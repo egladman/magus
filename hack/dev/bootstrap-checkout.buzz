@@ -200,6 +200,7 @@ export object Host {
     freshSkills: fun (dir: str) > str !> any,
     removeDir: fun (path: str) > void !> any,
     exec: fun (dir: str, argv: [str]) > Ran !> any,
+    seated: fun (dir: str, bin: str, args: [str]) > Ran !> any,
     readFile: fun (path: str) > str !> any,
     say: fun (line: str) > void,
     clock: fun () > double,
@@ -230,6 +231,54 @@ fun must(r: Ran, what: str) > str !> any {
         throw "gate-ready: {what}: exit {r.code}: {r.stderr}{r.stdout}";
     }
     return r.stdout;
+}
+
+// status --wait takes no deadline, so the pipe's process group is what
+// the bound stops.
+final SEAT_BOUND_MS = 1800000;
+
+// The exit code `magus run --timeout` documents.
+final SEAT_TIMED_OUT = 124;
+
+// shellQuote is word as one POSIX shell word.
+export fun shellQuote(word: str) > str {
+    return "'" + word.replace("'", with: "'\\''") + "'";
+}
+
+// seatedLine is `status --wait | <argv>` as a shell line. status holds
+// the run until the budget can seat it, then reserves the seat for it.
+// pipefail keeps a failed status from reading as the run's exit code.
+export fun seatedLine(statusBin: str, argv: [str]) > str {
+    final words = argv.map(fun (index: int, word: str) > str => shellQuote(word));
+    return "set -o pipefail; {shellQuote(statusBin)} status --wait | {words.join(" ")}";
+}
+
+// seatedRun runs a magus run behind status --wait, so a budget another
+// repo holds delays it instead of refusing it with MGS3009. It says what
+// it waits on and for how long. Past the bound it returns an error that
+// names the holders; any other exit code is the run's own.
+export fun seatedRun(h: Host, dir: str, bin: str, args: [str]) > result\Result::<Ran> {
+    final what = if (bin == "magus") "magus {args.join(" ")}" else "{bin} {args.join(" ")}";
+    h.say("waiting for the build budget to seat `{what}` in {dir}; it gives up after {SEAT_BOUND_MS / 60000}m");
+    try {
+        final ran = h.seated(dir, bin: bin, args: args);
+        if (ran.code != SEAT_TIMED_OUT) {
+            return result\ok::<Ran>(ran);
+        }
+        final holders = h.magus(dir, args: ["status"]);
+        return result\fail::<Ran>("bootstrap-checkout: gave up after {SEAT_BOUND_MS / 60000}m: `{what}` in {dir} had no seat or did not finish. {ran.stderr}\nthe build budget is held by:\n{holders.stdout.trim()}{holders.stderr.trim()}");
+    } catch (err: any) {
+        return result\caught::<Ran>(err, doing: "bootstrap-checkout: {what}");
+    }
+}
+
+// seatedOrThrow is seatedRun for a step that raises, like its neighbors.
+fun seatedOrThrow(h: Host, dir: str, bin: str, args: [str]) > Ran !> any {
+    final seated = seatedRun(h, dir: dir, bin: bin, args: args);
+    if (seated.error -> err) {
+        throw err.message;
+    }
+    return seated.value!;
 }
 
 // note says a step as it happens, so a long bootstrap never looks hung.
@@ -267,7 +316,7 @@ fun startDaemon(h: Host, dir: str) > str !> any {
 // installDependencies runs every project's install with the checkout's ./magus: a fresh checkout
 // has no node_modules, and the TypeScript symbol index needs tsc. It raises naming the command.
 fun installDependencies(h: Host, dir: str) > str !> any {
-    final r = h.magus(dir, args: ["run", "install", "/"]);
+    final r = seatedOrThrow(h, dir: dir, bin: "magus", args: ["run", "install", "/"]);
     if (r.code != 0) {
         throw "bootstrap-checkout: {dir}/magus run install /: exit {r.code}: {r.stderr}{r.stdout}";
     }
@@ -343,7 +392,7 @@ fun installProjects(h: Host, dir: str, install: str) > str !> any {
         return "installed no dependencies: the job touches no project that has an install target";
     }
     foreach (project in install.split(",")) {
-        final r = h.magus(dir, args: ["run", "install", project]);
+        final r = seatedOrThrow(h, dir: dir, bin: "magus", args: ["run", "install", project]);
         if (r.code != 0) {
             throw "bootstrap-checkout: {dir}/magus run install {project}: exit {r.code}: {r.stderr}{r.stdout}";
         }
@@ -441,11 +490,11 @@ export fun gateReady(h: Host, dir: str, restart: bool = false) > [str] !> any {
         return "built the graph";
     }));
     did.append(timed(h, start: "generating the symbol digest", run: fun () > str !> any {
-        _ = must(h.magus(dir, args: ["run", "symbol-digest-generate", "."]), what: "magus run symbol-digest-generate .");
+        _ = must(seatedOrThrow(h, dir: dir, bin: "magus", args: ["run", "symbol-digest-generate", "."]), what: "magus run symbol-digest-generate .");
         return "generated the symbol digest";
     }));
     did.append(timed(h, start: "building the proofread binary", run: fun () > str !> any {
-        _ = must(h.magus(dir, args: ["run", "proofread-build", "libs/proofread"]), what: "magus run proofread-build libs/proofread");
+        _ = must(seatedOrThrow(h, dir: dir, bin: "magus", args: ["run", "proofread-build", "libs/proofread"]), what: "magus run proofread-build libs/proofread");
         return "built the proofread binary";
     }));
     if (restart) {
@@ -697,6 +746,28 @@ export fun liveHost() > Host {
             final r = proc\exec("env", args: argv, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
             return Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
         },
+        // The go-run bootstrap runs before dir has a ./magus, so status
+        // may come from the forking checkout's.
+        seated = fun (dir: str, bin: str, args: [str]) > Ran !> any {
+            final own = fs\join(dir, name: "magus");
+            if (bin == "magus" and !fs\isFile(own)) {
+                return Ran{ stderr = "{own} does not exist", code = 127 };
+            }
+            final statusBin = if (fs\isFile(own)) own else fs\join(vcs\root(), name: "magus");
+            final argv = if (bin == "magus") [own] + args else [bin] + args;
+            if (!fs\isFile(statusBin)) {
+                std\print("no magus exists to ask the build budget, so `{argv.join(" ")}` runs without a seat");
+                final bare = proc\exec(argv[0], args: args, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
+                return Ran{ stdout = bare.stdout, stderr = bare.stderr, code = bare.code };
+            }
+            final sh = proc\shell(seatedLine(statusBin, argv: argv), shell: "bash");
+            final began = os\time();
+            final r = proc\exec(sh.bin, args: sh.args, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true, timeoutMs = std\toDouble(SEAT_BOUND_MS)});
+            if (r.code != 0 and os\time() - began >= std\toDouble(SEAT_BOUND_MS - 1000)) {
+                return Ran{ stdout = r.stdout, stderr = "the pipe was stopped at the bound.", code = SEAT_TIMED_OUT };
+            }
+            return Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
+        },
         readFile = fun (path: str) > str !> any {
             return fs\readFile(path);
         },
@@ -717,7 +788,7 @@ export fun liveHost() > Host {
 // It never commits what they rewrote, and a failure after it raises with the compiler output
 // and the regenerated paths.
 export fun compile(h: Host, dir: str) > str !> any {
-    final first = h.exec(dir, argv: bootstrapArgv());
+    final first = seatedOrThrow(h, dir: dir, bin: "env", args: bootstrapArgv());
     if (first.code == 0) {
         return "";
     }
@@ -740,7 +811,7 @@ export fun compile(h: Host, dir: str) > str !> any {
         throw "bootstrap-checkout: git status --porcelain after regenerating: exit {status.code}: {status.stderr}";
     }
     final paths = regeneratedPaths(status.stdout);
-    final second = h.exec(dir, argv: bootstrapArgv());
+    final second = seatedOrThrow(h, dir: dir, bin: "env", args: bootstrapArgv());
     if (second.code != 0) {
         final rewrote = if (paths.len() > 0) paths.join(", ") else "nothing";
         throw "bootstrap-checkout: the build failed, the bootstrap generators rewrote {rewrote}, and the build failed again: exit {second.code}:\n{second.stderr}{second.stdout}";
@@ -884,6 +955,12 @@ fun stubHostSaying(answers: {str: Ran}, stamps: {str: str}, calls: mut [str], sa
         },
         exec = fun (dir: str, argv: [str]) > Ran !> any {
             final line = "exec {dir}: {argv.join(" ")}";
+            final nth = calls.filter(fun (index: int, c: str) > bool => c == line).len() + 1;
+            calls.append(line);
+            return answers["{line} #{nth}"] ?? answers[line] ?? Ran{};
+        },
+        seated = fun (dir: str, bin: str, args: [str]) > Ran !> any {
+            final line = if (bin == "magus") "magus {args.join(" ")}" else "exec {dir}: {args.join(" ")}";
             final nth = calls.filter(fun (index: int, c: str) > bool => c == line).len() + 1;
             calls.append(line);
             return answers["{line} #{nth}"] ?? answers[line] ?? Ran{};
@@ -1052,6 +1129,7 @@ test "each slow step says what it does before it runs, and its result with the t
         "seeding the symbol index of /c",
         "seeded /c (0ms)",
         "installing the dependencies of docs with /c/magus",
+        "waiting for the build budget to seat `magus run install docs` in /c; it gives up after 30m",
         "installed the dependencies of docs (0ms)",
         "installing every declared harness",
         "installed every declared harness (0ms)",
@@ -1399,4 +1477,46 @@ test "a row that will not end fails loudly" {
     }, stamps: {}, calls: calls);
     final res = endMergedRows(h, dir: "/c", onto: "bbb", did: did);
     assert\isTrue(res.error != null and res.error!.message.indexOf("holds uncommitted work") != null, message: "named");
+}
+
+test "a seated line pipes status --wait into the quoted run under pipefail" {
+    assert\equal(seatedLine("/c/magus", argv: ["/c/magus", "run", "install", "it's"]), want: "set -o pipefail; '/c/magus' status --wait | '/c/magus' 'run' 'install' 'it'\\''s'", message: "line");
+}
+
+test "a seated run says what it waits on and for how long, then runs it" {
+    final calls = mut [<str>];
+    final said = mut [<str>];
+    final h = stubHostSaying({}, stamps: {}, calls: calls, said: said);
+    final ran = seatedRun(h, dir: "/c", bin: "magus", args: ["run", "install", "docs"]);
+    assert\equal(ran.error == null, want: true, message: "no error");
+    assert\equal(said, want: ["waiting for the build budget to seat `magus run install docs` in /c; it gives up after 30m"], message: "said");
+    assert\equal(calls, want: ["magus run install docs"], message: "ran once, after saying");
+}
+
+test "a seated run that exits 75 hands back the run's own code" {
+    final h = stubHost({"magus run install docs": Ran{ code = 75, stderr = "MGS3009" }}, stamps: {}, calls: mut [<str>]);
+    final ran = seatedRun(h, dir: "/c", bin: "magus", args: ["run", "install", "docs"]);
+    assert\equal(ran.value!.code, want: 75, message: "code");
+}
+
+test "a seated run past the bound fails loudly, naming who holds the budget" {
+    final calls = mut [<str>];
+    final h = stubHost({
+        "magus run go-build .": Ran{ code = 124, stderr = "the pipe was stopped at the bound." },
+        "magus status": Ran{ stdout = "held by lint (15.9 GiB) in /other\n" },
+    }, stamps: {}, calls: calls);
+    final ran = seatedRun(h, dir: "/c", bin: "magus", args: ["run", "go-build", "."]);
+    assert\equal(ran.value == null, want: true, message: "no value");
+    assert\equal(ran.error!.message.indexOf("gave up after 30m") != null, want: true, message: ran.error!.message);
+    assert\equal(ran.error!.message.indexOf("held by lint (15.9 GiB) in /other") != null, want: true, message: ran.error!.message);
+    assert\equal(calls, want: ["magus run go-build .", "magus status"], message: "run, then the holders");
+}
+
+test "the build waits for a seat before it compiles" {
+    final calls = mut [<str>];
+    final said = mut [<str>];
+    final h = stubHostSaying({}, stamps: {}, calls: calls, said: said);
+    _ = compile(h, dir: "/c");
+    assert\equal(calls, want: [BUILD_LINE], message: "the bootstrap ran");
+    assert\equal(said.len(), want: 1, message: "it said it waited");
 }
