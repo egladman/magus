@@ -238,7 +238,7 @@ func ReviewCommentsReached(ctx context.Context, at types.ReviewTarget) (comments
 	return comments, true, nil
 }
 
-func reviewDriver() (spells.Driver, bool) { //nolint:ireturn // the implementation is chosen at runtime among several
+func reviewDriver() (*spells.Spell, bool) {
 	name := ReviewProvider()
 	if name == "" {
 		return nil, false

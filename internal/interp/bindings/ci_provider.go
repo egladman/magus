@@ -20,7 +20,13 @@ import (
 // select a spell provider without linking the VM: the same indirection
 // remote_cache.go uses for cache backends.
 func init() { //nolint:gochecknoinits // internal/ci/annotate cannot link the Buzz VM; the opener registers from the layer that can
-	annotate.RegisterOpener(openSpellAnnotator)
+	annotate.RegisterOpener(func() annotate.Annotator {
+		// A nil *spellAnnotator returned as is would be a non-nil Annotator.
+		if a := openSpellAnnotator(); a != nil {
+			return a
+		}
+		return nil
+	})
 }
 
 // ciProviderSpell names the spell a magusfile selected via
@@ -40,7 +46,7 @@ func SetCIProvider(name string) {
 
 // openSpellAnnotator resolves the selected spell, if any, into an
 // Annotator. Returning nil leaves the built-in providers to apply.
-func openSpellAnnotator() annotate.Annotator { //nolint:ireturn // the implementation is chosen at runtime among several
+func openSpellAnnotator() *spellAnnotator {
 	ciProviderMu.RLock()
 	name := ciProviderName
 	ciProviderMu.RUnlock()
