@@ -70,6 +70,8 @@ rewritten
 .magus/
 -- shop/magus.yaml --
 concurrency: 2
+disk:
+  critical_free_mb: 0
 -- shop/notes.md --
 notes
 -- shop/host/tools/runs --

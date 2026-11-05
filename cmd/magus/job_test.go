@@ -1498,7 +1498,7 @@ func TestAForkUnderJobExecSharesItsClaim(t *testing.T) {
 	t.Cleanup(func() { cancel(); <-done })
 
 	root := testkit.NewRepository(t, map[string]string{
-		"magus.yaml":     "{}\n",
+		"magus.yaml":     "disk:\n  critical_free_mb: 0\n",
 		"magusfile.buzz": "import \"magus\";\n" + testTarget,
 		"a.go":           "package a\n",
 		filepath.FromSlash(job.CheckoutBootstrapScript): "import \"proc\";\n\nexport fun main(args: [str]) > void !> any {\n" +
