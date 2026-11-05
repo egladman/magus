@@ -157,10 +157,10 @@ type wsRegistry struct {
 	leaseOf      func(root string) string
 	leasedBroker func(lease string) *broker.Client
 	// changed is closed and replaced whenever an entry's state moves; guarded by mu.
-	changed chan struct{}
-	ctx     context.Context
-	stopCh  chan struct{}
-	wg      sync.WaitGroup
+	changed    chan struct{}
+	serverDone <-chan struct{}
+	stopCh     chan struct{}
+	wg         sync.WaitGroup
 }
 
 func newWSRegistry(ctx context.Context, lim *cache.Limiter, b *broker.Client, ttl time.Duration, tel observability.Provider) *wsRegistry {
@@ -178,7 +178,7 @@ func newWSRegistry(ctx context.Context, lim *cache.Limiter, b *broker.Client, tt
 		leaseOf:      boundLease,
 		leasedBroker: leasedBrokerClient,
 		changed:      make(chan struct{}),
-		ctx:          ctx,
+		serverDone:   ctx.Done(),
 		stopCh:       make(chan struct{}),
 	}
 	r.awaitChange = r.awaitSourceChange
@@ -335,10 +335,15 @@ func (r *wsRegistry) retry(e *wsEntry) {
 // awaitSourceChange blocks until a file a workspace load reads changes under e.root, and
 // reports false when e left the registry or the server is stopping first.
 func (r *wsRegistry) awaitSourceChange(e *wsEntry) bool {
-	ctx := r.ctx
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-r.serverDone:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
 	w, err := watch.New(ctx, watch.WithRoot(e.root),
 		watch.WithIgnore(watch.BuiltinIgnore))
 	if err != nil {

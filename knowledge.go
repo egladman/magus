@@ -2408,7 +2408,7 @@ func (c shardChain) PutShard(ctx context.Context, key string, r io.Reader) error
 // backend when ws is a cache-backed *Magus, then whatever UsePublishedShards installed.
 // nil means local-only, which is what an Inspect-constructed *Magus with no published ref
 // gets, because it has no cache either.
-func remoteShards(ws types.Inspector) knowledge.RemoteShards {
+func remoteShards(ws types.Inspector) knowledge.RemoteShards { //nolint:ireturn // the workspace backing is chosen at runtime
 	if lw, ok := ws.(*LazyWorkspace); ok {
 		return lazyRemoteShards{lw}
 	}

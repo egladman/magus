@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -57,11 +58,11 @@ const (
 //
 // Advice, never a failure: the magusfile figure stays a human's to write, and a
 // deliberate ceiling above the measured peak is a legitimate thing to declare.
-func (r *runner) checkMemoryDeclarations(projects []*types.Project) types.Check {
+func (r *runner) checkMemoryDeclarations(ctx context.Context, projects []*types.Project) types.Check {
 	const name = "memory-declarations"
 
 	var h forecast.History
-	if err := h.Load(r.runContext(), r.opts.cfg.HistoryPath); err != nil {
+	if err := h.Load(ctx, r.opts.cfg.HistoryPath); err != nil {
 		return historyUnreadableCheck(name, err)
 	}
 	// A missing history file loads as an empty one, so this is the ordinary state of a

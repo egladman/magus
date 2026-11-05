@@ -11,8 +11,37 @@ import (
 	"time"
 )
 
-// VCSDriver describes a version control system.
+// VCSDriver is one version control backend: git, Mercurial, Sapling, Jujutsu, or the
+// unsupported stand-in. It is the sum of the groups below; a caller that needs one
+// group takes that group, or declares its own interface with the methods it calls.
+//
+// Every driver implements every capability. A backend that cannot answer one returns a
+// *VCSUnsupportedError naming itself and the capability from each of that capability's
+// methods, before running anything. Callers call and handle the error rather than
+// type-asserting, so a missing capability is a value a caller can report, never a
+// silent false.
+//
+// A parameter named dir is any directory inside the checkout, one named root is the
+// checkout's top level, and every path argument and result is repo-relative with
+// forward slashes. The exceptions: the path filters of Dirty, DirtyFiles, DirtyDiff,
+// TrackedFiles, IgnoredFiles and RangeDiff are the backend's pathspecs, relative to
+// dir; CheckoutProvisioner's dir names a checkout outside the repository;
+// CheckoutLister and CheckoutReporter return absolute checkout roots; Bundler's file is
+// an absolute path.
 type VCSDriver interface {
+	VCSIdentity
+	WorkingCopyReporter
+	HistoryReporter
+	RevisionReader
+	RevisionWriter
+	CheckoutManager
+	RemoteSyncer
+	HookInstaller
+}
+
+// VCSIdentity is what a backend answers without starting a process: its name, the
+// checkouts it claims, and its spellings of fixed revisions and commands.
+type VCSIdentity interface {
 	Name() string
 	Claims() []string
 	// IsSecondaryCheckout reports whether dir is a second checkout of the same
@@ -35,42 +64,14 @@ type VCSDriver interface {
 	// argument. The spellings do not interchange: git reads its INDEX, hg and Sapling
 	// diff the working copy against its parent, and jj has no staging area at all.
 	ReviewCommand() string
-	// Root, ChangedFiles, and Metadata operate on the repository containing dir. An empty
-	// dir uses the process working directory. Passing an explicit dir is required
-	// for correctness when work runs concurrently, since the process cwd is global.
+}
+
+// WorkingCopyReporter reports the state of the checked-out working copy.
+type WorkingCopyReporter interface {
+	// Root returns the top level of the repository containing dir. An empty dir uses
+	// the process working directory, which is wrong when work runs concurrently since
+	// the cwd is global; the same holds for every dir across VCSDriver.
 	Root(ctx context.Context, dir string) (string, error)
-	ChangedFiles(ctx context.Context, dir, base string) ([]string, error)
-	DiffCommands(ctx context.Context, dir, base string) (DiffCommandHints, error)
-	// Preserve captures the working copy's uncommitted state, TRACKED changes and
-	// UNTRACKED files alike, and returns a backend-native handle for it. A clean tree
-	// returns "" and no error.
-	//
-	// Capturing must not COST state: when Preserve returns, every file on disk is
-	// byte-for-byte what it was and the backend still reports the same paths as modified
-	// and unknown. An implementation that cannot hold that returns an error instead of a
-	// handle, since a caller cannot tell a lossy capture from a lossless one.
-	//
-	// The handle is OPAQUE: each backend returns its own kind of name, only that backend
-	// resolves it, and nothing here reads one back.
-	//
-	// A handle stays resolvable until it outlives the retention PrunePreserved enforces,
-	// on every backend whose PrunePreserved can enforce one. Sapling's cannot, so its
-	// captures accumulate.
-	Preserve(ctx context.Context, dir string) (string, error)
-	// PrunePreserved drops every state Preserve minted in dir before the given time,
-	// and reports the handles it dropped, oldest first.
-	//
-	// An implementation deletes only what it can PROVE Preserve minted, which is the
-	// message Preserve left on the object and never a name in a namespace magus owns: a
-	// user can land on a magus-shaped shelf name without trying, and anyone can write
-	// into a magus ref prefix. This runs unasked inside every Preserve AND on a schedule
-	// the user never typed, so the cost of guessing wrong is a user's only copy of their
-	// work.
-	//
-	// Returning no handles means one of two things. A backend that mints nothing has
-	// nothing to drop. A backend that mints something it cannot remove has a GAP, and
-	// its implementation says so where a reader will meet it.
-	PrunePreserved(ctx context.Context, dir string, before time.Time) ([]string, error)
 	Metadata(ctx context.Context, dir string) (VCSMeta, error)
 	// Ref is Metadata's Ref alone: the movable name at the current revision, "" when none
 	// names it, and an error where Metadata fails to find the revision, as on git's unborn
@@ -110,6 +111,16 @@ type VCSDriver interface {
 	// those without lying about what ran. Context width follows the backend's own flag
 	// where it has one.
 	DirtyDiff(ctx context.Context, dir string, paths []string) (string, error)
+	CheckoutStateReporter
+	OperationReporter
+	TrackedFileReporter
+	IgnoredFileReporter
+}
+
+// HistoryReporter reads the commits reachable from the checkout.
+type HistoryReporter interface {
+	ChangedFiles(ctx context.Context, dir, base string) ([]string, error)
+	DiffCommands(ctx context.Context, dir, base string) (DiffCommandHints, error)
 	// FindCommit looks up a revision (a VCS-native rev expression; empty means
 	// the current revision) and returns its normalized Commit.
 	FindCommit(ctx context.Context, dir, rev string) (Commit, error)
@@ -135,54 +146,88 @@ type VCSDriver interface {
 	// released": a shallow or single-branch clone commonly fetches none, so a
 	// caller deciding what shipped must treat empty as unknown.
 	Tags(ctx context.Context, dir, pattern string) ([]VCSTag, error)
+	RevTimeReporter
+	AncestryReporter
+	ChurnReporter
+	BranchChangeReporter
+}
 
-	// The capabilities. Every driver implements every one of them; a backend that cannot
-	// answer one returns a *VCSUnsupportedError naming itself and the capability from each
-	// of that capability's methods, before running anything. Callers call and handle the
-	// error rather than type-asserting, so a missing capability is a value a caller can
-	// report, never a silent false.
-	//
-	// Across VCSDriver, a parameter named dir is any directory inside the checkout, one
-	// named root is the checkout's top level, and every path argument and result is
-	// repo-relative with forward slashes. The exceptions: the path filters of Dirty,
-	// DirtyFiles, DirtyDiff, TrackedFiles, IgnoredFiles and RangeDiff are the backend's
-	// pathspecs, relative to dir; CheckoutProvisioner's dir names a checkout outside the
-	// repository; CheckoutLister and CheckoutReporter return absolute checkout roots;
-	// Bundler's file is an absolute path.
+// RevisionReader reads the content of revisions other than the working copy.
+type RevisionReader interface {
 	Bisector
-	MergeDriverInstaller
-	RefreshHookInstaller
-	DriftHookInstaller
+	RangeReporter
+	RegionReporter
+	RevisionFileReader
+	RevisionExporter
+	TreeReporter
+	GeneratedPathReporter
+}
+
+// RevisionWriter writes revisions: commits, merges and conflict resolutions.
+type RevisionWriter interface {
+	ConflictResolver
+	MergeStarter
+	CommitWriter
+	TreeMerger
+}
+
+// CheckoutManager creates, lists and moves checkouts, and preserves a working copy's
+// uncommitted state.
+type CheckoutManager interface {
+	// Preserve captures the working copy's uncommitted state, TRACKED changes and
+	// UNTRACKED files alike, and returns a backend-native handle for it. A clean tree
+	// returns "" and no error.
+	//
+	// Capturing must not COST state: when Preserve returns, every file on disk is
+	// byte-for-byte what it was and the backend still reports the same paths as modified
+	// and unknown. An implementation that cannot hold that returns an error instead of a
+	// handle, since a caller cannot tell a lossy capture from a lossless one.
+	//
+	// The handle is OPAQUE: each backend returns its own kind of name, only that backend
+	// resolves it, and nothing here reads one back.
+	//
+	// A handle stays resolvable until it outlives the retention PrunePreserved enforces,
+	// on every backend whose PrunePreserved can enforce one. Sapling's cannot, so its
+	// captures accumulate.
+	Preserve(ctx context.Context, dir string) (string, error)
+	// PrunePreserved drops every state Preserve minted in dir before the given time,
+	// and reports the handles it dropped, oldest first.
+	//
+	// An implementation deletes only what it can PROVE Preserve minted, which is the
+	// message Preserve left on the object and never a name in a namespace magus owns: a
+	// user can land on a magus-shaped shelf name without trying, and anyone can write
+	// into a magus ref prefix. This runs unasked inside every Preserve AND on a schedule
+	// the user never typed, so the cost of guessing wrong is a user's only copy of their
+	// work.
+	//
+	// Returning no handles means one of two things. A backend that mints nothing has
+	// nothing to drop. A backend that mints something it cannot remove has a GAP, and
+	// its implementation says so where a reader will meet it.
+	PrunePreserved(ctx context.Context, dir string, before time.Time) ([]string, error)
+	CheckoutProvisioner
+	CheckoutFastForwarder
+	CheckoutLister
+	CheckoutReporter
+}
+
+// RemoteSyncer reads remote configuration and moves revisions to and from other
+// repositories.
+type RemoteSyncer interface {
 	RemoteReporter
 	RemoteConfigReporter
 	DefaultRefReporter
-	CheckoutStateReporter
-	OperationReporter
 	PushStatusReporter
-	RevTimeReporter
-	TrackedFileReporter
-	IgnoredFileReporter
-	ChurnReporter
-	BranchChangeReporter
-	RangeReporter
-	RegionReporter
-	AncestryReporter
-	ConflictResolver
-	RevisionFileReader
-	RevisionExporter
-	MergeStarter
-	CommitWriter
-	TreeReporter
-	TreeMerger
-	GeneratedPathReporter
-	CheckoutProvisioner
-	CheckoutFastForwarder
 	BranchHeadReporter
-	CheckoutLister
-	CheckoutReporter
 	RevisionFetcher
 	Pusher
 	Bundler
+}
+
+// HookInstaller installs the hooks and merge driver magus wires into a checkout.
+type HookInstaller interface {
+	MergeDriverInstaller
+	RefreshHookInstaller
+	DriftHookInstaller
 }
 
 // Bisector is the capability to find the first bad revision between a good and a bad one.

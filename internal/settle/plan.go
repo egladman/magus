@@ -139,7 +139,7 @@ func PlanConflicts(ctx context.Context, m *magus.Magus, resolver types.ConflictR
 //
 // Limited to outputs of the projects that were rebuilt, so a file you had already
 // modified elsewhere is not swept in.
-func (p Plan) Paths(ctx context.Context, m *magus.Magus, driver types.VCSDriver) ([]string, error) {
+func (p Plan) Paths(ctx context.Context, m *magus.Magus, driver types.WorkingCopyReporter) ([]string, error) {
 	settled := map[string]bool{}
 	for _, path := range slices.Concat(p.Keep, p.Rederive) {
 		settled[path] = true

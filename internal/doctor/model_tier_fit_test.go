@@ -61,7 +61,6 @@ func tierFitRunner(t *testing.T, set *types.ModelTierSet, outcomes ...[]types.Jo
 	return &runner{
 		opts: options{cfg: config.Config{HistoryPath: writeHistory(t, h)}},
 		ws:   tieredWorkspace{set: set},
-		ctx:  t.Context(),
 	}
 }
 
@@ -72,7 +71,7 @@ func TestModelTierFitNamesTheLineThatRoutedAFailingTier(t *testing.T) {
 		tierOutcomes("standard", types.JobKindCheck, types.ModelTierSourceDefault, "the declared default", 12, 0),
 	)
 
-	got := r.checkModelTierFit(nil)
+	got := r.checkModelTierFit(t.Context(), nil)
 
 	assert.Equal(t, types.CheckAdvice, got.Status)
 	assert.Contains(t, got.Message, "1 of 2")
@@ -88,7 +87,7 @@ func TestModelTierFitIsQuietUntilAPairHasEnoughJobs(t *testing.T) {
 		tierOutcomes("economy", types.JobKindSymbol, types.ModelTierSourceDefault, "", 0, modelTierFitJobs-1),
 	)
 
-	got := r.checkModelTierFit(nil)
+	got := r.checkModelTierFit(t.Context(), nil)
 
 	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Empty(t, got.Details)
@@ -99,7 +98,7 @@ func TestModelTierFitKeepsATierThatPasses(t *testing.T) {
 		tierOutcomes("economy", types.JobKindCheck, types.ModelTierSourceMatrix, "small", 11, 1),
 	)
 
-	got := r.checkModelTierFit(nil)
+	got := r.checkModelTierFit(t.Context(), nil)
 
 	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Contains(t, got.Message, "1 model tier and job kind pair(s)")
@@ -110,7 +109,7 @@ func TestModelTierFitSkipsATierTheDeclarationDropped(t *testing.T) {
 		tierOutcomes("retired", types.JobKindCheck, types.ModelTierSourceDefault, "", 0, 20),
 	)
 
-	got := r.checkModelTierFit(nil)
+	got := r.checkModelTierFit(t.Context(), nil)
 
 	assert.Equal(t, types.CheckOK, got.Status, "no line of the current declaration routes work to a tier it no longer names")
 	assert.Empty(t, got.Details)
@@ -119,7 +118,7 @@ func TestModelTierFitSkipsATierTheDeclarationDropped(t *testing.T) {
 func TestModelTierFitHasNothingToSayWithoutADeclaration(t *testing.T) {
 	r := tierFitRunner(t, nil, tierOutcomes("economy", types.JobKindCheck, types.ModelTierSourceDefault, "", 0, 20))
 
-	got := r.checkModelTierFit(nil)
+	got := r.checkModelTierFit(t.Context(), nil)
 
 	want := got
 	want.Status, want.Evidence = types.CheckOK, types.EvidenceUnknown

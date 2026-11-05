@@ -458,7 +458,7 @@ func (saplingVCS) CheckoutID(dir string) (string, bool) {
 
 // OpenObjectBatch starts one command server for every approved source a guard
 // load reads. See hgOpenObjectBatch.
-func (saplingVCS) OpenObjectBatch(ctx context.Context, root, rev string) (ObjectBatch, error) {
+func (saplingVCS) OpenObjectBatch(ctx context.Context, root, rev string) (ObjectBatch, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	return hgOpenObjectBatch(ctx, "sl", root, rev)
 }
 

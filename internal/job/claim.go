@@ -203,7 +203,7 @@ var errVCSDisabled = errors.New("version control is disabled here, so no diff pl
 // declarations; the error says why it cannot, and is errVCSDisabled when version control is
 // off. It returns the version control with the answer, so a caller can place a file's lines
 // without resolving it again.
-func claimDrivers(ctx context.Context, root string, paths []string) (types.VCSDriver, map[string]string, error) {
+func claimDrivers(ctx context.Context, root string, paths []string) (types.VCSDriver, map[string]string, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 	switch {
 	case err != nil:

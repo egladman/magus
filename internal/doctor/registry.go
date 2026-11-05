@@ -1,6 +1,8 @@
 package doctor
 
 import (
+	"context"
+
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -29,7 +31,7 @@ type checkDef struct {
 	NeedsWorkspace bool
 	// run takes the projects slice even where the check ignores it, keeping the table
 	// flat rather than a union of shapes.
-	run func(r *runner, projects []*types.Project) types.Check
+	run func(ctx context.Context, r *runner, projects []*types.Project) types.Check
 }
 
 // allChecks is every doctor check, in report order.
@@ -42,59 +44,63 @@ var allChecks = []checkDef{
 		Name:     "json-codec",
 		Doc:      "which encoding/json implementation this binary was built against",
 		Evidence: types.EvidenceMeasured,
-		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkJSONCodec() },
+		run:      func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkJSONCodec() },
 	},
 	{
 		Name:     "sockets",
 		Doc:      "the server, broker and per-process pool sockets in the magus socket directory, live and leftover",
 		Evidence: types.EvidenceMeasured,
-		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkStaleSockets() },
+		run:      func(ctx context.Context, r *runner, _ []*types.Project) types.Check { return r.checkStaleSockets(ctx) },
 	},
 	{
 		Name:     "tokens",
 		Doc:      "the operator token and the stored tokens: whether each loads, and which are expiring",
 		Evidence: types.EvidenceMeasured,
-		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkTokens() },
+		run:      func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkTokens() },
 	},
 	{
 		Name:           "mcp-client",
 		Doc:            "wired harness spells that declare user-owned MCP setup hints (Magus does not write host MCP config)",
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkMCPClient() },
+		run:            func(ctx context.Context, r *runner, _ []*types.Project) types.Check { return r.checkMCPClient(ctx) },
 	},
 	{
 		Name:     "terminal-capabilities",
 		Doc:      "what the terminal in front of magus can render",
 		Evidence: types.EvidenceMeasured,
-		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkTerminal() },
+		run:      func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkTerminal() },
 	},
 	{
 		Name:     "workspace",
 		Doc:      "the magusfile loads and its projects are discoverable",
 		Evidence: types.EvidenceMeasured,
-		run:      func(r *runner, projects []*types.Project) types.Check { return r.checkWorkspace(projects) },
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkWorkspace(projects)
+		},
 	},
 	{
 		Name:           "config-file",
 		Doc:            "magus.yaml parses and declares no key magus does not know",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkConfigFile() },
+		run:            func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkConfigFile() },
 	},
 	{
 		Name:           "cache-writable",
 		Doc:            "the cache directory and the entry store every checkout shares exist, and this user can write them",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkCacheWritable() },
+		run:            func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkCacheWritable() },
 	},
 	{
 		Name:           "concurrency-sizing",
 		Doc:            "the configured concurrency fits this machine",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkConcurrencySizing() },
+		run: func(_ context.Context, r *runner, _ []*types.Project) types.Check {
+			return r.checkConcurrencySizing()
+		},
 	},
 	{
 		Name:           "memory-declarations",
@@ -102,7 +108,9 @@ var allChecks = []checkDef{
 		Code:           types.MemoryDeclarationDrift,
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            (*runner).checkMemoryDeclarations,
+		run: func(ctx context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkMemoryDeclarations(ctx, projects)
+		},
 	},
 	{
 		Name:           gateFitsCheck,
@@ -110,7 +118,9 @@ var allChecks = []checkDef{
 		Code:           types.MachineBudgetExhausted,
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            (*runner).checkGateFits,
+		run: func(ctx context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkGateFits(ctx, projects)
+		},
 	},
 	{
 		Name:           "timeout-declarations",
@@ -118,41 +128,53 @@ var allChecks = []checkDef{
 		Code:           types.TimeoutDeclarationDrift,
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            (*runner).checkTimeoutDeclarations,
+		run: func(ctx context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkTimeoutDeclarations(ctx, projects)
+		},
 	},
 	{
 		Name:           "retry-declarations",
 		Doc:            "a target's declared retry_on_volatile against whether its retries have ever rescued a run",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            (*runner).checkRetryDeclarations,
+		run: func(ctx context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkRetryDeclarations(ctx, projects)
+		},
 	},
 	{
 		Name:           "model-tier-fit",
 		Doc:            "a model tier's recorded pass rate on a kind of job, and the line that routed those jobs to it",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            (*runner).checkModelTierFit,
+		run: func(ctx context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkModelTierFit(ctx, projects)
+		},
 	},
 	{
 		Name:     "brief-format",
 		Doc:      "the format a spawn brief takes when its job row names none, and whether magus.yaml chose it",
 		Evidence: types.EvidenceDeclared,
-		run:      (*runner).checkBriefFormat,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkBriefFormat(projects)
+		},
 	},
 	{
 		Name:           "conformance-ceiling",
 		Doc:            "configured conformance anchors the code now measures tighter than",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            (*runner).checkConformanceCeiling,
+		run: func(ctx context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkConformanceCeiling(ctx, projects)
+		},
 	},
 	{
 		Name:           "unexplained-hotspots",
 		Doc:            "whether the files this workspace edits hardest are explained by any note",
 		Evidence:       types.EvidenceInferred,
 		NeedsWorkspace: true,
-		run:            (*runner).checkUnexplainedHotspots,
+		run: func(ctx context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkUnexplainedHotspots(ctx, projects)
+		},
 	},
 	{
 		Name:           "cache-yield",
@@ -160,14 +182,18 @@ var allChecks = []checkDef{
 		Code:           types.TargetNeverReplays,
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            (*runner).checkCacheYield,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkCacheYield(projects)
+		},
 	},
 	{
 		Name:           "language-coverage",
 		Doc:            "projects binding no toolchain spell, so their work is invisible to affected tracking",
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkLanguageCoverage,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkLanguageCoverage(projects)
+		},
 	},
 	{
 		Name:           "ci-target",
@@ -175,21 +201,27 @@ var allChecks = []checkDef{
 		Code:           types.NoCITarget,
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkCITarget,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkCITarget(projects)
+		},
 	},
 	{
 		Name:           "magusfile-options-understood",
 		Doc:            "magus.project keys this binary dropped, so the policy each declares is not in force",
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkIgnoredOptions,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkIgnoredOptions(projects)
+		},
 	},
 	{
 		Name:           "required-version-covers-schema",
 		Doc:            "every magus.project key the workspace uses is covered by its declared required_version",
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkSchemaFloor,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkSchemaFloor(projects)
+		},
 	},
 	{
 		Name:           "service-duplication",
@@ -197,7 +229,9 @@ var allChecks = []checkDef{
 		Code:           types.NearDuplicateServices,
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkNearDuplicateServices,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkNearDuplicateServices(projects)
+		},
 	},
 	{
 		Name:           "service-suppressions",
@@ -205,21 +239,25 @@ var allChecks = []checkDef{
 		Code:           types.NearDuplicateServices,
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkStaleServiceSuppressions,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkStaleServiceSuppressions(projects)
+		},
 	},
 	{
 		Name:           "magusfile-syntax",
 		Doc:            "every magusfile parses, with strict-parity errors reported at once",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            (*runner).checkMagusfileSyntax,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkMagusfileSyntax(projects)
+		},
 	},
 	{
 		Name:           "spell-target-docs",
 		Doc:            "every function-handler target of a workspace-local spell carries a doc comment",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run: func(r *runner, _ []*types.Project) types.Check {
+		run: func(_ context.Context, r *runner, _ []*types.Project) types.Check {
 			return r.checkSpellDocs(project.DefaultSpellRegistry().All())
 		},
 	},
@@ -228,20 +266,20 @@ var allChecks = []checkDef{
 		Doc:            "what each registered spell implements of the mgs_ contract",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkSpellContract() },
+		run:            func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkSpellContract() },
 	},
 	{
 		Name:           "diagnostic-docs",
 		Doc:            "every MGS code magus prints routes to a docs page that names a next step",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkDiagnosticDocs() },
+		run:            func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkDiagnosticDocs() },
 	},
 	{
 		Name:     workspaceDiagnosticDocsCheck,
 		Doc:      "every page diagnostics.docs names is a code under the workspace's prefix and names a next step",
 		Evidence: types.EvidenceMeasured,
-		run: func(r *runner, _ []*types.Project) types.Check {
+		run: func(_ context.Context, r *runner, _ []*types.Project) types.Check {
 			return checkWorkspaceDiagnosticDocs(r.root, r.opts.cfg.Diagnostics)
 		},
 	},
@@ -251,118 +289,130 @@ var allChecks = []checkDef{
 		Code:           types.TargetDependencyCycle,
 		Evidence:       types.EvidenceInferred,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkGraphCycles() },
+		run:            func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkGraphCycles() },
 	},
 	{
 		Name:           "merge-driver-loads-workspace",
 		Doc:            "whether the registered merge driver can read this workspace, or leaves every generated conflict to a hand merge",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkMergeDriverLoads() },
+		run: func(ctx context.Context, r *runner, _ []*types.Project) types.Check {
+			return r.checkMergeDriverLoads(ctx)
+		},
 	},
 	{
 		Name:           "owed-regeneration",
 		Doc:            "whether a merge kept one side of a generated file whose regeneration has not run",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkOwedRegeneration() },
+		run: func(ctx context.Context, r *runner, _ []*types.Project) types.Check {
+			return r.checkOwedRegeneration(ctx)
+		},
 	},
 	{
 		Name:           "guard-binary",
 		Doc:            "which magus an agent-host guard hook would execute, and whether it predates the tree",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, projects []*types.Project) types.Check { return r.checkGuardBinaryEverywhere(projects) },
+		run: func(ctx context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkGuardBinaryEverywhere(ctx, projects)
+		},
 	},
 	{
 		Name:           servedScriptsCheck,
 		Doc:            "whether every script the guard serves by situation still exists",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkServedScripts() },
+		run:            func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkServedScripts() },
 	},
 	{
 		Name:           "agent-observer",
 		Doc:            "whether the wired observer hook is recording anything",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkObserverRecording() },
+		run: func(_ context.Context, r *runner, _ []*types.Project) types.Check {
+			return r.checkObserverRecording()
+		},
 	},
 	{
 		Name:           "session-load",
 		Doc:            "whether a host transcript has ever been loaded, and how stale the newest of it is",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkSessionLoad() },
+		run:            func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkSessionLoad() },
 	},
 	{
 		Name:           "guard-wiring",
 		Doc:            "whether anything in this checkout actually hands the guard a command to judge",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkGuardWiring() },
+		run:            func(ctx context.Context, r *runner, _ []*types.Project) types.Check { return r.checkGuardWiring(ctx) },
 	},
 	{
 		Name:           hookBindingsCheck,
 		Doc:            "whether every wired harness binds each hook point, or says why its host cannot",
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkHookBindings() },
+		run:            func(ctx context.Context, r *runner, _ []*types.Project) types.Check { return r.checkHookBindings(ctx) },
 	},
 	{
 		Name:           "checkpoint-wiring",
 		Doc:            "whether a wired agent host records where the work stood when a session stopped",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkCheckpointWiring() },
+		run: func(ctx context.Context, r *runner, _ []*types.Project) types.Check {
+			return r.checkCheckpointWiring(ctx)
+		},
 	},
 	{
 		Name:           "bound-lease",
 		Doc:            "whether the lease this checkout is bound to is a live, registered row, and whether a host hook is wired to judge it",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkBoundLease() },
+		run:            func(ctx context.Context, r *runner, _ []*types.Project) types.Check { return r.checkBoundLease(ctx) },
 	},
 	{
 		Name:           "job-tree",
 		Doc:            "live jobs a holder took and left quiet past jobs.stale_after, or blocked on a dependency that ended without passing",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkJobTree() },
+		run:            func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkJobTree() },
 	},
 	{
 		Name:     "server-version",
 		Doc:      "whether the server answering this workspace is the same build as the binary asking",
 		Evidence: types.EvidenceMeasured,
-		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkServerVersion() },
+		run:      func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkServerVersion() },
 	},
 	{
 		Name:           "agent-skills",
 		Doc:            "installed agent skills still current with this binary",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkAgentSkills() },
+		run:            func(ctx context.Context, r *runner, _ []*types.Project) types.Check { return r.checkAgentSkills(ctx) },
 	},
 	{
 		Name:           "release-index",
 		Doc:            "the signed release index has not passed its expires_at",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkReleaseIndexExpiry() },
+		run: func(_ context.Context, r *runner, _ []*types.Project) types.Check {
+			return r.checkReleaseIndexExpiry()
+		},
 	},
 	{
 		Name:           "symlinks",
 		Doc:            "symlinks whose resolved target escapes the workspace root",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkSymlinks() },
+		run:            func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkSymlinks() },
 	},
 	{
 		Name:           "graph-bounds",
 		Doc:            "the knowledge graph holds no node naming a location outside the workspace",
 		Evidence:       types.EvidenceInferred,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkGraphBounds() },
+		run:            func(ctx context.Context, r *runner, _ []*types.Project) types.Check { return r.checkGraphBounds(ctx) },
 	},
 	{
 		Name: "generated-output",
@@ -373,28 +423,32 @@ var allChecks = []checkDef{
 		Code:           types.NondeterministicOutput,
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkGeneratedDrift() },
+		run: func(ctx context.Context, r *runner, _ []*types.Project) types.Check {
+			return r.checkGeneratedDrift(ctx)
+		},
 	},
 	{
 		Name:           "stale-worktrees",
 		Doc:            "checkout directories under .claude/worktrees that the VCS no longer tracks",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkStaleWorktrees() },
+		run:            func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkStaleWorktrees() },
 	},
 	{
 		Name:           "environment-variables",
 		Doc:            "exported MAGUS_* variables magus retired or that misspell one it reads (a failure, MGS1046), and ones it does not read at all (advice)",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkEnvVars() },
+		run:            func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkEnvVars() },
 	},
 	{
 		Name:           "target-name-conventions",
 		Doc:            "the workspace declares target names in one casing convention rather than several",
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkTargetNameConventions,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkTargetNameConventions(projects)
+		},
 	},
 	{
 		Name:           "bespoke-phase-fragment-targets",
@@ -402,7 +456,9 @@ var allChecks = []checkDef{
 		Code:           types.BespokePhaseFragmentName,
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkBespokePhaseFragmentTargets,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkBespokePhaseFragmentTargets(projects)
+		},
 	},
 	{
 		Name:           "unreached-footprint-declarations",
@@ -410,7 +466,9 @@ var allChecks = []checkDef{
 		Code:           types.UnreachedFootprintDecl,
 		Evidence:       types.EvidenceInferred,
 		NeedsWorkspace: true,
-		run:            (*runner).checkUnreachedFootprintDecls,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkUnreachedFootprintDecls(projects)
+		},
 	},
 	{
 		Name:           "cacheable-secret-reads",
@@ -418,7 +476,9 @@ var allChecks = []checkDef{
 		Code:           types.CacheableSecretRead,
 		Evidence:       types.EvidenceInferred,
 		NeedsWorkspace: true,
-		run:            (*runner).checkCacheableSecretReads,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkCacheableSecretReads(projects)
+		},
 	},
 	{
 		Name:           "cacheable-external-ops",
@@ -426,7 +486,9 @@ var allChecks = []checkDef{
 		Code:           types.CacheableExternalOp,
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkCacheableExternalOps,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkCacheableExternalOps(projects)
+		},
 	},
 	{
 		Name:           "manifest-scripts",
@@ -434,7 +496,9 @@ var allChecks = []checkDef{
 		Code:           types.ManifestScriptDelegation,
 		Evidence:       types.EvidenceInferred,
 		NeedsWorkspace: true,
-		run:            (*runner).checkManifestScripts,
+		run: func(ctx context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkManifestScripts(ctx, projects)
+		},
 	},
 	{
 		Name:           "observation-keyed-as-version",
@@ -442,7 +506,9 @@ var allChecks = []checkDef{
 		Code:           types.ObservationKeyedAsVersion,
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkObservationKeyedAsVersion,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkObservationKeyedAsVersion(projects)
+		},
 	},
 	{
 		Name:           "redundant-footprint-globs",
@@ -450,7 +516,9 @@ var allChecks = []checkDef{
 		Code:           types.RedundantFootprintGlob,
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkRedundantFootprintGlobs,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkRedundantFootprintGlobs(projects)
+		},
 	},
 	{
 		Name:           "dead-output-globs",
@@ -458,7 +526,9 @@ var allChecks = []checkDef{
 		Code:           types.DeadOutputGlob,
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            (*runner).checkDeadOutputGlobs,
+		run: func(ctx context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkDeadOutputGlobs(ctx, projects)
+		},
 	},
 	{
 		Name:           "undeclared-seeding-files",
@@ -466,7 +536,9 @@ var allChecks = []checkDef{
 		Code:           types.UndeclaredSeedingFile,
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            (*runner).checkUndeclaredSeedingFiles,
+		run: func(ctx context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkUndeclaredSeedingFiles(ctx, projects)
+		},
 	},
 	{
 		Name:           "output-is-another-projects-source",
@@ -474,7 +546,9 @@ var allChecks = []checkDef{
 		Code:           types.OutputIsAnotherProjectsSource,
 		Evidence:       types.EvidenceInferred,
 		NeedsWorkspace: true,
-		run:            (*runner).checkOutputIsAnotherProjectsSource,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkOutputIsAnotherProjectsSource(projects)
+		},
 	},
 	{
 		Name:           "unmatchable-source-globs",
@@ -482,14 +556,18 @@ var allChecks = []checkDef{
 		Code:           types.UnmatchableSourceGlob,
 		Evidence:       types.EvidenceInferred,
 		NeedsWorkspace: true,
-		run:            (*runner).checkUnmatchableSourceGlobs,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkUnmatchableSourceGlobs(projects)
+		},
 	},
 	{
 		Name:           "recurring-guard-denials",
 		Doc:            "a guard rule an agent hit repeatedly across sessions",
 		Evidence:       types.EvidenceInferred,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkRecurringGuardDenials() },
+		run: func(_ context.Context, r *runner, _ []*types.Project) types.Check {
+			return r.checkRecurringGuardDenials()
+		},
 	},
 	{
 		Name:           "writes-without-rw-charm",
@@ -497,7 +575,9 @@ var allChecks = []checkDef{
 		Code:           types.WriteWithoutRWCharm,
 		Evidence:       types.EvidenceInferred,
 		NeedsWorkspace: true,
-		run:            (*runner).checkWriteWithoutRWCharm,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkWriteWithoutRWCharm(projects)
+		},
 	},
 	{
 		Name:           "source-is-also-output",
@@ -505,7 +585,9 @@ var allChecks = []checkDef{
 		Code:           types.SourceIsAlsoOutput,
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkSourceIsAlsoOutput,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkSourceIsAlsoOutput(projects)
+		},
 	},
 	{
 		Name:           "footprint-drops-op-globs",
@@ -513,7 +595,9 @@ var allChecks = []checkDef{
 		Code:           types.FootprintDropsOpGlobs,
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkFootprintDropsOpGlobs,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkFootprintDropsOpGlobs(projects)
+		},
 	},
 	{
 		Name:           "output-ownership",
@@ -521,7 +605,9 @@ var allChecks = []checkDef{
 		Code:           types.OutputOwnedByTwoTargets,
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkOutputOwnedByTwoTargets,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkOutputOwnedByTwoTargets(projects)
+		},
 	},
 	{
 		Name:           "same-step-writes",
@@ -529,7 +615,9 @@ var allChecks = []checkDef{
 		Code:           types.UnorderedSameStepWrite,
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkSameStepWrites,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkSameStepWrites(projects)
+		},
 	},
 	{
 		Name:           "self-staling-outputs",
@@ -537,21 +625,27 @@ var allChecks = []checkDef{
 		Code:           types.SelfStalingOutput,
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            (*runner).checkSelfStalingOutputs,
+		run: func(ctx context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkSelfStalingOutputs(ctx, projects)
+		},
 	},
 	{
 		Name:           "charm-target-collisions",
 		Doc:            "a charm name that also names a target, making invocations ambiguous to read",
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkCharmTargetCollision,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkCharmTargetCollision(projects)
+		},
 	},
 	{
 		Name:           "has-charm-typos",
 		Doc:            "a has_charm read whose name is a near-miss of a real charm, so its branch is dead",
 		Evidence:       types.EvidenceInferred,
 		NeedsWorkspace: true,
-		run:            (*runner).checkHasCharmTypos,
+		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkHasCharmTypos(projects)
+		},
 	},
 	{
 		Name: "tool-readiness",
@@ -561,7 +655,9 @@ var allChecks = []checkDef{
 		Doc:            "which tools this workspace's spells gate on, and what each gate asks",
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
-		run:            (*runner).checkReadinessProbes,
+		run: func(ctx context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkReadinessProbes(ctx, projects)
+		},
 	},
 	{
 		Name: "toolchain-lifecycle",
@@ -571,13 +667,15 @@ var allChecks = []checkDef{
 		Doc:            "an installed tool, or a workspace window floor, in a release cycle past its end of life",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            (*runner).checkToolchainLifecycle,
+		run: func(ctx context.Context, r *runner, projects []*types.Project) types.Check {
+			return r.checkToolchainLifecycle(ctx, projects)
+		},
 	},
 	{
 		Name:     "disk-trend",
 		Doc:      "the free space the reclaim hook last sampled, how fast it fell over the last day, and its last reclaim chunks, against the disk.* thresholds",
 		Evidence: types.EvidenceMeasured,
-		run:      func(r *runner, _ []*types.Project) types.Check { return r.checkDiskTrend() },
+		run:      func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkDiskTrend() },
 	},
 	{
 		Name:           "stale-spell-shadow-acknowledgments",
@@ -585,35 +683,39 @@ var allChecks = []checkDef{
 		Code:           types.SpellShadowed,
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkStaleShadowAcks() },
+		run:            func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkStaleShadowAcks() },
 	},
 	{
 		Name:           "spell-overrides",
 		Doc:            "a workspace copy of a built-in spell, against the built-in this binary ships and the one the copy was pulled from",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkSpellOverrides() },
+		run:            func(_ context.Context, r *runner, _ []*types.Project) types.Check { return r.checkSpellOverrides() },
 	},
 	{
 		Name:           "vcs-base-ref",
 		Doc:            "the configured VCS base ref resolves, so affected tracking has something to diff",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkVCSBaseRef() },
+		run:            func(ctx context.Context, r *runner, _ []*types.Project) types.Check { return r.checkVCSBaseRef(ctx) },
 	},
 	{
 		Name:           "workspace-registration",
 		Doc:            "whether this workspace is loaded in the server, and what else is",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkWorkspaceRegistration() },
+		run: func(_ context.Context, r *runner, _ []*types.Project) types.Check {
+			return r.checkWorkspaceRegistration()
+		},
 	},
 	{
 		Name:           "bridge-reachability",
 		Doc:            "the console endpoint answers, proving the guarded route exists",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkBridgeReachability() },
+		run: func(ctx context.Context, r *runner, _ []*types.Project) types.Check {
+			return r.checkBridgeReachability(ctx)
+		},
 	},
 }
 

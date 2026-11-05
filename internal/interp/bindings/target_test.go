@@ -966,19 +966,23 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 }
 `
 	for name, tc := range map[string]struct {
-		ctx  context.Context
-		want string
+		narrowing *project.OpNarrowing
+		want      string
 	}{
-		"a whole run": {context.Background(), "false"},
-		"a narrowed run": {project.WithOpNarrowing(context.Background(), project.OpNarrowing{Op: "go-test", Bin: "go",
-			Rewrite: func(_ context.Context, _ string, _ map[string]string, args []string) []string { return args }}), "true"},
+		"a whole run": {nil, "false"},
+		"a narrowed run": {&project.OpNarrowing{Op: "go-test", Bin: "go",
+			Rewrite: func(_ context.Context, _ string, _ map[string]string, args []string) []string { return args }}, "true"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			w := testkit.NewWorkspace(t)
 			dir := w.Root()
 			t.Chdir(dir)
 			w.Magusfile(mf)
-			_, err := interp.RunDir(tc.ctx, dir, "test", nil)
+			ctx := t.Context()
+			if tc.narrowing != nil {
+				ctx = project.WithOpNarrowing(ctx, *tc.narrowing)
+			}
+			_, err := interp.RunDir(ctx, dir, "test", nil)
 			require.NoError(t, err)
 			got, err := os.ReadFile(filepath.Join(dir, "narrowed.txt"))
 			require.NoError(t, err)

@@ -1349,7 +1349,7 @@ func dropReading(ctx context.Context, store *changeset.Store, mark changeset.Rea
 // check-review` run from a shell would otherwise die with the process. A job the server runs for
 // itself arrives with the server's workspace and its shared provider, which outlives the job and
 // must not be shut down here.
-func shutdownOneShotTelemetry(ctx context.Context, tel observability.Provider) {
+func shutdownOneShotTelemetry(ctx context.Context, tel observability.Exporter) {
 	if _, shared := magusFromContext(ctx); shared {
 		return
 	}

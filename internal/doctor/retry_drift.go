@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -30,11 +31,11 @@ const judgeableRetries = 3
 //
 // Advice, never a failure. A retry that has not paid off yet may still be correct about
 // the target, and doctor does not know the flake magus has not seen.
-func (r *runner) checkRetryDeclarations(projects []*types.Project) types.Check {
+func (r *runner) checkRetryDeclarations(ctx context.Context, projects []*types.Project) types.Check {
 	const name = "retry-declarations"
 
 	var h forecast.History
-	if err := h.Load(r.runContext(), r.opts.cfg.HistoryPath); err != nil {
+	if err := h.Load(ctx, r.opts.cfg.HistoryPath); err != nil {
 		return historyUnreadableCheck(name, err)
 	}
 
