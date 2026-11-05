@@ -256,7 +256,7 @@ func (e *queueEnv) openProvider(ctx context.Context, spec string) (*provider.Scr
 // It also returns the sandbox declaration of every spell the workspace's projects
 // resolved, for the hooks: like the sandbox config they are the base's, so a
 // candidate's spells widen nothing. Another build tool's base loaded no spell.
-func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool, facts, target string) (types.BuildFacts, map[string]spells.Sandbox, func() error, error) { //nolint:ireturn // the implementation is chosen at runtime among several
+func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool, facts, target string) (types.BuildFacts, map[string]spells.Sandbox, func() error, error) { //nolint:ireturn // types.BuildFacts: *client.Workspace or the --facts command
 	if facts != "" {
 		if targetGiven {
 			return nil, nil, nil, exit.Usagef("magus queue %s: --target has no effect with --facts", verb)
