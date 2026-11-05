@@ -176,12 +176,12 @@ func MarshalIndent(v any, prefix, indent string) ([]byte, error) {
 
 type v2encoder struct{ enc *jsontext.Encoder }
 
-func NewEncoder(w io.Writer) Encoder    { return &v2encoder{enc: jsontext.NewEncoder(w)} } //nolint:ireturn // the implementation is chosen at runtime among several
+func NewEncoder(w io.Writer) *v2encoder { return &v2encoder{enc: jsontext.NewEncoder(w)} }
 func (e *v2encoder) Encode(v any) error { return jsonv2.MarshalEncode(e.enc, v, marshalOpts) }
 
 type v2decoder struct{ dec *jsontext.Decoder }
 
-func NewDecoder(r io.Reader) Decoder    { return &v2decoder{dec: jsontext.NewDecoder(r)} } //nolint:ireturn // the implementation is chosen at runtime among several
+func NewDecoder(r io.Reader) *v2decoder { return &v2decoder{dec: jsontext.NewDecoder(r)} }
 func (d *v2decoder) Decode(v any) error { return jsonv2.UnmarshalDecode(d.dec, v, unmarshalOpts) }
 func Version() string                   { return "v2" }
 
