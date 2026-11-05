@@ -1186,10 +1186,6 @@ var envOnly = []cmdline.Env{
 // its own second signal or SIGKILL. Runs outlive the broker anyway.
 const defaultShutdownGrace = 5 * time.Minute
 
-// defaultBudgetWait is budget_wait when nothing sets it. Two gates refused
-// 717 s and 1,733 s into their work would have been seated within it.
-const defaultBudgetWait = 30 * time.Minute
-
 // Defaults returns a Config populated with the magus built-in defaults. It reads no
 // environment, so HistoryPath is empty; the loaders set it from [DefaultHistoryPath].
 func Defaults() Config {
@@ -1206,7 +1202,6 @@ func Defaults() Config {
 			},
 		},
 		ShutdownGrace: defaultShutdownGrace,
-		BudgetWait:    defaultBudgetWait,
 		Disk:          Disk{MinFreeMB: 51200, CriticalFreeMB: 10240, GrowthMBPerHour: 20480, SampleEvery: 10 * time.Minute},
 		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, MaxClaims: 10},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},

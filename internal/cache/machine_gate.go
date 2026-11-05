@@ -760,13 +760,18 @@ func workingDir() string {
 // invocations still fill the machine. A leased caller files the check owed,
 // since a refusal leaves no output ref to cite.
 func machineBusyError(c types.MachineClaim, v types.MachineVerdict, now time.Time, lease string, waited time.Duration, bound waitBound) error {
+	why := fmt.Sprintf("waited %s for a seat, %s. That is %s", waited.Round(time.Second), describeMachineHolders(v.Holders), bound.source)
 	next := fmt.Sprintf("Raise %s, or free a holder, then run the same command again", BudgetWaitSource)
+	if bound.d == 0 {
+		why = fmt.Sprintf("no seat is free, %s. It did not wait, since %s is 0", describeMachineHolders(v.Holders), BudgetWaitSource)
+		next = "To wait for a seat instead, run the same command again with --budget-wait 30m, or set MAGUS_BUDGET_WAIT or budget_wait in magus.yaml"
+	}
 	if lease != "" {
-		next = fmt.Sprintf("Job %s waited its bound: %s", lease, owedFiling(lease))
+		next = fmt.Sprintf("Job %s got no seat: %s", lease, owedFiling(lease))
 	}
 	return types.ExitError{Code: ExitCodeMachineBusy, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
-		"not starting %s %s: waited %s for a seat, %s. That is %s; %s, and %s. The broker %s. %s",
-		displayProject(c.Project), c.Target, waited.Round(time.Second), describeMachineHolders(v.Holders), bound.source, describeMachineDeclaration(c),
+		"not starting %s %s: %s; %s, and %s. The broker %s. %s",
+		displayProject(c.Project), c.Target, why, describeMachineDeclaration(c),
 		describeMachineRemaining(v), describeMachinePacking(c, v, now), next)}
 }
 

@@ -840,7 +840,8 @@ func (s *BudgetWaitSuite) TestABudgetWaitOfZeroRefusesAtOnce() {
 	_, err := s.gate.acquire(s.T().Context(), stranger)
 
 	s.Require().ErrorIs(err, types.MachineBudgetExhausted)
-	s.Contains(err.Error(), "waited 0s for a seat")
+	s.Contains(err.Error(), "It did not wait, since "+BudgetWaitSource+" is 0")
+	s.Contains(err.Error(), "run the same command again with --budget-wait 30m")
 	s.False(s.said("waiting for a seat"), "a refusal at once announces no wait")
 }
 
