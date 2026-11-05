@@ -631,11 +631,20 @@ fun dropTree(dir: str) > result\Result::<bool> {
     }
 }
 
+// removeWorktree is the live host's tree cleanup: git forgets the worktree,
+// then whatever is left of dir goes.
+fun removeWorktree(root: str, dir: str) > result\Result::<bool> {
+    final removed = rc\git(root, args: ["worktree", "remove", "--force", dir]);
+    if (removed.error -> err) { return result\Result::<bool>{ error = err }; }
+    return dropTree(dir);
+}
+
 // withTree runs body in a detached worktree of root at rev made at dir, and removes the
 // worktree however body ends. dir comes from the caller because the scratch checkout dir
 // lives under XDG_CACHE_HOME, which a CI gate puts inside its own checkout, where the
 // buzz-test sandbox denies writes.
-fun withTree(root: str, rev: str, dir: str, body: fun (dir: str) > result\Result::<bool>) > result\Result::<bool> {
+// remove is the host's cleanup; a worker lease refuses git's.
+fun withTree(root: str, rev: str, dir: str, remove: fun (root: str, dir: str) > result\Result::<bool>, body: fun (dir: str) > result\Result::<bool>) > result\Result::<bool> {
     final added = rc\git(root, args: ["worktree", "add", "--detach", "--quiet", dir, rev]);
     if (added.error -> err) {
         _ = dropTree(dir);
@@ -645,17 +654,13 @@ fun withTree(root: str, rev: str, dir: str, body: fun (dir: str) > result\Result
     if (outcome.error == null) { outcome = body(dir); }
     if (outcome.error -> err) {
         if (err.message.startsWith(KEPT)) { return result\Result::<bool>{ error = err }; }
-        try {
-            _ = vcs\cmd(["worktree", "remove", "--force", dir], opts: vcs\CommandOptions{ quiet = true, dir = root, allowFailure = true });
-        } catch (failed: any) {
-            return result\caught::<bool>(failed, doing: "merge-job-branches: remove the worktree {dir}");
+        final removed = remove(root, dir: dir);
+        if (removed.error -> failed) {
+            return result\fail::<bool>("{err.message}\n  the tree {dir} was not removed: {failed.message}");
         }
-        _ = dropTree(dir);
         return result\Result::<bool>{ error = err };
     }
-    final removed = rc\git(root, args: ["worktree", "remove", "--force", dir]);
-    if (removed.error -> err) { return result\Result::<bool>{ error = err }; }
-    return dropTree(dir);
+    return remove(root, dir: dir);
 }
 
 // requireTrusted fails before a run in dir does: mise refuses an untrusted config, and
@@ -972,7 +977,7 @@ export fun main(args: [str]) > void !> any {
     if (apply) {
         final fresh = requireNewBranch(root, into: into);
         if (fresh.error -> err) { throw err.message; }
-        final applied = withTree(root, rev: plan.base, dir: fs\scratchCheckoutDir("merge-job-branches"), body: fun (dir: str) > result\Result::<bool> {
+        final applied = withTree(root, rev: plan.base, dir: fs\scratchCheckoutDir("merge-job-branches"), remove: removeWorktree, body: fun (dir: str) > result\Result::<bool> {
             final layered = mergeLayers(dir, s: plan, into: into, settle: settleWithMagus);
             if (layered.error -> err) { return result\Result::<bool>{ error = err }; }
             merged = layered.value!;
@@ -1019,7 +1024,7 @@ export fun main(args: [str]) > void !> any {
                 declarations = l.declarations, check = l.check, goals = l.goals, status = status, reason = reason });
         }
         merged = stack\BranchStack{ schema = plan.schema, base = plan.base, layers = layers };
-        final checked = withTree(root, rev: into, dir: fs\scratchCheckoutDir("merge-job-branches"), body: fun (dir: str) > result\Result::<bool> {
+        final checked = withTree(root, rev: into, dir: fs\scratchCheckoutDir("merge-job-branches"), remove: removeWorktree, body: fun (dir: str) > result\Result::<bool> {
             final graded = verifyLayers(dir, s: merged);
             if (graded.error -> err) { return result\Result::<bool>{ error = err }; }
             verdicts = graded.value!;
@@ -1249,6 +1254,12 @@ fun testTree() > result\Result::<str> {
     }
 }
 
+// dropTestTree is the test host's tree cleanup. The scratch root is the
+// test's own, so fs removes it and no git removal meets a worker lease.
+fun dropTestTree(root: str, dir: str) > result\Result::<bool> {
+    return dropTree(dir);
+}
+
 fun planStack(root: str, names: [str]) > result\Result::<stack\BranchStack> {
     final cands = mut [<Candidate>];
     foreach (n in names) {
@@ -1268,7 +1279,8 @@ test "a merge orders by ancestry, lets the driver settle generated output, and s
 
     final mainBefore = sh(root, args: ["rev-parse", "main"]);
     var outcome = plan;
-    final ran = withTree(root, rev: "main", dir: testTree().value!, body: fun (dir: str) > result\Result::<bool> {
+    final tree = testTree().value!;
+    final ran = withTree(root, rev: "main", dir: tree, remove: dropTestTree, body: fun (dir: str) > result\Result::<bool> {
         final layered = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);
         if (layered.error -> err) { return result\Result::<bool>{ error = err }; }
         outcome = layered.value!;
@@ -1285,7 +1297,7 @@ test "a merge orders by ancestry, lets the driver settle generated output, and s
         assert\equal(why.indexOf(want) != null, want: true, message: "the stop names {want}: {why}");
     }
     assert\equal(sh(root, args: ["rev-parse", "main"]), want: mainBefore, message: "the base is untouched");
-    assert\equal(rc\lines(sh(root, args: ["worktree", "list"])).len(), want: 1, message: "the temporary tree is gone");
+    assert\equal(fs\isDir(tree), want: false, message: "the temporary tree is gone");
     assert\equal(rc\gitOK(root, args: ["show-ref", "--verify", "--quiet", "refs/heads/integration"]).value!, want: false, message: "no branch is written");
     fs\removeAll(root);
 }
@@ -1297,7 +1309,7 @@ test "a clean merge regenerates once and commits the output apart" {
     var dirty = [<str>];
     var subjects = [<str>];
     var regenerated = "";
-    final ran = withTree(root, rev: "main", dir: testTree().value!, body: fun (dir: str) > result\Result::<bool> {
+    final ran = withTree(root, rev: "main", dir: testTree().value!, remove: dropTestTree, body: fun (dir: str) > result\Result::<bool> {
         final merged = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);
         if (merged.error -> err) { return result\Result::<bool>{ error = err }; }
         if (!allMerged(merged.value!)) { return result\fail::<bool>("a layer did not merge"); }
@@ -1334,7 +1346,7 @@ test "a split stack merged back yields the original change's tree" {
     ] });
     final plan = stack\orderLayers(stack\readStack(written));
     var tree = "";
-    final ran = withTree(root, rev: plan.base, dir: testTree().value!, body: fun (dir: str) > result\Result::<bool> {
+    final ran = withTree(root, rev: plan.base, dir: testTree().value!, remove: dropTestTree, body: fun (dir: str) > result\Result::<bool> {
         final merged = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);
         if (merged.error -> err) { return result\Result::<bool>{ error = err }; }
         if (!allMerged(merged.value!)) { return result\fail::<bool>("a layer did not merge"); }
@@ -1353,13 +1365,13 @@ test "a layer settled by job claims says so, and only then does the merge owe a 
     final line = "{CLAIMS_SETTLED}src/a.txt by job claims: src/a.txt#A (job a) against src/a.txt#B (job b); every job passed";
     var plain = plan;
     var claimed = plan;
-    _ = withTree(root, rev: "main", dir: testTree().value!, body: fun (dir: str) > result\Result::<bool> {
+    _ = withTree(root, rev: "main", dir: testTree().value!, remove: dropTestTree, body: fun (dir: str) > result\Result::<bool> {
         final merged = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);
         if (merged.error -> err) { return result\Result::<bool>{ error = err }; }
         plain = merged.value!;
         return result\ok::<bool>(true);
     });
-    _ = withTree(root, rev: "main", dir: testTree().value!, body: fun (dir: str) > result\Result::<bool> {
+    _ = withTree(root, rev: "main", dir: testTree().value!, remove: dropTestTree, body: fun (dir: str) > result\Result::<bool> {
         final merged = mergeLayers(dir, s: plan, into: "integration", settle: fun (d: str, branch: str) > result\Result::<[str]> {
             _ = settleWithMagus(d, branch: branch);
             if (branch == "edit-a") { return result\ok::<[str]>([line]); }
@@ -1379,7 +1391,7 @@ test "a failed readiness keeps the tree and names its path, target, ref and one 
     final root = fixtureRepo().value!;
     final dump = `{"findings": [{"rule": "x"}, {"rule": "y"}]}` + "\n";
     final kept = testTree().value!;
-    final ran = withTree(root, rev: "main", dir: kept, body: fun (dir: str) > result\Result::<bool> {
+    final ran = withTree(root, rev: "main", dir: kept, remove: dropTestTree, body: fun (dir: str) > result\Result::<bool> {
         return regenerateWithMagus("main", ready: fun (d: str) > result\Result::<[str]> {
             return result\fail::<[str]>("gate-ready: magus run symbol-digest-generate .: exit 1: {dump}MGS8001 digest failed, output: out123abc\n{dump}");
         })(dir);
@@ -1399,7 +1411,7 @@ test "any other failure still removes the tree" {
     final root = fixtureRepo().value!;
     final gone = testTree().value!;
     var ran = false;
-    final outcome = withTree(root, rev: "main", dir: gone, body: fun (dir: str) > result\Result::<bool> {
+    final outcome = withTree(root, rev: "main", dir: gone, remove: dropTestTree, body: fun (dir: str) > result\Result::<bool> {
         ran = true;
         return result\fail::<bool>("boom");
     });
@@ -1410,7 +1422,7 @@ test "any other failure still removes the tree" {
 }
 
 // mergedFixture merges the named fixture branches onto a detached main in
-// root itself and regenerates. A worker's lease refuses `git worktree`.
+// root itself and regenerates. A worker's lease refuses `git worktree remove`.
 fun mergedFixture(root: str, names: [str]) > result\Result::<str> {
     final planRun = planStack(root, names: names);
     if (planRun.error -> err) { return result\Result::<str>{ error = err }; }
