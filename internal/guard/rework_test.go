@@ -17,7 +17,7 @@ import (
 const reworkTitle = "orchestrator/integrator guard-facts"
 
 type reworkFixture struct {
-	ctx   context.Context
+	ctx   context.Context //nolint:containedctx // test fixture scoped to one test
 	at    location
 	facts hint.Gate
 	store *job.Store

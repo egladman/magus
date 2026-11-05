@@ -866,7 +866,7 @@ func (s *LineWorkspaceSuite) TestARelativeSessionPlacesNone() {
 // a checkout that is a git repository with two commits.
 type LoadRecoverySuite struct {
 	suite.Suite
-	ctx        context.Context
+	ctx        context.Context //nolint:containedctx // test fixture scoped to one test
 	deps       Dependencies
 	checkpoint string
 }

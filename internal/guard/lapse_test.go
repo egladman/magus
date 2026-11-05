@@ -150,7 +150,7 @@ func TestOldSettingsJSONIsNotRead(t *testing.T) {
 // degrades into running on a lapse.
 type LapsePersonOnlySuite struct {
 	suite.Suite
-	ctx context.Context
+	ctx context.Context //nolint:containedctx // test fixture scoped to one test
 }
 
 func TestLapsePersonOnlySuite(t *testing.T) {
@@ -243,7 +243,7 @@ func (s *LapsePersonOnlySuite) TestAnOrdinaryCommandStillDegrades() {
 // write or command in a live job's checkout stays denied, and others degrade.
 type LapseDegradeSuite struct {
 	suite.Suite
-	ctx     context.Context
+	ctx     context.Context //nolint:containedctx // test fixture scoped to one test
 	session string
 	own     string
 }

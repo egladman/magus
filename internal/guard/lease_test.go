@@ -295,7 +295,7 @@ func TestDenyRepeatGate(t *testing.T) {
 // failed, before any target it failed has passed alone (build-budget recommendation 3).
 type redGateSuite struct {
 	suite.Suite
-	ctx  context.Context
+	ctx  context.Context //nolint:containedctx // test fixture scoped to one test
 	repo *testkit.Repo
 	dir  string
 }
@@ -1617,7 +1617,7 @@ func TestDenyLeaseScopedVCSGradesWorkersByHolder(t *testing.T) {
 // commitPathsSuite pins the grade of what a worker's commit carries.
 type commitPathsSuite struct {
 	suite.Suite
-	ctx    context.Context
+	ctx    context.Context //nolint:containedctx // test fixture scoped to one test
 	repo   worktreeRepo
 	worker types.Job
 	dir    string
@@ -2081,7 +2081,7 @@ func TestVCSCmdRefusalLetsAWorkerInitAScratchRepository(t *testing.T) {
 // its removal.
 type IntegrationScratchMergeSuite struct {
 	suite.Suite
-	ctx     context.Context
+	ctx     context.Context //nolint:containedctx // test fixture scoped to one test
 	repo    worktreeRepo
 	row     types.Job
 	own     string
@@ -3478,7 +3478,7 @@ func TestDenyWriteOutsideLeaseResolvesFromTheCallDir(t *testing.T) {
 // path for a shell line, and only the patch names what one of these writes.
 type PatchWriteSuite struct {
 	suite.Suite
-	ctx  context.Context
+	ctx  context.Context //nolint:containedctx // test fixture scoped to one test
 	root string
 	deps Dependencies
 }
@@ -3636,7 +3636,7 @@ func (s *PatchWriteSuite) TestAnUnleasedSessionIsNotGraded() {
 // names what a pick writes.
 type CherryPickWriteSuite struct {
 	suite.Suite
-	ctx  context.Context
+	ctx  context.Context //nolint:containedctx // test fixture scoped to one test
 	root string
 	deps Dependencies
 	base string
@@ -4001,7 +4001,7 @@ type ScratchWorkspaceSuite struct {
 	suite.Suite
 	held    string
 	scratch string
-	ctx     context.Context
+	ctx     context.Context //nolint:containedctx // test fixture scoped to one test
 	deps    Dependencies
 	row     types.Job
 }

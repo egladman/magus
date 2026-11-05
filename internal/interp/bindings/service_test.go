@@ -72,7 +72,7 @@ func TestServiceAcquireRefusals(t *testing.T) {
 	scoped, _ := service.WithScope(types.WithWorkspace(context.Background(), ws))
 	tests := []struct {
 		name    string
-		ctx     context.Context
+		ctx     context.Context //nolint:containedctx // test fixture scoped to one test
 		spell   string
 		op      string
 		wantErr string

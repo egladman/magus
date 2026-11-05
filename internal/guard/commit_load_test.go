@@ -16,7 +16,7 @@ import (
 // magusfile does not load and the approved one still does.
 type UnloadableCommitSuite struct {
 	suite.Suite
-	ctx      context.Context
+	ctx      context.Context //nolint:containedctx // test fixture scoped to one test
 	cacheDir string
 	deps     Dependencies
 }

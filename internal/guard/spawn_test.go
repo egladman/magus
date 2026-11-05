@@ -501,7 +501,7 @@ func TestHostSpawnTitleReadsOnlyAPlainChildID(t *testing.T) {
 
 // foregroundFleet is a session whose orchestrator spawns foreground workers, one job row each.
 type foregroundFleet struct {
-	ctx  context.Context
+	ctx  context.Context //nolint:containedctx // test fixture scoped to one test
 	root string
 }
 

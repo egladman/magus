@@ -24,7 +24,7 @@ import (
 // store: a second open on disk shows no fold answered first.
 type HookRowAppendSuite struct {
 	suite.Suite
-	ctx  context.Context
+	ctx  context.Context //nolint:containedctx // test fixture scoped to one test
 	root string
 	at   location
 }

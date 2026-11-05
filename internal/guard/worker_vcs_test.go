@@ -560,7 +560,7 @@ func TestIntegrationHolderMergesItsBranchesOnEveryPath(t *testing.T) {
 // standingWorker is a worker row on a checkout its fork made.
 type standingWorker struct {
 	suite.Suite
-	ctx    context.Context
+	ctx    context.Context //nolint:containedctx // test fixture scoped to one test
 	repo   worktreeRepo
 	own    string
 	worker types.Job
@@ -730,7 +730,7 @@ func (s *UnboundCommitSuite) TestAnUnboundCommitIsStillRefused() {
 // LeaseWriteMoveSuite grades what a move writes against a row's write paths.
 type LeaseWriteMoveSuite struct {
 	suite.Suite
-	ctx context.Context
+	ctx context.Context //nolint:containedctx // test fixture scoped to one test
 }
 
 func TestLeaseWriteMoveSuite(t *testing.T) { suite.Run(t, new(LeaseWriteMoveSuite)) }

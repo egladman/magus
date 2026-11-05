@@ -96,7 +96,7 @@ func TestRowUnknownPassesTheRecoveryLines(t *testing.T) {
 // rules would grade it on only the members they know.
 type RowUnknownVCSLinesSuite struct {
 	suite.Suite
-	ctx context.Context
+	ctx context.Context //nolint:containedctx // test fixture scoped to one test
 	row types.Job
 }
 
@@ -150,7 +150,7 @@ func TestRowUnknownPassesARowItCanRead(t *testing.T) {
 // RowUnknownReadOnlyCallerSuite pins the denial for a row with no checkout.
 type RowUnknownReadOnlyCallerSuite struct {
 	suite.Suite
-	ctx  context.Context
+	ctx  context.Context //nolint:containedctx // test fixture scoped to one test
 	row  types.Job
 	deps Dependencies
 }

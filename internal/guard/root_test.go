@@ -870,7 +870,7 @@ func judgeLeasedNestedSpawn(ctx context.Context, t *testing.T, deps Dependencies
 // RootGroundworkSuite judges a root whose bound spawn proves it hands out a live row.
 type RootGroundworkSuite struct {
 	suite.Suite
-	ctx  context.Context
+	ctx  context.Context //nolint:containedctx // test fixture scoped to one test
 	deps Dependencies
 }
 

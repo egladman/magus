@@ -20,7 +20,7 @@ import (
 // the row, and rm, release it.
 type ExitedHolderBindingSuite struct {
 	suite.Suite
-	ctx   context.Context
+	ctx   context.Context //nolint:containedctx // test fixture scoped to one test
 	root  string
 	at    location
 	who   hookAttribution
@@ -160,7 +160,7 @@ func (s *ExitedHolderBindingSuite) TestRootSessionsExitSchemaKeepsTheBinding() {
 // BindOnExecSuite pins that a binding follows an exec the store would take.
 type BindOnExecSuite struct {
 	suite.Suite
-	ctx   context.Context
+	ctx   context.Context //nolint:containedctx // test fixture scoped to one test
 	at    location
 	who   hookAttribution
 	store *job.Store

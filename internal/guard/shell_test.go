@@ -2630,7 +2630,7 @@ func TestEditDryRunRecordsNothing(t *testing.T) {
 
 type GradeEditSuite struct {
 	suite.Suite
-	ctx  context.Context
+	ctx  context.Context //nolint:containedctx // test fixture scoped to one test
 	root string
 }
 
@@ -2705,7 +2705,7 @@ func (s *GradeEditSuite) TestAnUnreadLeaseStoreRefusesLoudly() {
 // where jobs hold leases and the process names none.
 type PersonLeaseSuite struct {
 	suite.Suite
-	ctx  context.Context
+	ctx  context.Context //nolint:containedctx // test fixture scoped to one test
 	root string
 }
 

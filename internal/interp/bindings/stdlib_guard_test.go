@@ -25,8 +25,8 @@ import (
 type guardFixture struct {
 	sess         *buzz.Session
 	ws, outside  string
-	confined     context.Context
-	unrestricted context.Context
+	confined     context.Context //nolint:containedctx // test fixture scoped to one test
+	unrestricted context.Context //nolint:containedctx // test fixture scoped to one test
 }
 
 func newGuardFixture(t *testing.T, rules ...filesystem.Rule) guardFixture {

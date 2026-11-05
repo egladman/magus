@@ -236,7 +236,7 @@ func TestWithInvocationJournalPrefersTheForwardedLease(t *testing.T) {
 // the server's own.
 func TestWithInvocationJournalReadsTheEnvironmentOnlyWhenNothingStampedALease(t *testing.T) {
 	for name, tc := range map[string]struct {
-		ctx  context.Context
+		ctx  context.Context //nolint:containedctx // test fixture scoped to one test
 		want string
 	}{
 		"unstamped":         {ctx: context.Background(), want: "fleet/local"},

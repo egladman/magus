@@ -76,7 +76,7 @@ func TestQuerySymbolsMatchesTheFullyMergedQuery(t *testing.T) {
 func TestQuerySymbolsRanksUnderTheTableCtxCarries(t *testing.T) {
 	cacheDir, in := symbolQueryFixture(t)
 	for _, tc := range []struct {
-		ctx     context.Context
+		ctx     context.Context //nolint:containedctx // test fixture scoped to one test
 		skipped string
 	}{
 		{context.Background(), noTableSkipped},

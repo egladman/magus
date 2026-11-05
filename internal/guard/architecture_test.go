@@ -66,7 +66,7 @@ func TestAsksArchitectureIgnoresCPUsAndDiagrams(t *testing.T) {
 // skill loads, each from the root (agent "") or a subagent.
 type archSession struct {
 	t        *testing.T
-	ctx      context.Context
+	ctx      context.Context //nolint:containedctx // test fixture scoped to one test
 	deps     Dependencies
 	session  string
 	observes bool

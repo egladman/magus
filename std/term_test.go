@@ -107,7 +107,7 @@ func TestTermNotifyNeverRaises(t *testing.T) {
 
 	for _, tc := range []struct {
 		name    string
-		ctx     context.Context
+		ctx     context.Context //nolint:containedctx // test fixture scoped to one test
 		message string
 		level   string
 		ttlMs   int

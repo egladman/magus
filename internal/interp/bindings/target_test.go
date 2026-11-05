@@ -966,7 +966,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 }
 `
 	for name, tc := range map[string]struct {
-		ctx  context.Context
+		ctx  context.Context //nolint:containedctx // test fixture scoped to one test
 		want string
 	}{
 		"a whole run": {context.Background(), "false"},

@@ -686,7 +686,7 @@ magus\guard.write(fun (req: WriteRequest) > GuardVerdict {
 type StopRuleBindingSuite struct {
 	suite.Suite
 	reg  *workspace.WorkspaceRegistry
-	ctx  context.Context
+	ctx  context.Context //nolint:containedctx // test fixture scoped to one test
 	sess *buzz.Session
 }
 
