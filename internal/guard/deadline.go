@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +54,72 @@ const (
 // host's ten. A deadline ctx already carries that falls earlier stands.
 func WithHookDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, hookBudget)
+}
+
+// HookDeadlineEnv hands a delegating magus's hook deadline to its delegate,
+// in unix milliseconds.
+const HookDeadlineEnv = "MAGUS_HOOK_DEADLINE"
+
+// delegateGrace is how long a delegating magus outlives its own deadline
+// before it kills the delegate. The delegate's unjudged answer is due
+// judgeReserve after that deadline and must land first.
+const delegateGrace = judgeReserve + 250*time.Millisecond
+
+// WaitDelegate waits for a started cmd, killing it once ctx has been done for
+// delegateGrace. The grace lets the delegate answer unjudged first.
+func WaitDelegate(ctx context.Context, cmd *exec.Cmd) (killed bool, err error) {
+	done := make(chan struct{})
+	killedC := make(chan bool, 1)
+	go func() {
+		select {
+		case <-done:
+			killedC <- false
+		case <-ctx.Done():
+			grace := time.NewTimer(delegateGrace)
+			defer grace.Stop()
+			select {
+			case <-done:
+				killedC <- false
+			case <-grace.C:
+				_ = cmd.Process.Kill()
+				killedC <- true
+			}
+		}
+	}()
+	err = cmd.Wait()
+	close(done)
+	return <-killedC, err
+}
+
+// DelegateLapsedReason words the deny for a delegate killed unanswered.
+func DelegateLapsedReason(binary string) string {
+	return fmt.Sprintf("%s did not answer within the hook's %s budget, so it was killed.\n"+
+		"Nothing was judged, so this call is blocked rather than cleared. Retry it.", binary, hookBudget)
+}
+
+// HookDeadlineEntry is the environment entry that hands ctx's deadline to a
+// delegate, or "" when ctx has none.
+func HookDeadlineEntry(ctx context.Context) string {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("%s=%d", HookDeadlineEnv, deadline.UnixMilli())
+}
+
+// WithInheritedHookDeadline bounds ctx to the deadline in value, a
+// HookDeadlineEnv reading. An empty value changes nothing; one that is not
+// unix milliseconds is an error.
+func WithInheritedHookDeadline(ctx context.Context, value string) (context.Context, context.CancelFunc, error) {
+	if value == "" {
+		return ctx, func() {}, nil
+	}
+	ms, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || ms <= 0 {
+		return ctx, func() {}, fmt.Errorf("%s=%q is not a deadline in unix milliseconds, so the delegating magus's budget is unknown", HookDeadlineEnv, value)
+	}
+	ctx, cancel := context.WithDeadline(ctx, time.UnixMilli(ms))
+	return ctx, cancel, nil
 }
 
 // dryRunBudget bounds a dry-run judgment. No host waits on it, but a fork or a verb's own

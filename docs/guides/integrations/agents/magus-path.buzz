@@ -231,7 +231,8 @@ fun main(args: [str]) > void {
     // A pass and a broken guard both render nothing; see magus-command.buzz for why
     // telling them apart matters. Every call here is a write, so it is refused.
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
-        var why = "it printed no error";
+        var why = "it could not be run";
+        if (result != null) { why = "it printed no error (exit code {result!.code})"; }
         if (result != null and hook\firstLine(result!.stderr) != "") { why = hook\firstLine(result!.stderr); }
         io\stdout.write(hook\envOr("__MAGUS_FAILED_RESPONSE", fallback: hook\refusal(
             "magus guard could not judge this write: {bin} said: {why}",

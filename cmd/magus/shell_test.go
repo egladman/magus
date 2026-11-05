@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/iotest"
@@ -2268,9 +2269,56 @@ func (s *DelegateToCheckoutSuite) line() string {
 }
 
 func (s *DelegateToCheckoutSuite) delegate(input string) (handled bool, declined, out string, err error) {
+	return s.delegateWithin(context.Background(), input)
+}
+
+func (s *DelegateToCheckoutSuite) delegateWithin(ctx context.Context, input string) (handled bool, declined, out string, err error) {
 	var stdout, stderr bytes.Buffer
-	handled, decline, err := delegateToCheckout(context.Background(), s.running, input, &stdout, &stderr)
+	handled, decline, err := delegateToCheckout(ctx, s.running, input, output.Options{Format: outputText}, &stdout, &stderr)
 	return handled, decline.note, stdout.String(), err
+}
+
+// placeSleeper puts a stamped ./magus that marks its start and then sleeps.
+func placeSleeper(t *testing.T, root, stamp, started string) string {
+	t.Helper()
+	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then printf '%%s\\n' '%s'; exit 0; fi\ntouch '%s'\nexec sleep 30\n", stamp, started)
+	own := filepath.Join(root, "magus")
+	require.NoError(t, os.WriteFile(own, []byte(script), 0o755))
+	return own
+}
+
+func (s *DelegateToCheckoutSuite) TestADelegateKilledPastTheBudgetIsAnsweredWithADenyNamingIt() {
+	started := filepath.Join(s.T().TempDir(), "started")
+	own := placeSleeper(s.T(), s.repo.Root(), s.repo.Head(), started)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		for ctx.Err() == nil {
+			if _, err := os.Stat(started); err == nil {
+				cancel()
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+	handled, declined, out, err := s.delegateWithin(ctx, s.line())
+	s.True(handled)
+	s.Empty(declined)
+	s.Equal(2, exit.Code(err))
+	s.Contains(out, own)
+	s.Contains(out, "did not answer within the hook's 7s budget")
+}
+
+func (s *DelegateToCheckoutSuite) TestADelegateIsHandedTheParentsDeadline() {
+	own := filepath.Join(s.repo.Root(), "magus")
+	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then printf '%%s\\n' '%s'; exit 0; fi\ncat >/dev/null\nprintf '%%s' \"$%s\"\n", s.repo.Head(), guard.HookDeadlineEnv)
+	s.Require().NoError(os.WriteFile(own, []byte(script), 0o755))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	want, _ := ctx.Deadline()
+	handled, _, out, err := s.delegateWithin(ctx, s.line())
+	s.True(handled)
+	s.Require().NoError(err)
+	s.Equal(strconv.FormatInt(want.UnixMilli(), 10), out)
 }
 
 // The lockout: HEAD moved past ./magus, and an older judge cannot read the row.
@@ -2543,6 +2591,14 @@ func (s *unjudgedHookSuite) TestTheSecondCallInASessionIsToldToo() {
 	s.reply("magus-command.buzz", "claude-code", event)
 	reply := s.reply("magus-command.buzz", "claude-code", event)
 	s.Contains(reply["systemMessage"], "could not judge this call")
+}
+
+func (s *unjudgedHookSuite) TestASilentFailureNamesItsExitCode() {
+	body, _ := runGlue(s.T(), "magus-command.buzz", glueArrangement{label: "claude-code", host: "claude-code", stub: "#!/bin/sh\nprintf no > \"$RENDERS_ASK_RECORD\"\nexit 3\n",
+		event: `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git stash"}}`})
+	reply, ok := glueDecode(s.T(), "claude-code", body).(map[string]any)
+	s.Require().True(ok, body)
+	s.Contains(reply["systemMessage"], "it printed no error (exit code 3)")
 }
 
 func (s *unjudgedHookSuite) TestCodexRefusalFitsItsSchema() {

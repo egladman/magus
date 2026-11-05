@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -61,6 +62,80 @@ func TestWithHookDeadlineKeepsAnEarlierOne(t *testing.T) {
 	got, ok = ctx.Deadline()
 	require.True(t, ok)
 	assert.WithinDuration(t, time.Now().Add(hookBudget), got, time.Second)
+}
+
+// InheritedHookDeadlineSuite pins the deadline a delegate inherits.
+type InheritedHookDeadlineSuite struct {
+	suite.Suite
+}
+
+func TestInheritedHookDeadlineSuite(t *testing.T) {
+	suite.Run(t, new(InheritedHookDeadlineSuite))
+}
+
+func (s *InheritedHookDeadlineSuite) TestAnEmptyValueChangesNothing() {
+	ctx, cancel, err := WithInheritedHookDeadline(s.T().Context(), "")
+	defer cancel()
+	s.Require().NoError(err)
+	_, bounded := ctx.Deadline()
+	s.False(bounded)
+}
+
+func (s *InheritedHookDeadlineSuite) TestAMalformedValueIsAnError() {
+	_, cancel, err := WithInheritedHookDeadline(s.T().Context(), "soon")
+	defer cancel()
+	s.ErrorContains(err, HookDeadlineEnv)
+}
+
+func (s *InheritedHookDeadlineSuite) TestANonPositiveValueIsAnError() {
+	_, cancel, err := WithInheritedHookDeadline(s.T().Context(), "0")
+	defer cancel()
+	s.ErrorContains(err, "unix milliseconds")
+}
+
+func (s *InheritedHookDeadlineSuite) TestTheEntryCarriesTheDeadlineToTheDelegate() {
+	parent, cancelParent := context.WithTimeout(s.T().Context(), time.Minute)
+	defer cancelParent()
+	want, _ := parent.Deadline()
+	_, value, found := strings.Cut(HookDeadlineEntry(parent), HookDeadlineEnv+"=")
+	s.Require().True(found)
+	child, cancel, err := WithInheritedHookDeadline(s.T().Context(), value)
+	defer cancel()
+	s.Require().NoError(err)
+	got, _ := child.Deadline()
+	s.Equal(want.UnixMilli(), got.UnixMilli())
+}
+
+func (s *InheritedHookDeadlineSuite) TestAContextWithoutADeadlineHandsNothingOn() {
+	s.Empty(HookDeadlineEntry(s.T().Context()))
+}
+
+func (s *InheritedHookDeadlineSuite) TestAnInheritedDeadlineEarlierThanTheBudgetStands() {
+	parent := strconv.FormatInt(time.Now().Add(time.Second).UnixMilli(), 10)
+	inherited, cancelInherited, err := WithInheritedHookDeadline(s.T().Context(), parent)
+	defer cancelInherited()
+	s.Require().NoError(err)
+	ctx, cancel := WithHookDeadline(inherited)
+	defer cancel()
+	got, _ := ctx.Deadline()
+	s.Less(time.Until(got), 1100*time.Millisecond)
+}
+
+func (s *InheritedHookDeadlineSuite) TestTheJudgmentLapsesWithTheInheritedDeadline() {
+	parent := strconv.FormatInt(time.Now().Add(100*time.Millisecond).UnixMilli(), 10)
+	ctx, cancel, err := WithInheritedHookDeadline(s.T().Context(), parent)
+	defer cancel()
+	s.Require().NoError(err)
+	release := make(chan struct{})
+	defer close(release)
+	req := Request{Input: "cat >> $TARGET <<'EOF'\nline\nEOF", Host: "claude-code", Session: "inherited"}
+	start := time.Now()
+	v := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) types.GuardJudgment {
+		<-release
+		return types.GuardJudgment{Decision: decisionPass}
+	})
+	s.Equal(string(advisoryUnfinished), v.Rule)
+	s.Less(time.Since(start), hookBudget/2)
 }
 
 // A load that failed after the deadline passed lapsed; one that answered did not, however
