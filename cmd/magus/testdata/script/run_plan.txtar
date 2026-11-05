@@ -27,10 +27,15 @@ cmp log/c.build once
 ! exists log/a.build
 ! exists log/b.build
 
-# The target positional is optional, and adds charms when given.
+# The target positional is optional. Charms it adds are refused, since the plan was
+# evaluated under none and its steps would differ under rw.
 stdin plan.json
-exec magus run build:rw --stdin --shard 1 --dry-run
-stderr '\[dry\] shard 1: magus run build:rw a b'
+exec magus run build --stdin --shard 1 --dry-run
+stderr '\[dry\] shard 1: build runs a:build b:build'
+stdin plan.json
+! exec magus run build:rw --stdin --shard 1 --dry-run
+stderr 'MGS3029'
+stderr 'the plan was evaluated under charms "", not "rw"'
 
 # Without --shard every shard runs here; c replays from the run above.
 stdin plan.json
@@ -139,8 +144,8 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
   "max_parallel": 2,
   "source": "fixture",
   "matrix": [
-    {"shard": "1", "projects": "a b", "label": "7b1164227735", "units": [{"project": "a", "target": "build"}, {"project": "b", "target": "build"}]},
-    {"shard": "2", "projects": "c", "label": "0a26bc127b01", "units": [{"project": "c", "target": "build"}]}
+    {"shard": "1", "projects": "a b", "job_name": "a b", "digest": "7b1164227735", "units": [{"project": "a", "target": "build"}, {"project": "b", "target": "build"}]},
+    {"shard": "2", "projects": "c", "job_name": "c", "digest": "0a26bc127b01", "units": [{"project": "c", "target": "build"}]}
   ],
   "affected": ["a", "b", "c"],
   "outputs": [
@@ -156,6 +161,6 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 -- miscount.json --
 {"target": "build", "count": 3, "matrix": [{"shard": "1", "projects": "a"}, {"shard": "2", "projects": "b"}]}
 -- dup.json --
-{"target": "build", "count": 2, "matrix": [{"shard": "1", "projects": "a", "label": "ca277e40a192", "units": [{"project": "a", "target": "build"}]}, {"shard": "1", "projects": "b"}]}
+{"target": "build", "count": 2, "matrix": [{"shard": "1", "projects": "a", "job_name": "a", "digest": "ca277e40a192", "units": [{"project": "a", "target": "build"}]}, {"shard": "1", "projects": "b"}]}
 -- bad.json --
 this is not json
