@@ -666,8 +666,8 @@ var scopePlaceholder = regexp.MustCompile(`\{[^{}]*\}`)
 
 // namesTestScope tells a forwarded scope operand from a forwarded flag: the
 // spell declares the operand's shape in TestScope, so no second declaration is
-// needed. {dir}, {file} and {stem} match any text, and an arg starting with -
-// is a flag, never an operand.
+// needed. {dir}, {file} and {stem} match any text. An arg that starts with a
+// dash is a flag, never an operand.
 func namesTestScope(c spells.Command, args []string) bool {
 	operand := func(re *regexp.Regexp) func(string) bool {
 		return func(a string) bool { return !strings.HasPrefix(a, "-") && re.MatchString(a) }
