@@ -310,8 +310,8 @@ func gradePushWithoutGate(ev pushEvidence, lease string) (decision, reason strin
 		head += "That run is still going or it was killed.\n"
 	}
 	head += ev.narrow.shortfall()
-	gate := fmt.Sprintf("Or run `%s`, then `%s`, commit what it regenerates, and push again. CI runs the identical command on the identical tree, so a red push pays twice for one answer.",
-		hint.Status.With("--wait"), hint.Affected.With(string(types.TargetCI)))
+	gate := fmt.Sprintf("Or run `%s`, which waits for the build budget itself, commit what it regenerates, and push again. CI runs the identical command on the identical tree, so a red push pays twice for one answer.",
+		hint.Affected.With(string(types.TargetCI)))
 	if lease != "" {
 		return decisionDeny, fmt.Sprintf("%sThis session is bound to job %s, and workers do not publish: report the commit to the orchestrator that holds the branch.\n%s", head, lease, gate)
 	}
