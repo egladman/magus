@@ -631,8 +631,7 @@ fun dropTree(dir: str) > result\Result::<bool> {
     }
 }
 
-// removeWorktree is the live host's tree cleanup: git forgets the worktree,
-// then whatever is left of dir goes.
+// removeWorktree is the live host's cleanup, which integration rows may run.
 fun removeWorktree(root: str, dir: str) > result\Result::<bool> {
     final removed = rc\git(root, args: ["worktree", "remove", "--force", dir]);
     if (removed.error -> err) { return result\Result::<bool>{ error = err }; }
@@ -643,7 +642,6 @@ fun removeWorktree(root: str, dir: str) > result\Result::<bool> {
 // worktree however body ends. dir comes from the caller because the scratch checkout dir
 // lives under XDG_CACHE_HOME, which a CI gate puts inside its own checkout, where the
 // buzz-test sandbox denies writes.
-// remove is the host's cleanup; a worker lease refuses git's.
 fun withTree(root: str, rev: str, dir: str, remove: fun (root: str, dir: str) > result\Result::<bool>, body: fun (dir: str) > result\Result::<bool>) > result\Result::<bool> {
     final added = rc\git(root, args: ["worktree", "add", "--detach", "--quiet", dir, rev]);
     if (added.error -> err) {
@@ -1254,11 +1252,8 @@ fun testTree() > result\Result::<str> {
     }
 }
 
-// dropTestTree is the test host's tree cleanup. The scratch root is the
-// test's own, so fs removes it and no git removal meets a worker lease.
-fun dropTestTree(root: str, dir: str) > result\Result::<bool> {
-    return dropTree(dir);
-}
+// dropTestTree removes the test's own scratch root with fs, never with git.
+fun dropTestTree(root: str, dir: str) > result\Result::<bool> => dropTree(dir);
 
 fun planStack(root: str, names: [str]) > result\Result::<stack\BranchStack> {
     final cands = mut [<Candidate>];
