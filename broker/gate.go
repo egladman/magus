@@ -99,4 +99,3 @@ func (s *server) enqueueLocked(p *parked) {
 func jobWeight(c types.MachineClaim) float64 {
 	return cmp.Or(c.Weight, types.DefaultJobWeight)
 }
-

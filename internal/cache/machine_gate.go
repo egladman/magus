@@ -123,7 +123,7 @@ type machineGate struct {
 	// wait bounds a wait on other invocations' claims (budget_wait).
 	wait time.Duration
 	log  *slog.Logger
-	lost  sync.Once
+	lost sync.Once
 	// unread says once that this host's memory state has no reading.
 	unread sync.Once
 	// required refuses a step the admitter could not answer for, where the default
