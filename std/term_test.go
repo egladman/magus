@@ -103,24 +103,26 @@ func TestTermWantsColorIsFalseWithoutATerminal(t *testing.T) {
 // recording pass) is a silent drop. Making a magusfile guard it would be a tax
 // paid at every call site for a condition no author can act on.
 func TestTermNotifyNeverRaises(t *testing.T) {
-	ctx := context.Background()
-
 	for _, tc := range []struct {
-		name    string
-		ctx     context.Context //nolint:containedctx // test fixture scoped to one test
-		message string
-		level   string
-		ttlMs   int
+		name      string
+		recording bool
+		message   string
+		level     string
+		ttlMs     int
 	}{
-		{name: "default ttl", ctx: ctx, message: "built", level: "info"},
-		{name: "explicit ttl", ctx: ctx, message: "built", level: "warn", ttlMs: 250},
-		{name: "a negative ttl pins the notification", ctx: ctx, message: "built", level: "error", ttlMs: -1},
-		{name: "an unknown level is not an error", ctx: ctx, message: "built", level: "shouting"},
-		{name: "an empty message is a no-op", ctx: ctx},
-		{name: "a recording pass paints nothing", ctx: types.WithTrace(ctx), message: "built", level: "info"},
+		{name: "default ttl", message: "built", level: "info"},
+		{name: "explicit ttl", message: "built", level: "warn", ttlMs: 250},
+		{name: "a negative ttl pins the notification", message: "built", level: "error", ttlMs: -1},
+		{name: "an unknown level is not an error", message: "built", level: "shouting"},
+		{name: "an empty message is a no-op"},
+		{name: "a recording pass paints nothing", recording: true, message: "built", level: "info"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			require.NoError(t, TermNotify(tc.ctx, tc.message, tc.level, tc.ttlMs))
+			ctx := t.Context()
+			if tc.recording {
+				ctx = types.WithTrace(ctx)
+			}
+			require.NoError(t, TermNotify(ctx, tc.message, tc.level, tc.ttlMs))
 		})
 	}
 }
