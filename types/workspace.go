@@ -43,7 +43,7 @@ func (w *Workspace) SetGraphObserver(o Observer) {
 }
 
 // GraphObserver returns the default graph observer, or nil.
-func (w *Workspace) GraphObserver() Observer {
+func (w *Workspace) GraphObserver() Observer { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	w.graphObsMu.RLock()
 	defer w.graphObsMu.RUnlock()
 	return w.graphObs
@@ -143,7 +143,7 @@ func WithWorkspace(ctx context.Context, ws WorkspaceRepository) context.Context 
 
 // WorkspaceFromContext returns the WorkspaceRepository from ctx, or nil when no
 // workspace was installed (e.g. a direct SpellDriver call outside a run).
-func WorkspaceFromContext(ctx context.Context) WorkspaceRepository {
+func WorkspaceFromContext(ctx context.Context) WorkspaceRepository { //nolint:ireturn // the workspace backing is chosen at runtime
 	w, _ := ctx.Value(workspaceKey{}).(WorkspaceRepository)
 	return w
 }
@@ -209,7 +209,7 @@ func ContextWithGraphObserver(ctx context.Context, o Observer) context.Context {
 }
 
 // GraphObserverFromContext returns the request-scoped observer, or nil.
-func GraphObserverFromContext(ctx context.Context) Observer {
+func GraphObserverFromContext(ctx context.Context) Observer { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	o, _ := ctx.Value(graphObserverKey{}).(Observer)
 	return o
 }

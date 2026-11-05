@@ -241,7 +241,7 @@ func init() { workspace.SetView(internalView) } //nolint:gochecknoinits // inter
 
 // internalView is workspace.ViewAs's answer: a *Magus as its internals, any other workspace
 // unchanged.
-func internalView(ws types.WorkspaceRepository) types.WorkspaceRepository {
+func internalView(ws types.WorkspaceRepository) types.WorkspaceRepository { //nolint:ireturn // the workspace backing is chosen at runtime
 	if m, ok := ws.(*Magus); ok {
 		return m.internals()
 	}
@@ -287,7 +287,7 @@ func (w internals) CheckSpawn(parent, child types.ModelTier) error {
 // Telemetry returns this workspace's observability provider: nil on an Inspect workspace,
 // which builds none, and the shared instance when Open was given one
 // (workspace.WithTelemetryProvider).
-func (w internals) Telemetry() observability.Provider { return w.tel }
+func (w internals) Telemetry() observability.Provider { return w.tel } //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 
 // FindRoot walks up from dir to the workspace root. The nearest magus.yaml wins; with
 // none, the root is the outermost contiguous directory holding a magusfile
@@ -303,7 +303,7 @@ func FindRoot(dir string) (string, error) {
 }
 
 // Inspect discovers the workspace without opening the cache (for introspection commands).
-func Inspect(ctx context.Context, root string, opts ...Option) (types.WorkspaceRepository, error) {
+func Inspect(ctx context.Context, root string, opts ...Option) (types.WorkspaceRepository, error) { //nolint:ireturn // the workspace backing is chosen at runtime
 	m, err := inspect(ctx, root, opts...)
 	if err != nil {
 		return nil, err

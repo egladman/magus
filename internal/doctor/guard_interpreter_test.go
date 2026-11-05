@@ -42,7 +42,7 @@ func TestCheckGuardBinaryAdvisesWhenAWiredCommandNamesAMissingOwnBinary(t *testi
 	require.NoError(t, os.Remove(w.Path("magus")))
 	onPath(t)
 
-	got := (&runner{ws: boundWorkspace(t, w.Root(), "test-host")}).checkGuardBinary()
+	got := (&runner{ws: boundWorkspace(t, w.Root(), "test-host")}).checkGuardBinary(t.Context())
 
 	assert.Equal(t, types.CheckAdvice, got.Status)
 	assert.Contains(t, got.Message, "cannot launch in a live session")
@@ -57,7 +57,7 @@ func TestCheckGuardBinaryPassesWhenAWiredCommandNamesTheBareBinary(t *testing.T)
 	require.NoError(t, os.Remove(w.Path("magus")))
 	onPath(t)
 
-	got := (&runner{ws: boundWorkspace(t, w.Root(), "test-host")}).checkGuardBinary()
+	got := (&runner{ws: boundWorkspace(t, w.Root(), "test-host")}).checkGuardBinary(t.Context())
 
 	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Contains(t, got.Message, "no ./magus built")
@@ -72,14 +72,14 @@ func TestCheckGuardBinaryFailsWhenTheHookInterpreterIsAnotherBuild(t *testing.T)
 	t.Setenv("PATH", bin.Root())
 	r := &runner{ws: boundWorkspace(t, t.TempDir()), opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
 
-	got := r.checkGuardBinary()
+	got := r.checkGuardBinary(t.Context())
 
 	assert.Equal(t, types.CheckFail, got.Status)
 	assert.Contains(t, got.Message, stale+" (v0.4.3)", "names the binary a hook runs, and its build")
 	assert.Contains(t, got.Message, "this magus is v0.5.0", "and the build it should have been")
 
 	r.opts.serverInfo.ClientVersion = "v0.4.3"
-	assert.Equal(t, types.CheckOK, r.checkGuardBinary().Status, "the same build passes")
+	assert.Equal(t, types.CheckOK, r.checkGuardBinary(t.Context()).Status, "the same build passes")
 }
 
 // A binary that cannot say which build it is cannot run the glue either.
@@ -89,7 +89,7 @@ func TestCheckGuardBinaryFailsWhenTheHookInterpreterPrintsNoVersion(t *testing.T
 	withoutPathMagus(t)
 	r := &runner{ws: boundWorkspace(t, w.Root()), opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
 
-	got := r.checkGuardBinary()
+	got := r.checkGuardBinary(t.Context())
 
 	assert.Equal(t, types.CheckFail, got.Status)
 	assert.Contains(t, got.Message, "did not answer `version`")
@@ -158,7 +158,7 @@ func TestCheckGuardBinaryFailsForAWorktreeWithoutABinary(t *testing.T) {
 		hint.SituationDoctor + guardBinaryCheck: {placement},
 	}}))
 
-	got := r.checkGuardBinaryEverywhere(nil)
+	got := r.checkGuardBinaryEverywhere(t.Context(), nil)
 
 	assert.Equal(t, types.Check{
 		Name:    guardBinaryCheck,
@@ -172,7 +172,7 @@ func TestCheckGuardBinaryFailsForAWorktreeWithoutABinary(t *testing.T) {
 
 	require.NoError(t, os.Remove(filepath.Join(root, ".git")))
 	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
-	main := r.checkGuardBinaryEverywhere(nil)
+	main := r.checkGuardBinaryEverywhere(t.Context(), nil)
 	assert.NotContains(t, main.Message, "this worktree", "a main checkout with no ./magus is the ordinary state")
 }
 
@@ -230,13 +230,13 @@ func TestCheckGuardBinaryFailsWhenAProjectResolvesAnotherBuild(t *testing.T) {
 	r := &runner{ws: boundWorkspace(t, root), opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
 	projects := []*types.Project{{Path: ".", Dir: root}, {Path: "stray", Dir: stray}}
 
-	got := r.checkGuardBinaryEverywhere(projects)
+	got := r.checkGuardBinaryEverywhere(t.Context(), projects)
 
 	assert.Equal(t, types.CheckFail, got.Status)
 	assert.Contains(t, got.Message, stale+" (v0.4.3)")
 	assert.Equal(t, "resolved from the project directory "+stray, got.Details[0])
 
-	assert.Equal(t, types.CheckOK, r.checkGuardBinaryEverywhere(projects[:1]).Status, "the root alone passes")
+	assert.Equal(t, types.CheckOK, r.checkGuardBinaryEverywhere(t.Context(), projects[:1]).Status, "the root alone passes")
 }
 
 // No magus for a project directory is a failure, not a pass: nothing judges calls there.
@@ -251,7 +251,7 @@ func TestCheckGuardBinaryFailsWhenAProjectResolvesNoBinary(t *testing.T) {
 	withoutPathMagus(t)
 	r := &runner{ws: boundWorkspace(t, root), opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
 
-	got := r.checkGuardBinaryEverywhere([]*types.Project{{Path: "stray", Dir: stray}})
+	got := r.checkGuardBinaryEverywhere(t.Context(), []*types.Project{{Path: "stray", Dir: stray}})
 
 	assert.Equal(t, types.CheckFail, got.Status)
 	assert.Contains(t, got.Message, "no magus resolves for a hook run in "+stray)

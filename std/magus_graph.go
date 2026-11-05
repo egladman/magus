@@ -26,7 +26,7 @@ type knowledgeGraphs interface {
 	SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool)
 }
 
-func graphsFromContext(ctx context.Context, member string) (knowledgeGraphs, error) {
+func graphsFromContext(ctx context.Context, member string) (knowledgeGraphs, error) { //nolint:ireturn // the workspace backing is chosen at runtime
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return nil, errorNoWorkspace(member)

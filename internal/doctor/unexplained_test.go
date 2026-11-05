@@ -77,7 +77,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r := &runner{ws: hotWorkspace{files: hot("a.go")}}
 		r.opts.explanations = &Explanations{}
 
-		got := r.checkUnexplainedHotspots(nil)
+		got := r.checkUnexplainedHotspots(t.Context(), nil)
 		assert.Equal(t, types.Check{
 			Status:   types.CheckOK,
 			Evidence: types.EvidenceUnknown,
@@ -88,7 +88,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 	t.Run("no caller-supplied store is unknown, never a clean bill", func(t *testing.T) {
 		r := &runner{ws: hotWorkspace{files: hot("a.go")}}
 
-		got := r.checkUnexplainedHotspots(nil)
+		got := r.checkUnexplainedHotspots(t.Context(), nil)
 		assert.Equal(t, types.EvidenceUnknown, got.Evidence)
 	})
 
@@ -96,7 +96,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r := &runner{}
 		r.opts.explanations = &Explanations{Notes: 2}
 
-		got := r.checkUnexplainedHotspots(nil)
+		got := r.checkUnexplainedHotspots(t.Context(), nil)
 		assert.Equal(t, types.Check{Status: types.CheckOK, Evidence: types.EvidenceUnknown}, withoutWording(got))
 		assert.Contains(t, got.Message, "no history lens")
 	})
@@ -105,7 +105,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r := &runner{ws: hotWorkspace{}}
 		r.opts.explanations = &Explanations{Notes: 2}
 
-		got := r.checkUnexplainedHotspots(nil)
+		got := r.checkUnexplainedHotspots(t.Context(), nil)
 		assert.Equal(t, types.EvidenceUnknown, got.Evidence)
 	})
 
@@ -113,7 +113,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r := &runner{ws: hotWorkspace{files: hot("internal/cache/key.go", "b.go")}}
 		r.opts.explanations = &Explanations{Notes: 3, Files: []string{"internal/cache/key.go"}}
 
-		got := r.checkUnexplainedHotspots(nil)
+		got := r.checkUnexplainedHotspots(t.Context(), nil)
 		assert.Equal(t, types.Check{Status: types.CheckOK, Evidence: types.EvidenceInferred}, withoutWording(got))
 		assert.Contains(t, got.Message, "1 of the 2")
 	})
@@ -122,7 +122,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r := &runner{ws: hotWorkspace{files: hot("a.go", "b.go")}}
 		r.opts.explanations = &Explanations{Notes: 3, Files: []string{"elsewhere.go"}}
 
-		got := r.checkUnexplainedHotspots(nil)
+		got := r.checkUnexplainedHotspots(t.Context(), nil)
 		assert.Equal(t, types.CheckAdvice, got.Status)
 		require.Len(t, got.Details, 3) // two bare files, then the remedy
 		assert.Contains(t, got.Details[0], "a.go")
@@ -136,7 +136,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r := &runner{root: "/w", ws: hotWorkspace{files: hot("pkg/a.go")}}
 		r.opts.explanations = &Explanations{Notes: 1, Files: []string{"/w/pkg/a.go"}}
 
-		got := r.checkUnexplainedHotspots(nil)
+		got := r.checkUnexplainedHotspots(t.Context(), nil)
 		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "1 of the 1")
 	})
@@ -149,7 +149,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r := &runner{ws: hotWorkspace{files: hot(paths...)}}
 		r.opts.explanations = &Explanations{Notes: 1}
 
-		got := r.checkUnexplainedHotspots(nil)
+		got := r.checkUnexplainedHotspots(t.Context(), nil)
 		assert.Contains(t, got.Message, "0 of the 10")
 	})
 }

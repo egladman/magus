@@ -295,9 +295,9 @@ func TestDenyRepeatGate(t *testing.T) {
 // failed, before any target it failed has passed alone (build-budget recommendation 3).
 type redGateSuite struct {
 	suite.Suite
-	ctx  context.Context
-	repo *testkit.Repo
-	dir  string
+	layers ctxLayers
+	repo   *testkit.Repo
+	dir    string
 }
 
 func TestRedGateSuite(t *testing.T) { suite.Run(t, new(redGateSuite)) }
@@ -308,7 +308,7 @@ const redGate = "./magus affected ci"
 // and docs' lint. No gate ran before it in the window.
 func (s *redGateSuite) SetupTest() {
 	ctx, repo := gateRepeatRepository(s.T(), 0, sessions.OutcomeFail)
-	s.ctx, s.repo = ctx, repo
+	s.layers, s.repo = locationLayers(ctx), repo
 	dir, err := sessions.Dir(repo.Root())
 	s.Require().NoError(err)
 	s.dir = dir
@@ -328,7 +328,7 @@ func (s *redGateSuite) results(inv string, results ...sessions.TargetResult) {
 }
 
 func (s *redGateSuite) TestTheFirstRepeatIsRefusedNamingEachTargetAndItsNarrowRun() {
-	d := denyRepeatGate(s.ctx, Dependencies{}, "", redGate)
+	d := denyRepeatGate(s.testContext(), Dependencies{}, "", redGate)
 	s.Require().NotEmpty(d)
 	s.Contains(d.Say, "`ci` failed on this branch")
 	s.Contains(d.Say, "run inv-green")
@@ -342,19 +342,19 @@ func (s *redGateSuite) TestTheFirstRepeatIsRefusedNamingEachTargetAndItsNarrowRu
 func (s *redGateSuite) TestEachTargetPassingAloneAdmitsTheGate() {
 	time.Sleep(2 * time.Millisecond)
 	s.results("narrow-test", sessions.TargetResult{Project: ".", Target: "go-test", Outcome: sessions.OutcomePass})
-	d := denyRepeatGate(s.ctx, Dependencies{}, "", redGate)
+	d := denyRepeatGate(s.testContext(), Dependencies{}, "", redGate)
 	s.Require().NotEmpty(d, "docs' lint is still owed")
 	s.NotContains(d.Say, "go-test")
 
 	s.results("narrow-lint", sessions.TargetResult{Project: "docs", Target: "lint", Outcome: sessions.OutcomePass})
-	s.Empty(denyRepeatGate(s.ctx, Dependencies{}, "", redGate))
+	s.Empty(denyRepeatGate(s.testContext(), Dependencies{}, "", redGate))
 }
 
 func (s *redGateSuite) TestAHarnessWriteAfterTheRedGateAdmitsIt() {
 	time.Sleep(2 * time.Millisecond)
 	s.Require().NoError(sessions.RecordHarnessWrite(s.dir, sessions.HarnessWrite{Paths: []string{".claude/skills/x/SKILL.md"}},
 		sessions.InvocationStart{Workspace: s.repo.Root()}))
-	s.Empty(denyRepeatGate(s.ctx, Dependencies{}, "", redGate))
+	s.Empty(denyRepeatGate(s.testContext(), Dependencies{}, "", redGate))
 }
 
 func (s *redGateSuite) TestAHarnessWriteBeforeTheRedGateStillRefusesIt() {
@@ -364,14 +364,14 @@ func (s *redGateSuite) TestAHarnessWriteBeforeTheRedGateStillRefusesIt() {
 	s.Require().NoError(sessions.RecordGate(s.dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: s.repo.Head(), Outcome: sessions.OutcomeFail, Inv: "inv-green",
 	}, sessions.InvocationStart{Workspace: s.repo.Root()}))
-	s.NotEmpty(denyRepeatGate(s.ctx, Dependencies{}, "", redGate))
+	s.NotEmpty(denyRepeatGate(s.testContext(), Dependencies{}, "", redGate))
 }
 
 func (s *redGateSuite) TestAFileWrittenAfterTheRedGateAdmitsIt() {
 	s.repo.Write("a.go", "package a\n\nvar fixed = true\n")
 	after := time.Now().Add(time.Minute)
 	s.Require().NoError(os.Chtimes(s.repo.Path("a.go"), after, after))
-	s.Empty(denyRepeatGate(s.ctx, Dependencies{}, "", redGate))
+	s.Empty(denyRepeatGate(s.testContext(), Dependencies{}, "", redGate))
 }
 
 func TestWorkspaceRunsDirNeedsAResolvedCacheDir(t *testing.T) {
@@ -1617,7 +1617,7 @@ func TestDenyLeaseScopedVCSGradesWorkersByHolder(t *testing.T) {
 // commitPathsSuite pins the grade of what a worker's commit carries.
 type commitPathsSuite struct {
 	suite.Suite
-	ctx    context.Context
+	layers ctxLayers
 	repo   worktreeRepo
 	worker types.Job
 	dir    string
@@ -1626,7 +1626,8 @@ type commitPathsSuite struct {
 func TestCommitPaths(t *testing.T) { suite.Run(t, new(commitPathsSuite)) }
 
 func (s *commitPathsSuite) SetupTest() {
-	s.ctx, s.repo, s.worker, s.dir = leaseVCSRepository(s.T())
+	fixtureCtx, repo, worker, dir := leaseVCSRepository(s.T())
+	s.layers, s.repo, s.worker, s.dir = locationLayers(fixtureCtx), repo, worker, dir
 	s.Require().NoError(os.MkdirAll(filepath.Join(s.dir, "cmd/magus"), 0o755))
 	s.Require().NoError(os.MkdirAll(filepath.Join(s.dir, "docs"), 0o755))
 }
@@ -1639,7 +1640,7 @@ func (s *commitPathsSuite) deny(command string) string {
 	ws := typestest.NewMockWorkspaceRepository(s.T())
 	ws.EXPECT().All().Return(nil).Maybe()
 	deps := Dependencies{callDir: s.dir, Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
-	return denyLeaseScopedVCS(s.ctx, deps, s.worker.ID, command)
+	return denyLeaseScopedVCS(s.testContext(), deps, s.worker.ID, command)
 }
 
 func (s *commitPathsSuite) TestAStagedPathInsideTheLeasePasses() {
@@ -1671,7 +1672,7 @@ func (s *commitPathsSuite) TestAnIntegratingRowCommitsWhatItRegenerates() {
 	s.write("docs/index.md")
 	s.repo.git(s.dir, "add", "docs/gen.json", "docs/index.md")
 
-	s.Contains(denyLeaseScopedVCS(s.ctx, deps, s.worker.ID, "git commit -m done"), "It commits docs/gen.json docs/index.md",
+	s.Contains(denyLeaseScopedVCS(s.testContext(), deps, s.worker.ID, "git commit -m done"), "It commits docs/gen.json docs/index.md",
 		"a worker's row holds no output")
 
 	integrating := s.worker
@@ -1704,13 +1705,13 @@ func (s *commitPathsSuite) stage(paths ...string) {
 func (s *commitPathsSuite) TestAWorkerCommitsTheDeclaredOutputOfASourceItWrote() {
 	deps := s.regeneratingDeps("cmd/magus/*.go")
 	s.stage("cmd/magus/x.go", "docs/gen.json")
-	s.Empty(denyLeaseScopedVCS(s.ctx, deps, s.worker.ID, "git commit -m done"))
+	s.Empty(denyLeaseScopedVCS(s.testContext(), deps, s.worker.ID, "git commit -m done"))
 }
 
 func (s *commitPathsSuite) TestAWorkerStillCommitsNoUndeclaredPath() {
 	deps := s.regeneratingDeps("cmd/magus/*.go")
 	s.stage("cmd/magus/x.go", "docs/gen.json", "docs/hand.md")
-	got := denyLeaseScopedVCS(s.ctx, deps, s.worker.ID, "git commit -m done")
+	got := denyLeaseScopedVCS(s.testContext(), deps, s.worker.ID, "git commit -m done")
 	s.Contains(got, "It commits docs/hand.md,")
 	s.NotContains(got, "docs/gen.json,")
 }
@@ -1718,7 +1719,7 @@ func (s *commitPathsSuite) TestAWorkerStillCommitsNoUndeclaredPath() {
 func (s *commitPathsSuite) TestAWorkerCommitsNoOutputOfASourceOutsideItsRow() {
 	deps := s.regeneratingDeps("internal/other/*.go")
 	s.stage("cmd/magus/x.go", "docs/gen.json")
-	s.Contains(denyLeaseScopedVCS(s.ctx, deps, s.worker.ID, "git commit -m done"), "It commits docs/gen.json")
+	s.Contains(denyLeaseScopedVCS(s.testContext(), deps, s.worker.ID, "git commit -m done"), "It commits docs/gen.json")
 }
 
 func (s *commitPathsSuite) TestAnAddOnTheSameLineIsGraded() {
@@ -2081,7 +2082,7 @@ func TestVCSCmdRefusalLetsAWorkerInitAScratchRepository(t *testing.T) {
 // its removal.
 type IntegrationScratchMergeSuite struct {
 	suite.Suite
-	ctx     context.Context
+	layers  ctxLayers
 	repo    worktreeRepo
 	row     types.Job
 	own     string
@@ -2110,7 +2111,7 @@ func (s *IntegrationScratchMergeSuite) SetupTest() {
 	s.row.CheckoutRoot = s.own
 	s.row.Worktree = &types.JobWorktree{Root: s.own}
 	s.row.Integrates = []string{"done"}
-	s.ctx, _ = fleetFixture(t, s.row)
+	s.layers, _ = fleetLayers(t, s.row)
 	// After the fixture, which points the cache elsewhere.
 	t.Setenv("XDG_CACHE_HOME", cache)
 	s.Require().NoError(os.MkdirAll(s.scratch, 0o755))
@@ -2118,7 +2119,7 @@ func (s *IntegrationScratchMergeSuite) SetupTest() {
 }
 
 func (s *IntegrationScratchMergeSuite) run(row types.Job, dir string, args ...string) error {
-	return vcsCommandRefusal(s.ctx, row, "git", args, dir, nil)
+	return vcsCommandRefusal(s.testContext(), row, "git", args, dir, nil)
 }
 
 // addTree makes the scratch tree the way the guard is asked to let through.
@@ -2138,6 +2139,18 @@ func (s *IntegrationScratchMergeSuite) TestAPlainWorkerAddingOneIsRefused() {
 
 func (s *IntegrationScratchMergeSuite) TestAddingOneOnABranchIsRefused() {
 	s.Error(s.run(s.row, s.own, "worktree", "add", "-b", "x", s.tree, "HEAD"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestADetachThatIsTheReasonsValueIsRefused() {
+	s.Error(s.run(s.row, s.own, "worktree", "add", "--lock", "--reason", "--detach", s.tree, "HEAD"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestADetachAfterTheOperandsMarkIsRefused() {
+	s.Error(s.run(s.row, s.own, "worktree", "add", "--", s.tree, "--detach"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestAddingWithTheShortDetachPasses() {
+	s.NoError(s.run(s.row, s.own, "worktree", "add", "-d", s.tree, "HEAD"))
 }
 
 func (s *IntegrationScratchMergeSuite) TestAddingOneOutsideScratchIsRefused() {
@@ -2400,6 +2413,156 @@ func TestVCSCmdRefusalLetsAScratchRepositoryUseATemporaryIndex(t *testing.T) {
 		"a lease with no checkout_root cannot show the index is outside it")
 }
 
+// VCSCmdRefusalScratchWorktreeSuite runs vcs\cmd as withTree in
+// hack/dev/merge-job-branches.buzz does under a worker lease: a detached
+// worktree of a scratch repository, added outside the checkout.
+type VCSCmdRefusalScratchWorktreeSuite struct {
+	suite.Suite
+	repo    worktreeRepo
+	worker  types.Job
+	own     string
+	scratch string
+	tree    string
+}
+
+func TestVCSCmdRefusalScratchWorktreeSuite(t *testing.T) {
+	suite.Run(t, new(VCSCmdRefusalScratchWorktreeSuite))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) SetupTest() {
+	_, s.repo, s.worker, s.own = leaseVCSRepository(s.T())
+	s.scratch = testkit.NewRepository(s.T(), nil).Root()
+	s.tree = filepath.Join(s.T().TempDir(), "tree")
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) run(dir string, args ...string) error {
+	return vcsCommandRefusal(s.T().Context(), s.worker, "git", args, dir, nil)
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) add(target string, flags ...string) error {
+	args := append(append([]string{"worktree", "add"}, flags...), target, "HEAD")
+	return s.run(s.scratch, args...)
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingADetachedTreeOutsideTheCheckoutPasses() {
+	s.NoError(s.add(s.tree, "--detach", "--quiet"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestARelativeTargetResolvesFromTheDashCRepository() {
+	s.NoError(s.run(s.own, "-C", s.scratch, "worktree", "add", "--detach", "tree", "HEAD"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingWithTheShortDetachPasses() {
+	s.NoError(s.add(s.tree, "-d"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingWithAPackedDetachPasses() {
+	s.NoError(s.add(s.tree, "-fd"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestADetachThatIsTheReasonsValueIsRefused() {
+	s.Error(s.add(s.tree, "--lock", "--reason", "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestADetachAfterTheOperandsMarkIsRefused() {
+	s.Error(s.run(s.scratch, "worktree", "add", "--", s.tree, "--detach"))
+}
+
+// A tree's .git can be planted to name the scratch repository, so no
+// removal passes, its own detached tree included.
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestRemovingADetachedTreeIsRefused() {
+	s.repo.git(s.scratch, "worktree", "add", "--detach", "--quiet", s.tree, "HEAD")
+	s.Error(s.run(s.scratch, "worktree", "remove", "--force", s.tree))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingIntoANestedRepositoryOfTheMainCheckoutIsRefused() {
+	nested := filepath.Join(s.repo.main, "nested")
+	s.repo.git(s.repo.main, "init", "-q", nested)
+	s.Error(s.add(filepath.Join(nested, "tree"), "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingIntoANestedRepositoryOfASiblingWorktreeIsRefused() {
+	nested := filepath.Join(s.repo.add("sibling"), "nested")
+	s.repo.git(s.repo.main, "init", "-q", nested)
+	s.Error(s.add(filepath.Join(nested, "tree"), "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingIntoTheCheckoutIsRefused() {
+	s.Error(s.add(filepath.Join(s.own, "tree"), "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestARelativeTargetIntoTheCheckoutIsRefused() {
+	rel, err := filepath.Rel(s.scratch, filepath.Join(s.own, "tree"))
+	s.Require().NoError(err)
+	s.Error(s.add(rel, "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingIntoAnotherCheckoutOfTheJobsRepositoryIsRefused() {
+	s.Error(s.add(filepath.Join(s.repo.main, "tree"), "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingAmongTheJobCheckoutsIsRefused() {
+	checkouts, err := scratchCheckouts()
+	s.Require().NoError(err)
+	s.Error(s.add(filepath.Join(checkouts, "tree"), "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestATargetUnderTheHomeShorthandIsRefused() {
+	s.Error(s.add("~/tree", "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestATargetWithADollarIsRefused() {
+	s.Error(s.add("$HOME/tree", "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestATargetWithABacktickIsRefused() {
+	s.Error(s.add("`pwd`/tree", "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingWithoutDetachIsRefused() {
+	s.Error(s.add(s.tree))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingOnANewBranchIsRefused() {
+	s.Error(s.add(s.tree, "--detach", "-b", "x"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingOnAResetBranchIsRefused() {
+	s.Error(s.add(s.tree, "--detach", "-B", "x"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingAnOrphanIsRefused() {
+	s.Error(s.add(s.tree, "--detach", "--orphan"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingWithInlineConfigIsRefused() {
+	s.Error(s.run(s.scratch, "-c", "core.worktree="+s.own, "worktree", "add", "--detach", s.tree, "HEAD"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingFromTheWorkersCheckoutIsRefused() {
+	s.ErrorContains(s.run(s.own, "worktree", "add", "--detach", s.tree, "HEAD"), "stays with the orchestrator")
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingFromACheckoutSharingTheJobsGitDirIsRefused() {
+	sibling := s.repo.add("sibling")
+	s.Error(s.run(sibling, "worktree", "add", "--detach", s.tree, "HEAD"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestRemovingTheCheckoutIsRefused() {
+	s.Error(s.run(s.scratch, "worktree", "remove", "--force", s.own))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestRemovingAnotherRepositorysTreeIsRefused() {
+	other := testkit.NewRepository(s.T(), nil)
+	other.Git("worktree", "add", "--detach", "--quiet", s.tree, "HEAD")
+	s.Error(s.run(s.scratch, "worktree", "remove", "--force", s.tree))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestRemovingWithAnUnreadFlagIsRefused() {
+	s.repo.git(s.scratch, "worktree", "add", "--detach", "--quiet", s.tree, "HEAD")
+	s.Error(s.run(s.scratch, "worktree", "remove", "--force", "--unknown", s.tree))
+}
+
 // TestVCSCmdRefusalReadsTheJobsCheckoutUnderAnyAlias pins the exemption against spellings
 // of the job's repository that differ from the registered path as strings: a case variant
 // on a case-insensitive filesystem, macOS's firmlinked data volume, and a symlinked parent.
@@ -2483,61 +2646,130 @@ func mustRel(t *testing.T, base, target string) string {
 	return rel
 }
 
-// TestVCSCmdRefusalExemptsOnlyAnotherRepository pins the scratch-repository exemption to a
-// git operation whose site and work tree stand outside the job's checkout, in a repository
-// of their own. Pointed at another repository with --git-dir, git takes the job's checkout
-// as the work tree, so a clean or checkout there wipes the job's files; a submodule or
-// nested repository inside the checkout is the job's files under another git directory;
-// core.worktree, in the scratch's config or inline, moves the work tree onto the job's; and
-// a push writes to a remote that may be the job's repository.
-// A worktree call names its target path anywhere.
-func TestVCSCmdRefusalExemptsOnlyAnotherRepository(t *testing.T) {
-	ctx, r, worker, wt := leaseVCSRepository(t)
-	scratch := testkit.NewRepository(t, nil)
-	scratchGit := "--git-dir=" + filepath.Join(scratch.Root(), ".git")
+// VCSCmdRefusalExemptsOnlyAnotherRepositorySuite pins the scratch-repository
+// exemption to a git operation whose site and work tree stand outside the
+// job's checkout, in a repository of their own.
+type VCSCmdRefusalExemptsOnlyAnotherRepositorySuite struct {
+	suite.Suite
+	repo    worktreeRepo
+	worker  types.Job
+	own     string
+	scratch string
+	fresh   string
+}
 
-	nested := filepath.Join(wt, "nested")
-	r.git(wt, "init", "-q", nested)
-	r.git(wt, "-c", "protocol.file.allow=always", "submodule", "add", "-q", scratch.Root(), "sub")
-	sub := filepath.Join(wt, "sub")
-	moved := testkit.NewRepository(t, nil)
-	moved.Git("config", "core.worktree", wt)
-	fresh := testkit.NewRepository(t, nil)
-	linked := filepath.Join(t.TempDir(), "linked")
-	fresh.Git("worktree", "add", "-q", linked)
+func TestVCSCmdRefusalExemptsOnlyAnotherRepositorySuite(t *testing.T) {
+	suite.Run(t, new(VCSCmdRefusalExemptsOnlyAnotherRepositorySuite))
+}
 
-	for name, c := range map[string]struct {
-		args []string
-		dir  string
-		env  []string
-	}{
-		"clean through --git-dir":             {[]string{scratchGit, "clean", "-fdx"}, wt, nil},
-		"checkout through --git-dir":          {[]string{scratchGit, "checkout", "--", "."}, wt, nil},
-		"commit through --git-dir":            {[]string{scratchGit, "commit", "-m", "done"}, wt, nil},
-		"clean in a submodule":                {[]string{"clean", "-fdx"}, sub, nil},
-		"commit in a submodule":               {[]string{"commit", "-m", "done"}, sub, nil},
-		"commit in a nested repo":             {[]string{"-C", nested, "commit", "-m", "done"}, wt, nil},
-		"checkout in a nested repo":           {[]string{"checkout", "--", "."}, nested, nil},
-		"clean with GIT_DIR on the scratch":   {[]string{"clean", "-fdx"}, scratch.Root(), []string{"GIT_DIR=" + filepath.Join(scratch.Root(), ".git")}},
-		"clean with GIT_WORK_TREE on the job": {[]string{"clean", "-fdx"}, scratch.Root(), []string{"GIT_WORK_TREE=" + wt}},
-		"clean with core.worktree inline":     {[]string{"-c", "core.worktree=" + wt, "clean", "-fdx"}, scratch.Root(), nil},
-		"clean with core.worktree configured": {[]string{"clean", "-fdx"}, moved.Root(), nil},
-		"push from a scratch repo":            {[]string{"push", r.main, "HEAD:main"}, scratch.Root(), nil},
-		"worktree remove in a scratch repo":   {[]string{"worktree", "remove", "--force", linked}, fresh.Root(), nil},
-	} {
-		require.Error(t, vcsCommandRefusal(ctx, worker, "git", c.args, c.dir, c.env), name)
-	}
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) SetupTest() {
+	_, s.repo, s.worker, s.own = leaseVCSRepository(s.T())
+	s.scratch = testkit.NewRepository(s.T(), nil).Root()
+	s.fresh = testkit.NewRepository(s.T(), nil).Root()
+}
 
-	for name, c := range map[string]struct {
-		args []string
-		dir  string
-	}{
-		"commit in a scratch repo": {[]string{"commit", "-q", "--allow-empty", "-m", "done"}, fresh.Root()},
-		"clean in a scratch repo":  {[]string{"clean", "-fdx"}, scratch.Root()},
-		"reset -C a scratch repo":  {[]string{"-C", fresh.Root(), "reset", "--hard"}, wt},
-	} {
-		require.NoError(t, vcsCommandRefusal(ctx, worker, "git", c.args, c.dir, nil), name)
-	}
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) run(dir string, env []string, args ...string) error {
+	return vcsCommandRefusal(s.T().Context(), s.worker, "git", args, dir, env)
+}
+
+// scratchGit points git at the scratch repository from wherever it runs.
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) scratchGit() string {
+	return "--git-dir=" + filepath.Join(s.scratch, ".git")
+}
+
+// sub is a submodule of the scratch repository inside the worker's checkout.
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) sub() string {
+	s.repo.git(s.own, "-c", "protocol.file.allow=always", "submodule", "add", "-q", s.scratch, "sub")
+	return filepath.Join(s.own, "sub")
+}
+
+// nested is a repository of its own inside the worker's checkout.
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) nested() string {
+	nested := filepath.Join(s.own, "nested")
+	s.repo.git(s.own, "init", "-q", nested)
+	return nested
+}
+
+// With --git-dir on another repository, git takes the job's checkout as the
+// work tree, so a clean there wipes the job's files.
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACleanThroughGitDirIsRefused() {
+	s.Error(s.run(s.own, nil, s.scratchGit(), "clean", "-fdx"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACheckoutThroughGitDirIsRefused() {
+	s.Error(s.run(s.own, nil, s.scratchGit(), "checkout", "--", "."))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACommitThroughGitDirIsRefused() {
+	s.Error(s.run(s.own, nil, s.scratchGit(), "commit", "-m", "done"))
+}
+
+// A submodule or nested repository in the checkout holds the job's files
+// under another git directory.
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACleanInASubmoduleIsRefused() {
+	s.Error(s.run(s.sub(), nil, "clean", "-fdx"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACommitInASubmoduleIsRefused() {
+	s.Error(s.run(s.sub(), nil, "commit", "-m", "done"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACommitDashCANestedRepositoryIsRefused() {
+	s.Error(s.run(s.own, nil, "-C", s.nested(), "commit", "-m", "done"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACheckoutInANestedRepositoryIsRefused() {
+	s.Error(s.run(s.nested(), nil, "checkout", "--", "."))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACleanWithGitDirOnTheScratchIsRefused() {
+	s.Error(s.run(s.scratch, []string{"GIT_DIR=" + filepath.Join(s.scratch, ".git")}, "clean", "-fdx"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACleanWithGitWorkTreeOnTheJobIsRefused() {
+	s.Error(s.run(s.scratch, []string{"GIT_WORK_TREE=" + s.own}, "clean", "-fdx"))
+}
+
+// core.worktree, inline or configured, moves the work tree onto the job's.
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACleanWithCoreWorktreeInlineIsRefused() {
+	s.Error(s.run(s.scratch, nil, "-c", "core.worktree="+s.own, "clean", "-fdx"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACleanWithCoreWorktreeConfiguredIsRefused() {
+	moved := testkit.NewRepository(s.T(), nil)
+	moved.Git("config", "core.worktree", s.own)
+	s.Error(s.run(moved.Root(), nil, "clean", "-fdx"))
+}
+
+// A push writes to a remote, which may be the job's repository.
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestAPushFromAScratchRepositoryIsRefused() {
+	s.Error(s.run(s.scratch, nil, "push", s.repo.main, "HEAD:main"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestAWorktreeRemoveInAScratchRepositoryIsRefused() {
+	linked := filepath.Join(s.T().TempDir(), "linked")
+	s.repo.git(s.fresh, "worktree", "add", "-q", "--detach", linked)
+	s.Error(s.run(s.fresh, nil, "worktree", "remove", "--force", linked))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestAWorktreeAddOnABranchInAScratchRepositoryIsRefused() {
+	s.Error(s.run(s.fresh, nil, "worktree", "add", "-q", filepath.Join(s.T().TempDir(), "linked")))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestAWorktreePruneInAScratchRepositoryIsRefused() {
+	s.Error(s.run(s.fresh, nil, "worktree", "prune"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACommitInAScratchRepositoryPasses() {
+	s.NoError(s.run(s.fresh, nil, "commit", "-q", "--allow-empty", "-m", "done"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACleanInAScratchRepositoryPasses() {
+	s.NoError(s.run(s.scratch, nil, "clean", "-fdx"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestAResetDashCAScratchRepositoryPasses() {
+	s.NoError(s.run(s.own, nil, "-C", s.fresh, "reset", "--hard"))
 }
 
 // TestUndeclaredLeaseRepairsReadsGitsSubcommand pins that an unenrolled session's git
@@ -3478,9 +3710,9 @@ func TestDenyWriteOutsideLeaseResolvesFromTheCallDir(t *testing.T) {
 // path for a shell line, and only the patch names what one of these writes.
 type PatchWriteSuite struct {
 	suite.Suite
-	ctx  context.Context
-	root string
-	deps Dependencies
+	layers ctxLayers
+	root   string
+	deps   Dependencies
 }
 
 func TestPatchWriteSuite(t *testing.T) {
@@ -3488,7 +3720,7 @@ func TestPatchWriteSuite(t *testing.T) {
 }
 
 func (s *PatchWriteSuite) SetupTest() {
-	s.ctx, s.root = fleetFixture(s.T(), writePathFleet()...)
+	s.layers, s.root = fleetLayers(s.T(), writePathFleet()...)
 	s.deps = Dependencies{callDir: s.root}
 }
 
@@ -3503,7 +3735,7 @@ func gitDiffTouching(file string) string {
 }
 
 func (s *PatchWriteSuite) deny(command string) string {
-	return denyWriteOutsideLease(s.ctx, s.deps, "lease-b", command)
+	return denyWriteOutsideLease(s.testContext(), s.deps, "lease-b", command)
 }
 
 func (s *PatchWriteSuite) TestGitApplyOfARevokedPathIsRefused() {
@@ -3629,17 +3861,17 @@ func (s *PatchWriteSuite) TestPatchDryRunOnlyReads() {
 
 func (s *PatchWriteSuite) TestAnUnleasedSessionIsNotGraded() {
 	p := s.patchFile(gitDiffTouching("docs/notes.md"))
-	s.Empty(denyWriteOutsideLease(s.ctx, s.deps, "", "git apply "+p))
+	s.Empty(denyWriteOutsideLease(s.testContext(), s.deps, "", "git apply "+p))
 }
 
 // CherryPickWriteSuite pins lease-write on git cherry-pick: only the commit
 // names what a pick writes.
 type CherryPickWriteSuite struct {
 	suite.Suite
-	ctx  context.Context
-	root string
-	deps Dependencies
-	base string
+	layers ctxLayers
+	root   string
+	deps   Dependencies
+	base   string
 }
 
 func TestCherryPickWriteSuite(t *testing.T) {
@@ -3647,7 +3879,7 @@ func TestCherryPickWriteSuite(t *testing.T) {
 }
 
 func (s *CherryPickWriteSuite) SetupTest() {
-	s.ctx, s.root = fleetFixture(s.T(), writePathFleet()...)
+	s.layers, s.root = fleetLayers(s.T(), writePathFleet()...)
 	s.deps = Dependencies{callDir: s.root}
 	s.git("init", "-q")
 	s.git("commit", "-q", "--allow-empty", "-m", "base")
@@ -3671,7 +3903,7 @@ func (s *CherryPickWriteSuite) commit(file string) string {
 }
 
 func (s *CherryPickWriteSuite) deny(command string) string {
-	return denyWriteOutsideLease(s.ctx, s.deps, "lease-b", command)
+	return denyWriteOutsideLease(s.testContext(), s.deps, "lease-b", command)
 }
 
 func (s *CherryPickWriteSuite) TestAPickOfAnUndeclaredPathIsRefused() {
@@ -3751,7 +3983,7 @@ func (s *CherryPickWriteSuite) TestContinuingAPickNamesNothing() {
 }
 
 func (s *CherryPickWriteSuite) TestAnUnleasedSessionIsNotGraded() {
-	s.Empty(denyWriteOutsideLease(s.ctx, s.deps, "", "git cherry-pick "+s.commit("docs/notes.md")))
+	s.Empty(denyWriteOutsideLease(s.testContext(), s.deps, "", "git cherry-pick "+s.commit("docs/notes.md")))
 }
 
 func regeneratingLease(id string) types.Job {
@@ -4001,7 +4233,7 @@ type ScratchWorkspaceSuite struct {
 	suite.Suite
 	held    string
 	scratch string
-	ctx     context.Context
+	layers  ctxLayers
 	deps    Dependencies
 	row     types.Job
 }
@@ -4013,7 +4245,8 @@ func TestScratchWorkspaceSuite(t *testing.T) {
 func (s *ScratchWorkspaceSuite) SetupTest() {
 	s.held = markedWorkspace(s.T())
 	s.Require().NoError(os.MkdirAll(filepath.Join(s.held, ".git"), 0o755))
-	s.ctx, s.deps, s.row = heldRowFixture(s.T(), s.held, s.held, "feat")
+	fixtureCtx, deps, row := heldRowFixture(s.T(), s.held, s.held, "feat")
+	s.layers, s.deps, s.row = locationLayers(fixtureCtx), deps, row
 	cache := s.T().TempDir()
 	s.T().Setenv("XDG_CACHE_HOME", cache)
 	s.scratch = filepath.Join(cache, "magus", "tmp")
@@ -4032,7 +4265,7 @@ func (s *ScratchWorkspaceSuite) linkSibling(dir, name string) {
 }
 
 func (s *ScratchWorkspaceSuite) runIn(dir string) denial {
-	return denyLeaseCheckout(s.ctx, s.deps, s.row.ID, fmt.Sprintf("./magus -C %s run go-test .", dir))
+	return denyLeaseCheckout(s.testContext(), s.deps, s.row.ID, fmt.Sprintf("./magus -C %s run go-test .", dir))
 }
 
 func (s *ScratchWorkspaceSuite) TestAnotherRepositoryUnderTheMagusTempDirPasses() {
@@ -4292,3 +4525,15 @@ func (s *scriptRunDirsSuite) TestTheSamePathAfterACdIsThisRunAgain() {
 func (s *scriptRunDirsSuite) TestAWrappedCallKeepsTheNameMatch() {
 	s.Equal([]string{"/w", "/w/b"}, s.dirs("./x.sh && cd b && env c/x.sh"))
 }
+
+func (s *redGateSuite) testContext() context.Context { return s.layers.of(s.T()) }
+
+func (s *commitPathsSuite) testContext() context.Context { return s.layers.of(s.T()) }
+
+func (s *IntegrationScratchMergeSuite) testContext() context.Context { return s.layers.of(s.T()) }
+
+func (s *PatchWriteSuite) testContext() context.Context { return s.layers.of(s.T()) }
+
+func (s *CherryPickWriteSuite) testContext() context.Context { return s.layers.of(s.T()) }
+
+func (s *ScratchWorkspaceSuite) testContext() context.Context { return s.layers.of(s.T()) }

@@ -664,7 +664,7 @@ func boundWorkspace(t testing.TB, root string, ids ...string) *rootedWorkspace {
 // a pass over "nothing wired".
 func TestHarnessChecksReportUnknownWiring(t *testing.T) {
 	r := &runner{ws: rootedWorkspace{root: t.TempDir()}}
-	for _, got := range []types.Check{r.checkGuardWiring(), r.checkCheckpointWiring(), r.checkMCPClient()} {
+	for _, got := range []types.Check{r.checkGuardWiring(t.Context()), r.checkCheckpointWiring(t.Context()), r.checkMCPClient(t.Context())} {
 		assert.Equal(t, types.CheckAdvice, got.Status, got.Name)
 		assert.Equal(t, types.EvidenceUnknown, got.Evidence, got.Name)
 		assert.Contains(t, got.Message, "the wired harnesses are unknown", got.Name)
@@ -933,7 +933,7 @@ func TestCheckGraphBounds(t *testing.T) {
 			Status:   types.CheckOK,
 			Evidence: types.EvidenceUnknown,
 			Message:  "no knowledge graph supplied; skipped",
-		}, r.checkGraphBounds())
+		}, r.checkGraphBounds(t.Context()))
 	})
 
 	t.Run("a graph that fails to build fails loudly", func(t *testing.T) {
@@ -944,6 +944,6 @@ func TestCheckGraphBounds(t *testing.T) {
 			Name:    "graph-bounds",
 			Status:  types.CheckFail,
 			Message: "could not build the knowledge graph: boom",
-		}, r.checkGraphBounds())
+		}, r.checkGraphBounds(t.Context()))
 	})
 }

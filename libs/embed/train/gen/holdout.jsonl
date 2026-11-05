@@ -74,10 +74,13 @@
 {"group":"file:changes/unreleased/cache-keys-the-binary.md","path":"changes/unreleased/cache-keys-the-binary.md"}
 {"group":"file:changes/unreleased/cache-skips-sibling-outputs.md","path":"changes/unreleased/cache-skips-sibling-outputs.md"}
 {"group":"file:changes/unreleased/ceilings-in-refs-query-job.md","path":"changes/unreleased/ceilings-in-refs-query-job.md"}
-{"group":"file:changes/unreleased/change-risk-and-mutants.md","path":"changes/unreleased/change-risk-and-mutants.md"}
+{"group":"file:changes/unreleased/change-risk-base-from-main-ci.md","path":"changes/unreleased/change-risk-base-from-main-ci.md"}
+{"group":"file:changes/unreleased/change-risk-keeps-covered-lines.md","path":"changes/unreleased/change-risk-keeps-covered-lines.md"}
+{"group":"file:changes/unreleased/change-risk-reads-test-coverage.md","path":"changes/unreleased/change-risk-reads-test-coverage.md"}
 {"group":"file:changes/unreleased/checkout-reporter.md","path":"changes/unreleased/checkout-reporter.md"}
 {"group":"file:changes/unreleased/ci-asks-for-whole-machine-explicitly.md","path":"changes/unreleased/ci-asks-for-whole-machine-explicitly.md"}
 {"group":"file:changes/unreleased/ci-gates-in-the-queue-box.md","path":"changes/unreleased/ci-gates-in-the-queue-box.md"}
+{"group":"file:changes/unreleased/ci-shards-by-target-labels.md","path":"changes/unreleased/ci-shards-by-target-labels.md"}
 {"group":"file:changes/unreleased/claim-callers-of-a-symbol.md","path":"changes/unreleased/claim-callers-of-a-symbol.md"}
 {"group":"file:changes/unreleased/claim-sizing.md","path":"changes/unreleased/claim-sizing.md"}
 {"group":"file:changes/unreleased/clones-hg-jj-or-sapling-repository.md","path":"changes/unreleased/clones-hg-jj-or-sapling-repository.md"}
@@ -188,6 +191,7 @@
 {"group":"file:changes/unreleased/libs-xdg.md","path":"changes/unreleased/libs-xdg.md"}
 {"group":"file:changes/unreleased/lifecycle-provider-console.md","path":"changes/unreleased/lifecycle-provider-console.md"}
 {"group":"file:changes/unreleased/lint-goal-grades-what-the-row-changed.md","path":"changes/unreleased/lint-goal-grades-what-the-row-changed.md"}
+{"group":"file:changes/unreleased/log-append-after-lock-timeout.md","path":"changes/unreleased/log-append-after-lock-timeout.md"}
 {"group":"file:changes/unreleased/log-format-jsonl-refused.md","path":"changes/unreleased/log-format-jsonl-refused.md"}
 {"group":"file:changes/unreleased/magus-affected-plan-prints-affected-unbounded.md","path":"changes/unreleased/magus-affected-plan-prints-affected-unbounded.md"}
 {"group":"file:changes/unreleased/magus-multi-agent-integrate-reference.md","path":"changes/unreleased/magus-multi-agent-integrate-reference.md"}
@@ -243,6 +247,7 @@
 {"group":"file:changes/unreleased/proofread-train.md","path":"changes/unreleased/proofread-train.md"}
 {"group":"file:changes/unreleased/push-gate-accepts-narrow-evidence.md","path":"changes/unreleased/push-gate-accepts-narrow-evidence.md"}
 {"group":"file:changes/unreleased/query-invocation-shows-refs.md","path":"changes/unreleased/query-invocation-shows-refs.md"}
+{"group":"file:changes/unreleased/queue-apply-token-waits.md","path":"changes/unreleased/queue-apply-token-waits.md"}
 {"group":"file:changes/unreleased/queue-cache-read.md","path":"changes/unreleased/queue-cache-read.md"}
 {"group":"file:changes/unreleased/queue-dismisses-stale-approvals.md","path":"changes/unreleased/queue-dismisses-stale-approvals.md"}
 {"group":"file:changes/unreleased/queue-generator-label.md","path":"changes/unreleased/queue-generator-label.md"}
@@ -736,7 +741,6 @@
 {"group":"dir:docs/glossary","path":"docs/glossary/magusmd.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/manifest.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/module.md"}
-{"group":"dir:docs/glossary","path":"docs/glossary/mutant.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/one-off.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/one-vocabulary-rule.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/op.md"}
@@ -1027,13 +1031,13 @@
 {"group":"dir:hack/lint","path":"hack/lint/testpairing-pairing-has-no-exemptions.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/tool-descriptions-follow-proofread-rules.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/touched-functions-keep-change-risk-under-10.buzz"}
-{"group":"dir:hack/lint","path":"hack/lint/touched-functions-kill-their-mutants.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/trusted-jobs-restore-no-actions-cache.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/typescript-never-throws.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/whole-tree-targets-key-on-the-go-tree.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/advisories.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/badges.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/branch-stack.buzz"}
+{"group":"dir:hack/magusfile","path":"hack/magusfile/buzz-coverage.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/changelog.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/commits.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/conformance-ceiling.buzz"}
@@ -1045,8 +1049,10 @@
 {"group":"dir:hack/magusfile","path":"hack/magusfile/image.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/image_test.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/index.buzz"}
+{"group":"dir:hack/magusfile","path":"hack/magusfile/load-contract.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/mockassert.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/model-tiers.buzz"}
+{"group":"dir:hack/magusfile","path":"hack/magusfile/recompose.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/releases.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/ruledocs.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/run-golangci.buzz"}
@@ -1357,7 +1363,6 @@
 {"group":"dir:internal/json","path":"internal/json/json_v2.go"}
 {"group":"dir:internal/json","path":"internal/json/json_v2_test.go"}
 {"group":"dir:internal/json","path":"internal/json/requires_jsonv2.go"}
-{"group":"dir:internal/json","path":"internal/json/stream.go"}
 {"group":"dir:internal/petname","path":"internal/petname/petname.go"}
 {"group":"dir:internal/petname","path":"internal/petname/petname_test.go"}
 {"group":"dir:internal/petname","path":"internal/petname/words.go"}
@@ -1525,7 +1530,6 @@
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/manifest.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/mcpserver.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/modelrow.buzz"}
-{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/mutationsyntax.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/patchop.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/path.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/price.buzz"}
@@ -1558,7 +1562,6 @@
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/status.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/strings.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/stubsyntax.buzz"}
-{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/swap.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/symbolindexer.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/syntax.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/target.buzz"}

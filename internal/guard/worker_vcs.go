@@ -294,34 +294,95 @@ func sharesRepository(row types.Job, dir string) bool {
 // detached checkout there. rest is the words after `worktree`. A relative dir
 // resolves from cwd.
 func scratchWorktreeChange(ctx context.Context, row types.Job, rest []string, cwd string) bool {
-	resolve := func(target string) string {
-		if target == "" || strings.ContainsAny(target, "$`~") {
+	if firstWordIs(rest, "remove") {
+		return detachedScratch(ctx, row, worktreeRemoveTarget(rest, cwd))
+	}
+	target := worktreeAddTarget(rest, cwd)
+	return target != "" && inScratch(row, target)
+}
+
+// otherRepositoryWorktreeAdd reports a worktreeAddTarget call at site whose dir
+// lies outside row's checkouts and scratchCheckouts. A removal never passes:
+// its proof of ownership is files a worker can plant. A symlink swapped into
+// dir after the judgment is not seen.
+func otherRepositoryWorktreeAdd(ctx context.Context, row types.Job, inv hint.Invocation, site vcsSite) bool {
+	g := parseGit(inv.Args)
+	if g.sub != "worktree" || g.configured || site.gitDir != "" {
+		return false
+	}
+	target := worktreeAddTarget(g.rest, site.dir)
+	if target == "" || inOwnCheckout(row, target) || sharesRepository(row, target) {
+		return false
+	}
+	if scratch, err := scratchCheckouts(); err != nil || within(target, scratch) {
+		return false
+	}
+	return !inRepositoryCheckout(ctx, row, target)
+}
+
+// inRepositoryCheckout reports dir within the main checkout or a registered
+// worktree of row's repository, a nested repository there included. A list
+// that cannot be read reports true.
+func inRepositoryCheckout(ctx context.Context, row types.Job, dir string) bool {
+	if row.CheckoutRoot == "" {
+		return true
+	}
+	res, err := vcs.Resolve(ctx, row.CheckoutRoot, "", types.VCSOptions{Name: "git"})
+	if err != nil || res.VCS == nil {
+		return true
+	}
+	all, err := res.VCS.RegisteredCheckouts(ctx, row.CheckoutRoot)
+	if err != nil || len(all) == 0 {
+		return true
+	}
+	return slices.ContainsFunc(all, func(co types.RegisteredCheckout) bool { return within(dir, co.Root) })
+}
+
+// worktreeAddTarget is the literalDir of `git worktree add --detach <dir>`.
+// It is "" for an add without --detach or -d, or one making a branch.
+func worktreeAddTarget(rest []string, cwd string) string {
+	if !firstWordIs(rest, "add") {
+		return ""
+	}
+	flags, positional := splitOptions(rest[1:], gitWorktreeAddValued)
+	if !anyFlag(flags, "d", "--detach") || anyFlag(flags, "bB", "--orphan") || len(positional) == 0 {
+		return ""
+	}
+	return literalDir(positional[0], cwd)
+}
+
+// worktreeRemoveTarget is the literalDir of `git worktree remove [--force]
+// <dir>`. It is "" for another flag or other than one dir.
+func worktreeRemoveTarget(rest []string, cwd string) string {
+	if !firstWordIs(rest, "remove") {
+		return ""
+	}
+	var targets []string
+	for _, a := range rest[1:] {
+		switch {
+		case a == "--force" || a == "-f":
+		case strings.HasPrefix(a, "-"):
 			return ""
+		default:
+			targets = append(targets, a)
 		}
-		if !filepath.IsAbs(target) {
-			target = filepath.Join(cwd, target)
-		}
-		return filepath.Clean(target)
 	}
-	switch {
-	case firstWordIs(rest, "add"):
-		target := resolve(checkoutAddTarget("git", rest))
-		return slices.Contains(rest, "--detach") && !anyFlag(rest[1:], "bB", "--orphan") &&
-			target != "" && inScratch(row, target)
-	case firstWordIs(rest, "remove"):
-		var targets []string
-		for _, a := range rest[1:] {
-			switch {
-			case a == "--force" || a == "-f":
-			case strings.HasPrefix(a, "-"):
-				return false
-			default:
-				targets = append(targets, a)
-			}
-		}
-		return len(targets) == 1 && detachedScratch(ctx, row, resolve(targets[0]))
+	if len(targets) != 1 {
+		return ""
 	}
-	return false
+	return literalDir(targets[0], cwd)
+}
+
+// literalDir is word resolved from cwd and cleaned. It is "" for a word that
+// is empty or holds ~, $ or a backtick, which may expand elsewhere.
+func literalDir(word, cwd string) string {
+	if word == "" || strings.ContainsAny(word, "$`~") {
+		return ""
+	}
+	if !filepath.IsAbs(word) {
+		word = filepath.Join(cwd, word)
+	}
+	return filepath.Clean(word)
 }
 
 // inScratch reports dir lying below scratchCheckouts and outside row's own
@@ -331,11 +392,16 @@ func inScratch(row types.Job, dir string) bool {
 	if err != nil || dir == "" || samePath(dir, scratch) || !within(dir, scratch) {
 		return false
 	}
+	return !inOwnCheckout(row, dir)
+}
+
+// inOwnCheckout reports dir in row's checkout_root or recorded worktree.
+func inOwnCheckout(row types.Job, dir string) bool {
 	own := []string{row.CheckoutRoot}
 	if row.Worktree != nil {
 		own = append(own, row.Worktree.Root)
 	}
-	return !slices.ContainsFunc(own, func(root string) bool { return root != "" && within(dir, root) })
+	return slices.ContainsFunc(own, func(root string) bool { return root != "" && within(dir, root) })
 }
 
 // detachedScratch reports dir standing in a git checkout under
@@ -365,7 +431,7 @@ func checkoutAddTarget(tool string, rest []string) string {
 		if !firstWordIs(rest, "add") {
 			return ""
 		}
-		rest, valued = rest[1:], []string{"-b", "-B", "--reason"}
+		rest, valued = rest[1:], gitWorktreeAddValued
 	case "jj":
 		if !firstWordIs(rest, "add") {
 			return ""
@@ -375,20 +441,7 @@ func checkoutAddTarget(tool string, rest []string) string {
 	default:
 		return ""
 	}
-	var positional []string
-	for i := 0; i < len(rest); i++ {
-		a := rest[i]
-		switch {
-		case a == "--":
-			positional = append(positional, rest[i+1:]...)
-			i = len(rest)
-		case slices.Contains(valued, a):
-			i++
-		case strings.HasPrefix(a, "-"):
-		default:
-			positional = append(positional, a)
-		}
-	}
+	_, positional := splitOptions(rest, valued)
 	switch {
 	case tool == "hg" && len(positional) == 2:
 		// hg share SOURCE DEST; DEST defaults to SOURCE's name here, so it must be spelled.
@@ -397,6 +450,31 @@ func checkoutAddTarget(tool string, rest []string) string {
 		return positional[0]
 	}
 	return ""
+}
+
+// gitWorktreeAddValued is each `git worktree add` option taking the word after
+// it as its value.
+var gitWorktreeAddValued = []string{"-b", "-B", "--reason"}
+
+// splitOptions divides words into options and operands. Each of valued takes
+// the word after it, which lands in neither list. Every word after `--` is an
+// operand.
+func splitOptions(words, valued []string) (flags, positional []string) {
+	for i := 0; i < len(words); i++ {
+		a := words[i]
+		switch {
+		case a == "--":
+			return flags, append(positional, words[i+1:]...)
+		case slices.Contains(valued, a):
+			flags = append(flags, a)
+			i++
+		case strings.HasPrefix(a, "-"):
+			flags = append(flags, a)
+		default:
+			positional = append(positional, a)
+		}
+	}
+	return flags, positional
 }
 
 // checkoutAddDenial words the lease-vcs refusal of a checkout made by hand. what is the

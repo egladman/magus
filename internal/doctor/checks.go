@@ -44,8 +44,8 @@ import (
 
 // checkBridgeReachability probes the console endpoint (/api/v1/graph) by
 // issuing a real HTTP GET (a 401 proves the guarded route exists).
-func (r *runner) checkBridgeReachability() types.Check {
-	return probeBridgeReachability(r.runContext(), r.opts.serverInfo)
+func (r *runner) checkBridgeReachability(ctx context.Context) types.Check {
+	return probeBridgeReachability(ctx, r.opts.serverInfo)
 }
 
 // checkNearDuplicateServices is the static, whole-workspace half of MGS5001: it
@@ -209,11 +209,11 @@ func (r *runner) checkSymlinks() types.Check {
 
 const graphBoundsCheck = "graph-bounds"
 
-func (r *runner) checkGraphBounds() types.Check {
+func (r *runner) checkGraphBounds(ctx context.Context) types.Check {
 	if r.opts.graphNodes == nil {
 		return types.Check{Name: graphBoundsCheck, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "no knowledge graph supplied; skipped"}
 	}
-	nodes, err := r.opts.graphNodes(r.runContext())
+	nodes, err := r.opts.graphNodes(ctx)
 	if err != nil {
 		return types.Check{Name: graphBoundsCheck, Status: types.CheckFail, Message: fmt.Sprintf("could not build the knowledge graph: %v", err)}
 	}
@@ -523,8 +523,8 @@ func (r *runner) checkCacheWritable() types.Check {
 		Message: fmt.Sprintf("%s; entries in %s, shared by every checkout of this repository", cacheDir, store)}
 }
 
-func (r *runner) checkVCSBaseRef() types.Check {
-	return checkVCSBaseRef(r.runContext(), r.root, r.ws.VCSOptions())
+func (r *runner) checkVCSBaseRef(ctx context.Context) types.Check {
+	return checkVCSBaseRef(ctx, r.root, r.ws.VCSOptions())
 }
 
 func checkVCSBaseRef(ctx context.Context, root string, opts types.VCSOptions) types.Check {
@@ -1027,11 +1027,11 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) types.C
 // tree is present on a fresh clone, so counting it as evidence claims a tree was built
 // when it was not, and then reports every untracked sibling as dead. A backend that
 // cannot answer "is this tracked?" degrades to plain presence rather than guess.
-func (r *runner) checkDeadOutputGlobs(projects []*types.Project) types.Check {
+func (r *runner) checkDeadOutputGlobs(ctx context.Context, projects []*types.Project) types.Check {
 	const name = "dead-output-globs"
 
 	var tracked types.TrackedFileReporter
-	if res, err := vcs.Resolve(r.runContext(), r.root, "", r.ws.VCSOptions()); err == nil && res.VCS != nil {
+	if res, err := vcs.Resolve(ctx, r.root, "", r.ws.VCSOptions()); err == nil && res.VCS != nil {
 		tracked = res.VCS
 	}
 
@@ -1050,7 +1050,7 @@ func (r *runner) checkDeadOutputGlobs(projects []*types.Project) types.Check {
 				return err == nil && glob.Excludes(filepath.ToSlash(rel))
 			})
 			if len(hits) > 0 {
-				if provesBuilt(r.runContext(), tracked, p.Dir, hits) {
+				if provesBuilt(ctx, tracked, p.Dir, hits) {
 					builtAny = true
 				}
 				continue
@@ -1235,16 +1235,16 @@ func (r *runner) checkSameStepWrites(projects []*types.Project) types.Check {
 // different problem (a missing ignore), and a fresh clone must not read differently
 // from a working one. A backend that cannot report tracked files skips the question
 // rather than guessing, the same way checkDeadOutputGlobs does.
-func (r *runner) checkUndeclaredSeedingFiles(projects []*types.Project) types.Check {
+func (r *runner) checkUndeclaredSeedingFiles(ctx context.Context, projects []*types.Project) types.Check {
 	const name = "undeclared-seeding-files"
 
-	res, err := vcs.Resolve(r.runContext(), r.root, "", r.ws.VCSOptions())
+	res, err := vcs.Resolve(ctx, r.root, "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
 		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "no VCS to enumerate committed files with; skipped"}
 	}
 	// "." is a pathspec for the whole tree, so this is one ls-files rather than one
 	// per candidate: the check has no candidate set until it has the file list.
-	files, err := res.VCS.TrackedFiles(r.runContext(), r.root, []string{"."})
+	files, err := res.VCS.TrackedFiles(ctx, r.root, []string{"."})
 	if errors.Is(err, types.ErrVCSUnsupported) {
 		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: res.Name + " cannot report tracked files; skipped"}
 	}
@@ -1671,7 +1671,7 @@ const (
 // and the per-process pools runs host for their children. Two live servers fail the
 // check; leftover dead sockets are harmless (each is reclaimed on the next bind) and
 // reported only as context.
-func (r *runner) checkStaleSockets() types.Check {
+func (r *runner) checkStaleSockets(ctx context.Context) types.Check {
 	si := r.opts.serverInfo
 	sockDir := si.sockDirOrDefault()
 	if sockDir == "" {
@@ -1697,7 +1697,7 @@ func (r *runner) checkStaleSockets() types.Check {
 	// on a configured server.address inside this directory, which competes with server.sock.
 	var stale, others []string
 	probe := func(p string) socketState {
-		if isSocketAlive(r.runContext(), p) {
+		if isSocketAlive(ctx, p) {
 			return socketLive
 		}
 		stale = append(stale, p)
@@ -1766,7 +1766,7 @@ func (r *runner) checkStaleSockets() types.Check {
 	if len(stale) > 0 {
 		parts = append(parts, fmt.Sprintf("%d stale socket(s)", len(stale)))
 	}
-	stalePools, err := proc.StalePoolsIn(r.runContext(), sockDir, si.ClientVersion)
+	stalePools, err := proc.StalePoolsIn(ctx, sockDir, si.ClientVersion)
 	if err != nil {
 		return types.Check{Name: "sockets", Status: types.CheckFail, Message: err.Error()}
 	}
@@ -1831,7 +1831,7 @@ func (r *runner) checkSpellContract() types.Check {
 // guardBinaryCheck names the check that judges which magus a guard hook runs.
 const guardBinaryCheck = "guard-binary"
 
-func (r *runner) checkGuardBinary() types.Check {
+func (r *runner) checkGuardBinary(ctx context.Context) types.Check {
 	const name = guardBinaryCheck
 
 	bin := filepath.Join(r.ws.Root(), "magus")
@@ -1850,7 +1850,7 @@ func (r *runner) checkGuardBinary() types.Check {
 		if wiredErr != nil {
 			return unknownWiring(name, wiredErr)
 		}
-		if wired := configsNamingOwnBinary(r.runContext(), r.ws.Root(), harnesses...); len(wired) > 0 {
+		if wired := configsNamingOwnBinary(ctx, r.ws.Root(), harnesses...); len(wired) > 0 {
 			return types.Check{
 				Name:    name,
 				Status:  types.CheckAdvice,
@@ -1859,7 +1859,7 @@ func (r *runner) checkGuardBinary() types.Check {
 			}
 		}
 		if found, lookErr := exec.LookPath("magus"); lookErr == nil {
-			if skew, ok := interpreterSkew(r.runContext(), found, r.ownVersion()); ok {
+			if skew, ok := interpreterSkew(ctx, found, r.ownVersion()); ok {
 				return skew
 			}
 			return types.Check{Name: name, Status: types.CheckOK, Message: fmt.Sprintf("hook would run %s (from PATH; no ./magus built)", found)}
@@ -1889,7 +1889,7 @@ func (r *runner) checkGuardBinary() types.Check {
 			},
 		}
 	}
-	if skew, ok := interpreterSkew(r.runContext(), bin, r.ownVersion()); ok {
+	if skew, ok := interpreterSkew(ctx, bin, r.ownVersion()); ok {
 		return skew
 	}
 	return types.Check{Name: name, Status: types.CheckOK, Message: "hook would run ./magus, newer than every tracked Go source"}
@@ -2265,23 +2265,23 @@ func guardTemplateMarkerProblem(body []byte) string {
 // The probe plus the marker comparison is the honest, portable check; full
 // end-to-end execution is guard_templates.txtar's job, which runs in CI
 // against real event fixtures.
-func (r *runner) checkGuardWiring() types.Check {
+func (r *runner) checkGuardWiring(ctx context.Context) types.Check {
 	wired, err := workspace.WiredHarnesses(r.ws)
 	if err != nil {
 		return unknownWiring("guard-wiring", err)
 	}
-	return checkGuardWiring(r.runContext(), r.ws.Root(), guardProbeBudget, wired...)
+	return checkGuardWiring(ctx, r.ws.Root(), guardProbeBudget, wired...)
 }
 
 // checkHookBindings reads each wired harness's binding table, the one
 // agent.HookBindings builds, and fails on a point it neither binds nor
 // explains.
-func (r *runner) checkHookBindings() types.Check {
+func (r *runner) checkHookBindings(ctx context.Context) types.Check {
 	wired, err := workspace.WiredHarnesses(r.ws)
 	if err != nil {
 		return unknownWiring(hookBindingsCheck, err)
 	}
-	return checkHookBindings(r.runContext(), r.ws.Root(), wired...)
+	return checkHookBindings(ctx, r.ws.Root(), wired...)
 }
 
 const hookBindingsCheck = "harness-hook-bindings"
@@ -2492,7 +2492,7 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 //
 // AGENTS.md is graded too but can only ever be ADVICE: magus does not write that file, so
 // failing a check whose fix magus cannot apply would make --fix a liar.
-func (r *runner) checkAgentSkills() types.Check {
+func (r *runner) checkAgentSkills(ctx context.Context) types.Check {
 	const name = "agent-skills"
 
 	if r.opts.skills == nil {
@@ -2503,7 +2503,7 @@ func (r *runner) checkAgentSkills() types.Check {
 	if err != nil {
 		return unknownWiring(name, err)
 	}
-	statuses := r.opts.skills.CheckStatuses(r.runContext(), root, wired...)
+	statuses := r.opts.skills.CheckStatuses(ctx, root, wired...)
 	if len(statuses) == 0 {
 		return types.Check{
 			Name:    name,
@@ -2607,14 +2607,14 @@ const (
 //
 // Matching HEAD's OWN hash keeps it precise: a lockfile or fixture full of other hashes
 // cannot match.
-func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Check {
+func (r *runner) checkSelfStalingOutputs(ctx context.Context, projects []*types.Project) types.Check {
 	const name = "self-staling-outputs"
 
-	res, err := vcs.Resolve(r.runContext(), r.root, "", r.ws.VCSOptions())
+	res, err := vcs.Resolve(ctx, r.root, "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
 		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "no VCS resolved; skipped"}
 	}
-	meta, err := res.VCS.Metadata(r.runContext(), r.root)
+	meta, err := res.VCS.Metadata(ctx, r.root)
 	if err != nil {
 		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "could not read the current commit; skipped: " + err.Error()}
 	}
@@ -2629,7 +2629,7 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Check 
 		if len(rels) == 0 {
 			continue
 		}
-		tracked, err := res.VCS.TrackedFiles(r.runContext(), p.Dir, rels)
+		tracked, err := res.VCS.TrackedFiles(ctx, p.Dir, rels)
 		if errors.Is(err, types.ErrVCSUnsupported) {
 			return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: fmt.Sprintf("%s cannot report tracked paths; skipped", res.VCS.Name())}
 		}
@@ -2767,9 +2767,8 @@ func isHexByte(data []byte, i int) bool {
 //
 // It runs no generator, so it cannot see a generator that would produce different bytes
 // from unchanged inputs. That is the drift gate's job.
-func (r *runner) checkGeneratedDrift() types.Check {
+func (r *runner) checkGeneratedDrift(ctx context.Context) types.Check {
 	const name = "generated-output"
-	ctx := r.runContext()
 	res, err := vcs.Resolve(ctx, r.root, "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
 		return types.Check{Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown, Message: "no vcs resolved; skipped"}

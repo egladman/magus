@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/egladman/magus/internal/agent"
@@ -11,14 +12,14 @@ import (
 // checkMCPClient reports whether wired harness spells declare user-owned MCP
 // setup guidance (hint, docs, and/or register sketch). Magus does not write or
 // inspect host MCP client files.
-func (r *runner) checkMCPClient() types.Check {
+func (r *runner) checkMCPClient(ctx context.Context) types.Check {
 	const name = "mcp-client"
 	root := r.ws.Root()
 	wired, err := workspace.WiredHarnesses(r.ws)
 	if err != nil {
 		return unknownWiring(name, err)
 	}
-	ctx := agent.ContextWithWiredHarnesses(r.runContext(), wired)
+	ctx = agent.ContextWithWiredHarnesses(ctx, wired)
 	ids, err := agent.KnownHarnesses(ctx, wired...)
 	if err != nil {
 		return types.Check{Name: name, Status: types.CheckAdvice, Message: "cannot list harnesses: " + err.Error()}

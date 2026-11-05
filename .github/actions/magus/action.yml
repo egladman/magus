@@ -127,7 +127,7 @@ runs:
       run: |
         shopt -s nullglob
         # Each artifact holds one file, named as MAGUS_HISTORY_PATH names it.
-        files=("$RUNNER_TEMP"/shard-history/*/*.json)
+        files=("$RUNNER_TEMP"/shard-history/*/"$(basename "$MAGUS_HISTORY_PATH")")
         if [[ ${#files[@]} -gt 0 ]]; then
           magus config history import --history "$MAGUS_HISTORY_PATH" "${files[@]}"
         else

@@ -1002,7 +1002,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, re
 // already on it, so the terminal joining anywhere else would be a fourth opinion wearing the
 // same name. Without one there is nobody to pair with, so the changeset is computed here and
 // progress goes straight into the file the server's own store would have written.
-func attachDiffReview(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base string, paths []string) (types.Diff, *types.DiffReview, diffSync, error) {
+func attachDiffReview(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base string, paths []string) (types.Diff, *types.DiffReview, diffSync, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	asOf := changeset.PatchDigest(patch)
 	if b := dialDiffBridge(ctx, paths, asOf); b != nil {
 		return b.session.Diff, b.session, b, nil

@@ -174,6 +174,7 @@ decisions/0019-a-mandate-carries-out-decisions-already-made/
 decisions/0020-the-person-directs-sessions-report/
 decisions/0021-a-change-accepts-the-findings-it-causes/
 decisions/0022-domain-nouns-not-output-result-report/
+decisions/0023-touched-functions-meet-change-risk-and-their-mutants/
 dependencies/
 design/
 design/judgment/
@@ -194,6 +195,7 @@ design/principles/a-cache-is-an-accelerator/
 design/principles/a-copy-can-be-the-right-answer/
 design/principles/a-deliberate-break-never-merges-red/
 design/principles/a-harness-is-not-an-agent-thing/
+design/principles/a-measure-is-not-the-goal/
 design/principles/abstract-at-the-right-layer/
 design/principles/behavior-is-code-facts-are-data/
 design/principles/break-now-hold-still-later/
@@ -291,6 +293,7 @@ glossary/broker/
 glossary/buzz/
 glossary/cache/
 glossary/cantrip/
+glossary/change-risk/
 glossary/charm/
 glossary/chord/
 glossary/ci/

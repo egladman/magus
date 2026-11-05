@@ -42,7 +42,7 @@ var gatePoolProbeTimeout = 2 * time.Second
 type gateRedundancy struct {
 	m        *magus.Magus
 	root     string
-	drv      types.VCSDriver
+	drv      types.HistoryReporter
 	target   string
 	ref      string
 	commit   string

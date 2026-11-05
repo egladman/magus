@@ -1498,17 +1498,21 @@ func TestAForkUnderJobExecSharesItsClaim(t *testing.T) {
 	t.Cleanup(func() { cancel(); <-done })
 
 	root := testkit.NewRepository(t, map[string]string{
-		"magus.yaml":     "{}\n",
+		"magus.yaml":     "disk:\n  critical_free_mb: 0\n",
 		"magusfile.buzz": "import \"magus\";\n" + testTarget,
 		"a.go":           "package a\n",
 		filepath.FromSlash(job.CheckoutBootstrapScript): "import \"proc\";\n\nexport fun main(args: [str]) > void !> any {\n" +
 			"    _ = proc\\exec(\"./magus\", args: [\"run\", \"--no-cache\", \"test\", \".\"]);\n}\n",
 	}).Root()
-	// testscript.Main runs the CLI when this binary is invoked as `magus`.
+	// A hard link: Linux resolves a symlink, and a re-exec reruns the suite.
 	self, err := os.Executable()
 	require.NoError(t, err)
 	bin := filepath.Join(root, "magus")
-	require.NoError(t, os.Symlink(self, bin))
+	if err := os.Link(self, bin); err != nil {
+		data, err := os.ReadFile(self)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(bin, data, 0o755))
+	}
 	run := func(args ...string) (string, error) {
 		cmd := exec.Command(bin, args...)
 		cmd.Dir = root

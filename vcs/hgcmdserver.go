@@ -14,7 +14,7 @@ import (
 // hgOpenObjectBatch starts one `serve --cmdserver pipe`. Each Read is a
 // `cat` on that process. A cat per path is a process per file, which is the
 // cost git's cat-file batch already avoids.
-func hgOpenObjectBatch(ctx context.Context, prog, root, rev string) (ObjectBatch, error) {
+func hgOpenObjectBatch(ctx context.Context, prog, root, rev string) (ObjectBatch, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	if rev == "" {
 		rev = "."
 	}

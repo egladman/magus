@@ -11,6 +11,8 @@ import "std";
 import "vcs";
 import "hack/magusfile/branch-stack" as stack;
 import "hack/dev/bootstrap-checkout" as bootstrap;
+import "hack/magusfile/recompose" as rc;
+import "hack/magusfile/load-contract" as lc;
 
 import "assert";
 
@@ -211,30 +213,6 @@ export fun candidatesFromBranches(branches: [str], rows: [JobRow], checkedOut: f
     return result\ok::<[Candidate]>(acc);
 }
 
-fun git(dir: str, args: [str]) > result\Result::<str> {
-    try {
-        return result\ok::<str>(vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true, dir = dir }).stdout.trim());
-    } catch (err: any) {
-        return result\caught::<str>(err, doing: "git {args.join(" ")}");
-    }
-}
-
-fun gitOK(dir: str, args: [str]) > result\Result::<bool> {
-    try {
-        return result\ok::<bool>(vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true, dir = dir, allowFailure = true }).code == 0);
-    } catch (err: any) {
-        return result\caught::<bool>(err, doing: "git {args.join(" ")}");
-    }
-}
-
-fun lines(text: str) > [str] {
-    final acc = mut [<str>];
-    foreach (l in text.split("\n")) {
-        if (l.trim() != "") { acc.append(l.trim()); }
-    }
-    return acc;
-}
-
 // requireBranch accepts any ref that resolves to a commit, a remote-tracking one included,
 // and returns the line naming what it resolved to.
 fun requireBranch(root: str, branch: str) > result\Result::<str> {
@@ -254,14 +232,14 @@ fun requireBranch(root: str, branch: str) > result\Result::<str> {
 fun containsMap(root: str, branches: [str], base: str) > result\Result::<{str: [str]}> {
     final args = mut ["rev-parse"];
     foreach (b in branches) { args.append(b); }
-    final parsed = git(root, args: args);
+    final parsed = rc\git(root, args: args);
     if (parsed.error -> err) { return result\Result::<{str: [str]}>{ error = err }; }
-    final tips = lines(parsed.value!);
+    final tips = rc\lines(parsed.value!);
     final ahead = mut {<str: [str]>};
     foreach (b in branches) {
-        final listed = git(root, args: ["rev-list", "{base}..{b}"]);
+        final listed = rc\git(root, args: ["rev-list", "{base}..{b}"]);
         if (listed.error -> err) { return result\Result::<{str: [str]}>{ error = err }; }
-        ahead[b] = lines(listed.value!);
+        ahead[b] = rc\lines(listed.value!);
     }
     final found = mut {<str: [str]>};
     foreach (i, b in branches) {
@@ -276,11 +254,11 @@ fun containsMap(root: str, branches: [str], base: str) > result\Result::<{str: [
 }
 
 fun changedPaths(root: str, branch: str, base: str) > result\Result::<[str]> {
-    final mb = git(root, args: ["merge-base", base, branch]);
+    final mb = rc\git(root, args: ["merge-base", base, branch]);
     if (mb.error -> err) { return result\Result::<[str]>{ error = err }; }
-    final diffed = git(root, args: ["diff", "--name-only", "{mb.value!}..{branch}"]);
+    final diffed = rc\git(root, args: ["diff", "--name-only", "{mb.value!}..{branch}"]);
     if (diffed.error -> err) { return result\Result::<[str]>{ error = err }; }
-    return result\ok::<[str]>(lines(diffed.value!));
+    return result\ok::<[str]>(rc\lines(diffed.value!));
 }
 
 fun checkCommand(c: LeaseCheck?) > str {
@@ -342,7 +320,7 @@ fun branchOfJob(root: str, row: JobRow) > result\Result::<str> {
     final here = checkedOutIn(row);
     if (here.error -> err) { return result\Result::<str>{ error = err }; }
     if (here.value! != "") { return here; }
-    final named = gitOK(root, args: ["show-ref", "--verify", "--quiet", "refs/heads/{row.id}"]);
+    final named = rc\gitOK(root, args: ["show-ref", "--verify", "--quiet", "refs/heads/{row.id}"]);
     if (named.error -> err) { return result\Result::<str>{ error = err }; }
     if (named.value!) { return result\ok::<str>(row.id); }
     return result\fail::<str>("merge-job-branches: job {row.id} names no branch: its checkout {row.checkoutRoot} is gone or detached, and no branch is named {row.id}");
@@ -350,19 +328,19 @@ fun branchOfJob(root: str, row: JobRow) > result\Result::<str> {
 
 // shortlog is each commit in range touching path, as `<short> <subject>`.
 fun shortlog(dir: str, range: str, path: str) > result\Result::<[str]> {
-    final logged = git(dir, args: ["log", "--no-merges", "--format=%h %s", range, "--", path]);
+    final logged = rc\git(dir, args: ["log", "--no-merges", "--format=%h %s", range, "--", path]);
     if (logged.error -> err) { return result\Result::<[str]>{ error = err }; }
-    return result\ok::<[str]>(lines(logged.value!));
+    return result\ok::<[str]>(rc\lines(logged.value!));
 }
 
 // conflicts reads the files a merge in progress in dir left unsettled, each with the
 // commits on both sides since they diverged.
 fun conflicts(dir: str) > result\Result::<[Conflict]> {
-    final unmerged = git(dir, args: ["diff", "--name-only", "--diff-filter=U"]);
+    final unmerged = rc\git(dir, args: ["diff", "--name-only", "--diff-filter=U"]);
     if (unmerged.error -> err) { return result\Result::<[Conflict]>{ error = err }; }
-    final files = lines(unmerged.value!);
+    final files = rc\lines(unmerged.value!);
     if (files.len() == 0) { return result\ok::<[Conflict]>([<Conflict>]); }
-    final mb = git(dir, args: ["merge-base", "HEAD", "MERGE_HEAD"]);
+    final mb = rc\git(dir, args: ["merge-base", "HEAD", "MERGE_HEAD"]);
     if (mb.error -> err) { return result\Result::<[Conflict]>{ error = err }; }
     final acc = mut [<Conflict>];
     foreach (f in files) {
@@ -379,7 +357,7 @@ fun conflicts(dir: str) > result\Result::<[Conflict]> {
 fun fromLayer(dir: str, commit: str, merged: [str]) > result\Result::<str> {
     final sha = commit.split(" ")[0];
     foreach (b in merged) {
-        final inside = gitOK(dir, args: ["merge-base", "--is-ancestor", sha, b]);
+        final inside = rc\gitOK(dir, args: ["merge-base", "--is-ancestor", sha, b]);
         if (inside.error -> err) { return result\Result::<str>{ error = err }; }
         if (inside.value!) { return result\ok::<str>("{commit} (from {b})"); }
     }
@@ -407,16 +385,16 @@ fun settleWithMagus(dir: str, branch: str) > result\Result::<[str]> {
     try {
         said = magus\cmd("vcs", args: ["resolve", "--against", branch], opts: magus\CommandOptions{ dir = dir, root = dir, quiet = true }).stdout;
     } catch (err: any) {
-        final merging = gitOK(dir, args: ["rev-parse", "-q", "--verify", "MERGE_HEAD"]);
+        final merging = rc\gitOK(dir, args: ["rev-parse", "-q", "--verify", "MERGE_HEAD"]);
         if (merging.error -> failed) { return result\Result::<[str]>{ error = failed }; }
         if (!merging.value!) {
-            final tree = git(dir, args: ["status", "--porcelain"]);
+            final tree = rc\git(dir, args: ["status", "--porcelain"]);
             if (tree.error -> failed) { return result\Result::<[str]>{ error = failed }; }
-            return result\fail::<[str]>("merge-job-branches: merging {branch} did not start: {result\caught::<[str]>(err).error!.message}; the tree holds {lines(tree.value!).join(", ")}");
+            return result\fail::<[str]>("merge-job-branches: merging {branch} did not start: {result\caught::<[str]>(err).error!.message}; the tree holds {rc\lines(tree.value!).join(", ")}");
         }
     }
     final settled = mut [<str>];
-    foreach (l in lines(said)) {
+    foreach (l in rc\lines(said)) {
         if (l.startsWith(CLAIMS_SETTLED)) { settled.append(l); }
     }
     return result\ok::<[str]>(settled);
@@ -439,7 +417,7 @@ final KEPT = "merge-job-branches: kept the merged tree ";
 // an error code or the word error or fail, else the first line that is not a JSON dump.
 export fun causeLine(text: str) > str {
     var first = "";
-    foreach (l in lines(text)) {
+    foreach (l in rc\lines(text)) {
         if (l.startsWith("\{") or l.startsWith("[\{") or l.startsWith("}")) { continue; }
         if (first == "") { first = l; }
         final low = l.lower();
@@ -498,7 +476,7 @@ fun regenerateWithMagus(base: str, ready: fun (dir: str) > result\Result::<[str]
             if (ran.code != 0) {
                 return result\fail::<bool>(keptTree(dir, target: "affected generate:rw", text: "{ran.stderr}\n{ran.stdout}"));
             }
-            final left = unstaged(dir);
+            final left = rc\unstaged(dir);
             if (left.error -> err) { return result\Result::<bool>{ error = err }; }
             final changed = left.value!;
             if (changed.len() == 0) { return result\ok::<bool>(true); }
@@ -511,7 +489,7 @@ fun regenerateWithMagus(base: str, ready: fun (dir: str) > result\Result::<[str]
             }
             final add = mut ["add", "--"];
             foreach (p in changed) { add.append(p); }
-            final staged = git(dir, args: add);
+            final staged = rc\git(dir, args: add);
             if (staged.error -> err) { return result\Result::<bool>{ error = err }; }
             return result\ok::<bool>(true);
         } catch (err: any) {
@@ -520,61 +498,13 @@ fun regenerateWithMagus(base: str, ready: fun (dir: str) > result\Result::<[str]
     };
 }
 
-// unstaged is every path in dir changed and not staged: modified, deleted or untracked.
-fun unstaged(dir: str) > result\Result::<[str]> {
-    final acc = mut [<str>];
-    final modified = git(dir, args: ["diff", "--name-only"]);
-    if (modified.error -> err) { return result\Result::<[str]>{ error = err }; }
-    foreach (p in lines(modified.value!)) { acc.append(p); }
-    final untracked = git(dir, args: ["ls-files", "--others", "--exclude-standard"]);
-    if (untracked.error -> err) { return result\Result::<[str]>{ error = err }; }
-    foreach (p in lines(untracked.value!)) { acc.append(p); }
-    return result\ok::<[str]>(acc);
-}
-
-// CONTRACT_DIRS and loadContract are the load contract: what a magus built before a change
-// needs to load the tree after it. A copy of loadContract in internal/guard/load_contract.go,
-// since neither can read the other.
-final CONTRACT_DIRS = ["internal/spell/gen/decls/", "internal/interp/bindings/gen/"];
-
-export fun loadContract(p: str) > bool {
-    if (p.endsWith("_test.go")) { return false; }
-    if (p.endsWith("api.lock") or p.endsWith("api-go.lock")) { return true; }
-    foreach (d in CONTRACT_DIRS) {
-        if (p.startsWith(d)) { return true; }
-    }
-    if (!p.startsWith("libs/gopherbuzz/") or !p.endsWith(".go")) { return false; }
-    final name = p.sub("libs/gopherbuzz/".len(), len: p.len() - "libs/gopherbuzz/".len());
-    return name.indexOf("/") == null and (name.startsWith("checker") or name.startsWith("compiler"));
-}
-
-export fun contractPaths(changed: [str]) > [str] {
-    return changed.filter(fun (index: int, p: str) > bool => loadContract(p));
-}
-
-// policyFailure reads the verdict the merged ./magus gave a state-changing line, as a hook
-// would ask it, and says why the guard policy does not load, "" when it does.
-export fun policyFailure(verdictJSON: str) > result\Result::<str> {
-    try {
-        final v = serialize\jsonDecode(verdictJSON);
-        final rule = v.q("rule").stringValue();
-        final said = v.q("reason").stringValue() + v.q("context").stringValue();
-        if (rule == "policy-unloaded" or rule == "stale-binary" or said.indexOf("judged nothing") != null) {
-            return result\ok::<str>("{rule}: {said}");
-        }
-        return result\ok::<str>("");
-    } catch (err: any) {
-        return result\caught::<str>(err, doing: "merge-job-branches: read the guard verdict");
-    }
-}
-
 // requirePolicyLoads asks the ./magus built at dir to judge a write there and fails, keeping
 // the tree, when the guard policy does not load: landing it would leave every write waiting.
 fun requirePolicyLoads(dir: str) > result\Result::<bool> {
     try {
         final judged = proc\exec(fs\join(dir, name: "magus"), args: ["shell", "-o", "json", "touch .merge-job-branches-probe"], dir: dir,
             opts: proc\ExecOptions{ quiet = true, allowFailure = true });
-        final read = policyFailure(judged.stdout);
+        final read = lc\policyFailure(judged.stdout);
         var why = "it printed no verdict: {judged.stderr}";
         if (read.error == null) { why = read.value!; }
         if (why != "") {
@@ -601,13 +531,13 @@ fun conflictsByLayer(dir: str, found: [Conflict], merged: [str]) > result\Result
 }
 
 fun sealMerge(dir: str, settled: [str]) > result\Result::<str> {
-    final merging = gitOK(dir, args: ["rev-parse", "-q", "--verify", "MERGE_HEAD"]);
+    final merging = rc\gitOK(dir, args: ["rev-parse", "-q", "--verify", "MERGE_HEAD"]);
     if (merging.error -> err) { return result\Result::<str>{ error = err }; }
     if (merging.value!) {
-        final committed = git(dir, args: ["commit", "--no-edit", "--no-verify"]);
+        final committed = rc\git(dir, args: ["commit", "--no-edit", "--no-verify"]);
         if (committed.error -> err) { return result\Result::<str>{ error = err }; }
     }
-    final head = git(dir, args: ["rev-parse", "--short", "HEAD"]);
+    final head = rc\git(dir, args: ["rev-parse", "--short", "HEAD"]);
     if (head.error -> err) { return result\Result::<str>{ error = err }; }
     final said = mut ["merged as {head.value!}"];
     foreach (line in settled) { said.append(line); }
@@ -631,7 +561,7 @@ export fun mergeLayers(dir: str, s: stack\BranchStack, into: str, settle: fun (d
             status = "planned";
             reason = "not merged: {stopped} stopped the merge";
         } else {
-            final inTree = gitOK(dir, args: ["merge-base", "--is-ancestor", l.branch, "HEAD"]);
+            final inTree = rc\gitOK(dir, args: ["merge-base", "--is-ancestor", l.branch, "HEAD"]);
             if (inTree.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
             if (inTree.value!) {
                 reason = "already in the tree";
@@ -645,7 +575,7 @@ export fun mergeLayers(dir: str, s: stack\BranchStack, into: str, settle: fun (d
                 if (found.len() > 0) {
                     final annotated = conflictsByLayer(dir, found: found, merged: merged);
                     if (annotated.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
-                    final aborted = git(dir, args: ["merge", "--abort"]);
+                    final aborted = rc\git(dir, args: ["merge", "--abort"]);
                     if (aborted.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
                     status = "conflict";
                     reason = conflictReason(l.branch, into: into, found: annotated.value!);
@@ -677,18 +607,18 @@ fun allMerged(s: stack\BranchStack) > bool {
 export fun commitRegenerated(dir: str, s: stack\BranchStack, regenerate: fun (dir: str) > result\Result::<bool>) > result\Result::<str> {
     final regenerated = regenerate(dir);
     if (regenerated.error -> err) { return result\Result::<str>{ error = err }; }
-    final unstagedRun = unstaged(dir);
+    final unstagedRun = rc\unstaged(dir);
     if (unstagedRun.error -> err) { return result\Result::<str>{ error = err }; }
     final left = unstagedRun.value!;
     if (left.len() > 0) {
         return result\fail::<str>("merge-job-branches: regenerating left {left.join(", ")} unstaged");
     }
-    final clean = gitOK(dir, args: ["diff", "--cached", "--quiet"]);
+    final clean = rc\gitOK(dir, args: ["diff", "--cached", "--quiet"]);
     if (clean.error -> err) { return result\Result::<str>{ error = err }; }
     if (clean.value!) { return result\ok::<str>(""); }
-    final committed = git(dir, args: ["commit", "--no-verify", "-m", "regenerate after merging {s.layers.len()} branches"]);
+    final committed = rc\git(dir, args: ["commit", "--no-verify", "-m", "regenerate after merging {s.layers.len()} branches"]);
     if (committed.error -> err) { return result\Result::<str>{ error = err }; }
-    return git(dir, args: ["rev-parse", "HEAD"]);
+    return rc\git(dir, args: ["rev-parse", "HEAD"]);
 }
 
 // dropTree removes dir, which may not exist.
@@ -701,12 +631,19 @@ fun dropTree(dir: str) > result\Result::<bool> {
     }
 }
 
+// removeWorktree is the live host's cleanup, which integration rows may run.
+fun removeWorktree(root: str, dir: str) > result\Result::<bool> {
+    final removed = rc\git(root, args: ["worktree", "remove", "--force", dir]);
+    if (removed.error -> err) { return result\Result::<bool>{ error = err }; }
+    return dropTree(dir);
+}
+
 // withTree runs body in a detached worktree of root at rev made at dir, and removes the
 // worktree however body ends. dir comes from the caller because the scratch checkout dir
 // lives under XDG_CACHE_HOME, which a CI gate puts inside its own checkout, where the
 // buzz-test sandbox denies writes.
-fun withTree(root: str, rev: str, dir: str, body: fun (dir: str) > result\Result::<bool>) > result\Result::<bool> {
-    final added = git(root, args: ["worktree", "add", "--detach", "--quiet", dir, rev]);
+fun withTree(root: str, rev: str, dir: str, remove: fun (root: str, dir: str) > result\Result::<bool>, body: fun (dir: str) > result\Result::<bool>) > result\Result::<bool> {
+    final added = rc\git(root, args: ["worktree", "add", "--detach", "--quiet", dir, rev]);
     if (added.error -> err) {
         _ = dropTree(dir);
         return result\Result::<bool>{ error = err };
@@ -715,17 +652,13 @@ fun withTree(root: str, rev: str, dir: str, body: fun (dir: str) > result\Result
     if (outcome.error == null) { outcome = body(dir); }
     if (outcome.error -> err) {
         if (err.message.startsWith(KEPT)) { return result\Result::<bool>{ error = err }; }
-        try {
-            _ = vcs\cmd(["worktree", "remove", "--force", dir], opts: vcs\CommandOptions{ quiet = true, dir = root, allowFailure = true });
-        } catch (failed: any) {
-            return result\caught::<bool>(failed, doing: "merge-job-branches: remove the worktree {dir}");
+        final removed = remove(root, dir: dir);
+        if (removed.error -> failed) {
+            return result\fail::<bool>("{err.message}\n  the tree {dir} was not removed: {failed.message}");
         }
-        _ = dropTree(dir);
         return result\Result::<bool>{ error = err };
     }
-    final removed = git(root, args: ["worktree", "remove", "--force", dir]);
-    if (removed.error -> err) { return result\Result::<bool>{ error = err }; }
-    return dropTree(dir);
+    return remove(root, dir: dir);
 }
 
 // requireTrusted fails before a run in dir does: mise refuses an untrusted config, and
@@ -967,9 +900,9 @@ fun nameResolved(resolved: [str], values: {str: str}) > void {
 }
 
 fun requireNewBranch(root: str, into: str) > result\Result::<bool> {
-    final formatted = git(root, args: ["check-ref-format", "--branch", into]);
+    final formatted = rc\git(root, args: ["check-ref-format", "--branch", into]);
     if (formatted.error -> err) { return result\Result::<bool>{ error = err }; }
-    final exists = gitOK(root, args: ["show-ref", "--verify", "--quiet", "refs/heads/{into}"]);
+    final exists = rc\gitOK(root, args: ["show-ref", "--verify", "--quiet", "refs/heads/{into}"]);
     if (exists.error -> err) { return result\Result::<bool>{ error = err }; }
     if (exists.value!) {
         return result\fail::<bool>("merge-job-branches: branch {into} already exists; to merge more branches into it run merge-base-into-branches.buzz --branches {into}");
@@ -979,7 +912,7 @@ fun requireNewBranch(root: str, into: str) > result\Result::<bool> {
 
 // sh is the output of a git command a test expects to succeed.
 fun sh(dir: str, args: [str]) > str {
-    return git(dir, args: args).value!;
+    return rc\git(dir, args: args).value!;
 }
 
 test "requireBranch resolves a remote-tracking ref and refuses a name that is no commit" {
@@ -999,21 +932,6 @@ test "requireBranch resolves a remote-tracking ref and refuses a name that is no
     final existing = requireNewBranch(root, into: "main").error!.message;
     assert\equal(existing.indexOf("merge-base-into-branches.buzz --branches main") != null, want: true, message: "an existing --into names the updater: {existing}");
     fs\removeAll(root);
-}
-
-test "the load contract is the decls, the API locks, the bindings and the Buzz checker" {
-    assert\equal(contractPaths(["internal/spell/gen/decls/magus.buzz", "std/gen/std-api.lock", "internal/commands/testdata/api-go.lock",
-        "internal/interp/bindings/gen/boundary_list.go", "libs/gopherbuzz/checker_members.go", "libs/gopherbuzz/compiler.go",
-        "libs/gopherbuzz/checker_test.go", "libs/gopherbuzz/vm.go", "libs/gopherbuzz/docs/checker.go", "run.go", "docs/a.md"]),
-        want: ["internal/spell/gen/decls/magus.buzz", "std/gen/std-api.lock", "internal/commands/testdata/api-go.lock",
-            "internal/interp/bindings/gen/boundary_list.go", "libs/gopherbuzz/checker_members.go", "libs/gopherbuzz/compiler.go"],
-        message: "only the paths a binary built before them cannot load past");
-}
-
-test "policyFailure names a policy the merged binary cannot load" {
-    assert\equal(policyFailure("\{\"decision\":\"advise\",\"rule\":\"workspace:command\",\"context\":\"fine\"}").value!, want: "", message: "a loaded policy");
-    assert\equal(policyFailure("\{\"decision\":\"deny\",\"rule\":\"policy-unloaded\",\"reason\":\"line 3: bad\"}").value!, want: "policy-unloaded: line 3: bad", message: "a broken policy");
-    assert\equal(policyFailure("\{\"decision\":\"advise\",\"rule\":\"command-rule-failed\",\"context\":\"the rule judged nothing\"}").value!.startsWith("command-rule-failed"), want: true, message: "a rule that judged nothing");
 }
 
 fun printVerdicts(verdicts: [Verdict]) > bool {
@@ -1053,10 +971,11 @@ export fun main(args: [str]) > void !> any {
     var merged = plan;
     var verdicts = [<Verdict>];
     var regenerated = "";
+    var commits = [<str>];
     if (apply) {
         final fresh = requireNewBranch(root, into: into);
         if (fresh.error -> err) { throw err.message; }
-        final applied = withTree(root, rev: plan.base, dir: fs\scratchCheckoutDir("merge-job-branches"), body: fun (dir: str) > result\Result::<bool> {
+        final applied = withTree(root, rev: plan.base, dir: fs\scratchCheckoutDir("merge-job-branches"), remove: removeWorktree, body: fun (dir: str) > result\Result::<bool> {
             final layered = mergeLayers(dir, s: plan, into: into, settle: settleWithMagus);
             if (layered.error -> err) { return result\Result::<bool>{ error = err }; }
             merged = layered.value!;
@@ -1064,16 +983,20 @@ export fun main(args: [str]) > void !> any {
             final committed = commitRegenerated(dir, s: merged, regenerate: regenerateWithMagus(plan.base, ready: readyAt));
             if (committed.error -> err) { return result\Result::<bool>{ error = err }; }
             regenerated = committed.value!;
+            final landed = merged.layers.map(fun (index: int, l: stack\StackLayer) > str => l.branch);
+            final recomposed = rc\recompose(dir, base: plan.base, into: into, branches: landed, describe: rc\describeAt);
+            if (recomposed.error -> err) { return result\Result::<bool>{ error = err }; }
+            commits = recomposed.value!;
             // About one merge in five changes the load contract; only those pay for the probe.
-            final changed = git(dir, args: ["diff", "--name-only", plan.base, "HEAD"]);
+            final changed = rc\git(dir, args: ["diff", "--name-only", plan.base, "HEAD"]);
             if (changed.error -> err) { return result\Result::<bool>{ error = err }; }
-            if (contractPaths(lines(changed.value!)).len() > 0) {
+            if (lc\contractPaths(rc\lines(changed.value!)).len() > 0) {
                 final loads = requirePolicyLoads(dir);
                 if (loads.error -> err) { return result\Result::<bool>{ error = err }; }
             }
-            final tip = git(dir, args: ["rev-parse", "HEAD"]);
+            final tip = rc\git(dir, args: ["rev-parse", "HEAD"]);
             if (tip.error -> err) { return result\Result::<bool>{ error = err }; }
-            final made = git(root, args: ["branch", into, tip.value!]);
+            final made = rc\git(root, args: ["branch", into, tip.value!]);
             if (made.error -> err) { return result\Result::<bool>{ error = err }; }
             // A file settled by job claims is a merge no job's check has seen, so every
             // merged job's checks run on it whether or not --verify asked.
@@ -1092,14 +1015,14 @@ export fun main(args: [str]) > void !> any {
         foreach (l in plan.layers) {
             var status = "planned";
             var reason = "not in {into}";
-            final inside = gitOK(root, args: ["merge-base", "--is-ancestor", l.branch, into]);
+            final inside = rc\gitOK(root, args: ["merge-base", "--is-ancestor", l.branch, into]);
             if (inside.error -> err) { throw err.message; }
             if (inside.value!) { status = "merged"; reason = "in {into}"; }
             layers.append(stack\StackLayer{ branch = l.branch, parent = l.parent, job = l.job, paths = l.paths,
                 declarations = l.declarations, check = l.check, goals = l.goals, status = status, reason = reason });
         }
         merged = stack\BranchStack{ schema = plan.schema, base = plan.base, layers = layers };
-        final checked = withTree(root, rev: into, dir: fs\scratchCheckoutDir("merge-job-branches"), body: fun (dir: str) > result\Result::<bool> {
+        final checked = withTree(root, rev: into, dir: fs\scratchCheckoutDir("merge-job-branches"), remove: removeWorktree, body: fun (dir: str) > result\Result::<bool> {
             final graded = verifyLayers(dir, s: merged);
             if (graded.error -> err) { return result\Result::<bool>{ error = err }; }
             verdicts = graded.value!;
@@ -1120,7 +1043,11 @@ export fun main(args: [str]) > void !> any {
             std\print("verified {into} in a temporary worktree; nothing was written");
         }
         std\print(render(merged));
-        if (regenerated != "") { std\print("regenerated output committed apart as {regenerated.sub(0, len: 12)}"); }
+        if (regenerated != "") { std\print("regenerated the merged tree; its output joins the commits below"); }
+        if (commits.len() > 0) {
+            std\print("recomposed the unpushed commits above the base into:");
+            foreach (c in commits) { std\print("  {c}"); }
+        }
     }
     var passed = true;
     if (verdicts.len() > 0) {
@@ -1248,15 +1175,15 @@ fun put(root: str, path: str, content: str) > result\Result::<bool> {
 }
 
 fun commitAll(root: str, subject: str) > result\Result::<bool> {
-    final added = git(root, args: ["add", "-A"]);
+    final added = rc\git(root, args: ["add", "-A"]);
     if (added.error -> err) { return result\Result::<bool>{ error = err }; }
-    final committed = git(root, args: ["commit", "-q", "--no-verify", "-m", subject]);
+    final committed = rc\git(root, args: ["commit", "-q", "--no-verify", "-m", subject]);
     if (committed.error -> err) { return result\Result::<bool>{ error = err }; }
     return result\ok::<bool>(true);
 }
 
 fun branchFrom(root: str, name: str, start: str, files: {str: str}, subject: str) > result\Result::<bool> {
-    final made = git(root, args: ["checkout", "-q", "-b", name, start]);
+    final made = rc\git(root, args: ["checkout", "-q", "-b", name, start]);
     if (made.error -> err) { return result\Result::<bool>{ error = err }; }
     foreach (p, c in files) {
         final wrote = put(root, path: p, content: c);
@@ -1307,7 +1234,7 @@ fun fixtureRegenerate(dir: str) > result\Result::<bool> {
         _ = names.sort(fun (a: str, b: str) > bool => a < b);
         final wrote = put(dir, path: "gen/list.txt", content: names.join("\n") + "\n");
         if (wrote.error -> err) { return result\Result::<bool>{ error = err }; }
-        final staged = git(dir, args: ["add", "gen/list.txt"]);
+        final staged = rc\git(dir, args: ["add", "gen/list.txt"]);
         if (staged.error -> err) { return result\Result::<bool>{ error = err }; }
         return result\ok::<bool>(true);
     } catch (err: any) {
@@ -1324,6 +1251,9 @@ fun testTree() > result\Result::<str> {
         return result\caught::<str>(err, doing: "make a scratch tree");
     }
 }
+
+// dropTestTree removes the test's own scratch root with fs, never with git.
+fun dropTestTree(root: str, dir: str) > result\Result::<bool> => dropTree(dir);
 
 fun planStack(root: str, names: [str]) > result\Result::<stack\BranchStack> {
     final cands = mut [<Candidate>];
@@ -1344,7 +1274,8 @@ test "a merge orders by ancestry, lets the driver settle generated output, and s
 
     final mainBefore = sh(root, args: ["rev-parse", "main"]);
     var outcome = plan;
-    final ran = withTree(root, rev: "main", dir: testTree().value!, body: fun (dir: str) > result\Result::<bool> {
+    final tree = testTree().value!;
+    final ran = withTree(root, rev: "main", dir: tree, remove: dropTestTree, body: fun (dir: str) > result\Result::<bool> {
         final layered = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);
         if (layered.error -> err) { return result\Result::<bool>{ error = err }; }
         outcome = layered.value!;
@@ -1361,8 +1292,8 @@ test "a merge orders by ancestry, lets the driver settle generated output, and s
         assert\equal(why.indexOf(want) != null, want: true, message: "the stop names {want}: {why}");
     }
     assert\equal(sh(root, args: ["rev-parse", "main"]), want: mainBefore, message: "the base is untouched");
-    assert\equal(lines(sh(root, args: ["worktree", "list"])).len(), want: 1, message: "the temporary tree is gone");
-    assert\equal(gitOK(root, args: ["show-ref", "--verify", "--quiet", "refs/heads/integration"]).value!, want: false, message: "no branch is written");
+    assert\equal(fs\isDir(tree), want: false, message: "the temporary tree is gone");
+    assert\equal(rc\gitOK(root, args: ["show-ref", "--verify", "--quiet", "refs/heads/integration"]).value!, want: false, message: "no branch is written");
     fs\removeAll(root);
 }
 
@@ -1373,7 +1304,7 @@ test "a clean merge regenerates once and commits the output apart" {
     var dirty = [<str>];
     var subjects = [<str>];
     var regenerated = "";
-    final ran = withTree(root, rev: "main", dir: testTree().value!, body: fun (dir: str) > result\Result::<bool> {
+    final ran = withTree(root, rev: "main", dir: testTree().value!, remove: dropTestTree, body: fun (dir: str) > result\Result::<bool> {
         final merged = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);
         if (merged.error -> err) { return result\Result::<bool>{ error = err }; }
         if (!allMerged(merged.value!)) { return result\fail::<bool>("a layer did not merge"); }
@@ -1381,8 +1312,8 @@ test "a clean merge regenerates once and commits the output apart" {
         if (committed.error -> err) { return result\Result::<bool>{ error = err }; }
         regenerated = committed.value!;
         listed = fs\readFile("{dir}/gen/list.txt") catch "";
-        dirty = lines(sh(dir, args: ["status", "--porcelain"]));
-        subjects = lines(sh(dir, args: ["log", "--format=%s", "-2"]));
+        dirty = rc\lines(sh(dir, args: ["status", "--porcelain"]));
+        subjects = rc\lines(sh(dir, args: ["log", "--format=%s", "-2"]));
         return result\ok::<bool>(true);
     });
     assert\isTrue(ran.error == null, message: "every layer merges: {ran.error?.message ?? ""}");
@@ -1410,7 +1341,7 @@ test "a split stack merged back yields the original change's tree" {
     ] });
     final plan = stack\orderLayers(stack\readStack(written));
     var tree = "";
-    final ran = withTree(root, rev: plan.base, dir: testTree().value!, body: fun (dir: str) > result\Result::<bool> {
+    final ran = withTree(root, rev: plan.base, dir: testTree().value!, remove: dropTestTree, body: fun (dir: str) > result\Result::<bool> {
         final merged = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);
         if (merged.error -> err) { return result\Result::<bool>{ error = err }; }
         if (!allMerged(merged.value!)) { return result\fail::<bool>("a layer did not merge"); }
@@ -1429,13 +1360,13 @@ test "a layer settled by job claims says so, and only then does the merge owe a 
     final line = "{CLAIMS_SETTLED}src/a.txt by job claims: src/a.txt#A (job a) against src/a.txt#B (job b); every job passed";
     var plain = plan;
     var claimed = plan;
-    _ = withTree(root, rev: "main", dir: testTree().value!, body: fun (dir: str) > result\Result::<bool> {
+    _ = withTree(root, rev: "main", dir: testTree().value!, remove: dropTestTree, body: fun (dir: str) > result\Result::<bool> {
         final merged = mergeLayers(dir, s: plan, into: "integration", settle: settleWithMagus);
         if (merged.error -> err) { return result\Result::<bool>{ error = err }; }
         plain = merged.value!;
         return result\ok::<bool>(true);
     });
-    _ = withTree(root, rev: "main", dir: testTree().value!, body: fun (dir: str) > result\Result::<bool> {
+    _ = withTree(root, rev: "main", dir: testTree().value!, remove: dropTestTree, body: fun (dir: str) > result\Result::<bool> {
         final merged = mergeLayers(dir, s: plan, into: "integration", settle: fun (d: str, branch: str) > result\Result::<[str]> {
             _ = settleWithMagus(d, branch: branch);
             if (branch == "edit-a") { return result\ok::<[str]>([line]); }
@@ -1455,7 +1386,7 @@ test "a failed readiness keeps the tree and names its path, target, ref and one 
     final root = fixtureRepo().value!;
     final dump = `{"findings": [{"rule": "x"}, {"rule": "y"}]}` + "\n";
     final kept = testTree().value!;
-    final ran = withTree(root, rev: "main", dir: kept, body: fun (dir: str) > result\Result::<bool> {
+    final ran = withTree(root, rev: "main", dir: kept, remove: dropTestTree, body: fun (dir: str) > result\Result::<bool> {
         return regenerateWithMagus("main", ready: fun (d: str) > result\Result::<[str]> {
             return result\fail::<[str]>("gate-ready: magus run symbol-digest-generate .: exit 1: {dump}MGS8001 digest failed, output: out123abc\n{dump}");
         })(dir);
@@ -1467,7 +1398,7 @@ test "a failed readiness keeps the tree and names its path, target, ref and one 
     assert\equal(said.indexOf("output ref: out123abc (") != null, want: true, message: "the ref: {said}");
     assert\equal(said.indexOf("cause: MGS8001 digest failed, output: out123abc\n") != null, want: true, message: "the cause: {said}");
     assert\equal(said.indexOf("findings") == null, want: true, message: "no JSON dump: {said}");
-    _ = vcs\cmd(["worktree", "remove", "--force", kept], opts: vcs\CommandOptions{ quiet = true, dir = root });
+    fs\removeAll(kept);
     fs\removeAll(root);
 }
 
@@ -1475,13 +1406,84 @@ test "any other failure still removes the tree" {
     final root = fixtureRepo().value!;
     final gone = testTree().value!;
     var ran = false;
-    final outcome = withTree(root, rev: "main", dir: gone, body: fun (dir: str) > result\Result::<bool> {
+    final outcome = withTree(root, rev: "main", dir: gone, remove: dropTestTree, body: fun (dir: str) > result\Result::<bool> {
         ran = true;
         return result\fail::<bool>("boom");
     });
     assert\equal(ran, want: true, message: "the body ran: {outcome.error?.message ?? ""}");
     assert\equal(outcome.error!.message, want: "boom", message: "the body's error comes through");
     assert\equal(fs\isDir(gone), want: false, message: "the tree is gone");
+    fs\removeAll(root);
+}
+
+// mergedFixture merges the named fixture branches onto a detached main in
+// root itself and regenerates. A worker's lease refuses `git worktree remove`.
+fun mergedFixture(root: str, names: [str]) > result\Result::<str> {
+    final planRun = planStack(root, names: names);
+    if (planRun.error -> err) { return result\Result::<str>{ error = err }; }
+    final detached = rc\git(root, args: ["checkout", "-q", "--detach", "main"]);
+    if (detached.error -> err) { return result\Result::<str>{ error = err }; }
+    final merged = mergeLayers(root, s: planRun.value!, into: "integration", settle: settleWithMagus);
+    if (merged.error -> err) { return result\Result::<str>{ error = err }; }
+    if (!allMerged(merged.value!)) { return result\fail::<str>("a layer did not merge: {render(merged.value!)}"); }
+    final committed = commitRegenerated(root, s: merged.value!, regenerate: fixtureRegenerate);
+    if (committed.error -> err) { return result\Result::<str>{ error = err }; }
+    return result\ok::<str>(root);
+}
+
+final FOUR_JOBS = ["gen-b", "dep", "gen-c", "edit-a"];
+
+test "recomposing makes one commit per merged job, in merge order, with no merge and the merged tree byte for byte" {
+    final root = fixtureRepo().value!;
+    final fixture = mergedFixture(root, names: FOUR_JOBS);
+    assert\isTrue(fixture.error == null, message: "the fixture merges: {fixture.error?.message ?? ""}");
+    final dir = fixture.value!;
+    final before = sh(dir, args: ["rev-parse", "HEAD^\{tree\}"]);
+    assert\equal(sh(dir, args: ["rev-list", "--merges", "--count", "main..HEAD"]) != "0", want: true, message: "the merge made merge commits");
+    final made = rc\recompose(dir, base: "main", into: "integration", branches: FOUR_JOBS, describe: rc\describeAt);
+    assert\isTrue(made.error == null, message: "it recomposes: {made.error?.message ?? ""}");
+    assert\equal(sh(dir, args: ["rev-parse", "HEAD^\{tree\}"]), want: before, message: "the tree is unchanged");
+    assert\equal(sh(dir, args: ["rev-list", "--count", "main..HEAD"]), want: "4", message: "one commit per job above the base");
+    assert\equal(sh(dir, args: ["rev-list", "--merges", "--count", "main..HEAD"]), want: "0", message: "no merge is left");
+    assert\equal(sh(dir, args: ["log", "--reverse", "--format=%s", "main..HEAD"]).split("\n"),
+        want: ["add b", "add d on b", "add c", "edit a one way"], message: "subjects follow the merge order");
+    assert\equal(sh(dir, args: ["rev-parse", "HEAD~4"]), want: sh(root, args: ["rev-parse", "main"]), message: "on the base");
+    assert\equal(sh(dir, args: ["show", "--name-only", "--format=", "HEAD~3"]).split("\n").indexOf("gen/list.txt") != null, want: true,
+        message: "the regenerated list travels with the first job that invalidated it");
+    fs\removeAll(root);
+}
+
+test "a two-job landing becomes two commits with the same final tree" {
+    final root = fixtureRepo().value!;
+    final jobs = ["gen-b", "edit-a"];
+    final fixture = mergedFixture(root, names: jobs);
+    assert\isTrue(fixture.error == null, message: "the fixture merges: {fixture.error?.message ?? ""}");
+    final dir = fixture.value!;
+    final before = sh(dir, args: ["rev-parse", "HEAD^\{tree\}"]);
+    final made = rc\recompose(dir, base: "main", into: "integration", branches: jobs, describe: rc\describeAt);
+    assert\isTrue(made.error == null, message: "it recomposes: {made.error?.message ?? ""}");
+    assert\equal(sh(dir, args: ["rev-parse", "HEAD^\{tree\}"]), want: before, message: "the tree is unchanged");
+    assert\equal(sh(dir, args: ["rev-list", "--count", "main..HEAD"]), want: "2", message: "two commits above the base");
+    assert\equal(sh(dir, args: ["log", "--reverse", "--format=%s", "main..HEAD"]).split("\n"),
+        want: ["add b", "edit a one way"], message: "one subject per job");
+    fs\removeAll(root);
+}
+
+test "recomposing keeps every commit a remote ref of the branch already holds" {
+    final root = fixtureRepo().value!;
+    final fixture = mergedFixture(root, names: FOUR_JOBS);
+    assert\isTrue(fixture.error == null, message: "the fixture merges: {fixture.error?.message ?? ""}");
+    final dir = fixture.value!;
+    final pushed = sh(dir, args: ["rev-parse", "HEAD~1"]);
+    _ = sh(root, args: ["update-ref", "refs/remotes/origin/integration", pushed]);
+    assert\equal(rc\pushedFloor(dir, base: "main", into: "integration").value!, want: pushed, message: "the floor is the pushed commit");
+    final made = rc\recompose(dir, base: "main", into: "integration", branches: FOUR_JOBS, describe: rc\describeAt);
+    assert\isTrue(made.error == null, message: "it recomposes: {made.error?.message ?? ""}");
+    assert\equal(sh(dir, args: ["rev-parse", "HEAD~1"]), want: pushed, message: "the pushed commit stays the parent");
+    _ = sh(root, args: ["update-ref", "refs/remotes/origin/integration", sh(dir, args: ["rev-parse", "HEAD"])]);
+    final tip = sh(dir, args: ["rev-parse", "HEAD"]);
+    assert\equal(rc\recompose(dir, base: "main", into: "integration", branches: FOUR_JOBS, describe: rc\describeAt).value!, want: [<str>], message: "all pushed: nothing to do");
+    assert\equal(sh(dir, args: ["rev-parse", "HEAD"]), want: tip, message: "the pushed tip is untouched");
     fs\removeAll(root);
 }
 

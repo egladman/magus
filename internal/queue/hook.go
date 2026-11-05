@@ -9,6 +9,9 @@ package queue
 // machine's (the hook could not be started, or the queue itself was cancelled) is an
 // error, which stops a partition; anything else would let a change stall its partition
 // on every run by dying the right way.
+//
+// A red gate may carry a [types.Fault], evidence the machine caused it. The
+// verdict then waits for a retry a bounded number of times.
 
 import (
 	"bytes"
@@ -24,6 +27,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"mvdan.cc/sh/v3/expand"
@@ -421,11 +425,13 @@ func pathLines(paths []string) (lines string, refused []string) {
 	return strings.Join(kept, "\n") + "\n", refused
 }
 
-// changeFailure is a hook failing on the change: what it says is about the change. code
-// is the status the hook exited with, 0 when it exited with none.
+// changeFailure is a hook failing on the change: what it says is about the
+// change, unless fault names a machine condition it ran under. code is the
+// status the hook exited with, 0 when it exited with none.
 type changeFailure struct {
-	why  string
-	code int
+	why   string
+	code  int
+	fault types.Fault
 }
 
 func (f changeFailure) Error() string { return f.why }
@@ -470,11 +476,15 @@ func runHook(ctx context.Context, c hookCommand) (spawn.ExecResult, error) {
 		code := exit.ExitCode()
 		switch {
 		case code < 0:
-			return res, changeFailure{why: fmt.Sprintf("was killed (%s)", exit.String())}
+			failed := changeFailure{why: fmt.Sprintf("was killed (%s)", exit.String())}
+			if sigkilled(exit) {
+				failed.fault = types.FaultKilled
+			}
+			return res, failed
 		case code != ExitTempFail:
-			return res, changeFailure{fmt.Sprintf("exited %d", code), code}
+			return res, changeFailure{why: fmt.Sprintf("exited %d", code), code: code}
 		case attempt == attempts:
-			return res, changeFailure{fmt.Sprintf("exited %d (temporary failure) %d times", ExitTempFail, attempts), code}
+			return res, changeFailure{why: fmt.Sprintf("exited %d (temporary failure) %d times", ExitTempFail, attempts), code: code, fault: types.FaultTempFail}
 		}
 		select {
 		case <-ctx.Done():
@@ -482,6 +492,13 @@ func runHook(ctx context.Context, c hookCommand) (spawn.ExecResult, error) {
 		case <-time.After(retryDelay):
 		}
 	}
+}
+
+// sigkilled reports whether SIGKILL ended the process. Another signal, SIGSEGV
+// say, is the change's own crash and carries no fault.
+func sigkilled(e *exec.ExitError) bool {
+	ws, ok := e.Sys().(syscall.WaitStatus)
+	return ok && ws.Signaled() && ws.Signal() == syscall.SIGKILL
 }
 
 // HookEnv is the sandbox a hook runs in and what its environment adds.
@@ -509,6 +526,9 @@ type HookEnv struct {
 	// keeps all of them in the box, as the queue does, so no candidate replays or builds
 	// with what another's hook wrote.
 	Cache string
+	// CriticalFree is disk.critical_free_mb in bytes; zero is off. A red gate
+	// that printed ENOSPC is a disk fault only below it.
+	CriticalFree int64
 }
 
 // assignments is every assignment a gate or a regeneration in the box at home and tmp takes:
@@ -615,7 +635,7 @@ func GateCommit(ctx context.Context, v types.BuildVCS, root, scratch, commit str
 // hook's processes do is red. Its output goes to log, each line tagged with the commit
 // gated and its change, or "base" for a commit gated as it stands; a nil log discards
 // it.
-func CommandGate(cmd Command, env HookEnv, log *HookLog) types.Gate {
+func CommandGate(cmd Command, env HookEnv, log *HookLog) commandGate {
 	return commandGate{cmd: cmd, env: env, log: log}
 }
 
@@ -632,15 +652,55 @@ func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units [
 	}
 	out := g.log.Prefixed(fmt.Sprintf("[%s %s] ", short(cand.Commit), of))
 	defer out.Close()
-	err := g.env.gate(ctx, g.cmd, units, cand, out, out)
+	tail := &outputTail{w: out, max: gateTailBytes}
+	err := g.env.gate(ctx, g.cmd, units, cand, tail, tail)
 	var failed changeFailure
 	switch {
 	case errors.As(err, &failed):
-		return types.GateResult{Summary: "the gate " + failed.why}, nil
+		return types.GateResult{Summary: "the gate " + failed.why, Fault: gateFault(failed, tail.String(), cand.Dir, g.env.CriticalFree)}, nil
 	case err != nil:
 		return types.GateResult{}, fmt.Errorf("gate on `%s`: %w", short(cand.Commit), err)
 	}
 	return types.GateResult{Green: true}, nil
+}
+
+// gateFault is the machine fault a red gate ran under. A full disk needs the
+// ENOSPC text in output and dir's disk under floor, as [cache.DiskFullCause]
+// does. It wins, as it starves every other step; an unreadable disk is no
+// verdict.
+func gateFault(failed changeFailure, output, dir string, floor int64) types.Fault {
+	if _, full, err := cache.DiskFull(output, dir, floor); err == nil && full {
+		return types.FaultDisk
+	}
+	return failed.fault
+}
+
+// gateTailBytes is how much gate output is kept to look for a full disk.
+const gateTailBytes = 64 << 10
+
+// outputTail passes writes through to w and keeps the last max bytes.
+type outputTail struct {
+	w   io.Writer
+	max int
+
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (t *outputTail) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	t.buf = append(t.buf, p...)
+	if len(t.buf) > 2*t.max {
+		t.buf = slices.Clone(t.buf[len(t.buf)-t.max:])
+	}
+	t.mu.Unlock()
+	return t.w.Write(p)
+}
+
+func (t *outputTail) String() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return string(t.buf[max(0, len(t.buf)-t.max):])
 }
 
 // CommandRegenerate is a [types.RegenerateFunc] running cmd in a checkout with the
@@ -715,7 +775,7 @@ func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.Regener
 // A failing command is an error, auto_resolve and classify_edit aside, since the hook reads only the base,
 // never the change's code. Its environment is a gate's under env, less the box: facts
 // run in dir, the base's own checkout, with the queue's home and caches.
-func CommandFacts(cmd Command, dir string, env HookEnv, log *HookLog) types.BuildFacts {
+func CommandFacts(cmd Command, dir string, env HookEnv, log *HookLog) commandFacts {
 	return commandFacts{cmd: cmd, dir: dir, env: env, log: log}
 }
 

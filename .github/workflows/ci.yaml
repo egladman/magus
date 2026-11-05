@@ -74,6 +74,11 @@ env:
   # one runner. It lives here rather than in magus.yaml because it sizes a runner pool, and
   # a local plan spawns no runners.
   MAGUS_CI_MAX_SHARDS: '-1'
+  # The machine every shard runs on, which the plan packs memory against and
+  # records. ubuntu-latest for a public repository: 4 cores, 16 GiB.
+  MAGUS_CI_MACHINE_NAME: ubuntu-latest
+  MAGUS_CI_MACHINE_MEMORY_MB: '16384'
+  MAGUS_CI_MACHINE_CORES: '4'
   # Stream every target's output live instead of withholding it until something
   # fails. magus collapses on success by default, which is right on a terminal you
   # are sitting at and wrong in a log nobody reads until it goes red: a green run
@@ -222,12 +227,22 @@ jobs:
           fi
           mapfile -t projects < "$RUNNER_TEMP/pregate"
           if [ "${#projects[@]}" -gt 0 ]; then
-            magus run generate --no-default-charms --concurrency-profile aggressive "${projects[@]}" | magus affected ci --plan > "$RUNNER_TEMP/plan.json"
+            magus run generate --no-default-charms --concurrency-profile aggressive "${projects[@]}" | magus affected ci:gha --plan > "$RUNNER_TEMP/plan.json"
           else
-            magus affected ci --plan > "$RUNNER_TEMP/plan.json"
+            magus affected ci:gha --plan > "$RUNNER_TEMP/plan.json"
           fi
           magus run --stdin --dry-run -o 'template={{range .outputs}}{{.name}}={{.value}}{{"\n"}}{{end}}' < "$RUNNER_TEMP/plan.json" >> "$GITHUB_OUTPUT"
           magus run --stdin --dry-run -o 'template={{.summary}}' < "$RUNNER_TEMP/plan.json" >> "$GITHUB_STEP_SUMMARY"
+
+      # Each shard runs its units from this file. It carries what the matrix already
+      # carries to the shards that hold the signing key, so it adds no trust.
+      - name: Upload the shard plan
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: magus-plan-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/plan.json
+          if-no-files-found: error
+          retention-days: 7
 
       # Determinism, in this job rather than its own: the saving is a runner and a from-source
       # magus build, not a generate pass.
@@ -328,7 +343,7 @@ jobs:
           magus run generate --no-default-charms --concurrency-profile aggressive "${projects[@]}"
 
   ci:
-    name: "magus shard ${{ matrix.shard }}: ${{ matrix.label }}"
+    name: "magus shard ${{ matrix.shard }}: ${{ matrix.job_name }}"
     needs: plan
     if: fromJSON(needs.plan.outputs.count) > 0 && needs.plan.outputs.inherit != 'true'
     runs-on: ubuntu-latest
@@ -455,9 +470,9 @@ jobs:
             .magus/cas
             .magus/manifests
             .magus/logs
-          key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.digest }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-
+            ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.digest }}-
             ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-
 
       # The caches the spells declare (Go's GOCACHE and GOMODCACHE), from the bundle main
@@ -493,6 +508,25 @@ jobs:
       #   reaches that magus alone, since the box scrubs every child's environment.
       # TMPDIR and MISE_TRUSTED_CONFIG_PATHS are queue.yaml's validate values: the box,
       # and so the checkout mise must trust, lands under runner.temp.
+      # Under --cache .magus, the one directory outside the box its magus may read.
+      - name: Download the shard plan
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: magus-plan-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/.magus
+
+      # Run 41956616259 shard 0 hit ENOSPC in scip with 70 MB left, the log held no df, and
+      # the runner's 14 GB free is shared by the checkout, the gate's box copy with its own
+      # go build cache, test binaries, the OCI layout and .magus/symbols. The android SDK,
+      # dotnet, ghc and CodeQL are preinstalled and unused here, and removing them gives
+      # back about 25 GB. The two disk lines bracket the gate so the next overrun names
+      # what grew.
+      - name: Free runner disk and report it
+        run: |
+          df -h / "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
       - name: Run CI for shard
         uses: ./.github/actions/magus
         env:
@@ -509,23 +543,54 @@ jobs:
           # touching an explicitly named one. --concurrency-profile aggressive is the
           # explicit ask for the whole runner: magus reads no environment variable to
           # guess it is in CI, so every invocation that wants the machine says so itself.
-          # A main run passes --inherited=fatal for the same reason: security fails on
-          # every actionable finding main carries, not only on what a change introduced.
-          # A target argument, not a charm, since a charm keys every step and main's
-          # cache is the one pull requests read. docs figures stay off this shard (see
-          # the figures job): ci:gha delegates them there, since site-generate plus
-          # diagrams-generate OOMs 16GB together.
-          command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN,TZ -- magus buzz hack/ci/run-with-harnesses.buzz -- run ci:gha --no-default-charms --concurrency-profile aggressive ${{ matrix.projects }} ${{ github.event_name != 'pull_request' && '-- --inherited=fatal' || '' }}
+          # The saved plan names this shard's units: the targets each project's ci
+          # asks for under ci:gha, run as one invocation; --shard comes from MAGUS_SHARD.
+          # The plan was evaluated under gha and refuses other charms, so docs figures,
+          # which ci:gha delegates to the figures job, are never a unit here: site-generate
+          # plus diagrams-generate OOMs 16GB together.
+          command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN,TZ -- magus buzz hack/ci/run-with-harnesses.buzz -- --plan ${{ github.workspace }}/.magus/plan.json run ci:gha --no-default-charms --concurrency-profile aggressive --stdin
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.plan.outputs.count }}
 
+      # A main run gates security with --inherited=fatal: it fails on every actionable
+      # finding main carries, not only on what a change introduced. A target argument,
+      # not a charm, since a charm keys every step and main's cache is the one pull
+      # requests read. ci hands it to security from its body, which a unit run does not
+      # execute, so the shard holding the security unit runs it here by name.
+      - id: security-unit
+        if: github.event_name != 'pull_request'
+        name: Find the shard that holds security
+        env:
+          SHARD: ${{ matrix.shard }}
+        shell: bash
+        run: |
+          held=$(jq --arg s "$SHARD" '[.matrix[] | select(.shard == $s) | .units[] | select(.project == "." and .target == "security")] | length' .magus/plan.json)
+          echo "held=$([ "$held" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Gate security on inherited findings
+        if: steps.security-unit.outputs.held == 'true'
+        uses: ./.github/actions/magus
+        env:
+          TMPDIR: ${{ runner.temp }}
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}:/home/runner/.cache/magus/checkouts
+          TZ: Australia/Lord_Howe
+        # No signing key: this run stores nothing a pull request replays.
+        with:
+          command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN,TZ -- magus buzz hack/ci/run-with-harnesses.buzz -- run security:gha --no-default-charms --concurrency-profile aggressive . -- --inherited=fatal
+
+      - name: Report disk use after the gate
+        if: always()
+        run: |
+          df -h / "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
+          du -sh "$GITHUB_WORKSPACE/.magus" "$GITHUB_WORKSPACE/.magus/symbols" "$GITHUB_WORKSPACE/dist" "$RUNNER_TEMP" "$HOME/.cache/magus" "$HOME/.cache/go-build" "$HOME/go" 2>/dev/null || true
+
       # Signed with MAGUS_CACHE_SIGNING_KEY, which only main holds, in a box of the gate's
-      # --cache so it bundles what the gate built with. Only the shard that runs the root
-      # module saves: the day's first bundle stands, and one from a shard that compiled a
-      # corner of the tree would claim the key. Restored entries are dated a day back and
+      # --cache so it bundles what the gate built with. Only the shard the plan gave the
+      # cache-export duty saves, the one holding the most root units: the day's first
+      # bundle stands, and one from a shard that compiled a corner would claim the key. Restored entries are dated a day back and
       # the gate re-dates what it uses, so the save leaves out what this run never read.
       - name: Save the spells' caches
-        if: success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && contains(format(' {0} ', matrix.projects), ' . ')
+        if: success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && contains(format(' {0} ', matrix.duties), ' cache-export ')
         uses: ./.github/actions/magus
         env:
           TMPDIR: ${{ runner.temp }}
@@ -545,7 +610,7 @@ jobs:
             .magus/cas
             .magus/manifests
             .magus/logs
-          key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.digest }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       # The notes store's anchors, gated on the ONE finding worth blocking a merge for.
       #
@@ -560,10 +625,11 @@ jobs:
       # MAGUS.md files rewritten by a target that declared them as sources.
       #
       # --shared only: the private store is machine-local by definition, so gating on it would
-      # fail CI for files no runner can see. Runs on shard 1 alone; the store is workspace-wide
-      # and checking it once per shard would report one dangling anchor N times.
+      # fail CI for files no runner can see. Runs on the one shard the plan gave the
+      # notes-verify duty; the store is workspace-wide and checking it once per shard would
+      # report one dangling anchor N times.
       - name: Verify note anchors
-        if: matrix.shard == 1
+        if: contains(format(' {0} ', matrix.duties), ' notes-verify ')
         uses: ./.github/actions/magus
         with:
           command: notes verify --strict --shared

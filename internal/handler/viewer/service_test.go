@@ -220,7 +220,7 @@ func TestGetInvocationRejectsPreJournalRef(t *testing.T) {
 // client for it. connect.ServerStream has no injectable test sink, so a streaming RPC is exercised
 // end to end, the same shape the status service's stream test uses. poll is tightened so a test
 // does not wait on the production cadence.
-func streamClient(t *testing.T, runs runSource) viewerv1alpha1connect.ViewerServiceClient {
+func streamClient(t *testing.T, runs runSource) viewerv1alpha1connect.ViewerServiceClient { //nolint:ireturn // the generated client type is an interface; the implementation is chosen at runtime
 	t.Helper()
 	s := NewService(&storedOutputs{}, runs)
 	s.poll = 5 * time.Millisecond

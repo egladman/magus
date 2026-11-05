@@ -76,8 +76,8 @@ func warnWorkspaceNotAttached(err error) {
 // would also have to forward the optional interfaces std type-asserts for. A read that
 // cannot attach a workspace sees none, exactly as when the open ran at startup.
 type lazyWorkspaceContext struct {
-	context.Context
-	root string
+	context.Context //nolint:containedctx // class a: lazyWorkspaceContext is itself a context.Context, no stored-ctx cost to weigh
+	root            string
 
 	once      sync.Once
 	workspace types.WorkspaceRepository
@@ -176,8 +176,8 @@ func (c *lazyWorkspaceContext) attach() {
 
 // keyRecorder is a context that records the last key looked up in it.
 type keyRecorder struct {
-	context.Context
-	key any
+	context.Context //nolint:containedctx // class a: keyRecorder is itself a context.Context, no stored-ctx cost to weigh
+	key             any
 }
 
 func (r *keyRecorder) Value(key any) any {

@@ -39,7 +39,7 @@ const (
 )
 
 // FanOut returns an Observer forwarding to every non-nil observer.
-func FanOut(obs ...Observer) Observer {
+func FanOut(obs ...Observer) Observer { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	live := make([]Observer, 0, len(obs))
 	for _, o := range obs {
 		if o != nil {

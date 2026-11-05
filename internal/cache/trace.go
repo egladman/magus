@@ -25,7 +25,7 @@ func ContextWithTracer(ctx context.Context, t Tracer) context.Context {
 
 // tracerFromContext returns the Tracer installed by [ContextWithTracer], or a
 // no-op when none is present — so the build hot path never nil-checks.
-func tracerFromContext(ctx context.Context) Tracer {
+func tracerFromContext(ctx context.Context) Tracer { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	if t, ok := ctx.Value(tracerKey{}).(Tracer); ok {
 		return t
 	}

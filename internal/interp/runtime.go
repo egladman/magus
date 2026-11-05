@@ -546,7 +546,7 @@ const staleStampAge = 24 * time.Hour
 // compiled over.
 //
 // Nil when the cache or the key is unavailable, and the load compiles every time.
-func guardBytecodeStore(root string) buzz.BytecodeStore {
+func guardBytecodeStore(root string) buzz.BytecodeStore { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	return sealedBytecodeStoreUnder("buzz-bytecode", root)
 }
 
@@ -556,13 +556,13 @@ func guardBytecodeStore(root string) buzz.BytecodeStore {
 // reader before it runs, so an entry is found only for content the approval authority holds
 // now. Working-tree loads never write here, and the seal covers the directory, so a chunk
 // compiled from working-tree bytes and moved in does not verify.
-func approvedBytecodeStore(root string) buzz.BytecodeStore {
+func approvedBytecodeStore(root string) buzz.BytecodeStore { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	return sealedBytecodeStoreUnder("buzz-bytecode-approved", root)
 }
 
 // sealedBytecodeStoreUnder is the sealed store for the workspace at root under the user
 // cache's magus/<name>/<compiler stamp>, nil when it is unavailable.
-func sealedBytecodeStoreUnder(name, root string) buzz.BytecodeStore {
+func sealedBytecodeStoreUnder(name, root string) buzz.BytecodeStore { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	if root == "" {
 		return nil
 	}
@@ -1389,7 +1389,7 @@ func NewBuzzWorkerFunc(src *Source) buzz.WorkerFunc {
 // holds a magusfile.buzz, its files are executed first so their top-level
 // definitions are available at the prompt.
 // The returned engine.Session also satisfies the optional REPL/debug interfaces.
-func NewBuzzReplSession(ctx context.Context, dir string, autoload bool) (engine.Session, error) {
+func NewBuzzReplSession(ctx context.Context, dir string, autoload bool) (engine.Session, error) { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	// WithREPL suppresses the BZZ3001 unused-import warning, matching upstream Buzz
 	// (Parser.zig gates the same warning on `self.flavor != .Repl`): a REPL evaluates
 	// one statement at a time, so an import "unused so far" may just be used by a

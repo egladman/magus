@@ -229,7 +229,7 @@ func flagGiven(fs *flag.FlagSet, name string) bool {
 }
 
 // open opens the checkout.
-func (e *queueEnv) open(ctx context.Context, remote, backend string) (magustypes.VCSDriver, queue.Clone, error) {
+func (e *queueEnv) open(ctx context.Context, remote, backend string) (magustypes.VCSDriver, queue.Clone, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	drv, err := queueOpenVCS(ctx, e.dir, backend, remote)
 	return drv, queue.Clone{Root: e.dir, Remote: remote}, err
 }
@@ -256,7 +256,7 @@ func (e *queueEnv) openProvider(ctx context.Context, spec string) (*provider.Scr
 // It also returns the sandbox declaration of every spell the workspace's projects
 // resolved, for the hooks: like the sandbox config they are the base's, so a
 // candidate's spells widen nothing. Another build tool's base loaded no spell.
-func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool, facts, target string) (types.BuildFacts, map[string]spells.Sandbox, func() error, error) {
+func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool, facts, target string) (types.BuildFacts, map[string]spells.Sandbox, func() error, error) { //nolint:ireturn // types.BuildFacts: *client.Workspace or the --facts command
 	if facts != "" {
 		if targetGiven {
 			return nil, nil, nil, exit.Usagef("magus queue %s: --target has no effect with --facts", verb)
@@ -647,13 +647,26 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 	log := queue.NewHookLog(e.stderr)
 	// The sandbox is the base's, like the trust set: a candidate's magus.yaml widens
 	// neither.
-	hookEnv := queue.HookEnv{Sandbox: globalCfg.Sandbox}
+	hookEnv := queue.HookEnv{Sandbox: globalCfg.Sandbox, CriticalFree: int64(globalCfg.Disk.CriticalFreeMB) << 20}
 	if f.RemoteCacheRead {
 		var proxy *queue.CacheReadProxy
 		if proxy, hookEnv.Fixed, err = queueCacheRead(globalCfg.Cache.Remote, log); err != nil {
 			return err
 		}
 		defer func() { _ = proxy.Close() }()
+	}
+	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
+	if err != nil {
+		return err
+	}
+	bf, grants, closeFacts, err := e.openFacts(ctx, "validate", flagGiven(fs, flaggen.FlagQueueValidateTarget), f.Facts, f.Target)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = closeFacts() }()
+	hookEnv.Spells = grants
+	if hookEnv, err = passEnv(hookEnv, f.Env, "validate"); err != nil {
+		return err
 	}
 	dir := &queue.VerdictDir{Path: e.path(f.Verdicts)}
 	// A single-change run is one of several filling out; whoever gathers them marks it.
@@ -670,16 +683,6 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 	if err := dir.WritePlan(pl); err != nil {
 		return err
 	}
-	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
-	if err != nil {
-		return err
-	}
-	bf, grants, closeFacts, err := e.openFacts(ctx, "validate", flagGiven(fs, flaggen.FlagQueueValidateTarget), f.Facts, f.Target)
-	if err != nil {
-		return err
-	}
-	hookEnv.Spells = grants
-	defer func() { _ = closeFacts() }()
 	scratch, cleanup, err := queueScratch("merge-queue")
 	if err != nil {
 		return err
@@ -724,6 +727,19 @@ func queueCacheRead(remote config.CacheRemote, log *queue.HookLog) (*queue.Cache
 	), nil
 }
 
+// passEnv adds the variables list names, comma-separated, to env: validate and
+// gate share the --env that takes them. A name the box owns is a usage error.
+func passEnv(env queue.HookEnv, list, verb string) (queue.HookEnv, error) {
+	if list == "" {
+		return env, nil
+	}
+	env, err := env.Pass(strings.Split(list, ","))
+	if err != nil {
+		return env, exit.Usagef("magus queue %s: --env: %v", verb, err)
+	}
+	return env, nil
+}
+
 // queueGate runs its command in a candidate box of HEAD through queue.GateCommit, the
 // path validate's gate takes, with the sandbox and grants validate would give it, read
 // by the same openFacts.
@@ -731,10 +747,6 @@ func queueGate(ctx context.Context, e *queueEnv, args []string) error {
 	f, operands, _, err := queueParse(e, "gate", "magus queue gate [flags] -- <command> [args...]", args, flaggen.BindQueueGate, "command...")
 	if err != nil {
 		return err
-	}
-	var names []string
-	if f.Env != "" {
-		names = strings.Split(f.Env, ",")
 	}
 	drv, _, err := e.open(ctx, f.Remote, f.VCS)
 	if err != nil {
@@ -752,9 +764,9 @@ func queueGate(ctx context.Context, e *queueEnv, args []string) error {
 	if err := closeFacts(); err != nil {
 		return err
 	}
-	env, err := queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: grants, Cache: e.path(f.Cache)}.Pass(names)
+	env, err := passEnv(queue.HookEnv{Sandbox: globalCfg.Sandbox, Spells: grants, Cache: e.path(f.Cache)}, f.Env, "gate")
 	if err != nil {
-		return exit.Usagef("magus queue gate: --env: %v", err)
+		return err
 	}
 	scratch, cleanup, err := queueScratch("merge-queue")
 	if err != nil {

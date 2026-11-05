@@ -123,7 +123,7 @@ func digestFiles(root string, paths []string) map[string]string {
 
 // heldChange refuses a Change whose tree moved since it was built, naming
 // the moved paths, and returns the workspace it was checked against.
-func heldChange(ctx context.Context, c types.Change, member string) (types.WorkspaceRepository, error) {
+func heldChange(ctx context.Context, c types.Change, member string) (types.WorkspaceRepository, error) { //nolint:ireturn // the workspace on ctx: *magus.Magus or a wrapper of it
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return nil, errorNoWorkspace("Change." + member)

@@ -1128,7 +1128,7 @@ func benchStartup(b *testing.B, args []string) {
 		b.StopTimer()
 		resetStartupSingletons()
 		b.StartTimer()
-		res, _ := startup(context.Background(), args)
+		_, res, _ := startup(context.Background(), args)
 		if res.cleanup != nil {
 			res.cleanup()
 		}
@@ -1207,7 +1207,7 @@ func TestPoolDeclinesAnotherWorkspace(t *testing.T) {
 		defer mu.Unlock()
 		return slices.Clone(ran)
 	}
-	srv, err := proc.New(proc.Options{
+	srv, err := proc.New(t.Context(), proc.Options{
 		Handler: poolHandler(pool, func(_ context.Context, args []string) error {
 			mu.Lock()
 			defer mu.Unlock()
@@ -1217,7 +1217,7 @@ func TestPoolDeclinesAnotherWorkspace(t *testing.T) {
 	})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 	t.Setenv(proc.SocketEnv, srv.Addr())
 	t.Setenv(proc.TokenEnv, srv.Token())
 

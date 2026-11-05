@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/queue/types"
 )
@@ -113,4 +114,70 @@ func TestPlanWhileFollowingWaitsForThePlanOrTheDoneMarker(t *testing.T) {
 	_, ok, err = (&VerdictDir{Path: empty, Follow: true, Interval: time.Millisecond}).Plan(ctx)
 	require.NoError(t, err)
 	assert.False(t, ok, "complete without a plan")
+}
+
+type faultWaitsSuite struct{ suite.Suite }
+
+func TestVerdictFaultWaitsSuite(t *testing.T) { suite.Run(t, new(faultWaitsSuite)) }
+
+func (s *faultWaitsSuite) dir() *VerdictDir { return &VerdictDir{Path: s.T().TempDir()} }
+
+func (s *faultWaitsSuite) TestAnUnseenChangeHasNoWaits() {
+	n, err := s.dir().FaultWaits(types.Change{ID: "1", Head: "h"})
+	s.Require().NoError(err)
+	s.Zero(n)
+}
+
+func (s *faultWaitsSuite) TestEachWaitAddsOne() {
+	d, c := s.dir(), types.Change{ID: "1", Head: "h"}
+	for range 3 {
+		s.Require().NoError(d.NoteFaultWait(context.Background(), c, true))
+	}
+	n, err := d.FaultWaits(c)
+	s.Require().NoError(err)
+	s.Equal(3, n)
+}
+
+func (s *faultWaitsSuite) TestAnEndedStreakStartsAgain() {
+	d, c := s.dir(), types.Change{ID: "1", Head: "h"}
+	s.Require().NoError(d.NoteFaultWait(context.Background(), c, true))
+	s.Require().NoError(d.NoteFaultWait(context.Background(), c, false))
+	n, err := d.FaultWaits(c)
+	s.Require().NoError(err)
+	s.Zero(n)
+}
+
+func (s *faultWaitsSuite) TestANewHeadStartsAgain() {
+	d := s.dir()
+	s.Require().NoError(d.NoteFaultWait(context.Background(), types.Change{ID: "1", Head: "old"}, true))
+	n, err := d.FaultWaits(types.Change{ID: "1", Head: "new"})
+	s.Require().NoError(err)
+	s.Zero(n)
+}
+
+func (s *faultWaitsSuite) TestChangesCountApart() {
+	d := s.dir()
+	s.Require().NoError(d.NoteFaultWait(context.Background(), types.Change{ID: "1", Head: "h"}, true))
+	n, err := d.FaultWaits(types.Change{ID: "2", Head: "h"})
+	s.Require().NoError(err)
+	s.Zero(n)
+}
+
+func (s *faultWaitsSuite) TestTheStoreIsJSONLinesWhoseLastLinePerChangeWins() {
+	d, c := s.dir(), types.Change{ID: "1", Head: "h"}
+	for range 2 {
+		s.Require().NoError(d.NoteFaultWait(context.Background(), c, true))
+	}
+	raw, err := os.ReadFile(filepath.Join(d.Path, faultWaitsFile))
+	s.Require().NoError(err)
+	s.Equal("{\"change\":\"1\",\"head\":\"h\",\"count\":1}\n{\"change\":\"1\",\"head\":\"h\",\"count\":2}\n", string(raw))
+}
+
+func (s *faultWaitsSuite) TestTheStoreIsNoVerdict() {
+	d, c := s.dir(), types.Change{ID: "1", Head: "h"}
+	s.Require().NoError(d.NoteFaultWait(context.Background(), c, true))
+	batch, err := d.Poll(context.Background())
+	s.Require().NoError(err)
+	s.Empty(batch.Verdicts)
+	s.Empty(batch.Rejected)
 }

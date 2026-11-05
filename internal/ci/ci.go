@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/types"
 )
 
@@ -21,8 +22,8 @@ var ErrInvalidMaxShards = errors.New("ci: max shards must be -1 (unlimited) or a
 
 // Shard is one runner's worth of work; ID is zero-padded so log entries sort correctly.
 type Shard struct {
-	ID       string
-	Projects []*types.Project
+	ID    string
+	Units []types.Unit
 }
 
 // Plan is the output of Build: shards for a CI matrix plus source label and concurrency cap.
@@ -30,26 +31,22 @@ type Plan struct {
 	Shards      []Shard
 	Source      string
 	MaxParallel int // 0 = no cap (renderers emit max-parallel = len(Shards))
-}
-
-// Forecaster is the optional adaptive partitioner that replaces ceil-division when supplied to Build.
-// Defined by interface to avoid an import cycle with magus/ci/forecast.
-type Forecaster interface {
-	Plan(projects []*types.Project, maxShards int) [][]*types.Project
+	// Fallbacks says each limit Build applied that was not asked for.
+	Fallbacks []string
 }
 
 type config struct {
-	maxShards  int // -1 = unlimited (up to hardCeiling)
-	forecaster Forecaster
+	maxShards int // -1 = unlimited (up to hardCeiling)
+	model     *forecast.Model
 }
 
 // Option mutates the Build configuration.
 type Option func(*config)
 
-// WithForecaster enables adaptive sharding; nil clears it (falls back to ceil-division).
-func WithForecaster(f Forecaster) Option {
+// WithModel enables adaptive sharding; nil clears it (ceil-division).
+func WithModel(m *forecast.Model) Option {
 	return func(c *config) {
-		c.forecaster = f
+		c.model = m
 	}
 }
 
@@ -60,8 +57,10 @@ func WithMaxShards(n int) Option {
 	}
 }
 
-// Build partitions projects into at most maxShards shards via ceil-division (or a forecaster).
-func Build(projects []*types.Project, source string, opts ...Option) (Plan, error) {
+// Build partitions units into at most maxShards shards via ceil-division
+// (or a model). A shard never holds less than one unit, so the
+// limit clamps to len(units).
+func Build(units []types.Unit, source string, opts ...Option) (Plan, error) {
 	cfg := &config{maxShards: defaultMaxShards}
 	for _, o := range opts {
 		o(cfg)
@@ -70,55 +69,86 @@ func Build(projects []*types.Project, source string, opts ...Option) (Plan, erro
 		return Plan{}, ErrInvalidMaxShards
 	}
 
-	if len(projects) == 0 {
+	if len(units) == 0 {
 		return Plan{Source: source}, nil
 	}
 
 	maxShards := cfg.maxShards
 	if maxShards == -1 {
-		// Unlimited: one shard per project, still subject to hardCeiling.
-		maxShards = len(projects)
+		maxShards = len(units)
 	}
-	if maxShards > hardCeiling {
-		maxShards = hardCeiling
+	var fallbacks []string
+	if maxShards > hardCeiling && len(units) > hardCeiling {
+		fallbacks = append(fallbacks, fmt.Sprintf(
+			"the plan opens at most %d shards, the matrix-job ceiling, not the %d asked for", hardCeiling, maxShards))
 	}
-	if maxShards > len(projects) {
-		maxShards = len(projects)
-	}
+	maxShards = min(maxShards, hardCeiling, len(units))
 
-	var assignments [][]*types.Project
-	if cfg.forecaster != nil {
-		assignments = cfg.forecaster.Plan(projects, maxShards)
-		if len(assignments) == 0 { // defensive: never drop work
-			assignments = ceilDivide(projects, maxShards)
-		}
+	var assignments [][]types.Unit
+	if cfg.model != nil {
+		assignments = cfg.model.Plan(units, maxShards)
 	} else {
-		assignments = ceilDivide(projects, maxShards)
+		assignments = ceilDivide(units, maxShards)
+	}
+	if err := placedOnce(units, assignments, maxShards); err != nil {
+		return Plan{}, err
 	}
 
 	idWidth := digits(len(assignments) - 1)
 
 	shards := make([]Shard, len(assignments))
-	for i, ps := range assignments {
+	for i, us := range assignments {
 		shards[i] = Shard{
-			ID:       fmt.Sprintf("%0*d", idWidth, i),
-			Projects: ps,
+			ID:    fmt.Sprintf("%0*d", idWidth, i),
+			Units: us,
 		}
 	}
 
-	return Plan{Shards: shards, Source: source}, nil
+	return Plan{Shards: shards, Source: source, Fallbacks: fallbacks}, nil
 }
 
-// ceilDivide partitions projects into at most maxShards shards via ceil-division.
-func ceilDivide(projects []*types.Project, maxShards int) [][]*types.Project {
-	if len(projects) == 0 || maxShards < 1 {
+// placedOnce checks that assignments hold every unit exactly once, in at most
+// maxShards non-empty shards. A partitioner that drops or repeats a unit
+// would gate less, or run twice, with nothing to show it.
+func placedOnce(units []types.Unit, assignments [][]types.Unit, maxShards int) error {
+	if len(assignments) > maxShards {
+		return fmt.Errorf("ci: the partitioner opened %d shards, over the limit of %d", len(assignments), maxShards)
+	}
+	want := make(map[types.Unit]bool, len(units))
+	for _, u := range units {
+		want[u] = true
+	}
+	placed := make(map[types.Unit]int, len(units))
+	for i, shard := range assignments {
+		if len(shard) == 0 {
+			return fmt.Errorf("ci: the partitioner left shard %d empty", i)
+		}
+		for _, u := range shard {
+			switch {
+			case !want[u]:
+				return fmt.Errorf("ci: the partitioner placed %s, which is not a unit of the plan", u)
+			case placed[u] > 0:
+				return fmt.Errorf("ci: the partitioner placed %s on shards %d and %d", u, placed[u]-1, i)
+			}
+			placed[u] = i + 1
+		}
+	}
+	for _, u := range units {
+		if placed[u] == 0 {
+			return fmt.Errorf("ci: the partitioner dropped %s", u)
+		}
+	}
+	return nil
+}
+
+// ceilDivide partitions units into at most maxShards shards via ceil-division.
+func ceilDivide(units []types.Unit, maxShards int) [][]types.Unit {
+	if len(units) == 0 || maxShards < 1 {
 		return nil
 	}
-	if maxShards > len(projects) {
-		maxShards = len(projects)
-	}
-	out := make([][]*types.Project, maxShards)
-	n := len(projects)
+	maxShards = min(maxShards, len(units))
+	out := make([][]types.Unit, maxShards)
+	n := len(units)
 	base := n / maxShards
 	extra := n % maxShards
 	idx := 0
@@ -127,7 +157,7 @@ func ceilDivide(projects []*types.Project, maxShards int) [][]*types.Project {
 		if i < extra {
 			count++
 		}
-		out[i] = projects[idx : idx+count]
+		out[i] = units[idx : idx+count]
 		idx += count
 	}
 	return out

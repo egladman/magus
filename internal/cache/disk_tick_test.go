@@ -61,6 +61,24 @@ func (s *DiskFullSuite) TestZeroFloorIsOff() {
 	s.False(below)
 }
 
+func (s *DiskFullSuite) TestDiskFullNeedsTheTextAndALowDisk() {
+	_, full, err := DiskFull("No space left on device", s.dir, everyDisk)
+	s.Require().NoError(err)
+	s.True(full)
+}
+
+func (s *DiskFullSuite) TestDiskFullWithoutTheTextIsNot() {
+	_, full, err := DiskFull("exit status 1", s.dir, everyDisk)
+	s.Require().NoError(err)
+	s.False(full)
+}
+
+func (s *DiskFullSuite) TestDiskFullWithTheFloorOffIsNot() {
+	_, full, err := DiskFull("No space left on device", s.dir, 0)
+	s.Require().NoError(err)
+	s.False(full)
+}
+
 func (s *DiskFullSuite) printedFailure(logText string, floor int64) string {
 	saved := diskFullFloor
 	diskFullFloor = floor
@@ -69,7 +87,7 @@ func (s *DiskFullSuite) printedFailure(logText string, floor int64) string {
 	s.Require().NoError(os.WriteFile(p, []byte(logText), 0o600))
 	var out bytes.Buffer
 	h := NewPrettyHandler(&out, slog.LevelInfo)
-	h.printFailure(false, failureReport{label: "workspace", project: ".", target: "build", cause: "go exited 1", logPath: p})
+	h.printFailure(s.T().Context(), false, failureReport{label: "workspace", project: ".", target: "build", cause: "go exited 1", logPath: p})
 	return out.String()
 }
 

@@ -36,14 +36,14 @@ func TestStalePoolsIn(t *testing.T) {
 	dir := SockDir()
 
 	addr := "unix://" + filepath.Join(dir, "magus-424242-deadbeef.sock")
-	srv, err := New(Options{
+	srv, err := New(t.Context(), Options{
 		Address: addr,
 		Version: "stale-build",
 		Handler: func(context.Context, []string) error { return nil },
 	})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 
 	ctx := context.Background()
 	got, err := StalePoolsIn(ctx, dir, "current-build")

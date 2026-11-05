@@ -118,10 +118,6 @@ packages:
     config: *own-package
     interfaces:
       Tracer:
-  github.com/egladman/magus/internal/ci:
-    config: *own-package
-    interfaces:
-      Forecaster:
   github.com/egladman/magus/internal/handler/diff:
     config: *own-package
     interfaces:

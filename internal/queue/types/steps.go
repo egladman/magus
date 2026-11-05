@@ -3,6 +3,7 @@ package types
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	magustypes "github.com/egladman/magus/types"
 )
@@ -60,12 +61,41 @@ type Candidate struct {
 type GateResult struct {
 	Green   bool
 	Summary string // one line naming what failed, for the kick-back report
+	Fault   Fault  // set on a red the machine may have caused
 }
 
-// Gate validates units, never empty, in a checkout: a candidate, or the commit a red
-// candidate was built onto, which tells whether the red is the change's. An error means
-// the gate could not run, a failure the queue can prove is the machine's; anything the
-// checkout's code did is a result.
+// Fault is a machine condition a red gate ran under. Such a red says nothing
+// about the change or the base it ran on.
+type Fault string
+
+const (
+	FaultNone     Fault = ""
+	FaultDisk     Fault = "disk"     // ENOSPC in the output, disk under its floor
+	FaultTempFail Fault = "tempfail" // exit 75 outlasted its retries
+	FaultKilled   Fault = "killed"   // SIGKILL only; any other signal is the change's
+)
+
+// Cause says what the fault was, for a verdict's reason. FaultNone and a value
+// this build does not know are errors: neither is a cause to wait on.
+func (f Fault) Cause() (string, error) {
+	switch f {
+	case FaultDisk:
+		return "the disk is full, MGS3052", nil
+	case FaultTempFail:
+		return "the gate kept exiting 75, a temporary failure: no memory seat or a held lock", nil
+	case FaultKilled:
+		return "the gate was killed by SIGKILL", nil
+	case FaultNone:
+		return "", errors.New("no machine fault")
+	}
+	return "", fmt.Errorf("unknown machine fault %q", string(f))
+}
+
+// Gate validates units, never empty, in a checkout: a candidate, or the commit
+// a red candidate was built onto, which tells whether the red is the change's.
+// An error means the gate could not run, a failure the queue can prove is the
+// machine's. What the checkout's code did is a result: red, with a Fault when
+// the machine may have caused it.
 type Gate interface {
 	Validate(ctx context.Context, cand Candidate, units []string) (GateResult, error)
 }

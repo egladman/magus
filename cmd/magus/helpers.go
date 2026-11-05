@@ -236,7 +236,7 @@ func relaxGC() func() {
 	}
 }
 
-func inspectWorkspace(ctx context.Context, rootOverride string) (types.WorkspaceRepository, error) {
+func inspectWorkspace(ctx context.Context, rootOverride string) (types.WorkspaceRepository, error) { //nolint:ireturn // the workspace backing is chosen at runtime
 	t := traceFromContext(ctx)
 	inspectOnce.Do(func() {
 		inspectOpened.override = rootOverride
@@ -369,4 +369,4 @@ type magusInternals interface {
 // viewInternals is m as workspace.ViewAs shows it to magus's own packages. It is also what a
 // context carries as the workspace (types.WithWorkspace), so std and the Buzz bindings
 // find the methods they assert for.
-func viewInternals(m *magus.Magus) magusInternals { return workspace.ViewAs[magusInternals](m) }
+func viewInternals(m *magus.Magus) magusInternals { return workspace.ViewAs[magusInternals](m) } //nolint:ireturn // the workspace backing is chosen at runtime
