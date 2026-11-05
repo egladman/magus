@@ -89,7 +89,7 @@ The command that writes the spell's SCIP symbol index. magus runs it as the rese
 export fun mgs_getCoverage() > Coverage
 ```
 
-How the spell runs its tests with line coverage on, and the op a mutant is judged by. magus runs it as the reserved coverage op.
+How the spell runs its tests with line coverage on. magus runs it as the reserved coverage op.
 
 ## mgs_getSandbox
 

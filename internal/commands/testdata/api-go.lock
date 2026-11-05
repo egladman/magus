@@ -144,7 +144,6 @@ github.com/egladman/magus.Magus.ModelRows method(ptr) func(ctx context.Context) 
 github.com/egladman/magus.Magus.ModelTierLens method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.ModelTiers, error)
 github.com/egladman/magus.Magus.ModelTierMatrix method(ptr) func() github.com/egladman/magus/types.ModelTierMatrix
 github.com/egladman/magus.Magus.ModelTiers method(ptr) func(ctx context.Context) *github.com/egladman/magus/types.ModelTierSet
-github.com/egladman/magus.Magus.Mutants method(ptr) func(ctx context.Context, base string) (github.com/egladman/magus/types.Mutants, error)
 github.com/egladman/magus.Magus.OutputAttempts method(ptr) func(ctx context.Context, ref string) ([]OutputDescriptor, error)
 github.com/egladman/magus.Magus.OutputByRef method(ptr) func(ctx context.Context, ref string) ([]byte, OutputDescriptor, error)
 github.com/egladman/magus.Magus.OutputByRefRemote method(ptr) func(ctx context.Context, ref string) ([]byte, OutputDescriptor, error)
@@ -532,7 +531,6 @@ github.com/egladman/magus/std.MagusChangeConformance func(ctx context.Context, c
 github.com/egladman/magus/std.MagusChangeDiff func(ctx context.Context, c github.com/egladman/magus/types.Change, opts github.com/egladman/magus/types.MagusDiffOptions) (github.com/egladman/magus/types.Diff, error)
 github.com/egladman/magus/std.MagusChangeImpact func(ctx context.Context, c github.com/egladman/magus/types.Change, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ImpactResult, error)
 github.com/egladman/magus/std.MagusChangeMergeBase func(ctx context.Context, c github.com/egladman/magus/types.Change) (string, error)
-github.com/egladman/magus/std.MagusChangeMutants func(ctx context.Context, c github.com/egladman/magus/types.Change) (github.com/egladman/magus/types.Mutants, error)
 github.com/egladman/magus/std.MagusChangeOpen func(ctx context.Context, base string, opts github.com/egladman/magus/types.ChangeOptions) (github.com/egladman/magus/types.Change, error)
 github.com/egladman/magus/std.MagusChangeRisk func(ctx context.Context, c github.com/egladman/magus/types.Change) (github.com/egladman/magus/types.ChangeRisk, error)
 github.com/egladman/magus/std.MagusChangeTier func(ctx context.Context, c github.com/egladman/magus/types.Change, target string, opts github.com/egladman/magus/types.TierOptions) (github.com/egladman/magus/types.TierReport, error)
@@ -4020,7 +4018,6 @@ github.com/egladman/magus/types.MarkerFamily.String method func() string
 github.com/egladman/magus/types.MarkerFamily.Valid method func() bool
 github.com/egladman/magus/types.MarkerFamily.Values method func() []string
 github.com/egladman/magus/types.MarkerHarness const MarkerFamily = "harness"
-github.com/egladman/magus/types.MarkerMutant const MarkerFamily = "mutant"
 github.com/egladman/magus/types.MarkerObserved const MarkerFamily = "observed"
 github.com/egladman/magus/types.MarkerPoint const MarkerVerb = "point"
 github.com/egladman/magus/types.MarkerSkills const MarkerFamily = "skills"
@@ -4227,42 +4224,6 @@ github.com/egladman/magus/types.ModuleReport.Count field int "json:\"count\"    
 github.com/egladman/magus/types.ModuleReport.Definition field string "json:\"definition\" yaml:\"definition\""
 github.com/egladman/magus/types.ModuleReport.Modules field []ModuleEntry "json:\"modules\"    yaml:\"modules\""
 github.com/egladman/magus/types.MustParseGlobs func(declared ...string) []Glob
-github.com/egladman/magus/types.Mutant type struct
-github.com/egladman/magus/types.Mutant.BaseReason field string
-github.com/egladman/magus/types.Mutant.BaseSurvived field int
-github.com/egladman/magus/types.Mutant.Col field int
-github.com/egladman/magus/types.Mutant.Find field string
-github.com/egladman/magus/types.Mutant.ID field string
-github.com/egladman/magus/types.Mutant.Line field int
-github.com/egladman/magus/types.Mutant.Operator field string
-github.com/egladman/magus/types.Mutant.Outcome field MutantOutcome
-github.com/egladman/magus/types.Mutant.Path field string
-github.com/egladman/magus/types.Mutant.Reason field string
-github.com/egladman/magus/types.Mutant.Replace field string
-github.com/egladman/magus/types.Mutant.Seconds field float64
-github.com/egladman/magus/types.Mutant.Symbol field string
-github.com/egladman/magus/types.MutantExcepted const MutantOutcome = "excepted"
-github.com/egladman/magus/types.MutantKilled const MutantOutcome = "killed"
-github.com/egladman/magus/types.MutantOutcome type string
-github.com/egladman/magus/types.MutantOutcome.String method func() string
-github.com/egladman/magus/types.MutantOutcome.Valid method func() bool
-github.com/egladman/magus/types.MutantOutcome.Values method func() []string
-github.com/egladman/magus/types.MutantRun type struct
-github.com/egladman/magus/types.MutantRun.Checkout field string "json:\"checkout\""
-github.com/egladman/magus/types.MutantRun.ID field string "json:\"id\""
-github.com/egladman/magus/types.MutantRun.Key field string "json:\"key\""
-github.com/egladman/magus/types.MutantRun.MarshalJSON method func() ([]byte, error)
-github.com/egladman/magus/types.MutantRun.Outcome field MutantOutcome "json:\"outcome\""
-github.com/egladman/magus/types.MutantRun.Seconds field float64 "json:\"seconds\""
-github.com/egladman/magus/types.MutantRun.UnmarshalJSON method(ptr) func(b []byte) error
-github.com/egladman/magus/types.MutantSurvived const MutantOutcome = "survived"
-github.com/egladman/magus/types.MutantUncovered const MutantOutcome = "uncovered"
-github.com/egladman/magus/types.Mutants type struct
-github.com/egladman/magus/types.Mutants.Base field string
-github.com/egladman/magus/types.Mutants.Definition field string
-github.com/egladman/magus/types.Mutants.Gaps field []FunctionGap
-github.com/egladman/magus/types.Mutants.Mutants field []Mutant
-github.com/egladman/magus/types.Mutants.Unused field []Finding
 github.com/egladman/magus/types.NamedDeclarations func(claimed string, all []string) []string
 github.com/egladman/magus/types.NamesClaimedDeclaration func(claimed string, declaration string) bool
 github.com/egladman/magus/types.NamesDeclaration func(claimed string, declaration string) bool
