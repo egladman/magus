@@ -131,6 +131,8 @@ func withEnvRefusal(ctx context.Context, err error) context.Context {
 // host's hook stream.
 func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.Writer, args []string) error {
 	// Started here rather than in Judge, so loading the rules spends the same budget.
+	ctx, cancelInherited, deadlineErr := inheritedHookDeadline(ctx)
+	defer cancelInherited()
 	ctx, cancel := guard.WithHookDeadline(ctx)
 	defer cancel()
 	fset := flag.NewFlagSet("shell", flag.ContinueOnError) //nolint:hostvocab // TestEveryLeafRendersEveryFormatOrRefusesThem requires the leaf name shell
@@ -172,7 +174,8 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// failed guard as no verdict and fails open, so an environment magus knows is wrong
 	// would disarm every rule for the session. --observe and --message carry no verdict to
 	// deny.
-	if refusal, _ := ctx.Value(envRefusalKey{}).(error); refusal != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
+	envRefusal, _ := ctx.Value(envRefusalKey{}).(error)
+	if refusal := cmp.Or(envRefusal, deadlineErr); refusal != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
 		verdict := types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      "deny",
@@ -210,7 +213,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	var judge, judgeRoot string
 	if sf.Transport != "" {
 		commit, _ := buildinfo.Commit()
-		handled, declined, err := delegateToCheckout(ctx, commit, input, out, errOut)
+		handled, declined, err := delegateToCheckout(ctx, commit, input, opts, out, errOut)
 		if handled {
 			return err
 		}
@@ -872,6 +875,15 @@ func readGuardInput(in io.Reader) (string, error) {
 	return strings.TrimSpace(string(b)), nil
 }
 
+// inheritedHookDeadline bounds ctx to the deadline the delegating magus
+// passed in guard.HookDeadlineEnv. Only a delegate reads it.
+func inheritedHookDeadline(ctx context.Context) (context.Context, context.CancelFunc, error) {
+	if os.Getenv(delegatedEnv) == "" {
+		return ctx, func() {}, nil
+	}
+	return guard.WithInheritedHookDeadline(ctx, os.Getenv(guard.HookDeadlineEnv))
+}
+
 // delegatedEnv marks a guard call one magus handed to the checkout's own ./magus, so that
 // one judges instead of handing it on again.
 const delegatedEnv = "__MAGUS_DELEGATED_BY"
@@ -960,7 +972,7 @@ func checkoutBinary(dir, running string) string {
 //
 // A build behind HEAD still judges when newer than runningCommit.
 // An older judge cannot read a newer row, and denied every call.
-func delegateToCheckout(ctx context.Context, runningCommit, input string, out, errOut io.Writer) (handled bool, declined checkoutDecline, err error) {
+func delegateToCheckout(ctx context.Context, runningCommit, input string, opts output.Options, out, errOut io.Writer) (handled bool, declined checkoutDecline, err error) {
 	if os.Getenv(delegatedEnv) != "" {
 		return false, checkoutDecline{}, nil
 	}
@@ -992,16 +1004,26 @@ func delegateToCheckout(ctx context.Context, runningCommit, input string, out, e
 	cmd := &exec.Cmd{
 		Path:   own,
 		Args:   slices.Concat([]string{own}, os.Args[1:]),
-		Env:    env,
+		Env:    append(env, guard.HookDeadlineEntry(ctx)),
 		Stdin:  strings.NewReader(input),
 		Stdout: out,
 		Stderr: errOut,
 	}
 	err = cmd.Start()
 	if err == nil {
-		stop := context.AfterFunc(ctx, func() { _ = cmd.Process.Kill() })
-		err = cmd.Wait()
-		stop()
+		var killed bool
+		killed, err = guard.WaitDelegate(ctx, cmd)
+		if killed {
+			verdict := types.GuardJudgment{
+				SchemaVersion: agent.GuardSchemaVersion,
+				Decision:      "deny",
+				Reason:        guard.DelegateLapsedReason(own),
+			}
+			if werr := writeGuardVerdict(out, opts, verdict); werr != nil {
+				return true, checkoutDecline{}, werr
+			}
+			return true, checkoutDecline{}, verdictExit(errOut, opts, verdict)
+		}
 	}
 	var exited *exec.ExitError
 	switch {
