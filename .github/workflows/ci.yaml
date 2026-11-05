@@ -343,7 +343,7 @@ jobs:
           magus run generate --no-default-charms --concurrency-profile aggressive "${projects[@]}"
 
   ci:
-    name: "magus shard ${{ matrix.shard }}: ${{ matrix.name }}"
+    name: "magus shard ${{ matrix.shard }}: ${{ matrix.job_name }}"
     needs: plan
     if: fromJSON(needs.plan.outputs.count) > 0 && needs.plan.outputs.inherit != 'true'
     runs-on: ubuntu-latest
@@ -470,9 +470,9 @@ jobs:
             .magus/cas
             .magus/manifests
             .magus/logs
-          key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.digest }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-
+            ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.digest }}-
             ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-
 
       # The caches the spells declare (Go's GOCACHE and GOMODCACHE), from the bundle main
@@ -592,7 +592,7 @@ jobs:
             .magus/cas
             .magus/manifests
             .magus/logs
-          key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.digest }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       # The notes store's anchors, gated on the ONE finding worth blocking a merge for.
       #

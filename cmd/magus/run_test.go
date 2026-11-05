@@ -559,8 +559,8 @@ func TestDecodeSavedPlan(t *testing.T) {
 	one := []types.Unit{{Project: ".", Target: "test"}, {Project: "docs", Target: "lint"}}
 	two := []types.Unit{{Project: "console", Target: "lint"}}
 	got, err := decodeSavedPlan(fmt.Appendf(nil, `{"target":"ci","count":2,"max_parallel":2,"future_key":true,
-		"matrix":[{"shard":"1","projects":". docs","label":%q,"units":[{"project":".","target":"test"},{"project":"docs","target":"lint"}]},
-			{"shard":"2","projects":"console","label":%q,"units":[{"project":"console","target":"lint"}]}],
+		"matrix":[{"shard":"1","projects":". docs","digest":%q,"units":[{"project":".","target":"test"},{"project":"docs","target":"lint"}]},
+			{"shard":"2","projects":"console","digest":%q,"units":[{"project":"console","target":"lint"}]}],
 		"outputs":[{"name":"count","value":"2"}]}`, types.UnitsDigest(one), types.UnitsDigest(two)))
 	require.NoError(t, err)
 	assert.Equal(t, planOutput{
@@ -568,8 +568,8 @@ func TestDecodeSavedPlan(t *testing.T) {
 		Count:       2,
 		MaxParallel: 2,
 		Matrix: []planShard{
-			{Shard: "1", Projects: ". docs", Label: types.UnitsDigest(one), Units: one},
-			{Shard: "2", Projects: "console", Label: types.UnitsDigest(two), Units: two},
+			{Shard: "1", Projects: ". docs", Digest: types.UnitsDigest(one), Units: one},
+			{Shard: "2", Projects: "console", Digest: types.UnitsDigest(two), Units: two},
 		},
 		Outputs: []planPublish{{Name: "count", Value: "2"}},
 	}, got)
@@ -582,7 +582,7 @@ func TestDecodeSavedPlan(t *testing.T) {
 		{"no target", `{"count":0,"matrix":[]}`, "names no target"},
 		{"count disagrees", `{"target":"ci","count":2,"matrix":[{"shard":"1","projects":"."}]}`, "states 2 shard(s) but lists 1"},
 		{"shard without id", `{"target":"ci","count":1,"matrix":[{"projects":"."}]}`, "a shard with no id"},
-		{"duplicate id", fmt.Sprintf(`{"target":"ci","count":2,"matrix":[{"shard":"1","projects":".","label":"%s","units":[{"project":".","target":"test"}]},{"shard":"1","projects":"docs"}]}`, types.UnitsDigest([]types.Unit{{Project: ".", Target: "test"}})), "lists shard 1 twice"},
+		{"duplicate id", fmt.Sprintf(`{"target":"ci","count":2,"matrix":[{"shard":"1","projects":".","digest":"%s","units":[{"project":".","target":"test"}]},{"shard":"1","projects":"docs"}]}`, types.UnitsDigest([]types.Unit{{Project: ".", Target: "test"}})), "lists shard 1 twice"},
 		{"no projects", `{"target":"ci","count":1,"matrix":[{"shard":"1","projects":"  "}]}`, "shard 1 has no projects"},
 		{"no units", `{"target":"ci","count":1,"matrix":[{"shard":"1","projects":"."}]}`, "shard 1 lists no units"},
 	}
@@ -650,7 +650,7 @@ func TestSavedPlanAgreementSuite(t *testing.T) { suite.Run(t, new(SavedPlanAgree
 
 func (s *SavedPlanAgreementSuite) decode(projects, label string) error {
 	_, err := decodeSavedPlan(fmt.Appendf(nil,
-		`{"target":"ci","count":1,"matrix":[{"shard":"0","projects":%q,"label":%q,"units":[{"project":"docs","target":"lint"}]}]}`,
+		`{"target":"ci","count":1,"matrix":[{"shard":"0","projects":%q,"digest":%q,"units":[{"project":"docs","target":"lint"}]}]}`,
 		projects, label))
 	return err
 }
@@ -661,13 +661,13 @@ func (s *SavedPlanAgreementSuite) TestRefusesProjectsTheUnitsDoNotRunIn() {
 	s.ErrorContains(err, `shard 0 lists projects ". docs", but its units run in "docs"`)
 }
 
-func (s *SavedPlanAgreementSuite) TestRefusesALabelThatIsNotTheUnitsDigest() {
+func (s *SavedPlanAgreementSuite) TestRefusesADigestThatIsNotTheUnitsDigest() {
 	err := s.decode("docs", "docs")
 	s.Require().ErrorIs(err, types.SavedPlanRefused)
-	s.ErrorContains(err, `shard 0 is labeled "docs", but its units digest to`)
+	s.ErrorContains(err, `shard 0 has digest "docs", but its units digest to`)
 }
 
-func (s *SavedPlanAgreementSuite) TestAcceptsAShardWhoseProjectsAndLabelAgree() {
+func (s *SavedPlanAgreementSuite) TestAcceptsAShardWhoseProjectsAndDigestAgree() {
 	s.NoError(s.decode("docs", types.UnitsDigest([]types.Unit{{Project: "docs", Target: "lint"}})))
 }
 
@@ -702,13 +702,13 @@ func TestCIWorkflowRendersPlanOutputsAndSummary(t *testing.T) {
 	require.Len(t, found, 2, "ci.yaml's plan step no longer renders the saved plan twice; repoint this test at what does")
 
 	out := planOutput{Target: "ci", Count: 1, MaxParallel: 1,
-		Matrix: []planShard{{Shard: "1", Projects: ". docs", Name: ". docs", Label: "d", Duties: "notes-verify"}}}
+		Matrix: []planShard{{Shard: "1", Projects: ". docs", JobName: ". docs", Digest: "d", Duties: "notes-verify"}}}
 	out.Outputs, err = planOutputs(out)
 	require.NoError(t, err)
 	out.Summary = planSummaryMarkdown(out)
 
 	want := map[string]string{
-		"GITHUB_OUTPUT": `matrix={"include":[{"shard":"1","projects":". docs","name":". docs","label":"d","duties":"notes-verify"}]}` + "\n" +
+		"GITHUB_OUTPUT": `matrix={"include":[{"shard":"1","projects":". docs","job_name":". docs","digest":"d","duties":"notes-verify"}]}` + "\n" +
 			"count=1\nmax_parallel=1\ninherit=false\n",
 		"GITHUB_STEP_SUMMARY": out.Summary,
 	}

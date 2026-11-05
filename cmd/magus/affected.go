@@ -570,11 +570,11 @@ type planOutput struct {
 type planShard struct {
 	Shard    string `json:"shard"    yaml:"shard"`
 	Projects string `json:"projects" yaml:"projects"`
-	// Name is Projects shortened for a CI job name.
-	Name string `json:"name" yaml:"name"`
-	// Label is a digest of Units, the same for the same units on any plan, so a
+	// JobName is Projects shortened for a CI job name.
+	JobName string `json:"job_name" yaml:"job_name"`
+	// Digest is a digest of Units, the same for the same units on any plan, so a
 	// provider keys a per-shard cache by it.
-	Label string `json:"label" yaml:"label"`
+	Digest string `json:"digest" yaml:"digest"`
 	// Duties are the workspace-wide steps this shard runs, space-separated.
 	Duties string `json:"duties" yaml:"duties"`
 	// Units are what `magus run --stdin --shard` runs for this shard.
@@ -958,8 +958,8 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		out.Matrix[i] = planShard{
 			Shard:    s.ID,
 			Projects: strings.Join(s.ProjectPaths, " "),
-			Name:     shardName(s.ProjectPaths),
-			Label:    s.Label,
+			JobName:  shardName(s.ProjectPaths),
+			Digest:   s.Digest,
 			Duties:   joinDuties(s.Duties),
 			Units:    s.Units,
 		}
@@ -1734,7 +1734,7 @@ func filterShardPaths(shards []types.Shard, want map[string]bool) []types.Shard 
 		}
 		sh.ProjectPaths = kept
 		sh.Units = slices.DeleteFunc(slices.Clone(sh.Units), func(u types.Unit) bool { return !want[u.Project] })
-		sh.Label = types.UnitsDigest(sh.Units)
+		sh.Digest = types.UnitsDigest(sh.Units)
 		out = append(out, sh)
 	}
 	return out

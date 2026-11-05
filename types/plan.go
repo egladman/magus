@@ -66,9 +66,9 @@ const (
 // Shard is one runner's worth of work in a CI shard plan.
 type Shard struct {
 	ID string // zero-padded shard index (e.g. "00", "01")
-	// Label is UnitsDigest(Units). The same units get the same label on any
+	// Digest is UnitsDigest(Units). The same units get the same digest on any
 	// plan, so a provider can key a per-shard cache by it.
-	Label string
+	Digest string
 	// ProjectPaths are the distinct projects of Units, sorted.
 	ProjectPaths []string
 	// Units are what the shard runs, in the order the planner placed them.

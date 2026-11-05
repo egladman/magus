@@ -61,12 +61,12 @@ host that plans, and the plan records it. With none set the plan says it checked
 no memory budget. The same history, change, machine and config give the same plan
 on any host.
 
-Each shard lists its `units`, a `label` that digests them, and its `duties`: the
+Each shard lists its `units`, a `digest` of them, and its `duties`: the
 workspace-wide steps placed on exactly one shard. `cache-export` goes to the
 shard holding the most root units, `notes-verify` to the shard with the fewest
 units. `magus run ci:gha --stdin --shard <id>` reads the saved plan and runs that
 shard's units as one invocation. It refuses a plan evaluated under other charms
-or args, and a shard whose projects or label disagree with its units.
+or args, and a shard whose projects or digest disagree with its units.
 
 ## The checkout
 

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/interp"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -160,7 +160,7 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 	shards := make([]types.Shard, len(plan.Shards))
 	for i, s := range plan.Shards {
 		shards[i] = types.Shard{
-			ID: s.ID, Label: types.UnitsDigest(s.Units),
+			ID: s.ID, Digest: types.UnitsDigest(s.Units),
 			ProjectPaths: types.UnitProjects(s.Units), Units: s.Units,
 		}
 	}
@@ -257,18 +257,26 @@ func (m *Magus) anchorSteps(ctx context.Context, p *types.Project, anchor string
 // directCalls are the exported targets anchor's body in p calls as functions,
 // read from the magusfile. ctx.needs is the only call the recorder sees.
 func directCalls(p *types.Project, anchor string) ([]string, error) {
-	src, err := os.ReadFile(filepath.Join(p.Dir, types.MagusfileName))
+	srcs, err := interp.FindAll(p.Dir)
 	if err != nil {
-		return nil, fmt.Errorf("read %s's magusfile for direct calls: %w", p.Path, err)
-	}
-	prog, err := buzz.ParseEmbedded(string(src))
-	if err != nil {
-		return nil, fmt.Errorf("parse %s's magusfile for direct calls: %w", p.Path, err)
+		return nil, fmt.Errorf("find %s's magusfile for direct calls: %w", p.Path, err)
 	}
 	funcs := map[string]*ast.FunDecl{}
-	for _, stmt := range prog.Stmts {
-		if fn, ok := stmt.(*ast.FunDecl); ok {
-			funcs[fn.Name] = fn
+	for _, src := range srcs {
+		for _, file := range src.Files {
+			text, err := os.ReadFile(file)
+			if err != nil {
+				return nil, fmt.Errorf("read %s's magusfile for direct calls: %w", p.Path, err)
+			}
+			prog, err := buzz.ParseEmbedded(string(text))
+			if err != nil {
+				return nil, fmt.Errorf("parse %s's magusfile for direct calls: %w", file, err)
+			}
+			for _, stmt := range prog.Stmts {
+				if fn, ok := stmt.(*ast.FunDecl); ok {
+					funcs[fn.Name] = fn
+				}
+			}
 		}
 	}
 	var calls []string

@@ -2035,6 +2035,7 @@ github.com/egladman/magus/types.DirNotInGraph const DiagnosticCode = "MGS7005"
 github.com/egladman/magus/types.DirectCall type struct
 github.com/egladman/magus/types.DirectCall.Anchor field string "json:\"anchor\""
 github.com/egladman/magus/types.DirectCall.Project field string "json:\"project\""
+github.com/egladman/magus/types.DirectCall.String method func() string
 github.com/egladman/magus/types.DirectCall.Target field string "json:\"target\""
 github.com/egladman/magus/types.Direction type int
 github.com/egladman/magus/types.DirsOptions type struct
@@ -2125,7 +2126,6 @@ github.com/egladman/magus/types.DuplicationSite.ID field string "json:\"id\"    
 github.com/egladman/magus/types.DuplicationSite.Label field string "json:\"label\"            yaml:\"label\""
 github.com/egladman/magus/types.DuplicationSite.Source field string "json:\"source,omitempty\" yaml:\"source,omitempty\""
 github.com/egladman/magus/types.DuplicationSite.Tested field bool "json:\"tested\" yaml:\"tested\""
-github.com/egladman/magus/types.Duties var []Duty
 github.com/egladman/magus/types.Duty type string
 github.com/egladman/magus/types.DutyCacheExport const Duty = "cache-export"
 github.com/egladman/magus/types.DutyNotesVerify const Duty = "notes-verify"
@@ -3971,6 +3971,7 @@ github.com/egladman/magus/types.MagusWorkspace.Dir field string "json:\"dir\""
 github.com/egladman/magus/types.MagusWorkspace.Root field string "json:\"root\""
 github.com/egladman/magus/types.MagusfileAPIRemoved const DiagnosticCode = "MGS1025"
 github.com/egladman/magus/types.MagusfileIsNotASpell const DiagnosticCode = "MGS1017"
+github.com/egladman/magus/types.MagusfileName const untyped string = "magusfile.buzz"
 github.com/egladman/magus/types.MagusfileOnlyMember const DiagnosticCode = "MGS1022"
 github.com/egladman/magus/types.MagusfileSpellName const untyped string = "magusfile"
 github.com/egladman/magus/types.ManagedEntries type struct
@@ -4801,6 +4802,7 @@ github.com/egladman/magus/types.RiskMechanical const Tier = "mechanical"
 github.com/egladman/magus/types.RiskScoped const Tier = "scoped"
 github.com/egladman/magus/types.RiskTrivial const Tier = "trivial"
 github.com/egladman/magus/types.RootGlob func(projectPath string, glob string) string
+github.com/egladman/magus/types.RootProject const untyped string = "."
 github.com/egladman/magus/types.RuleDoc type struct
 github.com/egladman/magus/types.RuleDoc.Catches field string "json:\"catches\""
 github.com/egladman/magus/types.RuleDoc.Decision field string "json:\"decision\""
@@ -4909,9 +4911,9 @@ github.com/egladman/magus/types.ShapeParameterize const DuplicationShape = "para
 github.com/egladman/magus/types.ShapeSharedCore const DuplicationShape = "shared-core"
 github.com/egladman/magus/types.ShapeSiblingHelper const DuplicationShape = "sibling-helper"
 github.com/egladman/magus/types.Shard type struct
+github.com/egladman/magus/types.Shard.Digest field string
 github.com/egladman/magus/types.Shard.Duties field []Duty
 github.com/egladman/magus/types.Shard.ID field string
-github.com/egladman/magus/types.Shard.Label field string
 github.com/egladman/magus/types.Shard.ProjectPaths field []string
 github.com/egladman/magus/types.Shard.Units field []Unit
 github.com/egladman/magus/types.ShardPlan type struct
@@ -4927,7 +4929,6 @@ github.com/egladman/magus/types.ShardPlan.Source field string
 github.com/egladman/magus/types.ShardPlan.Sufficient field int
 github.com/egladman/magus/types.ShardPlan.UnboundedBy field string
 github.com/egladman/magus/types.ShardPlan.Unmeasured field []Unit
-github.com/egladman/magus/types.ShardPlan.Unplanned field []DirectCall
 github.com/egladman/magus/types.ShareBoundToAnotherDevice const DiagnosticCode = "MGS9009"
 github.com/egladman/magus/types.ShareRequestMalformed const DiagnosticCode = "MGS9020"
 github.com/egladman/magus/types.ShareUnavailable const DiagnosticCode = "MGS9014"
@@ -5736,6 +5737,7 @@ github.com/egladman/magus/types.Unit type struct
 github.com/egladman/magus/types.Unit.Project field string "json:\"project\""
 github.com/egladman/magus/types.Unit.String method func() string
 github.com/egladman/magus/types.Unit.Target field string "json:\"target\""
+github.com/egladman/magus/types.UnitNames func(units []Unit) []string
 github.com/egladman/magus/types.UnitProjects func(units []Unit) []string
 github.com/egladman/magus/types.UnitsDigest func(units []Unit) string
 github.com/egladman/magus/types.UnknownConfigKey const DiagnosticCode = "MGS1040"

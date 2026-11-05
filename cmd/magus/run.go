@@ -693,9 +693,9 @@ func decodeSavedPlan(data []byte) (planOutput, error) {
 			return planOutput{}, refusePlan("the plan on stdin: shard %s lists projects %q, but its units run in %q",
 				s.Shard, listed, ran)
 		}
-		if want := types.UnitsDigest(s.Units); s.Label != want {
-			return planOutput{}, refusePlan("the plan on stdin: shard %s is labeled %q, but its units digest to %q",
-				s.Shard, s.Label, want)
+		if want := types.UnitsDigest(s.Units); s.Digest != want {
+			return planOutput{}, refusePlan("the plan on stdin: shard %s has digest %q, but its units digest to %q",
+				s.Shard, s.Digest, want)
 		}
 		seen[s.Shard] = true
 	}

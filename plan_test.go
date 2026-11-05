@@ -203,6 +203,26 @@ func (s *PlanUnitsSuite) TestAnAffectedProjectOutsideTheWorkspaceIsAnError() {
 	s.ErrorContains(err, `project "ghost" is affected but not in the workspace`)
 }
 
+func (s *PlanUnitsSuite) TestAnAnchorUnderMagusfilesPlansFromThatFile() {
+	root := writeWorkspace(s.T(), map[string]string{
+		"magusfiles/targets.buzz": `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun security(ctx: magus\Context, args: [str]) > void {}
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(build);
+    security(ctx, args: args);
+}
+`,
+		"main.go": "package main\n",
+	})
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	calls, err := directCalls(m.Get("."), "ci")
+	s.Require().NoError(err)
+	s.Equal([]string{"security"}, calls)
+}
+
 func (s *PlanUnitsSuite) TestAnUnreadableMagusfileIsAnError() {
 	p := s.m.Get(".")
 	s.Require().NoError(os.Remove(filepath.Join(p.Dir, types.MagusfileName)))
@@ -257,11 +277,11 @@ func (s *PlanUnitsSuite) TestAHalfConfiguredMachineIsAnError() {
 	s.ErrorContains(err, `ci.machine "ubuntu-latest" needs both memory_mb and cores above zero`)
 }
 
-func (s *PlanUnitsSuite) TestEveryShardIsLabeledByItsUnitsDigest() {
+func (s *PlanUnitsSuite) TestEveryShardIsDigestedByItsUnitsDigest() {
 	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"magusfile.buzz", "api/main.go"}, MaxShards: -1})
 	s.Require().NoError(err)
 	for _, sh := range plan.Shards {
-		s.Equal(types.UnitsDigest(sh.Units), sh.Label)
+		s.Equal(types.UnitsDigest(sh.Units), sh.Digest)
 	}
 }
 
