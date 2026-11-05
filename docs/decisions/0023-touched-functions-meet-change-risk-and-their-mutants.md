@@ -124,7 +124,7 @@ number; it reports scores and mutants, and a lint rule decides.
 | head profile freshened through the cache; base profile kept per commit      | done                                                    |
 | each touched function judged against itself at base                         | done                                                    |
 | covered lines kept, in place of the 70% Go and 62% Buzz totals              | done                                                    |
-| `Change.risk` scoring this repository's own change                          | in progress (head scored; the base does not load)       |
+| `Change.risk` scoring this repository's own change                          | in progress (waits on main's CI base profile)           |
 | mutation: a go::mutate op, Go-native engine plus token fallback, one binary | not built (the next change)                             |
 | the mutant verdict cache, keyed by body, covering tests and Context         | not built (the next change)                             |
 | the `magus:mutant` marker and the kill-their-mutants rule                   | not built (the next change)                             |
@@ -166,11 +166,17 @@ Now, at head, core finds the project target that declares the spell's profile as
 output and freshens it the way `freshenSymbolIndexes` freshens an index: a step the cache
 vouches for is read as it stands, and a stale one runs through the scheduler of the run
 that holds the project, so nothing nests (MGS3007). `lint_rules` calls `Change.risk`
-once before its child process reads the rules, as it already does for precedents. At
-base, the profile is kept in the workspace store per merge-base commit. A miss runs that
-target once in an export of the base, with the copy's own cache, so only the remote tier
-can answer it, and a warning names the command. A red test makes each function of its
-project a gap that names the command.
+once before its child process reads the rules, as it already does for precedents. A
+profile a run freshened is recorded under that run's root invocation, so the nested magus
+reads it while its digest still matches; a record lives a day. A red test makes each
+function of its project a gap that names the command.
+
+At base, the profile is the cache entry main's CI wrote for the declaring target at the
+merge-base commit. Core exports the base only to key the target by the base's own inputs,
+against this workspace's store and its remote tier, and replays the entry there. It never
+runs the base, and no base binary is built. No entry is an error that names the base
+commit and the command, decided 2026-11-05: a base that is not measured would judge the
+change against nothing. A read keeps the profile in the workspace store per commit.
 
 ### Covered lines kept
 
