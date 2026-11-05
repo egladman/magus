@@ -315,7 +315,7 @@ func trustRoot(environ []string, root string) []string {
 }
 
 // inProcessIndexer is the in-process indexer si's format names over dir, nil for an external one.
-func inProcessIndexer(si *spells.SymbolIndexer, dir, root string) symbols.UnitIndexer { //nolint:ireturn // the implementation is chosen at runtime among several
+func inProcessIndexer(si *spells.SymbolIndexer, dir, root string) symbols.UnitIndexer { //nolint:ireturn // symbols.UnitIndexer: goindex, buzzindex or shindex
 	switch si.Format {
 	case spells.SymbolFormatGoPackages:
 		patterns := slices.Clone(si.Command.Args)

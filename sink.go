@@ -267,7 +267,7 @@ type jsonlEncoder struct {
 	notices *report.LineEncoder // nil when stdout and stderr are one writer
 }
 
-func newJSONLEncoder(env sinkEnv) encoder { return newJSONL(env) } //nolint:ireturn // the implementation is chosen at runtime among several
+func newJSONLEncoder(env sinkEnv) encoder { return newJSONL(env) } //nolint:ireturn // encoder: jsonlEncoder, picked from the encoders table by output format
 
 func newJSONL(env sinkEnv) *jsonlEncoder {
 	opts := []report.Option{report.WithBlockOnFull()}
@@ -320,7 +320,7 @@ type terminal interface {
 
 // pickTerminal draws through the process's display handler when w is standard error and
 // one paints there: writing past it would scroll lines through its band.
-func pickTerminal(w io.Writer) terminal { //nolint:ireturn // the implementation is chosen at runtime among several
+func pickTerminal(w io.Writer) terminal { //nolint:ireturn // terminal: cache.PrettyHandler or plainTerminal
 	if w == os.Stderr {
 		if h := cache.StderrHandler(); h != nil {
 			return h
@@ -369,7 +369,7 @@ type textEncoder struct {
 	level slog.Level // the least severe progress printed
 }
 
-func newTextEncoder(env sinkEnv) encoder { //nolint:ireturn // the implementation is chosen at runtime among several
+func newTextEncoder(env sinkEnv) encoder { //nolint:ireturn // encoder: textEncoder, picked from the encoders table by output format
 	return textEncoder{term: pickTerminal(env.stderr), level: env.level}
 }
 
