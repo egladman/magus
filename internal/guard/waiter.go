@@ -187,7 +187,7 @@ type refusedRun struct {
 
 // denyRefusedRetry refuses a magus run repeating a refusal this checkout's log
 // holds inside refusedRetryWindow, while it is the command's newest run.
-// Nothing freed a seat or memory meanwhile, and MGS3009 already waited.
+// Nothing freed a seat or memory meanwhile, and MGS3009 already waited as long as budget_wait allows, which is not at all by default.
 func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string) denial {
 	runs := magusRuns(command)
 	if len(runs) == 0 {
@@ -218,14 +218,14 @@ func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string)
 		}
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago, after waiting its bound: raise %s or free a holder first, or file the check as owed %q with `%s --stdin`.",
+		Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago, within its budget_wait: raise %s or free a holder first, or file the check as owed %q with `%s --stdin`.",
 			run, r.code, ago, cache.BudgetWaitSource, types.OwedNoSeat, hint.JobExit.With(deps.lease)),
 		Why: denyRefusedRetryWhy,
 	}
 }
 
 var (
-	denyRefusedRetryWhy = "An MGS3009 comes after the run already waited out budget_wait, and the same command run again inside a minute meets the same holders: one checkout was once refused 63 times in 12 minutes, each retry a turn spent on a look."
+	denyRefusedRetryWhy = "An MGS3009 comes after the run waited as long as budget_wait allows (not at all when it is 0), and the same command run again inside a minute meets the same holders: one checkout was once refused 63 times in 12 minutes, each retry a turn spent on a look."
 
 	denyPressureRetryWhy = "A refusal frees no memory, and a retry within the minute reads the same failing machine. On 2026-10-31 this state ended in a kernel panic, so an agent looping here spends turns on the machine least able to afford them."
 )

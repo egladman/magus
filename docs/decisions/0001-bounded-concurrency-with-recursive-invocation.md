@@ -325,8 +325,8 @@ full machine failed, removed its checkout and forked again. Core held three wait
 queue: the gate, `graph build` and `status --wait`.
 
 So the broker parks every claim that can fit, and only one larger than the whole budget is
-refused at once. The bound lives in the client: `budget_wait`, default 30 minutes, or the
-run's own deadline when that is sooner, and `0` refuses at once. A wait on the run's own
+refused at once. The bound lives in the client: `budget_wait`, or the run's own deadline
+when that is sooner. The default was first 30 minutes (see the reversal below). A wait on the run's own
 claims has no bound, as before. The client says when it parks and whenever the holders
 change, and nothing on a timer. At the bound it asks once more without parking, then
 refuses with MGS3009 (exit 75) naming the holders and what set the bound. A leased worker
@@ -342,3 +342,13 @@ waiting in order do not deadlock. `status --wait`, reservations, awaits and the 
 bound are deleted, and so is the second, peak-based fit rule they used. MGS3053 stays a
 refusal: the broker hears no event when the kernel's reading changes, and waiting on it
 would need a poll.
+
+### 2026-11-05: waiting is opt-in, `budget_wait` defaults to 0
+
+The amendment above set `budget_wait` to 30 minutes by default. Reversed the same day: a
+run kept out of the budget refuses at once unless the caller asks to wait. A wait nobody
+asked for looks like work, and a caller who wants one can say so. The refusal (MGS3009)
+now tells it how: `--budget-wait 30m`, `MAGUS_BUDGET_WAIT` or `budget_wait` in
+`magus.yaml`. Everything else above stands: the queue, the bound living in the client,
+the owed filing of a leased worker and protocol 5. The default alone changes, from 30
+minutes to 0, and a leased worker's check is refused at once unless its caller set a wait.

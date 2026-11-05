@@ -324,15 +324,14 @@ Key properties:
   `GOMAXPROCS` and `-p` equal to its slots, one included, since `go` reads no jobserver
   and would otherwise take every core the budget counted as free. So a Go target's
   measured width never exceeds its claim, and saturation above is how it widens.
-- **It waits for its seat, bounded.** A step kept out by another magus invocation waits
-  in the broker's queue up to `budget_wait` (default 30 minutes; `--budget-wait`,
-  `MAGUS_BUDGET_WAIT` or `budget_wait` in `magus.yaml`), or the run's own deadline when
-  that is sooner. It says on stderr when it parks and whenever the holders change, with
-  the time waited and the time left, and nothing on a timer. At the bound it asks once
-  more, then is refused, exiting **75**
+- **It waits for its seat only when asked.** `budget_wait` defaults to 0, so a step kept
+  out by another magus invocation is refused at once, exiting **75**
   ([MGS3009](../reference/codes/sandbox/MGS3009.md)) and naming who holds the budget
-  (pid, project, target, and directory) and what set the bound. `budget_wait: 0` refuses
-  at once. A step kept out only by its own process or its own run waits for them with no
+  (pid, project, target, and directory) and how to wait. With `--budget-wait 30m`,
+  `MAGUS_BUDGET_WAIT` or `budget_wait` in `magus.yaml`, it waits in the broker's queue up
+  to that bound, or the run's own deadline when that is sooner. It says on stderr when it
+  parks and whenever the holders change, with the time waited and the time left, and
+  nothing on a timer. At the bound it asks once more, then is refused the same way. A step kept out only by its own process or its own run waits for them with no
   bound, on the same terms as the lock. A nested magus that waits prints those lines to
   its parent's step, and they count as that step's progress for `stall_timeout`, quiet
   or not.

@@ -918,7 +918,7 @@ func (s *BudgetWaitSuite) TestALeasedWorkerWaitsItsBoundThenNamesTheOwedFiling()
 
 	s.Require().ErrorIs(err, types.MachineBudgetExhausted)
 	s.Contains(err.Error(), fmt.Sprintf(
-		"Job wave/api waited its bound: file this check as owed, not as a ref, with `%s --stdin` and owed %q on its gate evidence",
+		"Job wave/api got no seat: file this check as owed, not as a ref, with `%s --stdin` and owed %q on its gate evidence",
 		hint.JobExit.With("wave/api"), types.OwedNoSeat))
 }
 

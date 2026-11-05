@@ -542,7 +542,7 @@ func TestABudgetWaitOfZeroRefusesAtOnceNamingTheHolder(t *testing.T) {
 	_, err = g.acquire(t.Context(), types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, types.MachineBudgetExhausted), "the code is what maps to exit 75")
-	assert.Contains(t, err.Error(), "waited 0s for a seat")
+	assert.Contains(t, err.Error(), "It did not wait")
 	assert.Contains(t, err.Error(), "pid 100 (root) test")
 	assert.Equal(t, 2, adm.requests, "a refusal is one request, not a poll")
 }
@@ -689,7 +689,7 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 
 	printed := out.String()
 	assert.Contains(t, printed, "[fail] workspace test (not started)\n")
-	assert.Contains(t, printed, "  cause: [MGS3009] not starting (root) test: waited 0s for a seat")
+	assert.Contains(t, printed, "  cause: [MGS3009] not starting (root) test: no seat is free")
 	assert.Contains(t, printed, "held by pid 100 (root) test (8.8 GiB)")
 	assert.NotContains(t, printed, "output:", "nothing ran, so there is no captured output to point at")
 	assert.Contains(t, printed, "  reproduce: magus run test .\n")
@@ -719,7 +719,7 @@ func refusalEvent(inv string) journal.Event {
 // holder's figures, once the text is checked to give the cause.
 func normalizeRefusal(t *testing.T, e journal.Event) journal.Event {
 	t.Helper()
-	assert.Contains(t, e.Text, "waited 0s for a seat")
+	assert.Contains(t, e.Text, "no seat is free")
 	e.Ts, e.Text = 0, ""
 	return e
 }
