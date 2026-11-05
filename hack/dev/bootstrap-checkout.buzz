@@ -34,6 +34,7 @@ import "proc";
 import "result";
 import "std";
 import "vcs";
+import "hack/magusfile/seat" as seat;
 
 import "assert";
 
@@ -182,25 +183,18 @@ export fun skillInstalls(untracked: [str]) > [str] {
     return found;
 }
 
-// Ran is one command's result, what a stubbed Host answers.
-export object Ran {
-    stdout: str = "",
-    stderr: str = "",
-    code: int = 0,
-}
-
 // Host is every call gateReady makes, so a test answers them. git and magus never raise on a
 // failed command; gateReady reads code. magus runs the checkout's own ./magus.
 export object Host {
-    git: fun (dir: str, args: [str]) > Ran !> any,
-    magus: fun (dir: str, args: [str]) > Ran !> any,
+    git: fun (dir: str, args: [str]) > seat\Ran !> any,
+    magus: fun (dir: str, args: [str]) > seat\Ran !> any,
     build: fun (dir: str) > str !> any,
     seed: fun (dir: str) > str !> any,
     stampOf: fun (path: str) > str !> any,
     freshSkills: fun (dir: str) > str !> any,
     removeDir: fun (path: str) > void !> any,
-    exec: fun (dir: str, argv: [str]) > Ran !> any,
-    seated: fun (dir: str, bin: str, args: [str]) > Ran !> any,
+    exec: fun (dir: str, argv: [str]) > seat\Ran !> any,
+    seated: fun (dir: str, bin: str, args: [str]) > seat\Ran !> any,
     readFile: fun (path: str) > str !> any,
     say: fun (line: str) > void,
     clock: fun () > double,
@@ -226,55 +220,17 @@ fun lines(text: str) > [str] {
     return acc;
 }
 
-fun must(r: Ran, what: str) > str !> any {
+fun must(r: seat\Ran, what: str) > str !> any {
     if (r.code != 0) {
         throw "gate-ready: {what}: exit {r.code}: {r.stderr}{r.stdout}";
     }
     return r.stdout;
 }
 
-// status --wait takes no deadline, so the pipe's process group is what
-// the bound stops.
-final SEAT_BOUND_MS = 1800000;
-
-// The exit code `magus run --timeout` documents.
-final SEAT_TIMED_OUT = 124;
-
-// shellQuote is word as one POSIX shell word.
-export fun shellQuote(word: str) > str {
-    return "'" + word.replace("'", with: "'\\''") + "'";
-}
-
-// seatedLine is `status --wait | <argv>` as a shell line. status holds
-// the run until the budget can seat it, then reserves the seat for it.
-// pipefail keeps a failed status from reading as the run's exit code.
-export fun seatedLine(statusBin: str, argv: [str]) > str {
-    final words = argv.map(fun (index: int, word: str) > str => shellQuote(word));
-    return "set -o pipefail; {shellQuote(statusBin)} status --wait | {words.join(" ")}";
-}
-
-// seatedRun runs a magus run behind status --wait, so a budget another
-// repo holds delays it instead of refusing it with MGS3009. It says what
-// it waits on and for how long. Past the bound it returns an error that
-// names the holders; any other exit code is the run's own.
-export fun seatedRun(h: Host, dir: str, bin: str, args: [str]) > result\Result::<Ran> {
-    final what = if (bin == "magus") "magus {args.join(" ")}" else "{bin} {args.join(" ")}";
-    h.say("waiting for the build budget to seat `{what}` in {dir}; it gives up after {SEAT_BOUND_MS / 60000}m");
-    try {
-        final ran = h.seated(dir, bin: bin, args: args);
-        if (ran.code != SEAT_TIMED_OUT) {
-            return result\ok::<Ran>(ran);
-        }
-        final holders = h.magus(dir, args: ["status"]);
-        return result\fail::<Ran>("bootstrap-checkout: gave up after {SEAT_BOUND_MS / 60000}m: `{what}` in {dir} had no seat or did not finish. {ran.stderr}\nthe build budget is held by:\n{holders.stdout.trim()}{holders.stderr.trim()}");
-    } catch (err: any) {
-        return result\caught::<Ran>(err, doing: "bootstrap-checkout: {what}");
-    }
-}
-
-// seatedOrThrow is seatedRun for a step that raises, like its neighbors.
-fun seatedOrThrow(h: Host, dir: str, bin: str, args: [str]) > Ran !> any {
-    final seated = seatedRun(h, dir: dir, bin: bin, args: args);
+// seatedOrThrow is seat\run for a step that raises, like its neighbors.
+fun seatedOrThrow(h: Host, dir: str, bin: str, args: [str]) > seat\Ran !> any {
+    final holders = fun () > seat\Ran !> any => h.magus(dir, args: ["status"]);
+    final seated = seat\run(h.say, seated: h.seated, holders: holders, dir: dir, bin: bin, args: args);
     if (seated.error -> err) {
         throw err.message;
     }
@@ -503,19 +459,19 @@ export fun gateReady(h: Host, dir: str, restart: bool = false) > [str] !> any {
     return did;
 }
 
-fun gitRan(h: Host, dir: str, args: [str]) > result\Result::<Ran> {
+fun gitRan(h: Host, dir: str, args: [str]) > result\Result::<seat\Ran> {
     try {
-        return result\ok::<Ran>(h.git(dir, args: args));
+        return result\ok::<seat\Ran>(h.git(dir, args: args));
     } catch (err: any) {
-        return result\caught::<Ran>(err, doing: "bootstrap-checkout: git {args.join(" ")}");
+        return result\caught::<seat\Ran>(err, doing: "bootstrap-checkout: git {args.join(" ")}");
     }
 }
 
-fun magusRan(h: Host, dir: str, args: [str]) > result\Result::<Ran> {
+fun magusRan(h: Host, dir: str, args: [str]) > result\Result::<seat\Ran> {
     try {
-        return result\ok::<Ran>(h.magus(dir, args: args));
+        return result\ok::<seat\Ran>(h.magus(dir, args: args));
     } catch (err: any) {
-        return result\caught::<Ran>(err, doing: "bootstrap-checkout: magus {args.join(" ")}");
+        return result\caught::<seat\Ran>(err, doing: "bootstrap-checkout: magus {args.join(" ")}");
     }
 }
 
@@ -703,19 +659,51 @@ fun fastForward(h: Host, dir: str, onto: str, ontoSha: str, headSha: str) > resu
     return result\ok::<str>("fast-forwarded {dir} from {headSha.sub(0, len: 12)} to {onto} ({ontoSha.sub(0, len: 12)})");
 }
 
+fun liveFreshSkills(dir: str) > str !> any {
+    final root = fs\tempDir("fresh-skills-");
+    final r = proc\exec(fs\join(dir, name: "magus"), args: ["agent", "install", "--dir", root] + SKILL_DIRS, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
+    if (r.code != 0) {
+        throw "gate-ready: magus agent install into {root}: exit {r.code}: {r.stderr}{r.stdout}";
+    }
+    return root;
+}
+
+// The go-run bootstrap runs before dir has a ./magus, so status
+// may come from the forking checkout's.
+fun liveSeated(dir: str, bin: str, args: [str]) > seat\Ran !> any {
+    final own = fs\join(dir, name: "magus");
+    if (bin == "magus" and !fs\isFile(own)) {
+        return seat\Ran{ stderr = "{own} does not exist", code = 127 };
+    }
+    final statusBin = if (fs\isFile(own)) own else fs\join(vcs\root(), name: "magus");
+    final argv = if (bin == "magus") [own] + args else [bin] + args;
+    if (!fs\isFile(statusBin)) {
+        std\print("no magus exists to ask the build budget, so `{argv.join(" ")}` runs without a seat");
+        final bare = proc\exec(argv[0], args: args, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
+        return seat\Ran{ stdout = bare.stdout, stderr = bare.stderr, code = bare.code };
+    }
+    final sh = proc\shell(seat\line(statusBin, argv: argv), shell: "bash");
+    final began = os\time();
+    final r = proc\exec(sh.bin, args: sh.args, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true, timeoutMs = std\toDouble(seat\BOUND_MS)});
+    if (r.code != 0 and os\time() - began >= std\toDouble(seat\BOUND_MS - 1000)) {
+        return seat\Ran{ stdout = r.stdout, stderr = "the pipe was stopped at the bound.", code = seat\TIMED_OUT };
+    }
+    return seat\Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
+}
+
 export fun liveHost() > Host {
     return Host{
-        git = fun (dir: str, args: [str]) > Ran !> any {
+        git = fun (dir: str, args: [str]) > seat\Ran !> any {
             final r = vcs\cmd(args, opts: vcs\CommandOptions{dir = dir, quiet = true, allowFailure = true});
-            return Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
+            return seat\Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
         },
-        magus = fun (dir: str, args: [str]) > Ran !> any {
+        magus = fun (dir: str, args: [str]) > seat\Ran !> any {
             final bin = fs\join(dir, name: "magus");
             if (!fs\isFile(bin)) {
-                return Ran{ stderr = "{bin} does not exist", code = 127 };
+                return seat\Ran{ stderr = "{bin} does not exist", code = 127 };
             }
             final r = proc\exec(bin, args: args, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
-            return Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
+            return seat\Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
         },
         build = fun (dir: str) > str !> any {
             return build(dir);
@@ -732,41 +720,17 @@ export fun liveHost() > Host {
             return stampLine(fs\readFile(path));
         },
         freshSkills = fun (dir: str) > str !> any {
-            final root = fs\tempDir("fresh-skills-");
-            final r = proc\exec(fs\join(dir, name: "magus"), args: ["agent", "install", "--dir", root] + SKILL_DIRS, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
-            if (r.code != 0) {
-                throw "gate-ready: magus agent install into {root}: exit {r.code}: {r.stderr}{r.stdout}";
-            }
-            return root;
+            return liveFreshSkills(dir);
         },
         removeDir = fun (path: str) > void !> any {
             fs\removeAll(path);
         },
-        exec = fun (dir: str, argv: [str]) > Ran !> any {
+        exec = fun (dir: str, argv: [str]) > seat\Ran !> any {
             final r = proc\exec("env", args: argv, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
-            return Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
+            return seat\Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
         },
-        // The go-run bootstrap runs before dir has a ./magus, so status
-        // may come from the forking checkout's.
-        seated = fun (dir: str, bin: str, args: [str]) > Ran !> any {
-            final own = fs\join(dir, name: "magus");
-            if (bin == "magus" and !fs\isFile(own)) {
-                return Ran{ stderr = "{own} does not exist", code = 127 };
-            }
-            final statusBin = if (fs\isFile(own)) own else fs\join(vcs\root(), name: "magus");
-            final argv = if (bin == "magus") [own] + args else [bin] + args;
-            if (!fs\isFile(statusBin)) {
-                std\print("no magus exists to ask the build budget, so `{argv.join(" ")}` runs without a seat");
-                final bare = proc\exec(argv[0], args: args, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
-                return Ran{ stdout = bare.stdout, stderr = bare.stderr, code = bare.code };
-            }
-            final sh = proc\shell(seatedLine(statusBin, argv: argv), shell: "bash");
-            final began = os\time();
-            final r = proc\exec(sh.bin, args: sh.args, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true, timeoutMs = std\toDouble(SEAT_BOUND_MS)});
-            if (r.code != 0 and os\time() - began >= std\toDouble(SEAT_BOUND_MS - 1000)) {
-                return Ran{ stdout = r.stdout, stderr = "the pipe was stopped at the bound.", code = SEAT_TIMED_OUT };
-            }
-            return Ran{ stdout = r.stdout, stderr = r.stderr, code = r.code };
+        seated = fun (dir: str, bin: str, args: [str]) > seat\Ran !> any {
+            return liveSeated(dir, bin: bin, args: args);
         },
         readFile = fun (path: str) > str !> any {
             return fs\readFile(path);
@@ -912,12 +876,19 @@ export fun main(args: [str]) > void !> any {
 // a command the table lacks exits 0 with no output, so a daemon is running unless the table
 // says `server status` fails. An exec line's nth run is answered by "<line> #n" first.
 // stamps maps a SKILL.md path to its generated-by line, and any other path to its text.
-fun stubHost(answers: {str: Ran}, stamps: {str: str}, calls: mut [str]) > Host {
+fun stubHost(answers: {str: seat\Ran}, stamps: {str: str}, calls: mut [str]) > Host {
     return stubHostSaying(answers, stamps: stamps, calls: calls, said: mut [<str>]);
 }
 
+// stubNth records line and answers its nth run by "<line> #n" first.
+fun stubNth(answers: {str: seat\Ran}, calls: mut [str], line: str) > seat\Ran {
+    final nth = calls.filter(fun (index: int, c: str) > bool => c == line).len() + 1;
+    calls.append(line);
+    return answers["{line} #{nth}"] ?? answers[line] ?? seat\Ran{};
+}
+
 // stubHostSaying is stubHost that records each line the bootstrap says in said.
-fun stubHostSaying(answers: {str: Ran}, stamps: {str: str}, calls: mut [str], said: mut [str]) > Host {
+fun stubHostSaying(answers: {str: seat\Ran}, stamps: {str: str}, calls: mut [str], said: mut [str]) > Host {
     return Host{
         say = fun (line: str) > void {
             said.append(line);
@@ -925,15 +896,15 @@ fun stubHostSaying(answers: {str: Ran}, stamps: {str: str}, calls: mut [str], sa
         clock = fun () > double {
             return 0.0;
         },
-        git = fun (dir: str, args: [str]) > Ran !> any {
+        git = fun (dir: str, args: [str]) > seat\Ran !> any {
             final line = "git {args.join(" ")}";
             calls.append(line);
-            return answers["{dir}: {line}"] ?? answers[line] ?? Ran{};
+            return answers["{dir}: {line}"] ?? answers[line] ?? seat\Ran{};
         },
-        magus = fun (dir: str, args: [str]) > Ran !> any {
+        magus = fun (dir: str, args: [str]) > seat\Ran !> any {
             final line = "magus {args.join(" ")}";
             calls.append(line);
-            return answers[line] ?? Ran{};
+            return answers[line] ?? seat\Ran{};
         },
         build = fun (dir: str) > str !> any {
             calls.append("build {dir}");
@@ -953,17 +924,11 @@ fun stubHostSaying(answers: {str: Ran}, stamps: {str: str}, calls: mut [str], sa
         removeDir = fun (path: str) > void !> any {
             calls.append("remove {path}");
         },
-        exec = fun (dir: str, argv: [str]) > Ran !> any {
-            final line = "exec {dir}: {argv.join(" ")}";
-            final nth = calls.filter(fun (index: int, c: str) > bool => c == line).len() + 1;
-            calls.append(line);
-            return answers["{line} #{nth}"] ?? answers[line] ?? Ran{};
+        exec = fun (dir: str, argv: [str]) > seat\Ran !> any {
+            return stubNth(answers, calls: calls, line: "exec {dir}: {argv.join(" ")}");
         },
-        seated = fun (dir: str, bin: str, args: [str]) > Ran !> any {
-            final line = if (bin == "magus") "magus {args.join(" ")}" else "exec {dir}: {args.join(" ")}";
-            final nth = calls.filter(fun (index: int, c: str) > bool => c == line).len() + 1;
-            calls.append(line);
-            return answers["{line} #{nth}"] ?? answers[line] ?? Ran{};
+        seated = fun (dir: str, bin: str, args: [str]) > seat\Ran !> any {
+            return stubNth(answers, calls: calls, line: if (bin == "magus") "magus {args.join(" ")}" else "exec {dir}: {args.join(" ")}");
         },
         readFile = fun (path: str) > str !> any {
             return stamps[path] ?? "";
@@ -992,8 +957,8 @@ test "a build that compiles never regenerates" {
 test "a failed build runs the generators, then builds again, and names what they rewrote" {
     final calls = mut [<str>];
     final h = stubHost({
-        "{BUILD_LINE} #1": Ran{ code = 1, stderr = "undefined: ObjectJobClaim" },
-        "git status --porcelain": Ran{ stdout = " M internal/interp/bindings/gen/boundary_objects.go\n" },
+        "{BUILD_LINE} #1": seat\Ran{ code = 1, stderr = "undefined: ObjectJobClaim" },
+        "git status --porcelain": seat\Ran{ stdout = " M internal/interp/bindings/gen/boundary_objects.go\n" },
     }, stamps: {"/c/cmd/magus-utils/boundary_types.go": DIRECTIVES}, calls: calls);
     final rewrote = compile(h, dir: "/c");
     assert\equal(calls, want: [
@@ -1010,7 +975,7 @@ test "a failed build runs the generators, then builds again, and names what they
 test "the generators of every source run from that source's directory, in order" {
     final calls = mut [<str>];
     final h = stubHost({
-        "{BUILD_LINE} #1": Ran{ code = 1, stderr = "undefined: FlagThing" },
+        "{BUILD_LINE} #1": seat\Ran{ code = 1, stderr = "undefined: FlagThing" },
     }, stamps: {
         "/c/cmd/magus-utils/boundary_types.go": DIRECTIVES,
         "/c/cmd/magus/main.go": "package main\n\n//go:generate go run ../magus-utils cliflags -out gen/cli_flags.go\n",
@@ -1028,8 +993,8 @@ test "the generators of every source run from that source's directory, in order"
 
 test "a failed generator names the directory it ran in" {
     final h = stubHost({
-        "{BUILD_LINE} #1": Ran{ code = 1, stderr = "undefined: FlagThing" },
-        "exec /c/cmd/magus: GOEXPERIMENT=jsonv2 go run ../magus-utils cliflags": Ran{ code = 3, stderr = "no" },
+        "{BUILD_LINE} #1": seat\Ran{ code = 1, stderr = "undefined: FlagThing" },
+        "exec /c/cmd/magus: GOEXPERIMENT=jsonv2 go run ../magus-utils cliflags": seat\Ran{ code = 3, stderr = "no" },
     }, stamps: {"/c/cmd/magus/main.go": "//go:generate go run ../magus-utils cliflags\n"}, calls: mut [<str>]);
     var why = "";
     try {
@@ -1042,9 +1007,9 @@ test "a failed generator names the directory it ran in" {
 
 test "a build that fails again after the generators reports the compiler and the rewritten paths" {
     final h = stubHost({
-        "{BUILD_LINE} #1": Ran{ code = 1, stderr = "undefined: ObjectJobClaim" },
-        "{BUILD_LINE} #2": Ran{ code = 2, stderr = "undefined: Other" },
-        "git status --porcelain": Ran{ stdout = " M internal/interp/bindings/gen/boundary_list.go\n" },
+        "{BUILD_LINE} #1": seat\Ran{ code = 1, stderr = "undefined: ObjectJobClaim" },
+        "{BUILD_LINE} #2": seat\Ran{ code = 2, stderr = "undefined: Other" },
+        "git status --porcelain": seat\Ran{ stdout = " M internal/interp/bindings/gen/boundary_list.go\n" },
     }, stamps: {"/c/cmd/magus-utils/boundary_types.go": DIRECTIVES}, calls: mut [<str>]);
     var why = "";
     try {
@@ -1076,10 +1041,10 @@ test "the stamp is the generated-by line, and a file without one has none" {
 test "gate-ready stops the daemon, rebuilds a skewed binary, removes only untracked installs the placed binary would write differently, then builds the graph, digest and proofread binary" {
     final calls = mut [<str>];
     final h = stubHost({
-        "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
-        "magus version -o json": Ran{ stdout = `{"commit": "def456"}` },
-        "git ls-files --others -- .claude/skills .agents/skills .opencode/skills": Ran{ stdout = ".claude/skills/magus-run/SKILL.md\n.claude/skills/fresh/SKILL.md\n.claude/skills/plain/SKILL.md\n.claude/skills/kept/SKILL.md\n" },
-        "git ls-files -- .claude/skills/kept": Ran{ stdout = ".claude/skills/kept/ref.md\n" },
+        "git rev-parse HEAD": seat\Ran{ stdout = "abc123\n" },
+        "magus version -o json": seat\Ran{ stdout = `{"commit": "def456"}` },
+        "git ls-files --others -- .claude/skills .agents/skills .opencode/skills": seat\Ran{ stdout = ".claude/skills/magus-run/SKILL.md\n.claude/skills/fresh/SKILL.md\n.claude/skills/plain/SKILL.md\n.claude/skills/kept/SKILL.md\n" },
+        "git ls-files -- .claude/skills/kept": seat\Ran{ stdout = ".claude/skills/kept/ref.md\n" },
     }, stamps: {
         "/c/.claude/skills/magus-run/SKILL.md": "v1",
         "/fresh/.claude/skills/magus-run/SKILL.md": "v2",
@@ -1139,8 +1104,8 @@ test "each slow step says what it does before it runs, and its result with the t
 test "the build path keeps a clean binary at HEAD and leaves the daemon alone" {
     final calls = mut [<str>];
     final h = stubHost({
-        "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
-        "magus version -o json": Ran{ stdout = `{"commit": "abc123", "version": "v0.5.0"}` },
+        "git rev-parse HEAD": seat\Ran{ stdout = "abc123\n" },
+        "magus version -o json": seat\Ran{ stdout = `{"commit": "abc123", "version": "v0.5.0"}` },
     }, stamps: {}, calls: calls);
     assert\equal(placeBinary(h, dir: "/c", restart: false)[0], want: "kept /c/magus, already built at HEAD", message: "kept");
     assert\equal(calls.indexOf("build /c"), want: null, message: "no build");
@@ -1150,8 +1115,8 @@ test "the build path keeps a clean binary at HEAD and leaves the daemon alone" {
 test "a binary built from uncommitted changes at HEAD is rebuilt" {
     final calls = mut [<str>];
     final h = stubHost({
-        "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
-        "magus version -o json": Ran{ stdout = `{"commit": "abc123", "version": "v0.5.0-dirty"}` },
+        "git rev-parse HEAD": seat\Ran{ stdout = "abc123\n" },
+        "magus version -o json": seat\Ran{ stdout = `{"commit": "abc123", "version": "v0.5.0-dirty"}` },
     }, stamps: {}, calls: calls);
     _ = placeBinary(h, dir: "/c", restart: false);
     assert\equal(calls.indexOf("build /c") != null, want: true, message: "built");
@@ -1167,7 +1132,7 @@ test "install names the projects to install, one run each, or none" {
 }
 
 test "a failed install of a named project stops the build path, naming the command" {
-    final h = stubHost({"magus run install docs": Ran{ code = 1, stderr = "no pnpm" }}, stamps: {}, calls: mut [<str>]);
+    final h = stubHost({"magus run install docs": seat\Ran{ code = 1, stderr = "no pnpm" }}, stamps: {}, calls: mut [<str>]);
     var why = "";
     try {
         _ = placeBinary(h, dir: "/c", restart: false, install: "docs");
@@ -1210,8 +1175,8 @@ test "a seed that cannot copy returns the error" {
 test "the build path with restart installs before it starts the daemon on the new binary" {
     final calls = mut [<str>];
     final h = stubHost({
-        "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
-        "magus version -o json": Ran{ stdout = `{"commit": "abc123", "version": "v0.5.0"}` },
+        "git rev-parse HEAD": seat\Ran{ stdout = "abc123\n" },
+        "magus version -o json": seat\Ran{ stdout = `{"commit": "abc123", "version": "v0.5.0"}` },
     }, stamps: {}, calls: calls);
     final did = placeBinary(h, dir: "/c", restart: true);
     assert\equal(did[did.len() - 1], want: "started the daemon", message: "last");
@@ -1219,7 +1184,7 @@ test "the build path with restart installs before it starts the daemon on the ne
 }
 
 test "a failed install stops the build path, naming the command" {
-    final h = stubHost({"magus run install /": Ran{ code = 1, stderr = "no pnpm" }}, stamps: {}, calls: mut [<str>]);
+    final h = stubHost({"magus run install /": seat\Ran{ code = 1, stderr = "no pnpm" }}, stamps: {}, calls: mut [<str>]);
     var why = "";
     try {
         _ = placeBinary(h, dir: "/c", restart: false);
@@ -1232,8 +1197,8 @@ test "a failed install stops the build path, naming the command" {
 test "gate-ready keeps a binary at HEAD and says so" {
     final calls = mut [<str>];
     final h = stubHost({
-        "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
-        "magus version -o json": Ran{ stdout = `{"commit": "abc123"}` },
+        "git rev-parse HEAD": seat\Ran{ stdout = "abc123\n" },
+        "magus version -o json": seat\Ran{ stdout = `{"commit": "abc123"}` },
     }, stamps: {}, calls: calls);
     assert\equal(gateReady(h, dir: "/c", restart: false)[0], want: "./magus is built at HEAD abc123", message: "kept");
     assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("build")).len(), want: 0, message: "no build");
@@ -1243,9 +1208,9 @@ test "gate-ready keeps a binary at HEAD and says so" {
 test "gate-ready with restart stops the daemon, and ends with it running, saying so" {
     final calls = mut [<str>];
     final h = stubHost({
-        "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
-        "magus version -o json": Ran{ stdout = `{"commit": "abc123"}` },
-        "magus server status": Ran{ code = 1 },
+        "git rev-parse HEAD": seat\Ran{ stdout = "abc123\n" },
+        "magus version -o json": seat\Ran{ stdout = `{"commit": "abc123"}` },
+        "magus server status": seat\Ran{ code = 1 },
     }, stamps: {}, calls: calls);
     final did = gateReady(h, dir: "/c", restart: true);
     assert\equal(did[0], want: "no daemon was running", message: "first");
@@ -1255,9 +1220,9 @@ test "gate-ready with restart stops the daemon, and ends with it running, saying
 
 test "a daemon that will not start fails gate-ready loudly" {
     final h = stubHost({
-        "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
-        "magus version -o json": Ran{ stdout = `{"commit": "abc123"}` },
-        "magus server start": Ran{ code = 1, stderr = "no socket" },
+        "git rev-parse HEAD": seat\Ran{ stdout = "abc123\n" },
+        "magus version -o json": seat\Ran{ stdout = `{"commit": "abc123"}` },
+        "magus server start": seat\Ran{ code = 1, stderr = "no socket" },
     }, stamps: {}, calls: mut [<str>]);
     var why = "";
     try {
@@ -1270,9 +1235,9 @@ test "a daemon that will not start fails gate-ready loudly" {
 
 test "a failed graph build stops gate-ready, naming the command" {
     final h = stubHost({
-        "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
-        "magus version -o json": Ran{ stdout = `{"commit": "abc123"}` },
-        "magus graph build": Ran{ code = 1, stderr = "boom" },
+        "git rev-parse HEAD": seat\Ran{ stdout = "abc123\n" },
+        "magus version -o json": seat\Ran{ stdout = `{"commit": "abc123"}` },
+        "magus graph build": seat\Ran{ code = 1, stderr = "boom" },
     }, stamps: {}, calls: mut [<str>]);
     var why = "";
     try {
@@ -1285,9 +1250,9 @@ test "a failed graph build stops gate-ready, naming the command" {
 
 test "a failed proofread build stops gate-ready, naming the command" {
     final h = stubHost({
-        "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
-        "magus version -o json": Ran{ stdout = `{"commit": "abc123"}` },
-        "magus run proofread-build libs/proofread": Ran{ code = 1, stderr = "no compiler" },
+        "git rev-parse HEAD": seat\Ran{ stdout = "abc123\n" },
+        "magus version -o json": seat\Ran{ stdout = `{"commit": "abc123"}` },
+        "magus run proofread-build libs/proofread": seat\Ran{ code = 1, stderr = "no compiler" },
     }, stamps: {}, calls: mut [<str>]);
     var why = "";
     try {
@@ -1355,7 +1320,7 @@ test "explicit recovery permits a dirty tree without accepting another revision"
 
 test "a failed harness installation stops bootstrap before restarting the daemon" {
     final calls = mut [<str>];
-    final h = stubHost({"magus buzz hack/dev/bootstrap-harnesses.buzz": Ran{code = 1, stderr = "local conflict"}}, stamps: {}, calls: calls);
+    final h = stubHost({"magus buzz hack/dev/bootstrap-harnesses.buzz": seat\Ran{code = 1, stderr = "local conflict"}}, stamps: {}, calls: calls);
     var why = "";
     try { _ = placeBinary(h, dir: "/c", restart: true, install: "none"); }
     catch (err: any) { why = "{err}"; }
@@ -1365,15 +1330,15 @@ test "a failed harness installation stops bootstrap before restarting the daemon
 
 test "a current binary with no dependencies still installs every harness" {
     final calls = mut [<str>];
-    final h = stubHost({"git rev-parse HEAD": Ran{stdout = "abc123\n"},
-        "magus version -o json": Ran{stdout = `{"commit":"abc123","version":"v0.5.0"}`}}, stamps: {}, calls: calls);
+    final h = stubHost({"git rev-parse HEAD": seat\Ran{stdout = "abc123\n"},
+        "magus version -o json": seat\Ran{stdout = `{"commit":"abc123","version":"v0.5.0"}`}}, stamps: {}, calls: calls);
     _ = placeBinary(h, dir: "/c", install: "none");
     assert\equal(calls.filter(fun (index: int, line: str) > bool => line == "magus buzz hack/dev/bootstrap-harnesses.buzz").len(), want: 1, message: "exactly one complete installation");
 }
 
 final ROWS = `{"jobs":[{"id":"merged-work","state":"running","checkout_root":"/r","worktree":{"base":"b0"}},{"id":"done","state":"exited","checkout_root":"/x","worktree":{"base":"b0"}}]}`;
 
-fun adoptOf(answers: {str: Ran}, calls: mut [str], did: mut [str]) > result\Result::<bool> {
+fun adoptOf(answers: {str: seat\Ran}, calls: mut [str], did: mut [str]) > result\Result::<bool> {
     final h = stubHost(answers, stamps: {}, calls: calls);
     return adopt(h, dir: "/c", onto: "feat", did: did, install: "none");
 }
@@ -1381,7 +1346,7 @@ fun adoptOf(answers: {str: Ran}, calls: mut [str], did: mut [str]) > result\Resu
 test "adopt refuses a dirty tree and moves nothing" {
     final calls = mut [<str>];
     final did = mut [<str>];
-    final res = adoptOf({"git status --porcelain": Ran{ stdout = " M a.go\n" }}, calls: calls, did: did);
+    final res = adoptOf({"git status --porcelain": seat\Ran{ stdout = " M a.go\n" }}, calls: calls, did: did);
     assert\isTrue(res.error != null, message: "refused");
     assert\isTrue(res.error!.message.indexOf("uncommitted change") != null, message: "names the reason");
     assert\equal(calls.indexOf("git merge --ff-only bbb"), want: null, message: "no move");
@@ -1392,9 +1357,9 @@ test "adopt refuses a move that is not a fast-forward and resets nothing" {
     final calls = mut [<str>];
     final did = mut [<str>];
     final res = adoptOf({
-        "git rev-parse --verify feat^\{commit}": Ran{ stdout = "bbb\n" },
-        "git rev-parse HEAD": Ran{ stdout = "aaa\n" },
-        "git merge-base --is-ancestor HEAD bbb": Ran{ code = 1 },
+        "git rev-parse --verify feat^\{commit}": seat\Ran{ stdout = "bbb\n" },
+        "git rev-parse HEAD": seat\Ran{ stdout = "aaa\n" },
+        "git merge-base --is-ancestor HEAD bbb": seat\Ran{ code = 1 },
     }, calls: calls, did: did);
     assert\isTrue(res.error != null, message: "refused");
     assert\isTrue(res.error!.message.indexOf("not a fast-forward") != null, message: "names the reason");
@@ -1406,10 +1371,10 @@ test "adopt fast-forwards, places the binary, installs, then settles rows" {
     final calls = mut [<str>];
     final did = mut [<str>];
     final res = adoptOf({
-        "git rev-parse --verify feat^\{commit}": Ran{ stdout = "bbbbbbbbbbbbbbbb\n" },
-        "git rev-parse HEAD": Ran{ stdout = "aaaaaaaaaaaaaaaa\n" },
-        "magus ls jobs -o json": Ran{ stdout = `{"jobs":[]}` },
-        "magus job prune": Ran{ stdout = "ended 2 job(s)\n" },
+        "git rev-parse --verify feat^\{commit}": seat\Ran{ stdout = "bbbbbbbbbbbbbbbb\n" },
+        "git rev-parse HEAD": seat\Ran{ stdout = "aaaaaaaaaaaaaaaa\n" },
+        "magus ls jobs -o json": seat\Ran{ stdout = `{"jobs":[]}` },
+        "magus job prune": seat\Ran{ stdout = "ended 2 job(s)\n" },
     }, calls: calls, did: did);
     assert\isTrue(res.error == null, message: "adopted");
     assert\equal(did[0], want: "fast-forwarded /c from aaaaaaaaaaaa to feat (bbbbbbbbbbbb)", message: "moved");
@@ -1423,8 +1388,8 @@ test "adopt at the target moves nothing and says so" {
     final calls = mut [<str>];
     final did = mut [<str>];
     _ = adoptOf({
-        "git rev-parse --verify feat^\{commit}": Ran{ stdout = "bbbbbbbbbbbbbbbb\n" },
-        "git rev-parse HEAD": Ran{ stdout = "bbbbbbbbbbbbbbbb\n" },
+        "git rev-parse --verify feat^\{commit}": seat\Ran{ stdout = "bbbbbbbbbbbbbbbb\n" },
+        "git rev-parse HEAD": seat\Ran{ stdout = "bbbbbbbbbbbbbbbb\n" },
     }, calls: calls, did: did);
     assert\equal(did[0], want: "already at feat (bbbbbbbbbbbb)", message: "said");
     assert\equal(calls.indexOf("git merge --ff-only bbbbbbbbbbbbbbbb"), want: null, message: "no move");
@@ -1434,8 +1399,8 @@ test "a running row whose head is already in the target is ended" {
     final calls = mut [<str>];
     final did = mut [<str>];
     final h = stubHost({
-        "magus ls jobs -o json": Ran{ stdout = ROWS },
-        "/r: git rev-parse HEAD": Ran{ stdout = "h1h1h1h1h1h1h1h1\n" },
+        "magus ls jobs -o json": seat\Ran{ stdout = ROWS },
+        "/r: git rev-parse HEAD": seat\Ran{ stdout = "h1h1h1h1h1h1h1h1\n" },
     }, stamps: {}, calls: calls);
     final kept = endMergedRows(h, dir: "/c", onto: "bbb", did: did);
     assert\isTrue(kept.error == null, message: "settled");
@@ -1449,19 +1414,19 @@ test "a running row not yet in the target, at its base, or unreadable stays runn
     final calls = mut [<str>];
     final did = mut [<str>];
     final notYet = stubHost({
-        "magus ls jobs -o json": Ran{ stdout = ROWS },
-        "/r: git rev-parse HEAD": Ran{ stdout = "h1\n" },
-        "/r: git merge-base --is-ancestor h1 bbb": Ran{ code = 1 },
+        "magus ls jobs -o json": seat\Ran{ stdout = ROWS },
+        "/r: git rev-parse HEAD": seat\Ran{ stdout = "h1\n" },
+        "/r: git merge-base --is-ancestor h1 bbb": seat\Ran{ code = 1 },
     }, stamps: {}, calls: calls);
     assert\equal(endMergedRows(notYet, dir: "/c", onto: "bbb", did: did).value!, want: ["merged-work (its head is not in the target yet)"], message: "not yet");
     final atBase = stubHost({
-        "magus ls jobs -o json": Ran{ stdout = ROWS },
-        "/r: git rev-parse HEAD": Ran{ stdout = "b0\n" },
+        "magus ls jobs -o json": seat\Ran{ stdout = ROWS },
+        "/r: git rev-parse HEAD": seat\Ran{ stdout = "b0\n" },
     }, stamps: {}, calls: calls);
     assert\equal(endMergedRows(atBase, dir: "/c", onto: "bbb", did: did).value!, want: ["merged-work (it has committed nothing yet)"], message: "at base");
     final gone = stubHost({
-        "magus ls jobs -o json": Ran{ stdout = ROWS },
-        "/r: git rev-parse HEAD": Ran{ code = 128, stderr = "not a git repository" },
+        "magus ls jobs -o json": seat\Ran{ stdout = ROWS },
+        "/r: git rev-parse HEAD": seat\Ran{ code = 128, stderr = "not a git repository" },
     }, stamps: {}, calls: calls);
     assert\equal(endMergedRows(gone, dir: "/c", onto: "bbb", did: did).value!, want: ["merged-work (its checkout /r cannot be read)"], message: "unreadable");
     assert\equal(calls.indexOf("magus job exit merged-work"), want: null, message: "none ended");
@@ -1471,45 +1436,12 @@ test "a row that will not end fails loudly" {
     final calls = mut [<str>];
     final did = mut [<str>];
     final h = stubHost({
-        "magus ls jobs -o json": Ran{ stdout = ROWS },
-        "/r: git rev-parse HEAD": Ran{ stdout = "h1\n" },
-        "magus job exit merged-work": Ran{ code = 1, stderr = "holds uncommitted work" },
+        "magus ls jobs -o json": seat\Ran{ stdout = ROWS },
+        "/r: git rev-parse HEAD": seat\Ran{ stdout = "h1\n" },
+        "magus job exit merged-work": seat\Ran{ code = 1, stderr = "holds uncommitted work" },
     }, stamps: {}, calls: calls);
     final res = endMergedRows(h, dir: "/c", onto: "bbb", did: did);
     assert\isTrue(res.error != null and res.error!.message.indexOf("holds uncommitted work") != null, message: "named");
-}
-
-test "a seated line pipes status --wait into the quoted run under pipefail" {
-    assert\equal(seatedLine("/c/magus", argv: ["/c/magus", "run", "install", "it's"]), want: "set -o pipefail; '/c/magus' status --wait | '/c/magus' 'run' 'install' 'it'\\''s'", message: "line");
-}
-
-test "a seated run says what it waits on and for how long, then runs it" {
-    final calls = mut [<str>];
-    final said = mut [<str>];
-    final h = stubHostSaying({}, stamps: {}, calls: calls, said: said);
-    final ran = seatedRun(h, dir: "/c", bin: "magus", args: ["run", "install", "docs"]);
-    assert\equal(ran.error == null, want: true, message: "no error");
-    assert\equal(said, want: ["waiting for the build budget to seat `magus run install docs` in /c; it gives up after 30m"], message: "said");
-    assert\equal(calls, want: ["magus run install docs"], message: "ran once, after saying");
-}
-
-test "a seated run that exits 75 hands back the run's own code" {
-    final h = stubHost({"magus run install docs": Ran{ code = 75, stderr = "MGS3009" }}, stamps: {}, calls: mut [<str>]);
-    final ran = seatedRun(h, dir: "/c", bin: "magus", args: ["run", "install", "docs"]);
-    assert\equal(ran.value!.code, want: 75, message: "code");
-}
-
-test "a seated run past the bound fails loudly, naming who holds the budget" {
-    final calls = mut [<str>];
-    final h = stubHost({
-        "magus run go-build .": Ran{ code = 124, stderr = "the pipe was stopped at the bound." },
-        "magus status": Ran{ stdout = "held by lint (15.9 GiB) in /other\n" },
-    }, stamps: {}, calls: calls);
-    final ran = seatedRun(h, dir: "/c", bin: "magus", args: ["run", "go-build", "."]);
-    assert\equal(ran.value == null, want: true, message: "no value");
-    assert\equal(ran.error!.message.indexOf("gave up after 30m") != null, want: true, message: ran.error!.message);
-    assert\equal(ran.error!.message.indexOf("held by lint (15.9 GiB) in /other") != null, want: true, message: ran.error!.message);
-    assert\equal(calls, want: ["magus run go-build .", "magus status"], message: "run, then the holders");
 }
 
 test "the build waits for a seat before it compiles" {

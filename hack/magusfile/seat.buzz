@@ -1,0 +1,112 @@
+// A magus run held behind `status --wait`, so a budget another repo
+// holds delays the run instead of refusing it with MGS3009.
+
+import "result";
+import "assert";
+
+// Ran is one command's result, what a stubbed Host answers.
+export object Ran {
+    stdout: str = "",
+    stderr: str = "",
+    code: int = 0,
+}
+
+// status --wait takes no deadline, so the pipe's process group is what
+// the bound stops.
+export final BOUND_MS = 1800000;
+
+// The exit code `magus run --timeout` documents.
+export final TIMED_OUT = 124;
+
+// shellQuote is word as one POSIX shell word.
+export fun shellQuote(word: str) > str {
+    return "'" + word.replace("'", with: "'\\''") + "'";
+}
+
+// line is `status --wait | <argv>` as a shell line. status holds
+// the run until the budget can seat it, then reserves the seat for it.
+// pipefail keeps a failed status from reading as the run's exit code.
+export fun line(statusBin: str, argv: [str]) > str {
+    final words = argv.map(fun (index: int, word: str) > str => shellQuote(word));
+    return "set -o pipefail; {shellQuote(statusBin)} status --wait | {words.join(" ")}";
+}
+
+// run runs a magus run behind status --wait through seated. It says what
+// it waits on and for how long. Past the bound it asks holders who has
+// the budget and returns an error naming them; any other exit code is
+// the run's own.
+export fun run(
+    say: fun (line: str) > void,
+    seated: fun (dir: str, bin: str, args: [str]) > Ran !> any,
+    holders: fun () > Ran !> any,
+    dir: str,
+    bin: str,
+    args: [str],
+) > result\Result::<Ran> {
+    final what = if (bin == "magus") "magus {args.join(" ")}" else "{bin} {args.join(" ")}";
+    say("waiting for the build budget to seat `{what}` in {dir}; it gives up after {BOUND_MS / 60000}m");
+    try {
+        final ran = seated(dir, bin: bin, args: args);
+        if (ran.code != TIMED_OUT) {
+            return result\ok::<Ran>(ran);
+        }
+        final held = holders();
+        return result\fail::<Ran>("bootstrap-checkout: gave up after {BOUND_MS / 60000}m: `{what}` in {dir} had no seat or did not finish. {ran.stderr}\nthe build budget is held by:\n{held.stdout.trim()}{held.stderr.trim()}");
+    } catch (err: any) {
+        return result\caught::<Ran>(err, doing: "bootstrap-checkout: {what}");
+    }
+}
+
+test "a seated line pipes status --wait into the quoted run under pipefail" {
+    assert\equal(line("/c/magus", argv: ["/c/magus", "run", "install", "it's"]), want: "set -o pipefail; '/c/magus' status --wait | '/c/magus' 'run' 'install' 'it'\\''s'", message: "line");
+}
+
+test "a seated run says what it waits on and for how long, then runs it" {
+    final calls = mut [<str>];
+    final said = mut [<str>];
+    final ran = run(
+        fun (text: str) > void { said.append(text); },
+        fun (dir: str, bin: str, args: [str]) > Ran !> any {
+            calls.append(args.join(" "));
+            return Ran{};
+        },
+        fun () > Ran !> any => Ran{},
+        dir: "/c",
+        bin: "magus",
+        args: ["run", "install", "docs"],
+    );
+    assert\equal(ran.error == null, want: true, message: "no error");
+    assert\equal(said, want: ["waiting for the build budget to seat `magus run install docs` in /c; it gives up after 30m"], message: "said");
+    assert\equal(calls, want: ["run install docs"], message: "ran once, after saying");
+}
+
+test "a seated run that exits 75 hands back the run's own code" {
+    final ran = run(
+        fun (text: str) > void {},
+        fun (dir: str, bin: str, args: [str]) > Ran !> any => Ran{ code = 75, stderr = "MGS3009" },
+        fun () > Ran !> any => Ran{},
+        dir: "/c",
+        bin: "magus",
+        args: ["run", "install", "docs"],
+    );
+    assert\equal(ran.value!.code, want: 75, message: "code");
+}
+
+test "a seated run past the bound fails loudly, naming who holds the budget" {
+    final asked = mut [<str>];
+    final ran = run(
+        fun (text: str) > void {},
+        fun (dir: str, bin: str, args: [str]) > Ran !> any => Ran{ code = 124, stderr = "the pipe was stopped at the bound." },
+        fun () > Ran !> any {
+            asked.append("status");
+            return Ran{ stdout = "held by lint (15.9 GiB) in /other\n" };
+        },
+        dir: "/c",
+        bin: "magus",
+        args: ["run", "go-build", "."],
+    );
+    assert\equal(ran.value == null, want: true, message: "no value");
+    assert\equal(ran.error!.message.indexOf("gave up after 30m") != null, want: true, message: ran.error!.message);
+    assert\equal(ran.error!.message.indexOf("held by lint (15.9 GiB) in /other") != null, want: true, message: ran.error!.message);
+    assert\equal(asked, want: ["status"], message: "asked the holders once");
+}

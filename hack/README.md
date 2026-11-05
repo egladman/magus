@@ -179,6 +179,7 @@ Targets import these; each runs through its target rather than by hand.
 | `hack/magusfile/releases.buzz` | which modules version independently, the versions each may move to, release tags, the release signature check and the release-index publish |
 | `hack/magusfile/ruledocs.buzz` | the guard-rule reference: one page per rule the running binary enforces, plus the index |
 | `hack/magusfile/run-golangci.buzz` | the custom golangci-lint build run with the workspace config, and the lib-module lint that shares it |
+| `hack/magusfile/seat.buzz` | a magus run held behind `status --wait` so a busy build budget delays it, with the error past the bound that names the holders |
 | `hack/magusfile/toolchain.buzz` | installed toolchain versions against the ones upstream tagged |
 | `hack/magusfile/toolchain-policy.buzz` | the version windows the workspace requires of the binaries its spells drive |
 
