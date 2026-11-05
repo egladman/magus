@@ -17,7 +17,7 @@ import (
 // collectLocal builds a LocalCollect provider and returns a Collector over its in-process
 // ManualReader, so a test can record through the real Provider methods and read the raw
 // metricdata back without any network hop.
-func collectLocal(t *testing.T) (observability.Provider, *Collector) {
+func collectLocal(t *testing.T) (observability.Provider, *Collector) { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	t.Helper()
 	p, err := New(context.Background(), observability.Config{LocalCollect: true, ServiceName: "magus-test"})
 	require.NoError(t, err)

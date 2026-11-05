@@ -17,7 +17,7 @@ func checkDigest(d digest.Digest) error {
 // ctxReader stops a long blob copy when ctx is done. libs/oci keeps its own for
 // VerifyBlob; exporting one would add API for a three-line type.
 type ctxReader struct {
-	ctx context.Context
+	ctx context.Context //nolint:containedctx // class b: io.Reader has no ctx parameter; no benchmark or optimization: comment (62823db95)
 	r   io.Reader
 }
 

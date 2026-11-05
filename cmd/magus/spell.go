@@ -745,7 +745,7 @@ func registryCredential(ctx context.Context, spells config.SpellsConfig, host st
 // spellVCS resolves the VCS that holds dir, with the workspace's VCS options when a
 // workspace loads. A tree no VCS answers for is an error: packing every file on disk
 // would make the digest depend on the machine.
-func spellVCS(ctx context.Context, root, dir string) (types.VCSDriver, error) {
+func spellVCS(ctx context.Context, root, dir string) (types.VCSDriver, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	opts := types.VCSOptions{}
 	if ws, err := inspectWorkspace(ctx, root); err == nil {
 		opts = ws.VCSOptions()

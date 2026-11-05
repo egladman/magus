@@ -115,7 +115,7 @@ func Aggregate(rm metricdata.ResourceMetrics, at time.Time) *metricsv1.Snapshot 
 }
 
 // findMetric returns the first data aggregation named name across every scope, or (nil, false).
-func findMetric(rm metricdata.ResourceMetrics, name string) (metricdata.Aggregation, bool) {
+func findMetric(rm metricdata.ResourceMetrics, name string) (metricdata.Aggregation, bool) { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	for _, sm := range rm.ScopeMetrics {
 		for _, m := range sm.Metrics {
 			if m.Name == name {

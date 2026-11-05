@@ -50,7 +50,7 @@ func TestBuzzEngine_NewSession(t *testing.T) {
 	require.NoError(t, err)
 	defer s.Close()
 
-	require.NoError(t, s.DoString(`var x: int = 1;`))
+	require.NoError(t, s.DoString(t.Context(), `var x: int = 1;`))
 }
 
 func TestBuzzEngine_GetSetGlobal(t *testing.T) {
@@ -239,18 +239,14 @@ func benchSource(b *testing.B, eng engine.Engine, prog src) {
 	}
 	defer func() { _ = sess.Close() }()
 	if prog.setup != "" {
-		if err := sess.DoString(prog.setup); err != nil {
+		if err := sess.DoString(b.Context(), prog.setup); err != nil {
 			b.Fatalf("setup: %v", err)
 		}
-	}
-	fn, err := sess.LoadString(prog.hot)
-	if err != nil {
-		b.Fatalf("load hot: %v", err)
 	}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := sess.Call(engine.CallParams{Fn: fn}); err != nil {
+		if err := sess.DoString(b.Context(), prog.hot); err != nil {
 			b.Fatalf("call: %v", err)
 		}
 	}

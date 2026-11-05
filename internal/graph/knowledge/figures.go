@@ -123,7 +123,7 @@ func namespaceCall(n ast.Node, ns string) (*ast.CallExpr, string, bool) {
 
 // labeledArg returns the argument passed under label, or the first positional argument
 // for label "".
-func labeledArg(ce *ast.CallExpr, label string) (ast.Node, bool) {
+func labeledArg(ce *ast.CallExpr, label string) (ast.Node, bool) { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	for i, arg := range ce.Args {
 		name := ""
 		if i < len(ce.ArgNames) {

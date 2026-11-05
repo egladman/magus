@@ -23,12 +23,12 @@ type ttyBuf struct {
 func (*ttyBuf) Fd() uintptr { return 2 }
 
 // terminal returns a Probe describing a terminal of the given size.
-func terminal(width, height int) Probe {
+func terminal(width, height int) presetProbe {
 	return presetProbe{isTTY: true, width: width, height: height}
 }
 
 // notATerminal returns a Probe that reports every descriptor as a pipe.
-func notATerminal() Probe { return presetProbe{} }
+func notATerminal() presetProbe { return presetProbe{} }
 
 func TestRegionDisabledWhenHeightIsZero(t *testing.T) {
 	t.Parallel()

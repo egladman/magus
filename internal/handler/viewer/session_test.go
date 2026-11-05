@@ -22,7 +22,7 @@ import (
 
 // serveSessions mounts a Service over a real session store seeded with events, behind a real
 // transport so the RPC sees a loopback peer the way the server's does.
-func serveSessions(t *testing.T, events []sessions.LoadEvent) viewerv1alpha1connect.ViewerServiceClient {
+func serveSessions(t *testing.T, events []sessions.LoadEvent) viewerv1alpha1connect.ViewerServiceClient { //nolint:ireturn // the generated client type is an interface; the implementation is chosen at runtime
 	t.Helper()
 	testkit.Isolate(t)
 	root := t.TempDir()

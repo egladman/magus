@@ -52,7 +52,7 @@ func (c *captureTransport) snapshot() []byte {
 // newCaptureReader builds an SDK metric Reader that "exports" through a captureTransport,
 // yielding standard OTLP protobuf without a network hop. The long interval means it only
 // produces bytes when explicitly flushed; Snapshot drives that via MeterProvider.ForceFlush.
-func newCaptureReader(ctx context.Context) (sdkmetric.Reader, *captureTransport, error) {
+func newCaptureReader(ctx context.Context) (sdkmetric.Reader, *captureTransport, error) { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	capT := &captureTransport{}
 	exp, err := otlpmetrichttp.New(ctx,
 		otlpmetrichttp.WithEndpoint("127.0.0.1:4318"), // never dialed; the transport short-circuits

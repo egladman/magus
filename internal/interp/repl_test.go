@@ -31,10 +31,10 @@ func (t *orderedTable) String() string            { return "table" }
 func (t *orderedTable) AsString() (string, bool)  { return "", false }
 func (t *orderedTable) AsNumber() (float64, bool) { return 0, false }
 func (t *orderedTable) AsBool() bool              { return true }
-func (t *orderedTable) AsTable() (engine.Table, bool) {
+func (t *orderedTable) AsTable() (engine.Table, bool) { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	return t, true
 }
-func (t *orderedTable) AsFunction() (engine.Value, bool) { return nil, false }
+func (t *orderedTable) AsFunction() (engine.Value, bool) { return nil, false } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 
 func (t *orderedTable) set(k, v engine.Value) {
 	t.keys = append(t.keys, k)
@@ -44,11 +44,11 @@ func (t *orderedTable) set(k, v engine.Value) {
 func (t *orderedTable) RawSetString(key string, v engine.Value) {
 	t.set(engine.StringValue(key), v)
 }
-func (t *orderedTable) RawGetString(string) engine.Value { return engine.NilValue }
+func (t *orderedTable) RawGetString(string) engine.Value { return engine.NilValue } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 func (t *orderedTable) RawSetInt(key int, v engine.Value) {
 	t.set(engine.NumberValue(float64(key)), v)
 }
-func (t *orderedTable) RawGetInt(int) engine.Value { return engine.NilValue }
+func (t *orderedTable) RawGetInt(int) engine.Value { return engine.NilValue } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 func (t *orderedTable) ForEach(fn func(k, v engine.Value)) {
 	for i := range t.keys {
 		fn(t.keys[i], t.vals[i])
@@ -115,19 +115,20 @@ func (s *scriptedSession) Close() error { return nil }
 func (s *scriptedSession) SetGlobal(name string, v engine.Value) {
 	s.globals[name] = v
 }
-func (s *scriptedSession) GetGlobal(name string) engine.Value {
+func (s *scriptedSession) GetGlobal(name string) engine.Value { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	if v, ok := s.globals[name]; ok {
 		return v
 	}
 	return engine.NilValue
 }
-func (s *scriptedSession) NewTable() engine.Table                  { return &orderedTable{} }
-func (s *scriptedSession) LoadString(string) (engine.Value, error) { return engine.NilValue, nil }
-func (s *scriptedSession) DoString(code string) error {
+func (s *scriptedSession) NewTable() engine.Table { return &orderedTable{} } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
+func (s *scriptedSession) LoadString(context.Context, string) (engine.Value, error) { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
+	return engine.NilValue, nil
+}
+func (s *scriptedSession) DoString(_ context.Context, code string) error {
 	s.doStrings = append(s.doStrings, code)
 	return s.doErr
 }
-func (s *scriptedSession) Call(engine.CallParams) error { return nil }
 
 // Drivers satisfies engine.DriversProvider so replDrivers picks them up.
 func (s *scriptedSession) Drivers() []engine.ReplDriver { return s.drivers }

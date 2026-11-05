@@ -236,19 +236,19 @@ func TestWithInvocationJournalPrefersTheForwardedLease(t *testing.T) {
 // the server's own.
 func TestWithInvocationJournalReadsTheEnvironmentOnlyWhenNothingStampedALease(t *testing.T) {
 	for name, tc := range map[string]struct {
-		ctx  context.Context
-		want string
+		stamp func(context.Context) context.Context
+		want  string
 	}{
-		"unstamped":         {ctx: context.Background(), want: "fleet/local"},
-		"stamped with none": {ctx: types.WithJobLease(context.Background(), "")},
-		"the wire lied":     {ctx: types.WithJobLease(context.Background(), "not a lease id")},
+		"unstamped":         {stamp: func(ctx context.Context) context.Context { return ctx }, want: "fleet/local"},
+		"stamped with none": {stamp: func(ctx context.Context) context.Context { return types.WithJobLease(ctx, "") }},
+		"the wire lied":     {stamp: func(ctx context.Context) context.Context { return types.WithJobLease(ctx, "not a lease id") }},
 	} {
 		t.Run(name, func(t *testing.T) {
 			testkit.Isolate(t)
 			t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/local")
 			root := t.TempDir()
 
-			handlers := withInvocationJournal(tc.ctx, nil, root, "run", []string{"build"})
+			handlers := withInvocationJournal(tc.stamp(t.Context()), nil, root, "run", []string{"build"})
 			require.Len(t, handlers, 1)
 			emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
 

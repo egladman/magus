@@ -81,14 +81,14 @@ func TestProbeServerVersionReportsALiveServer(t *testing.T) {
 	defer snapshotGlobals()()
 	// Let proc pick a socket under SockDir; a t.TempDir() path can exceed the unix
 	// socket path length limit on macOS.
-	srv, err := proc.New(proc.Options{
+	srv, err := proc.New(t.Context(), proc.Options{
 		Version: "v9.9.9",
 		Handler: func(context.Context, []string) error { return nil },
 		Server:  func() *types.StatusServer { return &types.StatusServer{PID: 1} },
 	})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 	globalCfg.Server.Address = srv.Addr()
 
 	assert.Equal(t, serverProbe{version: "v9.9.9"}, probeServerVersion(context.Background()))

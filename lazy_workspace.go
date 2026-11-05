@@ -170,7 +170,7 @@ func (l *LazyWorkspace) Workspace(ctx context.Context, cfg types.WorkspaceConfig
 // opens the workspace for its remote.
 type lazyRemoteShards struct{ ws *LazyWorkspace }
 
-func (r lazyRemoteShards) backing(ctx context.Context) (knowledge.RemoteShards, error) {
+func (r lazyRemoteShards) backing(ctx context.Context) (knowledge.RemoteShards, error) { //nolint:ireturn // the workspace backing is chosen at runtime
 	m, err := r.ws.Magus(ctx)
 	if err != nil {
 		return nil, err
