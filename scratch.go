@@ -242,7 +242,7 @@ func (b *baseProfiles) read(ctx context.Context, c coverageSource) (profileRead,
 	case !errors.Is(err, fs.ErrNotExist):
 		return profileRead{}, fmt.Errorf("change risk: the kept base profile: %w", err)
 	}
-	slog.WarnContext(ctx, "change risk: no coverage profile is kept for the base, so its target runs there once",
+	slog.WarnContext(ctx, "no coverage profile is kept for the base, so its target runs there once",
 		slog.String("base", b.commit), slog.String("command", c.command()))
 	data, reason, err := b.runAtBase(ctx, c)
 	if err != nil || reason != "" {
@@ -266,25 +266,41 @@ func (b *baseProfiles) runAtBase(ctx context.Context, c coverageSource) ([]byte,
 		b.dir = dir
 		if err != nil {
 			err = fmt.Errorf("change risk: scratch copy: %w", err)
-			return nil, "", stopped(ctx, "change risk", b.start, "copying base "+b.commit, err)
+			return nil, "", stopped(ctx, b.start, "copying base "+b.commit, err)
 		}
 	}
-	res, err := b.run(ctx, b.dir, c)
+	res, runErr := b.run(ctx, b.dir, c)
 	switch {
 	case ctx.Err() != nil:
-		return nil, "", stopped(ctx, "change risk", b.start, doing, ctx.Err())
-	case errors.Is(err, errNoSeat):
-		return nil, "", fmt.Errorf("change risk: %w", err)
-	case err != nil:
-		return nil, err.Error(), nil
-	case !res.passed:
-		return nil, strings.TrimSuffix(fmt.Sprintf("a test fails at base %s: `%s`: %s", b.commit, c.command(), res.failure), ": "), nil
+		return nil, "", stopped(ctx, b.start, doing, ctx.Err())
+	case errors.Is(runErr, errNoSeat):
+		return nil, "", fmt.Errorf("change risk: %w", runErr)
 	}
-	data, err := os.ReadFile(filepath.Join(b.dir, filepath.FromSlash(c.project), filepath.FromSlash(c.coverage.Profile)))
-	if err != nil {
-		return nil, fmt.Sprintf("`%s` at base %s left no %s", c.command(), b.commit, c.coverage.Profile), nil
+	if reason := b.unmeasured(c, res, runErr); reason != "" {
+		return nil, reason, nil
 	}
-	return data, "", nil
+	data, reason := b.left(c)
+	return data, reason, nil
+}
+
+// unmeasured is why a finished run of c at base measured nothing, or "".
+func (b *baseProfiles) unmeasured(c coverageSource, res testRun, runErr error) string {
+	if runErr != nil {
+		return runErr.Error()
+	}
+	if res.passed {
+		return ""
+	}
+	return strings.TrimSuffix(fmt.Sprintf("a test fails at base %s: `%s`: %s", b.commit, c.command(), res.failure), ": ")
+}
+
+// left is the profile c's run left in the base copy, or why there is none.
+func (b *baseProfiles) left(c coverageSource) ([]byte, string) {
+	data, readErr := os.ReadFile(filepath.Join(b.dir, filepath.FromSlash(c.project), filepath.FromSlash(c.coverage.Profile)))
+	if readErr == nil {
+		return data, ""
+	}
+	return nil, fmt.Sprintf("`%s` at base %s left no %s", c.command(), b.commit, c.coverage.Profile)
 }
 
 func (b *baseProfiles) parsed(c coverageSource, data []byte) profileRead {

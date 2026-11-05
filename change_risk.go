@@ -182,11 +182,11 @@ func (m *Magus) ChangeRisk(ctx context.Context, base string) (types.ChangeRisk, 
 	start := time.Now()
 	set, err := m.touchedSince(ctx, base)
 	if err != nil {
-		return types.ChangeRisk{}, stopped(ctx, "change risk", start, "finding the touched functions", err)
+		return types.ChangeRisk{}, stopped(ctx, start, "finding the touched functions", err)
 	}
 	meter, err := m.newRiskMeter(ctx, set, base, start)
 	if err != nil {
-		return types.ChangeRisk{}, stopped(ctx, "change risk", start, "resolving the base", err)
+		return types.ChangeRisk{}, stopped(ctx, start, "resolving the base", err)
 	}
 	defer meter.done()
 	out, err := meter.measure(ctx, set.fns)
@@ -197,14 +197,14 @@ func (m *Magus) ChangeRisk(ctx context.Context, base string) (types.ChangeRisk, 
 	return out, nil
 }
 
-// stopped names what a measure was doing when ctx ended, and how long it ran.
-// A stop never reads as a bare "context canceled". While ctx is live, err
-// passes through.
-func stopped(ctx context.Context, measure string, start time.Time, doing string, err error) error {
+// stopped names what change risk was doing when ctx ended, and how long it
+// ran. A stop never reads as a bare "context canceled". While ctx is live,
+// err passes through.
+func stopped(ctx context.Context, start time.Time, doing string, err error) error {
 	if err == nil || ctx.Err() == nil {
 		return err
 	}
-	return fmt.Errorf("%s: stopped %s after %s: %w", measure, doing, time.Since(start).Round(time.Second), context.Cause(ctx))
+	return fmt.Errorf("change risk: stopped %s after %s: %w", doing, time.Since(start).Round(time.Second), context.Cause(ctx))
 }
 
 // coverageSource is where one project's coverage profile comes from: the
@@ -216,7 +216,7 @@ type coverageSource struct {
 	coverage spells.Coverage
 }
 
-func (c coverageSource) key() string { return c.project + "\x00" + c.coverage.Profile }
+func (c coverageSource) key() string { return fmt.Sprintf("%s\x00%s", c.project, c.coverage.Profile) }
 
 func (c coverageSource) command() string { return fmt.Sprintf("magus run %s %s", c.target, c.project) }
 

@@ -277,10 +277,6 @@ func parsedHunks(body string) []changeset.Hunk {
 	return files[0].Hunks
 }
 
-func delRow(old int) changeset.Row {
-	return changeset.Row{Kind: changeset.KindDel, OldLine: &old}
-}
-
 const riskCommitted = "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -10,1 +10,1 @@\n-\treturn 0\n+\treturn 1\n"
 
 const riskWorking = "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -2,0 +3,2 @@\n+// one\n+// two\n"
@@ -601,7 +597,7 @@ type ProfileTargetSuite struct{ suite.Suite }
 
 func TestProfileTargetSuite(t *testing.T) { suite.Run(t, new(ProfileTargetSuite)) }
 
-func outputsOf(targets map[string]string) *types.Project {
+func projectWriting(targets map[string]string) *types.Project {
 	p := &types.Project{Path: "lib", TargetOutputs: map[string][]types.OutputRef{}}
 	for name, glob := range targets {
 		p.TargetOutputs[name] = []types.OutputRef{{Glob: glob}}
@@ -610,17 +606,17 @@ func outputsOf(targets map[string]string) *types.Project {
 }
 
 func (s *ProfileTargetSuite) TestTheOneTargetDeclaringTheProfileWritesIt() {
-	target, reason := profileTarget(outputsOf(map[string]string{"test": "out/*.lcov", "build": "dist/**"}), "out/a.lcov")
+	target, reason := profileTarget(projectWriting(map[string]string{"test": "out/*.lcov", "build": "dist/**"}), "out/a.lcov")
 	s.Equal([2]string{"test", ""}, [2]string{target, reason})
 }
 
 func (s *ProfileTargetSuite) TestNoTargetDeclaringTheProfileIsAReason() {
-	_, reason := profileTarget(outputsOf(map[string]string{"build": "dist/**"}), "out/a.lcov")
+	_, reason := profileTarget(projectWriting(map[string]string{"build": "dist/**"}), "out/a.lcov")
 	s.Equal("no target of lib declares its coverage profile out/a.lcov as an output", reason)
 }
 
 func (s *ProfileTargetSuite) TestTwoTargetsDeclaringTheProfileIsAReason() {
-	_, reason := profileTarget(outputsOf(map[string]string{"test": "out/**", "cover": "out/a.lcov"}), "out/a.lcov")
+	_, reason := profileTarget(projectWriting(map[string]string{"test": "out/**", "cover": "out/a.lcov"}), "out/a.lcov")
 	s.Equal("targets cover, test of lib each declare its coverage profile out/a.lcov, so which run wrote it is unknown", reason)
 }
 

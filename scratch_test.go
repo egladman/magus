@@ -345,7 +345,7 @@ func (s *FreshProfilesSuite) TestAnotherRunVouchesForNothing() {
 	s.False(s.inRun("run2").vouches(toySource()))
 }
 
-func (s *FreshProfilesSuite) TestAProfileEditedSinceIsNotVouchedFor() {
+func (s *FreshProfilesSuite) TestAProfileEditedSinceGoesUnvouched() {
 	s.Require().NoError(s.inRun("run1").record(toySource()))
 	s.write("SF:" + scratchFile + "\nDA:4,0\nend_of_record\n")
 	s.False(s.inRun("run1").vouches(toySource()))
