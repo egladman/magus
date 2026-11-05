@@ -22,7 +22,7 @@ import (
 // verification or replay is a hit here and a failure in the tally, and a store the
 // backend reports as already present is a put here and neither an upload nor a failure
 // in the tally.
-func InstrumentRemoteBackend(b types.CacheBackend, p remoteOpRecorder) types.CacheBackend { //nolint:ireturn // the implementation is chosen at runtime among several
+func InstrumentRemoteBackend(b types.CacheBackend, p remoteOpRecorder) types.CacheBackend { //nolint:ireturn // types.CacheBackend: b itself, instrumentedBackend or instrumentedPruner
 	if b == nil || p == nil || !p.Enabled() {
 		return b
 	}
