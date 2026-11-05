@@ -615,7 +615,7 @@ func GateCommit(ctx context.Context, v types.BuildVCS, root, scratch, commit str
 // hook's processes do is red. Its output goes to log, each line tagged with the commit
 // gated and its change, or "base" for a commit gated as it stands; a nil log discards
 // it.
-func CommandGate(cmd Command, env HookEnv, log *HookLog) types.Gate { //nolint:ireturn // the implementation is chosen at runtime among several
+func CommandGate(cmd Command, env HookEnv, log *HookLog) commandGate {
 	return commandGate{cmd: cmd, env: env, log: log}
 }
 
@@ -715,7 +715,7 @@ func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.Regener
 // A failing command is an error, auto_resolve and classify_edit aside, since the hook reads only the base,
 // never the change's code. Its environment is a gate's under env, less the box: facts
 // run in dir, the base's own checkout, with the queue's home and caches.
-func CommandFacts(cmd Command, dir string, env HookEnv, log *HookLog) types.BuildFacts { //nolint:ireturn // the implementation is chosen at runtime among several
+func CommandFacts(cmd Command, dir string, env HookEnv, log *HookLog) commandFacts {
 	return commandFacts{cmd: cmd, dir: dir, env: env, log: log}
 }
 
