@@ -691,14 +691,6 @@ export fun commitRegenerated(dir: str, s: stack\BranchStack, regenerate: fun (di
     return git(dir, args: ["rev-parse", "HEAD"]);
 }
 
-// CommitGroup is one recomposed commit: one project's changed paths, plus
-// the declared outputs a target reading one of them produces.
-export object CommitGroup {
-    project: str,
-    paths: [str],
-    notes: [str],
-}
-
 fun claimsOutput(e: magus\FileEntry) > [magus\FileClaim] {
     return e.claims.filter(fun (index: int, c: magus\FileClaim) > bool => c.role == "output" and c.target != "");
 }
@@ -710,73 +702,76 @@ fun readsFor(e: magus\FileEntry, producer: magus\FileClaim) > bool {
     return false;
 }
 
-// ownerOf is the group an entry joins and a note when it fell back. An
-// output joins the first changed source its producer reads; with none, the
-// producer's project, else its own.
-fun ownerOf(e: magus\FileEntry, entries: [magus\FileEntry]) > [str] {
-    final producers = claimsOutput(e);
-    if (e.role != "output" or producers.len() == 0) { return [e.project, ""]; }
-    foreach (p in producers) {
-        foreach (s in entries) {
-            if (s.role != "output" and readsFor(s, producer: p)) { return [s.project, ""]; }
-        }
-    }
-    foreach (p in producers) {
-        foreach (s in entries) {
-            if (s.role != "output" and s.project == p.project) {
-                return [p.project, "{e.path}: no changed source is read by {p.project}:{p.target}, so it joins {p.project}"];
-            }
-        }
-    }
-    return [e.project, "{e.path}: no changed source is read by {producers[0].project}:{producers[0].target}, so it stays in {e.project}"];
+// JobCommit is one recomposed commit: a merged job branch's paths, with the
+// outputs its sources invalidated.
+export object JobCommit {
+    branch: str,
+    paths: [str],
+    notes: [str],
 }
 
-// groupPaths makes one group per project, each output beside its source.
-// A project follows the projects it depends on; others keep path order.
-export fun groupPaths(entries: [magus\FileEntry]) > [CommitGroup] {
-    final keys = mut [<str>];
+fun lastTouch(branches: [str], touched: {str: [str]}, path: str) > int {
+    for (i: int = branches.len() - 1; i >= 0; i = i - 1) {
+        if ((touched[branches[i]] ?? [<str>]).indexOf(path) != null) { return i; }
+    }
+    return -1;
+}
+
+fun firstTouch(branches: [str], touched: {str: [str]}, path: str) > int {
+    for (i: int = 0; i < branches.len(); i = i + 1) {
+        if ((touched[branches[i]] ?? [<str>]).indexOf(path) != null) { return i; }
+    }
+    return -1;
+}
+
+// ownerOf is the branch an entry joins and a note when it fell back. An output
+// joins the first branch that changed a source its producer reads; with none,
+// the last branch that changed it, else the last branch.
+fun ownerOf(e: magus\FileEntry, entries: [magus\FileEntry], branches: [str], touched: {str: [str]}) > [str] {
+    final own = lastTouch(branches, touched: touched, path: e.path);
+    final last = branches[branches.len() - 1];
+    final producers = claimsOutput(e);
+    if (e.role != "output" or producers.len() == 0) {
+        if (own >= 0) { return [branches[own], ""]; }
+        return [last, "{e.path}: no job branch changed it, so it joins {last}"];
+    }
+    var best = -1;
+    foreach (p in producers) {
+        foreach (s in entries) {
+            if (s.role == "output" or !readsFor(s, producer: p)) { continue; }
+            final at = firstTouch(branches, touched: touched, path: s.path);
+            if (at >= 0 and (best < 0 or at < best)) { best = at; }
+        }
+    }
+    if (best >= 0) { return [branches[best], ""]; }
+    var joins = last;
+    if (own >= 0) { joins = branches[own]; }
+    return [joins, "{e.path}: no changed source is read by {producers[0].project}:{producers[0].target}, so it joins {joins}"];
+}
+
+// assignPaths makes one commit per branch that owns a path, in branches order.
+// touched maps a branch to the paths its own commits changed. branches may not
+// be empty.
+export fun assignPaths(entries: [magus\FileEntry], branches: [str], touched: {str: [str]}) > [JobCommit] {
     final paths = mut {<str: mut [str]>};
     final notes = mut {<str: mut [str]>};
-    final deps = mut {<str: [str]>};
+    foreach (b in branches) {
+        paths[b] = mut [<str>];
+        notes[b] = mut [<str>];
+    }
     foreach (e in entries) {
-        final owner = ownerOf(e, entries: entries);
-        final key = owner[0];
-        if (paths[key] == null) {
-            keys.append(key);
-            paths[key] = mut [<str>];
-            notes[key] = mut [<str>];
-        }
-        paths[key]!.append(e.path);
-        if (owner[1] != "") { notes[key]!.append(owner[1]); }
-        if (e.project == key) { deps[key] = e.dependsOn; }
+        final owner = ownerOf(e, entries: entries, branches: branches, touched: touched);
+        paths[owner[0]]!.append(e.path);
+        if (owner[1] != "") { notes[owner[0]]!.append(owner[1]); }
     }
-    final placed = mut [<str>];
-    while (placed.len() < keys.len()) {
-        var pick = "";
-        foreach (k in keys) {
-            if (placed.indexOf(k) != null) { continue; }
-            var ready = true;
-            foreach (d in deps[k] ?? [<str>]) {
-                if (d != k and keys.indexOf(d) != null and placed.indexOf(d) == null) { ready = false; }
-            }
-            if (ready) { pick = k; break; }
-        }
-        if (pick == "") {
-            foreach (k in keys) {
-                if (placed.indexOf(k) == null) { pick = k; break; }
-            }
-        }
-        placed.append(pick);
-    }
-    final acc = mut [<CommitGroup>];
-    foreach (k in placed) {
-        acc.append(CommitGroup{ project = k, paths = paths[k]!, notes = notes[k]! });
+    final acc = mut [<JobCommit>];
+    foreach (b in branches) {
+        if (paths[b]!.len() > 0) { acc.append(JobCommit{ branch = b, paths = paths[b]!, notes = notes[b]! }); }
     }
     return acc;
 }
 
-// CommitWeight is a landed commit's subject and the lines it changed in a
-// group.
+// CommitWeight is a landed commit's subject and the lines it changed.
 export object CommitWeight {
     subject: str,
     lines: int,
@@ -811,7 +806,7 @@ export fun subjectFrom(commits: [CommitWeight], fallback: str) > str {
         ranked.append(pool[best]);
         _ = pool.remove(best);
     }
-    var subject = ranked[0];
+    var subject = capped(ranked[0]);
     for (i: int = 1; i < ranked.len(); i = i + 1) {
         if (subject.len() + 2 + ranked[i].len() <= SUBJECT_MAX) { subject = "{subject}; {ranked[i]}"; }
     }
@@ -822,10 +817,16 @@ fun literal(paths: [str]) > [str] {
     return paths.map(fun (index: int, p: str) > str => ":(literal){p}");
 }
 
-// weightsIn is each commit in range touching paths, oldest first.
-fun weightsIn(dir: str, range: str, paths: [str]) > result\Result::<[CommitWeight]> {
-    final args = mut ["log", "--no-merges", "--reverse", "--format=@@%s", "--numstat", range, "--"];
-    foreach (p in literal(paths)) { args.append(p); }
+fun capped(subject: str) > str {
+    if (subject.len() <= SUBJECT_MAX) { return subject; }
+    return subject.sub(0, len: SUBJECT_MAX - 3) + "...";
+}
+
+// weightsIn is each commit reachable from revs, oldest first. A rev starting
+// with ^ excludes what it reaches.
+fun weightsIn(dir: str, revs: [str]) > result\Result::<[CommitWeight]> {
+    final args = mut ["log", "--no-merges", "--reverse", "--format=@@%s", "--numstat"];
+    foreach (r in revs) { args.append(r); }
     final logged = git(dir, args: args);
     if (logged.error -> err) { return result\Result::<[CommitWeight]>{ error = err }; }
     final acc = mut [<CommitWeight>];
@@ -884,10 +885,19 @@ fun describeAt(dir: str, paths: [str]) > result\Result::<[magus\FileEntry]> {
     }
 }
 
+// jobRevs selects the commits only the branch at position i brought: not the
+// floor's, not an earlier branch's.
+fun jobRevs(branches: [str], i: int, floor: str) > [str] {
+    final revs = mut [branches[i], "^{floor}"];
+    for (j: int = 0; j < i; j = j + 1) { revs.append("^{branches[j]}"); }
+    return revs;
+}
+
 // recompose rewrites HEAD's commits above pushedFloor into one commit per
-// groupPaths group, with no merge left. HEAD's tree stays byte-identical or it
-// fails naming both trees. It returns `<short> <subject>` lines, oldest first.
-export fun recompose(dir: str, base: str, into: str, describe: fun (dir: str, paths: [str]) > result\Result::<[magus\FileEntry]>) > result\Result::<[str]> {
+// merged branch, in branches order, with no merge left. HEAD's tree stays
+// byte-identical or it fails naming both trees. It returns `<short> <subject>`
+// lines, oldest first.
+export fun recompose(dir: str, base: str, into: str, branches: [str], describe: fun (dir: str, paths: [str]) > result\Result::<[magus\FileEntry]>) > result\Result::<[str]> {
     final floorRun = pushedFloor(dir, base: base, into: into);
     if (floorRun.error -> err) { return result\Result::<[str]>{ error = err }; }
     final floor = floorRun.value!;
@@ -901,14 +911,26 @@ export fun recompose(dir: str, base: str, into: str, describe: fun (dir: str, pa
     if (changedRun.error -> err) { return result\Result::<[str]>{ error = err }; }
     final changed = lines(changedRun.value!);
     if (changed.len() == 0) { return result\ok::<[str]>([<str>]); }
+    if (branches.len() == 0) { return result\fail::<[str]>("merge-job-branches: no merged branch to recompose {changed.len()} changed paths into"); }
     final described = describe(dir, paths: changed);
     if (described.error -> err) { return result\Result::<[str]>{ error = err }; }
-    final groups = groupPaths(described.value!);
+    final touched = mut {<str: [str]>};
+    final weights = mut {<str: [CommitWeight]>};
+    foreach (i, b in branches) {
+        final revs = jobRevs(branches, i: i, floor: floor);
+        final named = mut ["log", "--no-merges", "--name-only", "--format="];
+        foreach (r in revs) { named.append(r); }
+        final names = git(dir, args: named);
+        if (names.error -> err) { return result\Result::<[str]>{ error = err }; }
+        touched[b] = lines(names.value!);
+        final own = weightsIn(dir, revs: revs);
+        if (own.error -> err) { return result\Result::<[str]>{ error = err }; }
+        weights[b] = own.value!;
+    }
+    final groups = assignPaths(described.value!, branches: branches, touched: touched);
     final subjects = mut [<str>];
     foreach (g in groups) {
-        final weights = weightsIn(dir, range: "{floor}..{tip}", paths: g.paths);
-        if (weights.error -> err) { return result\Result::<[str]>{ error = err }; }
-        subjects.append(subjectFrom(weights.value!, fallback: "carry the merge resolutions in {g.project}"));
+        subjects.append(capped(subjectFrom(weights[g.branch]!, fallback: "carry the merge resolutions of {g.branch}")));
     }
     final reset = git(dir, args: ["reset", "-q", "--mixed", floor]);
     if (reset.error -> err) { return result\Result::<[str]>{ error = err }; }
@@ -1309,7 +1331,8 @@ export fun main(args: [str]) > void !> any {
             final committed = commitRegenerated(dir, s: merged, regenerate: regenerateWithMagus(plan.base, ready: readyAt));
             if (committed.error -> err) { return result\Result::<bool>{ error = err }; }
             regenerated = committed.value!;
-            final recomposed = recompose(dir, base: plan.base, into: into, describe: describeAt);
+            final landed = merged.layers.map(fun (index: int, l: stack\StackLayer) > str => l.branch);
+            final recomposed = recompose(dir, base: plan.base, into: into, branches: landed, describe: describeAt);
             if (recomposed.error -> err) { return result\Result::<bool>{ error = err }; }
             commits = recomposed.value!;
             // About one merge in five changes the load contract; only those pay for the probe.
@@ -1741,24 +1764,36 @@ fun source(path: str, project: str, dependsOn: [str], reads: [magus\FileClaim]) 
     return magus\FileEntry{ path = path, project = project, role = "source", dependsOn = dependsOn, claims = reads };
 }
 
-test "paths group by project after their dependencies, each output beside the source its producer reads" {
+test "a path goes to the job that changed it, each output beside the first source its producer reads" {
     final catalog = magus\FileClaim{ project = "docs", target = "catalog", role = "source" };
-    final groups = groupPaths([
+    final commits = assignPaths([
         source("docs/guide.md", project: "docs", dependsOn: ["."], reads: [<magus\FileClaim>]),
         magus\FileEntry{ path = "docs/reference/skill.md", project = "docs", role = "output", dependsOn = ["."],
             claims = [magus\FileClaim{ project = "docs", target = "catalog", role = "output" }] },
         magus\FileEntry{ path = "docs/reference/stale.md", project = "docs", role = "output", dependsOn = ["."],
             claims = [magus\FileClaim{ project = "docs", target = "glossary", role = "output" }] },
         source("internal/skills/a/SKILL.md", project: ".", dependsOn: [<str>], reads: [catalog]),
-        source("console/app.ts", project: "console", dependsOn: [<str>], reads: [<magus\FileClaim>]),
-    ]);
+    ], branches: ["docs-job", "skill-job"], touched: {
+        "docs-job": ["docs/guide.md"],
+        "skill-job": ["internal/skills/a/SKILL.md", "docs/guide.md"],
+    });
     final shape = mut [<str>];
-    foreach (g in groups) { shape.append("{g.project}={g.paths.join(",")}"); }
-    assert\equal(shape, want: [".=docs/reference/skill.md,internal/skills/a/SKILL.md", "docs=docs/guide.md,docs/reference/stale.md",
-        "console=console/app.ts"], message: "the skill output joins its source in .; . goes before docs, which depends on it");
-    assert\equal(groups[1].notes, want: ["docs/reference/stale.md: no changed source is read by docs:glossary, so it joins docs"],
+    foreach (g in commits) { shape.append("{g.branch}={g.paths.join(",")}"); }
+    assert\equal(shape, want: ["skill-job=docs/guide.md,docs/reference/skill.md,docs/reference/stale.md,internal/skills/a/SKILL.md"],
+        message: "guide.md goes to the last job to change it; skill.md to the job whose source it reads");
+    assert\equal(commits[0].notes, want: ["docs/reference/stale.md: no changed source is read by docs:glossary, so it joins skill-job"],
         message: "an output no changed source explains says where it went");
-    assert\equal(groups[0].notes, want: [<str>], message: "a matched output needs no note");
+}
+
+test "an unrelated job keeps its own paths" {
+    final commits = assignPaths([
+        source("a.txt", project: ".", dependsOn: [<str>], reads: [<magus\FileClaim>]),
+        source("b.txt", project: ".", dependsOn: [<str>], reads: [<magus\FileClaim>]),
+    ], branches: ["one", "two"], touched: { "one": ["a.txt"], "two": ["b.txt"] });
+    final shape = mut [<str>];
+    foreach (g in commits) { shape.append("{g.branch}={g.paths.join(",")}"); }
+    assert\equal(shape, want: ["one=a.txt", "two=b.txt"], message: "one commit per job, in branch order");
+    assert\equal(commits[0].notes, want: [<str>], message: "a matched path needs no note");
 }
 
 test "a subject takes the heaviest clauses within the limit and drops regeneration beside them" {
@@ -1771,14 +1806,16 @@ test "a subject takes the heaviest clauses within the limit and drops regenerati
     assert\equal(subject, want: "add the recompose step; pin the floor", message: "the third clause would pass {SUBJECT_MAX}");
     assert\equal(subjectFrom([CommitWeight{ subject = "regenerate the outputs", lines = 3 }], fallback: "unused"),
         want: "regenerate the outputs", message: "a regeneration alone keeps its clause");
-    assert\equal(subjectFrom([<CommitWeight>], fallback: "carry the merge resolutions in ."),
-        want: "carry the merge resolutions in .", message: "no commit falls back");
+    assert\equal(subjectFrom([<CommitWeight>], fallback: "carry the merge resolutions of x"),
+        want: "carry the merge resolutions of x", message: "no commit falls back");
+    final long = capped("rework the integrator so every merged job branch becomes exactly one reviewable commit");
+    assert\equal(long.len(), want: SUBJECT_MAX, message: "a long subject is clipped: {long}");
 }
 
-// mergedFixture merges the four clean fixture branches onto a detached main
-// in root itself and regenerates. A worker's lease refuses `git worktree`.
-fun mergedFixture(root: str) > result\Result::<str> {
-    final planRun = planStack(root, names: ["gen-b", "gen-c", "dep", "edit-a"]);
+// mergedFixture merges the named fixture branches onto a detached main in
+// root itself and regenerates. A worker's lease refuses `git worktree`.
+fun mergedFixture(root: str, names: [str]) > result\Result::<str> {
+    final planRun = planStack(root, names: names);
     if (planRun.error -> err) { return result\Result::<str>{ error = err }; }
     final detached = git(root, args: ["checkout", "-q", "--detach", "main"]);
     if (detached.error -> err) { return result\Result::<str>{ error = err }; }
@@ -1790,41 +1827,58 @@ fun mergedFixture(root: str) > result\Result::<str> {
     return result\ok::<str>(root);
 }
 
-test "recomposing leaves one commit per project, no merge, and the merged tree byte for byte" {
+final FOUR_JOBS = ["gen-b", "dep", "gen-c", "edit-a"];
+
+test "recomposing makes one commit per merged job, in merge order, with no merge and the merged tree byte for byte" {
     final root = fixtureRepo().value!;
-    final fixture = mergedFixture(root);
+    final fixture = mergedFixture(root, names: FOUR_JOBS);
     assert\isTrue(fixture.error == null, message: "the fixture merges: {fixture.error?.message ?? ""}");
     final dir = fixture.value!;
-    final before =sh(dir, args: ["rev-parse", "HEAD^\{tree\}"]);
+    final before = sh(dir, args: ["rev-parse", "HEAD^\{tree\}"]);
     assert\equal(sh(dir, args: ["rev-list", "--merges", "--count", "main..HEAD"]) != "0", want: true, message: "the merge made merge commits");
-    final made = recompose(dir, base: "main", into: "integration", describe: describeAt);
+    final made = recompose(dir, base: "main", into: "integration", branches: FOUR_JOBS, describe: describeAt);
     assert\isTrue(made.error == null, message: "it recomposes: {made.error?.message ?? ""}");
-    assert\equal(made.value!.len(), want: 1, message: "every path is in project .: {made.value!.join(" | ")}");
     assert\equal(sh(dir, args: ["rev-parse", "HEAD^\{tree\}"]), want: before, message: "the tree is unchanged");
-    assert\equal(sh(dir, args: ["rev-list", "--count", "main..HEAD"]), want: "1", message: "one commit above the base");
-    assert\equal(sh(dir, args: ["rev-parse", "HEAD~1"]), want: sh(root, args: ["rev-parse", "main"]), message: "on the base");
-    final subject = sh(dir, args: ["log", "-1", "--format=%s"]);
-    foreach (want in ["add b", "add c", "add d on b", "edit a one way"]) {
-        assert\equal(subject.split("; ").indexOf(want) != null, want: true, message: "the subject carries {want}: {subject}");
-    }
-    assert\equal(subject.indexOf("regenerate") == null, want: true, message: "the regeneration folds in: {subject}");
+    assert\equal(sh(dir, args: ["rev-list", "--count", "main..HEAD"]), want: "4", message: "one commit per job above the base");
+    assert\equal(sh(dir, args: ["rev-list", "--merges", "--count", "main..HEAD"]), want: "0", message: "no merge is left");
+    assert\equal(sh(dir, args: ["log", "--reverse", "--format=%s", "main..HEAD"]).split("\n"),
+        want: ["add b", "add d on b", "add c", "edit a one way"], message: "subjects follow the merge order");
+    assert\equal(sh(dir, args: ["rev-parse", "HEAD~4"]), want: sh(root, args: ["rev-parse", "main"]), message: "on the base");
+    assert\equal(sh(dir, args: ["show", "--name-only", "--format=", "HEAD~3"]).split("\n").indexOf("gen/list.txt") != null, want: true,
+        message: "the regenerated list travels with the first job that invalidated it");
+    fs\removeAll(root);
+}
+
+test "a two-job landing becomes two commits with the same final tree" {
+    final root = fixtureRepo().value!;
+    final jobs = ["gen-b", "edit-a"];
+    final fixture = mergedFixture(root, names: jobs);
+    assert\isTrue(fixture.error == null, message: "the fixture merges: {fixture.error?.message ?? ""}");
+    final dir = fixture.value!;
+    final before = sh(dir, args: ["rev-parse", "HEAD^\{tree\}"]);
+    final made = recompose(dir, base: "main", into: "integration", branches: jobs, describe: describeAt);
+    assert\isTrue(made.error == null, message: "it recomposes: {made.error?.message ?? ""}");
+    assert\equal(sh(dir, args: ["rev-parse", "HEAD^\{tree\}"]), want: before, message: "the tree is unchanged");
+    assert\equal(sh(dir, args: ["rev-list", "--count", "main..HEAD"]), want: "2", message: "two commits above the base");
+    assert\equal(sh(dir, args: ["log", "--reverse", "--format=%s", "main..HEAD"]).split("\n"),
+        want: ["add b", "edit a one way"], message: "one subject per job");
     fs\removeAll(root);
 }
 
 test "recomposing keeps every commit a remote ref of the branch already holds" {
     final root = fixtureRepo().value!;
-    final fixture = mergedFixture(root);
+    final fixture = mergedFixture(root, names: FOUR_JOBS);
     assert\isTrue(fixture.error == null, message: "the fixture merges: {fixture.error?.message ?? ""}");
     final dir = fixture.value!;
-    final pushed =sh(dir, args: ["rev-parse", "HEAD~1"]);
+    final pushed = sh(dir, args: ["rev-parse", "HEAD~1"]);
     _ = sh(root, args: ["update-ref", "refs/remotes/origin/integration", pushed]);
     assert\equal(pushedFloor(dir, base: "main", into: "integration").value!, want: pushed, message: "the floor is the pushed commit");
-    final made = recompose(dir, base: "main", into: "integration", describe: describeAt);
+    final made = recompose(dir, base: "main", into: "integration", branches: FOUR_JOBS, describe: describeAt);
     assert\isTrue(made.error == null, message: "it recomposes: {made.error?.message ?? ""}");
     assert\equal(sh(dir, args: ["rev-parse", "HEAD~1"]), want: pushed, message: "the pushed commit stays the parent");
     _ = sh(root, args: ["update-ref", "refs/remotes/origin/integration", sh(dir, args: ["rev-parse", "HEAD"])]);
     final tip = sh(dir, args: ["rev-parse", "HEAD"]);
-    assert\equal(recompose(dir, base: "main", into: "integration", describe: describeAt).value!, want: [<str>], message: "all pushed: nothing to do");
+    assert\equal(recompose(dir, base: "main", into: "integration", branches: FOUR_JOBS, describe: describeAt).value!, want: [<str>], message: "all pushed: nothing to do");
     assert\equal(sh(dir, args: ["rev-parse", "HEAD"]), want: tip, message: "the pushed tip is untouched");
     fs\removeAll(root);
 }

@@ -480,9 +480,9 @@ nobody could measure it, not that nothing was found){{end}}.
 
 The integrator does not hand the reviewer the workers' history. After merging and
 regenerating, `hack/dev/merge-job-branches.buzz --apply` recomposes the commits the
-landing branch made above its base: one commit per project `{{cmd "describe file"}}`
-names, a declared output in the commit of the source its target reads, and no merge
-commit. Each subject joins the heaviest worker clauses with `;`. A commit a remote
+landing branch made above its base: one commit per merged job branch, in merge order,
+a declared output in the commit of the first job whose source its target reads (per `{{cmd "describe file"}}`), and no merge
+commit. Each subject joins that job's heaviest worker clauses with `;`, within 72 characters. A commit a remote
 ref of the branch already holds is never rewritten, and a tree that differs after
 recomposing fails the merge.{{if .Full}} Per-commit detail is lost on purpose: main
 squashes each PR anyway, and the PR branch is what a reviewer reads.{{end}}
