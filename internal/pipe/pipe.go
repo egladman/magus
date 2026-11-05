@@ -14,8 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofrs/flock"
-
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/log/attr"
@@ -242,36 +240,6 @@ func RecordExit(root string, cfg config.Config, status int, signal string) {
 	writeExitRecord(Dir(cacheDir, root), exitRecord{
 		PID: os.Getpid(), Command: strings.Join(os.Args, " "), Status: status, Signal: signal, Ended: time.Now(),
 	})
-}
-
-// gate is Gate's flock. Referenced for the life of the process so no finalizer closes
-// it, which would lift the gate early.
-var gate *flock.Flock
-
-// Gate holds the magus stage reading this process's stdout from starting anything
-// until this process exits: it takes no lock, and it refuses with MGS3030 if this process
-// exits non-zero. It does nothing unless stdout is a pipe. Call it at process start: a
-// stage that has already passed its locks does not look again.
-//
-// There is no release. The reader must see this process's exit record before it starts,
-// and that is written after the command returns.
-func Gate(root string, cfg config.Config) {
-	if gate != nil || !IsPipe(os.Stdout) {
-		return
-	}
-	dir := Dir(config.CacheDir(root, cfg), root)
-	if os.MkdirAll(dir, 0o755) != nil {
-		return
-	}
-	fl := flock.New(GatePath(dir, os.Getpid()))
-	if got, err := fl.TryLock(); err == nil && got {
-		gate = fl
-	}
-}
-
-// GatePath is where Gate leaves the flock of process procID in the pipe dir dir.
-func GatePath(dir string, procID int) string {
-	return filepath.Join(dir, strconv.Itoa(procID)+gateSuffix)
 }
 
 // ReadByMagus reports whether out is a pipe that the kernel proves another process
@@ -528,7 +496,6 @@ func sitsBlocked(seen map[int]blockedFork, pid int) bool {
 const (
 	// DirName is the pipe dir inside a workspace's locks dir.
 	DirName    = ".pipe"
-	gateSuffix = ".gate"
 	exitSuffix = ".exit"
 	// sweepName's mtime is the last scan, shared across processes that each
 	// exit before a timer could fire.
@@ -547,7 +514,7 @@ const (
 )
 
 // Dir is the pipe dir of the workspace at root whose cache dir is cacheDir: where its
-// runs leave their gates, exit records and the records a downstream stage reads.
+// runs leave their exit records and the records a downstream stage reads.
 func Dir(cacheDir, root string) string {
 	return filepath.Join(workspace.LocksDir(cacheDir, root), DirName)
 }
