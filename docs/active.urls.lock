@@ -194,6 +194,7 @@ design/principles/a-cache-is-an-accelerator/
 design/principles/a-copy-can-be-the-right-answer/
 design/principles/a-deliberate-break-never-merges-red/
 design/principles/a-harness-is-not-an-agent-thing/
+design/principles/a-measure-is-not-the-goal/
 design/principles/abstract-at-the-right-layer/
 design/principles/behavior-is-code-facts-are-data/
 design/principles/break-now-hold-still-later/
