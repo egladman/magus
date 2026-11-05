@@ -157,90 +157,6 @@ func TestMachineBudgetKeepsNothingForARefusedClaim(t *testing.T) {
 	assert.Len(t, b.Snapshot().Holders, 2, "only the granted claims are on record")
 }
 
-// liveReaders makes alive answer from the set the test keeps, so a reader can exit.
-func liveReaders(b *MachineBudget, pids ...int) map[int]bool {
-	live := map[int]bool{}
-	for _, p := range pids {
-		live[p] = true
-	}
-	b.alive = func(p int) bool { return live[p] }
-	return live
-}
-
-// TestMachineBudgetReservedSeatGoesToItsReader: the seat `status --wait` reserved is the
-// one a bare run started at the same moment would have taken, and the piped run gets it.
-func TestMachineBudgetReservedSeatGoesToItsReader(t *testing.T) {
-	b, now := testBudget(t, 0, 8)
-	const reader, bare = 500, 600
-	liveReaders(b, reader)
-	require.True(t, b.Request(types.MachineClaim{Project: "docs", Target: "ci", Slots: 4, PID: 100}).Granted)
-
-	reserved := b.Reserve(types.MachineClaim{Project: ".", Target: "go-test", Slots: 4}, reader)
-	require.True(t, reserved.Granted, "4 of 8 slots are free")
-	assert.Equal(t, 8, reserved.HeldSlots)
-	assert.Contains(t, b.Snapshot().Holders, types.MachineClaimant{Reserved: true, Project: ".", Target: "go-test", PID: reader, Slots: 4, Since: *now},
-		"status shows the seat as reserved for its reader")
-
-	stranger := b.Request(types.MachineClaim{Project: ".", Target: "test", Slots: 4, PID: bare})
-	assert.False(t, stranger.Granted, "a bare run cannot take the reserved seat")
-	assert.True(t, stranger.Fits)
-	assert.False(t, stranger.OwnRun, "it refuses at once, as a bare run always has")
-
-	piped := b.Request(types.MachineClaim{Project: ".", Target: "go-test", Slots: 4, PID: reader})
-	require.True(t, piped.Granted, "the reader's own claim takes its seat")
-	assert.Equal(t, 8, piped.HeldSlots, "the claim replaced the seat rather than adding to it")
-	for _, h := range b.Snapshot().Holders {
-		assert.False(t, h.Reserved, "the first claim consumed the reservation")
-	}
-}
-
-// TestMachineBudgetReservedSeatGoesToItsReadersNestedRun: a claim from a magus nested
-// under the reader, or from the daemon adopting the reader's run, names the reader as the
-// outermost invocation, and takes the seat too.
-func TestMachineBudgetReservedSeatGoesToItsReadersNestedRun(t *testing.T) {
-	b, _ := testBudget(t, 0, 4)
-	liveReaders(b, 500)
-	require.True(t, b.Reserve(types.MachineClaim{Slots: 4}, 500).Granted)
-
-	nested := b.Request(types.MachineClaim{Target: "test", Slots: 4, PID: 900, Invocation: "900:b", Ancestors: []string{"500:a"}})
-	assert.True(t, nested.Granted)
-}
-
-func TestMachineBudgetReservationDiesWithItsReader(t *testing.T) {
-	b, _ := testBudget(t, 0, 4)
-	live := liveReaders(b, 500)
-	require.True(t, b.Reserve(types.MachineClaim{Slots: 4}, 500).Granted)
-	require.False(t, b.Request(types.MachineClaim{Target: "test", Slots: 4, PID: 600}).Granted)
-
-	delete(live, 500)
-	assert.True(t, b.Request(types.MachineClaim{Target: "test", Slots: 4, PID: 600}).Granted,
-		"a reader that exited before claiming holds nothing")
-}
-
-func TestMachineBudgetReservationLapsesWhenItsReaderNeverClaims(t *testing.T) {
-	b, now := testBudget(t, 0, 4)
-	liveReaders(b, 500)
-	require.True(t, b.Reserve(types.MachineClaim{Slots: 4}, 500).Granted)
-
-	*now = now.Add(reservationBound - time.Second)
-	require.False(t, b.Request(types.MachineClaim{Target: "test", Slots: 4, PID: 600}).Granted)
-	*now = now.Add(time.Second)
-	assert.True(t, b.Request(types.MachineClaim{Target: "test", Slots: 4, PID: 600}).Granted,
-		"a live reader that claims nothing within the bound gives the seat back")
-}
-
-func TestMachineBudgetReserveRefusesWhatDoesNotFitNow(t *testing.T) {
-	b, _ := testBudget(t, 0, 4)
-	liveReaders(b, 500)
-	require.True(t, b.Request(types.MachineClaim{Target: "ci", Slots: 2, PID: 100}).Granted)
-
-	v := b.Reserve(types.MachineClaim{Slots: 4}, 500)
-	assert.False(t, v.Granted)
-	assert.True(t, v.Fits, "an idle machine seats it, so the caller asks again")
-	assert.Len(t, b.Snapshot().Holders, 1, "a refused reservation holds nothing")
-	assert.False(t, b.Reserve(types.MachineClaim{Slots: 5}, 500).Fits)
-}
-
 // TestMachineBudgetAssertRecordsWhatDoesNotFit pins the re-assert a holder makes on a new
 // broker: its step is already running, so the claim is recorded whatever it does to the
 // arithmetic, and the next request sees the memory as spent.
@@ -500,9 +416,9 @@ func TestMachineSnapshotReportsHolders(t *testing.T) {
 	}, b.Snapshot())
 }
 
-// budgetAdmitter is a MachineAdmitter whose answers come from a budget a test writes. It
-// holds a claim kept out by its own run until a release through it, as the broker does,
-// and records every request so the gate's calls can be observed.
+// budgetAdmitter is a MachineAdmitter answering from a budget a test
+// writes. Like the broker, it queues a claim that can fit until a release
+// seats it. It records every request so the gate's calls can be observed.
 type budgetAdmitter struct {
 	mu       sync.Mutex
 	freed    sync.Cond
@@ -519,7 +435,7 @@ func (*budgetAdmitter) HoldGroup(context.Context, string, int, string) (string, 
 
 func (*budgetAdmitter) ReleaseHold(context.Context, string) error { return nil }
 
-func (f *budgetAdmitter) Claim(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
+func (f *budgetAdmitter) Claim(ctx context.Context, c types.MachineClaim, parked func(types.MachineVerdict)) (types.MachineVerdict, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.requests++
@@ -533,16 +449,40 @@ func (f *budgetAdmitter) Claim(ctx context.Context, c types.MachineClaim) (types
 		f.freed.Broadcast()
 	})
 	defer stop()
+	sent := ""
 	for {
 		v := f.budget.Request(c)
-		if v.Granted || !v.Fits || !v.OwnRun {
+		if v.Granted || !v.Fits {
 			return v, nil
+		}
+		if k := fmt.Sprint(v.OwnRun, v.Holders); k != sent && parked != nil {
+			sent = k
+			f.mu.Unlock()
+			parked(v)
+			f.mu.Lock()
 		}
 		if ctx.Err() != nil {
 			return types.MachineVerdict{}, ctx.Err()
 		}
 		f.freed.Wait()
 	}
+}
+
+func (f *budgetAdmitter) Request(_ context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.fail != nil {
+		return types.MachineVerdict{}, f.fail
+	}
+	return f.budget.Request(c), nil
+}
+
+// wake re-judges every parked claim, as a broker does when a holder joins.
+func (f *budgetAdmitter) wake() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.freed.L = &f.mu
+	f.freed.Broadcast()
 }
 
 func (f *budgetAdmitter) Release(_ context.Context, id string) {
@@ -573,7 +513,7 @@ func TestAdmitMachineClaimsAndReleasesNonRunWork(t *testing.T) {
 	adm := &budgetAdmitter{budget: budget}
 	release, err := AdmitMachine(t.Context(), adm, types.MachineClaim{
 		Project: ".", Target: "session-brief", MemoryMB: 512,
-	}, false)
+	}, false, 0)
 	require.NoError(t, err)
 
 	holders := budget.Snapshot().Holders
@@ -592,7 +532,7 @@ func TestAdmitMachineClaimsAndReleasesNonRunWork(t *testing.T) {
 	assert.Empty(t, budget.Snapshot().Holders)
 }
 
-func TestMachineGateFailsFastNamingTheHolder(t *testing.T) {
+func TestABudgetWaitOfZeroRefusesAtOnceNamingTheHolder(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
 	g, adm := testGate(t, b)
 
@@ -602,7 +542,7 @@ func TestMachineGateFailsFastNamingTheHolder(t *testing.T) {
 	_, err = g.acquire(t.Context(), types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, types.MachineBudgetExhausted), "the code is what maps to exit 75")
-	assert.Contains(t, err.Error(), "this machine's build budget is full")
+	assert.Contains(t, err.Error(), "waited 0s for a seat")
 	assert.Contains(t, err.Error(), "pid 100 (root) test")
 	assert.Equal(t, 2, adm.requests, "a refusal is one request, not a poll")
 }
@@ -683,7 +623,7 @@ func TestMachineGateWaitsOnItsOwnRunsSiblings(t *testing.T) {
 	_, err = g.acquire(t.Context(), types.MachineClaim{
 		Project: "x", Target: "build", MemoryMB: 9000, PID: 400, Invocation: "400:inv-stranger",
 	})
-	require.Error(t, err, "a stranger is refused, not queued")
+	require.Error(t, err, "under budget_wait 0 a stranger is refused, not queued")
 	assert.True(t, errors.Is(err, types.MachineBudgetExhausted))
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -727,7 +667,7 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 	var out bytes.Buffer
 	c, err := Open(t.Context(), t.TempDir(),
 		WithLogger(slog.New(NewPrettyHandler(&out, slog.LevelInfo))),
-		WithMachineAdmission(&budgetAdmitter{budget: b}))
+		WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 
 	sink := &eventSink{}
@@ -749,7 +689,7 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 
 	printed := out.String()
 	assert.Contains(t, printed, "[fail] workspace test (not started)\n")
-	assert.Contains(t, printed, "  cause: [MGS3009] not starting (root) test: this machine's build budget is full")
+	assert.Contains(t, printed, "  cause: [MGS3009] not starting (root) test: waited 0s for a seat")
 	assert.Contains(t, printed, "held by pid 100 (root) test (8.8 GiB)")
 	assert.NotContains(t, printed, "output:", "nothing ran, so there is no captured output to point at")
 	assert.Contains(t, printed, "  reproduce: magus run test .\n")
@@ -779,7 +719,7 @@ func refusalEvent(inv string) journal.Event {
 // holder's figures, once the text is checked to give the cause.
 func normalizeRefusal(t *testing.T, e journal.Event) journal.Event {
 	t.Helper()
-	assert.Contains(t, e.Text, "build budget is full")
+	assert.Contains(t, e.Text, "waited 0s for a seat")
 	e.Ts, e.Text = 0, ""
 	return e
 }
@@ -794,7 +734,7 @@ func TestRunAsideJournalsAMachineRefusal(t *testing.T) {
 	})
 	require.True(t, held.Granted, "the fixture's holder must own the budget")
 
-	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}))
+	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
 	require.NoError(t, err)
 
 	sink := &eventSink{}
@@ -839,7 +779,7 @@ func cachedUnderFullBudget(t *testing.T, step Step) (*Cache, *budgetAdmitter) {
 	})
 	require.True(t, held.Granted, "the fixture's holder must own the budget")
 	adm := &budgetAdmitter{budget: b}
-	c, err := Open(t.Context(), cdir, WithLocalWrite(true), WithMachineAdmission(adm))
+	c, err := Open(t.Context(), cdir, WithLocalWrite(true), WithMachineAdmission(adm, 0))
 	require.NoError(t, err)
 	return c, adm
 }
@@ -1184,7 +1124,7 @@ func TestMachineRefusalStatesItsExitCode(t *testing.T) {
 		"a permanent refusal that shares EX_TEMPFAIL is a retry loop")
 }
 
-func TestNextChangeIsTheEarliestReservationBoundOrCurveBreakpoint(t *testing.T) {
+func TestNextChangeIsTheEarliestCurveBreakpoint(t *testing.T) {
 	b, now := testBudget(t, 10_000, 8)
 	_, ok := b.NextChange()
 	assert.False(t, ok, "an empty budget never changes on its own")
@@ -1193,19 +1133,13 @@ func TestNextChangeIsTheEarliestReservationBoundOrCurveBreakpoint(t *testing.T) 
 	_, ok = b.NextChange()
 	assert.False(t, ok, "a claim held flat changes only when released")
 
-	liveReaders(b, 500)
-	require.True(t, b.Reserve(types.MachineClaim{Slots: 1}, 500).Granted)
-	at, ok := b.NextChange()
-	require.True(t, ok)
-	assert.Equal(t, now.Add(reservationBound), at, "a reservation lapses at its bound")
-
 	profile := types.MemoryProfile{D10Ms: 10_000, D90Ms: 10_000, Runs: 3}
 	for i := range profile.Curve {
 		profile.Curve[i] = 100
 	}
 	b.Assert(types.MachineClaim{Target: "curved", MemoryMB: 100, Profile: profile})
-	at, ok = b.NextChange()
+	at, ok := b.NextChange()
 	require.True(t, ok)
 	step := 10 * time.Second / types.MemoryCurveBuckets
-	assert.Equal(t, now.Add(step), at, "a curve's first breakpoint comes before the reservation's bound")
+	assert.Equal(t, now.Add(step), at, "a curve's first breakpoint")
 }

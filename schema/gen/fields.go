@@ -752,6 +752,15 @@ var Fields = []fieldtype.Field{
 		Doc:      "Decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and shared services: required (refuse a step when none answers), best-effort (the default: run unarbitrated and say so once), or off (never start or contact one; a run hosts its services itself)",
 	},
 	{
+		GoPath:   "BudgetWait",
+		YamlPath: "budget_wait",
+		EnvVar:   "MAGUS_BUDGET_WAIT",
+		Flag:     fieldtype.FlagNames{Long: "budget-wait"},
+		Kind:     fieldtype.KindDuration,
+		Usage:    "MAGUS_BUDGET_WAIT: BudgetWait bounds a step's wait for budget other runs hold.",
+		Doc:      "Bounds a step's wait for budget other runs hold. Past it, MGS3009 names them. Zero refuses at once. A sooner run deadline bounds it instead",
+	},
+	{
 		GoPath:   "ShutdownGrace",
 		YamlPath: "shutdown_grace",
 		EnvVar:   "MAGUS_SHUTDOWN_GRACE",

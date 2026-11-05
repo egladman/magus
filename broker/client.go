@@ -199,20 +199,18 @@ func (c *Client) Addr() string { return c.addr }
 // If ctx ends after the broker granted but before the answer arrived, the grant is
 // handed straight back.
 func (c *Client) Request(ctx context.Context, claim types.MachineClaim) (types.MachineVerdict, error) {
-	return c.claim(ctx, claim, false)
+	return c.claim(ctx, claim, false, nil)
 }
 
-// Claim is Request, except that a claim kept out only by its own process's or run's
-// claims, or by its job tree's validation seat, is held by the broker until a release
-// makes room, and answered then. So is a claim of the oldest gate's run, until it has
-// waited gateWaitBound, when the error is a [types.ExitError] of exit 75 naming the bound.
-// It blocks on the connection meanwhile, and ctx ending cancels the wait and returns
-// ctx's error. Any other refusal answers at once.
-func (c *Client) Claim(ctx context.Context, claim types.MachineClaim) (types.MachineVerdict, error) {
-	return c.claim(ctx, claim, true)
+// Claim is Request, except that a claim that can fit waits in the
+// broker's queue until it is seated or ctx ends, which returns ctx's
+// error. parked hears each report of what keeps it out, bar a validation
+// seat wait, which is logged here.
+func (c *Client) Claim(ctx context.Context, claim types.MachineClaim, parked func(types.MachineVerdict)) (types.MachineVerdict, error) {
+	return c.claim(ctx, claim, true, parked)
 }
 
-func (c *Client) claim(ctx context.Context, claim types.MachineClaim, park bool) (types.MachineVerdict, error) {
+func (c *Client) claim(ctx context.Context, claim types.MachineClaim, park bool, onParked func(types.MachineVerdict)) (types.MachineVerdict, error) {
 	cn, err := c.open(ctx)
 	if err != nil {
 		return types.MachineVerdict{}, err
@@ -228,16 +226,13 @@ func (c *Client) claim(ctx context.Context, claim types.MachineClaim, park bool)
 		request := claimRequest{Claim: claim, Park: true}
 		parked := func(p parkedReply) {
 			c.noteSeat(ctx, p.Seat)
-			if p.Gate != nil {
-				slog.InfoContext(ctx, p.Gate.String(), attr.Notice("broker"))
+			if p.Seat == nil && onParked != nil {
+				onParked(p.Verdict)
 			}
 		}
 		err = c.parkedCall(ctx, cn, typeClaim, request, typeClaimReply, &reply, parked, late)
 	} else {
 		err = cn.roundTrip(ctx, c.next(), typeClaim, claimRequest{Claim: claim}, typeClaimReply, &reply, late)
-	}
-	if refused := (*Error)(nil); errors.As(err, &refused) && refused.Code == CodeGateTimeout {
-		return types.MachineVerdict{}, gateRefusal(refused.Message)
 	}
 	if err != nil {
 		return types.MachineVerdict{}, err
@@ -300,55 +295,6 @@ func (c *Client) sendOverrun(ctx context.Context, cn *conn, remote string) {
 				attr.Component("broker"))
 		})
 	}
-}
-
-// Reserve asks the broker to hold a seat the size of claim for process reader, blocking
-// until the budget can seat it beside what it holds; parked, when set, is called with the
-// budget as it stood if the broker had to hold the request. A grant does not ride this
-// connection: the seat lasts until the reader's first claim takes it, the reader exits,
-// or the reader claims nothing within the broker's bound, so it holds even after this
-// client closes. A verdict that is not Granted is a seat larger than the whole budget,
-// and reserved nothing. ctx ending cancels the wait. It never starts a broker.
-func (c *Client) Reserve(ctx context.Context, claim types.MachineClaim, reader int, parked func(types.MachineVerdict)) (types.MachineVerdict, error) {
-	cn, err := c.connect(ctx)
-	if err != nil {
-		return types.MachineVerdict{}, err
-	}
-	var reply reserveReply
-	request := reserveRequest{Claim: claim, Reader: reader}
-	onParked := func(p parkedReply) {
-		if parked != nil {
-			parked(p.Verdict)
-		}
-	}
-	if err := c.parkedCall(ctx, cn, typeReserve, request, typeReserveReply, &reply, onParked, nil); err != nil {
-		return types.MachineVerdict{}, err
-	}
-	return reply.Verdict, nil
-}
-
-// Await blocks until the budget would seat each of claims beside what it holds, taking
-// nothing, so a run started once it returns can still lose the room to another that asks
-// first. parked, when set, is called with the claim it waits on and the budget as it stood
-// if the broker had to hold the request. A verdict that is not Granted names in blocked a
-// claim larger than the whole budget. ctx ending cancels the wait. It never starts a
-// broker.
-func (c *Client) Await(ctx context.Context, claims []types.MachineClaim, parked func(blocked types.MachineClaim, v types.MachineVerdict)) (blocked types.MachineClaim, v types.MachineVerdict, err error) {
-	cn, err := c.connect(ctx)
-	if err != nil {
-		return types.MachineClaim{}, types.MachineVerdict{}, err
-	}
-	var reply awaitReply
-	request := awaitRequest{Claims: claims}
-	onParked := func(p parkedReply) {
-		if parked != nil {
-			parked(p.Blocked, p.Verdict)
-		}
-	}
-	if err := c.parkedCall(ctx, cn, typeAwait, request, typeAwaitReply, &reply, onParked, nil); err != nil {
-		return types.MachineClaim{}, types.MachineVerdict{}, err
-	}
-	return reply.Blocked, reply.Verdict, nil
 }
 
 // parkedCall is roundTrip for a request the broker may park: parked runs with the

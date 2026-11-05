@@ -25,7 +25,7 @@ import (
 
 // MachineClaims is what a run of targets, under charms and with extraArgs forwarded,
 // would ask the machine budget for: one claim per step the run admits, sized as the run
-// sizes it. A gating stage waits on these for the run it feeds (see `magus status --wait`).
+// sizes it. `magus doctor` reads these.
 //
 // The steps are the selected targets and, through each skip_cache composer, the
 // same-project ctx.needs members it lends claims of their own (types.MembersClaimTheirOwn),

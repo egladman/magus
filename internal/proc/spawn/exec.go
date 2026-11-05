@@ -252,7 +252,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 
 	outW, errW := OutputWriters(ctx)
 	if opts.Quiet {
-		outW, errW = io.Discard, io.Discard // capture-only / no live streaming
+		outW, errW = io.Discard, quietStderr(ctx) // capture-only / no live streaming
 	}
 	var outBuf, errBuf bytes.Buffer
 	if opts.Capture {

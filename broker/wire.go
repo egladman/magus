@@ -7,7 +7,7 @@ import (
 
 // ProtocolVersion is the wire version the hello exchange carries. A broker refuses a
 // client speaking another one with CodeProtocol.
-const ProtocolVersion = 4
+const ProtocolVersion = 5
 
 // helloMagic guards the first frame on a connection. Every later frame mutates state
 // shared by every magus on the host (a claim against its memory, a release of one), so
@@ -31,10 +31,6 @@ const (
 	typeReleaseReply   = "release.reply"
 	typeOverrun        = "overrun"
 	typeOverrunReply   = "overrun.reply"
-	typeReserve        = "reserve"
-	typeReserveReply   = "reserve.reply"
-	typeAwait          = "await"
-	typeAwaitReply     = "await.reply"
 	typeParked         = "parked"
 	typeCancel         = "cancel"
 	typeCancelReply    = "cancel.reply"
@@ -82,7 +78,7 @@ type hello struct {
 	// validation cap counts.
 	Lease string `json:"lease,omitempty"`
 	// Gate is a process running the ci composition. Its claims, and those of every magus
-	// it runs, outrank other runs' for seats (see [GateWait]).
+	// it runs, queue ahead of other runs' (see [server.enqueueLocked]).
 	Gate bool `json:"gate,omitzero"`
 	// Tree is the root of Lease's job tree and MaxValidations the workspace's
 	// jobs.max_validations: how many runs of that tree's leased workers the broker seats
@@ -101,10 +97,9 @@ type helloReply struct {
 	Version  string `json:"version,omitempty"`
 }
 
-// claimRequest asks for a seat. Reassert records the claim without asking whether it
-// fits: its step is already running under a broker that has since died. Park holds a
-// claim kept out by its own run or its job tree's validation seat until a release makes
-// room; any other refusal answers at once.
+// claimRequest asks for a seat. Reassert records the claim without asking:
+// its step already runs under a broker that has since died. Park queues a
+// claim that can fit until it is seated or cancelled.
 type claimRequest struct {
 	Claim    types.MachineClaim `json:"claim"`
 	Reassert bool               `json:"reassert,omitzero"`
@@ -120,40 +115,11 @@ type claimReply struct {
 	Seat *SeatWait `json:"seat,omitempty"`
 }
 
-// reserveRequest asks for a seat held for another process, Reader, until its first
-// claim. It does not ride the asking connection: `status --wait` exits before the run
-// reading its output may start. A seat that fits the budget but not what it holds now
-// is parked until it does.
-type reserveRequest struct {
-	Claim  types.MachineClaim `json:"claim"`
-	Reader int                `json:"reader"`
-}
-
-// reserveReply is the verdict. Granted means the seat is held for the reader.
-type reserveReply struct {
-	Verdict types.MachineVerdict `json:"verdict"`
-}
-
-// awaitRequest waits, parked, until the budget would seat each of Claims beside what it
-// holds, taking nothing.
-type awaitRequest struct {
-	Claims []types.MachineClaim `json:"claims"`
-}
-
-// awaitReply is the verdict: Granted when the budget seats every claim, else Blocked
-// is the one it could not, and its Fits is false.
-type awaitReply struct {
-	Verdict types.MachineVerdict `json:"verdict"`
-	Blocked types.MachineClaim   `json:"blocked,omitzero"`
-}
-
 // parkedReply is the first answer to a request the broker parked: what keeps it out now.
+// A wake sends another whenever that changes.
 type parkedReply struct {
 	Verdict types.MachineVerdict `json:"verdict"`
-	Blocked types.MachineClaim   `json:"blocked,omitzero"`
 	Seat    *SeatWait            `json:"seat,omitempty"`
-	// Gate is set on a gate's claim that waits for another invocation's seats.
-	Gate *GateWait `json:"gate,omitempty"`
 }
 
 // cancelRequest drops this connection's parked request with id ID, which is then
@@ -260,8 +226,6 @@ const (
 	CodeDraining ErrorCode = "draining"
 	// CodeCancelled answers a parked request its client cancelled.
 	CodeCancelled ErrorCode = "cancelled"
-	// CodeGateTimeout answers a gate's claim that waited gateWaitBound for a seat.
-	CodeGateTimeout ErrorCode = "gate-timeout"
 )
 
 // errorReply is the body of an error frame.

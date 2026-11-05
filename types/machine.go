@@ -55,10 +55,8 @@ func (c MachineClaim) Run() string {
 }
 
 // MachineClaimant is one step's hold on the machine budget. Since is when the claim was
-// granted. A Reserved holder is a seat `magus status --wait` sized and holds for PID, the
-// run reading its output, until that run's first claim takes it.
+// granted.
 type MachineClaimant struct {
-	Reserved bool   `json:"reserved,omitzero" yaml:"reserved,omitempty"`
 	Project  string `json:"project" yaml:"project"`
 	Target   string `json:"target" yaml:"target"`
 	PID      int    `json:"pid,omitzero" yaml:"pid,omitempty"`
@@ -75,14 +73,13 @@ type MachineClaimant struct {
 	Owner string `json:"owner,omitempty" yaml:"owner,omitempty"`
 }
 
-// MachineWaiter is a request the broker holds until the budget can answer it: a claim kept
-// out by its own run or its job tree's validation seat, or a `status --wait`.
+// MachineWaiter is a claim the broker holds until the budget can seat it.
 type MachineWaiter struct {
-	// Kind is claim, reserve (a seat held for a piped reader) or await (takes nothing).
+	// Kind is claim, the one request the broker parks.
 	Kind    string `json:"kind" yaml:"kind"`
 	Project string `json:"project,omitempty" yaml:"project,omitempty"`
 	Target  string `json:"target,omitempty" yaml:"target,omitempty"`
-	// PID is the waiting process; for a reservation, the run the seat is asked for.
+	// PID is the waiting process.
 	PID int `json:"pid,omitzero" yaml:"pid,omitempty"`
 	// MemoryMB and Slots are the claim it waits to seat.
 	MemoryMB int    `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`

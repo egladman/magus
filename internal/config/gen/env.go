@@ -555,6 +555,13 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			errs = append(errs, fmt.Errorf("MAGUS_BROKER: %w", err))
 		}
 	}
+	if v := getenv("MAGUS_BUDGET_WAIT"); v != "" {
+		if d, err := time.ParseDuration(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_BUDGET_WAIT: %w", err))
+		} else {
+			cfg.BudgetWait = d
+		}
+	}
 	if v := getenv("MAGUS_SHUTDOWN_GRACE"); v != "" {
 		if d, err := time.ParseDuration(v); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_SHUTDOWN_GRACE: %w", err))

@@ -82,6 +82,7 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.IntVar(&cfg.Concurrency, "j", cfg.Concurrency, "Short for --concurrency")
 	fs.TextVar(&cfg.ConcurrencyProfile, "concurrency-profile", cfg.ConcurrencyProfile, "MAGUS_CONCURRENCY_PROFILE: ConcurrencyProfile sets the default width relative to the machine: conservative (half the cores), balanced (min(cores...")
 	fs.TextVar(&cfg.Broker, "broker", cfg.Broker, "MAGUS_BROKER: Broker decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and sha...")
+	fs.DurationVar(&cfg.BudgetWait, "budget-wait", cfg.BudgetWait, "MAGUS_BUDGET_WAIT: BudgetWait bounds a step's wait for budget other runs hold.")
 	fs.DurationVar(&cfg.ShutdownGrace, "shutdown-grace", cfg.ShutdownGrace, "MAGUS_SHUTDOWN_GRACE: ShutdownGrace bounds how long the broker and the server take to stop after a first SIGTERM.")
 	fs.IntVar(&cfg.MaxFailures, "max-failures", cfg.MaxFailures, "MAGUS_MAX_FAILURES: MaxFailures bounds how many projects may fail before a run stops starting more.")
 	fs.DurationVar(&cfg.TargetTimeout, "target-timeout", cfg.TargetTimeout, "MAGUS_TARGET_TIMEOUT: TargetTimeout bounds how long any single target may run before magus cancels it.")

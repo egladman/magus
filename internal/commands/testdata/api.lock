@@ -3,6 +3,7 @@ config agents.brief_format
 config agents.profile
 config agents.prompt_cache_ttl
 config broker
+config budget_wait
 config cache.dir
 config cache.include.arch.enabled
 config cache.include.os.enabled
@@ -333,11 +334,9 @@ flag status/c
 flag status/compact
 flag status/no-compact
 flag status/no-symbols
-flag status/no-wait
 flag status/probe
 flag status/socket
 flag status/symbols
-flag status/wait
 flag status/watch
 flag status/workspace
 flag version/client

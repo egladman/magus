@@ -51,6 +51,11 @@ type Config struct {
 	// Broker decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and shared services: required (refuse a step when none answers), best-effort (the default: run unarbitrated and say so once), or off (never start or contact one; a run hosts its services itself).
 	Broker types.BrokerPolicy `json:"broker" yaml:"broker"`
 
+	// BudgetWait bounds a step's wait for budget other runs hold.
+	// Past it, MGS3009 names them. Zero refuses at once. A sooner
+	// run deadline bounds it instead.
+	BudgetWait time.Duration `json:"budget_wait" yaml:"budget_wait" validate:"gte=0"`
+
 	// ShutdownGrace bounds how long the broker and the server take to stop after a first SIGTERM. The broker seats nothing new and waits this long for the runs holding claims or services to finish; the server cancels the runs it adopted and waits this long for them to unwind. A second SIGTERM, or a SIGINT to the broker, stops either at once. Zero stops at once on the first signal; negative is an error.
 	ShutdownGrace time.Duration `json:"shutdown_grace" yaml:"shutdown_grace" validate:"gte=0"`
 
@@ -1171,6 +1176,10 @@ var envOnly = []cmdline.Env{
 // its own second signal or SIGKILL. Runs outlive the broker anyway.
 const defaultShutdownGrace = 5 * time.Minute
 
+// defaultBudgetWait is budget_wait when nothing sets it. Two gates refused
+// 717 s and 1,733 s into their work would have been seated within it.
+const defaultBudgetWait = 30 * time.Minute
+
 // Defaults returns a Config populated with the magus built-in defaults. It reads no
 // environment, so HistoryPath is empty; the loaders set it from [DefaultHistoryPath].
 func Defaults() Config {
@@ -1187,7 +1196,8 @@ func Defaults() Config {
 			},
 		},
 		ShutdownGrace: defaultShutdownGrace,
-		Disk:          Disk{MinFreeMB: 51200, CriticalFreeMB: 10240, GrowthMBPerHour: 20480, SampleEvery: 10 * time.Minute},
+		BudgetWait:    defaultBudgetWait,
+		Disk:         Disk{MinFreeMB: 51200, CriticalFreeMB: 10240, GrowthMBPerHour: 20480, SampleEvery: 10 * time.Minute},
 		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, MaxClaims: 10},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},
 		// Kept in step with secret.DefaultTimeouts, which applies when a Resolver is built
