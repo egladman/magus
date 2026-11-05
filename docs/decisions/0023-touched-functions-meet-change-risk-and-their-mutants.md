@@ -113,24 +113,24 @@ number; it reports scores and mutants, and a lint rule decides.
 
 ### State
 
-| item                                                                        | State                                                   |
-| --------------------------------------------------------------------------- | ------------------------------------------------------- |
-| decision tokens and the coverage profile declared by spells as data         | done                                                    |
-| complexity carried in the pack beside SCIP (`SymbolInfo.Complexity`)        | done                                                    |
-| runner refs resolve inside a token for `MAGUS` and `MAGUS_` names           | done                                                    |
-| `Magus.ChangeRisk` and the change-risk check in `magus diff`                | done                                                    |
-| Buzz methods `Change.risk` and `Workspace.risk`                             | done                                                    |
-| lint rule `touched-functions-keep-change-risk-under-10`                     | done (tested; not yet listed in `hack/lint/run.buzz`)   |
-| wiring the rule into `hack/lint/run.buzz` and warming it in `lint_rules`    | planned (once main's CI publishes the base profile)     |
-| head profile freshened through the cache; base profile kept per commit      | done                                                    |
-| each touched function judged against itself at base                         | done                                                    |
-| covered lines kept, in place of the 70% Go and 62% Buzz totals              | done                                                    |
-| `Change.risk` scoring this repository's own change                          | in progress (waits on main's CI base profile)           |
-| mutation: a go::mutate op, Go-native engine plus token fallback, one binary | not built (the next change)                             |
-| the mutant verdict cache, keyed by body, covering tests and Context         | not built (the next change)                             |
-| the `magus:mutant` marker and the kill-their-mutants rule                   | not built (the next change)                             |
-| coverage for bash                                                           | not built                                               |
-| Measured section (refusals and wall time over the last 20 merges)           | not built                                               |
+| item                                                                        | State                                                 |
+| --------------------------------------------------------------------------- | ----------------------------------------------------- |
+| decision tokens and the coverage profile declared by spells as data         | done                                                  |
+| complexity carried in the pack beside SCIP (`SymbolInfo.Complexity`)        | done                                                  |
+| runner refs resolve inside a token for `MAGUS` and `MAGUS_` names           | done                                                  |
+| `Magus.ChangeRisk` and the change-risk check in `magus diff`                | done                                                  |
+| Buzz methods `Change.risk` and `Workspace.risk`                             | done                                                  |
+| lint rule `touched-functions-keep-change-risk-under-10`                     | done (tested; not yet listed in `hack/lint/run.buzz`) |
+| wiring the rule into `hack/lint/run.buzz` and warming it in `lint_rules`    | planned (once main's CI publishes the base profile)   |
+| head profile freshened through the cache; base profile kept per commit      | done                                                  |
+| each touched function judged against itself at base                         | done                                                  |
+| covered lines kept, in place of the 70% Go and 62% Buzz totals              | done                                                  |
+| `Change.risk` scoring this repository's own change                          | in progress (waits on main's CI base profile)         |
+| mutation: a go::mutate op, Go-native engine plus token fallback, one binary | not built (the next change)                           |
+| the mutant verdict cache, keyed by body, covering tests and Context         | not built (the next change)                           |
+| the `magus:mutant` marker and the kill-their-mutants rule                   | not built (the next change)                           |
+| coverage for bash                                                           | not built                                             |
+| Measured section (refusals and wall time over the last 20 merges)           | not built                                             |
 
 On the building branch, change risk against `origin/main` ran the root `coverage` op for
 12m47s and failed: that op ran the whole Go suite, which was red. Listing the rules under
@@ -156,8 +156,7 @@ coverage profile.
 
 ### Coverage is read, not run
 
-Superseded on 2026-11-04 ([coverage is the tests' own
-profile](#2026-11-04-coverage-is-the-tests-own-profile)). `Change.risk` first ran each
+Superseded on 2026-11-04 ([coverage is the tests' own profile](#2026-11-04-coverage-is-the-tests-own-profile)). `Change.risk` first ran each
 coverage op in a scratch copy of the working tree and again in an export of the merge
 base, scoped to the touched files' tests. On this change that took 402 s at head, 274 s
 of it cmd/magus, and stopped at its 7m budget before base began (outd3b4e003ef3d). ci
@@ -259,8 +258,7 @@ function. The first lint rule became `touched-functions-keep-change-risk-under-1
 
 A touched function is judged against itself at base, coverage runs scoped in scratch
 copies, and covered lines kept replace the coverage totals. See
-[Judge against base](#judge-against-base), [Coverage is read, not
-run](#coverage-is-read-not-run) and [Covered lines kept](#covered-lines-kept).
+[Judge against base](#judge-against-base), [Coverage is read, not run](#coverage-is-read-not-run) and [Covered lines kept](#covered-lines-kept).
 
 ### 2026-11-04: mutation moves to go::mutate
 
@@ -282,8 +280,7 @@ declares only `{format, profile}`, and the target declaring the profile as an ou
 writes it. The reserved `coverage` op, `Op.Coverage`, `MAGUS_COVERAGE_DIR` and the
 measure's 7 minute budget are removed, since nothing runs coverage on change risk's
 behalf. Eli kept the rule that a function is credited only by its own package's tests,
-which the Go and Buzz profiles hold as written (see [Score](#score)). See [Coverage is
-read, not run](#coverage-is-read-not-run).
+which the Go and Buzz profiles hold as written (see [Score](#score)). See [Coverage is read, not run](#coverage-is-read-not-run).
 
 ### 2026-11-05: the rule lands unwired
 
