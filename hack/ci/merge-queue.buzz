@@ -368,19 +368,39 @@ export fun decide(runs: [Validation], intentAt: str) > Decision !> any {
 // is start one more run on base, which validates only what the base's own queue.yaml
 // plans.
 fun dispatch(run: str, base: str, intentAt: str) > void !> any {
-    final args = ["run", "view", run, "--repo", need("GITHUB_REPOSITORY"), "--json", "status,jobs"];
-    var event: str? = null;
-    while (event == null) {
-        event = intentEvent(capture("gh", args: args));
-        if (event == null) {
-            os\sleep(10000.0);
-        }
+    final awaited = awaitIntent(run);
+    if (awaited.error != null) {
+        throw awaited.error!.message;
     }
-    if (!intentOf(event!)) {
-        std\print("::notice title=queue-dispatch-no-intent::run {run} saw no merge intent (event \"{event!}\")");
+    final event = awaited.value!;
+    if (!intentOf(event)) {
+        std\print("::notice title=queue-dispatch-no-intent::run {run} saw no merge intent (event \"{event}\")");
         return;
     }
     start(base, intentAt: intentAt);
+}
+
+// awaitIntent polls every 10s, one API request each, until run says
+// whether its intent job ran and on what event.
+fun awaitIntent(run: str) > result\Result::<str> {
+    while (true) {
+        var seen = result\ok::<str?>(null);
+        try {
+            final args = ["run", "view", run, "--repo", need("GITHUB_REPOSITORY"), "--json", "status,jobs"];
+            seen = intentEvent(capture("gh", args: args));
+            if (seen.error == null and seen.value == null) {
+                os\sleep(10000.0);
+            }
+        } catch (err: any) {
+            return result\caught::<str>(err, doing: "queue: dispatch: view run {run}");
+        }
+        if (seen.error != null) {
+            return result\Result::<str>{ error = seen.error };
+        }
+        if (seen.value != null) {
+            return result\ok::<str>(seen.value!);
+        }
+    }
 }
 
 // INTENT_JOB starts the intent job's name. The rest names the event,
@@ -390,21 +410,25 @@ final INTENT_JOB = "queue intent on ";
 // intentEvent reads `gh run view --json status,jobs` of a pull request's run.
 // It returns the event the intent job names once that job ran.
 // It returns "" once the run says the job did not run, and null until then.
-export fun intentEvent(view: str) > str? !> any {
-    final run = serialize\jsonDecode(view);
-    foreach (j in run.q("jobs").listValue()) {
-        final name = j.q("name").stringValue();
-        if (name.startsWith(INTENT_JOB)) {
-            if (j.q("conclusion").stringValue() == "skipped") {
-                return "";
+export fun intentEvent(view: str) > result\Result::<str?> {
+    try {
+        final run = serialize\jsonDecode(view);
+        foreach (j in run.q("jobs").listValue()) {
+            final name = j.q("name").stringValue();
+            if (name.startsWith(INTENT_JOB)) {
+                if (j.q("conclusion").stringValue() == "skipped") {
+                    return result\ok::<str?>("");
+                }
+                return result\ok::<str?>(name.sub(INTENT_JOB.len()).trim());
             }
-            return name.sub(INTENT_JOB.len()).trim();
         }
+        if (run.q("status").stringValue() == "completed") {
+            return result\ok::<str?>("");
+        }
+    } catch (err: any) {
+        return result\caught::<str?>(err, doing: "queue: dispatch: read the run's jobs");
     }
-    if (run.q("status").stringValue() == "completed") {
-        return "";
-    }
-    return null;
+    return result\ok::<str?>(null);
 }
 
 // intentOf says whether event, as intentEvent reads it, is merge intent.
@@ -676,15 +700,18 @@ test "dispatch reads the event the intent job names, once the run says" {
     final view = fun (status: str, name: str, conclusion: str) > str {
         return encode({"status": status, "jobs": [{"name": name, "conclusion": conclusion}]});
     };
-    assert\equal(intentEvent(view("in_progress", name: "queue intent on labeled merge-queue: squash", conclusion: "")),
+    assert\equal(intentEvent(view("in_progress", name: "queue intent on labeled merge-queue: squash", conclusion: "")).value,
         want: "labeled merge-queue: squash", message: "a label event");
-    assert\equal(intentEvent(view("in_progress", name: "queue intent on synchronize ", conclusion: "success")),
+    assert\equal(intentEvent(view("in_progress", name: "queue intent on synchronize ", conclusion: "success")).value,
         want: "synchronize", message: "no label");
-    assert\equal(intentEvent(view("in_progress", name: "queue intent on synchronize", conclusion: "skipped")),
+    assert\equal(intentEvent(view("in_progress", name: "queue intent on synchronize", conclusion: "skipped")).value,
         want: "", message: "skipped");
-    assert\equal(intentEvent(encode({"status": "completed", "jobs": [<any>]})), want: "", message: "cancelled before it started");
-    assert\equal(intentEvent(encode({"status": "queued", "jobs": [<any>]})), want: null, message: "still waiting");
-    assert\equal(intentEvent(view("completed", name: "queue plan", conclusion: "success")), want: "", message: "another job says nothing");
+    assert\equal(intentEvent(encode({"status": "completed", "jobs": [<any>]})).value, want: "", message: "cancelled before it started");
+    final waiting = intentEvent(encode({"status": "queued", "jobs": [<any>]}));
+    assert\equal([waiting.value == null, waiting.error == null], want: [true, true], message: "still waiting");
+    assert\equal(intentEvent(view("completed", name: "queue plan", conclusion: "success")).value, want: "", message: "another job says nothing");
+    final broken = intentEvent("not json");
+    assert\equal([broken.value == null, broken.error != null], want: [true, true], message: "an unreadable body is an error, not a wait");
 }
 
 test "a labeled event is merge intent only when the label added is a method's" {
