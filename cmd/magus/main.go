@@ -180,7 +180,7 @@ func runCLI() int {
 	rootCtx = spawn.WithEnvOverlay(rootCtx)
 	rootCtx = proveStdio(rootCtx, args)
 
-	res, exitCode := startup(rootCtx, args)
+	dispatchCtx, res, exitCode := startup(rootCtx, args)
 
 	cleanup := func() {
 		if res.cleanup != nil {
@@ -206,9 +206,9 @@ func runCLI() int {
 	case "help", "-h", "--help":
 		usage()
 	case "version", "--version":
-		dispatchErr = runVersion(res.rootCtx, res.subArgs)
+		dispatchErr = runVersion(dispatchCtx, res.subArgs)
 	default:
-		dispatchErr = dispatchSub(res.rootCtx, res.root, res.rc, res.sub, res.subArgs)
+		dispatchErr = dispatchSub(dispatchCtx, res.root, res.rc, res.sub, res.subArgs)
 	}
 	code := mapExitCode(dispatchErr)
 	// Offer the run's pinned failures for rerun or inspection, while they are
@@ -220,15 +220,15 @@ func runCLI() int {
 	// Not after an abort. The prompt blocks on a read that cannot be
 	// interrupted, so opening one over the partial failures of a run the user
 	// just told magus to stop is both unwanted and the way to get stuck there.
-	if res.rootCtx.Err() == nil {
-		if err := promptFailures(res.rootCtx, res.root, cache.StderrHandler()); err != nil {
-			slog.ErrorContext(res.rootCtx, "", attr.Notice(""), attr.Component("magus"), attr.Error(err))
+	if dispatchCtx.Err() == nil {
+		if err := promptFailures(dispatchCtx, res.root, cache.StderrHandler()); err != nil {
+			slog.ErrorContext(dispatchCtx, "", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 		}
 	}
 	// Only a stage that succeeded settles: one that failed reports its own failure,
 	// never an upstream's.
 	if code == 0 {
-		if err := settlePipeline(res.rootCtx, args); err != nil {
+		if err := settlePipeline(dispatchCtx, args); err != nil {
 			dispatchErr, code = err, mapExitCode(err)
 		}
 	}
@@ -264,7 +264,6 @@ func withInterrupt(code int, err error, interrupted func() (syscall.Signal, bool
 // startupResult carries everything main needs to dispatch a subcommand.
 // cleanup MUST be called on every exit path (os.Exit skips deferred functions).
 type startupResult struct {
-	rootCtx context.Context
 	root    string
 	rc      runConfig
 	sub     string
@@ -724,7 +723,7 @@ func peekSub(args []string) (sub string, subArgs []string) {
 
 // startup runs all pre-dispatch steps (config, server forward, flag parse, workspace init, proc server).
 // exitCode >= 0 means exit without dispatching; -1 means proceed.
-func startup(rootCtx context.Context, args []string) (startupResult, int) {
+func startup(rootCtx context.Context, args []string) (context.Context, startupResult, int) {
 	trace := newStartupTracer(startupTraceEnabled(args))
 	cleanup := trace.done
 
@@ -744,10 +743,9 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		if err := applyPreSubDisplayFlags(args, peekedSubArgs, peekedSub); err != nil {
 			// The display flags are what failed to parse, so no display was installed.
 			fmt.Fprintln(os.Stderr, err)
-			return startupResult{cleanup: cleanup}, exit.Usage
+			return rootCtx, startupResult{cleanup: cleanup}, exit.Usage
 		}
-		return startupResult{
-			rootCtx: rootCtx,
+		return rootCtx, startupResult{
 			sub:     peekedSub,
 			subArgs: peekedSubArgs,
 			trace:   trace,
@@ -767,7 +765,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		// suggestion per line, and slog's text handler escapes every quote and newline
 		// in it back into one unreadable run.
 		fmt.Fprintf(os.Stderr, "magus: %v\n", config.WithRunningVersion(err, version))
-		return startupResult{cleanup: cleanup}, 1
+		return rootCtx, startupResult{cleanup: cleanup}, 1
 	}
 	// LoadWithRoot validates the yaml; ApplyEnv then overwrites those fields.
 	// Without a second pass the whole set of MAGUS_* variables goes unchecked while the
@@ -784,7 +782,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	}
 	if err := errors.Join(configgen.ApplyEnv(&cfg, knownEnv), config.Validate(cfg)); err != nil {
 		fmt.Fprintf(os.Stderr, "magus: invalid configuration from the environment: %v\n", err)
-		return startupResult{cleanup: cleanup}, 1
+		return rootCtx, startupResult{cleanup: cleanup}, 1
 	}
 	// Pass config to the workspace singletons via package-level state.
 	globalCfg = cfg
@@ -855,7 +853,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			code, fwdErr := proc.Forward(fwdCtx, args, version, earlyRoot)
 			stopFwd()
 			if fwdErr == nil {
-				return startupResult{cleanup: cleanup}, code
+				return rootCtx, startupResult{cleanup: cleanup}, code
 			}
 			logForwardFallback(rootCtx, slog.Default(), fwdErr)
 			// Keep MAGUS_PROC_SOCKET on the parent only while it can serve.
@@ -888,7 +886,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		if !errors.Is(err, flag.ErrHelp) {
 			stopFlags()
 			slog.Error("flag parse failed", attr.Error(err))
-			return startupResult{cleanup: cleanup}, 1
+			return rootCtx, startupResult{cleanup: cleanup}, 1
 		}
 		helpRequested = true
 	}
@@ -905,12 +903,12 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	if err := refuseOutputOnPath(global.output, rest); err != nil {
 		stopFlags()
 		slog.ErrorContext(rootCtx, "", attr.Notice(""), attr.Component("magus"), attr.Error(err))
-		return startupResult{cleanup: cleanup}, exit.Usage
+		return rootCtx, startupResult{cleanup: cleanup}, exit.Usage
 	}
 	if err := errors.Join(finalizeConfig(), refuseInheritedSandboxWeakened(globalCfg.Sandbox.Mode)); err != nil {
 		stopFlags()
 		slog.ErrorContext(rootCtx, "invalid configuration from flags", attr.Notice(""), attr.Component("magus"), attr.Error(err))
-		return startupResult{cleanup: cleanup}, 1
+		return rootCtx, startupResult{cleanup: cleanup}, 1
 	}
 	// globalCfg is the one the flags were bound into; cfg is the copy taken before any
 	// of them were parsed, and the startup path below still reads it: for the watch
@@ -934,10 +932,10 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	// asked wrong), and it is why this cannot simply key on "did we print usage".
 	if len(rest) == 0 {
 		if helpRequested {
-			return startupResult{cleanup: cleanup}, 0
+			return rootCtx, startupResult{cleanup: cleanup}, 0
 		}
 		usage()
-		return startupResult{cleanup: cleanup}, exit.Usage
+		return rootCtx, startupResult{cleanup: cleanup}, exit.Usage
 	}
 
 	rootCtx = withTrace(rootCtx, trace)
@@ -973,7 +971,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		// that parent (or a server was already running, or spawning failed); only a
 		// foreground server falls through to build and run it in this process.
 		if code, done := startServerBackground(rootCtx, cfg, subArgs); done {
-			return startupResult{cleanup: cleanup}, code
+			return rootCtx, startupResult{cleanup: cleanup}, code
 		}
 		startServer(rootCtx, cfg, rc)
 	case !profile.needsWorkspace:
@@ -1040,8 +1038,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		}
 	}
 
-	return startupResult{
-		rootCtx: rootCtx,
+	return rootCtx, startupResult{
 		root:    root,
 		rc:      rc,
 		sub:     sub,

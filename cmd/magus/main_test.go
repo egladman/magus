@@ -1128,7 +1128,7 @@ func benchStartup(b *testing.B, args []string) {
 		b.StopTimer()
 		resetStartupSingletons()
 		b.StartTimer()
-		res, _ := startup(context.Background(), args)
+		_, res, _ := startup(context.Background(), args)
 		if res.cleanup != nil {
 			res.cleanup()
 		}
