@@ -1484,12 +1484,14 @@ func TestJobExecRefusesAnythingButOneLiveJob(t *testing.T) {
 }
 
 // A fork under `job exec --timeout` bootstraps with the wrapper holding the
-// whole budget. A stranger's claim of that size refuses the same run.
+// whole budget. Under budget_wait 0 a stranger's claim of that size refuses the
+// same run.
 func TestAForkUnderJobExecSharesItsClaim(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	privateSockDir(t)
 	t.Setenv("MAGUS_BROKER", "")
+	t.Setenv("MAGUS_BUDGET_WAIT", "0")
 	ln, err := broker.Listen(t.Context(), broker.DefaultAddr())
 	require.NoError(t, err)
 	done := make(chan error, 1)
