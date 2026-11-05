@@ -883,7 +883,7 @@ func (s *LoadRecoverySuite) SetupTest() {
 	ctx = WithLocation(ctx, cacheDir, repo.Root(), repo.Root())
 	ownCheckout(s.T(), ctx, true)
 	declareGuardRule(s.T(), repo.Root())
-	s.layers = append(layersFrom(ctx), s.pin(s.checkpoint))
+	s.layers = append(locationLayers(ctx), s.pin(s.checkpoint))
 	s.deps = unloadedDependencies(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 }
 

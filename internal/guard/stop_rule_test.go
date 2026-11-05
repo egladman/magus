@@ -35,7 +35,7 @@ func TestStopRuleSuite(t *testing.T) { suite.Run(t, new(StopRuleSuite)) }
 
 func (s *StopRuleSuite) SetupTest() {
 	writeCtx, root, _ := writeFixture(s.T())
-	s.layers, s.root = layersFrom(writeCtx), root
+	s.layers, s.root = locationLayers(writeCtx), root
 }
 
 // stop is a host stop envelope in the fixture's workspace.

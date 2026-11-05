@@ -308,7 +308,7 @@ const redGate = "./magus affected ci"
 // and docs' lint. No gate ran before it in the window.
 func (s *redGateSuite) SetupTest() {
 	ctx, repo := gateRepeatRepository(s.T(), 0, sessions.OutcomeFail)
-	s.layers, s.repo = layersFrom(ctx), repo
+	s.layers, s.repo = locationLayers(ctx), repo
 	dir, err := sessions.Dir(repo.Root())
 	s.Require().NoError(err)
 	s.dir = dir
@@ -1627,7 +1627,7 @@ func TestCommitPaths(t *testing.T) { suite.Run(t, new(commitPathsSuite)) }
 
 func (s *commitPathsSuite) SetupTest() {
 	fixtureCtx, repo, worker, dir := leaseVCSRepository(s.T())
-	s.layers, s.repo, s.worker, s.dir = layersFrom(fixtureCtx), repo, worker, dir
+	s.layers, s.repo, s.worker, s.dir = locationLayers(fixtureCtx), repo, worker, dir
 	s.Require().NoError(os.MkdirAll(filepath.Join(s.dir, "cmd/magus"), 0o755))
 	s.Require().NoError(os.MkdirAll(filepath.Join(s.dir, "docs"), 0o755))
 }
@@ -4015,7 +4015,7 @@ func (s *ScratchWorkspaceSuite) SetupTest() {
 	s.held = markedWorkspace(s.T())
 	s.Require().NoError(os.MkdirAll(filepath.Join(s.held, ".git"), 0o755))
 	fixtureCtx, deps, row := heldRowFixture(s.T(), s.held, s.held, "feat")
-	s.layers, s.deps, s.row = layersFrom(fixtureCtx), deps, row
+	s.layers, s.deps, s.row = locationLayers(fixtureCtx), deps, row
 	cache := s.T().TempDir()
 	s.T().Setenv("XDG_CACHE_HOME", cache)
 	s.scratch = filepath.Join(cache, "magus", "tmp")

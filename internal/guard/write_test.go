@@ -1743,7 +1743,7 @@ func fleetLayers(t *testing.T, leases ...types.Job) (ctxLayers, string) {
 	return ctxLayers{atLayer(ctx.Value(locationKey{}).(location))}, root
 }
 
-func layersFrom(ctx context.Context) ctxLayers {
+func locationLayers(ctx context.Context) ctxLayers {
 	return ctxLayers{atLayer(ctx.Value(locationKey{}).(location))}
 }
 
@@ -1751,5 +1751,5 @@ func (s *UnboundWriteInJobCheckoutSuite) testContext() context.Context { return 
 
 func spawnLayers(t *testing.T) (ctxLayers, string) {
 	ctx, cacheDir := spawnFixture(t)
-	return layersFrom(ctx), cacheDir
+	return locationLayers(ctx), cacheDir
 }
