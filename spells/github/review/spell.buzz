@@ -711,7 +711,7 @@ fun readPull(item: serialize\Boxed, repo: str, base: str, auth: any, tally: Tall
         author = item.q("user").q("login").stringValue(),
         url = item.q("html_url").stringValue(),
         branch = item.q("head").q("ref").stringValue(),
-        headSha = sha,
+        headSHA = sha,
         draft = item.q("draft").booleanValue(),
         mergeable = mergeable,
         behindBy = behind,
