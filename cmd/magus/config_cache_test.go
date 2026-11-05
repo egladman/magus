@@ -130,7 +130,12 @@ func newCacheShard(t *testing.T) *cacheShard {
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
 	}
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	config := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", config)
+	// go writes telemetry here as cleanup runs; its mode file stops that.
+	telemetry := filepath.Join(config, "go", "telemetry")
+	require.NoError(t, os.MkdirAll(telemetry, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(telemetry, "mode"), []byte("off"), 0o644))
 	t.Setenv("MAGUS_CACHE_DIR", t.TempDir())
 	emu := remotetest.NewGHA()
 	emu.Serve(t, "shard-token")

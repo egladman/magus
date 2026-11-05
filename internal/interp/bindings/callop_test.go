@@ -15,7 +15,7 @@ import (
 
 // buzzProvider is a provider spell backed by src, as an imported spell is, and registered
 // nowhere: a test hands it straight to the adapter under test.
-func buzzProvider(t *testing.T, src string) spells.Driver {
+func buzzProvider(t *testing.T, src string) *spells.Spell {
 	t.Helper()
 	return spells.NewSpell("test-provider", spells.WithFuncSource(`import "magus/spell";
 `+src))

@@ -41,8 +41,8 @@ func (s *conformanceCeilingSuite) check(ws types.WorkspaceReader) types.Check {
 			types.ConformanceFuncLines: {types.ConformancePopSource: {Percentile: 99, Anchor: 92}},
 		},
 	}
-	r := &runner{opts: options{cfg: cfg}, root: s.T().TempDir(), ws: ws, ctx: s.T().Context()}
-	return r.checkConformanceCeiling(nil)
+	r := &runner{opts: options{cfg: cfg}, root: s.T().TempDir(), ws: ws}
+	return r.checkConformanceCeiling(s.T().Context(), nil)
 }
 
 func (s *conformanceCeilingSuite) TestNoAnalyzerCannotMeasure() {

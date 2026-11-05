@@ -17,7 +17,7 @@ import (
 // neither MAGUS_VCS_ENABLED nor MAGUS_VCS_NAME: an environment that turns magus's own
 // version control off, or points it at another backend, must not turn the queue's off
 // with it.
-func OpenVCS(ctx context.Context, root, name, remote string) (magustypes.VCSDriver, error) {
+func OpenVCS(ctx context.Context, root, name, remote string) (magustypes.VCSDriver, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	if root == "" || name == "" || remote == "" {
 		return nil, errors.New("opening a VCS needs a root, a backend name and a remote")
 	}
@@ -32,7 +32,7 @@ func OpenVCS(ctx context.Context, root, name, remote string) (magustypes.VCSDriv
 }
 
 // resolveVCS resolves the backend named name, whatever the environment says.
-func resolveVCS(ctx context.Context, root, name string) (magustypes.VCSDriver, error) {
+func resolveVCS(ctx context.Context, root, name string) (magustypes.VCSDriver, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	enabled := true
 	res, err := vcs.Resolve(ctx, root, "", magustypes.VCSOptions{Enabled: &enabled, Name: name})
 	if err != nil {

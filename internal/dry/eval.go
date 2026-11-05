@@ -152,12 +152,12 @@ type evalConfig struct {
 	catalog SpellCatalog
 }
 
-// spellCatalog returns the configured catalog, defaulting to the real registry.
-func (c *evalConfig) spellCatalog() SpellCatalog {
+// builtinOps asks the configured catalog, defaulting to the real registry.
+func (c *evalConfig) builtinOps() map[string][]string {
 	if c.catalog != nil {
-		return c.catalog
+		return c.catalog.BuiltinOps()
 	}
-	return builtinCatalog{}
+	return builtinCatalog{}.BuiltinOps()
 }
 
 // EvalOption configures Eval. Options are additive: each turns on a capability
@@ -206,7 +206,7 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 	// target's dependency closure: an example is self-contained, so every op it wires
 	// is worth showing.
 	if cfg.tracer {
-		tr, targets, ops, isSpellBuf, diag := evalAndProbe(ctx, src, nil, cfg.spellCatalog().BuiltinOps())
+		tr, targets, ops, isSpellBuf, diag := evalAndProbe(ctx, src, nil, cfg.builtinOps())
 		if diag != nil {
 			return EvalResult{Output: tr.out.String(), Diag: diag}
 		}

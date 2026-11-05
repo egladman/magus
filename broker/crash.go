@@ -67,7 +67,7 @@ func (c *Client) watchCrashes(ctx context.Context, cn *conn) {
 // watchCrash reads report until every writer is gone: the watched process exited, or its
 // runtime moved crash output to a newer pipe. Anything read is a crash; the broker
 // saves it and writes hint to the process's stderr, then lets both files go.
-func (s *server) watchCrash(h hello, hint string, report, stderr *os.File) {
+func (s *server) watchCrash(ctx context.Context, h hello, hint string, report, stderr *os.File) {
 	s.mu.Lock()
 	if s.closing {
 		s.mu.Unlock()
@@ -95,12 +95,12 @@ func (s *server) watchCrash(h hello, hint string, report, stderr *os.File) {
 		}
 		msg := hint
 		if path, err := s.saveCrash(h, body.Bytes()); err != nil {
-			s.opts.log.WarnContext(s.ctx, "could not save a crash report", slog.Int("pid", h.PID), attr.Error(err))
+			s.opts.log.WarnContext(ctx, "could not save a crash report", slog.Int("pid", h.PID), attr.Error(err))
 		} else if path != "" {
 			msg += fmt.Sprintf("The crash report is saved at %s.\n", path)
 		}
 		_, _ = io.WriteString(stderr, msg)
-		s.opts.log.WarnContext(s.ctx, "a watched process crashed", slog.Int("pid", h.PID), slog.String("command", strings.Join(h.Argv, " ")))
+		s.opts.log.WarnContext(ctx, "a watched process crashed", slog.Int("pid", h.PID), slog.String("command", strings.Join(h.Argv, " ")))
 	}()
 }
 

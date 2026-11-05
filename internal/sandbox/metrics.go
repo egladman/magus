@@ -43,7 +43,7 @@ func WithMetrics(ctx context.Context, rec MetricsRecorder) context.Context {
 	return context.WithValue(ctx, metricsKey{}, rec)
 }
 
-func metricsFromContext(ctx context.Context) MetricsRecorder {
+func metricsFromContext(ctx context.Context) MetricsRecorder { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	if ctx == nil {
 		return nil
 	}

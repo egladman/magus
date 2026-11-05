@@ -42,7 +42,7 @@ func buildService(obs buzz.DirectObserver) vm.Value {
 }
 
 // serviceScope is the script's scope and the workspace that opens its session.
-func serviceScope(ctx context.Context, member string) (*service.Scope, types.WorkspaceRepository, serviceSessions, error) {
+func serviceScope(ctx context.Context, member string) (*service.Scope, types.WorkspaceRepository, serviceSessions, error) { //nolint:ireturn // the workspace backing is chosen at runtime
 	sc := service.ScopeFromContext(ctx)
 	if sc == nil {
 		return nil, nil, nil, types.DiagnosticErrorf(types.MagusfileOnlyMember,

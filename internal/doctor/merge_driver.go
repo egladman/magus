@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -32,10 +33,10 @@ import (
 //
 // The diff drivers are installed with the merge driver, so a registration missing any of
 // them fails here too, and the remedy is the init verb that installs them.
-func (r *runner) checkMergeDriverLoads() types.Check {
+func (r *runner) checkMergeDriverLoads(ctx context.Context) types.Check {
 	const name = "merge-driver-loads-workspace"
 
-	registered := r.registeredMergeDriver()
+	registered := r.registeredMergeDriver(ctx)
 	if registered == "" {
 		return types.Check{Name: name, Status: types.CheckOK,
 			Message: "no merge driver registered, so generated conflicts fall back to a hand merge"}
@@ -45,7 +46,7 @@ func (r *runner) checkMergeDriverLoads() types.Check {
 		return types.Check{Name: name, Status: types.CheckFail,
 			Message: "the registered merge driver names no executable: " + registered}
 	}
-	missing, err := vcs.MissingDiffDrivers(r.runContext(), r.ws.Root())
+	missing, err := vcs.MissingDiffDrivers(ctx, r.ws.Root())
 	if err != nil {
 		return types.Check{Name: name, Status: types.CheckFail, Message: err.Error()}
 	}
@@ -73,7 +74,7 @@ func (r *runner) checkMergeDriverLoads() types.Check {
 			Status: types.CheckFail,
 			Message: "the merge driver is registered without the diff drivers installed beside it, so " +
 				"hunk headers name no declaration and a footprint cannot say what a change touched",
-			Details: append(missing, r.installRemedy()),
+			Details: append(missing, r.installRemedy(ctx)),
 		}
 	}
 	return types.Check{Name: name, Status: types.CheckOK,
@@ -83,12 +84,12 @@ func (r *runner) checkMergeDriverLoads() types.Check {
 // registeredMergeDriver returns the merge driver the workspace's VCS would run, or "" when
 // none is registered or the backend registers none. It is the effective registration, so a
 // worktree override, which is the whole point of install-dogfood, is the one reported.
-func (r *runner) registeredMergeDriver() string {
-	res, err := vcs.Resolve(r.runContext(), r.ws.Root(), "", r.ws.VCSOptions())
+func (r *runner) registeredMergeDriver(ctx context.Context) string {
+	res, err := vcs.Resolve(ctx, r.ws.Root(), "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
 		return ""
 	}
-	cmd, err := res.VCS.MergeDriverCommand(r.runContext(), r.ws.Root())
+	cmd, err := res.VCS.MergeDriverCommand(ctx, r.ws.Root())
 	if err != nil {
 		return ""
 	}
@@ -97,8 +98,8 @@ func (r *runner) registeredMergeDriver() string {
 
 // installRemedy names the init command that installs the diff drivers; when no VCS
 // resolves it says so rather than guessing a backend.
-func (r *runner) installRemedy() string {
-	res, err := vcs.Resolve(r.runContext(), r.ws.Root(), "", r.ws.VCSOptions())
+func (r *runner) installRemedy(ctx context.Context) string {
+	res, err := vcs.Resolve(ctx, r.ws.Root(), "", r.ws.VCSOptions())
 	if err != nil {
 		return "no VCS resolved for this workspace, so there is no backend to install them for: " + err.Error()
 	}
@@ -126,9 +127,8 @@ func driverExecutable(registered string) string {
 // settled yet. Each names generated files still holding one side of a merge, so a
 // commit made now carries stale output. The record outlives a settle hook that failed
 // or was bypassed with --no-verify, and this is where that becomes visible.
-func (r *runner) checkOwedRegeneration() types.Check {
+func (r *runner) checkOwedRegeneration(ctx context.Context) types.Check {
 	const name = "owed-regeneration"
-	ctx := r.runContext()
 	owed, err := vcs.OwedRegenerations(ctx, r.ws.Root())
 	if err != nil {
 		return types.Check{Name: name, Status: types.CheckFail, Message: err.Error()}

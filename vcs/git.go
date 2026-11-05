@@ -3003,7 +3003,7 @@ func (gitVCS) CheckoutID(dir string) (string, bool) { return headOID(dir) }
 // OpenObjectBatch starts one `git cat-file --batch` for every approved source a
 // guard load reads. git show per path measured about 75ms across the policy set
 // on one hook; the process startup is the cost, and one process serves the set.
-func (gitVCS) OpenObjectBatch(ctx context.Context, root, rev string) (ObjectBatch, error) {
+func (gitVCS) OpenObjectBatch(ctx context.Context, root, rev string) (ObjectBatch, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	if rev == "" {
 		rev = "HEAD"
 	}

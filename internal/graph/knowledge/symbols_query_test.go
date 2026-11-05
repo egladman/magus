@@ -76,13 +76,13 @@ func TestQuerySymbolsMatchesTheFullyMergedQuery(t *testing.T) {
 func TestQuerySymbolsRanksUnderTheTableCtxCarries(t *testing.T) {
 	cacheDir, in := symbolQueryFixture(t)
 	for _, tc := range []struct {
-		ctx     context.Context
+		with    func(context.Context) context.Context
 		skipped string
 	}{
-		{context.Background(), noTableSkipped},
-		{WithTable(context.Background(), fixtureTable(t)), listEmbed + ": no query token is in the table's vocabulary"},
+		{func(ctx context.Context) context.Context { return ctx }, noTableSkipped},
+		{func(ctx context.Context) context.Context { return WithTable(ctx, fixtureTable(t)) }, listEmbed + ": no query token is in the table's vocabulary"},
 	} {
-		got, _, err := NewStore(cacheDir, false, 0, nil, nil).QuerySymbols(tc.ctx, build(t, cacheDir, BuildOptions{}, in), "Alpha", 0)
+		got, _, err := NewStore(cacheDir, false, 0, nil, nil).QuerySymbols(tc.with(t.Context()), build(t, cacheDir, BuildOptions{}, in), "Alpha", 0)
 		require.NoError(t, err)
 		require.NotNil(t, got.Ranking)
 		assert.Contains(t, got.Ranking.Skipped, tc.skipped)

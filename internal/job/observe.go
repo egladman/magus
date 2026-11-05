@@ -95,7 +95,7 @@ func WorkTree(root string, row types.Job) string {
 }
 
 // resolveDriver is the VCS answering for root, or nil and why none is.
-func resolveDriver(ctx context.Context, root string) (types.VCSDriver, string) {
+func resolveDriver(ctx context.Context, root string) (types.VCSDriver, string) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 	switch {
 	case err != nil:

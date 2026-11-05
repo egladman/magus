@@ -252,7 +252,7 @@ var errNoDependency = errors.New("guard: the caller supplied no resolver for thi
 // an open costs seconds on an idle machine and more on a loaded one. An open that does not
 // answer in time answers its error, which every rule reads as a workspace it could not open.
 // A root opens once in a judgment: rules ask per file.
-func (d Dependencies) inspect(ctx context.Context, root string) (types.WorkspaceRepository, error) {
+func (d Dependencies) inspect(ctx context.Context, root string) (types.WorkspaceRepository, error) { //nolint:ireturn // the workspace backing is chosen at runtime
 	if d.Inspect == nil {
 		return nil, errNoDependency
 	}

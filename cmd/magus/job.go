@@ -2247,7 +2247,7 @@ func provisionCheckout(ctx context.Context, store *job.Store, ws job.Workspace, 
 // script's progress goes to stderr, since the fork's stdout is its record.
 func bootstrapCheckout(ctx context.Context, exe, forker, dir string, flags ...string) error {
 	args := append([]string{"buzz", job.CheckoutBootstrapScript, "--", "--checkout", dir}, flags...)
-	cmd := exec.CommandContext(ctx, exe, args...)
+	cmd := exec.CommandContext(ctx, exe, args...) //nolint:gosec // exe is the running magus binary or its own placed copy
 	var output bytes.Buffer
 	cmd.Dir, cmd.Stdout, cmd.Stderr = forker, progressWriter(ctx), io.MultiWriter(os.Stderr, &output)
 	if err := cmd.Run(); err != nil {
