@@ -479,7 +479,7 @@ func RunOptions(w *Writer, served NextServer) []cache.RunOption {
 }
 
 // GraphObserver returns a types.Observer that appends graph events to w; nil-safe.
-func GraphObserver(w *Writer) types.Observer {
+func GraphObserver(w *Writer) types.Observer { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	if w == nil {
 		return types.NoopObserver{}
 	}

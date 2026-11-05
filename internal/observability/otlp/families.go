@@ -26,25 +26,25 @@ func (r *reg) join(name string, err error) {
 	}
 }
 
-func (r *reg) i64c(name, desc, unit string) metric.Int64Counter {
+func (r *reg) i64c(name, desc, unit string) metric.Int64Counter { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	c, err := r.m.Int64Counter(name, metric.WithDescription(desc), metric.WithUnit(unit))
 	r.join(name, err)
 	return c
 }
 
-func (r *reg) i64ud(name, desc, unit string) metric.Int64UpDownCounter {
+func (r *reg) i64ud(name, desc, unit string) metric.Int64UpDownCounter { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	c, err := r.m.Int64UpDownCounter(name, metric.WithDescription(desc), metric.WithUnit(unit))
 	r.join(name, err)
 	return c
 }
 
-func (r *reg) i64h(name, desc, unit string) metric.Int64Histogram {
+func (r *reg) i64h(name, desc, unit string) metric.Int64Histogram { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	h, err := r.m.Int64Histogram(name, metric.WithDescription(desc), metric.WithUnit(unit))
 	r.join(name, err)
 	return h
 }
 
-func (r *reg) f64h(name, desc string) metric.Float64Histogram {
+func (r *reg) f64h(name, desc string) metric.Float64Histogram { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	// Every duration histogram is in seconds; the unit is not a per-call parameter.
 	h, err := r.m.Float64Histogram(name, metric.WithDescription(desc), metric.WithUnit("s"))
 	r.join(name, err)

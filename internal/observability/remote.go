@@ -22,7 +22,7 @@ import (
 // verification or replay is a hit here and a failure in the tally, and a store the
 // backend reports as already present is a put here and neither an upload nor a failure
 // in the tally.
-func InstrumentRemoteBackend(b types.CacheBackend, p remoteOpRecorder) types.CacheBackend {
+func InstrumentRemoteBackend(b types.CacheBackend, p remoteOpRecorder) types.CacheBackend { //nolint:ireturn // the implementation is chosen at runtime among several
 	if b == nil || p == nil || !p.Enabled() {
 		return b
 	}
@@ -126,7 +126,7 @@ func (c *countingReadCloser) Close() error {
 // CacheTracer adapts a Provider to [cache.Tracer] so the cache package can open
 // phase spans without importing this package. It returns nil when telemetry is
 // off; [cache.ContextWithTracer] stores a nil Tracer as a no-op.
-func CacheTracer(p enabledSpanStarter) cache.Tracer {
+func CacheTracer(p enabledSpanStarter) cache.Tracer { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	if p == nil || !p.Enabled() {
 		return nil
 	}

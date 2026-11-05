@@ -320,7 +320,7 @@ func (Nop) Snapshot(context.Context) ([]byte, error)                     { retur
 func (Nop) Shutdown(context.Context) error                               { return nil }
 
 // GraphObserver wraps p as a types.Observer; returns types.NoopObserver{} when p is nil or disabled.
-func GraphObserver(ctx context.Context, p graphQueryRecorder) types.Observer {
+func GraphObserver(ctx context.Context, p graphQueryRecorder) types.Observer { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	if p == nil || !p.Enabled() {
 		return types.NoopObserver{}
 	}
@@ -333,7 +333,7 @@ type graphQueryRecorder interface {
 }
 
 type otelGraphObserver struct {
-	ctx context.Context
+	ctx context.Context //nolint:containedctx // the observer interface carries no ctx
 	p   graphQueryRecorder
 }
 
@@ -357,7 +357,7 @@ func WithProvider(ctx context.Context, p Provider) context.Context {
 }
 
 // FromContext returns the Provider stored by [WithProvider], or nil.
-func FromContext(ctx context.Context) Provider {
+func FromContext(ctx context.Context) Provider { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	p, _ := ctx.Value(providerKey{}).(Provider)
 	return p
 }
