@@ -9,6 +9,7 @@ import (
 	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // writeFragment writes one fragment file into dir for tests.
@@ -46,8 +47,8 @@ func TestParseFragment(t *testing.T) {
 			})
 		}
 	}
-	require.GreaterOrEqual(t, valid, 3)
-	require.GreaterOrEqual(t, invalid, 10)
+	require.GreaterOrEqual(t, valid, 4)
+	require.GreaterOrEqual(t, invalid, 12)
 
 	got, err := parseFragment("f.md", []byte(files["valid/removed-breaking.md"]))
 	require.NoError(t, err)
@@ -88,4 +89,41 @@ func TestRenderUnreleased(t *testing.T) {
 	assert.Equal(t, want, renderUnreleased(frags))
 	assert.Empty(t, lintUnreleased(want))
 	assert.Equal(t, "", renderUnreleased(nil))
+}
+
+type ManyEntriesSuite struct {
+	suite.Suite
+}
+
+func TestManyEntriesSuite(t *testing.T) {
+	suite.Run(t, new(ManyEntriesSuite))
+}
+
+func (s *ManyEntriesSuite) TestParseFragmentKeepsEveryEntryInOrder() {
+	got, err := parseFragment("f.md", []byte("### Changed\n\n- **One.** It\n  wraps.\n\n- **Two.**\n"))
+	s.Require().NoError(err)
+	s.Equal(fragment{
+		path:    "f.md",
+		section: "Changed",
+		entry:   "- **One.** It\n  wraps.\n- **Two.**",
+	}, got)
+}
+
+func (s *ManyEntriesSuite) TestParseFragmentRefusesTwoHeadings() {
+	_, err := parseFragment("f.md", []byte("### Added\n\n- **One.**\n\n### Fixed\n\n- **Two.**\n"))
+	s.Require().ErrorContains(err, "more than one section heading, write one fragment per group")
+}
+
+func (s *ManyEntriesSuite) TestParseFragmentChecksEachEntry() {
+	_, err := parseFragment("f.md", []byte("### Added\n\n- **One.**\n- plain.\n"))
+	s.Require().ErrorContains(err, "line 4: an entry opens with a **bold headline**")
+}
+
+func (s *ManyEntriesSuite) TestReadAndRenderKeepFileNameThenEntryOrder() {
+	dir := s.T().TempDir()
+	writeFragment(s.T(), dir, "b.md", "### Added\n\n- **B1.**\n- **B2.**\n")
+	writeFragment(s.T(), dir, "a.md", "### Added\n\n- **A1.**\n- **A2.**\n")
+	frags, err := readFragments(dir)
+	s.Require().NoError(err)
+	s.Equal("### Added\n\n- **A1.**\n- **A2.**\n- **B1.**\n- **B2.**", renderUnreleased(frags))
 }
