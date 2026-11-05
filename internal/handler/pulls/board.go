@@ -17,18 +17,18 @@ import (
 // before the board blames capacity instead of code.
 const backlogMinChecks = 3
 
-// BoardInput is everything BuildBoard reads, the clock included, so a
+// boardInput is everything buildBoard reads, the clock included, so a
 // board is a function of its input.
-type BoardInput struct {
+type boardInput struct {
 	List   types.PullList
 	Now    time.Time
 	Config config.Pulls
-	Filter Filter
+	Filter authorFilter
 }
 
-// BuildBoard analyses the pull list into the board the console renders.
+// analyseBoard analyses the pull list into the board the console renders.
 // Sync stays unset: the poller owns when the list was taken.
-func BuildBoard(in BoardInput) *pullsv1.Board {
+func analyseBoard(in boardInput) *pullsv1.Board {
 	base := cmp.Or(in.List.Base.Name, "main")
 	rows := visiblePulls(in)
 	pulls := make([]*pullsv1.Pull, 0, len(rows))
@@ -48,7 +48,7 @@ func BuildBoard(in BoardInput) *pullsv1.Board {
 	}
 }
 
-func visiblePulls(in BoardInput) []types.ForgePull {
+func visiblePulls(in boardInput) []types.ForgePull {
 	authors := in.Filter.Effective(in.List.Viewer)
 	out := make([]types.ForgePull, 0, len(in.List.Pulls))
 	for _, p := range in.List.Pulls {
@@ -146,7 +146,7 @@ func mainState(b types.BaseBranch, now time.Time) *pullsv1.BranchState {
 	return s
 }
 
-func pullRow(p types.ForgePull, base string, in BoardInput) *pullsv1.Pull {
+func pullRow(p types.ForgePull, base string, in boardInput) *pullsv1.Pull {
 	r := rollupChecks(p.Checks, in.Now)
 	row := &pullsv1.Pull{
 		Number:    int32(p.Number),
@@ -237,7 +237,7 @@ func overlaps(rows []*pullsv1.Pull, src []types.ForgePull) {
 	}
 }
 
-func findPatterns(rows []types.ForgePull, in BoardInput) []*pullsv1.Pattern {
+func findPatterns(rows []types.ForgePull, in boardInput) []*pullsv1.Pattern {
 	out := regressions(rows, in)
 	if p := runnerBacklog(rows, in); p != nil {
 		out = append(out, p)
@@ -249,7 +249,7 @@ type failureKey struct{ check, line string }
 
 // regressions finds checks that fail the same way on several pulls. That
 // points at the base branch more than at any one change.
-func regressions(rows []types.ForgePull, in BoardInput) []*pullsv1.Pattern {
+func regressions(rows []types.ForgePull, in boardInput) []*pullsv1.Pattern {
 	type group struct {
 		pulls    map[int]bool
 		earliest time.Time
@@ -336,7 +336,7 @@ func regressionMessage(p *pullsv1.Pattern) string {
 	return msg
 }
 
-func runnerBacklog(rows []types.ForgePull, in BoardInput) *pullsv1.Pattern {
+func runnerBacklog(rows []types.ForgePull, in boardInput) *pullsv1.Pattern {
 	var n int
 	seen := map[int32]bool{}
 	var pulls []int32

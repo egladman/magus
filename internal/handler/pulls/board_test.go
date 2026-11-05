@@ -59,11 +59,11 @@ func pullOf(n int, author string, checks ...types.ForgeCheck) types.ForgePull {
 }
 
 func buildBoard(base types.BaseBranch, pulls ...types.ForgePull) *pullsv1.Board {
-	return BuildBoard(BoardInput{
+	return analyseBoard(boardInput{
 		List:   types.PullList{Repo: "acme/acme", Viewer: "ada", Base: base, Pulls: pulls},
 		Now:    testNow,
 		Config: testConfig(),
-		Filter: Filter{Saved: true},
+		Filter: authorFilter{Saved: true},
 	})
 }
 
@@ -353,11 +353,11 @@ func (s *BoardSuite) TestMainIsPinnedWithItsFirstFailure() {
 }
 
 func (s *BoardSuite) TestFilterKeepsTheChosenAuthorsOnly() {
-	b := BuildBoard(BoardInput{
+	b := analyseBoard(boardInput{
 		List:   types.PullList{Viewer: "ada", Pulls: []types.ForgePull{pullOf(1, "ada"), pullOf(2, "Grace"), pullOf(3, "bob")}},
 		Now:    testNow,
 		Config: testConfig(),
-		Filter: Filter{Saved: true, Authors: []string{"grace", "bob"}},
+		Filter: authorFilter{Saved: true, Authors: []string{"grace", "bob"}},
 	})
 
 	s.Require().Len(b.Pulls, 2)
@@ -366,7 +366,7 @@ func (s *BoardSuite) TestFilterKeepsTheChosenAuthorsOnly() {
 }
 
 func (s *BoardSuite) TestDefaultFilterShowsTheViewerOnly() {
-	b := BuildBoard(BoardInput{
+	b := analyseBoard(boardInput{
 		List:   types.PullList{Viewer: "ada", Pulls: []types.ForgePull{pullOf(1, "ada"), pullOf(2, "grace")}},
 		Now:    testNow,
 		Config: testConfig(),

@@ -138,7 +138,7 @@ func (p *Poller) Sync(ctx context.Context) {
 	p.state.NextSyncAt = timestampOf(now.Add(c.interval))
 }
 
-func (p *Poller) read(ctx context.Context, f Filter, viewer string) (types.PullList, error) {
+func (p *Poller) read(ctx context.Context, f authorFilter, viewer string) (types.PullList, error) {
 	remote := p.opts.Remote(ctx)
 	if remote == "" {
 		return types.PullList{}, errors.New("pulls: the workspace has no remote to read pull requests from")
@@ -167,7 +167,7 @@ func (p *Poller) Board() (*pullsv1.Board, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := p.opts.Now()
-	board := BuildBoard(BoardInput{List: p.list, Now: now, Config: p.opts.Config, Filter: filter})
+	board := analyseBoard(boardInput{List: p.list, Now: now, Config: p.opts.Config, Filter: filter})
 	if !p.haveList {
 		board.Filter = filter.proto(p.viewer)
 	}

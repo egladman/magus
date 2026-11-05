@@ -14,23 +14,23 @@ import (
 	pullsv1 "github.com/egladman/magus/proto/gen/go/magus/pulls/v1alpha1"
 )
 
-// AuthorEntry is one line of authors.jsonl. An untracked line ends its
+// authorEntry is one line of authors.jsonl. An untracked line ends its
 // login; the empty login marks a saved filter that tracks nobody.
-type AuthorEntry struct {
+type authorEntry struct {
 	Login   string    `json:"login"`
 	Tracked bool      `json:"tracked"`
 	At      time.Time `json:"at"`
 }
 
-// Filter is the saved author filter. Before anything is saved it is not
+// authorFilter is the saved author filter. Before anything is saved it is not
 // Saved and the board shows the viewer's own pulls.
-type Filter struct {
+type authorFilter struct {
 	Saved   bool
 	Authors []string
 }
 
 // Effective returns the logins the board shows, or nil for every author.
-func (f Filter) Effective(viewer string) []string {
+func (f authorFilter) Effective(viewer string) []string {
 	switch {
 	case !f.Saved && viewer == "":
 		return nil
@@ -43,7 +43,7 @@ func (f Filter) Effective(viewer string) []string {
 	}
 }
 
-func (f Filter) proto(viewer string) *pullsv1.AuthorFilter {
+func (f authorFilter) proto(viewer string) *pullsv1.AuthorFilter {
 	return &pullsv1.AuthorFilter{
 		Authors:     f.Effective(viewer),
 		IsDefault:   !f.Saved,
@@ -55,7 +55,7 @@ func (f Filter) proto(viewer string) *pullsv1.AuthorFilter {
 // Store keeps the author filter in a JSON Lines file under the state dir.
 type Store struct {
 	path  string
-	lines file.JSONL[AuthorEntry]
+	lines file.JSONL[authorEntry]
 	now   func() time.Time
 }
 
@@ -65,28 +65,28 @@ func OpenStore(path string) Store {
 	return Store{
 		path: path,
 		now:  time.Now,
-		lines: file.JSONL[AuthorEntry]{
+		lines: file.JSONL[authorEntry]{
 			Path: path,
-			Key:  func(e AuthorEntry) string { return e.Login },
-			Live: func(e AuthorEntry) bool { return e.Tracked },
+			Key:  func(e authorEntry) string { return e.Login },
+			Live: func(e authorEntry) bool { return e.Tracked },
 		},
 	}
 }
 
 // Filter reads the saved filter.
-func (s Store) Filter() (Filter, error) {
+func (s Store) Filter() (authorFilter, error) {
 	_, err := os.Stat(s.path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return Filter{}, nil
+		return authorFilter{}, nil
 	}
 	if err != nil {
-		return Filter{}, fmt.Errorf("pulls: stat authors: %w", err)
+		return authorFilter{}, fmt.Errorf("pulls: stat authors: %w", err)
 	}
 	entries, err := s.lines.Load()
 	if err != nil {
-		return Filter{}, fmt.Errorf("pulls: read authors: %w", err)
+		return authorFilter{}, fmt.Errorf("pulls: read authors: %w", err)
 	}
-	f := Filter{Saved: true}
+	f := authorFilter{Saved: true}
 	for _, e := range entries {
 		f.Authors = append(f.Authors, e.Login)
 	}
@@ -98,23 +98,23 @@ func (s Store) Filter() (Filter, error) {
 func (s Store) Set(ctx context.Context, authors []string) error {
 	want := cleanLogins(authors)
 	_, statErr := os.Stat(s.path)
-	err := s.lines.Update(ctx, func(have []AuthorEntry) []AuthorEntry {
+	err := s.lines.Update(ctx, func(have []authorEntry) []authorEntry {
 		at := s.now()
-		var add []AuthorEntry
+		var add []authorEntry
 		tracked := map[string]bool{}
 		for _, e := range have {
 			tracked[e.Login] = true
 			if !slices.Contains(want, e.Login) {
-				add = append(add, AuthorEntry{Login: e.Login, At: at})
+				add = append(add, authorEntry{Login: e.Login, At: at})
 			}
 		}
 		for _, login := range want {
 			if !tracked[login] {
-				add = append(add, AuthorEntry{Login: login, Tracked: true, At: at})
+				add = append(add, authorEntry{Login: login, Tracked: true, At: at})
 			}
 		}
 		if len(add) == 0 && errors.Is(statErr, fs.ErrNotExist) {
-			add = append(add, AuthorEntry{At: at})
+			add = append(add, authorEntry{At: at})
 		}
 		return add
 	})
