@@ -656,7 +656,7 @@ func (s *MutantRunnerSuite) TestACachedResultSaysSo() {
 
 func (s *MutantRunnerSuite) TestAFailedRunThatReportsNoResultJudgesNothing() {
 	_, err := s.runWith("echo 'workspace did not load' >&2", "exit 1")
-	s.ErrorContains(err, "exited 1 with no result for toy::test, so no test ran: workspace did not load")
+	s.ErrorContains(err, "exited 1 with no result for toy::test (workspace did not load): so no test ran")
 	s.ErrorIs(err, errNoResult)
 }
 

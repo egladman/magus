@@ -267,7 +267,7 @@ func newMutationSubject(root string, fn touchedFunction, project string, sp *spe
 	if reason != "" {
 		return mutationSubject{}, reason
 	}
-	c, reason := scopeOf(root, project, fn.Path, sp, false)
+	c, reason := measuringScope(root, project, fn.Path, sp, false)
 	if reason != "" {
 		return mutationSubject{}, reason
 	}
@@ -323,7 +323,7 @@ func (m *Magus) workspaceLinks() []string {
 
 // ignoreLinks is each project's dirs as workspace paths, sorted and unique.
 func ignoreLinks(dirs map[string][]string) []string {
-	var out []string
+	out := make([]string, 0, len(dirs))
 	for project, d := range dirs {
 		out = append(out, projectLinks(project, d)...)
 	}
@@ -733,9 +733,9 @@ func groupLabels(plans []subjectPlan, group []int) string {
 // run drops it before it needs a baseline. A baseline that left no report is
 // p's gap.
 func (e mutationEngine) keepCovered(ctx context.Context, dir string, p *subjectPlan) error {
-	covered, err := e.covered(dir, p.subject)
-	if err != nil {
-		p.gap = err.Error()
+	covered, gap := e.baselineHits(dir, p.subject)
+	if gap != "" {
+		p.gap = gap
 		return nil
 	}
 	var dropped []types.MutantRun
@@ -749,6 +749,16 @@ func (e mutationEngine) keepCovered(ctx context.Context, dir string, p *subjectP
 		return true
 	})
 	return e.store.record(context.WithoutCancel(ctx), dropped)
+}
+
+// baselineHits is the lines of s's file the baseline in dir hit, or why it left
+// none.
+func (e mutationEngine) baselineHits(dir string, s mutationSubject) (map[int]bool, string) {
+	covered, err := e.covered(dir, s)
+	if err != nil {
+		return nil, err.Error()
+	}
+	return covered, ""
 }
 
 // runMutant writes mutant j into dir's copy of its file, runs the scoped
@@ -916,7 +926,7 @@ func (r magusRunner) run(ctx context.Context, dir, target string, s coverageScop
 		return testRun{}, fmt.Errorf("%s was signaled with no result for %s: %s", line, target, lastLine(res.Stderr))
 	}
 	if !ok {
-		return testRun{}, fmt.Errorf("%s exited %d with no result for %s, %w: %s", line, res.Code, target, errNoResult, lastLine(res.Stderr))
+		return testRun{}, fmt.Errorf("%s exited %d with no result for %s (%s): %w", line, res.Code, target, lastLine(res.Stderr), errNoResult)
 	}
 	return testRun{passed: result.Status != targetFailed, cached: result.CacheHit}, nil
 }

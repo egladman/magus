@@ -234,7 +234,7 @@ func (c coverageScope) key() string {
 }
 
 // runKey names the one coverage run of c's project and spell.
-func (c coverageScope) runKey() string { return c.project + "\x00" + c.spell }
+func (c coverageScope) runKey() string { return fmt.Sprintf("%s\x00%s", c.project, c.spell) }
 
 // target names op through its spell, so no magusfile target of the same
 // name stands in for it.
@@ -244,9 +244,9 @@ func (c coverageScope) command() string {
 	return strings.Join(slices.Concat([]string{"magus run", c.target(spells.CoverageOp), c.project, "--"}, c.scope), " ")
 }
 
-// scopeOf is the coverage run that measures name, a file of project that sp
+// measuringScope is the coverage run that measures name, a file of project that sp
 // claims. whole runs the whole project instead of name's test scope.
-func scopeOf(root, project, name string, sp *spells.Spell, whole bool) (coverageScope, string) {
+func measuringScope(root, project, name string, sp *spells.Spell, whole bool) (coverageScope, string) {
 	if sp == nil {
 		return coverageScope{}, fmt.Sprintf("no spell bound to %s claims %s files", project, path.Ext(name))
 	}
@@ -279,8 +279,8 @@ type scopeRun struct {
 type riskMeter struct {
 	// scorer answers complexity at head; measure sets its report.
 	scorer riskScorer
-	// scopeOf is the coverage run that measures a file, or why there is none.
-	scopeOf func(path string) (coverageScope, string)
+	// measuringScope is the coverage run that measures a file, or why there is none.
+	measuringScope func(path string) (coverageScope, string)
 	// covers reports whether a changed file's spell declares coverage at all.
 	covers func(path string) bool
 	// copy makes a scratch copy of rev, or of the working tree when rev is "".
@@ -305,8 +305,8 @@ func (m *Magus) newRiskMeter(ctx context.Context, set touchedSet, base string) (
 	claimant, owner := m.spellClaiming(), m.projectOwner()
 	r := riskMeter{
 		scorer: m.riskScorer(set.defs),
-		scopeOf: func(p string) (coverageScope, string) {
-			return scopeOf(m.ws.Root, owner(p), p, claimant(p), base == "")
+		measuringScope: func(p string) (coverageScope, string) {
+			return measuringScope(m.ws.Root, owner(p), p, claimant(p), base == "")
 		},
 		covers: func(p string) bool {
 			sp := claimant(p)
@@ -466,7 +466,7 @@ func (r riskMeter) plan(fns []touchedFunction) scopePlan {
 		if _, done := runOf[name]; done || p.reason[name] != "" {
 			return
 		}
-		c, reason := r.scopeOf(name)
+		c, reason := r.measuringScope(name)
 		if reason != "" {
 			p.reason[name] = reason
 			return
@@ -581,17 +581,23 @@ func (r riskMeter) runOne(ctx context.Context, dir, rev string, c coverageScope)
 	if errors.Is(err, errNoSeat) {
 		return scopeRun{}, fmt.Errorf("change risk: %w", err)
 	}
-	if err != nil {
-		return scopeRun{reason: err.Error()}, nil
+	return r.left(dir, c, res, err), nil
+}
+
+// left is what a finished run of c in dir left: its report's files, or the
+// reason it has none.
+func (r riskMeter) left(dir string, c coverageScope, res testRun, runErr error) scopeRun {
+	if runErr != nil {
+		return scopeRun{reason: runErr.Error()}
 	}
 	if !res.passed {
-		return scopeRun{reason: fmt.Sprintf("a test in its scope fails: `%s`", c.command())}, nil
+		return scopeRun{reason: fmt.Sprintf("a test in its scope fails: `%s`", c.command())}
 	}
 	files, err := r.report(dir, c)
 	if err != nil {
-		return scopeRun{reason: err.Error()}, nil
+		return scopeRun{reason: err.Error()}
 	}
-	return scopeRun{files: files}, nil
+	return scopeRun{files: files}
 }
 
 // lines compares each changed file's covered lines at head with those at
@@ -814,8 +820,8 @@ func fileHunks(patch string) map[string][]changeset.Hunk {
 	return out
 }
 
-// renamedFrom maps the new path of each renamed file in patch to its old one.
-func renamedFrom(patch string) map[string]string {
+// renamedPaths maps the new path of each renamed file in patch to its old one.
+func renamedPaths(patch string) map[string]string {
 	out := map[string]string{}
 	for _, f := range changeset.Parse(patch) {
 		if f.Status == changeset.StatusRenamed && f.OldPath != f.Path {
@@ -838,7 +844,7 @@ func (m *Magus) linesSince(ctx context.Context, base string) (sinceBase, error) 
 	return sinceBase{
 		lines: changedLines(committed, working), removed: removed,
 		committed: fileHunks(committed), working: fileHunks(working),
-		committedOld: renamedFrom(committed), workingOld: renamedFrom(working),
+		committedOld: renamedPaths(committed), workingOld: renamedPaths(working),
 	}, nil
 }
 
