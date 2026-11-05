@@ -192,6 +192,15 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_CI_RECORD_RUNS**
 : Keeps the per-branch run log (forecast.Run) in the history file: which commit a branch passed or failed a target at, and when. On by default, because \`--base last-passed\` reads it and a CI run that cannot find its base gates less than it appears to (default: true). Config file key: **ci.record_runs**.
 
+**MAGUS_CI_MACHINE_NAME**
+: The provider's label, e.g. ubuntu-latest. Config file key: **ci.machine.name**.
+
+**MAGUS_CI_MACHINE_MEMORY_MB**
+: One runner's memory in megabytes. Config file key: **ci.machine.memory_mb**.
+
+**MAGUS_CI_MACHINE_CORES**
+: One runner's CPU cores. Config file key: **ci.machine.cores**.
+
 **MAGUS_VOLATILITY_ENABLED**
 : The master switch for volatility detection and auto-retry; false disables all retry logic (default: true). Config file key: **volatility.enabled**.
 

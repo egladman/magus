@@ -528,6 +528,53 @@ func TestQueueStepsResolvePathsAgainstTheCheckout(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// emptyPlan is the plan the queue writes over nothing to merge.
+func emptyPlan(t *testing.T, f *queueFixture) string {
+	t.Helper()
+	f.vcs.EXPECT().FetchRef(mock.Anything, f.root, "origin", "refs/heads/main").Return(queueBase, nil)
+	f.vcs.EXPECT().FindCommit(mock.Anything, f.root, queueBase).Return(magustypes.Commit{ID: queueBase, Date: queueDate}, nil)
+	f.vcs.EXPECT().Checkouts(mock.Anything, f.root).Return(nil, nil).Maybe()
+	var changes bytes.Buffer
+	require.NoError(t, queue.WriteChanges(&changes, types.Changes{Base: "main"}))
+	_, err := f.run(t, changes.String(), "plan", "--provider", "local.buzz", "--out", "plan.json", "--facts", "true")
+	require.NoError(t, err)
+	plan, err := os.ReadFile(filepath.Join(f.root, "plan.json"))
+	require.NoError(t, err)
+	return string(plan)
+}
+
+type queueValidateEnvSuite struct{ suite.Suite }
+
+func TestQueueValidateEnvSuite(t *testing.T) { suite.Run(t, new(queueValidateEnvSuite)) }
+
+func (s *queueValidateEnvSuite) TestAcceptsEnvLikeGate() {
+	t := s.T()
+	f := newQueueFixture(t, "", "")
+	plan := emptyPlan(t, f)
+	t.Setenv("TZ", "Australia/Lord_Howe")
+	_, err := f.run(t, plan, "validate", "--stdin", "--verdicts", "verdicts", "--gate", "true", "--facts", "true", "--env", "TZ,MAGUS_LOG_STREAM")
+	s.Require().NoError(err)
+}
+
+func (s *queueValidateEnvSuite) TestRefusesWhatWouldMoveTheBox() {
+	t := s.T()
+	f := newQueueFixture(t, "", "")
+	plan := emptyPlan(t, f)
+	_, err := f.run(t, plan, "validate", "--stdin", "--verdicts", "verdicts", "--gate", "true", "--facts", "true", "--env", "HOME")
+	s.Require().Equal(exit.Usage, exit.Code(err))
+	s.ErrorContains(err, "magus queue validate: --env")
+}
+
+func (s *queueValidateEnvSuite) TestRefusesBeforeTheVerdictsDirectoryHoldsAnything() {
+	t := s.T()
+	f := newQueueFixture(t, "", "")
+	plan := emptyPlan(t, f)
+	_, err := f.run(t, plan, "validate", "--stdin", "--verdicts", "verdicts", "--gate", "true", "--facts", "true", "--env", "HOME")
+	s.Require().Error(err)
+	s.NoFileExists(filepath.Join(f.root, "verdicts", queue.PlanFile))
+	s.NoFileExists(filepath.Join(f.root, "verdicts", queue.DoneFile))
+}
+
 // validated writes a plan of one change and its green verdict into dir, the way
 // validate leaves a directory.
 func validated(t *testing.T, dir string) {
@@ -744,6 +791,10 @@ type workflowStep struct {
 // harnessRunner is the script ci.yaml's gate runs magus through.
 const harnessRunner = "buzz hack/ci/run-with-harnesses.buzz "
 
+// harnessCall is the runner with its own options, which ci.yaml's
+// shard passes the saved plan through.
+var harnessCall = regexp.MustCompile(fmt.Sprintf(` -- magus %s-- (?:--plan (?:\$\{\{[^}]*\}\})?\S* )?`, regexp.QuoteMeta(harnessRunner)))
+
 // workflowJob reads job's steps from the workflow file at path under the repository root.
 func workflowJob(t *testing.T, path, job string) []workflowStep {
 	t.Helper()
@@ -768,7 +819,7 @@ func ciShardBoxes(t *testing.T) ([][]string, []workflowStep) {
 	for _, s := range workflowJob(t, ".github/workflows/ci.yaml", "ci") {
 		if s.Uses == "./.github/actions/magus" && strings.HasPrefix(s.With["command"], "queue gate ") {
 			command := regexp.MustCompile(`\$\{\{[^}]*\}\}`).ReplaceAllString(s.With["command"], "")
-			argvs = append(argvs, strings.Fields(strings.Replace(command, " -- magus "+harnessRunner+"-- ", " -- magus ", 1)))
+			argvs = append(argvs, strings.Fields(harnessCall.ReplaceAllLiteralString(command, " -- magus ")))
 			steps = append(steps, s)
 		}
 	}
@@ -872,7 +923,7 @@ func TestCIShardsCarryTheSpellsCachesTheGateBuildsWith(t *testing.T) {
 		case "magus config cache export --remote":
 			at["save"] = i
 		}
-		if slices.Equal(argv[sep+1:sep+3], []string{"magus", "run"}) {
+		if _, seen := at["gate"]; !seen && slices.Equal(argv[sep+1:sep+3], []string{"magus", "run"}) {
 			at["gate"] = i
 		}
 	}
@@ -898,7 +949,7 @@ func TestCIShardsCarryTheSpellsCachesTheGateBuildsWith(t *testing.T) {
 	assert.Empty(t, restore.If, "every shard restores: a bundle is verified before a byte of it is placed")
 	assert.NotContains(t, flag(argvs[at["restore"]], "--env"), "MAGUS_CACHE_SIGNING_KEY", "a restore signs nothing")
 	assert.True(t, strings.HasPrefix(save.If, "success() && "), save.If)
-	for _, cond := range []string{"github.event_name != 'pull_request'", "github.ref == 'refs/heads/main'", "contains(format(' {0} ', matrix.projects), ' . ')"} {
+	for _, cond := range []string{"github.event_name != 'pull_request'", "github.ref == 'refs/heads/main'", "contains(format(' {0} ', matrix.duties), ' cache-export ')"} {
 		assert.Contains(t, save.If, cond)
 	}
 	assert.Contains(t, flag(argvs[at["save"]], "--env"), "MAGUS_CACHE_SIGNING_KEY", "the save signs what it stores")

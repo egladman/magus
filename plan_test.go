@@ -10,7 +10,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
 )
 
@@ -134,6 +137,194 @@ func TestPlanReportsAnUnreadableHistory(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "load history")
+}
+
+type PlanUnitsSuite struct {
+	suite.Suite
+	m *Magus
+}
+
+func TestPlanUnitsSuite(t *testing.T) { suite.Run(t, new(PlanUnitsSuite)) }
+
+func (s *PlanUnitsSuite) SetupTest() {
+	root := writeWorkspace(s.T(), map[string]string{
+		"magusfile.buzz": `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun lint(ctx: magus\Context, args: [str]) > void {}
+export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(build); }
+export fun figures(ctx: magus\Context, args: [str]) > void {}
+export fun security(ctx: magus\Context, args: [str]) > void { ctx.needs(build); }
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint, test);
+    if (!ctx.hasCharm("gha")) { ctx.needs(figures); }
+    if (args.len() > 0) {
+        security(ctx, args: args);
+        return;
+    }
+    ctx.needs(security);
+}
+`,
+		"api/magusfile.buzz": "",
+		"api/main.go":        "package main\n",
+	})
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	s.m = m
+}
+
+func (s *PlanUnitsSuite) plan(charms, args []string) ([]types.Unit, error) {
+	return s.m.planUnits(context.Background(), []types.Target{{Path: "."}, {Path: "api"}}, "ci", charms, args)
+}
+
+func (s *PlanUnitsSuite) TestEachStepCIAsksForIsAUnit() {
+	got, err := s.plan(nil, nil)
+	s.Require().NoError(err)
+	s.Equal([]types.Unit{
+		{Project: ".", Target: "lint"}, {Project: ".", Target: "test"}, {Project: ".", Target: "figures"},
+		{Project: ".", Target: "security"}, {Project: "api", Target: "ci"},
+	}, got)
+}
+
+func (s *PlanUnitsSuite) TestAStepTheCharmSkipsIsNoUnit() {
+	got, err := s.plan([]string{"gha"}, nil)
+	s.Require().NoError(err)
+	s.NotContains(got, types.Unit{Project: ".", Target: "figures"})
+	s.Contains(got, types.Unit{Project: ".", Target: "lint"})
+}
+
+func (s *PlanUnitsSuite) TestADirectCallUnderArgsIsAnErrorNamingIt() {
+	_, err := s.plan([]string{"gha"}, []string{"--strict"})
+	s.ErrorContains(err, ".:ci calls security")
+}
+
+func (s *PlanUnitsSuite) TestAnAffectedProjectOutsideTheWorkspaceIsAnError() {
+	_, err := s.m.planUnits(context.Background(), []types.Target{{Path: "ghost"}}, "ci", nil, nil)
+	s.ErrorContains(err, `project "ghost" is affected but not in the workspace`)
+}
+
+func (s *PlanUnitsSuite) TestAnAnchorUnderMagusfilesPlansFromThatFile() {
+	root := writeWorkspace(s.T(), map[string]string{
+		"magusfiles/targets.buzz": `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun security(ctx: magus\Context, args: [str]) > void {}
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(build);
+    security(ctx, args: args);
+}
+`,
+		"main.go": "package main\n",
+	})
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	calls, err := directCalls(m.Get("."), "ci")
+	s.Require().NoError(err)
+	s.Equal([]string{"security"}, calls)
+}
+
+func (s *PlanUnitsSuite) TestAnUnreadableMagusfileIsAnError() {
+	p := s.m.Get(".")
+	s.Require().NoError(os.Remove(filepath.Join(p.Dir, types.MagusfileName)))
+	_, err := directCalls(p, "ci")
+	s.ErrorContains(err, "magusfile for direct calls")
+}
+
+func (s *PlanUnitsSuite) TestAUnitNeedsItsTransitiveSteps() {
+	got, err := s.m.unitNeeds(types.Unit{Project: ".", Target: "test"})
+	s.Require().NoError(err)
+	s.Equal([]types.Unit{{Project: ".", Target: "test"}, {Project: ".", Target: "build"}}, got)
+}
+
+func (s *PlanUnitsSuite) TestThePlanCarriesUnitsAndNamesTheUnmeasured() {
+	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"magusfile.buzz", "api/main.go"}, MaxShards: -1})
+	s.Require().NoError(err)
+	var placed []types.Unit
+	for _, sh := range plan.Shards {
+		placed = append(placed, sh.Units...)
+	}
+	s.ElementsMatch([]types.Unit{
+		{Project: ".", Target: "lint"}, {Project: ".", Target: "test"}, {Project: ".", Target: "figures"},
+		{Project: ".", Target: "security"}, {Project: "api", Target: "ci"},
+	}, placed)
+	s.Contains(plan.Unmeasured, types.Unit{Project: ".", Target: "build"}, "no history: every target fell back")
+}
+
+func (s *PlanUnitsSuite) TestColdHistoryOpensFewShardsAndSaysSo() {
+	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"magusfile.buzz", "api/main.go"}, MaxShards: -1})
+	s.Require().NoError(err)
+	s.LessOrEqual(len(plan.Shards), forecast.ColdShards)
+	s.Contains(plan.Fallbacks, "the history holds no duration for any unit, so the plan opens at most 2 shards")
+}
+
+func (s *PlanUnitsSuite) TestNoMachineChecksNoBudgetAndSaysSo() {
+	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"api/main.go"}, MaxShards: -1})
+	s.Require().NoError(err)
+	s.Nil(plan.Machine)
+	s.Contains(plan.Fallbacks, "no ci.machine is configured, so the plan checks no shard against a memory budget")
+}
+
+func (s *PlanUnitsSuite) TestTheConfiguredMachineIsRecorded() {
+	s.m.cfg.CI.Machine = config.CIMachine{Name: "ubuntu-latest", MemoryMB: 16384, Cores: 4}
+	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"api/main.go"}, MaxShards: -1})
+	s.Require().NoError(err)
+	s.Equal(&types.Machine{Name: "ubuntu-latest", MemoryMB: 16384, Cores: 4}, plan.Machine)
+}
+
+func (s *PlanUnitsSuite) TestAHalfConfiguredMachineIsAnError() {
+	s.m.cfg.CI.Machine = config.CIMachine{Name: "ubuntu-latest", MemoryMB: 16384}
+	_, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"api/main.go"}, MaxShards: -1})
+	s.ErrorContains(err, `ci.machine "ubuntu-latest" needs both memory_mb and cores above zero`)
+}
+
+func (s *PlanUnitsSuite) TestEveryShardIsDigestedByItsUnitsDigest() {
+	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"magusfile.buzz", "api/main.go"}, MaxShards: -1})
+	s.Require().NoError(err)
+	for _, sh := range plan.Shards {
+		s.Equal(types.UnitsDigest(sh.Units), sh.Digest)
+	}
+}
+
+type PlaceDutiesSuite struct{ suite.Suite }
+
+func TestPlaceDutiesSuite(t *testing.T) { suite.Run(t, new(PlaceDutiesSuite)) }
+
+func (s *PlaceDutiesSuite) TestTheCacheExportGoesWhereTheRootsUnitsAre() {
+	shards := []types.Shard{
+		{Units: []types.Unit{{Project: "docs", Target: "lint"}}},
+		{Units: []types.Unit{{Project: ".", Target: "lint"}, {Project: ".", Target: "test"}}},
+	}
+	placeDuties(shards)
+	s.Equal([]types.Duty{types.DutyCacheExport}, shards[1].Duties)
+}
+
+func (s *PlaceDutiesSuite) TestNotesVerifyGoesToTheLightestShard() {
+	shards := []types.Shard{
+		{Units: []types.Unit{{Project: ".", Target: "lint"}, {Project: ".", Target: "test"}}},
+		{Units: []types.Unit{{Project: "docs", Target: "lint"}}},
+	}
+	placeDuties(shards)
+	s.Equal([]types.Duty{types.DutyNotesVerify}, shards[1].Duties)
+}
+
+func (s *PlaceDutiesSuite) TestEachDutyLandsOnExactlyOneShard() {
+	shards := []types.Shard{
+		{Units: []types.Unit{{Project: "a", Target: "lint"}}},
+		{Units: []types.Unit{{Project: "b", Target: "lint"}}},
+		{Units: []types.Unit{{Project: "c", Target: "lint"}}},
+	}
+	placeDuties(shards)
+	count := map[types.Duty]int{}
+	for _, sh := range shards {
+		for _, d := range sh.Duties {
+			count[d]++
+		}
+	}
+	s.Equal(map[types.Duty]int{types.DutyCacheExport: 1, types.DutyNotesVerify: 1}, count)
+}
+
+func (s *PlaceDutiesSuite) TestNoShardsTakeNoDuties() {
+	s.NotPanics(func() { placeDuties(nil) })
 }
 
 // Example_runATarget runs a target, reads its result from the run's records, and

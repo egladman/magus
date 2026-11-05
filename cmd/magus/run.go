@@ -66,7 +66,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 	rawTarget, rest, ok := splitTargetFromArgs(args, prescanRun)
 	if !ok && saved != nil {
-		args = append([]string{saved.Target}, args...)
+		args = append([]string{savedTargetRef(*saved)}, args...)
 		rawTarget, rest, ok = splitTargetFromArgs(args, prescanRun)
 	}
 	if !ok {
@@ -129,6 +129,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if shardEnvErr != nil {
 		return exit.Usagef("magus run: %v", shardEnvErr)
 	}
+	var planShards []planShard
 	if saved != nil {
 		switch {
 		case rf.Detach:
@@ -139,11 +140,19 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			return exit.Usagef("magus run: the plan on --stdin names the projects; drop the project arguments")
 		case len(skips.refs) > 0:
 			return exit.Usagef("magus run: the plan on --stdin names the projects; --skip does not apply")
+		case !slices.Equal(extraArgs, saved.Args):
+			return refusePlan("the plan was evaluated with args %q, not %q; plan again with the args the shard runs",
+				strings.Join(saved.Args, " "), strings.Join(extraArgs, " "))
+		case !sameCharms(parsedTarget.Charms, saved.Charms):
+			return refusePlan("the plan was evaluated under charms %q, not %q; plan again under the charms the shard runs",
+				strings.Join(saved.Charms, ","), strings.Join(parsedTarget.Charms, ","))
 		}
 		shards, err := selectPlanShards(*saved, targetName, rf.Shard, rf.NShards)
 		if err != nil {
 			return err
 		}
+		// The args chose the anchor's steps; ctx.needs hands a step none.
+		extraArgs = nil
 		// Both halves of the shard label now come from the plan, and a run of every
 		// shard is not partial.
 		rf.NShards = 0
@@ -153,6 +162,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		if globalCfg.DryRun {
 			return emitSavedPlanDryRun(ctx, *saved, rawTarget, shards)
 		}
+		planShards = shards
 		projectArgs = planProjects(shards)
 		if len(projectArgs) == 0 {
 			slog.InfoContext(ctx, "magus run --stdin: the plan has no shards, so nothing runs", slog.String("target", targetName))
@@ -293,11 +303,14 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if inherited {
 		source = "pipe"
 	}
+	if saved != nil {
+		targets, source = planTargets(planShards), "plan"
+	}
 	// Fault tolerance by design: a target only some projects serve should skip (not
 	// error) the projects that lack it when the scope is the workspace or several
 	// projects, but a single project that does not serve it (or a name no project serves
 	// at all) is an error. This is the run counterpart to affected's tolerance.
-	if len(targets) > 0 {
+	if len(targets) > 0 && saved == nil {
 		targets, err = filterServedTargets(ctx, m, targets, targetName)
 		if err != nil {
 			return err
@@ -672,10 +685,29 @@ func decodeSavedPlan(data []byte) (planOutput, error) {
 			return planOutput{}, refusePlan("the plan on stdin lists shard %s twice", s.Shard)
 		case len(strings.Fields(s.Projects)) == 0:
 			return planOutput{}, refusePlan("the plan on stdin: shard %s has no projects", s.Shard)
+		case len(s.Units) == 0:
+			return planOutput{}, refusePlan("the plan on stdin: shard %s lists no units; print it again with `%s`",
+				s.Shard, hint.Affected.With(p.Target, "--plan"))
+		}
+		if listed, ran := strings.Join(strings.Fields(s.Projects), " "), strings.Join(types.UnitProjects(s.Units), " "); listed != ran {
+			return planOutput{}, refusePlan("the plan on stdin: shard %s lists projects %q, but its units run in %q",
+				s.Shard, listed, ran)
+		}
+		if want := types.UnitsDigest(s.Units); s.Digest != want {
+			return planOutput{}, refusePlan("the plan on stdin: shard %s has digest %q, but its units digest to %q",
+				s.Shard, s.Digest, want)
 		}
 		seen[s.Shard] = true
 	}
 	return p, nil
+}
+
+// savedTargetRef is the plan's target with the charms it was evaluated under.
+func savedTargetRef(p planOutput) string {
+	if len(p.Charms) == 0 {
+		return p.Target
+	}
+	return fmt.Sprintf("%s:%s", p.Target, strings.Join(p.Charms, ","))
 }
 
 // selectPlanShards returns the shards a `run --stdin` invocation runs: the one named by
@@ -705,13 +737,44 @@ func selectPlanShards(p planOutput, target, shard string, nShards int) ([]planSh
 	return nil, refusePlan("--shard %s: the plan has no such shard (it has %s)", shard, strings.Join(ids, ", "))
 }
 
-// planProjects is the projects shards run, in plan order.
+// planProjects is the projects shards run, in plan order, each once.
 func planProjects(shards []planShard) []string {
 	projects := make([]string, 0, len(shards))
+	seen := map[string]bool{}
 	for _, s := range shards {
-		projects = append(projects, strings.Fields(s.Projects)...)
+		for _, p := range strings.Fields(s.Projects) {
+			if !seen[p] {
+				seen[p] = true
+				projects = append(projects, p)
+			}
+		}
 	}
 	return projects
+}
+
+// planTargets is the units shards run, in plan order, each once.
+func planTargets(shards []planShard) []types.Target {
+	var targets []types.Target
+	seen := map[types.Unit]bool{}
+	for _, s := range shards {
+		for _, u := range s.Units {
+			if !seen[u] {
+				seen[u] = true
+				targets = append(targets, types.Target{Path: u.Project, Name: u.Target})
+			}
+		}
+	}
+	return targets
+}
+
+// planUnitList is units as space-separated project:target.
+func planUnitList(units []types.Unit) string {
+	return strings.Join(types.UnitNames(units), " ")
+}
+
+// sameCharms reports whether a and b hold the same charms in any order.
+func sameCharms(a, b []string) bool {
+	return slices.Equal(slices.Sorted(slices.Values(a)), slices.Sorted(slices.Values(b)))
 }
 
 // emitSavedPlanDryRun answers `run --stdin --dry-run`, which runs nothing. Structured -o
@@ -728,7 +791,7 @@ func emitSavedPlanDryRun(ctx context.Context, p planOutput, target string, shard
 			slog.InfoContext(ctx, "[dry] the plan has no shards; nothing would run", attr.Notice(""))
 		}
 		for _, s := range shards {
-			slog.InfoContext(ctx, fmt.Sprintf("[dry] shard %s: magus run %s %s", s.Shard, target, s.Projects), attr.Notice(""))
+			slog.InfoContext(ctx, fmt.Sprintf("[dry] shard %s: %s runs %s", s.Shard, target, planUnitList(s.Units)), attr.Notice(""))
 		}
 		return nil
 	case outputName:

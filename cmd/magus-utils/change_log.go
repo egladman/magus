@@ -12,7 +12,7 @@ import (
 // fragment is one unreleased changelog entry, kept in its own file under
 // changes/unreleased/ so concurrent changes never edit a shared file. The file is
 // the entry exactly as it reads under [Unreleased]: one Keep a Changelog section
-// heading and one entry in lintUnreleased's shape. hack/magusfile/changelog.buzz parses the
+// heading and one or more entries in lintUnreleased's shape. hack/magusfile/changelog.buzz parses the
 // same grammar for every reader but cut; changes/testdata/fragments.txtar holds
 // both to it. A breaking change says so in its headline, as every released entry
 // does:
@@ -24,7 +24,7 @@ import (
 type fragment struct {
 	path    string
 	section string
-	// entry is the "- **headline**" line and its two-space continuations.
+	// entry is each "- **headline**" line and its two-space continuations, in order.
 	entry string
 }
 
@@ -42,7 +42,7 @@ func parseFragment(path string, data []byte) (fragment, error) {
 		switch {
 		case strings.HasPrefix(line, "### "):
 			if f.section != "" {
-				return fragment{}, fmt.Errorf("%s: holds more than one section heading, write one fragment per entry", path)
+				return fragment{}, fmt.Errorf("%s: holds more than one section heading, write one fragment per group", path)
 			}
 			f.section = strings.TrimSpace(line[4:])
 		case strings.HasPrefix(line, "- "):
@@ -55,8 +55,8 @@ func parseFragment(path string, data []byte) (fragment, error) {
 	if f.section == "" {
 		return fragment{}, fmt.Errorf("%s: opens with no `### <group>` heading, one of %s", path, strings.Join(changelogSections, ", "))
 	}
-	if entries != 1 {
-		return fragment{}, fmt.Errorf("%s: holds %d entries, write one fragment per entry", path, entries)
+	if entries == 0 {
+		return fragment{}, fmt.Errorf("%s: holds 0 entries, write at least one", path)
 	}
 	f.entry = strings.Join(lines, "\n")
 	return f, nil

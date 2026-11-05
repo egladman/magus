@@ -23,6 +23,8 @@ exists $WORK/again/magusfile.buzz
 .magus/
 -- shop/magus.yaml --
 concurrency: 2
+disk:
+  critical_free_mb: 0
 -- shop/magusfile.buzz --
 import "magus";
 

@@ -587,6 +587,16 @@ type CI struct {
 	// base, keeping every timing and volatility field. Off, magus records nothing and
 	// `--base last-passed` says so loudly rather than resolving to something arbitrary.
 	RecordRuns bool `json:"record_runs" yaml:"record_runs"`
+	// Machine is the machine every shard runs on. The plan packs shards
+	// against its memory, never the planning host's. Unset, the plan says so.
+	Machine CIMachine `json:"machine" yaml:"machine"`
+}
+
+// CIMachine is the size of one CI machine. It sets both sizes or none.
+type CIMachine struct {
+	Name     string `json:"name" yaml:"name"`                            // the provider's label, e.g. ubuntu-latest
+	MemoryMB int    `json:"memory_mb" yaml:"memory_mb" validate:"gte=0"` // one runner's memory in megabytes
+	Cores    int    `json:"cores" yaml:"cores" validate:"gte=0"`         // one runner's CPU cores
 }
 
 // Volatility controls volatility detection and auto-retry for test runs.

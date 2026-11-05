@@ -513,17 +513,28 @@ func hasModeFlag(args []string, name string) bool {
 type planOutput struct {
 	// Target is what every shard runs, so `magus run --stdin` needs nothing beside the
 	// document to know what to run.
-	Target      string      `json:"target"`
-	Count       int         `json:"count"`
-	MaxParallel int         `json:"max_parallel"`
-	Source      string      `json:"source"`
-	Matrix      []planShard `json:"matrix"`
+	Target string `json:"target"`
+	// Charms and Args are what the target's body was evaluated under. A shard
+	// run under others is refused, since its steps would differ.
+	Charms []string `json:"charms,omitempty"`
+	Args   []string `json:"args,omitempty"`
+	// Machine is the class the shards were packed for; Fallbacks says each
+	// default the plan fell back to.
+	Machine     *types.Machine `json:"machine,omitempty"`
+	Fallbacks   []string       `json:"fallbacks,omitempty"`
+	Count       int            `json:"count"`
+	MaxParallel int            `json:"max_parallel"`
+	Source      string         `json:"source"`
+	Matrix      []planShard    `json:"matrix"`
 	// Affected is the whole closure the matrix was cut from, sorted, and UnboundedBy says
 	// why it is not a proof when it is not. Together they are the answer a merge queue's
 	// affected hook expects, so `affected <target> --plan --stdin` feeds one as it stands.
 	// Affected stays the closure even when an inherited verdict empties the matrix.
 	Affected    []string `json:"affected"`
 	UnboundedBy string   `json:"unbounded_by,omitempty"`
+	// Unmeasured are the units and prerequisites the shards were
+	// weighed by the workspace fallback for, having no history.
+	Unmeasured []types.Unit `json:"unmeasured,omitempty"`
 	// Inherit is present only when the plan inherited a green run's verdict;
 	// see planInherit. The matrix beside it is then empty on purpose.
 	Inherit *planInherit `json:"inherit,omitempty"`
@@ -559,16 +570,28 @@ type planOutput struct {
 type planShard struct {
 	Shard    string `json:"shard"    yaml:"shard"`
 	Projects string `json:"projects" yaml:"projects"`
-	// Label is Projects shortened for a CI job name. Separate from Projects because a
-	// provider passes that one to `magus run ci <projects>` and must not receive an
-	// elision.
-	Label string `json:"label" yaml:"label"`
+	// JobName is Projects shortened for a CI job name.
+	JobName string `json:"job_name" yaml:"job_name"`
+	// Digest is a digest of Units, the same for the same units on any plan, so a
+	// provider keys a per-shard cache by it.
+	Digest string `json:"digest" yaml:"digest"`
+	// Duties are the workspace-wide steps this shard runs, space-separated.
+	Duties string `json:"duties" yaml:"duties"`
+	// Units are what `magus run --stdin --shard` runs for this shard.
+	Units []types.Unit `json:"units,omitempty" yaml:"units,omitempty"`
 }
 
-// shardLabel names a shard by what is in it. A CI job list is scanned, not studied, so
-// this shows the first few paths and counts the rest; a bare shard number says nothing
-// about what is red.
-func shardLabel(paths []string) string {
+func joinDuties(duties []types.Duty) string {
+	names := make([]string, len(duties))
+	for i, d := range duties {
+		names[i] = string(d)
+	}
+	return strings.Join(names, " ")
+}
+
+// shardName names a shard by what is in it. A CI job list is scanned, not
+// studied, so this shows the first few paths and counts the rest.
+func shardName(paths []string) string {
 	const shown = 3
 	switch {
 	case len(paths) == 0:
@@ -644,7 +667,12 @@ func planRiskSummaryMarkdown(r *planRisk) string {
 // the field; the workflow keys that consume these live in .github/workflows/ci.yaml
 // and TestPlanOutputsCoverWorkflowKeys pins the two together.
 func planOutputs(out planOutput) ([]planPublish, error) {
-	matrix, err := json.Marshal(map[string]any{"include": out.Matrix})
+	// Units stay in the plan document: every matrix key is a job dimension.
+	include := slices.Clone(out.Matrix)
+	for i := range include {
+		include[i].Units = nil
+	}
+	matrix, err := json.Marshal(map[string]any{"include": include})
 	if err != nil {
 		return nil, fmt.Errorf("magus affected --plan: encode matrix: %w", err)
 	}
@@ -694,6 +722,12 @@ func planSummaryMarkdown(out planOutput) string {
 		"To inspect why a project was selected, run `magus affected ci --explain` locally. " +
 		"[Affected CI guide](https://eli.gladman.cc/magus/guides/affected/) - " +
 		"[CI target guide](https://eli.gladman.cc/magus/concepts/targets/ci/)\n")
+	for _, f := range out.Fallbacks {
+		fmt.Fprintf(&b, "\n- Fell back: %s.", f)
+	}
+	if len(out.Fallbacks) > 0 {
+		b.WriteString("\n")
+	}
 	return b.String()
 }
 
@@ -757,6 +791,10 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	// Leading positionals after the target are project filters, the same grammar
 	// `magus run <target> <projects>` already uses, so there is nothing new to learn, and
 	// no flag invented for something the CLI already spells one way.
+	var anchorArgs []string
+	if i := slices.Index(planless, "--"); i >= 0 {
+		planless, anchorArgs = planless[:i], planless[i+1:]
+	}
 	var target string
 	var only []string
 	flagArgs := planless
@@ -772,7 +810,11 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("magus affected --plan: a target is required (e.g. `%s`), run `%s` to list available targets",
 			hint.Affected.With("ci", "--plan"), hint.DescribeTargets)
 	}
-	target = canonicalTarget(target) // expand short aliases at the CLI edge, mirroring `magus run`
+	parsed, err := types.ParseTarget(canonicalTarget(target)) // expand short aliases at the CLI edge, mirroring `magus run`
+	if err != nil {
+		return exit.Usagef("magus affected --plan: %v", err)
+	}
+	target = parsed.Name
 
 	var pf *flaggen.AffectedPlanFlags
 	if _, err := commandParse(fmt.Sprintf("affected %s --plan", target), flagArgs, func(fs *flag.FlagSet) {
@@ -811,6 +853,8 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		MaxShards:        pf.MaxShards,
 		RunnerPoolBudget: pf.MaxParallelBudget,
 		BaseRef:          pf.Base,
+		Charms:           parsed.Charms,
+		Args:             anchorArgs,
 	}
 	if pf.Stdin {
 		planOpts.ChangedPaths, err = readAffectedPlanPaths(os.Stdin, pf.Null)
@@ -887,21 +931,37 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 			"shard(s) %s are predicted to exceed one runner's memory; a runner that runs out vanishes and reports \"cancelled\" with no diagnostics (a higher `--max-shards` splits them, unless one project exceeds the budget alone)",
 			strings.Join(plan.OverBudget, ", ")))
 	}
+	if len(plan.Unmeasured) > 0 && len(plan.Shards) > 0 {
+		slog.With(attr.Component("magus")).InfoContext(ctx, fmt.Sprintf(
+			"%d of the plan's targets have no recorded duration, so the plan weighed them with the workspace fallback: %s",
+			len(plan.Unmeasured), cappedUnits(plan.Unmeasured)), attr.Notice("note"))
+	}
 
+	if len(plan.Fallbacks) > 0 {
+		slog.With(attr.Component("magus")).WarnContext(ctx, "the plan fell back: "+strings.Join(plan.Fallbacks, "; "))
+	}
 	out := planOutput{
 		Target:      target,
+		Charms:      plan.Charms,
+		Args:        plan.Args,
+		Machine:     plan.Machine,
+		Fallbacks:   plan.Fallbacks,
 		Count:       len(plan.Shards),
 		MaxParallel: plan.MaxParallel,
 		Source:      plan.Source,
 		Matrix:      make([]planShard, len(plan.Shards)),
 		Affected:    plan.Affected,
 		UnboundedBy: plan.UnboundedBy,
+		Unmeasured:  plan.Unmeasured,
 	}
 	for i, s := range plan.Shards {
 		out.Matrix[i] = planShard{
 			Shard:    s.ID,
 			Projects: strings.Join(s.ProjectPaths, " "),
-			Label:    shardLabel(s.ProjectPaths),
+			JobName:  shardName(s.ProjectPaths),
+			Digest:   s.Digest,
+			Duties:   joinDuties(s.Duties),
+			Units:    s.Units,
 		}
 	}
 	if inherit != nil {
@@ -1128,6 +1188,11 @@ func cappedList(items []string) []string {
 	}
 	return append(items[:undeclaredSeedHintCap:undeclaredSeedHintCap],
 		fmt.Sprintf("and %d more", len(items)-undeclaredSeedHintCap))
+}
+
+// cappedUnits is units as project:target, bounded by cappedList.
+func cappedUnits(units []types.Unit) string {
+	return strings.Join(cappedList(types.UnitNames(units)), ", ")
 }
 
 // undeclaredSeedHintCap bounds how many seed projects (and how many of one project's
@@ -1668,6 +1733,8 @@ func filterShardPaths(shards []types.Shard, want map[string]bool) []types.Shard 
 			continue
 		}
 		sh.ProjectPaths = kept
+		sh.Units = slices.DeleteFunc(slices.Clone(sh.Units), func(u types.Unit) bool { return !want[u.Project] })
+		sh.Digest = types.UnitsDigest(sh.Units)
 		out = append(out, sh)
 	}
 	return out

@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27039
-skill_short_bytes: 21292
+skill_full_bytes: 27309
+skill_short_bytes: 21562
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `e122e9f74a9b` |
+| `skill-content` | `473a72c010a4` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -434,6 +434,9 @@ Never message a worker to ask how it is going, only to CHANGE what it was handed
 
 The root never builds. The integrator is a role, never a check: spawned `<parent>/integrate
 <job>` unisolated in the landing checkout, it cherry-picks, builds, regenerates and commits.
+Its merge (`hack/dev/merge-job-branches.buzz --apply`) then recomposes the landing
+branch's unpushed commits into one per merged job, each output beside its source, with no
+merge commit left and the merged tree byte-identical. A commit a remote ref already holds stays.
 
 As jobs finish: compare the store to the ACTUAL diff since each checkpoint; run
 `magus job wait <job>` before reading each result; reopen evidence with
@@ -918,6 +921,9 @@ Never message a worker to ask how it is going, only to CHANGE what it was handed
 
 The root never builds. The integrator is a role, never a check: spawned `<parent>/integrate
 <job>` unisolated in the landing checkout, it cherry-picks, builds, regenerates and commits.
+Its merge (`hack/dev/merge-job-branches.buzz --apply`) then recomposes the landing
+branch's unpushed commits into one per merged job, each output beside its source, with no
+merge commit left and the merged tree byte-identical. A commit a remote ref already holds stays.
 
 As jobs finish: compare the store to the ACTUAL diff since each checkpoint; run
 `magus job wait <job>` before reading each result; reopen evidence with

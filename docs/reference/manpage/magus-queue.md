@@ -106,6 +106,9 @@ apply report what would merge and call nothing on the provider.
 
 ### queue validate options
 
+**--env** *names*
+: Comma-separated names of variables passed from this environment to the gate's own magus, as queue gate does
+
 **--facts** *command*
 : command and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers
 

@@ -70,7 +70,8 @@ concurrency:
     'queue-apply' || format('queue-apply-other-{0}-{1}', github.event.workflow_run.id, github.event.action) }}
   cancel-in-progress: false
 
-# apply's own token only checks out main: every write is the queue app's.
+# apply's own token checks out main and reads validation's artifacts: every write is
+# the queue app's.
 permissions:
   contents: read
 
@@ -319,6 +320,9 @@ jobs:
     environment: magus-queue
     # Validation's own ceiling plus the plan job's.
     timeout-minutes: 150
+    permissions:
+      contents: read # check out main
+      actions: read # wait for and download validation's artifacts
     steps:
       # No credential persists: the queue's token is minted below, and the credential
       # helper hands it to git. A full clone, as queue.yaml's validate job has, since
@@ -338,6 +342,32 @@ jobs:
           cache: false
 
       # main's source, never the pull request's: this checkout is the default branch.
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      # Before the wait, which can last as long as validation: a missing app found
+      # only once a verdict lands strands that verdict.
+      - name: Require the queue app
+        env:
+          CLIENT_ID: ${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}
+          KEY_SET: ${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY != '' }}
+        run: |
+          if [ -z "$CLIENT_ID" ] || [ "$KEY_SET" != true ]; then
+            echo "::error::the merge queue needs its GitHub App: set the MAGUS_QUEUE_APP_CLIENT_ID variable and the magus-queue environment's MAGUS_QUEUE_APP_PRIVATE_KEY secret" >&2
+            exit 1
+          fi
+
+      # The app's token expires an hour after it is minted, and a validation can run
+      # longer. The wait is on the job's own token, which lasts as long as the job.
+      - name: Wait for validation's first verdict
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN: ${{ github.event.workflow_run.id }}
+        run: magus buzz hack/ci/merge-queue.buzz -- await-verdict --run "$RUN"
+
+      # Again, now to mint the app's token; the build above is in Go's cache.
       - id: magus
         uses: ./.github/actions/setup-magus
         with:
@@ -360,16 +390,13 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
-      - name: Require the queue app
-        if: steps.magus.outputs.queue-token == ''
-        run: |
-          echo "::error::the merge queue needs its GitHub App: set the MAGUS_QUEUE_APP_CLIENT_ID variable and the magus-queue environment's MAGUS_QUEUE_APP_PRIVATE_KEY secret" >&2
-          exit 1
-
+      # Following the run lists and downloads on the job's token, so it never expires
+      # mid-validation. Every write stays the app's.
       - name: Merge each change as it goes green
         env:
           GITHUB_TOKEN: ${{ steps.magus.outputs.queue-token }}
           MERGEQUEUE_TOKEN: ${{ steps.magus.outputs.queue-token }}
+          MERGEQUEUE_ARTIFACTS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN: ${{ github.event.workflow_run.id }}
           MAIN: ${{ github.event.repository.default_branch }}
           APP: ${{ steps.magus.outputs.queue-app-slug }}

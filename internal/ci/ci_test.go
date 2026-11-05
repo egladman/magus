@@ -1,174 +1,144 @@
 package ci
 
 import (
+	"fmt"
 	"testing"
 
-	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
-// makeProjects builds a []*types.Project from paths for use in Build calls.
-var makeProjects = testkit.Projects
+type BuildSuite struct{ suite.Suite }
+
+func TestBuildSuite(t *testing.T) { suite.Run(t, new(BuildSuite)) }
+
+func units(n int) []types.Unit {
+	out := make([]types.Unit, n)
+	for i := range out {
+		out[i] = types.Unit{Project: fmt.Sprintf("p%03d", i), Target: "test"}
+	}
+	return out
+}
 
 func shardSizes(shards []Shard) []int {
 	sizes := make([]int, len(shards))
 	for i, s := range shards {
-		sizes[i] = len(s.Projects)
+		sizes[i] = len(s.Units)
 	}
 	return sizes
 }
 
-func TestBuild_empty(t *testing.T) {
-	t.Parallel()
+func (s *BuildSuite) TestEmptyPlansNothing() {
 	plan, err := Build(nil, "test")
-	require.NoError(t, err)
-	assert.Empty(t, plan.Shards)
+	s.Require().NoError(err)
+	s.Empty(plan.Shards)
 }
 
-func TestBuild_oneProject(t *testing.T) {
-	t.Parallel()
-	plan, err := Build(makeProjects("a"), "test", WithMaxShards(8))
-	require.NoError(t, err)
-	require.Len(t, plan.Shards, 1)
-	assert.Equal(t, "0", plan.Shards[0].ID)
+func (s *BuildSuite) TestOneUnitIsOneShard() {
+	plan, err := Build(units(1), "test", WithMaxShards(8))
+	s.Require().NoError(err)
+	s.Require().Len(plan.Shards, 1)
+	s.Equal("0", plan.Shards[0].ID)
 }
 
-func TestBuild_exactlyCap(t *testing.T) {
-	t.Parallel()
-	paths := make([]string, 8)
-	for i := range paths {
-		paths[i] = string(rune('a' + i))
+func (s *BuildSuite) TestOneOverTheCapDoublesTheFirstShard() {
+	plan, err := Build(units(9), "test", WithMaxShards(8))
+	s.Require().NoError(err)
+	s.Equal([]int{2, 1, 1, 1, 1, 1, 1, 1}, shardSizes(plan.Shards))
+}
+
+func (s *BuildSuite) TestZeroMaxShardsIsAnError() {
+	_, err := Build(units(1), "test", WithMaxShards(0))
+	s.ErrorIs(err, ErrInvalidMaxShards)
+}
+
+func (s *BuildSuite) TestNegativeMaxShardsBelowUnlimitedIsAnError() {
+	_, err := Build(units(1), "test", WithMaxShards(-2))
+	s.ErrorIs(err, ErrInvalidMaxShards)
+}
+
+func (s *BuildSuite) TestUnlimitedIsOneShardPerUnit() {
+	plan, err := Build(units(5), "test", WithMaxShards(-1))
+	s.Require().NoError(err)
+	s.Len(plan.Shards, 5)
+}
+
+func (s *BuildSuite) TestMaxShardsClampsToTheUnitCount() {
+	plan, err := Build(units(1), "test", WithMaxShards(500))
+	s.Require().NoError(err)
+	s.Len(plan.Shards, 1)
+}
+
+func (s *BuildSuite) TestIDsPadToTheLastIndex() {
+	plan, err := Build(units(100), "test", WithMaxShards(100))
+	s.Require().NoError(err)
+	s.Equal("00", plan.Shards[0].ID)
+	s.Equal("99", plan.Shards[99].ID)
+}
+
+func (s *BuildSuite) TestAModelReplacesCeilDivision() {
+	us := units(4)
+	m := forecast.Model{
+		History:           forecast.History{Constants: forecast.Constants{SetupP50Ms: forecast.Millis(600_000)}},
+		MemoryBudgetBytes: 1 << 62,
 	}
-	plan, err := Build(makeProjects(paths...), "test", WithMaxShards(8))
-	require.NoError(t, err)
-	require.Len(t, plan.Shards, 8)
-	for _, s := range plan.Shards {
-		assert.Lenf(t, s.Projects, 1, "want 1 project per shard in shard %s", s.ID)
-	}
+
+	plan, err := Build(us, "test", WithMaxShards(8), WithModel(&m))
+	s.Require().NoError(err)
+	s.Equal([]int{4}, shardSizes(plan.Shards))
 }
 
-func TestBuild_oneOverCap(t *testing.T) {
-	t.Parallel()
-	// 9 projects, cap=8 → 8 shards, first shard gets 2, rest get 1
-	paths := make([]string, 9)
-	for i := range paths {
-		paths[i] = string(rune('a' + i))
-	}
-	plan, err := Build(makeProjects(paths...), "test", WithMaxShards(8))
-	require.NoError(t, err)
-	require.Len(t, plan.Shards, 8)
-	assert.Equal(t, []int{2, 1, 1, 1, 1, 1, 1, 1}, shardSizes(plan.Shards))
+func (s *BuildSuite) TestAnUnlimitedRequestPastTheCeilingSaysItWasCapped() {
+	plan, err := Build(units(hardCeiling+1), "test", WithMaxShards(-1))
+	s.Require().NoError(err)
+	s.Len(plan.Shards, hardCeiling)
+	s.Len(plan.Fallbacks, 1)
+	s.Contains(plan.Fallbacks[0], "at most 256 shards")
 }
 
-func TestBuild_100projects(t *testing.T) {
-	t.Parallel()
-	paths := make([]string, 100)
-	for i := range paths {
-		paths[i] = string(rune(i + 1)) // non-zero rune
-	}
-	plan, err := Build(makeProjects(paths...), "test", WithMaxShards(8))
-	require.NoError(t, err)
-	require.Len(t, plan.Shards, 8)
-	assert.Equal(t, []int{13, 13, 13, 13, 12, 12, 12, 12}, shardSizes(plan.Shards))
+func (s *BuildSuite) TestARequestUnderTheCeilingFallsBackOnNothing() {
+	plan, err := Build(units(5), "test", WithMaxShards(-1))
+	s.Require().NoError(err)
+	s.Empty(plan.Fallbacks)
 }
 
-func TestBuild_invalidMaxShards_zero(t *testing.T) {
-	t.Parallel()
-	_, err := Build(makeProjects("a"), "test", WithMaxShards(0))
-	assert.Error(t, err)
+type PlacedOnceSuite struct{ suite.Suite }
+
+func TestPlacedOnceSuite(t *testing.T) { suite.Run(t, new(PlacedOnceSuite)) }
+
+func (s *PlacedOnceSuite) TestAnEmptyAssignmentIsAnError() {
+	s.ErrorContains(placedOnce(units(2), nil, 2), "dropped p000:test")
 }
 
-func TestBuild_invalidMaxShards_negativeTwoOrLess(t *testing.T) {
-	t.Parallel()
-	for _, n := range []int{-2, -3, -100} {
-		_, err := Build(makeProjects("a"), "test", WithMaxShards(n))
-		assert.Errorf(t, err, "expected error for WithMaxShards(%d)", n)
-	}
+func (s *PlacedOnceSuite) TestAssignmentThatDropsAUnitIsAnError() {
+	us := units(2)
+	s.ErrorContains(placedOnce(us, [][]types.Unit{us[:1]}, 2), "dropped p001:test")
 }
 
-func TestBuild_unlimited(t *testing.T) {
-	t.Parallel()
-	// -1 = unlimited: 5 projects → 5 shards
-	paths := []string{"a", "b", "c", "d", "e"}
-	plan, err := Build(makeProjects(paths...), "test", WithMaxShards(-1))
-	require.NoError(t, err)
-	assert.Len(t, plan.Shards, 5)
+func (s *PlacedOnceSuite) TestAssignmentThatRepeatsAUnitIsAnError() {
+	us := units(2)
+	s.ErrorContains(placedOnce(us, [][]types.Unit{us, us[:1]}, 2), "placed p000:test on shards 0 and 1")
 }
 
-func TestBuild_clampAboveHardCeiling(t *testing.T) {
-	t.Parallel()
-	// 500 > hardCeiling(256): should clamp to 256, not error.
-	plan, err := Build(makeProjects("a"), "test", WithMaxShards(500))
-	require.NoError(t, err)
-	assert.Len(t, plan.Shards, 1)
+func (s *PlacedOnceSuite) TestAssignmentThatInventsAUnitIsAnError() {
+	us := units(1)
+	stray := types.Unit{Project: "x", Target: "lint"}
+	s.ErrorContains(placedOnce(us, [][]types.Unit{{us[0], stray}}, 1), "placed x:lint, which is not a unit")
 }
 
-func TestBuild_IDWidth(t *testing.T) {
-	t.Parallel()
-
-	// IDs "0".."7" — last=7, 1 digit
-	t.Run("maxShards=8 width=1", func(t *testing.T) {
-		assertIDWidth(t, 8, 1)
-	})
-	// IDs "0".."9" — last=9, 1 digit
-	t.Run("maxShards=10 width=1", func(t *testing.T) {
-		assertIDWidth(t, 10, 1)
-	})
-	// IDs "00".."99" — last=99, 2 digits
-	t.Run("maxShards=100 width=2", func(t *testing.T) {
-		assertIDWidth(t, 100, 2)
-	})
-	// IDs "000".."255" — last=255, 3 digits
-	t.Run("maxShards=256 width=3", func(t *testing.T) {
-		assertIDWidth(t, 256, 3)
-	})
+func (s *PlacedOnceSuite) TestAssignmentWithAnEmptyShardIsAnError() {
+	us := units(2)
+	s.ErrorContains(placedOnce(us, [][]types.Unit{us, {}}, 2), "left shard 1 empty")
 }
 
-func assertIDWidth(t *testing.T, maxShards, wantWidth int) {
-	t.Helper()
-	paths := make([]string, maxShards)
-	for i := range paths {
-		paths[i] = string(rune(i + 1))
-	}
-	plan, err := Build(makeProjects(paths...), "test", WithMaxShards(maxShards))
-	require.NoError(t, err)
-	for _, s := range plan.Shards {
-		assert.Lenf(t, s.ID, wantWidth, "maxShards=%d: ID %q", maxShards, s.ID)
-	}
+func (s *PlacedOnceSuite) TestAssignmentOverTheLimitIsAnError() {
+	us := units(2)
+	s.ErrorContains(placedOnce(us, [][]types.Unit{us[:1], us[1:], us[:0]}, 2), "opened 3 shards, over the limit of 2")
 }
 
-func TestBuild_withForecaster_replacesCeilDivision(t *testing.T) {
-	t.Parallel()
-	projects := makeProjects("a", "b", "c", "d")
-	// Forecaster groups everything into one shard regardless of count. Build clamps the 8
-	// requested shards to the 4 projects before it asks.
-	f := NewMockForecaster(t)
-	f.EXPECT().Plan(projects, 4).Return([][]*types.Project{projects}).Once()
-
-	plan, err := Build(projects, "test", WithMaxShards(8), WithForecaster(f))
-	require.NoError(t, err)
-	require.Len(t, plan.Shards, 1)
-	assert.Len(t, plan.Shards[0].Projects, 4)
-}
-
-func TestBuild_withForecaster_emptyResultFallsBack(t *testing.T) {
-	t.Parallel()
-	projects := makeProjects("a", "b")
-	// Misbehaving forecaster: returns empty for non-empty input.
-	f := NewMockForecaster(t)
-	f.EXPECT().Plan(projects, 2).Return(nil).Once()
-
-	plan, err := Build(projects, "test", WithMaxShards(8), WithForecaster(f))
-	require.NoError(t, err)
-	// Defensive fallback to ceil-division: 2 projects, max 8 shards → 2 shards.
-	assert.Len(t, plan.Shards, 2)
-}
-
-func TestBuild_sourcePassthrough(t *testing.T) {
-	t.Parallel()
-	plan, err := Build(makeProjects("a"), "git diff vs origin/main")
-	require.NoError(t, err)
-	assert.Equal(t, "git diff vs origin/main", plan.Source)
+func (s *BuildSuite) TestSourcePassesThrough() {
+	plan, err := Build(units(1), "git diff vs origin/main")
+	s.Require().NoError(err)
+	s.Equal("git diff vs origin/main", plan.Source)
 }

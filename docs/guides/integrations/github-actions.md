@@ -420,14 +420,23 @@ Setup is four steps, with no YAML edit:
 
 The apply job takes the app through `setup-magus`. The client id is an input, since it is
 not a secret; the key is never an input, and reaches the action through the calling
-step's `env`. The excerpt leaves out the checkout, which persists no credential, and the
-`gh auth setup-git` step that lets git push with the apply step's `GITHUB_TOKEN`:
+step's `env`. The app's token expires an hour after it is minted, so the job first waits
+on its own token for validation's first verdict, and only then mints the app's. Apply
+lists and downloads artifacts with the job's own token, `MERGEQUEUE_ARTIFACTS_TOKEN`,
+which lasts as long as the job; every other read and every write is the app's. A verdict
+landing more than an hour after the first meets an expired app token. The excerpt leaves
+out the checkout, which persists no credential, and the `gh auth setup-git` step that
+lets git push with the apply step's `GITHUB_TOKEN`:
 
 ```yaml
 jobs:
   apply:
     environment: magus-queue
     steps:
+      - run: magus buzz hack/ci/merge-queue.buzz -- await-verdict --run "$RUN"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN: ${{ github.event.workflow_run.id }}
       - id: magus
         uses: egladman/magus/.github/actions/setup-magus@<sha>
         with:
@@ -438,6 +447,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.magus.outputs.queue-token }}
           MERGEQUEUE_TOKEN: ${{ steps.magus.outputs.queue-token }}
+          MERGEQUEUE_ARTIFACTS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN: ${{ github.event.workflow_run.id }}
           MAIN: ${{ github.event.repository.default_branch }}
           APP: ${{ steps.magus.outputs.queue-app-slug }}
@@ -445,7 +455,7 @@ jobs:
 ```
 
 With neither the variable nor the secret, `setup-magus` mints nothing and its outputs are
-empty; this repository's apply job then fails before the queue starts, and
+empty; this repository's apply job then fails before it waits for a verdict, and
 `merge-queue.buzz` refuses an apply without `--app` and `--committer`. With one and not the
 other `setup-magus` fails the job. The token is an output, never an environment
 variable, because `setup-magus` also runs in jobs that execute pull-request code. The app

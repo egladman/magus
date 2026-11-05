@@ -6,6 +6,8 @@
 //	magus buzz hack/ci/merge-queue.buzz -- plan --depth <n>         plan the queue; write the validation matrix
 //	magus buzz hack/ci/merge-queue.buzz -- validate --change <id>   validate one change of the plan
 //	magus buzz hack/ci/merge-queue.buzz -- planned --run <id>       write whether validation run <id> plans at all
+//	... -- await-verdict --run <id>
+//	    wait until run <id> uploads a verdict or ends
 //	magus buzz hack/ci/merge-queue.buzz -- apply --run <id> --base <branch> --app <slug> --committer <who>
 //	                                                            merge what the run uploads onto the base,
 //	                                                            as the queue app
@@ -39,8 +41,10 @@ namespace queue;
 
 import "flags";
 import "fs";
+import "http";
 import "os";
 import "proc";
+import "result";
 import "serialize";
 import "std";
 import "time";
@@ -130,15 +134,15 @@ export fun validateArgs(dir: str, change: str) > [str] {
         "--gate", GATE, "--regenerate", REGENERATE, "--remote-cache-read"];
 }
 
-// applyArgs polls every 15s: each poll is two API requests on the queue app's token,
-// which shares its hourly limit with every other request the app makes. The regeneration
+// applyArgs polls every 30s, two requests each on the job's own token.
+// That token's 1,000 requests an hour cover the whole job. The regeneration
 // is main's own, run in magus's sandbox on exactly the projects that generate the files a
 // merge needs regenerated; the queue runs it only once the workspace proves the change
 // touches none of their code, and otherwise checks the bundle validation uploaded beside
 // the verdict. committer and app are the queue app's bot and slug, from the workflow.
 export fun applyArgs(run: str, repo: str, base: str, committer: str, app: str) > [str] {
     final args = mut ["queue", "apply", SANDBOX, "--provider", "github", "--base", base, "--workflow", WORKFLOW,
-        "--status-context", "merge-queue", "--interval", "15s",
+        "--status-context", "merge-queue", "--interval", "30s",
         "--regenerate", "magus run generate:rw",
         "--reproduce-gate", GATE, "--reproduce-regenerate", REGENERATE];
     args.append("--committer");
@@ -154,20 +158,186 @@ export fun applyArgs(run: str, repo: str, base: str, committer: str, app: str) >
 // queue on it validates changes it never merges.
 final APPLY_FLAGS = ["--run", "--base", "--app", "--committer"];
 
-// jobRan reads `gh run view --json status,jobs` of a queue.yaml run: whether its job
-// named job runs, or null while the run has not said. A run cancelled while it waited
-// for the one ahead of it ends with no such job at all.
-export fun jobRan(view: str, job: str) > bool? !> any {
-    final run = serialize\jsonDecode(view);
-    foreach (j in run.q("jobs").listValue()) {
+// jobRan reads a queue.yaml run and its jobs: whether its job named
+// job runs, or null while the run has not said. A run cancelled while
+// it waited for the one ahead of it ends with no such job at all.
+export fun jobRan(view: str, jobs: [serialize\Boxed], job: str) > bool? !> any {
+    foreach (j in jobs) {
         if (j.q("name").stringValue() == job) {
             return j.q("conclusion").stringValue() != "skipped";
         }
     }
-    if (run.q("status").stringValue() == "completed") {
+    if (serialize\jsonDecode(view).q("status").stringValue() == "completed") {
         return false;
     }
     return null;
+}
+
+// Polled is the last answer to one URL, kept for a conditional request.
+object Polled {
+    etag: str,
+    body: str,
+}
+
+// Answer is what one response comes to: a body, a pause before asking
+// again, or a failure. retryReason names what a retry answers.
+export object Answer {
+    body: str? = null,
+    retryMs: double = 0.0,
+    retryReason: str = "",
+    failure: str = "",
+}
+
+// RETRIES bounds the retries in a row one request takes before it fails.
+final RETRIES = 6;
+
+// SECONDARY_WAIT_MS is GitHub's advice for a secondary rate limit
+// that names no Retry-After.
+final SECONDARY_WAIT_MS = 60000.0;
+
+// header reads a response header whatever case the host gave its name.
+fun header(res: http\Response, name: str) > str {
+    foreach (key, value in res.headers) {
+        if (key.lower() == name.lower()) {
+            return value;
+        }
+    }
+    return "";
+}
+
+// backoff is the pause before retry attempt: 5s, doubling, at most a minute.
+fun backoff(attempt: int) > double {
+    var ms = 5000.0;
+    for (var i = 0; i < attempt and ms < 60000.0; i = i + 1) {
+        ms = ms * 2.0;
+    }
+    if (ms > 60000.0) {
+        return 60000.0;
+    }
+    return ms;
+}
+
+// answer says what res to GET url comes to on retry attempt. A 304
+// reuses cached. A 5xx or a secondary rate limit is retried, after
+// Retry-After when GitHub sends one. Any other status fails.
+export fun answer(url: str, res: http\Response, cached: Polled?, attempt: int) > Answer {
+    if (res.status == 200) {
+        return Answer{ body = res.body };
+    }
+    if (res.status == 304) {
+        if (cached -> c) {
+            return Answer{ body = c.body };
+        }
+        return Answer{ failure = "GET {url}: 304 to a request that sent no ETag" };
+    }
+    final secondary = (res.status == 403 or res.status == 429) and res.body.lower().indexOf("secondary rate limit") != null;
+    if (res.status < 500 and !secondary) {
+        return Answer{ failure = "GET {url}: HTTP {res.status}: {res.body}" };
+    }
+    if (attempt >= RETRIES) {
+        return Answer{ failure = "GET {url}: HTTP {res.status}, still after {RETRIES} retries: {res.body}" };
+    }
+    var reason = "HTTP {res.status}";
+    if (secondary) {
+        reason = "a secondary rate limit (HTTP {res.status})";
+    }
+    final after = std\parseInt(header(res, name: "retry-after"));
+    if (after -> seconds) {
+        return Answer{ retryMs = std\toDouble(seconds) * 1000.0, retryReason = reason };
+    }
+    if (secondary) {
+        return Answer{ retryMs = SECONDARY_WAIT_MS, retryReason = reason };
+    }
+    return Answer{ retryMs = backoff(attempt), retryReason = reason };
+}
+
+// apiGet reads path from the REST API on the job's own token. It sends
+// the last answer's ETag: GitHub counts no 304 against the hourly budget.
+fun apiGet(path: str, cache: mut {str: Polled}) > result\Result::<str> {
+    var url = path;
+    final hdrs = mut {<str: str>};
+    try {
+        url = need("GITHUB_API_URL") + "/" + path;
+        hdrs["Authorization"] = "Bearer " + need("GITHUB_TOKEN");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "queue: GET {path}");
+    }
+    hdrs["Accept"] = "application/vnd.github+json";
+    hdrs["X-GitHub-Api-Version"] = "2022-11-28";
+    final cached = cache[url];
+    if (cached -> c) {
+        hdrs["If-None-Match"] = c.etag;
+    }
+    var attempt = 0;
+    while (true) {
+        var got = Answer{};
+        try {
+            final res = http\get(url, headers: hdrs, opts: http\Options{ timeoutSeconds = 30.0 });
+            got = answer(url, res: res, cached: cached, attempt: attempt);
+            final etag = header(res, name: "etag");
+            if (res.status == 200 and etag != "") {
+                cache[url] = Polled{ etag = etag, body = res.body };
+            }
+        } catch (err: any) {
+            if (attempt >= RETRIES) {
+                return result\caught::<str>(err, doing: "queue: GET {url}, still after {RETRIES} retries");
+            }
+            got = Answer{ retryMs = backoff(attempt), retryReason = "no answer ({err})" };
+        }
+        if (got.failure != "") {
+            return result\fail::<str>("queue: {got.failure}");
+        }
+        if (got.body -> body) {
+            return result\ok::<str>(body);
+        }
+        attempt = attempt + 1;
+        std\print("::warning title=queue-api-retry::GET {url} met {got.retryReason}; retry {attempt} of {RETRIES} in {std\toInt(got.retryMs / 1000.0)}s");
+        try {
+            os\sleep(got.retryMs);
+        } catch (err: any) {
+            return result\caught::<str>(err, doing: "queue: wait to retry GET {url}");
+        }
+    }
+}
+
+// PER_PAGE is the most one page of a GitHub listing holds.
+final PER_PAGE = 100;
+
+// entries reads one listing page's key list. A page without it is an
+// error, never an empty page.
+export fun entries(page: str, key: str) > result\Result::<[serialize\Boxed]> {
+    try {
+        final list = serialize\jsonDecode(page).q(key).list();
+        if (list -> l) {
+            return result\ok::<[serialize\Boxed]>(l);
+        }
+    } catch (err: any) {
+        return result\caught::<[serialize\Boxed]>(err, doing: "queue: read a listing of {key}");
+    }
+    return result\fail::<[serialize\Boxed]>("queue: the listing names no {key}: {page}");
+}
+
+// listing reads every page of path's key list.
+fun listing(path: str, key: str, cache: mut {str: Polled}) > result\Result::<[serialize\Boxed]> {
+    final all = mut [<serialize\Boxed>];
+    var page = 1;
+    while (true) {
+        final body = apiGet("{path}?per_page={PER_PAGE}&page={page}", cache: cache);
+        if (body.error != null) {
+            return result\Result::<[serialize\Boxed]>{ error = body.error };
+        }
+        final got = entries(body.value!, key: key);
+        if (got.error != null) {
+            return got;
+        }
+        foreach (e in got.value!) {
+            all.append(e);
+        }
+        if (got.value!.len() < PER_PAGE) {
+            return result\ok::<[serialize\Boxed]>(all);
+        }
+        page = page + 1;
+    }
 }
 
 // capture runs cmd without echoing its stdout, and raises with its stderr on failure.
@@ -199,21 +369,100 @@ fun validate(change: str) > void !> any {
     _ = proc\exec("magus", args: validateArgs(dir, change: change), opts: proc\ExecOptions{ stdin = fs\readFile(dir + "/plan.json") });
 }
 
-// awaitJob polls every 10s, one API request each, until run says whether job runs; a
-// validation run waits on the run ahead of it for as long as that one validates.
-fun awaitJob(run: str, job: str) > bool !> any {
-    final args = ["run", "view", run, "--repo", need("GITHUB_REPOSITORY"), "--json", "status,jobs"];
+// POLL_MS is the pause between two reads of a run. Most reads are a
+// free 304, and the token's budget is shared with the whole job.
+final POLL_MS = 30000.0;
+
+// runPath is the API path of run in this repository.
+fun runPath(run: str) > str !> any {
+    return "repos/{need("GITHUB_REPOSITORY")}/actions/runs/{run}";
+}
+
+// awaitJob polls until run says whether job runs. A validation run
+// waits on the run ahead of it for as long as that one validates.
+fun awaitJob(run: str, job: str) > result\Result::<bool> {
+    final cache = mut {<str: Polled>};
     while (true) {
-        final ran = jobRan(capture("gh", args: args), job: job);
-        if (ran != null) {
-            return ran!;
+        var ran: bool? = null;
+        try {
+            final path = runPath(run);
+            final view = apiGet(path, cache: cache);
+            if (view.error != null) {
+                return result\Result::<bool>{ error = view.error };
+            }
+            final jobs = listing(path + "/jobs", key: "jobs", cache: cache);
+            if (jobs.error != null) {
+                return result\Result::<bool>{ error = jobs.error };
+            }
+            ran = jobRan(view.value!, jobs: jobs.value!, job: job);
+            if (ran == null) {
+                os\sleep(POLL_MS);
+            }
+        } catch (err: any) {
+            return result\caught::<bool>(err, doing: "queue: wait for run {run}'s {job} job");
         }
-        os\sleep(10000.0);
+        if (ran -> r) {
+            return result\ok::<bool>(r);
+        }
     }
 }
 
-fun planned(run: str) > void !> any {
-    fs\appendFile(need("GITHUB_OUTPUT"), content: "ran={awaitJob(run, job: PLAN_JOB)}\n");
+// VERDICT_PREFIX starts each verdict artifact's name.
+final VERDICT_PREFIX = "mergequeue-verdict-";
+
+// verdictReady reads a run, then its artifacts. A completed run
+// uploads nothing more, so apply has all it will get.
+export fun verdictReady(view: str, artifacts: [serialize\Boxed]) > bool !> any {
+    if (serialize\jsonDecode(view).q("status").stringValue() == "completed") {
+        return true;
+    }
+    foreach (a in artifacts) {
+        if (a.q("name").stringValue().startsWith(VERDICT_PREFIX)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// awaitVerdict polls on the job's own token until run uploads a
+// verdict or ends. Apply mints the app's token after it returns.
+fun awaitVerdict(run: str) > result\Result::<bool> {
+    final cache = mut {<str: Polled>};
+    while (true) {
+        var ready = false;
+        try {
+            final path = runPath(run);
+            final view = apiGet(path, cache: cache);
+            if (view.error != null) {
+                return result\Result::<bool>{ error = view.error };
+            }
+            final artifacts = listing(path + "/artifacts", key: "artifacts", cache: cache);
+            if (artifacts.error != null) {
+                return result\Result::<bool>{ error = artifacts.error };
+            }
+            ready = verdictReady(view.value!, artifacts: artifacts.value!);
+            if (!ready) {
+                os\sleep(POLL_MS);
+            }
+        } catch (err: any) {
+            return result\caught::<bool>(err, doing: "queue: await-verdict: read run {run}");
+        }
+        if (ready) {
+            return result\ok::<bool>(true);
+        }
+    }
+}
+
+fun planned(run: str) > result\Result::<bool> {
+    final ran = awaitJob(run, job: PLAN_JOB);
+    if (ran.error == null) {
+        try {
+            fs\appendFile(need("GITHUB_OUTPUT"), content: "ran={ran.value!}\n");
+        } catch (err: any) {
+            return result\caught::<bool>(err, doing: "queue: planned: write the output");
+        }
+    }
+    return ran;
 }
 
 // PLAN_JOB and PLAN_STEP name queue.yaml's plan job and the step in it that reads the
@@ -316,14 +565,26 @@ export fun decide(runs: [Validation], intentAt: str) > Decision !> any {
 // intentAt, unless an unfinished run covers it. That run's jobs are the pull request's
 // own file, so its intent job is a hint and never a verdict: the worst a forged one does
 // is start one more run on base, which validates only what the base's own queue.yaml
-// plans.
-fun dispatch(run: str, base: str, intentAt: str) > void !> any {
-    if (!awaitJob(run, job: "queue intent")) {
-        std\print("::notice title=queue-dispatch-no-intent::run {run} saw no merge intent");
-        return;
+// plans. It returns whether the intent job ran.
+fun dispatch(run: str, base: str, intentAt: str) > result\Result::<bool> {
+    final ran = awaitJob(run, job: INTENT_JOB);
+    if (ran.error != null or !ran.value!) {
+        if (ran.error == null) {
+            std\print("::notice title=queue-dispatch-no-intent::run {run} carried no merge intent");
+        }
+        return ran;
     }
-    start(base, intentAt: intentAt);
+    try {
+        start(base, intentAt: intentAt);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "queue: dispatch: start a run on {base}");
+    }
+    return result\ok::<bool>(true);
 }
+
+// INTENT_JOB is the job a pull request's run runs on merge intent.
+// Its if: decides intent; dispatch reads only whether it ran.
+final INTENT_JOB = "queue intent";
 
 // START_FLAGS are start's flags and DISPATCH_FLAGS dispatch's, all required: neither
 // step starts a run without the moment the change became ready to weigh it against.
@@ -465,6 +726,7 @@ final usage = "usage: magus buzz hack/ci/merge-queue.buzz -- <step> <flags>\n"
     + "  plan --depth <n>\n"
     + "  validate --change <id>\n"
     + "  planned --run <id>\n"
+    + "  await-verdict --run <id>\n"
     + "  apply --run <id> --base <branch> --app <slug> --committer <name <email>>\n"
     + "  dispatch --run <id> --base <branch> --intent-at <time>\n"
     + "  ci-queued --run <id> --base <branch>\n"
@@ -500,13 +762,24 @@ export fun main(args: [str]) > void !> any {
     } else if (step == "validate") {
         validate(options(step, argv: argv, required: ["--change"], optional: [<str>])["--change"]!);
     } else if (step == "planned") {
-        planned(options(step, argv: argv, required: ["--run"], optional: [<str>])["--run"]!);
+        final ran = planned(options(step, argv: argv, required: ["--run"], optional: [<str>])["--run"]!);
+        if (ran.error != null) {
+            throw ran.error!.message;
+        }
+    } else if (step == "await-verdict") {
+        final ready = awaitVerdict(options(step, argv: argv, required: ["--run"], optional: [<str>])["--run"]!);
+        if (ready.error != null) {
+            throw ready.error!.message;
+        }
     } else if (step == "apply") {
         final o = options(step, argv: argv, required: APPLY_FLAGS, optional: [<str>]);
         apply(o["--run"]!, base: o["--base"]!, app: o["--app"]!, committer: o["--committer"]!);
     } else if (step == "dispatch") {
         final o = options(step, argv: argv, required: DISPATCH_FLAGS, optional: [<str>]);
-        dispatch(o["--run"]!, base: o["--base"]!, intentAt: o["--intent-at"]!);
+        final dispatched = dispatch(o["--run"]!, base: o["--base"]!, intentAt: o["--intent-at"]!);
+        if (dispatched.error != null) {
+            throw dispatched.error!.message;
+        }
     } else if (step == "ci-queued") {
         final o = options(step, argv: argv, required: ["--run", "--base"], optional: [<str>]);
         ciQueued(o["--run"]!, base: o["--base"]!);
@@ -533,22 +806,85 @@ fun planDoc(depth: int, partitions: [[str]]) > str {
     return encode({"schema": "mergequeue.plan/v1", "depth": depth, "partitions": groups});
 }
 
-test "apply runs once the plan job runs, and not when it was skipped or never made" {
-    final view = fun (status: str, conclusion: str?) > str {
-        final jobs = mut [<{str: any}>];
-        if (conclusion != null) {
-            jobs.append({"name": "queue plan", "conclusion": conclusion!});
-        }
-        return encode({"status": status, "jobs": jobs});
-    };
-    assert\equal(jobRan(view("in_progress", conclusion: "skipped"), job: "queue plan"), want: false, message: "no merge intent");
-    assert\equal(jobRan(view("in_progress", conclusion: "success"), job: "queue plan"), want: true, message: "planned");
-    assert\equal(jobRan(view("completed", conclusion: "failure"), job: "queue plan"), want: true, message: "apply resets stale statuses whatever the plan did");
-    assert\equal(jobRan(view("in_progress", conclusion: ""), job: "queue plan"), want: true, message: "running");
-    assert\equal(jobRan(view("completed", conclusion: null), job: "queue plan"), want: false, message: "cancelled before it started");
-    assert\equal(jobRan(view("queued", conclusion: null), job: "queue plan"), want: null, message: "still waiting");
-    assert\equal(jobRan(view("completed", conclusion: "success"), job: "queue intent"), want: false, message: "another job's conclusion says nothing");
+// listed is the key list of one listing page holding docs.
+fun listed(key: str, docs: [{str: any}]) > [serialize\Boxed] !> any {
+    return entries(encode({"total_count": docs.len(), key: docs}), key: key).value!;
 }
+
+test "apply runs once the plan job runs, and not when it was skipped or never made" {
+    final run = fun (status: str) > str => encode({"status": status});
+    final jobs = fun (conclusion: str?) > [serialize\Boxed] {
+        final docs = mut [<{str: any}>];
+        if (conclusion != null) {
+            docs.append({"name": "queue plan", "conclusion": conclusion!});
+        }
+        return listed("jobs", docs: docs);
+    };
+    assert\equal(jobRan(run("in_progress"), jobs: jobs("skipped"), job: "queue plan"), want: false, message: "no merge intent");
+    assert\equal(jobRan(run("in_progress"), jobs: jobs("success"), job: "queue plan"), want: true, message: "planned");
+    assert\equal(jobRan(run("completed"), jobs: jobs("failure"), job: "queue plan"), want: true, message: "apply resets stale statuses whatever the plan did");
+    assert\equal(jobRan(run("in_progress"), jobs: jobs(""), job: "queue plan"), want: true, message: "running");
+    assert\equal(jobRan(run("completed"), jobs: jobs(null), job: "queue plan"), want: false, message: "cancelled before it started");
+    assert\equal(jobRan(run("queued"), jobs: jobs(null), job: "queue plan"), want: null, message: "still waiting");
+    assert\equal(jobRan(run("completed"), jobs: jobs("success"), job: INTENT_JOB), want: false, message: "another job's conclusion says nothing");
+}
+
+test "dispatch reads only whether the intent job ran" {
+    final jobs = listed("jobs", docs: [{"name": INTENT_JOB, "conclusion": "skipped"}]);
+    assert\equal(jobRan(encode({"status": "completed"}), jobs: jobs, job: INTENT_JOB), want: false, message: "its if: found no intent");
+    final ran = listed("jobs", docs: [{"name": INTENT_JOB, "conclusion": "success"}]);
+    assert\equal(jobRan(encode({"status": "in_progress"}), jobs: ran, job: INTENT_JOB), want: true, message: "intent");
+}
+
+test "apply mints its token once the run uploads a verdict or ends" {
+    final run = fun (status: str) > str => encode({"status": status});
+    final artifacts = fun (names: [str]) > [serialize\Boxed] {
+        final docs = mut [<{str: any}>];
+        foreach (n in names) {
+            docs.append({"name": n});
+        }
+        return listed("artifacts", docs: docs);
+    };
+    assert\equal(verdictReady(run("in_progress"), artifacts: artifacts([<str>])), want: false, message: "nothing uploaded");
+    assert\equal(verdictReady(run("in_progress"), artifacts: artifacts(["mergequeue-plan"])), want: false, message: "the plan alone");
+    assert\equal(verdictReady(run("in_progress"), artifacts: artifacts(["mergequeue-plan", "mergequeue-verdict-632"])), want: true, message: "a verdict");
+    assert\equal(verdictReady(run("completed"), artifacts: artifacts([<str>])), want: true, message: "a run that ended with none");
+}
+
+test "a listing page without its list is an error, never an empty page" {
+    final denied = entries(`{"message": "Bad credentials"}`, key: "artifacts");
+    assert\equal([denied.value == null, denied.error != null], want: [true, true], message: "an API error");
+    final broken = entries("not json", key: "jobs");
+    assert\equal([broken.value == null, broken.error != null], want: [true, true], message: "an unreadable body");
+    assert\equal(entries(`{"jobs": []}`, key: "jobs").value!.len(), want: 0, message: "an empty list is one");
+}
+
+test "a poll reuses an unchanged answer and retries only what may pass" {
+    final url = "https://api.github.com/repos/o/r/actions/runs/7";
+    final cached = Polled{ etag = `W/"1"`, body = "kept" };
+    final res = fun (status: str, body: str, headers: {str: str}) > http\Response {
+        return http\Response{ status = std\parseInt(status) ?? 0, body = body, headers = headers };
+    };
+    assert\equal(answer(url, res: res("200", body: "new", headers: {<str: str>}), cached: cached, attempt: 0).body, want: "new", message: "a fresh answer");
+    assert\equal(answer(url, res: res("304", body: "", headers: {<str: str>}), cached: cached, attempt: 0).body, want: "kept", message: "unchanged");
+    assert\equal(answer(url, res: res("304", body: "", headers: {<str: str>}), cached: null, attempt: 0).failure != "", want: true, message: "a 304 with nothing kept");
+    final flaky = answer(url, res: res("502", body: "", headers: {<str: str>}), cached: null, attempt: 1);
+    assert\equal([flaky.body, flaky.retryMs, flaky.retryReason], want: [null, 10000.0, "HTTP 502"], message: "a 5xx backs off");
+    assert\equal(answer(url, res: res("503", body: "", headers: {"Retry-After": "7"}), cached: null, attempt: 0).retryMs, want: 7000.0, message: "Retry-After");
+    assert\equal(answer(url, res: res("502", body: "", headers: {<str: str>}), cached: null, attempt: RETRIES).failure != "", want: true, message: "out of retries");
+    final limited = answer(url, res: res("403", body: `{"message": "You have exceeded a secondary rate limit."}`, headers: {<str: str>}), cached: null, attempt: 0);
+    assert\equal([limited.retryMs, limited.failure], want: [SECONDARY_WAIT_MS, ""], message: "a secondary rate limit waits a minute");
+    assert\equal(answer(url, res: res("429", body: "secondary rate limit", headers: {"retry-after": "30"}), cached: null, attempt: 0).retryMs, want: 30000.0, message: "lowercase Retry-After");
+    foreach (status in ["401", "403", "404", "422"]) {
+        final got = answer(url, res: res(status, body: `{"message": "no"}`, headers: {<str: str>}), cached: cached, attempt: 0);
+        assert\equal([got.body, got.retryMs, got.failure != ""], want: [null, 0.0, true], message: "HTTP " + status + " fails");
+    }
+}
+
+test "a retry waits 5s, doubling, at most a minute" {
+    assert\equal([backoff(0), backoff(1), backoff(3), backoff(9)], want: [5000.0, 10000.0, 40000.0, 60000.0], message: "backoff");
+}
+
 
 test "each partition gives its first depth changes a validation job" {
     final ids = validatedIDs(planDoc(2, partitions: [["1", "2", "3"], ["4"]]));
@@ -583,7 +919,7 @@ test "validation runs the candidate's own magus; apply keeps main's" {
 
 test "apply follows the validation run as its source, pinned to the base and queue.yaml, as the queue app's bot, regenerating in the sandbox" {
     assert\equal(applyArgs("99", repo: "o/r", base: "main", committer: "q[bot] <7+q[bot]@users.noreply.github.com>", app: "q"), want: ["queue", "apply", "--sandbox=required",
-        "--provider", "github", "--base", "main", "--workflow", ".github/workflows/queue.yaml", "--status-context", "merge-queue", "--interval", "15s",
+        "--provider", "github", "--base", "main", "--workflow", ".github/workflows/queue.yaml", "--status-context", "merge-queue", "--interval", "30s",
         "--regenerate", "magus run generate:rw",
         "--reproduce-gate", "go run ./cmd/magus buzz hack/ci/run-with-harnesses.buzz gate -- --inherited=fatal", "--reproduce-regenerate", "go run ./cmd/magus run generate:rw",
         "--committer", "q[bot] <7+q[bot]@users.noreply.github.com>", "--app", "q", "run:o/r/runs/99"], message: "argv");

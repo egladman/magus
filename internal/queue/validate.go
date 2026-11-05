@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -124,9 +125,10 @@ func (r *validation) fetch(ctx context.Context, cs []types.Change) {
 // baseGate is the gate on the commit red candidates were built onto, run once for every
 // change it answers.
 type baseGate struct {
-	once sync.Once
-	red  bool
-	err  error
+	once  sync.Once
+	red   bool
+	fault types.Fault
+	err   error
 }
 
 // units is what the hooks run on c's candidate take: its affected set when that is a
@@ -160,6 +162,7 @@ type flight struct {
 type outcome struct {
 	green   bool
 	summary string
+	fault   types.Fault
 	refused *types.RefusedError // building the candidate refused the change rather than a red gate
 	err     error
 	took    time.Duration
@@ -443,7 +446,7 @@ func (r *validation) start(ctx context.Context, group int, f *flight) {
 		defer r.release()
 		start := time.Now()
 		res, err := r.validate(fctx, f.cand, f.change)
-		f.done <- outcome{green: res.Green, summary: res.Summary, err: err, took: time.Since(start)}
+		f.done <- outcome{green: res.Green, summary: res.Summary, fault: res.Fault, err: err, took: time.Since(start)}
 	}()
 }
 
@@ -458,10 +461,10 @@ func (r *validation) validate(ctx context.Context, cand types.Candidate, c types
 
 // baseRed reports whether the gate is red on onto itself for c: a red there is not c's to
 // fix. Each onto and set of units is gated once a run, however many changes ask.
-func (r *validation) baseRed(ctx context.Context, onto string, c types.Change) (bool, error) {
+func (r *validation) baseRed(ctx context.Context, onto string, c types.Change) (red bool, fault types.Fault, err error) {
 	units, err := r.units(c)
 	if err != nil {
-		return false, err
+		return false, types.FaultNone, err
 	}
 	key := fmt.Sprintf("%s\x00%s", onto, strings.Join(units, "\x00"))
 	r.mu.Lock()
@@ -485,9 +488,41 @@ func (r *validation) baseRed(ctx context.Context, onto string, c types.Change) (
 		}
 		defer r.discard(ctx, cand)
 		res, err := r.gate.Validate(ctx, cand, units)
-		b.red, b.err = !res.Green, err
+		b.red, b.fault, b.err = !res.Green, res.Fault, err
 	})
-	return b.red, b.err
+	return b.red, b.fault, b.err
+}
+
+// baseHold is a wait the gate on the base earns, and the machine fault behind
+// it when the wait is for one.
+type baseHold struct {
+	stackHold
+	fault types.Fault
+}
+
+// baseWait is the wait the base earns a red change, false when the red is its
+// own. A machine fault on either gate is not the change's red or the base's.
+func (r *validation) baseWait(ctx context.Context, f *flight, out outcome) (baseHold, bool, error) {
+	red, baseFault, err := r.baseRed(ctx, f.onto, f.change)
+	if err != nil {
+		return baseHold{}, false, fmt.Errorf("gate %s without %s: %w", short(f.onto), f.change.Label(), err)
+	}
+	onto := ontoName(r.plan.Base, f.onto, f.after)
+	switch fault := cmp.Or(out.fault, baseFault); {
+	case fault != types.FaultNone:
+		cause, err := fault.Cause()
+		if err != nil {
+			return baseHold{}, false, fmt.Errorf("gate %s: %w", f.change.Label(), err)
+		}
+		reason := fmt.Sprintf("the gate failed on it, and the machine was at fault (%s), though %s is green without it; run it again", cause, onto)
+		if red {
+			reason = fmt.Sprintf("the gate failed on it and on %s without it, and the machine was at fault (%s); run it again", onto, cause)
+		}
+		return baseHold{stackHold{types.CodeWaitMachineFault, reason}, fault}, true, nil
+	case red:
+		return baseHold{stackHold: stackHold{types.CodeWaitBaseRed, fmt.Sprintf("the gate failed on it and on %s without it; retried once that is green", onto)}}, true, nil
+	}
+	return baseHold{}, false, nil
 }
 
 // verdict decides a gated or refused change. attributable says everything beneath the
@@ -508,13 +543,12 @@ func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attrib
 			return v.Decision, r.decide(v)
 		}
 		if out.refused == nil {
-			red, err := r.baseRed(ctx, f.onto, f.change)
+			hold, waits, err := r.redOnBase(ctx, f, &out)
 			if err != nil {
-				return 0, fmt.Errorf("gate %s without %s: %w", short(f.onto), f.change.Label(), err)
+				return 0, err
 			}
-			if red {
-				v.Decision, v.Code = types.DecisionWait, types.CodeWaitBaseRed
-				v.Reason = fmt.Sprintf("the gate failed on it and on %s without it; retried once that is green", ontoName(r.plan.Base, f.onto, f.after))
+			if waits {
+				v.Decision, v.Code, v.Reason = types.DecisionWait, hold.code, hold.reason
 				return v.Decision, r.decide(v)
 			}
 		}
@@ -544,6 +578,32 @@ Building the candidate %s; the gate ran on that merge.
 	}
 	defer cleanup()
 	return v.Decision, r.decideWithBundle(v, bundle)
+}
+
+// redOnBase is the wait a red candidate earns from the base, false when the
+// red is its own. A machine fault that cost [maxFaultWaits] waits in a row is
+// its own: out.summary then names the fault.
+func (r *validation) redOnBase(ctx context.Context, f *flight, out *outcome) (stackHold, bool, error) {
+	hold, waits, err := r.baseWait(ctx, f, *out)
+	if err != nil || !waits {
+		return stackHold{}, false, err
+	}
+	if hold.fault == types.FaultNone {
+		return hold.stackHold, true, nil
+	}
+	n, err := r.dir.FaultWaits(f.change)
+	if err != nil {
+		return stackHold{}, false, fmt.Errorf("count the machine-fault waits of %s: %w", f.change.Label(), err)
+	}
+	if n < maxFaultWaits {
+		return hold.stackHold, true, nil
+	}
+	cause, err := hold.fault.Cause()
+	if err != nil {
+		return stackHold{}, false, err
+	}
+	out.summary = fmt.Sprintf("the gate failed on it with the machine at fault (%s) on %d runs in a row, so it is sent back rather than waited on again", cause, maxFaultWaits+1)
+	return stackHold{}, false, nil
 }
 
 // bundle writes f's regenerated candidate, on the merge beneath it, to a file under
@@ -589,6 +649,9 @@ func (r *validation) decideWithBundle(v types.Verdict, bundle string) error {
 		Commit: v.CandidateCommit, Depth: v.Depth, DurationMS: v.DurationMS})
 	if err := r.dir.RecordWithBundle(v, bundle); err != nil {
 		return fmt.Errorf("record the verdict on %s: %w", v.Change.Label(), err)
+	}
+	if err := r.dir.NoteFaultWait(context.Background(), v.Change, v.Code == types.CodeWaitMachineFault); err != nil {
+		return fmt.Errorf("count the machine-fault waits of %s: %w", v.Change.Label(), err)
 	}
 	return nil
 }

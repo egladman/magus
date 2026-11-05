@@ -69,18 +69,25 @@ func DiskBelow(dir string, floorBytes int64) (free int64, below bool, err error)
 	return free, free < floorBytes, nil
 }
 
+// DiskFull reports whether output says the disk is full and the filesystem
+// holding dir has less than floorBytes free. Output without the text, or a
+// floor of zero, is not full; a disk it cannot read is an error.
+func DiskFull(output, dir string, floorBytes int64) (free int64, full bool, err error) {
+	if !strings.Contains(strings.ToLower(output), noSpaceText) {
+		return 0, false, nil
+	}
+	return DiskBelow(dir, floorBytes)
+}
+
 // DiskFullCause is the line naming the fix when output says the disk is full
 // and the filesystem holding dir agrees, "" otherwise. Text alone cannot tell
 // a fixture printing the string from a real failure.
 func DiskFullCause(output, dir string, floorBytes int64) string {
-	if !strings.Contains(strings.ToLower(output), noSpaceText) {
-		return ""
-	}
-	free, below, err := DiskBelow(dir, floorBytes)
+	free, full, err := DiskFull(output, dir, floorBytes)
 	if err != nil {
 		return fmt.Sprintf("the output says the disk is full, but this could not check: %v", err)
 	}
-	if !below {
+	if !full {
 		return ""
 	}
 	return fmt.Sprintf("[%s] the disk is full: %d MiB free where this ran. Run `%s`, which trims caches and says what it did and what it leaves for you",
