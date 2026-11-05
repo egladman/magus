@@ -1,7 +1,6 @@
 package coverage
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -114,11 +113,6 @@ func (s *ReportSuite) TestRebaseMakesAnAbsolutePathWorkspaceRelative() {
 
 func (s *ReportSuite) TestRebaseDropsAPathOutsideTheWorkspace() {
 	s.Empty(Rebase([]File{{Path: "/elsewhere/a.ts"}}, "/ws", "web"))
-}
-
-func (s *ReportSuite) TestDirIsPerProjectUnderTheCache() {
-	s.Equal(filepath.Join("/c", "coverage", "5feceb66ffc86f38"), Dir("/c", "0"))
-	s.NotEqual(Dir("/c", "web"), Dir("/c", "api"))
 }
 
 func (s *ReportSuite) TestParseRefusesAnLCOVReportWithNoRecord() {

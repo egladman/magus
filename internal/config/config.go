@@ -1160,7 +1160,6 @@ var envOnly = []cmdline.Env{
 	{Name: "MAGUS_INVOCATION_ANCESTORS", Key: "", Default: "", Doc: "Set by magus for the processes it spawns: the comma-separated invocations a nested magus runs underneath; never set it by hand"},
 	{Name: "MAGUS_BOOTSTRAP_EXEC_DONE", Key: "", Default: "", Doc: "Set by magus when it replaces itself with a workspace-local ./magus, so the replacement never hops again; never set it by hand"},
 	{Name: "MAGUS_SYMBOL_INDEX", Key: "", Default: "", Doc: "Set by magus for a spell's symbol indexer op: the path the indexer writes its SCIP index to; never set it by hand"},
-	{Name: "MAGUS_COVERAGE_DIR", Key: "", Default: "", Doc: "Set by magus for a spell's coverage op: the directory the op writes its coverage report into; never set it by hand"},
 	{Name: "MAGUS_WORKSPACE_ROOT", Key: "", Default: "", Doc: "Set by magus for a spell's symbol indexer op: the workspace root the index's paths are relative to; never set it by hand"},
 	{Name: "MAGUS_INTERNAL_ADVICE_MODE", Key: "", Default: "", Doc: "Set by `magus diff` for the advice script it runs; the two halves of one feature, not a setting, and either may be renamed without notice"},
 	{Name: "MAGUS_INTERNAL_ADVICE_BASE_BRANCH", Key: "", Default: "", Doc: "Set by `magus diff` alongside MAGUS_INTERNAL_ADVICE_MODE; not a setting"},

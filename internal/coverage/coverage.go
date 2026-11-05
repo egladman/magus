@@ -2,8 +2,6 @@ package coverage
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"path"
 	"path/filepath"
@@ -62,15 +60,6 @@ func (b Block) covered() int {
 	return 0
 }
 
-// Dir is where a coverage op writes its report for project, a
-// workspace-relative directory. It is keyed like the symbol index, so the run
-// and the reader agree without naming the checkout. The hashing copies
-// symbols.IndexPath on purpose: the two directories evolve apart.
-func Dir(cacheDir, project string) string {
-	sum := sha256.Sum256([]byte(filepath.ToSlash(filepath.Clean(project))))
-	return filepath.Join(cacheDir, "coverage", hex.EncodeToString(sum[:8]))
-}
-
 // Parse reads a report in format. modulePath strips a Go profile's
 // module-qualified paths and is unused for LCOV. A format magus does not read
 // is an error: guessing one would read as 0% or 100% covered. So is a report
@@ -114,7 +103,7 @@ func isRecord(format spells.CoverageFormat, line string) bool {
 }
 
 // Rebase makes each file's path workspace-relative. A relative path is taken
-// against project, the directory the coverage op ran in; an absolute one
+// against project, the directory the tests ran in; an absolute one
 // against root. A path outside the workspace is dropped.
 func Rebase(files []File, root, project string) []File {
 	out := make([]File, 0, len(files))
