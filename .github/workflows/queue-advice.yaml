@@ -14,9 +14,14 @@ on:
     types: [opened, reopened, synchronize, edited, labeled, unlabeled, closed, auto_merge_enabled, auto_merge_disabled]
   pull_request_review:
     types: [submitted, dismissed]
+  # CI and PR finishing on a pull request change what its merge-queue status says; only
+  # the waiting job runs on them.
+  workflow_run:
+    workflows: [CI, PR]
+    types: [completed]
 
 concurrency:
-  group: queue-advice-${{ github.event.pull_request.number }}
+  group: queue-advice-${{ github.event.pull_request.number || github.event.workflow_run.id }}
   cancel-in-progress: true
 
 permissions:
@@ -74,6 +79,65 @@ jobs:
           missing-target: 'false'
           exported-api: 'false'
           first-contribution: 'false'
+
+  # merge-queue is main's only required status, and the queue posts it only once a pull
+  # request is queued. This job posts it as pending on every other pull request, saying
+  # why it waits, so an unqueued one reads "not queued: CI has not passed" or "ready: ..."
+  # instead of "Expected" forever.
+  #
+  # statuses: write is safe here for two reasons. The job checks out main and runs
+  # main's pull-requests.buzz, which posts nothing but pending and executes none of the
+  # pull request's code. And the ruleset pins merge-queue to the queue app, so a status
+  # the Actions token posts, of any state, never satisfies the requirement: a pull request
+  # that edited this file to post success would still not merge.
+  waiting:
+    name: queue waiting status
+    if: >-
+      (github.event_name != 'workflow_run' &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'workflow_run' &&
+       (github.event.workflow_run.path == '.github/workflows/ci.yaml' || github.event.workflow_run.path == '.github/workflows/pr.yaml') &&
+       github.event.workflow_run.event == 'pull_request' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.pull_requests[0] != null)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read # check out main
+      pull-requests: read # every open pull request, for its checks and a stack's labels
+      checks: read # their checks, which say whether CI passed
+      statuses: write # post merge-queue as pending, the only state it posts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      - name: Note whether main's hack/ci/pull-requests.buzz has the waiting step yet
+        id: main
+        run: |
+          if grep -q 'step == "waiting"' hack/ci/pull-requests.buzz; then
+            echo "waiting=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::main's hack/ci/pull-requests.buzz has no waiting step yet; this job resumes once the change that adds it merges"
+          fi
+
+      # A workflow_run names every pull request the run was for; a pull request event, one.
+      - name: Post merge-queue as pending, saying why each pull request waits
+        if: steps.main.outputs.waiting == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAIN: ${{ github.event.repository.default_branch }}
+          PRS: ${{ github.event.pull_request.number || join(github.event.workflow_run.pull_requests.*.number, ' ') }}
+        run: |
+          set --
+          for n in $PRS; do set -- "$@" --pr "$n"; done
+          magus buzz hack/ci/pull-requests.buzz -- waiting --base "$MAIN" "$@"
 
   # queue-apply.yaml's dashboard job, run on the events that change a pull request's
   # place in the queue (a label, a review, auto-merge), so the pinned issue shows them

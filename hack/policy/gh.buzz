@@ -12,15 +12,20 @@ final failureRunReader = "magus buzz hack/ci/show-failures.buzz -- --run <run-id
 // is served a read it may run itself.
 final rootFailureReader = "gh run view <run-id> --log-failed";
 final rootFailureRead = "A session handing out work reads the failed job's log instead: `{rootFailureReader}`.";
+// merge-queue is pending on every pull request outside the queue, so a
+// count of pending checks that includes it never reaches zero.
+final queueStatusNote = "A pending `merge-queue` status is the queue, not CI: its description says why the pull "
+    + "request waits, and only the queue makes it pass. Leave it out when you count pending checks.";
 
 final ciWatchDenial = "read failed targets instead of watching: `{failureReader}`.\n"
     + "Watching buys nothing because GREEN CHANGES NOTHING: "
-    + "the human merges, not you. Fix the failures the records name. {rootFailureRead}\n"
+    + "the human merges, not you. Fix the failures the records name. {rootFailureRead} {queueStatusNote}\n"
     + "The merge queue is the same: `magus queue ls` lists every change with merge intent and its "
     + "state in one call, so ask it rather than watching a queue.yaml or queue-apply.yaml run.";
 
 final ciStatusDenial = "read the failed targets: `{failureReader}`.\n"
     + "CI status summaries and raw job logs do not isolate the failed target output. "
+    + queueStatusNote + " "
     + "For a known run: `{failureRunReader}`. Select the pull request's current head, not the checkout's HEAD. "
     + rootFailureRead;
 
