@@ -10,9 +10,24 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// captureHints points slog's default at a text handler on a buffer for the test.
+// resetEmitted gives the test its own dedupe set.
+func resetEmitted(t *testing.T) {
+	t.Helper()
+	emittedMu.Lock()
+	prev := emitted
+	emitted = make(map[string]struct{})
+	emittedMu.Unlock()
+	t.Cleanup(func() {
+		emittedMu.Lock()
+		emitted = prev
+		emittedMu.Unlock()
+	})
+}
+
+// captureHints logs the default slog handler to a buffer for the test.
 func captureHints(t *testing.T) *bytes.Buffer {
 	t.Helper()
+	resetEmitted(t)
 	var buf bytes.Buffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{
@@ -27,7 +42,7 @@ func captureHints(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// Hint dedupes by text across the whole process, so each test names its own message.
+// Hint dedupes by text, and a repeated run reuses the name.
 func TestHintLogsAHintRecordOnce(t *testing.T) {
 	buf := captureHints(t)
 	msg := "pass --force to replace it: " + t.Name()
