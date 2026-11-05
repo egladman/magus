@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/queue/types"
 )
 
@@ -197,6 +199,75 @@ func writeSynced(f *os.File, b []byte) error {
 		return err
 	}
 	return f.Close()
+}
+
+// faultWaitsFile is the JSON Lines store of [faultWait], beside the plan.
+const faultWaitsFile = "fault-waits.jsonl"
+
+// maxFaultWaits is how many runs in a row may wait on a machine fault for one
+// change before the next kicks it back. Three rides out a disk the next run
+// reclaims or a lock that frees in minutes. More would let a gate that really
+// dies hold its place for long.
+const maxFaultWaits = 3
+
+// faultWait is the runs in a row that waited on a machine fault for one change
+// at one head. The last line per change is its count.
+type faultWait struct {
+	Change string
+	Head   string
+	Count  int
+}
+
+type faultWaitLine struct {
+	Change string `json:"change"`
+	Head   string `json:"head"`
+	Count  int    `json:"count"`
+}
+
+func (w faultWait) MarshalJSON() ([]byte, error) { return json.Marshal(faultWaitLine(w)) }
+
+func (w *faultWait) UnmarshalJSON(b []byte) error {
+	var l faultWaitLine
+	if err := json.Unmarshal(b, &l); err != nil {
+		return err
+	}
+	*w = faultWait(l)
+	return nil
+}
+
+func (d *VerdictDir) faultWaits() file.JSONL[faultWait] {
+	return file.JSONL[faultWait]{Path: filepath.Join(d.Path, faultWaitsFile), Key: func(w faultWait) string { return w.Change }}
+}
+
+// FaultWaits is how many runs in a row waited on a machine fault for c at its
+// current head. A new head starts the count again.
+func (d *VerdictDir) FaultWaits(c types.Change) (int, error) {
+	all, err := d.faultWaits().Load()
+	if err != nil {
+		return 0, err
+	}
+	for _, w := range all {
+		if w.Change == c.ID && w.Head == c.Head {
+			return w.Count, nil
+		}
+	}
+	return 0, nil
+}
+
+// NoteFaultWait counts one more consecutive wait on a machine fault for c, or
+// with waited false ends the streak.
+func (d *VerdictDir) NoteFaultWait(ctx context.Context, c types.Change, waited bool) error {
+	prior, err := d.FaultWaits(c)
+	if err != nil || (!waited && prior == 0) {
+		return err
+	}
+	next := 0
+	if waited {
+		next = prior + 1
+	}
+	return d.faultWaits().Update(ctx, func([]faultWait) []faultWait {
+		return []faultWait{{Change: c.ID, Head: c.Head, Count: next}}
+	})
 }
 
 // MarkDone writes the end-of-verdicts signal.

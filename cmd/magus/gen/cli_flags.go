@@ -519,6 +519,8 @@ const (
 	FlagQueueReviewsTarget = "target"
 	// queue reviews: --vcs
 	FlagQueueReviewsVCS = "vcs"
+	// queue validate: --env
+	FlagQueueValidateEnv = "env"
 	// queue validate: --facts
 	FlagQueueValidateFacts = "facts"
 	// queue validate: --gate
@@ -1851,6 +1853,7 @@ type QueueValidateFlags struct {
 	Verdicts        string // --verdicts
 	Only            string // --only
 	Parallel        int    // --parallel
+	Env             string // --env
 	RemoteCacheRead bool   // --[no-]remote-cache-read
 	Facts           string // --facts
 	Target          string // --target
@@ -1868,6 +1871,7 @@ func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 	fs.StringVar(&f.Verdicts, FlagQueueValidateVerdicts, "", "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>")
 	fs.StringVar(&f.Only, FlagQueueValidateOnly, "", "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated")
 	fs.IntVar(&f.Parallel, FlagQueueValidateParallel, 0, "Candidates built or gated at once across every partition; 0 is one per CPU")
+	fs.StringVar(&f.Env, FlagQueueValidateEnv, "", "Comma-separated `names` of variables passed from this environment to the gate's own magus, as queue gate does")
 	fs.BoolVar(&f.RemoteCacheRead, FlagQueueValidateRemoteCacheRead, false, "Let hooks read magus's remote cache from GitHub Actions through a loopback proxy that forwards lookups with the runner's token and refuses writes. Hooks get a stand-in token. Refused without runner credentials or a trusted key")
 	cmdline.NegatedBoolVar(fs, &f.RemoteCacheRead, FlagQueueValidateRemoteCacheRead)
 	fs.StringVar(&f.Facts, FlagQueueValidateFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
