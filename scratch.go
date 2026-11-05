@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/coverage"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/libs/cmdline/exit"
@@ -341,4 +342,78 @@ func linkDirs(root, dir string, links []string) error {
 func exists(path string) bool {
 	_, err := os.Lstat(path)
 	return err == nil
+}
+
+// freshProfile is a profile one run brought current. A magus nested in the
+// same run reads it as it stands: its own probe keys the target from another
+// process, can miss, and a run there is refused MGS3007.
+type freshProfile struct {
+	Project string `json:"project"`
+	Profile string `json:"profile"`
+	Digest  string `json:"digest"`
+}
+
+// freshProfiles is what the run ctx belongs to brought current, as JSON Lines
+// in the workspace store. file is "" outside a run, which vouches for nothing.
+type freshProfiles struct {
+	root string
+	file string
+}
+
+func (m *Magus) freshProfiles(ctx context.Context) freshProfiles {
+	run := types.InvocationRoot(ctx)
+	store, err := config.StoreDir(m.ws.Root, m.cfg)
+	if run == "" || err != nil {
+		return freshProfiles{root: m.ws.Root}
+	}
+	sum := sha256.Sum256([]byte(run))
+	return freshProfiles{root: m.ws.Root, file: filepath.Join(store, keptProfilesDir, fmt.Sprintf("fresh-%x.jsonl", sum[:8]))}
+}
+
+func (f freshProfiles) digest(c coverageSource) (string, bool) {
+	data, err := os.ReadFile(filepath.Join(f.root, filepath.FromSlash(c.project), filepath.FromSlash(c.coverage.Profile)))
+	if err != nil {
+		return "", false
+	}
+	return fmt.Sprintf("%x", sha256.Sum256(data)), true
+}
+
+// vouches reports whether this run brought c's profile current and the
+// profile on disk is still the one it left. The last line per profile wins.
+func (f freshProfiles) vouches(c coverageSource) bool {
+	data, err := os.ReadFile(f.file)
+	if f.file == "" || err != nil {
+		return false
+	}
+	recorded := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		var e freshProfile
+		if json.Unmarshal([]byte(line), &e) == nil && e.Project == c.project && e.Profile == c.coverage.Profile {
+			recorded = e.Digest
+		}
+	}
+	now, ok := f.digest(c)
+	return ok && recorded == now
+}
+
+// record appends c's profile as this run left it. A profile the target did
+// not write is not recorded; reading it says so.
+func (f freshProfiles) record(c coverageSource) error {
+	now, ok := f.digest(c)
+	if f.file == "" || !ok {
+		return nil
+	}
+	line, err := json.Marshal(freshProfile{Project: c.project, Profile: c.coverage.Profile, Digest: now})
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(f.file), 0o700); err != nil {
+		return err
+	}
+	out, err := os.OpenFile(f.file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	_, werr := out.Write(append(line, '\n'))
+	return errors.Join(werr, out.Close())
 }

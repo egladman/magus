@@ -325,11 +325,17 @@ func profileTarget(p *types.Project, profile string) (string, string) {
 // headProfile freshens c's target and reads the profile it left. A target
 // that fails or cannot run is a reason; a cancelled one is an error.
 func (m *Magus) headProfile(ctx context.Context, c coverageSource) (profileRead, error) {
-	if err := m.freshenProfile(ctx, c); err != nil {
-		if ctx.Err() != nil {
-			return profileRead{}, fmt.Errorf("change risk: freshening `%s`: %w", c.command(), context.Cause(ctx))
+	fresh := m.freshProfiles(ctx)
+	if !fresh.vouches(c) {
+		if err := m.freshenProfile(ctx, c); err != nil {
+			if ctx.Err() != nil {
+				return profileRead{}, fmt.Errorf("change risk: freshening `%s`: %w", c.command(), context.Cause(ctx))
+			}
+			return profileRead{reason: fmt.Sprintf("`%s` left no current profile: %s", c.command(), err)}, nil
 		}
-		return profileRead{reason: fmt.Sprintf("`%s` left no current profile: %s", c.command(), err)}, nil
+		if err := fresh.record(c); err != nil {
+			return profileRead{}, fmt.Errorf("change risk: %w", err)
+		}
 	}
 	kept, reason := m.readCoverageReport(c.project, c.coverage)
 	return profileRead{files: kept.files, reason: reason}, nil

@@ -33,6 +33,7 @@ func (r Resolved) Descriptor() (spells.Descriptor, error) {
 	}
 	for _, step := range []func(*spells.Descriptor) error{
 		checkSandbox,
+		checkCoverage,
 		r.assembleOps,
 		func(m *spells.Descriptor) error { return applyModeArgs(m, r.Contract.ModeArgs) },
 		addSymbolIndexOp,
@@ -92,11 +93,6 @@ func (r Resolved) declared() (spells.Descriptor, error) {
 		}
 		indexer = &si
 	}
-	if c.Coverage != nil {
-		if err := validateCoverage(*c.Coverage); err != nil {
-			return spells.Descriptor{}, fmt.Errorf("mgs_getCoverage: %w", err)
-		}
-	}
 	return spells.Descriptor{
 		Name:               c.Name,
 		Needs:              globValues(c.RequiredGlobs),
@@ -139,6 +135,16 @@ func addSymbolIndexOp(m *spells.Descriptor) error {
 	command := indexer.Command
 	command.Capture, command.Quiet = true, true
 	m.Ops[indexer.OpName()] = spells.Op{Kind: spells.OpKindSymbolIndex, Command: command}
+	return nil
+}
+
+func checkCoverage(m *spells.Descriptor) error {
+	if m.Coverage == nil {
+		return nil
+	}
+	if err := validateCoverage(*m.Coverage); err != nil {
+		return fmt.Errorf("spell %q: mgs_getCoverage: %w", m.Name, err)
+	}
 	return nil
 }
 

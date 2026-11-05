@@ -309,3 +309,50 @@ func (s *BaseProfilesSuite) TestRemoveDeletesTheCopy() {
 	s.profiles.remove()
 	s.NoDirExists(dir)
 }
+
+// FreshProfilesSuite records the profiles one run brought current.
+type FreshProfilesSuite struct {
+	suite.Suite
+	m *Magus
+}
+
+func TestFreshProfilesSuite(t *testing.T) { suite.Run(t, new(FreshProfilesSuite)) }
+
+func (s *FreshProfilesSuite) SetupTest() {
+	cfg := config.Defaults()
+	cfg.Cache.Dir = filepath.Join(s.T().TempDir(), "cache")
+	s.m = &Magus{ws: &types.Workspace{Root: s.T().TempDir()}, cfg: cfg}
+	s.write(toyLCOV)
+}
+
+func (s *FreshProfilesSuite) write(text string) {
+	file := filepath.Join(s.m.ws.Root, "out", "lcov.info")
+	s.Require().NoError(os.MkdirAll(filepath.Dir(file), 0o755))
+	s.Require().NoError(os.WriteFile(file, []byte(text), 0o644))
+}
+
+func (s *FreshProfilesSuite) inRun(id string) freshProfiles {
+	return s.m.freshProfiles(types.AppendInvocationAncestor(context.Background(), 1, id))
+}
+
+func (s *FreshProfilesSuite) TestARecordedProfileIsVouchedForInTheSameRun() {
+	s.Require().NoError(s.inRun("run1").record(toySource()))
+	s.True(s.inRun("run1").vouches(toySource()))
+}
+
+func (s *FreshProfilesSuite) TestAnotherRunVouchesForNothing() {
+	s.Require().NoError(s.inRun("run1").record(toySource()))
+	s.False(s.inRun("run2").vouches(toySource()))
+}
+
+func (s *FreshProfilesSuite) TestAProfileEditedSinceIsNotVouchedFor() {
+	s.Require().NoError(s.inRun("run1").record(toySource()))
+	s.write("SF:" + scratchFile + "\nDA:4,0\nend_of_record\n")
+	s.False(s.inRun("run1").vouches(toySource()))
+}
+
+func (s *FreshProfilesSuite) TestOutsideARunNothingIsRecorded() {
+	outside := s.m.freshProfiles(context.Background())
+	s.Require().NoError(outside.record(toySource()))
+	s.False(outside.vouches(toySource()))
+}

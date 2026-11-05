@@ -2855,4 +2855,3 @@ export fun image(ctx: magus\Context, args: [str]) > void !> any {
 	assert.True(t, strings.HasPrefix(third, "two:"), "the edit reran build, then the image: %q", third)
 	assert.NotEqual(t, first, third)
 }
-
