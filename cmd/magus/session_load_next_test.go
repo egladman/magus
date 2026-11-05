@@ -65,7 +65,7 @@ func TestJoinServedNextLeavesUnattributableLinesAlone(t *testing.T) {
 
 	joinServedNext(events, commands, []hint.ServedNextEntry{
 		{AtMs: 1_000, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}},
-		{AtMs: 5_000 + nextJoinWindow.Milliseconds() + 1, ID: "query-path", Argv: []string{"magus", "path", "a", "b"}},
+		{AtMs: 5_000 + nextJoinWindow.Milliseconds() + 1, ID: "query-path", Argv: []string{"magus", "explain", "a", "--to", "b"}},
 	})
 
 	assert.Empty(t, events[0].Event.NextServed)

@@ -1720,7 +1720,7 @@ func sedOnlyPrints(args []string) bool {
 var (
 	undeclaredLeaseVerbs = map[string]bool{
 		"ledger": true, "job": true, "session": true, "ls": true, "describe": true,
-		"query": true, "explain": true, "path": true, "refs": true, "where": true,
+		"query": true, "explain": true, "refs": true, "where": true,
 		"status": true, "doctor": true, "help": true, "version": true,
 	}
 	gitReadVerbs = map[string]bool{

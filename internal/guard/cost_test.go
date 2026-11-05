@@ -508,7 +508,7 @@ func orchestrationLines(notes string) []string {
 		"./magus query 'kind=spell'",
 		"./magus explain internal/guard",
 		"./magus refs costState --occurrences",
-		"./magus path internal/guard internal/job",
+		"./magus explain internal/guard --to internal/job",
 		"./magus describe file internal/guard/root.go",
 		"./magus affected --plan",
 		"./magus graph stats",

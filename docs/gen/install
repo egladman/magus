@@ -440,7 +440,7 @@ install_release() {
     # Tolerated like the shorthand below: this script is served from main and installs
     # older releases too. `man` landed after v0.3.0, so an unconditional call killed the
     # install with the binary already in place.
-    "${INSTALL_PREFIX}/bin/magus" man install \
+    "${INSTALL_PREFIX}/bin/magus" self man \
         --dir "${INSTALL_PREFIX}/share/man/man1" ||
         printf 'warning: could not install the man pages; magus itself is installed\n' >&2
 
@@ -477,15 +477,15 @@ install_release() {
     # on $fpath as _magus - appending it to ~/.zshrc registers nothing.
     case "${SHELL:-}" in
         */bash)
-            printf "  Enable Bash completion: echo 'source <(magus completion bash)' >> ~/.bashrc\n"
+            printf "  Enable Bash completion: echo 'source <(magus self completion bash)' >> ~/.bashrc\n"
             ;;
         */zsh)
-            printf '  Enable Zsh completion: magus completion zsh > ~/.zsh/completions/_magus\n'
+            printf '  Enable Zsh completion: magus self completion zsh > ~/.zsh/completions/_magus\n'
             printf '    then put that directory on the zsh fpath before compinit:\n'
             printf '    https://eli.gladman.cc/magus/guides/download/shell-setup/\n'
             ;;
         */fish)
-            printf '  Enable Fish completion: magus completion fish > ~/.config/fish/completions/magus.fish\n'
+            printf '  Enable Fish completion: magus self completion fish > ~/.config/fish/completions/magus.fish\n'
             ;;
     esac
 }

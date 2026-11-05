@@ -4,7 +4,7 @@ generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
 skill_full_bytes: 15794
-skill_short_bytes: 9322
+skill_short_bytes: 9330
 ---
 
 # magus-query
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `fcfd43557334` |
+| `skill-content` | `6cf66543ccad` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -82,7 +82,7 @@ Read it only as last resort: no server AND no CLI, or human asking what committe
    Question: MCP; CLI
    - find and relate entities: `client` (`magus\graph().query`); `magus query "<terms>"`
    - one node: edges, provenance, blast radius: `client` (`magus\graph().explain`); `magus explain <node>`
-   - how two nodes relate: `client` (`magus\graph().path`); `magus path <a> <b>`
+   - how two nodes relate: `client` (`magus\graph().path`); `magus explain <a> --to <b>`
    - where risk concentrates: `client` (`magus\graph().stats`); `magus graph stats`
    - where code symbol defined and used: `client` (`magus\graph().refs`); `magus refs <symbol>`
    - what branch changed in graph: (export + diff); `magus graph diff <baseline.json>`
@@ -273,7 +273,7 @@ unavailable too, or when a human explicitly asks what the committed index says.
    | --------------------------------------------- | ------------------------------------------------ | ---------------------------------- |
    | find and relate entities                      | `client` (`magus\graph().query`)         | `magus query "<terms>"`            |
    | one node: its edges, provenance, blast radius | `client` (`magus\graph().explain`)       | `magus explain <node>`             |
-   | how do two nodes relate                       | `client` (`magus\graph().path`)          | `magus path <a> <b>`               |
+   | how do two nodes relate                       | `client` (`magus\graph().path`)          | `magus explain <a> --to <b>`       |
    | where risk concentrates                       | `client` (`magus\graph().stats`)         | `magus graph stats`                |
    | where a code symbol is defined and used       | `client` (`magus\graph().refs`)          | `magus refs <symbol>`              |
    | what a branch changed in the graph            | (export + diff) | `magus graph diff <baseline.json>` |

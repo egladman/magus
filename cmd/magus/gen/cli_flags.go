@@ -223,6 +223,8 @@ const (
 	FlagExplainSkipLines = "skip-lines"
 	// explain: --source
 	FlagExplainSource = "source"
+	// explain: --to
+	FlagExplainTo = "to"
 	// graph build: --sessions
 	FlagGraphBuildSessions = "sessions"
 	// graph build: --symbols
@@ -371,10 +373,6 @@ const (
 	FlagJobWaitSchema = "schema"
 	// job wait: --stdin
 	FlagJobWaitStdin = "stdin"
-	// man install: --dir
-	FlagManInstallDir = "dir"
-	// man install: --dry-run
-	FlagManInstallDryRun = "dry-run"
 	// notes capture: --anchor
 	FlagNotesCaptureAnchor = "anchor"
 	// notes capture: --gap
@@ -397,10 +395,6 @@ const (
 	FlagNotesLsShared = "shared"
 	// notes ls: --tag
 	FlagNotesLsTag = "tag"
-	// path: --global
-	FlagPathGlobal = "global"
-	// path: --refresh
-	FlagPathRefresh = "refresh"
 	// query: --attempts
 	FlagQueryAttempts = "attempts"
 	// query: --budget
@@ -609,6 +603,10 @@ const (
 	FlagSelfInstallShorthandDir = "dir"
 	// self install-shorthand: --force
 	FlagSelfInstallShorthandForce = "force"
+	// self man: --dir
+	FlagSelfManDir = "dir"
+	// self man: --dry-run
+	FlagSelfManDryRun = "dry-run"
 	// self update: --bin-dir
 	FlagSelfUpdateBinDir = "bin-dir"
 	// self update: --check
@@ -1171,16 +1169,18 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 
 // ExplainFlags are the flags declared for `magus explain`.
 type ExplainFlags struct {
-	Refresh   bool // --[no-]refresh
-	Global    bool // --[no-]global
-	Source    bool // --[no-]source
-	MaxLines  int  // --max-lines
-	SkipLines int  // --skip-lines
+	To        string // --to
+	Refresh   bool   // --[no-]refresh
+	Global    bool   // --[no-]global
+	Source    bool   // --[no-]source
+	MaxLines  int    // --max-lines
+	SkipLines int    // --skip-lines
 }
 
 // BindExplain registers `magus explain`'s flags on fs and returns the destination.
 func BindExplain(fs *flag.FlagSet) *ExplainFlags {
 	var f ExplainFlags
+	fs.StringVar(&f.To, FlagExplainTo, "", "Print the shortest chain of edges from the node to this `node` (an ID or a name) instead of its card")
 	fs.BoolVar(&f.Refresh, FlagExplainRefresh, false, "Force a full graph rebuild before explaining")
 	cmdline.NegatedBoolVar(fs, &f.Refresh, FlagExplainRefresh)
 	fs.BoolVar(&f.Global, FlagExplainGlobal, false, "Resolve across the workspaces registered in config (knowledge.workspaces)")
@@ -1189,22 +1189,6 @@ func BindExplain(fs *flag.FlagSet) *ExplainFlags {
 	cmdline.NegatedBoolVar(fs, &f.Source, FlagExplainSource)
 	fs.IntVar(&f.MaxLines, FlagExplainMaxLines, 200, "Print at most this many lines of the section (0 for all), then say how many there were and print the next command. Implies --source")
 	fs.IntVar(&f.SkipLines, FlagExplainSkipLines, 0, "Skip this many lines of the section first; line numbers carry on. Implies --source")
-	return &f
-}
-
-// PathFlags are the flags declared for `magus path`.
-type PathFlags struct {
-	Refresh bool // --[no-]refresh
-	Global  bool // --[no-]global
-}
-
-// BindPath registers `magus path`'s flags on fs and returns the destination.
-func BindPath(fs *flag.FlagSet) *PathFlags {
-	var f PathFlags
-	fs.BoolVar(&f.Refresh, FlagPathRefresh, false, "Force a full graph rebuild before pathfinding")
-	cmdline.NegatedBoolVar(fs, &f.Refresh, FlagPathRefresh)
-	fs.BoolVar(&f.Global, FlagPathGlobal, false, "Resolve endpoints across the workspaces registered in config (knowledge.workspaces)")
-	cmdline.NegatedBoolVar(fs, &f.Global, FlagPathGlobal)
 	return &f
 }
 
@@ -2494,21 +2478,6 @@ func BindConfigConsoleTokenCreate(fs *flag.FlagSet) *ConfigConsoleTokenCreateFla
 	return &f
 }
 
-// ManInstallFlags are the flags declared for `magus man install`.
-type ManInstallFlags struct {
-	Dir    string // --dir
-	DryRun bool   // --[no-]dry-run
-}
-
-// BindManInstall registers `magus man install`'s flags on fs and returns the destination.
-func BindManInstall(fs *flag.FlagSet) *ManInstallFlags {
-	var f ManInstallFlags
-	fs.StringVar(&f.Dir, FlagManInstallDir, "", "Directory for section 1 man pages (default: the user manpath)")
-	fs.BoolVar(&f.DryRun, FlagManInstallDryRun, false, "Print what would be written without touching the filesystem")
-	cmdline.NegatedBoolVar(fs, &f.DryRun, FlagManInstallDryRun)
-	return &f
-}
-
 // SelfUpdateFlags are the flags declared for `magus self update`.
 type SelfUpdateFlags struct {
 	Check   bool   // --[no-]check
@@ -2548,6 +2517,21 @@ func BindSelfInstallShorthand(fs *flag.FlagSet) *SelfInstallShorthandFlags {
 	fs.StringVar(&f.Dir, FlagSelfInstallShorthandDir, "", "Directory for the shorthand (default: the running binary's directory)")
 	fs.BoolVar(&f.Force, FlagSelfInstallShorthandForce, false, "Replace an existing file at the shorthand path")
 	cmdline.NegatedBoolVar(fs, &f.Force, FlagSelfInstallShorthandForce)
+	return &f
+}
+
+// SelfManFlags are the flags declared for `magus self man`.
+type SelfManFlags struct {
+	Dir    string // --dir
+	DryRun bool   // --[no-]dry-run
+}
+
+// BindSelfMan registers `magus self man`'s flags on fs and returns the destination.
+func BindSelfMan(fs *flag.FlagSet) *SelfManFlags {
+	var f SelfManFlags
+	fs.StringVar(&f.Dir, FlagSelfManDir, "", "Directory for section 1 man pages (default: the user manpath)")
+	fs.BoolVar(&f.DryRun, FlagSelfManDryRun, false, "Print what would be written without touching the filesystem")
+	cmdline.NegatedBoolVar(fs, &f.DryRun, FlagSelfManDryRun)
 	return &f
 }
 

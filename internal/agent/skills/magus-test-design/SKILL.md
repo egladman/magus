@@ -35,7 +35,7 @@ commit, or in CI.{{else}}Observes evidence, recommends; does not choose test pol
 
    ```sh
    magus refs <symbol>
-   magus path <a> <b>
+   magus explain <a> --to <b>
    ```
 
 {{if .Full}}4. Read the scoped code and existing tests. Identify the effects that change what a

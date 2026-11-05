@@ -46,9 +46,9 @@ func NextForQuery(out types.KnowledgeQueryOutput) []types.NextStep {
 			"kind="+types.KindDocSection, "id="+page))
 	}
 	if a, b, ok := firstSharedKind(out.Matches); ok {
-		next = append(next, breadcrumb("query-path", Path,
-			"two matches of one kind usually connect, and path prints the chain instead of leaving you to walk it.",
-			a, b))
+		next = append(next, breadcrumb("query-path", Explain,
+			"two matches of one kind usually connect, and explain --to prints the chain instead of leaving you to walk it.",
+			a, "--to", b))
 	}
 	if sym, ok := firstSymbol(out.Matches); ok {
 		next = append(next, breadcrumb("query-refs", Refs,
@@ -64,9 +64,9 @@ func NextForQuery(out types.KnowledgeQueryOutput) []types.NextStep {
 func NextForExplain(out types.KnowledgeExplainOutput) []types.NextStep {
 	var next []types.NextStep
 	if other, ok := heaviestNeighbor(out); ok {
-		next = append(next, breadcrumb("explain-path", Path,
-			"path resolves the chain between two nodes, and this is the neighbor the card names most.",
-			out.Node.ID, other))
+		next = append(next, breadcrumb("explain-path", Explain,
+			"--to resolves the chain between two nodes, and this is the neighbor the card names most.",
+			out.Node.ID, "--to", other))
 	}
 	if out.Node.Kind == types.KindSymbol {
 		next = append(next, breadcrumb("explain-refs", Refs,
@@ -306,7 +306,7 @@ var readCommands = []Command{
 	GraphExport, GraphStats, GraphDiff,
 	Status, Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile,
 	DescribeGraph, DescribeMCPTools,
-	Explain, Path, Diff, Doctor, Where, X, Ls, LsTargets, LsJobs, Refs,
+	Explain, Diff, Doctor, Where, X, Ls, LsTargets, LsJobs, Refs,
 	DescribeJob,
 	NotesLs, NotesGet,
 	Session, SessionShow, SessionAttention,

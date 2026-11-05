@@ -14,7 +14,7 @@ Angle brackets mark a value you replace with your own; never type the brackets:
 
 ```sh
 magus run <target>
-magus completion <shell>    # e.g. bash, zsh, fish
+magus self completion <shell>    # e.g. bash, zsh, fish
 ```
 
 `<target>`, `<path>`, `<shell>`, `<name>` and the like are stand-ins, not literal text.
@@ -24,13 +24,13 @@ magus completion <shell>    # e.g. bash, zsh, fish
 Every synopsis on this site and in `magus <verb> -h` and the manpages uses the
 same five marks. This is the whole vocabulary:
 
-| notation     | means                                     | example                                          |
-| ------------ | ----------------------------------------- | ------------------------------------------------ |
-| `<value>`    | required; replace it                      | `magus run <target>`                             |
-| `[thing]`    | optional; omit the brackets if you use it | `magus ls [flags]`                               |
-| `<a\|b\|c>`  | required, and one of these exact words    | `magus completion <bash\|zsh\|fish\|powershell>` |
-| `<value>...` | repeatable; one or more, space separated  | `magus describe file <path> [<path>...]`         |
-| `word[s]`    | the `s` is optional; both spellings work  | `magus describe spell[s]`                        |
+| notation     | means                                     | example                                               |
+| ------------ | ----------------------------------------- | ----------------------------------------------------- |
+| `<value>`    | required; replace it                      | `magus run <target>`                                  |
+| `[thing]`    | optional; omit the brackets if you use it | `magus ls [flags]`                                    |
+| `<a\|b\|c>`  | required, and one of these exact words    | `magus self completion <bash\|zsh\|fish\|powershell>` |
+| `<value>...` | repeatable; one or more, space separated  | `magus describe file <path> [<path>...]`              |
+| `word[s]`    | the `s` is optional; both spellings work  | `magus describe spell[s]`                             |
 
 The last one is the only place square brackets do NOT mean "optional argument":
 `spell[s]` means `magus describe spell` and `magus describe spells` are the same

@@ -141,7 +141,7 @@ func touchedPaths(ws types.WorkspaceReader, touched []string) []string {
 func scopeDriftAdvice(proj string, touched []string) advice {
 	return advice{
 		Say: fmt.Sprintf("magus workspace: consider handing %s to its own session: nothing in the graph ties it to %s, and `%s` checks whether they connect.",
-			proj, strings.Join(touched, ", "), hint.Path.With(proj, touched[0])),
+			proj, strings.Join(touched, ", "), hint.Explain.With(proj, "--to", touched[0])),
 		Why: fmt.Sprintf("%s depends on none of the projects this session has written to (%s), and none of them depends on it, so no target run for one half of this diff validates the other. "+
 			"The magus-multi-agent skill partitions work by write set, and this write opens a second one. If the two connect, this is one unit after all.",
 			proj, strings.Join(touched, ", ")),

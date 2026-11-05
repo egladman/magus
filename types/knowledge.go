@@ -1234,7 +1234,7 @@ const (
 		"(the induced subgraph, collected up to a node budget)."
 	KnowledgeExplainDefinition = "explain shows one node's context: its data, its " +
 		"incoming and outgoing edges with provenance, and how many nodes reach it."
-	KnowledgePathDefinition = "path connects two nodes: the shortest chain of edges " +
+	KnowledgePathDefinition = "explain --to connects two nodes: the shortest chain of edges " +
 		"between them (edges walked in either direction), with each hop's relation."
 )
 
@@ -1654,7 +1654,7 @@ type KnowledgePathStep struct {
 	Forward  bool       `json:"forward"  yaml:"forward"`
 }
 
-// KnowledgePathOutput is the result of `magus path a b`: the resolved endpoints
+// KnowledgePathOutput is `magus explain a --to b`: the resolved endpoints
 // and the shortest connecting path (edges treated as bidirectional), if any.
 type KnowledgePathOutput struct {
 	Definition    string              `json:"definition"     yaml:"definition"`
@@ -1665,7 +1665,7 @@ type KnowledgePathOutput struct {
 	Steps         []KnowledgePathStep `json:"steps,omitempty" yaml:"steps,omitempty"`
 }
 
-// KnowledgePathOptions narrows `magus path` and magus\graph().path.
+// KnowledgePathOptions narrows `magus explain --to` and magus\graph().path.
 type KnowledgePathOptions struct {
 	// Relations are the only relations a hop may walk. Empty walks every relation, so
 	// Found false under a filter means no path of those relations, not no path at all.

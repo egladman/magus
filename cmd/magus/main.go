@@ -420,8 +420,6 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// setting the environment had set. That was invisible locally, where the trust
 		// set is not what the yaml is consulted for, and fatal in CI.
 		return dispatchProfile{needsConfig: true}
-	case "completion", "man":
-		return dispatchProfile{needsConfig: true}
 	case "agent":
 		// agent install writes embedded skill files into a repo dir; it needs no
 		// workspace resolution and must not forward to a server (the install is

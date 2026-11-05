@@ -223,6 +223,7 @@ flag explain/no-source
 flag explain/refresh
 flag explain/skip-lines
 flag explain/source
+flag explain/to
 flag init/dry-run
 flag init/force
 flag init/global
@@ -232,10 +233,6 @@ flag init/no-force
 flag init/no-global
 flag init/no-local
 flag init/vcs
-flag path/global
-flag path/no-global
-flag path/no-refresh
-flag path/refresh
 flag query/attempts
 flag query/budget
 flag query/global
@@ -380,7 +377,6 @@ subcommand agent
 subcommand broker
 subcommand buzz
 subcommand clean
-subcommand completion
 subcommand config
 subcommand describe
 subcommand diff
@@ -391,10 +387,8 @@ subcommand graph
 subcommand init
 subcommand job
 subcommand ls
-subcommand man
 subcommand mcp
 subcommand notes
-subcommand path
 subcommand query
 subcommand queue
 subcommand refs

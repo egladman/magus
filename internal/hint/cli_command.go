@@ -118,7 +118,6 @@ var (
 	DescribeRules       = command("describe", "rules")
 	DescribeHarness     = command("describe", "harness")
 	Explain             = command("explain")
-	Path                = command("path")
 	Diff                = command("diff")
 	Init                = command("init")
 	Clean               = command("clean")
@@ -206,7 +205,7 @@ var AllCommands = []Command{
 	Run, Query, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
 	GraphDiff, ServerStart, ServerStop, ServerStatus, ServerReload, BrokerStatus, BrokerStop, BrokerUnits, Status, Watch, Affected,
 	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
-	DescribeMCPTools, DescribeJob, DescribeRule, DescribeRules, DescribeHarness, Explain, Path, Diff, Init, Clean, Doctor, Where, Buzz, X, Ls, LsTargets, LsJobs, Refs, Shell,
+	DescribeMCPTools, DescribeJob, DescribeRule, DescribeRules, DescribeHarness, Explain, Diff, Init, Clean, Doctor, Where, Buzz, X, Ls, LsTargets, LsJobs, Refs, Shell,
 	JobFork, JobApply, JobExec, JobExit, JobWait, JobWatch, JobRun, JobRm, NotesLs, NotesGet, NotesEdit,
 	Session, SessionLoad, SessionShow, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
 	VCSLsFiles, VCSResolve, VCSCheckpoint, AgentInstall, AgentStarter,

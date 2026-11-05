@@ -21,10 +21,10 @@
 # -- an explicit help request is a SATISFIED request: exit 0 -------------------
 exec magus config -h
 exec magus server -h
-exec magus man --help
+exec magus self man --help
 exec magus self --help
 exec magus vcs -h
-exec magus completion --help
+exec magus self completion --help
 exec magus agent -h
 
 # -- no subcommand at all is a USAGE ERROR: exit 2 -----------------------------
@@ -37,15 +37,11 @@ stderr 'want view, set, history, cache, or mcp'
 stderr 'target required'
 stderr 'want start, stop, status, or reload'
 
-! exec magus man
-stderr 'subcommand required'
-stderr 'want install'
-
 ! exec magus self
 stderr 'subcommand required'
 stderr 'want update'
 
-! exec magus completion
+! exec magus self completion
 stderr 'shell name required'
 
 # merge-driver is the sharp one: 0 is how a merge driver tells git the conflict was
@@ -58,11 +54,11 @@ stderr 'expected 5 arguments'
 stderr 'unknown subcommand "bogus"'
 ! exec magus server bogus
 stderr 'unknown target "bogus"'
-! exec magus man bogus
-stderr 'unknown subcommand "bogus"'
+! exec magus self man bogus
+stderr 'unexpected argument "bogus"'
 ! exec magus self bogus
 stderr 'unknown subcommand "bogus"'
-! exec magus completion bogus
+! exec magus self completion bogus
 stderr 'unsupported shell "bogus"'
 ! exec magus agent bogus
 stderr 'unknown subcommand "bogus"'

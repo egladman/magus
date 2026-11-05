@@ -52,7 +52,6 @@ _magus() {
                 'query:Search the knowledge graph, and retrieve a run'\''s output or journal by id'
                 'refs:List where an ingested code symbol is defined and referenced'
                 'explain:Show one knowledge-graph node'\''s context\: data, edges, and reach'
-                'path:Connect two knowledge-graph nodes\: the shortest chain of edges between them'
                 'graph:The workspace'\''s graphs as objects\: deps, export, stats'
                 'diff:Read the working tree'\''s changes in the order they deserve attention'
                 'vcs:Listing and conflict resolution that knows what is generated'
@@ -72,9 +71,7 @@ _magus() {
                 'init:Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)'
                 'doctor:Validate the workspace'
                 'config:View or update magus configuration'
-                'completion:Print a shell completion script'
-                'man:Install the man pages embedded in this binary'
-                'self:Manage the magus binary (update, install-shorthand)'
+                'self:Manage the magus binary (update, install-shorthand, place, completion, man)'
                 'version:Print the client and server versions'
                 'help:Show this message'
             )

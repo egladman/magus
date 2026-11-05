@@ -38,7 +38,7 @@ export object Case {
 final CASES = [
     Case{ name = "help", argv = ["help"] },
     Case{ name = "version", argv = ["version"] },
-    Case{ name = "completion_bash", argv = ["completion", "bash"] },
+    Case{ name = "completion_bash", argv = ["self", "completion", "bash"] },
     Case{ name = "ls", argv = ["ls"] },
 ];
 

@@ -3586,7 +3586,7 @@ github.com/egladman/magus/types.KnowledgePackage.Manager field string
 github.com/egladman/magus/types.KnowledgePackage.Name field string
 github.com/egladman/magus/types.KnowledgePackage.Replaced field bool
 github.com/egladman/magus/types.KnowledgePackage.Version field string
-github.com/egladman/magus/types.KnowledgePathDefinition const untyped string = "path connects two nodes: the shortest chain of edges between them (edges walked in either direction), with each hop's relation."
+github.com/egladman/magus/types.KnowledgePathDefinition const untyped string = "explain --to connects two nodes: the shortest chain of edges between them (edges walked in either direction), with each hop's relation."
 github.com/egladman/magus/types.KnowledgePathOptions type struct
 github.com/egladman/magus/types.KnowledgePathOptions.Relations field []RelationID "json:\"relations,omitempty\" yaml:\"relations,omitempty\""
 github.com/egladman/magus/types.KnowledgePathOutput type struct

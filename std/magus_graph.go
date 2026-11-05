@@ -164,7 +164,7 @@ func loadGraph(ctx context.Context, g knowledgeGraphs, seeded bool) (*knowledge.
 }
 
 // MagusPath backs magus\graph().path: the shortest chain from node to to.
-// It is the record `magus path -o json` prints.
+// It is the record `magus explain <a> --to <b> -o json` prints.
 // opts is a PathOptions; relations narrows the hops.
 // A resolved pair with no connection is an answer (found is false); only an endpoint
 // that resolves to nothing, or an option that names nothing, raises.

@@ -435,8 +435,8 @@ var queryCommand = cmdline.Command{
 	Tags:        []string{"cli", "magus query", "query", "knowledge graph", "search", "output", "reference", "invocation", "journal", "audit"},
 	Long: `Ask the workspace what it knows. query resolves terms to nodes in the
 knowledge graph and returns the ranked matches plus the induced subgraph around
-them, collected up to a node budget. Its siblings explain and path read the same
-graph: explain shows one node's context, path connects two nodes.
+them, collected up to a node budget. Its sibling explain reads the same graph: one
+node's context, or with --to the chain of edges connecting it to a second node.
 
 Terms are free text plus field matchers, and they compose: kind=spell, project=pkg/foo,
 relation=uses, id=build, exclusion with kind!=op, and a regex with id=~build$. A bare word
@@ -500,7 +500,7 @@ var explainCommand = cmdline.Command{
 	Name:        "explain",
 	Short:       "Show one knowledge-graph node's context: data, edges, and reach",
 	Description: "Show a single knowledge-graph node in context: its data, its incoming and outgoing edges with provenance, and how many nodes reach it.",
-	Tags:        []string{"cli", "magus explain", "explain", "knowledge graph", "node", "edges", "provenance", "impact"},
+	Tags:        []string{"cli", "magus explain", "explain", "knowledge graph", "node", "edges", "provenance", "impact", "shortest path", "relationship", "coupling"},
 	Long: `explain shows one node's context: its data, its incoming and outgoing
 edges with provenance, and how many nodes reach it. Where query finds candidates,
 explain is what you run on the one you picked.
@@ -514,10 +514,18 @@ what declared it, so a surprising relationship can be traced to the file that cr
 it rather than taken on faith. And the reach count answers the blast-radius question
 directly: how many nodes can arrive at this one.
 
+With --to, explain answers how the node is related to a second one: the shortest
+chain of edges between them, each hop's relation named. Ask it when a change to one
+thing breaks a seemingly unrelated other, or when two projects look coupled and you
+want the chain rather than a hunch. Edges are walked in EITHER direction, so a chain
+proves the two nodes are connected, not that influence flows from one to the other;
+read each hop's relation to see which way it points.
+
 The graph is cache-backed under <cache>/knowledge and only shards whose sources
 changed are rebuilt; --refresh forces a full rebuild.`,
-	Usage: "magus explain <node-id-or-name> [flags]",
+	Usage: "magus explain <node-id-or-name> [--to <node-id-or-name>] [flags]",
 	Flags: []cmdline.Flag{
+		{Name: "to", Kind: cmdline.String, Doc: "Print the shortest chain of edges from the node to this `node` (an ID or a name) instead of its card"},
 		{Name: "refresh", Kind: cmdline.Bool, Default: false, Doc: "Force a full graph rebuild before explaining"},
 		{Name: "global", Kind: cmdline.Bool, Default: false, Doc: "Resolve across the workspaces registered in config (knowledge.workspaces)"},
 		{Name: "source", Kind: cmdline.Bool, Default: false, Doc: "Print a doc section's lines from its indexed extent instead of the card, checked against the file on disk. A symbol's body is refs --source"},
@@ -530,41 +538,9 @@ changed are rebuilt; --refresh forces a full rebuild.`,
 		{Comment: "Resolve by bare name", Command: "magus explain build"},
 		{Comment: "A spell's context", Command: "magus explain spell:go"},
 		{Comment: "As a record", Command: "magus explain build -o json"},
-	},
-}
-
-var pathCommand = cmdline.Command{
-	Name:        "path",
-	Short:       "Connect two knowledge-graph nodes: the shortest chain of edges between them",
-	Description: "Find the shortest chain of edges connecting two knowledge-graph nodes, walking edges in either direction, with each hop's relation named.",
-	Tags:        []string{"cli", "magus path", "path", "knowledge graph", "shortest path", "relationship", "coupling"},
-	Long: `path connects two nodes: the shortest chain of edges between them (edges
-walked in either direction), with each hop's relation.
-
-It answers the question the other two verbs cannot: not "what is this" or "what does
-this touch", but "how are these two related at all". That is the question worth asking
-when a change to one thing breaks a seemingly unrelated other, or when you suspect two
-projects are coupled and want the chain rather than a hunch. Each hop names its
-relation, so the answer is a mechanism you can check and not just a claim that a
-connection exists.
-
-Edges are walked in EITHER direction, which is what makes it useful and is also its
-main caveat: a returned chain proves the two nodes are connected in the graph, not that
-influence flows from one to the other. Read the hop relations to see which way each
-link actually points.
-
-Each argument is a node ID (target:pkg/foo:build) or a name that resolves to one.
-The graph is cache-backed under <cache>/knowledge; --refresh forces a full rebuild.`,
-	Usage: "magus path <a> <b> [flags]",
-	Flags: []cmdline.Flag{
-		{Name: "refresh", Kind: cmdline.Bool, Default: false, Doc: "Force a full graph rebuild before pathfinding"},
-		{Name: "global", Kind: cmdline.Bool, Default: false, Doc: "Resolve endpoints across the workspaces registered in config (knowledge.workspaces)"},
-	},
-	Examples: []cmdline.Example{
-		{Comment: "How are two projects related", Command: "magus path pkg/api pkg/web"},
-		{Comment: "From a spell to a diagnostic", Command: "magus path spell:go MGS3003"},
-		{Comment: "Between two targets by ID", Command: "magus path target:pkg/api:build target:pkg/web:test"},
-		{Comment: "As a record", Command: "magus path pkg/api pkg/web -o json"},
+		{Comment: "How two projects are related", Command: "magus explain pkg/api --to pkg/web"},
+		{Comment: "From a spell to a diagnostic", Command: "magus explain spell:go --to MGS3003"},
+		{Comment: "The chain as a record", Command: "magus explain pkg/api --to pkg/web -o json"},
 	},
 }
 
@@ -574,8 +550,8 @@ var graphCommand = cmdline.Command{
 	Description: "Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).",
 	Tags:        []string{"cli", "magus graph", "graph", "knowledge graph", "dependency graph", "export", "graphml"},
 	Long: `The workspace's graphs as objects: emit, export, and measure them. The
-query, explain, and path verbs read the knowledge graph; magus graph is the
-home of the graph itself.
+query and explain verbs read the knowledge graph; magus graph is the home of
+the graph itself.
 
 Subcommands (the first argument):
 
@@ -1311,66 +1287,6 @@ magus release.`,
 		{Code: 0, Meaning: "The host closed stdin."},
 		{Code: 1, Meaning: "The workspace did not load, or reading stdin or writing stdout failed."},
 		{Code: 2, Meaning: "An argument was given; mcp takes none."},
-	},
-}
-
-var completionCommand = cmdline.Command{
-	Name:               "completion",
-	UnstructuredOutput: true, // stdout is the shell script
-	Short:              "Print a shell completion script",
-	Description:        "Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.",
-	Tags:               []string{"cli", "magus completion", "completion", "bash", "zsh", "fish", "powershell", "shell"},
-	Long: `Print a shell completion script to stdout. Every script registers both
-magus and the mgs shorthand.
-
-Completes subcommands, the targets accepted by run and affected, the nouns
-accepted by describe, and each subcommand's flags. Project paths are
-completed live by shelling out to magus ls -o name, so they track the
-workspace instead of a baked-in list; outside a workspace they are simply
-empty.
-
-Install differs per shell, and zsh is the one that bites:
-
-  bash        source it from ~/.bashrc, which re-reads it from the binary on
-              every new shell and so survives an upgrade:
-                  source <(magus completion bash)
-  zsh         write it to a directory on $fpath as _magus. The script ends by
-              invoking its own completion function, so sourcing it from
-              ~/.zshrc runs that outside a completion context and registers
-              nothing. Regenerate the file after magus self update.
-  fish        write it to ~/.config/fish/completions/magus.fish, loaded on
-              demand.
-  powershell  append it to $PROFILE. pwsh is accepted as an alias, for the
-              cross-platform PowerShell binary's own name.`,
-	Usage: "magus completion <bash|zsh|fish|powershell>",
-	Examples: []cmdline.Example{
-		{Comment: "Bash: source from the rc, never goes stale", Command: `echo 'source <(magus completion bash)' >> ~/.bashrc`},
-		{Comment: "Zsh: install onto $fpath (not into ~/.zshrc)", Command: "magus completion zsh > ~/.zsh/completions/_magus"},
-		{Comment: "Fish", Command: "magus completion fish > ~/.config/fish/completions/magus.fish"},
-		{Comment: "PowerShell", Command: "magus completion powershell >> $PROFILE"},
-	},
-}
-
-var manCommand = cmdline.Command{
-	Name:        "man",
-	Short:       "Install the man pages embedded in this binary",
-	Description: "Write magus section 1 man pages from the running binary to a user-selected manpath.",
-	Tags:        []string{"cli", "magus man", "manpage", "documentation", "install"},
-	Long:        `Write the complete magus manpage set carried by this binary. The installer uses this command to place the pages under the selected installation prefix.`,
-	Usage:       "magus man install [--dir <path>]",
-	Children: []cmdline.Command{
-		{
-			Name:  "install",
-			Short: "Write the embedded section 1 man pages",
-			Flags: []cmdline.Flag{
-				{Name: "dir", Kind: cmdline.String, Doc: "Directory for section 1 man pages (default: the user manpath)"},
-				{Name: "dry-run", Kind: cmdline.Bool, Default: false, Doc: "Print what would be written without touching the filesystem"},
-			},
-		},
-	},
-	Examples: []cmdline.Example{
-		{Comment: "Install to the default user manpath", Command: "magus man install"},
-		{Comment: "Install to a custom prefix", Command: "magus man install --dir ~/.local/share/man/man1"},
 	},
 }
 

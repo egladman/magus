@@ -61,13 +61,13 @@ Read it only as last resort: no server AND no CLI, or human asking what committe
    | --------------------------------------------- | ------------------------------------------------ | ---------------------------------- |
    | find and relate entities                      | `{{tool "client"}}` (`{{buzz "graph.query"}}`)         | `{{cmd "query"}} "<terms>"`            |
    | one node: its edges, provenance, blast radius | `{{tool "client"}}` (`{{buzz "graph.explain"}}`)       | `{{cmd "explain"}} <node>`             |
-   | how do two nodes relate                       | `{{tool "client"}}` (`{{buzz "graph.path"}}`)          | `{{cmd "path"}} <a> <b>`               |
+   | how do two nodes relate                       | `{{tool "client"}}` (`{{buzz "graph.path"}}`)          | `{{cmd "explain"}} <a> --to <b>`       |
    | where risk concentrates                       | `{{tool "client"}}` (`{{buzz "graph.stats"}}`)         | `{{cmd "graph stats"}}`                |
    | where a code symbol is defined and used       | `{{tool "client"}}` (`{{buzz "graph.refs"}}`)          | `{{cmd "refs"}} <symbol>`              |
    | what a branch changed in the graph            | (export + diff) | `{{cmd "graph diff"}} <baseline.json>` |{{else}}   Question: MCP; CLI
    - find and relate entities: `{{tool "client"}}` (`{{buzz "graph.query"}}`); `{{cmd "query"}} "<terms>"`
    - one node: edges, provenance, blast radius: `{{tool "client"}}` (`{{buzz "graph.explain"}}`); `{{cmd "explain"}} <node>`
-   - how two nodes relate: `{{tool "client"}}` (`{{buzz "graph.path"}}`); `{{cmd "path"}} <a> <b>`
+   - how two nodes relate: `{{tool "client"}}` (`{{buzz "graph.path"}}`); `{{cmd "explain"}} <a> --to <b>`
    - where risk concentrates: `{{tool "client"}}` (`{{buzz "graph.stats"}}`); `{{cmd "graph stats"}}`
    - where code symbol defined and used: `{{tool "client"}}` (`{{buzz "graph.refs"}}`); `{{cmd "refs"}} <symbol>`
    - what branch changed in graph: (export + diff); `{{cmd "graph diff"}} <baseline.json>`{{end}}

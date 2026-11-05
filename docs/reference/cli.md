@@ -170,7 +170,7 @@ of "why":
 
 - `magus query <term>`: search, and show a node's neighborhood
 - `magus explain <node>`: one node: its edges, provenance, blast radius
-- `magus path <a> <b>`: the shortest path between two nodes
+- `magus explain <a> --to <b>`: the shortest path between two nodes
 - `magus refs <symbol>`: where an ingested code symbol is defined and used, and
   what calls it
 - `magus graph stats`: where the workspace concentrates and where it is neglected

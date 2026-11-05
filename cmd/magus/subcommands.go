@@ -31,8 +31,6 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return queryCommand(ctx, root, subArgs)
 	case "explain":
 		return explainCommand(ctx, root, subArgs)
-	case "path":
-		return pathCommand(ctx, root, subArgs)
 	case "refs":
 		return refsCommand(ctx, root, subArgs)
 	case "graph":
@@ -71,10 +69,6 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return brokerCommand(ctx, subArgs)
 	case "mcp":
 		return mcpCommand(ctx, root, subArgs)
-	case "completion":
-		return completion(subArgs)
-	case "man":
-		return manCommand(subArgs)
 	case "init":
 		return initCommand(ctx, root, subArgs)
 	case "agent":
