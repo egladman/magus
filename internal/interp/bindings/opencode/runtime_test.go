@@ -162,7 +162,7 @@ func (s *runtimeSuite) TestOverlappingCallsAreSerialized() {
 				return processOutput{}, ctx.Err()
 			}
 		}
-		encoded, _ := json.Marshal(map[string]any{"schema_version": 1, "decision": "advise", "context": inv.Input})
+		encoded, _ := json.Marshal(map[string]any{"api_version": "magus.guard/v1alpha1", "decision": "advise", "context": inv.Input})
 		return processOutput{Stdout: string(encoded)}, nil
 	})
 	var wg sync.WaitGroup

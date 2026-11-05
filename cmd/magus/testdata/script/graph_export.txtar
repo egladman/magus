@@ -15,7 +15,7 @@ exists .magus/knowledge/manifest.json
 # -o json emits the merged node-link graph external graph tools read directly:
 # nodes carry id/kind, links carry source/target/relation, plus the schema version.
 exec magus graph export -o json
-stdout '"schema_version"'
+stdout '"api_version"'
 stdout '"directed": true'
 stdout '"kind": "project"'
 stdout '"kind": "target"'
@@ -55,7 +55,7 @@ stdout '"spell:acme"'
 
 # the same neighborhood in json/graphml is a valid export of just the subgraph.
 exec magus graph export --select 'spell:acme' -o json
-stdout '"schema_version"'
+stdout '"api_version"'
 stdout 'spell:acme'
 
 # a query that resolves to nothing yields an empty graph and a plain-ASCII note.

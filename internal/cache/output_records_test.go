@@ -16,7 +16,7 @@ func outputRecordLine(t *testing.T, mutate func(map[string]any)) string {
 	t.Helper()
 	key := strings.Repeat("ab", 32)
 	rec := map[string]any{
-		"schema_version": types.StoredOutputAPIVersion,
+		"api_version": types.StoredOutputAPIVersion,
 		"ref":            PortableRef(key), "key": key, "attempt": "out1234abcd",
 		"project": "libs/x", "target": "lint", "failed": true, "timestamp_ms": 1, "duration_ms": 2,
 		"output": "FAIL: x\n",
@@ -53,8 +53,8 @@ func TestOutputImportRefusesNewerSchema(t *testing.T) {
 	assert.ErrorContains(t, err, "line 1: ")
 	assert.ErrorContains(t, err, "output record schema_version 2 is newer than this magus reads (1)")
 
-	_, err = readRecords(outputRecordLine(t, func(r map[string]any) { delete(r, "schema_version") }))
-	assert.ErrorContains(t, err, "line 1: not an output record: it has no schema_version")
+	_, err = readRecords(outputRecordLine(t, func(r map[string]any) { delete(r, "api_version") }))
+	assert.ErrorContains(t, err, "line 1: not an output record: it has no api_version")
 
 	_, err = readRecords(outputRecordLine(t, func(r map[string]any) { r["requires"] = []string{"future-feature"} }))
 	require.ErrorIs(t, err, types.StoreRecordsNewer)

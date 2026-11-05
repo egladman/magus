@@ -2,7 +2,7 @@
 # again until none is left, says each one, and refuses with only the problems that need a
 # person: here the ci gate over the docs is added as a goal, and the directory write path
 # stays (MGS3018). Without --fix the list says how many --fix would apply. A --stdin record
-# naming no schema_version takes this magus's version and says so.
+# naming no api_version takes this magus's version and says so.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 env GIT_AUTHOR_NAME=Ana
@@ -36,7 +36,7 @@ stdout '"id": "check-docs"'
 
 stdin $WORK/guide.json
 exec magus job fork --stdin --fix
-stderr '^note: the record names no schema_version, so it was read as version [0-9]+$'
+stderr '^note: the record names no api_version, so it was read as magus\.job/v1alpha1$'
 stderr '^fixed: added the goal "check-docs"'
 stdout '^forked guide, declared, with 1 write path\(s\)\.'
 

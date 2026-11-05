@@ -15,7 +15,7 @@ func TestMagusHandle(t *testing.T) { suite.Run(t, new(magusHandleSuite)) }
 
 func (s *magusHandleSuite) TestJobResultDecodesThroughTheVersionedDecoder() {
 	result, err := decodeJobResult(map[string]any{
-		"schema_version": types.JobResultAPIVersion,
+		"api_version": types.JobResultAPIVersion,
 		"changed_paths":  []any{"internal/job/lifecycle.go"},
 		"validation": map[string]any{
 			"command":    "magus run test .",
@@ -30,7 +30,7 @@ func (s *magusHandleSuite) TestJobResultDecodesThroughTheVersionedDecoder() {
 
 func (s *magusHandleSuite) TestJobResultRefusesAFieldTheVerifierIgnores() {
 	_, err := decodeJobResult(map[string]any{
-		"schema_version":   types.JobResultAPIVersion,
+		"api_version":      types.JobResultAPIVersion,
 		"changed_paths":    []any{},
 		"validation":       map[string]any{},
 		"unresolved_risks": []any{},

@@ -692,7 +692,7 @@ func TestDeclarationCarryingEnterDeclaresNothingElse(t *testing.T) {
 	schema := Schema{Version: JobAPIVersion}
 	require.NoError(t, Declaration{Schema: schema, ID: "worker", Enter: "a.go"}.Validate())
 	err := Declaration{Schema: schema, ID: "worker", Enter: "a.go", WritePaths: []string{"**"}}.Validate()
-	assert.ErrorContains(t, err, "carries only schema_version, id and enter")
+	assert.ErrorContains(t, err, "carries only api_version, id and enter")
 }
 
 func TestSameLeaseCheckComparesEveryField(t *testing.T) {

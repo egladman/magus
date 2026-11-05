@@ -644,7 +644,7 @@ func TestPublishedShardsRebuildTheGraph(t *testing.T) {
 // TestShardKeysRefusesAForeignSchema stops a published store written by another schema
 // from being read as this one: the shard files behind it carry that schema's shapes.
 func TestShardKeysRefusesAForeignSchema(t *testing.T) {
-	_, err := ShardKeys([]byte(`{"schema_version":0,"shards":{}}`))
+	_, err := ShardKeys([]byte(`{"api_version":"","shards":{}}`))
 	assert.Error(t, err)
 }
 

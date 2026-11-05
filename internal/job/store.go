@@ -1229,13 +1229,16 @@ func (s *Store) parse(wait bool) (jobsFile, jobsLog, error) {
 		if err := json.Unmarshal(line.Text, &row); err != nil {
 			return jobsFile{}, jobsLog{}, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
 		}
-		if _, old := row.Unknown["schema_version"]; old || (row.Version != "" && row.Version.Compare(types.JobAPIVersion) < 0) {
-			return jobsFile{}, jobsLog{}, types.JobAPIVersion.Refuse(fmt.Sprintf("job: %s:%d", s.path, line.N), row.Version, staleStoreFix)
+		if err := s.checkStamp(&row.Schema, line.N); err != nil {
+			return jobsFile{}, jobsLog{}, err
 		}
 		if row.ID == "" {
 			var header jobsFile
 			if err := json.Unmarshal(line.Text, &header); err != nil {
 				return jobsFile{}, jobsLog{}, types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line.N, err)
+			}
+			if err := s.checkStamp(&header.Schema, line.N); err != nil {
+				return jobsFile{}, jobsLog{}, err
 			}
 			f.Schema, f.Migration, f.Retained, log.header = header.Schema, header.Migration, header.Retained, line.Text
 			continue
@@ -1256,8 +1259,34 @@ func (s *Store) parse(wait bool) (jobsFile, jobsLog, error) {
 }
 
 // staleStoreFix is how a person gets past a job store an older magus
-// wrote. Nothing migrates it. A newer magus's lines are kept whole.
-const staleStoreFix = "delete the job store, or move it aside, and fork the jobs again"
+// wrote. A newer magus's lines are kept whole.
+const staleStoreFix = "move jobs.jsonl aside, or delete it, and fork the jobs again"
+
+// checkStamp refuses a line older than JobAPIVersion, naming staleStoreFix.
+func (s *Store) checkStamp(schema *types.Schema, line int) error {
+	adoptIntegerStamp(schema)
+	if _, old := schema.Unknown["schema_version"]; old || (schema.Version != "" && schema.Version.Compare(types.JobAPIVersion) < 0) {
+		return types.JobAPIVersion.Refuse(fmt.Sprintf("job: %s:%d", s.path, line), schema.Version, staleStoreFix)
+	}
+	return nil
+}
+
+// adoptIntegerStamp reads a line stamped with an integer schema_version
+// as JobAPIVersion; its next rewrite writes the new stamp.
+// compat(until: no job store row still carries schema_version): every
+// worktree shares one store, and older binaries keep writing integers.
+func adoptIntegerStamp(schema *types.Schema) {
+	raw, ok := schema.Unknown["schema_version"]
+	var n int
+	if !ok || schema.Version != "" || json.Unmarshal(raw, &n) != nil {
+		return
+	}
+	delete(schema.Unknown, "schema_version")
+	if len(schema.Unknown) == 0 {
+		schema.Unknown = nil
+	}
+	schema.Version = types.JobAPIVersion
+}
 
 // newestVersion is the stamp a rewrite carries: this build's, or the
 // stored one when a newer magus wrote it, so no rewrite lowers a stamp.

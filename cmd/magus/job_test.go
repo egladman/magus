@@ -1145,7 +1145,7 @@ func (s *jobExitShapeSuite) refusal(stdin string) string {
 }
 
 func (s *jobExitShapeSuite) TestAnEmptyResultOnAWritingRowIsRefused() {
-	got := s.refusal(`{"schema_version":2}`)
+	got := s.refusal(`{"api_version":"magus.job/v1alpha2"}`)
 	s.Contains(got, "held writes, and its result names no changed path")
 	s.Contains(got, `"changed_paths"`)
 	s.Contains(got, `"owed": "no seat"`)

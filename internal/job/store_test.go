@@ -572,7 +572,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 	}{
 		{name: "job fork --stdin", fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
 			row, err := decodeDeclaration(strings.NewReader(fmt.Sprintf(
-				`{"schema_version":%d,"id":"a","criteria":"goal","checkpoint":%q,"write_paths":["a.go"],"check":{"target":"go-test","project":"."}}`,
+				`{"api_version":%q,"id":"a","criteria":"goal","checkpoint":%q,"write_paths":["a.go"],"check":{"target":"go-test","project":"."}}`,
 				types.JobAPIVersion, checkpoint)))
 			require.NoError(t, err)
 			return s.Update(t.Context(), row.ID, Declare(row, 0))
@@ -663,7 +663,7 @@ func TestStoreKeepsANewerRowWhole(t *testing.T) {
 	s := tempStore(t, t.TempDir())
 	path := plantRaw(t, s, fmt.Sprintf(
 		`{"id":"future","api_version":"magus.job/v1alpha99","requires":[],"state":"running","created":1,"updated":1,"future_field":{"x":1}}`+"\n"+
-			`{"id":"other","schema_version":%d,"state":"running","created":1,"updated":1}`, types.JobAPIVersion))
+			`{"id":"other","api_version":%q,"state":"running","created":1,"updated":1}`, types.JobAPIVersion))
 	want := map[string]any{"x": float64(1)}
 
 	_, err := s.Update(t.Context(), "other", func(u *types.Job) { u.Criteria = "moved" })
@@ -696,7 +696,7 @@ func TestStoreDegradesARowItCannotActOn(t *testing.T) {
 	s, notices := sweepStore(t, 10_000, time.Hour)
 	path := plantRaw(t, s, fmt.Sprintf(
 		`{"id":"future","api_version":"magus.job/v1alpha99","requires":["never-implemented"],"state":"declared","created":1,"updated":1,"future_field":7}`+"\n"+
-			`{"id":"other","schema_version":%d,"state":"running","created":9999,"updated":9999}`, types.JobAPIVersion))
+			`{"id":"other","api_version":%q,"state":"running","created":9999,"updated":9999}`, types.JobAPIVersion))
 	before := storedRow(t, path, "future")
 
 	rows, err := s.List()
@@ -748,7 +748,7 @@ func TestStoreKeepsTheFileEnvelope(t *testing.T) {
 	_, err := s.Clear(t.Context())
 	require.NoError(t, err)
 
-	assert.Equal(t, []map[string]any{{"schema_version": float64(99), "plan": "p1", "retained": float64(1_700_000_000)}},
+	assert.Equal(t, []map[string]any{{"api_version": "magus.job/v1alpha99", "plan": "p1", "retained": float64(1_700_000_000)}},
 		storedLines(t, path), "a clear leaves the header alone, and the store's own retention stamp rides in it")
 }
 
@@ -981,7 +981,7 @@ func TestStoreUpdatePreservesAnUnknownMember(t *testing.T) {
 
 	s := tempStore(t, t.TempDir())
 	path := plantRaw(t, s, fmt.Sprintf(
-		`{"id":"adj/store","schema_version":%d,"state":"running","created":1,"updated":1,"woolgathering":7}`,
+		`{"id":"adj/store","api_version":%q,"state":"running","created":1,"updated":1,"woolgathering":7}`,
 		types.JobAPIVersion))
 
 	_, err := s.Update(t.Context(), "adj/store", func(u *types.Job) { u.State = types.StatePass })
@@ -1419,7 +1419,7 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 // TestStoreRefusesAFileItCannotActOn).
 func TestStoreWritesAStoreANewerCommitStamped(t *testing.T) {
 	s := tempStore(t, t.TempDir())
-	plantRaw(t, s, fmt.Sprintf(`{"schema_version":%d,"writer":{"commit":"8a9d","time":"2099-01-01T00:00:00Z"}}`, types.JobAPIVersion))
+	plantRaw(t, s, fmt.Sprintf(`{"api_version":%q,"writer":{"commit":"8a9d","time":"2099-01-01T00:00:00Z"}}`, types.JobAPIVersion))
 
 	_, err := s.Update(t.Context(), "B", func(cur *types.Job) { *cur = lease("B") })
 	require.NoError(t, err)
@@ -1449,7 +1449,7 @@ func renamed(from, to string) migrate.Migration {
 }
 
 func (s *jobSuite) TestTheJobStoreMigratesOneVersionOnce() {
-	st, path, notices := s.migratingStore(`{"schema_version":13}`+"\n"+`{"id":"a","state":"running","created":1,"updated":1,"goal":"ship it"}`,
+	st, path, notices := s.migratingStore(`{"api_version":"magus.job/v1alpha1"}`+"\n"+`{"id":"a","state":"running","created":1,"updated":1,"goal":"ship it"}`,
 		renamed("goal", "criteria"))
 	notice := fmt.Sprintf("job: migrated job store %s from 0 to 1 (1 entries)\n", path)
 
@@ -1466,7 +1466,7 @@ func (s *jobSuite) TestTheJobStoreMigratesOneVersionOnce() {
 }
 
 func (s *jobSuite) TestTheJobStoreMigratesSeveralVersionsFromWhereItStands() {
-	st, path, _ := s.migratingStore(`{"schema_version":13,"migration":1}`+"\n"+`{"id":"a","state":"running","created":1,"updated":1,"aim":"ship it"}`,
+	st, path, _ := s.migratingStore(`{"api_version":"magus.job/v1alpha1","migration":1}`+"\n"+`{"id":"a","state":"running","created":1,"updated":1,"aim":"ship it"}`,
 		renamed("goal", "aim"), renamed("aim", "intent"), renamed("intent", "criteria"))
 
 	_, err := st.Update(s.T().Context(), "a", func(u *types.Job) { u.Model = "standard" })
@@ -1478,7 +1478,7 @@ func (s *jobSuite) TestTheJobStoreMigratesSeveralVersionsFromWhereItStands() {
 }
 
 func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
-	body := `{"schema_version":13,"migration":1}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1}`
+	body := `{"api_version":"magus.job/v1alpha1","migration":1}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1}`
 	st, path, notices := s.migratingStore(body, migrate.Migration{Name: "never", Up: func(migrate.Entry) (migrate.Entry, error) {
 		return nil, errors.New("ran")
 	}})
@@ -1492,7 +1492,7 @@ func (s *jobSuite) TestTheJobStoreAtItsMigrationIsLeftAlone() {
 }
 
 func (s *jobSuite) TestTheJobStoreRefusesAStorePastItsMigrations() {
-	body := `{"schema_version":13,"migration":3}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1}`
+	body := `{"api_version":"magus.job/v1alpha1","migration":3}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1}`
 	st, path, _ := s.migratingStore(body, renamed("goal", "criteria"))
 
 	_, err := st.read()
@@ -1506,7 +1506,7 @@ func (s *jobSuite) TestTheJobStoreRefusesAStorePastItsMigrations() {
 }
 
 func (s *jobSuite) TestAnInterruptedJobStoreMigrationLeavesTheFileIntact() {
-	body := `{"schema_version":13}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1,"goal":"ship it"}`
+	body := `{"api_version":"magus.job/v1alpha1"}` + "\n" + `{"id":"a","state":"running","created":1,"updated":1,"goal":"ship it"}`
 	st, path, notices := s.migratingStore(body, renamed("goal", "criteria"), migrate.Migration{Name: "fail", Up: func(migrate.Entry) (migrate.Entry, error) {
 		return nil, errors.New("disk on fire")
 	}})

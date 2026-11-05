@@ -58,10 +58,10 @@ func TestOwedRegenerationRejectsUnknownSchema(t *testing.T) {
 	dir := testkit.NewRepository(t, map[string]string{"a.txt": "a\n"}).Root()
 	path, err := OwedRegenerationPath(t.Context(), dir)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, []byte(`{"schema_version": 99, "owed": []}`), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte(`{"api_version": "magus.owed/v1alpha99", "owed": []}`), 0o644))
 
 	_, err = OwedRegenerations(t.Context(), dir)
-	require.ErrorContains(t, err, "schema_version 99")
+	require.ErrorContains(t, err, "is magus.owed/v1alpha99, newer than the magus.owed/v1alpha1 this magus reads")
 }
 
 // TestOwedRegenerationOutsideARepository is the backend without hooks: nothing is

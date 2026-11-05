@@ -15,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 )
 
 // LockFile is the lock's name. It sits beside magus.yaml with the same stem, as go.sum

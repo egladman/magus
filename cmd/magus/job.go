@@ -1340,7 +1340,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			return exit.Usagef("magus job fork: %s (`%s` prints the schema it must satisfy)", err, hint.JobFork.With("--schema"))
 		}
 		if defaulted {
-			slog.InfoContext(ctx, fmt.Sprintf("the record names no schema_version, so it was read as version %d", types.JobAPIVersion), attr.Notice("note"))
+			slog.InfoContext(ctx, fmt.Sprintf("the record names no api_version, so it was read as %s", types.JobAPIVersion), attr.Notice("note"))
 		}
 		if row.Checkout, err = recordCheckout(row.Checkout, declared.Checkout); err != nil {
 			return err

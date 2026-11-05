@@ -35,7 +35,7 @@ import { MagusGuard } from "./opencode-plugin.installed.ts";
 type SpawnCall = { bin: string; argv: string[]; stdin: string };
 
 /** The verdicts a fake magus can be told to return, by the input it is asked about. */
-type Canned = { schema_version: number; decision: string; reason?: string; context?: string };
+type Canned = { api_version: string; decision: string; reason?: string; context?: string };
 
 /**
  * Installs a Bun.spawn that records how it was called and answers from `reply`.
@@ -332,7 +332,7 @@ test("an unrunnable magus refuses every call and says how to get one", async () 
 });
 
 test("a verdict from an unknown schema is refused rather than obeyed", async () => {
-  stubBun(() => ({ ...deny, schema_version: 99 }));
+  stubBun(() => ({ ...deny, api_version: "magus.guard/v1alpha99" }));
   const h = await hooks();
   await assert.rejects(
     h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "ls" } }),
@@ -341,7 +341,7 @@ test("a verdict from an unknown schema is refused rather than obeyed", async () 
 });
 
 const ask: Canned = {
-  schema_version: 1,
+  api_version: "magus.guard/v1alpha1",
   decision: "ask",
   reason: "pushing abc1234, which no passing gate covers",
 };
@@ -519,7 +519,7 @@ const humanOnlyPrompt = {
 };
 
 const humanOnlyAsk: Canned = {
-  schema_version: 1,
+  api_version: "magus.guard/v1alpha1",
   decision: "ask",
   reason: "`magus run agent-bench-run .` is run by a person: launches paid sessions",
 };

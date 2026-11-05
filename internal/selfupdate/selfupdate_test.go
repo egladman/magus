@@ -164,14 +164,14 @@ func TestFetchAndVerifyIndex_WrongSchemaVersion(t *testing.T) {
 	t.Parallel()
 	pub, priv := makeTestKey(t)
 
-	data, _ := json.Marshal(map[string]any{"schema_version": 99, "releases": []any{}})
+	data, _ := json.Marshal(map[string]any{"api_version": "magus.release-index/v1alpha99", "releases": []any{}})
 	sig := ed25519.Sign(priv, data)
 	srv := startIndexServer(t, data, sig)
 
 	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	_, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "schema_version")
+	assert.Contains(t, err.Error(), "newer than the magus.release-index/v1alpha1 this magus reads")
 }
 
 func TestFetchAndVerifyIndex_RefusesAnIndexWithoutExpiry(t *testing.T) {
@@ -365,7 +365,7 @@ func TestSelectRelease_ExplicitPrereleaseInstalls(t *testing.T) {
 // drops the member, which is what keeps it on the stable list.
 func TestReleaseIndex_PrereleasesDecodeApart(t *testing.T) {
 	t.Parallel()
-	data := []byte(`{"schema_version":1,"key_id":"k","releases":[{"version":"v0.4.3","artifacts":[]}],` +
+	data := []byte(`{"api_version":"magus.release-index/v1alpha1","key_id":"k","releases":[{"version":"v0.4.3","artifacts":[]}],` +
 		`"prereleases":[{"version":"v0.5.0-rc.1","artifacts":[{"name":"rc.tar.gz"}]}]}`)
 	var idx ReleaseIndex
 	require.NoError(t, json.Unmarshal(data, &idx))

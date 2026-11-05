@@ -240,7 +240,7 @@ func TestHookCmd(t *testing.T) {
 	// A repeat in the same session, so the structured form carries the short reason.
 	got := run("git stash", "-o", "json")
 	assert.Contains(t, got, `"decision": "deny"`)
-	assert.Contains(t, got, `"schema_version": 1`)
+	assert.Contains(t, got, `"api_version": "magus.guard/v1alpha1"`)
 	assert.Contains(t, got, `"reason": "denied again [whole-tree]: `)
 
 	// A template renders a host dialect; pass renders empty, deny fills it.
@@ -436,7 +436,7 @@ func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","tool":"shell.command","command":"git stash","thread":"unknown","thread_from":"inferred"}`, string(body))
 	body, err = trail.ReadBlob(dir, got.ResponseRef)
 	require.NoError(t, err)
-	assert.Contains(t, string(body), `"schema_version":1`)
+	assert.Contains(t, string(body), `"api_version":"magus.agent-command/v1alpha1"`)
 	assert.Contains(t, string(body), `"decision":"deny"`)
 	assert.Contains(t, string(body), `"reason":`)
 }
@@ -458,7 +458,7 @@ func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	assert.Equal(t, hookCommandEvent(ctx, got, types.Origin{EntryPoint: types.EntryPointHook}, "file.write", "guard: advise"), got)
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"path":"AGENTS.md","tool":"file.write","thread":"unknown","thread_from":"inferred"}`, string(body))
+	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","path":"AGENTS.md","tool":"file.write","thread":"unknown","thread_from":"inferred"}`, string(body))
 
 	emptyDir := t.TempDir()
 	emptyCtx := guard.WithLocation(context.Background(), emptyDir, "/repo/magus", "")
@@ -618,7 +618,7 @@ func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
 
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"session":"s1","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"shell.command","command":"ls","thread":"unknown","thread_from":"inferred"}`, string(body))
+	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","session":"s1","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"shell.command","command":"ls","thread":"unknown","thread_from":"inferred"}`, string(body))
 }
 
 // TestHookCmd_TranscriptFlagRecordsThePointer covers the FLAG path, which is the one the

@@ -79,7 +79,7 @@ func TestGraph_SnakeCaseFieldNames(t *testing.T) {
 
 	var out map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
-	for _, key := range []string{"definition", "schema_version", "directed", "node_count", "edge_count", "source_base", "nodes", "links"} {
+	for _, key := range []string{"definition", "api_version", "directed", "node_count", "edge_count", "source_base", "nodes", "links"} {
 		assert.Containsf(t, out, key, "want snake_case key %q in %v", key, keys(out))
 	}
 	// Reject the camelCase spellings protojson would emit without UseProtoNames.

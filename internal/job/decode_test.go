@@ -75,7 +75,7 @@ func TestDecodeNamesTheVersionsItAccepts(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]string{
-		"a version from the future": `{"schema_version":3,"changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[],"next_field":1}`,
+		"a version from the future": `{"api_version":"magus.job-result/v1alpha3","changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[],"next_field":1}`,
 		"no version at all":         `{"changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[]}`,
 	}
 	for name, raw := range cases {
@@ -95,11 +95,11 @@ func TestDecodeAcceptsAnOlderVersion(t *testing.T) {
 	t.Parallel()
 
 	rep, err := DecodeResult(strings.NewReader(
-		`{"schema_version":1,"changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[]}`))
+		`{"api_version":"magus.job-result/v1alpha1","changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[]}`))
 	require.NoError(t, err)
 	assert.Equal(t, 1, rep.Version)
 
-	row, err := decodeDeclaration(strings.NewReader(`{"schema_version":1,"id":"adj/store"}`))
+	row, err := decodeDeclaration(strings.NewReader(`{"api_version":"magus.job/v1alpha1","id":"adj/store"}`))
 	require.NoError(t, err)
 	assert.Equal(t, types.Declaration{Schema: types.Schema{Version: types.JobAPIVersion}, ID: "adj/store"}, row)
 }
@@ -407,7 +407,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 	// only apply proves.
 	// A settlement's fields too: only apply writes them.
 	skipped := func(field string) bool {
-		return field == "schema_version" || field == "requires" || field == "id" || field == "checkout" || field == "soft_paths" ||
+		return field == "api_version" || field == "requires" || field == "id" || field == "checkout" || field == "soft_paths" ||
 			field == "integrates" || field == "claim" || field == "deferred" || field == "left_unmerged" || legacy[field]
 	}
 	_, err := DecodePut(map[string]any{"checkout": "/tmp/co"})
@@ -477,7 +477,7 @@ func TestDecodeStdinDeclarationTakesTheCurrentVersionWhenTheRecordNamesNone(t *t
 	require.NoError(t, err)
 	assert.False(t, defaulted, "a named version is read as named")
 
-	_, _, err = DecodeStdinDeclaration(strings.NewReader(`{"schema_version":0,"id":"a","read_only":true}`))
+	_, _, err = DecodeStdinDeclaration(strings.NewReader(`{"api_version":"","id":"a","read_only":true}`))
 	require.ErrorIs(t, err, types.JobRecordInvalid, "a version named 0 is no version, and is refused as before")
 
 	_, _, err = DecodeStdinDeclaration(strings.NewReader(`[]`))
