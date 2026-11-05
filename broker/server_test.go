@@ -662,7 +662,7 @@ func TestAHelloFromAnotherProtocolIsRefused(t *testing.T) {
 	f, err := r.read()
 	require.NoError(t, err)
 	require.Equal(t, typeHandshake, f.Type)
-	require.NoError(t, w.write(typeHello, 1, hello{Magic: helloMagic, Protocol: APIVersion + 1}))
+	require.NoError(t, w.write(typeHello, 1, hello{Magic: helloMagic, Protocol: "magus.broker/v1alpha2"}))
 	f, err = r.read()
 	require.NoError(t, err)
 	assert.Equal(t, typeError, f.Type)

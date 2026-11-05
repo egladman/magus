@@ -3197,7 +3197,7 @@ func TestDenyLeaseScopedRebindHandsAChildToTheStore(t *testing.T) {
 		fmt.Sprintf("client op=put id=%s/research parent=%s read_only=true", me.ID, me.ID),
 		fmt.Sprintf(`magus job fork --stdin <<'EOF'
 {"api_version": %q, "id": "%s/research", "parent": "%s", "read_only": true}
-EOF`, strconv.Itoa(types.JobAPIVersion), me.ID, me.ID),
+EOF`, string(types.JobAPIVersion), me.ID, me.ID),
 		fmt.Sprintf("magus job wait %s/scout", me.ID),
 		fmt.Sprintf("magus job fork %s/wide --parent %s --write-paths docs/**", me.ID, me.ID),
 	} {

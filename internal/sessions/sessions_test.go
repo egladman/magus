@@ -143,9 +143,9 @@ func TestReadAllSkipsAnOversizedLineAndKeepsReading(t *testing.T) {
 	path := filepath.Join(dir, "sess1.jsonl")
 
 	body := strings.Join([]string{
-		`{"v":1,"invocation":"sess1","seq":1,"kind":"target_result","ts":1,"payload":{"target":"build","outcome":"pass"}}`,
-		fmt.Sprintf(`{"v":1,"invocation":"sess1","seq":2,"kind":"target_result","ts":2,"payload":{"target":"%s"}}`, strings.Repeat("x", maxLineBytes*2)),
-		`{"v":1,"invocation":"sess1","seq":3,"kind":"target_result","ts":3,"payload":{"target":"lint","outcome":"pass"}}`,
+		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":1,"kind":"target_result","ts":1,"payload":{"target":"build","outcome":"pass"}}`,
+		fmt.Sprintf(`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":2,"kind":"target_result","ts":2,"payload":{"target":"%s"}}`, strings.Repeat("x", maxLineBytes*2)),
+		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":3,"kind":"target_result","ts":3,"payload":{"target":"lint","outcome":"pass"}}`,
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
 
@@ -169,8 +169,8 @@ func TestOversizedOpenDoesNotHideALaterOne(t *testing.T) {
 	path := filepath.Join(dir, "sess1.jsonl")
 
 	body := strings.Join([]string{
-		fmt.Sprintf(`{"v":1,"invocation":"sess1","seq":1,"kind":"attention_open","ts":1,"payload":{"request":"att-huge","outcome":"waiting","message":"%s"}}`, strings.Repeat("x", maxLineBytes*2)),
-		`{"v":1,"invocation":"sess1","seq":2,"kind":"attention_open","ts":2,"payload":{"request":"att-small","outcome":"waiting","message":"needs a decision"}}`,
+		fmt.Sprintf(`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":1,"kind":"attention_open","ts":1,"payload":{"request":"att-huge","outcome":"waiting","message":"%s"}}`, strings.Repeat("x", maxLineBytes*2)),
+		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":2,"kind":"attention_open","ts":2,"payload":{"request":"att-small","outcome":"waiting","message":"needs a decision"}}`,
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
 
@@ -267,12 +267,12 @@ func TestFoldOrdersByTimeThenSessionThenSeq(t *testing.T) {
 	dir := t.TempDir()
 
 	writeRaw(t, dir, "beta", []Record{
-		{V: "1", Invocation: "beta", Seq: 1, Kind: KindTargetResult, Ts: 100},
-		{V: "1", Invocation: "beta", Seq: 2, Kind: KindTargetResult, Ts: 100},
+		{V: APIVersion, Invocation: "beta", Seq: 1, Kind: KindTargetResult, Ts: 100},
+		{V: APIVersion, Invocation: "beta", Seq: 2, Kind: KindTargetResult, Ts: 100},
 	})
 	writeRaw(t, dir, "alpha", []Record{
-		{V: "1", Invocation: "alpha", Seq: 1, Kind: KindTargetResult, Ts: 100},
-		{V: "1", Invocation: "alpha", Seq: 2, Kind: KindTargetResult, Ts: 300},
+		{V: APIVersion, Invocation: "alpha", Seq: 1, Kind: KindTargetResult, Ts: 100},
+		{V: APIVersion, Invocation: "alpha", Seq: 2, Kind: KindTargetResult, Ts: 300},
 	})
 
 	fold, err := ReadAll(dir)
@@ -298,7 +298,7 @@ func TestReadAllToleratesACorruptTail(t *testing.T) {
 	path := filepath.Join(dir, "sess1.jsonl")
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
 	require.NoError(t, err)
-	_, err = f.WriteString(`{"v":1,"invocation":"sess1","seq":3,"kind":"target_res`)
+	_, err = f.WriteString(`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":3,"kind":"target_res`)
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
@@ -318,11 +318,11 @@ func TestReadAllCountsEveryUnusableLine(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sess1.jsonl")
 	body := strings.Join([]string{
-		`{"v":2,"invocation":"sess1","seq":1,"kind":"target_result","ts":1}`,
+		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":1,"kind":"target_result","ts":1}`,
 		`not json at all`,
 		``, // a blank line is not damage; it is skipped without counting
-		`{"v":2,"seq":2,"kind":"target_result","ts":2}`, // no invocation: unattributable
-		`{"v":2,"invocation":"sess1","seq":3,"ts":3}`,   // no kind: uninterpretable
+		`{"v":"magus.sessions/v1alpha1","seq":2,"kind":"target_result","ts":2}`, // no invocation: unattributable
+		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":3,"ts":3}`,   // no kind: uninterpretable
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
 
@@ -339,9 +339,9 @@ func TestUnknownKindsAndFieldsAreIgnoredNotRejected(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sess1.jsonl")
 	body := strings.Join([]string{
-		`{"v":1,"invocation":"sess1","seq":1,"kind":"invocation_start","ts":10,"payload":{"workspace":"/repo","invented_field":"ignored"}}`,
-		`{"v":9,"invocation":"sess1","seq":2,"kind":"attention_requested","ts":20,"payload":{"whatever":true}}`,
-		`{"v":1,"invocation":"sess1","seq":3,"kind":"target_result","ts":30,"payload":{"target":"build","outcome":"pass","future":1}}`,
+		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":1,"kind":"invocation_start","ts":10,"payload":{"workspace":"/repo","invented_field":"ignored"}}`,
+		`{"v":"magus.sessions/v1alpha9","invocation":"sess1","seq":2,"kind":"attention_requested","ts":20,"payload":{"whatever":true}}`,
+		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":3,"kind":"target_result","ts":30,"payload":{"target":"build","outcome":"pass","future":1}}`,
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
 
@@ -365,9 +365,9 @@ func TestUnknownKindsAndFieldsAreIgnoredNotRejected(t *testing.T) {
 func TestSummarizeOrdersMostRecentFirst(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writeRaw(t, dir, "old", []Record{{V: "1", Invocation: "old", Seq: 1, Kind: KindTargetResult, Ts: 100}})
-	writeRaw(t, dir, "new", []Record{{V: "1", Invocation: "new", Seq: 1, Kind: KindTargetResult, Ts: 900}})
-	writeRaw(t, dir, "mid", []Record{{V: "1", Invocation: "mid", Seq: 1, Kind: KindTargetResult, Ts: 500}})
+	writeRaw(t, dir, "old", []Record{{V: APIVersion, Invocation: "old", Seq: 1, Kind: KindTargetResult, Ts: 100}})
+	writeRaw(t, dir, "new", []Record{{V: APIVersion, Invocation: "new", Seq: 1, Kind: KindTargetResult, Ts: 900}})
+	writeRaw(t, dir, "mid", []Record{{V: APIVersion, Invocation: "mid", Seq: 1, Kind: KindTargetResult, Ts: 500}})
 
 	fold, err := ReadAll(dir)
 	require.NoError(t, err)
@@ -450,8 +450,8 @@ func TestASessionWrittenWithoutALeaseStillReads(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sess1.jsonl")
 	body := strings.Join([]string{
-		`{"v":1,"invocation":"sess1","seq":1,"kind":"invocation_start","ts":10,"payload":{"workspace":"/repo"}}`,
-		`{"v":1,"invocation":"sess1","seq":2,"kind":"target_result","ts":20,"payload":{"target":"build","outcome":"pass"}}`,
+		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":1,"kind":"invocation_start","ts":10,"payload":{"workspace":"/repo"}}`,
+		`{"v":"magus.sessions/v1alpha1","invocation":"sess1","seq":2,"kind":"target_result","ts":20,"payload":{"target":"build","outcome":"pass"}}`,
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
 

@@ -98,7 +98,7 @@ magus has output flags, so you never need to pipe its output through `grep`,
 | ---------------------------- | ------------------------------------------------------------------ |
 | `-s` / `--silent`            | a pass prints only its output ref; a failure adds a bounded tail   |
 | `-q` / `--quiet`             | drops progress, keeps errors and the failing project's full output |
-| `-o json` / `yaml` / `jsonl` | machine-readable, `schema_version`-stamped                         |
+| `-o json` / `yaml` / `jsonl` | machine-readable, `api_version`-stamped                         |
 | `-o name`                    | bare identifiers, one per line                                     |
 | `-o template=<go-template>`  | project exactly the fields you want                                |
 | `-v` / `-vv` / `-vvv`        | more log verbosity                                                 |

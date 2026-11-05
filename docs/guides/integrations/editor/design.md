@@ -24,7 +24,7 @@ not compose, and no integrator can be pointed at a single thing.
 | ------------------ | --------------------------------------------------- | ----------------------------------------------- | --------------- |
 | `internal/report`  | `{"schema":5,"type":"run.target.result",...}` JSONL | stdout of `magus run -o jsonl`                  | CI post-process |
 | `internal/journal` | `{ts,inv,kind,stream,text,ref}` JSONL               | per-invocation file; loopback SSE with `--open` | browser viewer  |
-| `types.Event`      | `{schema_version,outcome,severity,source,where}`    | `session notify`, attention store               | humans          |
+| `types.Event`      | `{api_version,outcome,severity,source,where}`    | `session notify`, attention store               | humans          |
 | `internal/trail`   | Kind + JSONL + blob refs                            | `/api/v1/activity` Connect                      | governance      |
 | daemon SSE         | graph seq, base64 proto Status, base64 OTLP         | `/api/v1/events`, bearer-gated                  | console PWA     |
 

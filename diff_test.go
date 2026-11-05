@@ -256,7 +256,7 @@ func TestAttachAPIDeltaRefusesAnOlderSchema(t *testing.T) {
 
 	assert.Nil(t, out.API)
 	require.Len(t, out.Notes, 1)
-	assert.Contains(t, out.Notes[0], "predates recorded signatures")
+	assert.Contains(t, out.Notes[0], "older than the magus.knowledge/v1alpha1 this magus reads")
 }
 
 // conformanceHead assembles a head graph the way a workspace build does: nine context readers

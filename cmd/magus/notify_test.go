@@ -34,7 +34,7 @@ func TestEventFromStdin(t *testing.T) {
 	canonical := `{"api_version":"magus.event/v1alpha1","outcome":"permission","severity":"critical","source":{"kind":"agent","sub":"host","id":"abc"},"message":"needs approval"}`
 	got := eventFromStdin([]byte(canonical))
 	assert.Equal(t, types.Event{
-		APIVersion: 1,
+		APIVersion: types.EventAPIVersion,
 		Outcome:       types.OutcomePermission,
 		Severity:      types.SeverityCritical,
 		Source:        types.EventSource{Kind: "agent", Sub: "host", ID: "abc"},

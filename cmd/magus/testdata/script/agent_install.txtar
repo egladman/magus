@@ -7,7 +7,7 @@ exists .claude/skills/magus-architecture-review/SKILL.md
 exists .claude/skills/magus-multi-agent/SKILL.md
 grep 'name: magus-query' .claude/skills/magus-query/SKILL.md
 grep 'name: magus-multi-agent' .claude/skills/magus-multi-agent/SKILL.md
-grep 'skill-stamp-format: \d' .claude/skills/magus-query/SKILL.md
+grep 'skill-stamp-format: magus\.skill-stamp/v1alpha1' .claude/skills/magus-query/SKILL.md
 
 # several destinations in one call; the destination is the caller's choice
 exec magus agent install .opencode/skills .agents/skills

@@ -19,7 +19,7 @@ import (
 )
 
 // SchemaSnapshot names the document [WriteSnapshot] keeps.
-const SchemaSnapshot = "mergequeue.snapshot/v1"
+const SchemaSnapshot = "mergequeue.snapshot/v1alpha1"
 
 // Snapshot is the newest provider read for one base, kept so every reader after it
 // answers without the network. `magus queue ls` writes it, having paid for the call,

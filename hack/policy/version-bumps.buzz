@@ -19,30 +19,30 @@ export object Counter {
 // counters are the hand-maintained version counters, each found by the line in file that
 // starts with declaration. A counter missing here is not guarded.
 export final counters = [
-    Counter{ name = "skill-stamp-format", file = "internal/agent/catalog.go", declaration = "const skillStampFormat = " },
+    Counter{ name = "skill-stamp-format", file = "internal/agent/catalog.go", declaration = "const skillStampFormat types.APIVersion = " },
     Counter{ name = "guard-template-version", file = "internal/agent/guard.go", declaration = "const GuardTemplateVersion = " },
-    Counter{ name = "guard-schema-version", file = "internal/agent/guard.go", declaration = "const GuardSchemaVersion = " },
-    Counter{ name = "agent-session-schema-version", file = "internal/agent/session.go", declaration = "const SessionSchemaVersion = " },
-    Counter{ name = "tool-rows-version", file = "internal/agent/tools.go", declaration = "const ToolRowsVersion = " },
-    Counter{ name = "harness-schema-version", file = "internal/agent/harness.go", declaration = "const harnessSchemaVersion = " },
-    Counter{ name = "harness-spell-schema-version", file = "internal/interp/bindings/harness_spell.go", declaration = "const harnessSchemaVersion = " },
-    Counter{ name = "knowledge-schema-version", file = "types/knowledge.go", declaration = "const KnowledgeSchemaVersion = " },
-    Counter{ name = "job-schema-version", file = "types/job.go", declaration = "const JobSchemaVersion = " },
-    Counter{ name = "job-result-schema-version", file = "types/job.go", declaration = "const JobResultSchemaVersion = " },
-    Counter{ name = "event-schema-version", file = "types/event.go", declaration = "const EventSchemaVersion = " },
-    Counter{ name = "stored-output-schema-version", file = "types/output_record.go", declaration = "const StoredOutputSchemaVersion = " },
-    Counter{ name = "sessions-schema-version", file = "internal/sessions/sessions.go", declaration = "const SchemaVersion = " },
-    Counter{ name = "session-record-schema-version", file = "internal/sessions/sessions.go", declaration = "const schemaVersionSession = " },
+    Counter{ name = "guard-schema-version", file = "internal/agent/guard.go", declaration = "const GuardAPIVersion = " },
+    Counter{ name = "agent-session-schema-version", file = "internal/agent/session.go", declaration = "const SessionAPIVersion types.APIVersion = " },
+    Counter{ name = "harness-schema-version", file = "internal/agent/harness.go", declaration = "const HarnessAPIVersion types.APIVersion = " },
+    Counter{ name = "knowledge-schema-version", file = "types/knowledge.go", declaration = "const KnowledgeAPIVersion APIVersion = " },
+    Counter{ name = "job-schema-version", file = "types/job.go", declaration = "const JobAPIVersion APIVersion = " },
+    Counter{ name = "job-result-schema-version", file = "types/job.go", declaration = "const JobResultAPIVersion APIVersion = " },
+    Counter{ name = "event-schema-version", file = "types/event.go", declaration = "const EventAPIVersion APIVersion = " },
+    Counter{ name = "stored-output-schema-version", file = "types/output_record.go", declaration = "const StoredOutputAPIVersion APIVersion = " },
+    Counter{ name = "sessions-schema-version", file = "internal/sessions/sessions.go", declaration = "const APIVersion types.APIVersion = " },
     Counter{ name = "goindex-format-version", file = "internal/symbols/goindex/goindex.go", declaration = "const formatVersion = " },
-    Counter{ name = "auth-store-version", file = "internal/auth/store.go", declaration = "const storeVersion = " },
-    Counter{ name = "trail-command-schema-version", file = "internal/trail/trail.go", declaration = "const agentCommandSchemaVersion = " },
-    Counter{ name = "trail-spawn-schema-version", file = "internal/trail/trail.go", declaration = "const agentSpawnSchemaVersion = " },
-    Counter{ name = "project-cache-schema-version", file = "project/cache.go", declaration = "const cacheSchemaVersion = " },
-    Counter{ name = "owed-schema-version", file = "vcs/owed.go", declaration = "const owedSchemaVersion = " },
-    Counter{ name = "broker-protocol-version", file = "broker/wire.go", declaration = "const ProtocolVersion = " },
+    Counter{ name = "auth-store-version", file = "internal/auth/store.go", declaration = "const storeVersion types.APIVersion = " },
+    Counter{ name = "trail-command-schema-version", file = "internal/trail/trail.go", declaration = "const agentCommandAPIVersion types.APIVersion = " },
+    Counter{ name = "trail-spawn-schema-version", file = "internal/trail/trail.go", declaration = "const agentSpawnAPIVersion types.APIVersion = " },
+    Counter{ name = "project-cache-schema-version", file = "project/cache.go", declaration = "const cacheAPIVersion types.APIVersion = " },
+    Counter{ name = "owed-schema-version", file = "vcs/owed.go", declaration = "const owedAPIVersion types.APIVersion = " },
+    Counter{ name = "release-index-version", file = "internal/selfupdate/selfupdate.go", declaration = "const IndexAPIVersion types.APIVersion = " },
+    Counter{ name = "guard-policy-version", file = "internal/guard/policy.go", declaration = "const policyAPIVersion types.APIVersion = " },
+    Counter{ name = "tool-rows-version", file = "internal/agent/tools.go", declaration = "const ToolRowsVersion types.APIVersion = " },
+    Counter{ name = "broker-protocol-version", file = "broker/wire.go", declaration = "const APIVersion types.APIVersion = " },
     Counter{ name = "cache-key-version", file = "internal/cache/hash.go", declaration = "const KeyVersion = " },
     Counter{ name = "forecast-history-version", file = "internal/ci/forecast/history.go", declaration = "const HistoryVersion = " },
-    Counter{ name = "spell-lock-version", file = "internal/spell/remote/lock.go", declaration = "const lockVersion = " },
+    Counter{ name = "spell-lock-version", file = "internal/spell/remote/lock.go", declaration = "const lockVersion types.APIVersion = " },
     Counter{ name = "textrank-weights-version", file = "internal/textrank/weights.go", declaration = "const weightsVersion = " },
     Counter{ name = "lifecycle-cache-version", file = "internal/workspace/lifecycle.go", declaration = "const lifecycleCacheVersion = " },
     Counter{ name = "provider-cache-version", file = "internal/workspace/provider_cache.go", declaration = "const providerCacheVersion = " },
@@ -178,48 +178,48 @@ fun fakeBase(files: {str: str}) > fun (path: str) > str? !> str {
     };
 }
 
-final skillFile = "internal/agent/catalog.go";
+final counterFile = "internal/agent/guard.go";
 
-fun skill(value: str) > str {
-    return "package agent\n\nconst skillStampFormat = {value}\n\nfunc x() \{\}\n";
+fun counterText(value: str) > str {
+    return "package agent\n\nconst GuardTemplateVersion = {value}\n\nfunc x() \{\}\n";
 }
 
 test "the first bump on a branch is allowed" {
-    final edit = Edit{ rel = skillFile, oldText = "const skillStampFormat = 1", newText = "const skillStampFormat = 2" };
-    final v = decide(edit, current: fakeFiles({skillFile: skill("1")}), base: fakeBase({skillFile: skill("1")}));
+    final edit = Edit{ rel = counterFile, oldText = "const GuardTemplateVersion = 1", newText = "const GuardTemplateVersion = 2" };
+    final v = decide(edit, current: fakeFiles({counterFile: counterText("1")}), base: fakeBase({counterFile: counterText("1")}));
     std\assert(v == null, message: "first bump");
 }
 
 test "a second bump on a branch is denied naming the counter, the base value and the branch value" {
-    final edit = Edit{ rel = skillFile, oldText = "const skillStampFormat = 2", newText = "const skillStampFormat = 3" };
-    final v = decide(edit, current: fakeFiles({skillFile: skill("2")}), base: fakeBase({skillFile: skill("1")}));
+    final edit = Edit{ rel = counterFile, oldText = "const GuardTemplateVersion = 2", newText = "const GuardTemplateVersion = 3" };
+    final v = decide(edit, current: fakeFiles({counterFile: counterText("2")}), base: fakeBase({counterFile: counterText("1")}));
     std\assert(v != null and v!.decision == magus\GuardDecision.deny, message: "second bump denied");
     final reason = v!.reason;
-    std\assert(reason.indexOf("skill-stamp-format") != null and reason.indexOf("from 1 to 2") != null, message: reason);
+    std\assert(reason.indexOf("guard-template-version") != null and reason.indexOf("from 1 to 2") != null, message: reason);
     std\assert(reason.indexOf("a branch bumps a version once") != null, message: reason);
     verdict\assertVerdict(reason, label: "second bump");
 }
 
 test "a whole-file write that bumps again is denied, and one that keeps the value is allowed" {
-    final files = fakeFiles({skillFile: skill("2")});
-    final base = fakeBase({skillFile: skill("1")});
-    final bumped = decide(Edit{ rel = skillFile, content = skill("3") }, current: files, base: base);
+    final files = fakeFiles({counterFile: counterText("2")});
+    final base = fakeBase({counterFile: counterText("1")});
+    final bumped = decide(Edit{ rel = counterFile, content = counterText("3") }, current: files, base: base);
     std\assert(bumped != null and bumped!.decision == magus\GuardDecision.deny, message: "write bumps again");
-    final kept = decide(Edit{ rel = skillFile, content = skill("2") + "// more\n" }, current: files, base: base);
+    final kept = decide(Edit{ rel = counterFile, content = counterText("2") + "// more\n" }, current: files, base: base);
     std\assert(kept == null, message: "write keeps the value");
 }
 
 test "an edit back to the base value is allowed" {
-    final edit = Edit{ rel = skillFile, oldText = "const skillStampFormat = 2", newText = "const skillStampFormat = 1" };
-    std\assert(decide(edit, current: fakeFiles({skillFile: skill("2")}), base: fakeBase({skillFile: skill("1")})) == null, message: "revert");
+    final edit = Edit{ rel = counterFile, oldText = "const GuardTemplateVersion = 2", newText = "const GuardTemplateVersion = 1" };
+    std\assert(decide(edit, current: fakeFiles({counterFile: counterText("2")}), base: fakeBase({counterFile: counterText("1")})) == null, message: "revert");
 }
 
 test "an unrelated edit is never judged, and never reads the base" {
     final base = fun (path: str) > str? !> str {
         throw "the base was read";
     };
-    final other = Edit{ rel = skillFile, oldText = "func x() \{\}", newText = "func y() \{\}" };
-    std\assert(decide(other, current: fakeFiles({skillFile: skill("2")}), base: base) == null, message: "same file, other line");
+    final other = Edit{ rel = counterFile, oldText = "func x() \{\}", newText = "func y() \{\}" };
+    std\assert(decide(other, current: fakeFiles({counterFile: counterText("2")}), base: base) == null, message: "same file, other line");
     final elsewhere = Edit{ rel = "README.md", content = "const skillStampFormat = 200\n" };
     std\assert(decide(elsewhere, current: fakeFiles({}), base: base) == null, message: "file with no counter");
 }
@@ -239,8 +239,8 @@ test "an unreadable base advises instead of judging" {
     final base = fun (path: str) > str? !> str {
         throw "no base";
     };
-    final edit = Edit{ rel = skillFile, oldText = "const skillStampFormat = 2", newText = "const skillStampFormat = 3" };
-    final v = decide(edit, current: fakeFiles({skillFile: skill("2")}), base: base);
+    final edit = Edit{ rel = counterFile, oldText = "const GuardTemplateVersion = 2", newText = "const GuardTemplateVersion = 3" };
+    final v = decide(edit, current: fakeFiles({counterFile: counterText("2")}), base: base);
     std\assert(v != null and v!.decision == magus\GuardDecision.advise, message: "advised");
 }
 

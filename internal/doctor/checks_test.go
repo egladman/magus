@@ -750,7 +750,7 @@ func TestCheckAgentSkills(t *testing.T) {
 
 	t.Run("nothing installed -> advice naming the install command", func(t *testing.T) {
 		r := &runner{ws: boundWorkspace(t, t.TempDir())}
-		r.opts.skills = agent.NewCatalog(fstest.MapFS{}, "", 1)
+		r.opts.skills = agent.NewCatalog(fstest.MapFS{}, "", "magus.knowledge/v1alpha1")
 
 		got := r.checkAgentSkills(t.Context())
 

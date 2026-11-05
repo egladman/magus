@@ -37,7 +37,7 @@ func TestLockMarshalIsStable(t *testing.T) {
 
 	empty, err := Lock{Version: lockVersion}.Marshal()
 	require.NoError(t, err)
-	assert.Equal(t, lockHeader+"version: 1\n", string(empty))
+	assert.Equal(t, lockHeader+"version: magus.spell-lock/v1alpha1\n", string(empty))
 }
 
 func TestReadLock(t *testing.T) {
@@ -51,11 +51,11 @@ func TestReadLock(t *testing.T) {
 	for name, tc := range map[string]struct {
 		body, wantErr string
 	}{
-		"other version": {body: "version: 2\n", wantErr: "schema version 2, this magus reads version 1"},
-		"empty":         {body: "", wantErr: "schema version 0"},
-		"unknown field": {body: fmt.Sprintf("version: 1\nspells:\n  ghcr.io/team/lint:\n    tag: v1\n    digest: %s\n    size: 3\n", d.String()), wantErr: "field size not found"},
-		"workspace key": {body: fmt.Sprintf("version: 1\nspells:\n  spells/lint:\n    tag: v1\n    digest: %s\n", d.String()), wantErr: `"spells/lint" is not a registry path`},
-		"bad digest":    {body: "version: 1\nspells:\n  ghcr.io/team/lint:\n    tag: v1\n    digest: sha256:abc\n", wantErr: "ghcr.io/team/lint"},
+		"other version": {body: "version: magus.spell-lock/v1alpha2\n", wantErr: "magus.lock is magus.spell-lock/v1alpha2, newer than"},
+		"empty":         {body: "", wantErr: "magus.lock carries no api_version"},
+		"unknown field": {body: fmt.Sprintf("version: magus.spell-lock/v1alpha1\nspells:\n  ghcr.io/team/lint:\n    tag: v1\n    digest: %s\n    size: 3\n", d.String()), wantErr: "field size not found"},
+		"workspace key": {body: fmt.Sprintf("version: magus.spell-lock/v1alpha1\nspells:\n  spells/lint:\n    tag: v1\n    digest: %s\n", d.String()), wantErr: `"spells/lint" is not a registry path`},
+		"bad digest":    {body: "version: magus.spell-lock/v1alpha1\nspells:\n  ghcr.io/team/lint:\n    tag: v1\n    digest: sha256:abc\n", wantErr: "ghcr.io/team/lint"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

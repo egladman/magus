@@ -708,7 +708,7 @@ func TestStoreDegradesARowItCannotActOn(t *testing.T) {
 
 	_, err = s.Update(t.Context(), "future", func(u *types.Job) { u.State = types.StatePass })
 	require.ErrorIs(t, err, types.StoreRecordsNewer)
-	assert.ErrorContains(t, err, fmt.Sprintf(`future requires "never-implemented", which this magus (schema %d) lacks: update magus`,
+	assert.ErrorContains(t, err, fmt.Sprintf(`future requires "never-implemented", which this magus (%s) lacks: update magus`,
 		types.JobAPIVersion))
 	_, err = s.Delete(t.Context(), "future", true)
 	assert.ErrorContains(t, err, `requires "never-implemented"`, "a delete is a write to the row")
@@ -730,7 +730,7 @@ func TestStoreRefusesAFileItCannotActOn(t *testing.T) {
 
 	_, err := s.List()
 	require.ErrorIs(t, err, types.JobStoreWriterOlder)
-	assert.ErrorContains(t, err, fmt.Sprintf(`%s requires "jobs-v2", which this magus (schema %d) lacks, update magus`,
+	assert.ErrorContains(t, err, fmt.Sprintf(`%s requires "jobs-v2", which this magus (%s) lacks, update magus`,
 		path, types.JobAPIVersion))
 
 	_, err = s.Update(t.Context(), "B", func(cur *types.Job) { *cur = lease("B") })

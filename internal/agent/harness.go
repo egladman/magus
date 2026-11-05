@@ -330,7 +330,7 @@ func harnessMissingError(id string) error {
 
 func validateHarnessDescriptor(d HarnessDescriptor) error {
 	if d.APIVersion != HarnessAPIVersion {
-		return fmt.Errorf("schema_version must be %d", HarnessAPIVersion)
+		return fmt.Errorf("api_version must be %s", HarnessAPIVersion)
 	}
 	if !harnessIDPattern.MatchString(d.ID) {
 		return fmt.Errorf("id must match %s", harnessIDPattern.String())

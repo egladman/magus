@@ -22,8 +22,8 @@ import (
 const recordFixture = `
 package fixture
 
-// FixtureSchemaVersion is the shape this fixture is written in.
-const FixtureSchemaVersion = 3
+// FixtureAPIVersion is the shape this fixture is written in.
+const FixtureAPIVersion = "magus.fixture/v1alpha3"
 
 // Fixture is a record a caller declares.
 //
@@ -44,8 +44,8 @@ type Fixture struct {
 
 // Envelope is inlined into every record that embeds it, and its bag publishes nothing.
 type Envelope struct {
-	// SchemaVersion is the shape this record is written in.
-	SchemaVersion int @json:"schema_version"@
+	// APIVersion is the shape this record is written in.
+	APIVersion string @json:"api_version"@
 	Unknown map[string]string @json:",unknown"@
 }
 
@@ -67,13 +67,12 @@ const wantFixtureSchema = `{
   "description": "Fixture is a record a caller declares.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "id"],
+  "required": ["api_version", "id"],
   "properties": {
-    "schema_version": {
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 3,
-      "description": "SchemaVersion is the shape this record is written in."
+    "api_version": {
+      "type": "string",
+      "const": "magus.fixture/v1alpha3",
+      "description": "APIVersion is the shape this record is written in."
     },
     "id": {
       "type": "string",
@@ -131,7 +130,7 @@ func writeRecordFixture(t *testing.T, src string) string {
 	return path
 }
 
-var fixtureRecord = jobRecord{Struct: "Fixture", Title: "magus fixture", File: "fixture.schema.json", Version: "FixtureSchemaVersion"}
+var fixtureRecord = jobRecord{Struct: "Fixture", Title: "magus fixture", File: "fixture.schema.json", Version: "FixtureAPIVersion"}
 
 // One assertion over the whole rendered document rather than a probe per rule: the schema
 // is published byte for byte, so its layout and its ordering are part of what a reader
@@ -173,19 +172,19 @@ func TestRenderLedgerSchemaNamesWhatItCannotPublish(t *testing.T) {
 
 	cases := map[string]struct{ src, want string }{
 		"a field with no json tag": {
-			src:  "package fixture\nconst FixtureSchemaVersion = 1\ntype Fixture struct {\n\tID string\n}\n",
+			src:  "package fixture\nconst FixtureAPIVersion = \"magus.fixture/v1alpha1\"\ntype Fixture struct {\n\tID string\n}\n",
 			want: "Fixture.ID carries no json tag",
 		},
 		"a type these sources do not declare": {
-			src:  "package fixture\nconst FixtureSchemaVersion = 1\ntype Fixture struct {\n\tAt time.Time @json:\"at\"@\n}\n",
+			src:  "package fixture\nconst FixtureAPIVersion = \"magus.fixture/v1alpha1\"\ntype Fixture struct {\n\tAt time.Time @json:\"at\"@\n}\n",
 			want: "type Time is neither a struct nor a closed set",
 		},
 		"no version constant": {
 			src:  "package fixture\ntype Fixture struct {\n\tID string @json:\"id\"@\n}\n",
-			want: "no constant FixtureSchemaVersion",
+			want: "no constant FixtureAPIVersion",
 		},
 		"no such struct": {
-			src:  "package fixture\nconst FixtureSchemaVersion = 1\n",
+			src:  "package fixture\nconst FixtureAPIVersion = \"magus.fixture/v1alpha1\"\n",
 			want: "no struct Fixture",
 		},
 	}
@@ -306,7 +305,7 @@ func TestTargetPatternMatchesTheValidator(t *testing.T) {
 const markerFixture = `
 package fixture
 
-const FixtureSchemaVersion = 1
+const FixtureAPIVersion = "magus.fixture/v1alpha1"
 
 type Fixture struct {
 	Parent    string      @json:"parent,omitempty" schema:"leaseid"@
@@ -390,7 +389,7 @@ func TestAMarkerThatMarksNothingIsRefused(t *testing.T) {
 			t.Parallel()
 
 			src := fmt.Sprintf(`package fixture
-const FixtureSchemaVersion = 1
+const FixtureAPIVersion = "magus.fixture/v1alpha1"
 type Inner struct{}
 type Fixture struct {
 	%s

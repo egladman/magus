@@ -215,10 +215,10 @@ same fragment a link into the rendered page carries.{{else}}Reading one file who
 ## Reading results
 
 {{if .Full}}- Reading as a machine? Add `-o json`. Every verb returns a stable,
-  `schema_version`-stamped OBJECT with a top-level wrapper. Key into the plural
+  `api_version`-stamped OBJECT with a top-level wrapper. Key into the plural
   (`.matches`, `.targets`); it is never a bare array. `-o name` prints bare IDs for
   piping. Do not scrape the human text or trim it with `head`.
-  Over MCP the tools already return structured content; nothing to shape.{{else}}- Machine reading -> `-o json`. Every verb returns stable, `schema_version`-stamped OBJECT with top-level wrapper. Key into plural (`.matches`, `.targets`); never bare array. `-o name`: bare IDs for piping. Do not scrape human text or trim with `head`.{{end}}
+  Over MCP the tools already return structured content; nothing to shape.{{else}}- Machine reading -> `-o json`. Every verb returns stable, `api_version`-stamped OBJECT with top-level wrapper. Key into plural (`.matches`, `.targets`); never bare array. `-o name`: bare IDs for piping. Do not scrape human text or trim with `head`.{{end}}
 {{if .Full}}- Each match carries `why`: `matched` of `of` says how many of your words it holds,
   so a partial match is labeled, not hidden; `terms` scores each word per field; `lists`
   gives its rank in each fused list; `seeds` names the changed files or lease paths that
@@ -241,7 +241,7 @@ same fragment a link into the rendered page carries.{{else}}Reading one file who
     `vcs_last_modified`, and `vcs_commits` from git history.{{else}}- Node `attrs` surface metadata.
   - `duration_p75_ms`, `cache_hit_rate`, `run_samples`, `last_output_ref`, `last_run_ok`: OBSERVED from local run history.
   - `{{cmd "query output"}} <ref>` on target's `last_output_ref` fetches latest captured run.{{end}}
-{{if .Full}}- Every output carries `schema_version`; a bump means the node/edge shape changed.{{else}}- Every output carries `schema_version`; bump means node/edge shape changed.{{end}}
+{{if .Full}}- Every output carries `api_version`; a bump means the node/edge shape changed.{{else}}- Every output carries `api_version`; bump means node/edge shape changed.{{end}}
 
 {{if .Full}}## Ownership and blast radius{{else}}## Ownership, blast radius{{end}}
 

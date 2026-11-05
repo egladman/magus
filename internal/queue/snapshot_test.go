@@ -53,7 +53,7 @@ func TestSnapshotRefusesAnotherSchema(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, snapshotName("main")), []byte(`{"schema":"mergequeue.snapshot/v2"}`), 0o644))
 
 	_, _, err = NewestSnapshot(root)
-	require.ErrorContains(t, err, `document is "mergequeue.snapshot/v2", want "mergequeue.snapshot/v1"`)
+	require.ErrorContains(t, err, `document is "mergequeue.snapshot/v2", want "mergequeue.snapshot/v1alpha1"`)
 }
 
 // A plan lands on its base's snapshot and nowhere else: without the changes there is

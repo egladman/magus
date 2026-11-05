@@ -6,13 +6,12 @@
   "description": "Declaration is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing the store computes. A caller cannot say when its row was created or what it released, and the way to make that true is for the input type not to carry those fields rather than for the store to strip them afterwards.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "id"],
+  "required": ["api_version", "id"],
   "properties": {
-    "schema_version": {
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 13,
-      "description": "Version is the newest schema any writer of this record used. A rewrite stamps the larger of the stored version and its own, so an older magus never relabels content a newer one wrote."
+    "api_version": {
+      "type": "string",
+      "const": "magus.job/v1alpha1",
+      "description": "Version is the format this record is written in. A reader refuses any other, so no magus acts on a record it cannot read."
     },
     "requires": {
       "type": "array",

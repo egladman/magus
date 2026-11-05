@@ -290,7 +290,7 @@ func newestLegacyTs(path string) int64 {
 			var dated struct {
 				Ts int64 `json:"ts"`
 			}
-			if otherVersion(bytes.TrimSpace(line)) && json.Unmarshal(bytes.TrimSpace(line), &dated) == nil {
+			if olderVersion(bytes.TrimSpace(line)) && json.Unmarshal(bytes.TrimSpace(line), &dated) == nil {
 				newest = max(newest, dated.Ts)
 			}
 		}

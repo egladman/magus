@@ -24,7 +24,7 @@ const (
 )
 
 // SchemaEvent names the schema every [Event] record carries.
-const SchemaEvent = "mergequeue.event/v1"
+const SchemaEvent = "mergequeue.event/v1alpha1"
 
 // Event is one JSONL record. Every command reports through these alone, one per line.
 type Event struct {

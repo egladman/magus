@@ -4,18 +4,24 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 // sessionAdapterPrefix names a session-load adapter. Registration is by NAME rather
 // than by a hand-kept second list alone, so a fourth host's adapter dropped into
 // the directory is claimed by the gates below the moment it exists.
 const sessionAdapterPrefix = "magus-session-load-"
+
+// sessionCoverageSchema is the schema= every adapter's coverage marker
+// names for SessionAPIVersion.
+// TODO: spell it as SessionAPIVersion once the marker lines are rewritten.
+const sessionCoverageSchema = "2"
 
 // sessionAdapters are the per-host extraction adapters. Every one of them must also
 // appear in hookTemplates, which is what gets it embedded and version-stamped;
@@ -95,10 +101,10 @@ func parseSessionCoverage(t *testing.T) sessionCoverage {
 				require.True(t, split, "%s: coverage declaration field %q is not key=value", name, kv)
 				fields[key] = value
 			}
-			require.Equal(t, strconv.Itoa(SessionAPIVersion), fields["schema"],
-				"%s declares session schema %q; the contract is agent.SessionSchemaVersion=%d.\n"+
+			require.Equal(t, sessionCoverageSchema, fields["schema"],
+				"%s declares session schema %q; the contract is schema=%s for %s.\n"+
 					"A schema bump means every adapter must be updated and re-downloaded before it loads again.",
-				name, fields["schema"], SessionAPIVersion)
+				name, fields["schema"], sessionCoverageSchema, SessionAPIVersion)
 			host := fields["host"]
 			require.NotEmpty(t, host, "%s: coverage declaration names no host", name)
 			require.Nil(t, cov[host],
@@ -137,7 +143,7 @@ func TestSessionAdaptersDeclareTheContract(t *testing.T) {
 // place that pins the schema NUMBER, so a future bump is a deliberate edit here
 // rather than a side effect of adding a dimension.
 func TestSessionSchemaCarriesModelAndHostVersion(t *testing.T) {
-	assert.Equal(t, 2, SessionAPIVersion)
+	assert.Equal(t, types.APIVersion("magus.agent-session/v1alpha1"), SessionAPIVersion)
 	assert.Contains(t, SessionDimensions(), "model")
 	assert.Contains(t, SessionDimensions(), "host-version")
 }

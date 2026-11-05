@@ -38,7 +38,7 @@ func TestHarnessToolsFilesAreOneFilePerCapability(t *testing.T) {
 		{Path: "host/magus/tools/runs", Content: "Shell\n"},
 		{Path: "host/magus/tools/reads", Content: "Glob\nRead\n"},
 		{Path: "host/magus/tools/inert", Content: "Todo\n"},
-		{Path: "host/magus/tools/version", Content: "1\n"},
+		{Path: "host/magus/tools/version", Content: "magus.tool-rows/v1alpha1\n"},
 	}, ToolFiles(tools, nil))
 }
 
@@ -177,7 +177,7 @@ func TestReadToolRowsSaysWhyThereAreNone(t *testing.T) {
 	for name, tc := range map[string]struct{ dir, says string }{
 		"no directory named": {"", "no tool rows directory was named"},
 		"never installed":    {"missing", "no tool rows at missing"},
-		"another layout":     {"stale", "are version 0 and this magus reads version 1"},
+		"another layout":     {"stale", "is 0 and this magus reads only magus.tool-rows/v1alpha1"},
 	} {
 		rows := readToolRows(root, tc.dir)
 		require.Error(t, rows.Err, name)

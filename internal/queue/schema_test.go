@@ -85,19 +85,19 @@ func TestVerdictRoundTripsWithItsSchemaStamped(t *testing.T) {
 
 func TestReadChangesRefusesAnotherSchemaAndAChangeWithoutAHead(t *testing.T) {
 	_, err := ReadChanges(strings.NewReader(`{"schema": "mergequeue.changes/v2", "base": "main"}`))
-	require.ErrorContains(t, err, `want "mergequeue.changes/v1"`)
-	_, err = ReadChanges(strings.NewReader(`{"schema": "mergequeue.changes/v1", "base": "main", "changes": [{"id": "1"}]}`))
+	require.ErrorContains(t, err, `want "mergequeue.changes/v1alpha1"`)
+	_, err = ReadChanges(strings.NewReader(`{"schema": "mergequeue.changes/v1alpha1", "base": "main", "changes": [{"id": "1"}]}`))
 	require.ErrorContains(t, err, `changes[0]: #1: head "" is not a full commit id`)
-	got, err := ReadChanges(strings.NewReader(fmt.Sprintf(`{"schema": "mergequeue.changes/v1", "base": "main",
+	got, err := ReadChanges(strings.NewReader(fmt.Sprintf(`{"schema": "mergequeue.changes/v1alpha1", "base": "main",
 		"changes": [{"id": "1", "head": "%s", "base": "main", "method": "squash", "affected": ["a"]},
 		            {"id": "2", "head": "%s", "base": "main", "method": "merge", "affected": null}]}`, head("1"), head("2"))))
 	require.NoError(t, err)
 	assert.True(t, proven(got.Changes[0]))
 	assert.False(t, proven(got.Changes[1]), "null is unknown, not empty")
-	_, err = ReadChanges(strings.NewReader(fmt.Sprintf("{\"schema\": \"mergequeue.changes/v1\", \"base\": \"main\", \"changes\": [{\"id\": \"1\", \"head\": \"%s\", \"base\": \"main\"}]}", head("1"))))
+	_, err = ReadChanges(strings.NewReader(fmt.Sprintf("{\"schema\": \"mergequeue.changes/v1alpha1\", \"base\": \"main\", \"changes\": [{\"id\": \"1\", \"head\": \"%s\", \"base\": \"main\"}]}", head("1"))))
 	require.ErrorContains(t, err, `#1: merge method "", want merge, squash or rebase`, "a provider default the queue cannot see is no method")
 	_, err = ReadChanges(strings.NewReader(`{not json`))
-	require.ErrorContains(t, err, "decode mergequeue.changes/v1")
+	require.ErrorContains(t, err, "decode mergequeue.changes/v1alpha1")
 }
 
 // What a step writes is checked as it is written, where the step can still say so.
@@ -105,11 +105,11 @@ func TestWritersRefuseWhatReadersWould(t *testing.T) {
 	twin := change("2", "b")
 	twin.Head = head("1")
 	err := WriteChanges(&bytes.Buffer{}, types.Changes{Base: "main", Changes: []types.Change{change("1", "a"), twin}})
-	require.EqualError(t, err, "mergequeue.changes/v1: changes[1]: #1 and #2 share head "+head("1"))
-	require.ErrorContains(t, WritePlan(&bytes.Buffer{}, types.Plan{Base: "main", BaseCommit: base}), "mergequeue.plan/v1: depth 0 is below 1")
+	require.EqualError(t, err, "mergequeue.changes/v1alpha1: changes[1]: #1 and #2 share head "+head("1"))
+	require.ErrorContains(t, WritePlan(&bytes.Buffer{}, types.Plan{Base: "main", BaseCommit: base}), "mergequeue.plan/v1alpha1: depth 0 is below 1")
 	noCandidate := green("1")
 	noCandidate.CandidateCommit = ""
-	require.ErrorContains(t, writeVerdict(&bytes.Buffer{}, noCandidate), "mergequeue.verdict/v1: merge verdict on #1 names no base commit, onto or candidate commit")
+	require.ErrorContains(t, writeVerdict(&bytes.Buffer{}, noCandidate), "mergequeue.verdict/v1alpha1: merge verdict on #1 names no base commit, onto or candidate commit")
 }
 
 func TestStackRefsNameEveryChangeAPlannedOneMayCarry(t *testing.T) {

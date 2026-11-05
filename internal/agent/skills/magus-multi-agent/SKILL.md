@@ -367,7 +367,7 @@ an editor magus cannot attribute{{end}}.
    [reference.md](reference.md) shows one.
 
    Before every fork, run `{{cmd "job fork"}} --stdin --dry-run`: it lists every problem with its code and fix, and writes nothing.
-   `{{cmd "job fork"}} --schema` prints every field and the newest `schema_version`.
+   `{{cmd "job fork"}} --schema` prints every field and the newest `api_version`.
 3. Spawn the worker with the description `<parent>/<role> <job>`: two words, a parent id and a role joined by `/`, then the job id.
    - A root job has no parent row, so its first word takes any label
      (`orchestrator/feat api-store`).

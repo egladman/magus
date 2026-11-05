@@ -51,7 +51,7 @@ func (s *StopRuleSuite) stop(event string, fields map[string]any) string {
 // cleared, so a case compares the rest whole.
 func (s *StopRuleSuite) judge(deps Dependencies, input string) types.GuardJudgment {
 	v := Judge(s.testContext(), deps, Request{Host: "claude-code", Input: input})
-	v.APIVersion, v.Lease, v.LeaseFrom, v.Next = 0, "", "", nil
+	v.APIVersion, v.Lease, v.LeaseFrom, v.Next = "", "", "", nil
 	return v
 }
 

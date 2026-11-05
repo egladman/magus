@@ -308,7 +308,7 @@ func TestQueueDescribePrintsTheProvidersCapabilitiesAsOneLine(t *testing.T) {
 	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/acme/widgets.git", nil)
 	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main")
 	require.NoError(t, err)
-	assert.Equal(t, `{"schema":"mergequeue.capabilities/v1","base":"main","stack_merge":"sequential","linear_stacks":false,`+
+	assert.Equal(t, `{"schema":"mergequeue.capabilities/v1alpha1","base":"main","stack_merge":"sequential","linear_stacks":false,`+
 		`"methods":["squash"],"required_approvals":0,"queue_label":"merge: ","committer":{"name":"bot","email":"bot@example.invalid"}}`+"\n", string(out))
 
 	_, err = f.run(t, "", "describe", "--provider", "local.buzz")
@@ -464,7 +464,7 @@ func TestQueueDescribeWithoutAStatusContextReadsNoSetup(t *testing.T) {
 	f := newSetupFixture(t)
 	out, err := f.run(t, "", "describe", "-o", "json", "--status-context", "", "--provider", "local.buzz", "--base", "main")
 	require.NoError(t, err)
-	assert.Equal(t, `{"schema":"mergequeue.capabilities/v1","base":"main","stack_merge":"atomic","linear_stacks":true,"methods":["squash"],"required_approvals":2}`+"\n", string(out))
+	assert.Equal(t, `{"schema":"mergequeue.capabilities/v1alpha1","base":"main","stack_merge":"atomic","linear_stacks":true,"methods":["squash"],"required_approvals":2}`+"\n", string(out))
 }
 
 func TestQueueDescribeRendersYAML(t *testing.T) {
@@ -480,7 +480,7 @@ func TestQueueDescribeRendersATemplate(t *testing.T) {
 	f := newSetupFixture(t)
 	out, err := f.run(t, "", "describe", "-o", "template={{.base}}:{{.schema}}", "--status-context", "", "--provider", "local.buzz", "--base", "main")
 	require.NoError(t, err)
-	assert.Equal(t, "main:mergequeue.capabilities/v1", string(out))
+	assert.Equal(t, "main:mergequeue.capabilities/v1alpha1", string(out))
 }
 
 func TestQueueDescribeBareTemplateListsTheDocumentsFields(t *testing.T) {

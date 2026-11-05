@@ -201,7 +201,7 @@ func TestSpawnAboveParentTierReadsTheHarnessRowsAlias(t *testing.T) {
 // assert on: the text is wording a field-by-field comparison would pin to the letter.
 func spoken(v types.GuardJudgment) (shape types.GuardJudgment, text string) {
 	text = v.Reason + v.Context
-	v.Reason, v.Context, v.APIVersion = "", "", 0
+	v.Reason, v.Context, v.APIVersion = "", "", ""
 	return v, text
 }
 

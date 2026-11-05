@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -438,7 +437,7 @@ func TestNoteForkReadsEveryShape(t *testing.T) {
 		{"cd /r && ./magus job fork a1", []string{"a1"}},
 		{fmt.Sprintf(`./magus job fork --stdin <<'EOF'
 {"api_version": %q, "id": "a2", "read_only": true}
-EOF`, strconv.Itoa(types.JobAPIVersion)), []string{"a2"}},
+EOF`, string(types.JobAPIVersion)), []string{"a2"}},
 		{`client op=put id="a3" parent="root"`, []string{"a3"}},
 		{`./magus buzz -e 'import "magus"; magus\workspace().putJob("a4", opts: {"parent": "root"});'`, []string{"a4"}},
 		{"./magus job wait a1", nil},

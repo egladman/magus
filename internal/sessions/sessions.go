@@ -68,13 +68,13 @@ import (
 
 // APIVersion stamps every record this build writes. Readers IGNORE what
 // they cannot interpret rather than failing, so an old binary reading a
-// newer store shows less instead of refusing. A record of another
-// version is counted in [Fold.Legacy] and never read.
+// newer store shows less instead of refusing. An older record is
+// counted in [Fold.Legacy] and never read.
 const APIVersion types.APIVersion = "magus.sessions/v1alpha1"
 
-// otherVersion reports whether line is a record stamped with anything
-// but APIVersion, an integer from an older magus included.
-func otherVersion(line []byte) bool {
+// olderVersion reports whether line is a record stamped older than
+// APIVersion, an integer from an older magus included.
+func olderVersion(line []byte) bool {
 	var stamp struct {
 		V json.RawMessage `json:"v"`
 	}
@@ -82,7 +82,7 @@ func otherVersion(line []byte) bool {
 		return false
 	}
 	var v types.APIVersion
-	return json.Unmarshal(stamp.V, &v) != nil || v != APIVersion
+	return json.Unmarshal(stamp.V, &v) != nil || v.Compare(APIVersion) < 0
 }
 
 // Kinds of fact an invocation records. A reader must tolerate a kind it does not know:
@@ -464,7 +464,7 @@ func readFile(path string) (records []Record, skipped, legacy int, vanished bool
 		} else if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 {
 			var rec Record
 			switch {
-			case otherVersion(trimmed):
+			case olderVersion(trimmed):
 				legacy++
 			case json.Unmarshal(trimmed, &rec) != nil || rec.Kind == "":
 				skipped++

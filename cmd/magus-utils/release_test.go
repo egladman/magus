@@ -97,7 +97,7 @@ func TestBuildIndexParsesAsTheClientReadsIt(t *testing.T) {
 
 	var idx selfupdate.ReleaseIndex
 	require.NoError(t, json.Unmarshal(data, &idx))
-	require.Equal(t, 1, idx.SchemaVersion)
+	require.Equal(t, selfupdate.IndexAPIVersion, idx.APIVersion)
 
 	rel, err := selfupdate.SelectRelease(&idx, "")
 	require.NoError(t, err)

@@ -38,12 +38,12 @@ type jobRecord struct {
 	Struct  string
 	Title   string
 	File    string
-	Version string // the constant holding this record's schema_version
+	Version string // the constant holding this record's api_version
 }
 
 var jobRecords = []jobRecord{
-	{Struct: "Declaration", Title: "magus job", File: "job.schema.json", Version: "JobSchemaVersion"},
-	{Struct: "JobResult", Title: "magus job result", File: "result.schema.json", Version: "JobResultSchemaVersion"},
+	{Struct: "Declaration", Title: "magus job", File: "job.schema.json", Version: "JobAPIVersion"},
+	{Struct: "JobResult", Title: "magus job result", File: "result.schema.json", Version: "JobResultAPIVersion"},
 }
 
 // jobSources are the files the records and every type they reach are declared in.
@@ -58,7 +58,7 @@ const (
 	schemaDraft = "http://json-schema.org/draft-07/schema#"
 	schemaIDs   = "https://magus.invalid/job/"
 	// versionProperty is the one property whose value is fixed rather than described.
-	versionProperty = "schema_version"
+	versionProperty = "api_version"
 	// leaseIDMarker is the `schema:"leaseid"` tag: this field holds a lease id, so the
 	// pattern and length types.ValidJobID enforces are published with it.
 	leaseIDMarker = "leaseid"
@@ -122,8 +122,8 @@ func runJobSchema(args []string) error {
 //     requiredness the decoder expresses;
 //   - an untagged embedded struct contributes its properties inline, as the decoder reads
 //     it, and a `,unknown` bag contributes none;
-//   - schema_version accepts 1 through the version its package declares, since a
-//     decoder takes any version up to its own;
+//   - api_version is the one version its package declares, the only one
+//     a decoder takes;
 //   - a field typed by a closed set carries that set as an enum, plus "" when the field
 //     is omitempty and an absent value is therefore legal;
 //   - a field marked `schema:"..."` carries the string constraint that marker names (a lease
@@ -172,7 +172,7 @@ func renderJobSchema(rec jobRecord, d *goDecls) ([]byte, error) {
 }
 
 // properties renders one struct's fields, and the names of those a caller must send.
-func properties(structName string, st *ast.StructType, d *goDecls, version int) (node, []string, error) {
+func properties(structName string, st *ast.StructType, d *goDecls, version string) (node, []string, error) {
 	var props node
 	required := []string{}
 	for _, f := range st.Fields.List {
@@ -223,17 +223,19 @@ func properties(structName string, st *ast.StructType, d *goDecls, version int) 
 	return props, required, nil
 }
 
-func property(f *ast.Field, structName, field, name string, omitempty bool, d *goDecls, version int) (node, error) {
+func property(f *ast.Field, structName, field, name string, omitempty bool, d *goDecls, version string) (node, error) {
 	tag := ""
 	if f.Tag != nil {
 		tag = f.Tag.Value
 	}
-	prop, err := typeMembers(f.Type, omitempty, godecl.Tag(tag, "schema"), d, version)
-	if err != nil {
-		return nil, fmt.Errorf("%s.%s: %w", structName, field, err)
-	}
+	var prop node
 	if name == versionProperty {
-		prop = append(prop, member{"minimum", 1}, member{"maximum", version})
+		prop = node{{"type", "string"}, {"const", version}}
+	} else {
+		var err error
+		if prop, err = typeMembers(f.Type, omitempty, godecl.Tag(tag, "schema"), d, version); err != nil {
+			return nil, fmt.Errorf("%s.%s: %w", structName, field, err)
+		}
 	}
 	if doc := d.docs[fmt.Sprintf("%s.%s", structName, field)]; doc != "" {
 		prop = append(prop, member{"description", doc})
@@ -243,7 +245,7 @@ func property(f *ast.Field, structName, field, name string, omitempty bool, d *g
 
 // typeMembers is the JSON shape of one Go type. A schema marker constrains the string it
 // sits on, or the items of a []string, since the array itself has no charset.
-func typeMembers(expr ast.Expr, omitempty bool, marker string, d *goDecls, version int) (node, error) {
+func typeMembers(expr ast.Expr, omitempty bool, marker string, d *goDecls, version string) (node, error) {
 	switch t := expr.(type) {
 	case *ast.StarExpr:
 		return typeMembers(t.X, omitempty, marker, d, version)
@@ -302,7 +304,7 @@ func withoutMarker(shape node, marker string) (node, error) {
 	return shape, nil
 }
 
-func namedType(name string, omitempty bool, marker string, d *goDecls, version int) (node, error) {
+func namedType(name string, omitempty bool, marker string, d *goDecls, version string) (node, error) {
 	if set, ok := closedSets[name]; ok {
 		values := set
 		if omitempty {
@@ -355,14 +357,14 @@ func leaseCheckChoice() []node {
 type goDecls struct {
 	structs map[string]*ast.StructType
 	docs    map[string]string
-	consts  map[string]int
+	consts  map[string]string
 }
 
 func loadGoDecls(paths ...string) (*goDecls, error) {
 	d := &goDecls{
 		structs: map[string]*ast.StructType{},
 		docs:    map[string]string{},
-		consts:  map[string]int{},
+		consts:  map[string]string{},
 	}
 	for _, path := range paths {
 		file, err := godecl.Parse(path)
@@ -407,10 +409,10 @@ func (d *goDecls) read(gd *ast.GenDecl, spec ast.Spec) {
 			return
 		}
 		lit, ok := s.Values[0].(*ast.BasicLit)
-		if !ok || lit.Kind != token.INT {
+		if !ok || lit.Kind != token.STRING {
 			return
 		}
-		if v, err := strconv.Atoi(lit.Value); err == nil {
+		if v, err := strconv.Unquote(lit.Value); err == nil {
 			d.consts[s.Names[0].Name] = v
 		}
 	}

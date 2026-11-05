@@ -51,7 +51,7 @@ func TestOutputImportRefusesNewerSchema(t *testing.T) {
 	_, err := readRecords(outputRecordLine(t, func(r map[string]any) { r["api_version"] = "magus.output-record/v1alpha2" }))
 	require.ErrorIs(t, err, types.StoreRecordsNewer)
 	assert.ErrorContains(t, err, "line 1: ")
-	assert.ErrorContains(t, err, "output record schema_version 2 is newer than this magus reads (1)")
+	assert.ErrorContains(t, err, "output record is magus.output-record/v1alpha2, newer than the magus.output-record/v1alpha1 this magus reads")
 
 	_, err = readRecords(outputRecordLine(t, func(r map[string]any) { delete(r, "api_version") }))
 	assert.ErrorContains(t, err, "line 1: not an output record: it has no api_version")

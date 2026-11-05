@@ -477,7 +477,7 @@ func gitRepositoryWithIgnoredExport(t *testing.T) (ignored, tracked string) {
 	out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput()
 	require.NoError(t, err, string(out))
 
-	newer := fmt.Sprintf("{\"api_version\": %q}\n", types.KnowledgeAPIVersion+1)
+	newer := "{\"api_version\": \"magus.knowledge/v1alpha2\"}\n"
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "gen"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("/gen/*.json\n"), 0o644))
 	ignored = filepath.Join(dir, "gen", "knowledge-graph.json")
@@ -500,7 +500,7 @@ func TestFsWriteFileOverwritesAnIgnoredNewerStamp(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "regenerated", string(got))
 
-	newer := fmt.Sprintf("{\"api_version\": %q}\n", types.KnowledgeAPIVersion+1)
+	newer := "{\"api_version\": \"magus.knowledge/v1alpha2\"}\n"
 	require.NoError(t, os.WriteFile(ignored, []byte(newer), 0o644))
 	require.NoError(t, FsWriteFileAtomic(ctx, ignored, "regenerated atomically"),
 		"the atomic spelling shares the exemption")

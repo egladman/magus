@@ -704,7 +704,7 @@ func TestLoadHarnessSpellOnlyWhenWired(t *testing.T) {
 			return HarnessDescriptor{}, "", false, nil
 		}
 		return HarnessDescriptor{
-			APIVersion: harnessSchemaVersion,
+			APIVersion: HarnessAPIVersion,
 			ID:            "test-host",
 			Display:       HarnessDisplay{Name: "Spell"},
 			Config:        types.HarnessConfig{Path: "spell/hooks.json"},
@@ -860,7 +860,7 @@ func TestPlanHarnessRefusesAPromptThePersonOverrode(t *testing.T) {
 // TestHarnessDescriptorRejectsAMalformedPrompt pins that a prompt names exactly one of a file
 // body or a JSON key, inside the workspace.
 func TestHarnessDescriptorRejectsAMalformedPrompt(t *testing.T) {
-	base := HarnessDescriptor{APIVersion: harnessSchemaVersion, ID: "p", Display: HarnessDisplay{Name: "P"}, Skills: types.HarnessSkills{Form: "both"}}
+	base := HarnessDescriptor{APIVersion: HarnessAPIVersion, ID: "p", Display: HarnessDisplay{Name: "P"}, Skills: types.HarnessSkills{Form: "both"}}
 	for name, prompt := range map[string]types.Prompt{
 		"no path":      {Content: "x"},
 		"escapes":      {Path: "../x", Content: "x"},
@@ -1218,7 +1218,7 @@ func (s *harnessPluginSuite) TestInstallLineFollowsTheDescriptor() {
 // TestHarnessDescriptorRejectsAMalformedSetting pins that a setting names a key and a value
 // inside a workspace file.
 func TestHarnessDescriptorRejectsAMalformedSetting(t *testing.T) {
-	base := HarnessDescriptor{APIVersion: harnessSchemaVersion, ID: "s", Display: HarnessDisplay{Name: "S"}, Skills: types.HarnessSkills{Form: "both"}}
+	base := HarnessDescriptor{APIVersion: HarnessAPIVersion, ID: "s", Display: HarnessDisplay{Name: "S"}, Skills: types.HarnessSkills{Form: "both"}}
 	for name, setting := range map[string]types.Setting{
 		"no path":   {Key: []string{"k"}, Value: true},
 		"escapes":   {Path: "../x", Key: []string{"k"}, Value: true},
@@ -1632,7 +1632,7 @@ func TestHarnessDescriptorWithoutAgentsPlansAndVerifiesNone(t *testing.T) {
 }
 
 func TestHarnessDescriptorRejectsAMalformedAgentFile(t *testing.T) {
-	base := HarnessDescriptor{APIVersion: harnessSchemaVersion, ID: "p", Display: HarnessDisplay{Name: "P"}, Skills: types.HarnessSkills{Form: "both"}}
+	base := HarnessDescriptor{APIVersion: HarnessAPIVersion, ID: "p", Display: HarnessDisplay{Name: "P"}, Skills: types.HarnessSkills{Form: "both"}}
 	for name, file := range map[string]types.AgentFile{
 		"no path":      {Content: "x"},
 		"absolute":     {Path: "/etc/agents/a.md", Content: "x"},

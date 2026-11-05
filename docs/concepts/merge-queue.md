@@ -360,15 +360,15 @@ How the provider's own credential is scoped is a separate question, answered und
 
 ## Commands
 
-Every subcommand writes JSONL events (`mergequeue.event/v1`) on stdout. Hook output and
+Every subcommand writes JSONL events (`mergequeue.event/v1alpha1`) on stdout. Hook output and
 errors go to stderr. A usage mistake exits 2; a queue that ran and failed exits 1.
 
 | Subcommand | Reads                                          | Writes                                                                 | Rights                       |
 | ---------- | ---------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------- |
-| `describe` | the provider                                   | setup steps, or a `mergequeue.capabilities/v1` document with `-o json` | read                         |
-| `ls`       | the provider                                   | a `mergequeue.changes/v1` document                                     | read                         |
-| `plan`     | changes (stdin or `--changes`)                 | a `mergequeue.plan/v1` file                                            | read                         |
-| `validate` | the plan (stdin, with `--stdin`)               | the plan and one `mergequeue.verdict/v1` per change                    | read; runs the changes' code |
+| `describe` | the provider                                   | setup steps, or a `mergequeue.capabilities/v1alpha1` document with `-o json` | read                         |
+| `ls`       | the provider                                   | a `mergequeue.changes/v1alpha1` document                                     | read                         |
+| `plan`     | changes (stdin or `--changes`)                 | a `mergequeue.plan/v1alpha1` file                                            | read                         |
+| `validate` | the plan (stdin, with `--stdin`)               | the plan and one `mergequeue.verdict/v1alpha1` per change                    | read; runs the changes' code |
 | `apply`    | a source: the plan, then verdicts as they come | merges through the provider                                            | write; runs no change's code |
 
 ```sh
@@ -457,11 +457,11 @@ not a regular file inside the artifact, or a verdict that does not read, holds t
 change and nothing else. A provider without `list_artifacts` cannot be followed through
 a run, and `apply` says so before reading anything.
 
-## Input: `mergequeue.changes/v1`
+## Input: `mergequeue.changes/v1alpha1`
 
 ```json
 {
-  "schema": "mergequeue.changes/v1",
+  "schema": "mergequeue.changes/v1alpha1",
   "base": "main",
   "remote_url": "https://github.com/acme/acme",
   "changes": [
@@ -782,7 +782,7 @@ absent, and it answers `{"tier", "why"}`. A failed or unknown answer is `code`.
 
 `magus queue reviews --provider github --base main --change <n>` classifies every
 approval standing on one pull request the same way, a code owner's included, and prints
-whether each carries; `-o json` prints a `mergequeue.reviews/v1` document. With
+whether each carries; `-o json` prints a `mergequeue.reviews/v1alpha1` document. With
 `--dismiss` it dismisses each one that does not carry, telling the reviewer which paths
 changed. It reads the head again first and dismisses nothing when it moved, since the
 run on the new head decides, and it skips a review already dismissed. So the reviews a
@@ -798,7 +798,7 @@ which apply proves before merging. An approved commit a force-push left unreacha
 cannot be compared, so its approval does not carry: "the approved commit `<id>` is no
 longer reachable".
 
-## Verdicts: `mergequeue.verdict/v1`
+## Verdicts: `mergequeue.verdict/v1alpha1`
 
 `validate --verdicts <dir>` first writes the plan there as `plan.json`, then one
 directory per decided change, named by its id, holding `verdict.json`. Each appears by
@@ -809,7 +809,7 @@ directory that already holds one is an error.
 
 ```json
 {
-  "schema": "mergequeue.verdict/v1",
+  "schema": "mergequeue.verdict/v1alpha1",
   "base_commit": "9f2e...",
   "change": {"id": "483", "head": "c0de...", "base": "main", "method": "squash", "fork": false, "title": "feat: lexer"},
   "decision": "merge",
@@ -990,7 +990,7 @@ GITHUB_TOKEN=$(gh auth token) magus queue describe --provider github --base main
 
 Without `--app` it stops with an error carrying the app's registration link and the
 command to run next, since a setup without the app is not one the queue can run on.
-`-o json` prints the same as the `setup` of a `mergequeue.capabilities/v1` document: the
+`-o json` prints the same as the `setup` of a `mergequeue.capabilities/v1alpha1` document: the
 status the queue posts and who its credential posts it as, every check the base requires
 and the integration each is pinned to, the repository settings the queue needs, the app,
 and the steps.

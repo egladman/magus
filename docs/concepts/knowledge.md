@@ -382,7 +382,7 @@ with `CODEOWNERS:<line>` provenance. Only declared ownership is taken; blame-der
 ownership is insight's job, not a graph edge, so "who owns the blast radius of this
 change" is one path query.
 
-Both node-link JSON and GraphML carry a `schema_version`; external consumers and
+Both node-link JSON and GraphML carry a `api_version`; external consumers and
 agent skills should check it, since a bump is a changelog event.
 
 ## File layout

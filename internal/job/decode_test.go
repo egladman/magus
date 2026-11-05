@@ -84,20 +84,20 @@ func TestDecodeNamesTheVersionsItAccepts(t *testing.T) {
 
 			_, err := DecodeResult(strings.NewReader(raw))
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "accepts versions 1 through 2")
+			assert.Contains(t, err.Error(), "magus.job-result/v1alpha1")
 			assert.NotContains(t, err.Error(), "next_field", "the version is the reason, not the field")
 		})
 	}
 }
 
-// An older sender's record is a subset of the current shape, so it is read, not refused.
-func TestDecodeAcceptsAnOlderVersion(t *testing.T) {
+// A record at the version this magus reads is read.
+func TestDecodeReadsItsOwnVersion(t *testing.T) {
 	t.Parallel()
 
 	rep, err := DecodeResult(strings.NewReader(
 		`{"api_version":"magus.job-result/v1alpha1","changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[]}`))
 	require.NoError(t, err)
-	assert.Equal(t, 1, rep.Version)
+	assert.Equal(t, types.JobResultAPIVersion, rep.Version)
 
 	row, err := decodeDeclaration(strings.NewReader(`{"api_version":"magus.job/v1alpha1","id":"adj/store"}`))
 	require.NoError(t, err)
@@ -110,7 +110,7 @@ func TestDecodeRefusesAnUnmetRequirement(t *testing.T) {
 	t.Parallel()
 
 	_, err := decodeDeclaration(declaration(`"requires":["never-implemented"]`, `"id":"adj/store"`))
-	assert.Equal(t, fmt.Sprintf(`job: the job requires "never-implemented", which this magus (schema %d) lacks, update magus`,
+	assert.Equal(t, fmt.Sprintf(`job: the job requires "never-implemented", which this magus (%s) lacks, update magus`,
 		types.JobAPIVersion), err.Error())
 
 	row, err := decodeDeclaration(declaration(`"requires":["claim-declarations"]`, `"id":"adj/store"`))

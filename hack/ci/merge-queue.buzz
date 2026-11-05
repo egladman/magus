@@ -823,7 +823,7 @@ fun planDoc(depth: int, partitions: [[str]]) > str {
         }
         groups.append(group);
     }
-    return encode({"schema": "mergequeue.plan/v1", "depth": depth, "partitions": groups});
+    return encode({"schema": "mergequeue.plan/v1alpha1", "depth": depth, "partitions": groups});
 }
 
 // listed is the key list of one listing page holding docs.

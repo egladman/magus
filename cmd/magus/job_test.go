@@ -893,7 +893,7 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 	// for the wired id directly, since another test in this package may have cleared the
 	// spell-backed one.
 	fixture.WireHarness(t, agent.HarnessDescriptor{
-		APIVersion: 2,
+		APIVersion: agent.HarnessAPIVersion,
 		ID:            "limit-host",
 		Display:       agent.HarnessDisplay{Name: "Limit host"},
 		Skills:        types.HarnessSkills{Form: types.SkillFormShort},
@@ -937,7 +937,7 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 // the wired harness publishes, and the host's own mapping of opus would give principal.
 func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 	fixture.WireHarness(t, agent.HarnessDescriptor{
-		APIVersion: 2,
+		APIVersion: agent.HarnessAPIVersion,
 		ID:            "limit-host",
 		Display:       agent.HarnessDisplay{Name: "Limit host"},
 		Skills:        types.HarnessSkills{Form: types.SkillFormShort},
@@ -963,7 +963,7 @@ func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 // since its rows would otherwise read as work.
 func TestEndWorktreesRestoresAWiredHarnessToolRows(t *testing.T) {
 	harness := agent.HarnessDescriptor{
-		APIVersion: 2,
+		APIVersion: agent.HarnessAPIVersion,
 		ID:            "limit-host",
 		Display:       agent.HarnessDisplay{Name: "Limit host"},
 		Skills:        types.HarnessSkills{Form: types.SkillFormShort},
@@ -1145,7 +1145,7 @@ func (s *jobExitShapeSuite) refusal(stdin string) string {
 }
 
 func (s *jobExitShapeSuite) TestAnEmptyResultOnAWritingRowIsRefused() {
-	got := s.refusal(`{"api_version":"magus.job/v1alpha2"}`)
+	got := s.refusal(`{"api_version":"magus.job-result/v1alpha1"}`)
 	s.Contains(got, "held writes, and its result names no changed path")
 	s.Contains(got, `"changed_paths"`)
 	s.Contains(got, `"owed": "no seat"`)

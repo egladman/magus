@@ -516,7 +516,7 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 		`"thread":"main","thread_from":"inferred","shadow":{"off":"allow","light":"allow","standard":"allow","strict":"allow"}}`, string(body))
 	body, err = trail.ReadBlob(dir, responseRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"api_version":"magus.guard/v1alpha1","decision":"pass"}`, string(body))
+	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","decision":"pass"}`, string(body))
 }
 
 // TestHookCmd_AttributionIsOptional holds the fail-open contract: attribution is best-effort
@@ -574,7 +574,7 @@ func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
 	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","tool":"file.read","path":"AGENTS.md","thread":"unknown","thread_from":"inferred"}`, string(body))
 	body, err = trail.ReadBlob(dir, got.ResponseRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"api_version":"magus.guard/v1alpha1","decision":""}`, string(body))
+	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","decision":""}`, string(body))
 }
 
 // TestHookCmd_ObserveOutranksPath holds the precedence the wrapper depends on: a host whose
@@ -715,7 +715,7 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 
 	body, err := trail.ReadBlob(dir, requestRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","host":"claude-code","session":"abc123","event":"PreToolUse",`+
+	assert.JSONEq(t, `{"api_version":"magus.agent-spawn/v1alpha1","host":"claude-code","session":"abc123","event":"PreToolUse",`+
 		`"tool":"Task","child":"Explore","lease":"notes-store-6b","declared_model":"opus",`+
 		`"context":"lease: notes-store-6b\nDo not run git stash anywhere.","thread":"main","thread_from":"inferred"}`, string(body))
 }

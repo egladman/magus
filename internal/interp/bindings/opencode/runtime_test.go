@@ -63,7 +63,7 @@ func (s *runtimeSuite) TestMalformedAdviceBlocksToolAndPermission() {
 	s.nativeVerdict(`{"api_version":"magus.guard/v1alpha1","decision":"advise"}`, dispatchResult{Block: true, Reason: `[magus guard] magus guard returned the decision "advise", which this plugin does not know, so it refuses the call rather than allow it. Update the plugin from the magus docs.`}, "deny")
 }
 func (s *runtimeSuite) TestFutureSchemaBlocksToolAndPreservesPrompt() {
-	s.nativeVerdict(`{"api_version":"magus.guard/v1alpha2","decision":"pass"}`, dispatchResult{Block: true, Reason: "[magus guard] magus guard could not judge this call: magus answered verdict schema 2, not 1; update this plugin from the magus docs; refused.\nInstall magus (https://eli.gladman.cc/magus/guides/setup/), build it from source (https://eli.gladman.cc/magus/guides/setup/build-from-source/), or set __MAGUS_BIN to its path."}, "")
+	s.nativeVerdict(`{"api_version":"magus.guard/v1alpha2","decision":"pass"}`, dispatchResult{Block: true, Reason: "[magus guard] magus guard could not judge this call: magus answered verdict magus.guard/v1alpha2, not magus.guard/v1alpha1; update this plugin from the magus docs; refused.\nInstall magus (https://eli.gladman.cc/magus/guides/setup/), build it from source (https://eli.gladman.cc/magus/guides/setup/build-from-source/), or set __MAGUS_BIN to its path."}, "")
 }
 func (s *runtimeSuite) TestUnknownDecisionBlocksToolAndPermission() {
 	s.nativeVerdict(`{"api_version":"magus.guard/v1alpha1","decision":"future"}`, dispatchResult{Block: true, Reason: `[magus guard] magus guard returned the decision "future", which this plugin does not know, so it refuses the call rather than allow it. Update the plugin from the magus docs.`}, "deny")

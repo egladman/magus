@@ -1148,7 +1148,7 @@ func ShardKeys(manifestJSON []byte) (map[string]string, error) {
 		return nil, fmt.Errorf("knowledge: decode store manifest: %w", err)
 	}
 	if m.APIVersion != types.KnowledgeAPIVersion {
-		return nil, fmt.Errorf("knowledge: store manifest is schema %d, this binary reads %d", m.APIVersion, types.KnowledgeAPIVersion)
+		return nil, fmt.Errorf("knowledge: store manifest is %q, this binary reads %s", m.APIVersion, types.KnowledgeAPIVersion)
 	}
 	out := make(map[string]string, len(m.Shards))
 	for name, meta := range m.Shards {

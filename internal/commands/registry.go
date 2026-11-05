@@ -1813,15 +1813,15 @@ var queueCommand = cmdline.Command{
 	Long: `A speculative, partitioned merge queue. A queue run has three steps, each with
 the rights it needs and no more.
 
-plan reads the changes carrying merge intent (a mergequeue.changes/v1 document on
+plan reads the changes carrying merge intent (a mergequeue.changes/v1alpha1 document on
 stdin or --changes, as ls prints it), checks each one's approval at its head,
 finds which changes are stacked on which, drops what conflicts with the base on
 its own, and splits the rest into partitions whose affected sets are disjoint.
-It writes a mergequeue.plan/v1 document.
+It writes a mergequeue.plan/v1alpha1 document.
 
 validate runs the changes' code and needs read access only. Per partition it
 builds candidates base+A, base+A+B and so on onto each other, regenerates
-generated files on each, runs --gate on them, and writes a mergequeue.verdict/v1
+generated files on each, runs --gate on them, and writes a mergequeue.verdict/v1alpha1
 per change to --verdicts the moment that change is decided.
 
 apply holds the write credential and runs no change's code. It rebuilds each
@@ -1832,7 +1832,7 @@ validation run as the provider names it (github: <owner>/<name>/runs/<id>).
 
 The checkout is the one at the global --root (default: the current directory),
 and every relative path resolves against it. The provider is a built-in name
-(github) or a Buzz script. Every verb prints JSONL events (mergequeue.event/v1)
+(github) or a Buzz script. Every verb prints JSONL events (mergequeue.event/v1alpha1)
 on stdout; ls and describe print their document instead. The global --dry-run makes
 apply report what would merge and call nothing on the provider.`,
 	Usage: "magus queue <describe|ls|plan|validate|gate|apply|reviews> [flags]",
@@ -1840,7 +1840,7 @@ apply report what would merge and call nothing on the provider.`,
 		{
 			Name:   "describe",
 			Effect: cmdline.EffectRead,
-			Short:  "Ask the provider what it supports on a base and what wiring the queue up still takes; prints the steps to run, or a mergequeue.capabilities/v1 document with -o json",
+			Short:  "Ask the provider what it supports on a base and what wiring the queue up still takes; prints the steps to run, or a mergequeue.capabilities/v1alpha1 document with -o json",
 			Long: `Ask the provider what it supports on a base, its merge methods and how a change
 is queued, and read how the queue is wired there: the status the base requires
 and which integration it is pinned to, the repository settings the queue depends
@@ -1854,7 +1854,7 @@ needs more, describe says what, where the provider shows it, and the command to
 run next. Every read goes to the provider over the network, with the credential
 the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 
--o json prints the mergequeue.capabilities/v1 document with the setup inside it.`,
+-o json prints the mergequeue.capabilities/v1alpha1 document with the setup inside it.`,
 			Usage: "magus queue describe --provider <provider> --base <branch> [flags]",
 			Flags: append([]cmdline.Flag{
 				{Name: "provider", Kind: cmdline.String, Doc: "`provider`: a built-in name (github) or a .buzz file"},
@@ -1866,7 +1866,7 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 		{
 			Name:   "ls",
 			Effect: cmdline.EffectRead,
-			Short:  "Ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1 document",
+			Short:  "Ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1alpha1 document",
 			Usage:  "magus queue ls --provider <provider> --base <branch> [flags]",
 			Flags: append([]cmdline.Flag{
 				{Name: "provider", Kind: cmdline.String, Doc: "`provider`: a built-in name (github) or a .buzz file"},
@@ -1880,9 +1880,9 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 			Short:              "Check approval, find stacks, drop what conflicts with the base, and partition by affected set",
 			Usage:              "magus queue plan --provider <provider> --out <file> [flags]",
 			Flags: append(append([]cmdline.Flag{
-				{Name: "changes", Kind: cmdline.String, Default: "-", Doc: "The mergequeue.changes/v1 `document`, or `-` for stdin"},
+				{Name: "changes", Kind: cmdline.String, Default: "-", Doc: "The mergequeue.changes/v1alpha1 `document`, or `-` for stdin"},
 				{Name: "provider", Kind: cmdline.String, Doc: "`provider` approval at each head is checked with"},
-				{Name: "out", Kind: cmdline.String, Effect: cmdline.EffectLocalWrite, Doc: "`file` the mergequeue.plan/v1 document is written to"},
+				{Name: "out", Kind: cmdline.String, Effect: cmdline.EffectLocalWrite, Doc: "`file` the mergequeue.plan/v1alpha1 document is written to"},
 				{Name: "depth", Kind: cmdline.Int, Default: 3, Doc: "Candidates of one partition that validate at once"},
 				{Name: "parallel", Kind: cmdline.Int, Doc: "Changes admitted at once; 0 is one per CPU"},
 			}, queueFacts...), queueCheckout...),
@@ -1894,7 +1894,7 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 			Short:              "Build and gate a candidate per change, writing each verdict the moment it is decided (read access only)",
 			Usage:              "magus queue validate --stdin --gate <command> --verdicts <dir> [flags] < plan.json",
 			Flags: append(append([]cmdline.Flag{
-				{Name: "stdin", Kind: cmdline.Bool, Default: false, Doc: "Read the mergequeue.plan/v1 document from stdin; required"},
+				{Name: "stdin", Kind: cmdline.Bool, Default: false, Doc: "Read the mergequeue.plan/v1alpha1 document from stdin; required"},
 				{Name: "gate", Kind: cmdline.String, Doc: "`command` and its arguments, run with no shell in each candidate's checkout with the change's affected projects added ahead of its first `--`; exit 0 is green"},
 				{Name: "regenerate", Kind: cmdline.String, Doc: "`command` and its arguments, run with no shell in a candidate with the change's affected projects added ahead of its first `--` and the generated files to rewrite listed on stdin"},
 				{Name: "verdicts", Kind: cmdline.String, Doc: "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>"},
@@ -1972,7 +1972,7 @@ credential (github: MERGEQUEUE_TOKEN with pull-requests write); without --dismis
 only reads. Nothing runs the change's code: the classifier reads the base's own
 workspace and the compared commits' contents.
 
--o json prints a mergequeue.reviews/v1 document.`,
+-o json prints a mergequeue.reviews/v1alpha1 document.`,
 			Usage: "magus queue reviews --provider <provider> --base <branch> --change <id> [flags]",
 			Flags: append(append([]cmdline.Flag{
 				{Name: "provider", Kind: cmdline.String, Doc: "`provider`: a built-in name (github) or a .buzz file"},

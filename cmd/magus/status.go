@@ -594,7 +594,7 @@ func printBrokerRows(w io.Writer, st daemon.Broker, policy types.BrokerPolicy, n
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(tw, "broker\t%d\t%s\n", st.PID, strings.Join(nonEmpty(
 		upText(st.StartTime, now),
-		fmt.Sprintf("proto %d", st.Protocol),
+		fmt.Sprintf("proto %s", st.Protocol),
 		st.Version, st.Executable, st.Socket), "  "))
 	c := st.Capacity
 	fmt.Fprintf(tw, "capacity\t-\t%s  broker: %s\n", capacityText(c), policy.Resolved())

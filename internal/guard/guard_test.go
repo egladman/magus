@@ -809,22 +809,22 @@ printf '{"headRefOid":"%%s","baseRefName":"main"}' %s
 	t.Run("version-bump-once", func(t *testing.T) {
 		testkit.Isolate(t)
 		const catalog = "internal/agent/catalog.go"
-		repo := testkit.NewRepository(t, map[string]string{catalog: "package agent\n\nconst skillStampFormat = 1\n"})
+		repo := testkit.NewRepository(t, map[string]string{catalog: "package agent\n\nconst skillStampFormat types.APIVersion = \"magus.skill-stamp/v1alpha1\"\n"})
 		repo.Git("update-ref", "refs/remotes/origin/main", "HEAD")
 		repo.Git("switch", "-q", "-c", "bump-skills")
-		repo.Commit("bump the skill stamp format", map[string]string{catalog: "package agent\n\nconst skillStampFormat = 2\n"})
+		repo.Commit("bump the skill stamp format", map[string]string{catalog: "package agent\n\nconst skillStampFormat types.APIVersion = \"magus.skill-stamp/v1alpha2\"\n"})
 		ws := repo.Root()
 		ctx := WithLocation(t.Context(), t.TempDir(), ws, ws)
 		edit := func(newText string) types.GuardJudgment {
 			return Judge(ctx, Dependencies{WriteRule: m.WriteRule()}, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
 				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Edit",
-				"tool_input": map[string]any{"file_path": filepath.Join(ws, catalog), "old_string": "const skillStampFormat = 2", "new_string": newText},
+				"tool_input": map[string]any{"file_path": filepath.Join(ws, catalog), "old_string": "const skillStampFormat types.APIVersion = \"magus.skill-stamp/v1alpha2\"", "new_string": newText},
 			})})
 		}
-		v := edit("const skillStampFormat = 3")
+		v := edit("const skillStampFormat types.APIVersion = \"magus.skill-stamp/v1alpha3\"")
 		assert.Equal(t, verdictWithRule(decisionDeny, workspaceShellPrefix+"version-bump-once"), unworded(v), v.Reason)
-		assert.Contains(t, v.Reason, "this branch already bumped skill-stamp-format from 1 to 2")
-		assert.NotEqual(t, decisionDeny, edit("const skillStampFormat = 1").Decision, "back to the base value is allowed")
+		assert.Contains(t, v.Reason, `this branch already bumped skill-stamp-format from "magus.skill-stamp/v1alpha1" to "magus.skill-stamp/v1alpha2"`)
+		assert.NotEqual(t, decisionDeny, edit("const skillStampFormat types.APIVersion = \"magus.skill-stamp/v1alpha1\"").Decision, "back to the base value is allowed")
 	})
 
 	source, err := os.ReadFile(filepath.Join(root, "hack", "policy", "guard.buzz"))

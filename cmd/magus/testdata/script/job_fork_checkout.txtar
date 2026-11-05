@@ -79,7 +79,7 @@ Shell
 -- shop/host/tools/models --
 -- shop/host/tools/tiers --
 -- shop/host/tools/version --
-1
+magus.tool-rows/v1alpha1
 -- shop/spells/rows-host/spell.buzz --
 import "magus/spell";
 

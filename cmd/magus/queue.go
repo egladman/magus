@@ -103,8 +103,8 @@ func queueUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: magus queue <subcommand> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
-	fmt.Fprintln(w, "  describe  ask the provider what it supports and what wiring the queue up still takes; prints the steps, or a mergequeue.capabilities/v1 document with -o json")
-	fmt.Fprintln(w, "  ls        ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1 document")
+	fmt.Fprintln(w, "  describe  ask the provider what it supports and what wiring the queue up still takes; prints the steps, or a mergequeue.capabilities/v1alpha1 document with -o json")
+	fmt.Fprintln(w, "  ls        ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1alpha1 document")
 	fmt.Fprintln(w, "  plan      check approval, find stacks, drop what conflicts with the base, partition by affected set")
 	fmt.Fprintln(w, "  validate  build and gate a candidate per change, writing each verdict as it is decided (read access only)")
 	fmt.Fprintln(w, "  gate      run a command in a checkout of HEAD boxed and sandboxed as validate runs --gate")
@@ -112,7 +112,7 @@ func queueUsage(w io.Writer) {
 	fmt.Fprintln(w, "  reviews   say whether each approval on a change carries over the change since it; --dismiss dismisses the rest")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "The checkout is the one at the global --root, and relative paths resolve against it.")
-	fmt.Fprintln(w, "Every subcommand prints JSONL events (mergequeue.event/v1) on stdout.")
+	fmt.Fprintln(w, "Every subcommand prints JSONL events (mergequeue.event/v1alpha1) on stdout.")
 	fmt.Fprintln(w, "Run `magus queue <subcommand> -h` for its own flags.")
 }
 
