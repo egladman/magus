@@ -66,11 +66,11 @@ test "a seated run says what it waits on and for how long, then runs it" {
     final said = mut [<str>];
     final ran = run(
         fun (text: str) > void { said.append(text); },
-        fun (dir: str, bin: str, args: [str]) > Ran !> any {
+        seated: fun (dir: str, bin: str, args: [str]) > Ran !> any {
             calls.append(args.join(" "));
             return Ran{};
         },
-        fun () > Ran !> any => Ran{},
+        holders: fun () > Ran !> any => Ran{},
         dir: "/c",
         bin: "magus",
         args: ["run", "install", "docs"],
@@ -83,8 +83,8 @@ test "a seated run says what it waits on and for how long, then runs it" {
 test "a seated run that exits 75 hands back the run's own code" {
     final ran = run(
         fun (text: str) > void {},
-        fun (dir: str, bin: str, args: [str]) > Ran !> any => Ran{ code = 75, stderr = "MGS3009" },
-        fun () > Ran !> any => Ran{},
+        seated: fun (dir: str, bin: str, args: [str]) > Ran !> any => Ran{ code = 75, stderr = "MGS3009" },
+        holders: fun () > Ran !> any => Ran{},
         dir: "/c",
         bin: "magus",
         args: ["run", "install", "docs"],
@@ -96,8 +96,8 @@ test "a seated run past the bound fails loudly, naming who holds the budget" {
     final asked = mut [<str>];
     final ran = run(
         fun (text: str) > void {},
-        fun (dir: str, bin: str, args: [str]) > Ran !> any => Ran{ code = 124, stderr = "the pipe was stopped at the bound." },
-        fun () > Ran !> any {
+        seated: fun (dir: str, bin: str, args: [str]) > Ran !> any => Ran{ code = 124, stderr = "the pipe was stopped at the bound." },
+        holders: fun () > Ran !> any {
             asked.append("status");
             return Ran{ stdout = "held by lint (15.9 GiB) in /other\n" };
         },
