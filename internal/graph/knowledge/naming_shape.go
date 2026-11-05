@@ -78,7 +78,7 @@ var shapeReaders = map[string]shapeReader{
 	"typescript": colonShapes{},
 }
 
-func pickShapeReader(language string) shapeReader { //nolint:ireturn // the implementation is chosen at runtime among several
+func pickShapeReader(language string) shapeReader { //nolint:ireturn // shapeReader: buzzShapes, goShapes, colonShapes or descriptorShapes
 	if r, ok := shapeReaders[language]; ok {
 		return r
 	}
