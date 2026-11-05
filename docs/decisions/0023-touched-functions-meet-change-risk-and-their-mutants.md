@@ -42,8 +42,9 @@ function the change does not edit is never charged.
 ### Score
 
 `change risk = c^2 (1 - cov)^3 + c`, with c the function's complexity. The formula
-is the CRAP score of Savoia and Evans (2007); magus calls it change risk. It does not
-measure whether a test asserts anything: a line a test runs counts as covered.
+is the CRAP score of Savoia and Evans (2007); magus calls it change risk.
+It does not measure whether a test asserts anything: a line a test runs counts as
+covered.
 
 - **Complexity is decisions plus one** (`Complexity = decisions + 1`). A spell declares
   its decision tokens as data (`Syntax.Decisions`); the engine counts them inside the
