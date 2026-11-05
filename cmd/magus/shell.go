@@ -131,6 +131,8 @@ func withEnvRefusal(ctx context.Context, err error) context.Context {
 // host's hook stream.
 func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.Writer, args []string) error {
 	// Started here rather than in Judge, so loading the rules spends the same budget.
+	ctx, cancelInherited, deadlineErr := takeDelegation(ctx)
+	defer cancelInherited()
 	ctx, cancel := guard.WithHookDeadline(ctx)
 	defer cancel()
 	fset := flag.NewFlagSet("shell", flag.ContinueOnError) //nolint:hostvocab // TestEveryLeafRendersEveryFormatOrRefusesThem requires the leaf name shell
@@ -172,11 +174,16 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// failed guard as no verdict and fails open, so an environment magus knows is wrong
 	// would disarm every rule for the session. --observe and --message carry no verdict to
 	// deny.
-	if refusal, _ := ctx.Value(envRefusalKey{}).(error); refusal != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
+	envRefusal, _ := ctx.Value(envRefusalKey{}).(error)
+	if refusal := cmp.Or(envRefusal, deadlineErr); refusal != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
+		remedy := "Fix the environment the agent host runs in."
+		if envRefusal == nil {
+			remedy = "Retry it; the magus that handed it on sets a fresh deadline."
+		}
 		verdict := types.GuardJudgment{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      "deny",
-			Reason:        fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared. Fix the environment the agent host runs in.", refusal.Error()),
+			Reason:        fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared. %s", refusal.Error(), remedy),
 		}
 		if err := writeGuardVerdict(out, opts, verdict); err != nil {
 			return err
@@ -210,13 +217,13 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	var judge, judgeRoot string
 	if sf.Transport != "" {
 		commit, _ := buildinfo.Commit()
-		handled, declined, err := delegateToCheckout(ctx, commit, input, out, errOut)
+		handled, declined, err := delegateToCheckout(ctx, commit, input, opts, out, errOut)
 		if handled {
 			return err
 		}
 		judge, judgeRoot = declined.note, unloadableCheckout(ctx, declined.root)
 	}
-	if by := os.Getenv(delegatedEnv); by != "" {
+	if by := delegatedBy(ctx); by != "" {
 		self, _ := runningBinaryPath()
 		judge = fmt.Sprintf("Judged by %s, this checkout's own ./magus, which %s handed the call to.", self, by)
 	}
@@ -872,6 +879,28 @@ func readGuardInput(in io.Reader) (string, error) {
 	return strings.TrimSpace(string(b)), nil
 }
 
+// takeDelegation marks ctx with the binary that handed this call on, if one
+// did, and bounds it to the deadline that binary passed. Both variables leave
+// this process's environment, so nothing it spawns, a daemon included, reads
+// itself delegated.
+func takeDelegation(ctx context.Context) (context.Context, context.CancelFunc, error) {
+	by, deadline := os.Getenv(delegatedEnv), os.Getenv(guard.HookDeadlineEnv)
+	_ = os.Unsetenv(delegatedEnv)
+	_ = os.Unsetenv(guard.HookDeadlineEnv)
+	if by == "" {
+		return ctx, func() {}, nil
+	}
+	return guard.WithInheritedHookDeadline(context.WithValue(ctx, delegatedByKey{}, by), deadline)
+}
+
+type delegatedByKey struct{}
+
+// delegatedBy is the binary that handed this call on, "" when none did.
+func delegatedBy(ctx context.Context) string {
+	by, _ := ctx.Value(delegatedByKey{}).(string)
+	return by
+}
+
 // delegatedEnv marks a guard call one magus handed to the checkout's own ./magus, so that
 // one judges instead of handing it on again.
 const delegatedEnv = "__MAGUS_DELEGATED_BY"
@@ -960,8 +989,8 @@ func checkoutBinary(dir, running string) string {
 //
 // A build behind HEAD still judges when newer than runningCommit.
 // An older judge cannot read a newer row, and denied every call.
-func delegateToCheckout(ctx context.Context, runningCommit, input string, out, errOut io.Writer) (handled bool, declined checkoutDecline, err error) {
-	if os.Getenv(delegatedEnv) != "" {
+func delegateToCheckout(ctx context.Context, runningCommit, input string, opts output.Options, out, errOut io.Writer) (handled bool, declined checkoutDecline, err error) {
+	if delegatedBy(ctx) != "" {
 		return false, checkoutDecline{}, nil
 	}
 	running, err := runningBinaryPath()
@@ -989,23 +1018,27 @@ func delegateToCheckout(ctx context.Context, runningCommit, input string, out, e
 		}
 		return false, decline(behind), nil
 	}
-	cmd := &exec.Cmd{
-		Path:   own,
-		Args:   slices.Concat([]string{own}, os.Args[1:]),
-		Env:    env,
-		Stdin:  strings.NewReader(input),
-		Stdout: out,
-		Stderr: errOut,
-	}
-	err = cmd.Start()
-	if err == nil {
-		stop := context.AfterFunc(ctx, func() { _ = cmd.Process.Kill() })
-		err = cmd.Wait()
-		stop()
+	end, err := guard.RunDelegate(ctx, own, os.Args[1:], env, strings.NewReader(input), out, errOut)
+	switch end {
+	case guard.DelegateExited:
+	case guard.DelegateKilledUnanswered:
+		verdict := types.GuardJudgment{
+			SchemaVersion: agent.GuardSchemaVersion,
+			Decision:      "deny",
+			Reason:        fmt.Sprintf("%s was killed unanswered at the hook's deadline, so this call is blocked. Retry it.", own),
+		}
+		if werr := writeGuardVerdict(out, opts, verdict); werr != nil {
+			return true, checkoutDecline{}, werr
+		}
+		return true, checkoutDecline{}, verdictExit(errOut, opts, verdict)
+	case guard.DelegateKilledAnswering:
+		// A second verdict after its bytes would garble the host's reply.
+		return true, checkoutDecline{}, exit.Reported(guardDenyExitCode)
 	}
 	var exited *exec.ExitError
 	switch {
-	case err == nil:
+	case err == nil, errors.Is(err, exec.ErrWaitDelay):
+		// ErrWaitDelay: it exited 0, and a grandchild held its output open.
 		return true, checkoutDecline{}, nil
 	case errors.As(err, &exited):
 		return true, checkoutDecline{}, exit.Reported(exited.ExitCode())

@@ -468,6 +468,9 @@ Never message a worker to ask how it is going, only to CHANGE what it was handed
 
 The root never builds. The integrator is a role, never a check: spawned `<parent>/integrate
 <job>` unisolated in the landing checkout, it cherry-picks, builds, regenerates and commits.
+Its merge (`hack/dev/merge-job-branches.buzz --apply`) then recomposes the landing
+branch's unpushed commits into one per merged job, each output beside its source, with no
+merge commit left and the merged tree byte-identical. A commit a remote ref already holds stays.
 
 As jobs finish: compare the store to the ACTUAL diff since each checkpoint; run
 `{{cmd "job wait"}} <job>` before reading each result; reopen evidence with

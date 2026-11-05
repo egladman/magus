@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -61,6 +64,192 @@ func TestWithHookDeadlineKeepsAnEarlierOne(t *testing.T) {
 	got, ok = ctx.Deadline()
 	require.True(t, ok)
 	assert.WithinDuration(t, time.Now().Add(hookBudget), got, time.Second)
+}
+
+// InheritedHookDeadlineSuite pins the deadline a delegate inherits.
+type InheritedHookDeadlineSuite struct {
+	suite.Suite
+}
+
+func TestInheritedHookDeadlineSuite(t *testing.T) {
+	suite.Run(t, new(InheritedHookDeadlineSuite))
+}
+
+func (s *InheritedHookDeadlineSuite) TestAnEmptyValueChangesNothing() {
+	ctx, cancel, err := WithInheritedHookDeadline(s.T().Context(), "")
+	defer cancel()
+	s.Require().NoError(err)
+	_, bounded := ctx.Deadline()
+	s.False(bounded)
+}
+
+func (s *InheritedHookDeadlineSuite) TestAMalformedValueIsAnError() {
+	_, cancel, err := WithInheritedHookDeadline(s.T().Context(), "soon")
+	defer cancel()
+	s.ErrorContains(err, HookDeadlineEnv)
+}
+
+func (s *InheritedHookDeadlineSuite) TestANonPositiveValueIsAnError() {
+	_, cancel, err := WithInheritedHookDeadline(s.T().Context(), "0")
+	defer cancel()
+	s.ErrorContains(err, "unix milliseconds")
+}
+
+func (s *InheritedHookDeadlineSuite) TestAPastDeadlineIsAnError() {
+	past := strconv.FormatInt(time.Now().Add(-time.Second).UnixMilli(), 10)
+	_, cancel, err := WithInheritedHookDeadline(s.T().Context(), past)
+	defer cancel()
+	s.ErrorContains(err, "had no budget left")
+}
+
+func (s *InheritedHookDeadlineSuite) TestADeadlineBeyondTheBudgetIsAnError() {
+	far := strconv.FormatInt(time.Now().Add(hookBudget+time.Minute).UnixMilli(), 10)
+	_, cancel, err := WithInheritedHookDeadline(s.T().Context(), far)
+	defer cancel()
+	s.ErrorContains(err, "past the hook's 7s budget")
+}
+
+func (s *InheritedHookDeadlineSuite) TestADeadlineWithinTheBudgetBoundsTheContext() {
+	want := time.Now().Add(hookBudget / 2)
+	ctx, cancel, err := WithInheritedHookDeadline(s.T().Context(), strconv.FormatInt(want.UnixMilli(), 10))
+	defer cancel()
+	s.Require().NoError(err)
+	got, _ := ctx.Deadline()
+	s.Equal(want.UnixMilli(), got.UnixMilli())
+}
+
+func (s *InheritedHookDeadlineSuite) TestAnInheritedDeadlineEarlierThanTheBudgetStands() {
+	parent := strconv.FormatInt(time.Now().Add(time.Second).UnixMilli(), 10)
+	inherited, cancelInherited, err := WithInheritedHookDeadline(s.T().Context(), parent)
+	defer cancelInherited()
+	s.Require().NoError(err)
+	ctx, cancel := WithHookDeadline(inherited)
+	defer cancel()
+	got, _ := ctx.Deadline()
+	s.Less(time.Until(got), 1100*time.Millisecond)
+}
+
+func (s *InheritedHookDeadlineSuite) TestTheJudgmentLapsesWithTheInheritedDeadline() {
+	parent := strconv.FormatInt(time.Now().Add(100*time.Millisecond).UnixMilli(), 10)
+	ctx, cancel, err := WithInheritedHookDeadline(s.T().Context(), parent)
+	defer cancel()
+	s.Require().NoError(err)
+	release := make(chan struct{})
+	defer close(release)
+	req := Request{Input: "cat >> $TARGET <<'EOF'\nline\nEOF", Host: "claude-code", Session: "inherited"}
+	start := time.Now()
+	v := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) types.GuardJudgment {
+		<-release
+		return types.GuardJudgment{Decision: decisionPass}
+	})
+	s.Equal(string(advisoryUnfinished), v.Rule)
+	s.Less(time.Since(start), hookBudget/2)
+}
+
+// DelegateHookDeadlineSuite runs a shell script as a hook call's delegate.
+type DelegateHookDeadlineSuite struct {
+	suite.Suite
+	out strings.Builder
+}
+
+func TestDelegateHookDeadlineSuite(t *testing.T) {
+	suite.Run(t, new(DelegateHookDeadlineSuite))
+}
+
+func (s *DelegateHookDeadlineSuite) SetupTest() {
+	s.out.Reset()
+}
+
+// run runs body as a /bin/sh delegate under ctx.
+func (s *DelegateHookDeadlineSuite) run(ctx context.Context, body string) (DelegateEnd, error) {
+	path := filepath.Join(s.T().TempDir(), "delegate")
+	s.Require().NoError(os.WriteFile(path, fmt.Appendf(nil, "#!/bin/sh\n%s\n", body), 0o755))
+	return RunDelegate(ctx, path, nil, os.Environ(), strings.NewReader(""), &s.out, io.Discard)
+}
+
+// done is a context already cancelled, so the grace runs from the start.
+func (s *DelegateHookDeadlineSuite) done() context.Context {
+	ctx, cancel := context.WithCancel(s.T().Context())
+	cancel()
+	return ctx
+}
+
+// runCancelledOnStart runs body, cancelling ctx once the script has started.
+// A fresh script's first exec can stall past the grace on macOS.
+func (s *DelegateHookDeadlineSuite) runCancelledOnStart(body string) (DelegateEnd, error) {
+	started := filepath.Join(s.T().TempDir(), "started")
+	ctx, cancel := context.WithCancel(s.T().Context())
+	defer cancel()
+	go func() {
+		for ctx.Err() == nil {
+			if _, err := os.Stat(started); err == nil {
+				cancel()
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}()
+	return s.run(ctx, fmt.Sprintf("touch '%s'\n%s", started, body))
+}
+
+func (s *DelegateHookDeadlineSuite) TestTheDeadlineGoesWithTheDelegate() {
+	ctx, cancel := context.WithTimeout(s.T().Context(), time.Minute)
+	defer cancel()
+	want, _ := ctx.Deadline()
+	end, err := s.run(ctx, fmt.Sprintf(`printf '%%s' "$%s"`, HookDeadlineEnv))
+	s.Require().NoError(err)
+	s.Equal(DelegateExited, end)
+	s.Equal(strconv.FormatInt(want.UnixMilli(), 10), s.out.String())
+}
+
+func (s *DelegateHookDeadlineSuite) TestAContextWithoutADeadlineHandsNoneOn() {
+	end, err := s.run(s.T().Context(), fmt.Sprintf(`printf '%%s' "${%s-unset}"`, HookDeadlineEnv))
+	s.Require().NoError(err)
+	s.Equal(DelegateExited, end)
+	s.Equal("unset", s.out.String())
+}
+
+func (s *DelegateHookDeadlineSuite) TestAFailedExitIsAnExitAndItsStatus() {
+	end, err := s.run(s.T().Context(), "exit 3")
+	s.Equal(DelegateExited, end)
+	var exited *exec.ExitError
+	s.Require().ErrorAs(err, &exited)
+	s.Equal(3, exited.ExitCode())
+}
+
+func (s *DelegateHookDeadlineSuite) TestAnAnswerWithinTheGraceIsAnExit() {
+	end, err := s.runCancelledOnStart("sleep 0.1; printf ok")
+	s.Require().NoError(err)
+	s.Equal(DelegateExited, end)
+	s.Equal("ok", s.out.String())
+}
+
+func (s *DelegateHookDeadlineSuite) TestADelegateKilledBeforeWritingIsUnanswered() {
+	start := time.Now()
+	end, _ := s.run(s.done(), "exec sleep 60")
+	s.Equal(DelegateKilledUnanswered, end)
+	s.Less(time.Since(start), 30*time.Second, "well short of the 60s sleep")
+}
+
+func (s *DelegateHookDeadlineSuite) TestADelegateKilledAfterWritingIsAnswering() {
+	end, _ := s.runCancelledOnStart("printf partial; exec sleep 60")
+	s.Equal(DelegateKilledAnswering, end)
+	s.Equal("partial", s.out.String())
+}
+
+func (s *DelegateHookDeadlineSuite) TestAGrandchildHoldingTheOutputDoesNotHoldTheKill() {
+	start := time.Now()
+	end, _ := s.run(s.done(), "sleep 60 & exec sleep 60")
+	s.Equal(DelegateKilledUnanswered, end)
+	s.Less(time.Since(start), 30*time.Second, "well short of the grandchild's 60s")
+}
+
+func (s *DelegateHookDeadlineSuite) TestAGrandchildHoldingTheOutputDoesNotHoldAnExit() {
+	start := time.Now()
+	end, err := s.run(s.T().Context(), "sleep 60 & printf ok")
+	s.ErrorIs(err, exec.ErrWaitDelay)
+	s.Equal(DelegateExited, end)
+	s.Equal("ok", s.out.String())
+	s.Less(time.Since(start), 30*time.Second, "well short of the grandchild's 60s")
 }
 
 // A load that failed after the deadline passed lapsed; one that answered did not, however
