@@ -525,7 +525,7 @@ func (c *Cache) buildTiers() error {
 // annotations returns the CI annotator, falling back to Nop for a Cache
 // built as a struct literal rather than through Open. Tests do that, and a
 // nil interface would panic on the first Active call.
-func (c *Cache) annotations() annotate.Annotator { //nolint:ireturn // the implementation is chosen at runtime among several
+func (c *Cache) annotations() annotate.Annotator { //nolint:ireturn // annotate.Annotator: annotate.Nop or the provider Detect found
 	if c.annotator == nil {
 		return annotate.Nop{}
 	}

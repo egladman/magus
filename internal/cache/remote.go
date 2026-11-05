@@ -85,7 +85,7 @@ func RegisterRemoteBackendOpener(fn func(ctx context.Context, selector string) (
 
 // OpenRemoteBackend opens the registered remote backend for selector, or errors when no
 // opener has been registered (no backend was linked into this binary).
-func OpenRemoteBackend(ctx context.Context, selector string) (types.CacheBackend, error) { //nolint:ireturn // the implementation is chosen at runtime among several
+func OpenRemoteBackend(ctx context.Context, selector string) (types.CacheBackend, error) { //nolint:ireturn // the registered opener builds it, and this package cannot name that backend without linking the Buzz VM
 	if remoteBackendOpener == nil {
 		return nil, errors.New("cache: no remote backend registered in this binary, the spell-backed opener is wired by internal/interp/bindings (blank-imported by cmd/magus), so a program that uses this package as a library without that import never registers one")
 	}
