@@ -41,7 +41,7 @@ export object Release {
 }
 
 // problems returns every way text departs from the fragment format, empty when it holds
-// exactly one well-formed entry under one known group. Line numbers count from 1.
+// one or more well-formed entries under one known group. Line numbers count from 1.
 export fun problems(text: str) > [str] {
     final body = trimEnd(text.replace("\r\n", with: "\n"));
     final found = lintBody(body);
@@ -53,7 +53,7 @@ export fun problems(text: str) > [str] {
     foreach (line in body.split("\n")) {
         if (line.startsWith("### ")) {
             if (group != "") {
-                return ["holds more than one section heading; write one fragment per entry"];
+                return ["holds more than one section heading; write one fragment per group"];
             }
             group = line.sub(4).trim();
         } else if (line.startsWith("- ")) {
@@ -63,8 +63,8 @@ export fun problems(text: str) > [str] {
     if (group == "") {
         return ["opens with no `### <group>` heading, one of " + GROUPS.join(", ")];
     }
-    if (entries != 1) {
-        return ["holds {entries} entries; write one fragment per entry"];
+    if (entries == 0) {
+        return ["holds 0 entries; write at least one"];
     }
     return [<str>];
 }
@@ -461,7 +461,7 @@ test "every valid fixture parses and every invalid one names its problem" {
             std\assert(got.indexOf(want) != null, message: "{name}: want \"{want}\", got \"{got}\"");
         }
     }
-    std\assert(valid >= 3 and invalid >= 10, message: "the fixture read: {valid} valid, {invalid} invalid");
+    std\assert(valid >= 4 and invalid >= 12, message: "the fixture read: {valid} valid, {invalid} invalid");
 }
 
 test "parse keeps the group and the entry as written" {

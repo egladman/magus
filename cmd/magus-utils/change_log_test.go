@@ -46,8 +46,8 @@ func TestParseFragment(t *testing.T) {
 			})
 		}
 	}
-	require.GreaterOrEqual(t, valid, 3)
-	require.GreaterOrEqual(t, invalid, 10)
+	require.GreaterOrEqual(t, valid, 4)
+	require.GreaterOrEqual(t, invalid, 12)
 
 	got, err := parseFragment("f.md", []byte(files["valid/removed-breaking.md"]))
 	require.NoError(t, err)
@@ -88,4 +88,30 @@ func TestRenderUnreleased(t *testing.T) {
 	assert.Equal(t, want, renderUnreleased(frags))
 	assert.Empty(t, lintUnreleased(want))
 	assert.Equal(t, "", renderUnreleased(nil))
+}
+
+func TestParseFragmentKeepsEveryEntryInOrder(t *testing.T) {
+	got, err := parseFragment("f.md", []byte("### Changed\n\n- **One.** It\n  wraps.\n\n- **Two.**\n"))
+	require.NoError(t, err)
+	assert.Equal(t, "Changed", got.section)
+	assert.Equal(t, "- **One.** It\n  wraps.\n- **Two.**", got.entry)
+}
+
+func TestParseFragmentRefusesTwoHeadings(t *testing.T) {
+	_, err := parseFragment("f.md", []byte("### Added\n\n- **One.**\n\n### Fixed\n\n- **Two.**\n"))
+	require.ErrorContains(t, err, "more than one section heading, write one fragment per group")
+}
+
+func TestParseFragmentChecksEachEntry(t *testing.T) {
+	_, err := parseFragment("f.md", []byte("### Added\n\n- **One.**\n- plain.\n"))
+	require.ErrorContains(t, err, "line 4: an entry opens with a **bold headline**")
+}
+
+func TestReadAndRenderKeepFileNameThenEntryOrder(t *testing.T) {
+	dir := t.TempDir()
+	writeFragment(t, dir, "b.md", "### Added\n\n- **B1.**\n- **B2.**\n")
+	writeFragment(t, dir, "a.md", "### Added\n\n- **A1.**\n- **A2.**\n")
+	frags, err := readFragments(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "### Added\n\n- **A1.**\n- **A2.**\n- **B1.**\n- **B2.**", renderUnreleased(frags))
 }

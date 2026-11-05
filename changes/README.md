@@ -5,7 +5,7 @@ There is no changelog file to edit, so concurrent pull requests add different
 files instead of colliding on one section.
 
 A fragment is the entry exactly as it reads under `[Unreleased]`: one Keep a
-Changelog group heading, a blank line, and one entry.
+Changelog group heading, a blank line, and one or more entries.
 
 ```markdown
 ### Removed
@@ -16,12 +16,13 @@ Changelog group heading, a blank line, and one entry.
 
 - The group is one of `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`,
   `Security`.
-- The entry opens with a bold headline, ends with a period, continues on lines
+- Each entry opens with a bold headline, ends with a period, continues on lines
   indented two spaces, and stays within 60 words.
 - A breaking change starts its headline with `Breaking:` (or `Breaking for SDK
   callers:`).
-- Name the file after the branch, `unreleased/<branch>.md`. Two entries are two
-  files. Within a group, entries render in file-name order.
+- Name the file after the branch, `unreleased/<branch>.md`. Entries under two
+  groups are two files. Within a group, entries render in file-name order, then in
+  the order written.
 
 A malformed fragment or an unknown group is an error:
 `magus run pr-changelog . -- "<title>"` checks a branch's fragments, and

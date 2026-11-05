@@ -42,13 +42,11 @@ line 1: "Fix" is not a Keep a Changelog section
 ### Added
 -- invalid/heading-alone.want --
 holds 0 entries
--- invalid/two-entries.md --
+-- valid/two-entries.md --
 ### Added
 
 - **One.**
 - **Two.**
--- invalid/two-entries.want --
-holds 2 entries
 -- invalid/two-sections.md --
 ### Added
 
@@ -106,3 +104,29 @@ opens with "Breaking:" or "Breaking for SDK callers:"
 - **breaking: a thing.** Fix the use.
 -- invalid/breaking-lowercase.want --
 opens with "Breaking:" or "Breaking for SDK callers:"
+-- valid/three-entries-wrapped.md --
+### Changed
+
+- **One.** It wraps
+  onto a second line.
+
+- **Two.** Blank lines between entries are fine.
+- **Three.**
+-- invalid/second-entry-no-headline.md --
+### Added
+
+- **One.**
+- plain.
+-- invalid/second-entry-no-headline.want --
+line 4: an entry opens with a **bold headline**
+-- invalid/second-entry-sixty-one-words.md --
+### Changed
+
+- **Short.**
+- **Sixty-one words.** one two three four five six seven eight nine ten eleven twelve
+  thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty one two
+  three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen
+  sixteen seventeen eighteen nineteen twenty one two three four five six seven eight
+  nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen end.
+-- invalid/second-entry-sixty-one-words.want --
+line 4: entry is 61 words; the cap is 60
