@@ -69,7 +69,7 @@ func (s *DiskFullSuite) printedFailure(logText string, floor int64) string {
 	s.Require().NoError(os.WriteFile(p, []byte(logText), 0o600))
 	var out bytes.Buffer
 	h := NewPrettyHandler(&out, slog.LevelInfo)
-	h.printFailure(false, failureReport{label: "workspace", project: ".", target: "build", cause: "go exited 1", logPath: p})
+	h.printFailure(s.T().Context(), false, failureReport{label: "workspace", project: ".", target: "build", cause: "go exited 1", logPath: p})
 	return out.String()
 }
 
