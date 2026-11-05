@@ -329,26 +329,26 @@ func TestChainCurveSumsOneCallOverTime(t *testing.T) {
 		"lint has no curve, so the call sums its peaks and carries no single run's curve")
 }
 
-// TestChainCurveComposesANestedCall: a member that is itself one ctx.needs call, as
-// lint is with its lint_rules call, carries its members' composed curve, so the call
-// above it still folds by curve; a member with no curve anywhere below falls back.
+// TestChainCurveComposesANestedCall: a member that is itself one ctx.needs
+// call, like lint, carries its members' composed curve. The call above it
+// still folds by curve. A member with no curve anywhere below falls back.
 func TestChainCurveComposesANestedCall(t *testing.T) {
 	t.Parallel()
 	p := &Project{
 		Path: ".",
 		TargetChains: map[string][]ChainStep{
 			"ci":   Needs("test", "lint"),
-			"lint": Needs("lint_rules", "vet"),
+			"lint": Needs("conventions", "vet"),
 		},
 		TargetPolicies: map[string]Target{"vet": {MemoryMB: 1000}},
 	}
 	profiles := map[string]MemoryProfile{
-		"test":       halves(500, 7000, 100_000),
-		"lint_rules": halves(3000, 100, 100_000),
-		"vet":        halves(1000, 200, 100_000),
+		"test":        halves(500, 7000, 100_000),
+		"conventions": halves(3000, 100, 100_000),
+		"vet":         halves(1000, 200, 100_000),
 	}
 	got := SizedChainMemory(p, "lint", nil, curveSizer(profiles), nil)
-	assert.Equal(t, ChainMemory{MB: 4000, DeclaredBy: "lint_rules", Sizing: MemorySizing{Samples: 3}, Profile: halves(4000, 300, 100_000)}, got)
+	assert.Equal(t, ChainMemory{MB: 4000, DeclaredBy: "conventions", Sizing: MemorySizing{Samples: 3}, Profile: halves(4000, 300, 100_000)}, got)
 
 	assert.Equal(t, ChainMemory{MB: 7300, DeclaredBy: "test", Sizing: MemorySizing{Samples: 3}, Profile: halves(4500, 7300, 100_000)},
 		SizedChainMemory(p, "ci", nil, curveSizer(profiles), nil), "test's late peak meets lint's late 300, not the 11000 summed peaks")

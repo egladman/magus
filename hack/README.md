@@ -14,7 +14,7 @@ magus buzz hack/dev/<script>.buzz -- --help
 | `bench/` | measurements of magus itself | a person comparing two builds |
 | `ci/` | workflow steps, and the scripts that act on pull requests and the repository | CI, the merge queue, a maintainer |
 | `magusfile/` | modules with no `main` | magusfiles and CI, through targets |
-| `lint/` | this repository's file linter: `run.buzz` and one file per rule | the root `lint-rules` target |
+| `lint/` | this repository's file linter: `run.buzz` and one file per rule | the root `conventions` target |
 | `policy/` | this repository's guard rules | `magus guard`, through the root magusfile |
 | `docs/` | the committed screenshots' capture | a person refreshing them |
 | `retro/` | retros built from the audit records and the graph: `trace.buzz`, `tests.buzz`, `denials.buzz` | a person or an agent starting a retro, judging tests or reviewing denial text |
