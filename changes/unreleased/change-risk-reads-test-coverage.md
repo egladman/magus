@@ -10,8 +10,9 @@
 - **Breaking: change risk judges against the base only through main's CI cache.** The
   base profile is the cache entry main's CI wrote for the declaring target at the
   merge-base commit, keyed by that commit's own inputs; magus never runs the base. No
-  entry is an error that names the base commit and the command. Until main's CI has run
-  `magus run test .` and `magus run buzz-test .` at a commit this magus can load, the
-  `touched-functions-keep-change-risk-under-10` rule fails on that error. This change
-  breaks it on its own base, whose spells still declare the old fields; it goes green
-  once it merges and main's CI publishes both profiles for the next merge base.
+  entry is an error that names the base commit and the command. Main's CI keyed this
+  change's own base before the contract changed, so the
+  `touched-functions-keep-change-risk-under-10` rule lands unwired: `hack/lint/run.buzz`
+  does not list it and `lint_rules` does not warm it. The follow-up is that one line and
+  the warm, once main's CI has run `magus run test .` and `magus run buzz-test .` at a
+  merge base that includes this change.

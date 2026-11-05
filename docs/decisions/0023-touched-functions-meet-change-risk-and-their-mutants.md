@@ -120,7 +120,8 @@ number; it reports scores and mutants, and a lint rule decides.
 | runner refs resolve inside a token for `MAGUS` and `MAGUS_` names           | done                                                    |
 | `Magus.ChangeRisk` and the change-risk check in `magus diff`                | done                                                    |
 | Buzz methods `Change.risk` and `Workspace.risk`                             | done                                                    |
-| lint rule `touched-functions-keep-change-risk-under-10`                     | done (`hack/lint/run.buzz` names it, under lint-rules)  |
+| lint rule `touched-functions-keep-change-risk-under-10`                     | done (tested; not yet listed in `hack/lint/run.buzz`)   |
+| wiring the rule into `hack/lint/run.buzz` and warming it in `lint_rules`    | planned (once main's CI publishes the base profile)     |
 | head profile freshened through the cache; base profile kept per commit      | done                                                    |
 | each touched function judged against itself at base                         | done                                                    |
 | covered lines kept, in place of the 70% Go and 62% Buzz totals              | done                                                    |
@@ -283,3 +284,14 @@ measure's 7 minute budget are removed, since nothing runs coverage on change ris
 behalf. Eli kept the rule that a function is credited only by its own package's tests,
 which the Go and Buzz profiles hold as written (see [Score](#score)). See [Coverage is
 read, not run](#coverage-is-read-not-run).
+
+### 2026-11-05: the rule lands unwired
+
+The base profile comes only from main's CI cache, and main's CI keyed the base of this
+change before it changed the spell coverage contract, so the rule could only fail here.
+Decided by the parent session, logged for Eli: the rule, `Change.risk` and their tests
+land, and `hack/lint/run.buzz` does not list the rule yet. The follow-up is one line in
+`hack/lint/run.buzz` and the warm in `lint_rules`, once main's CI has published the base
+profile for a merge base that includes this change. The touched magusfile targets `test`
+and `buzz_test` moved their logic into `hack/magusfile/coverage.buzz` and
+`hack/magusfile/buzz-coverage.buzz`, which buzz-test measures, so they score under 3.
