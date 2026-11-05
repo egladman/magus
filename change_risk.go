@@ -49,6 +49,16 @@ type riskScorer struct {
 type keptReport struct {
 	project string
 	files   []coverage.File
+	// writer is the command that wrote the profile, "" when unknown.
+	writer string
+}
+
+// source names the profile for a reason: its command, or its project.
+func (r keptReport) source() string {
+	if r.writer != "" {
+		return fmt.Sprintf("the profile `%s` writes", r.writer)
+	}
+	return "the coverage profile of " + r.project
 }
 
 // scoreAll scores each function, or reports it as a gap. A gap is never a
@@ -137,11 +147,12 @@ func (s riskScorer) coverage(fn touchedFunction) (covered, coverable int, reason
 func (r keptReport) span(fn touchedFunction) (covered, coverable int, reason string) {
 	i := slices.IndexFunc(r.files, func(f coverage.File) bool { return f.Path == fn.Path })
 	if i < 0 {
-		return 0, 0, fmt.Sprintf("the coverage report for %s instruments no line of %s", r.project, fn.Path)
+		return 0, 0, fmt.Sprintf("%s instruments no line of %s: no test it runs loads that file, so %s is unmeasured",
+			r.source(), fn.Path, fn.Path)
 	}
 	covered, coverable = r.files[i].Span(fn.Line, fn.EndLine)
 	if coverable == 0 {
-		return 0, 0, fmt.Sprintf("the coverage report for %s instruments no line in %s lines %d-%d", r.project, fn.Path, fn.Line, fn.EndLine)
+		return 0, 0, fmt.Sprintf("%s instruments no line in %s lines %d-%d", r.source(), fn.Path, fn.Line, fn.EndLine)
 	}
 	return covered, coverable, ""
 }
@@ -176,15 +187,16 @@ func functionGap(fn touchedFunction, complexity int, reason string) types.Functi
 // again as the merge base held it, and the changed files' covered lines are
 // compared. base "" scores every function in the workspace, against no base.
 // Coverage is the profile each owning spell declares. At head the target
-// writing it is freshened through the cache; at base the profile is read as
-// kept for the merge base, or that target runs once in a copy of it.
+// writing it is freshened through the cache. At base it is the profile main's
+// CI cached for that target at the merge base. None is an error naming the
+// base and the command; magus never runs the base itself.
 func (m *Magus) ChangeRisk(ctx context.Context, base string) (types.ChangeRisk, error) {
 	start := time.Now()
 	set, err := m.touchedSince(ctx, base)
 	if err != nil {
 		return types.ChangeRisk{}, stopped(ctx, start, "finding the touched functions", err)
 	}
-	meter, err := m.newRiskMeter(ctx, set, base, start)
+	meter, err := m.newRiskMeter(ctx, set, base)
 	if err != nil {
 		return types.ChangeRisk{}, stopped(ctx, start, "resolving the base", err)
 	}
@@ -249,7 +261,7 @@ type riskMeter struct {
 	changed []string
 }
 
-func (m *Magus) newRiskMeter(ctx context.Context, set touchedSet, base string, start time.Time) (riskMeter, error) {
+func (m *Magus) newRiskMeter(ctx context.Context, set touchedSet, base string) (riskMeter, error) {
 	claimant, owner := m.spellClaiming(), m.projectOwner()
 	r := riskMeter{
 		scorer: m.riskScorer(set.defs),
@@ -269,7 +281,7 @@ func (m *Magus) newRiskMeter(ctx context.Context, set touchedSet, base string, s
 	if err != nil {
 		return riskMeter{}, fmt.Errorf("change risk: %w", err)
 	}
-	profiles, err := m.newBaseProfiles(ctx, commit, start)
+	profiles, err := m.newBaseProfiles(ctx, commit)
 	if err != nil {
 		return riskMeter{}, fmt.Errorf("change risk: %w", err)
 	}
@@ -520,7 +532,7 @@ func (p sourcePlan) lookup(reads map[string]profileRead) reportLookup {
 		if got.reason != "" {
 			return keptReport{}, got.reason
 		}
-		return keptReport{project: c.project, files: got.files}, ""
+		return keptReport{project: c.project, files: got.files, writer: c.command()}, ""
 	}
 }
 

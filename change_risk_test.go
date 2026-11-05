@@ -171,14 +171,21 @@ func (s *ChangeRiskSuite) TestNoKeptReportIsAGap() {
 func (s *ChangeRiskSuite) TestAFileTheReportLeavesOutIsAGap() {
 	s.report.files = nil
 
-	s.Equal(s.gap(3, "the coverage report for lib instruments no line of lib/a.go"),
+	s.Equal(s.gap(3, "the coverage profile of lib instruments no line of lib/a.go: no test it runs loads that file, so lib/a.go is unmeasured"),
+		s.scorer().scoreAll([]touchedFunction{scoredFunction()}))
+}
+
+func (s *ChangeRiskSuite) TestAFileTheReportLeavesOutNamesTheCommandThatWroteIt() {
+	s.report.files, s.report.writer = nil, "magus run buzz-test ."
+
+	s.Equal(s.gap(3, "the profile `magus run buzz-test .` writes instruments no line of lib/a.go: no test it runs loads that file, so lib/a.go is unmeasured"),
 		s.scorer().scoreAll([]touchedFunction{scoredFunction()}))
 }
 
 func (s *ChangeRiskSuite) TestASpanWithNoInstrumentedLineIsAGap() {
 	s.report.files[0].Blocks = []coverage.Block{{StartLine: 20, EndLine: 21, Units: 1, Hits: 1}}
 
-	s.Equal(s.gap(3, "the coverage report for lib instruments no line in lib/a.go lines 3-8"),
+	s.Equal(s.gap(3, "the coverage profile of lib instruments no line in lib/a.go lines 3-8"),
 		s.scorer().scoreAll([]touchedFunction{scoredFunction()}))
 }
 
@@ -553,11 +560,16 @@ type ProfileFreshenSuite struct {
 
 func TestProfileFreshenSuite(t *testing.T) { suite.Run(t, new(ProfileFreshenSuite)) }
 
+// freshenTree is the workspace the suite opens, and a base export copies.
+var freshenTree = map[string]string{
+	"magusfile.buzz": riskMagusfile,
+	"go.mod":         "module example.com/m\n\ngo 1.25\n",
+	"a.go":           riskBody,
+}
+
 func (s *ProfileFreshenSuite) SetupTest() {
 	w := testkit.NewWorkspace(s.T())
-	w.Magusfile(riskMagusfile)
-	w.Write("go.mod", "module example.com/m\n\ngo 1.25\n")
-	w.Write("a.go", riskBody)
+	w.WriteTree(freshenTree)
 	m, err := Open(s.T().Context(), w.Root(), WithSpawnRule(TierCeiling))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = m.Close() })
@@ -591,6 +603,54 @@ func (s *ProfileFreshenSuite) TestAFailingTargetIsAReason() {
 
 	s.Require().NoError(err)
 	s.Contains(got.reason, "`magus run red .` left no current profile: ")
+}
+
+// export lays freshenTree, with edits, into a dir outside the workspace, as
+// a base export does.
+func (s *ProfileFreshenSuite) export(edits map[string]string) string {
+	dir := s.T().TempDir()
+	for name, text := range freshenTree {
+		if edited, ok := edits[name]; ok {
+			text = edited
+		}
+		s.Require().NoError(os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644))
+	}
+	return dir
+}
+
+func (s *ProfileFreshenSuite) TestABaseWhoseTargetRanIsReplayedIntoTheExport() {
+	s.Require().NoError(s.m.Run(s.T().Context(), []types.Target{{Path: ".", Name: "cover"}}))
+	dir := s.export(nil)
+
+	s.Require().NoError(s.m.replayAtBase(s.T().Context(), dir, outSource()))
+
+	s.FileExists(filepath.Join(dir, "cover.out"), "the cache entry restored the profile")
+}
+
+func (s *ProfileFreshenSuite) TestABaseNoRunKeyedIsNotCachedAndRunsNothing() {
+	dir := s.export(map[string]string{"a.go": riskBody + "\nfunc G() int { return 2 }\n"})
+
+	err := s.m.replayAtBase(s.T().Context(), dir, outSource())
+
+	s.ErrorIs(err, errBaseNotCached)
+	s.NoFileExists(filepath.Join(dir, "cover.out"), "the target never ran")
+}
+
+func (s *ProfileFreshenSuite) TestABaseThatDoesNotLoadIsAnError() {
+	dir := s.export(map[string]string{"magusfile.buzz": "this is not buzz"})
+
+	err := s.m.replayAtBase(s.T().Context(), dir, outSource())
+
+	s.ErrorContains(err, "this magus cannot load the base tree: ")
+}
+
+func (s *ProfileFreshenSuite) TestABaseWithoutTheProjectIsAnError() {
+	c := outSource()
+	c.project = "lib"
+
+	err := s.m.replayAtBase(s.T().Context(), s.export(nil), c)
+
+	s.EqualError(err, "the base holds no project lib")
 }
 
 type ProfileTargetSuite struct{ suite.Suite }
@@ -813,9 +873,9 @@ func (s *RiskMeterSuite) TestLineFindingsJoinConsecutiveLines() {
 }
 
 func (s *RiskMeterSuite) TestAReadThatFailsIsAnErrorNotAGap() {
-	s.readErr = fmt.Errorf("change risk: %w", errNoSeat)
+	s.readErr = fmt.Errorf("change risk: %w", errBaseNotCached)
 	_, err := s.meter.measure(context.Background(), []touchedFunction{scoredFunction()})
-	s.ErrorIs(err, errNoSeat)
+	s.ErrorIs(err, errBaseNotCached)
 }
 
 func (s *RiskMeterSuite) TestAChangedFileWithNoSourceIsReported() {
@@ -858,4 +918,87 @@ func (s *RiskMeterSuite) TestABasePathFollowsRenamesThroughBothPatches() {
 	}
 	since := sinceBase{committedOld: renamedPaths(rename("one.go", "two.go")), workingOld: renamedPaths(rename("two.go", "three.go"))}
 	s.Equal([3]string{"one.go", "two.go", "plain.go"}, [3]string{since.basePath("three.go"), since.headPath("three.go"), since.basePath("plain.go")})
+}
+
+// ChangeRiskRunSuite scores a committed Go module whose test target writes
+// the Go spell's profile, through Magus.ChangeRisk.
+type ChangeRiskRunSuite struct {
+	suite.Suite
+	repo *testkit.Repo
+	m    *Magus
+}
+
+func TestChangeRiskRunSuite(t *testing.T) { suite.Run(t, new(ChangeRiskRunSuite)) }
+
+// goProfileMagusfile's test target writes .magus/coverage.out, crediting a.go's
+// first block to its tests.
+const goProfileMagusfile = `import "magus";
+import "fs";
+import "magus/spell/go";
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles([".magus/coverage*.out"]);
+    fs\mkdirAll(".magus");
+    fs\writeFile(".magus/coverage.out", "mode: set\nexample.com/m/a.go:3.20,4.10 1 1\n");
+}
+`
+
+func (s *ChangeRiskRunSuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{
+		"magusfile.buzz": goProfileMagusfile,
+		"go.mod":         "module example.com/m\n\ngo 1.25\n",
+		"a.go":           riskBody,
+		".gitignore":     ".magus/\n",
+	})
+	s.open()
+}
+
+func (s *ChangeRiskRunSuite) open() {
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell("go"), WithSpell("magusfile"))
+	m, err := Open(s.T().Context(), s.repo.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	s.m = m
+}
+
+func (s *ChangeRiskRunSuite) TestNoBaseScoresEachFunctionFromTheTestProfile() {
+	got, err := s.m.ChangeRisk(s.T().Context(), "")
+
+	s.Require().NoError(err)
+	s.Require().Len(got.Functions, 1, "gaps: %v", got.Gaps)
+	f := got.Functions[0]
+	s.Equal([4]any{"F", 3, 1, noBase}, [4]any{f.Label, f.Complexity, f.Covered, f.BaseReason})
+}
+
+func (s *ChangeRiskRunSuite) TestABaseNoCacheHoldsIsAnErrorNamingTheBaseAndTheCommand() {
+	s.repo.Write("a.go", riskBody+"\nfunc G() int {\n\treturn 2\n}\n")
+
+	_, err := s.m.ChangeRisk(s.T().Context(), "HEAD")
+
+	s.ErrorIs(err, errBaseNotCached)
+	s.ErrorContains(err, "no cache holds the coverage profile of base ")
+	s.ErrorContains(err, "which main's CI writes with `magus run test .` at that commit")
+}
+
+func (s *ChangeRiskRunSuite) TestNewRiskMeterWithNoBaseJudgesNoBase() {
+	r, err := s.m.newRiskMeter(s.T().Context(), touchedSet{}, "")
+
+	s.Require().NoError(err)
+	s.Equal("", r.commit)
+	s.Nil(r.atBase)
+}
+
+func (s *ChangeRiskRunSuite) TestNewRiskMeterResolvesTheMergeBase() {
+	r, err := s.m.newRiskMeter(s.T().Context(), touchedSet{}, "HEAD")
+
+	s.Require().NoError(err)
+	s.Len(r.commit, 40)
+	text, ok := r.readAt("a.go")
+	s.Equal([2]any{riskBody, true}, [2]any{text, ok})
+}
+
+func (s *ChangeRiskRunSuite) TestNewRiskMeterRefusesABaseThatNamesNoRevision() {
+	_, err := s.m.newRiskMeter(s.T().Context(), touchedSet{}, "no-such-ref")
+
+	s.ErrorContains(err, "change risk: ")
 }
