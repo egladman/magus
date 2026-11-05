@@ -1,0 +1,160 @@
+import "fs";
+import "lcov";
+import "assert";
+
+// buzz-coverage plans buzz-test's `magus buzz -t` runs and joins their LCOV
+// fragments. A run records only its module, so each line is credited to its
+// own tests.
+
+final FRAGMENTS = "coverage/buzz";
+
+// Run is one module's covered test run: the args `magus buzz` takes, the dir it
+// runs in, and the fragment it writes. oldPrefix and newPrefix rewrite its SF
+// paths when they are relative to dir.
+export object Run {
+    argv: [str],
+    dir: str = ".",
+    fragment: str,
+    oldPrefix: str = "",
+    newPrefix: str = "",
+}
+
+// fragmentOf is the fragment a module's run writes under FRAGMENTS.
+fun fragmentOf(prefix: str, mod: str) > str {
+    return "{FRAGMENTS}/{prefix}{mod.replace("/", with: "_")}.lcov";
+}
+
+// covered is a run of mod from the root, in embedded mode when embedded.
+fun covered(mod: str, embedded: bool) > Run {
+    final fragment = fragmentOf("", mod: mod);
+    final mode = if (embedded) ["--embedded"] else [<str>];
+    return Run{ argv = ["-t"] + mode + ["--coverprofile", fragment, mod], fragment = fragment };
+}
+
+// globbed adds to planned a run of each module a glob matches, less the
+// modules under skip when skip is set.
+fun globbed(planned: mut [Run], pattern: str, embedded: bool, skip: str = "") > void !> any {
+    foreach (mod in fs\glob(pattern)) {
+        if (skip == "" or !mod.value.startsWith(skip)) { planned.append(covered(mod.value, embedded: embedded)); }
+    }
+}
+
+// docsLib is a run of lib, a module of the docs site, from docs/. Its SF paths
+// are relative to docs/, so they are rewritten before the join.
+fun docsLib(lib: str) > Run {
+    final fragment = fragmentOf("docs_", mod: lib);
+    return Run{ argv = ["-t", "--embedded", "--coverprofile", "../" + fragment, lib], dir = "docs",
+        fragment = fragment, oldPrefix = "SF:lib/", newPrefix = "SF:docs/lib/" };
+}
+
+final DOCS_LIBS = ["lib/text.buzz", "lib/dom.buzz", "lib/feed.buzz", "lib/html.buzz",
+                   "lib/csp.buzz", "lib/url.buzz", "lib/date.buzz", "lib/glossary.buzz",
+                   "lib/conventions.buzz"];
+
+// runs is every run buzz-test makes. A script a person or workflow runs is run
+// bare, so it is gated strict. A magusfile import and a spell parse embedded,
+// where strict would reject legal constructs. internal/dry covers
+// spells/examples/**.
+export fun runs() > [Run] !> any {
+    final planned = mut [<Run>];
+    globbed(planned, pattern: "std/lib/*.buzz", embedded: true);
+    foreach (dir in ["hack/dev", "hack/remote", "hack/bench", "hack/ci", "hack/retro", "hack/lint"]) {
+        globbed(planned, pattern: dir + "/*.buzz", embedded: false);
+    }
+    foreach (dir in ["hack/magusfile", "hack/policy"]) {
+        globbed(planned, pattern: dir + "/*.buzz", embedded: true);
+    }
+    globbed(planned, pattern: "spells/**/*.buzz", embedded: true, skip: "spells/examples/");
+    foreach (lib in DOCS_LIBS) {
+        planned.append(docsLib(lib));
+    }
+    return planned;
+}
+
+// rebased is a fragment's text with run's SF rewrite applied.
+export fun rebased(run: Run, text: str) > str {
+    if (run.oldPrefix == "") { return text; }
+    return text.replace(run.oldPrefix, with: run.newPrefix);
+}
+
+// keep adds what run left, rebased, to fragments. A run that wrote nothing adds
+// nothing, and report refuses a set with none.
+export fun keep(fragments: mut [str], run: Run) > void !> any {
+    if (fs\exists(run.fragment)) { fragments.append(rebased(run, text: fs\readFile(run.fragment))); }
+}
+
+// Report is what buzz-test keeps: the line percentage the badge shows, and the
+// joined tracefile the buzz spell declares as its coverage profile.
+export object Report {
+    percent: str,
+    tracefile: str,
+}
+
+// report joins the fragments. None means no run wrote coverage, which is an
+// error rather than a 0% that would read as a measurement.
+export fun report(fragments: [str]) > Report !> any {
+    if (fragments.len() == 0) {
+        throw "buzz-test: no LCOV fragments under {FRAGMENTS}/; --coverprofile did not write";
+    }
+    return Report{ percent = lcov\mergePercent(fragments, keep: ""), tracefile = fragments.join("") };
+}
+
+test "a module runs from the root and writes its own fragment" {
+    final run = covered("hack/lint/run.buzz", embedded: false);
+    assert\equal(run.argv.join(" "), want: "-t --coverprofile coverage/buzz/hack_lint_run.buzz.lcov hack/lint/run.buzz",
+        message: "argv");
+    assert\equal(run.dir, want: ".", message: "dir");
+}
+
+test "an embedded module says so before its profile" {
+    assert\equal(covered("std/lib/lcov.buzz", embedded: true).argv[1], want: "--embedded", message: "mode");
+}
+
+test "a docs library runs from docs and is rebased onto the workspace" {
+    final run = docsLib("lib/text.buzz");
+    assert\equal(run.dir, want: "docs", message: "dir");
+    assert\equal(run.argv[3], want: "../coverage/buzz/docs_lib_text.buzz.lcov", message: "profile from docs");
+    assert\equal(rebased(run, text: "SF:lib/text.buzz\nDA:1,1\n"), want: "SF:docs/lib/text.buzz\nDA:1,1\n", message: "rebased");
+}
+
+test "a root run's fragment is kept as written" {
+    final run = covered("hack/lint/run.buzz", embedded: false);
+    assert\equal(rebased(run, text: "SF:hack/lint/run.buzz\n"), want: "SF:hack/lint/run.buzz\n", message: "unchanged");
+}
+
+test "every lint rule is its own run and no spell example is" {
+    final modules = mut [<str>];
+    foreach (run in runs()) {
+        modules.append(run.argv[run.argv.len() - 1]);
+    }
+    assert\equal(modules.indexOf("hack/lint/run.buzz") != null, want: true, message: "the runner");
+    assert\equal(modules.indexOf("hack/lint/touched-functions-keep-change-risk-under-10.buzz") != null, want: true,
+        message: "a rule");
+    assert\equal(modules.indexOf("hack/magusfile/buzz-coverage.buzz") != null, want: true, message: "this module");
+    foreach (mod in modules) {
+        assert\equal(mod.startsWith("spells/examples/"), want: false, message: "{mod} is an example");
+    }
+}
+
+test "a run that wrote nothing keeps no fragment" {
+    final fragments = mut [<str>];
+    keep(fragments, run: covered("hack/no-such-module.buzz", embedded: false));
+    assert\equal(fragments.len(), want: 0, message: "absent");
+}
+
+test "a run's fragment is kept rebased" {
+    final fragments = mut [<str>];
+    keep(fragments, run: Run{ argv = [<str>], fragment = "hack/magusfile/buzz-coverage.buzz", oldPrefix = "import", newPrefix = "IMPORT" });
+    assert\equal(fragments[0].startsWith("IMPORT \"fs\";"), want: true, message: "read and rebased");
+}
+
+test "fragments join into one tracefile and a percentage" {
+    final parts = ["SF:a.buzz\nDA:1,1\nend_of_record\n", "SF:b.buzz\nDA:1,0\nend_of_record\n"];
+    final got = report(parts);
+    assert\equal(got.tracefile, want: parts.join(""), message: "joined");
+    assert\equal(got.percent, want: lcov\mergePercent(parts, keep: ""), message: "percent");
+}
+
+test "no fragment is an error, never a 0%" {
+    assert\throws(fun () > void !> any { final _ = report([<str>]); }, message: "none");
+}
