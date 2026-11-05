@@ -1,7 +1,7 @@
 ---
 title: "ADR 0023: touched functions keep change risk at 10 and kill their mutants"
 order: 23
-description: A function a change touches is refused when its change risk passes 10 or a mutant of it survives, and it is worse than the same function at base. Spells declare decision tokens and a coverage command as data, and one engine in core scores every language. Change risk has no exception. Coverage floors hold each changed file's covered lines against its base. Change risk is built and lint-rules runs its rule. Mutation moves to a go::mutate op with a Go-native engine and a token fallback, and is not built here.
+description: A function a change touches is refused when its change risk passes 10 or a mutant of it survives, and it is worse than the same function at base. Spells declare decision tokens and where their coverage profile lands as data, and one engine in core scores every language. Change risk has no exception. Coverage floors hold each changed file's covered lines against its base. Change risk is built and lint-rules runs its rule. Mutation moves to a go::mutate op with a Go-native engine and a token fallback, and is not built here.
 tags: [adr, decision, lint, coverage, mutation, spells, gates]
 status: accepted (partly implemented)
 date: 2026-11-03
@@ -53,15 +53,19 @@ is the CRAP score of Savoia and Evans (2007); magus calls it change risk.
   after parsing. It is not written into a SCIP `Documentation` string: the first build did
   that, and the line leaked into the interchange SCIP other tools read. `ExportSCIP`
   ignores the field.
-- **Coverage is declared on the op.** `mgs_getCoverage` makes magus synthesize an op of
-  kind `coverage`, and the declaration is `Op.Coverage` (`spells/op.go`). The coverage
-  command writes an LCOV or Go coverprofile report into `$MAGUS_COVERAGE_DIR`, which is
-  that op's declared output. cov is covered units over coverable units in the function's
-  span.
+- **Coverage is the profile the project's tests write.** `mgs_getCoverage` declares
+  `Coverage{format, profile}`: an LCOV or Go coverprofile report at a path relative to the
+  project. It synthesizes no op. The project target that declares the profile among its
+  outputs writes it, so core names no target and no path of its own. cov is covered units
+  over coverable units in the function's span.
+- **A line is credited only by its own package's tests.** Without `-coverpkg`, `go test`
+  instruments only the package being tested (`go help testflag`), so the Go profile the
+  root `test` writes already holds that rule. `magus buzz -t --coverprofile` records only
+  the module under test, so `buzz_test` joins one fragment per module.
 - **Runner refs resolve inside a token only for `MAGUS` and `MAGUS_` names.** A command
-  token such as `--cov-report=lcov:$MAGUS_COVERAGE_DIR/lcov.info` (the python spell's
-  pytest-cov evidence) expands `$MAGUS_COVERAGE_DIR`. Any other `$NAME` inside a token is
-  left to the shell, so a user's variable is not rewritten.
+  token such as `--output=$MAGUS_SYMBOL_INDEX.scip` expands `$MAGUS_SYMBOL_INDEX`. Any
+  other `$NAME` inside a token is left to the shell, so a user's variable is not
+  rewritten.
 
 ### Refuse
 
@@ -109,17 +113,18 @@ number; it reports scores and mutants, and a lint rule decides.
 
 | item                                                                        | State                                                   |
 | --------------------------------------------------------------------------- | ------------------------------------------------------- |
-| decision tokens and coverage declared by spells as data                     | done                                                    |
-| `Op.Coverage` and the synthesized `coverage` op                             | done                                                    |
+| decision tokens and the coverage profile declared by spells as data         | done                                                    |
+| `Op.Coverage` and the synthesized `coverage` op                             | removed (the profile the tests write replaced it)       |
 | complexity carried in the pack beside SCIP (`SymbolInfo.Complexity`)        | done                                                    |
 | runner refs resolve inside a token for `MAGUS` and `MAGUS_` names           | done                                                    |
 | `Magus.ChangeRisk` and the change-risk check in `magus diff`                | done                                                    |
 | Buzz methods `Change.risk` and `Workspace.risk`                             | done                                                    |
 | lint rule `touched-functions-keep-change-risk-under-10`                     | done (`hack/lint/run.buzz` names it, under lint-rules)  |
-| coverage run in scratch copies, scoped to the touched files' tests          | done                                                    |
+| coverage run in scratch copies, scoped to the touched files' tests          | removed (read from the tests' own profile)              |
+| head profile freshened through the cache; base profile kept per commit      | done                                                    |
 | each touched function judged against itself at base                         | done                                                    |
 | covered lines kept, in place of the 70% Go and 62% Buzz totals              | done                                                    |
-| `Change.risk` scoring this repository's own change                          | in progress (stopped at its 7m budget in lint-rules)    |
+| `Change.risk` scoring this repository's own change                          | done (lint-rules)                                       |
 | mutation: a go::mutate op, Go-native engine plus token fallback, one binary | not built (the next change)                             |
 | the mutant verdict cache, keyed by body, covering tests and Context         | not built (the next change)                             |
 | the `magus:mutant` marker and the kill-their-mutants rule                   | not built (the next change)                             |
@@ -137,7 +142,8 @@ the `>` of a return type for `>=`, and the docs magusfile no longer parsed.
 Eli decided on 2026-11-03 that removing code never costs. A touched function is charged
 only when it is past 10 and its change risk is worse than the same function's at base, or
 when it has more surviving mutants than it had at base. This is a measurement, not a
-waiver: the base is scored the same way, in a scratch export of the merge base.
+waiver: the base is scored the same way, over the merge base's source and its kept
+coverage profile.
 
 - **The base span comes from the patch.** The function's lines map back through the
   working tree's hunks and the commits' hunks. Removed lines inside the span belong to
@@ -147,16 +153,24 @@ waiver: the base is scored the same way, in a scratch export of the merge base.
 - **Only a function with a survivor is mutated at base.** None cannot be worse. Each
   mutant carries its function's survivor count at base.
 
-### Coverage runs in scratch copies
+### Coverage is read, not run
 
-`Change.risk` runs each coverage op in a scratch copy of the working tree, and again in an
-export of the merge base, with the copy's own cache dir. A run never locks a project of
-the workspace, so the lint rules run under `lint-rules`. Each run is scoped to the test
-scope the spell names for a touched or changed file, so a red test elsewhere costs
-nothing. A red test in scope makes each function there a gap that names the command.
+Superseded on 2026-11-04 ([coverage is the tests' own
+profile](#2026-11-04-coverage-is-the-tests-own-profile)). `Change.risk` first ran each
+coverage op in a scratch copy of the working tree and again in an export of the merge
+base, scoped to the touched files' tests. On this change that took 402 s at head, 274 s
+of it cmd/magus, and stopped at its 7m budget before base began (outd3b4e003ef3d). ci
+already ran the same tests in `test`, so the tree was tested twice.
 
-A mutant whose scoped run records no result, after its baseline passed in the same copy,
-did not compile or load: it is killed. Only a baseline with no result is an error.
+Now, at head, core finds the project target that declares the spell's profile as an
+output and freshens it the way `freshenSymbolIndexes` freshens an index: a step the cache
+vouches for is read as it stands, and a stale one runs through the scheduler of the run
+that holds the project, so nothing nests (MGS3007). `lint_rules` calls `Change.risk`
+once before its child process reads the rules, as it already does for precedents. At
+base, the profile is kept in the workspace store per merge-base commit. A miss runs that
+target once in an export of the base, with the copy's own cache, so only the remote tier
+can answer it, and a warning names the command. A red test makes each function of its
+project a gap that names the command.
 
 ### Covered lines kept
 
@@ -213,15 +227,14 @@ finding that says why.
 
 - Every touched function needs a test that asserts, except functions small enough that
   c^2 + c <= 10 decides them at any coverage.
-- Lint gets slower by the scoped coverage runs of touched code, at head and at base.
+- Lint runs no test of its own. It waits for the project's test target at head when ci
+  has not run it yet, and for one run at a base no cache holds.
 - Bash functions of complexity 3 or more are refused, because bash declares no coverage.
-- A node:test TypeScript project gets a loud gap that names vitest's coverage package,
-  since the TypeScript spell declares vitest.
+- A project whose tests do not write the profile its spell declares, as a declared
+  output, gets a loud gap that names the missing declaration.
 
 ## Open questions
 
-- Whether a second coverage declaration per spell is worth it for TypeScript projects on
-  node:test. Not decided; revisit when such a project is touched.
 - Bash coverage needs a runner such as bats with kcov. Decide when a shell file with
   complexity 3 or more is edited.
 - The 10 times baseline timeout can be tiny for a fast suite. No floor is configured; add
@@ -239,8 +252,8 @@ function. The first lint rule became `touched-functions-keep-change-risk-under-1
 
 A touched function is judged against itself at base, coverage runs scoped in scratch
 copies, and covered lines kept replace the coverage totals. See
-[Judge against base](#judge-against-base), [Coverage runs in scratch
-copies](#coverage-runs-in-scratch-copies) and [Covered lines kept](#covered-lines-kept).
+[Judge against base](#judge-against-base), [Coverage is read, not
+run](#coverage-is-read-not-run) and [Covered lines kept](#covered-lines-kept).
 
 ### 2026-11-04: mutation moves to go::mutate
 
@@ -252,3 +265,15 @@ under. Core keeps no mutation code until then: `Magus.Mutants`, `Change.mutants(
 `Syntax.Mutations`, the `magus:mutant` marker and `touched-functions-kill-their-mutants`
 are removed, and [Mutate](#mutate) and [Except](#except) record the decision that op
 builds.
+
+### 2026-11-04: coverage is the tests' own profile
+
+The scratch coverage runs stopped at their 7m budget inside `lint-rules` on this change
+(outd3b4e003ef3d). Eli decided that change risk gets no target of its own and reads the
+profile the project's tests already write: "The spell declares it." `mgs_getCoverage`
+declares only `{format, profile}`, and the target declaring the profile as an output
+writes it. The reserved `coverage` op, `Op.Coverage`, `MAGUS_COVERAGE_DIR` and the
+measure's 7 minute budget are removed, since nothing runs coverage on change risk's
+behalf. Eli kept the rule that a function is credited only by its own package's tests,
+which the Go and Buzz profiles hold as written (see [Score](#score)). See [Coverage is
+read, not run](#coverage-is-read-not-run).
