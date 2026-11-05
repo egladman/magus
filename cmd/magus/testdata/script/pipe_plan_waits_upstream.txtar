@@ -19,6 +19,9 @@ stderr 'MGS3030'
 
 # Green: the plan is the one `affected ci --plan` prints alone.
 rm c/broken
+# Generate runs once first so both plans read the same history: the plan lists the
+# units it has no duration for, and c:generate has none until it has run green.
+exec magus affected generate --no-default-charms
 exec magus affected ci --plan
 cp stdout want.json
 exec bash -c 'set -o pipefail; magus affected generate --no-default-charms | magus affected ci --plan'
@@ -26,7 +29,7 @@ cmp stdout want.json
 ! stderr 'MGS3030'
 
 exec bash -c 'set -o pipefail; magus affected generate --no-default-charms | magus affected ci --plan | magus run --stdin --dry-run -o ''template={{range .outputs}}{{.name}}={{.value}}{{"\n"}}{{end}}'''
-stdout '^count=3$'
+stdout '^count=2$'
 stdout '^matrix='
 ! stderr 'MGS30'
 

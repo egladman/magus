@@ -396,6 +396,17 @@ func (h *History) PredictDuration(project, target string, tags []string) time.Du
 	return time.Duration(p75) * time.Millisecond
 }
 
+// Measured reports whether PredictDuration answers from (project,
+// target)'s own samples rather than a workspace or built-in fallback.
+func (h *History) Measured(project, target string, tags []string) bool {
+	for _, s := range targetHistories(h.Projects[project], target) {
+		if _, _, _, _, ok := predictOne(s, tags); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // targetHistories returns every Stats a project recorded for target.
 //
 // The history keys a target as "<spell>/<target>", stamped with the spell that ran it,

@@ -744,6 +744,10 @@ type workflowStep struct {
 // harnessRunner is the script ci.yaml's gate runs magus through.
 const harnessRunner = "buzz hack/ci/run-with-harnesses.buzz "
 
+// harnessCall is the runner with its own options, which ci.yaml's
+// shard passes the saved plan through.
+var harnessCall = regexp.MustCompile(fmt.Sprintf(` -- magus %s-- (?:--plan (?:\$\{\{[^}]*\}\})?\S* )?`, regexp.QuoteMeta(harnessRunner)))
+
 // workflowJob reads job's steps from the workflow file at path under the repository root.
 func workflowJob(t *testing.T, path, job string) []workflowStep {
 	t.Helper()
@@ -768,7 +772,7 @@ func ciShardBoxes(t *testing.T) ([][]string, []workflowStep) {
 	for _, s := range workflowJob(t, ".github/workflows/ci.yaml", "ci") {
 		if s.Uses == "./.github/actions/magus" && strings.HasPrefix(s.With["command"], "queue gate ") {
 			command := regexp.MustCompile(`\$\{\{[^}]*\}\}`).ReplaceAllString(s.With["command"], "")
-			argvs = append(argvs, strings.Fields(strings.Replace(command, " -- magus "+harnessRunner+"-- ", " -- magus ", 1)))
+			argvs = append(argvs, strings.Fields(harnessCall.ReplaceAllLiteralString(command, " -- magus ")))
 			steps = append(steps, s)
 		}
 	}
@@ -872,7 +876,7 @@ func TestCIShardsCarryTheSpellsCachesTheGateBuildsWith(t *testing.T) {
 		case "magus config cache export --remote":
 			at["save"] = i
 		}
-		if slices.Equal(argv[sep+1:sep+3], []string{"magus", "run"}) {
+		if _, seen := at["gate"]; !seen && slices.Equal(argv[sep+1:sep+3], []string{"magus", "run"}) {
 			at["gate"] = i
 		}
 	}
@@ -898,7 +902,7 @@ func TestCIShardsCarryTheSpellsCachesTheGateBuildsWith(t *testing.T) {
 	assert.Empty(t, restore.If, "every shard restores: a bundle is verified before a byte of it is placed")
 	assert.NotContains(t, flag(argvs[at["restore"]], "--env"), "MAGUS_CACHE_SIGNING_KEY", "a restore signs nothing")
 	assert.True(t, strings.HasPrefix(save.If, "success() && "), save.If)
-	for _, cond := range []string{"github.event_name != 'pull_request'", "github.ref == 'refs/heads/main'", "contains(format(' {0} ', matrix.projects), ' . ')"} {
+	for _, cond := range []string{"github.event_name != 'pull_request'", "github.ref == 'refs/heads/main'", "contains(format(' {0} ', matrix.duties), ' cache-export ')"} {
 		assert.Contains(t, save.If, cond)
 	}
 	assert.Contains(t, flag(argvs[at["save"]], "--env"), "MAGUS_CACHE_SIGNING_KEY", "the save signs what it stores")

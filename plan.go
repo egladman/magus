@@ -1,15 +1,22 @@
 package magus
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"path"
 	"slices"
 	"strings"
 
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/ast"
+
 	"github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/interp"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -30,6 +37,11 @@ type PlanOptions struct {
 	// ChangedPaths computes the affected set from these repo-relative paths
 	// instead of a VCS diff. A non-nil empty slice deliberately means no paths.
 	ChangedPaths []string
+	// Charms and Args are what each shard runs the target under. The planner
+	// evaluates the target's body under them, so the units are the steps the
+	// shard takes.
+	Charms []string
+	Args   []string
 }
 
 // Plan computes a provider-neutral CI shard plan for the affected project
@@ -80,11 +92,17 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 	}
 	slices.Sort(affected)
 
-	projects := make([]*types.Project, 0, len(targets))
-	for _, t := range targets {
-		if p := m.Get(t.Path); p != nil {
-			projects = append(projects, p)
-		}
+	units, err := m.planUnits(ctx, targets, target, opts.Charms, opts.Args)
+	if err != nil {
+		return types.ShardPlan{}, fmt.Errorf("affected plan: %w", err)
+	}
+	machine, err := configuredMachine(m.cfg.CI.Machine)
+	if err != nil && !errors.Is(err, errNoMachine) {
+		return types.ShardPlan{}, fmt.Errorf("affected plan: %w", err)
+	}
+	var fallbacks []string
+	if machine == nil {
+		fallbacks = append(fallbacks, "no ci.machine is configured, so the plan checks no shard against a memory budget")
 	}
 
 	histPath := opts.HistoryPath
@@ -96,7 +114,18 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		return types.ShardPlan{}, fmt.Errorf("affected plan: load history: %w", err)
 	}
 
-	f := forecast.Forecaster{History: hist, Target: target}
+	needs := make(map[types.Unit][]types.Unit, len(units))
+	for _, u := range units {
+		closure, err := m.unitNeeds(u)
+		if err != nil {
+			return types.ShardPlan{}, fmt.Errorf("affected plan: %w", err)
+		}
+		needs[u] = closure
+	}
+	f := forecast.Model{History: hist, Needs: func(u types.Unit) []types.Unit { return needs[u] }}
+	if machine != nil {
+		f.MemoryBudgetBytes = forecast.BudgetBytes(machine.MemoryMB)
+	}
 	tags := make(map[string][]string, len(targets))
 	for _, t := range targets {
 		if len(t.Files) > 0 {
@@ -111,11 +140,17 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 	if maxShards == 0 {
 		maxShards = m.cfg.CI.MaxShards
 	}
+	if f.Cold(units) && (maxShards < 0 || maxShards > forecast.ColdShards) {
+		maxShards = forecast.ColdShards
+		fallbacks = append(fallbacks, fmt.Sprintf(
+			"the history holds no duration for any unit, so the plan opens at most %d shards", forecast.ColdShards))
+	}
 
-	plan, err := ci.Build(projects, source, ci.WithMaxShards(maxShards), ci.WithForecaster(f))
+	plan, err := ci.Build(units, source, ci.WithMaxShards(maxShards), ci.WithModel(&f))
 	if err != nil {
 		return types.ShardPlan{}, fmt.Errorf("affected plan: %w", err)
 	}
+	fallbacks = append(fallbacks, plan.Fallbacks...)
 
 	maxParallel := len(plan.Shards)
 	if opts.RunnerPoolBudget > 0 && opts.RunnerPoolBudget < maxParallel {
@@ -124,18 +159,15 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 
 	shards := make([]types.Shard, len(plan.Shards))
 	for i, s := range plan.Shards {
-		paths := make([]string, len(s.Projects))
-		for j, p := range s.Projects {
-			paths[j] = p.Path
+		shards[i] = types.Shard{
+			ID: s.ID, Digest: types.UnitsDigest(s.Units),
+			ProjectPaths: types.UnitProjects(s.Units), Units: s.Units,
 		}
-		shards[i] = types.Shard{ID: s.ID, ProjectPaths: paths}
 	}
-	// Both are asked of the concrete forecaster rather than carried out of ci.Build: the
-	// Forecaster interface returns an assignment and nothing about how it was reached, so
-	// a plan built from real history and one built from fallbacks are the same value.
-	assignments := make([][]*types.Project, len(plan.Shards))
+	placeDuties(shards)
+	assignments := make([][]types.Unit, len(plan.Shards))
 	for i, s := range plan.Shards {
-		assignments[i] = s.Projects
+		assignments[i] = s.Units
 	}
 	var overBudget []string
 	for _, i := range f.OverBudget(assignments) {
@@ -145,11 +177,213 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		Shards:      shards,
 		Source:      source,
 		MaxParallel: maxParallel,
-		Sufficient:  f.SufficientShards(projects),
+		Charms:      opts.Charms,
+		Args:        opts.Args,
+		Machine:     machine,
+		Fallbacks:   fallbacks,
+		Sufficient:  f.SufficientShards(units, len(plan.Shards)),
 		OverBudget:  overBudget,
+		Unmeasured:  f.Unmeasured(units),
 		Affected:    affected,
 		UnboundedBy: unboundedBy,
 	}, nil
+}
+
+// planUnits is each step anchor asks for through ctx.needs, under charms and
+// args. A project whose anchor asks for nothing is the unit (path, anchor).
+// A direct call is an error naming each call, since no unit would run it.
+func (m *Magus) planUnits(ctx context.Context, targets []types.Target, anchor string, charms, args []string) ([]types.Unit, error) {
+	var units []types.Unit
+	var unplanned []string
+	seen := map[types.Unit]bool{}
+	add := func(u types.Unit) {
+		if !seen[u] {
+			seen[u] = true
+			units = append(units, u)
+		}
+	}
+	for _, t := range targets {
+		p := m.Get(t.Path)
+		if p == nil {
+			return nil, fmt.Errorf("project %q is affected but not in the workspace", t.Path)
+		}
+		steps, found, err := m.anchorSteps(ctx, p, anchor, charms, args)
+		if err != nil {
+			return nil, err
+		}
+		if !found || len(steps) == 0 {
+			add(types.Unit{Project: p.Path, Target: anchor})
+			continue
+		}
+		for _, u := range steps {
+			add(types.Unit{Project: cmp.Or(u.Project, p.Path), Target: u.Target})
+		}
+		calls, err := directCalls(p, anchor)
+		if err != nil {
+			return nil, err
+		}
+		for _, call := range calls {
+			if !seen[types.Unit{Project: p.Path, Target: call}] {
+				unplanned = append(unplanned, types.DirectCall{Project: p.Path, Anchor: anchor, Target: call}.String())
+			}
+		}
+	}
+	if len(unplanned) > 0 {
+		return nil, fmt.Errorf("the anchor calls targets directly, so no shard would run them: %s", strings.Join(unplanned, "; "))
+	}
+	return units, nil
+}
+
+// anchorSteps evaluates anchor's body in p as a dry run does, under charms and
+// args, and returns the steps it asks for through ctx.needs. The recorder
+// answers ctx.needs and the trace stubs every effectful host call. found is
+// false when p's magusfile does not declare anchor.
+func (m *Magus) anchorSteps(ctx context.Context, p *types.Project, anchor string, charms, args []string) (steps []types.Unit, found bool, err error) {
+	if !slices.Contains(p.MagusfileTargets, types.Normalize(anchor)) {
+		return nil, false, nil
+	}
+	rec := types.NewStepLog()
+	ctx = types.WithStepLog(ctx, rec)
+	ctx = types.WithTrace(types.WithCharms(ctx, charms))
+	ctx = project.WithExtraArgs(installWorkspaceRegistry(ctx, m.wsReg), args)
+	ctx = types.WithWorkspace(ctx, m.internals())
+	ctx = buzz.WithTargetRuns(ctx, buzz.NewTargetRuns())
+	if err := m.runTarget(ctx, p, anchor); err != nil {
+		return nil, true, fmt.Errorf("evaluate %s in %s: %w", anchor, p.Path, err)
+	}
+	return rec.Units(), true, nil
+}
+
+// directCalls are the exported targets anchor's body in p calls as functions,
+// read from the magusfile. ctx.needs is the only call the recorder sees.
+func directCalls(p *types.Project, anchor string) ([]string, error) {
+	funcs, err := projectFuncDecls(p)
+	if err != nil {
+		return nil, err
+	}
+	return exportedCallees(funcs, anchor), nil
+}
+
+func projectFuncDecls(p *types.Project) (map[string]*ast.FunDecl, error) {
+	srcs, err := interp.FindAll(p.Dir)
+	if err != nil {
+		return nil, fmt.Errorf("find %s's magusfile for direct calls: %w", p.Path, err)
+	}
+	funcs := map[string]*ast.FunDecl{}
+	for _, src := range srcs {
+		for _, file := range src.Files {
+			text, err := os.ReadFile(file)
+			if err != nil {
+				return nil, fmt.Errorf("read %s's magusfile for direct calls: %w", p.Path, err)
+			}
+			prog, err := buzz.ParseEmbedded(string(text))
+			if err != nil {
+				return nil, fmt.Errorf("parse %s's magusfile for direct calls: %w", file, err)
+			}
+			for _, stmt := range prog.Stmts {
+				if fn, ok := stmt.(*ast.FunDecl); ok {
+					funcs[fn.Name] = fn
+				}
+			}
+		}
+	}
+	return funcs, nil
+}
+
+func exportedCallees(funcs map[string]*ast.FunDecl, anchor string) []string {
+	var calls []string
+	visited := map[string]bool{}
+	var walk func(fn *ast.FunDecl)
+	walk = func(fn *ast.FunDecl) {
+		if fn == nil || visited[fn.Name] {
+			return
+		}
+		visited[fn.Name] = true
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			id, ok := call.Callee.(*ast.IdentExpr)
+			if !ok {
+				return true
+			}
+			switch callee := funcs[id.Name]; {
+			case callee == nil:
+			case callee.IsExported:
+				calls = append(calls, types.Normalize(callee.Name))
+			default:
+				walk(callee)
+			}
+			return true
+		})
+	}
+	for name, fn := range funcs {
+		if fn.IsExported && types.Normalize(name) == types.Normalize(anchor) {
+			walk(fn)
+		}
+	}
+	slices.Sort(calls)
+	return slices.Compact(calls)
+}
+
+// errNoMachine is configuredMachine's answer when ci.machine is unset.
+var errNoMachine = errors.New("no ci.machine is configured")
+
+// configuredMachine is the machine ci.machine describes. One with only some of
+// its sizes set is an error, not a partial budget.
+func configuredMachine(c config.CIMachine) (*types.Machine, error) {
+	if c == (config.CIMachine{}) {
+		return nil, errNoMachine
+	}
+	if c.MemoryMB <= 0 || c.Cores <= 0 {
+		return nil, fmt.Errorf("ci.machine %q needs both memory_mb and cores above zero (memory_mb=%d cores=%d)",
+			c.Name, c.MemoryMB, c.Cores)
+	}
+	return &types.Machine{Name: c.Name, MemoryMB: c.MemoryMB, Cores: c.Cores}, nil
+}
+
+// placeDuties puts each workspace-wide duty on one shard. The cache export
+// goes where the root's units are, so its bundle covers the most of the tree.
+// Notes verify goes to the lightest shard. Ties go to the lower index.
+func placeDuties(shards []types.Shard) {
+	if len(shards) == 0 {
+		return
+	}
+	rootUnits := func(s types.Shard) int {
+		n := 0
+		for _, u := range s.Units {
+			if u.Project == types.RootProject {
+				n++
+			}
+		}
+		return n
+	}
+	root, fewest := 0, 0
+	mostRoot, leastUnits := rootUnits(shards[0]), len(shards[0].Units)
+	for i, s := range shards {
+		if n := rootUnits(s); n > mostRoot {
+			root, mostRoot = i, n
+		}
+		if n := len(s.Units); n < leastUnits {
+			fewest, leastUnits = i, n
+		}
+	}
+	shards[root].Duties = append(shards[root].Duties, types.DutyCacheExport)
+	shards[fewest].Duties = append(shards[fewest].Duties, types.DutyNotesVerify)
+}
+
+// unitNeeds is u's transitive needs closure, u included.
+func (m *Magus) unitNeeds(u types.Unit) ([]types.Unit, error) {
+	var out []types.Unit
+	err := types.WalkChain(m.Get(u.Project), u.Target, m.Get, func(v types.ChainVisit) error {
+		out = append(out, types.Unit{Project: v.Project.Path, Target: v.Target})
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("walk the needs of %s: %w", u, err)
+	}
+	return out, nil
 }
 
 // unboundedBy says why the closure computed from res is not a proof, or "" when it is.
