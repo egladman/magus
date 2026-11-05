@@ -481,7 +481,7 @@ func replDrivers(sess engine.Session) []engine.ReplDriver {
 }
 
 // defaultDriver picks the REPL-start driver: the first available.
-func defaultDriver(drivers []engine.ReplDriver) engine.ReplDriver {
+func defaultDriver(drivers []engine.ReplDriver) engine.ReplDriver { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	if len(drivers) > 0 {
 		return drivers[0]
 	}

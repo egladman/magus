@@ -35,7 +35,7 @@ func callOutcome(err error) observability.Outcome {
 // providerFromContext returns ctx's telemetry provider only when it is enabled. A nil
 // return is the signal to attach nothing, keeping the hot path free of observer
 // cost on ordinary one-shot runs.
-func providerFromContext(ctx context.Context) observability.Provider {
+func providerFromContext(ctx context.Context) observability.Provider { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	p := observability.FromContext(ctx)
 	if p == nil || !p.Enabled() {
 		return nil
@@ -104,7 +104,7 @@ func AttachSessionObservers(ctx context.Context, sess *buzz.Session, mode string
 // compileObserver forwards a Session's compile-phase and import events to the
 // spine. It closes over the run ctx (the hooks carry no ctx) and the provider.
 type compileObserver struct {
-	ctx  context.Context
+	ctx  context.Context //nolint:containedctx // the observer interface carries no ctx
 	p    observability.BuzzRecorder
 	mode string
 }
@@ -121,7 +121,7 @@ func (o compileObserver) Import(_ string, outcome buzz.ImportOutcome, elapsed ti
 // (reuse, warm, eviction, idle) to the spine, or nil when telemetry is disabled so
 // the pool runs unobserved. Thread the result onto the dispatch ctx with
 // buzz.WithPoolObserver.
-func NewPoolObserver(ctx context.Context) buzz.PoolObserver {
+func NewPoolObserver(ctx context.Context) buzz.PoolObserver { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	p := providerFromContext(ctx)
 	if p == nil {
 		return nil
@@ -159,7 +159,7 @@ func (o poolObserver) SessionRelease(ctx context.Context, kind buzz.SessionRelea
 // for every wrapped native callable, or nil when telemetry is disabled so
 // buzz.WrapDirect returns the callable unchanged and the VM's hot native-dispatch
 // arm is untouched.
-func NewHostCallObserver(ctx context.Context) buzz.DirectObserver {
+func NewHostCallObserver(ctx context.Context) buzz.DirectObserver { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	p := providerFromContext(ctx)
 	if p == nil {
 		return nil
@@ -170,7 +170,7 @@ func NewHostCallObserver(ctx context.Context) buzz.DirectObserver {
 // hostCallObserver forwards one wrapped native call's timing to the spine. It
 // closes over the registration ctx (DirectCall carries none) and the provider.
 type hostCallObserver struct {
-	ctx context.Context
+	ctx context.Context //nolint:containedctx // the observer interface carries no ctx
 	p   observability.BuzzRecorder
 }
 

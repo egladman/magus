@@ -25,7 +25,7 @@ func init() { //nolint:gochecknoinits // the engine registry cannot import the B
 
 type engineImpl struct{}
 
-func (engineImpl) NewSession(ctx context.Context) (engine.Session, error) {
+func (engineImpl) NewSession(ctx context.Context) (engine.Session, error) { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	return &session{core: core.NewSession(ctx, core.WithEmbedded(), core.WithParseCache(parsecache.Shared()))}, nil
 }
 
@@ -38,14 +38,14 @@ func (s *session) Close() error { return s.core.Close() }
 
 func (s *session) SetGlobal(name string, v engine.Value) { s.core.SetGlobal(name, fromEngine(v)) }
 
-func (s *session) GetGlobal(name string) engine.Value { return toEngine(s.core.GetGlobal(name)) }
+func (s *session) GetGlobal(name string) engine.Value { return toEngine(s.core.GetGlobal(name)) } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 
-func (s *session) NewTable() engine.Table { return &table{} }
+func (s *session) NewTable() engine.Table { return &table{} } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 
 // LoadString compiles code against the session's shared-globals scope and
 // returns the compiled Chunk as an engine.Value. It runs nothing: ctx is the
 // call the compile belongs to.
-func (s *session) LoadString(_ context.Context, code string) (engine.Value, error) {
+func (s *session) LoadString(_ context.Context, code string) (engine.Value, error) { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	chunk, err := s.core.Compile(code)
 	if err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func (s *session) LoadString(_ context.Context, code string) (engine.Value, erro
 
 func (s *session) DoString(ctx context.Context, code string) error { return s.core.Exec(ctx, code) }
 
-func toEngine(v vm.Value) engine.Value {
+func toEngine(v vm.Value) engine.Value { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	switch {
 	case v.IsNull():
 		return engine.NilValue
@@ -112,8 +112,8 @@ func (codeValue) AsBool() bool                       { return true }
 func (codeValue) String() string                     { return "<buzz:code>" }
 func (codeValue) AsString() (string, bool)           { return "", false }
 func (codeValue) AsNumber() (float64, bool)          { return 0, false }
-func (codeValue) AsTable() (engine.Table, bool)      { return nil, false }
-func (c codeValue) AsFunction() (engine.Value, bool) { return c, true }
+func (codeValue) AsTable() (engine.Table, bool)      { return nil, false } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
+func (c codeValue) AsFunction() (engine.Value, bool) { return c, true }    //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 
 // value wraps a non-collection vm.Value (or a function) as engine.Value.
 type value struct{ v vm.Value }
@@ -137,7 +137,7 @@ func (e value) AsNumber() (float64, bool) {
 	return 0, false
 }
 func (e value) AsBool() bool { return e.v.Bool() }
-func (e value) AsTable() (engine.Table, bool) {
+func (e value) AsTable() (engine.Table, bool) { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	if e.v.IsList() {
 		return &table{items: e.v.ListItems()}, true
 	}
@@ -147,7 +147,7 @@ func (e value) AsTable() (engine.Table, bool) {
 	return nil, false
 }
 
-func (e value) AsFunction() (engine.Value, bool) {
+func (e value) AsFunction() (engine.Value, bool) { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	if e.v.IsFun() || e.v.IsDirect() {
 		return e, true
 	}
@@ -165,8 +165,8 @@ func (t *table) IsNil() bool                      { return false }
 func (t *table) AsBool() bool                     { return true }
 func (t *table) AsString() (string, bool)         { return "", false }
 func (t *table) AsNumber() (float64, bool)        { return 0, false }
-func (t *table) AsFunction() (engine.Value, bool) { return nil, false }
-func (t *table) AsTable() (engine.Table, bool)    { return t, true }
+func (t *table) AsFunction() (engine.Value, bool) { return nil, false } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
+func (t *table) AsTable() (engine.Table, bool)    { return t, true }    //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 
 func (t *table) String() string {
 	if len(t.items) > 0 {
@@ -185,7 +185,7 @@ func (t *table) RawSetString(key string, v engine.Value) {
 	t.mapV.MapSet(key, fromEngine(v))
 }
 
-func (t *table) RawGetString(key string) engine.Value {
+func (t *table) RawGetString(key string) engine.Value { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	if v, ok := t.mapV.MapGet(key); ok {
 		return toEngine(v)
 	}
@@ -200,7 +200,7 @@ func (t *table) RawSetInt(key int, v engine.Value) {
 	t.items[idx] = fromEngine(v)
 }
 
-func (t *table) RawGetInt(key int) engine.Value {
+func (t *table) RawGetInt(key int) engine.Value { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	idx := key - 1
 	if idx < 0 || idx >= len(t.items) {
 		return engine.NilValue

@@ -25,7 +25,7 @@ func init() { //nolint:gochecknoinits // internal/secret cannot link the Buzz VM
 
 // openSpellSecretProvider resolves the selected spell by name and adapts it to
 // [secret.Provider].
-func openSpellSecretProvider(_ context.Context, name string) (secret.Provider, error) {
+func openSpellSecretProvider(_ context.Context, name string) (secret.Provider, error) { //nolint:ireturn // the implementation is chosen at runtime among several
 	drv, ok := project.DefaultSpellRegistry().Lookup(name)
 	if !ok {
 		return nil, fmt.Errorf("spell %q is not registered, import it in the magusfile before selecting it", name)

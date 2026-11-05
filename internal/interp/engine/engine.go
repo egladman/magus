@@ -59,13 +59,13 @@ type Table interface {
 }
 
 // StringValue wraps s as a string Value.
-func StringValue(s string) Value { return strVal(s) }
+func StringValue(s string) Value { return strVal(s) } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 
 // NumberValue wraps n as a numeric Value.
-func NumberValue(n float64) Value { return numVal(n) }
+func NumberValue(n float64) Value { return numVal(n) } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 
 // BoolValue wraps b as a boolean Value.
-func BoolValue(b bool) Value { return boolVal(b) }
+func BoolValue(b bool) Value { return boolVal(b) } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 
 // NilValue is Buzz null: IsNil reports true, AsBool false, and every other As
 // accessor reports no value.
@@ -78,8 +78,8 @@ func (v strVal) String() string            { return string(v) }
 func (v strVal) AsString() (string, bool)  { return string(v), true }
 func (v strVal) AsNumber() (float64, bool) { return 0, false }
 func (v strVal) AsBool() bool              { return true }
-func (v strVal) AsTable() (Table, bool)    { return nil, false }
-func (v strVal) AsFunction() (Value, bool) { return nil, false }
+func (v strVal) AsTable() (Table, bool)    { return nil, false } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
+func (v strVal) AsFunction() (Value, bool) { return nil, false } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 
 type numVal float64
 
@@ -88,8 +88,8 @@ func (v numVal) String() string            { return fmt.Sprintf("%g", float64(v)
 func (v numVal) AsString() (string, bool)  { return "", false }
 func (v numVal) AsNumber() (float64, bool) { return float64(v), true }
 func (v numVal) AsBool() bool              { return true }
-func (v numVal) AsTable() (Table, bool)    { return nil, false }
-func (v numVal) AsFunction() (Value, bool) { return nil, false }
+func (v numVal) AsTable() (Table, bool)    { return nil, false } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
+func (v numVal) AsFunction() (Value, bool) { return nil, false } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 
 type boolVal bool
 
@@ -103,8 +103,8 @@ func (v boolVal) String() string {
 func (v boolVal) AsString() (string, bool)  { return "", false }
 func (v boolVal) AsNumber() (float64, bool) { return 0, false }
 func (v boolVal) AsBool() bool              { return bool(v) }
-func (v boolVal) AsTable() (Table, bool)    { return nil, false }
-func (v boolVal) AsFunction() (Value, bool) { return nil, false }
+func (v boolVal) AsTable() (Table, bool)    { return nil, false } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
+func (v boolVal) AsFunction() (Value, bool) { return nil, false } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 
 type nilVal struct{}
 
@@ -113,8 +113,8 @@ func (nilVal) String() string            { return "nil" }
 func (nilVal) AsString() (string, bool)  { return "", false }
 func (nilVal) AsNumber() (float64, bool) { return 0, false }
 func (nilVal) AsBool() bool              { return false }
-func (nilVal) AsTable() (Table, bool)    { return nil, false }
-func (nilVal) AsFunction() (Value, bool) { return nil, false }
+func (nilVal) AsTable() (Table, bool)    { return nil, false } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
+func (nilVal) AsFunction() (Value, bool) { return nil, false } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 
 var (
 	engineMu sync.Mutex
@@ -132,7 +132,7 @@ func Register(name string, eng Engine) {
 }
 
 // Lookup returns the engine registered under name, or nil if not found.
-func Lookup(name string) Engine {
+func Lookup(name string) Engine { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	engineMu.Lock()
 	defer engineMu.Unlock()
 	return engines[name]

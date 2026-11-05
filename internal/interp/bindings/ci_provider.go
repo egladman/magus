@@ -40,7 +40,7 @@ func SetCIProvider(name string) {
 
 // openSpellAnnotator resolves the selected spell, if any, into an
 // Annotator. Returning nil leaves the built-in providers to apply.
-func openSpellAnnotator() annotate.Annotator {
+func openSpellAnnotator() annotate.Annotator { //nolint:ireturn // the implementation is chosen at runtime among several
 	ciProviderMu.RLock()
 	name := ciProviderName
 	ciProviderMu.RUnlock()

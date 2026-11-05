@@ -21,7 +21,7 @@ func newReplSession(t *testing.T) *session {
 	return s.(*session)
 }
 
-func driver(t *testing.T, s *session) engine.ReplDriver {
+func driver(t *testing.T, s *session) engine.ReplDriver { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	t.Helper()
 	drivers := s.Drivers()
 	require.Len(t, drivers, 1)

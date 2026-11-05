@@ -32,7 +32,7 @@ func init() { //nolint:gochecknoinits // internal/cache cannot link the Buzz VM;
 }
 
 // openSpellRemoteBackend resolves selector to a spell and adapts it to a RemoteBackend.
-func openSpellRemoteBackend(ctx context.Context, selector string) (types.CacheBackend, error) {
+func openSpellRemoteBackend(ctx context.Context, selector string) (types.CacheBackend, error) { //nolint:ireturn // the implementation is chosen at runtime among several
 	drv, err := resolveBackendSpell(ctx, selector)
 	if err != nil {
 		return nil, err
@@ -208,7 +208,7 @@ func (b *spellRemoteBackend) PruneArtifacts(ctx context.Context, policy cache.Re
 // with handler op support; any other value is a spell name looked up in the registry.
 // The magusfile wires the backend by calling magus.cache.remote(<spell handle>), which
 // records the spell's name.
-func resolveBackendSpell(ctx context.Context, selector string) (spells.Driver, error) {
+func resolveBackendSpell(ctx context.Context, selector string) (spells.Driver, error) { //nolint:ireturn // the implementation is chosen at runtime among several
 	// Before the registry-path test: a relative file path may carry a dot in its first
 	// element (build.d/cache.buzz) and still name a file.
 	if strings.HasSuffix(selector, ".buzz") {
