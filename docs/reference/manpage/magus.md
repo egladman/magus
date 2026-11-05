@@ -288,6 +288,24 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_CONSOLE_ENABLED**
 : When false, the MCP HTTP server does not mount the console's read-only API and job service (default true when MCP is up). Config file key: **console.enabled**.
 
+**MAGUS_CONSOLE_PULLS_FLOOR**
+: The shortest wait between two syncs, whatever else is chosen (default: 30s). Config file key: **console.pulls.floor**.
+
+**MAGUS_CONSOLE_PULLS_ACTIVE**
+: The wait while any check is queued or running (default: 1m). Config file key: **console.pulls.active**.
+
+**MAGUS_CONSOLE_PULLS_IDLE**
+: The wait while nothing is queued or running (default: 5m). Config file key: **console.pulls.idle**.
+
+**MAGUS_CONSOLE_PULLS_RESERVE**
+: The request budget kept back; below it the poller waits (default: 500). Config file key: **console.pulls.reserve**.
+
+**MAGUS_CONSOLE_PULLS_RUNNER_WAIT**
+: How long a queued check waits before runners are blamed (default: 15m). Config file key: **console.pulls.runner_wait**.
+
+**MAGUS_CONSOLE_PULLS_STALE_AFTER**
+: How long a pull request may go unpushed before it is stale (default: 72h). Config file key: **console.pulls.stale_after**.
+
 **MAGUS_REPORT_FILTER**
 : Restricts event types via +type/-type/bare terms; any "+" sets default-deny. Config file key: **report.filter**.
 

@@ -21,7 +21,7 @@ HTTP client. Requests run ONCE unless given a retry policy.
 
 ### get
 
-Send a GET request; returns {status, body, headers}. opts is an Options (curl-style): fail, failWithBody, failEarly; timeoutSeconds (default 30). Retrying is NOT configured here - pass a typed Retry as the retry argument; without one the request runs exactly once.
+Send a GET request; returns {status, body, headers}. opts is an Options (curl-style): fail, failWithBody, failEarly; timeoutSeconds (default 30); revalidate (send If-None-Match from the last ETag seen for the same method, URL and Authorization; a 304 returns status 304 with the cached body). Retrying is NOT configured here - pass a typed Retry as the retry argument; without one the request runs exactly once.
 
 **Signature:** `http\get(url, [headers], [opts], [retry]) -> Response` - [source](https://github.com/egladman/magus/blob/main/std/http.go)
 
@@ -53,7 +53,7 @@ try {
 
 ### download
 
-GET url and stream the response body straight to dest, returning the HTTP status. The body never becomes a Buzz string, so arbitrary binary (a release tarball, an image layer) survives intact and a large file costs no proportional memory. A non-2xx status writes nothing. Pair it with crypto.sha256_file to verify what you fetched before using it. opts is an Options (curl-style): fail, failWithBody, failEarly; timeoutSeconds (default 30). Retrying is NOT configured here - pass a typed Retry as the retry argument; without one the request runs exactly once.
+GET url and stream the response body straight to dest, returning the HTTP status. The body never becomes a Buzz string, so arbitrary binary (a release tarball, an image layer) survives intact and a large file costs no proportional memory. A non-2xx status writes nothing. Pair it with crypto.sha256_file to verify what you fetched before using it. opts is an Options (curl-style): fail, failWithBody, failEarly; timeoutSeconds (default 30); revalidate (send If-None-Match from the last ETag seen for the same method, URL and Authorization; a 304 returns status 304 with the cached body). Retrying is NOT configured here - pass a typed Retry as the retry argument; without one the request runs exactly once.
 
 **Signature:** `http\download(url, dest, [headers], [opts], [retry]) -> int` - [source](https://github.com/egladman/magus/blob/main/std/http.go)
 
@@ -69,7 +69,7 @@ GET url and stream the response body straight to dest, returning the HTTP status
 
 ### post
 
-Send a POST request with body; returns {status, body, headers}. opts is an Options (curl-style): fail, failWithBody, failEarly; timeoutSeconds (default 30). Retrying is NOT configured here - pass a typed Retry as the retry argument; without one the request runs exactly once.
+Send a POST request with body; returns {status, body, headers}. opts is an Options (curl-style): fail, failWithBody, failEarly; timeoutSeconds (default 30); revalidate (send If-None-Match from the last ETag seen for the same method, URL and Authorization; a 304 returns status 304 with the cached body). Retrying is NOT configured here - pass a typed Retry as the retry argument; without one the request runs exactly once.
 
 **Signature:** `http\post(url, body, [headers], [opts], [retry]) -> Response` - [source](https://github.com/egladman/magus/blob/main/std/http.go)
 
@@ -108,7 +108,7 @@ try {
 
 ### request
 
-Send an HTTP request; returns {status, body, headers}. opts is an Options (curl-style): fail, failWithBody, failEarly; timeoutSeconds (default 30). Retrying is NOT configured here - pass a typed Retry as the retry argument; without one the request runs exactly once.
+Send an HTTP request; returns {status, body, headers}. opts is an Options (curl-style): fail, failWithBody, failEarly; timeoutSeconds (default 30); revalidate (send If-None-Match from the last ETag seen for the same method, URL and Authorization; a 304 returns status 304 with the cached body). Retrying is NOT configured here - pass a typed Retry as the retry argument; without one the request runs exactly once.
 
 **Signature:** `http\request(method, url, [body], [headers], [opts], [retry]) -> Response` - [source](https://github.com/egladman/magus/blob/main/std/http.go)
 
