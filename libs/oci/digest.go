@@ -45,7 +45,7 @@ func VerifyBlob(ctx context.Context, r io.Reader, desc ocispec.Descriptor) error
 }
 
 type ctxReader struct {
-	ctx context.Context
+	ctx context.Context //nolint:containedctx // io.Reader has no ctx parameter
 	r   io.Reader
 }
 
