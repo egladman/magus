@@ -70,7 +70,7 @@ Three readers weigh this differently:
   `cmd/magus/queue.go` beside the engine's own commands. The split does not change what
   `magus affected ci` reaches, since both binaries stay in one module.
 - **A first-time adopter** expects `run`, `test` and `affected`. Today they get the queue
-  whether or not they will ever create the app. Nothing in `magus -h` says it is the
+  whether or not they ever create the app. Nothing in `magus -h` says it is the
   only command that needs outside setup before it does anything.
 
 ## Decision
@@ -236,7 +236,7 @@ same diff and lands green. Each break gets a `### Removed` or `### Changed` entr
 ### Principles checked
 
 - [What we do not build is the product](../design/principles/what-we-do-not-build.md): relied
-  on. The core stops carrying a GitHub-App-shaped feature that most workspaces will not
+  on. The core stops carrying a GitHub-App-shaped feature that most workspaces never
   configure.
 - [Capability is not a reason](../design/principles/capability-is-not-a-reason.md): strained.
   A plugin mechanism is a new capability. The failure it removes is the queue's place in
@@ -341,7 +341,7 @@ need a replacement. It reopens if the repository stops merging through `magus qu
 ## Open questions
 
 - **Is the archive size acceptable?** Two ~70 MB binaries per platform, for a feature most
-  installs will not use. A separate `magus-queue_<v>_<os>_<arch>.tar.gz` archive halves
+  installs never use. A separate `magus-queue_<v>_<os>_<arch>.tar.gz` archive halves
   the default download, but `self update` and `setup-magus` then fetch and verify two
   artifacts and can skew between them.
 - **Does mise place both binaries?** The mise guide installs through ubi and aqua, which
