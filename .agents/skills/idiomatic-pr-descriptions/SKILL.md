@@ -34,6 +34,8 @@ Add where it differs from the intent only when that's true, under the label that
 - `Not done:` what's left.
 - `Not verified:` what you didn't check.
 
+Considerations holds implementation notes: the trade-off taken, a constraint, the alternative set aside, a risk. Never a reading order ("Start with X"); name a file only with why it matters.
+
 Keep it short. A reviewer reads the diff anyway, so don't restate it. Say what the diff
 can't: why, and what's missing.
 
