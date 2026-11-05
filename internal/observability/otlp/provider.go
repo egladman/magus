@@ -31,7 +31,7 @@ import (
 
 // New returns a Provider backed by the configured OTLP collector. With cfg.Enabled and
 // cfg.LocalCollect both false it returns [observability.Nop] without opening any connection.
-func New(ctx context.Context, cfg observability.Config) (observability.Provider, error) {
+func New(ctx context.Context, cfg observability.Config) (observability.Provider, error) { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	// Disabled with no local collection requested: a true no-op (the common CLI path).
 	if !cfg.Enabled && !cfg.LocalCollect {
 		return observability.Nop{}, nil

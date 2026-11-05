@@ -14,12 +14,12 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func (r *runner) checkCheckpointWiring() types.Check {
+func (r *runner) checkCheckpointWiring(ctx context.Context) types.Check {
 	wired, err := workspace.WiredHarnesses(r.ws)
 	if err != nil {
 		return unknownWiring("checkpoint-wiring", err)
 	}
-	return checkCheckpointWiring(r.runContext(), r.ws.Root(), wired...)
+	return checkCheckpointWiring(ctx, r.ws.Root(), wired...)
 }
 
 // checkCheckpointWiring reports a host that magus is wired into but that records no

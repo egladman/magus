@@ -155,7 +155,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 	}
 
 	var addr string
-	srv, err := proc.New(proc.Options{
+	srv, err := proc.New(ctx, proc.Options{
 		Handler: func(hctx context.Context, args []string) error {
 			root := proc.RootFromContext(hctx)
 			if root == "" {
@@ -177,7 +177,6 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 		WorkspaceLister: reg.status,
 		ConfigReloader:  reg.evictAll,
 		Server:          func() *types.StatusServer { return serverInfo(addr) },
-		Context:         ctx,
 		Limiter:         lim,
 		Version:         version,
 		Address:         cfg.Server.Address,
@@ -191,7 +190,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 	addr = srv.Addr()
 	_ = os.Setenv(proc.SocketEnv, addr)
 	_ = os.Setenv(proc.TokenEnv, srv.Token())
-	if err := srv.Start(); err != nil {
+	if err := srv.Start(ctx); err != nil {
 		_ = os.Unsetenv(proc.SocketEnv)
 		_ = os.Unsetenv(proc.TokenEnv)
 		slog.With(attr.Component("server")).Error("start failed", attr.Error(err))

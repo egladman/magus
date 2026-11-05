@@ -104,7 +104,7 @@ type execHandle struct {
 // A start service (Service.Start) is probed first: already ready, it is [Adopted].
 // Otherwise its start command must exit 0 and its probe then pass; a probe that never
 // passes runs its stop command before Start returns the error.
-func (r ExecRunner) Start(ctx context.Context, s spells.Service) (Handle, error) {
+func (r ExecRunner) Start(ctx context.Context, s spells.Service) (Handle, error) { //nolint:ireturn // Handle: execHandle, startedHandle or Adopted
 	if s.Start.Bin != "" {
 		return r.bringUp(ctx, s)
 	}
@@ -156,7 +156,7 @@ func (ExecRunner) Stop(ctx context.Context, h Handle) {
 }
 
 // bringUp runs a start service's lifecycle up to ready; see Start.
-func (r ExecRunner) bringUp(ctx context.Context, s spells.Service) (Handle, error) {
+func (r ExecRunner) bringUp(ctx context.Context, s spells.Service) (Handle, error) { //nolint:ireturn // Handle: startedHandle or Adopted
 	probeCtx, cancel := context.WithTimeout(ctx, r.readyTimeout())
 	err := exec.CommandContext(probeCtx, s.Readiness.Bin, s.Readiness.Args...).Run()
 	cancel()

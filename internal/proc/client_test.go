@@ -30,7 +30,7 @@ func TestForwardRoundTrip(t *testing.T) {
 	var called atomic.Bool
 	var gotArgs atomic.Value // stores []string
 
-	srv, err := New(Options{
+	srv, err := New(t.Context(), Options{
 		Handler: func(_ context.Context, args []string) error {
 			gotArgs.Store(args)
 			called.Store(true)
@@ -39,7 +39,7 @@ func TestForwardRoundTrip(t *testing.T) {
 	})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 
 	t.Setenv("MAGUS_PROC_SOCKET", srv.Addr())
 
@@ -58,7 +58,7 @@ func TestForwardRoundTrip(t *testing.T) {
 // forwarded argv, cwd and root and no environment at all.
 func TestForwardCarriesTheLease(t *testing.T) {
 	got := make(chan string, 1)
-	srv, err := New(Options{
+	srv, err := New(t.Context(), Options{
 		Handler: func(ctx context.Context, _ []string) error {
 			got <- types.JobLeaseFromContext(ctx)
 			return nil
@@ -66,7 +66,7 @@ func TestForwardCarriesTheLease(t *testing.T) {
 	})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 
 	t.Setenv("MAGUS_PROC_SOCKET", srv.Addr())
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3")
@@ -78,14 +78,14 @@ func TestForwardCarriesTheLease(t *testing.T) {
 }
 
 func TestForwardHandlerError(t *testing.T) {
-	srv, err := New(Options{
+	srv, err := New(t.Context(), Options{
 		Handler: func(_ context.Context, args []string) error {
 			return errors.New("build failed")
 		},
 	})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 
 	t.Setenv("MAGUS_PROC_SOCKET", srv.Addr())
 
@@ -107,7 +107,7 @@ func TestForwardCycleDetection(t *testing.T) {
 	block := make(chan struct{})
 	started := make(chan struct{})
 
-	srv, err := New(Options{
+	srv, err := New(t.Context(), Options{
 		Concurrency: 4,
 		Handler: func(_ context.Context, args []string) error {
 			close(started)
@@ -118,7 +118,7 @@ func TestForwardCycleDetection(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Close()
 	defer close(block)
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 
 	t.Setenv("MAGUS_PROC_SOCKET", srv.Addr())
 
@@ -143,7 +143,7 @@ func TestQueryStatus(t *testing.T) {
 	block := make(chan struct{})
 	started := make(chan struct{}, 1)
 
-	srv, err := New(Options{
+	srv, err := New(t.Context(), Options{
 		Concurrency: 4,
 		Handler: func(_ context.Context, args []string) error {
 			started <- struct{}{}
@@ -154,7 +154,7 @@ func TestQueryStatus(t *testing.T) {
 	require.NoError(t, err)
 	defer srv.Close()
 	defer close(block)
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 
 	t.Setenv("MAGUS_PROC_SOCKET", srv.Addr())
 
@@ -242,7 +242,7 @@ func TestRunChildSyncNilLimiter(t *testing.T) {
 func TestNewAlreadyAdopted(t *testing.T) {
 	t.Setenv("MAGUS_PROC_SOCKET", "/some/path")
 
-	_, err := New(Options{
+	_, err := New(t.Context(), Options{
 		Handler: func(_ context.Context, args []string) error { return nil },
 	})
 	assert.ErrorIs(t, err, ErrAlreadyAdopted)
@@ -252,12 +252,12 @@ func TestNewAlreadyAdopted(t *testing.T) {
 // maxArgs elements in Args is rejected with an error rather than silently
 // allocating unbounded memory.
 func TestRunRequestArgsCapEnforced(t *testing.T) {
-	srv, err := New(Options{
+	srv, err := New(t.Context(), Options{
 		Handler: func(_ context.Context, args []string) error { return nil },
 	})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 
 	t.Setenv("MAGUS_PROC_SOCKET", srv.Addr())
 
@@ -365,12 +365,12 @@ func TestAClientMeetingAnOldServerIsToldToRestartIt(t *testing.T) {
 // its frame as a malformed request. Nothing runs.
 func TestAnOldLineClientRunsNothing(t *testing.T) {
 	var called atomic.Bool
-	srv, err := New(Options{
+	srv, err := New(t.Context(), Options{
 		Handler: func(context.Context, []string) error { called.Store(true); return nil },
 	})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 
 	ep, err := endpoint.Parse(srv.Addr())
 	require.NoError(t, err)
@@ -432,11 +432,11 @@ func TestStartCloseGoroutineLeak(t *testing.T) {
 
 	const cycles = 5
 	for i := 0; i < cycles; i++ {
-		srv, err := New(Options{
+		srv, err := New(t.Context(), Options{
 			Handler: func(_ context.Context, args []string) error { return nil },
 		})
 		require.NoError(t, err, "cycle %d: New", i)
-		require.NoError(t, srv.Start(), "cycle %d: Start", i)
+		require.NoError(t, srv.Start(t.Context()), "cycle %d: Start", i)
 		srv.Close()
 	}
 
@@ -454,11 +454,11 @@ func TestStartCloseGoroutineLeak(t *testing.T) {
 // TestShutdownRPC verifies that Shutdown dials the server, triggers a graceful
 // close, and that the server's socket file is removed afterward.
 func TestShutdownRPC(t *testing.T) {
-	srv, err := New(Options{
+	srv, err := New(t.Context(), Options{
 		Handler: func(_ context.Context, args []string) error { return nil },
 	})
 	require.NoError(t, err)
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 
 	addr := srv.Addr()
 
@@ -480,7 +480,7 @@ func TestShutdownRPC(t *testing.T) {
 // invocation at once, and the handler then runs it as a job.
 func TestSubmitJobRoundTrip(t *testing.T) {
 	got := make(chan []string, 1)
-	srv, err := New(Options{
+	srv, err := New(t.Context(), Options{
 		Handler: func(ctx context.Context, args []string) error {
 			if IsJob(ctx) {
 				got <- args
@@ -490,7 +490,7 @@ func TestSubmitJobRoundTrip(t *testing.T) {
 	})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 
 	inv, err := SubmitJob(t.Context(), srv.Addr(), []string{"graph", "build"}, "")
 	require.NoError(t, err)
@@ -504,13 +504,13 @@ func TestSubmitJobRoundTrip(t *testing.T) {
 }
 
 func TestReloadConfigRoundTrip(t *testing.T) {
-	srv, err := New(Options{
+	srv, err := New(t.Context(), Options{
 		Handler:        func(context.Context, []string) error { return nil },
 		ConfigReloader: func() (int, int) { return 3, 1 },
 	})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 
 	dropped, busy, err := ReloadConfig(t.Context(), srv.Addr())
 	require.NoError(t, err)
@@ -525,12 +525,12 @@ func TestReloadConfigRoundTrip(t *testing.T) {
 // alone admitted it.
 func TestProcRoutesRequireTheToken(t *testing.T) {
 	var called atomic.Bool
-	srv, err := New(Options{
+	srv, err := New(t.Context(), Options{
 		Handler: func(context.Context, []string) error { called.Store(true); return nil },
 	})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 	ep, err := endpoint.Parse(srv.Addr())
 	require.NoError(t, err)
 
@@ -566,9 +566,9 @@ func TestProcRoutesRequireTheToken(t *testing.T) {
 // TestTokenFileIsPrivateAndGoesWithTheServer pins the discovery half: a client that found
 // the socket reads the token beside it, the file is this user's alone, and Close removes it.
 func TestTokenFileIsPrivateAndGoesWithTheServer(t *testing.T) {
-	srv, err := New(Options{Handler: func(context.Context, []string) error { return nil }})
+	srv, err := New(t.Context(), Options{Handler: func(context.Context, []string) error { return nil }})
 	require.NoError(t, err)
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 	ep, err := endpoint.Parse(srv.Addr())
 	require.NoError(t, err)
 
@@ -588,12 +588,12 @@ func TestTokenFileIsPrivateAndGoesWithTheServer(t *testing.T) {
 
 func TestSocketRoutes(t *testing.T) {
 	var called atomic.Bool
-	srv, err := New(Options{
+	srv, err := New(t.Context(), Options{
 		Handler: func(context.Context, []string) error { called.Store(true); return nil },
 	})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 	ep, err := endpoint.Parse(srv.Addr())
 	require.NoError(t, err)
 	client := socketClient(ep)
@@ -634,7 +634,7 @@ func TestSocketRoutes(t *testing.T) {
 func TestForwardArgsWithNewline(t *testing.T) {
 	var gotArgs atomic.Value
 
-	srv, err := New(Options{
+	srv, err := New(t.Context(), Options{
 		Handler: func(_ context.Context, args []string) error {
 			gotArgs.Store(args)
 			return nil
@@ -642,7 +642,7 @@ func TestForwardArgsWithNewline(t *testing.T) {
 	})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 
 	t.Setenv("MAGUS_PROC_SOCKET", srv.Addr())
 
@@ -669,14 +669,14 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 // can dial it.
 func newBenchServer(b *testing.B) string {
 	b.Helper()
-	srv, err := New(Options{
+	srv, err := New(b.Context(), Options{
 		Concurrency: runtime.GOMAXPROCS(0),
 		Handler:     func(_ context.Context, _ []string) error { return nil },
 	})
 	if err != nil {
 		b.Fatalf("New: %v", err)
 	}
-	if err := srv.Start(); err != nil {
+	if err := srv.Start(b.Context()); err != nil {
 		b.Fatalf("Start: %v", err)
 	}
 	b.Cleanup(srv.Close)
@@ -744,7 +744,7 @@ func BenchmarkQueryStatusInflight(b *testing.B) {
 	block := make(chan struct{})
 	ready := make(chan struct{}, inflightN)
 
-	srv, err := New(Options{
+	srv, err := New(b.Context(), Options{
 		Concurrency: inflightN,
 		Handler: func(_ context.Context, _ []string) error {
 			ready <- struct{}{}
@@ -755,7 +755,7 @@ func BenchmarkQueryStatusInflight(b *testing.B) {
 	if err != nil {
 		b.Fatalf("New: %v", err)
 	}
-	if err := srv.Start(); err != nil {
+	if err := srv.Start(b.Context()); err != nil {
 		b.Fatalf("Start: %v", err)
 	}
 	b.Cleanup(func() {

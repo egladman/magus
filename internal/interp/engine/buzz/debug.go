@@ -14,7 +14,7 @@ import (
 // Wrap adapts a live core.Session to the generic engine.Session (plus the
 // optional REPL/debug interfaces). magus.pry() uses it to hand the session that
 // is running a magusfile.buzz to the shared Pry REPL.
-func Wrap(c *core.Session) engine.Session { return &session{core: c} }
+func Wrap(c *core.Session) engine.Session { return &session{core: c} } //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 
 // Drivers implements engine.DriversProvider: Buzz speaks one language.
 func (s *session) Drivers() []engine.ReplDriver {

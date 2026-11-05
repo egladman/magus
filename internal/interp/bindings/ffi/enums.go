@@ -31,7 +31,7 @@ type EnumCases interface {
 // it. It reads each enum the first time an encoder asks for it. Build one per
 // session: the cases belong to that session's definitions. ctx bounds the reads,
 // past the cancellation of the call that built it.
-func SessionEnums(ctx context.Context, sess *buzz.Session, module string) EnumCases {
+func SessionEnums(ctx context.Context, sess *buzz.Session, module string) *sessionEnums {
 	return &sessionEnums{
 		ctx:    context.WithoutCancel(ctx),
 		sess:   sess,
@@ -59,7 +59,7 @@ func (enumBacking) Instance(_ string, names []string, fields []vm.Value) vm.Valu
 }
 
 type sessionEnums struct {
-	ctx    context.Context
+	ctx    context.Context //nolint:containedctx // class b: EnumCases is called by 420 generated encoder sites with no ctx; no benchmark or optimization: comment (29d8b3deb)
 	sess   *buzz.Session
 	module string
 

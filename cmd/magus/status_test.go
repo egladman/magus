@@ -255,7 +255,7 @@ func TestStartupNoSubcommandExitsUsage(t *testing.T) {
 	t.Setenv("MAGUS_PROC_SOCKET", "")
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 
-	res, code := startup(context.Background(), nil)
+	_, res, code := startup(context.Background(), nil)
 	if res.cleanup != nil {
 		t.Cleanup(res.cleanup)
 	}
@@ -269,7 +269,7 @@ func TestStartupNoSubcommandExitsUsage(t *testing.T) {
 		t.Run(flagName, func(t *testing.T) {
 			t.Setenv("MAGUS_PROC_SOCKET", "")
 			t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
-			res, code := startup(context.Background(), []string{flagName})
+			_, res, code := startup(context.Background(), []string{flagName})
 			if res.cleanup != nil {
 				t.Cleanup(res.cleanup)
 			}

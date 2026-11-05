@@ -98,7 +98,7 @@ func New(runner Runner, defaultIdle time.Duration, opts ...Option) *Registry {
 // count. Concurrent acquires of the same key share one Start (the others block on
 // its completion). A failed Start is not cached: the entry is discarded so a later
 // Acquire retries.
-func (r *Registry) Acquire(ctx context.Context, key string, s spells.Service) (Handle, error) {
+func (r *Registry) Acquire(ctx context.Context, key string, s spells.Service) (Handle, error) { //nolint:ireturn // Handle: whatever the Runner started
 	r.mu.Lock()
 	if e := r.entries[key]; e != nil {
 		if e.timer != nil {

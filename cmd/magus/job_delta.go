@@ -32,7 +32,7 @@ type symbolDelta struct {
 // method, a field or test code, whose name some changed file held at base and none holds
 // now. Both read names as identifiers in text, so a name that survives only in a comment
 // still counts as held: they under-report rather than invent.
-func readSymbolDelta(ctx context.Context, root string, g *knowledge.Graph, driver types.VCSDriver, base string, changed []string) (symbolDelta, bool) {
+func readSymbolDelta(ctx context.Context, root string, g *knowledge.Graph, driver types.RevisionReader, base string, changed []string) (symbolDelta, bool) {
 	if g == nil || driver == nil || base == "" {
 		return symbolDelta{}, false
 	}

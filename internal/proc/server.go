@@ -107,7 +107,6 @@ func IsJob(ctx context.Context) bool {
 // Options configures the proc server created by New.
 type Options struct {
 	Handler         func(ctx context.Context, args []string) error // required; ctx carries Root/Cwd
-	Context         context.Context                                // nil → context.Background
 	Limiter         *cache.Limiter                                 // shared budget; nil → private limiter
 	Concurrency     int                                            // ignored when Limiter is set; 0 → default
 	Version         string                                         // "" disables version-mismatch check
@@ -222,7 +221,7 @@ func (s *Server) Close() {
 
 // New constructs an unstarted Server; returns ErrAlreadyAdopted when MAGUS_PROC_SOCKET is set.
 // Call Start to bind the socket.
-func New(opts Options) (*Server, error) {
+func New(ctx context.Context, opts Options) (*Server, error) {
 	// Name the culprit in the error. This guard refuses to host a second proc server when
 	// MAGUS_PROC_SOCKET is set (a nested process must forward to the parent's pool, not open
 	// its own socket). Surfacing the value turns an opaque "already adopted" (which reads as a
@@ -261,17 +260,13 @@ func New(opts Options) (*Server, error) {
 		lim = cache.NewLimiter(par)
 	}
 
-	parentCtx := opts.Context
-	if parentCtx == nil {
-		parentCtx = context.Background()
-	}
-	serverCtx, cancel := context.WithCancel(parentCtx)
+	serverCtx, cancel := context.WithCancel(ctx)
 
 	svc := &service{
 		handler:         opts.Handler,
 		read:            opts.Read,
 		configReloader:  opts.ConfigReloader,
-		parentCtx:       serverCtx,
+		stopped:         serverCtx.Done(),
 		lim:             lim,
 		version:         opts.Version,
 		gateVersion:     adoptionIdentity(opts.Version),
@@ -372,7 +367,7 @@ func (s *Server) serveExtra(w http.ResponseWriter, r *http.Request) {
 }
 
 // Start binds the socket and begins serving. Must be called once; on error the Server is unusable.
-func (s *Server) Start() error {
+func (s *Server) Start(ctx context.Context) error {
 	ln, err := s.ep.Listen()
 	if err != nil {
 		// If the address is already in use, check whether the socket is live.
@@ -381,7 +376,7 @@ func (s *Server) Start() error {
 		var opErr *net.OpError
 		if errors.As(err, &opErr) && (strings.Contains(opErr.Err.Error(), "address already in use") ||
 			strings.Contains(opErr.Err.Error(), "bind: address already in use")) {
-			if !isSocketLive(s.svc.parentCtx, s.ep.Addr) {
+			if !isSocketLive(ctx, s.ep.Addr) {
 				_ = os.Remove(s.ep.Addr)
 				_ = os.Remove(sockdir.TokenPath(s.ep.Addr))
 				ln, err = s.ep.Listen()
@@ -431,7 +426,7 @@ func (s *service) handleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var reply runReply
-	if err := s.run(req, &reply); err != nil {
+	if err := s.run(r.Context(), req, &reply); err != nil {
 		refuse(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -445,7 +440,7 @@ func (s *service) handleJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var reply jobReply
-	if err := s.submitJob(req, &reply); err != nil {
+	if err := s.submitJob(r.Context(), req, &reply); err != nil {
 		refuse(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -507,7 +502,7 @@ type activeCall struct {
 type service struct {
 	handler         func(ctx context.Context, args []string) error
 	read            func(ctx context.Context, root, verb string, request []byte) ([]byte, error)
-	parentCtx       context.Context
+	stopped         <-chan struct{}
 	lim             *cache.Limiter
 	version         string // human-facing display version; surfaced as StatusReply.Version
 	gateVersion     string // adoption identity for the version gate (see adoptionIdentity); "" disables the gate
@@ -554,14 +549,14 @@ func (s *service) trackCall(args []string, workspace, inv string) (call *activeC
 	return call, func() { s.calls.Delete(id) }
 }
 
-func (s *service) run(req runRequest, reply *runReply) error {
+func (s *service) run(reqCtx context.Context, req runRequest, reply *runReply) error {
 	if err := s.admitWork("runRequest", req.Args, req.Version); err != nil {
 		return err
 	}
 
 	// The server's context, not the request's: a client that disconnects mid-run does not
 	// cancel the work it started.
-	ctx, cancel := context.WithCancel(s.parentCtx)
+	ctx, cancel := s.detach(reqCtx)
 	defer cancel()
 
 	ctx = WithRoot(ctx, req.Root)
@@ -644,7 +639,7 @@ func (s *service) run(req runRequest, reply *runReply) error {
 // duplicate job already in flight (same workspace + args) is coalesced: no second run
 // starts, so a rapid series of checkouts collapses to one refresh. The job's own
 // success/failure is observed via the Dashboard/logs, not the reply.
-func (s *service) submitJob(req jobRequest, reply *jobReply) error {
+func (s *service) submitJob(reqCtx context.Context, req jobRequest, reply *jobReply) error {
 	if err := s.admitWork("jobRequest", req.Args, req.Version); err != nil {
 		return err
 	}
@@ -674,7 +669,7 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 		defer s.inflight.Delete(key)
 		defer untrack()
 
-		ctx, cancel := context.WithCancel(s.parentCtx)
+		ctx, cancel := s.detach(reqCtx)
 		defer cancel()
 		ctx = WithRoot(ctx, req.Root)
 		ctx = WithCurrentWorkingDirectory(ctx, req.Cwd)
@@ -682,7 +677,7 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 		ctx = WithSubOp(ctx, call.SubOp)
 		ctx = environ.With(ctx)
 		ctx = withJob(ctx) // route through the full job command set, not the run/affected adoption allowlist
-		// A job descends from nobody. parentCtx carries whatever ancestry the SERVER's
+		// A job descends from nobody. The request context carries whatever ancestry the SERVER's
 		// process environment had (which is a real value when the server was started from
 		// inside a magus target), and inheriting it would attribute this job's locks to a
 		// stranger, and tell every process it forks that it descends from one.
@@ -739,4 +734,18 @@ func cycleKey(root, cwd string, args []string) string {
 		scope = cwd
 	}
 	return fmt.Sprintf("%s\x00%s\x00%s", scope, cwd, strings.Join(args, "\x00"))
+}
+
+// detach returns a context that keeps reqCtx's values but outlives the request: work a
+// client started must not die when it hangs up. Closing the server still cancels it.
+func (s *service) detach(reqCtx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.WithoutCancel(reqCtx))
+	go func() {
+		select {
+		case <-s.stopped:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	return ctx, cancel
 }

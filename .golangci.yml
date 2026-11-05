@@ -92,6 +92,14 @@ linters:
     - misspell        # common English spelling mistakes in comments and strings
     - nolintlint      # enforce that //nolint directives include a reason
     - whitespace      # flag unnecessary blank lines inside functions/blocks
+    # Go's context docs: "Do not store Contexts inside a struct type." A ctx in a
+    # field outlives the call it was scoped to; pass it to each method instead.
+    - containedctx
+    # A large interface is hard to implement and to fake; the consumer declares the
+    # few methods it calls (CodeReviewComments, Google style guide).
+    - interfacebloat
+    # A constructor returns its concrete type and the caller narrows it.
+    - ireturn
 
     # --- In-repo linters (see libs/testpairing/.custom-gcl.yml) ---
     # testpair reports every X_test.go with no X.go beside it, with no exemptions:
@@ -759,6 +767,13 @@ linters:
         # confusing-naming intentionally disabled: it flags idiomatic
         # exported-wrapper/unexported-impl and build-tagged pairs (NewZstdWriter/
         # newZstdWriter, Midpoint/midpoint, Probe/probe) that are deliberate.
+
+    interfacebloat:
+      max: 10
+
+    ireturn:
+      # error, the stdlib's own interfaces, empty and generic returns are idiomatic.
+      allow: [error, stdlib, empty, generic, anon]
 
     errcheck:
       check-blank: false

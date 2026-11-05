@@ -23,10 +23,9 @@ import (
 // guardFixture is a session with every module, a workspace the policy grants,
 // and a directory outside it.
 type guardFixture struct {
-	sess         *buzz.Session
-	ws, outside  string
-	confined     context.Context
-	unrestricted context.Context
+	sess        *buzz.Session
+	ws, outside string
+	policy      *sandbox.Policy
 }
 
 func newGuardFixture(t *testing.T, rules ...filesystem.Rule) guardFixture {
@@ -49,8 +48,7 @@ func newGuardFixture(t *testing.T, rules ...filesystem.Rule) guardFixture {
 	}
 	return guardFixture{
 		sess: sess, ws: ws, outside: outside,
-		confined:     std.WithCurrentWorkingDirectory(sandbox.WithPolicy(t.Context(), p), ws),
-		unrestricted: std.WithCurrentWorkingDirectory(t.Context(), ws),
+		policy: p,
 	}
 }
 
@@ -73,11 +71,11 @@ func TestUpstreamOsEnvHonorsTheAllowlist(t *testing.T) {
 	f := newGuardFixture(t)
 	t.Setenv("MAGUS_GUARD_SECRET", "hunter2")
 
-	got, err := f.call(t, f.confined, "os", "env", vm.StringValue("MAGUS_GUARD_SECRET"))
+	got, err := f.call(t, f.confined(t), "os", "env", vm.StringValue("MAGUS_GUARD_SECRET"))
 	require.NoError(t, err)
 	assert.True(t, got.IsNull(), "a stripped name reads as unset")
 
-	got, err = f.call(t, f.unrestricted, "os", "env", vm.StringValue("MAGUS_GUARD_SECRET"))
+	got, err = f.call(t, f.unrestricted(t), "os", "env", vm.StringValue("MAGUS_GUARD_SECRET"))
 	require.NoError(t, err)
 	assert.Equal(t, "hunter2", got.AsString(), "with no policy os.env is upstream's")
 }
@@ -101,12 +99,12 @@ func TestUpstreamFsIsChecked(t *testing.T) {
 		{"list", []vm.Value{vm.StringValue(f.outside)}, types.PathReadDenied},
 		{"modified", []vm.Value{vm.StringValue(victim)}, types.PathReadDenied},
 	} {
-		_, err := f.call(t, f.confined, "fs", c.name, c.args...)
+		_, err := f.call(t, f.confined(t), "fs", c.name, c.args...)
 		require.ErrorIs(t, err, c.want, "fs.%s", c.name)
 	}
 	assert.FileExists(t, victim)
 
-	_, err := f.call(t, f.confined, "fs", "makeDirectory", vm.StringValue("inside"))
+	_, err := f.call(t, f.confined(t), "fs", "makeDirectory", vm.StringValue("inside"))
 	require.NoError(t, err, "a path the policy grants still works")
 	assert.DirExists(t, filepath.Join(f.ws, "inside"))
 }
@@ -120,7 +118,7 @@ func TestUpstreamFileOpenIsChecked(t *testing.T) {
 	for _, module := range []string{"io", "iocore"} {
 		for _, mode := range []string{"read", "write", "update"} {
 			src := fmt.Sprintf("import \"%[1]s\";\nfinal f = %[1]s\\File.open(\"%[2]s\", %[1]s\\FileMode.%[3]s);\n", module, secret, mode)
-			err := f.sess.Exec(f.confined, src)
+			err := f.sess.Exec(f.confined(t), src)
 			require.Error(t, err, "%s File.open %s", module, mode)
 			assert.Contains(t, err.Error(), "denied", "%s File.open %s", module, mode)
 		}
@@ -129,7 +127,7 @@ func TestUpstreamFileOpenIsChecked(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "x", string(data), "a refused write mode must not have truncated the file")
 
-	require.NoError(t, f.sess.Exec(f.confined,
+	require.NoError(t, f.sess.Exec(f.confined(t),
 		"import \"io\";\nfinal f = io\\File.open(\"inside.txt\", io\\FileMode.write);\nf.close();\n"),
 		"a path the policy grants still opens")
 }
@@ -160,7 +158,7 @@ func TestUpstreamOsExecuteRefusesVCS(t *testing.T) {
 		for i, w := range tc.argv {
 			items[i] = vm.StringValue(w)
 		}
-		_, err := f.call(t, f.confined, "os", "execute", vm.ListValue(items))
+		_, err := f.call(t, f.confined(t), "os", "execute", vm.ListValue(items))
 		require.EqualError(t, err, tc.want, tc.argv)
 	}
 }
@@ -180,16 +178,24 @@ func TestUpstreamOsExecuteGoesThroughRunExec(t *testing.T) {
 	})
 
 	denied := newGuardFixture(t)
-	_, err = denied.call(t, denied.confined, "os", "execute", cmd)
+	_, err = denied.call(t, denied.confined(t), "os", "execute", cmd)
 	require.ErrorIs(t, err, types.ExecDenied, "no exec grant, no exec")
 
 	resolved, err := filepath.EvalSymlinks(sh)
 	require.NoError(t, err)
 	f := newGuardFixture(t, filesystem.Rule{Path: filepath.Dir(resolved), Read: true, Exec: true})
-	code, err := f.call(t, f.confined, "os", "execute", cmd)
+	code, err := f.call(t, f.confined(t), "os", "execute", cmd)
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), code.AsInt())
 	out, err := os.ReadFile(filepath.Join(f.ws, "out.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "|", strings.TrimSpace(string(out)), "neither the socket nor a stripped secret reaches the child")
+}
+
+func (f guardFixture) confined(t *testing.T) context.Context {
+	return std.WithCurrentWorkingDirectory(sandbox.WithPolicy(t.Context(), f.policy), f.ws)
+}
+
+func (f guardFixture) unrestricted(t *testing.T) context.Context {
+	return std.WithCurrentWorkingDirectory(t.Context(), f.ws)
 }

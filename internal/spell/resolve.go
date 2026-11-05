@@ -32,7 +32,7 @@ func isBuiltinResolve(ctx context.Context) bool {
 
 // providerFromContext returns ctx's telemetry provider only when it is enabled, else nil
 // so spell instrumentation stays a true no-op off the server path.
-func providerFromContext(ctx context.Context) observability.Provider {
+func providerFromContext(ctx context.Context) observability.Provider { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	p := observability.FromContext(ctx)
 	if p == nil || !p.Enabled() {
 		return nil

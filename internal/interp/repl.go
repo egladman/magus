@@ -481,7 +481,7 @@ func replDrivers(sess engine.Session) []engine.ReplDriver {
 }
 
 // defaultDriver picks the REPL-start driver: the first available.
-func defaultDriver(drivers []engine.ReplDriver) engine.ReplDriver {
+func defaultDriver(drivers []engine.ReplDriver) engine.ReplDriver { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	if len(drivers) > 0 {
 		return drivers[0]
 	}
@@ -676,13 +676,13 @@ func handleReplMeta(ctx context.Context, stdout, stderr io.Writer, line string, 
 }
 
 // loadFile reads and executes path in sess via DoString.
-func loadFile(_ context.Context, sess engine.Session, path string, stderr io.Writer) {
+func loadFile(ctx context.Context, sess engine.Session, path string, stderr io.Writer) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return
 	}
-	if err := sess.DoString(string(data)); err != nil {
+	if err := sess.DoString(ctx, string(data)); err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 	}
 }

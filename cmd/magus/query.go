@@ -713,7 +713,7 @@ type graphWorkspace interface {
 //
 // The open, when it comes, is the one openWorkspaceForRead makes: the cache-backed handle
 // whose remote shard backing a rebuild pushes to.
-func openForRead(ctx context.Context, root string) (graphWorkspace, error) {
+func openForRead(ctx context.Context, root string) (graphWorkspace, error) { //nolint:ireturn // the workspace backing is chosen at runtime
 	stop := traceFromContext(ctx).phase("read.open")
 	defer stop()
 	if m, ok := loadedMagus(); ok {
@@ -736,7 +736,7 @@ func openForRead(ctx context.Context, root string) (graphWorkspace, error) {
 // set of workspace operations (refs, which reads symbols and classifies files). It is the same
 // Open-loaded handle startup used to preload for these verbs, so the local read is the one
 // it always was; the preload just no longer runs for a read a server answers.
-func openWorkspaceForRead(ctx context.Context, root string) (types.WorkspaceRepository, error) {
+func openWorkspaceForRead(ctx context.Context, root string) (types.WorkspaceRepository, error) { //nolint:ireturn // the workspace backing is chosen at runtime
 	// inspectWorkspace reuses this handle when the open succeeded, and reports why when it
 	// did not, so the error has one place to come from.
 	_, _ = loadMagus(ctx, root)
@@ -756,7 +756,7 @@ func asMagus(ws types.WorkspaceRepository) (*magus.Magus, error) {
 // fullWorkspace is the whole set of workspace operations behind a graph workspace, opening a lazy
 // one: for the reads that need more than the Inspector (the global graph unions
 // WorkspaceRepository handles).
-func fullWorkspace(ctx context.Context, ws graphWorkspace) (types.WorkspaceRepository, error) {
+func fullWorkspace(ctx context.Context, ws graphWorkspace) (types.WorkspaceRepository, error) { //nolint:ireturn // the workspace backing is chosen at runtime
 	switch w := ws.(type) {
 	case types.WorkspaceRepository:
 		return w, nil

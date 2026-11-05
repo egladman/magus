@@ -493,6 +493,18 @@ jobs:
       #   reaches that magus alone, since the box scrubs every child's environment.
       # TMPDIR and MISE_TRUSTED_CONFIG_PATHS are queue.yaml's validate values: the box,
       # and so the checkout mise must trust, lands under runner.temp.
+      # Run 41956616259 shard 0 hit ENOSPC in scip with 70 MB left, the log held no df, and
+      # the runner's 14 GB free is shared by the checkout, the gate's box copy with its own
+      # go build cache, test binaries, the OCI layout and .magus/symbols. The android SDK,
+      # dotnet, ghc and CodeQL are preinstalled and unused here, and removing them gives
+      # back about 25 GB. The two disk lines bracket the gate so the next overrun names
+      # what grew.
+      - name: Free runner disk and report it
+        run: |
+          df -h / "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
       - name: Run CI for shard
         uses: ./.github/actions/magus
         env:
@@ -518,6 +530,12 @@ jobs:
           command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN,TZ -- magus buzz hack/ci/run-with-harnesses.buzz -- run ci:gha --no-default-charms --concurrency-profile aggressive ${{ matrix.projects }} ${{ github.event_name != 'pull_request' && '-- --inherited=fatal' || '' }}
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.plan.outputs.count }}
+
+      - name: Report disk use after the gate
+        if: always()
+        run: |
+          df -h / "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
+          du -sh "$GITHUB_WORKSPACE/.magus" "$GITHUB_WORKSPACE/.magus/symbols" "$GITHUB_WORKSPACE/dist" "$RUNNER_TEMP" "$HOME/.cache/magus" "$HOME/.cache/go-build" "$HOME/go" 2>/dev/null || true
 
       # Signed with MAGUS_CACHE_SIGNING_KEY, which only main holds, in a box of the gate's
       # --cache so it bundles what the gate built with. Only the shard that runs the root

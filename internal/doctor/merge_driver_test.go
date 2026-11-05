@@ -20,7 +20,7 @@ func TestCheckOwedRegeneration(t *testing.T) {
 	r := &runner{ws: rootedWorkspace{root: root}}
 
 	assert.Equal(t, types.Check{Name: "owed-regeneration", Status: types.CheckOK,
-		Message: "no merge left a regeneration owed"}, r.checkOwedRegeneration())
+		Message: "no merge left a regeneration owed"}, r.checkOwedRegeneration(t.Context()))
 
 	ok, err := vcs.RecordOwedRegeneration(t.Context(), root, vcs.OwedRegeneration{Project: ".", Target: "generate", Paths: []string{"MAGUS.md"}})
 	require.NoError(t, err)
@@ -37,7 +37,7 @@ func TestCheckOwedRegeneration(t *testing.T) {
 			fmt.Sprintf("settle them with `%s`, which runs them, stages the result and clears the record", hint.VCSResolve.String()),
 			"record: " + path,
 		},
-	}, r.checkOwedRegeneration())
+	}, r.checkOwedRegeneration(t.Context()))
 }
 
 // rootedDetectingWorkspace resolves its VCS by detection, which registeredMergeDriver needs.
@@ -80,20 +80,20 @@ func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
 			"git config diff.yaml.xfuncname",
 			fmt.Sprintf("install them with `%s`", hint.Init.With("--vcs", "git")),
 		},
-	}, r.checkMergeDriverLoads())
+	}, r.checkMergeDriverLoads(t.Context()))
 
 	installer, ok := vcs.Installer("git")
 	require.True(t, ok)
 	require.NoError(t, installer.InstallMergeDriver(t.Context(), root, types.MergeDriverGlobs{}))
 	register() // the install points the driver at a real magus; the probe needs `true`
 	assert.Equal(t, types.Check{Name: "merge-driver-loads-workspace", Status: types.CheckOK,
-		Message: "the registered merge driver loads this workspace"}, r.checkMergeDriverLoads())
+		Message: "the registered merge driver loads this workspace"}, r.checkMergeDriverLoads(t.Context()))
 }
 
 // With no VCS resolving, the remedy says so; it never names a guessed backend.
 func TestInstallRemedyNamesNoGuessedBackend(t *testing.T) {
 	r := &runner{ws: rootedDetectingWorkspace{rootedWorkspace{root: t.TempDir()}}}
-	got := r.installRemedy()
+	got := r.installRemedy(t.Context())
 	assert.Contains(t, got, "no VCS resolved")
 	assert.NotContains(t, got, "--vcs")
 }
