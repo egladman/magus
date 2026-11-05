@@ -463,7 +463,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(conventions);
     ctx.needs(textsearch\lint);
     ctx.needs(agents\lint);
-    ctx.needs(workspace\lint_rules);
+    ctx.needs(workspace\conventions);
     markdown.typos(ctx);
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
     _ = proc\exec("pnpm", ["exec", "biome", "check", "src"], ".");
