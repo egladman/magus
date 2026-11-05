@@ -187,6 +187,7 @@
 {"group":"file:changes/unreleased/libs-xdg.md","path":"changes/unreleased/libs-xdg.md"}
 {"group":"file:changes/unreleased/lifecycle-provider-console.md","path":"changes/unreleased/lifecycle-provider-console.md"}
 {"group":"file:changes/unreleased/lint-goal-grades-what-the-row-changed.md","path":"changes/unreleased/lint-goal-grades-what-the-row-changed.md"}
+{"group":"file:changes/unreleased/log-append-after-lock-timeout.md","path":"changes/unreleased/log-append-after-lock-timeout.md"}
 {"group":"file:changes/unreleased/log-format-jsonl-refused.md","path":"changes/unreleased/log-format-jsonl-refused.md"}
 {"group":"file:changes/unreleased/magus-affected-plan-prints-affected-unbounded.md","path":"changes/unreleased/magus-affected-plan-prints-affected-unbounded.md"}
 {"group":"file:changes/unreleased/magus-multi-agent-integrate-reference.md","path":"changes/unreleased/magus-multi-agent-integrate-reference.md"}
@@ -1040,8 +1041,10 @@
 {"group":"dir:hack/magusfile","path":"hack/magusfile/image.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/image_test.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/index.buzz"}
+{"group":"dir:hack/magusfile","path":"hack/magusfile/load-contract.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/mockassert.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/model-tiers.buzz"}
+{"group":"dir:hack/magusfile","path":"hack/magusfile/recompose.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/releases.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/ruledocs.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/run-golangci.buzz"}
@@ -1348,7 +1351,6 @@
 {"group":"dir:internal/json","path":"internal/json/json_v2.go"}
 {"group":"dir:internal/json","path":"internal/json/json_v2_test.go"}
 {"group":"dir:internal/json","path":"internal/json/requires_jsonv2.go"}
-{"group":"dir:internal/json","path":"internal/json/stream.go"}
 {"group":"dir:internal/petname","path":"internal/petname/petname.go"}
 {"group":"dir:internal/petname","path":"internal/petname/petname_test.go"}
 {"group":"dir:internal/petname","path":"internal/petname/words.go"}
