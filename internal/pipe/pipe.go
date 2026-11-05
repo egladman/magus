@@ -76,7 +76,7 @@ func StdioFromContext(ctx context.Context) (Stdio, bool) {
 // too, and SettlePipeline reports them.
 //
 // When a record stage writes Stdin directly, it then starts reading its records (see
-// ReadRecords), after the walk: reading them puts a relay in Stdin's place, which no
+// readRecords), after the walk: reading them puts a relay in Stdin's place, which no
 // walk can follow back. When another magus stage writes Stdin directly, it keeps a
 // second descriptor on the pipe instead. Either is what the writer waits to see before
 // it exits (see AwaitReaderProof).
@@ -97,7 +97,7 @@ func (s *Stdio) ProveUpstream(ctx context.Context) {
 		}
 		recordsFrom := 0
 		if writesRecords != nil {
-			recordsFrom, _ = RecordUpstream(ctx, stdin, writesRecords)
+			recordsFrom, _ = recordUpstream(ctx, stdin, writesRecords)
 		}
 		// A cycle is refused by the walk a run repeats at its locks.
 		ups, _ := walkUpstream(ctx, in, takesLocks)
@@ -108,7 +108,7 @@ func (s *Stdio) ProveUpstream(ctx context.Context) {
 			}
 			return
 		}
-		r, err := ReadRecords(stdin)
+		r, err := readRecords(stdin)
 		if err != nil {
 			slog.WarnContext(ctx, fmt.Sprintf("pid %d upstream writes records this process cannot read", recordsFrom),
 				attr.Notice(""), attr.Component("magus"), attr.Error(err))
@@ -252,14 +252,14 @@ func RecordExit(root string, cfg config.Config, status int, signal string) {
 // execWait, since the shell forks every stage of a pipeline at once and a stage may
 // run other commands before it execs.
 func ReadByMagus(ctx context.Context, out *os.File) bool {
-	_, _, ok := ReaderArgv(ctx, out)
+	_, _, ok := readerArgv(ctx, out)
 	return ok
 }
 
-// ReaderArgv is ReadByMagus that also returns the reader's pid and argv, argv[0] first:
+// readerArgv is ReadByMagus that also returns the reader's pid and argv, argv[0] first:
 // which process is the next stage of the pipe and what it was asked to do. argv is nil
 // when a magus reads out but its argv cannot be read.
-func ReaderArgv(ctx context.Context, out *os.File) (pid int, argv []string, ok bool) {
+func readerArgv(ctx context.Context, out *os.File) (pid int, argv []string, ok bool) {
 	if out == nil {
 		return 0, nil, false
 	}
@@ -311,11 +311,11 @@ func AwaitReaderProof(out *os.File, proves func(argv []string) bool, limit time.
 	}
 }
 
-// RecordUpstream returns the pid of a magus stage writing in directly, proven from the
+// recordUpstream returns the pid of a magus stage writing in directly, proven from the
 // kernel as ReadByMagus proves a reader, whose argv writes answers true for: a stage
 // whose stdout carries records. A shell child still between fork and exec is waited
 // for, up to execWait. ok is false when no such stage writes in.
-func RecordUpstream(ctx context.Context, in *os.File, writes func(argv []string) bool) (pid int, ok bool) {
+func recordUpstream(ctx context.Context, in *os.File, writes func(argv []string) bool) (pid int, ok bool) {
 	if in == nil {
 		return 0, false
 	}
@@ -336,12 +336,12 @@ func RecordUpstream(ctx context.Context, in *os.File, writes func(argv []string)
 	return found, ok
 }
 
-// ReadRecords starts reading stdin, which a record stage writes (see RecordUpstream), as
+// readRecords starts reading stdin, which a record stage writes (see recordUpstream), as
 // records. A line that is not a record is what the upstream's targets wrote to their
 // stdout; it keeps reaching whatever in this process reads stdin, through a pipe put in
 // stdin's place, so a target downstream reads its upstream's bytes as it always has.
 // Those bytes are held in memory until read, so the upstream never blocks on them.
-func ReadRecords(stdin *os.File) (*report.Reader, error) {
+func readRecords(stdin *os.File) (*report.Reader, error) {
 	src, _, err := dupForDrain(stdin)
 	if err != nil {
 		return nil, fmt.Errorf("read the records on stdin: %w", err)

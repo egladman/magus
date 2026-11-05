@@ -205,7 +205,7 @@ func TestStdioRidesTheContext(t *testing.T) {
 	}
 }
 
-// ReadRecords takes the records off stdin and leaves every other byte where a target
+// readRecords takes the records off stdin and leaves every other byte where a target
 // reads it, in order, with the end of the stream intact.
 func TestReadRecordsRelaysWhatIsNotARecord(t *testing.T) {
 	r, w := shellPipe(t)
@@ -214,9 +214,9 @@ func TestReadRecordsRelaysWhatIsNotARecord(t *testing.T) {
 			`{"schema":5,"type":"run.target.result","project":"a","target":"emit","status":"ok","cache_hit":false}` + "\npayload-2")
 		_ = w.Close()
 	}()
-	in, err := ReadRecords(r)
+	in, err := readRecords(r)
 	if err != nil {
-		t.Fatalf("ReadRecords: %v", err)
+		t.Fatalf("readRecords: %v", err)
 	}
 	lines, err := in.All(context.Background())
 	if err != nil {
@@ -298,20 +298,20 @@ func TestRecordUpstream(t *testing.T) {
 	r, w := shellPipe(t)
 	up := pipeStage(t, t.TempDir(), map[string]string{"HOLD_MS": "3000"}, "records")
 	startUpstream(t, up, w)
-	pid, ok := RecordUpstream(ctx, r, writes)
+	pid, ok := recordUpstream(ctx, r, writes)
 	if !ok || pid != up.Process.Pid {
-		t.Errorf("RecordUpstream = %d, %v; want the record stage %d", pid, ok, up.Process.Pid)
+		t.Errorf("recordUpstream = %d, %v; want the record stage %d", pid, ok, up.Process.Pid)
 	}
 
 	r2, w2 := shellPipe(t)
 	startUpstream(t, pipeStage(t, t.TempDir(), map[string]string{"HOLD_MS": "3000"}), w2)
-	if _, ok := RecordUpstream(ctx, r2, writes); ok {
+	if _, ok := recordUpstream(ctx, r2, writes); ok {
 		t.Errorf("proved a stage whose argv writes no records")
 	}
 
 	r3, w3 := shellPipe(t)
 	startUpstream(t, exec.Command("sleep", "3"), w3)
-	if _, ok := RecordUpstream(ctx, r3, func([]string) bool { return true }); ok {
+	if _, ok := recordUpstream(ctx, r3, func([]string) bool { return true }); ok {
 		t.Errorf("proved sleep as a record stage")
 	}
 }
