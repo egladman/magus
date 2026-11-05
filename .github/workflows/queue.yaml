@@ -60,10 +60,11 @@ jobs:
   # Runs where a pull request event carries merge intent. queue-apply.yaml reads whether
   # it ran and dispatches a run on main; it is a hint, never a verdict. The provider lists
   # forks too and the plan refuses them by name; skipping them here only saves a run
-  # nobody's change can use. Only a method's label is intent: the queue's status labels
-  # share the prefix.
+  # nobody's change can use. The name carries the action and the label added, which
+  # the run's record lacks. dispatch decides intent from them: the queue's own marks
+  # fire labeled too.
   intent:
-    name: queue intent
+    name: queue intent on ${{ github.event.action }} ${{ github.event.label.name }}
     if: >-
       github.event_name != 'push' && github.event_name != 'workflow_dispatch' &&
       github.event.pull_request.head.repo.full_name == github.repository &&

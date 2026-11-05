@@ -318,11 +318,60 @@ export fun decide(runs: [Validation], intentAt: str) > Decision !> any {
 // is start one more run on base, which validates only what the base's own queue.yaml
 // plans.
 fun dispatch(run: str, base: str, intentAt: str) > void !> any {
-    if (!awaitJob(run, job: "queue intent")) {
-        std\print("::notice title=queue-dispatch-no-intent::run {run} saw no merge intent");
+    final args = ["run", "view", run, "--repo", need("GITHUB_REPOSITORY"), "--json", "status,jobs"];
+    var event: str? = null;
+    while (event == null) {
+        event = intentEvent(capture("gh", args: args));
+        if (event == null) {
+            os\sleep(10000.0);
+        }
+    }
+    if (!intentOf(event!)) {
+        std\print("::notice title=queue-dispatch-no-intent::run {run} saw no merge intent (event \"{event!}\")");
         return;
     }
     start(base, intentAt: intentAt);
+}
+
+// INTENT_JOB starts the intent job's name. The rest names the event,
+// "<action> <label>": a run's record names neither.
+final INTENT_JOB = "queue intent on ";
+
+// intentEvent reads `gh run view --json status,jobs` of a pull request's run.
+// It returns the event the intent job names once that job ran.
+// It returns "" once the run says the job did not run, and null until then.
+export fun intentEvent(view: str) > str? !> any {
+    final run = serialize\jsonDecode(view);
+    foreach (j in run.q("jobs").listValue()) {
+        final name = j.q("name").stringValue();
+        if (name.startsWith(INTENT_JOB)) {
+            if (j.q("conclusion").stringValue() == "skipped") {
+                return "";
+            }
+            return name.sub(INTENT_JOB.len()).trim();
+        }
+    }
+    if (run.q("status").stringValue() == "completed") {
+        return "";
+    }
+    return null;
+}
+
+// intentOf says whether event, as intentEvent reads it, is merge intent.
+// On labeled, only a method's label counts. The queue's own marks fire
+// labeled too, and each would start a run validating the same head again.
+export fun intentOf(event: str) > bool {
+    if (event == "") {
+        return false;
+    }
+    final space = event.indexOf(" ");
+    if (space == null) {
+        return event != "labeled";
+    }
+    if (event.sub(0, len: space!) != "labeled") {
+        return true;
+    }
+    return QUEUE_LABELS.indexOf(event.sub(space! + 1).trim()) != null;
 }
 
 // START_FLAGS are start's flags and DISPATCH_FLAGS dispatch's, all required: neither
@@ -548,6 +597,33 @@ test "apply runs once the plan job runs, and not when it was skipped or never ma
     assert\equal(jobRan(view("completed", conclusion: null), job: "queue plan"), want: false, message: "cancelled before it started");
     assert\equal(jobRan(view("queued", conclusion: null), job: "queue plan"), want: null, message: "still waiting");
     assert\equal(jobRan(view("completed", conclusion: "success"), job: "queue intent"), want: false, message: "another job's conclusion says nothing");
+}
+
+test "dispatch reads the event the intent job names, once the run says" {
+    final view = fun (status: str, name: str, conclusion: str) > str {
+        return encode({"status": status, "jobs": [{"name": name, "conclusion": conclusion}]});
+    };
+    assert\equal(intentEvent(view("in_progress", name: "queue intent on labeled merge-queue: squash", conclusion: "")),
+        want: "labeled merge-queue: squash", message: "a label event");
+    assert\equal(intentEvent(view("in_progress", name: "queue intent on synchronize ", conclusion: "success")),
+        want: "synchronize", message: "no label");
+    assert\equal(intentEvent(view("in_progress", name: "queue intent on synchronize", conclusion: "skipped")),
+        want: "", message: "skipped");
+    assert\equal(intentEvent(encode({"status": "completed", "jobs": [<any>]})), want: "", message: "cancelled before it started");
+    assert\equal(intentEvent(encode({"status": "queued", "jobs": [<any>]})), want: null, message: "still waiting");
+    assert\equal(intentEvent(view("completed", name: "queue plan", conclusion: "success")), want: "", message: "another job says nothing");
+}
+
+test "a labeled event is merge intent only when the label added is a method's" {
+    assert\equal(intentOf("labeled merge-queue: squash"), want: true, message: "a method label");
+    assert\equal(intentOf("labeled merge-queue: rebase"), want: true, message: "another method label");
+    assert\equal(intentOf("labeled queue: queued"), want: false, message: "the queue's own mark, with a method label already on");
+    assert\equal(intentOf("labeled needs-review"), want: false, message: "any other label");
+    assert\equal(intentOf("labeled"), want: false, message: "a label event naming no label");
+    assert\equal(intentOf("synchronize"), want: true, message: "a push to a queued pull request");
+    assert\equal(intentOf("submitted"), want: true, message: "a review");
+    assert\equal(intentOf("auto_merge_enabled"), want: true, message: "auto-merge");
+    assert\equal(intentOf(""), want: false, message: "no intent job ran");
 }
 
 test "each partition gives its first depth changes a validation job" {
