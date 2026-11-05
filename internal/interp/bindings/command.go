@@ -189,7 +189,9 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn.Exe
 		ctx = spawn.WithOutputWriters(ctx, io.MultiWriter(outTail, stdout), io.MultiWriter(errTail, stderr))
 	}
 	var res spawn.ExecResult
-	if len(tgt.Sources) == 0 {
+	// A forwarded scope operand names the files to run, so the declared sources
+	// would only widen it back to the whole project.
+	if len(tgt.Sources) == 0 || namesTestScope(tgt.Command, opts.args) {
 		res, err = execCommand(ctx, dir, bin, args, opts.env, opts.stdin, tgt.Capture, tgt.Quiet)
 	} else {
 		res, err = runSourcedCommand(ctx, tgt, bin, dir, args, opts)
@@ -664,15 +666,19 @@ var scopePlaceholder = regexp.MustCompile(`\{[^{}]*\}`)
 
 // namesTestScope tells a forwarded scope operand from a forwarded flag: the
 // spell declares the operand's shape in TestScope, so no second declaration is
-// needed. {dir}, {file} and {stem} match any text.
+// needed. {dir}, {file} and {stem} match any text, and an arg starting with -
+// is a flag, never an operand.
 func namesTestScope(c spells.Command, args []string) bool {
+	operand := func(re *regexp.Regexp) func(string) bool {
+		return func(a string) bool { return !strings.HasPrefix(a, "-") && re.MatchString(a) }
+	}
 	for _, entry := range c.TestScope {
 		parts := scopePlaceholder.Split(entry, -1)
 		for i := range parts {
 			parts[i] = regexp.QuoteMeta(parts[i])
 		}
 		re := regexp.MustCompile(fmt.Sprintf("^%s$", strings.Join(parts, ".+")))
-		if slices.ContainsFunc(args, re.MatchString) {
+		if slices.ContainsFunc(args, operand(re)) {
 			return true
 		}
 	}

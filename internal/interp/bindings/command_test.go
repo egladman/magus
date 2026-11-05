@@ -751,3 +751,31 @@ func (s *TestScopeArgsSuite) TestAForwardedFlagStillAppendsToTheDefaults() {
 func (s *TestScopeArgsSuite) TestAScopeOperandBesideAFlagKeepsTheFlag() {
 	s.Equal([]string{"test", "./calc", "-run", "X"}, s.argv("./calc", "-run", "X"))
 }
+
+// sourcedArgv runs a sourced op scoped by {file} over a tree holding a.txt
+// and b.txt, and returns each invocation's argv.
+func (s *TestScopeArgsSuite) sourcedArgv(forwarded ...string) [][]string {
+	dir := s.T().TempDir()
+	for _, name := range []string{"a.txt", "b.txt"} {
+		s.Require().NoError(os.WriteFile(filepath.Join(dir, name), nil, 0o644))
+	}
+	logFile := filepath.Join(dir, "calls.log")
+	op := logInvocationOp([]string{"*.txt"}, false)
+	op.TestScope = []string{"{file}"}
+	opts := commandOpts{args: forwarded, env: map[string]string{"LOGFILE": logFile}}
+	_, err := runCommand(std.WithCurrentWorkingDirectory(context.Background(), dir), op, opts)
+	s.Require().NoError(err)
+	var out [][]string
+	for _, line := range logLines(s.T(), logFile) {
+		out = append(out, strings.Fields(line))
+	}
+	return out
+}
+
+func (s *TestScopeArgsSuite) TestAScopeOperandReplacesTheSources() {
+	s.Equal([][]string{{"a.txt"}}, s.sourcedArgv("a.txt"))
+}
+
+func (s *TestScopeArgsSuite) TestAForwardedFlagKeepsTheSources() {
+	s.Equal([][]string{{"-v", "a.txt", "b.txt"}}, s.sourcedArgv("-v"))
+}

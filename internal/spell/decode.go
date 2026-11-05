@@ -152,6 +152,11 @@ func (r Resolved) addCoverageOp(m *spells.Descriptor) error {
 	if err != nil {
 		return fmt.Errorf("spell %q: mgs_getCoverage: %w", m.Name, err)
 	}
+	// A forwarded scope narrows coverage as it narrows the test op. Otherwise
+	// the default args and sources ride along, and it runs everything.
+	if len(cov.Command.TestScope) == 0 {
+		cov.Command.TestScope = m.Ops[cov.Test].TestScope
+	}
 	if m.Ops == nil {
 		m.Ops = map[string]spells.Op{}
 	}

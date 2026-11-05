@@ -318,7 +318,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"coverage": goldenCoverageOp(spells.Coverage{
 				Format: spells.CoverageFormatLCOV, File: "lcov.info", Test: "magus-buzz-test",
 				Command: spells.Command{Bin: "$MAGUS", Args: []string{"buzz", "-t", "--embedded", "--coverprofile", "$MAGUS_COVERAGE_DIR/lcov.info"},
-					Sources: []string{"**/*.buzz"}},
+					Sources: []string{"**/*.buzz"}, TestScope: []string{"{file}", "{dir}/{stem}_test.buzz"}},
 			}),
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatBuzzModule, Op: "scip-buzz"},
@@ -466,7 +466,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"coverage": goldenCoverageOp(spells.Coverage{
 				Format: spells.CoverageFormatGoProfile, File: "cover.out", Test: "go-test", Uses: []string{"go"},
 				Command: spells.Command{Bin: "go", Args: []string{"test", "-trimpath", "-covermode=set", "-coverprofile=$MAGUS_COVERAGE_DIR/cover.out"},
-					DefaultArgs: []string{"./..."}},
+					DefaultArgs: []string{"./..."}, TestScope: []string{"./{dir}"}},
 			}),
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatGoPackages,

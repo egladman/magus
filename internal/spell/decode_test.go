@@ -936,7 +936,16 @@ func (s *coverageOpSuite) TestRegistersTheReservedOpByKind() {
 	s.Require().NoError(err)
 	want := *coverageContract().Coverage
 	want.Test = "go-test"
+	want.Command.TestScope = []string{"./{dir}"}
 	s.Equal(spells.Op{Kind: spells.OpKindCoverage, Command: want.Command, Coverage: &want}, m.Ops[spells.CoverageOp])
+}
+
+func (s *coverageOpSuite) TestTheCoverageCommandKeepsItsOwnTestScope() {
+	c := coverageContract()
+	c.Coverage.Command.TestScope = []string{"{file}"}
+	m, err := describe(c)
+	s.Require().NoError(err)
+	s.Equal([]string{"{file}"}, m.Ops[spells.CoverageOp].TestScope)
 }
 
 func (s *coverageOpSuite) TestAddsNoOpWhenUndeclared() {
