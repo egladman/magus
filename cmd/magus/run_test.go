@@ -883,3 +883,19 @@ func TestResultRefsLine(t *testing.T) {
 		})
 	}
 }
+
+type SameCharmsSuite struct{ suite.Suite }
+
+func TestSameCharmsSuite(t *testing.T) { suite.Run(t, new(SameCharmsSuite)) }
+
+func (s *SameCharmsSuite) TestOrderDoesNotMatter() {
+	s.True(sameCharms([]string{"gha", "ci"}, []string{"ci", "gha"}))
+}
+
+func (s *SameCharmsSuite) TestADifferentCharmDiffers() {
+	s.False(sameCharms([]string{"gha"}, []string{"ci"}))
+}
+
+func (s *SameCharmsSuite) TestNoCharmsEqualsNoCharms() {
+	s.True(sameCharms(nil, []string{}))
+}

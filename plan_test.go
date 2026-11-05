@@ -173,35 +173,46 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 	s.m = m
 }
 
-func (s *PlanUnitsSuite) plan(charms, args []string) ([]types.Unit, []types.DirectCall) {
-	units, unplanned, err := s.m.planUnits(context.Background(), []types.Target{{Path: "."}, {Path: "api"}}, "ci", charms, args)
-	s.Require().NoError(err)
-	return units, unplanned
+func (s *PlanUnitsSuite) plan(charms, args []string) ([]types.Unit, error) {
+	return s.m.planUnits(context.Background(), []types.Target{{Path: "."}, {Path: "api"}}, "ci", charms, args)
 }
 
 func (s *PlanUnitsSuite) TestEachStepCIAsksForIsAUnit() {
-	got, unplanned := s.plan(nil, nil)
+	got, err := s.plan(nil, nil)
+	s.Require().NoError(err)
 	s.Equal([]types.Unit{
 		{Project: ".", Target: "lint"}, {Project: ".", Target: "test"}, {Project: ".", Target: "figures"},
 		{Project: ".", Target: "security"}, {Project: "api", Target: "ci"},
 	}, got)
-	s.Empty(unplanned)
 }
 
 func (s *PlanUnitsSuite) TestAStepTheCharmSkipsIsNoUnit() {
-	got, _ := s.plan([]string{"gha"}, nil)
+	got, err := s.plan([]string{"gha"}, nil)
+	s.Require().NoError(err)
 	s.NotContains(got, types.Unit{Project: ".", Target: "figures"})
 	s.Contains(got, types.Unit{Project: ".", Target: "lint"})
 }
 
-func (s *PlanUnitsSuite) TestADirectCallUnderArgsIsNamedUnplanned() {
-	got, unplanned := s.plan([]string{"gha"}, []string{"--strict"})
-	s.NotContains(got, types.Unit{Project: ".", Target: "security"})
-	s.Equal([]types.DirectCall{{Project: ".", Anchor: "ci", Target: "security"}}, unplanned)
+func (s *PlanUnitsSuite) TestADirectCallUnderArgsIsAnErrorNamingIt() {
+	_, err := s.plan([]string{"gha"}, []string{"--strict"})
+	s.ErrorContains(err, ".:ci calls security")
+}
+
+func (s *PlanUnitsSuite) TestAnAffectedProjectOutsideTheWorkspaceIsAnError() {
+	_, err := s.m.planUnits(context.Background(), []types.Target{{Path: "ghost"}}, "ci", nil, nil)
+	s.ErrorContains(err, `project "ghost" is affected but not in the workspace`)
+}
+
+func (s *PlanUnitsSuite) TestAnUnreadableMagusfileIsAnError() {
+	p := s.m.Get(".")
+	s.Require().NoError(os.Remove(filepath.Join(p.Dir, types.MagusfileName)))
+	_, err := directCalls(p, "ci")
+	s.ErrorContains(err, "magusfile for direct calls")
 }
 
 func (s *PlanUnitsSuite) TestAUnitNeedsItsTransitiveSteps() {
-	got := s.m.unitNeeds(types.Unit{Project: ".", Target: "test"})
+	got, err := s.m.unitNeeds(types.Unit{Project: ".", Target: "test"})
+	s.Require().NoError(err)
 	s.Equal([]types.Unit{{Project: ".", Target: "test"}, {Project: ".", Target: "build"}}, got)
 }
 

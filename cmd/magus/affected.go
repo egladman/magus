@@ -518,16 +518,14 @@ type planOutput struct {
 	// run under others is refused, since its steps would differ.
 	Charms []string `json:"charms,omitempty"`
 	Args   []string `json:"args,omitempty"`
-	// Runner is the class the shards were packed for; Fallbacks says each
+	// Machine is the class the shards were packed for; Fallbacks says each
 	// default the plan fell back to.
-	Machine   *types.Machine `json:"machine,omitempty"`
-	Fallbacks []string       `json:"fallbacks,omitempty"`
-	// Unplanned are targets an anchor calls directly, which no shard runs.
-	Unplanned   []types.DirectCall `json:"unplanned,omitempty"`
-	Count       int                `json:"count"`
-	MaxParallel int                `json:"max_parallel"`
-	Source      string             `json:"source"`
-	Matrix      []planShard        `json:"matrix"`
+	Machine     *types.Machine `json:"machine,omitempty"`
+	Fallbacks   []string       `json:"fallbacks,omitempty"`
+	Count       int            `json:"count"`
+	MaxParallel int            `json:"max_parallel"`
+	Source      string         `json:"source"`
+	Matrix      []planShard    `json:"matrix"`
 	// Affected is the whole closure the matrix was cut from, sorted, and UnboundedBy says
 	// why it is not a proof when it is not. Together they are the answer a merge queue's
 	// affected hook expects, so `affected <target> --plan --stdin` feeds one as it stands.
@@ -727,10 +725,7 @@ func planSummaryMarkdown(out planOutput) string {
 	for _, f := range out.Fallbacks {
 		fmt.Fprintf(&b, "\n- Fell back: %s.", f)
 	}
-	for _, c := range out.Unplanned {
-		fmt.Fprintf(&b, "\n- Unplanned: `%s`'s %s calls `%s` directly, so no shard runs it.", c.Project, c.Anchor, c.Target)
-	}
-	if len(out.Fallbacks)+len(out.Unplanned) > 0 {
+	if len(out.Fallbacks) > 0 {
 		b.WriteString("\n")
 	}
 	return b.String()
@@ -945,17 +940,12 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	if len(plan.Fallbacks) > 0 {
 		slog.With(attr.Component("magus")).WarnContext(ctx, "the plan fell back: "+strings.Join(plan.Fallbacks, "; "))
 	}
-	for _, c := range plan.Unplanned {
-		slog.With(attr.Component("magus")).WarnContext(ctx, fmt.Sprintf(
-			"%s's %s calls %s directly rather than through ctx.needs, so no shard runs it", c.Project, c.Anchor, c.Target))
-	}
 	out := planOutput{
 		Target:      target,
 		Charms:      plan.Charms,
 		Args:        plan.Args,
 		Machine:     plan.Machine,
 		Fallbacks:   plan.Fallbacks,
-		Unplanned:   plan.Unplanned,
 		Count:       len(plan.Shards),
 		MaxParallel: plan.MaxParallel,
 		Source:      plan.Source,
@@ -1202,11 +1192,7 @@ func cappedList(items []string) []string {
 
 // cappedUnits is units as project:target, bounded by cappedList.
 func cappedUnits(units []types.Unit) string {
-	names := make([]string, len(units))
-	for i, u := range units {
-		names[i] = u.String()
-	}
-	return strings.Join(cappedList(names), ", ")
+	return strings.Join(cappedList(types.UnitNames(units)), ", ")
 }
 
 // undeclaredSeedHintCap bounds how many seed projects (and how many of one project's

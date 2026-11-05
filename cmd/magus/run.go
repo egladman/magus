@@ -143,7 +143,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		case !slices.Equal(extraArgs, saved.Args):
 			return refusePlan("the plan was evaluated with args %q, not %q; plan again with the args the shard runs",
 				strings.Join(saved.Args, " "), strings.Join(extraArgs, " "))
-		case !slices.Equal(parsedTarget.Charms, saved.Charms):
+		case !sameCharms(parsedTarget.Charms, saved.Charms):
 			return refusePlan("the plan was evaluated under charms %q, not %q; plan again under the charms the shard runs",
 				strings.Join(saved.Charms, ","), strings.Join(parsedTarget.Charms, ","))
 		}
@@ -769,11 +769,12 @@ func planTargets(shards []planShard) []types.Target {
 
 // planUnitList is units as space-separated project:target.
 func planUnitList(units []types.Unit) string {
-	names := make([]string, len(units))
-	for i, u := range units {
-		names[i] = u.String()
-	}
-	return strings.Join(names, " ")
+	return strings.Join(types.UnitNames(units), " ")
+}
+
+// sameCharms reports whether a and b hold the same charms in any order.
+func sameCharms(a, b []string) bool {
+	return slices.Equal(slices.Sorted(slices.Values(a)), slices.Sorted(slices.Values(b)))
 }
 
 // emitSavedPlanDryRun answers `run --stdin --dry-run`, which runs nothing. Structured -o

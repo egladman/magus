@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/types"
 )
 
@@ -30,27 +31,22 @@ type Plan struct {
 	Shards      []Shard
 	Source      string
 	MaxParallel int // 0 = no cap (renderers emit max-parallel = len(Shards))
-}
-
-// Forecaster is the optional adaptive partitioner that replaces
-// ceil-division when supplied to Build. Plan returns every unit exactly
-// once, in at most maxShards shards.
-type Forecaster interface {
-	Plan(units []types.Unit, maxShards int) [][]types.Unit
+	// Fallbacks says each limit Build applied that was not asked for.
+	Fallbacks []string
 }
 
 type config struct {
-	maxShards  int // -1 = unlimited (up to hardCeiling)
-	forecaster Forecaster
+	maxShards int // -1 = unlimited (up to hardCeiling)
+	model     *forecast.Model
 }
 
 // Option mutates the Build configuration.
 type Option func(*config)
 
-// WithForecaster enables adaptive sharding; nil clears it (falls back to ceil-division).
-func WithForecaster(f Forecaster) Option {
+// WithModel enables adaptive sharding; nil clears it (ceil-division).
+func WithModel(m *forecast.Model) Option {
 	return func(c *config) {
-		c.forecaster = f
+		c.model = m
 	}
 }
 
@@ -62,7 +58,7 @@ func WithMaxShards(n int) Option {
 }
 
 // Build partitions units into at most maxShards shards via ceil-division
-// (or a forecaster). A shard never holds less than one unit, so the
+// (or a model). A shard never holds less than one unit, so the
 // limit clamps to len(units).
 func Build(units []types.Unit, source string, opts ...Option) (Plan, error) {
 	cfg := &config{maxShards: defaultMaxShards}
@@ -81,11 +77,16 @@ func Build(units []types.Unit, source string, opts ...Option) (Plan, error) {
 	if maxShards == -1 {
 		maxShards = len(units)
 	}
+	var fallbacks []string
+	if maxShards > hardCeiling && len(units) > hardCeiling {
+		fallbacks = append(fallbacks, fmt.Sprintf(
+			"the plan opens at most %d shards, the matrix-job ceiling, not the %d asked for", hardCeiling, maxShards))
+	}
 	maxShards = min(maxShards, hardCeiling, len(units))
 
 	var assignments [][]types.Unit
-	if cfg.forecaster != nil {
-		assignments = cfg.forecaster.Plan(units, maxShards)
+	if cfg.model != nil {
+		assignments = cfg.model.Plan(units, maxShards)
 	} else {
 		assignments = ceilDivide(units, maxShards)
 	}
@@ -103,7 +104,7 @@ func Build(units []types.Unit, source string, opts ...Option) (Plan, error) {
 		}
 	}
 
-	return Plan{Shards: shards, Source: source}, nil
+	return Plan{Shards: shards, Source: source, Fallbacks: fallbacks}, nil
 }
 
 // placedOnce checks that assignments hold every unit exactly once, in at most
@@ -113,28 +114,27 @@ func placedOnce(units []types.Unit, assignments [][]types.Unit, maxShards int) e
 	if len(assignments) > maxShards {
 		return fmt.Errorf("ci: the partitioner opened %d shards, over the limit of %d", len(assignments), maxShards)
 	}
-	want := make(map[string]bool, len(units))
+	want := make(map[types.Unit]bool, len(units))
 	for _, u := range units {
-		want[u.String()] = true
+		want[u] = true
 	}
-	placed := make(map[string]int, len(units))
+	placed := make(map[types.Unit]int, len(units))
 	for i, shard := range assignments {
 		if len(shard) == 0 {
 			return fmt.Errorf("ci: the partitioner left shard %d empty", i)
 		}
 		for _, u := range shard {
-			k := u.String()
 			switch {
-			case !want[k]:
-				return fmt.Errorf("ci: the partitioner placed %s, which is not a unit of the plan", k)
-			case placed[k] > 0:
-				return fmt.Errorf("ci: the partitioner placed %s on shards %d and %d", k, placed[k]-1, i)
+			case !want[u]:
+				return fmt.Errorf("ci: the partitioner placed %s, which is not a unit of the plan", u)
+			case placed[u] > 0:
+				return fmt.Errorf("ci: the partitioner placed %s on shards %d and %d", u, placed[u]-1, i)
 			}
-			placed[k] = i + 1
+			placed[u] = i + 1
 		}
 	}
 	for _, u := range units {
-		if placed[u.String()] == 0 {
+		if placed[u] == 0 {
 			return fmt.Errorf("ci: the partitioner dropped %s", u)
 		}
 	}

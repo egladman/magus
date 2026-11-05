@@ -92,7 +92,7 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 	}
 	slices.Sort(affected)
 
-	units, unplanned, err := m.planUnits(ctx, targets, target, opts.Charms, opts.Args)
+	units, err := m.planUnits(ctx, targets, target, opts.Charms, opts.Args)
 	if err != nil {
 		return types.ShardPlan{}, fmt.Errorf("affected plan: %w", err)
 	}
@@ -114,7 +114,15 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		return types.ShardPlan{}, fmt.Errorf("affected plan: load history: %w", err)
 	}
 
-	f := forecast.Forecaster{History: hist, Needs: m.unitNeeds}
+	needs := make(map[types.Unit][]types.Unit, len(units))
+	for _, u := range units {
+		closure, err := m.unitNeeds(u)
+		if err != nil {
+			return types.ShardPlan{}, fmt.Errorf("affected plan: %w", err)
+		}
+		needs[u] = closure
+	}
+	f := forecast.Model{History: hist, Needs: func(u types.Unit) []types.Unit { return needs[u] }}
 	if machine != nil {
 		f.MemoryBudgetBytes = forecast.BudgetBytes(machine.MemoryMB)
 	}
@@ -138,10 +146,11 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 			"the history holds no duration for any unit, so the plan opens at most %d shards", forecast.ColdShards))
 	}
 
-	plan, err := ci.Build(units, source, ci.WithMaxShards(maxShards), ci.WithForecaster(f))
+	plan, err := ci.Build(units, source, ci.WithMaxShards(maxShards), ci.WithModel(&f))
 	if err != nil {
 		return types.ShardPlan{}, fmt.Errorf("affected plan: %w", err)
 	}
+	fallbacks = append(fallbacks, plan.Fallbacks...)
 
 	maxParallel := len(plan.Shards)
 	if opts.RunnerPoolBudget > 0 && opts.RunnerPoolBudget < maxParallel {
@@ -156,9 +165,6 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		}
 	}
 	placeDuties(shards)
-	// Both are asked of the concrete forecaster rather than carried out of ci.Build: the
-	// Forecaster interface returns an assignment and nothing about how it was reached, so
-	// a plan built from real history and one built from fallbacks are the same value.
 	assignments := make([][]types.Unit, len(plan.Shards))
 	for i, s := range plan.Shards {
 		assignments[i] = s.Units
@@ -175,7 +181,6 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		Args:        opts.Args,
 		Machine:     machine,
 		Fallbacks:   fallbacks,
-		Unplanned:   unplanned,
 		Sufficient:  f.SufficientShards(units, len(plan.Shards)),
 		OverBudget:  overBudget,
 		Unmeasured:  f.Unmeasured(units),
@@ -186,8 +191,10 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 
 // planUnits is each step anchor asks for through ctx.needs, under charms and
 // args. A project whose anchor asks for nothing is the unit (path, anchor).
-// unplanned names targets an anchor calls directly that no unit runs.
-func (m *Magus) planUnits(ctx context.Context, targets []types.Target, anchor string, charms, args []string) (units []types.Unit, unplanned []types.DirectCall, err error) {
+// A direct call is an error naming each call, since no unit would run it.
+func (m *Magus) planUnits(ctx context.Context, targets []types.Target, anchor string, charms, args []string) ([]types.Unit, error) {
+	var units []types.Unit
+	var unplanned []string
 	seen := map[types.Unit]bool{}
 	add := func(u types.Unit) {
 		if !seen[u] {
@@ -198,34 +205,42 @@ func (m *Magus) planUnits(ctx context.Context, targets []types.Target, anchor st
 	for _, t := range targets {
 		p := m.Get(t.Path)
 		if p == nil {
-			continue
+			return nil, fmt.Errorf("project %q is affected but not in the workspace", t.Path)
 		}
-		steps, err := m.anchorSteps(ctx, p, anchor, charms, args)
+		steps, found, err := m.anchorSteps(ctx, p, anchor, charms, args)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		if len(steps) == 0 {
+		if !found || len(steps) == 0 {
 			add(types.Unit{Project: p.Path, Target: anchor})
 			continue
 		}
 		for _, u := range steps {
 			add(types.Unit{Project: cmp.Or(u.Project, p.Path), Target: u.Target})
 		}
-		for _, call := range directCalls(p, anchor) {
+		calls, err := directCalls(p, anchor)
+		if err != nil {
+			return nil, err
+		}
+		for _, call := range calls {
 			if !seen[types.Unit{Project: p.Path, Target: call}] {
-				unplanned = append(unplanned, types.DirectCall{Project: p.Path, Anchor: anchor, Target: call})
+				unplanned = append(unplanned, types.DirectCall{Project: p.Path, Anchor: anchor, Target: call}.String())
 			}
 		}
 	}
-	return units, unplanned, nil
+	if len(unplanned) > 0 {
+		return nil, fmt.Errorf("the anchor calls targets directly, so no shard would run them: %s", strings.Join(unplanned, "; "))
+	}
+	return units, nil
 }
 
 // anchorSteps evaluates anchor's body in p as a dry run does, under charms and
 // args, and returns the steps it asks for through ctx.needs. The recorder
-// answers ctx.needs and the trace stubs every effectful host call.
-func (m *Magus) anchorSteps(ctx context.Context, p *types.Project, anchor string, charms, args []string) ([]types.Unit, error) {
+// answers ctx.needs and the trace stubs every effectful host call. found is
+// false when p's magusfile does not declare anchor.
+func (m *Magus) anchorSteps(ctx context.Context, p *types.Project, anchor string, charms, args []string) (steps []types.Unit, found bool, err error) {
 	if !slices.Contains(p.MagusfileTargets, types.Normalize(anchor)) {
-		return nil, nil
+		return nil, false, nil
 	}
 	rec := types.NewStepLog()
 	ctx = types.WithStepLog(ctx, rec)
@@ -234,21 +249,21 @@ func (m *Magus) anchorSteps(ctx context.Context, p *types.Project, anchor string
 	ctx = types.WithWorkspace(ctx, m.internals())
 	ctx = buzz.WithTargetRuns(ctx, buzz.NewTargetRuns())
 	if err := m.runTarget(ctx, p, anchor); err != nil {
-		return nil, fmt.Errorf("evaluate %s in %s: %w", anchor, p.Path, err)
+		return nil, true, fmt.Errorf("evaluate %s in %s: %w", anchor, p.Path, err)
 	}
-	return rec.Units(), nil
+	return rec.Units(), true, nil
 }
 
 // directCalls are the exported targets anchor's body in p calls as functions,
 // read from the magusfile. ctx.needs is the only call the recorder sees.
-func directCalls(p *types.Project, anchor string) []string {
-	src, err := os.ReadFile(filepath.Join(p.Dir, "magusfile.buzz"))
+func directCalls(p *types.Project, anchor string) ([]string, error) {
+	src, err := os.ReadFile(filepath.Join(p.Dir, types.MagusfileName))
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("read %s's magusfile for direct calls: %w", p.Path, err)
 	}
 	prog, err := buzz.ParseEmbedded(string(src))
-	if err != nil || prog == nil {
-		return nil
+	if err != nil {
+		return nil, fmt.Errorf("parse %s's magusfile for direct calls: %w", p.Path, err)
 	}
 	funcs := map[string]*ast.FunDecl{}
 	for _, stmt := range prog.Stmts {
@@ -289,7 +304,7 @@ func directCalls(p *types.Project, anchor string) []string {
 		}
 	}
 	slices.Sort(calls)
-	return slices.Compact(calls)
+	return slices.Compact(calls), nil
 }
 
 // errNoMachine is configuredMachine's answer when ci.machine is unset.
@@ -318,7 +333,7 @@ func placeDuties(shards []types.Shard) {
 	rootUnits := func(s types.Shard) int {
 		n := 0
 		for _, u := range s.Units {
-			if u.Project == "." {
+			if u.Project == types.RootProject {
 				n++
 			}
 		}
@@ -339,14 +354,16 @@ func placeDuties(shards []types.Shard) {
 }
 
 // unitNeeds is u's transitive needs closure, u included.
-func (m *Magus) unitNeeds(u types.Unit) []types.Unit {
+func (m *Magus) unitNeeds(u types.Unit) ([]types.Unit, error) {
 	var out []types.Unit
-	// The callback returns no error, so the walk returns none.
-	_ = types.WalkChain(m.Get(u.Project), u.Target, m.Get, func(v types.ChainVisit) error {
+	err := types.WalkChain(m.Get(u.Project), u.Target, m.Get, func(v types.ChainVisit) error {
 		out = append(out, types.Unit{Project: v.Project.Path, Target: v.Target})
 		return nil
 	})
-	return out
+	if err != nil {
+		return nil, fmt.Errorf("walk the needs of %s: %w", u, err)
+	}
+	return out, nil
 }
 
 // unboundedBy says why the closure computed from res is not a proof, or "" when it is.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/suite"
 )
@@ -76,52 +77,64 @@ func (s *BuildSuite) TestIDsPadToTheLastIndex() {
 	s.Equal("99", plan.Shards[99].ID)
 }
 
-func (s *BuildSuite) TestAForecasterReplacesCeilDivision() {
+func (s *BuildSuite) TestAModelReplacesCeilDivision() {
 	us := units(4)
-	f := NewMockForecaster(s.T())
-	f.EXPECT().Plan(us, 4).Return([][]types.Unit{us}).Once()
+	m := forecast.Model{
+		History:           forecast.History{Constants: forecast.Constants{SetupP50Ms: forecast.Millis(600_000)}},
+		MemoryBudgetBytes: 1 << 62,
+	}
 
-	plan, err := Build(us, "test", WithMaxShards(8), WithForecaster(f))
+	plan, err := Build(us, "test", WithMaxShards(8), WithModel(&m))
 	s.Require().NoError(err)
 	s.Equal([]int{4}, shardSizes(plan.Shards))
 }
 
-func (s *BuildSuite) forecast(us []types.Unit, max int, assignments [][]types.Unit) error {
-	f := NewMockForecaster(s.T())
-	f.EXPECT().Plan(us, max).Return(assignments).Once()
-	_, err := Build(us, "test", WithMaxShards(8), WithForecaster(f))
-	return err
+func (s *BuildSuite) TestAnUnlimitedRequestPastTheCeilingSaysItWasCapped() {
+	plan, err := Build(units(hardCeiling+1), "test", WithMaxShards(-1))
+	s.Require().NoError(err)
+	s.Len(plan.Shards, hardCeiling)
+	s.Len(plan.Fallbacks, 1)
+	s.Contains(plan.Fallbacks[0], "at most 256 shards")
 }
 
-func (s *BuildSuite) TestAnEmptyForecastIsAnError() {
+func (s *BuildSuite) TestARequestUnderTheCeilingFallsBackOnNothing() {
+	plan, err := Build(units(5), "test", WithMaxShards(-1))
+	s.Require().NoError(err)
+	s.Empty(plan.Fallbacks)
+}
+
+type PlacedOnceSuite struct{ suite.Suite }
+
+func TestPlacedOnceSuite(t *testing.T) { suite.Run(t, new(PlacedOnceSuite)) }
+
+func (s *PlacedOnceSuite) TestAnEmptyAssignmentIsAnError() {
+	s.ErrorContains(placedOnce(units(2), nil, 2), "dropped p000:test")
+}
+
+func (s *PlacedOnceSuite) TestAssignmentThatDropsAUnitIsAnError() {
 	us := units(2)
-	s.ErrorContains(s.forecast(us, 2, nil), "dropped p000:test")
+	s.ErrorContains(placedOnce(us, [][]types.Unit{us[:1]}, 2), "dropped p001:test")
 }
 
-func (s *BuildSuite) TestAForecastThatDropsAUnitIsAnError() {
+func (s *PlacedOnceSuite) TestAssignmentThatRepeatsAUnitIsAnError() {
 	us := units(2)
-	s.ErrorContains(s.forecast(us, 2, [][]types.Unit{us[:1]}), "dropped p001:test")
+	s.ErrorContains(placedOnce(us, [][]types.Unit{us, us[:1]}, 2), "placed p000:test on shards 0 and 1")
 }
 
-func (s *BuildSuite) TestAForecastThatRepeatsAUnitIsAnError() {
-	us := units(2)
-	s.ErrorContains(s.forecast(us, 2, [][]types.Unit{us, us[:1]}), "placed p000:test on shards 0 and 1")
-}
-
-func (s *BuildSuite) TestAForecastThatInventsAUnitIsAnError() {
+func (s *PlacedOnceSuite) TestAssignmentThatInventsAUnitIsAnError() {
 	us := units(1)
 	stray := types.Unit{Project: "x", Target: "lint"}
-	s.ErrorContains(s.forecast(us, 1, [][]types.Unit{{us[0], stray}}), "placed x:lint, which is not a unit")
+	s.ErrorContains(placedOnce(us, [][]types.Unit{{us[0], stray}}, 1), "placed x:lint, which is not a unit")
 }
 
-func (s *BuildSuite) TestAForecastWithAnEmptyShardIsAnError() {
+func (s *PlacedOnceSuite) TestAssignmentWithAnEmptyShardIsAnError() {
 	us := units(2)
-	s.ErrorContains(s.forecast(us, 2, [][]types.Unit{us, {}}), "left shard 1 empty")
+	s.ErrorContains(placedOnce(us, [][]types.Unit{us, {}}, 2), "left shard 1 empty")
 }
 
-func (s *BuildSuite) TestAForecastOverTheLimitIsAnError() {
+func (s *PlacedOnceSuite) TestAssignmentOverTheLimitIsAnError() {
 	us := units(2)
-	s.ErrorContains(s.forecast(us, 2, [][]types.Unit{us[:1], us[1:], us[:0]}), "opened 3 shards, over the limit of 2")
+	s.ErrorContains(placedOnce(us, [][]types.Unit{us[:1], us[1:], us[:0]}, 2), "opened 3 shards, over the limit of 2")
 }
 
 func (s *BuildSuite) TestSourcePassesThrough() {

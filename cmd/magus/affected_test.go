@@ -498,14 +498,21 @@ func TestRunOutputCarriesUndeclaredSeedsAsAField(t *testing.T) {
 	assert.NotContains(t, string(b), "undeclared_seeds")
 }
 
-// TestShardNameElidesWithoutTouchingTheProjectList pins the split between the
-// two fields: Projects is checked against the units, Name is only read by a
-// person scanning a job list.
-func TestShardNameElidesWithoutTouchingTheProjectList(t *testing.T) {
-	t.Parallel()
+// ShardNameSuite pins the split between the two fields: Projects is checked
+// against the units, Name is only read by a person scanning a job list.
+type ShardNameSuite struct{ suite.Suite }
 
-	assert.Equal(t, "no projects", shardName(nil))
-	assert.Equal(t, ". docs", shardName([]string{".", "docs"}))
-	assert.Equal(t, ". docs proto", shardName([]string{".", "docs", "proto"}))
-	assert.Equal(t, ". docs proto +2", shardName([]string{".", "docs", "proto", "console", "libs/textsearch"}))
+func TestShardNameSuite(t *testing.T) { suite.Run(t, new(ShardNameSuite)) }
+
+func (s *ShardNameSuite) TestNoProjectsSaysSo() {
+	s.Equal("no projects", shardName(nil))
+}
+
+func (s *ShardNameSuite) TestUpToThreeProjectsAreListed() {
+	s.Equal(". docs", shardName([]string{".", "docs"}))
+	s.Equal(". docs proto", shardName([]string{".", "docs", "proto"}))
+}
+
+func (s *ShardNameSuite) TestMoreThanThreeElideTheRest() {
+	s.Equal(". docs proto +2", shardName([]string{".", "docs", "proto", "console", "libs/textsearch"}))
 }

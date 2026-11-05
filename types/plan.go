@@ -10,6 +10,13 @@ import (
 	"sync"
 )
 
+const (
+	// RootProject is the path of the workspace root's project.
+	RootProject = "."
+	// MagusfileName is the file a project declares its targets in.
+	MagusfileName = "magusfile.buzz"
+)
+
 // Unit is the smallest piece of work a CI shard plan places. It is one target
 // a project's anchor (ci) asks for through ctx.needs, under the plan's charms
 // and args. It carries no args: ctx.needs hands a step none.
@@ -21,12 +28,26 @@ type Unit struct {
 // String is the unit as project:target, the key ties break on.
 func (u Unit) String() string { return fmt.Sprintf("%s:%s", u.Project, u.Target) }
 
+// UnitNames is each unit as project:target, in order.
+func UnitNames(units []Unit) []string {
+	names := make([]string, len(units))
+	for i, u := range units {
+		names[i] = u.String()
+	}
+	return names
+}
+
 // DirectCall is a target an anchor's body calls as a function instead of
-// through ctx.needs. The recorder cannot see it, so no unit runs it.
+// through ctx.needs. The recorder cannot see it, so no unit would run it.
 type DirectCall struct {
 	Project string `json:"project"`
 	Anchor  string `json:"anchor"`
 	Target  string `json:"target"`
+}
+
+// String is the call as project:anchor calls target.
+func (c DirectCall) String() string {
+	return fmt.Sprintf("%s:%s calls %s", c.Project, c.Anchor, c.Target)
 }
 
 // Duty is a workspace-wide CI step the plan places on exactly one shard, so a
@@ -41,9 +62,6 @@ const (
 	// shard with the fewest units.
 	DutyNotesVerify Duty = "notes-verify"
 )
-
-// Duties is every duty a plan places, in placement order.
-var Duties = []Duty{DutyCacheExport, DutyNotesVerify}
 
 // Shard is one runner's worth of work in a CI shard plan.
 type Shard struct {
@@ -61,10 +79,7 @@ type Shard struct {
 
 // UnitsDigest is a short stable digest of units, independent of their order.
 func UnitsDigest(units []Unit) string {
-	keys := make([]string, len(units))
-	for i, u := range units {
-		keys[i] = u.String()
-	}
+	keys := UnitNames(units)
 	slices.Sort(keys)
 	sum := sha256.Sum256([]byte(strings.Join(keys, "\n")))
 	return hex.EncodeToString(sum[:6])
@@ -104,10 +119,9 @@ type ShardPlan struct {
 	// Fallbacks says each default the plan fell back to, one sentence each.
 	// Empty when every input was given.
 	Fallbacks []string
-	// Unplanned are the targets an anchor calls directly. No shard runs them.
-	Unplanned []DirectCall
-	// Sufficient is the smallest shard count that finishes as fast as this plan, so a
-	// reader can see what the extra runners bought. 0 when nothing was predictable.
+	// Sufficient is the fewest shards that pack by duration as fast as
+	// this plan's count. Memory splits are not counted. 0 when no unit
+	// outlasts setup.
 	Sufficient int
 	// OverBudget names the shards predicted to exceed one runner's memory, by ID. A
 	// runner that runs out of memory disappears and reports "cancelled" with no

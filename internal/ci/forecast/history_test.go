@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // fixedNow is a deterministic ingest timestamp so no test depends on wall-clock.
@@ -1726,4 +1727,85 @@ func BenchmarkHistoryLoad(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+type HistoryPredictionSuite struct{ suite.Suite }
+
+func TestHistoryPredictionSuite(t *testing.T) { suite.Run(t, new(HistoryPredictionSuite)) }
+
+func (s *HistoryPredictionSuite) TestAProjectWithFiveSamplesPredictsItsOwn() {
+	h := History{}
+	for range 5 {
+		h.Update(time.Now(), []Sample{{Project: "a", Target: "ci", DurationMs: 10_000}}, nil)
+	}
+	s.Equal(10*time.Second, h.PredictDuration("a", "ci", nil))
+	s.Equal(10*time.Second, h.PredictDuration("never-seen", "ci", nil), "unknown project, workspace fallback")
+}
+
+func (s *HistoryPredictionSuite) TestEmptyHistoryPredictsTheHardDefault() {
+	empty := History{}
+	s.Equal(time.Duration(DefaultDurationMs)*time.Millisecond, empty.PredictDuration("x", "ci", nil))
+}
+
+func (s *HistoryPredictionSuite) TestFewerThanThreeSamplesFallBackToTheWorkspace() {
+	h := History{}
+	h.Update(time.Now(), []Sample{
+		{Project: "alpha", Target: "ci", DurationMs: 100_000},
+		{Project: "other", Target: "ci", DurationMs: 1_000},
+		{Project: "other", Target: "ci", DurationMs: 1_000},
+		{Project: "other", Target: "ci", DurationMs: 1_000},
+	}, nil)
+	s.NotEqual(100*time.Second, h.PredictDuration("alpha", "ci", nil), "one sample is not alpha's own value")
+}
+
+func (s *HistoryPredictionSuite) TestWriteThenLoadRoundTrips() {
+	path := filepath.Join(s.T().TempDir(), "history.json")
+	h := History{}
+	h.Update(time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC), []Sample{
+		{Project: "api", Target: "ci", DurationMs: 42_000},
+		{Project: "api", Target: "ci", DurationMs: 45_000},
+		{Project: "api", Target: "ci", DurationMs: 40_000},
+	}, []ShardSample{{SetupMs: 25_000, TotalMs: 100_000, WorkMs: 200_000, NShards: 4}})
+	seedHistory(s.T(), path, h)
+
+	var got History
+	s.Require().NoError(got.Load(context.Background(), path))
+	s.Equal(HistoryVersion, got.Version)
+	s.Equal(3, got.Projects["api"]["ci"].Samples)
+	s.Equal(Millis(25_000), got.Constants.SetupP50Ms)
+}
+
+func (s *HistoryPredictionSuite) TestALoadOfAMissingFileIsEmpty() {
+	var got History
+	s.Require().NoError(got.Load(context.Background(), filepath.Join(s.T().TempDir(), "does-not-exist.json")))
+	s.Equal(HistoryVersion, got.Version)
+}
+
+func (s *HistoryPredictionSuite) TestRecentOutcomesCapAtTheSampleWindow() {
+	h := History{}
+	for i := range SampleWindow * 2 {
+		h.Update(time.Now(), []Sample{{Project: "p", Target: "ci", DurationMs: int64(1_000 + i)}}, nil)
+	}
+	st := h.Projects["p"]["ci"]
+	s.Len(st.Recent, SampleWindow)
+	s.Equal(SampleWindow*2, st.Samples)
+}
+
+func (s *HistoryPredictionSuite) TestADurationReadsTheHistoryKeyedBySpell() {
+	h := History{Projects: map[string]map[string]Stats{
+		"heavy": {"magusfile/ci": {P75Ms: 300_000, Samples: 50}},
+		"light": {"magusfile/ci": {P75Ms: 1_000, Samples: 50}},
+	}}
+	s.Equal(300*time.Second, h.PredictDuration("heavy", "ci", nil))
+	s.Equal(time.Second, h.PredictDuration("light", "ci", nil))
+	s.True(h.Measured("heavy", "ci", nil))
+}
+
+func (s *HistoryPredictionSuite) TestAPeakReadsTheHistoryKeyedBySpell() {
+	h := History{Projects: map[string]map[string]Stats{
+		"heavy": {"magusfile/ci": {RecentOutcomes: []Outcome{{MaxRSSBytes: 3 << 30}}}},
+	}}
+	got, ok := h.PredictPeakRSS("heavy", "ci")
+	s.Require().True(ok)
+	s.Equal(int64(3<<30), got)
 }

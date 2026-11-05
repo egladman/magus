@@ -44,8 +44,8 @@ or `libs/x:format`, so one large project can fill several runners. magus finds
 the units by evaluating each `ci` body the way a dry run does, under the charms
 and the args after `--` the shards run it with. A step behind
 `if (!ctx.hasCharm("gha"))` is no unit of a `ci:gha` plan. A target the body
-calls as a function is no unit either: the plan names it under `unplanned`, and
-no shard runs it.
+calls as a function is no unit either, so the plan fails and names each such
+call.
 
 Each unit weighs what the run history recorded for it. A unit with no history
 weighs the workspace fallback, and the plan lists it under `unmeasured`. When no
