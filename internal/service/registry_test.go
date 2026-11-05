@@ -24,7 +24,7 @@ type countingRunner struct {
 
 type numberedHandle struct{ id int }
 
-func (f *countingRunner) Start(_ context.Context, _ spells.Service) (Handle, error) {
+func (f *countingRunner) Start(_ context.Context, _ spells.Service) (Handle, error) { //nolint:ireturn // the implementation is chosen at runtime among several
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.startErr != nil {
@@ -234,7 +234,7 @@ type slowRunner struct {
 	proceed chan struct{}
 }
 
-func (s *slowRunner) Start(context.Context, spells.Service) (Handle, error) {
+func (s *slowRunner) Start(context.Context, spells.Service) (Handle, error) { //nolint:ireturn // the implementation is chosen at runtime among several
 	close(s.entered) // announce we are mid-start (only one start in these tests)
 	<-s.proceed      // block until the test lets it finish
 	s.mu.Lock()

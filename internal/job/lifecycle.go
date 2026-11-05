@@ -681,7 +681,7 @@ func unreadSince(ctx context.Context, here string, paths []string, run types.Job
 
 // revisionReader is the VCS that reads revision in root, or nil when none can: without one
 // a path missing at the revision and a revision missing from the store read alike.
-func revisionReader(ctx context.Context, root, revision string) types.VCSDriver {
+func revisionReader(ctx context.Context, root, revision string) types.VCSDriver { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	driver, _ := resolveDriver(ctx, root)
 	if driver == nil {
 		return nil

@@ -76,7 +76,7 @@ func TestEnsureDriverRefreshesAnExistingRegistration(t *testing.T) {
 	assert.Equal(t, before, snapshotTree(t, hooks))
 }
 
-func resolveGitDriver(t *testing.T, dir string) types.VCSDriver {
+func resolveGitDriver(t *testing.T, dir string) types.VCSDriver { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	t.Helper()
 	res, err := vcs.Resolve(context.Background(), dir, "", types.VCSOptions{})
 	require.NoError(t, err)
