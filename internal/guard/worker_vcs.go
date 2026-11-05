@@ -294,6 +294,42 @@ func sharesRepository(row types.Job, dir string) bool {
 // detached checkout there. rest is the words after `worktree`. A relative dir
 // resolves from cwd.
 func scratchWorktreeChange(ctx context.Context, row types.Job, rest []string, cwd string) bool {
+	target, removing := worktreeChangeTarget(rest, cwd)
+	if removing {
+		return detachedScratch(ctx, row, target)
+	}
+	return target != "" && inScratch(row, target)
+}
+
+// otherRepositoryWorktreeChange reports a worktreeChangeTarget call at site
+// whose dir lies outside row's checkout, every checkout of its repository and
+// scratchCheckouts, where job checkouts live. A removed dir must be a checkout
+// of site's repository. Planted worktree metadata could name any tree.
+func otherRepositoryWorktreeChange(row types.Job, inv hint.Invocation, site vcsSite) bool {
+	g := parseGit(inv.Args)
+	if g.sub != "worktree" || g.configured || site.gitDir != "" {
+		return false
+	}
+	target, removing := worktreeChangeTarget(g.rest, site.dir)
+	if target == "" || inOwnCheckout(row, target) || sharesRepository(row, target) {
+		return false
+	}
+	if scratch, err := scratchCheckouts(); err != nil || within(target, scratch) {
+		return false
+	}
+	if !removing {
+		return true
+	}
+	root, common, ok := gitCheckout(target)
+	_, here, hereOK := gitCheckout(site.dir)
+	return ok && hereOK && samePath(root, target) && samePath(common, here)
+}
+
+// worktreeChangeTarget is the dir of `git worktree add --detach <dir>` or
+// `git worktree remove [--force] <dir>`, resolved from cwd. It is "" for a
+// branch-making add or a dir with ~, $ or a backtick. rest is the words after
+// `worktree`.
+func worktreeChangeTarget(rest []string, cwd string) (target string, removing bool) {
 	resolve := func(target string) string {
 		if target == "" || strings.ContainsAny(target, "$`~") {
 			return ""
@@ -305,23 +341,27 @@ func scratchWorktreeChange(ctx context.Context, row types.Job, rest []string, cw
 	}
 	switch {
 	case firstWordIs(rest, "add"):
-		target := resolve(checkoutAddTarget("git", rest))
-		return slices.Contains(rest, "--detach") && !anyFlag(rest[1:], "bB", "--orphan") &&
-			target != "" && inScratch(row, target)
+		if !slices.Contains(rest, "--detach") || anyFlag(rest[1:], "bB", "--orphan") {
+			return "", false
+		}
+		return resolve(checkoutAddTarget("git", rest)), false
 	case firstWordIs(rest, "remove"):
 		var targets []string
 		for _, a := range rest[1:] {
 			switch {
 			case a == "--force" || a == "-f":
 			case strings.HasPrefix(a, "-"):
-				return false
+				return "", true
 			default:
 				targets = append(targets, a)
 			}
 		}
-		return len(targets) == 1 && detachedScratch(ctx, row, resolve(targets[0]))
+		if len(targets) != 1 {
+			return "", true
+		}
+		return resolve(targets[0]), true
 	}
-	return false
+	return "", false
 }
 
 // inScratch reports dir lying below scratchCheckouts and outside row's own
@@ -331,11 +371,16 @@ func inScratch(row types.Job, dir string) bool {
 	if err != nil || dir == "" || samePath(dir, scratch) || !within(dir, scratch) {
 		return false
 	}
+	return !inOwnCheckout(row, dir)
+}
+
+// inOwnCheckout reports dir in row's checkout_root or recorded worktree.
+func inOwnCheckout(row types.Job, dir string) bool {
 	own := []string{row.CheckoutRoot}
 	if row.Worktree != nil {
 		own = append(own, row.Worktree.Root)
 	}
-	return !slices.ContainsFunc(own, func(root string) bool { return root != "" && within(dir, root) })
+	return slices.ContainsFunc(own, func(root string) bool { return root != "" && within(dir, root) })
 }
 
 // detachedScratch reports dir standing in a git checkout under

@@ -2400,6 +2400,127 @@ func TestVCSCmdRefusalLetsAScratchRepositoryUseATemporaryIndex(t *testing.T) {
 		"a lease with no checkout_root cannot show the index is outside it")
 }
 
+// VCSCmdRefusalScratchWorktreeSuite runs vcs\cmd as withTree in
+// hack/dev/merge-job-branches.buzz does under a worker lease: a detached
+// worktree of a scratch repository, added and removed outside the checkout.
+type VCSCmdRefusalScratchWorktreeSuite struct {
+	suite.Suite
+	ctx     context.Context
+	repo    worktreeRepo
+	worker  types.Job
+	own     string
+	scratch string
+	tree    string
+}
+
+func TestVCSCmdRefusalScratchWorktreeSuite(t *testing.T) {
+	suite.Run(t, new(VCSCmdRefusalScratchWorktreeSuite))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) SetupTest() {
+	s.ctx, s.repo, s.worker, s.own = leaseVCSRepository(s.T())
+	s.scratch = testkit.NewRepository(s.T(), nil).Root()
+	s.tree = filepath.Join(s.T().TempDir(), "tree")
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) run(dir string, args ...string) error {
+	return vcsCommandRefusal(s.ctx, s.worker, "git", args, dir, nil)
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) add(target string, flags ...string) error {
+	args := append(append([]string{"worktree", "add"}, flags...), target, "HEAD")
+	return s.run(s.scratch, args...)
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingADetachedTreeOutsideTheCheckoutPasses() {
+	s.NoError(s.add(s.tree, "--detach", "--quiet"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestARelativeTargetResolvesFromTheDashCRepository() {
+	s.NoError(s.run(s.own, "-C", s.scratch, "worktree", "add", "--detach", "tree", "HEAD"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestRemovingADetachedTreePasses() {
+	s.repo.git(s.scratch, "worktree", "add", "--detach", "--quiet", s.tree, "HEAD")
+	s.NoError(s.run(s.scratch, "worktree", "remove", "--force", s.tree))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingIntoTheCheckoutIsRefused() {
+	s.Error(s.add(filepath.Join(s.own, "tree"), "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestARelativeTargetIntoTheCheckoutIsRefused() {
+	rel, err := filepath.Rel(s.scratch, filepath.Join(s.own, "tree"))
+	s.Require().NoError(err)
+	s.Error(s.add(rel, "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingIntoAnotherCheckoutOfTheJobsRepositoryIsRefused() {
+	s.Error(s.add(filepath.Join(s.repo.main, "tree"), "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingAmongTheJobCheckoutsIsRefused() {
+	checkouts, err := scratchCheckouts()
+	s.Require().NoError(err)
+	s.Error(s.add(filepath.Join(checkouts, "tree"), "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestATargetUnderTheHomeShorthandIsRefused() {
+	s.Error(s.add("~/tree", "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestATargetWithADollarIsRefused() {
+	s.Error(s.add("$HOME/tree", "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestATargetWithABacktickIsRefused() {
+	s.Error(s.add("`pwd`/tree", "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingWithoutDetachIsRefused() {
+	s.Error(s.add(s.tree))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingOnANewBranchIsRefused() {
+	s.Error(s.add(s.tree, "--detach", "-b", "x"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingOnAResetBranchIsRefused() {
+	s.Error(s.add(s.tree, "--detach", "-B", "x"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingAnOrphanIsRefused() {
+	s.Error(s.add(s.tree, "--detach", "--orphan"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingWithInlineConfigIsRefused() {
+	s.Error(s.run(s.scratch, "-c", "core.worktree="+s.own, "worktree", "add", "--detach", s.tree, "HEAD"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingFromTheWorkersCheckoutIsRefused() {
+	s.ErrorContains(s.run(s.own, "worktree", "add", "--detach", s.tree, "HEAD"), "stays with the orchestrator")
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingFromACheckoutSharingTheJobsGitDirIsRefused() {
+	sibling := s.repo.add("sibling")
+	s.Error(s.run(sibling, "worktree", "add", "--detach", s.tree, "HEAD"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestRemovingTheCheckoutIsRefused() {
+	s.Error(s.run(s.scratch, "worktree", "remove", "--force", s.own))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestRemovingAnotherRepositorysTreeIsRefused() {
+	other := testkit.NewRepository(s.T(), nil)
+	other.Git("worktree", "add", "--detach", "--quiet", s.tree, "HEAD")
+	s.Error(s.run(s.scratch, "worktree", "remove", "--force", s.tree))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestRemovingWithAnUnreadFlagIsRefused() {
+	s.repo.git(s.scratch, "worktree", "add", "--detach", "--quiet", s.tree, "HEAD")
+	s.Error(s.run(s.scratch, "worktree", "remove", "--force", "--unknown", s.tree))
+}
+
 // TestVCSCmdRefusalReadsTheJobsCheckoutUnderAnyAlias pins the exemption against spellings
 // of the job's repository that differ from the registered path as strings: a case variant
 // on a case-insensitive filesystem, macOS's firmlinked data volume, and a symlinked parent.
@@ -2490,7 +2611,6 @@ func mustRel(t *testing.T, base, target string) string {
 // nested repository inside the checkout is the job's files under another git directory;
 // core.worktree, in the scratch's config or inline, moves the work tree onto the job's; and
 // a push writes to a remote that may be the job's repository.
-// A worktree call names its target path anywhere.
 func TestVCSCmdRefusalExemptsOnlyAnotherRepository(t *testing.T) {
 	ctx, r, worker, wt := leaseVCSRepository(t)
 	scratch := testkit.NewRepository(t, nil)
@@ -2503,8 +2623,6 @@ func TestVCSCmdRefusalExemptsOnlyAnotherRepository(t *testing.T) {
 	moved := testkit.NewRepository(t, nil)
 	moved.Git("config", "core.worktree", wt)
 	fresh := testkit.NewRepository(t, nil)
-	linked := filepath.Join(t.TempDir(), "linked")
-	fresh.Git("worktree", "add", "-q", linked)
 
 	for name, c := range map[string]struct {
 		args []string
@@ -2523,7 +2641,6 @@ func TestVCSCmdRefusalExemptsOnlyAnotherRepository(t *testing.T) {
 		"clean with core.worktree inline":     {[]string{"-c", "core.worktree=" + wt, "clean", "-fdx"}, scratch.Root(), nil},
 		"clean with core.worktree configured": {[]string{"clean", "-fdx"}, moved.Root(), nil},
 		"push from a scratch repo":            {[]string{"push", r.main, "HEAD:main"}, scratch.Root(), nil},
-		"worktree remove in a scratch repo":   {[]string{"worktree", "remove", "--force", linked}, fresh.Root(), nil},
 	} {
 		require.Error(t, vcsCommandRefusal(ctx, worker, "git", c.args, c.dir, c.env), name)
 	}
