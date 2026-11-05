@@ -53,34 +53,70 @@ func ConfigFromTelemetry(t config.Telemetry, version, workspaceRoot string) Conf
 	return cfg
 }
 
-// Provider is the OTel runtime API. All methods are concurrency-safe; all are no-ops when Enabled=false.
-// A fake embeds [Nop] and defines only the methods it records; a consumer that calls one or two
-// methods declares its own interface with just those.
+// Provider is the OTel runtime API: the sum of the recorder groups below. All methods
+// are concurrency-safe; all are no-ops when Enabled=false. A fake embeds [Nop] and
+// defines only the methods it records; a consumer takes the group it calls, or declares
+// its own interface with just those methods.
 type Provider interface {
+	Exporter
+	SpanStarter
+	CacheRecorder
+	RunRecorder
+	AgentRecorder
+	SandboxRecorder
+	BuzzRecorder
+	ReviewRecorder
+}
+
+// Exporter is the provider's own lifecycle: whether it exports at all, its local
+// snapshot, and its shutdown.
+type Exporter interface {
 	Enabled() bool
-	RecordCacheRead(ctx context.Context, result CacheResult, attrs ...Attr)                   // magus.cache.reads
-	RecordCacheDuration(ctx context.Context, secs float64, result CacheResult)                // magus.cache.duration histogram
-	RecordCacheSaved(ctx context.Context, secs float64)                                       // magus.cache.saved.duration histogram
-	RecordGraphQuery(ctx context.Context, secs float64, attrs ...Attr)                        // magus.graph.query.duration histogram
-	RecordRemoteOp(ctx context.Context, op RemoteOp)                                          // magus.cache.remote.* metrics
+	// Snapshot returns the current metrics as standard OTLP protobuf, or (nil, nil) when this
+	// provider is not collecting locally. OTLP is the export format for real monitoring
+	// backends; it is never put on the dashboard's wire.
+	Snapshot(ctx context.Context) ([]byte, error)
+	Shutdown(ctx context.Context) error
+}
+
+// SpanStarter opens trace spans.
+type SpanStarter interface {
 	StartSpan(ctx context.Context, name string, attrs ...Attr) (context.Context, func(error)) // end fn marks failure on non-nil error
-	RecordTargetRun(ctx context.Context, secs float64, attrs ...Attr)                         // magus.target.duration
-	RecordPoolWait(ctx context.Context, secs float64)                                         // magus.pool.wait.duration
-	RecordPoolSlots(ctx context.Context, state PoolSlotState, delta int64)                    // magus.pool.slots.{queued,running} += delta
+}
 
-	// MCP tool call family: magus.mcp.tool.*.
+// CacheRecorder records the local and remote cache families: magus.cache.*.
+type CacheRecorder interface {
+	RecordCacheRead(ctx context.Context, result CacheResult, attrs ...Attr)    // magus.cache.reads
+	RecordCacheDuration(ctx context.Context, secs float64, result CacheResult) // magus.cache.duration histogram
+	RecordCacheSaved(ctx context.Context, secs float64)                        // magus.cache.saved.duration histogram
+	RecordRemoteOp(ctx context.Context, op RemoteOp)                           // magus.cache.remote.* metrics
+}
+
+// RunRecorder records graph queries, target runs and the concurrency pool.
+type RunRecorder interface {
+	RecordGraphQuery(ctx context.Context, secs float64, attrs ...Attr)     // magus.graph.query.duration histogram
+	RecordTargetRun(ctx context.Context, secs float64, attrs ...Attr)      // magus.target.duration
+	RecordPoolWait(ctx context.Context, secs float64)                      // magus.pool.wait.duration
+	RecordPoolSlots(ctx context.Context, state PoolSlotState, delta int64) // magus.pool.slots.{queued,running} += delta
+}
+
+// AgentRecorder records the MCP tool call family, magus.mcp.tool.*, and the agent cost
+// family, magus.agent.*.
+type AgentRecorder interface {
 	RecordMCPCall(ctx context.Context, c MCPCall)
-
-	// Agent cost family: magus.agent.*.
 	RecordAgentCall(ctx context.Context, c AgentCall)
+}
 
-	// Filesystem sandbox families: magus.sandbox.*.
+// SandboxRecorder records the filesystem sandbox families: magus.sandbox.*.
+type SandboxRecorder interface {
 	RecordSandboxApply(ctx context.Context, secs float64, outcome, scope string) // magus.sandbox.apply.duration
 	RecordSandboxRules(ctx context.Context, r SandboxRules)                      // magus.sandbox.rules + magus.sandbox.env.rules
 	RecordSandboxCheck(ctx context.Context, access, decision, project string)    // magus.sandbox.checks
 	RecordSandboxEnvDropped(ctx context.Context, project string, n int64)        // magus.sandbox.env.dropped
+}
 
-	// Buzz language families: magus.buzz.*.
+// BuzzRecorder records the Buzz language families: magus.buzz.*.
+type BuzzRecorder interface {
 	RecordBuzzExec(ctx context.Context, e BuzzExec)                              // magus.buzz.exec.duration
 	RecordBuzzCompile(ctx context.Context, c BuzzCompile)                        // magus.buzz.compile.duration
 	RecordBuzzHostCall(ctx context.Context, c BuzzHostCall)                      // magus.buzz.host.call.duration
@@ -91,10 +127,13 @@ type Provider interface {
 	RecordBuzzSpellBuiltinsWarm(ctx context.Context, secs float64, spell string) // magus.buzz.spell.builtins.warm
 	RecordBuzzJITRun(ctx context.Context)                                        // magus.buzz.jit.runs
 	RecordBuzzVMFault(ctx context.Context, kind string)                          // magus.buzz.vm.faults
+}
 
-	// Lease, attention and review families: magus.lease.*, magus.attention.*, magus.review.*. Every
-	// attribute here is a bounded enum the caller has already validated; an id, a path, a
-	// lease label or a remark body must never reach one.
+// ReviewRecorder records the lease, attention and review families: magus.lease.*,
+// magus.attention.*, magus.review.*. Every attribute here is a bounded enum the caller
+// has already validated; an id, a path, a lease label or a remark body must never reach
+// one.
+type ReviewRecorder interface {
 	RecordLeaseRegistration(ctx context.Context, verdict string)              // magus.lease.registrations
 	RecordAttentionDisposition(ctx context.Context, secs float64, sev string) // magus.attention.disposition.duration
 	RecordReviewRemark(ctx context.Context, author string)                    // magus.review.remarks
@@ -102,11 +141,6 @@ type Provider interface {
 	// RecordReviewMergedWhileReading records how long the reader had been reading a review
 	// that merged under them, in seconds (magus.review.merged_while_reading.duration).
 	RecordReviewMergedWhileReading(ctx context.Context, secs float64)
-	// Snapshot returns the current metrics as standard OTLP protobuf, or (nil, nil) when this
-	// provider is not collecting locally. OTLP is the export format for real monitoring
-	// backends; it is never put on the dashboard's wire.
-	Snapshot(ctx context.Context) ([]byte, error)
-	Shutdown(ctx context.Context) error
 }
 
 // CacheResult is how one Cache.Run ended: the result attribute on magus.cache.reads and
@@ -286,16 +320,21 @@ func (Nop) Snapshot(context.Context) ([]byte, error)                     { retur
 func (Nop) Shutdown(context.Context) error                               { return nil }
 
 // GraphObserver wraps p as a types.Observer; returns types.NoopObserver{} when p is nil or disabled.
-func GraphObserver(ctx context.Context, p Provider) types.Observer {
+func GraphObserver(ctx context.Context, p graphQueryRecorder) types.Observer {
 	if p == nil || !p.Enabled() {
 		return types.NoopObserver{}
 	}
 	return &otelGraphObserver{ctx: ctx, p: p}
 }
 
+type graphQueryRecorder interface {
+	Enabled() bool
+	RecordGraphQuery(ctx context.Context, secs float64, attrs ...Attr)
+}
+
 type otelGraphObserver struct {
 	ctx context.Context
-	p   Provider
+	p   graphQueryRecorder
 }
 
 // Observe records a finished build or query; a failed one has no duration worth a point.
@@ -331,7 +370,7 @@ type Attr struct {
 
 // CacheRunOptions returns the [cache.RunOption] that records every Cache.Run's result to the
 // Provider. Returns nil when p is nil; callers can wire unconditionally.
-func CacheRunOptions(ctx context.Context, p Provider) []cache.RunOption {
+func CacheRunOptions(ctx context.Context, p CacheRecorder) []cache.RunOption {
 	if p == nil {
 		return nil
 	}
@@ -360,7 +399,7 @@ func CacheRunOptions(ctx context.Context, p Provider) []cache.RunOption {
 // TargetRunOptions returns [cache.RunOption] values that record per-target metrics (magus.project, spell, target,
 // outcome, cache.hit) via the Provider. spellsOf maps project path → spell names; one row is emitted per spell.
 // Returns nil when p is nil.
-func TargetRunOptions(ctx context.Context, p Provider, spellsOf func(projectPath string) []string) []cache.RunOption {
+func TargetRunOptions(ctx context.Context, p RunRecorder, spellsOf func(projectPath string) []string) []cache.RunOption {
 	if p == nil {
 		return nil
 	}

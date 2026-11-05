@@ -51,7 +51,7 @@ var lastJITRuns atomic.Int64
 // recordJITDelta records the JIT-entry executions that happened since the last
 // timed exec. vm.JITRunCount is a process-global monotonic counter, so we diff it
 // and feed the delta to the (add-1) spine counter.
-func recordJITDelta(ctx context.Context, p observability.Provider) {
+func recordJITDelta(ctx context.Context, p observability.BuzzRecorder) {
 	now := vm.JITRunCount()
 	prev := lastJITRuns.Swap(now)
 	delta := now - prev
@@ -105,7 +105,7 @@ func AttachSessionObservers(ctx context.Context, sess *buzz.Session, mode string
 // spine. It closes over the run ctx (the hooks carry no ctx) and the provider.
 type compileObserver struct {
 	ctx  context.Context
-	p    observability.Provider
+	p    observability.BuzzRecorder
 	mode string
 }
 
@@ -132,7 +132,7 @@ func NewPoolObserver(ctx context.Context) buzz.PoolObserver {
 // poolObserver reports each checkout and release as one pool event; the provider derives the
 // idle gauge from the events.
 type poolObserver struct {
-	p observability.Provider
+	p observability.BuzzRecorder
 }
 
 func (o poolObserver) SessionAcquire(ctx context.Context, kind buzz.SessionAcquireKind, _ int) {
@@ -171,7 +171,7 @@ func NewHostCallObserver(ctx context.Context) buzz.DirectObserver {
 // closes over the registration ctx (DirectCall carries none) and the provider.
 type hostCallObserver struct {
 	ctx context.Context
-	p   observability.Provider
+	p   observability.BuzzRecorder
 }
 
 func (o hostCallObserver) DirectCall(name string, elapsed time.Duration, err error) {

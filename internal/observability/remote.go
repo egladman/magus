@@ -22,7 +22,7 @@ import (
 // verification or replay is a hit here and a failure in the tally, and a store the
 // backend reports as already present is a put here and neither an upload nor a failure
 // in the tally.
-func InstrumentRemoteBackend(b types.CacheBackend, p Provider) types.CacheBackend {
+func InstrumentRemoteBackend(b types.CacheBackend, p remoteOpRecorder) types.CacheBackend {
 	if b == nil || p == nil || !p.Enabled() {
 		return b
 	}
@@ -37,7 +37,13 @@ func InstrumentRemoteBackend(b types.CacheBackend, p Provider) types.CacheBacken
 // metering) and instruments GetArtifact/PutArtifact.
 type instrumentedBackend struct {
 	types.CacheBackend
-	p Provider
+	p remoteOpRecorder
+}
+
+type remoteOpRecorder interface {
+	Enabled() bool
+	SpanStarter
+	RecordRemoteOp(ctx context.Context, op RemoteOp)
 }
 
 // GetArtifact traces the fetch and records the outcome. On a hit the span and
@@ -120,14 +126,19 @@ func (c *countingReadCloser) Close() error {
 // CacheTracer adapts a Provider to [cache.Tracer] so the cache package can open
 // phase spans without importing this package. It returns nil when telemetry is
 // off; [cache.ContextWithTracer] stores a nil Tracer as a no-op.
-func CacheTracer(p Provider) cache.Tracer {
+func CacheTracer(p enabledSpanStarter) cache.Tracer {
 	if p == nil || !p.Enabled() {
 		return nil
 	}
 	return cacheTracer{p: p}
 }
 
-type cacheTracer struct{ p Provider }
+type enabledSpanStarter interface {
+	Enabled() bool
+	SpanStarter
+}
+
+type cacheTracer struct{ p enabledSpanStarter }
 
 func (t cacheTracer) StartSpan(ctx context.Context, name string) (context.Context, func(error)) {
 	return t.p.StartSpan(ctx, name)
