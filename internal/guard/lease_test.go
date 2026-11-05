@@ -2140,6 +2140,18 @@ func (s *IntegrationScratchMergeSuite) TestAddingOneOnABranchIsRefused() {
 	s.Error(s.run(s.row, s.own, "worktree", "add", "-b", "x", s.tree, "HEAD"))
 }
 
+func (s *IntegrationScratchMergeSuite) TestADetachThatIsTheReasonsValueIsRefused() {
+	s.Error(s.run(s.row, s.own, "worktree", "add", "--lock", "--reason", "--detach", s.tree, "HEAD"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestADetachAfterTheOperandsMarkIsRefused() {
+	s.Error(s.run(s.row, s.own, "worktree", "add", "--", s.tree, "--detach"))
+}
+
+func (s *IntegrationScratchMergeSuite) TestAddingWithTheShortDetachPasses() {
+	s.NoError(s.run(s.row, s.own, "worktree", "add", "-d", s.tree, "HEAD"))
+}
+
 func (s *IntegrationScratchMergeSuite) TestAddingOneOutsideScratchIsRefused() {
 	s.Error(s.run(s.row, s.own, "worktree", "add", "--detach", filepath.Join(s.repo.parent, "x"), "HEAD"))
 }
@@ -2402,7 +2414,7 @@ func TestVCSCmdRefusalLetsAScratchRepositoryUseATemporaryIndex(t *testing.T) {
 
 // VCSCmdRefusalScratchWorktreeSuite runs vcs\cmd as withTree in
 // hack/dev/merge-job-branches.buzz does under a worker lease: a detached
-// worktree of a scratch repository, added and removed outside the checkout.
+// worktree of a scratch repository, added outside the checkout.
 type VCSCmdRefusalScratchWorktreeSuite struct {
 	suite.Suite
 	ctx     context.Context
@@ -2440,9 +2452,39 @@ func (s *VCSCmdRefusalScratchWorktreeSuite) TestARelativeTargetResolvesFromTheDa
 	s.NoError(s.run(s.own, "-C", s.scratch, "worktree", "add", "--detach", "tree", "HEAD"))
 }
 
-func (s *VCSCmdRefusalScratchWorktreeSuite) TestRemovingADetachedTreePasses() {
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingWithTheShortDetachPasses() {
+	s.NoError(s.add(s.tree, "-d"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingWithAPackedDetachPasses() {
+	s.NoError(s.add(s.tree, "-fd"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestADetachThatIsTheReasonsValueIsRefused() {
+	s.Error(s.add(s.tree, "--lock", "--reason", "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestADetachAfterTheOperandsMarkIsRefused() {
+	s.Error(s.run(s.scratch, "worktree", "add", "--", s.tree, "--detach"))
+}
+
+// A tree's .git can be planted to name the scratch repository, so no
+// removal passes, its own detached tree included.
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestRemovingADetachedTreeIsRefused() {
 	s.repo.git(s.scratch, "worktree", "add", "--detach", "--quiet", s.tree, "HEAD")
-	s.NoError(s.run(s.scratch, "worktree", "remove", "--force", s.tree))
+	s.Error(s.run(s.scratch, "worktree", "remove", "--force", s.tree))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingIntoANestedRepositoryOfTheMainCheckoutIsRefused() {
+	nested := filepath.Join(s.repo.main, "nested")
+	s.repo.git(s.repo.main, "init", "-q", nested)
+	s.Error(s.add(filepath.Join(nested, "tree"), "--detach"))
+}
+
+func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingIntoANestedRepositoryOfASiblingWorktreeIsRefused() {
+	nested := filepath.Join(s.repo.add("sibling"), "nested")
+	s.repo.git(s.repo.main, "init", "-q", nested)
+	s.Error(s.add(filepath.Join(nested, "tree"), "--detach"))
 }
 
 func (s *VCSCmdRefusalScratchWorktreeSuite) TestAddingIntoTheCheckoutIsRefused() {
@@ -2604,57 +2646,131 @@ func mustRel(t *testing.T, base, target string) string {
 	return rel
 }
 
-// TestVCSCmdRefusalExemptsOnlyAnotherRepository pins the scratch-repository exemption to a
-// git operation whose site and work tree stand outside the job's checkout, in a repository
-// of their own. Pointed at another repository with --git-dir, git takes the job's checkout
-// as the work tree, so a clean or checkout there wipes the job's files; a submodule or
-// nested repository inside the checkout is the job's files under another git directory;
-// core.worktree, in the scratch's config or inline, moves the work tree onto the job's; and
-// a push writes to a remote that may be the job's repository.
-func TestVCSCmdRefusalExemptsOnlyAnotherRepository(t *testing.T) {
-	ctx, r, worker, wt := leaseVCSRepository(t)
-	scratch := testkit.NewRepository(t, nil)
-	scratchGit := "--git-dir=" + filepath.Join(scratch.Root(), ".git")
+// VCSCmdRefusalExemptsOnlyAnotherRepositorySuite pins the scratch-repository
+// exemption to a git operation whose site and work tree stand outside the
+// job's checkout, in a repository of their own.
+type VCSCmdRefusalExemptsOnlyAnotherRepositorySuite struct {
+	suite.Suite
+	ctx     context.Context
+	repo    worktreeRepo
+	worker  types.Job
+	own     string
+	scratch string
+	fresh   string
+}
 
-	nested := filepath.Join(wt, "nested")
-	r.git(wt, "init", "-q", nested)
-	r.git(wt, "-c", "protocol.file.allow=always", "submodule", "add", "-q", scratch.Root(), "sub")
-	sub := filepath.Join(wt, "sub")
-	moved := testkit.NewRepository(t, nil)
-	moved.Git("config", "core.worktree", wt)
-	fresh := testkit.NewRepository(t, nil)
+func TestVCSCmdRefusalExemptsOnlyAnotherRepositorySuite(t *testing.T) {
+	suite.Run(t, new(VCSCmdRefusalExemptsOnlyAnotherRepositorySuite))
+}
 
-	for name, c := range map[string]struct {
-		args []string
-		dir  string
-		env  []string
-	}{
-		"clean through --git-dir":             {[]string{scratchGit, "clean", "-fdx"}, wt, nil},
-		"checkout through --git-dir":          {[]string{scratchGit, "checkout", "--", "."}, wt, nil},
-		"commit through --git-dir":            {[]string{scratchGit, "commit", "-m", "done"}, wt, nil},
-		"clean in a submodule":                {[]string{"clean", "-fdx"}, sub, nil},
-		"commit in a submodule":               {[]string{"commit", "-m", "done"}, sub, nil},
-		"commit in a nested repo":             {[]string{"-C", nested, "commit", "-m", "done"}, wt, nil},
-		"checkout in a nested repo":           {[]string{"checkout", "--", "."}, nested, nil},
-		"clean with GIT_DIR on the scratch":   {[]string{"clean", "-fdx"}, scratch.Root(), []string{"GIT_DIR=" + filepath.Join(scratch.Root(), ".git")}},
-		"clean with GIT_WORK_TREE on the job": {[]string{"clean", "-fdx"}, scratch.Root(), []string{"GIT_WORK_TREE=" + wt}},
-		"clean with core.worktree inline":     {[]string{"-c", "core.worktree=" + wt, "clean", "-fdx"}, scratch.Root(), nil},
-		"clean with core.worktree configured": {[]string{"clean", "-fdx"}, moved.Root(), nil},
-		"push from a scratch repo":            {[]string{"push", r.main, "HEAD:main"}, scratch.Root(), nil},
-	} {
-		require.Error(t, vcsCommandRefusal(ctx, worker, "git", c.args, c.dir, c.env), name)
-	}
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) SetupTest() {
+	s.ctx, s.repo, s.worker, s.own = leaseVCSRepository(s.T())
+	s.scratch = testkit.NewRepository(s.T(), nil).Root()
+	s.fresh = testkit.NewRepository(s.T(), nil).Root()
+}
 
-	for name, c := range map[string]struct {
-		args []string
-		dir  string
-	}{
-		"commit in a scratch repo": {[]string{"commit", "-q", "--allow-empty", "-m", "done"}, fresh.Root()},
-		"clean in a scratch repo":  {[]string{"clean", "-fdx"}, scratch.Root()},
-		"reset -C a scratch repo":  {[]string{"-C", fresh.Root(), "reset", "--hard"}, wt},
-	} {
-		require.NoError(t, vcsCommandRefusal(ctx, worker, "git", c.args, c.dir, nil), name)
-	}
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) run(dir string, env []string, args ...string) error {
+	return vcsCommandRefusal(s.ctx, s.worker, "git", args, dir, env)
+}
+
+// scratchGit points git at the scratch repository from wherever it runs.
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) scratchGit() string {
+	return "--git-dir=" + filepath.Join(s.scratch, ".git")
+}
+
+// sub is a submodule of the scratch repository inside the worker's checkout.
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) sub() string {
+	s.repo.git(s.own, "-c", "protocol.file.allow=always", "submodule", "add", "-q", s.scratch, "sub")
+	return filepath.Join(s.own, "sub")
+}
+
+// nested is a repository of its own inside the worker's checkout.
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) nested() string {
+	nested := filepath.Join(s.own, "nested")
+	s.repo.git(s.own, "init", "-q", nested)
+	return nested
+}
+
+// With --git-dir on another repository, git takes the job's checkout as the
+// work tree, so a clean there wipes the job's files.
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACleanThroughGitDirIsRefused() {
+	s.Error(s.run(s.own, nil, s.scratchGit(), "clean", "-fdx"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACheckoutThroughGitDirIsRefused() {
+	s.Error(s.run(s.own, nil, s.scratchGit(), "checkout", "--", "."))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACommitThroughGitDirIsRefused() {
+	s.Error(s.run(s.own, nil, s.scratchGit(), "commit", "-m", "done"))
+}
+
+// A submodule or nested repository in the checkout holds the job's files
+// under another git directory.
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACleanInASubmoduleIsRefused() {
+	s.Error(s.run(s.sub(), nil, "clean", "-fdx"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACommitInASubmoduleIsRefused() {
+	s.Error(s.run(s.sub(), nil, "commit", "-m", "done"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACommitDashCANestedRepositoryIsRefused() {
+	s.Error(s.run(s.own, nil, "-C", s.nested(), "commit", "-m", "done"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACheckoutInANestedRepositoryIsRefused() {
+	s.Error(s.run(s.nested(), nil, "checkout", "--", "."))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACleanWithGitDirOnTheScratchIsRefused() {
+	s.Error(s.run(s.scratch, []string{"GIT_DIR=" + filepath.Join(s.scratch, ".git")}, "clean", "-fdx"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACleanWithGitWorkTreeOnTheJobIsRefused() {
+	s.Error(s.run(s.scratch, []string{"GIT_WORK_TREE=" + s.own}, "clean", "-fdx"))
+}
+
+// core.worktree, inline or configured, moves the work tree onto the job's.
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACleanWithCoreWorktreeInlineIsRefused() {
+	s.Error(s.run(s.scratch, nil, "-c", "core.worktree="+s.own, "clean", "-fdx"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACleanWithCoreWorktreeConfiguredIsRefused() {
+	moved := testkit.NewRepository(s.T(), nil)
+	moved.Git("config", "core.worktree", s.own)
+	s.Error(s.run(moved.Root(), nil, "clean", "-fdx"))
+}
+
+// A push writes to a remote, which may be the job's repository.
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestAPushFromAScratchRepositoryIsRefused() {
+	s.Error(s.run(s.scratch, nil, "push", s.repo.main, "HEAD:main"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestAWorktreeRemoveInAScratchRepositoryIsRefused() {
+	linked := filepath.Join(s.T().TempDir(), "linked")
+	s.repo.git(s.fresh, "worktree", "add", "-q", "--detach", linked)
+	s.Error(s.run(s.fresh, nil, "worktree", "remove", "--force", linked))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestAWorktreeAddOnABranchInAScratchRepositoryIsRefused() {
+	s.Error(s.run(s.fresh, nil, "worktree", "add", "-q", filepath.Join(s.T().TempDir(), "linked")))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestAWorktreePruneInAScratchRepositoryIsRefused() {
+	s.Error(s.run(s.fresh, nil, "worktree", "prune"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACommitInAScratchRepositoryPasses() {
+	s.NoError(s.run(s.fresh, nil, "commit", "-q", "--allow-empty", "-m", "done"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestACleanInAScratchRepositoryPasses() {
+	s.NoError(s.run(s.scratch, nil, "clean", "-fdx"))
+}
+
+func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) TestAResetDashCAScratchRepositoryPasses() {
+	s.NoError(s.run(s.own, nil, "-C", s.fresh, "reset", "--hard"))
 }
 
 // TestUndeclaredLeaseRepairsReadsGitsSubcommand pins that an unenrolled session's git

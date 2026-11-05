@@ -1391,7 +1391,7 @@ test "a failed readiness keeps the tree and names its path, target, ref and one 
     assert\equal(said.indexOf("output ref: out123abc (") != null, want: true, message: "the ref: {said}");
     assert\equal(said.indexOf("cause: MGS8001 digest failed, output: out123abc\n") != null, want: true, message: "the cause: {said}");
     assert\equal(said.indexOf("findings") == null, want: true, message: "no JSON dump: {said}");
-    _ = vcs\cmd(["worktree", "remove", "--force", kept], opts: vcs\CommandOptions{ quiet = true, dir = root });
+    fs\removeAll(kept);
     fs\removeAll(root);
 }
 

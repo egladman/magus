@@ -2691,7 +2691,7 @@ func vcsCommandRefusal(ctx context.Context, row types.Job, backend string, args 
 		site, unlocated, relocated = gitEnvSite(site, env, row.CheckoutRoot)
 	}
 	if unlocated == "" && !relocated && backend == "git" && !isInit(inv) &&
-		(repositoryLocal(inv) || otherRepositoryWorktreeChange(row, inv, site)) &&
+		(repositoryLocal(inv) || otherRepositoryWorktreeAdd(ctx, row, inv, site)) &&
 		inOtherRepository(site, row.CheckoutRoot) && workTreeAt(ctx, site.dir, row.CheckoutRoot) {
 		return nil
 	}
@@ -2796,7 +2796,7 @@ func inOtherRepository(site vcsSite, checkout string) bool {
 // repositoryLocal reports whether a git argv touches only its own repository.
 // A push writes to a remote, which may be the job's repository.
 // Inline config can move the work tree, or alias anything.
-// A worktree call names a path anywhere; see otherRepositoryWorktreeChange.
+// A worktree call names a path anywhere; see otherRepositoryWorktreeAdd.
 func repositoryLocal(inv hint.Invocation) bool {
 	g := parseGit(inv.Args)
 	return g.at >= 0 && g.sub != "push" && g.sub != "worktree" && !g.configured

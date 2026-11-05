@@ -2278,18 +2278,13 @@ func (s *DelegateToCheckoutSuite) delegateWithin(ctx context.Context, input stri
 	return handled, decline.note, stdout.String(), err
 }
 
-// placeSleeper puts a stamped ./magus that marks its start and then sleeps.
-func placeSleeper(t *testing.T, root, stamp, started string) string {
-	t.Helper()
-	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then printf '%%s\\n' '%s'; exit 0; fi\ntouch '%s'\nexec sleep 30\n", stamp, started)
-	own := filepath.Join(root, "magus")
-	require.NoError(t, os.WriteFile(own, []byte(script), 0o755))
-	return own
-}
-
-func (s *DelegateToCheckoutSuite) TestADelegateKilledPastTheBudgetIsAnsweredWithADenyNamingIt() {
+// delegateToSleeper places a stamped ./magus that prints say and sleeps, and
+// hands it the line, cancelling once it has started.
+func (s *DelegateToCheckoutSuite) delegateToSleeper(say string) (own string, handled bool, out string, err error) {
 	started := filepath.Join(s.T().TempDir(), "started")
-	own := placeSleeper(s.T(), s.repo.Root(), s.repo.Head(), started)
+	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then printf '%%s\\n' '%s'; exit 0; fi\nprintf '%%s' '%s'\ntouch '%s'\nexec sleep 30\n", s.repo.Head(), say, started)
+	own = filepath.Join(s.repo.Root(), "magus")
+	s.Require().NoError(os.WriteFile(own, []byte(script), 0o755))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
@@ -2301,11 +2296,23 @@ func (s *DelegateToCheckoutSuite) TestADelegateKilledPastTheBudgetIsAnsweredWith
 		}
 	}()
 	handled, declined, out, err := s.delegateWithin(ctx, s.line())
-	s.True(handled)
 	s.Empty(declined)
+	return own, handled, out, err
+}
+
+func (s *DelegateToCheckoutSuite) TestADelegateKilledPastTheBudgetIsAnsweredWithADenyNamingIt() {
+	own, handled, out, err := s.delegateToSleeper("")
+	s.True(handled)
 	s.Equal(2, exit.Code(err))
 	s.Contains(out, own)
-	s.Contains(out, "did not answer within the hook's 7s budget")
+	s.Contains(out, "was killed unanswered at the hook's deadline")
+}
+
+func (s *DelegateToCheckoutSuite) TestADelegateKilledAfterAnsweringGetsNoSecondVerdict() {
+	_, handled, out, err := s.delegateToSleeper(`{"decision":"pass"}`)
+	s.True(handled)
+	s.Equal(2, exit.Code(err))
+	s.Equal(`{"decision":"pass"}`, out)
 }
 
 func (s *DelegateToCheckoutSuite) TestADelegateIsHandedTheParentsDeadline() {
@@ -2402,10 +2409,50 @@ func (s *DelegateToCheckoutSuite) TestAnUnstampedBuildLeavesTheCallHere() {
 func (s *DelegateToCheckoutSuite) TestACallAlreadyHandedOnIsJudgedHere() {
 	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
 	s.T().Setenv(delegatedEnv, "/other/magus")
-	handled, declined, _, err := s.delegate(s.line())
+	ctx, cancel, err := takeDelegation(context.Background())
+	defer cancel()
+	s.Require().NoError(err)
+	handled, declined, _, err := s.delegateWithin(ctx, s.line())
 	s.False(handled)
 	s.Empty(declined)
 	s.NoError(err)
+}
+
+func (s *DelegateToCheckoutSuite) TestTakingTheDelegationLeavesNothingForAChildToInherit() {
+	s.T().Setenv(delegatedEnv, "/other/magus")
+	s.T().Setenv(guard.HookDeadlineEnv, strconv.FormatInt(time.Now().Add(time.Second).UnixMilli(), 10))
+	ctx, cancel, err := takeDelegation(context.Background())
+	defer cancel()
+	s.Require().NoError(err)
+	s.Equal("/other/magus", delegatedBy(ctx))
+	_, bounded := ctx.Deadline()
+	s.True(bounded)
+	for _, name := range []string{delegatedEnv, guard.HookDeadlineEnv} {
+		_, set := os.LookupEnv(name)
+		s.False(set, name)
+	}
+}
+
+func (s *DelegateToCheckoutSuite) TestADeadlineWithoutADelegationIsDroppedUnread() {
+	s.T().Setenv(guard.HookDeadlineEnv, "soon")
+	ctx, cancel, err := takeDelegation(context.Background())
+	defer cancel()
+	s.Require().NoError(err)
+	s.Empty(delegatedBy(ctx))
+	_, set := os.LookupEnv(guard.HookDeadlineEnv)
+	s.False(set)
+}
+
+func (s *DelegateToCheckoutSuite) TestADelegateHandedAPastDeadlineDeniesAndSaysToRetry() {
+	s.T().Setenv(trail.EnvBaggage, "")
+	s.T().Setenv(delegatedEnv, "/other/magus")
+	s.T().Setenv(guard.HookDeadlineEnv, strconv.FormatInt(time.Now().Add(-time.Second).UnixMilli(), 10))
+	var out bytes.Buffer
+	err := shellStdin(context.Background(), strings.NewReader("git status"), &out, nil)
+	s.Equal(2, exit.Code(err))
+	s.Contains(out.String(), "had no budget left")
+	s.Contains(out.String(), "Retry it")
+	s.NotContains(out.String(), "Fix the environment")
 }
 
 func (s *DelegateToCheckoutSuite) TestALineThatStaysInTheSessionIsJudgedHere() {
