@@ -288,7 +288,7 @@ func reportRefsMiss(stderr io.Writer, opts output.Options, m refsMiss) error {
 	if opts.Format != outputText && opts.Format != outputName {
 		if err := emitFormatted(opts, types.KnowledgeRefsOutput{
 			Definition:    types.KnowledgeRefsDefinition,
-			SchemaVersion: types.KnowledgeSchemaVersion,
+			APIVersion: types.KnowledgeAPIVersion,
 			Symbol:        m.name,
 			Answer:        m.answer,
 		}); err != nil {
@@ -595,7 +595,7 @@ func emitOccurrences(ctx context.Context, root string, opts output.Options, refs
 
 	out := types.KnowledgeOccurrencesOutput{
 		Definition:    types.KnowledgeOccurrencesDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		Symbol:        refs.Symbol,
 		Label:         refs.Label,
 		Names:         read.Names,
@@ -1200,7 +1200,7 @@ func renameCandidates(g *knowledge.Graph, ref string) []types.KnowledgeMatch {
 func refsRenameCommand(ctx context.Context, root string, opts output.Options, g *knowledge.Graph, ref, to string, dryRun bool) error {
 	out := types.KnowledgeRenameOutput{
 		Definition:    types.KnowledgeRenameDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		To:            to,
 	}
 	refuse := func(refused ...types.EditRefusal) error {

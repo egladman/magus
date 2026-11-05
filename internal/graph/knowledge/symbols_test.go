@@ -166,7 +166,7 @@ func TestGraphRefs(t *testing.T) {
 	// sorted by file: pkg/a before pkg/b. RefCount is 1 + 2 occurrences.
 	assert.Equal(t, types.KnowledgeRefsOutput{
 		Definition:    types.KnowledgeRefsDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		Symbol:        "symbol:example.com/foo Bar#",
 		Label:         "Bar",
 		FileCount:     2,
@@ -335,7 +335,7 @@ func TestGraphDefinitions(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, types.KnowledgeDefinitionsOutput{
 		Definition:    types.KnowledgeDefinitionsDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		Symbol:        "symbol:example.com/foo Bar#",
 		Label:         "Bar",
 		Definitions: []types.KnowledgeDefinitionSite{{

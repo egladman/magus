@@ -18,7 +18,7 @@ import (
 func graphToProto(g types.KnowledgeGraphOutput) *graphv1.Graph {
 	return &graphv1.Graph{
 		Definition:    g.Definition,
-		SchemaVersion: int32(g.SchemaVersion),
+		ApiVersion:    string(g.APIVersion),
 		Directed:      g.Directed,
 		Multigraph:    g.Multigraph,
 		NodeCount:     int32(g.NodeCount),

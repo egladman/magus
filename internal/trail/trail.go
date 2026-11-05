@@ -288,10 +288,10 @@ type AgentCommand struct {
 	types.AgentFacts
 }
 
-const agentCommandSchemaVersion = 1
+const agentCommandAPIVersion types.APIVersion = "magus.agent-command/v1alpha1"
 
 type agentCommandRequest struct {
-	SchemaVersion int    `json:"schema_version"`
+	APIVersion types.APIVersion `json:"api_version"`
 	Host          string `json:"host,omitempty"`
 	Session       string `json:"session,omitempty"`
 	Transcript    string `json:"transcript,omitempty"`
@@ -304,7 +304,7 @@ type agentCommandRequest struct {
 }
 
 type agentCommandResponse struct {
-	SchemaVersion int    `json:"schema_version"`
+	APIVersion types.APIVersion `json:"api_version"`
 	Decision      string `json:"decision"`
 	Reason        string `json:"reason,omitempty"`
 	Context       string `json:"context,omitempty"`
@@ -351,7 +351,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	command.Context = secret.RedactString(ctx, command.Context)
 	command.ContextModel = clampRunes(command.ContextModel, MaxSpawnerLen)
 	request, _ := json.Marshal(agentCommandRequest{
-		SchemaVersion: agentCommandSchemaVersion,
+		APIVersion: agentCommandAPIVersion,
 		Host:          command.Host,
 		Session:       command.Session,
 		Transcript:    command.Transcript,
@@ -362,7 +362,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		AgentFacts:    command.AgentFacts,
 	})
 	response, _ := json.Marshal(agentCommandResponse{
-		SchemaVersion:   agentCommandSchemaVersion,
+		APIVersion:   agentCommandAPIVersion,
 		Decision:        command.Decision,
 		Reason:          command.Reason,
 		Context:         command.Context,
@@ -480,10 +480,10 @@ type RuleFailure struct {
 	Error string `json:"error"`
 }
 
-const agentSpawnSchemaVersion = 1
+const agentSpawnAPIVersion types.APIVersion = "magus.agent-spawn/v1alpha1"
 
 type agentSpawnRequest struct {
-	SchemaVersion int    `json:"schema_version"`
+	APIVersion types.APIVersion `json:"api_version"`
 	Host          string `json:"host,omitempty"`
 	Session       string `json:"session,omitempty"`
 	Event         string `json:"event,omitempty"`
@@ -538,7 +538,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	lease := leaseFromContext(spawn.Context)
 	failures := redactFailures(ctx, spawn.RuleFailures)
 	request, _ := json.Marshal(agentSpawnRequest{
-		SchemaVersion: agentSpawnSchemaVersion,
+		APIVersion: agentSpawnAPIVersion,
 		Host:          spawn.Host,
 		Session:       spawn.Session,
 		Event:         spawn.Event,

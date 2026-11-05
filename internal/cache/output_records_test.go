@@ -16,7 +16,7 @@ func outputRecordLine(t *testing.T, mutate func(map[string]any)) string {
 	t.Helper()
 	key := strings.Repeat("ab", 32)
 	rec := map[string]any{
-		"schema_version": types.StoredOutputSchemaVersion,
+		"schema_version": types.StoredOutputAPIVersion,
 		"ref":            PortableRef(key), "key": key, "attempt": "out1234abcd",
 		"project": "libs/x", "target": "lint", "failed": true, "timestamp_ms": 1, "duration_ms": 2,
 		"output": "FAIL: x\n",
@@ -48,7 +48,7 @@ func TestOutputImportReadsRecordsInOrder(t *testing.T) {
 }
 
 func TestOutputImportRefusesNewerSchema(t *testing.T) {
-	_, err := readRecords(outputRecordLine(t, func(r map[string]any) { r["schema_version"] = types.StoredOutputSchemaVersion + 1 }))
+	_, err := readRecords(outputRecordLine(t, func(r map[string]any) { r["api_version"] = "magus.output-record/v1alpha2" }))
 	require.ErrorIs(t, err, types.StoreRecordsNewer)
 	assert.ErrorContains(t, err, "line 1: ")
 	assert.ErrorContains(t, err, "output record schema_version 2 is newer than this magus reads (1)")

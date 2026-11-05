@@ -368,7 +368,7 @@ func writeModHarness(t *testing.T, w *testkit.Workspace, enable bool, installed 
 	t.Helper()
 	var descriptor agent.HarnessDescriptor
 	require.NoError(t, json.Unmarshal([]byte(`{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "mod-host",
   "display": {"name": "Mod Host"},
   "skills": {"paths": [], "form": "both"},
@@ -764,7 +764,7 @@ func TestCheckAgentSkills(t *testing.T) {
 		writeDoctorHarness(t, w)
 		w.Write(".agents/skills/magus-query/SKILL.md", "---\nname: magus-query\n---\nold generated body\n")
 		r := &runner{ws: boundWorkspace(t, w.Root(), "test-host")}
-		r.opts.skills = agent.Default(types.KnowledgeSchemaVersion)
+		r.opts.skills = agent.Default(types.KnowledgeAPIVersion)
 
 		got := r.checkAgentSkills(t.Context())
 
@@ -780,7 +780,7 @@ func TestCheckAgentSkills(t *testing.T) {
 	t.Run("stamped orphan -> the reinstall is the fix, since install prunes it", func(t *testing.T) {
 		w := testkit.NewWorkspace(t)
 		writeDoctorHarness(t, w)
-		catalog := agent.Default(types.KnowledgeSchemaVersion)
+		catalog := agent.Default(types.KnowledgeAPIVersion)
 		_, _, err := catalog.WriteSkillTree(w.Root(), ".agents/skills", false, types.SkillFormBoth)
 		require.NoError(t, err)
 		w.Write(".agents/skills/magus-retired/SKILL.md",
@@ -804,7 +804,7 @@ func TestCheckAgentSkills(t *testing.T) {
 	t.Run("empty leftover directory -> stale, named with the command that removes it", func(t *testing.T) {
 		w := testkit.NewWorkspace(t)
 		writeDoctorHarness(t, w)
-		catalog := agent.Default(types.KnowledgeSchemaVersion)
+		catalog := agent.Default(types.KnowledgeAPIVersion)
 		_, _, err := catalog.WriteSkillTree(w.Root(), ".agents/skills", false, types.SkillFormBoth)
 		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll(w.Path(".agents/skills/magus-retired"), 0o755))

@@ -101,9 +101,12 @@ func policyMarkerLog(path string) file.JSONL[policyMarker] {
 		Old: filepath.Join(filepath.Dir(path), oldPolicyMarkerFile)}
 }
 
+// policyAPIVersion is the guard_policy blob's format.
+const policyAPIVersion types.APIVersion = "magus.guard-policy/v1alpha1"
+
 // policyEvent is the guard_policy blob: refs and ids, never a source body.
 type policyEvent struct {
-	SchemaVersion int            `json:"schema_version"`
+	APIVersion types.APIVersion `json:"api_version"`
 	Action        string         `json:"action"`
 	Digest        string         `json:"digest"`
 	Previous      string         `json:"previous,omitempty"`
@@ -146,7 +149,7 @@ func RecordPolicy(ctx context.Context, cacheDir, workspace string, now PolicySta
 	action := classifyPolicy(prev, seen, now, pending)
 	next := policyMarker{Digest: now.Digest, ShellRules: now.ShellRules, SpawnRule: now.SpawnRule, CommandRule: now.CommandRule, WriteRule: now.WriteRule, StopRule: now.StopRule, Pending: pending, Files: now.Files}
 	if action != "" {
-		body, _ := json.Marshal(policyEvent{SchemaVersion: 1, Action: action, Digest: now.Digest, Previous: prev.Digest, Sources: sources})
+		body, _ := json.Marshal(policyEvent{APIVersion: policyAPIVersion, Action: action, Digest: now.Digest, Previous: prev.Digest, Sources: sources})
 		ref, size := trail.WriteBlob(ctx, cacheDir, "policy", body)
 		trail.Append(ctx, cacheDir, trail.Event{
 			Ts:           time.Now().UnixMilli(),

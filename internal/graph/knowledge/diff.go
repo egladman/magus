@@ -27,7 +27,7 @@ import (
 func DiffGraphs(baseLabel string, before, after types.KnowledgeGraphOutput) types.KnowledgeGraphDiff {
 	out := types.KnowledgeGraphDiff{
 		Definition:    types.KnowledgeGraphDiffDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		Base:          baseLabel,
 	}
 

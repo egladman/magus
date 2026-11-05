@@ -88,7 +88,7 @@ func callSkills(t *testing.T, ctx context.Context, sess *buzz.Session, name stri
 func TestSkillsThroughBuzzScript(t *testing.T) {
 	root := t.TempDir()
 	fixture.WireHarness(t, agent.HarnessDescriptor{
-		SchemaVersion: 2,
+		APIVersion: 2,
 		ID:            "skills-test",
 		Display:       agent.HarnessDisplay{Name: "Skills test"},
 		Skills:        types.HarnessSkills{Paths: []string{".agents/skills"}, Form: types.SkillFormFull},

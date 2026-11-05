@@ -449,7 +449,7 @@ func TestClaimCommandIsOneApplyLine(t *testing.T) {
 	decoded, err := DecodeDeclarations(bytes.NewBufferString(record))
 	require.NoError(t, err)
 	require.Len(t, decoded, 1)
-	assert.Equal(t, types.Declaration{Schema: types.Schema{Version: types.JobSchemaVersion}, ID: "cli-ls-files", Claim: reqs}, decoded[0])
+	assert.Equal(t, types.Declaration{Schema: types.Schema{Version: types.JobAPIVersion}, ID: "cli-ls-files", Claim: reqs}, decoded[0])
 	assert.Empty(t, decoded[0].Problems())
 
 	long := []types.JobClaimRequest{{Path: strings.Repeat("a/", maxClaimCommand) + "x.go", Because: "released"}}

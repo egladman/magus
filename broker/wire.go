@@ -5,9 +5,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ProtocolVersion is the wire version the hello exchange carries. A broker refuses a
+// APIVersion is the wire version the hello exchange carries. A broker refuses a
 // client speaking another one with CodeProtocol.
-const ProtocolVersion = 5
+const APIVersion types.APIVersion = "magus.broker/v1alpha1"
 
 // helloMagic guards the first frame on a connection. Every later frame mutates state
 // shared by every magus on the host (a claim against its memory, a release of one), so
@@ -68,7 +68,7 @@ type frame struct {
 // it onto every claim this connection takes, so status can name a holder's command.
 type hello struct {
 	Magic    string   `json:"magic"`
-	Protocol int      `json:"protocol"`
+	Protocol types.APIVersion `json:"protocol"`
 	PID      int      `json:"pid"`
 	Dir      string   `json:"dir,omitempty"`
 	Argv     []string `json:"argv,omitempty"`
@@ -93,7 +93,7 @@ type hello struct {
 // helloReply is the broker's own identity.
 type helloReply struct {
 	PID      int    `json:"pid"`
-	Protocol int    `json:"protocol"`
+	Protocol types.APIVersion `json:"protocol"`
 	Version  string `json:"version,omitempty"`
 }
 

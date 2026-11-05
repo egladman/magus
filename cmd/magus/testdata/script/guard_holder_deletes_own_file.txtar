@@ -51,7 +51,7 @@ format() { echo "$1.00"; }
 -- scratch.sh --
 scratch() { :; }
 -- narrow.json --
-{"schema_version": 11, "id": "cents",
+{"api_version": "magus.job/v1alpha1", "id": "cents",
  "criteria": "prices are integers of cents",
  "write_paths": ["pricing/total.sh"],
  "check": {"target": "test", "project": "."}}

@@ -612,7 +612,7 @@ func TestAnOlderReaderKeepsEntries(t *testing.T) {
 		State JobState `json:"state"`
 	}
 	in := Job{
-		Schema:  Schema{Version: JobSchemaVersion},
+		Schema:  Schema{Version: JobAPIVersion},
 		ID:      "worker",
 		State:   StateRunning,
 		Entries: []JobEntry{{Path: "a.go", By: Origin{User: "eli"}, At: 1, Consumed: 2}},
@@ -630,7 +630,7 @@ func TestAnOlderReaderKeepsEntries(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rewritten, &back))
 	// The stamp an older reader sees is one it accepts, and it carries the entries through.
 	assert.Equal(t, Job{
-		Schema:  Schema{Version: JobSchemaVersion},
+		Schema:  Schema{Version: JobAPIVersion},
 		ID:      "worker",
 		State:   StatePass,
 		Entries: in.Entries,
@@ -689,7 +689,7 @@ func TestDeclarationIntegratesNamesMergeableBranchesOnce(t *testing.T) {
 func TestDeclarationCarryingEnterDeclaresNothingElse(t *testing.T) {
 	t.Parallel()
 
-	schema := Schema{Version: JobSchemaVersion}
+	schema := Schema{Version: JobAPIVersion}
 	require.NoError(t, Declaration{Schema: schema, ID: "worker", Enter: "a.go"}.Validate())
 	err := Declaration{Schema: schema, ID: "worker", Enter: "a.go", WritePaths: []string{"**"}}.Validate()
 	assert.ErrorContains(t, err, "carries only schema_version, id and enter")
@@ -829,7 +829,7 @@ func TestTestCheckIsAScriptChecksAlone(t *testing.T) {
 	target := Goal{ID: "unit", Kind: GoalKindCheck, Check: LeaseCheck{Target: "test", Project: ".", Test: true}}.Resolve()
 	require.ErrorContains(t, target.Validate(), `check target "test" sets test`)
 
-	rec := Declaration{Schema: Schema{Version: JobSchemaVersion}, ID: "fix-parser", Check: &LeaseCheck{Target: "test", Test: true}}
+	rec := Declaration{Schema: Schema{Version: JobAPIVersion}, ID: "fix-parser", Check: &LeaseCheck{Target: "test", Test: true}}
 	_, _, ps := rec.check()
 	require.Len(t, ps, 1)
 	assert.Equal(t, "check.test", ps[0].Field)
@@ -1209,7 +1209,7 @@ func TestParseClaimEvidence(t *testing.T) {
 func TestAClaimRecordDeclaresNothingElse(t *testing.T) {
 	t.Parallel()
 
-	rec := Declaration{Schema: Schema{Version: JobSchemaVersion}, ID: "cli-ls-files", Claim: []JobClaimRequest{{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"}}}
+	rec := Declaration{Schema: Schema{Version: JobAPIVersion}, ID: "cli-ls-files", Claim: []JobClaimRequest{{Path: "internal/guard/shell.go", Because: "refs:hint.VCSAdd"}}}
 	assert.Empty(t, rec.Problems())
 
 	rec.Criteria = "more"

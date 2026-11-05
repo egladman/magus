@@ -1122,7 +1122,7 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 			}
 			loc := tempLocation(t, t.TempDir())
 			plant(t, NewStore(loc), row)
-			result := types.JobResult{Schema: types.Schema{Version: types.JobResultSchemaVersion}, Job: "goal", ChangedPaths: changed}
+			result := types.JobResult{Schema: types.Schema{Version: types.JobResultAPIVersion}, Job: "goal", ChangedPaths: changed}
 			if tc.run.Found {
 				result.VerificationEvidence = []types.VerificationEvidence{{GateID: "goal", OutputRef: "ref"}}
 			}

@@ -137,7 +137,7 @@ func TestWriteTargetGraphMarkdownRouting(t *testing.T) {
 	}}}
 
 	routing := &types.KnowledgeRouting{
-		SchemaVersion: 1, NodeCount: 42, EdgeCount: 99,
+		APIVersion: 1, NodeCount: 42, EdgeCount: 99,
 		Kinds:    []types.KnowledgeRoutingKind{{Kind: "spell", Count: 12, Anchors: []string{"go", "buf"}}},
 		Projects: []types.KnowledgeRoutingProject{{Path: "pkg/foo", TargetCount: 3, KeyTargets: []string{"ci"}}},
 	}
@@ -318,7 +318,7 @@ func TestWriteTargetGraphMarkdownQueryLinks(t *testing.T) {
 		Path: ".", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}},
 	}}}
 	routing := &types.KnowledgeRouting{
-		SchemaVersion: 1, NodeCount: 10, EdgeCount: 20,
+		APIVersion: 1, NodeCount: 10, EdgeCount: 20,
 		Kinds:    []types.KnowledgeRoutingKind{{Kind: "spell", Count: 3, Anchors: []string{"go"}}},
 		Projects: []types.KnowledgeRoutingProject{{Path: "pkg/foo", TargetCount: 2, KeyTargets: []string{"ci"}}},
 	}
@@ -395,7 +395,7 @@ func TestWriteTargetGraphMarkdownRenderDeterministic(t *testing.T) {
 		}},
 	}}
 	routing := &types.KnowledgeRouting{
-		SchemaVersion: 1, NodeCount: 5, EdgeCount: 7,
+		APIVersion: 1, NodeCount: 5, EdgeCount: 7,
 		Kinds:    []types.KnowledgeRoutingKind{{Kind: "spell", Count: 2}},
 		Projects: []types.KnowledgeRoutingProject{{Path: "pkg/foo", TargetCount: 2}},
 	}

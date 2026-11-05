@@ -59,7 +59,7 @@ func TestBuildPersistsAndReloads(t *testing.T) {
 	g1 := build(t, cacheDir, BuildOptions{}, in)
 
 	man := readManifest(t, cacheDir)
-	assert.Equal(t, types.KnowledgeSchemaVersion, man.SchemaVersion)
+	assert.Equal(t, types.KnowledgeAPIVersion, man.APIVersion)
 	for _, name := range []string{registryShardName, "pkg/a", "pkg/b"} {
 		_, ok := man.Shards[name]
 		assert.Truef(t, ok, "manifest missing shard %q", name)
@@ -474,7 +474,7 @@ func TestProjectPaths(t *testing.T) {
 	}{
 		{
 			name: "project shards only, sorted; singletons and symbol shards filtered",
-			man: marshalManifest(t, manifest{SchemaVersion: types.KnowledgeSchemaVersion, Shards: map[string]shardMeta{
+			man: marshalManifest(t, manifest{APIVersion: types.KnowledgeAPIVersion, Shards: map[string]shardMeta{
 				"pkg/b":         {},
 				"pkg/a":         {},
 				".":             {},
@@ -489,15 +489,15 @@ func TestProjectPaths(t *testing.T) {
 			// A schema bump invalidates the whole store, so the paths are
 			// unknown rather than empty: a caller must not scope on them.
 			name: "schema mismatch reads as no projects",
-			man: marshalManifest(t, manifest{SchemaVersion: types.KnowledgeSchemaVersion + 1, Shards: map[string]shardMeta{
+			man: marshalManifest(t, manifest{APIVersion: "magus.knowledge/v1alpha2", Shards: map[string]shardMeta{
 				"pkg/a": {},
 			}}),
 		},
-		{name: "truncated json reads as no projects", man: []byte(`{"schema_version":10,"shards":{"pkg/a":`)},
+		{name: "truncated json reads as no projects", man: []byte(`{"api_version":"magus.job/v1alpha1","shards":{"pkg/a":`)},
 		{name: "non-json reads as no projects", man: []byte("not json at all")},
 		{
 			name: "a manifest of nothing but filtered shards",
-			man: marshalManifest(t, manifest{SchemaVersion: types.KnowledgeSchemaVersion, Shards: map[string]shardMeta{
+			man: marshalManifest(t, manifest{APIVersion: types.KnowledgeAPIVersion, Shards: map[string]shardMeta{
 				"@runtime":      {},
 				"@registry":     {},
 				"pkg/a@symbols": {},
@@ -570,7 +570,7 @@ func TestStoreSymbolIndexDigest(t *testing.T) {
 	})
 
 	t.Run("a blank fingerprint refuses", func(t *testing.T) {
-		cacheDir := writeManifestBytes(t, marshalManifest(t, manifest{SchemaVersion: types.KnowledgeSchemaVersion, Shards: map[string]shardMeta{
+		cacheDir := writeManifestBytes(t, marshalManifest(t, manifest{APIVersion: types.KnowledgeAPIVersion, Shards: map[string]shardMeta{
 			"pkg/a@symbols": {},
 		}}))
 		_, err := NewStore(cacheDir, false, 0, nil, nil).SymbolIndexDigest()
@@ -891,7 +891,7 @@ func TestEnsureFastMissWithMatchingFullStampRecordsFastAndIndexesWithoutRebuildi
 	}
 	// The full stamps are what settled the read, never rewritten, and no shard moves.
 	wantManifest := manifest{
-		SchemaVersion: before.SchemaVersion,
+		APIVersion: before.APIVersion,
 		Shards:        before.Shards,
 		Inputs:        before.Inputs,
 		FastStamps:    wantFast,

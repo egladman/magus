@@ -41,20 +41,20 @@ stderr 'a holder claims only its own job'
 stderr 'a claim record applies alone'
 
 -- wave.json --
-{"schema_version": 13, "id": "wave/w", "write_paths": ["pricing/total.sh", "pricing/tax.sh"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "wave/w", "write_paths": ["pricing/total.sh", "pricing/tax.sh"], "check": {"target": "test", "project": "."}}
 -- other.json --
-{"schema_version": 13, "id": "wave/other", "write_paths": ["pricing/rates.sh"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "wave/other", "write_paths": ["pricing/rates.sh"], "check": {"target": "test", "project": "."}}
 -- narrow.json --
-{"schema_version": 13, "id": "wave/w", "write_paths": ["pricing/total.sh"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "wave/w", "write_paths": ["pricing/total.sh"], "check": {"target": "test", "project": "."}}
 -- claim.json --
-{"schema_version": 13, "id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
+{"api_version": "magus.job/v1alpha1", "id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
 -- unproved.json --
-{"schema_version": 13, "id": "wave/w", "claim": [{"path": "pricing/rates.sh", "because": "released"}]}
+{"api_version": "magus.job/v1alpha1", "id": "wave/w", "claim": [{"path": "pricing/rates.sh", "because": "released"}]}
 -- theirs.json --
-{"schema_version": 13, "id": "wave/other", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
+{"api_version": "magus.job/v1alpha1", "id": "wave/other", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
 -- mixed.jsonl --
-{"schema_version": 13, "id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
-{"schema_version": 13, "id": "wave/other", "write_paths": ["pricing/rates.sh"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "wave/w", "claim": [{"path": "pricing/tax.sh", "because": "released"}]}
+{"api_version": "magus.job/v1alpha1", "id": "wave/other", "write_paths": ["pricing/rates.sh"], "check": {"target": "test", "project": "."}}
 -- .gitignore --
 .magus/
 -- magus.yaml --

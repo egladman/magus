@@ -311,7 +311,7 @@ func (m *Magus) OutputRecordByRef(ctx context.Context, ref string) (types.Stored
 		return types.StoredOutput{}, err
 	}
 	rec := types.StoredOutput{
-		Schema:           types.Schema{Version: types.StoredOutputSchemaVersion},
+		Schema:           types.Schema{Version: types.StoredOutputAPIVersion},
 		OutputDescriptor: desc,
 	}
 	if utf8.Valid(data) {

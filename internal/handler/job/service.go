@@ -334,7 +334,7 @@ func delegatedJob(row types.Job) *jobv1.Job {
 		Attempt:        wireAttempt(row.Attempt),
 		Integration:    wireIntegration(row.Integration),
 		WaiterEvidence: wireIntegration(row.WaiterEvidence),
-		SchemaVersion:  int32(row.Version),
+		ApiVersion:     string(row.Version),
 		Requires:       row.Requires,
 		ModelTier:      wireModelTier(row.ModelTier),
 		BriefFormat:    string(row.BriefFormat),

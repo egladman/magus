@@ -29,7 +29,7 @@ func TestAppendReadRoundTrip(t *testing.T) {
 	assert.Zero(t, fold.Skipped)
 	assert.Equal(t, 1, fold.Invocations)
 
-	assert.Equal(t, Record{V: SchemaVersion, Invocation: "sess1", Seq: 1, Kind: KindInvocationStart, Ts: fold.Records[0].Ts, Payload: fold.Records[0].Payload}, fold.Records[0])
+	assert.Equal(t, Record{V: APIVersion, Invocation: "sess1", Seq: 1, Kind: KindInvocationStart, Ts: fold.Records[0].Ts, Payload: fold.Records[0].Payload}, fold.Records[0])
 	assert.Equal(t, uint64(2), fold.Records[1].Seq)
 
 	var got TargetResult
@@ -267,12 +267,12 @@ func TestFoldOrdersByTimeThenSessionThenSeq(t *testing.T) {
 	dir := t.TempDir()
 
 	writeRaw(t, dir, "beta", []Record{
-		{V: 1, Invocation: "beta", Seq: 1, Kind: KindTargetResult, Ts: 100},
-		{V: 1, Invocation: "beta", Seq: 2, Kind: KindTargetResult, Ts: 100},
+		{V: "1", Invocation: "beta", Seq: 1, Kind: KindTargetResult, Ts: 100},
+		{V: "1", Invocation: "beta", Seq: 2, Kind: KindTargetResult, Ts: 100},
 	})
 	writeRaw(t, dir, "alpha", []Record{
-		{V: 1, Invocation: "alpha", Seq: 1, Kind: KindTargetResult, Ts: 100},
-		{V: 1, Invocation: "alpha", Seq: 2, Kind: KindTargetResult, Ts: 300},
+		{V: "1", Invocation: "alpha", Seq: 1, Kind: KindTargetResult, Ts: 100},
+		{V: "1", Invocation: "alpha", Seq: 2, Kind: KindTargetResult, Ts: 300},
 	})
 
 	fold, err := ReadAll(dir)
@@ -365,9 +365,9 @@ func TestUnknownKindsAndFieldsAreIgnoredNotRejected(t *testing.T) {
 func TestSummarizeOrdersMostRecentFirst(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writeRaw(t, dir, "old", []Record{{V: 1, Invocation: "old", Seq: 1, Kind: KindTargetResult, Ts: 100}})
-	writeRaw(t, dir, "new", []Record{{V: 1, Invocation: "new", Seq: 1, Kind: KindTargetResult, Ts: 900}})
-	writeRaw(t, dir, "mid", []Record{{V: 1, Invocation: "mid", Seq: 1, Kind: KindTargetResult, Ts: 500}})
+	writeRaw(t, dir, "old", []Record{{V: "1", Invocation: "old", Seq: 1, Kind: KindTargetResult, Ts: 100}})
+	writeRaw(t, dir, "new", []Record{{V: "1", Invocation: "new", Seq: 1, Kind: KindTargetResult, Ts: 900}})
+	writeRaw(t, dir, "mid", []Record{{V: "1", Invocation: "mid", Seq: 1, Kind: KindTargetResult, Ts: 500}})
 
 	fold, err := ReadAll(dir)
 	require.NoError(t, err)

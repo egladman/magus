@@ -142,7 +142,7 @@ func (g *Graph) Routing() types.KnowledgeRouting {
 	}
 
 	out := types.KnowledgeRouting{
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		NodeCount:     len(g.nodes),
 		EdgeCount:     edgeCount,
 	}

@@ -306,8 +306,8 @@ func writeRouting(b *md.Builder, r *types.KnowledgeRouting, indexes map[string]s
 	// `magus graph stats` reports the live counts to anyone who wants them, and it is
 	// right there in the block below. The schema version stays: it changes when the
 	// graph's SHAPE does, which is exactly when a reader should notice.
-	b.Paragraphf("This workspace has a knowledge graph (schema v%d). Query it instead "+
-		"of grepping:", r.SchemaVersion)
+	b.Paragraphf("This workspace has a knowledge graph (%s). Query it instead "+
+		"of grepping:", r.APIVersion)
 	b.AlignedCodeBlock("sh", []md.CodeLine{
 		{Code: canon(hint.Query, `"<terms>"`), Note: "kind=spell, project=pkg/foo, relation=uses, free text, kind!=op"},
 		{Code: canon(hint.Explain, "<node>"), Note: "one node: its edges, provenance, blast radius"},

@@ -49,7 +49,7 @@ func TestRoutingCountsAndKinds(t *testing.T) {
 	// EdgeCount equals the graph's only because sampleInputs sets no Runtime events; it counts
 	// non-runtime edges, which TestRoutingIgnoresRuntimeShard pins. The rows are checked below.
 	want := types.KnowledgeRouting{
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		NodeCount:     len(g.Nodes()),
 		EdgeCount:     len(g.Edges()),
 		Kinds:         r.Kinds,

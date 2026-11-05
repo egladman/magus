@@ -88,9 +88,9 @@ exec magus job wait integrate --integration --stdin
 stdout '^integration: integrate passes in '
 
 -- owed.json --
-{"schema_version": 1, "owed": [{"project": ".", "target": "test", "paths": ["pricing.txt"]}]}
+{"api_version": "magus.owed/v1alpha1", "owed": [{"project": ".", "target": "test", "paths": ["pricing.txt"]}]}
 -- evidence.tmpl.json --
-{"schema_version": 2,
+{"api_version": "magus.job-result/v1alpha1",
  "changed_paths": [],
  "validation": {"command": "magus run test .", "output_ref": "out<hex>"},
  "unresolved_risks": []}
@@ -106,15 +106,15 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 }
 -- done-a.json --
-{"schema_version": 13, "id": "done-a", "state": "pass", "criteria": "raise prices", "write_paths": ["pricing.txt"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "done-a", "state": "pass", "criteria": "raise prices", "write_paths": ["pricing.txt"], "check": {"target": "test", "project": "."}}
 -- done-b.json --
-{"schema_version": 13, "id": "done-b", "state": "pass", "criteria": "add a lint target", "write_paths": ["magusfile.buzz#lint"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "done-b", "state": "pass", "criteria": "add a lint target", "write_paths": ["magusfile.buzz#lint"], "check": {"target": "test", "project": "."}}
 -- declares-paths.json --
-{"schema_version": 13, "id": "integrate", "integrates": ["done-a"], "write_paths": ["pricing.txt"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "integrate", "integrates": ["done-a"], "write_paths": ["pricing.txt"], "check": {"target": "test", "project": "."}}
 -- missing.json --
-{"schema_version": 13, "id": "integrate", "integrates": ["no-such-branch"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "integrate", "integrates": ["no-such-branch"], "check": {"target": "test", "project": "."}}
 -- integrate.json --
-{"schema_version": 13, "id": "integrate", "criteria": "merge the finished branches", "integrates": ["done-a", "done-b"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "integrate", "criteria": "merge the finished branches", "integrates": ["done-a", "done-b"], "check": {"target": "test", "project": "."}}
 -- shop/.gitignore --
 .magus/
 -- shop/magus.yaml --

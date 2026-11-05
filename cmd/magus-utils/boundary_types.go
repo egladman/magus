@@ -653,6 +653,7 @@ var openStringTypes = map[reflect.Type]string{
 	reflect.TypeFor[diagnostics.Code]():    "a workspace mints its own codes through magus\\raise beside magus's catalog",
 	reflect.TypeFor[events.EventType]():    "a subscriber skips a type it does not know, so new types are added without a release of every reader",
 	reflect.TypeFor[types.ReviewVerdict](): "a review provider op carries it, and a provider op's request encoder writes no session enum case",
+	reflect.TypeFor[types.APIVersion]():    "a reader compares it to the one version it reads and names any other, so the set is every version ever written",
 	// The merge queue provider script compares these as str. They become enums with that
 	// script's typed rewrite (job queue-github-typed), which a str field here keeps checking.
 	reflect.TypeFor[queuetypes.StackMerge]():  "the queue provider script reads it as str until its typed rewrite",

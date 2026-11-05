@@ -79,7 +79,7 @@ tax() { echo $(( $1 / 10 )); }
 . checkout/tax.sh
 [ "$(total 2 3)" = 5 ] && [ "$(format 5)" = 5.00 ] && [ "$(tax 50)" = 5 ]
 -- release.json --
-{"schema_version": 11, "id": "cents",
+{"api_version": "magus.job/v1alpha1", "id": "cents",
  "criteria": "prices are integers of cents",
  "write_paths": ["pricing/total.sh"],
  "check": {"target": "test", "project": "."}}
@@ -151,7 +151,7 @@ goal commands
   check: magus run test .
 the result `magus job exit currency --stdin` reads
 {
-  "schema_version": 2,
+  "api_version": "magus.job-result/v1alpha1",
   "job": "currency",
   "changed_paths": [
     "<each file you changed>"

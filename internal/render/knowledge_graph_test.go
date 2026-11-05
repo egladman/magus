@@ -11,7 +11,7 @@ import (
 
 func knowledgeSubgraph() types.KnowledgeGraphOutput {
 	return types.KnowledgeGraphOutput{
-		SchemaVersion: 1,
+		APIVersion: types.KnowledgeAPIVersion,
 		Directed:      true,
 		NodeCount:     3,
 		EdgeCount:     2,
@@ -54,7 +54,7 @@ func TestWriteKnowledgeDOT(t *testing.T) {
 
 func graphMLFixture() types.KnowledgeGraphOutput {
 	return types.KnowledgeGraphOutput{
-		SchemaVersion: 1,
+		APIVersion: types.KnowledgeAPIVersion,
 		Directed:      true,
 		NodeCount:     2,
 		EdgeCount:     1,

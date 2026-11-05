@@ -194,7 +194,7 @@ func TestGuardDecisionsCoverEveryVerdictTheHookEmits(t *testing.T) {
 	for _, d := range agent.GuardDecisions() {
 		var out strings.Builder
 		require.NoError(t, writeGuardVerdict(&out, output.Options{Format: outputText}, types.GuardJudgment{
-			SchemaVersion: agent.GuardSchemaVersion,
+			APIVersion: agent.GuardAPIVersion,
 			Decision:      d,
 			Reason:        "why",
 			Context:       "why",
@@ -433,7 +433,7 @@ func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"tool":"shell.command","command":"git stash","thread":"unknown","thread_from":"inferred"}`, string(body))
+	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","tool":"shell.command","command":"git stash","thread":"unknown","thread_from":"inferred"}`, string(body))
 	body, err = trail.ReadBlob(dir, got.ResponseRef)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), `"schema_version":1`)
@@ -512,11 +512,11 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 
 	body, err := trail.ReadBlob(dir, requestRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"host":"claude-code","session":"abc123","event":"PreToolUse","tool":"shell.command","command":"ls",`+
+	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","host":"claude-code","session":"abc123","event":"PreToolUse","tool":"shell.command","command":"ls",`+
 		`"thread":"main","thread_from":"inferred","shadow":{"off":"allow","light":"allow","standard":"allow","strict":"allow"}}`, string(body))
 	body, err = trail.ReadBlob(dir, responseRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"decision":"pass"}`, string(body))
+	assert.JSONEq(t, `{"api_version":"magus.guard/v1alpha1","decision":"pass"}`, string(body))
 }
 
 // TestHookCmd_AttributionIsOptional holds the fail-open contract: attribution is best-effort
@@ -541,7 +541,7 @@ func TestHookCmd_AttributionIsOptional(t *testing.T) {
 	// Omitted rather than recorded empty: the blob says nothing was known, not that the host is "".
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"tool":"shell.command","command":"ls","thread":"unknown","thread_from":"inferred"}`, string(body))
+	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","tool":"shell.command","command":"ls","thread":"unknown","thread_from":"inferred"}`, string(body))
 }
 
 // TestHookCmd_ObserveRecordsWithoutJudging pins what --observe is for. AGENTS.md is the exact
@@ -571,10 +571,10 @@ func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
 
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"tool":"file.read","path":"AGENTS.md","thread":"unknown","thread_from":"inferred"}`, string(body))
+	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","tool":"file.read","path":"AGENTS.md","thread":"unknown","thread_from":"inferred"}`, string(body))
 	body, err = trail.ReadBlob(dir, got.ResponseRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"decision":""}`, string(body))
+	assert.JSONEq(t, `{"api_version":"magus.guard/v1alpha1","decision":""}`, string(body))
 }
 
 // TestHookCmd_ObserveOutranksPath holds the precedence the wrapper depends on: a host whose
@@ -647,7 +647,7 @@ func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
 
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"host":"claude-code","session":"s9","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"file.read","path":"internal/trail/trail.go","thread":"main","thread_from":"inferred"}`, string(body))
+	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","host":"claude-code","session":"s9","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"file.read","path":"internal/trail/trail.go","thread":"main","thread_from":"inferred"}`, string(body))
 }
 
 // TestHookCmd_ObserveWithNoInputRecordsNothing: a wrapper whose host event carried no path
@@ -715,7 +715,7 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 
 	body, err := trail.ReadBlob(dir, requestRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"host":"claude-code","session":"abc123","event":"PreToolUse",`+
+	assert.JSONEq(t, `{"api_version":"magus.agent-command/v1alpha1","host":"claude-code","session":"abc123","event":"PreToolUse",`+
 		`"tool":"Task","child":"Explore","lease":"notes-store-6b","declared_model":"opus",`+
 		`"context":"lease: notes-store-6b\nDo not run git stash anywhere.","thread":"main","thread_from":"inferred"}`, string(body))
 }
@@ -852,7 +852,7 @@ func TestEnforceVerdictBlocksAnAsk(t *testing.T) {
 // simply printed a kilobyte-plus reason twice to a terminal. A structured format renders no
 // prose, so there stderr is the only readable channel and keeps it.
 func TestGuardDenyPrintsItsReasonOnce(t *testing.T) {
-	deny := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: "because"}
+	deny := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: "deny", Reason: "because"}
 
 	var stdout bytes.Buffer
 	require.NoError(t, writeGuardVerdict(&stdout, output.Options{Format: outputText}, deny))
@@ -869,7 +869,7 @@ func TestGuardDenyPrintsItsReasonOnce(t *testing.T) {
 // TestGuardDenyStderrIsOneLine pins the person's view of a blocking hook: the verdict line
 // alone, with the next step and the details ref left to stdout.
 func TestGuardDenyStderrIsOneLine(t *testing.T) {
-	deny := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny",
+	deny := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: "deny",
 		Reason: "a text search the graph answers\nnothing ran (2 commands)\ndetails: ./magus query output grd1"}
 	assert.Equal(t, "a text search the graph answers\n", captureStderr(t, func() {
 		_ = enforceVerdict(output.Options{Format: outputJSON}, deny)
@@ -1921,7 +1921,7 @@ func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 
 	v := judgeSpawnAt(t, root)
 	assert.Equal(t, types.GuardJudgment{
-		SchemaVersion: v.SchemaVersion,
+		APIVersion: v.APIVersion,
 		Decision:      "deny",
 		Reason:        "Name a model.",
 		Rule:          v.Rule, // the rule's catalogued name is pinned by the guard's own tests
@@ -1950,7 +1950,7 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 	v = guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: "ls -la", Host: "claude-code"})
 	assert.Contains(t, v.Reason, "Not in this repository.")
 	assert.Equal(t, types.GuardJudgment{
-		SchemaVersion: v.SchemaVersion,
+		APIVersion: v.APIVersion,
 		Decision:      "deny",
 		Reason:        v.Reason, // checked above
 		Rule:          "workspace:command",
@@ -2616,7 +2616,7 @@ func (s *hookAudienceSuite) TestACodexStopBlockKeepsTheWholeReason() {
 }
 
 func (s *hookAudienceSuite) TestCursorDenyShowsThePersonOneLine() {
-	verdict, err := json.Marshal(types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: audienceReason})
+	verdict, err := json.Marshal(types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: "deny", Reason: audienceReason})
 	s.Require().NoError(err)
 	s.T().Setenv("GLUE_VERDICT", string(verdict))
 	body, _ := runGlue(s.T(), "cursor-hook.buzz", glueArrangement{label: "cursor", host: "cursor", stub: glueVerdictEcho,

@@ -23,25 +23,11 @@ import (
 // or otherwise unverifiable. These are pure domain types (stdlib-only leaf); the
 // builder lives in internal/graph/knowledge and the CLI in cmd/magus.
 
-// KnowledgeSchemaVersion is stamped into every exported graph, shard, and manifest.
-// External consumers (agent skills, MCP tools, other tools reading the node-link
-// JSON) check it; a bump is a changelog event.
-//
-// Increment when the node/edge shape or ID scheme changes in a way that would break a
-// consumer that parsed the old form. Also increment when a change is additive but
-// widens what an extractor produces: a new node kind, attr or edge, or a changed
-// fingerprint scheme. A consumer parses such a graph unchanged, but a store on disk
-// holds shards extracted before the change, and nothing else invalidates them because
-// their sources have not moved. The version mismatch is what forces the full rebuild
-// (a manifest at another version is read as absent).
-//
-// The edge vocabulary is part of the exported schema: each relation has one canonical
-// definition, and an export carries those plus a fingerprint, so a consumer meeting an
-// unfamiliar predicate can look it up. The set is closed but not enforced at write time,
-// because shards load lazily and an edge legitimately arrives before the node that gives
-// its endpoint a kind. Graph.UndeclaredEdges reports violations, and a test over this
-// workspace's own graph fails when a producer widens the vocabulary without declaring it.
-const KnowledgeSchemaVersion = 25
+// KnowledgeAPIVersion is stamped into every exported graph, shard and
+// manifest. Bump it when the shape or ID scheme changes. Bump it too
+// when an extractor widens what it produces: shards on disk predate the
+// change, and only a version mismatch forces the rebuild.
+const KnowledgeAPIVersion APIVersion = "magus.knowledge/v1alpha1"
 
 // MarkdownSection mirrors one element of markdown.sections' result. It
 // holds a heading's anchor and level, its 1-based file lines counting the
@@ -56,32 +42,22 @@ type MarkdownSection struct {
 	Digest      string
 }
 
-// schemaStampRe matches the knowledge-schema version magus embeds in the output it
-// generates. Four renderers write one of these spellings: the target-graph index
-// ("schema v10" in internal/render/target_graph.go), the knowledge-graph markdown
-// ("schema v10" in internal/render/knowledge_graph.go), the graph export's
-// schema_version field, and the installed agent skills
-// ("knowledge-schema-version: 10" in internal/agent).
-var schemaStampRe = regexp.MustCompile(`(?:schema v|"schema_version":\s*|knowledge-schema-version:\s*)(\d+)`)
+// knowledgeStampRe matches the knowledge version every renderer writes
+// into generated output, in whatever line it sits.
+var knowledgeStampRe = regexp.MustCompile(`magus\.knowledge/v[1-9][0-9]*(?:(?:alpha|beta)[1-9][0-9]*)?`)
 
-// StampedSchemaVersion reports the knowledge-schema version stamped into generated
-// output, and whether one was found. The first stamp wins, so a document quoting a
-// version later in its prose cannot move the answer.
-//
-// It reads a stamp rather than trusting a filename because the question a caller
-// asks is what BUILT these bytes. A binary that regenerates output stamped newer
-// than KnowledgeSchemaVersion is downgrading it, which is silent data loss when the
-// generator runs as a composed target where no drift gate compares the result.
-func StampedSchemaVersion(b []byte) (int, bool) {
-	m := schemaStampRe.FindSubmatch(b)
+// StampedKnowledgeVersion reports the knowledge version stamped into
+// generated output, and whether one was found. The first stamp wins, so
+// prose quoting a version later cannot move the answer. A caller asks
+// what BUILT these bytes: regenerating output stamped newer than
+// KnowledgeAPIVersion downgrades it, a silent loss where no drift gate
+// runs.
+func StampedKnowledgeVersion(b []byte) (APIVersion, bool) {
+	m := knowledgeStampRe.Find(b)
 	if m == nil {
-		return 0, false
+		return "", false
 	}
-	v, err := strconv.Atoi(string(m[1]))
-	if err != nil {
-		return 0, false
-	}
-	return v, true
+	return APIVersion(m), true
 }
 
 // KnowledgeGraphDefinition is the human-readable description printed by
@@ -1313,7 +1289,7 @@ const KnowledgeGraphDiffDefinition = "graph diff reports how the knowledge graph
 // the diff is deterministic and reviewable.
 type KnowledgeGraphDiff struct {
 	Definition    string                `json:"definition"     yaml:"definition"`
-	SchemaVersion int                   `json:"schema_version" yaml:"schema_version"`
+	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
 	Base          string                `json:"base"           yaml:"base"` // the base revision or baseline label
 	NodesAdded    []KnowledgeNode       `json:"nodes_added,omitempty"    yaml:"nodes_added,omitempty"`
 	NodesRemoved  []KnowledgeNode       `json:"nodes_removed,omitempty"  yaml:"nodes_removed,omitempty"`
@@ -1342,7 +1318,7 @@ const KnowledgeRefsDefinition = "refs lists where an ingested code symbol is " +
 // count and (capped) line list. Occurrence-shaped, not node-link.
 type KnowledgeRefsOutput struct {
 	Definition    string             `json:"definition"     yaml:"definition"`
-	SchemaVersion int                `json:"schema_version" yaml:"schema_version"`
+	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
 	Symbol        string             `json:"symbol"         yaml:"symbol"`
 	Label         string             `json:"label"          yaml:"label"`
 	FileCount     int                `json:"file_count"     yaml:"file_count"`
@@ -1380,7 +1356,7 @@ const KnowledgeDefinitionsDefinition = "refs --definition prints where an ingest
 // KnowledgeDefinitionsOutput is the result of `magus refs <symbol> --definition`.
 type KnowledgeDefinitionsOutput struct {
 	Definition    string                    `json:"definition"     yaml:"definition"`
-	SchemaVersion int                       `json:"schema_version" yaml:"schema_version"`
+	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
 	Symbol        string                    `json:"symbol"         yaml:"symbol"`
 	Label         string                    `json:"label"          yaml:"label"`
 	Definitions   []KnowledgeDefinitionSite `json:"definitions"    yaml:"definitions"`
@@ -1522,7 +1498,7 @@ type SymbolOccurrenceFile struct {
 // front-to-back application corrupts each subsequent site. Files are independent.
 type KnowledgeOccurrencesOutput struct {
 	Definition    string `json:"definition"     yaml:"definition"`
-	SchemaVersion int    `json:"schema_version" yaml:"schema_version"`
+	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
 	Symbol        string `json:"symbol"         yaml:"symbol"`
 	Label         string `json:"label"          yaml:"label"`
 	// Name is the identifier a rename would replace: the first of Names. It is derived from
@@ -1562,7 +1538,7 @@ const KnowledgeOccurrencesDefinition = "refs --occurrences lists every exact sou
 // smaller Matches slice than MatchCount) the caller pages via Offset + len(Matches).
 type KnowledgeQueryOutput struct {
 	Definition    string `json:"definition"     yaml:"definition"`
-	SchemaVersion int    `json:"schema_version" yaml:"schema_version"`
+	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
 	Query         string `json:"query"          yaml:"query"`
 	Budget        int    `json:"budget"         yaml:"budget"`
 	MatchCount    int    `json:"match_count"    yaml:"match_count"`
@@ -1613,7 +1589,7 @@ type KnowledgeEdgeRef struct {
 // transitively reach it).
 type KnowledgeExplainOutput struct {
 	Definition    string             `json:"definition"     yaml:"definition"`
-	SchemaVersion int                `json:"schema_version" yaml:"schema_version"`
+	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
 	Node          KnowledgeNode      `json:"node"           yaml:"node"`
 	BlastRadius   int                `json:"blast_radius"   yaml:"blast_radius"`
 	Out           []KnowledgeEdgeRef `json:"out,omitempty"  yaml:"out,omitempty"`
@@ -1661,7 +1637,7 @@ type KnowledgePathStep struct {
 // and the shortest connecting path (edges treated as bidirectional), if any.
 type KnowledgePathOutput struct {
 	Definition    string              `json:"definition"     yaml:"definition"`
-	SchemaVersion int                 `json:"schema_version" yaml:"schema_version"`
+	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
 	From          string              `json:"from"           yaml:"from"`
 	To            string              `json:"to"             yaml:"to"`
 	Found         bool                `json:"found"          yaml:"found"`
@@ -1701,7 +1677,7 @@ type KnowledgeNeighborhoodOptions struct {
 // So it is itself a valid export.
 type KnowledgeNeighborhoodOutput struct {
 	Definition    string `json:"definition"     yaml:"definition"`
-	SchemaVersion int    `json:"schema_version" yaml:"schema_version"`
+	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
 	// Focus is the resolved node ID, and Resolution how the requested name reached it.
 	Focus      string                       `json:"focus"      yaml:"focus"`
 	Resolution KnowledgeResolution          `json:"resolution" yaml:"resolution"`
@@ -1876,7 +1852,7 @@ const KnowledgeStatsDefinition = "Graph stats reads the knowledge graph to show 
 // query, and a few high-degree anchor nodes) and never dumps graph data, so it
 // stays diff-stable across routine edits.
 type KnowledgeRouting struct {
-	SchemaVersion int `json:"schema_version" yaml:"schema_version"`
+	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
 	// CatalogFingerprint identifies the binary that rendered this index; see the field of
 	// the same name on KnowledgeGraphOutput. Carried here so MAGUS.md can show it without
 	// the renderer taking another parameter. Empty when no graph was available.
@@ -1924,7 +1900,7 @@ type KnowledgeRoutingProject struct {
 // ignored by strict node-link readers. Directed and non-multigraph by construction.
 type KnowledgeGraphOutput struct {
 	Definition    string `json:"definition"    yaml:"definition"`
-	SchemaVersion int    `json:"schema_version" yaml:"schema_version"`
+	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
 	Directed      bool   `json:"directed"      yaml:"directed"`
 	Multigraph    bool   `json:"multigraph"    yaml:"multigraph"`
 	NodeCount     int    `json:"node_count"    yaml:"node_count"`

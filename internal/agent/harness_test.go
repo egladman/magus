@@ -196,7 +196,7 @@ func TestPlanHarnessPreservesCompetingAndLargeUserValues(t *testing.T) {
 func TestPlanHarnessCanWireReadObserver(t *testing.T) {
 	root := t.TempDir()
 	registerHarnessSpell(t, "reader", `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "reader",
   "display": {"name": "Reader"},
   "config": {"path": "reader/hooks.json"},
@@ -280,7 +280,7 @@ func TestPlanHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
 	registerHarnessSpell(t, "flat", `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "flat",
   "display": {"name": "Flat"},
   "config": {"path": "flat/hooks.json", "defaults": {"version": 1}},
@@ -317,7 +317,7 @@ func TestPlanHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
 // own, and a value they set for it is the one the host keeps.
 func TestPlanHarnessSetsAnObjectDefaultKeyByKey(t *testing.T) {
 	descriptor := `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "envhost",
   "display": {"name": "Env Host"},
   "config": {"path": "envhost/settings.json", "defaults": {"env": {"MAGUS_LOG_SILENT": "true"}}},
@@ -373,7 +373,7 @@ func TestPlanHarnessOwnsManagedEntries(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
 	registerHarnessSpell(t, "managed", `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "managed",
   "display": {"name": "Managed"},
   "config": {"path": "managed/hooks.json"},
@@ -483,7 +483,7 @@ func TestPlanHarnessRetiresTheEntriesTheOldDescriptorWrote(t *testing.T) {
 func TestPlanHarnessRetiresOnlyEntriesMarkedAsMagus(t *testing.T) {
 	root := t.TempDir()
 	registerHarnessSpell(t, "env-host", `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "env-host",
   "display": {"name": "Env Host"},
   "config": {"path": "env-host/hooks.json"},
@@ -556,7 +556,7 @@ func TestCarriesOwnedMarkerOnlyAsATrailingComment(t *testing.T) {
 func TestHarnessDescriptorRejectsEscapingPathAndNonMagusCommand(t *testing.T) {
 	root := t.TempDir()
 	registerHarnessSpell(t, "bad", `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "bad",
   "display": {"name": "Bad"},
   "config": {"path": "../outside.json"},
@@ -570,7 +570,7 @@ func TestHarnessDescriptorRejectsEscapingPathAndNonMagusCommand(t *testing.T) {
 	assert.Contains(t, err.Error(), "workspace-relative")
 
 	registerHarnessSpell(t, "bypass", `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "bypass",
   "display": {"name": "Bypass"},
   "config": {"path": "bypass/hooks.json"},
@@ -591,7 +591,7 @@ func TestHarnessDescriptorRejectsEscapingPathAndNonMagusCommand(t *testing.T) {
 func TestHarnessDescriptorRefusesAnUnmarkedEntry(t *testing.T) {
 	root := t.TempDir()
 	registerHarnessSpell(t, "unmarked", `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "unmarked",
   "display": {"name": "Unmarked"},
   "config": {"path": "unmarked/hooks.json"},
@@ -619,7 +619,7 @@ func TestHarnessDescriptorRefusesAnUnmarkedEntry(t *testing.T) {
 func TestSkillsOnlyHarnessReportsSkillsOnlyNotVerified(t *testing.T) {
 	root := t.TempDir()
 	registerHarnessSpell(t, "skills-only", `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "skills-only",
   "display": {"name": "Skills Only"},
   "skills": {"paths": [".agents/skills"], "form": "both"}
@@ -639,7 +639,7 @@ func TestSkillsOnlyHarnessReportsSkillsOnlyNotVerified(t *testing.T) {
 func TestVerifyHarnessRejectsConfigThatDoesNotInvokeMagus(t *testing.T) {
 	root := t.TempDir()
 	registerHarnessSpell(t, "empty", `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "empty",
   "display": {"name": "Empty"},
   "config": {"path": "empty/hooks.json"},
@@ -704,7 +704,7 @@ func TestLoadHarnessSpellOnlyWhenWired(t *testing.T) {
 			return HarnessDescriptor{}, "", false, nil
 		}
 		return HarnessDescriptor{
-			SchemaVersion: harnessSchemaVersion,
+			APIVersion: harnessSchemaVersion,
 			ID:            "test-host",
 			Display:       HarnessDisplay{Name: "Spell"},
 			Config:        types.HarnessConfig{Path: "spell/hooks.json"},
@@ -757,7 +757,7 @@ func writeAnsweringMagus(w *testkit.Workspace, name, output string) {
 func writeTestHarness(t *testing.T, root string) {
 	t.Helper()
 	registerHarnessSpell(t, "test-host", `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "test-host",
   "display": {"name": "Test Host", "color": "#111111"},
   "config": {"path": "test-host/hooks.json"},
@@ -779,7 +779,7 @@ const promptRules = "prefix_rule(pattern = [\"git\", \"push\"], decision = \"pro
 func writePromptHarness(t *testing.T, root string) {
 	t.Helper()
 	registerHarnessSpell(t, "prompter", fmt.Sprintf(`{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "prompter",
   "display": {"name": "Prompter"},
   "skills": {"paths": [".agents/skills"], "form": "both"},
@@ -860,7 +860,7 @@ func TestPlanHarnessRefusesAPromptThePersonOverrode(t *testing.T) {
 // TestHarnessDescriptorRejectsAMalformedPrompt pins that a prompt names exactly one of a file
 // body or a JSON key, inside the workspace.
 func TestHarnessDescriptorRejectsAMalformedPrompt(t *testing.T) {
-	base := HarnessDescriptor{SchemaVersion: harnessSchemaVersion, ID: "p", Display: HarnessDisplay{Name: "P"}, Skills: types.HarnessSkills{Form: "both"}}
+	base := HarnessDescriptor{APIVersion: harnessSchemaVersion, ID: "p", Display: HarnessDisplay{Name: "P"}, Skills: types.HarnessSkills{Form: "both"}}
 	for name, prompt := range map[string]types.Prompt{
 		"no path":      {Content: "x"},
 		"escapes":      {Path: "../x", Content: "x"},
@@ -879,7 +879,7 @@ func TestHarnessDescriptorRejectsAMalformedPrompt(t *testing.T) {
 func writeSettingsHarness(t *testing.T) {
 	t.Helper()
 	registerHarnessSpell(t, "moder", `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "moder",
   "display": {"name": "Moder"},
   "skills": {"paths": [], "form": "both"},
@@ -1195,7 +1195,7 @@ func (s *harnessPluginSuite) TestWorkspaceThatTurnsThePluginOffIsNotThePluginsBu
 // the descriptor's marketplace, not this repository's.
 func (s *harnessPluginSuite) TestInstallLineFollowsTheDescriptor() {
 	registerHarnessSpell(s.T(), "other-mod", `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "other-mod",
   "display": {"name": "Other"},
   "skills": {"paths": [], "form": "both"},
@@ -1218,7 +1218,7 @@ func (s *harnessPluginSuite) TestInstallLineFollowsTheDescriptor() {
 // TestHarnessDescriptorRejectsAMalformedSetting pins that a setting names a key and a value
 // inside a workspace file.
 func TestHarnessDescriptorRejectsAMalformedSetting(t *testing.T) {
-	base := HarnessDescriptor{SchemaVersion: harnessSchemaVersion, ID: "s", Display: HarnessDisplay{Name: "S"}, Skills: types.HarnessSkills{Form: "both"}}
+	base := HarnessDescriptor{APIVersion: harnessSchemaVersion, ID: "s", Display: HarnessDisplay{Name: "S"}, Skills: types.HarnessSkills{Form: "both"}}
 	for name, setting := range map[string]types.Setting{
 		"no path":   {Key: []string{"k"}, Value: true},
 		"escapes":   {Path: "../x", Key: []string{"k"}, Value: true},
@@ -1544,7 +1544,7 @@ const agentFileBody = "---\ndescription: \"x\"\n---\n\nbody\n"
 func writeAgentHarness(t *testing.T) {
 	t.Helper()
 	registerHarnessSpell(t, "scribe", fmt.Sprintf(`{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "scribe",
   "display": {"name": "Scribe"},
   "skills": {"paths": [".agents/skills"], "form": "both"},
@@ -1586,7 +1586,7 @@ func TestPlanHarnessWritesAgentFilesOnceAndThenNothing(t *testing.T) {
 func TestPlanHarnessCarriesEachAgentHintOnce(t *testing.T) {
 	root := t.TempDir()
 	registerHarnessSpell(t, "scribe", `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "scribe",
   "display": {"name": "Scribe"},
   "skills": {"paths": [".agents/skills"], "form": "both"},
@@ -1620,7 +1620,7 @@ func TestPlanHarnessRewritesAnEditedAgentFile(t *testing.T) {
 func TestHarnessDescriptorWithoutAgentsPlansAndVerifiesNone(t *testing.T) {
 	root := t.TempDir()
 	registerHarnessSpell(t, "plain", `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "plain",
   "display": {"name": "Plain"},
   "skills": {"paths": [".agents/skills"], "form": "both"}
@@ -1632,7 +1632,7 @@ func TestHarnessDescriptorWithoutAgentsPlansAndVerifiesNone(t *testing.T) {
 }
 
 func TestHarnessDescriptorRejectsAMalformedAgentFile(t *testing.T) {
-	base := HarnessDescriptor{SchemaVersion: harnessSchemaVersion, ID: "p", Display: HarnessDisplay{Name: "P"}, Skills: types.HarnessSkills{Form: "both"}}
+	base := HarnessDescriptor{APIVersion: harnessSchemaVersion, ID: "p", Display: HarnessDisplay{Name: "P"}, Skills: types.HarnessSkills{Form: "both"}}
 	for name, file := range map[string]types.AgentFile{
 		"no path":      {Content: "x"},
 		"absolute":     {Path: "/etc/agents/a.md", Content: "x"},
@@ -1669,7 +1669,7 @@ func TestShortestForegroundMaxIsFalseWhenNoneDeclaresOne(t *testing.T) {
 
 func TestHarnessRefusesAnUnmarkedReplyCheck(t *testing.T) {
 	registerHarnessSpell(t, "replycheck", `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "replycheck",
   "display": {"name": "Reply check"},
   "config": {"path": "replycheck/hooks.json"},

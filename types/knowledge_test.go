@@ -515,7 +515,7 @@ func TestKnowledgeDirJSONKeys(t *testing.T) {
 
 func TestKnowledgeNeighborhoodJSONKeys(t *testing.T) {
 	out := KnowledgeNeighborhoodOutput{
-		Definition: KnowledgeNeighborhoodDefinition, SchemaVersion: KnowledgeSchemaVersion,
+		Definition: KnowledgeNeighborhoodDefinition, APIVersion: KnowledgeAPIVersion,
 		Focus: "dir:internal", Resolution: ResolvedPath,
 		Options: KnowledgeNeighborhoodOptions{Depth: 2, Relations: []RelationID{RelationImports}, Collapse: []string{"internal/graph"}},
 		Nodes:   []KnowledgeNode{}, Links: []KnowledgeEdge{},
@@ -525,12 +525,12 @@ func TestKnowledgeNeighborhoodJSONKeys(t *testing.T) {
 	b, err := json.Marshal(out)
 	require.NoError(t, err)
 	assert.JSONEq(t, fmt.Sprintf(`{
-		"definition": %q, "schema_version": %d, "focus": "dir:internal", "resolution": "path",
+		"definition": %q, "api_version": %q, "focus": "dir:internal", "resolution": "path",
 		"options": {"depth": 2, "relations": ["imports"], "collapse": ["internal/graph"]},
 		"nodes": [], "links": [],
 		"folds": [{"prefix": "internal/graph", "node": "dir:internal/graph", "folded": 3}],
 		"answer": {"verdict": "found"}
-	}`, KnowledgeNeighborhoodDefinition, KnowledgeSchemaVersion), string(b))
+	}`, KnowledgeNeighborhoodDefinition, KnowledgeAPIVersion), string(b))
 }
 
 func TestGeneratedSource(t *testing.T) {

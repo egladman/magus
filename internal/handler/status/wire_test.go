@@ -202,7 +202,7 @@ func TestStatusProtoCarriesTheBrokerAndTheServer(t *testing.T) {
 	r := daemon.Snapshot{
 		BrokerPolicy: types.BrokerRequired,
 		Broker: &daemon.Broker{
-			PID: 48213, Protocol: 1, Socket: "unix:///run/magus/broker.sock", IdleExitSeconds: 600,
+			PID: 48213, Protocol: "magus.broker/v1alpha1", Socket: "unix:///run/magus/broker.sock", IdleExitSeconds: 600,
 			Capacity: types.MachineSnapshot{
 				BudgetMB: 48 << 10, HeldMB: 12 << 10, BudgetSlots: 10, HeldSlots: 4,
 				Holders: []types.MachineClaimant{{

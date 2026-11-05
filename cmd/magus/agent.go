@@ -27,7 +27,7 @@ import (
 
 // agentSkills is the catalog of skills magus ships. Sources, rendering, provenance, installation
 // and verification all live in internal/agent now; the CLI owns only presentation.
-var agentSkills = agent.Default(types.KnowledgeSchemaVersion)
+var agentSkills = agent.Default(types.KnowledgeAPIVersion)
 
 // agentCommand implements `magus agent <subcommand>`: the agent integration commands.
 //

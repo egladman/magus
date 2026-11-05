@@ -1,6 +1,10 @@
 package agent
 
-import "embed"
+import (
+	"embed"
+
+	"github.com/egladman/magus/types"
+)
 
 // skillFS holds the provider-neutral skill bodies, embedded at build time.
 //
@@ -30,6 +34,6 @@ var agentsSectionMD string
 // It is the ONE construction every shipping caller wants: the CLI's `agent install`, the docs
 // generator, and anything that needs to know which skills magus ships. NewCatalog stays exported
 // for a caller supplying different sources, which in practice means tests.
-func Default(schemaVersion int) *Catalog {
+func Default(schemaVersion types.APIVersion) *Catalog {
 	return NewCatalog(skillFS, agentsSectionMD, schemaVersion)
 }

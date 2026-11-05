@@ -276,7 +276,7 @@ func JudgeLapsed(ctx context.Context, deps Dependencies, req Request) (types.Gua
 // rules for a todo list costs the host a hook's worth of waiting.
 func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func(context.Context) types.GuardJudgment) types.GuardJudgment {
 	if inertCall(req) {
-		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+		return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 	}
 	if req.DryRun {
 		return judge(ctx)
@@ -437,7 +437,7 @@ func stripOutsideWrites(command string, s *syntax.Stmt, outside func(*syntax.Wor
 // job's checkout, are never degraded.
 func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog) types.GuardJudgment {
 	elapsed := time.Since(log.start)
-	pass := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+	pass := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
 	input, isPath, callDir := req.Input, req.IsPath, ""
 	if filepath.IsAbs(req.Dir) {

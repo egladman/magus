@@ -406,7 +406,7 @@ func projectSkeleton(tg types.TargetGraphOutput) types.KnowledgeGraphOutput {
 
 	return types.KnowledgeGraphOutput{
 		Definition:    tg.Definition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		Directed:      true,
 		NodeCount:     len(nodes),
 		EdgeCount:     len(links),

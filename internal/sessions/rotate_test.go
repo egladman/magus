@@ -357,7 +357,7 @@ func TestPruneCapsTheStoreAtItsNewestFiles(t *testing.T) {
 
 	for i := range 5 {
 		writeAged(t, dir, fmt.Sprintf("inv%d", i), time.Duration(i)*time.Hour, []Record{
-			{V: SchemaVersion, Invocation: fmt.Sprintf("inv%d", i), Seq: 1, Kind: KindInvocationStart, Ts: msAgo(time.Duration(i) * time.Hour)},
+			{V: APIVersion, Invocation: fmt.Sprintf("inv%d", i), Seq: 1, Kind: KindInvocationStart, Ts: msAgo(time.Duration(i) * time.Hour)},
 		})
 	}
 	writeLegacy(t, dir, "legacy", time.Now().Add(-30*time.Minute))
@@ -373,11 +373,11 @@ func TestPruneCapSparesTheNewestLoadedSessions(t *testing.T) {
 	dir := t.TempDir()
 
 	writeAged(t, dir, "loaded", 3*time.Hour, []Record{
-		{V: SchemaVersion, Invocation: "loaded", Seq: 1, Kind: KindAgentEvent, Ts: msAgo(3 * time.Hour), Payload: []byte(`{"host":"h","event":"file.read","ref":"r","at":1}`)},
+		{V: APIVersion, Invocation: "loaded", Seq: 1, Kind: KindAgentEvent, Ts: msAgo(3 * time.Hour), Payload: []byte(`{"host":"h","event":"file.read","ref":"r","at":1}`)},
 	})
 	for i := range 3 {
 		writeAged(t, dir, fmt.Sprintf("inv%d", i), time.Duration(i)*time.Hour, []Record{
-			{V: SchemaVersion, Invocation: fmt.Sprintf("inv%d", i), Seq: 1, Kind: KindInvocationStart, Ts: msAgo(time.Duration(i) * time.Hour)},
+			{V: APIVersion, Invocation: fmt.Sprintf("inv%d", i), Seq: 1, Kind: KindInvocationStart, Ts: msAgo(time.Duration(i) * time.Hour)},
 		})
 	}
 
@@ -396,7 +396,7 @@ func TestPruneCapStillHonorsTheAttentionExemption(t *testing.T) {
 	})
 	for i := range 3 {
 		writeAged(t, dir, fmt.Sprintf("inv%d", i), time.Duration(i)*time.Hour, []Record{
-			{V: SchemaVersion, Invocation: fmt.Sprintf("inv%d", i), Seq: 1, Kind: KindInvocationStart, Ts: msAgo(time.Duration(i) * time.Hour)},
+			{V: APIVersion, Invocation: fmt.Sprintf("inv%d", i), Seq: 1, Kind: KindInvocationStart, Ts: msAgo(time.Duration(i) * time.Hour)},
 		})
 	}
 

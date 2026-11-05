@@ -95,10 +95,10 @@ func parseSessionCoverage(t *testing.T) sessionCoverage {
 				require.True(t, split, "%s: coverage declaration field %q is not key=value", name, kv)
 				fields[key] = value
 			}
-			require.Equal(t, strconv.Itoa(SessionSchemaVersion), fields["schema"],
+			require.Equal(t, strconv.Itoa(SessionAPIVersion), fields["schema"],
 				"%s declares session schema %q; the contract is agent.SessionSchemaVersion=%d.\n"+
 					"A schema bump means every adapter must be updated and re-downloaded before it loads again.",
-				name, fields["schema"], SessionSchemaVersion)
+				name, fields["schema"], SessionAPIVersion)
 			host := fields["host"]
 			require.NotEmpty(t, host, "%s: coverage declaration names no host", name)
 			require.Nil(t, cov[host],
@@ -137,7 +137,7 @@ func TestSessionAdaptersDeclareTheContract(t *testing.T) {
 // place that pins the schema NUMBER, so a future bump is a deliberate edit here
 // rather than a side effect of adding a dimension.
 func TestSessionSchemaCarriesModelAndHostVersion(t *testing.T) {
-	assert.Equal(t, 2, SessionSchemaVersion)
+	assert.Equal(t, 2, SessionAPIVersion)
 	assert.Contains(t, SessionDimensions(), "model")
 	assert.Contains(t, SessionDimensions(), "host-version")
 }

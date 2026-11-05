@@ -75,7 +75,7 @@ func brokerToProto(b *daemon.Broker) *statusv1.Broker {
 	out := &statusv1.Broker{
 		Pid:        int32(b.PID),
 		Version:    b.Version,
-		Protocol:   int32(b.Protocol),
+		Protocol:   string(b.Protocol),
 		Socket:     b.Socket,
 		Executable: b.Executable,
 		StartTime:  tsFromTime(b.StartTime),

@@ -14,7 +14,7 @@ import (
 
 func agentRecord(invocation string, seq uint64, path string) Record {
 	return Record{
-		V: SchemaVersion, Invocation: invocation, Seq: seq, Kind: KindAgentEvent, Ts: int64(seq),
+		V: APIVersion, Invocation: invocation, Seq: seq, Kind: KindAgentEvent, Ts: int64(seq),
 		Payload: []byte(fmt.Sprintf(`{"host":"h","event":"file.read","ref":"%d","at":%d,"text":%q}`, seq, seq, path)),
 	}
 }
@@ -37,7 +37,7 @@ func TestReadAgentEventsMatchesReadAll(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	writeRaw(t, dir, "a", []Record{
-		{V: SchemaVersion, Invocation: "a", Seq: 1, Kind: KindInvocationStart, Ts: 1},
+		{V: APIVersion, Invocation: "a", Seq: 1, Kind: KindInvocationStart, Ts: 1},
 		agentRecord("a", 2, "x.go"),
 	})
 	writeRaw(t, dir, "b", []Record{agentRecord("b", 3, "y.go")})

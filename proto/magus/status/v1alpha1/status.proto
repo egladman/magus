@@ -41,7 +41,8 @@ message Status {
 message Broker {
   int32 pid = 1;
   string version = 2;
-  int32 protocol = 3; // the broker wire version it speaks
+  reserved 3;
+  string protocol = 10; // the broker wire version it speaks, as magus.broker/v1alpha1
   string socket = 4;
   string executable = 5; // the binary it runs from
   google.protobuf.Timestamp start_time = 6;

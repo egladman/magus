@@ -66,7 +66,7 @@ func (neverTerminalProbe) Size(uintptr) (int, int, error) { return 0, 0, nil }
 
 func blockedEvent(message string) types.Event {
 	return types.Event{
-		SchemaVersion: types.EventSchemaVersion,
+		APIVersion: types.EventAPIVersion,
 		Outcome:       types.OutcomeWaiting,
 		Severity:      types.SeverityWarning,
 		Source:        types.EventSource{Kind: "agent", Sub: "claude", ID: "sess-1"},

@@ -676,25 +676,25 @@ func TestJudgeStopLetsAResumedSubagentStop(t *testing.T) {
 	}{
 		{"at the floor", "2.1.299", from, func(listing string) types.GuardJudgment {
 			return types.GuardJudgment{
-				SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Rule: string(denyRuleBackgroundLeft),
+				APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Rule: string(denyRuleBackgroundLeft),
 				Context: fmt.Sprintf("magus workspace: this stop stands and the job stays yours: host version 2.1.299 resumes this subagent when each task completes.\nA shell command you ran in the background is still running:\n%s", listing),
 			}
 		}},
 		{"below the floor", "2.1.298", from, func(listing string) types.GuardJudgment {
 			return types.GuardJudgment{
-				SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft),
+				APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft),
 				Reason: fmt.Sprintf(stopEachTask, listing, "host version 2.1.298 is below 2.1.299, the first that resumes a subagent when its background task completes"),
 			}
 		}},
 		{"no version recorded", "", from, func(listing string) types.GuardJudgment {
 			return types.GuardJudgment{
-				SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft),
+				APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft),
 				Reason: fmt.Sprintf(stopEachTask, listing, "the transcript names no host version to compare with 2.1.299, the first that resumes a subagent when its background task completes"),
 			}
 		}},
 		{"no floor declared", "2.1.299", "", func(listing string) types.GuardJudgment {
 			return types.GuardJudgment{
-				SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft),
+				APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Rule: string(denyRuleBackgroundLeft),
 				Reason: fmt.Sprintf(stopEachTask, listing, "the wiring declares no host version that resumes a subagent when its background task completes"),
 			}
 		}},

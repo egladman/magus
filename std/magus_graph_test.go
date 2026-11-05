@@ -139,7 +139,7 @@ func TestNeighborhoodDecodesItsOptions(t *testing.T) {
 	// verdict below, so both are taken from out.
 	assert.Equal(t, types.KnowledgeNeighborhoodOutput{
 		Definition:    types.KnowledgeNeighborhoodDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		Focus:         "dir:internal/httpx",
 		Resolution:    types.ResolvedPath,
 		Options: types.KnowledgeNeighborhoodOptions{

@@ -55,7 +55,7 @@ func main() {
 // ever writes. A generated page showing a value that cannot occur is worse than
 // no page.
 func run(outDir string) error {
-	cat := agent.Default(types.KnowledgeSchemaVersion)
+	cat := agent.Default(types.KnowledgeAPIVersion)
 	defs, err := cat.EmbeddedSkills()
 	if err != nil {
 		return err

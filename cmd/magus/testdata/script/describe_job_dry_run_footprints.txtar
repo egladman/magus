@@ -75,4 +75,4 @@ func A(ctx int) {
 	b()
 }
 -- result.in.json --
-{"schema_version": 2, "job": "wave/a", "changed_paths": ["run.go", "outside.go"], "validation": {"command": "magus run lint .", "output_ref": "out<hex>"}, "unresolved_risks": []}
+{"api_version": "magus.job-result/v1alpha1", "job": "wave/a", "changed_paths": ["run.go", "outside.go"], "validation": {"command": "magus run lint .", "output_ref": "out<hex>"}, "unresolved_risks": []}

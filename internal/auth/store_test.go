@@ -418,7 +418,7 @@ func TestAPlantedRecordCannotExceedWhatMintWrites(t *testing.T) {
 		"code for a year+": func(r *tokenRecord) {
 			r.Kind, r.TokenTTL, r.Expires = types.KindExchange, 400*24*time.Hour, r.Created.Add(30*time.Second)
 		},
-		"too new": func(r *tokenRecord) { r.Version = storeVersion + 1 },
+		"too new": func(r *tokenRecord) { r.Version = "magus.token/v1alpha2" },
 	}
 	for name, edit := range cases {
 		t.Run(name, func(t *testing.T) {

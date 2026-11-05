@@ -51,7 +51,7 @@ func TestHarnessMCPHintRegisterSketch(t *testing.T) {
 
 func TestHarnessMCPPlanRendersTheStdioCommandTheSpellNames(t *testing.T) {
 	registerHarnessSpell(t, "stdio-host", `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "stdio-host",
   "display": {"name": "Stdio Host"},
   "skills": {"paths": [".agents/skills"], "form": "short"},

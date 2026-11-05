@@ -541,7 +541,7 @@ func (g *Graph) Explain(ref string) (types.KnowledgeExplainOutput, bool) {
 	n, _ := g.node(id)
 	out := types.KnowledgeExplainOutput{
 		Definition:    types.KnowledgeExplainDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		Node:          n,
 		BlastRadius:   g.blastRadius(id),
 		Resolution:    how,
@@ -583,7 +583,7 @@ func (g *Graph) PathWith(a, b string, opts types.KnowledgePathOptions) (types.Kn
 	}
 	out := types.KnowledgePathOutput{
 		Definition:    types.KnowledgePathDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		From:          from,
 		To:            to,
 	}
@@ -607,7 +607,7 @@ func (g *Graph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 	n, _ := g.node(id)
 	out := types.KnowledgeRefsOutput{
 		Definition:    types.KnowledgeRefsDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		Symbol:        id,
 		Label:         n.Label,
 	}
@@ -676,7 +676,7 @@ func (g *Graph) Definitions(ref string) (types.KnowledgeDefinitionsOutput, bool)
 	endLine, _ := strconv.Atoi(n.Attrs[attrDefEndLine])
 	out := types.KnowledgeDefinitionsOutput{
 		Definition:    types.KnowledgeDefinitionsDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		Symbol:        refs.Symbol,
 		Label:         refs.Label,
 	}
@@ -903,7 +903,7 @@ func (g *Graph) FocusNeighborhood(focus string, opts types.KnowledgeNeighborhood
 	graph := sub.Output()
 	out := types.KnowledgeNeighborhoodOutput{
 		Definition:    types.KnowledgeNeighborhoodDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		Focus:         id,
 		Resolution:    how,
 		Options:       opts,

@@ -748,7 +748,7 @@ func judgeEdit(ctx context.Context, deps Dependencies, root, rel string, before,
 	})
 	at := hookLocation(hookContextAt(ctx, deps, root), deps)
 	ungraded := func(say, why string) types.GuardJudgment {
-		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny,
+		return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny,
 			Rule: string(denyRuleEditUngraded), Reason: denial{Say: say, Why: why}.full()}
 	}
 	if _, err := leaseRows(ctx, at); err != nil {

@@ -66,7 +66,7 @@ func TestReleaseDuringReassertReachesTheNewBroker(t *testing.T) {
 		if err != nil || f.Type != typeHello {
 			return
 		}
-		_ = w.write(typeHelloReply, f.ID, helloReply{PID: os.Getpid(), Protocol: ProtocolVersion})
+		_ = w.write(typeHelloReply, f.ID, helloReply{PID: os.Getpid(), Protocol: APIVersion})
 		f, err = r.read()
 		if err != nil || f.Type != typeClaim {
 			return
@@ -155,7 +155,7 @@ func standIn(ln net.Listener, n string, refuse bool, drop <-chan struct{}) {
 		}
 		switch f.Type {
 		case typeHello:
-			_ = w.write(typeHelloReply, f.ID, helloReply{PID: os.Getpid(), Protocol: ProtocolVersion})
+			_ = w.write(typeHelloReply, f.ID, helloReply{PID: os.Getpid(), Protocol: APIVersion})
 		case typeClaim:
 			_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: types.MachineVerdict{Granted: true, Fits: true, ID: "remote-" + n}})
 		case typeHold:
@@ -232,7 +232,7 @@ func TestOverrunRoundTripAndAnOlderBroker(t *testing.T) {
 			}
 			switch f.Type {
 			case typeHello:
-				_ = w.write(typeHelloReply, f.ID, helloReply{PID: os.Getpid(), Protocol: ProtocolVersion})
+				_ = w.write(typeHelloReply, f.ID, helloReply{PID: os.Getpid(), Protocol: APIVersion})
 			case typeClaim:
 				_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: types.MachineVerdict{Granted: true, Fits: true, ID: "remote-1"}})
 			case typeOverrun:

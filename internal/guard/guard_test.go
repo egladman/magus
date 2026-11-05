@@ -49,7 +49,7 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 // pair it with unworded so a test compares the whole struct and still checks the prose by
 // substring.
 func verdictWithRule(decision, rule string) types.GuardJudgment {
-	return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decision, Rule: rule}
+	return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decision, Rule: rule}
 }
 
 // unworded is v without the fields a rule test leaves to other assertions: the reason and
@@ -222,7 +222,7 @@ func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
 func TestHostUnnamedRefusesWithTheCodeAndTheRemedy(t *testing.T) {
 	t.Parallel()
 	got := hostUnnamed()
-	assert.Equal(t, types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: got.Reason}, got)
+	assert.Equal(t, types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: got.Reason}, got)
 	assert.Contains(t, got.Reason, string(types.HookHostUnnamed))
 	assert.Contains(t, got.Reason, "--agent-name")
 	assert.Contains(t, got.Reason, "magus describe harness")
@@ -1093,7 +1093,7 @@ func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 	ref := verdictRef.FindString(v.Reason)
 	require.NotEmpty(t, ref, "the first firing cites its stored verdict")
 	require.Equal(t, types.GuardJudgment{
-		SchemaVersion: agent.GuardSchemaVersion,
+		APIVersion: agent.GuardAPIVersion,
 		Decision:      decisionDeny,
 		Reason:        fmt.Sprintf("`ls jobs >f` keeps console text, which is not a format anything should parse.\nnext:\n  magus ls jobs -o json --tee f%smagus query output %s", verdictRefLine, ref),
 		Rule:          string(denyRuleOutputRedirect),
@@ -1117,7 +1117,7 @@ func TestJudgeDropsARemedyTheRoleMayNotRun(t *testing.T) {
 	// The worker first: its firing is the one worded in full.
 	leased := Judge(ctx, deps, Request{Input: piped, Lease: worker.ID})
 	require.Equal(t, types.GuardJudgment{
-		SchemaVersion: agent.GuardSchemaVersion,
+		APIVersion: agent.GuardAPIVersion,
 		Decision:      decisionDeny,
 		Reason:        leased.Reason, // the prose is checked by substring below
 		Rule:          string(denyRuleOutputPipe),

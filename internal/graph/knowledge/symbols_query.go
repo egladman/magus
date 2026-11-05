@@ -223,7 +223,7 @@ func (s *Store) QuerySymbols(ctx context.Context, g *Graph, input string, budget
 			out := sub.Output()
 			return types.KnowledgeQueryOutput{
 				Definition:    types.KnowledgeQueryDefinition,
-				SchemaVersion: types.KnowledgeSchemaVersion,
+				APIVersion: types.KnowledgeAPIVersion,
 				Query:         strings.TrimSpace(input),
 				Budget:        budget,
 				MatchCount:    len(matches),

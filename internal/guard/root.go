@@ -256,7 +256,7 @@ func kTokens(n int64) string { return fmt.Sprintf("%dk", n/1000) }
 func applyFindings(markers hint.Gate, verdict types.GuardJudgment, findings []costFinding, from types.ThreadSource) types.GuardJudgment {
 	for _, f := range findings {
 		if f.deny && from == types.ThreadReported {
-			return types.GuardJudgment{SchemaVersion: verdict.SchemaVersion, Decision: decisionDeny, Reason: f.say, Rule: string(f.rule), Lease: verdict.Lease, LeaseFrom: verdict.LeaseFrom}
+			return types.GuardJudgment{APIVersion: verdict.APIVersion, Decision: decisionDeny, Reason: f.say, Rule: string(f.rule), Lease: verdict.Lease, LeaseFrom: verdict.LeaseFrom}
 		}
 	}
 	if verdict.Decision != decisionPass && verdict.Decision != decisionAdvise {

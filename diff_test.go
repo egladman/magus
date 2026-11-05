@@ -147,7 +147,7 @@ func TestAttachAPIDeltaClassifiesAndBumps(t *testing.T) {
 		private = "api.go:30"
 	)
 	base := types.KnowledgeGraphOutput{
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		Nodes: []types.KnowledgeNode{
 			symbolNode(goSymbol("api", "Open()."), "Open", kept, "func Open(root string) error", "d1"),
 			symbolNode(goSymbol("api", "Close()."), "Close", gone, "func Close() error", "d2"),
@@ -188,7 +188,7 @@ func TestAttachAPIDeltaClassifiesAndBumps(t *testing.T) {
 // what it suspects: a changed signature never raises the floor.
 func TestAttachAPIDeltaLikelyOnlyFromSignatures(t *testing.T) {
 	base := types.KnowledgeGraphOutput{
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		Nodes: []types.KnowledgeNode{
 			symbolNode(goSymbol("api", "Open()."), "Open", "api.go:10", "func Open() error", "d1"),
 		},
@@ -210,7 +210,7 @@ func TestAttachAPIDeltaLikelyOnlyFromSignatures(t *testing.T) {
 func TestAttachAPIDeltaMembersClassifyThemselves(t *testing.T) {
 	typeID := goSymbol("api", "Config#")
 	base := types.KnowledgeGraphOutput{
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		Nodes: []types.KnowledgeNode{
 			symbolNode(typeID, "Config", "api.go:10", "type Config struct { Root string }", "d1"),
 			symbolNode(typeID+"Root.", "Root", "api.go:11", "struct field Root string", "d2"),
@@ -236,7 +236,7 @@ func TestAttachAPIDeltaMembersClassifyThemselves(t *testing.T) {
 
 func TestAttachAPIDeltaRefusesABaselineWithoutSymbols(t *testing.T) {
 	out := diff.Diff{Files: []diff.File{{Path: "api.go", Project: "."}}}
-	base := types.KnowledgeGraphOutput{SchemaVersion: types.KnowledgeSchemaVersion}
+	base := types.KnowledgeGraphOutput{APIVersion: types.KnowledgeAPIVersion}
 
 	attachAPIDelta(&out, map[string]*diff.File{"api.go": &out.Files[0]}, newGraph(),
 		diffConfig{baseline: &base, baselineLabel: "main"}, noExternals)
@@ -248,7 +248,7 @@ func TestAttachAPIDeltaRefusesABaselineWithoutSymbols(t *testing.T) {
 
 func TestAttachAPIDeltaRefusesAnOlderSchema(t *testing.T) {
 	out := diff.Diff{}
-	base := types.KnowledgeGraphOutput{SchemaVersion: 13, Nodes: []types.KnowledgeNode{
+	base := types.KnowledgeGraphOutput{APIVersion: "", Nodes: []types.KnowledgeNode{
 		symbolNode(goSymbol("api", "Open()."), "Open", "api.go:10", "", ""),
 	}}
 

@@ -728,7 +728,7 @@ func TestRefsWindowsSitesAndKeepsTheTotals(t *testing.T) {
 	// the fixture's, not this test's to pin.
 	assert.Equal(t, types.KnowledgeRefsOutput{
 		Definition:    types.KnowledgeRefsDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		Symbol:        graphSymbol,
 		Label:         "Foo",
 		FileCount:     3,

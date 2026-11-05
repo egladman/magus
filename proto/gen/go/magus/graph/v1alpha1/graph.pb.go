@@ -79,13 +79,13 @@ func (EdgeDirection) EnumDescriptor() ([]byte, []int) {
 
 // Graph is a knowledge-graph projection: nodes, edges (links), and shape metadata.
 type Graph struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Definition    string                 `protobuf:"bytes,1,opt,name=definition,proto3" json:"definition,omitempty"`
-	SchemaVersion int32                  `protobuf:"varint,2,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
-	Directed      bool                   `protobuf:"varint,3,opt,name=directed,proto3" json:"directed,omitempty"`
-	Multigraph    bool                   `protobuf:"varint,4,opt,name=multigraph,proto3" json:"multigraph,omitempty"`
-	NodeCount     int32                  `protobuf:"varint,5,opt,name=node_count,json=nodeCount,proto3" json:"node_count,omitempty"`
-	EdgeCount     int32                  `protobuf:"varint,6,opt,name=edge_count,json=edgeCount,proto3" json:"edge_count,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Definition string                 `protobuf:"bytes,1,opt,name=definition,proto3" json:"definition,omitempty"`
+	ApiVersion string                 `protobuf:"bytes,10,opt,name=api_version,json=apiVersion,proto3" json:"api_version,omitempty"`
+	Directed   bool                   `protobuf:"varint,3,opt,name=directed,proto3" json:"directed,omitempty"`
+	Multigraph bool                   `protobuf:"varint,4,opt,name=multigraph,proto3" json:"multigraph,omitempty"`
+	NodeCount  int32                  `protobuf:"varint,5,opt,name=node_count,json=nodeCount,proto3" json:"node_count,omitempty"`
+	EdgeCount  int32                  `protobuf:"varint,6,opt,name=edge_count,json=edgeCount,proto3" json:"edge_count,omitempty"`
 	// source_base is the workspace repo blob base URL (e.g.
 	// "https://github.com/owner/repo/blob/main"), so a viewer can turn a node's relative
 	// source path into a link. Empty when there is no remote / the forge is unrecognized.
@@ -134,11 +134,11 @@ func (x *Graph) GetDefinition() string {
 	return ""
 }
 
-func (x *Graph) GetSchemaVersion() int32 {
+func (x *Graph) GetApiVersion() string {
 	if x != nil {
-		return x.SchemaVersion
+		return x.ApiVersion
 	}
-	return 0
+	return ""
 }
 
 func (x *Graph) GetDirected() bool {
@@ -1843,12 +1843,14 @@ var File_magus_graph_v1alpha1_graph_proto protoreflect.FileDescriptor
 
 const file_magus_graph_v1alpha1_graph_proto_rawDesc = "" +
 	"\n" +
-	" magus/graph/v1alpha1/graph.proto\x12\x14magus.graph.v1alpha1\"\xcd\x02\n" +
+	" magus/graph/v1alpha1/graph.proto\x12\x14magus.graph.v1alpha1\"\xdd\x02\n" +
 	"\x05Graph\x12\x1e\n" +
 	"\n" +
 	"definition\x18\x01 \x01(\tR\n" +
-	"definition\x12%\n" +
-	"\x0eschema_version\x18\x02 \x01(\x05R\rschemaVersion\x12\x1a\n" +
+	"definition\x12\x1f\n" +
+	"\vapi_version\x18\n" +
+	" \x01(\tR\n" +
+	"apiVersion\x12\x1a\n" +
 	"\bdirected\x18\x03 \x01(\bR\bdirected\x12\x1e\n" +
 	"\n" +
 	"multigraph\x18\x04 \x01(\bR\n" +
@@ -1860,7 +1862,7 @@ const file_magus_graph_v1alpha1_graph_proto_rawDesc = "" +
 	"\vsource_base\x18\a \x01(\tR\n" +
 	"sourceBase\x120\n" +
 	"\x05nodes\x18\b \x03(\v2\x1a.magus.graph.v1alpha1.NodeR\x05nodes\x120\n" +
-	"\x05links\x18\t \x03(\v2\x1a.magus.graph.v1alpha1.EdgeR\x05links\"\xe1\x01\n" +
+	"\x05links\x18\t \x03(\v2\x1a.magus.graph.v1alpha1.EdgeR\x05linksJ\x04\b\x02\x10\x03R\x0eschema_version\"\xe1\x01\n" +
 	"\x04Node\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +

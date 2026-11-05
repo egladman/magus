@@ -25,7 +25,7 @@ package types
 // vocabularies serve different purposes. When a call site needs to bridge
 // (a log entry becomes an event), the mapping lives inline at that site.
 type Event struct {
-	SchemaVersion int            `json:"schema_version"`
+	APIVersion APIVersion `json:"api_version"`
 	Outcome       EventOutcome   `json:"outcome"`
 	Severity      EventSeverity  `json:"severity"`
 	Source        EventSource    `json:"source"`
@@ -33,9 +33,9 @@ type Event struct {
 	Message       string         `json:"message"`
 }
 
-// EventSchemaVersion is the current envelope version. Bump on breaking
+// EventAPIVersion is the current envelope version. Bump on breaking
 // changes; additive optional fields do not require a bump.
-const EventSchemaVersion = 1
+const EventAPIVersion APIVersion = "magus.event/v1alpha1"
 
 // EventOutcome names the situation class: WHAT KIND of attention is needed.
 // Seven canonical values; an unrecognized outcome falls through to other.

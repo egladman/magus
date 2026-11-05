@@ -120,7 +120,7 @@ func TestClaimGrantReleaseAndStatus(t *testing.T) {
 	assert.Equal(t, daemon.Broker{
 		PID:             os.Getpid(),
 		Version:         "v-test",
-		Protocol:        ProtocolVersion,
+		Protocol:        APIVersion,
 		Socket:          st.Socket,
 		Executable:      st.Executable,
 		StartTime:       st.StartTime,
@@ -662,7 +662,7 @@ func TestAHelloFromAnotherProtocolIsRefused(t *testing.T) {
 	f, err := r.read()
 	require.NoError(t, err)
 	require.Equal(t, typeHandshake, f.Type)
-	require.NoError(t, w.write(typeHello, 1, hello{Magic: helloMagic, Protocol: ProtocolVersion + 1}))
+	require.NoError(t, w.write(typeHello, 1, hello{Magic: helloMagic, Protocol: APIVersion + 1}))
 	f, err = r.read()
 	require.NoError(t, err)
 	assert.Equal(t, typeError, f.Type)
@@ -688,7 +688,7 @@ func TestAHelloWithAnotherHandshakeIsRefused(t *testing.T) {
 		require.Equal(t, typeHandshake, f.Type)
 		current, err := readHandshake(path)
 		require.NoError(t, err, "the handshake file exists once its frame arrives")
-		require.NoError(t, (&frameWriter{w: conn}).write(typeHello, 1, hello{Magic: helloMagic, Protocol: ProtocolVersion, Handshake: pick(current)}))
+		require.NoError(t, (&frameWriter{w: conn}).write(typeHello, 1, hello{Magic: helloMagic, Protocol: APIVersion, Handshake: pick(current)}))
 		f, err = r.read()
 		require.NoError(t, err)
 		return f

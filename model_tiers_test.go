@@ -33,7 +33,7 @@ export fun mgs_renderPrompts(humanOnly: {str: str}) > [Prompt] { return []; }
 func TestModelRowsLetAJobPutResolveAnAliasThroughARealMagus(t *testing.T) {
 	testkit.Isolate(t)
 	fixture.WireHarness(t, agent.HarnessDescriptor{
-		SchemaVersion: 2,
+		APIVersion: 2,
 		ID:            "opus-host",
 		Display:       agent.HarnessDisplay{Name: "Opus host"},
 		Skills:        types.HarnessSkills{Form: types.SkillFormShort},

@@ -412,7 +412,7 @@ func TestCheckSkillStatusesNoFooter(t *testing.T) {
 func writeStatusHarness(t *testing.T, skillsDir string) {
 	t.Helper()
 	fixture.WireHarness(t, agent.HarnessDescriptor{
-		SchemaVersion: 2,
+		APIVersion: 2,
 		ID:            "status-test",
 		Display:       agent.HarnessDisplay{Name: "Status test"},
 		Skills:        types.HarnessSkills{Paths: []string{skillsDir}, Form: types.SkillFormFull},

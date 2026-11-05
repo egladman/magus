@@ -86,13 +86,13 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			spawner, _ := resolveActingLease(who, at, req.Lease)
 			recordSpawnedAgent(ctx, at, facts, who, env, spawner)
 		}
-		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+		return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 	}
 	// The main session starting a session of its own is never hindered: it carries no job
 	// row, so no spawn rule has anything to bind it to. A leased caller is judged as usual.
 	if env.IsSpawn && env.Tool == startSessionTool {
 		if lease, _ := resolveActingLease(who, at, req.Lease); lease == "" {
-			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+			return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 		}
 	}
 	digest := recordPolicy(ctx, deps, at, true)
@@ -102,7 +102,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		return spawnTitleJob(ctx, at, env.Spawn.Description)
 	}))
 
-	verdict := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+	verdict := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 	decided := ""
 	var failures []trail.RuleFailure
 	// The first built-in deny the workspace demoted, spoken once both built-ins have had
@@ -115,7 +115,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		verdict, verdictRef = spawnBuiltIns(ctx, deps, req, env, who, at)
 		if verdict.Decision == decisionDeny {
 			if _, refused := held.hold(deps, ShellVerdict{Deny: verdict.Reason, Rule: denyRule{Name: denyRuleName(verdict.Rule)}}); !refused {
-				verdict = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+				verdict = types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 			}
 		}
 		if verdict = deps.gradeAdvice(verdict); verdict.Decision != decisionPass {
@@ -128,10 +128,10 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		_, bound := continuedRow(ctx, at, facts, env)
 		brief := briefInput{text: env.Value, title: env.Spawn.Description, isolated: env.IsSpawn && spawnIsolated(env, titled), bound: bound}
 		if v, refused := held.hold(deps, judgeBriefCommand(deps, brief)); refused {
-			verdict = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
+			verdict = types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
 			why, decided = v.Why, decidedByBuiltin
 		} else if v.Context != "" && verdict.Decision == decisionPass {
-			verdict = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: v.Context, Rule: v.RuleName()}
+			verdict = types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: v.Context, Rule: v.RuleName()}
 			decided = decidedByBuiltin
 		}
 	}
@@ -228,7 +228,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 // never the prompt.
 func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hookRequest, who hookAttribution, at location) (types.GuardJudgment, string) {
 	refused := func(rule denyRuleName, d denial) types.GuardJudgment {
-		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: d.Say, Rule: string(rule)}
+		return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: d.Say, Rule: string(rule)}
 	}
 	// Whether the multi-agent brief was read before work was handed out: a marker file,
 	// no prose, which is what lets it live on this path.
@@ -252,14 +252,14 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 	gate := hint.NewGate(at.cacheDir, who.callerKey())
 	if note := adviseSharedCheckoutSpawn(ctx, gate, at); note.Say != "" {
 		shown, ref := shapeAdvice(ctx, gate, string(advisorySharedCheckout), note.Say, map[string]string{note.Say: note.Why}, false)
-		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: shown, Rule: string(advisorySharedCheckout)}, ref
+		return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: shown, Rule: string(advisorySharedCheckout)}, ref
 	}
 	// A subagent handing waiting to a helper of its own, said once a session.
 	if who.Agent != "" && spawnNestedWordRe.MatchString(fmt.Sprintf("%s\n%s", env.Spawn.Description, env.Value[:min(len(env.Value), spawnWaiterHead)])) {
 		note := adviseSpawnNestedWaiter()
 		if said := deps.heldBy(gate, string(advisorySpawnNestedWaiter)).Once(advisorySpawnNestedWaiter, note.Say); said != "" {
 			shown, ref := shapeAdvice(ctx, gate, string(advisorySpawnNestedWaiter), said, map[string]string{note.Say: note.Why}, false)
-			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: shown, Rule: string(advisorySpawnNestedWaiter)}, ref
+			return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: shown, Rule: string(advisorySpawnNestedWaiter)}, ref
 		}
 	}
 	// The orchestrator waits for the build budget so its workers never do; a subagent
@@ -269,10 +269,10 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 	if who.Agent == "" && !seatless {
 		if note := adviseBudgetFull(ctx, time.Now()); note.Say != "" {
 			shown, ref := shapeAdvice(ctx, gate, string(denyRuleSleepPoll), note.Say, map[string]string{note.Say: note.Why}, false)
-			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: shown, Rule: string(denyRuleSleepPoll)}, ref
+			return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: shown, Rule: string(denyRuleSleepPoll)}, ref
 		}
 	}
-	return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}, ""
+	return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}, ""
 }
 
 const denyRuleSpawnUnisolatedRow denyRuleName = "spawn-unisolated-row"

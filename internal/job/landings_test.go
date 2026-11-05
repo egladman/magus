@@ -720,7 +720,7 @@ func (s *unmergedSuite) TestAnotherCheckoutsTreeIsNotThisOnes() {
 }
 
 func (s *unmergedSuite) settle(rec types.Declaration) ([]types.Job, error) {
-	rec.Schema = types.Schema{Version: types.JobSchemaVersion}
+	rec.Schema = types.Schema{Version: types.JobAPIVersion}
 	return s.store.Settle(s.T().Context(), []types.Declaration{rec}, false)
 }
 

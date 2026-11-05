@@ -171,7 +171,7 @@ func TestRecordPolicyEventCarriesRefsNotBodies(t *testing.T) {
 	require.NoError(t, err)
 	var got policyEvent
 	require.NoError(t, json.Unmarshal(body, &got))
-	assert.Equal(t, policyEvent{SchemaVersion: 1, Action: PolicyTightened, Digest: "d2", Previous: "d1", Sources: []PolicySource{src}}, got)
+	assert.Equal(t, policyEvent{APIVersion: 1, Action: PolicyTightened, Digest: "d2", Previous: "d1", Sources: []PolicySource{src}}, got)
 }
 
 // Every verdict event names the policy in force and which side decided it.

@@ -842,8 +842,8 @@ func checkSchemaDowngrade(ctx context.Context, path string) error {
 	if n == 0 || (err != nil && !errors.Is(err, io.EOF)) {
 		return nil
 	}
-	stamped, ok := types.StampedSchemaVersion(head[:n])
-	if !ok || stamped <= types.KnowledgeSchemaVersion {
+	stamped, ok := types.StampedKnowledgeVersion(head[:n])
+	if !ok || stamped.Compare(types.KnowledgeAPIVersion) <= 0 {
 		return nil
 	}
 	if vcsIgnores(ctx, path) {
@@ -854,10 +854,10 @@ func checkSchemaDowngrade(ctx context.Context, path string) error {
 		self = "the running magus"
 	}
 	return types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus,
-		"refusing to overwrite %s: it carries knowledge-schema v%d and this build renders v%d, "+
+		"refusing to overwrite %s: it carries %s and this build renders %s, "+
 			"so regenerating it here would downgrade committed output. The running binary is %s. "+
 			"Re-run the target with a magus that renders it: `magus self update`, or rebuild ./magus the way this workspace builds it.",
-		path, stamped, types.KnowledgeSchemaVersion, self)
+		path, stamped, types.KnowledgeAPIVersion, self)
 }
 
 // vcsIgnores reports whether the VCS covering path's directory ignores it. A VCS that

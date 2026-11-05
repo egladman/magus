@@ -1,5 +1,7 @@
 package agent
 
+import "github.com/egladman/magus/types"
+
 // The guard's wire contract: the vocabulary every host glue must handle, in
 // the one package that the CLI producing a verdict imports and the parity tests
 // beside it read.
@@ -8,13 +10,13 @@ package agent
 // internal/guard, so that reason has expired: the lists could move beside the Verdict
 // they describe, and only the installed-artifact constants below still belong here.
 
-// GuardSchemaVersion is the version of the verdict envelope every host glue
-// parses, carried on the wire as schema_version. Bump it only when an existing
+// GuardAPIVersion is the version of the verdict envelope every host glue
+// parses, carried on the wire as api_version. Bump it only when an existing
 // field changes MEANING: adding an optional field that existing glues ignore is
 // not a bump, and neither is adding a rule. A bump is expensive: a glue that
 // meets a schema it does not recognize fails open, so every one of them must be
 // re-downloaded before it guards again.
-const GuardSchemaVersion = 1
+const GuardAPIVersion = types.APIVersion("magus.guard/v1alpha1")
 
 // guardDecisions is every decision a verdict can carry. A new entry here is a
 // promise that all four host glues can express it; the dogfood parity test is

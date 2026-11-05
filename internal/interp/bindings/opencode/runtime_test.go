@@ -48,25 +48,25 @@ func (s *runtimeSuite) nativeVerdict(body string, expected dispatchResult, permi
 	s.Equal(dispatchResult{Status: permission}, result)
 }
 func (s *runtimeSuite) TestPassAllowsToolAndPermission() {
-	s.nativeVerdict(`{"schema_version":1,"decision":"pass"}`, dispatchResult{}, "allow")
+	s.nativeVerdict(`{"api_version":"magus.guard/v1alpha1","decision":"pass"}`, dispatchResult{}, "allow")
 }
 func (s *runtimeSuite) TestAdviseAllowsToolAndPermission() {
-	s.nativeVerdict(`{"schema_version":1,"decision":"advise","context":"use magus"}`, dispatchResult{Context: "use magus"}, "allow")
+	s.nativeVerdict(`{"api_version":"magus.guard/v1alpha1","decision":"advise","context":"use magus"}`, dispatchResult{Context: "use magus"}, "allow")
 }
 func (s *runtimeSuite) TestAskBlocksToolAndPreservesPermissionAsk() {
-	s.nativeVerdict(`{"schema_version":1,"decision":"ask","reason":"approval required"}`, dispatchResult{Block: true, Reason: "[magus guard] approval required\n\nThis call needs the approval of the person you work for, and OpenCode will not ask them: only a plain git push, hg push, sl push or jj git push, or a plain magus run of a human-only target, reaches the prompt its own \"permission.bash\" entries configure, which magus describe harness opencode prints. Ask them to run it from their own terminal. If they saw no such message, relay this one to them verbatim."}, "ask")
+	s.nativeVerdict(`{"api_version":"magus.guard/v1alpha1","decision":"ask","reason":"approval required"}`, dispatchResult{Block: true, Reason: "[magus guard] approval required\n\nThis call needs the approval of the person you work for, and OpenCode will not ask them: only a plain git push, hg push, sl push or jj git push, or a plain magus run of a human-only target, reaches the prompt its own \"permission.bash\" entries configure, which magus describe harness opencode prints. Ask them to run it from their own terminal. If they saw no such message, relay this one to them verbatim."}, "ask")
 }
 func (s *runtimeSuite) TestDenyBlocksToolAndPermission() {
-	s.nativeVerdict(`{"schema_version":1,"decision":"deny","reason":"blocked"}`, dispatchResult{Block: true, Reason: "[magus guard] blocked"}, "deny")
+	s.nativeVerdict(`{"api_version":"magus.guard/v1alpha1","decision":"deny","reason":"blocked"}`, dispatchResult{Block: true, Reason: "[magus guard] blocked"}, "deny")
 }
 func (s *runtimeSuite) TestMalformedAdviceBlocksToolAndPermission() {
-	s.nativeVerdict(`{"schema_version":1,"decision":"advise"}`, dispatchResult{Block: true, Reason: `[magus guard] magus guard returned the decision "advise", which this plugin does not know, so it refuses the call rather than allow it. Update the plugin from the magus docs.`}, "deny")
+	s.nativeVerdict(`{"api_version":"magus.guard/v1alpha1","decision":"advise"}`, dispatchResult{Block: true, Reason: `[magus guard] magus guard returned the decision "advise", which this plugin does not know, so it refuses the call rather than allow it. Update the plugin from the magus docs.`}, "deny")
 }
 func (s *runtimeSuite) TestFutureSchemaBlocksToolAndPreservesPrompt() {
-	s.nativeVerdict(`{"schema_version":2,"decision":"pass"}`, dispatchResult{Block: true, Reason: "[magus guard] magus guard could not judge this call: magus answered verdict schema 2, not 1; update this plugin from the magus docs; refused.\nInstall magus (https://eli.gladman.cc/magus/guides/setup/), build it from source (https://eli.gladman.cc/magus/guides/setup/build-from-source/), or set __MAGUS_BIN to its path."}, "")
+	s.nativeVerdict(`{"api_version":"magus.guard/v1alpha2","decision":"pass"}`, dispatchResult{Block: true, Reason: "[magus guard] magus guard could not judge this call: magus answered verdict schema 2, not 1; update this plugin from the magus docs; refused.\nInstall magus (https://eli.gladman.cc/magus/guides/setup/), build it from source (https://eli.gladman.cc/magus/guides/setup/build-from-source/), or set __MAGUS_BIN to its path."}, "")
 }
 func (s *runtimeSuite) TestUnknownDecisionBlocksToolAndPermission() {
-	s.nativeVerdict(`{"schema_version":1,"decision":"future"}`, dispatchResult{Block: true, Reason: `[magus guard] magus guard returned the decision "future", which this plugin does not know, so it refuses the call rather than allow it. Update the plugin from the magus docs.`}, "deny")
+	s.nativeVerdict(`{"api_version":"magus.guard/v1alpha1","decision":"future"}`, dispatchResult{Block: true, Reason: `[magus guard] magus guard returned the decision "future", which this plugin does not know, so it refuses the call rather than allow it. Update the plugin from the magus docs.`}, "deny")
 }
 func (s *runtimeSuite) TestNonJSONBlocksToolAndPreservesPrompt() {
 	s.nativeVerdict(`not json`, dispatchResult{Block: true, Reason: "[magus guard] magus guard could not judge this call: magus answered something that is not JSON; refused.\nInstall magus (https://eli.gladman.cc/magus/guides/setup/), build it from source (https://eli.gladman.cc/magus/guides/setup/build-from-source/), or set __MAGUS_BIN to its path."}, "")
@@ -76,7 +76,7 @@ func (s *runtimeSuite) TestPromptableAskUsesHostApproval() {
 		s.Fail("direct mapping must not invoke native magus")
 		return processOutput{}, nil
 	})
-	result, err := runtime.Dispatch(context.Background(), hookEvent{Kind: "decide", Promptable: true, Verdict: &guardVerdict{SchemaVersion: 1, Decision: "ask", Reason: "human required"}})
+	result, err := runtime.Dispatch(context.Background(), hookEvent{Kind: "decide", Promptable: true, Verdict: &guardVerdict{APIVersion: guardAPIVersion, Decision: "ask", Reason: "human required"}})
 	s.Require().NoError(err)
 	s.Equal(dispatchResult{}, result)
 }
@@ -85,7 +85,7 @@ func (s *runtimeSuite) TestUnpromptableAskRefusesTool() {
 		s.Fail("direct mapping must not invoke native magus")
 		return processOutput{}, nil
 	})
-	result, err := runtime.Dispatch(context.Background(), hookEvent{Kind: "decide", Verdict: &guardVerdict{SchemaVersion: 1, Decision: "ask", Reason: "human required"}})
+	result, err := runtime.Dispatch(context.Background(), hookEvent{Kind: "decide", Verdict: &guardVerdict{APIVersion: guardAPIVersion, Decision: "ask", Reason: "human required"}})
 	s.Require().NoError(err)
 	s.True(result.Block)
 	s.Contains(result.Reason, "human required")
@@ -110,7 +110,7 @@ func (s *runtimeSuite) TestNativeArgumentsAndLegacyRetry() {
 		if len(calls) == 1 {
 			return processOutput{}, nil
 		}
-		return processOutput{Stdout: `{"schema_version":1,"decision":"pass"}`}, nil
+		return processOutput{Stdout: `{"api_version":"magus.guard/v1alpha1","decision":"pass"}`}, nil
 	})
 	result, err := runtime.Dispatch(context.Background(), hookEvent{Kind: "before", Tool: "edit", Path: "a;$(secret).go", RootSessionID: "root", AgentID: "worker"})
 	s.Require().NoError(err)
@@ -124,7 +124,7 @@ func (s *runtimeSuite) TestEnvelopesAndSessionScopedAdvisories() {
 	var captured magusCall
 	runtime := s.open(func(_ context.Context, inv magusCall) (processOutput, error) {
 		captured = inv
-		return processOutput{Stdout: `{"schema_version":1,"decision":"advise","context":"first advice"}`}, nil
+		return processOutput{Stdout: `{"api_version":"magus.guard/v1alpha1","decision":"advise","context":"first advice"}`}, nil
 	})
 	event := hookEvent{Kind: "before", Tool: "mcp__magus__magus_query", SessionID: "a", CallID: "same", RootSessionID: "root", AgentID: "child", Cwd: "/workspace", ArgsJSON: `{"query":"hello"}`, MCP: true}
 	result, err := runtime.Dispatch(context.Background(), event)

@@ -257,7 +257,7 @@ func TestCommandRuleStrengthensOnly(t *testing.T) {
 		ctx, _ := spawnFixture(t)
 		probe := &commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAdvise, Reason: "Batch-poll instead."}}
 		v := Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "gh pr checks 1", Host: "claude-code"})
-		assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: "advise", Context: "Batch-poll instead.", Rule: workspaceCommandRule}, v)
+		assert.Equal(t, types.GuardJudgment{APIVersion: v.APIVersion, Decision: "advise", Context: "Batch-poll instead.", Rule: workspaceCommandRule}, v)
 	})
 	t.Run("an allow changes nothing", func(t *testing.T) {
 		ctx, _ := spawnFixture(t)

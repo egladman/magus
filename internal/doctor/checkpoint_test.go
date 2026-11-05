@@ -18,7 +18,7 @@ import (
 // doctorHarnessDescriptorJSON is the "test-host" fixture body, in the same shape a
 // harnesses/test-host.json compat file used to carry.
 const doctorHarnessDescriptorJSON = `{
-  "schema_version": 2,
+  "api_version": "magus.harness/v1alpha1",
   "id": "test-host",
   "display": {"name": "Test Host"},
   "config": {"path": "host/hooks.json"},

@@ -34,10 +34,10 @@ exec magus describe job guide -o json
 stdout '"id": "check-docs"'
 
 -- guide.jsonl --
-{"schema_version": 11, "id": "guide", "write_paths": ["docs/guide.md"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "guide", "write_paths": ["docs/guide.md"], "check": {"target": "test", "project": "."}}
 -- both.jsonl --
-{"schema_version": 11, "id": "guide", "write_paths": ["docs/guide.md"], "check": {"target": "test", "project": "."}}
-{"schema_version": 11, "id": "pricing", "write_paths": ["pricing"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "guide", "write_paths": ["docs/guide.md"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "pricing", "write_paths": ["pricing"], "check": {"target": "test", "project": "."}}
 -- .gitignore --
 .magus/
 -- magus.yaml --

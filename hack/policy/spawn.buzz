@@ -607,7 +607,7 @@ fun waiting(branches: int, commits: int = 3) > ForkCounts {
     }
     return ForkCounts{
         finishedBranches = names,
-        integrateRecord = "\{\"schema_version\":13,\"id\":\"integrate-branches\"\}",
+        integrateRecord = "\{\"api_version\":\"magus.job/v1alpha1\",\"id\":\"integrate-branches\"\}",
         commitsSinceTest = commits,
         lastTest = "out1a2b3c at abc123",
     };

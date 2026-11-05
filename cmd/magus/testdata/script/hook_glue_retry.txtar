@@ -77,7 +77,7 @@ for arg in "$@"; do
     exit 2
   fi
 done
-echo '{"schema_version":2,"decision":"deny","reason":"FAKE-VERDICT","rule":"fake"}'
+echo '{"api_version":"magus.guard/v1alpha2","decision":"deny","reason":"FAKE-VERDICT","rule":"fake"}'
 exit 2
 -- killed-magus --
 #!/bin/sh

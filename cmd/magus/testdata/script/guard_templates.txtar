@@ -1924,7 +1924,7 @@ magus\guard.stop(fun (req: StopRequest) > GuardVerdict {
 echo "$*" >> "$COUNTING_MAGUS_LOG"
 cat > "$COUNTING_MAGUS_LOG.stdin"
 case "$1" in
-  shell) printf '%s\n' '{"schema_version":2,"decision":"advise","context":"COUNTED-ADVICE","rule":"counted"}' ;;
+  shell) printf '%s\n' '{"api_version":"magus.guard/v1alpha2","decision":"advise","context":"COUNTED-ADVICE","rule":"counted"}' ;;
   session) echo COUNTED-BRIEF ;;
 esac
 exit 0

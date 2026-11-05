@@ -67,7 +67,7 @@ func TestServiceGraphSkeleton(t *testing.T) {
 	assert.NotEmpty(t, out.RelationFingerprint)
 	assert.Equal(t, types.KnowledgeGraphOutput{
 		Definition:    out.Definition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		Directed:      true,
 		NodeCount:     out.NodeCount,
 		EdgeCount:     out.EdgeCount,

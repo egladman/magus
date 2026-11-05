@@ -21,7 +21,7 @@ func attRecord(t *testing.T, session string, seq uint64, ts int64, kind string, 
 	t.Helper()
 	raw, err := json.Marshal(payload)
 	require.NoError(t, err)
-	return Record{V: SchemaVersion, Invocation: session, Seq: seq, Kind: kind, Ts: ts, Payload: raw}
+	return Record{V: APIVersion, Invocation: session, Seq: seq, Kind: kind, Ts: ts, Payload: raw}
 }
 
 func openPayload(id, message string) AttentionOpen {

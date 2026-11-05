@@ -173,4 +173,4 @@ func B() int { return 20 }
 -- result.sh --
 magus run test . >/dev/null 2>&1
 ref=$(magus run test . -o jsonl | sed -n 's/.*"ref":"\(out[0-9a-f]*\)".*/\1/p' | head -n 1)
-printf '{"schema_version": 2, "changed_paths": ["a.go"], "validation": {"command": "magus run test .", "output_ref": "%s"}, "unresolved_risks": []}\n' "$ref" > "$WORK/result.json"
+printf '{"api_version": "magus.job-result/v1alpha1", "changed_paths": ["a.go"], "validation": {"command": "magus run test .", "output_ref": "%s"}, "unresolved_risks": []}\n' "$ref" > "$WORK/result.json"

@@ -28,9 +28,9 @@ func OutputCacheDirFromContext(ctx context.Context) string {
 	return dir
 }
 
-// StoredOutputSchemaVersion is the newest [StoredOutput] schema this build writes and
-// reads; a higher one is refused.
-const StoredOutputSchemaVersion = 1
+// StoredOutputAPIVersion is the [StoredOutput] shape this build writes
+// and the only one it reads.
+const StoredOutputAPIVersion APIVersion = "magus.output-record/v1alpha1"
 
 // StoredOutput is one stored run as `magus query output <ref> -o json|jsonl` writes it;
 // the output rides in Output when it is valid UTF-8 and in OutputBase64 otherwise.

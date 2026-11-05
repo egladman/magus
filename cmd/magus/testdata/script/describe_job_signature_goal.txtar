@@ -20,8 +20,8 @@ stdout '"signature-goals"'
 stdout '"signature": "func Stub\(n int\) error"'
 
 -- frozen.json --
-{"schema_version": 12, "id": "wave/shape", "criteria": "give Stub its shape", "write_paths": ["code.go"], "goals": [{"id": "shape", "kind": "symbol", "expect": "signature", "symbols": ["Stub"]}]}
+{"api_version": "magus.job/v1alpha1", "id": "wave/shape", "criteria": "give Stub its shape", "write_paths": ["code.go"], "goals": [{"id": "shape", "kind": "symbol", "expect": "signature", "symbols": ["Stub"]}]}
 -- declared.json --
-{"schema_version": 12, "id": "wave/shape", "criteria": "give Stub its shape", "write_paths": ["code.go"], "goals": [{"id": "shape", "kind": "symbol", "expect": "signature", "symbols": ["Stub"], "signature": "func Stub(n int) error"}]}
+{"api_version": "magus.job/v1alpha1", "id": "wave/shape", "criteria": "give Stub its shape", "write_paths": ["code.go"], "goals": [{"id": "shape", "kind": "symbol", "expect": "signature", "symbols": ["Stub"], "signature": "func Stub(n int) error"}]}
 -- code.go --
 package pkg

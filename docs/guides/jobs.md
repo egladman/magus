@@ -175,7 +175,7 @@ goal commands
   check: magus run test .
 the result `magus job exit refactor/pricing --stdin` reads
 {
-  "schema_version": 2,
+  "api_version": "magus.job-result/v1alpha1",
   "job": "refactor/pricing",
   "changed_paths": [
     "<each file you changed>"
@@ -207,7 +207,7 @@ changed and which run proves it:
 <!-- golden: job_people_solo.txtar result.in.json -->
 
 ```json
-{"schema_version": 2,
+{"api_version": "magus.job-result/v1alpha1",
  "changed_paths": ["pricing/total.sh"],
  "validation": {"command": "magus run test .", "output_ref": "out<hex>"},
  "unresolved_risks": []}
@@ -270,7 +270,7 @@ refactor/pricing  shop-pricing  pass       standard  1      alone     magus run 
 refactor/tax      shop-tax      no_return  standard  1      disjoint  magus run test .
 
 not merged onto main: 1
-  refactor/pricing at ea83860: 1 commit(s) at ea83860 are not on main; merge ea83860 into main, or state why it stays off: `magus job apply --stdin` with {"schema_version":13,"id":"refactor/pricing","left_unmerged":"<why>"}
+  refactor/pricing at ea83860: 1 commit(s) at ea83860 are not on main; merge ea83860 into main, or state why it stays off: `magus job apply --stdin` with {"api_version":"magus.job/v1alpha1","id":"refactor/pricing","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
 
@@ -368,7 +368,7 @@ record is the whole spec, so it repeats what stays:
 
 ```console
 $ magus job apply --stdin <<'EOF'
-{"schema_version": 11, "id": "cents",
+{"api_version": "magus.job/v1alpha1", "id": "cents",
  "criteria": "prices are integers of cents",
  "write_paths": ["pricing/total.sh"],
  "check": {"target": "test", "project": "."}}
@@ -438,7 +438,7 @@ goal commands
   check: magus run test .
 the result `magus job exit currency --stdin` reads
 {
-  "schema_version": 2,
+  "api_version": "magus.job-result/v1alpha1",
   "job": "currency",
   "changed_paths": [
     "<each file you changed>"
@@ -610,8 +610,8 @@ store, so the plan is committed beside the code:
 <!-- golden: job_people_ci.txtar shop/ci/jobs.jsonl -->
 
 ```json
-{"schema_version": 11, "id": "release/pricing", "criteria": "totals are computed in cents", "write_paths": ["pricing/total.sh"], "check": {"target": "test", "project": "."}}
-{"schema_version": 11, "id": "release/tax", "criteria": "tax rounds half up", "write_paths": ["checkout/tax.sh"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "release/pricing", "criteria": "totals are computed in cents", "write_paths": ["pricing/total.sh"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "release/tax", "criteria": "tax rounds half up", "write_paths": ["checkout/tax.sh"], "check": {"target": "test", "project": "."}}
 ```
 
 with the evidence the CI step fills in once it knows the run's ref:
@@ -619,7 +619,7 @@ with the evidence the CI step fills in once it knows the run's ref:
 <!-- golden: job_people_ci.txtar shop/ci/evidence.tmpl.json -->
 
 ```json
-{"schema_version": 2,
+{"api_version": "magus.job-result/v1alpha1",
  "changed_paths": [],
  "validation": {"command": "magus run test .", "output_ref": "out<hex>"},
  "unresolved_risks": []}

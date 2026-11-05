@@ -44,7 +44,7 @@ func WriteKnowledgeGraphML(w io.Writer, out types.KnowledgeGraphOutput) error {
 	b.WriteString(xml.Header)
 	b.WriteString(`<graphml xmlns="http://graphml.graphdrawing.org/xmlns">` + "\n")
 
-	fmt.Fprintf(&b, "  <!-- magus knowledge graph, schema v%d -->\n", out.SchemaVersion)
+	fmt.Fprintf(&b, "  <!-- magus knowledge graph, %s -->\n", out.APIVersion)
 	for _, k := range []string{"kind", "label", "doc", "source"} {
 		fmt.Fprintf(&b, `  <key id="%s" for="node" attr.name="%s" attr.type="string"/>`+"\n", k, k)
 	}

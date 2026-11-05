@@ -212,7 +212,7 @@ func MagusRefs(ctx context.Context, symbol string, opts types.KnowledgeRefsOptio
 	if !ok {
 		out = types.KnowledgeRefsOutput{
 			Definition:    types.KnowledgeRefsDefinition,
-			SchemaVersion: types.KnowledgeSchemaVersion,
+			APIVersion: types.KnowledgeAPIVersion,
 			Symbol:        symbol,
 		}
 	}

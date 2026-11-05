@@ -267,7 +267,7 @@ func TestQueryPagePaginatesMatches(t *testing.T) {
 		// assertions and the neighborhood tests pin, so they are carried over.
 		want := types.KnowledgeQueryOutput{
 			Definition:    types.KnowledgeQueryDefinition,
-			SchemaVersion: types.KnowledgeSchemaVersion,
+			APIVersion: types.KnowledgeAPIVersion,
 			Query:         "kind:target",
 			Budget:        50,
 			MatchCount:    all.MatchCount,
@@ -807,7 +807,7 @@ func TestNeighborhoodOfWalksDepthRelationsAndDirection(t *testing.T) {
 	// A depth of 0 means 1. The nodes and links are pinned just below, by id and relation.
 	wantOut := types.KnowledgeNeighborhoodOutput{
 		Definition:    types.KnowledgeNeighborhoodDefinition,
-		SchemaVersion: types.KnowledgeSchemaVersion,
+		APIVersion: types.KnowledgeAPIVersion,
 		Focus:         "dir:internal/handler/mcp",
 		Resolution:    types.ResolvedPath,
 		Options:       types.KnowledgeNeighborhoodOptions{Depth: 1, Relations: imports},

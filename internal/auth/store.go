@@ -40,9 +40,9 @@ const (
 	ExchangeCodeTTL = 10 * time.Second
 )
 
-// storeVersion 2 is the first version with grants. Version 1 records (connectors.d) name a
-// scope instead, and are refused rather than translated.
-const storeVersion = 2
+// storeVersion is the token record this build writes and reads. Older
+// records, integer versions included, are refused rather than translated.
+const storeVersion types.APIVersion = "magus.token/v1alpha1"
 
 // The sentinels a caller tests with errors.Is. Every refusal auth returns is a coded
 // DiagnosticError that unwraps to one of them, so each edge reports the same MGS code.
@@ -83,7 +83,7 @@ func (t Token) Credential() types.Credential {
 func (t Token) Expired(now time.Time) bool { return now.After(t.Expires) }
 
 type tokenRecord struct {
-	Version int `json:"version"`
+	Version types.APIVersion `json:"version"`
 	Token
 }
 
@@ -166,7 +166,7 @@ func fileExists(path string) bool {
 func tooOld(files []string) error {
 	sort.Strings(files)
 	return types.DiagnosticErrorf(types.TokenStoreTooOld,
-		"auth: %d token file(s) predate grants and are refused: %s; remove each (`rm <file>`) and mint its replacement with `%s` or `%s`",
+		"auth: %d token file(s) an older magus wrote are refused: %s; remove each (`rm <file>`) and mint its replacement with `%s` or `%s`",
 		len(files), strings.Join(files, ", "), hint.ConfigMCPConnectorCreate.With("--name", "<name>"), hint.ConfigConsoleTokenCreate.With("--name", "<name>"))
 }
 
@@ -255,16 +255,17 @@ func parseTokenRecord(name, path string, info fs.FileInfo, now time.Time) (Token
 		return Token{}, fmt.Errorf("auth: read token %s: %w", path, err)
 	}
 	var version struct {
-		Version int `json:"version"`
+		Version json.RawMessage `json:"version"`
 	}
 	if err := json.Unmarshal(data, &version); err != nil {
 		return Token{}, invalidRecord(path, "it is not JSON: %v", err)
 	}
+	var got types.APIVersion
 	switch {
-	case version.Version < storeVersion:
+	case json.Unmarshal(version.Version, &got) != nil, got.Compare(storeVersion) < 0:
 		return Token{}, tooOld([]string{path})
-	case version.Version > storeVersion:
-		return Token{}, types.DiagnosticErrorf(types.TokenStoreTooNew, "auth: token %s is version %d, newer than this magus supports (%d); upgrade magus", path, version.Version, storeVersion)
+	case got != storeVersion:
+		return Token{}, types.DiagnosticErrorf(types.TokenStoreTooNew, "auth: token %s is %s, and this magus reads only %s; upgrade magus", path, got, storeVersion)
 	}
 	var rec tokenRecord
 	if err := json.Unmarshal(data, &rec); err != nil {

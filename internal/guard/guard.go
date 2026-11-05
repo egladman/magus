@@ -724,7 +724,7 @@ type Request struct {
 // The reason names no form, so the sh and Buzz forms of one template reply alike.
 func hostUnnamed() types.GuardJudgment {
 	return types.GuardJudgment{
-		SchemaVersion: agent.GuardSchemaVersion,
+		APIVersion: agent.GuardAPIVersion,
 		Decision:      decisionDeny,
 		Reason: types.FormatDiagnostic(types.HookHostUnnamed,
 			"this hook passed no --agent-name, so magus cannot tell which host it answers: "+
@@ -782,7 +782,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		if !req.DryRun {
 			appendToolTime(ctx, hookLocation(ctx, deps), who, input, req)
 		}
-		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+		return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 	}
 	isPath := req.IsPath
 	// Where the call runs, which the bootstrap rule reads even when no workspace resolves
@@ -825,7 +825,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			who.Agent = env.Who.Agent
 		}
 		if req.DryRun && env.NothingToJudge && env.UnjudgedTool == "" {
-			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+			return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 		}
 		if env.LoadedSkill != "" && !req.DryRun {
 			// Recorded here, ahead of the arm below that returns. The gate is built here
@@ -841,7 +841,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			at := hookLocation(ctx, deps)
 			refusal, advice := joinStartedChild(withJobStoreRows(ctx, at), at, hint.NewGate(at.cacheDir, who.factsKey()), who, child, time.Now(), env.ChildStarted == "")
 			if refusal != "" {
-				return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: refusal}
+				return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: refusal}
 			}
 			unplaced = advice
 		}
@@ -863,7 +863,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			}
 			v, ok := judgeStop(deps, hint.NewGate(at.cacheDir, who.callerKey()), input, req.HostResumesOnBackgroundFrom, time.Now())
 			if !ok {
-				v = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+				v = types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 			}
 			lease, _ := resolveLease(who, req.Lease, boundJob(who, at).Job)
 			if v.Decision != decisionDeny {
@@ -912,7 +912,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		}
 		if env.IsSpawn || env.IsContinue {
 			if req.DryRun {
-				return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny,
+				return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny,
 					Reason: "magus workspace: a spawn or continuation cannot be checked, since judging one records it."}
 			}
 			return judgeAgentEvent(ctx, deps, req, env, who)
@@ -992,7 +992,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 	case isPath:
 		tool = hookToolWrite
 	}
-	verdict := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass, Lease: actingLease, LeaseFrom: leaseFrom}
+	verdict := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass, Lease: actingLease, LeaseFrom: leaseFrom}
 	// Where the acting lease STANDS, read once and before any rule. An id the job store does
 	// not carry is refused, because every lease-scoped rule below reads that row and
 	// finding nothing is how they all fall silent at once: the call would be graded by

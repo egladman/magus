@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 // OwedRegeneration is one regeneration a merge left owed: Target run over Project
@@ -31,15 +32,15 @@ type OwedRegeneration struct {
 	Paths []string `json:"paths"`
 }
 
-// owedSchemaVersion is bumped on any change an older reader would misread.
-const owedSchemaVersion = 1
+// owedAPIVersion is bumped on any change an older reader would misread.
+const owedAPIVersion types.APIVersion = "magus.owed/v1alpha1"
 
 // owedFileName sits in the per-worktree git dir: what a merge owes belongs to one
 // checkout, and the metadata dir never shows as untracked.
 const owedFileName = "magus-owed-regeneration.json"
 
 type owedDocument struct {
-	SchemaVersion int                `json:"schema_version"`
+	APIVersion types.APIVersion `json:"api_version"`
 	Owed          []OwedRegeneration `json:"owed"`
 }
 
@@ -166,9 +167,8 @@ func readOwed(path string) ([]OwedRegeneration, error) {
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("vcs: parse %s: %w", path, err)
 	}
-	if doc.SchemaVersion != owedSchemaVersion {
-		return nil, fmt.Errorf("vcs: %s has schema_version %d and this magus reads %d, run the generate targets it names by hand, then delete it",
-			path, doc.SchemaVersion, owedSchemaVersion)
+	if err := owedAPIVersion.Refuse("vcs: "+path, doc.APIVersion, "run the generate targets it names by hand, then delete it"); err != nil {
+		return nil, err
 	}
 	return doc.Owed, nil
 }
@@ -185,7 +185,7 @@ func writeOwed(path string, owed []OwedRegeneration) error {
 	slices.SortFunc(owed, func(a, b OwedRegeneration) int {
 		return cmp.Or(cmp.Compare(a.Project, b.Project), cmp.Compare(a.Target, b.Target))
 	})
-	data, err := json.MarshalIndent(owedDocument{SchemaVersion: owedSchemaVersion, Owed: owed}, "", "  ")
+	data, err := json.MarshalIndent(owedDocument{APIVersion: owedAPIVersion, Owed: owed}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("vcs: encode %s: %w", path, err)
 	}

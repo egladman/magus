@@ -113,10 +113,10 @@ type externalsFunc func(g *knowledge.Graph, symbolID, owner string) ([]string, i
 // could not be compared.
 func attachAPIDelta(out *difftypes.Diff, byPath map[string]*difftypes.File, head *knowledge.Graph, cfg diffConfig, externals externalsFunc) (map[string]string, []types.KnowledgeNode, *knowledge.Graph) {
 	baseOut := *cfg.baseline
-	if baseOut.SchemaVersion < 14 {
+	if baseOut.APIVersion.Compare(types.KnowledgeAPIVersion) < 0 {
 		out.Notes = append(out.Notes, fmt.Sprintf(
-			"API delta skipped: the baseline %s is knowledge schema %d, which predates recorded signatures; export it again with this magus",
-			cfg.baselineLabel, baseOut.SchemaVersion))
+			"API delta skipped: the baseline %s is knowledge %q, older than the %s this magus reads; export it again with this magus",
+			cfg.baselineLabel, baseOut.APIVersion, types.KnowledgeAPIVersion))
 		return nil, nil, nil
 	}
 	baseDefs := definedSymbols(baseOut.Nodes)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 // foldCachePath is the file under a store that keeps one kind's records between reads.
@@ -25,7 +26,7 @@ const foldCacheFormat = 1
 
 type foldCache struct {
 	Format int                  `json:"format"`
-	Schema int                  `json:"schema"`
+	Schema types.APIVersion     `json:"schema"`
 	Kind   string               `json:"kind"`
 	Files  map[string]foldEntry `json:"files"`
 }
@@ -77,7 +78,7 @@ func ReadKind(dir, kind string) (Fold, error) {
 	}
 	cachePath := foldCachePath(dir, kind)
 	prev := readFoldCache(cachePath, kind)
-	next := foldCache{Format: foldCacheFormat, Schema: SchemaVersion, Kind: kind, Files: make(map[string]foldEntry, len(entries))}
+	next := foldCache{Format: foldCacheFormat, Schema: APIVersion, Kind: kind, Files: make(map[string]foldEntry, len(entries))}
 	changed := false
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), fileExt) {
@@ -128,7 +129,7 @@ func readFoldCache(path, kind string) foldCache {
 		return foldCache{}
 	}
 	var c foldCache
-	if json.Unmarshal(b, &c) != nil || c.Format != foldCacheFormat || c.Schema != SchemaVersion || c.Kind != kind {
+	if json.Unmarshal(b, &c) != nil || c.Format != foldCacheFormat || c.Schema != APIVersion || c.Kind != kind {
 		return foldCache{}
 	}
 	return c

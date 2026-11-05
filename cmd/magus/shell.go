@@ -201,7 +201,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 			remedy = "Retry it; the magus that handed it on sets a fresh deadline."
 		}
 		verdict := types.GuardJudgment{
-			SchemaVersion: agent.GuardSchemaVersion,
+			APIVersion: agent.GuardAPIVersion,
 			Decision:      "deny",
 			Reason:        fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared. %s", refusal.Error(), remedy),
 		}
@@ -223,7 +223,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// the documented contract is that they always exit 0.
 	if readError != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
 		verdict := types.GuardJudgment{
-			SchemaVersion: agent.GuardSchemaVersion,
+			APIVersion: agent.GuardAPIVersion,
 			Decision:      "deny",
 			// "from stdin" is accurate whichever way this command is called: an operand
 			// is read off argv and cannot fail, so a read error is always the piped path.
@@ -282,7 +282,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	if refusal != nil {
 		if !sf.Observe && !sf.Message && sf.Duration == 0 {
 			verdict := types.GuardJudgment{
-				SchemaVersion: agent.GuardSchemaVersion,
+				APIVersion: agent.GuardAPIVersion,
 				Decision:      "deny",
 				Reason: fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared.\nNext: %s",
 					refusal.err.Error(), refusal.next.Run),
@@ -1140,7 +1140,7 @@ func delegateToCheckout(ctx context.Context, input string, opts output.Options, 
 	case guard.DelegateExited:
 	case guard.DelegateKilledUnanswered:
 		verdict := types.GuardJudgment{
-			SchemaVersion: agent.GuardSchemaVersion,
+			APIVersion: agent.GuardAPIVersion,
 			Decision:      "deny",
 			Reason:        fmt.Sprintf("%s was killed unanswered at the hook's deadline, so this call is blocked. Retry it.", own),
 		}

@@ -10,7 +10,7 @@ const KnowledgeRenameDefinition = "refs --rename replaces a symbol's name at eve
 // change and Applied false.
 type KnowledgeRenameOutput struct {
 	Definition    string `json:"definition"     yaml:"definition"`
-	SchemaVersion int    `json:"schema_version" yaml:"schema_version"`
+	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
 	Symbol        string `json:"symbol"         yaml:"symbol"`
 	Label         string `json:"label"          yaml:"label"`
 	// From is the spelling every site held; To replaces it.
