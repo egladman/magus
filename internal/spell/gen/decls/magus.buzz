@@ -330,13 +330,6 @@ export enum<str> ConformancePopulation {
     test = "test",
 }
 
-export enum<str> MutantOutcome {
-    none = "",
-    killed = "killed",
-    survived = "survived",
-    excepted = "excepted",
-}
-
 export enum<str> ChangeStatus {
     none = "",
     added = "added",
@@ -484,10 +477,6 @@ export object Change {
 
     fun risk() > ChangeRisk !> any {
         return magus__Change__risk(this);
-    }
-
-    fun mutants() > Mutants !> any {
-        return magus__Change__mutants(this);
     }
 }
 
@@ -2068,30 +2057,6 @@ export object ConformanceReport {
     indexes: [SymbolIndexStatus] = [],
 }
 
-export object Mutant {
-    id: str = "",
-    symbol: str = "",
-    path: str = "",
-    operator: str = "",
-    find: str = "",
-    replace: str = "",
-    line: int = 0,
-    col: int = 0,
-    outcome: MutantOutcome = MutantOutcome.none,
-    seconds: double = 0.0,
-    reason: str = "",
-    baseSurvived: int = 0,
-    baseReason: str = "",
-}
-
-export object Mutants {
-    definition: str = "",
-    base: str = "",
-    mutants: [Mutant] = [],
-    gaps: [FunctionGap] = [],
-    unused: [Finding] = [],
-}
-
 export object Node {
     path: str = "",
     name: str = "",
@@ -2736,24 +2701,11 @@ export object DecisionSyntax {
     operators: [str] = [],
 }
 
-export object Swap {
-    name: str = "",
-    find: str = "",
-    replace: str = "",
-}
-
-export object MutationSyntax {
-    swaps: [Swap] = [],
-    bodies: [str] = [],
-    arid: [str] = [],
-}
-
 export object Syntax {
     comments: CommentSyntax? = null,
     stubs: StubSyntax? = null,
     operators: [str] = [],
     decisions: DecisionSyntax? = null,
-    mutations: MutationSyntax? = null,
 }
 
 export object SpellVersion {
@@ -2903,7 +2855,6 @@ extern fun magus__Change__affected(recv: Change) > Affected !> any;
 extern fun magus__Change__conformance(recv: Change, checks: [str] = [<str>]) > ConformanceReport !> any;
 extern fun magus__Change__mergeBase(recv: Change) > str !> any;
 extern fun magus__Change__risk(recv: Change) > ChangeRisk !> any;
-extern fun magus__Change__mutants(recv: Change) > Mutants !> any;
 extern fun magus__History__hotspots(recv: History) > Hotspots !> any;
 extern fun magus__History__affinity(recv: History) > Affinity !> any;
 extern fun magus__History__ownership(recv: History) > Ownership !> any;

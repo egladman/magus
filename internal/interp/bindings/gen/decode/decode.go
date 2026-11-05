@@ -1159,94 +1159,6 @@ func decodeDecisionSyntax(v vm.Value, path string) (spells.DecisionSyntax, error
 	return out, nil
 }
 
-// DecodeSwap decodes a Buzz Swap, an object instance or a map, into a spells.Swap.
-func DecodeSwap(v vm.Value) (spells.Swap, error) {
-	return decodeSwap(v, "swap")
-}
-
-func decodeSwap(v vm.Value, path string) (spells.Swap, error) {
-	var out spells.Swap
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "Swap", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "name":
-			sName, err := decodeString(item, path+".name")
-			if err != nil {
-				return out, err
-			}
-			out.Name = sName
-		case "find":
-			sFind, err := decodeString(item, path+".find")
-			if err != nil {
-				return out, err
-			}
-			out.Find = sFind
-		case "replace":
-			sReplace, err := decodeString(item, path+".replace")
-			if err != nil {
-				return out, err
-			}
-			out.Replace = sReplace
-		default:
-			return out, unknownMember(path, "Swap", key)
-		}
-	}
-	return out, nil
-}
-
-// DecodeMutationSyntax decodes a Buzz MutationSyntax, an object instance or a map, into a spells.MutationSyntax.
-func DecodeMutationSyntax(v vm.Value) (spells.MutationSyntax, error) {
-	return decodeMutationSyntax(v, "mutationSyntax")
-}
-
-func decodeMutationSyntax(v vm.Value, path string) (spells.MutationSyntax, error) {
-	var out spells.MutationSyntax
-	fields, ok := v.MapView()
-	if !ok {
-		return out, mismatch(path, "MutationSyntax", v)
-	}
-	for _, key := range fields.MapKeys() {
-		item, _ := fields.MapGet(key)
-		switch key {
-		case "swaps":
-			listSwaps, err := decodeList(item, path+".swaps", "[Swap]")
-			if err != nil {
-				return out, err
-			}
-			if len(listSwaps) > 0 {
-				itemsSwaps := make([]spells.Swap, len(listSwaps))
-				for indexSwaps, itemSwaps := range listSwaps {
-					xSwapsItem, err := decodeSwap(itemSwaps, fmt.Sprintf("%s[%d]", path+".swaps", indexSwaps))
-					if err != nil {
-						return out, err
-					}
-					itemsSwaps[indexSwaps] = xSwapsItem
-				}
-				out.Swaps = itemsSwaps
-			}
-		case "bodies":
-			strsBodies, err := decodeStringList(item, path+".bodies")
-			if err != nil {
-				return out, err
-			}
-			out.Bodies = strsBodies
-		case "arid":
-			strsArid, err := decodeStringList(item, path+".arid")
-			if err != nil {
-				return out, err
-			}
-			out.Arid = strsArid
-		default:
-			return out, unknownMember(path, "MutationSyntax", key)
-		}
-	}
-	return out, nil
-}
-
 // DecodeSyntax decodes a Buzz Syntax, an object instance or a map, into a spells.Syntax.
 func DecodeSyntax(v vm.Value) (spells.Syntax, error) {
 	return decodeSyntax(v, "syntax")
@@ -1296,16 +1208,6 @@ func decodeSyntax(v vm.Value, path string) (spells.Syntax, error) {
 				}
 				optDecisions = xDecisions
 				out.Decisions = &optDecisions
-			}
-		case "mutations":
-			if !item.IsNull() {
-				var optMutations spells.MutationSyntax
-				xMutations, err := decodeMutationSyntax(item, path+".mutations")
-				if err != nil {
-					return out, err
-				}
-				optMutations = xMutations
-				out.Mutations = &optMutations
 			}
 		default:
 			return out, unknownMember(path, "Syntax", key)

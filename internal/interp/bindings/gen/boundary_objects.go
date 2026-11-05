@@ -2796,46 +2796,6 @@ func ObjectConformanceReport(v types.ConformanceReport, enums ffi.EnumCases) vm.
 	return out
 }
 
-func ObjectMutant(v types.Mutant, enums ffi.EnumCases) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("id", vm.StringValue(v.ID))
-	out.MapSet("symbol", vm.StringValue(v.Symbol))
-	out.MapSet("path", vm.StringValue(v.Path))
-	out.MapSet("operator", vm.StringValue(v.Operator))
-	out.MapSet("find", vm.StringValue(v.Find))
-	out.MapSet("replace", vm.StringValue(v.Replace))
-	out.MapSet("line", vm.IntValue(int64(v.Line)))
-	out.MapSet("col", vm.IntValue(int64(v.Col)))
-	out.MapSet("outcome", enums.Case("MutantOutcome", string(v.Outcome)))
-	out.MapSet("seconds", vm.FloatValue(float64(v.Seconds)))
-	out.MapSet("reason", vm.StringValue(v.Reason))
-	out.MapSet("baseSurvived", vm.IntValue(int64(v.BaseSurvived)))
-	out.MapSet("baseReason", vm.StringValue(v.BaseReason))
-	return out
-}
-
-func ObjectMutants(v types.Mutants, enums ffi.EnumCases) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("definition", vm.StringValue(v.Definition))
-	out.MapSet("base", vm.StringValue(v.Base))
-	itemsMutants := make([]vm.Value, len(v.Mutants))
-	for indexMutants := range v.Mutants {
-		itemsMutants[indexMutants] = ObjectMutant(v.Mutants[indexMutants], enums)
-	}
-	out.MapSet("mutants", vm.ListValue(itemsMutants))
-	itemsGaps := make([]vm.Value, len(v.Gaps))
-	for indexGaps := range v.Gaps {
-		itemsGaps[indexGaps] = ObjectFunctionGap(v.Gaps[indexGaps])
-	}
-	out.MapSet("gaps", vm.ListValue(itemsGaps))
-	itemsUnused := make([]vm.Value, len(v.Unused))
-	for indexUnused := range v.Unused {
-		itemsUnused[indexUnused] = ObjectFinding(v.Unused[indexUnused])
-	}
-	out.MapSet("unused", vm.ListValue(itemsUnused))
-	return out
-}
-
 func ObjectNode(v types.Node) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
@@ -3571,34 +3531,6 @@ func ObjectDecisionSyntax(v spells.DecisionSyntax) vm.Value {
 	return out
 }
 
-func ObjectSwap(v spells.Swap) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("name", vm.StringValue(v.Name))
-	out.MapSet("find", vm.StringValue(v.Find))
-	out.MapSet("replace", vm.StringValue(v.Replace))
-	return out
-}
-
-func ObjectMutationSyntax(v spells.MutationSyntax) vm.Value {
-	out := vm.NewMap()
-	itemsSwaps := make([]vm.Value, len(v.Swaps))
-	for indexSwaps := range v.Swaps {
-		itemsSwaps[indexSwaps] = ObjectSwap(v.Swaps[indexSwaps])
-	}
-	out.MapSet("swaps", vm.ListValue(itemsSwaps))
-	itemsBodies := make([]vm.Value, len(v.Bodies))
-	for indexBodies := range v.Bodies {
-		itemsBodies[indexBodies] = vm.StringValue(v.Bodies[indexBodies])
-	}
-	out.MapSet("bodies", vm.ListValue(itemsBodies))
-	itemsArid := make([]vm.Value, len(v.Arid))
-	for indexArid := range v.Arid {
-		itemsArid[indexArid] = vm.StringValue(v.Arid[indexArid])
-	}
-	out.MapSet("arid", vm.ListValue(itemsArid))
-	return out
-}
-
 func ObjectSyntax(v spells.Syntax) vm.Value {
 	out := vm.NewMap()
 	optComments := vm.Null
@@ -3621,11 +3553,6 @@ func ObjectSyntax(v spells.Syntax) vm.Value {
 		optDecisions = ObjectDecisionSyntax((*v.Decisions))
 	}
 	out.MapSet("decisions", optDecisions)
-	optMutations := vm.Null
-	if v.Mutations != nil {
-		optMutations = ObjectMutationSyntax((*v.Mutations))
-	}
-	out.MapSet("mutations", optMutations)
 	return out
 }
 

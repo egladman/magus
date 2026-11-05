@@ -60,7 +60,6 @@ magus__Change__conformance
 magus__Change__diff
 magus__Change__impact
 magus__Change__mergeBase
-magus__Change__mutants
 magus__Change__risk
 magus__Change__tier
 magus__Graph__dir

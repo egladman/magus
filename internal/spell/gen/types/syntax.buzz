@@ -10,5 +10,4 @@ export object Syntax {
     stubs: StubSyntax? = null,
     operators: [str] = [],
     decisions: DecisionSyntax? = null,
-    mutations: MutationSyntax? = null,
 }

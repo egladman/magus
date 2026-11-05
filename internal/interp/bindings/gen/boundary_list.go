@@ -270,9 +270,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ModuleFieldEntry", Zero: types.ModuleFieldEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleFieldEntry(v.(types.ModuleFieldEntry)) }},
 	{Name: "ModuleMethodEntry", Zero: types.ModuleMethodEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleMethodEntry(v.(types.ModuleMethodEntry)) }},
 	{Name: "ModuleObjectEntry", Zero: types.ModuleObjectEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectModuleObjectEntry(v.(types.ModuleObjectEntry)) }},
-	{Name: "Mutant", Zero: types.Mutant{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMutant(v.(types.Mutant), enums) }},
-	{Name: "Mutants", Zero: types.Mutants{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMutants(v.(types.Mutants), enums) }},
-	{Name: "MutationSyntax", Zero: spells.MutationSyntax{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMutationSyntax(v.(spells.MutationSyntax)) }},
 	{Name: "NeighborhoodResult", Zero: types.KnowledgeNeighborhoodOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeNeighborhoodOutput(v.(types.KnowledgeNeighborhoodOutput), enums)
 	}},
@@ -383,7 +380,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Status", Zero: types.StatusRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusRecord(v.(types.StatusRecord)) }},
 	{Name: "StopRequest", Zero: types.StopRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStopRequest(v.(types.StopRequest), enums) }},
 	{Name: "StubSyntax", Zero: spells.StubSyntax{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStubSyntax(v.(spells.StubSyntax)) }},
-	{Name: "Swap", Zero: spells.Swap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSwap(v.(spells.Swap)) }},
 	{Name: "SymbolDecl", Zero: types.SymbolDecl{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSymbolDecl(v.(types.SymbolDecl)) }},
 	{Name: "SymbolIndexStatus", Zero: types.SymbolIndexStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectSymbolIndexStatus(v.(types.SymbolIndexStatus), enums)

@@ -36,8 +36,6 @@ var inboundTypes = []inboundType{
 	{Name: "CommentSyntax", Zero: spells.CommentSyntax{}, Encode: func(v any) vm.Value { return ObjectCommentSyntax(v.(spells.CommentSyntax)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeCommentSyntax(v) }},
 	{Name: "StubSyntax", Zero: spells.StubSyntax{}, Encode: func(v any) vm.Value { return ObjectStubSyntax(v.(spells.StubSyntax)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeStubSyntax(v) }},
 	{Name: "DecisionSyntax", Zero: spells.DecisionSyntax{}, Encode: func(v any) vm.Value { return ObjectDecisionSyntax(v.(spells.DecisionSyntax)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeDecisionSyntax(v) }},
-	{Name: "Swap", Zero: spells.Swap{}, Encode: func(v any) vm.Value { return ObjectSwap(v.(spells.Swap)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSwap(v) }},
-	{Name: "MutationSyntax", Zero: spells.MutationSyntax{}, Encode: func(v any) vm.Value { return ObjectMutationSyntax(v.(spells.MutationSyntax)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeMutationSyntax(v) }},
 	{Name: "Syntax", Zero: spells.Syntax{}, Encode: func(v any) vm.Value { return ObjectSyntax(v.(spells.Syntax)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSyntax(v) }},
 	{Name: "Language", Zero: spells.Language{}, Encode: func(v any) vm.Value { return ObjectLanguage(v.(spells.Language)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeLanguage(v) }},
 	{Name: "Ack", Zero: types.Ack{}, Encode: func(v any) vm.Value { return ObjectAck(v.(types.Ack)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeAck(v) }},
