@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -44,11 +45,11 @@ const (
 // Advice, never a failure. How much headroom a runaway guard should carry is a
 // judgment about the worst machine the target will ever run on, which magus has not
 // seen.
-func (r *runner) checkTimeoutDeclarations(projects []*types.Project) types.Check {
+func (r *runner) checkTimeoutDeclarations(ctx context.Context, projects []*types.Project) types.Check {
 	const name = "timeout-declarations"
 
 	var h forecast.History
-	if err := h.Load(r.runContext(), r.opts.cfg.HistoryPath); err != nil {
+	if err := h.Load(ctx, r.opts.cfg.HistoryPath); err != nil {
 		return historyUnreadableCheck(name, err)
 	}
 

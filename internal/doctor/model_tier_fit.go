@@ -36,11 +36,11 @@ type modelTiered interface {
 // It only reports. A tier that fails one kind of job may be right for every other, and
 // moving work is a decision about cost the history cannot make, so nothing here edits a
 // declaration and nothing re-routes a job. Advice, never a failure.
-func (r *runner) checkModelTierFit(_ []*types.Project) types.Check {
+func (r *runner) checkModelTierFit(ctx context.Context, _ []*types.Project) types.Check {
 	const name = "model-tier-fit"
 
 	tiered, ok := r.ws.(modelTiered)
-	if !ok || tiered.ModelTiers(r.runContext()) == nil {
+	if !ok || tiered.ModelTiers(ctx) == nil {
 		return types.Check{
 			Name:     name,
 			Status:   types.CheckOK,
@@ -48,10 +48,10 @@ func (r *runner) checkModelTierFit(_ []*types.Project) types.Check {
 			Message:  "this workspace declares no model tiers, so no job is routed by one",
 		}
 	}
-	set := tiered.ModelTiers(r.runContext())
+	set := tiered.ModelTiers(ctx)
 
 	var h forecast.History
-	if err := h.Load(r.runContext(), r.opts.cfg.HistoryPath); err != nil {
+	if err := h.Load(ctx, r.opts.cfg.HistoryPath); err != nil {
 		return historyUnreadableCheck(name, err)
 	}
 

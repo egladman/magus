@@ -189,7 +189,7 @@ func RegisterOpener(fn func() Annotator) {
 // the runner reads it there. magus captures and replays subprocess output, so a
 // marker sent through a writer magus holds would land in the stream
 // [Annotator.Defang] scrubs.
-func Detect() Annotator {
+func Detect() Annotator { //nolint:ireturn // Annotator: Nop or the registered spell-backed provider
 	openerMu.RLock()
 	fn := opener
 	openerMu.RUnlock()

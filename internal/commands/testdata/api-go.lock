@@ -1303,6 +1303,13 @@ github.com/egladman/magus/types.CheckoutFastForwarder type interface
 github.com/egladman/magus/types.CheckoutFastForwarder.FastForward imethod func(ctx context.Context, root string, rev string) error
 github.com/egladman/magus/types.CheckoutLister type interface
 github.com/egladman/magus/types.CheckoutLister.OtherCheckouts imethod func(root string) ([]string, error)
+github.com/egladman/magus/types.CheckoutManager type interface
+github.com/egladman/magus/types.CheckoutManager.Preserve imethod func(ctx context.Context, dir string) (string, error)
+github.com/egladman/magus/types.CheckoutManager.PrunePreserved imethod func(ctx context.Context, dir string, before time.Time) ([]string, error)
+github.com/egladman/magus/types.CheckoutManager.embeds CheckoutFastForwarder
+github.com/egladman/magus/types.CheckoutManager.embeds CheckoutLister
+github.com/egladman/magus/types.CheckoutManager.embeds CheckoutProvisioner
+github.com/egladman/magus/types.CheckoutManager.embeds CheckoutReporter
 github.com/egladman/magus/types.CheckoutProvisioner type interface
 github.com/egladman/magus/types.CheckoutProvisioner.Checkouts imethod func(ctx context.Context, root string) ([]string, error)
 github.com/egladman/magus/types.CheckoutProvisioner.CreateCheckout imethod func(ctx context.Context, root string, dir string, rev string, branch string) error
@@ -2632,6 +2639,17 @@ github.com/egladman/magus/types.HistoryQuery type struct
 github.com/egladman/magus/types.HistoryQuery.FirstParent field bool
 github.com/egladman/magus/types.HistoryQuery.Limit field int
 github.com/egladman/magus/types.HistoryQuery.Paths field []string
+github.com/egladman/magus/types.HistoryReporter type interface
+github.com/egladman/magus/types.HistoryReporter.ChangedFiles imethod func(ctx context.Context, dir string, base string) ([]string, error)
+github.com/egladman/magus/types.HistoryReporter.Describe imethod func(ctx context.Context, dir string) (string, error)
+github.com/egladman/magus/types.HistoryReporter.DiffCommands imethod func(ctx context.Context, dir string, base string) (DiffCommandHints, error)
+github.com/egladman/magus/types.HistoryReporter.FindCommit imethod func(ctx context.Context, dir string, rev string) (Commit, error)
+github.com/egladman/magus/types.HistoryReporter.History imethod func(ctx context.Context, dir string, q HistoryQuery) ([]Commit, error)
+github.com/egladman/magus/types.HistoryReporter.Tags imethod func(ctx context.Context, dir string, pattern string) ([]VCSTag, error)
+github.com/egladman/magus/types.HistoryReporter.embeds AncestryReporter
+github.com/egladman/magus/types.HistoryReporter.embeds BranchChangeReporter
+github.com/egladman/magus/types.HistoryReporter.embeds ChurnReporter
+github.com/egladman/magus/types.HistoryReporter.embeds RevTimeReporter
 github.com/egladman/magus/types.HolderServer const JobHolder = "server"
 github.com/egladman/magus/types.HolderSession const JobHolder = "session"
 github.com/egladman/magus/types.Holds type struct
@@ -2651,6 +2669,10 @@ github.com/egladman/magus/types.HookCommand.Points field []HookPoint "json:\"poi
 github.com/egladman/magus/types.HookCommand.Script field string "json:\"script\""
 github.com/egladman/magus/types.HookCommand.TimeoutS field int "json:\"timeout_s,omitempty\""
 github.com/egladman/magus/types.HookHostUnnamed const DiagnosticCode = "MGS3024"
+github.com/egladman/magus/types.HookInstaller type interface
+github.com/egladman/magus/types.HookInstaller.embeds DriftHookInstaller
+github.com/egladman/magus/types.HookInstaller.embeds MergeDriverInstaller
+github.com/egladman/magus/types.HookInstaller.embeds RefreshHookInstaller
 github.com/egladman/magus/types.HookPoint type string
 github.com/egladman/magus/types.HookPoint.String method func() string
 github.com/egladman/magus/types.HookPoint.Valid method func() bool
@@ -4695,6 +4717,15 @@ github.com/egladman/magus/types.RemoteReporter.RemoteURL imethod func(ctx contex
 github.com/egladman/magus/types.RemoteSpellDigestMismatch const DiagnosticCode = "MGS1042"
 github.com/egladman/magus/types.RemoteSpellLockStale const DiagnosticCode = "MGS1043"
 github.com/egladman/magus/types.RemoteSpellUndeclared const DiagnosticCode = "MGS1041"
+github.com/egladman/magus/types.RemoteSyncer type interface
+github.com/egladman/magus/types.RemoteSyncer.embeds BranchHeadReporter
+github.com/egladman/magus/types.RemoteSyncer.embeds Bundler
+github.com/egladman/magus/types.RemoteSyncer.embeds DefaultRefReporter
+github.com/egladman/magus/types.RemoteSyncer.embeds PushStatusReporter
+github.com/egladman/magus/types.RemoteSyncer.embeds Pusher
+github.com/egladman/magus/types.RemoteSyncer.embeds RemoteConfigReporter
+github.com/egladman/magus/types.RemoteSyncer.embeds RemoteReporter
+github.com/egladman/magus/types.RemoteSyncer.embeds RevisionFetcher
 github.com/egladman/magus/types.RemovedOption const DiagnosticCode = "MGS1038"
 github.com/egladman/magus/types.RemovedOptions var map[string]string
 github.com/egladman/magus/types.RenamedCharmError func(name string) error
@@ -4779,6 +4810,19 @@ github.com/egladman/magus/types.RevisionFetcher.FetchCommit imethod func(ctx con
 github.com/egladman/magus/types.RevisionFetcher.FetchRef imethod func(ctx context.Context, root string, remote string, ref string) (string, error)
 github.com/egladman/magus/types.RevisionFileReader type interface
 github.com/egladman/magus/types.RevisionFileReader.ReadFileAt imethod func(ctx context.Context, root string, rev string, path string) (string, error)
+github.com/egladman/magus/types.RevisionReader type interface
+github.com/egladman/magus/types.RevisionReader.embeds Bisector
+github.com/egladman/magus/types.RevisionReader.embeds GeneratedPathReporter
+github.com/egladman/magus/types.RevisionReader.embeds RangeReporter
+github.com/egladman/magus/types.RevisionReader.embeds RegionReporter
+github.com/egladman/magus/types.RevisionReader.embeds RevisionExporter
+github.com/egladman/magus/types.RevisionReader.embeds RevisionFileReader
+github.com/egladman/magus/types.RevisionReader.embeds TreeReporter
+github.com/egladman/magus/types.RevisionWriter type interface
+github.com/egladman/magus/types.RevisionWriter.embeds CommitWriter
+github.com/egladman/magus/types.RevisionWriter.embeds ConflictResolver
+github.com/egladman/magus/types.RevisionWriter.embeds MergeStarter
+github.com/egladman/magus/types.RevisionWriter.embeds TreeMerger
 github.com/egladman/magus/types.RiskAssessor type interface
 github.com/egladman/magus/types.RiskAssessor.AssessRisk imethod func(ctx context.Context, target string, o TierOptions) (TierReport, error)
 github.com/egladman/magus/types.RiskFull const Tier = "full"
@@ -5756,60 +5800,21 @@ github.com/egladman/magus/types.VCSCommandOptions.Stdin field string
 github.com/egladman/magus/types.VCSCommandOptions.TTY field bool
 github.com/egladman/magus/types.VCSCommandOptions.TimeoutMs field float64
 github.com/egladman/magus/types.VCSDriver type interface
-github.com/egladman/magus/types.VCSDriver.Base imethod func() string
-github.com/egladman/magus/types.VCSDriver.ChangedFiles imethod func(ctx context.Context, dir string, base string) ([]string, error)
-github.com/egladman/magus/types.VCSDriver.Claims imethod func() []string
-github.com/egladman/magus/types.VCSDriver.Describe imethod func(ctx context.Context, dir string) (string, error)
-github.com/egladman/magus/types.VCSDriver.DiffCommands imethod func(ctx context.Context, dir string, base string) (DiffCommandHints, error)
-github.com/egladman/magus/types.VCSDriver.Dirty imethod func(ctx context.Context, dir string, paths []string) (bool, error)
-github.com/egladman/magus/types.VCSDriver.DirtyDiff imethod func(ctx context.Context, dir string, paths []string) (string, error)
-github.com/egladman/magus/types.VCSDriver.DirtyFiles imethod func(ctx context.Context, dir string, paths []string) ([]string, error)
-github.com/egladman/magus/types.VCSDriver.FindCommit imethod func(ctx context.Context, dir string, rev string) (Commit, error)
-github.com/egladman/magus/types.VCSDriver.History imethod func(ctx context.Context, dir string, q HistoryQuery) ([]Commit, error)
-github.com/egladman/magus/types.VCSDriver.IsSecondaryCheckout imethod func(dir string) bool
-github.com/egladman/magus/types.VCSDriver.Metadata imethod func(ctx context.Context, dir string) (VCSMeta, error)
-github.com/egladman/magus/types.VCSDriver.Name imethod func() string
-github.com/egladman/magus/types.VCSDriver.ParentRef imethod func() string
-github.com/egladman/magus/types.VCSDriver.Preserve imethod func(ctx context.Context, dir string) (string, error)
-github.com/egladman/magus/types.VCSDriver.PrunePreserved imethod func(ctx context.Context, dir string, before time.Time) ([]string, error)
-github.com/egladman/magus/types.VCSDriver.Ref imethod func(ctx context.Context, dir string) (string, error)
-github.com/egladman/magus/types.VCSDriver.ReviewCommand imethod func() string
-github.com/egladman/magus/types.VCSDriver.Root imethod func(ctx context.Context, dir string) (string, error)
-github.com/egladman/magus/types.VCSDriver.Tags imethod func(ctx context.Context, dir string, pattern string) ([]VCSTag, error)
-github.com/egladman/magus/types.VCSDriver.embeds AncestryReporter
-github.com/egladman/magus/types.VCSDriver.embeds Bisector
-github.com/egladman/magus/types.VCSDriver.embeds BranchChangeReporter
-github.com/egladman/magus/types.VCSDriver.embeds BranchHeadReporter
-github.com/egladman/magus/types.VCSDriver.embeds Bundler
-github.com/egladman/magus/types.VCSDriver.embeds CheckoutFastForwarder
-github.com/egladman/magus/types.VCSDriver.embeds CheckoutLister
-github.com/egladman/magus/types.VCSDriver.embeds CheckoutProvisioner
-github.com/egladman/magus/types.VCSDriver.embeds CheckoutReporter
-github.com/egladman/magus/types.VCSDriver.embeds CheckoutStateReporter
-github.com/egladman/magus/types.VCSDriver.embeds ChurnReporter
-github.com/egladman/magus/types.VCSDriver.embeds CommitWriter
-github.com/egladman/magus/types.VCSDriver.embeds ConflictResolver
-github.com/egladman/magus/types.VCSDriver.embeds DefaultRefReporter
-github.com/egladman/magus/types.VCSDriver.embeds DriftHookInstaller
-github.com/egladman/magus/types.VCSDriver.embeds GeneratedPathReporter
-github.com/egladman/magus/types.VCSDriver.embeds IgnoredFileReporter
-github.com/egladman/magus/types.VCSDriver.embeds MergeDriverInstaller
-github.com/egladman/magus/types.VCSDriver.embeds MergeStarter
-github.com/egladman/magus/types.VCSDriver.embeds OperationReporter
-github.com/egladman/magus/types.VCSDriver.embeds PushStatusReporter
-github.com/egladman/magus/types.VCSDriver.embeds Pusher
-github.com/egladman/magus/types.VCSDriver.embeds RangeReporter
-github.com/egladman/magus/types.VCSDriver.embeds RefreshHookInstaller
-github.com/egladman/magus/types.VCSDriver.embeds RegionReporter
-github.com/egladman/magus/types.VCSDriver.embeds RemoteConfigReporter
-github.com/egladman/magus/types.VCSDriver.embeds RemoteReporter
-github.com/egladman/magus/types.VCSDriver.embeds RevTimeReporter
-github.com/egladman/magus/types.VCSDriver.embeds RevisionExporter
-github.com/egladman/magus/types.VCSDriver.embeds RevisionFetcher
-github.com/egladman/magus/types.VCSDriver.embeds RevisionFileReader
-github.com/egladman/magus/types.VCSDriver.embeds TrackedFileReporter
-github.com/egladman/magus/types.VCSDriver.embeds TreeMerger
-github.com/egladman/magus/types.VCSDriver.embeds TreeReporter
+github.com/egladman/magus/types.VCSDriver.embeds CheckoutManager
+github.com/egladman/magus/types.VCSDriver.embeds HistoryReporter
+github.com/egladman/magus/types.VCSDriver.embeds HookInstaller
+github.com/egladman/magus/types.VCSDriver.embeds RemoteSyncer
+github.com/egladman/magus/types.VCSDriver.embeds RevisionReader
+github.com/egladman/magus/types.VCSDriver.embeds RevisionWriter
+github.com/egladman/magus/types.VCSDriver.embeds VCSIdentity
+github.com/egladman/magus/types.VCSDriver.embeds WorkingCopyReporter
+github.com/egladman/magus/types.VCSIdentity type interface
+github.com/egladman/magus/types.VCSIdentity.Base imethod func() string
+github.com/egladman/magus/types.VCSIdentity.Claims imethod func() []string
+github.com/egladman/magus/types.VCSIdentity.IsSecondaryCheckout imethod func(dir string) bool
+github.com/egladman/magus/types.VCSIdentity.Name imethod func() string
+github.com/egladman/magus/types.VCSIdentity.ParentRef imethod func() string
+github.com/egladman/magus/types.VCSIdentity.ReviewCommand imethod func() string
 github.com/egladman/magus/types.VCSInvocation type struct
 github.com/egladman/magus/types.VCSInvocation.Args field []string
 github.com/egladman/magus/types.VCSInvocation.Subcommand field string
@@ -5897,6 +5902,17 @@ github.com/egladman/magus/types.WithOutputCacheDir func(ctx context.Context, cac
 github.com/egladman/magus/types.WithReturnCapture func(ctx context.Context) (context.Context, func(target string) Returns)
 github.com/egladman/magus/types.WithTrace func(ctx context.Context) context.Context
 github.com/egladman/magus/types.WithWorkspace func(ctx context.Context, ws WorkspaceRepository) context.Context
+github.com/egladman/magus/types.WorkingCopyReporter type interface
+github.com/egladman/magus/types.WorkingCopyReporter.Dirty imethod func(ctx context.Context, dir string, paths []string) (bool, error)
+github.com/egladman/magus/types.WorkingCopyReporter.DirtyDiff imethod func(ctx context.Context, dir string, paths []string) (string, error)
+github.com/egladman/magus/types.WorkingCopyReporter.DirtyFiles imethod func(ctx context.Context, dir string, paths []string) ([]string, error)
+github.com/egladman/magus/types.WorkingCopyReporter.Metadata imethod func(ctx context.Context, dir string) (VCSMeta, error)
+github.com/egladman/magus/types.WorkingCopyReporter.Ref imethod func(ctx context.Context, dir string) (string, error)
+github.com/egladman/magus/types.WorkingCopyReporter.Root imethod func(ctx context.Context, dir string) (string, error)
+github.com/egladman/magus/types.WorkingCopyReporter.embeds CheckoutStateReporter
+github.com/egladman/magus/types.WorkingCopyReporter.embeds IgnoredFileReporter
+github.com/egladman/magus/types.WorkingCopyReporter.embeds OperationReporter
+github.com/egladman/magus/types.WorkingCopyReporter.embeds TrackedFileReporter
 github.com/egladman/magus/types.Workspace type struct
 github.com/egladman/magus/types.Workspace.All method(ptr) func() []*Project
 github.com/egladman/magus/types.Workspace.Get method(ptr) func(path string) *Project

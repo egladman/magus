@@ -50,7 +50,7 @@ func TestDryCheckParityWithEngine(t *testing.T) {
 			engine, err := interp.NewBuzzReplSession(ctx, t.TempDir(), false)
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = engine.Close() })
-			_, engineErr := engine.LoadString(string(src))
+			_, engineErr := engine.LoadString(ctx, string(src))
 
 			sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 			t.Cleanup(func() { _ = sess.Close() })

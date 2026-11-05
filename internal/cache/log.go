@@ -97,10 +97,6 @@ type PrettyHandler struct {
 	// growing an error branch. Reset at the top of Handle, returned at
 	// the bottom; guarded by mu like every other field.
 	err error
-	// recordCtx is the context of the record currently being handled, held so printf
-	// can reach the run's secret resolver without every print helper taking a ctx.
-	// Set and cleared in Handle; guarded by mu like every other field.
-	recordCtx context.Context
 	// zone owns the terminal's bottom rows for the whole process; lease is this
 	// handler's band within it. The handler no longer sets scroll margins
 	// itself: it used to, and so did the CLI's own handler, and two components
@@ -643,7 +639,7 @@ func (h *PrettyHandler) fail(err error) {
 // the first error so callers stay linear. Once a write has failed the
 // rest of the record is skipped: a broken stderr will not recover
 // mid-line, and continuing would only pile up identical errors.
-func (h *PrettyHandler) printf(format string, args ...any) {
+func (h *PrettyHandler) printf(ctx context.Context, format string, args ...any) {
 	if h.err != nil {
 		return
 	}
@@ -654,9 +650,9 @@ func (h *PrettyHandler) printf(format string, args ...any) {
 	// rule that gets forgotten when the thirteenth is added; this is every line the
 	// handler will ever print, in one place.
 	//
-	// The resolver comes from the record context captured in Handle rather than a
-	// parameter, so nothing that calls printf has to know secrets exist.
-	_, err := fmt.Fprintf(h.w, "%s", secret.RedactString(h.recordCtx, fmt.Sprintf(format, args...)))
+	// The resolver comes from ctx, the record context Handle was called with, so
+	// the value being printed never has to know secrets exist.
+	_, err := fmt.Fprintf(h.w, "%s", secret.RedactString(ctx, fmt.Sprintf(format, args...)))
 	h.fail(err)
 }
 
@@ -720,11 +716,6 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// Held for the duration of this record so printf can reach the run's secret
-	// resolver. Guarded by the same mutex as every other field here.
-	h.recordCtx = ctx
-	defer func() { h.recordCtx = nil }()
-
 	// One record, one error: clear the latch on entry so a failure on an
 	// earlier record does not suppress this one's output.
 	h.err = nil
@@ -748,19 +739,19 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		if tier := recordString(r, "remote"); tier != "" {
 			from = fmt.Sprintf(" from %s, %s", tier, FormatBytes(recordInt(r, "bytes")))
 		}
-		h.printf("%s %s (cached%s, %s%s)\n", Glyph(colorize, "pass", colDimGreen), label, from, FormatDuration(dur), remote)
-		h.printRepro(project, recordString(r, "target"))
-		h.printRef(ref)
+		h.printf(ctx, "%s %s (cached%s, %s%s)\n", Glyph(colorize, "pass", colDimGreen), label, from, FormatDuration(dur), remote)
+		h.printRepro(ctx, project, recordString(r, "target"))
+		h.printRef(ctx, ref)
 		h.status.cached++
 		h.paintStatus()
 	case "cache.miss":
-		h.printf("%s %s (ran, %s%s)\n", Glyph(colorize, "pass", colGreen), label, FormatDuration(dur), remote)
-		h.printRepro(project, recordString(r, "target"))
-		h.printRef(ref)
+		h.printf(ctx, "%s %s (ran, %s%s)\n", Glyph(colorize, "pass", colGreen), label, FormatDuration(dur), remote)
+		h.printRepro(ctx, project, recordString(r, "target"))
+		h.printRef(ctx, ref)
 		h.status.passed++
 		h.paintStatus()
 	case "cache.error":
-		h.printFailure(colorize, failureReport{
+		h.printFailure(ctx, colorize, failureReport{
 			label:   label,
 			project: project,
 			target:  recordString(r, "target"),
@@ -774,7 +765,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		h.status.failed++
 		h.paintStatus()
 	case "cache.warn":
-		h.printf("%s %s\n", Glyph(colorize, "warn", colYellow), recordString(r, "msg"))
+		h.printf(ctx, "%s %s\n", Glyph(colorize, "warn", colYellow), recordString(r, "msg"))
 	case "cache.memory":
 		// The sentence as the body, like cache.warn above. Without this arm the
 		// record fell through to handleGeneric and rendered as
@@ -787,7 +778,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// LogMemoryPressure builds msg with every figure it also attaches as an
 		// attribute, plus the running targets, so a trailer would print the same
 		// numbers twice.
-		h.printf("%s %s\n", Glyph(colorize, "warn", colYellow), recordString(r, "msg"))
+		h.printf(ctx, "%s %s\n", Glyph(colorize, "warn", colYellow), recordString(r, "msg"))
 	case "cache.pool":
 		// A live occupancy sample, folded into the row pinned at the top of
 		// the sticky region. Deliberately not printed on a non-TTY: this
@@ -804,13 +795,13 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		if recordBool(r, "active") {
 			state = "active"
 		}
-		h.printf("remote: %s (%s, verify %s, sign %s)\n", recordString(r, "backend"), state,
+		h.printf(ctx, "remote: %s (%s, verify %s, sign %s)\n", recordString(r, "backend"), state,
 			onOff(recordBool(r, "verify")), onOff(recordBool(r, "sign")))
 	case "cache.remote.miss":
-		h.printf("  %s not in the remote cache (%s)\n",
+		h.printf(ctx, "  %s not in the remote cache (%s)\n",
 			displayProjectLabel(label, project), recordString(r, "ref"))
 	case "cache.remote.store":
-		h.printf("  stored %s in the remote cache (%s)\n",
+		h.printf(ctx, "  stored %s in the remote cache (%s)\n",
 			displayProjectLabel(label, project), FormatBytes(recordInt(r, "bytes")))
 	case "run.exec":
 		// Every subprocess magus spawns (proc.exec, fork spells) logs through this event
@@ -822,12 +813,12 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 			cmd += " " + strings.Join(args, " ")
 		}
 		if colorize {
-			h.printf("  %s\n", tty.Colorize("$ "+cmd, colDim))
+			h.printf(ctx, "  %s\n", tty.Colorize("$ "+cmd, colDim))
 		} else {
-			h.printf("  $ %s\n", cmd)
+			h.printf(ctx, "  $ %s\n", cmd)
 		}
 	default:
-		h.handleGeneric(colorize, r)
+		h.handleGeneric(ctx, colorize, r)
 	}
 	return h.err
 }
@@ -838,10 +829,8 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 func (h *PrettyHandler) Print(ctx context.Context, text string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.recordCtx = ctx
-	defer func() { h.recordCtx = nil }()
 	h.err = nil
-	h.printf("%s", text)
+	h.printf(ctx, "%s", text)
 	return h.err
 }
 
@@ -863,14 +852,12 @@ func (h *PrettyHandler) BeginRun() {
 func (h *PrettyHandler) EndRun(ctx context.Context, footer string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.recordCtx = ctx
-	defer func() { h.recordCtx = nil }()
 	h.err = nil
 	colorize := h.WantsColor()
-	h.printBlocked(colorize)
-	h.printRepeated(colorize)
-	h.printf("%s", footer)
-	h.printRefLegend(colorize)
+	h.printBlocked(ctx, colorize)
+	h.printRepeated(ctx, colorize)
+	h.printf(ctx, "%s", footer)
+	h.printRefLegend(ctx, colorize)
 	if !h.hasPinnedFailures() || !h.lease.Enabled() {
 		h.fail(h.lease.Release())
 	}
@@ -923,7 +910,7 @@ func Glyph(colorize bool, label string, color tty.SGR) string {
 // boilerplate. The "dir" attr that the
 // process-wide handler stamps on every context-aware record is suppressed above debug
 // level, since it is a correlation aid, not something a reader needs on each line.
-func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
+func (h *PrettyHandler) handleGeneric(ctx context.Context, colorize bool, r slog.Record) {
 	label, color := "debug", colDim
 	switch {
 	case r.Level >= slog.LevelError:
@@ -946,19 +933,19 @@ func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
 	}
 	if isNotice {
 		label := cmp.Or(notice.String(), component)
-		h.printNotice(colorize, color, label, noticeText(label, r.Message, recordString(r, attr.ErrorKey)), attrs)
-		h.printWhy(colorize, "  ", recordString(r, attr.WhyKey))
-		h.printNext(recordString(r, attr.NextKey))
+		h.printNotice(ctx, colorize, color, label, noticeText(label, r.Message, recordString(r, attr.ErrorKey)), attrs)
+		h.printWhy(ctx, colorize, "  ", recordString(r, attr.WhyKey))
+		h.printNext(ctx, recordString(r, attr.NextKey))
 		return
 	}
 	msg := r.Message
 	if component != "" {
 		msg = fmt.Sprintf("%s: %s", component, msg)
 	}
-	h.printf("%s %s%s\n", Glyph(colorize, label, color), msg, attrs)
+	h.printf(ctx, "%s %s%s\n", Glyph(colorize, label, color), msg, attrs)
 	// Under the message, past the glyph and its space.
-	h.printWhy(colorize, strings.Repeat(" ", len(label)+3), recordString(r, attr.WhyKey))
-	h.printNext(recordString(r, attr.NextKey))
+	h.printWhy(ctx, colorize, strings.Repeat(" ", len(label)+3), recordString(r, attr.WhyKey))
+	h.printNext(ctx, recordString(r, attr.NextKey))
 }
 
 // noticeText joins a notice's message and its [attr.Error]. An error that originated in
@@ -978,27 +965,27 @@ func noticeText(label, msg, err string) string {
 
 // printNotice puts the label before the message, colored above info, with no glyph: a
 // line addressed to a person carries no log level.
-func (h *PrettyHandler) printNotice(colorize bool, color tty.SGR, label, msg, attrs string) {
+func (h *PrettyHandler) printNotice(ctx context.Context, colorize bool, color tty.SGR, label, msg, attrs string) {
 	if label == "" {
-		h.printf("%s%s\n", msg, attrs)
+		h.printf(ctx, "%s%s\n", msg, attrs)
 		return
 	}
 	label += ":"
 	if colorize && color != colDim {
 		label = tty.Colorize(label, color)
 	}
-	h.printf("%s %s%s\n", label, msg, attrs)
+	h.printf(ctx, "%s %s%s\n", label, msg, attrs)
 }
 
 // printNext lays out an [attr.Next] the way [hint.Render] lays out a result's
 // breadcrumbs, so a command reads the same under a result and under a notice.
-func (h *PrettyHandler) printNext(cmd string) {
+func (h *PrettyHandler) printNext(ctx context.Context, cmd string) {
 	if cmd == "" {
 		return
 	}
 	noWhy := func(types.NextStep) string { return "" }
 	block := hint.Render([]types.NextStep{{Run: cmd}}, noWhy)
-	h.printf("%s", strings.TrimPrefix(block, "\n"))
+	h.printf(ctx, "%s", strings.TrimPrefix(block, "\n"))
 }
 
 // causeIndent starts a line that continues a failure's cause.
@@ -1006,7 +993,7 @@ const causeIndent = "       "
 
 // printWhy prints a record's [attr.Why] dim under the line it explains, each of its lines
 // at indent. An empty why prints nothing.
-func (h *PrettyHandler) printWhy(colorize bool, indent, why string) {
+func (h *PrettyHandler) printWhy(ctx context.Context, colorize bool, indent, why string) {
 	if why == "" {
 		return
 	}
@@ -1014,7 +1001,7 @@ func (h *PrettyHandler) printWhy(colorize bool, indent, why string) {
 		if colorize {
 			line = tty.Colorize(line, colDim)
 		}
-		h.printf("%s%s\n", indent, line)
+		h.printf(ctx, "%s%s\n", indent, line)
 	}
 }
 
@@ -1042,14 +1029,14 @@ func formatAttrs(r slog.Record, skip ...string) string {
 }
 
 // printRepro prints the standalone `magus run <target> <project>` for a result.
-func (h *PrettyHandler) printRepro(project, target string) {
+func (h *PrettyHandler) printRepro(ctx context.Context, project, target string) {
 	if project == "" || target == "" {
 		return
 	}
 	// Unindented: nothing else on screen uses depth, so the indent bought grouping
 	// that adjacency already gives while costing copy fidelity: a reader selecting
 	// the line got leading whitespace they had to strip.
-	h.printf("%s\n", hint.Run.With(target, project))
+	h.printf(ctx, "%s\n", hint.Run.With(target, project))
 }
 
 // failureReport is one failure as printFailure needs it.
@@ -1094,7 +1081,7 @@ type blockedGroup struct {
 // lines stay in the scrolling region so the user can copy them with
 // normal terminal selection. Non-TTY writers and disabled regions fall
 // through to plain output unchanged.
-func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
+func (h *PrettyHandler) printFailure(ctx context.Context, colorize bool, f failureReport) {
 	label, project, target := f.label, f.project, f.target
 	dur, cause, ref, logPath := f.dur, f.cause, f.ref, f.logPath
 	heading := label
@@ -1136,25 +1123,25 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 		// command below, which is the detail the user most needs on the one
 		// path where the terminal is already misbehaving.
 		if f.refused {
-			h.printf("%s %s (not started)\n", Glyph(colorize, "fail", colRed), heading)
+			h.printf(ctx, "%s %s (not started)\n", Glyph(colorize, "fail", colRed), heading)
 		} else {
-			h.printf("%s %s (ran, %s)\n", Glyph(colorize, "fail", colRed), heading, FormatDuration(dur))
+			h.printf(ctx, "%s %s (ran, %s)\n", Glyph(colorize, "fail", colRed), heading, FormatDuration(dur))
 		}
 	}
 	if cause != "" {
 		causes := failureCauses(cause)
-		h.printf("  cause: %s\n", causes[0])
+		h.printf(ctx, "  cause: %s\n", causes[0])
 		// One line per independent failure; flattened, two read as one sentence.
 		for _, c := range causes[1:] {
-			h.printf("%s%s\n", causeIndent, c)
+			h.printf(ctx, "%s%s\n", causeIndent, c)
 		}
 	}
-	h.printWhy(colorize, causeIndent, f.why)
+	h.printWhy(ctx, colorize, causeIndent, f.why)
 	if full := DiskFullCause(fileTail(logPath, failureLogTail), ".", diskFullFloor); full != "" {
-		h.printf("  %s\n", full)
+		h.printf(ctx, "  %s\n", full)
 	}
 	if ref != "" {
-		h.printf("  output: %s\n", ref)
+		h.printf(ctx, "  output: %s\n", ref)
 		// The inspect hint prints EVERYWHERE, CI included. It used to be
 		// suppressed on CI on the grounds that a ref addressed a blob in the
 		// local cache of the machine that minted it, so pasting the command
@@ -1173,21 +1160,21 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 			// so magus cannot hit-test a click on them; they belong to the
 			// terminal's own selection. Terminals without OSC 8 get the plain
 			// command, which is what a reader copies anyway.
-			h.printf("  %s\n", tty.Colorize("inspect: "+h.linkify(full, logPath), colDim))
+			h.printf(ctx, "  %s\n", tty.Colorize("inspect: "+h.linkify(full, logPath), colDim))
 		} else {
-			h.printf("  inspect: %s\n", full)
+			h.printf(ctx, "  inspect: %s\n", full)
 		}
 	} else if !f.refused {
-		h.printf("  output: unavailable (no output was captured)\n")
+		h.printf(ctx, "  output: unavailable (no output was captured)\n")
 	}
 	if project == "" || target == "" {
 		return
 	}
 	repro := hint.Run.With(target, project)
 	if colorize {
-		h.printf("  %s\n", tty.Colorize("reproduce: "+repro, colDim))
+		h.printf(ctx, "  %s\n", tty.Colorize("reproduce: "+repro, colDim))
 	} else {
-		h.printf("  reproduce: %s\n", repro)
+		h.printf(ctx, "  reproduce: %s\n", repro)
 	}
 }
 
@@ -1246,7 +1233,7 @@ func (h *PrettyHandler) noteFailedStep(project, target string) {
 
 // printBlocked names, once per root, the targets whose failure was suppressed as
 // a restatement of it. A run that blocked nothing prints nothing.
-func (h *PrettyHandler) printBlocked(colorize bool) {
+func (h *PrettyHandler) printBlocked(ctx context.Context, colorize bool) {
 	for _, g := range h.blocked {
 		if len(g.blocked) == 0 {
 			continue
@@ -1255,7 +1242,7 @@ func (h *PrettyHandler) printBlocked(colorize bool) {
 		if colorize {
 			line = tty.Colorize(line, colDim)
 		}
-		h.printf("%s\n", line)
+		h.printf(ctx, "%s\n", line)
 	}
 }
 
@@ -1319,7 +1306,7 @@ func leadingCode(cause string) string {
 
 // printRepeated writes one line per diagnostic code that more than one step failed
 // with, naming the steps after the first. A run with no repeats prints nothing.
-func (h *PrettyHandler) printRepeated(colorize bool) {
+func (h *PrettyHandler) printRepeated(ctx context.Context, colorize bool) {
 	for _, r := range h.repeated {
 		if len(r.steps) == 0 {
 			continue
@@ -1337,7 +1324,7 @@ func (h *PrettyHandler) printRepeated(colorize bool) {
 		if colorize {
 			line = tty.Colorize(line, colDim)
 		}
-		h.printf("%s\n", line)
+		h.printf(ctx, "%s\n", line)
 	}
 }
 
@@ -1521,12 +1508,12 @@ func failureCauses(cause string) []string {
 // Bare rather than wrapped in a command: a passing target prints one of these EACH,
 // so spelling the retrieval out per line would add a line per target. The summary
 // legend carries that once instead.
-func (h *PrettyHandler) printRef(ref string) {
+func (h *PrettyHandler) printRef(ctx context.Context, ref string) {
 	if ref == "" {
 		return
 	}
 	h.mintedRef = true
-	h.printf("ref  %s\n\n", ref)
+	h.printf(ctx, "ref  %s\n\n", ref)
 }
 
 // printRefLegend says once, at the end of a run, what the bare ids above are.
@@ -1537,7 +1524,7 @@ func (h *PrettyHandler) printRef(ref string) {
 //
 // One line per run, and only when a ref was minted, so it never explains a
 // notation nothing on screen used. Deliberately vendor-neutral.
-func (h *PrettyHandler) printRefLegend(colorize bool) {
+func (h *PrettyHandler) printRefLegend(ctx context.Context, colorize bool) {
 	if !h.mintedRef {
 		return
 	}
@@ -1545,7 +1532,7 @@ func (h *PrettyHandler) printRefLegend(colorize bool) {
 	if colorize {
 		line = tty.Colorize(line, colDim)
 	}
-	h.printf("%s\n", line)
+	h.printf(ctx, "%s\n", line)
 }
 
 func recordString(r slog.Record, key string) string {

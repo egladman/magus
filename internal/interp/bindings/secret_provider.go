@@ -20,15 +20,21 @@ import (
 // with the secret package at init, so core can resolve through a spell provider without
 // linking the VM: the same indirection ci_provider.go and remote_cache.go use.
 func init() { //nolint:gochecknoinits // internal/secret cannot link the Buzz VM; the opener registers from the layer that can
-	secret.RegisterProviderOpener(openSpellSecretProvider)
+	secret.RegisterProviderOpener(func(ctx context.Context, name string) (secret.Provider, error) {
+		p, err := openSpellSecretProvider(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+		return p, nil
+	})
 }
 
 // openSpellSecretProvider resolves the selected spell by name and adapts it to
 // [secret.Provider].
-func openSpellSecretProvider(_ context.Context, name string) (secret.Provider, error) {
+func openSpellSecretProvider(_ context.Context, name string) (spellSecretProvider, error) {
 	drv, ok := project.DefaultSpellRegistry().Lookup(name)
 	if !ok {
-		return nil, fmt.Errorf("spell %q is not registered, import it in the magusfile before selecting it", name)
+		return spellSecretProvider{}, fmt.Errorf("spell %q is not registered, import it in the magusfile before selecting it", name)
 	}
 	return spellSecretProvider{drv: drv, name: name}, nil
 }

@@ -96,8 +96,8 @@ func TestRowUnknownPassesTheRecoveryLines(t *testing.T) {
 // rules would grade it on only the members they know.
 type RowUnknownVCSLinesSuite struct {
 	suite.Suite
-	ctx context.Context
-	row types.Job
+	layers ctxLayers
+	row    types.Job
 }
 
 func TestRowUnknownVCSLinesSuite(t *testing.T) {
@@ -106,12 +106,12 @@ func TestRowUnknownVCSLinesSuite(t *testing.T) {
 
 func (s *RowUnknownVCSLinesSuite) SetupTest() {
 	s.row = narrowLease()
-	s.ctx, _ = fleetFixture(s.T(), s.row)
-	plantUnknownMember(s.T(), s.ctx, s.row.ID, "narrows_paths")
+	s.layers, _ = fleetLayers(s.T(), s.row)
+	plantUnknownMember(s.T(), s.testContext(), s.row.ID, "narrows_paths")
 }
 
 func (s *RowUnknownVCSLinesSuite) refused(line string) bool {
-	return denyUnknownRowMembers(s.ctx, Dependencies{}, s.row.ID, line).refused()
+	return denyUnknownRowMembers(s.testContext(), Dependencies{}, s.row.ID, line).refused()
 }
 
 func (s *RowUnknownVCSLinesSuite) TestAPickIsRefused() {
@@ -150,9 +150,9 @@ func TestRowUnknownPassesARowItCanRead(t *testing.T) {
 // RowUnknownReadOnlyCallerSuite pins the denial for a row with no checkout.
 type RowUnknownReadOnlyCallerSuite struct {
 	suite.Suite
-	ctx  context.Context
-	row  types.Job
-	deps Dependencies
+	layers ctxLayers
+	row    types.Job
+	deps   Dependencies
 }
 
 func TestRowUnknownReadOnlyCallerSuite(t *testing.T) {
@@ -161,13 +161,13 @@ func TestRowUnknownReadOnlyCallerSuite(t *testing.T) {
 
 func (s *RowUnknownReadOnlyCallerSuite) SetupTest() {
 	s.row = types.Job{ID: "scout", ReadOnly: true, State: types.StateRunning, Registered: 1}
-	s.ctx, _ = fleetFixture(s.T(), s.row)
-	plantUnknownMember(s.T(), s.ctx, s.row.ID, "widens_paths")
+	s.layers, _ = fleetLayers(s.T(), s.row)
+	plantUnknownMember(s.T(), s.testContext(), s.row.ID, "widens_paths")
 	s.deps = Dependencies{Binary: "/work/magus", BinaryVersion: "v0.4.3-dev"}
 }
 
 func (s *RowUnknownReadOnlyCallerSuite) TestItTellsTheCallerToStopAndReportTheRisk() {
-	got := denyUnknownRowMembers(s.ctx, s.deps, s.row.ID, "magus describe job scout")
+	got := denyUnknownRowMembers(s.testContext(), s.deps, s.row.ID, "magus describe job scout")
 	s.Require().True(got.refused())
 	s.Contains(got.Say, "widens_paths")
 	s.Contains(got.Say, "stop")
@@ -176,7 +176,7 @@ func (s *RowUnknownReadOnlyCallerSuite) TestItTellsTheCallerToStopAndReportTheRi
 }
 
 func (s *RowUnknownReadOnlyCallerSuite) TestItNamesNoCheckoutPlaceholder() {
-	got := denyUnknownRowMembers(s.ctx, s.deps, s.row.ID, "magus describe job scout")
+	got := denyUnknownRowMembers(s.testContext(), s.deps, s.row.ID, "magus describe job scout")
 	s.NotContains(got.Say, "<checkout>")
 	s.NotContains(got.Why, "<checkout>")
 	s.NotContains(got.Say, "build this checkout")
@@ -223,3 +223,7 @@ func withUnknown(row types.Job, member string) types.Job {
 	row.Unknown = map[string]json.RawMessage{member: json.RawMessage(`true`)}
 	return row
 }
+
+func (s *RowUnknownVCSLinesSuite) testContext() context.Context { return s.layers.of(s.T()) }
+
+func (s *RowUnknownReadOnlyCallerSuite) testContext() context.Context { return s.layers.of(s.T()) }

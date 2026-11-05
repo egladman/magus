@@ -525,7 +525,7 @@ func (c *Cache) buildTiers() error {
 // annotations returns the CI annotator, falling back to Nop for a Cache
 // built as a struct literal rather than through Open. Tests do that, and a
 // nil interface would panic on the first Active call.
-func (c *Cache) annotations() annotate.Annotator {
+func (c *Cache) annotations() annotate.Annotator { //nolint:ireturn // annotate.Annotator: annotate.Nop or the provider Detect found
 	if c.annotator == nil {
 		return annotate.Nop{}
 	}
@@ -1447,8 +1447,8 @@ func SharedStepContext(ctx context.Context) context.Context {
 // goroutine and nothing to close: both halves outlive the step, so the merge is a pair of
 // pointers rather than a forwarded channel.
 type sharedStepContext struct {
-	values context.Context
-	cancel context.Context
+	values context.Context //nolint:containedctx // class a: sharedStepContext implements context.Context over two of them
+	cancel context.Context //nolint:containedctx // class a: see values
 }
 
 func (c sharedStepContext) Deadline() (time.Time, bool) { return c.cancel.Deadline() }

@@ -237,19 +237,21 @@ func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 		return mcplib.NewToolResultText("ran"), nil
 	})
 	req := callRequest(hint.ToolConfig.String(), nil)
-	with := func(c types.Credential) context.Context { return trail.ContextWithCredential(context.Background(), c) }
+	with := func(c types.Credential) func(context.Context) context.Context {
+		return func(ctx context.Context) context.Context { return trail.ContextWithCredential(ctx, c) }
+	}
 
 	for name, tc := range map[string]struct {
-		ctx  context.Context
-		want string
+		stamp func(context.Context) context.Context
+		want  string
 	}{
-		"no credential":   {context.Background(), "[MGS9015] config needs mcp=write and the caller holds nothing"},
+		"no credential":   {func(ctx context.Context) context.Context { return ctx }, "[MGS9015] config needs mcp=write and the caller holds nothing"},
 		"console grant":   {with(types.Credential{Kind: types.KindStored, Grant: types.GrantConsole}), "[MGS9015] config needs mcp=write and the caller holds console=write"},
 		"stdio":           {with(types.CredentialStdio), "ran"},
 		"connector token": {with(types.Credential{Kind: types.KindStored, Grant: types.GrantConnector}), "ran"},
 		"operator token":  {with(types.Credential{Kind: types.KindOperator, Grant: types.GrantOperator}), "ran"},
 	} {
-		res, err := h(tc.ctx, req)
+		res, err := h(tc.stamp(t.Context()), req)
 		require.NoError(t, err, name)
 		assert.Equal(t, tc.want != "ran", res.IsError, name)
 		assert.True(t, strings.HasPrefix(allText(res), tc.want), "%s: %s", name, allText(res))

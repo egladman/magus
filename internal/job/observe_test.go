@@ -1272,12 +1272,16 @@ func BenchmarkRegionsSinceWarm(b *testing.B) {
 	}
 	for _, tc := range []struct {
 		name string
-		ctx  context.Context
-	}{{"cold", b.Context()}, {"warm", cache}} {
+		warm bool
+	}{{"cold", false}, {"warm", true}} {
 		b.Run(tc.name, func(b *testing.B) {
+			ctx := b.Context()
+			if tc.warm {
+				ctx = cache
+			}
 			driver.take()
 			for b.Loop() {
-				if _, ok, why := regionsSince(tc.ctx, driver, root, rev, files); !ok {
+				if _, ok, why := regionsSince(ctx, driver, root, rev, files); !ok {
 					b.Fatal(why)
 				}
 			}
@@ -1299,12 +1303,16 @@ func BenchmarkOverlapFootprintsWarm(b *testing.B) {
 	}
 	for _, tc := range []struct {
 		name string
-		ctx  context.Context
-	}{{"cold", b.Context()}, {"warm", cache}} {
+		warm bool
+	}{{"cold", false}, {"warm", true}} {
 		b.Run(tc.name, func(b *testing.B) {
+			ctx := b.Context()
+			if tc.warm {
+				ctx = cache
+			}
 			driver.take()
 			for b.Loop() {
-				OverlapFootprints(tc.ctx, driver, rows, overlaps)
+				OverlapFootprints(ctx, driver, rows, overlaps)
 			}
 			reportCalls(b, driver.take())
 		})

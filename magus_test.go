@@ -392,7 +392,7 @@ func TestExpandAffectedFallbackDistinguishable(t *testing.T) {
 // returns it as a types.WorkspaceRepository rooted at it.
 // Uses Inspect (no cache, no Teal preload) so tests don't need a
 // runtime backend registered.
-func newWorkspace(t *testing.T) types.WorkspaceRepository {
+func newWorkspace(t *testing.T) types.WorkspaceRepository { //nolint:ireturn // the workspace backing is chosen at runtime
 	t.Helper()
 	w := testkit.NewWorkspace(t)
 	w.WriteTree(map[string]string{

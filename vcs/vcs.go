@@ -131,7 +131,7 @@ func Resolve(_ context.Context, root, runtimeBase string, opts types.VCSOptions)
 	return types.VCSResolution{Name: name, Source: source, Base: base, VCS: v}, nil
 }
 
-func lookupImplementation(name string) (types.VCSDriver, bool) {
+func lookupImplementation(name string) (types.VCSDriver, bool) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	for _, v := range builtin {
 		if v.Name() == name {
 			return v, true
@@ -154,7 +154,7 @@ func InstallableVCSes() []string {
 
 // Installer returns the merge-driver installer for the named VCS, or (nil, false) for an
 // unknown name or a backend that cannot install one.
-func Installer(name string) (types.MergeDriverInstaller, bool) {
+func Installer(name string) (types.MergeDriverInstaller, bool) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	v, ok := lookupImplementation(name)
 	if !ok || !installsMergeDriver(v) {
 		return nil, false

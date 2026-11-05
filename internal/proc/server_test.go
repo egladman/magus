@@ -22,9 +22,8 @@ import (
 
 func newJobService(handler func(ctx context.Context, args []string) error) *service {
 	return &service{
-		handler:   handler,
-		parentCtx: context.Background(),
-		lim:       cache.NewLimiter(4),
+		handler: handler,
+		lim:     cache.NewLimiter(4),
 	}
 }
 
@@ -36,7 +35,7 @@ func TestSubmitJobRunsAsync(t *testing.T) {
 	})
 
 	var reply jobReply
-	require.NoError(t, s.submitJob(jobRequest{Args: []string{"graph", "build"}}, &reply))
+	require.NoError(t, s.submitJob(t.Context(), jobRequest{Args: []string{"graph", "build"}}, &reply))
 	assert.NotEmpty(t, reply.Inv, "an accepted job returns an invocation id")
 
 	select {
@@ -60,7 +59,7 @@ func TestSubmitJobInvokesOnJobDone(t *testing.T) {
 	}
 
 	var reply jobReply
-	require.NoError(t, s.submitJob(jobRequest{Args: []string{"reindex"}}, &reply))
+	require.NoError(t, s.submitJob(t.Context(), jobRequest{Args: []string{"reindex"}}, &reply))
 
 	select {
 	case got := <-done:
@@ -85,10 +84,10 @@ func TestSubmitJobCoalescesDuplicates(t *testing.T) {
 
 	req := jobRequest{Args: []string{"graph", "build"}}
 	var r1, r2 jobReply
-	require.NoError(t, s.submitJob(req, &r1))
+	require.NoError(t, s.submitJob(t.Context(), req, &r1))
 	// Give the first job's goroutine a moment to register as in-flight.
 	time.Sleep(50 * time.Millisecond)
-	require.NoError(t, s.submitJob(req, &r2))
+	require.NoError(t, s.submitJob(t.Context(), req, &r2))
 
 	assert.NotEmpty(t, r1.Inv, "the first identical job is accepted")
 	assert.Empty(t, r2.Inv, "a duplicate in-flight job is coalesced, not re-run")
@@ -114,7 +113,7 @@ func TestRunAdoptsClientAncestry(t *testing.T) {
 
 	var reply runReply
 	want := []string{"inv-outer", "inv-nested"}
-	require.NoError(t, s.run(runRequest{Args: []string{"run", "build"}, Ancestors: want}, &reply))
+	require.NoError(t, s.run(t.Context(), runRequest{Args: []string{"run", "build"}, Ancestors: want}, &reply))
 	assert.Equal(t, 0, reply.ExitCode)
 	assert.Equal(t, want, <-got, "the handler must see the ancestry the client sent")
 }
@@ -130,7 +129,7 @@ func TestRunAdoptsClientLease(t *testing.T) {
 	})
 
 	var reply runReply
-	require.NoError(t, s.run(runRequest{Args: []string{"run", "build"}, Lease: "fleet/f3"}, &reply))
+	require.NoError(t, s.run(t.Context(), runRequest{Args: []string{"run", "build"}, Lease: "fleet/f3"}, &reply))
 	assert.Equal(t, 0, reply.ExitCode)
 	assert.Equal(t, "fleet/f3", <-got)
 }
@@ -152,7 +151,7 @@ func TestRunDropsAnInvalidClientLease(t *testing.T) {
 			})
 
 			var reply runReply
-			require.NoError(t, s.run(runRequest{Args: []string{"run", "build"}, Lease: id}, &reply))
+			require.NoError(t, s.run(t.Context(), runRequest{Args: []string{"run", "build"}, Lease: id}, &reply))
 			assert.Empty(t, <-got, "an id that fails the rule is dropped, matching the environment reader")
 		})
 	}
@@ -178,7 +177,7 @@ func TestRunRequestLeaseCrossesTheWire(t *testing.T) {
 // the adopted handler sees it, so it can decline rather than run the work under less.
 // Each run also gets an env overlay of its own.
 func TestSandboxFloorCrossesTheWire(t *testing.T) {
-	srv, err := New(Options{Handler: func(ctx context.Context, args []string) error {
+	srv, err := New(t.Context(), Options{Handler: func(ctx context.Context, args []string) error {
 		if environ.From(ctx) == nil {
 			return errors.New("no env overlay on the adopted run")
 		}
@@ -189,7 +188,7 @@ func TestSandboxFloorCrossesTheWire(t *testing.T) {
 	}})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 	t.Setenv(SocketEnv, srv.Addr())
 
 	code, err := Forward(WithSandboxFloor(t.Context(), types.SandboxModeRequired), []string{"run", "build", "required"}, "", "")
@@ -207,7 +206,7 @@ func TestSandboxFloorCrossesTheWire(t *testing.T) {
 func TestRunWithholdsReportedError(t *testing.T) {
 	var reply runReply
 	s := newJobService(func(context.Context, []string) error { return reportedErr{} })
-	require.NoError(t, s.run(runRequest{Args: []string{"run", "build"}}, &reply))
+	require.NoError(t, s.run(t.Context(), runRequest{Args: []string{"run", "build"}}, &reply))
 	assert.Equal(t, 1, reply.ExitCode, "the run still failed")
 	assert.Empty(t, reply.Err, "an already-reported failure must not ship its placeholder text")
 
@@ -215,7 +214,7 @@ func TestRunWithholdsReportedError(t *testing.T) {
 	// an adopted client gets, so it must cross.
 	reply = runReply{}
 	s = newJobService(func(context.Context, []string) error { return errors.New("no such target") })
-	require.NoError(t, s.run(runRequest{Args: []string{"run", "nope"}}, &reply))
+	require.NoError(t, s.run(t.Context(), runRequest{Args: []string{"run", "nope"}}, &reply))
 	assert.Equal(t, runReply{ExitCode: 1, Err: "no such target"}, reply)
 }
 
@@ -237,7 +236,7 @@ func (misuseErr) ExitCode() int { return 2 }
 func TestRunHonorsTheErrorsOwnExitCode(t *testing.T) {
 	var reply runReply
 	s := newJobService(func(context.Context, []string) error { return misuseErr{} })
-	require.NoError(t, s.run(runRequest{Args: []string{"run", "bogus-target"}}, &reply))
+	require.NoError(t, s.run(t.Context(), runRequest{Args: []string{"run", "bogus-target"}}, &reply))
 	assert.Equal(t, runReply{ExitCode: 2, Err: "no such target"}, reply,
 		"a misuse stays a misuse when the server adopts it, and it still says why")
 }
@@ -248,10 +247,10 @@ func TestRunHonorsTheErrorsOwnExitCode(t *testing.T) {
 // and the socket going dead), because the shutdown handler cancels only the listener's own
 // context, and a caller cannot see that from the reply alone.
 func TestShutdownClosesServer(t *testing.T) {
-	srv, err := New(Options{Handler: func(context.Context, []string) error { return nil }})
+	srv, err := New(t.Context(), Options{Handler: func(context.Context, []string) error { return nil }})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 
 	addr := srv.Addr()
 	require.True(t, SocketLive(context.Background(), addr), "server should be live before shutdown")
@@ -309,13 +308,13 @@ func TestForwardVersionGate(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var called atomic.Bool
-			srv, err := New(Options{
+			srv, err := New(t.Context(), Options{
 				Version: tc.serverVersion,
 				Handler: func(context.Context, []string) error { called.Store(true); return nil },
 			})
 			require.NoError(t, err)
 			defer srv.Close()
-			require.NoError(t, srv.Start())
+			require.NoError(t, srv.Start(t.Context()))
 			t.Setenv(SocketEnv, srv.Addr())
 
 			code, err := Forward(context.Background(), []string{"run", "build", "x"}, tc.clientVersion, "")
@@ -340,13 +339,13 @@ func TestForwardVersionGate(t *testing.T) {
 // cannot equal this binary's own. This is the stale-server incident in miniature.
 func TestForwardDevDifferentFingerprintRefused(t *testing.T) {
 	var called atomic.Bool
-	srv, err := New(Options{
+	srv, err := New(t.Context(), Options{
 		Version: devVersionSentinel, // gateVersion = this binary's real dev fingerprint
 		Handler: func(context.Context, []string) error { called.Store(true); return nil },
 	})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 
 	ep, err := endpoint.Parse(srv.Addr())
 	require.NoError(t, err)
@@ -373,8 +372,8 @@ func TestForwardDevDifferentFingerprintRefused(t *testing.T) {
 func TestSubmitJobVersionGate(t *testing.T) {
 	t.Run("mismatched version refused", func(t *testing.T) {
 		var reply jobReply
-		s := &service{gateVersion: "v1.0.0", parentCtx: context.Background()}
-		err := s.submitJob(jobRequest{Version: "v2.0.0", Args: []string{"graph", "build"}}, &reply)
+		s := &service{gateVersion: "v1.0.0"}
+		err := s.submitJob(t.Context(), jobRequest{Version: "v2.0.0", Args: []string{"graph", "build"}}, &reply)
 		assert.ErrorIs(t, err, ErrVersionMismatch)
 		assert.Empty(t, reply.Inv, "a refused job returns no invocation id")
 	})

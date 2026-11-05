@@ -242,11 +242,12 @@ func raiseDesktopNotification(ctx context.Context, ev types.Event) error {
 	title, body := renderNotification(ev)
 	switch runtime.GOOS {
 	case "darwin":
+		//nolint:gosec // fixed program; the event text is an argument, not a shell
 		return exec.CommandContext(ctx, "osascript", "-e", `on run argv
 	display notification item 1 of argv with title item 2 of argv
 end run`, body, title).Run()
 	case "linux":
-		return exec.CommandContext(ctx, "notify-send", title, body).Run()
+		return exec.CommandContext(ctx, "notify-send", title, body).Run() //nolint:gosec // fixed program; the event text is passed as arguments, not a shell
 	}
 	return nil
 }

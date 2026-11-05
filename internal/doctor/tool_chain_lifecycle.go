@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"time"
@@ -20,7 +21,7 @@ import (
 //
 // Advice at most. End of life is information about the world outside the tree, and a
 // release cycle ending is not a defect in it (docs/scope.md).
-func (r *runner) checkToolchainLifecycle(projects []*types.Project) types.Check {
+func (r *runner) checkToolchainLifecycle(ctx context.Context, projects []*types.Project) types.Check {
 	const name = "toolchain-lifecycle"
 	// A *magus.Magus answers both. The cache dir is the workspace's resolved one, which
 	// r.root (the --root override, often empty) cannot rebuild.
@@ -40,7 +41,7 @@ func (r *runner) checkToolchainLifecycle(projects []*types.Project) types.Check 
 	if len(keys) == 0 {
 		return types.Check{Name: name, Status: types.CheckOK, Message: "no spell names a lifecycle product"}
 	}
-	answer, stored := workspace.CachedLifecycles(r.runContext(), p.CacheDir(), r.ws.Root(), wired, keys)
+	answer, stored := workspace.CachedLifecycles(ctx, p.CacheDir(), r.ws.Root(), wired, keys)
 	if !stored {
 		return types.Check{
 			Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown,

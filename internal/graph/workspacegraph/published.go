@@ -41,7 +41,7 @@ type publishedShards struct {
 // no layer with that key. The store's answer to a miss is to build the shard locally,
 // which is what would have happened anyway, so a registry nobody can reach must never
 // turn into a failed command. Real failures are logged at debug and dropped.
-func PublishedShards(c *oci.Client, ref oci.Reference, artifactType string, log *slog.Logger) knowledge.RemoteShards {
+func PublishedShards(c *oci.Client, ref oci.Reference, artifactType string, log *slog.Logger) knowledge.RemoteShards { //nolint:ireturn // the workspace backing is chosen at runtime
 	if log == nil {
 		log = slog.Default()
 	}

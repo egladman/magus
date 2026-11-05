@@ -162,7 +162,7 @@ func ReadGuardOperation(ctx context.Context, root string) string {
 	return operationUnderway(ctx, res.VCS, root)
 }
 
-func operationUnderway(ctx context.Context, v types.VCSDriver, root string) string {
+func operationUnderway(ctx context.Context, v types.OperationReporter, root string) string {
 	op, err := v.OperationInProgress(ctx, root)
 	if err != nil {
 		return ""
