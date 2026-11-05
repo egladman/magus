@@ -27,6 +27,9 @@ func (s *BuzzSourcesSuite) read(eval string, args []string) (string, string, []s
 	if eval != "" {
 		return eval, "eval", nil, nil
 	}
+	if len(args) == 0 {
+		return "code of stdin", "stdin", nil, nil
+	}
 	if args[0] == "missing.buzz" {
 		return "", "", nil, errors.New("missing.buzz: no such file")
 	}
@@ -61,6 +64,55 @@ func (s *BuzzSourcesSuite) TestASnippetIsTheOneScript() {
 func (s *BuzzSourcesSuite) TestAPathThatCannotBeReadFails() {
 	_, err := BuzzTestSources(s.read, "", []string{"a.buzz", "missing.buzz"}, nil)
 	s.EqualError(err, "missing.buzz: no such file")
+}
+
+// stdinAs makes f the process's stdin until the test ends.
+func (s *BuzzSourcesSuite) stdinAs(f *os.File) {
+	saved := os.Stdin
+	os.Stdin = f
+	s.T().Cleanup(func() { os.Stdin = saved })
+}
+
+func (s *BuzzSourcesSuite) TestAPipedStdinIsTheOneScript() {
+	r, w, err := os.Pipe()
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = r.Close(); _ = w.Close() })
+	s.stdinAs(r)
+
+	got, err := BuzzTestSources(s.read, "", nil, []string{"--flag"})
+
+	s.Require().NoError(err)
+	s.Equal([]BuzzScript{{Code: "code of stdin", Name: "stdin", Args: []string{"--flag"}}}, got)
+}
+
+func (s *BuzzSourcesSuite) TestAFileOnStdinIsTheOneScript() {
+	f, err := os.CreateTemp(s.T().TempDir(), "script")
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = f.Close() })
+	s.stdinAs(f)
+
+	s.True(stdinIsPiped())
+}
+
+func (s *BuzzSourcesSuite) TestDevNullOnStdinTestsNothingAndIsRefused() {
+	f, err := os.Open(os.DevNull)
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = f.Close() })
+	s.stdinAs(f)
+
+	_, err = BuzzTestSources(s.read, "", nil, nil)
+
+	s.EqualError(err, "magus buzz: -t <file>... names the scripts to test; none was given and nothing is piped on stdin")
+	s.Empty(s.reads, "nothing is read")
+}
+
+func (s *BuzzSourcesSuite) TestAClosedStdinIsNotPiped() {
+	f, err := os.CreateTemp(s.T().TempDir(), "closed")
+	s.Require().NoError(err)
+	s.Require().NoError(f.Close())
+	s.stdinAs(f)
+
+	s.False(stdinIsPiped())
 }
 
 type BuzzScriptsSuite struct{ suite.Suite }
