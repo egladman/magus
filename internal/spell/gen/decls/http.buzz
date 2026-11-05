@@ -11,6 +11,7 @@ export object Options {
     failWithBody: bool = false,
     failEarly: bool = false,
     timeoutSeconds: double = 0.0,
+    revalidate: bool = false,
 }
 
 export object Retry {

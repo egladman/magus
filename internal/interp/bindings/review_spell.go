@@ -141,6 +141,28 @@ func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, w
 	return verdict, nil
 }
 
+// ListPulls asks the selected spell for the open pull requests on a base.
+//
+// No provider and an unexported op are errors, unlike FindReview. A poller
+// must tell "no pull requests" from "nothing could ask". An unreachable host
+// is the spell's to report in Reason.
+func ListPulls(ctx context.Context, req types.ListPullsRequest) (types.PullList, error) {
+	drv, ok := reviewDriver()
+	if !ok {
+		return types.PullList{}, errNoReviewProvider
+	}
+	op := providerops.ListPulls
+	list, exported, err := CallOp(ctx, drv, op, providerTarget(ctx, op.Name, ""), req)
+	if err != nil {
+		return types.PullList{}, err
+	}
+	if !exported {
+		return types.PullList{}, types.DiagnosticErrorf(types.ReviewOpMissing,
+			"the review provider's %s is not implemented by this spell, so no pull requests were read", op.Name)
+	}
+	return list, nil
+}
+
 // ReplyReview answers one existing thread, so a conversation can be finished without leaving.
 //
 // Loud, like PublishReview and unlike the two read paths: a reply is a sentence a colleague is

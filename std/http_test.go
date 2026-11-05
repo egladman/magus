@@ -17,7 +17,76 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type HTTPRevalidateSuite struct{ suite.Suite }
+
+func TestHTTPRevalidate(t *testing.T) { suite.Run(t, new(HTTPRevalidateSuite)) }
+
+// etagServer ties each ETag to the Authorization header and answers 304 on a
+// match. It records every If-None-Match it receives.
+func (s *HTTPRevalidateSuite) etagServer() (*httptest.Server, *[]string) {
+	var seen []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.Header.Get("If-None-Match"))
+		tag := `"` + r.Header.Get("Authorization") + `"`
+		w.Header().Set("ETag", tag)
+		w.Header().Set("X-Marker", "fresh")
+		if r.Header.Get("If-None-Match") == tag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		_, _ = io.WriteString(w, "body for "+r.Header.Get("Authorization"))
+	}))
+	s.T().Cleanup(srv.Close)
+	return srv, &seen
+}
+
+func (s *HTTPRevalidateSuite) TestSendsIfNoneMatchAndServesCachedBodyOn304() {
+	srv, seen := s.etagServer()
+	opts := types.HTTPOptions{Revalidate: true}
+	auth := map[string]string{"Authorization": "Bearer one"}
+
+	first, err := HTTPGet(context.Background(), srv.URL+"/a", auth, opts, types.HTTPRetry{})
+	s.Require().NoError(err)
+	s.Equal(200, first.Status)
+
+	second, err := HTTPGet(context.Background(), srv.URL+"/a", auth, opts, types.HTTPRetry{})
+	s.Require().NoError(err)
+	s.Equal(304, second.Status)
+	s.Equal("body for Bearer one", second.Body)
+	s.Equal("fresh", second.Headers["X-Marker"])
+	s.Equal([]string{"", `"Bearer one"`}, *seen)
+}
+
+func (s *HTTPRevalidateSuite) TestADifferentAuthorizationDoesNotShareAnEntry() {
+	srv, seen := s.etagServer()
+	opts := types.HTTPOptions{Revalidate: true}
+	one := map[string]string{"Authorization": "Bearer one"}
+	two := map[string]string{"Authorization": "Bearer two"}
+
+	_, err := HTTPGet(context.Background(), srv.URL+"/b", one, opts, types.HTTPRetry{})
+	s.Require().NoError(err)
+	other, err := HTTPGet(context.Background(), srv.URL+"/b", two, opts, types.HTTPRetry{})
+	s.Require().NoError(err)
+
+	s.Equal(200, other.Status)
+	s.Equal("body for Bearer two", other.Body)
+	s.Equal([]string{"", ""}, *seen)
+}
+
+func (s *HTTPRevalidateSuite) TestWithoutTheOptionNothingIsSentOrKept() {
+	srv, seen := s.etagServer()
+	auth := map[string]string{"Authorization": "Bearer three"}
+
+	for range 2 {
+		res, err := HTTPGet(context.Background(), srv.URL+"/c", auth, types.HTTPOptions{}, types.HTTPRetry{})
+		s.Require().NoError(err)
+		s.Equal(200, res.Status)
+	}
+	s.Equal([]string{"", ""}, *seen)
+}
 
 // TestParseHTTPOpts checks the curl-style options record is read, including the
 // seconds-to-duration conversion. Retry settings are NOT here any more: they moved

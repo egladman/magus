@@ -4,6 +4,8 @@ package std
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -28,7 +31,8 @@ import (
 // optsDoc is the trailing line shared by every method's Doc describing the
 // optional curl-style options map (last argument).
 const optsDoc = " opts is an Options (curl-style): fail, failWithBody, failEarly; " +
-	"timeoutSeconds (default 30). Retrying is NOT configured here - pass a typed " +
+	"timeoutSeconds (default 30); revalidate (send If-None-Match from the last ETag seen " +
+	"for the same method, URL and Authorization; a 304 returns status 304 with the cached body). Retrying is NOT configured here - pass a typed " +
 	"Retry as the retry argument; without one the request runs exactly once."
 
 // defaultHTTPTimeout bounds a request (including any retries and backoff) so a
@@ -413,6 +417,15 @@ func doRequest(ctx context.Context, method, url, body string, headers map[string
 		bodyReader = strings.NewReader(body)
 	}
 	o := parseHTTPOptions(opts)
+	var cacheKey string
+	var cached etagEntry
+	if o.revalidate {
+		cacheKey = etagKey(method, url, headers)
+		if e, ok := etags.get(cacheKey); ok {
+			cached = e
+			headers = withHeader(headers, "If-None-Match", e.etag)
+		}
+	}
 	resp, err := sendHTTP(ctx, "http."+strings.ToLower(method), method, url, bodyReader, headers, o, retryPolicy)
 	if err != nil {
 		return types.HTTPResponse{}, err
@@ -421,6 +434,14 @@ func doRequest(ctx context.Context, method, url, body string, headers map[string
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return types.HTTPResponse{}, fmt.Errorf("http.%s %s: read body: %w", strings.ToLower(method), url, err)
+	}
+	if o.revalidate {
+		switch {
+		case resp.StatusCode == http.StatusNotModified && cached.etag != "":
+			raw = []byte(cached.body)
+		case resp.StatusCode == http.StatusOK && resp.Header.Get("ETag") != "" && len(raw) <= etagMaxBody:
+			etags.put(cacheKey, etagEntry{etag: resp.Header.Get("ETag"), body: string(raw)})
+		}
 	}
 
 	// curl --fail / --fail-with-body: a >= 400 status becomes an error rather
@@ -456,6 +477,69 @@ type httpOpts struct {
 	failEarly    bool // --fail-early: never retry an HTTP error status, fail at once
 
 	timeout time.Duration // --max-time: overall request timeout; 0 = use default
+
+	revalidate bool // send If-None-Match from the process ETag cache
+}
+
+const (
+	etagMaxEntries = 2048
+	etagMaxBody    = 4 << 20
+)
+
+type etagEntry struct {
+	etag string
+	body string
+}
+
+// etagCache backs the revalidate option. It evicts the oldest entry first.
+type etagCache struct {
+	mu      sync.Mutex
+	entries map[string]etagEntry
+	order   []string
+}
+
+var etags = &etagCache{entries: map[string]etagEntry{}}
+
+func (c *etagCache) get(key string) (etagEntry, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.entries[key]
+	return e, ok
+}
+
+func (c *etagCache) put(key string, e etagEntry) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.entries[key]; !ok {
+		c.order = append(c.order, key)
+		for len(c.order) > etagMaxEntries {
+			delete(c.entries, c.order[0])
+			c.order = c.order[1:]
+		}
+	}
+	c.entries[key] = e
+}
+
+// etagKey hashes Authorization so one credential never reads the body another
+// credential fetched.
+func etagKey(method, url string, headers map[string]string) string {
+	var auth string
+	for k, v := range headers {
+		if strings.EqualFold(k, "Authorization") {
+			auth = v
+		}
+	}
+	sum := sha256.Sum256([]byte(auth))
+	return method + " " + url + " " + hex.EncodeToString(sum[:])
+}
+
+func withHeader(headers map[string]string, name, value string) map[string]string {
+	out := make(map[string]string, len(headers)+1)
+	for k, v := range headers {
+		out[k] = v
+	}
+	out[name] = value
+	return out
 }
 
 // custom reports whether this call needs a client of its own rather than the
@@ -591,7 +675,7 @@ func (o httpOpts) shouldRetry(r httpRetry, resp *http.Response, err error) bool 
 // parseHTTPOptions reads the curl-style options. The timeout is in seconds (curl's unit)
 // and may be fractional; zero or less keeps the default.
 func parseHTTPOptions(opts types.HTTPOptions) httpOpts {
-	o := httpOpts{fail: opts.Fail, failWithBody: opts.FailWithBody, failEarly: opts.FailEarly}
+	o := httpOpts{fail: opts.Fail, failWithBody: opts.FailWithBody, failEarly: opts.FailEarly, revalidate: opts.Revalidate}
 	if opts.TimeoutSeconds > 0 {
 		o.timeout = time.Duration(opts.TimeoutSeconds * float64(time.Second))
 	}

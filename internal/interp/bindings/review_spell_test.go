@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
@@ -32,6 +33,53 @@ export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget {
     return ReviewTarget{ id = "482", repo = "acme/acme" };
 }
 `
+
+type ListPullsSuite struct{ suite.Suite }
+
+func TestListPulls(t *testing.T) { suite.Run(t, new(ListPullsSuite)) }
+
+func (s *ListPullsSuite) TestWithNoProviderErrors() {
+	prev := ReviewProvider()
+	SetReviewProvider("")
+	s.T().Cleanup(func() { SetReviewProvider(prev) })
+
+	_, err := ListPulls(context.Background(), types.ListPullsRequest{Base: "main"})
+	s.ErrorIs(err, errNoReviewProvider)
+}
+
+func (s *ListPullsSuite) TestAnUnexportedOpIsACodedDiagnostic() {
+	withReviewSpell(s.T(), openReview)
+
+	_, err := ListPulls(context.Background(), types.ListPullsRequest{Base: "main"})
+	s.Require().Error(err)
+	s.Contains(err.Error(), "list_pulls")
+}
+
+func (s *ListPullsSuite) TestDecodesTheListAndHandsTheRequestThrough() {
+	withReviewSpell(s.T(), `
+export fun list_pulls(target: Target, req: ListPullsRequest) > PullList {
+    return PullList{
+        repo = req.remote,
+        pulls = [ForgePull{
+            number = 7, author = req.authors[0], behindBy = -1,
+            checks = [ForgeCheck{ name = "test", state = "failed", lines = ["boom"] }],
+        }],
+        rate = RateLimit{ limit = 5000, remaining = 4999 },
+        revalidated = 2,
+    };
+}`)
+
+	req := types.ListPullsRequest{Remote: "acme/acme", Base: "main", Authors: []string{"eli"}}
+	got, err := ListPulls(context.Background(), req)
+	s.Require().NoError(err)
+	s.Equal("acme/acme", got.Repo)
+	s.Equal(2, got.Revalidated)
+	s.Equal(types.RateLimit{Limit: 5000, Remaining: 4999}, got.Rate)
+	s.Equal([]types.ForgePull{{
+		Number: 7, Author: "eli", BehindBy: -1,
+		Checks: []types.ForgeCheck{{Name: "test", State: "failed", Lines: []string{"boom"}}},
+	}}, got.Pulls)
+}
 
 func TestFindReviewDecodesTheTargetAndCarriesTheRepo(t *testing.T) {
 	withReviewSpell(t, openReview)

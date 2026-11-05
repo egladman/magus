@@ -95,6 +95,9 @@ type HTTPOptions struct {
 	// TimeoutSeconds bounds the request including retries, like curl --max-time.
 	// Zero is the 30 second default.
 	TimeoutSeconds float64
+	// Revalidate sends If-None-Match from the last ETag this process saw for the same method,
+	// URL and Authorization. A 304 answers with status 304, the cached body and its own headers.
+	Revalidate bool
 }
 
 // HTTPServerOptions are http\server's options. Exactly one of Dir and Mounts is set.

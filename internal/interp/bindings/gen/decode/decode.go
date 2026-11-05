@@ -1538,6 +1538,430 @@ func decodeReviewComment(v vm.Value, path string) (types.ReviewComment, error) {
 	return out, nil
 }
 
+// DecodeRateLimit decodes a Buzz RateLimit, an object instance or a map, into a types.RateLimit.
+func DecodeRateLimit(v vm.Value) (types.RateLimit, error) {
+	return decodeRateLimit(v, "rateLimit")
+}
+
+func decodeRateLimit(v vm.Value, path string) (types.RateLimit, error) {
+	var out types.RateLimit
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "RateLimit", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "limit":
+			nLimit, err := decodeInt(item, path+".limit")
+			if err != nil {
+				return out, err
+			}
+			out.Limit = int(nLimit)
+		case "remaining":
+			nRemaining, err := decodeInt(item, path+".remaining")
+			if err != nil {
+				return out, err
+			}
+			out.Remaining = int(nRemaining)
+		case "reset":
+			sReset, err := decodeString(item, path+".reset")
+			if err != nil {
+				return out, err
+			}
+			out.Reset = sReset
+		default:
+			return out, unknownMember(path, "RateLimit", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeForgeCheck decodes a Buzz ForgeCheck, an object instance or a map, into a types.ForgeCheck.
+func DecodeForgeCheck(v vm.Value) (types.ForgeCheck, error) {
+	return decodeForgeCheck(v, "forgeCheck")
+}
+
+func decodeForgeCheck(v vm.Value, path string) (types.ForgeCheck, error) {
+	var out types.ForgeCheck
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "ForgeCheck", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "name":
+			sName, err := decodeString(item, path+".name")
+			if err != nil {
+				return out, err
+			}
+			out.Name = sName
+		case "kind":
+			sKind, err := decodeString(item, path+".kind")
+			if err != nil {
+				return out, err
+			}
+			out.Kind = sKind
+		case "state":
+			sState, err := decodeString(item, path+".state")
+			if err != nil {
+				return out, err
+			}
+			out.State = sState
+		case "queuedAt":
+			sQueuedAt, err := decodeString(item, path+".queuedAt")
+			if err != nil {
+				return out, err
+			}
+			out.QueuedAt = sQueuedAt
+		case "startedAt":
+			sStartedAt, err := decodeString(item, path+".startedAt")
+			if err != nil {
+				return out, err
+			}
+			out.StartedAt = sStartedAt
+		case "completedAt":
+			sCompletedAt, err := decodeString(item, path+".completedAt")
+			if err != nil {
+				return out, err
+			}
+			out.CompletedAt = sCompletedAt
+		case "url":
+			sURL, err := decodeString(item, path+".url")
+			if err != nil {
+				return out, err
+			}
+			out.URL = sURL
+		case "description":
+			sDescription, err := decodeString(item, path+".description")
+			if err != nil {
+				return out, err
+			}
+			out.Description = sDescription
+		case "lines":
+			strsLines, err := decodeStringList(item, path+".lines")
+			if err != nil {
+				return out, err
+			}
+			out.Lines = strsLines
+		case "outputRef":
+			sOutputRef, err := decodeString(item, path+".outputRef")
+			if err != nil {
+				return out, err
+			}
+			out.OutputRef = sOutputRef
+		default:
+			return out, unknownMember(path, "ForgeCheck", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeBaseCommit decodes a Buzz BaseCommit, an object instance or a map, into a types.BaseCommit.
+func DecodeBaseCommit(v vm.Value) (types.BaseCommit, error) {
+	return decodeBaseCommit(v, "baseCommit")
+}
+
+func decodeBaseCommit(v vm.Value, path string) (types.BaseCommit, error) {
+	var out types.BaseCommit
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "BaseCommit", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "sha":
+			sSHA, err := decodeString(item, path+".sha")
+			if err != nil {
+				return out, err
+			}
+			out.SHA = sSHA
+		case "subject":
+			sSubject, err := decodeString(item, path+".subject")
+			if err != nil {
+				return out, err
+			}
+			out.Subject = sSubject
+		case "at":
+			sAt, err := decodeString(item, path+".at")
+			if err != nil {
+				return out, err
+			}
+			out.At = sAt
+		case "pull":
+			nPull, err := decodeInt(item, path+".pull")
+			if err != nil {
+				return out, err
+			}
+			out.Pull = int(nPull)
+		default:
+			return out, unknownMember(path, "BaseCommit", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeBaseBranch decodes a Buzz BaseBranch, an object instance or a map, into a types.BaseBranch.
+func DecodeBaseBranch(v vm.Value) (types.BaseBranch, error) {
+	return decodeBaseBranch(v, "baseBranch")
+}
+
+func decodeBaseBranch(v vm.Value, path string) (types.BaseBranch, error) {
+	var out types.BaseBranch
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "BaseBranch", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "name":
+			sName, err := decodeString(item, path+".name")
+			if err != nil {
+				return out, err
+			}
+			out.Name = sName
+		case "sha":
+			sSHA, err := decodeString(item, path+".sha")
+			if err != nil {
+				return out, err
+			}
+			out.SHA = sSHA
+		case "url":
+			sURL, err := decodeString(item, path+".url")
+			if err != nil {
+				return out, err
+			}
+			out.URL = sURL
+		case "checks":
+			listChecks, err := decodeList(item, path+".checks", "[ForgeCheck]")
+			if err != nil {
+				return out, err
+			}
+			if len(listChecks) > 0 {
+				itemsChecks := make([]types.ForgeCheck, len(listChecks))
+				for indexChecks, itemChecks := range listChecks {
+					xChecksItem, err := decodeForgeCheck(itemChecks, fmt.Sprintf("%s[%d]", path+".checks", indexChecks))
+					if err != nil {
+						return out, err
+					}
+					itemsChecks[indexChecks] = xChecksItem
+				}
+				out.Checks = itemsChecks
+			}
+		case "commits":
+			listCommits, err := decodeList(item, path+".commits", "[BaseCommit]")
+			if err != nil {
+				return out, err
+			}
+			if len(listCommits) > 0 {
+				itemsCommits := make([]types.BaseCommit, len(listCommits))
+				for indexCommits, itemCommits := range listCommits {
+					xCommitsItem, err := decodeBaseCommit(itemCommits, fmt.Sprintf("%s[%d]", path+".commits", indexCommits))
+					if err != nil {
+						return out, err
+					}
+					itemsCommits[indexCommits] = xCommitsItem
+				}
+				out.Commits = itemsCommits
+			}
+		default:
+			return out, unknownMember(path, "BaseBranch", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeForgePull decodes a Buzz ForgePull, an object instance or a map, into a types.ForgePull.
+func DecodeForgePull(v vm.Value) (types.ForgePull, error) {
+	return decodeForgePull(v, "forgePull")
+}
+
+func decodeForgePull(v vm.Value, path string) (types.ForgePull, error) {
+	var out types.ForgePull
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "ForgePull", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "number":
+			nNumber, err := decodeInt(item, path+".number")
+			if err != nil {
+				return out, err
+			}
+			out.Number = int(nNumber)
+		case "title":
+			sTitle, err := decodeString(item, path+".title")
+			if err != nil {
+				return out, err
+			}
+			out.Title = sTitle
+		case "author":
+			sAuthor, err := decodeString(item, path+".author")
+			if err != nil {
+				return out, err
+			}
+			out.Author = sAuthor
+		case "url":
+			sURL, err := decodeString(item, path+".url")
+			if err != nil {
+				return out, err
+			}
+			out.URL = sURL
+		case "branch":
+			sBranch, err := decodeString(item, path+".branch")
+			if err != nil {
+				return out, err
+			}
+			out.Branch = sBranch
+		case "headSHA":
+			sHeadSHA, err := decodeString(item, path+".headSHA")
+			if err != nil {
+				return out, err
+			}
+			out.HeadSHA = sHeadSHA
+		case "draft":
+			bDraft, err := decodeBool(item, path+".draft")
+			if err != nil {
+				return out, err
+			}
+			out.Draft = bDraft
+		case "mergeable":
+			sMergeable, err := decodeString(item, path+".mergeable")
+			if err != nil {
+				return out, err
+			}
+			out.Mergeable = sMergeable
+		case "behindBy":
+			nBehindBy, err := decodeInt(item, path+".behindBy")
+			if err != nil {
+				return out, err
+			}
+			out.BehindBy = int(nBehindBy)
+		case "review":
+			sReview, err := decodeString(item, path+".review")
+			if err != nil {
+				return out, err
+			}
+			out.Review = sReview
+		case "pushedAt":
+			sPushedAt, err := decodeString(item, path+".pushedAt")
+			if err != nil {
+				return out, err
+			}
+			out.PushedAt = sPushedAt
+		case "checks":
+			listChecks, err := decodeList(item, path+".checks", "[ForgeCheck]")
+			if err != nil {
+				return out, err
+			}
+			if len(listChecks) > 0 {
+				itemsChecks := make([]types.ForgeCheck, len(listChecks))
+				for indexChecks, itemChecks := range listChecks {
+					xChecksItem, err := decodeForgeCheck(itemChecks, fmt.Sprintf("%s[%d]", path+".checks", indexChecks))
+					if err != nil {
+						return out, err
+					}
+					itemsChecks[indexChecks] = xChecksItem
+				}
+				out.Checks = itemsChecks
+			}
+		case "files":
+			strsFiles, err := decodeStringList(item, path+".files")
+			if err != nil {
+				return out, err
+			}
+			out.Files = strsFiles
+		default:
+			return out, unknownMember(path, "ForgePull", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodePullList decodes a Buzz PullList, an object instance or a map, into a types.PullList.
+func DecodePullList(v vm.Value) (types.PullList, error) {
+	return decodePullList(v, "pullList")
+}
+
+func decodePullList(v vm.Value, path string) (types.PullList, error) {
+	var out types.PullList
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "PullList", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "repo":
+			sRepo, err := decodeString(item, path+".repo")
+			if err != nil {
+				return out, err
+			}
+			out.Repo = sRepo
+		case "viewer":
+			sViewer, err := decodeString(item, path+".viewer")
+			if err != nil {
+				return out, err
+			}
+			out.Viewer = sViewer
+		case "reason":
+			sReason, err := decodeString(item, path+".reason")
+			if err != nil {
+				return out, err
+			}
+			out.Reason = sReason
+		case "base":
+			xBase, err := decodeBaseBranch(item, path+".base")
+			if err != nil {
+				return out, err
+			}
+			out.Base = xBase
+		case "pulls":
+			listPulls, err := decodeList(item, path+".pulls", "[ForgePull]")
+			if err != nil {
+				return out, err
+			}
+			if len(listPulls) > 0 {
+				itemsPulls := make([]types.ForgePull, len(listPulls))
+				for indexPulls, itemPulls := range listPulls {
+					xPullsItem, err := decodeForgePull(itemPulls, fmt.Sprintf("%s[%d]", path+".pulls", indexPulls))
+					if err != nil {
+						return out, err
+					}
+					itemsPulls[indexPulls] = xPullsItem
+				}
+				out.Pulls = itemsPulls
+			}
+		case "rate":
+			xRate, err := decodeRateLimit(item, path+".rate")
+			if err != nil {
+				return out, err
+			}
+			out.Rate = xRate
+		case "requests":
+			nRequests, err := decodeInt(item, path+".requests")
+			if err != nil {
+				return out, err
+			}
+			out.Requests = int(nRequests)
+		case "revalidated":
+			nRevalidated, err := decodeInt(item, path+".revalidated")
+			if err != nil {
+				return out, err
+			}
+			out.Revalidated = int(nRevalidated)
+		default:
+			return out, unknownMember(path, "PullList", key)
+		}
+	}
+	return out, nil
+}
+
 // DecodeProvidedProject decodes a Buzz Project, an object instance or a map, into a spells.ProvidedProject.
 func DecodeProvidedProject(v vm.Value) (spells.ProvidedProject, error) {
 	return decodeProvidedProject(v, "project")
@@ -5601,6 +6025,12 @@ func decodeHTTPOptions(v vm.Value, path string) (types.HTTPOptions, error) {
 				return out, err
 			}
 			out.TimeoutSeconds = nTimeoutSeconds
+		case "revalidate":
+			bRevalidate, err := decodeBool(item, path+".revalidate")
+			if err != nil {
+				return out, err
+			}
+			out.Revalidate = bRevalidate
 		default:
 			return out, unknownMember(path, "Options", key)
 		}
@@ -8391,6 +8821,7 @@ var ProviderFuncs = []ContractFunc{
 	{Name: "publish_review", Returns: "Ack", Params: "target: Target, req: PublishReviewRequest", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderPublishReview(v) }},
 	{Name: "reply_review", Returns: "Ack", Params: "target: Target, req: ReplyReviewRequest", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderReplyReview(v) }},
 	{Name: "review_threads", Returns: "[ReviewComment]", Params: "target: Target, req: ReviewRef", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderReviewThreads(v) }},
+	{Name: "list_pulls", Returns: "PullList", Params: "target: Target, req: ListPullsRequest", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderListPulls(v) }},
 	{Name: "list_projects", Returns: "[Project]", Params: "target: Target, req: ProjectQuery", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderListProjects(v) }},
 	{Name: "discover_projects", Returns: "[DiscoveredProject]", Params: "target: Target, req: DiscoveryQuery", Required: false, Decode: func(v vm.Value) (any, error) { return decodeProviderDiscoverProjects(v) }},
 }
@@ -8600,6 +9031,16 @@ func decodeProviderReviewThreads(v vm.Value) ([]types.ReviewComment, error) {
 		}
 		out = itemsReviewThreads
 	}
+	return out, nil
+}
+
+func decodeProviderListPulls(v vm.Value) (types.PullList, error) {
+	var out types.PullList
+	xListPulls, err := decodePullList(v, "list_pulls")
+	if err != nil {
+		return out, err
+	}
+	out = xListPulls
 	return out, nil
 }
 
