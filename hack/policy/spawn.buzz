@@ -4,6 +4,8 @@ namespace agentpolicy\spawn;
 
 import "std";
 import "magus";
+import "vcs";
+import "result";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/builds" as builds;
 import "./hack/policy/verdict" as verdict;
@@ -378,6 +380,12 @@ export final finishedBranchLimit = 10;
 export object ForkCounts {
     finishedBranches: [str] = [],
     branchesUnknown: str = "",
+    // publishedSkipped counts finished branches left out of finishedBranches
+    // because a remote ref holds their head.
+    publishedSkipped: int = 0,
+    // publishedUnread says why some branches could not be checked against the
+    // remotes; they stay counted.
+    publishedUnread: str = "",
     integrateRecord: str = "",
     commitsSinceTest: int = 0,
     lastTest: str = "",
@@ -395,13 +403,69 @@ export fun decideFork(fork: mandate\Fork, counts: ForkCounts, limit: int) > Guar
         return magus\guard.allow();
     }
     final facts = "{counts.finishedBranches.len()} finished branch(es) off the base: {counts.finishedBranches.join(", ")}; "
-        + "{describeTest(counts)}. The limit is {limit} branches, a starting guess: "
+        + "{describePublished(counts)}{describeTest(counts)}. The limit is {limit} branches, a starting guess: "
         + "change finishedBranchLimit in hack/policy/spawn.buzz if it is wrong.";
     if (!fork.known) {
         return magus\guard.advise("this fork's record could not be read, so it passes unjudged, though it would be refused if it does not integrate. {facts}");
     }
     return magus\guard.deny("too many finished branches wait off the base, so this fork is refused\n{facts} "
         + "Integrate them first with `./magus job fork --stdin --checkout <dir>`, given this record: {counts.integrateRecord}");
+}
+
+fun describePublished(counts: ForkCounts) > str {
+    var said = "{counts.publishedSkipped} branch(es) skipped as published (their head is on a remote ref); ";
+    if (counts.publishedUnread != "") {
+        said = said + "the remote refs could not be read for some, which stay counted: {counts.publishedUnread}; ";
+    }
+    return said;
+}
+
+// onRemoteRef is whether a remote ref holds branch's head. A branch git does
+// not know, or a git that fails, is the Result's error.
+export fun onRemoteRef(branch: str) > result\Result::<bool> {
+    try {
+        final found = vcs\cmd(["branch", "--remotes", "--contains", branch], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+        if (!found.ok) {
+            return result\fail::<bool>("git branch --remotes --contains {branch}: {found.stderr.trim()}");
+        }
+        return result\ok::<bool>(found.stdout.trim() != "");
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "git branch --remotes --contains {branch}");
+    }
+}
+
+// withoutPublished drops each finished branch whose head a remote ref holds:
+// a pull request carries that work, so it waits on nothing off the base. When
+// published fails the branch stays counted and the first failure is named.
+export fun withoutPublished(counts: ForkCounts, published: fun (branch: str) > result\Result::<bool>) > ForkCounts {
+    if (counts.branchesUnknown != "") {
+        return counts;
+    }
+    final kept = mut [<str>];
+    var skipped = 0;
+    var unread = "";
+    foreach (entry in counts.finishedBranches) {
+        final answer = published(entry.split(" ")[0]);
+        if (answer.error != null) {
+            if (unread == "") {
+                unread = answer.error!.message;
+            }
+        } else if (answer.value!) {
+            skipped = skipped + 1;
+            continue;
+        }
+        kept.append(entry);
+    }
+    return ForkCounts{
+        finishedBranches = kept,
+        branchesUnknown = counts.branchesUnknown,
+        publishedSkipped = skipped,
+        publishedUnread = unread,
+        integrateRecord = counts.integrateRecord,
+        commitsSinceTest = counts.commitsSinceTest,
+        lastTest = counts.lastTest,
+        testUnknown = counts.testUnknown,
+    };
 }
 
 fun describeTest(counts: ForkCounts) > str {
@@ -423,7 +487,7 @@ export fun decideForkLine(programs: [helpers\Program], line: str, read: fun (pat
         if (fork.known and (fork.integrates.len() > 0 or fork.parent != "")) {
             continue;
         }
-        final judged = decideFork(fork, counts: facts(), limit: limit);
+        final judged = decideFork(fork, counts: withoutPublished(facts(), published: onRemoteRef), limit: limit);
         if (judged.decision != magus\GuardDecision.allow) {
             return judged;
         }
@@ -484,6 +548,34 @@ test "a top-level fork at the limit is refused, printing both counts, the last t
     foreach (want in ["10 finished branch(es)", "done-9 (job done-9", "3 commit(s)", "out1a2b3c at abc123", "hack/policy/spawn.buzz", "integrate-branches"]) {
         std\assert(v.reason.indexOf(want) != null, message: "{want} in {v.reason}");
     }
+}
+
+test "a branch a remote ref holds stops counting, and the denial says how many were skipped" {
+    final onRemote = fun (branch: str) > result\Result::<bool> {
+        return result\ok::<bool>(branch != "done-0" and branch != "done-1");
+    };
+    final trimmed = withoutPublished(waiting(12), published: onRemote);
+    std\assert(trimmed.finishedBranches.len() == 2 and trimmed.publishedSkipped == 10, message: "{trimmed.finishedBranches}");
+    std\assert(decideFork(mandate\Fork{ id = "next" }, counts: trimmed, limit: finishedBranchLimit).decision == magus\GuardDecision.allow, message: "published work waits on nothing");
+    final stillOver = withoutPublished(waiting(12), published: fun (branch: str) > result\Result::<bool> {
+        return result\ok::<bool>(branch == "done-0");
+    });
+    final v = decideFork(mandate\Fork{ id = "next" }, counts: stillOver, limit: finishedBranchLimit);
+    std\assert(v.decision == magus\GuardDecision.deny, message: "eleven unpublished");
+    std\assert(v.reason.indexOf("1 branch(es) skipped as published") != null, message: v.reason);
+}
+
+test "a branch that is on no remote ref stays counted, and an unreadable one says why" {
+    final none = withoutPublished(waiting(10), published: fun (branch: str) > result\Result::<bool> {
+        return result\ok::<bool>(false);
+    });
+    std\assert(none.finishedBranches.len() == 10 and none.publishedSkipped == 0, message: "unpublished");
+    final v = decideFork(mandate\Fork{ id = "next" }, counts: none, limit: finishedBranchLimit);
+    std\assert(v.decision == magus\GuardDecision.deny and v.reason.indexOf("0 branch(es) skipped as published") != null, message: v.reason);
+    final broken = withoutPublished(waiting(10), published: fun (branch: str) > result\Result::<bool> {
+        return result\fail::<bool>("no remotes");
+    });
+    std\assert(broken.finishedBranches.len() == 10 and broken.publishedUnread == "no remotes", message: broken.publishedUnread);
 }
 
 test "raising the limit lets the same fork through" {
