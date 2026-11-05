@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"fmt"
 	"github.com/egladman/magus/spells"
 	"os/exec"
@@ -18,7 +19,7 @@ import (
 // daemon being up, the very coupling readiness exists to make legible. The runner
 // enforces; this only says what WOULD be enforced, so someone hitting MGS3004 can see
 // where the gate came from without reading a spell.
-func (r *runner) checkReadinessProbes(projects []*types.Project) types.Check {
+func (r *runner) checkReadinessProbes(ctx context.Context, projects []*types.Project) types.Check {
 	type gate struct {
 		spell, tool, cmd string
 		probe            spells.Command
@@ -78,7 +79,7 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) types.Check {
 		// --probe was asked for, so the gate is actually exercised. A tool that is
 		// down is a FAIL rather than advice: the caller asked whether their
 		// environment is ready, and the honest answer is no.
-		if err := exec.CommandContext(r.runContext(), g.probe.Bin, g.probe.Args...).Run(); err != nil {
+		if err := exec.CommandContext(ctx, g.probe.Bin, g.probe.Args...).Run(); err != nil {
 			down++
 			status = types.CheckFail
 			details = append(details, fmt.Sprintf("%s: %s NOT ready: `%s` failed", g.spell, g.tool, g.cmd))

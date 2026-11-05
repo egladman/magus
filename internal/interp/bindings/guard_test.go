@@ -686,7 +686,6 @@ magus\guard.write(fun (req: WriteRequest) > GuardVerdict {
 type StopRuleBindingSuite struct {
 	suite.Suite
 	reg  *workspace.WorkspaceRegistry
-	ctx  context.Context
 	sess *buzz.Session
 }
 
@@ -694,13 +693,12 @@ func TestStopRuleBindingSuite(t *testing.T) { suite.Run(t, new(StopRuleBindingSu
 
 func (s *StopRuleBindingSuite) SetupTest() {
 	s.reg = workspace.NewWorkspaceRegistry()
-	s.ctx = workspace.ContextWithRegistry(s.T().Context(), s.reg)
-	s.sess = buzz.NewSession(s.ctx, buzz.WithEmbedded())
-	registerAllBuzz(s.ctx, s.sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
+	s.sess = buzz.NewSession(s.testContext(), buzz.WithEmbedded())
+	registerAllBuzz(s.testContext(), s.sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
 }
 
 func (s *StopRuleBindingSuite) TestTheRuleSeesTheRequestAfterTheLoadCloses() {
-	s.Require().NoError(s.sess.Exec(s.ctx, `
+	s.Require().NoError(s.sess.Exec(s.testContext(), `
 import "magus";
 
 magus\guard.stop(fun (req: StopRequest) > GuardVerdict {
@@ -719,7 +717,7 @@ magus\guard.stop(fun (req: StopRequest) > GuardVerdict {
 }
 
 func (s *StopRuleBindingSuite) TestRegisteringTwiceIsMisdeclared() {
-	err := s.sess.Exec(s.ctx, `
+	err := s.sess.Exec(s.testContext(), `
 import "magus";
 
 magus\guard.stop(fun (req: StopRequest) > GuardVerdict => magus\guard.allow());
@@ -727,4 +725,8 @@ magus\guard.stop(fun (req: StopRequest) > GuardVerdict => magus\guard.allow());
 `)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "MGS1045")
+}
+
+func (s *StopRuleBindingSuite) testContext() context.Context {
+	return workspace.ContextWithRegistry(s.T().Context(), s.reg)
 }

@@ -1447,8 +1447,8 @@ func SharedStepContext(ctx context.Context) context.Context {
 // goroutine and nothing to close: both halves outlive the step, so the merge is a pair of
 // pointers rather than a forwarded channel.
 type sharedStepContext struct {
-	values context.Context
-	cancel context.Context
+	values context.Context //nolint:containedctx // class a: sharedStepContext implements context.Context over two of them
+	cancel context.Context //nolint:containedctx // class a: see values
 }
 
 func (c sharedStepContext) Deadline() (time.Time, bool) { return c.cancel.Deadline() }

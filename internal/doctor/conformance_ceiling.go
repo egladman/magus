@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/egladman/magus/types"
@@ -12,12 +13,12 @@ const checkConformanceCeilingName = "conformance-ceiling"
 // An anchor raised past the code moves no subject, so `magus diff` is silent about it and the
 // slack shows here. Per-file counts need no upkeep: a change is held to its base revision's.
 // Advice, never a failure.
-func (r *runner) checkConformanceCeiling(_ []*types.Project) types.Check {
+func (r *runner) checkConformanceCeiling(ctx context.Context, _ []*types.Project) types.Check {
 	analyzer, ok := r.ws.(types.HistoryMetrics)
 	if !ok {
 		return conformanceUnmeasured("this workspace exposes no conformance lens")
 	}
-	out, err := analyzer.Conformance(r.runContext())
+	out, err := analyzer.Conformance(ctx)
 	if err != nil {
 		// A misconfiguration is a failure rather than a quiet pass.
 		return types.Check{

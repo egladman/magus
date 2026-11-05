@@ -2630,14 +2630,14 @@ func TestEditDryRunRecordsNothing(t *testing.T) {
 
 type GradeEditSuite struct {
 	suite.Suite
-	ctx  context.Context
-	root string
+	layers ctxLayers
+	root   string
 }
 
 func TestGradeEdit(t *testing.T) { suite.Run(t, new(GradeEditSuite)) }
 
 func (s *GradeEditSuite) SetupTest() {
-	s.ctx, s.root = fleetFixture(s.T(), fixture.FleetLeases()...)
+	s.layers, s.root = fleetLayers(s.T(), fixture.FleetLeases()...)
 	s.T().Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
 }
 
@@ -2651,7 +2651,7 @@ func (s *GradeEditSuite) workspace(rel, role string) *typestest.MockWorkspaceRep
 }
 
 func (s *GradeEditSuite) grade(ws types.WorkspaceRepository, rel string, o EditGrade) (string, string) {
-	return GradeEdit(s.ctx, Dependencies{}, ws, rel, []byte("package x\n"), []byte("package y\n"), o)
+	return GradeEdit(s.testContext(), Dependencies{}, ws, rel, []byte("package x\n"), []byte("package y\n"), o)
 }
 
 func (s *GradeEditSuite) TestADeclaredOutputIsRefusedWithNoRule() {
@@ -2683,20 +2683,20 @@ func (s *GradeEditSuite) TestASourceInsideTheLeasePasses() {
 }
 
 func (s *GradeEditSuite) edit(rel string) types.GuardJudgment {
-	return judgeEdit(s.ctx, Dependencies{}, s.root, rel, []byte("package x\n"), []byte("package y\n"), false)
+	return judgeEdit(s.testContext(), Dependencies{}, s.root, rel, []byte("package x\n"), []byte("package y\n"), false)
 }
 
 // `magus job exec` binds the checkout, which names the lease with no BAGGAGE.
 func (s *GradeEditSuite) TestTheCheckoutBindingNamesTheLease() {
 	s.T().Setenv(trail.EnvBaggage, "")
-	bindCaller(s.T(), s.ctx, hookAttribution{}, "lease-a")
+	bindCaller(s.T(), s.testContext(), hookAttribution{}, "lease-a")
 	s.Equal(graded{false, "lease-a", types.LeaseSourceMarker}, gradedAs(s.edit("internal/ledger/store.go")))
 	s.Equal(graded{true, "lease-a", types.LeaseSourceMarker}, gradedAs(s.edit("cmd/magus/main.go")))
 }
 
 func (s *GradeEditSuite) TestAnUnreadLeaseStoreRefusesLoudly() {
 	s.T().Setenv(trail.EnvBaggage, "")
-	s.ctx = job.WithSnapshot(s.ctx, job.Snapshot{Err: errors.New("store locked")})
+	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Err: errors.New("store locked")}))
 	_, reason := s.grade(s.workspace("docs/readme.md", "source"), "docs/readme.md", EditGrade{})
 	s.Contains(reason, "store locked")
 }
@@ -2705,20 +2705,20 @@ func (s *GradeEditSuite) TestAnUnreadLeaseStoreRefusesLoudly() {
 // where jobs hold leases and the process names none.
 type PersonLeaseSuite struct {
 	suite.Suite
-	ctx  context.Context
-	root string
+	layers ctxLayers
+	root   string
 }
 
 func TestPersonLease(t *testing.T) { suite.Run(t, new(PersonLeaseSuite)) }
 
 func (s *PersonLeaseSuite) SetupTest() {
-	s.ctx, s.root = fleetFixture(s.T(), fixture.FleetLeases()...)
+	s.layers, s.root = fleetLayers(s.T(), fixture.FleetLeases()...)
 	s.T().Setenv(trail.EnvBaggage, "")
 }
 
 // holdHere records id as taken in this checkout, as `job exec` does.
 func (s *PersonLeaseSuite) holdHere(id string, paths ...string) {
-	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: hookLocation(s.ctx, Dependencies{}).cacheDir, Root: s.root})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: hookLocation(s.testContext(), Dependencies{}).cacheDir, Root: s.root})
 	_, err := store.Update(s.T().Context(), id, func(cur *types.Job) {
 		*cur = types.Job{ID: id, WritePaths: paths, State: types.StateRunning, CheckoutRoot: s.root}
 	})
@@ -2726,7 +2726,7 @@ func (s *PersonLeaseSuite) holdHere(id string, paths ...string) {
 }
 
 func (s *PersonLeaseSuite) edit(rel string) types.GuardJudgment {
-	return judgeEdit(s.ctx, Dependencies{}, s.root, rel, []byte("package x\n"), []byte("package y\n"), false)
+	return judgeEdit(s.testContext(), Dependencies{}, s.root, rel, []byte("package x\n"), []byte("package y\n"), false)
 }
 
 func (s *PersonLeaseSuite) TestOneLeaseHeldHereDoesNotBindThePerson() {
@@ -2765,14 +2765,14 @@ const (
 // judgeBound judges command from a worker bound to lease-a by session alone.
 func (s *PersonLeaseSuite) judgeBound(command string) types.GuardJudgment {
 	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
-	bindCaller(s.T(), s.ctx, who, "lease-a")
+	bindCaller(s.T(), s.testContext(), who, "lease-a")
 	return s.judgeAs(who, command)
 }
 
 func (s *PersonLeaseSuite) judgeAs(who hookAttribution, command string) types.GuardJudgment {
 	input := hookJSON(s.T(), map[string]any{"session_id": who.Session, "agent_id": who.Agent, "agent_type": "general-purpose", "cwd": s.root,
 		"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": map[string]any{"command": command}})
-	return Judge(s.ctx, Dependencies{}, Request{Input: input, Host: who.Host})
+	return Judge(s.testContext(), Dependencies{}, Request{Input: input, Host: who.Host})
 }
 
 func (s *PersonLeaseSuite) script(rel, body string) {
@@ -2847,7 +2847,7 @@ func (s *PersonLeaseSuite) TestAnUnboundCallerIsNotAskedForAClaim() {
 }
 
 func (s *PersonLeaseSuite) TestACheckoutRecordGradesWithNoClaim() {
-	bindCaller(s.T(), s.ctx, hookAttribution{}, "lease-a")
+	bindCaller(s.T(), s.testContext(), hookAttribution{}, "lease-a")
 	s.NotEqual(string(denyRuleEditUngraded), s.judgeBound(renameDryRun).Rule)
 }
 
@@ -2889,3 +2889,7 @@ func (s *PersonLeaseSuite) TestTheWiringAdviceToAPersonNamesNoOrchestrator() {
 	s.Equal(decisionAdvise, g.Decision)
 	s.NotContains(g.Context+g.Why, "orchestrator")
 }
+
+func (s *GradeEditSuite) testContext() context.Context { return s.layers.of(s.T()) }
+
+func (s *PersonLeaseSuite) testContext() context.Context { return s.layers.of(s.T()) }

@@ -12,7 +12,6 @@ package buzz
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/egladman/magus/internal/interp/engine"
 	"github.com/egladman/magus/internal/parsecache"
@@ -27,15 +26,12 @@ func init() { //nolint:gochecknoinits // the engine registry cannot import the B
 type engineImpl struct{}
 
 func (engineImpl) NewSession(ctx context.Context) (engine.Session, error) {
-	return &session{core: core.NewSession(ctx, core.WithEmbedded(), core.WithParseCache(parsecache.Shared())), ctx: ctx}, nil
+	return &session{core: core.NewSession(ctx, core.WithEmbedded(), core.WithParseCache(parsecache.Shared()))}, nil
 }
 
-// session wraps a *core.Session and satisfies engine.Session. ctx is the
-// session's bound context (from NewSession); Call honors it so the documented
-// cancellation contract holds on the generic engine path.
+// session wraps a *core.Session and satisfies engine.Session.
 type session struct {
 	core *core.Session
-	ctx  context.Context
 }
 
 func (s *session) Close() error { return s.core.Close() }
@@ -47,29 +43,17 @@ func (s *session) GetGlobal(name string) engine.Value { return toEngine(s.core.G
 func (s *session) NewTable() engine.Table { return &table{} }
 
 // LoadString compiles code against the session's shared-globals scope and
-// returns the compiled Chunk as an engine.Value. Execution is deferred to Call,
-// so the same chunk can be run multiple times without recompiling.
-func (s *session) LoadString(code string) (engine.Value, error) {
+// returns the compiled Chunk as an engine.Value. It runs nothing: ctx is the
+// call the compile belongs to.
+func (s *session) LoadString(_ context.Context, code string) (engine.Value, error) {
 	chunk, err := s.core.Compile(code)
 	if err != nil {
 		return nil, err
 	}
-	return codeValue{s: s, chunk: chunk}, nil
+	return codeValue{chunk: chunk}, nil
 }
 
-func (s *session) DoString(code string) error { return s.core.DoString(code) }
-
-func (s *session) Call(p engine.CallParams) error {
-	v, ok := p.Fn.(codeValue)
-	if !ok {
-		return fmt.Errorf("buzz: Call: value is not a compiled Buzz chunk")
-	}
-	ctx := v.s.ctx
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return v.s.core.ExecChunk(ctx, v.chunk)
-}
+func (s *session) DoString(ctx context.Context, code string) error { return s.core.Exec(ctx, code) }
 
 func toEngine(v vm.Value) engine.Value {
 	switch {
@@ -120,7 +104,6 @@ func fromEngine(ev engine.Value) vm.Value {
 
 // codeValue wraps a compiled Buzz Chunk as an engine.Value.
 type codeValue struct {
-	s     *session
 	chunk *vm.Chunk
 }
 

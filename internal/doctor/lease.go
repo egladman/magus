@@ -68,12 +68,12 @@ func checkJobTree(loc job.Location, limits config.Jobs, now int64) types.Check {
 	return types.Check{Name: name, Status: types.CheckAdvice, Message: strings.Join(parts, "; "), Details: details}
 }
 
-func (r *runner) checkBoundLease() types.Check {
+func (r *runner) checkBoundLease(ctx context.Context) types.Check {
 	wired, err := workspace.WiredHarnesses(r.ws)
 	if err != nil {
 		return unknownWiring("bound-lease", err)
 	}
-	return checkBoundLease(r.runContext(), r.jobPlace(), wired...)
+	return checkBoundLease(ctx, r.jobPlace(), wired...)
 }
 
 // checkBoundLease grades the lease this checkout is bound to: an unknown id, a

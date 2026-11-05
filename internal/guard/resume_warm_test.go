@@ -21,7 +21,7 @@ const (
 
 func (f reworkFixture) putRow(t *testing.T, row types.Job) {
 	t.Helper()
-	_, err := f.store.Update(f.ctx, row.ID, func(cur *types.Job) { *cur = row; cur.Validated = 1 })
+	_, err := f.store.Update(f.testContext(t), row.ID, func(cur *types.Job) { *cur = row; cur.Validated = 1 })
 	require.NoError(t, err)
 }
 
@@ -40,7 +40,7 @@ func warmFixture(t *testing.T, follow func(*types.Job)) reworkFixture {
 
 func (f reworkFixture) spawn(t *testing.T) types.GuardJudgment {
 	t.Helper()
-	return Judge(f.ctx, Dependencies{}, Request{Input: hookJSON(t, map[string]any{
+	return Judge(f.testContext(t), Dependencies{}, Request{Input: hookJSON(t, map[string]any{
 		"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Agent",
 		"tool_input": map[string]any{"description": warmSpawnTitle, "prompt": "Carry the job to its done-when."},
 	}), Host: "claude-code"})
@@ -115,7 +115,7 @@ func TestSpawnWarmWorkerRemedyPassesTheGuard(t *testing.T) {
 	f := warmFixture(t, func(j *types.Job) { j.Follows = "gate-fits" })
 	require.Equal(t, string(denyRuleSpawnWarmWorker), f.spawn(t).Rule)
 
-	v := Judge(f.ctx, Dependencies{}, Request{Input: hookJSON(t, map[string]any{
+	v := Judge(f.testContext(t), Dependencies{}, Request{Input: hookJSON(t, map[string]any{
 		"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "SendMessage",
 		"tool_input": map[string]any{"to": warmAgent, "message": "The order test regressed; fix it."},
 	}), Host: "claude-code"})

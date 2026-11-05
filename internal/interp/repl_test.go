@@ -121,13 +121,14 @@ func (s *scriptedSession) GetGlobal(name string) engine.Value {
 	}
 	return engine.NilValue
 }
-func (s *scriptedSession) NewTable() engine.Table                  { return &orderedTable{} }
-func (s *scriptedSession) LoadString(string) (engine.Value, error) { return engine.NilValue, nil }
-func (s *scriptedSession) DoString(code string) error {
+func (s *scriptedSession) NewTable() engine.Table { return &orderedTable{} }
+func (s *scriptedSession) LoadString(context.Context, string) (engine.Value, error) {
+	return engine.NilValue, nil
+}
+func (s *scriptedSession) DoString(_ context.Context, code string) error {
 	s.doStrings = append(s.doStrings, code)
 	return s.doErr
 }
-func (s *scriptedSession) Call(engine.CallParams) error { return nil }
 
 // Drivers satisfies engine.DriversProvider so replDrivers picks them up.
 func (s *scriptedSession) Drivers() []engine.ReplDriver { return s.drivers }

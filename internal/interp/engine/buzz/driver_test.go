@@ -129,7 +129,7 @@ func TestStepperFramesThroughEngine(t *testing.T) {
 			}
 		}
 	})
-	require.NoError(t, s.DoString(src))
+	require.NoError(t, s.DoString(t.Context(), src))
 	stepper.SetStepHook(0, nil)
 
 	assert.Equal(t, "inner", nameAtInner, "innermost frame at pause")
