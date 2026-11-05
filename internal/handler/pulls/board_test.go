@@ -47,7 +47,7 @@ func mergeQueue(state, description string) types.ForgeCheck {
 	return types.ForgeCheck{Name: queue.DefaultStatusContext, Kind: "status", State: state, Description: description}
 }
 
-func pullOf(n int, author string, checks ...types.ForgeCheck) types.ForgePull {
+func newPull(n int, author string, checks ...types.ForgeCheck) types.ForgePull {
 	return types.ForgePull{
 		Number:    n,
 		Author:    author,
@@ -74,7 +74,7 @@ type BoardSuite struct{ suite.Suite }
 func TestBoardSuite(t *testing.T) { suite.Run(t, new(BoardSuite)) }
 
 func (s *BoardSuite) TestCIIgnoresMergeQueue() {
-	row := onlyRow(buildBoard(types.BaseBranch{}, pullOf(1, "ada", passing("build"), mergeQueue("failure", "behind two pulls"))))
+	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada", passing("build"), mergeQueue("failure", "behind two pulls"))))
 
 	s.Equal(pullsv1.CiState_CI_STATE_GREEN, row.Ci)
 	s.EqualValues(1, row.Passed)
@@ -84,7 +84,7 @@ func (s *BoardSuite) TestCIIgnoresMergeQueue() {
 }
 
 func (s *BoardSuite) TestCIRedWhenAnyCheckFailed() {
-	row := onlyRow(buildBoard(types.BaseBranch{}, pullOf(1, "ada", passing("a"), failing("b", "boom", time.Hour), running("c"))))
+	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada", passing("a"), failing("b", "boom", time.Hour), running("c"))))
 
 	s.Equal(pullsv1.CiState_CI_STATE_RED, row.Ci)
 	s.EqualValues(1, row.Passed)
@@ -93,14 +93,14 @@ func (s *BoardSuite) TestCIRedWhenAnyCheckFailed() {
 }
 
 func (s *BoardSuite) TestCIRunningWhenACheckRuns() {
-	row := onlyRow(buildBoard(types.BaseBranch{}, pullOf(1, "ada", passing("a"), running("b"), queued("c", time.Minute))))
+	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada", passing("a"), running("b"), queued("c", time.Minute))))
 
 	s.Equal(pullsv1.CiState_CI_STATE_RUNNING, row.Ci)
 	s.EqualValues(2, row.Pending)
 }
 
 func (s *BoardSuite) TestCIQueuedReportsTheEarliestWait() {
-	row := onlyRow(buildBoard(types.BaseBranch{}, pullOf(1, "ada", queued("a", 5*time.Minute), queued("b", 20*time.Minute))))
+	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada", queued("a", 5*time.Minute), queued("b", 20*time.Minute))))
 
 	s.Equal(pullsv1.CiState_CI_STATE_QUEUED, row.Ci)
 	s.Equal(20*time.Minute, row.QueuedFor.AsDuration())
@@ -108,7 +108,7 @@ func (s *BoardSuite) TestCIQueuedReportsTheEarliestWait() {
 
 func (s *BoardSuite) TestCIGreenCountsSkippedAsPassed() {
 	skipped := types.ForgeCheck{Name: "s", State: "skipped"}
-	row := onlyRow(buildBoard(types.BaseBranch{}, pullOf(1, "ada", passing("a"), skipped)))
+	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada", passing("a"), skipped)))
 
 	s.Equal(pullsv1.CiState_CI_STATE_GREEN, row.Ci)
 	s.EqualValues(2, row.Passed)
@@ -116,13 +116,13 @@ func (s *BoardSuite) TestCIGreenCountsSkippedAsPassed() {
 }
 
 func (s *BoardSuite) TestCINoneWithoutChecks() {
-	row := onlyRow(buildBoard(types.BaseBranch{}, pullOf(1, "ada")))
+	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada")))
 
 	s.Equal(pullsv1.CiState_CI_STATE_NONE, row.Ci)
 }
 
 func (s *BoardSuite) TestCINoneWhenOnlyTheQueueReports() {
-	row := onlyRow(buildBoard(types.BaseBranch{}, pullOf(1, "ada", mergeQueue("pending", "waiting"))))
+	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada", mergeQueue("pending", "waiting"))))
 
 	s.Equal(pullsv1.CiState_CI_STATE_NONE, row.Ci)
 	s.Equal("pending", row.Queue.State)
@@ -131,7 +131,7 @@ func (s *BoardSuite) TestCINoneWhenOnlyTheQueueReports() {
 func (s *BoardSuite) TestFirstFailureNamesTheCheckAndItsLines() {
 	bad := failing("docs:site-generate", "exit 1", time.Hour)
 	bad.OutputRef = "out0123456789ab"
-	row := onlyRow(buildBoard(types.BaseBranch{}, pullOf(1, "ada", passing("a"), bad, failing("z", "later", time.Hour))))
+	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada", passing("a"), bad, failing("z", "later", time.Hour))))
 
 	s.Equal("docs:site-generate", row.FirstFailure.Name)
 	s.Equal([]string{"exit 1"}, row.FirstFailure.Lines)
@@ -140,55 +140,55 @@ func (s *BoardSuite) TestFirstFailureNamesTheCheckAndItsLines() {
 }
 
 func (s *BoardSuite) TestBlockedConflictsNamesTheBase() {
-	p := pullOf(1, "ada")
+	p := newPull(1, "ada")
 	p.Mergeable = "conflicting"
 
 	s.Equal([]string{"conflicts with main"}, onlyRow(buildBoard(types.BaseBranch{}, p)).Blocked)
 }
 
 func (s *BoardSuite) TestBlockedFailingNamesTheCheckAndItsFirstLine() {
-	row := onlyRow(buildBoard(types.BaseBranch{}, pullOf(1, "ada", failing("docs:site-generate", "exit 1", time.Hour))))
+	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada", failing("docs:site-generate", "exit 1", time.Hour))))
 
 	s.Equal([]string{"`docs:site-generate` failing: exit 1"}, row.Blocked)
 }
 
 func (s *BoardSuite) TestBlockedWaitingOnRunners() {
-	row := onlyRow(buildBoard(types.BaseBranch{}, pullOf(1, "ada", queued("a", 2*time.Hour))))
+	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada", queued("a", 2*time.Hour))))
 
 	s.Equal([]string{"waiting on runners for 2h"}, row.Blocked)
 }
 
 func (s *BoardSuite) TestShortQueueWaitIsNotBlocked() {
-	row := onlyRow(buildBoard(types.BaseBranch{}, pullOf(1, "ada", queued("a", 5*time.Minute))))
+	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada", queued("a", 5*time.Minute))))
 
 	s.Empty(row.Blocked)
 }
 
 func (s *BoardSuite) TestBlockedChangesRequested() {
-	p := pullOf(1, "ada")
+	p := newPull(1, "ada")
 	p.Review = "changes_requested"
 
 	s.Equal([]string{"changes requested"}, onlyRow(buildBoard(types.BaseBranch{}, p)).Blocked)
 }
 
 func (s *BoardSuite) TestBlockedReviewRequired() {
-	p := pullOf(1, "ada")
+	p := newPull(1, "ada")
 	p.Review = "review_required"
 
 	s.Equal([]string{"review required"}, onlyRow(buildBoard(types.BaseBranch{}, p)).Blocked)
 }
 
 func (s *BoardSuite) TestBlockedDraft() {
-	p := pullOf(1, "ada")
+	p := newPull(1, "ada")
 	p.Draft = true
 
 	s.Equal([]string{"draft"}, onlyRow(buildBoard(types.BaseBranch{}, p)).Blocked)
 }
 
 func (s *BoardSuite) TestBlockedBehindOnlyWhenMergeableIsUnknown() {
-	unknown := pullOf(1, "ada")
+	unknown := newPull(1, "ada")
 	unknown.Mergeable, unknown.BehindBy = "unknown", 3
-	known := pullOf(2, "ada")
+	known := newPull(2, "ada")
 	known.BehindBy = 3
 	b := buildBoard(types.BaseBranch{}, unknown, known)
 
@@ -197,7 +197,7 @@ func (s *BoardSuite) TestBlockedBehindOnlyWhenMergeableIsUnknown() {
 }
 
 func (s *BoardSuite) TestBlockedNamesTheConfiguredBase() {
-	p := pullOf(1, "ada")
+	p := newPull(1, "ada")
 	p.Mergeable = "conflicting"
 
 	s.Equal([]string{"conflicts with trunk"}, onlyRow(buildBoard(types.BaseBranch{Name: "trunk"}, p)).Blocked)
@@ -210,8 +210,8 @@ func (s *BoardSuite) TestRegressionNamesTheCommitItStartedAfter() {
 		{SHA: "aaaaaaa333", Subject: "older", At: ago(9 * time.Hour)},
 	}}
 	b := buildBoard(base,
-		pullOf(1, "ada", failing("docs:site-generate", "exit 1", 2*time.Hour)),
-		pullOf(2, "ada", failing("docs:site-generate", "exit 1", time.Hour)),
+		newPull(1, "ada", failing("docs:site-generate", "exit 1", 2*time.Hour)),
+		newPull(2, "ada", failing("docs:site-generate", "exit 1", time.Hour)),
 	)
 
 	s.Require().Len(b.Patterns, 1)
@@ -227,8 +227,8 @@ func (s *BoardSuite) TestRegressionNamesTheCommitItStartedAfter() {
 func (s *BoardSuite) TestRegressionFlagsAFailureThatMainShares() {
 	base := types.BaseBranch{Checks: []types.ForgeCheck{failing("docs:site-generate", "exit 1", time.Hour)}}
 	b := buildBoard(base,
-		pullOf(1, "ada", failing("docs:site-generate", "exit 1", 2*time.Hour)),
-		pullOf(2, "ada", failing("docs:site-generate", "exit 1", time.Hour)),
+		newPull(1, "ada", failing("docs:site-generate", "exit 1", 2*time.Hour)),
+		newPull(2, "ada", failing("docs:site-generate", "exit 1", time.Hour)),
 	)
 
 	s.Require().Len(b.Patterns, 1)
@@ -238,15 +238,15 @@ func (s *BoardSuite) TestRegressionFlagsAFailureThatMainShares() {
 
 func (s *BoardSuite) TestRegressionNeedsTheSameFirstLine() {
 	b := buildBoard(types.BaseBranch{},
-		pullOf(1, "ada", failing("lint", "unused import", time.Hour)),
-		pullOf(2, "ada", failing("lint", "missing return", time.Hour)),
+		newPull(1, "ada", failing("lint", "unused import", time.Hour)),
+		newPull(2, "ada", failing("lint", "missing return", time.Hour)),
 	)
 
 	s.Empty(b.Patterns)
 }
 
 func (s *BoardSuite) TestRegressionNeedsTwoPulls() {
-	b := buildBoard(types.BaseBranch{}, pullOf(1, "ada", failing("lint", "x", time.Hour)))
+	b := buildBoard(types.BaseBranch{}, newPull(1, "ada", failing("lint", "x", time.Hour)))
 
 	s.Empty(b.Patterns)
 }
@@ -255,7 +255,7 @@ func (s *BoardSuite) TestRegressionWithoutAKnownStartNamesNoCommit() {
 	noStart := failing("lint", "x", 0)
 	noStart.StartedAt = ""
 	b := buildBoard(types.BaseBranch{Commits: []types.BaseCommit{{SHA: "abc", At: ago(time.Hour)}}},
-		pullOf(1, "ada", noStart), pullOf(2, "ada", noStart))
+		newPull(1, "ada", noStart), newPull(2, "ada", noStart))
 
 	s.Require().Len(b.Patterns, 1)
 	s.Empty(b.Patterns[0].SinceSha)
@@ -264,8 +264,8 @@ func (s *BoardSuite) TestRegressionWithoutAKnownStartNamesNoCommit() {
 
 func (s *BoardSuite) TestRunnerBacklogAtThreeLongQueuedChecks() {
 	b := buildBoard(types.BaseBranch{},
-		pullOf(1, "ada", queued("a", time.Hour), queued("b", time.Hour)),
-		pullOf(2, "ada", queued("a", 30*time.Minute)),
+		newPull(1, "ada", queued("a", time.Hour), queued("b", time.Hour)),
+		newPull(2, "ada", queued("a", 30*time.Minute)),
 	)
 
 	s.Require().Len(b.Patterns, 1)
@@ -275,17 +275,17 @@ func (s *BoardSuite) TestRunnerBacklogAtThreeLongQueuedChecks() {
 }
 
 func (s *BoardSuite) TestRunnerBacklogNeedsThreeChecks() {
-	b := buildBoard(types.BaseBranch{}, pullOf(1, "ada", queued("a", time.Hour), queued("b", time.Hour)))
+	b := buildBoard(types.BaseBranch{}, newPull(1, "ada", queued("a", time.Hour), queued("b", time.Hour)))
 
 	s.Empty(b.Patterns)
 }
 
 func (s *BoardSuite) TestMergeOrderPutsApprovedGreenFirstThenGreenThenTheRest() {
-	approved := pullOf(30, "ada", passing("a"))
+	approved := newPull(30, "ada", passing("a"))
 	approved.Review = "approved"
-	green := pullOf(20, "ada", passing("a"))
-	red := pullOf(10, "ada", failing("a", "boom", time.Hour))
-	conflict := pullOf(5, "ada", passing("a"))
+	green := newPull(20, "ada", passing("a"))
+	red := newPull(10, "ada", failing("a", "boom", time.Hour))
+	conflict := newPull(5, "ada", passing("a"))
 	conflict.Mergeable = "conflicting"
 	b := buildBoard(types.BaseBranch{}, red, green, approved, conflict)
 
@@ -301,10 +301,10 @@ func (s *BoardSuite) TestMergeOrderPutsApprovedGreenFirstThenGreenThenTheRest() 
 
 func (s *BoardSuite) TestMergeOrderHoldsPullsFailingOnlyARegression() {
 	b := buildBoard(types.BaseBranch{},
-		pullOf(1, "ada", failing("docs", "x", time.Hour)),
-		pullOf(2, "ada", failing("docs", "x", time.Hour)),
-		pullOf(3, "ada", failing("lint", "y", time.Hour)),
-		pullOf(4, "ada", passing("a")),
+		newPull(1, "ada", failing("docs", "x", time.Hour)),
+		newPull(2, "ada", failing("docs", "x", time.Hour)),
+		newPull(3, "ada", failing("lint", "y", time.Hour)),
+		newPull(4, "ada", passing("a")),
 	)
 
 	var order []int32
@@ -316,10 +316,10 @@ func (s *BoardSuite) TestMergeOrderHoldsPullsFailingOnlyARegression() {
 }
 
 func (s *BoardSuite) TestOverlapNamesTheSharedFiles() {
-	a, c := pullOf(1, "ada"), pullOf(2, "ada")
+	a, c := newPull(1, "ada"), newPull(2, "ada")
 	a.Files = []string{"x.go", "y.go"}
 	c.Files = []string{"y.go", "z.go", "x.go"}
-	d := pullOf(3, "ada")
+	d := newPull(3, "ada")
 	d.Files = []string{"other.go"}
 	b := buildBoard(types.BaseBranch{}, a, c, d)
 
@@ -330,7 +330,7 @@ func (s *BoardSuite) TestOverlapNamesTheSharedFiles() {
 }
 
 func (s *BoardSuite) TestStaleAfterTheConfiguredWindow() {
-	old, fresh := pullOf(1, "ada"), pullOf(2, "ada")
+	old, fresh := newPull(1, "ada"), newPull(2, "ada")
 	old.PushedAt = ago(5 * 24 * time.Hour)
 	b := buildBoard(types.BaseBranch{}, old, fresh)
 
@@ -354,7 +354,7 @@ func (s *BoardSuite) TestMainIsPinnedWithItsFirstFailure() {
 
 func (s *BoardSuite) TestFilterKeepsTheChosenAuthorsOnly() {
 	b := analyseBoard(boardInput{
-		List:   types.PullList{Viewer: "ada", Pulls: []types.ForgePull{pullOf(1, "ada"), pullOf(2, "Grace"), pullOf(3, "bob")}},
+		List:   types.PullList{Viewer: "ada", Pulls: []types.ForgePull{newPull(1, "ada"), newPull(2, "Grace"), newPull(3, "bob")}},
 		Now:    testNow,
 		Config: testConfig(),
 		Filter: authorFilter{Saved: true, Authors: []string{"grace", "bob"}},
@@ -367,7 +367,7 @@ func (s *BoardSuite) TestFilterKeepsTheChosenAuthorsOnly() {
 
 func (s *BoardSuite) TestDefaultFilterShowsTheViewerOnly() {
 	b := analyseBoard(boardInput{
-		List:   types.PullList{Viewer: "ada", Pulls: []types.ForgePull{pullOf(1, "ada"), pullOf(2, "grace")}},
+		List:   types.PullList{Viewer: "ada", Pulls: []types.ForgePull{newPull(1, "ada"), newPull(2, "grace")}},
 		Now:    testNow,
 		Config: testConfig(),
 	})

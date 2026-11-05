@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func mergeableOf(s string) pullsv1.Mergeable {
+func parseMergeable(s string) pullsv1.Mergeable {
 	switch s {
 	case "mergeable":
 		return pullsv1.Mergeable_MERGEABLE_MERGEABLE
@@ -23,7 +23,7 @@ func mergeableOf(s string) pullsv1.Mergeable {
 	}
 }
 
-func reviewOf(s string) pullsv1.Review {
+func parseReview(s string) pullsv1.Review {
 	switch s {
 	case "approved":
 		return pullsv1.Review_REVIEW_APPROVED
@@ -49,14 +49,14 @@ func parseTime(s string) time.Time {
 	return t
 }
 
-func timestampOf(t time.Time) *timestamppb.Timestamp {
+func toTimestamp(t time.Time) *timestamppb.Timestamp {
 	if t.IsZero() {
 		return nil
 	}
 	return timestamppb.New(t)
 }
 
-func durationOf(d time.Duration) *durationpb.Duration { return durationpb.New(d) }
+func toDuration(d time.Duration) *durationpb.Duration { return durationpb.New(d) }
 
 // formatDuration drops the zero units: 1m, not 1m0s.
 func formatDuration(d time.Duration) string {

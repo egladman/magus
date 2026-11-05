@@ -117,25 +117,25 @@ func (p *Poller) Sync(ctx context.Context) {
 	if err != nil {
 		p.opts.Log.WarnContext(ctx, "pulls sync failed", attr.Error(err))
 		p.state.SyncError = err.Error()
-		p.state.FailedAt = timestampOf(now)
+		p.state.FailedAt = toTimestamp(now)
 	} else {
 		p.list, p.haveList = list, true
 		if list.Viewer != "" {
 			p.viewer = list.Viewer
 		}
-		p.state.SyncedAt = timestampOf(now)
+		p.state.SyncedAt = toTimestamp(now)
 		p.state.SyncError, p.state.FailedAt = "", nil
 		p.state.Requests, p.state.Revalidated = int32(list.Requests), int32(list.Revalidated)
 		p.state.RateLimit, p.state.RateRemaining = int32(list.Rate.Limit), int32(list.Rate.Remaining)
-		p.state.RateReset = timestampOf(parseTime(list.Rate.Reset))
+		p.state.RateReset = toTimestamp(parseTime(list.Rate.Reset))
 	}
 	c := chooseCadence(p.opts.Config, p.list, now)
 	if p.opts.BaseNote != "" {
 		c.reason += "; " + p.opts.BaseNote
 	}
-	p.state.Interval = durationOf(c.interval)
+	p.state.Interval = toDuration(c.interval)
 	p.state.CadenceReason = c.reason
-	p.state.NextSyncAt = timestampOf(now.Add(c.interval))
+	p.state.NextSyncAt = toTimestamp(now.Add(c.interval))
 }
 
 func (p *Poller) read(ctx context.Context, f authorFilter, viewer string) (types.PullList, error) {

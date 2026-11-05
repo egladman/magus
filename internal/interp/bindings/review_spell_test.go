@@ -72,13 +72,15 @@ export fun list_pulls(target: Target, req: ListPullsRequest) > PullList {
 	req := types.ListPullsRequest{Remote: "acme/acme", Base: "main", Authors: []string{"eli"}}
 	got, err := ListPulls(context.Background(), req)
 	s.Require().NoError(err)
-	s.Equal("acme/acme", got.Repo)
-	s.Equal(2, got.Revalidated)
-	s.Equal(types.RateLimit{Limit: 5000, Remaining: 4999}, got.Rate)
-	s.Equal([]types.ForgePull{{
-		Number: 7, Author: "eli", BehindBy: -1,
-		Checks: []types.ForgeCheck{{Name: "test", State: "failed", Lines: []string{"boom"}}},
-	}}, got.Pulls)
+	s.Equal(types.PullList{
+		Repo:        "acme/acme",
+		Revalidated: 2,
+		Rate:        types.RateLimit{Limit: 5000, Remaining: 4999},
+		Pulls: []types.ForgePull{{
+			Number: 7, Author: "eli", BehindBy: -1,
+			Checks: []types.ForgeCheck{{Name: "test", State: "failed", Lines: []string{"boom"}}},
+		}},
+	}, got)
 }
 
 func TestFindReviewDecodesTheTargetAndCarriesTheRepo(t *testing.T) {

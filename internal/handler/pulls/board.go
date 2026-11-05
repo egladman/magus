@@ -156,17 +156,17 @@ func pullRow(p types.ForgePull, base string, in boardInput) *pullsv1.Pull {
 		Branch:    p.Branch,
 		HeadSha:   p.HeadSHA,
 		BehindBy:  int32(p.BehindBy),
-		Mergeable: mergeableOf(p.Mergeable),
+		Mergeable: parseMergeable(p.Mergeable),
 		Ci:        r.state,
 		Passed:    int32(r.passed),
 		Failed:    int32(r.failed),
 		Pending:   int32(r.pending),
-		Review:    reviewOf(p.Review),
+		Review:    parseReview(p.Review),
 		Queue:     r.queue,
 		Draft:     p.Draft,
 	}
 	if r.hasQueued {
-		row.QueuedFor = durationOf(r.queuedFor)
+		row.QueuedFor = toDuration(r.queuedFor)
 	}
 	for _, c := range r.failures {
 		row.FailedJobs = append(row.FailedJobs, failedJob(c))
@@ -175,7 +175,7 @@ func pullRow(p types.ForgePull, base string, in boardInput) *pullsv1.Pull {
 		row.FirstFailure = row.FailedJobs[0]
 	}
 	if pushed := parseTime(p.PushedAt); !pushed.IsZero() {
-		row.PushedAt = timestampOf(pushed)
+		row.PushedAt = toTimestamp(pushed)
 		row.Stale = in.Now.Sub(pushed) > in.Config.StaleAfter
 	}
 	row.Blocked = blockedReasons(p, r, base, in.Config.RunnerWait)
@@ -207,7 +207,7 @@ func blockedReasons(p types.ForgePull, r rollup, base string, runnerWait time.Du
 		out = append(out, "draft")
 	}
 	if p.BehindBy > 0 && p.Mergeable != "mergeable" && p.Mergeable != "conflicting" {
-		out = append(out, plural(p.BehindBy, "commit", "commits")+" behind "+base)
+		out = append(out, fmt.Sprintf("%s behind %s", plural(p.BehindBy, "commit", "commits"), base))
 	}
 	return out
 }

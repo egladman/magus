@@ -24,13 +24,22 @@ type HTTPRevalidateSuite struct{ suite.Suite }
 
 func TestHTTPRevalidate(t *testing.T) { suite.Run(t, new(HTTPRevalidateSuite)) }
 
+func BenchmarkETagCachePutGet(b *testing.B) {
+	c := &etagCache{entries: map[string]etagEntry{}}
+	for i := range b.N {
+		key := fmt.Sprintf("GET /%d", i%etagMaxEntries)
+		c.put(key, etagEntry{etag: "t", body: "b"})
+		c.get(key)
+	}
+}
+
 // etagServer ties each ETag to the Authorization header and answers 304 on a
 // match. It records every If-None-Match it receives.
 func (s *HTTPRevalidateSuite) etagServer() (*httptest.Server, *[]string) {
 	var seen []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = append(seen, r.Header.Get("If-None-Match"))
-		tag := `"` + r.Header.Get("Authorization") + `"`
+		tag := fmt.Sprintf("%q", r.Header.Get("Authorization"))
 		w.Header().Set("ETag", tag)
 		w.Header().Set("X-Marker", "fresh")
 		if r.Header.Get("If-None-Match") == tag {
@@ -54,9 +63,8 @@ func (s *HTTPRevalidateSuite) TestSendsIfNoneMatchAndServesCachedBodyOn304() {
 
 	second, err := HTTPGet(context.Background(), srv.URL+"/a", auth, opts, types.HTTPRetry{})
 	s.Require().NoError(err)
-	s.Equal(304, second.Status)
-	s.Equal("body for Bearer one", second.Body)
-	s.Equal("fresh", second.Headers["X-Marker"])
+	second.Headers = map[string]string{"X-Marker": second.Headers["X-Marker"]}
+	s.Equal(types.HTTPResponse{Status: 304, Body: "body for Bearer one", Headers: map[string]string{"X-Marker": "fresh"}}, second)
 	s.Equal([]string{"", `"Bearer one"`}, *seen)
 }
 
@@ -71,8 +79,8 @@ func (s *HTTPRevalidateSuite) TestADifferentAuthorizationDoesNotShareAnEntry() {
 	other, err := HTTPGet(context.Background(), srv.URL+"/b", two, opts, types.HTTPRetry{})
 	s.Require().NoError(err)
 
-	s.Equal(200, other.Status)
-	s.Equal("body for Bearer two", other.Body)
+	other.Headers = nil
+	s.Equal(types.HTTPResponse{Status: 200, Body: "body for Bearer two"}, other)
 	s.Equal([]string{"", ""}, *seen)
 }
 

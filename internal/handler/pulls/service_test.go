@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-type PullsServiceSuite struct {
+type ServiceSuite struct {
 	suite.Suite
 	store Store
 	calls int
@@ -21,9 +21,9 @@ type PullsServiceSuite struct {
 	p     *Poller
 }
 
-func TestPullsServiceSuite(t *testing.T) { suite.Run(t, new(PullsServiceSuite)) }
+func TestServiceSuite(t *testing.T) { suite.Run(t, new(ServiceSuite)) }
 
-func (s *PullsServiceSuite) SetupTest() {
+func (s *ServiceSuite) SetupTest() {
 	s.calls = 0
 	s.store = OpenStore(filepath.Join(s.T().TempDir(), "authors.jsonl"))
 	s.p = NewPoller(PollerOptions{
@@ -31,7 +31,7 @@ func (s *PullsServiceSuite) SetupTest() {
 		Store:  s.store,
 		List: func(context.Context, types.ListPullsRequest) (types.PullList, error) {
 			s.calls++
-			return types.PullList{Viewer: "ada", Pulls: []types.ForgePull{pullOf(1, "ada"), pullOf(2, "grace")}}, nil
+			return types.PullList{Viewer: "ada", Pulls: []types.ForgePull{newPull(1, "ada"), newPull(2, "grace")}}, nil
 		},
 		Remote: func(context.Context) string { return "r" },
 		Now:    func() time.Time { return testNow },
@@ -39,14 +39,14 @@ func (s *PullsServiceSuite) SetupTest() {
 	s.svc = NewService(s.p, s.store)
 }
 
-func (s *PullsServiceSuite) TestGetPullsNeverCallsTheForge() {
+func (s *ServiceSuite) TestGetPullsNeverCallsTheForge() {
 	_, err := s.svc.GetPulls(s.T().Context(), connect.NewRequest(&pullsv1.GetPullsRequest{}))
 
 	s.Require().NoError(err)
 	s.Zero(s.calls)
 }
 
-func (s *PullsServiceSuite) TestGetPullsServesTheLastBoard() {
+func (s *ServiceSuite) TestGetPullsServesTheLastBoard() {
 	s.p.Sync(s.T().Context())
 
 	resp, err := s.svc.GetPulls(s.T().Context(), connect.NewRequest(&pullsv1.GetPullsRequest{}))
@@ -56,7 +56,7 @@ func (s *PullsServiceSuite) TestGetPullsServesTheLastBoard() {
 	s.Equal(1, s.calls)
 }
 
-func (s *PullsServiceSuite) TestSetAuthorsSavesTheFilterAndReturnsTheBoardUnderIt() {
+func (s *ServiceSuite) TestSetAuthorsSavesTheFilterAndReturnsTheBoardUnderIt() {
 	s.p.Sync(s.T().Context())
 
 	resp, err := s.svc.SetAuthors(s.T().Context(), connect.NewRequest(&pullsv1.SetAuthorsRequest{Authors: []string{"grace"}}))
@@ -68,7 +68,7 @@ func (s *PullsServiceSuite) TestSetAuthorsSavesTheFilterAndReturnsTheBoardUnderI
 	s.EqualValues(2, resp.Msg.Board.Pulls[0].Number)
 }
 
-func (s *PullsServiceSuite) TestSetAuthorsAsksForOneSyncWithoutCallingTheForgeItself() {
+func (s *ServiceSuite) TestSetAuthorsAsksForOneSyncWithoutCallingTheForgeItself() {
 	_, err := s.svc.SetAuthors(s.T().Context(), connect.NewRequest(&pullsv1.SetAuthorsRequest{}))
 
 	s.Require().NoError(err)
@@ -80,7 +80,7 @@ func (s *PullsServiceSuite) TestSetAuthorsAsksForOneSyncWithoutCallingTheForgeIt
 	}
 }
 
-func (s *PullsServiceSuite) TestSetAuthorsEmptyMeansEveryAuthor() {
+func (s *ServiceSuite) TestSetAuthorsEmptyMeansEveryAuthor() {
 	s.p.Sync(s.T().Context())
 
 	resp, err := s.svc.SetAuthors(s.T().Context(), connect.NewRequest(&pullsv1.SetAuthorsRequest{}))

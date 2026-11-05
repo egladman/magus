@@ -545,7 +545,7 @@ func etagKey(method, url string, headers map[string]string) string {
 		}
 	}
 	sum := sha256.Sum256([]byte(auth))
-	return method + " " + url + " " + hex.EncodeToString(sum[:])
+	return fmt.Sprintf("%s %s %s", method, url, hex.EncodeToString(sum[:]))
 }
 
 func withHeader(headers map[string]string, name, value string) map[string]string {
