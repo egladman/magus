@@ -140,7 +140,7 @@ type TokenInfo struct {
 // (superseding any current one); Close tears the current one down. It is safe
 // for concurrent use.
 type Manager struct {
-	parent context.Context
+	parent context.Context //nolint:containedctx // bounds every listener the Manager opens, past any one Start call
 	log    *slog.Logger
 
 	// selectAddr picks the bind IP. Production uses SelectLANIPv4; tests swap in

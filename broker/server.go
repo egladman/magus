@@ -191,7 +191,7 @@ type server struct {
 	handshake  string
 	executable string
 	started    time.Time
-	ctx        context.Context
+	ctx        context.Context //nolint:containedctx // the broker lifetime: hosted services outlive the request that asked for them, and crash.go and owner.go (outside this job) read it
 
 	mu    sync.Mutex
 	conns map[net.Conn]*session

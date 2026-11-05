@@ -117,7 +117,9 @@ func newSession(ctx context.Context) (*buzz.Session, error) {
 
 // printRecords carries what a provider script prints onto the log display, one record
 // per print, so the verbosity flags and redaction reach it.
-type printRecords struct{ ctx context.Context }
+type printRecords struct {
+	ctx context.Context //nolint:containedctx // io.Writer has no ctx parameter
+}
 
 func (w printRecords) Write(p []byte) (int, error) {
 	slog.InfoContext(w.ctx, strings.TrimSuffix(string(p), "\n"), attr.Notice(""))

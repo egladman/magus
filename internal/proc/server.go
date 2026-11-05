@@ -107,7 +107,7 @@ func IsJob(ctx context.Context) bool {
 // Options configures the proc server created by New.
 type Options struct {
 	Handler         func(ctx context.Context, args []string) error // required; ctx carries Root/Cwd
-	Context         context.Context                                // nil → context.Background
+	Context         context.Context                                //nolint:containedctx // New is a constructor: this is the server lifetime, nil → context.Background
 	Limiter         *cache.Limiter                                 // shared budget; nil → private limiter
 	Concurrency     int                                            // ignored when Limiter is set; 0 → default
 	Version         string                                         // "" disables version-mismatch check
@@ -507,7 +507,7 @@ type activeCall struct {
 type service struct {
 	handler         func(ctx context.Context, args []string) error
 	read            func(ctx context.Context, root, verb string, request []byte) ([]byte, error)
-	parentCtx       context.Context
+	parentCtx       context.Context //nolint:containedctx // the server lifetime every spawned job derives from, deliberately not an RPC request's
 	lim             *cache.Limiter
 	version         string // human-facing display version; surfaced as StatusReply.Version
 	gateVersion     string // adoption identity for the version gate (see adoptionIdentity); "" disables the gate

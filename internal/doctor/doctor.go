@@ -119,7 +119,7 @@ type runner struct {
 	// ctx bounds the checks that touch the world: a git probe, a socket dial, an HTTP
 	// GET. Each used to invent its own context.Background(), so a `magus\doctor` an
 	// agent cancelled kept dialing and walking regardless.
-	ctx context.Context
+	ctx context.Context //nolint:containedctx // runner lives for one Run call; its checks all share the run context
 	// wsErr is the workspace load error, held on the runner so checkWorkspace can be a
 	// registry entry like every other check rather than a special case in the loop.
 	wsErr error

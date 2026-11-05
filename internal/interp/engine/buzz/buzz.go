@@ -35,7 +35,7 @@ func (engineImpl) NewSession(ctx context.Context) (engine.Session, error) {
 // cancellation contract holds on the generic engine path.
 type session struct {
 	core *core.Session
-	ctx  context.Context
+	ctx  context.Context //nolint:containedctx // engine.Session.Call carries no ctx, so the session binds its own
 }
 
 func (s *session) Close() error { return s.core.Close() }
