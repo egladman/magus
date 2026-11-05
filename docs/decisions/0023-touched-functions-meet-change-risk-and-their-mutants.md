@@ -126,7 +126,7 @@ number; it reports scores and mutants, and a lint rule decides.
 | head profile freshened through the cache; base profile kept per commit      | done                                                    |
 | each touched function judged against itself at base                         | done                                                    |
 | covered lines kept, in place of the 70% Go and 62% Buzz totals              | done                                                    |
-| `Change.risk` scoring this repository's own change                          | done (lint-rules)                                       |
+| `Change.risk` scoring this repository's own change                          | in progress (head scored; the base does not load)       |
 | mutation: a go::mutate op, Go-native engine plus token fallback, one binary | not built (the next change)                             |
 | the mutant verdict cache, keyed by body, covering tests and Context         | not built (the next change)                             |
 | the `magus:mutant` marker and the kill-their-mutants rule                   | not built (the next change)                             |
