@@ -61,6 +61,24 @@ func (s *DiskFullSuite) TestZeroFloorIsOff() {
 	s.False(below)
 }
 
+func (s *DiskFullSuite) TestDiskFullNeedsTheTextAndALowDisk() {
+	_, full, err := DiskFull("No space left on device", s.dir, everyDisk)
+	s.Require().NoError(err)
+	s.True(full)
+}
+
+func (s *DiskFullSuite) TestDiskFullWithoutTheTextIsNot() {
+	_, full, err := DiskFull("exit status 1", s.dir, everyDisk)
+	s.Require().NoError(err)
+	s.False(full)
+}
+
+func (s *DiskFullSuite) TestDiskFullWithTheFloorOffIsNot() {
+	_, full, err := DiskFull("No space left on device", s.dir, 0)
+	s.Require().NoError(err)
+	s.False(full)
+}
+
 func (s *DiskFullSuite) printedFailure(logText string, floor int64) string {
 	saved := diskFullFloor
 	diskFullFloor = floor

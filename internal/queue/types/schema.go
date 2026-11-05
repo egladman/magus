@@ -166,8 +166,8 @@ const (
 	CodeWaitUnqueuedBelow   Code = "WAIT_UNQUEUED_BELOW"   // it carries the commits of an open change nobody queued
 	CodeWaitNoCommitter     Code = "WAIT_NO_COMMITTER"     // it needs an update commit, and nothing names who commits it
 	CodeWaitBaseRed         Code = "WAIT_BASE_RED"         // the gate was red on its candidate and on what that was built onto
-	CodeWaitMachineFault    Code = "WAIT_MACHINE_FAULT"    // the gate was red on both, and the machine was at fault
-	CodeWaitChecks          Code = "WAIT_CHECKS"          // the base's required checks are running on its head, or run again on the base
+	CodeWaitMachineFault    Code = "WAIT_MACHINE_FAULT"    // the machine failed the gate; run it again
+	CodeWaitChecks          Code = "WAIT_CHECKS"           // the base's required checks are running on its head, or run again on the base
 
 	CodeKickConflict Code = "KICK_CONFLICT" // a real conflict with the base in files that are not generated
 	CodeKickRed      Code = "KICK_RED"      // the gate, or a required check on a head carrying the base, was red

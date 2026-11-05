@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -492,40 +493,36 @@ func (r *validation) baseRed(ctx context.Context, onto string, c types.Change) (
 	return b.red, b.fault, b.err
 }
 
-// baseWait is the wait a red base earns the change, or no code when the red is
-// its own. A machine fault on either gate is not the base's red.
-func (r *validation) baseWait(ctx context.Context, f *flight, out outcome) (types.Code, string, error) {
+// baseHold is a wait the gate on the base earns, and the machine fault behind
+// it when the wait is for one.
+type baseHold struct {
+	stackHold
+	fault types.Fault
+}
+
+// baseWait is the wait the base earns a red change, false when the red is its
+// own. A machine fault on either gate is not the change's red or the base's.
+func (r *validation) baseWait(ctx context.Context, f *flight, out outcome) (baseHold, bool, error) {
 	red, baseFault, err := r.baseRed(ctx, f.onto, f.change)
 	if err != nil {
-		return "", "", fmt.Errorf("gate %s without %s: %w", short(f.onto), f.change.Label(), err)
+		return baseHold{}, false, fmt.Errorf("gate %s without %s: %w", short(f.onto), f.change.Label(), err)
 	}
 	onto := ontoName(r.plan.Base, f.onto, f.after)
-	if fault := firstFault(out.fault, baseFault); red && fault != types.FaultNone {
-		return types.CodeWaitMachineFault, fmt.Sprintf("the gate failed on it and on %s without it, and the machine was at fault (%s); run it again", onto, faultName(fault)), nil
-	}
-	if red {
-		return types.CodeWaitBaseRed, fmt.Sprintf("the gate failed on it and on %s without it; retried once that is green", onto), nil
-	}
-	return "", "", nil
-}
-
-func firstFault(faults ...types.Fault) types.Fault {
-	for _, f := range faults {
-		if f != types.FaultNone {
-			return f
+	switch fault := cmp.Or(out.fault, baseFault); {
+	case fault != types.FaultNone:
+		cause, err := fault.Cause()
+		if err != nil {
+			return baseHold{}, false, fmt.Errorf("gate %s: %w", f.change.Label(), err)
 		}
+		reason := fmt.Sprintf("the gate failed on it, and the machine was at fault (%s), though %s is green without it; run it again", cause, onto)
+		if red {
+			reason = fmt.Sprintf("the gate failed on it and on %s without it, and the machine was at fault (%s); run it again", onto, cause)
+		}
+		return baseHold{stackHold{types.CodeWaitMachineFault, reason}, fault}, true, nil
+	case red:
+		return baseHold{stackHold: stackHold{types.CodeWaitBaseRed, fmt.Sprintf("the gate failed on it and on %s without it; retried once that is green", onto)}}, true, nil
 	}
-	return types.FaultNone
-}
-
-func faultName(f types.Fault) string {
-	switch f {
-	case types.FaultDisk:
-		return "the disk is full, MGS3052"
-	case types.FaultTempFail:
-		return "the gate kept exiting 75, a temporary failure: no memory seat or a held lock"
-	}
-	return "the gate was killed by a signal or timeout"
+	return baseHold{}, false, nil
 }
 
 // verdict decides a gated or refused change. attributable says everything beneath the
@@ -546,12 +543,12 @@ func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attrib
 			return v.Decision, r.decide(v)
 		}
 		if out.refused == nil {
-			code, reason, err := r.baseWait(ctx, f, out)
+			hold, waits, err := r.redOnBase(ctx, f, &out)
 			if err != nil {
 				return 0, err
 			}
-			if code != "" {
-				v.Decision, v.Code, v.Reason = types.DecisionWait, code, reason
+			if waits {
+				v.Decision, v.Code, v.Reason = types.DecisionWait, hold.code, hold.reason
 				return v.Decision, r.decide(v)
 			}
 		}
@@ -581,6 +578,32 @@ Building the candidate %s; the gate ran on that merge.
 	}
 	defer cleanup()
 	return v.Decision, r.decideWithBundle(v, bundle)
+}
+
+// redOnBase is the wait a red candidate earns from the base, false when the
+// red is its own. A machine fault that cost [maxFaultWaits] waits in a row is
+// its own: out.summary then names the fault.
+func (r *validation) redOnBase(ctx context.Context, f *flight, out *outcome) (stackHold, bool, error) {
+	hold, waits, err := r.baseWait(ctx, f, *out)
+	if err != nil || !waits {
+		return stackHold{}, false, err
+	}
+	if hold.fault == types.FaultNone {
+		return hold.stackHold, true, nil
+	}
+	n, err := r.dir.FaultWaits(f.change)
+	if err != nil {
+		return stackHold{}, false, fmt.Errorf("count the machine-fault waits of %s: %w", f.change.Label(), err)
+	}
+	if n < maxFaultWaits {
+		return hold.stackHold, true, nil
+	}
+	cause, err := hold.fault.Cause()
+	if err != nil {
+		return stackHold{}, false, err
+	}
+	out.summary = fmt.Sprintf("the gate failed on it with the machine at fault (%s) on %d runs in a row, so it is sent back rather than waited on again", cause, maxFaultWaits+1)
+	return stackHold{}, false, nil
 }
 
 // bundle writes f's regenerated candidate, on the merge beneath it, to a file under
@@ -626,6 +649,9 @@ func (r *validation) decideWithBundle(v types.Verdict, bundle string) error {
 		Commit: v.CandidateCommit, Depth: v.Depth, DurationMS: v.DurationMS})
 	if err := r.dir.RecordWithBundle(v, bundle); err != nil {
 		return fmt.Errorf("record the verdict on %s: %w", v.Change.Label(), err)
+	}
+	if err := r.dir.NoteFaultWait(context.Background(), v.Change, v.Code == types.CodeWaitMachineFault); err != nil {
+		return fmt.Errorf("count the machine-fault waits of %s: %w", v.Change.Label(), err)
 	}
 	return nil
 }

@@ -368,7 +368,7 @@ func (s *machineFaultSuite) TestTemporaryFailureOnBothGatesWaits() {
 func (s *machineFaultSuite) TestKilledGateOnBothGatesWaits() {
 	got := machineFaultVerdict(s.T(), types.FaultKilled, types.FaultKilled)
 	s.Equal(types.CodeWaitMachineFault, got.Code)
-	s.Contains(got.Reason, "killed by a signal or timeout")
+	s.Contains(got.Reason, "killed by SIGKILL")
 }
 
 func (s *machineFaultSuite) TestFaultOnTheBaseGateAloneWaits() {
@@ -386,21 +386,112 @@ func (s *machineFaultSuite) TestRedOnBothGatesWithoutAFaultWaitsOnTheBase() {
 	s.Equal(types.CodeWaitBaseRed, got.Code)
 }
 
-func (s *machineFaultSuite) TestFaultOnTheCandidateWithAGreenBaseIsKickedBack() {
-	t := s.T()
+// onGreenBase validates change 1 with fault on its gate and a green base, after
+// priorWaits earlier machine-fault waits.
+func onGreenBase(t *testing.T, fault types.Fault, priorWaits int) (types.Verdict, *VerdictDir) {
+	t.Helper()
 	d := newDoubles(t)
 	one := change("1", "a")
 	d.builds(building{touched: []string{"a/x.go"}})
 	d.gates(func(id string) types.GateResult {
 		if id == "1" {
-			return types.GateResult{Summary: "the gate was killed", Fault: types.FaultKilled}
+			return types.GateResult{Summary: "the gate was killed", Fault: fault}
 		}
 		return types.GateResult{Green: true}
 	})
 	plan := newPlan([]types.Change{one})
 	v, dir := validating(t, d, plan)
+	for range priorWaits {
+		require.NoError(t, dir.NoteFaultWait(t.Context(), one, true))
+	}
+	require.NoError(t, v.Run(t.Context(), plan))
+	return recorded(t, dir)["1"], dir
+}
+
+func (s *machineFaultSuite) TestFaultOnTheCandidateWithAGreenBaseWaits() {
+	got, _ := onGreenBase(s.T(), types.FaultKilled, 0)
+	s.Equal(types.CodeWaitMachineFault, got.Code)
+	s.Contains(got.Reason, "green without it")
+}
+
+func (s *machineFaultSuite) TestAWaitOnAFaultCountsTowardTheBound() {
+	_, dir := onGreenBase(s.T(), types.FaultKilled, 1)
+	waits, err := dir.FaultWaits(change("1", "a"))
+	s.Require().NoError(err)
+	s.Equal(2, waits)
+}
+
+func (s *machineFaultSuite) TestTheLastAllowedWaitStillWaits() {
+	got, _ := onGreenBase(s.T(), types.FaultKilled, maxFaultWaits-1)
+	s.Equal(types.CodeWaitMachineFault, got.Code)
+}
+
+func (s *machineFaultSuite) TestAFaultPastTheBoundKicksBackNamingIt() {
+	got, _ := onGreenBase(s.T(), types.FaultKilled, maxFaultWaits)
+	s.Equal(types.CodeKickRed, got.Code)
+	s.Contains(got.Reason, "killed by SIGKILL")
+	s.Contains(got.Reason, fmt.Sprintf("%d runs in a row", maxFaultWaits+1))
+}
+
+func (s *machineFaultSuite) TestAFaultOnBothGatesPastTheBoundKicksBack() {
+	t := s.T()
+	d := newDoubles(t)
+	one := change("1", "a")
+	d.builds(building{touched: []string{"a/x.go"}})
+	d.gates(faultyGates(types.FaultDisk, types.FaultDisk, "1"))
+	plan := newPlan([]types.Change{one})
+	v, dir := validating(t, d, plan)
+	for range maxFaultWaits {
+		s.Require().NoError(dir.NoteFaultWait(t.Context(), one, true))
+	}
 	s.Require().NoError(v.Run(t.Context(), plan))
-	s.Equal(types.CodeKickRed, recorded(t, dir)["1"].Code)
+	got := recorded(t, dir)["1"]
+	s.Equal(types.CodeKickRed, got.Code)
+	s.Contains(got.Reason, "the disk is full")
+}
+
+func (s *machineFaultSuite) TestAKickEndsTheStreak() {
+	_, dir := onGreenBase(s.T(), types.FaultKilled, maxFaultWaits)
+	waits, err := dir.FaultWaits(change("1", "a"))
+	s.Require().NoError(err)
+	s.Zero(waits)
+}
+
+func (s *machineFaultSuite) TestAGreenRunEndsTheStreak() {
+	t := s.T()
+	d := newDoubles(t)
+	one := change("1", "a")
+	d.builds(building{touched: []string{"a/x.go"}})
+	d.gates(func(string) types.GateResult { return types.GateResult{Green: true} })
+	plan := newPlan([]types.Change{one})
+	v, dir := validating(t, d, plan)
+	s.Require().NoError(dir.NoteFaultWait(t.Context(), one, true))
+	s.Require().NoError(v.Run(t.Context(), plan))
+	waits, err := dir.FaultWaits(one)
+	s.Require().NoError(err)
+	s.Zero(waits)
+}
+
+type faultCauseSuite struct{ suite.Suite }
+
+func TestFaultCauseSuite(t *testing.T) { suite.Run(t, new(faultCauseSuite)) }
+
+func (s *faultCauseSuite) TestEachFaultSaysItsCause() {
+	for _, f := range []types.Fault{types.FaultDisk, types.FaultTempFail, types.FaultKilled} {
+		cause, err := f.Cause()
+		s.Require().NoError(err, string(f))
+		s.NotEmpty(cause, string(f))
+	}
+}
+
+func (s *faultCauseSuite) TestNoFaultHasNoCause() {
+	_, err := types.FaultNone.Cause()
+	s.Error(err)
+}
+
+func (s *faultCauseSuite) TestAnUnknownFaultHasNoCause() {
+	_, err := types.Fault("oom").Cause()
+	s.ErrorContains(err, `"oom"`)
 }
 
 // A set that is no proof, unknown or unbounded, reaches every hook as the build tool

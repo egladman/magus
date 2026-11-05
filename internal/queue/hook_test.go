@@ -703,37 +703,79 @@ func TestAGateKilledByASignalIsTheChangesRedVerdict(t *testing.T) {
 	}
 }
 
-func runGateFault(t *testing.T, body string) types.Fault {
+func TestAVariablePassedToTheGateReachesIt(t *testing.T) {
+	t.Setenv("TZ", "Australia/Lord_Howe")
+	env, err := HookEnv{}.Pass([]string{"TZ"})
+	require.NoError(t, err)
+	dir := t.TempDir()
+	res, err := CommandGate(script(`printf %s "$TZ" > tz`), env, nil).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: dir}), hookUnits)
+	require.NoError(t, err)
+	require.True(t, res.Green)
+	got, err := os.ReadFile(filepath.Join(dir, "tz"))
+	require.NoError(t, err)
+	assert.Equal(t, "Australia/Lord_Howe", string(got))
+}
+
+func runGateFault(t *testing.T, env HookEnv, body string) types.Fault {
 	t.Helper()
-	res, err := CommandGate(script(body), HookEnv{}, nil).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: t.TempDir()}), hookUnits)
+	res, err := CommandGate(script(body), env, nil).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: t.TempDir()}), hookUnits)
 	require.NoError(t, err)
 	return res.Fault
 }
+
+const noSpace = `echo 'write /tmp/x: No space left on device' >&2; exit 1`
 
 type gateFaultSuite struct{ suite.Suite }
 
 func TestQueueGateFaultSuite(t *testing.T) { suite.Run(t, new(gateFaultSuite)) }
 
-func (s *gateFaultSuite) TestKilledBySignal() {
-	s.Equal(types.FaultKilled, runGateFault(s.T(), `kill -KILL $$`))
+func (s *gateFaultSuite) TestKilledBySIGKILL() {
+	s.Equal(types.FaultKilled, runGateFault(s.T(), HookEnv{}, `kill -KILL $$`))
+}
+
+func (s *gateFaultSuite) TestAnotherSignalIsTheChangesOwn() {
+	s.Equal(types.FaultNone, runGateFault(s.T(), HookEnv{}, `kill -SEGV $$`))
 }
 
 func (s *gateFaultSuite) TestExit75IsATemporaryFailure() {
-	s.Equal(types.FaultTempFail, runGateFault(s.T(), `exit 75`))
+	s.Equal(types.FaultTempFail, runGateFault(s.T(), HookEnv{}, `exit 75`))
 }
 
 func (s *gateFaultSuite) TestExitOneCarriesNoFault() {
-	s.Equal(types.FaultNone, runGateFault(s.T(), `exit 1`))
+	s.Equal(types.FaultNone, runGateFault(s.T(), HookEnv{}, `exit 1`))
 }
 
-func (s *gateFaultSuite) TestRedBelowTheDiskFloorIsADiskFault() {
-	failed := changeFailure{why: "exited 1", code: 1}
-	s.Equal(types.FaultDisk, gateFault(failed, s.T().TempDir(), math.MaxInt64))
+func (s *gateFaultSuite) TestNoSpaceOnADiskUnderTheFloorIsADiskFault() {
+	s.Equal(types.FaultDisk, runGateFault(s.T(), HookEnv{CriticalFree: math.MaxInt64}, noSpace))
 }
 
-func (s *gateFaultSuite) TestRedAboveTheDiskFloorCarriesNoFault() {
+func (s *gateFaultSuite) TestNoSpaceWithTheFloorOffCarriesNoFault() {
+	s.Equal(types.FaultNone, runGateFault(s.T(), HookEnv{}, noSpace))
+}
+
+func (s *gateFaultSuite) TestNoSpaceOnADiskAboveTheFloorCarriesNoFault() {
+	s.Equal(types.FaultNone, runGateFault(s.T(), HookEnv{CriticalFree: 1}, noSpace))
+}
+
+func (s *gateFaultSuite) TestARedOnADiskUnderTheFloorWithoutNoSpaceCarriesNoFault() {
+	s.Equal(types.FaultNone, runGateFault(s.T(), HookEnv{CriticalFree: math.MaxInt64}, `exit 1`))
+}
+
+func (s *gateFaultSuite) TestGateFaultNeedsTheOutputToSayNoSpace() {
 	failed := changeFailure{why: "exited 1", code: 1}
-	s.Equal(types.FaultNone, gateFault(failed, s.T().TempDir(), 1))
+	s.Equal(types.FaultNone, gateFault(failed, "boom", s.T().TempDir(), math.MaxInt64))
+	s.Equal(types.FaultDisk, gateFault(failed, "No space left on device", s.T().TempDir(), math.MaxInt64))
+}
+
+func (s *gateFaultSuite) TestAnOutputTailKeepsTheEndOfALongOutput() {
+	var sink bytes.Buffer
+	tail := &outputTail{w: &sink, max: 8}
+	for range 10 {
+		_, err := tail.Write([]byte("0123456789"))
+		s.Require().NoError(err)
+	}
+	s.Equal("23456789", tail.String())
+	s.Equal(100, sink.Len())
 }
 
 // Nothing a hook started outlives it: before, a background process kept running after

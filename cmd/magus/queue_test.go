@@ -547,7 +547,7 @@ type queueValidateEnvSuite struct{ suite.Suite }
 
 func TestQueueValidateEnvSuite(t *testing.T) { suite.Run(t, new(queueValidateEnvSuite)) }
 
-func (s *queueValidateEnvSuite) TestTakesEnvLikeGate() {
+func (s *queueValidateEnvSuite) TestAcceptsEnvLikeGate() {
 	t := s.T()
 	f := newQueueFixture(t, "", "")
 	plan := emptyPlan(t, f)
@@ -563,6 +563,16 @@ func (s *queueValidateEnvSuite) TestRefusesWhatWouldMoveTheBox() {
 	_, err := f.run(t, plan, "validate", "--stdin", "--verdicts", "verdicts", "--gate", "true", "--facts", "true", "--env", "HOME")
 	s.Require().Equal(exit.Usage, exit.Code(err))
 	s.ErrorContains(err, "magus queue validate: --env")
+}
+
+func (s *queueValidateEnvSuite) TestRefusesBeforeTheVerdictsDirectoryHoldsAnything() {
+	t := s.T()
+	f := newQueueFixture(t, "", "")
+	plan := emptyPlan(t, f)
+	_, err := f.run(t, plan, "validate", "--stdin", "--verdicts", "verdicts", "--gate", "true", "--facts", "true", "--env", "HOME")
+	s.Require().Error(err)
+	s.NoFileExists(filepath.Join(f.root, "verdicts", queue.PlanFile))
+	s.NoFileExists(filepath.Join(f.root, "verdicts", queue.DoneFile))
 }
 
 // validated writes a plan of one change and its green verdict into dir, the way
