@@ -9,6 +9,7 @@ import (
 	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // writeFragment writes one fragment file into dir for tests.
@@ -90,28 +91,36 @@ func TestRenderUnreleased(t *testing.T) {
 	assert.Equal(t, "", renderUnreleased(nil))
 }
 
-func TestParseFragmentKeepsEveryEntryInOrder(t *testing.T) {
+type ManyEntriesSuite struct {
+	suite.Suite
+}
+
+func TestManyEntriesSuite(t *testing.T) {
+	suite.Run(t, new(ManyEntriesSuite))
+}
+
+func (s *ManyEntriesSuite) TestParseFragmentKeepsEveryEntryInOrder() {
 	got, err := parseFragment("f.md", []byte("### Changed\n\n- **One.** It\n  wraps.\n\n- **Two.**\n"))
-	require.NoError(t, err)
-	assert.Equal(t, "Changed", got.section)
-	assert.Equal(t, "- **One.** It\n  wraps.\n- **Two.**", got.entry)
+	s.Require().NoError(err)
+	s.Equal("Changed", got.section)
+	s.Equal("- **One.** It\n  wraps.\n- **Two.**", got.entry)
 }
 
-func TestParseFragmentRefusesTwoHeadings(t *testing.T) {
+func (s *ManyEntriesSuite) TestParseFragmentRefusesTwoHeadings() {
 	_, err := parseFragment("f.md", []byte("### Added\n\n- **One.**\n\n### Fixed\n\n- **Two.**\n"))
-	require.ErrorContains(t, err, "more than one section heading, write one fragment per group")
+	s.Require().ErrorContains(err, "more than one section heading, write one fragment per group")
 }
 
-func TestParseFragmentChecksEachEntry(t *testing.T) {
+func (s *ManyEntriesSuite) TestParseFragmentChecksEachEntry() {
 	_, err := parseFragment("f.md", []byte("### Added\n\n- **One.**\n- plain.\n"))
-	require.ErrorContains(t, err, "line 4: an entry opens with a **bold headline**")
+	s.Require().ErrorContains(err, "line 4: an entry opens with a **bold headline**")
 }
 
-func TestReadAndRenderKeepFileNameThenEntryOrder(t *testing.T) {
-	dir := t.TempDir()
-	writeFragment(t, dir, "b.md", "### Added\n\n- **B1.**\n- **B2.**\n")
-	writeFragment(t, dir, "a.md", "### Added\n\n- **A1.**\n- **A2.**\n")
+func (s *ManyEntriesSuite) TestReadAndRenderKeepFileNameThenEntryOrder() {
+	dir := s.T().TempDir()
+	writeFragment(s.T(), dir, "b.md", "### Added\n\n- **B1.**\n- **B2.**\n")
+	writeFragment(s.T(), dir, "a.md", "### Added\n\n- **A1.**\n- **A2.**\n")
 	frags, err := readFragments(dir)
-	require.NoError(t, err)
-	assert.Equal(t, "### Added\n\n- **A1.**\n- **A2.**\n- **B1.**\n- **B2.**", renderUnreleased(frags))
+	s.Require().NoError(err)
+	s.Equal("### Added\n\n- **A1.**\n- **A2.**\n- **B1.**\n- **B2.**", renderUnreleased(frags))
 }
