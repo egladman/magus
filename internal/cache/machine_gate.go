@@ -44,7 +44,7 @@ type MachineAdmitter interface {
 
 // KickingAdmitter is admit with kick called once, on the first claim. No claim
 // waits for it: a held step may be the one that would free space.
-func KickingAdmitter(admit MachineAdmitter, kick func()) MachineAdmitter {
+func KickingAdmitter(admit MachineAdmitter, kick func()) MachineAdmitter { //nolint:ireturn // the implementation is chosen at runtime among several
 	return &kickingAdmitter{MachineAdmitter: admit, kick: sync.OnceFunc(kick)}
 }
 

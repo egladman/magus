@@ -390,7 +390,7 @@ func (r *Resolver) Read(ctx context.Context, ref string) (types.Secret, error) {
 // provider returns the backend for name, falling back to the built-in when a magusfile
 // selected none. Falling back rather than erroring is what makes CI zero-configuration:
 // a workflow's env block is the only thing that can read a repository secret.
-func (r *Resolver) provider(ctx context.Context, name string) (Provider, error) {
+func (r *Resolver) provider(ctx context.Context, name string) (Provider, error) { //nolint:ireturn // the implementation is chosen at runtime among several
 	if name == "" {
 		return envProvider{}, nil
 	}

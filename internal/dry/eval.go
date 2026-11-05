@@ -153,7 +153,7 @@ type evalConfig struct {
 }
 
 // spellCatalog returns the configured catalog, defaulting to the real registry.
-func (c *evalConfig) spellCatalog() SpellCatalog {
+func (c *evalConfig) spellCatalog() SpellCatalog { //nolint:ireturn // the implementation is chosen at runtime among several
 	if c.catalog != nil {
 		return c.catalog
 	}
