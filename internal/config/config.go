@@ -1198,6 +1198,17 @@ var envOnly = []cmdline.Env{
 // its own second signal or SIGKILL. Runs outlive the broker anyway.
 const defaultShutdownGrace = 5 * time.Minute
 
+func pullsDefaults() Pulls {
+	return Pulls{
+		Floor:      30 * time.Second,
+		Active:     time.Minute,
+		Idle:       5 * time.Minute,
+		Reserve:    500,
+		RunnerWait: 15 * time.Minute,
+		StaleAfter: 72 * time.Hour,
+	}
+}
+
 // Defaults returns a Config populated with the magus built-in defaults. It reads no
 // environment, so HistoryPath is empty; the loaders set it from [DefaultHistoryPath].
 func Defaults() Config {
@@ -1213,14 +1224,7 @@ func Defaults() Config {
 				CheckReview:      15 * time.Minute,   // the only one that reaches a forge; a merge happens once
 			},
 		},
-		Console: Console{Pulls: Pulls{
-			Floor:      30 * time.Second,
-			Active:     time.Minute,
-			Idle:       5 * time.Minute,
-			Reserve:    500,
-			RunnerWait: 15 * time.Minute,
-			StaleAfter: 72 * time.Hour,
-		}},
+		Console:       Console{Pulls: pullsDefaults()},
 		ShutdownGrace: defaultShutdownGrace,
 		Disk:          Disk{MinFreeMB: 51200, CriticalFreeMB: 10240, GrowthMBPerHour: 20480, SampleEvery: 10 * time.Minute},
 		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, MaxClaims: 10},
