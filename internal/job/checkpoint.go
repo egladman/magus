@@ -97,7 +97,7 @@ func expandedCheckpoint(full, digest string) string {
 
 // fullRevision is the version control answering at the store's root and the full revision
 // it resolves rev to.
-func (s *Store) fullRevision(ctx context.Context, rev string) (types.VCSDriver, string, error) {
+func (s *Store) fullRevision(ctx context.Context, rev string) (types.VCSDriver, string, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	switch {
 	case rev == "":
 		return nil, "", errors.New("it has no revision before its digest")

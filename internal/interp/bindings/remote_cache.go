@@ -28,11 +28,17 @@ import (
 // handler ops. It registers itself with the cache package at init, so the magus
 // library can select the "spell" backend through a hook without linking the VM.
 func init() { //nolint:gochecknoinits // internal/cache cannot link the Buzz VM; the backend opener registers from the layer that can
-	cache.RegisterRemoteBackendOpener(openSpellRemoteBackend)
+	cache.RegisterRemoteBackendOpener(func(ctx context.Context, selector string) (types.CacheBackend, error) {
+		b, err := openSpellRemoteBackend(ctx, selector)
+		if err != nil {
+			return nil, err // not b: a nil *spellRemoteBackend is a non-nil CacheBackend
+		}
+		return b, nil
+	})
 }
 
 // openSpellRemoteBackend resolves selector to a spell and adapts it to a RemoteBackend.
-func openSpellRemoteBackend(ctx context.Context, selector string) (types.CacheBackend, error) {
+func openSpellRemoteBackend(ctx context.Context, selector string) (types.CacheBackend, error) { //nolint:ireturn // the implementation is chosen at runtime among several
 	drv, err := resolveBackendSpell(ctx, selector)
 	if err != nil {
 		return nil, err
@@ -208,7 +214,7 @@ func (b *spellRemoteBackend) PruneArtifacts(ctx context.Context, policy cache.Re
 // with handler op support; any other value is a spell name looked up in the registry.
 // The magusfile wires the backend by calling magus.cache.remote(<spell handle>), which
 // records the spell's name.
-func resolveBackendSpell(ctx context.Context, selector string) (spells.Driver, error) {
+func resolveBackendSpell(ctx context.Context, selector string) (*spells.Spell, error) {
 	// Before the registry-path test: a relative file path may carry a dot in its first
 	// element (build.d/cache.buzz) and still name a file.
 	if strings.HasSuffix(selector, ".buzz") {

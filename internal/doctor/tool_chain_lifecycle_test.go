@@ -35,13 +35,13 @@ func goProjects(bounds spells.VersionBounds) []*types.Project {
 
 func TestCheckToolchainLifecycleNeverFetches(t *testing.T) {
 	t.Run("no provider wired", func(t *testing.T) {
-		got := (&runner{ws: lifecycleWorkspace{root: t.TempDir()}}).checkToolchainLifecycle(goProjects(spells.VersionBounds{}))
+		got := (&runner{ws: lifecycleWorkspace{root: t.TempDir()}}).checkToolchainLifecycle(t.Context(), goProjects(spells.VersionBounds{}))
 		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "no lifecycle provider wired")
 	})
 
 	t.Run("no spell names a product", func(t *testing.T) {
-		got := (&runner{ws: lifecycleWorkspace{provider: "endoflife-date", root: t.TempDir()}}).checkToolchainLifecycle(nil)
+		got := (&runner{ws: lifecycleWorkspace{provider: "endoflife-date", root: t.TempDir()}}).checkToolchainLifecycle(t.Context(), nil)
 		assert.Equal(t, types.Check{
 			Name: "toolchain-lifecycle", Status: types.CheckOK,
 			Message: "no spell names a lifecycle product",
@@ -50,7 +50,7 @@ func TestCheckToolchainLifecycleNeverFetches(t *testing.T) {
 
 	// Nothing stored is unknown, not fine, and the remedy is the command that asks.
 	t.Run("no stored answer", func(t *testing.T) {
-		got := (&runner{ws: lifecycleWorkspace{provider: "endoflife-date", root: t.TempDir()}}).checkToolchainLifecycle(goProjects(spells.VersionBounds{}))
+		got := (&runner{ws: lifecycleWorkspace{provider: "endoflife-date", root: t.TempDir()}}).checkToolchainLifecycle(t.Context(), goProjects(spells.VersionBounds{}))
 		assert.Equal(t, types.Check{
 			Name: "toolchain-lifecycle", Status: types.CheckOK, Evidence: types.EvidenceUnknown,
 			Message: "no stored answer from endoflife-date for this workspace's spells; `magus describe tools` asks it",
@@ -89,7 +89,7 @@ func TestCheckToolchainLifecycleReadsTheStoredAnswer(t *testing.T) {
 			Cycles: []spells.ReleaseCycle{{Cycle: "1.20", EOL: "2024-02-06"}}}},
 		[]workspace.InstalledTool{{Project: ".", Bin: "go", Lifecycle: "go", Version: "v1.20.14"}})
 
-	got := (&runner{ws: ws, root: ""}).checkToolchainLifecycle(projects)
+	got := (&runner{ws: ws, root: ""}).checkToolchainLifecycle(t.Context(), projects)
 	assert.Equal(t, types.Check{
 		Status:  types.CheckAdvice,
 		Details: []string{"./go: installed v1.20.14 is in go 1.20, past end of life since 2024-02-06"},

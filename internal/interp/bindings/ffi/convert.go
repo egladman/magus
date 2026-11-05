@@ -162,7 +162,7 @@ func VariadicString(args []vm.Value, n int) []string {
 
 // CallbackArg wraps arg n (a Buzz function value) as a std.Callback, nil if
 // absent or not callable.
-func CallbackArg(sess *buzz.Session, args []vm.Value, n int) std.Callback {
+func CallbackArg(sess *buzz.Session, args []vm.Value, n int) std.Callback { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	if n >= len(args) {
 		return nil
 	}

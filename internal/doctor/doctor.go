@@ -116,10 +116,6 @@ type runner struct {
 	opts options
 	root string
 	ws   types.WorkspaceReader
-	// ctx bounds the checks that touch the world: a git probe, a socket dial, an HTTP
-	// GET. Each used to invent its own context.Background(), so a `magus\doctor` an
-	// agent cancelled kept dialing and walking regardless.
-	ctx context.Context
 	// wsErr is the workspace load error, held on the runner so checkWorkspace can be a
 	// registry entry like every other check rather than a special case in the loop.
 	wsErr error
@@ -140,22 +136,11 @@ func Run(ctx context.Context, root string, ws types.WorkspaceReader, wsErr error
 	for _, fn := range optFns {
 		fn(&o)
 	}
-	r := &runner{opts: o, root: root, ws: ws, ctx: ctx}
-	return r.run(wsErr)
+	r := &runner{opts: o, root: root, ws: ws}
+	return r.run(ctx, wsErr)
 }
 
-// runContext is the run's context, defaulting to Background when unset. Run always supplies
-// one; the fallback is for a runner built directly, which is how every check in this
-// package is unit tested. Without it a zero-value runner panics inside exec.CommandContext
-// rather than failing the check it was asked about.
-func (r *runner) runContext() context.Context {
-	if r.ctx == nil {
-		return context.Background()
-	}
-	return r.ctx
-}
-
-func (r *runner) run(wsErr error) types.DoctorReport {
+func (r *runner) run(ctx context.Context, wsErr error) types.DoctorReport {
 	r.wsErr = wsErr
 
 	var projects []*types.Project
@@ -169,7 +154,7 @@ func (r *runner) run(wsErr error) types.DoctorReport {
 		if def.NeedsWorkspace && wsErr != nil {
 			continue
 		}
-		c := def.run(r, projects)
+		c := def.run(ctx, r, projects)
 		// The registry is authoritative for the name, so a check body cannot report
 		// itself under one identifier while the listing advertises another. Evidence is
 		// only a DEFAULT here: a check that could not look, or looked harder than usual,

@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -46,7 +47,7 @@ type Explanations struct {
 // check red by default is one people learn to skip, taking the real findings with it. The
 // advice fires only where it can mean something: a workspace that HAS notes, none of which
 // reach its hottest code.
-func (r *runner) checkUnexplainedHotspots(_ []*types.Project) types.Check {
+func (r *runner) checkUnexplainedHotspots(ctx context.Context, _ []*types.Project) types.Check {
 	const name = "unexplained-hotspots"
 
 	exp := r.explanations()
@@ -71,7 +72,7 @@ func (r *runner) checkUnexplainedHotspots(_ []*types.Project) types.Check {
 			Message:  "this workspace exposes no history lens; skipped",
 		}
 	}
-	hot, err := analyzer.Hotspots(r.runContext(), types.HistoryMetricsOptions{Commits: unexplainedWindow, Files: true})
+	hot, err := analyzer.Hotspots(ctx, types.HistoryMetricsOptions{Commits: unexplainedWindow, Files: true})
 	if err != nil || len(hot.Files) == 0 {
 		// No history is the common shape of this (a fresh clone, a non-git tree), and it
 		// is emphatically not "the hot code is all explained".

@@ -153,7 +153,7 @@ func TestDeadOutputGlobsIgnoresCommittedOutputs(t *testing.T) {
 	repo := deadOutputRepository(t, false)
 	r := &runner{root: repo, ws: detectingWorkspace{}}
 
-	got := r.checkDeadOutputGlobs([]*types.Project{deadOutputProject(repo)})
+	got := r.checkDeadOutputGlobs(t.Context(), []*types.Project{deadOutputProject(repo)})
 
 	assert.Equal(t, types.Check{
 		Name:    "dead-output-globs",
@@ -171,7 +171,7 @@ func TestDeadOutputGlobsReportsOnceBuilt(t *testing.T) {
 	p.Outputs = types.MustParseGlobs("gen/**", "src/gen/**", "dist/**")
 	r := &runner{root: repo, ws: detectingWorkspace{}}
 
-	got := r.checkDeadOutputGlobs([]*types.Project{p})
+	got := r.checkDeadOutputGlobs(t.Context(), []*types.Project{p})
 
 	assert.Equal(t, types.Check{
 		Status:  types.CheckFail,
@@ -188,7 +188,7 @@ func TestDeadOutputGlobsWithoutTrackedReporter(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "gen", "a.ts"), []byte("x"), 0o644))
 	r := &runner{root: dir, ws: detectingWorkspace{}}
 
-	got := r.checkDeadOutputGlobs([]*types.Project{deadOutputProject(dir)})
+	got := r.checkDeadOutputGlobs(t.Context(), []*types.Project{deadOutputProject(dir)})
 
 	assert.Equal(t, types.Check{
 		Status:  types.CheckFail,
@@ -209,7 +209,7 @@ func TestDeadOutputGlobsJudgesAGlobByWhatItsExclusionsLeave(t *testing.T) {
 	p.Outputs = types.MustParseGlobs("src/gen/**", "gen/*.ts", "!gen/hand.ts")
 	r := &runner{root: dir, ws: detectingWorkspace{}}
 
-	got := r.checkDeadOutputGlobs([]*types.Project{p})
+	got := r.checkDeadOutputGlobs(t.Context(), []*types.Project{p})
 
 	assert.Equal(t,
 		[]string{`console: output glob "gen/*.ts" matched no files while the project's other outputs did`},
@@ -568,7 +568,7 @@ func TestDeclaredOutputFiles(t *testing.T) {
 func TestSelfStalingSkipsWithoutTrackedReporter(t *testing.T) {
 	// A non-git tree resolves no VCS, which is the same degrade path.
 	r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
-	got := r.checkSelfStalingOutputs(nil)
+	got := r.checkSelfStalingOutputs(t.Context(), nil)
 	assert.Equal(t, types.EvidenceUnknown, got.Evidence, "a skip is counted unknown, never a pass")
 	assert.Contains(t, got.Message, "skipped")
 }
@@ -603,7 +603,7 @@ func TestUndeclaredSeedingFilesReportsTheStandingSet(t *testing.T) {
 	repo := seedingRepository(t)
 	r := &runner{root: repo, ws: detectingWorkspace{}}
 
-	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
+	got := r.checkUndeclaredSeedingFiles(t.Context(), []*types.Project{seedingProject()})
 
 	require.Equal(t, types.Check{
 		Status:  types.CheckAdvice,
@@ -620,7 +620,7 @@ func TestUndeclaredSeedingFilesIsAdviceNotFailure(t *testing.T) {
 	repo := seedingRepository(t)
 	r := &runner{root: repo, ws: detectingWorkspace{}}
 
-	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
+	got := r.checkUndeclaredSeedingFiles(t.Context(), []*types.Project{seedingProject()})
 
 	assert.NotEqual(t, types.CheckFail, got.Status, "this check must never gate a build")
 }
@@ -634,7 +634,7 @@ func TestUndeclaredSeedingFilesClearsOnceDeclared(t *testing.T) {
 	p.Sources = types.MustParseGlobs("**/*.go", ".golangci.yml")
 	r := &runner{root: repo, ws: detectingWorkspace{}}
 
-	got := r.checkUndeclaredSeedingFiles([]*types.Project{p})
+	got := r.checkUndeclaredSeedingFiles(t.Context(), []*types.Project{p})
 
 	assert.Equal(t, types.CheckOK, got.Status, got.Message)
 }
@@ -646,7 +646,7 @@ func TestUndeclaredSeedingFilesWithoutVCS(t *testing.T) {
 	dir := t.TempDir() // not a repository
 	r := &runner{root: dir, ws: detectingWorkspace{}}
 
-	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
+	got := r.checkUndeclaredSeedingFiles(t.Context(), []*types.Project{seedingProject()})
 
 	assert.Equal(t, types.EvidenceUnknown, got.Evidence, "a check with nothing to enumerate did not run, so it is no pass")
 	assert.Contains(t, got.Message, "skipped")
@@ -694,7 +694,7 @@ func TestCheckAgentSkills(t *testing.T) {
 	t.Run("no catalog supplied -> skipped, not a finding", func(t *testing.T) {
 		r := &runner{ws: rootedWorkspace{root: t.TempDir()}}
 
-		got := r.checkAgentSkills()
+		got := r.checkAgentSkills(t.Context())
 
 		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "skipped")
@@ -704,7 +704,7 @@ func TestCheckAgentSkills(t *testing.T) {
 		r := &runner{ws: boundWorkspace(t, t.TempDir())}
 		r.opts.skills = agent.NewCatalog(fstest.MapFS{}, "", 1)
 
-		got := r.checkAgentSkills()
+		got := r.checkAgentSkills(t.Context())
 
 		require.Equal(t, types.CheckAdvice, got.Status)
 		assert.Contains(t, strings.Join(got.Details, "\n"), "magus agent install")
@@ -718,7 +718,7 @@ func TestCheckAgentSkills(t *testing.T) {
 		r := &runner{ws: boundWorkspace(t, w.Root(), "test-host")}
 		r.opts.skills = agent.Default(types.KnowledgeSchemaVersion)
 
-		got := r.checkAgentSkills()
+		got := r.checkAgentSkills(t.Context())
 
 		want := types.Check{
 			Status: types.CheckFail,
@@ -740,7 +740,7 @@ func TestCheckAgentSkills(t *testing.T) {
 		r := &runner{ws: boundWorkspace(t, w.Root(), "test-host")}
 		r.opts.skills = catalog
 
-		got := r.checkAgentSkills()
+		got := r.checkAgentSkills(t.Context())
 
 		want := types.Check{
 			Name:    "agent-skills",
@@ -763,7 +763,7 @@ func TestCheckAgentSkills(t *testing.T) {
 		r := &runner{ws: boundWorkspace(t, w.Root(), "test-host")}
 		r.opts.skills = catalog
 
-		got := r.checkAgentSkills()
+		got := r.checkAgentSkills(t.Context())
 
 		// Misconfiguration is a failure, not a warning, and a reinstall changes nothing here,
 		// so --fix has nothing to run.
@@ -1198,13 +1198,13 @@ func TestIsSocketAlive(t *testing.T) {
 
 func TestCheckStaleSockets(t *testing.T) {
 	t.Run("no socket directory configured", func(t *testing.T) {
-		got := (&runner{}).checkStaleSockets()
+		got := (&runner{}).checkStaleSockets(t.Context())
 		assert.Equal(t, types.Check{Name: "sockets", Status: types.CheckOK, Message: "no socket directory"}, got)
 	})
 
 	t.Run("socket directory does not exist", func(t *testing.T) {
 		r := &runner{opts: options{serverInfo: &ServerInfo{SockDir: filepath.Join(t.TempDir(), "absent")}}}
-		got := r.checkStaleSockets()
+		got := r.checkStaleSockets(t.Context())
 		assert.Equal(t, types.Check{Name: "sockets", Status: types.CheckOK, Message: "no socket directory"}, got)
 	})
 
@@ -1214,7 +1214,7 @@ func TestCheckStaleSockets(t *testing.T) {
 	}
 
 	t.Run("empty directory", func(t *testing.T) {
-		got := (&runner{opts: options{serverInfo: named(t.TempDir())}}).checkStaleSockets()
+		got := (&runner{opts: options{serverInfo: named(t.TempDir())}}).checkStaleSockets(t.Context())
 		assert.Equal(t, types.Check{
 			Name: "sockets", Status: types.CheckOK,
 			Message: "server not running, broker not running, 0 per-process pool(s)",
@@ -1229,7 +1229,7 @@ func TestCheckStaleSockets(t *testing.T) {
 		listenUnix(t, filepath.Join(dir, "broker.sock"))
 		listenUnix(t, filepath.Join(dir, "magus-41221-abc.sock"))
 
-		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets()
+		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets(t.Context())
 		assert.Equal(t, types.Check{
 			Name: "sockets", Status: types.CheckOK,
 			Message: "server live, broker live, 1 per-process pool(s)",
@@ -1246,7 +1246,7 @@ func TestCheckStaleSockets(t *testing.T) {
 		}
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, "magus-dir.sock"), 0o755))
 
-		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets()
+		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets(t.Context())
 		assert.Equal(t, types.Check{
 			Name: "sockets", Status: types.CheckOK,
 			Message: "server stale, broker stale, 0 per-process pool(s), 3 stale socket(s)",
@@ -1265,7 +1265,7 @@ func TestCheckStaleSockets(t *testing.T) {
 		listenUnix(t, filepath.Join(dir, "server.sock"))
 		listenUnix(t, filepath.Join(dir, "magus-custom.sock"))
 
-		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets()
+		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets(t.Context())
 		assert.Equal(t, types.Check{
 			Name: "sockets", Status: types.CheckFail,
 			Message: "2 live server sockets: more than one server is running",
@@ -1283,7 +1283,7 @@ func TestCheckStaleSockets(t *testing.T) {
 		listenUnix(t, filepath.Join(dir, "server.sock"))
 		listenUnix(t, filepath.Join(dir, "magus-41221-abc.sock"))
 
-		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets()
+		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets(t.Context())
 		assert.Equal(t, types.Check{
 			Name: "sockets", Status: types.CheckOK,
 			Message: "server live, broker not running, 1 per-process pool(s)",
@@ -1298,18 +1298,18 @@ func TestCheckStaleSockets(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = os.RemoveAll(dir) })
 		addr := "unix://" + filepath.Join(dir, "magus-424242-deadbeef.sock")
-		srv, err := proc.New(proc.Options{
+		srv, err := proc.New(t.Context(), proc.Options{
 			Address: addr,
 			Version: "stale-build",
 			Handler: func(context.Context, []string) error { return nil },
 		})
 		require.NoError(t, err)
 		t.Cleanup(func() { srv.Close() })
-		require.NoError(t, srv.Start())
+		require.NoError(t, srv.Start(t.Context()))
 
 		si := named(dir)
 		si.ClientVersion = "current-build"
-		got := (&runner{opts: options{serverInfo: si}}).checkStaleSockets()
+		got := (&runner{opts: options{serverInfo: si}}).checkStaleSockets(t.Context())
 		assert.Equal(t, types.Check{
 			Status: types.CheckFail,
 			// The pool's pid, version and address, which the proc package owns.
@@ -1407,7 +1407,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		bin := w.WriteExecutable("magus", "#!/bin/sh\n")
 		touchAt(t, bin, now.Add(-time.Hour))
 
-		got := (&runner{ws: boundWorkspace(t, w.Root())}).checkGuardBinary()
+		got := (&runner{ws: boundWorkspace(t, w.Root())}).checkGuardBinary(t.Context())
 		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "stale rules")
 		require.Len(t, got.Details, 3)
@@ -1422,7 +1422,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		bin := w.WriteExecutable("magus", "#!/bin/sh\n")
 		touchAt(t, bin, now)
 
-		got := (&runner{ws: boundWorkspace(t, w.Root())}).checkGuardBinary()
+		got := (&runner{ws: boundWorkspace(t, w.Root())}).checkGuardBinary(t.Context())
 		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "hook would run ./magus")
 	})
@@ -1434,7 +1434,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		onPath := bin.WriteExecutable("magus", "#!/bin/sh\n")
 		t.Setenv("PATH", bin.Root())
 
-		got := (&runner{ws: boundWorkspace(t, t.TempDir())}).checkGuardBinary()
+		got := (&runner{ws: boundWorkspace(t, t.TempDir())}).checkGuardBinary(t.Context())
 		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "no ./magus built")
 		assert.Contains(t, got.Message, onPath)
@@ -1442,7 +1442,7 @@ func TestCheckGuardBinary(t *testing.T) {
 
 	t.Run("no binary anywhere", func(t *testing.T) {
 		withoutPathMagus(t)
-		got := (&runner{ws: boundWorkspace(t, t.TempDir())}).checkGuardBinary()
+		got := (&runner{ws: boundWorkspace(t, t.TempDir())}).checkGuardBinary(t.Context())
 		assert.Equal(t, types.Check{
 			Status:  types.CheckFail,
 			Details: []string{"build one: magus run build ."},
@@ -1457,7 +1457,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		w := testkit.NewWorkspace(t)
 		w.Write("magus", "not a binary\n")
 
-		got := (&runner{ws: boundWorkspace(t, w.Root())}).checkGuardBinary()
+		got := (&runner{ws: boundWorkspace(t, w.Root())}).checkGuardBinary(t.Context())
 		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "no ./magus and no magus on PATH")
 	})

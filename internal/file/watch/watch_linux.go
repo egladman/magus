@@ -6,7 +6,7 @@ import "context"
 
 // newDefaultNotifier uses a direct inotify backend on Linux (requires 2.6.36+ for IN_EXCL_UNLINK);
 // falls back to fsnotify if InotifyInit1 fails (restricted containers or old kernels).
-func newDefaultNotifier(ctx context.Context, roots []string, ignore func(string) bool) (notifier, error) {
+func newDefaultNotifier(ctx context.Context, roots []string, ignore func(string) bool) (notifier, error) { //nolint:ireturn // notifier: inotify, or fsnotify when InotifyInit1 fails
 	n, err := newInotifyNotifier()
 	if err != nil {
 		// Graceful fallback: proceed with the portable fsnotify backend.

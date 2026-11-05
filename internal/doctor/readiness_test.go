@@ -22,7 +22,7 @@ func TestCheckReadinessProbes(t *testing.T) {
 	}}
 
 	t.Run("no gates", func(t *testing.T) {
-		got := (&runner{}).checkReadinessProbes([]*types.Project{{}})
+		got := (&runner{}).checkReadinessProbes(t.Context(), []*types.Project{{}})
 		assert.Equal(t, types.Check{
 			Name:    "tool-readiness",
 			Status:  types.CheckOK,
@@ -34,7 +34,7 @@ func TestCheckReadinessProbes(t *testing.T) {
 	// and forking the probe is opt-in. Declaring a gate is not a finding, so the listing
 	// is OK: an advice nobody can clear is one every docker workspace carries forever.
 	t.Run("lists the gate without running it", func(t *testing.T) {
-		got := (&runner{}).checkReadinessProbes(gated)
+		got := (&runner{}).checkReadinessProbes(t.Context(), gated)
 		assert.Equal(t, types.Check{
 			Name:     "tool-readiness",
 			Status:   types.CheckOK,
@@ -46,14 +46,14 @@ func TestCheckReadinessProbes(t *testing.T) {
 
 	// The same spell reached through two projects is one gate, not two.
 	t.Run("deduplicates across projects", func(t *testing.T) {
-		got := (&runner{}).checkReadinessProbes(append(gated, gated[0]))
+		got := (&runner{}).checkReadinessProbes(t.Context(), append(gated, gated[0]))
 		assert.Len(t, got.Details, 1)
 	})
 
 	// --probe means the caller asked whether their environment is ready, and the
 	// honest answer for a tool that is down is no.
 	t.Run("probing a tool that is down fails", func(t *testing.T) {
-		got := (&runner{opts: options{probe: true}}).checkReadinessProbes(gated)
+		got := (&runner{opts: options{probe: true}}).checkReadinessProbes(t.Context(), gated)
 		require.Len(t, got.Details, 1)
 		// The failed probe's own wording is pinned by substring below.
 		assert.Equal(t, types.Check{
@@ -81,7 +81,7 @@ func TestCheckReadinessProbes(t *testing.T) {
 				})),
 			},
 		}}
-		got := (&runner{opts: options{probe: true}}).checkReadinessProbes(up)
+		got := (&runner{opts: options{probe: true}}).checkReadinessProbes(t.Context(), up)
 		assert.Equal(t, types.Check{
 			Name:     "tool-readiness",
 			Status:   types.CheckOK,

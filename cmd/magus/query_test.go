@@ -449,14 +449,14 @@ func openGraphReadFixture(tb testing.TB, root string) graphReadFixture {
 
 	reg := newWSRegistry(ctx, cache.NewLimiter(2), nil, time.Hour, nil)
 	tb.Cleanup(reg.close)
-	srv, err := proc.New(proc.Options{
+	srv, err := proc.New(tb.Context(), proc.Options{
 		Handler: func(context.Context, []string) error { return nil },
 		Read:    graphReads(reg),
 		Version: version,
 	})
 	require.NoError(tb, err)
 	tb.Cleanup(srv.Close)
-	require.NoError(tb, srv.Start())
+	require.NoError(tb, srv.Start(tb.Context()))
 	return graphReadFixture{root: root, cfg: cfg, local: local, reg: reg, addr: srv.Addr()}
 }
 

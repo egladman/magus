@@ -333,7 +333,7 @@ func (r *clientReader) call(member []string, c *ast.CallExpr) {
 }
 
 // receiverID is the id in magus\job(id).method(...), rather than a method argument.
-func receiverID(c *ast.CallExpr) ast.Node {
+func receiverID(c *ast.CallExpr) ast.Node { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	method, ok := c.Callee.(*ast.MemberExpr)
 	if !ok {
 		return nil
@@ -404,7 +404,7 @@ func orUnread(s string) string {
 }
 
 // clientArg is a call's argument at position i, or the one labeled name.
-func clientArg(c *ast.CallExpr, i int, name string) ast.Node {
+func clientArg(c *ast.CallExpr, i int, name string) ast.Node { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
 	for j, label := range c.ArgNames {
 		if label == name && j < len(c.Args) {
 			return c.Args[j]
