@@ -16,6 +16,9 @@ import (
 	"maps"
 	"net/http"
 	"net/netip"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -37,12 +40,14 @@ import (
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
 	noteshandler "github.com/egladman/magus/internal/handler/notes"
 	planhandler "github.com/egladman/magus/internal/handler/plan"
+	pullshandler "github.com/egladman/magus/internal/handler/pulls"
 	"github.com/egladman/magus/internal/handler/status"
 	tokenhandler "github.com/egladman/magus/internal/handler/token"
 	toolhandler "github.com/egladman/magus/internal/handler/tool"
 	"github.com/egladman/magus/internal/handler/trailrpc"
 	"github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
@@ -58,11 +63,13 @@ import (
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1/metricsv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/notes/v1alpha1/notesv1alpha1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/pulls/v1alpha1/pullsv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1/statusv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/tool/v1alpha1/toolv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1/viewerv1alpha1connect"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // connectReadMax bounds every Connect request body the server accepts. connect-go
@@ -567,6 +574,15 @@ func (s *Server) Serve(ctx context.Context) error {
 			f.service(notesPath, notesHandler)
 			bridgeLog.InfoContext(ctx, "notes service mounted", slog.String("path", notesPath))
 
+			// Not in shareGuarded: SetAuthors writes.
+			if pullsSvc, perr := newPullsService(ctx, opts, svc, bridgeLog); perr != nil {
+				bridgeLog.WarnContext(ctx, "pulls service off", attr.Error(perr))
+			} else {
+				pullsPath, pullsHandler := pullsv1alpha1connect.NewPullsServiceHandler(pullsSvc, connectReadMax)
+				f.service(pullsPath, pullsHandler)
+				bridgeLog.InfoContext(ctx, "pulls service mounted", slog.String("path", pullsPath))
+			}
+
 			// Graph service: the typed API for the knowledge graph's own verbs (query,
 			// resolve, explain, path, stats). It exists so the browser stops reimplementing them;
 			// the Graph Explorer's filter was a second, divergent copy of the query grammar,
@@ -902,4 +918,33 @@ func (w diagramWorkspace) ImportGraph(ctx context.Context) (types.ImportGraph, e
 		return types.ImportGraph{}, err
 	}
 	return kg.ImportGraph(), nil
+}
+
+// newPullsService starts the pull request poller and returns its service.
+func newPullsService(ctx context.Context, opts mcp.Options, svc *console.Service, log *slog.Logger) (*pullshandler.Service, error) {
+	stateBase, err := xdg.StateDir()
+	if err != nil {
+		return nil, fmt.Errorf("server: resolve the state dir that holds the pull authors: %w", err)
+	}
+	dir, err := vcs.StateDir(stateBase, "pulls", opts.Magus.Root())
+	if err != nil {
+		return nil, fmt.Errorf("server: resolve the pull authors dir: %w", err)
+	}
+	base, note := "main", "vcs.base_ref is unset: reading pull requests against main"
+	if ref := strings.TrimPrefix(opts.Config.VCS.BaseRef, "origin/"); ref != "" {
+		base, note = ref, ""
+	}
+	store := pullshandler.OpenStore(filepath.Join(dir, "authors.jsonl"))
+	poller := pullshandler.NewPoller(pullshandler.PollerOptions{
+		Config:   opts.Config.Console.Pulls,
+		Store:    store,
+		List:     bindings.ListPulls,
+		Remote:   func(ctx context.Context) string { return svc.ReviewOrigin(ctx).Remote },
+		Base:     base,
+		BaseNote: note,
+		Now:      time.Now,
+		Log:      log,
+	})
+	go poller.Run(ctx)
+	return pullshandler.NewService(poller, store), nil
 }
