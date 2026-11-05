@@ -2418,7 +2418,6 @@ func TestVCSCmdRefusalLetsAScratchRepositoryUseATemporaryIndex(t *testing.T) {
 // worktree of a scratch repository, added outside the checkout.
 type VCSCmdRefusalScratchWorktreeSuite struct {
 	suite.Suite
-	ctx     context.Context
 	repo    worktreeRepo
 	worker  types.Job
 	own     string
@@ -2431,13 +2430,13 @@ func TestVCSCmdRefusalScratchWorktreeSuite(t *testing.T) {
 }
 
 func (s *VCSCmdRefusalScratchWorktreeSuite) SetupTest() {
-	s.ctx, s.repo, s.worker, s.own = leaseVCSRepository(s.T())
+	_, s.repo, s.worker, s.own = leaseVCSRepository(s.T())
 	s.scratch = testkit.NewRepository(s.T(), nil).Root()
 	s.tree = filepath.Join(s.T().TempDir(), "tree")
 }
 
 func (s *VCSCmdRefusalScratchWorktreeSuite) run(dir string, args ...string) error {
-	return vcsCommandRefusal(s.ctx, s.worker, "git", args, dir, nil)
+	return vcsCommandRefusal(s.T().Context(), s.worker, "git", args, dir, nil)
 }
 
 func (s *VCSCmdRefusalScratchWorktreeSuite) add(target string, flags ...string) error {
@@ -2652,7 +2651,6 @@ func mustRel(t *testing.T, base, target string) string {
 // job's checkout, in a repository of their own.
 type VCSCmdRefusalExemptsOnlyAnotherRepositorySuite struct {
 	suite.Suite
-	ctx     context.Context
 	repo    worktreeRepo
 	worker  types.Job
 	own     string
@@ -2665,13 +2663,13 @@ func TestVCSCmdRefusalExemptsOnlyAnotherRepositorySuite(t *testing.T) {
 }
 
 func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) SetupTest() {
-	s.ctx, s.repo, s.worker, s.own = leaseVCSRepository(s.T())
+	_, s.repo, s.worker, s.own = leaseVCSRepository(s.T())
 	s.scratch = testkit.NewRepository(s.T(), nil).Root()
 	s.fresh = testkit.NewRepository(s.T(), nil).Root()
 }
 
 func (s *VCSCmdRefusalExemptsOnlyAnotherRepositorySuite) run(dir string, env []string, args ...string) error {
-	return vcsCommandRefusal(s.ctx, s.worker, "git", args, dir, env)
+	return vcsCommandRefusal(s.T().Context(), s.worker, "git", args, dir, env)
 }
 
 // scratchGit points git at the scratch repository from wherever it runs.
