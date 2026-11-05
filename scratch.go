@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -56,8 +57,11 @@ func ignoreLinks(dirs map[string][]string) []string {
 }
 
 // testRun is what one run in a copy did. A cached run replayed an answer
-// and ran no test.
-type testRun struct{ passed, cached bool }
+// and ran no test. failure is what a failed run's result says went wrong.
+type testRun struct {
+	passed, cached bool
+	failure        string
+}
 
 // scratch runs targets in copies of the tree: this magus, the store holding
 // the copies, and the version control exporting them.
@@ -123,7 +127,11 @@ func (r magusRunner) run(ctx context.Context, dir string, c coverageSource) (tes
 	if !ok {
 		return testRun{}, fmt.Errorf("%s exited %d with no result for %s (%s): %w", line, res.Code, c.target, lastLine(res.Stderr), errNoResult)
 	}
-	return testRun{passed: result.Status != targetFailed, cached: result.CacheHit}, nil
+	run := testRun{passed: result.Status != targetFailed, cached: result.CacheHit}
+	if !run.passed {
+		run.failure = cmp.Or(result.Error, lastLine(res.Stderr))
+	}
+	return run, nil
 }
 
 // targetFailed is the Status a report.TargetResult carries for a step that
@@ -270,7 +278,7 @@ func (b *baseProfiles) runAtBase(ctx context.Context, c coverageSource) ([]byte,
 	case err != nil:
 		return nil, err.Error(), nil
 	case !res.passed:
-		return nil, fmt.Sprintf("a test fails at base %s: `%s`", b.commit, c.command()), nil
+		return nil, strings.TrimSuffix(fmt.Sprintf("a test fails at base %s: `%s`: %s", b.commit, c.command(), res.failure), ": "), nil
 	}
 	data, err := os.ReadFile(filepath.Join(b.dir, filepath.FromSlash(c.project), filepath.FromSlash(c.coverage.Profile)))
 	if err != nil {
@@ -381,14 +389,17 @@ func (f freshProfiles) digest(c coverageSource) (string, bool) {
 // vouches reports whether this run brought c's profile current and the
 // profile on disk is still the one it left. The last line per profile wins.
 func (f freshProfiles) vouches(c coverageSource) bool {
-	data, err := os.ReadFile(f.file)
-	if f.file == "" || err != nil {
+	if f.file == "" {
+		return false
+	}
+	lines, err := file.ReadLines(f.file)
+	if err != nil {
 		return false
 	}
 	recorded := ""
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, line := range lines.Lines {
 		var e freshProfile
-		if json.Unmarshal([]byte(line), &e) == nil && e.Project == c.project && e.Profile == c.coverage.Profile {
+		if json.Unmarshal(line.Text, &e) == nil && e.Project == c.project && e.Profile == c.coverage.Profile {
 			recorded = e.Digest
 		}
 	}
@@ -407,13 +418,5 @@ func (f freshProfiles) record(c coverageSource) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(f.file), 0o700); err != nil {
-		return err
-	}
-	out, err := os.OpenFile(f.file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	_, werr := out.Write(append(line, '\n'))
-	return errors.Join(werr, out.Close())
+	return file.AppendLines(f.file, [][]byte{line}, 0o600)
 }
