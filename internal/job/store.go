@@ -1273,8 +1273,8 @@ func (s *Store) checkStamp(schema *types.Schema, line int) error {
 
 // adoptIntegerStamp reads a line stamped with an integer schema_version
 // as JobAPIVersion; its next rewrite writes the new stamp.
-// compat(until: no job store row still carries schema_version): every
-// worktree shares one store, and older binaries keep writing integers.
+// compat(until: the next release): every worktree shares one store, and
+// older binaries keep writing integers during development.
 func adoptIntegerStamp(schema *types.Schema) {
 	raw, ok := schema.Unknown["schema_version"]
 	var n int
