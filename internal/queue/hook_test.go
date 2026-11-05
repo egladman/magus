@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -699,6 +700,31 @@ func TestAGateKilledByASignalIsTheChangesRedVerdict(t *testing.T) {
 		assert.False(t, res.Green)
 		assert.Contains(t, res.Summary, why, body)
 	}
+}
+
+func runGateFault(t *testing.T, body string) types.Fault {
+	t.Helper()
+	res, err := CommandGate(script(body), HookEnv{}, nil).Validate(context.Background(), boxed(t, types.Candidate{Commit: "s", Dir: t.TempDir()}), hookUnits)
+	require.NoError(t, err)
+	return res.Fault
+}
+
+func TestAGateKilledBySignalCarriesTheKilledFault(t *testing.T) {
+	assert.Equal(t, types.FaultKilled, runGateFault(t, `kill -KILL $$`))
+}
+
+func TestAGateExiting75CarriesTheMemoryFault(t *testing.T) {
+	assert.Equal(t, types.FaultMemory, runGateFault(t, `exit 75`))
+}
+
+func TestAGateExitingOneCarriesNoFault(t *testing.T) {
+	assert.Equal(t, types.FaultNone, runGateFault(t, `exit 1`))
+}
+
+func TestAGateRedOnAFullDiskCarriesTheDiskFault(t *testing.T) {
+	failed := changeFailure{why: "exited 1", code: 1}
+	assert.Equal(t, types.FaultDisk, gateFault(failed, t.TempDir(), math.MaxInt64))
+	assert.Equal(t, types.FaultNone, gateFault(failed, t.TempDir(), 1))
 }
 
 // Nothing a hook started outlives it: before, a background process kept running after

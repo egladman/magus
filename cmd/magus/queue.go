@@ -679,6 +679,11 @@ func queueValidate(ctx context.Context, e *queueEnv, args []string) (err error) 
 		return err
 	}
 	hookEnv.Spells = grants
+	if f.Env != "" {
+		if hookEnv, err = hookEnv.Pass(strings.Split(f.Env, ",")); err != nil {
+			return exit.Usagef("magus queue validate: --env: %v", err)
+		}
+	}
 	defer func() { _ = closeFacts() }()
 	scratch, cleanup, err := queueScratch("merge-queue")
 	if err != nil {

@@ -528,6 +528,37 @@ func TestQueueStepsResolvePathsAgainstTheCheckout(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// emptyPlan is the plan the queue writes over nothing to merge.
+func emptyPlan(t *testing.T, f *queueFixture) string {
+	t.Helper()
+	f.vcs.EXPECT().FetchRef(mock.Anything, f.root, "origin", "refs/heads/main").Return(queueBase, nil)
+	f.vcs.EXPECT().FindCommit(mock.Anything, f.root, queueBase).Return(magustypes.Commit{ID: queueBase, Date: queueDate}, nil)
+	f.vcs.EXPECT().Checkouts(mock.Anything, f.root).Return(nil, nil).Maybe()
+	var changes bytes.Buffer
+	require.NoError(t, queue.WriteChanges(&changes, types.Changes{Base: "main"}))
+	_, err := f.run(t, changes.String(), "plan", "--provider", "local.buzz", "--out", "plan.json", "--facts", "true")
+	require.NoError(t, err)
+	plan, err := os.ReadFile(filepath.Join(f.root, "plan.json"))
+	require.NoError(t, err)
+	return string(plan)
+}
+
+func TestQueueValidateTakesEnvLikeGate(t *testing.T) {
+	f := newQueueFixture(t, "", "")
+	plan := emptyPlan(t, f)
+	t.Setenv("TZ", "Australia/Lord_Howe")
+	_, err := f.run(t, plan, "validate", "--stdin", "--verdicts", "verdicts", "--gate", "true", "--facts", "true", "--env", "TZ,MAGUS_LOG_STREAM")
+	require.NoError(t, err)
+}
+
+func TestQueueValidateEnvRefusesWhatWouldMoveTheBox(t *testing.T) {
+	f := newQueueFixture(t, "", "")
+	plan := emptyPlan(t, f)
+	_, err := f.run(t, plan, "validate", "--stdin", "--verdicts", "verdicts", "--gate", "true", "--facts", "true", "--env", "HOME")
+	require.Equal(t, exit.Usage, exit.Code(err))
+	assert.ErrorContains(t, err, "magus queue validate: --env")
+}
+
 // validated writes a plan of one change and its green verdict into dir, the way
 // validate leaves a directory.
 func validated(t *testing.T, dir string) {

@@ -1920,6 +1920,7 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 				{Name: "verdicts", Kind: cmdline.String, Doc: "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>"},
 				{Name: "only", Kind: cmdline.String, Doc: "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated"},
 				{Name: "parallel", Kind: cmdline.Int, Doc: "Candidates built or gated at once across every partition; 0 is one per CPU"},
+				{Name: "env", Kind: cmdline.String, Doc: "Comma-separated `names` of variables passed from this environment to the gate's own magus, as queue gate does"},
 				{Name: "remote-cache-read", Kind: cmdline.Bool, Default: false, Doc: "Let hooks read magus's remote cache from GitHub Actions through a loopback proxy that forwards lookups with the runner's token and refuses writes. Hooks get a stand-in token. Refused without runner credentials or a trusted key"},
 			}, queueFacts...), queueCheckout...),
 		},

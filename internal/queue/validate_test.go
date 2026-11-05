@@ -320,6 +320,83 @@ func TestARedBaseKicksNobodyBackAndIsGatedOnce(t *testing.T) {
 	assert.Equal(t, []string{"a"}, g.gatedUnits("base@"+base))
 }
 
+func faultyGates(candidate, base types.Fault, ids ...string) func(string) types.GateResult {
+	return func(id string) types.GateResult {
+		switch {
+		case id == "base":
+			return types.GateResult{Summary: "the gate exited 1", Fault: base}
+		case slices.Contains(ids, id):
+			return types.GateResult{Summary: "the gate exited 1", Fault: candidate}
+		}
+		return types.GateResult{Green: true}
+	}
+}
+
+func machineFaultVerdict(t *testing.T, candidate, base types.Fault) types.Verdict {
+	t.Helper()
+	d := newDoubles(t)
+	one := change("1", "a")
+	d.builds(building{touched: []string{"a/x.go"}})
+	d.gates(faultyGates(candidate, base, "1"))
+	plan := newPlan([]types.Change{one})
+	v, dir := validating(t, d, plan)
+	require.NoError(t, v.Run(t.Context(), plan))
+	return recorded(t, dir)["1"]
+}
+
+func TestAFullDiskOnBothGatesWaitsAsAMachineFault(t *testing.T) {
+	got := machineFaultVerdict(t, types.FaultDisk, types.FaultDisk)
+	one := change("1", "a")
+	assert.Equal(t, recordedAs(types.Verdict{
+		Change: one, Onto: base, CandidateCommit: candidateID(base, one.Head), Method: one.Method, Depth: got.Depth,
+		Decision: types.DecisionWait, Code: types.CodeWaitMachineFault,
+		Reason: fmt.Sprintf("the gate failed on it and on `main` at `%s` without it, and the machine was at fault (the disk is full, MGS3052); run it again", short(base)),
+	}, got), got)
+}
+
+func TestAMemoryRefusalOnBothGatesWaitsAsAMachineFault(t *testing.T) {
+	got := machineFaultVerdict(t, types.FaultMemory, types.FaultMemory)
+	assert.Equal(t, types.CodeWaitMachineFault, got.Code)
+	assert.Contains(t, got.Reason, "MGS3053")
+}
+
+func TestAKilledGateOnBothGatesWaitsAsAMachineFault(t *testing.T) {
+	got := machineFaultVerdict(t, types.FaultKilled, types.FaultKilled)
+	assert.Equal(t, types.CodeWaitMachineFault, got.Code)
+	assert.Contains(t, got.Reason, "killed by a signal or timeout")
+}
+
+func TestAFaultOnTheBaseGateAloneWaitsAsAMachineFault(t *testing.T) {
+	got := machineFaultVerdict(t, types.FaultNone, types.FaultDisk)
+	assert.Equal(t, types.CodeWaitMachineFault, got.Code)
+}
+
+func TestAFaultOnTheCandidateGateAloneWaitsAsAMachineFault(t *testing.T) {
+	got := machineFaultVerdict(t, types.FaultKilled, types.FaultNone)
+	assert.Equal(t, types.CodeWaitMachineFault, got.Code)
+}
+
+func TestARedOnBothGatesWithoutAFaultStillWaitsOnTheBase(t *testing.T) {
+	got := machineFaultVerdict(t, types.FaultNone, types.FaultNone)
+	assert.Equal(t, types.CodeWaitBaseRed, got.Code)
+}
+
+func TestAFaultOnTheCandidateWithAGreenBaseIsKickedBack(t *testing.T) {
+	d := newDoubles(t)
+	one := change("1", "a")
+	d.builds(building{touched: []string{"a/x.go"}})
+	d.gates(func(id string) types.GateResult {
+		if id == "1" {
+			return types.GateResult{Summary: "the gate was killed", Fault: types.FaultKilled}
+		}
+		return types.GateResult{Green: true}
+	})
+	plan := newPlan([]types.Change{one})
+	v, dir := validating(t, d, plan)
+	require.NoError(t, v.Run(t.Context(), plan))
+	assert.Equal(t, types.CodeKickRed, recorded(t, dir)["1"].Code)
+}
+
 // A set that is no proof, unknown or unbounded, reaches every hook as the build tool
 // spells every unit; a proven empty set gates nothing.
 func TestAChangeWhoseSetIsNoProofIsGatedOnEveryUnit(t *testing.T) {

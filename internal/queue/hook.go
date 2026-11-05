@@ -424,8 +424,9 @@ func pathLines(paths []string) (lines string, refused []string) {
 // changeFailure is a hook failing on the change: what it says is about the change. code
 // is the status the hook exited with, 0 when it exited with none.
 type changeFailure struct {
-	why  string
-	code int
+	why   string
+	code  int
+	fault types.Fault
 }
 
 func (f changeFailure) Error() string { return f.why }
@@ -470,11 +471,11 @@ func runHook(ctx context.Context, c hookCommand) (spawn.ExecResult, error) {
 		code := exit.ExitCode()
 		switch {
 		case code < 0:
-			return res, changeFailure{why: fmt.Sprintf("was killed (%s)", exit.String())}
+			return res, changeFailure{why: fmt.Sprintf("was killed (%s)", exit.String()), fault: types.FaultKilled}
 		case code != ExitTempFail:
-			return res, changeFailure{fmt.Sprintf("exited %d", code), code}
+			return res, changeFailure{why: fmt.Sprintf("exited %d", code), code: code}
 		case attempt == attempts:
-			return res, changeFailure{fmt.Sprintf("exited %d (temporary failure) %d times", ExitTempFail, attempts), code}
+			return res, changeFailure{why: fmt.Sprintf("exited %d (temporary failure) %d times", ExitTempFail, attempts), code: code, fault: types.FaultMemory}
 		}
 		select {
 		case <-ctx.Done():
@@ -636,11 +637,20 @@ func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units [
 	var failed changeFailure
 	switch {
 	case errors.As(err, &failed):
-		return types.GateResult{Summary: "the gate " + failed.why}, nil
+		return types.GateResult{Summary: "the gate " + failed.why, Fault: gateFault(failed, cand.Dir, cache.DiskFullFloorBytes)}, nil
 	case err != nil:
 		return types.GateResult{}, fmt.Errorf("gate on `%s`: %w", short(cand.Commit), err)
 	}
 	return types.GateResult{Green: true}, nil
+}
+
+// gateFault is the machine fault a red gate ran under. A full disk wins, as it
+// starves every other step; an unreadable disk is no verdict.
+func gateFault(failed changeFailure, dir string, floor int64) types.Fault {
+	if _, below, err := cache.DiskBelow(dir, floor); err == nil && below {
+		return types.FaultDisk
+	}
+	return failed.fault
 }
 
 // CommandRegenerate is a [types.RegenerateFunc] running cmd in a checkout with the

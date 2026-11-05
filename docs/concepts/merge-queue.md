@@ -610,7 +610,9 @@ it runs only what that change adds. When a candidate whose every change beneath 
 validated is red, the queue gates the commit it was built onto with the same command
 and the same projects, once a run for every change that asks. Red there, the change waits
 with `WAIT_BASE_RED`, keeps its place and is told nothing; green, it is kicked back with
-`KICK_RED`. The gate's output lines on stderr are tagged with the commit and the change
+`KICK_RED`. When either gate ran on a full disk (MGS3052), was killed by a signal or
+timeout, or kept exiting 75 (MGS3053), the change waits with `WAIT_MACHINE_FAULT`
+instead: the machine failed, not main. Run it again. The gate's output lines on stderr are tagged with the commit and the change
 (`[4b1c0e9a2f31 #482]`), or with `base` for a commit gated as it stands. Each candidate
 is a checkout of its own (a git worktree) in a box with a home and a temporary directory
 of its own, where every cache its hooks keep lands ([the trust model](#trust-model)
@@ -853,6 +855,7 @@ checked, and hands the verdict's `reason` on as a claim, shown only as text.
 | `WAIT_UNQUEUED_BELOW`   | it carries the commits of an open change nobody queued                                                                  |
 | `WAIT_NO_COMMITTER`     | it needs an update commit, and nothing names who commits it                                                             |
 | `WAIT_BASE_RED`         | the gate was red on its candidate and on what that was built onto                                                       |
+| `WAIT_MACHINE_FAULT`    | the gate was red on its candidate and on the base, and a full disk, a memory refusal or a kill caused it                |
 | `WAIT_CHECKS`           | main's required checks are running on its head, or run again on main                                                    |
 | `KICK_CONFLICT`         | a real conflict with the base in files that are not generated                                                           |
 | `KICK_RED`              | the gate was red on its candidate, green on what it was built onto, or a required check was red on a head carrying main |

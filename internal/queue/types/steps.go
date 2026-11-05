@@ -60,7 +60,19 @@ type Candidate struct {
 type GateResult struct {
 	Green   bool
 	Summary string // one line naming what failed, for the kick-back report
+	Fault   Fault  // set on a red the machine may have caused
 }
+
+// Fault is a machine condition a red gate ran under. Such a red says nothing
+// about the change or the base it ran on.
+type Fault string
+
+const (
+	FaultNone   Fault = ""
+	FaultDisk   Fault = "disk"   // filesystem below the critical floor (MGS3052)
+	FaultMemory Fault = "memory" // exit 75 outlasted its retries (MGS3053)
+	FaultKilled Fault = "killed" // a signal or timeout ended the hook
+)
 
 // Gate validates units, never empty, in a checkout: a candidate, or the commit a red
 // candidate was built onto, which tells whether the red is the change's. An error means

@@ -124,9 +124,10 @@ func (r *validation) fetch(ctx context.Context, cs []types.Change) {
 // baseGate is the gate on the commit red candidates were built onto, run once for every
 // change it answers.
 type baseGate struct {
-	once sync.Once
-	red  bool
-	err  error
+	once  sync.Once
+	red   bool
+	fault types.Fault
+	err   error
 }
 
 // units is what the hooks run on c's candidate take: its affected set when that is a
@@ -160,6 +161,7 @@ type flight struct {
 type outcome struct {
 	green   bool
 	summary string
+	fault   types.Fault
 	refused *types.RefusedError // building the candidate refused the change rather than a red gate
 	err     error
 	took    time.Duration
@@ -443,7 +445,7 @@ func (r *validation) start(ctx context.Context, group int, f *flight) {
 		defer r.release()
 		start := time.Now()
 		res, err := r.validate(fctx, f.cand, f.change)
-		f.done <- outcome{green: res.Green, summary: res.Summary, err: err, took: time.Since(start)}
+		f.done <- outcome{green: res.Green, summary: res.Summary, fault: res.Fault, err: err, took: time.Since(start)}
 	}()
 }
 
@@ -458,10 +460,10 @@ func (r *validation) validate(ctx context.Context, cand types.Candidate, c types
 
 // baseRed reports whether the gate is red on onto itself for c: a red there is not c's to
 // fix. Each onto and set of units is gated once a run, however many changes ask.
-func (r *validation) baseRed(ctx context.Context, onto string, c types.Change) (bool, error) {
+func (r *validation) baseRed(ctx context.Context, onto string, c types.Change) (red bool, fault types.Fault, err error) {
 	units, err := r.units(c)
 	if err != nil {
-		return false, err
+		return false, types.FaultNone, err
 	}
 	key := fmt.Sprintf("%s\x00%s", onto, strings.Join(units, "\x00"))
 	r.mu.Lock()
@@ -485,9 +487,45 @@ func (r *validation) baseRed(ctx context.Context, onto string, c types.Change) (
 		}
 		defer r.discard(ctx, cand)
 		res, err := r.gate.Validate(ctx, cand, units)
-		b.red, b.err = !res.Green, err
+		b.red, b.fault, b.err = !res.Green, res.Fault, err
 	})
-	return b.red, b.err
+	return b.red, b.fault, b.err
+}
+
+// baseWait is the wait a red base earns the change, or no code when the red is
+// its own. A machine fault on either gate is not the base's red.
+func (r *validation) baseWait(ctx context.Context, f *flight, out outcome) (types.Code, string, error) {
+	red, baseFault, err := r.baseRed(ctx, f.onto, f.change)
+	if err != nil {
+		return "", "", fmt.Errorf("gate %s without %s: %w", short(f.onto), f.change.Label(), err)
+	}
+	onto := ontoName(r.plan.Base, f.onto, f.after)
+	if fault := firstFault(out.fault, baseFault); red && fault != types.FaultNone {
+		return types.CodeWaitMachineFault, fmt.Sprintf("the gate failed on it and on %s without it, and the machine was at fault (%s); run it again", onto, faultName(fault)), nil
+	}
+	if red {
+		return types.CodeWaitBaseRed, fmt.Sprintf("the gate failed on it and on %s without it; retried once that is green", onto), nil
+	}
+	return "", "", nil
+}
+
+func firstFault(faults ...types.Fault) types.Fault {
+	for _, f := range faults {
+		if f != types.FaultNone {
+			return f
+		}
+	}
+	return types.FaultNone
+}
+
+func faultName(f types.Fault) string {
+	switch f {
+	case types.FaultDisk:
+		return "the disk is full, MGS3052"
+	case types.FaultMemory:
+		return "the machine is short of memory, MGS3053"
+	}
+	return "the gate was killed by a signal or timeout"
 }
 
 // verdict decides a gated or refused change. attributable says everything beneath the
@@ -508,13 +546,12 @@ func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attrib
 			return v.Decision, r.decide(v)
 		}
 		if out.refused == nil {
-			red, err := r.baseRed(ctx, f.onto, f.change)
+			code, reason, err := r.baseWait(ctx, f, out)
 			if err != nil {
-				return 0, fmt.Errorf("gate %s without %s: %w", short(f.onto), f.change.Label(), err)
+				return 0, err
 			}
-			if red {
-				v.Decision, v.Code = types.DecisionWait, types.CodeWaitBaseRed
-				v.Reason = fmt.Sprintf("the gate failed on it and on %s without it; retried once that is green", ontoName(r.plan.Base, f.onto, f.after))
+			if code != "" {
+				v.Decision, v.Code, v.Reason = types.DecisionWait, code, reason
 				return v.Decision, r.decide(v)
 			}
 		}
