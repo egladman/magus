@@ -14,8 +14,9 @@ type qualityWorkspace interface {
 	ChangeRisk(ctx context.Context, base string) (types.ChangeRisk, error)
 }
 
-// qualityFromContext raises when no workspace can judge, never an empty record.
-func qualityFromContext(ctx context.Context, member string) (qualityWorkspace, error) {
+// qualityFromContext returns the workspace's scorer, and raises when no
+// workspace can judge, never an empty record.
+func qualityFromContext(ctx context.Context, member string) (func(context.Context, string) (types.ChangeRisk, error), error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return nil, errorNoWorkspace(member)
@@ -24,7 +25,7 @@ func qualityFromContext(ctx context.Context, member string) (qualityWorkspace, e
 	if !ok {
 		return nil, fmt.Errorf("magus\\%s: this workspace cannot score functions", member)
 	}
-	return q, nil
+	return q.ChangeRisk, nil
 }
 
 // MagusChangeRisk is Change.risk(): the change risk of each function
@@ -59,11 +60,11 @@ func heldChangeBase(ctx context.Context, c types.Change, member string) (string,
 // scoreRisk scores the functions touched since base, or every function
 // when base is "".
 func scoreRisk(ctx context.Context, member, base string) (types.ChangeRisk, error) {
-	q, err := qualityFromContext(ctx, member)
+	score, err := qualityFromContext(ctx, member)
 	if err != nil {
 		return types.ChangeRisk{}, err
 	}
-	out, err := q.ChangeRisk(ctx, base)
+	out, err := score(ctx, base)
 	if err != nil {
 		return types.ChangeRisk{}, fmt.Errorf("magus\\%s: %w", member, err)
 	}
