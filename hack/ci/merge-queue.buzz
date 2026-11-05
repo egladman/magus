@@ -6,6 +6,8 @@
 //	magus buzz hack/ci/merge-queue.buzz -- plan --depth <n>         plan the queue; write the validation matrix
 //	magus buzz hack/ci/merge-queue.buzz -- validate --change <id>   validate one change of the plan
 //	magus buzz hack/ci/merge-queue.buzz -- planned --run <id>       write whether validation run <id> plans at all
+//	... -- await-verdict --run <id>
+//	    wait until run <id> uploads a verdict or ends
 //	magus buzz hack/ci/merge-queue.buzz -- apply --run <id> --base <branch> --app <slug> --committer <who>
 //	                                                            merge what the run uploads onto the base,
 //	                                                            as the queue app
@@ -209,6 +211,41 @@ fun awaitJob(run: str, job: str) > bool !> any {
             return ran!;
         }
         os\sleep(10000.0);
+    }
+}
+
+// VERDICT_PREFIX starts each verdict artifact's name.
+final VERDICT_PREFIX = "mergequeue-verdict-";
+
+// verdictReady reads `gh api` of a run, then of its artifacts.
+// A completed run uploads nothing more, so apply has all it will get.
+export fun verdictReady(run: str, artifacts: str) > bool !> any {
+    if (serialize\jsonDecode(run).q("status").stringValue() == "completed") {
+        return true;
+    }
+    final list = serialize\jsonDecode(artifacts).q("artifacts").list();
+    if (list == null) {
+        throw "queue: await-verdict: the artifact listing names no artifacts: {artifacts}";
+    }
+    foreach (a in list!) {
+        if (a.q("name").stringValue().startsWith(VERDICT_PREFIX)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// awaitVerdict polls every 15s on the job's own token, two requests each.
+// Apply mints the app's token after it returns: that token lasts an hour.
+fun awaitVerdict(run: str) > void !> any {
+    final repo = need("GITHUB_REPOSITORY");
+    while (true) {
+        final view = capture("gh", args: ["api", "repos/{repo}/actions/runs/{run}"]);
+        final listing = capture("gh", args: ["api", "repos/{repo}/actions/runs/{run}/artifacts?per_page=100"]);
+        if (verdictReady(view, artifacts: listing)) {
+            return;
+        }
+        os\sleep(15000.0);
     }
 }
 
@@ -514,6 +551,7 @@ final usage = "usage: magus buzz hack/ci/merge-queue.buzz -- <step> <flags>\n"
     + "  plan --depth <n>\n"
     + "  validate --change <id>\n"
     + "  planned --run <id>\n"
+    + "  await-verdict --run <id>\n"
     + "  apply --run <id> --base <branch> --app <slug> --committer <name <email>>\n"
     + "  dispatch --run <id> --base <branch> --intent-at <time>\n"
     + "  ci-queued --run <id> --base <branch>\n"
@@ -550,6 +588,8 @@ export fun main(args: [str]) > void !> any {
         validate(options(step, argv: argv, required: ["--change"], optional: [<str>])["--change"]!);
     } else if (step == "planned") {
         planned(options(step, argv: argv, required: ["--run"], optional: [<str>])["--run"]!);
+    } else if (step == "await-verdict") {
+        awaitVerdict(options(step, argv: argv, required: ["--run"], optional: [<str>])["--run"]!);
     } else if (step == "apply") {
         final o = options(step, argv: argv, required: APPLY_FLAGS, optional: [<str>]);
         apply(o["--run"]!, base: o["--base"]!, app: o["--app"]!, committer: o["--committer"]!);
@@ -597,6 +637,28 @@ test "apply runs once the plan job runs, and not when it was skipped or never ma
     assert\equal(jobRan(view("completed", conclusion: null), job: "queue plan"), want: false, message: "cancelled before it started");
     assert\equal(jobRan(view("queued", conclusion: null), job: "queue plan"), want: null, message: "still waiting");
     assert\equal(jobRan(view("completed", conclusion: "success"), job: "queue intent"), want: false, message: "another job's conclusion says nothing");
+}
+
+test "apply mints its token once the run uploads a verdict or ends" {
+    final run = fun (status: str) > str => encode({"status": status});
+    final listing = fun (names: [str]) > str {
+        final artifacts = mut [<{str: str}>];
+        foreach (n in names) {
+            artifacts.append({"name": n});
+        }
+        return encode({"total_count": names.len(), "artifacts": artifacts});
+    };
+    assert\equal(verdictReady(run("in_progress"), artifacts: listing([<str>])), want: false, message: "nothing uploaded");
+    assert\equal(verdictReady(run("in_progress"), artifacts: listing(["mergequeue-plan"])), want: false, message: "the plan alone");
+    assert\equal(verdictReady(run("in_progress"), artifacts: listing(["mergequeue-plan", "mergequeue-verdict-632"])), want: true, message: "a verdict");
+    assert\equal(verdictReady(run("completed"), artifacts: listing([<str>])), want: true, message: "a run that ended with none");
+    var failed = false;
+    try {
+        _ = verdictReady(run("in_progress"), artifacts: `{"message": "Bad credentials"}`);
+    } catch (e) {
+        failed = true;
+    }
+    assert\equal(failed, want: true, message: "an API error is no empty listing");
 }
 
 test "dispatch reads the event the intent job names, once the run says" {
