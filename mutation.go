@@ -56,16 +56,19 @@ func (m *Magus) Mutants(ctx context.Context, base string) (types.Mutants, error)
 	if base == "" {
 		return types.Mutants{}, errors.New("mutants: name a base, since mutating every function of a workspace is not offered")
 	}
+	ctx, cancel := withBudget(ctx, "mutants")
+	defer cancel()
+	start := time.Now()
 	set, err := m.touchedSince(ctx, base)
 	if err != nil {
-		return types.Mutants{}, err
+		return types.Mutants{}, stopped(ctx, "mutants", start, "finding the touched functions", err)
 	}
 	subjects, gaps := m.mutationSubjects(set.fns)
-	out, err := m.mutateSubjects(ctx, subjects)
+	out, err := m.mutateSubjects(ctx, start, subjects)
 	if err != nil {
 		return types.Mutants{}, err
 	}
-	if err := m.mutateBase(ctx, base, set.since, subjects, &out); err != nil {
+	if err := m.mutateBase(ctx, start, base, set.since, subjects, &out); err != nil {
 		return types.Mutants{}, err
 	}
 	out.Definition, out.Base, out.Gaps = mutantsDefinition, base, append(gaps, out.Gaps...)
@@ -74,7 +77,7 @@ func (m *Magus) Mutants(ctx context.Context, base string) (types.Mutants, error)
 
 // mutateBase writes onto each mutant the survivor count of its function at
 // base. Only a function with a survivor at head is mutated there.
-func (m *Magus) mutateBase(ctx context.Context, base string, since sinceBase, subjects []mutationSubject, out *types.Mutants) error {
+func (m *Magus) mutateBase(ctx context.Context, start time.Time, base string, since sinceBase, subjects []mutationSubject, out *types.Mutants) error {
 	subjects = slices.DeleteFunc(slices.Clone(subjects), func(s mutationSubject) bool { return !survived(out.Mutants, s.fn.Symbol) })
 	if len(subjects) == 0 {
 		setBaseCounts(out.Mutants, nil)
@@ -88,14 +91,16 @@ func (m *Magus) mutateBase(ctx context.Context, base string, since sinceBase, su
 	if err != nil {
 		return fmt.Errorf("mutants: %w", err)
 	}
-	tree, err := sc.copy(ctx, commit, subjectLinks(subjects))
+	tree, err := sc.copy(ctx, commit, m.workspaceLinks())
 	if tree != "" {
 		defer os.RemoveAll(tree)
 	}
 	if err != nil {
-		return fmt.Errorf("mutants: export base %s: %w", commit, err)
+		return stopped(ctx, "mutants", start, "exporting base "+commit, fmt.Errorf("mutants: export base %s: %w", commit, err))
 	}
-	counts, err := sc.baseEngine(tree, commit).countBase(ctx, since, subjects)
+	e := sc.baseEngine(tree, commit)
+	e.start = start
+	counts, err := e.countBase(ctx, since, subjects)
 	if err != nil {
 		return err
 	}
@@ -214,14 +219,15 @@ func existingEntries(dir string, entries []string) []string {
 	})
 }
 
-func (m *Magus) mutateSubjects(ctx context.Context, subjects []mutationSubject) (types.Mutants, error) {
+func (m *Magus) mutateSubjects(ctx context.Context, start time.Time, subjects []mutationSubject) (types.Mutants, error) {
 	if len(subjects) == 0 {
 		return types.Mutants{}, nil
 	}
-	e, err := m.newMutationEngine(ctx, subjectLinks(subjects))
+	e, err := m.newMutationEngine(ctx, m.workspaceLinks())
 	if err != nil {
 		return types.Mutants{}, err
 	}
+	e.start = start
 	return e.mutate(ctx, subjects)
 }
 
@@ -303,10 +309,23 @@ func projectLinks(project string, dirs []string) []string {
 	return out
 }
 
-func subjectLinks(subjects []mutationSubject) []string {
+// workspaceLinks is every project's ignore dirs, such as node_modules. A test
+// in one project may load a tool another project installed.
+func (m *Magus) workspaceLinks() []string {
+	dirs := map[string][]string{}
+	for _, p := range m.ws.All() {
+		for _, sp := range p.ResolvedSpells {
+			dirs[p.Path] = append(dirs[p.Path], sp.IgnoreDirs()...)
+		}
+	}
+	return ignoreLinks(dirs)
+}
+
+// ignoreLinks is each project's dirs as workspace paths, sorted and unique.
+func ignoreLinks(dirs map[string][]string) []string {
 	var out []string
-	for _, s := range subjects {
-		out = append(out, s.links...)
+	for project, d := range dirs {
+		out = append(out, projectLinks(project, d)...)
 	}
 	slices.Sort(out)
 	return slices.Compact(out)
@@ -358,6 +377,8 @@ type mutationEngine struct {
 	copy    func(ctx context.Context) (string, error)
 	testKey func(context.Context, mutationSubject) (string, error)
 	store   mutantStore
+	// start is when the measure began, for the elapsed time a stop names.
+	start time.Time
 }
 
 // newMutationEngine runs the workspace's own magus in each scratch copy, so a
@@ -583,82 +604,128 @@ func (p subjectPlan) pending() bool {
 }
 
 // runPending runs every unanswered mutant, one scratch copy per seat. A seat
-// takes a whole subject, so each copy runs a scope's baseline once.
+// takes every subject of one scope, so a scope's baseline runs once.
 func (e mutationEngine) runPending(ctx context.Context, plans []subjectPlan) error {
-	var queue []int
-	for i := range plans {
-		if plans[i].pending() {
-			queue = append(queue, i)
-		}
-	}
-	work := make(chan int, len(queue))
-	for _, i := range queue {
-		work <- i
+	groups := pendingByScope(plans)
+	work := make(chan []int, len(groups))
+	for _, g := range groups {
+		work <- g
 	}
 	close(work)
 	g, gctx := errgroup.WithContext(ctx)
-	for range min(e.seats, len(queue)) {
+	for range min(e.seats, len(groups)) {
 		g.Go(func() error { return e.seat(gctx, work, plans) })
 	}
 	return g.Wait()
 }
 
-// seat runs the subjects it takes from work in one scratch copy.
-func (e mutationEngine) seat(ctx context.Context, work <-chan int, plans []subjectPlan) error {
+// pendingByScope is the pending plans' indexes, grouped by scope in first-seen
+// order.
+func pendingByScope(plans []subjectPlan) [][]int {
+	var keys []string
+	byKey := map[string][]int{}
+	for i := range plans {
+		if !plans[i].pending() {
+			continue
+		}
+		key := plans[i].subject.key()
+		if _, seen := byKey[key]; !seen {
+			keys = append(keys, key)
+		}
+		byKey[key] = append(byKey[key], i)
+	}
+	out := make([][]int, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, byKey[k])
+	}
+	return out
+}
+
+// seat runs the scopes it takes from work in one scratch copy.
+func (e mutationEngine) seat(ctx context.Context, work <-chan []int, plans []subjectPlan) error {
 	dir, err := e.copy(ctx)
 	if dir != "" {
 		defer os.RemoveAll(dir)
 	}
 	if err != nil {
-		return fmt.Errorf("mutants: scratch copy: %w", err)
+		return stopped(ctx, "mutants", e.start, "making a scratch copy", fmt.Errorf("mutants: scratch copy: %w", err))
 	}
-	for i := range work {
-		if err := e.runSubject(ctx, dir, &plans[i]); err != nil {
+	for group := range work {
+		if err := e.runScope(ctx, dir, plans, group); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// runSubject runs p's baseline, then each unanswered mutant it left under
-// mutantTimeoutFactor times the baseline's run.
-func (e mutationEngine) runSubject(ctx context.Context, dir string, p *subjectPlan) error {
-	took, err := e.baseline(ctx, dir, p)
-	if err != nil || p.gap != "" {
+// runScope runs the group's one baseline, then each unanswered mutant it
+// left under mutantTimeoutFactor times the baseline's run.
+func (e mutationEngine) runScope(ctx context.Context, dir string, plans []subjectPlan, group []int) error {
+	took, err := e.baseline(ctx, dir, plans, group)
+	if err != nil {
 		return err
 	}
 	timeout := took * mutantTimeoutFactor
-	for j := range p.mutants {
-		if err := e.runMutant(ctx, dir, p, j, timeout); err != nil {
-			return err
+	for _, i := range group {
+		p := &plans[i]
+		for j := range p.mutants {
+			if p.gap != "" {
+				break
+			}
+			if err := e.runMutant(ctx, dir, p, j, timeout); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-// baseline runs p's coverage op over its scope unmutated, then keeps only
-// the mutants on lines it hit. A red run is p's gap. A cancelled or replayed
-// run is an error: it measured no test.
-func (e mutationEngine) baseline(ctx context.Context, dir string, p *subjectPlan) (time.Duration, error) {
-	target := p.subject.target(spells.CoverageOp)
+// baseline runs the group's coverage op over its scope unmutated, then keeps
+// only the mutants on lines it hit. A red run is each plan's gap. A cancelled
+// or replayed run is an error: it measured no test.
+func (e mutationEngine) baseline(ctx context.Context, dir string, plans []subjectPlan, group []int) (time.Duration, error) {
+	s := plans[group[0]].subject
+	target := s.target(spells.CoverageOp)
 	start := time.Now()
-	res, err := e.run(ctx, dir, target, p.subject.coverageScope)
+	res, err := e.run(ctx, dir, target, s.coverageScope)
+	if ctx.Err() != nil {
+		return 0, stopped(ctx, "mutants", e.start, fmt.Sprintf("running the baseline `%s`", s.command()), ctx.Err())
+	}
 	if err == nil {
-		err = cmp.Or(ctx.Err(), res.replayed(target))
+		err = res.replayed(target)
 	}
 	if e.isBase && errors.Is(err, errNoResult) {
-		p.gap = err.Error()
+		gapAll(plans, group, err.Error())
 		return 0, nil
 	}
 	if err != nil {
-		return 0, fmt.Errorf("mutants: %s baseline: %w", p.subject.fn.Label, err)
+		return 0, fmt.Errorf("mutants: %s baseline: %w", groupLabels(plans, group), err)
 	}
 	took := time.Since(start)
 	if !res.passed {
-		p.gap = failingBaseline
+		gapAll(plans, group, failingBaseline)
 		return took, nil
 	}
-	return took, e.keepCovered(ctx, dir, p)
+	for _, i := range group {
+		if err := e.keepCovered(ctx, dir, &plans[i]); err != nil {
+			return 0, err
+		}
+	}
+	return took, nil
+}
+
+func gapAll(plans []subjectPlan, group []int, reason string) {
+	for _, i := range group {
+		plans[i].gap = reason
+	}
+}
+
+func groupLabels(plans []subjectPlan, group []int) string {
+	labels := make([]string, 0, len(group))
+	for _, i := range group {
+		labels = append(labels, plans[i].subject.fn.Label)
+	}
+	return strings.Join(labels, ", ")
 }
 
 // keepCovered drops p's mutants on lines the baseline did not hit: no test
@@ -731,7 +798,8 @@ func (e mutationEngine) judge(ctx context.Context, dir string, s mutationSubject
 	res, err := e.run(run, dir, target, s.coverageScope)
 	mu.Seconds = time.Since(start).Seconds()
 	if ctx.Err() != nil {
-		return ctx.Err()
+		doing := fmt.Sprintf("running the %s mutant of %s at %s:%d", mu.Operator, s.fn.Label, mu.Path, mu.Line)
+		return stopped(ctx, "mutants", e.start, doing, ctx.Err())
 	}
 	if run.Err() != nil || errors.Is(err, errNoResult) {
 		mu.Outcome = types.MutantKilled

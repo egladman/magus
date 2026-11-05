@@ -12,6 +12,9 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/coverage"
@@ -173,22 +176,48 @@ func functionGap(fn touchedFunction, complexity int, reason string) types.Functi
 // compared. base "" scores every function in the workspace, against no base.
 // Coverage runs in scratch copies of the tree, scoped to the touched files'
 // tests, so a caller inside a run holding the workspace's projects never waits
-// on itself.
+// on itself. A named base bounds the measure by measureBudget.
 func (m *Magus) ChangeRisk(ctx context.Context, base string) (types.ChangeRisk, error) {
+	if base != "" {
+		var cancel context.CancelFunc
+		ctx, cancel = withBudget(ctx, "change risk")
+		defer cancel()
+	}
+	start := time.Now()
 	set, err := m.touchedSince(ctx, base)
 	if err != nil {
-		return types.ChangeRisk{}, err
+		return types.ChangeRisk{}, stopped(ctx, "change risk", start, "finding the touched functions", err)
 	}
 	meter, err := m.newRiskMeter(ctx, set, base)
 	if err != nil {
-		return types.ChangeRisk{}, err
+		return types.ChangeRisk{}, stopped(ctx, "change risk", start, "resolving the base", err)
 	}
+	meter.start = start
 	out, err := meter.measure(ctx, set.fns)
 	if err != nil {
 		return types.ChangeRisk{}, err
 	}
 	out.Base = base
 	return out, nil
+}
+
+// measureBudget bounds one Change.risk or Change.mutants. lint-rules runs
+// both in one target, and the pair must end inside its kill.
+const measureBudget = 7 * time.Minute
+
+// withBudget is ctx bounded by measureBudget, its cause naming the budget.
+func withBudget(ctx context.Context, measure string) (context.Context, context.CancelFunc) {
+	return context.WithTimeoutCause(ctx, measureBudget, fmt.Errorf("%s ran past its %s budget", measure, measureBudget))
+}
+
+// stopped names what a measure was doing when ctx ended, and how long it ran.
+// A stop never reads as a bare "context canceled". While ctx is live, err
+// passes through.
+func stopped(ctx context.Context, measure string, start time.Time, doing string, err error) error {
+	if err == nil || ctx.Err() == nil {
+		return err
+	}
+	return fmt.Errorf("%s: stopped %s after %s: %w", measure, doing, time.Since(start).Round(time.Second), context.Cause(ctx))
 }
 
 // coverageScope is one run of a spell's coverage op over a test scope. A nil
@@ -198,12 +227,14 @@ type coverageScope struct {
 	spell    string
 	coverage spells.Coverage
 	scope    []string
-	links    []string
 }
 
 func (c coverageScope) key() string {
 	return strings.Join(slices.Concat([]string{c.project, c.spell}, c.scope), "\x00")
 }
+
+// runKey names the one coverage run of c's project and spell.
+func (c coverageScope) runKey() string { return c.project + "\x00" + c.spell }
 
 // target names op through its spell, so no magusfile target of the same
 // name stands in for it.
@@ -227,7 +258,7 @@ func scopeOf(root, project, name string, sp *spells.Spell, whole bool) (coverage
 	if !ok {
 		return coverageScope{}, fmt.Sprintf("spell %s's coverage names test op %s, which it does not declare", sp.Name(), cov.Coverage.Test)
 	}
-	c := coverageScope{project: project, spell: sp.Name(), coverage: *cov.Coverage, links: projectLinks(project, sp.IgnoreDirs())}
+	c := coverageScope{project: project, spell: sp.Name(), coverage: *cov.Coverage}
 	if whole {
 		return c, ""
 	}
@@ -260,6 +291,10 @@ type riskMeter struct {
 	commit  string
 	since   sinceBase
 	changed []string
+	// links are the dirs each copy links rather than copies.
+	links []string
+	// start is when the measure began, for the elapsed time a stop names.
+	start time.Time
 }
 
 func (m *Magus) newRiskMeter(ctx context.Context, set touchedSet, base string) (riskMeter, error) {
@@ -282,7 +317,7 @@ func (m *Magus) newRiskMeter(ctx context.Context, set touchedSet, base string) (
 			return ok
 		},
 		copy: sc.copy, run: magusRunner{bin: sc.bin}.run, report: scratchReport,
-		since: set.since, changed: set.changed,
+		since: set.since, changed: set.changed, links: m.workspaceLinks(),
 	}
 	if base != "" {
 		if _, r.commit, err = m.conformanceBaseCommit(ctx, base); err != nil {
@@ -299,13 +334,14 @@ const noBase = "no base was named"
 // changed files' lines.
 func (r riskMeter) measure(ctx context.Context, fns []touchedFunction) (types.ChangeRisk, error) {
 	plan := r.plan(fns)
-	headDir, head, err := r.runAll(ctx, "", plan.runs)
-	defer removeScratch(headDir)
+	head, base, err := r.runSides(ctx, plan.runs)
+	defer removeScratch(head.dir)
+	defer removeScratch(base.dir)
 	if err != nil {
 		return types.ChangeRisk{}, err
 	}
 	scorer := r.scorer
-	scorer.report = plan.lookup(head)
+	scorer.report = plan.lookup(head.runs)
 	out := scorer.scoreAll(fns)
 	if r.commit == "" {
 		for i := range out.Functions {
@@ -313,17 +349,37 @@ func (r riskMeter) measure(ctx context.Context, fns []touchedFunction) (types.Ch
 		}
 		return out, nil
 	}
-	baseDir, base, err := r.runAll(ctx, r.commit, plan.runs)
-	defer removeScratch(baseDir)
-	if err != nil {
-		return types.ChangeRisk{}, err
-	}
 	based := r.scorer
-	based.read, based.indexed = r.readAtBase(baseDir), noIndex
-	based.report = r.since.atHeadPath(plan.lookup(base))
+	based.read, based.indexed = r.readAtBase(base.dir), noIndex
+	based.report = r.since.atHeadPath(plan.lookup(base.runs))
 	r.judgeBase(out.Functions, fns, based)
-	out.Lines = r.lines(plan, head, base)
+	out.Lines = r.lines(plan, head.runs, base.runs)
 	return out, nil
+}
+
+// side is one tree's coverage runs: the copy they ran in and what each left.
+type side struct {
+	dir  string
+	runs map[string]scopeRun
+}
+
+// runSides runs runs at head and, with a commit, at base, each side in its own
+// copy and both at once. The caller removes both copies, even on an error.
+func (r riskMeter) runSides(ctx context.Context, runs []coverageScope) (head, base side, err error) {
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		var err error
+		head.dir, head.runs, err = r.runAll(gctx, "", runs)
+		return err
+	})
+	if r.commit != "" {
+		g.Go(func() error {
+			var err error
+			base.dir, base.runs, err = r.runAll(gctx, r.commit, runs)
+			return err
+		})
+	}
+	return head, base, g.Wait()
 }
 
 func removeScratch(dir string) {
@@ -393,8 +449,8 @@ func (r riskMeter) judgeBase(scored []types.ChangeRiskFunction, fns []touchedFun
 	}
 }
 
-// scopePlan is the coverage runs a measure makes: one per distinct scope of
-// the touched functions and the changed files a coverage spell claims.
+// scopePlan is the coverage runs a measure makes: one per project and spell.
+// Each runs the union of its touched functions' and changed files' scopes.
 type scopePlan struct {
 	byPath map[string]coverageScope
 	reason map[string]string
@@ -403,9 +459,11 @@ type scopePlan struct {
 
 func (r riskMeter) plan(fns []touchedFunction) scopePlan {
 	p := scopePlan{byPath: map[string]coverageScope{}, reason: map[string]string{}}
-	seen := map[string]bool{}
+	runOf := map[string]string{}
+	merged := map[string]*coverageScope{}
+	var order []string
 	add := func(name string) {
-		if _, done := p.byPath[name]; done || p.reason[name] != "" {
+		if _, done := runOf[name]; done || p.reason[name] != "" {
 			return
 		}
 		c, reason := r.scopeOf(name)
@@ -413,11 +471,13 @@ func (r riskMeter) plan(fns []touchedFunction) scopePlan {
 			p.reason[name] = reason
 			return
 		}
-		p.byPath[name] = c
-		if !seen[c.key()] {
-			seen[c.key()] = true
-			p.runs = append(p.runs, c)
+		k := c.runKey()
+		runOf[name] = k
+		if m, ok := merged[k]; ok {
+			m.scope = unionScope(m.scope, c.scope)
+			return
 		}
+		merged[k], order = &c, append(order, k)
 	}
 	for _, fn := range fns {
 		add(fn.Path)
@@ -427,7 +487,28 @@ func (r riskMeter) plan(fns []touchedFunction) scopePlan {
 			add(name)
 		}
 	}
+	for _, k := range order {
+		p.runs = append(p.runs, *merged[k])
+	}
+	for name, k := range runOf {
+		p.byPath[name] = *merged[k]
+	}
 	return p
+}
+
+// unionScope is a, then b's entries a lacks. An empty scope runs the whole
+// project, so it absorbs any other.
+func unionScope(a, b []string) []string {
+	if len(a) == 0 || len(b) == 0 {
+		return nil
+	}
+	out := slices.Clone(a)
+	for _, entry := range b {
+		if !slices.Contains(out, entry) {
+			out = append(out, entry)
+		}
+	}
+	return out
 }
 
 // lookup answers a scorer's report from runs.
@@ -451,14 +532,10 @@ func (r riskMeter) runAll(ctx context.Context, rev string, runs []coverageScope)
 	if len(runs) == 0 {
 		return "", nil, nil
 	}
-	var links []string
-	for _, c := range runs {
-		links = append(links, c.links...)
-	}
-	slices.Sort(links)
-	dir, err := r.copy(ctx, rev, slices.Compact(links))
+	dir, err := r.copy(ctx, rev, r.links)
 	if err != nil {
-		return dir, nil, fmt.Errorf("change risk: scratch copy: %w", err)
+		err = fmt.Errorf("change risk: scratch copy: %w", err)
+		return dir, nil, stopped(ctx, "change risk", r.start, "copying the tree at "+sideName(rev), err)
 	}
 	out := make(map[string]scopeRun, len(runs))
 	for _, c := range runs {
@@ -481,16 +558,25 @@ func (r riskMeter) runScope(ctx context.Context, dir, rev string, c coverageScop
 		}
 		c.scope = scope
 	}
-	return r.runOne(ctx, dir, c)
+	return r.runOne(ctx, dir, rev, c)
 }
 
-// runOne runs c in dir. A red or unreadable run is a reason that makes its
-// functions gaps. A cancelled run, or one the scheduler could not seat, is
-// an error.
-func (r riskMeter) runOne(ctx context.Context, dir string, c coverageScope) (scopeRun, error) {
+// sideName names the tree rev is, for an error.
+func sideName(rev string) string {
+	if rev == "" {
+		return "head"
+	}
+	return "base " + rev
+}
+
+// runOne runs c in dir, a copy of rev. A red or unreadable run is a reason
+// that makes its functions gaps. A cancelled run, or one the scheduler could
+// not seat, is an error.
+func (r riskMeter) runOne(ctx context.Context, dir, rev string, c coverageScope) (scopeRun, error) {
 	res, err := r.run(ctx, dir, c.target(spells.CoverageOp), c)
 	if ctx.Err() != nil {
-		return scopeRun{}, fmt.Errorf("change risk: %w", ctx.Err())
+		doing := fmt.Sprintf("running `%s` at %s", c.command(), sideName(rev))
+		return scopeRun{}, stopped(ctx, "change risk", r.start, doing, ctx.Err())
 	}
 	if errors.Is(err, errNoSeat) {
 		return scopeRun{}, fmt.Errorf("change risk: %w", err)

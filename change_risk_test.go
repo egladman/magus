@@ -2,10 +2,14 @@ package magus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -541,6 +545,8 @@ type RiskMeterSuite struct {
 	suite.Suite
 	scorer ChangeRiskSuite
 	meter  riskMeter
+	// mu guards revs and ran: head and base run at once.
+	mu sync.Mutex
 	// revs is each copy's revision by its dir.
 	revs   map[string]string
 	files  map[string][]coverage.File
@@ -572,10 +578,13 @@ func (s *RiskMeterSuite) SetupTest() {
 		covers:  func(string) bool { return true },
 		copy:    s.copy,
 		run: func(_ context.Context, dir, target string, c coverageScope) (testRun, error) {
-			s.ran = append(s.ran, fmt.Sprintf("%s@%s %s", target, s.revs[dir], strings.Join(c.scope, " ")))
-			return testRun{passed: !s.failed[s.revs[dir]]}, s.runErr
+			rev := s.revOf(dir)
+			s.mu.Lock()
+			s.ran = append(s.ran, fmt.Sprintf("%s@%s %s", target, rev, strings.Join(c.scope, " ")))
+			s.mu.Unlock()
+			return testRun{passed: !s.failed[rev]}, s.runErr
 		},
-		report: func(dir string, _ coverageScope) ([]coverage.File, error) { return s.files[s.revs[dir]], nil },
+		report: func(dir string, _ coverageScope) ([]coverage.File, error) { return s.files[s.revOf(dir)], nil },
 		commit: "base",
 		since: sinceBase{
 			lines:     map[string][]int{"lib/a.go": {5}},
@@ -585,9 +594,24 @@ func (s *RiskMeterSuite) SetupTest() {
 	}
 }
 
+func (s *RiskMeterSuite) revOf(dir string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.revs[dir]
+}
+
+// ranSorted is what ran, in order: head and base run at once.
+func (s *RiskMeterSuite) ranSorted() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Sorted(slices.Values(s.ran))
+}
+
 func (s *RiskMeterSuite) copy(_ context.Context, rev string, _ []string) (string, error) {
 	dir := s.T().TempDir()
+	s.mu.Lock()
 	s.revs[dir] = rev
+	s.mu.Unlock()
 	body := riskBody
 	if rev != "" {
 		body = riskBaseBody
@@ -613,7 +637,7 @@ func (s *RiskMeterSuite) TestAShrunkFunctionIsScoredAgainstItselfAtBase() {
 	f := got.Functions[0]
 	s.Equal([5]any{"", 4, 0, 3, 20.0}, [5]any{f.BaseReason, f.BaseComplexity, f.BaseCovered, f.BaseCoverable, f.BaseScore})
 	s.False(f.Charged(3), "past 3 at head, but better than at base")
-	s.Equal([]string{"go::coverage@ ./lib", "go::coverage@base ./lib"}, s.ran)
+	s.Equal([]string{"go::coverage@ ./lib", "go::coverage@base ./lib"}, s.ranSorted())
 }
 
 func (s *RiskMeterSuite) TestAFunctionWorseThanAtBaseIsCharged() {
@@ -724,14 +748,42 @@ func (s *RiskMeterSuite) TestAChangedFileWhoseScopeHasNoTestIsReported() {
 func (s *RiskMeterSuite) TestATestFileTheChangeAddedIsNotRunAtBase() {
 	s.scopedTo("./lib", "./added_test.go")
 	f := s.measure().Functions[0]
-	s.Equal([]string{"go::coverage@ ./lib ./added_test.go", "go::coverage@base ./lib"}, s.ran)
+	s.Equal([]string{"go::coverage@ ./lib ./added_test.go", "go::coverage@base ./lib"}, s.ranSorted())
 	s.Empty(f.BaseReason)
+}
+
+func (s *RiskMeterSuite) TestFilesOfOneProjectShareOneRunOverTheirUnion() {
+	s.meter.scopeOf = func(p string) (coverageScope, string) {
+		return coverageScope{project: "lib", spell: "go", coverage: spells.Coverage{File: "cover.out", Test: "go-test"},
+			scope: []string{"./" + path.Dir(p)}}, ""
+	}
+	s.meter.changed = []string{"lib/a.go", "lib/b/b.go", "lib/c/c.go", "lib/b/d.go"}
+	s.measure()
+	s.Equal([]string{"go::coverage@ ./lib ./lib/b ./lib/c", "go::coverage@base ./lib"}, s.ranSorted(),
+		"base drops the dirs its tree lacks")
+}
+
+func (s *RiskMeterSuite) TestAWholeProjectScopeAbsorbsTheOthers() {
+	s.Nil(unionScope([]string{"./a"}, nil))
+	s.Equal([]string{"./a", "./b"}, unionScope([]string{"./a"}, []string{"./b", "./a"}))
+}
+
+func (s *RiskMeterSuite) TestAStoppedRunNamesItsCommandSideAndElapsedTime() {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	s.meter.commit = ""
+	s.meter.run = func(context.Context, string, string, coverageScope) (testRun, error) {
+		cancel(errors.New("the gate ended"))
+		return testRun{}, context.Canceled
+	}
+	_, err := s.meter.measure(ctx, []touchedFunction{scoredFunction()})
+	s.ErrorContains(err, "change risk: stopped running `magus run go::coverage lib -- ./lib` at head after ")
+	s.ErrorContains(err, ": the gate ended")
 }
 
 func (s *RiskMeterSuite) TestABaseHoldingNoScopeFileMakesTheBaseUnmeasured() {
 	s.scopedTo("./added_test.go")
 	got := s.measure()
-	s.Equal([]string{"go::coverage@ ./added_test.go"}, s.ran, "nothing ran at base")
+	s.Equal([]string{"go::coverage@ ./added_test.go"}, s.ranSorted(), "nothing ran at base")
 	s.Equal("no test_scope entry names a file at base", got.Functions[0].BaseReason[len("its base is unmeasured: "):])
 }
 

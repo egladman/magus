@@ -249,7 +249,7 @@ func (s *MutantEngineSuite) TestAFullHitRunsNoBaselineWhenAMutantSitsOnAnUncover
 
 func (s *MutantEngineSuite) TestAFunctionWithNoSurvivorAtHeadSaysBaseWasNotMutated() {
 	out := types.Mutants{Mutants: []types.Mutant{smallMutant(0, 11, types.MutantKilled)}}
-	s.Require().NoError((&Magus{}).mutateBase(context.Background(), "base", sinceBase{}, []mutationSubject{toySmall()}, &out))
+	s.Require().NoError((&Magus{}).mutateBase(context.Background(), time.Now(), "base", sinceBase{}, []mutationSubject{toySmall()}, &out))
 	s.Equal([2]any{0, noSurvivorAtHead}, [2]any{out.Mutants[0].BaseSurvived, out.Mutants[0].BaseReason})
 }
 
@@ -427,9 +427,34 @@ func (s *MutantEngineSuite) TestAChangedTestKeyMissesTheKeptRun() {
 
 func (s *MutantEngineSuite) TestEachSeatTakesItsOwnCopy() {
 	s.engine.seats = 4
+	both := toyBoth()
+	both.scope = []string{"./calc/calc.toy"}
+	got := s.mutate(toySmall(), both)
+	s.Len(got.Mutants, 3)
+	s.Equal(2, s.copier.copies, "two scopes fill two of the four seats")
+}
+
+func (s *MutantEngineSuite) TestSubjectsOfOneScopeShareOneBaseline() {
+	s.engine.seats = 4
 	got := s.mutate(toySmall(), toyBoth())
 	s.Len(got.Mutants, 3)
-	s.Equal(2, s.copier.copies, "two subjects fill two of the four seats")
+	s.Equal(1, s.copier.copies, "one scope takes one seat")
+	s.Equal("toy::coverage", s.runner.targets[0])
+	s.NotContains(s.runner.targets[1:], "toy::coverage", "the baseline ran once")
+}
+
+func (s *MutantEngineSuite) TestAStoppedMutantNamesItsFunctionAndElapsedTime() {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	s.runner.hang = func(src string) bool {
+		if strings.Contains(src, "n <= 3") {
+			cancel(errors.New("the gate ended"))
+			return true
+		}
+		return false
+	}
+	_, err := s.engine.mutate(ctx, []mutationSubject{toySmall()})
+	s.ErrorContains(err, "mutants: stopped running the lt-le mutant of Small at calc/calc.toy:4 after ")
+	s.ErrorContains(err, ": the gate ended")
 }
 
 func (s *MutantEngineSuite) TestMovingAFunctionKeepsItsMutantIDs() {
@@ -473,7 +498,7 @@ func (s *MutantEngineSuite) TestABodyPastTheFileFails() {
 
 func (s *MutantEngineSuite) TestNoSubjectRunsNothing() {
 	m := &Magus{ws: &types.Workspace{Root: s.T().TempDir()}}
-	got, err := m.mutateSubjects(context.Background(), nil)
+	got, err := m.mutateSubjects(context.Background(), time.Now(), nil)
 	s.Require().NoError(err)
 	s.Equal(types.Mutants{}, got)
 }
@@ -553,10 +578,9 @@ func (s *MutantSubjectScopeSuite) TestNoSpellIsAReason() {
 	s.Equal("no spell bound to web claims .toy files", reason)
 }
 
-func (s *MutantSubjectScopeSuite) TestLinksAreTheSpellsIgnoreDirsInEachProject() {
-	a := mutationSubject{coverageScope: coverageScope{links: projectLinks("web", []string{"node_modules"})}}
-	b := mutationSubject{coverageScope: coverageScope{links: projectLinks(".", []string{"node_modules", "vendor"})}}
-	s.Equal([]string{"node_modules", "vendor", "web/node_modules"}, subjectLinks([]mutationSubject{a, b, a}))
+func (s *MutantSubjectScopeSuite) TestLinksAreEveryProjectsIgnoreDirs() {
+	got := ignoreLinks(map[string][]string{"web": {"node_modules", "node_modules"}, ".": {"node_modules", "vendor"}})
+	s.Equal([]string{"node_modules", "vendor", "web/node_modules"}, got)
 }
 
 // MutantCoverageSuite reads the report a baseline left in a scratch copy.
