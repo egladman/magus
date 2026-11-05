@@ -69,7 +69,7 @@ type Coverage struct {
 // GraphStore adapts the concrete knowledge graph to SymbolStore. It names an internal
 // type, so only in-module callers can reach it, which is correct: an outside caller
 // implements SymbolStore directly rather than going through the graph.
-func GraphStore(g *knowledge.Graph) SymbolStore { return graphStore{g: g} }
+func GraphStore(g *knowledge.Graph) SymbolStore { return graphStore{g: g} } //nolint:ireturn // the workspace backing is chosen at runtime
 
 type graphStore struct{ g *knowledge.Graph }
 

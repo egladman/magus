@@ -72,7 +72,7 @@ func (s *Server) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 			return
 		}
 		minter := trail.CredentialFromContext(r.Context())
-		link, err := mgr.Start(minter.Grant, consoleDir, guarded, time.Duration(req.TTLSeconds)*time.Second)
+		link, err := mgr.Start(r.Context(), minter.Grant, consoleDir, guarded, time.Duration(req.TTLSeconds)*time.Second)
 		switch {
 		case errors.Is(err, auth.ErrExceedsGrant):
 			refuseShare(w, r, rpcerr.Error{Code: connect.CodePermissionDenied, Reason: types.GrantInsufficient, Message: err.Error()}, log)

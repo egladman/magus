@@ -40,12 +40,12 @@ import (
 func TestServerStopTerminatesLiveServer(t *testing.T) {
 	// Let proc pick a random socket under SockDir; a t.TempDir() path can exceed the unix
 	// socket path length limit on macOS.
-	srv, err := proc.New(proc.Options{
+	srv, err := proc.New(t.Context(), proc.Options{
 		Handler: func(context.Context, []string) error { return nil },
 	})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 	addr := srv.Addr()
 	require.True(t, proc.SocketLive(context.Background(), addr), "server should be live before stop")
 
@@ -79,14 +79,14 @@ func TestServerStopNoServerExitsNonzero(t *testing.T) {
 func TestServerStopStalePools(t *testing.T) {
 	privateSockDir(t)
 	addr := "unix://" + filepath.Join(proc.SockDir(), "magus-424242-deadbeef.sock")
-	srv, err := proc.New(proc.Options{
+	srv, err := proc.New(t.Context(), proc.Options{
 		Address: addr,
 		Version: "stale-build",
 		Handler: func(context.Context, []string) error { return nil },
 	})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 	require.True(t, proc.SocketLive(context.Background(), addr))
 
 	err = serverStop(context.Background(), []string{"--pools"})

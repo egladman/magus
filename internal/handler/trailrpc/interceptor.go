@@ -115,7 +115,7 @@ func WithAuditReads() Option {
 // Recording is best-effort and post-hoc: it never blocks or fails the RPC (trail.Append swallows I/O
 // errors, matching the trail's "never a precondition for the action it records" contract), and a failed
 // mutation is still recorded, with its error, because an attempted revoke is itself worth auditing.
-func Interceptor(trailDir string, kind trail.Kind, opts ...Option) connect.Interceptor {
+func Interceptor(trailDir string, kind trail.Kind, opts ...Option) connect.Interceptor { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	var cfg options
 	for _, o := range opts {
 		o(&cfg)

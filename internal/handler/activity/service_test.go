@@ -550,7 +550,7 @@ func TestListActivityEvents_RejectsBadPageToken(t *testing.T) {
 // returns a client for it. connect.ServerStream has no injectable test sink, so a streaming
 // RPC is exercised end to end, the shape the viewer and status stream tests already use.
 // The poll is tightened so a test does not wait on the production cadence.
-func watchClient(t *testing.T, dir string, rows []types.Job, files chan job.FeedEvent) activityv1alpha1connect.ActivityServiceClient {
+func watchClient(t *testing.T, dir string, rows []types.Job, files chan job.FeedEvent) activityv1alpha1connect.ActivityServiceClient { //nolint:ireturn // the generated client type is an interface; the implementation is chosen at runtime
 	t.Helper()
 	s := NewService(func() []Workspace { return []Workspace{{Root: "/ws" + dir, CacheDir: dir}} },
 		WithJobs(func() []types.Job { return rows }),

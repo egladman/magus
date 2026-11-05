@@ -148,7 +148,7 @@ func warnKernelUnavailable(ctx context.Context) {
 }
 
 // recordRules reports the allow-rules p was built from under the workspace scope.
-func recordRules(ctx context.Context, prov observability.Provider, p *sandbox.Policy) {
+func recordRules(ctx context.Context, prov observability.SandboxRecorder, p *sandbox.Policy) {
 	access := map[filesystem.Access]int64{}
 	for _, r := range p.FS.Rules {
 		for _, a := range []filesystem.Access{filesystem.Read, filesystem.Write, filesystem.Exec} {

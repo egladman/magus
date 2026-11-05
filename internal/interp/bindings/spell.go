@@ -747,7 +747,7 @@ func loadLocalSpell(ctx context.Context, path string) (spells.Descriptor, bool) 
 // resolve a backend selected by a file path. A .buzz spell loads through the Buzz
 // path (registering a function-op spell eagerly, capturing its source for in-VM
 // dispatch).
-func loadSpellFile(ctx context.Context, path string) (spells.Driver, error) {
+func loadSpellFile(ctx context.Context, path string) (*spells.Spell, error) {
 	if !strings.HasSuffix(path, ".buzz") {
 		return nil, fmt.Errorf("spell file %q: must be a .buzz spell", path)
 	}

@@ -1256,12 +1256,12 @@ func serverSocket(t *testing.T) (*proc.Server, string, *http.Client) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	path := filepath.Join(dir, "server.sock")
-	srv, err := proc.New(proc.Options{
+	srv, err := proc.New(t.Context(), proc.Options{
 		Handler: func(context.Context, []string) error { return nil },
 		Address: "unix://" + path,
 	})
 	require.NoError(t, err)
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 	t.Cleanup(srv.Close)
 	return srv, srv.Addr(), &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {

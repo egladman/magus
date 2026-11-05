@@ -1559,7 +1559,7 @@ func TestHardenCoveringHandsOnlyTheEntriesCoveringThePath(t *testing.T) {
 // the root session writes freely.
 type UnboundWriteInJobCheckoutSuite struct {
 	suite.Suite
-	ctx     context.Context
+	layers  ctxLayers
 	session string
 	own     string
 }
@@ -1569,7 +1569,7 @@ func TestUnboundWriteInJobCheckoutSuite(t *testing.T) {
 }
 
 func (s *UnboundWriteInJobCheckoutSuite) SetupTest() {
-	s.ctx, s.session = fleetFixture(s.T())
+	s.layers, s.session = fleetLayers(s.T())
 	s.own = s.T().TempDir()
 	for _, dir := range []string{s.session, s.own} {
 		s.Require().NoError(os.MkdirAll(filepath.Join(dir, "std"), 0o755))
@@ -1583,7 +1583,7 @@ func (s *UnboundWriteInJobCheckoutSuite) pin(state types.JobState) {
 	row := types.Job{ID: "w", WritePaths: []string{"std/*.go"}, State: state,
 		Checkpoint: "rev-a", ReportedBase: "rev-a", BaseVerdict: types.BaseMatch, Registered: 1,
 		CheckoutRoot: s.own, Worktree: &types.JobWorktree{Root: s.own, Source: s.session}}
-	s.ctx = job.WithSnapshot(s.ctx, job.Snapshot{Rows: []types.Job{row}})
+	s.layers = append(s.layers, snapshotLayer(job.Snapshot{Rows: []types.Job{row}}))
 }
 
 // write is an editor Write of path by agent, or by the root session when
@@ -1594,7 +1594,7 @@ func (s *UnboundWriteInJobCheckoutSuite) write(agent, path string) types.GuardJu
 	if agent != "" {
 		env["agent_id"], env["agent_type"] = agent, "general-purpose"
 	}
-	return Judge(s.ctx, Dependencies{}, Request{Input: hookJSON(s.T(), env), Host: "claude-code"})
+	return Judge(s.testContext(), Dependencies{}, Request{Input: hookJSON(s.T(), env), Host: "claude-code"})
 }
 
 func (s *UnboundWriteInJobCheckoutSuite) TestUnboundSubagentWriteInAJobMadeCheckoutIsDenied() {
@@ -1619,7 +1619,7 @@ func (s *UnboundWriteInJobCheckoutSuite) TestUnboundSubagentWriteAfterTerminalWa
 }
 
 func (s *UnboundWriteInJobCheckoutSuite) TestPersonWriteInAJobMadeCheckoutPasses() {
-	v := Judge(s.ctx, Dependencies{}, Request{Input: filepath.Join(s.own, "std", "module.go"), IsPath: true})
+	v := Judge(s.testContext(), Dependencies{}, Request{Input: filepath.Join(s.own, "std", "module.go"), IsPath: true})
 	s.NotEqual(decisionDeny, v.Decision, v.Reason)
 }
 
@@ -1670,7 +1670,7 @@ func (s *ExitedHolderBindingSuite) write(cwd, path string) types.GuardJudgment {
 	input := hookJSON(s.T(), map[string]any{"session_id": s.who.Session, "cwd": cwd, "hook_event_name": "PreToolUse",
 		"agent_id": s.who.Agent, "agent_type": "general-purpose",
 		"tool_name": "Write", "tool_input": map[string]any{"file_path": path, "content": "package x\n"}})
-	return Judge(s.ctx, Dependencies{}, Request{Input: input, Host: s.who.Host})
+	return Judge(s.testContext(), Dependencies{}, Request{Input: input, Host: s.who.Host})
 }
 
 func (s *ExitedHolderBindingSuite) TestWriteOutsidePathsAfterOwnExitIsDenied() {
@@ -1700,16 +1700,16 @@ func (s *ExitedHolderBindingSuite) TestEditIntoTheJobCheckoutAfterOwnExitIsDenie
 	s.Require().NoError(os.MkdirAll(filepath.Join(own, "hack"), 0o755))
 	s.Require().NoError(os.WriteFile(filepath.Join(own, "magusfile.buzz"), nil, 0o644))
 	s.Require().NoError(os.WriteFile(filepath.Join(own, "hack", "README.md"), []byte("# hack\n"), 0o644))
-	_, err := s.store.Update(s.ctx, heldJob, func(cur *types.Job) { cur.CheckoutRoot = own })
+	_, err := s.store.Update(s.testContext(), heldJob, func(cur *types.Job) { cur.CheckoutRoot = own })
 	s.Require().NoError(err)
-	_, err = s.store.RecordWorktree(s.ctx, heldJob, types.JobWorktree{Root: own, Source: s.root})
+	_, err = s.store.RecordWorktree(s.testContext(), heldJob, types.JobWorktree{Root: own, Source: s.root})
 	s.Require().NoError(err)
 	s.exitOwnJob()
 
 	input := hookJSON(s.T(), map[string]any{"session_id": s.who.Session, "cwd": s.root, "hook_event_name": "PreToolUse",
 		"agent_id": s.who.Agent, "agent_type": "general-purpose", "tool_name": "Edit",
 		"tool_input": map[string]any{"file_path": filepath.Join(own, "hack", "README.md"), "old_string": "# hack", "new_string": "# hack scripts"}})
-	v := Judge(s.ctx, Dependencies{}, Request{Input: input, Host: s.who.Host})
+	v := Judge(s.testContext(), Dependencies{}, Request{Input: input, Host: s.who.Host})
 	s.Equal(decisionDeny, v.Decision)
 	s.Contains(v.Reason, "job held-job is exited")
 }
@@ -1718,4 +1718,38 @@ func (s *ExitedHolderBindingSuite) TestEditIntoTheJobCheckoutAfterOwnExitIsDenie
 func withoutVolatile(v types.GuardJudgment) types.GuardJudgment {
 	v.SchemaVersion, v.Reason, v.Context, v.LeaseFrom, v.Next = 0, "", "", "", nil
 	return v
+}
+
+type ctxLayers []func(context.Context) context.Context
+
+func (l ctxLayers) of(t *testing.T) context.Context {
+	ctx := t.Context()
+	for _, layer := range l {
+		ctx = layer(ctx)
+	}
+	return ctx
+}
+
+func atLayer(at location) func(context.Context) context.Context {
+	return func(ctx context.Context) context.Context { return context.WithValue(ctx, locationKey{}, at) }
+}
+
+func snapshotLayer(snap job.Snapshot) func(context.Context) context.Context {
+	return func(ctx context.Context) context.Context { return job.WithSnapshot(ctx, snap) }
+}
+
+func fleetLayers(t *testing.T, leases ...types.Job) (ctxLayers, string) {
+	ctx, root := fleetFixture(t, leases...)
+	return ctxLayers{atLayer(ctx.Value(locationKey{}).(location))}, root
+}
+
+func locationLayers(ctx context.Context) ctxLayers {
+	return ctxLayers{atLayer(ctx.Value(locationKey{}).(location))}
+}
+
+func (s *UnboundWriteInJobCheckoutSuite) testContext() context.Context { return s.layers.of(s.T()) }
+
+func spawnLayers(t *testing.T) (ctxLayers, string) {
+	ctx, cacheDir := spawnFixture(t)
+	return locationLayers(ctx), cacheDir
 }

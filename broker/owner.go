@@ -140,7 +140,7 @@ type heldWork struct {
 // holdLocked records h for sess, charges its slots to the budget unasked (the command
 // already runs), and arms its deadline. A group riding a claim is only recorded. Callers
 // hold s.mu.
-func (s *server) holdLocked(sess *session, h Hold) string {
+func (s *server) holdLocked(ctx context.Context, sess *session, h Hold) string {
 	if now := time.Now(); h.Held.IsZero() || h.Held.After(now) {
 		h.Held = now
 	}
@@ -161,7 +161,7 @@ func (s *server) holdLocked(sess *session, h Hold) string {
 		Kind: WorkExec, Lease: h.Lease, Spawner: h.Spawner, PID: sess.hello.PID,
 		Dir: cmp.Or(h.Root, sess.hello.Dir), Command: h.Command, Since: h.Held, Slots: slots, Deadline: h.Deadline,
 	}}
-	hw.timer = time.AfterFunc(time.Until(h.Deadline), func() { s.expire(sess, id) })
+	hw.timer = time.AfterFunc(time.Until(h.Deadline), func() { s.expire(ctx, sess, id) })
 	sess.holds[id] = hw
 	return id
 }
@@ -181,7 +181,7 @@ func (s *server) releaseHold(sess *session, id string) {
 }
 
 // expire stops a held command whose deadline passed.
-func (s *server) expire(sess *session, id string) {
+func (s *server) expire(ctx context.Context, sess *session, id string) {
 	s.mu.Lock()
 	hw, ok := sess.holds[id]
 	if !ok || hw.stopped {
@@ -190,23 +190,23 @@ func (s *server) expire(sess *session, id string) {
 	}
 	hw.stopped = true
 	s.mu.Unlock()
-	s.stopGroup(hw, hw.hold.DeadlineReason())
+	s.stopGroup(ctx, hw, hw.hold.DeadlineReason())
 }
 
 // reapOrphan stops a held group its connection left behind, and returns its slots.
-func (s *server) reapOrphan(hw *heldWork) {
+func (s *server) reapOrphan(ctx context.Context, hw *heldWork) {
 	if hw.claim == "" {
-		s.stopIfAlive(hw, "outlived the magus run whose step started it")
+		s.stopIfAlive(ctx, hw, "outlived the magus run whose step started it")
 		return
 	}
 	hw.timer.Stop()
-	s.stopIfAlive(hw, "outlived the magus job exec that ran it")
+	s.stopIfAlive(ctx, hw, "outlived the magus job exec that ran it")
 	s.budget.Release(hw.claim)
 }
 
 // stopRiders stops the groups riding claim that still run: the step that started them
 // handed its claim back, so nothing waits on them any more.
-func (s *server) stopRiders(sess *session, claim string) {
+func (s *server) stopRiders(ctx context.Context, sess *session, claim string) {
 	var riders []*heldWork
 	s.mu.Lock()
 	for id, hw := range sess.holds {
@@ -217,76 +217,76 @@ func (s *server) stopRiders(sess *session, claim string) {
 	}
 	s.mu.Unlock()
 	for _, hw := range riders {
-		s.stopIfAlive(hw, "outlived the step whose claim it rode")
+		s.stopIfAlive(ctx, hw, "outlived the step whose claim it rode")
 	}
 }
 
 // stopIfAlive stops hw's group once, if anything in it still runs.
-func (s *server) stopIfAlive(hw *heldWork, why string) {
+func (s *server) stopIfAlive(ctx context.Context, hw *heldWork, why string) {
 	s.mu.Lock()
 	stop := !hw.stopped && groupAlive(hw.hold.PGID)
 	hw.stopped = hw.stopped || stop
 	s.mu.Unlock()
 	if stop {
-		s.stopGroup(hw, why)
+		s.stopGroup(ctx, hw, why)
 	}
 }
 
 // stopGroup asks hw's process group to stop, kills what is left after killGrace, and
 // records the ending once: in this broker's memory and in the workspace's attention queue.
 // Each signal goes only to the group hw held (see [checkLeader]).
-func (s *server) stopGroup(hw *heldWork, why string) {
+func (s *server) stopGroup(ctx context.Context, hw *heldWork, why string) {
 	pgid := hw.hold.PGID
 	if err := checkLeader(pgid, hw.hold.Held); err != nil {
-		s.leaveGroup(hw, why, err)
+		s.leaveGroup(ctx, hw, why, err)
 		return
 	}
 	if err := SignalGroup(pgid, false); err != nil {
-		s.opts.log.DebugContext(s.ctx, "signal a held command's group", slog.Int("pgid", pgid), attr.Error(err))
+		s.opts.log.DebugContext(ctx, "signal a held command's group", slog.Int("pgid", pgid), attr.Error(err))
 	}
-	time.AfterFunc(killGrace, func() { s.killGroup(hw, why) })
+	time.AfterFunc(killGrace, func() { s.killGroup(ctx, hw, why) })
 	s.mu.Lock()
 	s.ended = append(s.ended, Ended{Work: hw.work, Reason: why, At: time.Now()})
 	if over := len(s.ended) - endedKeep; over > 0 {
 		s.ended = slices.Delete(s.ended, 0, over)
 	}
 	s.mu.Unlock()
-	s.opts.log.InfoContext(s.ctx, "stopped a held command", slog.Int("pgid", pgid),
+	s.opts.log.InfoContext(ctx, "stopped a held command", slog.Int("pgid", pgid),
 		slog.String("owner", hw.work.Owner()), slog.String("why", why))
-	job.NoteEnded(s.ctx, hw.hold.Root, hw.hold.Lease, EndedMessage(hw.hold, why))
+	job.NoteEnded(ctx, hw.hold.Root, hw.hold.Lease, EndedMessage(hw.hold, why))
 }
 
 // killGroup kills what is left of hw's group once its grace passed.
-func (s *server) killGroup(hw *heldWork, why string) {
+func (s *server) killGroup(ctx context.Context, hw *heldWork, why string) {
 	pgid := hw.hold.PGID
 	if !groupAlive(pgid) {
 		return
 	}
 	if err := checkLeader(pgid, hw.hold.Held); err != nil {
-		s.leaveGroup(hw, why, err)
+		s.leaveGroup(ctx, hw, why, err)
 		return
 	}
 	if err := SignalGroup(pgid, true); err != nil {
-		s.opts.log.DebugContext(s.ctx, "kill a held command's group", slog.Int("pgid", pgid), attr.Error(err))
+		s.opts.log.DebugContext(ctx, "kill a held command's group", slog.Int("pgid", pgid), attr.Error(err))
 	}
 }
 
 // leaveGroup leaves hw's group running, because err says it may not be the group hw
 // held. A group that took a freed id is no business of magus; one magus cannot tell is
 // said, in the log and in the workspace's attention queue, unless nothing is left of it.
-func (s *server) leaveGroup(hw *heldWork, why string, err error) {
+func (s *server) leaveGroup(ctx context.Context, hw *heldWork, why string, err error) {
 	pgid := hw.hold.PGID
 	switch {
 	case errors.Is(err, errGroupReused):
-		s.opts.log.InfoContext(s.ctx, "left alone a group that took a held group's id", slog.Int("pgid", pgid),
+		s.opts.log.InfoContext(ctx, "left alone a group that took a held group's id", slog.Int("pgid", pgid),
 			slog.String("owner", hw.work.Owner()), attr.Error(err))
 		return
 	case errors.Is(err, errLeaderGone) && !groupAlive(pgid):
 		return
 	}
-	s.opts.log.WarnContext(s.ctx, "left a held command running: magus cannot tell it is still the group it held",
+	s.opts.log.WarnContext(ctx, "left a held command running: magus cannot tell it is still the group it held",
 		slog.Int("pgid", pgid), slog.String("owner", hw.work.Owner()), slog.String("why", why), attr.Error(err))
-	job.NoteEnded(s.ctx, hw.hold.Root, hw.hold.Lease, fmt.Sprintf(
+	job.NoteEnded(ctx, hw.hold.Root, hw.hold.Lease, fmt.Sprintf(
 		"magus left `%s` (pid group %d, owner %s) running: it %s, but %v, so magus cannot tell it is still that group",
 		hw.hold.Command, pgid, hw.work.Owner(), why, err))
 }

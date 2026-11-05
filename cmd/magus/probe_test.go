@@ -97,21 +97,21 @@ func TestEvaluateHealth(t *testing.T) {
 // a reply that carries the server's own report is the server, so a per-process pool
 // answering the probed socket reads as no server rather than as one with nothing loaded.
 func TestServerSnapshotRefusesAPerProcessPool(t *testing.T) {
-	srv, err := proc.New(proc.Options{Handler: func(context.Context, []string) error { return nil }})
+	srv, err := proc.New(t.Context(), proc.Options{Handler: func(context.Context, []string) error { return nil }})
 	require.NoError(t, err)
 	defer srv.Close()
-	require.NoError(t, srv.Start())
+	require.NoError(t, srv.Start(t.Context()))
 
 	_, err = serverSnapshot(srv.Addr())(t.Context())
 	require.ErrorIs(t, err, errNotServer)
 
-	server, err := proc.New(proc.Options{
+	server, err := proc.New(t.Context(), proc.Options{
 		Handler: func(context.Context, []string) error { return nil },
 		Server:  func() *types.StatusServer { return &types.StatusServer{PID: 1} },
 	})
 	require.NoError(t, err)
 	defer server.Close()
-	require.NoError(t, server.Start())
+	require.NoError(t, server.Start(t.Context()))
 	out, err := serverSnapshot(server.Addr())(t.Context())
 	require.NoError(t, err)
 	assert.NotNil(t, out)
@@ -124,18 +124,18 @@ func TestServerSnapshotRefusesAPerProcessPool(t *testing.T) {
 // server.address, whatever the environment says.
 func TestServerSnapshotAsksTheServerNotTheRunsPool(t *testing.T) {
 	defer snapshotGlobals()()
-	pool, err := proc.New(proc.Options{Handler: func(context.Context, []string) error { return nil }})
+	pool, err := proc.New(t.Context(), proc.Options{Handler: func(context.Context, []string) error { return nil }})
 	require.NoError(t, err)
 	defer pool.Close()
-	require.NoError(t, pool.Start())
+	require.NoError(t, pool.Start(t.Context()))
 
-	server, err := proc.New(proc.Options{
+	server, err := proc.New(t.Context(), proc.Options{
 		Handler: func(context.Context, []string) error { return nil },
 		Server:  func() *types.StatusServer { return &types.StatusServer{PID: 7} },
 	})
 	require.NoError(t, err)
 	defer server.Close()
-	require.NoError(t, server.Start())
+	require.NoError(t, server.Start(t.Context()))
 	globalCfg.Server.Address = server.Addr()
 	// Set only now: proc.New refuses to host a pool while the variable names a parent.
 	t.Setenv(proc.SocketEnv, pool.Addr())

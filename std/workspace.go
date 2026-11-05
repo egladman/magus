@@ -25,7 +25,7 @@ import (
 // (a test double, or a provider-supplied workspace that models projects without git
 // history). Both report false here; the caller's message names the first, which is the one
 // a reader can act on.
-func AnalyzerFromContext(ctx context.Context) (types.HistoryMetrics, bool) {
+func AnalyzerFromContext(ctx context.Context) (types.HistoryMetrics, bool) { //nolint:ireturn // the workspace on ctx: *magus.Magus or a wrapper of it
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return nil, false

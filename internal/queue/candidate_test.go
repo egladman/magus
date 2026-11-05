@@ -572,7 +572,7 @@ func gitRepository(t *testing.T, files map[string]string) (string, string) {
 }
 
 // gitDriver is the git backend the queue runs on, for root.
-func gitDriver(t *testing.T, root string) types.BuildVCS {
+func gitDriver(t *testing.T, root string) types.BuildVCS { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	t.Helper()
 	enabled := true
 	res, err := vcs.Resolve(t.Context(), root, "", magustypes.VCSOptions{Enabled: &enabled, Name: "git"})

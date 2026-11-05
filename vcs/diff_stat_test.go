@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func diffStater(t *testing.T, b parityBackend) types.DiffStater {
+func diffStater(t *testing.T, b parityBackend) types.DiffStater { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	t.Helper()
 	ds, ok := b.drv.(types.DiffStater)
 	require.Truef(t, ok, "%s must implement DiffStater", b.name)
