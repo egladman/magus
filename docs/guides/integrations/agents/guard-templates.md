@@ -530,7 +530,8 @@ final FAILURE_LINES = 12;
 
 fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
     var version = "";
-    final probe = proc\exec(guard.bin, args: ["version"], opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
+    // In the binary's own directory, or version re-execs into another ./magus.
+    final probe = proc\exec(guard.bin, args: ["version"], dir: binDir(guard.bin), opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
     if (probe != null) { version = hook\firstLine(probe!.stdout); }
     if (version == "") { version = "version unreadable"; }
 
@@ -541,9 +542,22 @@ fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
         }
     }
     var why = lines.join("\n");
-    if (why == "") { why = "it printed no error"; }
+    if (why == "" and failed != null) { why = "it printed no error (exit code {failed!.code})"; }
+    if (why == "") { why = "it could not be run"; }
 
     return "magus guard could not judge this call: {guard.bin} ({version}) said: {why}";
+}
+
+// binDir is the directory bin lives in, "" for a bare name found on PATH.
+fun binDir(bin: str) > str {
+    final parts = bin.split("/");
+    final kept = mut [<str>];
+    var i = 0;
+    while (i < parts.len() - 1) {
+        kept.append(parts[i]);
+        i = i + 1;
+    }
+    return kept.join("/");
 }
 
 // unjudgedReply answers a call no magus judged. Every event shows the person
@@ -1068,7 +1082,8 @@ fun main(args: [str]) > void {
     // A pass and a broken guard both render nothing; see magus-command.buzz for why
     // telling them apart matters. Every call here is a write, so it is refused.
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
-        var why = "it printed no error";
+        var why = "it could not be run";
+        if (result != null) { why = "it printed no error (exit code {result!.code})"; }
         if (result != null and hook\firstLine(result!.stderr) != "") { why = hook\firstLine(result!.stderr); }
         io\stdout.write(hook\envOr("__MAGUS_FAILED_RESPONSE", fallback: hook\refusal(
             "magus guard could not judge this write: {bin} said: {why}",
