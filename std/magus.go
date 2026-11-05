@@ -1289,7 +1289,7 @@ type diskReclaimer interface {
 	FileDiskAttention(ctx context.Context, message string) error
 }
 
-func diskReclaimerFromContext(ctx context.Context, member string) (diskReclaimer, error) { //nolint:ireturn // the implementation is chosen at runtime among several
+func diskReclaimerFromContext(ctx context.Context, member string) (diskReclaimer, error) { //nolint:ireturn // only *magus.Magus implements it, and std cannot import it
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return nil, errorNoWorkspace(member)

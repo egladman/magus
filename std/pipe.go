@@ -208,7 +208,7 @@ type pipeWorkspace interface {
 	GetArtifact(ctx context.Context, v cache.ArtifactVersion, dst string) error
 }
 
-func resolvePipeWorkspace(ctx context.Context, member string) (pipeWorkspace, error) {
+func resolvePipeWorkspace(ctx context.Context, member string) (pipeWorkspace, error) { //nolint:ireturn // only *magus.Magus implements it, and std cannot import it
 	ws, ok := types.WorkspaceFromContext(ctx).(pipeWorkspace)
 	if !ok {
 		return nil, fmt.Errorf("pipe.%s reads the workspace's outputs and cache, and no workspace is attached, run the script inside one", member)

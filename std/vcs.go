@@ -190,7 +190,7 @@ var (
 	vcsBase   string
 )
 
-func resolveVCS(ctx context.Context) (types.VCSDriver, string) {
+func resolveVCS(ctx context.Context) (types.VCSDriver, string) { //nolint:ireturn // VCSDriver: git, hg, jj or sapling
 	wd, err := EffectiveCurrentWorkingDirectory(ctx)
 	if err != nil {
 		wd = "."
@@ -201,7 +201,7 @@ func resolveVCS(ctx context.Context) (types.VCSDriver, string) {
 
 // resolveVCSAt resolves the driver and base ref for the repository holding wd, sharing
 // resolveVCS's one-entry cache.
-func resolveVCSAt(ctx context.Context, wd string) (types.VCSDriver, string, error) {
+func resolveVCSAt(ctx context.Context, wd string) (types.VCSDriver, string, error) { //nolint:ireturn // VCSDriver: git, hg, jj or sapling
 	vcsMu.Lock()
 	defer vcsMu.Unlock()
 	if wd == vcsCwdKey {
@@ -228,7 +228,7 @@ func resolveVCSAt(ctx context.Context, wd string) (types.VCSDriver, string, erro
 // repository holding dir, or for "" the one holding the target's cwd. A dir that does not
 // exist is an error rather than a fall back to the cwd, which would answer for a different
 // checkout than the caller named.
-func vcsAt(ctx context.Context, method, dir string) (types.VCSDriver, string, string, error) {
+func vcsAt(ctx context.Context, method, dir string) (types.VCSDriver, string, string, error) { //nolint:ireturn // VCSDriver: git, hg, jj or sapling
 	if dir == "" {
 		v, base := resolveVCS(ctx)
 		return v, base, vcsDir(ctx), nil
