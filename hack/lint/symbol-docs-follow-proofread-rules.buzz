@@ -25,9 +25,10 @@ export final SANCTIONED = {<str: str>};
 // THIS is where a finding sends a reader to sanction a symbol.
 final THIS = "hack/lint/symbol-docs-follow-proofread-rules.buzz";
 
-// reads keys lint-rules on every source the indexes cover: a tree glob stops at a nested
-// project, so each project holding Go or TypeScript is named. proto's Go is all generated.
-// The proofread rules are the Go of libs/proofread, so its module files key the rule too.
+// reads keys conventions on every source the indexes cover: a tree glob stops
+// at a nested project, so each project holding Go or TypeScript is named.
+// proto's Go is all generated. The proofread rules are the Go of
+// libs/proofread, so its module files key the rule too.
 export fun reads() > [str] {
     return ["**/*.go", "libs/proofread/go.mod", "libs/proofread/go.sum",
         "libs/proofread/**/*.go", "libs/proofread/proofread.buzz",

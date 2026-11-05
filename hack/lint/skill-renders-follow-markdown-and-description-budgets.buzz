@@ -33,16 +33,17 @@ import "libs/proofread/proofread" as proofread;
 export final SKILLS = "internal/agent/skills";
 export final CATALOG = "internal/agent/catalog.go";
 
-// CONFIG is the decided Markdown style. lint-rules does not key on it yet, so it is read by
-// path rather than handed in.
+// CONFIG is the decided Markdown style. conventions does not key on it yet, so
+// it is read by path rather than handed in.
 final CONFIG = ".markdownlint.json";
 
 final RULES = "skill-description-budget,skill-set-description-budget";
 
 final JUDGE = "{proofread\home}/{proofread\command}";
 
-// reads keys lint-rules on the skill sources and on everything the judge is linked from. The
-// renders also read the Go of internal/agent, which lint-rules keys through **/*.go.
+// reads keys conventions on the skill sources and on everything the judge is
+// linked from. The renders also read the Go of internal/agent, which
+// conventions keys through **/*.go.
 export fun reads() > [str] {
     return [CATALOG, "{SKILLS}/*/SKILL.md", "hack/policy/proofread.buzz", "libs/proofread/go.mod",
         "libs/proofread/go.sum", "libs/proofread/**/*.go", "libs/proofread/proofread.buzz",

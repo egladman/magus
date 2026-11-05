@@ -3,8 +3,8 @@
 // plugin refuses a settings block, so what is left is what golangci-lint offers every
 // linter: an exclusion rule, a path exclusion, a nolint directive, leaving it off, or
 // leaving a module out of the run. This refuses each of those. A file-wide nolint is
-// out of the analyzer's reach, so this rule reads every test file, and lint-rules
-// replays from cache less often for it; that is the price of the check.
+// out of the analyzer's reach, so this rule reads every test file.
+// conventions replays from cache less often for it, the price of the check.
 //
 // Tier 1, mechanical: the fix deletes the exemption.
 namespace testpairing;

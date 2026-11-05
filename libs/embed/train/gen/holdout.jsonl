@@ -77,6 +77,7 @@
 {"group":"file:changes/unreleased/checkout-reporter.md","path":"changes/unreleased/checkout-reporter.md"}
 {"group":"file:changes/unreleased/ci-asks-for-whole-machine-explicitly.md","path":"changes/unreleased/ci-asks-for-whole-machine-explicitly.md"}
 {"group":"file:changes/unreleased/ci-gates-in-the-queue-box.md","path":"changes/unreleased/ci-gates-in-the-queue-box.md"}
+{"group":"file:changes/unreleased/ci-shards-by-target-labels.md","path":"changes/unreleased/ci-shards-by-target-labels.md"}
 {"group":"file:changes/unreleased/claim-callers-of-a-symbol.md","path":"changes/unreleased/claim-callers-of-a-symbol.md"}
 {"group":"file:changes/unreleased/claim-sizing.md","path":"changes/unreleased/claim-sizing.md"}
 {"group":"file:changes/unreleased/clones-hg-jj-or-sapling-repository.md","path":"changes/unreleased/clones-hg-jj-or-sapling-repository.md"}
@@ -243,6 +244,7 @@
 {"group":"file:changes/unreleased/proofread-train.md","path":"changes/unreleased/proofread-train.md"}
 {"group":"file:changes/unreleased/push-gate-accepts-narrow-evidence.md","path":"changes/unreleased/push-gate-accepts-narrow-evidence.md"}
 {"group":"file:changes/unreleased/query-invocation-shows-refs.md","path":"changes/unreleased/query-invocation-shows-refs.md"}
+{"group":"file:changes/unreleased/queue-apply-token-waits.md","path":"changes/unreleased/queue-apply-token-waits.md"}
 {"group":"file:changes/unreleased/queue-cache-read.md","path":"changes/unreleased/queue-cache-read.md"}
 {"group":"file:changes/unreleased/queue-dismisses-stale-approvals.md","path":"changes/unreleased/queue-dismisses-stale-approvals.md"}
 {"group":"file:changes/unreleased/queue-generator-label.md","path":"changes/unreleased/queue-generator-label.md"}
