@@ -417,15 +417,7 @@ func doRequest(ctx context.Context, method, url, body string, headers map[string
 		bodyReader = strings.NewReader(body)
 	}
 	o := parseHTTPOptions(opts)
-	var cacheKey string
-	var cached etagEntry
-	if o.revalidate {
-		cacheKey = etagKey(method, url, headers)
-		if e, ok := etags.get(cacheKey); ok {
-			cached = e
-			headers = withHeader(headers, "If-None-Match", e.etag)
-		}
-	}
+	cacheKey, cached, headers := lookupETag(o, method, url, headers)
 	resp, err := sendHTTP(ctx, "http."+strings.ToLower(method), method, url, bodyReader, headers, o, retryPolicy)
 	if err != nil {
 		return types.HTTPResponse{}, err
@@ -436,12 +428,7 @@ func doRequest(ctx context.Context, method, url, body string, headers map[string
 		return types.HTTPResponse{}, fmt.Errorf("http.%s %s: read body: %w", strings.ToLower(method), url, err)
 	}
 	if o.revalidate {
-		switch {
-		case resp.StatusCode == http.StatusNotModified && cached.etag != "":
-			raw = []byte(cached.body)
-		case resp.StatusCode == http.StatusOK && resp.Header.Get("ETag") != "" && len(raw) <= etagMaxBody:
-			etags.put(cacheKey, etagEntry{etag: resp.Header.Get("ETag"), body: string(raw)})
-		}
+		raw = storeETag(resp, cacheKey, cached, raw)
 	}
 
 	// curl --fail / --fail-with-body: a >= 400 status becomes an error rather
@@ -455,18 +442,46 @@ func doRequest(ctx context.Context, method, url, body string, headers map[string
 		return types.HTTPResponse{}, e
 	}
 
-	// Collect response headers; where a name has multiple values, take the first.
-	respHeaders := make(map[string]string, len(resp.Header))
-	for k, vs := range resp.Header {
-		if len(vs) > 0 {
-			respHeaders[k] = vs[0]
-		}
-	}
 	return types.HTTPResponse{
 		Status:  resp.StatusCode,
 		Body:    string(raw),
-		Headers: respHeaders,
+		Headers: firstHeaderValues(resp.Header),
 	}, nil
+}
+
+// lookupETag adds If-None-Match when a stored entry exists.
+func lookupETag(o httpOpts, method, url string, headers map[string]string) (string, etagEntry, map[string]string) {
+	if !o.revalidate {
+		return "", etagEntry{}, headers
+	}
+	key := etagKey(method, url, headers)
+	e, ok := etags.get(key)
+	if !ok {
+		return key, etagEntry{}, headers
+	}
+	return key, e, withHeader(headers, "If-None-Match", e.etag)
+}
+
+// storeETag swaps in the stored body on 304 and records a fresh 200.
+func storeETag(resp *http.Response, key string, cached etagEntry, raw []byte) []byte {
+	switch {
+	case resp.StatusCode == http.StatusNotModified && cached.etag != "":
+		return []byte(cached.body)
+	case resp.StatusCode == http.StatusOK && resp.Header.Get("ETag") != "" && len(raw) <= etagMaxBody:
+		etags.put(key, etagEntry{etag: resp.Header.Get("ETag"), body: string(raw)})
+	}
+	return raw
+}
+
+// firstHeaderValues keeps the first value where a header repeats.
+func firstHeaderValues(h http.Header) map[string]string {
+	out := make(map[string]string, len(h))
+	for k, vs := range h {
+		if len(vs) > 0 {
+			out[k] = vs[0]
+		}
+	}
+	return out
 }
 
 // httpOpts is the parsed curl-style options map. Zero value means "use the
