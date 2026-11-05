@@ -1289,7 +1289,7 @@ type diskReclaimer interface {
 	FileDiskAttention(ctx context.Context, message string) error
 }
 
-func diskReclaimerFromContext(ctx context.Context, member string) (diskReclaimer, error) {
+func diskReclaimerFromContext(ctx context.Context, member string) (diskReclaimer, error) { //nolint:ireturn // the implementation is chosen at runtime among several
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return nil, errorNoWorkspace(member)
@@ -1433,7 +1433,7 @@ func MagusGrouping(ctx context.Context) (types.Grouping, error) {
 	return a.GroupingLens(ctx)
 }
 
-func contextHistoryMetrics(ctx context.Context, member string) (types.HistoryMetrics, error) {
+func contextHistoryMetrics(ctx context.Context, member string) (types.HistoryMetrics, error) { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	if a, ok := AnalyzerFromContext(ctx); ok {
 		return a, nil
 	}
@@ -1448,7 +1448,7 @@ func contextHistoryMetrics(ctx context.Context, member string) (types.HistoryMet
 	return a, nil
 }
 
-func historyMetricsRequest(ctx context.Context, member string, opts types.HistoryMetricsOptions) (types.HistoryMetrics, types.HistoryMetricsOptions, error) {
+func historyMetricsRequest(ctx context.Context, member string, opts types.HistoryMetricsOptions) (types.HistoryMetrics, types.HistoryMetricsOptions, error) { //nolint:ireturn // the observability backend is Nop or OTel, chosen at runtime
 	a, err := contextHistoryMetrics(ctx, member)
 	if err != nil {
 		return nil, opts, err
