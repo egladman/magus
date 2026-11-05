@@ -185,10 +185,6 @@ The queryable graph of a workspace's spells, targets, docs, and code relationshi
 
 The committed routing index at a workspace root, regenerated from the knowledge graph: it lists every node and points at the exact query for a given question, so it is the entry point an agent reads first. [MAGUS.md in full](glossary/magusmd.md).
 
-### Mutant
-
-A copy of a touched function with one token swapped, run against the spell's own tests. A survivor means no test asserts on that token. [Mutant in full](glossary/mutant.md).
-
 ### historymetrics
 
 The metrics magus derives over the graph and history (hotspots, affinity, ownership, trend, volatility, unreferenced). [historymetrics in full](glossary/historymetrics.md).

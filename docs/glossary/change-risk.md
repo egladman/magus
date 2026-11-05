@@ -35,5 +35,4 @@ The knowledge graph holds no docs section or code type by this name outside the 
 ## See also
 
 - [ADR 0023](../decisions/0023-touched-functions-meet-change-risk-and-their-mutants.md)
-- [Mutant](mutant.md)
 - [Hotspot](hotspot.md)

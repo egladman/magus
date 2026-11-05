@@ -1,7 +1,7 @@
 ---
 title: "ADR 0023: touched functions keep change risk at 10 and kill their mutants"
 order: 23
-description: A function a change touches is refused when its change risk passes 10 or a mutant of it survives, and it is worse than the same function at base. Spells declare decision tokens, token swaps and a coverage command as data, and one engine in core scores and mutates every language. An equivalent mutant is excepted inline with a reason. Change risk has no exception. Coverage floors hold each changed file's covered lines against its base. The engine, the spell declarations, the host functions and the two lint rules are built, and lint-rules runs both.
+description: A function a change touches is refused when its change risk passes 10 or a mutant of it survives, and it is worse than the same function at base. Spells declare decision tokens and a coverage command as data, and one engine in core scores every language. Change risk has no exception. Coverage floors hold each changed file's covered lines against its base. Change risk is built and lint-rules runs its rule. Mutation moves to a go::mutate op with a Go-native engine and a token fallback, and is not built here.
 tags: [adr, decision, lint, coverage, mutation, spells, gates]
 status: accepted (partly implemented)
 date: 2026-11-03
@@ -71,6 +71,10 @@ coverage. A function that only moved, with an unchanged body digest, is not touc
 
 ### Mutate
 
+This section is the decision for mutation, which moves to the go spell's `mutate` op
+([2026-11-04: mutation moves to go::mutate](#2026-11-04-mutation-moves-to-gomutate)).
+Nothing below is built in core.
+
 Each touched function's covered, non-arid lines yield the spell's token swaps
 (`Syntax.Mutations`). A swap is `Find` and `Replace`, because `from` is a reserved word in
 Buzz.
@@ -103,26 +107,24 @@ number; it reports scores and mutants, and a lint rule decides.
 
 ### State
 
-| item                                                                        | State                                        |
-| --------------------------------------------------------------------------- | -------------------------------------------- |
-| decision tokens, token swaps and coverage declared by spells as data        | done                                         |
-| `Op.Coverage` and the synthesized `coverage` op                             | done                                         |
-| complexity carried in the pack beside SCIP (`SymbolInfo.Complexity`)        | done                                         |
-| runner refs resolve inside a token for `MAGUS` and `MAGUS_` names           | done                                         |
-| `Magus.ChangeRisk` and the change-risk check in `magus diff`                | done                                         |
-| `Magus.Mutants`, the scoped baseline, `mutants.jsonl` and the marker reader | done                                         |
-| the `magus:mutant` marker syntax and its unused-marker findings             | done                                         |
-| Buzz methods `Change.risk`, `Change.mutants` and `Workspace.risk`           | done                                         |
-| lint rule `touched-functions-keep-change-risk-under-10`                     | done (`hack/lint/run.buzz` names it)         |
-| lint rule `touched-functions-kill-their-mutants`                            | done (`hack/lint/run.buzz` names it)         |
-| coverage run in scratch copies, scoped to the touched files' tests          | done                                         |
-| each touched function judged against itself at base, in both rules          | done                                         |
-| a mutant with no result after a green baseline is killed                    | done                                         |
-| covered lines kept, in place of the 70% Go and 62% Buzz totals              | done                                         |
-| `Change.risk` scoring this repository's own change                          | in progress (not run since the copies)       |
-| `Change.mutants` over this repository's own change                          | in progress (a Buzz mutant breaks its parse) |
-| coverage for bash                                                           | not built                                    |
-| Measured section (refusals and wall time over the last 20 merges)           | not built                                    |
+| item                                                                        | State                                                   |
+| --------------------------------------------------------------------------- | ------------------------------------------------------- |
+| decision tokens and coverage declared by spells as data                     | done                                                    |
+| `Op.Coverage` and the synthesized `coverage` op                             | done                                                    |
+| complexity carried in the pack beside SCIP (`SymbolInfo.Complexity`)        | done                                                    |
+| runner refs resolve inside a token for `MAGUS` and `MAGUS_` names           | done                                                    |
+| `Magus.ChangeRisk` and the change-risk check in `magus diff`                | done                                                    |
+| Buzz methods `Change.risk` and `Workspace.risk`                             | done                                                    |
+| lint rule `touched-functions-keep-change-risk-under-10`                     | done (`hack/lint/run.buzz` names it, under lint-rules)  |
+| coverage run in scratch copies, scoped to the touched files' tests          | done                                                    |
+| each touched function judged against itself at base                         | done                                                    |
+| covered lines kept, in place of the 70% Go and 62% Buzz totals              | done                                                    |
+| `Change.risk` scoring this repository's own change                          | in progress (stopped at its 7m budget in lint-rules)    |
+| mutation: a go::mutate op, Go-native engine plus token fallback, one binary | not built (the next change)                             |
+| the mutant verdict cache, keyed by body, covering tests and Context         | not built (the next change)                             |
+| the `magus:mutant` marker and the kill-their-mutants rule                   | not built (the next change)                             |
+| coverage for bash                                                           | not built                                               |
+| Measured section (refusals and wall time over the last 20 merges)           | not built                                               |
 
 On the building branch, change risk against `origin/main` ran the root `coverage` op for
 12m47s and failed: that op ran the whole Go suite, which was red. Listing the rules under
@@ -172,14 +174,10 @@ finding that says why.
 - [No silent defaults](../design/judgment/no-silent-defaults.md): relied on; a missing
   extent, a missing report, an empty report, a red baseline, a replayed run and a missing
   capability are each a finding or an error that names the cause.
-- [A cache is an accelerator](../design/principles/a-cache-is-an-accelerator.md): relied
-  on; deleting `mutants.jsonl` changes a duration, and a cache hit never decides a mutant.
-- [Everything is a file](../design/principles/everything-is-a-file.md): relied on; one
-  JSON Lines file.
 - [Sit next to the tools](../design/principles/sit-next-to-the-tools.md): strained; magus
-  counts decisions and mutates itself rather than running gocyclo, ESLint, ruff, Stryker or
-  cargo-mutants. No one tool spans the languages, Buzz and bash have none, and every test
-  still runs through the spell's own op.
+  counts decisions itself rather than running gocyclo, ESLint or ruff. No one tool spans
+  the languages, Buzz and bash have none, and every test still runs through the spell's
+  own op.
 - [Capability is not a reason](../design/principles/capability-is-not-a-reason.md): the
   failure removed is a test that runs code without asserting on it.
 - [Measured, not asserted](../design/principles/measured-not-asserted.md): pending; this
@@ -215,9 +213,7 @@ finding that says why.
 
 - Every touched function needs a test that asserts, except functions small enough that
   c^2 + c <= 10 decides them at any coverage.
-- Lint gets slower by the scoped test runs of touched code when cold; a repeat run reads
-  `mutants.jsonl`.
-- Some survivors are equivalent mutants; each costs a marker with a reason.
+- Lint gets slower by the scoped coverage runs of touched code, at head and at base.
 - Bash functions of complexity 3 or more are refused, because bash declares no coverage.
 - A node:test TypeScript project gets a loud gap that names vitest's coverage package,
   since the TypeScript spell declares vitest.
@@ -245,3 +241,14 @@ A touched function is judged against itself at base, coverage runs scoped in scr
 copies, and covered lines kept replace the coverage totals. See
 [Judge against base](#judge-against-base), [Coverage runs in scratch
 copies](#coverage-runs-in-scratch-copies) and [Covered lines kept](#covered-lines-kept).
+
+### 2026-11-04: mutation moves to go::mutate
+
+Eli decided that this change lands change risk alone. Mutation moves to a `mutate` op of
+the go spell, built in the next change: a Go-native engine (go/ast sites, `go test
+-overlay`) with the token swaps kept as its fallback, in the one magus binary. A mutant's
+verdict is keyed by the function's body, the tests that cover it and the Context it runs
+under. Core keeps no mutation code until then: `Magus.Mutants`, `Change.mutants()`,
+`Syntax.Mutations`, the `magus:mutant` marker and `touched-functions-kill-their-mutants`
+are removed, and [Mutate](#mutate) and [Except](#except) record the decision that op
+builds.

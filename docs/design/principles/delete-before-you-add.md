@@ -46,8 +46,6 @@ my yes and carries the condition that retires it
   function against itself at base and holds the covered lines a change keeps, so
   shrinking a function or removing covered code never costs
   ([ADR 0023](../../decisions/0023-touched-functions-meet-change-risk-and-their-mutants.md)).
-- The lint rule `touched-functions-kill-their-mutants` refuses a survivor only
-  when its function has more survivors than at base.
 
 ## Good
 
