@@ -49,7 +49,7 @@ var SystemProbe Probe = systemProbe{}
 // terminal (a documentation renderer, a recording), and every one of them
 // stands down without a probe that says there is a terminal to draw on. Tests
 // have always had one; this is that, exported, so a generator can have it too.
-func FixedProbe(width, height int) Probe { return fixedProbe{width: width, height: height} } //nolint:ireturn // the implementation is chosen at runtime among several
+func FixedProbe(width, height int) fixedProbe { return fixedProbe{width: width, height: height} }
 
 type fixedProbe struct{ width, height int }
 
@@ -58,7 +58,7 @@ func (p fixedProbe) Size(uintptr) (int, int, error) { return p.width, p.height, 
 
 // CaptureProbe models a color-capable terminal for committed recordings. Its
 // rendering cannot depend on the shell running the generator.
-func CaptureProbe(width, height int) Probe { //nolint:ireturn // the implementation is chosen at runtime among several
+func CaptureProbe(width, height int) captureProbe {
 	return captureProbe{fixedProbe{width: width, height: height}}
 }
 
