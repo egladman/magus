@@ -28,6 +28,10 @@ func (s *runtimeSuite) open(invoke invoker) *buzzRuntime {
 	return runtime
 }
 
+func (s *runtimeSuite) TestGuardVersionIsTheAgentContract() {
+	s.Equal("magus.guard/v1alpha1", guardAPIVersion)
+}
+
 // The workspace Buzz audit leaves plugin.buzz to this check: only this
 // session declares the opencode module it imports.
 func (s *runtimeSuite) TestPluginHasNoDiagnostics() {

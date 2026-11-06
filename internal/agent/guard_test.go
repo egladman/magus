@@ -700,3 +700,8 @@ func TestHookOutputSchemasRejectAWrongEventName(t *testing.T) {
 			"cursor's postToolUse schema accepted an advisory that is not a string, which Cursor drops")
 	})
 }
+
+func TestGuardAPIVersionMatchesTheOpenCodePin(t *testing.T) {
+	assert.Equal(t, "magus.guard/v1alpha1", string(GuardAPIVersion),
+		"internal/interp/bindings/opencode pins this literal; change both")
+}

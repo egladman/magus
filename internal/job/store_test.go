@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // tempLocation places a ledger entirely under temp directories, so no test resolves the real
@@ -1527,4 +1528,55 @@ func (s *jobSuite) TestAFreshJobStoreIsWrittenAtItsMigration() {
 	path, err := st.Path()
 	s.Require().NoError(err)
 	s.InDelta(2, storedLines(s.T(), path)[0]["migration"], 0, "a new store needs no migration")
+}
+
+// IntegerStampSuite pins adoptIntegerStamp: a job store an integer-versioned
+// magus wrote reads as JobAPIVersion, and anything else old is refused.
+type IntegerStampSuite struct {
+	suite.Suite
+	store *Store
+}
+
+func TestIntegerStamp(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(IntegerStampSuite))
+}
+
+func (s *IntegerStampSuite) SetupTest() {
+	s.store = tempStore(s.T(), s.T().TempDir())
+}
+
+const integerStore = `{"schema_version":13}` + "\n" +
+	`{"id":"a","schema_version":13,"state":"running","created":1,"updated":1}` + "\n" +
+	`{"id":"b","schema_version":13,"state":"running","created":1,"updated":1}`
+
+func (s *IntegerStampSuite) TestReadsAnIntegerRowAsV1alpha1() {
+	plantRaw(s.T(), s.store, integerStore)
+	rows, err := s.store.List()
+	s.Require().NoError(err)
+	s.Require().Len(rows, 2)
+	s.Equal(types.JobAPIVersion, rows[0].Version)
+	s.NotContains(rows[0].Unknown, "schema_version")
+}
+
+func (s *IntegerStampSuite) TestRewriteWritesTheName() {
+	path := plantRaw(s.T(), s.store, integerStore)
+	_, err := s.store.Update(s.T().Context(), "a", func(u *types.Job) { u.Criteria = "moved" })
+	s.Require().NoError(err)
+	row := storedRow(s.T(), path, "a")
+	s.Equal(string(types.JobAPIVersion), row["api_version"])
+	s.NotContains(row, "schema_version")
+}
+
+func (s *IntegerStampSuite) TestRefusesANonIntegerSchemaVersion() {
+	plantRaw(s.T(), s.store, `{"id":"a","schema_version":"13","state":"running","created":1,"updated":1}`)
+	_, err := s.store.List()
+	s.ErrorContains(err, "carries no api_version, so an older magus wrote it")
+	s.ErrorContains(err, "move jobs.jsonl aside, or delete it, and fork the jobs again")
+}
+
+func (s *IntegerStampSuite) TestRefusesAMalformedVersion() {
+	plantRaw(s.T(), s.store, `{"id":"a","api_version":"13","state":"running","created":1,"updated":1}`)
+	_, err := s.store.List()
+	s.ErrorContains(err, "move jobs.jsonl aside, or delete it")
 }
