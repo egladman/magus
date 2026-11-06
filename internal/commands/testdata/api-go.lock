@@ -2415,6 +2415,7 @@ github.com/egladman/magus/types.ForgePull.BehindBy field int
 github.com/egladman/magus/types.ForgePull.Branch field string
 github.com/egladman/magus/types.ForgePull.Checks field []ForgeCheck
 github.com/egladman/magus/types.ForgePull.Draft field bool
+github.com/egladman/magus/types.ForgePull.FetchRef field string
 github.com/egladman/magus/types.ForgePull.Files field []string
 github.com/egladman/magus/types.ForgePull.HeadSHA field string
 github.com/egladman/magus/types.ForgePull.Mergeable field string
