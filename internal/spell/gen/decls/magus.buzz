@@ -808,12 +808,14 @@ export object JobResultValidation {
     command: str = "",
     outputRef: str = "",
     owed: str = "",
+    unrun: str = "",
 }
 
 export object GateEvidence {
     gateID: str = "",
     outputRef: str = "",
     owed: str = "",
+    unrun: str = "",
 }
 
 export object JobResult {

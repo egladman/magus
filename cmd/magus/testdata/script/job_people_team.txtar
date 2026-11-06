@@ -1,6 +1,6 @@
 # Two people in two worktrees of one repository claim the same file. The store records
 # the overlap, the guard advises the one who asks before writing and blocks nobody, and
-# `job apply -f -` hands the file over by narrowing the first job's record.
+# `job apply --stdin` hands the file over by narrowing the first job's record.
 # docs/guides/jobs.md shows these commands and every golden below verbatim
 # (TestJobGuideMatchesItsScripts holds it to that).
 env HOME=$WORK/home
@@ -40,7 +40,7 @@ cmp stdout $WORK/ls-overlap.out
 
 cd ../ana
 stdin $WORK/release.json
-exec magus job apply -f -
+exec magus job apply --stdin
 cmp stdout $WORK/apply.out
 exec magus ls jobs
 cmp stdout $WORK/ls-handed.out

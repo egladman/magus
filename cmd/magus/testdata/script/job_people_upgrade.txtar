@@ -16,7 +16,7 @@ exec git add -A
 exec git commit -q -m 'pin left-pad 1.2 everywhere'
 
 stdin $WORK/plan.jsonl
-exec magus job apply -f -
+exec magus job apply --stdin
 cmp stdout $WORK/apply.out
 exec git worktree add -q ../ana
 exec git worktree add -q ../ben
@@ -109,6 +109,6 @@ upgrade/api  ana     pass   standard  1      alone     magus run test api
 upgrade/web  ben     pass   standard  1      disjoint  magus run test web
 
 not merged onto main: 2
-  upgrade/api at 4482968: 1 commit(s) at 4482968 are not on main; merge 4482968 into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/api","left_unmerged":"<why>"}
-  upgrade/web at c2385b8: 1 commit(s) at c2385b8 are not on main; merge c2385b8 into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/web","left_unmerged":"<why>"}
+  upgrade/api at 4482968: 1 commit(s) at 4482968 are not on main; merge 4482968 into main, or state why it stays off: `magus job apply --stdin` with {"schema_version":13,"id":"upgrade/api","left_unmerged":"<why>"}
+  upgrade/web at c2385b8: 1 commit(s) at c2385b8 are not on main; merge c2385b8 into main, or state why it stays off: `magus job apply --stdin` with {"schema_version":13,"id":"upgrade/web","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes

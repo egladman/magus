@@ -717,6 +717,7 @@ func ObjectJobResultValidation(v types.JobResultValidation) vm.Value {
 	out.MapSet("command", vm.StringValue(v.Command))
 	out.MapSet("outputRef", vm.StringValue(v.OutputRef))
 	out.MapSet("owed", vm.StringValue(v.Owed))
+	out.MapSet("unrun", vm.StringValue(v.Unrun))
 	return out
 }
 
@@ -725,6 +726,7 @@ func ObjectGateEvidence(v types.GateEvidence) vm.Value {
 	out.MapSet("gateID", vm.StringValue(v.GateID))
 	out.MapSet("outputRef", vm.StringValue(v.OutputRef))
 	out.MapSet("owed", vm.StringValue(v.Owed))
+	out.MapSet("unrun", vm.StringValue(v.Unrun))
 	return out
 }
 

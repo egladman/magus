@@ -43,6 +43,10 @@
         },
         "owed": {
           "type": "string"
+        },
+        "unrun": {
+          "type": "string",
+          "description": "Unrun is the environment cause that kept the check from running, as on [GateEvidence]."
         }
       }
     },
@@ -61,6 +65,10 @@
           },
           "owed": {
             "type": "string"
+          },
+          "unrun": {
+            "type": "string",
+            "description": "Unrun is the cause that kept the goal's run from running in this environment. It files a failed attempt: `job wait` fails it."
           }
         }
       }

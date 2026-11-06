@@ -7570,6 +7570,12 @@ func decodeJobResultValidation(v vm.Value, path string) (types.JobResultValidati
 				return out, err
 			}
 			out.Owed = sOwed
+		case "unrun":
+			sUnrun, err := decodeString(item, path+".unrun")
+			if err != nil {
+				return out, err
+			}
+			out.Unrun = sUnrun
 		default:
 			return out, unknownMember(path, "JobResultValidation", key)
 		}
@@ -7609,6 +7615,12 @@ func decodeGateEvidence(v vm.Value, path string) (types.GateEvidence, error) {
 				return out, err
 			}
 			out.Owed = sOwed
+		case "unrun":
+			sUnrun, err := decodeString(item, path+".unrun")
+			if err != nil {
+				return out, err
+			}
+			out.Unrun = sUnrun
 		default:
 			return out, unknownMember(path, "GateEvidence", key)
 		}

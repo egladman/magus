@@ -242,7 +242,41 @@ func (s *exitEvidenceSuite) TestGoalWithNeitherRefNorOwedIsRefused() {
 
 	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
 
-	s.ErrorContains(err, `goal "lint" names neither output_ref nor owed`)
+	s.ErrorContains(err, `goal "lint" names none of output_ref, owed or unrun`)
+}
+
+func (s *exitEvidenceSuite) TestUnrunGoalNeedsNoRef() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Unrun: "node_modules is missing"}}
+
+	exited, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+
+	s.Require().NoError(err)
+	s.Equal(types.StateExited, exited.State)
+	s.Empty(exited.GateAttempts)
+}
+
+func (s *exitEvidenceSuite) TestUnrunGoalCitingARefIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
+	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Unrun: "disk under its floor", OutputRef: "out9"}}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+
+	s.ErrorContains(err, `goal "lint" is filed as unrun and cites output ref "out9"`)
+}
+
+func (s *exitEvidenceSuite) TestACheckBothOwedAndUnrunIsRefused() {
+	row := s.row()
+	result := passingResult()
+	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat, Unrun: "disk under its floor"}
+
+	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
+
+	s.ErrorContains(err, "files its check as both owed and unrun")
 }
 
 func (s *exitEvidenceSuite) TestGoalRefNamingAnotherCommandIsRefused() {

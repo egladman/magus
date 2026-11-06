@@ -3051,9 +3051,23 @@ func TestDenyLeaseScopedRebind(t *testing.T) {
 			assert.Contains(t, reason.Say, "give the child an id", "a fork the guard cannot read is the caller's to fix")
 			continue
 		}
+		if what == "take the lease on another job" {
+			continue
+		}
 		assert.Contains(t, reason.Say, "ask your orchestrator to", "the verdict must name the actor")
 		assert.Contains(t, reason.Why, "Report it as an unresolved risk and stop", "the rationale ends the turn")
 	}
+}
+
+// A resumed worker whose first row is still in flight is told to end it,
+// which it may do, rather than to stop and report.
+func TestDenyLeaseScopedRebindNamesTheExitBeforeAnotherExec(t *testing.T) {
+	ctx, _ := fleetFixture(t, narrowLease())
+	me := narrowLease().ID
+
+	reason := denyLeaseScopedRebind(ctx, Dependencies{}, me, "magus job exec harness/other")
+	assert.Contains(t, reason.Say, "end it first with `magus job exit "+me+" --stdin`, then take harness/other")
+	assert.NotContains(t, reason.Why, "Report it as an unresolved risk and stop")
 }
 
 // TestDenyLeaseScopedRebindLetsAHolderEnterBeneathIt pins the one put on another row a

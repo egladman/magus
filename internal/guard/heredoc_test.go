@@ -40,7 +40,7 @@ func TestHeredocWritesReadsOnlyALiteralBodyIntoAFile(t *testing.T) {
 		// The body expands a parameter, so nobody can read it before it runs.
 		{"cat > notes.md <<EOF\nhome is $HOME\nEOF", nil},
 		// A heredoc feeding a command's stdin is no write.
-		{"cat <<'EOF' | ./magus job apply -f -\nid: x\nEOF", nil},
+		{"cat <<'EOF' | ./magus job apply --stdin\nid: x\nEOF", nil},
 		{"cat <<'EOF' >/dev/null\nx\nEOF", nil},
 		{"cat 2> err.log <<'EOF'\nx\nEOF", nil},
 		{"grep x > out.txt <<'EOF'\nx\nEOF", nil},

@@ -118,6 +118,29 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 	return wt, true, nil
 }
 
+// CheckpointAtHead reports whether checkpoint's revision is dir's head
+// commit, and returns that head. A checkpoint naming no revision is at
+// any head.
+func CheckpointAtHead(ctx context.Context, dir, checkpoint string) (head string, at bool, err error) {
+	drv, why := resolveDriver(ctx, dir)
+	if drv == nil {
+		return "", false, errors.New(why)
+	}
+	h, err := drv.FindCommit(ctx, dir, "")
+	if err != nil {
+		return "", false, err
+	}
+	revision, _ := types.ParseCheckpointToken(checkpoint)
+	if revision == "" {
+		return h.ID, true, nil
+	}
+	target, err := drv.FindCommit(ctx, dir, revision)
+	if err != nil {
+		return h.ID, false, err
+	}
+	return h.ID, target.ID == h.ID, nil
+}
+
 // followCheckpoint moves wt to the revision a fork names. The job's own base
 // stays put, so a retry keeps its commits. Adopting allows an ancestor of the
 // head, which a child in a shared checkout names.

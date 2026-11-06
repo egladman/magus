@@ -536,8 +536,24 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		}
 	}
 
+	unrunByGate := map[string]string{}
+	if rep.Validation.Unrun != "" {
+		unrunByGate[types.PrimaryGoalID] = rep.Validation.Unrun
+	}
+	for _, evidence := range rep.GateEvidence {
+		if evidence.Unrun != "" {
+			unrunByGate[evidence.GateID] = evidence.Unrun
+		}
+	}
+
 	statusByGate := map[string]types.GateStatus{}
 	for _, gate := range gates {
+		if cause, unrun := unrunByGate[gate.ID]; unrun && strings.TrimSpace(evidenceByGate[gate.ID]) == "" {
+			statusByGate[gate.ID] = types.GateStatus{ID: gate.ID, Violations: []string{
+				fmt.Sprintf("did not run: %s; it fails until the check runs where that is fixed", cause),
+			}}
+			continue
+		}
 		if reason, owed := owedByGate[gate.ID]; owed && strings.TrimSpace(evidenceByGate[gate.ID]) == "" {
 			statusByGate[gate.ID] = owedGate(row, gate, reason)
 			if len(statusByGate[gate.ID].Violations) == 0 {
