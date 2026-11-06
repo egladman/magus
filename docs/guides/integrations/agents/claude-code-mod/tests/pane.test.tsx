@@ -164,3 +164,54 @@ test('the Agents tab lists spawned subagents and links one to the job its descri
   expect(await ui.find({ type: 'Text', text: /tokens/ })).toBeDefined()
   expect(await ui.find({ type: 'Button', key: 'watch' })).toBeDefined()
 })
+
+function spawnAgents($: Parameters<Parameters<typeof test>[1]>[0], on: On, theme: string) {
+  on('agent.spawn', ($, e) => ({ model: 'claude-haiku-5-5', agentId: e.tool_use_id }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('config.list', () => ({ value: [{ key: 'theme', label: 'Theme', kind: 'enum', value: theme, provider: { plugin: 'engine' } }] as never }))
+  const spawn = (id: string, description: string) =>
+    $.agent.spawn({
+      tool_use_id: id,
+      prompt: 'work',
+      description,
+      subagentType: 'general-purpose',
+      provider: { plugin: 'engine' },
+      parentModel: 'claude-opus-5-5',
+      background: true,
+    } as never)
+  return spawn
+}
+
+test('the Agents tab tints each row by the role its description names, in the theme shade', async ($, on) => {
+  const clock = mock.clock(on)
+  engine(on, { serverUp: true, calls: [] })
+  const spawn = spawnAgents($, on, 'dark')
+
+  await $.session.start({ cwd: ROOT, surface: 'desktop', isInteractive: true })
+  await spawn('o1', 'root/orchestrator plan')
+  await spawn('w1', 'root/worker store')
+  await spawn('x1', 'Map magus data feeds')
+
+  const ui = await $.ui.mount(PANE)
+  await ui.press({ key: 'tab-agents' })
+  await clock.settle()
+  expect((await ui.find({ type: 'Box', key: 'agent-o1' }))?.props.backgroundColor).toBe('#1b0d33')
+  expect((await ui.find({ type: 'Box', key: 'agent-w1' }))?.props.backgroundColor).toBe('#032142')
+  expect((await ui.find({ type: 'Box', key: 'agent-x1' }))?.props.backgroundColor).toBeUndefined()
+  expect(await ui.find({ type: 'Text', key: 'tint-off' })).toBeUndefined()
+})
+
+test('a theme with no shade draws no tint and says why', async ($, on) => {
+  const clock = mock.clock(on)
+  engine(on, { serverUp: true, calls: [] })
+  const spawn = spawnAgents($, on, 'auto')
+
+  await $.session.start({ cwd: ROOT, surface: 'desktop', isInteractive: true })
+  await spawn('w1', 'root/worker store')
+
+  const ui = await $.ui.mount(PANE)
+  await ui.press({ key: 'tab-agents' })
+  await clock.settle()
+  expect((await ui.find({ type: 'Box', key: 'agent-w1' }))?.props.backgroundColor).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /No role tints: theme auto names no light or dark shade/ })).toBeDefined()
+})

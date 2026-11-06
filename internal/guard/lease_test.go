@@ -3066,7 +3066,7 @@ func TestDenyLeaseScopedRebindNamesTheExitBeforeAnotherExec(t *testing.T) {
 	me := narrowLease().ID
 
 	reason := denyLeaseScopedRebind(ctx, Dependencies{}, me, "magus job exec harness/other")
-	assert.Contains(t, reason.Say, "end it first with `magus job exit "+me+" --stdin`, then take harness/other")
+	assert.Contains(t, reason.Say, fmt.Sprintf("end it first with `magus job exit %s --stdin`, then take harness/other", me))
 	assert.NotContains(t, reason.Why, "Report it as an unresolved risk and stop")
 }
 

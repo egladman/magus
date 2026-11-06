@@ -359,7 +359,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// and CI runs through this path.
 	captureHandlers = withInvocationJournal(ctx, captureHandlers, m.Root(), "affected", args)
 	failed := &failedResults{}
-	captureHandlers = append(captureHandlers, failed)
+	statuses := newResultStatuses(target)
+	captureHandlers = append(captureHandlers, failed, statuses)
 	invCtx, endInvocation := m.BeginInvocation(ctx, magus.Command{
 		Arguments: append([]string{"affected"}, args...), Cwd: cwd, Trigger: trigger,
 	}, version, captureHandlers...)
@@ -398,7 +399,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	sink.RecordValues(target, readReturns(target))
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:
-		return emitRunResult(ctx, m, opts, target, charms, targets, readReturns(target),
+		return emitRunResult(ctx, m, opts, target, charms, targets, readReturns(target), statuses,
 			slices.Sorted(maps.Keys(undeclaredOnly)))
 	case outputName:
 		return emitProjectNames(m, targets)

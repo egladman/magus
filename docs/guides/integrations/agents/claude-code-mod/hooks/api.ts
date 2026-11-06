@@ -1,7 +1,7 @@
-import type { ActivityLine, AgentRow, JobBlock, JobRow, JobState, Listing, RunRow } from '../types'
+import type { ActivityLine, AgentRow, JobBlock, JobRow, JobState, Listing, Role, RunRow } from '../types'
 import { MagusError, fail, isRecord, ok, parseJSON, type Result } from './result'
 
-export type { ActivityLine, AgentRow, JobBlock, JobRow, Listing, RunRow }
+export type { ActivityLine, AgentRow, JobBlock, JobRow, Listing, Role, RunRow }
 
 // The Connect procedures the pane calls, the same ones the console's PWA calls.
 export const LIST_JOBS = '/magus.job.v1alpha1.JobService/ListJobs'
@@ -127,4 +127,14 @@ export function candidateJobs(description: string): string[] {
   if (lead === undefined || job === undefined || rest.length > 0 || !lead.includes('/')) return []
   const parent = lead.slice(0, lead.lastIndexOf('/'))
   return [job, `${parent}/${job}`]
+}
+
+const ROLES: readonly Role[] = ['orchestrator', 'integrator', 'worker']
+
+// The role a description `<parent>/<role> <job>` names; null for any other.
+export function roleOf(description: string): Role | null {
+  if (candidateJobs(description).length === 0) return null
+  const lead = description.trim().split(/\s+/)[0] ?? ''
+  const role = lead.slice(lead.lastIndexOf('/') + 1)
+  return ROLES.find(r => r === role) ?? null
 }
