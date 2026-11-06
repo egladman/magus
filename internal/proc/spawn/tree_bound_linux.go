@@ -1,6 +1,7 @@
 package spawn
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -21,7 +22,7 @@ func readProcTable() (linuxTable, error) {
 // lookup parses /proc/<pid>/stat: the comm sits in parentheses and may hold
 // spaces, so the fields are read after the last ')'.
 func (linuxTable) lookup(pid int) (procInfo, bool) {
-	raw, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
 	if err != nil {
 		return procInfo{}, false
 	}
@@ -41,7 +42,7 @@ func (linuxTable) lookup(pid int) (procInfo, bool) {
 }
 
 func (t linuxTable) children(pid int) []procInfo {
-	tasks, _ := filepath.Glob(filepath.Join("/proc", strconv.Itoa(pid), "task", "*", "children"))
+	tasks, _ := filepath.Glob(fmt.Sprintf("/proc/%d/task/*/children", pid))
 	var out []procInfo
 	for _, f := range tasks {
 		raw, err := os.ReadFile(f)
