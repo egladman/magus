@@ -11,10 +11,10 @@ type darwinTable struct {
 	byParent map[int][]procInfo
 }
 
-func readProcTable() (procTable, error) {
+func readProcTable() (darwinTable, error) {
 	procs, err := unix.SysctlKinfoProcSlice("kern.proc.all")
 	if err != nil {
-		return nil, err
+		return darwinTable{}, err
 	}
 	t := darwinTable{byPID: make(map[int]procInfo, len(procs)), byParent: make(map[int][]procInfo, len(procs))}
 	for i := range procs {

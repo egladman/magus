@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -303,7 +304,7 @@ func gradeMainCommand(ctx context.Context, deps Dependencies, verdict types.Guar
 	}
 	// Checking a worker's acceptance evidence by its ref is the orchestrator's own job.
 	// Refused, the root relays the ref to a worker and never sees the evidence itself.
-	if call.work != "" && (readsOutputRef(in.command) || ownSourceRoot(at.workspace) && recoversOwnCheckout(in.command)) {
+	if call.work != "" && (readsOutputRef(in.command) || recoversOwnCheckout(in.command, at.workspace)) {
 		call.work = ""
 	}
 	if call.work != "" {
@@ -563,11 +564,17 @@ func (f forkedTier) rankedAbove(host, model string) string {
 		model, spawned.Name(), spawned.Rank(), f.job, f.line(alias), alias)
 }
 
-// Only the explicit recovery entry is root work; ordinary builds remain delegated.
-func recoversOwnCheckout(line string) bool {
+// recoversOwnCheckout reports a line that runs root's checkout.bootstrap with
+// --here --recover and nothing else. Only that entry is root work; ordinary
+// builds remain delegated. A workspace declaring no hook has no such line.
+func recoversOwnCheckout(line, root string) bool {
 	cmds, ok := ParseCommands(line)
 	if !ok || len(cmds) != 1 || !isMagusInvocation(cmds[0]) {
 		return false
 	}
-	return slices.Equal(magusSubcommandWords(cmds[0].Args), []string{"buzz", "hack/dev/bootstrap-checkout.buzz", "--", "--here", "--recover"})
+	args := cmds[0].Args
+	words := magusSubcommandWords(args)
+	dash := slices.Index(args, "--")
+	return len(words) == 2 && words[0] == "buzz" && job.RunsCheckoutHook(words[1], checkoutHook(root)) &&
+		dash >= 0 && slices.Equal(args[dash+1:], []string{"--here", "--recover"})
 }

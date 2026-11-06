@@ -66,7 +66,8 @@ func TestRowUnknownRefusesARowCarryingAMemberThisBuildDoesNotDeclare(t *testing.
 // Refusing these locked a worker out of the only lines that replace the judge.
 func TestRowUnknownPassesTheRecoveryLines(t *testing.T) {
 	row := narrowLease()
-	ctx, _ := fleetFixture(t, row)
+	ctx, root := fleetFixture(t, row)
+	declareCheckoutHook(t, root)
 	plantUnknownMember(t, ctx, row.ID, "widens_paths")
 	deps := Dependencies{Binary: "/work/magus", BinaryVersion: "v0.4.3-dev"}
 
@@ -184,10 +185,20 @@ func (s *RowUnknownReadOnlyCallerSuite) TestItNamesNoCheckoutPlaceholder() {
 
 func (s *RowUnknownReadOnlyCallerSuite) TestARowWithACheckoutStillNamesItsBootstrap() {
 	row := s.row
-	row.CheckoutRoot = "/work/job"
+	row.CheckoutRoot = s.T().TempDir()
+	declareCheckoutHook(s.T(), row.CheckoutRoot)
 	got := unknownRowDenial(s.deps, withUnknown(row, "widens_paths"))
 	s.Require().True(got.refused())
-	s.Contains(got.Say, "/work/job")
+	s.Contains(got.Say, job.CheckoutBootstrap(testCheckoutHook, row.CheckoutRoot))
+}
+
+func (s *RowUnknownReadOnlyCallerSuite) TestACheckoutDeclaringNoHookAsksForAPlacement() {
+	row := s.row
+	row.CheckoutRoot = s.T().TempDir()
+	got := unknownRowDenial(s.deps, withUnknown(row, "widens_paths"))
+	s.Require().True(got.refused())
+	s.Contains(got.Say, "ask the root to place a ./magus that reads it")
+	s.Contains(got.Why, "This checkout has no checkout.bootstrap declared")
 }
 
 // The spawn gate refuses a row the hook cannot read before a worker meets it.
