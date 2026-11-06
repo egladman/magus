@@ -31,6 +31,7 @@ final reading = [
     Advisor{input = "conformance", script = "conformance.buzz"},
     Advisor{input = "missing-target", script = "missing-target.buzz"},
     Advisor{input = "exported-api", script = "exported-api.buzz"},
+    Advisor{input = "change-risk", script = "change-risk.buzz"},
     Advisor{input = "first-contribution", script = "first-contribution.buzz"},
     Advisor{input = "merge-queue", script = "merge-queue.buzz"},
 ];
