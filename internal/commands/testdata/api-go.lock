@@ -2437,6 +2437,7 @@ github.com/egladman/magus/types.GateEvidence type struct
 github.com/egladman/magus/types.GateEvidence.GateID field string "json:\"gate_id\" yaml:\"gate_id\""
 github.com/egladman/magus/types.GateEvidence.OutputRef field string "json:\"output_ref\" yaml:\"output_ref\""
 github.com/egladman/magus/types.GateEvidence.Owed field string "json:\"owed,omitempty\" yaml:\"owed,omitempty\""
+github.com/egladman/magus/types.GateEvidence.Unrun field string "json:\"unrun,omitempty\" yaml:\"unrun,omitempty\""
 github.com/egladman/magus/types.GateNotRun const DiagnosticCode = "MGS3045"
 github.com/egladman/magus/types.GateStatus type struct
 github.com/egladman/magus/types.GateStatus.ID field string "json:\"id\" yaml:\"id\""
@@ -3357,6 +3358,7 @@ github.com/egladman/magus/types.JobResultValidation type struct
 github.com/egladman/magus/types.JobResultValidation.Command field string "json:\"command\" yaml:\"command\""
 github.com/egladman/magus/types.JobResultValidation.OutputRef field string "json:\"output_ref\" yaml:\"output_ref\""
 github.com/egladman/magus/types.JobResultValidation.Owed field string "json:\"owed,omitempty\" yaml:\"owed,omitempty\""
+github.com/egladman/magus/types.JobResultValidation.Unrun field string "json:\"unrun,omitempty\" yaml:\"unrun,omitempty\""
 github.com/egladman/magus/types.JobRun type struct
 github.com/egladman/magus/types.JobRun.BytesReclaimed field int64 "json:\"bytes_reclaimed,omitempty\" yaml:\"bytes_reclaimed,omitempty\""
 github.com/egladman/magus/types.JobRun.DurationMs field int64 "json:\"duration_ms,omitempty\" yaml:\"duration_ms,omitempty\""
@@ -5066,6 +5068,7 @@ github.com/egladman/magus/types.ShardPlan.Source field string
 github.com/egladman/magus/types.ShardPlan.Sufficient field int
 github.com/egladman/magus/types.ShardPlan.UnboundedBy field string
 github.com/egladman/magus/types.ShardPlan.Unmeasured field []Unit
+github.com/egladman/magus/types.ShardPlan.Unreached field []Unit
 github.com/egladman/magus/types.ShareBoundToAnotherDevice const DiagnosticCode = "MGS9009"
 github.com/egladman/magus/types.ShareRequestMalformed const DiagnosticCode = "MGS9020"
 github.com/egladman/magus/types.ShareUnavailable const DiagnosticCode = "MGS9014"
@@ -5363,6 +5366,7 @@ github.com/egladman/magus/types.StatusWorkspace.Root field string "json:\"root\"
 github.com/egladman/magus/types.StatusWorkspace.SecretProvider field string "json:\"secret_provider,omitempty\" yaml:\"secret_provider,omitempty\""
 github.com/egladman/magus/types.StatusWorkspace.State field WorkspaceState "json:\"state,omitempty\" yaml:\"state,omitempty\""
 github.com/egladman/magus/types.StepLog type struct
+github.com/egladman/magus/types.StepLog.Effects method(ptr) func() []string
 github.com/egladman/magus/types.StepLog.Record method(ptr) func(u Unit)
 github.com/egladman/magus/types.StepLog.Units method(ptr) func() []Unit
 github.com/egladman/magus/types.StepLogFromContext func(ctx context.Context) *StepLog
@@ -5440,6 +5444,7 @@ github.com/egladman/magus/types.StreamingUnsupported const DiagnosticCode = "MGS
 github.com/egladman/magus/types.StricterGuardVerdict func(a GuardVerdict, b GuardVerdict) GuardVerdict
 github.com/egladman/magus/types.Strings type struct
 github.com/egladman/magus/types.Strings.Items field []string
+github.com/egladman/magus/types.Stubbed func(ctx context.Context, op string) bool
 github.com/egladman/magus/types.SuggestionAccepted const SuggestionStatus = "accepted"
 github.com/egladman/magus/types.SuggestionDeclined const SuggestionStatus = "declined"
 github.com/egladman/magus/types.SuggestionPending const SuggestionStatus = ""

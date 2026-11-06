@@ -161,7 +161,7 @@ func setenv(ctx context.Context, name, value string) error {
 // EnvSet sets name to value for this run: its own later reads and every child it starts
 // see it, another run in the same process does not. Refused for a name the sandbox strips.
 func EnvSet(ctx context.Context, name, value string) error {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "env.set") {
 		return nil
 	}
 	slog.DebugContext(ctx, "env.set", "name", name)
@@ -178,7 +178,7 @@ func EnvSet(ctx context.Context, name, value string) error {
 // name (in which case it is already invisible and the call is a no-op, mirroring
 // EnvSet's refusal to touch stripped names).
 func EnvUnset(ctx context.Context, name string) error {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "env.unset") {
 		return nil
 	}
 	if p := sandbox.PolicyFromContext(ctx); p != nil && !p.AllowsEnv(name) {
@@ -299,7 +299,7 @@ func EnvLoadDotenv(ctx context.Context, path string) error {
 	if err != nil {
 		return fmt.Errorf("env.load_dotenv: %w", err)
 	}
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "env.loadDotenv") {
 		return nil
 	}
 	p := sandbox.PolicyFromContext(ctx)

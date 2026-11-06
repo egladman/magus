@@ -146,7 +146,7 @@ func TermColorize(_ context.Context, s, style string) (string, error) {
 
 // TermPick prompts for a choice among items and returns the chosen index.
 func TermPick(ctx context.Context, items []string, prompt, initialFilter string, initial, maxRows int) (int, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "term.pick") {
 		// Dry run: report the first item without painting anything. A record pass
 		// must never block on a human, and every other host effect is skipped the
 		// same way.
@@ -192,7 +192,7 @@ const defaultNotifyTTL = 5 * time.Second
 // magus's own. The band is owned by the process and released on the way out
 // (tty.ReleaseStderr), so a caller just says the thing.
 func TermNotify(ctx context.Context, message, level string, ttlMs int) error {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "term.notify") {
 		// A record pass must not paint: a dry run reports what WOULD happen,
 		// and a notification that flashed during it would be the one effect
 		// that leaked.

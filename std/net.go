@@ -94,7 +94,7 @@ func netAddr(host string, port int) string {
 
 // NetIsPortOpen reports whether host:port accepts a connection right now.
 func NetIsPortOpen(ctx context.Context, host string, port int) (bool, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "net.isPortOpen") {
 		return false, nil
 	}
 	if port <= 0 || port > 65535 {
@@ -120,7 +120,7 @@ func netDialOnce(ctx context.Context, addr string) bool {
 // NetWaitForPort blocks until host:port accepts a connection or the timeout
 // elapses.
 func NetWaitForPort(ctx context.Context, host string, port, timeoutMs int) (bool, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "net.waitForPort") {
 		// Dry run: report ready without waiting. A record pass must not spend the
 		// timeout on a service it never started.
 		return true, nil
@@ -159,7 +159,7 @@ func NetWaitForPort(ctx context.Context, host string, port, timeoutMs int) (bool
 // guess: scanning upward from a base port races every other process doing the
 // same thing, and magus already has one such scan in http.server.
 func NetFreePort(ctx context.Context) (int, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "net.freePort") {
 		// A plausible high port, created nothing. Matches fs.temp_dir's dry-run shape.
 		return 49152, nil
 	}

@@ -185,7 +185,7 @@ func HTTPGet(ctx context.Context, url string, headers map[string]string, opts ty
 // Moving it also gained it two things the companion version never had: the
 // retrying client the rest of this module uses, and a sandbox write check on dest.
 func HTTPDownload(ctx context.Context, url, dest string, headers map[string]string, opts types.HTTPOptions, retryPolicy types.HTTPRetry) (int, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "http.download") {
 		return 0, nil
 	}
 	dest = resolvePath(ctx, dest)
@@ -254,7 +254,7 @@ func HTTPServe(ctx context.Context, opts types.HTTPServerOptions) (int, error) {
 	// Under dry-run tracing a target body is evaluated to learn its declarations,
 	// not to run, and binding a real socket here would leak a listener out of a
 	// plan that was never meant to execute. Matches fs.watch and doRequest.
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "http.serve") {
 		return 0, nil
 	}
 
@@ -400,7 +400,7 @@ func sendHTTP(ctx context.Context, label, method, url string, body io.Reader, he
 }
 
 func doRequest(ctx context.Context, method, url, body string, headers map[string]string, opts types.HTTPOptions, retryPolicy types.HTTPRetry) (types.HTTPResponse, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "http." + method) {
 		return types.HTTPResponse{}, nil
 	}
 	// There is NO network sandboxing: every URL a magusfile reaches is fetched,

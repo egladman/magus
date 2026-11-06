@@ -13,6 +13,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
@@ -56,6 +57,7 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		targets     []types.Target
 		source      string
 		unboundedBy string
+		changed     []string
 	)
 	if opts.ChangedPaths != nil {
 		result, err := m.AffectedFromPaths(ctx, opts.ChangedPaths)
@@ -68,6 +70,7 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		}
 		source = "stdin paths"
 		result.Changed = opts.ChangedPaths
+		changed = opts.ChangedPaths
 		unboundedBy = m.unboundedBy(result)
 	} else {
 		var (
@@ -83,6 +86,7 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		case fellBack:
 			unboundedBy = fmt.Sprintf("the VCS could not diff, so the plan holds every project (%s)", source)
 		case res != nil:
+			changed = res.Changed
 			unboundedBy = m.unboundedBy(res)
 		}
 	}
@@ -122,9 +126,28 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		}
 		needs[u] = closure
 	}
-	f := forecast.Model{History: hist, Needs: func(u types.Unit) []types.Unit { return needs[u] }}
+	computes := func(types.Unit) bool { return true }
+	if unboundedBy == "" && changed != nil {
+		computes = m.computedBy(changed, affected)
+	}
+	var kept, unreached []types.Unit
+	for _, u := range units {
+		if computes(u) {
+			kept = append(kept, u)
+		} else {
+			unreached = append(unreached, u)
+		}
+	}
+	units = kept
+	slices.SortFunc(unreached, func(a, b types.Unit) int { return cmp.Compare(a.String(), b.String()) })
+	f := forecast.Model{
+		History:    hist,
+		Needs:      func(u types.Unit) []types.Unit { return needs[u] },
+		Repeatable: func(u types.Unit) bool { return !computes(u) },
+	}
 	if machine != nil {
 		f.MemoryBudgetBytes = forecast.BudgetBytes(machine.MemoryMB)
+		f.Slots = machine.Cores
 	}
 	tags := make(map[string][]string, len(targets))
 	for _, t := range targets {
@@ -169,9 +192,18 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 	for i, s := range plan.Shards {
 		assignments[i] = s.Units
 	}
+	if repeated := f.Repeats(assignments); len(repeated) > 0 {
+		return types.ShardPlan{}, fmt.Errorf("affected plan: %s would compute on more than one shard", joinUnits(repeated))
+	}
 	var overBudget []string
 	for _, i := range f.OverBudget(assignments) {
 		overBudget = append(overBudget, plan.Shards[i].ID)
+	}
+	if f.MemoryBudgetBytes > 0 {
+		if unpeaked := f.UnmeasuredPeaks(units); len(unpeaked) > 0 {
+			fallbacks = append(fallbacks, fmt.Sprintf(
+				"the history holds no peak memory for %s, so the memory check counts each as zero", joinUnits(unpeaked)))
+		}
 	}
 	return types.ShardPlan{
 		Shards:      shards,
@@ -184,6 +216,7 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		Sufficient:  f.SufficientShards(units, len(plan.Shards)),
 		OverBudget:  overBudget,
 		Unmeasured:  f.Unmeasured(units),
+		Unreached:   unreached,
 		Affected:    affected,
 		UnboundedBy: unboundedBy,
 	}, nil
@@ -216,7 +249,7 @@ func (m *Magus) planUnits(ctx context.Context, targets []types.Target, anchor st
 			continue
 		}
 		for _, u := range steps {
-			add(types.Unit{Project: cmp.Or(u.Project, p.Path), Target: u.Target})
+			add(u)
 		}
 		calls, err := directCalls(p, anchor)
 		if err != nil {
@@ -251,7 +284,29 @@ func (m *Magus) anchorSteps(ctx context.Context, p *types.Project, anchor string
 	if err := m.runTarget(ctx, p, anchor); err != nil {
 		return nil, true, fmt.Errorf("evaluate %s in %s: %w", anchor, p.Path, err)
 	}
-	return rec.Units(), true, nil
+	if effects := rec.Effects(); len(effects) > 0 {
+		return nil, true, fmt.Errorf(
+			"%s in %s does more than ctx.needs (%s), and a shard runs only the steps it asks for: move that work into a target %s needs",
+			anchor, p.Path, strings.Join(effects, ", "), anchor)
+	}
+	declared := map[types.Unit]bool{}
+	for _, s := range p.TargetChains[types.Normalize(anchor)] {
+		declared[types.Unit{Project: cmp.Or(s.Project, p.Path), Target: types.Normalize(s.Target)}] = true
+	}
+	var undeclared []string
+	for _, u := range rec.Units() {
+		u = types.Unit{Project: cmp.Or(u.Project, p.Path), Target: types.Normalize(u.Target)}
+		if !declared[u] {
+			undeclared = append(undeclared, u.String())
+		}
+		steps = append(steps, u)
+	}
+	if len(undeclared) > 0 {
+		return nil, true, fmt.Errorf(
+			"%s in %s asks for %s, which its declared ctx.needs chain does not name, so no shard could walk its prerequisites",
+			anchor, p.Path, strings.Join(undeclared, ", "))
+	}
+	return steps, true, nil
 }
 
 // directCalls are the exported targets anchor's body in p calls as functions,
@@ -384,6 +439,45 @@ func (m *Magus) unitNeeds(u types.Unit) ([]types.Unit, error) {
 		return nil, fmt.Errorf("walk the needs of %s: %w", u, err)
 	}
 	return out, nil
+}
+
+// computedBy reports whether changed makes a unit compute rather than replay
+// from the cache: a target in its closure reads a changed path. A target
+// with no declared reads reads its project, so an affected one counts.
+func (m *Magus) computedBy(changed, affected []string) func(types.Unit) bool {
+	inAffected := map[string]bool{}
+	for _, p := range affected {
+		inAffected[p] = true
+	}
+	reads := func(n types.Unit) bool {
+		p := m.Get(n.Project)
+		if p == nil {
+			return true
+		}
+		node := cache.DeclaredNode(p, n.Target, types.TargetRef{Project: p.Path, Target: n.Target}, m.Get)
+		if !node.DeclaredReads {
+			return inAffected[n.Project]
+		}
+		return slices.ContainsFunc(changed, func(c string) bool { return types.MatchGlobs(node.Reads, c) })
+	}
+	memo := map[types.Unit]bool{}
+	return func(u types.Unit) bool {
+		if v, ok := memo[u]; ok {
+			return v
+		}
+		closure, err := m.unitNeeds(u)
+		v := err != nil || slices.ContainsFunc(closure, reads)
+		memo[u] = v
+		return v
+	}
+}
+
+func joinUnits(us []types.Unit) string {
+	names := make([]string, len(us))
+	for i, u := range us {
+		names[i] = u.String()
+	}
+	return strings.Join(names, ", ")
 }
 
 // unboundedBy says why the closure computed from res is not a proof, or "" when it is.
