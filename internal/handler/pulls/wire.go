@@ -12,27 +12,35 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func parseMergeable(s string) pullsv1.Mergeable {
+// parseMergeable reports false for a value outside the provider contract,
+// which reads as UNSPECIFIED: UNKNOWN means the forge is still computing.
+func parseMergeable(s string) (pullsv1.Mergeable, bool) {
 	switch s {
 	case "mergeable":
-		return pullsv1.Mergeable_MERGEABLE_MERGEABLE
+		return pullsv1.Mergeable_MERGEABLE_MERGEABLE, true
 	case "conflicting":
-		return pullsv1.Mergeable_MERGEABLE_CONFLICTING
+		return pullsv1.Mergeable_MERGEABLE_CONFLICTING, true
+	case "unknown":
+		return pullsv1.Mergeable_MERGEABLE_UNKNOWN, true
 	default:
-		return pullsv1.Mergeable_MERGEABLE_UNKNOWN
+		return pullsv1.Mergeable_MERGEABLE_UNSPECIFIED, false
 	}
 }
 
-func parseReview(s string) pullsv1.Review {
+// parseReview reports false for a value outside the provider contract,
+// which reads as UNSPECIFIED.
+func parseReview(s string) (pullsv1.Review, bool) {
 	switch s {
 	case "approved":
-		return pullsv1.Review_REVIEW_APPROVED
+		return pullsv1.Review_REVIEW_APPROVED, true
 	case "changes_requested":
-		return pullsv1.Review_REVIEW_CHANGES_REQUESTED
+		return pullsv1.Review_REVIEW_CHANGES_REQUESTED, true
 	case "review_required":
-		return pullsv1.Review_REVIEW_REQUIRED
+		return pullsv1.Review_REVIEW_REQUIRED, true
+	case "none":
+		return pullsv1.Review_REVIEW_NONE, true
 	default:
-		return pullsv1.Review_REVIEW_NONE
+		return pullsv1.Review_REVIEW_UNSPECIFIED, false
 	}
 }
 

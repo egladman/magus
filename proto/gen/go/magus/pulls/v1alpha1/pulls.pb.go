@@ -53,6 +53,11 @@ const (
 	CiState_CI_STATE_QUEUED CiState = 4
 	// NONE means the commit has no checks at all.
 	CiState_CI_STATE_NONE CiState = 5
+	// CANCELLED means at least one check was cancelled and none failed or still runs.
+	CiState_CI_STATE_CANCELLED CiState = 6
+	// UNREADABLE means a check reported a state outside the provider contract.
+	// The pull's blocked reasons name the check and the state.
+	CiState_CI_STATE_UNREADABLE CiState = 7
 )
 
 // Enum value maps for CiState.
@@ -64,6 +69,8 @@ var (
 		3: "CI_STATE_RUNNING",
 		4: "CI_STATE_QUEUED",
 		5: "CI_STATE_NONE",
+		6: "CI_STATE_CANCELLED",
+		7: "CI_STATE_UNREADABLE",
 	}
 	CiState_value = map[string]int32{
 		"CI_STATE_UNSPECIFIED": 0,
@@ -72,6 +79,8 @@ var (
 		"CI_STATE_RUNNING":     3,
 		"CI_STATE_QUEUED":      4,
 		"CI_STATE_NONE":        5,
+		"CI_STATE_CANCELLED":   6,
+		"CI_STATE_UNREADABLE":  7,
 	}
 )
 
@@ -1657,14 +1666,16 @@ const file_magus_pulls_v1alpha1_pulls_proto_rawDesc = "" +
 	"\amessage\x18\t \x01(\tR\amessage\"7\n" +
 	"\tMergeStep\x12\x16\n" +
 	"\x06number\x18\x01 \x01(\x05R\x06number\x12\x12\n" +
-	"\x04note\x18\x02 \x01(\tR\x04note*\x87\x01\n" +
+	"\x04note\x18\x02 \x01(\tR\x04note*\xb8\x01\n" +
 	"\aCiState\x12\x18\n" +
 	"\x14CI_STATE_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eCI_STATE_GREEN\x10\x01\x12\x10\n" +
 	"\fCI_STATE_RED\x10\x02\x12\x14\n" +
 	"\x10CI_STATE_RUNNING\x10\x03\x12\x13\n" +
 	"\x0fCI_STATE_QUEUED\x10\x04\x12\x11\n" +
-	"\rCI_STATE_NONE\x10\x05*q\n" +
+	"\rCI_STATE_NONE\x10\x05\x12\x16\n" +
+	"\x12CI_STATE_CANCELLED\x10\x06\x12\x17\n" +
+	"\x13CI_STATE_UNREADABLE\x10\a*q\n" +
 	"\tMergeable\x12\x19\n" +
 	"\x15MERGEABLE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13MERGEABLE_MERGEABLE\x10\x01\x12\x19\n" +

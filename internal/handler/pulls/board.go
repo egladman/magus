@@ -73,7 +73,10 @@ type rollup struct {
 	hasQueued bool
 	queuedFor time.Duration
 	failures  []types.ForgeCheck
-	queue     *pullsv1.QueueStatus
+	cancelled []types.ForgeCheck
+	// unreadable holds checks whose state the provider contract does not name.
+	unreadable []types.ForgeCheck
+	queue      *pullsv1.QueueStatus
 }
 
 // rollupChecks keeps the queue context out of the counts. It says where
@@ -102,6 +105,10 @@ func rollupChecks(checks []types.ForgeCheck, now time.Time) rollup {
 			if q := parseTime(c.QueuedAt); !q.IsZero() && (earliest.IsZero() || q.Before(earliest)) {
 				earliest = q
 			}
+		case "cancelled":
+			r.cancelled = append(r.cancelled, c)
+		default:
+			r.unreadable = append(r.unreadable, c)
 		}
 	}
 	if !earliest.IsZero() {
@@ -110,10 +117,14 @@ func rollupChecks(checks []types.ForgeCheck, now time.Time) rollup {
 	switch {
 	case r.failed > 0:
 		r.state = pullsv1.CiState_CI_STATE_RED
+	case len(r.unreadable) > 0:
+		r.state = pullsv1.CiState_CI_STATE_UNREADABLE
 	case running > 0:
 		r.state = pullsv1.CiState_CI_STATE_RUNNING
 	case r.hasQueued:
 		r.state = pullsv1.CiState_CI_STATE_QUEUED
+	case len(r.cancelled) > 0:
+		r.state = pullsv1.CiState_CI_STATE_CANCELLED
 	case r.passed > 0:
 		r.state = pullsv1.CiState_CI_STATE_GREEN
 	default:
@@ -148,6 +159,8 @@ func mainState(b types.BaseBranch, now time.Time) *pullsv1.BranchState {
 
 func pullRow(p types.ForgePull, base string, in boardInput) *pullsv1.Pull {
 	r := rollupChecks(p.Checks, in.Now)
+	mergeable, _ := parseMergeable(p.Mergeable)
+	review, _ := parseReview(p.Review)
 	row := &pullsv1.Pull{
 		Number:    int32(p.Number),
 		Title:     p.Title,
@@ -157,12 +170,12 @@ func pullRow(p types.ForgePull, base string, in boardInput) *pullsv1.Pull {
 		HeadSha:   p.HeadSHA,
 		FetchRef:  p.FetchRef,
 		BehindBy:  int32(p.BehindBy),
-		Mergeable: parseMergeable(p.Mergeable),
+		Mergeable: mergeable,
 		Ci:        r.state,
 		Passed:    int32(r.passed),
 		Failed:    int32(r.failed),
 		Pending:   int32(r.pending),
-		Review:    parseReview(p.Review),
+		Review:    review,
 		Queue:     r.queue,
 		Draft:     p.Draft,
 	}
@@ -185,7 +198,11 @@ func pullRow(p types.ForgePull, base string, in boardInput) *pullsv1.Pull {
 
 func blockedReasons(p types.ForgePull, r rollup, base string, runnerWait time.Duration) []string {
 	var out []string
-	if p.Mergeable == "conflicting" {
+	mergeable, readMergeable := parseMergeable(p.Mergeable)
+	if !readMergeable {
+		out = append(out, fmt.Sprintf("the forge reported mergeable %q, which the board cannot read", p.Mergeable))
+	}
+	if mergeable == pullsv1.Mergeable_MERGEABLE_CONFLICTING {
 		out = append(out, "conflicts with "+base)
 	}
 	for _, c := range r.failures {
@@ -195,19 +212,27 @@ func blockedReasons(p types.ForgePull, r rollup, base string, runnerWait time.Du
 		}
 		out = append(out, reason)
 	}
+	for _, c := range r.unreadable {
+		out = append(out, fmt.Sprintf("`%s` reported state %q, which the board cannot read", c.Name, c.State))
+	}
+	for _, c := range r.cancelled {
+		out = append(out, fmt.Sprintf("`%s` cancelled", c.Name))
+	}
 	if r.hasQueued && r.queuedFor > runnerWait {
 		out = append(out, "waiting on runners for "+formatDuration(r.queuedFor.Truncate(time.Minute)))
 	}
-	switch p.Review {
-	case "changes_requested":
+	switch review, readReview := parseReview(p.Review); {
+	case !readReview:
+		out = append(out, fmt.Sprintf("the forge reported review %q, which the board cannot read", p.Review))
+	case review == pullsv1.Review_REVIEW_CHANGES_REQUESTED:
 		out = append(out, "changes requested")
-	case "review_required":
+	case review == pullsv1.Review_REVIEW_REQUIRED:
 		out = append(out, "review required")
 	}
 	if p.Draft {
 		out = append(out, "draft")
 	}
-	if p.BehindBy > 0 && p.Mergeable != "mergeable" && p.Mergeable != "conflicting" {
+	if p.BehindBy > 0 && mergeable != pullsv1.Mergeable_MERGEABLE_MERGEABLE && mergeable != pullsv1.Mergeable_MERGEABLE_CONFLICTING {
 		out = append(out, fmt.Sprintf("%s behind %s", plural(p.BehindBy, "commit", "commits"), base))
 	}
 	return out

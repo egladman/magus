@@ -43,7 +43,14 @@ type Poller struct {
 	viewer   string
 	state    pullsv1.SyncState
 	attempt  time.Time
+	// isHeld is true while the next sync waits for the rate limit's reset.
+	isHeld bool
+	// failures counts syncs that failed since the last good one.
+	failures int
 }
+
+// maxFailureBackoff caps the wait after repeated failures.
+const maxFailureBackoff = 30 * time.Minute
 
 // NewPoller returns a Poller that has not synced yet.
 func NewPoller(opts PollerOptions) *Poller {
@@ -53,7 +60,7 @@ func NewPoller(opts PollerOptions) *Poller {
 	return &Poller{opts: opts, kick: make(chan struct{}, 1)}
 }
 
-// Kick asks for one sync now. The poll floor still applies.
+// Kick asks for one sync now. The poll floor and a rate-limit hold still apply.
 func (p *Poller) Kick() {
 	select {
 	case p.kick <- struct{}{}:
@@ -71,7 +78,7 @@ func (p *Poller) Run(ctx context.Context) {
 			return
 		case <-timer.C:
 		case <-p.kick:
-			if wait := p.floorWait(); wait > 0 {
+			if wait := p.kickWait(); wait > 0 {
 				timer.Reset(wait)
 				continue
 			}
@@ -81,13 +88,18 @@ func (p *Poller) Run(ctx context.Context) {
 	}
 }
 
-func (p *Poller) floorWait() time.Duration {
+func (p *Poller) kickWait() time.Duration {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.attempt.IsZero() {
 		return 0
 	}
-	return max(p.attempt.Add(p.opts.Config.Floor).Sub(p.opts.Now()), 0)
+	now := p.opts.Now()
+	wait := p.attempt.Add(p.opts.Config.Floor).Sub(now)
+	if p.isHeld {
+		wait = max(wait, p.state.NextSyncAt.AsTime().Sub(now))
+	}
+	return max(wait, 0)
 }
 
 func (p *Poller) nextWait() time.Duration {
@@ -111,14 +123,21 @@ func (p *Poller) Sync(ctx context.Context) {
 		list, err = p.read(ctx, filter, viewer)
 	}
 
+	if err != nil && ctx.Err() != nil {
+		// Shutdown cut the read short; the last good state still stands.
+		return
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.attempt = now
 	if err != nil {
-		p.opts.Log.WarnContext(ctx, "pulls sync failed", attr.Error(err))
+		p.failures++
+		p.opts.Log.WarnContext(ctx, "pulls sync failed", attr.Error(err), slog.Int("failures", p.failures))
 		p.state.SyncError = err.Error()
 		p.state.FailedAt = toTimestamp(now)
 	} else {
+		p.failures = 0
 		p.list, p.haveList = list, true
 		if list.Viewer != "" {
 			p.viewer = list.Viewer
@@ -130,6 +149,13 @@ func (p *Poller) Sync(ctx context.Context) {
 		p.state.RateReset = toTimestamp(parseTime(list.Rate.Reset))
 	}
 	c := chooseCadence(p.opts.Config, p.list, now)
+	if wait := failureBackoff(p.opts.Config.Floor, p.failures); wait > c.interval {
+		c = cadence{
+			interval: wait,
+			reason:   fmt.Sprintf("%s failed in a row: retrying in %s", plural(p.failures, "sync", "syncs"), formatDuration(wait)),
+		}
+	}
+	p.isHeld = c.isHold
 	if p.opts.BaseNote != "" {
 		c.reason += "; " + p.opts.BaseNote
 	}
@@ -194,6 +220,24 @@ func (p *Poller) Board() (*pullsv1.Board, error) {
 type cadence struct {
 	interval time.Duration
 	reason   string
+	// isHold is true when the interval waits for the rate limit's reset.
+	isHold bool
+}
+
+// failureBackoff doubles the floor per failure since the last good sync,
+// up to maxFailureBackoff. Zero failures wait nothing extra.
+func failureBackoff(floor time.Duration, failures int) time.Duration {
+	if failures == 0 {
+		return 0
+	}
+	wait := floor
+	for range failures - 1 {
+		if wait >= maxFailureBackoff/2 {
+			return maxFailureBackoff
+		}
+		wait *= 2
+	}
+	return min(wait, maxFailureBackoff)
 }
 
 // chooseCadence picks the wait before the next sync. Near the request
@@ -206,6 +250,7 @@ func chooseCadence(cfg config.Pulls, list types.PullList, now time.Time) cadence
 			interval: max(reset.Sub(now), cfg.Floor),
 			reason: fmt.Sprintf("%d requests left of %d: waiting until %s reset",
 				rate.Remaining, rate.Limit, reset.Format("15:04")),
+			isHold: true,
 		}
 	}
 	interval, reason := cfg.Idle, "nothing running: backed off to %s"

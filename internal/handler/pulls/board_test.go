@@ -376,3 +376,46 @@ func (s *BoardSuite) TestDefaultFilterShowsTheViewerOnly() {
 	s.True(b.Filter.IsDefault)
 	s.Equal([]string{"ada"}, b.Filter.Authors)
 }
+
+func (s *BoardSuite) TestCICancelledIsNotGreen() {
+	cancelled := types.ForgeCheck{Name: "e2e", Kind: "check", State: "cancelled"}
+	b := buildBoard(types.BaseBranch{}, newPull(1, "ada", passing("a"), cancelled))
+	row := onlyRow(b)
+
+	s.Equal(pullsv1.CiState_CI_STATE_CANCELLED, row.Ci)
+	s.Equal([]string{"`e2e` cancelled"}, row.Blocked)
+	s.Equal("`e2e` cancelled", b.MergeOrder[0].Note)
+}
+
+func (s *BoardSuite) TestCIRunningOutranksCancelled() {
+	cancelled := types.ForgeCheck{Name: "e2e", Kind: "check", State: "cancelled"}
+	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada", running("a"), cancelled)))
+
+	s.Equal(pullsv1.CiState_CI_STATE_RUNNING, row.Ci)
+}
+
+func (s *BoardSuite) TestCIUnreadableStateNamesTheCheck() {
+	odd := types.ForgeCheck{Name: "lint", Kind: "check", State: "stale"}
+	row := onlyRow(buildBoard(types.BaseBranch{}, newPull(1, "ada", passing("a"), odd)))
+
+	s.Equal(pullsv1.CiState_CI_STATE_UNREADABLE, row.Ci)
+	s.Equal([]string{"`lint` reported state \"stale\", which the board cannot read"}, row.Blocked)
+}
+
+func (s *BoardSuite) TestBlockedUnreadableMergeable() {
+	p := newPull(1, "ada", passing("a"))
+	p.Mergeable = "blocked"
+	row := onlyRow(buildBoard(types.BaseBranch{}, p))
+
+	s.Equal(pullsv1.Mergeable_MERGEABLE_UNSPECIFIED, row.Mergeable)
+	s.Equal([]string{"the forge reported mergeable \"blocked\", which the board cannot read"}, row.Blocked)
+}
+
+func (s *BoardSuite) TestBlockedUnreadableReview() {
+	p := newPull(1, "ada", passing("a"))
+	p.Review = "commented"
+	row := onlyRow(buildBoard(types.BaseBranch{}, p))
+
+	s.Equal(pullsv1.Review_REVIEW_UNSPECIFIED, row.Review)
+	s.Equal([]string{"the forge reported review \"commented\", which the board cannot read"}, row.Blocked)
+}
