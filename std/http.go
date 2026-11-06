@@ -31,8 +31,8 @@ import (
 // optsDoc is the trailing line shared by every method's Doc describing the
 // optional curl-style options map (last argument).
 const optsDoc = " opts is an Options (curl-style): fail, failWithBody, failEarly; " +
-	"timeoutSeconds (default 30); revalidate (send If-None-Match from the last ETag seen " +
-	"for the same method, URL and Authorization; a 304 returns status 304 with the cached body). Retrying is NOT configured here - pass a typed " +
+	"timeoutSeconds (default 30); revalidate (GET only; send If-None-Match from the last ETag seen " +
+	"for the same URL and Authorization; a 304 returns status 304 with the cached body). Retrying is NOT configured here - pass a typed " +
 	"Retry as the retry argument; without one the request runs exactly once."
 
 // defaultHTTPTimeout bounds a request (including any retries and backoff) so a
@@ -417,20 +417,19 @@ func doRequest(ctx context.Context, method, url, body string, headers map[string
 		bodyReader = strings.NewReader(body)
 	}
 	o := parseHTTPOptions(opts)
+	if o.revalidate && !strings.EqualFold(method, http.MethodGet) {
+		return types.HTTPResponse{}, fmt.Errorf("http.%s %s: revalidate is only supported on GET", strings.ToLower(method), url)
+	}
 	cacheKey, cached, headers := lookupETag(o, method, url, headers)
 	resp, err := sendHTTP(ctx, "http."+strings.ToLower(method), method, url, bodyReader, headers, o, retryPolicy)
 	if err != nil {
 		return types.HTTPResponse{}, err
 	}
 	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := readBody(resp, o, method, url, cacheKey, cached)
 	if err != nil {
-		return types.HTTPResponse{}, fmt.Errorf("http.%s %s: read body: %w", strings.ToLower(method), url, err)
+		return types.HTTPResponse{}, err
 	}
-	if o.revalidate {
-		raw = storeETag(resp, cacheKey, cached, raw)
-	}
-
 	// curl --fail / --fail-with-body: a >= 400 status becomes an error rather
 	// than a result. --fail-with-body keeps the body in the error message;
 	// --fail omits it.
@@ -449,6 +448,18 @@ func doRequest(ctx context.Context, method, url, body string, headers map[string
 	}, nil
 }
 
+// readBody reads the response body, applying the ETag cache when o.revalidate is set.
+func readBody(resp *http.Response, o httpOpts, method, url, key string, cached etagEntry) ([]byte, error) {
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("http.%s %s: read body: %w", strings.ToLower(method), url, err)
+	}
+	if o.revalidate {
+		return storeETag(resp, url, key, cached, raw)
+	}
+	return raw, nil
+}
+
 // lookupETag adds If-None-Match when a stored entry exists.
 func lookupETag(o httpOpts, method, url string, headers map[string]string) (string, etagEntry, map[string]string) {
 	if !o.revalidate {
@@ -462,15 +473,18 @@ func lookupETag(o httpOpts, method, url string, headers map[string]string) (stri
 	return key, e, withHeader(headers, "If-None-Match", e.etag)
 }
 
-// storeETag swaps in the stored body on 304 and records a fresh 200.
-func storeETag(resp *http.Response, key string, cached etagEntry, raw []byte) []byte {
+// storeETag swaps in the stored body on 304 and records a fresh 200. A 304
+// with no stored entry is an error: there is no body to serve.
+func storeETag(resp *http.Response, url, key string, cached etagEntry, raw []byte) ([]byte, error) {
 	switch {
 	case resp.StatusCode == http.StatusNotModified && cached.etag != "":
-		return []byte(cached.body)
+		return []byte(cached.body), nil
+	case resp.StatusCode == http.StatusNotModified:
+		return nil, fmt.Errorf("http: %s answered 304 but no cached body is stored for it", url)
 	case resp.StatusCode == http.StatusOK && resp.Header.Get("ETag") != "" && len(raw) <= etagMaxBody:
 		etags.put(key, etagEntry{etag: resp.Header.Get("ETag"), body: string(raw)})
 	}
-	return raw
+	return raw, nil
 }
 
 // firstHeaderValues keeps the first value where a header repeats.
@@ -499,6 +513,8 @@ type httpOpts struct {
 const (
 	etagMaxEntries = 2048
 	etagMaxBody    = 4 << 20
+	// The entry and body caps alone allow 8 GiB of resident bodies.
+	etagMaxBytes = 64 << 20
 )
 
 type etagEntry struct {
@@ -506,11 +522,13 @@ type etagEntry struct {
 	body string
 }
 
-// etagCache backs the revalidate option. It evicts the oldest entry first.
+// etagCache backs the revalidate option. It evicts the oldest entry first,
+// past either the entry or the byte bound.
 type etagCache struct {
 	mu      sync.Mutex
 	entries map[string]etagEntry
 	order   []string
+	bytes   int
 }
 
 var etags = &etagCache{entries: map[string]etagEntry{}}
@@ -525,14 +543,18 @@ func (c *etagCache) get(key string) (etagEntry, bool) {
 func (c *etagCache) put(key string, e etagEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if _, ok := c.entries[key]; !ok {
+	if old, ok := c.entries[key]; ok {
+		c.bytes -= len(old.body)
+	} else {
 		c.order = append(c.order, key)
-		for len(c.order) > etagMaxEntries {
-			delete(c.entries, c.order[0])
-			c.order = c.order[1:]
-		}
 	}
 	c.entries[key] = e
+	c.bytes += len(e.body)
+	for len(c.order) > 1 && (len(c.order) > etagMaxEntries || c.bytes > etagMaxBytes) {
+		c.bytes -= len(c.entries[c.order[0]].body)
+		delete(c.entries, c.order[0])
+		c.order = c.order[1:]
+	}
 }
 
 // etagKey hashes Authorization so one credential never reads the body another
