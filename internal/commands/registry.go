@@ -841,19 +841,25 @@ trigger a full initial build in the downstream magus affected --stdin.`,
 	},
 }
 
-var statusCommand = cmdline.Command{
+var serverStatusCommand = cmdline.Command{
 	Name:        "status",
-	Short:       "Inspect concurrency pool and configuration",
-	Description: "Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.",
-	Tags:        []string{"cli", "magus status", "status", "concurrency", "pool", "server", "monitoring"},
-	Long: `Show the magus configuration that affects this process - telemetry, cache
-settings - and, when a parent magus process is running, the live state of its
-concurrency pool (current slot usage, queued waiters).
+	Short:       "Whether the server and broker are up, what holds capacity, and the pool (needs neither running)",
+	Description: "Report whether the server is running and where to reach it, the broker's capacity and claims, the live concurrency pool of any running parent magus process, and the effective config, with optional --watch polling and --compact output.",
+	Tags:        []string{"cli", "magus server status", "status", "concurrency", "pool", "server", "broker", "monitoring"},
+	Long: `Report the server, the broker and the magus configuration that affects this
+process - telemetry, cache settings - and, when a parent magus process is
+running, the live state of its concurrency pool (current slot usage, queued
+waiters).
+
+A server or broker that is down is a row, not a failure: the server reads
+"server: not running" and the rest of the report still prints, the way
+systemctl status reports a stopped unit. It starts nothing. Use --probe for
+an exit status a script can chain on.
 
 When --watch is non-zero, status polls and reprints at that interval. On a
 TTY the screen is cleared between reprints; piped output appends each
 snapshot on its own line for log capture.`,
-	Usage: "magus status [flags]",
+	Usage: "magus server status [flags]",
 	Flags: []cmdline.Flag{
 		{Name: "watch", Kind: cmdline.Duration, Unit: "s", Doc: "Poll and reprint at this interval (minimum 15s; 0 means one-shot)"},
 		{Name: "W", Kind: cmdline.Duration, AliasOf: "watch", Doc: "Short for --watch"},
@@ -865,10 +871,10 @@ snapshot on its own line for log capture.`,
 		{Name: "workspace", Kind: cmdline.String, Doc: "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)"},
 	},
 	Examples: []cmdline.Example{
-		{Comment: "One-shot status snapshot", Command: "magus status"},
-		{Comment: "Live updates every 15 seconds", Command: "magus status --watch=15s"},
-		{Comment: "Single-line snapshot for a multiplexer sidebar", Command: "magus status --compact --watch=15s"},
-		{Comment: "Inspect a specific running parent", Command: "magus status --socket=unix:///run/user/1000/magus/server.sock"},
+		{Comment: "One-shot status snapshot", Command: "magus server status"},
+		{Comment: "Live updates every 15 seconds", Command: "magus server status --watch=15s"},
+		{Comment: "Single-line snapshot for a multiplexer sidebar", Command: "magus server status --compact --watch=15s"},
+		{Comment: "Inspect a specific running parent", Command: "magus server status --socket=unix:///run/user/1000/magus/server.sock"},
 	},
 }
 
@@ -1079,21 +1085,24 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 
 var serverCommand = cmdline.Command{
 	Name:        "server",
-	Short:       "Manage the magus server: MCP, the console, APIs and background jobs",
-	Description: "Start, stop, reload or check the magus server a person starts: MCP over HTTP, the console, the APIs, background jobs and the warm graph and symbol watch.",
-	Tags:        []string{"cli", "magus server", "server", "mcp", "console", "socket", "persistent"},
-	Long: `Start, stop, reload or check the magus server.
+	Short:       "The background processes: the server (MCP, the console, APIs, jobs) and the broker",
+	Description: "Start, stop, reload or report the magus server a person starts (MCP over HTTP, the console, the APIs, background jobs and the warm graph and symbol watch) and the broker that holds this host's capacity.",
+	Tags:        []string{"cli", "magus server", "server", "broker", "mcp", "console", "socket", "persistent"},
+	Long: `Start, stop, reload or report the magus server, and check or stop the broker.
 
 The server is the background process a person asks for. It serves MCP and the
 console over HTTP, the APIs behind them, background jobs and scheduled
 maintenance, and keeps each workspace's knowledge graph and symbol indexes
 current. It keeps workspaces warm, so nested magus calls that forward to it pay
-for discovery and config once. Nothing starts it but ` + "`magus server start`" + ` (and
-` + "`graph export --follow`" + `, which asks for the console by name), and it runs
-until stopped.
+for discovery and config once. Nothing under ` + "`magus server`" + ` starts it but
+` + "`server start`" + ` (elsewhere, ` + "`graph export --follow`" + ` asks for the console
+by name), and it runs until stopped.
 
-It is not what holds this host's capacity: that is ` + "`magus broker`" + `, which a
-run starts on its own. The server asks the broker like any run does.
+It is not what holds this host's capacity: that is the broker, which a run
+starts on its own; ` + "`magus server broker`" + ` checks or stops it. The server asks
+the broker like any run does.
+
+Each verb's help line says whether it needs the server running.
 
 The socket address is resolved in priority order:
   --socket flag  >  MAGUS_SERVER_ADDRESS env  >  server.address in magus.yaml  >
@@ -1107,10 +1116,7 @@ Signals:
   SIGTERM, SIGINT  stop: close the socket, cancel the runs it adopted, and
                    wait up to shutdown_grace (default 5m) for them to unwind
   a second one     exit now`,
-	Usage: "magus server <start|stop|status|reload> [flags]",
-	// Each subcommand carries its own flags. --foreground sat on the parent with
-	// "(server start)" in its doc, and stop's --socket was not declared at all, bound
-	// by the command, absent from every man page.
+	Usage: "magus server <start|stop|status|reload|broker> [flags]",
 	Children: []cmdline.Command{
 		{
 			Name:               "start",
@@ -1122,37 +1128,21 @@ Signals:
 		},
 		{
 			Name:  "stop",
-			Short: "Send a graceful shutdown request to the running server",
+			Short: "Send a graceful shutdown request to the running server (needs it running)",
 			Flags: []cmdline.Flag{
 				{Name: "socket", Kind: cmdline.String, Doc: "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)"},
 				{Name: "pools", Kind: cmdline.Bool, Default: false, Doc: "Stop per-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone"},
 			},
 		},
-		{
-			Name:        "status",
-			Short:       "The server: whether it is up and where you reach it",
-			Description: "Report the running server's pid, version, uptime, socket, listeners, MCP url and console url, what it is running, and the workspaces it has loaded. Exits non-zero when no server is running.",
-			Long: `The server, and nothing else: is it up, and where do I reach it.
-
-` + "`magus status`" + ` is the other one. It answers what this workspace and this
-host are doing: the broker and what holds capacity, the server, what is
-loaded, and what the cache and config are. It embeds the server rows too, so
-this verb is the narrow view rather than a different fact.
-
-It exits non-zero when no server is running, matching ` + "`magus server stop`" + `,
-so a script can chain on it.`,
-			Usage: "magus server status [--socket <addr>] [flags]",
-			Flags: []cmdline.Flag{
-				{Name: "socket", Kind: cmdline.String, Doc: "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)"},
-			},
-		},
+		serverStatusCommand,
 		{
 			Name:  "reload",
-			Short: "Re-read configuration without restarting: drop the server's open workspaces",
+			Short: "Re-read configuration without restarting: drop the server's open workspaces (needs it running)",
 			Flags: []cmdline.Flag{
 				{Name: "socket", Kind: cmdline.String, Doc: "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)"},
 			},
 		},
+		serverBrokerCommand,
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Start the server (auto-backgrounds)", Command: "magus server start"},
@@ -1160,17 +1150,19 @@ so a script can chain on it.`,
 		{Comment: "Stop the running server", Command: "magus server stop"},
 		{Comment: "Stop leftover pool parents from an older build", Command: "magus server stop --pools"},
 		{Comment: "Reload configuration without restarting", Command: "magus server reload"},
-		{Comment: "Everything running on this host", Command: "magus status"},
+		{Comment: "Everything running on this host, server up or not", Command: "magus server status"},
+		{Comment: "Run tests once the build budget can seat them", Command: "magus server status --wait | magus run test ."},
+		{Comment: "Is a broker up, and what holds capacity", Command: "magus server broker status"},
 		{Comment: "Use a custom socket path", Command: "magus --server-address unix:///tmp/m.sock server start"},
 	},
 }
 
-var brokerCommand = cmdline.Command{
+var serverBrokerCommand = cmdline.Command{
 	Name:               "broker",
 	UnstructuredOutput: true, // runs the broker in the foreground
-	Short:              "The per-user process holding this host's capacity and shared services",
+	Short:              "The per-user process holding this host's capacity and shared services (needs no server)",
 	Description:        "Check or stop the broker: the per-user process that holds this host's concurrency slots, declared memory and shared services, which a run starts on its own.",
-	Tags:               []string{"cli", "magus broker", "broker", "capacity", "memory_mb", "services", "concurrency"},
+	Tags:               []string{"cli", "magus server broker", "broker", "capacity", "memory_mb", "services", "concurrency"},
 	Long: `The broker holds this host's capacity: the concurrency slots and declared
 memory_mb every magus on it shares, and the services runs keep warm between
 them. Every run asks it before starting a step; a step that does not fit
@@ -1183,7 +1175,7 @@ builds of another protocol run their own broker and share no budget with
 this one; status and a starting broker warn when one is live). It exits once
 it has held nothing (no
 claim, no service with a dependent) for ten minutes; a started broker logs to
-$XDG_STATE_HOME/magus/broker.log.
+$XDG_STATE_HOME/magus/broker.log. It is not the server and needs none.
 
 Each run holds one connection to it for its life, and every claim and service
 reference rides that connection, so a run killed outright releases what it
@@ -1197,7 +1189,7 @@ runs unarbitrated and says so once, off never starts or contacts one.
 Run with no target, it serves in this process and logs to stderr, or to the
 file --log names. Under systemd it takes the socket the supervisor hands over
 (LISTEN_FDS), refusing one that is malformed or bound anywhere but
-its protocol's socket. ` + "`magus broker units`" + ` prints the systemd or launchd units for
+its protocol's socket. ` + "`magus server broker units`" + ` prints the systemd or launchd units for
 it; magus never installs them.
 
 Signals:
@@ -1211,7 +1203,7 @@ A run the drain turns away is refused under broker: required (MGS3022) and
 runs unarbitrated under best-effort, each naming the draining broker. Runs
 still holding claims when the broker exits keep going and re-assert them on
 the next one.`,
-	Usage: "magus broker [status|stop|units] [flags]",
+	Usage: "magus server broker [status|stop|units] [flags]",
 	Flags: []cmdline.Flag{
 		{Name: "idle-exit", Kind: cmdline.Duration, Unit: "m", Default: 10 * time.Minute, Doc: "Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive"},
 		{Name: "log", Kind: cmdline.String, Doc: "Append stdout and stderr to this file, reopening it on SIGHUP; a run that starts a broker passes $XDG_STATE_HOME/magus/broker.log"},
@@ -1219,28 +1211,28 @@ the next one.`,
 	Children: []cmdline.Command{
 		{
 			Name:        "status",
-			Short:       "The broker: its capacity, every claim holding it, and its services",
+			Short:       "The broker: its capacity, every claim holding it, and its services (needs the broker running)",
 			Description: "Report the broker's pid, socket, capacity, each claim holding it and the services it hosts. Exits non-zero when no broker is running.",
-			Usage:       "magus broker status [flags]",
+			Usage:       "magus server broker status [flags]",
 		},
 		{
 			Name:  "stop",
-			Short: "Stop the broker, or with --services only the services it hosts",
+			Short: "Stop the broker, or with --services only the services it hosts (needs the broker running)",
 			Flags: []cmdline.Flag{
 				{Name: "services", Kind: cmdline.Bool, Default: false, Doc: "Stop the broker's hosted services, leaving the broker running"},
 			},
 		},
 		{
 			Name:        "units",
-			Short:       "Print the systemd or launchd units that supervise the broker",
+			Short:       "Print the systemd or launchd units that supervise the broker (needs nothing running)",
 			Description: "Print the unit files a supervisor needs to run the broker: a systemd socket and service that socket-activate it, or a launchd agent that keeps it alive. magus prints them and never installs them.",
-			Usage:       "magus broker units [systemd|launchd] [flags]",
+			Usage:       "magus server broker units [systemd|launchd] [flags]",
 		},
 	},
 	Examples: []cmdline.Example{
-		{Comment: "Is a broker up, and what holds capacity", Command: "magus broker status"},
-		{Comment: "Stop the services it keeps warm", Command: "magus broker stop --services"},
-		{Comment: "Print the systemd units that socket-activate it", Command: "magus broker units systemd"},
+		{Comment: "Is a broker up, and what holds capacity", Command: "magus server broker status"},
+		{Comment: "Stop the services it keeps warm", Command: "magus server broker stop --services"},
+		{Comment: "Print the systemd units that socket-activate it", Command: "magus server broker units systemd"},
 		{Comment: "Never start or ask one, for this run", Command: "magus run test . --broker off"},
 	},
 }

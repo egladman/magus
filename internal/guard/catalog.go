@@ -224,7 +224,7 @@ var ruleDocBusyWait = types.RuleDoc{
 		"Whatever the loop tests (a process, a file test on a task's output file, a grep of it) and whatever else each pass runs, a loop that sleeps is waiting. " +
 		"The one wait for work the caller started is that work's completion notice: a run backgrounded as `magus job exec --timeout <d> -- <command>` is announced when it ends, and a subagent may stop while it runs, since the notice resumes it with its job still bound (background-left). A job is waited on with `magus job wait <job>`. " +
 		"A loop waiting on one target run is served that run under `magus job exec --timeout`, bounded by the target's last run here plus half, or by background-unbounded's ceiling when nothing measures it. " +
-		"A loop probing a process the caller did not start (`kill -0`, the process table, `magus status` or a job row) gets no such announcement, so its deny names the record magus keeps of that work instead: `magus job wait <job>` for a job, one `magus status` for the project lock. " +
+		"A loop probing a process the caller did not start (`kill -0`, the process table, `magus server status` or a job row) gets no such announcement, so its deny names the record magus keeps of that work instead: `magus job wait <job>` for a job, one `magus server status` for the project lock. " +
 		"The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. " +
 		"Several have had to be killed by hand. A host's watcher running the same loop is judged the same way, since it is the same poll that also wakes the agent on every line and at expiry. " +
 		"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the output-pipe, output-redirect and unknown-env rules. " +
@@ -485,7 +485,7 @@ var ruleDocOutputRedirect = types.RuleDoc{
 var ruleDocProcessPoll = types.RuleDoc{
 	Name:    string(denyRuleProcessPoll),
 	Catches: "a process table inspected to wait on magus work the lock already reports",
-	Why: "A magus run holds a project lock and announces itself, and one `magus status` reads that same lock state: holder PID, command, age. A second run into the lock exits 75 at once, and a run the caller backgrounded under `magus job exec --timeout` announces its own end, so the wait is that completion notice. " +
+	Why: "A magus run holds a project lock and announces itself, and one `magus server status` reads that same lock state: holder PID, command, age. A second run into the lock exits 75 at once, and a run the caller backgrounded under `magus job exec --timeout` announces its own end, so the wait is that completion notice. " +
 		"`pgrep`, `pidof`, `ps` and `kill -0` invent a poll with no bound of its own that answers a question the lock message already answered.",
 }
 
@@ -493,7 +493,7 @@ var ruleDocProcessSignal = types.RuleDoc{
 	Name:    string(denyRuleProcessSignal),
 	Catches: "kill, pkill or killall used to signal a process identified only by PID or name",
 	Why: "A PID or process-name pattern cannot establish ownership: a pkill of a slow fork or MCP process can stop another session's work or the host's connection. " +
-		"Cancel the shell task through the host that started it, or have the person stop it. `magus status` inspects the tracked work without signaling it. " +
+		"Cancel the shell task through the host that started it, or have the person stop it. `magus server status` inspects the tracked work without signaling it. " +
 		"Signal-list requests pass; `kill -0` is a process-poll instead.",
 }
 
@@ -837,7 +837,7 @@ var ruleDocReadNavigation = types.RuleDoc{
 var ruleDocSleepPoll = types.RuleDoc{
 	Name:    string(denyRuleSleepPoll),
 	Catches: "a sleep before a status read, a call that only sleeps, or a wait on or retry into a full budget",
-	Why: "Both are a wait whose loop is the caller's own next call. A sleep of ten seconds or more followed on the same line by a status read (`kill -0`, the process table, `magus status` or a job row, a pull request's checks, a CI run) looks once and leaves the next look to the next call. " +
+	Why: "Both are a wait whose loop is the caller's own next call. A sleep of ten seconds or more followed on the same line by a status read (`kill -0`, the process table, `magus server status` or a job row, a pull request's checks, a CI run) looks once and leaves the next look to the next call. " +
 		"A call whose only work is sleeping, printing and reading a file once (`sleep 300; echo tick`, `sleep 120 && tail -5 out.log`, a `for` loop of sleeps and echoes) is a timer: its notice says only that time passed, where the work's own backgrounded call is announced with its result. " +
 		"Backgrounded it is refused at any length; in the foreground from ten seconds, since a foreground sleep past the tool timeout is moved to the background and becomes one. A shorter foreground sleep is a settle, and a line that also builds, tests or runs a script is work. " +
 		"A watch (`--watch`) is not a status read, and a loop is busy-wait's. " +
@@ -902,7 +902,7 @@ var ruleDocMonitorDuplicate = types.RuleDoc{
 	Why: "A watcher is a host tool that runs a command in the background and wakes the agent on each line it prints, and again when it expires. " +
 		"Its subject is what its command reads: a process pattern, a pid, a file, a job, the project lock, a CI run; a command naming none is its own subject. " +
 		"A second watcher while the first is live wakes the agent twice per event; one on a host task capture, or on the process of a command this agent backgrounded, repeats the notice the host already gives. " +
-		"A backgrounded call that watches without end (`magus status --watch`, `tail -f`, `watch`) is judged the same way, and a leased worker is refused one outright, since its waits are its own runs. " +
+		"A backgrounded call that watches without end (`magus server status --watch`, `tail -f`, `watch`) is judged the same way, and a leased worker is refused one outright, since its waits are its own runs. " +
 		"Re-arming a watcher that expired passes. It cannot tell a process pattern that also matches someone else's run from one matching only the agent's own.",
 }
 

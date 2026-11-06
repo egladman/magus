@@ -7,7 +7,7 @@
 // queued slots), what is running right now - the running targets, their workspace, and
 // how long they have run - and live cache ACTIVITY (hit/miss/error tallies + real on-disk
 // size). Static CONFIG (telemetry, the cache cap/immutability, build flags) is deliberately
-// NOT here; that is `magus status`/config, not "what is happening." Backs a native-feeling
+// NOT here; that is `magus server status`/config, not "what is happening." Backs a native-feeling
 // /dashboard. A sibling of magus.viewer.v1alpha1. buf-breaking gates this file.
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";

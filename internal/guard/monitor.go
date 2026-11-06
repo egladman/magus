@@ -115,8 +115,8 @@ type watchCall struct {
 	endless bool
 }
 
-// endlessWatch reports a line that watches until killed: `magus status --watch`, a
-// followed `tail`, or `watch`. Backgrounded, it is a waiter that never ends on its own.
+// endlessWatch reports a line that watches until killed: a status `--watch`,
+// a followed `tail`, or `watch`. Backgrounded, it never ends on its own.
 func endlessWatch(command string, d Dialect) bool {
 	cmds, ok := ParseCommandsDialect(command, d)
 	return ok && slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
@@ -130,7 +130,7 @@ func endlessWatch(command string, d Dialect) bool {
 			return false
 		}
 		words := magusSubcommandWords(c.Args)
-		return len(words) > 0 && words[0] == "status" && slices.ContainsFunc(c.Args, func(a string) bool {
+		return isServerStatus(words) && slices.ContainsFunc(c.Args, func(a string) bool {
 			return a == "--watch" || strings.HasPrefix(a, "--watch=") || a == "-watch" || strings.HasPrefix(a, "-watch=")
 		})
 	})
@@ -167,7 +167,7 @@ func watchSubjects(command string, d Dialect) []string {
 			switch words := magusSubcommandWords(c.Args); {
 			case len(words) >= 3 && (words[0] == "job" && words[1] == "wait" || words[0] == "describe" && words[1] == "job"):
 				out = append(out, "job:"+words[2])
-			case len(words) >= 1 && words[0] == "status":
+			case isServerStatus(words):
 				out = append(out, "status")
 			}
 		default:

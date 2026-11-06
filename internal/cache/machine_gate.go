@@ -698,7 +698,7 @@ func brokerUnavailableError(c types.MachineClaim, err error) error {
 			displayProject(c.Project), c.Target, err)}
 	}
 	return types.ExitError{Code: ExitCodeBrokerUnavailable, Err: types.WrapDiagnostic(types.BrokerUnavailable, err,
-		"not starting %s %s: no broker answered for this host's capacity (%v), and broker: required refuses to run unarbitrated. `magus broker status` says whether one is up and where it logs",
+		"not starting %s %s: no broker answered for this host's capacity (%v), and broker: required refuses to run unarbitrated. `magus server broker status` says whether one is up and where it logs",
 		displayProject(c.Project), c.Target, err)}
 }
 
@@ -791,7 +791,7 @@ func LeasedPressureNext(lease string) string {
 // memoryPressureError is no wait: the budget queue waits on declared claims
 // and cannot see this.
 func memoryPressureError(c types.MachineClaim, reason, lease string) error {
-	next := fmt.Sprintf("Free memory, then run the same command again: `%s` shows what magus holds, and this reading counts everything on the machine", hint.Status.String())
+	next := fmt.Sprintf("Free memory, then run the same command again: `%s` shows what magus holds, and this reading counts everything on the machine", hint.ServerStatus.String())
 	if lease != "" {
 		next = LeasedPressureNext(lease)
 	}

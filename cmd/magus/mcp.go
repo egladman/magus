@@ -108,7 +108,7 @@ func writeMCPUsage(w io.Writer, cfg config.MCP) {
 		fmt.Fprintf(w, "  url        http://%s/mcp\n", mcpAddress(cfg))
 		fmt.Fprintln(w, "  auth       Authorization: Bearer <token>, minted with")
 		fmt.Fprintln(w, "             magus config mcp connector create --name <client> --expires 366d")
-		fmt.Fprintln(w, "  check      magus status --probe=liveness,mcp")
+		fmt.Fprintln(w, "  check      magus server status --probe=liveness,mcp")
 	}
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Per-client configuration: docs/guides/integrations/mcp.md")

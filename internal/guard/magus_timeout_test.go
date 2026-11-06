@@ -60,7 +60,7 @@ func TestMagusTimeoutDeniesTowardTheRunsOwnTimeout(t *testing.T) {
 // once, so the wrapper is dropped rather than traded for a flag.
 func TestMagusTimeoutServesAReadBare(t *testing.T) {
 	for command, next := range map[string]string{
-		"timeout 30 magus status":           "magus status",
+		"timeout 30 magus server status":    "magus server status",
 		"timeout 30 ./magus query output x": "./magus query output x",
 		"gtimeout 5m magus graph build":     "magus graph build",
 	} {

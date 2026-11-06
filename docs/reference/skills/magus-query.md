@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 15794
-skill_short_bytes: 9330
+skill_full_bytes: 15815
+skill_short_bytes: 9351
 ---
 
 # magus-query
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `6cf66543ccad` |
+| `skill-content` | `be8192581eff` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -74,9 +74,9 @@ Read it only as last resort: no server AND no CLI, or human asking what committe
    - `magus describe spells`, `magus describe projects`.
 
 2. Then verbs. Prefer MCP tool when host exposes it.
-   - Call tool itself to check availability; `magus status --probe=mcp` tests loopback HTTP listener -> can fail while stdio or Unix-socket MCP works.
+   - Call tool itself to check availability; `magus server status --probe=mcp` tests loopback HTTP listener -> can fail while stdio or Unix-socket MCP works.
    - If tool missing or call fails -> CLI equivalent from same row below. Do not stop or grep.
-   - `magus status --probe=readiness`: checks workspace loaded on server socket; does not test host MCP registration.
+   - `magus server status --probe=readiness`: checks workspace loaded on server socket; does not test host MCP registration.
    - Never start server only to unlock tool.
 
    Question: MCP; CLI
@@ -123,7 +123,7 @@ Three things decide whether result usable; skipping any corrupts file in bulk re
 - `stale` file is stop, not filter. File stale when any of its ranges failed to verify; index may then also be MISSING occurrences added since, which no per-site check can see. Re-run project's `scip` target, ask again.
 
 Completeness rests on current index even when everything verifies: newly appended use verifies nothing, never seen.
-- `magus status` reports which indexes fresh. Re-index first when tree moved since last index.
+- `magus server status` reports which indexes fresh. Re-index first when tree moved since last index.
 - Check verdict for projects declaring no index at all; those not searched.
 
 ## Query grammar
@@ -259,12 +259,12 @@ unavailable too, or when a human explicitly asks what the committed index says.
    are right even mid-change, and they take a `-o json` for machine reading.
 
 2. Then reach for the verbs. Prefer an MCP tool when this host exposes it.
-   - Call the tool itself to check availability. `magus status --probe=mcp` tests
+   - Call the tool itself to check availability. `magus server status --probe=mcp` tests
      the loopback HTTP listener, so it can fail while stdio or Unix-socket MCP
      works.
    - If the tool is missing or its call fails, use the CLI equivalent from the same
      row below. Do not stop or grep.
-   - `magus status --probe=readiness` checks that this workspace is loaded on the
+   - `magus server status --probe=readiness` checks that this workspace is loaded on the
      server socket. It does not test the host's MCP registration.
    - Never start a server only to unlock a tool. CLI
      fallback remains correct, but has no tool discovery or warm server graph.
@@ -354,7 +354,7 @@ Completeness rests on a current index even when everything verifies. An edit tha
 appended a new use without disturbing existing ranges leaves every site verifying
 while adding one magus never saw.
 
-- `magus status` reports which indexes are fresh. Re-index first when the tree has
+- `magus server status` reports which indexes are fresh. Re-index first when the tree has
   moved since you last did.
 - Check the verdict for projects that declare no index at all; those are not
   searched.

@@ -91,7 +91,7 @@ why the ablation is a 0/1 ladder rather than a menu of independent switches:
   skill". Hooks-on with skills-off is an integration that routes to files that are
   not there, so it is a partial integration rather than a clean control.
 - **Skill bodies name MCP tools.** The installed skills tell an agent to prefer
-  `client` (`magus\graph().query`) and to check `magus status --probe=mcp`. With MCP
+  `client` (`magus\graph().query`) and to check `magus server status --probe=mcp`. With MCP
   unregistered, the full arm's agent is told about tools it does not have; the
   skills say to continue with the CLI fallback, which is what it does.
 - **The CLAUDE.md block and the skills share one content digest.** They are

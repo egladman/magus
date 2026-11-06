@@ -5,9 +5,9 @@
 [windows] skip 'no kernel API proves the writer of an anonymous pipe; the pipe fails fast as before'
 
 # generate holds the lock until a release file appears; this watcher supplies it
-# only once magus status proves the reader has actually registered its wait, so
+# only once magus server status proves the reader has actually registered its wait, so
 # the release can never race ahead of the thing it is meant to unblock.
-exec bash -c 'for i in $(seq 400); do [ -f generate-ready ] && break; sleep 0.05; done; for i in $(seq 400); do magus status -o json 2>/dev/null | grep -q pipe_waits && break; sleep 0.05; done; touch release' &
+exec bash -c 'for i in $(seq 400); do [ -f generate-ready ] && break; sleep 0.05; done; for i in $(seq 400); do magus server status -o json 2>/dev/null | grep -q pipe_waits && break; sleep 0.05; done; touch release' &
 exec bash -c 'set -o pipefail; magus affected generate --no-default-charms | magus affected ci --plan | magus run consume .'
 stderr 'magus: waiting for pid [0-9]+ \(.*affected generate'
 ! stderr 'locked by another magus process'
@@ -15,7 +15,7 @@ grep '"matrix"' consumed
 wait
 
 # Nothing is left behind: no held lock, no waiter.
-exec magus status -o json
+exec magus server status -o json
 ! stdout '"locks"'
 ! stdout '"pipe_waits"'
 

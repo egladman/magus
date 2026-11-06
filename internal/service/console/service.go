@@ -138,8 +138,8 @@ func (s *Service) Version() string { return s.version }
 
 // StatusSnapshot assembles the full status report: the static telemetry/cache/build fields
 // from the status base merged with the live pool state. The pool comes from the injected
-// StatusSnapshotFn when set (tests), otherwise queried from the server socket; a query
-// failure is reported as PoolError rather than an error return, matching `magus status`.
+// StatusSnapshotFn when set (tests), otherwise queried from the server socket.
+// As in `magus server status`, a query failure is a PoolError, not an error.
 func (s *Service) StatusSnapshot(ctx context.Context) types.StatusSnapshot {
 	out := s.statusSnapshot(ctx)
 	// Live runs come from this server's in-process run registry (not the pool query), so

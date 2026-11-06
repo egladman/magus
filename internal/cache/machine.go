@@ -424,8 +424,8 @@ func isMachineAncestor(invocation string, ancestors []string) bool {
 
 // FormatMB renders a declared memory figure. Base-1024 with binary suffixes and a
 // space, matching FormatBytes rather than inventing a second spelling of the same
-// quantity in one binary. Exported so a refusal and `magus status` say the same figure
-// the same way.
+// quantity in one binary. Exported so a refusal and `magus server status`
+// say the same figure the same way.
 func FormatMB(mb int) string {
 	if mb >= 1024 {
 		return fmt.Sprintf("%.1f GiB", float64(mb)/1024)

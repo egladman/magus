@@ -41,8 +41,6 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return watchCommand(ctx, root, rc, subArgs)
 	case "events":
 		return eventsCommand(ctx, root, subArgs)
-	case "status":
-		return status(ctx, subArgs)
 	case "clean":
 		return cleanCommand(ctx, root, subArgs)
 	case "vcs":
@@ -65,8 +63,6 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return diffCommand(ctx, root, subArgs)
 	case "server":
 		return serverCommand(ctx, root, subArgs)
-	case "broker":
-		return brokerCommand(ctx, subArgs)
 	case "mcp":
 		return mcpCommand(ctx, root, subArgs)
 	case "init":

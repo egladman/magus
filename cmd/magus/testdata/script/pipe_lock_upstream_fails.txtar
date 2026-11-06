@@ -8,7 +8,7 @@ stderr 'MGS3030'
 ! stderr 'consume: no plan on stdin'
 ! stderr 'locked by another magus process'
 
-exec magus status -o json
+exec magus server status -o json
 ! stdout '"locks"'
 ! stdout '"pipe_waits"'
 

@@ -1656,7 +1656,7 @@ func repairInvocation(c hint.Invocation) bool {
 			return true
 		}
 		words := magusSubcommandWords(c.Args)
-		return len(words) > 0 && undeclaredLeaseVerbs[words[0]] && !renamesSymbol(c.Args)
+		return len(words) > 0 && (undeclaredLeaseVerbs[words[0]] || isServerStatus(words)) && !renamesSymbol(c.Args)
 	}
 	if c.Name == "git" {
 		g := parseGit(c.Args)
@@ -1721,7 +1721,7 @@ var (
 	undeclaredLeaseVerbs = map[string]bool{
 		"ledger": true, "job": true, "session": true, "ls": true, "describe": true,
 		"query": true, "explain": true, "refs": true, "where": true,
-		"status": true, "doctor": true, "help": true, "version": true,
+		"doctor": true, "help": true, "version": true,
 	}
 	gitReadVerbs = map[string]bool{
 		"status": true, "log": true, "diff": true, "show": true, "branch": true, "remote": true,

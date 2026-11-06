@@ -5471,8 +5471,8 @@ async function fetchLiveStatus() {
       liveWorkspaceName = loaded.root;
     }
     // No pool strip here: how many targets the server is running is session state the dashboard
-    // owns. The affected set does not come from here either - StatusOutput.Affected is on the wire
-    // type but `magus status` never opens a workspace, so it has no VCS context to fill it.
+    // owns. Nor does the affected set. StatusOutput.Affected is on the wire
+    // type, but `magus server status` opens no workspace to fill it.
     // GraphService.FindAffected answers instead (refreshAffectedFromServer).
     publishLiveStatus();
   } catch {

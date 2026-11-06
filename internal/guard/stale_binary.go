@@ -314,7 +314,7 @@ func ghReadOnly(args []string) bool {
 }
 
 // magusReadVerbs are the magus verbs that answer a question and write nothing shared.
-var magusReadVerbs = []string{"version", "ls", "describe", "query", "status", "explain", "refs", "path", "doctor", "where"}
+var magusReadVerbs = []string{"version", "ls", "describe", "query", "explain", "refs", "doctor", "where"}
 
 // magusReadOnly reports a magus invocation that reads. Asking for help always does, and so
 // does `affected --explain`, which says why each project is affected and runs nothing.
@@ -334,7 +334,7 @@ func magusReadOnly(args []string) bool {
 	case words[0] == "vcs":
 		return len(words) > 1 && words[1] == "ls-files"
 	}
-	return slices.Contains(magusReadVerbs, words[0])
+	return slices.Contains(magusReadVerbs, words[0]) || isServerStatus(words)
 }
 
 // scoutRecord reports a magus invocation a read-only scout records its work with: `job

@@ -63,6 +63,6 @@ var processSignalVerdict = ShellVerdict{
 	Rule: denyRule{Name: denyRuleProcessSignal},
 }.withRemedy(
 	"a PID or name does not prove ownership; cancel your shell task through its host, or ask the person to stop it. Inspect the tracked work once.",
-	hint.NextForDenyRemedy(string(denyRuleProcessSignal), hint.Status.Argv(),
+	hint.NextForDenyRemedy(string(denyRuleProcessSignal), hint.ServerStatus.Argv(),
 		"status reads the live pool once and exits; it does not stop any process."),
 )

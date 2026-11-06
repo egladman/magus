@@ -135,7 +135,7 @@ func TestOutputPipeKeepsTheGenericAnswerWithoutARecord(t *testing.T) {
 	}{
 		// ls targets nests targets under projects: no flat list to slice, no --limit.
 		{"magus ls targets | head -5", "`-s` stays quiet"},
-		{"magus status | head -5", "`-s` stays quiet"},
+		{"magus server status | head -5", "`-s` stays quiet"},
 		{"magus describe target ci . | head -60", "`-s` stays quiet"},
 		{"magus describe job foo | head -40", "`-s` stays quiet"},
 		{"magus run test . | tail -30", "`-s` stays quiet"},
@@ -150,9 +150,9 @@ func TestOutputPipeKeepsTheGenericAnswerWithoutARecord(t *testing.T) {
 		// query's subcommands are not the query record; output is exempt, invocation is not.
 		{"magus query invocation abc | head", "`-s` stays quiet"},
 		{"magus run generate . | wc -l", "`-o name` prints one id per line"},
-		{"magus status | wc -l", "`-o name` prints one id per line"},
+		{"magus server status | wc -l", "`-o name` prints one id per line"},
 		{"magus ls | wc -c", "`-o name` prints one id per line"},
-		{"magus status | tr -d ' '", "`-o template` prints none"},
+		{"magus server status | tr -d ' '", "`-o template` prints none"},
 		{"magus ls | tr 'a' 'b'", "`-o name`, `-o json`, or `-o template='{{.field}}'` project the record"},
 		{"magus agent install | sort", "`-o name`, `-o json`, or `-o template='{{.field}}'` project the record"},
 	} {

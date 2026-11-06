@@ -434,3 +434,7 @@ reference/api/insight/v1alpha1/insight/
 reference/manpage/magus-completion/
 reference/manpage/magus-man/
 reference/manpage/magus-path/
+# status and broker moved under server, so their pages are now sections of
+# reference/manpage/magus-server/.
+reference/manpage/magus-broker/
+reference/manpage/magus-status/

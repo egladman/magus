@@ -249,7 +249,7 @@ function renderStatusBar(s: DashboardState): void {
     label: connectionLabel,
     ...(health !== undefined ? { health } : {}),
     hint: demoing ? "Demo data is synthetic. Click to change the server address." : "",
-    // The two processes behind the board in one line, the tokens `magus status --compact` prints.
+    // The board's two processes, as `magus server status --compact` prints.
     ...(s.status ? { count: processSummary(s.status) } : {}),
     ...(observing ? { observing } : {}),
   });

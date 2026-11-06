@@ -257,7 +257,7 @@ func MagusImportGraph(ctx context.Context) (types.ImportGraph, error) {
 }
 
 // precedentWorkspace is the part of *magus.Magus the graph's precedents read.
-// That is an index freshen, `magus status`'s verdict and the declared outputs.
+// That is an index freshen, the status verdict and the declared outputs.
 // knowledge.conformance's gates and ceilings judge the precedents.
 type precedentWorkspace interface {
 	FreshenSymbolIndexes(ctx context.Context, languages []string) error

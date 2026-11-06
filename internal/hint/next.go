@@ -304,7 +304,7 @@ func declaredRead(n types.NextStep) bool {
 var readCommands = []Command{
 	Query, QueryOutput, QueryInvocation,
 	GraphExport, GraphStats, GraphDiff,
-	Status, Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile,
+	ServerStatus, Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile,
 	DescribeGraph, DescribeMCPTools,
 	Explain, Diff, Doctor, Where, X, Ls, LsTargets, LsJobs, Refs,
 	DescribeJob,

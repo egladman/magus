@@ -372,6 +372,7 @@ func TestServerDispatcherChildrenAreDeclared(t *testing.T) {
 		hint.ServerStop.Leaf(),
 		hint.ServerStatus.Leaf(),
 		hint.ServerReload.Leaf(),
+		hint.ServerBroker.Leaf(),
 	}
 	slices.Sort(got)
 

@@ -43,18 +43,18 @@ Read it only as last resort: no server AND no CLI, or human asking what committe
    are right even mid-change, and they take a `-o json` for machine reading.{{end}}
 
 {{if .Full}}2. Then reach for the verbs. Prefer an MCP tool when this host exposes it.
-   - Call the tool itself to check availability. `{{cmd "status"}} --probe=mcp` tests
+   - Call the tool itself to check availability. `{{cmd "server status"}} --probe=mcp` tests
      the loopback HTTP listener, so it can fail while stdio or Unix-socket MCP
      works.
    - If the tool is missing or its call fails, use the CLI equivalent from the same
      row below. Do not stop or grep.
-   - `{{cmd "status"}} --probe=readiness` checks that this workspace is loaded on the
+   - `{{cmd "server status"}} --probe=readiness` checks that this workspace is loaded on the
      server socket. It does not test the host's MCP registration.
    - Never start a server only to unlock a tool. CLI
      fallback remains correct, but has no tool discovery or warm server graph.{{else}}2. Then verbs. Prefer MCP tool when host exposes it.
-   - Call tool itself to check availability; `{{cmd "status"}} --probe=mcp` tests loopback HTTP listener -> can fail while stdio or Unix-socket MCP works.
+   - Call tool itself to check availability; `{{cmd "server status"}} --probe=mcp` tests loopback HTTP listener -> can fail while stdio or Unix-socket MCP works.
    - If tool missing or call fails -> CLI equivalent from same row below. Do not stop or grep.
-   - `{{cmd "status"}} --probe=readiness`: checks workspace loaded on server socket; does not test host MCP registration.
+   - `{{cmd "server status"}} --probe=readiness`: checks workspace loaded on server socket; does not test host MCP registration.
    - Never start server only to unlock tool.{{end}}
 
 {{if .Full}}   | question                                      | MCP                                              | CLI                                |
@@ -153,8 +153,8 @@ rewrite corrupts a file:
 appended a new use without disturbing existing ranges leaves every site verifying
 while adding one magus never saw.
 {{else}}Completeness rests on current index even when everything verifies: newly appended use verifies nothing, never seen.{{end}}
-{{if .Full}}- `{{cmd "status"}}` reports which indexes are fresh. Re-index first when the tree has
-  moved since you last did.{{else}}- `{{cmd "status"}}` reports which indexes fresh. Re-index first when tree moved since last index.{{end}}
+{{if .Full}}- `{{cmd "server status"}}` reports which indexes are fresh. Re-index first when the tree has
+  moved since you last did.{{else}}- `{{cmd "server status"}}` reports which indexes fresh. Re-index first when tree moved since last index.{{end}}
 {{if .Full}}- Check the verdict for projects that declare no index at all; those are not
   searched.{{else}}- Check verdict for projects declaring no index at all; those not searched.{{end}}
 

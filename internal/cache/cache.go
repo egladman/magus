@@ -1408,8 +1408,8 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Contex
 	}, nil
 }
 
-// stepLabel names a step for a human reading a wait: the project as `magus status` spells
-// it, then the target.
+// stepLabel names a step for a human reading a wait. It is the project as
+// `magus server status` spells it, then the target.
 func stepLabel(s Step) string { return fmt.Sprintf("%s %s", displayProject(s.ProjectPath), s.Target) }
 
 type sharedStepBaseKey struct{}
@@ -1461,11 +1461,10 @@ func (c sharedStepContext) Value(key any) any           { return c.values.Value(
 // [Cache.admit]'s limiter slots, machine claim, inflight record and heartbeat, wrapped
 // around [Cache.Run]'s captured log, output ref and journal result event.
 //
-// It exists because post-batch work is still work. A re-run dispatched straight at the
-// interpreter claims nothing, appears in no inflight set and emits no journal event, so
-// every observer reports an idle machine while the invocation still holds every project
-// lock: exactly how a settle pass wedged a gate for over an hour on 2026-09-04 with
-// `magus status` reporting 0 slots in use and nothing running.
+// It exists because post-batch work is still work. A re-run dispatched
+// straight at the interpreter claims nothing and emits no journal event. Every
+// observer then reports an idle machine while it holds every project lock.
+// On 2026-09-04 a settle pass wedged a gate for over an hour this way.
 //
 // Concurrency is the caller's to arrange; unlike RunAll it waits on no upstreams.
 // The step still joins the invocation's isolation scope, so an exclusive off-batch step

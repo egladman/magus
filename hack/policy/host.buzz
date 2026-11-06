@@ -8,7 +8,7 @@
 //   denial points at the run and not at the file. With no ./magus in the
 //   workspace there is no query output to point at, and the read is allowed.
 // host-terminals (deny): creating or reading a directory named terminals.
-//   A host session folder is not a run; magus status reads the project lock.
+//   A host session folder is not a run. `magus server status` reads the lock.
 // host-cursor-rules (deny, writes only): a .mdc file under a .cursor/rules directory.
 //   This repository delivers Cursor guidance through hooks and skills.
 namespace agentpolicy\host;
@@ -24,7 +24,7 @@ final captureDenial = "reading a run log or task capture by cat or by a range dr
     + "A failure prints `output: out<hex>` on the line under `cause:`, and that ref is the whole log. "
     + "Reading `.magus/logs` or a task capture keeps a slice.";
 
-final terminalsDenial = "a directory named terminals is a host session folder, not a run; read the project lock: `magus status`.\n"
+final terminalsDenial = "a directory named terminals is a host session folder, not a run; read the project lock: `magus server status`.\n"
     + "Status reports who holds the lock, what they are running, and how long they have held it. "
     + "Do not create a terminals directory and do not read its files.";
 
@@ -473,7 +473,7 @@ test "with no ./magus in the workspace a capture read is allowed; a terminals re
     }
     final terminals = judgedWith(helpers\request([["cat", "terminals/266091.txt"]]), reads: none);
     std\assert(terminals.decision == magus\GuardDecision.deny, message: "terminals");
-    std\assert(terminals.reason.indexOf("magus status") != null, message: terminals.reason);
+    std\assert(terminals.reason.indexOf("magus server status") != null, message: terminals.reason);
 }
 
 test "readsFrom reads a capture relative to the command's directory and finds ./magus on disk" {
@@ -492,7 +492,7 @@ test "readsFrom reads a capture relative to the command's directory and finds ./
     fs\removeAll(dir);
 }
 
-test "creating or reading a terminals directory is denied, naming magus status" {
+test "creating or reading a terminals directory is denied, naming magus server status" {
     foreach (argv in [
         ["mkdir", "-p", "terminals"],
         ["mkdir", "-p", "foo/terminals"],
@@ -504,7 +504,7 @@ test "creating or reading a terminals directory is denied, naming magus status" 
     ]) {
         final v = judged(helpers\request([argv]));
         std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
-        std\assert(v.reason.indexOf("magus status") != null, message: "names the lock");
+        std\assert(v.reason.indexOf("magus server status") != null, message: "names the lock");
     }
 }
 
@@ -522,7 +522,7 @@ test "a directory that is not named terminals, and a search for the word, stay s
 }
 
 test "a write into a terminals directory or a run log is denied; source is not" {
-    std\assert(shaped("terminals/266091.txt").indexOf("magus status") != null, message: "a new session file");
+    std\assert(shaped("terminals/266091.txt").indexOf("magus server status") != null, message: "a new session file");
     std\assert(shaped(".magus/logs/abc.log").indexOf("magus query output") != null, message: "a log");
     std\assert(shaped("internal/guard/shell.go") == "", message: "source");
     std\assert(shaped("internal/term.go") == "", message: "a name that only starts the same way");

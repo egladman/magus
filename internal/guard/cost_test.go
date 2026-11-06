@@ -514,7 +514,7 @@ func orchestrationLines(notes string) []string {
 		"./magus graph stats",
 		"./magus graph diff",
 		"./magus diff --impact",
-		"./magus status",
+		"./magus server status",
 		"./magus affected ci",
 		// A fresh checkout runs no gate until its dependencies are installed (gap 219).
 		"./magus run install /",

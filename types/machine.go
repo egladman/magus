@@ -8,9 +8,9 @@ import (
 
 // MachineClaim is one step's request on the machine-wide admission budget.
 //
-// It crosses the broker socket AND lands in `magus status`, which is why it lives here
-// rather than in the package that arbitrates it: the engine, the broker, and every
-// status renderer read one definition. Two shapes projected onto each other drifted
+// It crosses the broker socket AND lands in `magus server status`, so it
+// lives here. The engine, the broker and every status renderer read one
+// definition. Two shapes projected onto each other drifted
 // their field names within a week of being written.
 //
 // Numeric fields use omitzero because the jsonv2 codec's omitempty does not omit 0.
@@ -135,7 +135,7 @@ type MachineVerdict struct {
 }
 
 // MachineSnapshot is the whole machine budget: what it is, what is spent, and the
-// claims spending it. It is what `magus status` reports and what the broker serves.
+// claims spending it. Status reports it and the broker serves it.
 type MachineSnapshot struct {
 	BudgetMB    int `json:"budget_mb,omitzero" yaml:"budget_mb,omitempty"`
 	HeldMB      int `json:"held_mb,omitzero" yaml:"held_mb,omitempty"`
