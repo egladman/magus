@@ -1,6 +1,6 @@
 ---
-title: "ADR 0025: refs gets no new subcommands"
-order: 25
+title: "ADR 0026: refs gets no new subcommands"
+order: 26
 description: >-
   Which subcommands `magus refs` should have beside reading a symbol's body. The candidates were callers, callees, implementers, a file outline, unused symbols and the subcommand split itself. Each was judged by its use across 198,579 agent shell calls and by whether explain, query or describe file already answers it. None earns a place: the outline and implementers are already answered by explain, callers by refs itself, and the split was refused on 2026-10-31. Nothing is built.
 tags: [adr, decision, refs, cli, symbols, knowledge-graph]
@@ -8,7 +8,7 @@ status: proposed
 date: 2026-11-06
 ---
 
-# ADR 0025: refs gets no new subcommands
+# ADR 0026: refs gets no new subcommands
 
 ## Context
 
