@@ -18,7 +18,7 @@ import (
 // runDevShims refuses a release while tracked source still holds a
 // development-only shim, one whose compat condition is marker.NextRelease.
 //
-// Usage: magus-utils dev-shims [-root .]
+// Usage: `magus-utils dev-shims [-root .]`.
 func runDevShims(args []string) error {
 	root := "."
 	if len(args) == 2 && args[0] == "-root" {
@@ -73,6 +73,6 @@ func checkDevShims(fsys fs.FS, paths []string) error {
 		return nil
 	}
 	return fmt.Errorf("%d development-only shim(s) remain, each marked %s%s): "+
-		"delete each shim and its marker before cutting a release:\n  %s",
-		len(left), marker.Compat, marker.NextRelease, strings.Join(left, "\n  "))
+		"delete each shim and its marker before cutting a release: %s",
+		len(left), marker.Compat, marker.NextRelease, strings.Join(left, ", "))
 }
