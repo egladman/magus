@@ -4,6 +4,7 @@ package spawn
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,7 +35,7 @@ func maybeForkTree() {
 	if depth > 0 {
 		for range 2 {
 			c := exec.Command(os.Args[0])
-			c.Env = append(os.Environ(), forkDepthEnv+"="+strconv.Itoa(depth-1), forkHoldEnv+"=1")
+			c.Env = append(os.Environ(), fmt.Sprintf("%s=%d", forkDepthEnv, depth-1), forkHoldEnv+"=1")
 			c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 			_ = c.Start()
 		}
@@ -77,7 +78,7 @@ func (s *TreeBoundSuite) TearDownTest() {
 
 // run execs a fork tree of depth; hold keeps the root running as well.
 func (s *TreeBoundSuite) run(depth int, hold bool) error {
-	env := append(os.Environ(), testPidEnv(), forkDepthEnv+"="+strconv.Itoa(depth), forkDirEnv+"="+s.dir)
+	env := append(os.Environ(), testPidEnv(), fmt.Sprintf("%s=%d", forkDepthEnv, depth), fmt.Sprintf("%s=%s", forkDirEnv, s.dir))
 	if hold {
 		env = append(env, forkHoldEnv+"=1")
 	}

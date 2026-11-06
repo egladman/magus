@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -17,7 +18,7 @@ func TestDevShimsSuite(t *testing.T) { suite.Run(t, new(DevShimsSuite)) }
 // The fixtures build the marker from its parts, so this file never holds one
 // the release would refuse.
 func devShim(prefix string) string {
-	return prefix + marker.Compat + marker.NextRelease + "): the old reader"
+	return fmt.Sprintf("%s%s%s): the old reader", prefix, marker.Compat, marker.NextRelease)
 }
 
 func mapFile(lines ...string) *fstest.MapFile {
