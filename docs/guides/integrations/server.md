@@ -29,10 +29,10 @@ aliases: [guides/daemon, guides/integrations/daemon]
 magus runs up to two background processes, each named for what it holds and each with
 one lifetime rule:
 
-| Process        | Holds                                                                                        | Started by                 | Exits                              | Listens on                                |
-| -------------- | -------------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------- | ----------------------------------------- |
+| Process               | Holds                                                                                        | Started by                 | Exits                              | Listens on                                           |
+| --------------------- | -------------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------- | ---------------------------------------------------- |
 | `magus server broker` | this host's capacity (slots and declared `memory_mb`) and the shared services runs keep warm | any run, when none answers | ten minutes after it holds nothing | `$XDG_RUNTIME_DIR/magus/broker-<protocol>.sock` only |
-| `magus server` | MCP, the console, the APIs, background jobs, the graph and symbol watch, warm workspaces     | `magus server start`       | when you stop it                   | `server.sock` and HTTP on `mcp.address`   |
+| `magus server`        | MCP, the console, the APIs, background jobs, the graph and symbol watch, warm workspaces     | `magus server start`       | when you stop it                   | `server.sock` and HTTP on `mcp.address`              |
 
 This page calls the second process the daemon; the command that runs it is `magus server`.
 `ps` tells them apart by argv: `magus server broker` and `magus server --foreground`.

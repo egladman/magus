@@ -537,8 +537,8 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 			}
 			return denial{
 				Say: fmt.Sprintf("magus workspace: `%s` builds ./magus, the binary judging lease %s's calls; %s.", r.target, me.ID, workerBuildVerdict),
-				Why: fmt.Sprintf("%s\nWhen this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator places it here with `%s`. Until then the unit is held to %s, and a need for the new binary goes in your result's unresolved risks. A row that moved the checkout it owns finishes with `./magus buzz %s -- --here`.",
-					onePerBase, strings.Join(placementArgv(me.ID), " "), commands[0], job.CheckoutBootstrapScript),
+				Why: fmt.Sprintf("%s\nWhen this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator places it here with `%s`. Until then the unit is held to %s, and a need for the new binary goes in your result's unresolved risks. %s",
+					onePerBase, strings.Join(placementArgv(me.ID), " "), commands[0], movedCheckoutRebuild(checkoutHook(at.workspace))),
 			}
 		}
 		if readsOwnProjects(r, me) {

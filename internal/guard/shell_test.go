@@ -2852,7 +2852,8 @@ func (s *PersonLeaseSuite) TestACheckoutRecordGradesWithNoClaim() {
 }
 
 func (s *PersonLeaseSuite) TestTheBootstrapScriptsTakeNoClaim() {
-	for _, script := range []string{placementScript, job.CheckoutBootstrapScript} {
+	declareCheckoutHook(s.T(), s.root)
+	for _, script := range []string{placementScript, testCheckoutHook} {
 		s.Require().NoError(os.MkdirAll(filepath.Dir(filepath.Join(s.root, script)), 0o755))
 		s.script(script, buzzWritesAFile)
 		s.NotEqual(string(denyRuleEditUngraded), s.judgeBound("./magus buzz "+script).Rule, script)

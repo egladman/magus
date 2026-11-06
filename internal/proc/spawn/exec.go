@@ -280,7 +280,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		var record func(types.MemorySample)
 		record, endCurve = types.RecordCurve(ctx, startedAt)
 		root = processSampler.follow(pid, startedAt, record)
-		tree = processBounds.follow(pid, name)
+		tree = processBounds.follow(ctx, pid, name)
 		group.bound(tree)
 	}
 	if ruleset != nil {
@@ -394,7 +394,7 @@ func command(ctx context.Context, policy *sandbox.Policy, confined bool, name, r
 		if policy != nil {
 			sandbox.RecordLaunch(ctx, 0, "unsupported")
 		}
-		c = exec.CommandContext(ctx, resolved, args...)
+		c = exec.CommandContext(ctx, resolved, args...) //nolint:gosec,nolintlint // G702: running the caller's command is spawn's job; resolved passed the binding checks. gosec reports it only in darwin builds, so linux builds see the directive as unused
 		c.Args[0] = name
 		return c, nil, nil
 	}

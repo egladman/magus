@@ -644,6 +644,11 @@ It adds these to a session:
 - A pane, opened with `/magus`, of the job tree, recent runs, and the session's
   subagents. It reads the daemon's Connect API over its unix socket, the same
   services the console uses, so it needs `magus server start` and holds no token.
+  A subagent spawned as `<parent>/<role> <job>` with role `orchestrator`,
+  `integrator` or `worker` draws on a muted PatternFly purple, teal or blue, the
+  10 step on a light theme and the 80 step on a dark one. Under a theme whose
+  name gives no shade, such as `auto`, the rows stay untinted and the tab says so.
+  Claude Code's own task list cannot be styled by a mod, so only this pane is tinted.
 - A warning or a held prompt when you submit after the prompt cache has expired,
   priced from a rates table you can replace through the mod's `ratesFile` setting.
   There is no countdown: the moment that matters is the submit.

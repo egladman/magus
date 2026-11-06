@@ -125,6 +125,27 @@ func withEnvRefusal(ctx context.Context, err error) context.Context {
 	return context.WithValue(ctx, envRefusalKey{}, err)
 }
 
+type staleConfigKey struct{}
+
+// withStaleConfig hands shellCommand a magus.yaml failure this build
+// predates. The guard judges it as a stale binary's load failure.
+func withStaleConfig(ctx context.Context, err error) context.Context {
+	return context.WithValue(ctx, staleConfigKey{}, err)
+}
+
+// staleConfigDependencies loads no rule, since the binary cannot read the
+// workspace's config. The stale-binary rule refuses what changes state.
+func staleConfigDependencies(ctx context.Context, rootOverride string, failure error) guard.Dependencies {
+	binary, _ := runningBinaryPath()
+	deps, _ := guard.NewDependencies(ctx, guard.Wiring{BinaryVersion: version, Binary: binary})
+	deps.CacheDir = guardCacheDir(rootOverride)
+	deps.LoadFailure = failure
+	deps.Inspect = func(context.Context, string) (types.WorkspaceRepository, error) {
+		return nil, failure
+	}
+	return deps
+}
+
 // shellCommandWithErrorWriter is shellCommand's transport seam. The CLI reports a deny reason on
 // stderr for machine-readable output, while a host adapter has already carried that
 // reason in its host reply and must not leak a second, non-protocol message into the
@@ -359,6 +380,9 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 // loadGuardDependencies is guardDependencies that also returns the rules it loaded, nil
 // when none loaded, for a caller that must know which files they came from.
 func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Dependencies, *guard.WorkspaceRules) {
+	if failure, ok := ctx.Value(staleConfigKey{}).(error); ok {
+		return staleConfigDependencies(ctx, rootOverride, failure), nil
+	}
 	root, err := guardRoot(rootOverride)
 	if err != nil {
 		root = ""

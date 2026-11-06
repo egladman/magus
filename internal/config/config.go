@@ -41,6 +41,7 @@ type Config struct {
 	Jobs       Jobs       `json:"jobs" yaml:"jobs"`
 	Queue      Queue      `json:"queue" yaml:"queue"`
 	Disk       Disk       `json:"disk" yaml:"disk"`
+	Checkout   Checkout   `json:"checkout" yaml:"checkout"`
 
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Overrides concurrency_profile when set.
 	Concurrency int `json:"concurrency" yaml:"concurrency" validate:"gte=0" cli:"short=j"`
@@ -218,6 +219,16 @@ type Disk struct {
 	// SampleEvery is the hook's rate limit: a hook that fires sooner reads one file's mtime
 	// and returns. Default 10m; 0 turns the hook off, and anything else takes at least 1m.
 	SampleEvery time.Duration `json:"sample_every" yaml:"sample_every" validate:"omitempty,gte=1m"`
+}
+
+// Checkout readies a new checkout for `magus vcs checkout` and
+// `magus job fork --checkout`. Bootstrap is a Buzz script relative to the
+// workspace root. It runs from the workspace that made the checkout as
+// `magus buzz <script> -- --checkout <dir> --install <p,q|none>`. --install
+// names the projects whose dependencies it still installs. Empty declares none.
+type Checkout struct {
+	// Bootstrap is read from the workspace's magus.yaml alone.
+	Bootstrap string `json:"bootstrap" yaml:"bootstrap" cli:"-"`
 }
 
 // Queue configures the merge queue, `magus queue`.
