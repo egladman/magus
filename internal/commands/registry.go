@@ -1151,7 +1151,6 @@ Signals:
 		{Comment: "Stop leftover pool parents from an older build", Command: "magus server stop --pools"},
 		{Comment: "Reload configuration without restarting", Command: "magus server reload"},
 		{Comment: "Everything running on this host, server up or not", Command: "magus server status"},
-		{Comment: "Run tests once the build budget can seat them", Command: "magus server status --wait | magus run test ."},
 		{Comment: "Is a broker up, and what holds capacity", Command: "magus server broker status"},
 		{Comment: "Use a custom socket path", Command: "magus --server-address unix:///tmp/m.sock server start"},
 	},
