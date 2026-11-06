@@ -78,9 +78,45 @@ func (s *missingCommitsSuite) TestRevertedWorkReadsAsHeld() {
 	s.Zero(s.missing())
 }
 
-func (s *missingCommitsSuite) TestARewrittenSquashLaterEditedReadsAsMissing() {
+func (s *missingCommitsSuite) TestSquashThenBaseEditsReadsHeld() {
 	s.repo.Commit("squash", map[string]string{"lock": "one\n2\n3\n4\n5\n6\n7\n8\n9\n"})
 	s.repo.Commit("edit bottom", map[string]string{"lock": "one\n2\n3\n4\n5\n6\n7\n8\nnine\n"})
+
+	s.Zero(s.missing())
+}
+
+func (s *missingCommitsSuite) TestIntegrationSquashReadsHeld() {
+	s.repo.Git("switch", "-q", "-c", "other", s.main)
+	s.repo.Commit("add other", map[string]string{"other.txt": "other\n"})
+	s.repo.Git("switch", "-q", s.main)
+	s.repo.Commit("integrate", map[string]string{
+		"lock":      "one\n2\n3\n4\n5\n6\n7\n8\n9\n",
+		"other.txt": "other\n",
+	})
+	s.repo.Commit("edit bottom", map[string]string{
+		"lock":      "one\n2\n3\n4\n5\n6\n7\n8\nnine\n",
+		"other.txt": "other\nmore\n",
+	})
+
+	s.Zero(s.missing())
+	got, err := gitVCS{}.MissingCommits(s.T().Context(), s.repo.Root(), s.main, "other")
+	s.Require().NoError(err)
+	s.Zero(got)
+}
+
+func (s *missingCommitsSuite) TestPartialSquashReadsMissing() {
+	s.repo.Git("switch", "-q", "side")
+	s.repo.Commit("add other", map[string]string{"other.txt": "other\n"})
+	s.repo.Git("switch", "-q", s.main)
+	s.repo.Commit("squash", map[string]string{"lock": "one\n2\n3\n4\n5\n6\n7\n8\n9\n"})
+	s.repo.Commit("edit bottom", map[string]string{"lock": "one\n2\n3\n4\n5\n6\n7\n8\nnine\n"})
+
+	s.Equal(2, s.missing())
+}
+
+func (s *missingCommitsSuite) TestUnrelatedSameSubjectReadsMissing() {
+	s.repo.Commit("edit top", map[string]string{"lock": "1\n2\n3\n4\n5\n6\n7\n8\nnine\n"})
+	s.repo.Commit("edit more", map[string]string{"lock": "1\n2\n3\n4\n5\n6\n7\n8\nnine\nten\n"})
 
 	s.Equal(1, s.missing())
 }
@@ -118,7 +154,7 @@ func (s *missingCommitsSuite) TestABranchFarAheadCostsNoGitCallPerCommit() {
 			logs++
 		}
 	}
-	s.Equal(2, logs, "one log per side of the range:\n%s", logged)
+	s.Equal(3, logs, "one log per side, then the path-narrowed candidates:\n%s", logged)
 }
 
 func (s *missingCommitsSuite) TestADifferentCommitSharingASubjectIsMissing() {
@@ -282,5 +318,5 @@ func (s *missingCommitsSuite) TestCommitsSharingASubjectDiffEachCommitOnce() {
 
 	s.Require().NoError(err)
 	s.Equal(2, missing)
-	s.Equal(5, counted.diffs)
+	s.Equal(6, counted.diffs, "five commits once each, then the net patch")
 }
