@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
@@ -46,7 +47,8 @@ func MirroredBinary(exe, root string) string {
 // ForkWorktree makes job id's checkout at dir on a branch named id, at checkpoint or the
 // forker's revision, or adopts dir when it already stands as a linked checkout (made false).
 // binary (see [MirroredBinary]) is copied in only where [BuildsItsOwnMagus] is false; a
-// checkout that builds its own is left for [CheckoutBootstrap], so a dirty forker never blocks.
+// checkout that builds its own is left for its checkout.bootstrap
+// hook, so a dirty forker never blocks.
 // A job holding another checkout its fork made is refused; one holding an adopted checkout is
 // bound to dir, since moving it loses nothing. Nothing is stored: the caller records wt, or
 // discards it with [Store.DiscardWorktree] when the fork is refused.
@@ -282,13 +284,33 @@ func InstallProjects(root string, row types.Job, projects []*types.Project) stri
 	return strings.Join(found, ",")
 }
 
-// noInstall is what bootstrap-checkout.buzz's --install reads as no project.
+// InstallTargets is the sorted paths of the projects that declare an install
+// target. A project whose spells are unresolved cannot list its targets, so it
+// is left out.
+func InstallTargets(projects []*types.Project) []string {
+	found := []string{}
+	for _, p := range projects {
+		if runsTarget(p, "install") {
+			found = append(found, p.Path)
+		}
+	}
+	slices.Sort(found)
+	return found
+}
+
+// noInstall is what a checkout.bootstrap hook's --install reads as no project.
 const noInstall = "none"
 
-// BuildsItsOwnMagus reports whether the checkout at dir holds [CheckoutBootstrapScript], and
-// so builds its ./magus from its own sources instead of taking a copy.
+// BuildsItsOwnMagus reports whether the checkout at dir declares a
+// checkout.bootstrap hook and holds it, and so builds its ./magus from its own
+// sources instead of taking a copy. A magus.yaml that does not load reads as
+// no hook, leaving the copy.
 func BuildsItsOwnMagus(dir string) bool {
-	info, err := os.Stat(filepath.Join(dir, filepath.FromSlash(CheckoutBootstrapScript)))
+	hook, err := CheckoutHook(dir)
+	if err != nil || hook == "" {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(dir, filepath.FromSlash(hook)))
 	return err == nil && info.Mode().IsRegular()
 }
 
@@ -480,13 +502,40 @@ func isBuildInput(p string, scopes []string) bool {
 	})
 }
 
-// CheckoutBootstrapScript builds ./magus in a checkout at the checkout's own revision.
-const CheckoutBootstrapScript = "hack/dev/bootstrap-checkout.buzz"
+// NoCheckoutHook says that a workspace declares no checkout.bootstrap hook.
+const NoCheckoutHook = "no checkout.bootstrap declared"
 
-// CheckoutBootstrap is the command that builds ./magus in dir, a checkout ForkWorktree made
-// at a commit no placed binary was built at.
-func CheckoutBootstrap(dir string) string {
-	return fmt.Sprintf("./magus buzz %s -- --checkout %s", CheckoutBootstrapScript, dir)
+// CheckoutHook is the checkout.bootstrap script the workspace at root declares
+// in its own magus.yaml, slash-separated, or "" when it declares none. A path
+// that leaves root is an error.
+func CheckoutHook(root string) (string, error) {
+	cfg, err := config.LoadWorkspaceOnly(root)
+	if err != nil {
+		return "", fmt.Errorf("job: read checkout.bootstrap in %s: %w", root, err)
+	}
+	hook := cfg.Checkout.Bootstrap
+	if hook == "" {
+		return "", nil
+	}
+	if !filepath.IsLocal(filepath.FromSlash(hook)) {
+		return "", fmt.Errorf("job: checkout.bootstrap %q in %s leaves the workspace", hook, root)
+	}
+	return path.Clean(filepath.ToSlash(hook)), nil
+}
+
+// CheckoutBootstrap is the command that runs hook, a workspace's
+// checkout.bootstrap, on dir. An empty hook is [NoCheckoutHook].
+func CheckoutBootstrap(hook, dir string) string {
+	if hook == "" {
+		return NoCheckoutHook
+	}
+	return fmt.Sprintf("./magus buzz %s -- --checkout %s", hook, dir)
+}
+
+// RunsCheckoutHook reports whether script, the file a `magus buzz` call
+// names, is hook. An empty hook matches nothing.
+func RunsCheckoutHook(script, hook string) bool {
+	return hook != "" && strings.HasSuffix(path.Clean("/"+script), "/"+hook)
 }
 
 // LandingBootstrap is [CheckoutBootstrap] for the store's own checkout, where a fork with no
@@ -531,7 +580,142 @@ func (s *Store) LandingBootstrap(ctx context.Context, exe, checkpoint string) (s
 	if err != nil || len(inputs) == 0 {
 		return "", err
 	}
-	return CheckoutBootstrap(root), nil
+	hook, err := CheckoutHook(root)
+	if err != nil {
+		return "", err
+	}
+	return CheckoutBootstrap(hook, root), nil
+}
+
+// reviewFetchRemote is the remote [ReviewCheckout.Checkout] fetches a ref from.
+// Only git fetches a ref by name, and its default remote is origin.
+const reviewFetchRemote = "origin"
+
+// skippedBootstrap is the hook note a checkout made with no bootstrap carries.
+const skippedBootstrap = "--no-bootstrap: nothing ran in the checkout"
+
+// ReviewCheckoutRecord is what `magus vcs checkout -o json` prints. The
+// console's CheckoutPull reads it, so its field names are fixed.
+type ReviewCheckoutRecord struct {
+	Path      string          `json:"path"`
+	Revision  string          `json:"revision"`
+	VCS       string          `json:"vcs"`
+	Bootstrap ReviewBootstrap `json:"bootstrap"`
+	Remove    string          `json:"remove"`
+}
+
+// ReviewBootstrap says what readied a review checkout. Install lists the
+// projects whose install target ran there, Hook the checkout.bootstrap that ran
+// or was skipped, and HookNote why none ran.
+type ReviewBootstrap struct {
+	Ran       bool     `json:"ran"`
+	Install   []string `json:"install"`
+	Harnesses bool     `json:"harnesses"`
+	Hook      string   `json:"hook"`
+	HookNote  string   `json:"hook_note"`
+}
+
+// ReviewCheckout makes checkouts of one revision each, for review, under Base.
+// Root is the workspace asking. Installs lists the projects in a checkout that
+// declare an install target, and Magus runs magus with args in a directory.
+type ReviewCheckout struct {
+	Root     string
+	Base     string
+	Driver   types.VCSDriver
+	Installs func(ctx context.Context, dir string) ([]string, error)
+	Magus    func(ctx context.Context, dir string, args ...string) error
+}
+
+// removeReviewCommand is the command that removes the review checkout at dir.
+func removeReviewCommand(dir string) string {
+	return "magus vcs checkout --remove " + dir
+}
+
+// Checkout fetches ref from [reviewFetchRemote] when it is set, makes a
+// detached checkout of rev at Base/checkout-<short rev>, and readies it unless
+// noBootstrap. Neither the fetch nor the checkout runs the revision's code.
+// A step that fails once the checkout exists keeps it, and the error names
+// the command that removes it.
+func (r ReviewCheckout) Checkout(ctx context.Context, rev, ref string, noBootstrap bool) (ReviewCheckoutRecord, error) {
+	if ref != "" {
+		if _, err := r.Driver.FetchRef(ctx, r.Root, reviewFetchRemote, ref); err != nil {
+			return ReviewCheckoutRecord{}, fmt.Errorf("vcs checkout: fetch %s from %s: %w", ref, reviewFetchRemote, err)
+		}
+	}
+	commit, err := r.Driver.FindCommit(ctx, r.Root, rev)
+	if err != nil {
+		return ReviewCheckoutRecord{}, fmt.Errorf("vcs checkout: %s cannot find %s: %w", r.Driver.Name(), rev, err)
+	}
+	if err := os.MkdirAll(r.Base, 0o755); err != nil {
+		return ReviewCheckoutRecord{}, fmt.Errorf("vcs checkout: %w", err)
+	}
+	dir := filepath.Join(r.Base, "checkout-"+ShortRevision(commit.ID))
+	if err := r.Driver.CreateCheckout(ctx, r.Root, dir, commit.ID, ""); err != nil {
+		return ReviewCheckoutRecord{}, fmt.Errorf("vcs checkout: %s cannot check out %s at %s: %w", r.Driver.Name(), commit.ID, dir, err)
+	}
+	rec := ReviewCheckoutRecord{Path: dir, Revision: commit.ID, VCS: r.Driver.Name(), Remove: removeReviewCommand(dir)}
+	rec.Bootstrap, err = r.bootstrap(ctx, dir, noBootstrap)
+	if err != nil {
+		return rec, fmt.Errorf("vcs checkout: readying %s failed, so it stays, and `%s` removes it: %w", dir, rec.Remove, err)
+	}
+	return rec, nil
+}
+
+// bootstrap runs the declared install targets in dir, then the harness
+// install, then Root's checkout.bootstrap hook from Root.
+func (r ReviewCheckout) bootstrap(ctx context.Context, dir string, skip bool) (ReviewBootstrap, error) {
+	hook, err := CheckoutHook(r.Root)
+	rec := ReviewBootstrap{Install: []string{}, Hook: hook}
+	switch {
+	case err != nil:
+		return rec, err
+	case skip:
+		rec.HookNote = skippedBootstrap
+		return rec, nil
+	}
+	rec.Ran = true
+	projects, err := r.Installs(ctx, dir)
+	if err != nil {
+		return rec, err
+	}
+	for _, p := range projects {
+		if err := r.Magus(ctx, dir, "run", "install", p); err != nil {
+			return rec, fmt.Errorf("magus run install %s: %w", p, err)
+		}
+		rec.Install = append(rec.Install, p)
+	}
+	if err := r.Magus(ctx, dir, "agent", "harness", "install"); err != nil {
+		return rec, fmt.Errorf("magus agent harness install: %w", err)
+	}
+	rec.Harnesses = true
+	if hook == "" {
+		rec.HookNote = NoCheckoutHook
+		return rec, nil
+	}
+	if err := r.Magus(ctx, r.Root, "buzz", hook, "--", "--checkout", dir, "--install", noInstall); err != nil {
+		return rec, fmt.Errorf("`%s`: %w", CheckoutBootstrap(hook, dir), err)
+	}
+	return rec, nil
+}
+
+// Remove removes the review checkout at dir, which must lie under Base.
+func (r ReviewCheckout) Remove(ctx context.Context, dir string) error {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return fmt.Errorf("vcs checkout --remove: %w", err)
+	}
+	if rel, err := filepath.Rel(r.Base, abs); err != nil || rel == "." || !filepath.IsLocal(rel) {
+		return fmt.Errorf("vcs checkout --remove: %s is not under %s, where magus vcs checkout makes its checkouts", abs, r.Base)
+	}
+	if err := r.Driver.RemoveCheckout(ctx, r.Root, abs); err != nil {
+		return fmt.Errorf("vcs checkout --remove: %s cannot remove %s: %w", r.Driver.Name(), abs, err)
+	}
+	return nil
+}
+
+// ShortRevision is the first twelve characters of a revision id.
+func ShortRevision(id string) string {
+	return id[:min(len(id), 12)]
 }
 
 // DiscardWorktree removes a checkout [Store.ForkWorktree] just made for a fork that was then

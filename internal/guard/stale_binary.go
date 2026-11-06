@@ -377,7 +377,7 @@ func recoveryLine(command string, d Dialect, lease string, builds bool, at locat
 	}
 	// denyCheckoutBootstrap still judges who may build which checkout.
 	places := onlyBaggageAssigns(call.Assigns) && len(words) >= 3 && path.Base(words[0]) == "magus" && words[1] == "buzz" &&
-		(words[2] == placementScript || words[2] == job.CheckoutBootstrapScript)
+		(words[2] == placementScript || words[2] == checkoutHook(at.workspace))
 	if places {
 		return true
 	}
@@ -606,7 +606,7 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 	case lease != "" && own && hasBinary && job.BuildsItsOwnMagus(root):
 		// A placement can be older than a tree the worker's own commits moved.
 		return binaryFix{
-			say: fmt.Sprintf("build this checkout's own, alone on its line: `%s`", job.CheckoutBootstrap(root)),
+			say: fmt.Sprintf("build this checkout's own, alone on its line: `%s`", job.CheckoutBootstrap(checkoutHook(root), root)),
 			why: "That line runs for the holder of the job whose checkout it is, whatever judges the call. The main session can place a ./magus instead when no Go build input differs.\n" +
 				workerFastForward + "\n" + onePerBase,
 		}

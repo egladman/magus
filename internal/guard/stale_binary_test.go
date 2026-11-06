@@ -592,20 +592,31 @@ func (s *WorkerRouteSuite) SetupTest() {
 }
 
 func (s *WorkerRouteSuite) TestACheckoutHoldingTheScriptNamesItsOwnBuild() {
-	placeFile(s.T(), s.root, job.CheckoutBootstrapScript, "namespace b;\n")
+	declareCheckoutHook(s.T(), s.root)
+	placeFile(s.T(), s.root, testCheckoutHook, "namespace b;\n")
 	fix := binaryRemedy(true, s.root, "lease-a", false)
-	s.Contains(fix.say, job.CheckoutBootstrap(s.root))
+	s.Contains(fix.say, job.CheckoutBootstrap(testCheckoutHook, s.root))
 	s.Empty(fix.placeFor)
 }
 
 func (s *WorkerRouteSuite) TestACheckoutWithoutTheScriptAsksForAPlacement() {
+	declareCheckoutHook(s.T(), s.root)
+	fix := binaryRemedy(true, s.root, "lease-a", false)
+	s.Equal("lease-a", fix.placeFor)
+}
+
+func (s *WorkerRouteSuite) TestACheckoutHoldingAnUndeclaredScriptAsksForAPlacement() {
+	placeFile(s.T(), s.root, testCheckoutHook, "namespace b;\n")
 	fix := binaryRemedy(true, s.root, "lease-a", false)
 	s.Equal("lease-a", fix.placeFor)
 }
 
 func (s *WorkerRouteSuite) TestTheNamedLinePassesWithTheLeaseExportInFront() {
-	line := "export BAGGAGE=magus.lease=lease-a; " + job.CheckoutBootstrap(s.root)
-	s.True(recoveryLine(line, DialectBash, "lease-a", false, magusRepoAt))
+	declareCheckoutHook(s.T(), s.root)
+	at := magusRepoAt
+	at.workspace = s.root
+	line := "export BAGGAGE=magus.lease=lease-a; " + job.CheckoutBootstrap(testCheckoutHook, s.root)
+	s.True(recoveryLine(line, DialectBash, "lease-a", false, at))
 }
 
 // The first line is a read pipeline a lapse once denied as state-changing.
@@ -710,6 +721,9 @@ func TestOutsideAnyWorkspace(t *testing.T) {
 }
 
 func TestRecoveryLine(t *testing.T) {
+	at := magusRepoAt
+	at.workspace = t.TempDir()
+	declareCheckoutHook(t, at.workspace)
 	for _, tc := range []struct {
 		line, lease string
 		builds      bool
@@ -741,7 +755,7 @@ func TestRecoveryLine(t *testing.T) {
 		{workerPlacementRun, "lease-a", true, true},
 		{"./magus run test .", "lease-a", true, false},
 	} {
-		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.builds, magusRepoAt), "%s (lease %q, builds %v)", tc.line, tc.lease, tc.builds)
+		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.builds, at), "%s (lease %q, builds %v)", tc.line, tc.lease, tc.builds)
 	}
 	for _, tc := range []struct {
 		line, lease string
@@ -774,7 +788,7 @@ func TestRecoveryLine(t *testing.T) {
 		{"./magus buzz hack/dev/bootstrap-checkout.buzz -- --here && git push", "lease-a", false},
 		{"/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job x --from /repo", "", true},
 	} {
-		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.lease == "", magusRepoAt), "%s (lease %q)", tc.line, tc.lease)
+		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.lease == "", at), "%s (lease %q)", tc.line, tc.lease)
 	}
 }
 

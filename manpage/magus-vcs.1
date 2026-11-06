@@ -3,7 +3,7 @@
 magus\-vcs \- Listing and conflict resolution that knows what is generated
 .SH SYNOPSIS
 .B magus
-.RI "vcs <ls\-files|resolve|checkpoint|merge\-driver> [flags]"
+.RI "vcs <ls\-files|resolve|checkpoint|checkout|merge\-driver> [flags]"
 .SH DESCRIPTION
 Version\-control operations that read the workspace's output declarations,
 so generated files and hand\-written sources are treated differently.
@@ -83,6 +83,19 @@ working copy')". Jujutsu mints nothing, so nothing accumulates.
 .PP
 resolve works on git, Mercurial and Jujutsu. Only \-\-against is git\-only: merge the
 base in yourself on the others, then run resolve.
+.PP
+checkout makes an isolated checkout of one revision under
+$XDG_CACHE_HOME/magus/tmp/checkout\-<short revision>, for reviewing a change
+such as a pull request's head: a git linked worktree with a detached head, an
+hg share, or a jj workspace. Sapling has no second working copy over one store
+and refuses by name. \-\-fetch <ref> first fetches that ref from the default
+remote (git: origin); fetching and checking out run none of the change's code.
+Then it readies the checkout with what this workspace declares: each project's
+install target, run in the checkout, then magus agent harness install there,
+then the checkout.bootstrap hook from magus.yaml, run from this workspace. With
+no hook declared it says so. \-\-no\-bootstrap skips all three and says so. It
+prints the path, what ran, and the command that removes it: checkout \-\-remove
+<dir>, which removes only a checkout under that directory.
 .SS vcs ls\-files options
 .RS
 .TP
@@ -122,6 +135,18 @@ Merge this ref first, then settle what it conflicts with
 \fB\-\-[no\-]preserve\fR (default: off)
 Also capture the uncommitted work and print a handle that restores it
 .RE
+.SS vcs checkout options
+.RS
+.TP
+\fB\-\-[no\-]bootstrap\fR (default: on)
+Run the install targets, the harness install and the checkout.bootstrap hook; \-\-no\-bootstrap skips all three
+.TP
+\fB\-\-fetch\fR \fIref\fR
+Fetch this ref from the default remote first, such as refs/pull/<n>/head
+.TP
+\fB\-\-remove\fR \fIdir\fR
+Remove the checkout at this dir, one this command made, instead
+.RE
 .SH SUBCOMMANDS
 .RS
 .TP
@@ -133,6 +158,9 @@ Settle an in\-progress merge's conflicted generated files, then regenerate once
 .TP
 \fBcheckpoint\fR
 Print the working state's identity, for recording what a lease was handed; writes nothing unless \-\-preserve
+.TP
+\fBcheckout\fR
+Check out one revision in an isolated checkout for review, readied by the workspace's declared install
 .TP
 \fBmerge\-driver\fR
 The per\-file merge driver git and hg invoke; you do not run this by hand
@@ -184,6 +212,18 @@ magus vcs checkpoint -o name
 .PP
 .EX
 magus vcs checkpoint --preserve
+.EE
+.PP
+\fICheck out a pull request's head to review it\fR
+.PP
+.EX
+magus vcs checkout <sha> --fetch refs/pull/<n>/head
+.EE
+.PP
+\fIRemove that checkout again\fR
+.PP
+.EX
+magus vcs checkout --remove <dir>
 .EE
 .PP
 .SH SEE ALSO

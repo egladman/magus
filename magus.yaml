@@ -99,6 +99,11 @@ cache:
 # binary, and it is what turns the hang into a sentence on the ones this cannot reach.
 required_version: ">= 0.4.4"
 
+# A new checkout builds its own ./magus at its own revision, from this repository's
+# sources, after `magus vcs checkout` installs and wires the harnesses.
+checkout:
+  bootstrap: hack/dev/bootstrap-checkout.buzz
+
 # The workspace's human-authored notes, and the git history the graph needs to tell when
 # prose has fallen behind what it describes.
 #
