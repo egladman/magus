@@ -87,3 +87,8 @@ func (s *ProtocolSocketSuite) TestTheWarningSaysTheBudgetIsNotShared() {
 	s.Contains(got, "budget is not shared")
 	s.Empty(OtherBrokersWarning(nil))
 }
+
+// A protocol bump moves the socket with it, so two protocols never share one.
+func TestTheSocketNameNamesTheProtocol(t *testing.T) {
+	assert.Equal(t, fmt.Sprintf("broker-%d.sock", ProtocolVersion), SocketName)
+}
