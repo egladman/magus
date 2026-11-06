@@ -11,9 +11,9 @@ import (
 // list, so a walk touches only the trees it follows.
 type linuxTable struct{}
 
-func readProcTable() (procTable, error) {
+func readProcTable() (linuxTable, error) {
 	if _, err := os.Stat("/proc/self/stat"); err != nil {
-		return nil, err
+		return linuxTable{}, err
 	}
 	return linuxTable{}, nil
 }
