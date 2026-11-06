@@ -1189,7 +1189,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "--checkout <dir> makes a new checkout of this repository at dir (a git worktree,")
 			fmt.Fprintln(os.Stderr, "an hg share, a jj workspace) at the job's checkpoint, or at this checkout's")
 			fmt.Fprintf(os.Stderr, "revision when it names none. When this checkout runs its own ./magus, a checkout\n")
-			fmt.Fprintf(os.Stderr, "holding %s builds its own from its own sources\n", job.CheckoutBootstrapScript)
+			fmt.Fprintln(os.Stderr, "holding the hook its magus.yaml declares as checkout.bootstrap builds its own")
+			fmt.Fprintln(os.Stderr, "with that hook, run from this checkout, from its own sources")
 			fmt.Fprintln(os.Stderr, "before the fork lands, and any other gets a copy. The job is taken there and")
 			fmt.Fprintln(os.Stderr, "nowhere else, and once it ends magus removes the checkout if it is clean and")
 			fmt.Fprintln(os.Stderr, "every commit in it is on a branch, bookmark, remote or its base; otherwise it")
@@ -2251,11 +2252,18 @@ func provisionCheckout(ctx context.Context, store *job.Store, ws job.Workspace, 
 	return placed != "", bootstrapCheckout(ctx, exe, forker, wt.Root, "--install", job.InstallProjects(forker, declared, ws.Projects))
 }
 
-// bootstrapCheckout builds ./magus in dir, a checkout the fork just made, from dir's own
-// sources: exe runs the forker's copy of [job.CheckoutBootstrapScript] from forker, and the
-// script's progress goes to stderr, since the fork's stdout is its record.
+// bootstrapCheckout builds ./magus in dir, a checkout the fork just made, from
+// dir's own sources. exe runs the forker's copy of its checkout.bootstrap hook
+// from forker. Progress goes to stderr, since the fork's stdout is its record.
 func bootstrapCheckout(ctx context.Context, exe, forker, dir string, flags ...string) error {
-	args := append([]string{"buzz", job.CheckoutBootstrapScript, "--", "--checkout", dir}, flags...)
+	hook, err := job.CheckoutHook(forker)
+	if err != nil {
+		return fmt.Errorf("magus job fork: %w", err)
+	}
+	if hook == "" {
+		return fmt.Errorf("magus job fork: %s holds a hook to build its own ./magus, and %s has %s, so the checkout is removed", dir, forker, job.NoCheckoutHook)
+	}
+	args := append([]string{"buzz", hook, "--", "--checkout", dir}, flags...)
 	cmd := exec.CommandContext(ctx, exe, args...) //nolint:gosec // exe is the running magus binary or its own placed copy
 	var output bytes.Buffer
 	cmd.Dir, cmd.Stdout, cmd.Stderr = forker, progressWriter(ctx), io.MultiWriter(os.Stderr, &output)
@@ -2264,7 +2272,7 @@ func bootstrapCheckout(ctx context.Context, exe, forker, dir string, flags ...st
 			return fmt.Errorf("magus job fork: building ./magus in %s failed, so the checkout is removed: %s: %w", dir, full, err)
 		}
 		return fmt.Errorf("magus job fork: building ./magus in %s from its own sources failed, so the checkout is removed: `%s` from %s says why: %w",
-			dir, job.CheckoutBootstrap(dir), forker, err)
+			dir, job.CheckoutBootstrap(hook, dir), forker, err)
 	}
 	return nil
 }
@@ -2326,6 +2334,9 @@ func printLandingBootstrap(ctx context.Context, out io.Writer, store *job.Store,
 	switch {
 	case err != nil:
 		fmt.Fprintf(out, "landing magus: whether ./magus judges %s's checkpoint could not be told: %s\n", row.ID, err)
+	case bootstrap == job.NoCheckoutHook:
+		fmt.Fprintf(out, "landing magus: ./magus was built before the Go build inputs of %s's checkpoint, so its guard judges another tree, and this workspace has %s to rebuild it\n",
+			row.ID, job.NoCheckoutHook)
 	case bootstrap != "":
 		fmt.Fprintf(out, "landing magus: ./magus was built before the Go build inputs of %s's checkpoint, so its guard judges another tree\n  next: `%s` rebuilds it\n",
 			row.ID, bootstrap)

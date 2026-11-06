@@ -262,15 +262,16 @@ func finishesMergeOfBuild(ctx context.Context, root, built, line string, d Diale
 }
 
 // mergeFinishLine reports `git add`, `git commit` short of an
-// amend, or `magus vcs resolve`.
+// amend, or `magus vcs resolve`. Only PATH's git and this checkout's magus
+// count: `./git` or another directory's magus could be anything.
 func mergeFinishLine(words []string) bool {
 	if len(words) < 2 {
 		return false
 	}
-	switch path.Base(words[0]) {
+	switch words[0] {
 	case "git":
 		return words[1] == "add" || words[1] == "commit" && !slices.Contains(words[2:], "--amend")
-	case "magus":
+	case "magus", "./magus":
 		sub := magusSubcommandWords(words[1:])
 		return len(sub) >= 2 && sub[0] == "vcs" && sub[1] == "resolve"
 	}

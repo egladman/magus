@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -464,7 +466,7 @@ func TestForkWorktreeCopiesNoBinaryIntoACheckoutThatBuildsItsOwn(t *testing.T) {
 	t.Parallel()
 	s, _, repo := worktreeStore(t)
 	built := repo.Head()
-	builds := repo.Commit("builds its own", map[string]string{CheckoutBootstrapScript: "namespace b;\n"})
+	builds := repo.Commit("builds its own", map[string]string{"magus.yaml": hookConfig, testHook: "namespace b;\n"})
 
 	for name, build := range map[string]types.MagusBuild{
 		"a build from uncommitted changes":          {Version: "v0.5.0-1-gabc-dirty", Commit: built},
@@ -718,12 +720,13 @@ func TestLandingBootstrapNamesTheBuildAStaleMagusNeeds(t *testing.T) {
 	linked := repo.Commit("linked", map[string]string{"lib/lib.go": "package lib\n\nfunc Run() { _ = 1 }\n"})
 	local := filepath.Join(repo.Root(), "magus")
 	require.NoError(t, os.WriteFile(local, []byte("build 1\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(repo.Root(), "magus.yaml"), []byte(hookConfig), 0o644))
 	ctx := types.WithMagusBuild(t.Context(), types.MagusBuild{Version: "v0.5.0-1-gabc", Commit: built})
 
 	for name, tc := range map[string]struct {
 		exe, checkpoint, want string
 	}{
-		"a checkpoint past a linked package": {exe: local, checkpoint: linked, want: CheckoutBootstrap(repo.Root())},
+		"a checkpoint past a linked package": {exe: local, checkpoint: linked, want: CheckoutBootstrap(testHook, repo.Root())},
 		"a checkpoint past a docs edit":      {exe: local, checkpoint: docs},
 		"the commit it was built at":         {exe: local, checkpoint: built},
 		"a magus on PATH":                    {exe: filepath.Join(t.TempDir(), "magus"), checkpoint: linked},
@@ -738,9 +741,218 @@ func TestLandingBootstrapNamesTheBuildAStaleMagusNeeds(t *testing.T) {
 	require.ErrorContains(t, err, "records no commit it was built from")
 }
 
-func TestCheckoutBootstrapNamesTheScript(t *testing.T) {
+// testHook is the checkout.bootstrap hookConfig declares.
+const (
+	testHook   = "hack/dev/bootstrap-checkout.buzz"
+	hookConfig = "checkout:\n  bootstrap: " + testHook + "\n"
+)
+
+type CheckoutHookSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestCheckoutHookSuite(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "./magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout /w", CheckoutBootstrap("/w"))
+	suite.Run(t, new(CheckoutHookSuite))
+}
+
+func (s *CheckoutHookSuite) SetupTest() {
+	s.root = s.T().TempDir()
+}
+
+func (s *CheckoutHookSuite) writeConfig(body string) {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magus.yaml"), []byte(body), 0o644))
+}
+
+func (s *CheckoutHookSuite) TestTheDeclaredHookIsRead() {
+	s.writeConfig(hookConfig)
+	hook, err := CheckoutHook(s.root)
+	s.Require().NoError(err)
+	s.Equal(testHook, hook)
+}
+
+func (s *CheckoutHookSuite) TestAWorkspaceDeclaringNoneHasNone() {
+	hook, err := CheckoutHook(s.root)
+	s.Require().NoError(err)
+	s.Empty(hook)
+}
+
+func (s *CheckoutHookSuite) TestAHookOutsideTheWorkspaceIsAnError() {
+	s.writeConfig("checkout:\n  bootstrap: ../elsewhere.buzz\n")
+	_, err := CheckoutHook(s.root)
+	s.Require().EqualError(err, fmt.Sprintf("job: checkout.bootstrap %q in %s leaves the workspace", "../elsewhere.buzz", s.root))
+}
+
+func (s *CheckoutHookSuite) TestTheCommandNamesTheHook() {
+	s.Equal("./magus buzz "+testHook+" -- --checkout /w", CheckoutBootstrap(testHook, "/w"))
+}
+
+func (s *CheckoutHookSuite) TestNoHookSaysNoneIsDeclared() {
+	s.Equal("no checkout.bootstrap declared", CheckoutBootstrap("", "/w"))
+}
+
+func (s *CheckoutHookSuite) TestACallMatchesTheHookByItsPathSuffix() {
+	s.True(RunsCheckoutHook(filepath.Join(s.root, testHook), testHook))
+}
+
+func (s *CheckoutHookSuite) TestNoHookMatchesNoCall() {
+	s.False(RunsCheckoutHook(testHook, ""))
+}
+
+func (s *CheckoutHookSuite) TestAHookDeclaredButMissingBuildsNothing() {
+	s.writeConfig(hookConfig)
+	s.False(BuildsItsOwnMagus(s.root))
+}
+
+type magusCall struct {
+	dir  string
+	args string
+}
+
+type ReviewCheckoutSuite struct {
+	suite.Suite
+	repo  *testkit.Repo
+	r     ReviewCheckout
+	calls []magusCall
+	fail  string
+}
+
+func TestReviewCheckoutSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(ReviewCheckoutSuite))
+}
+
+func (s *ReviewCheckoutSuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{"a.txt": "a\n"})
+	s.calls, s.fail = nil, ""
+	drv, why := resolveDriver(s.T().Context(), s.repo.Root())
+	s.Require().NotNil(drv, why)
+	s.r = ReviewCheckout{
+		Root:   s.repo.Root(),
+		Base:   s.T().TempDir(),
+		Driver: drv,
+		Installs: func(context.Context, string) ([]string, error) {
+			return []string{".", "console"}, nil
+		},
+		Magus: func(_ context.Context, dir string, args ...string) error {
+			joined := strings.Join(args, " ")
+			s.calls = append(s.calls, magusCall{dir: dir, args: joined})
+			if joined == s.fail {
+				return errors.New("exit status 1")
+			}
+			return nil
+		},
+	}
+}
+
+func (s *ReviewCheckoutSuite) declareHook() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.repo.Root(), "magus.yaml"), []byte(hookConfig), 0o644))
+}
+
+func (s *ReviewCheckoutSuite) dir(rev string) string {
+	return filepath.Join(s.r.Base, "checkout-"+rev[:12])
+}
+
+func (s *ReviewCheckoutSuite) TestTheRevisionIsCheckedOutUnderTheBase() {
+	head := s.repo.Head()
+	rec, err := s.r.Checkout(s.T().Context(), head, "", true)
+	s.Require().NoError(err)
+	s.Equal(ReviewCheckoutRecord{
+		Path:      s.dir(head),
+		Revision:  head,
+		VCS:       "git",
+		Bootstrap: ReviewBootstrap{Install: []string{}, HookNote: skippedBootstrap},
+		Remove:    "magus vcs checkout --remove " + s.dir(head),
+	}, rec)
+	s.FileExists(filepath.Join(rec.Path, "a.txt"))
+}
+
+func (s *ReviewCheckoutSuite) TestNoBootstrapRunsNothing() {
+	_, err := s.r.Checkout(s.T().Context(), s.repo.Head(), "", true)
+	s.Require().NoError(err)
+	s.Empty(s.calls)
+}
+
+func (s *ReviewCheckoutSuite) TestBootstrapRunsInstallsThenHarnessesThenTheHook() {
+	s.declareHook()
+	head := s.repo.Head()
+	rec, err := s.r.Checkout(s.T().Context(), head, "", false)
+	s.Require().NoError(err)
+	dir := s.dir(head)
+	s.Equal([]magusCall{
+		{dir: dir, args: "run install ."},
+		{dir: dir, args: "run install console"},
+		{dir: dir, args: "agent harness install"},
+		{dir: s.repo.Root(), args: fmt.Sprintf("buzz %s -- --checkout %s --install none", testHook, dir)},
+	}, s.calls)
+	s.Equal(ReviewBootstrap{Ran: true, Install: []string{".", "console"}, Harnesses: true, Hook: testHook}, rec.Bootstrap)
+}
+
+func (s *ReviewCheckoutSuite) TestNoHookDeclaredSaysSo() {
+	rec, err := s.r.Checkout(s.T().Context(), s.repo.Head(), "", false)
+	s.Require().NoError(err)
+	s.Equal(ReviewBootstrap{Ran: true, Install: []string{".", "console"}, Harnesses: true, HookNote: "no checkout.bootstrap declared"}, rec.Bootstrap)
+}
+
+func (s *ReviewCheckoutSuite) TestAFailedStepKeepsTheCheckoutAndNamesItsRemoval() {
+	s.fail = "agent harness install"
+	head := s.repo.Head()
+	rec, err := s.r.Checkout(s.T().Context(), head, "", false)
+	dir := s.dir(head)
+	s.Require().EqualError(err, fmt.Sprintf("vcs checkout: readying %s failed, so it stays, and `magus vcs checkout --remove %s` removes it: magus agent harness install: exit status 1", dir, dir))
+	s.Equal(dir, rec.Path)
+	s.DirExists(dir)
+}
+
+func (s *ReviewCheckoutSuite) TestARevisionThatIsNotThereIsRefused() {
+	_, err := s.r.Checkout(s.T().Context(), "0123456789abcdef0123456789abcdef01234567", "", true)
+	s.Require().ErrorContains(err, "vcs checkout: git cannot find 0123456789abcdef0123456789abcdef01234567")
+}
+
+func (s *ReviewCheckoutSuite) TestFetchBringsInARefTheCheckoutNeeds() {
+	upstream := testkit.NewRepository(s.T(), map[string]string{"pr.txt": "pr\n"})
+	head := upstream.Head()
+	upstream.Git("update-ref", "refs/pull/7/head", head)
+	s.repo.Git("remote", "add", "origin", upstream.Root())
+
+	rec, err := s.r.Checkout(s.T().Context(), head, "refs/pull/7/head", true)
+	s.Require().NoError(err)
+	s.Equal(head, rec.Revision)
+	s.FileExists(filepath.Join(rec.Path, "pr.txt"))
+}
+
+func (s *ReviewCheckoutSuite) TestRemoveRemovesTheCheckout() {
+	rec, err := s.r.Checkout(s.T().Context(), s.repo.Head(), "", true)
+	s.Require().NoError(err)
+	s.Require().NoError(s.r.Remove(s.T().Context(), rec.Path))
+	s.NoDirExists(rec.Path)
+}
+
+func (s *ReviewCheckoutSuite) TestRemoveRefusesADirectoryOutsideTheBase() {
+	elsewhere := s.T().TempDir()
+	err := s.r.Remove(s.T().Context(), elsewhere)
+	s.Require().EqualError(err, fmt.Sprintf("vcs checkout --remove: %s is not under %s, where magus vcs checkout makes its checkouts", elsewhere, s.r.Base))
+}
+
+func (s *ReviewCheckoutSuite) TestRemoveRefusesTheBaseItself() {
+	err := s.r.Remove(s.T().Context(), s.r.Base)
+	s.Require().ErrorContains(err, "is not under "+s.r.Base)
+}
+
+func (s *ReviewCheckoutSuite) TestTheRecordKeepsTheFieldNamesTheConsoleReads() {
+	data, err := json.Marshal(ReviewCheckoutRecord{Bootstrap: ReviewBootstrap{Install: []string{}}})
+	s.Require().NoError(err)
+	s.JSONEq(`{"path":"","revision":"","vcs":"","bootstrap":{"ran":false,"install":[],"harnesses":false,"hook":"","hook_note":""},"remove":""}`, string(data))
+}
+
+func (s *ReviewCheckoutSuite) TestInstallTargetsListsOnlyProjectsDeclaringInstall() {
+	projects := []*types.Project{
+		{Path: "web", MagusfileTargets: []string{"build", "install"}},
+		{Path: ".", MagusfileTargets: []string{"install"}},
+		{Path: "docs", MagusfileTargets: []string{"build"}},
+	}
+	s.Equal([]string{".", "web"}, InstallTargets(projects))
 }
 
 func TestChangedBuildInputsFailsWhereThePackagesCannotBeListed(t *testing.T) {

@@ -19,6 +19,7 @@
 
 exec magus run bundle:rw -o json
 stdout '"target": "bundle"'
+stdout '"status": "pass"'
 stdout '"dist/app.txt"'
 
 # The glob that claimed the file rides along: the declaration is what makes it a build
@@ -34,8 +35,15 @@ stdout '"role": "output"'
 # from the working tree rather than from the run's return value sidesteps it: the cache
 # replays declared outputs on a hit, so the files are there either way.
 exec magus run bundle:rw -o json
+stdout '"status": "cached"'
 stdout '"dist/app.txt"'
 stdout '"role": "output"'
+
+# A target a deviation ledger let pass reads permitted, never pass.
+exec magus run gate -o json
+stdout '"status": "permitted"'
+stdout '"permitted": 1'
+! stdout '"status": "pass"'
 
 exec magus run bundle:rw -o yaml
 stdout 'target: bundle'
@@ -46,6 +54,7 @@ stdout 'path: dist/app.txt'
 # invocation produced it.
 exec magus run bundle --dry-run -o json
 stdout '"dry_run": true'
+! stdout '"status"'
 ! stdout 'artifacts'
 ! stdout '"value"'
 
@@ -63,6 +72,9 @@ magus\project({ "spells": [acme] });
 export fun bundle(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(["dist/*.txt"]);
     proc\exec("sh", ["-c", "mkdir -p dist && echo built > dist/app.txt"]);
+}
+export fun gate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.permitted(1);
 }
 -- spells/acme/spell.buzz --
 import "magus/spell";
