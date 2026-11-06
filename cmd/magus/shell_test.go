@@ -2769,6 +2769,30 @@ func (s *staleConfigSuite) TestAStateChangeIsRefusedAsAStaleBinary() {
 	s.Equal(types.GuardJudgment{Decision: "deny", Rule: "stale-binary"}, types.GuardJudgment{Decision: v.Decision, Rule: v.Rule})
 }
 
+func (s *staleConfigSuite) TestStartupHandsAnUnknownKeyToTheGuard() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magus.yaml"), []byte("a_section_from_a_newer_magus:\n  enabled: true\n"), 0o644))
+	s.T().Setenv("MAGUS_PROC_SOCKET", "")
+	s.T().Setenv("XDG_RUNTIME_DIR", s.T().TempDir())
+	s.T().Setenv("XDG_CONFIG_HOME", s.T().TempDir())
+	r, w, err := os.Pipe()
+	s.Require().NoError(err)
+	saved := os.Stdout
+	os.Stdout = w
+	_, res, code := startup(s.T().Context(), []string{"shell", "-o", "json", "touch notes.txt"})
+	os.Stdout = saved
+	s.Require().NoError(w.Close())
+	if res.cleanup != nil {
+		s.T().Cleanup(res.cleanup)
+	}
+	body, err := io.ReadAll(r)
+	s.Require().NoError(err)
+	var v types.GuardJudgment
+	s.Require().NoError(json.Unmarshal(body, &v), string(body))
+	s.Contains(v.Reason, "predates this workspace's magus.yaml")
+	s.Equal(types.GuardJudgment{Decision: "deny", Rule: "stale-binary"}, types.GuardJudgment{Decision: v.Decision, Rule: v.Rule})
+	s.Equal(2, code, "the guard's deny exit, never startup's 1")
+}
+
 func (s *staleConfigSuite) TestTheBootstrapItServesRuns() {
 	v := s.judge(fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", s.root))
 	s.NotEqual("deny", v.Decision, v.Reason)
