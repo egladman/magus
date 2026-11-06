@@ -29,4 +29,3 @@ func (s *ChangeRiskSuite) TestCoverageIsCoveredOverCoverable() {
 func (s *ChangeRiskSuite) TestCoverageOfAFunctionWithNothingCoverableIsZero() {
 	s.Zero(ChangeRiskFunction{Covered: 0, Coverable: 0}.Coverage())
 }
-
