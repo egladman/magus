@@ -1205,6 +1205,7 @@ github.com/egladman/magus/types.CapRevisionFileReader const VCSCapability = "Rev
 github.com/egladman/magus/types.CapTrackedFileReporter const VCSCapability = "TrackedFileReporter"
 github.com/egladman/magus/types.CapTreeMerger const VCSCapability = "TreeMerger"
 github.com/egladman/magus/types.CapTreeReporter const VCSCapability = "TreeReporter"
+github.com/egladman/magus/types.CapabilityAbsent func(c DiagnosticCode) bool
 github.com/egladman/magus/types.CaptureExit func(ctx context.Context, code int)
 github.com/egladman/magus/types.CaptureLog func(ctx context.Context) string
 github.com/egladman/magus/types.CarryApprovalsInvalid const DiagnosticCode = "MGS1050"
@@ -2398,6 +2399,7 @@ github.com/egladman/magus/types.GateEvidence type struct
 github.com/egladman/magus/types.GateEvidence.GateID field string "json:\"gate_id\" yaml:\"gate_id\""
 github.com/egladman/magus/types.GateEvidence.OutputRef field string "json:\"output_ref\" yaml:\"output_ref\""
 github.com/egladman/magus/types.GateEvidence.Owed field string "json:\"owed,omitempty\" yaml:\"owed,omitempty\""
+github.com/egladman/magus/types.GateEvidence.Unrun field string "json:\"unrun,omitempty\" yaml:\"unrun,omitempty\""
 github.com/egladman/magus/types.GateNotRun const DiagnosticCode = "MGS3045"
 github.com/egladman/magus/types.GateStatus type struct
 github.com/egladman/magus/types.GateStatus.ID field string "json:\"id\" yaml:\"id\""
@@ -3318,6 +3320,7 @@ github.com/egladman/magus/types.JobResultValidation type struct
 github.com/egladman/magus/types.JobResultValidation.Command field string "json:\"command\" yaml:\"command\""
 github.com/egladman/magus/types.JobResultValidation.OutputRef field string "json:\"output_ref\" yaml:\"output_ref\""
 github.com/egladman/magus/types.JobResultValidation.Owed field string "json:\"owed,omitempty\" yaml:\"owed,omitempty\""
+github.com/egladman/magus/types.JobResultValidation.Unrun field string "json:\"unrun,omitempty\" yaml:\"unrun,omitempty\""
 github.com/egladman/magus/types.JobRun type struct
 github.com/egladman/magus/types.JobRun.BytesReclaimed field int64 "json:\"bytes_reclaimed,omitempty\" yaml:\"bytes_reclaimed,omitempty\""
 github.com/egladman/magus/types.JobRun.DurationMs field int64 "json:\"duration_ms,omitempty\" yaml:\"duration_ms,omitempty\""
@@ -4559,6 +4562,7 @@ github.com/egladman/magus/types.Project type struct
 github.com/egladman/magus/types.Project.AllOutputs method(ptr) func() []Glob
 github.com/egladman/magus/types.Project.AttachSpell method(ptr) func(spell *github.com/egladman/magus/spells.Spell)
 github.com/egladman/magus/types.Project.Bindings field []*Binding
+github.com/egladman/magus/types.Project.CheckNeedsReady method(ptr) func(ctx context.Context, target string) error
 github.com/egladman/magus/types.Project.DeclaredGlobs method(ptr) func() []Glob
 github.com/egladman/magus/types.Project.DependsOn field []string
 github.com/egladman/magus/types.Project.Dir field string
@@ -5481,6 +5485,7 @@ github.com/egladman/magus/types.Target.Integrates field string "json:\"integrate
 github.com/egladman/magus/types.Target.Key method func() []string
 github.com/egladman/magus/types.Target.MemoryMB field int "json:\"memory_mb,omitempty\" buzz:\"memory_mb\""
 github.com/egladman/magus/types.Target.Name field string "json:\"name,omitempty\""
+github.com/egladman/magus/types.Target.NeedsReady field []string "json:\"needs_ready,omitempty\" buzz:\"needs_ready\""
 github.com/egladman/magus/types.Target.Path field string "json:\"path,omitempty\"   buzz:\"projectPath\""
 github.com/egladman/magus/types.Target.Relinks field string "json:\"relinks,omitempty\" buzz:\"relinks\""
 github.com/egladman/magus/types.Target.RetryOnVolatile field bool "json:\"retryOnVolatile,omitempty\" buzz:\"retry_on_volatile\""

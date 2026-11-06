@@ -142,7 +142,7 @@ magus\project({
     },
     // buzz claims **/*.buzz, which go_build keys on, and builds the Buzz symbol index
     // (scip-buzz) beside the Go one.
-    "spells": [go, markdown, bash, buzz],
+    "spells": [go, markdown, bash, buzz, docker],
     // Tool configs no spell glob matches. Each changes what a target does, so an
     // undeclared one replays a stale verdict. Files doctor lists as undeclared stay
     // out when nothing reads them. Never add .gitattributes: magus writes it.
@@ -232,7 +232,10 @@ magus\project({
             "relinks": "./magus",
             "integrates": "links ./magus",
         },
-        "image-build": {"skip_cache": "pushes and cosign-signs a registry digest per invocation"},
+        "image-build": {
+            "skip_cache": "pushes and cosign-signs a registry digest per invocation",
+            "needs_ready": ["docker"],
+        },
         "image-registries": {"skip_cache": "reports the registry table resolved from the current environment"},
         "spell-publish": {"skip_cache": "pushes to a registry per invocation; a replay would publish nothing"},
         "spell-lock": {"skip_cache": "asks a registry under update, and writes no magus.lock while no remote spell is declared"},

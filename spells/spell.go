@@ -76,6 +76,7 @@ type Spell struct {
 	// probe runs one tool's version argv in a project dir. Injected so the engine
 	// owns process execution and this package stays free of it.
 	probe func(ctx context.Context, cmd Command, dir string) (string, error)
+	ready func(ctx context.Context, tool string, t Tool, dir string) error
 }
 
 // Name implements Driver.
@@ -559,6 +560,26 @@ func WithTools(tools map[string]Tool) Option {
 // execution, so this package never spawns anything itself.
 func WithVersionProber(fn func(ctx context.Context, cmd Command, dir string) (string, error)) Option {
 	return func(s *Spell) { s.probe = fn }
+}
+
+// WithReadyChecker injects how a tool's readiness probe is run.
+func WithReadyChecker(fn func(ctx context.Context, tool string, t Tool, dir string) error) Option {
+	return func(s *Spell) { s.ready = fn }
+}
+
+// ProbesReady reports whether this spell declares a readiness probe for tool.
+func (s *Spell) ProbesReady(tool string) bool {
+	t, ok := s.tools[tool]
+	return ok && t.Ready.Bin != ""
+}
+
+// CheckReady runs tool's readiness probe in dir. A tool this spell cannot probe
+// is an error: a caller asked for a check nothing here can make.
+func (s *Spell) CheckReady(ctx context.Context, tool, dir string) error {
+	if !s.ProbesReady(tool) || s.ready == nil {
+		return fmt.Errorf("spell %s declares no readiness probe for %s", s.name, tool)
+	}
+	return s.ready(ctx, tool, s.tools[tool], dir)
 }
 
 // WithAssets associates spell-relative runtime assets with a registered spell.

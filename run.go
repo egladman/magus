@@ -2733,6 +2733,9 @@ func (m *Magus) runTarget(ctx context.Context, p *types.Project, name string) er
 	if err := m.checkEditedSourcesExist(p, name); err != nil {
 		return err
 	}
+	if err := p.CheckNeedsReady(ctx, name); err != nil {
+		return err
+	}
 	a := audit.Begin(ctx, p, types.HasCharm(ctx, types.CharmReadWrite))
 	// A magusfile target whose body is provably only these calls runs them directly:
 	// evaluating the file and its imports to make them costs more than a warm install

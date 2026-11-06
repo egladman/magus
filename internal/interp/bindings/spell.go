@@ -55,6 +55,7 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 			spells.WithOps(spec.Ops),
 			spells.WithTools(spec.Tools),
 			spells.WithVersionProber(versionProber),
+			spells.WithReadyChecker(toolReady),
 			spells.WithCommandRenderer(newCommandRenderer(spec.Ops)),
 			spells.WithCommandExplainer(newCommandExplainer(spec.Ops)),
 			spells.WithCommandConflicts(newCommandConflictChecker(spec.Ops)),
@@ -340,8 +341,14 @@ func checkReady(ctx context.Context, tools map[string]spells.Tool, op spells.Op,
 	if !ok || t.Ready.Bin == "" {
 		return nil
 	}
+	return toolReady(ctx, op.Bin, t, dir)
+}
+
+// toolReady runs t's readiness probe once per run for (tool, dir). A target's
+// needs_ready reaches it through spells.Spell.CheckReady.
+func toolReady(ctx context.Context, tool string, t spells.Tool, dir string) error {
 	probe := t.Ready
-	key := fmt.Sprintf("%s\x00%s", op.Bin, dir)
+	key := fmt.Sprintf("%s\x00%s", tool, dir)
 	if cached, hit := readinessMemo.Load(key); hit {
 		if cached == nil {
 			return nil
@@ -349,7 +356,7 @@ func checkReady(ctx context.Context, tools map[string]spells.Tool, op spells.Op,
 		err, _ := cached.(error)
 		return err
 	}
-	out := probeUntilReady(ctx, probe, op.Bin, dir)
+	out := probeUntilReady(ctx, probe, tool, dir)
 	// A context error means THIS run was interrupted (Ctrl-C, a deadline), not that
 	// the tool is unready: the memo's "cannot change mid-run" justification above
 	// assumes one process per run, but the server is one process spanning many runs,
@@ -814,7 +821,7 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	if m.Sandbox != nil {
 		opts = append(opts, spells.WithSandbox(m.Sandbox))
 	}
-	opts = append(opts, spells.WithOps(m.Ops), spells.WithTools(m.Tools), spells.WithVersionProber(versionProber))
+	opts = append(opts, spells.WithOps(m.Ops), spells.WithTools(m.Tools), spells.WithVersionProber(versionProber), spells.WithReadyChecker(toolReady))
 	return opts
 }
 

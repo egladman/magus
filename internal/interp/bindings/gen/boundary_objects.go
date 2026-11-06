@@ -3258,6 +3258,11 @@ func ObjectTarget(v types.Target, enums ffi.EnumCases) vm.Value {
 	out.MapSet("human_only_reason", vm.StringValue(v.HumanOnlyReason))
 	out.MapSet("relinks", vm.StringValue(v.Relinks))
 	out.MapSet("integrates", vm.StringValue(v.Integrates))
+	itemsNeedsReady := make([]vm.Value, len(v.NeedsReady))
+	for indexNeedsReady := range v.NeedsReady {
+		itemsNeedsReady[indexNeedsReady] = vm.StringValue(v.NeedsReady[indexNeedsReady])
+	}
+	out.MapSet("needs_ready", vm.ListValue(itemsNeedsReady))
 	return out
 }
 
