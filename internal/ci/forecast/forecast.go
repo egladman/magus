@@ -99,10 +99,11 @@ func clampShards(maxShards, items int) int {
 // must share a shard, its closure as indexes into nodeMs. Items sort
 // longest-first.
 type weights struct {
-	items   []item
-	nodeMs  []int64
-	setupMs int64
-	slots   int64
+	items    []item
+	nodeMs   []int64
+	nodePeak []int64 // -1 when the history holds no peak
+	setupMs  int64
+	slots    int64
 }
 
 // item is units placed together, with their merged closure.
@@ -110,6 +111,7 @@ type item struct {
 	units   []types.Unit
 	own     []int // each unit's index in nodeMs
 	closure []int
+	alone   int64 // the item's cost on a shard of its own
 }
 
 func (f Model) weigh(units []types.Unit) weights {
@@ -123,7 +125,25 @@ func (f Model) weigh(units []types.Unit) weights {
 		index[u] = len(w.nodeMs)
 		byIndex = append(byIndex, u)
 		w.nodeMs = append(w.nodeMs, f.predict(u))
+		peak, ok := f.History.PredictPeakRSS(u.Project, u.Target)
+		if !ok {
+			peak = -1
+		}
+		w.nodePeak = append(w.nodePeak, peak)
 		return index[u]
+	}
+	// optimization: a stamp per node dedupes each closure in O(1) per
+	// node; slices.Contains made weigh quadratic in closure size.
+	var stamp []int
+	mark := func(n, id int) bool {
+		for len(stamp) <= n {
+			stamp = append(stamp, -1)
+		}
+		if stamp[n] == id {
+			return false
+		}
+		stamp[n] = id
+		return true
 	}
 	units = slices.Clone(units)
 	sortUnits(units)
@@ -143,10 +163,12 @@ func (f Model) weigh(units []types.Unit) weights {
 	owner := map[int]int{}
 	closures := make([][]int, len(units))
 	for i, u := range units {
-		closures[i] = []int{node(u)}
+		own := node(u)
+		mark(own, i)
+		closures[i] = []int{own}
 		if f.Needs != nil {
 			for _, n := range f.Needs(u) {
-				if j := node(n); !slices.Contains(closures[i], j) {
+				if j := node(n); mark(j, i) {
 					closures[i] = append(closures[i], j)
 				}
 			}
@@ -176,14 +198,17 @@ func (f Model) weigh(units []types.Unit) weights {
 		it.units = append(it.units, u)
 		it.own = append(it.own, closures[i][0])
 		for _, n := range closures[i] {
-			if !slices.Contains(it.closure, n) {
+			if mark(n, len(units)+at) {
 				it.closure = append(it.closure, n)
 			}
 		}
 	}
+	for i := range w.items {
+		w.items[i].alone = w.costOf(w.items[i].closure)
+	}
 	slices.SortStableFunc(w.items, func(a, b item) int {
-		if x, y := w.costOf(a.closure), w.costOf(b.closure); x != y {
-			return cmp.Compare(y, x)
+		if a.alone != b.alone {
+			return cmp.Compare(b.alone, a.alone)
 		}
 		return cmp.Compare(a.units[0].String(), b.units[0].String())
 	})
@@ -212,14 +237,15 @@ func (w weights) costOf(closure []int) int64 {
 // bin is one shard while packing.
 type bin struct {
 	items   []int
-	nodes   map[int]bool
+	nodes   []bool // indexed by node
+	held    []int  // the nodes set in nodes
 	sum     int64
 	longest int64
 	ms      int64
 }
 
 // with is b's cost once item i joins it.
-func (w weights) with(b bin, i int) int64 {
+func (w weights) with(b *bin, i int) int64 {
 	sum, longest := b.sum, b.longest
 	for _, n := range w.items[i].closure {
 		if !b.nodes[n] {
@@ -230,65 +256,95 @@ func (w weights) with(b bin, i int) int64 {
 	return w.cost(sum, longest)
 }
 
+// packing is pack's state. inBins counts the bins holding each node and
+// longest is the makespan, both kept as bins change.
+type packing struct {
+	w       weights
+	bins    []bin
+	inBins  []int
+	longest int64
+}
+
 // pack places every item. It opens a shard unconditionally while fewer
 // than minShards exist, and never past maxShards.
 func (w weights) pack(minShards, maxShards int) []bin {
-	var bins []bin
-	open := func(i int) {
-		bins = append(bins, w.add(bin{nodes: map[int]bool{}, ms: w.setupMs}, i))
-	}
+	p := packing{w: w, inBins: make([]int, len(w.nodeMs))}
 	for i := range w.items {
-		if len(bins) == 0 {
-			open(i)
+		if len(p.bins) == 0 {
+			p.open(i)
 			continue
 		}
-		best, bestMs := 0, w.with(bins[0], i)
-		for s := 1; s < len(bins); s++ {
-			if ms := w.with(bins[s], i); ms < bestMs {
+		best, bestMs := 0, w.with(&p.bins[0], i)
+		for s := 1; s < len(p.bins); s++ {
+			if ms := w.with(&p.bins[s], i); ms < bestMs {
 				best, bestMs = s, ms
 			}
 		}
-		if len(bins) < maxShards && (len(bins) < minShards || w.opens(bins, i, bestMs)) {
-			open(i)
+		if len(p.bins) < maxShards && (len(p.bins) < minShards || p.opens(i, bestMs)) {
+			p.open(i)
 			continue
 		}
-		bins[best] = w.add(bins[best], i)
+		p.add(best, i)
 	}
-	return bins
+	return p.bins
+}
+
+func (p *packing) open(i int) {
+	p.bins = append(p.bins, bin{nodes: make([]bool, len(p.w.nodeMs)), ms: p.w.setupMs})
+	p.add(len(p.bins)-1, i)
 }
 
 // opens reports whether item i on a shard of its own shortens the
 // longest shard by more than setup plus the prerequisites it repeats.
-func (w weights) opens(bins []bin, i int, joinedMs int64) bool {
-	longest := makespan(bins)
-	alone := w.costOf(w.items[i].closure)
+func (p *packing) opens(i int, joinedMs int64) bool {
+	it := p.w.items[i]
 	var repeated int64
-	for _, n := range w.items[i].closure {
-		if slices.Contains(w.items[i].own, n) {
-			continue
-		}
-		for _, b := range bins {
-			if b.nodes[n] {
-				repeated += w.nodeMs[n]
-				break
-			}
+	for _, n := range it.closure {
+		if p.inBins[n] > 0 && !slices.Contains(it.own, n) {
+			repeated += p.w.nodeMs[n]
 		}
 	}
-	gain := max(longest, joinedMs) - max(longest, alone)
-	return gain > w.setupMs+repeated
+	gain := max(p.longest, joinedMs) - max(p.longest, it.alone)
+	return gain > p.w.setupMs+repeated
 }
 
-func (w weights) add(b bin, i int) bin {
-	for _, n := range w.items[i].closure {
+func (p *packing) add(s, i int) {
+	b := &p.bins[s]
+	for _, n := range p.w.items[i].closure {
 		if !b.nodes[n] {
 			b.nodes[n] = true
-			b.sum += w.nodeMs[n]
-			b.longest = max(b.longest, w.nodeMs[n])
+			b.held = append(b.held, n)
+			p.inBins[n]++
+			b.sum += p.w.nodeMs[n]
+			b.longest = max(b.longest, p.w.nodeMs[n])
 		}
 	}
-	b.ms = w.cost(b.sum, b.longest)
+	b.ms = p.w.cost(b.sum, b.longest)
 	b.items = append(b.items, i)
-	return b
+	p.longest = max(p.longest, b.ms)
+}
+
+// fits reports whether every bin's peak, its slots largest node peaks,
+// fits budget.
+func (w weights) fits(bins []bin, budget int64) bool {
+	var peaks []int64
+	for _, b := range bins {
+		peaks = peaks[:0]
+		for _, n := range b.held {
+			if w.nodePeak[n] >= 0 {
+				peaks = append(peaks, w.nodePeak[n])
+			}
+		}
+		slices.SortFunc(peaks, func(a, b int64) int { return cmp.Compare(b, a) })
+		var total int64
+		for _, pk := range peaks[:min(len(peaks), int(w.slots))] {
+			total += pk
+		}
+		if total > budget {
+			return false
+		}
+	}
+	return true
 }
 
 func (w weights) assignments(bins []bin) [][]types.Unit {
@@ -312,12 +368,30 @@ func makespan(bins []bin) int64 {
 // fitMemory adds shards until every shard's peak fits the budget. A
 // runner out of memory vanishes as "cancelled". It only splits, so a
 // wrong peak costs runners, never a regression.
+//
+// optimization: the smallest fitting minimum is binary searched, as more
+// shards never raise a shard's peak. Stepping one shard at a time
+// repacked up to 256 times.
 func (f Model) fitMemory(w weights, limit int) [][]types.Unit {
+	budget := f.MemoryBudgetBytes
 	bins := w.pack(1, limit)
-	for f.MemoryBudgetBytes > 0 && len(bins) < limit && len(f.OverBudget(w.assignments(bins))) > 0 {
-		bins = w.pack(len(bins)+1, limit)
+	if budget <= 0 || len(bins) >= limit || w.fits(bins, budget) {
+		return w.assignments(bins)
 	}
-	return w.assignments(bins)
+	lo, hi := len(bins)+1, limit
+	found, foundAt := []bin(nil), 0
+	for lo < hi {
+		mid := lo + (hi-lo)/2
+		if b := w.pack(mid, limit); w.fits(b, budget) {
+			hi, found, foundAt = mid, b, mid
+		} else {
+			lo = mid + 1
+		}
+	}
+	if foundAt != lo {
+		found = w.pack(lo, limit)
+	}
+	return w.assignments(found)
 }
 
 // peak is a shard's predicted peak memory: the Slots largest recorded
@@ -351,12 +425,18 @@ func (f Model) SufficientShards(units []types.Unit, maxShards int) int {
 	if makespan(best) <= w.setupMs {
 		return 0
 	}
-	for n := 1; n < len(best); n++ {
-		if makespan(w.pack(1, n)) <= makespan(best) {
-			return n
+	// optimization: binary search, as a higher cap never lengthens the
+	// makespan. The linear scan packed once per count.
+	target := makespan(best)
+	lo, hi := 1, len(best)
+	for lo < hi {
+		if mid := lo + (hi-lo)/2; makespan(w.pack(1, mid)) <= target {
+			hi = mid
+		} else {
+			lo = mid + 1
 		}
 	}
-	return len(best)
+	return lo
 }
 
 // Unmeasured names the units and prerequisites the history holds no
