@@ -6,12 +6,9 @@
   alpha. A reader refuses any other version and names the fix.
 - **Breaking: the formats renamed.** Job rows, declarations and results, output records,
   graph exports and query results, guard verdicts, notify events, harness descriptors,
-  trail events, the broker hello, the release index, the spell lock, tool rows, skill
+  trail events, the broker hello, the spell lock, tool rows, skill
   stamps, tokens, session records, the owed record, the workspace cache and the merge
   queue ids (`mergequeue.<kind>/v1alpha1`).
-- **Every install from before this change needs one manual reinstall.** Its
-  `magus self update` refuses the new release index. Run
-  `curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install | sh`.
 - **Rebuild every checkout's `./magus` after this lands.** A job store row stamped with an
   integer still reads as `magus.job/v1alpha1`, and an older magus cannot read a row this
   one wrote.

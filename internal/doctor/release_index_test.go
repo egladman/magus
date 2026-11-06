@@ -35,7 +35,7 @@ func TestCheckReleaseIndexExpiry(t *testing.T) {
 		{"good for months", fmt.Sprintf(`{"expires_at":%q}`, inDays(170)), types.CheckOK, "good for another"},
 		{"inside the warning window", fmt.Sprintf(`{"expires_at":%q}`, inDays(10)), types.CheckAdvice, "expires in"},
 		{"already expired", fmt.Sprintf(`{"expires_at":%q}`, inDays(-3)), types.CheckFail, "is refusing it"},
-		{"no bound at all", `{"api_version":"magus.release-index/v1alpha1"}`, types.CheckFail, "declares no expires_at"},
+		{"no bound at all", `{"schema_version":1}`, types.CheckFail, "declares no expires_at"},
 		{"unreadable bound", `{"expires_at":"soon"}`, types.CheckFail, "not RFC3339"},
 		{"not json", `{`, types.CheckFail, "does not parse"},
 	}

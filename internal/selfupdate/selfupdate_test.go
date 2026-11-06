@@ -45,7 +45,7 @@ const testExpiry = "2999-01-01T00:00:00Z"
 // Returns the JSON bytes and signature bytes.
 func buildIndex(t *testing.T, priv ed25519.PrivateKey, releases []IndexRelease) ([]byte, []byte) {
 	t.Helper()
-	idx := ReleaseIndex{APIVersion: IndexAPIVersion, ExpiresAt: testExpiry, Releases: releases}
+	idx := ReleaseIndex{SchemaVersion: 1, ExpiresAt: testExpiry, Releases: releases}
 	data, err := json.Marshal(idx)
 	require.NoError(t, err)
 	sig := ed25519.Sign(priv, data)
@@ -92,7 +92,7 @@ func TestFetchAndVerifyIndex_Valid(t *testing.T) {
 	idx, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.NoError(t, err)
 	require.Equal(t, ReleaseIndex{
-		APIVersion: IndexAPIVersion,
+		SchemaVersion: 1,
 		ExpiresAt:     testExpiry,
 		Releases:      releases,
 	}, *idx)
@@ -164,21 +164,21 @@ func TestFetchAndVerifyIndex_WrongSchemaVersion(t *testing.T) {
 	t.Parallel()
 	pub, priv := makeTestKey(t)
 
-	data, _ := json.Marshal(map[string]any{"api_version": "magus.release-index/v1alpha99", "releases": []any{}})
+	data, _ := json.Marshal(map[string]any{"schema_version": 99, "releases": []any{}})
 	sig := ed25519.Sign(priv, data)
 	srv := startIndexServer(t, data, sig)
 
 	opts := Options{Keys: activeRing(pub), HTTPClient: srv.Client(), DiscoveryURL: srv.URL + "/index.json"}
 	_, err := FetchAndVerifyIndex(context.Background(), opts)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "newer than the magus.release-index/v1alpha1 this magus reads")
+	assert.Contains(t, err.Error(), "schema_version")
 }
 
 func TestFetchAndVerifyIndex_RefusesAnIndexWithoutExpiry(t *testing.T) {
 	t.Parallel()
 	pub, priv := makeTestKey(t)
 
-	data, err := json.Marshal(ReleaseIndex{APIVersion: IndexAPIVersion, Releases: []IndexRelease{{Version: "v1.0.0", Artifacts: []IndexArtifact{{Name: "f.tar.gz"}}}}})
+	data, err := json.Marshal(ReleaseIndex{SchemaVersion: 1, Releases: []IndexRelease{{Version: "v1.0.0", Artifacts: []IndexArtifact{{Name: "f.tar.gz"}}}}})
 	require.NoError(t, err)
 	srv := startIndexServer(t, data, ed25519.Sign(priv, data))
 
@@ -191,7 +191,7 @@ func TestFetchAndVerifyIndex_RefusesAnIndexWithoutExpiry(t *testing.T) {
 func TestSelectRelease_Latest(t *testing.T) {
 	t.Parallel()
 	idx := &ReleaseIndex{
-		APIVersion: IndexAPIVersion,
+		SchemaVersion: 1,
 		Releases: []IndexRelease{
 			{Version: "v2.0.0", Artifacts: []IndexArtifact{{Name: "f.tar.gz"}}},
 			{Version: "v1.0.0", Artifacts: []IndexArtifact{{Name: "f.tar.gz"}}},
@@ -205,7 +205,7 @@ func TestSelectRelease_Latest(t *testing.T) {
 func TestSelectRelease_SkipsYanked(t *testing.T) {
 	t.Parallel()
 	idx := &ReleaseIndex{
-		APIVersion: IndexAPIVersion,
+		SchemaVersion: 1,
 		Releases: []IndexRelease{
 			{Version: "v3.0.0", Yanked: true, Artifacts: []IndexArtifact{{Name: "f.tar.gz"}}},
 			{Version: "v2.0.0", Artifacts: []IndexArtifact{{Name: "f.tar.gz"}}},
@@ -219,7 +219,7 @@ func TestSelectRelease_SkipsYanked(t *testing.T) {
 func TestSelectRelease_ByTag(t *testing.T) {
 	t.Parallel()
 	idx := &ReleaseIndex{
-		APIVersion: IndexAPIVersion,
+		SchemaVersion: 1,
 		Releases: []IndexRelease{
 			{Version: "v2.0.0", Artifacts: []IndexArtifact{{Name: "f.tar.gz"}}},
 			{Version: "v1.0.0", Artifacts: []IndexArtifact{{Name: "g.tar.gz"}}},
@@ -233,7 +233,7 @@ func TestSelectRelease_ByTag(t *testing.T) {
 func TestSelectRelease_TagNotFound(t *testing.T) {
 	t.Parallel()
 	idx := &ReleaseIndex{
-		APIVersion: IndexAPIVersion,
+		SchemaVersion: 1,
 		Releases:      []IndexRelease{{Version: "v1.0.0"}},
 	}
 	_, err := SelectRelease(idx, "v9.9.9")
@@ -244,7 +244,7 @@ func TestSelectRelease_TagNotFound(t *testing.T) {
 func TestSelectRelease_YankedTag(t *testing.T) {
 	t.Parallel()
 	idx := &ReleaseIndex{
-		APIVersion: IndexAPIVersion,
+		SchemaVersion: 1,
 		Releases:      []IndexRelease{{Version: "v1.0.0", Yanked: true}},
 	}
 	_, err := SelectRelease(idx, "v1.0.0")
@@ -255,7 +255,7 @@ func TestSelectRelease_YankedTag(t *testing.T) {
 func TestSelectRelease_AllYanked(t *testing.T) {
 	t.Parallel()
 	idx := &ReleaseIndex{
-		APIVersion: IndexAPIVersion,
+		SchemaVersion: 1,
 		Releases:      []IndexRelease{{Version: "v1.0.0", Yanked: true}},
 	}
 	_, err := SelectRelease(idx, "")
@@ -269,7 +269,7 @@ func TestSelectRelease_AllYanked(t *testing.T) {
 func TestSelectRelease_OutOfOrderPicksTrueLatest(t *testing.T) {
 	t.Parallel()
 	idx := &ReleaseIndex{
-		APIVersion: IndexAPIVersion,
+		SchemaVersion: 1,
 		Releases: []IndexRelease{
 			{Version: "v1.0.0", Artifacts: []IndexArtifact{{Name: "a.tar.gz"}}},
 			{Version: "v3.0.0", Artifacts: []IndexArtifact{{Name: "c.tar.gz"}}},
@@ -287,7 +287,7 @@ func TestSelectRelease_OutOfOrderPicksTrueLatest(t *testing.T) {
 func TestSelectRelease_RejectsMalformedVersion(t *testing.T) {
 	t.Parallel()
 	idx := &ReleaseIndex{
-		APIVersion: IndexAPIVersion,
+		SchemaVersion: 1,
 		Releases: []IndexRelease{
 			{Version: "not-a-version", Artifacts: []IndexArtifact{{Name: "evil.tar.gz"}}},
 			{Version: "v1.0.0", Artifacts: []IndexArtifact{{Name: "a.tar.gz"}}},
@@ -303,7 +303,7 @@ func TestSelectRelease_RejectsMalformedVersion(t *testing.T) {
 func TestSelectRelease_AllMalformedVersions(t *testing.T) {
 	t.Parallel()
 	idx := &ReleaseIndex{
-		APIVersion: IndexAPIVersion,
+		SchemaVersion: 1,
 		Releases: []IndexRelease{
 			{Version: "not-a-version", Artifacts: []IndexArtifact{{Name: "a.tar.gz"}}},
 			{Version: "also-bad", Artifacts: []IndexArtifact{{Name: "b.tar.gz"}}},
@@ -317,7 +317,7 @@ func TestSelectRelease_AllMalformedVersions(t *testing.T) {
 func TestSelectRelease_LatestSkipsPrereleases(t *testing.T) {
 	t.Parallel()
 	idx := &ReleaseIndex{
-		APIVersion: IndexAPIVersion,
+		SchemaVersion: 1,
 		Releases: []IndexRelease{
 			{Version: "v0.5.0-rc.1", Artifacts: []IndexArtifact{{Name: "rc.tar.gz"}}},
 			{Version: "v0.4.3", Artifacts: []IndexArtifact{{Name: "stable.tar.gz"}}},
@@ -334,7 +334,7 @@ func TestSelectRelease_LatestSkipsPrereleases(t *testing.T) {
 func TestSelectRelease_OnlyPrereleasesRefusesAutoSelect(t *testing.T) {
 	t.Parallel()
 	idx := &ReleaseIndex{
-		APIVersion: IndexAPIVersion,
+		SchemaVersion: 1,
 		Releases:      []IndexRelease{{Version: "v0.5.0-rc.1"}},
 		Prereleases:   []IndexRelease{{Version: "v0.5.0-rc.2"}},
 	}
@@ -346,7 +346,7 @@ func TestSelectRelease_OnlyPrereleasesRefusesAutoSelect(t *testing.T) {
 func TestSelectRelease_ExplicitPrereleaseInstalls(t *testing.T) {
 	t.Parallel()
 	idx := &ReleaseIndex{
-		APIVersion: IndexAPIVersion,
+		SchemaVersion: 1,
 		Releases:      []IndexRelease{{Version: "v0.4.3", Artifacts: []IndexArtifact{{Name: "stable.tar.gz"}}}},
 		Prereleases: []IndexRelease{
 			{Version: "v0.5.0-rc.1", Artifacts: []IndexArtifact{{Name: "rc.tar.gz"}}},
@@ -365,12 +365,12 @@ func TestSelectRelease_ExplicitPrereleaseInstalls(t *testing.T) {
 // drops the member, which is what keeps it on the stable list.
 func TestReleaseIndex_PrereleasesDecodeApart(t *testing.T) {
 	t.Parallel()
-	data := []byte(`{"api_version":"magus.release-index/v1alpha1","key_id":"k","releases":[{"version":"v0.4.3","artifacts":[]}],` +
+	data := []byte(`{"schema_version":1,"key_id":"k","releases":[{"version":"v0.4.3","artifacts":[]}],` +
 		`"prereleases":[{"version":"v0.5.0-rc.1","artifacts":[{"name":"rc.tar.gz"}]}]}`)
 	var idx ReleaseIndex
 	require.NoError(t, json.Unmarshal(data, &idx))
 	require.Equal(t, ReleaseIndex{
-		APIVersion: IndexAPIVersion,
+		SchemaVersion: 1,
 		KeyID:         "k",
 		Releases:      []IndexRelease{{Version: "v0.4.3", Artifacts: []IndexArtifact{}}},
 		Prereleases:   []IndexRelease{{Version: "v0.5.0-rc.1", Artifacts: []IndexArtifact{{Name: "rc.tar.gz"}}}},

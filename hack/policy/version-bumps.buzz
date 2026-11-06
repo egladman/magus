@@ -36,7 +36,6 @@ export final counters = [
     Counter{ name = "trail-spawn-schema-version", file = "internal/trail/trail.go", declaration = "const agentSpawnAPIVersion types.APIVersion = " },
     Counter{ name = "project-cache-schema-version", file = "project/cache.go", declaration = "const cacheAPIVersion types.APIVersion = " },
     Counter{ name = "owed-schema-version", file = "vcs/owed.go", declaration = "const owedAPIVersion types.APIVersion = " },
-    Counter{ name = "release-index-version", file = "internal/selfupdate/selfupdate.go", declaration = "const IndexAPIVersion types.APIVersion = " },
     Counter{ name = "guard-policy-version", file = "internal/guard/policy.go", declaration = "const policyAPIVersion types.APIVersion = " },
     Counter{ name = "tool-rows-version", file = "internal/agent/tools.go", declaration = "const ToolRowsVersion types.APIVersion = " },
     Counter{ name = "broker-protocol-version", file = "broker/wire.go", declaration = "const APIVersion types.APIVersion = " },
