@@ -474,13 +474,15 @@ func (r *WorkspaceRegistry) Apply(w types.WorkspaceRepository) error {
 	return nil
 }
 
-// unprobedReadiness is each needs_ready tool that no spell p binds can probe.
+// unprobedReadiness is each needs_ready tool that no spell p binds or the
+// workspace registers can probe.
 func unprobedReadiness(p *types.Project) []error {
 	var errs []error
+	registered := project.DefaultSpellRegistry().All()
 	for _, target := range slices.Sorted(maps.Keys(p.TargetPolicies)) {
 		for _, tool := range p.TargetPolicies[target].NeedsReady {
-			if !slices.ContainsFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return s.ProbesReady(tool) }) {
-				errs = append(errs, fmt.Errorf("project %q: targets[%q].needs_ready names %q, which no spell the project binds declares a ready probe for",
+			if _, ok := p.ReadyProbe(tool, registered); !ok {
+				errs = append(errs, fmt.Errorf("project %q: targets[%q].needs_ready names %q, which no registered spell declares a ready probe for",
 					p.Path, target, tool))
 			}
 		}

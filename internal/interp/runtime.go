@@ -34,6 +34,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/xdg"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -1385,7 +1386,7 @@ func checkDeclaredReady(ctx context.Context, dir, key string) error {
 	if p == nil {
 		return nil
 	}
-	return p.CheckNeedsReady(ctx, key)
+	return p.CheckNeedsReady(ctx, key, project.DefaultSpellRegistry().All())
 }
 
 // NewBuzzWorkerFunc returns the buzz.WorkerFunc that creates a pre-warmed Buzz

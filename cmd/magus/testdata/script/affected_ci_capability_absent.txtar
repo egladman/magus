@@ -30,10 +30,17 @@ cp magusfile.buzz.red magusfile.buzz
 exec sh -c 'cat "$XDG_STATE_HOME"/magus/sessions/*/*.jsonl'
 stdout '"outcome":"fail"'
 
-# needs_ready naming a tool no bound spell probes is a load error.
+# A spell the workspace registers but the project does not bind still probes:
+# binding it would add its source globs to every target's key.
 cp magusfile.buzz.unbound magusfile.buzz
 ! exec magus run image .
-stderr 'targets\["image"\]\.needs_ready names "docker", which no spell the project binds declares a ready probe for'
+stderr 'MGS3004'
+! stderr 'image body ran'
+
+# needs_ready naming a tool no registered spell probes is a load error.
+cp magusfile.buzz.unprobed magusfile.buzz
+! exec magus run image .
+stderr 'targets\["image"\]\.needs_ready names "nosuchtool", which no registered spell declares a ready probe for'
 
 -- .gitignore --
 .magus/
@@ -42,6 +49,7 @@ bin/
 *.v2
 *.red
 *.unbound
+*.unprobed
 -- bin/docker --
 #!/bin/sh
 # docker with its daemon stopped: the client answers, `docker info` cannot.
@@ -87,11 +95,24 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 }
 -- magusfile.buzz.unbound --
 import "magus";
+import "proc";
 
 magus\project({
     "name": "root",
     "sources": ["**/*.md"],
     "targets": {"image": {"needs_ready": ["docker"]}},
+});
+
+export fun image(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sh", ["-c", "echo image body ran >&2"]);
+}
+-- magusfile.buzz.unprobed --
+import "magus";
+
+magus\project({
+    "name": "root",
+    "sources": ["**/*.md"],
+    "targets": {"image": {"needs_ready": ["nosuchtool"]}},
 });
 
 export fun image(ctx: magus\Context, args: [str]) > void {}

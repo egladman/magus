@@ -142,7 +142,7 @@ magus\project({
     },
     // buzz claims **/*.buzz, which go_build keys on, and builds the Buzz symbol index
     // (scip-buzz) beside the Go one.
-    "spells": [go, markdown, bash, buzz, docker],
+    "spells": [go, markdown, bash, buzz],
     // Tool configs no spell glob matches. Each changes what a target does, so an
     // undeclared one replays a stale verdict. Files doctor lists as undeclared stay
     // out when nothing reads them. Never add .gitattributes: magus writes it.
