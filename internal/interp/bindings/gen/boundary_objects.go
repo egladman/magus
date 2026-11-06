@@ -5492,6 +5492,7 @@ func ObjectForgePull(v types.ForgePull) vm.Value {
 	out.MapSet("url", vm.StringValue(v.URL))
 	out.MapSet("branch", vm.StringValue(v.Branch))
 	out.MapSet("headSHA", vm.StringValue(v.HeadSHA))
+	out.MapSet("fetchRef", vm.StringValue(v.FetchRef))
 	out.MapSet("draft", vm.BoolValue(v.Draft))
 	out.MapSet("mergeable", vm.StringValue(v.Mergeable))
 	out.MapSet("behindBy", vm.IntValue(int64(v.BehindBy)))

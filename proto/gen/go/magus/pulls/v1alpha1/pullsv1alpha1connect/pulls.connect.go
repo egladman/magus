@@ -14,7 +14,7 @@
 // SetAuthors is the only write, and it writes the filter, not the forge: it changes which
 // authors the board shows and asks the poller for one sync now, still bounded by the poll floor.
 //
-// Access policy: GetPulls is console read; SetAuthors is console write. Both sit behind the same
+// Access policy: GetPulls is console read; SetAuthors and CheckoutPull are console write. Both sit behind the same
 // loopback guard as the other console services and are never mounted on the LAN share listener.
 package pullsv1alpha1connect
 
@@ -51,6 +51,9 @@ const (
 	PullsServiceGetPullsProcedure = "/magus.pulls.v1alpha1.PullsService/GetPulls"
 	// PullsServiceSetAuthorsProcedure is the fully-qualified name of the PullsService's SetAuthors RPC.
 	PullsServiceSetAuthorsProcedure = "/magus.pulls.v1alpha1.PullsService/SetAuthors"
+	// PullsServiceCheckoutPullProcedure is the fully-qualified name of the PullsService's CheckoutPull
+	// RPC.
+	PullsServiceCheckoutPullProcedure = "/magus.pulls.v1alpha1.PullsService/CheckoutPull"
 )
 
 // PullsServiceClient is a client for the magus.pulls.v1alpha1.PullsService service.
@@ -59,6 +62,9 @@ type PullsServiceClient interface {
 	GetPulls(context.Context, *connect.Request[v1alpha1.GetPullsRequest]) (*connect.Response[v1alpha1.GetPullsResponse], error)
 	// SetAuthors replaces the author filter and triggers one sync now, respecting the poll floor.
 	SetAuthors(context.Context, *connect.Request[v1alpha1.SetAuthorsRequest]) (*connect.Response[v1alpha1.SetAuthorsResponse], error)
+	// CheckoutPull makes an isolated local checkout of a pull's head commit by running
+	// `magus vcs checkout`, and reports where it is and how to remove it.
+	CheckoutPull(context.Context, *connect.Request[v1alpha1.CheckoutPullRequest]) (*connect.Response[v1alpha1.CheckoutPullResponse], error)
 }
 
 // NewPullsServiceClient constructs a client for the magus.pulls.v1alpha1.PullsService service. By
@@ -84,13 +90,20 @@ func NewPullsServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(pullsServiceMethods.ByName("SetAuthors")),
 			connect.WithClientOptions(opts...),
 		),
+		checkoutPull: connect.NewClient[v1alpha1.CheckoutPullRequest, v1alpha1.CheckoutPullResponse](
+			httpClient,
+			baseURL+PullsServiceCheckoutPullProcedure,
+			connect.WithSchema(pullsServiceMethods.ByName("CheckoutPull")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // pullsServiceClient implements PullsServiceClient.
 type pullsServiceClient struct {
-	getPulls   *connect.Client[v1alpha1.GetPullsRequest, v1alpha1.GetPullsResponse]
-	setAuthors *connect.Client[v1alpha1.SetAuthorsRequest, v1alpha1.SetAuthorsResponse]
+	getPulls     *connect.Client[v1alpha1.GetPullsRequest, v1alpha1.GetPullsResponse]
+	setAuthors   *connect.Client[v1alpha1.SetAuthorsRequest, v1alpha1.SetAuthorsResponse]
+	checkoutPull *connect.Client[v1alpha1.CheckoutPullRequest, v1alpha1.CheckoutPullResponse]
 }
 
 // GetPulls calls magus.pulls.v1alpha1.PullsService.GetPulls.
@@ -103,12 +116,20 @@ func (c *pullsServiceClient) SetAuthors(ctx context.Context, req *connect.Reques
 	return c.setAuthors.CallUnary(ctx, req)
 }
 
+// CheckoutPull calls magus.pulls.v1alpha1.PullsService.CheckoutPull.
+func (c *pullsServiceClient) CheckoutPull(ctx context.Context, req *connect.Request[v1alpha1.CheckoutPullRequest]) (*connect.Response[v1alpha1.CheckoutPullResponse], error) {
+	return c.checkoutPull.CallUnary(ctx, req)
+}
+
 // PullsServiceHandler is an implementation of the magus.pulls.v1alpha1.PullsService service.
 type PullsServiceHandler interface {
 	// GetPulls returns the last board the poller produced. It never calls the forge.
 	GetPulls(context.Context, *connect.Request[v1alpha1.GetPullsRequest]) (*connect.Response[v1alpha1.GetPullsResponse], error)
 	// SetAuthors replaces the author filter and triggers one sync now, respecting the poll floor.
 	SetAuthors(context.Context, *connect.Request[v1alpha1.SetAuthorsRequest]) (*connect.Response[v1alpha1.SetAuthorsResponse], error)
+	// CheckoutPull makes an isolated local checkout of a pull's head commit by running
+	// `magus vcs checkout`, and reports where it is and how to remove it.
+	CheckoutPull(context.Context, *connect.Request[v1alpha1.CheckoutPullRequest]) (*connect.Response[v1alpha1.CheckoutPullResponse], error)
 }
 
 // NewPullsServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -130,12 +151,20 @@ func NewPullsServiceHandler(svc PullsServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(pullsServiceMethods.ByName("SetAuthors")),
 		connect.WithHandlerOptions(opts...),
 	)
+	pullsServiceCheckoutPullHandler := connect.NewUnaryHandler(
+		PullsServiceCheckoutPullProcedure,
+		svc.CheckoutPull,
+		connect.WithSchema(pullsServiceMethods.ByName("CheckoutPull")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/magus.pulls.v1alpha1.PullsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PullsServiceGetPullsProcedure:
 			pullsServiceGetPullsHandler.ServeHTTP(w, r)
 		case PullsServiceSetAuthorsProcedure:
 			pullsServiceSetAuthorsHandler.ServeHTTP(w, r)
+		case PullsServiceCheckoutPullProcedure:
+			pullsServiceCheckoutPullHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -151,4 +180,8 @@ func (UnimplementedPullsServiceHandler) GetPulls(context.Context, *connect.Reque
 
 func (UnimplementedPullsServiceHandler) SetAuthors(context.Context, *connect.Request[v1alpha1.SetAuthorsRequest]) (*connect.Response[v1alpha1.SetAuthorsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.pulls.v1alpha1.PullsService.SetAuthors is not implemented"))
+}
+
+func (UnimplementedPullsServiceHandler) CheckoutPull(context.Context, *connect.Request[v1alpha1.CheckoutPullRequest]) (*connect.Response[v1alpha1.CheckoutPullResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.pulls.v1alpha1.PullsService.CheckoutPull is not implemented"))
 }

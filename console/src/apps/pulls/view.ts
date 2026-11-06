@@ -242,7 +242,51 @@ function renderJob(j: FailedJob): HTMLElement {
   return li;
 }
 
-export function renderRow(p: Pull, nowMs: number, open: boolean): HTMLElement {
+export type Checkout =
+  | { kind: "running" }
+  | { kind: "done"; path: string; remove: string; log: readonly string[] }
+  | { kind: "failed"; error: string };
+
+export const CHECKOUT_NOTE =
+  "Makes an isolated checkout of the head commit. Bootstrap runs this workspace's declared install in it.";
+
+export function renderCheckout(
+  number: number,
+  state: Checkout | undefined,
+  onCheckout: (number: number) => void,
+): HTMLElement {
+  const sec = h("section");
+  sec.setAttribute("aria-label", "Local checkout");
+  const note = h("p", undefined, CHECKOUT_NOTE);
+  const b = h("button", undefined, "Check out locally");
+  b.type = "button";
+  b.disabled = state?.kind === "running";
+  b.addEventListener("click", () => onCheckout(number));
+  sec.append(note, b);
+  if (state?.kind === "running") sec.append(h("p", undefined, "Checking out…"));
+  if (state?.kind === "failed") {
+    const err = h("p", undefined, state.error);
+    err.setAttribute("role", "alert");
+    sec.append(err);
+  }
+  if (state?.kind === "done") {
+    const path = h("p", undefined, "checked out at ");
+    path.append(h("code", undefined, state.path));
+    const remove = h("p", undefined, "remove with ");
+    remove.append(h("code", undefined, state.remove));
+    sec.append(path, remove);
+    if (state.log.length > 0) sec.append(h("pre", undefined, state.log.join("\n")));
+  }
+  return sec;
+}
+
+export function renderRow(
+  p: Pull,
+  nowMs: number,
+  open: boolean,
+  checkout: Checkout | undefined,
+  onCheckout: (number: number) => void,
+): HTMLElement {
   const d = h("details");
   d.open = open;
   d.dataset.pull = String(p.number);
@@ -283,6 +327,7 @@ export function renderRow(p: Pull, nowMs: number, open: boolean): HTMLElement {
     body.append(h("p", undefined, "last push " + ageText(nowMs - pushed) + " ago"));
   }
   body.append(link(p.url, "Open #" + p.number + " on the forge"));
+  body.append(renderCheckout(p.number, checkout, onCheckout));
   d.append(body);
   return d;
 }

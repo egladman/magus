@@ -145,7 +145,7 @@ func runAndEmit(ctx context.Context, m *magus.Magus, target string, charms []str
 	}
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:
-		return emitRunResult(ctx, m, opts, target, charms, targets, nil, nil)
+		return emitRunResult(ctx, m, opts, target, charms, targets, nil, nil, nil)
 	case outputName:
 		return emitProjectNames(m, targets)
 	}

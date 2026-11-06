@@ -12,7 +12,7 @@ syntax = "proto3";
 // SetAuthors is the only write, and it writes the filter, not the forge: it changes which
 // authors the board shows and asks the poller for one sync now, still bounded by the poll floor.
 //
-// Access policy: GetPulls is console read; SetAuthors is console write. Both sit behind the same
+// Access policy: GetPulls is console read; SetAuthors and CheckoutPull are console write. Both sit behind the same
 // loopback guard as the other console services and are never mounted on the LAN share listener.
 package magus.pulls.v1alpha1;
 
@@ -25,6 +25,9 @@ service PullsService {
   rpc GetPulls(GetPullsRequest) returns (GetPullsResponse);
   // SetAuthors replaces the author filter and triggers one sync now, respecting the poll floor.
   rpc SetAuthors(SetAuthorsRequest) returns (SetAuthorsResponse);
+  // CheckoutPull makes an isolated local checkout of a pull's head commit by running
+  // `magus vcs checkout`, and reports where it is and how to remove it.
+  rpc CheckoutPull(CheckoutPullRequest) returns (CheckoutPullResponse);
 }
 
 // CiState is the rolled-up result of a commit's checks, with the queue context already removed.
@@ -96,6 +99,24 @@ message SetAuthorsRequest {
 message SetAuthorsResponse {
   // board is the board as it stands after the filter change, before the triggered sync lands.
   Board board = 1;
+}
+
+// CheckoutPullRequest names the pull to check out.
+message CheckoutPullRequest {
+  // number is the pull request number on the current board.
+  int32 number = 1;
+}
+
+// CheckoutPullResponse is the record `magus vcs checkout -o json` printed.
+message CheckoutPullResponse {
+  // path is the directory of the new checkout.
+  string path = 1;
+  // remove is the command that removes the checkout.
+  string remove = 2;
+  // log is what the checkout did, one line per step, including the bootstrap it ran.
+  repeated string log = 3;
+  // error is the failure text, empty on success.
+  string error = 4;
 }
 
 // Board is everything the console renders for one repository.
@@ -193,6 +214,8 @@ message Pull {
   repeated Overlap overlaps = 21;
   // failed_jobs are every failing check, expanded in place by the console.
   repeated FailedJob failed_jobs = 22;
+  // fetch_ref is the ref a clone fetches to get head_sha, for example refs/pull/12/head.
+  string fetch_ref = 23;
 }
 
 // QueueStatus is the merge queue's view of one pull request.

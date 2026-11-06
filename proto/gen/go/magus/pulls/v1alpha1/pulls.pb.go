@@ -16,7 +16,7 @@
 // SetAuthors is the only write, and it writes the filter, not the forge: it changes which
 // authors the board shows and asks the poller for one sync now, still bounded by the poll floor.
 //
-// Access policy: GetPulls is console read; SetAuthors is console write. Both sit behind the same
+// Access policy: GetPulls is console read; SetAuthors and CheckoutPull are console write. Both sit behind the same
 // loopback guard as the other console services and are never mounted on the LAN share listener.
 
 package pullsv1alpha1
@@ -451,6 +451,125 @@ func (x *SetAuthorsResponse) GetBoard() *Board {
 	return nil
 }
 
+// CheckoutPullRequest names the pull to check out.
+type CheckoutPullRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// number is the pull request number on the current board.
+	Number        int32 `protobuf:"varint,1,opt,name=number,proto3" json:"number,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckoutPullRequest) Reset() {
+	*x = CheckoutPullRequest{}
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckoutPullRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckoutPullRequest) ProtoMessage() {}
+
+func (x *CheckoutPullRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckoutPullRequest.ProtoReflect.Descriptor instead.
+func (*CheckoutPullRequest) Descriptor() ([]byte, []int) {
+	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *CheckoutPullRequest) GetNumber() int32 {
+	if x != nil {
+		return x.Number
+	}
+	return 0
+}
+
+// CheckoutPullResponse is the record `magus vcs checkout -o json` printed.
+type CheckoutPullResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// path is the directory of the new checkout.
+	Path string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	// remove is the command that removes the checkout.
+	Remove string `protobuf:"bytes,2,opt,name=remove,proto3" json:"remove,omitempty"`
+	// log is what the checkout did, one line per step, including the bootstrap it ran.
+	Log []string `protobuf:"bytes,3,rep,name=log,proto3" json:"log,omitempty"`
+	// error is the failure text, empty on success.
+	Error         string `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckoutPullResponse) Reset() {
+	*x = CheckoutPullResponse{}
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckoutPullResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckoutPullResponse) ProtoMessage() {}
+
+func (x *CheckoutPullResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckoutPullResponse.ProtoReflect.Descriptor instead.
+func (*CheckoutPullResponse) Descriptor() ([]byte, []int) {
+	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *CheckoutPullResponse) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *CheckoutPullResponse) GetRemove() string {
+	if x != nil {
+		return x.Remove
+	}
+	return ""
+}
+
+func (x *CheckoutPullResponse) GetLog() []string {
+	if x != nil {
+		return x.Log
+	}
+	return nil
+}
+
+func (x *CheckoutPullResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 // Board is everything the console renders for one repository.
 type Board struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -470,7 +589,7 @@ type Board struct {
 
 func (x *Board) Reset() {
 	*x = Board{}
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[4]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -482,7 +601,7 @@ func (x *Board) String() string {
 func (*Board) ProtoMessage() {}
 
 func (x *Board) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[4]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -495,7 +614,7 @@ func (x *Board) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Board.ProtoReflect.Descriptor instead.
 func (*Board) Descriptor() ([]byte, []int) {
-	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{4}
+	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Board) GetRepo() string {
@@ -563,7 +682,7 @@ type AuthorFilter struct {
 
 func (x *AuthorFilter) Reset() {
 	*x = AuthorFilter{}
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[5]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -575,7 +694,7 @@ func (x *AuthorFilter) String() string {
 func (*AuthorFilter) ProtoMessage() {}
 
 func (x *AuthorFilter) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[5]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -588,7 +707,7 @@ func (x *AuthorFilter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorFilter.ProtoReflect.Descriptor instead.
 func (*AuthorFilter) Descriptor() ([]byte, []int) {
-	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{5}
+	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *AuthorFilter) GetAuthors() []string {
@@ -647,7 +766,7 @@ type SyncState struct {
 
 func (x *SyncState) Reset() {
 	*x = SyncState{}
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[6]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -659,7 +778,7 @@ func (x *SyncState) String() string {
 func (*SyncState) ProtoMessage() {}
 
 func (x *SyncState) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[6]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -672,7 +791,7 @@ func (x *SyncState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncState.ProtoReflect.Descriptor instead.
 func (*SyncState) Descriptor() ([]byte, []int) {
-	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{6}
+	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SyncState) GetSyncedAt() *timestamppb.Timestamp {
@@ -771,7 +890,7 @@ type BranchState struct {
 
 func (x *BranchState) Reset() {
 	*x = BranchState{}
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[7]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -783,7 +902,7 @@ func (x *BranchState) String() string {
 func (*BranchState) ProtoMessage() {}
 
 func (x *BranchState) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[7]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -796,7 +915,7 @@ func (x *BranchState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BranchState.ProtoReflect.Descriptor instead.
 func (*BranchState) Descriptor() ([]byte, []int) {
-	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{7}
+	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *BranchState) GetName() string {
@@ -888,14 +1007,16 @@ type Pull struct {
 	// overlaps are the other open pulls that change files this pull also changes.
 	Overlaps []*Overlap `protobuf:"bytes,21,rep,name=overlaps,proto3" json:"overlaps,omitempty"`
 	// failed_jobs are every failing check, expanded in place by the console.
-	FailedJobs    []*FailedJob `protobuf:"bytes,22,rep,name=failed_jobs,json=failedJobs,proto3" json:"failed_jobs,omitempty"`
+	FailedJobs []*FailedJob `protobuf:"bytes,22,rep,name=failed_jobs,json=failedJobs,proto3" json:"failed_jobs,omitempty"`
+	// fetch_ref is the ref a clone fetches to get head_sha, for example refs/pull/12/head.
+	FetchRef      string `protobuf:"bytes,23,opt,name=fetch_ref,json=fetchRef,proto3" json:"fetch_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Pull) Reset() {
 	*x = Pull{}
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[8]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -907,7 +1028,7 @@ func (x *Pull) String() string {
 func (*Pull) ProtoMessage() {}
 
 func (x *Pull) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[8]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -920,7 +1041,7 @@ func (x *Pull) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Pull.ProtoReflect.Descriptor instead.
 func (*Pull) Descriptor() ([]byte, []int) {
-	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{8}
+	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Pull) GetNumber() int32 {
@@ -1077,6 +1198,13 @@ func (x *Pull) GetFailedJobs() []*FailedJob {
 	return nil
 }
 
+func (x *Pull) GetFetchRef() string {
+	if x != nil {
+		return x.FetchRef
+	}
+	return ""
+}
+
 // QueueStatus is the merge queue's view of one pull request.
 type QueueStatus struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1090,7 +1218,7 @@ type QueueStatus struct {
 
 func (x *QueueStatus) Reset() {
 	*x = QueueStatus{}
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[9]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1102,7 +1230,7 @@ func (x *QueueStatus) String() string {
 func (*QueueStatus) ProtoMessage() {}
 
 func (x *QueueStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[9]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1115,7 +1243,7 @@ func (x *QueueStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueueStatus.ProtoReflect.Descriptor instead.
 func (*QueueStatus) Descriptor() ([]byte, []int) {
-	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{9}
+	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *QueueStatus) GetState() string {
@@ -1143,7 +1271,7 @@ type Overlap struct {
 
 func (x *Overlap) Reset() {
 	*x = Overlap{}
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[10]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1155,7 +1283,7 @@ func (x *Overlap) String() string {
 func (*Overlap) ProtoMessage() {}
 
 func (x *Overlap) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[10]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1168,7 +1296,7 @@ func (x *Overlap) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Overlap.ProtoReflect.Descriptor instead.
 func (*Overlap) Descriptor() ([]byte, []int) {
-	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{10}
+	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Overlap) GetNumber() int32 {
@@ -1200,7 +1328,7 @@ type FailedJob struct {
 
 func (x *FailedJob) Reset() {
 	*x = FailedJob{}
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[11]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1212,7 +1340,7 @@ func (x *FailedJob) String() string {
 func (*FailedJob) ProtoMessage() {}
 
 func (x *FailedJob) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[11]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1225,7 +1353,7 @@ func (x *FailedJob) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FailedJob.ProtoReflect.Descriptor instead.
 func (*FailedJob) Descriptor() ([]byte, []int) {
-	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{11}
+	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *FailedJob) GetName() string {
@@ -1280,7 +1408,7 @@ type Pattern struct {
 
 func (x *Pattern) Reset() {
 	*x = Pattern{}
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[12]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1292,7 +1420,7 @@ func (x *Pattern) String() string {
 func (*Pattern) ProtoMessage() {}
 
 func (x *Pattern) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[12]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1305,7 +1433,7 @@ func (x *Pattern) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Pattern.ProtoReflect.Descriptor instead.
 func (*Pattern) Descriptor() ([]byte, []int) {
-	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{12}
+	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Pattern) GetKind() PatternKind {
@@ -1383,7 +1511,7 @@ type MergeStep struct {
 
 func (x *MergeStep) Reset() {
 	*x = MergeStep{}
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[13]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1395,7 +1523,7 @@ func (x *MergeStep) String() string {
 func (*MergeStep) ProtoMessage() {}
 
 func (x *MergeStep) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[13]
+	mi := &file_magus_pulls_v1alpha1_pulls_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1408,7 +1536,7 @@ func (x *MergeStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MergeStep.ProtoReflect.Descriptor instead.
 func (*MergeStep) Descriptor() ([]byte, []int) {
-	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{13}
+	return file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *MergeStep) GetNumber() int32 {
@@ -1436,7 +1564,14 @@ const file_magus_pulls_v1alpha1_pulls_proto_rawDesc = "" +
 	"\x11SetAuthorsRequest\x12\x18\n" +
 	"\aauthors\x18\x01 \x03(\tR\aauthors\"G\n" +
 	"\x12SetAuthorsResponse\x121\n" +
-	"\x05board\x18\x01 \x01(\v2\x1b.magus.pulls.v1alpha1.BoardR\x05board\"\xf2\x02\n" +
+	"\x05board\x18\x01 \x01(\v2\x1b.magus.pulls.v1alpha1.BoardR\x05board\"-\n" +
+	"\x13CheckoutPullRequest\x12\x16\n" +
+	"\x06number\x18\x01 \x01(\x05R\x06number\"j\n" +
+	"\x14CheckoutPullResponse\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x16\n" +
+	"\x06remove\x18\x02 \x01(\tR\x06remove\x12\x10\n" +
+	"\x03log\x18\x03 \x03(\tR\x03log\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\"\xf2\x02\n" +
 	"\x05Board\x12\x12\n" +
 	"\x04repo\x18\x01 \x01(\tR\x04repo\x12:\n" +
 	"\x06filter\x18\x02 \x01(\v2\".magus.pulls.v1alpha1.AuthorFilterR\x06filter\x123\n" +
@@ -1477,7 +1612,7 @@ const file_magus_pulls_v1alpha1_pulls_proto_rawDesc = "" +
 	"\rfirst_failure\x18\x05 \x01(\v2\x1f.magus.pulls.v1alpha1.FailedJobR\ffirstFailure\x12\x16\n" +
 	"\x06passed\x18\x06 \x01(\x05R\x06passed\x12\x16\n" +
 	"\x06failed\x18\a \x01(\x05R\x06failed\x12\x18\n" +
-	"\apending\x18\b \x01(\x05R\apending\"\xd1\x06\n" +
+	"\apending\x18\b \x01(\x05R\apending\"\xee\x06\n" +
 	"\x04Pull\x12\x16\n" +
 	"\x06number\x18\x01 \x01(\x05R\x06number\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +
@@ -1503,7 +1638,8 @@ const file_magus_pulls_v1alpha1_pulls_proto_rawDesc = "" +
 	"\x05draft\x18\x14 \x01(\bR\x05draft\x129\n" +
 	"\boverlaps\x18\x15 \x03(\v2\x1d.magus.pulls.v1alpha1.OverlapR\boverlaps\x12@\n" +
 	"\vfailed_jobs\x18\x16 \x03(\v2\x1f.magus.pulls.v1alpha1.FailedJobR\n" +
-	"failedJobs\"E\n" +
+	"failedJobs\x12\x1b\n" +
+	"\tfetch_ref\x18\x17 \x01(\tR\bfetchRef\"E\n" +
 	"\vQueueStatus\x12\x14\n" +
 	"\x05state\x18\x01 \x01(\tR\x05state\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\"7\n" +
@@ -1554,11 +1690,12 @@ const file_magus_pulls_v1alpha1_pulls_proto_rawDesc = "" +
 	"\vPatternKind\x12\x1c\n" +
 	"\x18PATTERN_KIND_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17PATTERN_KIND_REGRESSION\x10\x01\x12\x1f\n" +
-	"\x1bPATTERN_KIND_RUNNER_BACKLOG\x10\x022\xca\x01\n" +
+	"\x1bPATTERN_KIND_RUNNER_BACKLOG\x10\x022\xb1\x02\n" +
 	"\fPullsService\x12Y\n" +
 	"\bGetPulls\x12%.magus.pulls.v1alpha1.GetPullsRequest\x1a&.magus.pulls.v1alpha1.GetPullsResponse\x12_\n" +
 	"\n" +
-	"SetAuthors\x12'.magus.pulls.v1alpha1.SetAuthorsRequest\x1a(.magus.pulls.v1alpha1.SetAuthorsResponseB\xe3\x01\n" +
+	"SetAuthors\x12'.magus.pulls.v1alpha1.SetAuthorsRequest\x1a(.magus.pulls.v1alpha1.SetAuthorsResponse\x12e\n" +
+	"\fCheckoutPull\x12).magus.pulls.v1alpha1.CheckoutPullRequest\x1a*.magus.pulls.v1alpha1.CheckoutPullResponseB\xe3\x01\n" +
 	"\x18com.magus.pulls.v1alpha1B\n" +
 	"PullsProtoP\x01ZIgithub.com/egladman/magus/proto/gen/go/magus/pulls/v1alpha1;pullsv1alpha1\xa2\x02\x03MPX\xaa\x02\x14Magus.Pulls.V1alpha1\xca\x02\x14Magus\\Pulls\\V1alpha1\xe2\x02 Magus\\Pulls\\V1alpha1\\GPBMetadata\xea\x02\x16Magus::Pulls::V1alpha1b\x06proto3"
 
@@ -1575,7 +1712,7 @@ func file_magus_pulls_v1alpha1_pulls_proto_rawDescGZIP() []byte {
 }
 
 var file_magus_pulls_v1alpha1_pulls_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_magus_pulls_v1alpha1_pulls_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_magus_pulls_v1alpha1_pulls_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_magus_pulls_v1alpha1_pulls_proto_goTypes = []any{
 	(CiState)(0),                  // 0: magus.pulls.v1alpha1.CiState
 	(Mergeable)(0),                // 1: magus.pulls.v1alpha1.Mergeable
@@ -1585,51 +1722,55 @@ var file_magus_pulls_v1alpha1_pulls_proto_goTypes = []any{
 	(*GetPullsResponse)(nil),      // 5: magus.pulls.v1alpha1.GetPullsResponse
 	(*SetAuthorsRequest)(nil),     // 6: magus.pulls.v1alpha1.SetAuthorsRequest
 	(*SetAuthorsResponse)(nil),    // 7: magus.pulls.v1alpha1.SetAuthorsResponse
-	(*Board)(nil),                 // 8: magus.pulls.v1alpha1.Board
-	(*AuthorFilter)(nil),          // 9: magus.pulls.v1alpha1.AuthorFilter
-	(*SyncState)(nil),             // 10: magus.pulls.v1alpha1.SyncState
-	(*BranchState)(nil),           // 11: magus.pulls.v1alpha1.BranchState
-	(*Pull)(nil),                  // 12: magus.pulls.v1alpha1.Pull
-	(*QueueStatus)(nil),           // 13: magus.pulls.v1alpha1.QueueStatus
-	(*Overlap)(nil),               // 14: magus.pulls.v1alpha1.Overlap
-	(*FailedJob)(nil),             // 15: magus.pulls.v1alpha1.FailedJob
-	(*Pattern)(nil),               // 16: magus.pulls.v1alpha1.Pattern
-	(*MergeStep)(nil),             // 17: magus.pulls.v1alpha1.MergeStep
-	(*timestamppb.Timestamp)(nil), // 18: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 19: google.protobuf.Duration
+	(*CheckoutPullRequest)(nil),   // 8: magus.pulls.v1alpha1.CheckoutPullRequest
+	(*CheckoutPullResponse)(nil),  // 9: magus.pulls.v1alpha1.CheckoutPullResponse
+	(*Board)(nil),                 // 10: magus.pulls.v1alpha1.Board
+	(*AuthorFilter)(nil),          // 11: magus.pulls.v1alpha1.AuthorFilter
+	(*SyncState)(nil),             // 12: magus.pulls.v1alpha1.SyncState
+	(*BranchState)(nil),           // 13: magus.pulls.v1alpha1.BranchState
+	(*Pull)(nil),                  // 14: magus.pulls.v1alpha1.Pull
+	(*QueueStatus)(nil),           // 15: magus.pulls.v1alpha1.QueueStatus
+	(*Overlap)(nil),               // 16: magus.pulls.v1alpha1.Overlap
+	(*FailedJob)(nil),             // 17: magus.pulls.v1alpha1.FailedJob
+	(*Pattern)(nil),               // 18: magus.pulls.v1alpha1.Pattern
+	(*MergeStep)(nil),             // 19: magus.pulls.v1alpha1.MergeStep
+	(*timestamppb.Timestamp)(nil), // 20: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 21: google.protobuf.Duration
 }
 var file_magus_pulls_v1alpha1_pulls_proto_depIdxs = []int32{
-	8,  // 0: magus.pulls.v1alpha1.GetPullsResponse.board:type_name -> magus.pulls.v1alpha1.Board
-	8,  // 1: magus.pulls.v1alpha1.SetAuthorsResponse.board:type_name -> magus.pulls.v1alpha1.Board
-	9,  // 2: magus.pulls.v1alpha1.Board.filter:type_name -> magus.pulls.v1alpha1.AuthorFilter
-	10, // 3: magus.pulls.v1alpha1.Board.sync:type_name -> magus.pulls.v1alpha1.SyncState
-	11, // 4: magus.pulls.v1alpha1.Board.main:type_name -> magus.pulls.v1alpha1.BranchState
-	12, // 5: magus.pulls.v1alpha1.Board.pulls:type_name -> magus.pulls.v1alpha1.Pull
-	16, // 6: magus.pulls.v1alpha1.Board.patterns:type_name -> magus.pulls.v1alpha1.Pattern
-	17, // 7: magus.pulls.v1alpha1.Board.merge_order:type_name -> magus.pulls.v1alpha1.MergeStep
-	18, // 8: magus.pulls.v1alpha1.SyncState.synced_at:type_name -> google.protobuf.Timestamp
-	18, // 9: magus.pulls.v1alpha1.SyncState.next_sync_at:type_name -> google.protobuf.Timestamp
-	18, // 10: magus.pulls.v1alpha1.SyncState.failed_at:type_name -> google.protobuf.Timestamp
-	19, // 11: magus.pulls.v1alpha1.SyncState.interval:type_name -> google.protobuf.Duration
-	18, // 12: magus.pulls.v1alpha1.SyncState.rate_reset:type_name -> google.protobuf.Timestamp
+	10, // 0: magus.pulls.v1alpha1.GetPullsResponse.board:type_name -> magus.pulls.v1alpha1.Board
+	10, // 1: magus.pulls.v1alpha1.SetAuthorsResponse.board:type_name -> magus.pulls.v1alpha1.Board
+	11, // 2: magus.pulls.v1alpha1.Board.filter:type_name -> magus.pulls.v1alpha1.AuthorFilter
+	12, // 3: magus.pulls.v1alpha1.Board.sync:type_name -> magus.pulls.v1alpha1.SyncState
+	13, // 4: magus.pulls.v1alpha1.Board.main:type_name -> magus.pulls.v1alpha1.BranchState
+	14, // 5: magus.pulls.v1alpha1.Board.pulls:type_name -> magus.pulls.v1alpha1.Pull
+	18, // 6: magus.pulls.v1alpha1.Board.patterns:type_name -> magus.pulls.v1alpha1.Pattern
+	19, // 7: magus.pulls.v1alpha1.Board.merge_order:type_name -> magus.pulls.v1alpha1.MergeStep
+	20, // 8: magus.pulls.v1alpha1.SyncState.synced_at:type_name -> google.protobuf.Timestamp
+	20, // 9: magus.pulls.v1alpha1.SyncState.next_sync_at:type_name -> google.protobuf.Timestamp
+	20, // 10: magus.pulls.v1alpha1.SyncState.failed_at:type_name -> google.protobuf.Timestamp
+	21, // 11: magus.pulls.v1alpha1.SyncState.interval:type_name -> google.protobuf.Duration
+	20, // 12: magus.pulls.v1alpha1.SyncState.rate_reset:type_name -> google.protobuf.Timestamp
 	0,  // 13: magus.pulls.v1alpha1.BranchState.ci:type_name -> magus.pulls.v1alpha1.CiState
-	15, // 14: magus.pulls.v1alpha1.BranchState.first_failure:type_name -> magus.pulls.v1alpha1.FailedJob
+	17, // 14: magus.pulls.v1alpha1.BranchState.first_failure:type_name -> magus.pulls.v1alpha1.FailedJob
 	1,  // 15: magus.pulls.v1alpha1.Pull.mergeable:type_name -> magus.pulls.v1alpha1.Mergeable
 	0,  // 16: magus.pulls.v1alpha1.Pull.ci:type_name -> magus.pulls.v1alpha1.CiState
-	19, // 17: magus.pulls.v1alpha1.Pull.queued_for:type_name -> google.protobuf.Duration
-	15, // 18: magus.pulls.v1alpha1.Pull.first_failure:type_name -> magus.pulls.v1alpha1.FailedJob
+	21, // 17: magus.pulls.v1alpha1.Pull.queued_for:type_name -> google.protobuf.Duration
+	17, // 18: magus.pulls.v1alpha1.Pull.first_failure:type_name -> magus.pulls.v1alpha1.FailedJob
 	2,  // 19: magus.pulls.v1alpha1.Pull.review:type_name -> magus.pulls.v1alpha1.Review
-	13, // 20: magus.pulls.v1alpha1.Pull.queue:type_name -> magus.pulls.v1alpha1.QueueStatus
-	18, // 21: magus.pulls.v1alpha1.Pull.pushed_at:type_name -> google.protobuf.Timestamp
-	14, // 22: magus.pulls.v1alpha1.Pull.overlaps:type_name -> magus.pulls.v1alpha1.Overlap
-	15, // 23: magus.pulls.v1alpha1.Pull.failed_jobs:type_name -> magus.pulls.v1alpha1.FailedJob
+	15, // 20: magus.pulls.v1alpha1.Pull.queue:type_name -> magus.pulls.v1alpha1.QueueStatus
+	20, // 21: magus.pulls.v1alpha1.Pull.pushed_at:type_name -> google.protobuf.Timestamp
+	16, // 22: magus.pulls.v1alpha1.Pull.overlaps:type_name -> magus.pulls.v1alpha1.Overlap
+	17, // 23: magus.pulls.v1alpha1.Pull.failed_jobs:type_name -> magus.pulls.v1alpha1.FailedJob
 	3,  // 24: magus.pulls.v1alpha1.Pattern.kind:type_name -> magus.pulls.v1alpha1.PatternKind
 	4,  // 25: magus.pulls.v1alpha1.PullsService.GetPulls:input_type -> magus.pulls.v1alpha1.GetPullsRequest
 	6,  // 26: magus.pulls.v1alpha1.PullsService.SetAuthors:input_type -> magus.pulls.v1alpha1.SetAuthorsRequest
-	5,  // 27: magus.pulls.v1alpha1.PullsService.GetPulls:output_type -> magus.pulls.v1alpha1.GetPullsResponse
-	7,  // 28: magus.pulls.v1alpha1.PullsService.SetAuthors:output_type -> magus.pulls.v1alpha1.SetAuthorsResponse
-	27, // [27:29] is the sub-list for method output_type
-	25, // [25:27] is the sub-list for method input_type
+	8,  // 27: magus.pulls.v1alpha1.PullsService.CheckoutPull:input_type -> magus.pulls.v1alpha1.CheckoutPullRequest
+	5,  // 28: magus.pulls.v1alpha1.PullsService.GetPulls:output_type -> magus.pulls.v1alpha1.GetPullsResponse
+	7,  // 29: magus.pulls.v1alpha1.PullsService.SetAuthors:output_type -> magus.pulls.v1alpha1.SetAuthorsResponse
+	9,  // 30: magus.pulls.v1alpha1.PullsService.CheckoutPull:output_type -> magus.pulls.v1alpha1.CheckoutPullResponse
+	28, // [28:31] is the sub-list for method output_type
+	25, // [25:28] is the sub-list for method input_type
 	25, // [25:25] is the sub-list for extension type_name
 	25, // [25:25] is the sub-list for extension extendee
 	0,  // [0:25] is the sub-list for field type_name
@@ -1646,7 +1787,7 @@ func file_magus_pulls_v1alpha1_pulls_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_pulls_v1alpha1_pulls_proto_rawDesc), len(file_magus_pulls_v1alpha1_pulls_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   14,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -1912,6 +1912,12 @@ func decodeForgePull(v vm.Value, path string) (types.ForgePull, error) {
 				return out, err
 			}
 			out.HeadSHA = sHeadSHA
+		case "fetchRef":
+			sFetchRef, err := decodeString(item, path+".fetchRef")
+			if err != nil {
+				return out, err
+			}
+			out.FetchRef = sFetchRef
 		case "draft":
 			bDraft, err := decodeBool(item, path+".draft")
 			if err != nil {

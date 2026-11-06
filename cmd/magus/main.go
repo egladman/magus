@@ -61,6 +61,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/diagnostics"
@@ -761,10 +762,16 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 	cfg, err := config.LoadWithRoot(config.ExtractFlag(args), earlyRoot)
 	stopCfgLoad()
 	if err != nil {
+		err = config.WithRunningVersion(err, version)
+		// A hook reads a guard that exits as no verdict and refuses the
+		// call, the rebuild included. The guard judges a stale binary instead.
+		if peekedSub == "shell" && ward.IsStaleBinary(err) {
+			return rootCtx, startupResult{cleanup: cleanup}, mapExitCode(shellCommand(withStaleConfig(rootCtx, err), peekedSubArgs))
+		}
 		// Printed rather than logged: the unknown-key error names a file, a line and a
 		// suggestion per line, and slog's text handler escapes every quote and newline
 		// in it back into one unreadable run.
-		fmt.Fprintf(os.Stderr, "magus: %v\n", config.WithRunningVersion(err, version))
+		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 		return rootCtx, startupResult{cleanup: cleanup}, 1
 	}
 	// LoadWithRoot validates the yaml; ApplyEnv then overwrites those fields.

@@ -63,6 +63,26 @@ func (s *ParseSuite) TestDevOnlyIgnoresOtherConditions() {
 	s.False(DevOnly("// " + Compat + NextRelease + " ships, or later)"))
 }
 
+func (s *ParseSuite) TestNearDevOnlyReadsADifferentCase() {
+	s.True(NearDevOnly("// " + Compat + "The Next Release): the old reader"))
+}
+
+func (s *ParseSuite) TestNearDevOnlyReadsATrailingPeriod() {
+	s.True(NearDevOnly("// " + Compat + NextRelease + ".): the old reader"))
+}
+
+func (s *ParseSuite) TestNearDevOnlyReadsExtraSpacing() {
+	s.True(NearDevOnly("// " + Compat + "the  next release ): the old reader"))
+}
+
+func (s *ParseSuite) TestNearDevOnlyIgnoresTheExactCondition() {
+	s.False(NearDevOnly("// " + Compat + NextRelease + "): the old reader"))
+}
+
+func (s *ParseSuite) TestNearDevOnlyIgnoresOtherConditions() {
+	s.False(NearDevOnly("// " + Compat + "the next major release): the old reader"))
+}
+
 func (s *ParseSuite) TestDevOnlyIgnoresAMention() {
 	s.False(DevOnly("a shim takes `" + Compat + NextRelease + ")`"))
 }
