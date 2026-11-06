@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -27,17 +28,17 @@ func TestRenderUnitsWhatTheSupervisorReads(t *testing.T) {
 	systemd, err := RenderUnits(SupervisorSystemd, f)
 	require.NoError(t, err)
 	assert.Equal(t, []Unit{
-		{Supervisor: "systemd", Path: "/home/eli/.config/systemd/user/magus-broker.socket", Content: `[Unit]
+		{Supervisor: "systemd", Path: "/home/eli/.config/systemd/user/magus-broker.socket", Content: fmt.Sprintf(`[Unit]
 Description=magus server broker socket
 
 [Socket]
-ListenStream=/run/user/1000/magus%%/` + SocketName + `
+ListenStream=/run/user/1000/magus%%%%/%s
 SocketMode=0600
 DirectoryMode=0700
 
 [Install]
 WantedBy=sockets.target
-`},
+`, SocketName)},
 		{Supervisor: "systemd", Path: "/home/eli/.config/systemd/user/magus-broker.service", Content: `[Unit]
 Description=magus server broker: this host's capacity and shared services
 Requires=magus-broker.socket

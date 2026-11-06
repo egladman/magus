@@ -145,7 +145,7 @@ func (s *TreeBoundSuite) TestSetsidChildrenThatOutliveTheRootAreReaped() {
 func (s *TreeBoundSuite) TestALeftoverGetsSigtermBeforeSigkill() {
 	s.Require().NoError(s.run(1, false, "trap"))
 	_, err := os.Stat(filepath.Join(s.dir, "term"))
-	s.NoError(err, "a leftover that handles SIGTERM got the chance to")
+	s.Require().NoError(err, "a leftover that handles SIGTERM got the chance to")
 	s.assertNoneAlive()
 }
 
@@ -160,7 +160,7 @@ func (s *TreeBoundSuite) TestAProcessThatDropsTheMarkOutlivesTheRun() {
 
 func (s *TreeBoundSuite) TestANestedMarkAppendsToTheOneItInherits() {
 	env, mark := (&treeBounds{}).marked([]string{"A=1", TreeMarkEnv + "=outer"})
-	s.Equal([]string{"A=1", TreeMarkEnv + "=outer," + mark}, env)
+	s.Equal([]string{"A=1", fmt.Sprintf("%s=outer,%s", TreeMarkEnv, mark)}, env)
 	s.True(hasMark("outer,"+mark, mark))
 	s.False(hasMark("outer", mark))
 }

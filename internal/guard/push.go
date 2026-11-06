@@ -368,7 +368,7 @@ func (ev pushEvidence) admitted() string {
 	case ev.cover == gateNarrow:
 		return ev.narrow.admission(ev.commit)
 	case ev.cover == gateUnrun:
-		return fmt.Sprintf("magus workspace: `%s` at %s (%s) passed every target this host could run; PR CI owes the rest, which could not run here:\n  %s",
+		return fmt.Sprintf("magus workspace: PR CI owes what `%s` at %s (%s) could not run here:\n  %s",
 			types.TargetCI, ev.commit, gateRunRef(ev.unrun), strings.Join(ev.unrun.Unrun, "\n  "))
 	}
 	return ""

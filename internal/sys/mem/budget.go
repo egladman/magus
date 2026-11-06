@@ -3,6 +3,7 @@ package mem
 import (
 	"cmp"
 	"context"
+	"fmt"
 
 	"github.com/egladman/magus/types"
 )
@@ -63,7 +64,7 @@ func Reserve(usableBytes int64, profile types.ConcurrencyProfile) types.MemoryRe
 	return types.MemoryReserve{
 		TotalMB:    totalMB,
 		ReservedMB: totalMB - budgetMB,
-		Rule:       "the " + string(cmp.Or(profile, types.ProfileBalanced)) + " profile keeps 1/4",
+		Rule:       fmt.Sprintf("the %s profile keeps 1/4", cmp.Or(profile, types.ProfileBalanced)),
 	}
 }
 

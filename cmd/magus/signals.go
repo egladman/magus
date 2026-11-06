@@ -28,14 +28,13 @@ type lifecycle struct {
 // does a server run here.
 func ownsItsSignals(args []string) bool {
 	sub, subArgs := peekSub(args)
-	switch sub {
-	case "server":
-		if len(subArgs) > 0 && subArgs[0] == "broker" {
-			return brokerServes(subArgs[1:])
-		}
-		return isServerRun(subArgs) && wantsForeground(subArgs)
+	if sub != "server" {
+		return false
 	}
-	return false
+	if len(subArgs) > 0 && subArgs[0] == "broker" {
+		return brokerServes(subArgs[1:])
+	}
+	return isServerRun(subArgs) && wantsForeground(subArgs)
 }
 
 // early queues the signals a process ownsItsSignals names receives before its lifecycle

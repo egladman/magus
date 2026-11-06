@@ -105,12 +105,12 @@ func (b *treeBounds) marked(env []string) ([]string, string) {
 	out := make([]string, 0, len(env)+1)
 	for _, kv := range env {
 		if v, ok := strings.CutPrefix(kv, TreeMarkEnv+"="); ok && v != "" {
-			value = v + "," + mark
+			value = fmt.Sprintf("%s,%s", v, mark)
 			continue
 		}
 		out = append(out, kv)
 	}
-	return append(out, TreeMarkEnv+"="+value), mark
+	return append(out, fmt.Sprintf("%s=%s", TreeMarkEnv, value)), mark
 }
 
 // follow starts bounding the tree rooted at pid. It returns nil, and says so
@@ -133,12 +133,14 @@ func (b *treeBounds) follow(ctx context.Context, pid int, command, mark string) 
 	b.trees[t] = struct{}{}
 	if !b.running {
 		b.running = true
-		go b.loop()
+		go b.loop(context.WithoutCancel(ctx))
 	}
 	return t
 }
 
-func (b *treeBounds) loop() {
+// loop counts every followed tree until none is left. ctx carries only the
+// log context: the loop outlives the command that started it.
+func (b *treeBounds) loop(ctx context.Context) {
 	tick := time.NewTicker(boundEvery)
 	defer tick.Stop()
 	for range tick.C {
@@ -153,7 +155,7 @@ func (b *treeBounds) loop() {
 		tbl, err := b.read()
 		if err != nil {
 			b.lost.Do(func() {
-				slog.Warn(fmt.Sprintf("magus stopped reading the process table (%s), so running commands' trees are no longer bounded", err))
+				slog.WarnContext(ctx, "magus stopped reading the process table, so running commands' trees are no longer bounded", attr.Error(err))
 			})
 			continue
 		}

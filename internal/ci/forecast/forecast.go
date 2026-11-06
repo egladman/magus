@@ -231,7 +231,7 @@ func (g *weighing) group(units []types.Unit, closures [][]int, root func(int) in
 		}
 	}
 	for i := range w.items {
-		w.items[i].alone = w.costOf(w.items[i].closure)
+		w.items[i].alone = w.closureCost(w.items[i].closure)
 	}
 	slices.SortStableFunc(w.items, func(a, b item) int {
 		if a.alone != b.alone {
@@ -251,7 +251,8 @@ func (w weights) cost(sum, longest int64) int64 {
 	return w.setupMs + max((sum+w.slots-1)/w.slots, longest)
 }
 
-func (w weights) costOf(closure []int) int64 {
+// closureCost is closure's cost on a shard of its own.
+func (w weights) closureCost(closure []int) int64 {
 	var sum, longest int64
 	for _, n := range closure {
 		sum += w.nodeMs[n]
