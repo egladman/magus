@@ -1182,6 +1182,7 @@ var envOnly = []cmdline.Env{
 	{Name: "MAGUS_VCS_<NAME>_BASE_REF", Key: "", Default: "", Doc: "Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs"},
 	{Name: "MAGUS_PROC_SOCKET", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: the proc-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it"},
 	{Name: "MAGUS_PROC_TOKEN", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: the secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus"},
+	{Name: "MAGUS_PROC_TREE", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: the ids of every bounded process tree a process descends from, inherited by every child so a command's leftovers are found; set by magus, never by hand"},
 	{Name: "MAGUS_SHARD", Key: "", Default: "", Doc: "CI matrix shard ID (e.g. \"0\"); equivalent to magus run --shard; set by .github/actions/magus"},
 	{Name: "MAGUS_N_SHARDS", Key: "", Default: "", Doc: "Total shard count for this matrix run; equivalent to magus run --n-shards; set by .github/actions/magus"},
 	{Name: "MAGUS_UPDATE_URL", Key: "", Default: "https://eli.gladman.cc/magus/public/release/index.json", Doc: "Env-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self-hosted copy of index.json to use a private update channel"},

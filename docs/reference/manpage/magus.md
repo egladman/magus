@@ -465,6 +465,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_PROC_TOKEN**
 : Env-only, no magus.yaml equivalent: the secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus
 
+**MAGUS_PROC_TREE**
+: Env-only, no magus.yaml equivalent: the ids of every bounded process tree a process descends from, inherited by every child so a command's leftovers are found; set by magus, never by hand
+
 **MAGUS_SHARD**
 : CI matrix shard ID (e.g. "0"); equivalent to magus run --shard; set by .github/actions/magus
 

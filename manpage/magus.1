@@ -457,6 +457,9 @@ Env\-only, no magus.yaml equivalent: the proc\-server socket a magus process exp
 \fBMAGUS_PROC_TOKEN\fR
 Env\-only, no magus.yaml equivalent: the secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus
 .TP
+\fBMAGUS_PROC_TREE\fR
+Env\-only, no magus.yaml equivalent: the ids of every bounded process tree a process descends from, inherited by every child so a command's leftovers are found; set by magus, never by hand
+.TP
 \fBMAGUS_SHARD\fR
 CI matrix shard ID (e.g. "0"); equivalent to magus run \-\-shard; set by .github/actions/magus
 .TP
