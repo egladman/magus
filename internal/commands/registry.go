@@ -239,7 +239,7 @@ plan renders more than once without being computed again.`,
 		// RecordShardTotal as text and defaults from MAGUS_SHARD), and the man page
 		// documented it as an int for as long as the two lists were written apart.
 		// The drift test compared names only, so a type could disagree indefinitely.
-		{Name: "shard", Kind: cmdline.String, Doc: "With --stdin: run only the saved plan's shard with this id. Without it: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing"},
+		{Name: "shard", Kind: cmdline.String, Doc: "With --stdin: run only the saved plan's shard with this id, or every shard with \"all\"; a plan of several shards refuses without one. Without it: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing"},
 		{Name: "n-shards", Kind: cmdline.Int, Doc: "Without --stdin: the shard count the --shard label belongs to. With it the count is the saved plan's, and a different value is refused"},
 		{Name: "volatility-retry", Kind: cmdline.Bool, Default: true, Doc: "Retry a target that fails with volatile output; --no-volatility-retry disables it for this run"},
 		{Name: "redundancy-check", Kind: cmdline.Bool, Default: true, Doc: "Let the ci gate defer or reduce its tier when a passing run is on record (MGS3010); --no-redundancy-check runs it in full. ci target only"},

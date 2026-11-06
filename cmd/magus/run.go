@@ -156,6 +156,9 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		// Both halves of the shard label now come from the plan, and a run of every
 		// shard is not partial.
 		rf.NShards = 0
+		if rf.Shard == allPlanShards {
+			rf.Shard = ""
+		}
 		if rf.Shard != "" {
 			rf.NShards = saved.Count
 		}
@@ -753,9 +756,13 @@ func savedTargetRef(p planOutput) string {
 	return fmt.Sprintf("%s:%s", p.Target, strings.Join(p.Charms, ","))
 }
 
-// selectPlanShards returns the shards a `run --stdin` invocation runs: the one named by
-// shard, or every shard when shard is empty. target is the invoked target and nShards the
-// caller's --n-shards (0 when unset); each must agree with the plan.
+// allPlanShards is the --shard value that runs every shard of a saved plan.
+const allPlanShards = "all"
+
+// selectPlanShards returns the shards a `run --stdin` invocation runs: the one
+// named by shard, or every shard for allPlanShards. An empty shard selects
+// only a plan of one shard, so no caller runs a whole plan by omission.
+// target and nShards must agree with the plan.
 func selectPlanShards(p planOutput, target, shard string, nShards int) ([]planShard, error) {
 	if target != p.Target {
 		return nil, refusePlan("the plan is for %s, not %s; drop the target, or give %s with charms (%s:<charm>)",
@@ -764,7 +771,18 @@ func selectPlanShards(p planOutput, target, shard string, nShards int) ([]planSh
 	if nShards > 0 && nShards != p.Count {
 		return nil, refusePlan("--n-shards %d, but the plan has %d shard(s); drop --n-shards, the plan supplies it", nShards, p.Count)
 	}
+	if shard == allPlanShards {
+		return p.Matrix, nil
+	}
 	if shard == "" {
+		if len(p.Matrix) > 1 {
+			ids := make([]string, len(p.Matrix))
+			for i, s := range p.Matrix {
+				ids[i] = s.Shard
+			}
+			return nil, refusePlan("the plan has %d shards and no --shard selects one: pass --shard <id> (%s), or --shard %s to run every shard here",
+				len(p.Matrix), strings.Join(ids, ", "), allPlanShards)
+		}
 		return p.Matrix, nil
 	}
 	ids := make([]string, len(p.Matrix))

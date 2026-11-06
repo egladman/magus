@@ -232,8 +232,8 @@ jobs:
           else
             magus affected ci:gha --plan > "$RUNNER_TEMP/plan.json"
           fi
-          magus run --stdin --dry-run -o 'template={{range .outputs}}{{.name}}={{.value}}{{"\n"}}{{end}}' < "$RUNNER_TEMP/plan.json" >> "$GITHUB_OUTPUT"
-          magus run --stdin --dry-run -o 'template={{.summary}}' < "$RUNNER_TEMP/plan.json" >> "$GITHUB_STEP_SUMMARY"
+          magus run --stdin --shard all --dry-run -o 'template={{range .outputs}}{{.name}}={{.value}}{{"\n"}}{{end}}' < "$RUNNER_TEMP/plan.json" >> "$GITHUB_OUTPUT"
+          magus run --stdin --shard all --dry-run -o 'template={{.summary}}' < "$RUNNER_TEMP/plan.json" >> "$GITHUB_STEP_SUMMARY"
 
       # Each shard runs its units from this file. It carries what the matrix already
       # carries to the shards that hold the signing key, so it adds no trust.
@@ -545,11 +545,11 @@ jobs:
           # explicit ask for the whole runner: magus reads no environment variable to
           # guess it is in CI, so every invocation that wants the machine says so itself.
           # The saved plan names this shard's units: the targets each project's ci
-          # asks for under ci:gha, run as one invocation; --shard comes from MAGUS_SHARD.
+          # asks for under ci:gha, run as one invocation; --shard names it on argv, since the sandbox scrubs MAGUS_SHARD.
           # The plan was evaluated under gha and refuses other charms, so docs figures,
           # which ci:gha delegates to the figures job, are never a unit here: site-generate
           # plus diagrams-generate OOMs 16GB together.
-          command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN,TZ -- magus buzz hack/ci/run-with-harnesses.buzz -- --plan ${{ github.workspace }}/.magus/plan.json run ci:gha --no-default-charms --concurrency-profile aggressive --stdin
+          command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN,TZ -- magus buzz hack/ci/run-with-harnesses.buzz -- --plan ${{ github.workspace }}/.magus/plan.json run ci:gha --no-default-charms --concurrency-profile aggressive --stdin --shard ${{ matrix.shard }}
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.plan.outputs.count }}
 
