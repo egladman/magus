@@ -160,7 +160,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			rf.Shard = ""
 		}
 		if rf.Shard != "" {
-			rf.NShards = saved.Count
+			rf.NShards = len(planStage(*saved, rf.Shard))
 		}
 		if globalCfg.DryRun {
 			return emitSavedPlanDryRun(ctx, *saved, rawTarget, shards)
@@ -722,8 +722,9 @@ func decodeSavedPlan(data []byte) (planOutput, error) {
 	if p.Count != len(p.Matrix) {
 		return planOutput{}, refusePlan("the plan on stdin states %d shard(s) but lists %d", p.Count, len(p.Matrix))
 	}
-	seen := make(map[string]bool, len(p.Matrix))
-	for _, s := range p.Matrix {
+	every := slices.Concat(p.Matrix, p.StageZero)
+	seen := make(map[string]bool, len(every))
+	for _, s := range every {
 		switch {
 		case s.Shard == "":
 			return planOutput{}, refusePlan("the plan on stdin has a shard with no id")
@@ -760,33 +761,35 @@ func savedTargetRef(p planOutput) string {
 const allPlanShards = "all"
 
 // selectPlanShards returns the shards a `run --stdin` invocation runs: the one
-// named by shard, or every shard for allPlanShards. An empty shard selects
-// only a plan of one shard, so no caller runs a whole plan by omission.
-// target and nShards must agree with the plan.
+// named by shard, of either stage, or every shard for allPlanShards, stage
+// zero first. An empty shard selects only a plan of one shard, so no caller
+// runs a whole plan by omission. target must agree with the plan, and
+// nShards with the size of the named shard's stage.
 func selectPlanShards(p planOutput, target, shard string, nShards int) ([]planShard, error) {
 	if target != p.Target {
 		return nil, refusePlan("the plan is for %s, not %s; drop the target, or give %s with charms (%s:<charm>)",
 			p.Target, target, p.Target, p.Target)
 	}
-	if nShards > 0 && nShards != p.Count {
-		return nil, refusePlan("--n-shards %d, but the plan has %d shard(s); drop --n-shards, the plan supplies it", nShards, p.Count)
+	if stage := planStage(p, shard); nShards > 0 && nShards != len(stage) {
+		return nil, refusePlan("--n-shards %d, but the plan has %d shard(s); drop --n-shards, the plan supplies it", nShards, len(stage))
 	}
+	every := slices.Concat(p.StageZero, p.Matrix)
 	if shard == allPlanShards {
-		return p.Matrix, nil
+		return every, nil
 	}
 	if shard == "" {
-		if len(p.Matrix) > 1 {
-			ids := make([]string, len(p.Matrix))
-			for i, s := range p.Matrix {
+		if len(every) > 1 {
+			ids := make([]string, len(every))
+			for i, s := range every {
 				ids[i] = s.Shard
 			}
 			return nil, refusePlan("the plan has %d shards and no --shard selects one: pass --shard <id> (%s), or --shard %s to run every shard here",
-				len(p.Matrix), strings.Join(ids, ", "), allPlanShards)
+				len(every), strings.Join(ids, ", "), allPlanShards)
 		}
-		return p.Matrix, nil
+		return every, nil
 	}
-	ids := make([]string, len(p.Matrix))
-	for i, s := range p.Matrix {
+	ids := make([]string, len(every))
+	for i, s := range every {
 		if s.Shard == shard {
 			return []planShard{s}, nil
 		}
@@ -796,6 +799,15 @@ func selectPlanShards(p planOutput, target, shard string, nShards int) ([]planSh
 		return nil, refusePlan("--shard %s: the plan has no shards, so there is nothing to select", shard)
 	}
 	return nil, refusePlan("--shard %s: the plan has no such shard (it has %s)", shard, strings.Join(ids, ", "))
+}
+
+// planStage is the stage holding the shard named id: stage zero when one of
+// its shards has that ID, else the matrix.
+func planStage(p planOutput, id string) []planShard {
+	if slices.ContainsFunc(p.StageZero, func(s planShard) bool { return s.Shard == id }) {
+		return p.StageZero
+	}
+	return p.Matrix
 }
 
 // planProjects is the projects shards run, in plan order, each once.

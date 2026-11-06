@@ -106,6 +106,13 @@ type Machine struct {
 
 // ShardPlan is a provider-neutral CI shard plan produced by Magus.Plan.
 type ShardPlan struct {
+	// StageZero is the stage every shard of Shards waits for. Its shards
+	// compute, once, each prerequisite two or more of Shards would
+	// otherwise both compute. Shards then replay them from the cache stage
+	// zero exports, or compute them again when that cache is missing. Empty
+	// when no shard shares such a prerequisite. Its shards carry no duties.
+	StageZero []Shard
+	// Shards are the last stage, the one every plan has.
 	Shards      []Shard
 	Source      string // VCS source label (e.g. "git diff vs origin/main")
 	MaxParallel int    // recommended concurrency cap; 0 means unlimited
@@ -125,7 +132,8 @@ type ShardPlan struct {
 	Sufficient int
 	// OverBudget names the shards predicted to exceed one runner's memory, by ID. A
 	// runner that runs out of memory disappears and reports "cancelled" with no
-	// diagnostics, so this is the only warning there is.
+	// diagnostics, so this is the only warning there is. It names shards of
+	// both stages.
 	OverBudget []string
 	// Unmeasured are the units and prerequisites with no recorded
 	// duration, sorted. The plan weighed each with the fallback.

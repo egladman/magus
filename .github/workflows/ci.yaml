@@ -116,6 +116,11 @@ jobs:
       # because every path changed since it classifies low-risk. magus decides that
       # and publishes the report; the two `if:` guards below only consume the answer.
       inherit:       ${{ steps.plan.outputs.inherit }}
+      # Stage zero: the shards that compute, once, what two or more shards share,
+      # before any of them starts. A count of 0 is a plan with no shared work, and
+      # the stage-zero job then skips.
+      stage_zero_matrix: ${{ steps.stage-zero.outputs.matrix }}
+      stage_zero_count:  ${{ steps.stage-zero.outputs.count }}
       # The magus every later job runs, and the digest each verifies it against. A job
       # output, never a file in the artifact: the artifact is what is being checked.
       magus_artifact: ${{ steps.magus.outputs.artifact }}
@@ -235,6 +240,18 @@ jobs:
           magus run --stdin --shard all --dry-run -o 'template={{range .outputs}}{{.name}}={{.value}}{{"\n"}}{{end}}' < "$RUNNER_TEMP/plan.json" >> "$GITHUB_OUTPUT"
           magus run --stdin --shard all --dry-run -o 'template={{.summary}}' < "$RUNNER_TEMP/plan.json" >> "$GITHUB_STEP_SUMMARY"
 
+      # Stage zero, read from the same file. It stays out of the plan's outputs so a
+      # plan with no shared work renders byte for byte as before; the plan omits the
+      # stage_zero key exactly when that stage is empty, which `// []` reads as such.
+      - id: stage-zero
+        name: Read stage zero
+        shell: bash
+        run: |
+          {
+            echo "count=$(jq '.stage_zero // [] | length' "$RUNNER_TEMP/plan.json")"
+            echo "matrix=$(jq -c '{include: [(.stage_zero // [])[] | del(.units)]}' "$RUNNER_TEMP/plan.json")"
+          } >> "$GITHUB_OUTPUT"
+
       # Each shard runs its units from this file. It carries what the matrix already
       # carries to the shards that hold the signing key, so it adds no trust.
       - name: Upload the shard plan
@@ -343,10 +360,134 @@ jobs:
           mapfile -t projects < <(grep -vxF libs/embed/train "$RUNNER_TEMP/projects")
           magus run generate --no-default-charms --concurrency-profile aggressive "${projects[@]}"
 
+  # Stage zero computes, once, each prerequisite two or more shards would otherwise
+  # share, so those shards split instead of fanning in to one (ADR 0027). Each shard
+  # here runs its units as a `ci` shard does, then exports the local cache tier it
+  # built as a run-scoped artifact beside the archive's sha256. Every `ci` shard
+  # imports it and replays that work.
+  stage-zero:
+    name: "magus stage zero ${{ matrix.shard }}: ${{ matrix.job_name }}"
+    needs: plan
+    if: fromJSON(needs.plan.outputs.stage_zero_count) > 0 && needs.plan.outputs.inherit != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      # The `ci` job's cap, and the archive below exports that tier whole.
+      MAGUS_CACHE_SIZE_MB: '256'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.stage_zero_matrix) }}
+    # Each step below is the `ci` job's step of the same name; the comments there
+    # say why each is shaped as it is.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+          cache: ${{ github.event_name == 'pull_request' }}
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: artifact
+          artifact: ${{ needs.plan.outputs.magus_artifact }}
+          artifact-sha256: ${{ needs.plan.outputs.magus_sha256 }}
+          artifact-commit: ${{ github.sha }}
+          restore-history: ${{ github.event_name == 'pull_request' }}
+
+      - uses: ./.github/actions/setup-scip
+
+      - name: Export the Actions cache service credentials
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+              const value = process.env[name]
+              if (!value) {
+                core.warning(`${name} is not set; the magus remote cache stays disabled for this job`)
+                continue
+              }
+              if (name.endsWith('_TOKEN')) core.setSecret(value)
+              core.exportVariable(name, value)
+            }
+
+      - uses: ./.github/actions/codec-deps
+
+      - name: Restore the spells' caches
+        uses: ./.github/actions/magus
+        env:
+          TMPDIR: ${{ runner.temp }}
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}:/home/runner/.cache/magus/checkouts
+        with:
+          command: queue gate --sandbox=required --cache .magus --env MAGUS_CACHE_REMOTE_TRUSTED_KEYS,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus config cache import --remote
+
+      - name: Download the shard plan
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: magus-plan-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/.magus
+
+      - name: Free runner disk and report it
+        run: |
+          df -h / "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      # --shard names a stage-zero shard by its ID, as a `ci` shard is named.
+      - name: Run stage zero for shard
+        uses: ./.github/actions/magus
+        env:
+          TMPDIR: ${{ runner.temp }}
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ runner.temp }}:/home/runner/.cache/magus/checkouts
+          MAGUS_CACHE_SIGNING_KEY: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') && secrets.MAGUS_CACHE_SIGNING_KEY || '' }}
+          TZ: Australia/Lord_Howe
+        with:
+          command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN,TZ -- magus buzz hack/ci/run-with-harnesses.buzz -- --plan ${{ github.workspace }}/.magus/plan.json run ci:gha --no-default-charms --concurrency-profile aggressive --stdin --shard ${{ matrix.shard }}
+          shard:    ${{ matrix.shard }}
+          n-shards: ${{ needs.plan.outputs.stage_zero_count }}
+
+      # Outside the box: the gate's --cache .magus is the workspace's default cache
+      # directory, so this exports exactly the tier the gate built. The digest rides
+      # in the artifact because a matrix leg has no job output of its own.
+      - name: Export the cache stage zero built
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/stage-zero"
+          magus config cache export --to "$RUNNER_TEMP/stage-zero/cache.tar.gz"
+          cd "$RUNNER_TEMP/stage-zero"
+          sha256sum cache.tar.gz > cache.tar.gz.sha256
+          cat cache.tar.gz.sha256
+
+      - name: Upload the cache stage zero built
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: magus-stage-zero-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/stage-zero/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload magus run logs on failure
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: magus-logs-${{ matrix.shard }}
+          path: .magus/logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
   ci:
     name: "magus shard ${{ matrix.shard }}: ${{ matrix.job_name }}"
-    needs: plan
-    if: fromJSON(needs.plan.outputs.count) > 0 && needs.plan.outputs.inherit != 'true'
+    needs: [plan, stage-zero]
+    # !cancelled() in place of the implied success(): stage zero skips when no shard
+    # shares work, and a red stage zero leaves each shard able to compute what it
+    # needs, so the run still reports every shard's verdict. The gate fails on it.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && fromJSON(needs.plan.outputs.count) > 0 && needs.plan.outputs.inherit != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -516,6 +657,40 @@ jobs:
           name: magus-plan-${{ github.run_attempt }}
           path: ${{ github.workspace }}/.magus
 
+      # Stage zero's caches replay the prerequisites this shard shares with others.
+      # The cache is an accelerator: a missing archive, a digest that does not match
+      # or a failed import leaves this shard computing that work itself, and the
+      # warning says which.
+      - name: Download the caches stage zero built
+        id: stage-zero-download
+        if: fromJSON(needs.plan.outputs.stage_zero_count) > 0
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: magus-stage-zero-*-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/stage-zero
+
+      - name: Import the caches stage zero built
+        if: fromJSON(needs.plan.outputs.stage_zero_count) > 0
+        shell: bash
+        env:
+          WANT: ${{ needs.plan.outputs.stage_zero_count }}
+          DOWNLOAD: ${{ steps.stage-zero-download.outcome }}
+        run: |
+          shopt -s nullglob
+          dirs=("$RUNNER_TEMP"/stage-zero/*/)
+          if [ "$DOWNLOAD" != success ] || [ "${#dirs[@]}" -ne "$WANT" ]; then
+            echo "::warning title=stage zero::found ${#dirs[@]} of $WANT stage-zero cache archive(s) (download: $DOWNLOAD); this shard computes the rest of the shared prerequisites itself"
+          fi
+          for dir in "${dirs[@]}"; do
+            name=$(basename "$dir")
+            if ! (cd "$dir" && sha256sum --check --strict cache.tar.gz.sha256); then
+              echo "::warning title=stage zero::$name does not match its sha256, so it is not imported; this shard computes its prerequisites itself"
+            elif ! magus config cache import "$dir/cache.tar.gz"; then
+              echo "::warning title=stage zero::importing $name failed; this shard computes its prerequisites itself"
+            fi
+          done
+
       # Run 41956616259 shard 0 hit ENOSPC in scip with 70 MB left, the log held no df, and
       # the runner's 14 GB free is shared by the checkout, the gate's box copy with its own
       # go build cache, test binaries, the OCI layout and .magus/symbols. The android SDK,
@@ -546,9 +721,9 @@ jobs:
           # guess it is in CI, so every invocation that wants the machine says so itself.
           # The saved plan names this shard's units: the targets each project's ci
           # asks for under ci:gha, run as one invocation; --shard names it on argv, since the sandbox scrubs MAGUS_SHARD.
-          # The plan was evaluated under gha and refuses other charms, so docs figures,
-          # which ci:gha delegates to the figures job, are never a unit here: site-generate
-          # plus diagrams-generate OOMs 16GB together.
+          # The plan was evaluated under gha and refuses other charms. Docs figures and
+          # glossary usage are units like any other: the plan packs them apart from
+          # site-generate by measured peak memory, as the two OOM 16GB together.
           command:  queue gate --sandbox=required --cache .magus --env CI_PROVIDER,MAGUS_LOG_STREAM,MAGUS_SHARD,MAGUS_N_SHARDS,MAGUS_HISTORY_PATH,MAGUS_CACHE_SIZE_MB,MAGUS_CACHE_REMOTE_TRUSTED_KEYS,MAGUS_CACHE_REMOTE_WRITE_ENABLED,MAGUS_CACHE_SIGNING_KEY,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN,TZ -- magus buzz hack/ci/run-with-harnesses.buzz -- --plan ${{ github.workspace }}/.magus/plan.json run ci:gha --no-default-charms --concurrency-profile aggressive --stdin --shard ${{ matrix.shard }}
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.plan.outputs.count }}
@@ -797,62 +972,6 @@ jobs:
         with:
           baseline: ${{ steps.baseline.outputs.path }}
 
-  # The figures, laid out from the symbol index a shard never builds. Outside the queue
-  # gate's box on purpose: the index is keyed by the checkout's absolute path, and each gate
-  # invocation checks out into a fresh box, so an index built by one gate is invisible to
-  # the next.
-  #
-  # Every figure draws its edges from this tree's index, so a Go change that moves an import
-  # between two packages a figure draws, or adds a package inside a figure's scope, fails
-  # here, and the target names the fix. Kept off the docs shard so site-generate and
-  # diagrams-generate do not share one 16GB runner. Local ci includes these stages;
-  # ci:gha delegates the figure and glossary usage stages here, and the stable gate
-  # requires this job.
-  figures:
-    name: docs figures
-    needs: [plan]
-    if: needs.plan.outputs.inherit != 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    # The symbol index needs a WRITABLE local cache tier; see the advisor job above.
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          filter: blob:none
-
-      # External SCIP indexers still pinned in mise.toml (TypeScript). Cache on pull
-      # requests only, as the shards restore it; this job holds no secret and no write token.
-      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
-        with:
-          version: '2026.4.8'
-          env: false
-          cache: ${{ github.event_name == 'pull_request' }}
-
-      - uses: ./.github/actions/setup-magus
-        with:
-          installation-strategy: artifact
-          artifact: ${{ needs.plan.outputs.magus_artifact }}
-          artifact-sha256: ${{ needs.plan.outputs.magus_sha256 }}
-          artifact-commit: ${{ github.sha }}
-
-      # A project whose indexer fails is reported and skipped, not fatal. The step below
-      # is what refuses: with no index it fails, and a partial one fails on whatever
-      # figure draws a directory the index lost.
-      - name: Build the symbol index
-        run: magus graph build --no-sessions
-
-      # --no-default-charms drops the workspace's rw, which would rewrite the figures
-      # instead of failing on them.
-      - name: Lay out every figure from the symbol index
-        run: magus run diagrams-generate docs --no-default-charms
-
-      # The glossary's Used in blocks name code types, so they read the same index.
-      - name: Check each glossary term's Used in block against the graph
-        run: magus run glossary-usage-generate docs --no-default-charms
-
   # Reported to the gate instead of failing the plan, which is not leniency: the run still
   # goes red, and it goes red with the shard results in hand. Its own job because only the
   # gate reads it, and in the plan it ran in series with generate (19-89 s).
@@ -910,7 +1029,7 @@ jobs:
   # at run time. Requiring "magus shard 1" blocks a PR whose plan needed only one.
   gate:
     name: ci gate
-    needs: [plan, ci, figures, doctor]
+    needs: [plan, stage-zero, ci, doctor]
     # always(), or a skipped or failed dependency would skip this job too - and a required
     # check that never reports blocks the pull request instead of failing it, which reads
     # as an infrastructure problem rather than a red build.
@@ -952,13 +1071,13 @@ jobs:
           merge-history: 'true'
           ci-result: ${{ needs.ci.result }}
 
-      - name: Require the plan, doctor, every shard and the figures to have passed
+      - name: Require the plan, doctor, stage zero and every shard to have passed
         if: always()
         env:
           PLAN_RESULT: ${{ needs.plan.result }}
           DOCTOR_RESULT: ${{ needs.doctor.result }}
+          STAGE_ZERO_RESULT: ${{ needs.stage-zero.result }}
           CI_RESULT: ${{ needs.ci.result }}
-          FIGURES_RESULT: ${{ needs.figures.result }}
         run: |
           set -euo pipefail
           # Every verdict is reported before exiting, so one red run names everything that
@@ -975,14 +1094,14 @@ jobs:
             echo "::error::doctor did not pass (${DOCTOR_RESULT}); the workspace is misconfigured even where the shards are green"
             failed=1
           fi
+          # skipped is a pass: a plan with no shared work has no stage zero.
+          case "$STAGE_ZERO_RESULT" in
+            success|skipped) echo "stage zero: ${STAGE_ZERO_RESULT}" ;;
+            *) echo "::error::stage zero did not pass (${STAGE_ZERO_RESULT})"; failed=1 ;;
+          esac
           # skipped is a pass: an inherited verdict plans an empty shard matrix on purpose.
           case "$CI_RESULT" in
             success|skipped) echo "shards: ${CI_RESULT}" ;;
             *) echo "::error::shards did not pass (${CI_RESULT})"; failed=1 ;;
-          esac
-          # skipped is a pass for the same reason: an inherited verdict skips the figures too.
-          case "$FIGURES_RESULT" in
-            success|skipped) echo "figures: ${FIGURES_RESULT}" ;;
-            *) echo "::error::docs figures did not pass (${FIGURES_RESULT})"; failed=1 ;;
           esac
           exit "$failed"

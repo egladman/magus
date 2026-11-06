@@ -329,3 +329,46 @@ func BenchmarkSufficientShards(b *testing.B) {
 		})
 	}
 }
+
+// PlanStagesSuite holds SharedPrerequisiteSuite's units, planned in stages.
+type PlanStagesSuite struct {
+	suite.Suite
+	h     History
+	needs func(types.Unit) []types.Unit
+}
+
+func TestPlanStagesSuite(t *testing.T) { suite.Run(t, new(PlanStagesSuite)) }
+
+func (s *PlanStagesSuite) SetupTest() {
+	s.h = measured(1_000, map[string]int64{".:build": 10_000, ".:lint": 200_000, ".:test": 200_000})
+	s.needs = closures(map[string][]string{".:lint": {".:build"}, ".:test": {".:build"}})
+}
+
+func (s *PlanStagesSuite) TestPlanStagesComputesTheSharedBuildOnceAhead() {
+	f := Model{History: s.h, MemoryBudgetBytes: noBudget, Needs: s.needs}
+	got := f.PlanStages(unitList(".:lint", ".:test"), 8)
+	s.Equal([][]string{{".:build"}}, names(got.Zero))
+	s.Equal([][]string{{".:lint"}, {".:test"}}, names(got.One))
+}
+
+func (s *PlanStagesSuite) TestPlanStagesKeepsUnitsTogetherWhenSplittingDoesNotPay() {
+	h := measured(10_000, map[string]int64{".:build": 200_000, ".:lint": 50_000, ".:test": 50_000})
+	f := Model{History: h, MemoryBudgetBytes: noBudget, Needs: s.needs}
+	us := unitList(".:lint", ".:test")
+	got := f.PlanStages(us, 8)
+	s.Empty(got.Zero)
+	s.Equal(f.Plan(us, 8), got.One)
+}
+
+func (s *PlanStagesSuite) TestPlanStagesWithNoSharedPrerequisiteIsPlan() {
+	f := Model{History: s.h, MemoryBudgetBytes: noBudget}
+	us := unitList(".:lint", ".:test")
+	got := f.PlanStages(us, 8)
+	s.Empty(got.Zero)
+	s.Equal(f.Plan(us, 8), got.One)
+}
+
+func (s *PlanStagesSuite) TestReplayingLetsAStageRepeatWhatAnEarlierOneComputed() {
+	f := Model{Needs: s.needs}.Replaying(unitList(".:build"))
+	s.Empty(f.Repeats([][]types.Unit{unitList(".:lint"), unitList(".:test")}))
+}
