@@ -294,9 +294,9 @@ func assembleLinksIn(w *TreeWalk, projects []types.TargetGraphProject, idx docIn
 		var attrs map[string]string
 		switch path.Ext(rel) {
 		case ".go":
-			attrs = map[string]string{AttrLanguage: "go"}
+			attrs = map[string]string{types.AttrLanguage: "go"}
 		case ".buzz":
-			attrs = map[string]string{AttrLanguage: "buzz"}
+			attrs = map[string]string{types.AttrLanguage: "buzz"}
 		}
 		if isDir(root, rel) {
 			id, kind, attrs = dirID(rel), types.KindDir, nil

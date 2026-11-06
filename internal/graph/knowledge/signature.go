@@ -1,6 +1,10 @@
 package knowledge
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/egladman/magus/types"
+)
 
 // SignatureMatches compares declared, a declaration written by hand or copied from an index,
 // with the signature the index holds for symbol node id, and returns that indexed signature.
@@ -21,7 +25,7 @@ func (g *Graph) SignatureMatches(id, declared string) (indexed string, match, ok
 	if indexed == "" {
 		return "", false, false
 	}
-	return indexed, sameSignature(n.Attrs[AttrLanguage], indexed, declared), true
+	return indexed, sameSignature(n.Attrs[types.AttrLanguage], indexed, declared), true
 }
 
 func sameSignature(language, a, b string) bool {

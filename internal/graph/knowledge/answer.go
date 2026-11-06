@@ -94,16 +94,16 @@ func (g *Graph) SymbolLanguage(ref string) string {
 	if !ok {
 		return ""
 	}
-	if n, ok := g.node(id); ok && n.Attrs[AttrLanguage] != "" {
-		return n.Attrs[AttrLanguage]
+	if n, ok := g.node(id); ok && n.Attrs[types.AttrLanguage] != "" {
+		return n.Attrs[types.AttrLanguage]
 	}
 	g.ensureAdj()
 	for _, e := range g.in[id] {
 		if e.Relation != types.RelationDefines {
 			continue
 		}
-		if f, ok := g.node(e.Source); ok && f.Attrs[AttrLanguage] != "" {
-			return f.Attrs[AttrLanguage]
+		if f, ok := g.node(e.Source); ok && f.Attrs[types.AttrLanguage] != "" {
+			return f.Attrs[types.AttrLanguage]
 		}
 	}
 	return ""

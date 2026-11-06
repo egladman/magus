@@ -74,7 +74,7 @@ func importAliases(g *Graph, skip func(file string) bool) []*aliasPackage {
 		switch {
 		case p.ours:
 			p.name = n.Attrs[attrPackageName]
-		case n.Attrs[AttrLanguage] == "go":
+		case n.Attrs[types.AttrLanguage] == "go":
 			p.dir = importPath(id)
 			p.name = externalPackageName(p.dir)
 		}

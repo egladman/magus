@@ -114,7 +114,7 @@ func (x *conformanceIndex) callerFiles(id string) []string {
 
 // symbolShape is the declaration shape the symbol's language reader reports.
 func symbolShape(n types.KnowledgeNode, local []descriptor) declShape {
-	return pickShapeReader(n.Attrs[AttrLanguage]).read(symbolFacts{
+	return pickShapeReader(n.Attrs[types.AttrLanguage]).read(symbolFacts{
 		Kind: n.Attrs[attrSymbolKind], Signature: n.Attrs[AttrSignature], Path: local, Neutral: neutralKind(local),
 	})
 }

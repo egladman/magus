@@ -140,7 +140,7 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		seenFiles[path] = true
 		var attrs map[string]string
 		if language != "" {
-			attrs = map[string]string{AttrLanguage: language}
+			attrs = map[string]string{types.AttrLanguage: language}
 		}
 		if size, ok := sizes[path]; ok {
 			attrs = fileSizeAttrs(attrs, size[0], size[1])
@@ -159,7 +159,7 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		sID := symbolID(sym.Key)
 		attrs := map[string]string{}
 		if sym.Language != "" {
-			attrs[AttrLanguage] = sym.Language
+			attrs[types.AttrLanguage] = sym.Language
 		}
 		if sym.SymbolKind != "" {
 			attrs[attrSymbolKind] = sym.SymbolKind
@@ -289,7 +289,7 @@ type foldedImports struct {
 // A namespace's package is the lowest directory holding a non-test file that defines it,
 // read across every index, since an import's target is often in another project's index.
 // Test files are left out (a test may import what its package cannot), as are
-// self-imports and namespaces no workspace file defines. Each edge carries AttrLanguage
+// self-imports and namespaces no workspace file defines. Each edge carries types.AttrLanguage
 // and, as provenance, the lexically first source it was read from.
 func foldImports(symbols map[string][]types.KnowledgeSymbol) map[string]foldedImports {
 	nsDir := map[string]string{}

@@ -168,7 +168,7 @@ func TestModeKnobs(t *testing.T) {
 		{name: "data the body never branches on", sig: "func gitConfigSources(key string) []string", branches: nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			n := types.KnowledgeNode{Attrs: map[string]string{AttrSignature: tc.sig, AttrLanguage: "go"}}
+			n := types.KnowledgeNode{Attrs: map[string]string{AttrSignature: tc.sig, types.AttrLanguage: "go"}}
 			if len(tc.branches) > 0 {
 				n.Attrs[attrBranchIdents] = tc.branches[0]
 			}

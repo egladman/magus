@@ -23,7 +23,7 @@ func (f *precedentFixture) function(dir, lang, name, sig string) types.Case {
 	id := fmt.Sprintf("%s%s().", ns, name)
 	source := fmt.Sprintf("%s:%d", file, f.line)
 	f.g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindSymbol, Label: name, Source: source,
-		Attrs: map[string]string{attrNamespace: ns, AttrLanguage: lang, attrSymbolKind: "Function", AttrSignature: sig}})
+		Attrs: map[string]string{attrNamespace: ns, types.AttrLanguage: lang, attrSymbolKind: "Function", AttrSignature: sig}})
 	return types.Case{Node: id, Source: source}
 }
 

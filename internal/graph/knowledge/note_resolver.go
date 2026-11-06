@@ -122,7 +122,7 @@ func (r NoteResolver) Signature(_ context.Context, a notes.Anchor) (string, erro
 	sig := n.Attrs[AttrSignature]
 	if sig == "" {
 		indexer := "its"
-		if lang := n.Attrs[AttrLanguage]; lang != "" {
+		if lang := n.Attrs[types.AttrLanguage]; lang != "" {
 			indexer = "the " + lang
 		}
 		return "", fmt.Errorf("symbol %q has no signature, %s indexer rendered none", a.Target, indexer)

@@ -113,7 +113,7 @@ func TestLinksResolvesForgeURLToFileNode(t *testing.T) {
 	n, ok := nodeByID(out, target)
 	require.True(t, ok, "the cited source file gets a node so the edge has an endpoint")
 	assert.Equal(t, types.KindFile, n.Kind)
-	assert.Equal(t, "go", n.Attrs[AttrLanguage])
+	assert.Equal(t, "go", n.Attrs[types.AttrLanguage])
 	// A page citing a source path is describing it, so the relation is documents.
 	assert.True(t, hasEdge(out, docID("docs/guides/x.md"), target, types.RelationDocuments))
 }

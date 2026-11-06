@@ -33,9 +33,9 @@ func TestAssembleSymbols(t *testing.T) {
 		Label:  "Bar",
 		Source: "pkg/foo/foo.go:11",
 		Attrs: map[string]string{
-			AttrLanguage:   "go",
-			attrSymbolKind: "Type",
-			attrMoniker:    "scip-go gomod example.com/foo v1 Bar#",
+			types.AttrLanguage: "go",
+			attrSymbolKind:     "Type",
+			attrMoniker:        "scip-go gomod example.com/foo v1 Bar#",
 		},
 	}, n)
 

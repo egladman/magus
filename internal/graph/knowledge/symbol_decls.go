@@ -31,7 +31,7 @@ func (g *Graph) SymbolDecls(o SymbolDeclOptions) []types.SymbolDecl {
 			continue
 		}
 		d := types.SymbolDecl{
-			Node: id, Source: n.Source, Language: n.Attrs[AttrLanguage],
+			Node: id, Source: n.Source, Language: n.Attrs[types.AttrLanguage],
 			Name: n.Label, Doc: n.Attrs[AttrDoc],
 		}
 		if nd := x.byID[id]; nd != nil {

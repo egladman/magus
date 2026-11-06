@@ -438,11 +438,9 @@ func fileSizeAttrs(attrs map[string]string, lines, size int) map[string]string {
 	return attrs
 }
 
-// AttrLanguage and attrSymbolKind are the attrs a symbol (and, for language, a file) node
-// carries from its index. Named because they are read from four places across two files
-// and a mistyped literal would silently match nothing rather than fail.
+// attrSymbolKind is named because a mistyped literal would silently match
+// nothing rather than fail.
 const (
-	AttrLanguage   = "language"
 	attrSymbolKind = "symbol_kind"
 	// attrMoniker is the symbol's full SCIP moniker, version included, which the node ID
 	// drops.

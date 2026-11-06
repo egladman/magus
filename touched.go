@@ -129,7 +129,7 @@ func asTouchedFunction(id string, def symbolDef, change string) (touchedFunction
 	}
 	end, _ := strconv.Atoi(attrs[attrDefEndLine])
 	return touchedFunction{
-		Symbol: id, Label: def.node.Label, Path: def.path, Language: attrs[knowledge.AttrLanguage],
+		Symbol: id, Label: def.node.Label, Path: def.path, Language: attrs[types.AttrLanguage],
 		Digest: attrs[knowledge.AttrBodyDigest], Change: change,
 		Line: sourceLine(def.node.Source), EndLine: end,
 	}, true
