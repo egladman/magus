@@ -3,7 +3,7 @@ title: "ADR 0021: a change accepts the findings it causes"
 order: 21
 description: A deliberate protobuf rename fails buf-breaking and has no sanctioned way through the gate. This record proposes a per-project ledger of accepted findings, read by the target runner, in which an entry counts only while the change that adds it is not yet in the base. It names one target, one op and each finding it accepts, carries a reason, passes the gate green with the acceptance printed, and needs no cleanup after merge.
 tags: [adr, decision, ci, gates, compatibility, buf, breaking-changes]
-status: accepted (amended 2026-10-30; the last amendment's table holds the State)
+status: accepted (amended 2026-10-30, whose table holds the State; a scan amendment of 2026-11-06 is proposed)
 date: 2026-10-24
 aliases: [decisions/0017-a-change-accepts-the-findings-it-causes]
 ---
@@ -535,18 +535,92 @@ shipped Go stays language-agnostic and repo policy lives in repo Buzz.
   The conflict was not real, since a permitted finding is disposition, and that page's
   "exactly one code path" sentence was false. The page changed.
 
-| what                                                                                        | State                                                         |
-| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `allowFailure` on a captured op                                                             | done                                                          |
-| ledger module, `permitAdded`, two-way check, blank reason and malformed line errors         | done                                                          |
-| `bufBreaking` captures, `gha` dropped, `proto` `ci` uses the ledger                         | done                                                          |
-| `deviation-author` guard rule and its catalog row                                           | done                                                          |
-| a `permitted` result on the journal, `run.target.result` and the event stream; never cached | done                                                          |
-| `ctx.permitted`, which `proto` `ci` calls                                                   | done                                                          |
-| `permitted` in `run.summary`, apart from misses                                             | done                                                          |
-| `permitted` in the `-o json` run document                                                   | not built (that document carries no per-target status at all) |
-| `permitted` on both wire enums                                                              | done                                                          |
-| the console showing `permitted`                                                             | done (dashboard, logs and gantt show permitted)               |
-| `permitted` in session history                                                              | done                                                          |
-| deleting `Tool.Diagnostics` and `DiagnosticFormat`                                          | done                                                          |
-| scan acceptance, CI annotation on a line                                                    | not built (by decision)                                       |
+| what                                                                                        | State                                                  |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `allowFailure` on a captured op                                                             | done                                                   |
+| ledger module, `permitAdded`, two-way check, blank reason and malformed line errors         | done                                                   |
+| `bufBreaking` captures, `gha` dropped, `proto` `ci` uses the ledger                         | done                                                   |
+| `deviation-author` guard rule and its catalog row                                           | done                                                   |
+| a `permitted` result on the journal, `run.target.result` and the event stream; never cached | done                                                   |
+| `ctx.permitted`, which `proto` `ci` calls                                                   | done                                                   |
+| `permitted` in `run.summary`, apart from misses                                             | done                                                   |
+| `permitted` in the `-o json` run document                                                   | done (2026-11-06: each project entry carries `status`) |
+| `permitted` on both wire enums                                                              | done                                                   |
+| the console showing `permitted`                                                             | done (dashboard, logs and gantt show permitted)        |
+| `permitted` in session history                                                              | done                                                   |
+| deleting `Tool.Diagnostics` and `DiagnosticFormat`                                          | done                                                   |
+| scan acceptance, CI annotation on a line                                                    | not built (by decision)                                |
+
+### 2026-11-06: a person's deviation covers a blocking scan finding (proposed)
+
+The 10-30 amendment left scans out. This amendment proposes the design for them, so Eli can
+build it or refuse it. Nothing below is built, and the 10-30 table above stays the State.
+
+The need is the one Context names: a blocking finding a person decides not to take yet, with
+a reason. Today the only ways through are a dependency change or a red gate. No occurrence
+where a person needed to ship past a blocking finding is recorded in this tree, which is
+the difference from the comparison half, settled on one past occurrence.
+
+What it reuses, unchanged:
+
+- **The record.** One `types.Deviation` per line. `code` is the advisory id
+  (`GHSA-...`, `GO-...`), `subject` is one installed copy's `name@version`, the key
+  `classify` already looks up, and `reason` is required.
+- **The ledger.** `<project>/security.deviations.jsonl`, named for the `security` target
+  that calls `advisories\audit` (`console`, `docs`) or `advisories\govulncheck` (`.` and four
+  `libs/` projects). `nameError`, the symlink refusal and the parser apply as they are.
+- **The match.** `deviations\permit`: exact code and subject, no glob.
+- **Who may write it.** The `deviation-author` guard rule already covers every name ending
+  in `.deviations.jsonl` (`internal/guard/deviation.go`).
+- **The result.** The gate calls `ctx.permitted(n)`, so the run reads `permitted`, as
+  `proto` `ci` does. `audit` and `govulncheck` gain the `ctx` they need to call it.
+
+What differs from a comparison gate is the lifetime, and only that:
+
+| rule                                                        | comparison gate (built)         | scan gate (proposed)                                                  |
+| ----------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------- |
+| which lines count                                           | lines the tree adds to the base | every line in the tree, since the finding outlives the merge          |
+| what a line can permit                                      | any finding of its gate         | a blocking finding only                                               |
+| a line matching a deferred or inherited-on-a-change finding | n/a                             | used, permits nothing: the finding is still reported                  |
+| a line matching no reported finding                         | fails as unused                 | fails as unused when this change added it; printed as stale otherwise |
+| expiry                                                      | none (Eli, 10-30)               | none: a line stops mattering when the finding stops being reported    |
+
+Deferral stays the gate's own policy. A finding with no installable patch, or one inside the
+cooling window, is deferred automatically as today, and a line never stands in for that
+policy. Inherited findings keep failing main and not a change, as `isFatal` decides.
+
+| what                                                                              | State    |
+| --------------------------------------------------------------------------------- | -------- |
+| advisory findings reduced to `lint\Finding` (rule = id, subject = `name@version`) | proposed |
+| `security.deviations.jsonl` read whole, matched with `permit`, blocking only      | proposed |
+| unused added lines fail; unused base lines print as stale                         | proposed |
+| `audit` and `govulncheck` take `ctx` and call `ctx.permitted`                     | proposed |
+| `docs/guides/security-scanning.md` and the file header's "no allowlist to rot"    | proposed |
+
+Alternatives:
+
+- **Keep it unbuilt.** It wins if no person ever needs to ship past a blocking finding, and
+  none is recorded. It costs nothing and keeps "no allowlist to rot" true. It reopens on the
+  first such occurrence.
+- **The comparison lifetime (`permitAdded`).** It loses: the line stops counting at merge,
+  so main's next run fails on a finding the change was let through with.
+- **An expiry date on each line.** It loses on Eli's 10-30 ruling. A date also asks a
+  person to remember a finding the gate already reports on every run.
+- **The tools' own ignore lists** (pnpm's `auditConfig`; govulncheck's has not been
+  checked). They lose: two formats, no required reason, and no unused check, so a line rots
+  after the patch lands.
+- **The advisory id alone as the subject.** It loses: a new vulnerable copy of another
+  package under the same advisory would pass unread.
+- **Unused base lines fail everywhere.** That keeps the ledger clean, but a finding withdrawn
+  from the advisory database turns main and every change red with nobody's change to blame.
+  It is the open choice below.
+
+Principles checked: [Manual on purpose](../design/judgment/manual-on-purpose.md) holds, since
+a person writes each line and the gate only prints the line to add.
+[Capability is not a reason](../design/principles/capability-is-not-a-reason.md) is strained:
+no recorded failure needs it yet.
+[No silent defaults](../design/judgment/no-silent-defaults.md) holds through the unused check
+and the load errors the ledger module already raises.
+
+Open for Eli: whether to build it at all, and if so, whether an unused line already in the
+base fails the gate or only prints as stale.
