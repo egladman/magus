@@ -107,7 +107,8 @@ func servesAddr(ln net.Listener, addr string) (net.Listener, error) {
 			return &adoptedListener{Listener: ln, addr: &net.UnixAddr{Name: ep.Addr, Net: "unix"}}, nil
 		}
 	}
-	return nil, fmt.Errorf("broker: socket activation: the supervisor's socket is %s, but runs dial %s, point the unit's ListenStream there", got, ep.Addr)
+	// A unit installed before the socket was named for its protocol lands here.
+	return nil, fmt.Errorf("broker: socket activation: the supervisor's socket is %s, but runs dial %s: install the units `magus broker units` prints for this build", got, ep.Addr)
 }
 
 // adoptedListener is a supervisor's socket reporting the path runs dial, which its

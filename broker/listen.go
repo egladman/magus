@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -21,7 +22,7 @@ import (
 // SocketName is the broker socket's file name in the per-user runtime
 // directory. It names [ProtocolVersion], so a build speaking another
 // protocol runs its own broker rather than meeting this one's refusal.
-const SocketName = "broker-5.sock"
+var SocketName = "broker-" + strconv.Itoa(ProtocolVersion) + ".sock"
 
 // OtherBrokers lists the sockets in dir that a broker of another protocol
 // accepts connections on. Each arbitrates only builds speaking its protocol,
@@ -51,8 +52,8 @@ func OtherBrokersWarning(others []string) string {
 // expected answer when two runs race to start one: the loser exits quietly.
 var ErrRunning = errors.New("broker: a broker is already serving this socket")
 
-// DefaultAddr is where this user's broker listens: broker.sock in the private (0700)
-// runtime directory magus keeps its sockets in.
+// DefaultAddr is where this user's broker listens: SocketName in the
+// private (0700) runtime directory magus keeps its sockets in.
 func DefaultAddr() string {
 	return "unix://" + filepath.Join(sockdir.Dir(), SocketName)
 }
