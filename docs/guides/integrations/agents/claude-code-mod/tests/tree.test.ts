@@ -72,7 +72,7 @@ describe('role tints', () => {
     expect(tintFor('worker', 'dark')).toBe('#032142')
   })
 
-  test('no role or no shade leaves the surface background', async () => {
+  test('no role or no shade leaves the pane background', async () => {
     expect(tintFor(null, 'dark')).toBeUndefined()
     expect(tintFor('worker', null)).toBeUndefined()
   })

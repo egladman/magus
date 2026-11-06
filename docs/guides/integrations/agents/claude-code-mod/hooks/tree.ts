@@ -88,7 +88,7 @@ export function shadeOf(theme: string | null): Shade | null {
   return null
 }
 
-// A row's background; undefined leaves the surface's own.
+// A row's background; undefined leaves the pane's own.
 export function tintFor(role: Role | null, shade: Shade | null): string | undefined {
   if (role === null || shade === null) return undefined
   return TINT[role][shade]
