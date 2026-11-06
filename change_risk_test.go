@@ -299,8 +299,26 @@ func (s *ChangeRiskSuite) TestSpansTouchedMarksADefinitionAChangedLineFallsIn() 
 		"one": {path: "a.go", node: types.KnowledgeNode{Source: "a.go:30"}},
 	}
 
-	s.Equal(map[string]string{"in": types.DiffChangeBody, "one": types.DiffChangeBody},
-		spansTouched(defs, sinceBase{lines: map[string][]int{"a.go": {12, 30}}}, func(string) (string, bool) { return "", false }))
+	got, err := spansTouched(defs, sinceBase{lines: map[string][]int{"a.go": {12, 30}}}, func(string) (string, bool) { return "", false })
+
+	s.Require().NoError(err)
+	s.Equal(map[string]string{"in": types.DiffChangeBody, "one": types.DiffChangeBody}, got)
+}
+
+func (s *ChangeRiskSuite) TestSpansTouchedRefusesAnEndLineThatIsNotANumber() {
+	defs := map[string]symbolDef{
+		"bad": {path: "a.go", node: types.KnowledgeNode{Source: "a.go:10", Attrs: map[string]string{attrDefEndLine: "x"}}},
+	}
+
+	_, err := spansTouched(defs, sinceBase{lines: map[string][]int{"a.go": {12}}}, func(string) (string, bool) { return "", false })
+
+	s.ErrorContains(err, `the end line "x" of a.go:10 is not a number`)
+}
+
+func (s *ChangeRiskSuite) TestAFileNoSpellClaimsIsAGapBeforeCoverageReadsTheSpell() {
+	_, _, reason := s.scorer().coverage(touchedFunction{Path: "lib/a.zig"})
+
+	s.Equal("no spell bound to lib claims .zig files", reason)
 }
 
 func (s *ChangeRiskSuite) TestClaimingSpellMatchesTheExtension() {
@@ -444,6 +462,15 @@ func (s *ChangeRiskWorkspaceSuite) TestNoProfileNamesWhatIsMissing() {
 	_, reason := s.m.readCoverageReport(".", goProfile())
 
 	s.Equal(". holds no coverage profile at .magus/coverage.out: run the target that writes it", reason)
+}
+
+func (s *ChangeRiskWorkspaceSuite) TestAProfileThatCannotBeReadSaysSo() {
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.m.Root(), ".magus", "coverage.out"), 0o755))
+
+	_, reason := s.m.readCoverageReport(".", goProfile())
+
+	s.Contains(reason, "the coverage profile of . could not be read: ")
+	s.NotContains(reason, "holds no coverage profile")
 }
 
 func (s *ChangeRiskWorkspaceSuite) TestAGoProfileOutsideAnyModuleIsRefused() {

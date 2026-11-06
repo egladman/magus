@@ -29,6 +29,19 @@ func (s *ReportSuite) TestGoProfileAggregatesPerFile() {
 	}, ParseGoProfile(profile, testModule))
 }
 
+func (s *ReportSuite) TestGoProfileMergesABlockSeveralTestBinariesWrote() {
+	profile := []byte("mode: set\n" +
+		"github.com/egladman/magus/foo.go:10.2,12.16 3 0\n" +
+		"github.com/egladman/magus/foo.go:10.2,12.16 3 1\n" +
+		"github.com/egladman/magus/foo.go:20.2,20.10 2 0\n" +
+		"github.com/egladman/magus/foo.go:20.2,20.10 2 0\n")
+
+	s.Equal([]File{{Path: "foo.go", Covered: 3, Total: 5, Blocks: []Block{
+		{StartLine: 10, EndLine: 12, Units: 3, Hits: 1},
+		{StartLine: 20, EndLine: 20, Units: 2},
+	}}}, ParseGoProfile(profile, testModule))
+}
+
 func (s *ReportSuite) TestGoProfileDropsForeignAndMalformedLines() {
 	profile := []byte("mode: set\n" +
 		"other.com/pkg/x.go:1.1,2.2 1 1\n" +
