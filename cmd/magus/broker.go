@@ -142,6 +142,9 @@ func brokerServe(ctx context.Context, args []string) error {
 			return fmt.Errorf("magus broker: %w", err)
 		}
 	}
+	if warn := broker.OtherBrokersWarning(broker.OtherBrokers(ctx, proc.SockDir())); warn != "" {
+		slog.WarnContext(ctx, warn, attr.Component("magus"))
+	}
 
 	// Services outlive the runs that asked for them, so a journal records each one's
 	// stop command; a broker that crashed left orphans, and they are swept before
@@ -225,6 +228,9 @@ func brokerStatus(ctx context.Context, args []string) error {
 	}
 	if len(rest) > 0 {
 		return exit.Usagef("magus broker status: takes no arguments (got %q)", rest[0])
+	}
+	if warn := broker.OtherBrokersWarning(broker.OtherBrokers(ctx, proc.SockDir())); warn != "" {
+		slog.WarnContext(ctx, warn, attr.Notice(""))
 	}
 	st, qerr := queryBroker(ctx)
 	opts, err := outputOptionsOrDefault()

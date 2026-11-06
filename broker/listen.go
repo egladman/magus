@@ -18,8 +18,34 @@ import (
 	"github.com/egladman/magus/internal/proc/sockdir"
 )
 
-// SocketName is the broker socket's file name in the per-user runtime directory.
-const SocketName = "broker.sock"
+// SocketName is the broker socket's file name in the per-user runtime
+// directory. It names [ProtocolVersion], so a build speaking another
+// protocol runs its own broker rather than meeting this one's refusal.
+const SocketName = "broker-5.sock"
+
+// OtherBrokers lists the sockets in dir that a broker of another protocol
+// accepts connections on. Each arbitrates only builds speaking its protocol,
+// and no two share a machine budget.
+func OtherBrokers(ctx context.Context, dir string) []string {
+	matches, _ := filepath.Glob(filepath.Join(dir, "broker*.sock"))
+	var live []string
+	for _, m := range matches {
+		if filepath.Base(m) != SocketName && Live(ctx, "unix://"+m) {
+			live = append(live, m)
+		}
+	}
+	return live
+}
+
+// OtherBrokersWarning says that the brokers at others split this machine's
+// budget with this one, "" for none.
+func OtherBrokersWarning(others []string) string {
+	if len(others) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("a broker of another protocol also listens at %s: each arbitrates only its own protocol's builds, so this machine's budget is not shared and can be oversubscribed; stop the older one with that build's `magus broker stop`",
+		strings.Join(others, ", "))
+}
 
 // ErrRunning is Listen finding a live broker already bound to the address. It is the
 // expected answer when two runs race to start one: the loser exits quietly.
