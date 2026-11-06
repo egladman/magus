@@ -189,6 +189,18 @@ func TestVerifyGoalsRejectUndeclaredEvidence(t *testing.T) {
 	assert.Contains(t, strings.Join(status.Violations, "\n"), "undeclared goal \"invented\"")
 }
 
+// A job with goals and no check has no gate for validation.unrun to name, and
+// a run reported as missing still fails the job.
+func TestVerifyGoalsRejectAnUnrunCheckTheJobDoesNotDeclare(t *testing.T) {
+	t.Parallel()
+
+	rep := goalResult()
+	rep.Validation.Unrun = "docker is down"
+	status := VerifyGates(goalRow(), rep, types.JobAttempt{}, goalAttempts(), nil, claimed(rep))
+	assert.False(t, status.Verified)
+	assert.Contains(t, strings.Join(status.Violations, "\n"), "declares no check")
+}
+
 // TestVerifyCIGatePassesOnAGreenGateWithATrivialDelta: a check gate on ci passes on a
 // green ci gate when the change since it tiers trivial, with no output ref of its own and
 // even though that gate ran before the job was declared.

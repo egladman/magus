@@ -451,8 +451,9 @@ func ownBuildVerdict(ctx context.Context, deps Dependencies, cwd, command string
 	if !parsed {
 		return nil
 	}
-	if dir, ok := checkoutBootstrapDir(cmds, cwd); ok {
-		if refused := denyCheckoutBootstrap(ctx, deps, command, dir); refused.refused() {
+	hook := checkoutHook(hookLocation(ctx, deps).workspace)
+	if dir, ok := checkoutBootstrapDir(cmds, cwd, hook); ok {
+		if refused := denyCheckoutBootstrap(ctx, deps, command, hook, dir); refused.refused() {
 			return &ownBuildOutcome{checkoutBuild: refused}
 		}
 		return nil
@@ -485,13 +486,13 @@ func rankOwnBuild(v ShellVerdict, oc *ownBuildOutcome) ShellVerdict {
 	return oc.apply(v)
 }
 
-// checkoutBootstrapDir is the checkout a line's magus call hands
-// job.CheckoutBootstrapScript, by --checkout or --here, resolved against cwd.
+// checkoutBootstrapDir is the checkout a line's magus call hands hook, the
+// workspace's checkout.bootstrap, by --checkout or --here, against cwd.
 // ok is false for a line running no such call.
-func checkoutBootstrapDir(cmds []hint.Invocation, cwd string) (string, bool) {
+func checkoutBootstrapDir(cmds []hint.Invocation, cwd, hook string) (string, bool) {
 	for _, c := range cmds {
 		words := magusSubcommandWords(c.Args)
-		if c.Name != "magus" || len(words) < 2 || words[0] != "buzz" || !strings.HasSuffix(path.Clean("/"+words[1]), "/"+job.CheckoutBootstrapScript) {
+		if c.Name != "magus" || len(words) < 2 || words[0] != "buzz" || !job.RunsCheckoutHook(words[1], hook) {
 			continue
 		}
 		rest := c.Args[slices.Index(c.Args, "--")+1:]
@@ -516,10 +517,29 @@ func checkoutBootstrapDir(cmds []hint.Invocation, cwd string) (string, bool) {
 	return "", false
 }
 
+// checkoutHook is the checkout.bootstrap the workspace at root declares. A
+// magus.yaml that does not load declares none here: the load rules say why.
+func checkoutHook(root string) string {
+	hook, err := job.CheckoutHook(root)
+	if err != nil {
+		return ""
+	}
+	return hook
+}
+
+// movedCheckoutRebuild is the sentence naming how a row that moved its own
+// checkout rebuilds ./magus there.
+func movedCheckoutRebuild(hook string) string {
+	if hook == "" {
+		return "A row that moved the checkout it owns asks the root for a placement: " + job.NoCheckoutHook + "."
+	}
+	return fmt.Sprintf("A row that moved the checkout it owns finishes with `./magus buzz %s -- --here`.", hook)
+}
+
 // denyCheckoutBootstrap refuses a build of ./magus in dir under a lease that does not own
 // dir: the root, the integrator and the job holding that checkout may run it, since a
 // checkout forked at a commit no placed binary matches has no other way to get one.
-func denyCheckoutBootstrap(ctx context.Context, deps Dependencies, command, dir string) denial {
+func denyCheckoutBootstrap(ctx context.Context, deps Dependencies, command, hook, dir string) denial {
 	if deps.lease == "" {
 		return denial{}
 	}
@@ -530,7 +550,7 @@ func denyCheckoutBootstrap(ctx context.Context, deps Dependencies, command, dir 
 		return denial{}
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `magus buzz %s -- --checkout %s` builds ./magus in a checkout lease %s does not own; the root places it.", job.CheckoutBootstrapScript, dir, deps.lease),
+		Say: fmt.Sprintf("magus workspace: `magus buzz %s -- --checkout %s` builds ./magus in a checkout lease %s does not own; the root places it.", hook, dir, deps.lease),
 		Why: workerBuildVerdict + ". Only the root and the holder of the job whose checkout it names run it.\n" + onePerBase,
 	}
 }

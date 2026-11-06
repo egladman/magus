@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -94,6 +95,44 @@ func (s *HTTPRevalidateSuite) TestWithoutTheOptionNothingIsSentOrKept() {
 		s.Equal(200, res.Status)
 	}
 	s.Equal([]string{"", ""}, *seen)
+}
+
+func (s *HTTPRevalidateSuite) TestRevalidateOnPOSTIsRefused() {
+	srv, seen := s.etagServer()
+
+	_, err := HTTPPost(context.Background(), srv.URL+"/p", "x", nil, types.HTTPOptions{Revalidate: true}, types.HTTPRetry{})
+
+	s.Require().Error(err)
+	s.Contains(err.Error(), "post")
+	s.Contains(err.Error(), "revalidate is only supported on GET")
+	s.Empty(*seen)
+}
+
+func (s *HTTPRevalidateSuite) TestA304WithNoStoredEntryIsAnError() {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotModified)
+	}))
+	s.T().Cleanup(srv.Close)
+
+	_, err := HTTPGet(context.Background(), srv.URL+"/n", nil, types.HTTPOptions{Revalidate: true}, types.HTTPRetry{})
+
+	s.Require().Error(err)
+	s.Contains(err.Error(), srv.URL+"/n")
+}
+
+func (s *HTTPRevalidateSuite) TestTheETagCacheEvictsOldestPastItsByteBound() {
+	c := &etagCache{entries: map[string]etagEntry{}}
+	body := strings.Repeat("x", etagMaxBody)
+
+	for i := range 20 {
+		c.put(fmt.Sprintf("k%d", i), etagEntry{etag: "t", body: body})
+	}
+
+	_, oldest := c.get("k0")
+	_, newest := c.get("k19")
+	s.False(oldest)
+	s.True(newest)
+	s.LessOrEqual(c.bytes, etagMaxBytes)
 }
 
 // TestParseHTTPOpts checks the curl-style options record is read, including the

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { candidateJobs, connectError, parseActivity, parseJobs, parseRuns, socketFromStatus } from '../hooks/api'
+import { candidateJobs, connectError, parseActivity, parseJobs, parseRuns, roleOf, socketFromStatus } from '../hooks/api'
 
 describe('socketFromStatus', () => {
   test('a running server answers its socket without the scheme', async () => {
@@ -114,4 +114,18 @@ test('candidateJobs names the bare job, then the one under the parent, as the gu
   expect(candidateJobs('api/fix store')).toEqual(['store', 'api/store'])
   expect(candidateJobs('css-reorg/sub/feat tokens')).toEqual(['tokens', 'css-reorg/sub/tokens'])
   expect(candidateJobs('Map magus data feeds')).toEqual([])
+})
+
+describe('roleOf', () => {
+  test('reads the role a spawn description names after its last slash', async () => {
+    expect(roleOf('root/orchestrator plan')).toBe('orchestrator')
+    expect(roleOf('root/sub/integrator land')).toBe('integrator')
+    expect(roleOf('api/worker store')).toBe('worker')
+  })
+
+  test('a role outside the three, or a description of another shape, names none', async () => {
+    expect(roleOf('api/fix store')).toBeNull()
+    expect(roleOf('root/worker')).toBeNull()
+    expect(roleOf('Map magus data feeds')).toBeNull()
+  })
 })

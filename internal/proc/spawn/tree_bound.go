@@ -4,6 +4,7 @@ package spawn
 
 import (
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/egladman/magus/internal/log/attr"
 )
 
 // maxTreeProcs bounds the live processes one command's tree may hold at once.
@@ -64,15 +67,15 @@ type treeBounds struct {
 	warned  sync.Once
 }
 
-var processBounds = &treeBounds{trees: map[*boundedTree]struct{}{}, read: readProcTable}
+var processBounds = &treeBounds{trees: map[*boundedTree]struct{}{}, read: func() (procTable, error) { return readProcTable() }}
 
 // follow starts bounding the tree rooted at pid. It returns nil, and says so
 // once, where the host cannot list its processes.
-func (b *treeBounds) follow(pid int, command string) *boundedTree {
+func (b *treeBounds) follow(ctx context.Context, pid int, command string) *boundedTree {
 	tbl, err := b.read()
 	if err != nil {
 		b.warned.Do(func() {
-			slog.Warn(fmt.Sprintf("this host cannot list processes (%s), so no command's process tree is bounded or reaped past its group", err))
+			slog.WarnContext(ctx, "this host cannot list processes, so no command's process tree is bounded or reaped past its group", attr.Error(err))
 		})
 		return nil
 	}
@@ -154,7 +157,7 @@ func (b *treeBounds) stop(t *boundedTree) error {
 	if over == 0 {
 		return nil
 	}
-	return fmt.Errorf("%w: %s held %d processes at once, most of them %s, so magus killed every one; a command may hold %d",
+	return fmt.Errorf("%w: %s held %d processes at once, most of them %s, so magus killed every one, since a command may hold %d",
 		ErrTooManyProcesses, t.command, over, top, maxTreeProcs)
 }
 

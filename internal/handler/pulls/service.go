@@ -13,6 +13,7 @@ import (
 type Service struct {
 	poller *Poller
 	store  Store
+	run    runner
 }
 
 var _ pullsv1alpha1connect.PullsServiceHandler = (*Service)(nil)
@@ -20,7 +21,7 @@ var _ pullsv1alpha1connect.PullsServiceHandler = (*Service)(nil)
 // NewService returns the handler. GetPulls reads the poller's last board
 // and never calls the forge.
 func NewService(poller *Poller, store Store) *Service {
-	return &Service{poller: poller, store: store}
+	return &Service{poller: poller, store: store, run: execRunner}
 }
 
 // GetPulls returns the last board the poller built.
