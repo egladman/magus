@@ -172,8 +172,6 @@ flag agent/no-global
 flag agent/no-tar
 flag agent/skill-form
 flag agent/tar
-flag broker/idle-exit
-flag broker/log
 flag buzz/C
 flag buzz/autoload
 flag buzz/check
@@ -335,16 +333,6 @@ flag shell/result-digest
 flag shell/session
 flag shell/transcript
 flag shell/transport
-flag status/W
-flag status/c
-flag status/compact
-flag status/no-compact
-flag status/no-symbols
-flag status/probe
-flag status/socket
-flag status/symbols
-flag status/watch
-flag status/workspace
 flag version/client
 flag version/no-client
 flag watch/backend
@@ -379,7 +367,6 @@ operand run/ls
 operand run/test
 subcommand affected
 subcommand agent
-subcommand broker
 subcommand buzz
 subcommand clean
 subcommand config
@@ -403,7 +390,6 @@ subcommand server
 subcommand session
 subcommand shell
 subcommand spell
-subcommand status
 subcommand vcs
 subcommand version
 subcommand watch

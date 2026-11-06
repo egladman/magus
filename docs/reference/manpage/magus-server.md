@@ -77,9 +77,6 @@ Signals:
 **--[no-]symbols** (default: off)
 : Include the expensive symbol-index freshness scan
 
-**--[no-]wait** (default: off)
-: Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then, then reserves the seat for it until its first claim
-
 **--watch** *value*
 : Poll and reprint at this interval (minimum 15s; 0 means one-shot). Bare numbers are seconds.
 

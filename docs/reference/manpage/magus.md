@@ -103,23 +103,17 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **queue**
 : Merge approved changes through a speculative, partitioned merge queue. See [**magus-queue**(1)](magus-queue.md).
 
+**server**
+: The background processes: the server (MCP, the console, APIs, jobs) and the broker. See [**magus-server**(1)](magus-server.md).
+
+**mcp**
+: Serve MCP over stdio for the agent host that launched it. See [**magus-mcp**(1)](magus-mcp.md).
+
 **watch**
 : Emit changed file paths to stdout. See [**magus-watch**(1)](magus-watch.md).
 
 **events**
 : Stream workspace events as JSONL for an integration to consume. See [**magus-events**(1)](magus-events.md).
-
-**server**
-: Manage the magus server: MCP, the console, APIs and background jobs. See [**magus-server**(1)](magus-server.md).
-
-**broker**
-: The per-user process holding this host's capacity and shared services. See [**magus-broker**(1)](magus-broker.md).
-
-**mcp**
-: Serve MCP over stdio for the agent host that launched it. See [**magus-mcp**(1)](magus-mcp.md).
-
-**status**
-: Inspect concurrency pool and configuration. See [**magus-status**(1)](magus-status.md).
 
 **buzz**
 : Run a Buzz script. See [**magus-buzz**(1)](magus-buzz.md).
@@ -558,5 +552,5 @@ dot-prefixed names are accepted; having both in the same directory is an error.
 
 ## See Also
 
-[**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-server**(1)](magus-server.md), [**magus-broker**(1)](magus-broker.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-status**(1)](magus-status.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-where**(1)](magus-where.md), [**magus-run**(1)](magus-run.md), [**magus-affected**(1)](magus-affected.md), [**magus-x**(1)](magus-x.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-query**(1)](magus-query.md), [**magus-refs**(1)](magus-refs.md), [**magus-explain**(1)](magus-explain.md), [**magus-graph**(1)](magus-graph.md), [**magus-diff**(1)](magus-diff.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-session**(1)](magus-session.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-queue**(1)](magus-queue.md), [**magus-server**(1)](magus-server.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-spell**(1)](magus-spell.md), [**magus-agent**(1)](magus-agent.md), [**magus-init**(1)](magus-init.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 
