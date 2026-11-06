@@ -535,18 +535,18 @@ shipped Go stays language-agnostic and repo policy lives in repo Buzz.
   The conflict was not real, since a permitted finding is disposition, and that page's
   "exactly one code path" sentence was false. The page changed.
 
-| what                                                                                        | State                                                         |
-| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `allowFailure` on a captured op                                                             | done                                                          |
-| ledger module, `permitAdded`, two-way check, blank reason and malformed line errors         | done                                                          |
-| `bufBreaking` captures, `gha` dropped, `proto` `ci` uses the ledger                         | done                                                          |
-| `deviation-author` guard rule and its catalog row                                           | done                                                          |
-| a `permitted` result on the journal, `run.target.result` and the event stream; never cached | done                                                          |
-| `ctx.permitted`, which `proto` `ci` calls                                                   | done                                                          |
-| `permitted` in `run.summary`, apart from misses                                             | done                                                          |
-| `permitted` in the `-o json` run document                                                   | not built (that document carries no per-target status at all) |
-| `permitted` on both wire enums                                                              | done                                                          |
-| the console showing `permitted`                                                             | done (dashboard, logs and gantt show permitted)               |
-| `permitted` in session history                                                              | done                                                          |
-| deleting `Tool.Diagnostics` and `DiagnosticFormat`                                          | done                                                          |
-| scan acceptance, CI annotation on a line                                                    | not built (by decision)                                       |
+| what                                                                                        | State                                                  |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `allowFailure` on a captured op                                                             | done                                                   |
+| ledger module, `permitAdded`, two-way check, blank reason and malformed line errors         | done                                                   |
+| `bufBreaking` captures, `gha` dropped, `proto` `ci` uses the ledger                         | done                                                   |
+| `deviation-author` guard rule and its catalog row                                           | done                                                   |
+| a `permitted` result on the journal, `run.target.result` and the event stream; never cached | done                                                   |
+| `ctx.permitted`, which `proto` `ci` calls                                                   | done                                                   |
+| `permitted` in `run.summary`, apart from misses                                             | done                                                   |
+| `permitted` in the `-o json` run document                                                   | done (2026-11-06: each project entry carries `status`) |
+| `permitted` on both wire enums                                                              | done                                                   |
+| the console showing `permitted`                                                             | done (dashboard, logs and gantt show permitted)        |
+| `permitted` in session history                                                              | done                                                   |
+| deleting `Tool.Diagnostics` and `DiagnosticFormat`                                          | done                                                   |
+| scan acceptance, CI annotation on a line                                                    | not built (by decision)                                |
