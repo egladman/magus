@@ -52,8 +52,9 @@ var procedureNeeds = map[protoreflect.FullName]map[protoreflect.Name]types.Need{
 		"GetNote":   needConsoleRead,
 	},
 	"magus.pulls.v1alpha1.PullsService": {
-		"GetPulls":   needConsoleRead,
-		"SetAuthors": needConsoleWrite,
+		"GetPulls":     needConsoleRead,
+		"SetAuthors":   needConsoleWrite,
+		"CheckoutPull": needConsoleWrite,
 	},
 	"magus.status.v1alpha1.StatusService": {
 		"GetStatus":    needConsoleRead,
