@@ -1,0 +1,298 @@
+// Cost: one `magus refs --text` per word, one `magus describe file`.
+// Renames the gate words decided on 2026-11-04 to verification. Run it
+// again on a newer main to rename the sites that main added.
+//
+//	magus buzz hack/dev/rename-gate-to-verification.buzz -- [--apply]
+//
+// The words are strings too (JSON keys, flags, rule names), which a
+// symbol rename cannot reach. Generators carry the rename into outputs.
+namespace renamegatetoverification;
+
+import "flags";
+import "fs";
+import "magus";
+import "result";
+import "std";
+import "vcs";
+
+import "assert";
+
+final SUMMARY = "rename the decided gate words to verification across the tree";
+final SERVES = ["rule:sed-in-place", "rule:interpreter-rewrite"];
+
+final USAGE = "usage: magus buzz hack/dev/rename-gate-to-verification.buzz -- [--apply]";
+final HELP = "cost: one refs --text per word, one describe file\n{USAGE}";
+
+export object Word {
+    was: str,
+    becomes: str,
+}
+
+// WORDS is the reviewed list. Every other gate is still unnamed.
+final WORDS = [
+    Word{ was = "gate_evidence", becomes = "verification_evidence" },
+    Word{ was = "GateEvidence", becomes = "VerificationEvidence" },
+    Word{ was = "gateEvidence", becomes = "verificationEvidence" },
+    Word{ was = "gate-ready", becomes = "verify-ready" },
+    Word{ was = "gateReady", becomes = "verifyReady" },
+    Word{ was = "push-ungated", becomes = "push-unverified" },
+    Word{ was = "PushUngated", becomes = "PushUnverified" },
+    Word{ was = "pushUngated", becomes = "pushUnverified" },
+    Word{ was = "gate-repeat", becomes = "verify-repeat" },
+    Word{ was = "GateRepeat", becomes = "VerifyRepeat" },
+    Word{ was = "gateRepeat", becomes = "verifyRepeat" },
+    Word{ was = "RepeatGate", becomes = "RepeatVerify" },
+    Word{ was = "GateStatus", becomes = "VerificationStatus" },
+    Word{ was = "gateStatus", becomes = "verificationStatus" },
+];
+
+// RETIRED is each generated page the rename moves.
+final RETIRED = ["reference/rules/gate-repeat/", "reference/rules/push-ungated/"];
+
+final SELF = "hack/dev/rename-gate-to-verification.buzz";
+
+// KEPT must keep the old words. It holds real commit subjects, frozen schema
+// field sets (a rename reserves them) and the retired URLs.
+final KEPT = ["libs/proofread/testdata/commit-history.txtar", "types/testdata/schema/", "docs/retired.urls.lock"];
+
+export fun kept(path: str) > bool {
+    return KEPT.filter(fun (i: int, k: str) > bool => path == k or (k.endsWith("/") and path.startsWith(k))).len() > 0;
+}
+final RETIRED_LOCK = "docs/retired.urls.lock";
+
+// rewrite applies every word to text in order.
+export fun rewrite(text: str) > str {
+    var renamed = text;
+    foreach (w in WORDS) {
+        renamed = renamed.replace(w.was, with: w.becomes);
+    }
+    return renamed;
+}
+
+final WIDTH = 80;
+
+// width counts a tab as 4 columns, as the comment guard does.
+fun width(line: str) > int {
+    return line.replace("\t", with: "    ").len();
+}
+
+// wrapped splits a // comment line past WIDTH at spaces. A longer name
+// must not push a comment over the house width the guard enforces.
+export fun wrapped(line: str) > [str] {
+    final at = line.indexOf("//");
+    if (at == null or width(line) <= WIDTH or line.sub(0, len: at!).trim() != "") {
+        return [line];
+    }
+    final lead = line.sub(0, len: at! + 2) + " ";
+    final words = line.sub(at! + 2, len: line.len() - at! - 2).trim().split(" ");
+    final lines = mut [<str>];
+    var current = lead;
+    foreach (w in words) {
+        final next = if (current == lead) current + w else current + " " + w;
+        if (width(next) > WIDTH and current != lead) {
+            lines.append(current);
+            current = lead + w;
+        } else {
+            current = next;
+        }
+    }
+    lines.append(current);
+    return lines;
+}
+
+// renamed rewrites text and rewraps each comment line the rename touched.
+export fun renamed(text: str) > str {
+    final before = text.split("\n");
+    final after = rewrite(text).split("\n");
+    final lines = mut [<str>];
+    foreach (i, line in after) {
+        if (i < before.len() and line != before[i]) {
+            foreach (part in wrapped(line)) {
+                lines.append(part);
+            }
+        } else {
+            lines.append(line);
+        }
+    }
+    return lines.join("\n");
+}
+
+// firstFinding is the first line of a guard refusal that names a file line.
+export fun firstFinding(message: str) > str {
+    foreach (line in message.split("\n")) {
+        if (line.indexOf("over the limit") != null) {
+            return line.trim();
+        }
+    }
+    return message.split("\n")[0];
+}
+
+// pathOf is the workspace path of one `refs --text -o name` line, or "".
+export fun pathOf(line: str, root: str) > str {
+    var rest = line;
+    if (rest.startsWith(root + "/")) {
+        rest = rest.sub(root.len() + 1, len: rest.len() - root.len() - 1);
+    }
+    final colon = rest.indexOf(":");
+    if (colon == null or colon! == 0) {
+        return "";
+    }
+    return rest.sub(0, len: colon!);
+}
+
+// retiredBlock is what the retired URL lock lacks, under one comment.
+export fun retiredBlock(lock: str) > [str] {
+    final have = lock.split("\n");
+    final missing = RETIRED.filter(fun (i: int, url: str) > bool => have.indexOf(url) == null);
+    if (missing.len() == 0) {
+        return [<str>];
+    }
+    final lines = mut [
+        "# gate-repeat and push-ungated became verify-repeat and push-unverified when gate",
+        "# was renamed to verification. A rule page is generated per rule, so the old pages retire.",
+    ];
+    foreach (url in missing) {
+        lines.append(url);
+    }
+    return lines;
+}
+
+fun sites(root: str) > result\Result::<[str]> {
+    final seen = mut {<str: bool>};
+    foreach (w in WORDS) {
+        var listing = "";
+        try {
+            // refs --text exits 1 on no match, as grep does.
+            listing = magus\cmd("refs", args: ["--text", w.was, "-o", "name"],
+                opts: magus\CommandOptions{ quiet = true, allowFailure = true }).stdout;
+        } catch (err: any) {
+            return result\caught::<[str]>(err, doing: "rename-gate-to-verification: find {w.was}");
+        }
+        foreach (line in listing.split("\n")) {
+            final p = pathOf(line, root: root);
+            if (p != "" and p != SELF and !kept(p)) {
+                seen[p] = true;
+            }
+        }
+    }
+    final found = seen.keys();
+    var ignored = [<str>];
+    try {
+        // A host's skill install is ignored and rewritten by its installer.
+        ignored = vcs\ignoredFiles(found, dir: root);
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "rename-gate-to-verification: drop ignored paths");
+    }
+    final paths = found.filter(fun (i: int, p: str) > bool => ignored.indexOf(p) == null).cloneMutable();
+    paths.sort(fun (a: str, b: str) > bool => a < b);
+    return result\ok::<[str]>(paths);
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--apply", "--help"], valued: [<str>]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "rename-gate-to-verification: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final apply = parsed.values["--apply"] != null;
+    final root = vcs\root();
+    final found = sites(root);
+    if (found.error != null) {
+        throw found.error!.message;
+    }
+    final paths = found.value!;
+    if (paths.len() == 0) {
+        std\print("nothing to rename");
+        return;
+    }
+    var changed = 0;
+    var generated = 0;
+    final refused = mut [<str>];
+    foreach (f in magus\describe.file(paths).files) {
+        if (f.role == "output") {
+            generated = generated + 1;
+            continue;
+        }
+        final abs = "{root}/{f.path}";
+        final before = fs\readFile(abs);
+        final after = renamed(before);
+        if (after == before) {
+            continue;
+        }
+        changed = changed + 1;
+        if (apply) {
+            // A longer name can push a comment past the house width, and the
+            // guard refuses that write; the file is named for a hand rewrap.
+            try {
+                fs\writeFile(abs, content: after);
+            } catch (err: any) {
+                refused.append("{f.path}: {firstFinding("{err}")}");
+            }
+        } else {
+            std\print("  {f.path}");
+        }
+    }
+    final lockPath = "{root}/{RETIRED_LOCK}";
+    final block = retiredBlock(fs\readFile(lockPath));
+    if (apply and block.len() > 0) {
+        fs\appendFile(lockPath, content: block.join("\n") + "\n");
+    }
+    final verb = if (apply) "renamed" else "dry run, would rename";
+    std\print("{verb}: {changed} files; {generated} generated left to their generators; {block.len()} retired URL lines");
+    if (!apply) {
+        std\print("pass --apply to write");
+    }
+    foreach (p in refused) {
+        std\print("  refused, rename by hand: {p}");
+    }
+    if (refused.len() > 0) {
+        throw "rename-gate-to-verification: {refused.len()} files refused";
+    }
+}
+
+test "every decided word becomes its verification name" {
+    assert\equal(rewrite("gate_evidence --gate-ready push-ungated gate-repeat GateStatus"),
+        want: "verification_evidence --verify-ready push-unverified verify-repeat VerificationStatus", message: "public names");
+}
+
+test "an identifier built on a word is renamed with it" {
+    assert\equal(rewrite("JobGateEvidenceSchema denyRepeatGate advisoryGateRepeat JobGateStatus"),
+        want: "JobVerificationEvidenceSchema denyRepeatVerify advisoryVerifyRepeat JobVerificationStatus", message: "compounds");
+}
+
+test "a gate word nobody decided stays" {
+    assert\equal(rewrite("machine_gate precision_gate CompletionGate ci gate"),
+        want: "machine_gate precision_gate CompletionGate ci gate", message: "undecided");
+}
+
+test "a second run changes nothing" {
+    final once = rewrite("gate_evidence GateStatus push-ungated");
+    assert\equal(rewrite(once), want: once, message: "idempotent");
+}
+
+test "a renamed comment past the width is rewrapped, code is not" {
+    final c = "\t// gateReady makes the checkout ready to verify, and returns one line per thing it did here";
+    assert\equal(renamed(c), want: "\t// verifyReady makes the checkout ready to verify, and returns one line per\n\t// thing it did here", message: "comment");
+    final code = "\tx := gateReady(h, dir, restart, someVeryLongArgumentName, anotherVeryLongArgumentNameHere)";
+    assert\equal(renamed(code), want: rewrite(code), message: "code untouched");
+    assert\equal(renamed("// short gateReady"), want: "// short verifyReady", message: "short");
+}
+
+test "history and frozen schemas keep the old words" {
+    std\assert(kept("types/testdata/schema/job-result.v2.json"), message: "frozen schema");
+    std\assert(kept("libs/proofread/testdata/commit-history.txtar"), message: "history");
+    std\assert(!kept("types/job.go"), message: "source");
+}
+
+test "a refs line gives its workspace path" {
+    assert\equal(pathOf("/r/internal/job/a.go:12:x := 1", root: "/r"), want: "internal/job/a.go", message: "absolute");
+    assert\equal(pathOf("", root: "/r"), want: "", message: "blank");
+}
+
+test "the retired lock gets each moved page once" {
+    assert\equal(retiredBlock("a/\n").len(), want: 4, message: "comment and two urls");
+    assert\equal(retiredBlock("reference/rules/gate-repeat/\nreference/rules/push-ungated/\n").len(), want: 0, message: "already there");
+}
