@@ -829,6 +829,37 @@ func TestImport_NonExportedObjectType_Errors(t *testing.T) {
 	assert.Containsf(t, err.Error(), "undefined type", "error = %q, want it to mention \"undefined type\"", err.Error())
 }
 
+// A host type bound first under the bare name `Run` must not capture
+// `models\Run{...}`: building against its def nulled every field set.
+func TestImport_QualifiedObjectLiteral_HostTypeOfSameName(t *testing.T) {
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	sess.SetIncludeDirs([]string{"testdata"})
+	sess.SetModuleDecls("host", `export object Run { inv: str = "" }`)
+
+	src := `
+import "host";
+import "module_qualified_object_literal" as models;
+final r = models\Run{ id = "1", sha = "abc" };
+export final got = "{r.id} {r.sha}";
+`
+	require.NoError(t, sess.Exec(ctx, src))
+	assert.Equal(t, "1 abc", sess.Exports()["got"].String())
+}
+
+func TestCheck_ObjectLiteralUnknownFieldHasCode(t *testing.T) {
+	src, err := os.ReadFile("testdata/err_object_literal_unknown_field.buzz")
+	require.NoError(t, err)
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	t.Cleanup(func() { _ = sess.Close() })
+	_, err = sess.Compile(string(src))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `object Run has no field "id"`)
+	assert.Contains(t, err.Error(), string(ArgumentError))
+}
+
 func TestNamedArguments(t *testing.T) {
 	checkOK(t, `
 fun f(a: int, b: int) > int { return a - b; }

@@ -641,19 +641,17 @@ func QualifiedTypeKey(ns, name string) string {
 }
 
 // qualifiedType resolves `ns\name` to ns's own declaration and the Env key that builds
-// it. A module whose objects the Env does not bind per namespace falls back to the bare
-// name, the one key every flat import binds.
+// it. A type ns declares always takes the qualified key, so an unbound one
+// fails checkConstructible. The bare name may hold another module's type.
+// Only a namespace that declares no such type falls back to the bare name.
 func (c *compiler) qualifiedType(ns, name string) (*ast.ObjectDecl, bool, string) {
 	root := c
 	for root.parent != nil {
 		root = root.parent
 	}
-	key := QualifiedTypeKey(ns, name)
-	if root.typeBound != nil && root.typeBound(key) {
-		for _, n := range root.moduleTypes[ns] {
-			if od, ok := n.(*ast.ObjectDecl); ok && od.Name == name {
-				return od, true, key
-			}
+	for _, n := range root.moduleTypes[ns] {
+		if od, ok := n.(*ast.ObjectDecl); ok && od.Name == name {
+			return od, true, QualifiedTypeKey(ns, name)
 		}
 	}
 	decl, ok := c.importedType(name)

@@ -1,0 +1,7 @@
+// @expect: abc
+export object Run {
+    id: str = "",
+    sha: str,
+}
+
+final __r = Run{ sha = "abc" }.sha;

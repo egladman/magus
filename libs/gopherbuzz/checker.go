@@ -2681,7 +2681,7 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 			// no field, and reporting it would just be the tuple-vs-object mismatch
 			// twice.
 			if isField && !v.Tuple {
-				c.errorf(ast.NodePos(k), "object %s has no field %q", ot.Name, name.Val)
+				c.errorfc(ast.NodePos(k), ArgumentError, "object %s has no field %q", ot.Name, name.Val)
 			}
 			c.infer(v.Values[i])
 		}
@@ -2785,7 +2785,7 @@ func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
 	for i, key := range v.Keys {
 		ft, exists := ot.Fields[key]
 		if !exists {
-			c.errorf(v.Pos, "object %s has no field %q", v.TypeName, key)
+			c.errorfc(v.Pos, ArgumentError, "object %s has no field %q", v.TypeName, key)
 		}
 		if i >= len(v.Values) {
 			continue
