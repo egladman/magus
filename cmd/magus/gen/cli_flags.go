@@ -721,6 +721,12 @@ const (
 	FlagStatusWatch = "watch"
 	// status: --workspace
 	FlagStatusWorkspace = "workspace"
+	// vcs checkout: --bootstrap
+	FlagVCSCheckoutBootstrap = "bootstrap"
+	// vcs checkout: --fetch
+	FlagVCSCheckoutFetch = "fetch"
+	// vcs checkout: --remove
+	FlagVCSCheckoutRemove = "remove"
 	// vcs checkpoint: --preserve
 	FlagVCSCheckpointPreserve = "preserve"
 	// vcs ls-files: --exclude
@@ -1449,6 +1455,23 @@ func BindVCSCheckpoint(fs *flag.FlagSet) *VCSCheckpointFlags {
 	var f VCSCheckpointFlags
 	fs.BoolVar(&f.Preserve, FlagVCSCheckpointPreserve, false, "Also capture the uncommitted work and print a handle that restores it")
 	cmdline.NegatedBoolVar(fs, &f.Preserve, FlagVCSCheckpointPreserve)
+	return &f
+}
+
+// VCSCheckoutFlags are the flags declared for `magus vcs checkout`.
+type VCSCheckoutFlags struct {
+	Fetch     string // --fetch
+	Bootstrap bool   // --[no-]bootstrap
+	Remove    string // --remove
+}
+
+// BindVCSCheckout registers `magus vcs checkout`'s flags on fs and returns the destination.
+func BindVCSCheckout(fs *flag.FlagSet) *VCSCheckoutFlags {
+	var f VCSCheckoutFlags
+	fs.StringVar(&f.Fetch, FlagVCSCheckoutFetch, "", "Fetch this `ref` from the default remote first, such as refs/pull/<n>/head")
+	fs.BoolVar(&f.Bootstrap, FlagVCSCheckoutBootstrap, true, "Run the install targets, the harness install and the checkout.bootstrap hook; --no-bootstrap skips all three")
+	cmdline.NegatedBoolVar(fs, &f.Bootstrap, FlagVCSCheckoutBootstrap)
+	fs.StringVar(&f.Remove, FlagVCSCheckoutRemove, "", "Remove the checkout at this `dir`, one this command made, instead")
 	return &f
 }
 
