@@ -1244,6 +1244,10 @@ export object ChangeRiskFunction {
     baseCovered: int = 0,
     baseCoverable: int = 0,
     baseReason: str = "",
+
+    fun charged(threshold: int) > bool {
+        return magus__ChangeRiskFunction__charged(this, threshold: threshold);
+    }
 }
 
 export object FunctionGap {
@@ -1254,6 +1258,10 @@ export object FunctionGap {
     line: int = 0,
     complexity: int = 0,
     reason: str = "",
+
+    fun decided(threshold: int) > bool {
+        return magus__FunctionGap__decided(this, threshold: threshold);
+    }
 }
 
 export object Finding {
@@ -2857,6 +2865,8 @@ extern fun magus__Change__affected(recv: Change) > Affected !> any;
 extern fun magus__Change__conformance(recv: Change, checks: [str] = [<str>]) > ConformanceReport !> any;
 extern fun magus__Change__mergeBase(recv: Change) > str !> any;
 extern fun magus__Change__risk(recv: Change) > ChangeRisk !> any;
+extern fun magus__ChangeRiskFunction__charged(recv: ChangeRiskFunction, threshold: int) > bool;
+extern fun magus__FunctionGap__decided(recv: FunctionGap, threshold: int) > bool;
 extern fun magus__History__hotspots(recv: History) > Hotspots !> any;
 extern fun magus__History__affinity(recv: History) > Affinity !> any;
 extern fun magus__History__ownership(recv: History) > Ownership !> any;

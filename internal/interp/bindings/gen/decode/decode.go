@@ -8168,6 +8168,186 @@ func decodeChange(v vm.Value, path string) (types.Change, error) {
 	return out, nil
 }
 
+// DecodeFunctionGap decodes a Buzz FunctionGap, an object instance or a map, into a types.FunctionGap.
+func DecodeFunctionGap(v vm.Value) (types.FunctionGap, error) {
+	return decodeFunctionGap(v, "functionGap")
+}
+
+func decodeFunctionGap(v vm.Value, path string) (types.FunctionGap, error) {
+	var out types.FunctionGap
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "FunctionGap", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "symbol":
+			sSymbol, err := decodeString(item, path+".symbol")
+			if err != nil {
+				return out, err
+			}
+			out.Symbol = sSymbol
+		case "label":
+			sLabel, err := decodeString(item, path+".label")
+			if err != nil {
+				return out, err
+			}
+			out.Label = sLabel
+		case "path":
+			sPath, err := decodeString(item, path+".path")
+			if err != nil {
+				return out, err
+			}
+			out.Path = sPath
+		case "language":
+			sLanguage, err := decodeString(item, path+".language")
+			if err != nil {
+				return out, err
+			}
+			out.Language = sLanguage
+		case "line":
+			nLine, err := decodeInt(item, path+".line")
+			if err != nil {
+				return out, err
+			}
+			out.Line = int(nLine)
+		case "complexity":
+			nComplexity, err := decodeInt(item, path+".complexity")
+			if err != nil {
+				return out, err
+			}
+			out.Complexity = int(nComplexity)
+		case "reason":
+			sReason, err := decodeString(item, path+".reason")
+			if err != nil {
+				return out, err
+			}
+			out.Reason = sReason
+		default:
+			return out, unknownMember(path, "FunctionGap", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeChangeRiskFunction decodes a Buzz ChangeRiskFunction, an object instance or a map, into a types.ChangeRiskFunction.
+func DecodeChangeRiskFunction(v vm.Value) (types.ChangeRiskFunction, error) {
+	return decodeChangeRiskFunction(v, "changeRiskFunction")
+}
+
+func decodeChangeRiskFunction(v vm.Value, path string) (types.ChangeRiskFunction, error) {
+	var out types.ChangeRiskFunction
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "ChangeRiskFunction", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "symbol":
+			sSymbol, err := decodeString(item, path+".symbol")
+			if err != nil {
+				return out, err
+			}
+			out.Symbol = sSymbol
+		case "label":
+			sLabel, err := decodeString(item, path+".label")
+			if err != nil {
+				return out, err
+			}
+			out.Label = sLabel
+		case "path":
+			sPath, err := decodeString(item, path+".path")
+			if err != nil {
+				return out, err
+			}
+			out.Path = sPath
+		case "language":
+			sLanguage, err := decodeString(item, path+".language")
+			if err != nil {
+				return out, err
+			}
+			out.Language = sLanguage
+		case "digest":
+			sDigest, err := decodeString(item, path+".digest")
+			if err != nil {
+				return out, err
+			}
+			out.Digest = sDigest
+		case "line":
+			nLine, err := decodeInt(item, path+".line")
+			if err != nil {
+				return out, err
+			}
+			out.Line = int(nLine)
+		case "endLine":
+			nEndLine, err := decodeInt(item, path+".endLine")
+			if err != nil {
+				return out, err
+			}
+			out.EndLine = int(nEndLine)
+		case "complexity":
+			nComplexity, err := decodeInt(item, path+".complexity")
+			if err != nil {
+				return out, err
+			}
+			out.Complexity = int(nComplexity)
+		case "covered":
+			nCovered, err := decodeInt(item, path+".covered")
+			if err != nil {
+				return out, err
+			}
+			out.Covered = int(nCovered)
+		case "coverable":
+			nCoverable, err := decodeInt(item, path+".coverable")
+			if err != nil {
+				return out, err
+			}
+			out.Coverable = int(nCoverable)
+		case "score":
+			nScore, err := decodeFloat(item, path+".score")
+			if err != nil {
+				return out, err
+			}
+			out.Score = nScore
+		case "baseScore":
+			nBaseScore, err := decodeFloat(item, path+".baseScore")
+			if err != nil {
+				return out, err
+			}
+			out.BaseScore = nBaseScore
+		case "baseComplexity":
+			nBaseComplexity, err := decodeInt(item, path+".baseComplexity")
+			if err != nil {
+				return out, err
+			}
+			out.BaseComplexity = int(nBaseComplexity)
+		case "baseCovered":
+			nBaseCovered, err := decodeInt(item, path+".baseCovered")
+			if err != nil {
+				return out, err
+			}
+			out.BaseCovered = int(nBaseCovered)
+		case "baseCoverable":
+			nBaseCoverable, err := decodeInt(item, path+".baseCoverable")
+			if err != nil {
+				return out, err
+			}
+			out.BaseCoverable = int(nBaseCoverable)
+		case "baseReason":
+			sBaseReason, err := decodeString(item, path+".baseReason")
+			if err != nil {
+				return out, err
+			}
+			out.BaseReason = sBaseReason
+		default:
+			return out, unknownMember(path, "ChangeRiskFunction", key)
+		}
+	}
+	return out, nil
+}
+
 // DecodeHistory decodes a Buzz History, an object instance or a map, into a types.History.
 func DecodeHistory(v vm.Value) (types.History, error) {
 	return decodeHistory(v, "history")

@@ -336,6 +336,37 @@ var magusObjects = []Object{
 		},
 	},
 	{
+		Name: "ChangeRiskFunction",
+		Doc:  "One touched function's change risk score and its measure at base, as magus\\change().risk reports it.",
+		Methods: []Method{
+			{
+				Name: "charged",
+				Doc: "True when the function scores above threshold and worse than at base. With no base measure " +
+					"(baseReason set) threshold alone judges, so a function only shrunk is never charged. magus " +
+					"holds no threshold: the caller's rule passes its own.",
+				Args:    []Arg{{Name: "threshold", Type: TypeInt}},
+				Returns: []Ret{{Type: TypeBool}},
+				Impl:    MagusChangeRiskFunctionCharged,
+			},
+		},
+	},
+	{
+		Name: "FunctionGap",
+		Doc:  "A touched function magus could not score, and why, as magus\\change().risk reports it.",
+		Methods: []Method{
+			{
+				Name: "decided",
+				Doc: "True when the verdict against threshold holds at any coverage: the worst case, zero coverage, " +
+					"scores complexity^2 + complexity, so one within threshold passes without a coverage number. " +
+					"An unknown complexity (0) decides nothing. magus holds no threshold: the caller's rule passes " +
+					"its own.",
+				Args:    []Arg{{Name: "threshold", Type: TypeInt}},
+				Returns: []Ret{{Type: TypeBool}},
+				Impl:    MagusFunctionGapDecided,
+			},
+		},
+	},
+	{
 		Name: "History",
 		Doc:  "The window of version-control history the metrics read: magus\\history(opts).",
 		Methods: []Method{

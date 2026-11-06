@@ -29,12 +29,12 @@ export fun check(files: [Path]) > [Finding] !> any {
 export fun judge(risk: magus\ChangeRisk) > [Finding] {
     final found = mut [<Finding>];
     foreach (f in risk.functions) {
-        if (charged(f)) {
+        if (f.charged(THRESHOLD)) {
             found.append(refuse(f));
         }
     }
     foreach (g in risk.gaps) {
-        if (!decided(g.complexity)) {
+        if (!g.decided(THRESHOLD)) {
             found.append(unscored(g));
         }
     }
@@ -44,23 +44,11 @@ export fun judge(risk: magus\ChangeRisk) > [Finding] {
     return found;
 }
 
-// charged repeats types.ChangeRiskFunction.Charged, which the Buzz mirror
-// lacks. With no base measure the threshold alone judges.
-export fun charged(f: magus\ChangeRiskFunction) > bool {
-    return f.score > std\toDouble(THRESHOLD) and (f.baseReason != "" or f.score > f.baseScore);
-}
-
 fun versus(f: magus\ChangeRiskFunction) > str {
     if (f.baseReason != "") {
         return "no base score: {f.baseReason}";
     }
     return "{hundredths(f.baseScore)} at base";
-}
-
-// decided repeats types.FunctionGap.Decided, which the Buzz mirror lacks.
-// Zero coverage is the worst case, so within THRESHOLD there holds anywhere.
-export fun decided(complexity: int) > bool {
-    return complexity > 0 and complexity * complexity + complexity <= THRESHOLD;
 }
 
 fun refuse(f: magus\ChangeRiskFunction) > Finding {
