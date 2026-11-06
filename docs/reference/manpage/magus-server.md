@@ -156,12 +156,6 @@ magus server reload
 magus server status
 ```
 
-*Run tests once the build budget can seat them*
-
-```sh
-magus server status --wait | magus run test .
-```
-
 *Is a broker up, and what holds capacity*
 
 ```sh
