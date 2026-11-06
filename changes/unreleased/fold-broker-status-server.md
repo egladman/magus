@@ -8,5 +8,6 @@
 - **`magus server status` reports a stopped server instead of failing.** It prints
   `server - not running` and the rest of the report, and exits 0; `--probe` is the
   check a script chains on. It starts nothing.
-- The help group "Integrations and services" splits into "Background processes
-  (start on demand)", holding `server` and `mcp`, and "Integrations".
+- **`magus -h` lists `server` and `mcp` under "Background processes (start on
+  demand)".** The rest of the old "Integrations and services" group is now
+  "Integrations".
