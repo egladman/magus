@@ -519,6 +519,13 @@ const ToolNotOnPath DiagnosticCode = "MGS3003"
 // code), so it sits beside it rather than in a family of its own.
 const ToolNotReady DiagnosticCode = "MGS3004"
 
+// CapabilityAbsent reports a code that says this host lacks what a target
+// needs: its tool, or the service the tool talks to. The target could not run
+// here, so its code was never tried.
+func CapabilityAbsent(c DiagnosticCode) bool {
+	return c == ToolNotOnPath || c == ToolNotReady
+}
+
 // ToolTooOld is the fourth question about a tool: it exists, it reports a version,
 // it is usable, and that version is below the declared minimum.
 const ToolTooOld DiagnosticCode = "MGS3005"

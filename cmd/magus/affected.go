@@ -377,7 +377,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// Read the instant the run returns: after this line a cancellation means the signal
 	// arrived once the verdict was already decided, and dropping it would throw away a
 	// gate that genuinely ran.
-	gate.record(invCtx, err, invCtx.Err() != nil)
+	gate.record(invCtx, err, invCtx.Err() != nil, failed.list())
 	if err != nil && opts.Format == outputText {
 		printFailedResults(os.Stdout, failed.list())
 	}

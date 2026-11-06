@@ -333,13 +333,17 @@ func (g *gateRedundancy) renderDelta(f gateFinding) string {
 // The residual window is the run's own last instant, and it is deliberately resolved
 // toward NOT recording: a dropped verdict costs one re-run, while a recorded verdict for
 // a run that did not happen makes MGS3010 refuse every later gate on that commit.
-func (g *gateRedundancy) record(ctx context.Context, runErr error, cutShort bool) {
+func (g *gateRedundancy) record(ctx context.Context, runErr error, cutShort bool, failed []journal.Event) {
 	if g == nil || cutShort || errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
 		return
 	}
 	outcome := sessions.OutcomePass
+	var unrun []string
 	if runErr != nil {
 		outcome = sessions.OutcomeFail
+		if unrun = g.unrun(failed); len(unrun) > 0 {
+			outcome = sessions.OutcomeUnrun
+		}
 	}
 	g.append(ctx, sessions.GateResult{
 		Target:          g.target,
@@ -347,6 +351,7 @@ func (g *gateRedundancy) record(ctx context.Context, runErr error, cutShort bool
 		Ref:             g.ref,
 		Commit:          g.commit,
 		Outcome:         outcome,
+		Unrun:           unrun,
 		Fingerprint:     g.fp,
 		Projects:        g.projects,
 		Charms:          g.charms,
@@ -354,6 +359,20 @@ func (g *gateRedundancy) record(ctx context.Context, runErr error, cutShort bool
 		Tier:            string(g.tier),
 		Inv:             journal.InvocationIDFromContext(ctx),
 	})
+}
+
+// unrun names each failed target as "project:target: cause" when every one
+// failed for a capability this host lacks. Any other failure makes it nil.
+func (g *gateRedundancy) unrun(failed []journal.Event) []string {
+	var out []string
+	for _, e := range failed {
+		if !types.CapabilityAbsent(types.DiagnosticCode(e.DiagnosticCode)) {
+			return nil
+		}
+		cause, _, _ := strings.Cut(strings.TrimSpace(e.Text), "\n")
+		out = append(out, fmt.Sprintf("%s:%s: %s", e.Project, e.Target, cause))
+	}
+	return out
 }
 
 // recordDeferral persists the refusal itself, pointing at the green gate it
