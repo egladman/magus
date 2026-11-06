@@ -93,7 +93,7 @@ what it **saved**, one observation per hit. Its sum is the wall-clock the cache
 has given back, and its distribution says which hits are worth having. An entry
 written before the manifest carried a duration reports nothing rather than zero,
 so the total understates and never overstates: the same measured-not-modeled
-rule the `cache_saved_ms` field in `magus status` follows.
+rule the `cache_saved_ms` field in `magus server status` follows.
 
 ### Remote cache
 

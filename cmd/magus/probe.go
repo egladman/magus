@@ -259,7 +259,7 @@ func serverSnapshot(socket string) statusFunc {
 	}
 }
 
-// mcpProbeTimeout bounds the HTTP probe of the MCP endpoint from `magus status`.
+// mcpProbeTimeout bounds the MCP endpoint probe `magus server status` makes.
 // Short so a `--watch` poll stays snappy; a loopback connection-refused returns well
 // inside it, and a reachable endpoint answers immediately.
 const mcpProbeTimeout = time.Second

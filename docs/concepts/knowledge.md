@@ -64,7 +64,7 @@ distance is the point.
 ```sh
 magus query "<terms>"       # ranked node matches plus their neighborhood
 magus explain <node>        # one node: its edges, provenance, blast radius
-magus path <a> <b>          # the shortest chain of edges between two nodes
+magus explain <a> --to <b>  # the shortest chain of edges between two nodes
 magus refs <symbol>         # where an ingested code symbol is defined and referenced
 magus graph stats           # god nodes, orphans, doc coverage
 magus graph export -o json  # the whole graph as node-link JSON
@@ -137,7 +137,7 @@ knows the concrete tool behind every operation, not just the source.
 magus query "kind=tool"                    # the workspace's toolchain (go, buf, docker, ...)
 magus explain "tool:go"                    # every op and spell that runs go
 magus explain "op:go:go-test"              # an op's base argv (the `argv` attr) and its tool
-magus path "target:.:test" "tool:go"       # a target reaches its tool via target->op->tool
+magus explain "target:.:test" --to tool:go # a target reaches its tool via target->op->tool
 ```
 
 Each spell op carries the base argv it runs on an `argv` attr (rendered with empty
@@ -167,8 +167,8 @@ open it signed in: open "http://127.0.0.1:7391/console/graph/#view=blast&node=to
 (start the magus server if the graph does not load)
 
 next:
-  magus path tool:go op:go:go-build
-      path resolves the chain between two nodes, and this is the neighbor the card names most.
+  magus explain tool:go --to op:go:go-build
+      --to resolves the chain between two nodes, and this is the neighbor the card names most.
 ```
 
 <!-- /example -->
@@ -194,7 +194,7 @@ open it signed in: open "http://127.0.0.1:7391/console/graph/#view=blast&node=ta
 (start the magus server if the graph does not load)
 
 next:
-  magus path target:.:test op:go:go-test
+  magus explain target:.:test --to op:go:go-test
 ```
 
 <!-- /example -->
@@ -204,7 +204,7 @@ And `path` connects two nodes as a chain: a target reaches its tool through its 
 <!-- example:path-test-to-tool -->
 
 ```console
-$ magus path target:.:test tool:go
+$ magus explain target:.:test --to tool:go
 target:.:test -> tool:go  (2 steps)
 
 target:.:test
@@ -246,7 +246,7 @@ surgically instead of loading the whole file.
 #   affinity    projects that change together: hidden coupling
 #   ownership   author concentration and bus factor
 magus explain <node>      # a node's edges and how many nodes reach it (blast radius)
-magus path <a> <b>        # the shortest edge chain between two nodes
+magus explain <a> --to <b> # the shortest edge chain between two nodes
 ```
 
 **Which code lacks test coverage?** magus runs the tests, so it owns the coverage
@@ -547,7 +547,7 @@ auto-indexes. Tune or disable it under `knowledge.symbol_indexing` (`disabled`,
 `quiet_seconds`, `min_interval_seconds`). If an indexer is not installed the background
 run of that index just fails and backs off, while the project's other indexes keep
 running; install it, or run `magus run <project>::scip` yourself, or index in CI.
-`magus status` and the gaps a lookup reports name a missing indexer and where to get it.
+`magus server status` and the gaps a lookup reports name a missing indexer and where to get it.
 
 An index that has not been built yet is skipped, so symbols appear once its op
 has run. To point a project at indexes your own build already emits somewhere in the

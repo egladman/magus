@@ -23,11 +23,11 @@ exec magus ls -o name
 # The server is off in these scripts, so status reports the local view. That is the
 # interesting case anyway: the lock and symbol-index sections are workspace-local and
 # populated with no server at all.
-exec magus status
-exec magus status -o json
+exec magus server status
+exec magus server status -o json
 stdout '"telemetry"'
 stdout '"cache"'
-exec magus status -o yaml
+exec magus server status -o yaml
 stdout 'telemetry:'
 
 # -- doctor ------------------------------------------------------------------

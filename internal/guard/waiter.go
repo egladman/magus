@@ -93,10 +93,10 @@ func slotWaitLine(ctx context.Context, command string, d Dialect, watcher bool) 
 		if len(words) == 0 {
 			return
 		}
-		switch words[0] {
-		case "status":
+		switch {
+		case isServerStatus(words):
 			waits = waits || watcher || napped || statusFlag(c.Args, "watch", "W")
-		case "run", "affected":
+		case words[0] == "run", words[0] == "affected":
 			waits = waits || slept >= sleepPollFloor
 		}
 	})

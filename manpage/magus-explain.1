@@ -3,7 +3,7 @@
 magus\-explain \- Show one knowledge\-graph node's context: data, edges, and reach
 .SH SYNOPSIS
 .B magus
-.RI "explain <node\-id\-or\-name> [flags]"
+.RI "explain <node\-id\-or\-name> [\-\-to <node\-id\-or\-name>] [flags]"
 .SH DESCRIPTION
 explain shows one node's context: its data, its incoming and outgoing
 edges with provenance, and how many nodes reach it. Where query finds candidates,
@@ -17,6 +17,13 @@ Two parts of the output are worth knowing about. Every edge carries its PROVENAN
 what declared it, so a surprising relationship can be traced to the file that created
 it rather than taken on faith. And the reach count answers the blast\-radius question
 directly: how many nodes can arrive at this one.
+.PP
+With \-\-to, explain answers how the node is related to a second one: the shortest
+chain of edges between them, each hop's relation named. Ask it when a change to one
+thing breaks a seemingly unrelated other, or when two projects look coupled and you
+want the chain rather than a hunch. Edges are walked in EITHER direction, so a chain
+proves the two nodes are connected, not that influence flows from one to the other;
+read each hop's relation to see which way it points.
 .PP
 The graph is cache\-backed under <cache>/knowledge and only shards whose sources
 changed are rebuilt; \-\-refresh forces a full rebuild.
@@ -37,6 +44,9 @@ Skip this many lines of the section first; line numbers carry on. Implies \-\-so
 .TP
 \fB\-\-[no\-]source\fR (default: off)
 Print a doc section's lines from its indexed extent instead of the card, checked against the file on disk. A symbol's body is refs \-\-source
+.TP
+\fB\-\-to\fR \fInode\fR
+Print the shortest chain of edges from the node to this node (an ID or a name) instead of its card
 .RE
 .SH EXAMPLES
 \fIA target in full\fR
@@ -69,6 +79,24 @@ magus explain spell:go
 magus explain build -o json
 .EE
 .PP
+\fIHow two projects are related\fR
+.PP
+.EX
+magus explain pkg/api --to pkg/web
+.EE
+.PP
+\fIFrom a spell to a diagnostic\fR
+.PP
+.EX
+magus explain spell:go --to MGS3003
+.EE
+.PP
+\fIThe chain as a record\fR
+.PP
+.EX
+magus explain pkg/api --to pkg/web -o json
+.EE
+.PP
 .SH SEE ALSO
 \fBmagus\fR(1),
 \fBmagus\-ls\fR(1),
@@ -81,7 +109,6 @@ magus explain build -o json
 \fBmagus\-shell\fR(1),
 \fBmagus\-query\fR(1),
 \fBmagus\-refs\fR(1),
-\fBmagus\-path\fR(1),
 \fBmagus\-graph\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-vcs\fR(1),
@@ -89,20 +116,16 @@ magus explain build -o json
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-mcp\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
-\fBmagus\-server\fR(1),
-\fBmagus\-broker\fR(1),
-\fBmagus\-mcp\fR(1),
-\fBmagus\-status\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-spell\fR(1),
 \fBmagus\-agent\fR(1),
 \fBmagus\-init\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
-\fBmagus\-completion\fR(1),
-\fBmagus\-man\fR(1),
 \fBmagus\-self\fR(1),
 \fBmagus\-version\fR(1)
 .br

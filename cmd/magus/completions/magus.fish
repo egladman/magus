@@ -5,42 +5,37 @@
 function __magus_subcommands
     printf '%s\t%s\n' \
 # magus-utils:subcommands:begin
-        ls         'List all discovered projects' \
-        describe   'Define a magus concept and list its entities' \
-        where      'Print the absolute path of a project' \
-        run        'Run a target for selected projects' \
-        affected   'Run a target for VCS-diff affected projects' \
-        x          'Reproduce an output ref, or pick project + target' \
-        clean      'Remove declared outputs (regenerable, never sources)' \
-        shell      'Check a command against this workspace\'s conventions before running it' \
-        query      'Search the knowledge graph, and retrieve a run\'s output or journal by id' \
-        refs       'List where an ingested code symbol is defined and referenced' \
-        explain    'Show one knowledge-graph node\'s context: data, edges, and reach' \
-        path       'Connect two knowledge-graph nodes: the shortest chain of edges between them' \
-        graph      'The workspace\'s graphs as objects: deps, export, stats' \
-        diff       'Read the working tree\'s changes in the order they deserve attention' \
-        vcs        'Listing and conflict resolution that knows what is generated' \
-        session    'What magus invocations did and what agents are blocked on: humans read and dispose, hosts write' \
-        job        'Fork a job, take it, return it with its result, and verify that result' \
-        notes      'Human-authored notes committed to the repository' \
-        queue      'Merge approved changes through a speculative, partitioned merge queue' \
-        watch      'Emit changed file paths to stdout' \
-        events     'Stream workspace events as JSONL for an integration to consume' \
-        server     'Manage the magus server: MCP, the console, APIs and background jobs' \
-        broker     'The per-user process holding this host\'s capacity and shared services' \
-        mcp        'Serve MCP over stdio for the agent host that launched it' \
-        status     'Inspect concurrency pool and configuration' \
-        buzz       'Run a Buzz script' \
-        spell      'Build, publish, pull and list spells as OCI artifacts, and pin them in magus.lock' \
-        agent      'Manage skills, harnesses, and agent feedback' \
-        init       'Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)' \
-        doctor     'Validate the workspace' \
-        config     'View or update magus configuration' \
-        completion 'Print a shell completion script' \
-        man        'Install the man pages embedded in this binary' \
-        self       'Manage the magus binary (update, install-shorthand)' \
-        version    'Print the client and server versions' \
-        help       'Show this message'
+        ls       'List all discovered projects' \
+        describe 'Define a magus concept and list its entities' \
+        where    'Print the absolute path of a project' \
+        run      'Run a target for selected projects' \
+        affected 'Run a target for VCS-diff affected projects' \
+        x        'Reproduce an output ref, or pick project + target' \
+        clean    'Remove declared outputs (regenerable, never sources)' \
+        shell    'Check a command against this workspace\'s conventions before running it' \
+        query    'Search the knowledge graph, and retrieve a run\'s output or journal by id' \
+        refs     'List where an ingested code symbol is defined and referenced' \
+        explain  'Show one knowledge-graph node\'s context: data, edges, and reach' \
+        graph    'The workspace\'s graphs as objects: deps, export, stats' \
+        diff     'Read the working tree\'s changes in the order they deserve attention' \
+        vcs      'Listing and conflict resolution that knows what is generated' \
+        session  'What magus invocations did and what agents are blocked on: humans read and dispose, hosts write' \
+        job      'Fork a job, take it, return it with its result, and verify that result' \
+        notes    'Human-authored notes committed to the repository' \
+        queue    'Merge approved changes through a speculative, partitioned merge queue' \
+        server   'The background processes: the server (MCP, the console, APIs, jobs) and the broker' \
+        mcp      'Serve MCP over stdio for the agent host that launched it' \
+        watch    'Emit changed file paths to stdout' \
+        events   'Stream workspace events as JSONL for an integration to consume' \
+        buzz     'Run a Buzz script' \
+        spell    'Build, publish, pull and list spells as OCI artifacts, and pin them in magus.lock' \
+        agent    'Manage skills, harnesses, and agent feedback' \
+        init     'Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)' \
+        doctor   'Validate the workspace' \
+        config   'View or update magus configuration' \
+        self     'Manage the magus binary (update, install-shorthand, place, completion, man)' \
+        version  'Print the client and server versions' \
+        help     'Show this message'
 # magus-utils:subcommands:end
 end
 

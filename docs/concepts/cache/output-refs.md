@@ -55,7 +55,7 @@ a `next` field, so a tool reading `-o json` gets the affordance a person sees.
 ```text
 next:
   magus explain spell:go  (explain names a node's edges, provenance and blast radius.)
-  magus path spell:go spell:gomod
+  magus explain spell:go --to spell:gomod
 ```
 
 Three rules keep it from becoming noise:

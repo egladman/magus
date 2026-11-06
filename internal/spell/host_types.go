@@ -65,10 +65,10 @@ var CommitAuthorSource string
 var CommitSource string
 
 // TargetRunSource / RunSource are the generated Buzz mirrors of one run and the
-// targets in it (types.StatusTargetRun and types.StatusRun), the same shape
-// `magus status` reports. They exist so a caller can ITERATE a run: each target's
-// state (queued/running/passed/failed/cached), how long it took, and the output ref
-// it minted, rather than parsing magus's own console output back out of a string.
+// targets in it (types.StatusTargetRun and types.StatusRun), the shape
+// `magus server status` reports. A caller can ITERATE a run with them. Each
+// target carries its state, duration and output ref, so nobody parses
+// console output.
 //
 // TargetRun precedes Run, because Run.targets is a list of it and a struct-valued
 // field mirrors as its bare type name, which must already be declared.

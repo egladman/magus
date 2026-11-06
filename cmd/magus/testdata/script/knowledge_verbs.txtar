@@ -25,8 +25,8 @@ stdout '"relation": "references"'
 ! exec magus explain zzz-nonesuch
 stderr 'no node matches'
 
-# path connects two resolved nodes as a chain of natural-language steps
-exec magus path lint build
+# explain --to connects two resolved nodes as a chain of natural-language steps
+exec magus explain lint --to build
 stdout 'target:\.:build'
 stdout '->'
 

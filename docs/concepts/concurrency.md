@@ -197,11 +197,11 @@ magus: waiting for pid 40118 (magus run generate:rw .), upstream
 of this run in a pipe, to finish with the projects this run needs before taking their locks.
 ```
 
-`magus status` lists such a run under "waiting on a pipe upstream".
+`magus server status` lists such a run under "waiting on a pipe upstream".
 
 Stages on different projects run at once and stream. A downstream run waits only until
 the upstream has taken its locks, then starts as soon as it sees they do not overlap
-with its own. A read-only upstream, like `magus ls` or `magus status --watch`, never
+with its own. A read-only upstream, like `magus ls` or `magus server status --watch`, never
 holds a reader back. Three or more magus stages work the same way: each stage
 considers every magus stage upstream of it.
 
@@ -344,7 +344,7 @@ Key properties:
   job's holder its next magus run, through `magus job exec` and the guard, until
   `magus job resume <job>...`; a run already holding the budget finishes, since nothing
   is preempted. A run is charged to the lease its checkout's `magus job exec` binds, else
-  to the one `BAGGAGE` names, and `magus status` names it, or says `unleased`. A job's
+  to the one `BAGGAGE` names, and `magus server status` names it, or says `unleased`. A job's
   `weight`, in (0,1] on its record and 0.5 when omitted, orders the claims the broker
   holds. A gate still goes first, then the heavier job, and equal weights go in the order
   they asked. A run bound to no job weighs 0.5. A heavier request passes one already
@@ -374,7 +374,7 @@ Key properties:
   broker exits by itself ten minutes after it last held a claim or a service with a
   dependent.
 
-`magus status` shows the whole budget: what is held, and by whom, across every
+`magus server status` shows the whole budget: what is held, and by whom, across every
 worktree on the machine.
 
 ## Relationship to the broker and the daemon

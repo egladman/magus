@@ -94,7 +94,7 @@ func TestScopeDriftAdviceNamesBothSides(t *testing.T) {
 
 	assert.Contains(t, advice, "libs/ui")
 	assert.Contains(t, advice, "app")
-	assert.Contains(t, advice, "magus path libs/ui app", "the advisory has to name a command the reader can check it with")
+	assert.Contains(t, advice, "magus explain libs/ui --to app", "the advisory has to name a command the reader can check it with")
 	assert.Contains(t, advice, "magus-multi-agent", "naming a skill magus itself installs, or the routing lands in a wall")
 	assert.NotContains(t, advice, " - ", "comment and message prose carries no spaced-hyphen asides")
 }

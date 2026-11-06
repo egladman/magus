@@ -105,7 +105,7 @@ func DiscoverSocket(ctx context.Context) (string, error) {
 }
 
 // DiscoverSockets returns every live proc-server address in SockDir, the server's socket
-// first. Each one is a separate concurrency pool, so a reporter (`magus status`)
+// first. Each one is a separate concurrency pool, so `magus server status`
 // enumerates them instead of demanding the caller pick one.
 func DiscoverSockets(ctx context.Context) ([]string, error) {
 	var candidates []string

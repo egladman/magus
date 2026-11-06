@@ -4,7 +4,7 @@
 # The reader exits at once (a usage error, before any lock); the writer's next write
 # meets a closed pipe and kills it with SIGPIPE while it holds the project.
 ! exec bash -c 'set -o pipefail; magus run emitlate . | magus run nosuch .'
-exec magus status -o json
+exec magus server status -o json
 ! stdout '"locks"'
 exec magus run quick .
 
@@ -13,7 +13,7 @@ exec magus run quick .
 exec bash -c 'magus run hold . | magus run consume . & for i in $(seq 200); do [ -s holder.pid ] && break; sleep 0.05; done; [ -s holder.pid ] || exit 1; sleep 0.3; kill -9 $(cat holder.pid); wait'
 exists consumed
 grep 'before-kill' consumed
-exec magus status -o json
+exec magus server status -o json
 ! stdout '"locks"'
 ! stdout '"pipe_waits"'
 

@@ -18,10 +18,9 @@ import (
 // Term is the "term" host module: the terminal renderer magus already draws its
 // own output with, exposed so a magusfile can use it too.
 //
-// None of this is new machinery. internal/interactive/tty carries the picker, the
-// ANSI sequences and the terminal probe that `magus status --watch` and the
-// project picker are built from; until now a magusfile could reach exactly one
-// piece of it, os\stdinIsTerminal.
+// None of this is new machinery. internal/interactive/tty carries the picker,
+// the ANSI sequences and the terminal probe that status --watch is built
+// from. Until now a magusfile could reach one piece, os\stdinIsTerminal.
 //
 // THE RULE THAT SHAPES THIS MODULE: magus does not ask. Its own design principles say
 // the CLI reads context rather than prompting, because a prompt in a

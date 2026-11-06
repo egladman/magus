@@ -11,7 +11,7 @@ import (
 // Neither a PID nor a process name proves the caller owns it.
 func TestGuardDeniesProcessSignals(t *testing.T) {
 	for _, command := range []string{
-		`pkill -f 'magus job fork' ; ./magus status`,
+		`pkill -f 'magus job fork' ; ./magus server status`,
 		`pkill -f './magus mcp' 2>/dev/null`,
 		`kill 27873 32452 34431 2>/dev/null`,
 		`kill -TERM 30940`,
@@ -30,7 +30,7 @@ func TestGuardDeniesProcessSignals(t *testing.T) {
 			require.NotEmpty(t, v.Deny)
 			assert.Contains(t, v.Deny, "cancel")
 			require.Len(t, v.Next, 1)
-			assert.Equal(t, hint.Status.String(), v.Next[0].Run)
+			assert.Equal(t, hint.ServerStatus.String(), v.Next[0].Run)
 			assert.Empty(t, Evaluate(strict(testDependencies()), v.Next[0].Run).Deny)
 		})
 	}

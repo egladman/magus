@@ -159,8 +159,8 @@ type StatusReply struct {
 	Server *types.StatusServer `json:"server,omitempty"`
 }
 
-// StatusOutput is r as the status report's pool section, nil for a nil reply. It is the
-// one conversion `magus status` and the console both read, so the two cannot disagree.
+// StatusOutput is r as the status report's pool section, nil for a nil reply.
+// `magus server status` and the console both read it, so they cannot disagree.
 //
 // Affected is left unset: it needs a workspace-scoped VCS diff, and neither reader opens a
 // workspace to answer a status query.

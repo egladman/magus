@@ -33,7 +33,7 @@ const (
 //
 // launchd hands sockets over only through launch_activate_socket, a C call magus does
 // not make. Under launchd the broker runs from a KeepAlive agent and binds its own
-// socket instead (see `magus broker units launchd`).
+// socket instead (see `magus server broker units launchd`).
 func Activated(addr string) (net.Listener, error) {
 	n, err := listenFDs(os.LookupEnv, os.Getpid())
 	if err != nil || n == 0 {

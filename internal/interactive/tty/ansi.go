@@ -224,7 +224,7 @@ func escapeLen(s string) int {
 }
 
 // ClearScreen erases the screen and homes the cursor, the repaint a
-// full-screen refresh loop issues before redrawing (`magus status
+// full-screen refresh loop issues before redrawing (`magus server status
 // --watch`).
 //
 // This is not the alternate screen buffer: scrollback is preserved, so a

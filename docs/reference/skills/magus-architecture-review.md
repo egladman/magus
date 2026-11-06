@@ -3,8 +3,8 @@ title: magus-architecture-review
 generated_from: internal/agent/skills/magus-architecture-review/SKILL.md
 description: "Gather architecture evidence from the magus knowledge graph (package imports, layers, symbol callers, churn, ownership) instead of reading files."
 tags: [agents, skills, magus-architecture-review]
-skill_full_bytes: 12559
-skill_short_bytes: 9359
+skill_full_bytes: 12576
+skill_short_bytes: 9376
 ---
 
 # magus-architecture-review
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `dd8f1fe72ba4` |
+| `skill-content` | `cd2c7610d594` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -164,7 +164,7 @@ No layers declared -> say so; do not invent from directory names.
 Each: correct command in fast path.
 - `magus graph stats` without `--symbols` counts no package imports -> god nodes not packages; orphans: unused spells, isolated nodes, not unimported packages.
 - `--kind dir` degree counts contained files too -> many-file directory ranks high on `OUT` alone. Read `IN` for fan-in.
-- `magus path` walks edges both directions: found path means connected, not dependent. Use `magus\graph().neighborhood` with `direction`.
+- `magus explain <a> --to <b>` walks edges both directions: found chain means connected, not dependent. Use `magus\graph().neighborhood` with `direction`.
 - `N nodes reach this` line on `magus explain` card saturates: one-caller private helper reports over a thousand. Does not size migration; `refs --occurrences` does.
 - `magus\history().affinity` pairs projects -> inside one project sees nothing.
 - `hotspots` ranks generated files too: `magus describe file <path>` before calling hotspot design problem.
@@ -394,9 +394,9 @@ Each of these has a correct command in the fast path.
   unimported packages.
 - `--kind dir` degree counts contained files too, so a directory of many files
   ranks high on `OUT` alone. Read `IN` for fan-in.
-- `magus path` walks edges in both directions. A found path says two nodes
-  connect, not that one depends on the other. Use `magus\graph().neighborhood` with a
-  `direction`.
+- `magus explain <a> --to <b>` walks edges in both directions. A found chain says
+  two nodes connect, not that one depends on the other. Use `magus\graph().neighborhood`
+  with a `direction`.
 - The `N nodes reach this` line on an `magus explain` card saturates: a private
   helper with one caller reports over a thousand. It does not size a migration;
   `refs --occurrences` does.

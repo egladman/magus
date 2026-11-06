@@ -23,11 +23,11 @@ import (
 // afford each time; a minute is far finer than the silence the report measures.
 const heartbeatInterval = time.Minute
 
-// SilentLeaseAfter is how long a lease's session must go without a judged tool call before
-// `magus status` reports the lease as silent. A session waiting on a long bounded foreground command makes no call, so a short figure would report a slow
-// worker as dead. It is a starting figure for the shadow measurement to tune. Background
-// commands are counted as alive separately, because a session can sit past this while
-// one runs.
+// SilentLeaseAfter is how long a lease's session must go without a judged
+// tool call before `magus server status` reports the lease as silent. A
+// session waiting on a long foreground command makes no call, so a short
+// figure would report a slow worker as dead. It is a starting figure for the
+// shadow measurement to tune. Background commands count as alive separately.
 const SilentLeaseAfter = 30 * time.Minute
 
 // heartbeat is one stamp: the session was judged on a call under lease at At. The last

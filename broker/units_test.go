@@ -28,7 +28,7 @@ func TestRenderUnitsWhatTheSupervisorReads(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []Unit{
 		{Supervisor: "systemd", Path: "/home/eli/.config/systemd/user/magus-broker.socket", Content: `[Unit]
-Description=magus broker socket
+Description=magus server broker socket
 
 [Socket]
 ListenStream=/run/user/1000/magus%%/broker.sock
@@ -39,12 +39,12 @@ DirectoryMode=0700
 WantedBy=sockets.target
 `},
 		{Supervisor: "systemd", Path: "/home/eli/.config/systemd/user/magus-broker.service", Content: `[Unit]
-Description=magus broker: this host's capacity and shared services
+Description=magus server broker: this host's capacity and shared services
 Requires=magus-broker.socket
 After=magus-broker.socket
 
 [Service]
-ExecStart="/opt/my tools/magus" broker --shutdown-grace=1m30.5s
+ExecStart="/opt/my tools/magus" server broker --shutdown-grace=1m30.5s
 ExecReload=kill -HUP $MAINPID
 KillMode=mixed
 TimeoutStopSec=151
@@ -62,6 +62,7 @@ TimeoutStopSec=151
   <key>ProgramArguments</key>
   <array>
     <string>/opt/my tools/magus</string>
+    <string>server</string>
     <string>broker</string>
     <string>--idle-exit</string>
     <string>0</string>

@@ -74,7 +74,7 @@ func RenderUnits(supervisor string, f UnitFacts) ([]Unit, error) {
 	case SupervisorSystemd:
 		dir := filepath.Join(f.ConfigDir, "systemd", "user")
 		socket := fmt.Sprintf(`[Unit]
-Description=magus broker socket
+Description=magus server broker socket
 
 [Socket]
 ListenStream=%s
@@ -85,12 +85,12 @@ DirectoryMode=0700
 WantedBy=sockets.target
 `, systemdEscape(f.Socket))
 		svc := fmt.Sprintf(`[Unit]
-Description=magus broker: this host's capacity and shared services
+Description=magus server broker: this host's capacity and shared services
 Requires=magus-broker.socket
 After=magus-broker.socket
 
 [Service]
-ExecStart=%s broker --shutdown-grace=%s
+ExecStart=%s server broker --shutdown-grace=%s
 ExecReload=kill -HUP $MAINPID
 KillMode=mixed
 TimeoutStopSec=%s
@@ -111,6 +111,7 @@ TimeoutStopSec=%s
   <key>ProgramArguments</key>
   <array>
     <string>%s</string>
+    <string>server</string>
     <string>broker</string>
     <string>--idle-exit</string>
     <string>0</string>

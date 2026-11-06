@@ -315,6 +315,13 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	source := explainSourceWindow(xf, flags, pos[0])
+	if xf.To != "" {
+		if source.Show {
+			slog.ErrorContext(ctx, "--to prints a chain of edges, which has no source lines; drop --source, --max-lines and --skip-lines", attr.Notice("magus explain"))
+			return exit.Reported(exit.Usage)
+		}
+		return explainChain(ctx, root, xf, pos[0], xf.To)
+	}
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -469,28 +476,9 @@ func writeExplainText(w io.Writer, root, asked string, nx nextGate, next []types
 	return reportIndexStaleness(w, res.Answer)
 }
 
-func pathCommand(ctx context.Context, root string, args []string) error {
-	var pf *flaggen.PathFlags
-	pos, err := commandParse("path", args, func(fs *flag.FlagSet) {
-		pf = flaggen.BindPath(fs)
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus path <a> <b> [flags]")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, types.KnowledgePathDefinition)
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Each argument is a node ID or a name that resolves to one.")
-			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			printOwnDefaults(fs)
-		}
-	})
-	if err != nil {
-		return err
-	}
-	if len(pos) < 2 {
-		slog.ErrorContext(ctx, "requires two node IDs or names", attr.Notice("magus path"))
-		return exit.Reported(exit.Usage)
-	}
-
+// explainChain is `magus explain <from> --to <to>`: the shortest chain of edges
+// between the two nodes instead of from's card.
+func explainChain(ctx context.Context, root string, xf *flaggen.ExplainFlags, from, to string) error {
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -500,13 +488,13 @@ func pathCommand(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	g, err := loadWorkspaceGraph(ctx, ws, globalCfg, pf.Refresh, pf.Global, knowledge.SeedsLazyLayer(pos[0]) || knowledge.SeedsLazyLayer(pos[1]))
+	g, err := loadWorkspaceGraph(ctx, ws, globalCfg, xf.Refresh, xf.Global, knowledge.SeedsLazyLayer(from) || knowledge.SeedsLazyLayer(to))
 	if err != nil {
 		return err
 	}
-	out, ok := g.Path(pos[0], pos[1])
+	out, ok := g.Path(from, to)
 	if !ok {
-		slog.ErrorContext(ctx, fmt.Sprintf("could not resolve %q or %q to a node", pos[0], pos[1]), attr.Notice("magus path"))
+		slog.ErrorContext(ctx, fmt.Sprintf("could not resolve %q or %q to a node", from, to), attr.Notice("magus explain --to"))
 		return exit.Reported(exit.Usage)
 	}
 

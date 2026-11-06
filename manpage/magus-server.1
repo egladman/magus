@@ -1,22 +1,25 @@
 .TH MAGUS-SERVER 1 "" "magus" "magus Manual"
 .SH NAME
-magus\-server \- Manage the magus server: MCP, the console, APIs and background jobs
+magus\-server \- The background processes: the server (MCP, the console, APIs, jobs) and the broker
 .SH SYNOPSIS
 .B magus
-.RI "server <start|stop|status|reload> [flags]"
+.RI "server <start|stop|status|reload|broker> [flags]"
 .SH DESCRIPTION
-Start, stop, reload or check the magus server.
+Start, stop, reload or report the magus server, and check or stop the broker.
 .PP
 The server is the background process a person asks for. It serves MCP and the
 console over HTTP, the APIs behind them, background jobs and scheduled
 maintenance, and keeps each workspace's knowledge graph and symbol indexes
 current. It keeps workspaces warm, so nested magus calls that forward to it pay
-for discovery and config once. Nothing starts it but `magus server start` (and
-`graph export \-\-follow`, which asks for the console by name), and it runs
-until stopped.
+for discovery and config once. Nothing under `magus server` starts it but
+`server start` (elsewhere, `graph export \-\-follow` asks for the console
+by name), and it runs until stopped.
 .PP
-It is not what holds this host's capacity: that is `magus broker`, which a
-run starts on its own. The server asks the broker like any run does.
+It is not what holds this host's capacity: that is the broker, which a run
+starts on its own; `magus server broker` checks or stops it. The server asks
+the broker like any run does.
+.PP
+Each verb's help line says whether it needs the server running.
 .PP
 The socket address is resolved in priority order:
   \-\-socket flag  >  MAGUS_SERVER_ADDRESS env  >  server.address in magus.yaml  >
@@ -48,14 +51,50 @@ Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)
 .SS server status options
 .RS
 .TP
+\fB\-W\fR \fIvalue\fR
+Short for \-\-watch
+.TP
+\fB\-c\fR
+Short for \-\-compact
+.TP
+\fB\-\-[no\-]compact\fR (default: off)
+Single\-line, densely\-packed snapshot for sidebar/multiplexer use (text output only)
+.TP
+\fB\-\-probe\fR \fIstring\fR
+Exec\-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores \-\-watch/\-\-compact)
+.TP
 \fB\-\-socket\fR \fIstring\fR
-Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)
+Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. \-\-probe asks the server at server.address unless this names one
+.TP
+\fB\-\-[no\-]symbols\fR (default: off)
+Include the expensive symbol\-index freshness scan
+.TP
+\fB\-\-watch\fR \fIvalue\fR
+Poll and reprint at this interval (minimum 15s; 0 means one\-shot). Bare numbers are seconds.
+.TP
+\fB\-\-workspace\fR \fIstring\fR
+Workspace root to check for readiness with \-\-probe=readiness (default: any loaded workspace)
 .RE
 .SS server reload options
 .RS
 .TP
 \fB\-\-socket\fR \fIstring\fR
 Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)
+.RE
+.SS server broker options
+.RS
+.TP
+\fB\-\-idle\-exit\fR \fIvalue\fR (default: 10m0s)
+Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive. Bare numbers are minutes.
+.TP
+\fB\-\-log\fR \fIstring\fR
+Append stdout and stderr to this file, reopening it on SIGHUP; a run that starts a broker passes $XDG_STATE_HOME/magus/broker.log
+.RE
+.SS server broker stop options
+.RS
+.TP
+\fB\-\-[no\-]services\fR (default: off)
+Stop the broker's hosted services, leaving the broker running
 .RE
 .SH SUBCOMMANDS
 .RS
@@ -64,13 +103,16 @@ Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)
 Start the server (auto\-backgrounds by default; \-\-foreground blocks)
 .TP
 \fBstop\fR
-Send a graceful shutdown request to the running server
+Send a graceful shutdown request to the running server (needs it running)
 .TP
 \fBstatus\fR
-The server: whether it is up and where you reach it
+Whether the server and broker are up, what holds capacity, and the pool (needs neither running)
 .TP
 \fBreload\fR
-Re\-read configuration without restarting: drop the server's open workspaces
+Re\-read configuration without restarting: drop the server's open workspaces (needs it running)
+.TP
+\fBbroker\fR
+The per\-user process holding this host's capacity and shared services (needs no server)
 .RE
 .SH EXAMPLES
 \fIStart the server (auto\-backgrounds)\fR
@@ -103,10 +145,16 @@ magus server stop --pools
 magus server reload
 .EE
 .PP
-\fIEverything running on this host\fR
+\fIEverything running on this host, server up or not\fR
 .PP
 .EX
-magus status
+magus server status
+.EE
+.PP
+\fIIs a broker up, and what holds capacity\fR
+.PP
+.EX
+magus server broker status
 .EE
 .PP
 \fIUse a custom socket path\fR
@@ -128,7 +176,6 @@ magus --server-address unix:///tmp/m.sock server start
 \fBmagus\-query\fR(1),
 \fBmagus\-refs\fR(1),
 \fBmagus\-explain\fR(1),
-\fBmagus\-path\fR(1),
 \fBmagus\-graph\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-vcs\fR(1),
@@ -136,19 +183,15 @@ magus --server-address unix:///tmp/m.sock server start
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
+\fBmagus\-mcp\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
-\fBmagus\-broker\fR(1),
-\fBmagus\-mcp\fR(1),
-\fBmagus\-status\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-spell\fR(1),
 \fBmagus\-agent\fR(1),
 \fBmagus\-init\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
-\fBmagus\-completion\fR(1),
-\fBmagus\-man\fR(1),
 \fBmagus\-self\fR(1),
 \fBmagus\-version\fR(1)
 .br

@@ -251,7 +251,7 @@ protobufs.
 
 Green is the Unix domain socket, the local control plane: it dispatches
 `magus run`/`magus affected` into one shared [concurrency pool](docs/guides/integrations/server.md#concurrency),
-answers `magus status`, and adopts nested `magus` calls. Private
+answers `magus server status`, and adopts nested `magus` calls. Private
 (`0700`); the local CLI and the liveness/readiness probes use it.
 
 Orange is the HTTP server on `mcp.address`, for clients that cannot reach a Unix
@@ -294,7 +294,7 @@ at `/api/v1/graph`.
 </details>
 
 Because the two listeners are separate, they can diverge: the socket can be
-healthy while the HTTP/MCP endpoint failed to bind, which is why `magus status`
+healthy while the HTTP/MCP endpoint failed to bind, which is why `magus server status`
 reports each one on its own line.
 
 ## The browser console

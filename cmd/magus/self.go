@@ -39,6 +39,10 @@ func selfCommand(ctx context.Context, _ string, args []string) error {
 		return installShorthandCommand(rest)
 	case "place":
 		return selfPlaceCommand(ctx, rest)
+	case "completion":
+		return completion(rest)
+	case "man":
+		return manCommand(rest)
 	default:
 		selfCommandUsage()
 		return exit.Usagef("magus self: unknown subcommand %q (want %s)", sub, selfSubcommands())
@@ -49,9 +53,9 @@ func selfCommand(ctx context.Context, _ string, args []string) error {
 // noselfupdate binary prints does not advertise a subcommand it will refuse.
 func selfSubcommands() string {
 	if selfUpdateCompiled {
-		return "update, install-shorthand, place"
+		return "update, install-shorthand, place, completion, man"
 	}
-	return "install-shorthand, place"
+	return "install-shorthand, place, completion, man"
 }
 
 func selfCommandUsage() {
@@ -65,6 +69,8 @@ Subcommands:
   update               %s
   install-shorthand    symlink mgs to the running binary
   place                replace the running binary with a newer stamped build
+  completion           print a bash, zsh, fish or powershell completion script
+  man                  install the man pages embedded in this binary
 
 To bootstrap a workspace, use: magus init
 Run 'magus self <subcommand> --help' for subcommand flags.

@@ -853,7 +853,7 @@ type KnowledgePackage struct {
 }
 
 // SymbolIndexFreshness is the state of a project's cached SCIP index relative to its
-// current sources, reported by `magus status` and the dashboard.
+// current sources, reported by `magus server status` and the dashboard.
 type SymbolIndexFreshness string
 
 const (
@@ -1116,9 +1116,9 @@ func (a KnowledgeAnswer) IndexBehind() bool {
 // when none is stale.
 func (a KnowledgeAnswer) DescribeStale() string {
 	if len(a.StaleIndexDetails) == 0 {
-		// compat(until: no magus server that predates stale_index_details answers a newer
-		// CLI, observed as `magus status` reporting no version skew on any host): such a
-		// server sends only the project paths.
+		// compat(until: no server older than stale_index_details answers a
+		// newer CLI, seen as status reporting no version skew): such a server
+		// sends only the project paths.
 		return strings.Join(a.StaleIndexes, ", ")
 	}
 	return DescribeStaleIndexes(a.StaleIndexDetails)
@@ -1237,7 +1237,7 @@ const (
 		"(the induced subgraph, collected up to a node budget)."
 	KnowledgeExplainDefinition = "explain shows one node's context: its data, its " +
 		"incoming and outgoing edges with provenance, and how many nodes reach it."
-	KnowledgePathDefinition = "path connects two nodes: the shortest chain of edges " +
+	KnowledgePathDefinition = "explain --to connects two nodes: the shortest chain of edges " +
 		"between them (edges walked in either direction), with each hop's relation."
 )
 
@@ -1502,7 +1502,7 @@ type SymbolOccurrenceFile struct {
 	// disturbed no existing range (appending a new use at the end of the file) leaves
 	// every occurrence verifying while still adding a site the index never saw. Nothing
 	// magus can compute from the index alone detects that. Completeness rests on the
-	// index being current; `magus status` reports which indexes are.
+	// index being current; `magus server status` reports which indexes are.
 	Stale bool `json:"stale,omitempty" yaml:"stale,omitempty"`
 	// Generated marks a declared output: regenerate it, never hand-edit a site.
 	Generated bool `json:"generated,omitempty" yaml:"generated,omitempty"`
@@ -1657,7 +1657,7 @@ type KnowledgePathStep struct {
 	Forward  bool       `json:"forward"  yaml:"forward"`
 }
 
-// KnowledgePathOutput is the result of `magus path a b`: the resolved endpoints
+// KnowledgePathOutput is `magus explain a --to b`: the resolved endpoints
 // and the shortest connecting path (edges treated as bidirectional), if any.
 type KnowledgePathOutput struct {
 	Definition    string              `json:"definition"     yaml:"definition"`
@@ -1668,7 +1668,7 @@ type KnowledgePathOutput struct {
 	Steps         []KnowledgePathStep `json:"steps,omitempty" yaml:"steps,omitempty"`
 }
 
-// KnowledgePathOptions narrows `magus path` and magus\graph().path.
+// KnowledgePathOptions narrows `magus explain --to` and magus\graph().path.
 type KnowledgePathOptions struct {
 	// Relations are the only relations a hop may walk. Empty walks every relation, so
 	// Found false under a filter means no path of those relations, not no path at all.

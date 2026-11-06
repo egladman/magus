@@ -1548,9 +1548,9 @@ func foldBinary(h *knowledge.InputHash) bool {
 // and would turn an internal failure into a confident claim of absence, which is the one
 // outcome the verdict exists to prevent.
 //
-// It keys off the same declarations loadKnowledgeSymbols ingests, which is deliberately
-// NOT the set magus status reports: declarations include knowledge.symbols overrides, and
-// a project indexed only through one of those is invisible to the status lens.
+// It keys off the declarations loadKnowledgeSymbols ingests, NOT the set
+// `magus server status` reports. Those include knowledge.symbols overrides,
+// which status cannot see.
 //
 // The probe is one Stat per declared index and nothing more. It deliberately does not
 // decode the index to check it parses: that is a full protobuf unmarshal plus symbol

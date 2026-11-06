@@ -428,3 +428,13 @@ development/libs-testlayout/
 reference/api/insight/
 reference/api/insight/v1alpha1/
 reference/api/insight/v1alpha1/insight/
+# path folded into explain --to; completion and man moved under self. Man pages are
+# generated per top-level command, so the move retires these, now at
+# reference/manpage/magus-explain/ and reference/manpage/magus-self/.
+reference/manpage/magus-completion/
+reference/manpage/magus-man/
+reference/manpage/magus-path/
+# status and broker moved under server, so their pages are now sections of
+# reference/manpage/magus-server/.
+reference/manpage/magus-broker/
+reference/manpage/magus-status/

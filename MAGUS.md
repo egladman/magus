@@ -49,7 +49,7 @@ This workspace has a knowledge graph (schema v25). Query it instead of grepping:
 ```sh
 magus query "<terms>"       # kind=spell, project=pkg/foo, relation=uses, free text, kind!=op
 magus explain <node>        # one node: its edges, provenance, blast radius
-magus path <a> <b>          # how two nodes connect
+magus explain <a> --to <b>  # how two nodes connect
 magus graph stats           # god nodes, orphans, doc coverage
 magus graph export -o json  # the whole graph
 ```

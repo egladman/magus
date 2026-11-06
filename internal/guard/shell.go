@@ -2423,7 +2423,7 @@ func probesForeignProcess(c hint.Invocation) bool {
 		return false
 	}
 	words := magusSubcommandWords(c.Args)
-	return hint.Status.MatchedBy(words) || hint.LsJobs.MatchedBy(words) || hint.DescribeJob.MatchedBy(words) ||
+	return hint.ServerStatus.MatchedBy(words) || hint.LsJobs.MatchedBy(words) || hint.DescribeJob.MatchedBy(words) ||
 		(len(words) > 0 && words[0] == "job")
 }
 
@@ -2815,7 +2815,7 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 			// The one-shot read, not --watch: a watch never exits, and a served command that
 			// holds the caller's tool slot until it times out is the poll again.
 			poll = poll.withRemedy("process-table reads and `kill -0` answer what the project lock already records.",
-				hint.NextForDenyRemedy(string(denyRuleProcessPoll), hint.Status.Argv(),
+				hint.NextForDenyRemedy(string(denyRuleProcessPoll), hint.ServerStatus.Argv(),
 					"status reads the live pool once and exits, where the process table only guesses at it."))
 		}
 		if v, ok := held.ends(deps, poll); ok {

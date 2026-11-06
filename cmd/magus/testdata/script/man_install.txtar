@@ -1,17 +1,23 @@
-# magus man install writes the man pages embedded in the binary to a directory, so
+# magus self man writes the man pages embedded in the binary to a directory, so
 # the count of pages will churn as commands gain man pages - the count itself is not
 # the contract. What is worth pinning: the command reports success in the expected
 # shape AND real .1 files actually land on disk, not just a printed number.
 #
 # No workspace fixture needed - man pages come from the binary, not the project.
 
-exec magus man install --dir ./mandir
+exec magus self man --dir ./mandir
 stdout 'Installed \d+ man pages to \./mandir'
 exists mandir/magus.1
 exists mandir/magus-run.1
 exists mandir/magus-describe.1
 
-# Bare `magus man` with no subcommand exits 1 and names what is missing.
+# A stray argument exits 2 and names it.
+! exec magus self man install
+stderr 'Usage: magus self man \[--dir <path>\]'
+stderr 'magus self man: unexpected argument "install"'
+
+# Neither top-level verb survives the move.
 ! exec magus man
-stderr 'Usage: magus man install \[--dir <path>\]'
-stderr '\[error\] magus man: subcommand required'
+stderr 'unknown subcommand "man"'
+! exec magus completion bash
+stderr 'unknown subcommand "completion"'

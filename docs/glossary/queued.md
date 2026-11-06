@@ -12,10 +12,10 @@ until a slot frees. The dashboard colors a sample with queued > 0 accordingly.
 
 ## Example
 
-`magus status --watch` shows queued targets as they wait for a slot.
+`magus server status --watch` shows queued targets as they wait for a slot.
 
 ```sh
-magus status --watch=15s
+magus server status --watch=15s
 ```
 
 ## Used in

@@ -11,7 +11,7 @@ Two things worth doing once, after magus is [installed](../setup.md) and on your
 
 ## Shell completion
 
-`magus completion <shell>` prints a completion script for bash, zsh, fish, or powershell (`pwsh` is accepted too). Every script registers both `magus` and the [`mgs` shorthand](#mgs-shorthand), so you set this up once and get it under both names.
+`magus self completion <shell>` prints a completion script for bash, zsh, fish, or powershell (`pwsh` is accepted too). Every script registers both `magus` and the [`mgs` shorthand](#mgs-shorthand), so you set this up once and get it under both names.
 
 ### What it completes
 
@@ -28,7 +28,7 @@ Outside a workspace the project completions are empty. Nothing errors.
 Source it from your rc. The script is re-read from the binary on every new shell, so it cannot go stale after an upgrade:
 
 ```sh
-echo 'source <(magus completion bash)' >> ~/.bashrc
+echo 'source <(magus self completion bash)' >> ~/.bashrc
 ```
 
 ### zsh
@@ -37,7 +37,7 @@ Install it onto your `$fpath` as `_magus`:
 
 ```sh
 mkdir -p ~/.zsh/completions
-magus completion zsh > ~/.zsh/completions/_magus
+magus self completion zsh > ~/.zsh/completions/_magus
 ```
 
 Then in `~/.zshrc`, before `compinit` runs:
@@ -56,7 +56,7 @@ Unlike the bash setup this writes a snapshot, so regenerate it after a [`magus s
 Drop it in the completions directory, where fish loads it on demand:
 
 ```sh
-magus completion fish > ~/.config/fish/completions/magus.fish
+magus self completion fish > ~/.config/fish/completions/magus.fish
 ```
 
 ### PowerShell
@@ -64,10 +64,10 @@ magus completion fish > ~/.config/fish/completions/magus.fish
 Append it to your profile:
 
 ```powershell
-magus completion powershell >> $PROFILE
+magus self completion powershell >> $PROFILE
 ```
 
-Full reference: [`magus completion`](../../reference/manpage/magus-completion/).
+Full reference: [`magus self completion`](../../reference/manpage/magus-self/).
 
 ## `mgs` shorthand
 

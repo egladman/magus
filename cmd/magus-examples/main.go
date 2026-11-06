@@ -98,7 +98,7 @@ const (
 var examples = []example{
 	{docs: knowledgeDoc, slug: "explain-tool-go", fixture: graphFixture, argv: []string{"explain", "tool:go"}},
 	{docs: knowledgeDoc, slug: "explain-target-test", fixture: graphFixture, argv: []string{"explain", "target:.:test"}},
-	{docs: knowledgeDoc, slug: "path-test-to-tool", fixture: graphFixture, argv: []string{"path", "target:.:test", "tool:go"}},
+	{docs: knowledgeDoc, slug: "path-test-to-tool", fixture: graphFixture, argv: []string{"explain", "target:.:test", "--to", "tool:go"}},
 	// --patch, not a positional: a positional narrows the changeset to a PATH, so that spelling
 	// reviews a clean working tree filtered to a file named change.patch and captures
 	// "clean: every change is committed" into the docs.

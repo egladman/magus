@@ -76,7 +76,7 @@ func TestProbeServerVersionWithNoServer(t *testing.T) {
 }
 
 // TestProbeServerVersionReportsALiveServer drives the probe against a real proc server,
-// the same path `magus status` takes, so the wiring is exercised rather than mocked.
+// the path `magus server status` takes, so the wiring is exercised, not mocked.
 func TestProbeServerVersionReportsALiveServer(t *testing.T) {
 	defer snapshotGlobals()()
 	// Let proc pick a socket under SockDir; a t.TempDir() path can exceed the unix

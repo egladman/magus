@@ -4357,7 +4357,7 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
     case "trace": {
       if (!nodeId || !nodeTo) {
         setStatus(
-          "Click two nodes to find the path between them (trace view). CLI: magus path <a> <b>",
+          "Click two nodes to find the path between them (trace view). CLI: magus explain <a> --to <b>",
         );
         renderList();
         draw();
@@ -4662,7 +4662,7 @@ function buildFlowEdges() {
 // playground.html. The prefix swaps verb based on context:
 //   search: "magus query"
 //   blast:  "magus explain"
-//   trace:  "magus path"
+//   trace:  "magus explain --to"
 //   others: no command (no CLI equivalent maps cleanly)
 //
 // "Earn the prompt" rule (section 0.5): an app shows the prompt ONLY when its
@@ -4693,9 +4693,9 @@ function viewCommandStr(name: string | null, nodeId?: string | null, nodeTo?: st
     case "trace":
       // Half-picked: name the node already chosen rather than printing a command that throws
       // away what the app knows.
-      if (!nodeId) return "magus path <a> <b>";
-      if (!nodeTo) return "magus path " + shellQuote(nodeId) + " <b>";
-      return "magus path " + shellQuote(nodeId) + " " + shellQuote(nodeTo);
+      if (!nodeId) return "magus explain <a> --to <b>";
+      if (!nodeTo) return "magus explain " + shellQuote(nodeId) + " --to <b>";
+      return "magus explain " + shellQuote(nodeId) + " --to " + shellQuote(nodeTo);
     default:
       return null; // no valid CLI equivalent
   }
@@ -4710,7 +4710,7 @@ function renderViewCommand(name: string | null, nodeId?: string | null, nodeTo?:
     wrap.hidden = true;
     return;
   }
-  const verb = name === "blast" ? "magus explain" : name === "trace" ? "magus path" : null;
+  const verb = name === "blast" || name === "trace" ? "magus explain" : null;
   if (!verb) {
     wrap.hidden = true;
     return;
@@ -5471,8 +5471,8 @@ async function fetchLiveStatus() {
       liveWorkspaceName = loaded.root;
     }
     // No pool strip here: how many targets the server is running is session state the dashboard
-    // owns. The affected set does not come from here either - StatusOutput.Affected is on the wire
-    // type but `magus status` never opens a workspace, so it has no VCS context to fill it.
+    // owns. Nor does the affected set. StatusOutput.Affected is on the wire
+    // type, but `magus server status` opens no workspace to fill it.
     // GraphService.FindAffected answers instead (refreshAffectedFromServer).
     publishLiveStatus();
   } catch {

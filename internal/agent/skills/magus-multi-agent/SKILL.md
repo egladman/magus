@@ -458,7 +458,7 @@ each verifies. [reference.md](reference.md) has the table and the rename pattern
 ## Observe through the correct control plane
 
 Run workers non-blocking; block on one only when your next action needs its result.
-`{{cmd "status"}} --watch=15s` is for a person, never an agent's background task: an agent waits
+`{{cmd "server status"}} --watch=15s` is for a person, never an agent's background task: an agent waits
 for its own run's completion notice.
 
 The root reads `{{cmd "describe job"}} <job>` or `{{cmd "job watch"}} <job>` only when it needs to know.

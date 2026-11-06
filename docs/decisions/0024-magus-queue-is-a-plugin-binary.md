@@ -61,7 +61,7 @@ Three readers weigh this differently:
 - **A Linux graybeard** reads `magus -h` and finds 36 commands, one of them a merge queue
   that needs a GitHub App. The word is also taken: the [broker](../glossary/broker.md) holds
   a FIFO of [queued](../glossary/queued.md) targets waiting for a slot, and
-  `magus status --watch` shows them. The [scope test](../scope.md#the-test) asks whether a
+  `magus server status --watch` shows them. The [scope test](../scope.md#the-test) asks whether a
   verb answers from what magus already knows. The queue's affected sets pass it. Its
   providers, approvals, rulesets and app credentials each taught magus something new
   about the world.

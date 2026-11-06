@@ -531,7 +531,7 @@ func TestUsagePrintersNameTheirCommands(t *testing.T) {
 		{
 			name:  "completion",
 			print: completionUsage,
-			want:  []string{"Usage: magus completion", "bash", "zsh", "fish", "powershell"},
+			want:  []string{"Usage: magus self completion", "bash", "zsh", "fish", "powershell"},
 		},
 		{
 			name:  "describe",
@@ -551,7 +551,7 @@ func TestUsagePrintersNameTheirCommands(t *testing.T) {
 		{
 			name:  "man",
 			print: manUsage,
-			want:  []string{"Usage: magus man install", "--dir", "--dry-run"},
+			want:  []string{"Usage: magus self man", "--dir", "--dry-run"},
 		},
 		{
 			name:  "notes",
@@ -1149,11 +1149,10 @@ func BenchmarkStartupVersion(b *testing.B) {
 	benchStartup(b, []string{"version"})
 }
 
-// BenchmarkStartupCompletionBash measures `magus completion bash`. Needs
-// config (the completion script embeds config-driven hints) but does not
-// need a workspace.
+// BenchmarkStartupCompletionBash measures `magus self completion bash`, which
+// needs no workspace.
 func BenchmarkStartupCompletionBash(b *testing.B) {
-	benchStartup(b, []string{"completion", "bash"})
+	benchStartup(b, []string{"self", "completion", "bash"})
 }
 
 // BenchmarkStartupLs is the workspace-aware fast case — exercises

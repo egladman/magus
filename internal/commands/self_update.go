@@ -9,9 +9,9 @@ import "github.com/egladman/magus/libs/cmdline"
 // -tags noselfupdate, so that build carries its own selfCommand.
 var selfCommand = cmdline.Command{
 	Name:        "self",
-	Short:       "Manage the magus binary (update, install-shorthand)",
+	Short:       "Manage the magus binary (update, install-shorthand, place, completion, man)",
 	Description: "Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.",
-	Tags:        []string{"cli", "magus self", "self update", "self install-shorthand", "updates", "versioning", "install", "mgs"},
+	Tags:        []string{"cli", "magus self", "self update", "self install-shorthand", "self completion", "self man", "completion", "bash", "zsh", "fish", "powershell", "shell", "manpage", "documentation", "updates", "versioning", "install", "mgs"},
 	Long: `Targets for managing the magus binary.
 
 update is compiled in by default. Package maintainers who own the system
@@ -51,9 +51,13 @@ updated binary is written to <dir>/magus (or magus.exe on Windows) instead.`,
 		},
 		selfInstallShorthandCommand,
 		selfPlaceCommand,
+		selfCompletionCommand,
+		selfManCommand,
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Update the running binary", Command: "magus self update"},
 		{Comment: "Install the mgs shorthand", Command: "magus self install-shorthand"},
+		{Comment: "Bash completion, re-read on every new shell", Command: `echo 'source <(magus self completion bash)' >> ~/.bashrc`},
+		{Comment: "Install the man pages", Command: "magus self man"},
 	},
 }

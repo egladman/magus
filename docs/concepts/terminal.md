@@ -12,7 +12,7 @@ screen, and your scrollback survives: ordinary output keeps scrolling exactly
 as it would, while a few rows at the bottom hold still and show what is
 happening right now.
 
-The one exception is `magus status --watch`: each frame normally redraws in
+The one exception is `magus server status --watch`: each frame normally redraws in
 place, but a frame taller than your terminal has nowhere to redraw to, so that
 one case clears the visible screen and reprints. Scrollback still survives:
 clearing is not the alternate screen buffer, so what scrolled past before is
