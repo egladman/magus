@@ -41,6 +41,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Service", Type: reflect.TypeFor[spells.Service]()},
 	// Must follow Command: SymbolIndexer.command is one.
 	{Name: "SymbolIndexer", Type: reflect.TypeFor[spells.SymbolIndexer](), RuntimeObject: true},
+	{Name: "Coverage", Type: reflect.TypeFor[spells.Coverage]()},
 	{Name: "Charm", Type: reflect.TypeFor[spells.Charm]()},
 	{Name: "PatchOp", Type: reflect.TypeFor[spells.PatchOp]()},
 	{Name: "VersionKey", Type: reflect.TypeFor[spells.VersionKey]()},
@@ -53,13 +54,14 @@ var boundaryTypes = []boundaryType{
 	{Name: "SandboxEnv", Type: reflect.TypeFor[spells.SandboxEnv](), RuntimeObject: true},
 	{Name: "SandboxCache", Type: reflect.TypeFor[spells.SandboxCache](), RuntimeObject: true},
 	{Name: "Sandbox", Type: reflect.TypeFor[spells.Sandbox](), RuntimeObject: true},
-	// Leaves first: CommentSyntax carries [CommentBlock] and [Quote], Syntax
-	// carries a CommentSyntax and a StubSyntax, and Language carries a Syntax.
+	// Leaves first: CommentSyntax carries [CommentBlock] and [Quote], and
+	// Language carries a Syntax.
 	// RuntimeObject because magus\describe.spell hands them back inside a Spell.
 	{Name: "CommentBlock", Type: reflect.TypeFor[spells.CommentBlock](), RuntimeObject: true},
 	{Name: "Quote", Type: reflect.TypeFor[spells.Quote](), RuntimeObject: true},
 	{Name: "CommentSyntax", Type: reflect.TypeFor[spells.CommentSyntax](), RuntimeObject: true},
 	{Name: "StubSyntax", Type: reflect.TypeFor[spells.StubSyntax](), RuntimeObject: true},
+	{Name: "DecisionSyntax", Type: reflect.TypeFor[spells.DecisionSyntax](), RuntimeObject: true},
 	{Name: "Syntax", Type: reflect.TypeFor[spells.Syntax](), RuntimeObject: true},
 	{Name: "Language", Type: reflect.TypeFor[spells.Language]()},
 	// A provider spell WRITES this one, like Project below: resolve_secret constructs it
@@ -97,8 +99,17 @@ var boundaryTypes = []boundaryType{
 	{Name: "ReplyReviewRequest", Type: reflect.TypeFor[types.ReplyReviewRequest](), RuntimeObject: true},
 	{Name: "ReviewRef", Type: reflect.TypeFor[types.ReviewRef](), RuntimeObject: true},
 	{Name: "ProjectQuery", Type: reflect.TypeFor[types.ProjectQuery](), RuntimeObject: true},
+	{Name: "ListPullsRequest", Type: reflect.TypeFor[types.ListPullsRequest](), RuntimeObject: true},
 	{Name: "ReviewTarget", Type: reflect.TypeFor[types.ReviewTarget]()},
 	{Name: "ReviewComment", Type: reflect.TypeFor[types.ReviewComment]()},
+	// list_pulls answer, leaf first: PullList holds BaseBranch and ForgePull, which hold
+	// ForgeCheck, BaseCommit and RateLimit.
+	{Name: "RateLimit", Type: reflect.TypeFor[types.RateLimit]()},
+	{Name: "ForgeCheck", Type: reflect.TypeFor[types.ForgeCheck]()},
+	{Name: "BaseCommit", Type: reflect.TypeFor[types.BaseCommit]()},
+	{Name: "BaseBranch", Type: reflect.TypeFor[types.BaseBranch]()},
+	{Name: "ForgePull", Type: reflect.TypeFor[types.ForgePull]()},
+	{Name: "PullList", Type: reflect.TypeFor[types.PullList]()},
 	// The merge queue provider script's records, leaf first, each taking a Queue prefix
 	// because Change, Check and Setting already name other mirrors. host.go provides them to
 	// the queue's session; nothing else imports them.
@@ -345,6 +356,9 @@ var boundaryTypes = []boundaryType{
 	{Name: "ConformanceUnmeasured", Type: reflect.TypeFor[types.ConformanceUnmeasured](), RuntimeObject: true},
 	{Name: "ConformanceRow", Type: reflect.TypeFor[types.ConformanceRow](), RuntimeObject: true},
 	{Name: "Conformance", Type: reflect.TypeFor[types.Conformance](), RuntimeObject: true},
+	{Name: "FunctionGap", Type: reflect.TypeFor[types.FunctionGap](), RuntimeObject: true},
+	{Name: "ChangeRiskFunction", Type: reflect.TypeFor[types.ChangeRiskFunction](), RuntimeObject: true},
+	{Name: "ChangeRisk", Type: reflect.TypeFor[types.ChangeRisk](), RuntimeObject: true},
 	// There is deliberately no ModelTier object: that name is the workspace's own Buzz enum.
 	{Name: "ModelTierRecord", Type: reflect.TypeFor[types.ModelTierRecord](), RuntimeObject: true},
 	{Name: "ModelTiers", Type: reflect.TypeFor[types.ModelTiers](), RuntimeObject: true},
@@ -655,6 +669,11 @@ var boundaryEnums = []boundaryEnum{
 		Name:  "SymbolFormat",
 		Type:  reflect.TypeFor[spells.SymbolFormat](),
 		Cases: []enumCase{{"none", ""}, {"scip", "scip"}, {"goPackages", "go-packages"}, {"buzzModule", "buzz-module"}, {"shellScript", "shell-script"}},
+	},
+	{
+		Name:  "CoverageFormat",
+		Type:  reflect.TypeFor[spells.CoverageFormat](),
+		Cases: []enumCase{{"none", ""}, {"lcov", "lcov"}, {"goProfile", "go-coverprofile"}},
 	},
 	{
 		Name:  "External",

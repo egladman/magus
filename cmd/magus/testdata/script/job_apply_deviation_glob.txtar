@@ -18,7 +18,7 @@ exec magus describe job flags/glob -o 'template={{toJson .job.deviations}}'
 stdout '^\[\{"code":"MGS3044","reason":"the integrator regenerates every one","subject":"\*\*"\}\]$'
 
 stdin $WORK/widen.json
-exec magus job apply -f -
+exec magus job apply --stdin
 stdout '^updated flags/glob, still declared:$'
 stdout '^  write_paths \+docs/rules/\*\.md \+docs/manpage/\*\.md$'
 exec magus describe job flags/glob -o 'template={{toJson .job.deviations}}'

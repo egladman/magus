@@ -216,3 +216,19 @@ test "golangci-lint keys on the platform and the Go toolchain selectors" {
         std\assert(keys.indexOf(name) != null, message: "{name} keys the lint op");
     }
 }
+
+test "decisions are gocyclo's: if, for, case, && and ||" {
+    final decisions = go\mgs_getLanguage().syntax!.decisions!;
+    std\assert(decisions.keywords.join(" ") == "if for case", message: "keywords");
+    std\assert(decisions.operators.join(" ") == "&& ||", message: "operators");
+}
+
+test "coverage is a go profile the project's tests leave in .magus" {
+    final coverage = go\mgs_getCoverage();
+    std\assert(coverage.format == CoverageFormat.goProfile, message: "format");
+    std\assert(coverage.profile == ".magus/coverage.out", message: "profile");
+}
+
+test "go-test scopes to one package directory" {
+    std\assert(command("go-test").testScope.join(" ") == "./\{dir\}", message: "scope");
+}

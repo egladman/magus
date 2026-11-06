@@ -23,6 +23,7 @@ import (
 	"github.com/scip-code/scip/bindings/go/scip"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -1237,4 +1238,35 @@ export fun mgs_getSymbolIndexer() > SymbolIndexer {
 	require.NotNil(t, sp.SymbolIndexer())
 	assert.Equal(t, "scip-test", sp.SymbolIndexer().Command.Bin)
 	assert.Equal(t, spells.DefaultSymbolIndexOp, sp.SymbolIndexOp())
+}
+
+type spellCoverageSuite struct{ suite.Suite }
+
+func TestSpellCoverageSuite(t *testing.T) { suite.Run(t, new(spellCoverageSuite)) }
+
+// A workspace-local spell reaches the registry with its coverage declaration
+// whole, since change risk finds a spell's profile through Coverage.
+func (s *spellCoverageSuite) TestALocalSpellKeepsItsCoverage() {
+	const name = "local-spell-coverage"
+	dir := s.T().TempDir()
+	path := filepath.Join(dir, "spell.buzz")
+	s.Require().NoError(os.WriteFile(path, []byte(`import "magus/spell";
+export fun mgs_getName() > str { return "`+name+`"; }
+export fun mgs_getCoverage() > Coverage {
+    return Coverage{format = CoverageFormat.lcov, profile = "out/lcov.info"};
+}
+`), 0o644))
+	_, sp, err := loadBuzzSpell(interp.WithSource(context.Background(), &interp.Source{Dir: dir}), path)
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(name) })
+
+	s.Equal(&spells.Coverage{Format: spells.CoverageFormatLCOV, Profile: "out/lcov.info"}, sp.Coverage())
+	s.Empty(sp.Targets(), "a coverage declaration synthesizes no op")
+}
+
+func (s *spellCoverageSuite) TestTheShippedGoSpellDeclaresItsProfile() {
+	spec, _, err := loadBuzzSpell(context.Background(), filepath.Join("..", "..", "..", "spells", "golang", "spell.buzz"))
+	s.Require().NoError(err)
+
+	s.Equal(&spells.Coverage{Format: spells.CoverageFormatGoProfile, Profile: ".magus/coverage.out"}, spec.Coverage)
 }

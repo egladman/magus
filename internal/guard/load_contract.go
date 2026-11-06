@@ -229,6 +229,9 @@ func denyContractSkew(ctx context.Context, deps Dependencies, at location, line 
 	if readOnlyLine(line, d) || recoveryLine(line, d, deps.lease, deps.lease == "", at) || replacesStaleMagus(line, at) {
 		return ""
 	}
+	if finishesMergeOfBuild(ctx, at.workspace, skew.Built, line, d) {
+		return ""
+	}
 	built := skew.Built
 	if len(built) > 12 {
 		built = built[:12]
@@ -239,6 +242,35 @@ func denyContractSkew(ctx context.Context, deps Dependencies, at location, line 
 			deps.Binary, cmp.Or(deps.BinaryVersion, "an unknown version"), built, leadPath(skew.Contract), fix.say),
 		Why: withPolicyNote("A binary built before a change to the host declarations, the API locks, the generated bindings or the Buzz checker may not load the tree after it, and anything run now is judged by a policy it may not read. "+
 			"This names the process that judged the call: a file replaced since it started answers `version` with its own build. "+
-			"Reads, `git status`, VCS recovery and the rebuild still run.", runPolicyNote(line, at)),
+			"Reads, `git status`, VCS recovery and the rebuild still run, and so does finishing a merge of the commit the binary was built at.", runPolicyNote(line, at)),
 	}.full()
+}
+
+// finishesMergeOfBuild reports a line that settles or commits a
+// merge whose incoming side is the binary's build commit. That
+// binary loads the incoming contract, and a dirty-tree build is
+// refused, so the merge commit is the way out.
+func finishesMergeOfBuild(ctx context.Context, root, built, line string, d Dialect) bool {
+	call, ok := soleCall(line, d)
+	if !ok || len(call.Assigns) > 0 || !mergeFinishLine(literalWords(call.Args)) {
+		return false
+	}
+	incoming, err := gitNames(ctx, root, "rev-parse", "-q", "--verify", "MERGE_HEAD")
+	return err == nil && len(incoming) == 1 && incoming[0] == built
+}
+
+// mergeFinishLine reports `git add`, `git commit` short of an
+// amend, or `magus vcs resolve`.
+func mergeFinishLine(words []string) bool {
+	if len(words) < 2 {
+		return false
+	}
+	switch path.Base(words[0]) {
+	case "git":
+		return words[1] == "add" || words[1] == "commit" && !slices.Contains(words[2:], "--amend")
+	case "magus":
+		sub := magusSubcommandWords(words[1:])
+		return len(sub) >= 2 && sub[0] == "vcs" && sub[1] == "resolve"
+	}
+	return false
 }

@@ -60,6 +60,7 @@ magus__Change__conformance
 magus__Change__diff
 magus__Change__impact
 magus__Change__mergeBase
+magus__Change__risk
 magus__Change__tier
 magus__Graph__dir
 magus__Graph__dirs
@@ -96,6 +97,7 @@ magus__Workspace__forkFacts
 magus__Workspace__grouping
 magus__Workspace__jobs
 magus__Workspace__putJob
+magus__Workspace__risk
 magus__Workspace__skills
 magus__Workspace__tierOutcomes
 magus__Workspace__unmerged

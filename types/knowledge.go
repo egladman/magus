@@ -597,7 +597,10 @@ type KnowledgeSymbol struct {
 	// header [GeneratedSource] reads, from the same read. Its shape is its generator's, so
 	// no conformance check measures it.
 	SourceGenerated bool
-	Defs            []string
+	// Complexity is one plus the decision points an AST-reading
+	// indexer counted, or 0 when it did not count.
+	Complexity int
+	Defs       []string
 	// Definitions holds each defining file's first definition with that file's own doc, in
 	// Defs order, when Defs names more than one file: a function written once per GOOS has
 	// one key and a doc per file. It lists the file Source names too, so a reader walks one

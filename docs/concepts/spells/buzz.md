@@ -27,6 +27,12 @@ Working directory and environment are NOT options: they ride the context, as `bu
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
+## magus-buzz-test
+
+`magus buzz -t` tests every path it is given, so a file's own test blocks and its _test.buzz sibling both run. The op is not named buzz-test, which this repo's magusfiles already declare as targets.
+
+**Command:** `$MAGUS buzz -t --embedded`
+
 ## scip-buzz
 
 magus indexes the project's Buzz in process, one module file per unit, so the index runs no tool. A project bound to another indexing spell too (go, typescript) keeps that index under `scip` and builds this one beside it as `scip-buzz`, the op name every cached index and doc already uses.

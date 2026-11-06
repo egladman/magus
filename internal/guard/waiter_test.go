@@ -216,32 +216,29 @@ func TestSpawnDuplicateRefusesASecondWorkerForAJob(t *testing.T) {
 	}
 }
 
-// A worker waits for the build budget only in the call that spends the seat: a wait piped
-// straight into its run reserves the seat for it, and every other wait holds nothing,
-// whichever tool would run it.
+// A worker's run waits for the build budget in its own call, so every other wait
+// holds nothing, whichever tool would run it.
 func TestSleepPollRefusesAWorkersWaitForTheBuildBudget(t *testing.T) {
 	worker := figuresLease()
 	worker.Parent = "figures"
 	ctx, _ := fleetFixture(t, worker)
 	waits := []string{
-		"./magus status -wait",
-		"./magus status --wait; ./magus run diagrams_generate docs",
 		"./magus status --watch=15s | ./magus run diagrams_generate docs",
 		"./magus status --watch=15s",
 		"./magus status -W 15s",
 		"sleep 60; ./magus run diagrams_generate docs",
-		"sleep 60; ./magus status --wait | ./magus run diagrams_generate docs",
+		"sleep 60; ./magus status",
 	}
 	for i, line := range waits {
 		bash := Judge(ctx, Dependencies{}, Request{Input: line, Lease: worker.ID})
 		assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(bash), "Bash: %s", line)
 		if i == 0 {
-			assert.Contains(t, bash.Reason, "only in the call that spends the seat", "a repeat is shortened to the rule's name")
+			assert.Contains(t, bash.Reason, "waits for the build budget itself", "a repeat is shortened to the rule's name")
 		}
 		watcher := Judge(ctx, Dependencies{}, Request{Input: monitorCall(t, "", line), Lease: worker.ID, Host: "claude-code"})
 		assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(watcher), "Monitor: %s", line)
 	}
-	for _, line := range []string{"./magus status", "./magus status --wait | ./magus run diagrams_generate docs"} {
+	for _, line := range []string{"./magus status"} {
 		watched := Judge(ctx, Dependencies{}, Request{Input: monitorCall(t, "", line), Lease: worker.ID, Host: "claude-code"})
 		assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(watched), "a watcher repeats the call: %s", line)
 	}
@@ -250,16 +247,15 @@ func TestSleepPollRefusesAWorkersWaitForTheBuildBudget(t *testing.T) {
 		"./magus status",
 		"./magus run diagrams_generate docs",
 		"sleep 2; ./magus run diagrams_generate docs",
-		"./magus status --wait | ./magus run diagrams_generate docs",
 	} {
 		v := Judge(ctx, Dependencies{}, Request{Input: line, Lease: worker.ID})
 		assert.NotEqual(t, string(denyRuleSleepPoll), v.Rule, "a worker reads the pool once, or waits in its check's own call: %s", line)
 	}
 }
 
-// TestWorkerRetryIsSentToThePipedWait: inside the minute after a refusal a worker's bare
-// rerun of its check is refused and named the piped wait, which it may then run.
-func TestWorkerRetryIsSentToThePipedWait(t *testing.T) {
+// TestWorkerRetryAfterTheBoundIsRefused: inside the minute after a refusal, which
+// came after the run waited as long as budget_wait allows, a worker's rerun of its check is refused.
+func TestWorkerRetryAfterTheBoundIsRefused(t *testing.T) {
 	worker := figuresLease()
 	worker.Parent = "figures"
 	ctx, _ := fleetFixture(t, worker)
@@ -269,10 +265,7 @@ func TestWorkerRetryIsSentToThePipedWait(t *testing.T) {
 
 	bare := Judge(ctx, Dependencies{}, Request{Input: "./magus run diagrams_generate docs", Lease: worker.ID})
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(bare))
-	assert.Contains(t, bare.Reason, "status --wait | ")
-
-	piped := Judge(ctx, Dependencies{}, Request{Input: "./magus status --wait | ./magus run diagrams_generate docs", Lease: worker.ID})
-	assert.NotEqual(t, string(denyRuleSleepPoll), piped.Rule, piped.Reason)
+	assert.Contains(t, bare.Reason, "within its budget_wait")
 }
 
 // The orchestrator is who waits for the build budget, so the same lines pass for it.
@@ -280,7 +273,7 @@ func TestSleepPollLeavesTheOrchestratorsBudgetWait(t *testing.T) {
 	root := figuresLease()
 	ctx, _ := fleetFixture(t, root)
 	for _, line := range []string{
-		"./magus status --wait | ./magus run diagrams_generate docs",
+		"./magus run diagrams_generate docs",
 		"./magus status --watch=15s",
 		"sleep 60; ./magus run diagrams_generate docs",
 	} {
@@ -395,21 +388,7 @@ func (s *PressureRetrySuite) TestALeasedRetryIsToldTheOwedFilingAndNotTheWait() 
 	s.Require().True(d.refused())
 	s.Contains(d.Say, "refused with MGS3053 10s ago")
 	s.Contains(d.Say, cache.LeasedPressureNext("figures"), "the guard and the refusal say one thing")
-	s.NotContains(d.Say, "status --wait", "no seat clears this")
-}
-
-func (s *PressureRetrySuite) TestAWaitGatedRetryIsStillRefused() {
-	line := "./magus status --wait | " + pressureRetry
-	s.True(denyRefusedRetry(s.refusedAgo(10*time.Second), Dependencies{lease: "figures"}, "", line).refused())
-}
-
-func (s *PressureRetrySuite) TestAWaitGatedRetryOfAFullBudgetPasses() {
-	cacheDir := s.T().TempDir()
-	runsDir := filepath.Join(cacheDir, "runs")
-	s.Require().NoError(os.MkdirAll(runsDir, 0o755))
-	writeCodedLog(s.T(), runsDir, "invrefused", time.Now().Add(-10*time.Second), types.MachineBudgetExhausted, "run", "lint", ".")
-	ctx := context.WithValue(s.T().Context(), locationKey{}, location{cacheDir: cacheDir})
-	s.False(denyRefusedRetry(ctx, Dependencies{lease: "figures"}, "", "./magus status --wait | "+pressureRetry).refused())
+	s.NotContains(d.Say, "within its budget_wait", "no seat clears this")
 }
 
 func (s *PressureRetrySuite) TestEachListedCodeIsReadBack() {
@@ -438,9 +417,9 @@ func (s *PressureRetrySuite) TestARetryAfterTheMinutePasses() {
 	s.False(denyRefusedRetry(s.refusedAgo(90*time.Second), Dependencies{}, "", pressureRetry).refused())
 }
 
-// TestDenyRefusedRetry: a run this checkout saw refused with MGS3009 inside the minute is
-// refused again with the wait piped into it; an older refusal, another command, a run that
-// passed and the piped wait itself pass.
+// TestDenyRefusedRetry: a run this checkout saw refused with MGS3009 inside the minute,
+// after it waited its bound, is refused again; an older refusal, another command and a
+// run that passed pass.
 func TestDenyRefusedRetry(t *testing.T) {
 	t.Parallel()
 	const retry = "./magus run go-test . -s -- -run 'TestHookCmd|TestJudge'"
@@ -459,7 +438,7 @@ func TestDenyRefusedRetry(t *testing.T) {
 		d := denyRefusedRetry(at(t, 10*time.Second, true), Dependencies{lease: "figures"}, "", retry)
 		require.True(t, d.refused())
 		assert.Contains(t, d.Say, "refused with MGS3009 10s ago")
-		assert.Contains(t, d.Say, "status --wait | ", "the next line pipes the wait into the run")
+		assert.Contains(t, d.Say, "within its budget_wait", "the run already waited, so the next line raises the bound or files it owed")
 		assert.Contains(t, d.Say, " run go-test . -s -- -run 'TestHookCmd|TestJudge'`", "quoted so the pipe in the pattern stays an argument")
 	})
 	t.Run("a repeat after the minute", func(t *testing.T) {
@@ -483,24 +462,6 @@ func TestDenyRefusedRetry(t *testing.T) {
 		runsDir := workspaceRunsDir(ctx.Value(locationKey{}).(location).cacheDir)
 		writeRefusalLog(t, runsDir, "invpassed", time.Now().Add(-20*time.Second), false, refusedArgv...)
 		assert.False(t, denyRefusedRetry(ctx, Dependencies{}, "", retry).refused(), "the newest run of the command passed")
-	})
-	t.Run("the piped wait", func(t *testing.T) {
-		t.Parallel()
-		ctx := at(t, 10*time.Second, true)
-		assert.False(t, denyRefusedRetry(ctx, Dependencies{}, "", "./magus status --wait | "+retry).refused())
-		assert.False(t, denyRefusedRetry(ctx, Dependencies{}, "", "./magus status --wait 2>/dev/null | timeout 600 "+retry).refused())
-	})
-	t.Run("a wait that feeds no run", func(t *testing.T) {
-		t.Parallel()
-		ctx := at(t, 10*time.Second, true)
-		for _, line := range []string{
-			retry + "; ./magus status --wait",
-			"./magus status --wait; " + retry,
-			"./magus status -W 15s | " + retry,
-			"./magus status --wait | ./magus run lint . && " + retry,
-		} {
-			assert.True(t, denyRefusedRetry(ctx, Dependencies{}, "", line).refused(), line)
-		}
 	})
 	t.Run("no run log", func(t *testing.T) {
 		t.Parallel()
@@ -526,57 +487,14 @@ func TestJudgeRefusesARetryAfterARefusal(t *testing.T) {
 	}, v, v.Reason)
 }
 
-// Every way MGS3009's hint and the budget denies teach a wait passes a worker: the wait piped
-// into the refused call, a run or a `graph build`, or run before it with `&&`. A wait that
-// gates no magus call still waits for nothing.
-func TestSleepPollPassesEveryWaitTheBudgetHintTeaches(t *testing.T) {
-	worker := figuresLease()
-	worker.Parent = "figures"
-	ctx, _ := fleetFixture(t, worker)
-	for _, line := range []string{
-		"./magus status --wait | ./magus run diagrams_generate docs",
-		"./magus status --wait | ./magus graph build --silent",
-		"./magus status --wait && ./magus graph build --silent",
-		"./magus status --wait && ./magus run diagrams_generate docs",
-	} {
-		v := Judge(ctx, Dependencies{}, Request{Input: line, Lease: worker.ID})
-		assert.NotEqual(t, string(denyRuleSleepPoll), v.Rule, "%s: %s", line, v.Reason)
-	}
-	for _, line := range []string{
-		"./magus status --wait; ./magus graph build --silent",
-		"./magus status --wait | ./magus status",
-		"./magus status --wait && echo ready",
-		"./magus status --watch=15s && ./magus graph build --silent",
-	} {
-		v := Judge(ctx, Dependencies{}, Request{Input: line, Lease: worker.ID})
-		assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(v), line)
-	}
-}
-
-// A retry the wait gates with `&&` is not the poll denyRefusedRetry refuses; `;` still is.
-func TestRefusedRetryPassesARunTheWaitGates(t *testing.T) {
-	cacheDir := t.TempDir()
-	runsDir := filepath.Join(cacheDir, "runs")
-	require.NoError(t, os.MkdirAll(runsDir, 0o755))
-	writeRefusalLog(t, runsDir, "invrefused", time.Now().Add(-10*time.Second), true, "run", "lint", ".")
-	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir})
-
-	assert.False(t, denyRefusedRetry(ctx, Dependencies{}, "", "./magus status --wait && ./magus run lint .").refused())
-	assert.True(t, denyRefusedRetry(ctx, Dependencies{}, "", "./magus status --wait; ./magus run lint .").refused())
-}
-
-// The waits the budget denies and MGS3009 teach, and the bounded background run check-timeout
-// serves, pass the guard for every role they are served to.
-func TestEveryServedWaitPassesTheGuardForEveryRole(t *testing.T) {
+// The bounded background run check-timeout serves passes the guard for every
+// role it is served to.
+func TestEveryServedBackgroundCheckPassesTheGuardForEveryRole(t *testing.T) {
 	ctx, roles := servedRoles(t)
 	deps := strict(loadingWorkspace(t))
 	deps.Spells = testDependencies().Spells
-	wait := hint.Status.With("--wait")
 	for _, role := range roles {
 		for id, run := range map[string]string{
-			"wait piped into a run":    wait + " | magus run go::go-test . -- ./internal/ledger/",
-			"wait piped into a build":  wait + " | magus graph build --silent",
-			"wait before a build":      wait + " && magus graph build --silent",
 			"bounded background check": "./magus job exec --timeout 18m0s -- ./magus run go::go-test . -- -run TestLedger",
 		} {
 			t.Run(fmt.Sprintf("%s/%s", role.name, id), func(t *testing.T) {
@@ -633,8 +551,7 @@ func TestSleepPollRefusesAProcessWaitOnARunHoldingASeat(t *testing.T) {
 	}
 }
 
-// The unbound root is refused a run, so its retry remedy forks a job rather than piping
-// into the run.
+// The unbound root is refused a run, so its retry remedy forks a job.
 func TestRefusedRetryServesTheRootAForkedJob(t *testing.T) {
 	cacheDir := t.TempDir()
 	runsDir := filepath.Join(cacheDir, "runs")
@@ -648,7 +565,7 @@ func TestRefusedRetryServesTheRootAForkedJob(t *testing.T) {
 
 	leased := denyRefusedRetry(ctx, Dependencies{lease: "figures"}, "", "./magus run lint .")
 	require.True(t, leased.refused())
-	assert.Contains(t, leased.Say, "status --wait | ")
+	assert.Contains(t, leased.Say, "within its budget_wait")
 	assert.NotContains(t, leased.Say, hint.JobFork.String())
 }
 

@@ -54,10 +54,11 @@ type Cache struct {
 	inflight *inflight
 	// machine arbitrates concurrency slots and declared memory across every magus on
 	// the host; nil when no arbiter was wired, which admits every step as before. Built
-	// in Open from the two fields below, which is where the caller's logger exists.
+	// in Open from the fields below, which is where the caller's logger exists.
 	machine         *machineGate
 	machineAdmitter MachineAdmitter
 	machineRequired bool
+	machineWait     time.Duration
 	// The tiers Run walks, local first, built once in Open from the option inputs below.
 	local          *localTier
 	remote         *remoteTier // nil when no backend is configured
@@ -446,7 +447,7 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	// After the options, so its warnings reach the logger the caller chose.
 	c.mtimes = newMtimeStore(dir, c.log)
 	if c.machineAdmitter != nil {
-		c.machine = &machineGate{admit: c.machineAdmitter, log: c.log, required: c.machineRequired}
+		c.machine = &machineGate{admit: c.machineAdmitter, log: c.log, required: c.machineRequired, wait: c.machineWait}
 	}
 	if err := c.initSigning(); err != nil {
 		return nil, err
@@ -1292,7 +1293,7 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 		Invocation: selfInvocation(ctx), Ancestors: ancestorInvocations(ctx),
 	}}
 	if c.machine != nil {
-		h.claim.Weight = LeaseWeight(ctx, c.dir)
+		h.claim.Weight = leaseWeight(ctx, c.dir)
 	}
 	id, release, err := c.machine.claim(ctx, h.claim)
 	if err != nil {
@@ -2194,6 +2195,9 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		stderrTap = col.newLineTap(io.MultiWriter(os.Stderr, safeLogF), journal.StreamStderr)
 	}
 	captureCtx := spawn.WithOutputWriters(ctx, stdoutTap, stderrTap)
+	// A quiet child's lines skip the taps, yet a nested run's wait for a
+	// seat is still this step's progress (MGS3012).
+	captureCtx = spawn.WithActivity(captureCtx, ProgressFromContext(ctx).Beat)
 	// Tag the step so subprocesses run under fn emit exec events labeled with this
 	// project/target (the run primitive reads this from ctx; see internal/proc/spawn).
 	captureCtx = journal.WithStep(captureCtx, projectPath, target)

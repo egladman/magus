@@ -19,7 +19,7 @@ import (
 // plus the segments that open one of its modes, and console/src/apps/apps.test.ts fails when this
 // list and theirs differ in either direction. It stays a list because the CLI mints links where no
 // console bundle exists to read; the server's routes come from the bundle it serves (appRoute).
-var KnownApps = []string{"activity", "dashboard", "diagrams", "diff", "graph", "logs", "notes", "plan", "runs", "tools"}
+var KnownApps = []string{"activity", "dashboard", "diagrams", "diff", "graph", "logs", "notes", "plan", "pulls", "runs", "tools"}
 
 // IsAppRoute reports whether seg is exactly one known app segment (no sub-path).
 func IsAppRoute(seg string) bool {

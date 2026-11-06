@@ -1,0 +1,41 @@
+# A fork run inside a checkout a job's fork made adopts that checkout. A checkpoint that is
+# not its head names work in another checkout, so the fork is refused, naming --checkout,
+# rather than binding the job to a head nobody handed it.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+cd shop
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'shop'
+exec git switch -q -c side
+exec git commit -q --allow-empty -m 'side'
+exec git switch -q main
+
+exec magus job fork land --read-only --criteria 'land the work' --checkout $WORK/land
+stdout '^checkout .*land: made for job land at '
+
+cd $WORK/land
+! exec magus job fork probe --read-only --criteria 'check the side work' --checkpoint side
+stderr 'probe names the checkpoint side'
+stderr 'pass --checkout <dir>'
+! exec magus describe job probe
+
+exec magus job fork here --read-only --criteria 'read the landing tree'
+stderr 'so here is taken there too'
+
+-- shop/.gitignore --
+.magus/
+-- shop/magus.yaml --
+concurrency: 2
+disk:
+  critical_free_mb: 0
+-- shop/magusfile.buzz --
+import "magus";
+
+// test has nothing to check; the job here only reads.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+}

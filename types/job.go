@@ -592,6 +592,9 @@ type GateEvidence struct {
 	GateID    string `json:"gate_id" yaml:"gate_id"`
 	OutputRef string `json:"output_ref" yaml:"output_ref"`
 	Owed      string `json:"owed,omitempty" yaml:"owed,omitempty"`
+	// Unrun is the cause that kept the goal's run from running in this
+	// environment. It files a failed attempt: `job wait` fails it.
+	Unrun string `json:"unrun,omitempty" yaml:"unrun,omitempty"`
 }
 
 // JobResultValidation cites the output for a job's primary check, or names in Owed why its
@@ -600,6 +603,9 @@ type JobResultValidation struct {
 	Command   string `json:"command" yaml:"command"`
 	OutputRef string `json:"output_ref" yaml:"output_ref"`
 	Owed      string `json:"owed,omitempty" yaml:"owed,omitempty"`
+	// Unrun is the environment cause that kept the check from running, as
+	// on [GateEvidence].
+	Unrun string `json:"unrun,omitempty" yaml:"unrun,omitempty"`
 }
 
 // OwedNoSeat is the one reason a worker files a check as owed: the machine

@@ -53,7 +53,7 @@ func (m *Magus) wireBroker() ([]cache.Option, error) {
 		exe, _ := os.Executable()
 		cache.KickDiskTick(exe, m.ws.Root, m.cfg.Disk.SampleEvery)
 	}
-	opts := []cache.Option{cache.WithMachineAdmission(cache.KickingAdmitter(m.broker, kick))}
+	opts := []cache.Option{cache.WithMachineAdmission(cache.KickingAdmitter(m.broker, kick), m.cfg.BudgetWait)}
 	if policy.Resolved() == types.BrokerRequired {
 		opts = append(opts, cache.WithMachineAdmissionRequired())
 	}

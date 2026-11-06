@@ -215,12 +215,12 @@ func (s *GateArgvSuite) TestARootFlagValueIsNotTheVerb() {
 }
 
 func (s *GateArgvSuite) TestAVerbThatRunsNothingIsNoGate() {
-	s.False(gateArgv([]string{"status", "--wait"}))
+	s.False(gateArgv([]string{"status", "--watch", "15s"}))
 }
 
 // A wrapper's mark on its whole path: real `job exec`, real run, private
 // broker. Its pair is TestAForkUnderJobExecSharesItsClaim.
-func TestARunUnderJobExecIsRefusedOnABudgetStrangersFill(t *testing.T) {
+func TestARunUnderJobExecWaitsItsBoundOnABudgetStrangersFill(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	privateSockDir(t)
@@ -251,9 +251,13 @@ func TestARunUnderJobExecIsRefusedOnABudgetStrangersFill(t *testing.T) {
 
 	cmd := exec.Command(bin, "job", "exec", "--timeout", "2m", "--", bin, "run", "--no-cache", "test", ".")
 	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "MAGUS_BUDGET_WAIT=1s")
 	out, err := cmd.CombinedOutput()
 	require.Error(t, err, "%s", out)
+	assert.Contains(t, string(out), "waiting for a seat for (root) test", "it says it parked")
 	assert.Contains(t, string(out), "MGS3009")
+	assert.Contains(t, string(out), "waited 1s for a seat, held by pid 1 other test")
+	assert.Contains(t, string(out), "That is the bound budget_wait", "the refusal names where its bound came from")
 }
 
 type BrokerStopSuite struct{ suite.Suite }

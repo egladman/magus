@@ -1160,6 +1160,19 @@ func TestIntegratorGoalsLeaveADeclaredGoalOnTheTarget(t *testing.T) {
 	assert.Empty(t, integratorGoals(acceptRow()), "a job that integrates nothing holds only what it declares")
 }
 
+// A check the environment kept from running is filed with its cause and
+// fails, naming it: it is never a pass nobody earned.
+func TestVerifyFailsACheckFiledAsUnrunNamingTheCause(t *testing.T) {
+	t.Parallel()
+
+	rep := passingResult()
+	rep.Validation = types.JobResultValidation{Command: acceptRow().Validation, Unrun: "node_modules is missing"}
+	v := verifyClaim(acceptRow(), rep, types.JobAttempt{}, nil)
+	assert.False(t, v.Verified)
+	require.Len(t, v.Gates, 1)
+	assert.Equal(t, []string{"did not run: node_modules is missing; it fails until the check runs where that is fixed"}, v.Gates[0].Violations)
+}
+
 // A worker never waits for a seat: a check it files as owed for want of one is a normal
 // result, passed with the goal marked owed for the integration. Any other reason, a goal
 // that is not a check, and an integration filing its own checks as owed are refused.
@@ -1187,8 +1200,8 @@ func TestVerifyPassesAWorkerWhoseCheckIsOwed(t *testing.T) {
 	rep.Job = "integrate"
 	v = VerifyGates(integration, rep, types.JobAttempt{}, nil, nil, Observed{})
 	assert.False(t, v.Verified)
-	assert.Contains(t, strings.Join(v.Violations, "\n"), "goal \"check\": an integration runs the checks it owns: it waits for a seat with `")
-	assert.Contains(t, strings.Join(v.Violations, "\n"), "status --wait | <the check>`")
+	assert.Contains(t, strings.Join(v.Violations, "\n"), "goal \"check\": an integration runs the checks it owns: its check waits for a seat itself")
+	assert.Contains(t, strings.Join(v.Violations, "\n"), "raises budget_wait or frees a holder")
 }
 
 func TestAnIntegrationOwingACheckIsToldWhatClearsMemoryToo(t *testing.T) {

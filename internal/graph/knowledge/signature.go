@@ -21,7 +21,7 @@ func (g *Graph) SignatureMatches(id, declared string) (indexed string, match, ok
 	if indexed == "" {
 		return "", false, false
 	}
-	return indexed, sameSignature(n.Attrs[attrLanguage], indexed, declared), true
+	return indexed, sameSignature(n.Attrs[AttrLanguage], indexed, declared), true
 }
 
 func sameSignature(language, a, b string) bool {

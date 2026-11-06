@@ -850,9 +850,15 @@ func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve 
 	if err := refuseOwedReason(result); err != nil {
 		return types.JobAttempt{}, nil, err
 	}
+	if result.Validation.Owed != "" && result.Validation.Unrun != "" {
+		return types.JobAttempt{}, nil, errors.New("job: the result files its check as both owed and unrun: a check the machine would not seat is owed, and one the environment kept from running is unrun, so name one")
+	}
 	if ref := result.Validation.OutputRef; ref != "" {
 		if result.Validation.Owed != "" {
 			return types.JobAttempt{}, nil, fmt.Errorf("job: the result files its check as owed and cites output ref %q, and an owed run has no ref, so name one or the other", ref)
+		}
+		if result.Validation.Unrun != "" {
+			return types.JobAttempt{}, nil, fmt.Errorf("job: the result files its check as unrun and cites output ref %q: a run that failed is cited by its ref alone, so name one or the other", ref)
 		}
 		attempt, err := resolve(ctx, ref)
 		if err != nil {
@@ -869,16 +875,20 @@ func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve 
 		switch {
 		case evidence.GateID == "":
 			return types.JobAttempt{}, nil, errors.New("job: each gate_evidence entry requires gate_id")
+		case evidence.Owed != "" && evidence.Unrun != "":
+			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q is filed as both owed and unrun, so name one", evidence.GateID)
 		case evidence.Owed != "" && evidence.OutputRef != "":
 			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q is filed as owed and cites output ref %q, and an owed run has no ref, so name one or the other", evidence.GateID, evidence.OutputRef)
-		case evidence.Owed == "" && evidence.OutputRef == "":
-			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q names neither output_ref nor owed, so it files nothing", evidence.GateID)
+		case evidence.Unrun != "" && evidence.OutputRef != "":
+			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q is filed as unrun and cites output ref %q: a run that failed is cited by its ref alone, so name one or the other", evidence.GateID, evidence.OutputRef)
+		case evidence.Owed == "" && evidence.Unrun == "" && evidence.OutputRef == "":
+			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q names none of output_ref, owed or unrun, so it files nothing", evidence.GateID)
 		}
 		if seen[evidence.GateID] {
 			return types.JobAttempt{}, nil, fmt.Errorf("job: the result carries duplicate evidence for goal %q", evidence.GateID)
 		}
 		seen[evidence.GateID] = true
-		if evidence.Owed != "" {
+		if evidence.Owed != "" || evidence.Unrun != "" {
 			continue
 		}
 		attempt, err := resolve(ctx, evidence.OutputRef)
@@ -903,6 +913,7 @@ func refuseOwedReason(result types.JobResult) error {
 	for _, goal := range slices.Sorted(maps.Keys(owed)) {
 		if reason := owed[goal]; reason != "" && reason != types.OwedNoSeat {
 			return fmt.Errorf("job: goal %q is filed as owed because %q, and the one reason a run is owed is %q:"+
+				" a check the environment kept from running is filed as unrun with that cause, which fails the job,"+
 				" the integrator regenerates an output outside the write paths, so that files nothing,"+
 				" your orchestrator drops a goal that is not this job's or adds a deviation,"+
 				" and a lint finding in a file this job did not change clears by linting the files it changed",

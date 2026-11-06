@@ -55,6 +55,8 @@ import "http";
 import "os";
 import "result";
 import "serialize";
+import "std";
+import "time";
 import "magus";
 import "magus/spell";
 
@@ -262,7 +264,11 @@ export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget !>
     // until a merge became worth noticing. Ask again without that filter before reporting none:
     // a branch whose pull request just landed is the ordinary end of a review, not the absence
     // of one, and the reader is owed the difference.
-    final all = http\get(url + "&state=closed&sort=updated&direction=desc", headers: auth.value!);
+    return closedReview(url, auth: auth.value!, repo: repo, wantViewer: req.wantViewer);
+}
+
+fun closedReview(url: str, auth: any, repo: str, wantViewer: bool) > ReviewTarget !> any { //nolint:no-throw // magus reads a raise as a failed review call
+    final all = http\get(url + "&state=closed&sort=updated&direction=desc", headers: auth);
     if (all["status"] != 200) {
         return ReviewTarget{ reason = "no pull request for this branch" };
     }
@@ -287,7 +293,7 @@ export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget !>
             break;
         }
     }
-    final viewer = viewerLogin(req.wantViewer);
+    final viewer = viewerLogin(wantViewer);
     if (viewer.error -> e) {
         //nolint:no-throw // magus reads a raise as a failed review call
         throw e.message;
@@ -444,6 +450,431 @@ export fun reply_review(target: Target, req: ReplyReviewRequest) > Ack !> any { 
     }
     final res = http\post(url, body: serialize\jsonEncode({"body": req.body}), headers: auth.value!);
     return Ack{ ok = res["status"] == 200 or res["status"] == 201 };
+}
+
+// Tally counts the requests one list_pulls call sends and keeps the budget
+// the last response reported.
+object Tally {
+    requests: int = 0,
+    revalidated: int = 0,
+    limit: int = 0,
+    remaining: int = 0,
+    reset: str = "",
+}
+
+// getJson reads one resource. Every GET revalidates, so an unchanged
+// resource costs a 304, which GitHub does not count against the limit.
+fun getJson(url: str, auth: any, tally: Tally) > serialize\Boxed !> any {
+    final res = http\get(
+        url,
+        headers: auth,
+        opts: http\Options{ revalidate = true },
+    );
+    tally.requests = tally.requests + 1;
+    final status = res["status"];
+    if (status == 304) {
+        tally.revalidated = tally.revalidated + 1;
+    }
+    final seen = res["headers"];
+    final remaining = seen["X-Ratelimit-Remaining"] ?? "";
+    if (remaining != "") {
+        tally.limit = std\parseInt(seen["X-Ratelimit-Limit"] ?? "0") ?? 0;
+        tally.remaining = std\parseInt(remaining) ?? 0;
+        final epoch = std\parseInt(seen["X-Ratelimit-Reset"] ?? "0") ?? 0;
+        tally.reset = if (epoch == 0) "" else time\format(
+            "2006-01-02T15:04:05Z",
+            unixMillis: std\toDouble(epoch * 1000),
+        );
+    }
+    if (status != 200 and status != 304) {
+        throw "github: HTTP {status}";
+    }
+    return serialize\jsonDecode(res["body"]);
+}
+
+fun isHex(text: str) > bool {
+    var i = 0;
+    while (i < text.len()) {
+        if ("0123456789abcdef".indexOf(text.sub(i, len: 1)) == null) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+// outputRef finds a magus output ref in the lines: "out" and 12 hex digits,
+// not part of a longer word.
+export fun outputRef(lines: [str]) > str {
+    final word = "abcdefghijklmnopqrstuvwxyz0123456789";
+    foreach (line in lines) {
+        var i = 0;
+        while (i + 15 <= line.len()) {
+            final lead = if (i == 0) " " else line.sub(i - 1, len: 1);
+            final tail = if (i + 15 < line.len()) line.sub(i + 15, len: 1) else " ";
+            if (
+                word.indexOf(lead.lower()) == null
+                and word.indexOf(tail.lower()) == null
+                and line.sub(i, len: 3) == "out"
+                and isHex(line.sub(i + 3, len: 12))
+            ) {
+                return line.sub(i, len: 15);
+            }
+            i = i + 1;
+        }
+    }
+    return "";
+}
+
+fun firstLines(text: str, limit: int) > [str] {
+    final rows = mut [<str>];
+    foreach (line in text.split("\n")) {
+        final trimmed = line.trim();
+        if (trimmed != "" and rows.len() < limit) {
+            rows.append(trimmed);
+        }
+    }
+    return rows;
+}
+
+// checkState maps a check run's status and conclusion onto the contract.
+export fun checkState(status: str, conclusion: str) > str {
+    if (status == "in_progress") {
+        return "running";
+    }
+    if (status != "completed") {
+        return "queued";
+    }
+    if (conclusion == "success" or conclusion == "neutral") {
+        return "passed";
+    }
+    if (conclusion == "skipped") {
+        return "skipped";
+    }
+    if (conclusion == "cancelled") {
+        return "cancelled";
+    }
+    return "failed";
+}
+
+export fun statusState(state: str) > str {
+    if (state == "success") {
+        return "passed";
+    }
+    if (state == "failure" or state == "error") {
+        return "failed";
+    }
+    return "running";
+}
+
+// checksFor reads the check runs and statuses of one commit. Only a failed
+// check run costs a second request, for its annotations.
+fun failureLines(api: str, id: int, run: serialize\Boxed, auth: any, tally: Tally) > mut [str] !> any {
+    final lines = mut [<str>];
+    final notes = getJson(
+        api + "/check-runs/{id}/annotations",
+        auth: auth,
+        tally: tally,
+    );
+    foreach (note in notes.listValue()) {
+        final message = note.q("message").stringValue().trim();
+        if (lines.len() < 5 and message != "") {
+            lines.append(message);
+        }
+    }
+    if (lines.len() == 0) {
+        foreach (line in firstLines(run.q("output").q("summary").stringValue(), limit: 5)) {
+            lines.append(line);
+        }
+    }
+    return lines;
+}
+
+fun checksFor(repo: str, sha: str, auth: any, tally: Tally) > [ForgeCheck] !> any {
+    final api = apiBase() + "/repos/" + repo;
+    final rows = mut [<ForgeCheck>];
+    final runs = getJson(
+        api + "/commits/" + sha + "/check-runs?per_page=100",
+        auth: auth,
+        tally: tally,
+    );
+    foreach (run in runs.q("check_runs").listValue()) {
+        final state = checkState(
+            run.q("status").stringValue(),
+            conclusion: run.q("conclusion").stringValue(),
+        );
+        final id = run.q("id").integerValue();
+        final lines = if (state == "failed") failureLines(api, id: id, run: run, auth: auth, tally: tally) else mut [<str>];
+        rows.append(ForgeCheck{
+            name = run.q("name").stringValue(),
+            kind = "check",
+            state = state,
+            queuedAt = run.q("created_at").stringValue(),
+            startedAt = run.q("started_at").stringValue(),
+            completedAt = run.q("completed_at").stringValue(),
+            url = run.q("html_url").stringValue(),
+            description = run.q("output").q("title").stringValue(),
+            lines = lines,
+            outputRef = outputRef(lines),
+        });
+    }
+    final combined = getJson(
+        api + "/commits/" + sha + "/status",
+        auth: auth,
+        tally: tally,
+    );
+    foreach (st in combined.q("statuses").listValue()) {
+        rows.append(statusCheck(st));
+    }
+    return rows;
+}
+
+fun statusCheck(st: serialize\Boxed) > ForgeCheck {
+    final raw = st.q("state").stringValue();
+    final note = st.q("description").stringValue();
+    return ForgeCheck{
+        name = st.q("context").stringValue(),
+        kind = "status",
+        state = statusState(raw),
+        queuedAt = st.q("created_at").stringValue(),
+        startedAt = st.q("created_at").stringValue(),
+        completedAt = if (raw == "pending") "" else st.q("updated_at").stringValue(),
+        url = st.q("target_url").stringValue(),
+        description = note,
+        lines = [<str>],
+        outputRef = outputRef([note]),
+    };
+}
+
+// reviewState folds the reviews into one verdict. A reviewer counts by their
+// latest approval or change request. A comment changes nothing.
+export fun reviewState(latest: {str: str}, requested: bool) > str {
+    var approved = false;
+    foreach (who, state in latest) {
+        if (state == "CHANGES_REQUESTED") {
+            return "changes_requested";
+        }
+        if (state == "APPROVED") {
+            approved = true;
+        }
+    }
+    if (approved) {
+        return "approved";
+    }
+    return if (requested) "review_required" else "none";
+}
+
+// landedPull reads the pull request number from a trailing "(#123)".
+export fun landedPull(subject: str) > int {
+    final open = subject.indexOf("(#");
+    if (open == null or !subject.endsWith(")")) {
+        return 0;
+    }
+    final digits = subject.sub(open + 2, len: subject.len() - open - 3);
+    return std\parseInt(digits) ?? 0;
+}
+
+fun behindBy(api: str, base: str, sha: str, auth: any, tally: Tally) > int {
+    try {
+        final cmp = getJson(
+            api + "/compare/" + base + "..." + sha,
+            auth: auth,
+            tally: tally,
+        );
+        return cmp.q("behind_by").integerValue();
+    } catch (err: any) {
+        return -1;
+    }
+}
+
+fun changedFiles(api: str, number: int, auth: any, tally: Tally) > [str] !> any {
+    final files = mut [<str>];
+    final changed = getJson(
+        api + "/pulls/{number}/files?per_page=100",
+        auth: auth,
+        tally: tally,
+    );
+    foreach (f in changed.listValue()) {
+        files.append(f.q("filename").stringValue());
+    }
+    return files;
+}
+
+fun latestReviews(api: str, number: int, auth: any, tally: Tally) > {str: str} !> any {
+    final latest = mut {<str, str>};
+    final reviews = getJson(
+        api + "/pulls/{number}/reviews?per_page=100",
+        auth: auth,
+        tally: tally,
+    );
+    foreach (r in reviews.listValue()) {
+        final state = r.q("state").stringValue();
+        if (state == "APPROVED" or state == "CHANGES_REQUESTED" or state == "DISMISSED") {
+            latest[r.q("user").q("login").stringValue()] = state;
+        }
+    }
+    return latest;
+}
+
+fun readPull(item: serialize\Boxed, repo: str, base: str, auth: any, tally: Tally) > ForgePull !> any {
+    final api = apiBase() + "/repos/" + repo;
+    final number = item.q("number").integerValue();
+    final sha = item.q("head").q("sha").stringValue();
+    final detail = getJson(api + "/pulls/{number}", auth: auth, tally: tally);
+    final mstate = detail.q("mergeable_state").stringValue();
+    final mergeable = if (mstate == "dirty") "conflicting"
+        else if (mstate == "" or mstate == "unknown") "unknown"
+        else "mergeable";
+    final behind = behindBy(api, base: base, sha: sha, auth: auth, tally: tally);
+    final files = changedFiles(api, number: number, auth: auth, tally: tally);
+    final latest = latestReviews(api, number: number, auth: auth, tally: tally);
+    final pushed = getJson(api + "/git/commits/" + sha, auth: auth, tally: tally);
+    return ForgePull{
+        number = number,
+        title = item.q("title").stringValue(),
+        author = item.q("user").q("login").stringValue(),
+        url = item.q("html_url").stringValue(),
+        branch = item.q("head").q("ref").stringValue(),
+        headSHA = sha,
+        draft = item.q("draft").booleanValue(),
+        mergeable = mergeable,
+        behindBy = behind,
+        review = reviewState(
+            latest,
+            requested: item.q("requested_reviewers").listValue().len() > 0,
+        ),
+        pushedAt = pushed.q("committer").q("date").stringValue(),
+        checks = checksFor(repo, sha: sha, auth: auth, tally: tally),
+        files = files,
+    };
+}
+
+fun readBase(repo: str, name: str, auth: any, tally: Tally) > BaseBranch !> any {
+    final api = apiBase() + "/repos/" + repo;
+    final commits = mut [<BaseCommit>];
+    var tipUrl = "";
+    final log = getJson(
+        api + "/commits?sha=" + name + "&per_page=30",
+        auth: auth,
+        tally: tally,
+    );
+    foreach (c in log.listValue()) {
+        if (tipUrl == "") {
+            tipUrl = c.q("html_url").stringValue();
+        }
+        final subject = c.q("commit").q("message").stringValue().split("\n")[0];
+        commits.append(BaseCommit{
+            sha = c.q("sha").stringValue(),
+            subject = subject,
+            at = c.q("commit").q("committer").q("date").stringValue(),
+            pull = landedPull(subject),
+        });
+    }
+    if (commits.len() == 0) {
+        throw "github: no commits on {name}";
+    }
+    final tip = commits[0].sha;
+    return BaseBranch{
+        name = name,
+        sha = tip,
+        url = tipUrl,
+        checks = checksFor(repo, sha: tip, auth: auth, tally: tally),
+        commits = commits,
+    };
+}
+
+fun readPulls(req: ListPullsRequest, repo: str, viewer: str, auth: any) > result\Result::<PullList> {
+    final tally = mut Tally{};
+    final wanted = mut [<str>];
+    foreach (a in req.authors) {
+        wanted.append(a.lower());
+    }
+    final pulls = mut [<ForgePull>];
+    var onBase = BaseBranch{ name = req.base };
+    try {
+        onBase = readBase(repo, name: req.base, auth: auth, tally: tally);
+        final open = getJson(
+            apiBase() + "/repos/" + repo + "/pulls?state=open&base=" + req.base + "&per_page=100",
+            auth: auth,
+            tally: tally,
+        );
+        foreach (item in open.listValue()) {
+            final login = item.q("user").q("login").stringValue().lower();
+            if (wanted.len() > 0 and wanted.indexOf(login) == null) {
+                continue;
+            }
+            pulls.append(readPull(item, repo: repo, base: req.base, auth: auth, tally: tally));
+        }
+    } catch (err: any) {
+        return result\caught::<PullList>(err);
+    }
+    return result\ok::<PullList>(PullList{
+        repo = repo,
+        viewer = viewer,
+        base = onBase,
+        pulls = pulls,
+        rate = RateLimit{
+            limit = tally.limit,
+            remaining = tally.remaining,
+            reset = tally.reset,
+        },
+        requests = tally.requests,
+        revalidated = tally.revalidated,
+    });
+}
+
+// list_pulls reads the open pull requests on a base branch with their checks,
+// for a live dashboard. A failed read comes back as the list's reason.
+//nolint:no-throw // magus reads a raise as a failed review call
+export fun list_pulls(target: Target, req: ListPullsRequest) > PullList !> any {
+    if (!has_token()) {
+        return PullList{ reason = "no credential" };
+    }
+    final base = apiBase();
+    final repo = slug(req.remote, host: apiHost(base));
+    if (repo == "") {
+        return PullList{ reason = "not a {apiHost(base)} remote" };
+    }
+    final auth = headers();
+    if (auth.error -> e) {
+        //nolint:no-throw // magus reads a raise as a failed review call
+        throw e.message;
+    }
+    final who = viewerLogin(true);
+    if (who.error -> e) {
+        return PullList{ repo = repo, reason = e.message };
+    }
+    final got = readPulls(req, repo: repo, viewer: who.value!, auth: auth.value!);
+    if (got.error -> e) {
+        return PullList{ repo = repo, viewer = who.value!, reason = e.message };
+    }
+    return got.value!;
+}
+
+test "a check run maps onto the contract's states" {
+    assert\equal(checkState("queued", conclusion: ""), want: "queued", message: "not started");
+    assert\equal(checkState("in_progress", conclusion: ""), want: "running", message: "started");
+    assert\equal(checkState("completed", conclusion: "success"), want: "passed", message: "green");
+    assert\equal(checkState("completed", conclusion: "timed_out"), want: "failed", message: "other conclusions fail");
+    assert\equal(checkState("completed", conclusion: "cancelled"), want: "cancelled", message: "cancelled");
+}
+
+test "an output ref is found inside a line and not inside a word" {
+    assert\equal(outputRef(["see out1456ac978810 for more"]), want: "out1456ac978810", message: "inside");
+    assert\equal(outputRef(["layout1456ac978810"]), want: "", message: "part of a word");
+    assert\equal(outputRef(["out1456ac97881"]), want: "", message: "11 digits is not a ref");
+}
+
+test "a reviewer counts by their latest verdict" {
+    assert\equal(reviewState({"a": "APPROVED"}, requested: false), want: "approved", message: "one approval");
+    assert\equal(reviewState({"a": "APPROVED", "b": "CHANGES_REQUESTED"}, requested: false), want: "changes_requested", message: "a block wins");
+    assert\equal(reviewState({"a": "DISMISSED"}, requested: true), want: "review_required", message: "dismissed is open");
+    assert\equal(reviewState({"a": "DISMISSED"}, requested: false), want: "none", message: "nobody asked");
+}
+
+test "a landed pull request is named by the subject's trailing number" {
+    assert\equal(landedPull("fix the queue (#640)"), want: 640, message: "trailing");
+    assert\equal(landedPull("fix the queue"), want: 0, message: "none named");
 }
 
 test "slug reads every remote spelling and rejects a foreign host" {

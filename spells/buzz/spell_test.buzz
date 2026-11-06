@@ -1,0 +1,26 @@
+import "std";
+import "magus/spell";
+import "./spell" as buzz;
+
+test "decisions count match arms and every branching word" {
+    final decisions = buzz\mgs_getLanguage().syntax!.decisions!;
+    std\assert(decisions.keywords.join(" ") == "if while for foreach and or catch", message: "keywords");
+    std\assert(decisions.operators.join(" ") == "?? ->", message: "operators");
+}
+
+test "magus-buzz-test runs magus itself on the file and its sibling test" {
+    final test = buzz\mgs_listTargets()["magus-buzz-test"]!(Target{});
+    std\assert(test.bin == "$MAGUS", message: "bin");
+    std\assert(test.args.join(" ") == "buzz -t --embedded", message: "argv");
+    std\assert(test.testScope.join(" ") == "\{file\} \{dir\}/\{stem\}_test.buzz", message: "scope");
+}
+
+test "coverage is an lcov tracefile under coverage/buzz" {
+    final coverage = buzz\mgs_getCoverage();
+    std\assert(coverage.format == CoverageFormat.lcov, message: "format");
+    std\assert(coverage.profile == "coverage/buzz/lcov.info", message: "profile");
+}
+
+test "no op shares its name with a magusfile target" {
+    std\assert(!buzz\mgs_listTargets().hasKey("buzz-test"), message: "buzz-test is a target in . and docs");
+}

@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestAssembleSymbols(t *testing.T) {
@@ -32,7 +33,7 @@ func TestAssembleSymbols(t *testing.T) {
 		Label:  "Bar",
 		Source: "pkg/foo/foo.go:11",
 		Attrs: map[string]string{
-			attrLanguage:   "go",
+			AttrLanguage:   "go",
 			attrSymbolKind: "Type",
 			attrMoniker:    "scip-go gomod example.com/foo v1 Bar#",
 		},
@@ -262,6 +263,27 @@ func TestAssembleSymbolsCarriesBodyShape(t *testing.T) {
 	require.True(t, ok)
 	assert.NotContains(t, c.Attrs, AttrBodyShape)
 	assert.NotContains(t, c.Attrs, attrBodyTokens)
+}
+
+type symbolComplexitySuite struct{ suite.Suite }
+
+func TestSymbolComplexitySuite(t *testing.T) { suite.Run(t, new(symbolComplexitySuite)) }
+
+func (s *symbolComplexitySuite) node(sym types.KnowledgeSymbol) types.KnowledgeNode {
+	out := mergeAll([]Shard{assembleSymbols("pkg", []types.KnowledgeSymbol{sym}, nil)}).Output()
+	n, ok := nodeByID(out, symbolID(sym.Key))
+	s.Require().True(ok)
+	return n
+}
+
+func (s *symbolComplexitySuite) TestAStraightLineBodyCarriesComplexityOne() {
+	n := s.node(types.KnowledgeSymbol{Key: "sh f().", Label: "f", Source: "pkg/a.sh:1", Complexity: 1, Defs: []string{"pkg/a.sh"}})
+	s.Equal("1", n.Attrs[AttrComplexity])
+}
+
+func (s *symbolComplexitySuite) TestAnUncountedSymbolCarriesNoComplexity() {
+	n := s.node(types.KnowledgeSymbol{Key: "sh g().", Label: "g", Source: "pkg/a.sh:5", Defs: []string{"pkg/a.sh"}})
+	s.NotContains(n.Attrs, AttrComplexity)
 }
 
 // A package's clause rides its namespace node, and an import's alias the file's reference

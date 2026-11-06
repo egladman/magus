@@ -33,7 +33,7 @@ project, declared together in one stream:
 <!-- golden: job_people_upgrade.txtar apply.out -->
 
 ```console
-$ magus job apply -f - <<'EOF'
+$ magus job apply --stdin <<'EOF'
 {"schema_version": 11, "id": "upgrade/api", "criteria": "api runs left-pad 1.3", "write_paths": ["api/deps.txt"], "check": {"target": "test", "project": "api"}}
 {"schema_version": 11, "id": "upgrade/web", "criteria": "web runs left-pad 1.3", "write_paths": ["web/deps.txt"], "check": {"target": "test", "project": "web"}}
 EOF
@@ -87,8 +87,8 @@ upgrade/api  ana     pass   standard  1      alone     magus run test api
 upgrade/web  ben     pass   standard  1      disjoint  magus run test web
 
 not merged onto main: 2
-  upgrade/api at 4482968: 1 commit(s) at 4482968 are not on main; merge 4482968 into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/api","left_unmerged":"<why>"}
-  upgrade/web at c2385b8: 1 commit(s) at c2385b8 are not on main; merge c2385b8 into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"upgrade/web","left_unmerged":"<why>"}
+  upgrade/api at 4482968: 1 commit(s) at 4482968 are not on main; merge 4482968 into main, or state why it stays off: `magus job apply --stdin` with {"schema_version":13,"id":"upgrade/api","left_unmerged":"<why>"}
+  upgrade/web at c2385b8: 1 commit(s) at c2385b8 are not on main; merge c2385b8 into main, or state why it stays off: `magus job apply --stdin` with {"schema_version":13,"id":"upgrade/web","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
 
@@ -131,7 +131,7 @@ page by heading, which narrows Ana's job and declares Ben's in one stream:
 <!-- golden: job_people_pages.txtar apply.out -->
 
 ```console
-$ magus job apply -f - <<'EOF'
+$ magus job apply --stdin <<'EOF'
 {"schema_version": 11, "id": "fr/install", "criteria": "install page in French", "write_paths": ["docs/fr/install.md#Installer"], "check": {"target": "lint", "project": "."}}
 {"schema_version": 11, "id": "fr/upgrading", "criteria": "upgrading section in French", "write_paths": ["docs/fr/install.md#Mettre à jour"], "check": {"target": "lint", "project": "."}}
 EOF
@@ -173,7 +173,7 @@ needs no target: `paths` goals read the diff and the tree.
 <!-- golden: job_people_release.txtar apply.out -->
 
 ```console
-$ magus job apply -f - <<'EOF'
+$ magus job apply --stdin <<'EOF'
 {"schema_version": 11, "id": "release-1.3/changelog", "criteria": "CHANGELOG.md has a 1.3 section", "write_paths": ["CHANGELOG.md"], "goals": [{"id": "changelog", "kind": "paths", "expect": "changed", "paths": ["CHANGELOG.md"]}]}
 {"schema_version": 11, "id": "release-1.3/notes", "criteria": "release notes exist for 1.3", "write_paths": ["notes/1.3.md"], "goals": [{"id": "notes", "kind": "paths", "expect": "present", "paths": ["notes/1.3.md"]}]}
 EOF
@@ -211,7 +211,7 @@ release-1.3/changelog  changelog  exited  standard  1      alone     -
 release-1.3/notes      notes      exited  standard  1      disjoint  -
 
 not merged onto main: 1
-  release-1.3/changelog at 7b9e9dc: 1 commit(s) at 7b9e9dc are not on main; merge 7b9e9dc into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"release-1.3/changelog","left_unmerged":"<why>"}
+  release-1.3/changelog at 7b9e9dc: 1 commit(s) at 7b9e9dc are not on main; merge 7b9e9dc into main, or state why it stays off: `magus job apply --stdin` with {"schema_version":13,"id":"release-1.3/changelog","left_unmerged":"<why>"}
 unresolved risks, which stop nothing: 1
   release-1.3/notes: "the notes need the final benchmark numbers"
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
@@ -258,7 +258,7 @@ release-1.3/changelog  changelog  pass     standard  1      alone     -
 release-1.3/notes      notes      running  standard  1      disjoint  -
 
 not merged onto main: 1
-  release-1.3/changelog at 7b9e9dc: 1 commit(s) at 7b9e9dc are not on main; merge 7b9e9dc into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"release-1.3/changelog","left_unmerged":"<why>"}
+  release-1.3/changelog at 7b9e9dc: 1 commit(s) at 7b9e9dc are not on main; merge 7b9e9dc into main, or state why it stays off: `magus job apply --stdin` with {"schema_version":13,"id":"release-1.3/changelog","left_unmerged":"<why>"}
 unresolved risks, which stop nothing: 1
   release-1.3/notes: "the notes need the final benchmark numbers"
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes

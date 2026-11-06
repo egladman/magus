@@ -13,6 +13,7 @@ export enum<str> External {
 
 export object Command {
     testSelection: str = "",
+    testScope: [str] = [],
     bin: str = "",
     args: [str] = [],
     defaultArgs: [str] = [],

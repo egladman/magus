@@ -119,6 +119,8 @@ export fun rules() > [Rule] {
         Rule{ name = "gate-pages-say-what-they-do-not-measure", reads = gatemeasures\reads(), check = gatemeasures\check },
         Rule{ name = "lint-findings-carry-a-message-and-a-fix", reads = findingshape\reads(), check = findingshape\check },
         Rule{ name = "measured-claims-cite-their-run", reads = measuredclaims\reads(), check = measuredclaims\check },
+        // TODO: list touched-functions-keep-change-risk-under-10 once main's CI
+        // has published its base coverage profile (ADR 0023, State).
     ];
 }
 

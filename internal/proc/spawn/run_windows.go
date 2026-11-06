@@ -44,6 +44,10 @@ type procGroup struct {
 	cancelled atomic.Bool
 }
 
+// bound is a no-op: taskkill /T already ends the tree, and this host keeps no
+// table magus follows.
+func (g *procGroup) bound(*boundedTree) {}
+
 // setCancel configures c to use CTRL_BREAK_EVENT (in its own process group) on
 // context cancellation of a CommandContext.
 func setCancel(c *exec.Cmd) *procGroup {

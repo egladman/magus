@@ -717,6 +717,7 @@ func ObjectJobResultValidation(v types.JobResultValidation) vm.Value {
 	out.MapSet("command", vm.StringValue(v.Command))
 	out.MapSet("outputRef", vm.StringValue(v.OutputRef))
 	out.MapSet("owed", vm.StringValue(v.Owed))
+	out.MapSet("unrun", vm.StringValue(v.Unrun))
 	return out
 }
 
@@ -725,6 +726,7 @@ func ObjectGateEvidence(v types.GateEvidence) vm.Value {
 	out.MapSet("gateID", vm.StringValue(v.GateID))
 	out.MapSet("outputRef", vm.StringValue(v.OutputRef))
 	out.MapSet("owed", vm.StringValue(v.Owed))
+	out.MapSet("unrun", vm.StringValue(v.Unrun))
 	return out
 }
 
@@ -1294,6 +1296,73 @@ func ObjectVolatility(v types.Volatility) vm.Value {
 		itemsTargets[indexTargets] = ObjectVolatilityTarget(v.Targets[indexTargets])
 	}
 	out.MapSet("targets", vm.ListValue(itemsTargets))
+	return out
+}
+
+func ObjectChangeRiskFunction(v types.ChangeRiskFunction) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("symbol", vm.StringValue(v.Symbol))
+	out.MapSet("label", vm.StringValue(v.Label))
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("language", vm.StringValue(v.Language))
+	out.MapSet("digest", vm.StringValue(v.Digest))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("endLine", vm.IntValue(int64(v.EndLine)))
+	out.MapSet("complexity", vm.IntValue(int64(v.Complexity)))
+	out.MapSet("covered", vm.IntValue(int64(v.Covered)))
+	out.MapSet("coverable", vm.IntValue(int64(v.Coverable)))
+	out.MapSet("score", vm.FloatValue(float64(v.Score)))
+	out.MapSet("baseScore", vm.FloatValue(float64(v.BaseScore)))
+	out.MapSet("baseComplexity", vm.IntValue(int64(v.BaseComplexity)))
+	out.MapSet("baseCovered", vm.IntValue(int64(v.BaseCovered)))
+	out.MapSet("baseCoverable", vm.IntValue(int64(v.BaseCoverable)))
+	out.MapSet("baseReason", vm.StringValue(v.BaseReason))
+	return out
+}
+
+func ObjectFunctionGap(v types.FunctionGap) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("symbol", vm.StringValue(v.Symbol))
+	out.MapSet("label", vm.StringValue(v.Label))
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("language", vm.StringValue(v.Language))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("complexity", vm.IntValue(int64(v.Complexity)))
+	out.MapSet("reason", vm.StringValue(v.Reason))
+	return out
+}
+
+func ObjectFinding(v types.Finding) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("col", vm.IntValue(int64(v.Col)))
+	out.MapSet("rule", vm.StringValue(v.Rule))
+	out.MapSet("message", vm.StringValue(v.Message))
+	out.MapSet("fix", vm.StringValue(v.Fix))
+	out.MapSet("url", vm.StringValue(v.URL))
+	return out
+}
+
+func ObjectChangeRisk(v types.ChangeRisk) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("definition", vm.StringValue(v.Definition))
+	out.MapSet("base", vm.StringValue(v.Base))
+	itemsFunctions := make([]vm.Value, len(v.Functions))
+	for indexFunctions := range v.Functions {
+		itemsFunctions[indexFunctions] = ObjectChangeRiskFunction(v.Functions[indexFunctions])
+	}
+	out.MapSet("functions", vm.ListValue(itemsFunctions))
+	itemsGaps := make([]vm.Value, len(v.Gaps))
+	for indexGaps := range v.Gaps {
+		itemsGaps[indexGaps] = ObjectFunctionGap(v.Gaps[indexGaps])
+	}
+	out.MapSet("gaps", vm.ListValue(itemsGaps))
+	itemsLines := make([]vm.Value, len(v.Lines))
+	for indexLines := range v.Lines {
+		itemsLines[indexLines] = ObjectFinding(v.Lines[indexLines])
+	}
+	out.MapSet("lines", vm.ListValue(itemsLines))
 	return out
 }
 
@@ -3269,6 +3338,11 @@ func ObjectHint(v spells.Hint) vm.Value {
 func ObjectCommand(v spells.Command, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("testSelection", vm.StringValue(v.TestSelection))
+	itemsTestScope := make([]vm.Value, len(v.TestScope))
+	for indexTestScope := range v.TestScope {
+		itemsTestScope[indexTestScope] = vm.StringValue(v.TestScope[indexTestScope])
+	}
+	out.MapSet("testScope", vm.ListValue(itemsTestScope))
 	out.MapSet("bin", vm.StringValue(v.Bin))
 	itemsArgs := make([]vm.Value, len(v.Args))
 	for indexArgs := range v.Args {
@@ -3444,6 +3518,21 @@ func ObjectStubSyntax(v spells.StubSyntax) vm.Value {
 	return out
 }
 
+func ObjectDecisionSyntax(v spells.DecisionSyntax) vm.Value {
+	out := vm.NewMap()
+	itemsKeywords := make([]vm.Value, len(v.Keywords))
+	for indexKeywords := range v.Keywords {
+		itemsKeywords[indexKeywords] = vm.StringValue(v.Keywords[indexKeywords])
+	}
+	out.MapSet("keywords", vm.ListValue(itemsKeywords))
+	itemsOperators := make([]vm.Value, len(v.Operators))
+	for indexOperators := range v.Operators {
+		itemsOperators[indexOperators] = vm.StringValue(v.Operators[indexOperators])
+	}
+	out.MapSet("operators", vm.ListValue(itemsOperators))
+	return out
+}
+
 func ObjectSyntax(v spells.Syntax) vm.Value {
 	out := vm.NewMap()
 	optComments := vm.Null
@@ -3456,6 +3545,16 @@ func ObjectSyntax(v spells.Syntax) vm.Value {
 		optStubs = ObjectStubSyntax((*v.Stubs))
 	}
 	out.MapSet("stubs", optStubs)
+	itemsOperators := make([]vm.Value, len(v.Operators))
+	for indexOperators := range v.Operators {
+		itemsOperators[indexOperators] = vm.StringValue(v.Operators[indexOperators])
+	}
+	out.MapSet("operators", vm.ListValue(itemsOperators))
+	optDecisions := vm.Null
+	if v.Decisions != nil {
+		optDecisions = ObjectDecisionSyntax((*v.Decisions))
+	}
+	out.MapSet("decisions", optDecisions)
 	return out
 }
 
@@ -3595,6 +3694,18 @@ func ObjectReviewRef(v types.ReviewRef) vm.Value {
 func ObjectProjectQuery(v types.ProjectQuery) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("root", vm.StringValue(v.Root))
+	return out
+}
+
+func ObjectListPullsRequest(v types.ListPullsRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("remote", vm.StringValue(v.Remote))
+	out.MapSet("base", vm.StringValue(v.Base))
+	itemsAuthors := make([]vm.Value, len(v.Authors))
+	for indexAuthors := range v.Authors {
+		itemsAuthors[indexAuthors] = vm.StringValue(v.Authors[indexAuthors])
+	}
+	out.MapSet("authors", vm.ListValue(itemsAuthors))
 	return out
 }
 
@@ -5187,6 +5298,13 @@ func ObjectService(v spells.Service, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
+func ObjectCoverage(v spells.Coverage, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("format", enums.Case("CoverageFormat", string(v.Format)))
+	out.MapSet("profile", vm.StringValue(v.Profile))
+	return out
+}
+
 func ObjectVersionKey(v spells.VersionKey, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("const", vm.StringValue(v.Const))
@@ -5309,6 +5427,103 @@ func ObjectReviewComment(v types.ReviewComment) vm.Value {
 	out.MapSet("outdated", vm.BoolValue(v.Outdated))
 	out.MapSet("diffHunk", vm.StringValue(v.DiffHunk))
 	out.MapSet("new", vm.BoolValue(v.New))
+	return out
+}
+
+func ObjectRateLimit(v types.RateLimit) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("limit", vm.IntValue(int64(v.Limit)))
+	out.MapSet("remaining", vm.IntValue(int64(v.Remaining)))
+	out.MapSet("reset", vm.StringValue(v.Reset))
+	return out
+}
+
+func ObjectForgeCheck(v types.ForgeCheck) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StringValue(v.Name))
+	out.MapSet("kind", vm.StringValue(v.Kind))
+	out.MapSet("state", vm.StringValue(v.State))
+	out.MapSet("queuedAt", vm.StringValue(v.QueuedAt))
+	out.MapSet("startedAt", vm.StringValue(v.StartedAt))
+	out.MapSet("completedAt", vm.StringValue(v.CompletedAt))
+	out.MapSet("url", vm.StringValue(v.URL))
+	out.MapSet("description", vm.StringValue(v.Description))
+	itemsLines := make([]vm.Value, len(v.Lines))
+	for indexLines := range v.Lines {
+		itemsLines[indexLines] = vm.StringValue(v.Lines[indexLines])
+	}
+	out.MapSet("lines", vm.ListValue(itemsLines))
+	out.MapSet("outputRef", vm.StringValue(v.OutputRef))
+	return out
+}
+
+func ObjectBaseCommit(v types.BaseCommit) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("sha", vm.StringValue(v.SHA))
+	out.MapSet("subject", vm.StringValue(v.Subject))
+	out.MapSet("at", vm.StringValue(v.At))
+	out.MapSet("pull", vm.IntValue(int64(v.Pull)))
+	return out
+}
+
+func ObjectBaseBranch(v types.BaseBranch) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StringValue(v.Name))
+	out.MapSet("sha", vm.StringValue(v.SHA))
+	out.MapSet("url", vm.StringValue(v.URL))
+	itemsChecks := make([]vm.Value, len(v.Checks))
+	for indexChecks := range v.Checks {
+		itemsChecks[indexChecks] = ObjectForgeCheck(v.Checks[indexChecks])
+	}
+	out.MapSet("checks", vm.ListValue(itemsChecks))
+	itemsCommits := make([]vm.Value, len(v.Commits))
+	for indexCommits := range v.Commits {
+		itemsCommits[indexCommits] = ObjectBaseCommit(v.Commits[indexCommits])
+	}
+	out.MapSet("commits", vm.ListValue(itemsCommits))
+	return out
+}
+
+func ObjectForgePull(v types.ForgePull) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("number", vm.IntValue(int64(v.Number)))
+	out.MapSet("title", vm.StringValue(v.Title))
+	out.MapSet("author", vm.StringValue(v.Author))
+	out.MapSet("url", vm.StringValue(v.URL))
+	out.MapSet("branch", vm.StringValue(v.Branch))
+	out.MapSet("headSHA", vm.StringValue(v.HeadSHA))
+	out.MapSet("draft", vm.BoolValue(v.Draft))
+	out.MapSet("mergeable", vm.StringValue(v.Mergeable))
+	out.MapSet("behindBy", vm.IntValue(int64(v.BehindBy)))
+	out.MapSet("review", vm.StringValue(v.Review))
+	out.MapSet("pushedAt", vm.StringValue(v.PushedAt))
+	itemsChecks := make([]vm.Value, len(v.Checks))
+	for indexChecks := range v.Checks {
+		itemsChecks[indexChecks] = ObjectForgeCheck(v.Checks[indexChecks])
+	}
+	out.MapSet("checks", vm.ListValue(itemsChecks))
+	itemsFiles := make([]vm.Value, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = vm.StringValue(v.Files[indexFiles])
+	}
+	out.MapSet("files", vm.ListValue(itemsFiles))
+	return out
+}
+
+func ObjectPullList(v types.PullList) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("repo", vm.StringValue(v.Repo))
+	out.MapSet("viewer", vm.StringValue(v.Viewer))
+	out.MapSet("reason", vm.StringValue(v.Reason))
+	out.MapSet("base", ObjectBaseBranch(v.Base))
+	itemsPulls := make([]vm.Value, len(v.Pulls))
+	for indexPulls := range v.Pulls {
+		itemsPulls[indexPulls] = ObjectForgePull(v.Pulls[indexPulls])
+	}
+	out.MapSet("pulls", vm.ListValue(itemsPulls))
+	out.MapSet("rate", ObjectRateLimit(v.Rate))
+	out.MapSet("requests", vm.IntValue(int64(v.Requests)))
+	out.MapSet("revalidated", vm.IntValue(int64(v.Revalidated)))
 	return out
 }
 
@@ -6169,6 +6384,7 @@ func ObjectHTTPOptions(v types.HTTPOptions) vm.Value {
 	out.MapSet("failWithBody", vm.BoolValue(v.FailWithBody))
 	out.MapSet("failEarly", vm.BoolValue(v.FailEarly))
 	out.MapSet("timeoutSeconds", vm.FloatValue(float64(v.TimeoutSeconds)))
+	out.MapSet("revalidate", vm.BoolValue(v.Revalidate))
 	return out
 }
 

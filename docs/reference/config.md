@@ -36,9 +36,15 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 
 ## console
 
-| Config key        | Environment variable    | Flag         | Type              |
-| ----------------- | ----------------------- | ------------ | ----------------- |
-| `console.enabled` | `MAGUS_CONSOLE_ENABLED` | _(env only)_ | bool _(env only)_ |
+| Config key                  | Environment variable              | Flag                          | Type              |
+| --------------------------- | --------------------------------- | ----------------------------- | ----------------- |
+| `console.enabled`           | `MAGUS_CONSOLE_ENABLED`           | _(env only)_                  | bool _(env only)_ |
+| `console.pulls.active`      | `MAGUS_CONSOLE_PULLS_ACTIVE`      | `--console-pulls-active`      | duration          |
+| `console.pulls.floor`       | `MAGUS_CONSOLE_PULLS_FLOOR`       | `--console-pulls-floor`       | duration          |
+| `console.pulls.idle`        | `MAGUS_CONSOLE_PULLS_IDLE`        | `--console-pulls-idle`        | duration          |
+| `console.pulls.reserve`     | `MAGUS_CONSOLE_PULLS_RESERVE`     | `--console-pulls-reserve`     | int               |
+| `console.pulls.runner_wait` | `MAGUS_CONSOLE_PULLS_RUNNER_WAIT` | `--console-pulls-runner-wait` | duration          |
+| `console.pulls.stale_after` | `MAGUS_CONSOLE_PULLS_STALE_AFTER` | `--console-pulls-stale-after` | duration          |
 
 ## diff
 
@@ -60,6 +66,7 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | Config key            | Environment variable        | Flag                    | Type                               |
 | --------------------- | --------------------------- | ----------------------- | ---------------------------------- |
 | `broker`              | `MAGUS_BROKER`              | `--broker`              | string                             |
+| `budget_wait`         | `MAGUS_BUDGET_WAIT`         | `--budget-wait`         | duration                           |
 | `concurrency`         | `MAGUS_CONCURRENCY`         | `-j`, `--concurrency`   | int                                |
 | `concurrency_profile` | `MAGUS_CONCURRENCY_PROFILE` | `--concurrency-profile` | string                             |
 | `default_charms`      | `MAGUS_DEFAULT_CHARMS`      | _(env only)_            | list _(comma-separated, env only)_ |

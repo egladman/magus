@@ -49,7 +49,7 @@ func TestGradeLeasedWriteServesAProvedClaim(t *testing.T) {
 	require.Equal(t, writeGrade{Decision: "deny", Reason: got.Reason, Rule: string(denyRuleLeaseClaim), Next: got.Next}, got)
 	require.Len(t, got.Next, 1)
 	assert.Equal(t, "deny-lease-claim", got.Next[0].ID)
-	assert.Contains(t, got.Next[0].Run, "job apply -f - <<<")
+	assert.Contains(t, got.Next[0].Run, "job apply --stdin <<<")
 	assert.Contains(t, got.Next[0].Run, `"claim":[{"path":"internal/commands/registry.go","because":"released"}]`)
 	say, why, _ := strings.Cut(got.Reason, "\n")
 	assert.Contains(t, say, "magus proves it in scope (released)")

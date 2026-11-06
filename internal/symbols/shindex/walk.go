@@ -82,6 +82,7 @@ func (w *walker) function(n *syntax.FuncDecl) {
 	w.info(sym, symbols.SymbolInfo{
 		DisplayName: n.Name.Value, Kind: int32(scip.SymbolInformation_Function),
 		Signature: n.Name.Value + "()", Documentation: docComment(parentStmt(w.stack[:len(w.stack)-1])),
+		Complexity: w.s.decisions[n.Name.Value] + 1,
 	})
 }
 

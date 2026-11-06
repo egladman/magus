@@ -78,6 +78,9 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 		if spec.SymbolIndexer != nil {
 			opts = append(opts, spells.WithSymbolIndexer(spec.SymbolIndexer))
 		}
+		if spec.Coverage != nil {
+			opts = append(opts, spells.WithCoverage(spec.Coverage))
+		}
 		if spec.Sandbox != nil {
 			opts = append(opts, spells.WithSandbox(spec.Sandbox))
 		}
@@ -478,8 +481,7 @@ func runInstall(ctx context.Context, op spells.Op, opts commandOpts) error {
 }
 
 func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRequest) (any, error) {
-	ops, tools, ignoreDirs := spec.Ops, spec.Tools, spec.IgnoreDirs
-	op, ok := ops[req.Target]
+	op, ok := spec.Ops[req.Target]
 	if !ok {
 		slog.With(attr.Component("spell")).DebugContext(ctx, "target not provided by this spell (fan-out skip)", "target", req.Target, "dir", req.Dir)
 		return noResult()
@@ -488,31 +490,37 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 	// Ahead of every other setup step: a tool that cannot run makes the rest moot,
 	// and the point is to fail with what is actually wrong rather than let the op
 	// fork and report a build failure for a project with nothing wrong with it.
-	if err := checkReady(ctx, tools, op, req.Dir); err != nil {
+	if err := checkReady(ctx, spec.Tools, op, req.Dir); err != nil {
 		return nil, err
 	}
-	opts := commandOpts{spell: spec.Name, op: req.Target, cwd: req.Dir, args: project.ExtraArgs(ctx), ignoreDirs: ignoreDirs}
-	if op.Kind == spells.OpKindInstall {
-		return nil, runInstall(ctx, op, opts)
-	}
-	// A symbol indexer writes its index into the cache, not the tree: magus hands it
-	// the destination via MAGUS_SYMBOL_INDEX so the spell command (a bare
-	// "$MAGUS_SYMBOL_INDEX" arg token, resolved by resolveRunnerRefs) needs no
-	// knowledge of where the cache is. Set on both opts.refs (what a spell's Args
-	// token resolves against) and opts.env (the process environment), so an indexer
-	// that shells out (the doc comment on symbols.IndexEnvVar promises the env var is
-	// set) keeps working.
-	//
-	// Keyed on the op's KIND, which magus stamped when it synthesized the op from
-	// mgs_getSymbolIndexer. Matching the op's name instead made the capability a
-	// reserved string any spell could claim by spelling it.
-	if op.Kind != spells.OpKindSymbolIndex {
-		_, err := runCommand(ctx, op, opts)
+	opts := commandOpts{spell: spec.Name, op: req.Target, cwd: req.Dir, args: project.ExtraArgs(ctx), ignoreDirs: spec.IgnoreDirs}
+	if err := runOp(ctx, spec, op, opts); err != nil {
 		return nil, err
 	}
-	projectDir, indexPath, err := symbolIndexEnv(ctx, req.Dir, req.Target)
+	return noResult()
+}
+
+// runOp runs op by its kind, which magus stamps on the ops it synthesizes.
+// Matching the op's name instead would make a capability a reserved string any
+// spell could claim by spelling it.
+func runOp(ctx context.Context, spec spells.Descriptor, op spells.Op, opts commandOpts) error {
+	switch op.Kind {
+	case spells.OpKindInstall:
+		return runInstall(ctx, op, opts)
+	case spells.OpKindSymbolIndex:
+		return runSymbolIndex(ctx, spec, op, opts)
+	}
+	_, err := runCommand(ctx, op, opts)
+	return err
+}
+
+// runSymbolIndex writes the project's index into the cache, not the tree. A
+// command indexer gets the destination as MAGUS_SYMBOL_INDEX, in both its refs
+// and its environment, so one that shells out still finds it.
+func runSymbolIndex(ctx context.Context, spec spells.Descriptor, op spells.Op, opts commandOpts) error {
+	projectDir, indexPath, err := symbolIndexEnv(ctx, opts.cwd, opts.op)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	var envs []map[string]string
 	var format spells.SymbolFormat
@@ -520,40 +528,55 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 		envs, format = spec.SymbolIndexer.Envs, spec.SymbolIndexer.Format
 	}
 	if format == spells.SymbolFormatGoPackages {
-		patterns := slices.Clone(op.Args)
-		if len(patterns) == 0 {
-			patterns = []string{"."}
-		}
-		return nil, runUnitIndexer(ctx, spec.Name, "Go", projectDir, indexPath, &goindex.Indexer{Dir: projectDir, Patterns: patterns, Builds: envs})
+		return runGoPackagesIndex(ctx, spec.Name, op, projectDir, indexPath, envs)
 	}
 	if len(envs) > 0 {
-		return nil, fmt.Errorf("spell %q symbol indexer: envs need magus's in-process Go indexer (format %s), since %q runs once, in the host's environment",
+		return fmt.Errorf("spell %q symbol indexer: envs need magus's in-process Go indexer (format %s), since %q runs once, in the host's environment",
 			spec.Name, spells.SymbolFormatGoPackages, op.Bin)
 	}
-	base := map[string]string{}
+	if format == spells.SymbolFormatBuzzModule || format == spells.SymbolFormatShellScript {
+		return runFileIndex(ctx, spec.Name, format, projectDir, indexPath)
+	}
+	return runSCIPIndex(ctx, spec.Name, op, opts, indexPath)
+}
+
+func runGoPackagesIndex(ctx context.Context, spellName string, op spells.Op, projectDir, indexPath string, envs []map[string]string) error {
+	patterns := slices.Clone(op.Args)
+	if len(patterns) == 0 {
+		patterns = []string{"."}
+	}
+	return runUnitIndexer(ctx, spellName, "Go", projectDir, indexPath, &goindex.Indexer{Dir: projectDir, Patterns: patterns, Builds: envs})
+}
+
+// runFileIndex runs the in-process Buzz or shell indexer, which names symbols
+// by workspace path.
+func runFileIndex(ctx context.Context, spellName string, format spells.SymbolFormat, projectDir, indexPath string) error {
 	ws := types.WorkspaceFromContext(ctx)
-	if ws != nil {
+	if ws == nil {
+		return fmt.Errorf("spell %q symbol indexer: %s names symbols by workspace path, and this run has no workspace", spellName, format)
+	}
+	if format == spells.SymbolFormatBuzzModule {
+		return runUnitIndexer(ctx, spellName, "Buzz", projectDir, indexPath, &buzzindex.Indexer{Dir: projectDir, WorkspaceRoot: ws.Root()})
+	}
+	return runUnitIndexer(ctx, spellName, "shell", projectDir, indexPath, &shindex.Indexer{Dir: projectDir, WorkspaceRoot: ws.Root()})
+}
+
+// runSCIPIndex runs a command indexer, which writes SCIP beside the pack; the
+// pack is what readers open.
+func runSCIPIndex(ctx context.Context, spellName string, op spells.Op, opts commandOpts, indexPath string) error {
+	base := map[string]string{}
+	if ws := types.WorkspaceFromContext(ctx); ws != nil {
 		base[symbols.WorkspaceRootEnvVar] = ws.Root()
 	}
-	if format == spells.SymbolFormatBuzzModule || format == spells.SymbolFormatShellScript {
-		if ws == nil {
-			return nil, fmt.Errorf("spell %q symbol indexer: %s names symbols by workspace path, and this run has no workspace", spec.Name, format)
-		}
-		if format == spells.SymbolFormatBuzzModule {
-			return nil, runUnitIndexer(ctx, spec.Name, "Buzz", projectDir, indexPath, &buzzindex.Indexer{Dir: projectDir, WorkspaceRoot: ws.Root()})
-		}
-		return nil, runUnitIndexer(ctx, spec.Name, "shell", projectDir, indexPath, &shindex.Indexer{Dir: projectDir, WorkspaceRoot: ws.Root()})
-	}
-	// The command writes SCIP beside the pack; the pack is what readers open.
 	scipPath := indexPath + ".scip"
 	defer os.Remove(scipPath)
-	if err := runSymbolIndexer(ctx, spec.Name, op, opts, base, scipPath); err != nil {
-		return nil, err
+	if err := runSymbolIndexer(ctx, spellName, op, opts, base, scipPath); err != nil {
+		return err
 	}
 	if err := symbols.PackFromSCIP(scipPath, indexPath, "scip "+op.Bin); err != nil {
-		return nil, fmt.Errorf("spell %q symbol indexer: storing the index %q wrote: %w", spec.Name, op.Bin, err)
+		return fmt.Errorf("spell %q symbol indexer: storing the index %q wrote: %w", spellName, op.Bin, err)
 	}
-	return noResult()
+	return nil
 }
 
 // runUnitIndexer brings the pack at indexPath up to date with one of magus's in-process
@@ -674,35 +697,53 @@ func symbolIndexEnv(ctx context.Context, projectDir, op string) (string, string,
 	if c == nil {
 		return "", "", fmt.Errorf("a symbol indexer must run as a magus target so its index lands in the cache")
 	}
-	abs := projectDir
-	if !filepath.IsAbs(abs) {
-		cwd, err := std.EffectiveCurrentWorkingDirectory(ctx)
-		if err != nil {
-			return "", "", fmt.Errorf("resolve symbol index dir: %w", err)
-		}
-		abs = filepath.Join(cwd, abs)
-	}
-	ws := types.WorkspaceFromContext(ctx)
-	if ws == nil {
-		return "", "", fmt.Errorf("a symbol indexer must run in a workspace so its index is keyed by project path")
-	}
-	// Resolved, so a root and a project dir reached through different spellings (macOS
-	// /var and /private/var) still relate.
-	canonical := func(dir string) string {
-		if resolved, err := filepath.EvalSymlinks(dir); err == nil {
-			return resolved
-		}
-		return filepath.Clean(dir)
-	}
-	project, err := filepath.Rel(canonical(ws.Root()), canonical(abs))
-	if err != nil || !filepath.IsLocal(project) {
-		return "", "", fmt.Errorf("symbol index dir %s is outside the workspace %s", abs, ws.Root())
+	abs, project, err := projectUnderWorkspace(ctx, projectDir)
+	if err != nil {
+		return "", "", err
 	}
 	path := symbols.IndexPath(c.Dir(), project, op)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", "", fmt.Errorf("prepare symbol index dir: %w", err)
 	}
 	return abs, path, nil
+}
+
+// projectUnderWorkspace resolves projectDir to its absolute path and its path
+// under the workspace root, which keys what an op writes into the cache.
+func projectUnderWorkspace(ctx context.Context, projectDir string) (abs, project string, err error) {
+	abs, err = absoluteDir(ctx, projectDir)
+	if err != nil {
+		return "", "", err
+	}
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return "", "", errors.New("the op must run in a workspace so what it writes is keyed by project path")
+	}
+	project, err = filepath.Rel(canonicalDir(ws.Root()), canonicalDir(abs))
+	if err != nil || !filepath.IsLocal(project) {
+		return "", "", fmt.Errorf("project dir %s is outside the workspace %s", abs, ws.Root())
+	}
+	return abs, project, nil
+}
+
+func absoluteDir(ctx context.Context, dir string) (string, error) {
+	if filepath.IsAbs(dir) {
+		return dir, nil
+	}
+	cwd, err := std.EffectiveCurrentWorkingDirectory(ctx)
+	if err != nil {
+		return "", fmt.Errorf("resolve the project dir: %w", err)
+	}
+	return filepath.Join(cwd, dir), nil
+}
+
+// canonicalDir resolves symlinks, so a root and a project dir reached through
+// different spellings (macOS /var and /private/var) still relate.
+func canonicalDir(dir string) string {
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		return resolved
+	}
+	return filepath.Clean(dir)
 }
 
 // newSpellInvoker returns an invoker closure for a built-in spell. Built-in ops
@@ -810,6 +851,9 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	}
 	if m.SymbolIndexer != nil {
 		opts = append(opts, spells.WithSymbolIndexer(m.SymbolIndexer))
+	}
+	if m.Coverage != nil {
+		opts = append(opts, spells.WithCoverage(m.Coverage))
 	}
 	if m.Sandbox != nil {
 		opts = append(opts, spells.WithSandbox(m.Sandbox))

@@ -254,48 +254,10 @@ type conformanceInput struct {
 // and it was renamed from the name a removed line of its file spells where it now reads its own.
 func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph, in conformanceInput) {
 	defs := definedSymbols(head.Nodes())
-	var subjects, touched []string
-	introduced := map[string]bool{}
-	renamed := map[string]string{}
-	var pf patchFacts
-	if in.changes == nil {
-		pf = readPatchFacts(in.patch)
-	}
-	for _, id := range slices.Sorted(maps.Keys(defs)) {
-		def := defs[id]
-		f, ok := byPath[def.path]
-		if !ok || f.Generated() {
-			continue
-		}
-		if in.changes != nil {
-			switch in.changes[id] {
-			case types.DiffChangeAdded:
-				introduced[id] = true
-				subjects = append(subjects, id)
-			case types.DiffChangeSignature:
-				subjects = append(subjects, id)
-			case types.DiffChangeBody:
-				touched = append(touched, id)
-			}
-			continue
-		}
-		label := def.node.Label
-		text, added := pf.added[def.path][sourceLine(def.node.Source)]
-		if !added || knowledge.IndexIdentifier(pf.removedText, label) >= 0 {
-			continue
-		}
-		introduced[id] = true
-		subjects = append(subjects, id)
-		if old := knowledge.PreviousName(text, label, pf.removed[def.path]); old != "" {
-			renamed[id] = old
-		}
-	}
-	if in.changes != nil {
-		pairRenames(defs, in.changes, in.removed, renamed)
-	}
+	cls := classifyChanges(defs, byPath, in)
 	found := head.ConformanceChecks(knowledge.ConformanceChange{
-		Subjects: subjects, Introduced: introduced, Generated: in.generated, Renamed: renamed,
-		Read: in.read, Conformance: in.conformance, Base: in.base, Touched: touched,
+		Subjects: cls.subjects, Introduced: cls.introduced(), Generated: in.generated, Renamed: cls.renamed,
+		Read: in.read, Conformance: in.conformance, Base: in.base, Touched: cls.touched,
 	})
 	for _, id := range slices.Sorted(maps.Keys(found)) {
 		def, ok := defs[id]
@@ -306,7 +268,7 @@ func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph,
 		i := slices.IndexFunc(f.Symbols, func(s types.DiffSymbol) bool { return s.ID == id })
 		if i < 0 {
 			change := in.changes[id]
-			if in.changes == nil && introduced[id] {
+			if in.changes == nil && cls.change[id] == types.DiffChangeAdded {
 				change = types.DiffChangeAdded
 			}
 			f.Symbols = append(f.Symbols, types.DiffSymbol{

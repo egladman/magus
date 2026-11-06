@@ -41,6 +41,9 @@ type Contract struct {
 	// The command that writes the spell's SCIP symbol index. magus runs it as the
 	// reserved index op.
 	SymbolIndexer *spells.SymbolIndexer `mgs:"mgs_getSymbolIndexer"`
+	// Where a project's tests leave their line coverage profile. The project
+	// target that declares the profile as an output writes it.
+	Coverage *spells.Coverage `mgs:"mgs_getCoverage"`
 	// What the spell's tools need from the host beyond the sandbox's own grants.
 	Sandbox *spells.Sandbox `mgs:"mgs_getSandbox"`
 	// Whether the spell delegates to a foreign process that manages its own dependency

@@ -361,7 +361,7 @@ func (q *callSeqIndex) excluded(i, j int) bool {
 func (q *callSeqIndex) takesArgList(i int) bool {
 	id := q.ids[i]
 	n := q.g.nodes[id]
-	if n.Attrs[attrLanguage] != "go" {
+	if n.Attrs[AttrLanguage] != "go" {
 		return false
 	}
 	local := q.ci.local[id]

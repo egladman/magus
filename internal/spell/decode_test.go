@@ -699,6 +699,10 @@ func TestBuiltinStubSyntax(t *testing.T) {
 			Kinds: []string{"Function", "Method"}, BodyStyle: "brace",
 			Body: "{\n    todo!(\"{{&Name}} lands in {{&Branch}}\")\n}",
 		},
+		"buzz": {
+			Kinds: []string{"Function", "Method"}, BodyStyle: "brace",
+			Body: "{\n    std\\panic(\"unimplemented: {{&Name}} lands in {{&Branch}}\");\n}",
+		},
 		"python": {
 			Kinds: []string{"Function", "Method"}, BodyStyle: "indent",
 			Body: "raise NotImplementedError(\"{{&Name}} lands in {{&Branch}}\")",
@@ -710,8 +714,6 @@ func TestBuiltinStubSyntax(t *testing.T) {
 		assert.Equal(t, w, *m[name].Syntax.Stubs, name)
 	}
 	assert.Nil(t, m["bash"].Syntax, "a spell that cannot declare a body honestly declares none")
-	require.NotNil(t, m["buzz"].Syntax)
-	assert.Nil(t, m["buzz"].Syntax.Stubs, "buzz declares comments only")
 }
 
 type discoveredSuite struct {
@@ -905,4 +907,99 @@ func (s *discoveredSuite) TestInProcessIndexerRefusesEnvs() {
 		Format: spells.SymbolFormatBuzzModule, Envs: []map[string]string{{"GOOS": "linux"}},
 	}})
 	s.EqualError(err, `spell "buzz": symbol indexer: format buzz-module reads one build of the files, drop envs`)
+}
+
+// coverageContract declares a Go profile the project's tests leave in .magus.
+func coverageContract() Contract {
+	return Contract{
+		Name:     "golang",
+		Coverage: &spells.Coverage{Format: spells.CoverageFormatGoProfile, Profile: ".magus/coverage.out"},
+	}
+}
+
+type coverageSuite struct{ suite.Suite }
+
+func TestDecodeCoverage(t *testing.T) { suite.Run(t, new(coverageSuite)) }
+
+func (s *coverageSuite) TestCarriesTheDeclarationAndSynthesizesNoOp() {
+	m, err := describe(coverageContract())
+	s.Require().NoError(err)
+	s.Equal(coverageContract().Coverage, m.Coverage)
+	s.Empty(m.OpNames())
+}
+
+func (s *coverageSuite) TestAnUndeclaredCoverageIsNil() {
+	c := coverageContract()
+	c.Coverage = nil
+	m, err := describe(c)
+	s.Require().NoError(err)
+	s.Nil(m.Coverage)
+}
+
+func (s *coverageSuite) TestRefusesNoFormat() {
+	c := coverageContract()
+	c.Coverage.Format = spells.CoverageFormatNone
+	_, err := describe(c)
+	s.EqualError(err, `spell "golang": mgs_getCoverage: format is none, want one of lcov, go-coverprofile`)
+}
+
+func (s *coverageSuite) TestRefusesAProfileOutsideTheProject() {
+	c := coverageContract()
+	c.Coverage.Profile = "../coverage.out"
+	_, err := describe(c)
+	s.EqualError(err, `spell "golang": mgs_getCoverage: profile "../coverage.out" must be a clean slash path inside the project directory`)
+}
+
+func (s *coverageSuite) TestRefusesAnAbsoluteProfile() {
+	c := coverageContract()
+	c.Coverage.Profile = "/tmp/coverage.out"
+	_, err := describe(c)
+	s.ErrorContains(err, `profile "/tmp/coverage.out" must be a clean slash path`)
+}
+
+func (s *coverageSuite) TestRefusesNoProfile() {
+	c := coverageContract()
+	c.Coverage.Profile = ""
+	_, err := describe(c)
+	s.ErrorContains(err, `profile "" must be a clean slash path`)
+}
+
+func (s *coverageSuite) TestRefusesAnUncleanProfile() {
+	c := coverageContract()
+	c.Coverage.Profile = ".magus//coverage.out"
+	_, err := describe(c)
+	s.ErrorContains(err, `profile ".magus//coverage.out" must be a clean slash path`)
+}
+
+// lexLanguage declares a whole syntax, which each case below breaks one way.
+func lexLanguage(edit func(*spells.Syntax)) Contract {
+	syn := spells.Syntax{
+		Comments:  &spells.CommentSyntax{LineComments: []string{"//"}},
+		Stubs:     &spells.StubSyntax{Kinds: []string{"Function"}, BodyStyle: spells.StubBodyBrace, Body: "{}"},
+		Decisions: &spells.DecisionSyntax{Keywords: []string{"if"}},
+	}
+	edit(&syn)
+	return Contract{Name: "lang", Language: &spells.Language{Name: "Lang", Extensions: []string{".l"}, Syntax: &syn}}
+}
+
+type syntaxFactsSuite struct{ suite.Suite }
+
+func TestDecodeSyntaxFacts(t *testing.T) { suite.Run(t, new(syntaxFactsSuite)) }
+
+func (s *syntaxFactsSuite) TestAcceptsAWholeDeclaration() {
+	m, err := describe(lexLanguage(func(*spells.Syntax) {}))
+	s.Require().NoError(err)
+	s.Equal([]string{"if"}, m.Syntax.Decisions.Keywords)
+}
+
+func (s *syntaxFactsSuite) TestRefusesDecisionsWithoutComments() {
+	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Comments = nil }))
+	s.EqualError(err, `spell "lang": language.syntax: decisions need comments, `+
+		`or a token in a comment or string counts as code`)
+}
+
+func (s *syntaxFactsSuite) TestRefusesEmptyDecisions() {
+	_, err := describe(lexLanguage(func(syn *spells.Syntax) { syn.Decisions = &spells.DecisionSyntax{} }))
+	s.EqualError(err, `spell "lang": language.syntax: decisions declare no keyword or operator, `+
+		`so every function would read complexity 1`)
 }

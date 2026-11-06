@@ -1,0 +1,241 @@
+syntax = "proto3";
+
+// Package magus.pulls.v1alpha1 is the console-facing PullsService: the live view of the open
+// pull requests against the workspace's base branch, and the one author filter that scopes it.
+//
+// The board is computed by the server poller, never by the request. GetPulls returns the last
+// board the poller produced and never calls the forge, so a console polling every few seconds
+// costs nothing against the forge's rate limit. The sync state on the board says when that
+// board was taken, how long until the next sync, and why that interval was chosen, so a reader
+// can tell a board that is current from one that is merely the last good answer.
+//
+// SetAuthors is the only write, and it writes the filter, not the forge: it changes which
+// authors the board shows and asks the poller for one sync now, still bounded by the poll floor.
+//
+// Access policy: GetPulls is console read; SetAuthors is console write. Both sit behind the same
+// loopback guard as the other console services and are never mounted on the LAN share listener.
+package magus.pulls.v1alpha1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// PullsService serves the PR board and the author filter that scopes it.
+service PullsService {
+  // GetPulls returns the last board the poller produced. It never calls the forge.
+  rpc GetPulls(GetPullsRequest) returns (GetPullsResponse);
+  // SetAuthors replaces the author filter and triggers one sync now, respecting the poll floor.
+  rpc SetAuthors(SetAuthorsRequest) returns (SetAuthorsResponse);
+}
+
+// CiState is the rolled-up result of a commit's checks, with the queue context already removed.
+enum CiState {
+  CI_STATE_UNSPECIFIED = 0;
+  // GREEN means every check passed or was skipped.
+  CI_STATE_GREEN = 1;
+  // RED means at least one check failed.
+  CI_STATE_RED = 2;
+  // RUNNING means at least one check is running and none failed.
+  CI_STATE_RUNNING = 3;
+  // QUEUED means at least one check is waiting for a runner and none failed or ran.
+  CI_STATE_QUEUED = 4;
+  // NONE means the commit has no checks at all.
+  CI_STATE_NONE = 5;
+}
+
+// Mergeable is the forge's answer on whether the head merges into the base cleanly.
+enum Mergeable {
+  MERGEABLE_UNSPECIFIED = 0;
+  MERGEABLE_MERGEABLE = 1;
+  // CONFLICTING means the head cannot merge into the base without resolving conflicts.
+  MERGEABLE_CONFLICTING = 2;
+  // UNKNOWN means the forge has not computed the answer yet.
+  MERGEABLE_UNKNOWN = 3;
+}
+
+// Review is the state of a pull request's reviews.
+enum Review {
+  REVIEW_UNSPECIFIED = 0;
+  REVIEW_APPROVED = 1;
+  REVIEW_CHANGES_REQUESTED = 2;
+  // REVIEW_REQUIRED means reviewers were requested and none has reviewed yet.
+  REVIEW_REQUIRED = 3;
+  REVIEW_NONE = 4;
+}
+
+// PatternKind is the closed set of cross-PR patterns the board reports.
+enum PatternKind {
+  PATTERN_KIND_UNSPECIFIED = 0;
+  // REGRESSION means several PRs fail the same check with the same first line.
+  PATTERN_KIND_REGRESSION = 1;
+  // RUNNER_BACKLOG means checks across PRs have waited on runners too long, which is capacity,
+  // not code.
+  PATTERN_KIND_RUNNER_BACKLOG = 2;
+}
+
+// GetPullsRequest asks for the current board.
+message GetPullsRequest {}
+
+// GetPullsResponse carries the last board the poller produced.
+message GetPullsResponse {
+  // board is the last good board, with its sync state.
+  Board board = 1;
+}
+
+// SetAuthorsRequest replaces the author filter.
+message SetAuthorsRequest {
+  // authors are the logins to show. An empty list means every author.
+  repeated string authors = 1;
+}
+
+// SetAuthorsResponse carries the board after the filter change.
+message SetAuthorsResponse {
+  // board is the board as it stands after the filter change, before the triggered sync lands.
+  Board board = 1;
+}
+
+// Board is everything the console renders for one repository.
+message Board {
+  // repo is the owner/name the board describes.
+  string repo = 1;
+  AuthorFilter filter = 2;
+  SyncState sync = 3;
+  // main is the base branch, its CI pinned above the rows.
+  BranchState main = 4;
+  repeated Pull pulls = 5;
+  repeated Pattern patterns = 6;
+  // merge_order is the suggested order to merge the open pulls, first entry first.
+  repeated MergeStep merge_order = 7;
+}
+
+// AuthorFilter says whose pull requests the board shows.
+message AuthorFilter {
+  repeated string authors = 1;
+  // is_default is true when no filter was ever saved, so the board shows the viewer's own pulls.
+  bool is_default = 2;
+  // viewer is the login the forge credential belongs to.
+  string viewer = 3;
+  // every_author is true when the filter is saved as empty, meaning every author.
+  bool every_author = 4;
+}
+
+// SyncState is when the board was taken and why the poller is waiting as long as it is.
+message SyncState {
+  google.protobuf.Timestamp synced_at = 1;
+  google.protobuf.Timestamp next_sync_at = 2;
+  // failed_at is when the last sync failed. Unset when the last sync succeeded.
+  google.protobuf.Timestamp failed_at = 3;
+  // interval is the wait chosen before the next sync.
+  google.protobuf.Duration interval = 4;
+  // cadence_reason is one sentence saying why the interval is what it is, shown on the board.
+  string cadence_reason = 5;
+  // sync_error is the last sync's failure, shown on the board while the last good board stands.
+  string sync_error = 6;
+  // rate_limit is the forge's request budget for the window.
+  int32 rate_limit = 7;
+  // rate_remaining is how many requests remain in the window.
+  int32 rate_remaining = 8;
+  google.protobuf.Timestamp rate_reset = 9;
+  // requests is how many forge requests the last sync sent.
+  int32 requests = 10;
+  // revalidated is how many of those answered 304, which the forge does not count against the budget.
+  int32 revalidated = 11;
+}
+
+// BranchState is a branch and the CI on its head commit.
+message BranchState {
+  string name = 1;
+  string sha = 2;
+  string url = 3;
+  CiState ci = 4;
+  // first_failure is the first failing check, unset when nothing failed.
+  FailedJob first_failure = 5;
+  int32 passed = 6;
+  int32 failed = 7;
+  // pending counts checks queued or running.
+  int32 pending = 8;
+}
+
+// Pull is one open pull request row on the board.
+message Pull {
+  int32 number = 1;
+  string title = 2;
+  string author = 3;
+  string url = 4;
+  string branch = 5;
+  string head_sha = 6;
+  // behind_by is how many commits the base has that the head does not. -1 when unknown.
+  int32 behind_by = 7;
+  Mergeable mergeable = 8;
+  CiState ci = 9;
+  // queued_for is how long the earliest queued check has waited. Unset when nothing is queued.
+  google.protobuf.Duration queued_for = 10;
+  int32 passed = 11;
+  int32 failed = 12;
+  // pending counts checks queued or running.
+  int32 pending = 13;
+  // first_failure is the first failing check, unset when nothing failed.
+  FailedJob first_failure = 14;
+  Review review = 15;
+  // blocked is one plain sentence per reason the pull cannot merge now.
+  repeated string blocked = 16;
+  // queue is the merge queue's status for this pull, shown as its own column.
+  QueueStatus queue = 17;
+  google.protobuf.Timestamp pushed_at = 18;
+  // stale is true when nothing was pushed for longer than the configured stale window.
+  bool stale = 19;
+  bool draft = 20;
+  // overlaps are the other open pulls that change files this pull also changes.
+  repeated Overlap overlaps = 21;
+  // failed_jobs are every failing check, expanded in place by the console.
+  repeated FailedJob failed_jobs = 22;
+}
+
+// QueueStatus is the merge queue's view of one pull request.
+message QueueStatus {
+  // state is the queue's word for where the pull sits, for example queued or merging.
+  string state = 1;
+  // description is one sentence the queue wrote about the state.
+  string description = 2;
+}
+
+// Overlap is another open pull request that changes files this one also changes.
+message Overlap {
+  int32 number = 1;
+  repeated string files = 2;
+}
+
+// FailedJob is one failing check with the first error lines the forge reported for it.
+message FailedJob {
+  string name = 1;
+  string url = 2;
+  // lines are the first error lines, at most five.
+  repeated string lines = 3;
+  // output_ref is a magus output reference found in those lines, empty when none was.
+  string output_ref = 4;
+}
+
+// Pattern is one cross-PR finding: a regression, or a runner backlog.
+message Pattern {
+  PatternKind kind = 1;
+  // check is the check the pattern is about, empty for a runner backlog.
+  string check = 2;
+  // first_line is the error line the failing pulls share.
+  string first_line = 3;
+  // pulls are the pull numbers the pattern covers.
+  repeated int32 pulls = 4;
+  // since_sha is the newest base commit at or before the earliest failure, when a regression.
+  string since_sha = 5;
+  string since_subject = 6;
+  int32 since_pull = 7;
+  // on_main is true when the same check also fails on the base branch.
+  bool on_main = 8;
+  // message is the one sentence the board shows for the pattern.
+  string message = 9;
+}
+
+// MergeStep is one pull in the suggested merge order.
+message MergeStep {
+  int32 number = 1;
+  // note is one sentence on why the pull sits where it does, for example waits on a main regression.
+  string note = 2;
+}

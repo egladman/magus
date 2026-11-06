@@ -47,7 +47,7 @@ import "image";
 import "./hack/magusfile/image" as images;
 import "./hack/magusfile/badges" as badges;
 import "./hack/magusfile/coverage" as cov;
-import "lcov";
+import "./hack/magusfile/buzz-coverage" as buzzcov;
 
 // Aliased: an unaliased import flat-merges its exports here, where magus reads
 // each exported fun as a target and rejects it (MGS1008).
@@ -97,6 +97,8 @@ if (os\env("CI_PROVIDER") == "github-actions") {
 }
 import "spells/endoflife-date" as eol;
 magus\lifecycle.provider(eol);
+import "spells/github/review" as ghReview;
+magus\review.provider(ghReview);
 
 import "magus/modeltiers";
 import "./hack/magusfile/model-tiers" as tierhost;
@@ -1514,6 +1516,8 @@ fun release_target_platform(goos: str, goarch: str) > [str] !> any {
 export fun release_build(ctx: magus\Context, args: [str]) > void !> any {
     // `**`: this target stages into dist/<goos>-<goarch>/, which `*` would miss.
     ctx.writesFiles(["dist/**"]);
+    // Every release run builds here first, however its tag was pushed.
+    _ = proc\exec("go", args: ["run", "./cmd/magus-utils", "dev-shims"], dir: ".");
     var goos = "";
     var goarch = "";
     if (args.len() == 1) {
@@ -1873,6 +1877,15 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
         }
     }
 
+    // (e) release_build's refusal, asked before a tag burns the version.
+    final shims = proc\exec("go", args: ["run", "./cmd/magus-utils", "dev-shims"], dir: ".",
+        opts: proc\ExecOptions{quiet = true, allowFailure = true});
+    if (shims.ok) {
+        checks.append(passed("development-only shims", shims.stdout.trim()));
+    } else {
+        checks.append(failed("development-only shims", shims.stderr.trim()));
+    }
+
     // (b) Simulates version() with these tags on HEAD. Gated only on a root tag: a
     // library-only release publishes no assets.
     final root = releases\rootReleaseTag(wouldBeTags + onHead);
@@ -2157,14 +2170,6 @@ export fun watch(ctx: magus\Context, args: [str]) > void !> any {
     });
 }
 
-fun total_coverage(func_out: str) > str {
-    final lines = func_out.split("\n");
-    final fields = lines[lines.len() - 1].split("");
-    final cell = fields[fields.len() - 1];
-    if (cell.endsWith("%")) { return cell.sub(0, cell.len() - 1); }
-    return cell;
-}
-
 // Runs the PR advisors' `test "..." {}` blocks under a plain `magus buzz -t`, from each
 // script's own directory so their bare `import "advice"` resolves.
 export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
@@ -2176,7 +2181,8 @@ export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// Tests with race detection and a coverage floor. The published badge is coverage_render's.
+// Tests with race detection.
+// The published badge is coverage_render's.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // generate writes MAGUS.md and the *.lock fixtures this suite reads; without the
     // edge, coverage-render's parallel needs(generate, test) is MGS4008 at doctor time.
@@ -2223,24 +2229,11 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
         {"args": ["-race", "-covermode=atomic", "-coverprofile=" + cov\profilePath(COVERAGE_PROFILE, args: args)] + raced_packages() + args});
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
         {"args": ["-covermode=atomic", "-coverprofile=" + cov\profilePath(CMD_MAGUS_PROFILE, args: args), CMD_MAGUS_PKG] + args});
-    // A narrowed run's profiles cover a slice and live under their own key.
-    if (args.len() > 0) { return; }
-    fs\writeFile(COVERAGE_PROFILE,
-        merge_profiles(fs\readFile(COVERAGE_PROFILE), second: fs\readFile(CMD_MAGUS_PROFILE)));
-    // Hand-written code only. hack/magusfile/coverage.buzz detects generated files by
-    // Go's marker, not by path, since gen/ directories hold hand-maintained files too.
-    fs\writeFile(COVERAGE_HAND_PROFILE,
-        cov\stripGenerated(fs\readFile(COVERAGE_PROFILE),
-            prefix: cov\modulePath(fs\readFile("go.mod")) + "/"));
-    // A full run supersedes every slice; the glob would snapshot them.
-    final whole = [COVERAGE_PROFILE, COVERAGE_HAND_PROFILE, CMD_MAGUS_PROFILE];
-    foreach (profile in fs\glob(".magus/coverage*.out")) {
-        if (whole.indexOf(profile.value) == null) { fs\remove(profile.value); }
-    }
-    // Only a full run judges the floor; a narrowed gate measured a slice.
-    if (!ctx.narrowed() and std\parseInt(coverage_percent().split(".")[0]) < 70) {
-        throw "test: coverage " + coverage_percent() + "% is below the 70% floor; investigate the regression or lower the floor deliberately";
-    }
+    cov\settle(cov\Profiles{ whole = COVERAGE_PROFILE, cmd = CMD_MAGUS_PROFILE, hand = COVERAGE_HAND_PROFILE,
+        every = ".magus/coverage*.out" }, args: args, gomod: fs\readFile("go.mod"));
+    // No percentage floor: removing well-covered code would trip one. The
+    // touched-functions-keep-change-risk-under-10 lint rule holds each changed
+    // file's covered lines against its base instead.
 }
 
 final CMD_MAGUS_PKG = "./cmd/magus";
@@ -2264,27 +2257,6 @@ fun raced_packages() > [str] !> any {
     return raced;
 }
 
-// The second body appends under the first header; `go tool cover` refuses two headers.
-// Headers are checked because under `test:cd` go-test's own -coverprofile overwrites the
-// raced profile, and the merge would count cmd/magus twice.
-fun merge_profiles(first: str, second: str) > str !> any {
-    final head = first.split("\n")[0].trim();
-    final other = second.split("\n")[0].trim();
-    if (!head.startsWith("mode:") or head != other) {
-        throw "test: refusing to merge coverage profiles with headers " + head + " and " + other +
-              "; both must name the same mode (`test:cd` overwrites the raced profile, see the note above)";
-    }
-    final body = second.split("\n");
-    var merged = mut [first.trim()];
-    foreach (i, line in body) {
-        if (i > 0 and line.trim() != "") { merged.append(line); }
-    }
-    return merged.join("\n") + "\n";
-}
-
-fun coverage_percent() > str !> any {
-    return total_coverage(proc\exec("go", ["tool", "cover", "-func=" + COVERAGE_HAND_PROFILE]).stdout);
-}
 
 // Unions one platform's module profiles into block -> ran. A block absent from every
 // profile was never compiled there, which differs from compiled and never entered.
@@ -2337,7 +2309,8 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Runs the in-file `test "..." {}` blocks in this repo's Buzz modules through magus's
-// embedded engine, and holds their merged line coverage above a floor. Not the buzz
+// embedded engine, and writes their merged line coverage.
+// Not the buzz
 // spell's buzz-test op: that forks upstream `buzz` and would sweep in every magusfile.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // hack/lint/run.buzz's tests run the binary proofread-build links, and
@@ -2348,71 +2321,18 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["spells/**/*.buzz", "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
         "hack/ci/*.buzz", "hack/retro/*.buzz", "hack/retro/testdata/**", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/lint/*.mjs", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml", "hack/policy/gen/proofread-decisions.json", ".github/workflows/pr.yaml"]);
-    ctx.writesFiles(["coverage/buzz/*.lcov", "coverage/buzz/coverage.txt"]);
+    // lcov.info is the profile the buzz spell declares for change risk.
+    ctx.writesFiles(["coverage/buzz/*.lcov", "coverage/buzz/coverage.txt", "coverage/buzz/lcov.info"]);
     // proofread_build above links the binary that hack/lint/run.buzz invokes.
     fs\mkdirAll("coverage/buzz");
-    final reports = mut [<str>];
-
-    fun cover_module(mod: str, extra: [str], opts: magus\CommandOptions) > void !> any {
-        final profile = "coverage/buzz/" + mod.replace("/", "_") + ".lcov";
-        final argv = mut [<str>];
-        argv.append("-t");
-        argv.append("--coverprofile");
-        argv.append(profile);
-        foreach (a in extra) { argv.append(a); }
-        argv.append(mod);
-        _ = magus\cmd("buzz", args: argv, opts: opts);
-        if (fs\exists(profile)) {
-            reports.append(fs\readFile(profile));
-        }
+    final fragments = mut [<str>];
+    foreach (run in buzzcov\runs()) {
+        _ = magus\cmd("buzz", args: run.argv, opts: magus\CommandOptions{dir = run.dir});
+        buzzcov\keep(fragments, run: run);
     }
-
-    foreach (mod in fs\glob("std/lib/*.buzz")) {
-        cover_module(mod.value, ["--embedded"], magus\CommandOptions{});
-    }
-    // The mode follows the caller: a script a person or workflow runs is run bare, so it is
-    // gated strict, and a magusfile import parses embedded, where strict would reject legal
-    // constructs.
-    foreach (dir in ["hack/dev", "hack/remote", "hack/bench", "hack/ci", "hack/retro"]) {
-        foreach (mod in fs\glob(dir + "/*.buzz")) {
-            cover_module(mod.value, [], magus\CommandOptions{});
-        }
-    }
-    cover_module("hack/lint/run.buzz", [], magus\CommandOptions{});
-    foreach (dir in ["hack/magusfile", "hack/policy"]) {
-        foreach (mod in fs\glob(dir + "/*.buzz")) {
-            cover_module(mod.value, ["--embedded"], magus\CommandOptions{});
-        }
-    }
-    // Globbed so a new spell is covered: a spell no magusfile imports reaches no other gate.
-    // --embedded because these import magus/spell. The docs libraries need `dir` to resolve
-    // their relative imports. TestSpellExamplesParseAndRecord in internal/dry covers
-    // spells/examples/**.
-    foreach (spell in fs\glob("spells/**/*.buzz")) {
-        if (spell.value.startsWith("spells/examples/")) { continue; }
-        cover_module(spell.value, ["--embedded"], magus\CommandOptions{});
-    }
-    foreach (lib in ["lib/text.buzz", "lib/dom.buzz", "lib/feed.buzz", "lib/html.buzz",
-                     "lib/csp.buzz", "lib/url.buzz", "lib/date.buzz", "lib/glossary.buzz",
-                     "lib/conventions.buzz"]) {
-        // Coverprofile paths are relative to docs/, so SF: records are rewritten before merging.
-        final frag = "coverage/buzz/docs_" + lib.replace("/", "_") + ".lcov";
-        _ = magus\cmd("buzz", args: ["-t", "--embedded", "--coverprofile", "../" + frag, lib],
-            opts: magus\CommandOptions{dir = "docs"});
-        if (fs\exists(frag)) {
-            reports.append(fs\readFile(frag).replace("SF:lib/", "SF:docs/lib/"));
-        }
-    }
-
-    if (reports.len() == 0) {
-        throw "buzz-test: no LCOV fragments under coverage/buzz/; --coverprofile did not write";
-    }
-    final pct = lcov\mergePercent(reports, keep: "");
-    fs\writeFile("coverage/buzz/coverage.txt", content: pct + "\n");
-    final floor = 62;
-    if (std\parseInt(pct.split(".")[0])! < floor) {
-        throw "buzz-test: buzz coverage " + pct + "% is below the {floor}% floor; investigate the regression or lower the floor deliberately";
-    }
+    final report = buzzcov\report(fragments);
+    fs\writeFile("coverage/buzz/coverage.txt", content: report.percent + "\n");
+    fs\writeFile("coverage/buzz/lcov.info", content: report.tracefile);
 }
 
 // No doctor gate: the advice action reports its findings without blocking.

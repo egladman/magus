@@ -53,6 +53,16 @@ func TestSpawnWarmWorkerCountsAStoppedHolderAsWarm(t *testing.T) {
 	v := f.spawn(t)
 	require.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleSpawnWarmWorker)}, judgedAs(v), v.Context)
 	assert.Contains(t, v.Reason, "continue agent a1b2c3 with a message")
+	assert.Contains(t, v.Reason, "to end gate-fits with `magus job exit gate-fits --stdin` and then take regress-fix",
+		"a resumed worker whose row is in flight must end it before it may take the next")
+}
+
+func TestSpawnWarmWorkerAsksNoExitOfAnEndedRow(t *testing.T) {
+	f := warmFixture(t, func(j *types.Job) { j.Follows = "gate-fits" })
+
+	v := f.spawn(t)
+	require.Equal(t, string(denyRuleSpawnWarmWorker), v.Rule, v.Reason)
+	assert.NotContains(t, v.Reason, "magus job exit")
 }
 
 func TestSpawnWarmWorkerLeavesARunningHolderAlone(t *testing.T) {

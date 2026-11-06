@@ -51,7 +51,7 @@ exec magus job fork flags/survey --read-only --criteria 'read the registry'
 ! stdout 'regenerated outside'
 
 stdin $WORK/widen.json
-exec magus job apply -f -
+exec magus job apply --stdin
 stdout '^  write_paths \+docs/manpage/\*\.md$'
 ! stdout 'docs:content-generate'
 

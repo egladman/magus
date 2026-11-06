@@ -39,6 +39,8 @@ anyone.
 - [A deliberate break never merges red](a-deliberate-break-never-merges-red.md):
   the change that makes a break carries its own way to green.
 - An approved shim carries `compat(until: <condition>):`.
+- A shim that exists only while a break lands carries `compat(until: the next release)`,
+  and magus's release refuses to ship while one remains.
 - [Compatibility](../../concepts/compatibility.md) states what holds after 1.0.
 
 ## Good

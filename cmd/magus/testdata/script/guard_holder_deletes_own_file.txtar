@@ -21,7 +21,7 @@ exec git add pricing/added.sh
 exec git commit -q -m 'add a helper'
 
 stdin $WORK/narrow.json
-exec magus job apply -f -
+exec magus job apply --stdin
 
 exec magus shell --lease cents 'rm pricing/scratch.sh'
 exec magus shell --lease cents 'rm pricing/added.sh'

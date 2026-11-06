@@ -44,6 +44,7 @@ var ContractFuncs = []ContractFunc{
 	{Name: "mgs_getTools", Field: "Tools", Returns: "{str: Tool}", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractTools(v) }},
 	{Name: "mgs_getLanguage", Field: "Language", Returns: "Language", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractLanguage(v) }},
 	{Name: "mgs_getSymbolIndexer", Field: "SymbolIndexer", Returns: "SymbolIndexer", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractSymbolIndexer(v) }},
+	{Name: "mgs_getCoverage", Field: "Coverage", Returns: "Coverage", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractCoverage(v) }},
 	{Name: "mgs_getSandbox", Field: "Sandbox", Returns: "Sandbox", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractSandbox(v) }},
 	{Name: "mgs_isOpaque", Field: "Opaque", Returns: "bool", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractOpaque(v) }},
 	{Name: "mgs_getModeArgs", Field: "ModeArgs", Returns: "{str: [str]}", Required: false, Handler: false, Decode: func(v vm.Value) (any, error) { return decodeContractModeArgs(v) }},
@@ -225,6 +226,20 @@ func decodeContractSymbolIndexer(v vm.Value) (*spells.SymbolIndexer, error) {
 		}
 		optSymbolIndexer = xSymbolIndexer
 		out = &optSymbolIndexer
+	}
+	return out, nil
+}
+
+func decodeContractCoverage(v vm.Value) (*spells.Coverage, error) {
+	var out *spells.Coverage
+	if !v.IsNull() {
+		var optCoverage spells.Coverage
+		xCoverage, err := decodeCoverage(v, "mgs_getCoverage")
+		if err != nil {
+			return out, err
+		}
+		optCoverage = xCoverage
+		out = &optCoverage
 	}
 	return out, nil
 }

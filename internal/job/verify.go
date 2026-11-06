@@ -536,8 +536,24 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		}
 	}
 
+	unrunByGate := map[string]string{}
+	if rep.Validation.Unrun != "" {
+		unrunByGate[types.PrimaryGoalID] = rep.Validation.Unrun
+	}
+	for _, evidence := range rep.GateEvidence {
+		if evidence.Unrun != "" {
+			unrunByGate[evidence.GateID] = evidence.Unrun
+		}
+	}
+
 	statusByGate := map[string]types.GateStatus{}
 	for _, gate := range gates {
+		if cause, unrun := unrunByGate[gate.ID]; unrun && strings.TrimSpace(evidenceByGate[gate.ID]) == "" {
+			statusByGate[gate.ID] = types.GateStatus{ID: gate.ID, Violations: []string{
+				fmt.Sprintf("did not run: %s; it fails until the check runs where that is fixed", cause),
+			}}
+			continue
+		}
 		if reason, owed := owedByGate[gate.ID]; owed && strings.TrimSpace(evidenceByGate[gate.ID]) == "" {
 			statusByGate[gate.ID] = owedGate(row, gate, reason)
 			if len(statusByGate[gate.ID].Violations) == 0 {
@@ -713,8 +729,8 @@ func owedGate(row types.Job, gate types.Goal, reason string) types.GateStatus {
 	case gate.Kind != types.GoalKindCheck:
 		status.Violations = append(status.Violations, fmt.Sprintf("files a %s goal as owed, and only a check has a run to owe", gate.Kind))
 	case row.Integrating():
-		status.Violations = append(status.Violations, fmt.Sprintf("an integration runs the checks it owns: it waits for a seat with `%s | <the check>`, or after %s, which no seat clears, frees memory and runs the check again",
-			hint.Status.With("--wait"), types.MemoryPressureHigh))
+		status.Violations = append(status.Violations, fmt.Sprintf("an integration runs the checks it owns: its check waits for a seat itself, so it raises budget_wait or frees a holder, or after %s, which no seat clears, frees memory and runs the check again",
+			types.MemoryPressureHigh))
 	case reason != types.OwedNoSeat:
 		status.Violations = append(status.Violations, fmt.Sprintf("files its run as owed because %q, and the one reason a run is owed is %q", reason, types.OwedNoSeat))
 	}

@@ -212,3 +212,23 @@ test "every wired op is one this spell declares" {
         }
     }
 }
+
+test "decisions count optional parameters but not optional chaining" {
+    final syntax = typescript\mgs_getLanguage().syntax!;
+    final decisions = syntax.decisions!;
+    std\assert(decisions.keywords.join(" ") == "if for while case catch", message: "keywords");
+    std\assert(decisions.operators.join(" ") == "&& || ?? ??= ?", message: "operators");
+    std\assert(syntax.operators.indexOf("?.") != null, message: "?. is read whole, so it is no decision");
+}
+
+test "generic brackets are no decision" {
+    final syntax = typescript\mgs_getLanguage().syntax!;
+    final operators = syntax.decisions!.operators;
+    std\assert(operators.indexOf("<") == null and operators.indexOf(">") == null, message: "brackets are no decision");
+}
+
+test "coverage is node-test's lcov and vitest keeps no test scope" {
+    final coverage = typescript\mgs_getCoverage();
+    std\assert(coverage.format == CoverageFormat.lcov and coverage.profile == "coverage.lcov", message: "report");
+    std\assert(typescript\mgs_listTargets()["vitest"]!(Target{}).testScope.len() == 0, message: "whole project");
+}

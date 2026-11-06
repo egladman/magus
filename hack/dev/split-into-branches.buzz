@@ -376,7 +376,7 @@ export fun projectStack(groups: [Group], base: str, status: str) > branchstack\B
 // proofCommand is what proves a layer on its own: its branch checked out, then the build and
 // tests of every project the stack so far changes.
 fun proofCommand(branch: str, base: str) > str {
-    return "git switch {branch} && ./magus status --wait | ./magus affected build --base {base} && ./magus affected test --base {base}";
+    return "git switch {branch} && ./magus affected build --base {base} && ./magus affected test --base {base}";
 }
 
 // prBase is the branch a pull request targets for a base given as a remote-tracking ref.

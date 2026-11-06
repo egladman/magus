@@ -96,6 +96,13 @@ var magusObjects = []Object{
 				Impl:    MagusWorkspaceVolatility,
 			},
 			{
+				Name:    "risk",
+				Doc:     "The change risk of every function in the workspace: {definition, base, functions, gaps}, base empty, shaped as magus\\change().risk. Annotate `> ChangeRisk`. Workspace-wide; takes no options. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+				Returns: []Ret{{Type: TypeAnyMap, Object: "ChangeRisk"}},
+				Raises:  true,
+				Impl:    MagusWorkspaceRisk,
+			},
+			{
 				Name:    "skills",
 				Doc:     "Every skill this workspace offers an agent, sorted by name then form: each {name, description, source, form, body, current}. source is `shipped` for magus's own catalog, which yields a `short` and a `full` entry per skill, or `local` for a hand-authored skill found in an installed skills directory (a wired harness's skill paths, where `magus agent install` writes), which yields one entry with form `full`. body is exactly what an agent loads: the SKILL.md text with its frontmatter excluded, the generated footer kept. current is true when every installed copy of that entry is byte-equal to what this magus would install, false when one differs or none is installed, and always true for a local skill. opts.name selects one skill and raises on a name nothing offers, naming the near matches; opts.form (`short`, `full`, or `both`, the default) narrows the shipped entries and leaves local ones alone. An unknown option raises. Pair it with magus\\workspace().putJob and magus\\cmd(\"describe\", [\"job\", id]) to hand a worker its brief and its skills from magus itself rather than from pasted files. Read from the workspace on the context; raises MGS1022 in a script run outside one.",
 				Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "SkillsOptions"}},
@@ -318,6 +325,13 @@ var magusObjects = []Object{
 				Returns: []Ret{{Type: TypeString}},
 				Raises:  true,
 				Impl:    MagusChangeMergeBase,
+			},
+			{
+				Name:    "risk",
+				Doc:     "The change risk of each function touched since the Change's base, what HEAD added since it forked from the base and the working tree's edits on top: {definition, base, functions, gaps}. Annotate `> ChangeRisk`. Each function is {symbol, label, path, language, digest, line, endLine, complexity, covered, coverable, score}, score being complexity^2 * (1 - coverage)^3 + complexity; definition names the formula. A function magus cannot score is a gap {symbol, label, path, language, line, complexity, reason}, never a pass and never a score of 0. Coverage is the profile each owning spell declares (mgs_getCoverage): at head the project target declaring it as an output is freshened through the cache, and at base it is the cache entry main's CI wrote for that target at the merge base, replayed and never run; no entry raises an error naming the base commit and the command. Tests and generated files are not scored. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+				Returns: []Ret{{Type: TypeAnyMap, Object: "ChangeRisk"}},
+				Raises:  true,
+				Impl:    MagusChangeRisk,
 			},
 		},
 	},

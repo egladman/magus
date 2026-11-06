@@ -11,7 +11,7 @@ import (
 )
 
 // poolSocketRe matches the per-process pool filename Server.Start picks:
-// magus-<pid>-<rand>.sock. server.sock and broker.sock sit outside it on purpose.
+// magus-<pid>-<rand>.sock. server.sock and the broker's socket sit outside it.
 var poolSocketRe = regexp.MustCompile(`^magus-(\d+)-[^/]*\.sock$`)
 
 // StalePool is a live per-process pool whose display version differs from the binary

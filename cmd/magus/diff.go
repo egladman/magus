@@ -36,6 +36,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/marker"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/cmdline/exit"
@@ -2543,20 +2544,6 @@ func (e *earnedSync) finished() []review.Receipt {
 	return add
 }
 
-// compatMarker is the convention's opening, INCLUDING the space the convention always
-// writes after the colon. Everything from there to the closing paren is the RETIREMENT
-// CONDITION, which is the half a reader needs: what would have to become true before the
-// code below may go.
-//
-// inAComment is what keeps this constant out of its own report, by requiring the marker to sit
-// in a comment rather than in a string literal. The trailing space cannot do it: the constant
-// contains the space too, so it matches itself.
-const compatMarker = "compat(until: "
-
-// deprecatedMarker opens Go's deprecation paragraph, the other way code says it stays for a
-// caller that has not moved.
-const deprecatedMarker = "Deprecated:"
-
 // impactLeftBehind is what a change keeps alive or leaves unused: the markers it added
 // (compat(until:) and Deprecated:), and the symbols that lost their last use in it and are
 // still defined. Facts, not reasons: a marker says how long code stays, never whether it
@@ -2574,8 +2561,7 @@ type impactLeftBehind struct {
 type leftMarker struct {
 	Path string `json:"path" yaml:"path"`
 	Line int    `json:"line" yaml:"line"`
-	// Marker is compatMarker or deprecatedMarker as written, and Text what follows it: the
-	// retirement condition, or the deprecation's advice.
+	// Marker and Text are marker.Found's.
 	Marker string `json:"marker" yaml:"marker"`
 	Text   string `json:"text" yaml:"text"`
 }
@@ -2630,9 +2616,8 @@ func addedMarkers(patch string, generated map[string]bool) []leftMarker {
 			for _, raw := range h.Lines {
 				switch {
 				case strings.HasPrefix(raw, "+"):
-					if mk, ok := lineMarker(raw[1:]); ok {
-						mk.Path, mk.Line = f.Path, line
-						out = append(out, mk)
+					if mk, ok := marker.Parse(raw[1:]); ok {
+						out = append(out, leftMarker{Path: f.Path, Line: line, Marker: mk.Marker, Text: mk.Text})
 					}
 					line++
 				case strings.HasPrefix(raw, "-"), strings.HasPrefix(raw, `\`):
@@ -2643,50 +2628,6 @@ func addedMarkers(patch string, generated map[string]bool) []leftMarker {
 		}
 	}
 	return out
-}
-
-// lineMarker is the marker text carries in a comment, if any.
-func lineMarker(text string) (leftMarker, bool) {
-	if idx := strings.Index(text, compatMarker); idx >= 0 && inAComment(text[:idx]) {
-		if until := compatUntil(text[idx:]); until != "" {
-			return leftMarker{Marker: strings.TrimSpace(compatMarker), Text: until}, true
-		}
-	}
-	if idx := strings.Index(text, deprecatedMarker); idx >= 0 && inAComment(text[:idx]) {
-		return leftMarker{Marker: deprecatedMarker, Text: strings.TrimSpace(text[idx+len(deprecatedMarker):])}, true
-	}
-	return leftMarker{}, false
-}
-
-// inAComment reports whether the text preceding a marker opens a comment.
-//
-// The convention writes this marker in a comment beside the code it explains, so a match
-// anywhere else is a mention of the convention rather than a use of it: this file's own
-// constant, and the fixtures in its test, both of which reported themselves as decisions
-// governing the reader's change.
-//
-// Not a parser, and it does not need to be: it cannot tell a `//` inside a string from one
-// that starts a comment. The cases that matters for are files whose subject IS this marker,
-// where the remaining noise is a handful of lines in one test.
-func inAComment(before string) bool {
-	if strings.Contains(before, "//") || strings.Contains(before, "#") || strings.Contains(before, "/*") {
-		return true
-	}
-	// A block comment's continuation lines carry only a leading star.
-	return strings.HasPrefix(strings.TrimLeft(before, " \t"), "*")
-}
-
-// compatUntil extracts the retirement condition from a marker, empty when there is none.
-//
-// A condition running past the end of the line is truncated rather than dropped: these are
-// prose and routinely wrap, and half a condition still tells a reader what kind of thing
-// would retire the code.
-func compatUntil(s string) string {
-	rest := strings.TrimPrefix(s, compatMarker)
-	if end := strings.Index(rest, ")"); end >= 0 {
-		rest = rest[:end]
-	}
-	return strings.TrimSpace(rest)
 }
 
 // impactLeftBehindLines renders the section, including its empty forms.

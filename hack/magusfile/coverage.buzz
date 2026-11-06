@@ -394,6 +394,88 @@ export fun formatPercent(covered: int, statements: int) > str !> str {
     return "{covered * 100 / statements}";
 }
 
+// mergeProfiles appends second's body under first's header, since `go tool
+// cover` refuses two headers. The headers must match: under `test:cd`
+// go-test's own -coverprofile overwrites the raced profile, and the merge
+// would count cmd/magus twice.
+export fun mergeProfiles(first: str, second: str) > str !> any {
+    final head = first.split("\n")[0].trim();
+    final other = second.split("\n")[0].trim();
+    if (!head.startsWith("mode:") or head != other) {
+        throw "test: refusing to merge coverage profiles with headers " + head + " and " + other +
+              "; both must name the same mode (`test:cd` overwrites the raced profile)";
+    }
+    final merged = mut [first.trim()];
+    foreach (i, line in second.split("\n")) {
+        if (i > 0 and line.trim() != "") { merged.append(line); }
+    }
+    return merged.join("\n") + "\n";
+}
+
+// Profiles is where the test target leaves its Go profiles: the raced
+// packages' (whole once merged), cmd/magus's, the hand-written-only one, and
+// the glob every profile a run writes matches.
+export object Profiles {
+    whole: str,
+    cmd: str,
+    hand: str,
+    every: str,
+}
+
+// settle finishes a full test run: it merges cmd/magus into whole, derives
+// hand from it, and removes the slices narrowed runs left. A narrowed run, one
+// given args, settles nothing: its profiles cover a slice under their own key.
+export fun settle(p: Profiles, args: [str], gomod: str) > void !> any {
+    if (args.len() > 0) { return; }
+    fs\writeFile(p.whole, content: mergeProfiles(fs\readFile(p.whole), second: fs\readFile(p.cmd)));
+    // Hand-written code only, by Go's generated marker rather than by path.
+    fs\writeFile(p.hand, content: stripGenerated(fs\readFile(p.whole), prefix: modulePath(gomod) + "/"));
+    // A full run supersedes every slice; the glob would snapshot them. Names
+    // are compared: the glob may spell the dir through a resolved symlink.
+    final kept = [fs\basename(p.whole), fs\basename(p.hand), fs\basename(p.cmd)];
+    foreach (profile in fs\glob(p.every)) {
+        if (kept.indexOf(fs\basename(profile.value)) == null) { fs\remove(profile.value); }
+    }
+}
+
+// settledIn is Profiles under dir, as the test target lays them out in .magus.
+fun settledIn(dir: str) > Profiles {
+    return Profiles{ whole = "{dir}/coverage.out", cmd = "{dir}/coverage.cmd.out", hand = "{dir}/coverage.hand.out",
+        every = "{dir}/coverage*.out" };
+}
+
+test "mergeProfiles keeps one header over both bodies" {
+    final got = mergeProfiles("mode: atomic\nm/a.go:1.1,2.2 1 1\n", second: "mode: atomic\nm/b.go:1.1,2.2 1 0\n");
+    assert\equal(got, want: "mode: atomic\nm/a.go:1.1,2.2 1 1\nm/b.go:1.1,2.2 1 0\n", message: "merged");
+}
+
+test "mergeProfiles refuses two modes" {
+    assert\throws(fun () > void !> any { final _ = mergeProfiles("mode: atomic\n", second: "mode: set\n"); }, message: "modes differ");
+}
+
+test "settle merges a full run, derives the hand profile and drops the slices" {
+    final dir = fs\tempDir("settle");
+    final p = settledIn(dir);
+    fs\writeFile(p.whole, content: "mode: atomic\nexample.com/m/a.go:1.1,2.2 1 1\n");
+    fs\writeFile(p.cmd, content: "mode: atomic\nexample.com/m/b.go:1.1,2.2 1 0\n");
+    fs\writeFile("{dir}/coverage.-run_TestX.out", content: "mode: atomic\n");
+    settle(p, args: [], gomod: "module example.com/m\n");
+    assert\equal(fs\readFile(p.whole), want: "mode: atomic\nexample.com/m/a.go:1.1,2.2 1 1\nexample.com/m/b.go:1.1,2.2 1 0\n",
+        message: "merged");
+    assert\equal(fs\readFile(p.hand), want: fs\readFile(p.whole), message: "no generated file to strip");
+    assert\equal(fs\exists("{dir}/coverage.-run_TestX.out"), want: false, message: "slice removed");
+    fs\removeAll(dir);
+}
+
+test "settle leaves a narrowed run's profiles as they are" {
+    final dir = fs\tempDir("settle");
+    final p = settledIn(dir);
+    fs\writeFile(p.whole, content: "mode: atomic\n");
+    settle(p, args: ["-run", "TestX"], gomod: "module example.com/m\n");
+    assert\equal(fs\exists(p.hand), want: false, message: "nothing derived");
+    fs\removeAll(dir);
+}
+
 test "modulePath reads the module line" {
     assert\equal(modulePath("module github.com/egladman/magus\n\ngo 1.25\n"), want: "github.com/egladman/magus", message: "module path");
     // go.mod permits any run of whitespace after the keyword. split(" ")[1] took the

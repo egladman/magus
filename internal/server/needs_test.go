@@ -82,6 +82,8 @@ var pinnedNeeds = map[string]types.Need{
 	"/magus.metrics.v1alpha1.MetricsService/StreamMetrics":                   read,
 	"/magus.notes.v1alpha1.NotesService/ListNotes":                           read,
 	"/magus.notes.v1alpha1.NotesService/GetNote":                             read,
+	"/magus.pulls.v1alpha1.PullsService/GetPulls":                            read,
+	"/magus.pulls.v1alpha1.PullsService/SetAuthors":                          write,
 	"/magus.status.v1alpha1.StatusService/GetStatus":                         read,
 	"/magus.status.v1alpha1.StatusService/StreamStatus":                      read,
 	"/magus.token.v1alpha1.TokenService/ListTokens":                          tokens,

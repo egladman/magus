@@ -8,4 +8,6 @@
 export object Syntax {
     comments: CommentSyntax? = null,
     stubs: StubSyntax? = null,
+    operators: [str] = [],
+    decisions: DecisionSyntax? = null,
 }

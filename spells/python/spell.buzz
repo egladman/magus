@@ -58,6 +58,8 @@ export fun mgs_getLanguage() > Language {
                 bodyStyle = "indent",
                 body = "raise NotImplementedError(\"\{\{&Name}} lands in \{\{&Branch}}\")",
             },
+            operators = ["==", "!=", "<=", ">=", "**", "//", "->", ":=", "+=", "-="],
+            decisions = DecisionSyntax{keywords = ["if", "elif", "for", "while", "except", "and", "or", "case"]},
         },
     };
 }
@@ -135,6 +137,12 @@ fun ruffFormat(target: Target) > Command {
         "rw": drop(args, "--check"),
     }};
 }
+// The project's test target writes it: `pytest --cov --cov-report=lcov`.
+// pytest-cov belongs to the project's dependencies; magus ships no Python.
+export fun mgs_getCoverage() > Coverage {
+    return Coverage{format = CoverageFormat.lcov, profile = "coverage.lcov"};
+}
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"uv-build": uvBuild, "uv-clean": uvClean, "pytest": pytest, "ruff-check": ruffCheck, "ruff-format": ruffFormat};
 }

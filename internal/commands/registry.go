@@ -852,16 +852,7 @@ concurrency pool (current slot usage, queued waiters).
 
 When --watch is non-zero, status polls and reprints at that interval. On a
 TTY the screen is cleared between reprints; piped output appends each
-snapshot on its own line for log capture.
-
---wait prints no snapshot: it exits 0 once this machine's build budget can
-seat a run, and it is how a run refused with MGS3009 waits without a retry
-loop. Piped into a magus run (magus status --wait | magus run test .) it reads
-that run's command from the pipe, waits until the budget can seat the claims
-that run will make, and holds the run from starting until it exits; the run
-then proceeds as usual, or starts nothing (MGS3030) if the wait failed. On
-its own it waits for a free slot. A claim larger than the whole budget exits
-78 at once; no broker means nothing to wait for, and it exits 0.`,
+snapshot on its own line for log capture.`,
 	Usage: "magus status [flags]",
 	Flags: []cmdline.Flag{
 		{Name: "watch", Kind: cmdline.Duration, Unit: "s", Doc: "Poll and reprint at this interval (minimum 15s; 0 means one-shot)"},
@@ -872,11 +863,9 @@ its own it waits for a free slot. A claim larger than the whole budget exits
 		{Name: "socket", Kind: cmdline.String, Doc: "Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. --probe asks the server at server.address unless this names one"},
 		{Name: "probe", Kind: cmdline.String, Doc: "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)"},
 		{Name: "workspace", Kind: cmdline.String, Doc: "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)"},
-		{Name: "wait", Kind: cmdline.Bool, Default: false, Doc: "Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then, then reserves the seat for it until its first claim"},
 	},
 	Examples: []cmdline.Example{
 		{Comment: "One-shot status snapshot", Command: "magus status"},
-		{Comment: "Run tests once the build budget can seat them", Command: "magus status --wait | magus run test ."},
 		{Comment: "Live updates every 15 seconds", Command: "magus status --watch=15s"},
 		{Comment: "Single-line snapshot for a multiplexer sidebar", Command: "magus status --compact --watch=15s"},
 		{Comment: "Inspect a specific running parent", Command: "magus status --socket=unix:///run/user/1000/magus/server.sock"},
@@ -1189,7 +1178,10 @@ alongside what other invocations hold is refused with MGS3009 (exit 75).
 
 A run starts a broker when none answers, and prints one line saying so. It
 loads no workspace, records no telemetry and listens on a unix socket only
-($XDG_RUNTIME_DIR/magus/broker.sock). It exits once it has held nothing (no
+($XDG_RUNTIME_DIR/magus/broker-<protocol>.sock, one per wire protocol, so
+builds of another protocol run their own broker and share no budget with
+this one; status and a starting broker warn when one is live). It exits once
+it has held nothing (no
 claim, no service with a dependent) for ten minutes; a started broker logs to
 $XDG_STATE_HOME/magus/broker.log.
 
@@ -1205,7 +1197,7 @@ runs unarbitrated and says so once, off never starts or contacts one.
 Run with no target, it serves in this process and logs to stderr, or to the
 file --log names. Under systemd it takes the socket the supervisor hands over
 (LISTEN_FDS), refusing one that is malformed or bound anywhere but
-broker.sock. ` + "`magus broker units`" + ` prints the systemd or launchd units for
+its protocol's socket. ` + "`magus broker units`" + ` prints the systemd or launchd units for
 it; magus never installs them.
 
 Signals:
@@ -2304,7 +2296,7 @@ them and magus describe job prints one job's terms.`,
 				"read paths, check, goals, model, depends_on, parent and timeout. The record is the whole spec, so a spec " +
 				"field it leaves out is cleared, except an omitted checkpoint or timeout, which keeps the job's. Status is " +
 				"never written: the job keeps its state, holder and registration, and a record carrying state is refused. " +
-				"A new id creates the job. -f - reads stdin, and a stream holds one JSON job, an array, or one job per " +
+				"A new id creates the job. --stdin reads stdin, and a stream holds one JSON job, an array, or one job per " +
 				"line; every record is checked, with fork's rules for what it adds, before any is written, and every record's " +
 				"problems are listed at once with their codes. A path the " +
 				"orchestrator drops from a taken job is recorded as a revoked release carrying the digest of what the job " +
@@ -2338,11 +2330,12 @@ test:<file>, output:<project>:<target> or released. magus proves each path
 against the job's diff and records the proof on the job; the guard serves the
 record when it refuses a write it can prove. It applies alone.`,
 			Flags: []cmdline.Flag{
-				{Name: "f", Kind: cmdline.String, Doc: "The records to apply: a `file`, or `-` for stdin; one JSON job, a JSON array, or one job per line"},
+				{Name: "f", Kind: cmdline.String, Doc: "The records to apply from a `file`: one JSON job, a JSON array, or one job per line"},
+				{Name: "stdin", Kind: cmdline.Bool, Default: false, Doc: "Read the records from stdin instead of a file, as job fork --stdin does"},
 				{Name: "fix", Kind: cmdline.Bool, Default: false, Doc: "Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records"},
 				{Name: "add-write-path", Kind: cmdline.Custom, Doc: "A path to add to the job's write paths, or `<file>#<declaration>` to claim one declaration of a file; repeatable or comma-separated"},
 			},
-			Usage: "magus job apply <-f <file|->|--add-write-path <path> <id>>",
+			Usage: "magus job apply <-f <file>|--stdin|--add-write-path <path> <id>>",
 			Examples: []cmdline.Example{
 				{Comment: "Print what the records would change, writing nothing", Command: "magus job apply -f jobs.jsonl --dry-run"},
 				{Comment: "Widen one job by a path, without writing a record", Command: "magus job apply my-job --add-write-path internal/job/plan.go"},
@@ -2736,11 +2729,11 @@ Parsing is upstream-strict by default: a file written for the magusfile
 engine needs --embedded, or it fails on rules upstream Buzz enforces and
 magus does not. The most common one is "argument N must be labeled".
 
--t runs a file's test blocks and reports pass or fail, which is how Buzz
-code in this ecosystem is tested. --coverprofile writes an LCOV report for
-the file under -t (entry file only; imports are measured when they are the
--t subject). The lsp subcommand speaks the Language Server Protocol over
-stdio for an editor integration.
+-t runs the test blocks of every script given and reports pass or fail, which
+is how Buzz code in this ecosystem is tested. --coverprofile writes one LCOV
+report across all the files under -t (a file is measured when it is a -t
+subject; its imports are not). The lsp subcommand speaks the Language Server
+Protocol over stdio for an editor integration.
 
 --check parses and type-checks the named files and does not run them, which
 is the only way to judge a script whose whole job is a side effect: a hook
@@ -2763,10 +2756,10 @@ runs the same from any directory: magus buzz -C "$ROOT" -s hooks/guard.buzz.`,
 		// hand-written binding had them and the registry copy did not, which is the
 		// kind of difference two lists drift into when only their names are compared.
 		{Name: "e", Kind: cmdline.String, Doc: "Execute `code` given on the command line instead of a file"},
-		{Name: "t", Kind: cmdline.Bool, Default: false, Doc: `Run the file's test "..." {} blocks and report pass/fail`},
+		{Name: "t", Kind: cmdline.Bool, Default: false, Doc: `Run the test "..." {} blocks of every script given and report pass/fail`},
 		{Name: "test", Kind: cmdline.Bool, Default: false, AliasOf: "t", Doc: "Alias for -t"},
 		{Name: "check", Kind: cmdline.Bool, Default: false, Doc: "Parse and type-check the named files without running them; report every diagnostic"},
-		{Name: "coverprofile", Kind: cmdline.String, Doc: "Write an LCOV coverprofile for the file under `-t` (requires `-t`)"},
+		{Name: "coverprofile", Kind: cmdline.String, Doc: "Write one LCOV coverprofile across the files under `-t` (requires `-t`)"},
 		{Name: "profile", Kind: cmdline.Bool, Default: false, Doc: "Print where compile and import time went, after the script runs"},
 		{Name: "record", Kind: cmdline.Bool, Default: false, Doc: "Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (`magus query output <ref>` reopens it)"},
 		{Name: "embedded", Kind: cmdline.Bool, Default: false, Doc: "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine"},
@@ -2782,6 +2775,7 @@ runs the same from any directory: magus buzz -C "$ROOT" -s hooks/guard.buzz.`,
 		{Comment: "Run a script", Command: "magus buzz scripts/report.buzz"},
 		{Comment: "Run an inline snippet", Command: `magus buzz -e 'import "std"; fun main() > void { std\print("hi"); } main();'`},
 		{Comment: "Run a file's test blocks", Command: "magus buzz -t scripts/report.buzz"},
+		{Comment: "Run the test blocks of several files", Command: "magus buzz -t scripts/report.buzz scripts/lint.buzz"},
 		{Comment: "Check files without running them", Command: "magus buzz --check scripts/report.buzz scripts/build.buzz"},
 		{Comment: "Run a magusfile-style file", Command: "magus buzz --embedded scripts/target.buzz"},
 		{Comment: "Write an LCOV coverprofile while testing", Command: "magus buzz -t --coverprofile=out.lcov scripts/report.buzz"},

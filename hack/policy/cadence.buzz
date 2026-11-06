@@ -150,7 +150,7 @@ fun within(root: str, dir: str) > bool {
     return dir != "" and (dir == root or dir.startsWith(root + "/"));
 }
 
-// runsGate: `magus affected ci`, or `magus run ci`, with or without a charm, piped from `magus status --wait` or not, and not the --plan form, which runs nothing.
+// runsGate: `magus affected ci`, or `magus run ci`, with or without a charm, and not the --plan form, which runs nothing.
 fun runsGate(programs: [helpers\Program]) > bool {
     foreach (p in programs) {
         if (p.name == "magus") {
@@ -247,21 +247,6 @@ test "a worker whose role is not integrate may not run the gate" {
     ]) {
         std\assert(judged(helpers\request([argv]), caller: worker, checkout: null).decision == magus\GuardDecision.deny, message: argv.join(" "));
     }
-}
-
-test "the gate behind a status wait is judged as the gate" {
-    final worker = Caller{ role = magus\AgentRole.worker, title = "orchestrator/review guard-command" };
-    foreach (argv in [
-        ["magus", "affected", "ci"],
-        ["magus", "-j", "4", "affected", "ci"],
-    ]) {
-        final v = judged(helpers\request([["magus", "status", "--wait"], argv]), caller: worker, checkout: null);
-        std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
-        std\assert(v.reason.indexOf("integrate") != null, message: "names who may gate");
-    }
-    final person = Caller{ role = magus\AgentRole.none, title = "" };
-    std\assert(judged(helpers\request([["magus", "status", "--wait"], ["magus", "affected", "ci"]]), caller: person, checkout: null).decision != magus\GuardDecision.deny, message: "a person may run it");
-    std\assert(judged(helpers\request([["magus", "buzz", "hack/dev/ls-test-failures.buzz"]]), caller: worker, checkout: null).decision != magus\GuardDecision.deny, message: "other scripts are not the gate");
 }
 
 test "the orchestrator, a person, an integrate worker and the plan form may gate" {

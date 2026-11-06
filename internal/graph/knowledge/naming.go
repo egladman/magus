@@ -208,7 +208,7 @@ func newNamingIndex(g *Graph, c ConformanceChange) *namingIndex {
 		if facts.Neutral == "" {
 			continue
 		}
-		language := n.Attrs[attrLanguage]
+		language := n.Attrs[AttrLanguage]
 		shape := pickShapeReader(language).read(facts)
 		// No check reads a field. A reader may still turn a `.` member into a method (an
 		// indexer spelling an interface method that way), so this asks the shape.

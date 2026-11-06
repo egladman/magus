@@ -265,7 +265,7 @@ refactor/pricing  shop-pricing  pass       standard  1      alone     magus run 
 refactor/tax      shop-tax      no_return  standard  1      disjoint  magus run test .
 
 not merged onto main: 1
-  refactor/pricing at ea83860: 1 commit(s) at ea83860 are not on main; merge ea83860 into main, or state why it stays off: `magus job apply -f -` with {"schema_version":13,"id":"refactor/pricing","left_unmerged":"<why>"}
+  refactor/pricing at ea83860: 1 commit(s) at ea83860 are not on main; merge ea83860 into main, or state why it stays off: `magus job apply --stdin` with {"schema_version":13,"id":"refactor/pricing","left_unmerged":"<why>"}
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
 
@@ -362,7 +362,7 @@ record is the whole spec, so it repeats what stays:
 <!-- golden: job_people_team.txtar apply.out -->
 
 ```console
-$ magus job apply -f - <<'EOF'
+$ magus job apply --stdin <<'EOF'
 {"schema_version": 11, "id": "cents",
  "criteria": "prices are integers of cents",
  "write_paths": ["pricing/total.sh"],

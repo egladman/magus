@@ -588,6 +588,14 @@ func (m *Magus) foreignOutputs(p *types.Project, target string, outputs []types.
 	return types.CompactGlobs(out)
 }
 
+// reservedOpOutput is the symbol index when target is the op that writes it.
+func (m *Magus) reservedOpOutput(p *types.Project, target string) (string, bool) {
+	if indexesSymbols(p, target, m.cfg.Spells) {
+		return symbols.IndexPath(m.CacheDir(), p.Path, target), true
+	}
+	return "", false
+}
+
 // buildStep assembles the cache.Step for running target on p.
 func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	step := m.baseStep(p)
@@ -652,17 +660,15 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 		// inherits the globs its spell says it provides, and may be the one writing them.
 		step.ForeignOutputs = m.foreignOutputs(p, target, step.Outputs)
 	}
-	// The index is the op's one output, at one path under the root in every checkout, so the
-	// shared store replays it into a fresh one. Outside the workspace it cannot be an output,
-	// so it is a stamp: an entry replays only while the index is the one its run wrote.
-	if indexesSymbols(p, target, m.cfg.Spells) {
-		index := symbols.IndexPath(m.CacheDir(), p.Path, target)
+	// A reserved op's product is its one output, so a fresh checkout
+	// replays it. Outside the workspace it is a stamp instead.
+	if out, ok := m.reservedOpOutput(p, target); ok {
 		step.Outputs, step.RequiredOutputs, step.ForeignOutputs = nil, nil, nil
-		if rel, err := filepath.Rel(step.WorkspaceRoot, index); err == nil && filepath.IsLocal(rel) {
+		if rel, err := filepath.Rel(step.WorkspaceRoot, out); err == nil && filepath.IsLocal(rel) {
 			step.Outputs = []types.Glob{{Pattern: filepath.ToSlash(rel)}}
 			step.OutputsDeclared = true
 		} else {
-			step.Stamps = append(step.Stamps, index)
+			step.Stamps = append(step.Stamps, out)
 		}
 	}
 	sources := slices.Clone(step.Sources)
@@ -943,15 +949,28 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 	if p == nil {
 		return "", nil, fmt.Errorf("magus: compute target key: unknown project %q", projectPath)
 	}
+	step, err := m.targetStep(ctx, p, target, charms, reuse)
+	if err != nil {
+		return "", nil, err
+	}
 	var memo *cache.SourceMemo
-	var toolVersions map[string][]string
 	if reuse != nil {
 		memo = reuse.memo
+	}
+	return m.cache.StepKeyMemo(ctx, &step, memo)
+}
+
+// targetStep is the step a run of target on p with charms mints, keyed as the
+// run scheduler keys it. reuse, when set, supplies the tool versions.
+func (m *Magus) targetStep(ctx context.Context, p *types.Project, target string, charms []string, reuse *sweepReuse) (cache.Step, error) {
+	var toolVersions map[string][]string
+	if reuse != nil {
 		toolVersions = reuse.toolVersions
 	}
 	if toolVersions == nil && keysTools(p, target) {
+		var err error
 		if toolVersions, err = m.toolVersionsByProject(ctx, []*types.Project{p}); err != nil {
-			return "", nil, err
+			return cache.Step{}, err
 		}
 	}
 	// Not part of sweepReuse: an observation probe runs only for a project whose
@@ -966,7 +985,7 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 		keyTools = toolVersions[p.Path]
 	}
 	applyRunKeying(&step, p, m.cfg.Spells, keyTools, observationsForTarget(p, target, observations[p.Path]), charms)
-	return m.cache.StepKeyMemo(ctx, &step, memo)
+	return step, nil
 }
 
 // keysTools reports whether target's step on p keys on tool versions. A step that always

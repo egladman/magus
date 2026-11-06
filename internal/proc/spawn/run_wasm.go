@@ -18,3 +18,4 @@ type procGroup struct{ c *exec.Cmd }
 func setCancel(c *exec.Cmd) *procGroup        { return &procGroup{c: c} }
 func (g *procGroup) watch(groupWatch, string) {}
 func (g *procGroup) wait() error              { return g.c.Wait() }
+func (g *procGroup) bound(*boundedTree)       {}

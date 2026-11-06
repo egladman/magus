@@ -370,7 +370,7 @@ func (s *SymbolIndexersSuite) TestLoadsBesideSpellImports() {
 }
 
 func (s *SymbolIndexersSuite) TestValidateRefusesADuplicate() {
-	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs,
+	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Defaults().Knowledge, Jobs: Defaults().Jobs, Console: Defaults().Console,
 		Spells: SpellsConfig{SymbolIndexers: []string{"typescript", "typescript"}}}
 	s.ErrorContains(Validate(cfg), "spells.symbol_indexers")
 }

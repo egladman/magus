@@ -293,35 +293,7 @@ func admitGraphBuild(ctx context.Context, root string) (func(), error) {
 		return func() {}, nil
 	}
 	claim := types.MachineClaim{Project: ".", Target: "graph-build", MemoryMB: graphBuildMemoryMB, Dir: resolveRootOrEmpty(root)}
-	return awaitGraphBuildSeat(ctx, processBrokerClient(), claim, policy == types.BrokerRequired)
-}
-
-// budgetSeats is the broker as a graph build reaches it.
-type budgetSeats interface {
-	cache.MachineAdmitter
-	Await(ctx context.Context, claims []types.MachineClaim, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error)
-}
-
-// awaitGraphBuildSeat claims c, waiting and saying so while another run fills
-// the budget: the indexing a refusal would discard is already paid for. Any
-// other refusal stands, since no broker wait can clear it.
-func awaitGraphBuildSeat(ctx context.Context, seats budgetSeats, c types.MachineClaim, required bool) (func(), error) {
-	wait := func(ctx context.Context, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
-		return seats.Await(ctx, []types.MachineClaim{c}, parked)
-	}
-	waiting := func(msg string) { slog.InfoContext(ctx, msg, attr.Notice("magus graph build")) }
-	for {
-		release, err := cache.AdmitMachine(ctx, seats, c, required)
-		var refused types.ExitError
-		if !errors.Is(err, types.MachineBudgetExhausted) || !errors.As(err, &refused) || refused.Code != cache.ExitCodeMachineBusy {
-			return release, err
-		}
-		if err := cache.AwaitMachine(ctx, wait, waiting); err != nil {
-			return nil, err
-		}
-		// Await judges by snapshot, so room there can still lose the claim.
-		time.Sleep(graphBuildPoll)
-	}
+	return cache.AdmitMachine(ctx, processBrokerClient(), claim, policy == types.BrokerRequired, globalCfg.BudgetWait)
 }
 
 // noticeLines logs each line written to it as a notice. It stands in for os.Stderr where a

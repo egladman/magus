@@ -1,6 +1,7 @@
 package shindex
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,8 +14,10 @@ import (
 
 	"github.com/scip-code/scip/bindings/go/scip"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/types"
 )
 
 type shindexSuite struct {
@@ -351,4 +354,105 @@ func BenchmarkWorkspaceEditSourcedLibrary(b *testing.B) {
 			b.Fatalf("indexed %v, want %s alone", res.Indexed, ix.unit)
 		}
 	}
+}
+
+func (s *shindexSuite) decisions(src string) int {
+	return s.walked(src)["f"]
+}
+
+func (s *shindexSuite) walked(src string) map[string]int {
+	s.write("d.sh", src)
+	sc := (&reader{root: s.dir, scripts: map[string]*script{}}).load(filepath.Join(s.dir, "d.sh"))
+	s.Require().NoError(sc.err)
+	return sc.decisions
+}
+
+func (s *shindexSuite) TestDecisionsOfAStraightLineFunctionIsZero() {
+	s.Equal(0, s.decisions("f() {\n  echo hi\n}\n"))
+}
+
+func (s *shindexSuite) TestDecisionsCountAnIf() {
+	s.Equal(1, s.decisions("f() {\n  if true; then echo a; fi\n}\n"))
+}
+
+func (s *shindexSuite) TestDecisionsCountAnElifButNotAnElse() {
+	s.Equal(2, s.decisions("f() {\n  if a; then :; elif b; then :; else :; fi\n}\n"))
+}
+
+func (s *shindexSuite) TestDecisionsCountEachCaseArm() {
+	s.Equal(3, s.decisions("f() {\n  case \"$1\" in\n    a) :;;\n    b|c) :;;\n    *) :;;\n  esac\n}\n"))
+}
+
+func (s *shindexSuite) TestDecisionsCountAWhile() {
+	s.Equal(1, s.decisions("f() {\n  while true; do break; done\n}\n"))
+}
+
+func (s *shindexSuite) TestDecisionsCountAnUntil() {
+	s.Equal(1, s.decisions("f() {\n  until false; do break; done\n}\n"))
+}
+
+func (s *shindexSuite) TestDecisionsCountAForLoop() {
+	s.Equal(1, s.decisions("f() {\n  for x in a b; do echo \"$x\"; done\n}\n"))
+}
+
+func (s *shindexSuite) TestDecisionsCountACStyleLoop() {
+	s.Equal(1, s.decisions("f() {\n  for ((i=0; i<3; i++)); do :; done\n}\n"))
+}
+
+func (s *shindexSuite) TestDecisionsCountEachAndOrOperator() {
+	s.Equal(2, s.decisions("f() {\n  a && b || c\n}\n"))
+}
+
+func (s *shindexSuite) TestDecisionsCountOperatorsInATestExpression() {
+	s.Equal(2, s.decisions("f() {\n  [[ -n \"$1\" && -n \"$2\" || -n \"$3\" ]]\n}\n"))
+}
+
+func (s *shindexSuite) TestDecisionsCountNestedConstructs() {
+	src := "f() {\n  for x in a; do\n    case \"$x\" in\n      a) if t && u; then :; fi;;\n      *) :;;\n    esac\n  done\n}\n"
+	s.Equal(5, s.decisions(src))
+}
+
+func (s *shindexSuite) TestDecisionsStayWithTheirOwnFunction() {
+	got := s.walked("f() { if a; then :; fi; }\ng() { :; }\n")
+	s.Equal(map[string]int{"f": 1, "g": 0}, got)
+}
+
+func (s *shindexSuite) complexityPack() string {
+	s.write("d.sh", "# f picks.\nf() {\n  if a && b; then :; fi\n}\ng() { :; }\n")
+	pack := filepath.Join(s.T().TempDir(), "shell.pack")
+	_, err := symbols.UpdatePack(s.T().Context(), pack, s.indexer())
+	s.Require().NoError(err)
+	return pack
+}
+
+func (s *shindexSuite) TestComplexityReachesTheKnowledgeSymbol() {
+	idx, err := symbols.ReadIndex(s.complexityPack(), true)
+	s.Require().NoError(err)
+	got := map[string]types.KnowledgeSymbol{}
+	for _, sym := range symbols.ParseDecoded(s.T().Context(), idx, "", "") {
+		got[sym.Label] = sym
+	}
+	want := got["f"] // only the doc and complexity are under test here
+	want.Doc, want.Complexity = "f picks.", 3
+	s.Equal(want, got["f"])
+	wantG := got["g"]
+	wantG.Doc, wantG.Complexity = "", 1
+	s.Equal(wantG, got["g"])
+}
+
+func (s *shindexSuite) TestExportSCIPCarriesOnlyTheDocComment() {
+	var out bytes.Buffer
+	s.Require().NoError(symbols.ExportSCIP(&out, s.dir, []symbols.ProjectIndex{{Project: ".", Path: s.complexityPack(), Pack: true}}))
+	var idx scip.Index
+	s.Require().NoError(proto.Unmarshal(out.Bytes(), &idx))
+	docs := map[string][]string{}
+	for _, d := range idx.Documents {
+		if d.RelativePath != "d.sh" {
+			continue
+		}
+		for _, si := range d.Symbols {
+			docs[si.DisplayName] = si.Documentation
+		}
+	}
+	s.Equal(map[string][]string{"f": {"f picks."}, "g": nil}, docs)
 }
