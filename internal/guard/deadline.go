@@ -615,7 +615,7 @@ func degradedNote(call judgedCall, where string, inARow int) string {
 	}
 	return fmt.Sprintf("The guard has run out of its %s budget on %d judgments in a row in this session, so %s ran with no rule judging it, and so will every call "+
 		"until a judgment finishes in time. This one stalled %s. Nothing measured why: this call's trail row "+
-		"times each phase, and `magus server status` shows what is running.", hookBudget, inARow, call.what, where)
+		"times each phase, and `magus status` shows what is running.", hookBudget, inARow, call.what, where)
 }
 
 // phaseLog collects the phases of one judgment for its trail row, the one underway, and the

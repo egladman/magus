@@ -339,6 +339,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"docker-run":         {Command: spells.Command{Bin: "docker", Args: []string{"run", "--rm"}}},
 			"docker-buildx":      {Command: spells.Command{Bin: "docker", Args: []string{"buildx", "build"}, Hints: goldenBuildxHints}},
 			"docker-build-check": {Command: spells.Command{Bin: "docker", Args: []string{"build", "--check"}}},
+			"docker-load":        {Command: spells.Command{Bin: "docker", Args: []string{"load"}}},
 			"hadolint":           {Command: spells.Command{Bin: "hadolint", Args: []string{"-f", "gnu", "Dockerfile"}}},
 		},
 	},
