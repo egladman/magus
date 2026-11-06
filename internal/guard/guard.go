@@ -725,7 +725,7 @@ type Request struct {
 func hostUnnamed() types.GuardJudgment {
 	return types.GuardJudgment{
 		APIVersion: agent.GuardAPIVersion,
-		Decision:      decisionDeny,
+		Decision:   decisionDeny,
 		Reason: types.FormatDiagnostic(types.HookHostUnnamed,
 			"this hook passed no --agent-name, so magus cannot tell which host it answers: "+
 				"merge what `magus describe harness` prints into the host's hook configuration."),

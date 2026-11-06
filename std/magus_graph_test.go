@@ -138,10 +138,10 @@ func TestNeighborhoodDecodesItsOptions(t *testing.T) {
 	// The node list is the walk's own rendering of the graph and the answer is asserted by its
 	// verdict below, so both are taken from out.
 	assert.Equal(t, types.KnowledgeNeighborhoodOutput{
-		Definition:    types.KnowledgeNeighborhoodDefinition,
+		Definition: types.KnowledgeNeighborhoodDefinition,
 		APIVersion: types.KnowledgeAPIVersion,
-		Focus:         "dir:internal/httpx",
-		Resolution:    types.ResolvedPath,
+		Focus:      "dir:internal/httpx",
+		Resolution: types.ResolvedPath,
 		Options: types.KnowledgeNeighborhoodOptions{
 			Depth: 1, Relations: []types.RelationID{types.RelationCalls}, Direction: types.EdgeOut, Collapse: []string{"internal/handler"},
 		},

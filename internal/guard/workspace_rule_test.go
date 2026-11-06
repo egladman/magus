@@ -546,7 +546,7 @@ func TestWorkspaceRuleApprovedDenyCarriesTheNote(t *testing.T) {
 	v := Judge(ctx, deps, Request{Input: "gh run watch 1", Host: "claude-code", Session: "s1"})
 	assert.Equal(t, types.GuardJudgment{
 		APIVersion: agent.GuardAPIVersion,
-		Decision:      decisionDeny,
+		Decision:   decisionDeny,
 		Reason: fmt.Sprintf("no watching\n\nThe working tree's magus\\guard.command rule judged nothing: %s\n\n"+
 			"Only the built-in rules and the approved magus\\guard.command rule applied to this command.", staleFailures[0].Error),
 		Rule: workspaceCommandRule,

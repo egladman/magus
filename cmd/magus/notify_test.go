@@ -35,10 +35,10 @@ func TestEventFromStdin(t *testing.T) {
 	got := eventFromStdin([]byte(canonical))
 	assert.Equal(t, types.Event{
 		APIVersion: types.EventAPIVersion,
-		Outcome:       types.OutcomePermission,
-		Severity:      types.SeverityCritical,
-		Source:        types.EventSource{Kind: "agent", Sub: "host", ID: "abc"},
-		Message:       "needs approval",
+		Outcome:    types.OutcomePermission,
+		Severity:   types.SeverityCritical,
+		Source:     types.EventSource{Kind: "agent", Sub: "host", ID: "abc"},
+		Message:    "needs approval",
 	}, got)
 
 	assert.Equal(t, types.Event{Message: `{"outcome":"waiting"}`}, eventFromStdin([]byte(`{"outcome":"waiting"}`)))

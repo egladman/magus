@@ -167,11 +167,11 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 	require.NoError(t, json.Unmarshal(request, &gotRequest))
 	require.Equal(t, agentCommandRequest{
 		APIVersion: agentCommandAPIVersion,
-		Host:          "codex",
-		Session:       "abc123",
-		Event:         "PreToolUse",
-		Tool:          "Bash",
-		Command:       "magus run test .",
+		Host:       "codex",
+		Session:    "abc123",
+		Event:      "PreToolUse",
+		Tool:       "Bash",
+		Command:    "magus run test .",
 	}, gotRequest)
 
 	response, err := ReadBlob(dir, event.ResponseRef)
@@ -300,8 +300,8 @@ func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 	require.NoError(t, json.Unmarshal(response, &gotResponse))
 	require.Equal(t, agentCommandResponse{
 		APIVersion: agentCommandAPIVersion,
-		Decision:      "advise",
-		Context:       "record the decision",
+		Decision:   "advise",
+		Context:    "record the decision",
 	}, gotResponse)
 }
 
@@ -423,13 +423,13 @@ func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 	require.NoError(t, json.Unmarshal(request, &gotRequest))
 	require.Equal(t, agentSpawnRequest{
 		APIVersion: agentSpawnAPIVersion,
-		Host:          "claude-code",
-		Session:       "abc123",
-		Event:         "PreToolUse",
-		Tool:          "Task",
-		Child:         "Explore",
-		Lease:         "notes-store-6b",
-		Context:       handed,
+		Host:       "claude-code",
+		Session:    "abc123",
+		Event:      "PreToolUse",
+		Tool:       "Task",
+		Child:      "Explore",
+		Lease:      "notes-store-6b",
+		Context:    handed,
 	}, gotRequest)
 }
 

@@ -202,8 +202,8 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		}
 		verdict := types.GuardJudgment{
 			APIVersion: agent.GuardAPIVersion,
-			Decision:      "deny",
-			Reason:        fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared. %s", refusal.Error(), remedy),
+			Decision:   "deny",
+			Reason:     fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared. %s", refusal.Error(), remedy),
 		}
 		if err := writeGuardVerdict(out, opts, verdict); err != nil {
 			return err
@@ -224,7 +224,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	if readError != nil && !sf.Observe && !sf.Message && sf.Duration == 0 {
 		verdict := types.GuardJudgment{
 			APIVersion: agent.GuardAPIVersion,
-			Decision:      "deny",
+			Decision:   "deny",
 			// "from stdin" is accurate whichever way this command is called: an operand
 			// is read off argv and cannot fail, so a read error is always the piped path.
 			Reason: fmt.Sprintf("magus shell could not read its input from stdin: %s\nNothing was judged, so this call is blocked rather than cleared. Retry it.", readError.Error()),
@@ -283,7 +283,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		if !sf.Observe && !sf.Message && sf.Duration == 0 {
 			verdict := types.GuardJudgment{
 				APIVersion: agent.GuardAPIVersion,
-				Decision:      "deny",
+				Decision:   "deny",
 				Reason: fmt.Sprintf("%s\nNothing was judged, so this call is blocked rather than cleared.\nNext: %s",
 					refusal.err.Error(), refusal.next.Run),
 				Next: []types.NextStep{refusal.next},
@@ -1141,8 +1141,8 @@ func delegateToCheckout(ctx context.Context, input string, opts output.Options, 
 	case guard.DelegateKilledUnanswered:
 		verdict := types.GuardJudgment{
 			APIVersion: agent.GuardAPIVersion,
-			Decision:      "deny",
-			Reason:        fmt.Sprintf("%s was killed unanswered at the hook's deadline, so this call is blocked. Retry it.", own),
+			Decision:   "deny",
+			Reason:     fmt.Sprintf("%s was killed unanswered at the hook's deadline, so this call is blocked. Retry it.", own),
 		}
 		if werr := writeGuardVerdict(out, opts, verdict); werr != nil {
 			return true, checkoutDecline{}, werr

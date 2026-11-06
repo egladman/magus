@@ -891,16 +891,16 @@ func TestEnsureFastMissWithMatchingFullStampRecordsFastAndIndexesWithoutRebuildi
 	}
 	// The full stamps are what settled the read, never rewritten, and no shard moves.
 	wantManifest := manifest{
-		APIVersion: before.APIVersion,
-		Shards:        before.Shards,
-		Inputs:        before.Inputs,
-		FastStamps:    wantFast,
-		Reads:         before.Reads,
-		ReadsKnown:    before.ReadsKnown,
-		Indexes:       declsFixture(),
-		IndexesKnown:  true,
-		Extra:         before.Extra,
-		Routing:       before.Routing,
+		APIVersion:   before.APIVersion,
+		Shards:       before.Shards,
+		Inputs:       before.Inputs,
+		FastStamps:   wantFast,
+		Reads:        before.Reads,
+		ReadsKnown:   before.ReadsKnown,
+		Indexes:      declsFixture(),
+		IndexesKnown: true,
+		Extra:        before.Extra,
+		Routing:      before.Routing,
 	}
 	assert.Equal(t, wantManifest, after)
 

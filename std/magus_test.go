@@ -727,14 +727,14 @@ func TestRefsWindowsSitesAndKeepsTheTotals(t *testing.T) {
 	// The counts keep describing the whole set; only Refs is windowed. The answer's coverage is
 	// the fixture's, not this test's to pin.
 	assert.Equal(t, types.KnowledgeRefsOutput{
-		Definition:    types.KnowledgeRefsDefinition,
+		Definition: types.KnowledgeRefsDefinition,
 		APIVersion: types.KnowledgeAPIVersion,
-		Symbol:        graphSymbol,
-		Label:         "Foo",
-		FileCount:     3,
-		RefCount:      3,
-		Refs:          []types.KnowledgeRefSite{{File: "pkg/b.go", Count: 1, Lines: []int{3}}},
-		Answer:        r.Answer,
+		Symbol:     graphSymbol,
+		Label:      "Foo",
+		FileCount:  3,
+		RefCount:   3,
+		Refs:       []types.KnowledgeRefSite{{File: "pkg/b.go", Count: 1, Lines: []int{3}}},
+		Answer:     r.Answer,
 	}, r)
 
 	absent, err := MagusRefs(ctx, "symbol:example.com/x Missing#", types.KnowledgeRefsOptions{})

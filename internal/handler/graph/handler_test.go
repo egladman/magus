@@ -23,7 +23,7 @@ type cannedGraphs struct{}
 func (cannedGraphs) Graph(_ context.Context, flavor, _ string) (types.KnowledgeGraphOutput, error) {
 	return types.KnowledgeGraphOutput{
 		Definition:    fmt.Sprintf("test graph (%s)", flavor),
-		APIVersion: types.KnowledgeAPIVersion,
+		APIVersion:    types.KnowledgeAPIVersion,
 		Directed:      true,
 		NodeCount:     2,
 		EdgeCount:     1,

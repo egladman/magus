@@ -16,12 +16,12 @@ import (
 func TestGuardJudgmentWireShape(t *testing.T) {
 	full := GuardJudgment{
 		APIVersion: "magus.guard/v1alpha3",
-		Decision:      "deny",
-		Reason:        "no",
-		Context:       "fyi",
-		Rule:          "some-rule",
-		Lease:         "job-a",
-		LeaseFrom:     LeaseSourceFlag,
+		Decision:   "deny",
+		Reason:     "no",
+		Context:    "fyi",
+		Rule:       "some-rule",
+		Lease:      "job-a",
+		LeaseFrom:  LeaseSourceFlag,
 		Next: []NextStep{{
 			ID:    "deny-remedy-some-rule",
 			Run:   "magus run test .",

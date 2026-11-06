@@ -705,10 +705,10 @@ func TestLoadHarnessSpellOnlyWhenWired(t *testing.T) {
 		}
 		return HarnessDescriptor{
 			APIVersion: HarnessAPIVersion,
-			ID:            "test-host",
-			Display:       HarnessDisplay{Name: "Spell"},
-			Config:        types.HarnessConfig{Path: "spell/hooks.json"},
-			Skills:        types.HarnessSkills{Paths: []string{".agents/skills"}, Form: types.SkillFormFull},
+			ID:         "test-host",
+			Display:    HarnessDisplay{Name: "Spell"},
+			Config:     types.HarnessConfig{Path: "spell/hooks.json"},
+			Skills:     types.HarnessSkills{Paths: []string{".agents/skills"}, Form: types.SkillFormFull},
 			ManagedEntries: []types.ManagedEntries{{
 				Path:    []string{"hooks", "before"},
 				Entries: []map[string]any{{"command": "magus shell # magus:harness"}},

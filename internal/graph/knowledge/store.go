@@ -63,8 +63,8 @@ func StoreDir(cacheDir string) string { return filepath.Join(cacheDir, "knowledg
 // manifest is the per-shard index persisted at manifest.json. It doubles as the
 // (future) shard routing index; Phase 1 carries only fingerprints and counts.
 type manifest struct {
-	APIVersion types.APIVersion `json:"api_version"`
-	Shards        map[string]shardMeta `json:"shards"`
+	APIVersion types.APIVersion     `json:"api_version"`
+	Shards     map[string]shardMeta `json:"shards"`
 	// Inputs is the stamp each class's shards were last assembled under (see Stamps). A
 	// class with no entry matches no stamp, so a store written before stamps existed, or
 	// by a Sync that had none, is reassembled on its next build.
@@ -147,11 +147,11 @@ type SymbolIndexDeclaration struct {
 // to be parsed back into shard names (the manifest keys and this field are the
 // source of truth); the filename is a derived, collision-free slug.
 type shardFile struct {
-	APIVersion types.APIVersion `json:"api_version"`
-	Name          string                `json:"name"`
-	Fingerprint   string                `json:"fingerprint"`
-	Nodes         []types.KnowledgeNode `json:"nodes"`
-	Edges         []types.KnowledgeEdge `json:"edges"`
+	APIVersion  types.APIVersion      `json:"api_version"`
+	Name        string                `json:"name"`
+	Fingerprint string                `json:"fingerprint"`
+	Nodes       []types.KnowledgeNode `json:"nodes"`
+	Edges       []types.KnowledgeEdge `json:"edges"`
 }
 
 // Store persists and loads knowledge shards. It is the cache-first backing: a
@@ -262,12 +262,12 @@ const syncLockWait = 2 * time.Minute
 func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string, plan syncPlan) error {
 	old := s.readManifestOrNil()
 	newMan := manifest{
-		APIVersion: types.KnowledgeAPIVersion,
-		Shards:        map[string]shardMeta{},
-		Inputs:        map[ShardClass]string{},
-		FastStamps:    map[ShardClass]string{},
-		Extra:         map[ShardClass][]string{},
-		ShardErrors:   map[ShardClass][]string{},
+		APIVersion:  types.KnowledgeAPIVersion,
+		Shards:      map[string]shardMeta{},
+		Inputs:      map[ShardClass]string{},
+		FastStamps:  map[ShardClass]string{},
+		Extra:       map[ShardClass][]string{},
+		ShardErrors: map[ShardClass][]string{},
 	}
 	if old != nil {
 		newMan.Routing = old.Routing
@@ -1034,11 +1034,11 @@ func (s *Store) writeShard(ctx context.Context, sh Shard, fp string) error {
 	// files (diffable, and the content fingerprint is stable).
 	nodes, edges := sh.canonicalContent()
 	sf := shardFile{
-		APIVersion: types.KnowledgeAPIVersion,
-		Name:          sh.Name,
-		Fingerprint:   fp,
-		Nodes:         nodes,
-		Edges:         edges,
+		APIVersion:  types.KnowledgeAPIVersion,
+		Name:        sh.Name,
+		Fingerprint: fp,
+		Nodes:       nodes,
+		Edges:       edges,
 	}
 	// optimization: write the shard compact. The indentation was only for a human reading
 	// the file, and every reader goes through json.Unmarshal, which takes either. The

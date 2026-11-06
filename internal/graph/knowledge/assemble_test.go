@@ -245,7 +245,7 @@ func TestOutputMetadata(t *testing.T) {
 	// The nodes and links are what the other tests pin; this one judges the envelope round them.
 	want := types.KnowledgeGraphOutput{
 		Definition:          types.KnowledgeGraphDefinition,
-		APIVersion:       types.KnowledgeAPIVersion,
+		APIVersion:          types.KnowledgeAPIVersion,
 		Directed:            true,
 		Multigraph:          false,
 		NodeCount:           len(out.Nodes),
@@ -757,7 +757,7 @@ func TestOutputCarriesTheRelationVocabulary(t *testing.T) {
 	// The nodes and links are what the other tests pin; this one judges the vocabulary round them.
 	want := types.KnowledgeGraphOutput{
 		Definition:          types.KnowledgeGraphDefinition,
-		APIVersion:       types.KnowledgeAPIVersion,
+		APIVersion:          types.KnowledgeAPIVersion,
 		Directed:            true,
 		NodeCount:           len(out.Nodes),
 		EdgeCount:           len(out.Links),

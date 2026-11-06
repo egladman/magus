@@ -1288,14 +1288,14 @@ const KnowledgeGraphDiffDefinition = "graph diff reports how the knowledge graph
 // a base graph and the current one. Slices are sorted (by node ID, then edge key) so
 // the diff is deterministic and reviewable.
 type KnowledgeGraphDiff struct {
-	Definition    string                `json:"definition"     yaml:"definition"`
-	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
-	Base          string                `json:"base"           yaml:"base"` // the base revision or baseline label
-	NodesAdded    []KnowledgeNode       `json:"nodes_added,omitempty"    yaml:"nodes_added,omitempty"`
-	NodesRemoved  []KnowledgeNode       `json:"nodes_removed,omitempty"  yaml:"nodes_removed,omitempty"`
-	NodesChanged  []KnowledgeNodeChange `json:"nodes_changed,omitempty"  yaml:"nodes_changed,omitempty"`
-	EdgesAdded    []KnowledgeEdge       `json:"edges_added,omitempty"    yaml:"edges_added,omitempty"`
-	EdgesRemoved  []KnowledgeEdge       `json:"edges_removed,omitempty"  yaml:"edges_removed,omitempty"`
+	Definition   string                `json:"definition"     yaml:"definition"`
+	APIVersion   APIVersion            `json:"api_version" yaml:"api_version"`
+	Base         string                `json:"base"           yaml:"base"` // the base revision or baseline label
+	NodesAdded   []KnowledgeNode       `json:"nodes_added,omitempty"    yaml:"nodes_added,omitempty"`
+	NodesRemoved []KnowledgeNode       `json:"nodes_removed,omitempty"  yaml:"nodes_removed,omitempty"`
+	NodesChanged []KnowledgeNodeChange `json:"nodes_changed,omitempty"  yaml:"nodes_changed,omitempty"`
+	EdgesAdded   []KnowledgeEdge       `json:"edges_added,omitempty"    yaml:"edges_added,omitempty"`
+	EdgesRemoved []KnowledgeEdge       `json:"edges_removed,omitempty"  yaml:"edges_removed,omitempty"`
 }
 
 // KnowledgeNodeChange is one node present in both graphs whose data differs: the
@@ -1317,14 +1317,14 @@ const KnowledgeRefsDefinition = "refs lists where an ingested code symbol is " +
 // its definition site(s), and every referencing file with the per-file occurrence
 // count and (capped) line list. Occurrence-shaped, not node-link.
 type KnowledgeRefsOutput struct {
-	Definition    string             `json:"definition"     yaml:"definition"`
-	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
-	Symbol        string             `json:"symbol"         yaml:"symbol"`
-	Label         string             `json:"label"          yaml:"label"`
-	FileCount     int                `json:"file_count"     yaml:"file_count"`
-	RefCount      int                `json:"ref_count"      yaml:"ref_count"`
-	Defs          []KnowledgeRefSite `json:"defs,omitempty" yaml:"defs,omitempty"`
-	Refs          []KnowledgeRefSite `json:"refs,omitempty" yaml:"refs,omitempty"`
+	Definition string             `json:"definition"     yaml:"definition"`
+	APIVersion APIVersion         `json:"api_version" yaml:"api_version"`
+	Symbol     string             `json:"symbol"         yaml:"symbol"`
+	Label      string             `json:"label"          yaml:"label"`
+	FileCount  int                `json:"file_count"     yaml:"file_count"`
+	RefCount   int                `json:"ref_count"      yaml:"ref_count"`
+	Defs       []KnowledgeRefSite `json:"defs,omitempty" yaml:"defs,omitempty"`
+	Refs       []KnowledgeRefSite `json:"refs,omitempty" yaml:"refs,omitempty"`
 	// Signature is the definition's signature as its indexer rendered it, the attribute
 	// `magus diff` classifies a signature change by. Nil is unknown: the symbol did not
 	// resolve, or its indexer renders no signature.
@@ -1355,12 +1355,12 @@ const KnowledgeDefinitionsDefinition = "refs --definition prints where an ingest
 
 // KnowledgeDefinitionsOutput is the result of `magus refs <symbol> --definition`.
 type KnowledgeDefinitionsOutput struct {
-	Definition    string                    `json:"definition"     yaml:"definition"`
-	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
-	Symbol        string                    `json:"symbol"         yaml:"symbol"`
-	Label         string                    `json:"label"          yaml:"label"`
-	Definitions   []KnowledgeDefinitionSite `json:"definitions"    yaml:"definitions"`
-	Answer        KnowledgeAnswer           `json:"answer"         yaml:"answer"`
+	Definition  string                    `json:"definition"     yaml:"definition"`
+	APIVersion  APIVersion                `json:"api_version" yaml:"api_version"`
+	Symbol      string                    `json:"symbol"         yaml:"symbol"`
+	Label       string                    `json:"label"          yaml:"label"`
+	Definitions []KnowledgeDefinitionSite `json:"definitions"    yaml:"definitions"`
+	Answer      KnowledgeAnswer           `json:"answer"         yaml:"answer"`
 }
 
 // KnowledgeDefinitionSite is one file that defines a symbol and, when the index recorded
@@ -1497,10 +1497,10 @@ type SymbolOccurrenceFile struct {
 // name with one of a different length shifts every later column on the same line, so
 // front-to-back application corrupts each subsequent site. Files are independent.
 type KnowledgeOccurrencesOutput struct {
-	Definition    string `json:"definition"     yaml:"definition"`
+	Definition string     `json:"definition"     yaml:"definition"`
 	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
-	Symbol        string `json:"symbol"         yaml:"symbol"`
-	Label         string `json:"label"          yaml:"label"`
+	Symbol     string     `json:"symbol"         yaml:"symbol"`
+	Label      string     `json:"label"          yaml:"label"`
 	// Name is the identifier a rename would replace: the first of Names. It is derived from
 	// the symbol's own descriptor, not from the index's display name: for a package those
 	// differ, and the descriptor's last segment is what call sites write.
@@ -1537,11 +1537,11 @@ const KnowledgeOccurrencesDefinition = "refs --occurrences lists every exact sou
 // MatchCount is the TOTAL matches; when a page is requested (Offset > 0 or a
 // smaller Matches slice than MatchCount) the caller pages via Offset + len(Matches).
 type KnowledgeQueryOutput struct {
-	Definition    string `json:"definition"     yaml:"definition"`
+	Definition string     `json:"definition"     yaml:"definition"`
 	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
-	Query         string `json:"query"          yaml:"query"`
-	Budget        int    `json:"budget"         yaml:"budget"`
-	MatchCount    int    `json:"match_count"    yaml:"match_count"`
+	Query      string     `json:"query"          yaml:"query"`
+	Budget     int        `json:"budget"         yaml:"budget"`
+	MatchCount int        `json:"match_count"    yaml:"match_count"`
 	// Offset is the index of the first returned match within the full ranked list;
 	// 0 (omitted) for an unpaged query or the first page. Offset alone does not
 	// signal paging: page 0 of a paged query and an unpaged query look the same
@@ -1588,12 +1588,12 @@ type KnowledgeEdgeRef struct {
 // out/in edges with provenance, and a blast-radius count (how many nodes can
 // transitively reach it).
 type KnowledgeExplainOutput struct {
-	Definition    string             `json:"definition"     yaml:"definition"`
-	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
-	Node          KnowledgeNode      `json:"node"           yaml:"node"`
-	BlastRadius   int                `json:"blast_radius"   yaml:"blast_radius"`
-	Out           []KnowledgeEdgeRef `json:"out,omitempty"  yaml:"out,omitempty"`
-	In            []KnowledgeEdgeRef `json:"in,omitempty"   yaml:"in,omitempty"`
+	Definition  string             `json:"definition"     yaml:"definition"`
+	APIVersion  APIVersion         `json:"api_version" yaml:"api_version"`
+	Node        KnowledgeNode      `json:"node"           yaml:"node"`
+	BlastRadius int                `json:"blast_radius"   yaml:"blast_radius"`
+	Out         []KnowledgeEdgeRef `json:"out,omitempty"  yaml:"out,omitempty"`
+	In          []KnowledgeEdgeRef `json:"in,omitempty"   yaml:"in,omitempty"`
 	// DocsURL is a package node's documentation page for the version its version attr
 	// names, derived from manager, name and version when the card is built, never
 	// stored or fetched. Empty for other kinds, a replaced package, and a manager with
@@ -1636,12 +1636,12 @@ type KnowledgePathStep struct {
 // KnowledgePathOutput is `magus explain a --to b`: the resolved endpoints
 // and the shortest connecting path (edges treated as bidirectional), if any.
 type KnowledgePathOutput struct {
-	Definition    string              `json:"definition"     yaml:"definition"`
-	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
-	From          string              `json:"from"           yaml:"from"`
-	To            string              `json:"to"             yaml:"to"`
-	Found         bool                `json:"found"          yaml:"found"`
-	Steps         []KnowledgePathStep `json:"steps,omitempty" yaml:"steps,omitempty"`
+	Definition string              `json:"definition"     yaml:"definition"`
+	APIVersion APIVersion          `json:"api_version" yaml:"api_version"`
+	From       string              `json:"from"           yaml:"from"`
+	To         string              `json:"to"             yaml:"to"`
+	Found      bool                `json:"found"          yaml:"found"`
+	Steps      []KnowledgePathStep `json:"steps,omitempty" yaml:"steps,omitempty"`
 }
 
 // KnowledgePathOptions narrows `magus explain --to` and magus\graph().path.
@@ -1676,7 +1676,7 @@ type KnowledgeNeighborhoodOptions struct {
 // It is the subgraph within Depth hops of Focus, shaped as a query output.
 // So it is itself a valid export.
 type KnowledgeNeighborhoodOutput struct {
-	Definition    string `json:"definition"     yaml:"definition"`
+	Definition string     `json:"definition"     yaml:"definition"`
 	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
 	// Focus is the resolved node ID, and Resolution how the requested name reached it.
 	Focus      string                       `json:"focus"      yaml:"focus"`
@@ -1899,12 +1899,12 @@ type KnowledgeRoutingProject struct {
 // the extra magus fields (definition, schema_version, counts) are additive and
 // ignored by strict node-link readers. Directed and non-multigraph by construction.
 type KnowledgeGraphOutput struct {
-	Definition    string `json:"definition"    yaml:"definition"`
+	Definition string     `json:"definition"    yaml:"definition"`
 	APIVersion APIVersion `json:"api_version" yaml:"api_version"`
-	Directed      bool   `json:"directed"      yaml:"directed"`
-	Multigraph    bool   `json:"multigraph"    yaml:"multigraph"`
-	NodeCount     int    `json:"node_count"    yaml:"node_count"`
-	EdgeCount     int    `json:"edge_count"    yaml:"edge_count"`
+	Directed   bool       `json:"directed"      yaml:"directed"`
+	Multigraph bool       `json:"multigraph"    yaml:"multigraph"`
+	NodeCount  int        `json:"node_count"    yaml:"node_count"`
+	EdgeCount  int        `json:"edge_count"    yaml:"edge_count"`
 	// Relations is the closed edge vocabulary this graph was built against, and
 	// RelationFingerprint identifies that vocabulary independently of graph content.
 	// A consumer reading an unfamiliar relation can look it up here rather than

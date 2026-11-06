@@ -40,8 +40,8 @@ const owedAPIVersion types.APIVersion = "magus.owed/v1alpha1"
 const owedFileName = "magus-owed-regeneration.json"
 
 type owedDocument struct {
-	APIVersion types.APIVersion `json:"api_version"`
-	Owed          []OwedRegeneration `json:"owed"`
+	APIVersion types.APIVersion   `json:"api_version"`
+	Owed       []OwedRegeneration `json:"owed"`
 }
 
 // owedPaths are where root's record lives and the directory whose lock guards it.

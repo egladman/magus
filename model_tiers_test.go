@@ -34,11 +34,11 @@ func TestModelRowsLetAJobPutResolveAnAliasThroughARealMagus(t *testing.T) {
 	testkit.Isolate(t)
 	fixture.WireHarness(t, agent.HarnessDescriptor{
 		APIVersion: agent.HarnessAPIVersion,
-		ID:            "opus-host",
-		Display:       agent.HarnessDisplay{Name: "Opus host"},
-		Skills:        types.HarnessSkills{Form: types.SkillFormShort},
-		Config:        types.HarnessConfig{Path: "hooks.json"},
-		Models:        []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "principal"}},
+		ID:         "opus-host",
+		Display:    agent.HarnessDisplay{Name: "Opus host"},
+		Skills:     types.HarnessSkills{Form: types.SkillFormShort},
+		Config:     types.HarnessConfig{Path: "hooks.json"},
+		Models:     []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "principal"}},
 	})
 	root := writeWorkspace(t, map[string]string{
 		"magus.yaml":                  "",

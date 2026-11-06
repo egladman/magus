@@ -15,8 +15,8 @@ func TestMagusHandle(t *testing.T) { suite.Run(t, new(magusHandleSuite)) }
 
 func (s *magusHandleSuite) TestJobResultDecodesThroughTheVersionedDecoder() {
 	result, err := decodeJobResult(map[string]any{
-		"api_version": types.JobResultAPIVersion,
-		"changed_paths":  []any{"internal/job/lifecycle.go"},
+		"api_version":   types.JobResultAPIVersion,
+		"changed_paths": []any{"internal/job/lifecycle.go"},
 		"validation": map[string]any{
 			"command":    "magus run test .",
 			"output_ref": "out123",

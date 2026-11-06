@@ -894,11 +894,11 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 	// spell-backed one.
 	fixture.WireHarness(t, agent.HarnessDescriptor{
 		APIVersion: agent.HarnessAPIVersion,
-		ID:            "limit-host",
-		Display:       agent.HarnessDisplay{Name: "Limit host"},
-		Skills:        types.HarnessSkills{Form: types.SkillFormShort},
-		Config:        types.HarnessConfig{Path: "hooks.json"},
-		Limits:        types.Limits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000},
+		ID:         "limit-host",
+		Display:    agent.HarnessDisplay{Name: "Limit host"},
+		Skills:     types.HarnessSkills{Form: types.SkillFormShort},
+		Config:     types.HarnessConfig{Path: "hooks.json"},
+		Limits:     types.Limits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000},
 	})
 	for _, tt := range []struct {
 		name, magusfile, want string
@@ -938,11 +938,11 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 	fixture.WireHarness(t, agent.HarnessDescriptor{
 		APIVersion: agent.HarnessAPIVersion,
-		ID:            "limit-host",
-		Display:       agent.HarnessDisplay{Name: "Limit host"},
-		Skills:        types.HarnessSkills{Form: types.SkillFormShort},
-		Config:        types.HarnessConfig{Path: "hooks.json"},
-		Models:        []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "economy"}},
+		ID:         "limit-host",
+		Display:    agent.HarnessDisplay{Name: "Limit host"},
+		Skills:     types.HarnessSkills{Form: types.SkillFormShort},
+		Config:     types.HarnessConfig{Path: "hooks.json"},
+		Models:     []types.ModelPricing{{ID: "claude-opus-test", Alias: "opus", Tier: "economy"}},
 	})
 	resetWorkspaceMemo(t)
 	root, _ := execFixture(t)
@@ -964,10 +964,10 @@ func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 func TestEndWorktreesRestoresAWiredHarnessToolRows(t *testing.T) {
 	harness := agent.HarnessDescriptor{
 		APIVersion: agent.HarnessAPIVersion,
-		ID:            "limit-host",
-		Display:       agent.HarnessDisplay{Name: "Limit host"},
-		Skills:        types.HarnessSkills{Form: types.SkillFormShort},
-		Config:        types.HarnessConfig{Path: "hooks.json"},
+		ID:         "limit-host",
+		Display:    agent.HarnessDisplay{Name: "Limit host"},
+		Skills:     types.HarnessSkills{Form: types.SkillFormShort},
+		Config:     types.HarnessConfig{Path: "hooks.json"},
 	}
 	for _, tt := range []struct {
 		name, toolsDir, want string

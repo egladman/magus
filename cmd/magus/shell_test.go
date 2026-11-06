@@ -195,9 +195,9 @@ func TestGuardDecisionsCoverEveryVerdictTheHookEmits(t *testing.T) {
 		var out strings.Builder
 		require.NoError(t, writeGuardVerdict(&out, output.Options{Format: outputText}, types.GuardJudgment{
 			APIVersion: agent.GuardAPIVersion,
-			Decision:      d,
-			Reason:        "why",
-			Context:       "why",
+			Decision:   d,
+			Reason:     "why",
+			Context:    "why",
 		}))
 		assert.True(t, strings.HasPrefix(out.String(), d),
 			"writeGuardVerdict renders the listed decision %q as %q: its text arm has no case for it and\n"+
@@ -1922,12 +1922,12 @@ func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 	v := judgeSpawnAt(t, root)
 	assert.Equal(t, types.GuardJudgment{
 		APIVersion: v.APIVersion,
-		Decision:      "deny",
-		Reason:        "Name a model.",
-		Rule:          v.Rule, // the rule's catalogued name is pinned by the guard's own tests
-		Lease:         v.Lease,
-		LeaseFrom:     v.LeaseFrom,
-		Next:          v.Next,
+		Decision:   "deny",
+		Reason:     "Name a model.",
+		Rule:       v.Rule, // the rule's catalogued name is pinned by the guard's own tests
+		Lease:      v.Lease,
+		LeaseFrom:  v.LeaseFrom,
+		Next:       v.Next,
 	}, v)
 }
 
@@ -1951,12 +1951,12 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 	assert.Contains(t, v.Reason, "Not in this repository.")
 	assert.Equal(t, types.GuardJudgment{
 		APIVersion: v.APIVersion,
-		Decision:      "deny",
-		Reason:        v.Reason, // checked above
-		Rule:          "workspace:command",
-		Lease:         v.Lease,
-		LeaseFrom:     v.LeaseFrom,
-		Next:          v.Next,
+		Decision:   "deny",
+		Reason:     v.Reason, // checked above
+		Rule:       "workspace:command",
+		Lease:      v.Lease,
+		LeaseFrom:  v.LeaseFrom,
+		Next:       v.Next,
 	}, v)
 }
 

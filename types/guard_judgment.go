@@ -7,9 +7,9 @@ package types
 // dialects live in the documentation, never in code.
 type GuardJudgment struct {
 	APIVersion APIVersion `json:"api_version"`
-	Decision      string `json:"decision"`          // one of agent.GuardDecisions
-	Reason        string `json:"reason,omitempty"`  // deny: the block reason, written for the model
-	Context       string `json:"context,omitempty"` // advise: context to inject alongside the allowed call
+	Decision   string     `json:"decision"`          // one of agent.GuardDecisions
+	Reason     string     `json:"reason,omitempty"`  // deny: the block reason, written for the model
+	Context    string     `json:"context,omitempty"` // advise: context to inject alongside the allowed call
 	// Rule names the catalogued rule or advisory that produced this judgment, and is set on
 	// every deny, advise and ask (a workspace rule's carries its workspace prefix). Host
 	// adapters still render Reason and Context; this is what a PERSON looks up, reports

@@ -12,9 +12,9 @@ import (
 func knowledgeSubgraph() types.KnowledgeGraphOutput {
 	return types.KnowledgeGraphOutput{
 		APIVersion: types.KnowledgeAPIVersion,
-		Directed:      true,
-		NodeCount:     3,
-		EdgeCount:     2,
+		Directed:   true,
+		NodeCount:  3,
+		EdgeCount:  2,
 		Nodes: []types.KnowledgeNode{
 			{ID: "spell:go", Kind: types.KindSpell, Label: "go"},
 			{ID: "op:go:go-build", Kind: types.KindOp, Label: "go-build"},
@@ -55,9 +55,9 @@ func TestWriteKnowledgeDOT(t *testing.T) {
 func graphMLFixture() types.KnowledgeGraphOutput {
 	return types.KnowledgeGraphOutput{
 		APIVersion: types.KnowledgeAPIVersion,
-		Directed:      true,
-		NodeCount:     2,
-		EdgeCount:     1,
+		Directed:   true,
+		NodeCount:  2,
+		EdgeCount:  1,
 		Nodes: []types.KnowledgeNode{
 			{ID: "spell:go", Kind: "spell", Label: "go", Doc: "Go toolchain <adapter>", Attrs: map[string]string{"claims": "net, exec"}},
 			{ID: "target:pkg/a:build", Kind: "target", Label: "build", Source: "pkg/a/magusfile.buzz:3"},

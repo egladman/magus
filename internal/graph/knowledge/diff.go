@@ -26,9 +26,9 @@ import (
 // baseLabel names the base revision (or baseline file) and is echoed into the result.
 func DiffGraphs(baseLabel string, before, after types.KnowledgeGraphOutput) types.KnowledgeGraphDiff {
 	out := types.KnowledgeGraphDiff{
-		Definition:    types.KnowledgeGraphDiffDefinition,
+		Definition: types.KnowledgeGraphDiffDefinition,
 		APIVersion: types.KnowledgeAPIVersion,
-		Base:          baseLabel,
+		Base:       baseLabel,
 	}
 
 	beforeNodes := nodesByID(before.Nodes)

@@ -44,11 +44,11 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 	}
 	d := agent.HarnessDescriptor{
 		APIVersion: agent.HarnessAPIVersion,
-		ID:            id,
-		Display:       agent.HarnessDisplay{Name: displayName(id)},
-		Config:        definition.Config,
-		Guard:         definition.Guard,
-		Probe:         slices.Clone(definition.Probe),
+		ID:         id,
+		Display:    agent.HarnessDisplay{Name: displayName(id)},
+		Config:     definition.Config,
+		Guard:      definition.Guard,
+		Probe:      slices.Clone(definition.Probe),
 	}
 	for _, asset := range definition.Assets {
 		content, err := harnessAssetContent(drv, asset)

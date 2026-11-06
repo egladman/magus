@@ -413,10 +413,10 @@ func writeStatusHarness(t *testing.T, skillsDir string) {
 	t.Helper()
 	fixture.WireHarness(t, agent.HarnessDescriptor{
 		APIVersion: agent.HarnessAPIVersion,
-		ID:            "status-test",
-		Display:       agent.HarnessDisplay{Name: "Status test"},
-		Skills:        types.HarnessSkills{Paths: []string{skillsDir}, Form: types.SkillFormFull},
-		Config:        types.HarnessConfig{Path: ".status-test/config.json"},
+		ID:         "status-test",
+		Display:    agent.HarnessDisplay{Name: "Status test"},
+		Skills:     types.HarnessSkills{Paths: []string{skillsDir}, Form: types.SkillFormFull},
+		Config:     types.HarnessConfig{Path: ".status-test/config.json"},
 	})
 }
 

@@ -15,9 +15,9 @@ const cacheAPIVersion types.APIVersion = "magus.workspace-cache/v1alpha1"
 const wsCacheFile = ".magus/workspace.cache.json"
 
 type wsCache struct {
-	APIVersion types.APIVersion        `json:"v"`
-	Projects      map[string]cachedProject `json:"projects"`
-	DirMtimes     map[string]int64         `json:"dir_mtimes"`
+	APIVersion types.APIVersion         `json:"v"`
+	Projects   map[string]cachedProject `json:"projects"`
+	DirMtimes  map[string]int64         `json:"dir_mtimes"`
 }
 
 type cachedProject struct {
@@ -66,8 +66,8 @@ func saveWSCache(root string, ws *types.Workspace, dirMtimes map[string]int64) {
 	}
 	c := wsCache{
 		APIVersion: cacheAPIVersion,
-		Projects:      projects,
-		DirMtimes:     dirMtimes,
+		Projects:   projects,
+		DirMtimes:  dirMtimes,
 	}
 	data, err := json.Marshal(c)
 	if err != nil {

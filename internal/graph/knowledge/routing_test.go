@@ -50,10 +50,10 @@ func TestRoutingCountsAndKinds(t *testing.T) {
 	// non-runtime edges, which TestRoutingIgnoresRuntimeShard pins. The rows are checked below.
 	want := types.KnowledgeRouting{
 		APIVersion: types.KnowledgeAPIVersion,
-		NodeCount:     len(g.Nodes()),
-		EdgeCount:     len(g.Edges()),
-		Kinds:         r.Kinds,
-		Projects:      r.Projects,
+		NodeCount:  len(g.Nodes()),
+		EdgeCount:  len(g.Edges()),
+		Kinds:      r.Kinds,
+		Projects:   r.Projects,
 	}
 	assert.Equal(t, want, r)
 

@@ -25,12 +25,12 @@ package types
 // vocabularies serve different purposes. When a call site needs to bridge
 // (a log entry becomes an event), the mapping lives inline at that site.
 type Event struct {
-	APIVersion APIVersion `json:"api_version"`
-	Outcome       EventOutcome   `json:"outcome"`
-	Severity      EventSeverity  `json:"severity"`
-	Source        EventSource    `json:"source"`
-	Where         *EventLocation `json:"where,omitempty"`
-	Message       string         `json:"message"`
+	APIVersion APIVersion     `json:"api_version"`
+	Outcome    EventOutcome   `json:"outcome"`
+	Severity   EventSeverity  `json:"severity"`
+	Source     EventSource    `json:"source"`
+	Where      *EventLocation `json:"where,omitempty"`
+	Message    string         `json:"message"`
 }
 
 // EventAPIVersion is the current envelope version. Bump on breaking

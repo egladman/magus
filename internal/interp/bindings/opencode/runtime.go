@@ -41,10 +41,10 @@ type invoker func(context.Context, magusCall) (processOutput, error)
 
 type guardVerdict struct {
 	APIVersion string `json:"api_version"`
-	Decision      string `json:"decision"`
-	Reason        string `json:"reason,omitempty"`
-	Context       string `json:"context,omitempty"`
-	Why           string `json:"why,omitempty"`
+	Decision   string `json:"decision"`
+	Reason     string `json:"reason,omitempty"`
+	Context    string `json:"context,omitempty"`
+	Why        string `json:"why,omitempty"`
 }
 
 type hookEvent struct {

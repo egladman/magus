@@ -143,8 +143,8 @@ func (g *Graph) Routing() types.KnowledgeRouting {
 
 	out := types.KnowledgeRouting{
 		APIVersion: types.KnowledgeAPIVersion,
-		NodeCount:     len(g.nodes),
-		EdgeCount:     edgeCount,
+		NodeCount:  len(g.nodes),
+		EdgeCount:  edgeCount,
 	}
 	for _, kind := range routingKindOrder {
 		xs, ok := byKind[kind]

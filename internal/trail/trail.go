@@ -292,23 +292,23 @@ const agentCommandAPIVersion types.APIVersion = "magus.agent-command/v1alpha1"
 
 type agentCommandRequest struct {
 	APIVersion types.APIVersion `json:"api_version"`
-	Host          string `json:"host,omitempty"`
-	Session       string `json:"session,omitempty"`
-	Transcript    string `json:"transcript,omitempty"`
-	Event         string `json:"event,omitempty"`
-	Tool          string `json:"tool,omitempty"`
-	Command       string `json:"command,omitempty"`
-	Path          string `json:"path,omitempty"`
+	Host       string           `json:"host,omitempty"`
+	Session    string           `json:"session,omitempty"`
+	Transcript string           `json:"transcript,omitempty"`
+	Event      string           `json:"event,omitempty"`
+	Tool       string           `json:"tool,omitempty"`
+	Command    string           `json:"command,omitempty"`
+	Path       string           `json:"path,omitempty"`
 	// Additive for the reason agentCommandResponse.PreauthorizedBy gives.
 	types.AgentFacts
 }
 
 type agentCommandResponse struct {
 	APIVersion types.APIVersion `json:"api_version"`
-	Decision      string `json:"decision"`
-	Reason        string `json:"reason,omitempty"`
-	Context       string `json:"context,omitempty"`
-	Rule          string `json:"rule,omitempty"`
+	Decision   string           `json:"decision"`
+	Reason     string           `json:"reason,omitempty"`
+	Context    string           `json:"context,omitempty"`
+	Rule       string           `json:"rule,omitempty"`
 	// No schema bump: an added optional field a reader can ignore leaves every existing
 	// blob readable and every existing reader correct.
 	PreauthorizedBy string        `json:"preauthorized_by,omitempty"`
@@ -352,17 +352,17 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	command.ContextModel = clampRunes(command.ContextModel, MaxSpawnerLen)
 	request, _ := json.Marshal(agentCommandRequest{
 		APIVersion: agentCommandAPIVersion,
-		Host:          command.Host,
-		Session:       command.Session,
-		Transcript:    command.Transcript,
-		Event:         command.Event,
-		Tool:          command.Tool,
-		Command:       command.Command,
-		Path:          command.Path,
-		AgentFacts:    command.AgentFacts,
+		Host:       command.Host,
+		Session:    command.Session,
+		Transcript: command.Transcript,
+		Event:      command.Event,
+		Tool:       command.Tool,
+		Command:    command.Command,
+		Path:       command.Path,
+		AgentFacts: command.AgentFacts,
 	})
 	response, _ := json.Marshal(agentCommandResponse{
-		APIVersion:   agentCommandAPIVersion,
+		APIVersion:      agentCommandAPIVersion,
 		Decision:        command.Decision,
 		Reason:          command.Reason,
 		Context:         command.Context,
@@ -484,13 +484,13 @@ const agentSpawnAPIVersion types.APIVersion = "magus.agent-spawn/v1alpha1"
 
 type agentSpawnRequest struct {
 	APIVersion types.APIVersion `json:"api_version"`
-	Host          string `json:"host,omitempty"`
-	Session       string `json:"session,omitempty"`
-	Event         string `json:"event,omitempty"`
-	Tool          string `json:"tool,omitempty"`
-	Child         string `json:"child,omitempty"`
-	Lease         string `json:"lease,omitempty"`
-	Context       string `json:"context"`
+	Host       string           `json:"host,omitempty"`
+	Session    string           `json:"session,omitempty"`
+	Event      string           `json:"event,omitempty"`
+	Tool       string           `json:"tool,omitempty"`
+	Child      string           `json:"child,omitempty"`
+	Lease      string           `json:"lease,omitempty"`
+	Context    string           `json:"context"`
 	// DeclaredModel is additive: an older reader ignores a field it does not know, and one
 	// reading a record written before this field existed gets "" for it, which is exactly
 	// "no model declared": the same fact a genuinely undeclared spawn reports. No schema
@@ -538,7 +538,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	lease := leaseFromContext(spawn.Context)
 	failures := redactFailures(ctx, spawn.RuleFailures)
 	request, _ := json.Marshal(agentSpawnRequest{
-		APIVersion: agentSpawnAPIVersion,
+		APIVersion:    agentSpawnAPIVersion,
 		Host:          spawn.Host,
 		Session:       spawn.Session,
 		Event:         spawn.Event,

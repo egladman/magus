@@ -103,11 +103,11 @@ const (
 // hatch, and decoding it eagerly would turn an unknown kind into a parse error.
 type Record struct {
 	V          types.APIVersion `json:"v"`
-	Invocation string          `json:"invocation"`
-	Seq        uint64          `json:"seq"` // monotonic within an invocation, from 1
-	Kind       string          `json:"kind"`
-	Ts         int64           `json:"ts"` // unix milliseconds
-	Payload    json.RawMessage `json:"payload,omitempty"`
+	Invocation string           `json:"invocation"`
+	Seq        uint64           `json:"seq"` // monotonic within an invocation, from 1
+	Kind       string           `json:"kind"`
+	Ts         int64            `json:"ts"` // unix milliseconds
+	Payload    json.RawMessage  `json:"payload,omitempty"`
 }
 
 // InvocationStart is the payload of the first fact an invocation writes: who is running

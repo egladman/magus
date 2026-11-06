@@ -107,10 +107,10 @@ const policyAPIVersion types.APIVersion = "magus.guard-policy/v1alpha1"
 // policyEvent is the guard_policy blob: refs and ids, never a source body.
 type policyEvent struct {
 	APIVersion types.APIVersion `json:"api_version"`
-	Action        string         `json:"action"`
-	Digest        string         `json:"digest"`
-	Previous      string         `json:"previous,omitempty"`
-	Sources       []PolicySource `json:"sources,omitempty"`
+	Action     string           `json:"action"`
+	Digest     string           `json:"digest"`
+	Previous   string           `json:"previous,omitempty"`
+	Sources    []PolicySource   `json:"sources,omitempty"`
 }
 
 // recordPolicy is RecordPolicy for the location a hook call resolved, "" when the caller

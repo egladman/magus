@@ -1094,12 +1094,12 @@ func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 	require.NotEmpty(t, ref, "the first firing cites its stored verdict")
 	require.Equal(t, types.GuardJudgment{
 		APIVersion: agent.GuardAPIVersion,
-		Decision:      decisionDeny,
-		Reason:        fmt.Sprintf("`ls jobs >f` keeps console text, which is not a format anything should parse.\nnext:\n  magus ls jobs -o json --tee f%smagus query output %s", verdictRefLine, ref),
-		Rule:          string(denyRuleOutputRedirect),
-		Lease:         v.Lease, // follows the environment the test ran in
-		LeaseFrom:     v.LeaseFrom,
-		Next:          []types.NextStep{want},
+		Decision:   decisionDeny,
+		Reason:     fmt.Sprintf("`ls jobs >f` keeps console text, which is not a format anything should parse.\nnext:\n  magus ls jobs -o json --tee f%smagus query output %s", verdictRefLine, ref),
+		Rule:       string(denyRuleOutputRedirect),
+		Lease:      v.Lease, // follows the environment the test ran in
+		LeaseFrom:  v.LeaseFrom,
+		Next:       []types.NextStep{want},
 	}, v, "one line plus the next and the verdict ref")
 
 	assert.Equal(t, "deny-output-redirect", servedNextPreauthorizes(hint.NewGate(cacheDir, ""), want.Run))
@@ -1118,11 +1118,11 @@ func TestJudgeDropsARemedyTheRoleMayNotRun(t *testing.T) {
 	leased := Judge(ctx, deps, Request{Input: piped, Lease: worker.ID})
 	require.Equal(t, types.GuardJudgment{
 		APIVersion: agent.GuardAPIVersion,
-		Decision:      decisionDeny,
-		Reason:        leased.Reason, // the prose is checked by substring below
-		Rule:          string(denyRuleOutputPipe),
-		Lease:         worker.ID,
-		LeaseFrom:     leased.LeaseFrom, // which channel answered is not this test's concern
+		Decision:   decisionDeny,
+		Reason:     leased.Reason, // the prose is checked by substring below
+		Rule:       string(denyRuleOutputPipe),
+		Lease:      worker.ID,
+		LeaseFrom:  leased.LeaseFrom, // which channel answered is not this test's concern
 	}, leased, "the worker may not run the gate, so it is not served one")
 	assert.Contains(t, leased.Reason, "`-s` stays quiet until something fails", "the prose names the lever instead")
 	assert.NotContains(t, leased.Reason, "next:")

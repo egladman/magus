@@ -218,10 +218,10 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	w.Write("AGENTS.md", "# rules\n")
 	fixture.WireHarness(t, agent.HarnessDescriptor{
 		APIVersion: agent.HarnessAPIVersion,
-		ID:            "brief-host",
-		Display:       agent.HarnessDisplay{Name: "Brief Host"},
-		Config:        types.HarnessConfig{Path: "host/hooks.json"},
-		Skills:        types.HarnessSkills{Paths: []string{".agents/skills"}, Form: types.SkillFormBoth},
+		ID:         "brief-host",
+		Display:    agent.HarnessDisplay{Name: "Brief Host"},
+		Config:     types.HarnessConfig{Path: "host/hooks.json"},
+		Skills:     types.HarnessSkills{Paths: []string{".agents/skills"}, Form: types.SkillFormBoth},
 		ManagedEntries: []types.ManagedEntries{{
 			Path: []string{"hooks", "before"},
 			Entries: []map[string]any{{

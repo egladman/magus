@@ -222,15 +222,15 @@ func (s *Store) QuerySymbols(ctx context.Context, g *Graph, input string, budget
 		if !need(reached...) {
 			out := sub.Output()
 			return types.KnowledgeQueryOutput{
-				Definition:    types.KnowledgeQueryDefinition,
+				Definition: types.KnowledgeQueryDefinition,
 				APIVersion: types.KnowledgeAPIVersion,
-				Query:         strings.TrimSpace(input),
-				Budget:        budget,
-				MatchCount:    len(matches),
-				Matches:       matches,
-				Nodes:         out.Nodes,
-				Links:         out.Links,
-				Ranking:       &ranking,
+				Query:      strings.TrimSpace(input),
+				Budget:     budget,
+				MatchCount: len(matches),
+				Matches:    matches,
+				Nodes:      out.Nodes,
+				Links:      out.Links,
+				Ranking:    &ranking,
 			}, ranked, nil
 		}
 		if err := ctx.Err(); err != nil {

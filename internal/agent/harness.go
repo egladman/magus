@@ -82,7 +82,7 @@ var (
 // Each field holds what one function of the harness contract returned, nil or zero when
 // the spell does not export it.
 type HarnessDescriptor struct {
-	APIVersion types.APIVersion `json:"api_version"`
+	APIVersion     types.APIVersion       `json:"api_version"`
 	ID             string                 `json:"id"`
 	Display        HarnessDisplay         `json:"display"`
 	Guard          string                 `json:"guard,omitempty"`

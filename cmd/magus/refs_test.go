@@ -938,9 +938,9 @@ func TestReportRefsMissCarriesTheIndexCause(t *testing.T) {
 	var record types.KnowledgeRefsOutput
 	require.NoError(t, json.Unmarshal([]byte(stdout), &record), "stdout: %q", stdout)
 	assert.Equal(t, types.KnowledgeRefsOutput{
-		Definition:    record.Definition,    // the noun's prose, which the describe catalog pins
+		Definition: record.Definition, // the noun's prose, which the describe catalog pins
 		APIVersion: record.APIVersion, // the wire version, pinned by its own test
-		Symbol:        "Foo",
+		Symbol:     "Foo",
 		Answer: types.KnowledgeAnswer{
 			Verdict:    types.VerdictUnknown,
 			Reason:     types.ReasonSymbolIndexMissing,

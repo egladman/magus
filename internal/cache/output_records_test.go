@@ -17,7 +17,7 @@ func outputRecordLine(t *testing.T, mutate func(map[string]any)) string {
 	key := strings.Repeat("ab", 32)
 	rec := map[string]any{
 		"api_version": types.StoredOutputAPIVersion,
-		"ref":            PortableRef(key), "key": key, "attempt": "out1234abcd",
+		"ref":         PortableRef(key), "key": key, "attempt": "out1234abcd",
 		"project": "libs/x", "target": "lint", "failed": true, "timestamp_ms": 1, "duration_ms": 2,
 		"output": "FAIL: x\n",
 	}
