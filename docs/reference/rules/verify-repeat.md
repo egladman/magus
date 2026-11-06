@@ -1,10 +1,10 @@
 ---
-title: "gate-repeat: the gate run again over a tree its last verdict already covers, red or green"
+title: "verify-repeat: the gate run again over a tree its last verdict already covers, red or green"
 description: "A deny rule by default: it refuses the gate run again over a tree its last verdict already covers, red or green, and names what to run instead."
-tags: [guard, rules, gate-repeat, deny]
+tags: [guard, rules, verify-repeat, deny]
 ---
 
-# gate-repeat
+# verify-repeat
 
 A deny rule by default: it refuses the gate run again over a tree its last verdict already covers, red or green, and names what to run instead.
 
@@ -22,7 +22,7 @@ By default this rule takes the decision `deny`. A workspace sets it by name, in 
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"gate-repeat": "advise"})
+magus\guard.builtins({"verify-repeat": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,12 +32,12 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-deny [gate-repeat]: ...
+deny [verify-repeat]: ...
 ```
 
-A workspace that sets this rule to `advise` sees `advise [gate-repeat]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [verify-repeat]: ...` instead.
 
-`magus describe rule gate-repeat` prints the same entry at a terminal, and
+`magus describe rule verify-repeat` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 
 ## See also

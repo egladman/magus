@@ -153,8 +153,6 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "FindReviewRequest", Zero: types.FindReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFindReviewRequest(v.(types.FindReviewRequest)) }},
 	{Name: "FlagParse", Zero: types.FlagParse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFlagParse(v.(types.FlagParse)) }},
 	{Name: "FunctionGap", Zero: types.FunctionGap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFunctionGap(v.(types.FunctionGap)) }},
-	{Name: "GateEvidence", Zero: types.GateEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGateEvidence(v.(types.GateEvidence)) }},
-	{Name: "GateStatus", Zero: types.GateStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGateStatus(v.(types.GateStatus)) }},
 	{Name: "Goal", Zero: types.Goal{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGoal(v.(types.Goal), enums) }},
 	{Name: "Grant", Zero: types.Grant{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGrant(v.(types.Grant)) }},
 	{Name: "Graph", Zero: types.SymbolIndexDigest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
@@ -421,6 +419,12 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "UpdateRef", Zero: types.UpdateRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUpdateRef(v.(types.UpdateRef)) }},
 	{Name: "VCSCheckpoint", Zero: types.VCSCheckpoint{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVCSCheckpoint(v.(types.VCSCheckpoint)) }},
 	{Name: "VCSInvocation", Zero: types.VCSInvocation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVCSInvocation(v.(types.VCSInvocation)) }},
+	{Name: "VerificationEvidence", Zero: types.VerificationEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectVerificationEvidence(v.(types.VerificationEvidence))
+	}},
+	{Name: "VerificationStatus", Zero: types.VerificationStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectVerificationStatus(v.(types.VerificationStatus))
+	}},
 	{Name: "Volatility", Zero: types.Volatility{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVolatility(v.(types.Volatility)) }},
 	{Name: "VolatilityTarget", Zero: types.VolatilityTarget{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVolatilityTarget(v.(types.VolatilityTarget)) }},
 	{Name: "Workspace", Zero: types.MagusWorkspace{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {

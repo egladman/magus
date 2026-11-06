@@ -693,7 +693,7 @@ export object JobDeferred {
     reason: str = "",
 }
 
-export object GateStatus {
+export object VerificationStatus {
     id: str = "",
     verified: bool = false,
     outputRef: str = "",
@@ -728,7 +728,7 @@ export object PriorAttempt {
     ended: int = 0,
     reworkRounds: int = 0,
     widenings: int = 0,
-    unmet: [GateStatus] = [],
+    unmet: [VerificationStatus] = [],
     violations: [str] = [],
     unresolvedRisks: [str] = [],
     failingRefs: [str] = [],
@@ -738,7 +738,7 @@ export object PriorAttempt {
 }
 
 export object JobRejection {
-    unmet: [GateStatus] = [],
+    unmet: [VerificationStatus] = [],
     violations: [str] = [],
     at: int = 0,
     observedGeneration: int = 0,
@@ -811,7 +811,7 @@ export object JobResultValidation {
     unrun: str = "",
 }
 
-export object GateEvidence {
+export object VerificationEvidence {
     gateID: str = "",
     outputRef: str = "",
     owed: str = "",
@@ -824,7 +824,7 @@ export object JobResult {
     job: str = "",
     changedPaths: [str] = [],
     validation: JobResultValidation = JobResultValidation{},
-    gateEvidence: [GateEvidence] = [],
+    verificationEvidence: [VerificationEvidence] = [],
     descendants: [str] = [],
     unresolvedRisks: [str] = [],
     followUps: [str] = [],
@@ -867,7 +867,7 @@ export object JobIntegration {
     checkout: str = "",
     at: int = 0,
     verified: bool = false,
-    gates: [GateStatus] = [],
+    gates: [VerificationStatus] = [],
     observedGeneration: int = 0,
 }
 
@@ -2160,7 +2160,7 @@ export object JobStatus {
     violations: [str] = [],
     unresolvedRisks: [str] = [],
     command: str = "",
-    gates: [GateStatus] = [],
+    gates: [VerificationStatus] = [],
     notes: [str] = [],
     staleIndexes: [str] = [],
     footprint: [RegionChange] = [],

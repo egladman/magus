@@ -176,46 +176,18 @@ Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/
 
 Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 
-### JobGateEvidence
-
-JobGateEvidence is the run a holder offered for one goal.
-
-Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto).
-
-| Field        | Type   | # | Description |
-| ------------ | ------ | - | ----------- |
-| `gate_id`    | string | 1 |             |
-| `output_ref` | string | 2 |             |
-
-Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
-
-### JobGateStatus
-
-JobGateStatus is one gate's verdict at integration.
-
-Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto).
-
-| Field        | Type            | # | Description |
-| ------------ | --------------- | - | ----------- |
-| `id`         | string          | 1 |             |
-| `verified`   | bool            | 2 |             |
-| `output_ref` | string          | 3 |             |
-| `violations` | repeated string | 4 |             |
-
-Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
-
 ### JobIntegration
 
 JobIntegration is the integrator's verification of the job in its own checkout.
 
 Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto).
 
-| Field      | Type                                     | # | Description  |
-| ---------- | ---------------------------------------- | - | ------------ |
-| `checkout` | string                                   | 1 |              |
-| `at`       | int64                                    | 2 | unix seconds |
-| `verified` | bool                                     | 3 |              |
-| `gates`    | [repeated JobGateStatus](#jobgatestatus) | 4 |              |
+| Field      | Type                                                     | # | Description  |
+| ---------- | -------------------------------------------------------- | - | ------------ |
+| `checkout` | string                                                   | 1 |              |
+| `at`       | int64                                                    | 2 | unix seconds |
+| `verified` | bool                                                     | 3 |              |
+| `gates`    | [repeated JobVerificationStatus](#jobverificationstatus) | 4 |              |
 
 Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 
@@ -322,14 +294,14 @@ JobResult is what a holder filed when it exited: the paths it changed, the risks
 
 Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto).
 
-| Field                   | Type                                         | # | Description                             |
-| ----------------------- | -------------------------------------------- | - | --------------------------------------- |
-| `changed_paths`         | repeated string                              | 1 |                                         |
-| `unresolved_risks`      | repeated string                              | 2 |                                         |
-| `descendants`           | repeated string                              | 3 |                                         |
-| `validation_command`    | string                                       | 4 | the command the holder ran as its check |
-| `validation_output_ref` | string                                       | 5 | that run's output ref                   |
-| `gate_evidence`         | [repeated JobGateEvidence](#jobgateevidence) | 6 |                                         |
+| Field                   | Type                                                         | # | Description                             |
+| ----------------------- | ------------------------------------------------------------ | - | --------------------------------------- |
+| `changed_paths`         | repeated string                                              | 1 |                                         |
+| `unresolved_risks`      | repeated string                                              | 2 |                                         |
+| `descendants`           | repeated string                                              | 3 |                                         |
+| `validation_command`    | string                                                       | 4 | the command the holder ran as its check |
+| `validation_output_ref` | string                                                       | 5 | that run's output ref                   |
+| `verification_evidence` | [repeated JobVerificationEvidence](#jobverificationevidence) | 6 |                                         |
 
 Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 
@@ -362,6 +334,34 @@ Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/
 | `path`   | string | 1 |              |
 | `digest` | string | 2 |              |
 | `at`     | int64  | 3 | unix seconds |
+
+Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
+
+### JobVerificationEvidence
+
+JobVerificationEvidence is the run a holder offered for one goal.
+
+Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto).
+
+| Field        | Type   | # | Description |
+| ------------ | ------ | - | ----------- |
+| `gate_id`    | string | 1 |             |
+| `output_ref` | string | 2 |             |
+
+Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
+
+### JobVerificationStatus
+
+JobVerificationStatus is one gate's verdict at integration.
+
+Source: [job.proto](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto).
+
+| Field        | Type            | # | Description |
+| ------------ | --------------- | - | ----------- |
+| `id`         | string          | 1 |             |
+| `verified`   | bool            | 2 |             |
+| `output_ref` | string          | 3 |             |
+| `violations` | repeated string | 4 |             |
 
 Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 

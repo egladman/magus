@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27429
-skill_short_bytes: 21653
+skill_full_bytes: 27437
+skill_short_bytes: 21661
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `2ee300228ddb` |
+| `skill-content` | `93cc7a909cc9` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -387,7 +387,7 @@ any cap the user set for the tree. Require the worker to:
   when that is set;
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
 - run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending;
-- never wait for the build budget outside its check's own call. When its check is refused (MGS3009), having waited as long as `budget_wait` allows (none by default), it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `gate_evidence`, with no output ref. `magus job wait` passes that result and the integration runs the check;
+- never wait for the build budget outside its check's own call. When its check is refused (MGS3009), having waited as long as `budget_wait` allows (none by default), it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `verification_evidence`, with no output ref. `magus job wait` passes that result and the integration runs the check;
 - never exit its row while it waits on a reply from you: ending its turn with the question as its final text leaves the row open and the worker resumable.
 
 End every brief with the step that files the result, as the worker's LAST act before
@@ -871,7 +871,7 @@ any cap the user set for the tree. Require the worker to:
   `magus session ls`, and no verdict is keyed on them;
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
 - run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending;
-- never wait for the build budget outside its check's own call. When its check is refused (MGS3009), having waited as long as `budget_wait` allows (none by default), it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `gate_evidence`, with no output ref. `magus job wait` passes that result and the integration runs the check;
+- never wait for the build budget outside its check's own call. When its check is refused (MGS3009), having waited as long as `budget_wait` allows (none by default), it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `verification_evidence`, with no output ref. `magus job wait` passes that result and the integration runs the check;
 - never exit its row while it waits on a reply from you: ending its turn with the question as its final text leaves the row open and the worker resumable.
 
 End every brief with the step that files the result, as the worker's LAST act before

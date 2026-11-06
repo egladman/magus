@@ -1727,7 +1727,7 @@ func BindJobGrant(fs *flag.FlagSet) *JobGrantFlags {
 	cmdline.DurationVar(fs, &f.For, FlagJobGrantFor, 0, "h", "End the grant after this long (e.g. 2h); unset, it lasts until the job ends. Bare numbers are hours.")
 	fs.BoolVar(&f.Revoke, FlagJobGrantRevoke, false, "End the job's grant of the rule")
 	cmdline.NegatedBoolVar(fs, &f.Revoke, FlagJobGrantRevoke)
-	fs.StringVar(&f.Commit, FlagJobGrantCommit, "", "Waive the push gate for this one commit instead of lowering a rule for a job; takes only push-ungated")
+	fs.StringVar(&f.Commit, FlagJobGrantCommit, "", "Waive the push gate for this one commit instead of lowering a rule for a job; takes only push-unverified")
 	fs.StringVar(&f.Reason, FlagJobGrantReason, "", "Why the gate was skipped, recorded with the waiver; required with --commit unless --revoke")
 	return &f
 }
