@@ -77,6 +77,9 @@ type Terms struct {
 	// ReferencedOutsideGap says why ReferencedOutside is unknown, such as [NoSymbolIndex];
 	// empty when a symbol index answered.
 	ReferencedOutsideGap string `json:"referenced_outside_gap,omitempty" yaml:"referenced_outside_gap,omitempty"`
+	// TestScope is the narrow test run per project and spell the write paths
+	// reach, from [NarrowTestScope].
+	TestScope []TestScope `json:"test_scope,omitempty" yaml:"test_scope,omitempty"`
 }
 
 // TermsEvidence is what the knowledge graph knows about one write path: the node it
@@ -130,6 +133,7 @@ type TermsFacts struct {
 	DeletionCandidates   []types.UnreferencedEntry
 	ReferencedOutside    []ReferencedFile
 	ReferencedOutsideGap string
+	TestScope            []TestScope
 }
 
 // NewTerms renders one job's terms: the job itself, plus what the workspace contributed.
@@ -149,6 +153,7 @@ func NewTerms(row types.Job, facts TermsFacts) Terms {
 		DeletionCandidates:   facts.DeletionCandidates,
 		ReferencedOutside:    facts.ReferencedOutside,
 		ReferencedOutsideGap: facts.ReferencedOutsideGap,
+		TestScope:            facts.TestScope,
 	}
 }
 
@@ -194,6 +199,7 @@ func (b Terms) String() string {
 	}
 	writeList(&s, regeneratedHeading, regeneratedLines(b.RegeneratedOutside))
 	writeList(&s, unrunHeading, unrunLines(b.UnrunGates))
+	writeList(&s, testScopeHeading, testScopeLines(b.TestScope))
 
 	if len(b.Affinity) > 0 {
 		lines := make([]string, len(b.Affinity))
@@ -220,6 +226,21 @@ func (b Terms) String() string {
 	writeBlock(&s, "the only check you run", b.Lease.Validation)
 	writeList(&s, "depends on", b.Lease.DependsOn)
 	return s.String()
+}
+
+const testScopeHeading = "narrow test scope"
+
+func testScopeLines(scopes []TestScope) []string {
+	lines := make([]string, len(scopes))
+	for i, sc := range scopes {
+		files := strings.Join(sc.Files, ", ")
+		if sc.Whole != "" {
+			lines[i] = fmt.Sprintf("%s: not narrowed: %s (%s)", cmp.Or(sc.Project, "no project"), sc.Whole, files)
+			continue
+		}
+		lines[i] = fmt.Sprintf("%s %s %s (%s)", sc.Project, sc.Op, strings.Join(sc.Operands, " "), files)
+	}
+	return lines
 }
 
 // deliveryLine says how row's work is delivered, and onto which branch when
