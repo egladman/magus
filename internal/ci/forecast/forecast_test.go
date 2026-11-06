@@ -96,6 +96,21 @@ func seedPeak(h *History, project, target string, bytes int64) {
 	h.Projects[project][target] = s
 }
 
+// SharedPrerequisiteSuite holds a long lint and test sharing a short build,
+// so splitting them is faster yet repeats the build.
+type SharedPrerequisiteSuite struct {
+	suite.Suite
+	h     History
+	needs func(types.Unit) []types.Unit
+}
+
+func TestSharedPrerequisiteSuite(t *testing.T) { suite.Run(t, new(SharedPrerequisiteSuite)) }
+
+func (s *SharedPrerequisiteSuite) SetupTest() {
+	s.h = measured(1_000, map[string]int64{".:build": 10_000, ".:lint": 200_000, ".:test": 200_000})
+	s.needs = closures(map[string][]string{".:lint": {".:build"}, ".:test": {".:build"}})
+}
+
 func (s *PlanSuite) TestEmptyHistoryPlacesEveryUnitOnce() {
 	us := unitList("a:test", "b:test", "c:lint", "d:test", "e:build")
 	got := Model{MemoryBudgetBytes: noBudget}.Plan(us, 8)
@@ -166,8 +181,60 @@ func (s *PlanSuite) TestAMemoryBudgetSplitsAShardThatWouldNotFit() {
 	seedPeak(&h, ".", "test", 6<<30)
 	us := unitList("docs:ci", ".:test")
 
-	s.Len(Model{History: h, MemoryBudgetBytes: noBudget}.Plan(us, 8), 1, "the time model consolidates these")
-	s.Len(Model{History: h, MemoryBudgetBytes: 12 << 30}.Plan(us, 8), 2, "13GB exceeds a 12GB budget")
+	s.Len(Model{History: h, Slots: 2, MemoryBudgetBytes: noBudget}.Plan(us, 8), 1, "the time model consolidates these")
+	s.Len(Model{History: h, Slots: 2, MemoryBudgetBytes: 12 << 30}.Plan(us, 8), 2, "13GB exceeds a 12GB budget")
+}
+
+func (s *PlanSuite) TestOneSlotPeaksAtTheLargestTarget() {
+	h := measured(600_000, map[string]int64{"docs:ci": 60_000, ".:test": 60_000})
+	seedPeak(&h, "docs", "ci", 7<<30)
+	seedPeak(&h, ".", "test", 6<<30)
+	s.Len(Model{History: h, Slots: 1, MemoryBudgetBytes: 12 << 30}.Plan(unitList("docs:ci", ".:test"), 8), 1,
+		"run one at a time, 7GB fits a 12GB budget")
+}
+
+func (s *SharedPrerequisiteSuite) TestASharedPrerequisiteStaysOnOneShardEvenWhenSplittingIsFaster() {
+	got := Model{History: s.h, MemoryBudgetBytes: noBudget, Needs: s.needs}.Plan(unitList(".:lint", ".:test"), 8)
+	s.Equal([][]string{{".:lint", ".:test"}}, names(got))
+}
+
+func (s *SharedPrerequisiteSuite) TestARepeatablePrerequisiteLetsItsUnitsSplit() {
+	f := Model{History: s.h, MemoryBudgetBytes: noBudget, Needs: s.needs,
+		Repeatable: func(u types.Unit) bool { return u == unit(".:build") }}
+	s.Equal([][]string{{".:lint"}, {".:test"}}, names(f.Plan(unitList(".:lint", ".:test"), 8)))
+}
+
+func (s *SharedPrerequisiteSuite) TestRepeatsNamesAPrerequisiteOnTwoShards() {
+	shards := [][]types.Unit{unitList(".:lint"), unitList(".:test")}
+	s.Equal(unitList(".:build"), Model{Needs: s.needs}.Repeats(shards))
+}
+
+func (s *SharedPrerequisiteSuite) TestRepeatsSkipsARepeatablePrerequisite() {
+	shards := [][]types.Unit{unitList(".:lint"), unitList(".:test")}
+	f := Model{Needs: s.needs, Repeatable: func(types.Unit) bool { return true }}
+	s.Empty(f.Repeats(shards))
+}
+
+func (s *PlanSuite) TestSlotsLetAShardRunItsTargetsAtOnce() {
+	h := measured(1_000, map[string]int64{"a:test": 100_000, "b:test": 100_000})
+	us := unitList("a:test", "b:test")
+	s.Len(Model{History: h, Slots: 1, MemoryBudgetBytes: noBudget}.Plan(us, 8), 2)
+	s.Len(Model{History: h, Slots: 2, MemoryBudgetBytes: noBudget}.Plan(us, 8), 1)
+}
+
+func (s *PlanSuite) TestAPeakCountsThePrerequisites() {
+	h := measured(1, map[string]int64{"a:test": 60_000, "a:build": 60_000})
+	seedPeak(&h, "a", "build", 7<<30)
+	seedPeak(&h, "a", "test", 6<<30)
+	f := Model{History: h, Slots: 2, MemoryBudgetBytes: 8 << 30, Needs: closures(map[string][]string{"a:test": {"a:build"}})}
+	s.Equal([]int{0}, f.OverBudget([][]types.Unit{unitList("a:test")}))
+}
+
+func (s *PlanSuite) TestUnmeasuredPeaksNamesUnitsAndPrerequisites() {
+	h := measured(1, map[string]int64{".:test": 60_000, ".:generate": 1_000})
+	seedPeak(&h, ".", "test", 1<<20)
+	f := Model{History: h, Needs: closures(map[string][]string{".:test": {".:generate"}})}
+	s.Equal(unitList(".:generate"), f.UnmeasuredPeaks(unitList(".:test")))
 }
 
 func (s *PlanSuite) TestAMemoryBudgetLeavesAFittingPlanAlone() {

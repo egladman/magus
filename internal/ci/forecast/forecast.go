@@ -16,6 +16,11 @@ type Model struct {
 	// Needs is the transitive needs closure of a unit, the unit itself
 	// included. nil treats every unit as needing nothing else.
 	Needs func(types.Unit) []types.Unit
+	// Repeatable reports whether a prerequisite may run on several shards.
+	// nil repeats none.
+	Repeatable func(types.Unit) bool
+	// Slots is how many targets a shard runs at once; below 1 counts as 1.
+	Slots int
 	// MemoryBudgetBytes caps a shard's predicted peak; zero checks none. The
 	// caller derives it from the configured machine, never the planner.
 	MemoryBudgetBytes int64
@@ -60,79 +65,128 @@ func (f Model) nodes(units []types.Unit) []types.Unit {
 	return out
 }
 
-// Plan partitions units into at most maxShards shards. A shard costs
-// SetupP50Ms plus each distinct target in its units' needs closures.
-// Units go longest-first, ties by project:target, to the shard they
-// leave cheapest. A shard opens only when it shortens the longest one
-// by more than setup plus the prerequisites it repeats. Equal history
-// and units give an equal plan.
+func (f Model) slots() int {
+	return max(f.Slots, 1)
+}
+
+func (f Model) repeatable(u types.Unit) bool {
+	return f.Repeatable != nil && f.Repeatable(u)
+}
+
+// Plan partitions units into at most maxShards shards. Units that share a
+// prerequisite Repeatable refuses go to one shard as a group. A shard costs
+// SetupP50Ms plus its closure's targets run Slots at a time. Groups go
+// longest-first, ties by project:target, to the shard they leave cheapest.
+// A shard opens only when it shortens the longest one by more than setup
+// plus the prerequisites it repeats. Equal history and units give an equal
+// plan.
 func (f Model) Plan(units []types.Unit, maxShards int) [][]types.Unit {
 	if len(units) == 0 {
 		return nil
 	}
-	return f.fitMemory(f.weigh(units), clampShards(maxShards, len(units)))
+	w := f.weigh(units)
+	return f.fitMemory(w, clampShards(maxShards, len(w.items)))
 }
 
-func clampShards(maxShards, units int) int {
-	if maxShards <= 0 || maxShards > units {
-		return units
+func clampShards(maxShards, items int) int {
+	if maxShards <= 0 || maxShards > items {
+		return items
 	}
 	return maxShards
 }
 
-// weights is a unit set prepared for packing: each closure as indexes
-// into nodeMs, and units sorted longest-first.
+// weights is a unit set prepared for packing. Each item is units that
+// must share a shard, its closure as indexes into nodeMs. Items sort
+// longest-first.
 type weights struct {
-	units   []types.Unit
-	closure [][]int
-	own     []int // own[i] is units[i]'s index in nodeMs
+	items   []item
 	nodeMs  []int64
 	setupMs int64
+	slots   int64
+}
+
+// item is units placed together, with their merged closure.
+type item struct {
+	units   []types.Unit
+	own     []int // each unit's index in nodeMs
+	closure []int
 }
 
 func (f Model) weigh(units []types.Unit) weights {
-	w := weights{setupMs: int64(f.History.effectiveConstants().SetupP50Ms)}
+	w := weights{setupMs: int64(f.History.effectiveConstants().SetupP50Ms), slots: int64(f.slots())}
 	index := map[types.Unit]int{}
+	var byIndex []types.Unit
 	node := func(u types.Unit) int {
 		if i, ok := index[u]; ok {
 			return i
 		}
 		index[u] = len(w.nodeMs)
+		byIndex = append(byIndex, u)
 		w.nodeMs = append(w.nodeMs, f.predict(u))
 		return index[u]
 	}
-	type weighed struct {
-		unit    types.Unit
-		own     int
-		closure []int
-		ms      int64
+	units = slices.Clone(units)
+	sortUnits(units)
+	units = slices.Compact(units)
+
+	parent := make([]int, len(units))
+	for i := range parent {
+		parent[i] = i
 	}
-	all := make([]weighed, 0, len(units))
-	for _, u := range units {
-		x := weighed{unit: u, own: node(u), closure: []int{node(u)}}
+	var find func(int) int
+	find = func(i int) int {
+		if parent[i] != i {
+			parent[i] = find(parent[i])
+		}
+		return parent[i]
+	}
+	owner := map[int]int{}
+	closures := make([][]int, len(units))
+	for i, u := range units {
+		closures[i] = []int{node(u)}
 		if f.Needs != nil {
 			for _, n := range f.Needs(u) {
-				if i := node(n); !slices.Contains(x.closure, i) {
-					x.closure = append(x.closure, i)
+				if j := node(n); !slices.Contains(closures[i], j) {
+					closures[i] = append(closures[i], j)
 				}
 			}
 		}
-		for _, i := range x.closure {
-			x.ms += w.nodeMs[i]
+		for _, n := range closures[i] {
+			if f.repeatable(byIndex[n]) {
+				continue
+			}
+			if o, ok := owner[n]; ok {
+				parent[find(i)] = find(o)
+			} else {
+				owner[n] = i
+			}
 		}
-		all = append(all, x)
 	}
-	slices.SortStableFunc(all, func(a, b weighed) int {
-		if a.ms != b.ms {
-			return cmp.Compare(b.ms, a.ms)
+
+	byRoot := map[int]int{}
+	for i, u := range units {
+		r := find(i)
+		at, ok := byRoot[r]
+		if !ok {
+			at = len(w.items)
+			byRoot[r] = at
+			w.items = append(w.items, item{})
 		}
-		return cmp.Compare(a.unit.String(), b.unit.String())
+		it := &w.items[at]
+		it.units = append(it.units, u)
+		it.own = append(it.own, closures[i][0])
+		for _, n := range closures[i] {
+			if !slices.Contains(it.closure, n) {
+				it.closure = append(it.closure, n)
+			}
+		}
+	}
+	slices.SortStableFunc(w.items, func(a, b item) int {
+		if x, y := w.costOf(a.closure), w.costOf(b.closure); x != y {
+			return cmp.Compare(y, x)
+		}
+		return cmp.Compare(a.units[0].String(), b.units[0].String())
 	})
-	for _, x := range all {
-		w.units = append(w.units, x.unit)
-		w.own = append(w.own, x.own)
-		w.closure = append(w.closure, x.closure)
-	}
 	return w
 }
 
@@ -140,32 +194,50 @@ func (f Model) predict(u types.Unit) int64 {
 	return f.History.PredictDuration(u.Project, u.Target, f.TagsByProject[u.Project]).Milliseconds()
 }
 
+// cost is a shard's duration: setup, then its targets run slots at a
+// time, never shorter than the longest one.
+func (w weights) cost(sum, longest int64) int64 {
+	return w.setupMs + max((sum+w.slots-1)/w.slots, longest)
+}
+
+func (w weights) costOf(closure []int) int64 {
+	var sum, longest int64
+	for _, n := range closure {
+		sum += w.nodeMs[n]
+		longest = max(longest, w.nodeMs[n])
+	}
+	return w.cost(sum, longest)
+}
+
 // bin is one shard while packing.
 type bin struct {
-	units []int
-	nodes map[int]bool
-	ms    int64
+	items   []int
+	nodes   map[int]bool
+	sum     int64
+	longest int64
+	ms      int64
 }
 
-// with is b's cost once unit i joins it.
+// with is b's cost once item i joins it.
 func (w weights) with(b bin, i int) int64 {
-	ms := b.ms
-	for _, n := range w.closure[i] {
+	sum, longest := b.sum, b.longest
+	for _, n := range w.items[i].closure {
 		if !b.nodes[n] {
-			ms += w.nodeMs[n]
+			sum += w.nodeMs[n]
+			longest = max(longest, w.nodeMs[n])
 		}
 	}
-	return ms
+	return w.cost(sum, longest)
 }
 
-// pack places every unit. It opens a shard unconditionally while fewer
+// pack places every item. It opens a shard unconditionally while fewer
 // than minShards exist, and never past maxShards.
 func (w weights) pack(minShards, maxShards int) []bin {
 	var bins []bin
 	open := func(i int) {
 		bins = append(bins, w.add(bin{nodes: map[int]bool{}, ms: w.setupMs}, i))
 	}
-	for i := range w.units {
+	for i := range w.items {
 		if len(bins) == 0 {
 			open(i)
 			continue
@@ -185,15 +257,14 @@ func (w weights) pack(minShards, maxShards int) []bin {
 	return bins
 }
 
-// opens reports whether unit i on a shard of its own shortens the
+// opens reports whether item i on a shard of its own shortens the
 // longest shard by more than setup plus the prerequisites it repeats.
 func (w weights) opens(bins []bin, i int, joinedMs int64) bool {
 	longest := makespan(bins)
-	alone := w.setupMs
+	alone := w.costOf(w.items[i].closure)
 	var repeated int64
-	for _, n := range w.closure[i] {
-		alone += w.nodeMs[n]
-		if n == w.own[i] {
+	for _, n := range w.items[i].closure {
+		if slices.Contains(w.items[i].own, n) {
 			continue
 		}
 		for _, b := range bins {
@@ -208,19 +279,23 @@ func (w weights) opens(bins []bin, i int, joinedMs int64) bool {
 }
 
 func (w weights) add(b bin, i int) bin {
-	b.ms = w.with(b, i)
-	for _, n := range w.closure[i] {
-		b.nodes[n] = true
+	for _, n := range w.items[i].closure {
+		if !b.nodes[n] {
+			b.nodes[n] = true
+			b.sum += w.nodeMs[n]
+			b.longest = max(b.longest, w.nodeMs[n])
+		}
 	}
-	b.units = append(b.units, i)
+	b.ms = w.cost(b.sum, b.longest)
+	b.items = append(b.items, i)
 	return b
 }
 
 func (w weights) assignments(bins []bin) [][]types.Unit {
 	out := make([][]types.Unit, len(bins))
 	for s, b := range bins {
-		for _, i := range b.units {
-			out[s] = append(out[s], w.units[i])
+		for _, i := range b.items {
+			out[s] = append(out[s], w.items[i].units...)
 		}
 	}
 	return out
@@ -234,36 +309,32 @@ func makespan(bins []bin) int64 {
 	return longest
 }
 
-// fitMemory adds shards until every shard's peaks fit the budget. A
+// fitMemory adds shards until every shard's peak fits the budget. A
 // runner out of memory vanishes as "cancelled". It only splits, so a
 // wrong peak costs runners, never a regression.
 func (f Model) fitMemory(w weights, limit int) [][]types.Unit {
-	budget := f.MemoryBudgetBytes
 	bins := w.pack(1, limit)
-	for budget > 0 && len(bins) < limit && !f.fits(w.assignments(bins), budget) {
+	for f.MemoryBudgetBytes > 0 && len(bins) < limit && len(f.OverBudget(w.assignments(bins))) > 0 {
 		bins = w.pack(len(bins)+1, limit)
 	}
 	return w.assignments(bins)
 }
 
-// fits reports whether every shard's summed unit peaks fit the budget.
-// A sum, since a shard's units run concurrently. A unit with no recorded
-// peak adds nothing: unknown is neither free nor vast.
-func (f Model) fits(shards [][]types.Unit, budget int64) bool {
-	for _, shard := range shards {
-		if f.peak(shard) > budget {
-			return false
+// peak is a shard's predicted peak memory: the Slots largest recorded
+// peaks among its units and their prerequisites, as that many run at
+// once. A target with no recorded peak adds nothing; UnmeasuredPeaks
+// names each.
+func (f Model) peak(shard []types.Unit) int64 {
+	var peaks []int64
+	for _, u := range f.nodes(shard) {
+		if b, ok := f.History.PredictPeakRSS(u.Project, u.Target); ok {
+			peaks = append(peaks, b)
 		}
 	}
-	return true
-}
-
-func (f Model) peak(shard []types.Unit) int64 {
+	slices.SortFunc(peaks, func(a, b int64) int { return cmp.Compare(b, a) })
 	var total int64
-	for _, u := range shard {
-		if b, ok := f.History.PredictPeakRSS(u.Project, u.Target); ok {
-			total += b
-		}
+	for _, b := range peaks[:min(len(peaks), f.slots())] {
+		total += b
 	}
 	return total
 }
@@ -276,7 +347,7 @@ func (f Model) SufficientShards(units []types.Unit, maxShards int) int {
 		return 0
 	}
 	w := f.weigh(units)
-	best := w.pack(1, clampShards(maxShards, len(units)))
+	best := w.pack(1, clampShards(maxShards, len(w.items)))
 	if makespan(best) <= w.setupMs {
 		return 0
 	}
@@ -297,8 +368,43 @@ func (f Model) Unmeasured(units []types.Unit) []types.Unit {
 			out = append(out, u)
 		}
 	}
-	slices.SortFunc(out, func(a, b types.Unit) int { return cmp.Compare(a.String(), b.String()) })
+	sortUnits(out)
 	return out
+}
+
+// UnmeasuredPeaks names the units and prerequisites the history holds no
+// peak memory for, sorted by project:target. The memory check counts
+// each as zero.
+func (f Model) UnmeasuredPeaks(units []types.Unit) []types.Unit {
+	var out []types.Unit
+	for _, u := range f.nodes(units) {
+		if _, ok := f.History.PredictPeakRSS(u.Project, u.Target); !ok {
+			out = append(out, u)
+		}
+	}
+	sortUnits(out)
+	return out
+}
+
+// Repeats names each prerequisite that Repeatable refuses to repeat yet
+// sits on more than one of shards, sorted by project:target. Every shard
+// holding one computes it again.
+func (f Model) Repeats(shards [][]types.Unit) []types.Unit {
+	count := map[types.Unit]int{}
+	var out []types.Unit
+	for _, shard := range shards {
+		for _, n := range f.nodes(shard) {
+			if count[n]++; count[n] == 2 && !f.repeatable(n) {
+				out = append(out, n)
+			}
+		}
+	}
+	sortUnits(out)
+	return out
+}
+
+func sortUnits(us []types.Unit) {
+	slices.SortFunc(us, func(a, b types.Unit) int { return cmp.Compare(a.String(), b.String()) })
 }
 
 // OverBudget names the shards whose predicted peak memory exceeds one runner's budget,
