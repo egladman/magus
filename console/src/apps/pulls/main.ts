@@ -3,9 +3,15 @@
 // The server owns the forge cadence. This app re-reads its last board every
 // 10s, which is local and cheap, and says how old that board is.
 
-import { clone, toJsonString } from "@bufbuild/protobuf";
+import { clone, create, toJsonString } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
-import { BoardSchema, PullsService, type Board } from "@wire/pulls/v1alpha1/pulls_pb";
+import {
+  BoardSchema,
+  CheckoutPullResponseSchema,
+  PullsService,
+  type Board,
+  type CheckoutPullResponse,
+} from "@wire/pulls/v1alpha1/pulls_pb";
 import { MagusError, fail, fromPromise, ok, type Result } from "../../gen/magus/types";
 import {
   adoptServerOrigin,
@@ -19,6 +25,7 @@ import { h } from "../../desktop/view";
 import type { AppInstance } from "../../desktop/standalone";
 import { demoBoard } from "./demo";
 import {
+  type Checkout,
   authorsLine,
   renderChips,
   renderMain,
@@ -34,6 +41,7 @@ const TICK_MS = 1_000;
 interface Source {
   get(): Promise<Result<Board>>;
   setAuthors(authors: string[]): Promise<Result<Board>>;
+  checkout(number: number): Promise<Result<CheckoutPullResponse>>;
 }
 
 async function boardOf(p: Promise<{ board?: Board }>): Promise<Result<Board>> {
@@ -50,6 +58,7 @@ function liveSource(host: string): Source {
   return {
     get: () => boardOf(client.getPulls({})),
     setAuthors: (authors) => boardOf(client.setAuthors({ authors })),
+    checkout: (number) => fromPromise(client.checkoutPull({ number })),
   };
 }
 
@@ -67,6 +76,16 @@ function demoSource(): Source {
       current = next;
       return Promise.resolve(ok(current));
     },
+    checkout: (number) =>
+      Promise.resolve(
+        ok(
+          create(CheckoutPullResponseSchema, {
+            path: `/home/egladman/.cache/magus/tmp/checkout-${number}`,
+            remove: `magus vcs checkout --remove /home/egladman/.cache/magus/tmp/checkout-${number}`,
+            log: ["checked out the head commit with git", "installed: go, console"],
+          }),
+        ),
+      ),
   };
 }
 
@@ -125,6 +144,7 @@ export function activate(host: HTMLElement): AppInstance {
   let pollTimer: ReturnType<typeof setInterval> | undefined;
   let tickTimer: ReturnType<typeof setInterval> | undefined;
   const open = new Set<number>();
+  const checkouts = new Map<number, Checkout>();
 
   // A poll rebuilds the rows; this keeps an expanded row expanded.
   rows.addEventListener(
@@ -156,7 +176,11 @@ export function activate(host: HTMLElement): AppInstance {
     mainHost.replaceChildren(renderMain(board.main));
     patternsHost.replaceChildren(renderPatterns(board.patterns));
     orderHost.replaceChildren(renderOrder(board.mergeOrder));
-    rows.replaceChildren(...board.pulls.map((p) => renderRow(p, now, open.has(p.number))));
+    rows.replaceChildren(
+      ...board.pulls.map((p) =>
+        renderRow(p, now, open.has(p.number), checkouts.get(p.number), checkout),
+      ),
+    );
     if (board.pulls.length === 0) rows.append(h("p", undefined, "No open pull requests match."));
   }
 
@@ -184,6 +208,27 @@ export function activate(host: HTMLElement): AppInstance {
   async function writeAuthors(authors: string[]): Promise<void> {
     if (source === null) return;
     accept(await source.setAuthors(authors));
+  }
+
+  function setCheckout(number: number, state: Checkout): void {
+    checkouts.set(number, state);
+    renderedKey = "";
+    paint();
+  }
+
+  async function checkout(number: number): Promise<void> {
+    if (source === null || checkouts.get(number)?.kind === "running") return;
+    setCheckout(number, { kind: "running" });
+    const res = await source.checkout(number);
+    if (stale) return;
+    if (res.error) {
+      setCheckout(number, { kind: "failed", error: res.error.message });
+    } else if (res.value.error !== "") {
+      setCheckout(number, { kind: "failed", error: res.value.error });
+    } else {
+      const { path, remove, log } = res.value;
+      setCheckout(number, { kind: "done", path, remove, log });
+    }
   }
 
   function removeAuthor(author: string): void {

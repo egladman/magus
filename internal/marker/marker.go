@@ -41,8 +41,29 @@ func Parse(text string) (Found, bool) {
 // DevOnly reports whether text carries a compat marker whose condition is
 // exactly NextRelease.
 func DevOnly(text string) bool {
+	cond, ok := compatCondition(text)
+	return ok && cond == NextRelease
+}
+
+// NearDevOnly reports whether text's compat condition reads as NextRelease
+// once case, spacing and trailing punctuation are ignored, but is not it. A
+// release refuses one: it means the dev-only shim and would ship unnoticed.
+func NearDevOnly(text string) bool {
+	cond, ok := compatCondition(text)
+	if !ok || cond == NextRelease {
+		return false
+	}
+	folded := strings.Join(strings.Fields(strings.ToLower(cond)), " ")
+	return strings.TrimRight(folded, ".,;:!") == NextRelease
+}
+
+// compatCondition is the condition of text's compat marker, if it has one.
+func compatCondition(text string) (string, bool) {
 	f, ok := Parse(text)
-	return ok && f.Marker == strings.TrimSpace(Compat) && f.Text == NextRelease
+	if !ok || f.Marker != strings.TrimSpace(Compat) {
+		return "", false
+	}
+	return f.Text, true
 }
 
 // inComment reports whether the text before a marker opens a comment. It

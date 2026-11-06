@@ -911,3 +911,43 @@ func (s *RootGroundworkSuite) TestRootOutputRefThatWritesAFileIsStillGroundwork(
 }
 
 func (s *RootGroundworkSuite) testContext() context.Context { return s.layers.of(s.T()) }
+
+// RecoversOwnCheckoutSuite pins which line is the root's own recovery entry.
+type RecoversOwnCheckoutSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestRecoversOwnCheckoutSuite(t *testing.T) {
+	suite.Run(t, new(RecoversOwnCheckoutSuite))
+}
+
+func (s *RecoversOwnCheckoutSuite) SetupTest() {
+	s.root = s.T().TempDir()
+}
+
+func (s *RecoversOwnCheckoutSuite) TestTheDeclaredHookWithRecoverIsRootWork() {
+	declareCheckoutHook(s.T(), s.root)
+	s.True(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --here --recover", s.root))
+}
+
+func (s *RecoversOwnCheckoutSuite) TestARenamedHookIsReadFromMagusYAML() {
+	body := "checkout:\n  bootstrap: tools/ready.buzz\n"
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magus.yaml"), []byte(body), 0o644))
+	s.True(recoversOwnCheckout("./magus buzz tools/ready.buzz -- --here --recover", s.root))
+	s.False(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --here --recover", s.root))
+}
+
+func (s *RecoversOwnCheckoutSuite) TestNoDeclaredHookRecoversNothing() {
+	s.False(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --here --recover", s.root))
+}
+
+func (s *RecoversOwnCheckoutSuite) TestTheHookWithoutRecoverIsNotRecovery() {
+	declareCheckoutHook(s.T(), s.root)
+	s.False(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --here", s.root))
+}
+
+func (s *RecoversOwnCheckoutSuite) TestASecondCommandIsNotRecovery() {
+	declareCheckoutHook(s.T(), s.root)
+	s.False(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --here --recover && git push", s.root))
+}
