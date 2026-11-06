@@ -643,6 +643,27 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 		}
 	}
 	step.OwnedOutputs = types.CompactGlobs(owned)
+	// Every spell's caches and relinked binary, since a chained target writes
+	// inside this window too. With no home dir, MGS4011 names cache writes.
+	home, homeErr := os.UserHomeDir()
+	seen := map[string]bool{}
+	for _, proj := range m.All() {
+		for _, pol := range proj.TargetPolicies {
+			if pol.Relinks != "" {
+				step.WritePaths = append(step.WritePaths, filepath.Join(step.WorkspaceRoot, filepath.FromSlash(pol.Relinks)))
+			}
+		}
+		for _, s := range proj.ResolvedSpells {
+			sb := s.Sandbox()
+			if homeErr != nil || sb == nil || seen[s.Name()] {
+				continue
+			}
+			seen[s.Name()] = true
+			step.WritePaths = slices.AppendSeq(step.WritePaths, maps.Values(sandbox.CacheDirs(*sb, os.Environ(), home)))
+		}
+	}
+	slices.Sort(step.WritePaths)
+	step.WritePaths = slices.Compact(step.WritePaths)
 	// ctx.writesFiles completes the same ownership boundary for replay: once a target
 	// names its own artifacts, do not inherit every project or spell output into
 	// its snapshot. Otherwise an unrelated target can restore a stale tree merely

@@ -857,6 +857,11 @@ const UnorderedSameStepWrite DiagnosticCode = "MGS4008"
 // key is taken, so every run succeeds and none is cached. A moved input no target
 // declares as an output is a concurrent writer instead, and stays an uncoded notice.
 const SelfInvalidatingKey DiagnosticCode = "MGS4010"
+
+// UndeclaredOutputWritten is a target that wrote a file in its project that no
+// target declares. Without it, a target declaring no outputs is either a check
+// or a generator that forgot to say so, and only the run can tell which.
+const UndeclaredOutputWritten DiagnosticCode = "MGS4011"
 const NearDuplicateServices DiagnosticCode = "MGS5001"
 const ServiceOpDetached DiagnosticCode = "MGS5002"
 const CommandOpNeverExits DiagnosticCode = "MGS5003"
@@ -1165,6 +1170,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	UndeclaredSourceModified,
 	UnorderedSameStepWrite,
 	SelfInvalidatingKey,
+	UndeclaredOutputWritten,
 	NearDuplicateServices,
 	ServiceOpDetached,
 	CommandOpNeverExits,

@@ -140,6 +140,10 @@ func TestAnEntryWithoutTheDeclaredOutputsNeverReplays(t *testing.T) {
 	calls := 0
 	fn := func(_ context.Context) error {
 		calls++
+		// Undeclared, the write would fail the run with MGS4011.
+		if len(step.Outputs) == 0 {
+			return nil
+		}
 		return os.WriteFile(out, []byte("index"), 0o644)
 	}
 	run := func() Result {
@@ -150,7 +154,6 @@ func TestAnEntryWithoutTheDeclaredOutputsNeverReplays(t *testing.T) {
 	}
 
 	assert.False(t, run().Hit)
-	require.NoError(t, os.Remove(out))
 	step.Outputs = types.MustParseGlobs("test/pkg/index.scip")
 	step.OutputsDeclared = true
 	assert.False(t, run().Hit, "the entry recorded no outputs, so it cannot restore the index")

@@ -4,7 +4,9 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -379,4 +381,241 @@ func TestMovedInputsNoticeCodesOnlyAGeneratedInput(t *testing.T) {
 	got = movedInputsNotice(s, "0123456789abcdef", []string{"README.md"})
 	assert.NotContains(t, got, string(types.SelfInvalidatingKey))
 	assert.Contains(t, got, "README.md")
+}
+
+// UndeclaredWriteSuite pins MGS4011: a run that writes a file in its project
+// that no target declares fails and names the file.
+type UndeclaredWriteSuite struct {
+	suite.Suite
+	root string
+	c    *Cache
+	logs *recordingHandler
+}
+
+func TestUndeclaredWriteSuite(t *testing.T) {
+	suite.Run(t, new(UndeclaredWriteSuite))
+}
+
+func (s *UndeclaredWriteSuite) SetupTest() {
+	s.logs = &recordingHandler{}
+	s.root, s.c = openCache(s.T(), WithLogger(slog.New(s.logs)))
+	s.write("pkg/main.go", "package main")
+}
+
+func (s *UndeclaredWriteSuite) noticeNaming(rel string) bool {
+	return slices.ContainsFunc(s.logs.lines(), func(l string) bool {
+		return strings.Contains(l, string(types.UndeclaredOutputWritten)) && strings.Contains(l, rel)
+	})
+}
+
+func (s *UndeclaredWriteSuite) write(rel, body string) {
+	abs := filepath.Join(s.root, filepath.FromSlash(rel))
+	s.Require().NoError(os.MkdirAll(filepath.Dir(abs), 0o755))
+	s.Require().NoError(os.WriteFile(abs, []byte(body), 0o644))
+}
+
+func (s *UndeclaredWriteSuite) step(project, target string) Step {
+	return Step{
+		ProjectPath:   project,
+		WorkspaceRoot: s.root,
+		Target:        target,
+		Sources:       types.MustParseGlobs("pkg/*.go"),
+	}
+}
+
+func (s *UndeclaredWriteSuite) writing(rels ...string) func(context.Context) error {
+	return func(context.Context) error {
+		for _, rel := range rels {
+			s.write(rel, "written by the target")
+		}
+		return nil
+	}
+}
+
+func (s *UndeclaredWriteSuite) TestAnUndeclaredFileFailsAndIsNamed() {
+	_, err := s.c.Run(s.T().Context(), s.step(".", "breaking"), s.writing("report.txt"))
+	s.Require().Error(err)
+	s.Contains(err.Error(), "report.txt")
+}
+
+func (s *UndeclaredWriteSuite) TestTheErrorCarriesItsCode() {
+	_, err := s.c.Run(s.T().Context(), s.step(".", "breaking"), s.writing("report.txt"))
+	s.Require().ErrorIs(err, types.UndeclaredOutputWritten)
+}
+
+func (s *UndeclaredWriteSuite) TestADeclaredOutputPasses() {
+	step := s.step(".", "build")
+	step.Outputs = types.MustParseGlobs("dist/**")
+	_, err := s.c.Run(s.T().Context(), step, s.writing("dist/app"))
+	s.Require().NoError(err)
+}
+
+func (s *UndeclaredWriteSuite) TestADeclaredUpdatePasses() {
+	s.write("notes.md", "unformatted")
+	step := s.step(".", "format")
+	step.Updates = types.MustParseGlobs("notes.md")
+	_, err := s.c.Run(s.T().Context(), step, s.writing("notes.md"))
+	s.Require().NoError(err)
+}
+
+func (s *UndeclaredWriteSuite) TestAWriteUnderMagusStatePasses() {
+	_, err := s.c.Run(s.T().Context(), s.step(".", "graph"), s.writing(".magus/graph.jsonl"))
+	s.Require().NoError(err)
+}
+
+func (s *UndeclaredWriteSuite) TestATargetWritingNothingPasses() {
+	_, err := s.c.Run(s.T().Context(), s.step(".", "lint"), func(context.Context) error { return nil })
+	s.Require().NoError(err)
+}
+
+func (s *UndeclaredWriteSuite) TestACacheHitDoesNotRunTheCheck() {
+	step := s.step(".", "lint")
+	_, err := s.c.Run(s.T().Context(), step, func(context.Context) error { return nil })
+	s.Require().NoError(err)
+
+	res, err := s.c.Run(s.T().Context(), step, s.writing("report.txt"))
+	s.Require().NoError(err)
+	s.True(res.Hit)
+	s.NoFileExists(filepath.Join(s.root, "report.txt"), "a hit runs no body")
+}
+
+func (s *UndeclaredWriteSuite) TestANestedProjectsWriteIsNotBlamedOnItsParent() {
+	step := s.step(".", "build")
+	step.NestedDirs = []string{"libs/x"}
+	_, err := s.c.Run(s.T().Context(), step, s.writing("libs/x/out.txt"))
+	s.Require().NoError(err)
+}
+
+func (s *UndeclaredWriteSuite) TestAnotherProjectsDeclaredOutputIsClaimed() {
+	s.write("app/keep", "")
+	step := s.step("app", "generate")
+	step.OwnedOutputs = types.MustParseGlobs("app/schema.json")
+	_, err := s.c.Run(s.T().Context(), step, s.writing("app/schema.json"))
+	s.Require().NoError(err)
+}
+
+// runBeside keeps peer running until writer's run returns, so the write
+// lands inside peer's window.
+func (s *UndeclaredWriteSuite) runBeside(peer, writer Step, rel string) (peerErr, writerErr error) {
+	started, done := make(chan struct{}), make(chan struct{})
+	result := make(chan error, 1)
+	go func() {
+		_, err := s.c.Run(s.T().Context(), peer, func(context.Context) error {
+			close(started)
+			<-done
+			return nil
+		})
+		result <- err
+	}()
+	<-started
+	_, writerErr = s.c.Run(s.T().Context(), writer, s.writing(rel))
+	close(done)
+	return <-result, writerErr
+}
+
+func (s *UndeclaredWriteSuite) TestTwoTargetsOfOneProjectDoNotBlameEachOther() {
+	peerErr, writerErr := s.runBeside(s.step(".", "test"), s.step(".", "lint"), "report.txt")
+	s.NoError(peerErr, "the peer was running as the file was written")
+	s.NoError(writerErr, "the writer had a peer running beside it")
+	s.True(s.noticeNaming("report.txt"), "a write nobody is blamed for is still reported")
+}
+
+func (s *UndeclaredWriteSuite) TestAPeersDeclaredOutputClaimsTheWrite() {
+	peer := s.step(".", "build")
+	peer.Outputs = types.MustParseGlobs("dist/**")
+	_, writerErr := s.runBeside(peer, s.step(".", "test"), "dist/app")
+	s.Require().NoError(writerErr)
+	s.False(s.noticeNaming("dist/app"), "a peer declared the write")
+}
+
+func (s *UndeclaredWriteSuite) TestASiblingProjectsRunDoesNotExcuseAWrite() {
+	s.write("a/keep", "")
+	s.write("b/keep", "")
+	_, writerErr := s.runBeside(s.step("b", "test"), s.step("a", "lint"), "a/report.txt")
+	s.ErrorIs(writerErr, types.UndeclaredOutputWritten)
+}
+
+// chain runs inner from outer's body, the way ctx.needs does.
+func (s *UndeclaredWriteSuite) chain(outer, inner Step, rel string) (outerErr, innerErr error) {
+	_, outerErr = s.c.Run(s.T().Context(), outer, func(ctx context.Context) error {
+		_, innerErr = s.c.Run(ctx, inner, s.writing(rel))
+		return nil
+	})
+	return outerErr, innerErr
+}
+
+func (s *UndeclaredWriteSuite) TestAChainedTargetIsBlamedForItsOwnWrite() {
+	_, innerErr := s.chain(s.step(".", "ci"), s.step(".", "generate"), "report.txt")
+	s.ErrorIs(innerErr, types.UndeclaredOutputWritten, "the enclosing run is not a peer")
+}
+
+func (s *UndeclaredWriteSuite) TestAChainedTargetsDeclaredOutputPassesTheOuterRun() {
+	inner := s.step(".", "generate")
+	inner.Outputs = types.MustParseGlobs("gen.txt")
+	outerErr, innerErr := s.chain(s.step(".", "ci"), inner, "gen.txt")
+	s.NoError(innerErr)
+	s.NoError(outerErr)
+}
+
+func (s *UndeclaredWriteSuite) TestOutputRedirectedIntoTheTreeIsNotBlamed() {
+	log, err := os.Create(filepath.Join(s.root, "run.log"))
+	s.Require().NoError(err)
+	defer func() { _ = log.Close() }()
+	stdout := os.Stdout
+	os.Stdout = log
+	defer func() { os.Stdout = stdout }()
+
+	_, err = s.c.Run(s.T().Context(), s.step(".", "test"), func(context.Context) error {
+		_, err := log.WriteString("ok\n")
+		return err
+	})
+	s.Require().NoError(err)
+}
+
+func (s *UndeclaredWriteSuite) TestASpellsDeclaredCacheInsideTheTreeIsClaimed() {
+	s.write(".gocache/README", "")
+	step := s.step(".", "test")
+	step.WritePaths = []string{filepath.Join(s.root, ".gocache")}
+	_, err := s.c.Run(s.T().Context(), step, s.writing(".gocache/00/entry-a"))
+	s.Require().NoError(err)
+}
+
+// gitTrack makes the workspace a repository tracking rels.
+func (s *UndeclaredWriteSuite) gitTrack(rels ...string) {
+	for _, args := range [][]string{
+		{"init", "-q"},
+		append([]string{"add", "--"}, rels...),
+	} {
+		out, err := osexec.Command("git", append([]string{"-C", s.root}, args...)...).CombinedOutput()
+		s.Require().NoError(err, string(out))
+	}
+}
+
+func (s *UndeclaredWriteSuite) TestATrackedFileSavedMidRunIsNotBlamed() {
+	s.write("README.md", "before")
+	s.gitTrack("README.md")
+	_, err := s.c.Run(s.T().Context(), s.step(".", "test"), s.writing("README.md"))
+	s.Require().NoError(err)
+}
+
+func (s *UndeclaredWriteSuite) TestAModifiedUntrackedFileIsBlamed() {
+	s.write("README.md", "before")
+	s.write("coverage.out", "before")
+	s.gitTrack("README.md")
+	_, err := s.c.Run(s.T().Context(), s.step(".", "test"), s.writing("coverage.out"))
+	s.Require().ErrorIs(err, types.UndeclaredOutputWritten)
+	s.Contains(err.Error(), "coverage.out")
+}
+
+func (s *UndeclaredWriteSuite) TestARelinkedBinaryIsClaimed() {
+	step := s.step(".", "go-build")
+	step.WritePaths = []string{filepath.Join(s.root, "magus")}
+	_, err := s.c.Run(s.T().Context(), step, s.writing("magus"))
+	s.Require().NoError(err)
+}
+
+func (s *UndeclaredWriteSuite) TestANestedCheckoutIsNotWalked() {
+	s.write("worktrees/w/.git", "gitdir: elsewhere")
+	_, err := s.c.Run(s.T().Context(), s.step(".", "lint"), s.writing("worktrees/w/edited.go"))
+	s.Require().NoError(err)
 }
