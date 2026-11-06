@@ -69,6 +69,7 @@ var TargetPolicyOptions = []ProjectOption{
 	{Key: "human_only", Since: "0.5.0"},
 	{Key: "relinks", Since: "0.5.0"},
 	{Key: "integrates", Since: "0.5.0"},
+	{Key: "needs_ready", Since: "0.5.0"},
 }
 
 // ToolBoundKeys is the ONE list of recognized keys inside one entry of magus.project's

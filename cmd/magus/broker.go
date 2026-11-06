@@ -162,7 +162,9 @@ func brokerServe(ctx context.Context, args []string) error {
 	// process may commit, so a broker inside a memory-limited container budgets the
 	// container; slots come from the cores, the ceiling ClampConcurrency holds every run
 	// to. The profile decides memory's reservation.
-	memMB := mem.BudgetMB(mem.UsableBytes(ctx), globalCfg.ConcurrencyProfile)
+	usable := mem.UsableBytes(ctx)
+	memMB := mem.BudgetMB(usable, globalCfg.ConcurrencyProfile)
+	reserve := mem.Reserve(usable, globalCfg.ConcurrencyProfile)
 	slots := cache.MachineCeiling()
 	exits := "never exits for idleness"
 	if f.IdleExit > 0 {
@@ -184,6 +186,7 @@ func brokerServe(ctx context.Context, args []string) error {
 
 	err = broker.Serve(ctx, ln,
 		broker.WithCapacity(memMB, slots),
+		broker.WithMemoryReserve(reserve),
 		broker.WithServices(serviceHost{reg}),
 		broker.WithIdleExit(f.IdleExit),
 		broker.WithLogger(slog.Default()),

@@ -145,6 +145,16 @@ type MachineSnapshot struct {
 	Waiting []MachineWaiter `json:"waiting,omitempty" yaml:"waiting,omitempty"`
 	// Refused is the last MGS3009 refusals the broker answered, newest first.
 	Refused []MachineRefusal `json:"refused,omitempty" yaml:"refused,omitempty"`
+	// Reserve is what BudgetMB leaves the OS and desktop, and why.
+	Reserve MemoryReserve `json:"reserve,omitzero" yaml:"reserve,omitempty"`
+}
+
+// MemoryReserve is the memory kept back from build work: TotalMB less
+// ReservedMB is the budget. Rule says which profile set it.
+type MemoryReserve struct {
+	TotalMB    int    `json:"total_mb,omitzero" yaml:"total_mb,omitempty"`
+	ReservedMB int    `json:"reserved_mb,omitzero" yaml:"reserved_mb,omitempty"`
+	Rule       string `json:"rule,omitempty" yaml:"rule,omitempty"`
 }
 
 // HolderList names each holder as its pid, its command (or its target and project when it

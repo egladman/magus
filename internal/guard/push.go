@@ -80,6 +80,9 @@ const (
 	// gateNarrow is no passing gate at this commit, and passing narrow runs
 	// covering every file changed since the last one (narrowCoverageAt).
 	gateNarrow
+	// gateUnrun is a branch gate at this commit that passed everything this
+	// host could run. What it could not run is owed to PR CI.
+	gateUnrun
 )
 
 // gateCoverageAt reads the run log for gate invocations built from commit.
@@ -134,31 +137,39 @@ func gateCoverageAt(runsDir, commit string) gateCoverage {
 // as absent in the log while the redundancy check (MGS3010) refuses to run it again: two
 // rules each blocking the only way past the other.
 func gateVerdictAt(workspace, commit string) gateCoverage {
+	cover, _ := gateRecordAt(workspace, commit)
+	return cover
+}
+
+// gateRecordAt is gateVerdictAt with the record it read.
+func gateRecordAt(workspace, commit string) (gateCoverage, sessions.GateRecord) {
 	if workspace == "" || !matchableRevision(commit) {
-		return gateUnknown
+		return gateUnknown, sessions.GateRecord{}
 	}
 	dir, err := sessions.Dir(workspace)
 	if err != nil {
-		return gateUnknown
+		return gateUnknown, sessions.GateRecord{}
 	}
 	// Gate verdicts only, through the store's per-kind fold cache: a push used to decode
 	// every invocation in the store to find one record.
 	fold, err := sessions.ReadGateResults(dir)
 	if err != nil {
-		return gateUnknown
+		return gateUnknown, sessions.GateRecord{}
 	}
 	rec, ok := sessions.GateAt(fold, commit, string(types.TargetCI))
 	switch {
 	case !ok:
-		return gateUnknown
+		return gateUnknown, rec
+	case rec.Outcome == sessions.OutcomeUnrun && rec.Scope.CoversBranch():
+		return gateUnrun, rec
 	case !rec.BranchVerdict() && rec.Scope.Unscoped():
-		return gateUnscoped
+		return gateUnscoped, rec
 	case !rec.BranchVerdict():
-		return gateProjectScoped
+		return gateProjectScoped, rec
 	case rec.Outcome == sessions.OutcomePass:
-		return gatePassed
+		return gatePassed, rec
 	default:
-		return gateFailed
+		return gateFailed, rec
 	}
 }
 
@@ -292,7 +303,7 @@ func gradePushWithoutGate(ev pushEvidence, lease string) (decision, reason strin
 	// Unknown passes. This rule refuses on evidence or not at all: no run log, no VCS, or a
 	// host magus cannot read the revision from all mean the question was never asked, and
 	// a refusal there is one nobody can clear.
-	case gateUnknown, gatePassed, gateWaived, gateNarrow:
+	case gateUnknown, gatePassed, gateWaived, gateNarrow, gateUnrun:
 		return "", ""
 	case gateAbsent:
 		state = "no `" + string(types.TargetCI) + "` run is recorded at this commit"
@@ -335,6 +346,8 @@ type pushEvidence struct {
 	moved bool
 	// replay is the gate on the identical tree that covers a replayed commit.
 	replay sessions.GateRecord
+	// unrun is the gate at commit that could not run every target here.
+	unrun  sessions.GateRecord
 	waiver types.GateWaiver
 	// narrow is weighed only when nothing else covers the commit and no
 	// gate failed there.
@@ -354,6 +367,9 @@ func (ev pushEvidence) admitted() string {
 		return waiverNote(ev.commit, ev.waiver)
 	case ev.cover == gateNarrow:
 		return ev.narrow.admission(ev.commit)
+	case ev.cover == gateUnrun:
+		return fmt.Sprintf("magus workspace: `%s` at %s (%s) passed every target this host could run; PR CI owes the rest, which could not run here:\n  %s",
+			types.TargetCI, ev.commit, gateRunRef(ev.unrun), strings.Join(ev.unrun.Unrun, "\n  "))
 	}
 	return ""
 }
@@ -371,7 +387,11 @@ func pushCoverage(ctx context.Context, deps Dependencies, hook location, command
 		at = hookLocationAt(deps, push.dir)
 	}
 	ev := pushEvidence{commit: deps.revision(ctx, push.dir, push.rev)}
-	ev.cover = gateVerdictAt(at.workspace, ev.commit)
+	var rec sessions.GateRecord
+	ev.cover, rec = gateRecordAt(at.workspace, ev.commit)
+	if ev.cover == gateUnrun {
+		ev.unrun = rec
+	}
 	if ev.cover == gateUnknown {
 		ev.cover = gateCoverageAt(workspaceRunsDir(at.cacheDir), ev.commit)
 	}

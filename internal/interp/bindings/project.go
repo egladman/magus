@@ -459,6 +459,21 @@ func parseBuzzProjectOptions(ctx context.Context, v vm.Value) ([]workspace.Proje
 				}
 				opts = append(opts, workspace.WithTarget(name, workspace.Integrates(reason)))
 			}
+			if nv, ok := pv.MapGet("needs_ready"); ok {
+				var tools []string
+				if nv.IsList() {
+					for _, item := range nv.ListItems() {
+						if item.IsString() && strings.TrimSpace(item.AsString()) != "" {
+							tools = append(tools, strings.TrimSpace(item.AsString()))
+						}
+					}
+				}
+				if !nv.IsList() || len(tools) == 0 || len(tools) != len(nv.ListItems()) {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].needs_ready takes a non-empty list of tool names a bound spell probes for readiness, e.g. [\"docker\"]", name)
+				}
+				opts = append(opts, workspace.WithTarget(name, workspace.NeedsReady(tools...)))
+			}
 			// drift says what happens when this target's declared output moves under a
 			// read-only run. Absent means the default, which already gates a target that
 			// declares output, so this key exists to downgrade or switch off, not to

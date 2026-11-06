@@ -1,0 +1,97 @@
+# A target whose needs_ready tool is not ready fails as MGS3004 before its body
+# runs, and a gate whose only failures are that records "unrun" naming the target,
+# not "fail". The run still exits non-zero: PR CI owes the target.
+
+[!exec:git] skip 'the change is measured by a git diff'
+[!exec:sh] skip 'the fake docker and the store read need sh'
+env XDG_STATE_HOME=$WORK/.state
+chmod 0755 bin/docker
+env PATH=$WORK/bin${:}$PATH
+
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git add .gitignore magus.yaml magusfile.buzz
+exec git commit -m initial
+exec git tag base
+cp README.md.v2 README.md
+exec git add README.md
+
+! exec magus affected ci --base=base --no-redundancy-check
+stderr 'MGS3004'
+! stderr 'image body ran'
+exec sh -c 'cat "$XDG_STATE_HOME"/magus/sessions/*/*.jsonl'
+stdout '"outcome":"unrun"'
+stdout '"unrun":\["\.:ci: .*ctx\.needs: image: \[MGS3004\]'
+
+# A failure of the target's own code is a failed gate.
+cp magusfile.buzz.red magusfile.buzz
+! exec magus affected ci --base=base --no-redundancy-check
+exec sh -c 'cat "$XDG_STATE_HOME"/magus/sessions/*/*.jsonl'
+stdout '"outcome":"fail"'
+
+# needs_ready naming a tool no bound spell probes is a load error.
+cp magusfile.buzz.unbound magusfile.buzz
+! exec magus run image .
+stderr 'targets\["image"\]\.needs_ready names "docker", which no spell the project binds declares a ready probe for'
+
+-- .gitignore --
+.magus/
+.state/
+bin/
+*.v2
+*.red
+*.unbound
+-- bin/docker --
+#!/bin/sh
+# docker with its daemon stopped: the client answers, `docker info` cannot.
+case "$1" in
+--version) echo 'Docker version 29.3.1, build c2be9cc' ;;
+info) echo 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?' >&2; exit 1 ;;
+esac
+-- magus.yaml --
+{}
+-- README.md.v2 --
+# w
+-- magusfile.buzz --
+import "magus";
+import "proc";
+import "magus/spell/docker";
+
+magus\project({
+    "name": "root",
+    "sources": ["**/*.md"],
+    "spells": [docker],
+    "targets": {"image": {"needs_ready": ["docker"]}},
+});
+
+export fun image(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sh", ["-c", "echo image body ran >&2"]);
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(image);
+}
+-- magusfile.buzz.red --
+import "magus";
+import "proc";
+
+magus\project({"name": "root", "sources": ["**/*.md"]});
+
+export fun image(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sh", ["-c", "exit 1"]);
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(image);
+}
+-- magusfile.buzz.unbound --
+import "magus";
+
+magus\project({
+    "name": "root",
+    "sources": ["**/*.md"],
+    "targets": {"image": {"needs_ready": ["docker"]}},
+});
+
+export fun image(ctx: magus\Context, args: [str]) > void {}

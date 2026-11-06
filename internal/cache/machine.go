@@ -32,6 +32,7 @@ type MachineBudget struct {
 	mu          sync.Mutex
 	budgetMB    int
 	budgetSlots int
+	reserve     types.MemoryReserve
 	claims      map[string]*machineEntry
 	seq         int64
 
@@ -55,6 +56,12 @@ func NewMachineBudget(budgetMB, budgetSlots int) *MachineBudget {
 		budgetSlots: budgetSlots,
 		claims:      map[string]*machineEntry{},
 	}
+}
+
+// WithReserve records what the memory budget left the OS, for Snapshot to name.
+func (b *MachineBudget) WithReserve(r types.MemoryReserve) *MachineBudget {
+	b.reserve = r
+	return b
 }
 
 func (b *MachineBudget) clock() time.Time {
@@ -154,6 +161,7 @@ func (b *MachineBudget) Snapshot() types.MachineSnapshot {
 		BudgetSlots: b.budgetSlots,
 		HeldSlots:   heldSlots,
 		Holders:     b.holders(types.MachineClaim{}),
+		Reserve:     b.reserve,
 	}
 }
 

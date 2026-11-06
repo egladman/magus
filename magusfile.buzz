@@ -142,7 +142,7 @@ magus\project({
     },
     // buzz claims **/*.buzz, which go_build keys on, and builds the Buzz symbol index
     // (scip-buzz) beside the Go one.
-    "spells": [go, markdown, bash, buzz],
+    "spells": [go, markdown, bash, buzz, docker],
     // Tool configs no spell glob matches. Each changes what a target does, so an
     // undeclared one replays a stale verdict. Files doctor lists as undeclared stay
     // out when nothing reads them. Never add .gitattributes: magus writes it.
@@ -232,7 +232,10 @@ magus\project({
             "relinks": "./magus",
             "integrates": "links ./magus",
         },
-        "image-build": {"skip_cache": "pushes and cosign-signs a registry digest per invocation"},
+        "image-build": {
+            "skip_cache": "pushes and cosign-signs a registry digest per invocation",
+            "needs_ready": ["docker"],
+        },
         "image-registries": {"skip_cache": "reports the registry table resolved from the current environment"},
         "spell-publish": {"skip_cache": "pushes to a registry per invocation; a replay would publish nothing"},
         "spell-lock": {"skip_cache": "asks a registry under update, and writes no magus.lock while no remote spell is declared"},
@@ -514,8 +517,8 @@ fun exclusive_charms(ctx: magus\Context, a: str, b: str, code: str, question: st
 }
 
 // docker load needs a docker-save manifest.json beside the OCI layout (classic
-// daemons reject a bare OCI tar with blobs/json missing). It names nothing it
-// loads, so the tag follows by the image ID load prints.
+// daemons reject a bare OCI tar with blobs/json missing). The manifest names
+// the tag, so load tags the image itself.
 fun load_variant(ctx: magus\Context, variant: images\ImageVariant, platform: str, ldflags: str, tag: str) > images\Loaded {
     final one = images\only(variant, platform: platform);
     if (one.error != "") { return images\Loaded{ error = one.error }; }
@@ -524,14 +527,11 @@ fun load_variant(ctx: magus\Context, variant: images\ImageVariant, platform: str
     if (built.error != "") { return images\Loaded{ error = built.error }; }
     final layout = built.layouts[0].path;
     try {
-        final prep = images\prepareLoad(layout);
-        if (prep != "") { return images\Loaded{ error = prep }; }
+        final id = images\prepareLoad(layout, tag: tag);
+        if (id.error != "") { return images\Loaded{ error = id.error }; }
         final tarball = layout + ".tar";
         _ = archive\compress(layout, dest: tarball);
-        final said = proc\exec("docker", args: ["load", "--input", tarball]).stdout;
-        final id = images\loadedID(said);
-        if (id.error != "") { return images\Loaded{ error = id.error }; }
-        _ = proc\exec("docker", args: ["tag", id.id, tag]);
+        docker["docker-load"](ctx, {"args": ["--input", tarball]});
         // A binary that cannot exec on its base fails here, not later.
         docker["docker-run"](ctx, {"args": [tag, "version"]});
         return images\Loaded{ tag = tag, id = id.id, layout = layout };

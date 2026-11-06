@@ -373,6 +373,12 @@ func HumanOnly(reason string) TargetOption {
 	return func(t *types.Target) { t.HumanOnly = true; t.HumanOnlyReason = reason }
 }
 
+// NeedsReady returns a TargetOption naming the tools whose readiness probes run
+// before the target.
+func NeedsReady(tools ...string) TargetOption {
+	return func(t *types.Target) { t.NeedsReady = tools }
+}
+
 // Relinks returns a TargetOption that declares the binary a run of the target replaces,
 // workspace-relative ("./magus"). The guard keeps a pipe stage from following such a run,
 // and accepts it as the fix while that binary cannot load the tree.
