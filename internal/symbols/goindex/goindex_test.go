@@ -88,7 +88,7 @@ func (s *goindexSuite) update(ix *Indexer) (symbols.UpdateResult, string) {
 	return res, pack
 }
 
-func (s *goindexSuite) index(pack string) *scip.Index {
+func (s *goindexSuite) index(pack string) *symbols.Index {
 	idx, err := symbols.ReadIndex(pack, true)
 	s.Require().NoError(err)
 	return idx

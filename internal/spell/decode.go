@@ -2,6 +2,7 @@ package spell
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"maps"
 	"path"
@@ -30,27 +31,30 @@ func (r Resolved) Descriptor() (spells.Descriptor, error) {
 	if err != nil {
 		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
 	}
-	if m.Sandbox != nil {
-		if err := validateSandbox(*m.Sandbox); err != nil {
-			return spells.Descriptor{}, types.DiagnosticErrorf(types.AllowlistUnresolved, "spell %q: mgs_getSandbox: %v", name, err)
+	for _, step := range []func(*spells.Descriptor) error{
+		checkSandbox,
+		checkCoverage,
+		r.assembleOps,
+		func(m *spells.Descriptor) error { return applyModeArgs(m, r.Contract.ModeArgs) },
+		addSymbolIndexOp,
+		synthesizeInstall,
+		func(m *spells.Descriptor) error { return validateTools(*m) },
+	} {
+		if err := step(&m); err != nil {
+			return spells.Descriptor{}, err
 		}
 	}
-	if err := r.assembleOps(&m); err != nil {
-		return spells.Descriptor{}, err
-	}
-	if err := applyModeArgs(&m, r.Contract.ModeArgs); err != nil {
-		return spells.Descriptor{}, err
-	}
-	if err := addSymbolIndexOp(&m); err != nil {
-		return spells.Descriptor{}, err
-	}
-	if err := synthesizeInstall(&m); err != nil {
-		return spells.Descriptor{}, err
-	}
-	if err := validateTools(m); err != nil {
-		return spells.Descriptor{}, err
-	}
 	return m, nil
+}
+
+func checkSandbox(m *spells.Descriptor) error {
+	if m.Sandbox == nil {
+		return nil
+	}
+	if err := validateSandbox(*m.Sandbox); err != nil {
+		return types.DiagnosticErrorf(types.AllowlistUnresolved, "spell %q: mgs_getSandbox: %v", m.Name, err)
+	}
+	return nil
 }
 
 // declared validates the contract's load-time answers other than the ops and the sandbox,
@@ -101,6 +105,7 @@ func (r Resolved) declared() (spells.Descriptor, error) {
 		LanguageExtensions: lang.Extensions,
 		Syntax:             lang.Syntax,
 		SymbolIndexer:      indexer,
+		Coverage:           c.Coverage,
 		Sandbox:            c.Sandbox,
 		Opaque:             c.Opaque,
 	}, nil
@@ -131,6 +136,28 @@ func addSymbolIndexOp(m *spells.Descriptor) error {
 	command.Capture, command.Quiet = true, true
 	m.Ops[indexer.OpName()] = spells.Op{Kind: spells.OpKindSymbolIndex, Command: command}
 	return nil
+}
+
+func checkCoverage(m *spells.Descriptor) error {
+	if m.Coverage == nil {
+		return nil
+	}
+	if err := validateCoverage(*m.Coverage); err != nil {
+		return fmt.Errorf("spell %q: mgs_getCoverage: %w", m.Name, err)
+	}
+	return nil
+}
+
+// validateCoverage refuses a report magus would have to guess how to read or
+// where to find.
+func validateCoverage(cov spells.Coverage) error {
+	if !cov.Format.Valid() || cov.Format == spells.CoverageFormatNone {
+		return fmt.Errorf("format is %s, want one of %s", cmp.Or(string(cov.Format), "none"), strings.Join(cov.Format.Values(), ", "))
+	}
+	if !path.IsAbs(cov.Profile) && path.Clean(cov.Profile) == cov.Profile && filepath.IsLocal(cov.Profile) {
+		return nil
+	}
+	return fmt.Errorf("profile %q must be a clean slash path inside the project directory", cov.Profile)
 }
 
 // assembleOps turns the spell's target and service handlers into m.Ops and m.DocOps.
@@ -527,17 +554,47 @@ func validateLanguage(l *spells.Language) (spells.Language, error) {
 	if l.Name == "" {
 		return spells.Language{}, fmt.Errorf("language: name is required")
 	}
-	if syn := l.Syntax; syn != nil {
-		if syn.Comments != nil && len(l.Extensions) == 0 {
-			return spells.Language{}, fmt.Errorf("language: syntax.comments without extensions covers no files, declare the extensions that are this language")
-		}
-		if syn.Stubs != nil {
-			if err := validateStubs(*syn.Stubs); err != nil {
-				return spells.Language{}, fmt.Errorf("language.syntax: %w", err)
-			}
-		}
+	if err := validateSyntax(*l); err != nil {
+		return spells.Language{}, err
 	}
 	return *l, nil
+}
+
+func validateSyntax(l spells.Language) error {
+	syn := l.Syntax
+	if syn == nil {
+		return nil
+	}
+	if syn.Comments != nil && len(l.Extensions) == 0 {
+		return fmt.Errorf("language: syntax.comments without extensions covers no files, declare the extensions that are this language")
+	}
+	for _, check := range []func(spells.Syntax) error{checkSyntaxStubs, checkTokenFacts, checkDecisions} {
+		if err := check(*syn); err != nil {
+			return fmt.Errorf("language.syntax: %w", err)
+		}
+	}
+	return nil
+}
+
+func checkSyntaxStubs(syn spells.Syntax) error {
+	if syn.Stubs == nil {
+		return nil
+	}
+	return validateStubs(*syn.Stubs)
+}
+
+func checkTokenFacts(syn spells.Syntax) error {
+	if syn.Comments == nil && syn.Decisions != nil {
+		return errors.New("decisions need comments, or a token in a comment or string counts as code")
+	}
+	return nil
+}
+
+func checkDecisions(syn spells.Syntax) error {
+	if syn.Decisions != nil && len(syn.Decisions.Keywords)+len(syn.Decisions.Operators) == 0 {
+		return errors.New("decisions declare no keyword or operator, so every function would read complexity 1")
+	}
+	return nil
 }
 
 // validateStubs requires every field of a stub syntax: a record with no kinds stubs

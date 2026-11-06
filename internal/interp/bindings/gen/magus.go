@@ -302,6 +302,17 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ObjectVolatility(ret0), nil
 	}))
+	m.MapSet("magus__Workspace__risk", vm.DirectValue("magus.magus__Workspace__risk", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__risk", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusWorkspaceRisk(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectChangeRisk(ret0), nil
+	}))
 	m.MapSet("magus__Workspace__skills", vm.DirectValue("magus.magus__Workspace__skills", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		recv, err := ffi.Object("magus\\magus__Workspace__skills", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
 		if err != nil {
@@ -693,6 +704,17 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, ffi.Error(err)
 		}
 		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("magus__Change__risk", vm.DirectValue("magus.magus__Change__risk", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Change__risk", "recv", bzArgs, 0, decode.DecodeChange)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		ret0, err := std.MagusChangeRisk(ctx, recv)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectChangeRisk(ret0), nil
 	}))
 	m.MapSet("magus__History__hotspots", vm.DirectValue("magus.magus__History__hotspots", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		recv, err := ffi.Object("magus\\magus__History__hotspots", "recv", bzArgs, 0, decode.DecodeHistory)

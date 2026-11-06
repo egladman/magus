@@ -62,6 +62,8 @@ export fun mgs_getLanguage() > Language {
                 bodyStyle = "brace",
                 body = "\{\n    todo!(\"\{\{&Name}} lands in \{\{&Branch}}\")\n\}",
             },
+            operators = ["==", "!=", "<=", ">=", "&&", "||", "=>", "->", "::", "..", "..=", "+=", "-=", "<<=", ">>="],
+            decisions = DecisionSyntax{keywords = ["if", "while", "for"], operators = ["&&", "||", "=>"]},
         },
     };
 }
@@ -88,7 +90,7 @@ export fun mgs_listManifests() > [Manifest] {
     return [Manifest{value = "Cargo.toml", lockCandidates = ["Cargo.lock"], installs = {"Cargo.lock": Install{
         name = "cargo-fetch",
         command = Command{bin = "cargo", args = args, charms = {
-            "update": Charm{ops = set(args, "fetch", "update").ops + drop(args, "--locked").ops},
+            "update": Charm{ops = set(args, anchor: "fetch", val: "update").ops + drop(args, anchor: "--locked").ops},
         }},
     }}}];
 }
@@ -111,10 +113,16 @@ fun cargoFmt(target: Target) > Command {
     // matters — drop --check (the higher index) before -- so the patch applies
     // sequentially without an index shifting out from under it.
     return Command{bin = "cargo", args = args, charms = {
-        "rw": Charm{ ops = drop(args, "--check").ops + drop(args, "--").ops },
+        "rw": Charm{ ops = drop(args, anchor: "--check").ops + drop(args, anchor: "--").ops },
     }};
 }
 fun cargoTest(target: Target) > Command { return Command{bin = "cargo", args = ["test"]}; }
+// The project's test target writes it with
+// `cargo llvm-cov --lcov --output-path lcov.info`.
+export fun mgs_getCoverage() > Coverage {
+    return Coverage{format = CoverageFormat.lcov, profile = "lcov.info"};
+}
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"cargo-build": cargoBuild, "cargo-clean": cargoClean, "cargo-clippy": cargoClippy, "cargo-fmt": cargoFmt, "cargo-test": cargoTest};
 }

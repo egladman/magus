@@ -54,6 +54,7 @@ func TestReadContract(t *testing.T) {
 		"mgs_getTools":          "{str: Tool}",
 		"mgs_getLanguage":       "Language",
 		"mgs_getSymbolIndexer":  "SymbolIndexer",
+		"mgs_getCoverage":       "Coverage",
 		"mgs_getSandbox":        "Sandbox",
 		"mgs_isOpaque":          "bool",
 		"mgs_getModeArgs":       "{str: [str]}",

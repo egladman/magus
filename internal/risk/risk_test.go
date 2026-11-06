@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestClassifiedLine pins the per-file rendering a merge report prints: the path, its
@@ -541,4 +542,13 @@ func TestOverlappingClaims(t *testing.T) {
 
 	_, _, ok = OverlappingClaims([]string{"A"}, []string{"B", "execute"})
 	assert.False(t, ok, "claims naming different declarations are disjoint")
+}
+
+type stripDirectiveSuite struct{ suite.Suite }
+
+func TestStripDirective(t *testing.T) { suite.Run(t, new(stripDirectiveSuite)) }
+
+func (s *stripDirectiveSuite) TestStripCommentsKeepsADirectiveAndItsReason() {
+	src := "x := f() //nolint:nilerr // a < b\n"
+	s.Equal(src, StripComments(src, commentSyntax(s.T(), ".go")))
 }

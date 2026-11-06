@@ -74,6 +74,9 @@
 {"group":"file:changes/unreleased/cache-keys-the-binary.md","path":"changes/unreleased/cache-keys-the-binary.md"}
 {"group":"file:changes/unreleased/cache-skips-sibling-outputs.md","path":"changes/unreleased/cache-skips-sibling-outputs.md"}
 {"group":"file:changes/unreleased/ceilings-in-refs-query-job.md","path":"changes/unreleased/ceilings-in-refs-query-job.md"}
+{"group":"file:changes/unreleased/change-risk-base-from-main-ci.md","path":"changes/unreleased/change-risk-base-from-main-ci.md"}
+{"group":"file:changes/unreleased/change-risk-keeps-covered-lines.md","path":"changes/unreleased/change-risk-keeps-covered-lines.md"}
+{"group":"file:changes/unreleased/change-risk-reads-test-coverage.md","path":"changes/unreleased/change-risk-reads-test-coverage.md"}
 {"group":"file:changes/unreleased/checkout-reporter.md","path":"changes/unreleased/checkout-reporter.md"}
 {"group":"file:changes/unreleased/ci-asks-for-whole-machine-explicitly.md","path":"changes/unreleased/ci-asks-for-whole-machine-explicitly.md"}
 {"group":"file:changes/unreleased/ci-gates-in-the-queue-box.md","path":"changes/unreleased/ci-gates-in-the-queue-box.md"}
@@ -710,6 +713,7 @@
 {"group":"dir:docs/glossary","path":"docs/glossary/buzz.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/cache.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/cantrip.md"}
+{"group":"dir:docs/glossary","path":"docs/glossary/change-risk.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/charm.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/chord.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/ci.md"}
@@ -1026,12 +1030,14 @@
 {"group":"dir:hack/lint","path":"hack/lint/symbol-docs-follow-proofread-rules.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/testpairing-pairing-has-no-exemptions.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/tool-descriptions-follow-proofread-rules.buzz"}
+{"group":"dir:hack/lint","path":"hack/lint/touched-functions-keep-change-risk-under-10.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/trusted-jobs-restore-no-actions-cache.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/typescript-never-throws.buzz"}
 {"group":"dir:hack/lint","path":"hack/lint/whole-tree-targets-key-on-the-go-tree.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/advisories.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/badges.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/branch-stack.buzz"}
+{"group":"dir:hack/magusfile","path":"hack/magusfile/buzz-coverage.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/changelog.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/commits.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/conformance-ceiling.buzz"}
@@ -1055,6 +1061,10 @@
 {"group":"dir:hack/remote","path":"hack/remote/on-actions.buzz"}
 {"group":"dir:hack/remote","path":"hack/remote/on-linux.buzz"}
 {"group":"dir:internal/agent/skills/magus-sdk","path":"internal/agent/skills/magus-sdk/SKILL.md"}
+{"group":"dir:internal/coverage","path":"internal/coverage/buzz.go"}
+{"group":"dir:internal/coverage","path":"internal/coverage/buzz_test.go"}
+{"group":"dir:internal/coverage","path":"internal/coverage/coverage.go"}
+{"group":"dir:internal/coverage","path":"internal/coverage/coverage_test.go"}
 {"group":"dir:internal/edit","path":"internal/edit/edit.go"}
 {"group":"dir:internal/edit","path":"internal/edit/edit_test.go"}
 {"group":"dir:internal/edit","path":"internal/edit/rename.go"}
@@ -1489,6 +1499,8 @@
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/commentsyntax.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/commit.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/commitauthor.buzz"}
+{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/coverage.buzz"}
+{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/decisionsyntax.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/discoveredproject.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/discoveryfile.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/discoverygap.buzz"}

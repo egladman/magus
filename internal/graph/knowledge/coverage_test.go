@@ -3,6 +3,7 @@ package knowledge
 import (
 	"testing"
 
+	"github.com/egladman/magus/internal/coverage"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,31 +24,18 @@ func TestParseCoverageAggregatesPerFile(t *testing.T) {
 			Path:    "internal/bar.go",
 			Covered: 0,
 			Total:   1,
-			Blocks:  []CoverageBlock{{StartLine: 5, EndLine: 6, NumStmt: 1, Hits: 0}},
+			Blocks:  []coverage.Block{{StartLine: 5, EndLine: 6, Units: 1, Hits: 0}},
 		},
 		{
 			Path:    "internal/foo.go",
 			Covered: 3,
 			Total:   5,
-			Blocks: []CoverageBlock{
-				{StartLine: 10, EndLine: 12, NumStmt: 3, Hits: 1},
-				{StartLine: 20, EndLine: 20, NumStmt: 2, Hits: 0},
+			Blocks: []coverage.Block{
+				{StartLine: 10, EndLine: 12, Units: 3, Hits: 1},
+				{StartLine: 20, EndLine: 20, Units: 2, Hits: 0},
 			},
 		},
 	}, got)
-}
-
-func TestParseCoverageDropsForeignAndMalformed(t *testing.T) {
-	profile := []byte("mode: set\n" +
-		"other.com/pkg/x.go:1.1,2.2 1 1\n" +
-		"github.com/egladman/magus/ok.go:1.1,2.2 1 1\n" +
-		"garbage line without colon location\n" +
-		"github.com/egladman/magus/bad.go:1.1,2.2 notanum 1\n")
-
-	got := ParseCoverage(profile, testModule)
-
-	require.Len(t, got, 1)
-	assert.Equal(t, "ok.go", got[0].Path)
 }
 
 func TestParseCoverageEmptyModuleYieldsNil(t *testing.T) {
@@ -60,10 +48,10 @@ func TestAssembleCoverageFileAndSymbolNodes(t *testing.T) {
 		Path:    "internal/foo.go",
 		Covered: 4,
 		Total:   6,
-		Blocks: []CoverageBlock{
-			{StartLine: 3, EndLine: 4, NumStmt: 1, Hits: 0},
-			{StartLine: 12, EndLine: 14, NumStmt: 2, Hits: 1},
-			{StartLine: 22, EndLine: 24, NumStmt: 3, Hits: 0},
+		Blocks: []coverage.Block{
+			{StartLine: 3, EndLine: 4, Units: 1, Hits: 0},
+			{StartLine: 12, EndLine: 14, Units: 2, Hits: 1},
+			{StartLine: 22, EndLine: 24, Units: 3, Hits: 0},
 		},
 	}}
 	symbols := map[string][]types.KnowledgeSymbol{
@@ -97,7 +85,7 @@ func TestAssembleCoverageWithoutSymbolsIsFileOnly(t *testing.T) {
 	cov := []FileCoverage{{
 		Path:   "internal/foo.go",
 		Total:  2,
-		Blocks: []CoverageBlock{{StartLine: 12, EndLine: 14, NumStmt: 2, Hits: 0}},
+		Blocks: []coverage.Block{{StartLine: 12, EndLine: 14, Units: 2, Hits: 0}},
 	}}
 	sh := assembleCoverage(cov, nil)
 	require.Len(t, sh.Nodes, 1)

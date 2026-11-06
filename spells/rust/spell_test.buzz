@@ -125,3 +125,26 @@ test "an unreadable manifest is claimed with a gap" {
     std\assert(claims[0].targets.len() == 0, message: "no targets on a manifest it could not read");
     std\assert(hasGap(claims[0], file: "x/Cargo.toml", fragment: "Cargo.toml:"), message: "parse error named");
 }
+
+test "decisions count each match arm, one more than the textbook" {
+    final decisions = rust\mgs_getLanguage().syntax!.decisions!;
+    std\assert(decisions.keywords.join(" ") == "if while for", message: "keywords");
+    std\assert(decisions.operators.join(" ") == "&& || =>", message: "operators");
+}
+
+test "coverage is cargo llvm-cov's lcov and cargo-test keeps no test scope" {
+    final coverage = rust\mgs_getCoverage();
+    std\assert(coverage.format == CoverageFormat.lcov and coverage.profile == "lcov.info", message: "report");
+    std\assert(rust\mgs_listTargets()["cargo-test"]!(Target{}).testScope.len() == 0, message: "whole crate");
+}
+
+test "generic brackets are no decision" {
+    final syntax = rust\mgs_getLanguage().syntax!;
+    std\assert(syntax.decisions!.operators.indexOf("<") == null and syntax.decisions!.operators.indexOf(">") == null, message: "brackets are no decision");
+}
+
+test "an empty closure || counts as a decision: a declared limit" {
+    // The declared token cannot tell a closure from or.
+    final decisions = rust\mgs_getLanguage().syntax!.decisions!;
+    std\assert(decisions.operators.indexOf("||") != null, message: "|| is a decision for closures and or alike");
+}

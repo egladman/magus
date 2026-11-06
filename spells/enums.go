@@ -35,3 +35,9 @@ var sandboxAccesses = enum.Set[SandboxAccess]{"ro", "rx", "rw", "rwx"}
 func (v SandboxAccess) Values() []string { return sandboxAccesses.Strings() }
 func (v SandboxAccess) Valid() bool      { return sandboxAccesses.Valid(v) }
 func (v SandboxAccess) String() string   { return enum.String(v) }
+
+var coverageFormats = enum.Set[CoverageFormat]{"lcov", "go-coverprofile"}
+
+func (v CoverageFormat) Values() []string { return coverageFormats.Strings() }
+func (v CoverageFormat) Valid() bool      { return coverageFormats.Valid(v) }
+func (v CoverageFormat) String() string   { return enum.String(v) }

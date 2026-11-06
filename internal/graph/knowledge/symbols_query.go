@@ -38,7 +38,7 @@ type symbolNames struct {
 // rankedAttrs are the node attrs Retrieve's filters, its lexical document and a match
 // read. Any other attr reaches a query's output only through the neighborhood, which is
 // built from decoded shards.
-var rankedAttrs = []string{attrLanguage, attrRole, types.AttrLayer, types.AttrMarkerFamily, AttrStaleness, AttrOutrunDays, AttrDoc, AttrSignature}
+var rankedAttrs = []string{AttrLanguage, attrRole, types.AttrLayer, types.AttrMarkerFamily, AttrStaleness, AttrOutrunDays, AttrDoc, AttrSignature}
 
 func (s *Store) namesPath() string { return filepath.Join(s.dir, "shards", symbolsNamesFile) }
 

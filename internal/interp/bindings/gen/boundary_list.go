@@ -36,6 +36,10 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Case", Zero: types.Case{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCase(v.(types.Case)) }},
 	{Name: "ChainStep", Zero: types.ChainStep{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectChainStep(v.(types.ChainStep)) }},
 	{Name: "Change", Zero: types.Change{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectChange(v.(types.Change), enums) }},
+	{Name: "ChangeRisk", Zero: types.ChangeRisk{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectChangeRisk(v.(types.ChangeRisk)) }},
+	{Name: "ChangeRiskFunction", Zero: types.ChangeRiskFunction{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectChangeRiskFunction(v.(types.ChangeRiskFunction))
+	}},
 	{Name: "CharmConflict", Zero: spells.CharmConflict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmConflict(v.(spells.CharmConflict)) }},
 	{Name: "CharmDeclaration", Zero: types.CharmDeclaration{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmDeclaration(v.(types.CharmDeclaration)) }},
 	{Name: "CharmEntry", Zero: types.CharmEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmEntry(v.(types.CharmEntry)) }},
@@ -75,6 +79,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ContextWindow", Zero: types.ContextWindow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectContextWindow(v.(types.ContextWindow), enums) }},
 	{Name: "Credential", Zero: types.Credential{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCredential(v.(types.Credential), enums) }},
 	{Name: "CrossTargetRef", Zero: types.CrossTargetRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCrossTargetRef(v.(types.CrossTargetRef)) }},
+	{Name: "DecisionSyntax", Zero: spells.DecisionSyntax{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDecisionSyntax(v.(spells.DecisionSyntax)) }},
 	{Name: "Descriptor", Zero: types.ImageDescriptor{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectImageDescriptor(v.(types.ImageDescriptor), enums)
 	}},
@@ -147,6 +152,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "FileStat", Zero: types.FileStat{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileStat(v.(types.FileStat)) }},
 	{Name: "FindReviewRequest", Zero: types.FindReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFindReviewRequest(v.(types.FindReviewRequest)) }},
 	{Name: "FlagParse", Zero: types.FlagParse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFlagParse(v.(types.FlagParse)) }},
+	{Name: "FunctionGap", Zero: types.FunctionGap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFunctionGap(v.(types.FunctionGap)) }},
 	{Name: "GateEvidence", Zero: types.GateEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGateEvidence(v.(types.GateEvidence)) }},
 	{Name: "GateStatus", Zero: types.GateStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGateStatus(v.(types.GateStatus)) }},
 	{Name: "Goal", Zero: types.Goal{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGoal(v.(types.Goal), enums) }},

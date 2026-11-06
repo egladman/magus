@@ -29,7 +29,7 @@ func occurrenceFixture() *scip.Index {
 }
 
 func TestOccurrenceFileRoundTripsOneKeyAtATime(t *testing.T) {
-	all, err := IndexOccurrences(t.Context(), occurrenceFixture(), "")
+	all, err := IndexOccurrences(t.Context(), &Index{Index: occurrenceFixture()}, "")
 	require.NoError(t, err)
 	path := filepath.Join(t.TempDir(), "index.occ")
 	require.NoError(t, WriteOccurrenceFile(path, "stamp-1", all))

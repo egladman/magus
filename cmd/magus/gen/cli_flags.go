@@ -2132,12 +2132,12 @@ type BuzzFlags struct {
 func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 	var f BuzzFlags
 	fs.StringVar(&f.E, FlagBuzzE, "", "Execute `code` given on the command line instead of a file")
-	fs.BoolVar(&f.Test, FlagBuzzT, false, "Run the file's test \"...\" {} blocks and report pass/fail")
+	fs.BoolVar(&f.Test, FlagBuzzT, false, "Run the test \"...\" {} blocks of every script given and report pass/fail")
 	fs.BoolVar(&f.Test, FlagBuzzTest, false, "Alias for -t")
 	cmdline.NegatedBoolVar(fs, &f.Test, FlagBuzzT)
 	fs.BoolVar(&f.Check, FlagBuzzCheck, false, "Parse and type-check the named files without running them; report every diagnostic")
 	cmdline.NegatedBoolVar(fs, &f.Check, FlagBuzzCheck)
-	fs.StringVar(&f.Coverprofile, FlagBuzzCoverprofile, "", "Write an LCOV coverprofile for the file under `-t` (requires `-t`)")
+	fs.StringVar(&f.Coverprofile, FlagBuzzCoverprofile, "", "Write one LCOV coverprofile across the files under `-t` (requires `-t`)")
 	fs.BoolVar(&f.Profile, FlagBuzzProfile, false, "Print where compile and import time went, after the script runs")
 	cmdline.NegatedBoolVar(fs, &f.Profile, FlagBuzzProfile)
 	fs.BoolVar(&f.Record, FlagBuzzRecord, false, "Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (`magus query output <ref>` reopens it)")

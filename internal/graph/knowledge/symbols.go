@@ -140,7 +140,7 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		seenFiles[path] = true
 		var attrs map[string]string
 		if language != "" {
-			attrs = map[string]string{attrLanguage: language}
+			attrs = map[string]string{AttrLanguage: language}
 		}
 		if size, ok := sizes[path]; ok {
 			attrs = fileSizeAttrs(attrs, size[0], size[1])
@@ -159,7 +159,7 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		sID := symbolID(sym.Key)
 		attrs := map[string]string{}
 		if sym.Language != "" {
-			attrs[attrLanguage] = sym.Language
+			attrs[AttrLanguage] = sym.Language
 		}
 		if sym.SymbolKind != "" {
 			attrs[attrSymbolKind] = sym.SymbolKind
@@ -186,16 +186,7 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		if sym.Doc != "" {
 			attrs[AttrDoc] = sym.Doc
 		}
-		if sym.BodyDigest != "" {
-			attrs[AttrBodyDigest] = sym.BodyDigest
-		}
-		if sym.BodyShape != "" {
-			attrs[AttrBodyShape] = sym.BodyShape
-			attrs[attrBodyTokens] = strconv.Itoa(sym.BodyTokens)
-		}
-		if len(sym.BranchIdents) > 0 {
-			attrs[attrBranchIdents] = strings.Join(sym.BranchIdents, ",")
-		}
+		bodyAttrs(attrs, sym)
 		if sym.PackageName != "" {
 			attrs[attrPackageName] = sym.PackageName
 		}
@@ -226,6 +217,23 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		}
 	}
 	return s
+}
+
+// bodyAttrs sets the attrs measured from a symbol's definition body.
+func bodyAttrs(attrs map[string]string, sym types.KnowledgeSymbol) {
+	if sym.BodyDigest != "" {
+		attrs[AttrBodyDigest] = sym.BodyDigest
+	}
+	if sym.BodyShape != "" {
+		attrs[AttrBodyShape] = sym.BodyShape
+		attrs[attrBodyTokens] = strconv.Itoa(sym.BodyTokens)
+	}
+	if len(sym.BranchIdents) > 0 {
+		attrs[attrBranchIdents] = strings.Join(sym.BranchIdents, ",")
+	}
+	if sym.Complexity > 0 {
+		attrs[AttrComplexity] = strconv.Itoa(sym.Complexity)
+	}
 }
 
 // definesEdge is file -defines-> sID. A symbol defined in several files has a doc per file

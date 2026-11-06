@@ -15,9 +15,11 @@ build, and slop is still possible in unskilled hands. A gate that forgets this
 turns into four risks, and each has a stated answer.
 
 - **Goodhart.** Once a gate is a number, tests get written to move it. Change
-  risk is paired with mutation testing, which asks whether the tests check
-  anything, so a test that runs a line and asserts nothing does not move the
-  second number. The one exception marker needs a written reason.
+  risk is to be paired with mutation testing, which asks whether the tests
+  check anything, so a test that runs a line and asserts nothing does not move
+  the second number. Until that lands
+  ([ADR 0023](../../decisions/0023-touched-functions-meet-change-risk-and-their-mutants.md)),
+  such a test still lowers change risk, and change risk has no exception form.
 - **False authority.** A green gate is not "good code". Each gate documents what
   it measures and what it cannot: coverage measures lines run, not behavior
   pinned; change risk measures complexity against coverage, not whether the
@@ -33,8 +35,9 @@ turns into four risks, and each has a stated answer.
 
 ## Enforced by
 
-- The mutation and change-risk gates run together, and an exception marker
-  without a reason is itself a finding.
+- The change-risk gate judges each touched function against itself at base,
+  and a function it cannot score is a finding that names why
+  (`hack/lint/touched-functions-keep-change-risk-under-10.buzz`).
 - A docs section on a gate's score, ceiling, floor or threshold that says what
   it measures also says what it does not
   (`hack/lint/gate-pages-say-what-they-do-not-measure.buzz`).
@@ -46,8 +49,8 @@ turns into four risks, and each has a stated answer.
 ## Good
 
 ```text
-change risk 41 on parse.go: mutation score 0.30, 7 of 10 mutants survived;
-assert on the returned error in TestParseRejectsEmpty, or delete the branch
+parse.Parse has change risk 42.00 (complexity 6, coverage 0%), past 10 (12.00 at base)
+Cover it with tests, or split it into functions that each score 10 or less.
 ```
 
 The refusal names the number, the reason and the fix.

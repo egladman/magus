@@ -21,7 +21,7 @@ import (
 
 // formatVersion changes whenever a shard this indexer writes would come out different
 // for the same source, so a pack written before is rebuilt whole.
-const formatVersion = "shindex 1"
+const formatVersion = "shindex 3"
 
 // scheme is the SCIP scheme of every symbol the indexer names, the Go indexer's too.
 const scheme = "magus"
@@ -215,7 +215,9 @@ type script struct {
 	err  error // why it was not read or did not parse
 
 	funcs map[string]bool
-	vars  map[string]*varDef
+	// decisions is each function's decision points, by name.
+	decisions map[string]int
+	vars      map[string]*varDef
 	// locals holds the names each function declares local.
 	locals  map[*syntax.FuncDecl]map[string]bool
 	sourced []sourced
@@ -241,7 +243,7 @@ func (r *reader) load(abs string) *script {
 		return s
 	}
 	rel, _ := relative(r.root, abs)
-	s := &script{rel: rel, abs: abs, funcs: map[string]bool{}, vars: map[string]*varDef{}, locals: map[*syntax.FuncDecl]map[string]bool{}}
+	s := &script{rel: rel, abs: abs, funcs: map[string]bool{}, decisions: map[string]int{}, vars: map[string]*varDef{}, locals: map[*syntax.FuncDecl]map[string]bool{}}
 	r.scripts[abs] = s
 	s.data, s.err = os.ReadFile(abs)
 	if s.err != nil {
@@ -271,6 +273,7 @@ func (r *reader) collect(s *script) {
 		case *syntax.FuncDecl:
 			if n.Name != nil {
 				s.funcs[n.Name.Value] = true
+				s.decisions[n.Name.Value] = countDecisions(n)
 			}
 			s.locals[n] = map[string]bool{}
 		case *syntax.CallExpr:
@@ -299,6 +302,45 @@ func (r *reader) collect(s *script) {
 		}
 		return true
 	})
+}
+
+// countDecisions counts the branch points in fn's body, nested ones too.
+func countDecisions(fn *syntax.FuncDecl) int {
+	total := 0
+	syntax.Walk(fn.Body, func(n syntax.Node) bool {
+		total += decisionWeight(n)
+		return true
+	})
+	return total
+}
+
+func decisionWeight(n syntax.Node) int {
+	switch n := n.(type) {
+	case *syntax.WhileClause, *syntax.ForClause:
+		return 1
+	case *syntax.IfClause:
+		return boolInt(n.Cond != nil)
+	case *syntax.CaseClause:
+		return len(n.Items)
+	}
+	return logicalWeight(n)
+}
+
+func logicalWeight(n syntax.Node) int {
+	switch n := n.(type) {
+	case *syntax.BinaryCmd:
+		return boolInt(n.Op == syntax.AndStmt || n.Op == syntax.OrStmt)
+	case *syntax.BinaryTest:
+		return boolInt(n.Op == syntax.AndTest || n.Op == syntax.OrTest)
+	}
+	return 0
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func (s *script) collectAssign(a *syntax.Assign, fn *syntax.FuncDecl, variant string, stmt *syntax.Stmt) {

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/internal/coverage"
 	"github.com/egladman/magus/types"
 )
 
@@ -28,124 +29,28 @@ const coverageShardName = "@coverage"
 // isCoverageShard reports whether name is the observed coverage overlay shard.
 func isCoverageShard(name string) bool { return name == coverageShardName }
 
-// CoverageBlock is one line-range record from a Go coverage profile: the statement
-// count the range holds and whether the run hit it. Retained per file (not just
-// aggregated) so coverage can be attributed to individual symbols by line range.
-type CoverageBlock struct {
-	StartLine int
-	EndLine   int
-	NumStmt   int
-	Hits      int
-}
-
 // FileCoverage is one source file's parsed coverage: its workspace-relative path, the
 // covered/total statement totals (the file-level ratio), and the raw blocks (for
-// symbol-level attribution). Covered counts statements the run hit at least once.
+// symbol-level attribution). It has [coverage.File]'s shape, so one converts to the other.
 type FileCoverage struct {
 	Path    string
 	Covered int
 	Total   int
-	Blocks  []CoverageBlock
+	Blocks  []coverage.Block
 }
 
-// ParseCoverage parses a Go coverage profile into per-file coverage, keyed by
-// workspace-relative path. Profile lines are module-qualified
-// ("github.com/egladman/magus/internal/foo.go:12.2,14.16 3 1"), so modulePath (the
-// go.mod module path) is stripped to recover the workspace-relative path the file and
-// symbol nodes use. A line outside modulePath (a nested module, or a std/vendored path)
-// is dropped rather than mis-attributed. Malformed lines are skipped, never fatal:
-// coverage is best-effort enrichment. The result is sorted by path for deterministic
-// assembly. A profile that covers nothing yields nil.
+// ParseCoverage parses a Go coverage profile into per-file coverage as
+// [coverage.ParseGoProfile] reads it. A profile that covers nothing yields nil.
 func ParseCoverage(profile []byte, modulePath string) []FileCoverage {
-	prefix := modulePath
-	if prefix != "" && !strings.HasSuffix(prefix, "/") {
-		prefix += "/"
-	}
-	byPath := map[string]*FileCoverage{}
-	for _, raw := range strings.Split(string(profile), "\n") {
-		line := strings.TrimSpace(raw)
-		if line == "" || strings.HasPrefix(line, "mode:") {
-			continue
-		}
-		path, blk, ok := parseCoverageLine(line)
-		if !ok {
-			continue
-		}
-		rel, ok := strings.CutPrefix(path, prefix)
-		if !ok || prefix == "" {
-			// prefix == "" means we could not learn the module path; without it the
-			// module-qualified path never matches a node, so drop rather than guess.
-			continue
-		}
-		fc := byPath[rel]
-		if fc == nil {
-			fc = &FileCoverage{Path: rel}
-			byPath[rel] = fc
-		}
-		fc.Total += blk.NumStmt
-		if blk.Hits > 0 {
-			fc.Covered += blk.NumStmt
-		}
-		fc.Blocks = append(fc.Blocks, blk)
-	}
-	if len(byPath) == 0 {
+	files := coverage.ParseGoProfile(profile, modulePath)
+	if files == nil {
 		return nil
 	}
-	out := make([]FileCoverage, 0, len(byPath))
-	for _, fc := range byPath {
-		out = append(out, *fc)
+	out := make([]FileCoverage, len(files))
+	for i, f := range files {
+		out[i] = FileCoverage(f)
 	}
-	slices.SortFunc(out, func(a, b FileCoverage) int { return strings.Compare(a.Path, b.Path) })
 	return out
-}
-
-// parseCoverageLine decodes one profile record "<path>:<sl>.<sc>,<el>.<ec> <n> <h>"
-// into its path and block. ok=false for any line that does not match the shape, so a
-// malformed or truncated profile degrades to fewer records, never a panic.
-func parseCoverageLine(line string) (path string, blk CoverageBlock, ok bool) {
-	// Split off the two trailing space-separated integers (numStmt, hitCount) first, so
-	// a path containing a space (rare, but legal on disk) does not confuse the parse.
-	fields := strings.Fields(line)
-	if len(fields) < 3 {
-		return "", CoverageBlock{}, false
-	}
-	hits, err := strconv.Atoi(fields[len(fields)-1])
-	if err != nil {
-		return "", CoverageBlock{}, false
-	}
-	numStmt, err := strconv.Atoi(fields[len(fields)-2])
-	if err != nil {
-		return "", CoverageBlock{}, false
-	}
-	loc := strings.Join(fields[:len(fields)-2], " ")
-	colon := strings.LastIndexByte(loc, ':')
-	if colon < 0 {
-		return "", CoverageBlock{}, false
-	}
-	path = loc[:colon]
-	// The range is "startLine.startCol,endLine.endCol"; only the line numbers matter for
-	// symbol attribution, so parse the line halves and ignore the columns.
-	rng := loc[colon+1:]
-	startPart, endPart, found := strings.Cut(rng, ",")
-	if !found {
-		return "", CoverageBlock{}, false
-	}
-	startLine, ok1 := parseLine(startPart)
-	endLine, ok2 := parseLine(endPart)
-	if !ok1 || !ok2 {
-		return "", CoverageBlock{}, false
-	}
-	return path, CoverageBlock{StartLine: startLine, EndLine: endLine, NumStmt: numStmt, Hits: hits}, true
-}
-
-// parseLine pulls the line number out of a "line.col" half of a coverage range.
-func parseLine(part string) (int, bool) {
-	lineStr, _, _ := strings.Cut(part, ".")
-	n, err := strconv.Atoi(lineStr)
-	if err != nil {
-		return 0, false
-	}
-	return n, true
 }
 
 // coverageAttrs renders the covered/total ratio into the attr map shared by file and
@@ -236,9 +141,9 @@ func symbolCoverage(fc FileCoverage, defs []fileSymbolDef) []types.KnowledgeNode
 		if i < 0 {
 			continue // above the first definition: file-level only
 		}
-		tallies[i].total += blk.NumStmt
+		tallies[i].total += blk.Units
 		if blk.Hits > 0 {
-			tallies[i].covered += blk.NumStmt
+			tallies[i].covered += blk.Units
 		}
 	}
 	var out []types.KnowledgeNode

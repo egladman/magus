@@ -167,3 +167,15 @@ test "a pyproject.toml without content is a contract violation" {
     }
     std\assert(threw, message: "core must pass marker content");
 }
+
+test "decisions are mccabe's keywords and no operator" {
+    final decisions = python\mgs_getLanguage().syntax!.decisions!;
+    std\assert(decisions.keywords.join(" ") == "if elif for while except and or case", message: "keywords");
+    std\assert(decisions.operators.len() == 0, message: "no operators");
+}
+
+test "coverage is pytest-cov's lcov and pytest keeps no test scope" {
+    final coverage = python\mgs_getCoverage();
+    std\assert(coverage.format == CoverageFormat.lcov and coverage.profile == "coverage.lcov", message: "report");
+    std\assert(python\mgs_listTargets()["pytest"]!(Target{}).testScope.len() == 0, message: "whole project");
+}

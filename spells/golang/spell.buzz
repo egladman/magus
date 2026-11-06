@@ -162,6 +162,8 @@ export fun mgs_getLanguage() > Language {
                 ],
                 directives = ["go:", "nolint", "export", "line ", "+build", "sys", "extern"],
             },
+            operators = ["==", "!=", "<=", ">=", "&&", "||", "++", "--", "<-", ":=", "...", "<<", ">>", "&^", "+=", "-=", "*=", "/=", "%="],
+            decisions = DecisionSyntax{keywords = ["if", "for", "case"], operators = ["&&", "||"]},
             stubs = StubSyntax{
                 kinds = ["Function", "Method"],
                 bodyStyle = "brace",
@@ -270,7 +272,7 @@ fun golangCILint(target: Target) > Command {
 // bakes in this worktree's absolute path, so the cache can never hit from another
 // worktree at the same content.
 fun goTest(target: Target) > Command {
-    return Command{testSelection = "go", bin = "go", args = ["test", "-trimpath"], defaultArgs = ["./..."], hints = GO_MOD_HINTS, envKeys = GO_PLATFORM_ENV, charms = {
+    return Command{testSelection = "go", testScope = ["./\{dir\}"], bin = "go", args = ["test", "-trimpath"], defaultArgs = ["./..."], hints = GO_MOD_HINTS, envKeys = GO_PLATFORM_ENV, charms = {
         "debug": append(["-v"]),
         "cd": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
     }};
@@ -340,6 +342,13 @@ export fun mgs_getSymbolIndexer() > SymbolIndexer {
         uses = ["go"],
         envs = [{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}, {"GOOS": "js", "GOARCH": "wasm"}],
     };
+}
+
+// The project's test target writes the profile with -coverprofile. Without
+// -coverpkg, go test instruments only the package being tested, so a line is
+// credited only by its own package's tests.
+export fun mgs_getCoverage() > Coverage {
+    return Coverage{format = CoverageFormat.goProfile, profile = ".magus/coverage.out"};
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {

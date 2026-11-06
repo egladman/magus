@@ -44,7 +44,7 @@ func buzzIndexSymbols(t *testing.T, docs map[string][]buzzOcc) []types.Knowledge
 		}
 		idx.Documents = append(idx.Documents, doc)
 	}
-	syms := symbols.ParseDecoded(t.Context(), idx, ".", "buzz")
+	syms := symbols.ParseDecoded(t.Context(), &symbols.Index{Index: idx}, ".", "buzz")
 	require.NotEmpty(t, syms)
 	return syms
 }

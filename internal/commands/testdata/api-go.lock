@@ -88,6 +88,7 @@ github.com/egladman/magus.Magus.CacheDir method(ptr) func() string
 github.com/egladman/magus.Magus.CacheDiskBytes method(ptr) func() int64
 github.com/egladman/magus.Magus.CacheStats method(ptr) func() CacheStats
 github.com/egladman/magus.Magus.CarvedOutputs method(ptr) func(ctx context.Context) ([]string, error)
+github.com/egladman/magus.Magus.ChangeRisk method(ptr) func(ctx context.Context, base string) (github.com/egladman/magus/types.ChangeRisk, error)
 github.com/egladman/magus.Magus.ClassifyEdit method(ptr) func(ctx context.Context, path string, old []byte, cur []byte) (class string, why string)
 github.com/egladman/magus.Magus.ClassifyFiles method(ptr) func(ctx context.Context, paths []string) ([]github.com/egladman/magus/types.FileEntry, error)
 github.com/egladman/magus.Magus.CleanCache method(ptr) func(ctx context.Context, projects ...*github.com/egladman/magus/types.Project) error
@@ -533,6 +534,7 @@ github.com/egladman/magus/std.MagusChangeDiff func(ctx context.Context, c github
 github.com/egladman/magus/std.MagusChangeImpact func(ctx context.Context, c github.com/egladman/magus/types.Change, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ImpactResult, error)
 github.com/egladman/magus/std.MagusChangeMergeBase func(ctx context.Context, c github.com/egladman/magus/types.Change) (string, error)
 github.com/egladman/magus/std.MagusChangeOpen func(ctx context.Context, base string, opts github.com/egladman/magus/types.ChangeOptions) (github.com/egladman/magus/types.Change, error)
+github.com/egladman/magus/std.MagusChangeRisk func(ctx context.Context, c github.com/egladman/magus/types.Change) (github.com/egladman/magus/types.ChangeRisk, error)
 github.com/egladman/magus/std.MagusChangeTier func(ctx context.Context, c github.com/egladman/magus/types.Change, target string, opts github.com/egladman/magus/types.TierOptions) (github.com/egladman/magus/types.TierReport, error)
 github.com/egladman/magus/std.MagusClean func(ctx context.Context, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.CleanReport, error)
 github.com/egladman/magus/std.MagusClearJob func(ctx context.Context) (int, error)
@@ -639,6 +641,7 @@ github.com/egladman/magus/std.MagusWorkspaceGrouping func(ctx context.Context, _
 github.com/egladman/magus/std.MagusWorkspaceJobs func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.JobList, error)
 github.com/egladman/magus/std.MagusWorkspaceOpen func(ctx context.Context, dir string) (github.com/egladman/magus/types.MagusWorkspace, error)
 github.com/egladman/magus/std.MagusWorkspacePutJob func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace, id string, opts map[string]any) (github.com/egladman/magus/types.Job, error)
+github.com/egladman/magus/std.MagusWorkspaceRisk func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.ChangeRisk, error)
 github.com/egladman/magus/std.MagusWorkspaceSkills func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace, opts github.com/egladman/magus/types.SkillsOptions) ([]github.com/egladman/magus/types.Skill, error)
 github.com/egladman/magus/std.MagusWorkspaceTierOutcomes func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.ModelTiers, error)
 github.com/egladman/magus/std.MagusWorkspaceUnmerged func(ctx context.Context, w github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.JobUnmergedReport, error)
@@ -1256,6 +1259,33 @@ github.com/egladman/magus/types.ChangeOptions type struct
 github.com/egladman/magus/types.ChangeOptions.Patch field string "json:\"patch\""
 github.com/egladman/magus/types.ChangeOptions.Rev field string "json:\"rev\""
 github.com/egladman/magus/types.ChangeRenamed const ChangeStatus = "renamed"
+github.com/egladman/magus/types.ChangeRisk type struct
+github.com/egladman/magus/types.ChangeRisk.Base field string
+github.com/egladman/magus/types.ChangeRisk.Definition field string
+github.com/egladman/magus/types.ChangeRisk.Functions field []ChangeRiskFunction
+github.com/egladman/magus/types.ChangeRisk.Gaps field []FunctionGap
+github.com/egladman/magus/types.ChangeRisk.Lines field []Finding
+github.com/egladman/magus/types.ChangeRiskFunction type struct
+github.com/egladman/magus/types.ChangeRiskFunction.BaseComplexity field int
+github.com/egladman/magus/types.ChangeRiskFunction.BaseCoverable field int
+github.com/egladman/magus/types.ChangeRiskFunction.BaseCovered field int
+github.com/egladman/magus/types.ChangeRiskFunction.BaseReason field string
+github.com/egladman/magus/types.ChangeRiskFunction.BaseScore field float64
+github.com/egladman/magus/types.ChangeRiskFunction.Charged method func(threshold int) bool
+github.com/egladman/magus/types.ChangeRiskFunction.Complexity field int
+github.com/egladman/magus/types.ChangeRiskFunction.Coverable field int
+github.com/egladman/magus/types.ChangeRiskFunction.Coverage method func() float64
+github.com/egladman/magus/types.ChangeRiskFunction.Covered field int
+github.com/egladman/magus/types.ChangeRiskFunction.Digest field string
+github.com/egladman/magus/types.ChangeRiskFunction.EndLine field int
+github.com/egladman/magus/types.ChangeRiskFunction.Label field string
+github.com/egladman/magus/types.ChangeRiskFunction.Language field string
+github.com/egladman/magus/types.ChangeRiskFunction.Line field int
+github.com/egladman/magus/types.ChangeRiskFunction.Past method func(threshold int) bool
+github.com/egladman/magus/types.ChangeRiskFunction.Path field string
+github.com/egladman/magus/types.ChangeRiskFunction.Score field float64
+github.com/egladman/magus/types.ChangeRiskFunction.Symbol field string
+github.com/egladman/magus/types.ChangeRiskScore func(complexity int, coverage float64) float64
 github.com/egladman/magus/types.ChangeStatus type string
 github.com/egladman/magus/types.CharmCD const untyped string = "cd"
 github.com/egladman/magus/types.CharmDeclaration type struct
@@ -2394,6 +2424,15 @@ github.com/egladman/magus/types.ForgePull.Review field string
 github.com/egladman/magus/types.ForgePull.Title field string
 github.com/egladman/magus/types.ForgePull.URL field string
 github.com/egladman/magus/types.FormatDiagnostic func(c DiagnosticCode, msg string) string
+github.com/egladman/magus/types.FunctionGap type struct
+github.com/egladman/magus/types.FunctionGap.Complexity field int
+github.com/egladman/magus/types.FunctionGap.Decided method func(threshold int) bool
+github.com/egladman/magus/types.FunctionGap.Label field string
+github.com/egladman/magus/types.FunctionGap.Language field string
+github.com/egladman/magus/types.FunctionGap.Line field int
+github.com/egladman/magus/types.FunctionGap.Path field string
+github.com/egladman/magus/types.FunctionGap.Reason field string
+github.com/egladman/magus/types.FunctionGap.Symbol field string
 github.com/egladman/magus/types.GateEvidence type struct
 github.com/egladman/magus/types.GateEvidence.GateID field string "json:\"gate_id\" yaml:\"gate_id\""
 github.com/egladman/magus/types.GateEvidence.OutputRef field string "json:\"output_ref\" yaml:\"output_ref\""
@@ -3753,6 +3792,7 @@ github.com/egladman/magus/types.KnowledgeSymbol.BodyShape field string
 github.com/egladman/magus/types.KnowledgeSymbol.BodyTokens field int
 github.com/egladman/magus/types.KnowledgeSymbol.BranchIdents field []string
 github.com/egladman/magus/types.KnowledgeSymbol.Calls field []KnowledgeSymbolCall
+github.com/egladman/magus/types.KnowledgeSymbol.Complexity field int
 github.com/egladman/magus/types.KnowledgeSymbol.DefEndLine field int
 github.com/egladman/magus/types.KnowledgeSymbol.Definitions field []KnowledgeSymbolDefinition
 github.com/egladman/magus/types.KnowledgeSymbol.Defs field []string

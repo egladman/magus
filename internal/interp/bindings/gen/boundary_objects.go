@@ -1297,6 +1297,73 @@ func ObjectVolatility(v types.Volatility) vm.Value {
 	return out
 }
 
+func ObjectChangeRiskFunction(v types.ChangeRiskFunction) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("symbol", vm.StringValue(v.Symbol))
+	out.MapSet("label", vm.StringValue(v.Label))
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("language", vm.StringValue(v.Language))
+	out.MapSet("digest", vm.StringValue(v.Digest))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("endLine", vm.IntValue(int64(v.EndLine)))
+	out.MapSet("complexity", vm.IntValue(int64(v.Complexity)))
+	out.MapSet("covered", vm.IntValue(int64(v.Covered)))
+	out.MapSet("coverable", vm.IntValue(int64(v.Coverable)))
+	out.MapSet("score", vm.FloatValue(float64(v.Score)))
+	out.MapSet("baseScore", vm.FloatValue(float64(v.BaseScore)))
+	out.MapSet("baseComplexity", vm.IntValue(int64(v.BaseComplexity)))
+	out.MapSet("baseCovered", vm.IntValue(int64(v.BaseCovered)))
+	out.MapSet("baseCoverable", vm.IntValue(int64(v.BaseCoverable)))
+	out.MapSet("baseReason", vm.StringValue(v.BaseReason))
+	return out
+}
+
+func ObjectFunctionGap(v types.FunctionGap) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("symbol", vm.StringValue(v.Symbol))
+	out.MapSet("label", vm.StringValue(v.Label))
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("language", vm.StringValue(v.Language))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("complexity", vm.IntValue(int64(v.Complexity)))
+	out.MapSet("reason", vm.StringValue(v.Reason))
+	return out
+}
+
+func ObjectFinding(v types.Finding) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("col", vm.IntValue(int64(v.Col)))
+	out.MapSet("rule", vm.StringValue(v.Rule))
+	out.MapSet("message", vm.StringValue(v.Message))
+	out.MapSet("fix", vm.StringValue(v.Fix))
+	out.MapSet("url", vm.StringValue(v.URL))
+	return out
+}
+
+func ObjectChangeRisk(v types.ChangeRisk) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("definition", vm.StringValue(v.Definition))
+	out.MapSet("base", vm.StringValue(v.Base))
+	itemsFunctions := make([]vm.Value, len(v.Functions))
+	for indexFunctions := range v.Functions {
+		itemsFunctions[indexFunctions] = ObjectChangeRiskFunction(v.Functions[indexFunctions])
+	}
+	out.MapSet("functions", vm.ListValue(itemsFunctions))
+	itemsGaps := make([]vm.Value, len(v.Gaps))
+	for indexGaps := range v.Gaps {
+		itemsGaps[indexGaps] = ObjectFunctionGap(v.Gaps[indexGaps])
+	}
+	out.MapSet("gaps", vm.ListValue(itemsGaps))
+	itemsLines := make([]vm.Value, len(v.Lines))
+	for indexLines := range v.Lines {
+		itemsLines[indexLines] = ObjectFinding(v.Lines[indexLines])
+	}
+	out.MapSet("lines", vm.ListValue(itemsLines))
+	return out
+}
+
 func ObjectSkill(v types.Skill) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StringValue(v.Name))
@@ -3269,6 +3336,11 @@ func ObjectHint(v spells.Hint) vm.Value {
 func ObjectCommand(v spells.Command, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("testSelection", vm.StringValue(v.TestSelection))
+	itemsTestScope := make([]vm.Value, len(v.TestScope))
+	for indexTestScope := range v.TestScope {
+		itemsTestScope[indexTestScope] = vm.StringValue(v.TestScope[indexTestScope])
+	}
+	out.MapSet("testScope", vm.ListValue(itemsTestScope))
 	out.MapSet("bin", vm.StringValue(v.Bin))
 	itemsArgs := make([]vm.Value, len(v.Args))
 	for indexArgs := range v.Args {
@@ -3444,6 +3516,21 @@ func ObjectStubSyntax(v spells.StubSyntax) vm.Value {
 	return out
 }
 
+func ObjectDecisionSyntax(v spells.DecisionSyntax) vm.Value {
+	out := vm.NewMap()
+	itemsKeywords := make([]vm.Value, len(v.Keywords))
+	for indexKeywords := range v.Keywords {
+		itemsKeywords[indexKeywords] = vm.StringValue(v.Keywords[indexKeywords])
+	}
+	out.MapSet("keywords", vm.ListValue(itemsKeywords))
+	itemsOperators := make([]vm.Value, len(v.Operators))
+	for indexOperators := range v.Operators {
+		itemsOperators[indexOperators] = vm.StringValue(v.Operators[indexOperators])
+	}
+	out.MapSet("operators", vm.ListValue(itemsOperators))
+	return out
+}
+
 func ObjectSyntax(v spells.Syntax) vm.Value {
 	out := vm.NewMap()
 	optComments := vm.Null
@@ -3456,6 +3543,16 @@ func ObjectSyntax(v spells.Syntax) vm.Value {
 		optStubs = ObjectStubSyntax((*v.Stubs))
 	}
 	out.MapSet("stubs", optStubs)
+	itemsOperators := make([]vm.Value, len(v.Operators))
+	for indexOperators := range v.Operators {
+		itemsOperators[indexOperators] = vm.StringValue(v.Operators[indexOperators])
+	}
+	out.MapSet("operators", vm.ListValue(itemsOperators))
+	optDecisions := vm.Null
+	if v.Decisions != nil {
+		optDecisions = ObjectDecisionSyntax((*v.Decisions))
+	}
+	out.MapSet("decisions", optDecisions)
 	return out
 }
 
@@ -5196,6 +5293,13 @@ func ObjectService(v spells.Service, enums ffi.EnumCases) vm.Value {
 	out.MapSet("stop", ObjectCommand(v.Stop, enums))
 	out.MapSet("distinct", vm.StringValue(v.Distinct))
 	out.MapSet("idle", vm.StringValue(v.Idle))
+	return out
+}
+
+func ObjectCoverage(v spells.Coverage, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("format", enums.Case("CoverageFormat", string(v.Format)))
+	out.MapSet("profile", vm.StringValue(v.Profile))
 	return out
 }
 

@@ -8,12 +8,10 @@
 // extension map that binds a file to a project - so removing it does not remove
 // work, it makes those readers treat Buzz as unstructured text.
 //
-// It declares NO ops of its own on purpose. The three it used to carry (buzz-check,
-// buzz-test, magus-buzz) forked interpreters that know only the Buzz stdlib, so they
-// could not load a magusfile or a spell, which is every Buzz file in this repository.
-// They were checkable only against sources nobody had. `magus buzz -t <file>` runs the
-// in-file test blocks directly and needs no spell. The one op it has is the in-process
-// indexer magus synthesizes from mgs_getSymbolIndexer, under the name scip-buzz.
+// Its test op runs magus itself ($MAGUS). The old ops forked interpreters that
+// knew only the Buzz stdlib, so they could not load a magusfile or a spell.
+// The other op is the in-process indexer magus synthesizes from
+// mgs_getSymbolIndexer, under the name scip-buzz.
 
 import "magus/spell";
 
@@ -32,6 +30,13 @@ export fun mgs_getLanguage() > Language {
                     Quote{open = "\"", close = "\""},
                 ],
             },
+            stubs = StubSyntax{
+                kinds = ["Function", "Method"],
+                bodyStyle = "brace",
+                body = "\{\n    std\\panic(\"unimplemented: \{\{&Name}} lands in \{\{&Branch}}\");\n\}",
+            },
+            operators = ["==", "!=", "<=", ">=", "??", "->", "!>", "=>", "...", "+=", "-="],
+            decisions = DecisionSyntax{keywords = ["if", "while", "for", "foreach", "and", "or", "catch"], operators = ["??", "->"]},
         },
     };
 }
@@ -46,4 +51,21 @@ export fun mgs_listRequiredGlobs() > [Path] {
 // cached index and doc already uses.
 export fun mgs_getSymbolIndexer() > SymbolIndexer {
     return SymbolIndexer{format = SymbolFormat.buzzModule, op = "scip-buzz"};
+}
+
+// `magus buzz -t` tests every path it is given, so a file's own test blocks and
+// its _test.buzz sibling both run. The op is not named buzz-test, which this
+// repo's magusfiles already declare as targets.
+fun magusBuzzTest(target: Target) > Command {
+    return Command{bin = "$MAGUS", args = ["buzz", "-t", "--embedded"], testScope = ["\{file\}", "\{dir\}/\{stem\}_test.buzz"]};
+}
+
+// `magus buzz -t --coverprofile` records only the module under test, so a
+// tracefile joined from one run per module credits each line to its own tests.
+export fun mgs_getCoverage() > Coverage {
+    return Coverage{format = CoverageFormat.lcov, profile = "coverage/buzz/lcov.info"};
+}
+
+export fun mgs_listTargets() > {str: fun(Target) Command} {
+    return {"magus-buzz-test": magusBuzzTest};
 }

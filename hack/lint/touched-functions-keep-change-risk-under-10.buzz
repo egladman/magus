@@ -1,0 +1,146 @@
+// Tier 2, measured shape: a function the change touches may not score
+// a change risk above 10 and worse than it scored at base. A function it
+// leaves alone, or only shrinks, is never refused. A changed file may not lose
+// a covered line it keeps, nor add a line no test covers.
+namespace changeRiskRule;
+
+import "assert";
+import "std";
+import "vcs";
+import "magus";
+import "magus/lint";
+
+export final THRESHOLD = 10;
+
+// reads keys lint-rules on the sources a score comes from: functions and tests.
+export fun reads() > [str] {
+    return ["**/*.go", "**/*_test.go", "libs/**/*.go", "libs/**/*_test.go", "magus.yaml"];
+}
+
+// check refuses each touched function charged against its base, each gap
+// that the worst case cannot decide, and each line finding.
+export fun check(files: [Path]) > [Finding] !> any {
+    return judge(magus\change(vcs\base()).risk());
+}
+
+// judge is check's verdict over a magus\change(base).risk answer. Change
+// risk has no exception. The engine reports the line findings; removing a
+// line never yields one.
+export fun judge(risk: magus\ChangeRisk) > [Finding] {
+    final found = mut [<Finding>];
+    foreach (f in risk.functions) {
+        if (charged(f)) {
+            found.append(refuse(f));
+        }
+    }
+    foreach (g in risk.gaps) {
+        if (!decided(g.complexity)) {
+            found.append(unscored(g));
+        }
+    }
+    foreach (l in risk.lines) {
+        found.append(l);
+    }
+    return found;
+}
+
+// charged repeats types.ChangeRiskFunction.Charged, which the Buzz mirror
+// lacks. With no base measure the threshold alone judges.
+export fun charged(f: magus\ChangeRiskFunction) > bool {
+    return f.score > std\toDouble(THRESHOLD) and (f.baseReason != "" or f.score > f.baseScore);
+}
+
+fun versus(f: magus\ChangeRiskFunction) > str {
+    if (f.baseReason != "") {
+        return "no base score: {f.baseReason}";
+    }
+    return "{hundredths(f.baseScore)} at base";
+}
+
+// decided repeats types.FunctionGap.Decided, which the Buzz mirror lacks.
+// Zero coverage is the worst case, so within THRESHOLD there holds anywhere.
+export fun decided(complexity: int) > bool {
+    return complexity > 0 and complexity * complexity + complexity <= THRESHOLD;
+}
+
+fun refuse(f: magus\ChangeRiskFunction) > Finding {
+    return Finding{ path = f.path, line = f.line,
+        message = "{f.label} has change risk {hundredths(f.score)} (complexity {f.complexity}, coverage {coverage(f)}), past {THRESHOLD} ({versus(f)})",
+        fix = "Cover it with tests, or split it into functions that each score {THRESHOLD} or less." };
+}
+
+fun unscored(g: magus\FunctionGap) > Finding {
+    return Finding{ path = g.path, line = g.line,
+        message = "{g.label} has no change risk score ({g.reason}) and complexity {g.complexity} does not decide it within {THRESHOLD}",
+        fix = "Give its language a coverage measure, or split it until complexity squared plus complexity is {THRESHOLD} or less." };
+}
+
+fun coverage(f: magus\ChangeRiskFunction) > str {
+    if (f.coverable == 0) {
+        return "no coverable lines";
+    }
+    return "{f.covered * 100 / f.coverable}%";
+}
+
+fun hundredths(score: double) > str {
+    final h = std\toInt(score * 100.0 + 0.5);
+    final frac = h % 100;
+    final pad = if (frac < 10) "0" else "";
+    return "{(h - frac) / 100}.{pad}{frac}";
+}
+
+fun fn(label: str, complexity: int, covered: int, coverable: int, score: double) > magus\ChangeRiskFunction {
+    return magus\ChangeRiskFunction{ label = label, path = "a.go", line = 3, complexity = complexity,
+        covered = covered, coverable = coverable, score = score, baseReason = "it is new since base" };
+}
+
+fun shrunk(score: double, baseScore: double) > magus\ChangeRiskFunction {
+    return magus\ChangeRiskFunction{ label = "a.Shrunk", path = "a.go", line = 3, complexity = 12,
+        covered = 0, coverable = 4, score = score, baseScore = baseScore, baseReason = "" };
+}
+
+fun gap(complexity: int) > magus\FunctionGap {
+    return magus\FunctionGap{ label = "a.F", path = "a.go", line = 9, complexity = complexity, reason = "spell bash declares no coverage" };
+}
+
+test "a touched function past ten is refused with its score, complexity and coverage" {
+    final got = judge(magus\ChangeRisk{ functions = [fn("a.Long", complexity: 12, covered: 1, coverable: 4, score: 31.5)] });
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\equal(got[0].line, want: 3, message: "at the function");
+    assert\equal(got[0].message, want: "a.Long has change risk 31.50 (complexity 12, coverage 25%), past 10 (no base score: it is new since base)",
+        message: "figures");
+}
+
+test "a function past ten but no worse than at base passes" {
+    assert\equal(judge(magus\ChangeRisk{ functions = [shrunk(80.0, baseScore: 156.0), shrunk(80.0, baseScore: 80.0)] }).len(), want: 0,
+        message: "only shrunk");
+}
+
+test "a function past ten and worse than at base is refused with its base score" {
+    final got = judge(magus\ChangeRisk{ functions = [shrunk(156.0, baseScore: 80.0)] });
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\equal(got[0].message, want: "a.Shrunk has change risk 156.00 (complexity 12, coverage 0%), past 10 (80.00 at base)", message: "base shown");
+}
+
+test "the engine's line findings pass through" {
+    final lost = Finding{ path = "a.go", line = 4, message = "a.go:4 was covered at base and no test in its scope covers it now" };
+    final got = judge(magus\ChangeRisk{ lines = [lost] });
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\equal(got[0].message, want: lost.message, message: "unchanged");
+}
+
+test "a function at ten passes" {
+    assert\equal(judge(magus\ChangeRisk{ functions = [fn("a.Ok", complexity: 3, covered: 4, coverable: 4, score: 10.0)] }).len(), want: 0,
+        message: "ten is within");
+}
+
+test "a gap is decided by its worst case, and refused otherwise with its reason" {
+    final got = judge(magus\ChangeRisk{ gaps = [gap(2), gap(3), gap(0)] });
+    assert\equal(got.len(), want: 2, message: "2 decides (6), 3 does not (12), 0 decides nothing");
+    assert\equal(got[0].message, want: "a.F has no change risk score (spell bash declares no coverage) and complexity 3 does not decide it within 10",
+        message: "reason shown");
+}
+
+test "a function with no coverable line says so" {
+    assert\equal(coverage(fn("a.F", complexity: 1, covered: 0, coverable: 0, score: 0.0)), want: "no coverable lines", message: "none");
+}

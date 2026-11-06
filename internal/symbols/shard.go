@@ -59,6 +59,10 @@ type SymbolInfo struct {
 	Documentation []string
 	Signature     string
 	Relationships []symbolRelationship
+	// Complexity is one plus the indexer's decision count, 0 when it
+	// did not count. SCIP has no field for it, so packIndex carries it
+	// beside the index.
+	Complexity int
 }
 
 // symbolRelationship mirrors scip.Relationship.

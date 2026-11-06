@@ -263,7 +263,7 @@ func newConformanceIndex(g *Graph, o types.ConformanceOptions) *conformanceIndex
 		}
 		local := afterNamespace(p)
 		x.local[id] = local
-		if n.Attrs[attrLanguage] == "go" && len(local) == 1 && local[0] == (descriptor{Name: "main", Suffix: '('}) &&
+		if n.Attrs[AttrLanguage] == "go" && len(local) == 1 && local[0] == (descriptor{Name: "main", Suffix: '('}) &&
 			!types.IsTestPath(n.Source) {
 			x.main[n.Attrs[attrNamespace]] = true
 		}
@@ -326,7 +326,7 @@ func conformanceExcludes(o types.ConformanceOptions, file string) bool {
 func conformanceExcluded(g *Graph, o types.ConformanceOptions) int {
 	n := 0
 	for _, f := range g.nodes {
-		if f.Kind == types.KindFile && f.Attrs[attrLanguage] != "" && !conformanceGenerated(g, o, f.Source) && conformanceExcludes(o, f.Source) {
+		if f.Kind == types.KindFile && f.Attrs[AttrLanguage] != "" && !conformanceGenerated(g, o, f.Source) && conformanceExcludes(o, f.Source) {
 			n++
 		}
 	}
@@ -339,7 +339,7 @@ type conformanceAdd func(types.ConformanceMetric, types.ConformancePopulation, s
 // file with no language is a document, not code.
 func (x *conformanceIndex) fileSamples(add conformanceAdd) {
 	for id, f := range x.g.nodes {
-		if f.Kind != types.KindFile || f.Attrs[attrLanguage] == "" {
+		if f.Kind != types.KindFile || f.Attrs[AttrLanguage] == "" {
 			continue
 		}
 		lines, err := strconv.Atoi(f.Attrs[AttrLines])
@@ -549,7 +549,7 @@ func (x *conformanceIndex) exports() []conformanceExport {
 	for _, s := range syms {
 		ns := s.node.Attrs[attrNamespace]
 		dir, placed := dirs[ns]
-		if s.pop == types.ConformancePopTest || !placed || s.node.Attrs[attrLanguage] != "go" || len(s.local) != 1 ||
+		if s.pop == types.ConformancePopTest || !placed || s.node.Attrs[AttrLanguage] != "go" || len(s.local) != 1 ||
 			!exportedName(s.local[0].Name) || moduleRoot(ns) {
 			continue
 		}
@@ -575,7 +575,7 @@ func (x *conformanceIndex) reachedExports(syms []conformanceSymbol, dirs map[str
 	for _, s := range syms {
 		ns := s.node.Attrs[attrNamespace]
 		dir, placed := dirs[ns]
-		if !placed || s.pop == types.ConformancePopTest || s.node.Attrs[attrLanguage] != "go" || !x.readOutside(s.id, dir) {
+		if !placed || s.pop == types.ConformancePopTest || s.node.Attrs[AttrLanguage] != "go" || !x.readOutside(s.id, dir) {
 			continue
 		}
 		if len(s.local) == 2 {
@@ -732,7 +732,7 @@ func topReach(reach map[string]int) string {
 func (x *conformanceIndex) mainLogicSamples(add conformanceAdd) {
 	homes := map[string]string{}
 	for _, s := range x.callables() {
-		if s.pop != types.ConformancePopMain || s.node.Attrs[attrLanguage] != "go" || s.shape == "" {
+		if s.pop != types.ConformancePopMain || s.node.Attrs[AttrLanguage] != "go" || s.shape == "" {
 			continue
 		}
 		file, _, _ := splitPathLine(s.node.Source)
@@ -801,7 +801,7 @@ var stateWriters = map[string]bool{
 func (x *conformanceIndex) storePathSamples(add conformanceAdd) {
 	stores := x.stateDirs()
 	for _, s := range x.symbols() {
-		if s.pop == types.ConformancePopTest || s.node.Attrs[attrLanguage] != "go" || len(s.local) != 1 ||
+		if s.pop == types.ConformancePopTest || s.node.Attrs[AttrLanguage] != "go" || len(s.local) != 1 ||
 			!exportedName(s.local[0].Name) || !storePath(s.node, s.local[0].Name) {
 			continue
 		}

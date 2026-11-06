@@ -332,14 +332,14 @@ func (m precedentMiner) testPackageName(pk precedentPackages) []types.Precedent 
 			continue
 		}
 		for _, ns := range nss {
-			k := dirLang{path.Dir(n.Source), m.g.nodes[ns].Attrs[attrLanguage]}
+			k := dirLang{path.Dir(n.Source), m.g.nodes[ns].Attrs[AttrLanguage]}
 			if sources[k] == nil {
 				sources[k] = map[string]bool{}
 			}
 			sources[k][ns] = true
 		}
 		if len(nss) > 0 {
-			files[dirLang{path.Dir(n.Source), m.g.nodes[nss[0]].Attrs[attrLanguage]}]++
+			files[dirLang{path.Dir(n.Source), m.g.nodes[nss[0]].Attrs[AttrLanguage]}]++
 		}
 	}
 	shared, split := map[string]int{}, map[string]int{}
@@ -358,7 +358,7 @@ func (m precedentMiner) testPackageName(pk precedentPackages) []types.Precedent 
 	for _, id := range tests {
 		n := m.g.nodes[id]
 		nss := m.fileNS[id]
-		lang := m.g.nodes[nss[0]].Attrs[attrLanguage]
+		lang := m.g.nodes[nss[0]].Attrs[AttrLanguage]
 		if shared[lang] <= split[lang] {
 			continue
 		}

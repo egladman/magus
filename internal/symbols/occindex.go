@@ -36,7 +36,7 @@ type KeyOccurrences struct {
 // MaxRefLines cap or a bare line number. That is affordable because the result is
 // persisted and a lookup reads one key's record. projectPath rebases document paths as
 // ParseIndex does; see workspacePath.
-func IndexOccurrences(ctx context.Context, idx *scip.Index, projectPath string) (map[string]KeyOccurrences, error) {
+func IndexOccurrences(ctx context.Context, idx *Index, projectPath string) (map[string]KeyOccurrences, error) {
 	type acc struct {
 		ident, display string
 		byFile         map[string][]types.SymbolOccurrence

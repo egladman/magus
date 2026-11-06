@@ -487,6 +487,12 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("magus__Change__mergeBase", function("magus.conformanceBase", func(context.Context, []vm.Value) (vm.Value, error) {
 		return vm.StringValue(""), nil
 	}))
+	// A preview freshens no coverage profile, so nothing is scored.
+	risk := map[string]vm.Value{
+		"definition": vm.StringValue(""), "base": vm.StringValue(""), "functions": empty, "gaps": empty,
+	}
+	m.MapSet("magus__Change__risk", shaped("magus.risk", risk))
+	m.MapSet("magus__Workspace__risk", shaped("magus.risk", risk))
 	// The typed records come from the generated encoders, so a dry run exposes exactly the
 	// fields a figure reads. Nothing is raised: the preview has no graph to hold a path or
 	// a layer against, so importsIndexed stays false and a neighborhood's verdict unknown.

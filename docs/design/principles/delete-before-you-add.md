@@ -42,6 +42,10 @@ my yes and carries the condition that retires it
   can observe, so it has a way out.
 - [A record of refusals](../refusals.md) keeps the deletions that were measured,
   so a removed thing is not quietly re-added.
+- The lint rule `touched-functions-keep-change-risk-under-10` judges a touched
+  function against itself at base and holds the covered lines a change keeps, so
+  shrinking a function or removing covered code never costs
+  ([ADR 0023](../../decisions/0023-touched-functions-meet-change-risk-and-their-mutants.md)).
 
 ## Good
 

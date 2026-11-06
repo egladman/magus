@@ -633,7 +633,7 @@ func buzzSignatureIndex(t *testing.T, values ...string) *Graph {
 		doc.Occurrences = append(doc.Occurrences, def(sym(name, "."), line),
 			&scip.Occurrence{Symbol: sym("ParseError", "#"), Range: []int32{line, 20, 30}})
 	}
-	syms := symbols.ParseDecoded(t.Context(), &scip.Index{Documents: []*scip.Document{doc}}, ".", "buzz")
+	syms := symbols.ParseDecoded(t.Context(), &symbols.Index{Index: &scip.Index{Documents: []*scip.Document{doc}}}, ".", "buzz")
 	return mergeAll([]Shard{assembleSymbols(".", syms, []types.TargetGraphProject{{Path: "."}})})
 }
 

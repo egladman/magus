@@ -269,21 +269,33 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Needs:              []string{"**/*.buzz"},
 		Language:           "buzz",
 		LanguageExtensions: []string{".buzz"},
-		Syntax: &spells.Syntax{Comments: &spells.CommentSyntax{
-			LineComments:  []string{"//"},
-			BlockComments: []spells.CommentBlock{{Open: "/*", Close: "*/"}},
-			Quotes: []spells.Quote{
-				{Open: "`", Close: "`", IgnoreEscape: true},
-				{Open: `"`, Close: `"`},
+		Syntax: &spells.Syntax{
+			Comments: &spells.CommentSyntax{
+				LineComments:  []string{"//"},
+				BlockComments: []spells.CommentBlock{{Open: "/*", Close: "*/"}},
+				Quotes: []spells.Quote{
+					{Open: "`", Close: "`", IgnoreEscape: true},
+					{Open: `"`, Close: `"`},
+				},
 			},
-		}},
-		// Its one op is the in-process indexer, under the scip-buzz it declares rather than
-		// the default scip, so it sits beside a project's Go index. Its former ops forked
-		// interpreters that could load no magusfile or spell, which is every Buzz file here.
+			Stubs: &spells.StubSyntax{
+				Kinds: []string{"Function", "Method"}, BodyStyle: spells.StubBodyBrace,
+				Body: "{\n    std\\panic(\"unimplemented: {{&Name}} lands in {{&Branch}}\");\n}",
+			},
+			Operators: []string{"==", "!=", "<=", ">=", "??", "->", "!>", "=>", "...", "+=", "-="},
+			Decisions: &spells.DecisionSyntax{
+				Keywords:  []string{"if", "while", "for", "foreach", "and", "or", "catch"},
+				Operators: []string{"??", "->"},
+			},
+		},
+		// The indexer sits beside a project's Go index under its own scip-buzz.
 		Ops: map[string]spells.Op{
 			"scip-buzz": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Capture: true, Quiet: true}},
+			"magus-buzz-test": {Command: spells.Command{Bin: "$MAGUS", Args: []string{"buzz", "-t", "--embedded"},
+				TestScope: []string{"{file}", "{dir}/{stem}_test.buzz"}}},
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatBuzzModule, Op: "scip-buzz"},
+		Coverage:      &spells.Coverage{Format: spells.CoverageFormatLCOV, Profile: "coverage/buzz/lcov.info"},
 	},
 	"cosign": {
 		Name:  "cosign",
@@ -359,6 +371,11 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				Kinds: []string{"Function", "Method"}, BodyStyle: "brace",
 				Body: "{\n\tpanic(\"unimplemented: {{&Name}} lands in {{&Branch}}\")\n}",
 			},
+			Operators: []string{"==", "!=", "<=", ">=", "&&", "||", "++", "--", "<-", ":=", "...", "<<", ">>", "&^", "+=", "-=", "*=", "/=", "%="},
+			Decisions: &spells.DecisionSyntax{
+				Keywords:  []string{"if", "for", "case"},
+				Operators: []string{"&&", "||"},
+			},
 		},
 		IgnoreDirs: []string{"vendor"},
 		Manifests:  goldenGoManifests,
@@ -383,7 +400,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				"rw":    {Ops: []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
 			}}},
 			"go-fuzz": {Command: spells.Command{Bin: "go", Args: []string{"test", "-trimpath", "-run", "^$"}, Hints: goldenGoModHints, EnvKeys: goldenGoPlatformEnv, External: spells.ExternalReads}},
-			"go-test": {Command: spells.Command{TestSelection: "go", Bin: "go", Args: []string{"test", "-trimpath"}, DefaultArgs: []string{"./..."}, Hints: goldenGoModHints, EnvKeys: goldenGoPlatformEnv, Charms: map[string]spells.Charm{
+			"go-test": {Command: spells.Command{TestSelection: "go", TestScope: []string{"./{dir}"}, Bin: "go", Args: []string{"test", "-trimpath"}, DefaultArgs: []string{"./..."}, Hints: goldenGoModHints, EnvKeys: goldenGoPlatformEnv, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 				"cd": {Ops: []spells.PatchOp{
 					{Op: "add", Path: "/-", Value: "-covermode=atomic"},
@@ -405,6 +422,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatGoPackages,
 			Command: spells.Command{Bin: "go", Args: []string{"./..."}}, Uses: []string{"go"},
 			Envs: []map[string]string{{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}, {"GOOS": "js", "GOARCH": "wasm"}}},
+		Coverage: &spells.Coverage{Format: spells.CoverageFormatGoProfile, Profile: ".magus/coverage.out"},
 	},
 	"markdown": {
 		Name:  "markdown",
@@ -471,6 +489,10 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				Kinds: []string{"Function", "Method"}, BodyStyle: "indent",
 				Body: "raise NotImplementedError(\"{{&Name}} lands in {{&Branch}}\")",
 			},
+			Operators: []string{"==", "!=", "<=", ">=", "**", "//", "->", ":=", "+=", "-="},
+			Decisions: &spells.DecisionSyntax{
+				Keywords: []string{"if", "elif", "for", "while", "except", "and", "or", "case"},
+			},
 		},
 		IgnoreDirs: []string{"__pycache__"},
 		Manifests:  goldenPythonManifests,
@@ -491,6 +513,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			}}},
 			"scip": {Kind: spells.OpKindSymbolIndex, Command: quiet(goldenScipPython)},
 		},
+		Coverage: &spells.Coverage{Format: spells.CoverageFormatLCOV, Profile: "coverage.lcov"},
 		ScriptRunners: []spells.Command{
 			{Bin: "poe"},
 			{Bin: "hatch", Args: []string{"run"}},
@@ -506,6 +529,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"rust-analyzer": {Observe: spells.Command{Bin: "rust-analyzer", Args: []string{"--version"}}},
 		},
 		SymbolIndexer:      &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: goldenRustAnalyzer},
+		Coverage:           &spells.Coverage{Format: spells.CoverageFormatLCOV, Profile: "lcov.info"},
 		Language:           "rust",
 		LanguageExtensions: []string{".rs"},
 		Syntax: &spells.Syntax{
@@ -522,6 +546,11 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			Stubs: &spells.StubSyntax{
 				Kinds: []string{"Function", "Method"}, BodyStyle: "brace",
 				Body: "{\n    todo!(\"{{&Name}} lands in {{&Branch}}\")\n}",
+			},
+			Operators: []string{"==", "!=", "<=", ">=", "&&", "||", "=>", "->", "::", "..", "..=", "+=", "-=", "<<=", ">>="},
+			Decisions: &spells.DecisionSyntax{
+				Keywords:  []string{"if", "while", "for"},
+				Operators: []string{"&&", "||", "=>"},
 			},
 		},
 		IgnoreDirs: []string{"target"},
@@ -570,6 +599,11 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				Kinds: []string{"Function", "Method"}, BodyStyle: "brace",
 				Body: "{\n\tthrow new Error(\"unimplemented: {{&Name}} lands in {{&Branch}}\");\n}",
 			},
+			Operators: []string{"===", "!==", "==", "!=", "<=", ">=", "&&", "||", "??", "??=", "?.", "=>", "++", "--", "**", "...", "+=", "-="},
+			Decisions: &spells.DecisionSyntax{
+				Keywords:  []string{"if", "for", "while", "case", "catch"},
+				Operators: []string{"&&", "||", "??", "??=", "?"},
+			},
 		},
 		IgnoreDirs: []string{"node_modules", ".testcache", ".turbo", ".pnpm-store"},
 		Manifests:  goldenTypescriptManifests,
@@ -609,6 +643,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			}},
 			"scip": {Kind: spells.OpKindSymbolIndex, Command: quiet(goldenScipTypescript)},
 		},
+		Coverage: &spells.Coverage{Format: spells.CoverageFormatLCOV, Profile: "coverage.lcov"},
 		ScriptRunners: []spells.Command{
 			{Bin: "npm", Args: []string{"run"}}, {Bin: "npm", Args: []string{"run-script"}},
 			{Bin: "npm", Args: []string{"test"}}, {Bin: "npm", Args: []string{"t"}},

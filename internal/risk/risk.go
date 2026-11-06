@@ -310,160 +310,28 @@ func StripComments(src string, syn spells.CommentSyntax) string {
 	var out strings.Builder
 	out.Grow(len(src))
 	prev := 0
-	for _, s := range commentSpans(src, syn) {
-		out.WriteString(src[prev:s.start])
-		dropTrailingIndent(&out)
-		end := s.end
-		wholeLine := s.ownLine && (s.closer == "" || end >= len(src) || src[end] == '\n')
-		if wholeLine && end < len(src) {
-			end++ // the whole line was the comment; its newline goes too
+	for _, s := range syn.Spans(src) {
+		if s.Kind != spells.LexComment {
+			continue
 		}
-		prev = end
+		out.WriteString(src[prev:s.Start])
+		dropTrailingIndent(&out)
+		prev = commentEnd(src, s)
 	}
 	out.WriteString(src[prev:])
 	return out.String()
 }
 
-// commentSpan is one non-directive comment of a source: src[start:end] from its opener
-// through its closer, or to the end of the line for a line comment (closer "").
-type commentSpan struct {
-	start, end     int
-	opener, closer string
-	// ownLine reports that nothing but whitespace precedes the opener on its line.
-	ownLine bool
+// commentEnd extends a comment that is its whole line over its newline.
+func commentEnd(src string, s spells.LexSpan) int {
+	if ownsLine(src, s) && s.End < len(src) {
+		return s.End + 1
+	}
+	return s.End
 }
 
-// commentSpans is the string-aware state machine StripComments documents, reporting the
-// spans it would strip instead of stripping them.
-func commentSpans(src string, syn spells.CommentSyntax) []commentSpan {
-	quotes := slices.Clone(syn.Quotes)
-	// Longest opener first, so `"""` wins over `"` and `r#"` over `r"`.
-	slices.SortStableFunc(quotes, func(a, b spells.Quote) int { return len(b.Open) - len(a.Open) })
-
-	var spans []commentSpan
-	i := 0
-	lineHasCode := false
-	for i < len(src) {
-		if q, ok := openingQuote(src, i, quotes); ok {
-			i = stringEnd(src, i+len(q.Open), q)
-			lineHasCode = true
-			continue
-		}
-		if opener, ok := openingToken(src, i, syn.LineComments); ok {
-			end := lineEnd(src, i)
-			if isDirective(src[i+len(opener):end], syn.Directives) {
-				lineHasCode = true
-			} else {
-				spans = append(spans, commentSpan{start: i, end: end, opener: opener, ownLine: !lineHasCode})
-			}
-			i = end
-			continue
-		}
-		if open, closer, ok := openingBlock(src, i, syn.BlockComments); ok {
-			end := blockEnd(src, i+len(open), open, closer, syn.Nested)
-			if isDirective(src[i+len(open):end], syn.Directives) {
-				lineHasCode = true
-			} else {
-				spans = append(spans, commentSpan{start: i, end: end, opener: open, closer: closer, ownLine: !lineHasCode})
-			}
-			i = end
-			continue
-		}
-		switch src[i] {
-		case '\n':
-			lineHasCode = false
-		case ' ', '\t', '\r':
-		default:
-			lineHasCode = true
-		}
-		i++
-	}
-	return spans
-}
-
-func openingQuote(src string, i int, quotes []spells.Quote) (spells.Quote, bool) {
-	for _, q := range quotes {
-		if strings.HasPrefix(src[i:], q.Open) {
-			return q, true
-		}
-	}
-	return spells.Quote{}, false
-}
-
-func openingToken(src string, i int, tokens []string) (string, bool) {
-	for _, t := range tokens {
-		if strings.HasPrefix(src[i:], t) {
-			return t, true
-		}
-	}
-	return "", false
-}
-
-func openingBlock(src string, i int, blocks []spells.CommentBlock) (open, closer string, ok bool) {
-	for _, b := range blocks {
-		if strings.HasPrefix(src[i:], b.Open) {
-			return b.Open, b.Close, true
-		}
-	}
-	return "", "", false
-}
-
-// stringEnd scans from just past the opener to just past the closer; an unterminated
-// string runs to EOF, which strips deterministically on both sides of a comparison.
-func stringEnd(src string, i int, q spells.Quote) int {
-	for i < len(src) {
-		if !q.IgnoreEscape && src[i] == '\\' {
-			i += 2
-			continue
-		}
-		if strings.HasPrefix(src[i:], q.Close) {
-			return i + len(q.Close)
-		}
-		i++
-	}
-	return len(src)
-}
-
-func lineEnd(src string, i int) int {
-	if n := strings.IndexByte(src[i:], '\n'); n >= 0 {
-		return i + n
-	}
-	return len(src)
-}
-
-// blockEnd scans from just past the opener to just past the matching closer, honoring
-// nesting where declared.
-func blockEnd(src string, i int, open, closer string, nested bool) int {
-	depth := 1
-	for i < len(src) {
-		if nested && strings.HasPrefix(src[i:], open) {
-			depth++
-			i += len(open)
-			continue
-		}
-		if strings.HasPrefix(src[i:], closer) {
-			i += len(closer)
-			depth--
-			if depth == 0 {
-				return i
-			}
-			continue
-		}
-		i++
-	}
-	return len(src)
-}
-
-// isDirective reports whether a comment body opens with a declared directive prefix,
-// after leading whitespace.
-func isDirective(body string, directives []string) bool {
-	body = strings.TrimLeft(body, " \t")
-	for _, d := range directives {
-		if strings.HasPrefix(body, d) {
-			return true
-		}
-	}
-	return false
+func ownsLine(src string, s spells.LexSpan) bool {
+	return s.OwnLine && (s.Closer == "" || s.End >= len(src) || src[s.End] == '\n')
 }
 
 // dropTrailingIndent removes the horizontal whitespace already written just before a

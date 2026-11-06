@@ -118,6 +118,8 @@ export fun mgs_getLanguage() > Language {
                 bodyStyle = "brace",
                 body = "\{\n\tthrow new Error(\"unimplemented: \{\{&Name}} lands in \{\{&Branch}}\");\n\}",
             },
+            operators = ["===", "!==", "==", "!=", "<=", ">=", "&&", "||", "??", "??=", "?.", "=>", "++", "--", "**", "...", "+=", "-="],
+            decisions = DecisionSyntax{keywords = ["if", "for", "while", "case", "catch"], operators = ["&&", "||", "??", "??=", "?"]},
         },
     };
 }
@@ -353,6 +355,11 @@ fun devServer(target: Target) > Service {
         needsArgs = "dev-server runs the command you name; pass it as args: typescript[\"dev-server\"](ctx, \{\"args\": [\"vite\"]})",
     }};
 }
+// node-test's lcov reporter writes it by default.
+export fun mgs_getCoverage() > Coverage {
+    return Coverage{format = CoverageFormat.lcov, profile = "coverage.lcov"};
+}
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"biome-check": biomeCheck, "biome-format": biomeFormat,
             "eslint": eslint, "prettier": prettier, "tsc": tsc,

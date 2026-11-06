@@ -158,7 +158,7 @@ func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage 
 	if err != nil {
 		return nil, err
 	}
-	return ParseDecoded(ctx, idx, projectPath, declaredLanguage), nil
+	return ParseDecoded(ctx, &Index{Index: idx}, projectPath, declaredLanguage), nil
 }
 
 // decodeIndex decodes a SCIP index's bytes. It is the expensive half of every read of an
@@ -173,7 +173,7 @@ func decodeIndex(data []byte) (*scip.Index, error) {
 }
 
 // ParseDecoded is ParseIndex over an index ReadIndex already decoded.
-func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLanguage string) []types.KnowledgeSymbol {
+func ParseDecoded(ctx context.Context, idx *Index, projectPath, declaredLanguage string) []types.KnowledgeSymbol {
 	// SymbolInformation (display name, kind) can live in any document; index it by
 	// the version-stripped KEY (not the raw moniker) so a symbol whose definition and
 	// first-seen reference carry different-version monikers is still named.
@@ -264,6 +264,7 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 					a.sym.SymbolKind = si.Kind.String()
 					a.sym.Signature = renderedSignature(si)
 					a.sym.Doc = docText(si)
+					a.sym.Complexity = idx.facts[si.Symbol].complexity
 				}
 				byKey[key] = a
 			}

@@ -115,6 +115,12 @@ func decodeCommand(v vm.Value, path string) (spells.Command, error) {
 				return out, err
 			}
 			out.TestSelection = sTestSelection
+		case "testScope":
+			strsTestScope, err := decodeStringList(item, path+".testScope")
+			if err != nil {
+				return out, err
+			}
+			out.TestScope = strsTestScope
 		case "bin":
 			sBin, err := decodeString(item, path+".bin")
 			if err != nil {
@@ -483,6 +489,39 @@ func decodeSymbolIndexer(v vm.Value, path string) (spells.SymbolIndexer, error) 
 			}
 		default:
 			return out, unknownMember(path, "SymbolIndexer", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeCoverage decodes a Buzz Coverage, an object instance or a map, into a spells.Coverage.
+func DecodeCoverage(v vm.Value) (spells.Coverage, error) {
+	return decodeCoverage(v, "coverage")
+}
+
+func decodeCoverage(v vm.Value, path string) (spells.Coverage, error) {
+	var out spells.Coverage
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Coverage", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "format":
+			sFormat, err := decodeEnum(item, path+".format", "CoverageFormat", enumCoverageFormatValues)
+			if err != nil {
+				return out, err
+			}
+			out.Format = spells.CoverageFormat(sFormat)
+		case "profile":
+			sProfile, err := decodeString(item, path+".profile")
+			if err != nil {
+				return out, err
+			}
+			out.Profile = sProfile
+		default:
+			return out, unknownMember(path, "Coverage", key)
 		}
 	}
 	return out, nil
@@ -1069,6 +1108,39 @@ func decodeStubSyntax(v vm.Value, path string) (spells.StubSyntax, error) {
 	return out, nil
 }
 
+// DecodeDecisionSyntax decodes a Buzz DecisionSyntax, an object instance or a map, into a spells.DecisionSyntax.
+func DecodeDecisionSyntax(v vm.Value) (spells.DecisionSyntax, error) {
+	return decodeDecisionSyntax(v, "decisionSyntax")
+}
+
+func decodeDecisionSyntax(v vm.Value, path string) (spells.DecisionSyntax, error) {
+	var out spells.DecisionSyntax
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "DecisionSyntax", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "keywords":
+			strsKeywords, err := decodeStringList(item, path+".keywords")
+			if err != nil {
+				return out, err
+			}
+			out.Keywords = strsKeywords
+		case "operators":
+			strsOperators, err := decodeStringList(item, path+".operators")
+			if err != nil {
+				return out, err
+			}
+			out.Operators = strsOperators
+		default:
+			return out, unknownMember(path, "DecisionSyntax", key)
+		}
+	}
+	return out, nil
+}
+
 // DecodeSyntax decodes a Buzz Syntax, an object instance or a map, into a spells.Syntax.
 func DecodeSyntax(v vm.Value) (spells.Syntax, error) {
 	return decodeSyntax(v, "syntax")
@@ -1102,6 +1174,22 @@ func decodeSyntax(v vm.Value, path string) (spells.Syntax, error) {
 				}
 				optStubs = xStubs
 				out.Stubs = &optStubs
+			}
+		case "operators":
+			strsOperators, err := decodeStringList(item, path+".operators")
+			if err != nil {
+				return out, err
+			}
+			out.Operators = strsOperators
+		case "decisions":
+			if !item.IsNull() {
+				var optDecisions spells.DecisionSyntax
+				xDecisions, err := decodeDecisionSyntax(item, path+".decisions")
+				if err != nil {
+					return out, err
+				}
+				optDecisions = xDecisions
+				out.Decisions = &optDecisions
 			}
 		default:
 			return out, unknownMember(path, "Syntax", key)
@@ -9238,6 +9326,7 @@ var enumArchitectureValues = []string{"", "amd64", "arm64"}
 var enumBindingStatusValues = []string{"", "bound", "unsupported"}
 var enumBriefFormatValues = []string{"", "markdown", "buzz"}
 var enumClaimKindValues = []string{"", "refs", "test", "output", "released", "dead"}
+var enumCoverageFormatValues = []string{"", "lcov", "go-coverprofile"}
 var enumCredentialKindValues = []string{"", "operator", "stored", "share", "exchange", "stdio", "socket-peer"}
 var enumDiagnosticOriginValues = []string{"", "builtin", "workspace"}
 var enumDiscoveryRoleValues = []string{"", "project", "member"}

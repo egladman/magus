@@ -177,7 +177,7 @@ const putSymbol = "m internal/cache/Store#Put()."
 
 // symbolGraph holds one Go symbol defined at source, as the indexer would fold it in.
 func symbolGraph(source, signature string) *Graph {
-	attrs := map[string]string{attrLanguage: "go"}
+	attrs := map[string]string{AttrLanguage: "go"}
 	if signature != "" {
 		attrs[AttrSignature] = signature
 	}
