@@ -2,7 +2,6 @@ package broker
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -47,7 +46,7 @@ func TestProtocolSocketSuite(t *testing.T) {
 	suite.Run(t, new(ProtocolSocketSuite))
 }
 
-// SetupTest makes a short directory under $TMPDIR: macOS caps a unix socket
+// SetupTest makes a short directory under $TMPDIR: darwin caps a unix socket
 // path at 104 bytes, and t.TempDir passes it by adding the test name.
 func (s *ProtocolSocketSuite) SetupTest() {
 	dir, err := os.MkdirTemp("", "bk")
@@ -56,8 +55,10 @@ func (s *ProtocolSocketSuite) SetupTest() {
 	s.dir = dir
 }
 
+// listen binds through endpoint: a linux sandbox's $TMPDIR alone passes
+// sun_path, which endpoint reaches there.
 func (s *ProtocolSocketSuite) listen(name string) {
-	ln, err := net.Listen("unix", filepath.Join(s.dir, name))
+	ln, err := endpoint.ListenUnix(filepath.Join(s.dir, name))
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = ln.Close() })
 }
@@ -73,9 +74,9 @@ func (s *ProtocolSocketSuite) TestAnotherProtocolsLiveBrokerIsListed() {
 }
 
 func (s *ProtocolSocketSuite) TestADeadSocketIsNotListed() {
-	ln, err := net.Listen("unix", filepath.Join(s.dir, "broker-4.sock"))
+	ln, err := endpoint.ListenUnix(filepath.Join(s.dir, "broker-4.sock"))
 	s.Require().NoError(err)
-	ln.(*net.UnixListener).SetUnlinkOnClose(false)
+	ln.SetUnlinkOnClose(false)
 	s.Require().NoError(ln.Close())
 	s.Empty(OtherBrokers(s.T().Context(), s.dir))
 }
