@@ -6,6 +6,7 @@ package ci
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/types"
@@ -28,6 +29,10 @@ type Shard struct {
 
 // Plan is the output of Build: shards for a CI matrix plus source label and concurrency cap.
 type Plan struct {
+	// StageZero runs before Shards and computes the prerequisites Shards
+	// share; see [forecast.Model.PlanStages]. Each ID starts with
+	// "stage-zero-". Empty without a model, or when no shard shares one.
+	StageZero   []Shard
 	Shards      []Shard
 	Source      string
 	MaxParallel int // 0 = no cap (renderers emit max-parallel = len(Shards))
@@ -84,27 +89,42 @@ func Build(units []types.Unit, source string, opts ...Option) (Plan, error) {
 	}
 	maxShards = min(maxShards, hardCeiling, len(units))
 
-	var assignments [][]types.Unit
+	stages := forecast.Stages{One: ceilDivide(units, maxShards)}
 	if cfg.model != nil {
-		assignments = cfg.model.Plan(units, maxShards)
-	} else {
-		assignments = ceilDivide(units, maxShards)
+		stages = cfg.model.PlanStages(units, maxShards)
 	}
-	if err := placedOnce(units, assignments, maxShards); err != nil {
+	zero := slices.Concat(stages.Zero...)
+	if err := placedOnce(zero, stages.Zero, maxShards); err != nil {
+		return Plan{}, fmt.Errorf("stage zero: %w", err)
+	}
+	one := slices.DeleteFunc(slices.Clone(units), func(u types.Unit) bool { return slices.Contains(zero, u) })
+	if err := placedOnce(one, stages.One, maxShards); err != nil {
 		return Plan{}, err
 	}
+	return Plan{
+		StageZero: numbered(stageZeroPrefix, stages.Zero),
+		Shards:    numbered("", stages.One),
+		Source:    source,
+		Fallbacks: fallbacks,
+	}, nil
+}
 
+// stageZeroPrefix starts every stage-zero shard ID, so one --shard value
+// names a shard of either stage.
+const stageZeroPrefix = "stage-zero-"
+
+// numbered is assignments as shards whose IDs are prefix and a zero-padded
+// index.
+func numbered(prefix string, assignments [][]types.Unit) []Shard {
+	if len(assignments) == 0 {
+		return nil
+	}
 	idWidth := digits(len(assignments) - 1)
-
 	shards := make([]Shard, len(assignments))
 	for i, us := range assignments {
-		shards[i] = Shard{
-			ID:    fmt.Sprintf("%0*d", idWidth, i),
-			Units: us,
-		}
+		shards[i] = Shard{ID: fmt.Sprintf("%s%0*d", prefix, idWidth, i), Units: us}
 	}
-
-	return Plan{Shards: shards, Source: source, Fallbacks: fallbacks}, nil
+	return shards
 }
 
 // placedOnce checks that assignments hold every unit exactly once, in at most

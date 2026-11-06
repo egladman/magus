@@ -505,9 +505,9 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
     // Build waits for lint's format instead of racing it (MGS4008).
     ctx.needs(generate, lint, test);
     ctx.needs(build);
-    // GitHub's gha shards delegate figures to the required docs figures job so the two
-    // memory peaks have separate runners. Local CI validates figures after the site.
-    if (!ctx.hasCharm("gha")) { ctx.needs(diagrams_generate, glossary_usage_generate); }
+    // Units of their own on every CI: the plan packs them apart from the site by
+    // memory, and computes the symbol digest they share once (ADR 0027).
+    ctx.needs(diagrams_generate, glossary_usage_generate);
 }
 
 // build-playground compiles the playground's WebAssembly interpreter with stock Go and

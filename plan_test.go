@@ -478,3 +478,77 @@ func BenchmarkPlan(b *testing.B) {
 		})
 	}
 }
+
+// PlanStageSuite plans a 200s test and a 200s vet whose prerequisites take
+// 10s, from a measured history, so splitting them pays.
+type PlanStageSuite struct {
+	suite.Suite
+	history string
+}
+
+func TestPlanStageSuite(t *testing.T) { suite.Run(t, new(PlanStageSuite)) }
+
+func (s *PlanStageSuite) SetupTest() {
+	s.history = filepath.Join(s.T().TempDir(), "history.json")
+	h := forecast.History{
+		Constants: forecast.Constants{SetupP50Ms: forecast.Millis(1_000)},
+		Projects: map[string]map[string]forecast.Stats{".": {
+			"build": {P75Ms: 10_000, Samples: 50},
+			"gen":   {P75Ms: 10_000, Samples: 50},
+			"test":  {P75Ms: 200_000, Samples: 50},
+			"vet":   {P75Ms: 200_000, Samples: 50},
+		}},
+	}
+	s.Require().NoError(forecast.UpdateHistory(context.Background(), s.history, func(dst *forecast.History) error {
+		*dst = h
+		return nil
+	}))
+}
+
+// stagedMagusfile is a ci whose test needs build and whose vet needs VET_NEEDS.
+const stagedMagusfile = `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void !> any { ctx.readsFiles(["*.go"]); }
+export fun gen(ctx: magus\Context, args: [str]) > void !> any { ctx.readsFiles(["*.go"]); }
+export fun test(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(build); ctx.readsFiles(["*.go"]); }
+export fun vet(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(VET_NEEDS); ctx.readsFiles(["*.go"]); }
+export fun ci(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(test, vet); }
+`
+
+// plan plans ci, with vet needing vetNeeds, after main.go changes.
+func (s *PlanStageSuite) plan(vetNeeds string) types.ShardPlan {
+	root := writeWorkspace(s.T(), map[string]string{
+		"magusfile.buzz": strings.ReplaceAll(stagedMagusfile, "VET_NEEDS", vetNeeds),
+		"main.go":        "package main\n",
+	})
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	plan, err := m.Plan(context.Background(), "ci", PlanOptions{
+		ChangedPaths: []string{"main.go"}, MaxShards: -1, HistoryPath: s.history,
+	})
+	s.Require().NoError(err)
+	return plan
+}
+
+func (s *PlanStageSuite) TestADependencySharedByTwoShardsIsPlannedOnceInStageZero() {
+	plan := s.plan("build")
+	build := []types.Unit{{Project: ".", Target: "build"}}
+	s.Equal([]types.Shard{{
+		ID: "stage-zero-0", Digest: types.UnitsDigest(build), ProjectPaths: []string{"."}, Units: build,
+	}}, plan.StageZero, "duties stay on the last stage")
+	s.Require().Len(plan.Shards, 2)
+	for _, sh := range plan.Shards {
+		s.NotContains(sh.Units, build[0])
+	}
+}
+
+func (s *PlanStageSuite) TestAPlanWithNoSharedWorkHasOneStage() {
+	plan := s.plan("gen")
+	s.Nil(plan.StageZero)
+	test := []types.Unit{{Project: ".", Target: "test"}}
+	vet := []types.Unit{{Project: ".", Target: "vet"}}
+	s.Equal([]types.Shard{
+		{ID: "0", Digest: types.UnitsDigest(test), ProjectPaths: []string{"."}, Units: test, Duties: []types.Duty{types.DutyCacheExport, types.DutyNotesVerify}},
+		{ID: "1", Digest: types.UnitsDigest(vet), ProjectPaths: []string{"."}, Units: vet},
+	}, plan.Shards)
+}

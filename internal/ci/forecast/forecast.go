@@ -510,6 +510,79 @@ func (f Model) Repeats(shards [][]types.Unit) []types.Unit {
 	return out
 }
 
+// Stages is a plan in two stages: every shard of Zero runs before any of One.
+type Stages struct {
+	// Zero computes each prerequisite that two or more shards of One would
+	// otherwise both compute. Empty when no shard shares one.
+	Zero [][]types.Unit
+	// One holds the units Zero does not compute. Its shards replay Zero's
+	// units from the cache Zero leaves.
+	One [][]types.Unit
+}
+
+// PlanStages is Plan with shared computing work moved to a stage before it.
+// It packs with the shared prerequisites counted as repeatable, so their
+// dependents may split. Each one the split leaves on two shards goes to
+// Zero, packed under the same maxShards and memory budget. With none, One is
+// Plan(units, maxShards). Needs must answer for prerequisites too.
+func (f Model) PlanStages(units []types.Unit, maxShards int) Stages {
+	if shared := f.shared(units); len(shared) > 0 {
+		split := f.Replaying(shared).Plan(units, maxShards)
+		if zero := f.Repeats(split); len(zero) > 0 {
+			return Stages{Zero: f.Plan(zero, maxShards), One: without(split, zero)}
+		}
+	}
+	return Stages{One: f.Plan(units, maxShards)}
+}
+
+// Replaying is f with units counted as Repeatable, as a stage that runs
+// after they computed replays them.
+func (f Model) Replaying(units []types.Unit) Model {
+	done := make(map[types.Unit]bool, len(units))
+	for _, u := range units {
+		done[u] = true
+	}
+	g := f
+	g.Repeatable = func(u types.Unit) bool { return done[u] || f.repeatable(u) }
+	return g
+}
+
+// shared names each prerequisite Repeatable refuses that two or more of
+// units' closures hold, sorted by project:target.
+func (f Model) shared(units []types.Unit) []types.Unit {
+	if f.Needs == nil {
+		return nil
+	}
+	held := map[types.Unit]int{}
+	var out []types.Unit
+	for _, u := range units {
+		seen := map[types.Unit]bool{}
+		for _, n := range f.Needs(u) {
+			if seen[n] || f.repeatable(n) {
+				continue
+			}
+			seen[n] = true
+			if held[n]++; held[n] == 2 {
+				out = append(out, n)
+			}
+		}
+	}
+	sortUnits(out)
+	return out
+}
+
+// without is shards less the units in drop, less any shard left empty.
+func without(shards [][]types.Unit, drop []types.Unit) [][]types.Unit {
+	var out [][]types.Unit
+	for _, shard := range shards {
+		kept := slices.DeleteFunc(slices.Clone(shard), func(u types.Unit) bool { return slices.Contains(drop, u) })
+		if len(kept) > 0 {
+			out = append(out, kept)
+		}
+	}
+	return out
+}
+
 func sortUnits(us []types.Unit) {
 	slices.SortFunc(us, func(a, b types.Unit) int { return cmp.Compare(a.String(), b.String()) })
 }
