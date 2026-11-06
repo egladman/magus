@@ -32,5 +32,5 @@ func (b *treeBounds) follow(int, string) *boundedTree {
 	return nil
 }
 
-func (*treeBounds) killTree(*boundedTree)    {}
+func (*treeBounds) killTree(*boundedTree)   {}
 func (*treeBounds) stop(*boundedTree) error { return nil }
