@@ -31,11 +31,11 @@ Parsing is upstream-strict by default: a file written for the magusfile
 engine needs --embedded, or it fails on rules upstream Buzz enforces and
 magus does not. The most common one is "argument N must be labeled".
 
--t runs a file's test blocks and reports pass or fail, which is how Buzz
-code in this ecosystem is tested. --coverprofile writes an LCOV report for
-the file under -t (entry file only; imports are measured when they are the
--t subject). The lsp subcommand speaks the Language Server Protocol over
-stdio for an editor integration.
+-t runs the test blocks of every script given and reports pass or fail, which
+is how Buzz code in this ecosystem is tested. --coverprofile writes one LCOV
+report across all the files under -t (a file is measured when it is a -t
+subject; its imports are not). The lsp subcommand speaks the Language Server
+Protocol over stdio for an editor integration.
 
 --check parses and type-checks the named files and does not run them, which
 is the only way to judge a script whose whole job is a side effect: a hook
@@ -65,7 +65,7 @@ runs the same from any directory: magus buzz -C "$ROOT" -s hooks/guard.buzz.
 : Parse and type-check the named files without running them; report every diagnostic
 
 **--coverprofile** *-t*
-: Write an LCOV coverprofile for the file under -t (requires \`-t\`)
+: Write one LCOV coverprofile across the files under -t (requires \`-t\`)
 
 **-e** *code*
 : Execute code given on the command line instead of a file
@@ -80,7 +80,7 @@ runs the same from any directory: magus buzz -C "$ROOT" -s hooks/guard.buzz.
 : Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (magus query output \<ref\> reopens it)
 
 **-t**
-: Run the file's test "..." {} blocks and report pass/fail
+: Run the test "..." {} blocks of every script given and report pass/fail
 
 **--test**
 : Alias for -t
@@ -114,6 +114,12 @@ magus buzz -e 'import "std"; fun main() > void { std\print("hi"); } main();'
 
 ```sh
 magus buzz -t scripts/report.buzz
+```
+
+*Run the test blocks of several files*
+
+```sh
+magus buzz -t scripts/report.buzz scripts/lint.buzz
 ```
 
 *Check files without running them*

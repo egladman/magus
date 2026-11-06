@@ -305,6 +305,8 @@ const (
 	FlagJobApplyF = "f"
 	// job apply: --fix
 	FlagJobApplyFix = "fix"
+	// job apply: --stdin
+	FlagJobApplyStdin = "stdin"
 	// job exec: --slots
 	FlagJobExecSlots = "slots"
 	// job exec: --timeout
@@ -715,8 +717,6 @@ const (
 	FlagStatusSocket = "socket"
 	// status: --symbols
 	FlagStatusSymbols = "symbols"
-	// status: --wait
-	FlagStatusWait = "wait"
 	// status: --watch
 	FlagStatusWatch = "watch"
 	// status: --workspace
@@ -1577,14 +1577,17 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 // It does NOT carry --add-write-path: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type JobApplyFlags struct {
-	F   string // -f
-	Fix bool   // --[no-]fix
+	F     string // -f
+	Stdin bool   // --[no-]stdin
+	Fix   bool   // --[no-]fix
 }
 
 // BindJobApply registers `magus job apply`'s flags on fs and returns the destination.
 func BindJobApply(fs *flag.FlagSet) *JobApplyFlags {
 	var f JobApplyFlags
-	fs.StringVar(&f.F, FlagJobApplyF, "", "The records to apply: a `file`, or `-` for stdin; one JSON job, a JSON array, or one job per line")
+	fs.StringVar(&f.F, FlagJobApplyF, "", "The records to apply from a `file`: one JSON job, a JSON array, or one job per line")
+	fs.BoolVar(&f.Stdin, FlagJobApplyStdin, false, "Read the records from stdin instead of a file, as job fork --stdin does")
+	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagJobApplyStdin)
 	fs.BoolVar(&f.Fix, FlagJobApplyFix, false, "Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records")
 	cmdline.NegatedBoolVar(fs, &f.Fix, FlagJobApplyFix)
 	return &f
@@ -2083,7 +2086,6 @@ type StatusFlags struct {
 	Socket    string        // --socket
 	Probe     string        // --probe
 	Workspace string        // --workspace
-	Wait      bool          // --[no-]wait
 }
 
 // BindStatus registers `magus status`'s flags on fs and returns the destination.
@@ -2099,8 +2101,6 @@ func BindStatus(fs *flag.FlagSet) *StatusFlags {
 	fs.StringVar(&f.Socket, FlagStatusSocket, "", "Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. --probe asks the server at server.address unless this names one")
 	fs.StringVar(&f.Probe, FlagStatusProbe, "", "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)")
 	fs.StringVar(&f.Workspace, FlagStatusWorkspace, "", "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
-	fs.BoolVar(&f.Wait, FlagStatusWait, false, "Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then, then reserves the seat for it until its first claim")
-	cmdline.NegatedBoolVar(fs, &f.Wait, FlagStatusWait)
 	return &f
 }
 
@@ -2121,12 +2121,12 @@ type BuzzFlags struct {
 func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 	var f BuzzFlags
 	fs.StringVar(&f.E, FlagBuzzE, "", "Execute `code` given on the command line instead of a file")
-	fs.BoolVar(&f.Test, FlagBuzzT, false, "Run the file's test \"...\" {} blocks and report pass/fail")
+	fs.BoolVar(&f.Test, FlagBuzzT, false, "Run the test \"...\" {} blocks of every script given and report pass/fail")
 	fs.BoolVar(&f.Test, FlagBuzzTest, false, "Alias for -t")
 	cmdline.NegatedBoolVar(fs, &f.Test, FlagBuzzT)
 	fs.BoolVar(&f.Check, FlagBuzzCheck, false, "Parse and type-check the named files without running them; report every diagnostic")
 	cmdline.NegatedBoolVar(fs, &f.Check, FlagBuzzCheck)
-	fs.StringVar(&f.Coverprofile, FlagBuzzCoverprofile, "", "Write an LCOV coverprofile for the file under `-t` (requires `-t`)")
+	fs.StringVar(&f.Coverprofile, FlagBuzzCoverprofile, "", "Write one LCOV coverprofile across the files under `-t` (requires `-t`)")
 	fs.BoolVar(&f.Profile, FlagBuzzProfile, false, "Print where compile and import time went, after the script runs")
 	cmdline.NegatedBoolVar(fs, &f.Profile, FlagBuzzProfile)
 	fs.BoolVar(&f.Record, FlagBuzzRecord, false, "Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (`magus query output <ref>` reopens it)")

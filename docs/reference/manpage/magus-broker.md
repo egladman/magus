@@ -22,7 +22,10 @@ alongside what other invocations hold is refused with MGS3009 (exit 75).
 
 A run starts a broker when none answers, and prints one line saying so. It
 loads no workspace, records no telemetry and listens on a unix socket only
-($XDG_RUNTIME_DIR/magus/broker.sock). It exits once it has held nothing (no
+($XDG_RUNTIME_DIR/magus/broker-\<protocol\>.sock, one per wire protocol, so
+builds of another protocol run their own broker and share no budget with
+this one; status and a starting broker warn when one is live). It exits once
+it has held nothing (no
 claim, no service with a dependent) for ten minutes; a started broker logs to
 $XDG_STATE_HOME/magus/broker.log.
 
@@ -38,7 +41,7 @@ runs unarbitrated and says so once, off never starts or contacts one.
 Run with no target, it serves in this process and logs to stderr, or to the
 file --log names. Under systemd it takes the socket the supervisor hands over
 (LISTEN_FDS), refusing one that is malformed or bound anywhere but
-broker.sock. \`magus broker units\` prints the systemd or launchd units for
+its protocol's socket. \`magus broker units\` prints the systemd or launchd units for
 it; magus never installs them.
 
 Signals:

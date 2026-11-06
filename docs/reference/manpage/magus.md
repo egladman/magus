@@ -279,6 +279,24 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_CONSOLE_ENABLED**
 : When false, the MCP HTTP server does not mount the console's read-only API and job service (default true when MCP is up). Config file key: **console.enabled**.
 
+**MAGUS_CONSOLE_PULLS_FLOOR**
+: The shortest wait between two syncs, whatever else is chosen (default: 30s). Config file key: **console.pulls.floor**.
+
+**MAGUS_CONSOLE_PULLS_ACTIVE**
+: The wait while any check is queued or running (default: 1m). Config file key: **console.pulls.active**.
+
+**MAGUS_CONSOLE_PULLS_IDLE**
+: The wait while nothing is queued or running (default: 5m). Config file key: **console.pulls.idle**.
+
+**MAGUS_CONSOLE_PULLS_RESERVE**
+: The request budget kept back; below it the poller waits (default: 500). Config file key: **console.pulls.reserve**.
+
+**MAGUS_CONSOLE_PULLS_RUNNER_WAIT**
+: How long a queued check waits before runners are blamed (default: 15m). Config file key: **console.pulls.runner_wait**.
+
+**MAGUS_CONSOLE_PULLS_STALE_AFTER**
+: How long a pull request may go unpushed before it is stale (default: 72h). Config file key: **console.pulls.stale_after**.
+
 **MAGUS_REPORT_FILTER**
 : Restricts event types via +type/-type/bare terms; any "+" sets default-deny. Config file key: **report.filter**.
 
@@ -404,6 +422,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 
 **MAGUS_BROKER**
 : Decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and shared services: required (refuse a step when none answers), best-effort (the default: run unarbitrated and say so once), or off (never start or contact one; a run hosts its services itself). Config file key: **broker**.
+
+**MAGUS_BUDGET_WAIT**
+: Bounds a step's wait for budget other runs hold. Past it, MGS3009 names them. Zero refuses at once. A sooner run deadline bounds it instead. Config file key: **budget_wait**.
 
 **MAGUS_SHUTDOWN_GRACE**
 : Bounds how long the broker and the server take to stop after a first SIGTERM. The broker seats nothing new and waits this long for the runs holding claims or services to finish; the server cancels the runs it adopted and waits this long for them to unwind. A second SIGTERM, or a SIGINT to the broker, stops either at once. Zero stops at once on the first signal; negative is an error (default: 5m). Config file key: **shutdown_grace**.

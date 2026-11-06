@@ -21,11 +21,11 @@ Parsing is upstream\-strict by default: a file written for the magusfile
 engine needs \-\-embedded, or it fails on rules upstream Buzz enforces and
 magus does not. The most common one is "argument N must be labeled".
 .PP
-\-t runs a file's test blocks and reports pass or fail, which is how Buzz
-code in this ecosystem is tested. \-\-coverprofile writes an LCOV report for
-the file under \-t (entry file only; imports are measured when they are the
-\-t subject). The lsp subcommand speaks the Language Server Protocol over
-stdio for an editor integration.
+\-t runs the test blocks of every script given and reports pass or fail, which
+is how Buzz code in this ecosystem is tested. \-\-coverprofile writes one LCOV
+report across all the files under \-t (a file is measured when it is a \-t
+subject; its imports are not). The lsp subcommand speaks the Language Server
+Protocol over stdio for an editor integration.
 .PP
 \-\-check parses and type\-checks the named files and does not run them, which
 is the only way to judge a script whose whole job is a side effect: a hook
@@ -55,7 +55,7 @@ Execute the magusfile when the REPL starts; \-\-no\-autoload starts without it
 Parse and type\-check the named files without running them; report every diagnostic
 .TP
 \fB\-\-coverprofile\fR \fI-t\fR
-Write an LCOV coverprofile for the file under \-t (requires `\-t`)
+Write one LCOV coverprofile across the files under \-t (requires `\-t`)
 .TP
 \fB\-e\fR \fIcode\fR
 Execute code given on the command line instead of a file
@@ -70,7 +70,7 @@ Print where compile and import time went, after the script runs
 Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (magus query output <ref> reopens it)
 .TP
 \fB\-t\fR
-Run the file's test "..." {} blocks and report pass/fail
+Run the test "..." {} blocks of every script given and report pass/fail
 .TP
 \fB\-\-test\fR
 Alias for \-t
@@ -104,6 +104,12 @@ magus buzz -e 'import "std"; fun main() > void { std\(rsprint("hi"); } main();'
 .PP
 .EX
 magus buzz -t scripts/report.buzz
+.EE
+.PP
+\fIRun the test blocks of several files\fR
+.PP
+.EX
+magus buzz -t scripts/report.buzz scripts/lint.buzz
 .EE
 .PP
 \fICheck files without running them\fR

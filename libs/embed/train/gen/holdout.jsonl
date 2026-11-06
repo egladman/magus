@@ -20,6 +20,7 @@
 {"group":"dir:broker","path":"broker/group_other.go"}
 {"group":"dir:broker","path":"broker/group_test.go"}
 {"group":"dir:broker","path":"broker/listen.go"}
+{"group":"dir:broker","path":"broker/listen_protocol_test.go"}
 {"group":"dir:broker","path":"broker/listen_test.go"}
 {"group":"dir:broker","path":"broker/owner.go"}
 {"group":"dir:broker","path":"broker/owner_test.go"}
@@ -118,6 +119,7 @@
 {"group":"file:changes/unreleased/figure-svg-drops-anchor-line.md","path":"changes/unreleased/figure-svg-drops-anchor-line.md"}
 {"group":"file:changes/unreleased/file-split-relation-and-rule.md","path":"changes/unreleased/file-split-relation-and-rule.md"}
 {"group":"file:changes/unreleased/flags-repeated-and-command.md","path":"changes/unreleased/flags-repeated-and-command.md"}
+{"group":"file:changes/unreleased/fold-path-completion-man.md","path":"changes/unreleased/fold-path-completion-man.md"}
 {"group":"file:changes/unreleased/fork-binds-the-right-checkout.md","path":"changes/unreleased/fork-binds-the-right-checkout.md"}
 {"group":"file:changes/unreleased/fork-claim-notes.md","path":"changes/unreleased/fork-claim-notes.md"}
 {"group":"file:changes/unreleased/fork-rules-at-every-door.md","path":"changes/unreleased/fork-rules-at-every-door.md"}
@@ -277,6 +279,7 @@
 {"group":"file:changes/unreleased/root-from-another-directory-reads-its-config.md","path":"changes/unreleased/root-from-another-directory-reads-its-config.md"}
 {"group":"file:changes/unreleased/root-test-narrows-args.md","path":"changes/unreleased/root-test-narrows-args.md"}
 {"group":"file:changes/unreleased/run-false-alarms.md","path":"changes/unreleased/run-false-alarms.md"}
+{"group":"file:changes/unreleased/runs-wait-for-the-budget.md","path":"changes/unreleased/runs-wait-for-the-budget.md"}
 {"group":"file:changes/unreleased/sandbox-launcher.md","path":"changes/unreleased/sandbox-launcher.md"}
 {"group":"file:changes/unreleased/sandbox-policy-grants.md","path":"changes/unreleased/sandbox-policy-grants.md"}
 {"group":"file:changes/unreleased/sandboxed-git-no-global-config.md","path":"changes/unreleased/sandboxed-git-no-global-config.md"}
@@ -520,8 +523,6 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/startup_trace.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/status.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/status_test.go"}
-{"group":"dir:cmd/magus","path":"cmd/magus/status_wait.go"}
-{"group":"dir:cmd/magus","path":"cmd/magus/status_wait_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/stepper.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/stepper_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/stream.go"}
@@ -675,6 +676,7 @@
 {"group":"dir:console/src/desktop","path":"console/src/desktop/zoomControl-dom.test.ts"}
 {"group":"dir:console/src/desktop","path":"console/src/desktop/zoomControl.ts"}
 {"group":"dir:console/src/gen/google/rpc","path":"console/src/gen/google/rpc/status_pb.ts"}
+{"group":"dir:console/src/gen/magus/pulls/v1alpha1","path":"console/src/gen/magus/pulls/v1alpha1/pulls_pb.ts"}
 {"group":"dir:console/src/ui","path":"console/src/ui/alert-dom.test.ts"}
 {"group":"dir:console/src/ui","path":"console/src/ui/alert.ts"}
 {"group":"dir:console/src/ui","path":"console/src/ui/app-menu-dom.test.ts"}
@@ -802,6 +804,7 @@
 {"group":"dir:docs/lib","path":"docs/lib/text.buzz"}
 {"group":"dir:docs/lib","path":"docs/lib/url.buzz"}
 {"group":"file:docs/reference/api/index.md","path":"docs/reference/api/index.md"}
+{"group":"file:docs/reference/api/pulls/v1alpha1/pulls.md","path":"docs/reference/api/pulls/v1alpha1/pulls.md"}
 {"group":"file:docs/reference/api/status/v1alpha1/status.md","path":"docs/reference/api/status/v1alpha1/status.md"}
 {"group":"file:docs/reference/buzz/diskwatch.md","path":"docs/reference/buzz/diskwatch.md"}
 {"group":"dir:std/encoding/hex","path":"docs/reference/buzz/hex.md"}
@@ -1179,6 +1182,7 @@
 {"group":"dir:internal/guard","path":"internal/guard/lease_claim_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/lease_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/load_contract.go"}
+{"group":"dir:internal/guard","path":"internal/guard/load_contract_merge_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/load_contract_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/load_restore.go"}
 {"group":"dir:internal/guard","path":"internal/guard/load_restore_test.go"}
@@ -1363,6 +1367,8 @@
 {"group":"dir:internal/json","path":"internal/json/json_v2.go"}
 {"group":"dir:internal/json","path":"internal/json/json_v2_test.go"}
 {"group":"dir:internal/json","path":"internal/json/requires_jsonv2.go"}
+{"group":"dir:internal/marker","path":"internal/marker/marker.go"}
+{"group":"dir:internal/marker","path":"internal/marker/marker_test.go"}
 {"group":"dir:internal/petname","path":"internal/petname/petname.go"}
 {"group":"dir:internal/petname","path":"internal/petname/petname_test.go"}
 {"group":"dir:internal/petname","path":"internal/petname/words.go"}
@@ -1490,6 +1496,8 @@
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/ack.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/agentfile.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/artifactrequest.buzz"}
+{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/basebranch.buzz"}
+{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/basecommit.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/charm.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/ciannotation.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/cigroup.buzz"}
@@ -1510,6 +1518,8 @@
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/fileinfo.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/finding.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/findreviewrequest.buzz"}
+{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/forgecheck.buzz"}
+{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/forgepull.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/greenrun.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/harness.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/harnessasset.buzz"}
@@ -1526,6 +1536,7 @@
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/lifecycle.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/lifecyclequery.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/limits.buzz"}
+{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/listpullsrequest.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/managedentries.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/manifest.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/mcpserver.buzz"}
@@ -1540,7 +1551,9 @@
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/prunerequest.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/pruneresult.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/publishreviewrequest.buzz"}
+{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/pulllist.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/quote.buzz"}
+{"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/ratelimit.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/releasecycle.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/replyreviewrequest.buzz"}
 {"group":"dir:internal/spell/gen/types","path":"internal/spell/gen/types/reviewcomment.buzz"}

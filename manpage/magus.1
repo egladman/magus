@@ -271,6 +271,24 @@ Lists exact scheme://host origins, past loopback, trusted with the console route
 \fBMAGUS_CONSOLE_ENABLED\fR
 When false, the MCP HTTP server does not mount the console's read\-only API and job service (default true when MCP is up). Config file key: \fBconsole.enabled\fR.
 .TP
+\fBMAGUS_CONSOLE_PULLS_FLOOR\fR
+The shortest wait between two syncs, whatever else is chosen (default: 30s). Config file key: \fBconsole.pulls.floor\fR.
+.TP
+\fBMAGUS_CONSOLE_PULLS_ACTIVE\fR
+The wait while any check is queued or running (default: 1m). Config file key: \fBconsole.pulls.active\fR.
+.TP
+\fBMAGUS_CONSOLE_PULLS_IDLE\fR
+The wait while nothing is queued or running (default: 5m). Config file key: \fBconsole.pulls.idle\fR.
+.TP
+\fBMAGUS_CONSOLE_PULLS_RESERVE\fR
+The request budget kept back; below it the poller waits (default: 500). Config file key: \fBconsole.pulls.reserve\fR.
+.TP
+\fBMAGUS_CONSOLE_PULLS_RUNNER_WAIT\fR
+How long a queued check waits before runners are blamed (default: 15m). Config file key: \fBconsole.pulls.runner_wait\fR.
+.TP
+\fBMAGUS_CONSOLE_PULLS_STALE_AFTER\fR
+How long a pull request may go unpushed before it is stale (default: 72h). Config file key: \fBconsole.pulls.stale_after\fR.
+.TP
 \fBMAGUS_REPORT_FILTER\fR
 Restricts event types via +type/\-type/bare terms; any "+" sets default\-deny. Config file key: \fBreport.filter\fR.
 .TP
@@ -396,6 +414,9 @@ Sets the default width relative to the machine: conservative (half the cores), b
 .TP
 \fBMAGUS_BROKER\fR
 Decides whether a run asks the broker, the per\-user process holding this host's slots, declared memory and shared services: required (refuse a step when none answers), best\-effort (the default: run unarbitrated and say so once), or off (never start or contact one; a run hosts its services itself). Config file key: \fBbroker\fR.
+.TP
+\fBMAGUS_BUDGET_WAIT\fR
+Bounds a step's wait for budget other runs hold. Past it, MGS3009 names them. Zero refuses at once. A sooner run deadline bounds it instead. Config file key: \fBbudget_wait\fR.
 .TP
 \fBMAGUS_SHUTDOWN_GRACE\fR
 Bounds how long the broker and the server take to stop after a first SIGTERM. The broker seats nothing new and waits this long for the runs holding claims or services to finish; the server cancels the runs it adopted and waits this long for them to unwind. A second SIGTERM, or a SIGINT to the broker, stops either at once. Zero stops at once on the first signal; negative is an error (default: 5m). Config file key: \fBshutdown_grace\fR.

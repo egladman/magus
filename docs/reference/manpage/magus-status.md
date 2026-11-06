@@ -23,15 +23,6 @@ When --watch is non-zero, status polls and reprints at that interval. On a
 TTY the screen is cleared between reprints; piped output appends each
 snapshot on its own line for log capture.
 
---wait prints no snapshot: it exits 0 once this machine's build budget can
-seat a run, and it is how a run refused with MGS3009 waits without a retry
-loop. Piped into a magus run (magus status --wait | magus run test .) it reads
-that run's command from the pipe, waits until the budget can seat the claims
-that run will make, and holds the run from starting until it exits; the run
-then proceeds as usual, or starts nothing (MGS3030) if the wait failed. On
-its own it waits for a free slot. A claim larger than the whole budget exits
-78 at once; no broker means nothing to wait for, and it exits 0.
-
 ## Options
 
 **-W** *value*
@@ -52,9 +43,6 @@ its own it waits for a free slot. A claim larger than the whole budget exits
 **--[no-]symbols** (default: off)
 : Include the expensive symbol-index freshness scan
 
-**--[no-]wait** (default: off)
-: Exit 0 once the build budget can seat the magus run reading this pipe (a free slot when none does); holds that run until then, then reserves the seat for it until its first claim
-
 **--watch** *value*
 : Poll and reprint at this interval (minimum 15s; 0 means one-shot). Bare numbers are seconds.
 
@@ -67,12 +55,6 @@ its own it waits for a free slot. A claim larger than the whole budget exits
 
 ```sh
 magus status
-```
-
-*Run tests once the build budget can seat them*
-
-```sh
-magus status --wait | magus run test .
 ```
 
 *Live updates every 15 seconds*
