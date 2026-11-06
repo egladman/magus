@@ -890,7 +890,7 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 	cmdline.DurationVar(fs, &f.Timeout, FlagRunTimeout, 0, "m", "Abort if the run has not finished within this duration (e.g. 5m, 1h30m). Bare numbers are minutes.")
 	fs.BoolVar(&f.Stdin, FlagRunStdin, false, "Run the shards of a saved shard plan, the document affected --plan prints, read from stdin; the plan names the target and the projects")
 	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagRunStdin)
-	fs.StringVar(&f.Shard, FlagRunShard, "", "With --stdin: run only the saved plan's shard with this id. Without it: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing")
+	fs.StringVar(&f.Shard, FlagRunShard, "", "With --stdin: run only the saved plan's shard with this id, or every shard with \"all\"; a plan of several shards refuses without one. Without it: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing")
 	fs.IntVar(&f.NShards, FlagRunNShards, 0, "Without --stdin: the shard count the --shard label belongs to. With it the count is the saved plan's, and a different value is refused")
 	fs.BoolVar(&f.VolatilityRetry, FlagRunVolatilityRetry, true, "Retry a target that fails with volatile output; --no-volatility-retry disables it for this run")
 	cmdline.NegatedBoolVar(fs, &f.VolatilityRetry, FlagRunVolatilityRetry)
