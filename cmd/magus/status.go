@@ -604,7 +604,7 @@ func printBrokerRows(w io.Writer, st types.StatusBroker, policy types.BrokerPoli
 			h.Owner, h.Dir, h.Command, sinceText(h.Since)), "  "))
 	}
 	for _, q := range c.Waiting {
-		why := q.Kind
+		why := ""
 		if q.Tree != "" {
 			why = fmt.Sprintf("seat in %s", q.Tree)
 		}

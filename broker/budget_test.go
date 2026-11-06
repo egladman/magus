@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -80,7 +81,7 @@ func TestAClaimKeptOutByItsOwnProcessIsParkedUntilARelease(t *testing.T) {
 
 	second := claimAsync(t, t.Context(), addr, c, types.MachineClaim{Project: "docs", Target: "lint", MemoryMB: 900, Dir: "/w"})
 	requirePending(t, second)
-	assert.Equal(t, []types.MachineWaiter{{Kind: "claim", Project: "docs", Target: "lint", PID: os.Getpid(), MemoryMB: 900, Slots: 1, Dir: "/w", Command: waiters(t, addr)[0].Command, Owner: "unleased"}},
+	assert.Equal(t, []types.MachineWaiter{{Project: "docs", Target: "lint", PID: os.Getpid(), MemoryMB: 900, Slots: 1, Dir: "/w", Command: waiters(t, addr)[0].Command, Owner: "unleased"}},
 		waiters(t, addr), "status lists the parked claim")
 
 	c.Release(t.Context(), first.ID)
@@ -350,7 +351,7 @@ func TestCapacityJSONCarriesOwnersWaitersAndRefusals(t *testing.T) {
 	b, err := json.Marshal(types.MachineSnapshot{
 		BudgetSlots: 10, HeldSlots: 8,
 		Holders: []types.MachineClaimant{holder},
-		Waiting: []types.MachineWaiter{{Kind: "claim", PID: 2, Project: ".", Target: "lint", Slots: 1, Dir: "/w", Owner: "unleased", Since: at, WaitedMS: 1500}},
+		Waiting: []types.MachineWaiter{{PID: 2, Project: ".", Target: "lint", Slots: 1, Dir: "/w", Owner: "unleased", Since: at, WaitedMS: 1500}},
 		Refused: []types.MachineRefusal{{At: at, PID: 3, Project: ".", Target: "ci", Slots: 4, Owner: "spawned by root", Fits: true,
 			Holders: []types.MachineClaimant{holder}}},
 	})
@@ -359,7 +360,7 @@ func TestCapacityJSONCarriesOwnersWaitersAndRefusals(t *testing.T) {
 	assert.JSONEq(t, fmt.Sprintf(`{
 		"budget_slots": 10, "held_slots": 8,
 		"holders": [%[1]s],
-		"waiting": [{"kind": "claim", "pid": 2, "project": ".", "target": "lint", "slots": 1, "dir": "/w", "owner": "unleased", "since": "2026-10-24T09:40:55Z", "waited_ms": 1500}],
+		"waiting": [{"pid": 2, "project": ".", "target": "lint", "slots": 1, "dir": "/w", "owner": "unleased", "since": "2026-10-24T09:40:55Z", "waited_ms": 1500}],
 		"refused": [{"at": "2026-10-24T09:40:55Z", "pid": 3, "project": ".", "target": "ci", "slots": 4, "owner": "spawned by root", "fits": true,
 			"holders": [%[1]s]}]
 	}`, holderJSON), string(b))
@@ -471,4 +472,42 @@ func (s *StrangerQueueSuite) TestAProtocol4ClientIsRefusedAtHello() {
 	var er errorReply
 	s.Require().NoError(decodeBody(f, &er))
 	s.Equal(CodeProtocol, er.Code, "a protocol 4 client would wait unbounded")
+}
+
+type ParkedFrameSuite struct {
+	suite.Suite
+}
+
+func TestParkedFrameSuite(t *testing.T) { suite.Run(t, new(ParkedFrameSuite)) }
+
+func (s *ParkedFrameSuite) TestAFrameOlderThanOneAlreadyWrittenIsDropped() {
+	var out bytes.Buffer
+	p := &parked{w: &frameWriter{w: &out}, id: 9}
+	stale, fresh := p.nextFrameLocked(), p.nextFrameLocked()
+
+	p.send(fresh, typeParked, parkedReply{Verdict: types.MachineVerdict{HeldSlots: 2}})
+	p.send(stale, typeParked, parkedReply{Verdict: types.MachineVerdict{HeldSlots: 1}})
+
+	r := newFrameReader(&out)
+	f, err := r.read()
+	s.Require().NoError(err)
+	var got parkedReply
+	s.Require().NoError(decodeBody(f, &got))
+	s.Equal(2, got.Verdict.HeldSlots)
+	_, err = r.read()
+	s.Error(err, "the stale frame never went out")
+}
+
+func (s *ParkedFrameSuite) TestTheKeyCoversWhatTheClientPrints() {
+	base := parkedReply{Verdict: types.MachineVerdict{Fits: true, BudgetMB: 1000, HeldMB: 500, BudgetSlots: 4, HeldSlots: 2,
+		Holders: []types.MachineClaimant{{PID: 7, Project: ".", Target: "lint", Slots: 1, MemoryMB: 100}}}}
+	more := base
+	more.Verdict.HeldMB = 600
+	s.NotEqual(base.key(), more.key(), "remaining memory")
+	more = base
+	more.Verdict.HeldSlots = 3
+	s.NotEqual(base.key(), more.key(), "remaining slots")
+	more = base
+	more.Verdict.Holders = []types.MachineClaimant{{PID: 7, Project: ".", Target: "lint", Slots: 2, MemoryMB: 100}}
+	s.NotEqual(base.key(), more.key(), "holder slots")
 }
