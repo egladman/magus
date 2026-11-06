@@ -460,7 +460,27 @@ func (s *UnloadCauseSuite) TestAnUnknownConfigKeyThisBuildPredatesIsStale() {
 	binary.WriteExecutable("magus", "#!/bin/sh\n")
 	err := types.DiagnosticErrorf(types.UnknownConfigKey,
 		"magus.yaml has a key this magus does not know:\n  - guard.newest  (line 4)")
+	s.Equal(unloadReason{Cause: unloadStale, Config: true}, unloadCause(err, binary.Root()))
+}
+
+func (s *UnloadCauseSuite) TestAnOlderMagusfileFailureIsNotAConfigOne() {
+	binary := testkit.NewWorkspace(s.T())
+	binary.WriteExecutable("magus", "#!/bin/sh\n")
+	err := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "older")
 	s.Equal(unloadReason{Cause: unloadStale}, unloadCause(err, binary.Root()))
+}
+
+func (s *UnloadCauseSuite) TestTheDenialSaysOwnMagusPredatesTheConfig() {
+	binary := testkit.NewWorkspace(s.T())
+	binary.WriteExecutable("magus", "#!/bin/sh\n")
+	d := staleBinaryDenial(judgedCall{what: "this command"}, unloadReason{Cause: unloadStale, Config: true}, nil, true, binary.Root())
+	s.Contains(d.Say, "./magus predates this workspace's magus.yaml")
+}
+
+func (s *UnloadCauseSuite) TestTheDenialSaysAnyJudgePredatesTheConfig() {
+	root := testkit.NewWorkspace(s.T()).Root()
+	d := staleBinaryDenial(judgedCall{what: "this command"}, unloadReason{Cause: unloadStale, Config: true}, nil, false, root)
+	s.Contains(d.Say, "the magus judging this predates this workspace's magus.yaml")
 }
 
 func TestDeclaresGuardRule(t *testing.T) {

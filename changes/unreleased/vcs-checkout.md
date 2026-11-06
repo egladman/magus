@@ -9,3 +9,5 @@
   as `refs/pull/<n>/head` first with `--fetch`. It then runs each project's `install`
   target, `magus agent harness install` and the `checkout.bootstrap` hook, and prints the
   path and the `--remove` command. `--no-bootstrap` skips all three.
+- **The guard reads a `magus.yaml` key its binary does not know as an out-of-date binary.**
+  It refuses what changes state, says the binary predates `magus.yaml`, and lets the rebuild run.

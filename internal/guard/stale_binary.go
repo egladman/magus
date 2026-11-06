@@ -2,6 +2,7 @@ package guard
 
 import (
 	"bytes"
+	"errors"
 	"cmp"
 	"context"
 	"fmt"
@@ -44,6 +45,8 @@ const (
 type unloadReason struct {
 	Cause unloadKind
 	Spell string
+	// Config marks a stale failure on a magus.yaml key the binary predates.
+	Config bool
 }
 
 // The rules denyUnloaded refuses under, while no side of the workspace's guard policy loads.
@@ -69,7 +72,7 @@ func unloadCause(loadFailure error, root string) unloadReason {
 		return unloadReason{}
 	}
 	if ward.IsStaleBinary(loadFailure) {
-		return unloadReason{Cause: unloadStale}
+		return unloadReason{Cause: unloadStale, Config: errors.Is(loadFailure, types.UnknownConfigKey)}
 	}
 	spell := skewedSpell(loadFailure, root)
 	switch {
@@ -556,6 +559,10 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 		problem = fmt.Sprintf("./magus was built from another commit than this tree: it ships no spell %q, which the tree carries, so it cannot load its guard policy", reason.Spell)
 	case reason.Cause == unloadNoBinary, own && !hasBinary:
 		problem = "this checkout has no ./magus to load its guard policy"
+	case reason.Config && own && hasBinary:
+		problem = "./magus predates this workspace's magus.yaml, which sets a key it does not know, so it cannot load its guard policy"
+	case reason.Config:
+		problem = "the magus judging this predates this workspace's magus.yaml, which sets a key it does not know, so it cannot load its guard policy"
 	case own && hasBinary:
 		problem = "./magus is older than this workspace and cannot load its guard policy"
 	}

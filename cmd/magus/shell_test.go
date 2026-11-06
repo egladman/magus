@@ -2726,3 +2726,50 @@ func (s *unjudgedHookSuite) TestTheHookBootstrapIsWardsCommand() {
 	s.Require().NoError(err)
 	s.Contains(string(body), fmt.Sprintf("final BOOTSTRAP = %q;", ward.BootstrapCommand))
 }
+
+// staleConfigSuite pins the guard over a magus.yaml key this build predates
+// (MGS1040): it judges the call as a stale binary's rather than exiting.
+type staleConfigSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestStaleConfigSuite(t *testing.T) {
+	suite.Run(t, new(staleConfigSuite))
+}
+
+func (s *staleConfigSuite) SetupTest() {
+	ws := testkit.NewWorkspace(s.T())
+	ws.Write("go.mod", "module github.com/egladman/magus\n\ngo 1.25\n")
+	ws.Write("magusfile.buzz", "import \"magus\";\nmagus\\guard.command(judge);\n")
+	ws.Write("magus.yaml", "checkout:\n  bootstrap: hack/dev/bootstrap-checkout.buzz\n")
+	ws.WriteExecutable("magus", "#!/bin/sh\n")
+	s.root = ws.Root()
+	s.T().Chdir(s.root)
+	savedRoot, savedFlags := guardRoot, global
+	guardRoot = func(string) (string, error) { return s.root, nil }
+	global = globalFlags{}
+	s.T().Cleanup(func() { guardRoot, global = savedRoot, savedFlags })
+}
+
+func (s *staleConfigSuite) judge(command string) types.GuardJudgment {
+	failure := types.DiagnosticErrorf(types.UnknownConfigKey,
+		"magus.yaml has a key this magus does not know:\n  - checkout  (line 1)")
+	ctx := withStaleConfig(s.T().Context(), failure)
+	var out bytes.Buffer
+	_ = shellCommandWithErrorWriter(ctx, strings.NewReader(""), &out, io.Discard, []string{"-o", "json", command})
+	var v types.GuardJudgment
+	s.Require().NoError(json.Unmarshal(out.Bytes(), &v), out.String())
+	return v
+}
+
+func (s *staleConfigSuite) TestAStateChangeIsRefusedAsAStaleBinary() {
+	v := s.judge("touch notes.txt")
+	s.Contains(v.Reason, "predates this workspace's magus.yaml")
+	s.Equal(types.GuardJudgment{Decision: "deny", Rule: "stale-binary"}, types.GuardJudgment{Decision: v.Decision, Rule: v.Rule})
+}
+
+func (s *staleConfigSuite) TestTheBootstrapItServesRuns() {
+	v := s.judge(fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", s.root))
+	s.NotEqual("deny", v.Decision, v.Reason)
+}
