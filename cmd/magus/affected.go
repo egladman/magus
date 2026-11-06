@@ -536,6 +536,9 @@ type planOutput struct {
 	// Unmeasured are the units and prerequisites the shards were
 	// weighed by the workspace fallback for, having no history.
 	Unmeasured []types.Unit `json:"unmeasured,omitempty"`
+	// Unreached are the affected projects' units no changed path reaches
+	// through declared reads. Each replays from the cache, so no shard runs it.
+	Unreached []types.Unit `json:"unreached,omitempty"`
 	// Inherit is present only when the plan inherited a green run's verdict;
 	// see planInherit. The matrix beside it is then empty on purpose.
 	Inherit *planInherit `json:"inherit,omitempty"`
@@ -937,6 +940,11 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 			"%d of the plan's targets have no recorded duration, so the plan weighed them with the workspace fallback: %s",
 			len(plan.Unmeasured), cappedUnits(plan.Unmeasured)), attr.Notice("note"))
 	}
+	if len(plan.Unreached) > 0 {
+		slog.With(attr.Component("magus")).InfoContext(ctx, fmt.Sprintf(
+			"%d of the affected projects' targets read no changed path, so the plan leaves them to the cache: %s",
+			len(plan.Unreached), cappedUnits(plan.Unreached)), attr.Notice("note"))
+	}
 
 	if len(plan.Fallbacks) > 0 {
 		slog.With(attr.Component("magus")).WarnContext(ctx, "the plan fell back: "+strings.Join(plan.Fallbacks, "; "))
@@ -954,6 +962,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		Affected:    plan.Affected,
 		UnboundedBy: plan.UnboundedBy,
 		Unmeasured:  plan.Unmeasured,
+		Unreached:   plan.Unreached,
 	}
 	for i, s := range plan.Shards {
 		out.Matrix[i] = planShard{

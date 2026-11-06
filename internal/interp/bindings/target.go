@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
@@ -396,29 +395,23 @@ func secretGrantArg(method string, args []vm.Value) (types.SecretGrant, error) {
 
 // dispatchBuzzExternal runs the cross-project target an external handle names,
 // through the run's CrossDispatch coordinator (run-once + cross-project cycle
-// detection). The project path is resolved with file.ResolveImport against the caller's
-// workspace-relative path, the same rule describe.go applies to the extracted ref, so
-// the graph edge and the runtime dispatch agree, and a ..-escape or absolute path is rejected
-// rather than running a magusfile outside the workspace. The dep's canonical dir
+// detection). externalProjectPath resolves the project, so the graph edge and
+// the dispatch agree. A ..-escape or absolute path is rejected.
+// The dep's canonical dir
 // comes from the workspace, keeping the coordinator's run-once/cycle key canonical.
 // It yields the caller's concurrency slot for the duration (the remote run needs
 // slots of its own), mirroring buzzDispatchViaPool. No-op when no coordinator/
 // workspace is in ctx (describe/parse), so the handle stays graph-only.
 func dispatchBuzzExternal(ctx context.Context, ref externalTarget) error {
 	cd := interp.CrossDispatchFromContext(ctx)
-	src := interp.SourceFromContext(ctx)
-	ws := types.WorkspaceFromContext(ctx)
-	if cd == nil || src == nil || ws == nil {
+	if cd == nil {
 		return nil
 	}
-	callerRel, err := filepath.Rel(ws.Root(), src.Dir)
-	if err != nil {
-		return fmt.Errorf("cross-project dependency: %w", err)
-	}
-	depPath, err := file.ResolveImport(ref.Project, filepath.ToSlash(callerRel))
-	if err != nil {
+	depPath, ok, err := externalProjectPath(ctx, ref)
+	if err != nil || !ok {
 		return err
 	}
+	ws := types.WorkspaceFromContext(ctx)
 	dep := ws.Get(depPath)
 	if dep == nil {
 		return fmt.Errorf("cross-project dependency: unknown project %q", depPath)
@@ -452,38 +445,16 @@ func buildBuzzNeeds(targets map[string]vm.Callable, exports map[string]vm.Value,
 		}
 		var names []string
 		external := 0
-		// collect resolves one argument to its target name(s): a target function to
-		// its name, or a ctx.glob(...) list to each element's name. A cross-project
-		// handle dispatches immediately (awaited via CrossDispatch, not the same-project
-		// pool). Errors are returned unprefixed; the caller adds the verb.
-		var collect func(arg vm.Value) error
-		collect = func(arg vm.Value) error {
-			if arg.IsList() {
-				for _, el := range arg.ListItems() {
-					if err := collect(el); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
-			if !arg.IsFun() {
-				return fmt.Errorf("each argument must be a target function (an exported target, a project import member, or a ctx.glob(...) result)")
-			}
-			if ref, ok := ext.lookup(arg); ok {
+		// A cross-project handle dispatches at once, awaited via
+		// CrossDispatch rather than the same-project pool.
+		err := eachNeed(targets, exports, ext, args,
+			func(name string) { names = append(names, name) },
+			func(ref externalTarget) error {
 				external++
 				return dispatchBuzzExternal(callCtx, ref)
-			}
-			name, err := resolveTargetFun(targets, exports, arg)
-			if err != nil {
-				return err
-			}
-			names = append(names, name)
-			return nil
-		}
-		for _, arg := range args {
-			if err := collect(arg); err != nil {
-				return vm.Null, fmt.Errorf("ctx.needs: %w", err)
-			}
+			})
+		if err != nil {
+			return vm.Null, err
 		}
 		// The same silent no-op ctx.glob refuses, reached by an empty list or no argument.
 		if len(names) == 0 && external == 0 {
@@ -521,7 +492,7 @@ func buildBuzzNeeds(targets map[string]vm.Callable, exports map[string]vm.Value,
 		// dependencies, and silently skipping them would be the worst failure this
 		// change could cause.
 		started := time.Now()
-		err := runBuzzDependencies(callCtx, targets, names)
+		err = runBuzzDependencies(callCtx, targets, names)
 		types.DependencyWaitFromContext(callCtx).Add(time.Since(started))
 		if err != nil {
 			return vm.Null, fmt.Errorf("ctx.needs: %w", err)

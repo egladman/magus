@@ -435,7 +435,7 @@ func archiveHoldThreads(ctx context.Context, opts types.ArchiveOptions) (threads
 // entries, and fails at maxSize uncompressed bytes (10 GiB by default) rather than
 // filling the disk.
 func ArchiveUncompress(ctx context.Context, src, dest string, opts types.ArchiveOptions) (types.UncompressResult, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "archive.uncompress") {
 		return types.UncompressResult{}, nil
 	}
 	src, dest = resolvePath(ctx, src), resolvePath(ctx, dest)
@@ -494,7 +494,7 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts types.Archive
 // the format option overrides it. Symlinks are not followed by default, so a link
 // inside src cannot pull files from outside it into the archive.
 func ArchiveCompress(ctx context.Context, src, dest string, opts types.ArchiveOptions) (types.CompressResult, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "archive.compress") {
 		return types.CompressResult{}, nil
 	}
 	src, dest = resolvePath(ctx, src), resolvePath(ctx, dest)

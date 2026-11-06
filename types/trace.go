@@ -22,3 +22,15 @@ func Tracing(ctx context.Context) bool {
 	on, _ := ctx.Value(traceKey{}).(bool)
 	return on
 }
+
+// Stubbed is Tracing for an effectful host operation named op: under a trace
+// the caller stubs op, and a [StepLog] on ctx notes it among its Effects.
+func Stubbed(ctx context.Context, op string) bool {
+	if !Tracing(ctx) {
+		return false
+	}
+	if r := StepLogFromContext(ctx); r != nil {
+		r.effect(op)
+	}
+	return true
+}

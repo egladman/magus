@@ -285,6 +285,71 @@ func (s *PlanUnitsSuite) TestEveryShardIsDigestedByItsUnitsDigest() {
 	}
 }
 
+func (s *PlanUnitsSuite) TestAnAnchorThatDoesMoreThanNeedsIsAnErrorNamingIt() {
+	root := writeWorkspace(s.T(), map[string]string{
+		"magusfile.buzz": `import "magus";
+import "fs";
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun ci(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(build);
+    fs\writeFile("out.txt", "x");
+}
+`,
+	})
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	_, err = m.planUnits(context.Background(), []types.Target{{Path: "."}}, "ci", nil, nil)
+	s.ErrorContains(err, "ci in . does more than ctx.needs (fs.writeFile)")
+}
+
+// PlanReachSuite plans a workspace whose targets declare their reads, so a
+// change reaches some units and leaves the rest to the cache.
+type PlanReachSuite struct {
+	suite.Suite
+	m *Magus
+}
+
+func TestPlanReachSuite(t *testing.T) { suite.Run(t, new(PlanReachSuite)) }
+
+func (s *PlanReachSuite) SetupTest() {
+	root := writeWorkspace(s.T(), map[string]string{
+		"magusfile.buzz": `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void !> any { ctx.readsFiles(["*.go"]); }
+export fun docs(ctx: magus\Context, args: [str]) > void !> any { ctx.readsFiles(["docs/*"]); }
+export fun test(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(build); ctx.readsFiles(["*_test.go"]); }
+export fun vet(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(build); ctx.readsFiles(["*_test.go"]); }
+export fun ci(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(docs, test, vet); }
+`,
+		"main.go":   "package main\n",
+		"docs/a.md": "a\n",
+	})
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	s.m = m
+}
+
+func (s *PlanReachSuite) plan(path string) types.ShardPlan {
+	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{path}, MaxShards: -1})
+	s.Require().NoError(err)
+	return plan
+}
+
+func (s *PlanReachSuite) TestAUnitWhoseClosureReadsNoChangedPathIsUnreached() {
+	s.Equal([]types.Unit{{Project: ".", Target: "docs"}}, s.plan("main.go").Unreached)
+}
+
+func (s *PlanReachSuite) TestAPrerequisiteReadingTheChangeReachesItsDependents() {
+	s.Equal([]types.Unit{{Project: ".", Target: "test"}, {Project: ".", Target: "vet"}}, s.plan("docs/a.md").Unreached)
+}
+
+func (s *PlanReachSuite) TestUnitsSharingAReachedPrerequisiteShareAShard() {
+	plan := s.plan("main.go")
+	s.Require().Len(plan.Shards, 1)
+	s.ElementsMatch([]types.Unit{{Project: ".", Target: "test"}, {Project: ".", Target: "vet"}}, plan.Shards[0].Units)
+}
+
 type PlaceDutiesSuite struct{ suite.Suite }
 
 func TestPlaceDutiesSuite(t *testing.T) { suite.Run(t, new(PlaceDutiesSuite)) }

@@ -178,7 +178,7 @@ func (r ExecResult) BuzzObject() types.BuzzObject {
 // left the group (setsid) is not reached. A watch on ctx ([WithGroupWatch]) is told of
 // the group for as long as its leader runs.
 func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (ExecResult, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "proc.exec") {
 		slog.InfoContext(ctx, "run.exec", "cmd", name, "args", args, "dir", opts.Dir)
 		return ExecResult{Started: true, Code: 0}, nil
 	}

@@ -163,7 +163,7 @@ func ImageDigestString(_ context.Context, d types.ImageDigest) (string, error) {
 // ImageAssemble writes the image spec describes as a layout at dest. A dry run
 // writes nothing and returns what ImageLayout returns.
 func ImageAssemble(ctx context.Context, spec types.ImageSpec, dest string) (types.ImageLayout, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "image.assemble") {
 		return ImageLayout(ctx, spec)
 	}
 	s, err := imageSpec(ctx, spec)
@@ -202,7 +202,7 @@ func ImageLayout(ctx context.Context, spec types.ImageSpec) (types.ImageLayout, 
 
 // ImageAssembleIndex writes one Image Index over layouts at dest.
 func ImageAssembleIndex(ctx context.Context, layouts []string, dest string) (types.ImageLayout, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "image.assembleIndex") {
 		return types.ImageLayout{}, nil
 	}
 	resolved := make([]string, len(layouts))
@@ -224,7 +224,7 @@ func ImageAssembleIndex(ctx context.Context, layouts []string, dest string) (typ
 // only under the update charm: it names what a registry serves today, which the cache
 // key cannot see.
 func ImagePull(ctx context.Context, reference string, platform types.ImagePlatform, dest string, auth *types.ImageRegistryAuth) (types.ImageLayout, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "image.pull") {
 		return types.ImageLayout{}, nil
 	}
 	ref, err := oci.ParseReference(reference)
@@ -255,7 +255,7 @@ func ImagePull(ctx context.Context, reference string, platform types.ImagePlatfo
 
 // ImagePush pushes the layout at layout to repository under tags.
 func ImagePush(ctx context.Context, layout, repository string, tags []string, auth *types.ImageRegistryAuth) (types.ImagePushed, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "image.push") {
 		return types.ImagePushed{}, nil
 	}
 	repo, err := oci.ParseRepository(repository)
@@ -280,7 +280,7 @@ func ImagePush(ctx context.Context, layout, repository string, tags []string, au
 
 // ImageWriteSBOM writes an SPDX document for the layout's image to path.
 func ImageWriteSBOM(ctx context.Context, layout, path string) (types.ImageDocument, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "image.writeSBOM") {
 		return types.ImageDocument{}, nil
 	}
 	layout, path = resolvePath(ctx, layout), resolvePath(ctx, path)
@@ -296,7 +296,7 @@ func ImageWriteSBOM(ctx context.Context, layout, path string) (types.ImageDocume
 
 // ImageWriteProvenance writes an in-toto statement for the layout's image to path.
 func ImageWriteProvenance(ctx context.Context, layout string, p types.ImageProvenance, path string) (types.ImageDocument, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "image.writeProvenance") {
 		return types.ImageDocument{}, nil
 	}
 	prov := image.Provenance{BuilderID: p.BuilderID, SourceRevision: p.SourceRevision}
@@ -320,7 +320,7 @@ func ImageWriteProvenance(ctx context.Context, layout string, p types.ImageProve
 
 // ImageAttachReferrers writes a new layout at dest with subject's image and documents.
 func ImageAttachReferrers(ctx context.Context, subject string, documents []types.ImageDocument, dest string) (types.ImageLayout, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "image.attachReferrers") {
 		return types.ImageLayout{}, nil
 	}
 	subject, dest = resolvePath(ctx, subject), resolvePath(ctx, dest)
@@ -346,7 +346,7 @@ func ImageAttachReferrers(ctx context.Context, subject string, documents []types
 
 // ImageOpen reads the layout at path back, opened at the image name names.
 func ImageOpen(ctx context.Context, path, name string) (types.ImageLayout, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "image.open") {
 		return types.ImageLayout{}, nil
 	}
 	path = resolvePath(ctx, path)
@@ -373,7 +373,7 @@ func ImageOpen(ctx context.Context, path, name string) (types.ImageLayout, error
 // ImageReferrers reads the documents attached beside the image at path.
 // It needs no registry, which oci.Client.Referrers does.
 func ImageReferrers(ctx context.Context, path, name string) ([]types.ImageDocument, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "image.referrers") {
 		return nil, nil
 	}
 	path = resolvePath(ctx, path)
