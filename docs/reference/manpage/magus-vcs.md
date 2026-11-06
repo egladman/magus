@@ -224,13 +224,13 @@ magus vcs checkpoint --preserve
 *Check out a pull request's head to review it*
 
 ```sh
-magus vcs checkout <sha> --fetch refs/pull/<n>/head
+magus vcs checkout 1a2b3c4 --fetch refs/pull/42/head
 ```
 
 *Remove that checkout again*
 
 ```sh
-magus vcs checkout --remove <dir>
+magus vcs checkout --remove ~/.cache/magus/tmp/checkout-1a2b3c4
 ```
 
 ## See Also

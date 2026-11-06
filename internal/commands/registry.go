@@ -1824,8 +1824,8 @@ prints the path, what ran, and the command that removes it: checkout --remove
 		{Comment: "Record what a lease was handed", Command: "magus vcs checkpoint"},
 		{Comment: "The one citable token, for a ledger cell", Command: "magus vcs checkpoint -o name"},
 		{Comment: "Capture the uncommitted work too, before something risky", Command: "magus vcs checkpoint --preserve"},
-		{Comment: "Check out a pull request's head to review it", Command: "magus vcs checkout <sha> --fetch refs/pull/<n>/head"},
-		{Comment: "Remove that checkout again", Command: "magus vcs checkout --remove <dir>"},
+		{Comment: "Check out a pull request's head to review it", Command: "magus vcs checkout 1a2b3c4 --fetch refs/pull/42/head"},
+		{Comment: "Remove that checkout again", Command: "magus vcs checkout --remove ~/.cache/magus/tmp/checkout-1a2b3c4"},
 	},
 }
 
