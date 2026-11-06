@@ -89,11 +89,28 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 	if opts.RunnerPoolBudget > 0 && opts.RunnerPoolBudget < maxParallel {
 		maxParallel = opts.RunnerPoolBudget
 	}
-	shards, overBudget, unpeaked, err := planShards(&f, plan, reach.kept)
+	// Stage one replays what stage zero computed, so it may repeat it.
+	stageOne := f
+	var stageZero []types.Shard
+	var zeroOverBudget []string
+	if len(plan.StageZero) > 0 {
+		stageOne = f.Replaying(shardUnits(plan.StageZero))
+		if stageZero, zeroOverBudget, err = planShards(&f, plan.StageZero); err != nil {
+			return types.ShardPlan{}, err
+		}
+	}
+	shards, oneOverBudget, err := planShards(&stageOne, plan.Shards)
 	if err != nil {
 		return types.ShardPlan{}, err
 	}
+	placeDuties(shards)
+	var unpeaked []string
+	if unmeasured := f.UnmeasuredPeaks(reach.kept); f.MemoryBudgetBytes > 0 && len(unmeasured) > 0 {
+		unpeaked = []string{fmt.Sprintf(
+			"the history holds no peak memory for %s, so the memory check counts each as zero", joinUnits(unmeasured))}
+	}
 	return types.ShardPlan{
+		StageZero:   stageZero,
 		Shards:      shards,
 		Source:      scope.source,
 		MaxParallel: maxParallel,
@@ -101,8 +118,8 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		Args:        opts.Args,
 		Machine:     machine,
 		Fallbacks:   append(fallbacks, unpeaked...),
-		Sufficient:  f.SufficientShards(reach.kept, len(plan.Shards)),
-		OverBudget:  overBudget,
+		Sufficient:  stageOne.SufficientShards(shardUnits(plan.Shards), len(plan.Shards)),
+		OverBudget:  slices.Concat(zeroOverBudget, oneOverBudget),
 		Unmeasured:  f.Unmeasured(reach.kept),
 		Unreached:   reach.unreached,
 		Affected:    scope.affected,
@@ -185,6 +202,7 @@ type planReach struct {
 func (m *Magus) planReach(units []types.Unit, scope planScope) (planReach, error) {
 	// optimization: each closure is walked once; reach and packing read the
 	// map, where each asked WalkChain again for every unit and prerequisite.
+	// A prerequisite's closure is there too, for stage zero to pack it.
 	r := planReach{needs: make(map[types.Unit][]types.Unit, len(units))}
 	closureOf := func(u types.Unit) ([]types.Unit, error) {
 		if c, ok := r.needs[u]; ok {
@@ -197,8 +215,14 @@ func (m *Magus) planReach(units []types.Unit, scope planScope) (planReach, error
 		return c, err
 	}
 	for _, u := range units {
-		if _, err := closureOf(u); err != nil {
+		closure, err := closureOf(u)
+		if err != nil {
 			return planReach{}, fmt.Errorf("affected plan: %w", err)
+		}
+		for _, n := range closure {
+			if _, err := closureOf(n); err != nil {
+				return planReach{}, fmt.Errorf("affected plan: %w", err)
+			}
 		}
 	}
 	r.computes = func(types.Unit) bool { return true }
@@ -254,34 +278,35 @@ func (m *Magus) planMaxShards(opts PlanOptions, f *forecast.Model, units []types
 	return maxShards, nil
 }
 
-// planShards turns plan into shards with their duties placed. It refuses a
-// unit two shards would compute, and names the shards over f's memory budget
-// and the units with no measured peak.
-func planShards(f *forecast.Model, plan ci.Plan, units []types.Unit) ([]types.Shard, []string, []string, error) {
-	shards := make([]types.Shard, len(plan.Shards))
-	assignments := make([][]types.Unit, len(plan.Shards))
-	for i, s := range plan.Shards {
+// planShards turns one stage's planned shards into plan shards. It refuses a
+// unit two shards would compute, and names the shards over f's memory budget.
+func planShards(f *forecast.Model, planned []ci.Shard) ([]types.Shard, []string, error) {
+	shards := make([]types.Shard, len(planned))
+	assignments := make([][]types.Unit, len(planned))
+	for i, s := range planned {
 		shards[i] = types.Shard{
 			ID: s.ID, Digest: types.UnitsDigest(s.Units),
 			ProjectPaths: types.UnitProjects(s.Units), Units: s.Units,
 		}
 		assignments[i] = s.Units
 	}
-	placeDuties(shards)
 	if repeated := f.Repeats(assignments); len(repeated) > 0 {
-		return nil, nil, nil, fmt.Errorf("affected plan: %s would compute on more than one shard", joinUnits(repeated))
+		return nil, nil, fmt.Errorf("affected plan: %s would compute on more than one shard", joinUnits(repeated))
 	}
-	var overBudget, unpeakedNote []string
+	var overBudget []string
 	for _, i := range f.OverBudget(assignments) {
-		overBudget = append(overBudget, plan.Shards[i].ID)
+		overBudget = append(overBudget, planned[i].ID)
 	}
-	if f.MemoryBudgetBytes > 0 {
-		if unpeaked := f.UnmeasuredPeaks(units); len(unpeaked) > 0 {
-			unpeakedNote = []string{fmt.Sprintf(
-				"the history holds no peak memory for %s, so the memory check counts each as zero", joinUnits(unpeaked))}
-		}
+	return shards, overBudget, nil
+}
+
+// shardUnits is every unit planned holds, in shard order.
+func shardUnits(planned []ci.Shard) []types.Unit {
+	var units []types.Unit
+	for _, s := range planned {
+		units = append(units, s.Units...)
 	}
-	return shards, overBudget, unpeakedNote, nil
+	return units
 }
 
 // planUnits is each step anchor asks for through ctx.needs, under charms and

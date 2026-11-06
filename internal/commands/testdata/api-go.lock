@@ -5075,6 +5075,7 @@ github.com/egladman/magus/types.ShardPlan.MaxParallel field int
 github.com/egladman/magus/types.ShardPlan.OverBudget field []string
 github.com/egladman/magus/types.ShardPlan.Shards field []Shard
 github.com/egladman/magus/types.ShardPlan.Source field string
+github.com/egladman/magus/types.ShardPlan.StageZero field []Shard
 github.com/egladman/magus/types.ShardPlan.Sufficient field int
 github.com/egladman/magus/types.ShardPlan.UnboundedBy field string
 github.com/egladman/magus/types.ShardPlan.Unmeasured field []Unit
