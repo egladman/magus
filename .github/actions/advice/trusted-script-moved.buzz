@@ -464,7 +464,6 @@ jobs:
         with:
           merge-queue: 'true'
           merge-conflicts: 'false'
-          target-outputs: 'false'
           doctor: 'false'
           version-floor: 'false'
           blast-radius: 'false'
