@@ -1500,10 +1500,10 @@ func TestAForkUnderJobExecSharesItsClaim(t *testing.T) {
 	t.Cleanup(func() { cancel(); <-done })
 
 	root := testkit.NewRepository(t, map[string]string{
-		"magus.yaml":     "disk:\n  critical_free_mb: 0\n",
+		"magus.yaml":     "disk:\n  critical_free_mb: 0\ncheckout:\n  bootstrap: hack/dev/bootstrap-checkout.buzz\n",
 		"magusfile.buzz": "import \"magus\";\n" + testTarget,
 		"a.go":           "package a\n",
-		filepath.FromSlash(job.CheckoutBootstrapScript): "import \"proc\";\n\nexport fun main(args: [str]) > void !> any {\n" +
+		filepath.FromSlash("hack/dev/bootstrap-checkout.buzz"): "import \"proc\";\n\nexport fun main(args: [str]) > void !> any {\n" +
 			"    _ = proc\\exec(\"./magus\", args: [\"run\", \"--no-cache\", \"test\", \".\"]);\n}\n",
 	}).Root()
 	// A hard link: Linux resolves a symlink, and a re-exec reruns the suite.

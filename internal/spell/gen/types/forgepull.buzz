@@ -12,6 +12,7 @@ export object ForgePull {
     url: str = "",
     branch: str = "",
     headSHA: str = "",
+    fetchRef: str = "",
     draft: bool = false,
     mergeable: str = "",
     behindBy: int = 0,
