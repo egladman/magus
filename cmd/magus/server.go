@@ -309,7 +309,7 @@ func servingSuffix(st *proc.StatusReply) string {
 // would be excused from the budget, and a run with no ancestry of its own would be judged
 // a nested magus that had lost it.
 func detachedChildEnv() []string {
-	drop := []string{proc.SocketEnv + "=", proc.TokenEnv + "=", spawn.AncestorsEnvVar + "=", "MAGUS_LEVEL="}
+	drop := []string{proc.SocketEnv + "=", proc.TokenEnv + "=", spawn.AncestorsEnvVar + "=", "MAGUS_LEVEL=", spawn.TreeMarkEnv + "="}
 	env := os.Environ()
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
