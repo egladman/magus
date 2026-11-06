@@ -658,7 +658,7 @@ fun readRegressions(base: str, open: [Pull]) > result\Result::<[regressions\Regr
         var i = 0;
         while (i < runs.len()) {
             final jobs = capture("gh", args: ["run", "view", runs[i].id, "--json", "jobs"]);
-            runs[i] = regressions\Run{ id = runs[i].id, sha = runs[i].sha, keys = regressions\parseJobs(jobs, keyOf: regressions\checkKey) };
+            runs[i] = regressions\CiRun{ id = runs[i].id, sha = runs[i].sha, keys = regressions\parseJobs(jobs, keyOf: regressions\checkKey) };
             if (i == 0) {
                 red = regressions\redKeys(runs[0]);
             }
@@ -1986,6 +1986,8 @@ object Board {
     mainRun: MainRun? = null,
     // The checks red on main, read only while its newest run is red.
     regressions: [regressions\Regression] = [<regressions\Regression>],
+    // Why main's red checks could not be attributed; "" when they were read.
+    regressionsUnread: str = "",
 }
 
 // Placed is a pull request the page shows, with its record and section.
@@ -2892,6 +2894,10 @@ export fun renderDashboard(b: Board) > str !> any {
         lines.append("{mono(b.base)} " + said.join(" · "));
         lines.append("");
     }
+    if (b.regressionsUnread != "") {
+        lines.append("{mono(b.base)} is red; which change broke it is unknown, the read failed: {b.regressionsUnread}");
+        lines.append("");
+    }
     if (hint != "") {
         lines.append(hint);
         lines.append("");
@@ -3025,8 +3031,14 @@ fun fetchBoard(sel: Selector) > Board !> any {
         "--limit", "20", "--json", "status,conclusion,url"]));
     requests = requests + 3;
     var attributed = [<regressions\Regression>];
+    var unread = "";
     if (ci != null and ci!.state == "red") {
-        attributed = mainRegressions(sel.base, open: open);
+        final read = readRegressions(sel.base, open: open);
+        if (read.error -> err) {
+            unread = err.message;
+        } else {
+            attributed = read.value!;
+        }
     }
     final ids = mut [<int>];
     foreach (q in queue) {
@@ -3056,7 +3068,8 @@ fun fetchBoard(sel: Selector) > Board !> any {
         + "{runs.len()} running validations from api.github.com in {requests} requests plus magus queue ls ({queue.len()} queued), "
         + "{std\toInt(os\time() - began)}ms");
     return Board{ base = sel.base, at = time\nowIso(), tip = tip, runUrl = sel.runUrl, console = sel.console, open = open, pulls = pulls,
-        queue = queue, merged = merged, waits = waits, flights = flights, mainRun = ci, regressions = attributed };
+        queue = queue, merged = merged, waits = waits, flights = flights, mainRun = ci, regressions = attributed,
+        regressionsUnread = unread };
 }
 
 // dashboard renders the board and writes it to --out and the --issue body.
@@ -4314,4 +4327,17 @@ test "the dashboard says who broke main and which pull request to merge first" {
         regressions = [broke] });
     has(page, want: "red since #640 (ci gate); merge #655 first");
     lacks(renderDashboard(Board{ base = "main", at = AT, open = [<Pull>], pulls = [<Pull>], mainRun = MainRun{ state = "red" } }), want: "red since");
+}
+
+test "a run built across the module boundary keeps its fields, so main's history reads" {
+    final run = regressions\CiRun{ id = "7", sha = "c2", keys = {"ci gate": "fail"} };
+    assert\equal(run.id, want: "7", message: "id");
+    assert\equal(run.sha, want: "c2", message: "sha");
+    assert\equal(regressions\redKeys(run), want: ["ci gate"], message: "red keys iterate its map, not a null");
+}
+
+test "the dashboard says an unreadable main history is unknown, never an empty list" {
+    final page = renderDashboard(Board{ base = "main", at = AT, open = [<Pull>], pulls = [<Pull>], mainRun = MainRun{ state = "red" },
+        regressionsUnread = "gh: HTTP 502" });
+    has(page, want: "which change broke it is unknown, the read failed: gh: HTTP 502");
 }

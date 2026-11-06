@@ -28,9 +28,9 @@ export fun checkKey(name: str) > str {
     return SHARD_PREFIX + name.sub(colon!);
 }
 
-// Run is one completed CI run on main. keys maps a check key to "pass",
+// CiRun is one completed CI run on main. keys maps a check key to "pass",
 // "fail" or "none", which is a run that judged nothing.
-export object Run {
+export object CiRun {
     id: str = "",
     sha: str,
     keys: {str: str} = {<str: str>},
@@ -112,23 +112,23 @@ export fun parseJobs(body: str, keyOf: fun (name: str) > str) > {str: str} !> an
 
 // parseMainRuns reads `gh run list --json databaseId,headSha,status`,
 // newest first. A run still going judged nothing yet and is left out.
-export fun parseMainRuns(body: str) > [Run] !> any {
-    final acc = mut [<Run>];
+export fun parseMainRuns(body: str) > [CiRun] !> any {
+    final acc = mut [<CiRun>];
     foreach (run in serialize\jsonDecode(body).listValue()) {
         if (run.q("status").stringValue() == "completed") {
-            acc.append(Run{ id = "{run.q("databaseId").integerValue()}", sha = run.q("headSha").stringValue() });
+            acc.append(CiRun{ id = "{run.q("databaseId").integerValue()}", sha = run.q("headSha").stringValue() });
         }
     }
     return acc;
 }
 
-fun stateOf(run: Run, key: str) > str {
+fun stateOf(run: CiRun, key: str) > str {
     return run.keys[key] ?? "none";
 }
 
 // firstRed finds where key's red streak began in runs, newest first. Runs
 // at the head that judged nothing are skipped.
-export fun firstRed(runs: [Run], key: str) > Attribution {
+export fun firstRed(runs: [CiRun], key: str) > Attribution {
     var head = 0;
     while (head < runs.len() and stateOf(runs[head], key: key) == "none") {
         head = head + 1;
@@ -305,7 +305,7 @@ export fun line(r: Regression) > str {
 }
 
 // redKeys are the checks that failed in run.
-export fun redKeys(run: Run) > [str] {
+export fun redKeys(run: CiRun) > [str] {
     final acc = mut [<str>];
     foreach (k, s in run.keys) {
         if (s == "fail") {
@@ -317,7 +317,7 @@ export fun redKeys(run: Run) > [str] {
 
 // unsettled reports whether a check in red has no passing run among the
 // first upto+1 of runs. The reader stops fetching jobs once none is left.
-export fun unsettled(runs: [Run], upto: int, red: [str]) > bool {
+export fun unsettled(runs: [CiRun], upto: int, red: [str]) > bool {
     foreach (k in red) {
         var passed = false;
         var i = 0;
@@ -335,7 +335,7 @@ export fun unsettled(runs: [Run], upto: int, red: [str]) > bool {
 }
 
 // attributeAll attributes each check in red and finds its fixers.
-export fun attributeAll(runs: [Run], red: [str], merged: [Merged], probes: [Probe]) > [Regression] !> any {
+export fun attributeAll(runs: [CiRun], red: [str], merged: [Merged], probes: [Probe]) > [Regression] !> any {
     final acc = mut [<Regression>];
     foreach (k in red) {
         final a = attribute(firstRed(runs, key: k), merged: merged);
@@ -344,8 +344,8 @@ export fun attributeAll(runs: [Run], red: [str], merged: [Merged], probes: [Prob
     return acc;
 }
 
-fun run(sha: str, state: str) > Run {
-    return Run{ sha = sha, keys = {"t": state} };
+fun run(sha: str, state: str) > CiRun {
+    return CiRun{ sha = sha, keys = {"t": state} };
 }
 
 test "a red streak names its oldest failure, the run before the pass" {
@@ -372,7 +372,7 @@ test "a streak that reaches the window's end is unknown, red since before its ol
     assert\equal(a.state, want: "unknown", message: "state");
     assert\equal(a.shas, want: ["c2"], message: "the oldest run read");
     assert\equal(since(a), want: "before c2", message: "worded");
-    assert\equal(firstRed([<Run>], key: "t").state, want: "unknown", message: "no runs read is unknown, not clear");
+    assert\equal(firstRed([<CiRun>], key: "t").state, want: "unknown", message: "no runs read is unknown, not clear");
 }
 
 test "a merged pull request is found by its commit, and the newest merge time is kept" {
