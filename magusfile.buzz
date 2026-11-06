@@ -1516,6 +1516,8 @@ fun release_target_platform(goos: str, goarch: str) > [str] !> any {
 export fun release_build(ctx: magus\Context, args: [str]) > void !> any {
     // `**`: this target stages into dist/<goos>-<goarch>/, which `*` would miss.
     ctx.writesFiles(["dist/**"]);
+    // Every release run builds here first, however its tag was pushed.
+    _ = proc\exec("go", args: ["run", "./cmd/magus-utils", "dev-shims"], dir: ".");
     var goos = "";
     var goarch = "";
     if (args.len() == 1) {
@@ -1873,6 +1875,15 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
         } else {
             checks.append(passed("branch collision", "no branch is named `" + tag + "`"));
         }
+    }
+
+    // (e) release_build's refusal, asked before a tag burns the version.
+    final shims = proc\exec("go", args: ["run", "./cmd/magus-utils", "dev-shims"], dir: ".",
+        opts: proc\ExecOptions{quiet = true, allowFailure = true});
+    if (shims.ok) {
+        checks.append(passed("development-only shims", shims.stdout.trim()));
+    } else {
+        checks.append(failed("development-only shims", shims.stderr.trim()));
     }
 
     // (b) Simulates version() with these tags on HEAD. Gated only on a root tag: a

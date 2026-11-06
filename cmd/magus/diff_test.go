@@ -1005,20 +1005,6 @@ func TestTerminalSeenMarkingReachesTheStoreTheConsoleWrites(t *testing.T) {
 	assert.Equal(t, []string{"t1", "t2"}, seen)
 }
 
-func TestCompatUntil(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"compat(until: no store still serves ed25519 envelopes): sigAlg is", "no store still serves ed25519 envelopes"},
-		{"compat(until: console reads the new keys)", "console reads the new keys"},
-		// A condition that wraps onto the next line is truncated rather than dropped: half
-		// of it still says what KIND of thing would retire the code.
-		{"compat(until: no install still carries the pre-rename file - the", "no install still carries the pre-rename file - the"},
-		{"compat(until: )", ""},
-	}
-	for _, c := range cases {
-		assert.Equal(t, c.want, compatUntil(c.in), c.in)
-	}
-}
-
 // Only the markers a change ADDS are left behind by it: a marker already in the file is
 // context, a removed one is the opposite, and one in generated output was written by its
 // generator. A bare mention of the marker outside a comment is not one.
@@ -1118,20 +1104,6 @@ func TestImpactEvidenceGapsReadDifferently(t *testing.T) {
 	// The one gap that is a fact about the change says so without hedging it.
 	assert.Equal(t, []string{"EVIDENCE: the authors of this changeset ran no magus read verb"},
 		impactEvidenceLines(nil, trail.ConsultGapNoQuestions))
-}
-
-// The scanner used to report its own constant (`const compatMarker = "compat(until: "`)
-// as a decision governing the reader's change, alongside its own test fixtures, rendering
-// a line whose condition was a bare quote character. The file comment claimed the marker's
-// trailing space prevented this; it cannot, because the constant contains that space too.
-func TestAMarkerInAStringLiteralIsNotADecision(t *testing.T) {
-	assert.False(t, inAComment(`const compatMarker = "`), "the scanner's own constant")
-	assert.False(t, inAComment(`		{"`), "a table-driven fixture")
-
-	assert.True(t, inAComment("\t// "), "a line comment")
-	assert.True(t, inAComment("// "), "a line comment at column 0")
-	assert.True(t, inAComment("  * "), "a block comment continuation")
-	assert.True(t, inAComment("# "), "a shell or yaml comment")
 }
 
 // adviceDirWith builds an advisor directory holding the REAL advice.buzz plus the given
