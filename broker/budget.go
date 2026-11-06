@@ -5,9 +5,10 @@ import (
 	"net"
 	"os"
 	"slices"
-	"strings"
+	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -48,6 +49,28 @@ type parked struct {
 	overtaken int
 	// gate is a claim run under a gate, which queues ahead of every other request.
 	gate bool
+	// seq numbers the frames p is due, under s.mu. frameMu orders their
+	// writes, so a frame older than one already written is dropped.
+	seq     uint64
+	frameMu sync.Mutex
+	wrote   uint64
+}
+
+// send writes the frame numbered seq unless a newer one went out first.
+func (p *parked) send(seq uint64, typ string, body any) {
+	p.frameMu.Lock()
+	defer p.frameMu.Unlock()
+	if seq <= p.wrote {
+		return
+	}
+	p.wrote = seq
+	_ = p.w.write(typ, p.id, body)
+}
+
+// nextFrameLocked numbers the next frame p is due. Callers hold s.mu.
+func (p *parked) nextFrameLocked() uint64 {
+	p.seq++
+	return p.seq
 }
 
 type reply struct {
@@ -65,14 +88,14 @@ func (s *server) park(p *parked) {
 		_ = p.w.write(typeError, p.id, s.drainingError())
 		return
 	}
-	if p.kind == "claim" {
-		s.markGateLocked(p.sess, p.claim)
-		p.gate = s.gateLocked(p.sess, p.claim) != nil
-	}
+	s.markGateLocked(p.sess, p.claim)
+	p.gate = s.gateLocked(p.sess, p.claim) != nil
 	r, o := s.judgeLocked(p, s.aheadLocked(p, false))
 	why := p.why
+	var seq uint64
 	if o == waiting {
 		p.sent = why.key()
+		seq = p.nextFrameLocked()
 		s.enqueueLocked(p)
 		s.armWakeLocked()
 	}
@@ -80,7 +103,7 @@ func (s *server) park(p *parked) {
 	s.mu.Unlock()
 	if o == waiting {
 		// A wake may answer p before this frame goes out; the client then drops it.
-		_ = p.w.write(typeParked, p.id, why)
+		p.send(seq, typeParked, why)
 		return
 	}
 	_ = p.w.write(r.typ, p.id, r.body)
@@ -90,18 +113,14 @@ func (s *server) park(p *parked) {
 	}
 }
 
-// key is what a parked frame says, so a wake re-sends one only when the
-// holders or the reason changed.
+// key is the whole frame, so a wake re-sends one whenever anything the
+// client prints from it changed.
 func (r parkedReply) key() string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "%t", r.Verdict.OwnRun)
-	if r.Seat != nil {
-		b.WriteString(" seat " + r.Seat.Tree)
+	b, err := json.Marshal(r)
+	if err != nil {
+		return fmt.Sprintf("%+v", r)
 	}
-	for _, h := range r.Verdict.Holders {
-		fmt.Fprintf(&b, " %d %s %s", h.PID, h.Project, h.Target)
-	}
-	return b.String()
+	return string(b)
 }
 
 // starvedHeadLocked is the head of the queue once maxOvertakes requests went ahead of it,
@@ -136,8 +155,9 @@ func (s *server) judgeLocked(p, starved *parked) (reply, outcome) {
 // One still waiting whose holders changed hears a fresh parked frame.
 func (s *server) wake() {
 	type answer struct {
-		p *parked
-		r reply
+		p   *parked
+		seq uint64
+		r   reply
 	}
 	var out []answer
 	s.mu.Lock()
@@ -147,18 +167,18 @@ func (s *server) wake() {
 		if o == waiting {
 			if k := p.why.key(); k != p.sent {
 				p.sent = k
-				out = append(out, answer{p, reply{typeParked, p.why}})
+				out = append(out, answer{p, p.nextFrameLocked(), reply{typeParked, p.why}})
 			}
 			i++
 			continue
 		}
 		s.queue = slices.Delete(s.queue, i, i+1)
-		out = append(out, answer{p, r})
+		out = append(out, answer{p, p.nextFrameLocked(), r})
 	}
 	s.armWakeLocked()
 	s.mu.Unlock()
 	for _, a := range out {
-		_ = a.p.w.write(a.r.typ, a.p.id, a.r.body)
+		a.p.send(a.seq, a.r.typ, a.r.body)
 	}
 }
 
@@ -226,7 +246,7 @@ func (s *server) waitingLocked(now time.Time) []types.MachineWaiter {
 			tree = p.why.Seat.Tree
 		}
 		out = append(out, types.MachineWaiter{
-			Kind: p.kind, Project: c.Project, Target: c.Target, PID: c.PID, MemoryMB: c.MemoryMB,
+			Project: c.Project, Target: c.Target, PID: c.PID, MemoryMB: c.MemoryMB,
 			Slots: max(c.Slots, 1), Dir: c.Dir, Command: c.Command, Owner: sessionOwner(p.sess), Tree: tree,
 			Since: p.since, WaitedMS: now.Sub(p.since).Milliseconds(),
 		})

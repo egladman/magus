@@ -292,7 +292,7 @@ func printInitNextSteps(ctx context.Context, cfgPath string, scaffolded, isLocal
      ! %s >/dev/null 2>&1; then
     %s &
   fi
-`, hint.Status.With("--probe=liveness"), hint.ServerStart.String()), attr.Notice(""))
+`, hint.ServerStatus.With("--probe=liveness"), hint.ServerStart.String()), attr.Notice(""))
 	interactive.Hint(ctx, "stop with:  "+hint.ServerStop.String())
 
 	// Point users at the agent integration. A hint, not a step: connecting a client

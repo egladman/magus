@@ -241,14 +241,14 @@ var magusObjects = []Object{
 			},
 			{
 				Name:    "symbols",
-				Doc:     "Every non-test, non-generated symbol's declaration and doc comment in the workspace's merged symbol indexes, whatever language indexed them, as data: {symbols, indexes}, keyed as JSON is, with no Buzz object mirroring it. Each symbol is {node, source, language, name, kind, owner, doc}: source is the declaration's path and line, since an index records no position inside a doc; kind is function, method, type, interface, struct or value, or empty when the naming index read no shape; owner is the enclosing type of a member; doc is the whole comment with its lines kept. Nothing here judges the text: a magusfile rule reads it and decides. indexes is each declared symbol index as `magus status` judges it, judged just before the graph is read, as magus\\graph().precedents reports it: an index not `up-to-date` gave the symbols nothing or something old, so a gate on them checks indexes first. Test files and declared outputs are never listed. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+				Doc:     "Every non-test, non-generated symbol's declaration and doc comment in the workspace's merged symbol indexes, whatever language indexed them, as data: {symbols, indexes}, keyed as JSON is, with no Buzz object mirroring it. Each symbol is {node, source, language, name, kind, owner, doc}: source is the declaration's path and line, since an index records no position inside a doc; kind is function, method, type, interface, struct or value, or empty when the naming index read no shape; owner is the enclosing type of a member; doc is the whole comment with its lines kept. Nothing here judges the text: a magusfile rule reads it and decides. indexes is each declared symbol index as `magus server status` judges it, judged just before the graph is read, as magus\\graph().precedents reports it: an index not `up-to-date` gave the symbols nothing or something old, so a gate on them checks indexes first. Test files and declared outputs are never listed. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 				Returns: []Ret{{Type: TypeAnyMap, Object: "Symbols"}},
 				Raises:  true,
 				Impl:    MagusGraphSymbols,
 			},
 			{
 				Name:    "precedents",
-				Doc:     "The precedents the workspace's merged symbol indexes establish, the rows `Graph.Precedents` mines: {precedents, indexes}, keyed as JSON is, with no Buzz object mirroring it. Each precedent is {family, scope, key, follow, cohort, share, established, cited, departures}: follow of cohort cases share one shape, established when the cohort and share clear the conformance gate, and departures are the cases that do not. indexes is each declared symbol index as `magus status` judges it ({project, op, language, freshness, detail}), judged just before the graph is read: an index not `up-to-date` gave the rows nothing or something old, so a gate on the rows checks indexes first and fails rather than reading silence as agreement. Declared outputs are never counted. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+				Doc:     "The precedents the workspace's merged symbol indexes establish, the rows `Graph.Precedents` mines: {precedents, indexes}, keyed as JSON is, with no Buzz object mirroring it. Each precedent is {family, scope, key, follow, cohort, share, established, cited, departures}: follow of cohort cases share one shape, established when the cohort and share clear the conformance gate, and departures are the cases that do not. indexes is each declared symbol index as `magus server status` judges it ({project, op, language, freshness, detail}), judged just before the graph is read: an index not `up-to-date` gave the rows nothing or something old, so a gate on the rows checks indexes first and fails rather than reading silence as agreement. Declared outputs are never counted. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 				Returns: []Ret{{Type: TypeAnyMap, Object: "Holds"}},
 				Raises:  true,
 				Impl:    MagusGraphPrecedents,
@@ -313,7 +313,7 @@ var magusObjects = []Object{
 			},
 			{
 				Name:    "conformance",
-				Doc:     "The conformance lens as data: {definition, rows, excluded, answer, indexes, base, ceilings, unmeasured}, keyed as JSON is. Each row is {key, n, p50, p90, p95, p99, live, value, propose, violations}: key names a metric (file-lines, func-lines, type-methods, file-symbols, dep-fanout, clone-tokens, export-scope, call-sequence, shared-body, shared-reach, caller-spread, mode-knobs, alias-share, name-clash), a population (source, main, test) and a scope; value is the anchor knowledge.conformance configures; live is the configured percentile today; violations are the files, symbols, packages or clone groups past value, each {id, source, measure}. propose is zero, or a tighter anchor a person may configure; it is never looser than value, and nothing enforces live. checks and base hold a change to a conformance ceiling: base is a revision, and ceilings are the files changed since it whose count of violations of a metric in checks rose past their count there, each {key, file, base, head, violations}; a drop is progress, and unmeasured lists each touched file only an external indexer reads, {file, language, reason}, which holds no ceiling. No count is stored in the workspace: it reads the base's measure magus\\change().mergeBase kept in the user cache, and raises when none is kept or the base has no checks. excluded counts the files knowledge.conformance.exclude hides. answer is unknown, never a pass, when a symbol index is missing. indexes is each declared symbol index as `magus status` judges it, judged just before the graph is read, as magus\\graph().precedents reports it: an index not `up-to-date` gave the rows something old, so a gate on them checks indexes first. Declared outputs are never counted. Read in-process from the workspace on the context; raises MGS1022 outside one, and raises on a policy it cannot honor or a base it cannot measure whole.",
+				Doc:     "The conformance lens as data: {definition, rows, excluded, answer, indexes, base, ceilings, unmeasured}, keyed as JSON is. Each row is {key, n, p50, p90, p95, p99, live, value, propose, violations}: key names a metric (file-lines, func-lines, type-methods, file-symbols, dep-fanout, clone-tokens, export-scope, call-sequence, shared-body, shared-reach, caller-spread, mode-knobs, alias-share, name-clash), a population (source, main, test) and a scope; value is the anchor knowledge.conformance configures; live is the configured percentile today; violations are the files, symbols, packages or clone groups past value, each {id, source, measure}. propose is zero, or a tighter anchor a person may configure; it is never looser than value, and nothing enforces live. checks and base hold a change to a conformance ceiling: base is a revision, and ceilings are the files changed since it whose count of violations of a metric in checks rose past their count there, each {key, file, base, head, violations}; a drop is progress, and unmeasured lists each touched file only an external indexer reads, {file, language, reason}, which holds no ceiling. No count is stored in the workspace: it reads the base's measure magus\\change().mergeBase kept in the user cache, and raises when none is kept or the base has no checks. excluded counts the files knowledge.conformance.exclude hides. answer is unknown, never a pass, when a symbol index is missing. indexes is each declared symbol index as `magus server status` judges it, judged just before the graph is read, as magus\\graph().precedents reports it: an index not `up-to-date` gave the rows something old, so a gate on them checks indexes first. Declared outputs are never counted. Read in-process from the workspace on the context; raises MGS1022 outside one, and raises on a policy it cannot honor or a base it cannot measure whole.",
 				Args:    []Arg{{Name: "checks", Type: TypeStringSlice, Optional: true}},
 				Returns: []Ret{{Type: TypeAnyMap, Object: "ConformanceReport"}},
 				Raises:  true,
@@ -332,6 +332,37 @@ var magusObjects = []Object{
 				Returns: []Ret{{Type: TypeAnyMap, Object: "ChangeRisk"}},
 				Raises:  true,
 				Impl:    MagusChangeRisk,
+			},
+		},
+	},
+	{
+		Name: "ChangeRiskFunction",
+		Doc:  "One touched function's change risk score and its measure at base, as magus\\change().risk reports it.",
+		Methods: []Method{
+			{
+				Name: "charged",
+				Doc: "True when the function scores above threshold and worse than at base. With no base measure " +
+					"(baseReason set) threshold alone judges, so a function only shrunk is never charged. magus " +
+					"holds no threshold: the caller's rule passes its own.",
+				Args:    []Arg{{Name: "threshold", Type: TypeInt}},
+				Returns: []Ret{{Type: TypeBool}},
+				Impl:    MagusChangeRiskFunctionCharged,
+			},
+		},
+	},
+	{
+		Name: "FunctionGap",
+		Doc:  "A touched function magus could not score, and why, as magus\\change().risk reports it.",
+		Methods: []Method{
+			{
+				Name: "decided",
+				Doc: "True when the verdict against threshold holds at any coverage: the worst case, zero coverage, " +
+					"scores complexity^2 + complexity, so one within threshold passes without a coverage number. " +
+					"An unknown complexity (0) decides nothing. magus holds no threshold: the caller's rule passes " +
+					"its own.",
+				Args:    []Arg{{Name: "threshold", Type: TypeInt}},
+				Returns: []Ret{{Type: TypeBool}},
+				Impl:    MagusFunctionGapDecided,
 			},
 		},
 	},

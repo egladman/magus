@@ -45,21 +45,35 @@ the units by evaluating each `ci` body the way a dry run does, under the charms
 and the args after `--` the shards run it with. A step behind
 `if (!ctx.hasCharm("gha"))` is no unit of a `ci:gha` plan. A target the body
 calls as a function is no unit either, so the plan fails and names each such
-call.
+call. A shard runs only the units, so a `ci` body that does anything else, such
+as writing a file or running a command, fails the plan and names the operation.
+So does a step the body asks for that its declared `ctx.needs` chain does not
+name, since the chain is what the plan walks for prerequisites.
+
+A unit whose targets, prerequisites included, declare reads with
+`ctx.readsFiles` and read no changed path replays from the cache. The plan
+leaves it out and lists it under `unreached`. A target that declares no reads
+reads its whole project. A change that can move the graph itself, listed under
+`unbounded_by`, narrows nothing.
 
 Each unit weighs what the run history recorded for it. A unit with no history
 weighs the workspace fallback, and the plan lists it under `unmeasured`. When no
 unit has any history, the plan opens at most 2 shards and says so under
 `fallbacks`.
 
-A shard costs one runner's setup plus every distinct target its units need,
-prerequisites counted once. Units go longest first to the shard they leave
-cheapest. A new shard opens only when it shortens the longest shard by more than
-setup plus the prerequisites it would repeat. A shard's predicted peak memory
-must fit the machine `ci.machine` names (`memory_mb`, `cores`), never the
-host that plans, and the plan records it. With none set the plan says it checked
-no memory budget. The same history, change, machine and config give the same plan
-on any host.
+Units that share a prerequisite the change reaches go to one shard, so that
+prerequisite computes once. A prerequisite the change does not reach replays from
+the cache on every shard that needs it. A shard runs `cores` targets at once: it
+costs one runner's setup plus its distinct targets' durations spread across
+`cores`, never less than its longest target. Units go longest first to the shard
+they leave cheapest. A new shard opens only when it shortens the longest shard by
+more than setup plus the prerequisites it would repeat. A shard's predicted peak
+memory is its `cores` largest peaks, prerequisites included, and must fit the
+machine `ci.machine` names (`memory_mb`, `cores`), never the host that plans.
+A target with no recorded peak counts as zero, and `fallbacks` names each. With
+no machine set, the plan runs one target at a time and says it checked no memory
+budget. The same history, change, machine and config give the same plan on any
+host.
 
 Each shard lists its `units`, a `digest` of them, and its `duties`: the
 workspace-wide steps placed on exactly one shard. `cache-export` goes to the

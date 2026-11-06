@@ -399,7 +399,7 @@ Skills prefer the MCP tools and fall back to the CLI, so they work in both
 connected and disconnected sessions. MCP availability is a host/integration
 concern: configure it once for the host that owns it. An agent tries an exposed
 MCP tool directly, then uses the CLI fallback if the tool is missing or fails.
-`magus status --probe=mcp` checks the loopback HTTP listener, so it cannot judge
+`magus server status --probe=mcp` checks the loopback HTTP listener, so it cannot judge
 stdio or Unix-socket MCP. An agent must not manually start Magus merely to obtain
 MCP.
 
@@ -417,7 +417,7 @@ warm graph and background indexes, and structured output retrieval.
 
 An agent must not turn that into a blocker. If an MCP tool is missing or its
 call fails, use the CLI fallback. For daemon-socket diagnosis,
-`magus status --probe=readiness` checks whether this workspace is loaded on the
+`magus server status --probe=readiness` checks whether this workspace is loaded on the
 socket; it does not prove the host registered MCP. Restoring or changing host
 MCP wiring is a user-owned integration action, not ordinary agent work.
 

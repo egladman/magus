@@ -7,16 +7,21 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"runtime"
 	"slices"
 	"strings"
+
+	"golang.org/x/sync/errgroup"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/parsecache"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -48,51 +53,11 @@ type PlanOptions struct {
 // set using target as the CI target (typically "ci"). Adaptive sharding is applied
 // when runtime history is available at the resolved HistoryPath.
 func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (types.ShardPlan, error) {
-	if opts.ChangedPaths != nil && opts.BaseRef != "" {
-		return types.ShardPlan{}, fmt.Errorf("affected plan: changed paths and base ref are mutually exclusive")
+	scope, err := m.planScope(ctx, target, opts)
+	if err != nil {
+		return types.ShardPlan{}, err
 	}
-
-	var (
-		targets     []types.Target
-		source      string
-		unboundedBy string
-	)
-	if opts.ChangedPaths != nil {
-		result, err := m.AffectedFromPaths(ctx, opts.ChangedPaths)
-		if err != nil {
-			return types.ShardPlan{}, fmt.Errorf("affected plan: compute paths: %w", err)
-		}
-		targets = make([]types.Target, len(result.Affected))
-		for i, path := range result.Affected {
-			targets[i] = types.Target{Path: path, Name: target, Files: result.FilesBySeed[path]}
-		}
-		source = "stdin paths"
-		result.Changed = opts.ChangedPaths
-		unboundedBy = m.unboundedBy(result)
-	} else {
-		var (
-			fellBack bool
-			res      *types.AffectedResult
-			err      error
-		)
-		targets, source, fellBack, res, err = m.ExpandAffectedSet(ctx, target, opts.BaseRef)
-		if err != nil {
-			return types.ShardPlan{}, err
-		}
-		switch {
-		case fellBack:
-			unboundedBy = fmt.Sprintf("the VCS could not diff, so the plan holds every project (%s)", source)
-		case res != nil:
-			unboundedBy = m.unboundedBy(res)
-		}
-	}
-	affected := make([]string, len(targets))
-	for i, t := range targets {
-		affected[i] = t.Path
-	}
-	slices.Sort(affected)
-
-	units, err := m.planUnits(ctx, targets, target, opts.Charms, opts.Args)
+	units, err := m.planUnits(ctx, scope.targets, target, opts.Charms, opts.Args)
 	if err != nil {
 		return types.ShardPlan{}, fmt.Errorf("affected plan: %w", err)
 	}
@@ -104,27 +69,164 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 	if machine == nil {
 		fallbacks = append(fallbacks, "no ci.machine is configured, so the plan checks no shard against a memory budget")
 	}
+	hist, err := m.planHistory(ctx, opts)
+	if err != nil {
+		return types.ShardPlan{}, err
+	}
+	reach, err := m.planReach(units, scope)
+	if err != nil {
+		return types.ShardPlan{}, err
+	}
+	f := planModel(hist, reach, machine, scope.targets)
+	maxShards, cold := m.planMaxShards(opts, &f, reach.kept)
+	fallbacks = append(fallbacks, cold...)
+	plan, err := ci.Build(reach.kept, scope.source, ci.WithMaxShards(maxShards), ci.WithModel(&f))
+	if err != nil {
+		return types.ShardPlan{}, fmt.Errorf("affected plan: %w", err)
+	}
+	fallbacks = append(fallbacks, plan.Fallbacks...)
+	maxParallel := len(plan.Shards)
+	if opts.RunnerPoolBudget > 0 && opts.RunnerPoolBudget < maxParallel {
+		maxParallel = opts.RunnerPoolBudget
+	}
+	shards, overBudget, unpeaked, err := planShards(&f, plan, reach.kept)
+	if err != nil {
+		return types.ShardPlan{}, err
+	}
+	return types.ShardPlan{
+		Shards:      shards,
+		Source:      scope.source,
+		MaxParallel: maxParallel,
+		Charms:      opts.Charms,
+		Args:        opts.Args,
+		Machine:     machine,
+		Fallbacks:   append(fallbacks, unpeaked...),
+		Sufficient:  f.SufficientShards(reach.kept, len(plan.Shards)),
+		OverBudget:  overBudget,
+		Unmeasured:  f.Unmeasured(reach.kept),
+		Unreached:   reach.unreached,
+		Affected:    scope.affected,
+		UnboundedBy: scope.unboundedBy,
+	}, nil
+}
 
+// planScope is the affected set a plan covers and how it was found.
+type planScope struct {
+	targets     []types.Target
+	source      string
+	unboundedBy string
+	changed     []string
+	affected    []string // the targets' paths, sorted
+}
+
+// planScope reads the affected set from opts' changed paths, or else from a
+// VCS diff against opts' base.
+func (m *Magus) planScope(ctx context.Context, target string, opts PlanOptions) (planScope, error) {
+	if opts.ChangedPaths != nil && opts.BaseRef != "" {
+		return planScope{}, fmt.Errorf("affected plan: changed paths and base ref are mutually exclusive")
+	}
+	var s planScope
+	if opts.ChangedPaths != nil {
+		result, err := m.AffectedFromPaths(ctx, opts.ChangedPaths)
+		if err != nil {
+			return planScope{}, fmt.Errorf("affected plan: compute paths: %w", err)
+		}
+		s.targets = make([]types.Target, len(result.Affected))
+		for i, path := range result.Affected {
+			s.targets[i] = types.Target{Path: path, Name: target, Files: result.FilesBySeed[path]}
+		}
+		s.source = "stdin paths"
+		result.Changed = opts.ChangedPaths
+		s.changed = opts.ChangedPaths
+		s.unboundedBy = m.unboundedBy(result)
+	} else {
+		targets, source, fellBack, res, err := m.ExpandAffectedSet(ctx, target, opts.BaseRef)
+		if err != nil {
+			return planScope{}, err
+		}
+		s.targets, s.source = targets, source
+		switch {
+		case fellBack:
+			s.unboundedBy = fmt.Sprintf("the VCS could not diff, so the plan holds every project (%s)", source)
+		case res != nil:
+			s.changed = res.Changed
+			s.unboundedBy = m.unboundedBy(res)
+		}
+	}
+	s.affected = make([]string, len(s.targets))
+	for i, t := range s.targets {
+		s.affected[i] = t.Path
+	}
+	slices.Sort(s.affected)
+	return s, nil
+}
+
+// planHistory loads the runtime history opts names, or the configured one.
+func (m *Magus) planHistory(ctx context.Context, opts PlanOptions) (forecast.History, error) {
 	histPath := opts.HistoryPath
 	if histPath == "" {
 		histPath = m.cfg.HistoryPath
 	}
 	var hist forecast.History
 	if err := hist.Load(ctx, histPath); err != nil {
-		return types.ShardPlan{}, fmt.Errorf("affected plan: load history: %w", err)
+		return forecast.History{}, fmt.Errorf("affected plan: load history: %w", err)
 	}
+	return hist, nil
+}
 
-	needs := make(map[types.Unit][]types.Unit, len(units))
-	for _, u := range units {
-		closure, err := m.unitNeeds(u)
-		if err != nil {
-			return types.ShardPlan{}, fmt.Errorf("affected plan: %w", err)
+// planReach is each unit's prerequisites and whether the change makes it
+// compute: kept units do, and unreached ones replay.
+type planReach struct {
+	needs           map[types.Unit][]types.Unit
+	computes        func(types.Unit) bool
+	kept, unreached []types.Unit
+}
+
+func (m *Magus) planReach(units []types.Unit, scope planScope) (planReach, error) {
+	// optimization: each closure is walked once; reach and packing read the
+	// map, where each asked WalkChain again for every unit and prerequisite.
+	r := planReach{needs: make(map[types.Unit][]types.Unit, len(units))}
+	closureOf := func(u types.Unit) ([]types.Unit, error) {
+		if c, ok := r.needs[u]; ok {
+			return c, nil
 		}
-		needs[u] = closure
+		c, err := m.unitNeeds(u)
+		if err == nil {
+			r.needs[u] = c
+		}
+		return c, err
 	}
-	f := forecast.Model{History: hist, Needs: func(u types.Unit) []types.Unit { return needs[u] }}
+	for _, u := range units {
+		if _, err := closureOf(u); err != nil {
+			return planReach{}, fmt.Errorf("affected plan: %w", err)
+		}
+	}
+	r.computes = func(types.Unit) bool { return true }
+	if scope.unboundedBy == "" && scope.changed != nil {
+		r.computes = m.computedBy(scope.changed, scope.affected, closureOf)
+	}
+	for _, u := range units {
+		if r.computes(u) {
+			r.kept = append(r.kept, u)
+		} else {
+			r.unreached = append(r.unreached, u)
+		}
+	}
+	slices.SortFunc(r.unreached, func(a, b types.Unit) int { return cmp.Compare(a.String(), b.String()) })
+	return r, nil
+}
+
+// planModel is the forecast the packer weighs shards with: durations from
+// hist, prerequisites from reach, and machine's memory budget and cores.
+func planModel(hist forecast.History, reach planReach, machine *types.Machine, targets []types.Target) forecast.Model {
+	f := forecast.Model{
+		History:    hist,
+		Needs:      func(u types.Unit) []types.Unit { return reach.needs[u] },
+		Repeatable: func(u types.Unit) bool { return !reach.computes(u) },
+	}
 	if machine != nil {
 		f.MemoryBudgetBytes = forecast.BudgetBytes(machine.MemoryMB)
+		f.Slots = machine.Cores
 	}
 	tags := make(map[string][]string, len(targets))
 	for _, t := range targets {
@@ -135,58 +237,51 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 	if len(tags) > 0 {
 		f.TagsByProject = tags
 	}
+	return f
+}
 
+// planMaxShards is the shard cap from opts or magus.yaml. A history with no
+// duration for any unit caps it at forecast.ColdShards, and says so.
+func (m *Magus) planMaxShards(opts PlanOptions, f *forecast.Model, units []types.Unit) (int, []string) {
 	maxShards := opts.MaxShards
 	if maxShards == 0 {
 		maxShards = m.cfg.CI.MaxShards
 	}
 	if f.Cold(units) && (maxShards < 0 || maxShards > forecast.ColdShards) {
-		maxShards = forecast.ColdShards
-		fallbacks = append(fallbacks, fmt.Sprintf(
-			"the history holds no duration for any unit, so the plan opens at most %d shards", forecast.ColdShards))
+		return forecast.ColdShards, []string{fmt.Sprintf(
+			"the history holds no duration for any unit, so the plan opens at most %d shards", forecast.ColdShards)}
 	}
+	return maxShards, nil
+}
 
-	plan, err := ci.Build(units, source, ci.WithMaxShards(maxShards), ci.WithModel(&f))
-	if err != nil {
-		return types.ShardPlan{}, fmt.Errorf("affected plan: %w", err)
-	}
-	fallbacks = append(fallbacks, plan.Fallbacks...)
-
-	maxParallel := len(plan.Shards)
-	if opts.RunnerPoolBudget > 0 && opts.RunnerPoolBudget < maxParallel {
-		maxParallel = opts.RunnerPoolBudget
-	}
-
+// planShards turns plan into shards with their duties placed. It refuses a
+// unit two shards would compute, and names the shards over f's memory budget
+// and the units with no measured peak.
+func planShards(f *forecast.Model, plan ci.Plan, units []types.Unit) ([]types.Shard, []string, []string, error) {
 	shards := make([]types.Shard, len(plan.Shards))
+	assignments := make([][]types.Unit, len(plan.Shards))
 	for i, s := range plan.Shards {
 		shards[i] = types.Shard{
 			ID: s.ID, Digest: types.UnitsDigest(s.Units),
 			ProjectPaths: types.UnitProjects(s.Units), Units: s.Units,
 		}
-	}
-	placeDuties(shards)
-	assignments := make([][]types.Unit, len(plan.Shards))
-	for i, s := range plan.Shards {
 		assignments[i] = s.Units
 	}
-	var overBudget []string
+	placeDuties(shards)
+	if repeated := f.Repeats(assignments); len(repeated) > 0 {
+		return nil, nil, nil, fmt.Errorf("affected plan: %s would compute on more than one shard", joinUnits(repeated))
+	}
+	var overBudget, unpeakedNote []string
 	for _, i := range f.OverBudget(assignments) {
 		overBudget = append(overBudget, plan.Shards[i].ID)
 	}
-	return types.ShardPlan{
-		Shards:      shards,
-		Source:      source,
-		MaxParallel: maxParallel,
-		Charms:      opts.Charms,
-		Args:        opts.Args,
-		Machine:     machine,
-		Fallbacks:   fallbacks,
-		Sufficient:  f.SufficientShards(units, len(plan.Shards)),
-		OverBudget:  overBudget,
-		Unmeasured:  f.Unmeasured(units),
-		Affected:    affected,
-		UnboundedBy: unboundedBy,
-	}, nil
+	if f.MemoryBudgetBytes > 0 {
+		if unpeaked := f.UnmeasuredPeaks(units); len(unpeaked) > 0 {
+			unpeakedNote = []string{fmt.Sprintf(
+				"the history holds no peak memory for %s, so the memory check counts each as zero", joinUnits(unpeaked))}
+		}
+	}
+	return shards, overBudget, unpeakedNote, nil
 }
 
 // planUnits is each step anchor asks for through ctx.needs, under charms and
@@ -203,11 +298,14 @@ func (m *Magus) planUnits(ctx context.Context, targets []types.Target, anchor st
 		}
 	}
 	for _, t := range targets {
-		p := m.Get(t.Path)
-		if p == nil {
+		if m.Get(t.Path) == nil {
 			return nil, fmt.Errorf("project %q is affected but not in the workspace", t.Path)
 		}
-		steps, found, err := m.anchorSteps(ctx, p, anchor, charms, args)
+	}
+	evals := m.traceAnchors(ctx, targets, anchor, charms, args)
+	for i, t := range targets {
+		p := m.Get(t.Path)
+		steps, found, err := evals[i].steps, evals[i].found, evals[i].err
 		if err != nil {
 			return nil, err
 		}
@@ -216,7 +314,7 @@ func (m *Magus) planUnits(ctx context.Context, targets []types.Target, anchor st
 			continue
 		}
 		for _, u := range steps {
-			add(types.Unit{Project: cmp.Or(u.Project, p.Path), Target: u.Target})
+			add(u)
 		}
 		calls, err := directCalls(p, anchor)
 		if err != nil {
@@ -232,6 +330,34 @@ func (m *Magus) planUnits(ctx context.Context, targets []types.Target, anchor st
 		return nil, fmt.Errorf("the anchor calls targets directly, so no shard would run them: %s", strings.Join(unplanned, "; "))
 	}
 	return units, nil
+}
+
+// tracedAnchor is the steps one project's anchor asks for, as anchorSteps
+// returns them.
+type tracedAnchor struct {
+	steps []types.Unit
+	found bool
+	err   error
+}
+
+// traceAnchors evaluates each target's anchor, one result per target in
+// order.
+func (m *Magus) traceAnchors(ctx context.Context, targets []types.Target, anchor string, charms, args []string) []tracedAnchor {
+	// optimization: each project's anchor evaluates on its own goroutine,
+	// as the evaluations share nothing. Results merge in target order, so
+	// the units and the first error stay deterministic.
+	evals := make([]tracedAnchor, len(targets))
+	var g errgroup.Group
+	g.SetLimit(runtime.GOMAXPROCS(0))
+	for i, t := range targets {
+		g.Go(func() error {
+			e := &evals[i]
+			e.steps, e.found, e.err = m.anchorSteps(ctx, m.Get(t.Path), anchor, charms, args)
+			return nil
+		})
+	}
+	_ = g.Wait()
+	return evals
 }
 
 // anchorSteps evaluates anchor's body in p as a dry run does, under charms and
@@ -251,7 +377,29 @@ func (m *Magus) anchorSteps(ctx context.Context, p *types.Project, anchor string
 	if err := m.runTarget(ctx, p, anchor); err != nil {
 		return nil, true, fmt.Errorf("evaluate %s in %s: %w", anchor, p.Path, err)
 	}
-	return rec.Units(), true, nil
+	if effects := rec.Effects(); len(effects) > 0 {
+		return nil, true, fmt.Errorf(
+			"%s in %s does more than ctx.needs (%s), and a shard runs only the steps it asks for: move that work into a target %s needs",
+			anchor, p.Path, strings.Join(effects, ", "), anchor)
+	}
+	declared := map[types.Unit]bool{}
+	for _, s := range p.TargetChains[types.Normalize(anchor)] {
+		declared[types.Unit{Project: cmp.Or(s.Project, p.Path), Target: types.Normalize(s.Target)}] = true
+	}
+	var undeclared []string
+	for _, u := range rec.Units() {
+		u = types.Unit{Project: cmp.Or(u.Project, p.Path), Target: types.Normalize(u.Target)}
+		if !declared[u] {
+			undeclared = append(undeclared, u.String())
+		}
+		steps = append(steps, u)
+	}
+	if len(undeclared) > 0 {
+		return nil, true, fmt.Errorf(
+			"%s in %s asks for %s, which its declared ctx.needs chain does not name, so no shard could walk its prerequisites",
+			anchor, p.Path, strings.Join(undeclared, ", "))
+	}
+	return steps, true, nil
 }
 
 // directCalls are the exported targets anchor's body in p calls as functions,
@@ -276,7 +424,7 @@ func projectFuncDecls(p *types.Project) (map[string]*ast.FunDecl, error) {
 			if err != nil {
 				return nil, fmt.Errorf("read %s's magusfile for direct calls: %w", p.Path, err)
 			}
-			prog, err := buzz.ParseEmbedded(string(text))
+			prog, err := parsecache.Shared().ParseEmbedded(string(text))
 			if err != nil {
 				return nil, fmt.Errorf("parse %s's magusfile for direct calls: %w", file, err)
 			}
@@ -384,6 +532,51 @@ func (m *Magus) unitNeeds(u types.Unit) ([]types.Unit, error) {
 		return nil, fmt.Errorf("walk the needs of %s: %w", u, err)
 	}
 	return out, nil
+}
+
+// computedBy reports whether changed makes a unit compute rather than replay
+// from the cache: a target in its closure reads a changed path. A target
+// with no declared reads reads its project, so an affected one counts.
+func (m *Magus) computedBy(changed, affected []string, closureOf func(types.Unit) ([]types.Unit, error)) func(types.Unit) bool {
+	inAffected := map[string]bool{}
+	for _, p := range affected {
+		inAffected[p] = true
+	}
+	read := map[types.Unit]bool{}
+	reads := func(n types.Unit) bool {
+		if v, ok := read[n]; ok {
+			return v
+		}
+		v := true
+		if p := m.Get(n.Project); p != nil {
+			node := cache.DeclaredNode(p, n.Target, types.TargetRef{Project: p.Path, Target: n.Target}, m.Get)
+			if node.DeclaredReads {
+				v = slices.ContainsFunc(changed, func(c string) bool { return types.MatchGlobs(node.Reads, c) })
+			} else {
+				v = inAffected[n.Project]
+			}
+		}
+		read[n] = v
+		return v
+	}
+	memo := map[types.Unit]bool{}
+	return func(u types.Unit) bool {
+		if v, ok := memo[u]; ok {
+			return v
+		}
+		closure, err := closureOf(u)
+		v := err != nil || slices.ContainsFunc(closure, reads)
+		memo[u] = v
+		return v
+	}
+}
+
+func joinUnits(us []types.Unit) string {
+	names := make([]string, len(us))
+	for i, u := range us {
+		names[i] = u.String()
+	}
+	return strings.Join(names, ", ")
 }
 
 // unboundedBy says why the closure computed from res is not a proof, or "" when it is.

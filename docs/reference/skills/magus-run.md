@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 15582
-skill_short_bytes: 9073
+skill_full_bytes: 15610
+skill_short_bytes: 9101
 ---
 
 # magus-run
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `784ed940daab` |
+| `skill-content` | `6f863c757e1c` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -74,8 +74,8 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
 ## How to run work
 
 1. Prefer MCP tools; call exposed tool directly. If missing or call fails -> CLI fallback below.
-   - Do not gate that choice on `magus status --probe=mcp`: tests loopback HTTP; host may use stdio or server Unix socket.
-   - `magus status --probe=readiness`: checks workspace loaded on server socket; does not test host MCP registration.
+   - Do not gate that choice on `magus server status --probe=mcp`: tests loopback HTTP; host may use stdio or server Unix socket.
+   - `magus server status --probe=readiness`: checks workspace loaded on server socket; does not test host MCP registration.
    - Hosts manage own connection; never start server for agent.
    - `client` (`magus\run`): run named projects, same arguments as `magus run`.
    - `client` (`magus\change().affected`): projects VCS change touched; returns set, does not run it.
@@ -197,11 +197,11 @@ Run generators before the full test run, so a drift test does not fail for nothi
 
 Run whose project lock or machine budget another magus invocation holds: exits 75 at once, naming holder.
 - Never write `sleep`/`ps`/`pgrep` polling loops; guard denies `pgrep`, `pidof`, `ps`.
-- `magus status`: reads lock state once: holder PID, command, directory, age. To wait: background run as `magus job exec --timeout <d> -- <command>`, wait for its completion notice.
+- `magus server status`: reads lock state once: holder PID, command, directory, age. To wait: background run as `magus job exec --timeout <d> -- <command>`, wait for its completion notice.
 - Long-running holder alone: not evidence of hang.
 
 ```sh
-magus status
+magus server status
 ```
 
 If lock crossed stale warning threshold -> report exact holder, inspect its captured target output.
@@ -273,9 +273,9 @@ VCS.
 1. Prefer the MCP tools; they return structured content with nothing to silence.
    Call an exposed MCP tool directly. If it is missing or its call fails, use the
    CLI fallback below.
-   - Do not gate that choice on `magus status --probe=mcp`. It tests loopback HTTP,
+   - Do not gate that choice on `magus server status --probe=mcp`. It tests loopback HTTP,
      while a host may use stdio or the server's Unix socket.
-   - `magus status --probe=readiness` checks that this workspace is loaded on the
+   - `magus server status --probe=readiness` checks that this workspace is loaded on the
      server socket. It does not test the host's MCP registration.
    - Hosts manage their own connection; never start a server for an agent.
      Do not make the connection a prerequisite for completing the work.
@@ -501,13 +501,13 @@ at once, naming the holder.
 
 - Never write `sleep`/`ps`/`pgrep` polling loops. The guard denies `pgrep`,
   `pidof`, and `ps` for this reason.
-- `magus status` reads that lock state once: holder PID, command, directory,
+- `magus server status` reads that lock state once: holder PID, command, directory,
   and age. To wait, background your run as `magus job exec --timeout <d> -- <command>`
   and wait for its completion notice.
 - A long-running holder is not, by itself, evidence of a hang.
 
 ```sh
-magus status
+magus server status
 ```
 
 If the lock has crossed its stale warning threshold, report the exact holder and

@@ -44,6 +44,16 @@ func MagusWorkspaceRisk(ctx context.Context, _ types.MagusWorkspace) (types.Chan
 	return scoreRisk(ctx, "Workspace.risk", "")
 }
 
+// MagusChangeRiskFunctionCharged is ChangeRiskFunction.charged(threshold).
+func MagusChangeRiskFunctionCharged(_ context.Context, f types.ChangeRiskFunction, threshold int) (bool, error) {
+	return f.Charged(threshold), nil
+}
+
+// MagusFunctionGapDecided is FunctionGap.decided(threshold).
+func MagusFunctionGapDecided(_ context.Context, g types.FunctionGap, threshold int) (bool, error) {
+	return g.Decided(threshold), nil
+}
+
 // heldChangeBase is c's base once heldChange vouches for its tree.
 func heldChangeBase(ctx context.Context, c types.Change, member string) (string, error) {
 	ws, err := heldChange(ctx, c, member)

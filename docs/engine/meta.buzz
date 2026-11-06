@@ -180,8 +180,8 @@ export fun insertAdrMeta(html: str, status: str, date: str, supersedes: str) > s
     if (marker == null) { return html; }
     // Frontmatter dates decode as full RFC3339; the calendar day is all an ADR records.
     final day = date.split("T")[0];
-    // A sentence rather than "Status:" and "Date:" labels: the code cross-linker links the
-    // first "status" on a page to `magus status`, and a label line reads as a form.
+    // A sentence, not "Status:" and "Date:" labels. The code cross-linker
+    // links a bare command word, and a label line reads as a form.
     var meta = "\n<p class=\"adr-meta\">Decision <strong>" + escapeAttr(status) + "</strong> on <time datetime=\""
         + escapeAttr(day) + "\">" + escapeAttr(day) + "</time>.";
     if (supersedes != "") { meta = meta + "<br>Supersedes: " + codeSpans(supersedes); }

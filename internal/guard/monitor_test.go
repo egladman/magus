@@ -52,7 +52,7 @@ func TestWatchSubjectsNormalizeWhatIsWaitedOn(t *testing.T) {
 	assert.Equal(t, watchSubjects(same[0], DialectBash), watchSubjects(same[1], DialectBash))
 	assert.Equal(t, []string{"pid:4242"}, watchSubjects("while kill -0 4242; do sleep 20; done", DialectBash))
 	assert.Equal(t, []string{"file:/tmp/x/tasks/b1.output"}, watchSubjects("until [ -s /tmp/x/tasks/b1.output ]; do sleep 1; done", DialectBash))
-	assert.Equal(t, []string{"status"}, watchSubjects("./magus status --watch=15s", DialectBash))
+	assert.Equal(t, []string{"status"}, watchSubjects("./magus server status --watch=15s", DialectBash))
 	assert.Equal(t, []string{"job:a2-rules"}, watchSubjects("./magus job wait a2-rules", DialectBash))
 }
 
@@ -114,9 +114,9 @@ func TestAnExpiredWatcherIsNotLive(t *testing.T) {
 
 func TestEndlessBackgroundWatch(t *testing.T) {
 	t.Parallel()
-	assert.True(t, endlessWatch("./magus status --watch=15s", DialectBash))
+	assert.True(t, endlessWatch("./magus server status --watch=15s", DialectBash))
 	assert.True(t, endlessWatch("tail -F run.log", DialectBash))
-	assert.False(t, endlessWatch("./magus status", DialectBash))
+	assert.False(t, endlessWatch("./magus server status", DialectBash))
 	assert.False(t, endlessWatch("tail -n 20 run.log", DialectBash))
 
 	facts := hint.NewGate(t.TempDir(), "s")

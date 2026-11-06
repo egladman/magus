@@ -2,35 +2,38 @@ package interactive
 
 import (
 	"bytes"
-	"fmt"
+	"context"
 	"log/slog"
 	"testing"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/stretchr/testify/assert"
 )
 
-// resetEmitted gives the test its own dedupe set.
-func resetEmitted(t *testing.T) {
-	t.Helper()
-	emittedMu.Lock()
-	prev := emitted
-	emitted = make(map[string]struct{})
-	emittedMu.Unlock()
-	t.Cleanup(func() {
-		emittedMu.Lock()
-		emitted = prev
-		emittedMu.Unlock()
-	})
+type HintSuite struct {
+	suite.Suite
+	buf  *bytes.Buffer
+	prev *slog.Logger
 }
 
-// captureHints logs the default slog handler to a buffer for the test.
-func captureHints(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	resetEmitted(t)
+func TestHintSuite(t *testing.T) { suite.Run(t, new(HintSuite)) }
+
+func (s *HintSuite) SetupTest() {
+	s.prev = slog.Default()
+	s.buf = s.capture(slog.LevelInfo)
+}
+
+func (s *HintSuite) TearDownTest() {
+	slog.SetDefault(s.prev)
+	SetHintsEnabled(true)
+}
+
+// capture logs the default slog handler at level to a fresh buffer.
+func (s *HintSuite) capture(level slog.Level) *bytes.Buffer {
 	var buf bytes.Buffer
-	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{
+		Level: level,
 		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.TimeKey {
 				return slog.Attr{}
@@ -38,41 +41,47 @@ func captureHints(t *testing.T) *bytes.Buffer {
 			return a
 		},
 	})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
 	return &buf
 }
 
-// Hint dedupes by text, and a repeated run reuses the name.
-func TestHintLogsAHintRecordOnce(t *testing.T) {
-	buf := captureHints(t)
-	msg := "pass --force to replace it: " + t.Name()
-	Hint(t.Context(), msg, attr.Component("spell"))
-	Hint(t.Context(), msg)
-	assert.Equal(t, fmt.Sprintf("level=INFO msg=\"%s\" component=spell notice=hint\n", msg), buf.String())
+func (s *HintSuite) TestHintLogsAHintRecordOncePerInvocation() {
+	ctx := WithHints(s.T().Context())
+	Hint(ctx, "pass --force to replace it", attr.Component("spell"))
+	Hint(ctx, "pass --force to replace it")
+	s.Equal("level=INFO msg=\"pass --force to replace it\" component=spell notice=hint\n", s.buf.String())
 }
 
-func TestHintLogsNothingWithHintsDisabled(t *testing.T) {
-	buf := captureHints(t)
+// A server serves many invocations, and each one is taught again.
+func (s *HintSuite) TestEachInvocationShowsTheHintAgain() {
+	Hint(WithHints(s.T().Context()), "pass --force to replace it")
+	Hint(WithHints(s.T().Context()), "pass --force to replace it")
+	s.Equal(2, bytes.Count(s.buf.Bytes(), []byte("notice=hint")))
+}
+
+func (s *HintSuite) TestAContextWithoutASetShowsEveryHint() {
+	Hint(context.Background(), "pass --force to replace it")
+	Hint(context.Background(), "pass --force to replace it")
+	s.Equal(2, bytes.Count(s.buf.Bytes(), []byte("notice=hint")))
+}
+
+func (s *HintSuite) TestHintLogsNothingWithHintsDisabled() {
+	ctx := WithHints(s.T().Context())
 	SetHintsEnabled(false)
-	t.Cleanup(func() { SetHintsEnabled(true) })
-	msg := "try `magus run` instead: " + t.Name()
-	Hint(t.Context(), msg)
-	assert.Empty(t, buf.String())
+	Hint(ctx, "try `magus run` instead")
+	s.Empty(s.buf.String())
 
 	SetHintsEnabled(true)
-	Hint(t.Context(), msg)
-	assert.Contains(t, buf.String(), "notice=hint", "a hint withheld while disabled is still shown once enabled")
+	Hint(ctx, "try `magus run` instead")
+	s.Contains(s.buf.String(), "notice=hint", "a hint withheld while disabled is still shown once enabled")
 }
 
 // A handler that refuses info leaves the showing unspent for a later display.
-func TestHintKeepsItsShowingWhenTheHandlerRefusesIt(t *testing.T) {
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	slog.SetDefault(slog.New(slog.NewTextHandler(&bytes.Buffer{}, &slog.HandlerOptions{Level: slog.LevelError})))
-	msg := "read that failure with magus query output: " + t.Name()
-	Hint(t.Context(), msg)
+func (s *HintSuite) TestHintKeepsItsShowingWhenTheHandlerRefusesIt() {
+	ctx := WithHints(s.T().Context())
+	s.capture(slog.LevelError)
+	Hint(ctx, "read that failure with magus query output")
 
-	buf := captureHints(t)
-	Hint(t.Context(), msg)
-	assert.Contains(t, buf.String(), "notice=hint")
+	buf := s.capture(slog.LevelInfo)
+	Hint(ctx, "read that failure with magus query output")
+	s.Contains(buf.String(), "notice=hint")
 }

@@ -285,6 +285,71 @@ func (s *PlanUnitsSuite) TestEveryShardIsDigestedByItsUnitsDigest() {
 	}
 }
 
+func (s *PlanUnitsSuite) TestAnAnchorThatDoesMoreThanNeedsIsAnErrorNamingIt() {
+	root := writeWorkspace(s.T(), map[string]string{
+		"magusfile.buzz": `import "magus";
+import "fs";
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun ci(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(build);
+    fs\writeFile("out.txt", "x");
+}
+`,
+	})
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	_, err = m.planUnits(context.Background(), []types.Target{{Path: "."}}, "ci", nil, nil)
+	s.ErrorContains(err, "ci in . does more than ctx.needs (fs.writeFile)")
+}
+
+// PlanReachSuite plans a workspace whose targets declare their reads, so a
+// change reaches some units and leaves the rest to the cache.
+type PlanReachSuite struct {
+	suite.Suite
+	m *Magus
+}
+
+func TestPlanReachSuite(t *testing.T) { suite.Run(t, new(PlanReachSuite)) }
+
+func (s *PlanReachSuite) SetupTest() {
+	root := writeWorkspace(s.T(), map[string]string{
+		"magusfile.buzz": `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void !> any { ctx.readsFiles(["*.go"]); }
+export fun docs(ctx: magus\Context, args: [str]) > void !> any { ctx.readsFiles(["docs/*"]); }
+export fun test(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(build); ctx.readsFiles(["*_test.go"]); }
+export fun vet(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(build); ctx.readsFiles(["*_test.go"]); }
+export fun ci(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(docs, test, vet); }
+`,
+		"main.go":   "package main\n",
+		"docs/a.md": "a\n",
+	})
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	s.m = m
+}
+
+func (s *PlanReachSuite) plan(path string) types.ShardPlan {
+	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{path}, MaxShards: -1})
+	s.Require().NoError(err)
+	return plan
+}
+
+func (s *PlanReachSuite) TestAUnitWhoseClosureReadsNoChangedPathIsUnreached() {
+	s.Equal([]types.Unit{{Project: ".", Target: "docs"}}, s.plan("main.go").Unreached)
+}
+
+func (s *PlanReachSuite) TestAPrerequisiteReadingTheChangeReachesItsDependents() {
+	s.Equal([]types.Unit{{Project: ".", Target: "test"}, {Project: ".", Target: "vet"}}, s.plan("docs/a.md").Unreached)
+}
+
+func (s *PlanReachSuite) TestUnitsSharingAReachedPrerequisiteShareAShard() {
+	plan := s.plan("main.go")
+	s.Require().Len(plan.Shards, 1)
+	s.ElementsMatch([]types.Unit{{Project: ".", Target: "test"}, {Project: ".", Target: "vet"}}, plan.Shards[0].Units)
+}
+
 type PlaceDutiesSuite struct{ suite.Suite }
 
 func TestPlaceDutiesSuite(t *testing.T) { suite.Run(t, new(PlaceDutiesSuite)) }
@@ -375,4 +440,41 @@ func Example_runATarget() {
 	// api:build ok, cache hit false
 	// ref names api:build, failed false
 	// api/out/greeting.txt: hello
+}
+
+// planBenchWorkspace is projects whose ci asks for lint and test, both
+// needing build, with every project changed.
+func planBenchWorkspace(b *testing.B, projects int) (*Magus, []string) {
+	files := map[string]string{"magusfile.buzz": ""}
+	var changed []string
+	for p := range projects {
+		dir := fmt.Sprintf("p%03d", p)
+		files[dir+"/magusfile.buzz"] = `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void !> any { ctx.readsFiles(["*.go"]); }
+export fun lint(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(build); }
+export fun test(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(build); }
+export fun ci(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(lint, test); }
+`
+		files[dir+"/main.go"] = "package main\n"
+		changed = append(changed, dir+"/main.go")
+	}
+	m, err := Open(context.Background(), writeWorkspace(b, files), WithSpawnRule(TierCeiling))
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { _ = m.Close() })
+	return m, changed
+}
+
+func BenchmarkPlan(b *testing.B) {
+	for _, projects := range []int{10, 40} {
+		m, changed := planBenchWorkspace(b, projects)
+		b.Run(fmt.Sprintf("projects=%d", projects), func(b *testing.B) {
+			for b.Loop() {
+				if _, err := m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: changed, MaxShards: -1}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
 }

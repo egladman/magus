@@ -106,10 +106,10 @@ describe('parseBudget', () => {
 
   test('output that is not the status record is an error that says so', async () => {
     expect(parseBudget('[error] the workspace did not load').error?.message).toBe(
-      'magus status -o json printed no JSON: [error] the workspace did not load',
+      'magus server status -o json printed no JSON: [error] the workspace did not load',
     )
     expect(parseBudget(JSON.stringify({ broker: { pid: 1 } })).error?.message).toBe(
-      'magus status -o json has a broker without broker.capacity',
+      'magus server status -o json has a broker without broker.capacity',
     )
   })
 })
@@ -141,7 +141,7 @@ describe('refusals', () => {
   test('a magus command is told from one that only mentions it', async () => {
     expect(runsMagus('./magus run go-test .')).toBe(true)
     expect(runsMagus('cd /w && ./magus run lint .')).toBe(true)
-    expect(runsMagus('/usr/local/bin/magus status')).toBe(true)
+    expect(runsMagus('/usr/local/bin/magus server status')).toBe(true)
     expect(runsMagus('magus')).toBe(true)
     expect(runsMagus('ls magusfile.buzz')).toBe(false)
     expect(runsMagus('grep magus-run notes.md')).toBe(false)

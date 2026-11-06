@@ -30,18 +30,18 @@ func TestSleepPollRefusesASleepBeforeAStatusRead(t *testing.T) {
 		line string
 		want bool
 	}{
-		{"sleep 30; ./magus status", true},
+		{"sleep 30; ./magus server status", true},
 		{"sleep 60 && gh pr checks 12", true},
 		{"sleep 45 && gh run view 99", true},
 		// A settle, not a wait.
-		{"sleep 5; ./magus status", false},
+		{"sleep 5; ./magus server status", false},
 		// The read came first.
-		{"./magus status; sleep 30", false},
+		{"./magus server status; sleep 30", false},
 		// A watch waits for the change itself.
 		{"sleep 30; gh pr checks 12 --watch", false},
-		{"sleep 30; ./magus status --watch=15s", false},
+		{"sleep 30; ./magus server status --watch=15s", false},
 		{"sleep 30 && echo done", false},
-		{"echo 'sleep 30; magus status'", false},
+		{"echo 'sleep 30; magus server status'", false},
 	} {
 		v := Evaluate(deps, tt.line)
 		if tt.want {
@@ -52,7 +52,7 @@ func TestSleepPollRefusesASleepBeforeAStatusRead(t *testing.T) {
 		}
 	}
 	// It denies by default too.
-	v := Evaluate(Dependencies{}, "sleep 30; ./magus status")
+	v := Evaluate(Dependencies{}, "sleep 30; ./magus server status")
 	assert.Equal(t, denyRuleSleepPoll, v.Rule.Name)
 	assert.NotEmpty(t, v.Deny)
 }
@@ -223,11 +223,11 @@ func TestSleepPollRefusesAWorkersWaitForTheBuildBudget(t *testing.T) {
 	worker.Parent = "figures"
 	ctx, _ := fleetFixture(t, worker)
 	waits := []string{
-		"./magus status --watch=15s | ./magus run diagrams_generate docs",
-		"./magus status --watch=15s",
-		"./magus status -W 15s",
+		"./magus server status --watch=15s | ./magus run diagrams_generate docs",
+		"./magus server status --watch=15s",
+		"./magus server status -W 15s",
 		"sleep 60; ./magus run diagrams_generate docs",
-		"sleep 60; ./magus status",
+		"sleep 60; ./magus server status",
 	}
 	for i, line := range waits {
 		bash := Judge(ctx, Dependencies{}, Request{Input: line, Lease: worker.ID})
@@ -238,13 +238,13 @@ func TestSleepPollRefusesAWorkersWaitForTheBuildBudget(t *testing.T) {
 		watcher := Judge(ctx, Dependencies{}, Request{Input: monitorCall(t, "", line), Lease: worker.ID, Host: "claude-code"})
 		assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(watcher), "Monitor: %s", line)
 	}
-	for _, line := range []string{"./magus status"} {
+	for _, line := range []string{"./magus server status"} {
 		watched := Judge(ctx, Dependencies{}, Request{Input: monitorCall(t, "", line), Lease: worker.ID, Host: "claude-code"})
 		assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(watched), "a watcher repeats the call: %s", line)
 	}
 
 	for _, line := range []string{
-		"./magus status",
+		"./magus server status",
 		"./magus run diagrams_generate docs",
 		"sleep 2; ./magus run diagrams_generate docs",
 	} {
@@ -274,7 +274,7 @@ func TestSleepPollLeavesTheOrchestratorsBudgetWait(t *testing.T) {
 	ctx, _ := fleetFixture(t, root)
 	for _, line := range []string{
 		"./magus run diagrams_generate docs",
-		"./magus status --watch=15s",
+		"./magus server status --watch=15s",
 		"sleep 60; ./magus run diagrams_generate docs",
 	} {
 		bash := Judge(ctx, Dependencies{}, Request{Input: line, Lease: root.ID, Session: "root", Host: "claude-code"})
@@ -448,7 +448,7 @@ func TestDenyRefusedRetry(t *testing.T) {
 	t.Run("a different command", func(t *testing.T) {
 		t.Parallel()
 		ctx := at(t, 10*time.Second, true)
-		for _, line := range []string{"./magus run lint .", "./magus run go-test . -- -run 'TestHookCmd|TestJudge'", "./magus status", "git status"} {
+		for _, line := range []string{"./magus run lint .", "./magus run go-test . -- -run 'TestHookCmd|TestJudge'", "./magus server status", "git status"} {
 			assert.False(t, denyRefusedRetry(ctx, Dependencies{}, "", line).refused(), line)
 		}
 	})
@@ -519,7 +519,7 @@ func TestProcessPollWithNoRunOnTheLineReadsStatus(t *testing.T) {
 	v := Evaluate(strict(testDependencies()), "pgrep -fl magus")
 	assert.Equal(t, denyRuleProcessPoll, v.Rule.Name)
 	require.Len(t, v.Next, 1)
-	assert.Equal(t, hint.Status.String(), v.Next[0].Run)
+	assert.Equal(t, hint.ServerStatus.String(), v.Next[0].Run)
 }
 
 // A wait on the pid of a run holding a seat spends the budget wait outside the call that
@@ -673,7 +673,7 @@ func TestSleepFormPollSuite(t *testing.T) {
 }
 
 func (s *SleepFormPollSuite) refusesBeforeAStatusRead(sleeper string) {
-	v := Evaluate(Dependencies{}, sleeper+"; ./magus status")
+	v := Evaluate(Dependencies{}, sleeper+"; ./magus server status")
 	s.Equal(denyRuleSleepPoll, v.Rule.Name, sleeper)
 }
 
@@ -823,14 +823,14 @@ func (s *WaitRemedySuite) TestBusyWaitOnTwoRunsServesNothing() {
 }
 
 func (s *WaitRemedySuite) TestSleepPollOnAStatusReadServesNothing() {
-	v := s.evaluate("sleep 30; ./magus status")
+	v := s.evaluate("sleep 30; ./magus server status")
 	s.Equal(denyRuleSleepPoll, v.Rule.Name)
 	s.Empty(v.Next, "the work it polls is not on the line")
 }
 
 func (s *WaitRemedySuite) TestSleepPollBesideARunServesThatRun() {
 	recordRun(s.T(), s.root, ".", "test", 80*time.Second)
-	v := s.evaluate("sleep 30; ./magus status; ./magus run test .")
+	v := s.evaluate("sleep 30; ./magus server status; ./magus run test .")
 	s.Equal(denyRuleSleepPoll, v.Rule.Name)
 	s.Require().Len(v.Next, 1)
 	s.Equal("./magus job exec --timeout 2m -- ./magus run test .", v.Next[0].Run)

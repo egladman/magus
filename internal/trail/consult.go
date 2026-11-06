@@ -43,7 +43,6 @@ type Consultation struct {
 var consultVerbs = map[string]bool{
 	"query":    true,
 	"explain":  true,
-	"path":     true,
 	"refs":     true,
 	"describe": true,
 	"where":    true,

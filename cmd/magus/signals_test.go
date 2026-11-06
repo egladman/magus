@@ -90,12 +90,12 @@ func TestOwnsItsSignals(t *testing.T) {
 		args []string
 		want bool
 	}{
-		{[]string{"broker"}, true},
-		{[]string{"broker", "--log", "/x"}, true},
-		{[]string{"-v", "broker"}, true},
-		{[]string{"broker", "status"}, false},
-		{[]string{"broker", "stop"}, false},
-		{[]string{"broker", "-h"}, false},
+		{[]string{"server", "broker"}, true},
+		{[]string{"server", "broker", "--log", "/x"}, true},
+		{[]string{"-v", "server", "broker"}, true},
+		{[]string{"server", "broker", "status"}, false},
+		{[]string{"server", "broker", "stop"}, false},
+		{[]string{"server", "broker", "-h"}, false},
 		{[]string{"server", "--foreground"}, true},
 		{[]string{"server", "start", "--foreground"}, true},
 		// The launcher returns once its child is up; the child is the server.
@@ -207,10 +207,10 @@ func brokerEnv(t *testing.T) (stateDir string) {
 	return stateDir
 }
 
-// startBroker runs `magus broker` with args and waits until it answers.
+// startBroker runs `magus server broker` with args and waits until it answers.
 func startBroker(t *testing.T, stderrPath string, args ...string) *child {
 	t.Helper()
-	c := startChild(t, stderrPath, append([]string{"broker"}, args...)...)
+	c := startChild(t, stderrPath, append([]string{"server", "broker"}, args...)...)
 	addr := broker.DefaultAddr()
 	require.Eventually(t, func() bool { return broker.Live(t.Context(), addr) || !c.running() },
 		lifecycleBound, 10*time.Millisecond, "the broker never bound its socket")

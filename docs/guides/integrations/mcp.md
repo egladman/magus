@@ -65,7 +65,7 @@ http://127.0.0.1:7391/mcp
 
 ## Is the loopback MCP endpoint reachable?
 
-For a host configured with the loopback URL, `magus status` reports the HTTP
+For a host configured with the loopback URL, `magus server status` reports the HTTP
 endpoint's live health as its own block, checked independently of the daemon's
 socket. This block does not describe a host using stdio or the daemon's Unix socket:
 
@@ -84,14 +84,14 @@ The `state` is one of:
 | `unreachable` | nothing is listening; start the daemon with `magus server start` |
 | `disabled`    | turned off by `mcp.enabled=false`                                |
 
-For scripts and container probes, `magus status --probe=<kind>` exits `0` healthy / `1`
+For scripts and container probes, `magus server status --probe=<kind>` exits `0` healthy / `1`
 unhealthy. The kinds are `liveness` (the daemon answers), `readiness` (a workspace is
 loaded), and `mcp` (this endpoint is reachable), and they are comma-combinable, failing
 if any listed check does:
 
 ```sh
-magus status --probe=mcp             # fail if loopback HTTP MCP is unreachable
-magus status --probe=liveness,mcp    # fail if the daemon OR the endpoint is down
+magus server status --probe=mcp             # fail if loopback HTTP MCP is unreachable
+magus server status --probe=liveness,mcp    # fail if the daemon OR the endpoint is down
 ```
 
 The daemon also serves `/livez`, `/readyz`, and `/healthz` on the same port. If `state` is
@@ -168,7 +168,7 @@ does not own a second graph, build engine, job store or VCS implementation.
 Use a typed MCP tool when the host exposes it. If the tool is missing or its
 call fails, use the corresponding CLI verb. The HTTP probe above cannot test
 the host's stdio or Unix-socket connection. For a daemon-socket problem,
-`magus status --probe=readiness` checks whether this workspace is loaded on
+`magus server status --probe=readiness` checks whether this workspace is loaded on
 the socket, but cannot confirm the host registered MCP. The host owns the
 connection; an agent should not start a daemon merely to unlock a tool.
 
@@ -392,7 +392,7 @@ logs and history). How you connect depends on the client:
   file. Export `MAGUS_MCP_TOKEN` where the Cursor GUI process inherits it
   (macOS Dock launches often miss shell-profile exports), then restart Cursor
   or toggle Magus under Tools & MCP. Confirm with Output -> MCP Logs and
-  `magus status --probe=mcp`.
+  `magus server status --probe=mcp`.
 
 - **Codex** uses user-level `~/.codex/config.toml` to register the local
   Streamable HTTP endpoint. Do not commit this client configuration. It contains
@@ -414,14 +414,14 @@ logs and history). How you connect depends on the client:
   magus server start
   magus config mcp connector create --name codex --expires 366d
   codex mcp list
-  magus status --probe=liveness,mcp
+  magus server status --probe=liveness,mcp
   ```
 
   For the ChatGPT desktop app or Codex IDE extension, set the variable through
   the OS environment before launching or restarting the client; exporting it in
   a terminal does not configure an already-running app. Start a new task after
   the daemon comes up. `codex mcp list` confirms configuration, while
-  `magus status --probe=liveness,mcp` confirms the endpoint is live. If you
+  `magus server status --probe=liveness,mcp` confirms the endpoint is live. If you
   change `mcp.address`, update the URL in `~/.codex/config.toml` too. In the
   desktop app, `/mcp` shows connected servers. Install matching guidance with
   `magus agent install .agents/skills`, then paste the `AGENTS.md` block it

@@ -49,13 +49,13 @@ type UnitFacts struct {
 
 // RenderUnits renders the units for supervisor, one of the Supervisor constants.
 //
-// Under systemd the socket unit owns broker.sock and starts the broker on the first
-// connection; the broker takes the socket over (LISTEN_FDS) and still exits when idle,
-// since the next connection starts it again.
+// Under systemd the socket unit owns SocketName and starts the broker on the
+// first connection. The broker adopts it (LISTEN_FDS) and still exits idle.
 //
-// launchd hands a socket over only through launch_activate_socket, a C call magus does
-// not make, so its agent starts the broker at login, keeps it alive and turns idle exit
-// off; the broker binds broker.sock itself. The agent pins the variables the socket
+// launchd hands a socket over only through launch_activate_socket, which magus
+// does not call. Its agent keeps the broker alive from login, with idle exit
+// off, and the broker binds SocketName itself. The agent pins the variables
+// the socket
 // path comes from, because launchd starts agents with an environment of its own.
 //
 // Both pin shutdown_grace on the command line and give the supervisor that long plus
@@ -74,7 +74,7 @@ func RenderUnits(supervisor string, f UnitFacts) ([]Unit, error) {
 	case SupervisorSystemd:
 		dir := filepath.Join(f.ConfigDir, "systemd", "user")
 		socket := fmt.Sprintf(`[Unit]
-Description=magus broker socket
+Description=magus server broker socket
 
 [Socket]
 ListenStream=%s
@@ -85,12 +85,12 @@ DirectoryMode=0700
 WantedBy=sockets.target
 `, systemdEscape(f.Socket))
 		svc := fmt.Sprintf(`[Unit]
-Description=magus broker: this host's capacity and shared services
+Description=magus server broker: this host's capacity and shared services
 Requires=magus-broker.socket
 After=magus-broker.socket
 
 [Service]
-ExecStart=%s broker --shutdown-grace=%s
+ExecStart=%s server broker --shutdown-grace=%s
 ExecReload=kill -HUP $MAINPID
 KillMode=mixed
 TimeoutStopSec=%s
@@ -111,6 +111,7 @@ TimeoutStopSec=%s
   <key>ProgramArguments</key>
   <array>
     <string>%s</string>
+    <string>server</string>
     <string>broker</string>
     <string>--idle-exit</string>
     <string>0</string>

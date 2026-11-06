@@ -124,8 +124,8 @@ func TestRunConfigCmd_UnknownSubcommand(t *testing.T) {
 
 // TestRunConfigCmd_NoArgs pins that a missing subcommand is a USAGE ERROR, not a
 // quiet success. It previously returned nil, so `magus config` exited 0 and a script
-// could not tell a bare invocation from one that did work, and it disagreed with
-// `magus man`, which exited 1 for the same mistake. Usage errors exit 2 across the CLI.
+// could not tell a bare invocation from one that did work.
+// Usage errors exit 2 across the CLI.
 func TestRunConfigCmd_NoArgs(t *testing.T) {
 	cfg := config.Defaults()
 	err := configCommand(context.Background(), "", cfg, nil)

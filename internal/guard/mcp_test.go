@@ -190,7 +190,7 @@ func TestBuildCall(t *testing.T) {
 		want  string
 	}{
 		"a buzz script": {hint.ToolBuzz, map[string]any{"path": "a b.buzz"}, `magus buzz "a b.buzz"`},
-		"a status":      {hint.ToolStatus, nil, "magus status"},
+		"a status":      {hint.ToolStatus, nil, "magus server status"},
 	} {
 		assert.Equal(t, tc.want, buildCall(tc.tool.String(), tc.input, ""), name)
 	}

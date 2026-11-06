@@ -130,6 +130,9 @@ type ShardPlan struct {
 	// Unmeasured are the units and prerequisites with no recorded
 	// duration, sorted. The plan weighed each with the fallback.
 	Unmeasured []Unit
+	// Unreached are the units of affected projects whose closures read no
+	// changed path, sorted. Each replays from the cache, so no shard runs it.
+	Unreached []Unit
 	// Affected is every project the change set reaches, sorted: the closure the shards
 	// were cut from, before any sharding or filtering.
 	Affected []string
@@ -147,9 +150,10 @@ type ShardPlan struct {
 // carrying one. The units are then the steps that body takes under the shard's
 // charms and args. Safe for concurrent use.
 type StepLog struct {
-	mu    sync.Mutex
-	units []Unit
-	seen  map[Unit]bool
+	mu      sync.Mutex
+	units   []Unit
+	seen    map[Unit]bool
+	effects []string
 }
 
 // NewStepLog returns an empty log.
@@ -172,6 +176,23 @@ func (r *StepLog) Units() []Unit {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.units)
+}
+
+// Effects are the host operations the traced body asked for and the trace
+// stubbed, each once, in the order asked. A shard runs only the recorded
+// units, so none of these would run.
+func (r *StepLog) Effects() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.effects)
+}
+
+func (r *StepLog) effect(op string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !slices.Contains(r.effects, op) {
+		r.effects = append(r.effects, op)
+	}
 }
 
 type stepLogKey struct{}

@@ -15,7 +15,7 @@ gave a session, and is never recorded as a session.
 A command run outside any host still gets its fire-once notices once per terminal.
 
 ```sh
-magus status
+magus server status
 ```
 
 ## Used in

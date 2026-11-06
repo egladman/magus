@@ -31,8 +31,6 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return queryCommand(ctx, root, subArgs)
 	case "explain":
 		return explainCommand(ctx, root, subArgs)
-	case "path":
-		return pathCommand(ctx, root, subArgs)
 	case "refs":
 		return refsCommand(ctx, root, subArgs)
 	case "graph":
@@ -43,8 +41,6 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return watchCommand(ctx, root, rc, subArgs)
 	case "events":
 		return eventsCommand(ctx, root, subArgs)
-	case "status":
-		return status(ctx, subArgs)
 	case "clean":
 		return cleanCommand(ctx, root, subArgs)
 	case "vcs":
@@ -67,14 +63,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return diffCommand(ctx, root, subArgs)
 	case "server":
 		return serverCommand(ctx, root, subArgs)
-	case "broker":
-		return brokerCommand(ctx, subArgs)
 	case "mcp":
 		return mcpCommand(ctx, root, subArgs)
-	case "completion":
-		return completion(subArgs)
-	case "man":
-		return manCommand(subArgs)
 	case "init":
 		return initCommand(ctx, root, subArgs)
 	case "agent":

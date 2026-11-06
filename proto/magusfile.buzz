@@ -13,7 +13,7 @@ magus\project({
     // go because buf.gen.yaml runs its plugins through `go tool`.
     "spells": [buf, go],
     "targets": {
-        "ci": {"skip_cache": "buf-breaking compares against the default branch, which moves without touching this tree"},
+        "breaking": {"skip_cache": "buf-breaking compares against the default branch, which moves without touching this tree"},
     },
     // generate stays cached, unlike the other drift gates: it calls a remote buf
     // plugin, and uncached runs exhaust the BSR rate limit.
@@ -75,8 +75,13 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
 export fun lint(ctx: magus\Context, args: [str]) > void {
     buf["buf-lint"](ctx, {"args": ["."]});
 }
-export fun ci(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(generate, lint);
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate, lint, breaking);
+}
+
+// breaking runs buf-breaking against the default branch, less the findings the
+// ledger permits.
+export fun breaking(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(["buf-breaking.deviations.jsonl", "**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"]);
     final ledger = "buf-breaking.deviations.jsonl";
     // buf reads the baseline from git only.
@@ -86,7 +91,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     final schema = vcs\cmd(["cat-file", "-e", base + ":proto/buf.yaml"],
                            opts: vcs\CommandOptions{allowFailure = true, quiet = true});
     if (base == "" or !schema["ok"]) {
-        throw "ci: cannot read proto/buf.yaml at `{base}`, so buf-breaking has nothing to compare; "
+        throw "breaking: cannot read proto/buf.yaml at `{base}`, so buf-breaking has nothing to compare; "
             + "fetch that ref, or set vcs.base_ref to one holding the schema";
     }
     final run = buf["buf-breaking"](ctx, {"allowFailure": true, "args": ["--against",
@@ -94,10 +99,10 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     final shown = "proto/{ledger}";
     final verdict = deviations\judge(run, findingsExit: 100, ledger: ledger, shown: shown, base: base);
     if (verdict.failure != "") {
-        throw "ci: buf-breaking: {verdict.failure}";
+        throw "breaking: buf-breaking: {verdict.failure}";
     }
     if (verdict.permitted > 0) {
         ctx.permitted(verdict.permitted);
-        magus\log.warn("proto ci: permitted {verdict.permitted} findings ({shown})");
+        magus\log.warn("proto breaking: permitted {verdict.permitted} findings ({shown})");
     }
 }

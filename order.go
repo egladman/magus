@@ -270,11 +270,9 @@ func (m *Magus) settleDerivedOrder(ctx context.Context, st *orderSettle, steps [
 			slog.String("written_by", fmt.Sprintf("%s:%s", stale.Project, stale.Target)))
 		types.ActiveDispatchFromContext(ctx).Mark(p.Path)
 		types.ActiveDispatchFromContext(ctx).Mark(p.Dir)
-		// Through RunAside, not straight at the interpreter: a re-run here holds every
-		// project lock, so it has to appear where the batch's steps appear: a limiter
-		// slot, a machine claim `magus status` names, the inflight set, and a journal
-		// result event with its captured log. Dispatched bare it was invisible to all
-		// four, and a stalled settle read as a finished run that forgot to exit.
+		// A re-run here holds every project lock, so RunAside makes it appear
+		// where batch steps do. Dispatched bare, a stalled settle read as a
+		// finished run that forgot to exit.
 		if _, err := m.cache.RunAside(ctx, newStep(p, node.Target), func(ctx context.Context) error {
 			_, err := interp.RunDir(buzz.WithTargetRuns(ctx, buzz.NewTargetRuns()), p.Dir, node.Target, nil)
 			return err

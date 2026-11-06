@@ -113,7 +113,7 @@ async function binaryInfo($: EngineInterface, path: string, root: string): Promi
 }
 
 async function serverInfo($: EngineInterface, bin: string, root: string): Promise<ServerInfo | null> {
-  // Exits 1 with no server running, and still prints the report.
+  // Prints the report, with server null, when no server is running.
   const r = await run($, [bin, '-s', 'server', 'status', '-o', 'json'], root)
   if (r === null) return null
   try {
@@ -202,9 +202,9 @@ async function readBudget($: EngineInterface): Promise<void> {
 async function readBudgetOnce($: EngineInterface): Promise<void> {
   const root = await $.session.root()
   if (!(await $.fs.exists(`${root}/magusfile.buzz`))) return
-  const r = await run($, [await magusBin($, root), '-s', 'status', '-o', 'json'], root)
+  const r = await run($, [await magusBin($, root), '-s', 'server', 'status', '-o', 'json'], root)
   if (r === null) {
-    await $.state.set(BUDGET_ERROR, 'magus status -o json did not run')
+    await $.state.set(BUDGET_ERROR, 'magus server status -o json did not run')
     await refreshStatus($)
     return
   }

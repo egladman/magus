@@ -10,7 +10,7 @@ tags:
     repl,
     recursion,
     magus\cmd,
-    magus status,
+    magus server status,
     output,
     template,
     fields,
@@ -30,10 +30,10 @@ Non-obvious ways to combine magus subcommands.
 
 ## Live pool snapshot in a multiplexer sidebar
 
-`magus status` is a non-blocking, one-shot RPC snapshot: it returns immediately whether the daemon is running or not. Combine `--compact` (a single densely-packed line) with `--watch` to keep a tmux/screen sidebar pane current:
+`magus server status` is a non-blocking, one-shot RPC snapshot: it returns immediately whether the daemon is running or not. Combine `--compact` (a single densely-packed line) with `--watch` to keep a tmux/screen sidebar pane current:
 
 ```sh
-magus status --compact --watch=15s
+magus server status --compact --watch=15s
 ```
 
 Sample output:
@@ -77,11 +77,11 @@ done
 
 ## One-shot daemon health probe
 
-`magus status` exits 0 even when the daemon is down (the pool block reads `server: off`). Use it as a cheap, non-blocking reachability probe in scripts or CI health checks, with no risk of hanging on a network timeout:
+`magus server status` exits 0 even when the daemon is down (the pool block reads `server: off`). Use it as a cheap, non-blocking reachability probe in scripts or CI health checks, with no risk of hanging on a network timeout:
 
 ```sh
-magus status
-magus status -o json   # machine-readable output
+magus server status
+magus server status -o json   # machine-readable output
 ```
 
 ## Discover an output's fields for -o json and -o template

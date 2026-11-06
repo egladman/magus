@@ -19,7 +19,7 @@ broker passes no messages: it holds this host's build budget and the services ru
 ## Example
 
 ```sh
-magus broker status
+magus server broker status
 ```
 
 ## Used in

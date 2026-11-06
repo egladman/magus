@@ -262,7 +262,7 @@ func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (string, 
 	if err != nil {
 		return "", nil, err
 	}
-	// seat can hold a claim 30 minutes, and a healthy machine can fail in that.
+	// A long wait can end on a machine that went bad meanwhile.
 	if err := g.refuseUnderPressure(ctx, c); err != nil {
 		release()
 		return "", nil, err
@@ -388,6 +388,7 @@ type budgetWait struct {
 	holders string
 	verdict types.MachineVerdict
 	timer   *time.Timer
+	gen     int
 	fired   bool
 }
 
@@ -397,15 +398,23 @@ func (g *machineGate) newBudgetWait(ctx context.Context, c types.MachineClaim) (
 }
 
 // parked hears each report of what keeps the claim out. A wait on its own
-// run passes in silence. A wait on other invocations says so, and again
-// when they change.
+// run passes in silence and clears the bound a wait on other invocations
+// started. A wait on other invocations says so, and again when they change.
 func (w *budgetWait) parked(ctx context.Context, v types.MachineVerdict) {
-	if v.OwnRun {
-		return
-	}
 	held := describeMachineHolders(v.Holders)
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if v.OwnRun {
+		w.gen++
+		if w.timer != nil {
+			w.timer.Stop()
+			w.timer = nil
+		}
+		if !w.fired {
+			w.since, w.holders = time.Time{}, ""
+		}
+		return
+	}
 	w.verdict = v
 	if w.fired {
 		return
@@ -417,7 +426,9 @@ func (w *budgetWait) parked(ctx context.Context, v types.MachineVerdict) {
 			w.cancel()
 			return
 		}
-		w.timer = time.AfterFunc(w.bound.d, w.expire)
+		w.gen++
+		gen := w.gen
+		w.timer = time.AfterFunc(w.bound.d, func() { w.expire(gen) })
 		w.say(ctx, fmt.Sprintf("waiting for a seat for %s %s: %s, and %s; %s. It gives up after %s (%s)",
 			displayProject(w.claim.Project), w.claim.Target, describeMachineDeclaration(w.claim),
 			describeMachineRemaining(v), held, w.bound.d, w.bound.source))
@@ -433,8 +444,13 @@ func (w *budgetWait) parked(ctx context.Context, v types.MachineVerdict) {
 		max(w.bound.d-elapsed, 0).Round(time.Second)))
 }
 
-func (w *budgetWait) expire() {
+// expire ends the wait unless its timer was cleared as it fired.
+func (w *budgetWait) expire(gen int) {
 	w.mu.Lock()
+	if gen != w.gen {
+		w.mu.Unlock()
+		return
+	}
 	w.fired = true
 	w.mu.Unlock()
 	w.cancel()
@@ -698,7 +714,7 @@ func brokerUnavailableError(c types.MachineClaim, err error) error {
 			displayProject(c.Project), c.Target, err)}
 	}
 	return types.ExitError{Code: ExitCodeBrokerUnavailable, Err: types.WrapDiagnostic(types.BrokerUnavailable, err,
-		"not starting %s %s: no broker answered for this host's capacity (%v), and broker: required refuses to run unarbitrated. `magus broker status` says whether one is up and where it logs",
+		"not starting %s %s: no broker answered for this host's capacity (%v), and broker: required refuses to run unarbitrated. `magus server broker status` says whether one is up and where it logs",
 		displayProject(c.Project), c.Target, err)}
 }
 
@@ -791,7 +807,7 @@ func LeasedPressureNext(lease string) string {
 // memoryPressureError is no wait: the budget queue waits on declared claims
 // and cannot see this.
 func memoryPressureError(c types.MachineClaim, reason, lease string) error {
-	next := fmt.Sprintf("Free memory, then run the same command again: `%s` shows what magus holds, and this reading counts everything on the machine", hint.Status.String())
+	next := fmt.Sprintf("Free memory, then run the same command again: `%s` shows what magus holds, and this reading counts everything on the machine", hint.ServerStatus.String())
 	if lease != "" {
 		next = LeasedPressureNext(lease)
 	}

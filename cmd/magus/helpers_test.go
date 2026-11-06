@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/gcpolicy"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
@@ -534,9 +535,10 @@ func TestHintCanonicalSpellingTeachesCharmOnce(t *testing.T) {
 	target, err := types.ParseTarget("format:UPDATE")
 	require.NoError(t, err)
 
+	ctx := interactive.WithHints(t.Context())
 	got := notices(t, func() {
-		hintCanonicalSpelling(t.Context(), target)
-		hintCanonicalSpelling(t.Context(), target)
+		hintCanonicalSpelling(ctx, target)
+		hintCanonicalSpelling(ctx, target)
 	})
 	assert.Equal(t, 1, strings.Count(got, "hint:"), "the charm must teach once, not once per call: %q", got)
 	assert.Contains(t, got, `charm "UPDATE" is canonically "update"`)

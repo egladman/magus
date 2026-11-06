@@ -1010,7 +1010,7 @@ func denyUnboundedBackground(command string, background bool, d Dialect, ceiling
 	return denial{
 		Say: fmt.Sprintf("magus workspace: `%s` runs in the background unbounded; bound it at the ceiling: `magus job exec --timeout %s -- <command>`.", program, bound),
 		Why: "A backgrounded command outlives the agent that started it: the host stops it only when asked, and an agent that finishes first leaves it running with nobody told. " +
-			"`magus job exec --timeout D -- cmd` runs it in its own process group under the broker, which names its owner (your lease) in `magus status`, stops the whole group at the deadline or when the wrapper dies, and files one attention row when it does. " +
+			"`magus job exec --timeout D -- cmd` runs it in its own process group under the broker, which names its owner (your lease) in `magus server status`, stops the whole group at the deadline or when the wrapper dies, and files one attention row when it does. " +
 			"`timeout N` or `gtimeout N` in front of each command that can run long also bounds it; stock macOS ships neither, and Homebrew's coreutils installs `gtimeout`. " +
 			"timeout signals its own process group, so a child that starts its own session (setsid, a daemon) escapes it, and `--foreground` narrows it to the direct child; `--kill-after` sends KILL to a command that ignores TERM. " +
 			"A magus target run is bounded by its target's timeout and passes, and so do builtins that return at once (cd, export, echo). A pipeline is bounded by its first command, since the rest end with its output. Running the command in the foreground passes too, since the host times a foreground call out. " +

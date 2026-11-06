@@ -108,7 +108,7 @@ func TestConsultedIgnoresALeaseThatWroteNothingInTheChangeset(t *testing.T) {
 	base := t.TempDir()
 	record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: toolShell, Command: "magus refs AppendAgentCommand"})
 	record(t, base, AgentCommand{Session: "s1", Lease: "mine", Tool: toolWrite, Path: "internal/trail/consult.go"})
-	record(t, base, AgentCommand{Session: "s2", Lease: "theirs", Tool: toolShell, Command: "magus path a b"})
+	record(t, base, AgentCommand{Session: "s2", Lease: "theirs", Tool: toolShell, Command: "magus explain a"})
 	record(t, base, AgentCommand{Session: "s2", Lease: "theirs", Tool: toolWrite, Path: "console/src/app.ts"})
 
 	got, _ := Consulted("", base, []string{"internal/trail/consult.go"}, 100)
@@ -144,7 +144,7 @@ func TestConsultationOfReadsTheVerbAndItsSubject(t *testing.T) {
 		// A flag that takes a separate value must not hand the value to the verb slot, and a
 		// trailing flag is not part of what was asked.
 		{cmd: "magus --root /repo -o json query kind=op -s", verb: "query", subject: "kind=op", ok: true},
-		{cmd: "MAGUS_ROOT=/repo magus path a b", verb: "path", subject: "a b", ok: true},
+		{cmd: "MAGUS_ROOT=/repo magus explain a b", verb: "explain", subject: "a b", ok: true},
 		{cmd: "magus run test .", ok: false},
 		{cmd: "magus", ok: false},
 		// A value-taking flag with nothing after it walks the scan past the end of the line.

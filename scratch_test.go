@@ -74,6 +74,24 @@ func (s *TreeCopySuite) TestACopyLandsInTheStoreWhenTheUserCacheIsDenied() {
 	s.NoDirExists(filepath.Join(denied, "magus"))
 }
 
+func (s *TreeCopySuite) TestAVersionControlThatDoesNotResolveIsThatError() {
+	m := &Magus{ws: &types.Workspace{Root: s.T().TempDir(), VCSOptions: types.VCSOptions{Name: "nonesuch"}}}
+
+	_, err := m.newScratch(context.Background())
+
+	s.ErrorIs(err, types.ErrVCSUnknown)
+	s.NotContains(err.Error(), "disabled")
+}
+
+func (s *TreeCopySuite) TestDisabledVersionControlIsNamedAsDisabled() {
+	off := false
+	m := &Magus{ws: &types.Workspace{Root: s.T().TempDir(), VCSOptions: types.VCSOptions{Enabled: &off}}}
+
+	_, err := m.newScratch(context.Background())
+
+	s.ErrorContains(err, "version control is disabled")
+}
+
 func (s *TreeCopySuite) TestACopyHoldsTheRevision() {
 	c := treeCopier{root: s.T().TempDir(), trees: s.T().TempDir(), rev: "c0ffee",
 		vcs: copyVCS{head: map[string]string{"kept.toy": "base"}}}

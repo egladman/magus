@@ -430,7 +430,7 @@ func FsReadFile(ctx context.Context, path string) (string, error) {
 
 // FsWriteFile writes content to path (mode 0644), subject to the sandbox write policy.
 func FsWriteFile(ctx context.Context, path string, content string) error {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "fs.writeFile") {
 		return nil
 	}
 	path = resolvePath(ctx, path)
@@ -451,7 +451,7 @@ func FsWriteFile(ctx context.Context, path string, content string) error {
 
 // FsMkdirAll creates path and any missing parents with the given mode, subject to the sandbox write policy.
 func FsMkdirAll(ctx context.Context, path string, perm int) error {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "fs.mkdirAll") {
 		return nil
 	}
 	path = resolvePath(ctx, path)
@@ -471,7 +471,7 @@ func FsJoin(_ context.Context, parts ...string) (string, error) {
 
 // FsRemoveAll recursively removes path (no error if missing), subject to the sandbox write policy.
 func FsRemoveAll(ctx context.Context, path string) error {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "fs.removeAll") {
 		return nil
 	}
 	path = resolvePath(ctx, path)
@@ -487,7 +487,7 @@ func FsRemoveAll(ctx context.Context, path string) error {
 // FsRemove removes a single file or empty directory, subject to the sandbox write
 // policy. A missing path is not an error, matching remove_all.
 func FsRemove(ctx context.Context, path string) error {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "fs.remove") {
 		return nil
 	}
 	path = resolvePath(ctx, path)
@@ -504,7 +504,7 @@ func FsRemove(ctx context.Context, path string) error {
 // dst's parent is created first so the common "rename into a fresh output dir"
 // does not need a separate mkdirall.
 func FsRename(ctx context.Context, src, dst string) error {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "fs.rename") {
 		return nil
 	}
 	src = resolvePath(ctx, src)
@@ -544,7 +544,7 @@ func FsSize(ctx context.Context, path string) (int, error) {
 // private temp dir when a policy is attached.
 func FsTempFile(ctx context.Context, prefix string) (string, error) {
 	base := sandbox.PolicyFromContext(ctx).TempBase()
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "fs.tempFile") {
 		// Dry run: name a plausible path without creating it, matching temp_dir.
 		// Writes to it are themselves recorded as skipped, so it never needs to exist.
 		return filepath.Join(cmp.Or(base, os.TempDir()), prefix+"magus-dry-run"), nil
@@ -563,7 +563,7 @@ func FsTempFile(ctx context.Context, prefix string) (string, error) {
 // FsWriteFileAtomic writes content to path via a same-directory temporary file
 // renamed into place, subject to the sandbox write policy.
 func FsWriteFileAtomic(ctx context.Context, path string, content string) error {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "fs.writeFileAtomic") {
 		return nil
 	}
 	path = resolvePath(ctx, path)
@@ -654,7 +654,7 @@ func FsStat(ctx context.Context, path string) (types.FileInfo, error) {
 // FsCopyFile copies src to dst (overwriting), preserving src's permission bits.
 // Both ends are subject to the sandbox policy: src must be readable, dst writable.
 func FsCopyFile(ctx context.Context, src, dst string) error {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "fs.copyFile") {
 		return nil
 	}
 	src, dst = resolvePath(ctx, src), resolvePath(ctx, dst)
@@ -677,7 +677,7 @@ func FsCopyFile(ctx context.Context, src, dst string) error {
 // permission bits. Each source entry is checked for read and each destination
 // for write, so a sandbox-denied path stops the copy with a diag error.
 func FsCopyDir(ctx context.Context, src, dst string) error {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "fs.copyDir") {
 		return nil
 	}
 	src, dst = resolvePath(ctx, src), resolvePath(ctx, dst)
@@ -891,7 +891,7 @@ func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 	// not to run, and fs.watch would otherwise block forever on its event loop.
 	// Return immediately (callback never invoked) so discovering a watch/serve
 	// target does not hang.
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "fs.watch") {
 		return nil
 	}
 	opts := []watch.Option{watch.WithIgnore(watch.BuiltinIgnore)}
@@ -986,7 +986,7 @@ func FsWalk(ctx context.Context, root string, cb Callback) error {
 // FsAppendFile appends content to path (creating the file if absent, mode 0644),
 // subject to the sandbox write policy.
 func FsAppendFile(ctx context.Context, path, content string) error {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "fs.appendFile") {
 		return nil
 	}
 	path = resolvePath(ctx, path)
@@ -1024,7 +1024,7 @@ func FsMode(_ context.Context, notation string) (int, error) {
 
 // FsChmod changes the permission bits of path, subject to the sandbox write policy.
 func FsChmod(ctx context.Context, path string, mode int) error {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "fs.chmod") {
 		return nil
 	}
 	path = resolvePath(ctx, path)
@@ -1041,7 +1041,7 @@ func FsChmod(ctx context.Context, path string, mode int) error {
 // sandbox write policy on link and the read policy on target: a link is a way to
 // reach its target, so one the policy could not read is refused.
 func FsSymlink(ctx context.Context, target, link string) error {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "fs.symlink") {
 		return nil
 	}
 	// Only link (the path being created) is resolved against the project dir;
@@ -1098,7 +1098,7 @@ func FsReadLines(ctx context.Context, path string) ([]string, error) {
 // subject to the sandbox write policy. An empty list writes an empty file, so
 // write_lines(p, read_lines(p)) round-trips a newline-terminated file.
 func FsWriteLines(ctx context.Context, path string, lines []string) error {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "fs.writeLines") {
 		return nil
 	}
 	content := ""
@@ -1114,7 +1114,7 @@ func FsWriteLines(ctx context.Context, path string, lines []string) error {
 // neither read nor write.
 func FsTempDir(ctx context.Context, prefix string) (string, error) {
 	base := sandbox.PolicyFromContext(ctx).TempBase()
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "fs.tempDir") {
 		// Dry run: return a plausible path without creating it. Writes into it are
 		// themselves recorded (skipped), so the directory never needs to exist.
 		return filepath.Join(cmp.Or(base, os.TempDir()), prefix+"magus-dry-run"), nil
@@ -1133,7 +1133,7 @@ func FsScratchCheckoutDir(ctx context.Context, purpose string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("fs.scratch_checkout_dir: %w", err)
 	}
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "fs.scratchCheckoutDir") {
 		return filepath.Join(parent, "magus-dry-run"), nil
 	}
 	if err := checkWrite(ctx, parent); err != nil {

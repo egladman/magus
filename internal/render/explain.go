@@ -10,14 +10,8 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// This file renders `magus explain` and `magus path` as compact, human-readable
-// text, the DEFAULT output for both the CLI and the MCP tools. It replaces the
-// old adjacency notation (`<--uses-- op:go:go-build [op]`), which forced the reader
-// to mentally invert the arrow. Here the edge direction is folded into a natural
-// verb (active when the focus node is the source, passive when it is the target),
-// edges are grouped by that verb with a count, and the FULL node IDs are listed
-// (the exact token to pass to the next explain), so one rendering serves humans,
-// agents that read, and the man pages. `-o json` remains the structured opt-in.
+// Edge direction folds into a verb, active from the source and passive from the
+// target. Full node IDs are listed: they are the token the next explain takes.
 
 // The labels live in types.KnowledgeRelationDefinitions, not here. This file used to
 // carry its own copy of all fifteen forward/reverse pairs, which made the registry's

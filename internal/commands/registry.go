@@ -435,8 +435,8 @@ var queryCommand = cmdline.Command{
 	Tags:        []string{"cli", "magus query", "query", "knowledge graph", "search", "output", "reference", "invocation", "journal", "audit"},
 	Long: `Ask the workspace what it knows. query resolves terms to nodes in the
 knowledge graph and returns the ranked matches plus the induced subgraph around
-them, collected up to a node budget. Its siblings explain and path read the same
-graph: explain shows one node's context, path connects two nodes.
+them, collected up to a node budget. Its sibling explain reads the same graph: one
+node's context, or with --to the chain of edges connecting it to a second node.
 
 Terms are free text plus field matchers, and they compose: kind=spell, project=pkg/foo,
 relation=uses, id=build, exclusion with kind!=op, and a regex with id=~build$. A bare word
@@ -500,7 +500,7 @@ var explainCommand = cmdline.Command{
 	Name:        "explain",
 	Short:       "Show one knowledge-graph node's context: data, edges, and reach",
 	Description: "Show a single knowledge-graph node in context: its data, its incoming and outgoing edges with provenance, and how many nodes reach it.",
-	Tags:        []string{"cli", "magus explain", "explain", "knowledge graph", "node", "edges", "provenance", "impact"},
+	Tags:        []string{"cli", "magus explain", "explain", "knowledge graph", "node", "edges", "provenance", "impact", "shortest path", "relationship", "coupling"},
 	Long: `explain shows one node's context: its data, its incoming and outgoing
 edges with provenance, and how many nodes reach it. Where query finds candidates,
 explain is what you run on the one you picked.
@@ -514,10 +514,18 @@ what declared it, so a surprising relationship can be traced to the file that cr
 it rather than taken on faith. And the reach count answers the blast-radius question
 directly: how many nodes can arrive at this one.
 
+With --to, explain answers how the node is related to a second one: the shortest
+chain of edges between them, each hop's relation named. Ask it when a change to one
+thing breaks a seemingly unrelated other, or when two projects look coupled and you
+want the chain rather than a hunch. Edges are walked in EITHER direction, so a chain
+proves the two nodes are connected, not that influence flows from one to the other;
+read each hop's relation to see which way it points.
+
 The graph is cache-backed under <cache>/knowledge and only shards whose sources
 changed are rebuilt; --refresh forces a full rebuild.`,
-	Usage: "magus explain <node-id-or-name> [flags]",
+	Usage: "magus explain <node-id-or-name> [--to <node-id-or-name>] [flags]",
 	Flags: []cmdline.Flag{
+		{Name: "to", Kind: cmdline.String, Doc: "Print the shortest chain of edges from the node to this `node` (an ID or a name) instead of its card"},
 		{Name: "refresh", Kind: cmdline.Bool, Default: false, Doc: "Force a full graph rebuild before explaining"},
 		{Name: "global", Kind: cmdline.Bool, Default: false, Doc: "Resolve across the workspaces registered in config (knowledge.workspaces)"},
 		{Name: "source", Kind: cmdline.Bool, Default: false, Doc: "Print a doc section's lines from its indexed extent instead of the card, checked against the file on disk. A symbol's body is refs --source"},
@@ -530,41 +538,9 @@ changed are rebuilt; --refresh forces a full rebuild.`,
 		{Comment: "Resolve by bare name", Command: "magus explain build"},
 		{Comment: "A spell's context", Command: "magus explain spell:go"},
 		{Comment: "As a record", Command: "magus explain build -o json"},
-	},
-}
-
-var pathCommand = cmdline.Command{
-	Name:        "path",
-	Short:       "Connect two knowledge-graph nodes: the shortest chain of edges between them",
-	Description: "Find the shortest chain of edges connecting two knowledge-graph nodes, walking edges in either direction, with each hop's relation named.",
-	Tags:        []string{"cli", "magus path", "path", "knowledge graph", "shortest path", "relationship", "coupling"},
-	Long: `path connects two nodes: the shortest chain of edges between them (edges
-walked in either direction), with each hop's relation.
-
-It answers the question the other two verbs cannot: not "what is this" or "what does
-this touch", but "how are these two related at all". That is the question worth asking
-when a change to one thing breaks a seemingly unrelated other, or when you suspect two
-projects are coupled and want the chain rather than a hunch. Each hop names its
-relation, so the answer is a mechanism you can check and not just a claim that a
-connection exists.
-
-Edges are walked in EITHER direction, which is what makes it useful and is also its
-main caveat: a returned chain proves the two nodes are connected in the graph, not that
-influence flows from one to the other. Read the hop relations to see which way each
-link actually points.
-
-Each argument is a node ID (target:pkg/foo:build) or a name that resolves to one.
-The graph is cache-backed under <cache>/knowledge; --refresh forces a full rebuild.`,
-	Usage: "magus path <a> <b> [flags]",
-	Flags: []cmdline.Flag{
-		{Name: "refresh", Kind: cmdline.Bool, Default: false, Doc: "Force a full graph rebuild before pathfinding"},
-		{Name: "global", Kind: cmdline.Bool, Default: false, Doc: "Resolve endpoints across the workspaces registered in config (knowledge.workspaces)"},
-	},
-	Examples: []cmdline.Example{
-		{Comment: "How are two projects related", Command: "magus path pkg/api pkg/web"},
-		{Comment: "From a spell to a diagnostic", Command: "magus path spell:go MGS3003"},
-		{Comment: "Between two targets by ID", Command: "magus path target:pkg/api:build target:pkg/web:test"},
-		{Comment: "As a record", Command: "magus path pkg/api pkg/web -o json"},
+		{Comment: "How two projects are related", Command: "magus explain pkg/api --to pkg/web"},
+		{Comment: "From a spell to a diagnostic", Command: "magus explain spell:go --to MGS3003"},
+		{Comment: "The chain as a record", Command: "magus explain pkg/api --to pkg/web -o json"},
 	},
 }
 
@@ -574,8 +550,8 @@ var graphCommand = cmdline.Command{
 	Description: "Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).",
 	Tags:        []string{"cli", "magus graph", "graph", "knowledge graph", "dependency graph", "export", "graphml"},
 	Long: `The workspace's graphs as objects: emit, export, and measure them. The
-query, explain, and path verbs read the knowledge graph; magus graph is the
-home of the graph itself.
+query and explain verbs read the knowledge graph; magus graph is the home of
+the graph itself.
 
 Subcommands (the first argument):
 
@@ -865,19 +841,25 @@ trigger a full initial build in the downstream magus affected --stdin.`,
 	},
 }
 
-var statusCommand = cmdline.Command{
+var serverStatusCommand = cmdline.Command{
 	Name:        "status",
-	Short:       "Inspect concurrency pool and configuration",
-	Description: "Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.",
-	Tags:        []string{"cli", "magus status", "status", "concurrency", "pool", "server", "monitoring"},
-	Long: `Show the magus configuration that affects this process - telemetry, cache
-settings - and, when a parent magus process is running, the live state of its
-concurrency pool (current slot usage, queued waiters).
+	Short:       "Whether the server and broker are up, what holds capacity, and the pool (needs neither running)",
+	Description: "Report whether the server is running and where to reach it, the broker's capacity and claims, the live concurrency pool of any running parent magus process, and the effective config, with optional --watch polling and --compact output.",
+	Tags:        []string{"cli", "magus server status", "status", "concurrency", "pool", "server", "broker", "monitoring"},
+	Long: `Report the server, the broker and the magus configuration that affects this
+process - telemetry, cache settings - and, when a parent magus process is
+running, the live state of its concurrency pool (current slot usage, queued
+waiters).
+
+A server or broker that is down is a row, not a failure: the server reads
+"server: not running" and the rest of the report still prints, the way
+systemctl status reports a stopped unit. It starts nothing. Use --probe for
+an exit status a script can chain on.
 
 When --watch is non-zero, status polls and reprints at that interval. On a
 TTY the screen is cleared between reprints; piped output appends each
 snapshot on its own line for log capture.`,
-	Usage: "magus status [flags]",
+	Usage: "magus server status [flags]",
 	Flags: []cmdline.Flag{
 		{Name: "watch", Kind: cmdline.Duration, Unit: "s", Doc: "Poll and reprint at this interval (minimum 15s; 0 means one-shot)"},
 		{Name: "W", Kind: cmdline.Duration, AliasOf: "watch", Doc: "Short for --watch"},
@@ -889,10 +871,10 @@ snapshot on its own line for log capture.`,
 		{Name: "workspace", Kind: cmdline.String, Doc: "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)"},
 	},
 	Examples: []cmdline.Example{
-		{Comment: "One-shot status snapshot", Command: "magus status"},
-		{Comment: "Live updates every 15 seconds", Command: "magus status --watch=15s"},
-		{Comment: "Single-line snapshot for a multiplexer sidebar", Command: "magus status --compact --watch=15s"},
-		{Comment: "Inspect a specific running parent", Command: "magus status --socket=unix:///run/user/1000/magus/server.sock"},
+		{Comment: "One-shot status snapshot", Command: "magus server status"},
+		{Comment: "Live updates every 15 seconds", Command: "magus server status --watch=15s"},
+		{Comment: "Single-line snapshot for a multiplexer sidebar", Command: "magus server status --compact --watch=15s"},
+		{Comment: "Inspect a specific running parent", Command: "magus server status --socket=unix:///run/user/1000/magus/server.sock"},
 	},
 }
 
@@ -1103,21 +1085,24 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 
 var serverCommand = cmdline.Command{
 	Name:        "server",
-	Short:       "Manage the magus server: MCP, the console, APIs and background jobs",
-	Description: "Start, stop, reload or check the magus server a person starts: MCP over HTTP, the console, the APIs, background jobs and the warm graph and symbol watch.",
-	Tags:        []string{"cli", "magus server", "server", "mcp", "console", "socket", "persistent"},
-	Long: `Start, stop, reload or check the magus server.
+	Short:       "The background processes: the server (MCP, the console, APIs, jobs) and the broker",
+	Description: "Start, stop, reload or report the magus server a person starts (MCP over HTTP, the console, the APIs, background jobs and the warm graph and symbol watch) and the broker that holds this host's capacity.",
+	Tags:        []string{"cli", "magus server", "server", "broker", "mcp", "console", "socket", "persistent"},
+	Long: `Start, stop, reload or report the magus server, and check or stop the broker.
 
 The server is the background process a person asks for. It serves MCP and the
 console over HTTP, the APIs behind them, background jobs and scheduled
 maintenance, and keeps each workspace's knowledge graph and symbol indexes
 current. It keeps workspaces warm, so nested magus calls that forward to it pay
-for discovery and config once. Nothing starts it but ` + "`magus server start`" + ` (and
-` + "`graph export --follow`" + `, which asks for the console by name), and it runs
-until stopped.
+for discovery and config once. Nothing under ` + "`magus server`" + ` starts it but
+` + "`server start`" + ` (elsewhere, ` + "`graph export --follow`" + ` asks for the console
+by name), and it runs until stopped.
 
-It is not what holds this host's capacity: that is ` + "`magus broker`" + `, which a
-run starts on its own. The server asks the broker like any run does.
+It is not what holds this host's capacity: that is the broker, which a run
+starts on its own; ` + "`magus server broker`" + ` checks or stops it. The server asks
+the broker like any run does.
+
+Each verb's help line says whether it needs the server running.
 
 The socket address is resolved in priority order:
   --socket flag  >  MAGUS_SERVER_ADDRESS env  >  server.address in magus.yaml  >
@@ -1131,10 +1116,7 @@ Signals:
   SIGTERM, SIGINT  stop: close the socket, cancel the runs it adopted, and
                    wait up to shutdown_grace (default 5m) for them to unwind
   a second one     exit now`,
-	Usage: "magus server <start|stop|status|reload> [flags]",
-	// Each subcommand carries its own flags. --foreground sat on the parent with
-	// "(server start)" in its doc, and stop's --socket was not declared at all, bound
-	// by the command, absent from every man page.
+	Usage: "magus server <start|stop|status|reload|broker> [flags]",
 	Children: []cmdline.Command{
 		{
 			Name:               "start",
@@ -1146,37 +1128,21 @@ Signals:
 		},
 		{
 			Name:  "stop",
-			Short: "Send a graceful shutdown request to the running server",
+			Short: "Send a graceful shutdown request to the running server (needs it running)",
 			Flags: []cmdline.Flag{
 				{Name: "socket", Kind: cmdline.String, Doc: "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)"},
 				{Name: "pools", Kind: cmdline.Bool, Default: false, Doc: "Stop per-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone"},
 			},
 		},
-		{
-			Name:        "status",
-			Short:       "The server: whether it is up and where you reach it",
-			Description: "Report the running server's pid, version, uptime, socket, listeners, MCP url and console url, what it is running, and the workspaces it has loaded. Exits non-zero when no server is running.",
-			Long: `The server, and nothing else: is it up, and where do I reach it.
-
-` + "`magus status`" + ` is the other one. It answers what this workspace and this
-host are doing: the broker and what holds capacity, the server, what is
-loaded, and what the cache and config are. It embeds the server rows too, so
-this verb is the narrow view rather than a different fact.
-
-It exits non-zero when no server is running, matching ` + "`magus server stop`" + `,
-so a script can chain on it.`,
-			Usage: "magus server status [--socket <addr>] [flags]",
-			Flags: []cmdline.Flag{
-				{Name: "socket", Kind: cmdline.String, Doc: "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)"},
-			},
-		},
+		serverStatusCommand,
 		{
 			Name:  "reload",
-			Short: "Re-read configuration without restarting: drop the server's open workspaces",
+			Short: "Re-read configuration without restarting: drop the server's open workspaces (needs it running)",
 			Flags: []cmdline.Flag{
 				{Name: "socket", Kind: cmdline.String, Doc: "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)"},
 			},
 		},
+		serverBrokerCommand,
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Start the server (auto-backgrounds)", Command: "magus server start"},
@@ -1184,17 +1150,18 @@ so a script can chain on it.`,
 		{Comment: "Stop the running server", Command: "magus server stop"},
 		{Comment: "Stop leftover pool parents from an older build", Command: "magus server stop --pools"},
 		{Comment: "Reload configuration without restarting", Command: "magus server reload"},
-		{Comment: "Everything running on this host", Command: "magus status"},
+		{Comment: "Everything running on this host, server up or not", Command: "magus server status"},
+		{Comment: "Is a broker up, and what holds capacity", Command: "magus server broker status"},
 		{Comment: "Use a custom socket path", Command: "magus --server-address unix:///tmp/m.sock server start"},
 	},
 }
 
-var brokerCommand = cmdline.Command{
+var serverBrokerCommand = cmdline.Command{
 	Name:               "broker",
 	UnstructuredOutput: true, // runs the broker in the foreground
-	Short:              "The per-user process holding this host's capacity and shared services",
+	Short:              "The per-user process holding this host's capacity and shared services (needs no server)",
 	Description:        "Check or stop the broker: the per-user process that holds this host's concurrency slots, declared memory and shared services, which a run starts on its own.",
-	Tags:               []string{"cli", "magus broker", "broker", "capacity", "memory_mb", "services", "concurrency"},
+	Tags:               []string{"cli", "magus server broker", "broker", "capacity", "memory_mb", "services", "concurrency"},
 	Long: `The broker holds this host's capacity: the concurrency slots and declared
 memory_mb every magus on it shares, and the services runs keep warm between
 them. Every run asks it before starting a step; a step that does not fit
@@ -1207,7 +1174,7 @@ builds of another protocol run their own broker and share no budget with
 this one; status and a starting broker warn when one is live). It exits once
 it has held nothing (no
 claim, no service with a dependent) for ten minutes; a started broker logs to
-$XDG_STATE_HOME/magus/broker.log.
+$XDG_STATE_HOME/magus/broker.log. It is not the server and needs none.
 
 Each run holds one connection to it for its life, and every claim and service
 reference rides that connection, so a run killed outright releases what it
@@ -1221,7 +1188,7 @@ runs unarbitrated and says so once, off never starts or contacts one.
 Run with no target, it serves in this process and logs to stderr, or to the
 file --log names. Under systemd it takes the socket the supervisor hands over
 (LISTEN_FDS), refusing one that is malformed or bound anywhere but
-its protocol's socket. ` + "`magus broker units`" + ` prints the systemd or launchd units for
+its protocol's socket. ` + "`magus server broker units`" + ` prints the systemd or launchd units for
 it; magus never installs them.
 
 Signals:
@@ -1235,7 +1202,7 @@ A run the drain turns away is refused under broker: required (MGS3022) and
 runs unarbitrated under best-effort, each naming the draining broker. Runs
 still holding claims when the broker exits keep going and re-assert them on
 the next one.`,
-	Usage: "magus broker [status|stop|units] [flags]",
+	Usage: "magus server broker [status|stop|units] [flags]",
 	Flags: []cmdline.Flag{
 		{Name: "idle-exit", Kind: cmdline.Duration, Unit: "m", Default: 10 * time.Minute, Doc: "Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive"},
 		{Name: "log", Kind: cmdline.String, Doc: "Append stdout and stderr to this file, reopening it on SIGHUP; a run that starts a broker passes $XDG_STATE_HOME/magus/broker.log"},
@@ -1243,28 +1210,28 @@ the next one.`,
 	Children: []cmdline.Command{
 		{
 			Name:        "status",
-			Short:       "The broker: its capacity, every claim holding it, and its services",
+			Short:       "The broker: its capacity, every claim holding it, and its services (needs the broker running)",
 			Description: "Report the broker's pid, socket, capacity, each claim holding it and the services it hosts. Exits non-zero when no broker is running.",
-			Usage:       "magus broker status [flags]",
+			Usage:       "magus server broker status [flags]",
 		},
 		{
 			Name:  "stop",
-			Short: "Stop the broker, or with --services only the services it hosts",
+			Short: "Stop the broker, or with --services only the services it hosts (needs the broker running)",
 			Flags: []cmdline.Flag{
 				{Name: "services", Kind: cmdline.Bool, Default: false, Doc: "Stop the broker's hosted services, leaving the broker running"},
 			},
 		},
 		{
 			Name:        "units",
-			Short:       "Print the systemd or launchd units that supervise the broker",
+			Short:       "Print the systemd or launchd units that supervise the broker (needs nothing running)",
 			Description: "Print the unit files a supervisor needs to run the broker: a systemd socket and service that socket-activate it, or a launchd agent that keeps it alive. magus prints them and never installs them.",
-			Usage:       "magus broker units [systemd|launchd] [flags]",
+			Usage:       "magus server broker units [systemd|launchd] [flags]",
 		},
 	},
 	Examples: []cmdline.Example{
-		{Comment: "Is a broker up, and what holds capacity", Command: "magus broker status"},
-		{Comment: "Stop the services it keeps warm", Command: "magus broker stop --services"},
-		{Comment: "Print the systemd units that socket-activate it", Command: "magus broker units systemd"},
+		{Comment: "Is a broker up, and what holds capacity", Command: "magus server broker status"},
+		{Comment: "Stop the services it keeps warm", Command: "magus server broker stop --services"},
+		{Comment: "Print the systemd units that socket-activate it", Command: "magus server broker units systemd"},
 		{Comment: "Never start or ask one, for this run", Command: "magus run test . --broker off"},
 	},
 }
@@ -1303,66 +1270,6 @@ magus release.`,
 		{Code: 0, Meaning: "The host closed stdin."},
 		{Code: 1, Meaning: "The workspace did not load, or reading stdin or writing stdout failed."},
 		{Code: 2, Meaning: "An argument was given; mcp takes none."},
-	},
-}
-
-var completionCommand = cmdline.Command{
-	Name:               "completion",
-	UnstructuredOutput: true, // stdout is the shell script
-	Short:              "Print a shell completion script",
-	Description:        "Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.",
-	Tags:               []string{"cli", "magus completion", "completion", "bash", "zsh", "fish", "powershell", "shell"},
-	Long: `Print a shell completion script to stdout. Every script registers both
-magus and the mgs shorthand.
-
-Completes subcommands, the targets accepted by run and affected, the nouns
-accepted by describe, and each subcommand's flags. Project paths are
-completed live by shelling out to magus ls -o name, so they track the
-workspace instead of a baked-in list; outside a workspace they are simply
-empty.
-
-Install differs per shell, and zsh is the one that bites:
-
-  bash        source it from ~/.bashrc, which re-reads it from the binary on
-              every new shell and so survives an upgrade:
-                  source <(magus completion bash)
-  zsh         write it to a directory on $fpath as _magus. The script ends by
-              invoking its own completion function, so sourcing it from
-              ~/.zshrc runs that outside a completion context and registers
-              nothing. Regenerate the file after magus self update.
-  fish        write it to ~/.config/fish/completions/magus.fish, loaded on
-              demand.
-  powershell  append it to $PROFILE. pwsh is accepted as an alias, for the
-              cross-platform PowerShell binary's own name.`,
-	Usage: "magus completion <bash|zsh|fish|powershell>",
-	Examples: []cmdline.Example{
-		{Comment: "Bash: source from the rc, never goes stale", Command: `echo 'source <(magus completion bash)' >> ~/.bashrc`},
-		{Comment: "Zsh: install onto $fpath (not into ~/.zshrc)", Command: "magus completion zsh > ~/.zsh/completions/_magus"},
-		{Comment: "Fish", Command: "magus completion fish > ~/.config/fish/completions/magus.fish"},
-		{Comment: "PowerShell", Command: "magus completion powershell >> $PROFILE"},
-	},
-}
-
-var manCommand = cmdline.Command{
-	Name:        "man",
-	Short:       "Install the man pages embedded in this binary",
-	Description: "Write magus section 1 man pages from the running binary to a user-selected manpath.",
-	Tags:        []string{"cli", "magus man", "manpage", "documentation", "install"},
-	Long:        `Write the complete magus manpage set carried by this binary. The installer uses this command to place the pages under the selected installation prefix.`,
-	Usage:       "magus man install [--dir <path>]",
-	Children: []cmdline.Command{
-		{
-			Name:  "install",
-			Short: "Write the embedded section 1 man pages",
-			Flags: []cmdline.Flag{
-				{Name: "dir", Kind: cmdline.String, Doc: "Directory for section 1 man pages (default: the user manpath)"},
-				{Name: "dry-run", Kind: cmdline.Bool, Default: false, Doc: "Print what would be written without touching the filesystem"},
-			},
-		},
-	},
-	Examples: []cmdline.Example{
-		{Comment: "Install to the default user manpath", Command: "magus man install"},
-		{Comment: "Install to a custom prefix", Command: "magus man install --dir ~/.local/share/man/man1"},
 	},
 }
 

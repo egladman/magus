@@ -44,6 +44,7 @@ type Option func(*serveOptions)
 
 type serveOptions struct {
 	budgetMB, budgetSlots int
+	reserve               types.MemoryReserve
 	services              ServiceHost
 	idleExit              time.Duration
 	log                   *slog.Logger
@@ -57,6 +58,12 @@ type serveOptions struct {
 // unlimited, the fallback for a host magus cannot measure.
 func WithCapacity(memoryMB, slots int) Option {
 	return func(o *serveOptions) { o.budgetMB, o.budgetSlots = memoryMB, slots }
+}
+
+// WithMemoryReserve names what the memory budget leaves the OS, so status can
+// say where the figure came from.
+func WithMemoryReserve(r types.MemoryReserve) Option {
+	return func(o *serveOptions) { o.reserve = r }
 }
 
 // WithServices hosts shared services on h. Without it a service request is answered
@@ -110,7 +117,7 @@ func Serve(ctx context.Context, ln net.Listener, opts ...Option) error {
 	s := &server{
 		handshake:  handshake,
 		opts:       o,
-		budget:     cache.NewMachineBudget(o.budgetMB, o.budgetSlots),
+		budget:     cache.NewMachineBudget(o.budgetMB, o.budgetSlots).WithReserve(o.reserve),
 		socket:     "unix://" + ln.Addr().String(),
 		executable: exe,
 		started:    time.Now(),

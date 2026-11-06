@@ -311,7 +311,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ObjectChangeRisk(ret0), nil
+		return ObjectChangeRisk(ret0, enums), nil
 	}))
 	m.MapSet("magus__Workspace__skills", vm.DirectValue("magus.magus__Workspace__skills", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		recv, err := ffi.Object("magus\\magus__Workspace__skills", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
@@ -714,7 +714,31 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ObjectChangeRisk(ret0), nil
+		return ObjectChangeRisk(ret0, enums), nil
+	}))
+	m.MapSet("magus__ChangeRiskFunction__charged", vm.DirectValue("magus.magus__ChangeRiskFunction__charged", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__ChangeRiskFunction__charged", "recv", bzArgs, 0, decode.DecodeChangeRiskFunction)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		threshold := ffi.Int(bzArgs, 1, 0)
+		ret0, err := std.MagusChangeRiskFunctionCharged(ctx, recv, threshold)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.BoolVal(ret0), nil
+	}))
+	m.MapSet("magus__FunctionGap__decided", vm.DirectValue("magus.magus__FunctionGap__decided", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__FunctionGap__decided", "recv", bzArgs, 0, decode.DecodeFunctionGap)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		threshold := ffi.Int(bzArgs, 1, 0)
+		ret0, err := std.MagusFunctionGapDecided(ctx, recv, threshold)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("magus__History__hotspots", vm.DirectValue("magus.magus__History__hotspots", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		recv, err := ffi.Object("magus\\magus__History__hotspots", "recv", bzArgs, 0, decode.DecodeHistory)

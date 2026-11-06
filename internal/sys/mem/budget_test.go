@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/types"
 )
@@ -45,11 +46,12 @@ func TestBudgetMB(t *testing.T) {
 	assert.Equal(t, 0, BudgetMB(-1, types.ProfileBalanced))
 }
 
-// TestBudgetMB_Aggressive pins the profile's whole point: no percentage reservation,
-// only the fixed kernel/page-cache floor comes off the top.
+// TestBudgetMB_Aggressive pins the default profile's reservation: an eighth,
+// never under the 1 GiB floor, so the desktop keeps memory.
 func TestBudgetMB_Aggressive(t *testing.T) {
-	assert.Equal(t, 16384-aggressiveFloorMB, BudgetMB(16<<30, types.ProfileAggressive),
-		"every usable megabyte minus the fixed floor, not a fraction of the machine")
+	assert.Equal(t, 21504, BudgetMB(24<<30, types.ProfileAggressive),
+		"a 24 GiB Mac keeps 3 GiB, so 12.0 and 10.2 GiB steps cannot both seat")
+	assert.Equal(t, 6144, BudgetMB(7<<30, types.ProfileAggressive), "a 7 GiB runner keeps the 1 GiB floor")
 	assert.Equal(t, 0, BudgetMB(0, types.ProfileAggressive), "an unmeasurable host still has no budget to arbitrate")
 	assert.Equal(t, 0, BudgetMB(-1, types.ProfileAggressive))
 	assert.Equal(t, 1, BudgetMB(256<<20, types.ProfileAggressive),
@@ -64,4 +66,25 @@ func TestUsableNeverExceedsTotal(t *testing.T) {
 	} else {
 		assert.Zero(t, totalBytes(ctx), "an unmeasurable host reports UNKNOWN")
 	}
+}
+
+type ReserveSuite struct{ suite.Suite }
+
+func TestReserveSuite(t *testing.T) { suite.Run(t, new(ReserveSuite)) }
+
+func (s *ReserveSuite) TestNoProfileBudgetsTheWholeMachine() {
+	for _, p := range []types.ConcurrencyProfile{"", types.ProfileConservative, types.ProfileBalanced, types.ProfileAggressive} {
+		s.Less(BudgetMB(24<<30, p), 24576, "profile %q", p)
+	}
+}
+
+func (s *ReserveSuite) TestTheReserveNamesTheProfileThatSetIt() {
+	s.Equal(types.MemoryReserve{TotalMB: 24576, ReservedMB: 3072, Rule: "the aggressive profile keeps 1/8, at least 1 GiB"},
+		Reserve(24<<30, types.ProfileAggressive))
+	s.Equal(types.MemoryReserve{TotalMB: 16384, ReservedMB: 4096, Rule: "the balanced profile keeps 1/4"},
+		Reserve(16<<30, ""))
+}
+
+func (s *ReserveSuite) TestAnUnmeasurableHostReservesNothing() {
+	s.Zero(Reserve(0, types.ProfileAggressive))
 }

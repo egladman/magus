@@ -575,9 +575,10 @@ func (s *Server) Serve(ctx context.Context) error {
 			bridgeLog.InfoContext(ctx, "notes service mounted", slog.String("path", notesPath))
 
 			// Not in shareGuarded: SetAuthors writes.
-			if pullsSvc, perr := newPullsService(ctx, opts, svc, bridgeLog); perr != nil {
-				bridgeLog.WarnContext(ctx, "pulls service off", attr.Error(perr))
+			if pullsSvc, stopPoller, perr := newPullsService(ctx, opts, svc, bridgeLog); perr != nil {
+				f.errs = append(f.errs, perr)
 			} else {
+				defer stopPoller()
 				pullsPath, pullsHandler := pullsv1alpha1connect.NewPullsServiceHandler(pullsSvc, connectReadMax)
 				f.service(pullsPath, pullsHandler)
 				bridgeLog.InfoContext(ctx, "pulls service mounted", slog.String("path", pullsPath))
@@ -920,15 +921,16 @@ func (w diagramWorkspace) ImportGraph(ctx context.Context) (types.ImportGraph, e
 	return kg.ImportGraph(), nil
 }
 
-// newPullsService starts the pull request poller and returns its service.
-func newPullsService(ctx context.Context, opts mcp.Options, svc *console.Service, log *slog.Logger) (*pullshandler.Service, error) {
+// newPullsService starts the pull request poller and returns its service
+// and a func that stops the poller and waits for it to return.
+func newPullsService(ctx context.Context, opts mcp.Options, svc *console.Service, log *slog.Logger) (*pullshandler.Service, func(), error) {
 	stateBase, err := xdg.StateDir()
 	if err != nil {
-		return nil, fmt.Errorf("server: resolve the state dir that holds the pull authors: %w", err)
+		return nil, nil, fmt.Errorf("server: resolve the state dir that holds the pull authors: %w", err)
 	}
 	dir, err := vcs.StateDir(stateBase, "pulls", opts.Magus.Root())
 	if err != nil {
-		return nil, fmt.Errorf("server: resolve the pull authors dir: %w", err)
+		return nil, nil, fmt.Errorf("server: resolve the pull authors dir: %w", err)
 	}
 	base, note := "main", "vcs.base_ref is unset: reading pull requests against main"
 	if ref := strings.TrimPrefix(opts.Config.VCS.BaseRef, "origin/"); ref != "" {
@@ -945,6 +947,15 @@ func newPullsService(ctx context.Context, opts mcp.Options, svc *console.Service
 		Now:      time.Now,
 		Log:      log,
 	})
-	go poller.Run(ctx)
-	return pullshandler.NewService(poller, store), nil
+	pollCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		poller.Run(pollCtx)
+	}()
+	stop := func() {
+		cancel()
+		<-done
+	}
+	return pullshandler.NewService(poller, store), stop, nil
 }

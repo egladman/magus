@@ -44,12 +44,6 @@ test "releaseTags adds latest only on stable" {
         want: "v1.0.0-rc.1", message: "unstable static");
 }
 
-test "loadedID reads docker load's line and reports its absence" {
-    final id = images\loadedID("noise\nLoaded image ID: sha256:abc\n");
-    assert\equal(id.id, want: "sha256:abc", message: "id");
-    assert\contains(images\loadedID("Loaded image: x:y\n").error, item: "printed no image ID", message: "absent");
-}
-
 test "prepareLoad writes the docker-save manifest classic load needs" {
     final dir = fs\tempDir("image-prepare-load");
     final bin = dir + "/magus";
@@ -59,12 +53,14 @@ test "prepareLoad writes the docker-save manifest classic load needs" {
         platform = AMD64,
         files = [image\File{ source = bin, path = "/magus", mode = 493 }],
     }, layout: dir + "/layout");
-    assert\equal(images\prepareLoad(layout.path), want: "", message: "no error");
+    final loaded = images\prepareLoad(layout.path, tag: "magus:test");
+    assert\equal(loaded.error, want: "", message: "no error");
+    assert\isTrue(loaded.id.startsWith("sha256:"), message: "the config digest is the image ID");
     final body = fs\readFile(layout.path + "/manifest.json");
-    assert\contains(body, item: "\"Config\":\"blobs/sha256/", message: "config blob path");
-    assert\contains(body, item: "\"RepoTags\":[]", message: "untagged so load prints an ID");
+    assert\contains(body, item: "\"Config\":\"blobs/sha256/" + loaded.id.sub(7), message: "config blob path");
+    assert\contains(body, item: "\"RepoTags\":[\"magus:test\"]", message: "load tags the image itself");
     assert\contains(body, item: "\"Layers\":[\"blobs/sha256/", message: "layer blob paths");
-    assert\isTrue(images\prepareLoad(dir + "/missing").startsWith("image-build: prepareLoad "), message: "missing names the path");
+    assert\isTrue(images\prepareLoad(dir + "/missing", tag: "magus:test").error.startsWith("image-build: prepareLoad "), message: "missing names the path");
     fs\removeAll(dir);
 }
 

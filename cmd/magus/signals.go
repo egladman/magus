@@ -23,18 +23,18 @@ type lifecycle struct {
 	interruptIsNow bool
 }
 
-// ownsItsSignals reports whether this invocation is a process that answers signals
-// through a lifecycle rather than through watchInterrupts: `magus broker` serving, or a
-// server running in this process.
+// ownsItsSignals reports whether this process answers signals through a
+// lifecycle rather than watchInterrupts. A serving broker does, and so
+// does a server run here.
 func ownsItsSignals(args []string) bool {
 	sub, subArgs := peekSub(args)
-	switch sub {
-	case "broker":
-		return brokerServes(subArgs)
-	case "server":
-		return isServerRun(subArgs) && wantsForeground(subArgs)
+	if sub != "server" {
+		return false
 	}
-	return false
+	if len(subArgs) > 0 && subArgs[0] == "broker" {
+		return brokerServes(subArgs[1:])
+	}
+	return isServerRun(subArgs) && wantsForeground(subArgs)
 }
 
 // early queues the signals a process ownsItsSignals names receives before its lifecycle

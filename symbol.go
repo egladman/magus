@@ -581,7 +581,7 @@ func (c *symbolStatusCache) setWatched(on bool) {
 // SymbolIndexStatus reports, for each symbol-capable project, whether its cached SCIP
 // index reflects current sources: fresh, out-of-date, or not-indexed. In the server it
 // answers from a watcher-invalidated memo (a status push does not re-stat source trees);
-// elsewhere it recomputes each call. Powers `magus status` and the dashboard.
+// elsewhere it recomputes each call. Status and the dashboard read it.
 func (m *Magus) SymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus {
 	if v, ok := m.symbolStatus.get(); ok {
 		return v

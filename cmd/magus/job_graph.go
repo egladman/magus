@@ -110,6 +110,7 @@ func leaseBoundary(ctx context.Context, root string, store *job.Store, row types
 		Affinity:           leaseAffinity(ctx, m, affected.Seed),
 		Stage:              workspaceStage(ctx, m),
 		DeletionCandidates: deletionCandidates(ctx, graph.loadScoped(row.WritePaths), row),
+		TestScope:          job.NarrowTestScope(m.All(), row.WritePaths, here),
 	}
 	facts.ReferencedOutside, facts.ReferencedOutsideGap = referencedOutside(ctx, graph.loadScoped(row.WritePaths), m.Root(), row, m.All())
 	// A history file that does not read leaves the section out, the way Affinity's scan does.

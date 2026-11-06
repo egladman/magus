@@ -283,9 +283,10 @@ function parseBrokerPolicy(s: string): BrokerPolicy {
   return s === "required" || s === "off" ? s : "best-effort";
 }
 
-// processSummary is the dashboard's one-line account of the two processes behind it, the same
-// tokens `magus status --compact` prints: "broker off" is the setting, "no broker" is one a run
-// would start, and a broker that measured the host shows the slots it has seated.
+// processSummary is the dashboard's one-line account of its two processes,
+// in the tokens `magus server status --compact` prints. "broker off" is the
+// setting and "no broker" is one a run would start. A broker that measured
+// the host shows the slots it has seated.
 export function processSummary(st: Pick<StatusView, "broker" | "server" | "brokerPolicy">): string {
   let broker = "broker up";
   if (!st.broker) broker = st.brokerPolicy === "off" ? "broker off" : "no broker";

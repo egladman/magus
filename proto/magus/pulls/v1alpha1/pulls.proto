@@ -43,6 +43,11 @@ enum CiState {
   CI_STATE_QUEUED = 4;
   // NONE means the commit has no checks at all.
   CI_STATE_NONE = 5;
+  // CANCELLED means at least one check was cancelled and none failed or still runs.
+  CI_STATE_CANCELLED = 6;
+  // UNREADABLE means a check reported a state outside the provider contract.
+  // The pull's blocked reasons name the check and the state.
+  CI_STATE_UNREADABLE = 7;
 }
 
 // Mergeable is the forge's answer on whether the head merges into the base cleanly.

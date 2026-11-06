@@ -3,7 +3,9 @@ package magus
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path"
@@ -132,6 +134,9 @@ func (s riskScorer) indexerDecisions(fn touchedFunction, spellName string) (int,
 
 func (s riskScorer) coverage(fn touchedFunction) (covered, coverable int, reason string) {
 	sp := s.claimant(fn.Path)
+	if sp == nil {
+		return 0, 0, fmt.Sprintf("no spell bound to %s claims %s files", s.owner(fn.Path), path.Ext(fn.Path))
+	}
 	cov := sp.Coverage()
 	if cov == nil {
 		return 0, 0, fmt.Sprintf("spell %s declares no coverage (mgs_getCoverage)", sp.Name())
@@ -651,7 +656,11 @@ func (m *Magus) touchedSince(ctx context.Context, base string) (touchedSet, erro
 	if set.since, err = m.linesSince(ctx, base); err != nil {
 		return touchedSet{}, err
 	}
-	if set.fns, err = m.touchedIn(ctx, set.defs, spansTouched(set.defs, set.since, m.readWorkspaceFile)); err != nil {
+	spans, err := spansTouched(set.defs, set.since, m.readWorkspaceFile)
+	if err != nil {
+		return touchedSet{}, err
+	}
+	if set.fns, err = m.touchedIn(ctx, set.defs, spans); err != nil {
 		return touchedSet{}, err
 	}
 	set.changed, err = m.handWritten(ctx, slices.Sorted(maps.Keys(set.since.lines)))
@@ -918,18 +927,25 @@ func removedInSpan(rows []changeset.Row, start, end int) []int {
 
 // spansTouched marks each defined symbol whose lines a change touched. A
 // symbol that only moved is not touched: its text is added whole and a
-// removed line run spells it verbatim.
-func spansTouched(defs map[string]symbolDef, since sinceBase, read func(string) (string, bool)) map[string]string {
+// removed line run spells it verbatim. An end line that does not parse is an
+// error: read as one line, it would leave the body's edits unscored.
+func spansTouched(defs map[string]symbolDef, since sinceBase, read func(string) (string, bool)) (map[string]string, error) {
 	out := map[string]string{}
 	for id, def := range defs {
 		start := sourceLine(def.node.Source)
-		end, _ := strconv.Atoi(def.node.Attrs[attrDefEndLine])
-		end = max(start, end)
+		end := start
+		if raw, ok := def.node.Attrs[attrDefEndLine]; ok {
+			n, err := strconv.Atoi(raw)
+			if err != nil {
+				return nil, fmt.Errorf("change risk: the end line %q of %s is not a number: %w", raw, def.node.Source, err)
+			}
+			end = max(start, n)
+		}
 		if slices.ContainsFunc(since.lines[def.path], inSpan(start, end)) && !since.moved(def.path, start, end, read) {
 			out[id] = types.DiffChangeBody
 		}
 	}
-	return out
+	return out, nil
 }
 
 // moved reports whether lines start..end of path are all changed lines and
@@ -1022,8 +1038,11 @@ func oncePerProject(read func(string, spells.Coverage) (keptReport, string)) fun
 // working tree.
 func (m *Magus) readCoverageReport(project string, cov spells.Coverage) (keptReport, string) {
 	data, err := os.ReadFile(filepath.Join(m.ws.Root, filepath.FromSlash(project), filepath.FromSlash(cov.Profile)))
-	if err != nil {
+	if errors.Is(err, fs.ErrNotExist) {
 		return keptReport{}, fmt.Sprintf("%s holds no coverage profile at %s: run the target that writes it", project, cov.Profile)
+	}
+	if err != nil {
+		return keptReport{}, fmt.Sprintf("the coverage profile of %s could not be read: %s", project, err)
 	}
 	files, err := m.parseReport(project, cov, data)
 	if err != nil {

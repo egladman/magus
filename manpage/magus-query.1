@@ -7,8 +7,8 @@ magus\-query \- Search the knowledge graph, and retrieve a run's output or journ
 .SH DESCRIPTION
 Ask the workspace what it knows. query resolves terms to nodes in the
 knowledge graph and returns the ranked matches plus the induced subgraph around
-them, collected up to a node budget. Its siblings explain and path read the same
-graph: explain shows one node's context, path connects two nodes.
+them, collected up to a node budget. Its sibling explain reads the same graph: one
+node's context, or with \-\-to the chain of edges connecting it to a second node.
 .PP
 Terms are free text plus field matchers, and they compose: kind=spell, project=pkg/foo,
 relation=uses, id=build, exclusion with kind!=op, and a regex with id=~build$. A bare word
@@ -136,7 +136,6 @@ magus query invocation invmsm3vcou1 --secrets
 \fBmagus\-shell\fR(1),
 \fBmagus\-refs\fR(1),
 \fBmagus\-explain\fR(1),
-\fBmagus\-path\fR(1),
 \fBmagus\-graph\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-vcs\fR(1),
@@ -144,20 +143,16 @@ magus query invocation invmsm3vcou1 --secrets
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-mcp\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
-\fBmagus\-server\fR(1),
-\fBmagus\-broker\fR(1),
-\fBmagus\-mcp\fR(1),
-\fBmagus\-status\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-spell\fR(1),
 \fBmagus\-agent\fR(1),
 \fBmagus\-init\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
-\fBmagus\-completion\fR(1),
-\fBmagus\-man\fR(1),
 \fBmagus\-self\fR(1),
 \fBmagus\-version\fR(1)
 .br

@@ -90,3 +90,60 @@ func (s *MagusChangeRiskSuite) TestRaisesWhatTheEngineRaises() {
 
 	s.ErrorContains(err, "magus\\Change.risk: no coverage report")
 }
+
+type RiskVerdictSuite struct {
+	suite.Suite
+}
+
+func TestRiskVerdictSuite(t *testing.T) {
+	suite.Run(t, new(RiskVerdictSuite))
+}
+
+func (s *RiskVerdictSuite) TestChargedRefusesANewFunctionPastThreshold() {
+	got, err := MagusChangeRiskFunctionCharged(s.T().Context(), types.ChangeRiskFunction{Score: 31.5, BaseReason: "it is new since base"}, 10)
+
+	s.Require().NoError(err)
+	s.True(got)
+}
+
+func (s *RiskVerdictSuite) TestChargedPassesAFunctionAtThreshold() {
+	got, err := MagusChangeRiskFunctionCharged(s.T().Context(), types.ChangeRiskFunction{Score: 10, BaseReason: "it is new since base"}, 10)
+
+	s.Require().NoError(err)
+	s.False(got)
+}
+
+func (s *RiskVerdictSuite) TestChargedPassesAFunctionNoWorseThanAtBase() {
+	got, err := MagusChangeRiskFunctionCharged(s.T().Context(), types.ChangeRiskFunction{Score: 80, BaseScore: 80}, 10)
+
+	s.Require().NoError(err)
+	s.False(got)
+}
+
+func (s *RiskVerdictSuite) TestChargedRefusesAFunctionWorseThanAtBase() {
+	got, err := MagusChangeRiskFunctionCharged(s.T().Context(), types.ChangeRiskFunction{Score: 156, BaseScore: 80}, 10)
+
+	s.Require().NoError(err)
+	s.True(got)
+}
+
+func (s *RiskVerdictSuite) TestDecidedHoldsWhenTheWorstCaseIsWithinThreshold() {
+	got, err := MagusFunctionGapDecided(s.T().Context(), types.FunctionGap{Complexity: 2}, 10)
+
+	s.Require().NoError(err)
+	s.True(got)
+}
+
+func (s *RiskVerdictSuite) TestDecidedFailsWhenTheWorstCaseIsPastThreshold() {
+	got, err := MagusFunctionGapDecided(s.T().Context(), types.FunctionGap{Complexity: 3}, 10)
+
+	s.Require().NoError(err)
+	s.False(got)
+}
+
+func (s *RiskVerdictSuite) TestDecidedFailsOnUnknownComplexity() {
+	got, err := MagusFunctionGapDecided(s.T().Context(), types.FunctionGap{}, 10)
+
+	s.Require().NoError(err)
+	s.False(got)
+}

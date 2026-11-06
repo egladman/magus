@@ -98,6 +98,10 @@ export function ciText(ci: CiState): string {
       return "CI queued";
     case CiState.NONE:
       return "no CI";
+    case CiState.CANCELLED:
+      return "CI cancelled";
+    case CiState.UNREADABLE:
+      return "CI unreadable";
     default:
       return "CI unknown";
   }

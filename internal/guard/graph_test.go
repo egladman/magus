@@ -13,7 +13,7 @@ func TestCommandReadsGraph(t *testing.T) {
 		"magus refs Foo",
 		"./magus query \"kind:target build\"",
 		"magus explain target:.:ci",
-		"mise exec -- magus path a b",
+		"mise exec -- magus explain a --to b",
 	} {
 		assert.True(t, commandReadsGraph(cmd), cmd)
 	}

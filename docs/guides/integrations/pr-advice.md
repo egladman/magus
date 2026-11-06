@@ -133,6 +133,7 @@ files.
 | `conformance`          | a new target, or a symbol the change adds, renames or re-signs, departs from what the rest of the workspace does with the same work or declaration       |
 | `missing-target`       | the change adds a project, or drops a target, leaving it short of one its kind overwhelmingly has                                                        |
 | `exported-api`         | the change touches symbols reachable outside the project that defines them, and with a `baseline`, what it did to each and the smallest bump that proves |
+| `change-risk`          | the change touches functions with a change-risk check; lists the riskiest by score, then those with no coverage profile, as measurements and no verdict            |
 | `first-contribution`   | the author has no merged pull request here yet                                                                                                           |
 | `merge-queue`          | off by default; the pull request is approved and could join `magus queue` but has not, naming the label and the methods the provider allows              |
 

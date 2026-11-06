@@ -180,6 +180,8 @@ var inboundTypes = []string{
 	"VCSCheckpoint",
 	"ChangeOptions",
 	"Change",
+	"FunctionGap",
+	"ChangeRiskFunction",
 	"History",
 	"SessionOptions",
 	"Session",

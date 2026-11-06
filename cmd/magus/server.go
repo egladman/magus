@@ -37,7 +37,7 @@ import (
 func serverCommand(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		serverUsage()
-		return exit.Usagef("magus server: target required (want start, stop, status, or reload)")
+		return exit.Usagef("magus server: target required (want start, stop, status, reload, or broker)")
 	}
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		serverUsage()
@@ -54,9 +54,11 @@ func serverCommand(ctx context.Context, root string, args []string) error {
 	case hint.ServerStop.Leaf():
 		return serverStop(ctx, rest)
 	case hint.ServerStatus.Leaf():
-		return serverStatus(ctx, rest)
+		return status(ctx, rest)
 	case hint.ServerReload.Leaf():
 		return serverReload(ctx, rest)
+	case hint.ServerBroker.Leaf():
+		return brokerCommand(ctx, rest)
 	case job.NameRotateActivities:
 		return serverRotateActivities(ctx, root, rest)
 	case job.NameRotateLogs:
@@ -68,107 +70,20 @@ func serverCommand(ctx context.Context, root string, args []string) error {
 	case job.NameCheckDrift:
 		return serverCheckDrift(ctx, root, rest)
 	default:
-		return exit.Usagef("magus server: unknown target %q (want start, stop, status, or reload)", sub)
+		return exit.Usagef("magus server: unknown target %q (want start, stop, status, reload, or broker)", sub)
 	}
 }
 
 func serverUsage() {
-	fmt.Fprintln(os.Stderr, "usage: magus server <start|stop|status|reload> [flags]")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Targets:")
-	fmt.Fprintln(os.Stderr, "  start   start the server: MCP, the console, APIs, background jobs")
-	fmt.Fprintln(os.Stderr, "  stop    send a graceful shutdown request to the running server")
-	fmt.Fprintln(os.Stderr, "  status  is the server up, and where do I reach it")
-	fmt.Fprintln(os.Stderr, "  reload  re-read configuration without restarting: drop the server's open workspaces")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintf(os.Stderr, "`%s` is this workspace and this host: the broker and what holds capacity,\n", hint.Status)
-	fmt.Fprintln(os.Stderr, "the server, and what the cache and config are.")
+	page, _ := commandAt("server")
+	fmt.Fprintf(os.Stderr, "usage: %s\n\n%s\n\nTargets:\n", page.Usage, page.Short)
+	for _, c := range page.Children {
+		fmt.Fprintf(os.Stderr, "  %-7s %s\n", c.Name, c.Short)
+	}
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "The socket address is taken from --server-address, MAGUS_SERVER_ADDRESS,")
 	fmt.Fprintln(os.Stderr, "or server.address in magus.yaml. When none is set, `server start` uses:")
 	fmt.Fprintln(os.Stderr, "  "+proc.ServerDefaultAddr())
-}
-
-// serverStatus answers one question: is my server up, and where do I reach it.
-//
-// Deliberately NOT a second `magus status`. That verb is this workspace and this host,
-// and it embeds the server rows inside a broader view; this one is the server and its
-// addresses, which is what somebody asks when nothing is answering. Both print the
-// server rows through printServerRows, so the two can never disagree.
-//
-// It exits non-zero with no server, matching `server stop`, so a script can chain on it.
-func serverStatus(ctx context.Context, args []string) error {
-	var socket string
-	rest, err := commandParse("server status", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&socket, "socket", "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "usage: magus server status [--socket <addr>] [flags]")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "The server: whether it is up and where you reach it. Its pid and version, how")
-			fmt.Fprintln(os.Stderr, "long it has been observing, the socket and listeners, the MCP url, the console")
-			fmt.Fprintln(os.Stderr, "url, what it is running, and the workspaces it has loaded.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintf(os.Stderr, "`%s` is the other one: this workspace and this host, the broker and what\n", hint.Status)
-			fmt.Fprintln(os.Stderr, "holds capacity, and what the cache and config are.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Exits non-zero when no server is running, so a script can chain on it.")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			printOwnDefaults(fs)
-		}
-	})
-	if err != nil {
-		return err
-	}
-	if len(rest) > 0 {
-		return exit.Usagef("magus server status: takes no arguments (got %q)", rest[0])
-	}
-
-	report := buildStatusSnapshot(ctx, resolveServerAddr(socket), false)
-	opts, err := outputOptionsOrDefault()
-	if err != nil {
-		return err
-	}
-	if opts.Format != outputText {
-		if err := emitRecord(opts, report, statusNames(report)); err != nil {
-			return err
-		}
-		if report.Server == nil {
-			return exit.Reported(exit.Failure)
-		}
-		return nil
-	}
-
-	if report.Server == nil || report.Pool == nil {
-		// To stderr, like every other thing `magus server` says when it cannot do what it
-		// was asked: stdout carries the report, and a caller redirecting it wants an empty
-		// file rather than a sentence about why there is nothing in it.
-		slog.ErrorContext(ctx, "no server is running", attr.Notice(""),
-			attr.Why(strings.TrimSpace(fmt.Sprintf("%s\n%s", report.PoolError, fmt.Sprintf("`%s` still reports this workspace and this host without a server.", hint.Status)))),
-			attr.Next(hint.ServerStart.String()))
-		return exit.Reported(exit.Failure)
-	}
-	printServerRows(os.Stdout, report.Server, time.Now())
-	printPoolSummary(os.Stdout, report.Pool, "pool")
-	if skew := serverVersionSkew(report.Pool); skew != "" {
-		fmt.Print(skew)
-	}
-	if !report.ObservingSince.IsZero() {
-		fmt.Printf("observing since: %s\n", report.ObservingSince.Format(time.RFC3339))
-	}
-	printMCPEndpointStatus(os.Stdout, report.MCPEndpoint)
-	printConsoleStatus(os.Stdout, report.Console)
-	if len(report.Pool.Workspaces) > 0 {
-		fmt.Printf("\nworkspaces (%d)\n", len(report.Pool.Workspaces))
-		for _, ws := range report.Pool.Workspaces {
-			if !ws.Loaded() {
-				fmt.Printf("  %s  (%s)\n", ws.Root, ws.State)
-				continue
-			}
-			fmt.Printf("  %s  (idle %s)\n", ws.Root, time.Since(ws.LastAccess).Round(time.Second))
-		}
-	}
-	return nil
 }
 
 // serverReadyTimeout bounds how long the backgrounding parent waits for the detached child
@@ -394,7 +309,7 @@ func servingSuffix(st *proc.StatusReply) string {
 // would be excused from the budget, and a run with no ancestry of its own would be judged
 // a nested magus that had lost it.
 func detachedChildEnv() []string {
-	drop := []string{proc.SocketEnv + "=", proc.TokenEnv + "=", spawn.AncestorsEnvVar + "=", "MAGUS_LEVEL="}
+	drop := []string{proc.SocketEnv + "=", proc.TokenEnv + "=", spawn.AncestorsEnvVar + "=", "MAGUS_LEVEL=", spawn.TreeMarkEnv + "="}
 	env := os.Environ()
 	out := make([]string, 0, len(env))
 	for _, kv := range env {

@@ -302,14 +302,16 @@ CiState is the rolled-up result of a commit's checks, with the queue context alr
 
 Source: [pulls.proto](https://github.com/egladman/magus/blob/main/proto/magus/pulls/v1alpha1/pulls.proto).
 
-| Value                  | # | Description                                                                     |
-| ---------------------- | - | ------------------------------------------------------------------------------- |
-| `CI_STATE_UNSPECIFIED` | 0 |                                                                                 |
-| `CI_STATE_GREEN`       | 1 | GREEN means every check passed or was skipped.                                  |
-| `CI_STATE_RED`         | 2 | RED means at least one check failed.                                            |
-| `CI_STATE_RUNNING`     | 3 | RUNNING means at least one check is running and none failed.                    |
-| `CI_STATE_QUEUED`      | 4 | QUEUED means at least one check is waiting for a runner and none failed or ran. |
-| `CI_STATE_NONE`        | 5 | NONE means the commit has no checks at all.                                     |
+| Value                  | # | Description                                                                                                                       |
+| ---------------------- | - | --------------------------------------------------------------------------------------------------------------------------------- |
+| `CI_STATE_UNSPECIFIED` | 0 |                                                                                                                                   |
+| `CI_STATE_GREEN`       | 1 | GREEN means every check passed or was skipped.                                                                                    |
+| `CI_STATE_RED`         | 2 | RED means at least one check failed.                                                                                              |
+| `CI_STATE_RUNNING`     | 3 | RUNNING means at least one check is running and none failed.                                                                      |
+| `CI_STATE_QUEUED`      | 4 | QUEUED means at least one check is waiting for a runner and none failed or ran.                                                   |
+| `CI_STATE_NONE`        | 5 | NONE means the commit has no checks at all.                                                                                       |
+| `CI_STATE_CANCELLED`   | 6 | CANCELLED means at least one check was cancelled and none failed or still runs.                                                   |
+| `CI_STATE_UNREADABLE`  | 7 | UNREADABLE means a check reported a state outside the provider contract. The pull's blocked reasons name the check and the state. |
 
 Used by: [GetPulls (response)](pulls.md#getpulls), [SetAuthors (response)](pulls.md#setauthors).
 

@@ -13,10 +13,10 @@ about.
 
 ## Example
 
-`magus status` prints each latency family with its percentiles.
+`magus server status` prints each latency family with its percentiles.
 
 ```sh
-magus status
+magus server status
 ```
 
 ## Used in

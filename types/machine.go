@@ -8,9 +8,9 @@ import (
 
 // MachineClaim is one step's request on the machine-wide admission budget.
 //
-// It crosses the broker socket AND lands in `magus status`, which is why it lives here
-// rather than in the package that arbitrates it: the engine, the broker, and every
-// status renderer read one definition. Two shapes projected onto each other drifted
+// It crosses the broker socket AND lands in `magus server status`, so it
+// lives here. The engine, the broker and every status renderer read one
+// definition. Two shapes projected onto each other drifted
 // their field names within a week of being written.
 //
 // Numeric fields use omitzero because the jsonv2 codec's omitempty does not omit 0.
@@ -75,8 +75,6 @@ type MachineClaimant struct {
 
 // MachineWaiter is a claim the broker holds until the budget can seat it.
 type MachineWaiter struct {
-	// Kind is claim, the one request the broker parks.
-	Kind    string `json:"kind" yaml:"kind"`
 	Project string `json:"project,omitempty" yaml:"project,omitempty"`
 	Target  string `json:"target,omitempty" yaml:"target,omitempty"`
 	// PID is the waiting process.
@@ -135,7 +133,7 @@ type MachineVerdict struct {
 }
 
 // MachineSnapshot is the whole machine budget: what it is, what is spent, and the
-// claims spending it. It is what `magus status` reports and what the broker serves.
+// claims spending it. Status reports it and the broker serves it.
 type MachineSnapshot struct {
 	BudgetMB    int `json:"budget_mb,omitzero" yaml:"budget_mb,omitempty"`
 	HeldMB      int `json:"held_mb,omitzero" yaml:"held_mb,omitempty"`
@@ -147,6 +145,16 @@ type MachineSnapshot struct {
 	Waiting []MachineWaiter `json:"waiting,omitempty" yaml:"waiting,omitempty"`
 	// Refused is the last MGS3009 refusals the broker answered, newest first.
 	Refused []MachineRefusal `json:"refused,omitempty" yaml:"refused,omitempty"`
+	// Reserve is what BudgetMB leaves the OS and desktop, and why.
+	Reserve MemoryReserve `json:"reserve,omitzero" yaml:"reserve,omitempty"`
+}
+
+// MemoryReserve is the memory kept back from build work: TotalMB less
+// ReservedMB is the budget. Rule says which profile set it.
+type MemoryReserve struct {
+	TotalMB    int    `json:"total_mb,omitzero" yaml:"total_mb,omitempty"`
+	ReservedMB int    `json:"reserved_mb,omitzero" yaml:"reserved_mb,omitempty"`
+	Rule       string `json:"rule,omitempty" yaml:"rule,omitempty"`
 }
 
 // HolderList names each holder as its pid, its command (or its target and project when it

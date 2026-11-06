@@ -465,12 +465,29 @@ func (r *WorkspaceRegistry) Apply(w types.WorkspaceRepository) error {
 		}
 		if projectOK {
 			p.ResolvedSpells = resolved
+			errs = append(errs, unprobedReadiness(p)...)
 		}
 	}
 	if len(errs) > 0 {
 		return errors.Join(errs...)
 	}
 	return nil
+}
+
+// unprobedReadiness is each needs_ready tool that no spell p binds or the
+// workspace registers can probe.
+func unprobedReadiness(p *types.Project) []error {
+	var errs []error
+	registered := project.DefaultSpellRegistry().All()
+	for _, target := range slices.Sorted(maps.Keys(p.TargetPolicies)) {
+		for _, tool := range p.TargetPolicies[target].NeedsReady {
+			if _, ok := p.ReadyProbe(tool, registered); !ok {
+				errs = append(errs, fmt.Errorf("project %q: targets[%q].needs_ready names %q, which no registered spell declares a ready probe for",
+					p.Path, target, tool))
+			}
+		}
+	}
+	return errs
 }
 
 // SetModelTiers records the declaration of magus\job.modelTiers, replacing one an earlier

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/cmdline/exit"
@@ -52,7 +53,7 @@ func (s *GateScopeSuite) TestAProjectScopedPassIsNotTheBranchGate() {
 	root := s.T().TempDir()
 	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1",
 		projects: []string{"libs/cmdline"}, scope: sessions.GateScopeProject}
-	g.record(context.Background(), nil, false)
+	g.record(context.Background(), nil, false, nil)
 
 	dir, err := sessions.Dir(root)
 	s.Require().NoError(err)
@@ -380,14 +381,14 @@ func TestGateRecordsNothingWhenTheRunWasCutShort(t *testing.T) {
 
 	cut, cancel := context.WithCancel(context.Background())
 	cancel()
-	g.record(cut, nil, true /* cutShort */)
+	g.record(cut, nil, true /* cutShort */, nil)
 
 	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
 	_, ok := sessions.LatestGate(fold, "b", types.TargetCI)
 	assert.False(t, ok, "a cancelled run must record no verdict, whatever it returned")
 
-	g.record(context.Background(), nil, false)
+	g.record(context.Background(), nil, false, nil)
 	rec, ok := sessions.LatestGate(fold2(t, dir), "b", types.TargetCI)
 	require.True(t, ok, "a run that finished still records")
 	assert.Equal(t, sessions.OutcomePass, rec.Outcome)
@@ -408,7 +409,7 @@ func TestGateRecordsAVerdictDecidedBeforeTheSignal(t *testing.T) {
 
 	interrupted, cancel := context.WithCancel(context.Background())
 	cancel()
-	g.record(interrupted, nil, false /* the run had already returned */)
+	g.record(interrupted, nil, false /* the run had already returned */, nil)
 
 	rec, ok := sessions.LatestGate(fold2(t, dir), "b", types.TargetCI)
 	require.True(t, ok, "a verdict decided before the signal must survive it")
@@ -421,4 +422,37 @@ func fold2(t *testing.T, dir string) sessions.Fold {
 	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
 	return fold
+}
+
+type GateUnrunSuite struct {
+	suite.Suite
+	g *gateRedundancy
+}
+
+func TestGateUnrunSuite(t *testing.T) {
+	suite.Run(t, new(GateUnrunSuite))
+}
+
+func (s *GateUnrunSuite) SetupTest() {
+	s.g = &gateRedundancy{target: types.TargetCI}
+}
+
+func absent(project, target string) journal.Event {
+	return journal.Event{Project: project, Target: target, DiagnosticCode: string(types.ToolNotReady),
+		Text: "MGS3004 docker is installed but not ready\nCannot connect to the Docker daemon"}
+}
+
+func (s *GateUnrunSuite) TestEveryFailureAnAbsentCapabilityNamesEachTarget() {
+	s.Equal([]string{
+		"images/magus:image-build: MGS3004 docker is installed but not ready",
+		"images/web:image-build: MGS3004 docker is installed but not ready",
+	}, s.g.unrun([]journal.Event{absent("images/magus", "image-build"), absent("images/web", "image-build")}))
+}
+
+func (s *GateUnrunSuite) TestOneFailureOfTheCodeMakesTheGateFail() {
+	s.Nil(s.g.unrun([]journal.Event{absent("images/magus", "image-build"), {Project: ".", Target: "go-test", Text: "FAIL"}}))
+}
+
+func (s *GateUnrunSuite) TestNoFailedTargetIsNoUnrunGate() {
+	s.Nil(s.g.unrun(nil), "a run that failed before any target ran failed")
 }

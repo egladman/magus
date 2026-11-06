@@ -62,6 +62,7 @@ fun hadolint(target: Target) > Command { return Command{bin = "hadolint", args =
 // --rm is baked in: an op that leaves containers behind turns a repeated target into a
 // disk leak. The caller supplies mounts, workdir, image and command through args.
 fun dockerRun(target: Target) > Command { return Command{bin = "docker", args = ["run", "--rm"]}; }
+fun dockerLoad(target: Target) > Command { return Command{bin = "docker", args = ["load"]}; }
 
 // Scans an image OFFLINE by default: --skip-db-update is documented as "skip updating
 // vulnerability database", so a plain run answers from the copy already on disk and
@@ -89,7 +90,7 @@ fun trivyImage(target: Target) > Command {
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {
-    return {"docker-build": dockerBuild, "docker-buildx": dockerBuildx, "docker-build-check": dockerBuildCheck, "docker-run": dockerRun, "hadolint": hadolint, "trivy-image": trivyImage};
+    return {"docker-build": dockerBuild, "docker-buildx": dockerBuildx, "docker-build-check": dockerBuildCheck, "docker-run": dockerRun, "docker-load": dockerLoad, "hadolint": hadolint, "trivy-image": trivyImage};
 }
 
 // `docker --version` ends in a build hash (`29.3.1, build c2be9cc`) that moves with a

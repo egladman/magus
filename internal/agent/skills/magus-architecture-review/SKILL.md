@@ -161,9 +161,9 @@ No layers declared -> say so; do not invent from directory names.{{end}}{{if .Fu
 - `{{cmd "graph stats"}}` without `--symbols` counts no package imports -> god nodes not packages; orphans: unused spells, isolated nodes, not unimported packages.{{end}}
 {{if .Full}}- `--kind dir` degree counts contained files too, so a directory of many files
   ranks high on `OUT` alone. Read `IN` for fan-in.{{else}}- `--kind dir` degree counts contained files too -> many-file directory ranks high on `OUT` alone. Read `IN` for fan-in.{{end}}
-{{if .Full}}- `{{cmd "path"}}` walks edges in both directions. A found path says two nodes
-  connect, not that one depends on the other. Use `{{buzz "graph.neighborhood"}}` with a
-  `direction`.{{else}}- `{{cmd "path"}}` walks edges both directions: found path means connected, not dependent. Use `{{buzz "graph.neighborhood"}}` with `direction`.{{end}}
+{{if .Full}}- `{{cmd "explain"}} <a> --to <b>` walks edges in both directions. A found chain says
+  two nodes connect, not that one depends on the other. Use `{{buzz "graph.neighborhood"}}`
+  with a `direction`.{{else}}- `{{cmd "explain"}} <a> --to <b>` walks edges both directions: found chain means connected, not dependent. Use `{{buzz "graph.neighborhood"}}` with `direction`.{{end}}
 {{if .Full}}- The `N nodes reach this` line on an `{{cmd "explain"}}` card saturates: a private
   helper with one caller reports over a thousand. It does not size a migration;
   `refs --occurrences` does.{{else}}- `N nodes reach this` line on `{{cmd "explain"}}` card saturates: one-caller private helper reports over a thousand. Does not size migration; `refs --occurrences` does.{{end}}

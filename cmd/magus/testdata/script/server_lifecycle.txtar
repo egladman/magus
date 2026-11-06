@@ -1,13 +1,13 @@
-# `magus server` manages the server; `magus broker` reports on the broker. These
+# `magus server` manages the server; `magus server broker` reports on the broker. These
 # paths must all work with nothing running - management itself has to detect and
 # report that absence correctly, since it is the thing users reach for when
 # something seems stuck.
 #
 # MAGUS_SERVER_ENABLED=false and MAGUS_BROKER=off (set by the test harness) govern
 # whether an ordinary command USES the server or the broker; they do not change what
-# `magus server` or `magus broker status` do. Every assertion below holds either way.
+# `magus server` or `magus server broker status` do. Every assertion below holds either way.
 #
-# We deliberately never run `magus server start` or `magus broker`: each would spawn a
+# We deliberately never run `magus server start` or `magus server broker`: each would spawn a
 # real background process on a real socket shared machine-wide, which would step on
 # the actual developer environment and any other agent running concurrently. Only
 # argument validation and nothing-running paths are covered here.
@@ -18,23 +18,28 @@
 # -h, asserted further down, is the way to ask "what can I do here" and exits 0.
 ! exec magus server
 stderr 'target required'
-stderr 'usage: magus server <start\|stop\|status\|reload> \[flags\]'
-stderr 'start   start the server'
-stderr 'stop    send a graceful shutdown request'
-stderr 'reload  re-read configuration without restarting'
-stderr 'status  is the server up, and where do I reach it'
-stderr '`magus status` is this workspace and this host'
+stderr 'usage: magus server <start\|stop\|status\|reload\|broker> \[flags\]'
+stderr 'start   Start the server'
+stderr 'stop    Send a graceful shutdown request to the running server \(needs it running\)'
+stderr 'reload  Re-read configuration without restarting'
+stderr 'status  Whether the server and broker are up'
+stderr 'broker  The per-user process holding this host''s capacity'
 
 exec magus server -h
-stderr 'usage: magus server <start\|stop\|status\|reload> \[flags\]'
+stderr 'usage: magus server <start\|stop\|status\|reload\|broker> \[flags\]'
 
-# `status` IS a target, and with no server it fails loudly rather than printing
-# an empty report: a script chaining on it and a person who meant `magus status`
-# both need that said out loud. The pointer to the other verb is the second half
-# of the contract, because the two are the pair people confuse.
-! exec magus server status
-stderr 'no server is running'
-stderr 'still reports this workspace and this host'
+# `status` with no server running reports it as a row and still prints the
+# rest, the way systemctl status reports a stopped unit. It starts nothing.
+exec magus server status
+stdout 'server +- +not running'
+stdout 'broker +- +not running'
+! exec magus server status --probe=liveness
+
+# Neither top-level verb survives the move under `server`.
+! exec magus status
+stderr 'unknown subcommand "status"'
+! exec magus broker status
+stderr 'unknown subcommand "broker"'
 
 # `server stop` with no server running must fail loudly rather than silently
 # succeed - a silent success would hide that the developer's mental model of "a
@@ -45,7 +50,7 @@ stderr 'no server is running'
 exec magus server stop -h
 stderr 'usage: magus server stop \[flags\]'
 stderr 'Send a graceful shutdown request to the running server'
-stderr 'magus broker stop --services'
+stderr 'magus server broker stop --services'
 
 exec magus server start -h
 stderr 'usage: magus server start \[--foreground\] \[flags\]'
@@ -54,20 +59,20 @@ stderr '\-foreground'
 
 # The broker's status chains the same way: non-zero with none running, naming the
 # policy in force.
-! exec magus broker status
+! exec magus server broker status
 stderr 'no broker is running \(broker: off\)'
 
-! exec magus broker stop
+! exec magus server broker stop
 stderr 'no broker is running'
 
-! exec magus broker stop --services
+! exec magus server broker stop --services
 stderr 'no broker is running'
 
-exec magus broker -h
-stderr 'usage: magus broker \[status\|stop\|units\] \[flags\]'
+exec magus server broker -h
+stderr 'usage: magus server broker \[status\|stop\|units\] \[flags\]'
 stderr 'unix socket only'
 
-! exec magus broker bogus
+! exec magus server broker bogus
 stderr 'unknown target "bogus"'
 
 # `server reload` re-reads config without restarting the server. With no server running

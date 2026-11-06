@@ -3,8 +3,8 @@ title: magus-test-design
 generated_from: internal/agent/skills/magus-test-design/SKILL.md
 description: "Choose unit, integration, or end-to-end test boundaries from the magus graph and runtime behavior."
 tags: [agents, skills, magus-test-design]
-skill_full_bytes: 10515
-skill_short_bytes: 5414
+skill_full_bytes: 10523
+skill_short_bytes: 5422
 ---
 
 # magus-test-design
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `9369f1d189a5` |
+| `skill-content` | `291760a733fa` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -80,7 +80,7 @@ Observes evidence, recommends; does not choose test policy, enable service, crea
 
    ```sh
    magus refs <symbol>
-   magus path <a> <b>
+   magus explain <a> --to <b>
    ```
 
 4. Read scoped code, existing tests; find effects changing what lower boundary can prove: live process or runtime, filesystem, network, time, scheduler, durable storage, language boundary.
@@ -216,7 +216,7 @@ commit, or in CI.
 
    ```sh
    magus refs <symbol>
-   magus path <a> <b>
+   magus explain <a> --to <b>
    ```
 
 4. Read the scoped code and existing tests. Identify the effects that change what a
