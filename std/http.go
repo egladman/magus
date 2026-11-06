@@ -400,7 +400,7 @@ func sendHTTP(ctx context.Context, label, method, url string, body io.Reader, he
 }
 
 func doRequest(ctx context.Context, method, url, body string, headers map[string]string, opts types.HTTPOptions, retryPolicy types.HTTPRetry) (types.HTTPResponse, error) {
-	if types.Stubbed(ctx, "http." + method) {
+	if types.Stubbed(ctx, "http."+method) {
 		return types.HTTPResponse{}, nil
 	}
 	// There is NO network sandboxing: every URL a magusfile reaches is fetched,
