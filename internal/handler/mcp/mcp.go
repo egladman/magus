@@ -22,6 +22,7 @@ import (
 
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
@@ -391,6 +392,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 		// The one boundary where the client's name is known: every record made under this
 		// call is stamped with it as the origin's Host.
 		ctx = trail.ContextWithHost(trail.ContextWithEntryPoint(ctx, types.EntryPointMCP), o.Name)
+		ctx = interactive.WithHints(ctx)
 		// The workspace's secret resolver, so the trail writes below are redacted.
 		//
 		// This context is an ANCESTOR of any run a tool starts, never a descendant, so it

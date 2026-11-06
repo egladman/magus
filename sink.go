@@ -548,13 +548,13 @@ func (t textEncoder) detach(ctx context.Context, e report.RunDetach) {
 
 // notice rides the hint channel: the run that pays for a notice is often a gate run
 // with -s, and hints are what -s still bubbles up. hints.enabled turns them off, and
-// one already shown in this process is not repeated.
+// one already shown in this invocation is not repeated.
 func (t textEncoder) notice(ctx context.Context, e report.Notice) {
 	msg := e.Message
 	if e.Code != "" {
 		msg = fmt.Sprintf("[%s] %s", e.Code, msg)
 	}
-	if r, ok := interactive.TakeHint(e.Level, msg); ok {
+	if r, ok := interactive.TakeHint(ctx, e.Level, msg); ok {
 		_ = t.term.Handle(ctx, r)
 	}
 }
