@@ -123,6 +123,7 @@
 {"group":"file:changes/unreleased/figure-svg-drops-anchor-line.md","path":"changes/unreleased/figure-svg-drops-anchor-line.md"}
 {"group":"file:changes/unreleased/file-split-relation-and-rule.md","path":"changes/unreleased/file-split-relation-and-rule.md"}
 {"group":"file:changes/unreleased/flags-repeated-and-command.md","path":"changes/unreleased/flags-repeated-and-command.md"}
+{"group":"file:changes/unreleased/fold-path-completion-man-self.md","path":"changes/unreleased/fold-path-completion-man-self.md"}
 {"group":"file:changes/unreleased/fold-path-completion-man.md","path":"changes/unreleased/fold-path-completion-man.md"}
 {"group":"file:changes/unreleased/fork-binds-the-right-checkout.md","path":"changes/unreleased/fork-binds-the-right-checkout.md"}
 {"group":"file:changes/unreleased/fork-claim-notes.md","path":"changes/unreleased/fork-claim-notes.md"}
@@ -254,6 +255,7 @@
 {"group":"file:changes/unreleased/proofread-round-gates.md","path":"changes/unreleased/proofread-round-gates.md"}
 {"group":"file:changes/unreleased/proofread-tells.md","path":"changes/unreleased/proofread-tells.md"}
 {"group":"file:changes/unreleased/proofread-train.md","path":"changes/unreleased/proofread-train.md"}
+{"group":"file:changes/unreleased/pulls-board-reads-every-check-state-state-dir.md","path":"changes/unreleased/pulls-board-reads-every-check-state-state-dir.md"}
 {"group":"file:changes/unreleased/push-gate-accepts-narrow-evidence.md","path":"changes/unreleased/push-gate-accepts-narrow-evidence.md"}
 {"group":"file:changes/unreleased/query-invocation-shows-refs.md","path":"changes/unreleased/query-invocation-shows-refs.md"}
 {"group":"file:changes/unreleased/queue-apply-token-waits.md","path":"changes/unreleased/queue-apply-token-waits.md"}

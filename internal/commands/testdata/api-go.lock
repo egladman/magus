@@ -4609,7 +4609,7 @@ github.com/egladman/magus/types.Project type struct
 github.com/egladman/magus/types.Project.AllOutputs method(ptr) func() []Glob
 github.com/egladman/magus/types.Project.AttachSpell method(ptr) func(spell *github.com/egladman/magus/spells.Spell)
 github.com/egladman/magus/types.Project.Bindings field []*Binding
-github.com/egladman/magus/types.Project.CheckNeedsReady method(ptr) func(ctx context.Context, target string) error
+github.com/egladman/magus/types.Project.CheckNeedsReady method(ptr) func(ctx context.Context, target string, registered []*github.com/egladman/magus/spells.Spell) error
 github.com/egladman/magus/types.Project.DeclaredGlobs method(ptr) func() []Glob
 github.com/egladman/magus/types.Project.DependsOn field []string
 github.com/egladman/magus/types.Project.Dir field string
@@ -4627,6 +4627,7 @@ github.com/egladman/magus/types.Project.NoLanguage field string
 github.com/egladman/magus/types.Project.Origin field ProjectOrigin
 github.com/egladman/magus/types.Project.Outputs field []Glob
 github.com/egladman/magus/types.Project.Path field string
+github.com/egladman/magus/types.Project.ReadyProbe method(ptr) func(tool string, registered []*github.com/egladman/magus/spells.Spell) (*github.com/egladman/magus/spells.Spell, bool)
 github.com/egladman/magus/types.Project.ResolvedSpells field []*github.com/egladman/magus/spells.Spell
 github.com/egladman/magus/types.Project.ReviewRequired field []string
 github.com/egladman/magus/types.Project.Sources field []Glob
