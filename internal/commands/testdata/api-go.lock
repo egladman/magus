@@ -5884,6 +5884,7 @@ github.com/egladman/magus/types.USDPerMTok type float64
 github.com/egladman/magus/types.UncompressResult type struct
 github.com/egladman/magus/types.UncompressResult.Bytes field int
 github.com/egladman/magus/types.UncompressResult.Files field []Path
+github.com/egladman/magus/types.UndeclaredOutputWritten const DiagnosticCode = "MGS4011"
 github.com/egladman/magus/types.UndeclaredSeedingFile const DiagnosticCode = "MGS1028"
 github.com/egladman/magus/types.UndeclaredSourceModified const DiagnosticCode = "MGS4007"
 github.com/egladman/magus/types.Unit type struct
