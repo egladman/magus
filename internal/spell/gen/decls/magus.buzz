@@ -2448,6 +2448,7 @@ export object Target {
     human_only_reason: str = "",
     relinks: str = "",
     integrates: str = "",
+    needs_ready: [str] = [],
 }
 
 export object EvaluatedProject {
