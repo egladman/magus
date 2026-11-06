@@ -97,8 +97,17 @@ var boundaryTypes = []boundaryType{
 	{Name: "ReplyReviewRequest", Type: reflect.TypeFor[types.ReplyReviewRequest](), RuntimeObject: true},
 	{Name: "ReviewRef", Type: reflect.TypeFor[types.ReviewRef](), RuntimeObject: true},
 	{Name: "ProjectQuery", Type: reflect.TypeFor[types.ProjectQuery](), RuntimeObject: true},
+	{Name: "ListPullsRequest", Type: reflect.TypeFor[types.ListPullsRequest](), RuntimeObject: true},
 	{Name: "ReviewTarget", Type: reflect.TypeFor[types.ReviewTarget]()},
 	{Name: "ReviewComment", Type: reflect.TypeFor[types.ReviewComment]()},
+	// list_pulls answer, leaf first: PullList holds BaseBranch and ForgePull, which hold
+	// ForgeCheck, BaseCommit and RateLimit.
+	{Name: "RateLimit", Type: reflect.TypeFor[types.RateLimit]()},
+	{Name: "ForgeCheck", Type: reflect.TypeFor[types.ForgeCheck]()},
+	{Name: "BaseCommit", Type: reflect.TypeFor[types.BaseCommit]()},
+	{Name: "BaseBranch", Type: reflect.TypeFor[types.BaseBranch]()},
+	{Name: "ForgePull", Type: reflect.TypeFor[types.ForgePull]()},
+	{Name: "PullList", Type: reflect.TypeFor[types.PullList]()},
 	// The merge queue provider script's records, leaf first, each taking a Queue prefix
 	// because Change, Check and Setting already name other mirrors. host.go provides them to
 	// the queue's session; nothing else imports them.

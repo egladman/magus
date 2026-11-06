@@ -280,6 +280,24 @@ Lists exact scheme://host origins, past loopback, trusted with the console route
 \fBMAGUS_CONSOLE_ENABLED\fR
 When false, the MCP HTTP server does not mount the console's read\-only API and job service (default true when MCP is up). Config file key: \fBconsole.enabled\fR.
 .TP
+\fBMAGUS_CONSOLE_PULLS_FLOOR\fR
+The shortest wait between two syncs, whatever else is chosen (default: 30s). Config file key: \fBconsole.pulls.floor\fR.
+.TP
+\fBMAGUS_CONSOLE_PULLS_ACTIVE\fR
+The wait while any check is queued or running (default: 1m). Config file key: \fBconsole.pulls.active\fR.
+.TP
+\fBMAGUS_CONSOLE_PULLS_IDLE\fR
+The wait while nothing is queued or running (default: 5m). Config file key: \fBconsole.pulls.idle\fR.
+.TP
+\fBMAGUS_CONSOLE_PULLS_RESERVE\fR
+The request budget kept back; below it the poller waits (default: 500). Config file key: \fBconsole.pulls.reserve\fR.
+.TP
+\fBMAGUS_CONSOLE_PULLS_RUNNER_WAIT\fR
+How long a queued check waits before runners are blamed (default: 15m). Config file key: \fBconsole.pulls.runner_wait\fR.
+.TP
+\fBMAGUS_CONSOLE_PULLS_STALE_AFTER\fR
+How long a pull request may go unpushed before it is stale (default: 72h). Config file key: \fBconsole.pulls.stale_after\fR.
+.TP
 \fBMAGUS_REPORT_FILTER\fR
 Restricts event types via +type/\-type/bare terms; any "+" sets default\-deny. Config file key: \fBreport.filter\fR.
 .TP

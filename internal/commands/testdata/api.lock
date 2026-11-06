@@ -22,6 +22,12 @@ config ci.runner_pool_budget
 config concurrency
 config concurrency_profile
 config console.enabled
+config console.pulls.active
+config console.pulls.floor
+config console.pulls.idle
+config console.pulls.reserve
+config console.pulls.runner_wait
+config console.pulls.stale_after
 config default_charms
 config diagnostics.docs
 config diagnostics.prefix

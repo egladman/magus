@@ -65,11 +65,14 @@ var ReplyReview = bindgen.ProviderOp[types.ReplyReviewRequest, types.Ack]{Family
 // ReviewThreads is the review provider's optional review_threads op.
 var ReviewThreads = bindgen.ProviderOp[types.ReviewRef, []types.ReviewComment]{Family: "review", Name: "review_threads", Encode: bindgen.ObjectReviewRef, Decode: decoded[[]types.ReviewComment](decode.ProviderFuncs, 16)}
 
+// ListPulls is the review provider's optional list_pulls op.
+var ListPulls = bindgen.ProviderOp[types.ListPullsRequest, types.PullList]{Family: "review", Name: "list_pulls", Encode: bindgen.ObjectListPullsRequest, Decode: decoded[types.PullList](decode.ProviderFuncs, 17)}
+
 // ListProjects is the workspace provider's required list_projects op.
-var ListProjects = bindgen.ProviderOp[types.ProjectQuery, []spells.ProvidedProject]{Family: "workspace", Name: "list_projects", Encode: bindgen.ObjectProjectQuery, Decode: decoded[[]spells.ProvidedProject](decode.ProviderFuncs, 17)}
+var ListProjects = bindgen.ProviderOp[types.ProjectQuery, []spells.ProvidedProject]{Family: "workspace", Name: "list_projects", Encode: bindgen.ObjectProjectQuery, Decode: decoded[[]spells.ProvidedProject](decode.ProviderFuncs, 18)}
 
 // DiscoverProjects is the discovery provider's required discover_projects op.
-var DiscoverProjects = bindgen.ProviderOp[spells.DiscoveryQuery, []spells.DiscoveredProject]{Family: "discovery", Name: "discover_projects", Encode: bindgen.ObjectDiscoveryQuery, Decode: decoded[[]spells.DiscoveredProject](decode.ProviderFuncs, 18)}
+var DiscoverProjects = bindgen.ProviderOp[spells.DiscoveryQuery, []spells.DiscoveredProject]{Family: "discovery", Name: "discover_projects", Encode: bindgen.ObjectDiscoveryQuery, Decode: decoded[[]spells.DiscoveredProject](decode.ProviderFuncs, 19)}
 
 // QueueDescribe is the queue provider's required describe op.
 var QueueDescribe = bindgen.ProviderOp[queuetypes.DescribeRequest, queuetypes.DescribeResult]{Family: "queue", Name: "describe", Encode: bindgen.ObjectQueueDescribeRequest, Decode: decoded[queuetypes.DescribeResult](decode.QueueFuncs, 0)}
