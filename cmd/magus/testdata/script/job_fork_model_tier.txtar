@@ -47,13 +47,13 @@ stdout 'wave/model +- +declared +haiku '
 
 # A dry-run apply writes nothing and assigns no tier; the real one creates the row with one.
 stdin $WORK/applied.json
-exec magus job apply -f - --dry-run
+exec magus job apply --stdin --dry-run
 stdout '^would create wave/applied with 1 write path\(s\)$'
 ! stdout 'model tier'
 exec magus ls jobs -o name
 ! stdout 'wave/applied'
 stdin $WORK/applied.json
-exec magus job apply -f -
+exec magus job apply --stdin
 stdout '^created wave/applied, declared, with 1 write path\(s\)$'
 stdout '^model tier: economy \(rank 0\), matrix: "1 file in 1 project" at magusfile\.buzz$'
 

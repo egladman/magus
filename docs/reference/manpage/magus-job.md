@@ -145,10 +145,13 @@ them and magus describe job prints one job's terms.
 : A path to add to the job's write paths, or \<file\>#\<declaration\> to claim one declaration of a file; repeatable or comma-separated
 
 **-f** *file*
-: The records to apply: a file, or \`-\` for stdin; one JSON job, a JSON array, or one job per line
+: The records to apply from a file: one JSON job, a JSON array, or one job per line
 
 **--[no-]fix** (default: off)
 : Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records
+
+**--[no-]stdin** (default: off)
+: Read the records from stdin instead of a file, as job fork --stdin does
 
 ### job exec options
 

@@ -1160,6 +1160,19 @@ func TestIntegratorGoalsLeaveADeclaredGoalOnTheTarget(t *testing.T) {
 	assert.Empty(t, integratorGoals(acceptRow()), "a job that integrates nothing holds only what it declares")
 }
 
+// A check the environment kept from running is filed with its cause and
+// fails, naming it: it is never a pass nobody earned.
+func TestVerifyFailsACheckFiledAsUnrunNamingTheCause(t *testing.T) {
+	t.Parallel()
+
+	rep := passingResult()
+	rep.Validation = types.JobResultValidation{Command: acceptRow().Validation, Unrun: "node_modules is missing"}
+	v := verifyClaim(acceptRow(), rep, types.JobAttempt{}, nil)
+	assert.False(t, v.Verified)
+	require.Len(t, v.Gates, 1)
+	assert.Equal(t, []string{"did not run: node_modules is missing; it fails until the check runs where that is fixed"}, v.Gates[0].Violations)
+}
+
 // A worker never waits for a seat: a check it files as owed for want of one is a normal
 // result, passed with the goal marked owed for the integration. Any other reason, a goal
 // that is not a check, and an integration filing its own checks as owed are refused.

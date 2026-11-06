@@ -1984,7 +1984,11 @@ func leaseRebind(c hint.Invocation, stdin string, h holder) rebind {
 		if operand == "" {
 			return boundedExecRebind(h)
 		}
-		return rebind{problem: fmt.Sprintf("would take the lease on another job while lease %s is in flight", h.id), ask: "hand that job out"}
+		// A resumed worker moves on by ending its own row, which it may do.
+		return rebind{
+			problem: fmt.Sprintf("would take the lease on another job while lease %s is in flight", h.id),
+			fix:     fmt.Sprintf("end it first with `%s`, then take %s", hint.JobExit.With(h.id, "--stdin"), operand),
+		}
 	case words[0] == hint.JobWait.Head() && words[1] == hint.JobWait.Leaf():
 		if len(words) > 2 && isDescendant(h.standing(), words[2]) {
 			return rebind{}

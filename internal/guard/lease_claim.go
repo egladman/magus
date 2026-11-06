@@ -39,5 +39,5 @@ func denyLeaseClaim(me types.Job, rel string, req types.JobClaimRequest, proof s
 		Say: fmt.Sprintf("magus workspace: %s is outside the write paths of lease %s, and magus proves it in scope (%s); claim the job with the command served next, then retry this write.",
 			rel, me.ID, req.Because),
 		Why: proof + ". The store proves it again when the record applies, and refuses it if another live job holds the path or a deny path covers it.",
-	}.full(), Next: []types.NextStep{{ID: hint.DenyRemedyPrefix + string(denyRuleLeaseClaim), Run: line, Argv: strings.Fields(hint.JobApply.With("-f", "-")), Why: "the proof is the record this applies; the store proves it again under its lock."}}}
+	}.full(), Next: []types.NextStep{{ID: hint.DenyRemedyPrefix + string(denyRuleLeaseClaim), Run: line, Argv: strings.Fields(hint.JobApply.With("--stdin")), Why: "the proof is the record this applies; the store proves it again under its lock."}}}
 }

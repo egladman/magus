@@ -1,4 +1,4 @@
-# `magus job apply -f -` reads records from stdin the way `kubectl apply -f -` does. A new
+# `magus job apply --stdin` reads records from stdin, the spelling job fork reads. A new
 # id creates the job; a second stream upserts its spec and creates another, keeping the
 # first job's state; --dry-run prints the spec diff and writes nothing; a record adding a
 # directory (MGS3018) is refused and leaves the row as it was, and a stream with problems in
@@ -11,14 +11,20 @@ cp $WORK/code.go src/pkg/code.go
 cp $WORK/code.go src/pkg/other.go
 
 env 'ROW={"schema_version":11,"id":"wave/a","write_paths":["src/pkg/code.go"],"check":{"target":"test","project":"."}}'
-exec sh -c 'printf ''%s'' "$ROW" | magus job apply -f -'
+exec sh -c 'printf ''%s'' "$ROW" | magus job apply --stdin'
 stdout '^created wave/a, declared, with 1 write path\(s\)$'
 
 stdin $WORK/widen.jsonl
-exec magus job apply -f -
+exec magus job apply --stdin
 stdout '^updated wave/a, still declared:$'
 stdout '^  write_paths \+src/pkg/other\.go$'
 stdout '^created wave/b, declared, with 1 write path\(s\)$'
+
+# stdin has one spelling, as on job fork.
+! exec magus job apply -f -
+stderr 'stdin is --stdin, as on job fork, not -f -'
+! exec magus job apply -f $WORK/narrow.json --stdin
+stderr '-f reads a file and --stdin reads stdin: name one'
 
 exec magus job apply -f $WORK/narrow.json --dry-run
 stdout '^would update wave/a, still declared:$'

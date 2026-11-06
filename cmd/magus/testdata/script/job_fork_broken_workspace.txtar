@@ -28,7 +28,7 @@ stderr 'unchecked: the workspace did not load, so the outputs regenerated outsid
 stderr 'no member "noSuchCall"'
 
 stdin $WORK/applied.json
-exec magus job apply -f -
+exec magus job apply --stdin
 stdout '^created wave/applied, declared, with 1 write path\(s\)$'
 ! stdout 'model tier'
 stderr 'unchecked: the workspace did not load, so no model tier was assigned'
@@ -36,7 +36,7 @@ stderr 'unchecked: the workspace did not load, so the outputs regenerated outsid
 
 # A dry run assigns no tier anyway, so only the notes are skipped.
 stdin $WORK/applied.json
-exec magus job apply -f - --dry-run
+exec magus job apply --stdin --dry-run
 ! stderr 'no model tier was assigned'
 
 exec magus ls jobs -o name

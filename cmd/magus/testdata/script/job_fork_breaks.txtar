@@ -29,7 +29,7 @@ exec magus ls jobs -o json
 stdout '"breaks": \['
 
 stdin clear.json
-exec magus job apply -f - --dry-run
+exec magus job apply --stdin --dry-run
 stdout 'dry run: nothing written'
 exec magus describe job wave/shape
 stdout '^  --old-flag$'

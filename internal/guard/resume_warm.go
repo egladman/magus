@@ -58,6 +58,9 @@ type warmWorker struct {
 	link  string
 	idle  time.Duration
 	left  time.Duration
+	// inFlight is a stopped holder whose row is still declared or
+	// running: resumed, it must end that row before it takes another.
+	inFlight bool
 }
 
 // denyWarmSpawn refuses row's fresh spawn while a worker that wrote its code is warm.
@@ -112,7 +115,7 @@ func findWarmWorker(facts hint.Gate, rows []types.Job, row types.Job, title stri
 		if idle >= ttl || nearPriceStep(rec, cmp.Or(rec.Model, session), models) {
 			continue
 		}
-		return warmWorker{agent: agent, job: ended.ID, link: link, idle: idle, left: ttl - idle}, true
+		return warmWorker{agent: agent, job: ended.ID, link: link, idle: idle, left: ttl - idle, inFlight: ended.State.Editing()}, true
 	}
 	return warmWorker{}, false
 }
@@ -165,9 +168,13 @@ func nearPriceStep(rec spawnedAgent, model string, models []types.ModelPricing) 
 }
 
 func denySpawnWarmWorker(row types.Job, w warmWorker, ttl promptCacheTTL) denial {
+	message := "with a message"
+	if w.inFlight {
+		message = fmt.Sprintf("with a message to end %s with `%s` and then take %s", w.job, hint.JobExit.With(w.job, "--stdin"), row.ID)
+	}
 	return denial{
-		Say: fmt.Sprintf("job %s %s; worker %s stays warm %s more (TTL %s: %s): continue agent %s with a message, or set `fresh_reason` and run `%s`.",
-			row.ID, w.link, w.agent, w.left.Round(time.Second), ttl.ttl, ttl.source, w.agent, hint.JobApply.With("-f", "<record>")),
+		Say: fmt.Sprintf("job %s %s; worker %s stays warm %s more (TTL %s: %s): continue agent %s %s, or set `fresh_reason` and run `%s`.",
+			row.ID, w.link, w.agent, w.left.Round(time.Second), ttl.ttl, ttl.source, w.agent, message, hint.JobApply.With("-f", "<record>")),
 		Why: fmt.Sprintf("Worker %s ended %s ago. "+
 			"A resumed worker reads its context at the cache-read price and has already oriented; a fresh one pays the prefix and the orientation again for code another context already holds. "+
 			"`fresh_reason` is for a context that is wrong for the job, never for one that is merely large.", w.agent, w.idle.Round(time.Second)),

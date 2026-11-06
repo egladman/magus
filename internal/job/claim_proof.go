@@ -665,7 +665,7 @@ func ClaimCommand(id string, reqs []types.JobClaimRequest) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	line := fmt.Sprintf("%s <<<%s", hint.JobApply.With("-f", "-"), shellQuote(string(record)))
+	line := fmt.Sprintf("%s <<<%s", hint.JobApply.With("--stdin"), shellQuote(string(record)))
 	return line, len(line) <= maxClaimCommand
 }
 

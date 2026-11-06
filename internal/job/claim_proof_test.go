@@ -444,7 +444,7 @@ func TestClaimCommandIsOneApplyLine(t *testing.T) {
 
 	cmd, record, found := strings.Cut(line, " <<<")
 	require.True(t, found, line)
-	assert.True(t, strings.HasSuffix(cmd, "job apply -f -"), cmd)
+	assert.True(t, strings.HasSuffix(cmd, "job apply --stdin"), cmd)
 	record = strings.TrimSuffix(strings.TrimPrefix(record, "'"), "'")
 	decoded, err := DecodeDeclarations(bytes.NewBufferString(record))
 	require.NoError(t, err)
