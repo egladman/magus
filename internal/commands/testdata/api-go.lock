@@ -4024,6 +4024,7 @@ github.com/egladman/magus/types.MachineSnapshot.HeldSlots field int "json:\"held
 github.com/egladman/magus/types.MachineSnapshot.HolderList method func(now time.Time) string
 github.com/egladman/magus/types.MachineSnapshot.Holders field []MachineClaimant "json:\"holders,omitempty\" yaml:\"holders,omitempty\""
 github.com/egladman/magus/types.MachineSnapshot.Refused field []MachineRefusal "json:\"refused,omitempty\" yaml:\"refused,omitempty\""
+github.com/egladman/magus/types.MachineSnapshot.Reserve field MemoryReserve "json:\"reserve,omitzero\" yaml:\"reserve,omitempty\""
 github.com/egladman/magus/types.MachineSnapshot.Waiting field []MachineWaiter "json:\"waiting,omitempty\" yaml:\"waiting,omitempty\""
 github.com/egladman/magus/types.MachineVerdict type struct
 github.com/egladman/magus/types.MachineVerdict.BudgetMB field int "json:\"budget_mb,omitzero\" yaml:\"budget_mb,omitempty\""
@@ -4137,6 +4138,10 @@ github.com/egladman/magus/types.MemoryProfile.D10Ms field int64 "json:\"d10_ms\"
 github.com/egladman/magus/types.MemoryProfile.D90Ms field int64 "json:\"d90_ms\""
 github.com/egladman/magus/types.MemoryProfile.HeldMB method func(elapsed time.Duration) int
 github.com/egladman/magus/types.MemoryProfile.Runs field int "json:\"runs\""
+github.com/egladman/magus/types.MemoryReserve type struct
+github.com/egladman/magus/types.MemoryReserve.ReservedMB field int "json:\"reserved_mb,omitzero\" yaml:\"reserved_mb,omitempty\""
+github.com/egladman/magus/types.MemoryReserve.Rule field string "json:\"rule,omitempty\" yaml:\"rule,omitempty\""
+github.com/egladman/magus/types.MemoryReserve.TotalMB field int "json:\"total_mb,omitzero\" yaml:\"total_mb,omitempty\""
 github.com/egladman/magus/types.MemorySample type struct
 github.com/egladman/magus/types.MemorySample.At field time.Duration
 github.com/egladman/magus/types.MemorySample.Bytes field int64

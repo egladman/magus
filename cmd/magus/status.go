@@ -728,7 +728,11 @@ func capacityText(c types.MachineSnapshot) string {
 		parts = append(parts, fmt.Sprintf("slots %d/%d", c.HeldSlots, c.BudgetSlots))
 	}
 	if c.BudgetMB > 0 {
-		parts = append(parts, fmt.Sprintf("mem %s/%s", cache.FormatMB(c.HeldMB), cache.FormatMB(c.BudgetMB)))
+		mem := fmt.Sprintf("mem %s/%s", cache.FormatMB(c.HeldMB), cache.FormatMB(c.BudgetMB))
+		if r := c.Reserve; r.TotalMB > 0 {
+			mem += fmt.Sprintf(" (%s less %s: %s)", cache.FormatMB(r.TotalMB), cache.FormatMB(r.ReservedMB), r.Rule)
+		}
+		parts = append(parts, mem)
 	}
 	if len(parts) == 0 {
 		return "unmeasured"

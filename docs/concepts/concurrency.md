@@ -296,9 +296,9 @@ Key properties:
   machine's cores, both sized by the same `concurrency_profile` that
   decided the pool's width above: `balanced` and `conservative` reserve a quarter of
   memory for the OS, magus's own processes, and everything else sharing the
-  machine; `aggressive` reserves none of that, taking every usable megabyte down to a
-  fixed 512 MiB floor for the kernel and its page cache. A CI job that asks for
-  `aggressive` claims memory the same way it claims cores.
+  machine; `aggressive`, the default, reserves an eighth, and never less than 1 GiB, so
+  a desktop keeps memory. A 24 GiB machine budgets 21 GiB. No profile budgets the whole
+  machine, and `magus status` names the total, the reserve and the profile that set it.
 - **A claim is declared or measured; a failing machine refuses anyway.** The budget
   arbitrates what targets say they need ([`memory_mb`](targets.md) and `slots`) and what
   their recorded runs measured, so on a healthy machine the same command with the same
