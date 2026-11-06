@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/hint"
 )
 
 // The load contract is what a magus built before a change needs to load the tree after it:
@@ -133,9 +134,10 @@ func denyContractPick(ctx context.Context, deps Dependencies, at location, line 
 		return ""
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: this changes the load contract (%s), so it lands through a dry run that builds and loads the result first, never straight into this checkout.", leadPath(touched)),
+		Say: fmt.Sprintf("magus workspace: this changes the load contract (%s), so it lands in a checkout of its own first, never straight into this one: `%s`, pick and build there, then move this branch to the result.",
+			leadPath(touched), hint.JobFork.With("<integration>", "--checkout", "<dir>")),
 		Why: "A change to the host declarations, the API locks, the generated bindings or the Buzz checker can leave ./magus unable to load the tree, and a prefix of a series can leave a tree no binary builds from. " +
-			"Then every write waits for a binary nothing can build. The dry run applies the whole change in a scratch worktree, compiles ./cmd/magus, checks generator drift and loads the guard policy with the result, and lands nothing unless all of it passes.",
+			"Then every write waits for a binary nothing can build. In a checkout of its own the whole change is applied, ./cmd/magus compiled and the guard policy loaded before anything reaches this branch.",
 	}.full()
 }
 
