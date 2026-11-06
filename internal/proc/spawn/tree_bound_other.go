@@ -3,6 +3,7 @@
 package spawn
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -22,15 +23,15 @@ var ErrTooManyProcesses = errors.New("process tree over its bound")
 
 // follow says once that nothing bounds the tree. Windows is quiet: taskkill /T
 // already ends the tree, and wasm runs no process.
-func (b *treeBounds) follow(int, string) *boundedTree {
+func (b *treeBounds) follow(ctx context.Context, _ int, _ string) *boundedTree {
 	if runtime.GOOS == "windows" || runtime.GOARCH == "wasm" {
 		return nil
 	}
 	b.warned.Do(func() {
-		slog.Warn(fmt.Sprintf("magus bounds and reaps a command's process tree only on linux and darwin, not %s", runtime.GOOS))
+		slog.WarnContext(ctx, fmt.Sprintf("magus bounds and reaps a command's process tree only on linux and darwin, not %s", runtime.GOOS))
 	})
 	return nil
 }
 
-func (*treeBounds) killTree(*boundedTree)    {}
+func (*treeBounds) killTree(*boundedTree)   {}
 func (*treeBounds) stop(*boundedTree) error { return nil }

@@ -448,7 +448,8 @@ func doRequest(ctx context.Context, method, url, body string, headers map[string
 	}, nil
 }
 
-// readBody reads the response body, applying the ETag cache when o.revalidate is set.
+// readBody reads the response body, through the ETag cache when
+// o.revalidate is set.
 func readBody(resp *http.Response, o httpOpts, method, url, key string, cached etagEntry) ([]byte, error) {
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
