@@ -468,7 +468,7 @@ permission prompt and when the agent goes idle waiting for input), and `Stop` or
         "hooks": [
           {
             "type": "command",
-            "command": "d=$PWD; while [ -n \"$d\" ] && [ ! -f \"$d/magusfile.buzz\" ]; do d=${d%/*}; done; __MAGUS_BIN=$([ -x \"$d/magus\" ] && printf %s \"$d/magus\" || command -v magus 2>/dev/null); [ -n \"$__MAGUS_BIN\" ] && jq -c '{api_version: "magus.event/v1alpha1", outcome: .hook_event_name, source: {kind: \"agent\"}, message: .message}' | \"$__MAGUS_BIN\" session notify --desktop >/dev/null 2>&1; exit 0"
+            "command": "d=$PWD; while [ -n \"$d\" ] && [ ! -f \"$d/magusfile.buzz\" ]; do d=${d%/*}; done; __MAGUS_BIN=$([ -x \"$d/magus\" ] && printf %s \"$d/magus\" || command -v magus 2>/dev/null); [ -n \"$__MAGUS_BIN\" ] && jq -c '{api_version: \"magus.event/v1alpha1\", outcome: .hook_event_name, source: {kind: \"agent\"}, message: .message}' | \"$__MAGUS_BIN\" session notify --desktop >/dev/null 2>&1; exit 0"
           }
         ]
       }
