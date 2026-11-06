@@ -115,40 +115,61 @@ type item struct {
 }
 
 func (f Model) weigh(units []types.Unit) weights {
-	w := weights{setupMs: int64(f.History.effectiveConstants().SetupP50Ms), slots: int64(f.slots())}
-	index := map[types.Unit]int{}
-	var byIndex []types.Unit
-	node := func(u types.Unit) int {
-		if i, ok := index[u]; ok {
-			return i
-		}
-		index[u] = len(w.nodeMs)
-		byIndex = append(byIndex, u)
-		w.nodeMs = append(w.nodeMs, f.predict(u))
-		peak, ok := f.History.PredictPeakRSS(u.Project, u.Target)
-		if !ok {
-			peak = -1
-		}
-		w.nodePeak = append(w.nodePeak, peak)
-		return index[u]
-	}
-	// optimization: a stamp per node dedupes each closure in O(1) per
-	// node; slices.Contains made weigh quadratic in closure size.
-	var stamp []int
-	mark := func(n, id int) bool {
-		for len(stamp) <= n {
-			stamp = append(stamp, -1)
-		}
-		if stamp[n] == id {
-			return false
-		}
-		stamp[n] = id
-		return true
+	g := &weighing{
+		f:     f,
+		w:     weights{setupMs: int64(f.History.effectiveConstants().SetupP50Ms), slots: int64(f.slots())},
+		index: map[types.Unit]int{},
 	}
 	units = slices.Clone(units)
 	sortUnits(units)
 	units = slices.Compact(units)
+	closures, root := g.closures(units)
+	g.group(units, closures, root)
+	return g.w
+}
 
+// weighing is one weigh call's state: a node per unit and per need, in
+// first-seen order.
+type weighing struct {
+	f       Model
+	w       weights
+	index   map[types.Unit]int
+	byIndex []types.Unit
+	// optimization: a stamp per node dedupes each closure in O(1) per
+	// node; slices.Contains made weigh quadratic in closure size.
+	stamp []int
+}
+
+func (g *weighing) node(u types.Unit) int {
+	if i, ok := g.index[u]; ok {
+		return i
+	}
+	g.index[u] = len(g.w.nodeMs)
+	g.byIndex = append(g.byIndex, u)
+	g.w.nodeMs = append(g.w.nodeMs, g.f.predict(u))
+	peak, ok := g.f.History.PredictPeakRSS(u.Project, u.Target)
+	if !ok {
+		peak = -1
+	}
+	g.w.nodePeak = append(g.w.nodePeak, peak)
+	return g.index[u]
+}
+
+// mark reports whether node n is new to the set id names, and adds it.
+func (g *weighing) mark(n, id int) bool {
+	for len(g.stamp) <= n {
+		g.stamp = append(g.stamp, -1)
+	}
+	if g.stamp[n] == id {
+		return false
+	}
+	g.stamp[n] = id
+	return true
+}
+
+// closures returns each unit's closure, its own node first, and root, which
+// joins units that share a node no shard may repeat.
+func (g *weighing) closures(units []types.Unit) ([][]int, func(int) int) {
 	parent := make([]int, len(units))
 	for i := range parent {
 		parent[i] = i
@@ -163,18 +184,18 @@ func (f Model) weigh(units []types.Unit) weights {
 	owner := map[int]int{}
 	closures := make([][]int, len(units))
 	for i, u := range units {
-		own := node(u)
-		mark(own, i)
+		own := g.node(u)
+		g.mark(own, i)
 		closures[i] = []int{own}
-		if f.Needs != nil {
-			for _, n := range f.Needs(u) {
-				if j := node(n); mark(j, i) {
+		if g.f.Needs != nil {
+			for _, n := range g.f.Needs(u) {
+				if j := g.node(n); g.mark(j, i) {
 					closures[i] = append(closures[i], j)
 				}
 			}
 		}
 		for _, n := range closures[i] {
-			if f.repeatable(byIndex[n]) {
+			if g.f.repeatable(g.byIndex[n]) {
 				continue
 			}
 			if o, ok := owner[n]; ok {
@@ -184,10 +205,16 @@ func (f Model) weigh(units []types.Unit) weights {
 			}
 		}
 	}
+	return closures, find
+}
 
+// group folds units sharing a root into one item, then orders the items
+// heaviest first, by first unit on a tie.
+func (g *weighing) group(units []types.Unit, closures [][]int, root func(int) int) {
+	w := &g.w
 	byRoot := map[int]int{}
 	for i, u := range units {
-		r := find(i)
+		r := root(i)
 		at, ok := byRoot[r]
 		if !ok {
 			at = len(w.items)
@@ -198,7 +225,7 @@ func (f Model) weigh(units []types.Unit) weights {
 		it.units = append(it.units, u)
 		it.own = append(it.own, closures[i][0])
 		for _, n := range closures[i] {
-			if mark(n, len(units)+at) {
+			if g.mark(n, len(units)+at) {
 				it.closure = append(it.closure, n)
 			}
 		}
@@ -212,7 +239,6 @@ func (f Model) weigh(units []types.Unit) weights {
 		}
 		return cmp.Compare(a.units[0].String(), b.units[0].String())
 	})
-	return w
 }
 
 func (f Model) predict(u types.Unit) int64 {

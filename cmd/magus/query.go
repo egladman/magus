@@ -347,8 +347,13 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 	if !res.Found {
 		return reportExplainMiss(ctx, pos[0], res)
 	}
-	out := res.Out
+	return emitExplainCard(ctx, root, pos[0], opts, source, res)
+}
 
+// emitExplainCard writes the card res found for input, with its next steps.
+// A source window asks for the doc section's lines instead.
+func emitExplainCard(ctx context.Context, root, input string, opts output.Options, source sourceWindow, res explainResult) error {
+	out := res.Out
 	stop := traceFromContext(ctx).phase("explain.next")
 	nx := newNextGate(root)
 	next := nx.served(hint.NextForExplain(out))
@@ -374,7 +379,7 @@ func explainCommand(ctx context.Context, root string, args []string) error {
 		return emitNames(os.Stdout, []string{out.Node.ID})
 	}
 
-	return writeExplainText(os.Stdout, root, pos[0], nx, next, res)
+	return writeExplainText(os.Stdout, root, input, nx, next, res)
 }
 
 func noteExplainRefresh(ctx context.Context, root, input string, res *explainResult) {

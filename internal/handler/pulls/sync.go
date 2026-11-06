@@ -137,17 +137,29 @@ func (p *Poller) Sync(ctx context.Context) {
 		p.state.SyncError = err.Error()
 		p.state.FailedAt = toTimestamp(now)
 	} else {
-		p.failures = 0
-		p.list, p.haveList = list, true
-		if list.Viewer != "" {
-			p.viewer = list.Viewer
-		}
-		p.state.SyncedAt = toTimestamp(now)
-		p.state.SyncError, p.state.FailedAt = "", nil
-		p.state.Requests, p.state.Revalidated = int32(list.Requests), int32(list.Revalidated)
-		p.state.RateLimit, p.state.RateRemaining = int32(list.Rate.Limit), int32(list.Rate.Remaining)
-		p.state.RateReset = toTimestamp(parseTime(list.Rate.Reset))
+		p.recordList(list, now)
 	}
+	p.scheduleNext(now)
+}
+
+// recordList keeps list as the last good read and clears the failure streak.
+// The caller holds p.mu.
+func (p *Poller) recordList(list types.PullList, now time.Time) {
+	p.failures = 0
+	p.list, p.haveList = list, true
+	if list.Viewer != "" {
+		p.viewer = list.Viewer
+	}
+	p.state.SyncedAt = toTimestamp(now)
+	p.state.SyncError, p.state.FailedAt = "", nil
+	p.state.Requests, p.state.Revalidated = int32(list.Requests), int32(list.Revalidated)
+	p.state.RateLimit, p.state.RateRemaining = int32(list.Rate.Limit), int32(list.Rate.Remaining)
+	p.state.RateReset = toTimestamp(parseTime(list.Rate.Reset))
+}
+
+// scheduleNext sets the next sync from the cadence, or from the failure
+// backoff when that waits longer. The caller holds p.mu.
+func (p *Poller) scheduleNext(now time.Time) {
 	c := chooseCadence(p.opts.Config, p.list, now)
 	if wait := failureBackoff(p.opts.Config.Floor, p.failures); wait > c.interval {
 		c = cadence{
