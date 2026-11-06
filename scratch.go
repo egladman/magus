@@ -31,7 +31,10 @@ type scratch struct {
 
 func (m *Magus) newScratch(ctx context.Context) (scratch, error) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
-	if err != nil || res.VCS == nil {
+	if err != nil {
+		return scratch{}, fmt.Errorf("change risk: resolve version control to export the base: %w", err)
+	}
+	if res.VCS == nil {
 		return scratch{}, types.DiagnosticErrorf(types.VCSCapabilityMissing,
 			"version control is disabled, so magus cannot export the base to key it")
 	}
