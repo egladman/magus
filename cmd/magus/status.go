@@ -26,7 +26,6 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/types"
 )
@@ -54,17 +53,16 @@ func bindStatus(f **flaggen.StatusFlags) func(*flag.FlagSet) {
 	}
 }
 
+// queryCapacity is the broker's build budget as status reads it.
+func queryCapacity(ctx context.Context) (types.MachineSnapshot, error) {
+	st, err := queryBroker(ctx)
+	return st.Capacity, err
+}
+
 func status(ctx context.Context, args []string) error {
 	var f *flaggen.StatusFlags
 	if _, err := commandParse("status", args, bindStatus(&f)); err != nil {
 		return err
-	}
-
-	if f.Wait {
-		if f.Probe != "" || f.Watch != 0 {
-			return exit.Usagef("magus status: --wait prints no snapshot; it does not combine with --probe or --watch")
-		}
-		return awaitBudget(ctx, extractRootFlag(args))
 	}
 
 	// Probe mode: exec-probe semantics — exit 0 healthy, exit 1 unhealthy.

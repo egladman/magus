@@ -429,62 +429,6 @@ func TestGraphBuildStillBuildsBehindAnotherCheckout(t *testing.T) {
 	assert.Nil(t, waitedOn)
 }
 
-// scriptedSeats answers each Claim from verdicts in turn and records Awaits.
-type scriptedSeats struct {
-	verdicts []types.MachineVerdict
-	awaited  []types.MachineClaim
-	released []string
-}
-
-func (s *scriptedSeats) Claim(context.Context, types.MachineClaim) (types.MachineVerdict, error) {
-	v := s.verdicts[0]
-	s.verdicts = s.verdicts[1:]
-	return v, nil
-}
-
-func (s *scriptedSeats) Release(_ context.Context, id string) { s.released = append(s.released, id) }
-
-func (s *scriptedSeats) Overrun(context.Context, string) {}
-
-func (s *scriptedSeats) HoldGroup(context.Context, string, int, string) (string, error) {
-	return "", nil
-}
-
-func (s *scriptedSeats) ReleaseHold(context.Context, string) error { return nil }
-
-func (s *scriptedSeats) Await(_ context.Context, claims []types.MachineClaim, parked func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
-	s.awaited = append(s.awaited, claims...)
-	parked(claims[0], types.MachineVerdict{Fits: true, BudgetMB: 4096, HeldMB: 4096})
-	return types.MachineClaim{}, types.MachineVerdict{Granted: true}, nil
-}
-
-// graphBuildClaim names ancestors so the claim reads no real memory pressure.
-func graphBuildClaim() types.MachineClaim {
-	return types.MachineClaim{Project: ".", Target: "graph-build", MemoryMB: graphBuildMemoryMB, Ancestors: []string{"1:parent"}}
-}
-
-func TestGraphBuildSeatWaitsForRoomThenClaims(t *testing.T) {
-	seats := &scriptedSeats{verdicts: []types.MachineVerdict{{Fits: true}, {Granted: true, Fits: true, ID: "seat"}}}
-
-	release, err := awaitGraphBuildSeat(t.Context(), seats, graphBuildClaim(), false)
-
-	require.NoError(t, err)
-	require.Len(t, seats.awaited, 1)
-	assert.Equal(t, "graph-build", seats.awaited[0].Target)
-	assert.Empty(t, seats.verdicts, "it claimed again after the wait")
-	release()
-	assert.Equal(t, []string{"seat"}, seats.released)
-}
-
-func TestGraphBuildSeatRefusesWhatTheWholeBudgetCannotSeat(t *testing.T) {
-	seats := &scriptedSeats{verdicts: []types.MachineVerdict{{Fits: false, BudgetMB: 1024, BudgetSlots: 4}}}
-
-	_, err := awaitGraphBuildSeat(t.Context(), seats, graphBuildClaim(), false)
-
-	require.ErrorIs(t, err, types.MachineBudgetExhausted)
-	assert.Empty(t, seats.awaited, "no wait admits it")
-}
-
 type graphBuildShardSuite struct{ suite.Suite }
 
 func TestGraphBuildShard(t *testing.T) { suite.Run(t, new(graphBuildShardSuite)) }

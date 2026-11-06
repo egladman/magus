@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"path/filepath"
+	"time"
 
 	"github.com/egladman/magus/types"
 )
@@ -107,8 +108,9 @@ func WithCollapse(collapse bool) Option {
 
 // WithMachineAdmission routes every step that will execute through machine-wide
 // admission: it takes its concurrency slots and declared memory_mb from a budget shared
-// by every magus on the host. A step that does not fit fails fast (MGS3009, exit 75);
-// magus never queues behind a peer already holding the budget.
+// by every magus on the host.
+// A step other invocations keep out waits up to wait (budget_wait),
+// then fails with MGS3009, exit 75. Zero fails at once.
 //
 // A step whose entry is in the local cache replays without asking the admitter at all,
 // so a full budget, or under WithMachineAdmissionRequired a missing one, never refuses
@@ -120,8 +122,8 @@ func WithCollapse(collapse bool) Option {
 //
 // A step the admitter cannot answer for runs unarbitrated, said once through the
 // caller's logger, unless WithMachineAdmissionRequired is also given.
-func WithMachineAdmission(admitter MachineAdmitter) Option {
-	return func(c *Cache) { c.machineAdmitter = admitter }
+func WithMachineAdmission(admitter MachineAdmitter, wait time.Duration) Option {
+	return func(c *Cache) { c.machineAdmitter, c.machineWait = admitter, wait }
 }
 
 // WithMachineAdmissionRequired refuses a step the admitter cannot answer for (MGS3022,

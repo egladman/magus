@@ -255,6 +255,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "LeaseCheck", Zero: types.LeaseCheck{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLeaseCheck(v.(types.LeaseCheck)) }},
 	{Name: "LifecycleQuery", Zero: types.LifecycleQuery{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLifecycleQuery(v.(types.LifecycleQuery)) }},
 	{Name: "LifecycleStatus", Zero: types.LifecycleStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLifecycleStatus(v.(types.LifecycleStatus)) }},
+	{Name: "ListPullsRequest", Zero: types.ListPullsRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectListPullsRequest(v.(types.ListPullsRequest)) }},
 	{Name: "MCPTool", Zero: types.MCPTool{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMCPTool(v.(types.MCPTool)) }},
 	{Name: "MCPToolParam", Zero: types.MCPToolParam{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMCPToolParam(v.(types.MCPToolParam)) }},
 	{Name: "MarkdownSection", Zero: types.MarkdownSection{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectMarkdownSection(v.(types.MarkdownSection)) }},

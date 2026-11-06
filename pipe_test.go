@@ -21,7 +21,6 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/pipe"
@@ -33,9 +32,8 @@ import (
 
 // TestHelperPipeStage is not a test: it is one stage of a shell pipe, re-executed from
 // this binary so it runs the same executable a real magus stage would. PIPETEST_*
-// configures it: raise the pipe gate when GATE is set, sleep PRE_MS, take PROJECTS
-// through takeRunLocks, touch READY. With AWAIT_RELEASE, wait for the budget
-// until the pipe at descriptor 3 closes. Then write WRITE_HOLDING and
+// configures it: sleep PRE_MS, take PROJECTS
+// through takeRunLocks, touch READY. Then write WRITE_HOLDING and
 // WRITE_BYTES while holding, hold HOLD_MS, release, write WRITE_AFTER.
 // RESULT, when set, receives "acquired" or the acquisition's error. EXIT, when set, is
 // the status it records and exits with.
@@ -50,9 +48,6 @@ func TestHelperPipeStage(t *testing.T) {
 	}
 	l := newProjectLocker(env("CACHE_DIR"), testWorkspaceRoot, withStdio(&pipe.Stdio{Stdin: os.Stdin, Stdout: os.Stdout}))
 	cfg := config.Config{Cache: config.Cache{Dir: env("CACHE_DIR")}}
-	if env("GATE") != "" {
-		pipe.Gate(testWorkspaceRoot, cfg)
-	}
 	time.Sleep(ms("PRE_MS"))
 	release := func() {}
 	if p := env("PROJECTS"); p != "" {
@@ -71,17 +66,6 @@ func TestHelperPipeStage(t *testing.T) {
 	}
 	if r := env("READY"); r != "" {
 		_ = os.WriteFile(r, []byte("1"), 0o644)
-	}
-	if env("AWAIT_RELEASE") != "" {
-		// Not a FIFO: on macOS a reader can miss a writer that opens, writes
-		// nothing and closes, and block in read forever.
-		budget := func(context.Context, func(types.MachineClaim, types.MachineVerdict)) (types.MachineClaim, types.MachineVerdict, error) {
-			_, err := io.ReadAll(os.NewFile(3, "release"))
-			return types.MachineClaim{}, types.MachineVerdict{Granted: true, Fits: true}, err
-		}
-		if err := cache.AwaitMachine(context.Background(), budget, nil); err != nil {
-			os.Exit(4)
-		}
 	}
 	_, _ = os.Stdout.WriteString(env("WRITE_HOLDING"))
 	if n, _ := strconv.Atoi(env("WRITE_BYTES")); n > 0 {
@@ -570,103 +554,6 @@ func TestReadOnlyUpstreamNeverDelays(t *testing.T) {
 	if sp != nil || time.Since(start) > 500*time.Millisecond {
 		t.Fatalf("waited %s on a producer that takes no locks", time.Since(start))
 	}
-}
-
-// readOnly classifies a stage whose argv says "readonly" as one that takes no locks, the
-// way status is classified.
-func readOnly(argv []string) bool { return !slices.Contains(argv, "readonly") }
-
-// TestPipeGateHoldsTheRunUntilItExits is `magus status --wait | magus run`: status
-// takes no locks, yet its gate holds the run back until it exits.
-func TestPipeGateHoldsTheRunUntilItExits(t *testing.T) {
-	cacheDir := t.TempDir()
-	r, w := shellPipe(t)
-	ready := readyFile(t)
-	up := pipeStage(t, cacheDir, map[string]string{"GATE": "1", "READY": ready, "HOLD_MS": "500", "EXIT": "0"}, "readonly")
-	startUpstream(t, up, w)
-	waitForFile(t, ready, 5*time.Second)
-
-	l := newProjectLocker(cacheDir, testWorkspaceRoot, withOutput(io.Discard), withStdio(&pipe.Stdio{Stdin: r, TakesLocks: readOnly}))
-	start := time.Now()
-	release, _, err := l.takeRunLocks(t.Context(), []string{"p"})
-	if err != nil {
-		t.Fatalf("takeRunLocks after a gate that exited 0: %v", err)
-	}
-	release()
-	if waited := time.Since(start); waited < 300*time.Millisecond {
-		t.Fatalf("started after %s, before the gated upstream exited", waited)
-	}
-}
-
-// TestPipeGateThatFailsStartsNothing: a wait that fails fails the pipeline, so the run
-// never reaches the budget it was waiting for.
-func TestPipeGateThatFailsStartsNothing(t *testing.T) {
-	cacheDir := t.TempDir()
-	r, w := shellPipe(t)
-	ready := readyFile(t)
-	up := pipeStage(t, cacheDir, map[string]string{"GATE": "1", "READY": ready, "HOLD_MS": "200", "EXIT": "78"}, "readonly")
-	startUpstream(t, up, w)
-	waitForFile(t, ready, 5*time.Second)
-
-	l := newProjectLocker(cacheDir, testWorkspaceRoot, withOutput(io.Discard), withStdio(&pipe.Stdio{Stdin: r, TakesLocks: readOnly}))
-	_, _, err := l.takeRunLocks(t.Context(), []string{"p"})
-	wantPipeUpstreamFailed(t, err, 78, up.Process.Pid)
-}
-
-// TestStatusWaitPipeRunsTheDownstreamAfterRelease is the whole composition: the gated
-// stage waits on a full budget, and the run behind it starts once the budget frees.
-func TestStatusWaitPipeRunsTheDownstreamAfterRelease(t *testing.T) {
-	cacheDir := t.TempDir()
-	r, w := shellPipe(t)
-	ready := readyFile(t)
-	held, freed := shellPipe(t)
-	up := pipeStage(t, cacheDir, map[string]string{"GATE": "1", "READY": ready, "AWAIT_RELEASE": "1", "EXIT": "0"}, "readonly")
-	up.ExtraFiles = []*os.File{held}
-	startUpstream(t, up, w)
-	_ = held.Close()
-	waitForFile(t, ready, 5*time.Second)
-
-	waiting := make(chan struct{})
-	l := newProjectLocker(cacheDir, testWorkspaceRoot, withOutput(notifyWriter{waiting}), withStdio(&pipe.Stdio{Stdin: r, TakesLocks: readOnly}))
-	done := make(chan error, 1)
-	// The wait reports this bound itself, naming the stage that never ended.
-	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
-	defer cancel()
-	go func() {
-		release, _, err := l.takeRunLocks(ctx, []string{"p"})
-		if err == nil {
-			release()
-		}
-		done <- err
-	}()
-	select {
-	case err := <-done:
-		t.Fatalf("the run started (%v) while the budget was still full", err)
-	case <-waiting:
-	}
-	select {
-	case err := <-done:
-		t.Fatalf("the run started (%v) while saying it waits", err)
-	default:
-	}
-	if err := freed.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := <-done; err != nil {
-		t.Fatalf("takeRunLocks once the budget freed: %v", err)
-	}
-}
-
-// notifyWriter closes its channel at the first line the locker says.
-type notifyWriter struct{ said chan struct{} }
-
-func (w notifyWriter) Write(p []byte) (int, error) {
-	select {
-	case <-w.said:
-	default:
-		close(w.said)
-	}
-	return len(p), nil
 }
 
 // TestTransitiveUpstreamIsWeighed: in a | b | c the stage two back holds c's project,

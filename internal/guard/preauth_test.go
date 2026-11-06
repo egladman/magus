@@ -420,16 +420,9 @@ func rootMergeServesBaseScript(t *testing.T, ctx context.Context, deps Dependenc
 	return Request{}, next
 }
 
-// seatWaitServesTheRun is MGS3009's remedy: the wait piped into the run that spends the seat.
-func seatWaitServesTheRun(*testing.T, context.Context, Dependencies, servedRole) (Request, []string) {
-	const run = "magus run go::go-test . -- ./internal/ledger/"
-	return Request{Input: run}, []string{fmt.Sprintf("%s | %s", hint.Status.With("--wait"), run)}
-}
-
 func servedFixtures() []servedFixture {
 	return []servedFixture{
 		{"a root's merge names the script that brings the base in", rootMergeServesBaseScript},
-		{"MGS3009 waits in the call that spends the seat", seatWaitServesTheRun},
 		{"a stale index's rebuild", func(t *testing.T, _ context.Context, _ Dependencies, role servedRole) (Request, []string) {
 			standBudget(t, types.MachineSnapshot{BudgetSlots: 1, HeldSlots: 1})
 			root := recordedSearchTree(t)

@@ -130,3 +130,93 @@ type ReviewRef struct {
 type ProjectQuery struct {
 	Root string
 }
+
+// ListPullsRequest is what list_pulls is asked.
+type ListPullsRequest struct {
+	// Remote is the workspace's remote, as ReviewOrigin gives it.
+	Remote string
+	Base   string
+	// Authors are logins. Empty asks for every open pull request.
+	Authors []string
+}
+
+// PullList is the open pull requests list_pulls read and what the reads cost.
+type PullList struct {
+	Repo   string
+	Viewer string
+	// Reason is non-empty when nothing could be read, such as "no credential".
+	Reason      string
+	Base        BaseBranch
+	Pulls       []ForgePull
+	Rate        RateLimit
+	Requests    int // sent this call
+	Revalidated int // of Requests, answered 304
+}
+
+// RateLimit is the host's request budget as of the last response.
+type RateLimit struct {
+	Limit     int
+	Remaining int
+	// Reset is RFC 3339, or empty when the host sent none.
+	Reset string
+}
+
+// BaseBranch is the branch pull requests target.
+type BaseBranch struct {
+	Name   string
+	SHA    string
+	URL    string
+	Checks []ForgeCheck
+	// Commits are newest first, about the last 30.
+	Commits []BaseCommit
+}
+
+// BaseCommit is one commit on the base branch.
+type BaseCommit struct {
+	SHA     string
+	Subject string
+	// At is RFC 3339.
+	At string
+	// Pull is the pull request this commit landed, or 0 when none is named.
+	Pull int
+}
+
+// ForgePull is one open pull request as the forge reports it.
+type ForgePull struct {
+	Number  int
+	Title   string
+	Author  string
+	URL     string
+	Branch  string
+	HeadSHA string
+	Draft   bool
+	// Mergeable is mergeable, conflicting or unknown.
+	Mergeable string
+	// BehindBy counts commits on base missing from head, -1 when unknown.
+	BehindBy int
+	// Review is approved, changes_requested, review_required or none.
+	Review string
+	// PushedAt is RFC 3339.
+	PushedAt string
+	Checks   []ForgeCheck
+	Files    []string
+}
+
+// ForgeCheck is one check run or commit status on a commit.
+type ForgeCheck struct {
+	Name string
+	// Kind is "check" for a check run, "status" for a commit status.
+	Kind string
+	// State is queued/running/passed/failed/skipped/cancelled.
+	State string
+	// The three times are RFC 3339.
+	QueuedAt    string
+	StartedAt   string
+	CompletedAt string
+	URL         string
+	Description string
+	// Lines are the first error lines, at most 5.
+	Lines []string
+	// OutputRef is a magus output ref found in Lines, or empty.
+	OutputRef string
+}

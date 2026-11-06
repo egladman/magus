@@ -42,6 +42,31 @@ func WithOutputWriters(ctx context.Context, stdout, stderr io.Writer) context.Co
 	return context.WithValue(ctx, contextKey{}, writers{stdout: stdout, stderr: stderr})
 }
 
+type activityKey struct{}
+
+// WithActivity returns ctx under which a Quiet exec calls alive on each
+// write its child makes to stderr. A quiet nested magus still says it is
+// waiting for a seat, and that line is progress to the run above it.
+func WithActivity(ctx context.Context, alive func()) context.Context {
+	return context.WithValue(ctx, activityKey{}, alive)
+}
+
+// quietStderr is where a Quiet exec sends its child's stderr: nowhere, but
+// each write still counts as the activity WithActivity names.
+func quietStderr(ctx context.Context) io.Writer {
+	if alive, ok := ctx.Value(activityKey{}).(func()); ok && alive != nil {
+		return activityWriter(alive)
+	}
+	return io.Discard
+}
+
+type activityWriter func()
+
+func (a activityWriter) Write(p []byte) (int, error) {
+	a()
+	return len(p), nil
+}
+
 // OutputWriters returns the writers from WithOutputWriters, or os.Stdout/os.Stderr.
 func OutputWriters(ctx context.Context) (stdout, stderr io.Writer) {
 	if w, ok := ctx.Value(contextKey{}).(writers); ok {

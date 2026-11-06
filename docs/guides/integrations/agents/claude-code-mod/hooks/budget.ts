@@ -35,7 +35,6 @@ function waiterOf(w: Record<string, unknown>): BudgetWaiter {
     slots: int(w.slots),
     memoryMb: int(w.memory_mb),
     owner: str(w.owner),
-    reservation: bool(w.reservation),
     tree: str(w.tree),
     since: time(w.since),
   }
@@ -113,7 +112,7 @@ export function holderText(h: BudgetHolder, now: number): string {
 }
 
 export function waiterText(w: BudgetWaiter, now: number): string {
-  const why = w.reservation ? 'reserving' : w.tree ? `for ${w.tree}'s seat` : ''
+  const why = w.tree ? `for ${w.tree}'s seat` : ''
   return [
     `pid ${w.pid}`,
     what(w.project, w.target),

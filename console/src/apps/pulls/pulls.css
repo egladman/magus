@@ -1,0 +1,50 @@
+.console-pulls-app {
+  margin-block: var(--pf-t--global--spacer--lg);
+  font-size: var(--pf-t--global--font--size--body--default);
+}
+
+.console-pulls-app ul[aria-label="Tracked authors"] {
+  display: flex; flex-wrap: wrap; gap: var(--pf-t--global--spacer--sm);
+  margin: 0; padding: 0; list-style: none;
+}
+
+.console-pulls-app ul[aria-label="Tracked authors"] li {
+  padding-inline: var(--pf-t--global--spacer--sm);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+}
+
+.console-pulls-app [role="alert"] {
+  color: var(--console-status-danger-text);
+}
+
+.console-pulls-app details {
+  padding-block: var(--pf-t--global--spacer--sm);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+}
+
+.console-pulls-app summary {
+  cursor: pointer;
+}
+
+.console-pulls-app [data-field="number"],
+.console-pulls-app [data-field="title"] {
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+}
+
+.console-pulls-app [data-field="meta"] {
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--body--sm);
+}
+
+.console-pulls-app [data-field="blocked"] {
+  color: var(--console-status-warn-text);
+}
+
+.console-pulls-app details > div {
+  padding-inline-start: var(--pf-t--global--spacer--lg);
+}
+
+.console-pulls-app pre {
+  overflow-x: auto;
+}

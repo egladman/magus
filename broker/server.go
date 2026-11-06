@@ -309,13 +309,12 @@ func (s *server) held() int {
 }
 
 // startDrain turns away every new claim and service reference from here on, refuses
-// every parked request, gives back every reserved seat, and returns what is still held.
+// every parked request, and returns what is still held.
 func (s *server) startDrain() int {
 	s.mu.Lock()
 	s.draining = true
 	s.mu.Unlock()
 	s.refuseParked(CodeDraining, "is shutting down and seats nothing new")
-	s.budget.DropReservations()
 	return s.held()
 }
 
@@ -529,24 +528,10 @@ func (s *server) dispatch(ctx context.Context, sess *session, w *frameWriter, f 
 		s.ledger.claimed(s.conns, sess, c, v, time.Now())
 		s.mu.Unlock()
 		_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: v})
-
-	case typeReserve:
-		var req reserveRequest
-		if err := decodeBody(f, &req); err != nil || req.Reader <= 0 {
-			fail(CodeMalformed, "broker: a reservation needs a claim, and the pid of the process it is held for")
-			return
+		if v.Granted {
+			// A new holder is news to every parked request.
+			s.wake()
 		}
-		c := s.attribute(sess, req.Claim)
-		c.PID = req.Reader
-		s.park(&parked{sess: sess, w: w, id: f.ID, kind: "reserve", since: time.Now(), claim: c, try: s.reserveTry(c, req.Reader)})
-
-	case typeAwait:
-		var req awaitRequest
-		if err := decodeBody(f, &req); err != nil {
-			fail(CodeMalformed, "broker: decode await: %v", err)
-			return
-		}
-		s.park(&parked{sess: sess, w: w, id: f.ID, kind: "await", since: time.Now(), try: s.awaitTry(sess, req.Claims)})
 
 	case typeCancel:
 		var req cancelRequest

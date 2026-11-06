@@ -1018,6 +1018,17 @@ github.com/egladman/magus/types.AttrMarkerFamily const untyped string = "family"
 github.com/egladman/magus/types.AttrMarkerVerb const untyped string = "verb"
 github.com/egladman/magus/types.AttrTransport const untyped string = "transport"
 github.com/egladman/magus/types.AuthFailuresThrottled const DiagnosticCode = "MGS9030"
+github.com/egladman/magus/types.BaseBranch type struct
+github.com/egladman/magus/types.BaseBranch.Checks field []ForgeCheck
+github.com/egladman/magus/types.BaseBranch.Commits field []BaseCommit
+github.com/egladman/magus/types.BaseBranch.Name field string
+github.com/egladman/magus/types.BaseBranch.SHA field string
+github.com/egladman/magus/types.BaseBranch.URL field string
+github.com/egladman/magus/types.BaseCommit type struct
+github.com/egladman/magus/types.BaseCommit.At field string
+github.com/egladman/magus/types.BaseCommit.Pull field int
+github.com/egladman/magus/types.BaseCommit.SHA field string
+github.com/egladman/magus/types.BaseCommit.Subject field string
 github.com/egladman/magus/types.BaseDiverged const JobBaseVerdict = "diverged"
 github.com/egladman/magus/types.BaseMatch const JobBaseVerdict = "match"
 github.com/egladman/magus/types.BaseRevisionMatch const JobBaseVerdict = "revision-match"
@@ -2387,6 +2398,31 @@ github.com/egladman/magus/types.FootprintDisjoint const untyped string = "disjoi
 github.com/egladman/magus/types.FootprintDropsOpGlobs const DiagnosticCode = "MGS1036"
 github.com/egladman/magus/types.FootprintShared const untyped string = "shared"
 github.com/egladman/magus/types.FootprintUnknown const untyped string = "unknown"
+github.com/egladman/magus/types.ForgeCheck type struct
+github.com/egladman/magus/types.ForgeCheck.CompletedAt field string
+github.com/egladman/magus/types.ForgeCheck.Description field string
+github.com/egladman/magus/types.ForgeCheck.Kind field string
+github.com/egladman/magus/types.ForgeCheck.Lines field []string
+github.com/egladman/magus/types.ForgeCheck.Name field string
+github.com/egladman/magus/types.ForgeCheck.OutputRef field string
+github.com/egladman/magus/types.ForgeCheck.QueuedAt field string
+github.com/egladman/magus/types.ForgeCheck.StartedAt field string
+github.com/egladman/magus/types.ForgeCheck.State field string
+github.com/egladman/magus/types.ForgeCheck.URL field string
+github.com/egladman/magus/types.ForgePull type struct
+github.com/egladman/magus/types.ForgePull.Author field string
+github.com/egladman/magus/types.ForgePull.BehindBy field int
+github.com/egladman/magus/types.ForgePull.Branch field string
+github.com/egladman/magus/types.ForgePull.Checks field []ForgeCheck
+github.com/egladman/magus/types.ForgePull.Draft field bool
+github.com/egladman/magus/types.ForgePull.Files field []string
+github.com/egladman/magus/types.ForgePull.HeadSHA field string
+github.com/egladman/magus/types.ForgePull.Mergeable field string
+github.com/egladman/magus/types.ForgePull.Number field int
+github.com/egladman/magus/types.ForgePull.PushedAt field string
+github.com/egladman/magus/types.ForgePull.Review field string
+github.com/egladman/magus/types.ForgePull.Title field string
+github.com/egladman/magus/types.ForgePull.URL field string
 github.com/egladman/magus/types.FormatDiagnostic func(c DiagnosticCode, msg string) string
 github.com/egladman/magus/types.FunctionGap type struct
 github.com/egladman/magus/types.FunctionGap.Complexity field int
@@ -2587,6 +2623,7 @@ github.com/egladman/magus/types.HTTPOptions type struct
 github.com/egladman/magus/types.HTTPOptions.Fail field bool
 github.com/egladman/magus/types.HTTPOptions.FailEarly field bool
 github.com/egladman/magus/types.HTTPOptions.FailWithBody field bool
+github.com/egladman/magus/types.HTTPOptions.Revalidate field bool
 github.com/egladman/magus/types.HTTPOptions.TimeoutSeconds field float64
 github.com/egladman/magus/types.HTTPResponse type struct
 github.com/egladman/magus/types.HTTPResponse.Body field string
@@ -3872,6 +3909,10 @@ github.com/egladman/magus/types.Limits.HookTimeoutMs field int64 "json:\"hook_ti
 github.com/egladman/magus/types.Limits.ObservesSkillLoads field bool "json:\"observes_skill_loads,omitempty\""
 github.com/egladman/magus/types.Limits.PayloadFields field []string "json:\"payload_fields,omitempty\""
 github.com/egladman/magus/types.Limits.ResumesOnBackgroundFrom field string "json:\"resumes_on_background_from,omitempty\""
+github.com/egladman/magus/types.ListPullsRequest type struct
+github.com/egladman/magus/types.ListPullsRequest.Authors field []string
+github.com/egladman/magus/types.ListPullsRequest.Base field string
+github.com/egladman/magus/types.ListPullsRequest.Remote field string
 github.com/egladman/magus/types.ListenerHTTP const ListenerKind = "http"
 github.com/egladman/magus/types.ListenerKind type string
 github.com/egladman/magus/types.ListenerSocket const ListenerKind = "socket"
@@ -3956,7 +3997,6 @@ github.com/egladman/magus/types.MachineClaimant.Owner field string "json:\"owner
 github.com/egladman/magus/types.MachineClaimant.PID field int "json:\"pid,omitzero\" yaml:\"pid,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Profile field MemoryProfile "json:\"profile,omitzero\" yaml:\"profile,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Project field string "json:\"project\" yaml:\"project\""
-github.com/egladman/magus/types.MachineClaimant.Reserved field bool "json:\"reserved,omitzero\" yaml:\"reserved,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Since field time.Time "json:\"since,omitempty\" yaml:\"since,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Sizing field MemorySizing "json:\"sizing,omitzero\" yaml:\"sizing,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Slots field int "json:\"slots,omitzero\" yaml:\"slots,omitempty\""
@@ -4659,6 +4699,15 @@ github.com/egladman/magus/types.PublishReviewRequest.ID field string
 github.com/egladman/magus/types.PublishReviewRequest.Repo field string
 github.com/egladman/magus/types.PublishReviewRequest.Summary field string
 github.com/egladman/magus/types.PublishReviewRequest.Verdict field ReviewVerdict
+github.com/egladman/magus/types.PullList type struct
+github.com/egladman/magus/types.PullList.Base field BaseBranch
+github.com/egladman/magus/types.PullList.Pulls field []ForgePull
+github.com/egladman/magus/types.PullList.Rate field RateLimit
+github.com/egladman/magus/types.PullList.Reason field string
+github.com/egladman/magus/types.PullList.Repo field string
+github.com/egladman/magus/types.PullList.Requests field int
+github.com/egladman/magus/types.PullList.Revalidated field int
+github.com/egladman/magus/types.PullList.Viewer field string
 github.com/egladman/magus/types.PushLease type struct
 github.com/egladman/magus/types.PushLease.Expected field string
 github.com/egladman/magus/types.PushLease.Ref field string
@@ -4685,6 +4734,10 @@ github.com/egladman/magus/types.RangeReporter.MissingCommits imethod func(ctx co
 github.com/egladman/magus/types.RangeReporter.RangeCommits imethod func(ctx context.Context, dir string, base string, head string, paths []string) ([]Commit, error)
 github.com/egladman/magus/types.RangeReporter.RangeDiff imethod func(ctx context.Context, dir string, base string, head string, paths []string) (string, error)
 github.com/egladman/magus/types.RangeReporter.RangeFiles imethod func(ctx context.Context, dir string, base string, head string, paths []string) ([]string, error)
+github.com/egladman/magus/types.RateLimit type struct
+github.com/egladman/magus/types.RateLimit.Limit field int
+github.com/egladman/magus/types.RateLimit.Remaining field int
+github.com/egladman/magus/types.RateLimit.Reset field string
 github.com/egladman/magus/types.ReadinessComponent type struct
 github.com/egladman/magus/types.ReadinessComponent.Detail field string "json:\"detail\""
 github.com/egladman/magus/types.ReadinessComponent.Name field ReadinessName "json:\"name\""

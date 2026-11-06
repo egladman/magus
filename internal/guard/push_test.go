@@ -258,7 +258,6 @@ func TestUngatedPushDeniesTheOrchestrator(t *testing.T) {
 	assert.NotContains(t, v.Reason, "Approving")
 
 	_, full := gradePushWithoutGate(pushEvidence{cover: gateAbsent, commit: "abc1234"}, "")
-	assert.Contains(t, full, "status --wait")
 	assert.Contains(t, full, "affected ci")
 
 	failed := judgePush(t, "fail", "")

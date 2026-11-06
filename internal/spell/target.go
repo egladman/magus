@@ -234,6 +234,13 @@ var (
 //go:generate go run ../../cmd/magus-utils types -type ReviewTarget -out gen/types/reviewtarget.buzz
 //go:generate go run ../../cmd/magus-utils types -type ReviewComment -out gen/types/reviewcomment.buzz
 //go:generate go run ../../cmd/magus-utils types -type ProjectQuery -out gen/types/projectquery.buzz
+//go:generate go run ../../cmd/magus-utils types -type ListPullsRequest -out gen/types/listpullsrequest.buzz
+//go:generate go run ../../cmd/magus-utils types -type RateLimit -out gen/types/ratelimit.buzz
+//go:generate go run ../../cmd/magus-utils types -type ForgeCheck -out gen/types/forgecheck.buzz
+//go:generate go run ../../cmd/magus-utils types -type BaseCommit -out gen/types/basecommit.buzz
+//go:generate go run ../../cmd/magus-utils types -type BaseBranch -out gen/types/basebranch.buzz
+//go:generate go run ../../cmd/magus-utils types -type ForgePull -out gen/types/forgepull.buzz
+//go:generate go run ../../cmd/magus-utils types -type PullList -out gen/types/pulllist.buzz
 var (
 	//go:embed gen/types/empty.buzz
 	emptySource string
@@ -275,6 +282,20 @@ var (
 	reviewCommentSource string
 	//go:embed gen/types/projectquery.buzz
 	projectQuerySource string
+	//go:embed gen/types/listpullsrequest.buzz
+	listPullsRequestSource string
+	//go:embed gen/types/ratelimit.buzz
+	rateLimitSource string
+	//go:embed gen/types/forgecheck.buzz
+	forgeCheckSource string
+	//go:embed gen/types/basecommit.buzz
+	baseCommitSource string
+	//go:embed gen/types/basebranch.buzz
+	baseBranchSource string
+	//go:embed gen/types/forgepull.buzz
+	forgePullSource string
+	//go:embed gen/types/pulllist.buzz
+	pullListSource string
 )
 
 // The harness contract's records (types/harness_contract.go): what a harness spell's mgs_
@@ -385,6 +406,7 @@ var SpellModuleSource = strings.Join([]string{pathSource, targetModuleSource, pa
 	artifactRequestSource, pruneRequestSource, pruneResultSource, lifecycleQuerySource,
 	findReviewRequestSource, reviewDraftSource, publishReviewRequestSource, replyReviewRequestSource, reviewRefSource,
 	reviewTargetSource, reviewCommentSource, projectQuerySource,
+	listPullsRequestSource, rateLimitSource, forgeCheckSource, baseCommitSource, baseBranchSource, forgePullSource, pullListSource,
 	harnessConfigSource, harnessAssetSource, harnessSource, harnessSkillsSource, hookCommandSource, hookBindingSource, managedEntriesSource, mcpServerSource,
 	priceSource, priceStepSource, modelRowSource, harnessToolSource, harnessToolsSource,
 	agentFileSource, promptSource, settingSource, limitsSource, shippedAgentSource}, "\n")

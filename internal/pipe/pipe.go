@@ -14,8 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofrs/flock"
-
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/log/attr"
@@ -78,7 +76,7 @@ func StdioFromContext(ctx context.Context) (Stdio, bool) {
 // too, and SettlePipeline reports them.
 //
 // When a record stage writes Stdin directly, it then starts reading its records (see
-// ReadRecords), after the walk: reading them puts a relay in Stdin's place, which no
+// readRecords), after the walk: reading them puts a relay in Stdin's place, which no
 // walk can follow back. When another magus stage writes Stdin directly, it keeps a
 // second descriptor on the pipe instead. Either is what the writer waits to see before
 // it exits (see AwaitReaderProof).
@@ -99,7 +97,7 @@ func (s *Stdio) ProveUpstream(ctx context.Context) {
 		}
 		recordsFrom := 0
 		if writesRecords != nil {
-			recordsFrom, _ = RecordUpstream(ctx, stdin, writesRecords)
+			recordsFrom, _ = recordUpstream(ctx, stdin, writesRecords)
 		}
 		// A cycle is refused by the walk a run repeats at its locks.
 		ups, _ := walkUpstream(ctx, in, takesLocks)
@@ -110,7 +108,7 @@ func (s *Stdio) ProveUpstream(ctx context.Context) {
 			}
 			return
 		}
-		r, err := ReadRecords(stdin)
+		r, err := readRecords(stdin)
 		if err != nil {
 			slog.WarnContext(ctx, fmt.Sprintf("pid %d upstream writes records this process cannot read", recordsFrom),
 				attr.Notice(""), attr.Component("magus"), attr.Error(err))
@@ -244,36 +242,6 @@ func RecordExit(root string, cfg config.Config, status int, signal string) {
 	})
 }
 
-// gate is Gate's flock. Referenced for the life of the process so no finalizer closes
-// it, which would lift the gate early.
-var gate *flock.Flock
-
-// Gate holds the magus stage reading this process's stdout from starting anything
-// until this process exits: it takes no lock, and it refuses with MGS3030 if this process
-// exits non-zero. It does nothing unless stdout is a pipe. Call it at process start: a
-// stage that has already passed its locks does not look again.
-//
-// There is no release. The reader must see this process's exit record before it starts,
-// and that is written after the command returns.
-func Gate(root string, cfg config.Config) {
-	if gate != nil || !IsPipe(os.Stdout) {
-		return
-	}
-	dir := Dir(config.CacheDir(root, cfg), root)
-	if os.MkdirAll(dir, 0o755) != nil {
-		return
-	}
-	fl := flock.New(GatePath(dir, os.Getpid()))
-	if got, err := fl.TryLock(); err == nil && got {
-		gate = fl
-	}
-}
-
-// GatePath is where Gate leaves the flock of process procID in the pipe dir dir.
-func GatePath(dir string, procID int) string {
-	return filepath.Join(dir, strconv.Itoa(procID)+gateSuffix)
-}
-
 // ReadByMagus reports whether out is a pipe that the kernel proves another process
 // running this same executable reads: the next magus stage of a shell pipe, which takes
 // this process's records rather than its prose. A reader that is one of this process's
@@ -284,14 +252,14 @@ func GatePath(dir string, procID int) string {
 // execWait, since the shell forks every stage of a pipeline at once and a stage may
 // run other commands before it execs.
 func ReadByMagus(ctx context.Context, out *os.File) bool {
-	_, _, ok := ReaderArgv(ctx, out)
+	_, _, ok := readerArgv(ctx, out)
 	return ok
 }
 
-// ReaderArgv is ReadByMagus that also returns the reader's pid and argv, argv[0] first:
+// readerArgv is ReadByMagus that also returns the reader's pid and argv, argv[0] first:
 // which process is the next stage of the pipe and what it was asked to do. argv is nil
 // when a magus reads out but its argv cannot be read.
-func ReaderArgv(ctx context.Context, out *os.File) (pid int, argv []string, ok bool) {
+func readerArgv(ctx context.Context, out *os.File) (pid int, argv []string, ok bool) {
 	if out == nil {
 		return 0, nil, false
 	}
@@ -343,11 +311,11 @@ func AwaitReaderProof(out *os.File, proves func(argv []string) bool, limit time.
 	}
 }
 
-// RecordUpstream returns the pid of a magus stage writing in directly, proven from the
+// recordUpstream returns the pid of a magus stage writing in directly, proven from the
 // kernel as ReadByMagus proves a reader, whose argv writes answers true for: a stage
 // whose stdout carries records. A shell child still between fork and exec is waited
 // for, up to execWait. ok is false when no such stage writes in.
-func RecordUpstream(ctx context.Context, in *os.File, writes func(argv []string) bool) (pid int, ok bool) {
+func recordUpstream(ctx context.Context, in *os.File, writes func(argv []string) bool) (pid int, ok bool) {
 	if in == nil {
 		return 0, false
 	}
@@ -368,12 +336,12 @@ func RecordUpstream(ctx context.Context, in *os.File, writes func(argv []string)
 	return found, ok
 }
 
-// ReadRecords starts reading stdin, which a record stage writes (see RecordUpstream), as
+// readRecords starts reading stdin, which a record stage writes (see recordUpstream), as
 // records. A line that is not a record is what the upstream's targets wrote to their
 // stdout; it keeps reaching whatever in this process reads stdin, through a pipe put in
 // stdin's place, so a target downstream reads its upstream's bytes as it always has.
 // Those bytes are held in memory until read, so the upstream never blocks on them.
-func ReadRecords(stdin *os.File) (*report.Reader, error) {
+func readRecords(stdin *os.File) (*report.Reader, error) {
 	src, _, err := dupForDrain(stdin)
 	if err != nil {
 		return nil, fmt.Errorf("read the records on stdin: %w", err)
@@ -528,7 +496,6 @@ func sitsBlocked(seen map[int]blockedFork, pid int) bool {
 const (
 	// DirName is the pipe dir inside a workspace's locks dir.
 	DirName    = ".pipe"
-	gateSuffix = ".gate"
 	exitSuffix = ".exit"
 	// sweepName's mtime is the last scan, shared across processes that each
 	// exit before a timer could fire.
@@ -547,7 +514,7 @@ const (
 )
 
 // Dir is the pipe dir of the workspace at root whose cache dir is cacheDir: where its
-// runs leave their gates, exit records and the records a downstream stage reads.
+// runs leave their exit records and the records a downstream stage reads.
 func Dir(cacheDir, root string) string {
 	return filepath.Join(workspace.LocksDir(cacheDir, root), DirName)
 }
