@@ -402,7 +402,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// store every worktree of this repo shares (`magus session` reads it back).
 	captureHandlers = withInvocationJournal(ctx, captureHandlers, m.Root(), "run", args)
 	refs := &resultRefs{}
-	captureHandlers = append(captureHandlers, refs)
+	statuses := newResultStatuses(targetName)
+	captureHandlers = append(captureHandlers, refs, statuses)
 	invCtx, endInvocation := m.BeginInvocation(ctx, magus.Command{
 		Arguments: append([]string{"run"}, args...), Cwd: cwd, Trigger: trigger,
 	}, version, captureHandlers...)
@@ -455,7 +456,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:
 		// No undeclared seeds: `magus run` names its own selection, so no changed file seeded it.
-		return emitRunResult(ctx, m, opts, targetName, charms, targets, readReturns(targetName), nil)
+		return emitRunResult(ctx, m, opts, targetName, charms, targets, readReturns(targetName), statuses, nil)
 	case outputName:
 		return emitProjectNames(m, targets)
 	}
@@ -491,6 +492,47 @@ func (c *resultRefs) list() []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return slices.Clone(c.refs)
+}
+
+// resultStatuses collects the journal status of the asked target's result,
+// by project. A dependency's result is left out.
+type resultStatuses struct {
+	target string
+	mu     sync.Mutex
+	status map[string]string
+}
+
+func newResultStatuses(target string) *resultStatuses {
+	return &resultStatuses{target: target, status: map[string]string{}}
+}
+
+func (c *resultStatuses) Enabled(context.Context, slog.Level) bool { return true }
+
+func (c *resultStatuses) Handle(_ context.Context, r slog.Record) error {
+	e, ok := journal.EventFromRecord(r)
+	if !ok || e.Kind != journal.KindResult || e.Status == "" {
+		return nil
+	}
+	// The journal names a charmed step "target:charm,...".
+	if name, _, _ := strings.Cut(e.Target, ":"); name != c.target {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.status[e.Project] = e.Status
+	return nil
+}
+
+func (c *resultStatuses) WithAttrs([]slog.Attr) slog.Handler { return c }
+func (c *resultStatuses) WithGroup(string) slog.Handler      { return c }
+
+func (c *resultStatuses) of(project string) string {
+	if c == nil {
+		return ""
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.status[project]
 }
 
 // refLine is the one line a successful `-s` run prints: every other line of a pass is
@@ -1075,6 +1117,9 @@ type runArtifact struct {
 // run.
 type runProject struct {
 	Path string `json:"path" yaml:"path"`
+	// Status is the journal's result: pass, cached or permitted.
+	// Permitted passed only by a deviation ledger. A dry run has none.
+	Status string `json:"status,omitempty" yaml:"status,omitempty"`
 	// Value is what the target returned (str or [str]), absent for a `> void`
 	// target. Replayed from the cache entry on a hit, so it is present whether or
 	// not this invocation actually executed the target.
@@ -1107,7 +1152,7 @@ type runOutput struct {
 // produced it. It DOES report the return value, because a dry run evaluates the
 // target body under a tracing context: the value is real, and omitting it made
 // `-o json` claim "no return value" for a target that had just produced one.
-func emitRunResult(ctx context.Context, m *magus.Magus, opts output.Options, target string, charms []string, selection []types.Target, returns types.Returns, undeclaredSeeds []string) error {
+func emitRunResult(ctx context.Context, m *magus.Magus, opts output.Options, target string, charms []string, selection []types.Target, returns types.Returns, statuses *resultStatuses, undeclaredSeeds []string) error {
 	out := runOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun, Permitted: m.CacheStats().Permitted, UndeclaredSeeds: undeclaredSeeds}
 	projects := m.ResolveProjects(selection)
 	out.Count = len(projects)
@@ -1147,6 +1192,7 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts output.Options, tar
 	for _, p := range projects {
 		out.Projects = append(out.Projects, runProject{
 			Path:      p.Path,
+			Status:    statuses.of(p.Path),
 			Artifacts: byProject[p.Path],
 			Value:     returns[p.Path],
 		})

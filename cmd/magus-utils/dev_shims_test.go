@@ -32,7 +32,7 @@ func (s *DevShimsSuite) TestRefusedWhileMarkersRemain() {
 		"clean.go":   mapFile("package clean"),
 		"binary.bin": mapFile("\x00", devShim("// ")),
 	}
-	err := checkDevShims(fsys, []string{"a.go", "hack/b.sh", "clean.go", "binary.bin", "deleted.go"})
+	_, err := checkDevShims(fsys, []string{"a.go", "hack/b.sh", "clean.go", "binary.bin", "deleted.go"})
 	s.Require().Error(err)
 	s.Contains(err.Error(), "2 development-only shim(s) remain")
 	s.Contains(err.Error(), "a.go:3")
@@ -43,7 +43,8 @@ func (s *DevShimsSuite) TestRefusedWhileMarkersRemain() {
 
 func (s *DevShimsSuite) TestAllowedWithNone() {
 	fsys := fstest.MapFS{"a.go": mapFile("package a")}
-	s.NoError(checkDevShims(fsys, []string{"a.go"}))
+	_, err := checkDevShims(fsys, []string{"a.go"})
+	s.NoError(err)
 }
 
 func (s *DevShimsSuite) TestOtherConditionsAreIgnored() {
@@ -52,5 +53,34 @@ func (s *DevShimsSuite) TestOtherConditionsAreIgnored() {
 		"// "+marker.Compat+"no store holds v1 rows): the old reader",
 		`const doc = "`+marker.Compat+marker.NextRelease+`)"`,
 	)}
-	s.NoError(checkDevShims(fsys, []string{"a.go"}))
+	_, err := checkDevShims(fsys, []string{"a.go"})
+	s.NoError(err)
+}
+
+// A near miss means the dev-only shim, so shipping it unnoticed is the
+// failure the gate exists to stop.
+func (s *DevShimsSuite) TestRefusedOnANearMiss() {
+	fsys := fstest.MapFS{"a.go": mapFile(
+		"package a",
+		"// "+marker.Compat+"The next release.): the old reader",
+	)}
+	_, err := checkDevShims(fsys, []string{"a.go"})
+	s.Require().Error(err)
+	s.Contains(err.Error(), "1 compat marker(s) nearly read")
+	s.Contains(err.Error(), "a.go:2")
+}
+
+// A tracked directory, such as a submodule, is reported rather than read.
+func (s *DevShimsSuite) TestADirectoryEntryIsSkippedAndNamed() {
+	fsys := fstest.MapFS{
+		"a.go":         mapFile("package a"),
+		"vendor/sub/x": mapFile("x"),
+	}
+	dirs, err := checkDevShims(fsys, []string{"a.go", "vendor/sub"})
+	s.Require().NoError(err)
+	s.Equal([]string{"vendor/sub"}, dirs)
+}
+
+func (s *DevShimsSuite) TestRootTakesNoPositionalArgument() {
+	s.ErrorContains(runDevShims([]string{"extra"}), "takes no arguments")
 }

@@ -225,6 +225,15 @@ func (s *MergeOfBuildSuite) TestAnyOtherChangeIsStillRefused() {
 	s.NotEmpty(s.judge(s.decls, "touch notes.txt"))
 }
 
+func (s *MergeOfBuildSuite) TestAGitOutsidePathIsRefused() {
+	s.NotEmpty(s.judge(s.decls, "./git add internal/spell/gen/decls/branch.buzz"))
+	s.NotEmpty(s.judge(s.decls, `/tmp/x/git commit -m "merge main"`))
+}
+
+func (s *MergeOfBuildSuite) TestAMagusOutsideThisCheckoutIsRefused() {
+	s.NotEmpty(s.judge(s.decls, "/tmp/x/magus vcs resolve"))
+}
+
 func (s *MergeOfBuildSuite) TestTheCommitIsRefusedWhenTheBuildIsNeitherSide() {
 	s.NotEmpty(s.judge(s.base, `git commit -m "merge main"`))
 }

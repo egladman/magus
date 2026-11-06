@@ -43,7 +43,7 @@ import (
 func vcsCommand(ctx context.Context, root string, rc runConfig, args []string) error {
 	if len(args) == 0 {
 		vcsUsage(os.Stderr)
-		return exit.Usagef("magus vcs: a subcommand is required (try: ls-files, resolve, checkpoint)")
+		return exit.Usagef("magus vcs: a subcommand is required (try: ls-files, resolve, checkpoint, checkout)")
 	}
 	verb, rest := splitVCSVerb(args)
 	switch verb {
@@ -53,13 +53,15 @@ func vcsCommand(ctx context.Context, root string, rc runConfig, args []string) e
 		return vcsResolveCommand(ctx, root, rc, rest)
 	case "checkpoint":
 		return vcsCheckpointCommand(ctx, root, rest)
+	case "checkout":
+		return vcsCheckoutCommand(ctx, root, rest)
 	case "merge-driver":
 		return mergeDriverCommand(ctx, root, rest)
 	case "-h", "--help", "help":
 		vcsUsage(os.Stderr)
 		return nil
 	default:
-		return exit.Usagef("magus vcs: unknown subcommand %q (want ls-files, resolve, checkpoint, or merge-driver)", verb)
+		return exit.Usagef("magus vcs: unknown subcommand %q (want ls-files, resolve, checkpoint, checkout, or merge-driver)", verb)
 	}
 }
 
@@ -84,6 +86,7 @@ func vcsUsage(w io.Writer) {
 	fmt.Fprintln(w, "  ls-files       list the dirty paths a commit of this change wants; stages nothing")
 	fmt.Fprintln(w, "  resolve        settle an in-progress merge/rebase's conflicted generated files, then regenerate once")
 	fmt.Fprintln(w, "  checkpoint     print the identity of the working state right now; writes nothing")
+	fmt.Fprintln(w, "  checkout       check out one revision in an isolated checkout for review")
 	fmt.Fprintln(w, "  merge-driver   the per-file merge driver git and hg invoke; you do not run this by hand")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Run `magus vcs <subcommand> -h` for its own flags.")

@@ -1758,11 +1758,24 @@ until you remove them. List them with sl log --hidden -r "desc('magus preserved
 working copy')". Jujutsu mints nothing, so nothing accumulates.
 
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
-base in yourself on the others, then run resolve.`,
+base in yourself on the others, then run resolve.
+
+checkout makes an isolated checkout of one revision under
+$XDG_CACHE_HOME/magus/tmp/checkout-<short revision>, for reviewing a change
+such as a pull request's head: a git linked worktree with a detached head, an
+hg share, or a jj workspace. Sapling has no second working copy over one store
+and refuses by name. --fetch <ref> first fetches that ref from the default
+remote (git: origin); fetching and checking out run none of the change's code.
+Then it readies the checkout with what this workspace declares: each project's
+install target, run in the checkout, then magus agent harness install there,
+then the checkout.bootstrap hook from magus.yaml, run from this workspace. With
+no hook declared it says so. --no-bootstrap skips all three and says so. It
+prints the path, what ran, and the command that removes it: checkout --remove
+<dir>, which removes only a checkout under that directory.`,
 	// No parent Flags: `magus vcs` takes none of its own, and a flag declared on the
 	// parent lands in one merged Options section on the man page and in every child's
 	// generated binder.
-	Usage: "magus vcs <ls-files|resolve|checkpoint|merge-driver> [flags]",
+	Usage: "magus vcs <ls-files|resolve|checkpoint|checkout|merge-driver> [flags]",
 	Children: []cmdline.Command{
 		{
 			Name:  "ls-files",
@@ -1793,6 +1806,16 @@ base in yourself on the others, then run resolve.`,
 				{Name: "preserve", Kind: cmdline.Bool, Default: false, Doc: "Also capture the uncommitted work and print a handle that restores it"},
 			},
 		},
+		{
+			Name:  "checkout",
+			Short: "Check out one revision in an isolated checkout for review, readied by the workspace's declared install",
+			Usage: "magus vcs checkout <rev> [--fetch <ref>] [--no-bootstrap] | --remove <dir>",
+			Flags: []cmdline.Flag{
+				{Name: "fetch", Kind: cmdline.String, Doc: "Fetch this `ref` from the default remote first, such as refs/pull/<n>/head"},
+				{Name: "bootstrap", Kind: cmdline.Bool, Default: true, Doc: "Run the install targets, the harness install and the checkout.bootstrap hook; --no-bootstrap skips all three"},
+				{Name: "remove", Kind: cmdline.String, Doc: "Remove the checkout at this `dir`, one this command made, instead"},
+			},
+		},
 		{Name: "merge-driver", UnstructuredOutput: true, Short: "The per-file merge driver git and hg invoke; you do not run this by hand"}, // git reads only the exit status
 	},
 	Examples: []cmdline.Example{
@@ -1804,6 +1827,8 @@ base in yourself on the others, then run resolve.`,
 		{Comment: "Record what a lease was handed", Command: "magus vcs checkpoint"},
 		{Comment: "The one citable token, for a ledger cell", Command: "magus vcs checkpoint -o name"},
 		{Comment: "Capture the uncommitted work too, before something risky", Command: "magus vcs checkpoint --preserve"},
+		{Comment: "Check out a pull request's head to review it", Command: "magus vcs checkout 1a2b3c4 --fetch refs/pull/42/head"},
+		{Comment: "Remove that checkout again", Command: "magus vcs checkout --remove ~/.cache/magus/tmp/checkout-1a2b3c4"},
 	},
 }
 
