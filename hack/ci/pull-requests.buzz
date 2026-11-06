@@ -52,6 +52,7 @@ import "time";
 import "vcs";
 import "hack/magusfile/commits" as commits;
 import "hack/dev/rebase-branches-onto-base" as rebaseonto;
+import "hack/magusfile/regressions" as regressions;
 import "../../.github/actions/advice/figure-link" as figurelink;
 
 import "assert";
@@ -99,6 +100,8 @@ object Check {
     job: str = "",
     // runUrl is the workflow run's page, "" for a status.
     runUrl: str = "",
+    // When the check's run started, RFC 3339; "" for a status.
+    startedAt: str = "",
 }
 
 // Baseline is main's latest completed CI run: what failed there, by check name and by Go
@@ -119,6 +122,10 @@ object Verdict {
     // The failing checks and tests main's run does not have.
     newChecks: [str] = [<str>],
     newTests: [str] = [<str>],
+    // For a red-inherited pull request: who broke each inherited check on
+    // main, and the open pull requests that fix any of them.
+    introducedBy: [str] = [<str>],
+    fixedBy: [int] = [<int>],
 }
 
 object Kick {
@@ -187,6 +194,8 @@ object Facts {
     failingTests: [str] = [<str>],
     // The squash-merged pull request whose head a conflicting one still carries.
     squashed: rebaseonto\Squashed? = null,
+    // The checks red on main and who broke them; empty when not read.
+    regressions: [regressions\Regression] = [<regressions\Regression>],
 }
 
 object Evidence {
@@ -299,7 +308,8 @@ export fun parseChecks(rollup: [serialize\Boxed]) > [Check] {
                 runUrl = url.sub(0, len: jobAt!);
             }
             check = Check{ name = c.q("name").stringValue(), conclusion = conclusion,
-                run = idAfter(url, marker: "/runs/"), job = idAfter(url, marker: "/job/"), runUrl = runUrl };
+                run = idAfter(url, marker: "/runs/"), job = idAfter(url, marker: "/job/"), runUrl = runUrl,
+                startedAt = c.q("startedAt").stringValue() };
         }
         final seen = latest[key];
         if (seen == null) {
@@ -540,29 +550,16 @@ export fun completedRed(p: Pull) > bool {
     return p.checks.len() > 0 and names(p.checks, conclusion: "PENDING").len() == 0 and failing(p.checks).len() > 0;
 }
 
-final SHARD_PREFIX = "magus shard ";
-
-// checkKey is the name a check is matched with main's by. A shard's number depends on how
-// many shards the run's affected set split into, so `magus shard 0: docs` on a pull request
-// is `magus shard 2: docs` on main; the project after the colon is what names it.
-export fun checkKey(name: str) > str {
-    final colon = name.indexOf(": ");
-    if (!name.startsWith(SHARD_PREFIX) or colon == null) {
-        return name;
-    }
-    return SHARD_PREFIX + name.sub(colon!);
-}
-
 // newFailures names the failing checks on p's head that main's run does not fail. Only a
 // FAILURE can be main's: a cancelled or timed-out run never judged the change.
 fun newFailures(p: Pull, baseline: Baseline) > [str] {
     final mains = mut [<str>];
     foreach (name in baseline.failingChecks) {
-        mains.append(checkKey(name));
+        mains.append(regressions\checkKey(name));
     }
     final acc = mut [<str>];
     foreach (c in failing(p.checks)) {
-        if ((c.conclusion != "FAILURE" or mains.indexOf(checkKey(c.name)) == null) and acc.indexOf(c.name) == null) {
+        if ((c.conclusion != "FAILURE" or mains.indexOf(regressions\checkKey(c.name)) == null) and acc.indexOf(c.name) == null) {
             acc.append(c.name);
         }
     }
@@ -608,8 +605,83 @@ export fun judge(p: Pull, facts: Facts) > Verdict {
     if (newChecks.len() == 0 and newTests.len() == 0) {
         state = "red-inherited";
     }
+    final introducedBy = mut [<str>];
+    final fixedBy = mut [<int>];
+    if (state == "red-inherited") {
+        foreach (r in facts.regressions) {
+            if (!failsKey(bad, key: r.attribution.key)) {
+                continue;
+            }
+            introducedBy.append(regressions\describe(r));
+            foreach (n in r.fixers) {
+                if (fixedBy.indexOf(n) == null) {
+                    fixedBy.append(n);
+                }
+            }
+        }
+    }
     return Verdict{ state = state, mainRun = baseline.url, headRuns = runs, failingTests = facts.failingTests,
-        newChecks = newChecks, newTests = newTests };
+        newChecks = newChecks, newTests = newTests, introducedBy = introducedBy, fixedBy = fixedBy };
+}
+
+fun failsKey(bad: [Check], key: str) > bool {
+    foreach (c in bad) {
+        if (c.conclusion == "FAILURE" and regressions\checkKey(c.name) == key) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// probes reduces open pull requests to what the fixer test reads.
+fun probes(open: [Pull]) > [regressions\Probe] {
+    final acc = mut [<regressions\Probe>];
+    foreach (p in open) {
+        final checks = mut [<regressions\CheckRun>];
+        foreach (c in p.checks) {
+            checks.append(regressions\CheckRun{ key = regressions\checkKey(c.name), passed = c.conclusion == "SUCCESS", startedAt = c.startedAt });
+        }
+        acc.append(regressions\Probe{ pr = p.number, checks = checks });
+    }
+    return acc;
+}
+
+// readRegressions attributes each check red on main's newest run. It reads
+// jobs newest first and stops once every red check has a passing run. An
+// empty list means main is not red; a read that fails is an error.
+fun readRegressions(base: str, open: [Pull]) > result\Result::<[regressions\Regression]> {
+    try {
+        final listed = capture("gh", args: ["run", "list", "--branch", base, "--event", "push", "--workflow", CI_WORKFLOW,
+            "--status", "completed", "--limit", "20", "--json", "databaseId,headSha,status"]);
+        final runs = regressions\parseMainRuns(listed);
+        var red = [<str>];
+        var i = 0;
+        while (i < runs.len()) {
+            final jobs = capture("gh", args: ["run", "view", runs[i].id, "--json", "jobs"]);
+            runs[i] = regressions\Run{ id = runs[i].id, sha = runs[i].sha, keys = regressions\parseJobs(jobs, keyOf: regressions\checkKey) };
+            if (i == 0) {
+                red = regressions\redKeys(runs[0]);
+            }
+            if (!regressions\unsettled(runs, upto: i, red: red)) {
+                break;
+            }
+            i = i + 1;
+        }
+        final merged = regressions\parseMerged(capture("gh", args: ["pr", "list", "--state", "merged", "--base", base,
+            "--limit", "100", "--json", "number,mergeCommit,mergedAt"]));
+        return result\ok::<[regressions\Regression]>(regressions\attributeAll(runs, red: red, merged: merged, probes: probes(open)));
+    } catch (err: any) {
+        return result\caught::<[regressions\Regression]>(err, doing: "pull-requests: attribute main's red checks");
+    }
+}
+
+// mainRegressions turns a failed read into the throw its callers need.
+fun mainRegressions(base: str, open: [Pull]) > [regressions\Regression] !> any {
+    final read = readRegressions(base, open: open);
+    if (read.error -> err) {
+        throw err.message;
+    }
+    return read.value!;
 }
 
 // What the waiting step posts on QUEUE_STATUS. WAITING_PREFIXES tell its
@@ -1340,6 +1412,8 @@ export fun render(r: Record) > str {
     if (r.verdict != null) {
         final v = r.verdict!;
         if (v.mainRun != "") { e["main_run"] = v.mainRun; }
+        if (v.introducedBy.len() > 0) { e["introduced_by"] = v.introducedBy; }
+        if (v.fixedBy.len() > 0) { e["fixed_by"] = v.fixedBy; }
         if (v.headRuns.len() > 0) { e["head_runs"] = v.headRuns; }
         // A broken package fails dozens of tests at once; a few name it, the count sizes it.
         if (v.failingTests.len() > 0) {
@@ -1674,6 +1748,8 @@ fun records(sel: Selector) > [Record] !> any {
     final squashed = findSquashed(conflicting);
     // main's run is read once, and only when a finished red needs comparing with it.
     var baseline: Baseline? = null;
+    var attributed = [<regressions\Regression>];
+    var attributedRead = false;
     final acc = mut[<Record>];
     foreach (p in chosen) {
         final stage = mergeStage(p, open: open);
@@ -1684,21 +1760,27 @@ fun records(sel: Selector) > [Record] !> any {
             }
             if (inheritedChecks(p, baseline: baseline!)) {
                 tests = fetchFailingTests(p);
+                if (!attributedRead) {
+                    attributed = mainRegressions(sel.base, open: open);
+                    attributedRead = true;
+                }
             }
         }
         var facts = Facts{ conflicts = conflicts[p.number] ?? [<Conflict>], baseline = baseline, failingTests = tests,
-            squashed = squashed[p.number] };
+            squashed = squashed[p.number], regressions = attributed };
         final verdict = judge(p, facts: facts);
         if (verdict.state == "red" and MERGE_READY_STAGES.indexOf(stage) != null) {
-            facts = Facts{ annotations = fetchAnnotations(p), failedSteps = fetchFailedSteps(p), baseline = baseline, failingTests = tests };
+            facts = Facts{ annotations = fetchAnnotations(p), failedSteps = fetchFailedSteps(p), baseline = baseline, failingTests = tests,
+                regressions = attributed };
         } else if (stage == "kicked-back" and p.kick != null) {
-            facts = Facts{ generated = rebaseonto\findGenerated(p.kick!.paths), baseline = baseline, failingTests = tests };
+            facts = Facts{ generated = rebaseonto\findGenerated(p.kick!.paths), baseline = baseline, failingTests = tests,
+                regressions = attributed };
         }
         var r = classify(p, open: open, facts: facts);
         // Attempts matter only to a rerun, so only a rerun pays for them.
         if (r.action == "rerun") {
             r = classify(p, open: open, facts: Facts{ annotations = facts.annotations, failedSteps = facts.failedSteps,
-                attempts = countAttempts(r.evidence.rerun), baseline = baseline, failingTests = tests });
+                attempts = countAttempts(r.evidence.rerun), baseline = baseline, failingTests = tests, regressions = attributed });
         }
         acc.append(r);
     }
@@ -1902,6 +1984,8 @@ object Board {
     waits: {int: Wait} = {<int: Wait>},
     flights: {int: Flight} = {<int: Flight>},
     mainRun: MainRun? = null,
+    // The checks red on main, read only while its newest run is red.
+    regressions: [regressions\Regression] = [<regressions\Regression>],
 }
 
 // Placed is a pull request the page shows, with its record and section.
@@ -2800,6 +2884,14 @@ export fun renderDashboard(b: Board) > str !> any {
         lines.append(status.join(" · "));
         lines.append("");
     }
+    if (b.regressions.len() > 0) {
+        final said = mut [<str>];
+        foreach (r in b.regressions) {
+            said.append(regressions\line(r));
+        }
+        lines.append("{mono(b.base)} " + said.join(" · "));
+        lines.append("");
+    }
     if (hint != "") {
         lines.append(hint);
         lines.append("");
@@ -2932,6 +3024,10 @@ fun fetchBoard(sel: Selector) > Board !> any {
     final ci = parseMainRun(capture("gh", args: ["run", "list", "--branch", sel.base, "--event", "push", "--workflow", CI_WORKFLOW,
         "--limit", "20", "--json", "status,conclusion,url"]));
     requests = requests + 3;
+    var attributed = [<regressions\Regression>];
+    if (ci != null and ci!.state == "red") {
+        attributed = mainRegressions(sel.base, open: open);
+    }
     final ids = mut [<int>];
     foreach (q in queue) {
         ids.append(q.id);
@@ -2960,7 +3056,7 @@ fun fetchBoard(sel: Selector) > Board !> any {
         + "{runs.len()} running validations from api.github.com in {requests} requests plus magus queue ls ({queue.len()} queued), "
         + "{std\toInt(os\time() - began)}ms");
     return Board{ base = sel.base, at = time\nowIso(), tip = tip, runUrl = sel.runUrl, console = sel.console, open = open, pulls = pulls,
-        queue = queue, merged = merged, waits = waits, flights = flights, mainRun = ci };
+        queue = queue, merged = merged, waits = waits, flights = flights, mainRun = ci, regressions = attributed };
 }
 
 // dashboard renders the board and writes it to --out and the --issue body.
@@ -3573,7 +3669,7 @@ test "the checks on the head decide running, green, red-inherited and red" {
 
     _ = expect([failed("magus shard 1: ."), failed("ci gate")],
         facts: Facts{ baseline = MAIN, failingTests = ["TestAcquireDefersToAPredecessorThatHolds"] }, want: "red-inherited");
-    assert\equal([checkKey("magus shard 0: docs"), checkKey("magus shard 2: docs"), checkKey("ci gate")],
+    assert\equal([regressions\checkKey("magus shard 0: docs"), regressions\checkKey("magus shard 2: docs"), regressions\checkKey("ci gate")],
         want: ["magus shard : docs", "magus shard : docs", "ci gate"], message: "a shard is matched by its project");
     final cancelled = expect([Check{ name = "magus shard 0: .", conclusion = "CANCELLED", run = "11" }], facts: Facts{ baseline = MAIN }, want: "red");
     assert\equal(cancelled.newChecks, want: ["magus shard 0: ."], message: "a run that never judged the change is not main's failure");
@@ -4197,4 +4293,25 @@ test "waiting takes --pr and --base, and needs a --pr" {
         }
         assert\equal(refused, want: true, message: argv.join(" "));
     }
+}
+
+test "an inherited red names who broke the check on main and who fixes it" {
+    final broke = regressions\Regression{ attribution = regressions\Attribution{ key = "ci gate", state = "introduced",
+        shas = ["c2"], prs = [640], mergedAt = "2026-11-06T10:00:00Z" }, fixers = [655] };
+    final p = Pull{ number = 1, checks = [failed("ci gate")] };
+    final v = judge(p, facts: Facts{ baseline = MAIN, regressions = [broke] });
+    assert\equal(v.state, want: "red-inherited", message: "state");
+    assert\equal(v.introducedBy, want: ["#640 (ci gate)"], message: "introducer");
+    assert\equal(v.fixedBy, want: [655], message: "fixer");
+    final other = judge(Pull{ number = 2, checks = [failed("magus shard 0: .")] }, facts: Facts{ baseline = MAIN, regressions = [broke] });
+    assert\equal(other.introducedBy.len(), want: 0, message: "a regression of another check is not this pull request's");
+}
+
+test "the dashboard says who broke main and which pull request to merge first" {
+    final broke = regressions\Regression{ attribution = regressions\Attribution{ key = "ci gate", state = "introduced",
+        shas = ["c2"], prs = [640], mergedAt = "2026-11-06T10:00:00Z" }, fixers = [655] };
+    final page = renderDashboard(Board{ base = "main", at = AT, open = [<Pull>], pulls = [<Pull>], mainRun = MainRun{ state = "red" },
+        regressions = [broke] });
+    has(page, want: "red since #640 (ci gate); merge #655 first");
+    lacks(renderDashboard(Board{ base = "main", at = AT, open = [<Pull>], pulls = [<Pull>], mainRun = MainRun{ state = "red" } }), want: "red since");
 }
