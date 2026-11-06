@@ -11,7 +11,7 @@ Listing and conflict resolution that knows what is generated
 
 ## Synopsis
 
-**magus** vcs \<ls-files|resolve|checkpoint|merge-driver\> [flags]
+**magus** vcs \<ls-files|resolve|checkpoint|checkout|merge-driver\> [flags]
 
 ## Description
 
@@ -94,6 +94,19 @@ working copy')". Jujutsu mints nothing, so nothing accumulates.
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
 base in yourself on the others, then run resolve.
 
+checkout makes an isolated checkout of one revision under
+$XDG_CACHE_HOME/magus/tmp/checkout-\<short revision\>, for reviewing a change
+such as a pull request's head: a git linked worktree with a detached head, an
+hg share, or a jj workspace. Sapling has no second working copy over one store
+and refuses by name. --fetch \<ref\> first fetches that ref from the default
+remote (git: origin); fetching and checking out run none of the change's code.
+Then it readies the checkout with what this workspace declares: each project's
+install target, run in the checkout, then magus agent harness install there,
+then the checkout.bootstrap hook from magus.yaml, run from this workspace. With
+no hook declared it says so. --no-bootstrap skips all three and says so. It
+prints the path, what ran, and the command that removes it: checkout --remove
+\<dir\>, which removes only a checkout under that directory.
+
 ### vcs ls-files options
 
 **--exclude** *pattern*
@@ -130,6 +143,17 @@ base in yourself on the others, then run resolve.
 **--[no-]preserve** (default: off)
 : Also capture the uncommitted work and print a handle that restores it
 
+### vcs checkout options
+
+**--[no-]bootstrap** (default: on)
+: Run the install targets, the harness install and the checkout.bootstrap hook; --no-bootstrap skips all three
+
+**--fetch** *ref*
+: Fetch this ref from the default remote first, such as refs/pull/\<n\>/head
+
+**--remove** *dir*
+: Remove the checkout at this dir, one this command made, instead
+
 ## Subcommands
 
 **ls-files**
@@ -140,6 +164,9 @@ base in yourself on the others, then run resolve.
 
 **checkpoint**
 : Print the working state's identity, for recording what a lease was handed; writes nothing unless --preserve
+
+**checkout**
+: Check out one revision in an isolated checkout for review, readied by the workspace's declared install
 
 **merge-driver**
 : The per-file merge driver git and hg invoke; you do not run this by hand
@@ -192,6 +219,18 @@ magus vcs checkpoint -o name
 
 ```sh
 magus vcs checkpoint --preserve
+```
+
+*Check out a pull request's head to review it*
+
+```sh
+magus vcs checkout <sha> --fetch refs/pull/<n>/head
+```
+
+*Remove that checkout again*
+
+```sh
+magus vcs checkout --remove <dir>
 ```
 
 ## See Also
