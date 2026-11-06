@@ -386,6 +386,10 @@ export object ForkCounts {
     // publishedUnread says why some branches could not be checked against the
     // remotes; they stay counted.
     publishedUnread: str = "",
+    // landedSkipped counts finished branches whose change the base already
+    // holds, as a squash merge leaves it.
+    landedSkipped: int = 0,
+    landedUnread: str = "",
     integrateRecord: str = "",
     commitsSinceTest: int = 0,
     lastTest: str = "",
@@ -417,6 +421,12 @@ fun describePublished(counts: ForkCounts) > str {
     if (counts.publishedUnread != "") {
         said = said + "the remote refs could not be read for some, which stay counted: {counts.publishedUnread}; ";
     }
+    if (counts.landedSkipped > 0) {
+        said = said + "{counts.landedSkipped} skipped as landed (the base already holds their change); ";
+    }
+    if (counts.landedUnread != "") {
+        said = said + "some could not be checked against the base, which stay counted: {counts.landedUnread}; ";
+    }
     return said;
 }
 
@@ -441,11 +451,56 @@ export fun withoutPublished(counts: ForkCounts, published: fun (branch: str) > r
     if (counts.branchesUnknown != "") {
         return counts;
     }
+    final s = sift(counts.finishedBranches, held: published);
+    return ForkCounts{
+        finishedBranches = s.kept,
+        branchesUnknown = counts.branchesUnknown,
+        publishedSkipped = s.skipped,
+        publishedUnread = s.unread,
+        landedSkipped = counts.landedSkipped,
+        landedUnread = counts.landedUnread,
+        integrateRecord = counts.integrateRecord,
+        commitsSinceTest = counts.commitsSinceTest,
+        lastTest = counts.lastTest,
+        testUnknown = counts.testUnknown,
+    };
+}
+
+// withoutLanded drops each finished branch whose change the base already
+// holds. A squash merge copies no commit, so the core still counts it.
+export fun withoutLanded(counts: ForkCounts, landed: fun (branch: str) > result\Result::<bool>) > ForkCounts {
+    if (counts.branchesUnknown != "") {
+        return counts;
+    }
+    final s = sift(counts.finishedBranches, held: landed);
+    return ForkCounts{
+        finishedBranches = s.kept,
+        branchesUnknown = counts.branchesUnknown,
+        publishedSkipped = counts.publishedSkipped,
+        publishedUnread = counts.publishedUnread,
+        landedSkipped = s.skipped,
+        landedUnread = s.unread,
+        integrateRecord = counts.integrateRecord,
+        commitsSinceTest = counts.commitsSinceTest,
+        lastTest = counts.lastTest,
+        testUnknown = counts.testUnknown,
+    };
+}
+
+object Sifted {
+    kept: [str],
+    skipped: int = 0,
+    unread: str = "",
+}
+
+// sift drops each entry whose branch held answers true. One held cannot
+// answer stays counted, and the first failure is named.
+fun sift(entries: [str], held: fun (branch: str) > result\Result::<bool>) > Sifted {
     final kept = mut [<str>];
     var skipped = 0;
     var unread = "";
-    foreach (entry in counts.finishedBranches) {
-        final answer = published(entry.split(" ")[0]);
+    foreach (entry in entries) {
+        final answer = held(entry.split(" ")[0]);
         if (answer.error != null) {
             if (unread == "") {
                 unread = answer.error!.message;
@@ -456,16 +511,35 @@ export fun withoutPublished(counts: ForkCounts, published: fun (branch: str) > r
         }
         kept.append(entry);
     }
-    return ForkCounts{
-        finishedBranches = kept,
-        branchesUnknown = counts.branchesUnknown,
-        publishedSkipped = skipped,
-        publishedUnread = unread,
-        integrateRecord = counts.integrateRecord,
-        commitsSinceTest = counts.commitsSinceTest,
-        lastTest = counts.lastTest,
-        testUnknown = counts.testUnknown,
-    };
+    return Sifted{ kept = kept, skipped = skipped, unread = unread };
+}
+
+// landedOnBase is whether merging branch into HEAD, and into the VCS base,
+// leaves either tree unchanged. A conflict reads as not landed.
+export fun landedOnBase(branch: str) > result\Result::<bool> {
+    try {
+        final bases = mut ["HEAD"];
+        final base = vcs\base();
+        if (base != "" and base != "HEAD") {
+            bases.append(base);
+        }
+        foreach (b in bases) {
+            final tree = vcs\cmd(["rev-parse", "{b}^\{tree\}"], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+            if (!tree.ok) {
+                return result\fail::<bool>("git rev-parse {b}: {tree.stderr.trim()}");
+            }
+            final merged = vcs\cmd(["merge-tree", "--write-tree", b, branch], opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+            if (merged.code > 1) {
+                return result\fail::<bool>("git merge-tree {b} {branch}: {merged.stderr.trim()}");
+            }
+            if (merged.code == 0 and merged.stdout.trim() == tree.stdout.trim()) {
+                return result\ok::<bool>(true);
+            }
+        }
+        return result\ok::<bool>(false);
+    } catch (err: any) {
+        return result\caught::<bool>(err, doing: "git merge-tree {branch}");
+    }
 }
 
 fun describeTest(counts: ForkCounts) > str {
@@ -487,7 +561,12 @@ export fun decideForkLine(programs: [helpers\Program], line: str, read: fun (pat
         if (fork.known and (fork.integrates.len() > 0 or fork.parent != "")) {
             continue;
         }
-        final judged = decideFork(fork, counts: withoutPublished(facts(), published: onRemoteRef), limit: limit);
+        var counts = withoutPublished(facts(), published: onRemoteRef);
+        // Each landed check merges trees, so only a count at the limit pays.
+        if (counts.finishedBranches.len() >= limit) {
+            counts = withoutLanded(counts, landed: landedOnBase);
+        }
+        final judged = decideFork(fork, counts: counts, limit: limit);
         if (judged.decision != magus\GuardDecision.allow) {
             return judged;
         }
@@ -563,6 +642,30 @@ test "a branch a remote ref holds stops counting, and the denial says how many w
     final v = decideFork(mandate\Fork{ id = "next" }, counts: stillOver, limit: finishedBranchLimit);
     std\assert(v.decision == magus\GuardDecision.deny, message: "eleven unpublished");
     std\assert(v.reason.indexOf("1 branch(es) skipped as published") != null, message: v.reason);
+}
+
+test "a branch the base already holds stops counting, and the denial says how many were skipped" {
+    final squashed = fun (branch: str) > result\Result::<bool> {
+        return result\ok::<bool>(branch != "done-0");
+    };
+    final trimmed = withoutLanded(waiting(12), landed: squashed);
+    std\assert(trimmed.finishedBranches.len() == 1 and trimmed.landedSkipped == 11, message: "{trimmed.finishedBranches}");
+    std\assert(decideFork(mandate\Fork{ id = "next" }, counts: trimmed, limit: finishedBranchLimit).decision == magus\GuardDecision.allow, message: "landed work waits on nothing");
+    final stillOver = withoutLanded(waiting(12), landed: fun (branch: str) > result\Result::<bool> {
+        return result\ok::<bool>(branch == "done-0");
+    });
+    final v = decideFork(mandate\Fork{ id = "next" }, counts: stillOver, limit: finishedBranchLimit);
+    std\assert(v.decision == magus\GuardDecision.deny, message: "eleven not landed");
+    std\assert(v.reason.indexOf("1 skipped as landed") != null, message: v.reason);
+}
+
+test "a branch the base cannot be checked against stays counted, and says why" {
+    final broken = withoutLanded(waiting(10), landed: fun (branch: str) > result\Result::<bool> {
+        return result\fail::<bool>("git merge-tree HEAD {branch}: bad object");
+    });
+    std\assert(broken.finishedBranches.len() == 10 and broken.landedSkipped == 0, message: "counted");
+    final v = decideFork(mandate\Fork{ id = "next" }, counts: broken, limit: finishedBranchLimit);
+    std\assert(v.reason.indexOf("bad object") != null, message: v.reason);
 }
 
 test "a branch that is on no remote ref stays counted, and an unreadable one says why" {
