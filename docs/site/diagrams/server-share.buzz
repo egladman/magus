@@ -45,8 +45,8 @@ export fun serverShareFigure() > figure\Figure !> any {
             why: "shared read services, folded into the two shared boxes")
         .except([magus\graph().dir("internal/handler/diff"), magus\graph().dir("internal/handler/job"), magus\graph().dir("internal/handler/mcp"), magus\graph().dir("internal/handler/plan")],
             why: "loopback only, named in the never-on-a-share box")
-        .except([magus\graph().dir("internal/handler/attention"), magus\graph().dir("internal/handler/diagram"), magus\graph().dir("internal/handler/notes"), magus\graph().dir("internal/handler/token"), magus\graph().dir("internal/handler/tool")],
-            why: "loopback only: a person's blocks, the figures, private notes, token management and a service that execs tools")
+        .except([magus\graph().dir("internal/handler/attention"), magus\graph().dir("internal/handler/diagram"), magus\graph().dir("internal/handler/notes"), magus\graph().dir("internal/handler/pulls"), magus\graph().dir("internal/handler/token"), magus\graph().dir("internal/handler/tool")],
+            why: "loopback only: a person's blocks, the figures, private notes, the pull request board, token management and a service that execs tools")
         .except([magus\graph().dir("internal/handler/trailrpc")],
             why: "the audit interceptor around Connect services, not a route");
 }
