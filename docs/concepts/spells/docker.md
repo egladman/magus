@@ -93,6 +93,10 @@ export fun image_buildx(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
+## docker-load
+
+**Command:** `docker load`
+
 ## docker-run
 
 --rm is baked in: an op that leaves containers behind turns a repeated target into a disk leak. The caller supplies mounts, workdir, image and command through args.
