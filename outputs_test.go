@@ -467,7 +467,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 
 // writeWorkspace lays down a workspace from rel-path -> content and returns the root.
-func writeWorkspace(t *testing.T, files map[string]string) string {
+func writeWorkspace(t testing.TB, files map[string]string) string {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
 	w.WriteTree(files)

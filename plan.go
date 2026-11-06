@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"runtime"
 	"slices"
 	"strings"
+
+	"golang.org/x/sync/errgroup"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
@@ -18,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/parsecache"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -118,17 +122,27 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		return types.ShardPlan{}, fmt.Errorf("affected plan: load history: %w", err)
 	}
 
+	// optimization: each closure is walked once; reach and packing read the
+	// map, where each asked WalkChain again for every unit and prerequisite.
 	needs := make(map[types.Unit][]types.Unit, len(units))
+	closureOf := func(u types.Unit) ([]types.Unit, error) {
+		if c, ok := needs[u]; ok {
+			return c, nil
+		}
+		c, err := m.unitNeeds(u)
+		if err == nil {
+			needs[u] = c
+		}
+		return c, err
+	}
 	for _, u := range units {
-		closure, err := m.unitNeeds(u)
-		if err != nil {
+		if _, err := closureOf(u); err != nil {
 			return types.ShardPlan{}, fmt.Errorf("affected plan: %w", err)
 		}
-		needs[u] = closure
 	}
 	computes := func(types.Unit) bool { return true }
 	if unboundedBy == "" && changed != nil {
-		computes = m.computedBy(changed, affected)
+		computes = m.computedBy(changed, affected, closureOf)
 	}
 	var kept, unreached []types.Unit
 	for _, u := range units {
@@ -236,11 +250,32 @@ func (m *Magus) planUnits(ctx context.Context, targets []types.Target, anchor st
 		}
 	}
 	for _, t := range targets {
-		p := m.Get(t.Path)
-		if p == nil {
+		if m.Get(t.Path) == nil {
 			return nil, fmt.Errorf("project %q is affected but not in the workspace", t.Path)
 		}
-		steps, found, err := m.anchorSteps(ctx, p, anchor, charms, args)
+	}
+	// optimization: each project's anchor evaluates on its own goroutine,
+	// as the evaluations share nothing. Results merge in target order, so
+	// the units and the first error stay deterministic.
+	type traced struct {
+		steps []types.Unit
+		found bool
+		err   error
+	}
+	evals := make([]traced, len(targets))
+	var g errgroup.Group
+	g.SetLimit(runtime.GOMAXPROCS(0))
+	for i, t := range targets {
+		g.Go(func() error {
+			e := &evals[i]
+			e.steps, e.found, e.err = m.anchorSteps(ctx, m.Get(t.Path), anchor, charms, args)
+			return nil
+		})
+	}
+	_ = g.Wait()
+	for i, t := range targets {
+		p := m.Get(t.Path)
+		steps, found, err := evals[i].steps, evals[i].found, evals[i].err
 		if err != nil {
 			return nil, err
 		}
@@ -331,7 +366,7 @@ func projectFuncDecls(p *types.Project) (map[string]*ast.FunDecl, error) {
 			if err != nil {
 				return nil, fmt.Errorf("read %s's magusfile for direct calls: %w", p.Path, err)
 			}
-			prog, err := buzz.ParseEmbedded(string(text))
+			prog, err := parsecache.Shared().ParseEmbedded(string(text))
 			if err != nil {
 				return nil, fmt.Errorf("parse %s's magusfile for direct calls: %w", file, err)
 			}
@@ -444,28 +479,34 @@ func (m *Magus) unitNeeds(u types.Unit) ([]types.Unit, error) {
 // computedBy reports whether changed makes a unit compute rather than replay
 // from the cache: a target in its closure reads a changed path. A target
 // with no declared reads reads its project, so an affected one counts.
-func (m *Magus) computedBy(changed, affected []string) func(types.Unit) bool {
+func (m *Magus) computedBy(changed, affected []string, closureOf func(types.Unit) ([]types.Unit, error)) func(types.Unit) bool {
 	inAffected := map[string]bool{}
 	for _, p := range affected {
 		inAffected[p] = true
 	}
+	read := map[types.Unit]bool{}
 	reads := func(n types.Unit) bool {
-		p := m.Get(n.Project)
-		if p == nil {
-			return true
+		if v, ok := read[n]; ok {
+			return v
 		}
-		node := cache.DeclaredNode(p, n.Target, types.TargetRef{Project: p.Path, Target: n.Target}, m.Get)
-		if !node.DeclaredReads {
-			return inAffected[n.Project]
+		v := true
+		if p := m.Get(n.Project); p != nil {
+			node := cache.DeclaredNode(p, n.Target, types.TargetRef{Project: p.Path, Target: n.Target}, m.Get)
+			if node.DeclaredReads {
+				v = slices.ContainsFunc(changed, func(c string) bool { return types.MatchGlobs(node.Reads, c) })
+			} else {
+				v = inAffected[n.Project]
+			}
 		}
-		return slices.ContainsFunc(changed, func(c string) bool { return types.MatchGlobs(node.Reads, c) })
+		read[n] = v
+		return v
 	}
 	memo := map[types.Unit]bool{}
 	return func(u types.Unit) bool {
 		if v, ok := memo[u]; ok {
 			return v
 		}
-		closure, err := m.unitNeeds(u)
+		closure, err := closureOf(u)
 		v := err != nil || slices.ContainsFunc(closure, reads)
 		memo[u] = v
 		return v
