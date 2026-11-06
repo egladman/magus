@@ -223,7 +223,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn.Exe
 			// around it is invisible to exactly the reader it is for: someone reading a
 			// CI failure after the fact. It also keeps the advice attributed and ordered
 			// with the target's own output when several projects run at once.
-			if _, ok := interactive.TakeHint(slog.LevelInfo, advice); ok {
+			if _, ok := interactive.TakeHint(ctx, slog.LevelInfo, advice); ok {
 				_, stderr := spawn.OutputWriters(ctx)
 				_, _ = fmt.Fprintf(stderr, "%s: %s\n", attr.HintLabel, advice)
 			}

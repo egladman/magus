@@ -165,6 +165,7 @@ func runCLI() int {
 	rootCtx = types.WithJobLease(rootCtx, trail.LeaseFromEnv())
 	// The verbs that are another entry point (the hook, the server) restamp this.
 	rootCtx = trail.ContextWithEntryPoint(rootCtx, types.EntryPointCLI)
+	rootCtx = interactive.WithHints(rootCtx)
 	// An agent host's hook judged this invocation before it ran, and a person typing it
 	// answers for it: the Run family must not judge it a second time in process.
 	rootCtx = guard.WithHostJudged(rootCtx)

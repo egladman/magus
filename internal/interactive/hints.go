@@ -22,36 +22,44 @@ func HintsEnabled() bool {
 	return hintsEnabled
 }
 
-// emitted is the set of hint texts already shown, so a fact repeated across
-// many targets/charms/calls in one run (or one long-lived server) teaches
-// once instead of nagging on every occurrence.
-var (
-	emittedMu sync.Mutex
-	emitted   = make(map[string]struct{})
-)
+// shownHints is the set of hint texts one invocation has shown, so a fact
+// repeated across its targets teaches once instead of nagging.
+type shownHints struct {
+	mu   sync.Mutex
+	seen map[string]struct{}
+}
 
-// maxEmittedDedupe bounds the dedupe set. The server hosting Hint calls never
-// restarts to clear it, so an unbounded map would be a slow leak; once full it
-// resets and hints start teaching again rather than growing forever.
-const maxEmittedDedupe = 4096
+// maxShownHints bounds a set. A server's own context lives as long as the
+// daemon, so once full the set resets rather than growing forever.
+const maxShownHints = 4096
 
-// Hint logs msg as an [attr.Hint] record when hints are enabled, once per distinct msg;
-// see emitted. The display prints it "hint: <msg>", and keeps it under -q and -s.
+type shownHintsKey struct{}
+
+// WithHints returns ctx carrying a fresh set of shown hints. Each entry point
+// calls it once per invocation, so a server shows a hint once per command it
+// serves, not once per daemon. Without a set, every hint is shown each time.
+func WithHints(ctx context.Context) context.Context {
+	return context.WithValue(ctx, shownHintsKey{}, &shownHints{seen: map[string]struct{}{}})
+}
+
+// Hint logs msg as an [attr.Hint] record when hints are enabled, once per
+// distinct msg under ctx's [WithHints] set. The display prints it
+// "hint: <msg>", and keeps it under -q and -s.
 func Hint(ctx context.Context, msg string, attrs ...slog.Attr) {
 	h := slog.Default().Handler()
 	if !h.Enabled(ctx, slog.LevelInfo) {
 		return
 	}
-	if r, ok := TakeHint(slog.LevelInfo, msg, attrs...); ok {
+	if r, ok := TakeHint(ctx, slog.LevelInfo, msg, attrs...); ok {
 		_ = h.Handle(ctx, r)
 	}
 }
 
-// TakeHint spends msg's one showing and returns it as an [attr.Hint] record at level, for
-// a caller that hands records to a handler of its own. It returns false when hints are off
-// or msg was already shown.
-func TakeHint(level slog.Level, msg string, attrs ...slog.Attr) (slog.Record, bool) {
-	if !firstShowing(msg) {
+// TakeHint spends msg's one showing under ctx and returns it as an
+// [attr.Hint] record at level, for a caller that hands records to a handler
+// of its own. It returns false when hints are off or msg was already shown.
+func TakeHint(ctx context.Context, level slog.Level, msg string, attrs ...slog.Attr) (slog.Record, bool) {
+	if !firstShowing(ctx, msg) {
 		return slog.Record{}, false
 	}
 	r := slog.NewRecord(time.Now(), level, msg, 0)
@@ -60,20 +68,24 @@ func TakeHint(level slog.Level, msg string, attrs ...slog.Attr) (slog.Record, bo
 	return r, true
 }
 
-// firstShowing reports whether msg is a hint to show now: hints are on and msg has not
-// been shown before. It records the showing.
-func firstShowing(msg string) bool {
+// firstShowing reports whether msg is a hint to show now, and records the
+// showing in ctx's set.
+func firstShowing(ctx context.Context, msg string) bool {
 	if !HintsEnabled() {
 		return false
 	}
-	emittedMu.Lock()
-	defer emittedMu.Unlock()
-	if _, ok := emitted[msg]; ok {
+	s, ok := ctx.Value(shownHintsKey{}).(*shownHints)
+	if !ok {
+		return true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.seen[msg]; ok {
 		return false
 	}
-	if len(emitted) >= maxEmittedDedupe {
-		emitted = make(map[string]struct{})
+	if len(s.seen) >= maxShownHints {
+		s.seen = map[string]struct{}{}
 	}
-	emitted[msg] = struct{}{}
+	s.seen[msg] = struct{}{}
 	return true
 }
