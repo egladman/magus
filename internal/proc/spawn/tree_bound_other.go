@@ -3,7 +3,6 @@
 package spawn
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
 	"runtime"
@@ -17,12 +16,12 @@ type treeBounds struct{ warned sync.Once }
 
 var processBounds = &treeBounds{}
 
-// ErrTooManyProcesses is a command whose process tree passed its bound.
-var ErrTooManyProcesses = errors.New("process tree over its bound")
+// marked leaves env as it is: nothing here reads a mark back.
+func (*treeBounds) marked(env []string) ([]string, string) { return env, "" }
 
 // follow says once that nothing bounds the tree. Windows is quiet: taskkill /T
 // already ends the tree, and wasm runs no process.
-func (b *treeBounds) follow(int, string) *boundedTree {
+func (b *treeBounds) follow(int, string, string) *boundedTree {
 	if runtime.GOOS == "windows" || runtime.GOARCH == "wasm" {
 		return nil
 	}

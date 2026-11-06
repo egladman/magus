@@ -233,7 +233,8 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	if opts.CancelGrace > 0 {
 		c.WaitDelay = opts.CancelGrace
 	}
-	c.Env = env
+	var mark string
+	c.Env, mark = processBounds.marked(env)
 	if js := jobserverFromContext(ctx); js != nil {
 		c.ExtraFiles = append(c.ExtraFiles, js.files()...)
 	}
@@ -280,7 +281,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		var record func(types.MemorySample)
 		record, endCurve = types.RecordCurve(ctx, startedAt)
 		root = processSampler.follow(pid, startedAt, record)
-		tree = processBounds.follow(pid, name)
+		tree = processBounds.follow(pid, name, mark)
 		group.bound(tree)
 	}
 	if ruleset != nil {
@@ -300,8 +301,9 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		}
 	}
 	samples := processSampler.stop(root)
+	// Joined, so the command's own exit or cancellation survives beside it.
 	if boundErr := processBounds.stop(tree); boundErr != nil {
-		runErr = boundErr
+		runErr = errors.Join(boundErr, runErr)
 	}
 	endCurve()
 	runErr = classifyMissingBinary(runErr, name, c.ProcessState != nil)

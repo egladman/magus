@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
+	"strings"
 
+	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/types"
 )
@@ -100,7 +103,9 @@ func procDetach(ctx context.Context, cmd string, args []string, dir string, opts
 	c := exec.Command(cmd, args...)
 	c.Dir = dir
 	overrides, _ := ctx.Value(withEnvKey{}).([]string)
-	c.Env = append(os.Environ(), overrides...)
+	// Without the tree mark, the reap that ends this run's command leaves it.
+	env := slices.DeleteFunc(os.Environ(), func(kv string) bool { return strings.HasPrefix(kv, spawn.TreeMarkEnv+"=") })
+	c.Env = append(env, overrides...)
 	c.SysProcAttr = detachedProcAttr()
 	if err := c.Start(); err != nil {
 		return types.ExecResult{}, fmt.Errorf(`proc\exec %s: start detached: %w`, cmd, err)
