@@ -47,10 +47,10 @@ func TestProtocolSocketSuite(t *testing.T) {
 	suite.Run(t, new(ProtocolSocketSuite))
 }
 
-// SetupTest makes a short directory: macOS caps a unix socket path at
-// 104 bytes, and t.TempDir under $TMPDIR is longer.
+// SetupTest makes a short directory under $TMPDIR: macOS caps a unix socket
+// path at 104 bytes, and t.TempDir passes it by adding the test name.
 func (s *ProtocolSocketSuite) SetupTest() {
-	dir, err := os.MkdirTemp("/tmp", "bk")
+	dir, err := os.MkdirTemp("", "bk")
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { _ = os.RemoveAll(dir) })
 	s.dir = dir
