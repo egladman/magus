@@ -661,7 +661,7 @@ It adds these to a session:
   cost.
 - The session's spend, main conversation and subagents together, at the top of the
   pane.
-- The machine build budget, read from `magus status -o json` every 15 seconds and
+- The machine build budget, read from `magus server status -o json` every 15 seconds and
   around each Bash call that runs magus: each holder's pid, target, slots, memory,
   age and checkout, the callers waiting for a seat, and the
   [MGS3009](../../../reference/codes/sandbox/MGS3009.md) refusals, on the pane's

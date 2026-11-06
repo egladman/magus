@@ -220,7 +220,7 @@ stages 2 and 3.
 
 **Good.** The deadlock class recursion creates becomes impossible rather than detected, for
 both the slot pool and the slot x cache-lock shape. Stage 3 removes the isolation gate,
-MGS3013 and the marking discipline they read. `magus status` means "executing" again, rather
+MGS3013 and the marking discipline they read. `magus server status` means "executing" again, rather
 than a seat held by a body that is waiting.
 
 **Bad, and named rather than discovered later.**

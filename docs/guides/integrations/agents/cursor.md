@@ -90,7 +90,7 @@ Then register Magus under Cursor Settings -> Tools & MCP (or hand-write
 `.cursor/mcp.json` / `~/.cursor/mcp.json`). Endpoint
 `http://127.0.0.1:7391/mcp`; bind the token with `${env:MAGUS_MCP_TOKEN}` if you
 prefer env interpolation. Restart Cursor after changing the client config.
-`magus status --probe=mcp` must report serving. Full notes: [MCP](../mcp.md).
+`magus server status --probe=mcp` must report serving. Full notes: [MCP](../mcp.md).
 An agent uses the CLI fallback when MCP is unavailable; it does not manually
 start Magus solely to obtain tools.
 

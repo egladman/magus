@@ -16,7 +16,7 @@ Stop the daemon and the broker first so nothing writes while you delete:
 
 ```sh
 magus server stop
-magus broker stop --services
+magus server broker stop --services
 ```
 
 Each exits non-zero when it finds nothing to stop, which is what you get if none is

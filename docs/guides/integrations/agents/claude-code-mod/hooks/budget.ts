@@ -58,16 +58,16 @@ function refusalOf(r: Record<string, unknown>): BudgetRefusal {
 
 const statusError = (message: string): Result<never> => fail(new MagusError({ code: '', message }))
 
-// The broker's build budget from `magus status -o json`. budget is null when the report
-// has no broker, which is a budget nothing holds.
+// The broker's build budget from `magus server status -o json`. budget is
+// null when the report has no broker, which is a budget nothing holds.
 export function parseBudget(stdout: string): Result<Budget | null> {
   const parsed = parseJSON(stdout)
-  if (parsed.error) return statusError(`magus status -o json printed no JSON${stdout ? `: ${stdout.slice(0, 120)}` : ''}`)
+  if (parsed.error) return statusError(`magus server status -o json printed no JSON${stdout ? `: ${stdout.slice(0, 120)}` : ''}`)
   const doc = parsed.value
-  if (!isRecord(doc)) return statusError('magus status -o json printed no object')
+  if (!isRecord(doc)) return statusError('magus server status -o json printed no object')
   if (doc.broker == null) return ok(null)
   if (!isRecord(doc.broker) || !isRecord(doc.broker.capacity)) {
-    return statusError('magus status -o json has a broker without broker.capacity')
+    return statusError('magus server status -o json has a broker without broker.capacity')
   }
   const c = doc.broker.capacity
   return ok({

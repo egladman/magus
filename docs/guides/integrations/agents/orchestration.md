@@ -112,7 +112,7 @@ workspace loading for everyone in that checkout.
 
 A worker reruns only its own check. When the machine's build budget refuses
 that check ([MGS3009](../../../reference/codes/sandbox/MGS3009.md)), the worker
-may wait for a seat with `magus status --wait | magus run <its check>`, which
+may wait for a seat with `magus server status --wait | magus run <its check>`, which
 keeps the seat the wait sized for the run it pipes into. Any other wait, or a
 bare rerun within the minute, is refused.
 
@@ -176,7 +176,7 @@ Editing costs nothing; validation contends. Every magus run on the machine, in
 every worktree, takes its slots and memory from one budget the
 [broker](../server.md) holds, so N workers each running a check cannot start N
 budgets of work. A step the budget cannot seat is refused at once with
-MGS3009, naming who holds it, rather than queued. `magus status` shows what is
+MGS3009, naming who holds it, rather than queued. `magus server status` shows what is
 held and by whom. See [Concurrency](../../../concepts/concurrency.md#across-the-whole-machine-the-budget).
 
 ## Each checkout gets its own ./magus

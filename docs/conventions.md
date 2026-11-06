@@ -62,7 +62,7 @@ Some flags take a comma-separated list, which is written as one value. Spaces
 around the commas are trimmed and empty entries are ignored:
 
 ```sh
-magus status --probe=mcp,liveness
+magus server status --probe=mcp,liveness
 ```
 
 A few take a structured value spelled `key=<value>` pairs, comma separated. Where

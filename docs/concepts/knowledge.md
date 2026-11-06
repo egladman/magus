@@ -547,7 +547,7 @@ auto-indexes. Tune or disable it under `knowledge.symbol_indexing` (`disabled`,
 `quiet_seconds`, `min_interval_seconds`). If an indexer is not installed the background
 run of that index just fails and backs off, while the project's other indexes keep
 running; install it, or run `magus run <project>::scip` yourself, or index in CI.
-`magus status` and the gaps a lookup reports name a missing indexer and where to get it.
+`magus server status` and the gaps a lookup reports name a missing indexer and where to get it.
 
 An index that has not been built yet is skipped, so symbols appear once its op
 has run. To point a project at indexes your own build already emits somewhere in the

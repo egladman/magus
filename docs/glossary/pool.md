@@ -1,7 +1,7 @@
 ---
 title: Pool
 order: 11
-description: "The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live."
+description: "The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus server status and the dashboard report it live."
 tags: [glossary, execution-and-caching]
 ---
 
@@ -9,13 +9,13 @@ tags: [glossary, execution-and-caching]
 
 The concurrency pool: the shared set of slots that caps how many targets run in
 parallel on one machine. Its capacity defaults to `MAGUS_CONCURRENCY`, then 4 on
-GitHub-hosted runners, then `min(NumCPU, 8)`; `magus status` and the
+GitHub-hosted runners, then `min(NumCPU, 8)`; `magus server status` and the
 [dashboard](../guides/integrations/server.md) report it live.
 
 ## Example
 
 ```sh
-magus status
+magus server status
 ```
 
 ## Used in

@@ -102,7 +102,7 @@ export type CacheState = {
 export type Spend = { mainUsd: number; agentUsd: number; isPartial: boolean }
 
 // One claim on the machine build budget: an entry of broker.capacity.holders in
-// `magus status -o json`.
+// `magus server status -o json`.
 export type BudgetHolder = {
   pid: number
   project: string

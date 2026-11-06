@@ -18,10 +18,10 @@ service is a process magus starts for targets and keeps across runs.
 
 ## Example
 
-`magus broker status` lists the services the broker keeps warm.
+`magus server broker status` lists the services the broker keeps warm.
 
 ```sh
-magus broker status
+magus server broker status
 ```
 
 ## Used in
