@@ -25,7 +25,7 @@ import (
 
 // MachineClaims is what a run of targets, under charms and with extraArgs forwarded,
 // would ask the machine budget for: one claim per step the run admits, sized as the run
-// sizes it. A gating stage waits on these for the run it feeds (see `magus status --wait`).
+// sizes it. `magus doctor` reads these.
 //
 // The steps are the selected targets and, through each skip_cache composer, the
 // same-project ctx.needs members it lends claims of their own (types.MembersClaimTheirOwn),
@@ -74,20 +74,6 @@ func (m *Magus) MachineClaims(ctx context.Context, targets []types.Target, charm
 
 // withStdio hands the locker its invocation's standard streams. See pipe.Stdio.
 func withStdio(s *pipe.Stdio) lockerOption { return func(l *projectLocker) { l.stdio = s } }
-
-// gated reports whether procID holds a pipe gate (see pipe.Gate). A gate left by a dead
-// process is swept.
-func (l *projectLocker) gated(procID int) bool {
-	path := pipe.GatePath(l.pipeDir(), procID)
-	if _, err := os.Stat(path); err != nil {
-		return false
-	}
-	if lockIsHeld(path) {
-		return true
-	}
-	_ = os.Remove(path)
-	return false
-}
 
 const (
 	holdsSuffix    = ".holds"
@@ -264,15 +250,14 @@ type upstreamBlock struct {
 	conflict bool
 }
 
-// blocking returns the upstream stages this run must still wait for, conflicts first:
-// those that may take locks or hold a gate, still write their pipe, and have either not
-// settled a lock set yet or settled one that overlaps paths. A stage whose settled set is
-// disjoint streams alongside; a gate never settles one.
+// blocking returns the upstream stages this run must still wait for,
+// conflicts first. Each may take locks, still writes its pipe, and has not
+// settled a lock set disjoint from paths.
 func (l *projectLocker) blocking(ups []pipe.Stage, paths []string) []upstreamBlock {
 	want := canonicalProjects(paths)
 	var out []upstreamBlock
 	for _, u := range ups {
-		if (!u.TakesLocks && !l.gated(u.PID)) || !u.Writes.WrittenBy(u.PID) {
+		if !u.TakesLocks || !u.Writes.WrittenBy(u.PID) {
 			continue
 		}
 		held, settled := l.settledProjects(u.PID)
@@ -316,12 +301,8 @@ func (l *projectLocker) emitPipeWait(ctx context.Context, up pipe.Stage) {
 		_ = report.Record(l.rw, report.LockPipeWait{UpstreamPID: up.PID, Command: up.Command()})
 		return
 	}
-	if l.gated(up.PID) {
-		fmt.Fprintf(l.out, "magus: waiting for pid %d (%s), upstream of this run in a pipe, to exit before starting.\n", up.PID, up.Command())
-	} else {
-		fmt.Fprintf(l.out, "magus: waiting for pid %d (%s), upstream of this run in a pipe, to finish with the projects this run needs before taking their locks.\n",
-			up.PID, up.Command())
-	}
+	fmt.Fprintf(l.out, "magus: waiting for pid %d (%s), upstream of this run in a pipe, to finish with the projects this run needs before taking their locks.\n",
+		up.PID, up.Command())
 	slog.InfoContext(ctx, "lock.pipe_wait", slog.Int("upstream_pid", up.PID), slog.String("upstream_command", up.Command()))
 }
 

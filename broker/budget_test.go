@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // waiters is the broker's parked requests as its status reply lists them, with the
@@ -41,7 +43,7 @@ func claimAsync(t *testing.T, ctx context.Context, addr string, c *Client, claim
 	before := len(waiters(t, addr))
 	done := make(chan claimed, 1)
 	go func() {
-		v, err := c.Claim(ctx, claim)
+		v, err := c.Claim(ctx, claim, nil)
 		done <- claimed{v, err}
 	}()
 	require.Eventually(t, func() bool { return len(done) == 1 || len(waiters(t, addr)) > before }, 5*time.Second, 5*time.Millisecond)
@@ -72,7 +74,7 @@ func TestAClaimKeptOutByItsOwnProcessIsParkedUntilARelease(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(1000, 4))
 	c := dial(t, addr)
-	first, err := c.Claim(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 900})
+	first, err := c.Claim(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 900}, nil)
 	require.NoError(t, err)
 	require.True(t, first.Granted)
 
@@ -80,12 +82,6 @@ func TestAClaimKeptOutByItsOwnProcessIsParkedUntilARelease(t *testing.T) {
 	requirePending(t, second)
 	assert.Equal(t, []types.MachineWaiter{{Kind: "claim", Project: "docs", Target: "lint", PID: os.Getpid(), MemoryMB: 900, Slots: 1, Dir: "/w", Command: waiters(t, addr)[0].Command, Owner: "unleased"}},
 		waiters(t, addr), "status lists the parked claim")
-
-	stranger := dial(t, addr)
-	refused, err := stranger.Claim(t.Context(), types.MachineClaim{Project: "x", Target: "build", MemoryMB: 900, PID: 1})
-	require.NoError(t, err)
-	assert.Equal(t, []bool{false, true, false}, []bool{refused.Granted, refused.Fits, refused.OwnRun},
-		"another invocation's claim is refused at once, never parked")
 
 	c.Release(t.Context(), first.ID)
 	got := requireAnswer(t, second)
@@ -104,7 +100,7 @@ func TestAParkedQueueLetsSmallClaimsByUntilTheHeadStarves(t *testing.T) {
 	one := types.MachineClaim{Target: "small", Slots: 1}
 	var held []string
 	for range maxOvertakes {
-		v, err := c.Claim(t.Context(), one)
+		v, err := c.Claim(t.Context(), one, nil)
 		require.NoError(t, err)
 		require.True(t, v.Granted)
 		held = append(held, v.ID)
@@ -143,7 +139,7 @@ func holdOnlySlot(t *testing.T) (addr string, c *Client, held string) {
 	addr = testAddr(t)
 	serve(t, addr, WithCapacity(0, 1))
 	c = dial(t, addr)
-	v, err := c.Claim(t.Context(), types.MachineClaim{Target: "holder", Slots: 1})
+	v, err := c.Claim(t.Context(), types.MachineClaim{Target: "holder", Slots: 1}, nil)
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 	return addr, c, v.ID
@@ -206,7 +202,7 @@ func TestAGateStillGoesAheadOfAHeavierJob(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(0, 1))
 	c := dial(t, addr)
-	v, err := c.Claim(t.Context(), types.MachineClaim{Target: "holder", Slots: 1})
+	v, err := c.Claim(t.Context(), types.MachineClaim{Target: "holder", Slots: 1}, nil)
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 	heavy := claimAsync(t, t.Context(), addr, c, types.MachineClaim{Target: "heavy", Slots: 1, Weight: 1})
@@ -220,46 +216,12 @@ func TestAGateStillGoesAheadOfAHeavierJob(t *testing.T) {
 	requirePending(t, heavy)
 }
 
-func TestAStatusWaitCarriesItsJobsWeightIntoTheQueue(t *testing.T) {
-	addr := testAddr(t)
-	serve(t, addr, WithCapacity(0, 1))
-	holder := dial(t, addr)
-	v, err := holder.Request(t.Context(), types.MachineClaim{Target: "holder", Slots: 1, PID: 1})
-	require.NoError(t, err)
-	require.True(t, v.Granted)
-
-	reserve := func(target string, weight float64) <-chan error {
-		c := dial(t, addr)
-		reader := startReader(t).Process.Pid
-		parked, done := make(chan struct{}), make(chan error, 1)
-		go func() {
-			_, err := c.Reserve(t.Context(), types.MachineClaim{Target: target, Slots: 1, Weight: weight}, reader,
-				func(types.MachineVerdict) { close(parked) })
-			done <- err
-		}()
-		<-parked
-		return done
-	}
-	light := reserve("light", 0.25)
-	heavy := reserve("heavy", 1)
-
-	holder.Release(t.Context(), v.ID)
-	require.NoError(t, <-heavy, "the heavier reservation takes the room")
-	require.Len(t, holders(t, addr), 1)
-	assert.Equal(t, "heavy", holders(t, addr)[0].Target)
-	select {
-	case err := <-light:
-		t.Fatalf("the light reservation was answered (%v) with the slot taken", err)
-	default:
-	}
-}
-
 func TestAParkedSeatWaitIsSeatedWhenTheSeatsRunEnds(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(0, 10))
 	first := leasedClient(t, addr, "plan/a", "plan", 1)
 	second := leasedClient(t, addr, "plan/b", "plan", 1)
-	v, err := first.Claim(t.Context(), types.MachineClaim{Target: "go-test", Invocation: "1:a"})
+	v, err := first.Claim(t.Context(), types.MachineClaim{Target: "go-test", Invocation: "1:a"}, nil)
 	require.NoError(t, err)
 	require.True(t, v.Granted)
 
@@ -278,7 +240,7 @@ func TestAParkedClaimEndsWithItsContextOrItsConnection(t *testing.T) {
 	addr := testAddr(t)
 	serve(t, addr, WithCapacity(1000, 4))
 	c := dial(t, addr)
-	_, err := c.Claim(t.Context(), types.MachineClaim{Target: "test", MemoryMB: 900})
+	_, err := c.Claim(t.Context(), types.MachineClaim{Target: "test", MemoryMB: 900}, nil)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -310,7 +272,7 @@ func TestStoppingTheBrokerRefusesEveryParkedRequest(t *testing.T) {
 			drain := make(chan struct{})
 			stop, _ := serve(t, addr, WithCapacity(1000, 4), WithDrain(drain, time.Minute))
 			c := dial(t, addr)
-			_, err := c.Claim(t.Context(), types.MachineClaim{Target: "test", MemoryMB: 900})
+			_, err := c.Claim(t.Context(), types.MachineClaim{Target: "test", MemoryMB: 900}, nil)
 			require.NoError(t, err)
 			done := claimAsync(t, t.Context(), addr, c, types.MachineClaim{Target: "lint", MemoryMB: 900})
 
@@ -323,64 +285,6 @@ func TestStoppingTheBrokerRefusesEveryParkedRequest(t *testing.T) {
 			assert.Contains(t, refused.Message, "this claim waited")
 		})
 	}
-}
-
-func TestAReservationAndAnAwaitAreParkedUntilTheBudgetHasRoom(t *testing.T) {
-	addr := testAddr(t)
-	serve(t, addr, WithCapacity(0, 4))
-	reader := startReader(t)
-	holder := dial(t, addr)
-	held, err := holder.Request(t.Context(), types.MachineClaim{Target: "test", Slots: 4, PID: 1})
-	require.NoError(t, err)
-	require.True(t, held.Granted)
-
-	type answer struct {
-		v       types.MachineVerdict
-		blocked types.MachineClaim
-		err     error
-	}
-	// The await parks first: a seat reserved ahead of it would keep it out in turn.
-	asker := dial(t, addr)
-	parkedOn := make(chan types.MachineClaim, 1)
-	awaited := make(chan answer, 1)
-	go func() {
-		blocked, v, err := asker.Await(t.Context(), []types.MachineClaim{{Target: "go-test", Slots: 2}},
-			func(blocked types.MachineClaim, _ types.MachineVerdict) { parkedOn <- blocked })
-		awaited <- answer{v, blocked, err}
-	}()
-	assert.Equal(t, types.MachineClaim{Target: "go-test", Slots: 2}, <-parkedOn, "the await says what it is parked on")
-	reserved := make(chan answer, 1)
-	go func() {
-		v, err := asker.Reserve(t.Context(), types.MachineClaim{Target: "go-test", Slots: 4}, reader.Process.Pid,
-			func(types.MachineVerdict) { parkedOn <- types.MachineClaim{Target: "reserve"} })
-		reserved <- answer{v: v, err: err}
-	}()
-	assert.Equal(t, "reserve", (<-parkedOn).Target)
-	assert.Len(t, waiters(t, addr), 2)
-
-	holder.Release(t.Context(), held.ID)
-	for _, ch := range []chan answer{awaited, reserved} {
-		select {
-		case a := <-ch:
-			require.NoError(t, a.err)
-			assert.True(t, a.v.Granted)
-		case <-time.After(5 * time.Second):
-			t.Fatal("never answered after the release")
-		}
-	}
-	h := holders(t, addr)
-	require.Len(t, h, 1)
-	assert.True(t, h[0].Reserved, "the reservation holds the seat; the await took nothing")
-}
-
-func TestAnAwaitLargerThanTheBudgetIsRefusedAtOnce(t *testing.T) {
-	addr := testAddr(t)
-	serve(t, addr, WithCapacity(0, 4))
-	blocked, v, err := dial(t, addr).Await(t.Context(), []types.MachineClaim{{Target: "test", Slots: 8}}, nil)
-	require.NoError(t, err)
-	assert.Equal(t, types.MachineClaim{Target: "test", Slots: 8}, blocked)
-	assert.False(t, v.Fits)
-	assert.False(t, v.Granted)
 }
 
 func ledgerConns(t *testing.T, sessions ...*session) map[net.Conn]*session {
@@ -440,41 +344,6 @@ func TestLedgerRemembersTheLastRefusalsNewestFirstWithTheirHolders(t *testing.T)
 	}, r[0])
 }
 
-func TestLedgerOwnsAReservedSeatAndRefusesOneThatCannotFit(t *testing.T) {
-	var l budgetLedger
-	waiter := ledgerSession(70, "job-c")
-	conns := ledgerConns(t, waiter)
-	now := time.Unix(1000, 0)
-	c := types.MachineClaim{Target: "ci", PID: 70, Command: "magus affected ci"}
-
-	l.reserved(conns, waiter, c, 99, types.MachineVerdict{Fits: true}, now)
-	assert.Empty(t, l.seats, "a reservation still waiting holds no seat")
-
-	l.reserved(conns, waiter, c, 99, types.MachineVerdict{Granted: true, Fits: true}, now)
-	snap := l.capacity(conns, types.MachineSnapshot{Holders: []types.MachineClaimant{{Reserved: true, Target: "ci", PID: 99}}})
-	assert.Equal(t, "job-c", snap.Holders[0].Owner)
-
-	l.capacity(conns, types.MachineSnapshot{})
-	assert.Empty(t, l.seats, "a seat no longer held is forgotten")
-
-	l.reserved(conns, waiter, types.MachineClaim{Target: "huge", MemoryMB: 1 << 20}, 99, types.MachineVerdict{}, now)
-	r := l.capacity(conns, types.MachineSnapshot{}).Refused
-	require.Len(t, r, 1)
-	assert.Equal(t, 99, r[0].PID)
-	assert.False(t, r[0].Fits)
-}
-
-func TestLedgerBoundsTheSeatsItRemembers(t *testing.T) {
-	var l budgetLedger
-	now := time.Unix(1000, 0)
-	for pid := 1; pid <= reservedKeep+10; pid++ {
-		l.reserve(pid, "o", now.Add(time.Duration(pid)*time.Second))
-	}
-	assert.Len(t, l.seats, reservedKeep)
-	assert.NotContains(t, l.seats, 1)
-	assert.Contains(t, l.seats, reservedKeep+10)
-}
-
 func TestCapacityJSONCarriesOwnersWaitersAndRefusals(t *testing.T) {
 	at := time.Date(2026, 10, 24, 9, 40, 55, 0, time.UTC)
 	holder := types.MachineClaimant{Project: ".", Target: "go-test", PID: 1, Slots: 8, Owner: "job-a", Since: at}
@@ -494,4 +363,112 @@ func TestCapacityJSONCarriesOwnersWaitersAndRefusals(t *testing.T) {
 		"refused": [{"at": "2026-10-24T09:40:55Z", "pid": 3, "project": ".", "target": "ci", "slots": 4, "owner": "spawned by root", "fits": true,
 			"holders": [%[1]s]}]
 	}`, holderJSON), string(b))
+}
+
+// StrangerQueueSuite pins the queue every claim that can fit waits in,
+// whoever holds the room.
+type StrangerQueueSuite struct {
+	suite.Suite
+	addr string
+	// stranger holds 900 of 1000 MB under held.
+	stranger *Client
+	held     string
+}
+
+func TestStrangerQueueSuite(t *testing.T) { suite.Run(t, new(StrangerQueueSuite)) }
+
+func (s *StrangerQueueSuite) SetupTest() {
+	s.addr = testAddr(s.T())
+	serve(s.T(), s.addr, WithCapacity(1000, 4))
+	s.stranger = dial(s.T(), s.addr)
+	v, err := s.stranger.Request(s.T().Context(), types.MachineClaim{Project: "x", Target: "build", MemoryMB: 900, PID: 1})
+	s.Require().NoError(err)
+	s.Require().True(v.Granted)
+	s.held = v.ID
+}
+
+// park claims c on a client of its own, sending each parked verdict to frames.
+func (s *StrangerQueueSuite) park(ctx context.Context, c types.MachineClaim, frames chan types.MachineVerdict) <-chan claimed {
+	done := make(chan claimed, 1)
+	cl := dial(s.T(), s.addr)
+	go func() {
+		v, err := cl.Claim(ctx, c, func(v types.MachineVerdict) { frames <- v })
+		done <- claimed{v, err}
+	}()
+	return done
+}
+
+func (s *StrangerQueueSuite) TestAStrangerHeldClaimParksAndIsSeatedOnRelease() {
+	frames := make(chan types.MachineVerdict, 8)
+	done := s.park(s.T().Context(), types.MachineClaim{Project: ".", Target: "go-test", MemoryMB: 500}, frames)
+
+	first := <-frames
+	s.False(first.OwnRun, "another invocation keeps it out")
+	s.Require().Len(first.Holders, 1)
+	s.Equal(1, first.Holders[0].PID)
+	requirePending(s.T(), done)
+
+	s.stranger.Release(s.T().Context(), s.held)
+	got := requireAnswer(s.T(), done)
+	s.Require().NoError(got.err)
+	s.True(got.v.Granted)
+}
+
+func (s *StrangerQueueSuite) TestAHolderChangeResendsOneParkedFrameAndNoChangeSendsNone() {
+	frames := make(chan types.MachineVerdict, 8)
+	done := s.park(s.T().Context(), types.MachineClaim{Project: ".", Target: "go-test", MemoryMB: 500}, frames)
+	s.Len((<-frames).Holders, 1)
+
+	other := dial(s.T(), s.addr)
+	v, err := other.Request(s.T().Context(), types.MachineClaim{Project: "y", Target: "lint", MemoryMB: 50, PID: 2})
+	s.Require().NoError(err)
+	s.Require().True(v.Granted)
+	s.Len((<-frames).Holders, 2, "a new holder is news")
+
+	ctx, cancel := context.WithCancel(s.T().Context())
+	quiet := s.park(ctx, types.MachineClaim{Project: "z", Target: "test", MemoryMB: 900}, make(chan types.MachineVerdict, 8))
+	s.Eventually(func() bool { return len(waiters(s.T(), s.addr)) == 2 }, 5*time.Second, 5*time.Millisecond)
+	cancel()
+	s.Error(requireAnswer(s.T(), quiet).err)
+	s.Never(func() bool { return len(frames) > 0 }, 200*time.Millisecond, 10*time.Millisecond,
+		"a wake that changed no holder sends no frame")
+	requirePending(s.T(), done)
+}
+
+func (s *StrangerQueueSuite) TestAParkedStrangerWaitIsNoRefusal() {
+	frames := make(chan types.MachineVerdict, 8)
+	done := s.park(s.T().Context(), types.MachineClaim{Project: ".", Target: "go-test", MemoryMB: 500}, frames)
+	<-frames
+
+	st, err := QueryStatus(s.T().Context(), s.addr)
+	s.Require().NoError(err)
+	s.Empty(st.Capacity.Refused, "a wait is not a refusal")
+	s.Len(st.Capacity.Waiting, 1, "status lists it as waiting")
+	requirePending(s.T(), done)
+}
+
+func (s *StrangerQueueSuite) TestAClaimLargerThanTheBudgetIsRefusedAtOnce() {
+	got := requireAnswer(s.T(), s.park(s.T().Context(), types.MachineClaim{Project: ".", Target: "huge", MemoryMB: 2000}, nil))
+
+	s.Require().NoError(got.err)
+	s.False(got.v.Fits)
+	s.False(got.v.Granted)
+	st, err := QueryStatus(s.T().Context(), s.addr)
+	s.Require().NoError(err)
+	s.Len(st.Capacity.Refused, 1, "a claim that can never fit is the one refusal")
+}
+
+func (s *StrangerQueueSuite) TestAProtocol4ClientIsRefusedAtHello() {
+	conn, err := endpoint.DialUnix(s.T().Context(), s.addr[len("unix://"):])
+	s.Require().NoError(err)
+	defer func() { _ = conn.Close() }()
+	r, w := newFrameReader(conn), &frameWriter{w: conn}
+	_, err = r.read()
+	s.Require().NoError(err)
+	s.Require().NoError(w.write(typeHello, 1, hello{Magic: helloMagic, Protocol: 4}))
+	f, err := r.read()
+	s.Require().NoError(err)
+	var er errorReply
+	s.Require().NoError(decodeBody(f, &er))
+	s.Equal(CodeProtocol, er.Code, "a protocol 4 client would wait unbounded")
 }

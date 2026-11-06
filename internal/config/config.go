@@ -51,6 +51,11 @@ type Config struct {
 	// Broker decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and shared services: required (refuse a step when none answers), best-effort (the default: run unarbitrated and say so once), or off (never start or contact one; a run hosts its services itself).
 	Broker types.BrokerPolicy `json:"broker" yaml:"broker"`
 
+	// BudgetWait bounds a step's wait for budget other runs hold.
+	// Past it, MGS3009 names them. Zero refuses at once. A sooner
+	// run deadline bounds it instead.
+	BudgetWait time.Duration `json:"budget_wait" yaml:"budget_wait" validate:"gte=0"`
+
 	// ShutdownGrace bounds how long the broker and the server take to stop after a first SIGTERM. The broker seats nothing new and waits this long for the runs holding claims or services to finish; the server cancels the runs it adopted and waits this long for them to unwind. A second SIGTERM, or a SIGINT to the broker, stops either at once. Zero stops at once on the first signal; negative is an error.
 	ShutdownGrace time.Duration `json:"shutdown_grace" yaml:"shutdown_grace" validate:"gte=0"`
 

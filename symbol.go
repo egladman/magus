@@ -782,7 +782,7 @@ func (m *Magus) admitSymbolRefresh(ctx context.Context) (func(), error) {
 		Target:   "symbol-refresh",
 		MemoryMB: symbolRefreshMemoryMB,
 		Dir:      m.Root(),
-	}, policy.Resolved() == types.BrokerRequired)
+	}, policy.Resolved() == types.BrokerRequired, m.cfg.BudgetWait)
 }
 
 // symbolRefresher is RefreshSymbolIndexes' policy, its collaborators

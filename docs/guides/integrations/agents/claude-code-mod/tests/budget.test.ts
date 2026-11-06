@@ -29,7 +29,7 @@ const STATUS = JSON.stringify({
       holders: [GO_TEST, { project: 'console', target: 'test', pid: 23224, memory_mb: 512, slots: 1 }],
       waiting: [
         { pid: 30001, project: '.', target: 'lint', slots: 2, dir: '/w/magus-a', owner: 'unleased', since: SINCE },
-        { pid: 30002, project: '.', target: 'ci', owner: 'job-b', reservation: true, since: SINCE },
+        { pid: 30002, project: '.', target: 'ci', owner: 'job-b', since: SINCE },
         { pid: 30003, project: 'docs', target: 'ci', owner: 'job-c', tree: 'root-job', since: SINCE },
       ],
       refused: [
@@ -72,9 +72,9 @@ describe('parseBudget', () => {
       { pid: 23224, project: 'console', target: 'test', dir: '', command: '', slots: 1, memoryMb: 512, since: 0, owner: '' },
     ])
     expect(p.value?.waiting).toEqual([
-      { pid: 30001, project: '.', target: 'lint', dir: '/w/magus-a', command: '', slots: 2, memoryMb: 0, owner: 'unleased', reservation: false, tree: '', since: AT },
-      { pid: 30002, project: '.', target: 'ci', dir: '', command: '', slots: 0, memoryMb: 0, owner: 'job-b', reservation: true, tree: '', since: AT },
-      { pid: 30003, project: 'docs', target: 'ci', dir: '', command: '', slots: 0, memoryMb: 0, owner: 'job-c', reservation: false, tree: 'root-job', since: AT },
+      { pid: 30001, project: '.', target: 'lint', dir: '/w/magus-a', command: '', slots: 2, memoryMb: 0, owner: 'unleased', tree: '', since: AT },
+      { pid: 30002, project: '.', target: 'ci', dir: '', command: '', slots: 0, memoryMb: 0, owner: 'job-b', tree: '', since: AT },
+      { pid: 30003, project: 'docs', target: 'ci', dir: '', command: '', slots: 0, memoryMb: 0, owner: 'job-c', tree: 'root-job', since: AT },
     ])
     expect(p.value?.refused).toEqual([
       {
@@ -129,7 +129,7 @@ describe('render', () => {
     const lines = (budget?.waiting ?? []).map(w => waiterText(w, AT + 60_000))
     expect(lines).toEqual([
       'pid 30001 · lint · unleased · 2 slots · waiting 1m · in magus-a',
-      'pid 30002 · ci · job-b · 1 slot · reserving · waiting 1m',
+      'pid 30002 · ci · job-b · 1 slot · waiting 1m',
       "pid 30003 · docs ci · job-c · 1 slot · for root-job's seat · waiting 1m",
     ])
   })

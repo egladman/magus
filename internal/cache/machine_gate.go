@@ -24,12 +24,10 @@ import (
 // MachineAdmitter is the budget as a client reaches it: the broker, over the one
 // connection this process holds to it.
 type MachineAdmitter interface {
-	// Claim asks the budget to seat c. A claim kept out only by its own process's or run's
-	// claims, or by its job tree's validation seat, is held by the budget until it is
-	// seated or ctx ends, which returns ctx's error; so is a claim of the oldest gate's run,
-	// up to a bound past which the error is a types.ExitError. Any other refusal answers
-	// at once.
-	Claim(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error)
+	// Claim queues c until it is seated or ctx ends; a claim larger
+	// than the whole budget answers at once. parked hears each report.
+	Claim(ctx context.Context, c types.MachineClaim, parked func(types.MachineVerdict)) (types.MachineVerdict, error)
+	Request(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error)
 	Release(ctx context.Context, id string)
 	// Overrun says the granted claim id held more than its memory curve predicted, so
 	// the budget charges it its full peak until Release. Best-effort, like Release.
@@ -53,9 +51,9 @@ type kickingAdmitter struct {
 	kick func()
 }
 
-func (k *kickingAdmitter) Claim(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
+func (k *kickingAdmitter) Claim(ctx context.Context, c types.MachineClaim, parked func(types.MachineVerdict)) (types.MachineVerdict, error) {
 	k.kick()
-	return k.MachineAdmitter.Claim(ctx, c)
+	return k.MachineAdmitter.Claim(ctx, c, parked)
 }
 
 // machineReleaseTimeout bounds handing a claim back. The release runs in the defer
@@ -92,14 +90,13 @@ const ExitCodeBrokerUnavailable = 69
 
 // AdmitMachine claims the machine budget for host work outside Cache.Run:
 // a session brief's workspace Inspect and any future hook path that loads the same
-// way. Same refuse/wait rules as a step: another invocation's claims refuse at once
-// (exit 75); this process or run's claims wait.
+// way. It waits as a step does, bounded by wait.
 //
 // A nil admitter is a no-op grant, matching a Cache with no WithMachineAdmission.
 // Zero PID, Dir, Invocation, Ancestors and Slots are filled the way claimMachine
 // fills a step's claim, so a caller names the work (Project, Target, MemoryMB) and
 // nothing else.
-func AdmitMachine(ctx context.Context, admit MachineAdmitter, c types.MachineClaim, required bool) (release func(), err error) {
+func AdmitMachine(ctx context.Context, admit MachineAdmitter, c types.MachineClaim, required bool, wait time.Duration) (release func(), err error) {
 	if c.PID == 0 {
 		c.PID = os.Getpid()
 	}
@@ -115,7 +112,7 @@ func AdmitMachine(ctx context.Context, admit MachineAdmitter, c types.MachineCla
 	if c.Slots == 0 {
 		c.Slots = 1
 	}
-	g := &machineGate{admit: admit, required: required, log: slog.With(attr.Component("magus"))}
+	g := &machineGate{admit: admit, required: required, wait: wait, log: slog.With(attr.Component("magus"))}
 	return g.acquire(ctx, c)
 }
 
@@ -123,8 +120,10 @@ func AdmitMachine(ctx context.Context, admit MachineAdmitter, c types.MachineCla
 // waits on its own run, or refuses.
 type machineGate struct {
 	admit MachineAdmitter
-	log   *slog.Logger
-	lost  sync.Once
+	// wait bounds a wait on other invocations' claims (budget_wait).
+	wait time.Duration
+	log  *slog.Logger
+	lost sync.Once
 	// unread says once that this host's memory state has no reading.
 	unread sync.Once
 	// required refuses a step the admitter could not answer for, where the default
@@ -137,8 +136,9 @@ type machineGate struct {
 //
 // A step declaring nothing still takes a slot: concurrency is the half every step
 // spends. A step kept out only by claims of its own process or its own run waits for
-// them, until ctx ends; one kept out by any other magus invocation is refused at once
-// (exit 75), since magus never waits on another magus invocation.
+// them, until ctx ends.
+// One kept out by another invocation waits up to g.wait, then is
+// refused (exit 75).
 //
 // A broker that dies, or a transport that breaks, admits the step and says so once
 // under best-effort; under required it refuses with MGS3022 (exit 69).
@@ -197,9 +197,8 @@ func (h *machineHold) lend() {
 	}
 }
 
-// reclaim takes the claim again once the last lent dispatch returns. It waits on this
-// run's claims and is refused by any other invocation's, so a composer can fail here
-// after its members ran.
+// reclaim takes the claim again once the last lent dispatch returns.
+// It waits as any claim does.
 // It reads no memory: this step is running, and running work is never refused.
 func (h *machineHold) reclaim(ctx context.Context) error {
 	h.mu.Lock()
@@ -290,15 +289,21 @@ func (g *machineGate) refuseUnderPressure(ctx context.Context, c types.MachineCl
 	return memoryPressureError(c, reason, claimLease(ctx))
 }
 
-// seat asks the budget for c, with no reading of memory.
+// seat asks the budget for c, with no reading of memory. It waits in the
+// budget's queue, and a wait on other invocations ends at g's bound.
 func (g *machineGate) seat(ctx context.Context, c types.MachineClaim) (string, func(), error) {
 	if g == nil || g.admit == nil {
 		return "", func() {}, nil
 	}
-	v, err := g.ask(ctx, c)
+	wctx, w := g.newBudgetWait(ctx, c)
+	defer w.stop()
+	v, err := g.ask(wctx, c, func(v types.MachineVerdict) { w.parked(ctx, v) })
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", nil, fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(c.Project), c.Target, ctx.Err())
+		}
+		if w.expired() {
+			return g.atBound(ctx, c, w)
 		}
 		// An admitter that answers with an exit status refused the step itself (its
 		// workspace's admission config does not read), which no broker policy excuses.
@@ -312,24 +317,180 @@ func (g *machineGate) seat(ctx context.Context, c types.MachineClaim) (string, f
 	}
 	switch {
 	case v.Granted:
+		w.seated(ctx)
 		return v.ID, g.releaser(v.ID), nil
 	case !v.Fits:
 		return "", nil, machineDoesNotFitError(c, v)
-	case v.OwnRun:
-		return "", nil, fmt.Errorf("machine budget: the admitter answered %s %s with a wait on its own run instead of holding the claim until it is seated", displayProject(c.Project), c.Target)
-	case blindToOwnAncestry(ctx):
-		// A nested magus that cannot name its ancestors cannot be excused from its own
-		// parent's claim, so the refusal names the fix rather than the holders.
-		return "", nil, machineBlindError(c, v)
 	default:
-		return "", nil, machineBusyError(c, v, time.Now(), claimLease(ctx))
+		return "", nil, fmt.Errorf("machine budget: the admitter answered %s %s without seating it or holding the claim until it is seated", displayProject(c.Project), c.Target)
 	}
+}
+
+// atBound is the one unparked ask a wait gets at its bound: the room may
+// have come free as the bound passed. Otherwise it is MGS3009 naming the
+// holders now.
+func (g *machineGate) atBound(ctx context.Context, c types.MachineClaim, w *budgetWait) (string, func(), error) {
+	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
+	defer cancel()
+	v, err := g.admit.Request(rctx, c)
+	switch {
+	case err != nil:
+		v = w.last()
+	case v.Granted:
+		w.seated(ctx)
+		return v.ID, g.releaser(v.ID), nil
+	case !v.Fits:
+		return "", nil, machineDoesNotFitError(c, v)
+	}
+	if w.blind {
+		// A nested magus that cannot name its ancestors cannot be excused
+		// from its parent's claim, so the refusal names the fix.
+		return "", nil, machineBlindError(c, v)
+	}
+	return "", nil, machineBusyError(c, v, time.Now(), claimLease(ctx), w.waited(), w.bound)
+}
+
+// waitBound is how long a wait on other invocations may last, and what
+// set that.
+type waitBound struct {
+	d      time.Duration
+	source string
+}
+
+// BudgetWaitSource names where budget_wait is set.
+const BudgetWaitSource = "budget_wait (--budget-wait, MAGUS_BUDGET_WAIT or magus.yaml)"
+
+// budgetBound is the smaller of wait and the time left before ctx's deadline.
+func budgetBound(ctx context.Context, wait time.Duration) waitBound {
+	b := waitBound{d: wait, source: "the bound " + BudgetWaitSource + " sets"}
+	if dl, ok := ctx.Deadline(); ok && wait > 0 {
+		if left := time.Until(dl); left < wait {
+			b = waitBound{d: max(left, 0), source: "this run's deadline"}
+		}
+	}
+	return b
+}
+
+// budgetWait is one claim's wait in the budget's queue. The bound starts
+// the first time another invocation keeps the claim out. A run queued
+// behind its own steps waits as long as they take.
+type budgetWait struct {
+	cancel context.CancelFunc
+	gate   *machineGate
+	claim  types.MachineClaim
+	bound  waitBound
+	// blind is a nested run that lost its ancestry. It never queues behind
+	// another invocation.
+	blind bool
+
+	mu      sync.Mutex
+	since   time.Time
+	holders string
+	verdict types.MachineVerdict
+	timer   *time.Timer
+	fired   bool
+}
+
+func (g *machineGate) newBudgetWait(ctx context.Context, c types.MachineClaim) (context.Context, *budgetWait) {
+	wctx, cancel := context.WithCancel(ctx)
+	return wctx, &budgetWait{cancel: cancel, gate: g, claim: c, bound: budgetBound(ctx, g.wait), blind: blindToOwnAncestry(ctx)}
+}
+
+// parked hears each report of what keeps the claim out. A wait on its own
+// run passes in silence. A wait on other invocations says so, and again
+// when they change.
+func (w *budgetWait) parked(ctx context.Context, v types.MachineVerdict) {
+	if v.OwnRun {
+		return
+	}
+	held := describeMachineHolders(v.Holders)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.verdict = v
+	if w.fired {
+		return
+	}
+	if w.since.IsZero() {
+		w.since, w.holders = time.Now(), held
+		if w.bound.d <= 0 || w.blind {
+			w.fired = true
+			w.cancel()
+			return
+		}
+		w.timer = time.AfterFunc(w.bound.d, w.expire)
+		w.say(ctx, fmt.Sprintf("waiting for a seat for %s %s: %s, and %s; %s. It gives up after %s (%s)",
+			displayProject(w.claim.Project), w.claim.Target, describeMachineDeclaration(w.claim),
+			describeMachineRemaining(v), held, w.bound.d, w.bound.source))
+		return
+	}
+	if held == w.holders {
+		return
+	}
+	w.holders = held
+	elapsed := time.Since(w.since)
+	w.say(ctx, fmt.Sprintf("still waiting for a seat for %s %s after %s: now %s; it gives up in %s",
+		displayProject(w.claim.Project), w.claim.Target, elapsed.Round(time.Second), held,
+		max(w.bound.d-elapsed, 0).Round(time.Second)))
+}
+
+func (w *budgetWait) expire() {
+	w.mu.Lock()
+	w.fired = true
+	w.mu.Unlock()
+	w.cancel()
+}
+
+// expired reports a wait its bound ended, not its caller.
+func (w *budgetWait) expired() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.fired
+}
+
+func (w *budgetWait) last() types.MachineVerdict {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.verdict
+}
+
+func (w *budgetWait) waited() time.Duration {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.since.IsZero() {
+		return 0
+	}
+	return time.Since(w.since)
+}
+
+// seated says how long a wait on other invocations took.
+func (w *budgetWait) seated(ctx context.Context) {
+	w.mu.Lock()
+	since := w.since
+	w.mu.Unlock()
+	if since.IsZero() {
+		return
+	}
+	w.say(ctx, fmt.Sprintf("seated %s %s after %s", displayProject(w.claim.Project), w.claim.Target,
+		time.Since(since).Round(time.Second)))
+}
+
+func (w *budgetWait) say(ctx context.Context, msg string) {
+	w.gate.log.InfoContext(ctx, msg, attr.Notice("machine budget"))
+}
+
+func (w *budgetWait) stop() {
+	w.mu.Lock()
+	if w.timer != nil {
+		w.timer.Stop()
+	}
+	w.mu.Unlock()
+	w.cancel()
 }
 
 // ask is one Claim, beating the stall watchdog every lockWaitHeartbeat while the budget
 // holds it: the holders may be another invocation of this process or of this job tree,
 // whose progress the watchdog does not see, and a queued run must not trip MGS3012.
-func (g *machineGate) ask(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
+func (g *machineGate) ask(ctx context.Context, c types.MachineClaim, parked func(types.MachineVerdict)) (types.MachineVerdict, error) {
 	done := make(chan struct{})
 	beating := make(chan struct{})
 	go func() {
@@ -349,12 +510,12 @@ func (g *machineGate) ask(ctx context.Context, c types.MachineClaim) (types.Mach
 		close(done)
 		<-beating
 	}()
-	return g.admit.Claim(ctx, c)
+	return g.admit.Claim(ctx, c, parked)
 }
 
-// LeaseWeight is the weight of the job a run on ctx acts under, resolved as the run's lease
+// leaseWeight is the weight of the job a run on ctx acts under, resolved as the run's lease
 // is (see job.RunLease), or 0 when it acts under none or the job store cannot be read.
-func LeaseWeight(ctx context.Context, cacheDir string) float64 {
+func leaseWeight(ctx context.Context, cacheDir string) float64 {
 	stateBase, err := xdg.StateDir()
 	if err != nil {
 		return 0
@@ -595,21 +756,23 @@ func workingDir() string {
 // that lost its ancestry both answer the same way forever, so a wrapper retrying on 75
 // would loop on them.
 
-// machineBusyError is the fail-fast answer: another magus invocation fills the machine
-// right now, and the same command will succeed later. The wait belongs to the caller, so
-// the error names the pipe that does it rather than a retry loop. A caller acting under a
-// job lease never waits for a seat, and may not run the pipe, so it is told to file the
-// check as owed instead: a refusal leaves no output ref for a result to cite.
-func machineBusyError(c types.MachineClaim, v types.MachineVerdict, now time.Time, lease string) error {
-	next := fmt.Sprintf("To run it once the budget can seat it, pipe the budget into the same command: `%s | %s <same args>`",
-		hint.Status.With("--wait"), hint.Run)
+// machineBusyError is the answer once a wait reaches its bound: other
+// invocations still fill the machine. A leased caller files the check owed,
+// since a refusal leaves no output ref to cite.
+func machineBusyError(c types.MachineClaim, v types.MachineVerdict, now time.Time, lease string, waited time.Duration, bound waitBound) error {
+	why := fmt.Sprintf("waited %s for a seat, %s. That is %s", waited.Round(time.Second), describeMachineHolders(v.Holders), bound.source)
+	next := fmt.Sprintf("Raise %s, or free a holder, then run the same command again", BudgetWaitSource)
+	if bound.d == 0 {
+		why = fmt.Sprintf("no seat is free, %s. It did not wait, since %s is 0", describeMachineHolders(v.Holders), BudgetWaitSource)
+		next = "To wait for a seat instead, run the same command again with --budget-wait 30m, or set MAGUS_BUDGET_WAIT or budget_wait in magus.yaml"
+	}
 	if lease != "" {
-		next = fmt.Sprintf("Job %s never waits for a seat: %s", lease, owedFiling(lease))
+		next = fmt.Sprintf("Job %s got no seat: %s", lease, owedFiling(lease))
 	}
 	return types.ExitError{Code: ExitCodeMachineBusy, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
-		"not starting %s %s: this machine's build budget is full; %s, and %s. %s. The broker %s. %s",
-		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
-		describeMachineRemaining(v), describeMachineHolders(v.Holders), describeMachinePacking(c, v, now), next)}
+		"not starting %s %s: %s; %s, and %s. The broker %s. %s",
+		displayProject(c.Project), c.Target, why, describeMachineDeclaration(c),
+		describeMachineRemaining(v), describeMachinePacking(c, v, now), next)}
 }
 
 // owedFiling tells a caller under a job lease how to file a refused check.
@@ -625,8 +788,8 @@ func LeasedPressureNext(lease string) string {
 		lease, owedFiling(lease))
 }
 
-// memoryPressureError offers no wait pipe: that waits on declared claims and
-// cannot see this.
+// memoryPressureError is no wait: the budget queue waits on declared claims
+// and cannot see this.
 func memoryPressureError(c types.MachineClaim, reason, lease string) error {
 	next := fmt.Sprintf("Free memory, then run the same command again: `%s` shows what magus holds, and this reading counts everything on the machine", hint.Status.String())
 	if lease != "" {
@@ -683,82 +846,6 @@ func describeMachinePacking(c types.MachineClaim, v types.MachineVerdict, now ti
 		FormatMB(v.BudgetMB), at.Format(time.TimeOnly), at.Sub(now).Round(time.Second))
 }
 
-// MachineWait is one ask of the budget that the broker holds until it can answer.
-// parked runs when the broker first keeps it out, with the claim it cannot seat and the
-// budget as it stands. It returns the broker's answer: Granted, or the claim that does
-// not fit the whole budget.
-type machineWait func(ctx context.Context, parked func(blocked types.MachineClaim, v types.MachineVerdict)) (blocked types.MachineClaim, v types.MachineVerdict, err error)
-
-// AwaitMachine blocks on wait, one parked ask, until the budget answers it, and returns
-// nil once it seats; the MGS3009 refusal for a claim larger than the whole budget, which
-// no wait admits; ctx's error, wrapped, when ctx ends first; or wait's own error, wrapped,
-// for the caller to decide what an absent broker means. waiting is called once, when the
-// broker parks the ask, with what keeps it out.
-func AwaitMachine(ctx context.Context, wait machineWait, waiting func(msg string)) error {
-	var last types.MachineClaim
-	parked := func(blocked types.MachineClaim, v types.MachineVerdict) {
-		last = blocked
-		if waiting != nil {
-			waiting(fmt.Sprintf("waiting for this machine's build budget to seat %s %s: %s, and %s. %s",
-				displayProject(blocked.Project), blocked.Target, describeMachineDeclaration(blocked),
-				describeMachineRemaining(v), describeMachineHolders(v.Holders)))
-		}
-	}
-	blocked, v, err := wait(ctx, parked)
-	switch {
-	case ctx.Err() != nil:
-		return fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(last.Project), last.Target, ctx.Err())
-	case err != nil:
-		return fmt.Errorf("machine budget: %w", err)
-	case !v.Granted:
-		return machineDoesNotFitError(blocked, v)
-	}
-	return nil
-}
-
-// WidestSeat is the one seat that admits every claim of a run on its own: the largest
-// memory claim, taking the most slots any claim takes. A run's later steps wait on its
-// earlier ones, so it needs room for its largest step, not for their sum.
-func WidestSeat(claims []types.MachineClaim) types.MachineClaim {
-	var seat types.MachineClaim
-	slots := 1
-	for i, c := range claims {
-		if i == 0 || c.MemoryMB > seat.MemoryMB {
-			seat = c
-		}
-		slots = max(slots, c.Slots)
-	}
-	seat.Slots = slots
-	return seat
-}
-
-// AwaitVerdict is the budget's answer to a wait on claims, each judged on its own beside
-// what s holds, since a run's steps wait on one another: Granted when s seats every one;
-// otherwise blocked is the first it cannot, and Fits says whether an empty budget would.
-func AwaitVerdict(s types.MachineSnapshot, claims []types.MachineClaim) (types.MachineClaim, types.MachineVerdict) {
-	v := types.MachineVerdict{Fits: true, Holders: s.Holders, BudgetMB: s.BudgetMB, HeldMB: s.HeldMB, BudgetSlots: s.BudgetSlots, HeldSlots: s.HeldSlots}
-	blocked, ok := firstUnadmitted(s, claims)
-	if !ok {
-		v.Granted = true
-		return types.MachineClaim{}, v
-	}
-	v.Fits = NewMachineBudget(s.BudgetMB, s.BudgetSlots).fits(blocked, 0, 0)
-	return blocked, v
-}
-
-// firstUnadmitted returns the first claim s cannot seat beside what it holds, by the
-// rule MachineBudget.Request applies to a claim with no ancestors.
-func firstUnadmitted(s types.MachineSnapshot, claims []types.MachineClaim) (types.MachineClaim, bool) {
-	budget := NewMachineBudget(s.BudgetMB, s.BudgetSlots)
-	for _, c := range claims {
-		c.Slots = max(c.Slots, 1)
-		if !budget.fits(c, s.HeldMB, s.HeldSlots) {
-			return c, true
-		}
-	}
-	return types.MachineClaim{}, false
-}
-
 // machineDoesNotFitError is the refusal no wait can fix: the declaration does not fit
 // in the whole budget, so an empty machine would refuse it too.
 //
@@ -792,7 +879,7 @@ func machineDoesNotFitError(c types.MachineClaim, v types.MachineVerdict) error 
 // lie for the other.
 func describeMachineOversize(c types.MachineClaim, v types.MachineVerdict) string {
 	if v.BudgetMB > 0 && c.MemoryMB > v.BudgetMB {
-		return fmt.Sprintf("the claim that does not fit is %s %s at %s against a budget of %s, and `magus status --wait` cannot seat it either. That budget is what magus reserved for build work here, not the whole machine; the rest runs the OS, its page cache, and (outside concurrency_profile: aggressive) everything else sharing it. Narrow the run to fewer projects or a lighter target, or run `magus doctor` and read MGS1030, which compares this declaration to the peak memory magus measured: correct the declaration if it has drifted; if it is honest, get a bigger machine.",
+		return fmt.Sprintf("the claim that does not fit is %s %s at %s against a budget of %s, and no wait seats it. That budget is what magus reserved for build work here, not the whole machine; the rest runs the OS, its page cache, and (outside concurrency_profile: aggressive) everything else sharing it. Narrow the run to fewer projects or a lighter target, or run `magus doctor` and read MGS1030, which compares this declaration to the peak memory magus measured: correct the declaration if it has drifted; if it is honest, get a bigger machine.",
 			displayProject(c.Project), c.Target, FormatMB(c.MemoryMB), FormatMB(v.BudgetMB))
 	}
 	return fmt.Sprintf("this machine has %d slots in total, so a step taking %d never fits. Correct the declaration if it is wrong, or run this on a bigger machine.",

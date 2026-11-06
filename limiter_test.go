@@ -396,7 +396,7 @@ func TestSizeClaimNamesSlotsTakenForMemory(t *testing.T) {
 	assert.Equal(t, types.SlotSizing{Source: types.SlotsForMemory}, sizing.Slots)
 
 	c, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
-		cache.WithMachineAdmission(broker.NewClient("unix:///nonexistent/broker.sock")))
+		cache.WithMachineAdmission(broker.NewClient("unix:///nonexistent/broker.sock"), 0))
 	require.NoError(t, err)
 	m.cache = c
 	step = cache.Step{}
@@ -504,9 +504,8 @@ func TestSizeSlotClaim(t *testing.T) {
 	}
 }
 
-// A skip_cache composer lends its same-project members claims of their own, so the run it
-// feeds needs a seat as wide as its widest member: `magus status --wait | magus affected
-// ci` reserved ci's one slot while the root test, which ci composes, took four.
+// A skip_cache composer lends its same-project members claims of their own,
+// so each member's claim is sized for itself, never by its composer.
 func TestMachineClaimsCoverTheMembersAComposerLends(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Magusfile(`import "magus";

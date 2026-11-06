@@ -3,11 +3,13 @@ package spawn
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestExecRedactsSecretsFromEveryCapturedPath is the regression for two leaks found in
@@ -438,4 +441,26 @@ func TestExecArgsVerbatim(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "*\n", out, "args may have been shell-expanded")
+}
+
+// QuietActivitySuite pins that a quiet child's stderr is still activity.
+type QuietActivitySuite struct{ suite.Suite }
+
+func TestQuietActivitySuite(t *testing.T) { suite.Run(t, new(QuietActivitySuite)) }
+
+func (s *QuietActivitySuite) TestAQuietChildsStderrIsActivity() {
+	if runtime.GOOS == "windows" {
+		s.T().Skip("needs sh")
+	}
+	var beats atomic.Int64
+	ctx := WithActivity(s.T().Context(), func() { beats.Add(1) })
+	res, err := Exec(ctx, "sh", []string{"-c", "echo 'waiting for a seat' >&2"}, ExecOptions{Quiet: true, Capture: true})
+
+	s.Require().NoError(err)
+	s.Positive(beats.Load(), "the wait line beat the parent's progress")
+	s.Contains(res.Stderr, "waiting for a seat", "and is still captured")
+}
+
+func (s *QuietActivitySuite) TestAQuietChildWithNoActivityHookStreamsNowhere() {
+	s.Equal(io.Discard, quietStderr(s.T().Context()))
 }

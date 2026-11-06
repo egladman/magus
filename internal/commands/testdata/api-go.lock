@@ -3916,7 +3916,6 @@ github.com/egladman/magus/types.MachineClaimant.Owner field string "json:\"owner
 github.com/egladman/magus/types.MachineClaimant.PID field int "json:\"pid,omitzero\" yaml:\"pid,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Profile field MemoryProfile "json:\"profile,omitzero\" yaml:\"profile,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Project field string "json:\"project\" yaml:\"project\""
-github.com/egladman/magus/types.MachineClaimant.Reserved field bool "json:\"reserved,omitzero\" yaml:\"reserved,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Since field time.Time "json:\"since,omitempty\" yaml:\"since,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Sizing field MemorySizing "json:\"sizing,omitzero\" yaml:\"sizing,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Slots field int "json:\"slots,omitzero\" yaml:\"slots,omitempty\""

@@ -733,7 +733,7 @@ export const register: Register = (on, options) => {
           ))}
           {b?.waiting.length ? <Text bold>Waiting for a seat</Text> : null}
           {(b?.waiting ?? []).map(w => (
-            <Text key={`waiting-${w.pid}-${w.target}-${w.reservation}`} color="yellow" wrap="truncate-end">
+            <Text key={`waiting-${w.pid}-${w.target}`} color="yellow" wrap="truncate-end">
               … {waiterText(w, now)}
             </Text>
           ))}
