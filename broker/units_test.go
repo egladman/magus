@@ -16,7 +16,7 @@ import (
 func TestRenderUnitsWhatTheSupervisorReads(t *testing.T) {
 	f := UnitFacts{
 		Exe:       "/opt/my tools/magus",
-		Socket:    "/run/user/1000/magus%/broker.sock",
+		Socket:    "/run/user/1000/magus%/" + SocketName,
 		Log:       "/home/eli/.local/state/magus/broker.log",
 		Grace:     90*time.Second + 500*time.Millisecond,
 		Home:      "/home/eli",
@@ -31,7 +31,7 @@ func TestRenderUnitsWhatTheSupervisorReads(t *testing.T) {
 Description=magus server broker socket
 
 [Socket]
-ListenStream=/run/user/1000/magus%%/broker.sock
+ListenStream=/run/user/1000/magus%%/` + SocketName + `
 SocketMode=0600
 DirectoryMode=0700
 
