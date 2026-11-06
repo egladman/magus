@@ -46,7 +46,12 @@ type procGroup struct {
 	reaped bool
 	// release ends a WithGroupWatch watch on the group; nil when nothing watches it.
 	release func()
+	// tree is the child's whole process tree, setsid members included; nil when
+	// the host cannot follow one.
+	tree *boundedTree
 }
+
+func (g *procGroup) bound(t *boundedTree) { g.tree = t }
 
 // setCancel starts c in its own process group and, on context cancellation of a
 // CommandContext, SIGTERMs the whole group. When c's WaitDelay runs out exec kills c,

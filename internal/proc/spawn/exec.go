@@ -268,6 +268,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	// the sampler is handed it. Behaviorally identical (Run is Start plus Wait);
 	// the split exists only so nothing reads c.Process concurrently.
 	var root *sampledRoot
+	var tree *boundedTree
 	endCurve := func() {}
 	started := func(pid int) {
 		if ruleset != nil {
@@ -279,6 +280,8 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		var record func(types.MemorySample)
 		record, endCurve = types.RecordCurve(ctx, startedAt)
 		root = processSampler.follow(pid, startedAt, record)
+		tree = processBounds.follow(pid, name)
+		group.bound(tree)
 	}
 	if ruleset != nil {
 		defer ruleset.Close()
@@ -297,6 +300,9 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		}
 	}
 	samples := processSampler.stop(root)
+	if boundErr := processBounds.stop(tree); boundErr != nil {
+		runErr = boundErr
+	}
 	endCurve()
 	runErr = classifyMissingBinary(runErr, name, c.ProcessState != nil)
 

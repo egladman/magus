@@ -214,6 +214,7 @@ func envValues(env []string, name string) []string {
 // TestMain lets the test binary serve as the sandbox launcher: a confined Exec
 // re-executes the running binary, which under go test is this one.
 func TestMain(m *testing.M) {
+	maybeForkTree()
 	sandbox.MaybeLaunch()
 	testkit.Main(m)
 }
