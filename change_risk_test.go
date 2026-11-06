@@ -793,18 +793,16 @@ func (s *RiskMeterSuite) TestAShrunkFunctionIsScoredAgainstItselfAtBase() {
 	s.Require().Len(got.Functions, 1)
 	f := got.Functions[0]
 	s.Equal([5]any{"", 4, 0, 3, 20.0}, [5]any{f.BaseReason, f.BaseComplexity, f.BaseCovered, f.BaseCoverable, f.BaseScore})
-	s.False(f.Charged(3), "past 3 at head, but better than at base")
 	s.Equal([]string{"base magus run test lib", "head magus run test lib"}, s.readSorted())
 }
 
-func (s *RiskMeterSuite) TestAFunctionWorseThanAtBaseIsCharged() {
+func (s *RiskMeterSuite) TestAFunctionWorseThanAtBaseMeasuresBothScores() {
 	s.files["base"] = []coverage.File{{Path: "lib/a.go", Blocks: []coverage.Block{
 		{StartLine: 3, EndLine: 11, Units: 1, Hits: 1},
 	}}}
 	s.files["head"] = []coverage.File{{Path: "lib/a.go", Blocks: []coverage.Block{{StartLine: 3, EndLine: 8, Units: 2}}}}
 	f := s.measure().Functions[0]
 	s.Equal([2]float64{12, 4}, [2]float64{f.Score, f.BaseScore})
-	s.True(f.Charged(3))
 }
 
 func (s *RiskMeterSuite) TestANewFunctionHasNoBase() {
@@ -838,7 +836,6 @@ func (s *RiskMeterSuite) TestARedBaseLeavesTheHeadScoreAndSaysWhy() {
 	s.failed["base"] = true
 	f := s.measure().Functions[0]
 	s.Equal("its base is unmeasured: a test fails at base: `magus run test lib`", f.BaseReason)
-	s.True(f.Charged(3), "no base measure: the threshold alone judges")
 }
 
 func (s *RiskMeterSuite) TestAKeptLineThatLostCoverageAndAnUncoveredAddedLineAreFindings() {

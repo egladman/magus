@@ -22,15 +22,6 @@ type FunctionGap struct {
 	Reason string
 }
 
-// Decided reports whether the verdict against threshold holds at ANY
-// coverage. Zero coverage is the worst case, complexity^2 + complexity, so a
-// function whose worst case is within threshold passes without a coverage
-// number. An unknown complexity (0) decides nothing.
-func (f FunctionGap) Decided(threshold int) bool {
-	c := f.Complexity
-	return c > 0 && c*c+c <= threshold
-}
-
 // ChangeRiskFunction is one function's measured score.
 type ChangeRiskFunction struct {
 	Symbol   string
@@ -61,18 +52,6 @@ func (f ChangeRiskFunction) Coverage() float64 {
 		return 0
 	}
 	return float64(f.Covered) / float64(f.Coverable)
-}
-
-// Past reports whether the function scores above threshold.
-func (f ChangeRiskFunction) Past(threshold int) bool {
-	return f.Score > float64(threshold)
-}
-
-// Charged reports whether the function is past threshold and worse than at
-// base. One with no base measure is judged by threshold alone, so a shrunk
-// function never costs and a new one meets the threshold as before.
-func (f ChangeRiskFunction) Charged(threshold int) bool {
-	return f.Past(threshold) && (f.BaseReason != "" || f.Score > f.BaseScore)
 }
 
 // ChangeRisk is the change risk answer for a change: what it scored and what

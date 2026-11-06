@@ -146,19 +146,6 @@ func (s *commandTestScopeSuite) TestRefusesAnEmptyEntry() {
 	s.EqualError(Command{TestScope: []string{""}}.Validate(), "test_scope[0] is empty")
 }
 
-func (s *commandTestScopeSuite) TestExpandsEachPlaceholder() {
-	c := Command{TestScope: []string{"./{dir}", "{file}", "{dir}/{stem}_test.buzz"}}
-	s.Equal([]string{"./std/lib", "std/lib/fmt.buzz", "std/lib/fmt_test.buzz"}, c.ExpandTestScope("std/lib/fmt.buzz"))
-}
-
-func (s *commandTestScopeSuite) TestExpandsAFileAtTheProjectRoot() {
-	s.Equal([]string{"./."}, Command{TestScope: []string{"./{dir}"}}.ExpandTestScope("main.go"))
-}
-
-func (s *commandTestScopeSuite) TestExpandsNothingWhenUndeclared() {
-	s.Empty(Command{}.ExpandTestScope("main.go"))
-}
-
 func (s *commandTestScopeSuite) TestSurvivesJSON() {
 	original := Command{Bin: "go", TestScope: []string{"./{dir}"}}
 	data, err := json.Marshal(original)

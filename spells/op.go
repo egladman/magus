@@ -3,7 +3,6 @@ package spells
 import (
 	"errors"
 	"fmt"
-	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -215,19 +214,6 @@ func (c Command) validateTestScope() error {
 		}
 	}
 	return nil
-}
-
-// ExpandTestScope returns TestScope for one project-relative source file:
-// {dir} is its directory, {file} its path and {stem} its base name without
-// extension. It checks no path; a caller drops entries naming none.
-func (c Command) ExpandTestScope(file string) []string {
-	r := strings.NewReplacer("{dir}", path.Dir(file), "{file}", file,
-		"{stem}", strings.TrimSuffix(path.Base(file), path.Ext(file)))
-	out := make([]string, 0, len(c.TestScope))
-	for _, entry := range c.TestScope {
-		out = append(out, r.Replace(entry))
-	}
-	return out
 }
 
 // SourcesPlaceholder renders Sources as a single human-readable argv token, for a
