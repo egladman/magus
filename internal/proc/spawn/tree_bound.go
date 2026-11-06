@@ -4,6 +4,7 @@ package spawn
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -26,6 +27,9 @@ const boundEvery = 50 * time.Millisecond
 // termGrace is how long a command's leftover descendants get between SIGTERM
 // and SIGKILL once the command has exited.
 const termGrace = 500 * time.Millisecond
+
+// ErrTooManyProcesses is a command whose process tree passed its bound.
+var ErrTooManyProcesses = errors.New("process tree over its bound")
 
 // procInfo is one process as a table read saw it. start tells a reused pid
 // from the process that held it before.

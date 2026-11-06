@@ -3,6 +3,7 @@
 package spawn
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"runtime"
@@ -15,6 +16,9 @@ type boundedTree struct{}
 type treeBounds struct{ warned sync.Once }
 
 var processBounds = &treeBounds{}
+
+// ErrTooManyProcesses is a command whose process tree passed its bound.
+var ErrTooManyProcesses = errors.New("process tree over its bound")
 
 // marked leaves env as it is: nothing here reads a mark back.
 func (*treeBounds) marked(env []string) ([]string, string) { return env, "" }
