@@ -23,6 +23,9 @@ func (g *procGroup) wait() error {
 	}
 	g.reaped = true
 	g.mu.Unlock()
+	// A setsid member left the group, so the group kill missed it, and its copy
+	// of stdout would hold Wait until WaitDelay.
+	processBounds.killTree(g.tree)
 	if g.release != nil {
 		g.release()
 	}
