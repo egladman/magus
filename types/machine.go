@@ -75,8 +75,6 @@ type MachineClaimant struct {
 
 // MachineWaiter is a claim the broker holds until the budget can seat it.
 type MachineWaiter struct {
-	// Kind is claim, the one request the broker parks.
-	Kind    string `json:"kind" yaml:"kind"`
 	Project string `json:"project,omitempty" yaml:"project,omitempty"`
 	Target  string `json:"target,omitempty" yaml:"target,omitempty"`
 	// PID is the waiting process.

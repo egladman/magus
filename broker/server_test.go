@@ -169,7 +169,7 @@ func TestStatusNamesOwnersWaitersAndRefusals(t *testing.T) {
 	assert.Equal(t, "plan/a", c.Holders[0].Owner)
 	require.Len(t, c.Waiting, 1)
 	w := c.Waiting[0]
-	assert.Equal(t, types.MachineWaiter{Kind: "claim", PID: 102, Project: ".", Target: "lint", Slots: 1, Dir: w.Dir, Command: w.Command,
+	assert.Equal(t, types.MachineWaiter{PID: 102, Project: ".", Target: "lint", Slots: 1, Dir: w.Dir, Command: w.Command,
 		Owner: "plan/b", Tree: "plan", Since: w.Since, WaitedMS: w.WaitedMS}, w)
 	require.Len(t, c.Refused, 1)
 	r := c.Refused[0]
@@ -182,7 +182,7 @@ func TestStatusNamesOwnersWaitersAndRefusals(t *testing.T) {
 
 	b, err := json.Marshal(st)
 	require.NoError(t, err)
-	assert.Contains(t, string(b), `"waiting":[{"kind":"claim","project":".","target":"lint","pid":102`)
+	assert.Contains(t, string(b), `"waiting":[{"project":".","target":"lint","pid":102`)
 	assert.Contains(t, string(b), `"refused":[{"at":`)
 
 	require.NoError(t, waiter.Close())
