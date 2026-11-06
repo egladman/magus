@@ -884,6 +884,48 @@ func TestResultRefsLine(t *testing.T) {
 	}
 }
 
+type ResultStatusesSuite struct{ suite.Suite }
+
+func TestResultStatusesSuite(t *testing.T) { suite.Run(t, new(ResultStatusesSuite)) }
+
+func (s *ResultStatusesSuite) record(target string, events ...journal.Event) *resultStatuses {
+	statuses := newResultStatuses(target)
+	ctx := journal.WithLogger(context.Background(), journal.NewLogger(statuses))
+	for _, e := range events {
+		journal.Emit(ctx, e)
+	}
+	return statuses
+}
+
+func (s *ResultStatusesSuite) TestKeepsEachProjectsStatus() {
+	statuses := s.record("ci",
+		journal.Event{Kind: journal.KindResult, Project: "proto", Target: "ci", Status: journal.StatusPermitted},
+		journal.Event{Kind: journal.KindResult, Project: "console", Target: "ci", Status: journal.StatusCached},
+	)
+	s.Equal(journal.StatusPermitted, statuses.of("proto"))
+	s.Equal(journal.StatusCached, statuses.of("console"))
+}
+
+func (s *ResultStatusesSuite) TestMatchesACharmedStep() {
+	statuses := s.record("bundle", journal.Event{Kind: journal.KindResult, Project: ".", Target: "bundle:rw", Status: journal.StatusPass})
+	s.Equal(journal.StatusPass, statuses.of("."))
+}
+
+func (s *ResultStatusesSuite) TestLeavesOutADependencysResult() {
+	statuses := s.record("ci", journal.Event{Kind: journal.KindResult, Project: "proto", Target: "lint", Status: journal.StatusFail})
+	s.Empty(statuses.of("proto"))
+}
+
+func (s *ResultStatusesSuite) TestSkipsEventsThatAreNotResults() {
+	statuses := s.record("ci", journal.Event{Kind: journal.KindOutput, Project: "proto", Target: "ci", Status: journal.StatusPass})
+	s.Empty(statuses.of("proto"))
+}
+
+func (s *ResultStatusesSuite) TestANilCollectorReportsNothing() {
+	var statuses *resultStatuses
+	s.Empty(statuses.of("proto"))
+}
+
 type SameCharmsSuite struct{ suite.Suite }
 
 func TestSameCharmsSuite(t *testing.T) { suite.Run(t, new(SameCharmsSuite)) }

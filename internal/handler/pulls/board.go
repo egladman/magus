@@ -155,6 +155,7 @@ func pullRow(p types.ForgePull, base string, in boardInput) *pullsv1.Pull {
 		Url:       p.URL,
 		Branch:    p.Branch,
 		HeadSha:   p.HeadSHA,
+		FetchRef:  p.FetchRef,
 		BehindBy:  int32(p.BehindBy),
 		Mergeable: parseMergeable(p.Mergeable),
 		Ci:        r.state,

@@ -189,7 +189,9 @@ type ForgePull struct {
 	URL     string
 	Branch  string
 	HeadSHA string
-	Draft   bool
+	// FetchRef fetches the head commit, as in refs/pull/<n>/head.
+	FetchRef string
+	Draft    bool
 	// Mergeable is mergeable, conflicting or unknown.
 	Mergeable string
 	// BehindBy counts commits on base missing from head, -1 when unknown.

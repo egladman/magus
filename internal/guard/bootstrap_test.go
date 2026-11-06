@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // The bootstrap the rules exempt is one environment prefix and a go command, which is what
@@ -451,6 +452,53 @@ func writeSource(t *testing.T, root, rel string) {
 	require.NoError(t, os.WriteFile(p, []byte("package guard\n"), 0o644))
 }
 
+// testCheckoutHook is the checkout.bootstrap declareCheckoutHook declares.
+const testCheckoutHook = "hack/dev/bootstrap-checkout.buzz"
+
+// declareCheckoutHook writes a magus.yaml at root declaring testCheckoutHook.
+func declareCheckoutHook(t *testing.T, root string) {
+	t.Helper()
+	body := "checkout:\n  bootstrap: " + testCheckoutHook + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(body), 0o644))
+}
+
+type CheckoutHookSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestCheckoutHookSuite(t *testing.T) {
+	suite.Run(t, new(CheckoutHookSuite))
+}
+
+func (s *CheckoutHookSuite) SetupTest() {
+	s.root = s.T().TempDir()
+}
+
+func (s *CheckoutHookSuite) TestAWorkspaceDeclaringNoHookMatchesNoBootstrapLine() {
+	cmds, ok := ParseCommandsDialect("./magus buzz "+testCheckoutHook+" -- --here", effectiveDialect(""))
+	s.Require().True(ok)
+	_, matched := checkoutBootstrapDir(cmds, s.root, checkoutHook(s.root))
+	s.False(matched)
+}
+
+func (s *CheckoutHookSuite) TestTheDeclaredHookMatchesItsBootstrapLine() {
+	declareCheckoutHook(s.T(), s.root)
+	cmds, ok := ParseCommandsDialect("./magus buzz "+testCheckoutHook+" -- --here", effectiveDialect(""))
+	s.Require().True(ok)
+	dir, matched := checkoutBootstrapDir(cmds, s.root, checkoutHook(s.root))
+	s.True(matched)
+	s.Equal(s.root, dir)
+}
+
+func (s *CheckoutHookSuite) TestAMovedCheckoutWithNoHookAsksForAPlacement() {
+	s.Equal("A row that moved the checkout it owns asks the root for a placement: no checkout.bootstrap declared.", movedCheckoutRebuild(""))
+}
+
+func (s *CheckoutHookSuite) TestAMovedCheckoutRunsTheHookHere() {
+	s.Equal("A row that moved the checkout it owns finishes with `./magus buzz "+testCheckoutHook+" -- --here`.", movedCheckoutRebuild(testCheckoutHook))
+}
+
 // A checkout forked at a commit no placed binary matches gets one from the checkout
 // bootstrap, which the root and the job holding that checkout run; any other lease is a
 // worker building magus.
@@ -460,7 +508,8 @@ func TestRankOwnBuildLetsOnlyTheRootAndTheHolderBootstrapACheckout(t *testing.T)
 	holder := types.Job{ID: "pages-fix", State: types.StateRunning, Registered: 1, CheckoutRoot: checkout, Worktree: &types.JobWorktree{Root: checkout, Source: root}}
 	other := types.Job{ID: "other", State: types.StateRunning, Registered: 1}
 	ctx = job.WithSnapshot(ctx, job.Snapshot{Rows: []types.Job{holder, other}})
-	line := job.CheckoutBootstrap(checkout)
+	declareCheckoutHook(t, root)
+	line := job.CheckoutBootstrap(testCheckoutHook, checkout)
 
 	for _, tt := range []struct {
 		name, lease, cwd, command string
@@ -470,7 +519,7 @@ func TestRankOwnBuildLetsOnlyTheRootAndTheHolderBootstrapACheckout(t *testing.T)
 		{name: "the holder", lease: holder.ID, cwd: checkout, command: line},
 		{name: "the holder by a relative path", lease: holder.ID, cwd: filepath.Dir(checkout), command: "./magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout=" + filepath.Base(checkout)},
 		{name: "another lease", lease: other.ID, cwd: root, command: line, deny: true},
-		{name: "another lease by the script's absolute path", lease: other.ID, cwd: root, command: fmt.Sprintf("./magus buzz %s -- --checkout %s", filepath.Join(root, job.CheckoutBootstrapScript), checkout), deny: true},
+		{name: "another lease by the script's absolute path", lease: other.ID, cwd: root, command: fmt.Sprintf("./magus buzz %s -- --checkout %s", filepath.Join(root, testCheckoutHook), checkout), deny: true},
 		{name: "the holder in its checkout with --here", lease: holder.ID, cwd: checkout, command: "./magus buzz hack/dev/bootstrap-checkout.buzz -- --here"},
 		{name: "another lease with --here", lease: other.ID, cwd: root, command: "./magus buzz hack/dev/bootstrap-checkout.buzz -- --here", deny: true},
 		{name: "another lease running another script", lease: other.ID, cwd: root, command: "./magus buzz hack/dev/ls-uncommitted.buzz"},
