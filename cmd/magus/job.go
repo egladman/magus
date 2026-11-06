@@ -1587,6 +1587,15 @@ func forkCheckout(ctx context.Context, store *job.Store, root string, row types.
 		return row, err
 	}
 	if owned != "" {
+		// A checkpoint off this head is work in another checkout. Adopting
+		// this one would grade it at the wrong commit.
+		head, at, err := job.CheckpointAtHead(ctx, owned, row.Checkpoint)
+		switch {
+		case err != nil:
+			return row, exit.Usagef("magus job fork: whether %s's checkpoint %s is the head of %s cannot be read (%s): pass --checkout <dir>, the checkout the work is in", row.ID, row.Checkpoint, owned, err)
+		case !at:
+			return row, exit.Usagef("magus job fork: %s names the checkpoint %s, and %s, the checkout a job's fork made that this fork would adopt, stands at %.12s: pass --checkout <dir>, the checkout the work is in", row.ID, row.Checkpoint, owned, head)
+		}
 		slog.InfoContext(ctx, fmt.Sprintf("the fork runs inside %s, a checkout a job's fork made, so %s is taken there too", owned, row.ID), attr.Notice("note"))
 		row.Checkout = owned
 		return row, nil
@@ -2934,9 +2943,9 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 	}
 }
 
-// jobApply is `magus job apply -f <file|->`, the way `kubectl apply -f` reads a manifest:
-// each record is a job's whole spec, upserted in order, and nothing magus records about the
-// job (its state, holder, registration, results) moves. A new id creates the job.
+// jobApply is `magus job apply`. Each record is a job's whole spec,
+// upserted in order. Nothing magus records about the job moves.
+// A new id creates the job.
 func jobApply(ctx context.Context, root string, args []string) error {
 	var (
 		flags    *flaggen.JobApplyFlags
@@ -2957,19 +2966,23 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	)
 	root = resolveRootOrEmpty(root)
 	switch {
-	case adding && flags.F != "":
-		return exit.Usagef("magus job apply: --add-write-path widens the job it names, and -f applies whole records: name one or the other")
+	case adding && (flags.F != "" || flags.Stdin):
+		return exit.Usagef("magus job apply: --add-write-path widens the job it names, and -f or --stdin applies whole records: name one or the other")
+	case flags.F != "" && flags.Stdin:
+		return exit.Usagef("magus job apply: -f reads a file and --stdin reads stdin: name one")
+	case flags.F == "-":
+		return exit.Usagef("magus job apply: stdin is --stdin, as on job fork, not -f -")
 	case adding && len(pos) != 1:
 		return exit.Usagef("magus job apply: --add-write-path widens one job: name its id as the one argument")
 	case !adding && len(pos) > 0:
 		return exit.Usagef("magus job apply: the records name their jobs, so %q is one argument too many", pos[0])
 	case !adding:
 		var in io.Reader
-		switch flags.F {
-		case "":
-			return exit.Usagef("magus job apply: name the records with -f <file>, or -f - for stdin")
-		case "-":
+		switch {
+		case flags.Stdin:
 			in = os.Stdin
+		case flags.F == "":
+			return exit.Usagef("magus job apply: name the records with -f <file>, or --stdin")
 		default:
 			f, err := os.Open(flags.F)
 			if err != nil {

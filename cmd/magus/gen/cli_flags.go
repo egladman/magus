@@ -303,6 +303,8 @@ const (
 	FlagJobApplyF = "f"
 	// job apply: --fix
 	FlagJobApplyFix = "fix"
+	// job apply: --stdin
+	FlagJobApplyStdin = "stdin"
 	// job exec: --slots
 	FlagJobExecSlots = "slots"
 	// job exec: --timeout
@@ -1591,14 +1593,17 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 // It does NOT carry --add-write-path: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type JobApplyFlags struct {
-	F   string // -f
-	Fix bool   // --[no-]fix
+	F     string // -f
+	Stdin bool   // --[no-]stdin
+	Fix   bool   // --[no-]fix
 }
 
 // BindJobApply registers `magus job apply`'s flags on fs and returns the destination.
 func BindJobApply(fs *flag.FlagSet) *JobApplyFlags {
 	var f JobApplyFlags
-	fs.StringVar(&f.F, FlagJobApplyF, "", "The records to apply: a `file`, or `-` for stdin; one JSON job, a JSON array, or one job per line")
+	fs.StringVar(&f.F, FlagJobApplyF, "", "The records to apply from a `file`: one JSON job, a JSON array, or one job per line")
+	fs.BoolVar(&f.Stdin, FlagJobApplyStdin, false, "Read the records from stdin instead of a file, as job fork --stdin does")
+	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagJobApplyStdin)
 	fs.BoolVar(&f.Fix, FlagJobApplyFix, false, "Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records")
 	cmdline.NegatedBoolVar(fs, &f.Fix, FlagJobApplyFix)
 	return &f

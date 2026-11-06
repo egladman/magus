@@ -136,10 +136,13 @@ A path this job may write, or <file>#<declaration> to claim one declaration of a
 A path to add to the job's write paths, or <file>#<declaration> to claim one declaration of a file; repeatable or comma\-separated
 .TP
 \fB\-f\fR \fIfile\fR
-The records to apply: a file, or `\-` for stdin; one JSON job, a JSON array, or one job per line
+The records to apply from a file: one JSON job, a JSON array, or one job per line
 .TP
 \fB\-\-[no\-]fix\fR (default: off)
 Make every edit a problem's fix names without judgment, as job fork \-\-fix does, before applying the records
+.TP
+\fB\-\-[no\-]stdin\fR (default: off)
+Read the records from stdin instead of a file, as job fork \-\-stdin does
 .RE
 .SS job exec options
 .RS
