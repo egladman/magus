@@ -239,7 +239,7 @@ func judgePushAs(t *testing.T, rendersAsk bool, gate, lease string, leases ...ty
 func TestUngatedPushDeniesWhetherOrNotTheCallerRendersAsk(t *testing.T) {
 	for _, renders := range []bool{true, false} {
 		v := judgePushAs(t, renders, "", "")
-		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v))
+		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUnverified)), unworded(v))
 		assert.Contains(t, v.Reason, "abc1234", "the refusal names what it refused")
 		assert.NotContains(t, v.Reason, "predates approval prompts")
 	}
@@ -252,7 +252,7 @@ func TestUngatedPushDeniesWhetherOrNotTheCallerRendersAsk(t *testing.T) {
 // pull requests went out with no local gate when the root was only asked.
 func TestUngatedPushDeniesTheOrchestrator(t *testing.T) {
 	v := judgePush(t, "", "")
-	assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v))
+	assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUnverified)), unworded(v))
 	assert.Contains(t, v.Reason, "abc1234", "the refusal names the commit it publishes")
 	assert.Contains(t, v.Reason, "no `ci` run is recorded")
 	assert.NotContains(t, v.Reason, "Approving")
@@ -273,13 +273,13 @@ func TestGhPrCreateMeetsThePushGate(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir), 0o755))
 		deps := Dependencies{Revision: func(context.Context, string, string) string { return "abc1234" }}
 		v := Judge(ctx, deps, Request{Input: line, RendersAsk: true})
-		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v), line)
+		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUnverified)), unworded(v), line)
 		assert.Contains(t, v.Reason, "abc1234", line)
 	}
 	for _, line := range []string{"gh pr view 12", "gh pr list"} {
 		ctx, _ := fleetFixture(t)
 		v := Judge(ctx, Dependencies{}, Request{Input: line, RendersAsk: true})
-		assert.NotEqual(t, string(denyRulePushUngated), v.Rule, line)
+		assert.NotEqual(t, string(denyRulePushUnverified), v.Rule, line)
 	}
 }
 
@@ -300,7 +300,7 @@ func TestUngatedPushDenyStillAsksTheCommandRule(t *testing.T) {
 
 	probe.answer = types.GuardVerdict{Decision: types.GuardAdvise, Reason: "batch it"}
 	v = Judge(ctx, deps, Request{Input: line, RendersAsk: true})
-	assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: decisionDeny, Reason: v.Reason, Rule: string(denyRulePushUngated)}, v, "an advise leaves the push deny as it stood")
+	assert.Equal(t, types.GuardJudgment{SchemaVersion: v.SchemaVersion, Decision: decisionDeny, Reason: v.Reason, Rule: string(denyRulePushUnverified)}, v, "an advise leaves the push deny as it stood")
 	assert.NotContains(t, v.Reason, "batch it")
 }
 
@@ -337,7 +337,7 @@ func TestUngatedPushDeniesARootSessionHoldingItsOwnLease(t *testing.T) {
 	require.NoError(t, os.MkdirAll(runs, 0o755))
 	deps := Dependencies{Revision: func(context.Context, string, string) string { return "abc1234" }}
 	v := Judge(ctx, deps, Request{Input: "git push origin HEAD", Lease: lease.ID, RendersAsk: true, Host: "claude-code", Session: "root-session"})
-	assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v))
+	assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUnverified)), unworded(v))
 	assert.NotContains(t, v.Reason, "workers do not publish")
 }
 
@@ -497,7 +497,7 @@ func TestRelocatedPushGradesTheCheckoutItRunsIn(t *testing.T) {
 
 	t.Run("an ungated checkout is refused, though the hook's own is gated", func(t *testing.T) {
 		v := judgeRelocatedPush(t, true, false, dashC)
-		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v))
+		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUnverified)), unworded(v))
 		assert.Contains(t, v.Reason, "def5678")
 		assert.NotContains(t, v.Reason, "abc1234")
 	})
@@ -523,13 +523,13 @@ func TestRelocatedPushGradesTheCheckoutItRunsIn(t *testing.T) {
 		v := judgeRelocatedPush(t, true, false, func(b string) string {
 			return fmt.Sprintf("git --no-pager -c color.ui=never -C %s -P push origin HEAD:refs/heads/x", b)
 		})
-		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v))
+		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUnverified)), unworded(v))
 		assert.Contains(t, v.Reason, "def5678")
 	})
 
 	t.Run("a pager option does not hide a push from the hook's checkout", func(t *testing.T) {
 		v := judgeRelocatedPush(t, false, true, func(string) string { return "git -P push" })
-		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v))
+		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUnverified)), unworded(v))
 		assert.Contains(t, v.Reason, "abc1234")
 	})
 
@@ -574,7 +574,7 @@ func TestPushAfterACommitOnTheLineIsRefused(t *testing.T) {
 	}
 	for _, line := range refused {
 		v := Judge(gated(t), deps, Request{Input: line, RendersAsk: true})
-		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUngated)), unworded(v), line)
+		assert.Equal(t, verdictWithRule(decisionDeny, string(denyRulePushUnverified)), unworded(v), line)
 		assert.Contains(t, v.Reason, "in a separate call", line)
 	}
 
@@ -683,15 +683,15 @@ func (s *GateScopeSuite) projectPass(commit string) sessions.GateResult {
 }
 
 func (s *GateScopeSuite) TestAProjectPassAfterARedAffectedGateLeavesTheBranchRed() {
-	ctx, repo := gateRepeatRepository(s.T(), 2, sessions.OutcomeFail)
+	ctx, repo := verifyRepeatRepository(s.T(), 2, sessions.OutcomeFail)
 	s.recordAt(repo.Root(), s.projectPass(repo.Head()))
 
-	s.Empty(denyRepeatGate(ctx, Dependencies{}, "", "./magus affected ci"), "the affected gate is not a repeat of a green one")
+	s.Empty(denyRepeatVerify(ctx, Dependencies{}, "", "./magus affected ci"), "the affected gate is not a repeat of a green one")
 	s.Equal(gateFailed, coverageAtPush(ctx, repo, repo.Head()), "and the push is graded on the red affected verdict")
 }
 
 func (s *GateScopeSuite) TestAProjectPassAloneCoversNoPush() {
-	ctx, repo := gateRepeatRepository(s.T(), 0, sessions.OutcomeFail)
+	ctx, repo := verifyRepeatRepository(s.T(), 0, sessions.OutcomeFail)
 	other := repo.Commit("more", map[string]string{"b.go": "package a\n"})
 	s.recordAt(repo.Root(), s.projectPass(other))
 
@@ -702,7 +702,7 @@ func (s *GateScopeSuite) TestAProjectPassAloneCoversNoPush() {
 }
 
 func (s *GateScopeSuite) TestAProjectPassIsNoReplayOfTheTree() {
-	ctx, repo := gateRepeatRepository(s.T(), 0, sessions.OutcomeFail)
+	ctx, repo := verifyRepeatRepository(s.T(), 0, sessions.OutcomeFail)
 	gated := repo.Commit("more", map[string]string{"b.go": "package a\n"})
 	s.recordAt(repo.Root(), s.projectPass(gated))
 	fixtureGit(s.T(), repo.Root(), "commit", "-q", "--amend", "-m", "reworded")

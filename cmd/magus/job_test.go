@@ -263,7 +263,7 @@ func TestPrintJobStatusFailedGateNamesHowToReadIt(t *testing.T) {
 	status := job.Status{
 		Job:        "plan",
 		Violations: []string{`goal "ci": the run behind output ref "outdeadbeef" failed, so its check did not pass`},
-		Gates: []types.GateStatus{
+		Gates: []types.VerificationStatus{
 			{ID: "ci", Verified: false, OutputRef: "outdeadbeef"},
 			{ID: "lint", Verified: true, OutputRef: "outfeedface"},
 		},

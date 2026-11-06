@@ -80,18 +80,18 @@ magus job exit <job> --stdin <<'EOF'
 {"schema_version": 2, "job": "<job>",
  "changed_paths": ["api/store.go", "api/store_test.go"],
  "validation": {"command": "magus run go-test api -- -run TestStore", "output_ref": "<ref>"},
- "gate_evidence": [{"gate_id": "go-test", "output_ref": "<ref>"}, {"gate_id": "lint", "output_ref": "<ref>"}],
+ "verification_evidence": [{"gate_id": "go-test", "output_ref": "<ref>"}, {"gate_id": "lint", "output_ref": "<ref>"}],
  "descendants": [],
  "unresolved_risks": ["what is left, or what the worker could not verify"]}
 EOF
 ```
 
-`validation` carries one command. `gate_evidence` carries one `{gate_id, output_ref}` per gate
+`validation` carries one command. `verification_evidence` carries one `{gate_id, output_ref}` per gate
 the brief names, so each gate keeps its own ref.
 
 A check its worker found no seat for is owed, not run: `"validation": {"command":
 "<the check>", "output_ref": "", "owed": "no seat"}`, or the same `owed` on a goal's
-`gate_evidence` entry. `{{cmd "job wait"}}` passes the result with the goal marked
+`verification_evidence` entry. `{{cmd "job wait"}}` passes the result with the goal marked
 `[owed]`, and the integration that merges the branch runs it. "no seat" is the only
 reason, and an integration may not owe its own checks.
 

@@ -1630,7 +1630,7 @@ func unfinishedIntegration(ctx context.Context, root string, store *job.Store, r
 	if err != nil {
 		return nil, exit.Usagef("magus job fork: %s's goals cannot be graded, so whether it is finished is unknown: %s", row.ID, err)
 	}
-	if !slices.ContainsFunc(status.Gates, func(g types.GateStatus) bool { return !g.Verified }) {
+	if !slices.ContainsFunc(status.Gates, func(g types.VerificationStatus) bool { return !g.Verified }) {
 		return nil, nil
 	}
 	return slices.Clone(rows[i].WritePaths), nil
@@ -2395,7 +2395,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--integration asks whether the work still passes in THIS tree, such as a branch")
 			fmt.Fprintln(os.Stderr, "it was merged into: the job's check and check goals are graded against the runs")
-			fmt.Fprintln(os.Stderr, "the result's validation.output_ref and gate_evidence name here, and the grade is")
+			fmt.Fprintln(os.Stderr, "the result's validation.output_ref and verification_evidence name here, and the grade is")
 			fmt.Fprintln(os.Stderr, "recorded as the job's integration. Its state does not move, and an ended job is")
 			fmt.Fprintln(os.Stderr, "graded too.")
 			fmt.Fprintln(os.Stderr, "")

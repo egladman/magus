@@ -13,10 +13,10 @@ import (
 func TestClassifyAttempt(t *testing.T) {
 	t.Parallel()
 
-	unmet := func(ids ...string) []types.GateStatus {
-		out := make([]types.GateStatus, len(ids))
+	unmet := func(ids ...string) []types.VerificationStatus {
+		out := make([]types.VerificationStatus, len(ids))
 		for i, id := range ids {
-			out[i] = types.GateStatus{ID: id}
+			out[i] = types.VerificationStatus{ID: id}
 		}
 		return out
 	}
@@ -99,7 +99,7 @@ func TestFoldAttemptKeepsWhatTheNextHolderNeeds(t *testing.T) {
 		{GateID: "lint", Attempt: types.JobAttempt{Ref: "out2"}},
 		{GateID: "unit", Attempt: types.JobAttempt{Ref: "out3", Failed: true}},
 	}
-	prev.Rejection = &types.JobRejection{Unmet: []types.GateStatus{{ID: "check", Violations: []string{"failed"}}}, Violations: []string{"v"}}
+	prev.Rejection = &types.JobRejection{Unmet: []types.VerificationStatus{{ID: "check", Violations: []string{"failed"}}}, Violations: []string{"v"}}
 	denials := make([]types.JobDenial, 10)
 	for i := range denials {
 		denials[i] = types.JobDenial{Rule: "raw-tool", Ts: int64(i)}
@@ -109,7 +109,7 @@ func TestFoldAttemptKeepsWhatTheNextHolderNeeds(t *testing.T) {
 
 	want := types.PriorAttempt{N: 1, State: types.StateFail, ObservedGeneration: 2, ModelTier: "economy", Checkpoint: "abc", ReportedBase: "abd"}
 	want.Ended, want.ReworkRounds, want.Widenings = 40, 2, 1
-	want.Unmet = []types.GateStatus{{ID: "check", Violations: []string{"failed"}}}
+	want.Unmet = []types.VerificationStatus{{ID: "check", Violations: []string{"failed"}}}
 	want.Violations = []string{"v"}
 	want.UnresolvedRisks = []string{"one", "two"}
 	want.FailingRefs = []string{"out1", "out3"}

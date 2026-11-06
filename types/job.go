@@ -575,7 +575,7 @@ type JobResult struct {
 	Job             string              `json:"job,omitempty" yaml:"job,omitempty"`
 	ChangedPaths    []string            `json:"changed_paths" yaml:"changed_paths"`
 	Validation      JobResultValidation `json:"validation,omitempty" yaml:"validation,omitempty"`
-	GateEvidence    []GateEvidence      `json:"gate_evidence,omitempty" yaml:"gate_evidence,omitempty"`
+	VerificationEvidence    []VerificationEvidence      `json:"verification_evidence,omitempty" yaml:"verification_evidence,omitempty"`
 	Descendants     []string            `json:"descendants,omitempty" yaml:"descendants,omitempty"`
 	UnresolvedRisks []string            `json:"unresolved_risks" yaml:"unresolved_risks"`
 	// FollowUps is work the holder explicitly leaves for later. Each item
@@ -586,9 +586,10 @@ type JobResult struct {
 	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
 }
 
-// GateEvidence links a goal to captured Magus output, or says why its run is owed instead:
-// Owed names the reason, and the integration that merges the job's branch runs the goal.
-type GateEvidence struct {
+// VerificationEvidence links a goal to captured Magus output, or says why its
+// run is owed instead. Owed names the reason, and the integration that merges
+// the job's branch runs the goal.
+type VerificationEvidence struct {
 	GateID    string `json:"gate_id" yaml:"gate_id"`
 	OutputRef string `json:"output_ref" yaml:"output_ref"`
 	Owed      string `json:"owed,omitempty" yaml:"owed,omitempty"`
@@ -598,13 +599,13 @@ type GateEvidence struct {
 }
 
 // JobResultValidation cites the output for a job's primary check, or names in Owed why its
-// run is owed to the integration, as [GateEvidence] does.
+// run is owed to the integration, as [VerificationEvidence] does.
 type JobResultValidation struct {
 	Command   string `json:"command" yaml:"command"`
 	OutputRef string `json:"output_ref" yaml:"output_ref"`
 	Owed      string `json:"owed,omitempty" yaml:"owed,omitempty"`
 	// Unrun is the environment cause that kept the check from running, as
-	// on [GateEvidence].
+	// on [VerificationEvidence].
 	Unrun string `json:"unrun,omitempty" yaml:"unrun,omitempty"`
 }
 
@@ -620,7 +621,7 @@ type JobStatus struct {
 	Violations      []string     `json:"violations,omitempty" yaml:"violations,omitempty"`
 	UnresolvedRisks []string     `json:"unresolved_risks,omitempty" yaml:"unresolved_risks,omitempty"`
 	Command         string       `json:"command,omitempty" yaml:"command,omitempty"`
-	Gates           []GateStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
+	Gates           []VerificationStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
 	// Notes are what the grade passed over and says so rather than dropping silently, such
 	// as a changed path magus maintains itself outside the write paths. They never decide
 	// Verified.
@@ -665,8 +666,8 @@ type JobStatus struct {
 // Clean reports whether the holder's result left no risk unresolved.
 func (s JobStatus) Clean() bool { return len(s.UnresolvedRisks) == 0 }
 
-// GateStatus reports verification of one goal.
-type GateStatus struct {
+// VerificationStatus reports verification of one goal.
+type VerificationStatus struct {
 	ID        string `json:"id" yaml:"id"`
 	Verified  bool   `json:"verified" yaml:"verified"`
 	OutputRef string `json:"output_ref,omitempty" yaml:"output_ref,omitempty"`
@@ -1060,14 +1061,14 @@ type JobIntegration struct {
 	Checkout string       `json:"checkout" yaml:"checkout"`
 	At       int64        `json:"at" yaml:"at"`
 	Verified bool         `json:"verified" yaml:"verified"`
-	Gates    []GateStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
+	Gates    []VerificationStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
 	// ObservedGeneration is the row's Generation when the grade was taken.
 	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
 }
 
 // JobRejection is a `magus job wait` that refused the live attempt, At unix seconds.
 type JobRejection struct {
-	Unmet              []GateStatus `json:"unmet,omitempty"               yaml:"unmet,omitempty"`
+	Unmet              []VerificationStatus `json:"unmet,omitempty"               yaml:"unmet,omitempty"`
 	Violations         []string     `json:"violations,omitempty"          yaml:"violations,omitempty"`
 	At                 int64        `json:"at"                            yaml:"at"`
 	ObservedGeneration int          `json:"observed_generation,omitzero"  yaml:"observed_generation,omitempty"`
@@ -1098,7 +1099,7 @@ type PriorAttempt struct {
 	Ended              int64        `json:"ended,omitempty"               yaml:"ended,omitempty"`
 	ReworkRounds       int          `json:"rework_rounds,omitempty"       yaml:"rework_rounds,omitempty"`
 	Widenings          int          `json:"widenings,omitempty"        yaml:"widenings,omitempty"`
-	Unmet              []GateStatus `json:"unmet,omitempty"               yaml:"unmet,omitempty"`
+	Unmet              []VerificationStatus `json:"unmet,omitempty"               yaml:"unmet,omitempty"`
 	Violations         []string     `json:"violations,omitempty"          yaml:"violations,omitempty"`
 	UnresolvedRisks    []string     `json:"unresolved_risks,omitempty"    yaml:"unresolved_risks,omitempty"`
 	// FailingRefs are the output refs of the attempt's failed runs, to reopen.
@@ -2792,7 +2793,7 @@ func (u Job) Clone() Job {
 		result.Descendants = slices.Clone(u.Result.Descendants)
 		result.UnresolvedRisks = slices.Clone(u.Result.UnresolvedRisks)
 		result.FollowUps = slices.Clone(u.Result.FollowUps)
-		result.GateEvidence = slices.Clone(u.Result.GateEvidence)
+		result.VerificationEvidence = slices.Clone(u.Result.VerificationEvidence)
 		c.Result = &result
 	}
 	if u.Attempt != nil {
@@ -2816,7 +2817,7 @@ func (u Job) Clone() Job {
 	}
 	c.Prior = slices.Clone(u.Prior)
 	for i, p := range c.Prior {
-		c.Prior[i].Unmet = cloneGateStatuses(p.Unmet)
+		c.Prior[i].Unmet = cloneVerificationStatuses(p.Unmet)
 		c.Prior[i].Violations = slices.Clone(p.Violations)
 		c.Prior[i].UnresolvedRisks = slices.Clone(p.UnresolvedRisks)
 		c.Prior[i].FailingRefs = slices.Clone(p.FailingRefs)
@@ -2824,15 +2825,15 @@ func (u Job) Clone() Job {
 	}
 	if u.Rejection != nil {
 		r := *u.Rejection
-		r.Unmet = cloneGateStatuses(u.Rejection.Unmet)
+		r.Unmet = cloneVerificationStatuses(u.Rejection.Unmet)
 		r.Violations = slices.Clone(u.Rejection.Violations)
 		c.Rejection = &r
 	}
 	return c
 }
 
-// cloneGateStatuses is a deep copy of gates, nil for nil.
-func cloneGateStatuses(gates []GateStatus) []GateStatus {
+// cloneVerificationStatuses is a deep copy of gates, nil for nil.
+func cloneVerificationStatuses(gates []VerificationStatus) []VerificationStatus {
 	out := slices.Clone(gates)
 	for i := range out {
 		out[i].Violations = slices.Clone(out[i].Violations)
@@ -2846,7 +2847,7 @@ func cloneIntegration(g *JobIntegration) *JobIntegration {
 		return nil
 	}
 	c := *g
-	c.Gates = cloneGateStatuses(g.Gates)
+	c.Gates = cloneVerificationStatuses(g.Gates)
 	return &c
 }
 

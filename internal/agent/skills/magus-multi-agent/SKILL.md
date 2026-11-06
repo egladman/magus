@@ -418,7 +418,7 @@ any cap the user set for the tree. Require the worker to:
   `{{cmd "session"}} ls`, and no verdict is keyed on them{{end}};
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
 - run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending;
-- never wait for the build budget outside its check's own call. When its check is refused (MGS3009), having waited as long as `budget_wait` allows (none by default), it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `gate_evidence`, with no output ref. `{{cmd "job wait"}}` passes that result and the integration runs the check;
+- never wait for the build budget outside its check's own call. When its check is refused (MGS3009), having waited as long as `budget_wait` allows (none by default), it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `verification_evidence`, with no output ref. `{{cmd "job wait"}}` passes that result and the integration runs the check;
 - never exit its row while it waits on a reply from you: ending its turn with the question as its final text leaves the row open and the worker resumable.
 
 End every brief with the step that files the result, as the worker's LAST act before

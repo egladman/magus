@@ -260,7 +260,7 @@ func retriedRow() types.Job {
 	first := types.PriorAttempt{N: 1, State: types.StateNoReturn, EndReason: "its checkout is gone", ModelTier: "economy", DenialsKnown: true}
 	first.Retry = types.RetryVerdict{Retryable: true}
 	second := types.PriorAttempt{N: 2, State: types.StateFail, ModelTier: "standard", ReworkRounds: 2, Widenings: 1, DenialsKnown: true}
-	second.Unmet = []types.GateStatus{{ID: "check"}, {ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}, {ID: "e"}}
+	second.Unmet = []types.VerificationStatus{{ID: "check"}, {ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}, {ID: "e"}}
 	second.Violations = []string{`changed path "docs/x.md" is outside the job's write paths (internal/ledger)`}
 	second.UnresolvedRisks = []string{"the second worktree was not tried"}
 	second.Denials = []types.JobDenial{{Rule: "lease-write", Reason: "docs/x.md belongs to no lease you hold\nask the orchestrator"}}

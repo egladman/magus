@@ -402,8 +402,8 @@ func TestJobCloneCopiesPriorAttemptsAndRejection(t *testing.T) {
 	t.Parallel()
 
 	refs := func() []string { return append(make([]string, 0, 4), "out1") }
-	unmet := func() []GateStatus {
-		return append(make([]GateStatus, 0, 4), GateStatus{ID: "unit", Violations: refs()})
+	unmet := func() []VerificationStatus {
+		return append(make([]VerificationStatus, 0, 4), VerificationStatus{ID: "unit", Violations: refs()})
 	}
 	prior := func() PriorAttempt {
 		return PriorAttempt{

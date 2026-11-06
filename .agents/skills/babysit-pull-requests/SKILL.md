@@ -66,8 +66,8 @@ fix the pure function that produced it and its test, then run it again.
    gate: each script already absorbs the failure that recurs there.
 
    1. `hack/ci/pull-requests.buzz -- status` names the action.
-   2. `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready` makes
-      the checkout gate-ready. It builds `./magus` at HEAD, stops pool parents of other
+   2. `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready` makes
+      the checkout verify-ready. It builds `./magus` at HEAD, stops pool parents of other
       builds, removes untracked stamped skill installs, and builds the graph and symbol
       digest. The scripts below run it themselves. An MGS7003 naming a binary
       built at another commit means this step did not run.
@@ -82,7 +82,7 @@ fix the pure function that produced it and its test, then run it again.
         sits on the one before. Both scripts take local branches origin lacks.
       - When either stops at a source conflict, it names the files and the
         checkout; hand those to an agent of the record's model as below.
-   4. `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready`, then
+   4. `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready`, then
       `./magus affected ci`, which waits for the build budget itself, gates the result once; on failure it
       closes with each failed target's ref and cause. Fix from those, never rerun.
    5. `./magus buzz hack/dev/land-commits.buzz -- --branch <name> --from <ref>

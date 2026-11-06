@@ -108,7 +108,7 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 		Job:                result.Job,
 		Verified:           true,
 		Command:            result.Validation.Command,
-		Gates:              []types.GateStatus{{ID: types.PrimaryGoalID, OutputRef: result.Validation.OutputRef, Verified: true}},
+		Gates:              []types.VerificationStatus{{ID: types.PrimaryGoalID, OutputRef: result.Validation.OutputRef, Verified: true}},
 		ObservedGeneration: 1,
 	}, status)
 
@@ -204,7 +204,7 @@ func (s *exitEvidenceSuite) TestOwedGoalNeedsNoRef() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
-	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Owed: types.OwedNoSeat}}
+	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Owed: types.OwedNoSeat}}
 
 	exited, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
 
@@ -217,7 +217,7 @@ func (s *exitEvidenceSuite) TestOwedGoalCitingARefIsRefused() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat}
-	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Owed: types.OwedNoSeat, OutputRef: "out9"}}
+	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Owed: types.OwedNoSeat, OutputRef: "out9"}}
 
 	_, err := s.exit(row, result, types.JobAttempt{Target: "lint"})
 
@@ -238,7 +238,7 @@ func (s *exitEvidenceSuite) TestGoalWithNeitherRefNorOwedIsRefused() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
-	result.GateEvidence = []types.GateEvidence{{GateID: "lint"}}
+	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint"}}
 
 	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
 
@@ -249,7 +249,7 @@ func (s *exitEvidenceSuite) TestUnrunGoalNeedsNoRef() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
-	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Unrun: "node_modules is missing"}}
+	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Unrun: "node_modules is missing"}}
 
 	exited, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
 
@@ -262,7 +262,7 @@ func (s *exitEvidenceSuite) TestUnrunGoalCitingARefIsRefused() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
-	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Unrun: "disk under its floor", OutputRef: "out9"}}
+	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Unrun: "disk under its floor", OutputRef: "out9"}}
 
 	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
 
@@ -283,7 +283,7 @@ func (s *exitEvidenceSuite) TestGoalRefNamingAnotherCommandIsRefused() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat}
-	result.GateEvidence = []types.GateEvidence{{GateID: "lint", OutputRef: "out9"}}
+	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", OutputRef: "out9"}}
 
 	_, err := s.exit(row, result, types.JobAttempt{Target: "build"})
 
@@ -305,7 +305,7 @@ func (s *exitEvidenceSuite) TestCheckRefNamingAnotherCommandIsRefused() {
 func (s *exitEvidenceSuite) exitUnderDefaults(row types.Job, attempt types.JobAttempt) (types.Job, error) {
 	result := passingResult()
 	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
-	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Owed: types.OwedNoSeat}}
+	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Owed: types.OwedNoSeat}}
 	loc := declared(s.T(), row)
 	s.Require().NoError(os.WriteFile(filepath.Join(loc.Root, "magus.yaml"), []byte("default_charms: [rw]\n"), 0o644))
 	resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
@@ -1115,7 +1115,7 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 			plant(t, NewStore(loc), row)
 			result := types.JobResult{Schema: types.Schema{Version: types.JobResultSchemaVersion}, Job: "goal", ChangedPaths: changed}
 			if tc.run.Found {
-				result.GateEvidence = []types.GateEvidence{{GateID: "goal", OutputRef: "ref"}}
+				result.VerificationEvidence = []types.VerificationEvidence{{GateID: "goal", OutputRef: "ref"}}
 			}
 			read := GraphSymbols(graph)
 			if tc.blind {
@@ -1415,7 +1415,7 @@ func TestWaitTakesWaiterEvidenceForAGoalTheHolderFailed(t *testing.T) {
 	assert.Equal(t, j.waiter, row.WaiterEvidence.Checkout)
 	assert.NotZero(t, row.WaiterEvidence.At)
 	assert.True(t, row.WaiterEvidence.Verified)
-	assert.Equal(t, []types.GateStatus{{ID: types.PrimaryGoalID, Verified: true, OutputRef: "here"}}, row.WaiterEvidence.Gates)
+	assert.Equal(t, []types.VerificationStatus{{ID: types.PrimaryGoalID, Verified: true, OutputRef: "here"}}, row.WaiterEvidence.Gates)
 }
 
 func TestWaitTakesWaiterEvidenceForOneNamedGoalOnly(t *testing.T) {
@@ -1437,8 +1437,8 @@ func TestWaitTakesWaiterEvidenceForOneNamedGoalOnly(t *testing.T) {
 
 	row := j.stored(t)
 	require.NotNil(t, row.WaiterEvidence)
-	assert.Equal(t, []types.GateStatus{{ID: "unit", Verified: true, OutputRef: "here"}}, row.WaiterEvidence.Gates, "docs passed on the holder's evidence and took none")
-	assert.Equal(t, "unit-ref", row.Result.GateEvidence[0].OutputRef)
+	assert.Equal(t, []types.VerificationStatus{{ID: "unit", Verified: true, OutputRef: "here"}}, row.WaiterEvidence.Gates, "docs passed on the holder's evidence and took none")
+	assert.Equal(t, "unit-ref", row.Result.VerificationEvidence[0].OutputRef)
 	assert.True(t, row.GateAttempts[0].Attempt.Failed)
 }
 
@@ -1870,7 +1870,7 @@ func TestWaitEvidenceRecordsTheAttemptTheRefResolvedTo(t *testing.T) {
 
 	row := j.stored(t)
 	require.NotNil(t, row.WaiterEvidence)
-	assert.Equal(t, []types.GateStatus{{ID: types.PrimaryGoalID, Verified: true, OutputRef: "1a2b3c4d5e6f"}}, row.WaiterEvidence.Gates)
+	assert.Equal(t, []types.VerificationStatus{{ID: types.PrimaryGoalID, Verified: true, OutputRef: "1a2b3c4d5e6f"}}, row.WaiterEvidence.Gates)
 }
 
 func TestWaitEvidenceNeedsTheFiledResult(t *testing.T) {

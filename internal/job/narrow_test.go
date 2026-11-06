@@ -336,7 +336,7 @@ func (s *exitEvidenceSuite) TestOwedForAnyReasonButNoSeatIsRefused() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = types.JobResultValidation{Command: row.Validation, OutputRef: "out1"}
-	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Owed: "generated drift"}}
+	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Owed: "generated drift"}}
 
 	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
 
@@ -348,7 +348,7 @@ func (s *exitEvidenceSuite) TestOwedCheckForAnyReasonButNoSeatIsRefused() {
 	row := s.row()
 	result := passingResult()
 	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: "not this row's target"}
-	result.GateEvidence = []types.GateEvidence{{GateID: "lint", Owed: types.OwedNoSeat}}
+	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Owed: types.OwedNoSeat}}
 
 	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
 
@@ -365,7 +365,7 @@ func (s *exitEvidenceSuite) TestNarrowedLintOverTheClaimedFilesIsFiled() {
 	}
 	result := passingResult()
 	result.Validation = types.JobResultValidation{Command: row.Validation, Owed: types.OwedNoSeat}
-	result.GateEvidence = []types.GateEvidence{{GateID: "lint", OutputRef: "out2"}}
+	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}}
 	exit := func(args ...string) (types.Job, error) {
 		resolve := func(_ context.Context, ref string) (types.JobAttempt, error) {
 			return types.JobAttempt{Found: true, Ref: ref, Project: ".", Target: "lint", ExtraArgs: args, TimestampMs: 9_999_999_999_999}, nil

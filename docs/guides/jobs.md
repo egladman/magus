@@ -181,7 +181,7 @@ the result `magus job exit refactor/pricing --stdin` reads
   },
   "unresolved_risks": []
 }
-A check the machine would not seat has no ref: set "output_ref": "" and "owed": "no seat" on its validation or gate_evidence entry.
+A check the machine would not seat has no ref: set "output_ref": "" and "owed": "no seat" on its validation or verification_evidence entry.
 ```
 
 The other half's file is listed as somebody else's, and the check is unmet because
@@ -441,7 +441,7 @@ the result `magus job exit currency --stdin` reads
   },
   "unresolved_risks": []
 }
-A check the machine would not seat has no ref: set "output_ref": "" and "owed": "no seat" on its validation or gate_evidence entry.
+A check the machine would not seat has no ref: set "output_ref": "" and "owed": "no seat" on its validation or verification_evidence entry.
 ```
 
 ### Splitting a file by declaration
