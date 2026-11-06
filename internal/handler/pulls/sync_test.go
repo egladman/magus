@@ -58,7 +58,7 @@ func (s *CadenceSuite) TestNearTheReserveWaitsForTheReset() {
 
 	c := chooseCadence(testConfig(), list, testNow)
 
-	s.Equal(cadence{interval: 20 * time.Minute, reason: "312 requests left of 5000: waiting until 12:20 reset"}, c)
+	s.Equal(cadence{interval: 20 * time.Minute, reason: "312 requests left of 5000: waiting until 12:20 reset", isHold: true}, c)
 }
 
 func (s *CadenceSuite) TestAPastResetDoesNotHoldThePoller() {
@@ -202,14 +202,14 @@ func (s *PollerSuite) TestKickWithinTheFloorWaitsOutTheRest() {
 	s.p.Sync(s.T().Context())
 	s.now = s.now.Add(10 * time.Second)
 
-	s.Equal(20*time.Second, s.p.floorWait())
+	s.Equal(20*time.Second, s.p.kickWait())
 }
 
 func (s *PollerSuite) TestKickAfterTheFloorSyncsNow() {
 	s.p.Sync(s.T().Context())
 	s.now = s.now.Add(time.Minute)
 
-	s.Zero(s.p.floorWait())
+	s.Zero(s.p.kickWait())
 }
 
 func (s *PollerSuite) TestNextWaitNeverUndercutsTheFloor() {
@@ -242,4 +242,64 @@ func (s *PollerSuite) TestUnfetchedBaseNoteJoinsTheReason() {
 	b, err := p.Board()
 	s.Require().NoError(err)
 	s.Contains(b.Sync.CadenceReason, "vcs.base_ref is unset")
+}
+
+func (s *PollerSuite) TestKickWaitsOutARateLimitHold() {
+	s.list.Rate = types.RateLimit{Limit: 5000, Remaining: 10, Reset: s.now.Add(20 * time.Minute).Format(time.RFC3339)}
+	s.p.Sync(s.T().Context())
+	s.now = s.now.Add(time.Minute)
+
+	s.Equal(19*time.Minute, s.p.kickWait())
+}
+
+func (s *PollerSuite) TestFailuresBackOffFromTheFloor() {
+	s.err = errors.New("HTTP 502")
+	for range 5 {
+		s.p.Sync(s.T().Context())
+	}
+
+	st := s.board().Sync
+	s.Equal(8*time.Minute, st.Interval.AsDuration())
+	s.Equal("5 syncs failed in a row: retrying in 8m", st.CadenceReason)
+}
+
+func (s *PollerSuite) TestARecoveredSyncDropsTheBackoff() {
+	s.err = errors.New("HTTP 502")
+	for range 4 {
+		s.p.Sync(s.T().Context())
+	}
+	s.err = nil
+	s.p.Sync(s.T().Context())
+
+	s.Equal(5*time.Minute, s.board().Sync.Interval.AsDuration())
+}
+
+func (s *PollerSuite) TestACancelledSyncLeavesTheLastGoodState() {
+	s.p.Sync(s.T().Context())
+	ctx, cancel := context.WithCancel(s.T().Context())
+	cancel()
+	s.now = s.now.Add(time.Minute)
+	s.err = context.Canceled
+	s.p.Sync(ctx)
+
+	st := s.board().Sync
+	s.Empty(st.SyncError)
+	s.Nil(st.FailedAt)
+	s.Equal(testNow, st.SyncedAt.AsTime())
+}
+
+type BackoffSuite struct{ suite.Suite }
+
+func TestBackoffSuite(t *testing.T) { suite.Run(t, new(BackoffSuite)) }
+
+func (s *BackoffSuite) TestNoFailureAddsNoWait() {
+	s.Zero(failureBackoff(30*time.Second, 0))
+}
+
+func (s *BackoffSuite) TestTheFirstFailureWaitsTheFloor() {
+	s.Equal(30*time.Second, failureBackoff(30*time.Second, 1))
+}
+
+func (s *BackoffSuite) TestManyFailuresStopAtTheCap() {
+	s.Equal(maxFailureBackoff, failureBackoff(30*time.Second, 40))
 }
