@@ -506,7 +506,7 @@ func TestServerAndBrokerSocketsSitApart(t *testing.T) {
 	assert.True(t, strings.HasPrefix(server, "unix://"), server)
 	assert.True(t, strings.HasSuffix(server, "/server.sock"), server)
 	assert.True(t, strings.HasPrefix(brk, "unix://"), brk)
-	assert.True(t, strings.HasSuffix(brk, "/broker.sock"), brk)
+	assert.True(t, strings.HasSuffix(brk, "/"+broker.SocketName), brk)
 	assert.Equal(t, filepath.Dir(server), filepath.Dir(brk))
 }
 
