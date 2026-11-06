@@ -96,7 +96,7 @@ magus graph export -o json  # the whole graph
 | [libs/testpairing](libs/testpairing/MAGUS.md)                               |       8 | `magus query project=libs/testpairing`                | `format`, `ci`, `test`                                        |
 | [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                     |
 | [libs/xdg](libs/xdg/MAGUS.md)                                               |       8 | `magus query project=libs/xdg`                        | `format`, `build`, `test`                                     |
-| [proto](proto/MAGUS.md)                                                     |       5 | `magus query project=proto`                           | `generate`, `ci`, `format`                                    |
+| [proto](proto/MAGUS.md)                                                     |       6 | `magus query project=proto`                           | `generate`, `breaking`, `ci`                                  |
 
 ## Project: magus
 
