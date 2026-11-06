@@ -1222,6 +1222,12 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		result.Status = journal.StatusFail
 		result.Level = "error"
 		result.Text = runErr.Error()
+		// A gate reads the code to tell a host that could not run the target
+		// from a target that failed.
+		var coded *types.DiagnosticError
+		if errors.As(runErr, &coded) && types.CapabilityAbsent(coded.Code) {
+			result.DiagnosticCode = string(coded.Code)
+		}
 	}
 	journal.Emit(ctx, result)
 	return ref

@@ -402,7 +402,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// store every worktree of this repo shares (`magus session` reads it back).
 	captureHandlers = withInvocationJournal(ctx, captureHandlers, m.Root(), "run", args)
 	refs := &resultRefs{}
-	captureHandlers = append(captureHandlers, refs)
+	failed := &failedResults{}
+	captureHandlers = append(captureHandlers, refs, failed)
 	invCtx, endInvocation := m.BeginInvocation(ctx, magus.Command{
 		Arguments: append([]string{"run"}, args...), Cwd: cwd, Trigger: trigger,
 	}, version, captureHandlers...)
@@ -417,7 +418,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		err = m.Run(invCtx, targets, runOpts...)
 	}
 	// See affected.go: the cut-short question is read here, not inside record.
-	gate.record(invCtx, err, invCtx.Err() != nil)
+	gate.record(invCtx, err, invCtx.Err() != nil, failed.list())
 	if rf.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("run %s: timed out after %s", targetName, rf.Timeout)
 	}
