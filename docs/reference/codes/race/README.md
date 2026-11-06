@@ -50,6 +50,8 @@ or a manual audit rather than every push.
 - [MGS4002](MGS4002.md): declared output overlap.
 - [MGS4003](MGS4003.md): non-deterministic output.
 - [MGS4004](MGS4004.md): potential undeclared dependency.
+- [MGS4005](MGS4005.md): environmental drift.
+- [MGS4006](MGS4006.md): stale generated output.
 - [MGS4007](MGS4007.md): undeclared source modified. Always on, like `MGS4002`,
   and needs no `--race`: the comparison is between two hashes of the declared
   source set, which every run computes anyway.
@@ -59,3 +61,6 @@ or a manual audit rather than every push.
   declarations, so it refuses the plan rather than reporting the damage.
 - [MGS4010](MGS4010.md): a target whose key reads a file its own run generates,
   so it succeeds and is never cached. Always on.
+- [MGS4011](MGS4011.md): a target that wrote a file in its project that no
+  target declares. Always on, and needs no `--race`: the run stamps its
+  project's files before and after.

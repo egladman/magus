@@ -29,12 +29,6 @@ inputs:
       command that settles them.
     required: false
     default: 'true'
-  target-outputs:
-    description: >
-      Comment when the pull request adds a target that declares no outputs, which can
-      never replay from cache. Only new targets; an existing one is a decision already made.
-    required: false
-    default: 'true'
   doctor:
     description: >
       Report what `magus doctor` finds about the workspace. Non-blocking by design, so a

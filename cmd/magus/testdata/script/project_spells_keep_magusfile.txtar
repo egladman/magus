@@ -15,14 +15,18 @@
 # language adapter you opt into like go or buf, it is what makes the file you are
 # writing runnable at all. Listing it is now an error (MGS1017) rather than a
 # no-op, since it never did anything.
+#
+# The workspace is ws/, so the probes sit outside it and are no undeclared write
+# (MGS4011).
+cd ws
 
 # A target in a project that declares ONLY a tool spell still runs its own body.
 exec magus run check
-exec cat BODY_RAN
+exec cat ../BODY_RAN
 stdout 'yes'
 
 # And still reaches the tool spell's op.
-exists MARKER
+exists ../MARKER
 
 # The declared spell is the PRIMARY one a listing reports. It no longer depends on
 # binding order: an internal registration never claims that slot, so the implicit
@@ -30,21 +34,21 @@ exists MARKER
 exec magus ls
 stdout '\(acme\)'
 
--- magus.yaml --
+-- ws/magus.yaml --
 concurrency: 4
--- magusfile.buzz --
+-- ws/magusfile.buzz --
 import "magus";
 import "fs";
 import "spells/acme";
 magus\project({ "spells": [acme], "targets": {"check": {"skip_cache": "test policy"}} });
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
-    fs\writeFile("BODY_RAN", "yes");
+    fs\writeFile("../BODY_RAN", "yes");
     acme["lint"](ctx);
 }
--- spells/acme/spell.buzz --
+-- ws/spells/acme/spell.buzz --
 import "magus/spell";
 export fun mgs_getName() > str { return "acme"; }
 fun lint(target: Target) > Command {
-    return Command{bin = "touch", args = ["MARKER"]};
+    return Command{bin = "touch", args = ["../MARKER"]};
 }
 export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

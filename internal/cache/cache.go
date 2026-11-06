@@ -89,6 +89,7 @@ type Cache struct {
 	exportMu       sync.RWMutex // guards Export/Import against concurrent Run writes
 	evictMu        sync.Mutex   // serializes evictLRU so concurrent Runs don't over-evict each other's fresh manifests
 	failureHinted  sync.Map     // cache key -> struct{}: keys emitUnchangedFailureHint already spoke for
+	writers        writeWindows // running steps, so MGS4011 never blames a peer's write
 	// annotator folds failure output and raises notices for whichever CI
 	// provider is running the job; Nop off CI, so call sites never branch.
 	// annotateMu serializes a whole failure block (group open, dump, group
@@ -206,6 +207,10 @@ type Step struct {
 	// ctx.needs puts a chained target's writes inside this step's window and a workspace
 	// target does the same across projects.
 	OwnedOutputs []types.Glob
+	// WritePaths are absolute files and dirs a declaration other than
+	// ctx.writesFiles claims: a spell's tool cache (GOCACHE), a relinked
+	// binary. MGS4011 skips them. Unhashed.
+	WritePaths []string
 
 	Deps      []string // upstream project hashes folded into the key
 	DependsOn []string // upstream project paths for scheduling (not hashed)
@@ -927,12 +932,21 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	if preErr != nil {
 		preSources = nil
 	}
+	win := c.writers.open(rc.step, enclosingWriteWindow(ctx))
+	defer c.writers.release(win)
+	preTree, treeErr := stampProjectTree(rc.step)
+	if treeErr != nil {
+		c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
+			fmt.Sprintf("undeclared write check skipped for %s: %v", s.ProjectPath, treeErr)))
+		preTree = nil
+	}
 
 	lp := c.logPath(s.ProjectPath, hash)
 	ctx = journal.WithPermits(types.WithExecCost(ctx))
 	watchOverrun(ctx)
 	// NewContext lets spell bindings (magus.bust_cache) reach the active cache.
-	rawOutput, runErr := c.captureRun(NewContext(ctx, c), lp, s.ProjectPath, reproTarget(s), fn)
+	rawOutput, runErr := c.captureRun(withWriteWindow(NewContext(ctx, c), win), lp, s.ProjectPath, reproTarget(s), fn)
+	c.writers.finish(win)
 	result.MaxRSSBytes, result.CPUMs = types.PeakRSS(ctx), types.CPUMs(ctx)
 	result.Permitted = journal.Permits(ctx)
 
@@ -987,6 +1001,9 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	// inputs must not reach the local store or the shared remote.
 	if mutErr := c.checkSourceMutation(ctx, rc.step, preSources); mutErr != nil {
 		return fail(mutErr)
+	}
+	if err := c.checkUndeclaredWrites(ctx, rc.step, win, preTree, preSources); err != nil {
+		return fail(err)
 	}
 
 	// The write phase of the read-execute-validate cycle this already performs: hashStep

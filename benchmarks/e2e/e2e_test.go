@@ -110,7 +110,8 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 	fake := spells.NewSpell(
 		"faketool",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
-			f, err := os.OpenFile(filepath.Join(req.Dir, "count"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			// Outside the project, so it is no undeclared write (MGS4011).
+			f, err := os.OpenFile(filepath.Join(req.Dir, "..", "count"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			if err != nil {
 				return nil, err
 			}
@@ -140,7 +141,7 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 
 	targets, err := m.ExpandPath(types.Target{Name: "build"})
 	require.NoError(t, err, "ExpandPath")
-	count := func() int { return len(readFile(t, filepath.Join(projDir, "count"))) }
+	count := func() int { return len(readFile(t, filepath.Join(root, "count"))) }
 
 	// Run 1: cache miss → the spell runs once.
 	require.NoError(t, m.Run(ctx, targets), "run 1")
@@ -170,7 +171,7 @@ import "os";
 import "proc";
 magus\project("svc", {});
 export fun hit(ctx: magus\Context, args: [str]) > void !> any {
-    final c = proc\shell("printf x >> count");
+    final c = proc\shell("printf x >> ../count");
     proc\exec(c.bin, c.args, "", proc\ExecOptions{});
 }
 `
@@ -184,7 +185,7 @@ export fun hit(ctx: magus\Context, args: [str]) > void !> any {
 	targets, err := m.ExpandPath(types.Target{Name: "hit"})
 	require.NoError(t, err, "ExpandPath")
 	require.NoError(t, m.Run(ctx, targets), "Run")
-	assert.Equal(t, 1, len(readFile(t, filepath.Join(dir, "count"))), "target ran more than once (double-bind regression)")
+	assert.Equal(t, 1, len(readFile(t, filepath.Join(root, "count"))), "target ran more than once (double-bind regression)")
 }
 
 // TestDeclaringMagusfileAsASpellIsRejected pins the migration. Declaring it was a
@@ -273,7 +274,7 @@ import "magus";
 import "os";
 import "proc";
 fun record(name: str) > void !> any {
-    final c = proc\shell("printf '%s\n' " + name + " >> ci-order");
+    final c = proc\shell("printf '%s\n' " + name + " >> ../ci-order");
     proc\exec(c.bin, c.args, "", proc\ExecOptions{});
 }
 export fun build(ctx: magus\Context, args: [str]) > void !> any { record("build"); }
@@ -296,7 +297,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 	require.NoError(t, err, "ExpandPath")
 	require.NoError(t, m.RunCI(ctx, targets), "RunCI")
 
-	got, err := os.ReadFile(filepath.Join(root, "svc", "ci-order"))
+	got, err := os.ReadFile(filepath.Join(root, "ci-order"))
 	require.NoError(t, err, "ci-order log not written")
 	assert.Equal(t, "build\ntest\n", string(got), "CI step order")
 }
