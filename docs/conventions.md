@@ -308,7 +308,7 @@ Generated pages are their generator's to fix, and skip these checks.
 ## Prose punctuation and headings
 
 Hand-written Markdown anywhere in the repository keeps to plain punctuation, and
-`magus run lint-rules .` refuses a file that departs from it
+`magus run conventions .` refuses a file that departs from it
 ([`hack/lint/markdown-proofread.buzz`](https://github.com/egladman/magus/blob/main/hack/lint/markdown-proofread.buzz)):
 
 - **No typographic characters outside code.** No em or en dash, curly quote or ellipsis

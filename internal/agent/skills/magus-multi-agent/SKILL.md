@@ -162,9 +162,10 @@ Before spawning, state the topology: the model per job, and whether isolated wor
   - `default_timeout` bounds a fork that names no `--timeout`.
   - Honor a cap the user states the same way.
 - Editing costs the workspace nothing; VALIDATION contends: the magus runs a job
-  triggers, which share the machine's build budget. An integrator waits for that budget,
-  explicitly (`{{cmd "status"}} --wait` piped into its run) and for as long as it decided, never a worker; a spawn
-  or `{{cmd "job fork"}}` into a full one says how full it is.
+  triggers, which share the machine's build budget. A run kept out of that budget is
+  refused at once (MGS3009) naming who holds it, and waits in its own call only when
+  `budget_wait` (default 0; `--budget-wait 30m`) says so; a spawn or `{{cmd "job fork"}}`
+  into a full one says how full it is.
   Serialize validations that share a worktree, even when their write sets are disjoint.
 
 Assign the check from the pipeline the workspace composed, not from convention.
@@ -176,7 +177,7 @@ Assign the check from the pipeline the workspace composed, not from convention.
   (`go::go-test . -- ./pkg/... -run 'Store'`) may filter their tests too. Never the full suite.
 - The integration job owns the full `go-test` and `lint`, and runs every check a merged
   worker filed as owed. The integrator re-runs the described order, and `{{cmd "affected"}} ci` re-proves the whole composition.{{else}}- No cap on fan-out or depth unless magus.yaml `jobs` sets one (`{{cmd "config view"}}`, `{{tool "config"}}`): `max_depth`, `max_live` refuse past them; `default_timeout` bounds a fork with no `--timeout`. User-stated cap: same.
-- Editing costs nothing; VALIDATION contends for machine build budget. Only integrator waits for it (`{{cmd "status"}} --wait` piped into its run), never a worker; spawn or `{{cmd "job fork"}}` into full budget says how full.
+- Editing costs nothing; VALIDATION contends for machine build budget. A run kept out is refused at once (MGS3009) and waits in its own call only when `budget_wait` (default 0) says so; spawn or `{{cmd "job fork"}}` into full budget says how full.
 - Serialize validations sharing a worktree, even with disjoint write sets.
 
 Assign check from composed pipeline, never convention: `{{cmd "describe target"}} ci <project>` names what `ci` chains, in order.
@@ -417,7 +418,7 @@ any cap the user set for the tree. Require the worker to:
   `{{cmd "session"}} ls`, and no verdict is keyed on them{{end}};
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
 - run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending;
-- never wait for the build budget, `{{cmd "status"}} --wait` included. When a full budget refuses its check, it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `gate_evidence`, with no output ref. `{{cmd "job wait"}}` passes that result and the integration runs the check;
+- never wait for the build budget outside its check's own call. When its check is refused (MGS3009), having waited as long as `budget_wait` allows (none by default), it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `gate_evidence`, with no output ref. `{{cmd "job wait"}}` passes that result and the integration runs the check;
 - never exit its row while it waits on a reply from you: ending its turn with the question as its final text leaves the row open and the worker resumable.
 
 End every brief with the step that files the result, as the worker's LAST act before

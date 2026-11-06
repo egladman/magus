@@ -34,6 +34,12 @@ fix the pure function that produced it and its test, then run it again.
      main's latest completed CI run; `evidence` names both runs.
    - `red`: anything else; `evidence` names the failures main does not have.
 
+   The `merge-queue` status is the queue, not CI, and `state` leaves it out. It
+   stays pending on every pull request outside the queue. Its description says why:
+   `not queued: CI has not passed`, `not queued: waiting for an approving review`,
+   or `ready: ...` once only merge intent is missing. Never count it as a running
+   check or wait for it to pass.
+
    `stage` is what else stands before a merge: `merged`, `closed`, `draft`,
    `waiting-below`, `conflicting`, `kicked-back`, `behind`, `queued`,
    `needs-queue`.
@@ -77,7 +83,7 @@ fix the pure function that produced it and its test, then run it again.
       - When either stops at a source conflict, it names the files and the
         checkout; hand those to an agent of the record's model as below.
    4. `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready`, then
-      `./magus status --wait | ./magus affected ci` gates the result once; on failure it
+      `./magus affected ci`, which waits for the build budget itself, gates the result once; on failure it
       closes with each failed target's ref and cause. Fix from those, never rerun.
    5. `./magus buzz hack/dev/land-commits.buzz -- --branch <name> --from <ref>
       --title <text> --body-file <file>` opens a pull request for commits that have

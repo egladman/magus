@@ -1,11 +1,8 @@
 package broker
 
 import (
-	"errors"
 	"testing"
-	"time"
 
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/suite"
@@ -34,7 +31,7 @@ func (s *AttributionSuite) client(opts ...ClientOption) *Client {
 }
 
 func (s *AttributionSuite) grant(c *Client, claim types.MachineClaim) string {
-	v, err := c.Claim(s.T().Context(), claim)
+	v, err := c.Claim(s.T().Context(), claim, nil)
 	s.Require().NoError(err)
 	s.Require().True(v.Granted, "%+v", v)
 	return v.ID
@@ -46,7 +43,7 @@ func (s *AttributionSuite) TestWithLeaseOutranksBaggage() {
 	s.Equal("from-marker", NewClient(s.addr, WithLease("from-marker")).hello.Lease)
 }
 
-func (s *AttributionSuite) TestTheOldestGateWaitsForAnotherInvocationsSeat() {
+func (s *AttributionSuite) TestAGateWaitsForAnotherInvocationsSeat() {
 	feature := s.client()
 	held := s.grant(feature, types.MachineClaim{Project: "libs/x", Target: "go-test", Slots: 2, PID: 1})
 	gate := s.client(WithGate(true))
@@ -60,15 +57,31 @@ func (s *AttributionSuite) TestTheOldestGateWaitsForAnotherInvocationsSeat() {
 	s.True(got.v.Granted, "the release seats the gate's member")
 }
 
-func (s *AttributionSuite) TestAYoungerGateIsRefusedAtOnce() {
+func (s *AttributionSuite) TestAYoungerGateWaitsBehindTheOlder() {
 	older := s.client(WithGate(true))
-	s.grant(older, types.MachineClaim{Project: ".", Target: "lint", Slots: 2, PID: 3})
+	held := s.grant(older, types.MachineClaim{Project: ".", Target: "lint", Slots: 2, PID: 3})
 	younger := s.client(WithGate(true))
 
-	v, err := younger.Claim(s.T().Context(), types.MachineClaim{Project: "docs", Target: "lint", Slots: 1, PID: 4})
-	s.Require().NoError(err)
-	s.Equal([]bool{false, true, false}, []bool{v.Granted, v.Fits, v.OwnRun},
-		"only the oldest gate waits, so two gates never wait on each other")
+	waiting := claimAsync(s.T(), s.T().Context(), s.addr, younger, types.MachineClaim{Project: "docs", Target: "lint", Slots: 1, PID: 4})
+	requirePending(s.T(), waiting)
+
+	older.Release(s.T().Context(), held)
+	s.True(requireAnswer(s.T(), waiting).v.Granted, "the older gate's release seats the younger")
+}
+
+func (s *AttributionSuite) TestTwoGatesOnDifferentRootsBothFinish() {
+	first, second := s.client(WithGate(true)), s.client(WithGate(true))
+	a := s.grant(first, types.MachineClaim{Project: ".", Target: "ci", Slots: 1, PID: 3, Invocation: "3:a"})
+	b := s.grant(second, types.MachineClaim{Project: ".", Target: "ci", Slots: 1, PID: 4, Invocation: "4:b"})
+	firstMember := claimAsync(s.T(), s.T().Context(), s.addr, first, types.MachineClaim{Project: ".", Target: "go-test", Slots: 1, PID: 3, Invocation: "3:a2", Ancestors: []string{"3:a"}})
+	secondMember := claimAsync(s.T(), s.T().Context(), s.addr, second, types.MachineClaim{Project: ".", Target: "go-test", Slots: 1, PID: 4, Invocation: "4:b2", Ancestors: []string{"4:b"}})
+
+	for _, got := range []claimed{requireAnswer(s.T(), firstMember), requireAnswer(s.T(), secondMember)} {
+		s.Require().NoError(got.err)
+		s.True(got.v.Granted, "each stalled root seats one child, so neither waits on the other")
+	}
+	first.Release(s.T().Context(), a)
+	second.Release(s.T().Context(), b)
 }
 
 func (s *AttributionSuite) TestAWaitingGateKeepsAFeatureCheckOutOfItsRoom() {
@@ -80,13 +93,12 @@ func (s *AttributionSuite) TestAWaitingGateKeepsAFeatureCheckOutOfItsRoom() {
 
 	feature.Release(s.T().Context(), first)
 	requirePending(s.T(), member)
-	late := s.client()
-	v, err := late.Claim(s.T().Context(), types.MachineClaim{Project: "libs/y", Target: "go-test", Slots: 1, PID: 5})
-	s.Require().NoError(err)
-	s.False(v.Granted, "the freed slot is the gate's, so the feature check is refused")
+	late := claimAsync(s.T(), s.T().Context(), s.addr, s.client(), types.MachineClaim{Project: "libs/y", Target: "go-test", Slots: 1, PID: 5})
+	requirePending(s.T(), late)
 
 	feature.Release(s.T().Context(), second)
-	s.True(requireAnswer(s.T(), member).v.Granted)
+	s.True(requireAnswer(s.T(), member).v.Granted, "the freed slots are the gate's")
+	requirePending(s.T(), late)
 }
 
 func (s *AttributionSuite) TestAMemberOfTheGatesRunWaitsWithIt() {
@@ -104,20 +116,4 @@ func (s *AttributionSuite) TestAMemberOfTheGatesRunWaitsWithIt() {
 
 	feature.Release(s.T().Context(), held)
 	s.True(requireAnswer(s.T(), member).v.Granted, "a magus the gate runs is the gate's")
-}
-
-func (s *AttributionSuite) TestTheGateGivesUpAtItsBoundNamingIt() {
-	bound := gateWaitBound
-	gateWaitBound = 100 * time.Millisecond
-	s.T().Cleanup(func() { gateWaitBound = bound })
-	feature := s.client()
-	s.grant(feature, types.MachineClaim{Project: "libs/x", Target: "go-test", Slots: 2, PID: 1})
-	gate := s.client(WithGate(true))
-
-	got := requireAnswer(s.T(), claimAsync(s.T(), s.T().Context(), s.addr, gate, types.MachineClaim{Project: ".", Target: "go-test", Slots: 1, PID: 3}))
-	var exit types.ExitError
-	s.Require().True(errors.As(got.err, &exit), "%v", got.err)
-	s.Equal(cache.ExitCodeMachineBusy, exit.Code)
-	s.Contains(got.err.Error(), "the most a gate waits")
-	s.Contains(got.err.Error(), "go-test")
 }

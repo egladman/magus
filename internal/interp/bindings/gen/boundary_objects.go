@@ -3598,6 +3598,18 @@ func ObjectProjectQuery(v types.ProjectQuery) vm.Value {
 	return out
 }
 
+func ObjectListPullsRequest(v types.ListPullsRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("remote", vm.StringValue(v.Remote))
+	out.MapSet("base", vm.StringValue(v.Base))
+	itemsAuthors := make([]vm.Value, len(v.Authors))
+	for indexAuthors := range v.Authors {
+		itemsAuthors[indexAuthors] = vm.StringValue(v.Authors[indexAuthors])
+	}
+	out.MapSet("authors", vm.ListValue(itemsAuthors))
+	return out
+}
+
 func ObjectQueuePinnedChange(v queuetypes.PinnedChange) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
@@ -5312,6 +5324,103 @@ func ObjectReviewComment(v types.ReviewComment) vm.Value {
 	return out
 }
 
+func ObjectRateLimit(v types.RateLimit) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("limit", vm.IntValue(int64(v.Limit)))
+	out.MapSet("remaining", vm.IntValue(int64(v.Remaining)))
+	out.MapSet("reset", vm.StringValue(v.Reset))
+	return out
+}
+
+func ObjectForgeCheck(v types.ForgeCheck) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StringValue(v.Name))
+	out.MapSet("kind", vm.StringValue(v.Kind))
+	out.MapSet("state", vm.StringValue(v.State))
+	out.MapSet("queuedAt", vm.StringValue(v.QueuedAt))
+	out.MapSet("startedAt", vm.StringValue(v.StartedAt))
+	out.MapSet("completedAt", vm.StringValue(v.CompletedAt))
+	out.MapSet("url", vm.StringValue(v.URL))
+	out.MapSet("description", vm.StringValue(v.Description))
+	itemsLines := make([]vm.Value, len(v.Lines))
+	for indexLines := range v.Lines {
+		itemsLines[indexLines] = vm.StringValue(v.Lines[indexLines])
+	}
+	out.MapSet("lines", vm.ListValue(itemsLines))
+	out.MapSet("outputRef", vm.StringValue(v.OutputRef))
+	return out
+}
+
+func ObjectBaseCommit(v types.BaseCommit) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("sha", vm.StringValue(v.SHA))
+	out.MapSet("subject", vm.StringValue(v.Subject))
+	out.MapSet("at", vm.StringValue(v.At))
+	out.MapSet("pull", vm.IntValue(int64(v.Pull)))
+	return out
+}
+
+func ObjectBaseBranch(v types.BaseBranch) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StringValue(v.Name))
+	out.MapSet("sha", vm.StringValue(v.SHA))
+	out.MapSet("url", vm.StringValue(v.URL))
+	itemsChecks := make([]vm.Value, len(v.Checks))
+	for indexChecks := range v.Checks {
+		itemsChecks[indexChecks] = ObjectForgeCheck(v.Checks[indexChecks])
+	}
+	out.MapSet("checks", vm.ListValue(itemsChecks))
+	itemsCommits := make([]vm.Value, len(v.Commits))
+	for indexCommits := range v.Commits {
+		itemsCommits[indexCommits] = ObjectBaseCommit(v.Commits[indexCommits])
+	}
+	out.MapSet("commits", vm.ListValue(itemsCommits))
+	return out
+}
+
+func ObjectForgePull(v types.ForgePull) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("number", vm.IntValue(int64(v.Number)))
+	out.MapSet("title", vm.StringValue(v.Title))
+	out.MapSet("author", vm.StringValue(v.Author))
+	out.MapSet("url", vm.StringValue(v.URL))
+	out.MapSet("branch", vm.StringValue(v.Branch))
+	out.MapSet("headSHA", vm.StringValue(v.HeadSHA))
+	out.MapSet("draft", vm.BoolValue(v.Draft))
+	out.MapSet("mergeable", vm.StringValue(v.Mergeable))
+	out.MapSet("behindBy", vm.IntValue(int64(v.BehindBy)))
+	out.MapSet("review", vm.StringValue(v.Review))
+	out.MapSet("pushedAt", vm.StringValue(v.PushedAt))
+	itemsChecks := make([]vm.Value, len(v.Checks))
+	for indexChecks := range v.Checks {
+		itemsChecks[indexChecks] = ObjectForgeCheck(v.Checks[indexChecks])
+	}
+	out.MapSet("checks", vm.ListValue(itemsChecks))
+	itemsFiles := make([]vm.Value, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = vm.StringValue(v.Files[indexFiles])
+	}
+	out.MapSet("files", vm.ListValue(itemsFiles))
+	return out
+}
+
+func ObjectPullList(v types.PullList) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("repo", vm.StringValue(v.Repo))
+	out.MapSet("viewer", vm.StringValue(v.Viewer))
+	out.MapSet("reason", vm.StringValue(v.Reason))
+	out.MapSet("base", ObjectBaseBranch(v.Base))
+	itemsPulls := make([]vm.Value, len(v.Pulls))
+	for indexPulls := range v.Pulls {
+		itemsPulls[indexPulls] = ObjectForgePull(v.Pulls[indexPulls])
+	}
+	out.MapSet("pulls", vm.ListValue(itemsPulls))
+	out.MapSet("rate", ObjectRateLimit(v.Rate))
+	out.MapSet("requests", vm.IntValue(int64(v.Requests)))
+	out.MapSet("revalidated", vm.IntValue(int64(v.Revalidated)))
+	return out
+}
+
 func ObjectProvidedProject(v spells.ProvidedProject) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
@@ -6169,6 +6278,7 @@ func ObjectHTTPOptions(v types.HTTPOptions) vm.Value {
 	out.MapSet("failWithBody", vm.BoolValue(v.FailWithBody))
 	out.MapSet("failEarly", vm.BoolValue(v.FailEarly))
 	out.MapSet("timeoutSeconds", vm.FloatValue(float64(v.TimeoutSeconds)))
+	out.MapSet("revalidate", vm.BoolValue(v.Revalidate))
 	return out
 }
 

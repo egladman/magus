@@ -311,3 +311,44 @@ above no longer exists and `weight` was written and never read. It now orders pa
 requests: gates first, then the heavier job, in asking order within a weight. A request
 that goes ahead counts as overtaking, so `maxOvertakes` bounds how long a light job waits.
 Weight still decides no verdict, and a refused claim still holds no place in the queue.
+
+### 2026-11-05: every claim waits for its seat, bounded
+
+The last clause above changes: a claim that can fit holds a place in the queue whoever
+holds the room. Until now another invocation's claim was refused at once (MGS3009), except
+the oldest `ci` gate's, which waited up to 30 minutes. The evidence of 2026-11-04 and 05 is
+that every caller then typed the same wait by hand. Workers piped `magus status --wait`
+into their checks because the guard told them to, and the guard grew a parser for the pipe.
+The checkout bootstrap wrapped every nested run in that pipe with its own 30-minute bound
+(#635, closed unmerged). `graph build` looped on the reservation in Go. A job fork on a
+full machine failed, removed its checkout and forked again. Core held three waiters for one
+queue: the gate, `graph build` and `status --wait`.
+
+So the broker parks every claim that can fit, and only one larger than the whole budget is
+refused at once. The bound lives in the client: `budget_wait`, or the run's own deadline
+when that is sooner. The default was first 30 minutes (see the reversal below). A wait on the run's own
+claims has no bound, as before. The client says when it parks and whenever the holders
+change, and nothing on a timer. At the bound it asks once more without parking, then
+refuses with MGS3009 (exit 75) naming the holders and what set the bound. A leased worker
+files its check owed only after that. Broker protocol goes to 5, since a protocol 4 client
+would wait with no bound.
+
+This adds no hold-and-wait the Decision ruled out. A holder is a running step, and a running
+step waits only on its descendants, which its run's own claims excuse and its stalled
+ancestor's free seat lets in, or on a retake that holds nothing while it waits. So no holder
+waits on a stranger's waiter, and the bound ends any cycle this reasoning missed, naming the
+holders. Gates keep queuing first in asking order, and the oldest-gate rule goes: two gates
+waiting in order do not deadlock. `status --wait`, reservations, awaits and the gate-only
+bound are deleted, and so is the second, peak-based fit rule they used. MGS3053 stays a
+refusal: the broker hears no event when the kernel's reading changes, and waiting on it
+would need a poll.
+
+### 2026-11-05: waiting is opt-in, `budget_wait` defaults to 0
+
+The amendment above set `budget_wait` to 30 minutes by default. Reversed the same day: a
+run kept out of the budget refuses at once unless the caller asks to wait. A wait nobody
+asked for looks like work, and a caller who wants one can say so. The refusal (MGS3009)
+now tells it how: `--budget-wait 30m`, `MAGUS_BUDGET_WAIT` or `budget_wait` in
+`magus.yaml`. Everything else above stands: the queue, the bound living in the client,
+the owed filing of a leased worker and protocol 5. The default alone changes, from 30
+minutes to 0, and a leased worker's check is refused at once unless its caller set a wait.

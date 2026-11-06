@@ -296,6 +296,48 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			cfg.Console.Enabled = &b
 		}
 	}
+	if v := getenv("MAGUS_CONSOLE_PULLS_FLOOR"); v != "" {
+		if d, err := time.ParseDuration(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_CONSOLE_PULLS_FLOOR: %w", err))
+		} else {
+			cfg.Console.Pulls.Floor = d
+		}
+	}
+	if v := getenv("MAGUS_CONSOLE_PULLS_ACTIVE"); v != "" {
+		if d, err := time.ParseDuration(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_CONSOLE_PULLS_ACTIVE: %w", err))
+		} else {
+			cfg.Console.Pulls.Active = d
+		}
+	}
+	if v := getenv("MAGUS_CONSOLE_PULLS_IDLE"); v != "" {
+		if d, err := time.ParseDuration(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_CONSOLE_PULLS_IDLE: %w", err))
+		} else {
+			cfg.Console.Pulls.Idle = d
+		}
+	}
+	if v := getenv("MAGUS_CONSOLE_PULLS_RESERVE"); v != "" {
+		if n, err := strconv.Atoi(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_CONSOLE_PULLS_RESERVE: %w", err))
+		} else {
+			cfg.Console.Pulls.Reserve = n
+		}
+	}
+	if v := getenv("MAGUS_CONSOLE_PULLS_RUNNER_WAIT"); v != "" {
+		if d, err := time.ParseDuration(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_CONSOLE_PULLS_RUNNER_WAIT: %w", err))
+		} else {
+			cfg.Console.Pulls.RunnerWait = d
+		}
+	}
+	if v := getenv("MAGUS_CONSOLE_PULLS_STALE_AFTER"); v != "" {
+		if d, err := time.ParseDuration(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_CONSOLE_PULLS_STALE_AFTER: %w", err))
+		} else {
+			cfg.Console.Pulls.StaleAfter = d
+		}
+	}
 	if v := getenv("MAGUS_REPORT_FILTER"); v != "" {
 		parts := strings.Split(v, ",")
 		out := parts[:0]
@@ -570,6 +612,13 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 	if v := getenv("MAGUS_BROKER"); v != "" {
 		if err := cfg.Broker.UnmarshalText([]byte(v)); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_BROKER: %w", err))
+		}
+	}
+	if v := getenv("MAGUS_BUDGET_WAIT"); v != "" {
+		if d, err := time.ParseDuration(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_BUDGET_WAIT: %w", err))
+		} else {
+			cfg.BudgetWait = d
 		}
 	}
 	if v := getenv("MAGUS_SHUTDOWN_GRACE"); v != "" {

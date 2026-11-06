@@ -129,8 +129,6 @@ export type BudgetWaiter = {
   slots: number
   memoryMb: number
   owner: string
-  // A `magus status --wait` asking for a seat on pid's behalf.
-  reservation: boolean
   // The job tree whose validation seat it waits for; '' when it waits on the budget.
   tree: string
   // Unix milliseconds of the first ask the broker turned away.

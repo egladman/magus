@@ -1,5 +1,5 @@
 // This repository's file linter: the conventions on its non-Go files that no compiler or
-// off-the-shelf linter checks. The root lint-rules target runs it:
+// off-the-shelf linter checks. The root conventions target runs it:
 //
 //	magus buzz hack/lint/run.buzz
 //
@@ -220,10 +220,12 @@ export fun run(rules: [Rule], files: [str]) > [Finding] !> any {
     return found;
 }
 
-// FOOTPRINT names the runner's own check: lint-rules keys on exactly what the rules read.
-export final FOOTPRINT = "lint-rules-keys-on-what-the-rules-read";
+// FOOTPRINT names the runner's own check: conventions keys on exactly what the
+// rules read.
+export final FOOTPRINT = "conventions-keys-on-what-the-rules-read";
 
-// SOURCES are the linter's own files, which lint-rules keys on beside what the rules read.
+// SOURCES are the linter's own files, which conventions keys on beside what the
+// rules read.
 export final SOURCES = ["hack/lint/*.buzz"];
 
 // claims reports whether a readsFiles glob of the root project keys rel. It mirrors
@@ -252,8 +254,9 @@ export fun claims(glob: str, rel: str, nested: [str]) > bool !> any {
     return base == owner or base.startsWith(owner + "/");
 }
 
-// footprintFindings holds lint-rules's declared readsFiles to read, every file a rule
-// was handed plus the linter's own sources: each is keyed, and each glob keys one.
+// footprintFindings holds the conventions target's declared readsFiles to read,
+// every file a rule was handed plus the linter's own sources: each is keyed,
+// and each glob keys one.
 // nested are the workspace's projects other than the root.
 export fun footprintFindings(read: [str], declared: [str], nested: [str], line: int) > [Finding] !> any {
     final found = mut [<Finding>];
@@ -264,8 +267,8 @@ export fun footprintFindings(read: [str], declared: [str], nested: [str], line: 
         }
         if (!keyed) {
             found.append(Finding{ path = "magusfile.buzz", line = line, rule = FOOTPRINT,
-                message = "lint-rules reads " + rel + " but its ctx.readsFiles does not key it",
-                fix = "Declare it in lint_rules, or an edit to it replays a verdict computed without it.\n"
+                message = "conventions reads " + rel + " but its ctx.readsFiles does not key it",
+                fix = "Declare it in conventions, or an edit to it replays a verdict computed without it.\n"
                     + "A glob rooted above a nested project does not reach into it: name the project's path." });
         }
     }
@@ -276,15 +279,15 @@ export fun footprintFindings(read: [str], declared: [str], nested: [str], line: 
         }
         if (!keys) {
             found.append(Finding{ path = "magusfile.buzz", line = line, rule = FOOTPRINT,
-                message = "lint-rules declares " + glob + ", which keys no file a rule reads",
-                fix = "Drop it from lint_rules's ctx.readsFiles, or point it at what a rule reads now." });
+                message = "conventions declares " + glob + ", which keys no file a rule reads",
+                fix = "Drop it from the ctx.readsFiles of conventions, or point it at what a rule reads now." });
         }
     }
     return found;
 }
 
 // footprint runs footprintFindings against the tree: the files rules reads, the root's
-// lint-rules declaration and the workspace's nested projects.
+// conventions declaration and the workspace's nested projects.
 fun footprint(rules: [Rule], files: [str]) > [Finding] !> any {
     final seen = mut {<str: bool>};
     final read = mut [<str>];
@@ -312,7 +315,7 @@ fun footprint(rules: [Rule], files: [str]) > [Finding] !> any {
     var declared: [str]? = null;
     foreach (p in support\targets().projects) {
         foreach (n in p.nodes) {
-            if (p.path == "." and n.name == "lint-rules") {
+            if (p.path == "." and n.name == "conventions") {
                 final acc = mut [<str>];
                 foreach (ref in n.readsFiles) {
                     acc.append(ref.glob);
@@ -322,10 +325,10 @@ fun footprint(rules: [Rule], files: [str]) > [Finding] !> any {
         }
     }
     if (declared == null) {
-        return [Finding{ path = "magusfile.buzz", rule = FOOTPRINT, message = "declares no lint-rules target",
-            fix = "hack/lint/run.buzz is what lint-rules runs; update this check if the target was renamed." }];
+        return [Finding{ path = "magusfile.buzz", rule = FOOTPRINT, message = "declares no conventions target",
+            fix = "hack/lint/run.buzz is what conventions runs; update this check if the target was renamed." }];
     }
-    final line = support\findLine(fs\readFile("magusfile.buzz"), needle: "export fun lint_rules(");
+    final line = support\findLine(fs\readFile("magusfile.buzz"), needle: "export fun conventions(");
     return footprintFindings(read, declared: declared!, nested: nested, line: line);
 }
 
@@ -593,13 +596,13 @@ test "a glob keys a nested project's file only when rooted inside it" {
     assert\equal(claims("libs/*/magusfile.buzz", rel: "libs/gopherbuzz/magusfile.buzz", nested: nested), want: false, message: "wildcard above the project");
 }
 
-test "lint-rules keys exactly what the rules read" {
+test "conventions keys exactly what the rules read" {
     final nested = ["docs"];
     assert\equal(footprintFindings(["a.lock", "docs/b.lock"], declared: ["**/*.lock", "docs/**/*.lock"], nested: nested, line: 1).len(),
         want: 0, message: "exact");
     assert\equal(support\messages(footprintFindings(["a.lock", "docs/b.lock"], declared: ["**/*.lock", "console/*.lock"], nested: nested, line: 1)), want: [
-        "lint-rules reads docs/b.lock but its ctx.readsFiles does not key it",
-        "lint-rules declares console/*.lock, which keys no file a rule reads",
+        "conventions reads docs/b.lock but its ctx.readsFiles does not key it",
+        "conventions declares console/*.lock, which keys no file a rule reads",
     ], message: "unkeyed and stale");
 }
 

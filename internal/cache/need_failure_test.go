@@ -10,13 +10,13 @@ import (
 )
 
 func TestWrapNeedFailureKeepsTheErrorText(t *testing.T) {
-	base := errors.New("[MGS4007] .:lint-rules failed")
-	wrapped := WrapNeedFailure(fmt.Errorf("ctx.needs: %w", base), NeedMember{Target: "lint-rules", Ref: "outaaaaaaaaaaaa"})
+	base := errors.New("[MGS4007] .:conventions failed")
+	wrapped := WrapNeedFailure(fmt.Errorf("ctx.needs: %w", base), NeedMember{Target: "conventions", Ref: "outaaaaaaaaaaaa"})
 
-	assert.Equal(t, "ctx.needs: [MGS4007] .:lint-rules failed", wrapped.Error(), "hopChain and causeSignature read this text")
+	assert.Equal(t, "ctx.needs: [MGS4007] .:conventions failed", wrapped.Error(), "hopChain and causeSignature read this text")
 	require.ErrorIs(t, wrapped, base)
 	target, ref := asNeedFailure(fmt.Errorf("ctx.needs: %w", wrapped))
-	assert.Equal(t, "lint-rules", target)
+	assert.Equal(t, "conventions", target)
 	assert.Equal(t, "outaaaaaaaaaaaa", ref)
 }
 

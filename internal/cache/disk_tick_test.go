@@ -124,7 +124,7 @@ type countingAdmitter struct {
 	claims int
 }
 
-func (c *countingAdmitter) Claim(context.Context, types.MachineClaim) (types.MachineVerdict, error) {
+func (c *countingAdmitter) Claim(context.Context, types.MachineClaim, func(types.MachineVerdict)) (types.MachineVerdict, error) {
 	c.claims++
 	return types.MachineVerdict{}, nil
 }
@@ -133,7 +133,7 @@ func (s *KickingAdmitterSuite) TestKicksOnceAcrossClaimsAndNeverHoldsOne() {
 	inner, kicks := &countingAdmitter{}, 0
 	admit := KickingAdmitter(inner, func() { kicks++ })
 	for range 3 {
-		_, err := admit.Claim(s.T().Context(), types.MachineClaim{})
+		_, err := admit.Claim(s.T().Context(), types.MachineClaim{}, nil)
 		s.Require().NoError(err)
 	}
 	s.Equal(1, kicks)

@@ -5,9 +5,9 @@ import (
 	"net"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/types"
 )
 
@@ -24,7 +24,7 @@ const (
 	waiting outcome = iota
 	// seated: answered, and it took room.
 	seated
-	// answered: answered without taking room: a refusal, or an await that holds nothing.
+	// answered: a refusal, which takes no room.
 	answered
 )
 
@@ -41,8 +41,10 @@ type parked struct {
 	claim types.MachineClaim
 	// try answers it when the budget can. Callers hold s.mu.
 	try func(p *parked) (reply, outcome)
-	// why is what kept it out at its last try.
+	// why is what kept it out at its last try. sent is the key of the last
+	// parked frame the client heard.
 	why       parkedReply
+	sent      string
 	overtaken int
 	// gate is a claim run under a gate, which queues ahead of every other request.
 	gate bool
@@ -70,9 +72,11 @@ func (s *server) park(p *parked) {
 	r, o := s.judgeLocked(p, s.aheadLocked(p, false))
 	why := p.why
 	if o == waiting {
+		p.sent = why.key()
 		s.enqueueLocked(p)
 		s.armWakeLocked()
 	}
+	others := o == seated && len(s.queue) > 0
 	s.mu.Unlock()
 	if o == waiting {
 		// A wake may answer p before this frame goes out; the client then drops it.
@@ -80,6 +84,24 @@ func (s *server) park(p *parked) {
 		return
 	}
 	_ = p.w.write(r.typ, p.id, r.body)
+	if others {
+		// p is a new holder the parked requests have not heard of.
+		s.wake()
+	}
+}
+
+// key is what a parked frame says, so a wake re-sends one only when the
+// holders or the reason changed.
+func (r parkedReply) key() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%t", r.Verdict.OwnRun)
+	if r.Seat != nil {
+		b.WriteString(" seat " + r.Seat.Tree)
+	}
+	for _, h := range r.Verdict.Holders {
+		fmt.Fprintf(&b, " %d %s %s", h.PID, h.Project, h.Target)
+	}
+	return b.String()
 }
 
 // starvedHeadLocked is the head of the queue once maxOvertakes requests went ahead of it,
@@ -111,6 +133,7 @@ func (s *server) judgeLocked(p, starved *parked) (reply, outcome) {
 
 // wake tries every parked request in order, answering each the budget now can. It runs
 // after anything that frees room and when the wake timer fires.
+// One still waiting whose holders changed hears a fresh parked frame.
 func (s *server) wake() {
 	type answer struct {
 		p *parked
@@ -122,6 +145,10 @@ func (s *server) wake() {
 		p := s.queue[i]
 		r, o := s.judgeLocked(p, s.aheadLocked(p, i == 0))
 		if o == waiting {
+			if k := p.why.key(); k != p.sent {
+				p.sent = k
+				out = append(out, answer{p, reply{typeParked, p.why}})
+			}
 			i++
 			continue
 		}
@@ -135,10 +162,8 @@ func (s *server) wake() {
 	}
 }
 
-// armWakeLocked sets the wake timer to the next instant the budget changes on its own (a
-// reservation lapsing, a curve stepping down), so a request waiting on that is answered
-// without a release. A reservation whose reader exits early lapses at its bound. Callers
-// hold s.mu.
+// armWakeLocked sets the wake timer to the next instant a curve steps down.
+// A request waiting on that is answered without a release. Callers hold s.mu.
 func (s *server) armWakeLocked() {
 	if s.wakeTimer != nil {
 		s.wakeTimer.Stop()
@@ -147,11 +172,7 @@ func (s *server) armWakeLocked() {
 	if len(s.queue) == 0 || s.closing {
 		return
 	}
-	at, ok := s.budget.NextChange()
-	if gate, waits := s.gateDeadlineLocked(); waits && (!ok || gate.Before(at)) {
-		at, ok = gate, true
-	}
-	if ok {
+	if at, ok := s.budget.NextChange(); ok {
 		s.wakeTimer = time.AfterFunc(time.Until(at), s.wake)
 	}
 }
@@ -214,9 +235,8 @@ func (s *server) waitingLocked(now time.Time) []types.MachineWaiter {
 	return out
 }
 
-// claimTry seats c for sess, parking it while only its own run or its job tree's
-// validation seat keeps it out, or while it runs under the oldest gate (see
-// [server.gateWaitLocked]). Any other refusal answers at once.
+// claimTry seats c for sess, parking it while anything a release can clear
+// keeps it out. Only a claim larger than the whole budget is refused at once.
 func (s *server) claimTry(sess *session, c types.MachineClaim) func(*parked) (reply, outcome) {
 	return func(p *parked) (reply, outcome) {
 		if wait := s.seatLocked(sess, c, false); wait != nil {
@@ -228,70 +248,32 @@ func (s *server) claimTry(sess *session, c types.MachineClaim) func(*parked) (re
 		case v.Granted:
 			sess.claims[v.ID] = max(c.Slots, 1)
 			return reply{typeClaimReply, claimReply{Verdict: v}}, seated
-		case v.Fits && v.OwnRun:
+		case v.Fits:
+			v.Holders = ownedHolders(s.conns, v.Holders)
 			p.why = parkedReply{Verdict: v}
 			return reply{}, waiting
-		}
-		if r, o, ok := s.gateWaitLocked(p, v); ok {
-			if o == answered {
-				s.ledger.claimed(s.conns, sess, c, v, time.Now())
-			}
-			return r, o
 		}
 		s.ledger.claimed(s.conns, sess, c, v, time.Now())
 		return reply{typeClaimReply, claimReply{Verdict: v}}, answered
 	}
 }
 
-// reserveTry holds a seat the size of c for reader once the budget can seat it beside
-// what it holds. A seat larger than the whole budget is refused at once.
-func (s *server) reserveTry(c types.MachineClaim, reader int) func(*parked) (reply, outcome) {
-	return func(p *parked) (reply, outcome) {
-		v := s.budget.Reserve(c, reader)
-		switch {
-		case v.Granted:
-			s.ledger.reserved(s.conns, p.sess, c, reader, v, time.Now())
-			return reply{typeReserveReply, reserveReply{Verdict: v}}, seated
-		case v.Fits:
-			p.why = parkedReply{Verdict: v, Blocked: c}
-			return reply{}, waiting
-		}
-		s.ledger.reserved(s.conns, p.sess, c, reader, v, time.Now())
-		return reply{typeReserveReply, reserveReply{Verdict: v}}, answered
+// ownedHolders is holders with each one's owner named. Callers hold s.mu.
+func ownedHolders(conns map[net.Conn]*session, holders []types.MachineClaimant) []types.MachineClaimant {
+	owners := connectionOwners(conns)
+	out := slices.Clone(holders)
+	for i, h := range out {
+		out[i].Owner = owners[h.PID]
 	}
-}
-
-// awaitTry answers once the budget would seat each of claims beside what it holds, and
-// refuses at once a claim larger than the whole budget.
-func (s *server) awaitTry(sess *session, claims []types.MachineClaim) func(*parked) (reply, outcome) {
-	return func(p *parked) (reply, outcome) {
-		blocked, v := cache.AwaitVerdict(s.budget.Snapshot(), claims)
-		p.claim = s.attribute(sess, blocked)
-		if !v.Granted && v.Fits {
-			p.why = parkedReply{Verdict: v, Blocked: blocked}
-			return reply{}, waiting
-		}
-		return reply{typeAwaitReply, awaitReply{Verdict: v, Blocked: blocked}}, answered
-	}
+	return out
 }
 
 // refusedKeep bounds the refusals a broker remembers for status.
 const refusedKeep = 20
 
-// reservedKeep bounds the reserved seats whose owner the ledger remembers. A seat lapses
-// within the budget's reservation bound, so the oldest past this many is long gone.
-const reservedKeep = 64
-
-type reservedSeat struct {
-	owner string
-	at    time.Time
-}
-
-// budgetLedger is what the broker remembers about its budget beyond the claims it holds
-// and the requests it parks: who asked for each reserved seat, and the last MGS3009
-// refusals it answered, each bounded. The zero value is ready; s.mu guards it.
+// budgetLedger is the last MGS3009 refusals the broker answered, bounded.
+// The zero value is ready; s.mu guards it.
 type budgetLedger struct {
-	seats map[int]reservedSeat
 	// refused is newest first.
 	refused []types.MachineRefusal
 }
@@ -305,58 +287,12 @@ func (l *budgetLedger) claimed(conns map[net.Conn]*session, sess *session, c typ
 	l.refuse(machineRefusal(c, sessionOwner(sess), v, connectionOwners(conns), now))
 }
 
-// reserved records what a reservation's verdict says about the run it is asked for,
-// reader: a grant is a seat the asker's owner holds, and a claim that can never fit is a
-// refusal.
-func (l *budgetLedger) reserved(conns map[net.Conn]*session, sess *session, c types.MachineClaim, reader int, v types.MachineVerdict, now time.Time) {
-	c.PID = reader
-	owner := sessionOwner(sess)
-	switch {
-	case v.Granted:
-		l.reserve(reader, owner, now)
-	case !v.Fits:
-		l.refuse(machineRefusal(c, owner, v, connectionOwners(conns), now))
-	}
-}
-
-// capacity is snap with each holder's owner and the refusals remembered. A reserved
-// holder's owner is the one who asked for the seat; any other's is the connection that
-// holds its pid.
+// capacity is snap with each holder's owner, the connection that holds its
+// pid, and the refusals remembered.
 func (l *budgetLedger) capacity(conns map[net.Conn]*session, snap types.MachineSnapshot) types.MachineSnapshot {
-	owners := connectionOwners(conns)
-	held := map[int]bool{}
-	snap.Holders = slices.Clone(snap.Holders)
-	for i, h := range snap.Holders {
-		if h.Reserved {
-			held[h.PID] = true
-			snap.Holders[i].Owner = l.seats[h.PID].owner
-			continue
-		}
-		snap.Holders[i].Owner = owners[h.PID]
-	}
-	for pid := range l.seats {
-		if !held[pid] {
-			delete(l.seats, pid)
-		}
-	}
+	snap.Holders = ownedHolders(conns, snap.Holders)
 	snap.Refused = slices.Clone(l.refused)
 	return snap
-}
-
-func (l *budgetLedger) reserve(reader int, owner string, now time.Time) {
-	if l.seats == nil {
-		l.seats = map[int]reservedSeat{}
-	}
-	l.seats[reader] = reservedSeat{owner: owner, at: now}
-	for len(l.seats) > reservedKeep {
-		oldest := 0
-		for pid, s := range l.seats {
-			if oldest == 0 || s.at.Before(l.seats[oldest].at) {
-				oldest = pid
-			}
-		}
-		delete(l.seats, oldest)
-	}
 }
 
 func (l *budgetLedger) refuse(r types.MachineRefusal) {

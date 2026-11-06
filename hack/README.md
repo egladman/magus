@@ -14,7 +14,7 @@ magus buzz hack/dev/<script>.buzz -- --help
 | `bench/` | measurements of magus itself | a person comparing two builds |
 | `ci/` | workflow steps, and the scripts that act on pull requests and the repository | CI, the merge queue, a maintainer |
 | `magusfile/` | modules with no `main` | magusfiles and CI, through targets |
-| `lint/` | this repository's file linter: `run.buzz` and one file per rule | the root `lint-rules` target |
+| `lint/` | this repository's file linter: `run.buzz` and one file per rule | the root `conventions` target |
 | `policy/` | this repository's guard rules | `magus guard`, through the root magusfile |
 | `docs/` | the committed screenshots' capture | a person refreshing them |
 | `retro/` | retros built from the audit records and the graph: `trace.buzz`, `tests.buzz`, `denials.buzz` | a person or an agent starting a retro, judging tests or reviewing denial text |
@@ -43,9 +43,9 @@ Find the script by what you are doing; each row's flags are in its row under `de
 
 | you want to | run |
 | --- | --- |
-| babysit open pull requests to main: action, gate-ready, refresh, gate, land | `hack/ci/pull-requests.buzz`, then `hack/dev/bootstrap-checkout.buzz --gate-ready`, `hack/dev/rebase-branches-onto-base.buzz` or `hack/dev/merge-base-into-branches.buzz`, `./magus status --wait \| ./magus affected ci`, `hack/dev/land-commits.buzz` (the `babysit-pull-requests` skill) |
+| babysit open pull requests to main: action, gate-ready, refresh, gate, land | `hack/ci/pull-requests.buzz`, then `hack/dev/bootstrap-checkout.buzz --gate-ready`, `hack/dev/rebase-branches-onto-base.buzz` or `hack/dev/merge-base-into-branches.buzz`, `./magus affected ci`, `hack/dev/land-commits.buzz` (the `babysit-pull-requests` skill) |
 | make a checkout gate-ready: `./magus` at HEAD, pools, stale skill installs, graph, symbol digest | `hack/dev/bootstrap-checkout.buzz --gate-ready` |
-| run the gate and see what failed | `hack/dev/bootstrap-checkout.buzz --here --gate-ready`, then `./magus status --wait \| ./magus affected ci`; bound it with `./magus job exec --timeout <duration> -- ./magus affected ci` |
+| run the gate and see what failed | `hack/dev/bootstrap-checkout.buzz --here --gate-ready`, then `./magus affected ci`; bound it with `./magus job exec --timeout <duration> -- ./magus affected ci` |
 | read a failed Go test run as `file:line: message` | `hack/dev/ls-test-failures.buzz` |
 | free disk, clear finished worktrees, or trim spell caches | `hack/dev/reclaim-disk-space.buzz`; the prompt hook, `magus job fork` and `magus run` start one bounded reclaim on their own |
 | see every worktree, its uncommitted files and unpushed commits | `hack/dev/ls-worktrees.buzz` |

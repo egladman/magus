@@ -1187,8 +1187,8 @@ func TestVerifyPassesAWorkerWhoseCheckIsOwed(t *testing.T) {
 	rep.Job = "integrate"
 	v = VerifyGates(integration, rep, types.JobAttempt{}, nil, nil, Observed{})
 	assert.False(t, v.Verified)
-	assert.Contains(t, strings.Join(v.Violations, "\n"), "goal \"check\": an integration runs the checks it owns: it waits for a seat with `")
-	assert.Contains(t, strings.Join(v.Violations, "\n"), "status --wait | <the check>`")
+	assert.Contains(t, strings.Join(v.Violations, "\n"), "goal \"check\": an integration runs the checks it owns: its check waits for a seat itself")
+	assert.Contains(t, strings.Join(v.Violations, "\n"), "raises budget_wait or frees a holder")
 }
 
 func TestAnIntegrationOwingACheckIsToldWhatClearsMemoryToo(t *testing.T) {

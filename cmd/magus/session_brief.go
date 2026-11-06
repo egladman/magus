@@ -329,7 +329,7 @@ func admitSessionBrief(ctx context.Context, root string) (func(), error) {
 		Target:   "session-brief",
 		MemoryMB: briefMemoryMB,
 		Dir:      root,
-	}, required)
+	}, required, globalCfg.BudgetWait)
 }
 
 // briefUnmergedLines caps what the brief prints of the unmerged report.

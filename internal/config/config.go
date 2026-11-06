@@ -51,6 +51,11 @@ type Config struct {
 	// Broker decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and shared services: required (refuse a step when none answers), best-effort (the default: run unarbitrated and say so once), or off (never start or contact one; a run hosts its services itself).
 	Broker types.BrokerPolicy `json:"broker" yaml:"broker"`
 
+	// BudgetWait bounds a step's wait for budget other runs hold.
+	// Past it, MGS3009 names them. Zero refuses at once. A sooner
+	// run deadline bounds it instead.
+	BudgetWait time.Duration `json:"budget_wait" yaml:"budget_wait" validate:"gte=0"`
+
 	// ShutdownGrace bounds how long the broker and the server take to stop after a first SIGTERM. The broker seats nothing new and waits this long for the runs holding claims or services to finish; the server cancels the runs it adopted and waits this long for them to unwind. A second SIGTERM, or a SIGINT to the broker, stops either at once. Zero stops at once on the first signal; negative is an error.
 	ShutdownGrace time.Duration `json:"shutdown_grace" yaml:"shutdown_grace" validate:"gte=0"`
 
@@ -651,6 +656,23 @@ func (m MCP) HTTPEnabled() bool { return m.HTTP == nil || *m.HTTP }
 // for triggering maintenance jobs (the server's one mutating route). Loopback only; bearer auth.
 type Console struct {
 	Enabled *bool `json:"enabled" yaml:"enabled"` // when false, the MCP HTTP server does not mount the console's read-only API and job service (default true when MCP is up)
+	Pulls   Pulls `json:"pulls" yaml:"pulls"`
+}
+
+// Pulls is the poll cadence and thresholds of the console's pull request board.
+type Pulls struct {
+	// Floor is the shortest wait between two syncs, whatever else is chosen.
+	Floor time.Duration `json:"floor" yaml:"floor" validate:"gte=1s"`
+	// Active is the wait while any check is queued or running.
+	Active time.Duration `json:"active" yaml:"active" validate:"gte=1s"`
+	// Idle is the wait while nothing is queued or running.
+	Idle time.Duration `json:"idle" yaml:"idle" validate:"gte=1s"`
+	// Reserve is the request budget kept back; below it the poller waits.
+	Reserve int `json:"reserve" yaml:"reserve" validate:"gte=0"`
+	// RunnerWait is how long a queued check waits before runners are blamed.
+	RunnerWait time.Duration `json:"runner_wait" yaml:"runner_wait" validate:"gte=1s"`
+	// StaleAfter is how long a pull request may go unpushed before it is stale.
+	StaleAfter time.Duration `json:"stale_after" yaml:"stale_after" validate:"gte=1m"`
 }
 
 // Server configures `magus server`: where it listens, which workspaces it serves, and its
@@ -1181,6 +1203,17 @@ var envOnly = []cmdline.Env{
 // its own second signal or SIGKILL. Runs outlive the broker anyway.
 const defaultShutdownGrace = 5 * time.Minute
 
+func pullsDefaults() Pulls {
+	return Pulls{
+		Floor:      30 * time.Second,
+		Active:     time.Minute,
+		Idle:       5 * time.Minute,
+		Reserve:    500,
+		RunnerWait: 15 * time.Minute,
+		StaleAfter: 72 * time.Hour,
+	}
+}
+
 // Defaults returns a Config populated with the magus built-in defaults. It reads no
 // environment, so HistoryPath is empty; the loaders set it from [DefaultHistoryPath].
 func Defaults() Config {
@@ -1196,6 +1229,7 @@ func Defaults() Config {
 				CheckReview:      15 * time.Minute,   // the only one that reaches a forge; a merge happens once
 			},
 		},
+		Console:       Console{Pulls: pullsDefaults()},
 		ShutdownGrace: defaultShutdownGrace,
 		Disk:          Disk{MinFreeMB: 51200, CriticalFreeMB: 10240, GrowthMBPerHour: 20480, SampleEvery: 10 * time.Minute},
 		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, MaxClaims: 10},

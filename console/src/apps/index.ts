@@ -5,6 +5,7 @@ import { runs } from "./runs/app";
 import { logs } from "./logs/app";
 import { graph } from "./graph/app";
 import { diff } from "./diff/app";
+import { pulls } from "./pulls/app";
 import { notes } from "./notes/app";
 import { tools } from "./tools/app";
 import { shortcuts } from "./shortcuts/app";
@@ -20,6 +21,7 @@ export const APPS: readonly AppManifest[] = [
   logs,
   graph,
   diff,
+  pulls,
   notes,
   tools,
   shortcuts,

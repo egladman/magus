@@ -30,9 +30,11 @@ follows.
   never a side effect of another verb. The acts in
   [Manual on purpose](../judgment/manual-on-purpose.md) stay a person's keystroke.
 - **Non-positive.** magus publishes what it refused to build and why, in
-  [A record of refusals](../refusals.md), and a budget it cannot fit is
-  refused at once ([MGS3009](../../reference/codes/sandbox/MGS3009.md)) rather than
-  queued behind a spinner.
+  [A record of refusals](../refusals.md), and a claim larger than the whole
+  budget is refused at once ([MGS3009](../../reference/codes/sandbox/MGS3009.md))
+  rather than queued behind a spinner. A claim that can fit waits instead,
+  bounded, saying who holds the room: the refusal at once told every caller the
+  same sentence, every caller typed the same wait, and that toll was removed.
 - **Unpredictable self.** A refusal hands back the command to run, so the
   person decides the next move instead of following a default the tool picked
   for them ([A refusal carries its reason](../judgment/a-refusal-carries-its-reason.md)).
