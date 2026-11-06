@@ -2753,6 +2753,7 @@ var localAdvisors = []string{
 	"conformance.buzz",
 	"missing-target.buzz",
 	"exported-api.buzz",
+	"change-risk.buzz",
 }
 
 // runLocalAdvisors runs the read-only PR advisors against the local tree and returns

@@ -1,0 +1,186 @@
+// Name the touched functions with the highest change risk.
+//
+// States measurements and no verdict, as exported-api does. Reads the
+// change-risk checks that advice\review already attached to each symbol.
+// It never calls Change.risk(): that freshens the test target.
+//
+// A check holds its score only as message text, so the score is parsed.
+import "advice";
+import "magus";
+import "std";
+
+final section = "change-risk";
+
+final scoredPrefix = "change risk ";
+final gapPrefix = "change risk unmeasured: ";
+final listed = 10;
+
+// Entry is one touched function and what its change-risk check said.
+export object Entry {
+    path: str = "",
+    label: str = "",
+    message: str = "",
+    score: double = 0.0,
+    // One of "scored", "unparsed" or "gap".
+    kind: str = "unparsed",
+}
+
+// parseScore reads the number after "change risk " up to the colon.
+// It returns null when the message has no such number.
+export fun parseScore(message: str) > double? {
+    if (!message.startsWith(scoredPrefix)) { return null; }
+    final rest = message.sub(scoredPrefix.len());
+    final colon = rest.indexOf(":");
+    if (colon == null) { return null; }
+    return std\parseDouble(rest.sub(0, len: colon!));
+}
+
+// classify turns one check message into an Entry.
+export fun classify(path: str, label: str, message: str) > Entry {
+    if (message.startsWith(gapPrefix)) {
+        return Entry{ path = path, label = label, message = message.sub(gapPrefix.len()), kind = "gap" };
+    }
+    final score = parseScore(message);
+    if (score == null) {
+        return Entry{ path = path, label = label, message = message, kind = "unparsed" };
+    }
+    return Entry{ path = path, label = label, message = message, score = score!, kind = "scored" };
+}
+
+fun ofKind(entries: [Entry], kind: str) > [Entry] {
+    final matched = mut [<Entry>];
+    foreach (e in entries) {
+        if (e.kind == kind) { matched.append(e); }
+    }
+    return matched;
+}
+
+// ranked lists the highest score first, then unparsed messages, then gaps.
+export fun ranked(entries: [Entry]) > [Entry] {
+    final scored = ofKind(entries, kind: "scored").cloneMutable();
+    _ = scored.sort(fun (left: Entry, right: Entry) > bool => left.score > right.score);
+    final order = mut [<Entry>];
+    foreach (e in scored) { order.append(e); }
+    foreach (e in ofKind(entries, kind: "unparsed")) { order.append(e); }
+    foreach (e in ofKind(entries, kind: "gap")) { order.append(e); }
+    return order;
+}
+
+// line renders one entry.
+export fun line(e: Entry) > str {
+    if (e.kind == "gap") {
+        return "- `" + e.label + "` (`" + e.path + "`): not measured, " + e.message + "\n";
+    }
+    return "- `" + e.label + "` (`" + e.path + "`): " + e.message + "\n";
+}
+
+// body renders the section from entries already ranked.
+export fun body(entries: [Entry]) > str {
+    final parts = mut ["**This change touches " + "{entries.len()}" + " function(s) with a change-risk "
+        + "check.** The riskiest come first.\n\n"];
+    var shown = 0;
+    foreach (e in entries) {
+        if (shown >= listed) { break; }
+        parts.append(line(e));
+        shown = shown + 1;
+    }
+    if (entries.len() > shown) {
+        parts.append("- and " + "{entries.len() - shown}" + " more\n");
+    }
+    return parts.join("")
+        + "\nChange risk weighs a function's complexity against how much of it the coverage "
+        + "profile reaches. These are measurements, not a verdict: the score was parsed from "
+        + "the check's message text, and a function listed as not measured has no coverage "
+        + "profile to score.\n";
+}
+
+fun main() > void !> any {
+    final pull = advice\pullRequest();
+    final repo = pull.repo;
+    final pr = pull.number;
+    final base = pull.base;
+    final head = pull.headSha;
+    if (pr == "" and base == "" and head == "") {
+        std\print("change-risk: no PR context; nothing to advise");
+        return;
+    }
+    if (pr == "" or base == "" or head == "") {
+        throw "change-risk: the pull request's number, base and head sha must be set together";
+    }
+    if (advice\silenced(repo, pr: pr, name: section)) {
+        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        std\print("change-risk: silenced by label");
+        return;
+    }
+
+    final review = advice\review(base, head: head);
+    final entries = mut [<Entry>];
+    foreach (f in review.files) {
+        foreach (sym in f.symbols) {
+            foreach (c in sym.checks) {
+                if (c.name != section) { continue; }
+                entries.append(classify(f.path, label: sym.label, message: c.message));
+            }
+        }
+    }
+
+    if (entries.len() == 0) {
+        // An empty body retracts the last push's finding.
+        advice\publish(repo, pr: pr, name: section, title: "Change risk", body: "");
+        std\print("change-risk: no touched function has a change-risk check");
+        return;
+    }
+
+    advice\publish(repo, pr: pr, name: section,
+        title: "Change risk ({entries.len()})", body: body(ranked(entries)));
+    std\print("change-risk: advised on {entries.len()} functions");
+}
+
+test "parseScore reads the number a measured message opens with" {
+    final score = parseScore("change risk 12.5: complexity 6, 1 of 4 coverable units covered");
+    std\assert(score != null and score! == 12.5, message: "the score before the colon");
+}
+
+test "parseScore refuses a message it cannot read" {
+    std\assert(parseScore("change risk unmeasured: no profile") == null, message: "a gap has no score");
+    std\assert(parseScore("something else entirely") == null, message: "no prefix");
+    std\assert(parseScore("change risk 3.0 complexity 2") == null, message: "no colon");
+}
+
+test "classify separates scored, unparsed and gap" {
+    final scored = classify("a.go", label: "F", message: "change risk 4.0: complexity 2, 1 of 2 coverable units covered");
+    std\assert(scored.kind == "scored" and scored.score == 4.0, message: "scored");
+    final gap = classify("b.go", label: "G", message: "change risk unmeasured: no coverage profile");
+    std\assert(gap.kind == "gap" and gap.message == "no coverage profile", message: "a gap keeps its reason");
+    final odd = classify("c.go", label: "H", message: "change risk: ???");
+    std\assert(odd.kind == "unparsed" and odd.message == "change risk: ???", message: "kept as it is");
+}
+
+test "ranked orders by score, then unparsed, then gaps" {
+    final order = ranked([
+        classify("g.go", label: "gap", message: "change risk unmeasured: no profile"),
+        classify("l.go", label: "low", message: "change risk 2.0: complexity 1, 1 of 1 coverable units covered"),
+        classify("o.go", label: "odd", message: "mystery"),
+        classify("h.go", label: "high", message: "change risk 15.0: complexity 8, 0 of 8 coverable units covered"),
+    ]);
+    std\assert(order[0].label == "high", message: "highest first");
+    std\assert(order[1].label == "low", message: "then the lower score");
+    std\assert(order[2].label == "odd", message: "then the unparsed");
+    std\assert(order[3].label == "gap", message: "gaps last");
+}
+
+test "line says a gap is not measured and gives its reason" {
+    final text = line(classify("b.go", label: "G", message: "change risk unmeasured: no coverage profile"));
+    std\assert(text.indexOf("not measured, no coverage profile") != null, message: "reason kept");
+}
+
+test "body caps the list and counts the rest" {
+    final entries = mut [<Entry>];
+    for (var i = 0; i < 12; i = i + 1) {
+        entries.append(classify("a.go", label: "F{i}", message: "change risk {i}.0: complexity 1, 0 of 1 coverable units covered"));
+    }
+    final text = body(ranked(entries));
+    std\assert(text.indexOf("12 function(s)") != null, message: "counts all of them");
+    std\assert(text.indexOf("- and 2 more") != null, message: "names the remainder");
+    std\assert(text.indexOf("parsed from the check's message text") != null, message: "says where the score came from");
+}

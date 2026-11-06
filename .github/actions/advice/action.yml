@@ -137,6 +137,13 @@ inputs:
       against the base, which magus does not index.
     required: false
     default: 'true'
+  change-risk:
+    description: >
+      Name the touched functions with the highest change risk, and those with no coverage
+      profile to score. States the measurements and never a verdict. Reads the checks the
+      diff already holds and runs no test.
+    required: false
+    default: 'true'
   first-contribution:
     description: >
       Welcome someone opening their first pull request here, with the two repository
