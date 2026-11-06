@@ -2,9 +2,9 @@ package guard
 
 import (
 	"bytes"
-	"errors"
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
