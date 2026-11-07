@@ -52,8 +52,15 @@ final RETIRED = ["reference/rules/gate-repeat/", "reference/rules/push-ungated/"
 final SELF = "hack/dev/rename-gate-to-verification.buzz";
 
 // KEPT must keep the old words. It holds real commit subjects, frozen schema
-// field sets (a rename reserves them) and the retired URLs.
-final KEPT = ["libs/proofread/testdata/commit-history.txtar", "types/testdata/schema/", "docs/retired.urls.lock"];
+// field sets and the ledger reserving the old name. The retired URLs and the
+// changelog entry naming the rename stay too.
+final KEPT = [
+    "libs/proofread/testdata/commit-history.txtar",
+    "types/testdata/schema/",
+    "types/schema.go",
+    "docs/retired.urls.lock",
+    "changes/unreleased/gate-words-become-verification.md",
+];
 
 export fun kept(path: str) > bool {
     return KEPT.filter(fun (i: int, k: str) > bool => path == k or (k.endsWith("/") and path.startsWith(k))).len() > 0;
