@@ -877,7 +877,7 @@ func checkWorkspaceImports(ctx context.Context, rel, code string) error {
 		name, _, _ := strings.Cut(after, "/")
 		if _, err := os.Stat(filepath.Join(ws.Root(), filepath.FromSlash(types.WorkspacesDir), name)); err != nil {
 			return types.DiagnosticErrorf(types.WorkspaceNotConnected,
-				"%s imports %q through %s/%s, which is not connected here; add {name: %s, path: ...} to knowledge.workspaces in $XDG_CONFIG_HOME/magus/magus.yaml",
+				"%s imports %q through %s/%s, not connected here: add {name: %s, path: ...} to knowledge.workspaces in $XDG_CONFIG_HOME/magus/magus.yaml",
 				rel, imported, types.WorkspacesDir, name, name)
 		}
 	}

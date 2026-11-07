@@ -1005,7 +1005,7 @@ func (s *WorkspaceSourcesSuite) TestTheKeyIsTheSameFromAnotherCheckoutOfTheOther
 func (s *WorkspaceSourcesSuite) TestAWorkspaceNotConnectedRefusesWithMGS1059() {
 	_, _, err := s.cache.StepKeyMemo(context.Background(), s.step(".magus/workspaces/other/x.yml"), nil)
 	s.Require().ErrorIs(err, types.WorkspaceNotConnected)
-	s.Contains(err.Error(), "b:lint reads .magus/workspaces/other")
+	s.Contains(err.Error(), "b:lint reads .magus/workspaces/other, not connected here")
 	s.Contains(err.Error(), "knowledge.workspaces")
 }
 

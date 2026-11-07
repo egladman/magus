@@ -896,7 +896,7 @@ func workspaceRoots(s *Step) (map[string]string, error) {
 		real, err := filepath.EvalSymlinks(filepath.Join(s.WorkspaceRoot, filepath.FromSlash(dir)))
 		if err != nil {
 			return nil, types.DiagnosticErrorf(types.WorkspaceNotConnected,
-				"%s:%s reads %s, which is not connected here; add {name: %s, path: ...} to knowledge.workspaces in $XDG_CONFIG_HOME/magus/magus.yaml",
+				"%s:%s reads %s, not connected here: add {name: %s, path: ...} to knowledge.workspaces in $XDG_CONFIG_HOME/magus/magus.yaml",
 				s.Label, s.Target, dir, name)
 		}
 		if out == nil {

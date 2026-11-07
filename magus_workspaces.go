@@ -56,7 +56,7 @@ func refuseTrackedWorkspaces(ctx context.Context, root string, opts types.VCSOpt
 	}
 	if len(ignored) == 0 {
 		return types.DiagnosticErrorf(types.WorkspacesTracked,
-			"%s does not ignore %s, so the workspaces knowledge.workspaces connects could be committed; .magus/ must be ignored: add it to the ignore file",
+			"%s does not ignore %s, so a connected workspace could be committed: add .magus/ to the ignore file",
 			res.Name, types.WorkspacesDir)
 	}
 	return nil

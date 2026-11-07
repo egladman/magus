@@ -84,7 +84,7 @@ func selfEntry(root string, entries []ListedEntry) (ListedEntry, bool) {
 
 // checkWorkspace refuses an entry whose root is gone or holds no workspace.
 func checkWorkspace(e ListedEntry) error {
-	why := ""
+	var why string
 	fi, err := os.Stat(e.Root)
 	switch {
 	case err != nil:
@@ -181,7 +181,7 @@ func (r *reconciler) make(tree, name, target, label string) error {
 	switch {
 	case err == nil && fi.Mode()&fs.ModeSymlink == 0:
 		return types.DiagnosticErrorf(types.WorkspacesNotALink,
-			"%s is not a symlink, so the load cannot point it at %s; magus deletes nothing it did not make, so move it away",
+			"%s is not a symlink and magus deletes nothing it did not make: move it away, and the next load points it at %s",
 			at, target)
 	case err == nil:
 		got, _ := os.Readlink(at)

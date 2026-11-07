@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -77,7 +78,7 @@ func (s *KnowledgeWorkspacesSuite) TestARepeatedNameRefusesNamingBothLines() {
 	_, err := s.load()
 	s.Require().ErrorIs(err, types.WorkspaceEntryShape)
 	s.Contains(err.Error(), file+":5")
-	s.Contains(err.Error(), "first at "+file+":3")
+	s.Contains(err.Error(), fmt.Sprintf("first at %s:3", file))
 }
 
 func (s *KnowledgeWorkspacesSuite) TestARelativePathRefuses() {

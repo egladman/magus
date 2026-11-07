@@ -109,6 +109,7 @@ func (s *ReconcileWorkspacesSuite) TestAPlainDirectoryInTheWayRefusesWithMGS1058
 	s.Require().NoError(os.MkdirAll(s.at(s.a, "buzzed"), 0o755))
 	_, _, err := ReconcileWorkspaces(s.a, s.both())
 	s.Require().ErrorIs(err, types.WorkspacesNotALink)
+	s.Contains(err.Error(), "move it away")
 	s.DirExists(s.at(s.a, "buzzed"), "nothing magus did not make is deleted")
 }
 
