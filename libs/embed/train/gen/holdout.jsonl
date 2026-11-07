@@ -36,6 +36,7 @@
 {"group":"dir:broker","path":"broker/units.go"}
 {"group":"dir:broker","path":"broker/units_test.go"}
 {"group":"dir:broker","path":"broker/wire.go"}
+{"group":"file:changes/unreleased/advice-conformance-counts-only-names.md","path":"changes/unreleased/advice-conformance-counts-only-names.md"}
 {"group":"file:changes/unreleased/advice-trusted-script-moved.md","path":"changes/unreleased/advice-trusted-script-moved.md"}
 {"group":"file:changes/unreleased/affected-ci-sizes-its-gate.md","path":"changes/unreleased/affected-ci-sizes-its-gate.md"}
 {"group":"file:changes/unreleased/agent-guard-hook-longer-loads-workspace.md","path":"changes/unreleased/agent-guard-hook-longer-loads-workspace.md"}
@@ -49,6 +50,7 @@
 {"group":"file:changes/unreleased/bootstrap-names-the-outputs-it-regenerated.md","path":"changes/unreleased/bootstrap-names-the-outputs-it-regenerated.md"}
 {"group":"file:changes/unreleased/bootstrap-takes-lease-first.md","path":"changes/unreleased/bootstrap-takes-lease-first.md"}
 {"group":"file:changes/unreleased/bootstrap-worktree-detaches.md","path":"changes/unreleased/bootstrap-worktree-detaches.md"}
+{"group":"file:changes/unreleased/branch-name-covers-topics.md","path":"changes/unreleased/branch-name-covers-topics.md"}
 {"group":"file:changes/unreleased/branch-scripts-local-branches.md","path":"changes/unreleased/branch-scripts-local-branches.md"}
 {"group":"file:changes/unreleased/breaking-cache-drops-ed25519-envelopes.md","path":"changes/unreleased/breaking-cache-drops-ed25519-envelopes.md"}
 {"group":"file:changes/unreleased/breaking-oci-artifact-names-chunked-upload.md","path":"changes/unreleased/breaking-oci-artifact-names-chunked-upload.md"}
@@ -83,6 +85,7 @@
 {"group":"file:changes/unreleased/ci-asks-for-whole-machine-explicitly.md","path":"changes/unreleased/ci-asks-for-whole-machine-explicitly.md"}
 {"group":"file:changes/unreleased/ci-gates-in-the-queue-box.md","path":"changes/unreleased/ci-gates-in-the-queue-box.md"}
 {"group":"file:changes/unreleased/ci-plan-cost.md","path":"changes/unreleased/ci-plan-cost.md"}
+{"group":"file:changes/unreleased/ci-shard-ids-and-plan-summary.md","path":"changes/unreleased/ci-shard-ids-and-plan-summary.md"}
 {"group":"file:changes/unreleased/ci-shard-stages.md","path":"changes/unreleased/ci-shard-stages.md"}
 {"group":"file:changes/unreleased/ci-shards-anchor-effects.md","path":"changes/unreleased/ci-shards-anchor-effects.md"}
 {"group":"file:changes/unreleased/ci-shards-by-target-labels.md","path":"changes/unreleased/ci-shards-by-target-labels.md"}
@@ -253,6 +256,7 @@
 {"group":"file:changes/unreleased/proc-exec-timeout-detach.md","path":"changes/unreleased/proc-exec-timeout-detach.md"}
 {"group":"file:changes/unreleased/proofread-fix6-round5.md","path":"changes/unreleased/proofread-fix6-round5.md"}
 {"group":"file:changes/unreleased/proofread-fix8-adjectives.md","path":"changes/unreleased/proofread-fix8-adjectives.md"}
+{"group":"file:changes/unreleased/proofread-local-path.md","path":"changes/unreleased/proofread-local-path.md"}
 {"group":"file:changes/unreleased/proofread-round-gates.md","path":"changes/unreleased/proofread-round-gates.md"}
 {"group":"file:changes/unreleased/proofread-tells.md","path":"changes/unreleased/proofread-tells.md"}
 {"group":"file:changes/unreleased/proofread-train.md","path":"changes/unreleased/proofread-train.md"}
@@ -287,6 +291,7 @@
 {"group":"file:changes/unreleased/review-thread.md","path":"changes/unreleased/review-thread.md"}
 {"group":"file:changes/unreleased/root-from-another-directory-no-longer.md","path":"changes/unreleased/root-from-another-directory-no-longer.md"}
 {"group":"file:changes/unreleased/root-from-another-directory-reads-its-config.md","path":"changes/unreleased/root-from-another-directory-reads-its-config.md"}
+{"group":"file:changes/unreleased/root-reads-cited-results-worker-computed-spawns.md","path":"changes/unreleased/root-reads-cited-results-worker-computed-spawns.md"}
 {"group":"file:changes/unreleased/root-test-narrows-args.md","path":"changes/unreleased/root-test-narrows-args.md"}
 {"group":"file:changes/unreleased/run-document-carries-target-status.md","path":"changes/unreleased/run-document-carries-target-status.md"}
 {"group":"file:changes/unreleased/run-false-alarms.md","path":"changes/unreleased/run-false-alarms.md"}
@@ -884,6 +889,12 @@
 {"group":"dir:docs/reference/codes/magusfile","path":"docs/reference/codes/magusfile/MGS1051.md"}
 {"group":"dir:docs/reference/codes/magusfile","path":"docs/reference/codes/magusfile/MGS1052.md"}
 {"group":"dir:docs/reference/codes/magusfile","path":"docs/reference/codes/magusfile/MGS1053.md"}
+{"group":"dir:docs/reference/codes/magusfile","path":"docs/reference/codes/magusfile/MGS1054.md"}
+{"group":"dir:docs/reference/codes/magusfile","path":"docs/reference/codes/magusfile/MGS1055.md"}
+{"group":"dir:docs/reference/codes/magusfile","path":"docs/reference/codes/magusfile/MGS1056.md"}
+{"group":"dir:docs/reference/codes/magusfile","path":"docs/reference/codes/magusfile/MGS1057.md"}
+{"group":"dir:docs/reference/codes/magusfile","path":"docs/reference/codes/magusfile/MGS1058.md"}
+{"group":"dir:docs/reference/codes/magusfile","path":"docs/reference/codes/magusfile/MGS1059.md"}
 {"group":"dir:docs/reference/codes/magusfile","path":"docs/reference/codes/magusfile/README.md"}
 {"group":"file:docs/reference/rules/busy-wait.md","path":"docs/reference/rules/busy-wait.md"}
 {"group":"file:docs/reference/rules/checkpoint-state.md","path":"docs/reference/rules/checkpoint-state.md"}
@@ -1189,6 +1200,7 @@
 {"group":"dir:internal/guard","path":"internal/guard/heredoc_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/human_only.go"}
 {"group":"dir:internal/guard","path":"internal/guard/human_only_test.go"}
+{"group":"dir:internal/guard","path":"internal/guard/integrator_vcs_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/interpreter.go"}
 {"group":"dir:internal/guard","path":"internal/guard/interpreter_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/lapse.go"}
@@ -1196,6 +1208,7 @@
 {"group":"dir:internal/guard","path":"internal/guard/lease.go"}
 {"group":"dir:internal/guard","path":"internal/guard/lease_claim.go"}
 {"group":"dir:internal/guard","path":"internal/guard/lease_claim_test.go"}
+{"group":"dir:internal/guard","path":"internal/guard/lease_denial_text_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/lease_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/load_contract.go"}
 {"group":"dir:internal/guard","path":"internal/guard/load_contract_test.go"}
@@ -1256,6 +1269,7 @@
 {"group":"dir:internal/guard","path":"internal/guard/shell.go"}
 {"group":"dir:internal/guard","path":"internal/guard/shell_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/skill.go"}
+{"group":"dir:internal/guard","path":"internal/guard/skill_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/spawn.go"}
 {"group":"dir:internal/guard","path":"internal/guard/spawn_ceiling.go"}
 {"group":"dir:internal/guard","path":"internal/guard/spawn_ceiling_test.go"}
