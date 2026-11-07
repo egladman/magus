@@ -183,7 +183,7 @@ func (e *emitter) encode(c *conv, src string) string {
 		case kindBasic:
 			return fmt.Sprintf("%s(%s)", basicGo(c.t.basic), src)
 		case kindRecord:
-			return e.genAlias(c.t.pkg) + "Encode" + c.t.name + "(" + src + ")"
+			return fmt.Sprintf("%sEncode%s(%s)", e.genAlias(c.t.pkg), c.t.name, src)
 		default:
 			return fmt.Sprintf("%s%sHandles.Put(%s)", e.genAlias(c.t.pkg), c.t.name, src)
 		}
@@ -221,7 +221,7 @@ func (e *emitter) decode(c *conv, src string) string {
 			}
 			return fmt.Sprintf("convert.IntAs[%s](%s)", e.goType(c.t, false), src)
 		case kindRecord:
-			return e.genAlias(c.t.pkg) + "Decode" + c.t.name + "(" + src + ")"
+			return fmt.Sprintf("%sDecode%s(%s)", e.genAlias(c.t.pkg), c.t.name, src)
 		default:
 			return fmt.Sprintf("convert.Handle(%s%sHandles, %s)", e.genAlias(c.t.pkg), c.t.name, src)
 		}
