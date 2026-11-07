@@ -24658,9 +24658,10 @@
 {"doc_ref":"libs/proofread/slop.go:497-505","query_ref":"libs/proofread/slop.go:496-496","source":"go-doc-decl","split":"train"}
 {"doc_ref":"libs/proofread/slop.go:509-523","query_ref":"libs/proofread/slop.go:507-508","source":"go-doc-decl","split":"train"}
 {"doc_ref":"libs/proofread/slop.go:531-583","query_ref":"libs/proofread/slop.go:525-530","source":"go-doc-decl","split":"train"}
-{"doc_ref":"libs/proofread/slop.go:601-617","query_ref":"libs/proofread/slop.go:599-600","source":"go-doc-decl","split":"train"}
-{"doc_ref":"libs/proofread/slop.go:647-689","query_ref":"libs/proofread/slop.go:643-646","source":"go-doc-decl","split":"train"}
-{"doc_ref":"libs/proofread/slop.go:695-708","query_ref":"libs/proofread/slop.go:691-694","source":"go-doc-decl","split":"train"}
+{"doc_ref":"libs/proofread/slop.go:610-623","query_ref":"libs/proofread/slop.go:606-609","source":"go-doc-decl","split":"train"}
+{"doc_ref":"libs/proofread/slop.go:627-643","query_ref":"libs/proofread/slop.go:625-626","source":"go-doc-decl","split":"train"}
+{"doc_ref":"libs/proofread/slop.go:673-715","query_ref":"libs/proofread/slop.go:669-672","source":"go-doc-decl","split":"train"}
+{"doc_ref":"libs/proofread/slop.go:721-734","query_ref":"libs/proofread/slop.go:717-720","source":"go-doc-decl","split":"train"}
 {"doc_ref":"libs/proofread/suppress.go:132-150","query_ref":"libs/proofread/suppress.go:131-131","source":"go-doc-decl","split":"train"}
 {"doc_ref":"libs/proofread/suppress.go:154-200","query_ref":"libs/proofread/suppress.go:152-153","source":"go-doc-decl","split":"train"}
 {"doc_ref":"libs/proofread/suppress.go:204-214","query_ref":"libs/proofread/suppress.go:202-203","source":"go-doc-decl","split":"train"}

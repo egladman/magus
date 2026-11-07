@@ -91,6 +91,7 @@
 {"group":"file:changes/unreleased/ci-shards-by-target-labels.md","path":"changes/unreleased/ci-shards-by-target-labels.md"}
 {"group":"file:changes/unreleased/claim-callers-of-a-symbol.md","path":"changes/unreleased/claim-callers-of-a-symbol.md"}
 {"group":"file:changes/unreleased/claim-sizing.md","path":"changes/unreleased/claim-sizing.md"}
+{"group":"file:changes/unreleased/claude-code-mod-moves-under-claude-code.md","path":"changes/unreleased/claude-code-mod-moves-under-claude-code.md"}
 {"group":"file:changes/unreleased/clones-hg-jj-or-sapling-repository.md","path":"changes/unreleased/clones-hg-jj-or-sapling-repository.md"}
 {"group":"file:changes/unreleased/compact-worker-records.md","path":"changes/unreleased/compact-worker-records.md"}
 {"group":"file:changes/unreleased/conformance-alias-metrics.md","path":"changes/unreleased/conformance-alias-metrics.md"}
@@ -795,6 +796,7 @@
 {"group":"dir:docs/glossary","path":"docs/glossary/ward.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/window.md"}
 {"group":"dir:docs/glossary","path":"docs/glossary/workspace.md"}
+{"group":"dir:docs/guides/integrations/agents/claude-code/mod/types","path":"docs/guides/integrations/agents/claude-code/mod/types/index.d.ts"}
 {"group":"dir:docs/guides/integrations/agents/lib","path":"docs/guides/integrations/agents/lib/bindings.buzz"}
 {"group":"dir:docs/guides/integrations/agents/lib","path":"docs/guides/integrations/agents/lib/bindings_test.buzz"}
 {"group":"dir:docs/guides/integrations/agents/lib","path":"docs/guides/integrations/agents/lib/embed.buzz"}

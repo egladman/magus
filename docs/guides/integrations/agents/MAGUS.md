@@ -12,7 +12,7 @@ Query: `magus query project=docs/guides/integrations/agents`
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `generate`                | Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker replaced by the file it names.               |
 | `cursor-schemas-generate` | Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.                                                     |
-| `mod-types-generate`      | Emits claude-code-mod/types/gen from the types the engine writes when a claude session loads its plugin-authoring skill.        |
+| `mod-types-generate`      | Emits claude-code/mod/types/gen from the types the engine writes when a claude session loads its plugin-authoring skill.        |
 | `lint`                    | lint runs the TypeScript type-check of the templates and of the Claude Code mod, Biome, and a Buzz type-check of the templates. |
 | `test`                    | test runs the OpenCode plugin's transport cases under node; the test supplies Bun.spawn.                                        |
 | `mod-test`                | mod-test runs the Claude Code mod's tests on the engine that loads it.                                                          |
