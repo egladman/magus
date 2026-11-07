@@ -7,7 +7,34 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type RewriteCallDirSuite struct {
+	suite.Suite
+	at location
+}
+
+func TestRewriteCallDirSuite(t *testing.T) { suite.Run(t, new(RewriteCallDirSuite)) }
+
+func (s *RewriteCallDirSuite) SetupTest() {
+	s.at = rewriteFixture(s.T())
+	s.at.dir = filepath.Join(s.at.workspace, "internal")
+}
+
+func (s *RewriteCallDirSuite) TestARelativeWriteFromASubdirectoryIsDenied() {
+	reason := denyInterpreterRewrite(s.at, `python3 -c "open('ledger/store.go','w').write(x)"`, DialectBash)
+	s.Contains(reason, "internal/ledger/store.go")
+}
+
+func (s *RewriteCallDirSuite) TestARootRelativeNameFromASubdirectoryIsANewFile() {
+	s.Empty(denyInterpreterRewrite(s.at, `python3 -c "open('internal/ledger/store.go','w').write(x)"`, DialectBash))
+}
+
+func (s *RewriteCallDirSuite) TestABuzzWriteFromASubdirectoryIsDenied() {
+	reason := denyInterpreterRewrite(s.at, `magus buzz -e 'fs\writeFile("ledger/store.go", content: x);'`, DialectBash)
+	s.Contains(reason, "internal/ledger/store.go")
+}
 
 // rewriteFixture is a workspace carrying one tracked file, which is what separates a
 // rewrite from a script producing new output.

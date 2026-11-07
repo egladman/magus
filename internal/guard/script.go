@@ -126,7 +126,7 @@ func judgeScript(deps Dependencies, lang scriptLang, body string) ShellVerdict {
 	case scriptBuzz:
 		// The verdict an inline interpreter gets for replacing a file the tree carries: fs
 		// in a Buzz script writes exactly what open(p, 'w') does in a python one.
-		if rel := buzzRewrittenFile(deps.scope.root, body); rel != "" {
+		if rel := buzzRewrittenFile(deps.scope, body); rel != "" {
 			return deps.grade(ShellVerdict{
 				Deny: interpreterRewriteDenial(rel) + referenceScriptNote(deps.scope.root, denyRuleInterpreterRewrite),
 				Rule: denyRule{Name: denyRuleInterpreterRewrite},
