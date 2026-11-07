@@ -30,12 +30,11 @@
 // grants), so a topic miss alone advises, once per session, and the mechanical rules deny.
 //
 // A topic the branch adds is a changelog fragment it adds, else a commit
-// subject. coverage and theme deny: they read what the branch holds.
+// subject. theme denies, and coverage denies past maxAdvised topics.
 //
-// Replayed over merged pull requests (2026-11-07), coverage or theme denies
-// 13 of 123 one-fragment branches, 2 of 25 with two, 15 of 36 with three to
-// six and 17 of 20 with more. With no fragment, judged on the squash subject
-// alone, it denies 47 of 346 (14%). The small-branch rate is unresolved.
+// Replayed over merged pull requests (2026-11-07), coverage fails 13 of 123
+// one-fragment branches and 2 of 25 with two, most of them good names. So a
+// miss on up to maxAdvised topics advises, once per session.
 //
 // Each refusal names every failed rule with its evidence and serves a name built from the
 // one pushed, or, when nothing of it survives, from the diff's words. A branch the remote
@@ -52,6 +51,7 @@ final maxWords = 4;
 final maxChars = 28;
 // A branch adding more topics than this is wide: its name needs a theme word.
 final maxNarrow = 6;
+final maxAdvised = 2;
 
 final commitTypes = ["feat", "fix", "chore", "refactor", "docs", "perf", "test", "build", "ci",
     "style", "revert"];
@@ -857,7 +857,8 @@ export fun decideNames(programs: [helpers\Program], current: str, remote: Remote
         }
         foreach (f in verdict.failures) {
             lines.append("- {f.rule}: {f.why}");
-            if (f.rule != "topic") { mechanical = true; }
+            final small = f.rule == "coverage" and read!.subjects.len() <= maxAdvised;
+            if (f.rule != "topic" and !small) { mechanical = true; }
         }
         final update = p.tool == "gh" or remote.branches.indexOf("{p.remote}/{p.name}") != null;
         if ((update or !mechanical) and !once("branch-name:{p.name}")) {

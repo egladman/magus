@@ -89,3 +89,17 @@ test "a coverage miss is denied at the push, naming the topics" {
     std\assert(v.decision == magus\GuardDecision.deny, message: "denied");
     std\assert(v.reason.indexOf("theme:") != null, message: v.reason);
 }
+
+test "a coverage miss on a two-topic branch advises at the push" {
+    final topic = fun () > branches\Topic {
+        return branches\withSubjects(branches\unknownTopic(), subjects: [
+            fragment("guard-rule-precision", headline: "The guard judges a rule only where it applies."),
+            fragment("proofread-local-path", headline: "proofread flags a local path in a reply."),
+        ]);
+    };
+    final push = helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:startup-latency"]]);
+    final remote = branches\Remote{ base = "origin/main", branches = [<str>] };
+    final v = branches\decideNames(push, current: "startup-latency", remote: remote, topic: topic, once: helpers\counter());
+    std\assert(v.decision == magus\GuardDecision.advise, message: v.reason);
+    std\assert(v.reason.indexOf("coverage:") != null, message: v.reason);
+}
