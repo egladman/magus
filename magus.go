@@ -1663,6 +1663,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	if patchErr == nil {
 		attachHunks(out.Files, patch, placesByFile)
 		if !cfg.skipOrder {
+			m.attachRisk(ctx, &out, cfg.riskBase, patch)
 			m.attachOrder(ctx, &out, graph, patch, m.orderSkip(ctx, touched, freshErr, indexed))
 		}
 	}

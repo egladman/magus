@@ -6,6 +6,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// A tier nobody proved bounds nothing, so it must not rank as trivial.
+func TestAnUnknownTierRanksAsFull(t *testing.T) {
+	assert.Equal(t, RiskFull.Rank(), Tier("").Rank())
+	assert.Equal(t, RiskFull.Rank(), Tier("bogus").Rank())
+	assert.Less(t, RiskTrivial.Rank(), RiskMechanical.Rank())
+	assert.Less(t, RiskMechanical.Rank(), RiskScoped.Rank())
+	assert.Less(t, RiskScoped.Rank(), RiskFull.Rank())
+}
+
 // TestRiskReportLines pins the per-path rendering every sized or skipped gate prints:
 // the path, its tier, its class and the fact behind it, and a gate step's own reasons
 // under the step's name.

@@ -33,6 +33,7 @@ type diffConfig struct {
 	minCohort int
 	minShare  float64
 	skipOrder bool
+	riskBase  string
 }
 
 // DiffAgainst is [Magus.Diff] compared against base, a `magus graph export --symbols` of the
@@ -57,7 +58,7 @@ func (m *Magus) DiffWith(ctx context.Context, paths []string, opts types.DiffOpt
 		baseline: opts.Baseline, baselineLabel: opts.BaselineLabel,
 		patch: opts.Patch, patchGiven: opts.Patch != "",
 		minCohort: opts.MinCohort, minShare: opts.MinShare,
-		skipOrder: opts.SkipOrder,
+		skipOrder: opts.SkipOrder, riskBase: opts.RiskBase,
 	})
 }
 

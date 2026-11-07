@@ -35,6 +35,9 @@ type OrderFile struct {
 	// Reach is the number of files that reference the file's symbols, the ranking key after
 	// group size.
 	Reach int
+	// Tier is the file's proven tier, the first ranking key.
+	// Empty ranks as full.
+	Tier types.Tier
 }
 
 // OrderSite is a use of a changed symbol at Path:Line in the new file.
@@ -67,6 +70,7 @@ type orderNode struct {
 	hunk  types.DiffHunk
 	test  bool
 	reach int
+	tier  int
 }
 
 // orderEdge says hunk definer comes before hunk user.
@@ -109,6 +113,7 @@ type orderGroup struct {
 	placements []orderPlacement
 	size       int
 	reach      int
+	tier       int
 	first      int
 }
 
@@ -182,6 +187,9 @@ func OrderHunks(in OrderInput) types.DiffOrder {
 	}
 	sort.SliceStable(connected, func(i, j int) bool {
 		a, c := connected[i], connected[j]
+		if a.tier != c.tier {
+			return a.tier > c.tier
+		}
 		if a.size != c.size {
 			return a.size > c.size
 		}
@@ -227,6 +235,7 @@ func (b *orderBuilder) normalize() {
 				hunk:  h,
 				test:  isTest,
 				reach: f.Reach,
+				tier:  f.Tier.Rank(),
 			})
 		}
 	}
@@ -402,11 +411,12 @@ func (b *orderBuilder) components(ranked []int) [][]int {
 func (b *orderBuilder) orderMembers(members []int) orderGroup {
 	inGroup := map[int]bool{}
 	sets := map[int][]int{}
-	reach := 0
+	reach, tier := 0, 0
 	for _, m := range members {
 		inGroup[m] = true
 		sets[b.rep[m]] = append(sets[b.rep[m]], m)
 		reach = max(reach, b.nodes[m].reach)
+		tier = max(tier, b.nodes[m].tier)
 	}
 	testSteps := map[int]bool{}
 	indeg := map[int]int{}
@@ -498,7 +508,7 @@ func (b *orderBuilder) orderMembers(members []int) orderGroup {
 		}
 		placements = append(placements, p)
 	}
-	return orderGroup{kind: types.DiffGroupConnected, placements: placements, size: len(members), reach: reach, first: members[0]}
+	return orderGroup{kind: types.DiffGroupConnected, placements: placements, size: len(members), reach: reach, tier: tier, first: members[0]}
 }
 
 // placedBefore reports whether step a goes before step b: code before tests, then hunk

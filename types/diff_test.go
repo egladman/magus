@@ -41,6 +41,19 @@ func TestSortForReadingPutsUnmeasuredAboveMeasuredZero(t *testing.T) {
 	assert.Equal(t, []string{"wide.go", "unmeasured.go", "measured-zero.go"}, paths(d))
 }
 
+// A file magus proved mechanical reads after one it could not bound, whatever
+// their reach; a file with no assessment ranks as full.
+func TestSortForReadingReadsAnUnprovenFileBeforeAMechanicalOne(t *testing.T) {
+	d := Diff{Files: []DiffFile{
+		{Path: "wide-mechanical.go", Role: DiffRoleSource, Reach: reach(40), Risk: &TierEvidence{Tier: RiskMechanical}},
+		{Path: "untiered.go", Role: DiffRoleSource, Reach: reach(0)},
+		{Path: "scoped.go", Role: DiffRoleSource, Reach: reach(1), Risk: &TierEvidence{Tier: RiskScoped}},
+	}}
+	d.SortForReading()
+
+	assert.Equal(t, []string{"untiered.go", "scoped.go", "wide-mechanical.go"}, paths(d))
+}
+
 // Generated output goes last whatever its reach: reading a machine's restatement before the
 // source that caused it is reading the answer before the question.
 func TestSortForReadingKeepsGeneratedLast(t *testing.T) {

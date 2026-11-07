@@ -1876,6 +1876,8 @@ github.com/egladman/magus/types.DiffFile.Project field string "json:\"project,om
 github.com/egladman/magus/types.DiffFile.Reach field *int "json:\"reach\" yaml:\"reach\""
 github.com/egladman/magus/types.DiffFile.ReachOr method func(def int) int
 github.com/egladman/magus/types.DiffFile.ReadState field string "json:\"read_state,omitempty\" yaml:\"read_state,omitempty\""
+github.com/egladman/magus/types.DiffFile.Risk field *TierEvidence "json:\"risk,omitempty\" yaml:\"risk,omitempty\""
+github.com/egladman/magus/types.DiffFile.RiskRank method func() int
 github.com/egladman/magus/types.DiffFile.Role field string "json:\"role\" yaml:\"role\""
 github.com/egladman/magus/types.DiffFile.Symbols field []DiffSymbol "json:\"symbols,omitempty\" yaml:\"symbols,omitempty\""
 github.com/egladman/magus/types.DiffFile.Threads field []DiffThreadRef "json:\"threads,omitempty\" yaml:\"threads,omitempty\""
@@ -1911,6 +1913,7 @@ github.com/egladman/magus/types.DiffOptions.BaselineLabel field string "json:\"-
 github.com/egladman/magus/types.DiffOptions.MinCohort field int "json:\"-\" yaml:\"-\""
 github.com/egladman/magus/types.DiffOptions.MinShare field float64 "json:\"-\" yaml:\"-\""
 github.com/egladman/magus/types.DiffOptions.Patch field string "json:\"-\" yaml:\"-\""
+github.com/egladman/magus/types.DiffOptions.RiskBase field string "json:\"-\" yaml:\"-\""
 github.com/egladman/magus/types.DiffOptions.SkipOrder field bool "json:\"-\" yaml:\"-\""
 github.com/egladman/magus/types.DiffOrder type struct
 github.com/egladman/magus/types.DiffOrder.Count field DiffOrderCount "json:\"count\" yaml:\"count\""
@@ -5667,6 +5670,7 @@ github.com/egladman/magus/types.ThreadSource.UnmarshalText method(ptr) func(text
 github.com/egladman/magus/types.ThreadSource.Valid method func() bool
 github.com/egladman/magus/types.ThreadSource.Values method func() []string
 github.com/egladman/magus/types.Tier type string
+github.com/egladman/magus/types.Tier.Rank method func() int
 github.com/egladman/magus/types.TierEvidence type struct
 github.com/egladman/magus/types.TierEvidence.Class field string "json:\"class,omitempty\"   yaml:\"class,omitempty\""
 github.com/egladman/magus/types.TierEvidence.Line method func() string

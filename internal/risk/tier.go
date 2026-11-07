@@ -43,12 +43,8 @@ type Inputs struct {
 	Read func(ctx context.Context, path string) (old, cur string, err error)
 }
 
-var tierRank = map[types.Tier]int{
-	types.RiskTrivial: 0, types.RiskMechanical: 1, types.RiskScoped: 2, types.RiskFull: 3,
-}
-
 // Higher reports whether a outranks b.
-func Higher(a, b types.Tier) bool { return tierRank[a] > tierRank[b] }
+func Higher(a, b types.Tier) bool { return a.Rank() > b.Rank() }
 
 // reader is a (project, target) pair that declares a changed path as its input.
 type reader struct{ project, target string }
