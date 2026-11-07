@@ -672,6 +672,12 @@ It adds these to a session:
   [MGS3009](../../../reference/codes/sandbox/MGS3009.md) refusals, on the pane's
   Budget tab. Nothing about it reaches the status line or the band: an agent reads
   a refusal and retries.
+- A table under each reply that names a `.jsonl` file, as a link, a code span or a
+  bare path, and under each `SendUserFile` call that sends one: one column per key
+  in the order the file first names it, rows in file order, nested values as
+  one-line JSON, and a red `✖ line N:` for each line that is not a JSON object.
+  A named file that is not there draws one dim line. A cell past 160 characters,
+  and the rows past 200, are cut, and the table says how many rows it left out.
 
 Every threshold is a setting in `/config`: `cacheGate`, `gateMinTokens`, `cacheTtl`,
 `priceStepGate`, `priceStepMarginTokens`, `spawnGate`, `spawnMaxInputUsdPerMTok`,

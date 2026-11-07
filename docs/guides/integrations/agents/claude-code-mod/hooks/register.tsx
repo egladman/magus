@@ -36,6 +36,7 @@ import {
 import type { RateTable, Usage } from './cost'
 import { assess, inBand, statusText } from './health'
 import type { BinaryInfo, Probe, ServerInfo } from './health'
+import { registerJsonlTables } from './jsonl-view'
 import { DEFAULT_RATES } from './rates'
 import { MagusError, fail, fromPromise, ok, type Result } from './result'
 import { readSettings } from './settings'
@@ -476,6 +477,7 @@ async function openJob($: EngineInterface, candidates: string[]): Promise<void> 
 
 export const register: Register = (on, options) => {
   settings = readSettings(options)
+  registerJsonlTables(on)
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'magus', description: "Show magus's jobs, runs, this session's agents and the build budget" })
