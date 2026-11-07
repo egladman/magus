@@ -521,12 +521,12 @@ type planOutput struct {
 	Args   []string `json:"args,omitempty"`
 	// Machine is the class the shards were packed for; Fallbacks says each
 	// default the plan fell back to.
-	Machine     *types.Machine `json:"machine,omitempty"`
-	Fallbacks   []string       `json:"fallbacks,omitempty"`
-	Count       int            `json:"count"`
-	MaxParallel int            `json:"max_parallel"`
-	Source      string         `json:"source"`
-	Matrix      []planShard    `json:"matrix"`
+	Machine     *types.Machine   `json:"machine,omitempty"`
+	Fallbacks   []types.Fallback `json:"fallbacks,omitempty"`
+	Count       int              `json:"count"`
+	MaxParallel int              `json:"max_parallel"`
+	Source      string           `json:"source"`
+	Matrix      []planShard      `json:"matrix"`
 	// StageZero runs before every shard of Matrix and computes, once, the
 	// prerequisites two or more of them share. Absent when none is shared.
 	// It stays out of Outputs, so a plan without it renders as before;
@@ -715,10 +715,13 @@ func planSummaryMarkdown(out planOutput) string {
 		return planRiskSummaryMarkdown(out.Risk)
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "## Affected CI plan\n\n%d shard(s), max parallel %d\n\n", out.Count, out.MaxParallel)
+	shards := len(out.StageZero) + len(out.Matrix)
 	if len(out.StageZero) > 0 {
-		fmt.Fprintf(&b, "%d stage-zero shard(s) first compute the prerequisites the shards share; each shard replays them.\n\n",
-			len(out.StageZero))
+		fmt.Fprintf(&b, "## CI plan: %s in 2 stages\n\n", shardCount(shards))
+		b.WriteString("Stage 0 computes, once, what two or more stage 1 shards share. " +
+			"Each stage 1 shard then replays it from the cache.\n\n")
+	} else {
+		fmt.Fprintf(&b, "## CI plan: %s\n\n", shardCount(shards))
 	}
 	b.WriteString("| Shard | Projects |\n| --- | --- |\n")
 	for _, s := range slices.Concat(out.StageZero, out.Matrix) {
@@ -730,19 +733,29 @@ func planSummaryMarkdown(out planOutput) string {
 		} else if after, ok := strings.CutPrefix(projects, ". "); ok {
 			projects = "magus " + after
 		}
-		fmt.Fprintf(&b, "| %s | %s |\n", s.Shard, projects)
+		fmt.Fprintf(&b, "| `%s` | %s |\n", s.Shard, projects)
 	}
-	b.WriteString("\n**What this means:** each shard runs the listed projects concurrently within the declared limit. " +
-		"To inspect why a project was selected, run `magus affected ci --explain` locally. " +
-		"[Affected CI guide](https://eli.gladman.cc/magus/guides/affected/) - " +
-		"[CI target guide](https://eli.gladman.cc/magus/concepts/targets/ci/)\n")
-	for _, f := range out.Fallbacks {
-		fmt.Fprintf(&b, "\n- Fell back: %s.", f)
-	}
+	fmt.Fprintf(&b, "\nUp to %s of stage 1 run at once. "+
+		"Each shard's job starts with its ID, and a red one uploads its logs as `magus-logs-<ID>`.\n",
+		shardCount(out.MaxParallel))
 	if len(out.Fallbacks) > 0 {
-		b.WriteString("\n")
+		b.WriteString("\n### The plan used defaults\n\n" +
+			"An input was missing, so the plan chose for it. Each row says what that costs this run.\n\n" +
+			"| Default | Because | What it means |\n| --- | --- | --- |\n")
+		for _, f := range out.Fallbacks {
+			fmt.Fprintf(&b, "| %s | %s | %s |\n", f.What, f.Why, f.Effect)
+		}
 	}
+	b.WriteString("\n<details><summary>Why these projects</summary>\n\n" +
+		"Run `magus affected ci --explain` locally to see which changed path reached each project. " +
+		"[Affected CI guide](https://eli.gladman.cc/magus/guides/affected/), " +
+		"[CI target guide](https://eli.gladman.cc/magus/concepts/targets/ci/)\n\n</details>\n")
 	return b.String()
+}
+
+// shardCount is n shards, singular for one.
+func shardCount(n int) string {
+	return strconv.Itoa(n) + " " + plural(n, "shard", "shards")
 }
 
 // shardDetail is what each shard actually DOES: the invocation, what it runs, and what it
@@ -959,7 +972,11 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	}
 
 	if len(plan.Fallbacks) > 0 {
-		slog.With(attr.Component("magus")).WarnContext(ctx, "the plan fell back: "+strings.Join(plan.Fallbacks, "; "))
+		lines := make([]string, len(plan.Fallbacks))
+		for i, f := range plan.Fallbacks {
+			lines[i] = f.String()
+		}
+		slog.With(attr.Component("magus")).WarnContext(ctx, "the plan fell back: "+strings.Join(lines, " "))
 	}
 	out := planOutput{
 		Target:      target,

@@ -215,8 +215,8 @@ Each shard job runs its share as positionals: the matrix entry's `projects` is e
 list `magus run` takes. Passing `shard` and `n-shards` to the action sets `MAGUS_SHARD` and
 `MAGUS_N_SHARDS`, which label the run's timing events with the shard; they select nothing.
 
-The saved plan also runs outside the matrix. `magus run --stdin --shard 2 < plan.json`
-runs exactly shard 2 of it, which reproduces one CI job locally from the plan that job ran,
+The saved plan also runs outside the matrix. `magus run --stdin --shard 1b < plan.json`
+runs exactly shard 1b of it, which reproduces one CI job locally from the plan that job ran,
 and `magus affected ci --plan | magus run --stdin` runs every shard in one process. A shard
 id the plan lacks, a target other than the plan's, or a malformed plan is refused before
 anything runs ([MGS3029](../../reference/codes/sandbox/MGS3029.md)).

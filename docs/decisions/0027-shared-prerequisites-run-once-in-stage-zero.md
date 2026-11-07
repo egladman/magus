@@ -44,10 +44,10 @@ with no `--shard` (MGS3029).
 | Item                                                                                       | State |
 | ------------------------------------------------------------------------------------------ | ----- |
 | `forecast.Model.PlanStages` splits a plan into stage zero and stage one                    | done  |
-| `ci.Plan.StageZero` and `types.ShardPlan.StageZero`, IDs `stage-zero-<n>`                  | done  |
+| `ci.Plan.StageZero` and `types.ShardPlan.StageZero`; shard IDs are stage then letters: `0a`, `1a` | done  |
 | The `--plan` document's `stage_zero` key, absent when stage zero is empty                  | done  |
-| `magus run --stdin --shard stage-zero-<n>` runs one stage-zero shard                       | done  |
-| ci.yaml: a `stage-zero` job, its cache archive and sha256, imported by every `ci` shard    | done  |
+| `magus run --stdin --shard 0a` runs one stage-zero shard                                   | done  |
+| ci.yaml: a `stage-0` job, its cache archive and sha256, imported by every `stage-1` shard  | done  |
 | docs `ci` asks for diagrams-generate and glossary-usage-generate under gha; no `figures` job | done  |
 | The symbol index's pack path names no checkout, so a cached index replays anywhere        | done (62823db95, #625) |
 | Each project's index op as a planned unit, beside the root's symbol digest                 | not built |

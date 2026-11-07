@@ -1003,11 +1003,52 @@ export fun built(ctx: magus\Context, args: [str]) > void {
 	for _, target := range []string{"check", "built"} {
 		assert.Equal(t, key(target), key(target, types.CharmReadWrite), "%s never reads rw", target)
 		assert.Equal(t, key(target), key(target, types.CharmUpdate), "%s never reads update", target)
-		assert.NotEqual(t, key(target), key(target, types.CharmCD), "%s: only the write grants are judged", target)
+		assert.Equal(t, key(target), key(target, types.CharmCD), "%s never reads cd", target)
 	}
 	for _, target := range []string{"gen", "tidy", "outer"} {
 		assert.NotEqual(t, key(target), key(target, types.CharmReadWrite), "%s reads rw", target)
 	}
+}
+
+// TestCharmKeysOnlyAGeneratorThatReadsIt: generate:gha replays plain
+// generate's entry for a generator whose chain never reads gha. One that
+// reads it in its body, a same-file helper or a needed target keys on it.
+func TestCharmKeysOnlyAGeneratorThatReadsIt(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Magusfile(`import "magus";
+export fun plain(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles(["gen/plain.txt"]);
+}
+export fun reports(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles(["gen/reports.txt"]);
+    if (ctx.hasCharm("gha")) { return; }
+}
+fun summarize(ctx: magus\Context) > void {
+    if (ctx.hasCharm("gha")) { return; }
+}
+export fun helped(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles(["gen/helped.txt"]);
+    summarize(ctx);
+}
+export fun composed(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(reports);
+}
+`)
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	key := func(target string, charms ...string) string {
+		k, _, err := m.ComputeTargetKey(context.Background(), ".", target, charms)
+		require.NoError(t, err, target)
+		return k
+	}
+	assert.Equal(t, key("plain"), key("plain", types.CharmGHA), "plain never reads gha")
+	assert.Equal(t, key("plain"), key("plain", types.CharmGHA, types.CharmReadWrite),
+		"plain reads neither charm")
+	assert.NotEqual(t, key("reports"), key("reports", types.CharmGHA), "reports branches on gha")
+	assert.NotEqual(t, key("helped"), key("helped", types.CharmGHA), "helped reads gha in a helper")
+	assert.NotEqual(t, key("composed"), key("composed", types.CharmGHA), "composed needs a reader")
 }
 
 // TestInputsDynamicArgIsLoadError guards the loud-rejection contract: a

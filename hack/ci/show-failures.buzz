@@ -73,13 +73,14 @@ export fun tail(text: str, count: int) > str {
     return lines.sub(lines.len() - count, len: count).join("\n");
 }
 
-// covered says whether a magus-logs artifact accounts for the job: the ci workflow names a
-// shard job `magus shard <n>: <label>` and its artifact `magus-logs-<n>`. A job matching no
+// covered says whether a magus-logs artifact accounts for the job.
+// ci.yaml names a shard job `<id> <label>` and its artifact
+// `magus-logs-<id>`. A job matching no
 // artifact that way, or one that cannot be told apart, is uncovered.
 export fun covered(job: str, artifacts: [str]) > bool {
     foreach (artifact in artifacts) {
         final shard = artifact.sub(ARTIFACT_PREFIX.len(), len: artifact.len() - ARTIFACT_PREFIX.len());
-        if (job.startsWith("magus shard {shard}:")) {
+        if (job.startsWith("{shard} ")) {
             return true;
         }
     }
@@ -185,7 +186,7 @@ test "a failed plain job falls back to its gh log tail" {
     assert\equal(seen[1], want: "run view --job 11 --log-failed", message: "log call");
 }
 
-final MIXED = "\{\"jobs\": [\{\"databaseId\": 21, \"name\": \"magus shard 3: go\", \"conclusion\": \"failure\"}, \{\"databaseId\": 22, \"name\": \"magus doctor\", \"conclusion\": \"failure\"}]}";
+final MIXED = "\{\"jobs\": [\{\"databaseId\": 21, \"name\": \"1d go\", \"conclusion\": \"failure\"}, \{\"databaseId\": 22, \"name\": \"doctor\", \"conclusion\": \"failure\"}]}";
 
 test "a failed plain job beside a failed shard with an artifact is still read" {
     final seen = mut [<str>];
@@ -196,12 +197,12 @@ test "a failed plain job beside a failed shard with an artifact is still read" {
         }
         return "doctor says no";
     };
-    final report = fallbackLogs("99", artifacts: ["magus-logs-3"], gh: stub) catch "";
-    assert\equal(report.indexOf("magus doctor (job 22)") != null, want: true, message: "plain job read");
-    assert\equal(report.indexOf("shard 3") == null, want: true, message: "covered shard skipped");
+    final report = fallbackLogs("99", artifacts: ["magus-logs-1d"], gh: stub) catch "";
+    assert\equal(report.indexOf("doctor (job 22)") != null, want: true, message: "plain job read");
+    assert\equal(report.indexOf("1d go") == null, want: true, message: "covered shard skipped");
     assert\equal(seen.len(), want: 2, message: "one log call for the one uncovered job");
-    assert\equal(covered("magus shard 3: go", artifacts: ["magus-logs-3"]), want: true, message: "shard matches");
-    assert\equal(covered("magus shard 30: go", artifacts: ["magus-logs-3"]), want: false, message: "no prefix collision");
+    assert\equal(covered("1d go", artifacts: ["magus-logs-1d"]), want: true, message: "shard matches");
+    assert\equal(covered("1da go", artifacts: ["magus-logs-1d"]), want: false, message: "no prefix collision");
 }
 
 test "tail keeps the last lines" {
