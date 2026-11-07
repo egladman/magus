@@ -72,9 +72,9 @@ func TestAgentGrantIsRefused(t *testing.T) {
 
 func TestAgentWaiveIsRefusedAsAGrant(t *testing.T) {
 	for _, line := range []string{
-		"magus job grant --commit HEAD push-ungated --reason ci-down",
-		"./magus job grant --commit HEAD --revoke push-ungated",
-		"bash -c 'magus job grant --commit abc1234 push-ungated --reason x'",
+		"magus job grant --commit HEAD push-unverified --reason ci-down",
+		"./magus job grant --commit HEAD --revoke push-unverified",
+		"bash -c 'magus job grant --commit abc1234 push-unverified --reason x'",
 	} {
 		granted, _ := grantRows()
 		ctx, _ := fleetFixture(t, granted)
@@ -107,20 +107,20 @@ func TestGateWaiverLetsThatCommitAloneThrough(t *testing.T) {
 	}
 
 	v := waivedPush(t, "abc1234", waive)
-	assert.NotEqual(t, string(denyRulePushUngated), v.Rule, "the waived commit goes out: %s", v.Reason)
+	assert.NotEqual(t, string(denyRulePushUnverified), v.Rule, "the waived commit goes out: %s", v.Reason)
 	assert.NotEqual(t, decisionDeny, v.Decision)
 	assert.Contains(t, v.Context, "abc1234 goes out ungated under the waiver")
 	assert.Contains(t, v.Context, ": CI gates the release branch")
 
 	v = waivedPush(t, "fed9876", waive)
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRulePushUngated)}, judgedAs(v), "another commit is still refused")
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRulePushUnverified)}, judgedAs(v), "another commit is still refused")
 
 	v = waivedPush(t, "abc1234", func(ctx context.Context, store *job.Store) {
 		waive(ctx, store)
 		_, err := RevokeGateWaiver(ctx, store, waived)
 		require.NoError(t, err)
 	})
-	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRulePushUngated)}, judgedAs(v), "a revoked waiver covers nothing")
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRulePushUnverified)}, judgedAs(v), "a revoked waiver covers nothing")
 }
 
 func TestGateWaiverIsAPersonsKeystroke(t *testing.T) {

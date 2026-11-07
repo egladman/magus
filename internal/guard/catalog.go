@@ -64,7 +64,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocBuzzUnbriefed},
 	{doc: ruleDocAmbiguousCiWord},
 	{doc: ruleDocArchitectureUnbriefed},
-	{doc: ruleDocPushUngated},
+	{doc: ruleDocPushUnverified},
 	{doc: ruleDocHumanOnly},
 	{doc: ruleDocGrantIsAPersons},
 	{doc: ruleDocInlineAlias},
@@ -136,7 +136,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocReadSymbol, advisory: true},
 	{doc: ruleDocSpawnUnplaced, advisory: true},
 	{doc: ruleDocFocus, advisory: true, enrolled: true},
-	{doc: ruleDocGateRepeat},
+	{doc: ruleDocVerifyRepeat},
 	{doc: ruleDocGeneratedWrite, advisory: true, enrolled: true},
 	{doc: ruleDocGraphPipe, advisory: true, enrolled: true},
 	{doc: ruleDocGraphStale, advisory: true, enrolled: true},
@@ -371,8 +371,8 @@ var ruleDocAmbiguousCiWord = types.RuleDoc{
 		"It is not a skill-load rule: the remedy is to ask, not to read a skill first.",
 }
 
-var ruleDocPushUngated = types.RuleDoc{
-	Name:    string(denyRulePushUngated),
+var ruleDocPushUnverified = types.RuleDoc{
+	Name:    string(denyRulePushUnverified),
 	Catches: "a push or `gh pr create` at a commit no green gate or passing narrow run covers",
 	Why: "The advisory this replaced fired on EVERY push, having read nothing: it told a caller who had just gated and a caller who had never gated the same sentence, which is a toll rather than a reminder. " +
 		"This one reads the run log, so the finding is a fact: which invocations ran the gate, which commit each was built from, and how it finished. That is what makes stopping the call legitimate here where the rest of this tier only advises. " +
@@ -387,7 +387,7 @@ var ruleDocPushUngated = types.RuleDoc{
 		"A session no job lease binds is the orchestrator. It used to be asked, and two pull requests went out with no local gate because the rule only asked, so it is now refused with the narrow runs and the gate named: `magus affected ci`, which waits for the build budget itself. Opening a pull request with `gh pr create` meets the same gate at the head commit. " +
 		"A session bound to a lease is a worker, and workers do not publish: its refusal also sends the commit to the orchestrator. " +
 		"A push that follows a commit, merge, cherry-pick, am, rebase, reset or pull on the same line (git, hg, sl or jj; joined by `;`, `&&`, `||`, a newline or a subshell) is denied for everyone: the revision is read before the line runs, so a gate recorded at that HEAD says nothing about the commit that goes out. Run the commit alone and push in the next call, where the push is graded at the real HEAD. " +
-		"A person who skips the gate on purpose types `magus job grant --commit <commit> push-ungated --reason \"...\"`: a push or `gh pr create` of that commit, and of no other, then passes, and the verdict names who waived it, when and why. A revoked waiver covers nothing.",
+		"A person who skips the gate on purpose types `magus job grant --commit <commit> push-unverified --reason \"...\"`: a push or `gh pr create` of that commit, and of no other, then passes, and the verdict names who waived it, when and why. A revoked waiver covers nothing.",
 }
 
 var ruleDocHumanOnly = types.RuleDoc{
@@ -695,7 +695,7 @@ var ruleDocGrantIsAPersons = types.RuleDoc{
 	Why: "A grant is a person's one-time approval: `magus job grant <job> <rule> [--for <duration>]` lowers one rule to advice for one job's calls until the duration passes or the job ends, and `--revoke` ends it early. " +
 		"Every call the hook judges is an agent's, so a grant reaching it is not a person's, and it is refused whoever runs it, the root included. The job store also refuses a grant from a process carrying a lease, and no MCP tool exposes one. " +
 		"Only hooks-off is grantable to a job; any other rule is refused, naming the grantable ones. The advice a granted rule gives names who typed the grant, when, and until when. " +
-		"`magus job grant --commit <commit> push-ungated --reason \"...\"` is the one commit-scoped form: a person's waiver of the push gate for that commit alone, ended by `--revoke`. The store refuses it from a process carrying a lease, as it does a grant.",
+		"`magus job grant --commit <commit> push-unverified --reason \"...\"` is the one commit-scoped form: a person's waiver of the push gate for that commit alone, ended by `--revoke`. The store refuses it from a process carrying a lease, as it does a grant.",
 }
 
 var ruleDocEditUngraded = types.RuleDoc{
@@ -1035,8 +1035,8 @@ var ruleDocFocus = types.RuleDoc{
 	Catches: "a read or write outside the paths the running job declared",
 }
 
-var ruleDocGateRepeat = types.RuleDoc{
-	Name:    string(advisoryGateRepeat),
+var ruleDocVerifyRepeat = types.RuleDoc{
+	Name:    string(advisoryVerifyRepeat),
 	Catches: "the gate run again over a tree its last verdict already covers, red or green",
 	Why: "From the third gate run inside two hours, the run is refused when the newest verdict the branch recorded passed and no file that differs from that verdict's commit was written after it: such a gate can only pass again. " +
 		"When that newest verdict failed, the next gate over the same tree is refused at once, naming each failing target and its narrow `magus run`, until each of them passes on its own or a file changes: such a gate can only fail again on the same targets. " +

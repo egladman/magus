@@ -49,7 +49,6 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [exit-status-echo](exit-status-echo.md)               | a line ending by printing an exit status, which the harness already reports                         |
 | [filter-without-input](filter-without-input.md)       | a filter or interpreter with no file, script, pipe or redirect, which reads a stdin nothing feeds   |
 | [focus-read](focus-read.md)                           | a read outside the paths a focus lease was given                                                    |
-| [gate-repeat](gate-repeat.md)                         | the gate run again over a tree its last verdict already covers, red or green                        |
 | [generated-write](generated-write.md)                 | a hand edit to a declared output, which the next run overwrites                                     |
 | [grant-is-a-persons](grant-is-a-persons.md)           | an agent running `magus job grant`, in any spelling and any role                                    |
 | [graph-pipe](graph-pipe.md)                           | a read-only graph verb piped into a text filter, when magus projects the record itself              |
@@ -85,7 +84,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [policy-unloaded](policy-unloaded.md)                 | a call that changes state while the guard policy that judges it does not load                       |
 | [process-poll](process-poll.md)                       | a process table inspected to wait on magus work the lock already reports                            |
 | [process-signal](process-signal.md)                   | kill, pkill or killall used to signal a process identified only by PID or name                      |
-| [push-ungated](push-ungated.md)                       | a push or `gh pr create` at a commit no green gate or passing narrow run covers                     |
+| [push-unverified](push-unverified.md)                 | a push or `gh pr create` at a commit no green gate or passing narrow run covers                     |
 | [raw-tool](raw-tool.md)                               | a toolchain command a spell already wraps, run outside the cache                                    |
 | [read-navigation](read-navigation.md)                 | a whole read of a Go, Buzz or Markdown file past the workspace's line limit                         |
 | [read-paging](read-paging.md)                         | a mapped file read window by window, past two windows of it                                         |
@@ -111,6 +110,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [unknown-env](unknown-env.md)                         | a retired or misspelled MAGUS_* variable handed to a command                                        |
 | [unread-command](unread-command.md)                   | a program or VCS subcommand the shell computes before it runs, which no rule can read               |
 | [vcs-off-switch](vcs-off-switch.md)                   | an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads                    |
+| [verify-repeat](verify-repeat.md)                     | the gate run again over a tree its last verdict already covers, red or green                        |
 | [whole-tree](whole-tree.md)                           | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                          |
 | [worker-background-run](worker-background-run.md)     | a bound worker running a magus target in the background                                             |
 | [worker-check-only](worker-check-only.md)             | a bound worker running other than its check or a writer of its write paths, or writing past them    |

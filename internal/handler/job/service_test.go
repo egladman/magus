@@ -364,15 +364,15 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 		Entries:      []types.JobEntry{{Path: "api/new.go", By: by, At: 8, Consumed: 9}},
 		Integration: &types.JobIntegration{
 			Checkout: "/w", At: 10, Verified: true,
-			Gates: []types.GateStatus{{ID: "lint", Verified: false, OutputRef: "out3", Violations: []string{"red"}}},
+			Gates: []types.VerificationStatus{{ID: "lint", Verified: false, OutputRef: "out3", Violations: []string{"red"}}},
 		},
 		WaiterEvidence: &types.JobIntegration{
 			Checkout: "/waiter", At: 12, Verified: true,
-			Gates: []types.GateStatus{{ID: "lint", Verified: true, OutputRef: "out4"}},
+			Gates: []types.VerificationStatus{{ID: "lint", Verified: true, OutputRef: "out4"}},
 		},
 		Result: &types.JobResult{
-			Validation:   types.JobResultValidation{Command: "magus run go-test api", OutputRef: "out1"},
-			GateEvidence: []types.GateEvidence{{GateID: "lint", OutputRef: "out2"}},
+			Validation:           types.JobResultValidation{Command: "magus run go-test api", OutputRef: "out1"},
+			VerificationEvidence: []types.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}},
 		},
 	}
 	row.Version = 11
@@ -417,7 +417,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	require.True(t, proto.Equal(&jobv1.JobRelease{Path: "api/old.go", Digest: "sha", ReleasedAt: 6, Revoked: true}, got.Releases[0]))
 	require.True(t, proto.Equal(&jobv1.JobIntegration{
 		Checkout: "/waiter", At: 12, Verified: true,
-		Gates: []*jobv1.JobGateStatus{{Id: "lint", Verified: true, OutputRef: "out4"}},
+		Gates: []*jobv1.JobVerificationStatus{{Id: "lint", Verified: true, OutputRef: "out4"}},
 	}, got.WaiterEvidence))
 	require.Len(t, got.GateAttempts, 1)
 	require.Equal(t, "lint", got.GateAttempts[0].GateId)
@@ -428,11 +428,11 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	require.True(t, proto.Equal(wantBy, got.Entries[0].By))
 	require.True(t, proto.Equal(&jobv1.JobIntegration{
 		Checkout: "/w", At: 10, Verified: true,
-		Gates: []*jobv1.JobGateStatus{{Id: "lint", OutputRef: "out3", Violations: []string{"red"}}},
+		Gates: []*jobv1.JobVerificationStatus{{Id: "lint", OutputRef: "out3", Violations: []string{"red"}}},
 	}, got.Integration))
 	require.Equal(t, "magus run go-test api", got.Result.ValidationCommand)
 	require.Equal(t, "out1", got.Result.ValidationOutputRef)
-	require.True(t, proto.Equal(&jobv1.JobGateEvidence{GateId: "lint", OutputRef: "out2"}, got.Result.GateEvidence[0]))
+	require.True(t, proto.Equal(&jobv1.JobVerificationEvidence{GateId: "lint", OutputRef: "out2"}, got.Result.VerificationEvidence[0]))
 
 	bare := delegatedJob(types.Job{ID: "old", State: types.StatePass})
 	require.Nil(t, bare.RegisteredBy, "a row from before origins were recorded has no origin to report")

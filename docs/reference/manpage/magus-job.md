@@ -209,7 +209,7 @@ them and magus describe job prints one job's terms.
 ### job grant options
 
 **--commit** *string*
-: Waive the push gate for this one commit instead of lowering a rule for a job; takes only push-ungated
+: Waive the push gate for this one commit instead of lowering a rule for a job; takes only push-unverified
 
 **--for** *value*
 : End the grant after this long (e.g. 2h); unset, it lasts until the job ends. Bare numbers are hours.
@@ -344,13 +344,13 @@ magus job pause session-load/core --reason 'release build needs the machine' --u
 *Push HEAD without the local gate, saying why*
 
 ```sh
-magus job grant --commit HEAD push-ungated --reason "CI gates this release branch"
+magus job grant --commit HEAD push-unverified --reason "CI gates this release branch"
 ```
 
 *Take that waiver back*
 
 ```sh
-magus job grant --commit HEAD push-ungated --revoke
+magus job grant --commit HEAD push-unverified --revoke
 ```
 
 ## See Also

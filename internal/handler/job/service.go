@@ -408,7 +408,7 @@ func wireIntegration(in *types.JobIntegration) *jobv1.JobIntegration {
 	}
 	w := &jobv1.JobIntegration{Checkout: in.Checkout, At: in.At, Verified: in.Verified}
 	for _, g := range in.Gates {
-		w.Gates = append(w.Gates, &jobv1.JobGateStatus{Id: g.ID, Verified: g.Verified, OutputRef: g.OutputRef, Violations: g.Violations})
+		w.Gates = append(w.Gates, &jobv1.JobVerificationStatus{Id: g.ID, Verified: g.Verified, OutputRef: g.OutputRef, Violations: g.Violations})
 	}
 	return w
 }
@@ -487,8 +487,8 @@ func wireJobResult(r *types.JobResult) *jobv1.JobResult {
 		ValidationCommand:   r.Validation.Command,
 		ValidationOutputRef: r.Validation.OutputRef,
 	}
-	for _, g := range r.GateEvidence {
-		w.GateEvidence = append(w.GateEvidence, &jobv1.JobGateEvidence{GateId: g.GateID, OutputRef: g.OutputRef})
+	for _, g := range r.VerificationEvidence {
+		w.VerificationEvidence = append(w.VerificationEvidence, &jobv1.JobVerificationEvidence{GateId: g.GateID, OutputRef: g.OutputRef})
 	}
 	return w
 }

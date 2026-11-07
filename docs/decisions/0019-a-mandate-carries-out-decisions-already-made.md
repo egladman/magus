@@ -145,7 +145,7 @@ While a mandate is in force the guard denies, beyond what it denies always:
 | reversing a decision            | writes under `docs/decisions/` and `docs/design/`                                        |
 | hook and permission config      | writes to `.claude/`, `.codex/`, `hack/policy/`, `spells/harness/`, `magus.yaml`         |
 | a grant                         | `magus job grant` (person-only already; listed so the report names it)                   |
-| merge and push                  | `gh pr merge`, `git push` (push-ungated stands; merge is never the root's or a worker's) |
+| merge and push                  | `gh pr merge`, `git push` (push-unverified stands; merge is never the root's or a worker's) |
 | deleting work not made under it | `magus job rm`, `git branch -D`, `git worktree remove` of a row or branch made before it |
 
 A mandate only adds denials. It lowers no rule, and the guide's "An unattended mode, a
@@ -270,7 +270,7 @@ check at stop time, not a poll.
 
 - Whether Claude Code's `!` shell escape and Remote Control from a phone run hooks. If
   `!` runs PreToolUse, the person's own `issue` line is denied as an agent's, and `issue`
-  needs a channel only the person writes (a PR review, the push-ungated proposal at L7404).
+  needs a channel only the person writes (a PR review, the push-unverified proposal at L7404).
 - Whether a project-scoped `ci` run should ever count as the branch gate (running doc
   entry 277). The report names the gate's scope either way.
 - The token counter, if anyone ever wants the budget.

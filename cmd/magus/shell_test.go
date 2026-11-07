@@ -843,8 +843,8 @@ func TestEnforceVerdictBlocksAnAsk(t *testing.T) {
 
 	var stdout bytes.Buffer
 	require.NoError(t, writeGuardVerdict(&stdout, output.Options{Format: outputText},
-		types.GuardJudgment{Decision: "ask", Rule: "push-ungated", Reason: "publish?"}))
-	assert.Equal(t, "ask [push-ungated]: publish?\n", stdout.String())
+		types.GuardJudgment{Decision: "ask", Rule: "push-unverified", Reason: "publish?"}))
+	assert.Equal(t, "ask [push-unverified]: publish?\n", stdout.String())
 }
 
 // TestGuardDenyPrintsItsReasonOnce: text mode already renders the full reason to stdout, and

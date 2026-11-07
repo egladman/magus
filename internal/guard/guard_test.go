@@ -1322,7 +1322,7 @@ var recoverableRules = []string{
 // commandAdvisories are the advisories whose text names a command, which deny by default.
 var commandAdvisories = []string{
 	"capture-filter", "check-timeout", "checkpoint-state", "dependency-install", "dependency-update",
-	"gate-repeat", "generated-write", "graph-pipe", "installed-skill", "lease-invalid",
+	"verify-repeat", "generated-write", "graph-pipe", "installed-skill", "lease-invalid",
 	"model-tier-context-cap", "spawn-nested-waiter",
 }
 

@@ -118,7 +118,7 @@ func goalResult() types.JobResult {
 		Schema:       types.Schema{Version: types.JobResultSchemaVersion},
 		Job:          "harness/gated",
 		ChangedPaths: []string{"internal/job/verify.go"},
-		GateEvidence: []types.GateEvidence{
+		VerificationEvidence: []types.VerificationEvidence{
 			{GateID: "unit", OutputRef: "unit-ref"},
 			{GateID: "docs", OutputRef: "docs-ref"},
 		},
@@ -144,7 +144,7 @@ func TestVerifyTakesAResultInsideTheBoundary(t *testing.T) {
 		Verified: true,
 		Command:  "magus run go::go-test . -- -run Ledger",
 		// The primary check reports as the gate it is. See the note in lifecycle_test.go.
-		Gates: []types.GateStatus{{ID: types.PrimaryGoalID, OutputRef: passingResult().Validation.OutputRef, Verified: true}},
+		Gates: []types.VerificationStatus{{ID: types.PrimaryGoalID, OutputRef: passingResult().Validation.OutputRef, Verified: true}},
 	}, got)
 }
 
@@ -162,7 +162,7 @@ func TestVerifyGoalsRejectMissingOrWrongEvidence(t *testing.T) {
 	t.Parallel()
 
 	rep := goalResult()
-	rep.GateEvidence = rep.GateEvidence[:1]
+	rep.VerificationEvidence = rep.VerificationEvidence[:1]
 	status := VerifyGates(goalRow(), rep, types.JobAttempt{}, goalAttempts()[:1], nil, Observed{})
 	assert.False(t, status.Verified)
 	assert.Contains(t, strings.Join(status.Violations, "\n"), `goal "docs"`)
@@ -179,7 +179,7 @@ func TestVerifyGoalsRejectUndeclaredEvidence(t *testing.T) {
 	t.Parallel()
 
 	rep := goalResult()
-	rep.GateEvidence = append(rep.GateEvidence, types.GateEvidence{GateID: "invented", OutputRef: "invented-ref"})
+	rep.VerificationEvidence = append(rep.VerificationEvidence, types.VerificationEvidence{GateID: "invented", OutputRef: "invented-ref"})
 	attempts := append(goalAttempts(), types.JobGateAttempt{
 		GateID:  "invented",
 		Attempt: types.JobAttempt{Found: true, Ref: "invented-ref", Project: ".", Target: "go-test"},
@@ -221,7 +221,7 @@ func TestVerifyCIGatePassesOnAGreenGateWithATrivialDelta(t *testing.T) {
 	seen.GreenGate = green
 	status := VerifyGates(ciRow("ci", "."), rep, types.JobAttempt{}, nil, nil, seen)
 	assert.True(t, status.Verified, status.Violations)
-	assert.Equal(t, []types.GateStatus{{ID: types.PrimaryGoalID, Verified: true}}, status.Gates)
+	assert.Equal(t, []types.VerificationStatus{{ID: types.PrimaryGoalID, Verified: true}}, status.Gates)
 
 	for name, tc := range map[string]struct {
 		row  types.Job
@@ -279,7 +279,7 @@ func TestVerifyGoalDependenciesPropagate(t *testing.T) {
 		ID: "publish", Check: types.LeaseCheck{Target: "test", Project: "docs"}, DependsOn: []string{"docs"},
 	})
 	rep := goalResult()
-	rep.GateEvidence = append(rep.GateEvidence, types.GateEvidence{GateID: "publish", OutputRef: "publish-ref"})
+	rep.VerificationEvidence = append(rep.VerificationEvidence, types.VerificationEvidence{GateID: "publish", OutputRef: "publish-ref"})
 	attempts := append(goalAttempts(), types.JobGateAttempt{
 		GateID: "publish", Attempt: types.JobAttempt{Found: true, Ref: "publish-ref", Project: "docs", Target: "test"},
 	})
@@ -455,7 +455,7 @@ func TestVerifyGradesAScopedRunOfTheCheck(t *testing.T) {
 	assert.Equal(t, "goal \"check\" was graded on output ref \"a1b2c3d4\", a run scoped with `-- -run Spawn|Waiter`:"+
 		" -run and -skip select tests inside the packages `magus run go::go-test .` runs, so it ran every package the check does", v.Notes[0])
 	require.Len(t, v.Gates, 1)
-	assert.Equal(t, types.GateStatus{ID: "check", Verified: true, OutputRef: "a1b2c3d4", Scope: "-- -run Spawn|Waiter"}, v.Gates[0])
+	assert.Equal(t, types.VerificationStatus{ID: "check", Verified: true, OutputRef: "a1b2c3d4", Scope: "-- -run Spawn|Waiter"}, v.Gates[0])
 	var out strings.Builder
 	RenderGates(&out, v)
 	assert.Contains(t, out.String(), "  [met] check, a run scoped with `-- -run Spawn|Waiter`\nnote: goal \"check\" was graded on output ref \"a1b2c3d4\", a run scoped")
@@ -485,30 +485,31 @@ func TestWithoutTestSelectionDropsEverySpelling(t *testing.T) {
 	assert.Equal(t, []string{"run", "---run", "x"}, withoutTestSelection([]string{"run", "---run", "x"}), "not a flag go test reads")
 }
 
-// The check is the goal named check: a result may file its evidence under gate_evidence
+// The check is the goal named check: a result may file its evidence under
+// verification_evidence
 // by that id instead of validation, and its snapshot grades it the same.
 func TestVerifyTakesTheChecksEvidenceUnderItsGoalID(t *testing.T) {
 	t.Parallel()
 
 	rep := passingResult()
 	ref := rep.Validation.OutputRef
-	rep.GateEvidence = []types.GateEvidence{{GateID: types.PrimaryGoalID, OutputRef: ref}}
+	rep.VerificationEvidence = []types.VerificationEvidence{{GateID: types.PrimaryGoalID, OutputRef: ref}}
 	snapshots := []types.JobGateAttempt{{GateID: types.PrimaryGoalID, Attempt: passingRun}}
 
 	v := VerifyGates(acceptRow(), rep, passingRun, snapshots, nil, claimed(rep))
 	assert.True(t, v.Verified, "%q", v.Violations)
-	assert.Equal(t, []types.GateStatus{{ID: types.PrimaryGoalID, OutputRef: ref, Verified: true}}, v.Gates)
+	assert.Equal(t, []types.VerificationStatus{{ID: types.PrimaryGoalID, OutputRef: ref, Verified: true}}, v.Gates)
 
 	only := rep
 	only.Validation.OutputRef = ""
 	v = VerifyGates(acceptRow(), only, types.JobAttempt{}, snapshots, nil, claimed(only))
-	assert.True(t, v.Verified, "evidence filed only under gate_evidence: %q", v.Violations)
+	assert.True(t, v.Verified, "evidence filed only under verification_evidence: %q", v.Violations)
 
 	two := rep
 	two.Validation.OutputRef = "other-ref"
 	v = VerifyGates(acceptRow(), two, passingRun, snapshots, nil, claimed(two))
 	assert.False(t, v.Verified)
-	assert.Contains(t, v.Violations, `the result names output ref "other-ref" for goal "check" in validation and "a1b2c3d4" in gate_evidence; name one run`)
+	assert.Contains(t, v.Violations, `the result names output ref "other-ref" for goal "check" in validation and "a1b2c3d4" in verification_evidence; name one run`)
 }
 
 // A row with no check has nothing to bind evidence to, and accepting it anyway is how a
@@ -1024,7 +1025,7 @@ func runs(byRef map[string][2]string, failed ...string) AttemptResolver {
 
 func integrationEvidence() types.JobResult {
 	return types.JobResult{Job: "w", Validation: types.JobResultValidation{OutputRef: "out1"},
-		GateEvidence: []types.GateEvidence{{GateID: "lint", OutputRef: "out2"}}}
+		VerificationEvidence: []types.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}}}
 }
 
 // A job that already passed where it was written gains an integration grade from runs in
@@ -1072,7 +1073,7 @@ func TestWaitIntegrationRefusesEvidenceForAGoalItDoesNotHold(t *testing.T) {
 
 	s := integrationRow(t, types.StatePass)
 	rep := integrationEvidence()
-	rep.GateEvidence = append(rep.GateEvidence, types.GateEvidence{GateID: "nope", OutputRef: "out3"})
+	rep.VerificationEvidence = append(rep.VerificationEvidence, types.VerificationEvidence{GateID: "nope", OutputRef: "out3"})
 	_, err := WaitIntegration(t.Context(), s, "w", rep, runs(nil), "/merged", nil)
 	require.ErrorContains(t, err, `goal "nope"`)
 	rows, err := s.List()
@@ -1130,7 +1131,7 @@ func TestWaitIntegrationGradesSymbolGoalsAgainstTheCheckoutsGraph(t *testing.T) 
 	wantShape.ID = "shape"
 	wantShape.Violations = []string{"\"Api\" is declared `func Api(n int)`, and this goal expects `func Api()`"}
 	assert.Equal(t, wantShape, grade.Gates[0])
-	assert.Equal(t, types.GateStatus{ID: "gone", Verified: true}, grade.Gates[1])
+	assert.Equal(t, types.VerificationStatus{ID: "gone", Verified: true}, grade.Gates[1])
 
 	blind, err := WaitIntegration(t.Context(), s, "w", types.JobResult{Job: "w"}, runs(nil), "/merged", nil)
 	require.NoError(t, err)
@@ -1143,10 +1144,10 @@ func TestVerifyGradesAnIntegrationRowOnTheIntegratorsRuns(t *testing.T) {
 
 	row := types.Job{ID: "integrate", Integrates: []string{"a", "b"}, WritePaths: []string{"a.go", "b.go"}, State: types.StateRunning}
 	rep := types.JobResult{
-		Schema:       types.Schema{Version: types.JobResultSchemaVersion},
-		Job:          "integrate",
-		ChangedPaths: []string{"a.go", "MAGUS.md"},
-		GateEvidence: []types.GateEvidence{{GateID: "go-test", OutputRef: "test-ref"}, {GateID: "lint", OutputRef: "lint-ref"}},
+		Schema:               types.Schema{Version: types.JobResultSchemaVersion},
+		Job:                  "integrate",
+		ChangedPaths:         []string{"a.go", "MAGUS.md"},
+		VerificationEvidence: []types.VerificationEvidence{{GateID: "go-test", OutputRef: "test-ref"}, {GateID: "lint", OutputRef: "lint-ref"}},
 	}
 	attempts := []types.JobGateAttempt{
 		{GateID: "go-test", Attempt: types.JobAttempt{Found: true, Ref: "test-ref", Project: ".", Target: "go-test"}},
@@ -1156,7 +1157,7 @@ func TestVerifyGradesAnIntegrationRowOnTheIntegratorsRuns(t *testing.T) {
 	assert.True(t, status.Verified, "the merge range is the change, and the integrator's runs are declared evidence: %v", status.Violations)
 	require.Len(t, status.Gates, 2)
 
-	rep.GateEvidence = rep.GateEvidence[:1]
+	rep.VerificationEvidence = rep.VerificationEvidence[:1]
 	status = VerifyGates(row, rep, types.JobAttempt{}, attempts[:1], nil, Observed{})
 	assert.False(t, status.Verified, "the integrator's lint run is required, not optional")
 	assert.Contains(t, strings.Join(status.Violations, "\n"), `goal "lint"`)
@@ -1197,7 +1198,7 @@ func TestVerifyPassesAWorkerWhoseCheckIsOwed(t *testing.T) {
 		return rep
 	}
 	v := verifyClaim(acceptRow(), owed(types.OwedNoSeat), types.JobAttempt{}, nil)
-	assert.Equal(t, Status{Job: acceptRow().ID, Verified: true, UnresolvedRisks: []string{}, Command: acceptRow().Validation, Gates: []types.GateStatus{{ID: "check", Owed: types.OwedNoSeat}},
+	assert.Equal(t, Status{Job: acceptRow().ID, Verified: true, UnresolvedRisks: []string{}, Command: acceptRow().Validation, Gates: []types.VerificationStatus{{ID: "check", Owed: types.OwedNoSeat}},
 		Notes: []string{"goal \"check\" is owed (no seat): the integration that merges harness/ledger-accept runs it"}}, v)
 	var out strings.Builder
 	RenderGates(&out, v)
@@ -1237,8 +1238,8 @@ func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
 		{ID: "lint", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "lint", Project: "."}},
 		{ID: "buzz", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "buzz-test", Project: "docs"}},
 	}, Result: &types.JobResult{
-		Validation:   types.JobResultValidation{Command: "magus run go::go-test . -- ./pkg -run Alpha", Owed: types.OwedNoSeat},
-		GateEvidence: []types.GateEvidence{{GateID: "lint", Owed: types.OwedNoSeat}, {GateID: "buzz", Owed: types.OwedNoSeat}},
+		Validation:           types.JobResultValidation{Command: "magus run go::go-test . -- ./pkg -run Alpha", Owed: types.OwedNoSeat},
+		VerificationEvidence: []types.VerificationEvidence{{GateID: "lint", Owed: types.OwedNoSeat}, {GateID: "buzz", Owed: types.OwedNoSeat}},
 	}}
 	paid := types.Job{ID: "b", Check: &types.LeaseCheck{Target: "buzz-test", Project: "console"},
 		Result: &types.JobResult{Validation: types.JobResultValidation{OutputRef: "out1"}}}
@@ -1273,7 +1274,7 @@ func (s *narrowedRunSuite) grade(row types.Job, seen Observed, args ...string) S
 	check := types.JobAttempt{Found: true, Target: "go-test", Project: ".", ExtraArgs: []string{"-run", "Ledger"}}
 	lint := types.JobAttempt{Found: true, Target: "lint", Project: ".", Ref: "out2", ExtraArgs: args}
 	rep := passingResult()
-	rep.GateEvidence = []types.GateEvidence{{GateID: "lint", OutputRef: "out2"}}
+	rep.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}}
 	return VerifyGates(row, rep, check, []types.JobGateAttempt{{GateID: "lint", Attempt: lint}}, nil, seen)
 }
 

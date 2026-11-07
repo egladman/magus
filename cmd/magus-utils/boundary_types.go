@@ -388,7 +388,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "JobEntry", Type: reflect.TypeFor[types.JobEntry](), RuntimeObject: true},
 	{Name: "LeaseCheck", Type: reflect.TypeFor[types.LeaseCheck](), RuntimeObject: true},
 	{Name: "Goal", Type: reflect.TypeFor[types.Goal](), RuntimeObject: true},
-	{Name: "GateEvidence", Type: reflect.TypeFor[types.GateEvidence](), RuntimeObject: true},
+	{Name: "VerificationEvidence", Type: reflect.TypeFor[types.VerificationEvidence](), RuntimeObject: true},
 	{Name: "JobResult", Type: reflect.TypeFor[types.JobResult](), RuntimeObject: true},
 	{Name: "JobResultValidation", Type: reflect.TypeFor[types.JobResultValidation](), RuntimeObject: true},
 	{Name: "JobAttempt", Type: reflect.TypeFor[types.JobAttempt](), RuntimeObject: true},
@@ -471,7 +471,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "InflightFetch", Type: reflect.TypeFor[types.InflightFetch](), RuntimeObject: true},
 	{Name: "JobList", Type: reflect.TypeFor[types.JobList](), RuntimeObject: true},
 	{Name: "JobStatus", Type: reflect.TypeFor[types.JobStatus](), RuntimeObject: true},
-	{Name: "GateStatus", Type: reflect.TypeFor[types.GateStatus](), RuntimeObject: true},
+	{Name: "VerificationStatus", Type: reflect.TypeFor[types.VerificationStatus](), RuntimeObject: true},
 	// magus\guard.spawn's and magus\guard.command's requests, after Job because each
 	// request's lease is one, and the verdict both return. The guard hands a rule the
 	// request and the rule hands back the verdict, so all need encoders: allow/advise/deny

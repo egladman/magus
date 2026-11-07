@@ -36,24 +36,22 @@ import (
 )
 
 const (
-	// gateRepeatWindow is how far back a repeat is counted. Long enough to cover a
+	// verifyRepeatWindow is how far back a repeat is counted. Long enough to
+	// cover a
 	// working session, short enough that yesterday's runs say nothing about today's.
-	gateRepeatWindow = 2 * time.Hour
+	verifyRepeatWindow = 2 * time.Hour
 
-	// gateRepeatMinRuns is how many runs inside the window before saying anything.
+	// verifyRepeatMinRuns is how many runs inside the window before saying
+	// anything.
 	// The second is the first that could have been a narrower target.
-	gateRepeatMinRuns = 2
+	verifyRepeatMinRuns = 2
 
-	// gateRepeatMinSpent is how much those runs must have COST before it is worth
-	// mentioning. Frequency alone is not waste: a repeat gate over an unchanged tree
-	// is mostly cache hits and finishes in seconds, which is the cache working. What
-	// is worth a word is a gate that keeps genuinely re-running.
-	gateRepeatMinSpent = 5 * time.Minute
+	// verifyRepeatMinSpent is how much those runs must COST before a word.
+	// A repeat over an unchanged tree is mostly cache hits, which is the
+	// cache working.
+	verifyRepeatMinSpent = 5 * time.Minute
 )
 
-// adviseRepeatGate reports what the CI gate has already cost in this window, or ""
-// when it has not run enough to be worth saying.
-//
 // The gate is the most expensive target by construction, because it runs everything
 // the diff reaches, and it is the one an iterating caller reaches for out of habit.
 //
@@ -68,19 +66,22 @@ const (
 // counted and reported as having run "here". The run log is per-workspace, one file
 // per invocation, carrying the argv and real wall clock, so the count is a fact
 // rather than a reconstruction from per-spell samples.
-func adviseRepeatGate(runsDir string, now time.Time) (full advice, brief string) {
+
+// adviseRepeatVerify reports what the CI gate has already cost in this window,
+// or "" when it has not run enough to be worth saying.
+func adviseRepeatVerify(runsDir string, now time.Time) (full advice, brief string) {
 	runs, spent := recentGateRuns(runsDir, now)
-	if runs < gateRepeatMinRuns || spent < gateRepeatMinSpent {
+	if runs < verifyRepeatMinRuns || spent < verifyRepeatMinSpent {
 		return advice{}, ""
 	}
-	return gateRepeatAdvice(runs, spent), gateRepeatBrief(runs, spent)
+	return verifyRepeatAdvice(runs, spent), verifyRepeatBrief(runs, spent)
 }
 
-// denyRepeatGate refuses a gate over a tree unchanged since the branch's newest verdict,
-// which can only repeat it: at once after a fail whose targets have not passed alone, from
-// the third gate in the window after a pass. It reads the workspace the gate runs in
-// (placedLocation), not the hook's. Anything unreadable refuses nothing.
-func denyRepeatGate(ctx context.Context, deps Dependencies, _, command string) denial {
+// denyRepeatVerify refuses a gate over a tree unchanged since the newest
+// verdict. After a fail it refuses unless the targets passed alone; after a
+// pass, from the third gate in the window. It reads the gate's workspace
+// (placedLocation). Anything unreadable refuses nothing.
+func denyRepeatVerify(ctx context.Context, deps Dependencies, _, command string) denial {
 	if !commandRunsGate(command) {
 		return denial{}
 	}
@@ -93,7 +94,7 @@ func denyRepeatGate(ctx context.Context, deps Dependencies, _, command string) d
 		return denyFailedGate(at.workspace, last)
 	}
 	runs, _ := recentGateRuns(workspaceRunsDir(at.cacheDir), time.Now())
-	if runs < gateRepeatDenyRuns {
+	if runs < verifyRepeatDenyRuns {
 		return denial{}
 	}
 	return denial{
@@ -101,7 +102,7 @@ func denyRepeatGate(ctx context.Context, deps Dependencies, _, command string) d
 			types.TargetCI, time.Since(last.At).Round(time.Second), gateRunRef(last)),
 		Why: fmt.Sprintf("The gate has run %d times here in the last %s, and the newest verdict, a pass at %s (%s), covers the tree as it stands: no file that differs from that commit was written after it. "+
 			"A gate over a tree it already passed only repeats the pass. %s.",
-			runs, gateRepeatWindow, last.Commit, gateRunRef(last), gateCadence),
+			runs, verifyRepeatWindow, last.Commit, gateRunRef(last), gateCadence),
 	}
 }
 
@@ -146,9 +147,10 @@ func gateRunRef(rec sessions.GateRecord) string {
 	return "run " + rec.Inv
 }
 
-// gateRepeatDenyRuns is how many gate runs inside the window refuse the next over an
+// verifyRepeatDenyRuns is how many gate runs inside the window refuse the next
+// over an
 // unchanged green tree: the third run is the first refused.
-const gateRepeatDenyRuns = 2
+const verifyRepeatDenyRuns = 2
 
 // gateUnchanged is the newest gate verdict this branch recorded, pass or fail, when no file
 // that differs from its commit was written after it. A project-scoped pass is no verdict on
@@ -266,7 +268,7 @@ func workspaceRunsDir(cacheDir string) string {
 // One log file is one invocation, so there is nothing to cluster and no way to count
 // the same run twice.
 func recentGateRuns(runsDir string, now time.Time) (runs int, spent time.Duration) {
-	cutoff := now.Add(-gateRepeatWindow)
+	cutoff := now.Add(-verifyRepeatWindow)
 	recentRunLogs(runsDir, cutoff, func(started journal.Event, modified time.Time, _ *bufio.Reader) {
 		start := time.UnixMilli(started.Ts)
 		if !isGateCommand(started.Command.Arguments) || start.Before(cutoff) {
@@ -358,8 +360,8 @@ func gateVerb(args []string) string {
 	return ""
 }
 
-// gateRepeatAdvice names no target but the gate itself: a workspace calls its
-// narrower targets whatever it likes, so the advisory points at the command that
+// verifyRepeatAdvice names no target but the gate itself. A workspace names
+// its narrower targets freely, so the advisory points at the command that
 // lists them rather than guessing.
 
 // gateCadence names the cost, the command that sizes the risk, and leaves the trade to
@@ -381,18 +383,18 @@ var gateCadence = fmt.Sprintf("`%s` sizes the risk", hint.Affected.With(string(t
 var gateCadenceWhy = "One project is usually answered by that project's own `" + string(types.TargetCI) +
 	"`, while the root or several projects is the gate earning it."
 
-func gateRepeatAdvice(runs int, spent time.Duration) advice {
+func verifyRepeatAdvice(runs int, spent time.Duration) advice {
 	return advice{
 		Say: fmt.Sprintf("magus workspace: the `%s` gate has run %d times here in the last %s, about %s of wall clock; %s first.",
-			types.TargetCI, runs, gateRepeatWindow, spent.Round(time.Second), gateCadence),
+			types.TargetCI, runs, verifyRepeatWindow, spent.Round(time.Second), gateCadence),
 		Why: gateCadenceWhy,
 	}
 }
 
-// gateRepeatBrief is the repeat form, and it keeps the running cost rather than going
-// quiet: the count and the wall clock are the whole argument, and they are the part that
-// has changed since the caller last read the full text.
-func gateRepeatBrief(runs int, spent time.Duration) string {
+// verifyRepeatBrief is the repeat form, and it keeps the running cost rather
+// than going quiet. The count and the wall clock are the whole argument, and
+// they changed since the caller last read the full text.
+func verifyRepeatBrief(runs int, spent time.Duration) string {
 	return fmt.Sprintf("magus workspace: `%s` has run %d times here, about %s of wall clock; %s.",
 		types.TargetCI, runs, spent.Round(time.Second), gateCadence)
 }

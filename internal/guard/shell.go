@@ -176,7 +176,7 @@ const (
 	denyRuleClaimedDeclaration denyRuleName = "claimed-declaration"
 	// Upgraded from the push-gate ADVISORY when the run log proves no green gate covers
 	// this commit; see internal/guard/push.go.
-	denyRulePushUngated denyRuleName = "push-ungated"
+	denyRulePushUnverified denyRuleName = "push-unverified"
 	// Both kinds of call, like cache-dir-write: a file write and a shell line; see
 	// internal/guard/credential.go.
 	denyRuleTokenState denyRuleName = "token-state"

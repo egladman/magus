@@ -349,7 +349,7 @@ func owedChecks(d types.Job) []types.LeaseCheck {
 	if d.Result.Validation.Owed != "" {
 		owed[types.PrimaryGoalID] = true
 	}
-	for _, e := range d.Result.GateEvidence {
+	for _, e := range d.Result.VerificationEvidence {
 		if e.Owed != "" {
 			owed[e.GateID] = true
 		}
@@ -392,7 +392,8 @@ func (o Observed) covering(declared string, paths []string) bool {
 // the primary check and every goal.
 //
 // IT VERIFIES EVIDENCE, NOT ASSERTIONS: every rule turns on something magus already holds,
-// and GateEvidence has no passed bit by design. Whether the work is GOOD, and whether the
+// and VerificationEvidence has no passed bit by design. Whether the work is
+// GOOD, and whether the
 // prose Criteria were met, stay the reading of whoever forked the job.
 //
 // att and gateAttempts are what an output store recorded, and seen is what the caller
@@ -482,7 +483,8 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 	// every other goal and lands in Gates like one. Grading it separately meant a job
 	// declaring only `--check` reported no goals at all to anything that read Gates,
 	// which is how `describe job` came to show an empty goal list on a job with a check.
-	// The check is a goal here too, so gate_evidence may name it by its id.
+	// The check is a goal here too, so verification_evidence may name it by its
+	// id.
 	gates := append(row.EffectiveGoals(), integratorGoals(row)...)
 	gates = append(gates, owedGoals(row, declared, gates)...)
 	declaredGates := make(map[string]types.Goal, len(gates))
@@ -502,8 +504,8 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		}
 		attemptByGate[snapshot.GateID] = snapshot.Attempt
 	}
-	evidenceByGate := make(map[string]string, len(rep.GateEvidence))
-	for _, evidence := range rep.GateEvidence {
+	evidenceByGate := make(map[string]string, len(rep.VerificationEvidence))
+	for _, evidence := range rep.VerificationEvidence {
 		if _, declared := declaredGates[evidence.GateID]; !declared {
 			v.Violations = append(v.Violations, fmt.Sprintf("the result carries evidence for undeclared goal %q", evidence.GateID))
 			continue
@@ -515,11 +517,12 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		evidenceByGate[evidence.GateID] = evidence.OutputRef
 	}
 
-	// validation.output_ref is the check's evidence unless the result filed it only under
-	// gate_evidence; two different refs for the one check leave no single run to grade.
+	// validation.output_ref is the check's evidence unless the result filed
+	// it only under verification_evidence. Two refs for one check leave no
+	// run to grade.
 	if filed, ok := evidenceByGate[types.PrimaryGoalID]; !ok || rep.Validation.OutputRef != "" {
 		if ok && filed != rep.Validation.OutputRef {
-			v.Violations = append(v.Violations, fmt.Sprintf("the result names output ref %q for goal %q in validation and %q in gate_evidence; name one run",
+			v.Violations = append(v.Violations, fmt.Sprintf("the result names output ref %q for goal %q in validation and %q in verification_evidence; name one run",
 				rep.Validation.OutputRef, types.PrimaryGoalID, filed))
 		}
 		evidenceByGate[types.PrimaryGoalID] = rep.Validation.OutputRef
@@ -530,7 +533,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 	if rep.Validation.Owed != "" {
 		owedByGate[types.PrimaryGoalID] = rep.Validation.Owed
 	}
-	for _, evidence := range rep.GateEvidence {
+	for _, evidence := range rep.VerificationEvidence {
 		if evidence.Owed != "" {
 			owedByGate[evidence.GateID] = evidence.Owed
 		}
@@ -540,20 +543,20 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 	if rep.Validation.Unrun != "" {
 		if _, declared := declaredGates[types.PrimaryGoalID]; !declared {
 			v.Violations = append(v.Violations, fmt.Sprintf("the result says the check did not run (%s), but job %s declares no check;"+
-				" report each goal's run under gate_evidence", rep.Validation.Unrun, row.ID))
+				" report each goal's run under verification_evidence", rep.Validation.Unrun, row.ID))
 		}
 		unrunByGate[types.PrimaryGoalID] = rep.Validation.Unrun
 	}
-	for _, evidence := range rep.GateEvidence {
+	for _, evidence := range rep.VerificationEvidence {
 		if evidence.Unrun != "" {
 			unrunByGate[evidence.GateID] = evidence.Unrun
 		}
 	}
 
-	statusByGate := map[string]types.GateStatus{}
+	statusByGate := map[string]types.VerificationStatus{}
 	for _, gate := range gates {
 		if cause, unrun := unrunByGate[gate.ID]; unrun && strings.TrimSpace(evidenceByGate[gate.ID]) == "" {
-			statusByGate[gate.ID] = types.GateStatus{ID: gate.ID, Violations: []string{
+			statusByGate[gate.ID] = types.VerificationStatus{ID: gate.ID, Violations: []string{
 				fmt.Sprintf("did not run: %s; it fails until the check runs where that is fixed", cause),
 			}}
 			continue
@@ -713,7 +716,7 @@ func diffViolations(row types.Job, rep types.JobResult, seen Observed) []string 
 	return out
 }
 
-func prefixedGateViolations(status types.GateStatus) []string {
+func prefixedGateViolations(status types.VerificationStatus) []string {
 	if status.Verified {
 		return nil
 	}
@@ -727,8 +730,8 @@ func prefixedGateViolations(status types.GateStatus) []string {
 // owedGate is the status of a goal whose result files its run as owed for reason. It holds
 // no violation for a worker's check owed for want of a seat, the one owed run the integration
 // that merges the job takes on; it is never verified either way.
-func owedGate(row types.Job, gate types.Goal, reason string) types.GateStatus {
-	status := types.GateStatus{ID: gate.ID, Owed: reason}
+func owedGate(row types.Job, gate types.Goal, reason string) types.VerificationStatus {
+	status := types.VerificationStatus{ID: gate.ID, Owed: reason}
 	switch {
 	case gate.Kind != types.GoalKindCheck:
 		status.Violations = append(status.Violations, fmt.Sprintf("files a %s goal as owed, and only a check has a run to owe", gate.Kind))
@@ -741,11 +744,11 @@ func owedGate(row types.Job, gate types.Goal, reason string) types.GateStatus {
 	return status
 }
 
-func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAttempt, seen Observed) types.GateStatus {
+func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAttempt, seen Observed) types.VerificationStatus {
 	if kind := gate.Kind; kind != types.GoalKindCheck {
 		return verifySubjectGate(gate, seen)
 	}
-	status := types.GateStatus{ID: gate.ID, OutputRef: strings.TrimSpace(ref)}
+	status := types.VerificationStatus{ID: gate.ID, OutputRef: strings.TrimSpace(ref)}
 	if seen.GreenGate.covers(gate.Check) {
 		status.Verified = true
 		return status
@@ -1267,8 +1270,8 @@ const globMeta = "*?[{"
 // one thing a gate must not read as evidence, and a caller that could not compute the diff
 // says so through ChangedKnown rather than by handing back an empty list that looks like a
 // job which changed nothing.
-func verifySubjectGate(gate types.Goal, seen Observed) types.GateStatus {
-	status := types.GateStatus{ID: gate.ID}
+func verifySubjectGate(gate types.Goal, seen Observed) types.VerificationStatus {
+	status := types.VerificationStatus{ID: gate.ID}
 	kind, expect := gate.Kind, gate.Expect
 
 	// The observation this pair needs, and whether magus actually made it. Asked once, up
@@ -1341,7 +1344,7 @@ func WaitIntegration(ctx context.Context, store *Store, id string, rep types.Job
 	if ref := strings.TrimSpace(rep.Validation.OutputRef); ref != "" {
 		refs[types.PrimaryGoalID] = ref
 	}
-	for _, evidence := range rep.GateEvidence {
+	for _, evidence := range rep.VerificationEvidence {
 		if !slices.ContainsFunc(checks, func(g types.Goal) bool { return g.ID == evidence.GateID }) {
 			return types.JobIntegration{}, fmt.Errorf("job: the evidence names goal %q, and %s holds no check goal by that id", evidence.GateID, id)
 		}

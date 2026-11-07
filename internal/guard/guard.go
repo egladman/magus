@@ -1368,13 +1368,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				decision, reason = decisionDeny, movedPushReason
 			}
 			if decision != "" {
-				if _, refused := pending.hold(deps, ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRulePushUngated}}); !refused {
+				if _, refused := pending.hold(deps, ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRulePushUnverified}}); !refused {
 					decision = ""
 				}
 			}
 			if decision == decisionDeny {
 				verdict.Decision, verdict.Context, verdict.Reason = decisionDeny, "", reason
-				verdict.Rule = string(denyRulePushUngated)
+				verdict.Rule = string(denyRulePushUnverified)
 			} else if note := ev.admitted(); note != "" {
 				verdict.Context = note
 			}
@@ -1386,11 +1386,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// advisory's answer is to run a narrower target, and firing on one argues with
 		// the caller for doing what it asked.
 		if verdict.Decision == decisionPass && preauth == "" && commandRunsGate(input) {
-			full, brief := adviseRepeatGate(workspaceRunsDir(location.cacheDir), time.Now())
-			if notice := deps.heldBy(markers, string(advisoryGateRepeat)).OnceOrBrief(advisoryGateRepeat, full.Say, brief); notice != "" {
+			full, brief := adviseRepeatVerify(workspaceRunsDir(location.cacheDir), time.Now())
+			if notice := deps.heldBy(markers, string(advisoryVerifyRepeat)).OnceOrBrief(advisoryVerifyRepeat, full.Say, brief); notice != "" {
 				verdict.Decision = decisionAdvise
 				verdict.Context = notice
-				verdict.Rule = string(advisoryGateRepeat)
+				verdict.Rule = string(advisoryVerifyRepeat)
 				whys[full.Say] = full.Why
 			}
 		}
@@ -1676,7 +1676,8 @@ type roleScopedRule struct {
 }
 
 // roleScopedCommandRules are the command rules a served next stands down, so each is
-// asked of a remedy before it is served. gate-repeat reads the run log rather than a row,
+// asked of a remedy before it is served. verify-repeat reads the run log rather
+// than a row,
 // and is here because a gate magus itself served is not a repeat the caller chose.
 func roleScopedCommandRules() []roleScopedRule {
 	return []roleScopedRule{
@@ -1685,7 +1686,7 @@ func roleScopedCommandRules() []roleScopedRule {
 		{denyRuleLeasePaused, denyPausedLease},
 		{denyRuleLeaseGate, denyLeaseScopedGate},
 		{denyRuleWorkerCheckOnly, denyWorkerRawTool},
-		{denyRuleName(advisoryGateRepeat), denyRepeatGate},
+		{denyRuleName(advisoryVerifyRepeat), denyRepeatVerify},
 		{denyRuleLeaseVCS, oneString(denyLeaseScopedVCS)},
 		{denyRuleLeaseRebind, denyLeaseScopedRebind},
 		{denyRuleLeaseHarness, denyLeaseScopedHarness},
