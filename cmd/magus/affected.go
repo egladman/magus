@@ -755,7 +755,7 @@ func planSummaryMarkdown(out planOutput) string {
 
 // shardCount is n shards, singular for one.
 func shardCount(n int) string {
-	return strconv.Itoa(n) + " " + plural(n, "shard", "shards")
+	return fmt.Sprintf("%d %s", n, plural(n, "shard", "shards"))
 }
 
 // shardDetail is what each shard actually DOES: the invocation, what it runs, and what it
