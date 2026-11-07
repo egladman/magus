@@ -225,6 +225,8 @@ var boundaryTypes = []boundaryType{
 	{Name: "EvaluatedSpell", Type: reflect.TypeFor[types.EvaluatedSpell](), RuntimeObject: true},
 	{Name: "EvaluatedTarget", Type: reflect.TypeFor[types.EvaluatedTarget](), RuntimeObject: true},
 	{Name: "EvaluatedProject", Type: reflect.TypeFor[types.EvaluatedProject](), RuntimeObject: true},
+	// Must precede WorkspaceEntry, which holds a [ListedWorkspace] list.
+	{Name: "ListedWorkspace", Type: reflect.TypeFor[types.ListedWorkspace](), RuntimeObject: true},
 	{Name: "WorkspaceEntry", Type: reflect.TypeFor[types.WorkspaceEntry](), RuntimeObject: true},
 	{Name: "Rule", Type: reflect.TypeFor[types.RuleDoc](), RuntimeObject: true},
 	{Name: "HarnessWired", Type: reflect.TypeFor[types.HarnessWired](), RuntimeObject: true},

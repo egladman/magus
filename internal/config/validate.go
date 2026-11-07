@@ -80,6 +80,9 @@ func newValidator() *validator.Validate {
 // Validate checks cfg against its validate struct tags and the spell import
 // declarations, which no tag can express; returns *ValidationError on failure.
 func Validate(cfg Config) error {
+	if err := workspacesShapeError(cfg.Knowledge.Workspaces); err != nil {
+		return err
+	}
 	var failures []FieldFailure
 	if err := validate.Struct(cfg); err != nil {
 		var fe validator.ValidationErrors

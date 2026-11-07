@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -70,7 +71,10 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	if err != nil {
 		return ctx, err
 	}
-	p, err := sandbox.FromConfig(m.ws.Root, loc.CacheDir, storeDir, m.cfg.Sandbox, spells.Sandboxes(loaded), m.serviceSpells(loaded)...)
+	// Every other listed workspace is readable, never its own sandbox allows.
+	cfg := m.cfg.Sandbox
+	cfg.Allow = append(slices.Clone(cfg.Allow), sandbox.WorkspaceAllows(m.ws.Workspaces)...)
+	p, err := sandbox.FromConfig(m.ws.Root, loc.CacheDir, storeDir, cfg, spells.Sandboxes(loaded), m.serviceSpells(loaded)...)
 	if err != nil {
 		return ctx, err
 	}

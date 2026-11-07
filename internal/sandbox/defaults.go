@@ -569,3 +569,17 @@ func mergeRulesByPath(rules []filesystem.Rule) []filesystem.Rule {
 	}
 	return out
 }
+
+// WorkspaceAllows grants each other listed workspace's root read-only, as
+// magus.yaml sandbox.allow entries. A child reads there and never writes:
+// anything built from it lands in this workspace's own tree.
+func WorkspaceAllows(listed []types.ListedWorkspace) []spells.SandboxAllow {
+	out := make([]spells.SandboxAllow, 0, len(listed))
+	for _, w := range listed {
+		if w.Dir == "" {
+			continue
+		}
+		out = append(out, spells.SandboxAllow{Name: "workspace-" + w.Name, Path: w.Root, Mode: spells.SandboxAccessRO})
+	}
+	return out
+}

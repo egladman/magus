@@ -45,16 +45,10 @@ func (s *WaitBoardSuite) TestTreeIsNilBeforeAWaitIsOldEnough() {
 
 func (s *WaitBoardSuite) TestTreeHangsTheChainUnderTheRunningStep() {
 	s.chain()
-	roots := s.board.tree(s.later())
-	s.Require().Len(roots, 1)
-	s.Equal(ref("a", "build"), roots[0].ref)
-	s.Equal(2, roots[0].holds)
-	s.Require().Len(roots[0].children, 1)
-	b := roots[0].children[0]
-	s.Equal(ref("b", "build"), b.ref)
-	s.Require().Len(b.children, 1)
-	s.Equal(ref("c", "build"), b.children[0].ref)
-	s.Equal(time.Minute, b.children[0].age)
+	c := &waitNode{ref: ref("c", "build"), state: StepWaiting, age: time.Minute}
+	b := &waitNode{ref: ref("b", "build"), state: StepWaiting, age: time.Minute, holds: 1, children: []*waitNode{c}}
+	a := &waitNode{ref: ref("a", "build"), state: StepRunning, age: time.Minute, holds: 2, children: []*waitNode{b}}
+	s.Equal([]*waitNode{a}, s.board.tree(s.later()))
 }
 
 func (s *WaitBoardSuite) TestTreePutsTheBottleneckFirst() {
@@ -67,10 +61,13 @@ func (s *WaitBoardSuite) TestTreePutsTheBottleneckFirst() {
 	})
 	s.board.set(s.start, x, StepRunning)
 	s.board.set(s.start, y, StepRunning)
-	roots := s.board.tree(s.later())
-	s.Require().Len(roots, 2)
-	s.Equal(y, roots[0].ref)
-	s.Equal(2, roots[0].holds)
+	waiter := func(name string) *waitNode {
+		return &waitNode{ref: ref(name, "test"), state: StepWaiting, age: time.Minute}
+	}
+	s.Equal([]*waitNode{
+		{ref: y, state: StepRunning, age: time.Minute, holds: 2, children: []*waitNode{waiter("w2"), waiter("w3")}},
+		{ref: x, state: StepRunning, age: time.Minute, holds: 1, children: []*waitNode{waiter("w1")}},
+	}, s.board.tree(s.later()))
 }
 
 func (s *WaitBoardSuite) TestWaiterOnTwoUpstreamsIsDrawnOnceUnderTheRunningOne() {
@@ -92,10 +89,9 @@ func (s *WaitBoardSuite) TestDoneUpstreamReleasesItsWaiter() {
 	s.chain()
 	s.board.set(s.start, ref("a", "build"), StepDone)
 	s.board.set(s.start, ref("b", "build"), StepRunning)
-	roots := s.board.tree(s.later())
-	s.Require().Len(roots, 1)
-	s.Equal(ref("b", "build"), roots[0].ref)
-	s.Equal(1, roots[0].holds)
+	c := &waitNode{ref: ref("c", "build"), state: StepWaiting, age: time.Minute}
+	b := &waitNode{ref: ref("b", "build"), state: StepRunning, age: time.Minute, holds: 1, children: []*waitNode{c}}
+	s.Equal([]*waitNode{b}, s.board.tree(s.later()))
 }
 
 func (s *WaitBoardSuite) TestBoardIsIdleOnceEveryStepIsDone() {
@@ -114,8 +110,8 @@ func (s *WaitBoardSuite) TestUpstreamsLeaveOutStepsOutsideTheBatch() {
 	s.Equal([]types.TargetRef{ref("a", "build")}, ups[ref("b", "build")])
 }
 
-// waitCtx is the context waitForUpstream logs console build's wait with.
-func waitCtx() context.Context {
+// waitContext is the context waitForUpstream logs console build's wait with.
+func waitContext() context.Context {
 	edge := WaitEdge{Waiter: ref("console", "build"), Upstream: ref("docs", "build")}
 	return context.WithValue(context.Background(), waitEdgeKey{}, edge)
 }
@@ -184,7 +180,7 @@ func (s *WaitBandSuite) TestBandCountsTheWaitersPastItsBudget() {
 func (s *WaitBandSuite) TestWaitLineIsDroppedWhileTheBoardShowsIt() {
 	s.plan(1)
 	r := buildRecord("console build is waiting for docs build to finish (8m0s so far)")
-	s.Require().NoError(s.h.Handle(waitCtx(), r))
+	s.Require().NoError(s.h.Handle(waitContext(), r))
 	s.Zero(s.screen.FindRow("is waiting for"))
 }
 
@@ -242,7 +238,7 @@ func TestWaitLinePrintsOffATerminal(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewPlainHandler(&buf, slog.LevelInfo)
 	r := buildRecord("console build is waiting for docs build to finish (8m0s so far)")
-	if err := h.Handle(waitCtx(), r); err != nil {
+	if err := h.Handle(waitContext(), r); err != nil {
 		t.Fatal(err)
 	}
 	want := "[info] console build is waiting for docs build to finish (8m0s so far)\n"

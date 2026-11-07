@@ -1095,6 +1095,7 @@ func (m *Magus) Workspace(ctx context.Context, cfg types.WorkspaceConfig) (types
 		CacheDir:     cfg.CacheDir,
 		Concurrency:  cfg.Concurrency,
 		ProjectCount: len(m.ws.All()),
+		Workspaces:   append([]types.ListedWorkspace(nil), m.ws.Workspaces...),
 	}, nil
 }
 

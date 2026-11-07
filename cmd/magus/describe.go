@@ -1480,6 +1480,13 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 		if w.Concurrency > 0 {
 			fmt.Printf("  concurrency: %d\n", w.Concurrency)
 		}
+		for _, l := range w.Workspaces {
+			if l.Dir == "" {
+				fmt.Printf("  workspace %s: %s (this one)\n", l.Name, l.Root)
+				continue
+			}
+			fmt.Printf("  workspace %s: %s -> %s\n", l.Name, l.Dir, l.Root)
+		}
 	}
 	return nil
 }
