@@ -30,48 +30,49 @@ The bottom rows of the terminal are reserved. Output above them scrolls
 normally (selectable, copyable, in real scrollback), and the reserved rows do
 not move with it.
 
-![A magus run: build output scrolling above a dim status row pinned at the bottom of the terminal](../../assets/gen/terminal-run-band.svg)
+![A magus run: build output scrolling above a status row pinned at the bottom of the terminal, with a spinner and a progress bar](../../assets/gen/terminal-run-band.svg)
 
-A dim box encloses the band, so it is obvious at a glance which lines
-scroll away and which are being repainted in place. It is drawn with
-box-drawing runes, and the same box is drawn by every interactive view
-(the band, the failure list, the `magus x` picker), because two views that
-frame themselves differently read as two different products.
+The band is plain rows of text. There is no frame, no rule above it, and no
+padding to the edge of the terminal, so each row ends where its words end. The
+band and the failure list both read this way, and so does the `magus x` picker.
+[Terminal output stays copyable](../design/principles/terminal-output-stays-copyable.md)
+says why.
 
-Those runes are multi-byte, so a terminal whose locale is not UTF-8 renders
-them as mojibake. That is a deliberate trade rather than an oversight: the
-border is only ever drawn when there is an interactive terminal to draw it on,
-and the environments that still run non-UTF-8 locales (CI, cron, minimal
-containers, `LANG=C` scripts) are the ones where output is piped and no border
-is drawn at all. Choosing per locale would also make a committed screenshot a
-function of whichever shell recorded it.
+The first row is a live status line: a spinner, how many planned targets have
+finished with a bar to show it, how many pool slots are working, how many
+targets are queued, how many passed and failed, and how long the run has been
+going. A clause with nothing to say is left out. The spinner turns while
+anything is in flight, and gives way to `✓` or `✗` when nothing is. The row
+repaints in place rather than printing again, so it costs nothing to watch and
+never fills the transcript.
 
-So magus draws one box everywhere and reports the locale instead of silently
-changing what it draws. If yours is not UTF-8, `magus doctor` says so:
+The spinner, the bar and the marks are multi-byte characters, so a terminal
+whose locale is not UTF-8 renders them as mojibake. That is a deliberate trade
+rather than an oversight: the band is only drawn when there is an interactive
+terminal to draw it on, and the environments that still run non-UTF-8 locales
+(CI, cron, minimal containers, `LANG=C` scripts) are the ones where output is
+piped and no band is drawn at all. Choosing per locale would also make a
+committed screenshot a function of whichever shell recorded it.
 
-```text
-locale is not UTF-8 (none of LC_ALL, LC_CTYPE or LANG is set), so the band's
-border may render as stray characters; set LANG to a UTF-8 value
-```
-
-The top row of the band is a live status line: pool occupancy, how many targets
-have passed, how long the run has been going. It repaints in place rather than
-printing again, so it costs nothing to watch and never fills the transcript.
+So magus draws the same characters everywhere and reports the locale instead of
+silently changing what it draws: if yours is not UTF-8, `magus doctor` says so.
 
 ### What a target is waiting on
 
-When targets wait on other targets, the band draws the wait as a tree. Each
-root is a target that is running, or queued for a seat, with the targets
-waiting on it beneath it, and theirs beneath those. Roots are sorted by how
-many targets they hold, and the first is marked `bottleneck`. Each row says
-how long the target has run or waited, and `+N more` on a waiting row counts
-the other unfinished targets it also waits on.
+When targets wait on other targets, the band draws the wait as a tree under the
+status row. Each root is a target that is running, or queued for a seat, with
+the spinner in front of it and the targets waiting on it beneath it, and theirs
+beneath those. Roots are sorted by how many targets they hold, and the first is
+marked `bottleneck`. Each row says how long the target has run or waited, and
+`+N more` on a waiting row counts the other unfinished targets it also waits on.
+That metadata starts in one column, after the longest label.
 
 ![The band during a run: the root test running and holding three waiting targets, marked bottleneck, above docs build holding a chain of two](../../assets/gen/terminal-run-waits.svg)
 
 A wait shows once it passes three seconds, so a cached run does not flicker.
-The tree repaints every second while targets are in flight. Past six rows its
-last row counts the waiting targets left out.
+The band repaints every 80 milliseconds while targets are in flight, which turns
+the spinner, and stops repainting when nothing is. Past six rows its last row
+counts the waiting targets left out.
 
 While the tree shows a wait, the `is waiting for ... to finish` line for it is
 not printed. Without a band (a pipe, a CI log, `-o json`), that line prints as
@@ -100,17 +101,25 @@ that also has to survive the run.
 When a run ends with failures, they stay on screen instead of being cleared,
 because that is the moment they become actionable:
 
-![The end of a failed run: two failures pinned at the bottom, one highlighted, with a hint row offering rerun, output and escape](../../assets/gen/terminal-failure-prompt.svg)
+![The end of a failed run: three failures grouped by project, one highlighted, with its output under the list and a hint row offering the actions](../../assets/gen/terminal-failure-prompt.svg)
 
 Click a failure, or select it with the arrow keys, and:
 
 - **enter** reruns just that target with `--step`, pausing before each command
   so you can look at what is about to happen
+- **tab** moves rows between the failure list and its output
+- **y** copies the output to your clipboard
 - **o** prints its captured output into the scrolling transcript
 - **esc**, **q** or **ctrl-c** leaves
 
-The way out is always on screen. It is pinned to the right edge so that on a
-narrow terminal it is the last thing clipped rather than the first.
+The selected failure's output appears under the list, headed with the target it
+belongs to. With the list in focus the whole list shows and the output takes the
+rows left, newest lines last. Press tab and the list collapses to the selected
+failure, marked `(1 of 3)`, and the output takes the rest.
+
+The way out is always on screen. When the terminal is too narrow for every
+hint, whole hints drop from the right and the way out stays, so no hint is cut
+in the middle of a word.
 
 ## Clicking
 
@@ -135,20 +144,16 @@ other command, and that is where magus prints the things worth taking: a
 failure's cause, its output reference, and the `magus run <target> <project>`
 that reproduces it.
 
-The pinned band is different, and the difference is worth stating plainly rather
-than leaving you to discover it. It is a box with two columns, so a drag down
-one column takes the other column and the divider with it. That is not a bug we
-can arrange away: terminals select LINEARLY, and rectangular selection is
-modifier-gated, missing from several terminals, and something you would have to
-already know about.
+The pinned band is real text too. It has one column, no frame and no trailing
+spaces, so a drag over it copies the words you see and nothing else. The failure
+output sits under the tree rather than beside it for the same reason: a drag
+down one column would otherwise take the other.
 
-So magus does not ask you to select. Press **y** and the selected failure's
-captured output goes straight to your system clipboard (the bytes the tool
-emitted, with no frame, no padding and no escape sequences) through a sequence
-that survives ssh and tmux. Press **o** and the same output is printed into the
-transcript, where it copies like anything else.
-
-The band is for reading. The clipboard and the transcript are for taking.
+Two keys skip the selecting. Press **y** and the selected failure's captured
+output goes straight to your system clipboard (the bytes the tool emitted, with
+no padding and no escape sequences) through a sequence that survives ssh and
+tmux. Press **o** and the same output is printed into the transcript, where it
+copies like anything else.
 
 A terminal that refuses clipboard writes (some disable them) says so in a
 notification rather than failing the run, and **o** still works.
