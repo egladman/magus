@@ -260,7 +260,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 
 ## go-test
 
-`./...` is a default, not a fixed arg: a magusfile that passes args replaces it, so one package's tests need not compile every test binary in the module. A bare go.test() (and `magus run <t> -- <extra>` forwarding) still runs the whole tree. -trimpath matches go-build's: without it, a compiled test binary's build ID bakes in this worktree's absolute path, so the cache can never hit from another worktree at the same content.
+`./...` is a default, not a fixed arg: a magusfile that passes args replaces it, so one package's tests need not compile every test binary in the module. A bare go.test(), or forwarding only flags, runs the whole tree. A forwarded testScope operand (`-- ./pkg`) replaces it. -trimpath matches go-build's: without it, a compiled test binary's build ID bakes in this worktree's absolute path, so the cache can never hit from another worktree at the same content.
 
 **Command:** `go test -trimpath ./...`
 
