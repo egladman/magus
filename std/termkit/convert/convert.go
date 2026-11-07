@@ -117,8 +117,7 @@ func List(v any) ([]any, error) {
 
 // Strings reads a Buzz list of str.
 func Strings(v any) ([]string, error) {
-	switch l := v.(type) {
-	case []string:
+	if l, ok := v.([]string); ok {
 		return l, nil
 	}
 	items, err := List(v)
@@ -206,8 +205,7 @@ func ErrorText(err error) string {
 
 // Floats reads a Buzz list of numbers.
 func Floats(v any) ([]float64, error) {
-	switch l := v.(type) {
-	case []float64:
+	if l, ok := v.([]float64); ok {
 		return l, nil
 	}
 	items, err := List(v)

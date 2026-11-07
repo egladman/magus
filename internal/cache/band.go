@@ -45,7 +45,7 @@ func (h *PrettyHandler) SetLoader(l progress.Loader) error {
 	switch l.Kind {
 	case progress.Glyph, progress.Rotation, progress.Strip:
 	default:
-		return fmt.Errorf("the band's loader must be a glyph, rotation or strip loader; %s is a %s loader", l.Name, l.Kind)
+		return fmt.Errorf("the band's loader must be a glyph, rotation or strip loader: %s is a %s loader", l.Name, l.Kind)
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()

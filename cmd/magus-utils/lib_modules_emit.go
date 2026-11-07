@@ -110,14 +110,14 @@ func (e *emitter) genAlias(p *libPkg) string {
 		return ""
 	}
 	alias := "gen" + p.genName
-	e.use(alias, e.lib.genImport+"/"+p.genName)
+	e.use(alias, path.Join(e.lib.genImport, p.genName))
 	return alias + "."
 }
 
 // goType spells t in generated code; a handle is held by pointer unless its
 // methods take a value.
 func (e *emitter) goType(t *libType, handle bool) string {
-	name := e.pkgAlias(t.pkg) + "." + t.name
+	name := fmt.Sprintf("%s.%s", e.pkgAlias(t.pkg), t.name)
 	if handle && t.kind == kindHandle && t.byPointer() {
 		return "*" + name
 	}
@@ -168,24 +168,24 @@ func (e *emitter) encode(c *conv, src string) string {
 	case convPrim:
 		switch c.prim {
 		case "rune", "uintptr", "int64", "byte":
-			return "int(" + src + ")"
+			return fmt.Sprintf("int(%s)", src)
 		}
 		return src
 	case convDuration:
 		e.use("time", "time")
-		return "int(" + src + " / time.Millisecond)"
+		return fmt.Sprintf("int(%s / time.Millisecond)", src)
 	case convError:
-		return "convert.ErrorText(" + src + ")"
+		return fmt.Sprintf("convert.ErrorText(%s)", src)
 	case convBytes:
-		return "convert.BytesList(" + src + ")"
+		return fmt.Sprintf("convert.BytesList(%s)", src)
 	case convNamed:
 		switch c.t.kind {
 		case kindBasic:
-			return basicGo(c.t.basic) + "(" + src + ")"
+			return fmt.Sprintf("%s(%s)", basicGo(c.t.basic), src)
 		case kindRecord:
 			return e.genAlias(c.t.pkg) + "Encode" + c.t.name + "(" + src + ")"
 		default:
-			return e.genAlias(c.t.pkg) + c.t.name + "Handles.Put(" + src + ")"
+			return fmt.Sprintf("%s%sHandles.Put(%s)", e.genAlias(c.t.pkg), c.t.name, src)
 		}
 	case convSlice:
 		return fmt.Sprintf("convert.ListOf(%s, func(x %s) any { return %s })", src, e.goExpr(c.elem), e.encode(c.elem, "x"))
@@ -200,19 +200,19 @@ func (e *emitter) decode(c *conv, src string) string {
 	case convPrim:
 		switch c.prim {
 		case "string":
-			return "convert.String(" + src + ")"
+			return fmt.Sprintf("convert.String(%s)", src)
 		case "bool":
-			return "convert.Bool(" + src + ")"
+			return fmt.Sprintf("convert.Bool(%s)", src)
 		case "float64":
-			return "convert.Float(" + src + ")"
+			return fmt.Sprintf("convert.Float(%s)", src)
 		case "int":
-			return "convert.Int(" + src + ")"
+			return fmt.Sprintf("convert.Int(%s)", src)
 		}
 		return fmt.Sprintf("convert.IntAs[%s](%s)", c.prim, src)
 	case convDuration:
-		return "convert.Millis(" + src + ")"
+		return fmt.Sprintf("convert.Millis(%s)", src)
 	case convBytes:
-		return "convert.Bytes(" + src + ")"
+		return fmt.Sprintf("convert.Bytes(%s)", src)
 	case convNamed:
 		switch c.t.kind {
 		case kindBasic:
@@ -287,8 +287,8 @@ func tag(c *conv) string {
 	return "std.TypeAny"
 }
 
-// implParam is the Go parameter type a top-level argument's Impl takes.
-func implParam(t string) string {
+// implementationParam is the Go parameter type a top-level argument's Impl takes.
+func implementationParam(t string) string {
 	switch t {
 	case "std.TypeString":
 		return "string"
@@ -311,7 +311,7 @@ func implParam(t string) string {
 func (e *emitter) function(fn *libFunc) error {
 	name := snake(fn.name)
 	if fn.recv != nil {
-		name = snake(fn.recv.name) + "_" + name
+		name = fmt.Sprintf("%s_%s", snake(fn.recv.name), name)
 	}
 	impl := "Impl" + upperFirst(strings.ReplaceAll(fn.qualified(), ".", ""))
 	var args, params, pre, call []string
@@ -349,8 +349,8 @@ func (e *emitter) function(fn *libFunc) error {
 		t := tag(c)
 		args = append(args, fmt.Sprintf("{Name: %q, Type: %s}", prm.name, t))
 		goName := "a" + upperFirst(prm.name)
-		params = append(params, goName+" "+implParam(t))
-		direct := (c.kind == convPrim && implParam(t) == c.prim) || c.kind == convBytes || t == "std.TypeStringSlice"
+		params = append(params, fmt.Sprintf("%s %s", goName, implementationParam(t)))
+		direct := (c.kind == convPrim && implementationParam(t) == c.prim) || c.kind == convBytes || t == "std.TypeStringSlice"
 		val := "v" + upperFirst(prm.name)
 		if direct {
 			val = goName
@@ -376,7 +376,7 @@ func (e *emitter) function(fn *libFunc) error {
 		}
 		results = append(results, c)
 	}
-	callee := e.pkgAlias(fn.file.pkg) + "." + fn.name
+	callee := fmt.Sprintf("%s.%s", e.pkgAlias(fn.file.pkg), fn.name)
 	if fn.recv != nil {
 		callee = "recv." + fn.name
 	}
@@ -395,8 +395,8 @@ func (e *emitter) function(fn *libFunc) error {
 		zero = ""
 	case 1:
 		retTag = tag(results[0])
-		retType = implParam(retTag)
-		zero = zeroOf(retType)
+		retType = implementationParam(retTag)
+		zero = zeroLiteral(retType)
 		ret = e.encodeTop(results[0], "r0", retType)
 	default:
 		retTag, retType, zero = "std.TypeAny", "any", "nil"
@@ -404,7 +404,7 @@ func (e *emitter) function(fn *libFunc) error {
 		for i, c := range results {
 			items = append(items, e.encode(c, fmt.Sprintf("r%d", i)))
 		}
-		ret = "[]any{" + strings.Join(items, ", ") + "}"
+		ret = fmt.Sprintf("[]any{%s}", strings.Join(items, ", "))
 	}
 
 	var b bytes.Buffer
@@ -466,14 +466,14 @@ func (e *emitter) getter(t *libType, f libField) error {
 		return err
 	}
 	retTag := tag(c)
-	retType := implParam(retTag)
-	impl := "Impl" + t.name + f.name
+	retType := implementationParam(retTag)
+	impl := fmt.Sprintf("Impl%s%s", t.name, f.name)
 	recv := lowerFirst(t.name)
 	fmt.Fprintf(&e.body, "// %s reads the %s field of a %s.\nfunc %s(ctx context.Context, %s int) (%s, error) {\n", impl, f.name, t.name, impl, recv, retType)
 	fmt.Fprintf(&e.body, "recv, err := %sHandles.Get(%s)\nif err != nil {\nreturn %s, err\n}\nreturn %s, nil\n}\n\n",
-		t.name, recv, zeroOf(retType), e.encodeTop(c, "recv."+f.name, retType))
+		t.name, recv, zeroLiteral(retType), e.encodeTop(c, "recv."+f.name, retType))
 	e.methods = append(e.methods, fmt.Sprintf("\t\t{\n\t\t\tName: %q,\n\t\t\tDoc: %q,\n\t\t\tArgs: []std.Arg{{Name: %q, Type: std.TypeInt}},\n\t\t\tReturns: []std.Ret{{Type: %s}},\n\t\t\tRaises: true,\n\t\t\tImpl: %s,\n\t\t},\n",
-		snake(t.name)+"_"+snake(f.name), fmt.Sprintf("The %s field of a %s.", f.name, t.name), recv, retTag, impl))
+		fmt.Sprintf("%s_%s", snake(t.name), snake(f.name)), fmt.Sprintf("The %s field of a %s.", f.name, t.name), recv, retTag, impl))
 	return nil
 }
 
@@ -497,14 +497,14 @@ func (e *emitter) value(v *libValue) error {
 		return err
 	}
 	impl := "Impl" + v.name
-	src := e.pkgAlias(v.file.pkg) + "." + v.name
+	src := fmt.Sprintf("%s.%s", e.pkgAlias(v.file.pkg), v.name)
 	var t, goT, val string
-	switch {
-	case c.kind == convError:
+	switch c.kind {
+	case convError:
 		t, goT, val = "std.TypeString", "string", src+".Error()"
 	default:
 		t = tag(c)
-		goT = implParam(t)
+		goT = implementationParam(t)
 		val = e.encodeTop(c, src, goT)
 	}
 	// A method rather than a std.Field: the checker declares methods, so a
@@ -515,7 +515,7 @@ func (e *emitter) value(v *libValue) error {
 	return nil
 }
 
-func zeroOf(goType string) string {
+func zeroLiteral(goType string) string {
 	switch goType {
 	case "string":
 		return `""`
@@ -608,7 +608,7 @@ func (lib *libModule) emitRegister(wasm bool) ([]byte, error) {
 	b.WriteString("//go:build !wasm\n\n// Code generated by magus-utils libmodules. DO NOT EDIT.\n\n")
 	fmt.Fprintf(&b, "package %s\n\nimport (\n\t\"github.com/egladman/magus/std\"\n", clause)
 	for _, p := range lib.pkgs {
-		fmt.Fprintf(&b, "\tgen%s %q\n", p.genName, lib.genImport+"/"+p.genName)
+		fmt.Fprintf(&b, "\tgen%s %q\n", p.genName, path.Join(lib.genImport, p.genName))
 	}
 	b.WriteString(")\n\n// Modules is one Buzz module per Go package of the library.\nfunc Modules() []std.Module {\n\treturn []std.Module{\n")
 	for _, p := range lib.pkgs {

@@ -38,7 +38,7 @@ func runLibModules(args []string) error {
 		return err
 	}
 	if gaps := lib.gaps(); len(gaps) > 0 {
-		return fmt.Errorf("no Buzz binding for:\n  %s", strings.Join(gaps, "\n  "))
+		return fmt.Errorf("no Buzz binding for: %s", strings.Join(gaps, ", "))
 	}
 	for _, p := range lib.pkgs {
 		src, err := lib.emitPackage(p)
@@ -169,7 +169,10 @@ func loadLib(dir, genImport string) (*libModule, error) {
 			return filepath.SkipDir
 		}
 		pkg, err := lib.parseDir(p, rel)
-		if err != nil || pkg == nil {
+		if errors.Is(err, errNoGoFiles) {
+			return nil
+		}
+		if err != nil {
 			return err
 		}
 		lib.pkgs = append(lib.pkgs, pkg)
@@ -181,6 +184,9 @@ func loadLib(dir, genImport string) (*libModule, error) {
 	}
 	return lib, nil
 }
+
+// errNoGoFiles reports a directory that holds no Go source, which is no package.
+var errNoGoFiles = errors.New("no Go files")
 
 func (lib *libModule) parseDir(dir, rel string) (*libPkg, error) {
 	fset := token.NewFileSet()
@@ -201,14 +207,14 @@ func (lib *libModule) parseDir(dir, rel string) (*libPkg, error) {
 		files = append(files, f)
 	}
 	if len(files) == 0 {
-		return nil, nil
+		return nil, errNoGoFiles
 	}
 	p := &libPkg{importPath: lib.modPath, name: files[0].Name.Name, types: map[string]*libType{}}
 	p.buzzName, p.buzzPath, p.genName = lib.base, lib.base, lib.base
 	if rel != "." {
 		p.importPath += "/" + rel
 		p.buzzName = path.Base(rel)
-		p.buzzPath = lib.base + "/" + rel
+		p.buzzPath = path.Join(lib.base, rel)
 		p.genName = p.buzzName
 	}
 	for _, f := range files {
@@ -522,7 +528,7 @@ func isFunc(e ast.Expr) bool {
 
 func (fn *libFunc) qualified() string {
 	if fn.recv != nil {
-		return fn.recv.name + "." + fn.name
+		return fmt.Sprintf("%s.%s", fn.recv.name, fn.name)
 	}
 	return fn.name
 }
