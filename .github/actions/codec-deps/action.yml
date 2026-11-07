@@ -2,13 +2,12 @@ name: magus codec build dependencies
 description: >
   Install the system libraries internal/codec's cgo xz/zstd fast path links against
   (liblzma-dev, libzstd-dev). Any job that builds or tests magus with cgo needs them:
-  without them pkg-config exits 1 and compress-cgo-test fails. It also installs chktex,
-  which the latex spell's lint runs and mise cannot install. Ubuntu runners only.
+  without them pkg-config exits 1 and compress-cgo-test fails. Ubuntu runners only.
 
 runs:
   using: composite
   steps:
-    # The two libraries are the whole codec list. libgtk-3-dev and libwebkit2gtk-4.1-dev used to be
+    # These two are the whole list. libgtk-3-dev and libwebkit2gtk-4.1-dev used to be
     # installed alongside them and were never needed: nothing in the tree references
     # webkit or gtk, no dependency pulls a webview, and the console is a PWA rather than
     # a native shell. They arrived in the bulk workflow replacement b31229bcc, not in
@@ -23,8 +22,9 @@ runs:
     # 85s on both shards at once when azure.archive.ubuntu.com was slow, which is the correlated
     # stall that reads as a hang.
     #
-    # None of it is needed. libzstd-dev already ships in the runner image; liblzma-dev comes from
-    # noble/main and chktex from noble/universe, whose indexes the image already carries.
+    # None of it is needed. libzstd-dev already ships in the runner image, liblzma-dev is the one
+    # package actually installed, and it comes from noble/main, whose index the image already
+    # carries. So the cached index resolves both in about two seconds.
     #
     # The fallback is what keeps that honest: if the image ever ships without the lists, or its
     # index goes stale enough that the .deb 404s, the install fails and the update runs for real.
@@ -33,6 +33,6 @@ runs:
     - name: Install codec build dependencies
       shell: bash
       run: |
-        sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev chktex \
+        sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev \
           || { sudo apt-get update -o Acquire::Retries=3 -o Acquire::Languages=none \
-               && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev chktex; }
+               && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev; }
