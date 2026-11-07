@@ -672,6 +672,11 @@ It adds these to a session:
   [MGS3009](../../../reference/codes/sandbox/MGS3009.md) refusals, on the pane's
   Budget tab. Nothing about it reaches the status line or the band: an agent reads
   a refusal and retries.
+- A line of links under each reply and each finished magus call, Bash or MCP, that
+  names an output ref, a guard detail or an invocation id. A link's title is the
+  command that prints it. Pressing one opens a pane with that command's output and a
+  Copy command button. Where a surface opens links itself and no press reaches the
+  mod, the link opens the page on [output refs](../../../concepts/cache/output-refs.md).
 
 Every threshold is a setting in `/config`: `cacheGate`, `gateMinTokens`, `cacheTtl`,
 `priceStepGate`, `priceStepMarginTokens`, `spawnGate`, `spawnMaxInputUsdPerMTok`,
