@@ -2367,6 +2367,11 @@ func ObjectDiffFile(v types.DiffFile, enums ffi.EnumCases) vm.Value {
 		itemsThreads[indexThreads] = ObjectDiffThreadRef(v.Threads[indexThreads])
 	}
 	out.MapSet("threads", vm.ListValue(itemsThreads))
+	optRisk := vm.Null
+	if v.Risk != nil {
+		optRisk = ObjectTierEvidence((*v.Risk), enums)
+	}
+	out.MapSet("risk", optRisk)
 	return out
 }
 

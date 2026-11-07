@@ -1868,6 +1868,7 @@ export object DiffFile {
     noHistory: bool = false,
     reach: int? = null,
     threads: [DiffThreadRef] = [],
+    risk: TierEvidence? = null,
 }
 
 export object ImpactProject {
