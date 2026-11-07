@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { compact, jsonlPaths, parseJsonl, resolvePath, toMarkdown } from '../hooks/jsonl'
+import { jsonlPaths, parseJsonl, resolvePath, toMarkdown } from '../hooks/jsonl'
 
 const INVENTORY = [
   '{"line": 1002, "title": "Fork binds lease", "status": "UNSURE", "evidence": "a | b", "fix_write_set": ["internal/job/checkout.go"], "size": "M"}',
@@ -40,37 +40,27 @@ describe('parseJsonl', () => {
   })
 })
 
-describe('compact', () => {
-  test('draws strings bare, nested values as one-line JSON, a missing key empty', async () => {
-    expect(compact('x')).toBe('x')
-    expect(compact(['a', 'b'])).toBe('["a","b"]')
-    expect(compact({ k: { n: 1 } })).toBe('{"k":{"n":1}}')
-    expect(compact(null)).toBe('null')
-    expect(compact(undefined)).toBe('')
-  })
-})
-
 describe('toMarkdown', () => {
   test('escapes pipes and counts the rows left out', async () => {
-    const md = toMarkdown(parseJsonl(INVENTORY), 1)
+    const md = toMarkdown(parseJsonl(INVENTORY), 1, 20)
     expect(md.split('\n')).toEqual([
-      '| line | title | status | evidence | fix_write_set | size |',
+      '| line | title | status | evidence | fix\\_write\\_set | size |',
       '| --- | --- | --- | --- | --- | --- |',
-      '| 1002 | Fork binds lease | UNSURE | a \\| b | ["internal/job/checkout.go"] | M |',
+      '| 1002 | Fork binds lease | UNSURE | a \\| b | \\["internal/job/checkout.go"\\] | M |',
       '',
       '1 more rows not shown.',
     ])
   })
 
   test('cuts a long cell with an ellipsis', async () => {
-    const md = toMarkdown(parseJsonl(JSON.stringify({ a: 'x'.repeat(500) })), 10)
+    const md = toMarkdown(parseJsonl(JSON.stringify({ a: 'x'.repeat(500) })), 10, 20)
     const cell = md.split('\n')[2] ?? ''
     expect(cell.endsWith('… |')).toBe(true)
     expect(cell.length).toBe('| '.length + 160 + ' |'.length)
   })
 
   test('draws nothing for a file with no entry', async () => {
-    expect(toMarkdown(parseJsonl('not json'), 10)).toBe('')
+    expect(toMarkdown(parseJsonl('not json'), 10, 20)).toBe('')
   })
 })
 
@@ -81,7 +71,11 @@ describe('jsonlPaths', () => {
       '`/Users/e/Application Support/notes/part-4.jsonl`, then ~/x/runs.jsonl.',
       'Also `rows.jsonl` but not report.json or /tmp/a.jsonlx.',
     ].join('\n')
-    expect(jsonlPaths(text)).toEqual(['/Users/e/Application Support/notes/part-4.jsonl', 'rows.jsonl', '~/x/runs.jsonl'])
+    expect(jsonlPaths(text)).toEqual([
+      '/Users/e/Application Support/notes/part-4.jsonl',
+      'rows.jsonl',
+      '~/x/runs.jsonl',
+    ])
   })
 
   test('strips a file: scheme from a link', async () => {
@@ -94,5 +88,63 @@ describe('resolvePath', () => {
     expect(resolvePath('~/a.jsonl', '/Users/e', '/w')).toBe('/Users/e/a.jsonl')
     expect(resolvePath('/abs/a.jsonl', '/Users/e', '/w')).toBe('/abs/a.jsonl')
     expect(resolvePath('rel/a.jsonl', '/Users/e', '/w/')).toBe('/w/rel/a.jsonl')
+  })
+})
+
+describe('parseJsonl edge cases', () => {
+  test('a key named like an Object.prototype member is a column, and a row without it has no cell', async () => {
+    const t = parseJsonl('{"toString": 1}\n{"a": 2}')
+    expect(t.columns).toEqual(['toString', 'a'])
+    expect(t.rows[1]?.cells).toEqual([undefined, 2])
+    expect(toMarkdown(t, 10, 20).split('\n')[3]).toBe('|  | 2 |')
+  })
+
+  test('an error names at most 80 characters of the value it rejected', async () => {
+    const t = parseJsonl(JSON.stringify(['x'.repeat(500)]))
+    expect(t.errors[0]?.message.length).toBe('not a JSON object: '.length + 80)
+  })
+})
+
+describe('toMarkdown edge cases', () => {
+  test('past 20 columns the rest are left out and counted', async () => {
+    const entry = Object.fromEntries(Array.from({ length: 23 }, (_, i) => [`c${i}`, i]))
+    const lines = toMarkdown(parseJsonl(JSON.stringify(entry)), 10, 20).split('\n')
+    expect(lines[0]?.split(' | ').length).toBe(20)
+    expect(lines.at(-1)).toBe('3 more columns not shown.')
+  })
+
+  test('escapes the characters markdown would read as syntax', async () => {
+    const md = toMarkdown(parseJsonl(JSON.stringify({ a: '[x](y) <b> `c` *d* _e_ !f &g' })), 10, 20)
+    expect(md.split('\n')[2]).toBe('| \\[x\\]\\(y\\) \\<b\\> \\`c\\` \\*d\\* \\_e\\_ \\!f \\&g |')
+  })
+
+  test('cuts by code point, never inside a surrogate pair', async () => {
+    const md = toMarkdown(parseJsonl(JSON.stringify({ a: '😀'.repeat(300) })), 10, 20)
+    const body = (md.split('\n')[2] ?? '').slice(2, -2)
+    expect([...body].length).toBe(160)
+    expect(body.endsWith('😀…')).toBe(true)
+  })
+})
+
+describe('jsonlPaths edge cases', () => {
+  test('a path that only starts like a .jsonl file is no match', async () => {
+    expect(jsonlPaths('Kept /tmp/a.jsonl.bak and /tmp/b.jsonl.')).toEqual(['/tmp/b.jsonl'])
+  })
+
+  test('a code span with a command or a glob names no path', async () => {
+    expect(jsonlPaths('Run `jq . a.jsonl` or `ls *.jsonl` or `out/{a,b}.jsonl`.')).toEqual([])
+  })
+
+  test('a link with a scheme other than file: is skipped', async () => {
+    expect(jsonlPaths('[a](https://example.com/a.jsonl) [b](mailto:x/b.jsonl)')).toEqual([])
+  })
+})
+
+describe('resolvePath edge cases', () => {
+  test('folds . and .. segments and doubled slashes', async () => {
+    expect(resolvePath('./a/../b//c.jsonl', '/h', '/w')).toBe('/w/b/c.jsonl')
+    expect(resolvePath('../c.jsonl', '/h', '/w/x')).toBe('/w/c.jsonl')
+    expect(resolvePath('/a/./b/../c.jsonl', '/h', '/w')).toBe('/a/c.jsonl')
+    expect(resolvePath('~/a/../b.jsonl', '/h', '/w')).toBe('/h/b.jsonl')
   })
 })

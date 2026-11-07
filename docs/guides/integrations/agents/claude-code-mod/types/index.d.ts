@@ -174,7 +174,17 @@ export type Budget = {
 export type BudgetRead = { budget: Budget | null; readAt: number }
 
 // The ref the ref pane shows. text is what the command printed, colors dropped.
-export type RefView = { ref: string; command: string; text: string; error: string | null; isLoading: boolean }
+export type RefView = {
+  ref: string
+  command: string
+  // Why the command ran as it did, for example the fallback to magus on PATH; null when nothing needs saying.
+  note: string | null
+  text: string
+  // Characters of stdout the pane did not draw.
+  omitted: number
+  error: string | null
+  isLoading: boolean
+}
 
 declare module 'claude-code' {
   interface PluginState {

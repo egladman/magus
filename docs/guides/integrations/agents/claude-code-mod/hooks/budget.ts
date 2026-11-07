@@ -62,7 +62,8 @@ const statusError = (message: string): Result<never> => fail(new MagusError({ co
 // null when the report has no broker, which is a budget nothing holds.
 export function parseBudget(stdout: string): Result<Budget | null> {
   const parsed = parseJSON(stdout)
-  if (parsed.error) return statusError(`magus server status -o json printed no JSON${stdout ? `: ${stdout.slice(0, 120)}` : ''}`)
+  if (parsed.error)
+    return statusError(`magus server status -o json printed no JSON${stdout ? `: ${stdout.slice(0, 120)}` : ''}`)
   const doc = parsed.value
   if (!isRecord(doc)) return statusError('magus server status -o json printed no object')
   if (doc.broker == null) return ok(null)

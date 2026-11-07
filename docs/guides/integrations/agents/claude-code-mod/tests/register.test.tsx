@@ -11,14 +11,28 @@ const BAND = {
   plugin: 'magus',
   surface: 'terminal',
   component: 'AbovePrompt',
-  props: { hasSurvey: false, isWorking: false, maxRows: 6, bodyColumns: 120, scroll: { offset: 0, bodyRows: 6 }, view: {} },
+  props: {
+    hasSurvey: false,
+    isWorking: false,
+    maxRows: 6,
+    bodyColumns: 120,
+    scroll: { offset: 0, bodyRows: 6 },
+    view: {},
+  },
 } as const
 const PANE = {
   plugin: 'magus',
   surface: 'desktop',
   component: 'Pane',
   requestId: 'magus',
-  props: { title: 'magus', isFocused: true, bodyColumns: 100, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} },
+  props: {
+    title: 'magus',
+    isFocused: true,
+    bodyColumns: 100,
+    placement: 'dock',
+    scroll: { offset: 0, bodyRows: 30 },
+    view: {},
+  },
 } as const
 const RUN_MAGUS = {
   command: 'magus',
@@ -51,7 +65,9 @@ function engine(on: On, opts: Opts = {}): Seen {
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.root', () => ({ value: ROOT }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
-  on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: opts.context ?? 182_000, window: 1_000_000 }, rateLimits: [] } as never }))
+  on('session.usage', () => ({
+    value: { startedAt: 0, context: { tokens: opts.context ?? 182_000, window: 1_000_000 }, rateLimits: [] } as never,
+  }))
   on('env.get', ($, e) => ({ value: opts.env?.[e.name] }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
@@ -76,7 +92,10 @@ function engine(on: On, opts: Opts = {}): Seen {
       opts.workspace === true &&
       [`${ROOT}/magusfile.buzz`, `${ROOT}/go.mod`, ...(opts.noLocalBinary ? [] : [`${ROOT}/magus`])].includes(e.path),
   }))
-  on('ui.copy', () => ({ value: opts.noClipboard ? { isCopied: false, reason: 'no-clipboard' } : { isCopied: true } }) as never)
+  on(
+    'ui.copy',
+    () => ({ value: opts.noClipboard ? { isCopied: false, reason: 'no-clipboard' } : { isCopied: true } }) as never,
+  )
   on('fs.read', ($, e) => {
     const text = opts.files?.[e.path]
     if (text !== undefined) return { value: text }
@@ -89,7 +108,14 @@ function engine(on: On, opts: Opts = {}): Seen {
     const cmd = e.argv.join(' ')
     if (cmd.endsWith('server status -o json')) {
       return opts.serverUp
-        ? ok(0, JSON.stringify({ server: { pid: 1 }, pool: { socket: `unix://${SOCK}`, version: 'v1' }, mcp_endpoint: { state: 'serving' } }))
+        ? ok(
+            0,
+            JSON.stringify({
+              server: { pid: 1 },
+              pool: { socket: `unix://${SOCK}`, version: 'v1' },
+              mcp_endpoint: { state: 'serving' },
+            }),
+          )
         : ok(1, JSON.stringify({ pool_error: 'no such file' }))
     }
     return ok(127, '')
@@ -97,7 +123,15 @@ function engine(on: On, opts: Opts = {}): Seen {
   on('http.fetch', ($, e) => {
     const answers: Record<string, unknown> = {
       'http://magus/magus.job.v1alpha1.JobService/ListJobs': {
-        jobs: [{ id: 'css-reorg', state: 'running', model: 'sonnet', criteria: 'one stylesheet per app', updated: String(T0 / 1000) }],
+        jobs: [
+          {
+            id: 'css-reorg',
+            state: 'running',
+            model: 'sonnet',
+            criteria: 'one stylesheet per app',
+            updated: String(T0 / 1000),
+          },
+        ],
       },
     }
     return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(answers[e.url] ?? {}) } }
@@ -109,7 +143,10 @@ function engine(on: On, opts: Opts = {}): Seen {
   return seen
 }
 
-const usage = (u: Partial<{ input: number; output: number; read: number; write: number }>, model = 'claude-opus-5-5') => ({
+const usage = (
+  u: Partial<{ input: number; output: number; read: number; write: number }>,
+  model = 'claude-opus-5-5',
+) => ({
   model,
   input_tokens: u.input ?? 100,
   output_tokens: u.output ?? 500,
@@ -147,35 +184,45 @@ test('the warn gate toasts at submit after expiry and still sends', async ($, on
   expect(seen.toasts.at(-1)).toMatch(/Cache expired 1m ago/)
 })
 
-test('the confirm gate holds an expired prompt once, puts the text back, and sends it the second time', { options: { cacheGate: 'confirm' } }, async ($, on) => {
-  const clock = mock.clock(on)
-  await clock.set(T0)
-  const seen = engine(on)
-  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
-  await $.turn.complete(main(usage({ write: 182_000 })))
-  await clock.advance(10 * MIN)
-  await clock.settle()
+test(
+  'the confirm gate holds an expired prompt once, puts the text back, and sends it the second time',
+  { options: { cacheGate: 'confirm' } },
+  async ($, on) => {
+    const clock = mock.clock(on)
+    await clock.set(T0)
+    const seen = engine(on)
+    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+    await $.turn.complete(main(usage({ write: 182_000 })))
+    await clock.advance(10 * MIN)
+    await clock.settle()
 
-  const held = await $.prompt.submit({ text: 'refactor the store' } as never)
-  expect(held).toMatchObject({ drop: expect.stringMatching(/^Held: Cache expired 5m ago.*Submit again to send it\.$/) })
-  await clock.advance(1)
-  await clock.settle()
-  expect(seen.fills).toEqual(['refactor the store'])
+    const held = await $.prompt.submit({ text: 'refactor the store' } as never)
+    expect(held).toMatchObject({
+      drop: expect.stringMatching(/^Held: Cache expired 5m ago.*Submit again to send it\.$/),
+    })
+    await clock.advance(1)
+    await clock.settle()
+    expect(seen.fills).toEqual(['refactor the store'])
 
-  expect(await $.prompt.submit({ text: 'refactor the store' } as never)).toMatchObject({ text: 'refactor the store' })
-})
+    expect(await $.prompt.submit({ text: 'refactor the store' } as never)).toMatchObject({ text: 'refactor the store' })
+  },
+)
 
-test('a small context passes the gate silently', { options: { cacheGate: 'confirm', gateMinTokens: 500_000 } }, async ($, on) => {
-  const clock = mock.clock(on)
-  await clock.set(T0)
-  const seen = engine(on)
-  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
-  await $.turn.complete(main(usage({ write: 182_000 })))
-  await clock.advance(10 * MIN)
-  await clock.settle()
-  expect(await $.prompt.submit({ text: 'hi' } as never)).toMatchObject({ text: 'hi' })
-  expect(seen.toasts).toEqual([])
-})
+test(
+  'a small context passes the gate silently',
+  { options: { cacheGate: 'confirm', gateMinTokens: 500_000 } },
+  async ($, on) => {
+    const clock = mock.clock(on)
+    await clock.set(T0)
+    const seen = engine(on)
+    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+    await $.turn.complete(main(usage({ write: 182_000 })))
+    await clock.advance(10 * MIN)
+    await clock.settle()
+    expect(await $.prompt.submit({ text: 'hi' } as never)).toMatchObject({ text: 'hi' })
+    expect(seen.toasts).toEqual([])
+  },
+)
 
 test('a cache hit after a 20-minute gap teaches the mod the TTL is an hour', async ($, on) => {
   const clock = mock.clock(on)
@@ -208,7 +255,15 @@ test('a subagent shows its cost in the pane and raises no toast', async ($, on) 
     background: true,
   } as never)
   const sub = (u: ReturnType<typeof usage>) =>
-    ({ answer: 'done', durationMs: 1000, isAborted: false, turnId: 's', reason: 'answer', agentId: 'ag1', usage: u }) as never
+    ({
+      answer: 'done',
+      durationMs: 1000,
+      isAborted: false,
+      turnId: 's',
+      reason: 'answer',
+      agentId: 'ag1',
+      usage: u,
+    }) as never
   await $.turn.complete(sub(usage({ input: 60_000, output: 2_000 }, 'claude-haiku-5-5')))
   await $.turn.complete(sub(usage({ input: 60_000, output: 2_000 }, 'claude-haiku-5-5')))
   expect(seen.toasts).toEqual([])
@@ -222,14 +277,20 @@ test('a subagent shows its cost in the pane and raises no toast', async ($, on) 
   expect(await ui.find({ type: 'Text', text: /over .* budget/ })).toBeUndefined()
 })
 
-test('a rates file that does not parse falls back to the built-in rates and says so', { options: { ratesFile: '/r.json' } }, async ($, on) => {
-  const clock = mock.clock(on)
-  await clock.set(T0)
-  engine(on, { files: { '/r.json': '{"models": "nope"}' } })
-  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount(BAND)
-  expect(await ui.find({ type: 'Text', text: /\/r\.json: rates: cacheWriteMultiplier.*using the built-in rates/ })).toBeDefined()
-})
+test(
+  'a rates file that does not parse falls back to the built-in rates and says so',
+  { options: { ratesFile: '/r.json' } },
+  async ($, on) => {
+    const clock = mock.clock(on)
+    await clock.set(T0)
+    engine(on, { files: { '/r.json': '{"models": "nope"}' } })
+    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount(BAND)
+    expect(
+      await ui.find({ type: 'Text', text: /\/r\.json: rates: cacheWriteMultiplier.*using the built-in rates/ }),
+    ).toBeDefined()
+  },
+)
 
 test('/magus reads ListJobs over the server socket and opens a job on press', async ($, on) => {
   const clock = mock.clock(on)
@@ -305,67 +366,95 @@ test('the price step gate stays quiet further under the step than its margin', a
   expect(seen.toasts).toEqual([])
 })
 
-test('the confirm price step gate holds the prompt once and names both rates', { options: { priceStepGate: 'confirm' } }, async ($, on) => {
-  const clock = mock.clock(on)
-  await clock.set(T0)
-  const seen = engine(on)
-  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
-  await $.turn.complete(main(usage({ write: 182_000 }, HAIKU)))
+test(
+  'the confirm price step gate holds the prompt once and names both rates',
+  { options: { priceStepGate: 'confirm' } },
+  async ($, on) => {
+    const clock = mock.clock(on)
+    await clock.set(T0)
+    const seen = engine(on)
+    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+    await $.turn.complete(main(usage({ write: 182_000 }, HAIKU)))
 
-  const held = await $.prompt.submit({ text: 'refactor the store' } as never)
-  expect(held).toMatchObject({
-    drop: expect.stringMatching(/^Held: Context is 182K tokens, past the 100K step.*\$0\.50 per MTok input.*up from \$0\.10.*Submit again to send it\.$/),
-  })
-  await clock.advance(1)
-  await clock.settle()
-  expect(seen.fills).toEqual(['refactor the store'])
-  expect(await $.prompt.submit({ text: 'refactor the store' } as never)).toMatchObject({ text: 'refactor the store' })
-})
+    const held = await $.prompt.submit({ text: 'refactor the store' } as never)
+    expect(held).toMatchObject({
+      drop: expect.stringMatching(
+        /^Held: Context is 182K tokens, past the 100K step.*\$0\.50 per MTok input.*up from \$0\.10.*Submit again to send it\.$/,
+      ),
+    })
+    await clock.advance(1)
+    await clock.settle()
+    expect(seen.fills).toEqual(['refactor the store'])
+    expect(await $.prompt.submit({ text: 'refactor the store' } as never)).toMatchObject({ text: 'refactor the store' })
+  },
+)
 
-test('a model without a price step is never gated on prompt size', { options: { priceStepGate: 'confirm' } }, async ($, on) => {
-  const clock = mock.clock(on)
-  await clock.set(T0)
-  const seen = engine(on, { context: 900_000 })
-  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
-  await $.turn.complete(main(usage({ write: 900_000 })))
-  expect(await $.prompt.submit({ text: 'hi' } as never)).toMatchObject({ text: 'hi' })
-  expect(seen.toasts).toEqual([])
-})
+test(
+  'a model without a price step is never gated on prompt size',
+  { options: { priceStepGate: 'confirm' } },
+  async ($, on) => {
+    const clock = mock.clock(on)
+    await clock.set(T0)
+    const seen = engine(on, { context: 900_000 })
+    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+    await $.turn.complete(main(usage({ write: 900_000 })))
+    expect(await $.prompt.submit({ text: 'hi' } as never)).toMatchObject({ text: 'hi' })
+    expect(seen.toasts).toEqual([])
+  },
+)
 
-test('two confirm gates hold one prompt once, with both reasons', { options: { cacheGate: 'confirm', priceStepGate: 'confirm' } }, async ($, on) => {
-  const clock = mock.clock(on)
-  await clock.set(T0)
-  engine(on)
-  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
-  await $.turn.complete(main(usage({ write: 182_000 }, HAIKU)))
-  await clock.advance(10 * MIN)
-  await clock.settle()
+test(
+  'two confirm gates hold one prompt once, with both reasons',
+  { options: { cacheGate: 'confirm', priceStepGate: 'confirm' } },
+  async ($, on) => {
+    const clock = mock.clock(on)
+    await clock.set(T0)
+    engine(on)
+    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+    await $.turn.complete(main(usage({ write: 182_000 }, HAIKU)))
+    await clock.advance(10 * MIN)
+    await clock.settle()
 
-  const held = await $.prompt.submit({ text: 'again' } as never)
-  expect(held).toMatchObject({ drop: expect.stringMatching(/Cache expired 5m ago.*past the 100K step/) })
-  expect(await $.prompt.submit({ text: 'again' } as never)).toMatchObject({ text: 'again' })
-})
+    const held = await $.prompt.submit({ text: 'again' } as never)
+    expect(held).toMatchObject({ drop: expect.stringMatching(/Cache expired 5m ago.*past the 100K step/) })
+    expect(await $.prompt.submit({ text: 'again' } as never)).toMatchObject({ text: 'again' })
+  },
+)
 
-test('the budget gate counts the main session and its subagents', { options: { sessionBudgetUsd: 1, budgetGate: 'confirm' } }, async ($, on) => {
-  const clock = mock.clock(on)
-  await clock.set(T0)
-  const seen = engine(on)
-  await $.session.start({ cwd: ROOT, surface: 'desktop', isInteractive: true })
-  await $.turn.complete(main(usage({ write: 182_000 })))
-  expect(await $.prompt.submit({ text: 'under budget' } as never)).toMatchObject({ text: 'under budget' })
+test(
+  'the budget gate counts the main session and its subagents',
+  { options: { sessionBudgetUsd: 1, budgetGate: 'confirm' } },
+  async ($, on) => {
+    const clock = mock.clock(on)
+    await clock.set(T0)
+    const seen = engine(on)
+    await $.session.start({ cwd: ROOT, surface: 'desktop', isInteractive: true })
+    await $.turn.complete(main(usage({ write: 182_000 })))
+    expect(await $.prompt.submit({ text: 'under budget' } as never)).toMatchObject({ text: 'under budget' })
 
-  await $.turn.complete(
-    ({ answer: 'done', durationMs: 1000, isAborted: false, turnId: 's', reason: 'answer', agentId: 'ag9', usage: usage({ input: 100_000, output: 10_000 }) }) as never,
-  )
+    await $.turn.complete({
+      answer: 'done',
+      durationMs: 1000,
+      isAborted: false,
+      turnId: 's',
+      reason: 'answer',
+      agentId: 'ag9',
+      usage: usage({ input: 100_000, output: 10_000 }),
+    } as never)
 
-  const held = await $.prompt.submit({ text: 'over budget' } as never)
-  expect(held).toMatchObject({ drop: 'Held: Session spend $1.52 has passed your $1.00 budget (main $0.92, subagents $0.60). Submit again to send it.' })
-  expect(await $.prompt.submit({ text: 'over budget' } as never)).toMatchObject({ text: 'over budget' })
+    const held = await $.prompt.submit({ text: 'over budget' } as never)
+    expect(held).toMatchObject({
+      drop: 'Held: Session spend $1.52 has passed your $1.00 budget (main $0.92, subagents $0.60). Submit again to send it.',
+    })
+    expect(await $.prompt.submit({ text: 'over budget' } as never)).toMatchObject({ text: 'over budget' })
 
-  await $.command.run(RUN_MAGUS)
-  const ui = await $.ui.mount(PANE)
-  expect(await ui.find({ type: 'Text', text: /Session spend \$1\.52\/\$1\.00 \(main \$0\.92, subagents \$0\.60\)/ })).toBeDefined()
-})
+    await $.command.run(RUN_MAGUS)
+    const ui = await $.ui.mount(PANE)
+    expect(
+      await ui.find({ type: 'Text', text: /Session spend \$1\.52\/\$1\.00 \(main \$0\.92, subagents \$0\.60\)/ }),
+    ).toBeDefined()
+  },
+)
 
 test('no budget set means the budget gate never speaks', { options: { budgetGate: 'confirm' } }, async ($, on) => {
   const clock = mock.clock(on)
@@ -413,19 +502,67 @@ test('Copy fix confirms a copy that reached the clipboard', async ($, on) => {
 })
 
 const HOLDERS = [
-  { project: '.', target: 'go-test', pid: 21068, memory_mb: 4470, slots: 4, dir: '/r/magus-integrate', command: './magus run go-test .', since: new Date(T0 - 3 * MIN).toISOString(), owner: 'fix-cache' },
-  { project: '.', target: 'go-test', pid: 23224, memory_mb: 4470, slots: 4, dir: '/r/magus-stop', command: './magus run go-test .', since: new Date(T0 - MIN).toISOString(), owner: 'unleased' },
+  {
+    project: '.',
+    target: 'go-test',
+    pid: 21068,
+    memory_mb: 4470,
+    slots: 4,
+    dir: '/r/magus-integrate',
+    command: './magus run go-test .',
+    since: new Date(T0 - 3 * MIN).toISOString(),
+    owner: 'fix-cache',
+  },
+  {
+    project: '.',
+    target: 'go-test',
+    pid: 23224,
+    memory_mb: 4470,
+    slots: 4,
+    dir: '/r/magus-stop',
+    command: './magus run go-test .',
+    since: new Date(T0 - MIN).toISOString(),
+    owner: 'unleased',
+  },
 ]
 const budgetStatusOf = (capacity: Record<string, unknown>) =>
-  JSON.stringify({ broker: { pid: 51051, capacity: { budget_mb: 24064, held_mb: 8940, budget_slots: 10, held_slots: 8, holders: HOLDERS, ...capacity } } })
+  JSON.stringify({
+    server: { pid: 1 },
+    pool: { socket: `unix://${SOCK}`, version: 'v1' },
+    mcp_endpoint: { state: 'serving' },
+    broker: {
+      pid: 51051,
+      capacity: { budget_mb: 24064, held_mb: 8940, budget_slots: 10, held_slots: 8, holders: HOLDERS, ...capacity },
+    },
+  })
 const BUDGET_STATUS = budgetStatusOf({
-  waiting: [{ pid: 30001, project: '.', target: 'lint', slots: 2, dir: '/r/magus-a', owner: 'job-b', since: new Date(T0).toISOString() }],
+  waiting: [
+    {
+      pid: 30001,
+      project: '.',
+      target: 'lint',
+      slots: 2,
+      dir: '/r/magus-a',
+      owner: 'job-b',
+      since: new Date(T0).toISOString(),
+    },
+  ],
   refused: [
-    { at: new Date(T0).toISOString(), pid: 30100, project: '.', target: 'ci', slots: 4, dir: '/r/magus-b', owner: 'spawned by root', fits: true, holders: [HOLDERS[0]] },
+    {
+      at: new Date(T0).toISOString(),
+      pid: 30100,
+      project: '.',
+      target: 'ci',
+      slots: 4,
+      dir: '/r/magus-b',
+      owner: 'spawned by root',
+      fits: true,
+      holders: [HOLDERS[0]],
+    },
   ],
 })
 const answerStatusWith = (stdout: string) => (argv: readonly string[]) =>
-  argv.join(' ') === `${ROOT}/magus -s status -o json` ? { exitCode: 0, stdout } : undefined
+  argv.join(' ') === `${ROOT}/magus -s server status -o json` ? { exitCode: 0, stdout } : undefined
 
 test('the build budget fills the Budget tab and stays out of the status line and the band', async ($, on) => {
   const clock = mock.clock(on)
@@ -445,9 +582,16 @@ test('the build budget fills the Budget tab and stays out of the status line and
   await clock.advance(1)
   await clock.settle()
   expect(await pane.find({ type: 'Text', text: /^8\/10 slots, 8\.7\/23\.5 GiB held/ })).toBeDefined()
-  expect(await pane.find({ type: 'Text', text: /pid 23224 · go-test · unleased · 4 slots · 4\.4 GiB · held 1m · in magus-stop/ })).toBeDefined()
+  expect(
+    await pane.find({
+      type: 'Text',
+      text: /pid 23224 · go-test · unleased · 4 slots · 4\.4 GiB · held 1m · in magus-stop/,
+    }),
+  ).toBeDefined()
   expect(await pane.find({ type: 'Text', text: 'Waiting for a seat' })).toBeDefined()
-  expect(await pane.find({ type: 'Text', text: /pid 30001 · lint · job-b · 2 slots · waiting 0s · in magus-a/ })).toBeDefined()
+  expect(
+    await pane.find({ type: 'Text', text: /pid 30001 · lint · job-b · 2 slots · waiting 0s · in magus-a/ }),
+  ).toBeDefined()
   expect(await pane.find({ type: 'Text', text: 'Refused on this machine' })).toBeDefined()
   expect(await pane.find({ type: 'Text', text: /held by fix-cache pid 21068/ })).toBeDefined()
 })
@@ -487,7 +631,7 @@ async function boot($: Engine, on: On, opts: Opts = {}): Promise<Seen> {
   return seen
 }
 
-const OVER_OPUS ='Subagent will run on claude-opus-5-5 at $4.00 per MTok input, over your $2.00 cap.'
+const OVER_OPUS = 'Subagent will run on claude-opus-5-5 at $4.00 per MTok input, over your $2.00 cap.'
 
 describe('the spawn gate', () => {
   test('is off by default: an expensive spawn goes ahead with no toast', async ($, on) => {
@@ -501,54 +645,88 @@ describe('the spawn gate', () => {
     expect(await $.agent.spawn(spawnOf({ model: 'haiku' }))).toMatchObject({ agentId: 'ag1' })
     expect(await $.agent.spawn(spawnOf({ model: 'sonnet' }))).toMatchObject({ agentId: 'ag1' })
     expect(await $.agent.spawn(spawnOf({ model: 'claude-fable-5-1' }))).toMatchObject({
-      deny: expect.stringMatching(/^Subagent will run on claude-fable-5-1 at \$10\.00 per MTok input, over your \$2\.00 cap\./),
+      deny: expect.stringMatching(
+        /^Subagent will run on claude-fable-5-1 at \$10\.00 per MTok input, over your \$2\.00 cap\./,
+      ),
     })
   })
 
-  test('deny refuses the spawn before it starts and names the cheaper route', { options: { spawnGate: 'deny' } }, async ($, on) => {
-    const seen = await boot($, on)
-    const r = await $.agent.spawn(spawnOf())
-    expect(r).toMatchObject({ deny: expect.stringMatching(/^Subagent will run on claude-opus-5-5.*magus-scout.*model: haiku\.$/) })
-    expect(r.agentId).toBeUndefined()
-    expect(seen.toasts).toEqual([])
-    expect(await $.agent.spawn(spawnOf({ model: 'haiku' }))).toMatchObject({ agentId: 'ag1' })
-  })
+  test(
+    'deny refuses the spawn before it starts and names the cheaper route',
+    { options: { spawnGate: 'deny' } },
+    async ($, on) => {
+      const seen = await boot($, on)
+      const r = await $.agent.spawn(spawnOf())
+      expect(r).toMatchObject({
+        deny: expect.stringMatching(/^Subagent will run on claude-opus-5-5.*magus-scout.*model: haiku\.$/),
+      })
+      expect(r.agentId).toBeUndefined()
+      expect(seen.toasts).toEqual([])
+      expect(await $.agent.spawn(spawnOf({ model: 'haiku' }))).toMatchObject({ agentId: 'ag1' })
+    },
+  )
 
-  test('a definition that sets a model decides; one that sets none inherits; the env fills in for it', { options: { spawnGate: 'deny' } }, async ($, on) => {
-    await boot($, on, {
-      files: {
-        [`${ROOT}/.claude/agents/magus-scout.md`]: '---\nname: "magus-scout"\nmodel: haiku\n---\nbody',
-        [`${ROOT}/.claude/agents/planner.md`]: '---\nname: planner\n---\nbody',
-        '/home/me/.claude/agents/archivist.md': '---\nmodel: claude-fable-5-1\n---\n',
-      },
-      env: { HOME: '/home/me' },
-    })
-    expect(await $.agent.spawn(spawnOf({ subagentType: 'magus-scout' }))).toMatchObject({ agentId: 'ag1' })
-    expect(await $.agent.spawn(spawnOf({ subagentType: 'planner' }))).toMatchObject({ deny: expect.stringContaining(OVER_OPUS) })
-    expect(await $.agent.spawn(spawnOf({ subagentType: 'archivist' }))).toMatchObject({ deny: expect.stringMatching(/claude-fable-5-1 at \$10\.00/) })
-  })
+  test(
+    'a definition that sets a model decides; one that sets none inherits; the env fills in for it',
+    { options: { spawnGate: 'deny' } },
+    async ($, on) => {
+      await boot($, on, {
+        files: {
+          [`${ROOT}/.claude/agents/magus-scout.md`]: '---\nname: "magus-scout"\nmodel: haiku\n---\nbody',
+          [`${ROOT}/.claude/agents/planner.md`]: '---\nname: planner\n---\nbody',
+          '/home/me/.claude/agents/archivist.md': '---\nmodel: claude-fable-5-1\n---\n',
+        },
+        env: { HOME: '/home/me' },
+      })
+      expect(await $.agent.spawn(spawnOf({ subagentType: 'magus-scout' }))).toMatchObject({ agentId: 'ag1' })
+      expect(await $.agent.spawn(spawnOf({ subagentType: 'planner' }))).toMatchObject({
+        deny: expect.stringContaining(OVER_OPUS),
+      })
+      expect(await $.agent.spawn(spawnOf({ subagentType: 'archivist' }))).toMatchObject({
+        deny: expect.stringMatching(/claude-fable-5-1 at \$10\.00/),
+      })
+    },
+  )
 
-  test('CLAUDE_CODE_SUBAGENT_MODEL replaces the parent for a definition with no model', { options: { spawnGate: 'deny' } }, async ($, on) => {
-    await boot($, on, { env: { CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' } })
-    expect(await $.agent.spawn(spawnOf())).toMatchObject({ agentId: 'ag1' })
-  })
+  test(
+    'CLAUDE_CODE_SUBAGENT_MODEL replaces the parent for a definition with no model',
+    { options: { spawnGate: 'deny' } },
+    async ($, on) => {
+      await boot($, on, { env: { CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' } })
+      expect(await $.agent.spawn(spawnOf())).toMatchObject({ agentId: 'ag1' })
+    },
+  )
 
-  test('a fork runs on the parent model, so a model on the call does not save it', { options: { spawnGate: 'deny' } }, async ($, on) => {
-    await boot($, on)
-    expect(await $.agent.spawn(spawnOf({ fork: true, model: 'haiku' }))).toMatchObject({ deny: expect.stringContaining(OVER_OPUS) })
-  })
+  test(
+    'a fork runs on the parent model, so a model on the call does not save it',
+    { options: { spawnGate: 'deny' } },
+    async ($, on) => {
+      await boot($, on)
+      expect(await $.agent.spawn(spawnOf({ fork: true, model: 'haiku' }))).toMatchObject({
+        deny: expect.stringContaining(OVER_OPUS),
+      })
+    },
+  )
 
-  test('a definition the mod cannot read is judged by the model the engine resolved, after the fact', { options: { spawnGate: 'deny' } }, async ($, on) => {
-    const seen = await boot($, on, { spawnedModel: 'claude-opus-5-5' })
-    await $.agent.spawn(spawnOf({ subagentType: 'Explore' }))
-    expect(seen.toasts).toEqual([OVER_OPUS])
-  })
+  test(
+    'a definition the mod cannot read is judged by the model the engine resolved, after the fact',
+    { options: { spawnGate: 'deny' } },
+    async ($, on) => {
+      const seen = await boot($, on, { spawnedModel: 'claude-opus-5-5' })
+      await $.agent.spawn(spawnOf({ subagentType: 'Explore' }))
+      expect(seen.toasts).toEqual([OVER_OPUS])
+    },
+  )
 
-  test('an unreadable definition that resolves cheap says nothing', { options: { spawnGate: 'deny' } }, async ($, on) => {
-    const seen = await boot($, on)
-    await $.agent.spawn(spawnOf({ subagentType: 'Explore' }))
-    expect(seen.toasts).toEqual([])
-  })
+  test(
+    'an unreadable definition that resolves cheap says nothing',
+    { options: { spawnGate: 'deny' } },
+    async ($, on) => {
+      const seen = await boot($, on)
+      await $.agent.spawn(spawnOf({ subagentType: 'Explore' }))
+      expect(seen.toasts).toEqual([])
+    },
+  )
 
   test('a zero cap is off', { options: { spawnMaxInputUsdPerMTok: 0, spawnGate: 'deny' } }, async ($, on) => {
     const seen = await boot($, on)

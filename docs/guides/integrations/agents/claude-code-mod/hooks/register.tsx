@@ -1,4 +1,4 @@
-import type { AgentSpawnInput, EngineInterface, ProcessRunResult, Register, RenderSurface, TurnUsage } from 'claude-code'
+import type { AgentSpawnInput, EngineInterface, ProcessRunResult, Register, TurnUsage } from 'claude-code'
 
 import type { AgentRow, CacheState, Filter, Report, Spend, Tab, Ttl } from '../types'
 import {
@@ -14,6 +14,7 @@ import {
   socketFromStatus,
 } from './api'
 import { magusBin } from './bin'
+import { copyFix } from './ui'
 import { capacityText, holderText, parseBudget, refusalText, runsMagus, waiterText } from './budget'
 import {
   budgetNotice,
@@ -96,7 +97,12 @@ const usageOf = (u: TurnUsage): Usage => ({
 
 // ---------- health ----------
 
-async function run($: EngineInterface, argv: string[], cwd: string, timeoutMs = 10_000): Promise<ProcessRunResult | null> {
+async function run(
+  $: EngineInterface,
+  argv: string[],
+  cwd: string,
+  timeoutMs = 10_000,
+): Promise<ProcessRunResult | null> {
   try {
     return await $.process.run(argv, { cwd, timeoutMs })
   } catch {
@@ -205,7 +211,7 @@ async function readBudget($: EngineInterface): Promise<void> {
 async function readBudgetOnce($: EngineInterface): Promise<void> {
   const root = await $.session.root()
   if (!(await $.fs.exists(`${root}/magusfile.buzz`))) return
-  const r = await run($, [await magusBin($, root), '-s', 'server', 'status', '-o', 'json'], root)
+  const r = await run($, [(await magusBin($, root)).path, '-s', 'server', 'status', '-o', 'json'], root)
   if (r === null) {
     await $.state.set(BUDGET_ERROR, 'magus server status -o json did not run')
     await refreshStatus($)
@@ -213,7 +219,10 @@ async function readBudgetOnce($: EngineInterface): Promise<void> {
   }
   const parsed = parseBudget(r.stdout)
   if (parsed.error) {
-    await $.state.set(BUDGET_ERROR, r.exitCode !== 0 ? `${parsed.error.message} (exit ${r.exitCode})` : parsed.error.message)
+    await $.state.set(
+      BUDGET_ERROR,
+      r.exitCode !== 0 ? `${parsed.error.message} (exit ${r.exitCode})` : parsed.error.message,
+    )
   } else {
     await $.state.set(BUDGET, { budget: parsed.value, readAt: await $.clock.now() })
     await $.state.set(BUDGET_ERROR, null)
@@ -295,7 +304,9 @@ async function recordAgentUsage($: EngineInterface, agentId: string, usage: Turn
   const tokens = row.tokens + totalTokens(u)
   await $.state.set(
     AGENTS,
-    rows.map(r => (r.agentId === agentId ? { ...r, tokens, usd: usd === null || r.usd === null ? null : r.usd + usd } : r)),
+    rows.map(r =>
+      r.agentId === agentId ? { ...r, tokens, usd: usd === null || r.usd === null ? null : r.usd + usd } : r,
+    ),
   )
 }
 
@@ -339,7 +350,7 @@ async function definitionModel($: EngineInterface, type: string): Promise<string
 async function discover($: EngineInterface): Promise<string | null> {
   const root = await $.session.root()
   try {
-    const r = await $.process.run([await magusBin($, root), '-s', 'server', 'status', '-o', 'json'], {
+    const r = await $.process.run([(await magusBin($, root)).path, '-s', 'server', 'status', '-o', 'json'], {
       cwd: root,
       timeoutMs: 15_000,
     })
@@ -355,7 +366,9 @@ async function discover($: EngineInterface): Promise<string | null> {
 async function rpc($: EngineInterface, procedure: string, body: unknown): Promise<Result<string>> {
   socket ??= await discover($)
   if (socket === null) {
-    return fail(new MagusError({ code: '', message: 'No magus server is running. Start one with `magus server start`.' }))
+    return fail(
+      new MagusError({ code: '', message: 'No magus server is running. Start one with `magus server start`.' }),
+    )
   }
   const answered = await fromPromise(
     $.http.fetch(`http://magus${procedure}`, {
@@ -375,12 +388,6 @@ async function rpc($: EngineInterface, procedure: string, body: unknown): Promis
     return fail(new MagusError({ code: '', message: connectError(r.status, r.text) }))
   }
   return ok(r.text)
-}
-
-// A toast says what happened: the copy can fail on a remote client or with no clipboard.
-async function copyFix($: EngineInterface, text: string, surface: RenderSurface | undefined): Promise<void> {
-  const copied = await $.ui.copy({ text, surface })
-  $.ui.toast(copied.isCopied ? `Copied: ${text}` : `Not copied (${copied.reason}). Run: ${text}`)
 }
 
 async function isPaneOpen($: EngineInterface): Promise<boolean> {
@@ -479,7 +486,10 @@ export const register: Register = (on, options) => {
   registerRefLinks(on)
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'magus', description: "Show magus's jobs, runs, this session's agents and the build budget" })
+    await $.command.register({
+      name: 'magus',
+      description: "Show magus's jobs, runs, this session's agents and the build budget",
+    })
     await loadRates($)
     scheduleHealth($)
     $.clock.every(HEALTH_POLL_MS, () => void checkHealth($))
@@ -589,7 +599,7 @@ export const register: Register = (on, options) => {
     // An unreadable definition leaves the model unknown until the engine resolves it. The
     // spawn has started by then, so even deny mode can only say so.
     if (isGated && model === null && !r.deny) {
-      const late = overSpawnCap(rates, pricedModel(rates, r.model, e.parentModel) ?? '', cap)
+      const late = overSpawnCap(rates, pricedModel(rates, r.model ?? '', e.parentModel) ?? '', cap)
       if (late) $.ui.toast(spawnWarning(late, cap))
     }
     if (!r.deny && r.agentId) {
@@ -635,11 +645,7 @@ export const register: Register = (on, options) => {
               </Text>
             </Box>
             {i.fix !== undefined ? (
-              <Button
-                key={`copy-${i.id}`}
-                label="Copy fix"
-                onPress={p => void copyFix($, i.fix ?? '', p.surface)}
-              />
+              <Button key={`copy-${i.id}`} label="Copy fix" onPress={p => void copyFix($, i.fix ?? '', p.surface)} />
             ) : null}
           </Box>
         ))}
@@ -678,7 +684,12 @@ export const register: Register = (on, options) => {
         ) : null}
       </Box>
     )
-    const errorLine = error !== null ? <Text color="red" wrap="wrap">{error}</Text> : null
+    const errorLine =
+      error !== null ? (
+        <Text color="red" wrap="wrap">
+          {error}
+        </Text>
+      ) : null
 
     if (tab === 'agents') {
       const { value: agents = [] } = await $.state.get(AGENTS)
@@ -696,11 +707,7 @@ export const register: Register = (on, options) => {
           ) : null}
           {agents.map(a => {
             return (
-              <Box
-                key={`agent-${a.agentId}`}
-                gap={1}
-                backgroundColor={tintFor(roleOf(a.description), shade)}
-              >
+              <Box key={`agent-${a.agentId}`} gap={1} backgroundColor={tintFor(roleOf(a.description), shade)}>
                 <Text color={a.finishedAt === 0 ? 'cyan' : a.outcome === 'answer' ? 'green' : 'yellow'}>
                   {a.finishedAt === 0 ? '●' : a.outcome === 'answer' ? '✓' : '◐'}
                 </Text>
@@ -739,9 +746,15 @@ export const register: Register = (on, options) => {
       return (
         <Box flexDirection="column">
           {header}
-          {budgetError !== null ? <Text color="red" wrap="wrap">{budgetError}</Text> : null}
+          {budgetError !== null ? (
+            <Text color="red" wrap="wrap">
+              {budgetError}
+            </Text>
+          ) : null}
           {read === null && budgetError === null ? <Text dimColor>reading…</Text> : null}
-          {read !== null && b === null ? <Text dimColor>No broker running: nothing holds the build budget.</Text> : null}
+          {read !== null && b === null ? (
+            <Text dimColor>No broker running: nothing holds the build budget.</Text>
+          ) : null}
           {b !== null ? (
             <Text key="capacity" bold={b.heldSlots >= b.budgetSlots} wrap="truncate-end">
               {capacityText(b)} held · {age((now - (read?.readAt ?? now)) / 1000)} ago
@@ -769,7 +782,9 @@ export const register: Register = (on, options) => {
           {(b?.refused ?? []).map(r => (
             <Text key={`refused-${r.at}-${r.pid}-${r.target}`} color="red" wrap="truncate-end">
               ✖ {refusalText(r, now)}
-              {r.holders.length ? ` · held by ${r.holders.map(h => [h.owner, `pid ${h.pid}`].filter(Boolean).join(' ')).join(', ')}` : ''}
+              {r.holders.length
+                ? ` · held by ${r.holders.map(h => [h.owner, `pid ${h.pid}`].filter(Boolean).join(' ')).join(', ')}`
+                : ''}
             </Text>
           ))}
         </Box>
@@ -795,7 +810,12 @@ export const register: Register = (on, options) => {
                     ? `${age((now - r.startedAt) / 1000)} so far`
                     : `${age((r.endedAt - r.startedAt) / 1000)} · ${age((now - r.endedAt) / 1000)} ago`}
                 </Text>
-                <Button key={`copy-${r.id}`} plain label={r.id} onPress={p => void $.ui.copy({ text: r.id, surface: p.surface })} />
+                <Button
+                  key={`copy-${r.id}`}
+                  plain
+                  label={r.id}
+                  onPress={p => void $.ui.copy({ text: r.id, surface: p.surface })}
+                />
               </Box>
             )
           })}
@@ -856,7 +876,9 @@ export const register: Register = (on, options) => {
           </Text>
         </Box>
         {errorLine}
-        {listing && lines.length === 0 ? <Text dimColor>{filter === 'live' ? 'No live jobs.' : 'No jobs match.'}</Text> : null}
+        {listing && lines.length === 0 ? (
+          <Text dimColor>{filter === 'live' ? 'No live jobs.' : 'No jobs match.'}</Text>
+        ) : null}
         {shown.map(({ row, depth, isContext }) => {
           const f = flags(row.id)
           return (
@@ -879,21 +901,31 @@ export const register: Register = (on, options) => {
             </Box>
           )
         })}
-        {lines.length > shown.length ? <Text dimColor>… {lines.length - shown.length} more; narrow the filter</Text> : null}
+        {lines.length > shown.length ? (
+          <Text dimColor>… {lines.length - shown.length} more; narrow the filter</Text>
+        ) : null}
         {picked ? (
           <Box flexDirection="column" marginTop={1} borderStyle="round" paddingX={1}>
             <Text bold wrap="truncate-end">
               {GLYPH[picked.state]} {picked.id}
             </Text>
             {picked.criteria ? <Text wrap="wrap">{picked.criteria}</Text> : null}
-            {picked.check ? <Text dimColor wrap="truncate-end">check: {picked.check}</Text> : null}
+            {picked.check ? (
+              <Text dimColor wrap="truncate-end">
+                check: {picked.check}
+              </Text>
+            ) : null}
             {picked.writePaths.length ? (
               <Text dimColor wrap="truncate-end">
                 writes: {picked.writePaths.slice(0, 6).join(', ')}
                 {picked.writePaths.length > 6 ? ` +${picked.writePaths.length - 6}` : ''}
               </Text>
             ) : null}
-            {picked.goals.length ? <Text dimColor wrap="truncate-end">goals: {picked.goals.join(', ')}</Text> : null}
+            {picked.goals.length ? (
+              <Text dimColor wrap="truncate-end">
+                goals: {picked.goals.join(', ')}
+              </Text>
+            ) : null}
             {picked.proof || picked.baseVerdict ? (
               <Text dimColor>
                 {[picked.proof && `write proof: ${picked.proof}`, picked.baseVerdict && `base: ${picked.baseVerdict}`]
@@ -901,10 +933,19 @@ export const register: Register = (on, options) => {
                   .join(' · ')}
               </Text>
             ) : null}
-            {picked.endReason ? <Text color="yellow" wrap="wrap">ended: {picked.endReason}</Text> : null}
+            {picked.endReason ? (
+              <Text color="yellow" wrap="wrap">
+                ended: {picked.endReason}
+              </Text>
+            ) : null}
             <Box gap={1}>
               {watching === picked.id ? (
-                <Button key="unwatch" label="Stop watching" hotkey="w" onPress={() => void $.state.set(WATCHING, null)} />
+                <Button
+                  key="unwatch"
+                  label="Stop watching"
+                  hotkey="w"
+                  onPress={() => void $.state.set(WATCHING, null)}
+                />
               ) : (
                 <Button
                   key="watch"

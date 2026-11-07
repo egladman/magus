@@ -42,14 +42,21 @@ const JOB_STATES: readonly JobState[] = ['declared', 'running', 'exited', 'pass'
 function jobState(v: unknown): Result<JobState> {
   const word = str(v) || 'declared'
   const state = JOB_STATES.find(s => s === word)
-  return state ? ok(state) : fail(new MagusError({ code: '', message: `ListJobs answered an unknown job state ${word}` }))
+  return state
+    ? ok(state)
+    : fail(new MagusError({ code: '', message: `ListJobs answered an unknown job state ${word}` }))
 }
 
 // answer parses one Connect response body, which is a JSON object for every procedure here.
 function answer(text: string, procedure: string): Result<Record<string, unknown>> {
   const doc = parseJSON(text)
-  if (doc.error) return fail(new MagusError({ code: '', message: `${procedure} answered a body that is not JSON: ${doc.error.message}` }))
-  return isRecord(doc.value) ? ok(doc.value) : fail(new MagusError({ code: '', message: `${procedure} answered JSON that is not an object` }))
+  if (doc.error)
+    return fail(
+      new MagusError({ code: '', message: `${procedure} answered a body that is not JSON: ${doc.error.message}` }),
+    )
+  return isRecord(doc.value)
+    ? ok(doc.value)
+    : fail(new MagusError({ code: '', message: `${procedure} answered JSON that is not an object` }))
 }
 
 export function parseJobs(text: string, fetchedAt: number): Result<Listing> {

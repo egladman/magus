@@ -1,36 +1,61 @@
-import type { EngineInterface, Register, RenderElement, RenderInput, RenderSurface } from 'claude-code'
+import type { EngineInterface, RenderElement } from 'claude-code'
 
+import type { RefView } from '../types'
 import { magusBin } from './bin'
-import { refArgs, refCommand, refLinks, refOf, refsIn, stripAnsi } from './refs'
-
-type On = Parameters<Register>[0]
+import { runsMagus } from './budget'
+import { refArgs, refCommand, refLinks, refOf, refsIn, refStrings, stripAnsi } from './refs'
+import { fromPromise, isRecord } from './result'
+import { copyFix } from './ui'
+import type { On, RowInput } from './ui'
 
 const REF_PANE = 'magus-ref'
 const REF = { plugin: 'magus', key: 'ref' } as const
 const READ_TIMEOUT_MS = 30_000
+const MAX_DRAWN = 50_000
+
+// settle writes the view unless a newer press has taken the pane for another
+// ref, so a slow read never overwrites it.
+async function settle($: EngineInterface, view: RefView): Promise<void> {
+  const current = await fromPromise($.state.get(REF))
+  if (current.error) return $.ui.toast(current.error.message)
+  if (current.value.value?.ref !== view.ref) return
+  const written = await fromPromise($.state.set(REF, view))
+  if (written.error) $.ui.toast(written.error.message)
+}
 
 async function show($: EngineInterface, ref: string): Promise<void> {
-  const command = refCommand(ref)
-  await $.state.set(REF, { ref, command, text: '', error: null, isLoading: true })
-  await $.ui.open({ id: REF_PANE, title: ref, focus: true })
-  const root = await $.session.root()
-  const argv = [await magusBin($, root), ...refArgs(ref)]
-  try {
-    const r = await $.process.run(argv, { cwd: root, timeoutMs: READ_TIMEOUT_MS })
-    const error = r.exitCode === 0 ? null : stripAnsi(r.stderr).trim() || `exit ${r.exitCode}`
-    await $.state.set(REF, { ref, command, text: stripAnsi(r.stdout), error, isLoading: false })
-  } catch (e) {
-    const error = e instanceof Error ? e.message : String(e)
-    await $.state.set(REF, { ref, command, text: '', error, isLoading: false })
+  const loading: RefView = {
+    ref,
+    command: refCommand(ref),
+    note: null,
+    text: '',
+    omitted: 0,
+    error: null,
+    isLoading: true,
   }
-}
+  const opened = await fromPromise(
+    $.state.set(REF, loading).then(() => $.ui.open({ id: REF_PANE, title: ref, focus: true })),
+  )
+  if (opened.error) return $.ui.toast(opened.error.message)
+  const done = { ...loading, isLoading: false }
 
-async function copy($: EngineInterface, text: string, surface: RenderSurface | undefined): Promise<void> {
-  const copied = await $.ui.copy({ text, surface })
-  $.ui.toast(copied.isCopied ? `Copied: ${text}` : `Not copied (${copied.reason}). Run: ${text}`)
-}
+  const root = await fromPromise($.session.root())
+  if (root.error) return settle($, { ...done, error: root.error.message })
+  const bin = await fromPromise(magusBin($, root.value))
+  if (bin.error) return settle($, { ...done, error: bin.error.message })
 
-type RowInput = RenderInput<'AssistantMessage'> | RenderInput<'ToolUse'>
+  const argv = [bin.value.path, ...refArgs(ref)]
+  const command = refCommand(ref, bin.value.isFallback ? 'magus' : './magus')
+  const note = bin.value.isFallback ? `no ./magus at ${root.value}; ran magus from PATH` : null
+  const ran = await fromPromise($.process.run(argv, { cwd: root.value, timeoutMs: READ_TIMEOUT_MS }))
+  if (ran.error) return settle($, { ...done, command, note, error: ran.error.message })
+
+  const r = ran.value
+  const stdout = stripAnsi(r.stdout)
+  const error = r.exitCode === 0 ? null : stripAnsi(r.stderr).trim() || `exit ${r.exitCode}`
+  const text = stdout.slice(0, MAX_DRAWN)
+  return settle($, { ...done, command, note, text, omitted: stdout.length - text.length, error })
+}
 
 function withLinks($: EngineInterface, e: RowInput, own: RenderElement, refs: string[]): RenderElement {
   const { Box, Markdown } = $.ui.resolve(e)
@@ -50,11 +75,8 @@ function withLinks($: EngineInterface, e: RowInput, own: RenderElement, refs: st
   )
 }
 
-function isMagusCall(tool: string, input: unknown): boolean {
-  if (tool.startsWith('mcp__magus__')) return true
-  if (tool !== 'Bash' || typeof input !== 'object' || input === null || !('command' in input)) return false
-  return typeof input.command === 'string' && /(^|[\s;&|(])(\.\/)?magus\s/.test(input.command)
-}
+const commandOf = (input: unknown): string =>
+  isRecord(input) && typeof input.command === 'string' ? input.command : ''
 
 // registerRefLinks makes every output ref, guard detail and invocation id a
 // reply or a magus call prints a link. A press opens its content in a pane.
@@ -67,8 +89,10 @@ export function registerRefLinks(on: On): void {
 
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
     const own = await next(e)
-    if (e.props.isRunning || !isMagusCall(e.props.tool, e.props.input)) return own
-    const refs = refsIn(JSON.stringify(e.props.output ?? ''))
+    const { tool, input, output, isRunning } = e.props
+    const isMagus = tool.startsWith('mcp__magus__') || (tool === 'Bash' && runsMagus(commandOf(input)))
+    if (isRunning || !isMagus) return own
+    const refs = refsIn(refStrings(output).join('\n'))
     return refs.length === 0 ? own : withLinks($, e, own, refs)
   })
 
@@ -82,11 +106,13 @@ export function registerRefLinks(on: On): void {
           <Box flexShrink={1}>
             <Text wrap="truncate-end">{view.command}</Text>
           </Box>
-          <Button key="copy-command" label="Copy command" onPress={p => void copy($, view.command, p.surface)} />
+          <Button key="copy-command" label="Copy command" onPress={p => void copyFix($, view.command, p.surface)} />
         </Box>
+        {view.note !== null ? <Text dimColor>{view.note}</Text> : null}
         {view.isLoading ? <Text dimColor>reading {view.ref}…</Text> : null}
         {view.error !== null ? <Text color="red">✖ {view.error}</Text> : null}
         {view.text !== '' ? <Code source={view.text} language="text" /> : null}
+        {view.omitted > 0 ? <Text dimColor>{view.omitted} more characters not shown.</Text> : null}
       </Box>
     )
   })
