@@ -13,6 +13,7 @@ import {
   roleOf,
   socketFromStatus,
 } from './api'
+import { magusBin } from './bin'
 import { capacityText, holderText, parseBudget, refusalText, runsMagus, waiterText } from './budget'
 import {
   budgetNotice,
@@ -38,6 +39,7 @@ import { assess, inBand, statusText } from './health'
 import type { BinaryInfo, Probe, ServerInfo } from './health'
 import { registerJsonlTables } from './jsonl-view'
 import { DEFAULT_RATES } from './rates'
+import { registerRefLinks } from './refs-view'
 import { MagusError, fail, fromPromise, ok, type Result } from './result'
 import { readSettings } from './settings'
 import type { Gate, Settings } from './settings'
@@ -332,10 +334,6 @@ async function definitionModel($: EngineInterface, type: string): Promise<string
 
 // ---------- jobs pane ----------
 
-async function magusBin($: EngineInterface, root: string): Promise<string> {
-  return (await $.fs.exists(`${root}/magus`)) ? `${root}/magus` : 'magus'
-}
-
 // Asks magus where its server listens, the one CLI call the pane makes: the address
 // honors server.address, which no client should resolve on its own.
 async function discover($: EngineInterface): Promise<string | null> {
@@ -478,6 +476,7 @@ async function openJob($: EngineInterface, candidates: string[]): Promise<void> 
 export const register: Register = (on, options) => {
   settings = readSettings(options)
   registerJsonlTables(on)
+  registerRefLinks(on)
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'magus', description: "Show magus's jobs, runs, this session's agents and the build budget" })
