@@ -148,6 +148,16 @@ fun reviewBudget(text: str) > result\Result::<int> {
     return result\ok::<int>(budget!);
 }
 
+fun toleranceFrom(value: str) > result\Result::<str> {
+    if (mandate\tiers.indexOf(value) == null) {
+        return result\fail::<str>("mandate issue: --tolerance takes one of {mandate\tiers.join(", ")}, and got {shown(value)}");
+    }
+    if (mandate\rank(value) > mandate\rank(mandate\ceiling)) {
+        return result\fail::<str>("mandate issue: --tolerance {value} is above this repository's ceiling, {mandate\ceiling} (hack/policy/mandate.buzz)");
+    }
+    return result\ok::<str>(value);
+}
+
 fun issue(root: str, args: [str]) > result\Result::<bool> {
     try {
         final parsed = flags\parse(args, switches: [<str>], valued: ["--until", "--tolerance", "--rows", "--tokens", "--review-budget"]);
@@ -162,13 +172,11 @@ fun issue(root: str, args: [str]) > result\Result::<bool> {
         if (minutes == null) {
             return result\fail::<bool>("mandate issue: --until takes the local end time as HH:MM, and got {shown(clock)}\n{USAGE}");
         }
-        final tolerance = parsed.values["--tolerance"] ?? "";
-        if (mandate\tiers.indexOf(tolerance) == null) {
-            return result\fail::<bool>("mandate issue: --tolerance takes one of {mandate\tiers.join(", ")}, and got {shown(tolerance)}");
+        final checked = toleranceFrom(parsed.values["--tolerance"] ?? "");
+        if (checked.error != null) {
+            return result\Result::<bool>{ error = checked.error };
         }
-        if (mandate\rank(tolerance) > mandate\rank(mandate\ceiling)) {
-            return result\fail::<bool>("mandate issue: --tolerance {tolerance} is above this repository's ceiling, {mandate\ceiling} (hack/policy/mandate.buzz)");
-        }
+        final tolerance = checked.value!;
         final budget = reviewBudget(parsed.values["--review-budget"] ?? "{branchstack\reviewBudget}");
         if (budget.error != null) {
             return result\Result::<bool>{ error = budget.error };
