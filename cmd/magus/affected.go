@@ -359,7 +359,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// and CI runs through this path.
 	captureHandlers = withInvocationJournal(ctx, captureHandlers, m.Root(), "affected", args)
 	failed := &failedResults{}
-	captureHandlers = append(captureHandlers, failed)
+	statuses := newResultStatuses(target)
+	captureHandlers = append(captureHandlers, failed, statuses)
 	invCtx, endInvocation := m.BeginInvocation(ctx, magus.Command{
 		Arguments: append([]string{"affected"}, args...), Cwd: cwd, Trigger: trigger,
 	}, version, captureHandlers...)
@@ -377,7 +378,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// Read the instant the run returns: after this line a cancellation means the signal
 	// arrived once the verdict was already decided, and dropping it would throw away a
 	// gate that genuinely ran.
-	gate.record(invCtx, err, invCtx.Err() != nil)
+	gate.record(invCtx, err, invCtx.Err() != nil, failed.list())
 	if err != nil && opts.Format == outputText {
 		printFailedResults(os.Stdout, failed.list())
 	}
@@ -398,7 +399,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	sink.RecordValues(target, readReturns(target))
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:
-		return emitRunResult(ctx, m, opts, target, charms, targets, readReturns(target),
+		return emitRunResult(ctx, m, opts, target, charms, targets, readReturns(target), statuses,
 			slices.Sorted(maps.Keys(undeclaredOnly)))
 	case outputName:
 		return emitProjectNames(m, targets)
@@ -526,6 +527,12 @@ type planOutput struct {
 	MaxParallel int            `json:"max_parallel"`
 	Source      string         `json:"source"`
 	Matrix      []planShard    `json:"matrix"`
+	// StageZero runs before every shard of Matrix and computes, once, the
+	// prerequisites two or more of them share. Absent when none is shared.
+	// It stays out of Outputs, so a plan without it renders as before;
+	// `magus run --stdin --shard <id>` runs one of its shards. Count and
+	// MaxParallel describe Matrix alone.
+	StageZero []planShard `json:"stage_zero,omitempty"`
 	// Affected is the whole closure the matrix was cut from, sorted, and UnboundedBy says
 	// why it is not a proof when it is not. Together they are the answer a merge queue's
 	// affected hook expects, so `affected <target> --plan --stdin` feeds one as it stands.
@@ -535,6 +542,9 @@ type planOutput struct {
 	// Unmeasured are the units and prerequisites the shards were
 	// weighed by the workspace fallback for, having no history.
 	Unmeasured []types.Unit `json:"unmeasured,omitempty"`
+	// Unreached are the affected projects' units no changed path reaches
+	// through declared reads. Each replays from the cache, so no shard runs it.
+	Unreached []types.Unit `json:"unreached,omitempty"`
 	// Inherit is present only when the plan inherited a green run's verdict;
 	// see planInherit. The matrix beside it is then empty on purpose.
 	Inherit *planInherit `json:"inherit,omitempty"`
@@ -706,8 +716,12 @@ func planSummaryMarkdown(out planOutput) string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "## Affected CI plan\n\n%d shard(s), max parallel %d\n\n", out.Count, out.MaxParallel)
+	if len(out.StageZero) > 0 {
+		fmt.Fprintf(&b, "%d stage-zero shard(s) first compute the prerequisites the shards share; each shard replays them.\n\n",
+			len(out.StageZero))
+	}
 	b.WriteString("| Shard | Projects |\n| --- | --- |\n")
-	for _, s := range out.Matrix {
+	for _, s := range slices.Concat(out.StageZero, out.Matrix) {
 		// The workspace root is "." on the wire and nowhere else; a reader scanning
 		// the table for the project that failed is looking for its name.
 		projects := s.Projects
@@ -872,6 +886,8 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	}
 
 	if len(only) > 0 {
+		// Stage zero stays whole: the shards kept may still share its
+		// prerequisites, and a stage-zero shard nobody needs only costs a runner.
 		if plan.Shards, err = filterShards(ctx, m, plan.Shards, only); err != nil {
 			return err
 		}
@@ -890,7 +906,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	var inherit *internalci.InheritFinding
 	if target == types.TargetCI && !pf.Stdin && len(only) == 0 {
 		if inherit = planInheritance(ctx, m); inherit != nil {
-			plan.Shards = nil
+			plan.StageZero, plan.Shards = nil, nil
 			plan.MaxParallel = 0
 			slog.InfoContext(ctx, "ci plan inherits a green run's verdict",
 				slog.String("run", inherit.Run), slog.String("commit", inherit.Commit))
@@ -903,7 +919,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	if target == types.TargetCI && !pf.Stdin && len(only) == 0 && inherit == nil {
 		if rep, err := m.AssessChange(ctx, target, magus.AssessOptions{Base: pf.Base}); err == nil && rep.Tier == types.RiskTrivial {
 			trivial = newPlanRisk(rep)
-			plan.Shards = nil
+			plan.StageZero, plan.Shards = nil, nil
 			plan.MaxParallel = 0
 			slog.InfoContext(ctx, "ci plan sized trivial", slog.String("base", rep.Base))
 		}
@@ -936,6 +952,11 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 			"%d of the plan's targets have no recorded duration, so the plan weighed them with the workspace fallback: %s",
 			len(plan.Unmeasured), cappedUnits(plan.Unmeasured)), attr.Notice("note"))
 	}
+	if len(plan.Unreached) > 0 {
+		slog.With(attr.Component("magus")).InfoContext(ctx, fmt.Sprintf(
+			"%d of the affected projects' targets read no changed path, so the plan leaves them to the cache: %s",
+			len(plan.Unreached), cappedUnits(plan.Unreached)), attr.Notice("note"))
+	}
 
 	if len(plan.Fallbacks) > 0 {
 		slog.With(attr.Component("magus")).WarnContext(ctx, "the plan fell back: "+strings.Join(plan.Fallbacks, "; "))
@@ -953,16 +974,13 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		Affected:    plan.Affected,
 		UnboundedBy: plan.UnboundedBy,
 		Unmeasured:  plan.Unmeasured,
+		Unreached:   plan.Unreached,
 	}
 	for i, s := range plan.Shards {
-		out.Matrix[i] = planShard{
-			Shard:    s.ID,
-			Projects: strings.Join(s.ProjectPaths, " "),
-			JobName:  shardName(s.ProjectPaths),
-			Digest:   s.Digest,
-			Duties:   joinDuties(s.Duties),
-			Units:    s.Units,
-		}
+		out.Matrix[i] = newPlanShard(s)
+	}
+	for _, s := range plan.StageZero {
+		out.StageZero = append(out.StageZero, newPlanShard(s))
 	}
 	if inherit != nil {
 		pi := &planInherit{Run: inherit.Run, Commit: inherit.Commit}
@@ -973,7 +991,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	}
 	out.Risk = trivial
 	if pf.Detail {
-		out.Detail, err = planDetail(ctx, m, target, plan.Shards)
+		out.Detail, err = planDetail(ctx, m, target, slices.Concat(plan.StageZero, plan.Shards))
 		if err != nil {
 			return err
 		}
@@ -986,6 +1004,18 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	return emitPlan(opts, out)
+}
+
+// newPlanShard is s as the plan document lists it.
+func newPlanShard(s types.Shard) planShard {
+	return planShard{
+		Shard:    s.ID,
+		Projects: strings.Join(s.ProjectPaths, " "),
+		JobName:  shardName(s.ProjectPaths),
+		Digest:   s.Digest,
+		Duties:   joinDuties(s.Duties),
+		Units:    s.Units,
+	}
 }
 
 // emitPlan renders a --plan through the shared renderer like every other structured

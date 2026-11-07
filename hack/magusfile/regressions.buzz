@@ -1,0 +1,431 @@
+// Attributes a red check on main to the merged pull request that broke it,
+// and names the open pull request that fixes it. Pure logic only: the
+// board's gh readers feed it, since a magusfile module may not call gh.
+//
+// Main is linear and CI runs once per commit, so a check's runs read newest
+// first as a red streak over the run that last passed.
+namespace regressions;
+
+import "serialize";
+import "std";
+import "time";
+
+import "assert";
+
+final STAMP = "2006-01-02T15:04:05Z07:00";
+final WINDOW = 20;
+final MERGED_LIMIT = 100;
+final SHARD_PREFIX = "magus shard ";
+
+// checkKey is the name a check is matched with across runs. A shard's number
+// depends on how the affected set split, so `magus shard 0: docs` on a pull
+// request is `magus shard 2: docs` on main. The project names it.
+export fun checkKey(name: str) > str {
+    final colon = name.indexOf(": ");
+    if (!name.startsWith(SHARD_PREFIX) or colon == null) {
+        return name;
+    }
+    return SHARD_PREFIX + name.sub(colon!);
+}
+
+// CiRun is one completed CI run on main. keys maps a check key to "pass",
+// "fail" or "none", which is a run that judged nothing.
+export object CiRun {
+    id: str = "",
+    sha: str,
+    keys: {str: str} = {<str: str>},
+}
+
+// Attribution is where a check's red streak began. state is introduced,
+// ambiguous (shas are the candidates), unknown (the streak passes the
+// window; shas is its oldest run) or clear.
+export object Attribution {
+    key: str,
+    state: str,
+    shas: [str] = [<str>],
+    prs: [int] = [<int>],
+    // The newest candidate's merge time, "" without a pull request.
+    mergedAt: str = "",
+}
+
+export object Merged {
+    number: int,
+    sha: str,
+    mergedAt: str,
+}
+
+// CheckRun is a check on an open pull request: whether its newest run
+// passed, and when that run started.
+export object CheckRun {
+    key: str,
+    passed: bool,
+    startedAt: str = "",
+}
+
+export object Probe {
+    pr: int,
+    checks: [CheckRun] = [<CheckRun>],
+}
+
+// Regression is one check red on main. fixers means something only when
+// attribution.mergedAt is set; without it the fixer is unknown, not absent.
+export object Regression {
+    attribution: Attribution,
+    fixers: [int] = [<int>],
+}
+
+fun jobState(conclusions: [str]) > str {
+    var passed = conclusions.len() > 0;
+    foreach (c in conclusions) {
+        if (c == "failure") {
+            return "fail";
+        }
+        if (c != "success") {
+            passed = false;
+        }
+    }
+    if (passed) {
+        return "pass";
+    }
+    return "none";
+}
+
+// parseJobs reads `gh run view --json jobs` into one state per check key.
+// Jobs that share a key fold: any failure fails it.
+export fun parseJobs(body: str, keyOf: fun (name: str) > str) > {str: str} !> any {
+    final grouped = mut {<str: [str]>};
+    foreach (job in serialize\jsonDecode(body).q("jobs").listValue()) {
+        final key = keyOf(job.q("name").stringValue());
+        final seen = mut [<str>];
+        foreach (c in grouped[key] ?? [<str>]) {
+            seen.append(c);
+        }
+        seen.append(job.q("conclusion").stringValue());
+        grouped[key] = seen;
+    }
+    final acc = mut {<str: str>};
+    foreach (key, conclusions in grouped) {
+        acc[key] = jobState(conclusions);
+    }
+    return acc;
+}
+
+// parseMainRuns reads `gh run list --json databaseId,headSha,status`,
+// newest first. A run still going judged nothing yet and is left out.
+export fun parseMainRuns(body: str) > [CiRun] !> any {
+    final acc = mut [<CiRun>];
+    foreach (run in serialize\jsonDecode(body).listValue()) {
+        if (run.q("status").stringValue() == "completed") {
+            acc.append(CiRun{ id = "{run.q("databaseId").integerValue()}", sha = run.q("headSha").stringValue() });
+        }
+    }
+    return acc;
+}
+
+fun stateOf(run: CiRun, key: str) > str {
+    return run.keys[key] ?? "none";
+}
+
+// firstRed finds where key's red streak began in runs, newest first. Runs
+// at the head that judged nothing are skipped.
+export fun firstRed(runs: [CiRun], key: str) > Attribution {
+    var head = 0;
+    while (head < runs.len() and stateOf(runs[head], key: key) == "none") {
+        head = head + 1;
+    }
+    if (head == runs.len()) {
+        return Attribution{ key = key, state = "unknown" };
+    }
+    if (stateOf(runs[head], key: key) == "pass") {
+        return Attribution{ key = key, state = "clear" };
+    }
+    var oldest = head;
+    var gap = -1;
+    var i = head + 1;
+    while (i < runs.len()) {
+        final s = stateOf(runs[i], key: key);
+        if (s == "pass") {
+            break;
+        }
+        if (s == "none" and gap < 0) {
+            gap = i;
+        }
+        if (s == "fail") {
+            oldest = i;
+        }
+        i = i + 1;
+    }
+    if (i == runs.len()) {
+        return Attribution{ key = key, state = "unknown", shas = [runs[runs.len() - 1].sha] };
+    }
+    if (gap < 0) {
+        return Attribution{ key = key, state = "introduced", shas = [runs[oldest].sha] };
+    }
+    // The run that judged nothing may have passed, which would make the
+    // failure above it the introducer, so candidates start there.
+    final shas = mut [<str>];
+    var j = gap - 1;
+    while (j < i) {
+        shas.append(runs[j].sha);
+        j = j + 1;
+    }
+    return Attribution{ key = key, state = "ambiguous", shas = shas };
+}
+
+// parseMerged reads `gh pr list --state merged --json number,mergeCommit`.
+export fun parseMerged(body: str) > [Merged] !> any {
+    final acc = mut [<Merged>];
+    foreach (pr in serialize\jsonDecode(body).listValue()) {
+        final sha = pr.q("mergeCommit").q("oid").stringValue();
+        if (sha != "") {
+            acc.append(Merged{ number = std\toInt(pr.q("number").integerValue()), sha = sha, mergedAt = pr.q("mergedAt").stringValue() });
+        }
+    }
+    return acc;
+}
+
+// attribute adds the pull requests behind a's commits and when the newest
+// merged. A commit with no merged pull request, a direct push, leaves
+// mergedAt empty.
+export fun attribute(a: Attribution, merged: [Merged]) > Attribution !> any {
+    if (a.shas.len() == 0 or a.state == "unknown") {
+        return a;
+    }
+    final prs = mut [<int>];
+    var newest = "";
+    var all = true;
+    foreach (sha in a.shas) {
+        var found = false;
+        foreach (m in merged) {
+            if (m.sha != sha) {
+                continue;
+            }
+            found = true;
+            prs.append(m.number);
+            if (newest == "" or time\parse(STAMP, value: m.mergedAt) > time\parse(STAMP, value: newest)) {
+                newest = m.mergedAt;
+            }
+        }
+        if (!found) {
+            all = false;
+        }
+    }
+    var at = "";
+    if (all) {
+        at = newest;
+    }
+    return Attribution{ key = a.key, state = a.state, shas = a.shas, prs = prs, mergedAt = at };
+}
+
+// fixers are the open pull requests whose check passed in a run that
+// started after the introducer merged. Their runs test the merge ref, so an
+// earlier run never saw the regression. With no merge time it returns none;
+// the caller reads mergedAt.
+export fun fixers(open: [Probe], attribution: Attribution) > [int] !> any {
+    final acc = mut [<int>];
+    if (attribution.mergedAt == "") {
+        return acc;
+    }
+    final merged = time\parse(STAMP, value: attribution.mergedAt);
+    foreach (p in open) {
+        var seen = 0;
+        var proven = true;
+        foreach (c in p.checks) {
+            if (c.key != attribution.key) {
+                continue;
+            }
+            seen = seen + 1;
+            if (!c.passed or c.startedAt == "" or time\parse(STAMP, value: c.startedAt) <= merged) {
+                proven = false;
+            }
+        }
+        if (seen > 0 and proven) {
+            acc.append(p.pr);
+        }
+    }
+    return acc;
+}
+
+fun short(sha: str) > str {
+    if (sha.len() > 12) {
+        return sha.sub(0, len: 12);
+    }
+    return sha;
+}
+
+fun who(a: Attribution) > [str] {
+    final acc = mut [<str>];
+    var i = 0;
+    foreach (sha in a.shas) {
+        if (a.prs.len() == a.shas.len()) {
+            acc.append("#{a.prs[i]}");
+        } else {
+            acc.append(short(sha));
+        }
+        i = i + 1;
+    }
+    return acc;
+}
+
+// since words who broke the check: "#640", "one of #640, #641" or
+// "before <sha>".
+export fun since(a: Attribution) > str {
+    final names = who(a);
+    if (a.state == "introduced") {
+        return names[0];
+    }
+    if (a.state == "ambiguous") {
+        return "one of " + names.join(", ");
+    }
+    if (a.state == "unknown" and names.len() > 0) {
+        return "before " + names[0];
+    }
+    return "unknown";
+}
+
+// describe is the regression as "#640 (check)", for a pull request's evidence.
+export fun describe(r: Regression) > str {
+    return "{since(r.attribution)} ({r.attribution.key})";
+}
+
+// line is the dashboard's sentence for one regression.
+export fun line(r: Regression) > str {
+    var first = "fixer unknown";
+    if (r.attribution.mergedAt != "") {
+        first = "no open pull request fixes it";
+        if (r.fixers.len() > 0) {
+            final names = mut [<str>];
+            foreach (n in r.fixers) {
+                names.append("#{n}");
+            }
+            first = "merge " + names.join(", ") + " first";
+        }
+    }
+    return "red since {since(r.attribution)} ({r.attribution.key}); {first}";
+}
+
+// redKeys are the checks that failed in run.
+export fun redKeys(run: CiRun) > [str] {
+    final acc = mut [<str>];
+    foreach (k, s in run.keys) {
+        if (s == "fail") {
+            acc.append(k);
+        }
+    }
+    return acc;
+}
+
+// unsettled reports whether a check in red has no passing run among the
+// first upto+1 of runs. The reader stops fetching jobs once none is left.
+export fun unsettled(runs: [CiRun], upto: int, red: [str]) > bool {
+    foreach (k in red) {
+        var passed = false;
+        var i = 0;
+        while (i <= upto and i < runs.len()) {
+            if (stateOf(runs[i], key: k) == "pass") {
+                passed = true;
+            }
+            i = i + 1;
+        }
+        if (!passed) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// attributeAll attributes each check in red and finds its fixers.
+export fun attributeAll(runs: [CiRun], red: [str], merged: [Merged], probes: [Probe]) > [Regression] !> any {
+    final acc = mut [<Regression>];
+    foreach (k in red) {
+        final a = attribute(firstRed(runs, key: k), merged: merged);
+        acc.append(Regression{ attribution = a, fixers = fixers(probes, attribution: a) });
+    }
+    return acc;
+}
+
+fun run(sha: str, state: str) > CiRun {
+    return CiRun{ sha = sha, keys = {"t": state} };
+}
+
+test "a red streak names its oldest failure, the run before the pass" {
+    final a = firstRed([run("c4", state: "fail"), run("c3", state: "fail"), run("c2", state: "fail"), run("c1", state: "pass")], key: "t");
+    assert\equal(a.state, want: "introduced", message: "state");
+    assert\equal(a.shas, want: ["c2"], message: "the oldest failure");
+}
+
+test "a green newest run is clear, and a cancelled head run is passed over" {
+    assert\equal(firstRed([run("c2", state: "pass"), run("c1", state: "fail")], key: "t").state, want: "clear", message: "green");
+    final a = firstRed([run("c3", state: "none"), run("c2", state: "fail"), run("c1", state: "pass")], key: "t");
+    assert\equal(a.shas, want: ["c2"], message: "the cancelled head judged nothing");
+}
+
+test "a run that judged nothing inside the streak makes the introducer one of several" {
+    final a = firstRed([run("c5", state: "fail"), run("c4", state: "none"), run("c3", state: "fail"),
+        run("c2", state: "none"), run("c1", state: "pass")], key: "t");
+    assert\equal(a.state, want: "ambiguous", message: "state");
+    assert\equal(a.shas, want: ["c5", "c4", "c3", "c2"], message: "from the failure above the first gap to the run before the pass");
+}
+
+test "a streak that reaches the window's end is unknown, red since before its oldest run" {
+    final a = firstRed([run("c3", state: "fail"), run("c2", state: "fail")], key: "t");
+    assert\equal(a.state, want: "unknown", message: "state");
+    assert\equal(a.shas, want: ["c2"], message: "the oldest run read");
+    assert\equal(since(a), want: "before c2", message: "worded");
+    assert\equal(firstRed([<CiRun>], key: "t").state, want: "unknown", message: "no runs read is unknown, not clear");
+}
+
+test "a merged pull request is found by its commit, and the newest merge time is kept" {
+    final merged = parseMerged(`[{"number": 7, "mergedAt": "2026-11-06T10:00:00Z", "mergeCommit": {"oid": "c2"}},
+        {"number": 8, "mergedAt": "2026-11-06T11:00:00Z", "mergeCommit": {"oid": "c3"}},
+        {"number": 9, "mergedAt": "2026-11-06T12:00:00Z", "mergeCommit": null}]`);
+    final one = attribute(Attribution{ key = "t", state = "introduced", shas = ["c2"] }, merged: merged);
+    assert\equal(one.prs, want: [7], message: "pr");
+    assert\equal(since(one), want: "#7", message: "worded");
+    final two = attribute(Attribution{ key = "t", state = "ambiguous", shas = ["c3", "c2"] }, merged: merged);
+    assert\equal(two.mergedAt, want: "2026-11-06T11:00:00Z", message: "newest candidate");
+    assert\equal(since(two), want: "one of #8, #7", message: "worded");
+    final direct = attribute(Attribution{ key = "t", state = "introduced", shas = ["cx"] }, merged: merged);
+    assert\equal(direct.mergedAt, want: "", message: "a direct push has no merge time");
+    assert\equal(since(direct), want: "cx", message: "the sha");
+}
+
+test "a fixer passed after the introducer merged; a run that started before the merge is rejected" {
+    final a = Attribution{ key = "t", state = "introduced", shas = ["c2"], prs = [7], mergedAt = "2026-11-06T10:00:00Z" };
+    final late = Probe{ pr = 20, checks = [CheckRun{ key = "t", passed = true, startedAt = "2026-11-06T10:30:00Z" }] };
+    final early = Probe{ pr = 21, checks = [CheckRun{ key = "t", passed = true, startedAt = "2026-11-06T09:30:00Z" }] };
+    final red = Probe{ pr = 22, checks = [CheckRun{ key = "t", passed = false, startedAt = "2026-11-06T10:30:00Z" }] };
+    final other = Probe{ pr = 23, checks = [CheckRun{ key = "u", passed = true, startedAt = "2026-11-06T10:30:00Z" }] };
+    final unstamped = Probe{ pr = 24, checks = [CheckRun{ key = "t", passed = true }] };
+    assert\equal(fixers([late, early, red, other, unstamped], attribution: a), want: [20], message: "only the run after the merge");
+    assert\equal(fixers([late], attribution: Attribution{ key = "t", state = "unknown" }).len(), want: 0, message: "no merge time, no answer");
+}
+
+test "the board's sentence says unknown, none or the pull request to merge first" {
+    final a = Attribution{ key = "t", state = "introduced", shas = ["c2"], prs = [7], mergedAt = "2026-11-06T10:00:00Z" };
+    assert\equal(line(Regression{ attribution = a, fixers = [20] }), want: "red since #7 (t); merge #20 first", message: "fixer");
+    assert\equal(line(Regression{ attribution = a }), want: "red since #7 (t); no open pull request fixes it", message: "none");
+    assert\equal(line(Regression{ attribution = Attribution{ key = "t", state = "unknown", shas = ["c2"] } }),
+        want: "red since before c2 (t); fixer unknown", message: "unknown");
+}
+
+test "the reader stops once every red check has a passing run, and attributes each" {
+    final runs = [run("c3", state: "fail"), run("c2", state: "fail"), run("c1", state: "pass")];
+    final red = redKeys(runs[0]);
+    assert\equal(red, want: ["t"], message: "red keys");
+    assert\equal(unsettled(runs, upto: 1, red: red), want: true, message: "no pass read yet");
+    assert\equal(unsettled(runs, upto: 2, red: red), want: false, message: "the pass settles it");
+    final merged = parseMerged(`[{"number": 7, "mergedAt": "2026-11-06T10:00:00Z", "mergeCommit": {"oid": "c2"}}]`);
+    final late = Probe{ pr = 20, checks = [CheckRun{ key = "t", passed = true, startedAt = "2026-11-06T10:30:00Z" }] };
+    final all = attributeAll(runs, red: red, merged: merged, probes: [late]);
+    assert\equal(line(all[0]), want: "red since #7 (t); merge #20 first", message: "line");
+}
+
+test "jobs fold by key: a failed shard fails it and a cancelled one judges nothing" {
+    final keyed = parseJobs(`{"jobs": [{"name": "a 0", "conclusion": "success"}, {"name": "a 1", "conclusion": "failure"},
+        {"name": "b", "conclusion": "cancelled"}, {"name": "c", "conclusion": "success"}]}`,
+        keyOf: fun (name: str) > str => name.sub(0, len: 1));
+    assert\equal(keyed["a"], want: "fail", message: "failure");
+    assert\equal(keyed["b"], want: "none", message: "cancelled");
+    assert\equal(keyed["c"], want: "pass", message: "success");
+}

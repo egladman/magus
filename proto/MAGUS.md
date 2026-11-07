@@ -6,10 +6,11 @@ Up: [workspace index](../MAGUS.md)
 
 Query: `magus query project=proto`
 
-| Target           | What it does                                                                          |
-| ---------------- | ------------------------------------------------------------------------------------- |
-| `generate`       | generate runs buf codegen and fails if a committed generated tree drifted.            |
-| `format`         | format rewrites the .proto files with buf format, after generate refreshes the trees. |
-| `ci`             |                                                                                       |
-| `index-generate` | Renders MAGUS.md, this project's target catalog.                                      |
-| `lint`           | Job lint goals pass written files, including generated Go and config files.           |
+| Target           | What it does                                                                                 |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| `generate`       | generate runs buf codegen and fails if a committed generated tree drifted.                   |
+| `format`         | format rewrites the .proto files with buf format, after generate refreshes the trees.        |
+| `ci`             |                                                                                              |
+| `index-generate` | Renders MAGUS.md, this project's target catalog.                                             |
+| `lint`           | Job lint goals pass written files, including generated Go and config files.                  |
+| `breaking`       | breaking runs buf-breaking against the default branch, less the findings the ledger permits. |

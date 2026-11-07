@@ -65,7 +65,7 @@
 //   host-capture (deny): cat, sed, rg, grep, head or tail of a run log or a task
 //     capture. The compiled rule only advises a filter of those files.
 //   host-terminals (deny): creating or reading a directory named terminals. A host
-//     session folder is not a run; magus status reads the lock.
+//     session folder is not a run; magus server status reads the lock.
 //   host-cursor-rules (deny, write): a .mdc file written under a .cursor/rules directory.
 //     This repository delivers Cursor guidance through hooks and skills.
 //   sealed-read (deny): a line that reads, lists, copies or searches the sealed proofread

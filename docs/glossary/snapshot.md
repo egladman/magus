@@ -19,7 +19,7 @@ of live state.
 ## Example
 
 ```sh
-magus status -o json
+magus server status -o json
 ```
 
 ## Used in

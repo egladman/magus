@@ -21,7 +21,6 @@ export object Advisor {
 // subset in (cmd/magus/diff.go, localAdvisors, which a test holds to this list).
 final reading = [
     Advisor{input = "merge-conflicts", script = "merge-conflict.buzz"},
-    Advisor{input = "target-outputs", script = "target-outputs.buzz"},
     Advisor{input = "doctor", script = "doctor.buzz"},
     Advisor{input = "version-floor", script = "version-floor.buzz"},
     Advisor{input = "trusted-script-moved", script = "trusted-script-moved.buzz"},
@@ -31,6 +30,7 @@ final reading = [
     Advisor{input = "conformance", script = "conformance.buzz"},
     Advisor{input = "missing-target", script = "missing-target.buzz"},
     Advisor{input = "exported-api", script = "exported-api.buzz"},
+    Advisor{input = "change-risk", script = "change-risk.buzz"},
     Advisor{input = "first-contribution", script = "first-contribution.buzz"},
     Advisor{input = "merge-queue", script = "merge-queue.buzz"},
 ];

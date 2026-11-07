@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { age, leaf, treeLines } from '../hooks/tree'
+import { age, leaf, shadeOf, tintFor, treeLines } from '../hooks/tree'
 import type { JobRow } from '../hooks/tree'
 
 const NOW = 1_000_000
@@ -56,4 +56,24 @@ test('leaf drops the parent prefix the indentation already shows', async () => {
   expect(leaf('other', 'api')).toBe('other')
   expect(age(90)).toBe('2m')
   expect(age(3 * 86400)).toBe('3d')
+})
+
+describe('role tints', () => {
+  test('a theme name leads with its shade; auto names none', async () => {
+    expect(shadeOf('light-daltonized')).toBe('light')
+    expect(shadeOf('dark-ansi')).toBe('dark')
+    expect(shadeOf('auto')).toBeNull()
+    expect(shadeOf(null)).toBeNull()
+  })
+
+  test('each role draws its PatternFly step for the shade', async () => {
+    expect(tintFor('orchestrator', 'light')).toBe('#ece6ff')
+    expect(tintFor('integrator', 'dark')).toBe('#003333')
+    expect(tintFor('worker', 'dark')).toBe('#032142')
+  })
+
+  test('no role or no shade leaves the pane background', async () => {
+    expect(tintFor(null, 'dark')).toBeUndefined()
+    expect(tintFor('worker', null)).toBeUndefined()
+  })
 })

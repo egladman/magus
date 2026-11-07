@@ -49,7 +49,50 @@ func missingCommits(ctx context.Context, r workReader, dir, branch, head string)
 			missing++
 		}
 	}
+	if missing > 0 {
+		held, err := heldByNetPatch(ctx, r, lines, dir, branch, head)
+		if err != nil {
+			return 0, err
+		}
+		if held {
+			return 0, nil
+		}
+	}
 	return missing, nil
+}
+
+// heldByNetPatch reports one commit on branch carrying every line head
+// changed since the split, as a squash does. Part of them is not held.
+func heldByNetPatch(ctx context.Context, r workReader, lines *commitLines, dir, branch, head string) (bool, error) {
+	diff, err := r.RangeDiff(ctx, dir, branch, head, nil)
+	if err != nil {
+		return false, err
+	}
+	net := diffLines(diff, head)
+	if len(net) == 0 {
+		return false, nil
+	}
+	paths, err := r.RangeFiles(ctx, dir, branch, head, nil)
+	if err != nil {
+		return false, err
+	}
+	candidates, err := r.RangeCommits(ctx, dir, head, branch, paths)
+	if err != nil {
+		return false, err
+	}
+	for _, c := range candidates {
+		if len(c.Parents) != 1 {
+			continue
+		}
+		theirs, err := lines.of(ctx, c)
+		if err != nil {
+			return false, err
+		}
+		if carriesAll(theirs, net) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // heldByCopy reports a candidate carrying every line c changed. Author and
@@ -119,6 +162,12 @@ func changedLines(ctx context.Context, r workReader, dir string, c types.Commit)
 	if err != nil {
 		return nil, err
 	}
+	return diffLines(diff, c.ID), nil
+}
+
+// diffLines is changedLines over a patch already read. id stands in for a
+// binary's missing blob ids.
+func diffLines(diff, id string) map[string]bool {
 	lines := map[string]bool{}
 	blobs := ""
 	for line := range strings.Lines(diff) {
@@ -129,14 +178,14 @@ func changedLines(ctx context.Context, r workReader, dir string, c types.Commit)
 		case strings.HasPrefix(line, "index "):
 			blobs = line
 		case strings.HasPrefix(line, "Binary"), strings.HasPrefix(line, "GIT binary patch"):
-			lines[cmp.Or(blobs, c.ID)+line] = true
+			lines[cmp.Or(blobs, id)+line] = true
 		case line == "\n", strings.HasPrefix(line, " "), strings.HasPrefix(line, "@@"), strings.HasPrefix(line, "\\"),
 			strings.HasPrefix(line, "similarity index"), strings.HasPrefix(line, "dissimilarity index"):
 		default:
 			lines[line] = true
 		}
 	}
-	return lines, nil
+	return lines
 }
 
 // contentOnBranch reports whether every file head changed since it diverged

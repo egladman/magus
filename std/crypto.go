@@ -344,7 +344,7 @@ func CryptoSignFile(ctx context.Context, alg, path, keyHex string) (string, erro
 	if err := checkRead(ctx, full); err != nil {
 		return "", err
 	}
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "crypto.signFile") {
 		return "", nil
 	}
 	if err := checkWrite(ctx, full+".sig"); err != nil {

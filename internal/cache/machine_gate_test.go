@@ -952,3 +952,34 @@ func (l *lockedLog) String() string {
 	defer l.mu.Unlock()
 	return l.buf.String()
 }
+
+func (s *BudgetWaitSuite) timedWait() (context.Context, *budgetWait) {
+	g := &machineGate{wait: 50 * time.Millisecond, log: s.gate.log}
+	wctx, w := g.newBudgetWait(s.T().Context(), types.MachineClaim{Project: ".", Target: "test"})
+	s.T().Cleanup(w.stop)
+	return wctx, w
+}
+
+var (
+	strangerHolds = types.MachineVerdict{Fits: true, Holders: []types.MachineClaimant{{PID: 7, Project: ".", Target: "lint"}}}
+	ownRunHolds   = types.MachineVerdict{Fits: true, OwnRun: true}
+)
+
+func (s *BudgetWaitSuite) TestAWaitThatTurnsToItsOwnRunNeverExpires() {
+	wctx, w := s.timedWait()
+	w.parked(s.T().Context(), strangerHolds)
+	w.parked(s.T().Context(), ownRunHolds)
+
+	s.Never(w.expired, 300*time.Millisecond, 10*time.Millisecond)
+	s.NoError(wctx.Err())
+}
+
+func (s *BudgetWaitSuite) TestAWaitThatTurnsToStrangersAgainStartsItsBoundAgain() {
+	wctx, w := s.timedWait()
+	w.parked(s.T().Context(), strangerHolds)
+	w.parked(s.T().Context(), ownRunHolds)
+	w.parked(s.T().Context(), strangerHolds)
+
+	s.Eventually(w.expired, 5*time.Second, 10*time.Millisecond)
+	s.Error(wctx.Err())
+}

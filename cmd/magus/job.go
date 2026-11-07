@@ -1189,7 +1189,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "--checkout <dir> makes a new checkout of this repository at dir (a git worktree,")
 			fmt.Fprintln(os.Stderr, "an hg share, a jj workspace) at the job's checkpoint, or at this checkout's")
 			fmt.Fprintf(os.Stderr, "revision when it names none. When this checkout runs its own ./magus, a checkout\n")
-			fmt.Fprintf(os.Stderr, "holding %s builds its own from its own sources\n", job.CheckoutBootstrapScript)
+			fmt.Fprintln(os.Stderr, "holding the hook its magus.yaml declares as checkout.bootstrap builds its own")
+			fmt.Fprintln(os.Stderr, "with that hook, run from this checkout, from its own sources")
 			fmt.Fprintln(os.Stderr, "before the fork lands, and any other gets a copy. The job is taken there and")
 			fmt.Fprintln(os.Stderr, "nowhere else, and once it ends magus removes the checkout if it is clean and")
 			fmt.Fprintln(os.Stderr, "every commit in it is on a branch, bookmark, remote or its base; otherwise it")
@@ -1754,7 +1755,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "With --timeout and a command after --, exec takes no job: it runs the command in")
 			fmt.Fprintln(os.Stderr, "its own process group, owned by your lease (BAGGAGE magus.lease or this checkout's")
 			fmt.Fprintln(os.Stderr, "binding) or by nobody, and stops the whole group once the timeout passes. The")
-			fmt.Fprintln(os.Stderr, "broker records the command with its owner, deadline and slots for `magus status`,")
+			fmt.Fprintln(os.Stderr, "broker records the command with its owner, deadline and slots for `magus server status`,")
 			fmt.Fprintln(os.Stderr, "stops the group if this process dies first, and files one attention row for")
 			fmt.Fprintln(os.Stderr, "each command it stops. The exit status is the command's, or 124 at the deadline.")
 			fmt.Fprintln(os.Stderr, "A magus the command starts runs under those slots and never waits on them.")
@@ -1814,9 +1815,9 @@ const jobExecGrace = 10 * time.Second
 
 // jobExecCommand is `magus job exec --timeout D -- cmd`: it runs cmd as the leader of its
 // own process group, owned by the caller's lease, and stops the whole group at the
-// deadline. The broker is told what runs, so `magus status` shows it by owner and the
-// broker stops the group if this process dies first; this process enforces the deadline
-// itself too, so the bound holds with no broker (broker: off, or none answered).
+// deadline. The broker is told what runs. `magus server status` shows it by
+// owner, and the broker stops the group if this process dies first. This
+// process enforces the deadline too, so it holds with no broker answering.
 //
 // Nothing about it is for agents only: a person bounds a long search the same way.
 func jobExecCommand(ctx context.Context, root string, pos []string, timeout time.Duration, slots int, command []string) error {
@@ -1900,7 +1901,7 @@ func holdWithBroker(ctx context.Context, h broker.Hold) func() {
 	client := processBrokerClient()
 	id, err := client.Hold(hctx, h)
 	if err != nil {
-		slog.WarnContext(ctx, "the broker is not watching this command, so `magus status` will not show it; this process still stops it at its deadline",
+		slog.WarnContext(ctx, "the broker is not watching this command, so `magus server status` will not show it; this process still stops it at its deadline",
 			attr.Error(err))
 		return func() {}
 	}
@@ -2251,11 +2252,18 @@ func provisionCheckout(ctx context.Context, store *job.Store, ws job.Workspace, 
 	return placed != "", bootstrapCheckout(ctx, exe, forker, wt.Root, "--install", job.InstallProjects(forker, declared, ws.Projects))
 }
 
-// bootstrapCheckout builds ./magus in dir, a checkout the fork just made, from dir's own
-// sources: exe runs the forker's copy of [job.CheckoutBootstrapScript] from forker, and the
-// script's progress goes to stderr, since the fork's stdout is its record.
+// bootstrapCheckout builds ./magus in dir, a checkout the fork just made, from
+// dir's own sources. exe runs the forker's copy of its checkout.bootstrap hook
+// from forker. Progress goes to stderr, since the fork's stdout is its record.
 func bootstrapCheckout(ctx context.Context, exe, forker, dir string, flags ...string) error {
-	args := append([]string{"buzz", job.CheckoutBootstrapScript, "--", "--checkout", dir}, flags...)
+	hook, err := job.CheckoutHook(forker)
+	if err != nil {
+		return fmt.Errorf("magus job fork: %w", err)
+	}
+	if hook == "" {
+		return fmt.Errorf("magus job fork: %s holds a hook to build its own ./magus, and %s has %s, so the checkout is removed", dir, forker, job.NoCheckoutHook)
+	}
+	args := append([]string{"buzz", hook, "--", "--checkout", dir}, flags...)
 	cmd := exec.CommandContext(ctx, exe, args...) //nolint:gosec // exe is the running magus binary or its own placed copy
 	var output bytes.Buffer
 	cmd.Dir, cmd.Stdout, cmd.Stderr = forker, progressWriter(ctx), io.MultiWriter(os.Stderr, &output)
@@ -2264,7 +2272,7 @@ func bootstrapCheckout(ctx context.Context, exe, forker, dir string, flags ...st
 			return fmt.Errorf("magus job fork: building ./magus in %s failed, so the checkout is removed: %s: %w", dir, full, err)
 		}
 		return fmt.Errorf("magus job fork: building ./magus in %s from its own sources failed, so the checkout is removed: `%s` from %s says why: %w",
-			dir, job.CheckoutBootstrap(dir), forker, err)
+			dir, job.CheckoutBootstrap(hook, dir), forker, err)
 	}
 	return nil
 }
@@ -2326,6 +2334,9 @@ func printLandingBootstrap(ctx context.Context, out io.Writer, store *job.Store,
 	switch {
 	case err != nil:
 		fmt.Fprintf(out, "landing magus: whether ./magus judges %s's checkpoint could not be told: %s\n", row.ID, err)
+	case bootstrap == job.NoCheckoutHook:
+		fmt.Fprintf(out, "landing magus: ./magus was built before the Go build inputs of %s's checkpoint, so its guard judges another tree, and this workspace has %s to rebuild it\n",
+			row.ID, job.NoCheckoutHook)
 	case bootstrap != "":
 		fmt.Fprintf(out, "landing magus: ./magus was built before the Go build inputs of %s's checkpoint, so its guard judges another tree\n  next: `%s` rebuilds it\n",
 			row.ID, bootstrap)

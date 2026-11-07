@@ -73,9 +73,6 @@ List where an ingested code symbol is defined and referenced. See \fBmagus\-refs
 \fBexplain\fR
 Show one knowledge\-graph node's context: data, edges, and reach. See \fBmagus\-explain\fR(1).
 .TP
-\fBpath\fR
-Connect two knowledge\-graph nodes: the shortest chain of edges between them. See \fBmagus\-path\fR(1).
-.TP
 \fBgraph\fR
 The workspace's graphs as objects: deps, export, stats. See \fBmagus\-graph\fR(1).
 .TP
@@ -97,23 +94,17 @@ Human\-authored notes committed to the repository. See \fBmagus\-notes\fR(1).
 \fBqueue\fR
 Merge approved changes through a speculative, partitioned merge queue. See \fBmagus\-queue\fR(1).
 .TP
+\fBserver\fR
+The background processes: the server (MCP, the console, APIs, jobs) and the broker. See \fBmagus\-server\fR(1).
+.TP
+\fBmcp\fR
+Serve MCP over stdio for the agent host that launched it. See \fBmagus\-mcp\fR(1).
+.TP
 \fBwatch\fR
 Emit changed file paths to stdout. See \fBmagus\-watch\fR(1).
 .TP
 \fBevents\fR
 Stream workspace events as JSONL for an integration to consume. See \fBmagus\-events\fR(1).
-.TP
-\fBserver\fR
-Manage the magus server: MCP, the console, APIs and background jobs. See \fBmagus\-server\fR(1).
-.TP
-\fBbroker\fR
-The per\-user process holding this host's capacity and shared services. See \fBmagus\-broker\fR(1).
-.TP
-\fBmcp\fR
-Serve MCP over stdio for the agent host that launched it. See \fBmagus\-mcp\fR(1).
-.TP
-\fBstatus\fR
-Inspect concurrency pool and configuration. See \fBmagus\-status\fR(1).
 .TP
 \fBbuzz\fR
 Run a Buzz script. See \fBmagus\-buzz\fR(1).
@@ -133,14 +124,8 @@ Validate the workspace. See \fBmagus\-doctor\fR(1).
 \fBconfig\fR
 View or update magus configuration. See \fBmagus\-config\fR(1).
 .TP
-\fBcompletion\fR
-Print a shell completion script. See \fBmagus\-completion\fR(1).
-.TP
-\fBman\fR
-Install the man pages embedded in this binary. See \fBmagus\-man\fR(1).
-.TP
 \fBself\fR
-Manage the magus binary (update, install\-shorthand). See \fBmagus\-self\fR(1).
+Manage the magus binary (update, install\-shorthand, place, completion, man). See \fBmagus\-self\fR(1).
 .TP
 \fBversion\fR
 Print the client and server versions. See \fBmagus\-version\fR(1).
@@ -472,6 +457,9 @@ Env\-only, no magus.yaml equivalent: the proc\-server socket a magus process exp
 \fBMAGUS_PROC_TOKEN\fR
 Env\-only, no magus.yaml equivalent: the secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus
 .TP
+\fBMAGUS_PROC_TREE\fR
+Env\-only, no magus.yaml equivalent: the ids of every bounded process tree a process descends from, inherited by every child so a command's leftovers are found; set by magus, never by hand
+.TP
 \fBMAGUS_SHARD\fR
 CI matrix shard ID (e.g. "0"); equivalent to magus run \-\-shard; set by .github/actions/magus
 .TP
@@ -568,7 +556,6 @@ Content\-addressed build cache in the workspace root. Override with MAGUS_CACHE_
 \fBmagus\-query\fR(1),
 \fBmagus\-refs\fR(1),
 \fBmagus\-explain\fR(1),
-\fBmagus\-path\fR(1),
 \fBmagus\-graph\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-vcs\fR(1),
@@ -576,20 +563,16 @@ Content\-addressed build cache in the workspace root. Override with MAGUS_CACHE_
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-mcp\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
-\fBmagus\-server\fR(1),
-\fBmagus\-broker\fR(1),
-\fBmagus\-mcp\fR(1),
-\fBmagus\-status\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-spell\fR(1),
 \fBmagus\-agent\fR(1),
 \fBmagus\-init\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
-\fBmagus\-completion\fR(1),
-\fBmagus\-man\fR(1),
 \fBmagus\-self\fR(1),
 \fBmagus\-version\fR(1)
 .br

@@ -519,6 +519,13 @@ const ToolNotOnPath DiagnosticCode = "MGS3003"
 // code), so it sits beside it rather than in a family of its own.
 const ToolNotReady DiagnosticCode = "MGS3004"
 
+// CapabilityAbsent reports a code that says this host lacks what a target
+// needs: its tool, or the service the tool talks to. The target could not run
+// here, so its code was never tried.
+func CapabilityAbsent(c DiagnosticCode) bool {
+	return c == ToolNotOnPath || c == ToolNotReady
+}
+
 // ToolTooOld is the fourth question about a tool: it exists, it reports a version,
 // it is usable, and that version is below the declared minimum.
 const ToolTooOld DiagnosticCode = "MGS3005"
@@ -850,6 +857,11 @@ const UnorderedSameStepWrite DiagnosticCode = "MGS4008"
 // key is taken, so every run succeeds and none is cached. A moved input no target
 // declares as an output is a concurrent writer instead, and stays an uncoded notice.
 const SelfInvalidatingKey DiagnosticCode = "MGS4010"
+
+// UndeclaredOutputWritten is a target that wrote a file in its project that no
+// target declares. Without it, a target declaring no outputs is either a check
+// or a generator that forgot to say so, and only the run can tell which.
+const UndeclaredOutputWritten DiagnosticCode = "MGS4011"
 const NearDuplicateServices DiagnosticCode = "MGS5001"
 const ServiceOpDetached DiagnosticCode = "MGS5002"
 const CommandOpNeverExits DiagnosticCode = "MGS5003"
@@ -1158,6 +1170,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	UndeclaredSourceModified,
 	UnorderedSameStepWrite,
 	SelfInvalidatingKey,
+	UndeclaredOutputWritten,
 	NearDuplicateServices,
 	ServiceOpDetached,
 	CommandOpNeverExits,

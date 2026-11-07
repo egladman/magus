@@ -36,7 +36,7 @@ func (o *SubOp) Load() string {
 
 type subOpKey struct{}
 
-// WithSubOp injects op into ctx for display in magus status.
+// WithSubOp injects op into ctx for display in magus server status.
 func WithSubOp(ctx context.Context, op *SubOp) context.Context {
 	return context.WithValue(ctx, subOpKey{}, op)
 }

@@ -16,7 +16,7 @@ Stop the daemon and the broker first so nothing writes while you delete:
 
 ```sh
 magus server stop
-magus broker stop --services
+magus server broker stop --services
 ```
 
 Each exits non-zero when it finds nothing to stop, which is what you get if none is
@@ -42,7 +42,7 @@ command -v magus
 ```
 
 With `XDG_DATA_HOME` set, the man pages go to `$XDG_DATA_HOME/man/man1` instead. That
-is the default `magus man install` resolves, and the one the install script passes
+is the default `magus self man` resolves, and the one the install script passes
 through.
 
 ## State, config, and runtime
@@ -51,7 +51,7 @@ through.
 | ------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `$XDG_STATE_HOME/magus/`  | `~/.local/state/magus/` | `history.jsonl` under `history/` (run history, read by volatility detection, the CI forecaster, and bisect), `pry_history` (REPL history), `x/` (the `magus x` picker, one file per project), `memory/` (per-repository agent memory), `mcp_token` and `tokens.d/` (the operator token, and one file per stored token), `broker.log` and `server.log` |
 | `$XDG_CONFIG_HOME/magus/` | `~/.config/magus/`      | the user-global `magus.yaml`, the tier under a workspace's own (see [Configuration](../../reference/config.md))                                                                                                                                                                                                                                       |
-| `$XDG_RUNTIME_DIR/magus/` | `/tmp/magus-<uid>/`     | `broker-<protocol>.sock`, `server.sock`, and `services/`. Recreated on the next broker or daemon start, and cleared for you at reboot                                                                                                                                                                                                                            |
+| `$XDG_RUNTIME_DIR/magus/` | `/tmp/magus-<uid>/`     | `broker-<protocol>.sock`, `server.sock`, and `services/`. Recreated on the next broker or daemon start, and cleared for you at reboot                                                                                                                                                                                                                 |
 
 State and config are separate on purpose: config is the kind of thing you sync or
 commit to a dotfiles repo, and `mcp_token` must never ride along with it.
@@ -95,12 +95,12 @@ back.
 The lines you added by hand in [Shell setup](shell-setup.md) are still there.
 Depending on which setup steps you followed:
 
-| Path                                    | What                                       |
-| --------------------------------------- | ------------------------------------------ |
-| `~/.bashrc`                             | the `source <(magus completion bash)` line |
-| `~/.zsh/completions/_magus`             | the zsh completion snapshot                |
-| `~/.config/fish/completions/magus.fish` | the fish completions                       |
-| `$PROFILE`                              | the PowerShell completion block            |
+| Path                                    | What                                            |
+| --------------------------------------- | ----------------------------------------------- |
+| `~/.bashrc`                             | the `source <(magus self completion bash)` line |
+| `~/.zsh/completions/_magus`             | the zsh completion snapshot                     |
+| `~/.config/fish/completions/magus.fish` | the fish completions                            |
+| `$PROFILE`                              | the PowerShell completion block                 |
 
 Plus the `export PATH="$HOME/.local/bin:$PATH"` line, if you added it for magus and
 nothing else lives there.
@@ -115,4 +115,4 @@ nothing else lives there.
   (`docker rmi`/`podman rmi`). It installed nothing on the host, though a bind-mounted
   workspace still carries its own `.magus/`.
 - With a manual install, delete the binary at whatever path you moved it to, and the man
-  pages if you ran `magus man install`.
+  pages if you ran `magus self man`.

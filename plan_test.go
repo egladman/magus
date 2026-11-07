@@ -285,6 +285,71 @@ func (s *PlanUnitsSuite) TestEveryShardIsDigestedByItsUnitsDigest() {
 	}
 }
 
+func (s *PlanUnitsSuite) TestAnAnchorThatDoesMoreThanNeedsIsAnErrorNamingIt() {
+	root := writeWorkspace(s.T(), map[string]string{
+		"magusfile.buzz": `import "magus";
+import "fs";
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun ci(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(build);
+    fs\writeFile("out.txt", "x");
+}
+`,
+	})
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	_, err = m.planUnits(context.Background(), []types.Target{{Path: "."}}, "ci", nil, nil)
+	s.ErrorContains(err, "ci in . does more than ctx.needs (fs.writeFile)")
+}
+
+// PlanReachSuite plans a workspace whose targets declare their reads, so a
+// change reaches some units and leaves the rest to the cache.
+type PlanReachSuite struct {
+	suite.Suite
+	m *Magus
+}
+
+func TestPlanReachSuite(t *testing.T) { suite.Run(t, new(PlanReachSuite)) }
+
+func (s *PlanReachSuite) SetupTest() {
+	root := writeWorkspace(s.T(), map[string]string{
+		"magusfile.buzz": `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void !> any { ctx.readsFiles(["*.go"]); }
+export fun docs(ctx: magus\Context, args: [str]) > void !> any { ctx.readsFiles(["docs/*"]); }
+export fun test(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(build); ctx.readsFiles(["*_test.go"]); }
+export fun vet(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(build); ctx.readsFiles(["*_test.go"]); }
+export fun ci(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(docs, test, vet); }
+`,
+		"main.go":   "package main\n",
+		"docs/a.md": "a\n",
+	})
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	s.m = m
+}
+
+func (s *PlanReachSuite) plan(path string) types.ShardPlan {
+	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{path}, MaxShards: -1})
+	s.Require().NoError(err)
+	return plan
+}
+
+func (s *PlanReachSuite) TestAUnitWhoseClosureReadsNoChangedPathIsUnreached() {
+	s.Equal([]types.Unit{{Project: ".", Target: "docs"}}, s.plan("main.go").Unreached)
+}
+
+func (s *PlanReachSuite) TestAPrerequisiteReadingTheChangeReachesItsDependents() {
+	s.Equal([]types.Unit{{Project: ".", Target: "test"}, {Project: ".", Target: "vet"}}, s.plan("docs/a.md").Unreached)
+}
+
+func (s *PlanReachSuite) TestUnitsSharingAReachedPrerequisiteShareAShard() {
+	plan := s.plan("main.go")
+	s.Require().Len(plan.Shards, 1)
+	s.ElementsMatch([]types.Unit{{Project: ".", Target: "test"}, {Project: ".", Target: "vet"}}, plan.Shards[0].Units)
+}
+
 type PlaceDutiesSuite struct{ suite.Suite }
 
 func TestPlaceDutiesSuite(t *testing.T) { suite.Run(t, new(PlaceDutiesSuite)) }
@@ -375,4 +440,115 @@ func Example_runATarget() {
 	// api:build ok, cache hit false
 	// ref names api:build, failed false
 	// api/out/greeting.txt: hello
+}
+
+// planBenchWorkspace is projects whose ci asks for lint and test, both
+// needing build, with every project changed.
+func planBenchWorkspace(b *testing.B, projects int) (*Magus, []string) {
+	files := map[string]string{"magusfile.buzz": ""}
+	var changed []string
+	for p := range projects {
+		dir := fmt.Sprintf("p%03d", p)
+		files[dir+"/magusfile.buzz"] = `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void !> any { ctx.readsFiles(["*.go"]); }
+export fun lint(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(build); }
+export fun test(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(build); }
+export fun ci(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(lint, test); }
+`
+		files[dir+"/main.go"] = "package main\n"
+		changed = append(changed, dir+"/main.go")
+	}
+	m, err := Open(context.Background(), writeWorkspace(b, files), WithSpawnRule(TierCeiling))
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { _ = m.Close() })
+	return m, changed
+}
+
+func BenchmarkPlan(b *testing.B) {
+	for _, projects := range []int{10, 40} {
+		m, changed := planBenchWorkspace(b, projects)
+		b.Run(fmt.Sprintf("projects=%d", projects), func(b *testing.B) {
+			for b.Loop() {
+				if _, err := m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: changed, MaxShards: -1}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+// PlanStageSuite plans a 200s test and a 200s vet whose prerequisites take
+// 10s, from a measured history, so splitting them pays.
+type PlanStageSuite struct {
+	suite.Suite
+	history string
+}
+
+func TestPlanStageSuite(t *testing.T) { suite.Run(t, new(PlanStageSuite)) }
+
+func (s *PlanStageSuite) SetupTest() {
+	s.history = filepath.Join(s.T().TempDir(), "history.json")
+	h := forecast.History{
+		Constants: forecast.Constants{SetupP50Ms: forecast.Millis(1_000)},
+		Projects: map[string]map[string]forecast.Stats{".": {
+			"build": {P75Ms: 10_000, Samples: 50},
+			"gen":   {P75Ms: 10_000, Samples: 50},
+			"test":  {P75Ms: 200_000, Samples: 50},
+			"vet":   {P75Ms: 200_000, Samples: 50},
+		}},
+	}
+	s.Require().NoError(forecast.UpdateHistory(context.Background(), s.history, func(dst *forecast.History) error {
+		*dst = h
+		return nil
+	}))
+}
+
+// stagedMagusfile is a ci whose test needs build and whose vet needs VET_NEEDS.
+const stagedMagusfile = `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void !> any { ctx.readsFiles(["*.go"]); }
+export fun gen(ctx: magus\Context, args: [str]) > void !> any { ctx.readsFiles(["*.go"]); }
+export fun test(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(build); ctx.readsFiles(["*.go"]); }
+export fun vet(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(VET_NEEDS); ctx.readsFiles(["*.go"]); }
+export fun ci(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(test, vet); }
+`
+
+// plan plans ci, with vet needing vetNeeds, after main.go changes.
+func (s *PlanStageSuite) plan(vetNeeds string) types.ShardPlan {
+	root := writeWorkspace(s.T(), map[string]string{
+		"magusfile.buzz": strings.ReplaceAll(stagedMagusfile, "VET_NEEDS", vetNeeds),
+		"main.go":        "package main\n",
+	})
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	plan, err := m.Plan(context.Background(), "ci", PlanOptions{
+		ChangedPaths: []string{"main.go"}, MaxShards: -1, HistoryPath: s.history,
+	})
+	s.Require().NoError(err)
+	return plan
+}
+
+func (s *PlanStageSuite) TestADependencySharedByTwoShardsIsPlannedOnceInStageZero() {
+	plan := s.plan("build")
+	build := []types.Unit{{Project: ".", Target: "build"}}
+	s.Equal([]types.Shard{{
+		ID: "stage-zero-0", Digest: types.UnitsDigest(build), ProjectPaths: []string{"."}, Units: build,
+	}}, plan.StageZero, "duties stay on the last stage")
+	s.Require().Len(plan.Shards, 2)
+	for _, sh := range plan.Shards {
+		s.NotContains(sh.Units, build[0])
+	}
+}
+
+func (s *PlanStageSuite) TestAPlanWithNoSharedWorkHasOneStage() {
+	plan := s.plan("gen")
+	s.Nil(plan.StageZero)
+	test := []types.Unit{{Project: ".", Target: "test"}}
+	vet := []types.Unit{{Project: ".", Target: "vet"}}
+	s.Equal([]types.Shard{
+		{ID: "0", Digest: types.UnitsDigest(test), ProjectPaths: []string{"."}, Units: test, Duties: []types.Duty{types.DutyCacheExport, types.DutyNotesVerify}},
+		{ID: "1", Digest: types.UnitsDigest(vet), ProjectPaths: []string{"."}, Units: vet},
+	}, plan.Shards)
 }

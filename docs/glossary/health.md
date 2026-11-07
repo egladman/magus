@@ -19,7 +19,7 @@ three states, and degraded (the pool reports an error) is the one a probe would 
 ## Example
 
 ```sh
-magus status --probe=readiness
+magus server status --probe=readiness
 ```
 
 ## Used in
@@ -28,7 +28,7 @@ magus status --probe=readiness
 
 In the docs:
 
-- [Health: what magus status reports](../guides/integrations/server.md#health-what-magus-status-reports)
+- [Health: what magus server status reports](../guides/integrations/server.md#health-what-magus-server-status-reports)
 - [One-shot daemon health probe](../guides/tips.md#one-shot-daemon-health-probe)
 - [Health](../reference/api/status/v1alpha1/status.md#health)
 

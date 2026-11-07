@@ -3,8 +3,12 @@
 # however stdin arrives.
 [windows] skip 'no kernel API proves the writer of an anonymous pipe'
 
+# The workspace is ws/, so the probe files sit outside it and are no undeclared write
+# (MGS4011).
+cd ws
+
 exec magus run holdslow . &
-exec bash -c 'for i in $(seq 200); do [ -f ready ] && exit 0; sleep 0.05; done; exit 1'
+exec bash -c 'for i in $(seq 200); do [ -f ../ready ] && exit 0; sleep 0.05; done; exit 1'
 
 # stdin piped from a process that is not magus.
 exec bash -c 'echo x | magus run consume .; [ $? -eq 75 ]'
@@ -21,16 +25,16 @@ exec bash -c '(exec -a magus sleep 2) | magus run consume .; [ $? -eq 75 ]'
 stderr 'locked by another magus process'
 ! stderr 'waiting for pid'
 
-exec touch release
+exec touch ../release
 wait
 
--- plan.json --
+-- ws/plan.json --
 {"matrix": []}
--- magus.yaml --
+-- ws/magus.yaml --
 {}
--- .gitignore --
+-- ws/.gitignore --
 .magus/
--- magusfile.buzz --
+-- ws/magusfile.buzz --
 import "magus";
 import "io";
 import "proc";
@@ -46,7 +50,7 @@ magus\project({
 // holdslow holds the project until a release file appears, bounded so a stuck
 // script cannot hang CI.
 export fun holdslow(ctx: magus\Context, args: [str]) > void !> any {
-    proc\exec("sh", ["-c", "touch ready; for i in $(seq 400); do [ -f release ] && exit 0; sleep 0.05; done"]);
+    proc\exec("sh", ["-c", "touch ../ready; for i in $(seq 400); do [ -f ../release ] && exit 0; sleep 0.05; done"]);
 }
 
 export fun consume(ctx: magus\Context, args: [str]) > void !> any {

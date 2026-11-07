@@ -193,10 +193,9 @@ func TestStatusProtoMapsRuns(t *testing.T) {
 	assert.Equal(t, statusv1.TargetRun_STATE_CACHED, run.GetTargets()[2].GetState())
 }
 
-// TestStatusProtoCarriesTheBrokerAndTheServer pins wire parity with `magus status`: the
-// broker's capacity and every claim holding it, the policy that decides what a missing
-// broker means, the server's listeners, and the broker's services on the list the
-// dashboard already reads.
+// TestStatusProtoCarriesTheBrokerAndTheServer pins wire parity with `magus
+// server status`. It covers the broker's capacity and claims, its policy, the
+// server's listeners and the broker's services.
 func TestStatusProtoCarriesTheBrokerAndTheServer(t *testing.T) {
 	since := time.UnixMilli(1700)
 	r := types.StatusSnapshot{

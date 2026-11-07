@@ -29,7 +29,7 @@ func (b BuildInfo) Fingerprint() string {
 	return fmt.Sprintf("magus %s (%s) built %s", b.Version, b.Commit, b.Date)
 }
 
-// StatusSnapshot is the canonical JSON/YAML shape returned by `magus status -o json`.
+// StatusSnapshot is the JSON/YAML shape `magus server status -o json` prints.
 // The server serves the same data to the console over the typed StatusService (its live
 // fields are projected onto magus.status.v1alpha1.Status) so both consumers share one definition.
 // Fields are exported so pkg types can be read from internal packages without importing cmd/magus.
@@ -55,16 +55,15 @@ type StatusSnapshot struct {
 	// ObservingSince is when this server began observing (its start). The telemetry and
 	// cache counters above are cumulative from this instant and are NOT persisted across
 	// restarts, so a dashboard can be transparent that the numbers are "since <this>", not
-	// all-time. Zero (omitted) when `magus status` reported it without a server.
+	// all-time. Zero (omitted) when no server reported it.
 	ObservingSince time.Time `json:"observing_since,omitempty" yaml:"observing_since,omitempty"`
 	// Config surfaces the server's RESOLVED configuration (read-only) so a dashboard can show what
 	// the server is set to do (the default charms it applies, the concurrency cap) without a
 	// round-trip to the terminal. Additive JSON, not on the proto event wire.
 	Config StatusConfig `json:"config,omitempty" yaml:"config,omitempty"`
-	// SymbolIndexes reports each symbol-capable project's SCIP index freshness (up to
-	// date / out of date / not indexed), so `magus status` and the dashboard show at a
-	// glance whether code symbols reflect current source. Empty when the workspace is
-	// unavailable or no project is symbol-capable.
+	// SymbolIndexes reports each symbol-capable project's SCIP index freshness.
+	// Status and the dashboard show from it whether symbols match the source.
+	// Empty with no workspace or no symbol-capable project.
 	SymbolIndexes []SymbolIndexStatus `json:"symbol_indexes,omitempty" yaml:"symbol_indexes,omitempty"`
 	// Locks are the per-project workspace locks held right now, with the process
 	// holding each. A held lock is NORMAL (every mutating run takes one), so this is
@@ -393,7 +392,7 @@ type CacheStatus struct {
 	SizeMB    int    `json:"size_mb,omitempty" yaml:"size_mb,omitempty"`
 }
 
-// StatusOutput is the public shape of the live concurrency pool reported by `magus status`.
+// StatusOutput is the live concurrency pool `magus server status` reports.
 type StatusOutput struct {
 	ParentPID int    `json:"parent_pid" yaml:"parent_pid"`
 	Version   string `json:"version,omitempty" yaml:"version,omitempty"`

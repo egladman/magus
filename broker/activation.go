@@ -33,7 +33,7 @@ const (
 //
 // launchd hands sockets over only through launch_activate_socket, a C call magus does
 // not make. Under launchd the broker runs from a KeepAlive agent and binds its own
-// socket instead (see `magus broker units launchd`).
+// socket instead (see `magus server broker units launchd`).
 func Activated(addr string) (net.Listener, error) {
 	n, err := listenFDs(os.LookupEnv, os.Getpid())
 	if err != nil || n == 0 {
@@ -107,7 +107,8 @@ func servesAddr(ln net.Listener, addr string) (net.Listener, error) {
 			return &adoptedListener{Listener: ln, addr: &net.UnixAddr{Name: ep.Addr, Net: "unix"}}, nil
 		}
 	}
-	return nil, fmt.Errorf("broker: socket activation: the supervisor's socket is %s, but runs dial %s, point the unit's ListenStream there", got, ep.Addr)
+	// A unit installed before the socket was named for its protocol lands here.
+	return nil, fmt.Errorf("broker: socket activation: the supervisor's socket is %s, but runs dial %s: install the units `magus server broker units` prints for this build", got, ep.Addr)
 }
 
 // adoptedListener is a supervisor's socket reporting the path runs dial, which its

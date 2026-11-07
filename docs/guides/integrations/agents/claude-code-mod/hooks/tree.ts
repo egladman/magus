@@ -1,4 +1,4 @@
-import type { Filter, JobRow, JobState } from '../types'
+import type { Filter, JobRow, JobState, Role } from '../types'
 
 export type { Filter, JobRow, JobState }
 
@@ -66,6 +66,32 @@ export const COLOR: Record<JobState, string> = {
   pass: 'green',
   fail: 'red',
   no_return: 'gray',
+}
+
+export type Shade = 'light' | 'dark'
+
+// PatternFly palette steps: 10 on a light theme, 80 on a dark one.
+const TINT: Record<Role, Record<Shade, string>> = {
+  // --pf-t--color--purple--10, --pf-t--color--purple--80
+  orchestrator: { light: '#ece6ff', dark: '#1b0d33' },
+  // --pf-t--color--teal--10, --pf-t--color--teal--80
+  integrator: { light: '#daf2f2', dark: '#003333' },
+  // --pf-t--color--blue--10, --pf-t--color--blue--80
+  worker: { light: '#e0f0ff', dark: '#032142' },
+}
+
+// Claude Code theme names lead with their shade (`dark-ansi`).
+// Null for one that does not, such as `auto`, whose shade is hidden.
+export function shadeOf(theme: string | null): Shade | null {
+  if (theme?.startsWith('light')) return 'light'
+  if (theme?.startsWith('dark')) return 'dark'
+  return null
+}
+
+// A row's background; undefined leaves the pane's own.
+export function tintFor(role: Role | null, shade: Shade | null): string | undefined {
+  if (role === null || shade === null) return undefined
+  return TINT[role][shade]
 }
 
 export function age(seconds: number): string {

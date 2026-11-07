@@ -1,0 +1,7 @@
+// @error: BZZ1004
+object Run {
+    sha: str,
+}
+
+final _r = Run{ sha = "abc", id = "1" };
+final __r = 0;

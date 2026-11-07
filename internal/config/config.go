@@ -41,6 +41,7 @@ type Config struct {
 	Jobs       Jobs       `json:"jobs" yaml:"jobs"`
 	Queue      Queue      `json:"queue" yaml:"queue"`
 	Disk       Disk       `json:"disk" yaml:"disk"`
+	Checkout   Checkout   `json:"checkout" yaml:"checkout"`
 
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Overrides concurrency_profile when set.
 	Concurrency int `json:"concurrency" yaml:"concurrency" validate:"gte=0" cli:"short=j"`
@@ -218,6 +219,16 @@ type Disk struct {
 	// SampleEvery is the hook's rate limit: a hook that fires sooner reads one file's mtime
 	// and returns. Default 10m; 0 turns the hook off, and anything else takes at least 1m.
 	SampleEvery time.Duration `json:"sample_every" yaml:"sample_every" validate:"omitempty,gte=1m"`
+}
+
+// Checkout readies a new checkout for `magus vcs checkout` and
+// `magus job fork --checkout`. Bootstrap is a Buzz script relative to the
+// workspace root. It runs from the workspace that made the checkout as
+// `magus buzz <script> -- --checkout <dir> --install <p,q|none>`. --install
+// names the projects whose dependencies it still installs. Empty declares none.
+type Checkout struct {
+	// Bootstrap is read from the workspace's magus.yaml alone.
+	Bootstrap string `json:"bootstrap" yaml:"bootstrap" cli:"-"`
 }
 
 // Queue configures the merge queue, `magus queue`.
@@ -1171,6 +1182,7 @@ var envOnly = []cmdline.Env{
 	{Name: "MAGUS_VCS_<NAME>_BASE_REF", Key: "", Default: "", Doc: "Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs"},
 	{Name: "MAGUS_PROC_SOCKET", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: the proc-server socket a magus process exports for the magus processes it spawns; unix:// URL or bare path, read directly by the process that adopts it"},
 	{Name: "MAGUS_PROC_TOKEN", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: the secret the MAGUS_PROC_SOCKET server requires on every request, exported beside it and inherited only by a nested magus"},
+	{Name: "MAGUS_PROC_TREE", Key: "", Default: "", Doc: "Env-only, no magus.yaml equivalent: the ids of every bounded process tree a process descends from, inherited by every child so a command's leftovers are found; set by magus, never by hand"},
 	{Name: "MAGUS_SHARD", Key: "", Default: "", Doc: "CI matrix shard ID (e.g. \"0\"); equivalent to magus run --shard; set by .github/actions/magus"},
 	{Name: "MAGUS_N_SHARDS", Key: "", Default: "", Doc: "Total shard count for this matrix run; equivalent to magus run --n-shards; set by .github/actions/magus"},
 	{Name: "MAGUS_UPDATE_URL", Key: "", Default: "https://eli.gladman.cc/magus/public/release/index.json", Doc: "Env-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self-hosted copy of index.json to use a private update channel"},

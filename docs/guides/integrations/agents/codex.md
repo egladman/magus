@@ -67,7 +67,7 @@ enabled = true
 ```sh
 magus config mcp connector create --name codex --expires 366d   # shown once: store it as MAGUS_MCP_TOKEN
 codex mcp list
-magus status --probe=liveness,mcp
+magus server status --probe=liveness,mcp
 ```
 
 `codex mcp list` confirms configuration; the probe confirms the endpoint is
@@ -559,7 +559,7 @@ Codex supports twelve hook events. This harness wires eight:
 
 ```sh
 codex mcp list
-magus status --probe=liveness,mcp
+magus server status --probe=liveness,mcp
 magus doctor
 ```
 

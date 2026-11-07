@@ -1,18 +1,21 @@
 # stdin from a file is not a pipe: nothing to wait on, and the target reads it as before.
 [windows] skip 'no kernel API proves the writer of an anonymous pipe'
 
+# The workspace is ws/, so the probe sits outside it and is no undeclared write (MGS4011).
+cd ws
+
 stdin plan.json
 exec magus run consume .
 ! stderr 'waiting for pid'
-cmp consumed plan.json
+cmp ../consumed plan.json
 
--- plan.json --
+-- ws/plan.json --
 {"matrix": [{"shard": "1"}]}
--- magus.yaml --
+-- ws/magus.yaml --
 {}
--- .gitignore --
+-- ws/.gitignore --
 .magus/
--- magusfile.buzz --
+-- ws/magusfile.buzz --
 import "magus";
 import "io";
 import "fs";
@@ -23,5 +26,5 @@ magus\project({
 });
 
 export fun consume(ctx: magus\Context, args: [str]) > void !> any {
-    fs\writeFile("consumed", io\stdin.readAll());
+    fs\writeFile("../consumed", io\stdin.readAll());
 }

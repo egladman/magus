@@ -2,6 +2,8 @@ package job
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -128,4 +130,89 @@ func (s *testSelectionSuite) TestStoreValidationReportsUnavailableSelection() {
 	}, config.Jobs{}, nil)
 	s.Require().NoError(err)
 	s.Contains(validation.Unchecked, "the check's project, target and test-selection semantics: this door opened the job store without a workspace")
+}
+
+func scopedSpell(name, ext string, scopes map[string][]string) *spells.Spell {
+	ops := map[string]spells.Op{"vet": {}}
+	targets := []string{"vet"}
+	for op, scope := range scopes {
+		ops[op] = spells.Op{Command: spells.Command{TestScope: scope}}
+		targets = append(targets, op)
+	}
+	return spells.NewSpell(name, spells.WithTargets(targets...), spells.WithOps(ops), spells.WithLanguageExtensions([]string{ext}))
+}
+
+type narrowTestScopeSuite struct {
+	suite.Suite
+	checkout string
+}
+
+func TestNarrowTestScope(t *testing.T) { suite.Run(t, new(narrowTestScopeSuite)) }
+
+func (s *narrowTestScopeSuite) SetupTest() {
+	s.checkout = s.T().TempDir()
+	for _, dir := range []string{"pkg/a", "libs/x/sub"} {
+		s.Require().NoError(os.MkdirAll(filepath.Join(s.checkout, dir), 0o755))
+	}
+}
+
+func (s *narrowTestScopeSuite) project(path string, bound ...*spells.Spell) *types.Project {
+	return &types.Project{Path: path, ResolvedSpells: bound}
+}
+
+func (s *narrowTestScopeSuite) goSpell() *spells.Spell {
+	return scopedSpell("go", ".go", map[string][]string{"go-test": {"./{dir}"}})
+}
+
+func (s *narrowTestScopeSuite) TestFilesInOneDirectoryShareOneOperand() {
+	got := NarrowTestScope([]*types.Project{s.project(".", s.goSpell())}, []string{"pkg/a/x.go", "pkg/a/y.go"}, s.checkout)
+	s.Equal([]TestScope{{Project: ".", Spell: "go", Op: "go::go-test", Files: []string{"pkg/a/x.go", "pkg/a/y.go"}, Operands: []string{"./pkg/a"}}}, got)
+}
+
+func (s *narrowTestScopeSuite) TestANestedProjectExpandsItsOwnRelativePath() {
+	projects := []*types.Project{s.project(".", s.goSpell()), s.project("libs/x", s.goSpell())}
+	got := NarrowTestScope(projects, []string{"libs/x/sub/z.go"}, s.checkout)
+	s.Equal([]TestScope{{Project: "libs/x", Spell: "go", Op: "go::go-test", Files: []string{"libs/x/sub/z.go"}, Operands: []string{"./sub"}}}, got)
+}
+
+func (s *narrowTestScopeSuite) TestAnOperandMissingFromTheCheckoutIsDroppedAndSaysSo() {
+	buzz := scopedSpell("buzz", ".buzz", map[string][]string{"buzz-test": {"{file}", "{dir}/{stem}_test.buzz"}})
+	s.Require().NoError(os.WriteFile(filepath.Join(s.checkout, "pkg/a/m.buzz"), nil, 0o644))
+	got := NarrowTestScope([]*types.Project{s.project(".", buzz)}, []string{"pkg/a/m.buzz", "pkg/a/gone.buzz"}, s.checkout)
+	s.Equal([]TestScope{{Project: ".", Spell: "buzz", Op: "buzz::buzz-test", Files: []string{"pkg/a/m.buzz", "pkg/a/gone.buzz"}, Operands: []string{"pkg/a/m.buzz"}}}, got)
+}
+
+func (s *narrowTestScopeSuite) TestNoExistingOperandRunsTheWholeProject() {
+	buzz := scopedSpell("buzz", ".buzz", map[string][]string{"buzz-test": {"{file}"}})
+	got := NarrowTestScope([]*types.Project{s.project(".", buzz)}, []string{"pkg/a/gone.buzz"}, s.checkout)
+	s.Equal([]TestScope{{Project: ".", Spell: "buzz", Op: "buzz::buzz-test", Files: []string{"pkg/a/gone.buzz"},
+		Whole: "nothing buzz::buzz-test's testScope expands these files to exists in the checkout"}}, got)
+}
+
+func (s *narrowTestScopeSuite) TestASpellWithoutTestScopeRunsItsWholeProject() {
+	py := scopedSpell("python", ".py", nil)
+	got := NarrowTestScope([]*types.Project{s.project(".", py)}, []string{"pkg/a/m.py"}, s.checkout)
+	s.Equal([]TestScope{{Project: ".", Spell: "python", Files: []string{"pkg/a/m.py"}, Whole: "spell python declares no testScope, so its whole project runs"}}, got)
+}
+
+func (s *narrowTestScopeSuite) TestTwoScopedOpsNameNoTestOp() {
+	two := scopedSpell("go", ".go", map[string][]string{"go-test": {"./{dir}"}, "go-race": {"./{dir}"}})
+	got := NarrowTestScope([]*types.Project{s.project(".", two)}, []string{"pkg/a/x.go"}, s.checkout)
+	s.Equal([]TestScope{{Project: ".", Spell: "go", Files: []string{"pkg/a/x.go"},
+		Whole: "spell go declares testScope on ops go-race, go-test, so which one is its test op is unknown"}}, got)
+}
+
+func (s *narrowTestScopeSuite) TestAFileNoSpellClaimsSaysSo() {
+	got := NarrowTestScope([]*types.Project{s.project(".", s.goSpell())}, []string{"docs/a.md"}, s.checkout)
+	s.Equal([]TestScope{{Project: ".", Files: []string{"docs/a.md"}, Whole: `no spell bound to . claims its extension ".md"`}}, got)
+}
+
+func (s *narrowTestScopeSuite) TestAFileOutsideEveryProjectSaysSo() {
+	got := NarrowTestScope([]*types.Project{s.project("libs/x", s.goSpell())}, []string{"pkg/a/x.go"}, s.checkout)
+	s.Equal([]TestScope{{Files: []string{"pkg/a/x.go"}, Whole: "no project contains it"}}, got)
+}
+
+func (s *narrowTestScopeSuite) TestAGlobIsNotExpanded() {
+	got := NarrowTestScope([]*types.Project{s.project(".", s.goSpell())}, []string{"pkg/**/*.go"}, s.checkout)
+	s.Equal([]TestScope{{Project: ".", Spell: "go", Op: "go::go-test", Files: []string{"pkg/**/*.go"}, Whole: "a glob names no one file to expand"}}, got)
 }

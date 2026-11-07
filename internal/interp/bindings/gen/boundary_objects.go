@@ -1299,37 +1299,12 @@ func ObjectVolatility(v types.Volatility) vm.Value {
 	return out
 }
 
-func ObjectChangeRiskFunction(v types.ChangeRiskFunction) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("symbol", vm.StringValue(v.Symbol))
-	out.MapSet("label", vm.StringValue(v.Label))
-	out.MapSet("path", vm.StringValue(v.Path))
-	out.MapSet("language", vm.StringValue(v.Language))
-	out.MapSet("digest", vm.StringValue(v.Digest))
-	out.MapSet("line", vm.IntValue(int64(v.Line)))
-	out.MapSet("endLine", vm.IntValue(int64(v.EndLine)))
-	out.MapSet("complexity", vm.IntValue(int64(v.Complexity)))
-	out.MapSet("covered", vm.IntValue(int64(v.Covered)))
-	out.MapSet("coverable", vm.IntValue(int64(v.Coverable)))
-	out.MapSet("score", vm.FloatValue(float64(v.Score)))
-	out.MapSet("baseScore", vm.FloatValue(float64(v.BaseScore)))
-	out.MapSet("baseComplexity", vm.IntValue(int64(v.BaseComplexity)))
-	out.MapSet("baseCovered", vm.IntValue(int64(v.BaseCovered)))
-	out.MapSet("baseCoverable", vm.IntValue(int64(v.BaseCoverable)))
-	out.MapSet("baseReason", vm.StringValue(v.BaseReason))
-	return out
+func ObjectChangeRiskFunction(v types.ChangeRiskFunction, enums ffi.EnumCases) vm.Value {
+	return enums.Instance("ChangeRiskFunction", []string{"symbol", "label", "path", "language", "digest", "line", "endLine", "complexity", "covered", "coverable", "score", "baseScore", "baseComplexity", "baseCovered", "baseCoverable", "baseReason"}, []vm.Value{vm.StringValue(v.Symbol), vm.StringValue(v.Label), vm.StringValue(v.Path), vm.StringValue(v.Language), vm.StringValue(v.Digest), vm.IntValue(int64(v.Line)), vm.IntValue(int64(v.EndLine)), vm.IntValue(int64(v.Complexity)), vm.IntValue(int64(v.Covered)), vm.IntValue(int64(v.Coverable)), vm.FloatValue(float64(v.Score)), vm.FloatValue(float64(v.BaseScore)), vm.IntValue(int64(v.BaseComplexity)), vm.IntValue(int64(v.BaseCovered)), vm.IntValue(int64(v.BaseCoverable)), vm.StringValue(v.BaseReason)})
 }
 
-func ObjectFunctionGap(v types.FunctionGap) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("symbol", vm.StringValue(v.Symbol))
-	out.MapSet("label", vm.StringValue(v.Label))
-	out.MapSet("path", vm.StringValue(v.Path))
-	out.MapSet("language", vm.StringValue(v.Language))
-	out.MapSet("line", vm.IntValue(int64(v.Line)))
-	out.MapSet("complexity", vm.IntValue(int64(v.Complexity)))
-	out.MapSet("reason", vm.StringValue(v.Reason))
-	return out
+func ObjectFunctionGap(v types.FunctionGap, enums ffi.EnumCases) vm.Value {
+	return enums.Instance("FunctionGap", []string{"symbol", "label", "path", "language", "line", "complexity", "reason"}, []vm.Value{vm.StringValue(v.Symbol), vm.StringValue(v.Label), vm.StringValue(v.Path), vm.StringValue(v.Language), vm.IntValue(int64(v.Line)), vm.IntValue(int64(v.Complexity)), vm.StringValue(v.Reason)})
 }
 
 func ObjectFinding(v types.Finding) vm.Value {
@@ -1344,18 +1319,18 @@ func ObjectFinding(v types.Finding) vm.Value {
 	return out
 }
 
-func ObjectChangeRisk(v types.ChangeRisk) vm.Value {
+func ObjectChangeRisk(v types.ChangeRisk, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
 	out.MapSet("base", vm.StringValue(v.Base))
 	itemsFunctions := make([]vm.Value, len(v.Functions))
 	for indexFunctions := range v.Functions {
-		itemsFunctions[indexFunctions] = ObjectChangeRiskFunction(v.Functions[indexFunctions])
+		itemsFunctions[indexFunctions] = ObjectChangeRiskFunction(v.Functions[indexFunctions], enums)
 	}
 	out.MapSet("functions", vm.ListValue(itemsFunctions))
 	itemsGaps := make([]vm.Value, len(v.Gaps))
 	for indexGaps := range v.Gaps {
-		itemsGaps[indexGaps] = ObjectFunctionGap(v.Gaps[indexGaps])
+		itemsGaps[indexGaps] = ObjectFunctionGap(v.Gaps[indexGaps], enums)
 	}
 	out.MapSet("gaps", vm.ListValue(itemsGaps))
 	itemsLines := make([]vm.Value, len(v.Lines))
@@ -3325,6 +3300,11 @@ func ObjectTarget(v types.Target, enums ffi.EnumCases) vm.Value {
 	out.MapSet("human_only_reason", vm.StringValue(v.HumanOnlyReason))
 	out.MapSet("relinks", vm.StringValue(v.Relinks))
 	out.MapSet("integrates", vm.StringValue(v.Integrates))
+	itemsNeedsReady := make([]vm.Value, len(v.NeedsReady))
+	for indexNeedsReady := range v.NeedsReady {
+		itemsNeedsReady[indexNeedsReady] = vm.StringValue(v.NeedsReady[indexNeedsReady])
+	}
+	out.MapSet("needs_ready", vm.ListValue(itemsNeedsReady))
 	return out
 }
 
@@ -5492,6 +5472,7 @@ func ObjectForgePull(v types.ForgePull) vm.Value {
 	out.MapSet("url", vm.StringValue(v.URL))
 	out.MapSet("branch", vm.StringValue(v.Branch))
 	out.MapSet("headSHA", vm.StringValue(v.HeadSHA))
+	out.MapSet("fetchRef", vm.StringValue(v.FetchRef))
 	out.MapSet("draft", vm.BoolValue(v.Draft))
 	out.MapSet("mergeable", vm.StringValue(v.Mergeable))
 	out.MapSet("behindBy", vm.IntValue(int64(v.BehindBy)))

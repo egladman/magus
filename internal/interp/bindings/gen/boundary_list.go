@@ -36,9 +36,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Case", Zero: types.Case{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCase(v.(types.Case)) }},
 	{Name: "ChainStep", Zero: types.ChainStep{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectChainStep(v.(types.ChainStep)) }},
 	{Name: "Change", Zero: types.Change{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectChange(v.(types.Change), enums) }},
-	{Name: "ChangeRisk", Zero: types.ChangeRisk{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectChangeRisk(v.(types.ChangeRisk)) }},
+	{Name: "ChangeRisk", Zero: types.ChangeRisk{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectChangeRisk(v.(types.ChangeRisk), enums) }},
 	{Name: "ChangeRiskFunction", Zero: types.ChangeRiskFunction{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectChangeRiskFunction(v.(types.ChangeRiskFunction))
+		return ObjectChangeRiskFunction(v.(types.ChangeRiskFunction), enums)
 	}},
 	{Name: "CharmConflict", Zero: spells.CharmConflict{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmConflict(v.(spells.CharmConflict)) }},
 	{Name: "CharmDeclaration", Zero: types.CharmDeclaration{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCharmDeclaration(v.(types.CharmDeclaration)) }},
@@ -152,7 +152,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "FileStat", Zero: types.FileStat{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFileStat(v.(types.FileStat)) }},
 	{Name: "FindReviewRequest", Zero: types.FindReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFindReviewRequest(v.(types.FindReviewRequest)) }},
 	{Name: "FlagParse", Zero: types.FlagParse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFlagParse(v.(types.FlagParse)) }},
-	{Name: "FunctionGap", Zero: types.FunctionGap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFunctionGap(v.(types.FunctionGap)) }},
+	{Name: "FunctionGap", Zero: types.FunctionGap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFunctionGap(v.(types.FunctionGap), enums) }},
 	{Name: "Goal", Zero: types.Goal{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGoal(v.(types.Goal), enums) }},
 	{Name: "Grant", Zero: types.Grant{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectGrant(v.(types.Grant)) }},
 	{Name: "Graph", Zero: types.SymbolIndexDigest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {

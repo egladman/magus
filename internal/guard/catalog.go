@@ -224,7 +224,7 @@ var ruleDocBusyWait = types.RuleDoc{
 		"Whatever the loop tests (a process, a file test on a task's output file, a grep of it) and whatever else each pass runs, a loop that sleeps is waiting. " +
 		"The one wait for work the caller started is that work's completion notice: a run backgrounded as `magus job exec --timeout <d> -- <command>` is announced when it ends, and a subagent may stop while it runs, since the notice resumes it with its job still bound (background-left). A job is waited on with `magus job wait <job>`. " +
 		"A loop waiting on one target run is served that run under `magus job exec --timeout`, bounded by the target's last run here plus half, or by background-unbounded's ceiling when nothing measures it. " +
-		"A loop probing a process the caller did not start (`kill -0`, the process table, `magus status` or a job row) gets no such announcement, so its deny names the record magus keeps of that work instead: `magus job wait <job>` for a job, one `magus status` for the project lock. " +
+		"A loop probing a process the caller did not start (`kill -0`, the process table, `magus server status` or a job row) gets no such announcement, so its deny names the record magus keeps of that work instead: `magus job wait <job>` for a job, one `magus server status` for the project lock. " +
 		"The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. " +
 		"Several have had to be killed by hand. A host's watcher running the same loop is judged the same way, since it is the same poll that also wakes the agent on every line and at expiry. " +
 		"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the output-pipe, output-redirect and unknown-env rules. " +
@@ -378,6 +378,7 @@ var ruleDocPushUnverified = types.RuleDoc{
 		"This one reads the run log, so the finding is a fact: which invocations ran the gate, which commit each was built from, and how it finished. That is what makes stopping the call legitimate here where the rest of this tier only advises. " +
 		"It matches on the COMMIT and not the exact tree, deliberately: an exact match would expire on the first comment typo after a green run, which is the delta the cadence already says to push, and a rule that fires there is one people route around. " +
 		"A full local `affected ci` takes the machine's whole build budget while the pull request's CI runs the same gate, so narrow runs count as evidence too. " +
+		"A gate whose only failures are a tool or service this host lacks (MGS3003, MGS3004), such as a stopped docker daemon, records those targets as could not run here rather than failed. Its push passes, and the verdict names each target PR CI owes. " +
 		"With no green gate at the commit, and none there that failed, the push passes when every file it changed since the newest ancestor with a passing `ci` (with none, since the merge base with the base ref) is covered: " +
 		"a passing run, recorded in this checkout's output store, of a target whose declared inputs hold the file, that read the file as the pushed commit holds it. A narrow `go-test -- -run ...` counts, and a file-scoped `lint -- <files>` covers the files it names. " +
 		"A generated output no target reads is covered by the run that wrote it: a passing run of a target whose declared outputs hold the file, with the file as the pushed commit holds it. " +
@@ -485,7 +486,7 @@ var ruleDocOutputRedirect = types.RuleDoc{
 var ruleDocProcessPoll = types.RuleDoc{
 	Name:    string(denyRuleProcessPoll),
 	Catches: "a process table inspected to wait on magus work the lock already reports",
-	Why: "A magus run holds a project lock and announces itself, and one `magus status` reads that same lock state: holder PID, command, age. A second run into the lock exits 75 at once, and a run the caller backgrounded under `magus job exec --timeout` announces its own end, so the wait is that completion notice. " +
+	Why: "A magus run holds a project lock and announces itself, and one `magus server status` reads that same lock state: holder PID, command, age. A second run into the lock exits 75 at once, and a run the caller backgrounded under `magus job exec --timeout` announces its own end, so the wait is that completion notice. " +
 		"`pgrep`, `pidof`, `ps` and `kill -0` invent a poll with no bound of its own that answers a question the lock message already answered.",
 }
 
@@ -493,7 +494,7 @@ var ruleDocProcessSignal = types.RuleDoc{
 	Name:    string(denyRuleProcessSignal),
 	Catches: "kill, pkill or killall used to signal a process identified only by PID or name",
 	Why: "A PID or process-name pattern cannot establish ownership: a pkill of a slow fork or MCP process can stop another session's work or the host's connection. " +
-		"Cancel the shell task through the host that started it, or have the person stop it. `magus status` inspects the tracked work without signaling it. " +
+		"Cancel the shell task through the host that started it, or have the person stop it. `magus server status` inspects the tracked work without signaling it. " +
 		"Signal-list requests pass; `kill -0` is a process-poll instead.",
 }
 
@@ -564,10 +565,10 @@ var ruleDocStaleBinary = types.RuleDoc{
 	Why: "A magus older than the tree, or one answering for a checkout with no ./magus, cannot load the magusfile, so none of the workspace's rules run and a fresh worktree has no record of them to fall back on. The magusfile visibly registering a guard rule is enough to refuse. " +
 		"Edits, spawns, pushes, writing MCP tools and every command that changes state wait until a magus loads the tree. A line passes only when it proves read-only (every program reads, no redirect writes a file, nothing is computed by a substitution), is the fix (`./magus run go-build .`, the relink, the bootstrap over a ./magus that cannot load the tree, each alone on its line), or is a read-only scout recording its work (`magus job exec`, `magus job exit`, `magus buzz --record`). " +
 		"A call that puts back a file the load error names as an unresolved import (`git mv` onto it, `git restore` or `git checkout --` of it, or a write to it) also runs, with an advisory that says so; the bootstrap runs for that failure too. " +
-		"A leased worker is never told to rebuild the main checkout's binary: there is one binary per base and the main session places it with `<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>`. A placement can be older than a tree the worker's own commits moved, so the one route that always works for a worker's own row is `./magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout <its checkout>`, alone on its line with at most an `export BAGGAGE=...;` in front. A load failure no newer binary fixes, such as a typo in a checkout with its own ./magus, is policy-unloaded's instead. " +
+		"A leased worker is never told to rebuild the main checkout's binary: there is one binary per base and the main session places it with `<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>`. A placement can be older than a tree the worker's own commits moved, so the one route that always works for a worker's own row is the hook magus.yaml declares as checkout.bootstrap, `./magus buzz <checkout.bootstrap> -- --checkout <its checkout>`, alone on its line with at most an `export BAGGAGE=...;` in front. A workspace with no checkout.bootstrap declared has no such route, and a placement is the way in. A load failure no newer binary fixes, such as a typo in a checkout with its own ./magus, is policy-unloaded's instead. " +
 		"The load contract is what a binary built before a change needs to load the tree after it: the host declarations, the API locks, the generated boundary bindings, and the Buzz checker and compiler. " +
 		"In a checkout of magus whose ./magus was built at a commit before a load-contract change HEAD carries, every call that changes state is refused until it is rebuilt; reads, VCS recovery and the rebuild run. A build descending from HEAD lacks nothing HEAD carries and is not refused, and only the changes on HEAD's own side of a diverged build count. The refusal names the process that judged the call. A ./magus built from uncommitted changes may already carry the change, and the stale-sources notice speaks for it instead. " +
-		"A `git cherry-pick` or `git merge` that brings a load-contract change straight into a checkout of magus whose tree still loads is refused too: it lands through a dry run that applies the whole change in a scratch worktree, compiles ./cmd/magus, checks generator drift and loads the guard policy with the result, because a prefix of a series can leave a tree no binary builds from. " +
+		"A `git cherry-pick` or `git merge` that brings a load-contract change straight into a checkout of magus whose tree still loads is refused too: it lands in a checkout of its own first (`magus job fork <integration> --checkout <dir>`), where the whole change is applied, ./cmd/magus compiled and the guard policy loaded before this branch moves to it, because a prefix of a series can leave a tree no binary builds from. " +
 		"While the tree does not load, the pick is the way out, and it runs.",
 }
 
@@ -837,7 +838,7 @@ var ruleDocReadNavigation = types.RuleDoc{
 var ruleDocSleepPoll = types.RuleDoc{
 	Name:    string(denyRuleSleepPoll),
 	Catches: "a sleep before a status read, a call that only sleeps, or a wait on or retry into a full budget",
-	Why: "Both are a wait whose loop is the caller's own next call. A sleep of ten seconds or more followed on the same line by a status read (`kill -0`, the process table, `magus status` or a job row, a pull request's checks, a CI run) looks once and leaves the next look to the next call. " +
+	Why: "Both are a wait whose loop is the caller's own next call. A sleep of ten seconds or more followed on the same line by a status read (`kill -0`, the process table, `magus server status` or a job row, a pull request's checks, a CI run) looks once and leaves the next look to the next call. " +
 		"A call whose only work is sleeping, printing and reading a file once (`sleep 300; echo tick`, `sleep 120 && tail -5 out.log`, a `for` loop of sleeps and echoes) is a timer: its notice says only that time passed, where the work's own backgrounded call is announced with its result. " +
 		"Backgrounded it is refused at any length; in the foreground from ten seconds, since a foreground sleep past the tool timeout is moved to the background and becomes one. A shorter foreground sleep is a settle, and a line that also builds, tests or runs a script is work. " +
 		"A watch (`--watch`) is not a status read, and a loop is busy-wait's. " +
@@ -902,7 +903,7 @@ var ruleDocMonitorDuplicate = types.RuleDoc{
 	Why: "A watcher is a host tool that runs a command in the background and wakes the agent on each line it prints, and again when it expires. " +
 		"Its subject is what its command reads: a process pattern, a pid, a file, a job, the project lock, a CI run; a command naming none is its own subject. " +
 		"A second watcher while the first is live wakes the agent twice per event; one on a host task capture, or on the process of a command this agent backgrounded, repeats the notice the host already gives. " +
-		"A backgrounded call that watches without end (`magus status --watch`, `tail -f`, `watch`) is judged the same way, and a leased worker is refused one outright, since its waits are its own runs. " +
+		"A backgrounded call that watches without end (`magus server status --watch`, `tail -f`, `watch`) is judged the same way, and a leased worker is refused one outright, since its waits are its own runs. " +
 		"Re-arming a watcher that expired passes. It cannot tell a process pattern that also matches someone else's run from one matching only the agent's own.",
 }
 

@@ -541,6 +541,10 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 
 	unrunByGate := map[string]string{}
 	if rep.Validation.Unrun != "" {
+		if _, declared := declaredGates[types.PrimaryGoalID]; !declared {
+			v.Violations = append(v.Violations, fmt.Sprintf("the result says the check did not run (%s), but job %s declares no check;"+
+				" report each goal's run under gate_evidence", rep.Validation.Unrun, row.ID))
+		}
 		unrunByGate[types.PrimaryGoalID] = rep.Validation.Unrun
 	}
 	for _, evidence := range rep.VerificationEvidence {

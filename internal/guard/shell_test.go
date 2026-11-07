@@ -718,7 +718,7 @@ func TestDenyReasonsStayShort(t *testing.T) {
 		"git stash",
 		"magus diff --ack",
 		"magus notes add 'a decision'",
-		"while true; do magus status | grep done; done",
+		"while true; do magus server status | grep done; done",
 		"pgrep magus",
 		"gh run watch",
 		"grep 'cause:' /tmp/task-capture.log",
@@ -1434,7 +1434,7 @@ func TestOutputPipeAdvisesOnGraphReads(t *testing.T) {
 		{"magus affected ci 2>&1 | tail -30", "deny"},
 		{"magus x out1a2b | grep cause", "deny"},
 		{"magus ls | grep lint", "deny"},
-		{"magus status | head", "deny"},
+		{"magus server status | head", "deny"},
 		// A graph read beside a run on the same line does not soften the run's pipe.
 		{"magus refs Foo | head; magus run test . | tail", "deny"},
 		{"magus run test . | tail; magus refs Foo | head", "deny"},
@@ -2058,7 +2058,7 @@ func TestBusyWaitOnAForeignProcessSaysWhatItProves(t *testing.T) {
 		`while kill -0 4242 2>/dev/null; do sleep 30; done`,
 		`until ! kill -0 $PID; do sleep 10; done`,
 		`while pgrep -f go-build >/dev/null; do sleep 5; done`,
-		`until ./magus status -o json | jq -e '.idle'; do sleep 20; done`,
+		`until ./magus server status -o json | jq -e '.idle'; do sleep 20; done`,
 		`until ./magus describe job worker-a -o name; do sleep 60; done`,
 		`while kill -0 4242 2>/dev/null; do echo still running; sleep 30; done`,
 	} {
@@ -2187,7 +2187,7 @@ func TestShellRulesAdviseWhenSetToAdvise(t *testing.T) {
 func TestGuardAllowsMentioningProcessPollWithoutRunningIt(t *testing.T) {
 	for _, cmd := range []string{
 		`echo 'pgrep -fl magus'`,
-		`./magus status --watch=15s`,
+		`./magus server status --watch=15s`,
 	} {
 		assert.NotEqual(t, denyRuleProcessPoll, Evaluate(strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
@@ -2852,7 +2852,8 @@ func (s *PersonLeaseSuite) TestACheckoutRecordGradesWithNoClaim() {
 }
 
 func (s *PersonLeaseSuite) TestTheBootstrapScriptsTakeNoClaim() {
-	for _, script := range []string{placementScript, job.CheckoutBootstrapScript} {
+	declareCheckoutHook(s.T(), s.root)
+	for _, script := range []string{placementScript, testCheckoutHook} {
 		s.Require().NoError(os.MkdirAll(filepath.Dir(filepath.Join(s.root, script)), 0o755))
 		s.script(script, buzzWritesAFile)
 		s.NotEqual(string(denyRuleEditUngraded), s.judgeBound("./magus buzz "+script).Rule, script)

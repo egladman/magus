@@ -299,7 +299,7 @@ func TestDenyUnboundedBackground(t *testing.T) {
 		{`sleep 540; echo tick`, "sleep"},
 		{`sleep 1000`, "sleep"},
 		{`while true; do sleep 5; done`, "while"},
-		{`magus status --watch=15s`, "magus"},
+		{`magus server status --watch=15s`, "magus"},
 		{`bash -c 'grep -r x .'`, "grep"},
 		{`timeout 0 grep -r x .`, "timeout"},
 		{`timeout grep -r x .`, "timeout"},

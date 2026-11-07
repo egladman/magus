@@ -119,7 +119,7 @@ OpenTelemetry's name for one unit of work under a trace: a target execution, who
 
 ### Pool
 
-The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live. [Pool in full](glossary/pool.md).
+The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus server status and the dashboard report it live. [Pool in full](glossary/pool.md).
 
 ### Slot
 

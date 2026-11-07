@@ -1942,11 +1942,12 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 	// Flat import: merge file's globals directly into this env, and
 	// collect its exported types and functions so the importer can name
 	// them (Exec only merges runtime values, not type declarations).
-	s.collectImportedModule(boundName, string(data))
+	prog := s.collectImportedModule(boundName, string(data))
 	exports, err := s.execImport(ctx, string(data))
 	if err != nil {
 		return ImportFile, importFailed(imp.Path, path, err)
 	}
+	s.bindQualifiedTypes(boundName, prog)
 	if len(s.importFrames) > 0 {
 		noted.files = append(noted.files, nestedClosure(s.lastClosure, moduleDir)...)
 	}
@@ -2388,6 +2389,7 @@ func (s *Session) bindCachedAlias(alias string, c *cachedImport) {
 		if !v.IsObjectDef() {
 			continue
 		}
+		s.env.Define(QualifiedTypeKey(alias, n), v)
 		if _, exists := s.env.Get(n); !exists {
 			s.env.Define(n, v)
 		}
@@ -2644,17 +2646,15 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 		m.MapSet(name, v)
 		// An object TYPE also gets bound in the parent under its bare name.
 		//
-		// `ns\Name{...}` compiles to a construction of the BARE name (the parser
-		// resolves it that way on purpose, "to the same object def upstream reaches
-		// as ns\Name"), and the VM then looks the def up in the env. Leaving it only
-		// inside the alias map made `testing\PrefixMe{}` fail at RUN time with
-		// "unknown object type", after type-checking cleanly.
+		// `ns\Name{...}` builds the def under QualifiedTypeKey. The bare name
+		// may hold another module's type, whose def nulls every field.
 		//
 		// Values are NOT bound this way: isolation is the point of an aliased
 		// import, and a type declaration is a compile-time fact rather than state.
 		// An existing binding wins, so a local type still shadows an imported one,
 		// matching how the compiler seeds its typeDecls.
 		if v.IsObjectDef() {
+			s.env.Define(QualifiedTypeKey(alias, name), v)
 			if _, exists := s.env.Get(name); !exists {
 				s.env.Define(name, v)
 			}

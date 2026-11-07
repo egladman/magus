@@ -14,7 +14,7 @@ each as a count, sum, and percentiles.
 ## Example
 
 ```sh
-magus status
+magus server status
 ```
 
 ## Used in

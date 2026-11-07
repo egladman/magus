@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -314,4 +315,36 @@ func TestTermsNamesTheAttemptOnlyPastTheFirstOrUnderACap(t *testing.T) {
 	uncapped := retriedRow()
 	uncapped.MaxAttempts = 0
 	assert.Contains(t, NewTerms(uncapped, TermsFacts{}).String(), "\nattempt 3\n")
+}
+
+type termsTestScopeSuite struct{ suite.Suite }
+
+func TestTermsTestScope(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(termsTestScopeSuite))
+}
+
+func (s *termsTestScopeSuite) facts() TermsFacts {
+	return TermsFacts{TestScope: []TestScope{
+		{Project: ".", Spell: "go", Op: "go::go-test", Files: []string{"pkg/a/x.go"}, Operands: []string{"./pkg/a"}},
+		{Project: "docs", Spell: "typescript", Files: []string{"docs/a.ts"}, Whole: "spell typescript declares no testScope, so its whole project runs"},
+	}}
+}
+
+func (s *termsTestScopeSuite) TestRendersOperandsAndTheReasonForAWholeRun() {
+	got := NewTerms(briefRow(), s.facts()).String()
+	s.Contains(got, "\nnarrow test scope\n"+
+		"  . go::go-test ./pkg/a (pkg/a/x.go)\n"+
+		"  docs: not narrowed: spell typescript declares no testScope, so its whole project runs (docs/a.ts)\n")
+	s.Less(strings.Index(got, testScopeHeading), strings.Index(got, "the only check you run"))
+}
+
+func (s *termsTestScopeSuite) TestNoScopeDropsTheSection() {
+	s.NotContains(NewTerms(briefRow(), TermsFacts{}).String(), testScopeHeading)
+}
+
+func (s *termsTestScopeSuite) TestJSONCarriesTestScope() {
+	b, err := json.Marshal(NewTerms(briefRow(), s.facts()))
+	s.Require().NoError(err)
+	s.Contains(string(b), `"test_scope":[{"project":".","spell":"go","op":"go::go-test","files":["pkg/a/x.go"],"operands":["./pkg/a"]}`)
 }

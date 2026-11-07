@@ -1,6 +1,6 @@
 .TH MAGUS-SELF 1 "" "magus" "magus Manual"
 .SH NAME
-magus\-self \- Manage the magus binary (update, install\-shorthand)
+magus\-self \- Manage the magus binary (update, install\-shorthand, place, completion, man)
 .SH SYNOPSIS
 .B magus
 .RI "self <subcommand> [flags]"
@@ -45,6 +45,15 @@ Directory for the shorthand (default: the running binary's directory)
 \fB\-\-[no\-]force\fR (default: off)
 Replace an existing file at the shorthand path
 .RE
+.SS self man options
+.RS
+.TP
+\fB\-\-dir\fR \fIstring\fR
+Directory for section 1 man pages (default: the user manpath)
+.TP
+\fB\-\-[no\-]dry\-run\fR (default: off)
+Print what would be written without touching the filesystem
+.RE
 .SH SUBCOMMANDS
 .RS
 .TP
@@ -56,6 +65,12 @@ Symlink mgs, the magus shorthand, to the running binary
 .TP
 \fBplace\fR
 Replace the running binary with a newer stamped build
+.TP
+\fBcompletion\fR
+Print a shell completion script
+.TP
+\fBman\fR
+Install the section 1 man pages embedded in this binary
 .RE
 .SH EXAMPLES
 \fIUpdate the running binary\fR
@@ -68,6 +83,18 @@ magus self update
 .PP
 .EX
 magus self install-shorthand
+.EE
+.PP
+\fIBash completion, re\-read on every new shell\fR
+.PP
+.EX
+echo 'source <(magus self completion bash)' >> ~/.bashrc
+.EE
+.PP
+\fIInstall the man pages\fR
+.PP
+.EX
+magus self man
 .EE
 .PP
 .SH SEE ALSO
@@ -83,7 +110,6 @@ magus self install-shorthand
 \fBmagus\-query\fR(1),
 \fBmagus\-refs\fR(1),
 \fBmagus\-explain\fR(1),
-\fBmagus\-path\fR(1),
 \fBmagus\-graph\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-vcs\fR(1),
@@ -91,19 +117,15 @@ magus self install-shorthand
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-mcp\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
-\fBmagus\-server\fR(1),
-\fBmagus\-broker\fR(1),
-\fBmagus\-mcp\fR(1),
-\fBmagus\-status\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-spell\fR(1),
 \fBmagus\-agent\fR(1),
 \fBmagus\-init\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
-\fBmagus\-completion\fR(1),
-\fBmagus\-man\fR(1),
 \fBmagus\-version\fR(1)
 .br

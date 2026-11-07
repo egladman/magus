@@ -597,44 +597,74 @@ func TestDecodeSavedPlan(t *testing.T) {
 	}
 }
 
-func TestSelectPlanShards(t *testing.T) {
-	t.Parallel()
+type SelectPlanShardsSuite struct {
+	suite.Suite
+	plan planOutput
+}
 
-	plan := planOutput{Target: "ci", Count: 2, Matrix: []planShard{
+func TestSelectPlanShardsSuite(t *testing.T) { suite.Run(t, new(SelectPlanShardsSuite)) }
+
+func (s *SelectPlanShardsSuite) SetupTest() {
+	s.plan = planOutput{Target: "ci", Count: 2, Matrix: []planShard{
 		{Shard: "1", Projects: ". docs"},
 		{Shard: "2", Projects: "console"},
 	}}
-	tests := []struct {
-		name    string
-		plan    planOutput
-		target  string
-		shard   string
-		nShards int
-		want    []planShard
-		wantErr string
-	}{
-		{name: "every shard", plan: plan, target: "ci", want: plan.Matrix},
-		{name: "one shard", plan: plan, target: "ci", shard: "2", want: []planShard{{Shard: "2", Projects: "console"}}},
-		{name: "agreeing count", plan: plan, target: "ci", shard: "1", nShards: 2, want: []planShard{{Shard: "1", Projects: ". docs"}}},
-		{name: "unknown shard", plan: plan, target: "ci", shard: "3", wantErr: "--shard 3: the plan has no such shard (it has 1, 2)"},
-		{name: "other target", plan: plan, target: "test", wantErr: "the plan is for ci, not test"},
-		{name: "other count", plan: plan, target: "ci", nShards: 3, wantErr: "--n-shards 3, but the plan has 2 shard(s)"},
-		{name: "inherited plan, whole", plan: planOutput{Target: "ci"}, target: "ci", want: nil},
-		{name: "inherited plan, one shard", plan: planOutput{Target: "ci"}, target: "ci", shard: "1", wantErr: "the plan has no shards, so there is nothing to select"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := selectPlanShards(tt.plan, tt.target, tt.shard, tt.nShards)
-			if tt.wantErr != "" {
-				require.ErrorIs(t, err, types.SavedPlanRefused)
-				assert.ErrorContains(t, err, tt.wantErr)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.want, got)
-		})
-	}
+}
+
+func (s *SelectPlanShardsSuite) TestAShardRunsOnlyItsOwnUnits() {
+	got, err := selectPlanShards(s.plan, "ci", "2", 0)
+	s.Require().NoError(err)
+	s.Equal([]planShard{{Shard: "2", Projects: "console"}}, got)
+}
+
+func (s *SelectPlanShardsSuite) TestAMultiShardPlanWithNoSelectionRefuses() {
+	got, err := selectPlanShards(s.plan, "ci", "", 0)
+	s.Require().ErrorIs(err, types.SavedPlanRefused)
+	s.ErrorContains(err, "the plan has 2 shards and no --shard selects one")
+	s.ErrorContains(err, "--shard <id> (1, 2)")
+	s.ErrorContains(err, "--shard all")
+	s.Nil(got)
+}
+
+func (s *SelectPlanShardsSuite) TestAllRunsEveryShard() {
+	got, err := selectPlanShards(s.plan, "ci", "all", 0)
+	s.Require().NoError(err)
+	s.Equal(s.plan.Matrix, got)
+}
+
+func (s *SelectPlanShardsSuite) TestAOneShardPlanRunsWithNoSelection() {
+	s.plan.Count, s.plan.Matrix = 1, s.plan.Matrix[:1]
+	got, err := selectPlanShards(s.plan, "ci", "", 0)
+	s.Require().NoError(err)
+	s.Equal(s.plan.Matrix, got)
+}
+
+func (s *SelectPlanShardsSuite) TestAnUnknownShardRefuses() {
+	_, err := selectPlanShards(s.plan, "ci", "3", 0)
+	s.Require().ErrorIs(err, types.SavedPlanRefused)
+	s.ErrorContains(err, "--shard 3: the plan has no such shard (it has 1, 2)")
+}
+
+func (s *SelectPlanShardsSuite) TestAnotherTargetRefuses() {
+	_, err := selectPlanShards(s.plan, "test", "1", 0)
+	s.Require().ErrorIs(err, types.SavedPlanRefused)
+	s.ErrorContains(err, "the plan is for ci, not test")
+}
+
+func (s *SelectPlanShardsSuite) TestADisagreeingShardCountRefuses() {
+	_, err := selectPlanShards(s.plan, "ci", "1", 3)
+	s.Require().ErrorIs(err, types.SavedPlanRefused)
+	s.ErrorContains(err, "--n-shards 3, but the plan has 2 shard(s)")
+}
+
+func (s *SelectPlanShardsSuite) TestAPlanWithNoShardsRunsWholeAndRefusesASelection() {
+	empty := planOutput{Target: "ci"}
+	got, err := selectPlanShards(empty, "ci", "", 0)
+	s.Require().NoError(err)
+	s.Empty(got)
+	_, err = selectPlanShards(empty, "ci", "1", 0)
+	s.Require().ErrorIs(err, types.SavedPlanRefused)
+	s.ErrorContains(err, "the plan has no shards, so there is nothing to select")
 }
 
 func TestPlanProjectsKeepPlanOrder(t *testing.T) {
@@ -697,7 +727,7 @@ func TestCIWorkflowRendersPlanOutputsAndSummary(t *testing.T) {
 	workflow := string(body)
 	assert.NotContains(t, workflow, "ci-shard")
 
-	render := regexp.MustCompile(`magus run --stdin --dry-run -o '([^']*)' < "\$RUNNER_TEMP/plan\.json" >> "\$(GITHUB_OUTPUT|GITHUB_STEP_SUMMARY)"`)
+	render := regexp.MustCompile(`magus run --stdin --shard all --dry-run -o '([^']*)' < "\$RUNNER_TEMP/plan\.json" >> "\$(GITHUB_OUTPUT|GITHUB_STEP_SUMMARY)"`)
 	found := render.FindAllStringSubmatch(workflow, -1)
 	require.Len(t, found, 2, "ci.yaml's plan step no longer renders the saved plan twice; repoint this test at what does")
 
@@ -882,6 +912,48 @@ func TestResultRefsLine(t *testing.T) {
 			assert.Equal(t, tc.wantOut, refLine(refs.list()))
 		})
 	}
+}
+
+type ResultStatusesSuite struct{ suite.Suite }
+
+func TestResultStatusesSuite(t *testing.T) { suite.Run(t, new(ResultStatusesSuite)) }
+
+func (s *ResultStatusesSuite) record(target string, events ...journal.Event) *resultStatuses {
+	statuses := newResultStatuses(target)
+	ctx := journal.WithLogger(context.Background(), journal.NewLogger(statuses))
+	for _, e := range events {
+		journal.Emit(ctx, e)
+	}
+	return statuses
+}
+
+func (s *ResultStatusesSuite) TestKeepsEachProjectsStatus() {
+	statuses := s.record("ci",
+		journal.Event{Kind: journal.KindResult, Project: "proto", Target: "ci", Status: journal.StatusPermitted},
+		journal.Event{Kind: journal.KindResult, Project: "console", Target: "ci", Status: journal.StatusCached},
+	)
+	s.Equal(journal.StatusPermitted, statuses.of("proto"))
+	s.Equal(journal.StatusCached, statuses.of("console"))
+}
+
+func (s *ResultStatusesSuite) TestMatchesACharmedStep() {
+	statuses := s.record("bundle", journal.Event{Kind: journal.KindResult, Project: ".", Target: "bundle:rw", Status: journal.StatusPass})
+	s.Equal(journal.StatusPass, statuses.of("."))
+}
+
+func (s *ResultStatusesSuite) TestLeavesOutADependencysResult() {
+	statuses := s.record("ci", journal.Event{Kind: journal.KindResult, Project: "proto", Target: "lint", Status: journal.StatusFail})
+	s.Empty(statuses.of("proto"))
+}
+
+func (s *ResultStatusesSuite) TestSkipsEventsThatAreNotResults() {
+	statuses := s.record("ci", journal.Event{Kind: journal.KindOutput, Project: "proto", Target: "ci", Status: journal.StatusPass})
+	s.Empty(statuses.of("proto"))
+}
+
+func (s *ResultStatusesSuite) TestANilCollectorReportsNothing() {
+	var statuses *resultStatuses
+	s.Empty(statuses.of("proto"))
 }
 
 type SameCharmsSuite struct{ suite.Suite }

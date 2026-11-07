@@ -108,3 +108,8 @@ func unsetsBool(name, value string) bool {
 	b, err := strconv.ParseBool(value)
 	return err == nil && !b
 }
+
+// isServerStatus reports whether a magus argv's words are `server status`.
+func isServerStatus(words []string) bool {
+	return len(words) >= 2 && words[0] == "server" && words[1] == "status"
+}

@@ -344,6 +344,12 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// A dry run performs no VCS probe, so nothing has drifted by construction. The
 	// shape still has to match the real verdict, so a magusfile reading .files or
 	// .drifted behaves the same under --dry-run as it does for real.
+	m.MapSet("magus__ChangeRiskFunction__charged", function("magus.ChangeRiskFunction.charged", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.BoolValue(false), nil
+	}))
+	m.MapSet("magus__FunctionGap__decided", function("magus.FunctionGap.decided", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.BoolValue(false), nil
+	}))
 	m.MapSet("magus__Workspace__diagnoseDrift", function("magus.diagnoseDrift", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("drifted", vm.BoolValue(false))

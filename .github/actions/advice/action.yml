@@ -29,12 +29,6 @@ inputs:
       command that settles them.
     required: false
     default: 'true'
-  target-outputs:
-    description: >
-      Comment when the pull request adds a target that declares no outputs, which can
-      never replay from cache. Only new targets; an existing one is a decision already made.
-    required: false
-    default: 'true'
   doctor:
     description: >
       Report what `magus doctor` finds about the workspace. Non-blocking by design, so a
@@ -135,6 +129,13 @@ inputs:
       States EVIDENCE and never a verdict. It reports who can see what you changed and
       does not decide whether it broke - deciding that needs signature compatibility
       against the base, which magus does not index.
+    required: false
+    default: 'true'
+  change-risk:
+    description: >
+      Name the touched functions with the highest change risk, and those with no coverage
+      profile to score. States the measurements and never a verdict. Reads the checks the
+      diff already holds and runs no test.
     required: false
     default: 'true'
   first-contribution:

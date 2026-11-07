@@ -1,10 +1,10 @@
 // Cost: one merge and one regeneration per branch, and a push each.
 //
-// Brings a list of branches up to date, in order. Each branch is made
-// verify-ready so ./magus is built at its head, then merged with --base.
-// `magus vcs resolve --against` settles conflicted generated files. Each
-// merge is committed and pushed before the next.
-// The branches are independent by default; --stack makes
+// Brings a list of branches up to date, in order. Each branch is made gate-ready
+// (bootstrap-checkout.buzz) so ./magus is built at its head. It is merged with
+// --base, `magus vcs resolve --against` settling generated conflicts, and
+// committed. ./magus is rebuilt at the merged head before the push. A failed
+// rebuild stops the run. The branches are independent by default; --stack makes
 // each merge the branch before it instead. A branch another worktree has checked out is merged
 // in that worktree; any other is switched to here. It stops at the first branch holding a
 // conflict in a source file and lists the files. Every tree it touches must be clean. --dry-run
@@ -42,8 +42,7 @@ export object Ran {
     code: int = 0,
 }
 
-// Shell is every git, magus and verify-ready call the script makes, so a test
-// answers them. git
+// Shell is every git, magus and gate-ready call the script makes, so a test answers them. git
 // and run never raise on a failed command; the caller reads code. dir "" is this checkout.
 export object Shell {
     git: fun (dir: str, args: [str]) > result\Result::<Ran>,
@@ -110,9 +109,10 @@ export fun plan(s: Step, dir: str) > [str] {
     }
     return [
         where,
-        "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready",
+        "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready",
         "magus {resolveArgv(s.against).join(" ")}",
         "git commit --no-edit (when the merge is in progress)",
+        "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready (again, at the merged head)",
         "git push origin {s.branch}",
     ];
 }
@@ -171,7 +171,7 @@ export fun update(sh: Shell, s: Step, dir: str) > result\Result::<bool> {
         return result\Result::<bool>{ error = err };
     }
     foreach (line in ready.value!) {
-        std\print("verify-ready: {line}");
+        std\print("gate-ready: {line}");
     }
     final resolved = sh.run(dir, sub: "vcs", args: resolveArgv(s.against).sub(1));
     if (resolved.error -> err) {
@@ -201,6 +201,13 @@ fun finish(sh: Shell, s: Step, dir: str) > result\Result::<bool> {
         if (committed.error -> err) {
             return result\Result::<bool>{ error = err };
         }
+    }
+    final rebuilt = sh.ready(dir);
+    if (rebuilt.error -> err) {
+        return result\fail::<bool>("merge-base-into-branches: rebuilding ./magus at the merged head of {s.branch} failed, so nothing was pushed; rebuild it by hand (bootstrap-checkout.buzz --here --gate-ready) before any other call there: {err.message}");
+    }
+    foreach (line in rebuilt.value!) {
+        std\print("gate-ready: {line}");
     }
     final pushed = must(sh.git(dir, args: ["push", "origin", s.branch]), what: "git push origin {s.branch}");
     if (pushed.error -> err) {
@@ -308,7 +315,7 @@ fun liveShell() > Shell {
         },
         ready = fun (dir: str) > result\Result::<[str]> {
             try {
-                return result\ok::<[str]>(bootstrap\verifyReady(bootstrap\liveHost(), dir: if (dir == "") vcs\root() else dir));
+                return result\ok::<[str]>(bootstrap\gateReady(bootstrap\liveHost(), dir: if (dir == "") vcs\root() else dir));
             } catch (err: any) {
                 return result\caught::<[str]>(err, doing: "merge-base-into-branches: ready the checkout for the gate");
             }
@@ -363,6 +370,11 @@ fun at(dir: str) > str {
 }
 
 fun fake(answers: {str: Ran}, calls: mut [str]) > Shell {
+    return fakeReady(answers, calls: calls, buildFails: false);
+}
+
+// fakeReady fails the build made after the merge commits, when buildFails.
+fun fakeReady(answers: {str: Ran}, calls: mut [str], buildFails: bool) > Shell {
     return Shell{
         git = fun (dir: str, args: [str]) > result\Result::<Ran> {
             final line = "git{at(dir)} {args.join(" ")}";
@@ -376,6 +388,9 @@ fun fake(answers: {str: Ran}, calls: mut [str]) > Shell {
         },
         ready = fun (dir: str) > result\Result::<[str]> {
             calls.append("ready {dir}");
+            if (buildFails and calls.indexOf("git commit --no-edit") != null) {
+                return result\fail::<[str]>("go build failed");
+            }
             return result\ok::<[str]>(["built"]);
         },
     };
@@ -407,9 +422,10 @@ test "a step's argv and plan name the branch and what it merges" {
     assert\equal(resolveArgv("origin/main"), want: ["vcs", "resolve", "--against", "origin/main"], message: "argv");
     assert\equal(plan(Step{ branch = "b", against = "a" }, dir: ""), want: [
         "git switch b",
-        "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready",
+        "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready",
         "magus vcs resolve --against a",
         "git commit --no-edit (when the merge is in progress)",
+        "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready (again, at the merged head)",
         "git push origin b",
     ], message: "plan");
     assert\equal(plan(Step{ branch = "b", against = "a" }, dir: "/other")[0], want: "run in /other, where b is checked out", message: "worktree");
@@ -439,6 +455,7 @@ test "a local branch is switched to here, merged and pushed" {
         "git diff --name-only --diff-filter=U",
         "git rev-parse -q --verify MERGE_HEAD",
         "git commit --no-edit",
+        "ready ",
         "git push origin local-only",
     ], message: "calls");
 }
@@ -485,4 +502,20 @@ test "a dirty tree refuses before any merge" {
     final why = execute(sh, stack: [Step{ branch = "a", against = "origin/main" }], here: "/repo").error!.message;
     assert\equal(why.indexOf("holds uncommitted changes") != null, want: true, message: why);
     assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("magus")).len(), want: 0, message: "no merge");
+}
+
+test "./magus is rebuilt after the merge commits and before the push" {
+    final calls = mut [<str>];
+    final sh = fake({ "git rev-parse -q --verify MERGE_HEAD": Ran{} }, calls: calls);
+    assert\isTrue(update(sh, s: Step{ branch = "b", against = "origin/main" }, dir: "").error == null, message: "updates");
+    final marks = calls.filter(fun (index: int, c: str) > bool => c == "ready " or c == "magus vcs resolve --against origin/main" or c == "git commit --no-edit" or c.startsWith("git push"));
+    assert\equal(marks, want: ["ready ", "magus vcs resolve --against origin/main", "git commit --no-edit", "ready ", "git push origin b"], message: "order");
+}
+
+test "a failed rebuild after the merge stops the run before the push" {
+    final calls = mut [<str>];
+    final sh = fakeReady({ "git rev-parse -q --verify MERGE_HEAD": Ran{} }, calls: calls, buildFails: true);
+    final why = update(sh, s: Step{ branch = "b", against = "origin/main" }, dir: "").error!.message;
+    assert\equal(why.indexOf("rebuilding ./magus at the merged head of b failed") != null, want: true, message: why);
+    assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("git push")).len(), want: 0, message: "no push");
 }

@@ -226,8 +226,8 @@ type countingTTY struct{ n int }
 func (c *countingTTY) Write(p []byte) (int, error) { c.n += len(p); return len(p), nil }
 func (*countingTTY) Fd() uintptr                   { return 2 }
 
-// statusFrame is a realistic `magus status --watch` grid: mostly static rows
-// with one animated cell, which is what the 150ms tick exists to advance.
+// statusFrame is a realistic `magus server status --watch` grid. Its rows
+// are static but for one animated cell, which the 150ms tick advances.
 func statusFrame(spinner rune) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "server  %c  running   pid 4211   uptime 3h12m\n", spinner)

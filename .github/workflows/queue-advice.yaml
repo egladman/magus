@@ -68,7 +68,6 @@ jobs:
         with:
           merge-queue: 'true'
           merge-conflicts: 'false'
-          target-outputs: 'false'
           doctor: 'false'
           version-floor: 'false'
           trusted-script-moved: 'false'
@@ -78,6 +77,7 @@ jobs:
           conformance: 'false'
           missing-target: 'false'
           exported-api: 'false'
+          change-risk: 'false'
           first-contribution: 'false'
 
   # merge-queue is main's only required status, and the queue posts it only once a pull

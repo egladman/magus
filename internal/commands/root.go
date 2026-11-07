@@ -44,12 +44,12 @@ dot-prefixed names are accepted; having both in the same directory is an error.`
 	Children: slices.Concat(
 		group("Projects and targets", listCommand, describeCommand, whereCommand, runCommand,
 			affectedCommand, xCommand, cleanCommand, shellCommand),
-		group("Knowledge graph", queryCommand, refsCommand, explainCommand, pathCommand, graphCommand),
+		group("Knowledge graph", queryCommand, refsCommand, explainCommand, graphCommand),
 		group("Changes and history", diffCommand, vcsCommand, sessionCommand, jobCommand, notesCommand, queueCommand),
-		group("Integrations and services", watchCommand, eventsCommand, serverCommand, brokerCommand,
-			mcpCommand, statusCommand, buzzCommand, spellCommand, agentCommand),
-		group("Setup and maintenance", initCommand, doctorCommand, configCommand, completionCommand,
-			manCommand, selfCommand, versionCommand),
+		group("Background processes (start on demand)", serverCommand, mcpCommand),
+		group("Integrations", watchCommand, eventsCommand, buzzCommand, spellCommand, agentCommand),
+		group("Setup and maintenance", initCommand, doctorCommand, configCommand, selfCommand,
+			versionCommand),
 	),
 }
 

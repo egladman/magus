@@ -81,12 +81,6 @@ const (
 	FlagAgentSkillForm = "skill-form"
 	// agent: --tar
 	FlagAgentTar = "tar"
-	// broker stop: --services
-	FlagBrokerStopServices = "services"
-	// broker: --idle-exit
-	FlagBrokerIdleExit = "idle-exit"
-	// broker: --log
-	FlagBrokerLog = "log"
 	// buzz: --C
 	FlagBuzzC = "C"
 	// buzz: --autoload
@@ -223,6 +217,8 @@ const (
 	FlagExplainSkipLines = "skip-lines"
 	// explain: --source
 	FlagExplainSource = "source"
+	// explain: --to
+	FlagExplainTo = "to"
 	// graph build: --sessions
 	FlagGraphBuildSessions = "sessions"
 	// graph build: --symbols
@@ -373,10 +369,6 @@ const (
 	FlagJobWaitSchema = "schema"
 	// job wait: --stdin
 	FlagJobWaitStdin = "stdin"
-	// man install: --dir
-	FlagManInstallDir = "dir"
-	// man install: --dry-run
-	FlagManInstallDryRun = "dry-run"
 	// notes capture: --anchor
 	FlagNotesCaptureAnchor = "anchor"
 	// notes capture: --gap
@@ -399,10 +391,6 @@ const (
 	FlagNotesLsShared = "shared"
 	// notes ls: --tag
 	FlagNotesLsTag = "tag"
-	// path: --global
-	FlagPathGlobal = "global"
-	// path: --refresh
-	FlagPathRefresh = "refresh"
 	// query: --attempts
 	FlagQueryAttempts = "attempts"
 	// query: --budget
@@ -611,6 +599,10 @@ const (
 	FlagSelfInstallShorthandDir = "dir"
 	// self install-shorthand: --force
 	FlagSelfInstallShorthandForce = "force"
+	// self man: --dir
+	FlagSelfManDir = "dir"
+	// self man: --dry-run
+	FlagSelfManDryRun = "dry-run"
 	// self update: --bin-dir
 	FlagSelfUpdateBinDir = "bin-dir"
 	// self update: --check
@@ -625,12 +617,32 @@ const (
 	FlagSelfUpdateY = "y"
 	// self update: --yes
 	FlagSelfUpdateYes = "yes"
+	// server broker stop: --services
+	FlagServerBrokerStopServices = "services"
+	// server broker: --idle-exit
+	FlagServerBrokerIdleExit = "idle-exit"
+	// server broker: --log
+	FlagServerBrokerLog = "log"
 	// server reload: --socket
 	FlagServerReloadSocket = "socket"
 	// server start: --foreground
 	FlagServerStartForeground = "foreground"
+	// server status: --W
+	FlagServerStatusW = "W"
+	// server status: --c
+	FlagServerStatusC = "c"
+	// server status: --compact
+	FlagServerStatusCompact = "compact"
+	// server status: --probe
+	FlagServerStatusProbe = "probe"
 	// server status: --socket
 	FlagServerStatusSocket = "socket"
+	// server status: --symbols
+	FlagServerStatusSymbols = "symbols"
+	// server status: --watch
+	FlagServerStatusWatch = "watch"
+	// server status: --workspace
+	FlagServerStatusWorkspace = "workspace"
 	// server stop: --pools
 	FlagServerStopPools = "pools"
 	// server stop: --socket
@@ -707,22 +719,12 @@ const (
 	FlagSpellPushTag = "tag"
 	// spell push: --username
 	FlagSpellPushUsername = "username"
-	// status: --W
-	FlagStatusW = "W"
-	// status: --c
-	FlagStatusC = "c"
-	// status: --compact
-	FlagStatusCompact = "compact"
-	// status: --probe
-	FlagStatusProbe = "probe"
-	// status: --socket
-	FlagStatusSocket = "socket"
-	// status: --symbols
-	FlagStatusSymbols = "symbols"
-	// status: --watch
-	FlagStatusWatch = "watch"
-	// status: --workspace
-	FlagStatusWorkspace = "workspace"
+	// vcs checkout: --bootstrap
+	FlagVCSCheckoutBootstrap = "bootstrap"
+	// vcs checkout: --fetch
+	FlagVCSCheckoutFetch = "fetch"
+	// vcs checkout: --remove
+	FlagVCSCheckoutRemove = "remove"
 	// vcs checkpoint: --preserve
 	FlagVCSCheckpointPreserve = "preserve"
 	// vcs ls-files: --exclude
@@ -888,7 +890,7 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 	cmdline.DurationVar(fs, &f.Timeout, FlagRunTimeout, 0, "m", "Abort if the run has not finished within this duration (e.g. 5m, 1h30m). Bare numbers are minutes.")
 	fs.BoolVar(&f.Stdin, FlagRunStdin, false, "Run the shards of a saved shard plan, the document affected --plan prints, read from stdin; the plan names the target and the projects")
 	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagRunStdin)
-	fs.StringVar(&f.Shard, FlagRunShard, "", "With --stdin: run only the saved plan's shard with this id. Without it: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing")
+	fs.StringVar(&f.Shard, FlagRunShard, "", "With --stdin: run only the saved plan's shard with this id, or every shard with \"all\"; a plan of several shards refuses without one. Without it: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing")
 	fs.IntVar(&f.NShards, FlagRunNShards, 0, "Without --stdin: the shard count the --shard label belongs to. With it the count is the saved plan's, and a different value is refused")
 	fs.BoolVar(&f.VolatilityRetry, FlagRunVolatilityRetry, true, "Retry a target that fails with volatile output; --no-volatility-retry disables it for this run")
 	cmdline.NegatedBoolVar(fs, &f.VolatilityRetry, FlagRunVolatilityRetry)
@@ -1171,16 +1173,18 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 
 // ExplainFlags are the flags declared for `magus explain`.
 type ExplainFlags struct {
-	Refresh   bool // --[no-]refresh
-	Global    bool // --[no-]global
-	Source    bool // --[no-]source
-	MaxLines  int  // --max-lines
-	SkipLines int  // --skip-lines
+	To        string // --to
+	Refresh   bool   // --[no-]refresh
+	Global    bool   // --[no-]global
+	Source    bool   // --[no-]source
+	MaxLines  int    // --max-lines
+	SkipLines int    // --skip-lines
 }
 
 // BindExplain registers `magus explain`'s flags on fs and returns the destination.
 func BindExplain(fs *flag.FlagSet) *ExplainFlags {
 	var f ExplainFlags
+	fs.StringVar(&f.To, FlagExplainTo, "", "Print the shortest chain of edges from the node to this `node` (an ID or a name) instead of its card")
 	fs.BoolVar(&f.Refresh, FlagExplainRefresh, false, "Force a full graph rebuild before explaining")
 	cmdline.NegatedBoolVar(fs, &f.Refresh, FlagExplainRefresh)
 	fs.BoolVar(&f.Global, FlagExplainGlobal, false, "Resolve across the workspaces registered in config (knowledge.workspaces)")
@@ -1189,22 +1193,6 @@ func BindExplain(fs *flag.FlagSet) *ExplainFlags {
 	cmdline.NegatedBoolVar(fs, &f.Source, FlagExplainSource)
 	fs.IntVar(&f.MaxLines, FlagExplainMaxLines, 200, "Print at most this many lines of the section (0 for all), then say how many there were and print the next command. Implies --source")
 	fs.IntVar(&f.SkipLines, FlagExplainSkipLines, 0, "Skip this many lines of the section first; line numbers carry on. Implies --source")
-	return &f
-}
-
-// PathFlags are the flags declared for `magus path`.
-type PathFlags struct {
-	Refresh bool // --[no-]refresh
-	Global  bool // --[no-]global
-}
-
-// BindPath registers `magus path`'s flags on fs and returns the destination.
-func BindPath(fs *flag.FlagSet) *PathFlags {
-	var f PathFlags
-	fs.BoolVar(&f.Refresh, FlagPathRefresh, false, "Force a full graph rebuild before pathfinding")
-	cmdline.NegatedBoolVar(fs, &f.Refresh, FlagPathRefresh)
-	fs.BoolVar(&f.Global, FlagPathGlobal, false, "Resolve endpoints across the workspaces registered in config (knowledge.workspaces)")
-	cmdline.NegatedBoolVar(fs, &f.Global, FlagPathGlobal)
 	return &f
 }
 
@@ -1465,6 +1453,23 @@ func BindVCSCheckpoint(fs *flag.FlagSet) *VCSCheckpointFlags {
 	var f VCSCheckpointFlags
 	fs.BoolVar(&f.Preserve, FlagVCSCheckpointPreserve, false, "Also capture the uncommitted work and print a handle that restores it")
 	cmdline.NegatedBoolVar(fs, &f.Preserve, FlagVCSCheckpointPreserve)
+	return &f
+}
+
+// VCSCheckoutFlags are the flags declared for `magus vcs checkout`.
+type VCSCheckoutFlags struct {
+	Fetch     string // --fetch
+	Bootstrap bool   // --[no-]bootstrap
+	Remove    string // --remove
+}
+
+// BindVCSCheckout registers `magus vcs checkout`'s flags on fs and returns the destination.
+func BindVCSCheckout(fs *flag.FlagSet) *VCSCheckoutFlags {
+	var f VCSCheckoutFlags
+	fs.StringVar(&f.Fetch, FlagVCSCheckoutFetch, "", "Fetch this `ref` from the default remote first, such as refs/pull/<n>/head")
+	fs.BoolVar(&f.Bootstrap, FlagVCSCheckoutBootstrap, true, "Run the install targets, the harness install and the checkout.bootstrap hook; --no-bootstrap skips all three")
+	cmdline.NegatedBoolVar(fs, &f.Bootstrap, FlagVCSCheckoutBootstrap)
+	fs.StringVar(&f.Remove, FlagVCSCheckoutRemove, "", "Remove the checkout at this `dir`, one this command made, instead")
 	return &f
 }
 
@@ -1972,6 +1977,99 @@ func BindQueueReviews(fs *flag.FlagSet) *QueueReviewsFlags {
 	return &f
 }
 
+// ServerStartFlags are the flags declared for `magus server start`.
+type ServerStartFlags struct {
+	Foreground bool // --[no-]foreground
+}
+
+// BindServerStart registers `magus server start`'s flags on fs and returns the destination.
+func BindServerStart(fs *flag.FlagSet) *ServerStartFlags {
+	var f ServerStartFlags
+	fs.BoolVar(&f.Foreground, FlagServerStartForeground, false, "Run in the foreground and block, instead of auto-backgrounding")
+	cmdline.NegatedBoolVar(fs, &f.Foreground, FlagServerStartForeground)
+	return &f
+}
+
+// ServerStopFlags are the flags declared for `magus server stop`.
+type ServerStopFlags struct {
+	Socket string // --socket
+	Pools  bool   // --[no-]pools
+}
+
+// BindServerStop registers `magus server stop`'s flags on fs and returns the destination.
+func BindServerStop(fs *flag.FlagSet) *ServerStopFlags {
+	var f ServerStopFlags
+	fs.StringVar(&f.Socket, FlagServerStopSocket, "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
+	fs.BoolVar(&f.Pools, FlagServerStopPools, false, "Stop per-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone")
+	cmdline.NegatedBoolVar(fs, &f.Pools, FlagServerStopPools)
+	return &f
+}
+
+// ServerStatusFlags are the flags declared for `magus server status`.
+type ServerStatusFlags struct {
+	Watch     time.Duration // --watch, -W
+	Compact   bool          // --[no-]compact, -c
+	Symbols   bool          // --[no-]symbols
+	Socket    string        // --socket
+	Probe     string        // --probe
+	Workspace string        // --workspace
+}
+
+// BindServerStatus registers `magus server status`'s flags on fs and returns the destination.
+func BindServerStatus(fs *flag.FlagSet) *ServerStatusFlags {
+	var f ServerStatusFlags
+	cmdline.DurationVar(fs, &f.Watch, FlagServerStatusWatch, 0, "s", "Poll and reprint at this interval (minimum 15s; 0 means one-shot). Bare numbers are seconds.")
+	cmdline.DurationVar(fs, &f.Watch, FlagServerStatusW, 0, "s", "Short for --watch")
+	fs.BoolVar(&f.Compact, FlagServerStatusCompact, false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
+	fs.BoolVar(&f.Compact, FlagServerStatusC, false, "Short for --compact")
+	cmdline.NegatedBoolVar(fs, &f.Compact, FlagServerStatusCompact)
+	fs.BoolVar(&f.Symbols, FlagServerStatusSymbols, false, "Include the expensive symbol-index freshness scan")
+	cmdline.NegatedBoolVar(fs, &f.Symbols, FlagServerStatusSymbols)
+	fs.StringVar(&f.Socket, FlagServerStatusSocket, "", "Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. --probe asks the server at server.address unless this names one")
+	fs.StringVar(&f.Probe, FlagServerStatusProbe, "", "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)")
+	fs.StringVar(&f.Workspace, FlagServerStatusWorkspace, "", "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
+	return &f
+}
+
+// ServerReloadFlags are the flags declared for `magus server reload`.
+type ServerReloadFlags struct {
+	Socket string // --socket
+}
+
+// BindServerReload registers `magus server reload`'s flags on fs and returns the destination.
+func BindServerReload(fs *flag.FlagSet) *ServerReloadFlags {
+	var f ServerReloadFlags
+	fs.StringVar(&f.Socket, FlagServerReloadSocket, "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
+	return &f
+}
+
+// ServerBrokerFlags are the flags declared for `magus server broker`.
+type ServerBrokerFlags struct {
+	IdleExit time.Duration // --idle-exit
+	Log      string        // --log
+}
+
+// BindServerBroker registers `magus server broker`'s flags on fs and returns the destination.
+func BindServerBroker(fs *flag.FlagSet) *ServerBrokerFlags {
+	var f ServerBrokerFlags
+	cmdline.DurationVar(fs, &f.IdleExit, FlagServerBrokerIdleExit, time.Duration(600000000000), "m", "Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive. Bare numbers are minutes.")
+	fs.StringVar(&f.Log, FlagServerBrokerLog, "", "Append stdout and stderr to this file, reopening it on SIGHUP; a run that starts a broker passes $XDG_STATE_HOME/magus/broker.log")
+	return &f
+}
+
+// ServerBrokerStopFlags are the flags declared for `magus server broker stop`.
+type ServerBrokerStopFlags struct {
+	Services bool // --[no-]services
+}
+
+// BindServerBrokerStop registers `magus server broker stop`'s flags on fs and returns the destination.
+func BindServerBrokerStop(fs *flag.FlagSet) *ServerBrokerStopFlags {
+	var f ServerBrokerStopFlags
+	fs.BoolVar(&f.Services, FlagServerBrokerStopServices, false, "Stop the broker's hosted services, leaving the broker running")
+	cmdline.NegatedBoolVar(fs, &f.Services, FlagServerBrokerStopServices)
+	return &f
+}
+
 // WatchFlags are the flags declared for `magus watch`.
 //
 // It does NOT carry --ignore: a custom-valued flag is bound by the command itself,
@@ -2012,111 +2110,6 @@ func BindEvents(fs *flag.FlagSet) *EventsFlags {
 	fs.StringVar(&f.Type, FlagEventsType, "", "Restrict to these event types (comma-separated); default is every type except target.output")
 	fs.IntVar(&f.Limit, FlagEventsLimit, 20, "Replay this many recent invocations before following; 0 replays nothing (only new events), negative replays every retained run")
 	cmdline.DurationVar(fs, &f.Interval, FlagEventsInterval, time.Duration(250000000), "ms", "How often --follow polls the run log for new events. Bare numbers are milliseconds.")
-	return &f
-}
-
-// ServerStartFlags are the flags declared for `magus server start`.
-type ServerStartFlags struct {
-	Foreground bool // --[no-]foreground
-}
-
-// BindServerStart registers `magus server start`'s flags on fs and returns the destination.
-func BindServerStart(fs *flag.FlagSet) *ServerStartFlags {
-	var f ServerStartFlags
-	fs.BoolVar(&f.Foreground, FlagServerStartForeground, false, "Run in the foreground and block, instead of auto-backgrounding")
-	cmdline.NegatedBoolVar(fs, &f.Foreground, FlagServerStartForeground)
-	return &f
-}
-
-// ServerStopFlags are the flags declared for `magus server stop`.
-type ServerStopFlags struct {
-	Socket string // --socket
-	Pools  bool   // --[no-]pools
-}
-
-// BindServerStop registers `magus server stop`'s flags on fs and returns the destination.
-func BindServerStop(fs *flag.FlagSet) *ServerStopFlags {
-	var f ServerStopFlags
-	fs.StringVar(&f.Socket, FlagServerStopSocket, "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
-	fs.BoolVar(&f.Pools, FlagServerStopPools, false, "Stop per-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone")
-	cmdline.NegatedBoolVar(fs, &f.Pools, FlagServerStopPools)
-	return &f
-}
-
-// ServerStatusFlags are the flags declared for `magus server status`.
-type ServerStatusFlags struct {
-	Socket string // --socket
-}
-
-// BindServerStatus registers `magus server status`'s flags on fs and returns the destination.
-func BindServerStatus(fs *flag.FlagSet) *ServerStatusFlags {
-	var f ServerStatusFlags
-	fs.StringVar(&f.Socket, FlagServerStatusSocket, "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
-	return &f
-}
-
-// ServerReloadFlags are the flags declared for `magus server reload`.
-type ServerReloadFlags struct {
-	Socket string // --socket
-}
-
-// BindServerReload registers `magus server reload`'s flags on fs and returns the destination.
-func BindServerReload(fs *flag.FlagSet) *ServerReloadFlags {
-	var f ServerReloadFlags
-	fs.StringVar(&f.Socket, FlagServerReloadSocket, "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
-	return &f
-}
-
-// BrokerFlags are the flags declared for `magus broker`.
-type BrokerFlags struct {
-	IdleExit time.Duration // --idle-exit
-	Log      string        // --log
-}
-
-// BindBroker registers `magus broker`'s flags on fs and returns the destination.
-func BindBroker(fs *flag.FlagSet) *BrokerFlags {
-	var f BrokerFlags
-	cmdline.DurationVar(fs, &f.IdleExit, FlagBrokerIdleExit, time.Duration(600000000000), "m", "Exit once the broker has held nothing this long; 0 never exits, for a supervisor that keeps it alive. Bare numbers are minutes.")
-	fs.StringVar(&f.Log, FlagBrokerLog, "", "Append stdout and stderr to this file, reopening it on SIGHUP; a run that starts a broker passes $XDG_STATE_HOME/magus/broker.log")
-	return &f
-}
-
-// BrokerStopFlags are the flags declared for `magus broker stop`.
-type BrokerStopFlags struct {
-	Services bool // --[no-]services
-}
-
-// BindBrokerStop registers `magus broker stop`'s flags on fs and returns the destination.
-func BindBrokerStop(fs *flag.FlagSet) *BrokerStopFlags {
-	var f BrokerStopFlags
-	fs.BoolVar(&f.Services, FlagBrokerStopServices, false, "Stop the broker's hosted services, leaving the broker running")
-	cmdline.NegatedBoolVar(fs, &f.Services, FlagBrokerStopServices)
-	return &f
-}
-
-// StatusFlags are the flags declared for `magus status`.
-type StatusFlags struct {
-	Watch     time.Duration // --watch, -W
-	Compact   bool          // --[no-]compact, -c
-	Symbols   bool          // --[no-]symbols
-	Socket    string        // --socket
-	Probe     string        // --probe
-	Workspace string        // --workspace
-}
-
-// BindStatus registers `magus status`'s flags on fs and returns the destination.
-func BindStatus(fs *flag.FlagSet) *StatusFlags {
-	var f StatusFlags
-	cmdline.DurationVar(fs, &f.Watch, FlagStatusWatch, 0, "s", "Poll and reprint at this interval (minimum 15s; 0 means one-shot). Bare numbers are seconds.")
-	cmdline.DurationVar(fs, &f.Watch, FlagStatusW, 0, "s", "Short for --watch")
-	fs.BoolVar(&f.Compact, FlagStatusCompact, false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
-	fs.BoolVar(&f.Compact, FlagStatusC, false, "Short for --compact")
-	cmdline.NegatedBoolVar(fs, &f.Compact, FlagStatusCompact)
-	fs.BoolVar(&f.Symbols, FlagStatusSymbols, false, "Include the expensive symbol-index freshness scan")
-	cmdline.NegatedBoolVar(fs, &f.Symbols, FlagStatusSymbols)
-	fs.StringVar(&f.Socket, FlagStatusSocket, "", "Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. --probe asks the server at server.address unless this names one")
-	fs.StringVar(&f.Probe, FlagStatusProbe, "", "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)")
-	fs.StringVar(&f.Workspace, FlagStatusWorkspace, "", "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
 	return &f
 }
 
@@ -2494,21 +2487,6 @@ func BindConfigConsoleTokenCreate(fs *flag.FlagSet) *ConfigConsoleTokenCreateFla
 	return &f
 }
 
-// ManInstallFlags are the flags declared for `magus man install`.
-type ManInstallFlags struct {
-	Dir    string // --dir
-	DryRun bool   // --[no-]dry-run
-}
-
-// BindManInstall registers `magus man install`'s flags on fs and returns the destination.
-func BindManInstall(fs *flag.FlagSet) *ManInstallFlags {
-	var f ManInstallFlags
-	fs.StringVar(&f.Dir, FlagManInstallDir, "", "Directory for section 1 man pages (default: the user manpath)")
-	fs.BoolVar(&f.DryRun, FlagManInstallDryRun, false, "Print what would be written without touching the filesystem")
-	cmdline.NegatedBoolVar(fs, &f.DryRun, FlagManInstallDryRun)
-	return &f
-}
-
 // SelfUpdateFlags are the flags declared for `magus self update`.
 type SelfUpdateFlags struct {
 	Check   bool   // --[no-]check
@@ -2548,6 +2526,21 @@ func BindSelfInstallShorthand(fs *flag.FlagSet) *SelfInstallShorthandFlags {
 	fs.StringVar(&f.Dir, FlagSelfInstallShorthandDir, "", "Directory for the shorthand (default: the running binary's directory)")
 	fs.BoolVar(&f.Force, FlagSelfInstallShorthandForce, false, "Replace an existing file at the shorthand path")
 	cmdline.NegatedBoolVar(fs, &f.Force, FlagSelfInstallShorthandForce)
+	return &f
+}
+
+// SelfManFlags are the flags declared for `magus self man`.
+type SelfManFlags struct {
+	Dir    string // --dir
+	DryRun bool   // --[no-]dry-run
+}
+
+// BindSelfMan registers `magus self man`'s flags on fs and returns the destination.
+func BindSelfMan(fs *flag.FlagSet) *SelfManFlags {
+	var f SelfManFlags
+	fs.StringVar(&f.Dir, FlagSelfManDir, "", "Directory for section 1 man pages (default: the user manpath)")
+	fs.BoolVar(&f.DryRun, FlagSelfManDryRun, false, "Print what would be written without touching the filesystem")
+	cmdline.NegatedBoolVar(fs, &f.DryRun, FlagSelfManDryRun)
 	return &f
 }
 

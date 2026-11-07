@@ -57,7 +57,7 @@ type mcpCLIEquivalent struct {
 // clientCall reads.
 var mcpCLIEquivalents = map[hint.ToolName]mcpCLIEquivalent{
 	hint.ToolDiff:   {command: hint.Diff},
-	hint.ToolStatus: {command: hint.Status},
+	hint.ToolStatus: {command: hint.ServerStatus},
 	hint.ToolConfig: {command: hint.ConfigView},
 	hint.ToolBuzz:   {command: hint.Buzz, operands: []string{"path"}},
 }

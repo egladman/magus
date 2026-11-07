@@ -14,7 +14,7 @@
 // SetAuthors is the only write, and it writes the filter, not the forge: it changes which
 // authors the board shows and asks the poller for one sync now, still bounded by the poll floor.
 //
-// Access policy: GetPulls is console read; SetAuthors is console write. Both sit behind the same
+// Access policy: GetPulls is console read; SetAuthors and CheckoutPull are console write. Both sit behind the same
 // loopback guard as the other console services and are never mounted on the LAN share listener.
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
@@ -27,7 +27,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/pulls/v1alpha1/pulls.proto.
  */
 export const file_magus_pulls_v1alpha1_pulls: GenFile = /*@__PURE__*/
-  fileDesc("CiBtYWd1cy9wdWxscy92MWFscGhhMS9wdWxscy5wcm90bxIUbWFndXMucHVsbHMudjFhbHBoYTEiEQoPR2V0UHVsbHNSZXF1ZXN0Ij4KEEdldFB1bGxzUmVzcG9uc2USKgoFYm9hcmQYASABKAsyGy5tYWd1cy5wdWxscy52MWFscGhhMS5Cb2FyZCIkChFTZXRBdXRob3JzUmVxdWVzdBIPCgdhdXRob3JzGAEgAygJIkAKElNldEF1dGhvcnNSZXNwb25zZRIqCgVib2FyZBgBIAEoCzIbLm1hZ3VzLnB1bGxzLnYxYWxwaGExLkJvYXJkIrsCCgVCb2FyZBIMCgRyZXBvGAEgASgJEjIKBmZpbHRlchgCIAEoCzIiLm1hZ3VzLnB1bGxzLnYxYWxwaGExLkF1dGhvckZpbHRlchItCgRzeW5jGAMgASgLMh8ubWFndXMucHVsbHMudjFhbHBoYTEuU3luY1N0YXRlEi8KBG1haW4YBCABKAsyIS5tYWd1cy5wdWxscy52MWFscGhhMS5CcmFuY2hTdGF0ZRIpCgVwdWxscxgFIAMoCzIaLm1hZ3VzLnB1bGxzLnYxYWxwaGExLlB1bGwSLwoIcGF0dGVybnMYBiADKAsyHS5tYWd1cy5wdWxscy52MWFscGhhMS5QYXR0ZXJuEjQKC21lcmdlX29yZGVyGAcgAygLMh8ubWFndXMucHVsbHMudjFhbHBoYTEuTWVyZ2VTdGVwIlkKDEF1dGhvckZpbHRlchIPCgdhdXRob3JzGAEgAygJEhIKCmlzX2RlZmF1bHQYAiABKAgSDgoGdmlld2VyGAMgASgJEhQKDGV2ZXJ5X2F1dGhvchgEIAEoCCL3AgoJU3luY1N0YXRlEi0KCXN5bmNlZF9hdBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbmV4dF9zeW5jX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBItCglmYWlsZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKCGludGVydmFsGAQgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhYKDmNhZGVuY2VfcmVhc29uGAUgASgJEhIKCnN5bmNfZXJyb3IYBiABKAkSEgoKcmF0ZV9saW1pdBgHIAEoBRIWCg5yYXRlX3JlbWFpbmluZxgIIAEoBRIuCgpyYXRlX3Jlc2V0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIQCghyZXF1ZXN0cxgKIAEoBRITCgtyZXZhbGlkYXRlZBgLIAEoBSLJAQoLQnJhbmNoU3RhdGUSDAoEbmFtZRgBIAEoCRILCgNzaGEYAiABKAkSCwoDdXJsGAMgASgJEikKAmNpGAQgASgOMh0ubWFndXMucHVsbHMudjFhbHBoYTEuQ2lTdGF0ZRI2Cg1maXJzdF9mYWlsdXJlGAUgASgLMh8ubWFndXMucHVsbHMudjFhbHBoYTEuRmFpbGVkSm9iEg4KBnBhc3NlZBgGIAEoBRIOCgZmYWlsZWQYByABKAUSDwoHcGVuZGluZxgIIAEoBSKTBQoEUHVsbBIOCgZudW1iZXIYASABKAUSDQoFdGl0bGUYAiABKAkSDgoGYXV0aG9yGAMgASgJEgsKA3VybBgEIAEoCRIOCgZicmFuY2gYBSABKAkSEAoIaGVhZF9zaGEYBiABKAkSEQoJYmVoaW5kX2J5GAcgASgFEjIKCW1lcmdlYWJsZRgIIAEoDjIfLm1hZ3VzLnB1bGxzLnYxYWxwaGExLk1lcmdlYWJsZRIpCgJjaRgJIAEoDjIdLm1hZ3VzLnB1bGxzLnYxYWxwaGExLkNpU3RhdGUSLQoKcXVldWVkX2ZvchgKIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIOCgZwYXNzZWQYCyABKAUSDgoGZmFpbGVkGAwgASgFEg8KB3BlbmRpbmcYDSABKAUSNgoNZmlyc3RfZmFpbHVyZRgOIAEoCzIfLm1hZ3VzLnB1bGxzLnYxYWxwaGExLkZhaWxlZEpvYhIsCgZyZXZpZXcYDyABKA4yHC5tYWd1cy5wdWxscy52MWFscGhhMS5SZXZpZXcSDwoHYmxvY2tlZBgQIAMoCRIwCgVxdWV1ZRgRIAEoCzIhLm1hZ3VzLnB1bGxzLnYxYWxwaGExLlF1ZXVlU3RhdHVzEi0KCXB1c2hlZF9hdBgSIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDQoFc3RhbGUYEyABKAgSDQoFZHJhZnQYFCABKAgSLwoIb3ZlcmxhcHMYFSADKAsyHS5tYWd1cy5wdWxscy52MWFscGhhMS5PdmVybGFwEjQKC2ZhaWxlZF9qb2JzGBYgAygLMh8ubWFndXMucHVsbHMudjFhbHBoYTEuRmFpbGVkSm9iIjEKC1F1ZXVlU3RhdHVzEg0KBXN0YXRlGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJIigKB092ZXJsYXASDgoGbnVtYmVyGAEgASgFEg0KBWZpbGVzGAIgAygJIkkKCUZhaWxlZEpvYhIMCgRuYW1lGAEgASgJEgsKA3VybBgCIAEoCRINCgVsaW5lcxgDIAMoCRISCgpvdXRwdXRfcmVmGAQgASgJIswBCgdQYXR0ZXJuEi8KBGtpbmQYASABKA4yIS5tYWd1cy5wdWxscy52MWFscGhhMS5QYXR0ZXJuS2luZBINCgVjaGVjaxgCIAEoCRISCgpmaXJzdF9saW5lGAMgASgJEg0KBXB1bGxzGAQgAygFEhEKCXNpbmNlX3NoYRgFIAEoCRIVCg1zaW5jZV9zdWJqZWN0GAYgASgJEhIKCnNpbmNlX3B1bGwYByABKAUSDwoHb25fbWFpbhgIIAEoCBIPCgdtZXNzYWdlGAkgASgJIikKCU1lcmdlU3RlcBIOCgZudW1iZXIYASABKAUSDAoEbm90ZRgCIAEoCSqHAQoHQ2lTdGF0ZRIYChRDSV9TVEFURV9VTlNQRUNJRklFRBAAEhIKDkNJX1NUQVRFX0dSRUVOEAESEAoMQ0lfU1RBVEVfUkVEEAISFAoQQ0lfU1RBVEVfUlVOTklORxADEhMKD0NJX1NUQVRFX1FVRVVFRBAEEhEKDUNJX1NUQVRFX05PTkUQBSpxCglNZXJnZWFibGUSGQoVTUVSR0VBQkxFX1VOU1BFQ0lGSUVEEAASFwoTTUVSR0VBQkxFX01FUkdFQUJMRRABEhkKFU1FUkdFQUJMRV9DT05GTElDVElORxACEhUKEU1FUkdFQUJMRV9VTktOT1dOEAMqeQoGUmV2aWV3EhYKElJFVklFV19VTlNQRUNJRklFRBAAEhMKD1JFVklFV19BUFBST1ZFRBABEhwKGFJFVklFV19DSEFOR0VTX1JFUVVFU1RFRBACEhMKD1JFVklFV19SRVFVSVJFRBADEg8KC1JFVklFV19OT05FEAQqaQoLUGF0dGVybktpbmQSHAoYUEFUVEVSTl9LSU5EX1VOU1BFQ0lGSUVEEAASGwoXUEFUVEVSTl9LSU5EX1JFR1JFU1NJT04QARIfChtQQVRURVJOX0tJTkRfUlVOTkVSX0JBQ0tMT0cQAjLKAQoMUHVsbHNTZXJ2aWNlElkKCEdldFB1bGxzEiUubWFndXMucHVsbHMudjFhbHBoYTEuR2V0UHVsbHNSZXF1ZXN0GiYubWFndXMucHVsbHMudjFhbHBoYTEuR2V0UHVsbHNSZXNwb25zZRJfCgpTZXRBdXRob3JzEicubWFndXMucHVsbHMudjFhbHBoYTEuU2V0QXV0aG9yc1JlcXVlc3QaKC5tYWd1cy5wdWxscy52MWFscGhhMS5TZXRBdXRob3JzUmVzcG9uc2VC4wEKGGNvbS5tYWd1cy5wdWxscy52MWFscGhhMUIKUHVsbHNQcm90b1ABWklnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9wdWxscy92MWFscGhhMTtwdWxsc3YxYWxwaGExogIDTVBYqgIUTWFndXMuUHVsbHMuVjFhbHBoYTHKAhRNYWd1c1xQdWxsc1xWMWFscGhhMeICIE1hZ3VzXFB1bGxzXFYxYWxwaGExXEdQQk1ldGFkYXRh6gIWTWFndXM6OlB1bGxzOjpWMWFscGhhMWIGcHJvdG8z", [file_google_protobuf_duration, file_google_protobuf_timestamp]);
+  fileDesc("CiBtYWd1cy9wdWxscy92MWFscGhhMS9wdWxscy5wcm90bxIUbWFndXMucHVsbHMudjFhbHBoYTEiEQoPR2V0UHVsbHNSZXF1ZXN0Ij4KEEdldFB1bGxzUmVzcG9uc2USKgoFYm9hcmQYASABKAsyGy5tYWd1cy5wdWxscy52MWFscGhhMS5Cb2FyZCIkChFTZXRBdXRob3JzUmVxdWVzdBIPCgdhdXRob3JzGAEgAygJIkAKElNldEF1dGhvcnNSZXNwb25zZRIqCgVib2FyZBgBIAEoCzIbLm1hZ3VzLnB1bGxzLnYxYWxwaGExLkJvYXJkIiUKE0NoZWNrb3V0UHVsbFJlcXVlc3QSDgoGbnVtYmVyGAEgASgFIlAKFENoZWNrb3V0UHVsbFJlc3BvbnNlEgwKBHBhdGgYASABKAkSDgoGcmVtb3ZlGAIgASgJEgsKA2xvZxgDIAMoCRINCgVlcnJvchgEIAEoCSK7AgoFQm9hcmQSDAoEcmVwbxgBIAEoCRIyCgZmaWx0ZXIYAiABKAsyIi5tYWd1cy5wdWxscy52MWFscGhhMS5BdXRob3JGaWx0ZXISLQoEc3luYxgDIAEoCzIfLm1hZ3VzLnB1bGxzLnYxYWxwaGExLlN5bmNTdGF0ZRIvCgRtYWluGAQgASgLMiEubWFndXMucHVsbHMudjFhbHBoYTEuQnJhbmNoU3RhdGUSKQoFcHVsbHMYBSADKAsyGi5tYWd1cy5wdWxscy52MWFscGhhMS5QdWxsEi8KCHBhdHRlcm5zGAYgAygLMh0ubWFndXMucHVsbHMudjFhbHBoYTEuUGF0dGVybhI0CgttZXJnZV9vcmRlchgHIAMoCzIfLm1hZ3VzLnB1bGxzLnYxYWxwaGExLk1lcmdlU3RlcCJZCgxBdXRob3JGaWx0ZXISDwoHYXV0aG9ycxgBIAMoCRISCgppc19kZWZhdWx0GAIgASgIEg4KBnZpZXdlchgDIAEoCRIUCgxldmVyeV9hdXRob3IYBCABKAgi9wIKCVN5bmNTdGF0ZRItCglzeW5jZWRfYXQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDG5leHRfc3luY19hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLQoJZmFpbGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIrCghpbnRlcnZhbBgEIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIWCg5jYWRlbmNlX3JlYXNvbhgFIAEoCRISCgpzeW5jX2Vycm9yGAYgASgJEhIKCnJhdGVfbGltaXQYByABKAUSFgoOcmF0ZV9yZW1haW5pbmcYCCABKAUSLgoKcmF0ZV9yZXNldBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEAoIcmVxdWVzdHMYCiABKAUSEwoLcmV2YWxpZGF0ZWQYCyABKAUiyQEKC0JyYW5jaFN0YXRlEgwKBG5hbWUYASABKAkSCwoDc2hhGAIgASgJEgsKA3VybBgDIAEoCRIpCgJjaRgEIAEoDjIdLm1hZ3VzLnB1bGxzLnYxYWxwaGExLkNpU3RhdGUSNgoNZmlyc3RfZmFpbHVyZRgFIAEoCzIfLm1hZ3VzLnB1bGxzLnYxYWxwaGExLkZhaWxlZEpvYhIOCgZwYXNzZWQYBiABKAUSDgoGZmFpbGVkGAcgASgFEg8KB3BlbmRpbmcYCCABKAUipgUKBFB1bGwSDgoGbnVtYmVyGAEgASgFEg0KBXRpdGxlGAIgASgJEg4KBmF1dGhvchgDIAEoCRILCgN1cmwYBCABKAkSDgoGYnJhbmNoGAUgASgJEhAKCGhlYWRfc2hhGAYgASgJEhEKCWJlaGluZF9ieRgHIAEoBRIyCgltZXJnZWFibGUYCCABKA4yHy5tYWd1cy5wdWxscy52MWFscGhhMS5NZXJnZWFibGUSKQoCY2kYCSABKA4yHS5tYWd1cy5wdWxscy52MWFscGhhMS5DaVN0YXRlEi0KCnF1ZXVlZF9mb3IYCiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SDgoGcGFzc2VkGAsgASgFEg4KBmZhaWxlZBgMIAEoBRIPCgdwZW5kaW5nGA0gASgFEjYKDWZpcnN0X2ZhaWx1cmUYDiABKAsyHy5tYWd1cy5wdWxscy52MWFscGhhMS5GYWlsZWRKb2ISLAoGcmV2aWV3GA8gASgOMhwubWFndXMucHVsbHMudjFhbHBoYTEuUmV2aWV3Eg8KB2Jsb2NrZWQYECADKAkSMAoFcXVldWUYESABKAsyIS5tYWd1cy5wdWxscy52MWFscGhhMS5RdWV1ZVN0YXR1cxItCglwdXNoZWRfYXQYEiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBXN0YWxlGBMgASgIEg0KBWRyYWZ0GBQgASgIEi8KCG92ZXJsYXBzGBUgAygLMh0ubWFndXMucHVsbHMudjFhbHBoYTEuT3ZlcmxhcBI0CgtmYWlsZWRfam9icxgWIAMoCzIfLm1hZ3VzLnB1bGxzLnYxYWxwaGExLkZhaWxlZEpvYhIRCglmZXRjaF9yZWYYFyABKAkiMQoLUXVldWVTdGF0dXMSDQoFc3RhdGUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkiKAoHT3ZlcmxhcBIOCgZudW1iZXIYASABKAUSDQoFZmlsZXMYAiADKAkiSQoJRmFpbGVkSm9iEgwKBG5hbWUYASABKAkSCwoDdXJsGAIgASgJEg0KBWxpbmVzGAMgAygJEhIKCm91dHB1dF9yZWYYBCABKAkizAEKB1BhdHRlcm4SLwoEa2luZBgBIAEoDjIhLm1hZ3VzLnB1bGxzLnYxYWxwaGExLlBhdHRlcm5LaW5kEg0KBWNoZWNrGAIgASgJEhIKCmZpcnN0X2xpbmUYAyABKAkSDQoFcHVsbHMYBCADKAUSEQoJc2luY2Vfc2hhGAUgASgJEhUKDXNpbmNlX3N1YmplY3QYBiABKAkSEgoKc2luY2VfcHVsbBgHIAEoBRIPCgdvbl9tYWluGAggASgIEg8KB21lc3NhZ2UYCSABKAkiKQoJTWVyZ2VTdGVwEg4KBm51bWJlchgBIAEoBRIMCgRub3RlGAIgASgJKrgBCgdDaVN0YXRlEhgKFENJX1NUQVRFX1VOU1BFQ0lGSUVEEAASEgoOQ0lfU1RBVEVfR1JFRU4QARIQCgxDSV9TVEFURV9SRUQQAhIUChBDSV9TVEFURV9SVU5OSU5HEAMSEwoPQ0lfU1RBVEVfUVVFVUVEEAQSEQoNQ0lfU1RBVEVfTk9ORRAFEhYKEkNJX1NUQVRFX0NBTkNFTExFRBAGEhcKE0NJX1NUQVRFX1VOUkVBREFCTEUQBypxCglNZXJnZWFibGUSGQoVTUVSR0VBQkxFX1VOU1BFQ0lGSUVEEAASFwoTTUVSR0VBQkxFX01FUkdFQUJMRRABEhkKFU1FUkdFQUJMRV9DT05GTElDVElORxACEhUKEU1FUkdFQUJMRV9VTktOT1dOEAMqeQoGUmV2aWV3EhYKElJFVklFV19VTlNQRUNJRklFRBAAEhMKD1JFVklFV19BUFBST1ZFRBABEhwKGFJFVklFV19DSEFOR0VTX1JFUVVFU1RFRBACEhMKD1JFVklFV19SRVFVSVJFRBADEg8KC1JFVklFV19OT05FEAQqaQoLUGF0dGVybktpbmQSHAoYUEFUVEVSTl9LSU5EX1VOU1BFQ0lGSUVEEAASGwoXUEFUVEVSTl9LSU5EX1JFR1JFU1NJT04QARIfChtQQVRURVJOX0tJTkRfUlVOTkVSX0JBQ0tMT0cQAjKxAgoMUHVsbHNTZXJ2aWNlElkKCEdldFB1bGxzEiUubWFndXMucHVsbHMudjFhbHBoYTEuR2V0UHVsbHNSZXF1ZXN0GiYubWFndXMucHVsbHMudjFhbHBoYTEuR2V0UHVsbHNSZXNwb25zZRJfCgpTZXRBdXRob3JzEicubWFndXMucHVsbHMudjFhbHBoYTEuU2V0QXV0aG9yc1JlcXVlc3QaKC5tYWd1cy5wdWxscy52MWFscGhhMS5TZXRBdXRob3JzUmVzcG9uc2USZQoMQ2hlY2tvdXRQdWxsEikubWFndXMucHVsbHMudjFhbHBoYTEuQ2hlY2tvdXRQdWxsUmVxdWVzdBoqLm1hZ3VzLnB1bGxzLnYxYWxwaGExLkNoZWNrb3V0UHVsbFJlc3BvbnNlQuMBChhjb20ubWFndXMucHVsbHMudjFhbHBoYTFCClB1bGxzUHJvdG9QAVpJZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvcHVsbHMvdjFhbHBoYTE7cHVsbHN2MWFscGhhMaICA01QWKoCFE1hZ3VzLlB1bGxzLlYxYWxwaGExygIUTWFndXNcUHVsbHNcVjFhbHBoYTHiAiBNYWd1c1xQdWxsc1xWMWFscGhhMVxHUEJNZXRhZGF0YeoCFk1hZ3VzOjpQdWxsczo6VjFhbHBoYTFiBnByb3RvMw", [file_google_protobuf_duration, file_google_protobuf_timestamp]);
 
 /**
  * GetPullsRequest asks for the current board.
@@ -108,6 +108,69 @@ export const SetAuthorsResponseSchema: GenMessage<SetAuthorsResponse> = /*@__PUR
   messageDesc(file_magus_pulls_v1alpha1_pulls, 3);
 
 /**
+ * CheckoutPullRequest names the pull to check out.
+ *
+ * @generated from message magus.pulls.v1alpha1.CheckoutPullRequest
+ */
+export type CheckoutPullRequest = Message<"magus.pulls.v1alpha1.CheckoutPullRequest"> & {
+  /**
+   * number is the pull request number on the current board.
+   *
+   * @generated from field: int32 number = 1;
+   */
+  number: number;
+};
+
+/**
+ * Describes the message magus.pulls.v1alpha1.CheckoutPullRequest.
+ * Use `create(CheckoutPullRequestSchema)` to create a new message.
+ */
+export const CheckoutPullRequestSchema: GenMessage<CheckoutPullRequest> = /*@__PURE__*/
+  messageDesc(file_magus_pulls_v1alpha1_pulls, 4);
+
+/**
+ * CheckoutPullResponse is the record `magus vcs checkout -o json` printed.
+ *
+ * @generated from message magus.pulls.v1alpha1.CheckoutPullResponse
+ */
+export type CheckoutPullResponse = Message<"magus.pulls.v1alpha1.CheckoutPullResponse"> & {
+  /**
+   * path is the directory of the new checkout.
+   *
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * remove is the command that removes the checkout.
+   *
+   * @generated from field: string remove = 2;
+   */
+  remove: string;
+
+  /**
+   * log is what the checkout did, one line per step, including the bootstrap it ran.
+   *
+   * @generated from field: repeated string log = 3;
+   */
+  log: string[];
+
+  /**
+   * error is the failure text, empty on success.
+   *
+   * @generated from field: string error = 4;
+   */
+  error: string;
+};
+
+/**
+ * Describes the message magus.pulls.v1alpha1.CheckoutPullResponse.
+ * Use `create(CheckoutPullResponseSchema)` to create a new message.
+ */
+export const CheckoutPullResponseSchema: GenMessage<CheckoutPullResponse> = /*@__PURE__*/
+  messageDesc(file_magus_pulls_v1alpha1_pulls, 5);
+
+/**
  * Board is everything the console renders for one repository.
  *
  * @generated from message magus.pulls.v1alpha1.Board
@@ -160,7 +223,7 @@ export type Board = Message<"magus.pulls.v1alpha1.Board"> & {
  * Use `create(BoardSchema)` to create a new message.
  */
 export const BoardSchema: GenMessage<Board> = /*@__PURE__*/
-  messageDesc(file_magus_pulls_v1alpha1_pulls, 4);
+  messageDesc(file_magus_pulls_v1alpha1_pulls, 6);
 
 /**
  * AuthorFilter says whose pull requests the board shows.
@@ -200,7 +263,7 @@ export type AuthorFilter = Message<"magus.pulls.v1alpha1.AuthorFilter"> & {
  * Use `create(AuthorFilterSchema)` to create a new message.
  */
 export const AuthorFilterSchema: GenMessage<AuthorFilter> = /*@__PURE__*/
-  messageDesc(file_magus_pulls_v1alpha1_pulls, 5);
+  messageDesc(file_magus_pulls_v1alpha1_pulls, 7);
 
 /**
  * SyncState is when the board was taken and why the poller is waiting as long as it is.
@@ -285,7 +348,7 @@ export type SyncState = Message<"magus.pulls.v1alpha1.SyncState"> & {
  * Use `create(SyncStateSchema)` to create a new message.
  */
 export const SyncStateSchema: GenMessage<SyncState> = /*@__PURE__*/
-  messageDesc(file_magus_pulls_v1alpha1_pulls, 6);
+  messageDesc(file_magus_pulls_v1alpha1_pulls, 8);
 
 /**
  * BranchState is a branch and the CI on its head commit.
@@ -343,7 +406,7 @@ export type BranchState = Message<"magus.pulls.v1alpha1.BranchState"> & {
  * Use `create(BranchStateSchema)` to create a new message.
  */
 export const BranchStateSchema: GenMessage<BranchState> = /*@__PURE__*/
-  messageDesc(file_magus_pulls_v1alpha1_pulls, 7);
+  messageDesc(file_magus_pulls_v1alpha1_pulls, 9);
 
 /**
  * Pull is one open pull request row on the board.
@@ -478,6 +541,13 @@ export type Pull = Message<"magus.pulls.v1alpha1.Pull"> & {
    * @generated from field: repeated magus.pulls.v1alpha1.FailedJob failed_jobs = 22;
    */
   failedJobs: FailedJob[];
+
+  /**
+   * fetch_ref is the ref a clone fetches to get head_sha, for example refs/pull/12/head.
+   *
+   * @generated from field: string fetch_ref = 23;
+   */
+  fetchRef: string;
 };
 
 /**
@@ -485,7 +555,7 @@ export type Pull = Message<"magus.pulls.v1alpha1.Pull"> & {
  * Use `create(PullSchema)` to create a new message.
  */
 export const PullSchema: GenMessage<Pull> = /*@__PURE__*/
-  messageDesc(file_magus_pulls_v1alpha1_pulls, 8);
+  messageDesc(file_magus_pulls_v1alpha1_pulls, 10);
 
 /**
  * QueueStatus is the merge queue's view of one pull request.
@@ -513,7 +583,7 @@ export type QueueStatus = Message<"magus.pulls.v1alpha1.QueueStatus"> & {
  * Use `create(QueueStatusSchema)` to create a new message.
  */
 export const QueueStatusSchema: GenMessage<QueueStatus> = /*@__PURE__*/
-  messageDesc(file_magus_pulls_v1alpha1_pulls, 9);
+  messageDesc(file_magus_pulls_v1alpha1_pulls, 11);
 
 /**
  * Overlap is another open pull request that changes files this one also changes.
@@ -537,7 +607,7 @@ export type Overlap = Message<"magus.pulls.v1alpha1.Overlap"> & {
  * Use `create(OverlapSchema)` to create a new message.
  */
 export const OverlapSchema: GenMessage<Overlap> = /*@__PURE__*/
-  messageDesc(file_magus_pulls_v1alpha1_pulls, 10);
+  messageDesc(file_magus_pulls_v1alpha1_pulls, 12);
 
 /**
  * FailedJob is one failing check with the first error lines the forge reported for it.
@@ -575,7 +645,7 @@ export type FailedJob = Message<"magus.pulls.v1alpha1.FailedJob"> & {
  * Use `create(FailedJobSchema)` to create a new message.
  */
 export const FailedJobSchema: GenMessage<FailedJob> = /*@__PURE__*/
-  messageDesc(file_magus_pulls_v1alpha1_pulls, 11);
+  messageDesc(file_magus_pulls_v1alpha1_pulls, 13);
 
 /**
  * Pattern is one cross-PR finding: a regression, or a runner backlog.
@@ -646,7 +716,7 @@ export type Pattern = Message<"magus.pulls.v1alpha1.Pattern"> & {
  * Use `create(PatternSchema)` to create a new message.
  */
 export const PatternSchema: GenMessage<Pattern> = /*@__PURE__*/
-  messageDesc(file_magus_pulls_v1alpha1_pulls, 12);
+  messageDesc(file_magus_pulls_v1alpha1_pulls, 14);
 
 /**
  * MergeStep is one pull in the suggested merge order.
@@ -672,7 +742,7 @@ export type MergeStep = Message<"magus.pulls.v1alpha1.MergeStep"> & {
  * Use `create(MergeStepSchema)` to create a new message.
  */
 export const MergeStepSchema: GenMessage<MergeStep> = /*@__PURE__*/
-  messageDesc(file_magus_pulls_v1alpha1_pulls, 13);
+  messageDesc(file_magus_pulls_v1alpha1_pulls, 15);
 
 /**
  * CiState is the rolled-up result of a commit's checks, with the queue context already removed.
@@ -719,6 +789,21 @@ export enum CiState {
    * @generated from enum value: CI_STATE_NONE = 5;
    */
   NONE = 5,
+
+  /**
+   * CANCELLED means at least one check was cancelled and none failed or still runs.
+   *
+   * @generated from enum value: CI_STATE_CANCELLED = 6;
+   */
+  CANCELLED = 6,
+
+  /**
+   * UNREADABLE means a check reported a state outside the provider contract.
+   * The pull's blocked reasons name the check and the state.
+   *
+   * @generated from enum value: CI_STATE_UNREADABLE = 7;
+   */
+  UNREADABLE = 7,
 }
 
 /**
@@ -862,6 +947,17 @@ export const PullsService: GenService<{
     methodKind: "unary";
     input: typeof SetAuthorsRequestSchema;
     output: typeof SetAuthorsResponseSchema;
+  },
+  /**
+   * CheckoutPull makes an isolated local checkout of a pull's head commit by running
+   * `magus vcs checkout`, and reports where it is and how to remove it.
+   *
+   * @generated from rpc magus.pulls.v1alpha1.PullsService.CheckoutPull
+   */
+  checkoutPull: {
+    methodKind: "unary";
+    input: typeof CheckoutPullRequestSchema;
+    output: typeof CheckoutPullResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_magus_pulls_v1alpha1_pulls, 0);

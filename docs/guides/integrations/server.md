@@ -8,8 +8,8 @@ tags:
     server,
     concurrency,
     magus server,
-    magus broker,
-    magus status,
+    magus server broker,
+    magus server status,
     socket,
     pool,
     magus.yaml,
@@ -29,13 +29,13 @@ aliases: [guides/daemon, guides/integrations/daemon]
 magus runs up to two background processes, each named for what it holds and each with
 one lifetime rule:
 
-| Process        | Holds                                                                                        | Started by                 | Exits                              | Listens on                                |
-| -------------- | -------------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------- | ----------------------------------------- |
-| `magus broker` | this host's capacity (slots and declared `memory_mb`) and the shared services runs keep warm | any run, when none answers | ten minutes after it holds nothing | `$XDG_RUNTIME_DIR/magus/broker-<protocol>.sock` only |
-| `magus server` | MCP, the console, the APIs, background jobs, the graph and symbol watch, warm workspaces     | `magus server start`       | when you stop it                   | `server.sock` and HTTP on `mcp.address`   |
+| Process               | Holds                                                                                        | Started by                 | Exits                              | Listens on                                           |
+| --------------------- | -------------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------- | ---------------------------------------------------- |
+| `magus server broker` | this host's capacity (slots and declared `memory_mb`) and the shared services runs keep warm | any run, when none answers | ten minutes after it holds nothing | `$XDG_RUNTIME_DIR/magus/broker-<protocol>.sock` only |
+| `magus server`        | MCP, the console, the APIs, background jobs, the graph and symbol watch, warm workspaces     | `magus server start`       | when you stop it                   | `server.sock` and HTTP on `mcp.address`              |
 
 This page calls the second process the daemon; the command that runs it is `magus server`.
-`ps` tells them apart by argv: `magus broker` and `magus server --foreground`.
+`ps` tells them apart by argv: `magus server broker` and `magus server --foreground`.
 
 ## Concurrency
 
@@ -63,7 +63,7 @@ invocations still adopt into their parent's pool.
 A run starts the broker when none answers, and says so once on stderr:
 
 ```text
-magus: started a broker (pid 48213) to hold this host's capacity; it opens no network listener and exits after 10 minutes holding nothing (`magus broker status` lists it)
+magus: started a broker (pid 48213) to hold this host's capacity; it opens no network listener and exits after 10 minutes holding nothing (`magus server broker status` lists it)
 ```
 
 It loads no workspace, records no telemetry, and listens on its unix socket and nothing
@@ -79,14 +79,14 @@ dies with runs still going, each re-asserts its claims on the next broker to ans
 the new one counts the memory those steps are using.
 
 ```sh
-magus broker status             # capacity, every claim holding it, its services
-magus broker stop --services    # stop the services it hosts, leave it running
-magus broker stop               # stop it; running steps keep going
-magus broker                    # run one in this process, logging to stderr
-magus broker --log FILE         # the same, appending to FILE (a run passes broker.log)
+magus server broker status             # capacity, every claim holding it, its services
+magus server broker stop --services    # stop the services it hosts, leave it running
+magus server broker stop               # stop it; running steps keep going
+magus server broker                    # run one in this process, logging to stderr
+magus server broker --log FILE         # the same, appending to FILE (a run passes broker.log)
 ```
 
-`magus broker status` exits non-zero when none is running, so a script can chain on it.
+`magus server broker status` exits non-zero when none is running, so a script can chain on it.
 
 The broker answers signals the way a supervisor expects:
 
@@ -97,7 +97,7 @@ The broker answers signals the way a supervisor expects:
 | second `SIGTERM`, or `SIGINT` | stops its services and exits now                                                                                                                               |
 
 A run the drain turns away is refused under `broker: required` and runs unarbitrated under
-`best-effort`, each with the draining broker's pid in the message. `magus broker status`
+`best-effort`, each with the draining broker's pid in the message. `magus server broker status`
 shows a `draining` row meanwhile. Runs still holding claims when it exits keep going and
 re-assert them on the next broker.
 
@@ -116,9 +116,9 @@ A run starting the broker is enough on its own. To have a supervisor own it inst
 print the units and install them yourself; magus never writes them:
 
 ```sh
-magus broker units systemd   # magus-broker.socket and magus-broker.service
-magus broker units launchd   # ~/Library/LaunchAgents/magus.broker.plist
-magus broker units -o json   # the same, as {supervisor, path, content} records
+magus server broker units systemd   # magus-broker.socket and magus-broker.service
+magus server broker units launchd   # ~/Library/LaunchAgents/magus.broker.plist
+magus server broker units -o json   # the same, as {supervisor, path, content} records
 ```
 
 With no supervisor named it prints launchd's on macOS and systemd's elsewhere. Each file
@@ -131,13 +131,13 @@ socket over through `LISTEN_PID` and `LISTEN_FDS`, still exits when idle, and sy
 starts it again on the next connection. A handed-over socket is checked strictly: a
 malformed variable, more than one socket, anything but a listening unix stream socket,
 or a socket bound anywhere but `broker-<protocol>.sock` stops the broker with an error rather than
-binding a socket of its own. `magus broker stop` waits for the broker to hang up, not for
+binding a socket of its own. `magus server broker stop` waits for the broker to hang up, not for
 the socket to go, since systemd keeps it.
 
 launchd hands a socket over only through `launch_activate_socket`, a C call magus does
 not make. The launchd agent therefore starts the broker at login with `--idle-exit 0` and
 keeps it alive, and the broker binds `broker-<protocol>.sock` itself. The agent pins `TMPDIR` and
-`XDG_RUNTIME_DIR` to the values `magus broker units` saw, because the socket's path is
+`XDG_RUNTIME_DIR` to the values `magus server broker units` saw, because the socket's path is
 derived from them and launchd starts agents with an environment of its own.
 
 Both units fit the drain the broker runs on its first `SIGTERM`:
@@ -150,7 +150,7 @@ Both units fit the drain the broker runs on its first `SIGTERM`:
 | `SIGHUP`, log reopen  | `ExecReload=kill -HUP $MAINPID`      | `launchctl kill SIGHUP gui/$(id -u)/magus.broker`      |
 | where the log goes    | stderr, into the journal             | `--log`, with `StandardErrorPath` naming the same file |
 
-The grace is the `shutdown_grace` that `magus broker units` resolved, pinned on the
+The grace is the `shutdown_grace` that `magus server broker units` resolved, pinned on the
 command line so the broker drains for exactly as long as its supervisor waits; to change
 it, print the units again. The 60 seconds past it cover the broker stopping the services
 it hosts, which it does only once the drain ends. That is also why systemd's `SIGTERM`
@@ -175,8 +175,8 @@ magus server start          # detaches and returns once it is accepting
 magus server start --foreground # blocking, for a supervisor
 magus server stop           # graceful shutdown; waits for in-flight work
 magus server status         # the daemon's rows, pool and listeners; non-zero when down
-magus status                # the broker, the daemon, the pool, MCP endpoint health
-magus status -W 15s         # poll and reprint every 15 seconds
+magus server status                # the broker, the daemon, the pool, MCP endpoint health
+magus server status -W 15s         # poll and reprint every 15 seconds
 ```
 
 `magus server start` detaches by default: it spawns `magus server --foreground`, waits
@@ -215,7 +215,7 @@ the broker, which holds the host's capacity, starts itself.
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MCP                                             | stdio only: `magus mcp`, launched by the agent host, opens the workspace it starts in                                                                        | also Streamable HTTP on `mcp.address` and on the daemon's socket, one endpoint several clients share ([which transport when](mcp.md#which-transport-when))                                                                              |
 | Console                                         | not available; `magus graph export --open --serve` hands one graph snapshot to the hosted explorer and stops                                                 | served on `mcp.address`, with the printed URL and a token from `magus config console token create`; [sharing it to a phone](#sharing-the-console-to-a-phone) is available                                                               |
-| Health probes                                   | `magus status` reports the daemon as not running                                                                                                             | `/livez`, `/readyz` and `/healthz`, and `magus status --probe` ([Kubernetes and container probes](#kubernetes-and-container-probes))                                                                                                    |
+| Health probes                                   | `magus server status` reports the daemon as not running                                                                                                             | `/livez`, `/readyz` and `/healthz`, and `magus server status --probe` ([Kubernetes and container probes](#kubernetes-and-container-probes))                                                                                                    |
 | Job ledger (`magus job fork`, `exec`, `exit`)   | works; the ledger is kept per repository and `magus job watch` reads it locally                                                                              | the same, and each job verb prints a console link for the job                                                                                                                                                                           |
 | The daemon's own jobs (`magus job run <name>`)  | does nothing and exits 0, so a hook never delays a checkout; the request is recorded as `no-server`                                                          | submitted and run in the background; a job already running is not started twice                                                                                                                                                         |
 | Scheduled runs                                  | none; nothing runs on a timer                                                                                                                                | when the pool is idle: `sync-graph` every 6h, `rotate-activities` every 1h, `rotate-logs` every 7d, `prune-preserved` every 24h, `check-review` every 15m; set under `server.maintenance`, `0` disables a job                           |
@@ -309,7 +309,7 @@ magus: detached as pid 48301; its output goes to /home/you/.local/state/magus/de
 ```
 
 The detached run is an ordinary run: it takes its own broker connection for its claims,
-and needs no daemon. Follow it with `tail -f` on that log, or `magus broker status` to see
+and needs no daemon. Follow it with `tail -f` on that log, or `magus server broker status` to see
 what it holds. The log directory is `$XDG_STATE_HOME/magus/detached/`, one file per run.
 
 ## Two transports
@@ -352,7 +352,7 @@ daemon started by an older magus says so with
 The Unix socket is the source of truth for daemon state; the HTTP health routes are a thin
 wrapper that answers by querying that same socket. But only an actual HTTP request proves
 the agent-facing endpoint is bound and serving (a socket check cannot detect an HTTP bind
-failure), so the two listeners can diverge, which is why `magus status` reports each
+failure), so the two listeners can diverge, which is why `magus server status` reports each
 separately.
 
 This page zooms in on the two transports; the HTTP server also carries the agent-facing
@@ -407,9 +407,9 @@ It cannot run a build, mutate the cache, reach `/mcp`, or read anything the loop
 console does not already show. There is no standing exposure: when the timer fires the
 listener is gone and the token validates nowhere.
 
-## Health: what `magus status` reports
+## Health: what `magus server status` reports
 
-`magus status` is the health command. It prints one row per fact, record type first and
+`magus server status` is the health command. It prints one row per fact, record type first and
 pid second, so `awk` and `xargs` work on it without a parser:
 
 ```text
@@ -435,7 +435,7 @@ not-ready | unreachable | disabled`), the HTTP endpoint agent hosts connect to. 
 starts this on its own, so an `unreachable` MCP endpoint is the usual reason "the magus
 tools disappeared" from an agent. See [MCP](mcp.md#is-mcp-actually-reachable).
 
-For scripts and Kubernetes probes, `magus status --probe=<kind>` exits `0` healthy / `1`
+For scripts and Kubernetes probes, `magus server status --probe=<kind>` exits `0` healthy / `1`
 unhealthy. The kinds are `liveness` (the daemon answers), `readiness` (a workspace is
 loaded), and `mcp` (the MCP endpoint is reachable), and they are comma-combinable:
 `--probe=liveness,mcp` fails if either the daemon or the endpoint is down. The daemon also
@@ -468,7 +468,7 @@ phrases only, never workspace roots, project or service names, filesystem paths,
 daemon PID. For the identifying per-subsystem view (workspace roots, per-project
 symbol-index freshness, named service state), read the bearer-authenticated
 `magus.status.v1alpha1.StatusService/GetStatus` Connect route instead (the
-typed replacement for the retired `GET /api/v1/status`; `magus status` reads
+typed replacement for the retired `GET /api/v1/status`; `magus server status` reads
 it the same way).
 
 The endpoints bind to `127.0.0.1` by default, which the kubelet cannot reach; set
@@ -576,7 +576,7 @@ The broker reaps a service after an idle window once its last dependent releases
 hosted service's stop command so a **new broker reaps orphans** a previous one left
 behind if it was killed uncleanly. A run's references ride its broker connection, so a
 run killed mid-build no longer leaves a service with a dependent that never releases.
-`magus broker stop --services` clears every hosted service on demand (to drop stale
+`magus server broker stop --services` clears every hosted service on demand (to drop stale
 state or free held ports) without stopping the broker.
 
 ## Configuring the daemon's socket address

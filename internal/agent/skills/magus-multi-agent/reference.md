@@ -376,7 +376,7 @@ task view. Use it to keep the store aware of descendants.
 A person at a terminal watches processes and shared workspace resources with magus:
 
 ```sh
-magus status --watch=15s
+magus server status --watch=15s
 ```
 
 It shows magus process state, lock holders, and shared-service state and adoption. It

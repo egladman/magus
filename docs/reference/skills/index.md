@@ -14,7 +14,7 @@ is its `<name>-full` twin, loaded by name when a reader needs the rationale.
 See [Skills](../../guides/integrations/agents/skills.md) for the difference.
 
 <div class="grid landing-cards">
-  <a class="landing-card" href="magus-architecture-review/"><span class="landing-card-title">magus-architecture-review</span><span class="landing-card-body">Gather architecture evidence from the magus knowledge graph (package imports, layers, symbol callers, churn, ownership) instead of reading files.</span><span class="landing-card-body"><small>9.1 KB short, 12.3 KB full - 25% shorter</small></span></a>
+  <a class="landing-card" href="magus-architecture-review/"><span class="landing-card-title">magus-architecture-review</span><span class="landing-card-body">Gather architecture evidence from the magus knowledge graph (package imports, layers, symbol callers, churn, ownership) instead of reading files.</span><span class="landing-card-body"><small>9.2 KB short, 12.3 KB full - 25% shorter</small></span></a>
   <a class="landing-card" href="magus-buzz-from-shell/"><span class="landing-card-title">magus-buzz-from-shell</span><span class="landing-card-body">Rewrite a shell script as idiomatic Buzz, not a line-by-line port.</span><span class="landing-card-body"><small>12.9 KB short, 15.2 KB full - 14% shorter</small></span></a>
   <a class="landing-card" href="magus-buzz-lang/"><span class="landing-card-title">magus-buzz-lang</span><span class="landing-card-body">Write, fix and debug Buzz, the statically typed language of magusfile.buzz, spells and `magus buzz` scripts.</span><span class="landing-card-body"><small>9.7 KB short, 12.6 KB full - 22% shorter</small></span></a>
   <a class="landing-card" href="magus-buzz-review/"><span class="landing-card-title">magus-buzz-review</span><span class="landing-card-body">Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance.</span><span class="landing-card-body"><small>11.3 KB short, 18.7 KB full - 39% shorter</small></span></a>
@@ -33,4 +33,4 @@ See [Skills](../../guides/integrations/agents/skills.md) for the difference.
   <a class="landing-card" href="magus-workspace-rules/"><span class="landing-card-title">magus-workspace-rules</span><span class="landing-card-body">Adapt magus's installed agent integration to THIS workspace without breaking it.</span><span class="landing-card-body"><small>8.3 KB short, 12.4 KB full - 32% shorter</small></span></a>
 </div>
 
-All 17 together are 132.1 KB installed as the short form, against 196.4 KB for the full twins: 32% less always-loaded text.
+All 17 together are 132.1 KB installed as the short form, against 196.5 KB for the full twins: 32% less always-loaded text.

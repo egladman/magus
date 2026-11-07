@@ -539,8 +539,8 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 			}
 			return denial{
 				Say: fmt.Sprintf("magus workspace: `%s` builds ./magus, the binary judging lease %s's calls; %s.", r.target, me.ID, workerBuildVerdict),
-				Why: fmt.Sprintf("%s\nWhen this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator places it here with `%s`. Until then the unit is held to %s, and a need for the new binary goes in your result's unresolved risks. A row that moved the checkout it owns finishes with `./magus buzz %s -- --here`.",
-					onePerBase, strings.Join(placementArgv(me.ID), " "), commands[0], job.CheckoutBootstrapScript),
+				Why: fmt.Sprintf("%s\nWhen this unit's own changes have to reach that binary, the checkout's integrator builds ./magus at this branch's commit and the orchestrator places it here with `%s`. Until then the unit is held to %s, and a need for the new binary goes in your result's unresolved risks. %s",
+					onePerBase, strings.Join(placementArgv(me.ID), " "), commands[0], movedCheckoutRebuild(checkoutHook(at.workspace))),
 			}
 		}
 		if readsOwnProjects(r, me) {
@@ -1658,7 +1658,7 @@ func repairInvocation(c hint.Invocation) bool {
 			return true
 		}
 		words := magusSubcommandWords(c.Args)
-		return len(words) > 0 && undeclaredLeaseVerbs[words[0]] && !renamesSymbol(c.Args)
+		return len(words) > 0 && (undeclaredLeaseVerbs[words[0]] || isServerStatus(words)) && !renamesSymbol(c.Args)
 	}
 	if c.Name == "git" {
 		g := parseGit(c.Args)
@@ -1722,8 +1722,8 @@ func sedOnlyPrints(args []string) bool {
 var (
 	undeclaredLeaseVerbs = map[string]bool{
 		"ledger": true, "job": true, "session": true, "ls": true, "describe": true,
-		"query": true, "explain": true, "path": true, "refs": true, "where": true,
-		"status": true, "doctor": true, "help": true, "version": true,
+		"query": true, "explain": true, "refs": true, "where": true,
+		"doctor": true, "help": true, "version": true,
 	}
 	gitReadVerbs = map[string]bool{
 		"status": true, "log": true, "diff": true, "show": true, "branch": true, "remote": true,

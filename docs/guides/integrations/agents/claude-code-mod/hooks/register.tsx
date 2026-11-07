@@ -10,6 +10,7 @@ import {
   parseActivity,
   parseJobs,
   parseRuns,
+  roleOf,
   socketFromStatus,
 } from './api'
 import { capacityText, holderText, parseBudget, refusalText, runsMagus, waiterText } from './budget'
@@ -39,7 +40,7 @@ import { DEFAULT_RATES } from './rates'
 import { MagusError, fail, fromPromise, ok, type Result } from './result'
 import { readSettings } from './settings'
 import type { Gate, Settings } from './settings'
-import { age, COLOR, GLYPH, leaf, treeLines } from './tree'
+import { age, COLOR, GLYPH, leaf, shadeOf, tintFor, treeLines } from './tree'
 
 const PANE = 'magus'
 const HEALTH_GAP_MS = 10_000
@@ -68,6 +69,7 @@ const SPEND = { plugin: 'magus', key: 'spend' } as const
 const RATES_ERROR = { plugin: 'magus', key: 'ratesError' } as const
 const BUDGET = { plugin: 'magus', key: 'budget' } as const
 const BUDGET_ERROR = { plugin: 'magus', key: 'budgetError' } as const
+const THEME = { plugin: 'magus', key: 'theme' } as const
 
 // Module state, rebuilt by register on every load.
 let settings: Settings = readSettings({})
@@ -111,7 +113,7 @@ async function binaryInfo($: EngineInterface, path: string, root: string): Promi
 }
 
 async function serverInfo($: EngineInterface, bin: string, root: string): Promise<ServerInfo | null> {
-  // Exits 1 with no server running, and still prints the report.
+  // Prints the report, with server null, when no server is running.
   const r = await run($, [bin, '-s', 'server', 'status', '-o', 'json'], root)
   if (r === null) return null
   try {
@@ -200,9 +202,9 @@ async function readBudget($: EngineInterface): Promise<void> {
 async function readBudgetOnce($: EngineInterface): Promise<void> {
   const root = await $.session.root()
   if (!(await $.fs.exists(`${root}/magusfile.buzz`))) return
-  const r = await run($, [await magusBin($, root), '-s', 'status', '-o', 'json'], root)
+  const r = await run($, [await magusBin($, root), '-s', 'server', 'status', '-o', 'json'], root)
   if (r === null) {
-    await $.state.set(BUDGET_ERROR, 'magus status -o json did not run')
+    await $.state.set(BUDGET_ERROR, 'magus server status -o json did not run')
     await refreshStatus($)
     return
   }
@@ -441,6 +443,12 @@ async function showTab($: EngineInterface, tab: Tab): Promise<void> {
   if (tab === 'budget') await readBudget($)
 }
 
+async function readTheme($: EngineInterface): Promise<void> {
+  const rows = await fromPromise($.config.list())
+  const row = rows.value?.find(r => r.key === 'theme')
+  await $.state.set(THEME, typeof row?.value === 'string' ? row.value : null)
+}
+
 async function recordSpawn($: EngineInterface, row: AgentRow): Promise<void> {
   const { value: rows = [] } = await $.state.get(AGENTS)
   await $.state.set(AGENTS, [row, ...rows].slice(0, 50))
@@ -479,7 +487,14 @@ export const register: Register = (on, options) => {
     $.clock.every(WATCH_POLL_MS, () => void pollWatch($))
     scheduleBudget($)
     $.clock.every(BUDGET_POLL_MS, () => void readBudget($))
+    await readTheme($)
     return next(e)
+  })
+
+  on('config.set', { key: 'theme' }, async ($, e, next) => {
+    const result = await next(e)
+    await readTheme($)
+    return result
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
@@ -666,13 +681,25 @@ export const register: Register = (on, options) => {
 
     if (tab === 'agents') {
       const { value: agents = [] } = await $.state.get(AGENTS)
+      const { value: theme = null } = await $.state.get(THEME)
+      const shade = shadeOf(theme)
+      const hasRoles = agents.some(a => roleOf(a.description) !== null)
       return (
         <Box flexDirection="column">
           {header}
           {agents.length === 0 ? <Text dimColor>No subagents spawned in this session yet.</Text> : null}
+          {hasRoles && shade === null ? (
+            <Text key="tint-off" dimColor wrap="truncate-end">
+              No role tints: theme {theme ?? 'unread'} names no light or dark shade.
+            </Text>
+          ) : null}
           {agents.map(a => {
             return (
-              <Box key={`agent-${a.agentId}`} gap={1}>
+              <Box
+                key={`agent-${a.agentId}`}
+                gap={1}
+                backgroundColor={tintFor(roleOf(a.description), shade)}
+              >
                 <Text color={a.finishedAt === 0 ? 'cyan' : a.outcome === 'answer' ? 'green' : 'yellow'}>
                   {a.finishedAt === 0 ? '●' : a.outcome === 'answer' ? '✓' : '◐'}
                 </Text>

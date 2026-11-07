@@ -94,7 +94,7 @@ type holdsRecord struct {
 	Projects string `record:"projects"` // newline-separated, "." for the root
 }
 
-// pipeWaitRecord names a run waiting on its upstream, for `magus status`.
+// pipeWaitRecord names a run waiting on its upstream, for status to show.
 type pipeWaitRecord struct {
 	PID             int       `record:"pid"`
 	Command         string    `record:"command"`
@@ -306,7 +306,7 @@ func (l *projectLocker) emitPipeWait(ctx context.Context, up pipe.Stage) {
 	slog.InfoContext(ctx, "lock.pipe_wait", slog.Int("upstream_pid", up.PID), slog.String("upstream_command", up.Command()))
 }
 
-// writePipeWait publishes the wait for `magus status` and returns its retraction.
+// writePipeWait publishes the wait for status and returns its retraction.
 func (l *projectLocker) writePipeWait(ctx context.Context, up pipe.Stage) func() {
 	dir := l.pipeDir()
 	if os.MkdirAll(dir, 0o755) != nil {

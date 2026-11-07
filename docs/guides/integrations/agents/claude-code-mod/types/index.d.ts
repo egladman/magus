@@ -78,6 +78,9 @@ export type AgentRow = {
   usd: number | null
 }
 
+// What the `<role>` of a spawn description `<parent>/<role> <job>` may name.
+export type Role = 'orchestrator' | 'integrator' | 'worker'
+
 export type Filter = 'live' | 'recent' | 'all'
 
 export type Tab = 'jobs' | 'runs' | 'agents' | 'budget'
@@ -102,7 +105,7 @@ export type CacheState = {
 export type Spend = { mainUsd: number; agentUsd: number; isPartial: boolean }
 
 // One claim on the machine build budget: an entry of broker.capacity.holders in
-// `magus status -o json`.
+// `magus server status -o json`.
 export type BudgetHolder = {
   pid: number
   project: string
@@ -190,6 +193,8 @@ declare module 'claude-code' {
       ratesError: string | null
       budget: BudgetRead | null
       budgetError: string | null
+      // The `theme` row of /config, read at session start and on each change.
+      theme: string | null
     }
   }
 }

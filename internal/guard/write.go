@@ -636,7 +636,7 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 	}
 	return writeGrade{Decision: decisionDeny, Reason: denial{
 		Say: fmt.Sprintf("magus workspace: %s is outside the paths lease %s was given (%s), and magus did not claim it on its own: %s; "+leaseActorClause("widen these write paths"),
-			rel, me.ID, strings.Join(me.WritePaths, ", "), stop),
+			rel, me.ID, nearestWritePaths(me, rel), stop),
 		Why: fmt.Sprintf("%s%s is outside every entry in the write_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
 			"`%s` shows what the job holds; ask the job's owner, whoever forked it, if it needs %s.\n"+
 			leaseActorWhy,
@@ -650,11 +650,34 @@ func denyExitedWrite(me types.Job, rel string) writeGrade {
 	return writeGrade{Decision: decisionDeny, Reason: denial{
 		Say: fmt.Sprintf("magus workspace: %s is outside the paths lease %s was given (%s), and job %s is exited; `%s` re-takes it, then "+
 			leaseActorClause(fmt.Sprintf("widen it with `%s`", hint.JobApply)),
-			rel, me.ID, strings.Join(me.WritePaths, ", "), me.ID, hint.JobExec.With(me.ID)),
+			rel, me.ID, nearestWritePaths(me, rel), me.ID, hint.JobExec.With(me.ID)),
 		Why: fmt.Sprintf("You stay bound to lease %s after `%s`: its write paths still grade your writes until a wait ends it. "+
 			"`%s` shows what the job holds.\n"+leaseActorWhy,
 			me.ID, hint.JobExit.With(me.ID), hint.DescribeJob.With(me.ID)),
 	}.full()}
+}
+
+// nearestWriteShown caps the write paths a denial names. An integrator's lease
+// held hundreds, and every denial printed all of them into its context.
+const nearestWriteShown = 3
+
+// nearestWritePaths names the write paths of me sharing the longest prefix with
+// rel, then counts the rest and names the command that lists them.
+func nearestWritePaths(me types.Job, rel string) string {
+	paths := slices.Clone(me.WritePaths)
+	if len(paths) <= nearestWriteShown {
+		return strings.Join(paths, ", ")
+	}
+	shared := func(p string) int {
+		n := 0
+		for n < len(p) && n < len(rel) && p[n] == rel[n] {
+			n++
+		}
+		return n
+	}
+	slices.SortStableFunc(paths, func(a, b string) int { return shared(b) - shared(a) })
+	return fmt.Sprintf("%s and %d more; `%s` lists them",
+		strings.Join(paths[:nearestWriteShown], ", "), len(paths)-nearestWriteShown, hint.DescribeJob.With(me.ID))
 }
 
 // revokedCovering is the newest revoked release on me that covers rel.

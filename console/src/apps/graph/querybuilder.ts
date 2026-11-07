@@ -254,7 +254,7 @@ const VIEWS: ViewSpec[] = [
     id: "trace",
     label: "Why does A depend on B?",
     blurb: "The shortest dependency path between two targets you pick.",
-    cli: "magus path <a> <b>",
+    cli: "magus explain <a> --to <b>",
     picks: true,
   },
   {

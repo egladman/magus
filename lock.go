@@ -40,9 +40,8 @@ type projectHold struct {
 
 // release unlocks every project this hold took and stops watching the root. Idempotent:
 // the stall watchdog is a second caller. Without that, a watchdog release followed by
-// the deferred release runs removeOwner twice, and between them another process can take
-// the lock and write its own owner record, which the finished run would then delete, making
-// the live holder invisible to `magus status` and to every refusal that names it.
+// the deferred release runs removeOwner twice. In between, another process
+// can take the lock, and the finished run would delete its owner record.
 func (h *projectHold) release() {
 	if h.stopWatchdog != nil {
 		h.stopWatchdog()

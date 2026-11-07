@@ -97,7 +97,7 @@ fun body(projects: [str], reasons: [str], total: int, link: str) > str {
         + "\nIf that matches what you expected, there is nothing to do here. If it "
         + "surprises you, look at the dependency graph before this pull request: "
         + "`magus affected --explain <project>` lists the files that pulled one in, and "
-        + "`magus path <a> <b>` shows how any two connect.\n";
+        + "`magus explain <a> --to <b>` shows how any two connect.\n";
 }
 
 fun main() > void !> any {

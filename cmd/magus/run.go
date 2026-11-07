@@ -156,8 +156,11 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		// Both halves of the shard label now come from the plan, and a run of every
 		// shard is not partial.
 		rf.NShards = 0
+		if rf.Shard == allPlanShards {
+			rf.Shard = ""
+		}
 		if rf.Shard != "" {
-			rf.NShards = saved.Count
+			rf.NShards = len(planStage(*saved, rf.Shard))
 		}
 		if globalCfg.DryRun {
 			return emitSavedPlanDryRun(ctx, *saved, rawTarget, shards)
@@ -402,7 +405,9 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// store every worktree of this repo shares (`magus session` reads it back).
 	captureHandlers = withInvocationJournal(ctx, captureHandlers, m.Root(), "run", args)
 	refs := &resultRefs{}
-	captureHandlers = append(captureHandlers, refs)
+	statuses := newResultStatuses(targetName)
+	failed := &failedResults{}
+	captureHandlers = append(captureHandlers, refs, statuses, failed)
 	invCtx, endInvocation := m.BeginInvocation(ctx, magus.Command{
 		Arguments: append([]string{"run"}, args...), Cwd: cwd, Trigger: trigger,
 	}, version, captureHandlers...)
@@ -417,7 +422,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		err = m.Run(invCtx, targets, runOpts...)
 	}
 	// See affected.go: the cut-short question is read here, not inside record.
-	gate.record(invCtx, err, invCtx.Err() != nil)
+	gate.record(invCtx, err, invCtx.Err() != nil, failed.list())
 	if rf.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("run %s: timed out after %s", targetName, rf.Timeout)
 	}
@@ -455,7 +460,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:
 		// No undeclared seeds: `magus run` names its own selection, so no changed file seeded it.
-		return emitRunResult(ctx, m, opts, targetName, charms, targets, readReturns(targetName), nil)
+		return emitRunResult(ctx, m, opts, targetName, charms, targets, readReturns(targetName), statuses, nil)
 	case outputName:
 		return emitProjectNames(m, targets)
 	}
@@ -491,6 +496,47 @@ func (c *resultRefs) list() []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return slices.Clone(c.refs)
+}
+
+// resultStatuses collects the journal status of the asked target's result,
+// by project. A dependency's result is left out.
+type resultStatuses struct {
+	target string
+	mu     sync.Mutex
+	status map[string]string
+}
+
+func newResultStatuses(target string) *resultStatuses {
+	return &resultStatuses{target: target, status: map[string]string{}}
+}
+
+func (c *resultStatuses) Enabled(context.Context, slog.Level) bool { return true }
+
+func (c *resultStatuses) Handle(_ context.Context, r slog.Record) error {
+	e, ok := journal.EventFromRecord(r)
+	if !ok || e.Kind != journal.KindResult || e.Status == "" {
+		return nil
+	}
+	// The journal names a charmed step "target:charm,...".
+	if name, _, _ := strings.Cut(e.Target, ":"); name != c.target {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.status[e.Project] = e.Status
+	return nil
+}
+
+func (c *resultStatuses) WithAttrs([]slog.Attr) slog.Handler { return c }
+func (c *resultStatuses) WithGroup(string) slog.Handler      { return c }
+
+func (c *resultStatuses) of(project string) string {
+	if c == nil {
+		return ""
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.status[project]
 }
 
 // refLine is the one line a successful `-s` run prints: every other line of a pass is
@@ -676,8 +722,9 @@ func decodeSavedPlan(data []byte) (planOutput, error) {
 	if p.Count != len(p.Matrix) {
 		return planOutput{}, refusePlan("the plan on stdin states %d shard(s) but lists %d", p.Count, len(p.Matrix))
 	}
-	seen := make(map[string]bool, len(p.Matrix))
-	for _, s := range p.Matrix {
+	every := slices.Concat(p.Matrix, p.StageZero)
+	seen := make(map[string]bool, len(every))
+	for _, s := range every {
 		switch {
 		case s.Shard == "":
 			return planOutput{}, refusePlan("the plan on stdin has a shard with no id")
@@ -710,22 +757,39 @@ func savedTargetRef(p planOutput) string {
 	return fmt.Sprintf("%s:%s", p.Target, strings.Join(p.Charms, ","))
 }
 
-// selectPlanShards returns the shards a `run --stdin` invocation runs: the one named by
-// shard, or every shard when shard is empty. target is the invoked target and nShards the
-// caller's --n-shards (0 when unset); each must agree with the plan.
+// allPlanShards is the --shard value that runs every shard of a saved plan.
+const allPlanShards = "all"
+
+// selectPlanShards returns the shards a `run --stdin` invocation runs: the one
+// named by shard, of either stage, or every shard for allPlanShards, stage
+// zero first. An empty shard selects only a plan of one shard, so no caller
+// runs a whole plan by omission. target must agree with the plan, and
+// nShards with the size of the named shard's stage.
 func selectPlanShards(p planOutput, target, shard string, nShards int) ([]planShard, error) {
 	if target != p.Target {
 		return nil, refusePlan("the plan is for %s, not %s; drop the target, or give %s with charms (%s:<charm>)",
 			p.Target, target, p.Target, p.Target)
 	}
-	if nShards > 0 && nShards != p.Count {
-		return nil, refusePlan("--n-shards %d, but the plan has %d shard(s); drop --n-shards, the plan supplies it", nShards, p.Count)
+	if stage := planStage(p, shard); nShards > 0 && nShards != len(stage) {
+		return nil, refusePlan("--n-shards %d, but the plan has %d shard(s); drop --n-shards, the plan supplies it", nShards, len(stage))
+	}
+	every := slices.Concat(p.StageZero, p.Matrix)
+	if shard == allPlanShards {
+		return every, nil
 	}
 	if shard == "" {
-		return p.Matrix, nil
+		if len(every) > 1 {
+			ids := make([]string, len(every))
+			for i, s := range every {
+				ids[i] = s.Shard
+			}
+			return nil, refusePlan("the plan has %d shards and no --shard selects one: pass --shard <id> (%s), or --shard %s to run every shard here",
+				len(every), strings.Join(ids, ", "), allPlanShards)
+		}
+		return every, nil
 	}
-	ids := make([]string, len(p.Matrix))
-	for i, s := range p.Matrix {
+	ids := make([]string, len(every))
+	for i, s := range every {
 		if s.Shard == shard {
 			return []planShard{s}, nil
 		}
@@ -735,6 +799,15 @@ func selectPlanShards(p planOutput, target, shard string, nShards int) ([]planSh
 		return nil, refusePlan("--shard %s: the plan has no shards, so there is nothing to select", shard)
 	}
 	return nil, refusePlan("--shard %s: the plan has no such shard (it has %s)", shard, strings.Join(ids, ", "))
+}
+
+// planStage is the stage holding the shard named id: stage zero when one of
+// its shards has that ID, else the matrix.
+func planStage(p planOutput, id string) []planShard {
+	if slices.ContainsFunc(p.StageZero, func(s planShard) bool { return s.Shard == id }) {
+		return p.StageZero
+	}
+	return p.Matrix
 }
 
 // planProjects is the projects shards run, in plan order, each once.
@@ -1075,6 +1148,9 @@ type runArtifact struct {
 // run.
 type runProject struct {
 	Path string `json:"path" yaml:"path"`
+	// Status is the journal's result: pass, cached or permitted.
+	// Permitted passed only by a deviation ledger. A dry run has none.
+	Status string `json:"status,omitempty" yaml:"status,omitempty"`
 	// Value is what the target returned (str or [str]), absent for a `> void`
 	// target. Replayed from the cache entry on a hit, so it is present whether or
 	// not this invocation actually executed the target.
@@ -1107,7 +1183,7 @@ type runOutput struct {
 // produced it. It DOES report the return value, because a dry run evaluates the
 // target body under a tracing context: the value is real, and omitting it made
 // `-o json` claim "no return value" for a target that had just produced one.
-func emitRunResult(ctx context.Context, m *magus.Magus, opts output.Options, target string, charms []string, selection []types.Target, returns types.Returns, undeclaredSeeds []string) error {
+func emitRunResult(ctx context.Context, m *magus.Magus, opts output.Options, target string, charms []string, selection []types.Target, returns types.Returns, statuses *resultStatuses, undeclaredSeeds []string) error {
 	out := runOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun, Permitted: m.CacheStats().Permitted, UndeclaredSeeds: undeclaredSeeds}
 	projects := m.ResolveProjects(selection)
 	out.Count = len(projects)
@@ -1147,6 +1223,7 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts output.Options, tar
 	for _, p := range projects {
 		out.Projects = append(out.Projects, runProject{
 			Path:      p.Path,
+			Status:    statuses.of(p.Path),
 			Artifacts: byProject[p.Path],
 			Value:     returns[p.Path],
 		})

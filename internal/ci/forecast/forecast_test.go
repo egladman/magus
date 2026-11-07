@@ -1,6 +1,7 @@
 package forecast
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/egladman/magus/internal/sys/mem"
@@ -96,6 +97,21 @@ func seedPeak(h *History, project, target string, bytes int64) {
 	h.Projects[project][target] = s
 }
 
+// SharedPrerequisiteSuite holds a long lint and test sharing a short build,
+// so splitting them is faster yet repeats the build.
+type SharedPrerequisiteSuite struct {
+	suite.Suite
+	h     History
+	needs func(types.Unit) []types.Unit
+}
+
+func TestSharedPrerequisiteSuite(t *testing.T) { suite.Run(t, new(SharedPrerequisiteSuite)) }
+
+func (s *SharedPrerequisiteSuite) SetupTest() {
+	s.h = measured(1_000, map[string]int64{".:build": 10_000, ".:lint": 200_000, ".:test": 200_000})
+	s.needs = closures(map[string][]string{".:lint": {".:build"}, ".:test": {".:build"}})
+}
+
 func (s *PlanSuite) TestEmptyHistoryPlacesEveryUnitOnce() {
 	us := unitList("a:test", "b:test", "c:lint", "d:test", "e:build")
 	got := Model{MemoryBudgetBytes: noBudget}.Plan(us, 8)
@@ -166,8 +182,60 @@ func (s *PlanSuite) TestAMemoryBudgetSplitsAShardThatWouldNotFit() {
 	seedPeak(&h, ".", "test", 6<<30)
 	us := unitList("docs:ci", ".:test")
 
-	s.Len(Model{History: h, MemoryBudgetBytes: noBudget}.Plan(us, 8), 1, "the time model consolidates these")
-	s.Len(Model{History: h, MemoryBudgetBytes: 12 << 30}.Plan(us, 8), 2, "13GB exceeds a 12GB budget")
+	s.Len(Model{History: h, Slots: 2, MemoryBudgetBytes: noBudget}.Plan(us, 8), 1, "the time model consolidates these")
+	s.Len(Model{History: h, Slots: 2, MemoryBudgetBytes: 12 << 30}.Plan(us, 8), 2, "13GB exceeds a 12GB budget")
+}
+
+func (s *PlanSuite) TestOneSlotPeaksAtTheLargestTarget() {
+	h := measured(600_000, map[string]int64{"docs:ci": 60_000, ".:test": 60_000})
+	seedPeak(&h, "docs", "ci", 7<<30)
+	seedPeak(&h, ".", "test", 6<<30)
+	s.Len(Model{History: h, Slots: 1, MemoryBudgetBytes: 12 << 30}.Plan(unitList("docs:ci", ".:test"), 8), 1,
+		"run one at a time, 7GB fits a 12GB budget")
+}
+
+func (s *SharedPrerequisiteSuite) TestASharedPrerequisiteStaysOnOneShardEvenWhenSplittingIsFaster() {
+	got := Model{History: s.h, MemoryBudgetBytes: noBudget, Needs: s.needs}.Plan(unitList(".:lint", ".:test"), 8)
+	s.Equal([][]string{{".:lint", ".:test"}}, names(got))
+}
+
+func (s *SharedPrerequisiteSuite) TestARepeatablePrerequisiteLetsItsUnitsSplit() {
+	f := Model{History: s.h, MemoryBudgetBytes: noBudget, Needs: s.needs,
+		Repeatable: func(u types.Unit) bool { return u == unit(".:build") }}
+	s.Equal([][]string{{".:lint"}, {".:test"}}, names(f.Plan(unitList(".:lint", ".:test"), 8)))
+}
+
+func (s *SharedPrerequisiteSuite) TestRepeatsNamesAPrerequisiteOnTwoShards() {
+	shards := [][]types.Unit{unitList(".:lint"), unitList(".:test")}
+	s.Equal(unitList(".:build"), Model{Needs: s.needs}.Repeats(shards))
+}
+
+func (s *SharedPrerequisiteSuite) TestRepeatsSkipsARepeatablePrerequisite() {
+	shards := [][]types.Unit{unitList(".:lint"), unitList(".:test")}
+	f := Model{Needs: s.needs, Repeatable: func(types.Unit) bool { return true }}
+	s.Empty(f.Repeats(shards))
+}
+
+func (s *PlanSuite) TestSlotsLetAShardRunItsTargetsAtOnce() {
+	h := measured(1_000, map[string]int64{"a:test": 100_000, "b:test": 100_000})
+	us := unitList("a:test", "b:test")
+	s.Len(Model{History: h, Slots: 1, MemoryBudgetBytes: noBudget}.Plan(us, 8), 2)
+	s.Len(Model{History: h, Slots: 2, MemoryBudgetBytes: noBudget}.Plan(us, 8), 1)
+}
+
+func (s *PlanSuite) TestAPeakCountsThePrerequisites() {
+	h := measured(1, map[string]int64{"a:test": 60_000, "a:build": 60_000})
+	seedPeak(&h, "a", "build", 7<<30)
+	seedPeak(&h, "a", "test", 6<<30)
+	f := Model{History: h, Slots: 2, MemoryBudgetBytes: 8 << 30, Needs: closures(map[string][]string{"a:test": {"a:build"}})}
+	s.Equal([]int{0}, f.OverBudget([][]types.Unit{unitList("a:test")}))
+}
+
+func (s *PlanSuite) TestUnmeasuredPeaksNamesUnitsAndPrerequisites() {
+	h := measured(1, map[string]int64{".:test": 60_000, ".:generate": 1_000})
+	seedPeak(&h, ".", "test", 1<<20)
+	f := Model{History: h, Needs: closures(map[string][]string{".:test": {".:generate"}})}
+	s.Equal(unitList(".:generate"), f.UnmeasuredPeaks(unitList(".:test")))
 }
 
 func (s *PlanSuite) TestAMemoryBudgetLeavesAFittingPlanAlone() {
@@ -204,4 +272,103 @@ func (s *PlanSuite) TestSufficientShardsCountsTheShardsTheMakespanNeeds() {
 	us := unitList("a:test", "b:test", "c:test")
 	s.Equal(2, f.SufficientShards(us, 3))
 	s.Equal(1, f.SufficientShards(us, 1))
+}
+
+// benchModel is projects each with build, lint, test and vet, every unit
+// needing its project's build and a shared generate that every shard may
+// replay. Peaks force the memory loop to add shards.
+func benchModel(projects int) (Model, []types.Unit) {
+	h := History{Constants: Constants{SetupP50Ms: Millis(20_000)}, Projects: map[string]map[string]Stats{}}
+	edges := map[types.Unit][]types.Unit{}
+	gen := types.Unit{Project: ".", Target: "generate"}
+	h.Projects["."] = map[string]Stats{"generate": {P75Ms: 30_000, Samples: 50}}
+	var units []types.Unit
+	for p := range projects {
+		name := fmt.Sprintf("libs/p%04d", p)
+		h.Projects[name] = map[string]Stats{}
+		build := types.Unit{Project: name, Target: "build"}
+		for t, target := range []string{"build", "lint", "test", "vet"} {
+			ms := int64(5_000 + (p*7919+t*104729)%240_000)
+			h.Projects[name][target] = Stats{P75Ms: ms, Samples: 50}
+			seedPeak(&h, name, target, int64(1+(p+t)%6)<<30)
+			u := types.Unit{Project: name, Target: target}
+			units = append(units, u)
+			edges[u] = []types.Unit{u, gen}
+			if target != "build" {
+				edges[u] = append(edges[u], build)
+			}
+		}
+	}
+	return Model{
+		History:           h,
+		Needs:             func(u types.Unit) []types.Unit { return edges[u] },
+		Repeatable:        func(u types.Unit) bool { return u == gen },
+		Slots:             4,
+		MemoryBudgetBytes: 12 << 30,
+	}, units
+}
+
+func BenchmarkPlan(b *testing.B) {
+	for _, projects := range []int{100, 500} {
+		f, units := benchModel(projects)
+		b.Run(fmt.Sprintf("units=%d", len(units)), func(b *testing.B) {
+			for b.Loop() {
+				f.Plan(units, 256)
+			}
+		})
+	}
+}
+
+func BenchmarkSufficientShards(b *testing.B) {
+	for _, projects := range []int{100, 500} {
+		f, units := benchModel(projects)
+		b.Run(fmt.Sprintf("units=%d", len(units)), func(b *testing.B) {
+			for b.Loop() {
+				f.SufficientShards(units, 256)
+			}
+		})
+	}
+}
+
+// PlanStagesSuite holds SharedPrerequisiteSuite's units, planned in stages.
+type PlanStagesSuite struct {
+	suite.Suite
+	h     History
+	needs func(types.Unit) []types.Unit
+}
+
+func TestPlanStagesSuite(t *testing.T) { suite.Run(t, new(PlanStagesSuite)) }
+
+func (s *PlanStagesSuite) SetupTest() {
+	s.h = measured(1_000, map[string]int64{".:build": 10_000, ".:lint": 200_000, ".:test": 200_000})
+	s.needs = closures(map[string][]string{".:lint": {".:build"}, ".:test": {".:build"}})
+}
+
+func (s *PlanStagesSuite) TestPlanStagesComputesTheSharedBuildOnceAhead() {
+	f := Model{History: s.h, MemoryBudgetBytes: noBudget, Needs: s.needs}
+	got := f.PlanStages(unitList(".:lint", ".:test"), 8)
+	s.Equal([][]string{{".:build"}}, names(got.Zero))
+	s.Equal([][]string{{".:lint"}, {".:test"}}, names(got.One))
+}
+
+func (s *PlanStagesSuite) TestPlanStagesKeepsUnitsTogetherWhenSplittingDoesNotPay() {
+	h := measured(10_000, map[string]int64{".:build": 200_000, ".:lint": 50_000, ".:test": 50_000})
+	f := Model{History: h, MemoryBudgetBytes: noBudget, Needs: s.needs}
+	us := unitList(".:lint", ".:test")
+	got := f.PlanStages(us, 8)
+	s.Empty(got.Zero)
+	s.Equal(f.Plan(us, 8), got.One)
+}
+
+func (s *PlanStagesSuite) TestPlanStagesWithNoSharedPrerequisiteIsPlan() {
+	f := Model{History: s.h, MemoryBudgetBytes: noBudget}
+	us := unitList(".:lint", ".:test")
+	got := f.PlanStages(us, 8)
+	s.Empty(got.Zero)
+	s.Equal(f.Plan(us, 8), got.One)
+}
+
+func (s *PlanStagesSuite) TestReplayingLetsAStageRepeatWhatAnEarlierOneComputed() {
+	f := Model{Needs: s.needs}.Replaying(unitList(".:build"))
+	s.Empty(f.Repeats([][]types.Unit{unitList(".:lint"), unitList(".:test")}))
 }

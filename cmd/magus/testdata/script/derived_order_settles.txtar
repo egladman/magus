@@ -8,6 +8,10 @@
 # (first-generate -> page-generate -> index-generate), which is what the
 # scheduler derives from the declarations; the against-the-grain hop is settled
 # by re-running index-generate once its input actually moved.
+#
+# The workspace is ws/, so audit's probe log sits outside it and is no undeclared
+# write (MGS4011).
+cd ws
 
 # The committed state is settled for seed "one". Move the seed.
 cp seed2.txt src/seed.txt
@@ -32,34 +36,34 @@ cmp index.txt want-index.txt
 # must leave it alone - it ran once in the batch and that is all. Re-running
 # verifiers on the post-batch tail is how a stalled scanner once wedged a green
 # gate for an hour.
-cmp audit.log want-audit-once
+cmp ../audit.log want-audit-once
 
 # A second identical invocation changes nothing: the settle step re-runs a
 # reader only when a writer's bytes moved, and nothing moves on a settled tree.
 cp index.txt index.settled
 exec magus run assemble . site
 cmp index.txt index.settled
-cmp audit.log want-audit-twice
+cmp ../audit.log want-audit-twice
 
--- magus.yaml --
+-- ws/magus.yaml --
 concurrency: 2
--- src/seed.txt --
+-- ws/src/seed.txt --
 one
--- SEED.md --
+-- ws/SEED.md --
 one
--- index.txt --
+-- ws/index.txt --
 one
 page: one
--- want-seed.md --
+-- ws/want-seed.md --
 two
--- want-page.md --
+-- ws/want-page.md --
 page: two
--- want-index.txt --
+-- ws/want-index.txt --
 two
 page: two
--- seed2.txt --
+-- ws/seed2.txt --
 two
--- magusfile.buzz --
+-- ws/magusfile.buzz --
 import "magus";
 import "proc";
 magus\project({
@@ -79,21 +83,21 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("sh", ["-c", "cat SEED.md site/page.md > index.txt"]);
 }
 export fun audit(ctx: magus\Context, args: [str]) > void !> any {
-    proc\exec("sh", ["-c", "echo ran >> audit.log"]);
+    proc\exec("sh", ["-c", "echo ran >> ../audit.log"]);
 }
 export fun assemble(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(first_generate);
     ctx.needs(index_generate);
     ctx.needs(audit);
 }
--- want-audit-once --
+-- ws/want-audit-once --
 ran
--- want-audit-twice --
+-- ws/want-audit-twice --
 ran
 ran
--- site/page.md --
+-- ws/site/page.md --
 page: one
--- site/magusfile.buzz --
+-- ws/site/magusfile.buzz --
 import "magus";
 import "proc";
 import "project/.." as ws;

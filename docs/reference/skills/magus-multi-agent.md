@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 27437
-skill_short_bytes: 21661
+skill_full_bytes: 27444
+skill_short_bytes: 21668
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `1` |
 | `knowledge-schema-version` | `25` |
-| `skill-content` | `93cc7a909cc9` |
+| `skill-content` | `fe14ecff2113` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -423,7 +423,7 @@ each verifies. [reference.md](reference.md) has the table and the rename pattern
 ## Observe through the correct control plane
 
 Run workers non-blocking; block on one only when your next action needs its result.
-`magus status --watch=15s` is for a person, never an agent's background task: an agent waits
+`magus server status --watch=15s` is for a person, never an agent's background task: an agent waits
 for its own run's completion notice.
 
 The root reads `magus describe job <job>` or `magus job watch <job>` only when it needs to know.
@@ -911,7 +911,7 @@ each verifies. [reference.md](reference.md) has the table and the rename pattern
 ## Observe through the correct control plane
 
 Run workers non-blocking; block on one only when your next action needs its result.
-`magus status --watch=15s` is for a person, never an agent's background task: an agent waits
+`magus server status --watch=15s` is for a person, never an agent's background task: an agent waits
 for its own run's completion notice.
 
 The root reads `magus describe job <job>` or `magus job watch <job>` only when it needs to know.

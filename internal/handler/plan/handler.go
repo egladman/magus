@@ -178,10 +178,9 @@ func (h *Handler) resolveAnchor(raw string, index planTargets, report types.Stat
 // workspace. Concurrent runs resolve to the most recently STARTED one: that is the one the
 // reader just triggered and is waiting to watch.
 //
-// A pool entry identifies its work by the invocation's ARGV, so this reads argv the way
-// `magus status` does (parseRunning, cmd/magus/status.go), narrower, because a plan needs
-// only the target: it covers every project defining it, and the project argument may be a
-// fuzzy name that only the run itself resolves to a path.
+// A pool entry identifies its work by ARGV. This reads it like parseRunning
+// in cmd/magus/status.go, for the target only. A plan covers every project
+// defining it.
 func runningAnchor(pool *types.StatusOutput, root string) string {
 	if pool == nil {
 		return ""

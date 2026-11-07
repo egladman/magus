@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/config"
@@ -428,9 +429,8 @@ func TestBrokerRowsNameOwnersWaitersAndRefusals(t *testing.T) {
 			BudgetSlots: 8, HeldSlots: 8,
 			Holders: []types.MachineClaimant{{Project: ".", Target: "test", PID: 41221, Slots: 8, Dir: "/tree/polish", Owner: "fix-cache"}},
 			Waiting: []types.MachineWaiter{
-				{Kind: "claim", PID: 41300, Project: ".", Target: "lint", Slots: 2, Dir: "/tree/a", Owner: "unleased", Since: now.Add(-time.Minute)},
-				{Kind: "claim", PID: 41301, Project: "docs", Target: "ci", Owner: "job-b", Tree: "root-job", Since: now},
-				{Kind: "reserve", PID: 41302, Target: "ci", Owner: "job-c", Since: now},
+				{PID: 41300, Project: ".", Target: "lint", Slots: 2, Dir: "/tree/a", Owner: "unleased", Since: now.Add(-time.Minute)},
+				{PID: 41301, Project: "docs", Target: "ci", Owner: "job-b", Tree: "root-job", Since: now},
 			},
 			Refused: []types.MachineRefusal{{
 				At: now.Add(-2 * time.Minute), PID: 41400, Project: ".", Target: "ci", Slots: 4, Dir: "/tree/b",
@@ -440,14 +440,13 @@ func TestBrokerRowsNameOwnersWaitersAndRefusals(t *testing.T) {
 		},
 	}, types.BrokerRequired, now)
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	require.Len(t, lines, 7)
+	require.Len(t, lines, 6)
 	assert.Contains(t, lines[2], "(root) test  fix-cache  /tree/polish")
 	assert.True(t, strings.HasPrefix(lines[3], "waiting   41300"), lines[3])
-	assert.Contains(t, lines[3], "slots 2  (root) lint  claim  unleased  /tree/a")
+	assert.Contains(t, lines[3], "slots 2  (root) lint  unleased  /tree/a")
 	assert.Contains(t, lines[4], "docs ci  seat in root-job  job-b")
-	assert.Contains(t, lines[5], "(root) ci  reserve  job-c")
-	assert.True(t, strings.HasPrefix(lines[6], "refused   41400"), lines[6])
-	assert.Contains(t, lines[6], "2m0s ago  slots 4  (root) ci  spawned by root  /tree/b  held by pid 41221 fix-cache, pid 41222 owner unknown")
+	assert.True(t, strings.HasPrefix(lines[5], "refused   41400"), lines[5])
+	assert.Contains(t, lines[5], "2m0s ago  slots 4  (root) ci  spawned by root  /tree/b  held by pid 41221 fix-cache, pid 41222 owner unknown")
 }
 
 // A request the broker holds parked shows as its own row, after the claims keeping it out.
@@ -456,12 +455,12 @@ func TestBrokerRowsNameEveryParkedRequest(t *testing.T) {
 	printBrokerRows(&buf, types.StatusBroker{
 		PID: 48213,
 		Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 8, Waiting: []types.MachineWaiter{
-			{Kind: "claim", Project: "docs", Target: "lint", PID: 41300, MemoryMB: 2 << 10, Slots: 2, Dir: "/tree/polish", Command: "magus run lint docs"},
+			{Project: "docs", Target: "lint", PID: 41300, MemoryMB: 2 << 10, Slots: 2, Dir: "/tree/polish", Command: "magus run lint docs"},
 		}},
 	}, types.BrokerRequired, time.Now())
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	require.Len(t, lines, 3)
-	assert.Equal(t, "waiting   41300  slots 2  mem 2.0 GiB  docs lint  claim  /tree/polish  magus run lint docs", lines[2])
+	assert.Equal(t, "waiting   41300  slots 2  mem 2.0 GiB  docs lint  /tree/polish  magus run lint docs", lines[2])
 }
 
 // A claim says where its figure came from, since a measured one sits below what the
@@ -1086,7 +1085,7 @@ func statusFixture(now time.Time) types.StatusSnapshot {
 		},
 		BrokerPolicy: types.BrokerBestEffort,
 		Broker: &types.StatusBroker{
-			PID: 48213, Protocol: 1, Socket: "unix:///run/magus/broker.sock", StartTime: now.Add(-time.Hour),
+			PID: 48213, Protocol: 1, Socket: "unix:///run/magus/" + broker.SocketName, StartTime: now.Add(-time.Hour),
 			Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 2, BudgetMB: 4096, HeldMB: 1024},
 			Services: []types.StatusService{
 				{ID: "svc-db", Label: "postgres", Command: "docker compose up db", Ports: []string{"5432"}, State: types.ServiceRunning, Dependents: 2},
@@ -1129,7 +1128,7 @@ func TestPrintStatusTextRendersEverySection(t *testing.T) {
 	assert.Contains(t, out, "512")
 	assert.Contains(t, out, "concurrency")
 
-	assert.Contains(t, out, "broker    48213  up 1h0m  proto 1  unix:///run/magus/broker.sock")
+	assert.Contains(t, out, "broker    48213  up 1h0m  proto 1  unix:///run/magus/"+broker.SocketName)
 	assert.Contains(t, out, "slots 2/8  mem 1.0 GiB/4.0 GiB  broker: best-effort")
 	assert.Contains(t, out, "service   -      postgres  running  deps 2  ports 5432")
 	// A service with no label falls back to its id.
@@ -1464,4 +1463,20 @@ func TestServerVersionSkewPoolParentRemedy(t *testing.T) {
 	assert.Contains(t, got, "the server serving it")
 	assert.Contains(t, got, "server start")
 	assert.NotContains(t, got, "--pools")
+}
+
+type CapacityReserveSuite struct{ suite.Suite }
+
+func TestCapacityReserveSuite(t *testing.T) { suite.Run(t, new(CapacityReserveSuite)) }
+
+func (s *CapacityReserveSuite) TestTheMemoryFigureNamesWhatItLeftTheOS() {
+	s.Equal("slots 8/10  mem 14.4 GiB/21.0 GiB (24.0 GiB less 3.0 GiB: the aggressive profile keeps 1/8, at least 1 GiB)",
+		capacityText(types.MachineSnapshot{
+			BudgetSlots: 10, HeldSlots: 8, BudgetMB: 21504, HeldMB: 14746,
+			Reserve: types.MemoryReserve{TotalMB: 24576, ReservedMB: 3072, Rule: "the aggressive profile keeps 1/8, at least 1 GiB"},
+		}))
+}
+
+func (s *CapacityReserveSuite) TestABrokerThatSendsNoReserveShowsTheBudgetAlone() {
+	s.Equal("mem 1.0 GiB/4.0 GiB", capacityText(types.MachineSnapshot{BudgetMB: 4096, HeldMB: 1024}))
 }

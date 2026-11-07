@@ -17,7 +17,7 @@ import (
 // statusSnapshotToProto maps the LIVE portion of the domain status snapshot (types.StatusSnapshot)
 // onto the magus.status.v1alpha1 wire message, deriving the at-a-glance Health from the
 // pool's presence and error state. Static config (telemetry/cache/build) is
-// intentionally not on this dashboard contract: it is `magus status`/config.
+// left to `magus server status` and config.
 //
 // The message is always whole but for the error details err names, which a caller logs
 // and still sends: a dashboard short one error detail beats no dashboard.

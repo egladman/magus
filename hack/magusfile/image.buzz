@@ -120,18 +120,6 @@ export fun only(v: ImageVariant, platform: str) > Only {
     } };
 }
 
-// loadedID reads the image ID from `docker load` output.
-export fun loadedID(output: str) > LoadedID {
-    final marker = "Loaded image ID: ";
-    foreach (line in output.split("\n")) {
-        final at = line.indexOf(marker);
-        if (at -> start) {
-            return LoadedID{ id = line.sub(start + marker.len()).trim() };
-        }
-    }
-    return LoadedID{ error = "image-build: docker load printed no image ID:\n{output}" };
-}
-
 // blobPath is the path docker's load archive and the OCI layout share for a digest.
 fun blobPath(d: image\Digest) > str {
     return "blobs/{d.algorithm}/{d.encoded}";
@@ -139,27 +127,28 @@ fun blobPath(d: image\Digest) > str {
 
 // prepareLoad writes the docker-save manifest.json classic `docker load` needs
 // beside the OCI layout. Without it, a daemon that is not on the containerd
-// image store fails with `blobs/json: no such file or directory`. RepoTags stay
-// empty so load prints `Loaded image ID:` rather than a tag name.
-export fun prepareLoad(layout: str) > str {
+// image store fails with `blobs/json: no such file or directory`. RepoTags
+// names tag, so load tags the image itself. The image ID is the config digest.
+export fun prepareLoad(layout: str, tag: str) > LoadedID {
     try {
         final opened = image\open(layout);
         if (opened.config == null) {
-            return "image-build: prepareLoad {layout}: layout holds no image config";
+            return LoadedID{ error = "image-build: prepareLoad {layout}: layout holds no image config" };
         }
         final layers = mut [<str>];
         foreach (layer in opened.layers) {
             layers.append(blobPath(layer.digest));
         }
+        final config = opened.config!.digest;
         final body = serialize\jsonEncode(serialize\Boxed.init([{
-            "Config": blobPath(opened.config!.digest),
-            "RepoTags": [<str>],
+            "Config": blobPath(config),
+            "RepoTags": [tag],
             "Layers": layers,
         }]));
         fs\writeFile(layout + "/manifest.json", content: body);
-        return "";
+        return LoadedID{ id = "{config.algorithm}:{config.encoded}" };
     } catch (e) {
-        return "image-build: prepareLoad {layout}: {e}";
+        return LoadedID{ error = "image-build: prepareLoad {layout}: {e}" };
     }
 }
 

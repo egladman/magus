@@ -19,6 +19,7 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/file/watch"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
@@ -474,7 +475,7 @@ func (r *wsRegistry) dispatch(ctx context.Context, root string, rc runConfig, ar
 		return err
 	}
 	defer r.release(e) // hold the lease for the whole build
-	ctx = withMagus(ctx, e.m)
+	ctx = interactive.WithHints(withMagus(ctx, e.m))
 	if proc.IsJob(ctx) {
 		return dispatchJob(trail.ContextWithEntryPoint(ctx, types.EntryPointServer), root, rc, args)
 	}

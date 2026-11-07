@@ -1,0 +1,67 @@
+# `magus explain <a> --to <b>` walks the shortest chain of edges between two
+# graph nodes, in either direction, and reports each hop's relation instead of
+# a's card.
+
+# Neither argument resolves to a node: the error names BOTH inputs, even
+# though only one of them may actually be bogus - resolution is checked
+# jointly, not per argument. Surprising but that is the actual contract, so
+# pin it rather than assume it is smarter than it is.
+! exec magus explain nope --to other
+stderr 'magus explain --to: could not resolve "nope" or "other" to a node'
+
+# A chain with ONE resolvable argument still fails the same way and still
+# names both terms in the message.
+! exec magus explain project:. --to nope
+stderr 'magus explain --to: could not resolve "project:." or "nope" to a node'
+
+# --to prints a chain, which has no source lines to page.
+! exec magus explain project:. --to target:.:lint --source
+stderr '--to prints a chain of edges'
+
+# A direct edge: the root project contains its one target, one hop.
+exec magus explain project:. --to target:.:lint
+stdout 'project:\. -> target:\.:lint  \(1 step\)'
+stdout 'contains  target:\.:lint'
+
+# A longer chain: project -> target (contains) -> op (uses), two hops, and
+# both relation names show up in order.
+exec magus explain project:. --to op:acme:lint
+stdout 'project:\. -> op:acme:lint  \(2 steps\)'
+stdout 'contains  target:\.:lint'
+stdout 'uses      op:acme:lint'
+
+# Both arguments resolve but nothing connects them: this is NOT an error
+# (exit 0), it is a negative finding - distinct from the unresolvable case
+# above, which exits 2.
+exec magus explain project:. --to diagnostic:MGS1001
+stdout 'project:\. -> diagnostic:MGS1001  \(no path\)'
+stdout 'no path connects these nodes'
+
+# -o json carries the same two outcomes as typed fields: found true with the
+# hop list, found false with none.
+exec magus explain project:. --to target:.:lint -o json
+stdout '"found": true'
+stdout '"relation": "contains"'
+stdout '"forward": true'
+
+exec magus explain project:. --to diagnostic:MGS1001 -o json
+stdout '"found": false'
+
+# The verb is gone, with no alias.
+! exec magus path project:. target:.:lint
+stderr 'unknown subcommand "path"'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/acme";
+magus\project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
+-- spells/acme/spell.buzz --
+import "magus/spell";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

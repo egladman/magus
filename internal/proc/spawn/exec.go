@@ -178,7 +178,7 @@ func (r ExecResult) BuzzObject() types.BuzzObject {
 // left the group (setsid) is not reached. A watch on ctx ([WithGroupWatch]) is told of
 // the group for as long as its leader runs.
 func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (ExecResult, error) {
-	if types.Tracing(ctx) {
+	if types.Stubbed(ctx, "proc.exec") {
 		slog.InfoContext(ctx, "run.exec", "cmd", name, "args", args, "dir", opts.Dir)
 		return ExecResult{Started: true, Code: 0}, nil
 	}
@@ -233,7 +233,8 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	if opts.CancelGrace > 0 {
 		c.WaitDelay = opts.CancelGrace
 	}
-	c.Env = env
+	var mark string
+	c.Env, mark = processBounds.marked(env)
 	if js := jobserverFromContext(ctx); js != nil {
 		c.ExtraFiles = append(c.ExtraFiles, js.files()...)
 	}
@@ -280,7 +281,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		var record func(types.MemorySample)
 		record, endCurve = types.RecordCurve(ctx, startedAt)
 		root = processSampler.follow(pid, startedAt, record)
-		tree = processBounds.follow(pid, name)
+		tree = processBounds.follow(ctx, pid, name, mark)
 		group.bound(tree)
 	}
 	if ruleset != nil {
@@ -300,8 +301,9 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		}
 	}
 	samples := processSampler.stop(root)
+	// Joined, so the command's own exit or cancellation survives beside it.
 	if boundErr := processBounds.stop(tree); boundErr != nil {
-		runErr = boundErr
+		runErr = errors.Join(boundErr, runErr)
 	}
 	endCurve()
 	runErr = classifyMissingBinary(runErr, name, c.ProcessState != nil)
@@ -394,7 +396,7 @@ func command(ctx context.Context, policy *sandbox.Policy, confined bool, name, r
 		if policy != nil {
 			sandbox.RecordLaunch(ctx, 0, "unsupported")
 		}
-		c = exec.CommandContext(ctx, resolved, args...)
+		c = exec.CommandContext(ctx, resolved, args...) //nolint:gosec,nolintlint // G702: running the caller's command is spawn's job; resolved passed the binding checks. gosec reports it only in darwin builds, so linux builds see the directive as unused
 		c.Args[0] = name
 		return c, nil, nil
 	}

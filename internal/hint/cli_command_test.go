@@ -18,9 +18,9 @@ func TestCommandRender(t *testing.T) {
 		{"with no args", Run.With(), "magus run"},
 		{"with one arg", QueryOutput.With("out1a2b3c"), "magus query output out1a2b3c"},
 		{"with two args", QueryOutput.With("out1a2b3c", "--open"), "magus query output out1a2b3c --open"},
-		{"single-token head", Status.Head(), "status"},
+		{"single-token head", Doctor.Head(), "doctor"},
 		{"multi-token head", GraphExport.Head(), "graph"},
-		{"single-token leaf", Status.Leaf(), "status"},
+		{"single-token leaf", Doctor.Leaf(), "doctor"},
 		{"multi-token leaf", GraphExport.Leaf(), "export"},
 		{"deep leaf", MCPTokenGenerate.Leaf(), "generate"},
 	}

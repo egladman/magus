@@ -28,6 +28,12 @@ const KindGateResult = "gate_result"
 // verdict on the inputs, which is why [LatestGate] skips it.
 const OutcomeDeferred = "deferred"
 
+// OutcomeUnrun is a gate whose every failure was a capability this host
+// lacks, such as a stopped docker daemon. Everything that could run passed.
+// It is no verdict: the targets that did not run are owed to a host that can
+// run them.
+const OutcomeUnrun = "unrun"
+
 // GateScope names what a gate's verdict covers.
 //
 // The zero value is an entry written before gate records named their scope. It covers
@@ -92,8 +98,10 @@ type GateResult struct {
 	// Commit is the revision the gate ran at. The working tree may have been
 	// dirty on top of it; the Fingerprint is what captures that exactly.
 	Commit string `json:"commit"`
-	// Outcome is OutcomePass, OutcomeFail, or OutcomeDeferred.
+	// Outcome is OutcomePass, OutcomeFail, OutcomeDeferred or OutcomeUnrun.
 	Outcome string `json:"outcome"`
+	// Unrun names each target an OutcomeUnrun gate could not run, and why.
+	Unrun []string `json:"unrun,omitempty"`
 	// Fingerprint condenses the per-step cache keys the gate ran under
 	// (ci.GateFingerprint), so a later run can tell "identical inputs"
 	// apart from "same commit".
@@ -171,7 +179,8 @@ func LatestGate(fold Fold, ref, target string) (GateRecord, bool) {
 // GateAt returns the newest gate verdict on the branch for target recorded at commit, on
 // any ref; see [GateResult.BranchVerdict]. When the commit holds only project-scoped
 // passes, it returns the newest of those, so a caller can name what ran instead of
-// reporting nothing; such a record answers false to BranchVerdict. Commits compare by
+// reporting nothing; such a record answers false to BranchVerdict.
+// An [OutcomeUnrun] record outranks a project's pass there. Commits compare by
 // prefix in both directions, because callers hold abbreviations of different lengths.
 // Deferrals are skipped for the reason LatestGate gives.
 func GateAt(fold Fold, commit, target string) (GateRecord, bool) {
@@ -199,7 +208,9 @@ func GateAt(fold Fold, commit, target string) (GateRecord, bool) {
 		if g.BranchVerdict() {
 			return at, true
 		}
-		if !found {
+		// A branch gate that could not run everything says more than a
+		// project's pass.
+		if !found || g.Outcome == OutcomeUnrun && narrow.Outcome != OutcomeUnrun {
 			narrow, found = at, true
 		}
 	}

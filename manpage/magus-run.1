@@ -61,7 +61,7 @@ Race diagnostics: watch, replay, or watch,replay. watch flags a write two projec
 Let the ci gate defer or reduce its tier when a passing run is on record (MGS3010); \-\-no\-redundancy\-check runs it in full. ci target only
 .TP
 \fB\-\-shard\fR \fIstring\fR
-With \-\-stdin: run only the saved plan's shard with this id. Without it: a label naming this run's shard in a CI matrix, paired with \-\-n\-shards; it selects nothing
+With \-\-stdin: run only the saved plan's shard with this id, or every shard with "all"; a plan of several shards refuses without one. Without it: a label naming this run's shard in a CI matrix, paired with \-\-n\-shards; it selects nothing
 .TP
 \fB\-\-skip\fR \fIstring\fR
 Exclude projects from the selection; repeatable or comma\-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/*); a value matching nothing is an error
@@ -220,7 +220,6 @@ magus run --stdin --dry-run -o 'template={{.summary}}' < plan.json
 \fBmagus\-query\fR(1),
 \fBmagus\-refs\fR(1),
 \fBmagus\-explain\fR(1),
-\fBmagus\-path\fR(1),
 \fBmagus\-graph\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-vcs\fR(1),
@@ -228,20 +227,16 @@ magus run --stdin --dry-run -o 'template={{.summary}}' < plan.json
 \fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-queue\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-mcp\fR(1),
 \fBmagus\-watch\fR(1),
 \fBmagus\-events\fR(1),
-\fBmagus\-server\fR(1),
-\fBmagus\-broker\fR(1),
-\fBmagus\-mcp\fR(1),
-\fBmagus\-status\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-spell\fR(1),
 \fBmagus\-agent\fR(1),
 \fBmagus\-init\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
-\fBmagus\-completion\fR(1),
-\fBmagus\-man\fR(1),
 \fBmagus\-self\fR(1),
 \fBmagus\-version\fR(1)
 .br

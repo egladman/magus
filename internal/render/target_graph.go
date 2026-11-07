@@ -311,7 +311,7 @@ func writeRouting(b *md.Builder, r *types.KnowledgeRouting, indexes map[string]s
 	b.AlignedCodeBlock("sh", []md.CodeLine{
 		{Code: canon(hint.Query, `"<terms>"`), Note: "kind=spell, project=pkg/foo, relation=uses, free text, kind!=op"},
 		{Code: canon(hint.Explain, "<node>"), Note: "one node: its edges, provenance, blast radius"},
-		{Code: canon(hint.Path, "<a>", "<b>"), Note: "how two nodes connect"},
+		{Code: canon(hint.Explain, "<a>", "--to", "<b>"), Note: "how two nodes connect"},
 		{Code: canon(hint.GraphStats), Note: "god nodes, orphans, doc coverage"},
 		{Code: canon(hint.GraphExport, "-o", "json"), Note: "the whole graph"},
 	})

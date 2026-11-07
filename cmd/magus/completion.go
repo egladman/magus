@@ -23,7 +23,7 @@ var completionFish string
 var completionPowerShell string
 
 func completion(args []string) error {
-	fs := flag.NewFlagSet("completion", flag.ContinueOnError)
+	fs := flag.NewFlagSet("self completion", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.Usage = completionUsage
 	if err := fs.Parse(args); err != nil {
@@ -31,7 +31,7 @@ func completion(args []string) error {
 	}
 	if fs.NArg() < 1 {
 		completionUsage()
-		return exit.Usagef("magus completion: shell name required (bash, zsh, fish, or powershell)")
+		return exit.Usagef("magus self completion: shell name required (bash, zsh, fish, or powershell)")
 	}
 	switch fs.Arg(0) {
 	case "bash":
@@ -48,25 +48,18 @@ func completion(args []string) error {
 		return err
 	default:
 		completionUsage()
-		return exit.Usagef("magus completion: unsupported shell %q (choose: bash, zsh, fish, powershell)", fs.Arg(0))
+		return exit.Usagef("magus self completion: unsupported shell %q (choose: bash, zsh, fish, powershell)", fs.Arg(0))
 	}
 }
 
 func completionUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus completion <bash|zsh|fish|powershell>")
+	fmt.Fprintln(os.Stderr, "Usage: magus self completion <bash|zsh|fish|powershell>")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Print a shell completion script to stdout.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Examples:")
-	fmt.Fprintln(os.Stderr, "  # Bash")
-	fmt.Fprintln(os.Stderr, "  magus completion bash >> ~/.bashrc")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "  # Zsh")
-	fmt.Fprintln(os.Stderr, "  magus completion zsh >> ~/.zshrc")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "  # Fish")
-	fmt.Fprintln(os.Stderr, "  magus completion fish >> ~/.config/fish/config.fish")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "  # PowerShell (Windows / cross-platform pwsh)")
-	fmt.Fprintln(os.Stderr, "  magus completion powershell >> $PROFILE")
+	page, _ := commandAt("self completion")
+	for _, ex := range page.Examples {
+		fmt.Fprintf(os.Stderr, "  # %s\n  %s\n", ex.Comment, ex.Command)
+	}
 }

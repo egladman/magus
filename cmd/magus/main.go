@@ -61,6 +61,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/diagnostics"
@@ -164,6 +165,7 @@ func runCLI() int {
 	rootCtx = types.WithJobLease(rootCtx, trail.LeaseFromEnv())
 	// The verbs that are another entry point (the hook, the server) restamp this.
 	rootCtx = trail.ContextWithEntryPoint(rootCtx, types.EntryPointCLI)
+	rootCtx = interactive.WithHints(rootCtx)
 	// An agent host's hook judged this invocation before it ran, and a person typing it
 	// answers for it: the Run family must not judge it a second time in process.
 	rootCtx = guard.WithHostJudged(rootCtx)
@@ -420,8 +422,6 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// setting the environment had set. That was invisible locally, where the trust
 		// set is not what the yaml is consulted for, and fatal in CI.
 		return dispatchProfile{needsConfig: true}
-	case "completion", "man":
-		return dispatchProfile{needsConfig: true}
 	case "agent":
 		// agent install writes embedded skill files into a repo dir; it needs no
 		// workspace resolution and must not forward to a server (the install is
@@ -474,8 +474,6 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// refresh the merge-driver registration, and a subscriber an editor spawns must
 		// not write .gitattributes.
 		return dispatchProfile{needsConfig: true}
-	case "status":
-		return dispatchProfile{needsConfig: true, needsForward: true}
 	case "job":
 		// Never forwarded, never preloaded. The job store answers most of what a job verb
 		// asks, the server adopts none of them, and the verbs that need the workspace (a
@@ -508,10 +506,11 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// (common across dev worktrees on one shared socket) it fell through to hosting its
 		// own throwaway proc server, then shut THAT down instead of the real server: a silent
 		// no-op stop. The rotate-* job workers that need a workspace load one themselves.
-		return dispatchProfile{needsConfig: true}
-	case "broker":
-		// The broker loads no workspace and forwards to nothing. The config tier is only
-		// for concurrency_profile, which sizes its memory reservation.
+		if len(subArgs) > 0 && subArgs[0] == hint.ServerStatus.Leaf() {
+			// It reads a running parent's pool. Forwarding starts no server.
+			return dispatchProfile{needsConfig: true, needsForward: true}
+		}
+		// The broker's config tier is only for concurrency_profile.
 		return dispatchProfile{needsConfig: true}
 	case "mcp":
 		// Never forwarded: this process's stdin and stdout ARE the protocol, and a server
@@ -761,10 +760,16 @@ func startup(rootCtx context.Context, args []string) (context.Context, startupRe
 	cfg, err := config.LoadWithRoot(config.ExtractFlag(args), earlyRoot)
 	stopCfgLoad()
 	if err != nil {
+		err = config.WithRunningVersion(err, version)
+		// A hook reads a guard that exits as no verdict and refuses the
+		// call, the rebuild included. The guard judges a stale binary instead.
+		if peekedSub == "shell" && ward.IsStaleBinary(err) {
+			return rootCtx, startupResult{cleanup: cleanup}, mapExitCode(shellCommand(withStaleConfig(rootCtx, err), peekedSubArgs))
+		}
 		// Printed rather than logged: the unknown-key error names a file, a line and a
 		// suggestion per line, and slog's text handler escapes every quote and newline
 		// in it back into one unreadable run.
-		fmt.Fprintf(os.Stderr, "magus: %v\n", config.WithRunningVersion(err, version))
+		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 		return rootCtx, startupResult{cleanup: cleanup}, 1
 	}
 	// LoadWithRoot validates the yaml; ApplyEnv then overwrites those fields.

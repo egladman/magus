@@ -34,6 +34,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/xdg"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -1325,6 +1326,9 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 			// a timeout, so each level re-adds time the level above already has.
 			ctx = types.WithDependencyWait(ctx)
 			ctx = withDeclaredStep(ctx, dir, key)
+			if err := checkDeclaredReady(ctx, dir, key); err != nil {
+				return vm.Null, err
+			}
 			// The DURATION, not a context carrying it: runTargetBody applies it per
 			// resume, so it measures the body's own execution and not the time its
 			// dependencies take.
@@ -1369,6 +1373,20 @@ func withDeclaredStep(ctx context.Context, dir, key string) context.Context {
 		scope[i] = s.Name()
 	}
 	return sandbox.WithStep(ctx, scope, p.TargetPolicies[key].Sandbox)
+}
+
+// checkDeclaredReady probes key's needs_ready tools before its body runs. A
+// ctx.needs dependency never passes through runTarget, so this is its check.
+func checkDeclaredReady(ctx context.Context, dir, key string) error {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return nil
+	}
+	p := projectAt(ws, dir)
+	if p == nil {
+		return nil
+	}
+	return p.CheckNeedsReady(ctx, key, project.DefaultSpellRegistry().All())
 }
 
 // NewBuzzWorkerFunc returns the buzz.WorkerFunc that creates a pre-warmed Buzz

@@ -13,10 +13,10 @@ One unit of the pool's capacity. A target acquires the slots it needs to run
 
 ## Example
 
-`magus status` reports the pool's capacity, running and queued slots.
+`magus server status` reports the pool's capacity, running and queued slots.
 
 ```sh
-magus status
+magus server status
 ```
 
 A run's footer names the widest grant any of its targets took. A fully cached run

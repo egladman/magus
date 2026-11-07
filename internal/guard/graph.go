@@ -13,7 +13,7 @@ import "slices"
 
 // graphReadSubcommands are the verbs that answer FROM the index, so a stale one changes
 // what they report.
-var graphReadSubcommands = []string{"refs", "query", "explain", "path"}
+var graphReadSubcommands = []string{"refs", "query", "explain"}
 
 // commandReadsGraph reports whether a shell line would run one of them.
 //

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/hint"
 )
 
 // The load contract is what a magus built before a change needs to load the tree after it:
@@ -133,9 +134,11 @@ func denyContractPick(ctx context.Context, deps Dependencies, at location, line 
 		return ""
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: this changes the load contract (%s), so it lands through a dry run that builds and loads the result first, never straight into this checkout.", leadPath(touched)),
+		Say: fmt.Sprintf("magus workspace: this changes the load contract (%s), so it lands in a checkout of its own first: `%s`.",
+			leadPath(touched), hint.JobFork.With("<integration>", "--checkout", "<dir>")),
 		Why: "A change to the host declarations, the API locks, the generated bindings or the Buzz checker can leave ./magus unable to load the tree, and a prefix of a series can leave a tree no binary builds from. " +
-			"Then every write waits for a binary nothing can build. The dry run applies the whole change in a scratch worktree, compiles ./cmd/magus, checks generator drift and loads the guard policy with the result, and lands nothing unless all of it passes.",
+			"Then every write waits for a binary nothing can build. In a checkout of its own the whole change is applied, ./cmd/magus compiled and the guard policy loaded before anything reaches this branch. " +
+			"Pick and build there, then move this branch to the result.",
 	}.full()
 }
 
@@ -260,15 +263,16 @@ func finishesMergeOfBuild(ctx context.Context, root, built, line string, d Diale
 }
 
 // mergeFinishLine reports `git add`, `git commit` short of an
-// amend, or `magus vcs resolve`.
+// amend, or `magus vcs resolve`. Only PATH's git and this checkout's magus
+// count: `./git` or another directory's magus could be anything.
 func mergeFinishLine(words []string) bool {
 	if len(words) < 2 {
 		return false
 	}
-	switch path.Base(words[0]) {
+	switch words[0] {
 	case "git":
 		return words[1] == "add" || words[1] == "commit" && !slices.Contains(words[2:], "--amend")
-	case "magus":
+	case "magus", "./magus":
 		sub := magusSubcommandWords(words[1:])
 		return len(sub) >= 2 && sub[0] == "vcs" && sub[1] == "resolve"
 	}

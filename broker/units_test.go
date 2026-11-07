@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 func TestRenderUnitsWhatTheSupervisorReads(t *testing.T) {
 	f := UnitFacts{
 		Exe:       "/opt/my tools/magus",
-		Socket:    "/run/user/1000/magus%/broker.sock",
+		Socket:    "/run/user/1000/magus%/" + SocketName,
 		Log:       "/home/eli/.local/state/magus/broker.log",
 		Grace:     90*time.Second + 500*time.Millisecond,
 		Home:      "/home/eli",
@@ -27,24 +28,24 @@ func TestRenderUnitsWhatTheSupervisorReads(t *testing.T) {
 	systemd, err := RenderUnits(SupervisorSystemd, f)
 	require.NoError(t, err)
 	assert.Equal(t, []Unit{
-		{Supervisor: "systemd", Path: "/home/eli/.config/systemd/user/magus-broker.socket", Content: `[Unit]
-Description=magus broker socket
+		{Supervisor: "systemd", Path: "/home/eli/.config/systemd/user/magus-broker.socket", Content: fmt.Sprintf(`[Unit]
+Description=magus server broker socket
 
 [Socket]
-ListenStream=/run/user/1000/magus%%/broker.sock
+ListenStream=/run/user/1000/magus%%%%/%s
 SocketMode=0600
 DirectoryMode=0700
 
 [Install]
 WantedBy=sockets.target
-`},
+`, SocketName)},
 		{Supervisor: "systemd", Path: "/home/eli/.config/systemd/user/magus-broker.service", Content: `[Unit]
-Description=magus broker: this host's capacity and shared services
+Description=magus server broker: this host's capacity and shared services
 Requires=magus-broker.socket
 After=magus-broker.socket
 
 [Service]
-ExecStart="/opt/my tools/magus" broker --shutdown-grace=1m30.5s
+ExecStart="/opt/my tools/magus" server broker --shutdown-grace=1m30.5s
 ExecReload=kill -HUP $MAINPID
 KillMode=mixed
 TimeoutStopSec=151
@@ -62,6 +63,7 @@ TimeoutStopSec=151
   <key>ProgramArguments</key>
   <array>
     <string>/opt/my tools/magus</string>
+    <string>server</string>
     <string>broker</string>
     <string>--idle-exit</string>
     <string>0</string>

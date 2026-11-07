@@ -15,7 +15,7 @@ import (
 
 var nextFixture = []types.NextStep{
 	{ID: "query-explain", Run: "magus explain spell:go", Argv: []string{"magus", "explain", "spell:go"}, Why: "explain names a node's edges."},
-	{ID: "query-path", Run: "magus path spell:go spell:gomod", Argv: []string{"magus", "path", "spell:go", "spell:gomod"}, Why: "path prints the chain."},
+	{ID: "query-path", Run: "magus explain spell:go --to spell:gomod", Argv: []string{"magus", "explain", "spell:go", "--to", "spell:gomod"}, Why: "explain --to prints the chain."},
 }
 
 func gateAt(base, session string) nextGate {
@@ -40,11 +40,11 @@ func TestPrintNextFiresEachWhyOnce(t *testing.T) {
 	assert.Equal(t, "\nnext:\n"+
 		"  magus explain spell:go\n"+
 		"      explain names a node's edges.\n"+
-		"  magus path spell:go spell:gomod\n"+
-		"      path prints the chain.\n", first.String())
+		"  magus explain spell:go --to spell:gomod\n"+
+		"      explain --to prints the chain.\n", first.String())
 	assert.Equal(t, "\nnext:\n"+
 		"  magus explain spell:go\n"+
-		"  magus path spell:go spell:gomod\n", second.String())
+		"  magus explain spell:go --to spell:gomod\n", second.String())
 }
 
 // A separate session meets every Why again: the suppression is per session, not a
@@ -71,7 +71,7 @@ func TestPrintNextUnderSilentKeepsRunAndSpendsNothing(t *testing.T) {
 	printNext(&quiet, s, nextFixture)
 	assert.Equal(t, "\nnext:\n"+
 		"  magus explain spell:go\n"+
-		"  magus path spell:go spell:gomod\n", quiet.String())
+		"  magus explain spell:go --to spell:gomod\n", quiet.String())
 
 	global.silent = false
 	var loud bytes.Buffer

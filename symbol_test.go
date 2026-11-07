@@ -588,9 +588,8 @@ func freshness(t *testing.T, m *Magus) types.SymbolIndexFreshness {
 }
 
 // The probe has to find the manifest the run in newIndexedWorkspace just wrote. Nothing
-// else asserted that, which is how the probe came to hash a step no run ever mints
-// (buildStep without applyRunKeying): the lookup missed every time, every built index read
-// as out-of-date, and `magus status` said so permanently with nothing to contradict it.
+// else asserted that, so the probe once hashed a step no run mints. The
+// lookup always missed, and status reported every built index out-of-date.
 func TestSymbolIndexFreshnessFindsTheManifestTheRunWrote(t *testing.T) {
 	m, _ := newIndexedWorkspace(t)
 	assert.Equal(t, types.SymbolIndexFresh, freshness(t, m),

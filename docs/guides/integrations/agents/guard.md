@@ -398,9 +398,9 @@ matches; a workspace that set `advise` gets the same served command as advice.
 - **Waiting by hand is refused.** Work you start in the background is
   announced when it ends, so the waiter rules point every wait back at that
   notice, at `magus job wait <job>` for another agent's job, or at
-  `magus status --watch=15s` for the project lock. `sleep-poll` matches a
+  `magus server status --watch=15s` for the project lock. `sleep-poll` matches a
   sleep of ten seconds or more followed on the line by a one-shot status read
-  (`kill -0`, the process table, `magus status` or a job row,
+  (`kill -0`, the process table, `magus server status` or a job row,
   `gh pr view|checks|status`, `gh run view|list`), and a backgrounded call
   whose only work is sleeping and printing: a timer, whose notice says only
   that time passed. `busy-wait` matches any `while` or `until` loop that sleeps,
@@ -411,7 +411,7 @@ matches; a workspace that set `advise` gets the same served command as advice.
   `monitor-duplicate` refuses a second live watcher on one subject (the process
   pattern, pid, file, job, lock or CI run its command reads), one on a host task
   capture or on the process of a command you backgrounded, and a second endless
-  backgrounded watch (`magus status --watch`, `tail -f`, `watch`); a leased
+  backgrounded watch (`magus server status --watch`, `tail -f`, `watch`); a leased
   worker is refused an endless watch outright, since its waits are its own runs.
   `monitor-pile` counts each agent's live waiters, watchers, timers and endless
   watches together, from when each is armed to its timeout, and advises at the

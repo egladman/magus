@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -44,6 +45,8 @@ const (
 type unloadReason struct {
 	Cause unloadKind
 	Spell string
+	// Config marks a stale failure on a magus.yaml key the binary predates.
+	Config bool
 }
 
 // The rules denyUnloaded refuses under, while no side of the workspace's guard policy loads.
@@ -69,7 +72,7 @@ func unloadCause(loadFailure error, root string) unloadReason {
 		return unloadReason{}
 	}
 	if ward.IsStaleBinary(loadFailure) {
-		return unloadReason{Cause: unloadStale}
+		return unloadReason{Cause: unloadStale, Config: errors.Is(loadFailure, types.UnknownConfigKey)}
 	}
 	spell := skewedSpell(loadFailure, root)
 	switch {
@@ -314,7 +317,7 @@ func ghReadOnly(args []string) bool {
 }
 
 // magusReadVerbs are the magus verbs that answer a question and write nothing shared.
-var magusReadVerbs = []string{"version", "ls", "describe", "query", "status", "explain", "refs", "path", "doctor", "where"}
+var magusReadVerbs = []string{"version", "ls", "describe", "query", "explain", "refs", "doctor", "where"}
 
 // magusReadOnly reports a magus invocation that reads. Asking for help always does, and so
 // does `affected --explain`, which says why each project is affected and runs nothing.
@@ -334,7 +337,7 @@ func magusReadOnly(args []string) bool {
 	case words[0] == "vcs":
 		return len(words) > 1 && words[1] == "ls-files"
 	}
-	return slices.Contains(magusReadVerbs, words[0])
+	return slices.Contains(magusReadVerbs, words[0]) || isServerStatus(words)
 }
 
 // scoutRecord reports a magus invocation a read-only scout records its work with: `job
@@ -377,7 +380,7 @@ func recoveryLine(command string, d Dialect, lease string, builds bool, at locat
 	}
 	// denyCheckoutBootstrap still judges who may build which checkout.
 	places := onlyBaggageAssigns(call.Assigns) && len(words) >= 3 && path.Base(words[0]) == "magus" && words[1] == "buzz" &&
-		(words[2] == placementScript || words[2] == job.CheckoutBootstrapScript)
+		(words[2] == placementScript || words[2] == checkoutHook(at.workspace))
 	if places {
 		return true
 	}
@@ -556,6 +559,10 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 		problem = fmt.Sprintf("./magus was built from another commit than this tree: it ships no spell %q, which the tree carries, so it cannot load its guard policy", reason.Spell)
 	case reason.Cause == unloadNoBinary, own && !hasBinary:
 		problem = "this checkout has no ./magus to load its guard policy"
+	case reason.Config && own && hasBinary:
+		problem = "./magus predates this workspace's magus.yaml, which sets a key it does not know, so it cannot load its guard policy"
+	case reason.Config:
+		problem = "the magus judging this predates this workspace's magus.yaml, which sets a key it does not know, so it cannot load its guard policy"
 	case own && hasBinary:
 		problem = "./magus is older than this workspace and cannot load its guard policy"
 	}
@@ -606,7 +613,7 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 	case lease != "" && own && hasBinary && job.BuildsItsOwnMagus(root):
 		// A placement can be older than a tree the worker's own commits moved.
 		return binaryFix{
-			say: fmt.Sprintf("build this checkout's own, alone on its line: `%s`", job.CheckoutBootstrap(root)),
+			say: fmt.Sprintf("build this checkout's own, alone on its line: `%s`", job.CheckoutBootstrap(checkoutHook(root), root)),
 			why: "That line runs for the holder of the job whose checkout it is, whatever judges the call. The main session can place a ./magus instead when no Go build input differs.\n" +
 				workerFastForward + "\n" + onePerBase,
 		}

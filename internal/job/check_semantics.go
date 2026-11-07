@@ -2,10 +2,13 @@ package job
 
 import (
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -126,6 +129,108 @@ func dispatchedSelection(p *types.Project, target string) (string, bool) {
 		}
 	}
 	return dialect, true
+}
+
+// TestScope is the narrow test run for the write paths one spell claims in
+// one project. It holds the operands its test op's testScope expands them to,
+// or why the run cannot be narrowed.
+type TestScope struct {
+	Project string `json:"project,omitempty" yaml:"project,omitempty"`
+	Spell   string `json:"spell,omitempty"   yaml:"spell,omitempty"`
+	// Op is the qualified test op, `spell::op`, whose testScope was expanded.
+	Op    string   `json:"op,omitempty" yaml:"op,omitempty"`
+	Files []string `json:"files"        yaml:"files"`
+	// Operands exist in the checkout, relative to the project directory.
+	Operands []string `json:"operands,omitempty" yaml:"operands,omitempty"`
+	// Whole says why no operand narrows the run, so the project's whole test op
+	// runs. It is empty when Operands is set.
+	Whole string `json:"whole,omitempty" yaml:"whole,omitempty"`
+}
+
+// NarrowTestScope groups writePaths, workspace-relative, by owning project and
+// claiming spell. It expands each through the testScope of that spell's test
+// op and drops an operand naming nothing under checkout. Every group carries
+// Operands or a Whole reason. Core holds no language's notion of which tests
+// a file has, so a spell declaring no testScope gets a reason.
+func NarrowTestScope(projects []*types.Project, writePaths []string, checkout string) []TestScope {
+	var out []TestScope
+	for _, file := range writePaths {
+		one := fileTestScope(projects, file, checkout)
+		i := slices.IndexFunc(out, func(s TestScope) bool {
+			return s.Project == one.Project && s.Spell == one.Spell && s.Op == one.Op && s.Whole == one.Whole
+		})
+		if i < 0 {
+			out = append(out, one)
+			continue
+		}
+		out[i].Files = append(out[i].Files, file)
+		for _, operand := range one.Operands {
+			if !slices.Contains(out[i].Operands, operand) {
+				out[i].Operands = append(out[i].Operands, operand)
+			}
+		}
+	}
+	for i := range out {
+		if out[i].Op != "" && out[i].Whole == "" && len(out[i].Operands) == 0 {
+			out[i].Whole = fmt.Sprintf("nothing %s's testScope expands these files to exists in the checkout", out[i].Op)
+		}
+	}
+	return out
+}
+
+func fileTestScope(projects []*types.Project, file, checkout string) TestScope {
+	p := owningProject(projects, file)
+	if p == nil {
+		return TestScope{Files: []string{file}, Whole: "no project contains it"}
+	}
+	scope := TestScope{Project: p.Path, Files: []string{file}}
+	rel := file
+	if p.Path != "." {
+		rel = strings.TrimPrefix(file, p.Path+"/")
+	}
+	ext := strings.ToLower(path.Ext(rel))
+	i := slices.IndexFunc(p.ResolvedSpells, func(sp *spells.Spell) bool { return slices.Contains(sp.LanguageExtensions(), ext) })
+	if i < 0 {
+		scope.Whole = fmt.Sprintf("no spell bound to %s claims its extension %q", p.Path, ext)
+		return scope
+	}
+	sp := p.ResolvedSpells[i]
+	scope.Spell = sp.Name()
+	names := scopedOps(sp)
+	switch len(names) {
+	case 0:
+		scope.Whole = fmt.Sprintf("spell %s declares no testScope, so its whole project runs", sp.Name())
+		return scope
+	case 1:
+	default:
+		scope.Whole = fmt.Sprintf("spell %s declares testScope on ops %s, so which one is its test op is unknown", sp.Name(), strings.Join(names, ", "))
+		return scope
+	}
+	scope.Op = fmt.Sprintf("%s::%s", sp.Name(), names[0])
+	if strings.ContainsAny(rel, "*?[{") {
+		scope.Whole = "a glob names no one file to expand"
+		return scope
+	}
+	op, _ := sp.Op(types.Normalize(names[0]))
+	for _, operand := range op.ExpandTestScope(rel) {
+		if _, err := os.Stat(filepath.Join(checkout, filepath.FromSlash(p.Path), filepath.FromSlash(operand))); err == nil {
+			scope.Operands = append(scope.Operands, operand)
+		}
+	}
+	return scope
+}
+
+// scopedOps are the sorted names of sp's ops that declare a testScope.
+func scopedOps(sp *spells.Spell) []string {
+	var names []string
+	for _, name := range sp.Targets() {
+		op, ok := sp.Op(types.Normalize(name))
+		if ok && len(op.TestScope) > 0 && !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names
 }
 
 // uncheckedTestSelection skips a check already in refused: it cannot run.

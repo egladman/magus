@@ -32,6 +32,7 @@ type MachineBudget struct {
 	mu          sync.Mutex
 	budgetMB    int
 	budgetSlots int
+	reserve     types.MemoryReserve
 	claims      map[string]*machineEntry
 	seq         int64
 
@@ -55,6 +56,12 @@ func NewMachineBudget(budgetMB, budgetSlots int) *MachineBudget {
 		budgetSlots: budgetSlots,
 		claims:      map[string]*machineEntry{},
 	}
+}
+
+// WithReserve records what the memory budget left the OS, for Snapshot to name.
+func (b *MachineBudget) WithReserve(r types.MemoryReserve) *MachineBudget {
+	b.reserve = r
+	return b
 }
 
 func (b *MachineBudget) clock() time.Time {
@@ -154,6 +161,7 @@ func (b *MachineBudget) Snapshot() types.MachineSnapshot {
 		BudgetSlots: b.budgetSlots,
 		HeldSlots:   heldSlots,
 		Holders:     b.holders(types.MachineClaim{}),
+		Reserve:     b.reserve,
 	}
 }
 
@@ -424,8 +432,8 @@ func isMachineAncestor(invocation string, ancestors []string) bool {
 
 // FormatMB renders a declared memory figure. Base-1024 with binary suffixes and a
 // space, matching FormatBytes rather than inventing a second spelling of the same
-// quantity in one binary. Exported so a refusal and `magus status` say the same figure
-// the same way.
+// quantity in one binary. Exported so a refusal and `magus server status`
+// say the same figure the same way.
 func FormatMB(mb int) string {
 	if mb >= 1024 {
 		return fmt.Sprintf("%.1f GiB", float64(mb)/1024)

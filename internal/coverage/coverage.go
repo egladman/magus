@@ -141,6 +141,16 @@ func (fs *files) add(p string, b Block) {
 		f = &File{Path: p}
 		fs.byPath[p] = f
 	}
+	// A second test binary's profile repeats blocks; adding them would count
+	// their units twice.
+	if i := slices.IndexFunc(f.Blocks, func(o Block) bool {
+		return o.StartLine == b.StartLine && o.EndLine == b.EndLine && o.Units == b.Units
+	}); i >= 0 {
+		f.Covered -= f.Blocks[i].covered()
+		f.Blocks[i].Hits += b.Hits
+		f.Covered += f.Blocks[i].covered()
+		return
+	}
 	f.Total += b.Units
 	f.Covered += b.covered()
 	f.Blocks = append(f.Blocks, b)

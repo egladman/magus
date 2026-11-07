@@ -113,7 +113,7 @@ Before judging a symbol's tests, run `hack/retro/tests.buzz` on it, a file, or a
 magus buzz hack/retro/tests.buzz -- --symbol <name> [--symbol <name>]... [--profile <coverage profile>]
 ```
 
-- Reach walks `calls` edges toward the symbol only. Never count `magus path` as reach: it walks
+- Reach walks `calls` edges toward the symbol only. Never count `magus explain --to` as reach: it walks
   edges both ways and credits a test of a shared callee.
 - It reads `.magus/coverage.hand.out`, which only an unnarrowed `./magus run test .` writes. It
   refuses a profile with no block for a file in scope.

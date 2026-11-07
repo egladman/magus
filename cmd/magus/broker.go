@@ -56,7 +56,7 @@ func brokerCommand(ctx context.Context, args []string) error {
 		return brokerUnits(ctx, args[1:])
 	default:
 		brokerUsage()
-		return exit.Usagef("magus broker: unknown target %q (want status, stop or units, or nothing to run one)", args[0])
+		return exit.Usagef("magus server broker: unknown target %q (want status, stop or units, or nothing to run one)", args[0])
 	}
 }
 
@@ -74,7 +74,7 @@ func brokerServes(args []string) bool {
 }
 
 func brokerUsage() {
-	fmt.Fprintln(os.Stderr, "usage: magus broker [status|stop|units] [flags]")
+	fmt.Fprintln(os.Stderr, "usage: magus server broker [status|stop|units] [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "The broker holds this host's capacity (slots and declared memory) and the")
 	fmt.Fprintln(os.Stderr, "services every magus on it shares. A run or session brief starts one when none answers; it")
@@ -99,35 +99,34 @@ func brokerUsage() {
 	fmt.Fprintln(os.Stderr, "Log, when a run started it: "+brokerLogPath())
 }
 
-// brokerServe is `magus broker`: serve this host's capacity and shared services until
-// idle, stopped or signalled. Losing the bind to a live broker is the ordinary end of a
-// start race, so it exits 0. A socket a supervisor hands over is served instead of
-// binding one.
+// brokerServe is `magus server broker`. It serves this host's capacity until
+// idle, stopped or signalled. Losing the bind to a live broker ends a start
+// race, so it exits 0. A supervisor's socket is served, not bound.
 func brokerServe(ctx context.Context, args []string) error {
-	var f *flaggen.BrokerFlags
-	rest, err := commandParse("broker", args, func(fs *flag.FlagSet) {
-		f = flaggen.BindBroker(fs)
+	var f *flaggen.ServerBrokerFlags
+	rest, err := commandParse("server broker", args, func(fs *flag.FlagSet) {
+		f = flaggen.BindServerBroker(fs)
 		fs.Usage = brokerUsage
 	})
 	if err != nil {
 		return err
 	}
 	if len(rest) > 0 {
-		return exit.Usagef("magus broker: unexpected argument %q (want status, stop or units, or flags only to run one)", rest[0])
+		return exit.Usagef("magus server broker: unexpected argument %q (want status, stop or units, or flags only to run one)", rest[0])
 	}
 	if f.IdleExit < 0 {
-		return exit.Usagef("magus broker: --idle-exit %s is negative; 0 never exits", f.IdleExit)
+		return exit.Usagef("magus server broker: --idle-exit %s is negative; 0 never exits", f.IdleExit)
 	}
 	if f.Log != "" {
 		if err := redirectStdio(f.Log); err != nil {
-			return fmt.Errorf("magus broker: %w", err)
+			return fmt.Errorf("magus server broker: %w", err)
 		}
 	}
 
 	addr := broker.DefaultAddr()
 	ln, err := broker.Activated(addr)
 	if err != nil {
-		return fmt.Errorf("magus broker: %w", err)
+		return fmt.Errorf("magus server broker: %w", err)
 	}
 	from := "serving"
 	if ln != nil {
@@ -139,7 +138,7 @@ func brokerServe(ctx context.Context, args []string) error {
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("magus broker: %w", err)
+			return fmt.Errorf("magus server broker: %w", err)
 		}
 	}
 	if warn := broker.OtherBrokersWarning(broker.OtherBrokers(ctx, proc.SockDir())); warn != "" {
@@ -163,7 +162,9 @@ func brokerServe(ctx context.Context, args []string) error {
 	// process may commit, so a broker inside a memory-limited container budgets the
 	// container; slots come from the cores, the ceiling ClampConcurrency holds every run
 	// to. The profile decides memory's reservation.
-	memMB := mem.BudgetMB(mem.UsableBytes(ctx), globalCfg.ConcurrencyProfile)
+	usable := mem.UsableBytes(ctx)
+	memMB := mem.BudgetMB(usable, globalCfg.ConcurrencyProfile)
+	reserve := mem.Reserve(usable, globalCfg.ConcurrencyProfile)
 	slots := cache.MachineCeiling()
 	exits := "never exits for idleness"
 	if f.IdleExit > 0 {
@@ -185,6 +186,7 @@ func brokerServe(ctx context.Context, args []string) error {
 
 	err = broker.Serve(ctx, ln,
 		broker.WithCapacity(memMB, slots),
+		broker.WithMemoryReserve(reserve),
 		broker.WithServices(serviceHost{reg}),
 		broker.WithIdleExit(f.IdleExit),
 		broker.WithLogger(slog.Default()),
@@ -215,9 +217,9 @@ func reopenBrokerLog(ctx context.Context, path string) {
 }
 
 func brokerStatus(ctx context.Context, args []string) error {
-	rest, err := commandParse("broker status", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("server broker status", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "usage: magus broker status [flags]")
+			fmt.Fprintln(os.Stderr, "usage: magus server broker status [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "The broker: its pid, capacity, every claim holding it and the services it")
 			fmt.Fprintln(os.Stderr, "hosts. Exits non-zero when none is running, so a script can chain on it.")
@@ -227,7 +229,7 @@ func brokerStatus(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return exit.Usagef("magus broker status: takes no arguments (got %q)", rest[0])
+		return exit.Usagef("magus server broker status: takes no arguments (got %q)", rest[0])
 	}
 	if warn := broker.OtherBrokersWarning(broker.OtherBrokers(ctx, proc.SockDir())); warn != "" {
 		slog.WarnContext(ctx, warn, attr.Notice(""))
@@ -259,11 +261,11 @@ func brokerStatus(ctx context.Context, args []string) error {
 }
 
 func brokerStop(ctx context.Context, args []string) error {
-	var f *flaggen.BrokerStopFlags
-	if _, err := commandParse("broker stop", args, func(fs *flag.FlagSet) {
-		f = flaggen.BindBrokerStop(fs)
+	var f *flaggen.ServerBrokerStopFlags
+	if _, err := commandParse("server broker stop", args, func(fs *flag.FlagSet) {
+		f = flaggen.BindServerBrokerStop(fs)
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "usage: magus broker stop [--services]")
+			fmt.Fprintln(os.Stderr, "usage: magus server broker stop [--services]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Stop the broker. Every claim on this host goes with it; runs already going")
 			fmt.Fprintln(os.Stderr, "keep going and re-assert their claims on the next broker. With --services,")
@@ -343,7 +345,7 @@ func stopUnanswering(ctx context.Context, services bool, dialErr error) (int, er
 		return 0, unknownBrokerError(sock, err, dialErr)
 	}
 	if services {
-		return 0, fmt.Errorf("broker stop --services: broker (pid %d) does not answer this build, which cannot ask it to stop only its services, so `magus broker stop` stops it whole: %w", pid, dialErr)
+		return 0, fmt.Errorf("broker stop --services: broker (pid %d) does not answer this build, which cannot ask it to stop only its services, so `magus server broker stop` stops it whole: %w", pid, dialErr)
 	}
 	command := processCommand(ctx, pid)
 	if !slices.Contains(strings.Fields(command), "broker") {
@@ -440,7 +442,7 @@ func stateLogPath(name string) string {
 // without one being started.
 var spawnBroker = func() (pid int, logPath string, err error) {
 	logPath = brokerLogPath()
-	pid, err = spawnDetached([]string{"broker", "--" + flaggen.FlagBrokerLog, logPath}, logPath)
+	pid, err = spawnDetached([]string{"server", "broker", "--" + flaggen.FlagServerBrokerLog, logPath}, logPath)
 	return pid, logPath, err
 }
 
@@ -585,13 +587,13 @@ func gateArgv(args []string) bool {
 	return canonicalTarget(t.Name) == string(types.TargetCI)
 }
 
-// brokerUnits is `magus broker units [systemd|launchd]`: print the files a supervisor
-// needs to run the broker, for the person to install. The default is launchd on macOS
-// and systemd elsewhere.
+// brokerUnits is `magus server broker units [systemd|launchd]`. It prints
+// the files a supervisor needs to run the broker, for a person to install.
+// The default is launchd on macOS and systemd elsewhere.
 func brokerUnits(ctx context.Context, args []string) error {
-	rest, err := commandParse("broker units", args, func(fs *flag.FlagSet) {
+	rest, err := commandParse("server broker units", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "usage: magus broker units [systemd|launchd] [flags]")
+			fmt.Fprintln(os.Stderr, "usage: magus server broker units [systemd|launchd] [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Print the units a supervisor needs to run the broker: a systemd socket and")
 			fmt.Fprintln(os.Stderr, "service that socket-activate it, or a launchd agent that keeps it alive.")
@@ -610,15 +612,15 @@ func brokerUnits(ctx context.Context, args []string) error {
 	case 1:
 		supervisor = rest[0]
 	default:
-		return exit.Usagef("magus broker units: takes at most one supervisor (got %q)", rest)
+		return exit.Usagef("magus server broker units: takes at most one supervisor (got %q)", rest)
 	}
 	facts, err := gatherUnitFacts()
 	if err != nil {
-		return fmt.Errorf("magus broker units: %w", err)
+		return fmt.Errorf("magus server broker units: %w", err)
 	}
 	units, err := broker.RenderUnits(supervisor, facts)
 	if err != nil {
-		return exit.Usagef("magus broker units: %v", err)
+		return exit.Usagef("magus server broker units: %v", err)
 	}
 	opts, err := outputOptionsOrDefault()
 	if err != nil {

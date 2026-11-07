@@ -29,7 +29,7 @@ func TestNextForQuery(t *testing.T) {
 
 	assert.Equal(t, [][2]string{
 		{"query-explain", "magus explain spell:go"},
-		{"query-path", "magus path spell:go spell:gomod"},
+		{"query-path", "magus explain spell:go --to spell:gomod"},
 		{"query-refs", "magus refs RunAll"},
 	}, runs(next))
 }
@@ -56,7 +56,7 @@ func TestNextForQueryOpensAMatchedDocPagesSections(t *testing.T) {
 	assert.Equal(t, [][2]string{
 		{"query-explain", "magus explain doc:docs/concepts/cache.md"},
 		{"query-doc-sections", "magus query kind=docsection id=docs/concepts/cache.md"},
-		{"query-path", "magus path doc:docs/concepts/cache.md doc:docs/concepts/sandbox.md"},
+		{"query-path", "magus explain doc:docs/concepts/cache.md --to doc:docs/concepts/sandbox.md"},
 	}, runs(next))
 }
 
@@ -89,7 +89,7 @@ func TestNextForExplain(t *testing.T) {
 	})
 
 	assert.Equal(t, [][2]string{
-		{"explain-path", "magus path symbol:RunAll spell:gomod"},
+		{"explain-path", "magus explain symbol:RunAll --to spell:gomod"},
 		{"explain-refs", "magus refs RunAll"},
 		{"explain-describe-file", "magus describe file internal/cache/run.go"},
 	}, runs(next))
@@ -103,7 +103,7 @@ func TestNextForExplainBreaksNeighborTiesByCardOrder(t *testing.T) {
 		Out:  []types.KnowledgeEdgeRef{{Other: "op:go:go-build"}, {Other: "op:go:go-test"}},
 	}
 	for range 20 {
-		require.Equal(t, "magus path spell:go op:go:go-build", NextForExplain(card)[0].Run)
+		require.Equal(t, "magus explain spell:go --to op:go:go-build", NextForExplain(card)[0].Run)
 	}
 }
 
@@ -362,16 +362,16 @@ func TestBreadcrumbRendersRunAndArgv(t *testing.T) {
 func TestRenderIsTheOneTwoLineLayout(t *testing.T) {
 	next := []types.NextStep{
 		{Run: "magus explain spell:go", Why: "explain names a node's edges."},
-		{Run: "magus path spell:go spell:gomod"},
+		{Run: "magus explain spell:go --to spell:gomod"},
 	}
 	assert.Equal(t, "\nnext:\n"+
 		"  magus explain spell:go\n"+
 		"      explain names a node's edges.\n"+
-		"  magus path spell:go spell:gomod\n",
+		"  magus explain spell:go --to spell:gomod\n",
 		Render(next, func(n types.NextStep) string { return n.Why }))
 	assert.Equal(t, "\nnext:\n"+
 		"  magus explain spell:go\n"+
-		"  magus path spell:go spell:gomod\n",
+		"  magus explain spell:go --to spell:gomod\n",
 		Render(next, func(types.NextStep) string { return "" }))
 	assert.Empty(t, Render(nil, func(n types.NextStep) string { return n.Why }))
 }

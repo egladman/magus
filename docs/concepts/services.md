@@ -84,9 +84,9 @@ Once a shared service's last dependent releases it, the broker keeps it warm for
 then reaps it. Teardown has three layers:
 
 - The idle timeout above and a crash reaper (below) tear services down automatically;
-- `magus broker stop --services` stops every hosted service (to
+- `magus server broker stop --services` stops every hosted service (to
   drop stale state or free held ports) without shutting the broker down;
-- `magus broker stop` tears the broker and its services down.
+- `magus server broker stop` tears the broker and its services down.
 
 If the broker is killed uncleanly, a new broker replays each hosted service's `stop`
 command on startup to **reap orphans** the dead one left behind. Give a container

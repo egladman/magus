@@ -31,8 +31,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// TestBrokerOpensNoInternetSocket runs the real `magus broker` and asks the kernel what
-// it has open. The broker is started by builds, inside CI and containers and over ssh,
+// TestBrokerOpensNoInternetSocket runs the real `magus server broker` and
+// asks the kernel what it has open. The broker is started by builds, inside
+// CI and containers and over ssh,
 // and anything a build leaves listening on the network is a finding; the rule is that
 // the broker entry point never reaches a TCP listener, and this holds it to that from
 // the outside rather than by reading the code.
@@ -57,7 +58,7 @@ func TestBrokerOpensNoInternetSocket(t *testing.T) {
 	logFile, err := os.Create(logPath)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = logFile.Close() })
-	cmd := exec.Command(bin, "broker")
+	cmd := exec.Command(bin, "server", "broker")
 	cmd.Dir = t.TempDir()
 	cmd.Stderr = logFile
 	require.NoError(t, cmd.Start())
@@ -162,7 +163,7 @@ func TestBrokerRefusesANegativeIdleExit(t *testing.T) {
 // in the CLI registry, on the package constant a broker a run starts uses.
 func TestBrokerIdleExitDefaultsToTheBrokers(t *testing.T) {
 	fs := flag.NewFlagSet("broker", flag.ContinueOnError)
-	f := flaggen.BindBroker(fs)
+	f := flaggen.BindServerBroker(fs)
 	assert.Equal(t, broker.DefaultIdleExit, f.IdleExit)
 }
 
@@ -396,7 +397,7 @@ func (s *BrokerStopSuite) TestStoppingOnlyTheServicesOfAnotherBuildSaysWhatItCan
 	err := brokerStop(s.T().Context(), []string{"--services"})
 	s.Require().Error(err)
 	s.ErrorContains(err, fmt.Sprintf("broker (pid %d)", pid))
-	s.ErrorContains(err, "`magus broker stop` stops it whole")
+	s.ErrorContains(err, "`magus server broker stop` stops it whole")
 	s.Empty(exited, "nothing was signalled")
 }
 

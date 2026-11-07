@@ -2744,7 +2744,6 @@ var adviceDirRel = filepath.Join(".github", "actions", "advice")
 // it here is the failure that gate exists for.
 var localAdvisors = []string{
 	"merge-conflict.buzz",
-	"target-outputs.buzz",
 	"doctor.buzz",
 	"version-floor.buzz",
 	"unclaimed.buzz",
@@ -2753,6 +2752,7 @@ var localAdvisors = []string{
 	"conformance.buzz",
 	"missing-target.buzz",
 	"exported-api.buzz",
+	"change-risk.buzz",
 }
 
 // runLocalAdvisors runs the read-only PR advisors against the local tree and returns

@@ -20,7 +20,6 @@
 {"group":"dir:broker","path":"broker/group_other.go"}
 {"group":"dir:broker","path":"broker/group_test.go"}
 {"group":"dir:broker","path":"broker/listen.go"}
-{"group":"dir:broker","path":"broker/listen_protocol_test.go"}
 {"group":"dir:broker","path":"broker/listen_test.go"}
 {"group":"dir:broker","path":"broker/owner.go"}
 {"group":"dir:broker","path":"broker/owner_test.go"}
@@ -65,6 +64,7 @@
 {"group":"file:changes/unreleased/broker-lifecycle-detach.md","path":"changes/unreleased/broker-lifecycle-detach.md"}
 {"group":"file:changes/unreleased/broker-lifecycle-hup.md","path":"changes/unreleased/broker-lifecycle-hup.md"}
 {"group":"file:changes/unreleased/broker-reply-before-close-kept.md","path":"changes/unreleased/broker-reply-before-close-kept.md"}
+{"group":"file:changes/unreleased/broker-socket-name-from-protocol.md","path":"changes/unreleased/broker-socket-name-from-protocol.md"}
 {"group":"file:changes/unreleased/broker-step-groups-survive-restart.md","path":"changes/unreleased/broker-step-groups-survive-restart.md"}
 {"group":"file:changes/unreleased/buf-provided-outputs.md","path":"changes/unreleased/buf-provided-outputs.md"}
 {"group":"file:changes/unreleased/buzz-parse.md","path":"changes/unreleased/buzz-parse.md"}
@@ -76,11 +76,15 @@
 {"group":"file:changes/unreleased/cache-skips-sibling-outputs.md","path":"changes/unreleased/cache-skips-sibling-outputs.md"}
 {"group":"file:changes/unreleased/ceilings-in-refs-query-job.md","path":"changes/unreleased/ceilings-in-refs-query-job.md"}
 {"group":"file:changes/unreleased/change-risk-base-from-main-ci.md","path":"changes/unreleased/change-risk-base-from-main-ci.md"}
+{"group":"file:changes/unreleased/change-risk-errors.md","path":"changes/unreleased/change-risk-errors.md"}
 {"group":"file:changes/unreleased/change-risk-keeps-covered-lines.md","path":"changes/unreleased/change-risk-keeps-covered-lines.md"}
 {"group":"file:changes/unreleased/change-risk-reads-test-coverage.md","path":"changes/unreleased/change-risk-reads-test-coverage.md"}
 {"group":"file:changes/unreleased/checkout-reporter.md","path":"changes/unreleased/checkout-reporter.md"}
 {"group":"file:changes/unreleased/ci-asks-for-whole-machine-explicitly.md","path":"changes/unreleased/ci-asks-for-whole-machine-explicitly.md"}
 {"group":"file:changes/unreleased/ci-gates-in-the-queue-box.md","path":"changes/unreleased/ci-gates-in-the-queue-box.md"}
+{"group":"file:changes/unreleased/ci-plan-cost.md","path":"changes/unreleased/ci-plan-cost.md"}
+{"group":"file:changes/unreleased/ci-shard-stages.md","path":"changes/unreleased/ci-shard-stages.md"}
+{"group":"file:changes/unreleased/ci-shards-anchor-effects.md","path":"changes/unreleased/ci-shards-anchor-effects.md"}
 {"group":"file:changes/unreleased/ci-shards-by-target-labels.md","path":"changes/unreleased/ci-shards-by-target-labels.md"}
 {"group":"file:changes/unreleased/claim-callers-of-a-symbol.md","path":"changes/unreleased/claim-callers-of-a-symbol.md"}
 {"group":"file:changes/unreleased/claim-sizing.md","path":"changes/unreleased/claim-sizing.md"}
@@ -119,9 +123,12 @@
 {"group":"file:changes/unreleased/figure-svg-drops-anchor-line.md","path":"changes/unreleased/figure-svg-drops-anchor-line.md"}
 {"group":"file:changes/unreleased/file-split-relation-and-rule.md","path":"changes/unreleased/file-split-relation-and-rule.md"}
 {"group":"file:changes/unreleased/flags-repeated-and-command.md","path":"changes/unreleased/flags-repeated-and-command.md"}
+{"group":"file:changes/unreleased/fold-path-completion-man-self.md","path":"changes/unreleased/fold-path-completion-man-self.md"}
+{"group":"file:changes/unreleased/fold-path-completion-man.md","path":"changes/unreleased/fold-path-completion-man.md"}
 {"group":"file:changes/unreleased/fork-binds-the-right-checkout.md","path":"changes/unreleased/fork-binds-the-right-checkout.md"}
 {"group":"file:changes/unreleased/fork-claim-notes.md","path":"changes/unreleased/fork-claim-notes.md"}
 {"group":"file:changes/unreleased/fork-rules-at-every-door.md","path":"changes/unreleased/fork-rules-at-every-door.md"}
+{"group":"file:changes/unreleased/gate-could-not-run-here.md","path":"changes/unreleased/gate-could-not-run-here.md"}
 {"group":"file:changes/unreleased/gate-fits-machine.md","path":"changes/unreleased/gate-fits-machine.md"}
 {"group":"file:changes/unreleased/gitattributes-carve-outs.md","path":"changes/unreleased/gitattributes-carve-outs.md"}
 {"group":"file:changes/unreleased/glossary-term-pages.md","path":"changes/unreleased/glossary-term-pages.md"}
@@ -208,6 +215,7 @@
 {"group":"file:changes/unreleased/measured-claims.md","path":"changes/unreleased/measured-claims.md"}
 {"group":"file:changes/unreleased/memory-claims-pool-runs-by-charms-read.md","path":"changes/unreleased/memory-claims-pool-runs-by-charms-read.md"}
 {"group":"file:changes/unreleased/merge-job-branches.md","path":"changes/unreleased/merge-job-branches.md"}
+{"group":"file:changes/unreleased/merge-of-build-finish-bare-binary.md","path":"changes/unreleased/merge-of-build-finish-bare-binary.md"}
 {"group":"file:changes/unreleased/merge-queue-dashboard.md","path":"changes/unreleased/merge-queue-dashboard.md"}
 {"group":"file:changes/unreleased/metrics-histogram-counters-removed.md","path":"changes/unreleased/metrics-histogram-counters-removed.md"}
 {"group":"file:changes/unreleased/metrics-outcome-ok-error.md","path":"changes/unreleased/metrics-outcome-ok-error.md"}
@@ -216,6 +224,7 @@
 {"group":"file:changes/unreleased/mgs3014-newer-gate-supersedes-older-one.md","path":"changes/unreleased/mgs3014-newer-gate-supersedes-older-one.md"}
 {"group":"file:changes/unreleased/mod-attention-removes-settings.md","path":"changes/unreleased/mod-attention-removes-settings.md"}
 {"group":"file:changes/unreleased/mod-plugin-validates.md","path":"changes/unreleased/mod-plugin-validates.md"}
+{"group":"file:changes/unreleased/mod-role-tints.md","path":"changes/unreleased/mod-role-tints.md"}
 {"group":"file:changes/unreleased/mod-shows-build-budget.md","path":"changes/unreleased/mod-shows-build-budget.md"}
 {"group":"file:changes/unreleased/model-table-in-spells.md","path":"changes/unreleased/model-table-in-spells.md"}
 {"group":"file:changes/unreleased/model-table-no-harness.md","path":"changes/unreleased/model-table-no-harness.md"}
@@ -225,6 +234,7 @@
 {"group":"file:changes/unreleased/more-libs-never-compose-format.md","path":"changes/unreleased/more-libs-never-compose-format.md"}
 {"group":"file:changes/unreleased/needs-at-width-one.md","path":"changes/unreleased/needs-at-width-one.md"}
 {"group":"file:changes/unreleased/needs-failure-is-catchable.md","path":"changes/unreleased/needs-failure-is-catchable.md"}
+{"group":"file:changes/unreleased/needs-ready-probes-registered-spells.md","path":"changes/unreleased/needs-ready-probes-registered-spells.md"}
 {"group":"file:changes/unreleased/no-throw-rest-of-hack-dev.md","path":"changes/unreleased/no-throw-rest-of-hack-dev.md"}
 {"group":"file:changes/unreleased/no-throw-spell-helpers.md","path":"changes/unreleased/no-throw-spell-helpers.md"}
 {"group":"file:changes/unreleased/oci-base-name-matches-digest.md","path":"changes/unreleased/oci-base-name-matches-digest.md"}
@@ -246,6 +256,7 @@
 {"group":"file:changes/unreleased/proofread-round-gates.md","path":"changes/unreleased/proofread-round-gates.md"}
 {"group":"file:changes/unreleased/proofread-tells.md","path":"changes/unreleased/proofread-tells.md"}
 {"group":"file:changes/unreleased/proofread-train.md","path":"changes/unreleased/proofread-train.md"}
+{"group":"file:changes/unreleased/pulls-board-reads-every-check-state-state-dir.md","path":"changes/unreleased/pulls-board-reads-every-check-state-state-dir.md"}
 {"group":"file:changes/unreleased/push-gate-accepts-narrow-evidence.md","path":"changes/unreleased/push-gate-accepts-narrow-evidence.md"}
 {"group":"file:changes/unreleased/query-invocation-shows-refs.md","path":"changes/unreleased/query-invocation-shows-refs.md"}
 {"group":"file:changes/unreleased/queue-apply-token-waits.md","path":"changes/unreleased/queue-apply-token-waits.md"}
@@ -277,6 +288,7 @@
 {"group":"file:changes/unreleased/root-from-another-directory-no-longer.md","path":"changes/unreleased/root-from-another-directory-no-longer.md"}
 {"group":"file:changes/unreleased/root-from-another-directory-reads-its-config.md","path":"changes/unreleased/root-from-another-directory-reads-its-config.md"}
 {"group":"file:changes/unreleased/root-test-narrows-args.md","path":"changes/unreleased/root-test-narrows-args.md"}
+{"group":"file:changes/unreleased/run-document-carries-target-status.md","path":"changes/unreleased/run-document-carries-target-status.md"}
 {"group":"file:changes/unreleased/run-false-alarms.md","path":"changes/unreleased/run-false-alarms.md"}
 {"group":"file:changes/unreleased/runs-wait-for-the-budget.md","path":"changes/unreleased/runs-wait-for-the-budget.md"}
 {"group":"file:changes/unreleased/sandbox-launcher.md","path":"changes/unreleased/sandbox-launcher.md"}
@@ -312,6 +324,7 @@
 {"group":"file:changes/unreleased/spells-can-be-imported-from-registry.md","path":"changes/unreleased/spells-can-be-imported-from-registry.md"}
 {"group":"file:changes/unreleased/stale-binary-advisory-go-c-deny.md","path":"changes/unreleased/stale-binary-advisory-go-c-deny.md"}
 {"group":"file:changes/unreleased/stale-binary-lets-recovery-through.md","path":"changes/unreleased/stale-binary-lets-recovery-through.md"}
+{"group":"file:changes/unreleased/status-drops-waiter-kind.md","path":"changes/unreleased/status-drops-waiter-kind.md"}
 {"group":"file:changes/unreleased/std-api-lock.md","path":"changes/unreleased/std-api-lock.md"}
 {"group":"file:changes/unreleased/stop-advice-said-once.md","path":"changes/unreleased/stop-advice-said-once.md"}
 {"group":"file:changes/unreleased/stores-helpers-session-load.md","path":"changes/unreleased/stores-helpers-session-load.md"}
@@ -532,6 +545,8 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/text_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/timeout.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/vcs.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/vcs_checkout.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/vcs_checkout_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/vcs_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/verbosity.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/verbosity_test.go"}
@@ -1056,6 +1071,7 @@
 {"group":"dir:hack/magusfile","path":"hack/magusfile/mockassert.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/model-tiers.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/recompose.buzz"}
+{"group":"dir:hack/magusfile","path":"hack/magusfile/regressions.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/releases.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/ruledocs.buzz"}
 {"group":"dir:hack/magusfile","path":"hack/magusfile/run-golangci.buzz"}
@@ -1182,7 +1198,6 @@
 {"group":"dir:internal/guard","path":"internal/guard/lease_claim_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/lease_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/load_contract.go"}
-{"group":"dir:internal/guard","path":"internal/guard/load_contract_merge_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/load_contract_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/load_restore.go"}
 {"group":"dir:internal/guard","path":"internal/guard/load_restore_test.go"}

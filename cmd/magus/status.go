@@ -40,11 +40,11 @@ const statusWatchMin = 15 * time.Second
 // usage banner. The hand-written options struct this replaced described itself as
 // "the middle ground between loose per-flag vars and a declarative registry"; the
 // registry now exists, so the middle ground is gone.
-func bindStatus(f **flaggen.StatusFlags) func(*flag.FlagSet) {
+func bindStatus(f **flaggen.ServerStatusFlags) func(*flag.FlagSet) {
 	return func(fs *flag.FlagSet) {
-		*f = flaggen.BindStatus(fs)
+		*f = flaggen.BindServerStatus(fs)
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "usage: magus status [flags]")
+			fmt.Fprintln(os.Stderr, "usage: magus server status [flags]")
 			fmt.Fprintln(os.Stderr, "\nShow magus's configured telemetry, cache settings, and (when a parent")
 			fmt.Fprintln(os.Stderr, "process is running) the live concurrency-pool state.")
 			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted, see `magus -h`):")
@@ -60,8 +60,8 @@ func queryCapacity(ctx context.Context) (types.MachineSnapshot, error) {
 }
 
 func status(ctx context.Context, args []string) error {
-	var f *flaggen.StatusFlags
-	if _, err := commandParse("status", args, bindStatus(&f)); err != nil {
+	var f *flaggen.ServerStatusFlags
+	if _, err := commandParse("server status", args, bindStatus(&f)); err != nil {
 		return err
 	}
 
@@ -229,9 +229,9 @@ func printSilentLeases(w io.Writer, silent []guard.SilentLease, err error) {
 
 // clampStatusWatch floors the poll interval at statusWatchMin. Zero passes
 // through untouched: it is the caller's "not watching" sentinel, answered with a
-// single snapshot before this runs. A NEGATIVE interval clamps rather than
-// passing through, because time.NewTicker panics on anything at or below zero:
-// `magus status --watch -1s` took the whole process down instead of polling.
+// single snapshot before this runs. A NEGATIVE interval clamps too, because
+// time.NewTicker panics at or below zero. `--watch -1s` once took the whole
+// process down.
 func clampStatusWatch(interval time.Duration) time.Duration {
 	if interval != 0 && interval < statusWatchMin {
 		return statusWatchMin
@@ -366,15 +366,14 @@ func applyStatusPools(ctx context.Context, snapshot *types.StatusSnapshot, addrs
 	}
 }
 
-// loadSymbolIndexStatus computes each symbol-capable project's SCIP index freshness,
-// best-effort: it opens the workspace read/write (a full load is needed for the cache
-// probe) and returns nil when there is no workspace here, so `magus status` outside a
-// magus tree omits the section.
+// loadSymbolIndexStatus computes each symbol-capable project's SCIP index
+// freshness, best-effort. The cache probe needs a full read/write load. It
+// returns nil with no workspace here, so the section is omitted.
 func loadSymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus {
 	// No Close: loadMagus is a process-wide sync.Once singleton, so closing it here
-	// tears down a buzz pool every LATER caller still expects to be open. Under
-	// `magus status --watch --symbols` this probe runs once per tick, so the second
-	// tick was reading through a handle the first one had already closed. The
+	// tears down a buzz pool every LATER caller still expects to be open.
+	// Under `--watch --symbols` this probe runs once per tick, and the second
+	// tick read through a handle the first had closed. The
 	// singleton's lifetime belongs to process exit, not to a status probe.
 	m, err := loadMagus(ctx, "")
 	if err != nil {
@@ -604,7 +603,7 @@ func printBrokerRows(w io.Writer, st types.StatusBroker, policy types.BrokerPoli
 			h.Owner, h.Dir, h.Command, sinceText(h.Since)), "  "))
 	}
 	for _, q := range c.Waiting {
-		why := q.Kind
+		why := ""
 		if q.Tree != "" {
 			why = fmt.Sprintf("seat in %s", q.Tree)
 		}
@@ -728,7 +727,11 @@ func capacityText(c types.MachineSnapshot) string {
 		parts = append(parts, fmt.Sprintf("slots %d/%d", c.HeldSlots, c.BudgetSlots))
 	}
 	if c.BudgetMB > 0 {
-		parts = append(parts, fmt.Sprintf("mem %s/%s", cache.FormatMB(c.HeldMB), cache.FormatMB(c.BudgetMB)))
+		mem := fmt.Sprintf("mem %s/%s", cache.FormatMB(c.HeldMB), cache.FormatMB(c.BudgetMB))
+		if r := c.Reserve; r.TotalMB > 0 {
+			mem += fmt.Sprintf(" (%s less %s: %s)", cache.FormatMB(r.TotalMB), cache.FormatMB(r.ReservedMB), r.Rule)
+		}
+		parts = append(parts, mem)
 	}
 	if len(parts) == 0 {
 		return "unmeasured"
@@ -893,10 +896,9 @@ func serverVersionSkew(pool *types.StatusOutput) string {
 // printPoolSummary renders whose pool this is and what it is running: the identity line
 // and the width line.
 //
-// ONE renderer for two verbs. `magus status` prints it inside its broader view and
-// `magus server status` prints it beside the server rows, and a second spelling of these
-// two lines is a second thing to keep true: the pair would first drift in wording and
-// then in which number they read.
+// ONE renderer, which `magus server status` prints beside the server rows. A
+// second spelling of these two lines would drift first in wording, then in
+// which number they read.
 func printPoolSummary(w io.Writer, p *types.StatusOutput, label string) {
 	fmt.Fprintf(w, "%s pid %d\n", label, p.ParentPID)
 	fmt.Fprintf(w, "width: %d   running: %d   available: %d   queued: %d\n",

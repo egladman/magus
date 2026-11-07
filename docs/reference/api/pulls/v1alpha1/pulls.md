@@ -29,6 +29,14 @@ SetAuthors replaces the author filter and triggers one sync now, respecting the 
 
 Takes [SetAuthorsRequest](#setauthorsrequest), returns [SetAuthorsResponse](#setauthorsresponse).
 
+### CheckoutPull
+
+CheckoutPull makes an isolated local checkout of a pull's head commit by running `magus vcs checkout`, and reports where it is and how to remove it.
+
+`POST /magus.pulls.v1alpha1.PullsService/CheckoutPull`: unary. Source: [pulls.proto](https://github.com/egladman/magus/blob/main/proto/magus/pulls/v1alpha1/pulls.proto).
+
+Takes [CheckoutPullRequest](#checkoutpullrequest), returns [CheckoutPullResponse](#checkoutpullresponse).
+
 ## Messages
 
 ### AuthorFilter
@@ -82,6 +90,33 @@ Source: [pulls.proto](https://github.com/egladman/magus/blob/main/proto/magus/pu
 | `pending`       | int32                   | 8 | pending counts checks queued or running.                              |
 
 Used by: [GetPulls (response)](pulls.md#getpulls), [SetAuthors (response)](pulls.md#setauthors).
+
+### CheckoutPullRequest
+
+CheckoutPullRequest names the pull to check out.
+
+Source: [pulls.proto](https://github.com/egladman/magus/blob/main/proto/magus/pulls/v1alpha1/pulls.proto).
+
+| Field    | Type  | # | Description                                             |
+| -------- | ----- | - | ------------------------------------------------------- |
+| `number` | int32 | 1 | number is the pull request number on the current board. |
+
+Used by: [CheckoutPull (request)](pulls.md#checkoutpull).
+
+### CheckoutPullResponse
+
+CheckoutPullResponse is the record `magus vcs checkout -o json` printed.
+
+Source: [pulls.proto](https://github.com/egladman/magus/blob/main/proto/magus/pulls/v1alpha1/pulls.proto).
+
+| Field    | Type            | # | Description                                                                      |
+| -------- | --------------- | - | -------------------------------------------------------------------------------- |
+| `path`   | string          | 1 | path is the directory of the new checkout.                                       |
+| `remove` | string          | 2 | remove is the command that removes the checkout.                                 |
+| `log`    | repeated string | 3 | log is what the checkout did, one line per step, including the bootstrap it ran. |
+| `error`  | string          | 4 | error is the failure text, empty on success.                                     |
+
+Used by: [CheckoutPull (response)](pulls.md#checkoutpull).
 
 ### FailedJob
 
@@ -196,6 +231,7 @@ Source: [pulls.proto](https://github.com/egladman/magus/blob/main/proto/magus/pu
 | `draft`         | bool                             | 20 |                                                                                             |
 | `overlaps`      | [repeated Overlap](#overlap)     | 21 | overlaps are the other open pulls that change files this pull also changes.                 |
 | `failed_jobs`   | [repeated FailedJob](#failedjob) | 22 | failed\_jobs are every failing check, expanded in place by the console.                     |
+| `fetch_ref`     | string                           | 23 | fetch\_ref is the ref a clone fetches to get head\_sha, for example refs/pull/12/head.      |
 
 Used by: [GetPulls (response)](pulls.md#getpulls), [SetAuthors (response)](pulls.md#setauthors).
 
@@ -266,14 +302,16 @@ CiState is the rolled-up result of a commit's checks, with the queue context alr
 
 Source: [pulls.proto](https://github.com/egladman/magus/blob/main/proto/magus/pulls/v1alpha1/pulls.proto).
 
-| Value                  | # | Description                                                                     |
-| ---------------------- | - | ------------------------------------------------------------------------------- |
-| `CI_STATE_UNSPECIFIED` | 0 |                                                                                 |
-| `CI_STATE_GREEN`       | 1 | GREEN means every check passed or was skipped.                                  |
-| `CI_STATE_RED`         | 2 | RED means at least one check failed.                                            |
-| `CI_STATE_RUNNING`     | 3 | RUNNING means at least one check is running and none failed.                    |
-| `CI_STATE_QUEUED`      | 4 | QUEUED means at least one check is waiting for a runner and none failed or ran. |
-| `CI_STATE_NONE`        | 5 | NONE means the commit has no checks at all.                                     |
+| Value                  | # | Description                                                                                                                       |
+| ---------------------- | - | --------------------------------------------------------------------------------------------------------------------------------- |
+| `CI_STATE_UNSPECIFIED` | 0 |                                                                                                                                   |
+| `CI_STATE_GREEN`       | 1 | GREEN means every check passed or was skipped.                                                                                    |
+| `CI_STATE_RED`         | 2 | RED means at least one check failed.                                                                                              |
+| `CI_STATE_RUNNING`     | 3 | RUNNING means at least one check is running and none failed.                                                                      |
+| `CI_STATE_QUEUED`      | 4 | QUEUED means at least one check is waiting for a runner and none failed or ran.                                                   |
+| `CI_STATE_NONE`        | 5 | NONE means the commit has no checks at all.                                                                                       |
+| `CI_STATE_CANCELLED`   | 6 | CANCELLED means at least one check was cancelled and none failed or still runs.                                                   |
+| `CI_STATE_UNREADABLE`  | 7 | UNREADABLE means a check reported a state outside the provider contract. The pull's blocked reasons name the check and the state. |
 
 Used by: [GetPulls (response)](pulls.md#getpulls), [SetAuthors (response)](pulls.md#setauthors).
 

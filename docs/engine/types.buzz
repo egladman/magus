@@ -817,7 +817,6 @@ export object Site {
         ents.append(Entity{ token = "magusfile.buzz", kind = "file", url = "concepts/targets/", summary = "The file that declares a project's targets and binds its spells." });
         ents.append(Entity{ token = "magus query", kind = "command", url = "concepts/knowledge/", summary = "Search the knowledge graph." });
         ents.append(Entity{ token = "magus explain", kind = "command", url = "concepts/knowledge/", summary = "Explain one knowledge-graph node." });
-        ents.append(Entity{ token = "magus path", kind = "command", url = "concepts/knowledge/", summary = "Show the shortest path between knowledge-graph nodes." });
         ents.append(Entity{ token = "magus refs", kind = "command", url = "concepts/knowledge/", summary = "Find a symbol's definition and references." });
         ents.append(Entity{ token = "magus graph export --open", kind = "command", url = "reference/manpage/magus-graph/", summary = "Open a graph explorer for the workspace graph." });
         // vcs has no manpage (nor do refs, clean, memory, buzz, agent, hook, notify), and
@@ -829,7 +828,6 @@ export object Site {
         ents.append(Entity{ token = "magus vcs", kind = "command", url = "guides/integrations/git/", summary = "Path listing and conflict resolution that knows what is generated." });
         ents.append(Entity{ token = "query", kind = "command", url = "concepts/knowledge/", summary = "magus query: search the knowledge graph." });
         ents.append(Entity{ token = "explain", kind = "command", url = "concepts/knowledge/", summary = "magus explain: explain one knowledge-graph node." });
-        ents.append(Entity{ token = "path", kind = "command", url = "concepts/knowledge/", summary = "magus path: show the shortest path between knowledge-graph nodes." });
         ents.append(Entity{ token = "refs", kind = "command", url = "concepts/knowledge/", summary = "magus refs: find a symbol's definition and references." });
         ents.append(Entity{ token = "graph open", kind = "command", url = "reference/manpage/magus-graph/", summary = "magus graph export --open: open a graph explorer." });
 

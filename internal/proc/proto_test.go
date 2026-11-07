@@ -9,8 +9,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Output is the one StatusReply conversion `magus status` and the console share: every
-// field crosses, a failed workspace keeps its state and error, and Affected stays unset.
+// Output is the one StatusReply conversion `magus server status` and the
+// console share. Every field crosses, a failed workspace keeps its state and
+// error, and Affected stays unset.
 func TestStatusReplyOutput(t *testing.T) {
 	t.Parallel()
 	assert.Nil(t, (*StatusReply)(nil).StatusOutput())

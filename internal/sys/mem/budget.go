@@ -1,7 +1,9 @@
 package mem
 
 import (
+	"cmp"
 	"context"
+	"fmt"
 
 	"github.com/egladman/magus/types"
 )
@@ -16,22 +18,20 @@ import (
 // the run-time admission gate sizing a host. They ask the same question, and two
 // figures that drifted apart would be two different answers to it.
 //
-// aggressive does not use this fraction at all; see BudgetMB.
+// aggressive keeps less; see Reserve.
 const UsableFraction = 0.75
 
-// aggressiveFloorMB is what the aggressive profile leaves off the top instead of a
-// percentage: enough for the kernel and its page cache to keep working without
-// tipping into reclaim pressure. 512 MiB is a figure a small dedicated CI runner (the
-// case this profile exists for) can afford to give up, unlike the quarter that
-// balanced and conservative reserve for a laptop's editor and browser.
-const aggressiveFloorMB = 512
+// aggressiveFloorMB and aggressiveShare are what the aggressive profile keeps
+// for the OS: the larger of 1 GiB and an eighth. aggressive is the shipped
+// default, and a flat 512 MiB budgeted 23.5 GiB of a 24 GiB Mac on 2026-11-05.
+// Two seated steps then starved WindowServer.
+const (
+	aggressiveFloorMB = 1024
+	aggressiveShare   = 8
+)
 
-// BudgetMB is the memory build work may plan against, in megabytes.
-//
-// Under aggressive it is every usable megabyte minus aggressiveFloorMB, no percentage
-// reservation: the profile's whole point is claiming the machine, and a laptop's
-// editor and browser are exactly what it assumes are not there to protect memory for.
-// Every other profile (including the zero value) keeps UsableFraction.
+// BudgetMB is the memory build work may plan against, in megabytes: Reserve's
+// total less what it keeps back.
 //
 // Zero when the host is unmeasurable, which every caller reads as no budget to
 // arbitrate rather than as a budget of nothing. A measurable host below the floor
@@ -39,17 +39,33 @@ const aggressiveFloorMB = 512
 // mistaken for the unmeasurable case: refusing nearly everything and arbitrating
 // nothing are different answers.
 func BudgetMB(usableBytes int64, profile types.ConcurrencyProfile) int {
-	if usableBytes <= 0 {
+	r := Reserve(usableBytes, profile)
+	if r.TotalMB <= 0 {
 		return 0
 	}
-	if profile == types.ProfileAggressive {
-		usableMB := int(usableBytes / (1 << 20))
-		if usableMB <= aggressiveFloorMB {
-			return 1
-		}
-		return usableMB - aggressiveFloorMB
+	return max(r.TotalMB-r.ReservedMB, 1)
+}
+
+// Reserve is what profile keeps back from usableBytes for the OS and desktop.
+// No profile keeps nothing, so a budget never equals the machine.
+func Reserve(usableBytes int64, profile types.ConcurrencyProfile) types.MemoryReserve {
+	if usableBytes <= 0 {
+		return types.MemoryReserve{}
 	}
-	return int(float64(usableBytes) * UsableFraction / (1 << 20))
+	totalMB := int(usableBytes / (1 << 20))
+	if profile == types.ProfileAggressive {
+		return types.MemoryReserve{
+			TotalMB:    totalMB,
+			ReservedMB: min(max(totalMB/aggressiveShare, aggressiveFloorMB), totalMB),
+			Rule:       "the aggressive profile keeps 1/8, at least 1 GiB",
+		}
+	}
+	budgetMB := int(float64(usableBytes) * UsableFraction / (1 << 20))
+	return types.MemoryReserve{
+		TotalMB:    totalMB,
+		ReservedMB: totalMB - budgetMB,
+		Rule:       fmt.Sprintf("the %s profile keeps 1/4", cmp.Or(profile, types.ProfileBalanced)),
+	}
 }
 
 // UsableBytes is the memory THIS PROCESS may actually commit: the machine's total,

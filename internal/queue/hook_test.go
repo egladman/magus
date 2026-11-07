@@ -275,7 +275,7 @@ func TestAHooksEnvironmentIsTheSandboxesInItsBox(t *testing.T) {
 	assert.Equal(t, "/dev/null", seen["GIT_CONFIG_GLOBAL"], "a child reads no global git config")
 	allowed := slices.Concat(sandboxenv.DefaultAllow(), boxedNames, []string{"PASSED", "GLOB_X", "SET"},
 		// What magus gives every sandboxed child: itself, its mode, and no global git config.
-		[]string{"MAGUS", "MAGUS_LEVEL", spawn.AncestorsEnvVar, spawn.SandboxEnvVar, "GIT_CONFIG_GLOBAL"},
+		[]string{"MAGUS", "MAGUS_LEVEL", spawn.AncestorsEnvVar, spawn.SandboxEnvVar, spawn.TreeMarkEnv, "GIT_CONFIG_GLOBAL"},
 		[]string{"SHLVL", "_", "OLDPWD", "PWD"}) // what sh sets itself
 	for name := range seen {
 		assert.Contains(t, allowed, name, "%s reaches the hook", name)
@@ -991,7 +991,9 @@ func boxedRun(t *testing.T, out string) []string {
 		}
 	}
 	require.NotEmpty(t, home, "the probe printed no HOME: %s", out)
-	return strings.Split(strings.TrimSpace(strings.ReplaceAll(out, filepath.Dir(home), "<box>")), "\n")
+	lines := strings.Split(strings.TrimSpace(strings.ReplaceAll(out, filepath.Dir(home), "<box>")), "\n")
+	// The tree mark names this run's own process tree, so no two runs share it.
+	return slices.DeleteFunc(lines, func(l string) bool { return strings.HasPrefix(l, spawn.TreeMarkEnv+"=") })
 }
 
 // CI gates a change with GateCommit and the queue with a CommandGate: a gate on the same

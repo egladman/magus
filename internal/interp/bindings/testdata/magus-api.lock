@@ -55,6 +55,7 @@ log.error
 log.hint
 log.info
 log.warn
+magus__ChangeRiskFunction__charged
 magus__Change__affected
 magus__Change__conformance
 magus__Change__diff
@@ -62,6 +63,7 @@ magus__Change__impact
 magus__Change__mergeBase
 magus__Change__risk
 magus__Change__tier
+magus__FunctionGap__decided
 magus__Graph__dir
 magus__Graph__dirs
 magus__Graph__duplication

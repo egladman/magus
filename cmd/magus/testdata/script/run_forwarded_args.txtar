@@ -2,37 +2,39 @@
 # with explicit args does NOT forward them on its own: the explicit list replaces the
 # passthrough. So a target that states its own scope narrows only by appending `args`,
 # which is what the root magusfile's `test` target does. The acme op records each argv
-# it was forked with, one line per call.
+# it was forked with, one line per call, outside the project so that it is no
+# undeclared write (MGS4011).
+cd ws
 
 # Without forwarded args the call shape is the target's own, and `args` is empty.
 exec magus run check
-grep '^forwarded: 0$' calls.txt
-grep '^-race ./\.\.\.$' calls.txt
-! grep 'TestNarrow' calls.txt
-rm calls.txt
+grep '^forwarded: 0$' ../calls.txt
+grep '^-race ./\.\.\.$' ../calls.txt
+! grep 'TestNarrow' ../calls.txt
+rm ../calls.txt
 
 # Forwarded args reach the body and, appended, the op.
 exec magus run check -- -run TestNarrow
-grep '^forwarded: 2$' calls.txt
-grep '^-race ./\.\.\. -run TestNarrow$' calls.txt
-rm calls.txt
+grep '^forwarded: 2$' ../calls.txt
+grep '^-race ./\.\.\. -run TestNarrow$' ../calls.txt
+rm ../calls.txt
 
 # An explicit args list alone drops them: the replace rule this script documents.
 exec magus run pinned -- -run TestNarrow
-grep '^-race ./\.\.\.$' calls.txt
-! grep 'TestNarrow' calls.txt
-rm calls.txt
+grep '^-race ./\.\.\.$' ../calls.txt
+! grep 'TestNarrow' ../calls.txt
+rm ../calls.txt
 
 # A target reached through ctx.needs gets an empty list, never null, and none of the
 # args forwarded to the target that composes it.
 exec magus run gate -- -run TestNarrow
-grep '^forwarded: 0$' calls.txt
-grep '^-race ./\.\.\.$' calls.txt
-! grep 'TestNarrow' calls.txt
+grep '^forwarded: 0$' ../calls.txt
+grep '^-race ./\.\.\.$' ../calls.txt
+! grep 'TestNarrow' ../calls.txt
 
--- magus.yaml --
+-- ws/magus.yaml --
 concurrency: 2
--- magusfile.buzz --
+-- ws/magusfile.buzz --
 import "magus";
 import "spells/acme";
 magus\project({ "spells": [acme] });
@@ -42,10 +44,10 @@ export fun check(ctx: magus\Context, args: [str]) > void {
 }
 export fun pinned(ctx: magus\Context, args: [str]) > void { acme.test(ctx, {"args": ["-race", "./..."]}); }
 export fun gate(ctx: magus\Context, args: [str]) > void { ctx.needs(check); }
--- spells/acme/spell.buzz --
+-- ws/spells/acme/spell.buzz --
 import "magus/spell";
 export fun mgs_getName() > str { return "acme"; }
 fun test(target: Target) > Command {
-    return Command{bin = "sh", args = ["-c", "echo \"$*\" >> calls.txt", "acme"]};
+    return Command{bin = "sh", args = ["-c", "echo \"$*\" >> ../calls.txt", "acme"]};
 }
 export fun mgs_listTargets() > {str: fun(Target) Command} { return {"test": test}; }

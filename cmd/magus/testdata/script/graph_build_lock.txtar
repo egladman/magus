@@ -4,15 +4,18 @@
 # the first stored.
 #
 # bash orchestrates because the second build must start only once the first holds the
-# lock, which its holder record on disk shows.
-exec bash -c 'magus graph build --no-sessions >first.out 2>first.err & first=$!; for i in $(seq 400); do [ -s .magus/knowledge/graph-build.holder.json ] && break; sleep 0.05; done; [ -s .magus/knowledge/graph-build.holder.json ] || exit 9; magus graph build --no-sessions >second.out 2>second.err; second=$?; wait $first; echo "first=$? second=$second"'
+# lock, which its holder record on disk shows. The workspace is ws/ and the builds'
+# output goes outside it: the second build writing into the tree while the first one's
+# indexer runs would be an undeclared write (MGS4011).
+cd ws
+exec bash -c 'magus graph build --no-sessions >../first.out 2>../first.err & first=$!; for i in $(seq 400); do [ -s .magus/knowledge/graph-build.holder.json ] && break; sleep 0.05; done; [ -s .magus/knowledge/graph-build.holder.json ] || exit 9; magus graph build --no-sessions >../second.out 2>../second.err; second=$?; wait $first; echo "first=$? second=$second"'
 stdout 'first=0 second=0'
 
-grep 'knowledge graph rebuilt' first.err
-! grep 'waiting for' first.err
-grep 'magus graph build: waiting for `magus graph build` in .+ \(pid [0-9]+, started [0-9-]+ [0-9:]+\); interrupting stops the wait' second.err
-grep 'knowledge graph current, built by `magus graph build` in .+ \(pid [0-9]+' second.err
-! grep 'took over' second.err
+grep 'knowledge graph rebuilt' ../first.err
+! grep 'waiting for' ../first.err
+grep 'magus graph build: waiting for `magus graph build` in .+ \(pid [0-9]+, started [0-9-]+ [0-9:]+\); interrupting stops the wait' ../second.err
+grep 'knowledge graph current, built by `magus graph build` in .+ \(pid [0-9]+' ../second.err
+! grep 'took over' ../second.err
 
 # Each build released the lock, so no holder record is left for the next one to reclaim.
 ! exists .magus/knowledge/graph-build.holder.json
@@ -21,15 +24,15 @@ grep 'knowledge graph current, built by `magus graph build` in .+ \(pid [0-9]+' 
 exec magus graph stats
 stdout 'nodes'
 
--- magus.yaml --
+-- ws/magus.yaml --
 concurrency: 2
 spells:
   symbol_indexers: [slow]
--- magusfile.buzz --
+-- ws/magusfile.buzz --
 import "magus";
 import "spells/slow";
 magus\project({ "spells": [slow] });
--- spells/slow/spell.buzz --
+-- ws/spells/slow/spell.buzz --
 import "magus/spell";
 export fun mgs_getName() > str { return "slow"; }
 export fun mgs_getSymbolIndexer() > SymbolIndexer {

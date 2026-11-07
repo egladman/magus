@@ -45,9 +45,9 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
 {{if .Full}}1. Prefer the MCP tools; they return structured content with nothing to silence.
    Call an exposed MCP tool directly. If it is missing or its call fails, use the
    CLI fallback below.
-   - Do not gate that choice on `{{cmd "status"}} --probe=mcp`. It tests loopback HTTP,
+   - Do not gate that choice on `{{cmd "server status"}} --probe=mcp`. It tests loopback HTTP,
      while a host may use stdio or the server's Unix socket.
-   - `{{cmd "status"}} --probe=readiness` checks that this workspace is loaded on the
+   - `{{cmd "server status"}} --probe=readiness` checks that this workspace is loaded on the
      server socket. It does not test the host's MCP registration.
    - Hosts manage their own connection; never start a server for an agent.
      Do not make the connection a prerequisite for completing the work.
@@ -55,8 +55,8 @@ Binary run by absolute path does NOT set working directory: walks up from cwd ->
      project). Use when you know which projects to run.
    - `{{tool "client"}}` (`{{buzz "change.affected"}}`): the projects a VCS change touched. It
      returns the set and does not run it. The gate is `{{cmd "affected"}} ci`.{{else}}1. Prefer MCP tools; call exposed tool directly. If missing or call fails -> CLI fallback below.
-   - Do not gate that choice on `{{cmd "status"}} --probe=mcp`: tests loopback HTTP; host may use stdio or server Unix socket.
-   - `{{cmd "status"}} --probe=readiness`: checks workspace loaded on server socket; does not test host MCP registration.
+   - Do not gate that choice on `{{cmd "server status"}} --probe=mcp`: tests loopback HTTP; host may use stdio or server Unix socket.
+   - `{{cmd "server status"}} --probe=readiness`: checks workspace loaded on server socket; does not test host MCP registration.
    - Hosts manage own connection; never start server for agent.
    - `{{tool "client"}}` (`{{buzz "run"}}`): run named projects, same arguments as `{{cmd "run"}}`.
    - `{{tool "client"}}` (`{{buzz "change.affected"}}`): projects VCS change touched; returns set, does not run it.{{end}}
@@ -298,13 +298,13 @@ at once, naming the holder.
 {{else}}Run whose project lock or machine budget another magus invocation holds: exits 75 at once, naming holder.{{end}}
 {{if .Full}}- Never write `sleep`/`ps`/`pgrep` polling loops. The guard denies `pgrep`,
   `pidof`, and `ps` for this reason.{{else}}- Never write `sleep`/`ps`/`pgrep` polling loops; guard denies `pgrep`, `pidof`, `ps`.{{end}}
-{{if .Full}}- `{{cmd "status"}}` reads that lock state once: holder PID, command, directory,
+{{if .Full}}- `{{cmd "server status"}}` reads that lock state once: holder PID, command, directory,
   and age. To wait, background your run as `{{cmd "job exec"}} --timeout <d> -- <command>`
-  and wait for its completion notice.{{else}}- `{{cmd "status"}}`: reads lock state once: holder PID, command, directory, age. To wait: background run as `{{cmd "job exec"}} --timeout <d> -- <command>`, wait for its completion notice.{{end}}
+  and wait for its completion notice.{{else}}- `{{cmd "server status"}}`: reads lock state once: holder PID, command, directory, age. To wait: background run as `{{cmd "job exec"}} --timeout <d> -- <command>`, wait for its completion notice.{{end}}
 {{if .Full}}- A long-running holder is not, by itself, evidence of a hang.{{else}}- Long-running holder alone: not evidence of hang.{{end}}
 
 ```sh
-magus status
+magus server status
 ```
 
 {{if .Full}}If the lock has crossed its stale warning threshold, report the exact holder and
