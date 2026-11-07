@@ -258,7 +258,7 @@ plan renders more than once without being computed again.`,
 		{Comment: "Graph dependents of api/gateway", Command: "magus run build api/gateway --graph --upstream"},
 		{Comment: "Stream JSONL target events to a file", Command: "magus run build -o jsonl --tee build.jsonl"},
 		{Comment: "Run every shard of the affected ci plan here", Command: "magus affected ci --plan | magus run --stdin"},
-		{Comment: "Run one shard of a saved plan", Command: "magus run ci:gha --stdin --shard 2 < plan.json"},
+		{Comment: "Run one shard of a saved plan", Command: "magus run ci:gha --stdin --shard 1b < plan.json"},
 		{Comment: "Render a saved plan's summary without computing it again", Command: "magus run --stdin --dry-run -o 'template={{.summary}}' < plan.json"},
 	},
 	ExitStatus: []cmdline.ExitCode{

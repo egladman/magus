@@ -208,7 +208,7 @@ magus affected ci --plan | magus run --stdin
 *Run one shard of a saved plan*
 
 ```sh
-magus run ci:gha --stdin --shard 2 < plan.json
+magus run ci:gha --stdin --shard 1b < plan.json
 ```
 
 *Render a saved plan's summary without computing it again*

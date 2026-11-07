@@ -100,8 +100,10 @@ env:
   CI_PROVIDER: github-actions
 
 jobs:
+  # Named for both halves: the drift-checking generate below runs first and is most
+  # of this job's time, and a name of only "plan" hid it.
   plan:
-    name: magus plan
+    name: generate + plan
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -299,7 +301,7 @@ jobs:
   # reaches the generate step alone. The plan job stays keyless, since it restores the
   # unsigned history.
   plan-cache:
-    name: magus plan cache
+    name: plan cache
     needs: [plan]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -362,11 +364,14 @@ jobs:
 
   # Stage zero computes, once, each prerequisite two or more shards would otherwise
   # share, so those shards split instead of fanning in to one (ADR 0027). Each shard
-  # here runs its units as a `ci` shard does, then exports the local cache tier it
-  # built as a run-scoped artifact beside the archive's sha256. Every `ci` shard
+  # here runs its units as a `stage-1` shard does, then exports the local cache tier it
+  # built as a run-scoped artifact beside the archive's sha256. Every `stage-1` shard
   # imports it and replays that work.
-  stage-zero:
-    name: "magus stage zero ${{ matrix.shard }}: ${{ matrix.job_name }}"
+  #
+  # Job names lead with the shard ID (0a, 1a), the one part the run graph never
+  # truncates; the job ID already says the stage, and the workflow says it is magus.
+  stage-0:
+    name: "${{ matrix.shard }} ${{ matrix.job_name }}"
     needs: plan
     if: fromJSON(needs.plan.outputs.stage_zero_count) > 0 && needs.plan.outputs.inherit != 'true'
     runs-on: ubuntu-latest
@@ -374,12 +379,12 @@ jobs:
     permissions:
       contents: read
     env:
-      # The `ci` job's cap, and the archive below exports that tier whole.
+      # The `stage-1` job's cap, and the archive below exports that tier whole.
       MAGUS_CACHE_SIZE_MB: '256'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.stage_zero_matrix) }}
-    # Each step below is the `ci` job's step of the same name; the comments there
+    # Each step below is the `stage-1` job's step of the same name; the comments there
     # say why each is shaped as it is.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -439,7 +444,7 @@ jobs:
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h /
 
-      # --shard names a stage-zero shard by its ID, as a `ci` shard is named.
+      # --shard names a stage 0 shard by its ID, as a `stage-1` shard is named.
       - name: Run stage zero for shard
         uses: ./.github/actions/magus
         env:
@@ -481,9 +486,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  ci:
-    name: "magus shard ${{ matrix.shard }}: ${{ matrix.job_name }}"
-    needs: [plan, stage-zero]
+  stage-1:
+    name: "${{ matrix.shard }} ${{ matrix.job_name }}"
+    needs: [plan, stage-0]
     # !cancelled() in place of the implied success(): stage zero skips when no shard
     # shares work, and a red stage zero leaves each shard able to compute what it
     # needs, so the run still reports every shard's verdict. The gate fails on it.
@@ -881,7 +886,7 @@ jobs:
     #
     # Skipped on an inherited verdict: the advisors describe the delta against main,
     # which the last green run already commented on, and re-posting it says nothing new.
-    name: magus advisor
+    name: advice
     if: github.event_name == 'pull_request' && vars.MAGUS_PR_COMMENTS != 'false' && needs.plan.outputs.inherit != 'true'
     needs: [plan]
     runs-on: ubuntu-latest
@@ -983,7 +988,7 @@ jobs:
   # merged with them still unrun. A check that costs you the answer you came for is
   # charging too much for the answer it gives.
   doctor:
-    name: magus doctor
+    name: doctor
     needs: [plan]
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -1029,7 +1034,7 @@ jobs:
   # at run time. Requiring "magus shard 1" blocks a PR whose plan needed only one.
   gate:
     name: ci gate
-    needs: [plan, stage-zero, ci, doctor]
+    needs: [plan, stage-0, stage-1, doctor]
     # always(), or a skipped or failed dependency would skip this job too - and a required
     # check that never reports blocks the pull request instead of failing it, which reads
     # as an infrastructure problem rather than a red build.
@@ -1060,7 +1065,7 @@ jobs:
       - if: always() && needs.plan.result == 'success'
         uses: ./.github/actions/ci-outcome
         with:
-          ci-result: ${{ needs.ci.result }}
+          ci-result: ${{ needs.stage-1.result }}
           shard-count: ${{ needs.plan.outputs.count }}
 
       # A pull request's shard histories describe a branch that is about to disappear,
@@ -1069,15 +1074,15 @@ jobs:
         uses: ./.github/actions/magus
         with:
           merge-history: 'true'
-          ci-result: ${{ needs.ci.result }}
+          ci-result: ${{ needs.stage-1.result }}
 
-      - name: Require the plan, doctor, stage zero and every shard to have passed
+      - name: Require the plan, doctor and both stages to have passed
         if: always()
         env:
           PLAN_RESULT: ${{ needs.plan.result }}
           DOCTOR_RESULT: ${{ needs.doctor.result }}
-          STAGE_ZERO_RESULT: ${{ needs.stage-zero.result }}
-          CI_RESULT: ${{ needs.ci.result }}
+          STAGE_ZERO_RESULT: ${{ needs.stage-0.result }}
+          CI_RESULT: ${{ needs.stage-1.result }}
         run: |
           set -euo pipefail
           # Every verdict is reported before exiting, so one red run names everything that
@@ -1096,12 +1101,12 @@ jobs:
           fi
           # skipped is a pass: a plan with no shared work has no stage zero.
           case "$STAGE_ZERO_RESULT" in
-            success|skipped) echo "stage zero: ${STAGE_ZERO_RESULT}" ;;
-            *) echo "::error::stage zero did not pass (${STAGE_ZERO_RESULT})"; failed=1 ;;
+            success|skipped) echo "stage 0: ${STAGE_ZERO_RESULT}" ;;
+            *) echo "::error::stage 0 did not pass (${STAGE_ZERO_RESULT})"; failed=1 ;;
           esac
           # skipped is a pass: an inherited verdict plans an empty shard matrix on purpose.
           case "$CI_RESULT" in
-            success|skipped) echo "shards: ${CI_RESULT}" ;;
-            *) echo "::error::shards did not pass (${CI_RESULT})"; failed=1 ;;
+            success|skipped) echo "stage 1: ${CI_RESULT}" ;;
+            *) echo "::error::stage 1 did not pass (${CI_RESULT})"; failed=1 ;;
           esac
           exit "$failed"

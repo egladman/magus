@@ -288,19 +288,51 @@ func TestPlanSummaryMarkdownPrefersTheInheritanceReport(t *testing.T) {
 	t.Parallel()
 
 	out := planOutput{Count: 2, MaxParallel: 2, Matrix: []planShard{
-		{Shard: "1", Projects: "."},
-		{Shard: "2", Projects: ". console"},
+		{Shard: "1a", Projects: "."},
+		{Shard: "1b", Projects: ". console"},
 	}}
 	table := planSummaryMarkdown(out)
-	assert.Contains(t, table, "2 shard(s), max parallel 2")
-	assert.Contains(t, table, "| 1 | magus |")
-	assert.Contains(t, table, "| 2 | magus console |")
+	assert.Contains(t, table, "## CI plan: 2 shards\n")
+	assert.Contains(t, table, "| `1a` | magus |")
+	assert.Contains(t, table, "| `1b` | magus console |")
 
 	out.Inherit = &planInherit{Run: "42", Commit: "abc123"}
 	inherited := planSummaryMarkdown(out)
 	assert.Contains(t, inherited, "### Inherited verdict")
 	assert.Contains(t, inherited, "Inherited run: 42 at commit `abc123`.")
-	assert.NotContains(t, inherited, "Affected CI plan")
+	assert.NotContains(t, inherited, "CI plan")
+}
+
+// TestPlanSummaryMarkdownNamesStagesAndFallbacks pins the whole summary of a
+// two-stage plan with a fallback, the shape a reader meets most.
+func TestPlanSummaryMarkdownNamesStagesAndFallbacks(t *testing.T) {
+	t.Parallel()
+
+	out := planOutput{
+		Count: 2, MaxParallel: 2,
+		StageZero: []planShard{{Shard: "0a", Projects: "."}},
+		Matrix:    []planShard{{Shard: "1a", Projects: "cmd/magus"}, {Shard: "1b", Projects: "console docs"}},
+		Fallbacks: []types.Fallback{{
+			What: "No memory check", Why: "magus.yaml sets no `ci.machine`",
+			Effect: "No shard is checked against a runner's memory.",
+		}},
+	}
+	want := "## CI plan: 3 shards in 2 stages\n\n" +
+		"Stage 0 computes, once, what two or more stage 1 shards share. " +
+		"Each stage 1 shard then replays it from the cache.\n\n" +
+		"| Shard | Projects |\n| --- | --- |\n" +
+		"| `0a` | magus |\n| `1a` | cmd/magus |\n| `1b` | console docs |\n\n" +
+		"Up to 2 shards of stage 1 run at once. " +
+		"Each shard's job starts with its ID, and a red one uploads its logs as `magus-logs-<ID>`.\n\n" +
+		"### The plan used defaults\n\n" +
+		"An input was missing, so the plan chose for it. Each row says what that costs this run.\n\n" +
+		"| Default | Because | What it means |\n| --- | --- | --- |\n" +
+		"| No memory check | magus.yaml sets no `ci.machine` | No shard is checked against a runner's memory. |\n\n" +
+		"<details><summary>Why these projects</summary>\n\n" +
+		"Run `magus affected ci --explain` locally to see which changed path reached each project. " +
+		"[Affected CI guide](https://eli.gladman.cc/magus/guides/affected/), " +
+		"[CI target guide](https://eli.gladman.cc/magus/concepts/targets/ci/)\n\n</details>\n"
+	assert.Equal(t, want, planSummaryMarkdown(out))
 }
 
 // TestPlanRiskOnATrivialChange: a trivial change plans no shard, and the summary is
@@ -337,7 +369,7 @@ func TestSavedPlanJSONContainsTypedInputsWithoutMarkdown(t *testing.T) {
 		body, err := json.Marshal(out)
 		require.NoError(t, err)
 		assert.NotContains(t, string(body), "summary")
-		assert.NotContains(t, string(body), "# Affected CI plan")
+		assert.NotContains(t, string(body), "# CI plan")
 	}
 }
 

@@ -254,14 +254,18 @@ func (s *PlanUnitsSuite) TestColdHistoryOpensFewShardsAndSaysSo() {
 	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"magusfile.buzz", "api/main.go"}, MaxShards: -1})
 	s.Require().NoError(err)
 	s.LessOrEqual(len(plan.Shards), forecast.ColdShards)
-	s.Contains(plan.Fallbacks, "the history holds no duration for any unit, so the plan opens at most 2 shards")
+	s.Require().NotEmpty(plan.Fallbacks)
+	s.Equal("At most 2 shards", plan.Fallbacks[len(plan.Fallbacks)-1].What)
+	s.Equal("the run history holds no duration for any target", plan.Fallbacks[len(plan.Fallbacks)-1].Why)
 }
 
 func (s *PlanUnitsSuite) TestNoMachineChecksNoBudgetAndSaysSo() {
 	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"api/main.go"}, MaxShards: -1})
 	s.Require().NoError(err)
 	s.Nil(plan.Machine)
-	s.Contains(plan.Fallbacks, "no ci.machine is configured, so the plan checks no shard against a memory budget")
+	s.Require().NotEmpty(plan.Fallbacks)
+	s.Equal("No memory check", plan.Fallbacks[0].What)
+	s.Equal("magus.yaml sets no `ci.machine`", plan.Fallbacks[0].Why)
 }
 
 func (s *PlanUnitsSuite) TestTheConfiguredMachineIsRecorded() {
@@ -534,7 +538,7 @@ func (s *PlanStageSuite) TestADependencySharedByTwoShardsIsPlannedOnceInStageZer
 	plan := s.plan("build")
 	build := []types.Unit{{Project: ".", Target: "build"}}
 	s.Equal([]types.Shard{{
-		ID: "stage-zero-0", Digest: types.UnitsDigest(build), ProjectPaths: []string{"."}, Units: build,
+		ID: "0a", Digest: types.UnitsDigest(build), ProjectPaths: []string{"."}, Units: build,
 	}}, plan.StageZero, "duties stay on the last stage")
 	s.Require().Len(plan.Shards, 2)
 	for _, sh := range plan.Shards {
@@ -548,7 +552,7 @@ func (s *PlanStageSuite) TestAPlanWithNoSharedWorkHasOneStage() {
 	test := []types.Unit{{Project: ".", Target: "test"}}
 	vet := []types.Unit{{Project: ".", Target: "vet"}}
 	s.Equal([]types.Shard{
-		{ID: "0", Digest: types.UnitsDigest(test), ProjectPaths: []string{"."}, Units: test, Duties: []types.Duty{types.DutyCacheExport, types.DutyNotesVerify}},
-		{ID: "1", Digest: types.UnitsDigest(vet), ProjectPaths: []string{"."}, Units: vet},
+		{ID: "1a", Digest: types.UnitsDigest(test), ProjectPaths: []string{"."}, Units: test, Duties: []types.Duty{types.DutyCacheExport, types.DutyNotesVerify}},
+		{ID: "1b", Digest: types.UnitsDigest(vet), ProjectPaths: []string{"."}, Units: vet},
 	}, plan.Shards)
 }

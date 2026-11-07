@@ -65,9 +65,14 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 	if err != nil && !errors.Is(err, errNoMachine) {
 		return types.ShardPlan{}, fmt.Errorf("affected plan: %w", err)
 	}
-	var fallbacks []string
+	var fallbacks []types.Fallback
 	if machine == nil {
-		fallbacks = append(fallbacks, "no ci.machine is configured, so the plan checks no shard against a memory budget")
+		fallbacks = append(fallbacks, types.Fallback{
+			What: "No memory check",
+			Why:  "magus.yaml sets no `ci.machine`",
+			Effect: "No shard is checked against a runner's memory. A shard that runs out shows as cancelled, with no logs. " +
+				"Set `ci.machine` to check.",
+		})
 	}
 	hist, err := m.planHistory(ctx, opts)
 	if err != nil {
@@ -104,10 +109,13 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		return types.ShardPlan{}, err
 	}
 	placeDuties(shards)
-	var unpeaked []string
+	var unpeaked []types.Fallback
 	if unmeasured := f.UnmeasuredPeaks(reach.kept); f.MemoryBudgetBytes > 0 && len(unmeasured) > 0 {
-		unpeaked = []string{fmt.Sprintf(
-			"the history holds no peak memory for %s, so the memory check counts each as zero", joinUnits(unmeasured))}
+		unpeaked = []types.Fallback{{
+			What:   "Peak memory counted as zero",
+			Why:    "the run history holds no peak memory for " + joinUnits(unmeasured),
+			Effect: "The memory check can pass a shard that runs out. A main run records peaks for the next plan.",
+		}}
 	}
 	return types.ShardPlan{
 		StageZero:   stageZero,
@@ -266,14 +274,17 @@ func planModel(hist forecast.History, reach planReach, machine *types.Machine, t
 
 // planMaxShards is the shard cap from opts or magus.yaml. A history with no
 // duration for any unit caps it at forecast.ColdShards, and says so.
-func (m *Magus) planMaxShards(opts PlanOptions, f *forecast.Model, units []types.Unit) (int, []string) {
+func (m *Magus) planMaxShards(opts PlanOptions, f *forecast.Model, units []types.Unit) (int, []types.Fallback) {
 	maxShards := opts.MaxShards
 	if maxShards == 0 {
 		maxShards = m.cfg.CI.MaxShards
 	}
 	if f.Cold(units) && (maxShards < 0 || maxShards > forecast.ColdShards) {
-		return forecast.ColdShards, []string{fmt.Sprintf(
-			"the history holds no duration for any unit, so the plan opens at most %d shards", forecast.ColdShards)}
+		return forecast.ColdShards, []types.Fallback{{
+			What:   fmt.Sprintf("At most %d shards", forecast.ColdShards),
+			Why:    "the run history holds no duration for any target",
+			Effect: "Shards are packed by count, not time, so one can run far longer than the rest. A main run records durations for the next plan.",
+		}}
 	}
 	return maxShards, nil
 }
