@@ -9,9 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
 	"github.com/egladman/magus/types"
 )
 
@@ -926,4 +928,97 @@ func TestUnsettledMtimeAlwaysHashesTheBytes(t *testing.T) {
 			assert.Equal(t, want, got)
 		})
 	}
+}
+
+// StitchedSourcesSuite pins how a step's key reads a used workspace's files:
+// under the use reference, never the used root's absolute path.
+type StitchedSourcesSuite struct {
+	suite.Suite
+	cache *Cache
+	root  string
+	used  string
+}
+
+func TestStitchedSourcesSuite(t *testing.T) { suite.Run(t, new(StitchedSourcesSuite)) }
+
+func (s *StitchedSourcesSuite) SetupTest() {
+	s.cache = newBareCache(s.T())
+	s.root, s.used = s.T().TempDir(), s.T().TempDir()
+	s.write(s.root, "main.go", "package main")
+	s.write(s.used, ".golangci.yml", "version: 2")
+	s.write(s.used, "libs/lint/rule.go", "package lint")
+}
+
+func (s *StitchedSourcesSuite) write(dir, rel, body string) {
+	p := filepath.Join(dir, filepath.FromSlash(rel))
+	s.Require().NoError(os.MkdirAll(filepath.Dir(p), 0o755))
+	s.Require().NoError(os.WriteFile(p, []byte(body), 0o644))
+}
+
+func (s *StitchedSourcesSuite) step(globs ...string) *Step {
+	return &Step{ProjectPath: ".", WorkspaceRoot: s.root, UseRoots: map[string]string{"magus": s.used},
+		Sources: types.MustParseGlobs(globs...)}
+}
+
+func (s *StitchedSourcesSuite) key(st *Step) (string, []string) {
+	key, lines, err := s.cache.StepKeyMemo(context.Background(), st, nil)
+	s.Require().NoError(err)
+	return key, lines
+}
+
+func (s *StitchedSourcesSuite) TestAUseReferenceKeysUnderItsReferenceName() {
+	_, lines := s.key(s.step("*.go", types.UseRef("magus", ".golangci.yml"), types.UseRef("magus", "libs/**/*.go")))
+	joined := strings.Join(lines, "\n")
+	s.Contains(joined, "src:"+types.UseRef("magus", ".golangci.yml")+":")
+	s.Contains(joined, "src:"+types.UseRef("magus", "libs/lint/rule.go")+":")
+	s.NotContains(joined, s.used, "the key never carries the used root")
+}
+
+func (s *StitchedSourcesSuite) TestAnEditInTheUsedWorkspaceMissesTheKey() {
+	st := s.step(types.UseRef("magus", ".golangci.yml"))
+	before, _ := s.key(st)
+	s.write(s.used, ".golangci.yml", "version: 2\nlinters: {}")
+	after, _ := s.key(st)
+	s.NotEqual(before, after)
+}
+
+func (s *StitchedSourcesSuite) TestTheKeyIsTheSameFromAnotherCheckoutOfTheUsedWorkspace() {
+	st := s.step(types.UseRef("magus", ".golangci.yml"))
+	here, _ := s.key(st)
+	moved := s.T().TempDir()
+	s.write(moved, ".golangci.yml", "version: 2")
+	st.UseRoots = map[string]string{"magus": moved}
+	there, _ := s.key(st)
+	s.Equal(here, there, "only the reference and the bytes key the step")
+}
+
+func (s *StitchedSourcesSuite) TestAReferenceToAnUndeclaredWorkspaceIsRefused() {
+	_, _, err := s.cache.StepKeyMemo(context.Background(), s.step(types.UseRef("other", "x.yml")), nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "magus.yaml use does not declare")
+}
+
+func (s *StitchedSourcesSuite) TestEscapingTheRootByDotDotIsRefusedNotDropped() {
+	_, _, err := s.cache.StepKeyMemo(context.Background(), s.step("../other/*.go"), nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "reaches outside the workspace root")
+}
+
+func (s *StitchedSourcesSuite) TestAnAbsoluteGlobIsRefusedNotDropped() {
+	_, _, err := s.cache.StepKeyMemo(context.Background(), s.step("/abs/*.go"), nil)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "reaches outside the workspace root")
+}
+
+func (s *StitchedSourcesSuite) TestTheMemoTellsUseRootsApart() {
+	memo := NewSourceMemo()
+	st := s.step(types.UseRef("magus", ".golangci.yml"))
+	first, _, err := s.cache.StepKeyMemo(context.Background(), st, memo)
+	s.Require().NoError(err)
+	other := s.T().TempDir()
+	s.write(other, ".golangci.yml", "version: 3")
+	st.UseRoots = map[string]string{"magus": other}
+	second, _, err := s.cache.StepKeyMemo(context.Background(), st, memo)
+	s.Require().NoError(err)
+	s.NotEqual(first, second)
 }

@@ -826,6 +826,9 @@ type WorkspaceEntry struct {
 	CacheDir     string `json:"cache_dir,omitempty"     yaml:"cache_dir,omitempty"`
 	Concurrency  int    `json:"concurrency,omitempty"   yaml:"concurrency,omitempty"`
 	ProjectCount int    `json:"project_count"           yaml:"project_count"`
+	// Use is each workspace magus.yaml `use` stitches in, its root
+	// absolute. Their projects are not counted in ProjectCount.
+	Use []UsedWorkspace `json:"use" yaml:"use"`
 }
 
 // WorkspaceConfig carries infrastructure details for Inspector.Workspace

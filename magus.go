@@ -572,10 +572,17 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if d := ward.CheckRequiredVersion(cfg.RequiredVersion, vo.Version); d != nil {
 		return nil, d
 	}
+	// Beside the floor, and for its reason: rules a used workspace lends
+	// must be there before any magusfile that reads them is evaluated.
+	uses, err := resolveUses(root, cfg.Use)
+	if err != nil {
+		return nil, err
+	}
 	ws, err := project.Discover(ctx, root)
 	if err != nil {
 		return nil, err
 	}
+	ws.Uses = uses
 	// vcs.Resolve falls back to MAGUS_VCS_* env vars on a zero VCSOptions, so this
 	// wiring was the only thing standing between magus.yaml's vcs.* keys and every
 	// caller of vcs.Resolve(..., m.ws.VCSOptions); without it the keys parsed and
@@ -2227,6 +2234,7 @@ func (m *Magus) baseStep(p *types.Project) cache.Step {
 		IgnoreDirs:      ignoreDirs,
 		Outputs:         outputs,
 		WorkspaceRoot:   m.ws.Root,
+		UseRoots:        useRoots(m.ws.Uses),
 		SpellDefVersion: spell.BuiltinsHash(),
 		Label:           types.ProjectDisplayName(p.Path, p.Name, p.Dir),
 	}

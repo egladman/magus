@@ -10,10 +10,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 )
 
 // goDecl and cargoDecl stand in for the go and rust spells' declarations; the real ones
@@ -561,4 +563,23 @@ func TestCheckDeclarationRefusesANegativeTrim(t *testing.T) {
 	assert.ErrorContains(t, CheckDeclaration(sb), "caches[0]: trimMb is -1")
 	sb.Caches[0].TrimMB = 0
 	assert.NoError(t, CheckDeclaration(sb))
+}
+
+type UseAllowsSuite struct{ suite.Suite }
+
+func TestUseAllowsSuite(t *testing.T) { suite.Run(t, new(UseAllowsSuite)) }
+
+func (s *UseAllowsSuite) TestEachUsedRootIsReadOnly() {
+	got := UseAllows([]types.UsedWorkspace{{Name: "magus", Root: "/src/magus"}})
+	s.Equal([]spells.SandboxAllow{{Name: types.UseRef("magus", ""), Path: "/src/magus", Mode: spells.SandboxAccessRO}}, got)
+}
+
+func (s *UseAllowsSuite) TestTheEntriesPassTheAllowCheck() {
+	for _, a := range UseAllows([]types.UsedWorkspace{{Name: "magus", Root: s.T().TempDir()}}) {
+		s.NoError(checkAllow(a))
+	}
+}
+
+func (s *UseAllowsSuite) TestNoUseGrantsNothing() {
+	s.Empty(UseAllows(nil))
 }

@@ -569,3 +569,14 @@ func mergeRulesByPath(rules []filesystem.Rule) []filesystem.Rule {
 	}
 	return out
 }
+
+// UseAllows grants each used workspace's root read-only, as magus.yaml
+// sandbox.allow entries. A child reads the rules it lends and never writes
+// there: anything built from them lands in the consumer's own tree.
+func UseAllows(uses []types.UsedWorkspace) []spells.SandboxAllow {
+	out := make([]spells.SandboxAllow, 0, len(uses))
+	for _, u := range uses {
+		out = append(out, spells.SandboxAllow{Name: types.UseRef(u.Name, ""), Path: u.Root, Mode: spells.SandboxAccessRO})
+	}
+	return out
+}

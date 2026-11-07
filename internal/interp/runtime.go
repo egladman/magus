@@ -1477,6 +1477,12 @@ func magusSearchPaths(ctx context.Context, projectDir string) []string {
 		if root := ws.Root(); root != "" && root != projectDir {
 			roots = append(roots, root)
 		}
+		// Inside the root, so confineImportReads admits it with no bound of its own.
+		if root := ws.Root(); root != "" {
+			if links := filepath.Join(root, filepath.FromSlash(types.UseLinkDir)); isDir(links) {
+				roots = append(roots, links)
+			}
+		}
 	}
 	if view := remotespell.ImportsFromContext(ctx).View(); view != "" {
 		roots = append(roots, view)
@@ -1540,6 +1546,12 @@ func absClean(p string) string {
 		return abs
 	}
 	return filepath.Clean(p)
+}
+
+// isDir reports whether p names a directory, following a link.
+func isDir(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && fi.IsDir()
 }
 
 // within reports whether the clean absolute path p is root or lies under it.

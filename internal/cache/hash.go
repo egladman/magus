@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -276,7 +278,7 @@ func NewSourceMemo() *SourceMemo {
 // safe because every glob carries its own exclusions: expandSources' result is a
 // membership test per file, so two lists differing only in order expand to the same
 // file set. The key only detects that repetition and is never written to the hash.
-func sourceMemoKey(root string, sources, outputs []types.Glob, ignoreDirs []string) string {
+func sourceMemoKey(root string, uses map[string]string, sources, outputs []types.Glob, ignoreDirs []string) string {
 	var b strings.Builder
 	write := func(ss []string) {
 		sorted := append([]string(nil), ss...)
@@ -296,6 +298,10 @@ func sourceMemoKey(root string, sources, outputs []types.Glob, ignoreDirs []stri
 	}
 	b.WriteString(root)
 	b.WriteByte(0)
+	for _, name := range slices.Sorted(maps.Keys(uses)) {
+		b.WriteString(name + "=" + uses[name])
+		b.WriteByte(0)
+	}
 	write(flat(sources))
 	write(flat(outputs))
 	write(ignoreDirs)
@@ -307,7 +313,7 @@ func sourceMemoKey(root string, sources, outputs []types.Glob, ignoreDirs []stri
 // prior inline behavior in hashStepInputs.
 func (c *Cache) expandAndHashSources(ctx context.Context, s *Step, memo *SourceMemo) ([]relAbs, []string, []os.FileMode, error) {
 	if memo == nil {
-		files, err := expandSources(s.Sources, s.WorkspaceRoot, s.Outputs, s.IgnoreDirs)
+		files, err := expandStepSources(s)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -318,7 +324,7 @@ func (c *Cache) expandAndHashSources(ctx context.Context, s *Step, memo *SourceM
 		return files, hashes, modes, nil
 	}
 
-	key := sourceMemoKey(s.WorkspaceRoot, s.Sources, s.Outputs, s.IgnoreDirs)
+	key := sourceMemoKey(s.WorkspaceRoot, s.UseRoots, s.Sources, s.Outputs, s.IgnoreDirs)
 	memo.mu.Lock()
 	if e, ok := memo.entries[key]; ok {
 		memo.mu.Unlock()
@@ -326,7 +332,7 @@ func (c *Cache) expandAndHashSources(ctx context.Context, s *Step, memo *SourceM
 	}
 	memo.mu.Unlock()
 
-	files, err := expandSources(s.Sources, s.WorkspaceRoot, s.Outputs, s.IgnoreDirs)
+	files, err := expandStepSources(s)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -835,4 +841,60 @@ func shortHash(h string) string {
 		return h
 	}
 	return h[:8]
+}
+
+// expandStepSources expands s.Sources as the key reads them. A glob spelled
+// as a use reference expands under that used root and keeps the reference
+// as its name, so the key never carries the root. A glob reaching past the
+// workspace root is refused, since no walk could match it.
+func expandStepSources(s *Step) ([]relAbs, error) {
+	var local []types.Glob
+	used := map[string][]types.Glob{}
+	for _, g := range s.Sources {
+		if name, rel, ok := types.CutUseRef(g.Pattern); ok {
+			if _, known := s.UseRoots[name]; !known {
+				return nil, fmt.Errorf("source glob %q names %s, which magus.yaml use does not declare", g.Pattern, types.UseRef(name, ""))
+			}
+			used[name] = append(used[name], types.Glob{Pattern: rel, Except: exceptUnder(name, g.Except)})
+			continue
+		}
+		if escapesRoot(g.Pattern) {
+			return nil, fmt.Errorf("source glob %q reaches outside the workspace root, so it could never key this target: "+
+				"declare the other workspace in magus.yaml use and read it as %s", g.Pattern, types.UseRef("<name>", "<glob>"))
+		}
+		local = append(local, g)
+	}
+	out, err := expandSources(local, s.WorkspaceRoot, s.Outputs, s.IgnoreDirs)
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range slices.Sorted(maps.Keys(used)) {
+		files, err := expandSources(used[name], s.UseRoots[name], nil, s.IgnoreDirs)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
+			out = append(out, relAbs{rel: types.UseRef(name, f.rel), abs: f.abs})
+		}
+	}
+	slices.SortFunc(out, func(a, b relAbs) int { return cmp.Compare(a.rel, b.rel) })
+	return out, nil
+}
+
+// exceptUnder keeps the exclusions that name a path under the used
+// workspace name, relative to its root.
+func exceptUnder(name string, except []string) []string {
+	var out []string
+	for _, e := range except {
+		if n, rel, ok := types.CutUseRef(e); ok && n == name {
+			out = append(out, rel)
+		}
+	}
+	return out
+}
+
+// escapesRoot reports whether a workspace-rooted glob leaves the root.
+func escapesRoot(glob string) bool {
+	clean := path.Clean(glob)
+	return path.IsAbs(clean) || filepath.IsAbs(glob) || clean == ".." || strings.HasPrefix(clean, "../")
 }

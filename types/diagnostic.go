@@ -454,6 +454,11 @@ const ModelTierDeclarationUnusable DiagnosticCode = "MGS1052"
 // never replayed or cleaned. The load stops rather than pick one.
 const FootprintDeclaredBothWays DiagnosticCode = "MGS1053"
 
+// UseWorkspaceUnavailable is a magus.yaml `use` entry the load cannot honor:
+// its path is missing, not a directory, holds no workspace, or is this one.
+// The load stops, since a rule silently left unused reads as enforced.
+const UseWorkspaceUnavailable DiagnosticCode = "MGS1054"
+
 // SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 // ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 // keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -1098,6 +1103,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SpellContractViolated,
 	ModelTierDeclarationUnusable,
 	FootprintDeclaredBothWays,
+	UseWorkspaceUnavailable,
 	PathReadDenied,
 	PathWriteDenied,
 	EnvStripped,

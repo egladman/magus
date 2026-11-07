@@ -28,6 +28,10 @@ type Workspace struct {
 	// VCSOptions holds explicit VCS configuration injected at construction time.
 	VCSOptions VCSOptions
 
+	// Uses are the workspaces magus.yaml `use` stitches in, resolved at load.
+	// Their projects are never this workspace's projects.
+	Uses []UsedWorkspace
+
 	// graphObs is the default observer for Graph calls. Use ContextWithGraphObserver
 	// for concurrent callers (the server) — SetGraphObserver is only safe for a sole owner.
 	graphObsMu sync.RWMutex

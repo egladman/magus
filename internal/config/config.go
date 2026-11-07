@@ -140,6 +140,14 @@ type Config struct {
 	// would silently disable the floor for every workspace that session touches.
 	RequiredVersion string `json:"required_version" yaml:"required_version" cli:"-"`
 
+	// Use stitches other magus workspaces in by local path, as go.work stitches
+	// modules: each entry lends this workspace the rule kinds it shares, read
+	// through `@<name>/` patterns and imports. See UseEntry and MGS1054.
+	//
+	// cli:"-": magus.yaml ONLY. Which workspace's rules apply to this code is
+	// the repository's decision, and a flag or env var would change it per shell.
+	Use []UseEntry `json:"use" yaml:"use" cli:"-"`
+
 	// Agents states facts about the account agents run under and a person's guard level.
 	// See Agents.
 	//

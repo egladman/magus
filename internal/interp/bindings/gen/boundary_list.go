@@ -417,6 +417,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Unreferenced", Zero: types.Unreferenced{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUnreferenced(v.(types.Unreferenced), enums) }},
 	{Name: "UnreferencedEntry", Zero: types.UnreferencedEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUnreferencedEntry(v.(types.UnreferencedEntry)) }},
 	{Name: "UpdateRef", Zero: types.UpdateRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUpdateRef(v.(types.UpdateRef)) }},
+	{Name: "UsedWorkspace", Zero: types.UsedWorkspace{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectUsedWorkspace(v.(types.UsedWorkspace), enums) }},
 	{Name: "VCSCheckpoint", Zero: types.VCSCheckpoint{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVCSCheckpoint(v.(types.VCSCheckpoint)) }},
 	{Name: "VCSInvocation", Zero: types.VCSInvocation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectVCSInvocation(v.(types.VCSInvocation)) }},
 	{Name: "VerificationEvidence", Zero: types.VerificationEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
@@ -430,7 +431,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Workspace", Zero: types.MagusWorkspace{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectMagusWorkspace(v.(types.MagusWorkspace), enums)
 	}},
-	{Name: "WorkspaceEntry", Zero: types.WorkspaceEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectWorkspaceEntry(v.(types.WorkspaceEntry)) }},
+	{Name: "WorkspaceEntry", Zero: types.WorkspaceEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectWorkspaceEntry(v.(types.WorkspaceEntry), enums)
+	}},
 	{Name: "WriteRequest", Zero: types.WriteRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectWriteRequest(v.(types.WriteRequest), enums) }},
 	{Name: "YamlPositions", Zero: types.YAMLPositions{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectYAMLPositions(v.(types.YAMLPositions)) }},
 }

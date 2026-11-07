@@ -4739,13 +4739,30 @@ func ObjectEvaluatedProject(v types.EvaluatedProject, enums ffi.EnumCases) vm.Va
 	return out
 }
 
-func ObjectWorkspaceEntry(v types.WorkspaceEntry) vm.Value {
+func ObjectUsedWorkspace(v types.UsedWorkspace, enums ffi.EnumCases) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StringValue(v.Name))
+	out.MapSet("root", vm.StringValue(v.Root))
+	itemsShare := make([]vm.Value, len(v.Share))
+	for indexShare := range v.Share {
+		itemsShare[indexShare] = enums.Case("ShareKind", string(v.Share[indexShare]))
+	}
+	out.MapSet("share", vm.ListValue(itemsShare))
+	return out
+}
+
+func ObjectWorkspaceEntry(v types.WorkspaceEntry, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("root", vm.StringValue(v.Root))
 	out.MapSet("vcsBaseRef", vm.StringValue(v.VCSBaseRef))
 	out.MapSet("cacheDir", vm.StringValue(v.CacheDir))
 	out.MapSet("concurrency", vm.IntValue(int64(v.Concurrency)))
 	out.MapSet("projectCount", vm.IntValue(int64(v.ProjectCount)))
+	itemsUse := make([]vm.Value, len(v.Use))
+	for indexUse := range v.Use {
+		itemsUse[indexUse] = ObjectUsedWorkspace(v.Use[indexUse], enums)
+	}
+	out.MapSet("use", vm.ListValue(itemsUse))
 	return out
 }
 

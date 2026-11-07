@@ -94,6 +94,7 @@ func Validate(cfg Config) error {
 	failures = append(failures, allowedOriginFailures(cfg.MCP.AllowedOrigins)...)
 	failures = append(failures, conformanceFailures(cfg.Knowledge.Conformance)...)
 	failures = append(failures, diagnosticsFailures(cfg.Diagnostics)...)
+	failures = append(failures, useFailures(cfg.Use)...)
 	failures = append(failures, sourceFailures(cfg.Sources)...)
 	if !cfg.Broker.Valid() {
 		failures = append(failures, FieldFailure{Field: "broker", Tag: "oneof",
@@ -412,6 +413,12 @@ func humanReason(f FieldFailure) string {
 	case "source_verdict":
 		return fmt.Sprintf("entry %s must be one of: %s (got %q)", f.Param,
 			strings.Join(SourceVerdict("").Values(), ", "), f.Value)
+	case "use_name":
+		return fmt.Sprintf("must be [a-z0-9-]+, the handle a use reference carries (got %q)", f.Value)
+	case "use_share_kind":
+		return fmt.Sprintf("is not a kind magus shares; want one of: %s (got %q)", strings.Join(strings.Fields(f.Param), ", "), f.Value)
+	case "use_share_owner":
+		return fmt.Sprintf("is already shared by use entry %q; one kind has one owner, so narrow one entry's share list (got %q)", f.Param, f.Value)
 	case "spell_path_nested":
 		return fmt.Sprintf("nests inside spells.%s; each remote spell is laid out as a directory named by its path, so one cannot hold another", f.Param)
 	default:
