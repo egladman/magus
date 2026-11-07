@@ -1,15 +1,12 @@
 package plugin
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/egladman/magus/libs/conventions/internal/sourcetest"
 	"github.com/golangci/plugin-module-register/register"
 	"github.com/stretchr/testify/suite"
-	"gopkg.in/yaml.v3"
 )
 
 // TestPluginsRegister builds every plugin from a yaml-shaped settings block, the
@@ -88,182 +85,51 @@ func TestUnknownKeyFails(t *testing.T) {
 	}
 }
 
-type ScopeSuite struct {
-	root string
+type ModuleSuite struct {
 	suite.Suite
 }
 
-func TestScopeSuite(t *testing.T) { suite.Run(t, new(ScopeSuite)) }
+func TestModuleSuite(t *testing.T) { suite.Run(t, new(ModuleSuite)) }
 
-func (s *ScopeSuite) build(name string, settings any) (register.LinterPlugin, error) {
+func (s *ModuleSuite) build(name string, settings any) (register.LinterPlugin, error) {
 	newPlugin, err := register.GetPlugin(name)
 	s.Require().NoError(err)
 	return newPlugin(settings)
 }
 
-func (s *ScopeSuite) analyzerCount(p register.LinterPlugin) int {
+func (s *ModuleSuite) analyzerCount(p register.LinterPlugin) int {
 	analyzers, err := p.BuildAnalyzers()
 	s.Require().NoError(err)
 	return len(analyzers)
 }
 
-func (s *ScopeSuite) TestModuleComesFromTheTreesGoMod() {
+func (s *ModuleSuite) TestModuleComesFromTheTreesGoMod() {
 	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
 	p, err := s.build("errmsg", map[string]any{"files": []any{"cmd/app/*.go"}})
 	s.Require().NoError(err)
 	s.Equal(1, s.analyzerCount(p))
 }
 
-func (s *ScopeSuite) TestPathRuleNamingNoFileInTheTreeFailsLoudly() {
+func (s *ModuleSuite) TestPathRuleNamingNoFileInTheTreeFailsLoudly() {
 	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
 	_, err := s.build("errmsg", map[string]any{"files": []any{"cmd/gone/*.go"}})
 	s.ErrorContains(err, `files pattern "cmd/gone/*.go" matches no file`)
 }
 
-func (s *ScopeSuite) TestTreeWithoutGoModIsAnError() {
+func (s *ModuleSuite) TestTreeWithoutGoModIsAnError() {
 	s.T().Chdir(s.T().TempDir())
 	_, err := s.build("errmsg", map[string]any{})
 	s.ErrorContains(err, "no go.mod at or above")
 }
 
-func (s *ScopeSuite) TestNoSettingsStillReadsTheTree() {
+func (s *ModuleSuite) TestNoSettingsStillReadsTheTree() {
 	s.T().Chdir(s.T().TempDir())
 	_, err := s.build("filenames", nil)
 	s.ErrorContains(err, "no go.mod at or above")
 }
 
-func (s *ScopeSuite) TestExplicitModuleOverridesTheTree() {
+func (s *ModuleSuite) TestExplicitModuleOverridesTheTree() {
 	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
 	_, err := s.build("errmsg", map[string]any{"module": "example.com/other"})
 	s.ErrorContains(err, `module "example.com/other": no go.mod at or above`)
-}
-
-func (s *ScopeSuite) inModule(module string, settings map[string]any) []any {
-	block := map[string]any{"module": module}
-	for k, v := range settings {
-		block[k] = v
-	}
-	return []any{block}
-}
-
-func (s *ScopeSuite) TestInModuleBlockAppliesToItsOwnModule() {
-	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
-	_, err := s.build("errmsg", map[string]any{"in-module": s.inModule("example.com/m", map[string]any{
-		"allow": []any{map[string]any{"file": "cmd/gone/x.go", "reason": "staged"}},
-	})})
-	s.ErrorContains(err, `allow pattern "cmd/gone/x.go" matches no file`)
-}
-
-func (s *ScopeSuite) TestInModuleBlockOfAnotherModuleIsIgnored() {
-	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
-	p, err := s.build("errmsg", map[string]any{"notice-attrs": []any{"example.com/m/attr.Notice"}, "in-module": s.inModule("example.com/other", map[string]any{
-		"allow": []any{map[string]any{"file": "cmd/gone/x.go", "reason": "staged"}},
-	})})
-	s.Require().NoError(err)
-	s.Equal(1, s.analyzerCount(p))
-}
-
-func (s *ScopeSuite) TestInModuleBlockReachesANestedModule() {
-	root := sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
-	inner := filepath.Join(root, "libs", "inner")
-	s.Require().NoError(os.MkdirAll(inner, 0o755))
-	s.Require().NoError(os.WriteFile(filepath.Join(inner, "go.mod"), []byte("module example.com/m/libs/inner\n"), 0o644))
-	s.T().Chdir(inner)
-
-	_, err := s.build("errmsg", map[string]any{"in-module": s.inModule("example.com/m", map[string]any{
-		"allow": []any{map[string]any{"file": "cmd/gone/x.go", "reason": "staged"}},
-	})})
-	s.ErrorContains(err, `allow pattern "cmd/gone/x.go" matches no file`)
-}
-
-func (s *ScopeSuite) TestInModuleBlockSurvivesAKeyWithSeveralDots() {
-	sourcetest.Module(s.T(), "example.com/a.b/c", "cmd/app/main.go")
-	_, err := s.build("errmsg", map[string]any{"in-module": s.inModule("example.com/a.b/c", map[string]any{
-		"allow": []any{map[string]any{"file": "cmd/gone/x.go", "reason": "staged"}},
-	})})
-	s.ErrorContains(err, `allow pattern "cmd/gone/x.go" matches no file`)
-}
-
-func (s *ScopeSuite) TestInModuleBlockFeedsEveryScopedLinter() {
-	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
-	_, err := s.build("hostvocab", map[string]any{"in-module": s.inModule("example.com/m", map[string]any{
-		"files": []any{"cmd/gone/*.go"}, "words": []any{"Read"},
-	})})
-	s.ErrorContains(err, `files pattern "cmd/gone/*.go" matches no file`)
-}
-
-func (s *ScopeSuite) TestLinterWithOnlyAnotherModulesSettingsIsInert() {
-	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
-	p, err := s.build("ruletext", map[string]any{"in-module": s.inModule("example.com/other", map[string]any{
-		"files": []any{"cmd/magus/shell.go"}, "prefix": "magus workspace:",
-	})})
-	s.Require().NoError(err)
-	s.Zero(s.analyzerCount(p))
-}
-
-func (s *ScopeSuite) TestInModuleThatIsNotAListIsAnError() {
-	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
-	_, err := s.build("errmsg", map[string]any{"in-module": map[string]any{"example.com/m": map[string]any{}}})
-	s.ErrorContains(err, "in-module lists blocks, each naming its module")
-}
-
-func (s *ScopeSuite) TestInModuleBlockWithoutAModuleIsAnError() {
-	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
-	_, err := s.build("errmsg", map[string]any{"in-module": []any{map[string]any{"allow": []any{}}}})
-	s.ErrorContains(err, "in-module entry 0 names no module")
-}
-
-func (s *ScopeSuite) TestTwoInModuleBlocksNamingOneModuleIsAnError() {
-	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
-	two := append(s.inModule("example.com/m", nil), s.inModule("example.com/m", nil)...)
-	_, err := s.build("errmsg", map[string]any{"in-module": two})
-	s.ErrorContains(err, `in-module names module "example.com/m" twice`)
-}
-
-type repoConfig struct {
-	Linters struct {
-		Settings struct {
-			Custom map[string]struct {
-				Settings any `yaml:"settings"`
-			} `yaml:"custom"`
-		} `yaml:"settings"`
-	} `yaml:"linters"`
-}
-
-func (s *ScopeSuite) buildRepositoryConfig() map[string]int {
-	data, err := os.ReadFile(filepath.Join(s.root, ".golangci.yml"))
-	s.Require().NoError(err)
-	var cfg repoConfig
-	s.Require().NoError(yaml.Unmarshal(data, &cfg))
-	built := map[string]int{}
-	for name, linter := range cfg.Linters.Settings.Custom {
-		if _, err := register.GetPlugin(name); err != nil {
-			continue
-		}
-		p, err := s.build(name, linter.Settings)
-		s.Require().NoError(err, name)
-		built[name] = s.analyzerCount(p)
-	}
-	return built
-}
-
-func (s *ScopeSuite) TestRepositoryConfigBuildsInsideItsOwnTree() {
-	wd, err := os.Getwd()
-	s.Require().NoError(err)
-	s.root = filepath.Join(wd, "..", "..", "..")
-	built := s.buildRepositoryConfig()
-	s.Equal(1, built["ruletext"])
-	s.Equal(1, built["errmsg"])
-	s.Equal(1, built["diagmsg"])
-}
-
-func (s *ScopeSuite) TestRepositoryConfigBuildsInAnotherModule() {
-	wd, err := os.Getwd()
-	s.Require().NoError(err)
-	s.root = filepath.Join(wd, "..", "..", "..")
-	sourcetest.Module(s.T(), "example.com/scratch", "cmd/app/main.go")
-	built := s.buildRepositoryConfig()
-	s.Equal(1, built["errmsg"])
-	s.Zero(built["ruletext"])
-	s.Zero(built["providerio"])
 }

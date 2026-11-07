@@ -40,7 +40,8 @@ type Options struct {
 	// CalleePackages are import path prefixes whose functions write wherever
 	// they are told. Handing os.Stderr to one is a write, unless the callee is
 	// help, an option such as WithStderr, or a constructor such as NewLogger,
-	// which keep the stream for the display to write through.
+	// which keep the stream for the display to write through. Empty means
+	// [Options.Module].
 	CalleePackages []string `json:"callee-packages"`
 
 	// Display names the callees that are the display itself, which is handed
@@ -77,6 +78,9 @@ type AllowEntry struct {
 func New(opts Options) (*analysis.Analyzer, error) {
 	if opts.UsagePattern == "" && len(opts.UsageFields) == 0 {
 		return nil, errors.New("stderrprint: no usage-pattern or usage-fields, so no help could print")
+	}
+	if len(opts.CalleePackages) == 0 && opts.Module != "" {
+		opts.CalleePackages = []string{opts.Module}
 	}
 	var usage *regexp.Regexp
 	if opts.UsagePattern != "" {

@@ -213,10 +213,6 @@ linters:
 
 
     custom:
-      # A conventions plugin reads its module from the linted tree's go.mod. Settings that
-      # name this repository's paths or packages sit under in-module, which applies only in
-      # github.com/egladman/magus and the modules nested in it, so another tree lints with
-      # this file unchanged.
       testpairing:
         type: module
         description: reports a test file outside its package, or named for unix
@@ -236,14 +232,13 @@ linters:
         description: reports Go source naming an agent host outside a filesystem path
         original-url: github.com/egladman/magus/libs/conventions
         settings:
-          in-module:
-            - module: github.com/egladman/magus
-              # Generated output, and the packages that embed documentation checked
-              # elsewhere. Each must name a directory holding Go files; the go tool
-              # never builds dot directories or testdata, so they need no entry.
-              # proofread is skipped too: its attribution rule names the tools whose
-              # credit it refuses, which is this repository's policy, not magus naming a host.
-              skip-dirs: [gen, docs, schema, proofread]
+          module: github.com/egladman/magus
+          # Generated output, and the packages that embed documentation checked
+          # elsewhere. Each must name a directory holding Go files; the go tool
+          # never builds dot directories or testdata, so they need no entry.
+          # proofread is skipped too: its attribution rule names the tools whose
+          # credit it refuses, which is this repository's policy, not magus naming a host.
+          skip-dirs: [gen, docs, schema, proofread]
           hosts: [claude, opencode, codex, aider, windsurf]
           # Cursor is a terminal position and a pagination token far more often
           # than the host, so only the shapes that mean the host are matched: the
@@ -261,33 +256,31 @@ linters:
         description: reports a host's tool name spelled as a string literal in guard code
         original-url: github.com/egladman/magus/libs/conventions
         settings:
-          in-module:
-            - module: github.com/egladman/magus
-              # The only code that sees a host's hook payload. Tree-wide, "Read" and
-              # "Task" are ordinary words and would report hundreds of times.
-              files:
-                - internal/guard/*.go
-                - cmd/magus/shell*.go
-                - internal/agent/*.go
-              # magus's own labels (hookToolCommand, hookToolWrite, hookToolRead in
-              # internal/guard/guard.go) are deliberately none of these.
-              words: [Read, Write, Edit, MultiEdit, NotebookEdit, Glob, Grep, Bash, Task, TodoWrite,
-                      WebFetch, WebSearch, ExitPlanMode, read_file, write_file, edit_file, list_dir,
-                      apply_patch, run_terminal_cmd, str_replace_editor, codebase_search, shell]
-              hint: >-
-                record magus's own label (hookToolCommand, hookToolWrite, hookToolRead) and let
-                the wrapper in the reader's config map to it by which flag it passes
+          module: github.com/egladman/magus
+          # The only code that sees a host's hook payload. Tree-wide, "Read" and
+          # "Task" are ordinary words and would report hundreds of times.
+          files:
+            - internal/guard/*.go
+            - cmd/magus/shell*.go
+            - internal/agent/*.go
+          # magus's own labels (hookToolCommand, hookToolWrite, hookToolRead in
+          # internal/guard/guard.go) are deliberately none of these.
+          words: [Read, Write, Edit, MultiEdit, NotebookEdit, Glob, Grep, Bash, Task, TodoWrite,
+                  WebFetch, WebSearch, ExitPlanMode, read_file, write_file, edit_file, list_dir,
+                  apply_patch, run_terminal_cmd, str_replace_editor, codebase_search, shell]
+          hint: >-
+            record magus's own label (hookToolCommand, hookToolWrite, hookToolRead) and let
+            the wrapper in the reader's config map to it by which flag it passes
 
       ruletext:
         type: module
         description: reports guard rule text in the guard's CLI half
         original-url: github.com/egladman/magus/libs/conventions
         settings:
-          in-module:
-            - module: github.com/egladman/magus
-              files: [cmd/magus/shell.go]
-              prefix: "magus workspace:"
-              hint: the guard is internal/guard, and `magus session ls` replays its rules
+          module: github.com/egladman/magus
+          files: [cmd/magus/shell.go]
+          prefix: "magus workspace:"
+          hint: the guard is internal/guard, and `magus session ls` replays its rules
 
       # A message magus prints is a verdict, one next command and a ref for the
       # rationale. The sites below build one; a rationale field beside a verdict
@@ -297,6 +290,7 @@ linters:
         description: judges the messages magus prints by the prose message rules
         original-url: github.com/egladman/magus/libs/conventions
         settings:
+          module: github.com/egladman/magus
           max-runes: 160
           calls:
             - {func: github.com/egladman/magus/types.DiagnosticErrorf, arg: 1, format: true}
@@ -321,47 +315,45 @@ linters:
           # never exempts a slog message.
           slog: true
           hint: a message is the verdict, one next command and a ref; the rationale goes behind the ref
-          in-module:
-            - module: github.com/egladman/magus
-              # AN ALLOW LIST: every file holding a finding on 2026-10-09 (173 findings in 54
-              # files: 87 message-length, 56 message-rationale, 24 message-tag, 6
-              # message-commands), exempt until the terse-output rewrites land. Delete an
-              # entry once its file is clean; never add one.
-              allow:
-                - {file: cmd/magus/spell.go, reason: staged}
-                - {file: cmd/magus/stale_index.go, reason: staged}
-                - {file: describe.go, reason: staged}
-                - {file: internal/auth/share.go, reason: staged}
-                - {file: internal/auth/store.go, reason: staged}
-                - {file: internal/auth/token.go, reason: staged}
-                - {file: internal/cache/deadlock.go, reason: staged}
-                - {file: internal/cache/machine_gate.go, reason: staged}
-                - {file: internal/cache/mutation.go, reason: staged}
-                - {file: internal/cache/order.go, reason: staged}
-                - {file: internal/handler/token/service.go, reason: staged}
-                - {file: internal/hint/schema.go, reason: staged}
-                - {file: internal/interp/bindings/buzz.go, reason: staged}
-                - {file: internal/interp/bindings/imports.go, reason: staged}
-                - {file: internal/interp/bindings/skills.go, reason: staged}
-                - {file: internal/interp/runtime.go, reason: staged}
-                - {file: internal/interp/transform/transform.go, reason: staged}
-                - {file: internal/job/checkout.go, reason: staged}
-                - {file: internal/job/claim.go, reason: staged}
-                - {file: internal/queue/apply.go, reason: staged}
-                - {file: internal/spell/remote/imports.go, reason: staged}
-                - {file: internal/ward/shadow.go, reason: staged}
-                - {file: internal/ward/version.go, reason: staged}
-                - {file: internal/ward/ward.go, reason: staged}
-                - {file: internal/workspace/provider.go, reason: staged}
-                - {file: lock.go, reason: staged}
-                - {file: magus.go, reason: staged}
-                - {file: pipe.go, reason: staged}
-                - {file: run.go, reason: staged}
-                - {file: std/fs.go, reason: staged}
-                - {file: std/magus.go, reason: staged}
-                - {file: symbol.go, reason: staged}
-                - {file: types/secret.go, reason: staged}
-                - {file: watchdog.go, reason: staged}
+          # AN ALLOW LIST: every file holding a finding on 2026-10-09 (173 findings in 54
+          # files: 87 message-length, 56 message-rationale, 24 message-tag, 6
+          # message-commands), exempt until the terse-output rewrites land. Delete an
+          # entry once its file is clean; never add one.
+          allow:
+            - {file: cmd/magus/spell.go, reason: staged}
+            - {file: cmd/magus/stale_index.go, reason: staged}
+            - {file: describe.go, reason: staged}
+            - {file: internal/auth/share.go, reason: staged}
+            - {file: internal/auth/store.go, reason: staged}
+            - {file: internal/auth/token.go, reason: staged}
+            - {file: internal/cache/deadlock.go, reason: staged}
+            - {file: internal/cache/machine_gate.go, reason: staged}
+            - {file: internal/cache/mutation.go, reason: staged}
+            - {file: internal/cache/order.go, reason: staged}
+            - {file: internal/handler/token/service.go, reason: staged}
+            - {file: internal/hint/schema.go, reason: staged}
+            - {file: internal/interp/bindings/buzz.go, reason: staged}
+            - {file: internal/interp/bindings/imports.go, reason: staged}
+            - {file: internal/interp/bindings/skills.go, reason: staged}
+            - {file: internal/interp/runtime.go, reason: staged}
+            - {file: internal/interp/transform/transform.go, reason: staged}
+            - {file: internal/job/checkout.go, reason: staged}
+            - {file: internal/job/claim.go, reason: staged}
+            - {file: internal/queue/apply.go, reason: staged}
+            - {file: internal/spell/remote/imports.go, reason: staged}
+            - {file: internal/ward/shadow.go, reason: staged}
+            - {file: internal/ward/version.go, reason: staged}
+            - {file: internal/ward/ward.go, reason: staged}
+            - {file: internal/workspace/provider.go, reason: staged}
+            - {file: lock.go, reason: staged}
+            - {file: magus.go, reason: staged}
+            - {file: pipe.go, reason: staged}
+            - {file: run.go, reason: staged}
+            - {file: std/fs.go, reason: staged}
+            - {file: std/magus.go, reason: staged}
+            - {file: symbol.go, reason: staged}
+            - {file: types/secret.go, reason: staged}
+            - {file: watchdog.go, reason: staged}
 
       secretfields:
         type: module
@@ -383,6 +375,7 @@ linters:
         description: reports a write to os.Stderr outside a usage function and the display
         original-url: github.com/egladman/magus/libs/conventions
         settings:
+          module: github.com/egladman/magus
           usage-pattern: '(?i)(usage|help)$'
           usage-fields: [Usage]
           callee-packages: [github.com/egladman/magus]
@@ -393,28 +386,26 @@ linters:
             - github.com/egladman/magus/internal/report.NewLineEncoder
             - github.com/egladman/magus.NewSink
             - github.com/egladman/magus.pickTerminal
-          in-module:
-            - module: github.com/egladman/magus
-              allow:
-                - {file: "cmd/magus-*/*.go", reason: build-time codegen with no log display}
-                - {file: cmd/langservice-manifest/*.go, reason: build-time codegen with no log display}
-                - {file: internal/config/generate/*.go, reason: build-time codegen with no log display}
-                - {file: "benchmarks/*/main.go", reason: a standalone benchmark tool with no log display}
-                - {file: "benchmarks/agent/cmd/*/main.go", reason: a standalone benchmark tool with no log display}
-                - {file: libs/testkit/environ.go, reason: a test binary's TestMain reports before any display exists}
-                - {file: cmd/magus/main.go, reason: "reports flag and config errors before the display exists, and relays a worker's stderr"}
-                - {file: cmd/magus/pprof.go, reason: MAGUS_PPROF starts before the display exists}
-                - {file: cmd/magus/bootstrap_exec.go, reason: runs before the display exists}
-                - {file: cmd/magus/bootstrap_exec_unix.go, reason: runs before the display exists}
-                - {file: cmd/magus/shell.go, reason: "the guard's verdict on stderr is the hook protocol a host reads"}
-                - {file: cmd/magus/queue.go, reason: relays the stderr of the hooks and gates a queue verb runs}
-                - {file: cmd/magus/buzz.go, reason: "relays a script's own output under --check"}
-                - {file: cmd/magus/stepper.go, reason: "a step prompt blocks the run on its answer, so -q must not hide it"}
-                - {file: cmd/magus/interrupt.go, reason: "the first Ctrl-C's answer, which a quiet display would turn into a hang"}
-                - {file: cmd/magus/failures.go, reason: the end-of-run failure prompt and its OSC 52 copy}
-                - {file: internal/cache/cache.go, reason: "relays a target's captured log and the frame around it"}
-                - {file: internal/settle/quiet.go, reason: relays the captured output of a silenced run}
-                - {file: internal/sandbox/launch.go, reason: reports from inside the confined child before any display exists}
+          allow:
+            - {file: "cmd/magus-*/*.go", reason: build-time codegen with no log display}
+            - {file: cmd/langservice-manifest/*.go, reason: build-time codegen with no log display}
+            - {file: internal/config/generate/*.go, reason: build-time codegen with no log display}
+            - {file: "benchmarks/*/main.go", reason: a standalone benchmark tool with no log display}
+            - {file: "benchmarks/agent/cmd/*/main.go", reason: a standalone benchmark tool with no log display}
+            - {file: libs/testkit/environ.go, reason: a test binary's TestMain reports before any display exists}
+            - {file: cmd/magus/main.go, reason: "reports flag and config errors before the display exists, and relays a worker's stderr"}
+            - {file: cmd/magus/pprof.go, reason: MAGUS_PPROF starts before the display exists}
+            - {file: cmd/magus/bootstrap_exec.go, reason: runs before the display exists}
+            - {file: cmd/magus/bootstrap_exec_unix.go, reason: runs before the display exists}
+            - {file: cmd/magus/shell.go, reason: "the guard's verdict on stderr is the hook protocol a host reads"}
+            - {file: cmd/magus/queue.go, reason: relays the stderr of the hooks and gates a queue verb runs}
+            - {file: cmd/magus/buzz.go, reason: "relays a script's own output under --check"}
+            - {file: cmd/magus/stepper.go, reason: "a step prompt blocks the run on its answer, so -q must not hide it"}
+            - {file: cmd/magus/interrupt.go, reason: "the first Ctrl-C's answer, which a quiet display would turn into a hang"}
+            - {file: cmd/magus/failures.go, reason: the end-of-run failure prompt and its OSC 52 copy}
+            - {file: internal/cache/cache.go, reason: "relays a target's captured log and the frame around it"}
+            - {file: internal/settle/quiet.go, reason: relays the captured output of a silenced run}
+            - {file: internal/sandbox/launch.go, reason: reports from inside the confined child before any display exists}
           hint: "a notice is slog.InfoContext(ctx, msg, attr.Notice(label)), with attr.Why for a reason and attr.Next for the command; a hint is interactive.Hint"
 
       # A plain Go error is a fragment its callers chain context onto with ": ".
@@ -427,64 +418,61 @@ linters:
         description: 'judges error text (errors.New, fmt.Errorf, Error methods) as a fragment chained with ": "'
         original-url: github.com/egladman/magus/libs/conventions
         settings:
+          module: github.com/egladman/magus
           # A notice's error rides attr.Error, so the display names its origin once.
           notice-attrs:
             - github.com/egladman/magus/internal/log/attr.Notice
             - github.com/egladman/magus/internal/log/attr.Hint
-          in-module:
-            - module: github.com/egladman/magus
-              allow:
-                - {file: libs/diagnostics/diagnostics.go, rule: error-newline, reason: "a coded diagnostic renders its see: line for a person; diagmsg judges it"}
+          allow:
+            - {file: libs/diagnostics/diagnostics.go, rule: error-newline, reason: "a coded diagnostic renders its see: line for a person; diagmsg judges it"}
 
       asciistrings:
         type: module
         description: reports typographic glyphs in user-facing string literals
         original-url: github.com/egladman/magus/libs/conventions
         settings:
-          in-module:
-            - module: github.com/egladman/magus
-              # Exactly the files the ASCII sweep fixed, not whole packages: cmd/magus,
-              # status.go's pool display and internal/cache/log.go keep drawing glyphs on
-              # purpose, and files the sweep never touched may carry drift it was not
-              # scoped to fix. Reverting any one fix here still fails.
-              files:
-                - types/describe.go
-                - internal/render/target_graph.go
-                - cmd/magus-docs/main.go
-                - internal/observability/otlp/provider.go
-                - internal/handler/mcp/registry.go
-                - cmd/magus/query.go
-                - internal/guard/shell.go
-                - internal/guard/write.go
-                - cmd/magus/config_console.go
-                - internal/doctor/checks.go
-                - cmd/magus/init.go
-                - internal/config/load.go
-                - internal/config/validate.go
-                - internal/interp/repl.go
-                - internal/interp/bindings/pry.go
-                - std/platform.go
-                - std/env.go
-                - std/markdown.go
-                - std/buzz_stdlib.go
-                - std/archive.go
-                - std/buzz_signature.go
-                - internal/cache/output.go
+          module: github.com/egladman/magus
+          # Exactly the files the ASCII sweep fixed, not whole packages: cmd/magus,
+          # status.go's pool display and internal/cache/log.go keep drawing glyphs on
+          # purpose, and files the sweep never touched may carry drift it was not
+          # scoped to fix. Reverting any one fix here still fails.
+          files:
+            - types/describe.go
+            - internal/render/target_graph.go
+            - cmd/magus-docs/main.go
+            - internal/observability/otlp/provider.go
+            - internal/handler/mcp/registry.go
+            - cmd/magus/query.go
+            - internal/guard/shell.go
+            - internal/guard/write.go
+            - cmd/magus/config_console.go
+            - internal/doctor/checks.go
+            - cmd/magus/init.go
+            - internal/config/load.go
+            - internal/config/validate.go
+            - internal/interp/repl.go
+            - internal/interp/bindings/pry.go
+            - std/platform.go
+            - std/env.go
+            - std/markdown.go
+            - std/buzz_stdlib.go
+            - std/archive.go
+            - std/buzz_signature.go
+            - internal/cache/output.go
 
       benchbeside:
         type: module
         description: requires a benchmark beside an optimization comment or a cache type
         original-url: github.com/egladman/magus/libs/conventions
         settings:
-          in-module:
-            - module: github.com/egladman/magus
-              # A package whose optimization carries no benchmark, with why. The list only
-              # shrinks: an entry whose tests gain a func Benchmark fails the load.
-              exempt:
-                internal/config: Cache is magus.yaml's cache section, a config struct, not a cache
-                internal/gcpolicy: raising GOGC before main is measured end to end by gctrace and hyperfine, as its comment records; a Go benchmark cannot run before init
-                internal/handler/diagram: renderCache saves a whole render, which TestDiagramSecondRequestIsServedFromTheCache and the TestRenderCache tests pin; a benchmark would time the renderer
-                internal/handler/diff: the optimization comment on Handler keeps the changed set the patch was read with, which is a correctness choice, not a measured speedup
+          module: github.com/egladman/magus
+          # A package whose optimization carries no benchmark, with why. The list only
+          # shrinks: an entry whose tests gain a func Benchmark fails the load.
+          exempt:
+            internal/config: Cache is magus.yaml's cache section, a config struct, not a cache
+            internal/gcpolicy: raising GOGC before main is measured end to end by gctrace and hyperfine, as its comment records; a Go benchmark cannot run before init
+            internal/handler/diagram: renderCache saves a whole render, which TestDiagramSecondRequestIsServedFromTheCache and the TestRenderCache tests pin; a benchmark would time the renderer
+            internal/handler/diff: the optimization comment on Handler keeps the changed set the patch was read with, which is a correctness choice, not a measured speedup
 
       stutter:
         type: module
@@ -500,11 +488,10 @@ linters:
         description: reports a Go file name that mashes two words together
         original-url: github.com/egladman/magus/libs/conventions
         settings:
-          in-module:
-            - module: github.com/egladman/magus
-              # The go tool never builds dot directories or testdata, so the walk skips
-              # them without an entry here.
-              skip-dirs: [gen]
+          module: github.com/egladman/magus
+          # The go tool never builds dot directories or testdata, so the walk skips
+          # them without an entry here.
+          skip-dirs: [gen]
           suffixes: [test, linux, darwin, windows, unix, other, amd64, arm64, js, wasm, freebsd,
                      openbsd, netbsd]
           # Segments that are one established word. Adding one says "this is a
@@ -524,14 +511,13 @@ linters:
         description: requires every name-format switch arm to render through an emitter
         original-url: github.com/egladman/magus/libs/conventions
         settings:
-          in-module:
-            - module: github.com/egladman/magus
-              package: github.com/egladman/magus/cmd/magus
-              case-ident: outputName
-              emitters: [emitNames, emitItemNames, outputDestination]
-              hint: >-
-                the destination is --tee's; a single value is emitNames(out, []string{v}), a slice of
-                records is emitItemNames(out, records, func(r T) string { return r.Field })
+          module: github.com/egladman/magus
+          package: github.com/egladman/magus/cmd/magus
+          case-ident: outputName
+          emitters: [emitNames, emitItemNames, outputDestination]
+          hint: >-
+            the destination is --tee's; a single value is emitNames(out, []string{v}), a slice of
+            records is emitItemNames(out, records, func(r T) string { return r.Field })
 
       namewords:
         type: module
@@ -576,15 +562,14 @@ linters:
         description: requires an isolating TestMain in every test binary that links the runtime dir
         original-url: github.com/egladman/magus/libs/conventions
         settings:
-          in-module:
-            - module: github.com/egladman/magus
-              # Where magus resolves the per-user runtime directory the broker and the
-              # server listen in. libs/testkit points a test process somewhere private.
-              package: github.com/egladman/magus/internal/proc/sockdir
-              calls: [testkit.Main, testkit.Isolated]
-              hint: >-
-                unisolated, its tests can reach the person's real runtime directory, dial their
-                broker, and bind a pool beside their server
+          # Where magus resolves the per-user runtime directory the broker and the
+          # server listen in. libs/testkit points a test process somewhere private.
+          module: github.com/egladman/magus
+          package: github.com/egladman/magus/internal/proc/sockdir
+          calls: [testkit.Main, testkit.Isolated]
+          hint: >-
+            unisolated, its tests can reach the person's real runtime directory, dial their
+            broker, and bind a pool beside their server
 
       # A CI or VCS provider (GitHub, GitLab, ...) is reached only by a Buzz op magus
       # invokes - a provider spell, a queue provider script, a hack/ driver script -
@@ -601,53 +586,52 @@ linters:
         description: reports Go source outside an allowlist that reaches toward a CI/VCS provider
         original-url: github.com/egladman/magus/libs/conventions
         settings:
-          in-module:
-            - module: github.com/egladman/magus
-              dirs: [internal/queue, internal/job, internal/handler, internal/service, cmd/magus]
-              hint: >-
-                magus reaches a provider only by a Buzz op it invokes (docs/design/judgment/provider-io-is-buzz.md, "provider
-                I/O is Buzz"); an allow entry below is for magus's own remote services
-              # Known CI/VCS provider client SDKs. None is a dependency today (go.mod has
-              # none of these); the entry stands so the day one is added, this is what
-              # refuses it rather than a review catching it by eye.
-              provider-imports:
-                - google/go-github
-                - xanzy/go-gitlab
-                - gitlab.com/gitlab-org/api/client-go
-                - ktrysmt/go-bitbucket
-                - shurcooL/githubv4
-              allow:
-                # Loopback to magus's OWN server, not a provider: the diff bridge and the
-                # MCP readiness probe.
-                - file: cmd/magus/diff.go
-                  reason: talks to magus's own local diff-bridge server over loopback
-                - file: cmd/magus/graph.go
-                  reason: probes magus's own local graph bridge over loopback
-                - file: cmd/magus/notes.go
-                  reason: talks to magus's own local diff-bridge server over loopback
-                - file: cmd/magus/probe.go
-                  reason: probes magus's own local MCP server's /readyz over loopback
-                # magus's own remote services, reached from cmd/magus's CLI wiring.
-                - file: cmd/magus/graph_registry.go
-                  reason: the OCI registry the graph publishes to and pulls from
-                - file: cmd/magus/spell.go
-                  reason: the OCI registry a spell pulls from
-                - file: cmd/magus/self_update.go
-                  reason: downloads magus's own release artifacts from GitHub Releases; distribution, not provider I/O
-                # internal/queue/provider/host.go implements mergequeue\request, the Go
-                # binding a provider spell's Buzz calls to reach a host - the same shape as
-                # std/http.go, not an exception to the rule the rule is checking.
-                - file: internal/queue/provider/host.go
-                  reason: the Go binding behind the mergequeue Buzz host module, the queue provider script's own primitive
-                # The next two are genuine exceptions, not the intended pattern, kept here
-                # with the plan (inflight-view-2026-09-27.md sec 3) named rather than moved
-                # silently: report them, do not pretend they are clean.
-                - file: internal/queue/cache.go
-                  reason: proxies GitHub Actions cache reads on loopback so the runner's write-capable token never reaches Buzz; a deliberate exception, not yet a spell
-                - file: internal/queue/artifacts.go
-                  reason: downloads a validation run's CI artifacts by the URL a Buzz provider listing returns; a pre-existing exception, not yet a spell
-                - file: cmd/magus/queue.go
-                  reason: CLI wiring for internal/queue/artifacts.go's client; see that entry
+          module: github.com/egladman/magus
+          dirs: [internal/queue, internal/job, internal/handler, internal/service, cmd/magus]
+          hint: >-
+            magus reaches a provider only by a Buzz op it invokes (docs/design/judgment/provider-io-is-buzz.md, "provider
+            I/O is Buzz"); an allow entry below is for magus's own remote services
+          # Known CI/VCS provider client SDKs. None is a dependency today (go.mod has
+          # none of these); the entry stands so the day one is added, this is what
+          # refuses it rather than a review catching it by eye.
+          provider-imports:
+            - google/go-github
+            - xanzy/go-gitlab
+            - gitlab.com/gitlab-org/api/client-go
+            - ktrysmt/go-bitbucket
+            - shurcooL/githubv4
+          allow:
+            # Loopback to magus's OWN server, not a provider: the diff bridge and the
+            # MCP readiness probe.
+            - file: cmd/magus/diff.go
+              reason: talks to magus's own local diff-bridge server over loopback
+            - file: cmd/magus/graph.go
+              reason: probes magus's own local graph bridge over loopback
+            - file: cmd/magus/notes.go
+              reason: talks to magus's own local diff-bridge server over loopback
+            - file: cmd/magus/probe.go
+              reason: probes magus's own local MCP server's /readyz over loopback
+            # magus's own remote services, reached from cmd/magus's CLI wiring.
+            - file: cmd/magus/graph_registry.go
+              reason: the OCI registry the graph publishes to and pulls from
+            - file: cmd/magus/spell.go
+              reason: the OCI registry a spell pulls from
+            - file: cmd/magus/self_update.go
+              reason: downloads magus's own release artifacts from GitHub Releases; distribution, not provider I/O
+            # internal/queue/provider/host.go implements mergequeue\request, the Go
+            # binding a provider spell's Buzz calls to reach a host - the same shape as
+            # std/http.go, not an exception to the rule the rule is checking.
+            - file: internal/queue/provider/host.go
+              reason: the Go binding behind the mergequeue Buzz host module, the queue provider script's own primitive
+            # The next two are genuine exceptions, not the intended pattern, kept here
+            # with the plan (inflight-view-2026-09-27.md sec 3) named rather than moved
+            # silently: report them, do not pretend they are clean.
+            - file: internal/queue/cache.go
+              reason: proxies GitHub Actions cache reads on loopback so the runner's write-capable token never reaches Buzz; a deliberate exception, not yet a spell
+            - file: internal/queue/artifacts.go
+              reason: downloads a validation run's CI artifacts by the URL a Buzz provider listing returns; a pre-existing exception, not yet a spell
+            - file: cmd/magus/queue.go
+              reason: CLI wiring for internal/queue/artifacts.go's client; see that entry
 
       # A test that pins a struct field by field still passes when the struct grows one.
       fieldwise:
@@ -664,11 +648,10 @@ linters:
         description: requires a test that assigns the command-line globals to restore them
         original-url: github.com/egladman/magus/libs/conventions
         settings:
-          in-module:
-            - module: github.com/egladman/magus
-              package: github.com/egladman/magus/cmd/magus
-              vars: [global, globalCfg]
-              hint: add t.Cleanup(snapshotGlobals()) at the top of the test
+          module: github.com/egladman/magus
+          package: github.com/egladman/magus/cmd/magus
+          vars: [global, globalCfg]
+          hint: add t.Cleanup(snapshotGlobals()) at the top of the test
 
       # A cancelled go test runs no cleanup, so a shell loop in a process group of its own
       # outlived the spawn tests that started one, and forked until the machine hung.

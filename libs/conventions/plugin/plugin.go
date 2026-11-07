@@ -58,28 +58,17 @@ func init() { //nolint:gochecknoinits // golangci-lint's plugin-module-register 
 	register.Plugin("testloops", plugin("testloops", testloops.New))
 }
 
-// inModuleKey holds settings that name paths or packages of one module, listed
-// by that module's path. A block applies when the linted tree is that module or
-// nested in it; elsewhere it is ignored, so a rule naming cmd/magus/shell.go
-// cannot fail a tree that has no such file.
-const inModuleKey = "in-module"
-
 // plugin builds a constructor that decodes a settings block straight into the
 // analyzer's own Options, so an option added there cannot be dropped on the
 // way in, and an unknown key is a load error naming the linter.
 //
 // An analyzer with a module option reads the module from the linted tree's
 // go.mod unless the settings name one, and a tree with no go.mod is an error.
-// A linter whose settings are only an in-module block is inert in any other
-// module.
 func plugin[O any](name string, build func(O) (*analysis.Analyzer, error)) register.NewPlugin {
 	return func(raw any) (register.LinterPlugin, error) {
-		settings, applies, err := scope[O](name, raw)
+		settings, err := withTreeModule[O](name, raw)
 		if err != nil {
 			return nil, err
-		}
-		if !applies {
-			return &linter{}, nil
 		}
 		opts, err := register.DecodeSettings[O](settings)
 		if err != nil {
@@ -93,82 +82,29 @@ func plugin[O any](name string, build func(O) (*analysis.Analyzer, error)) regis
 	}
 }
 
-// scope resolves raw against the linted tree: it merges the in-module block
-// that owns the tree and defaults the module option. It reports false when the
-// settings are only in-module blocks and none owns the tree.
-func scope[O any](name string, raw any) (settings any, applies bool, err error) {
-	takesModule := hasModuleOption[O]()
-	base, isMap := raw.(map[string]any)
-	if raw == nil {
-		base, isMap = map[string]any{}, true
+// withTreeModule fills the module option from the linted tree's go.mod unless
+// the settings already name one.
+func withTreeModule[O any](name string, raw any) (any, error) {
+	if !hasModuleOption[O]() {
+		return raw, nil
 	}
-	scoped, hasScoped := base[inModuleKey]
-	if !isMap || (!takesModule && !hasScoped) {
-		return raw, true, nil
+	settings, isMap := raw.(map[string]any)
+	if raw == nil {
+		settings, isMap = map[string]any{}, true
+	}
+	if !isMap {
+		return raw, nil
+	}
+	if _, set := settings["module"]; set {
+		return raw, nil
 	}
 	tree, err := source.TreeModule(name)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	merged := maps.Clone(base)
-	delete(merged, inModuleKey)
-	module := tree
-	if hasScoped {
-		list, ok := scoped.([]any)
-		if !ok {
-			return nil, false, fmt.Errorf("%s: settings: %s lists blocks, each naming its module", name, inModuleKey)
-		}
-		blocks, err := moduleBlocks(name, list)
-		if err != nil {
-			return nil, false, err
-		}
-		if owner, found := owningModule(tree, blocks); found {
-			maps.Copy(merged, blocks[owner])
-			module = owner
-		} else if len(merged) == 0 {
-			return nil, false, nil
-		}
-	}
-	if _, set := merged["module"]; takesModule && !set {
-		merged["module"] = module
-	}
-	return merged, true, nil
-}
-
-// moduleBlocks keys the in-module list by module path. A list rather than a
-// map, because golangci-lint's viper loader splits map keys at their dots.
-func moduleBlocks(name string, list []any) (map[string]map[string]any, error) {
-	blocks := map[string]map[string]any{}
-	for i, item := range list {
-		block, ok := item.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("%s: settings: %s entry %d is not a block", name, inModuleKey, i)
-		}
-		module, _ := block["module"].(string)
-		if module == "" {
-			return nil, fmt.Errorf("%s: settings: %s entry %d names no module", name, inModuleKey, i)
-		}
-		if _, dup := blocks[module]; dup {
-			return nil, fmt.Errorf("%s: settings: %s names module %q twice", name, inModuleKey, module)
-		}
-		settings := maps.Clone(block)
-		delete(settings, "module")
-		blocks[module] = settings
-	}
-	return blocks, nil
-}
-
-// owningModule returns the longest key that is tree or a module path tree is
-// nested under, which is how a lib module's run reaches its enclosing
-// module's rules.
-func owningModule(tree string, blocks map[string]map[string]any) (string, bool) {
-	owner := ""
-	for key := range blocks {
-		if (key == tree || strings.HasPrefix(tree, key+"/")) && len(key) > len(owner) {
-			owner = key
-		}
-	}
-	return owner, owner != ""
+	merged := maps.Clone(settings)
+	merged["module"] = tree
+	return merged, nil
 }
 
 func hasModuleOption[O any]() bool {
@@ -188,12 +124,8 @@ type linter struct {
 	analyzer *analysis.Analyzer
 }
 
-// BuildAnalyzers returns the one analyzer the settings configured, or none
-// when the linter is inert in this module.
+// BuildAnalyzers returns the one analyzer the settings configured.
 func (l *linter) BuildAnalyzers() ([]*analysis.Analyzer, error) {
-	if l.analyzer == nil {
-		return nil, nil
-	}
 	return []*analysis.Analyzer{l.analyzer}, nil
 }
 
