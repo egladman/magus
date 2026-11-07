@@ -32,3 +32,5 @@ pnpm = "10.33.0"
 "aqua:bufbuild/buf" = "1.58.0"
 "aqua:yannh/kubeconform" = "0.8.0"
 "npm:@sourcegraph/scip-typescript" = "0.4.0"
+"github:tectonic-typesetting/tectonic" = { version = "tectonic@0.17.0", version_prefix = "tectonic@" }
+"github:cmhughes/latexindent.pl" = { version = "V4.0.3", asset_pattern = "latexindent-{{ os() }}" }

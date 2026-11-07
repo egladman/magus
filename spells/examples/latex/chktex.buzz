@@ -1,0 +1,9 @@
+// chktex lints the project's LaTeX sources.
+import "magus";
+import "magus/spell/latex";
+
+magus\project({ "spells": [latex] });
+
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    latex["chktex"](ctx);
+}
