@@ -10,7 +10,7 @@ import (
 func TestSlopChecksRunInOrder(t *testing.T) {
 	want := []Rule{
 		RuleSignpost, RuleChatbot, RuleLeak, RuleBuzzword, RuleBuzzwordWeak, RuleContrast, RuleVague,
-		RuleCloser, RuleIngTail, RuleStaccato, RuleDash, RuleASCII, RuleHeadingCase,
+		RuleCloser, RuleIngTail, RuleStaccato, RuleDash, RuleASCII, RuleLocalPath, RuleHeadingCase,
 	}
 
 	if got := ruleNames(slopChecks); !reflect.DeepEqual(got, want) {
@@ -161,6 +161,25 @@ func TestLeakReportsResidueOfAToolOrATemplate(t *testing.T) {
 		{"a turn id", KindReference, "See turn0search1 for the source.", []string{"1:turn0search1"}},
 		{"a doc comment", KindDocComment, "Pins the key. TBD.", []string{"1:TBD"}},
 		{"a reply", KindReviewReply, "Done, citeturn0search0.", []string{"1:citeturn"}},
+	})
+}
+
+func TestLocalPathReportsAPathOnlyTheAuthorsMachineHolds(t *testing.T) {
+	runTextCases(t, RuleLocalPath, []textCase{
+		{"a home path in code", KindChangeDescription, pr("- Moves the store under `~/Repos/magus/.cache`."),
+			[]string{"4:~/Repos/magus/.cache"}},
+		{"an absolute user path", KindChangeDescription, pr("- Reads /Users/eli/Repos/magus/magus.yaml."),
+			[]string{"4:/Users/eli/Repos/magus/magus.yaml"}},
+		{"a temp path", KindChangeDescription, pr("- Logs to /private/tmp/claude-501/run.log, then exits."),
+			[]string{"4:/private/tmp/claude-501/run.log"}},
+		{"a HOME variable", KindCommitMessage, "read $HOME/.config/magus/keys on start\n", []string{"1:$HOME/.config/magus/keys"}},
+		{"a Windows path", KindReviewInline, `This reads C:\Users\eli\magus.yaml here.`, []string{`1:C:\Users\eli\magus.yaml`}},
+		{"a repository path", KindChangeDescription, pr("- Edits `internal/guard/stale_binary.go` and ./magus."), nil},
+		{"a URL", KindChangeDescription, pr("- See https://eli.gladman.cc/magus/guides/setup/ for it."), nil},
+		{"a site link", KindChangelog, "### Fixed\n\n- See [setup](/guides/setup/).\n", nil},
+		{"the null device", KindChangeDescription, pr("- Writes to /dev/null."), nil},
+		{"a slash command", KindChangeDescription, pr("- Documents /loop."), nil},
+		{"a reply to the person at the machine", KindAgentReply, "Wrote /Users/eli/notes/run.md.", nil},
 	})
 }
 

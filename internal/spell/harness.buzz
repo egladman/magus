@@ -34,8 +34,9 @@ fun escapeBasic(text: str) > str {
 }
 
 // buzzCommand is one glue script as a plain argv: PATH's magus, so the string is the same
-// on every machine and a workspace that builds its own magus is still judged by it (magus
-// re-execs into the ./magus of the tree -C names). host is the directory the host's hook
+// on every machine. The glue judges with the ./magus of the
+// event cwd's checkout, PATH's only where it has none.
+// host is the directory the host's hook
 // commands start in, as the host spells it ("$CLAUDE_PROJECT_DIR", "."), or "" for a host
 // that starts them in the workspace root. `-s` keeps the interpreter's advisories off
 // stderr, which a host shows as a hook error. flags ride after `--`, which `magus buzz`

@@ -449,6 +449,15 @@ var coreTexts = map[Rule]ruleText{
 		why: "House style: curly quotes prove nothing about who wrote a text; the rule encodes one " +
 			"repository's ASCII-only policy. Arrows and box drawing stay legal, having no plain spelling.",
 	},
+	RuleLocalPath: {
+		code:      "PRF5008",
+		dimension: DimensionConventions,
+		catches:   "a path only the author's machine holds: a home directory, `$HOME`, a temp directory or a drive letter",
+		why: "House style: text a repository publishes names a file by its path from the repository root, " +
+			"which resolves in every clone. A path like `~/Repos/<repo>/...` or `/Users/<name>/...` leaks the " +
+			"author's machine and resolves nowhere else. URLs, link targets and `/dev/null` are left alone, " +
+			"and a reply to the person at that machine is not judged.",
+	},
 	RuleTense: {
 		code:      "PRF5004",
 		dimension: DimensionConventions,

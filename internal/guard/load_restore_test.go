@@ -115,6 +115,32 @@ func TestMissingImportAllowsRestoringTheNamedFile(t *testing.T) {
 	shortDeny(t, cacheDir, other, denyRuleStaleBinary, staleOwnSay)
 }
 
+// A load error in a file lets git put back that file, and only by git.
+func TestAnyFileTheLoadErrorNamesMayBeRestored(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	root := ownCheckout(t, ctx, true)
+	declareGuardRule(t, root)
+	deps := unloadedDependencies(errors.New("hack/policy/guard.buzz:12:3: [BZZ1004] wrong argument count: got 2, want 1"))
+
+	for _, line := range []string{
+		"git restore hack/policy/guard.buzz",
+		"git checkout -- hack/policy/guard.buzz",
+	} {
+		v := judgeUnloaded(ctx, deps, line)
+		assert.NotEqual(t, decisionDeny, v.Decision, line)
+		assert.Contains(t, v.Context, "puts back hack/policy/guard.buzz, which the load error names", line)
+	}
+	for _, line := range []string{
+		"git restore notes.txt",
+		"git restore policy/guard.buzz",
+		"git mv hack/policy/guard.old.buzz hack/policy/guard.buzz",
+	} {
+		assert.Equal(t, decisionDeny, judgeUnloaded(ctx, deps, line).Decision, line)
+	}
+	write := Judge(ctx, deps, Request{Input: filepath.Join(root, "hack", "policy", "guard.buzz"), IsPath: true, Host: "claude-code", Session: "s1"})
+	assert.Equal(t, decisionDeny, write.Decision, "a write is an edit, not a restore")
+}
+
 // A load failure that names no file leaves the restore denied.
 func TestRestoreIsDeniedWhenTheLoadErrorNamesNoFile(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)

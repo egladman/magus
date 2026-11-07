@@ -243,9 +243,11 @@ export fun binRoot(cwd: str) > str {
 }
 
 // fallbackNote says why resolveBin fell back from the checkout's ./magus, or
-// "" when it did not. It names a ./magus that cannot run, and a checkout of
-// magus with none. Anywhere else PATH is where magus is meant to come from.
-export fun fallbackNote(cwd: str = "") > str {
+// "" when it did not. It names a ./magus that cannot run. It also names a
+// checkout with none whose session workspace has one: a linked worktree
+// nobody placed a binary in. session defaults to the hook's own directory.
+// Where the session has no ./magus either, PATH is the intended source.
+export fun fallbackNote(cwd: str = "", session: str = "") > str {
     if ((env\get("__MAGUS_BIN") catch "") != "") { return ""; }
     final root = binRoot(cwd);
     if (root == "") { return ""; }
@@ -256,7 +258,9 @@ export fun fallbackNote(cwd: str = "") > str {
         return "{candidate} exists but is not executable, so the magus on PATH judges, "
             + "which may predate this checkout's rules; run `chmod +x {candidate}`";
     }
-    if (onPath != "" and buildsMagus(root)) {
+    var sessionRoot = workspaceRoot();
+    if (session != "") { sessionRoot = workspaceRootAt(session); }
+    if (onPath != "" and sessionRoot != root and isExecutable("{sessionRoot}/magus")) {
         return "{root} has no ./magus, so the magus on PATH judges, "
             + "{describeBin(onPath)}, which may predate this checkout's rules";
     }
@@ -430,12 +434,31 @@ test "a fallback from the checkout's ./magus is named, and only then" {
     fs\writeFile("{root}/magus.yaml", content: "");
     fs\writeFile("{bare}/magus.yaml", content: "");
     fs\writeFile("{root}/magus", content: "#!/bin/sh\n");
-    std\assert(fallbackNote(root).indexOf("chmod +x {root}/magus") != null, message: fallbackNote(root));
-    std\assert(fallbackNote(bare) == "", message: "a checkout that does not build magus expects PATH's");
+    std\assert(fallbackNote(root, session: bare).indexOf("chmod +x {root}/magus") != null, message: fallbackNote(root, session: bare));
+    std\assert(fallbackNote(bare, session: bare) == "", message: "a workspace that builds no ./magus expects PATH's");
     plantBinary(root);
-    std\assert(fallbackNote(root) == "", message: "a runnable ./magus is no fallback");
+    std\assert(fallbackNote(root, session: root) == "", message: "a runnable ./magus is no fallback");
     fs\removeAll(root);
     fs\removeAll(bare);
+}
+
+test "a checkout with no ./magus beside a session that has one names the PATH fallback" {
+    final session = fs\tempDir("hook-session-");
+    final linked = fs\tempDir("hook-linked-");
+    fs\writeFile("{session}/magus.yaml", content: "");
+    fs\writeFile("{linked}/magus.yaml", content: "");
+    plantBinary(session);
+    final note = fallbackNote(linked, session: session);
+    if ((proc\which("magus") catch "") == "") {
+        std\assert(note == "", message: "no PATH magus judges, which the unavailable reply says");
+    } else {
+        std\assert(note.startsWith("{linked} has no ./magus, so the magus on PATH judges, "), message: note);
+    }
+    std\assert(fallbackNote(session, session: session) == "", message: "the session's own ./magus judges");
+    fs\writeFile("{linked}/go.mod", content: "module github.com/egladman/magus\n");
+    std\assert(fallbackNote(linked, session: linked) == "", message: "the language a checkout is written in decides nothing");
+    fs\removeAll(session);
+    fs\removeAll(linked);
 }
 
 test "the fix for a missing magus is the bootstrap in a checkout of magus, else the install page" {

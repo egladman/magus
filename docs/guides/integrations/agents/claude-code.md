@@ -107,7 +107,7 @@ claude-code` prints it, in the place it lands in `.claude/settings.json`:
         "hooks": [{
           "type": "command",
           "timeout": 10,
-          "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code"
+          "command": "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code"
         }]
       }
     ]
@@ -140,8 +140,8 @@ the root the session started in ([hooks reference](https://code.claude.com/docs/
 So the string is the same on every machine, never an absolute path. `-C` makes the
 root the working directory before anything else, so the root-relative script path
 resolves wherever the session is; the glue reads the session's own directory off
-the event. The glue is Buzz and needs no `jq`, and no entry carries any shell of
-its own.
+the event. The glue is Buzz and needs no `jq`. The only shell an entry carries is
+the binary choice before `buzz`, POSIX `sh` with no pipe or substitution.
 
 Flags an entry declares ride after `--`, which `magus buzz` forwards to the script,
 never in a leading `VAR=value`: the glue reads whether to forward the whole event
@@ -153,15 +153,18 @@ Three things in a session resolve the word `magus`, and each has its own owner:
 
 | Who runs `magus`                                        | Resolved by                                                               | Owner                                                                                                                                              |
 | ------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Hook commands (the guard's interpreter)                 | PATH, then the `./magus` of the tree `-C` names when that tree builds one | every hook entry, and magus's own re-exec                                                                                                          |
+| Hook commands (the guard's interpreter)                 | `$CLAUDE_PROJECT_DIR/magus` when executable, else PATH                    | every hook entry, in the shell before `buzz`                                                                                                       |
 | The binary that judges a call                           | `./magus` beside the nearest `magus.yaml` above the call's cwd, else PATH | `magus-command.buzz` and the other glue, from the event's `cwd`                                                                                    |
 | The agent's own Bash tool commands                      | PATH, with the session root put first                                     | the `SessionStart` entry (matcher `startup\|resume\|clear`), whose `magus-session.buzz` appends `export PATH="<root>:$PATH"` to `$CLAUDE_ENV_FILE` |
 | Commands magus itself starts (targets, spells, scripts) | PATH, with the running binary's directory put first                       | magus, on every child it spawns                                                                                                                    |
 
-A hook's `magus` is whatever the PATH Claude Code was started with finds. Before it
-does anything else, that magus walks up from the `-C` directory to the workspace root
-and re-execs into the `./magus` there when one exists, so a workspace that builds its
-own binary is judged by it and one that builds none uses the installed one. The
+A hook entry runs the session root's `./magus` when it is executable, and the magus on
+the PATH Claude Code was started with otherwise. That binary only interprets the glue.
+The glue reads the event's `cwd`, walks up to that checkout's workspace root, and
+judges the call with the `./magus` there; only a checkout with none falls back to PATH.
+The shell cannot read the event, so it cannot pick the cwd's binary itself, and magus
+does not re-exec the guard into another binary. When a linked checkout has no `./magus`
+while the session root does, the glue says which PATH binary judged instead. The
 `SessionStart` entry cannot serve hooks: the hooks reference says `CLAUDE_ENV_FILE`
 persists variables "for subsequent Bash commands", and names no other consumer.
 
@@ -298,7 +301,7 @@ as the reason to fix it:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name claude-code",
+            "command": "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name claude-code",
             "timeout": 30
           }
         ]
