@@ -589,12 +589,38 @@ var asciiMarks = regexp.MustCompile(`[‘’“”…\x{1F300}-\x{1FAFF}\x{2705}
 
 var (
 	// localPaths are a path after a word boundary that starts at a home
-	// directory, $HOME, an absolute root or a drive letter.
+	// directory, $HOME, an absolute root or a drive letter. holdsOnlyHere
+	// then keeps the ones that name one person's machine.
 	localPaths = regexp.MustCompile("(?:^|[\\s`'\"(=])((?:~[\\w.-]*|\\$\\{?HOME\\}?)/[^\\s`'\"()<>]+" +
 		"|/[\\w.-]+/[^\\s`'\"()<>]+|[A-Za-z]:\\\\[^\\s`'\"()<>]+)")
 	// urls are left out first, so a URL's path is never one of localPaths.
 	urls = regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.-]*://\S+`)
 )
+
+// scratchRoots are the top-level directories whose contents belong to one
+// machine or one person: a user's home, a temp directory, a mount.
+var scratchRoots = map[string]bool{
+	"Users": true, "home": true, "root": true, "tmp": true, "private": true, "Volumes": true,
+}
+
+// holdsOnlyHere reports whether a path candidate points into one person's
+// machine. A URL route (/api/v1/share), a system path (/proc/self/fd) and a
+// per-user location every reader has (~/.gitconfig, ~/go/pkg) resolve for
+// every reader, so they pass.
+func holdsOnlyHere(p string) bool {
+	switch {
+	case strings.HasPrefix(p, "~/"), strings.HasPrefix(p, "$HOME/"), strings.HasPrefix(p, "${HOME}/"):
+		rest := p[strings.Index(p, "/")+1:]
+		first, _, _ := strings.Cut(rest, "/")
+		return first != "" && !strings.HasPrefix(first, ".") && first != "go"
+	case strings.HasPrefix(p, "~"), strings.HasPrefix(p, "$"):
+		return true
+	case strings.HasPrefix(p, "/"):
+		first, _, _ := strings.Cut(p[1:], "/")
+		return scratchRoots[first] || strings.HasPrefix(p, "/var/folders/")
+	}
+	return true
+}
 
 // localPath reports each path in the written source that resolves only on
 // the author's machine. Link targets after `](` and /dev/null pass.
@@ -604,7 +630,7 @@ func localPath(in input) []Finding {
 		line = urls.ReplaceAllStringFunc(line, func(u string) string { return strings.Repeat(" ", len(u)) })
 		for _, at := range localPaths.FindAllStringSubmatchIndex(line, -1) {
 			m := strings.TrimRight(line[at[2]:at[3]], ".,;:!?]")
-			if m == "/dev/null" || strings.HasSuffix(line[:at[2]], "](") {
+			if m == "/dev/null" || strings.HasSuffix(line[:at[2]], "](") || !holdsOnlyHere(m) {
 				continue
 			}
 			out = append(out, Finding{
