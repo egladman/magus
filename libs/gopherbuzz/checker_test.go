@@ -848,6 +848,48 @@ export final got = "{r.id} {r.sha}";
 	assert.Equal(t, "1 abc", sess.Exports()["got"].String())
 }
 
+// An aliased import's types are reachable only through the alias, as in
+// upstream, so a bare name means the same type to the checker and the VM.
+func TestImport_UnqualifiedNameIsTheImporters(t *testing.T) {
+	session := func(t *testing.T, host bool) *Session {
+		t.Helper()
+		sess := NewSession(context.Background(), WithEmbedded())
+		t.Cleanup(func() { _ = sess.Close() })
+		sess.SetIncludeDirs([]string{"testdata"})
+		if host {
+			sess.SetModuleDecls("host", `export object Run { inv: str = "" }`)
+		}
+		return sess
+	}
+
+	t.Run("the host's type", func(t *testing.T) {
+		src, err := os.ReadFile("testdata/unqualified_name_host_and_alias.buzz")
+		require.NoError(t, err)
+		sess := session(t, true)
+		require.NoError(t, sess.Exec(context.Background(), string(src)))
+		assert.Equal(t, "x abc", sess.Exports()["got"].String())
+	})
+
+	t.Run("not the alias's field", func(t *testing.T) {
+		_, err := session(t, true).Compile(`
+import "host";
+import "module_qualified_object_literal" as models;
+final r = Run{ sha = "abc" };
+`)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `object Run has no field "sha"`)
+	})
+
+	t.Run("undefined with only the alias", func(t *testing.T) {
+		_, err := session(t, false).Compile(`
+import "module_qualified_object_literal" as models;
+final r = Run{ sha = "abc" };
+`)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `undefined type "Run"`)
+	})
+}
+
 func TestCheck_ObjectLiteralUnknownFieldHasCode(t *testing.T) {
 	src, err := os.ReadFile("testdata/err_object_literal_unknown_field.buzz")
 	require.NoError(t, err)
