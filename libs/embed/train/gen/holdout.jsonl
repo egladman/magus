@@ -210,6 +210,7 @@
 {"group":"file:changes/unreleased/magus-never-waits-on-another-magus.md","path":"changes/unreleased/magus-never-waits-on-another-magus.md"}
 {"group":"file:changes/unreleased/magus-query-output-reads-trail-payloads.md","path":"changes/unreleased/magus-query-output-reads-trail-payloads.md"}
 {"group":"file:changes/unreleased/magus-session-dispose-refuses-without-interactive.md","path":"changes/unreleased/magus-session-dispose-refuses-without-interactive.md"}
+{"group":"file:changes/unreleased/mandate-review-budget.md","path":"changes/unreleased/mandate-review-budget.md"}
 {"group":"file:changes/unreleased/mcp-buzz.md","path":"changes/unreleased/mcp-buzz.md"}
 {"group":"file:changes/unreleased/mcp-client-tasks.md","path":"changes/unreleased/mcp-client-tasks.md"}
 {"group":"file:changes/unreleased/mcp-failed-authentication-throttled.md","path":"changes/unreleased/mcp-failed-authentication-throttled.md"}
