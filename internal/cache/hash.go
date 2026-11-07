@@ -299,7 +299,7 @@ func sourceMemoKey(root string, uses map[string]string, sources, outputs []types
 	b.WriteString(root)
 	b.WriteByte(0)
 	for _, name := range slices.Sorted(maps.Keys(uses)) {
-		b.WriteString(name + "=" + uses[name])
+		fmt.Fprintf(&b, "%s=%s", name, uses[name])
 		b.WriteByte(0)
 	}
 	write(flat(sources))

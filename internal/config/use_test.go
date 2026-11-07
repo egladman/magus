@@ -26,22 +26,17 @@ func (s *UseConfigSuite) TestNoShareListTakesEveryImplementedKind() {
 
 func (s *UseConfigSuite) TestAnUnimplementedKindIsRefused() {
 	got := s.failures(UseEntry{Name: "magus", Path: "../magus", Share: []types.ShareKind{"proofread"}})
-	s.Require().Len(got, 1)
-	s.Equal("use_share_kind", got[0].Tag)
-	s.Equal("use[0].share[0]", got[0].Field)
+	s.Equal([]FieldFailure{{Field: "use[0].share[0]", Tag: "use_share_kind", Param: "lint", Value: "proofread"}}, got)
 }
 
 func (s *UseConfigSuite) TestOneKindSharedByTwoEntriesIsRefused() {
 	got := s.failures(UseEntry{Name: "a", Path: "../a"}, UseEntry{Name: "b", Path: "../b"})
-	s.Require().Len(got, 1)
-	s.Equal("use_share_owner", got[0].Tag)
-	s.Equal("a", got[0].Param)
+	s.Equal([]FieldFailure{{Field: "use[1].share[0]", Tag: "use_share_owner", Param: "a", Value: "lint"}}, got)
 }
 
 func (s *UseConfigSuite) TestAMalformedNameIsRefused() {
 	got := s.failures(UseEntry{Name: "Magus/x", Path: "../magus"})
-	s.Require().Len(got, 1)
-	s.Equal("use_name", got[0].Tag)
+	s.Equal([]FieldFailure{{Field: "use[0].name", Tag: "use_name", Value: "Magus/x"}}, got)
 }
 
 func (s *UseConfigSuite) TestADuplicateNameIsRefused() {
@@ -52,8 +47,7 @@ func (s *UseConfigSuite) TestADuplicateNameIsRefused() {
 
 func (s *UseConfigSuite) TestAnEmptyPathIsRefused() {
 	got := s.failures(UseEntry{Name: "magus"})
-	s.Require().Len(got, 1)
-	s.Equal("use[0].path", got[0].Field)
+	s.Equal([]FieldFailure{{Field: "use[0].path", Tag: "required"}}, got)
 }
 
 func (s *UseConfigSuite) TestValidateReportsUseFailures() {

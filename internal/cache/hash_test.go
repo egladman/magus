@@ -969,8 +969,8 @@ func (s *StitchedSourcesSuite) key(st *Step) (string, []string) {
 func (s *StitchedSourcesSuite) TestAUseReferenceKeysUnderItsReferenceName() {
 	_, lines := s.key(s.step("*.go", types.UseRef("magus", ".golangci.yml"), types.UseRef("magus", "libs/**/*.go")))
 	joined := strings.Join(lines, "\n")
-	s.Contains(joined, "src:"+types.UseRef("magus", ".golangci.yml")+":")
-	s.Contains(joined, "src:"+types.UseRef("magus", "libs/lint/rule.go")+":")
+	s.Contains(joined, fmt.Sprintf("src:%s:", types.UseRef("magus", ".golangci.yml")))
+	s.Contains(joined, fmt.Sprintf("src:%s:", types.UseRef("magus", "libs/lint/rule.go")))
 	s.NotContains(joined, s.used, "the key never carries the used root")
 }
 

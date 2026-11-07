@@ -1,6 +1,7 @@
 package types
 
 import (
+	"path"
 	"slices"
 	"strings"
 )
@@ -47,7 +48,7 @@ func UseRef(name, rel string) string {
 	if rel == "" {
 		return useRefPrefix + name
 	}
-	return useRefPrefix + name + "/" + rel
+	return path.Join(useRefPrefix+name, rel)
 }
 
 // CutUseRef splits a reference [UseRef] wrote into the name and the path
