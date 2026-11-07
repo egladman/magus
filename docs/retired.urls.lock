@@ -442,3 +442,10 @@ reference/manpage/magus-path/
 # reference/manpage/magus-server/.
 reference/manpage/magus-broker/
 reference/manpage/magus-status/
+# The tags only the status and broker man pages carried went with them.
+tags/capacity/
+tags/magus-broker/
+tags/magus-status/
+tags/monitoring/
+tags/pool/
+tags/status/
