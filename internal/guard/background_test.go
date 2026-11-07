@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
@@ -199,9 +200,10 @@ func TestAdviseCheckTimeoutCoversTheLastRealRun(t *testing.T) {
 	})
 }
 
-// A run narrowed with `-- -run` is priced as the whole target, since no per-test durations
-// are recorded, so past the foreground maximum it is told the bounded form with its filter
-// kept. That line carries its own deadline and passes, in the foreground or the background.
+// A narrowed run that never ran here is priced as the whole
+// target. Past the foreground maximum it is told the bounded
+// form with its filter kept. That line carries its own deadline
+// and passes, in the foreground or the background.
 func TestCheckTimeoutSendsANarrowedRunToTheBoundedForm(t *testing.T) {
 	row := figuresLease()
 	ctx, root := fleetFixture(t, row)
@@ -218,6 +220,59 @@ func TestCheckTimeoutSendsANarrowedRunToTheBoundedForm(t *testing.T) {
 		v := Judge(ctx, Dependencies{}, req)
 		assert.NotEqual(t, "deny", v.Decision, "background %v: %s", background, v.Reason)
 	}
+}
+
+type NarrowedRunPriceSuite struct {
+	suite.Suite
+	lease string
+	ctx   context.Context
+	root  string
+}
+
+func TestNarrowedRunPriceSuite(t *testing.T) { suite.Run(t, new(NarrowedRunPriceSuite)) }
+
+func (s *NarrowedRunPriceSuite) SetupTest() {
+	row := figuresLease()
+	s.lease = row.ID
+	s.ctx, s.root = fleetFixture(s.T(), row)
+	recordRun(s.T(), s.root, "docs", "diagrams-generate", 13*time.Minute)
+}
+
+func (s *NarrowedRunPriceSuite) recordNarrowed(took time.Duration) {
+	dir, err := sessions.Dir(s.root)
+	s.Require().NoError(err)
+	w, err := sessions.Open(dir, fmt.Sprintf("invmv%d1", recordedRuns.Add(1)),
+		sessions.InvocationStart{Command: "run diagrams_generate docs -- -run TestA|TestB"})
+	s.Require().NoError(err)
+	s.Require().NoError(w.Append(sessions.KindTargetResult, sessions.TargetResult{
+		Target: "diagrams-generate", Project: "docs", Outcome: sessions.OutcomePass, DurationMs: took.Milliseconds(),
+	}))
+}
+
+const narrowedRun = "./magus run diagrams_generate docs -- -run 'TestA|TestB'"
+
+func (s *NarrowedRunPriceSuite) TestARecordedNarrowedRunPricesItself() {
+	s.recordNarrowed(30 * time.Second)
+	s.Empty(checkTimeoutAdvice(s.ctx, s.lease, narrowedRun, claudeLimits).Say, "30s fits the default wait")
+}
+
+func (s *NarrowedRunPriceSuite) TestTheAdviceSaysItPricedTheCommandLine() {
+	s.recordNarrowed(5 * time.Minute)
+	a := checkTimeoutAdvice(s.ctx, s.lease, narrowedRun, claudeLimits)
+	s.Contains(a.Say, "last ran 5m0s here")
+	s.Contains(a.Why, "the newest real run of this command line")
+}
+
+func (s *NarrowedRunPriceSuite) TestAnUnrecordedNarrowedRunSaysItPricedTheTarget() {
+	a := checkTimeoutAdvice(s.ctx, s.lease, narrowedRun, claudeLimits)
+	s.Contains(a.Say, "last ran 13m0s here")
+	s.Contains(a.Why, "since this command line has none recorded")
+}
+
+func (s *NarrowedRunPriceSuite) TestAWholeRunIsNotPricedByANarrowedOne() {
+	s.recordNarrowed(30 * time.Second)
+	a := checkTimeoutAdvice(s.ctx, s.lease, "./magus run diagrams_generate docs", claudeLimits)
+	s.Contains(a.Say, "last ran 13m0s here")
 }
 
 // bgCall is bgSearchCall and its result with command in place of the search.

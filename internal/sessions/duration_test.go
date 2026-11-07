@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // recordResults files each result under its own invocation, in the order given, so a later
@@ -18,6 +19,46 @@ func recordResults(t *testing.T, dir string, results ...TargetResult) {
 		require.NoError(t, err)
 		require.NoError(t, w.Append(KindTargetResult, r))
 	}
+}
+
+type RunDurationWithSuite struct {
+	suite.Suite
+	dir string
+}
+
+func TestRunDurationWithSuite(t *testing.T) { suite.Run(t, new(RunDurationWithSuite)) }
+
+func (s *RunDurationWithSuite) SetupTest() {
+	s.dir = s.T().TempDir()
+	for i, run := range []struct {
+		command string
+		took    int64
+	}{
+		{"run go-test .", 400_000},
+		{"run go-test . -- -run TestA", 20_000},
+		{"run go-test . --", 300_000},
+	} {
+		w, err := Open(s.dir, fmt.Sprintf("invwith%04d1", i), InvocationStart{Command: run.command})
+		s.Require().NoError(err)
+		s.Require().NoError(w.Append(KindTargetResult, TargetResult{Target: "go-test", Project: ".", Outcome: OutcomePass, DurationMs: run.took}))
+	}
+}
+
+func (s *RunDurationWithSuite) TestTheSameForwardedArgumentsMatch() {
+	got, ok := LastRunDurationWith(s.dir, ".", "go-test", []string{"-run", "TestA"})
+	s.Require().True(ok)
+	s.Equal(20*time.Second, got)
+}
+
+func (s *RunDurationWithSuite) TestNoForwardedArgumentsMatchAnUnfilteredRun() {
+	got, ok := LastRunDurationWith(s.dir, ".", "go-test", nil)
+	s.Require().True(ok)
+	s.Equal(300*time.Second, got, "a bare -- forwards nothing")
+}
+
+func (s *RunDurationWithSuite) TestOtherArgumentsHaveNoRecord() {
+	_, ok := LastRunDurationWith(s.dir, ".", "go-test", []string{"-run", "TestB"})
+	s.False(ok)
 }
 
 func TestLastRunDurationIsTheNewestRun(t *testing.T) {
