@@ -969,134 +969,232 @@ func writeClaudePluginStore(t *testing.T, files map[string]string) {
 	}
 }
 
-// TestVerifyHarnessReportsAnEnabledPluginNobodyInstalled pins that settings alone do not
-// make a plugin appear: a workspace that enables it while the person has not installed it
-// is uncovered, and the reason names the one-time install line.
-func TestVerifyHarnessReportsAnEnabledPluginNobodyInstalled(t *testing.T) {
-	root := t.TempDir()
-	writeSettingsHarness(t)
-	writeClaudePluginStore(t, nil)
-	mergeHarness(t, root, "moder")
-
-	result, err := VerifyHarness(untimedProbes(), root, "moder")
-	require.NoError(t, err)
-	assert.Equal(t, HarnessVerified, result.Setting.Status, "the settings are in place; the install is the gap")
-	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
-	assert.Contains(t, result.Plugin.Reason, "claude plugin marketplace add egladman/magus")
-	assert.Contains(t, result.Plugin.Reason, "magus@magus")
-	assert.Contains(t, result.Plugin.Reason, "not registered")
+// harnessPluginSuite verifies an enabled plugin against a plugin
+// store under a temp config dir.
+type harnessPluginSuite struct {
+	suite.Suite
+	root string
 }
 
-// TestVerifyHarnessReadsAnInstalledPluginAsCurrent covers both shapes of the install record:
-// the list of installs per scope, and the single object of the first file version.
-func TestVerifyHarnessReadsAnInstalledPluginAsCurrent(t *testing.T) {
-	for name, installed := range map[string]string{
-		"list":   `{"version": 2, "plugins": {"magus@magus": [{"scope": "user", "version": "1.0.0"}]}}`,
-		"object": `{"version": 1, "plugins": {"magus@magus": {"version": "1.0.0"}}}`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			root := t.TempDir()
-			writeSettingsHarness(t)
-			writeClaudePluginStore(t, map[string]string{"installed_plugins.json": installed})
-			mergeHarness(t, root, "moder")
+func TestHarnessPluginSuite(t *testing.T) { suite.Run(t, new(harnessPluginSuite)) }
 
-			result, err := VerifyHarness(untimedProbes(), root, "moder")
-			require.NoError(t, err)
-			assert.Equal(t, HarnessVerified, result.Plugin.Status)
-			assert.Empty(t, result.Plugin.Reason)
-		})
+const (
+	pluginHead  = "971497a65ff397184686fb3e1168586c73ea2c30"
+	pluginOlder = "0e683071aaaabbbbccccddddeeeeffff00001111"
+)
+
+func (s *harnessPluginSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	writeSettingsHarness(s.T())
+	writeClaudePluginStore(s.T(), nil)
+}
+
+func (s *harnessPluginSuite) pluginsRoot() string {
+	return filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "plugins")
+}
+
+func (s *harnessPluginSuite) write(path, body string) {
+	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
+	s.Require().NoError(os.WriteFile(path, []byte(body), 0o644))
+}
+
+func (s *harnessPluginSuite) record(install string) {
+	s.write(filepath.Join(s.pluginsRoot(), "installed_plugins.json"),
+		fmt.Sprintf(`{"version": 2, "plugins": {"magus@magus": [%s]}}`, install))
+}
+
+func userInstall(commit string) string {
+	return fmt.Sprintf(`{"scope": "user", "gitCommitSha": %q}`, commit)
+}
+
+func projectInstall(path, commit string) string {
+	return fmt.Sprintf(`{"scope": "project", "projectPath": %q, "gitCommitSha": %q}`, path, commit)
+}
+
+// marketplace clones the magus marketplace, its branch at head and
+// its plugin at source.
+func (s *harnessPluginSuite) marketplace(head, source string) string {
+	clone := filepath.Join(s.pluginsRoot(), "marketplaces", "magus")
+	s.write(filepath.Join(clone, ".git", "HEAD"), "ref: refs/heads/main\n")
+	if head != "" {
+		s.write(filepath.Join(clone, ".git", "refs", "heads", "main"), head+"\n")
 	}
+	s.write(filepath.Join(clone, ".claude-plugin", "marketplace.json"),
+		fmt.Sprintf(`{"name": "magus", "plugins": [{"name": "magus", "source": %s}]}`, source))
+	s.write(filepath.Join(s.pluginsRoot(), "known_marketplaces.json"),
+		fmt.Sprintf(`{"magus": {"installLocation": %q, "lastUpdated": "2026-11-07T00:00:00Z"}}`, clone))
+	return clone
 }
 
-// TestVerifyHarnessCountsACachedPluginWithoutAnInstallRecord pins that a plugin Claude Code
-// cached from a relative-path marketplace is present although installed_plugins.json omits it.
-func TestVerifyHarnessCountsACachedPluginWithoutAnInstallRecord(t *testing.T) {
-	root := t.TempDir()
-	writeSettingsHarness(t)
-	writeClaudePluginStore(t, nil)
-	require.NoError(t, os.MkdirAll(filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "plugins", "cache", "magus", "magus", "1.0.0"), 0o755))
-	mergeHarness(t, root, "moder")
-
-	result, err := VerifyHarness(untimedProbes(), root, "moder")
-	require.NoError(t, err)
-	assert.Equal(t, HarnessVerified, result.Plugin.Status)
-	assert.Empty(t, result.Plugin.Reason)
+func (s *harnessPluginSuite) verify() HarnessVerification {
+	mergeHarness(s.T(), s.root, "moder")
+	return s.verifyUnmerged()
 }
 
-// TestVerifyHarnessIgnoresAnEmptyPluginCacheDir pins that a plugin directory holding no
-// version dir is not an install.
-func TestVerifyHarnessIgnoresAnEmptyPluginCacheDir(t *testing.T) {
-	root := t.TempDir()
-	writeSettingsHarness(t)
-	writeClaudePluginStore(t, nil)
-	require.NoError(t, os.MkdirAll(filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "plugins", "cache", "magus", "magus"), 0o755))
-	mergeHarness(t, root, "moder")
-
-	result, err := VerifyHarness(untimedProbes(), root, "moder")
-	require.NoError(t, err)
-	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
+func (s *harnessPluginSuite) verifyUnmerged() HarnessVerification {
+	result, err := VerifyHarness(untimedProbes(), s.root, "moder")
+	s.Require().NoError(err)
+	return result
 }
 
-// TestVerifyHarnessHonorsThePluginCacheDirVariable pins that CLAUDE_CODE_PLUGIN_CACHE_DIR
-// moves the plugins root: the install record and the cache are read there, not under the
-// config dir.
-func TestVerifyHarnessHonorsThePluginCacheDirVariable(t *testing.T) {
-	root := t.TempDir()
-	writeSettingsHarness(t)
-	writeClaudePluginStore(t, nil)
-	pluginsRoot := t.TempDir()
-	t.Setenv("CLAUDE_CODE_PLUGIN_CACHE_DIR", pluginsRoot)
-	mergeHarness(t, root, "moder")
-
-	result, err := VerifyHarness(untimedProbes(), root, "moder")
-	require.NoError(t, err)
-	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
-	assert.Contains(t, result.Plugin.Reason, filepath.Join(pluginsRoot, "installed_plugins.json"))
-
-	require.NoError(t, os.WriteFile(filepath.Join(pluginsRoot, "installed_plugins.json"),
-		[]byte(`{"version": 2, "plugins": {"magus@magus": [{"scope": "user"}]}}`), 0o644))
-	result, err = VerifyHarness(untimedProbes(), root, "moder")
-	require.NoError(t, err)
-	assert.Equal(t, HarnessVerified, result.Plugin.Status)
-
-	require.NoError(t, os.Remove(filepath.Join(pluginsRoot, "installed_plugins.json")))
-	require.NoError(t, os.MkdirAll(filepath.Join(pluginsRoot, "cache", "magus", "magus", "2.0.0"), 0o755))
-	result, err = VerifyHarness(untimedProbes(), root, "moder")
-	require.NoError(t, err)
-	assert.Equal(t, HarnessVerified, result.Plugin.Status)
+func (s *harnessPluginSuite) TestEnabledPluginNobodyInstalledIsUninstalled() {
+	result := s.verify()
+	s.Equal(HarnessVerified, result.Setting.Status, "the settings are in place; the install is the gap")
+	s.Equal(HarnessPluginUninstalled, result.Plugin.Status)
+	s.Contains(result.Plugin.Reason, "claude plugin marketplace add egladman/magus, then claude plugin install magus@magus")
+	s.Contains(result.Plugin.Reason, "not registered")
+	s.True(result.Plugin.Failing())
 }
 
-// TestVerifyHarnessIgnoresAPluginTheWorkspaceDoesNotEnable pins the silence: an unmerged
-// settings file, or one where the person turned the plugin off, is not an install gap.
-func TestVerifyHarnessIgnoresAPluginTheWorkspaceDoesNotEnable(t *testing.T) {
-	for name, settings := range map[string]string{
-		"no settings file": "",
-		"other plugin":     `{"enabledPlugins": {"other@x": true}}`,
-		"turned off":       `{"enabledPlugins": {"magus@magus": false}}`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			root := t.TempDir()
-			writeSettingsHarness(t)
-			writeClaudePluginStore(t, nil)
-			if settings != "" {
-				path := filepath.Join(root, ".claude", "settings.json")
-				require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-				require.NoError(t, os.WriteFile(path, []byte(settings), 0o644))
-			}
-
-			result, err := VerifyHarness(untimedProbes(), root, "moder")
-			require.NoError(t, err)
-			assert.Empty(t, result.Plugin.Status)
-			assert.Empty(t, result.Plugin.Reason)
-		})
-	}
+func (s *harnessPluginSuite) TestCachedPluginWithoutAnInstallRecordIsUninstalled() {
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.pluginsRoot(), "cache", "magus", "magus", "0.1.0"), 0o755))
+	result := s.verify()
+	s.Equal(HarnessPluginUninstalled, result.Plugin.Status)
+	s.Contains(result.Plugin.Reason, "claude plugin install magus@magus")
 }
 
-// TestVerifyHarnessPluginInstallLineFollowsTheDescriptor pins that the install line is read
-// from the descriptor's marketplace, not hardcoded to this repository's.
-func TestVerifyHarnessPluginInstallLineFollowsTheDescriptor(t *testing.T) {
-	root := t.TempDir()
-	registerHarnessSpell(t, "other-mod", `{
+func (s *harnessPluginSuite) TestInstallAtTheMarketplaceHeadIsVerified() {
+	s.marketplace(pluginHead, `"./mod"`)
+	s.record(userInstall(pluginHead))
+	result := s.verify()
+	s.Equal(HarnessVerified, result.Plugin.Status)
+	s.Contains(result.Plugin.Reason, pluginHead[:12])
+}
+
+func (s *harnessPluginSuite) TestInstallRecordingAnAbbreviatedCommitIsVerified() {
+	s.marketplace(pluginHead, `"./mod"`)
+	s.record(userInstall(pluginHead[:12]))
+	s.Equal(HarnessVerified, s.verify().Plugin.Status)
+}
+
+func (s *harnessPluginSuite) TestMarketplaceHeadInPackedRefsIsRead() {
+	clone := s.marketplace("", `"./mod"`)
+	s.write(filepath.Join(clone, ".git", "packed-refs"), "# pack-refs with: peeled\n"+pluginHead+" refs/heads/main\n")
+	s.record(userInstall(pluginHead))
+	s.Equal(HarnessVerified, s.verify().Plugin.Status)
+}
+
+func (s *harnessPluginSuite) TestInstallBehindTheMarketplaceIsBehind() {
+	s.marketplace(pluginHead, `"./mod"`)
+	s.record(userInstall(pluginOlder))
+	result := s.verify()
+	s.Equal(HarnessPluginBehind, result.Plugin.Status)
+	s.Contains(result.Plugin.Reason, "claude plugin update magus@magus")
+	s.Contains(result.Plugin.Reason, pluginOlder[:12])
+	s.Contains(result.Plugin.Reason, pluginHead[:12])
+}
+
+func (s *harnessPluginSuite) TestInstallWithNoRecordedCommitHasAnUnknownCurrency() {
+	s.marketplace(pluginHead, `"./mod"`)
+	s.record(`{"scope": "user", "version": "0.1.0"}`)
+	result := s.verify()
+	s.Equal(HarnessUnprobed, result.Plugin.Status)
+	s.Contains(result.Plugin.Reason, "unknown")
+	s.Contains(result.Plugin.Reason, "claude plugin update magus@magus")
+}
+
+func (s *harnessPluginSuite) TestPluginFromItsOwnSourceHasAnUnknownCurrency() {
+	s.marketplace(pluginHead, `{"source": "github", "repo": "egladman/mod"}`)
+	s.record(userInstall(pluginHead))
+	result := s.verify()
+	s.Equal(HarnessUnprobed, result.Plugin.Status)
+	s.Contains(result.Plugin.Reason, "a source of its own")
+}
+
+func (s *harnessPluginSuite) TestUnregisteredMarketplaceHasAnUnknownCurrency() {
+	s.record(userInstall(pluginHead))
+	result := s.verify()
+	s.Equal(HarnessUnprobed, result.Plugin.Status)
+	s.Contains(result.Plugin.Reason, "no clone of marketplace magus")
+}
+
+func (s *harnessPluginSuite) TestProjectInstallForAnotherCheckoutIsUninstalled() {
+	s.record(projectInstall(s.T().TempDir(), pluginHead))
+	s.Equal(HarnessPluginUninstalled, s.verify().Plugin.Status)
+}
+
+func (s *harnessPluginSuite) TestProjectInstallForThisCheckoutCounts() {
+	s.marketplace(pluginHead, `"./mod"`)
+	s.record(projectInstall(s.root, pluginHead))
+	s.Equal(HarnessVerified, s.verify().Plugin.Status)
+}
+
+func (s *harnessPluginSuite) TestLocalSettingsThatTurnThePluginOffAreDisabled() {
+	s.marketplace(pluginHead, `"./mod"`)
+	s.record(userInstall(pluginHead))
+	mergeHarness(s.T(), s.root, "moder")
+	s.write(filepath.Join(s.root, ".claude", "settings.local.json"), `{"enabledPlugins": {"magus@magus": false}}`)
+	result := s.verifyUnmerged()
+	s.Equal(HarnessPluginDisabled, result.Plugin.Status)
+	s.Contains(result.Plugin.Reason, ".claude/settings.local.json")
+	s.Contains(result.Plugin.Reason, "claude plugin enable magus@magus --scope local")
+}
+
+func (s *harnessPluginSuite) TestVersionOneRecordIsUnprobed() {
+	s.write(filepath.Join(s.pluginsRoot(), "installed_plugins.json"),
+		`{"version": 1, "plugins": {"magus@magus": {"version": "1.0.0"}}}`)
+	result := s.verify()
+	s.Equal(HarnessUnprobed, result.Plugin.Status)
+	s.Contains(result.Plugin.Reason, "version 1")
+}
+
+func (s *harnessPluginSuite) TestUnknownInstallScopeIsUnprobed() {
+	s.record(`{"scope": "galaxy"}`)
+	result := s.verify()
+	s.Equal(HarnessUnprobed, result.Plugin.Status)
+	s.Contains(result.Plugin.Reason, `"galaxy"`)
+}
+
+// TestStoreThatCannotBeReadIsUnprobed: a corrupt store is not "not
+// installed". magus cannot tell, and says so.
+func (s *harnessPluginSuite) TestStoreThatCannotBeReadIsUnprobed() {
+	s.write(filepath.Join(s.pluginsRoot(), "installed_plugins.json"), `{not json`)
+	result := s.verify()
+	s.Equal(HarnessUnprobed, result.Plugin.Status)
+	s.Contains(result.Plugin.Reason, "installed_plugins.json")
+}
+
+func (s *harnessPluginSuite) TestNoHostConfigDirSkipsThePlugin() {
+	missing := filepath.Join(s.T().TempDir(), "absent")
+	s.T().Setenv("CLAUDE_CONFIG_DIR", missing)
+	result := s.verify()
+	s.Equal(harnessSkipped, result.Plugin.Status)
+	s.Contains(result.Plugin.Reason, missing)
+	s.False(result.Plugin.Failing())
+}
+
+func (s *harnessPluginSuite) TestPluginCacheDirVariableMovesTheStore() {
+	pluginsRoot := s.T().TempDir()
+	s.T().Setenv("CLAUDE_CODE_PLUGIN_CACHE_DIR", pluginsRoot)
+	result := s.verify()
+	s.Equal(HarnessPluginUninstalled, result.Plugin.Status)
+	s.Contains(result.Plugin.Reason, filepath.Join(pluginsRoot, "installed_plugins.json"))
+
+	s.write(filepath.Join(pluginsRoot, "installed_plugins.json"),
+		`{"version": 2, "plugins": {"magus@magus": [{"scope": "user"}]}}`)
+	s.Equal(HarnessUnprobed, s.verifyUnmerged().Plugin.Status, "the record there is read; it lacks a commit")
+}
+
+func (s *harnessPluginSuite) TestUnmergedSettingsAreNotThePluginsBusiness() {
+	result := s.verifyUnmerged()
+	s.Empty(result.Plugin.Status)
+	s.Empty(result.Plugin.Reason)
+}
+
+func (s *harnessPluginSuite) TestSettingsEnablingAnotherPluginAreNotThePluginsBusiness() {
+	s.write(filepath.Join(s.root, ".claude", "settings.json"), `{"enabledPlugins": {"other@x": true}}`)
+	s.Empty(s.verifyUnmerged().Plugin.Status)
+}
+
+func (s *harnessPluginSuite) TestWorkspaceThatTurnsThePluginOffIsNotThePluginsBusiness() {
+	s.write(filepath.Join(s.root, ".claude", "settings.json"), `{"enabledPlugins": {"magus@magus": false}}`)
+	s.Empty(s.verifyUnmerged().Plugin.Status)
+}
+
+// TestInstallLineFollowsTheDescriptor: the install line comes from
+// the descriptor's marketplace, not this repository's.
+func (s *harnessPluginSuite) TestInstallLineFollowsTheDescriptor() {
+	registerHarnessSpell(s.T(), "other-mod", `{
   "schema_version": 2,
   "id": "other-mod",
   "display": {"name": "Other"},
@@ -1106,31 +1204,15 @@ func TestVerifyHarnessPluginInstallLineFollowsTheDescriptor(t *testing.T) {
     {"path": ".claude/settings.json", "key": ["enabledPlugins", "lint@tools"], "value": true}
   ]
 }`)
-	writeClaudePluginStore(t, map[string]string{
-		"installed_plugins.json":  `{"version": 2, "plugins": {"magus@magus": [{"scope": "user"}]}}`,
-		"known_marketplaces.json": `{"tools": {}}`,
-	})
-	mergeHarness(t, root, "other-mod")
+	s.record(`{"scope": "user"}`)
+	s.write(filepath.Join(s.pluginsRoot(), "known_marketplaces.json"), `{"tools": {}}`)
+	mergeHarness(s.T(), s.root, "other-mod")
 
-	result, err := VerifyHarness(untimedProbes(), root, "other-mod")
-	require.NoError(t, err)
-	assert.Equal(t, HarnessUncovered, result.Plugin.Status)
-	assert.Contains(t, result.Plugin.Reason, "claude plugin marketplace add acme/tools")
-	assert.NotContains(t, result.Plugin.Reason, "not registered")
-}
-
-// TestVerifyHarnessPluginStoreThatCannotBeReadIsUnprobed pins that a corrupt store is not
-// read as "not installed": magus cannot tell, and says so.
-func TestVerifyHarnessPluginStoreThatCannotBeReadIsUnprobed(t *testing.T) {
-	root := t.TempDir()
-	writeSettingsHarness(t)
-	writeClaudePluginStore(t, map[string]string{"installed_plugins.json": `{not json`})
-	mergeHarness(t, root, "moder")
-
-	result, err := VerifyHarness(untimedProbes(), root, "moder")
-	require.NoError(t, err)
-	assert.Equal(t, HarnessUnprobed, result.Plugin.Status)
-	assert.Contains(t, result.Plugin.Reason, "installed_plugins.json")
+	result, err := VerifyHarness(untimedProbes(), s.root, "other-mod")
+	s.Require().NoError(err)
+	s.Equal(HarnessPluginUninstalled, result.Plugin.Status)
+	s.Contains(result.Plugin.Reason, "claude plugin install lint@tools")
+	s.NotContains(result.Plugin.Reason, "marketplace add")
 }
 
 // TestHarnessDescriptorRejectsAMalformedSetting pins that a setting names a key and a value
