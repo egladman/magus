@@ -21,10 +21,13 @@ import (
 	"strings"
 )
 
-// pickerRules is what the box costs in rows: one rule above, one below. The
-// prompt rides the top and the way out rides the bottom, so the list keeps
-// every line it had.
-const pickerRules = 2
+// pickerChromeRows is what the prompt and the hint cost in rows: one above the
+// list and one below it.
+const pickerChromeRows = 2
+
+// plain is the no-styling dim function, for a view drawing to something that
+// does not want color.
+func plain(s string) string { return s }
 
 // SelectMark is the glyph every interactive view uses to show which row a
 // keypress or a click will act on.
@@ -351,22 +354,14 @@ func (s *session) frame() string {
 	if prompt == "" {
 		prompt = "filter"
 	}
-	// The SAME box the run's pinned band draws, from the same functions.
-	//
-	// The picker used to be a bare list with its hint jammed onto the prompt
-	// row, which made two views a reader drives identically look like two
-	// different products. Position still differs on purpose (this is drawn
-	// where the cursor is, because `magus x` is a command you type and its list
-	// belongs where you typed it), but the LOOK does not.
-	//
-	// The prompt rides the top rule and the way out rides the bottom, so
-	// neither costs a row of the list.
-	inner := s.innerWidth()
+	// Plain rows, no frame: a drag selection over the list copies the items and
+	// nothing else.
+	width := s.rowWidth()
 	dim := plain
 	if WantsColor(s.out, s.probe) {
 		dim = func(t string) string { return Colorize(t, SGRDim) }
 	}
-	b.WriteString(boxRule(inner, boxTL, boxTR, fmt.Sprintf("%s: %s_", prompt, s.filter), "", dim))
+	b.WriteString(ClipCols(fmt.Sprintf("%s: %s_", prompt, s.filter), width))
 	b.WriteString("\n")
 	for i := start; i < end; i++ {
 		idx := s.matches[i]
@@ -374,26 +369,25 @@ func (s *session) frame() string {
 		if i == s.cursor {
 			marker = SelectMark + " "
 		}
-		b.WriteString(boxWrap(ClipCols(marker+s.items[idx], inner), inner, dim))
+		b.WriteString(ClipCols(marker+s.items[idx], width))
 		b.WriteString("\n")
 	}
 	if len(s.matches) == 0 && maxRows > 0 {
-		b.WriteString(boxWrap("  (no matches)", inner, dim))
-		b.WriteString("\n")
+		b.WriteString("  (no matches)\n")
 		s.visible = 1
 	}
-	b.WriteString(boxRule(inner, boxBL, boxBR, pickerHint, "", dim))
+	b.WriteString(dim(ClipCols(pickerHint, width)))
 	return b.String()
 }
 
-// innerWidth is the columns a picker row has for its own text: the terminal
-// less the two vertical edges, and less the column held back from the wrap.
-func (s *session) innerWidth() int {
+// rowWidth is the columns a picker row has for its own text: the terminal less
+// the column held back from the wrap.
+func (s *session) rowWidth() int {
 	w, ok := s.width()
 	if !ok || w < minUsefulWidth {
 		w = minUsefulWidth
 	}
-	return w - 1 - 2*borderCols
+	return w - 1
 }
 
 // reposition keeps track of where the prompt line is after a redraw, asking the
@@ -461,7 +455,7 @@ func (s *session) maxRows() int {
 	// is standing on. Without that a short terminal drew a list that did not
 	// fit, pushing its own prompt off the top, which reads as the picker
 	// having hung rather than as a window being small.
-	if limit := height - 1 - pickerRules; max > limit {
+	if limit := height - 1 - pickerChromeRows; max > limit {
 		max = limit
 	}
 	if max < 0 {

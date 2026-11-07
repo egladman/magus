@@ -195,31 +195,29 @@ func TestZoneHitTestResolvesAClickToItsLease(t *testing.T) {
 	_, err := failures.Set([]Line{{Text: "pool"}})
 	require.NoError(t, err)
 
-	// 9 leased rows plus the box on a 24-row terminal: the zone starts at row
-	// 14, its top rule occupies that row, and the first leased row is 15.
-	l, i, ok := z.HitTest(15)
+	// 9 leased rows on a 24-row terminal: the zone starts at row 16, and the
+	// first leased row is 16.
+	l, i, ok := z.HitTest(16)
 	require.True(t, ok)
 	assert.Same(t, failures, l)
 	assert.Equal(t, 0, i, "the first row of the first band")
 
-	l, i, ok = z.HitTest(17)
+	l, i, ok = z.HitTest(18)
 	require.True(t, ok)
 	assert.Same(t, failures, l)
 	assert.Equal(t, 2, i)
 
-	l, i, ok = z.HitTest(21)
+	l, i, ok = z.HitTest(22)
 	require.True(t, ok)
 	assert.Same(t, toasts, l, "the second band")
 	assert.Equal(t, 0, i)
 
-	// 23, not 24: the zone's bottom rule owns the last row and belongs to no
-	// lease, so a click there resolves to nothing.
-	l, i, ok = z.HitTest(23)
+	l, i, ok = z.HitTest(24)
 	require.True(t, ok)
 	assert.Same(t, toasts, l)
 	assert.Equal(t, 2, i, "the last leased row")
-	_, _, ok = z.HitTest(24)
-	assert.False(t, ok, "the bottom rule is not part of any band")
+	_, _, ok = z.HitTest(15)
+	assert.False(t, ok, "the row above the zone is scrolling output")
 }
 
 func TestZoneHitTestRejectsScrollingRows(t *testing.T) {
@@ -232,17 +230,14 @@ func TestZoneHitTestRejectsScrollingRows(t *testing.T) {
 	_, err := l.Set([]Line{{Text: "pool"}})
 	require.NoError(t, err)
 
-	// One 6-row lease plus the box on a 24-row terminal reserves rows 17-24:
-	// the top rule on 17, the six leased rows, the bottom rule on 24.
-	// Everything above scrolls.
-	for _, row := range []int{1, 15, 16} {
+	// One 6-row lease on a 24-row terminal reserves rows 19-24. Everything
+	// above scrolls.
+	for _, row := range []int{1, 15, 18} {
 		_, _, ok := z.HitTest(row)
 		assert.False(t, ok, "row %d is scrolling output", row)
 	}
-	_, _, ok := z.HitTest(17)
-	assert.False(t, ok, "the top rule is the boundary, not a clickable row")
-	_, _, ok = z.HitTest(18)
-	assert.True(t, ok, "the first leased row sits under the rule")
+	_, _, ok := z.HitTest(19)
+	assert.True(t, ok, "the first leased row is the top of the zone")
 }
 
 func TestZoneHitTestRejectsEverythingBeforeAnythingIsDrawn(t *testing.T) {

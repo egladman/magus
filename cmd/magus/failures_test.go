@@ -221,7 +221,7 @@ func TestHintIsAlwaysVisible(t *testing.T) {
 		z := tty.NewZone(&band, fixedSizeTerminal{w: 80, h: 40})
 		require.NoError(t, showHint(z.Acquire(1), &transcript))
 
-		assert.Contains(t, band.String(), "[esc] done", "it goes in the band")
+		assert.Contains(t, band.String(), "esc done", "it goes in the band")
 		assert.Empty(t, transcript.String(), "and does not also clutter the transcript")
 	})
 
@@ -234,7 +234,7 @@ func TestHintIsAlwaysVisible(t *testing.T) {
 		require.False(t, lease.Enabled(), "the premise: this grant is refused")
 
 		require.NoError(t, showHint(lease, &transcript))
-		assert.Contains(t, transcript.String(), "[esc] done",
+		assert.Contains(t, transcript.String(), "esc done",
 			"a prompt with no way out on screen is the thing people kill the terminal to escape")
 		// Against the composition, not a copy of its wording: a literal here
 		// would have to be edited every time an action is added, and would
@@ -265,7 +265,7 @@ func (f hintsByColumn) HitSpan(_, col int) (string, bool) {
 
 // TestFailurePromptClicksTheHintActions is the parity guarantee: every action
 // the hint row NAMES can be taken with the mouse, not just with the key it
-// names. Without it the row printed "[esc] done" at a spot that ignored clicks,
+// names. Without it the row printed "esc done" at a spot that ignored clicks,
 // which is worse than printing nothing: it draws a target that does not work.
 func TestFailurePromptClicksTheHintActions(t *testing.T) {
 	hintRow := 30

@@ -74,8 +74,6 @@ type region struct {
 	// buf composes one line so it reaches the terminal as a single
 	// Write. Keeps cursor positioning atomic and avoids per-byte flicker.
 	buf []byte
-	// titleL and titleR are drawn into the top rule; see setTitle.
-	titleL, titleR string
 	// painted is the last frame [region.render] drew, so the next one can skip
 	// rows that did not change. Nil means "nothing on screen is known", which
 	// is the state after any repaint of the zone by other means (Reserve
@@ -202,29 +200,13 @@ func (r *region) paint(row int, body func()) error {
 	return err
 }
 
-// Align says which edge a [Span] is laid out from.
-type Align int
-
-const (
-	// AlignLeft packs a span after the previous left-aligned one, from column 1.
-	AlignLeft Align = iota
-	// AlignRight packs a span against the right edge, after any other
-	// right-aligned spans on the row.
-	AlignRight
-)
-
-// Span is one styled, aligned segment of a row.
+// Span is one styled segment of a row.
 //
-// Spans exist because a row often carries two unrelated things (what is
-// happening on the left, and how to get out of it on the right), and a single
-// string cannot express that. The alignment is resolved at PAINT time rather
-// than by the caller, because only the region knows the terminal's width, and a
-// caller padding to a width it guessed is a caller that is wrong after the
-// first resize.
+// A row is several spans so that a keyed hint can sit beside plain text and
+// still be a click target.
 type Span struct {
 	Text  string
 	Style SGR
-	Align Align
 	// Key names this span as a click target, or is empty for ordinary text.
 	//
 	// It exists so that a row which PRINTS an action is also a place you can
@@ -325,14 +307,13 @@ func cols(s string) int {
 	return n
 }
 
-// fit shortens text to width DISPLAY COLUMNS, marking the cut.
+// Fit shortens text to width display columns, ending in an ellipsis when it
+// cut.
 //
-// ClipCols gets the widths right, which is what keeps the box square, but it
-// cuts silently, and a row that was truncated must say so, or a reader takes a
-// half value for the whole one. So the mark is put back here, inside the same
-// budget, rather than by going back to the byte-counting Clip that put it there
-// before.
-func fit(text string, width int) string {
+// ClipCols cuts silently, and a clipped row must say so or a reader takes a
+// half value for the whole one. Exported so a composer clips a label before
+// the metadata that sits after it.
+func Fit(text string, width int) string {
 	if width <= 0 {
 		return ""
 	}
@@ -351,57 +332,30 @@ type spanExtent struct {
 	from, to int
 }
 
-// layout renders spans, discarding where they landed. Most callers only paint.
-// layout composes one row's spans into the bytes for a terminal `width` wide.
-//
-// RIGHT-ALIGNED SPANS ARE LAID OUT FIRST AND KEPT; the left side is clipped to
-// whatever remains. That order is the policy, not an implementation detail: the
-// things that sit on the right are the ones that must not vanish when the
-// window is narrow (the way out of a prompt, the state of a run), while the
-// left is a description that degrades usefully. Doing it the other way round is
-// how an 80-column terminal ends up hiding the only key that closes a prompt.
+// layout renders spans into the bytes for a terminal width columns wide,
+// discarding where they landed. Later spans are clipped first.
 func layout(spans []Span, width int) []byte {
-	b, _, _ := layoutExtents(spans, width)
+	b, _ := layoutExtents(spans, width)
 	return b
 }
 
-// layoutExtents renders spans AND reports the columns each keyed one occupies.
+// layoutExtents renders spans and reports the columns each keyed one occupies.
 //
-// One function rather than a renderer plus a parallel column calculator: the
-// clipping, the right-alignment gap and the budget are the arithmetic that
-// decides both answers, and two copies of it would agree until the first time
-// they did not, at which point a click would land on the wrong action with
-// nothing on screen to suggest why.
-func layoutExtents(spans []Span, width int) ([]byte, []spanExtent, int) {
+// One function rather than a renderer plus a column calculator: the clipping
+// is the arithmetic that decides both answers, and two copies would agree
+// until a click landed on the wrong action.
+func layoutExtents(spans []Span, width int) ([]byte, []spanExtent) {
 	if width <= 0 {
-		return nil, nil, 0
+		return nil, nil
 	}
 	var extents []spanExtent
-	var left, right []Span
-	for _, s := range spans {
-		if s.Align == AlignRight {
-			right = append(right, s)
-			continue
-		}
-		left = append(left, s)
-	}
-
-	rightWidth := 0
-	for _, s := range right {
-		rightWidth += cols(s.Text)
-	}
-	if rightWidth > width {
-		rightWidth = width
-	}
-
 	var b []byte
 	used := 0
-	budget := width - rightWidth
-	for _, s := range left {
-		if used >= budget {
+	for _, s := range spans {
+		if used >= width {
 			break
 		}
-		text := fit(s.Text, budget-used)
+		text := Fit(s.Text, width-used)
 		if text == "" {
 			continue
 		}
@@ -411,25 +365,7 @@ func layoutExtents(spans []Span, width int) ([]byte, []spanExtent, int) {
 		}
 		used += cols(text)
 	}
-	// A gap only exists when something is aligned right; otherwise the row ends
-	// where its text ends and no trailing spaces are written.
-	if rightWidth > 0 {
-		for ; used < width-rightWidth; used++ {
-			b = append(b, ' ')
-		}
-		for _, s := range right {
-			text := fit(s.Text, width-used)
-			if text == "" {
-				continue
-			}
-			b = appendStyled(b, text, s.Style)
-			if s.Key != "" {
-				extents = append(extents, spanExtent{key: s.Key, from: used + 1, to: used + cols(text)})
-			}
-			used += cols(text)
-		}
-	}
-	return b, extents, used
+	return b, extents
 }
 
 // appendStyled writes text wrapped in sgr, closing it so the next span cannot
@@ -485,13 +421,9 @@ func (r *region) render(rows []Line) error {
 	r.buf = append(r.buf, cursorSave...)
 	changed := 0
 	for i := range r.height {
-		// Region row 0 is the top edge and the last is the bottom, so content
-		// row n is drawn one row lower. The edges compare as the zero Line,
-		// which is what keeps them from being rewritten every frame: they never
-		// change, so after the first paint the diff skips them.
 		var row Line
-		if c := i - borderRowsPerEdge; c >= 0 && c < len(rows) && i != r.height-1 {
-			row = rows[c]
+		if i < len(rows) {
+			row = rows[i]
 		}
 		if i < len(r.painted) && r.painted[i].equal(row) {
 			continue
@@ -501,14 +433,7 @@ func (r *region) render(rows []Line) error {
 		// EL from column 1 erases the whole row, so a row that is now shorter
 		// than its predecessor (or empty) cannot leave a tail behind.
 		r.buf = append(r.buf, el...)
-		switch i {
-		case 0:
-			r.buf = append(r.buf, r.edgeText(true)...)
-		case r.height - 1:
-			r.buf = append(r.buf, r.edgeText(false)...)
-		default:
-			r.buf = append(r.buf, r.frameText(row)...)
-		}
+		r.buf = append(r.buf, layout(row.spans(), r.width-1)...)
 	}
 	r.buf = append(r.buf, cursorRestore...)
 
@@ -529,8 +454,7 @@ func (r *region) render(rows []Line) error {
 	}
 	r.painted = r.painted[:r.height]
 	for i := range r.height {
-		c := i - borderRowsPerEdge
-		if c < 0 || c >= len(rows) || i == r.height-1 {
+		if i >= len(rows) {
 			r.painted[i] = Line{}
 			continue
 		}
@@ -538,7 +462,7 @@ func (r *region) render(rows []Line) error {
 		// would let a caller that reuses one across frames mutate what this
 		// believes is on screen, so equal would compare a frame against itself
 		// and the diff would skip a row that really changed.
-		row := rows[c]
+		row := rows[i]
 		if len(row.Spans) > 0 {
 			row.Spans = append([]Span(nil), row.Spans...)
 		}
@@ -578,108 +502,6 @@ func (r *region) release() error {
 // firstRow is the top of the reserved zone, in absolute terminal rows, using
 // the dimensions cached at Reserve.
 func (r *region) firstRow() int { return r.termHeight - r.height + 1 }
-
-// innerWidth is the columns a framed row has for its own content: the usable
-// width less the two vertical edges.
-//
-// The usable width is width-1, not width: [region.render] holds the last column
-// back so writing it cannot trigger the terminal's pending wrap.
-func (r *region) innerWidth() int { return r.width - 1 - 2*borderCols }
-
-// The border glyphs. Box-drawing rather than ASCII, and unconditionally rather
-// than by locale, which are two decisions worth separating.
-//
-// Box-drawing because these runes JOIN: "+---+" is a row of separate marks that
-// the eye reads as decoration, while a real rectangle reads as an edge, which is
-// the whole job: saying which rows hold still and which scroll away.
-//
-// Unconditionally because one look everywhere beats the case it gives up. They
-// are multi-byte, so a non-UTF-8 locale shows mojibake, but the border is only
-// drawn when [CanRender] says there is an interactive terminal, and the
-// environments still running non-UTF-8 locales are the ones where output is
-// piped and no border is drawn. Choosing per locale would also make a committed
-// picture a function of the shell that generated it.
-//
-// They are East Asian AMBIGUOUS width, so a CJK locale rendering them
-// double-width will shear the box. `magus doctor` reports both rather than
-// silently changing what magus draws.
-const (
-	boxH = "\u2500"
-	boxV = "\u2502"
-	// ROUNDED corners. Square ones (U+250C and friends) read as a table cell
-	// (a form to be filled in) while the arc reads as a panel, which is what
-	// this is. It is the single cheapest change that makes a terminal view
-	// look designed rather than drawn, and it costs the same one column.
-	boxTL = "\u256d"
-	boxTR = "\u256e"
-	boxBL = "\u2570"
-	boxBR = "\u256f"
-)
-
-// dim styles a border glyph, or leaves it bare when the terminal does not want
-// color. The border is drawn by this type rather than composed by a caller, so
-// the caller's color decision cannot reach it; it has to ask.
-func (r *region) dim(s string) string {
-	if !WantsColor(r.w, r.probe) {
-		return s
-	}
-	return Colorize(s, SGRDim)
-}
-
-// SetTitle puts text into the region's top rule, so a caption costs no row.
-//
-// A status line IS a property of the band, so the frame is where it belongs,
-// and a titled box is how every other framed UI says so. Held on the region
-// rather than passed per render because it changes on its own clock (a pool
-// sample, an elapsed second) independently of the rows beneath it.
-func (r *region) setTitle(left, right string) {
-	// UNCHANGED is the common case and must cost nothing. The caption is set on
-	// every repaint, so invalidating unconditionally threw away the frame diff
-	// entirely: every pool sample re-addressed and rewrote all four rows of the
-	// zone, which is precisely what the diff exists to avoid.
-	if r.titleL == left && r.titleR == right {
-		return
-	}
-	r.titleL, r.titleR = left, right
-	r.painted = nil // the rule is cached like any row; a new caption must redraw it
-}
-
-// edgeText renders the top or bottom rule as bytes.
-//
-// Bytes rather than a Line through [layout], because layout budgets in BYTES and
-// a box-drawing rune is three of them to one column: routed through it, an edge
-// would be clipped to a third of the width.
-func (r *region) edgeText(top bool) []byte {
-	inner := r.innerWidth()
-	if inner < 1 {
-		return nil
-	}
-	if !top {
-		return []byte(boxRule(inner, boxBL, boxBR, "", "", r.dim))
-	}
-	return []byte(boxRule(inner, boxTL, boxTR, r.titleL, r.titleR, r.dim))
-}
-
-// frameText renders one content row inside the vertical edges.
-//
-// The content is laid out to the inner width and then padded by COLUMNS to it,
-// which is why layoutExtents reports what it consumed: the padding has to put
-// the right edge in the same column on every row, and the byte length of a
-// styled run says nothing about where it ends on screen.
-func (r *region) frameText(row Line) []byte {
-	inner := r.innerWidth()
-	if inner < 1 {
-		return layout(row.spans(), r.width-1)
-	}
-	body, _, used := layoutExtents(row.spans(), inner)
-	// Padded from the laid-out width rather than by re-measuring: layoutExtents
-	// already knows how many COLUMNS it consumed, and body carries escape
-	// sequences that a second measurement would have to skip again.
-	if used < inner {
-		body = append(body, strings.Repeat(" ", inner-used)...)
-	}
-	return []byte(boxWrap(string(body), inner, r.dim))
-}
 
 // reflow re-measures the terminal and re-applies the scroll margins when
 // the window has been resized since the region was reserved.

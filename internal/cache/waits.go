@@ -160,6 +160,16 @@ func (b *waitBoard) inFlight() bool {
 	return false
 }
 
+// progress counts the steps finished and planned, for the status row.
+func (b *waitBoard) progress() (done, total int) {
+	for _, s := range b.steps {
+		if s.state == StepDone {
+			done++
+		}
+	}
+	return done, len(b.steps)
+}
+
 // knows reports whether ref is a step the board is tracking.
 func (b *waitBoard) knows(ref types.TargetRef) bool {
 	s, ok := b.steps[ref]
@@ -277,40 +287,25 @@ func (h *PrettyHandler) boardShowsWait(ctx context.Context) bool {
 	return ok && h.lease.Enabled() && h.board.knows(edge.Waiter)
 }
 
-// withWaits puts the board above rows, in at most budget rows. Callers hold
-// h.mu.
-func (h *PrettyHandler) withWaits(rows []tty.Line, budget int, color bool, dim tty.SGR) []tty.Line {
-	waits := waitLines(h.board.tree(h.now()), min(budget, waitBandRows), color, dim)
-	if len(waits) == 0 {
-		return rows
-	}
-	hits := make([]int, len(waits), len(waits)+len(h.rowFailure))
-	for i := range hits {
-		hits[i] = -1
-	}
-	h.rowFailure = append(hits, h.rowFailure...)
-	return append(waits, rows...)
-}
-
 // waitLines draws the board's tree in at most budget rows. Past it the last
 // row counts the waiters left out.
-func waitLines(roots []*waitNode, budget int, color bool, dim tty.SGR) []tty.Line {
+func waitLines(roots []*waitNode, budget int, spin string, width int, color bool, dim tty.SGR) []tty.Line {
 	if len(roots) == 0 || budget <= 0 {
 		return nil
 	}
-	var all []tty.Line
+	var all []bandRow
 	// seen[i] is the waiters drawn through row i.
 	var seen []int
 	waiters := 0
 	var walk func(n *waitNode, indent string, last, root bool)
 	walk = func(n *waitNode, indent string, last, root bool) {
-		all = append(all, waitLine(n, indent, last, root, root && n == roots[0], color, dim))
-		next := indent
+		all = append(all, waitRow(n, indent, last, root, root && n == roots[0], spin, color))
+		next := indent + "  "
 		if !root {
 			waiters++
-			next += "│  "
+			next = indent + "│ "
 			if last {
-				next = indent + "   "
+				next = indent + "  "
 			}
 		}
 		seen = append(seen, waiters)
@@ -319,62 +314,69 @@ func waitLines(roots []*waitNode, budget int, color bool, dim tty.SGR) []tty.Lin
 		}
 	}
 	for _, r := range roots {
-		walk(r, " ", false, true)
+		walk(r, "  ", false, true)
 	}
-	if len(all) <= budget {
-		return all
+	more := 0
+	if len(all) > budget {
+		keep := budget - 1
+		more = waiters
+		if keep > 0 {
+			more -= seen[keep-1]
+		}
+		all = all[:keep]
 	}
-	keep := budget - 1
-	more := waiters
-	if keep > 0 {
-		more -= seen[keep-1]
+	lines := alignBlock(all, width, tty.SGRReverse, dim)
+	if more > 0 {
+		lines = append(lines, tty.Line{Text: fmt.Sprintf("    +%d more waiting", more), Style: dim})
 	}
-	return append(all[:keep], tty.Line{
-		Text:  fmt.Sprintf("  +%d more waiting", more),
-		Style: dim,
-	})
+	return lines
 }
 
-var stateGlyph = map[StepState]string{StepRunning: "run", StepQueued: "queue", StepWaiting: "wait"}
-
-// waitLine is one row of the board: a holder with how many it holds, or a
+// waitRow is one row of the board: a holder with how many it holds, or a
 // waiter with how long it has waited.
-func waitLine(n *waitNode, indent string, last, root, top, color bool, dim tty.SGR) tty.Line {
-	var right []string
-	prefix := indent
-	var label tty.SGR
-	switch {
-	case root:
+func waitRow(n *waitNode, indent string, last, root, top bool, spin string, color bool) bandRow {
+	var label, mark tty.SGR
+	if color {
+		mark = colYellow
+	}
+	age := FormatDuration(n.age)
+	row := bandRow{failure: -1}
+	if root {
+		lead := " "
+		if n.state != StepWaiting {
+			lead = spin
+		}
+		meta := []string{age}
+		if n.state != StepRunning {
+			meta[0] = fmt.Sprintf("%s %s", n.state, age)
+		}
 		if top && n.holds > 1 {
-			right = append(right, "bottleneck")
+			meta = append(meta, "bottleneck")
 			if color {
 				label = tty.SGRBold
 			}
 		}
-		right = append(right, fmt.Sprintf("holds %d", n.holds))
-	case last:
-		prefix += treeEnd
-	default:
-		prefix += treeTee
+		meta = append(meta, fmt.Sprintf("holds %d", n.holds))
+		row.label = []tty.Span{{Text: indent}, {Text: lead, Style: mark}, {Text: " "}}
+		row.meta = strings.Join(meta, metaSep)
+	} else {
+		branch := treeTee
+		if last {
+			branch = treeEnd
+		}
+		meta := []string{fmt.Sprintf("%s %s", n.state, age)}
+		if n.others > 0 {
+			meta = append(meta, fmt.Sprintf("+%d more", n.others))
+		}
+		row.label = []tty.Span{{Text: indent + branch}}
+		row.meta = strings.Join(meta, metaSep)
 	}
-	if !root && n.others > 0 {
-		right = append(right, fmt.Sprintf("+%d more", n.others))
-	}
-	right = append(right, fmt.Sprintf("%s %s", n.state, FormatDuration(n.age)))
-	glyph := colYellow
-	if n.state == StepWaiting {
-		glyph = colDim
-	}
-	return tty.Line{Spans: []tty.Span{
-		{Text: prefix, Style: dim},
-		{Text: Glyph(color, stateGlyph[n.state], glyph) + " "},
-		{Text: displayNodeLabel(n.ref), Style: label},
-		{Text: strings.Join(right, ", "), Style: dim, Align: tty.AlignRight},
-	}}
+	row.label = append(row.label, tty.Span{Text: displayNodeLabel(n.ref), Style: label})
+	return row
 }
 
-// startTicker repaints the band every tickEvery until stopTicker. Callers
-// hold h.mu.
+// startTicker repaints the band every tickEvery until nothing is in flight or
+// stopTicker. Callers hold h.mu.
 func (h *PrettyHandler) startTicker() {
 	if h.tickEvery <= 0 || h.tickStop != nil || !h.lease.Enabled() {
 		return
@@ -401,9 +403,12 @@ func (h *PrettyHandler) tick(stop <-chan struct{}, every time.Duration) {
 			return
 		default:
 		}
-		if h.lease.Enabled() && h.board.inFlight() {
-			h.repaint()
+		if !h.lease.Enabled() || !h.inFlightLocked() {
+			h.stopTicker()
+			h.mu.Unlock()
+			return
 		}
+		h.repaint()
 		h.mu.Unlock()
 	}
 }

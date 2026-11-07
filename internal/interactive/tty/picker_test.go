@@ -92,7 +92,7 @@ func TestSessionDrawMarksTheCursorRow(t *testing.T) {
 	s.cursor = 1
 	s.draw()
 
-	out := unbox(stripANSI(buf.String()))
+	out := stripANSI(buf.String())
 	assert.Contains(t, out, SelectMark+" beta", "the cursor row is marked")
 	assert.Contains(t, out, "  alpha", "non-cursor rows are indented, not marked")
 	assert.Contains(t, out, "project: _", "the prompt and filter caret are drawn")
@@ -104,7 +104,7 @@ func TestSessionDrawUsesADefaultPrompt(t *testing.T) {
 	var buf ttyBuf
 	s := newTestSession(&buf, []string{"alpha"}, PickOptions{})
 	s.draw()
-	assert.Contains(t, unbox(stripANSI(buf.String())), "filter: _", "an unset prompt falls back to a generic label")
+	assert.Contains(t, stripANSI(buf.String()), "filter: _", "an unset prompt falls back to a generic label")
 }
 
 func TestSessionDrawReportsNoMatches(t *testing.T) {
@@ -113,7 +113,7 @@ func TestSessionDrawReportsNoMatches(t *testing.T) {
 	s := newTestSession(&buf, []string{"alpha"}, PickOptions{InitialFilter: "zzz"})
 	s.draw()
 
-	assert.Contains(t, unbox(stripANSI(buf.String())), "(no matches)")
+	assert.Contains(t, stripANSI(buf.String()), "(no matches)")
 	assert.Equal(t, 1+pickerChrome, s.view.Lines(), "the empty-state line inside the box")
 }
 
@@ -147,7 +147,7 @@ func TestSessionDrawWindowsAroundTheCursor(t *testing.T) {
 	s.cursor = 5 // past the window; the view must scroll to include it
 	s.draw()
 
-	out := unbox(stripANSI(buf.String()))
+	out := stripANSI(buf.String())
 	assert.Contains(t, out, SelectMark+" a5", "the cursor item must be visible")
 	assert.Contains(t, out, "a3", "the window ends at the cursor")
 	assert.NotContains(t, out, "a0", "items above the window are not drawn")
@@ -343,17 +343,17 @@ func TestSessionKeepsTheScreenCorrectAcrossRedraws(t *testing.T) {
 	// Row 2 is the box's top rule, which carries the prompt; the list starts
 	// under it and the way out closes it.
 	assert.Contains(t, s.Row(2), "project: _", "the prompt rides the top rule")
-	assert.Equal(t, SelectMark+" console", unboxRow(s, 3))
-	assert.Equal(t, "  docs", unboxRow(s, 4))
-	assert.Equal(t, "  libs/gopherbuzz", unboxRow(s, 5))
+	assert.Equal(t, SelectMark+" console", rowText(s, 3))
+	assert.Equal(t, "  docs", rowText(s, 4))
+	assert.Equal(t, "  libs/gopherbuzz", rowText(s, 5))
 	assert.Contains(t, s.Row(6), "[esc] cancel", "and the way out closes the box")
 
 	// Moving the highlight rewrites two rows and must leave the rest alone.
 	sess.cursor = 1
 	sess.draw()
-	assert.Equal(t, "  console", unboxRow(s, 3))
-	assert.Equal(t, SelectMark+" docs", unboxRow(s, 4))
-	assert.Equal(t, "  libs/gopherbuzz", unboxRow(s, 5))
+	assert.Equal(t, "  console", rowText(s, 3))
+	assert.Equal(t, SelectMark+" docs", rowText(s, 4))
+	assert.Equal(t, "  libs/gopherbuzz", rowText(s, 5))
 
 	// Filtering shrinks the block; the rows it gives up must come back clean.
 	sess.filter = "doc"
@@ -361,7 +361,7 @@ func TestSessionKeepsTheScreenCorrectAcrossRedraws(t *testing.T) {
 	sess.cursor = 0
 	sess.draw()
 	assert.Contains(t, s.Row(2), "project: doc_", "the filter is on the rule")
-	assert.Equal(t, SelectMark+" docs", unboxRow(s, 3))
+	assert.Equal(t, SelectMark+" docs", rowText(s, 3))
 	assert.Equal(t, "", s.Row(5), "the vacated rows are erased, not left as litter")
 	assert.Equal(t, "", s.Row(6))
 
@@ -425,7 +425,7 @@ func TestSessionShowsAsManyItemsAsFit(t *testing.T) {
 		view: NewInlineView(short, sp)}
 	_ = sess.refilter(t.Context())
 	sess.draw()
-	assert.Equal(t, 8-pickerRules-1, sess.visible, "a short one shows what it can, and still shows the prompt")
+	assert.Equal(t, 8-pickerChromeRows-1, sess.visible, "a short one shows what it can, and still shows the prompt")
 	assert.NotZero(t, short.FindRow("filter:"))
 }
 
@@ -478,17 +478,10 @@ func TestSelectMarkIsOneGlyphEverywhere(t *testing.T) {
 		"a keyboard character standing in for a pointer is what this replaced")
 }
 
-// pickerChrome is what the box costs the picker in rows: a rule above and a
-// rule below. The prompt moved onto the top rule and the way out onto the
-// bottom, so the list itself keeps every line it had: the net cost is one row,
-// and the picker now looks like the run's band because it IS the same box.
-const pickerChrome = pickerRules
+// pickerChrome is what the prompt and the hint cost the picker in rows.
+const pickerChrome = pickerChromeRows
 
-// TestPickerDrawsTheSameBoxAsTheBand is the integration this closes: two lists a
-// reader drives identically must not look like two products. Position still
-// differs on purpose (the picker draws where the cursor is), but the frame,
-// the corners and the captions come from one place.
-func TestPickerDrawsTheSameBoxAsTheBand(t *testing.T) {
+func TestPickerDrawsNoFrame(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
 	s := &session{
@@ -500,16 +493,31 @@ func TestPickerDrawsTheSameBoxAsTheBand(t *testing.T) {
 	s.draw()
 
 	out := stripANSI(buf.String())
-	assert.Contains(t, out, boxTL, "the same rounded corner the band draws")
-	assert.Contains(t, out, boxBR)
-	assert.Contains(t, out, "project", "the prompt rides the top rule")
-	assert.Contains(t, out, "[esc] cancel", "and the way out rides the bottom")
+	for _, r := range "─│╭╮╰╯" {
+		assert.NotContains(t, out, string(r), "a frame rune would be copied with the list")
+	}
+	assert.Contains(t, out, "project", "the prompt is the first row")
+	assert.Contains(t, out, "[esc] cancel", "and the way out the last")
 }
 
-// unboxRow is one screen row with the picker's vertical edges taken off, so an
-// assertion about an item does not restate the frame around it.
-func unboxRow(s *screen.Screen, row int) string {
-	return strings.TrimRight(strings.Trim(s.Row(row), boxV), " ")
+func TestPickerWritesNoTrailingSpace(t *testing.T) {
+	t.Parallel()
+	sc := screen.New(60, 24)
+	p := terminal(60, 24)
+	s := &session{
+		items: []string{"console", "docs"}, out: sc, probe: p,
+		view: NewInlineView(sc, p),
+		opts: PickOptions{Prompt: "project", MaxRows: 10},
+	}
+	_ = s.refilter(t.Context())
+	s.draw()
+
+	assert.Empty(t, sc.TrailingSpaceRows(), "no picker row ends in padding")
+}
+
+// rowText is one screen row without its right-hand blanks.
+func rowText(s *screen.Screen, row int) string {
+	return strings.TrimRight(s.Row(row), " ")
 }
 
 // benchItems builds a realistic picker list: `magus x` offers project+target

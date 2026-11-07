@@ -106,8 +106,8 @@ func TestShotsAreNotBlank(t *testing.T) {
 	for name, svg := range shots {
 		assert.Contains(t, svg, "<text ", "%s drew no text at all", name)
 	}
-	assert.Contains(t, shots["terminal-run-band.svg"], "pool 6/8 running")
-	assert.Contains(t, shots["terminal-failure-prompt.svg"], "[esc] done")
+	assert.Contains(t, shots["terminal-run-band.svg"], "3/8 slots")
+	assert.Contains(t, shots["terminal-failure-prompt.svg"], "esc done")
 	assert.Contains(t, shots["terminal-picker.svg"], "libs/gopherbuzz")
 	assert.Contains(t, shots["terminal-run-waits.svg"], "bottleneck")
 }
@@ -128,7 +128,7 @@ func TestFailurePromptShotShowsTheRealHint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failurePrompt: %v", err)
 	}
-	for _, span := range cache.FailureHint()[0].Spans {
+	for _, span := range cache.FailureHint(shotCols - 1)[0].Spans {
 		if strings.TrimSpace(span.Text) == "" {
 			continue
 		}

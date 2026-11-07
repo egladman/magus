@@ -171,7 +171,7 @@ func (s *WaitBandSuite) TestBandDrawsTheBottleneckAndItsWaiters() {
 	s.plan(2)
 	row := s.screen.FindRow("(root) test")
 	s.Require().NotZero(row)
-	s.Contains(s.screen.Row(row), "bottleneck, holds 2, running 8m0s")
+	s.Contains(s.screen.Row(row), "8m0s · bottleneck · holds 2")
 	s.NotZero(s.screen.FindRow("w0 lint"))
 	s.Contains(s.screen.Row(s.screen.FindRow("console build")), "waiting 8m0s")
 }

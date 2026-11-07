@@ -151,7 +151,7 @@ func TestNotifierSharesTheZoneWithAnotherLease(t *testing.T) {
 
 	out := buf.String()
 	assert.Less(t, strings.Index(out, "pool 2/8 running"), strings.Index(out, "api built"))
-	assert.Equal(t, 1, strings.Count(out, fmt.Sprintf("\x1b[1;%dr", 33-borderRows)),
+	assert.Equal(t, 1, strings.Count(out, fmt.Sprintf("\x1b[1;%dr", 33)),
 		"one owner, one DECSTBM: 6 failure rows plus one notification leaves 33 scrolling")
 }
 
@@ -168,21 +168,21 @@ func TestNotifierClaimsNoRowsUntilItNotifies(t *testing.T) {
 	_, err := other.Set([]Line{{Text: "pool 1/8 running"}})
 	require.NoError(t, err)
 	// 6 leased rows on 24 means margins 1;18, not the 1;15 nine rows would give.
-	assert.Contains(t, buf.String(), fmt.Sprintf("\x1b[1;%dr", 18-borderRows), "the unused band must cost nothing")
+	assert.Contains(t, buf.String(), fmt.Sprintf("\x1b[1;%dr", 18), "the unused band must cost nothing")
 
 	z.mu.Lock()
-	assert.Equal(t, 6+borderRows, z.region.height)
+	assert.Equal(t, 6, z.region.height)
 	z.mu.Unlock()
 
 	require.NoError(t, n.Notify("waiting on the lock", SGRYellow, 0))
 	z.mu.Lock()
-	assert.Equal(t, 7+borderRows, z.region.height,
+	assert.Equal(t, 7, z.region.height,
 		"one notification claims ONE row, not the band's worst case")
 	z.mu.Unlock()
 
 	require.NoError(t, n.Notify("second", "", time.Minute))
 	z.mu.Lock()
-	assert.Equal(t, 8+borderRows, z.region.height, "and it grows only as more are actually showing")
+	assert.Equal(t, 8, z.region.height, "and it grows only as more are actually showing")
 	z.mu.Unlock()
 }
 

@@ -58,8 +58,11 @@ type Screen struct {
 }
 
 type cell struct {
-	r     rune
-	style string
+	r rune
+	// written marks a cell a program put text in, as opposed to one that is
+	// only blank because nothing ever wrote it or it was erased.
+	written bool
+	style   string
 }
 
 // New returns a Screen of the given size, cursor at the top left and the whole
@@ -246,7 +249,7 @@ func (s *Screen) put(r rune) {
 		s.col = 1
 		s.lineFeed()
 	}
-	s.cells[s.row-1][s.col-1] = cell{r: r, style: s.style}
+	s.cells[s.row-1][s.col-1] = cell{r: r, style: s.style, written: true}
 	s.col++
 }
 
@@ -407,4 +410,26 @@ func (s *Screen) FindRow(substr string) int {
 		}
 	}
 	return 0
+}
+
+// TrailingSpaceRows returns the 1-based rows whose last written cell is a
+// space.
+//
+// A cell a program never wrote, or erased, does not count: such a row ends
+// where its text ends. A written trailing space is what a drag selection copies
+// as padding.
+func (s *Screen) TrailingSpaceRows() []int {
+	var rows []int
+	for i, row := range s.cells {
+		for c := len(row) - 1; c >= 0; c-- {
+			if !row[c].written {
+				continue
+			}
+			if row[c].r == ' ' {
+				rows = append(rows, i+1)
+			}
+			break
+		}
+	}
+	return rows
 }

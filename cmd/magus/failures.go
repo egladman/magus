@@ -259,7 +259,7 @@ func runFailurePrompt(ctx context.Context, h failureBand, selected *int) (failur
 func showHint(l *tty.Lease, w io.Writer) error {
 	// Composed by the package that owns the band, not here, so the row the
 	// documentation renders and the row a reader sees are the same object.
-	rendered, err := l.Set(cache.FailureHint())
+	rendered, err := l.Set(cache.FailureHint(l.Width()))
 	if err != nil {
 		return err
 	}

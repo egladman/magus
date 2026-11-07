@@ -156,7 +156,7 @@ func TestZoneResizesTheRegionWhenALeaseArrives(t *testing.T) {
 	require.NoError(t, err)
 
 	z.mu.Lock()
-	assert.Equal(t, 2+borderRows, z.region.height)
+	assert.Equal(t, 2, z.region.height)
 	z.mu.Unlock()
 
 	second := z.Acquire(3)
@@ -164,7 +164,7 @@ func TestZoneResizesTheRegionWhenALeaseArrives(t *testing.T) {
 	require.NoError(t, err)
 
 	z.mu.Lock()
-	assert.Equal(t, 5+borderRows, z.region.height, "the zone grows to the leased total rather than reserving up front")
+	assert.Equal(t, 5, z.region.height, "the zone grows to the leased total rather than reserving up front")
 	z.mu.Unlock()
 }
 
@@ -292,11 +292,11 @@ func toastRow(s *screen.Screen, row int) string {
 	return strings.TrimPrefix(bandRow(s, row), accentBar+" ")
 }
 
-// bandRow is the text of an absolute terminal row with the zone's box taken
+// bandRow is the text of an absolute terminal row with the right-hand blanks taken
 // off, so an assertion about what a lease drew does not have to know the region
 // frames it.
 func bandRow(s *screen.Screen, row int) string {
-	return strings.TrimRight(strings.Trim(s.Row(row), boxV), " ")
+	return strings.TrimRight(s.Row(row), " ")
 }
 
 func TestPaintZoneSurvivesScrollingOutput(t *testing.T) {
@@ -324,12 +324,12 @@ func TestPaintZoneSurvivesScrollingOutput(t *testing.T) {
 	assert.Greater(t, s.Scrolled(), before, "output must scroll normally")
 	// Line 40's own trailing newline scrolls it up one, so the last line of
 	// output sits one row above the cursor, which waits on the last scrolling row.
-	assert.Contains(t, s.Row(14-borderRows), "compiling package 40")
-	assert.Equal(t, 15-borderRows, cursorRow(s), "the cursor stays inside the scrolling area, never in the zone")
+	assert.Contains(t, s.Row(14), "compiling package 40")
+	assert.Equal(t, 15, cursorRow(s), "the cursor stays inside the scrolling area, never in the zone")
 	// ...and the zone did not move with it.
-	assert.Equal(t, "pool 4/8 running", bandRow(s, 16-borderRowsPerEdge), "the status row held its place under 40 lines of output")
-	assert.Equal(t, "api built in 1.2s", toastRow(s, 24-borderRowsPerEdge), "the toast held its place too")
-	assert.Equal(t, string(SGRGreen), s.StyleAt(24-borderRowsPerEdge, 1+borderCols), "and kept its colour")
+	assert.Equal(t, "pool 4/8 running", bandRow(s, 16), "the status row held its place under 40 lines of output")
+	assert.Equal(t, "api built in 1.2s", toastRow(s, 24), "the toast held its place too")
+	assert.Equal(t, string(SGRGreen), s.StyleAt(24, 1), "and kept its colour")
 }
 
 // TestPaintLeavesTheCursorWhereTheCallerLeftIt is the second half of that
@@ -364,17 +364,17 @@ func TestPaintNotificationsExpireWithoutResidue(t *testing.T) {
 
 	require.NoError(t, n.Notify("lint failed in std/", SGRRed, 5*time.Second))
 	require.NoError(t, n.Notify("api built", SGRGreen, 30*time.Second))
-	assert.Equal(t, "lint failed in std/", toastRow(s, 23-borderRowsPerEdge))
-	assert.Equal(t, "api built", toastRow(s, 24-borderRowsPerEdge))
+	assert.Equal(t, "lint failed in std/", toastRow(s, 23))
+	assert.Equal(t, "api built", toastRow(s, 24))
 	// Column 1 is the box's left edge now, so the text starts at column 2.
-	assert.Equal(t, string(SGRRed), s.StyleAt(23-borderRowsPerEdge, 1+borderCols))
+	assert.Equal(t, string(SGRRed), s.StyleAt(23, 1))
 
 	clock.advance(6 * time.Second)
 	n.sweep()
 	// The expired toast is gone and the survivor slid down to sit closest to
 	// the reader. No fragment of the old text remains on either row.
-	assert.Equal(t, "", bandRow(s, 23-borderRowsPerEdge), "an expired notification leaves a clean row")
-	assert.Equal(t, "api built", toastRow(s, 24-borderRowsPerEdge))
+	assert.Equal(t, "", bandRow(s, 23), "an expired notification leaves a clean row")
+	assert.Equal(t, "api built", toastRow(s, 24))
 }
 
 // TestPaintReleaseHandsBackAWholeScreen pins teardown: the rows come back, the
@@ -387,12 +387,12 @@ func TestPaintReleaseHandsBackAWholeScreen(t *testing.T) {
 	fmt.Fprint(s, "transcript line\n")
 	_, err := l.Set([]Line{{Text: "pool 1/4 running"}})
 	require.NoError(t, err)
-	require.Equal(t, "pool 1/4 running", bandRow(s, 19-borderRowsPerEdge))
+	require.Equal(t, "pool 1/4 running", bandRow(s, 19))
 
 	require.NoError(t, z.Close())
 	assert.Equal(t, 1, scrollTop(s), "margins reset, or the user's shell stays pinned")
 	assert.Equal(t, 24, scrollBottom(s))
-	assert.Equal(t, "", bandRow(s, 19-borderRowsPerEdge), "the leased rows are cleared, not left as litter")
+	assert.Equal(t, "", bandRow(s, 19), "the leased rows are cleared, not left as litter")
 	assert.Contains(t, s.String(), "transcript line", "and the transcript survives teardown")
 }
 
@@ -415,17 +415,15 @@ func TestPaintTwoConsumersShareOneTerminal(t *testing.T) {
 	require.NoError(t, n.Notify("cache stampede on go-build", SGRYellow, time.Minute))
 
 	// One margin set, covering both bands. Seven leased rows, not nine: the
-	// failure band's six plus the ONE row the single notification actually
-	// needs, and the zone's border above them.
+	// failure band's six plus the ONE row the single notification needs.
 	assert.Equal(t, 1, scrollTop(s))
-	assert.Equal(t, 17-borderRows, scrollBottom(s))
-	// The border marks where the scrolling stops.
-	assert.Equal(t, fmt.Sprintf("%s%s%s", boxTL, strings.Repeat(boxH, 77), boxTR), s.Row(18-borderRows), "the top rule spans the region, corners included")
+	assert.Equal(t, 17, scrollBottom(s))
+	assert.Empty(t, s.TrailingSpaceRows(), "no row of either band ends in padding")
 	// Both consumers are visible at once, in acquisition order.
-	assert.Equal(t, "pool 6/8 running   2 ok  1 failed", bandRow(s, 18-borderRowsPerEdge))
-	assert.Equal(t, "[fail] test std (ran, 4.1s)", bandRow(s, 19-borderRowsPerEdge))
-	// A single notification rides the bottom rule rather than taking a row.
-	assert.Equal(t, "cache stampede on go-build", toastRow(s, 24-borderRowsPerEdge))
+	assert.Equal(t, "pool 6/8 running   2 ok  1 failed", bandRow(s, 18))
+	assert.Equal(t, "[fail] test std (ran, 4.1s)", bandRow(s, 19))
+	// A single notification takes the last row.
+	assert.Equal(t, "cache stampede on go-build", toastRow(s, 24))
 }
 
 // Small readers over the emulator, so the assertions below stay about what a

@@ -225,3 +225,32 @@ func TestInvertedScrollRegionIsIgnored(t *testing.T) {
 		}
 	}, "an inverted scroll region must not reach lineFeed")
 }
+
+func TestTrailingSpaceRowsFlagsAWrittenSpace(t *testing.T) {
+	t.Parallel()
+	s := New(20, 5)
+	fmt.Fprint(s, "padded \r\nclean")
+	assert.Equal(t, []int{1}, s.TrailingSpaceRows())
+}
+
+func TestTrailingSpaceRowsIgnoresCellsNeverWritten(t *testing.T) {
+	t.Parallel()
+	s := New(20, 5)
+	fmt.Fprint(s, "text")
+	assert.Empty(t, s.TrailingSpaceRows(), "blank cells beyond the text were never written")
+}
+
+func TestTrailingSpaceRowsIgnoresErasedCells(t *testing.T) {
+	t.Parallel()
+	s := New(20, 5)
+	fmt.Fprint(s, "text   ")
+	fmt.Fprint(s, "\x1b[1;5H\x1b[K")
+	assert.Empty(t, s.TrailingSpaceRows(), "erasing the padding leaves the row ending in text")
+}
+
+func TestTrailingSpaceRowsAllowsAGapInsideTheRow(t *testing.T) {
+	t.Parallel()
+	s := New(20, 5)
+	fmt.Fprint(s, "label   8s")
+	assert.Empty(t, s.TrailingSpaceRows())
+}
