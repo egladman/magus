@@ -912,6 +912,46 @@ func (s *RootGroundworkSuite) TestRootOutputRefThatWritesAFileIsStillGroundwork(
 
 func (s *RootGroundworkSuite) testContext() context.Context { return s.layers.of(s.T()) }
 
+// RootCitedReadSuite judges a root reading a file a filed job result names.
+type RootCitedReadSuite struct {
+	suite.Suite
+	layers ctxLayers
+	deps   Dependencies
+}
+
+func (s *RootCitedReadSuite) testContext() context.Context { return s.layers.of(s.T()) }
+
+func (s *RootCitedReadSuite) judge(line string) types.GuardJudgment {
+	return Judge(s.testContext(), s.deps, Request{Input: line, Host: "claude-code", Session: "s"})
+}
+
+func TestRootCitedReadSuite(t *testing.T) { suite.Run(t, new(RootCitedReadSuite)) }
+
+func (s *RootCitedReadSuite) SetupTest() {
+	research := types.Job{ID: "research", ReadOnly: true, State: types.StateExited, Result: &types.JobResult{
+		ChangedPaths:    []string{},
+		UnresolvedRisks: []string{"`docs/guide/page.md:12` contradicts internal/guard/root.go"},
+	}}
+	s.layers, _ = fleetLayers(s.T(), types.Job{ID: "scout", ReadOnly: true, State: types.StateDeclared}, research)
+	s.deps = levelDeps(s.T(), types.GuardProfileLight)
+	hostGate(hookLocation(s.testContext(), s.deps).cacheDir, "claude-code").MarkFired(hostAgentsKind)
+	s.Require().NotEqual(decisionDeny, judgeSpawn(s.testContext(), s.T(), s.deps, "haiku").Decision)
+}
+
+func (s *RootCitedReadSuite) TestRootReadsAFileAResultCites() {
+	s.NotEqual(string(denyRuleOrchestratorGroundwork), s.judge("cat docs/guide/page.md").Rule)
+}
+
+func (s *RootCitedReadSuite) TestRootReadOfAnUncitedFileIsStillGroundwork() {
+	v := s.judge("cat docs/guide/other.md")
+	s.Equal(types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleOrchestratorGroundwork)}, judgedAs(v))
+}
+
+func (s *RootCitedReadSuite) TestRootReadOfACitedAndAnUncitedFileIsStillGroundwork() {
+	v := s.judge("cat docs/guide/page.md docs/guide/other.md")
+	s.Equal(types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleOrchestratorGroundwork)}, judgedAs(v))
+}
+
 // RecoversOwnCheckoutSuite pins which line is the root's own recovery entry.
 type RecoversOwnCheckoutSuite struct {
 	suite.Suite

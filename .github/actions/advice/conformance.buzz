@@ -206,6 +206,21 @@ export fun symbolRow(path: str, check: str, message: str, details: [str]) > {str
     return {"path": path, "check": check, "message": message, "evidence": details.join("; ")};
 }
 
+// conformanceRows keeps the rows of a check symbolChecks renders. The review
+// also carries change-risk checks, which publish in their own section.
+export fun conformanceRows(rows: [{str: str}]) > [{str: str}] {
+    final kept = mut [<{str: str}>];
+    foreach (r in rows) {
+        foreach (c in symbolChecks) {
+            if ((r["check"] ?? "") == (c["check"] ?? "")) {
+                kept.append(r);
+                break;
+            }
+        }
+    }
+    return kept;
+}
+
 // symbolTables renders a table for each check with rows, and "" when none has any.
 export fun symbolTables(rows: [{str: str}]) > str {
     final parts = mut [<str>];
@@ -358,7 +373,8 @@ fun main() > void !> any {
             + "and a symbol whose signature changed was not compared.");
     }
 
-    final count = items.len() + rows.len();
+    final named = conformanceRows(rows);
+    final count = items.len() + named.len();
     if (count == 0) {
         // An empty body retracts the section, so a name fixed on the next push stops being reported.
         advice\publish(repo, pr: pr, name: section, title: "A name diverges from the workspace", body: "");
@@ -367,8 +383,8 @@ fun main() > void !> any {
     }
     advice\publish(repo, pr: pr, name: section,
         title: "A name diverges from the workspace ({count})",
-        body: body(items, rows: rows, caveats: caveats));
-    std\print("conformance: advised on {items.len()} target(s) and {rows.len()} symbol name(s)");
+        body: body(items, rows: named, caveats: caveats));
+    std\print("conformance: advised on {items.len()} target(s) and {named.len()} symbol name(s)");
 }
 
 
@@ -480,6 +496,16 @@ test "a symbol finding carries its counts and its exemplars" {
     std\assert(text.indexOf("| internal/trail/trail.go | \\`EntryPointFrom\\`: 33 of 35") != null, message: "one row");
     std\assert(text.indexOf("_conformance: the baseline could not be compared_") != null, message: "what weakened it is said");
     std\assert(text.indexOf("This adds a target") == null, message: "no target finding, no target table");
+}
+
+test "a change-risk check is neither counted nor rendered as a name finding" {
+    final rows = [
+        symbolRow("a.go", check: "change-risk", message: "not measured", details: []),
+        symbolRow("a.go", check: "name-collision", message: "already carries", details: []),
+    ];
+    final kept = conformanceRows(rows);
+    std\assert(kept.len() == 1, message: "only the conformance check is kept");
+    std\assert((kept[0]["check"] ?? "") == "name-collision", message: "the kept row is the name finding");
 }
 
 test "each check gets its own table, in symbolChecks order" {

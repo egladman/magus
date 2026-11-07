@@ -2,13 +2,67 @@ package guard
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/libs/testkit"
 )
+
+type ComputedSpawnSuite struct {
+	suite.Suite
+	root    string
+	scratch string
+}
+
+func TestComputedSpawnSuite(t *testing.T) { suite.Run(t, new(ComputedSpawnSuite)) }
+
+const computedSpawn = `for (f in files) { proc\exec("git", args: ["add", f]); }`
+
+func (s *ComputedSpawnSuite) SetupTest() {
+	s.root, s.scratch = s.T().TempDir(), s.T().TempDir()
+}
+
+func (s *ComputedSpawnSuite) deps(worker bool) Dependencies {
+	return Dependencies{worker: worker, scope: workspaceScope{root: s.root, dir: s.root}}
+}
+
+func (s *ComputedSpawnSuite) script(dir, program string) string {
+	file := filepath.Join(dir, "loop.buzz")
+	s.Require().NoError(os.WriteFile(file, []byte(program), 0o644))
+	return file
+}
+
+func (s *ComputedSpawnSuite) TestAWorkersInlineComputedSpawnIsRefused() {
+	v, ok := buzzSpawnVerdict(s.deps(true), &heldAdvice{}, "magus buzz -e '"+computedSpawn+"'", DialectBash)
+	s.Require().True(ok)
+	s.Contains(v.Deny, "computed argv")
+	s.Equal(denyRuleInterpreterScript, v.Rule.Name)
+}
+
+func (s *ComputedSpawnSuite) TestAnUnleasedInlineComputedSpawnPasses() {
+	_, ok := buzzSpawnVerdict(s.deps(false), &heldAdvice{}, "magus buzz -e '"+computedSpawn+"'", DialectBash)
+	s.False(ok)
+}
+
+func (s *ComputedSpawnSuite) TestAWorkersLiteralSpawnIsNotComputed() {
+	s.False(computesSpawn(`proc\exec("echo", args: ["hi"]); proc\shell("ls docs");`))
+}
+
+func (s *ComputedSpawnSuite) TestAWorkersScratchScriptWithAComputedSpawnIsRefused() {
+	file := s.script(s.scratch, computedSpawn)
+	v := denyScriptContent(s.deps(true), s.root, "magus buzz "+file, DialectBash)
+	s.Contains(v.Deny, "computed argv")
+}
+
+func (s *ComputedSpawnSuite) TestARepositoryScriptWithAComputedSpawnPasses() {
+	file := s.script(s.root, computedSpawn)
+	s.Empty(denyScriptContent(s.deps(true), s.root, "magus buzz "+file, DialectBash).Deny)
+}
 
 // TestInterpreterScriptDeniesAdHocScripts: Buzz is the scripting language, so a program
 // typed for python, node, perl or ruby, or piped into one, is refused; a version or help

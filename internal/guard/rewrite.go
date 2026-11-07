@@ -143,7 +143,7 @@ func denyInterpreterRewrite(location location, command string, d Dialect) string
 			name := path.Base(c.Name)
 			if name == "magus" {
 				if script, ok := inlineBuzz(c.Args, heredocText(st)); ok {
-					hit = buzzRewrittenFile(location.workspace, script)
+					hit = buzzRewrittenFile(scopeAt(location), script)
 				}
 				if hit != "" {
 					return false
@@ -180,7 +180,7 @@ func denyInterpreterRewrite(location location, command string, d Dialect) string
 // it writes to scratch, is data.
 func rewrittenWorkspaceFile(location location, name, script string, args []string) string {
 	candidates, _ := writeCandidates(name, script, args)
-	return existingWorkspaceFile(location.workspace, candidates)
+	return existingWorkspaceFile(scopeAt(location), candidates)
 }
 
 // writeCandidates are the paths the program's writes may land on, less any aimed at a
@@ -206,8 +206,8 @@ func writeCandidates(name, script string, args []string) (candidates []string, u
 // buzzRewrittenFile names the first file already in the workspace that a Buzz program
 // replaces through fs at a literal destination, or "". A destination built at run time
 // from argv or a computed path is not read: this judges what the program text proves.
-func buzzRewrittenFile(workspace, script string) string {
-	return existingWorkspaceFile(workspace, buzzWriteDestinations(script))
+func buzzRewrittenFile(scope workspaceScope, script string) string {
+	return existingWorkspaceFile(scope, buzzWriteDestinations(script))
 }
 
 // buzzWriteDestinations are the literals each fs write in a Buzz program is spelled from,
@@ -257,22 +257,27 @@ func inlineBuzz(args []string, heredoc string) (string, bool) {
 var buzzWriterRe = regexp.MustCompile(`\bfs\\(?:writeFileAtomic|writeFile|writeLines)\s*\(`)
 
 // existingWorkspaceFile names the first candidate that is a file already in the workspace,
-// or "". A relative candidate resolves from the workspace root.
-func existingWorkspaceFile(workspace string, candidates []string) string {
-	if workspace == "" {
+// or "". A relative candidate resolves from the call's directory, where the
+// program opens it. A call whose directory is unknown is placed at the root.
+func existingWorkspaceFile(scope workspaceScope, candidates []string) string {
+	if scope.root == "" {
 		return ""
+	}
+	dir := scope.dir
+	if dir == "" {
+		dir = scope.root
 	}
 	for _, candidate := range candidates {
 		if candidate == "" || throwawayDirRe.MatchString(candidate) {
 			continue
 		}
-		rel, inside := workspaceRelative(workspace, candidate)
-		if !inside || rel == "." {
+		abs, placed := placePath(candidate, dir, scope.home)
+		if !placed {
 			continue
 		}
-		abs := candidate
-		if !filepath.IsAbs(abs) {
-			abs = filepath.Join(workspace, candidate)
+		rel, inside := workspaceRelative(scope.root, abs)
+		if !inside || rel == "." {
+			continue
 		}
 		if info, err := os.Stat(abs); err == nil && !info.IsDir() {
 			return rel
