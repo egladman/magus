@@ -194,7 +194,7 @@ type repoConfig struct {
 	} `yaml:"linters"`
 }
 
-func (s *ScopeSuite) buildRepoConfig() map[string]int {
+func (s *ScopeSuite) buildRepositoryConfig() map[string]int {
 	data, err := os.ReadFile(filepath.Join(s.root, ".golangci.yml"))
 	s.Require().NoError(err)
 	var cfg repoConfig
@@ -211,22 +211,22 @@ func (s *ScopeSuite) buildRepoConfig() map[string]int {
 	return built
 }
 
-func (s *ScopeSuite) TestRepoConfigBuildsInsideItsOwnTree() {
+func (s *ScopeSuite) TestRepositoryConfigBuildsInsideItsOwnTree() {
 	wd, err := os.Getwd()
 	s.Require().NoError(err)
 	s.root = filepath.Join(wd, "..", "..", "..")
-	built := s.buildRepoConfig()
+	built := s.buildRepositoryConfig()
 	s.Equal(1, built["ruletext"])
 	s.Equal(1, built["errmsg"])
 	s.Equal(1, built["diagmsg"])
 }
 
-func (s *ScopeSuite) TestRepoConfigBuildsInAnotherModule() {
+func (s *ScopeSuite) TestRepositoryConfigBuildsInAnotherModule() {
 	wd, err := os.Getwd()
 	s.Require().NoError(err)
 	s.root = filepath.Join(wd, "..", "..", "..")
 	sourcetest.Module(s.T(), "example.com/scratch", "cmd/app/main.go")
-	built := s.buildRepoConfig()
+	built := s.buildRepositoryConfig()
 	s.Equal(1, built["errmsg"])
 	s.Zero(built["ruletext"])
 	s.Zero(built["providerio"])
