@@ -837,7 +837,7 @@ func describeMachinePacking(c types.MachineClaim, v types.MachineVerdict, now ti
 		if c.Profile.Runs > 0 {
 			how = "packed by peak, predating memory curves"
 		}
-		peak := fmt.Sprintf("%s: this claimed the %s peak", how, FormatMB(c.MemoryMB))
+		peak := fmt.Sprintf("%s: this claimed the %s peak", how, types.FormatMB(c.MemoryMB))
 		if v.BudgetMB > 0 && v.HeldMB+c.MemoryMB > v.BudgetMB {
 			peak += ", which passes the budget now"
 		}
@@ -856,10 +856,10 @@ func describeMachinePacking(c types.MachineClaim, v types.MachineVerdict, now ti
 		return "packed by curve"
 	}
 	if at.Equal(now) {
-		return fmt.Sprintf("packed by curve: the claims pass the %s budget together now", FormatMB(v.BudgetMB))
+		return fmt.Sprintf("packed by curve: the claims pass the %s budget together now", types.FormatMB(v.BudgetMB))
 	}
 	return fmt.Sprintf("packed by curve: the claims pass the %s budget together at %s, %s from now",
-		FormatMB(v.BudgetMB), at.Format(time.TimeOnly), at.Sub(now).Round(time.Second))
+		types.FormatMB(v.BudgetMB), at.Format(time.TimeOnly), at.Sub(now).Round(time.Second))
 }
 
 // machineDoesNotFitError is the refusal no wait can fix: the declaration does not fit
@@ -880,7 +880,7 @@ func machineDoesNotFitError(c types.MachineClaim, v types.MachineVerdict) error 
 	return types.ExitError{Code: ExitCodeMachineDeclaration, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"refusing to start %s %s: %s, which does not fit in this machine's whole build budget of %s across %d slots. Waiting would not help; %s",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
-		FormatMB(v.BudgetMB), v.BudgetSlots, describeMachineOversize(c, v))}
+		types.FormatMB(v.BudgetMB), v.BudgetSlots, describeMachineOversize(c, v))}
 }
 
 // describeMachineOversize says what to change, which is not the same sentence for the two
@@ -896,7 +896,7 @@ func machineDoesNotFitError(c types.MachineClaim, v types.MachineVerdict) error 
 func describeMachineOversize(c types.MachineClaim, v types.MachineVerdict) string {
 	if v.BudgetMB > 0 && c.MemoryMB > v.BudgetMB {
 		return fmt.Sprintf("the claim that does not fit is %s %s at %s against a budget of %s, and no wait seats it. That budget is what magus reserved for build work here, not the whole machine; the rest runs the OS, its page cache, and (outside concurrency_profile: aggressive) everything else sharing it. Narrow the run to fewer projects or a lighter target, or run `magus doctor` and read MGS1030, which compares this declaration to the peak memory magus measured: correct the declaration if it has drifted; if it is honest, get a bigger machine.",
-			displayProject(c.Project), c.Target, FormatMB(c.MemoryMB), FormatMB(v.BudgetMB))
+			displayProject(c.Project), c.Target, types.FormatMB(c.MemoryMB), types.FormatMB(v.BudgetMB))
 	}
 	return fmt.Sprintf("this machine has %d slots in total, so a step taking %d never fits. Correct the declaration if it is wrong, or run this on a bigger machine.",
 		v.BudgetSlots, max(c.Slots, 1))
@@ -927,9 +927,9 @@ func describeMachineDeclaration(c types.MachineClaim) string {
 	if c.MemoryMB <= 0 {
 		return "it takes " + slots
 	}
-	what := fmt.Sprintf("it claims %s (%s) and takes %s", FormatMB(c.MemoryMB), c.Sizing, slots)
+	what := fmt.Sprintf("it claims %s (%s) and takes %s", types.FormatMB(c.MemoryMB), c.Sizing, slots)
 	if c.DeclaredBy != "" && c.DeclaredBy != c.Target {
-		what = fmt.Sprintf("it runs %s, which claims %s (%s), and takes %s", c.DeclaredBy, FormatMB(c.MemoryMB), c.Sizing, slots)
+		what = fmt.Sprintf("it runs %s, which claims %s (%s), and takes %s", c.DeclaredBy, types.FormatMB(c.MemoryMB), c.Sizing, slots)
 	}
 	return what
 }
@@ -937,7 +937,7 @@ func describeMachineDeclaration(c types.MachineClaim) string {
 func describeMachineRemaining(v types.MachineVerdict) string {
 	parts := make([]string, 0, 2)
 	if v.BudgetMB > 0 {
-		parts = append(parts, fmt.Sprintf("%s of %s is left", FormatMB(max(v.BudgetMB-v.HeldMB, 0)), FormatMB(v.BudgetMB)))
+		parts = append(parts, fmt.Sprintf("%s of %s is left", types.FormatMB(max(v.BudgetMB-v.HeldMB, 0)), types.FormatMB(v.BudgetMB)))
 	}
 	if v.BudgetSlots > 0 {
 		parts = append(parts, fmt.Sprintf("%d of %d slots are free", max(v.BudgetSlots-v.HeldSlots, 0), v.BudgetSlots))
@@ -959,7 +959,7 @@ func describeMachineHolders(holders []types.MachineClaimant) string {
 	for _, h := range holders[:min(len(holders), show)] {
 		desc := fmt.Sprintf("pid %d %s %s", h.PID, displayProject(h.Project), h.Target)
 		if h.MemoryMB > 0 {
-			desc += fmt.Sprintf(" (%s)", FormatMB(h.MemoryMB))
+			desc += fmt.Sprintf(" (%s)", types.FormatMB(h.MemoryMB))
 		}
 		if h.Dir != "" {
 			desc += ", in " + h.Dir

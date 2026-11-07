@@ -295,7 +295,7 @@ const refusedKeep = 20
 // The zero value is ready; s.mu guards it.
 type budgetLedger struct {
 	// refused is newest first.
-	refused []types.MachineRefusal
+	refused []types.MachineAdmission
 }
 
 // claimed records a claim's verdict when it is the MGS3009 refusal the client turns it
@@ -315,19 +315,19 @@ func (l *budgetLedger) capacity(conns map[net.Conn]*session, snap types.MachineS
 	return snap
 }
 
-func (l *budgetLedger) refuse(r types.MachineRefusal) {
+func (l *budgetLedger) refuse(r types.MachineAdmission) {
 	l.refused = slices.Insert(l.refused, 0, r)
 	if len(l.refused) > refusedKeep {
 		l.refused = l.refused[:refusedKeep]
 	}
 }
 
-func machineRefusal(c types.MachineClaim, owner string, v types.MachineVerdict, owners map[int]string, now time.Time) types.MachineRefusal {
+func machineRefusal(c types.MachineClaim, owner string, v types.MachineVerdict, owners map[int]string, now time.Time) types.MachineAdmission {
 	holders := slices.Clone(v.Holders)
 	for i, h := range holders {
 		holders[i].Owner = owners[h.PID]
 	}
-	return types.MachineRefusal{
+	return types.MachineAdmission{
 		At: now, PID: c.PID, Project: c.Project, Target: c.Target, MemoryMB: c.MemoryMB, Slots: max(c.Slots, 1),
 		Dir: c.Dir, Command: c.Command, Owner: owner, Fits: v.Fits, Holders: holders,
 	}

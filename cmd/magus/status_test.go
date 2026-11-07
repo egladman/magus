@@ -432,7 +432,7 @@ func TestBrokerRowsNameOwnersWaitersAndRefusals(t *testing.T) {
 				{PID: 41300, Project: ".", Target: "lint", Slots: 2, Dir: "/tree/a", Owner: "unleased", Since: now.Add(-time.Minute)},
 				{PID: 41301, Project: "docs", Target: "ci", Owner: "job-b", Tree: "root-job", Since: now},
 			},
-			Refused: []types.MachineRefusal{{
+			Refused: []types.MachineAdmission{{
 				At: now.Add(-2 * time.Minute), PID: 41400, Project: ".", Target: "ci", Slots: 4, Dir: "/tree/b",
 				Owner: "spawned by root", Fits: true,
 				Holders: []types.MachineClaimant{{PID: 41221, Owner: "fix-cache"}, {PID: 41222}},

@@ -1070,12 +1070,6 @@ func TestLibraryCallerIsExcusedFromItsParentsClaim(t *testing.T) {
 	release()
 }
 
-func TestFormatMB(t *testing.T) {
-	assert.Equal(t, "512 MiB", FormatMB(512))
-	assert.Equal(t, "1.0 GiB", FormatMB(1024))
-	assert.Equal(t, "10.0 GiB", FormatMB(10240))
-}
-
 func TestDescribeMachineHoldersBoundsTheList(t *testing.T) {
 	holders := make([]types.MachineClaimant, 0, 6)
 	for i := range 6 {

@@ -564,6 +564,39 @@ func (s MemorySizing) String() string {
 	return fmt.Sprintf("%s; %s", from, s.Fallback)
 }
 
+// Breakdown renders one line of a claim's memory: the target, its figure and
+// where the figure came from. under names the composer an inline member runs
+// beneath, "" for a target that claims for itself.
+func (s MemorySizing) Breakdown(target, under string, mb int) string {
+	head := fmt.Sprintf("%s %s", target, FormatMB(mb))
+	if under != "" {
+		head += " under " + under
+	}
+	var from string
+	switch {
+	case !s.Measured():
+		from = "declared"
+	case s.AnyShape:
+		from = fmt.Sprintf("own peak over %d runs of any shape", s.Samples)
+	default:
+		from = fmt.Sprintf("own peak over %d runs", s.Samples)
+	}
+	if s.Fallback != "" {
+		from += "; " + s.Fallback
+	}
+	return fmt.Sprintf("%s: %s", head, from)
+}
+
+// FormatMB renders a memory figure in base-1024 units with a space, the
+// spelling FormatBytes uses, so a refusal and `magus server status` say the
+// same figure the same way.
+func FormatMB(mb int) string {
+	if mb >= 1024 {
+		return fmt.Sprintf("%.1f GiB", float64(mb)/1024)
+	}
+	return fmt.Sprintf("%d MiB", mb)
+}
+
 // ErrSkipChain is a ChainWalkFunc's answer that keeps WalkChain from descending under the
 // target it was given; the walk goes on with that target's siblings, as fs.SkipDir does
 // for a directory.

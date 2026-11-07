@@ -218,7 +218,7 @@ func sizeMemoryClaim(target string, declaredMB int, sameShape, anyShape, fullPea
 	}
 	if profile.Runs < minMeasuredRuns {
 		sizing.Fallback = fmt.Sprintf("%s: no memory curve for this shape (%d of %d runs); claimed the %s peak",
-			target, profile.Runs, minMeasuredRuns, cache.FormatMB(mb))
+			target, profile.Runs, minMeasuredRuns, types.FormatMB(mb))
 		return mb, sizing, types.MemoryProfile{}
 	}
 	for i, bucket := range profile.Curve {

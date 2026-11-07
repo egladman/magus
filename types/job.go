@@ -2869,3 +2869,12 @@ func ParsePauseUntil(raw string, now time.Time) (int64, error) {
 	}
 	return 0, fmt.Errorf("--until %q is neither a duration such as 2h nor an RFC3339 instant such as 2006-01-02T15:04:05Z", raw)
 }
+
+// HoldsNoBuildSeat reports whether the worker for u can never take a build
+// seat. It writes nothing and declares no check, so it runs no target.
+func (u Job) HoldsNoBuildSeat() bool {
+	if !u.ReadOnly || len(u.WritePaths) > 0 {
+		return false
+	}
+	return !slices.ContainsFunc(u.EffectiveGoals(), func(g Goal) bool { return g.Resolve().Kind == GoalKindCheck })
+}

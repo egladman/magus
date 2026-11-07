@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
@@ -86,7 +85,7 @@ func gradeGateFits(claims []types.MachineClaim, budgetMB, budgetSlots int) types
 			continue
 		}
 		what := fmt.Sprintf("%s %s claims %s (%s) and %d slot(s)",
-			types.ProjectDisplayName(c.Project, "", ""), c.Target, cache.FormatMB(c.MemoryMB), c.Sizing, max(c.Slots, 1))
+			types.ProjectDisplayName(c.Project, "", ""), c.Target, types.FormatMB(c.MemoryMB), c.Sizing, max(c.Slots, 1))
 		if c.DeclaredBy != "" && c.DeclaredBy != c.Target {
 			what += ", most of it from " + c.DeclaredBy
 		}
@@ -96,7 +95,7 @@ func gradeGateFits(claims []types.MachineClaim, budgetMB, budgetSlots int) types
 		return types.Check{
 			Name: gateFitsCheck, Status: types.CheckOK,
 			Message: fmt.Sprintf("every step of the ci gate fits this machine's build budget of %s across %d slots",
-				cache.FormatMB(budgetMB), budgetSlots),
+				types.FormatMB(budgetMB), budgetSlots),
 		}
 	}
 	slices.Sort(details)
@@ -105,7 +104,7 @@ func gradeGateFits(claims []types.MachineClaim, budgetMB, budgetSlots int) types
 		Status: types.CheckFail,
 		Message: fmt.Sprintf(
 			"%d step(s) of the ci gate claim more than this machine's whole build budget of %s across %d slots, so `%s` is refused here every time (see %s). Lower the claim: correct a drifted memory_mb (the memory-declarations check compares it to what magus measured), split the target, or run the gate on a bigger machine",
-			len(details), cache.FormatMB(budgetMB), budgetSlots, hint.Affected.With("ci"), types.CodeURL(types.MachineBudgetExhausted)),
+			len(details), types.FormatMB(budgetMB), budgetSlots, hint.Affected.With("ci"), types.CodeURL(types.MachineBudgetExhausted)),
 		Details: details,
 	}
 }

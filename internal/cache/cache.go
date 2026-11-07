@@ -286,7 +286,10 @@ type Step struct {
 	// MemoryProfile is the curve MemoryMB peaks over, zero when the claim is a peak
 	// held flat. Never hashed.
 	MemoryProfile types.MemoryProfile
-	Label         string // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
+	// Under is "<project>:<target>" of the composer an inline member runs
+	// under, "" otherwise. Never hashed.
+	Under string
+	Label        string // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
 	// Revision and Dirty are the VCS state the run's inputs were read at, resolved ONCE
 	// per invocation by the caller (a per-target probe would spawn a VCS subprocess per
 	// step) and copied onto every step. Display-only provenance for the output
@@ -1314,6 +1317,7 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 		MemoryMB: s.MemoryMB, Profile: s.MemoryProfile, Sizing: s.MemorySizing, Slots: slots,
 		PID: os.Getpid(), Dir: workingDir(),
 		Invocation: selfInvocation(ctx), Ancestors: ancestorInvocations(ctx),
+		Under: s.Under,
 	}}
 	if c.machine != nil {
 		h.claim.Weight = leaseWeight(ctx, c.dir)

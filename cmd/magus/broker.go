@@ -171,7 +171,7 @@ func brokerServe(ctx context.Context, args []string) error {
 		exits = fmt.Sprintf("exits after %s holding nothing", idleText(f.IdleExit))
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("broker (pid %d) %s %s: %d slots, %s; %s",
-		os.Getpid(), from, addr, slots, cache.FormatMB(memMB), exits), attr.Notice(""), attr.Component("magus"))
+		os.Getpid(), from, addr, slots, types.FormatMB(memMB), exits), attr.Notice(""), attr.Component("magus"))
 
 	ctx, stopNow := context.WithCancel(ctx)
 	defer stopNow()
@@ -423,6 +423,10 @@ func idleText(d time.Duration) string {
 // brokerLogPath is where a broker a run started writes: the XDG state directory, which
 // survives logout, where the runtime directory holding its socket does not.
 func brokerLogPath() string { return stateLogPath("broker.log") }
+
+// admissionLogPath is the store of the admissions the broker recorded, one
+// types.MachineAdmission per line.
+func admissionLogPath() string { return stateLogPath("admissions.jsonl") }
 
 // serverLogPath is brokerLogPath's counterpart for a server `server start` detached.
 func serverLogPath() string { return stateLogPath("server.log") }

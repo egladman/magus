@@ -379,7 +379,7 @@ func BudgetFull(s types.MachineSnapshot, now time.Time) string {
 		held = append(held, fmt.Sprintf("slots %d/%d", s.HeldSlots, s.BudgetSlots))
 	}
 	if s.BudgetMB > 0 && s.HeldMB >= s.BudgetMB {
-		held = append(held, fmt.Sprintf("mem %s/%s", cache.FormatMB(s.HeldMB), cache.FormatMB(s.BudgetMB)))
+		held = append(held, fmt.Sprintf("mem %s/%s", types.FormatMB(s.HeldMB), types.FormatMB(s.BudgetMB)))
 	}
 	if len(held) == 0 {
 		return ""
@@ -396,15 +396,6 @@ func BudgetFull(s types.MachineSnapshot, now time.Time) string {
 		}
 	}
 	return text + ". A seat frees as each run ends: hold this worker until the completion notice of work you already started arrives, since a worker whose check finds no seat reports and stops."
-}
-
-// holdsNoBuildSeat reports whether the worker for row can never take a build seat: it writes
-// nothing and declares no check, so it runs no target.
-func holdsNoBuildSeat(row types.Job) bool {
-	if !row.ReadOnly || len(row.WritePaths) > 0 {
-		return false
-	}
-	return !slices.ContainsFunc(row.EffectiveGoals(), func(g types.Goal) bool { return g.Resolve().Kind == types.GoalKindCheck })
 }
 
 // adviseBudgetFull is the advisory for an orchestrator spawning into a full build budget,

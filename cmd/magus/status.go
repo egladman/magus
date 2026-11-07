@@ -728,9 +728,9 @@ func capacityText(c types.MachineSnapshot) string {
 		parts = append(parts, fmt.Sprintf("slots %d/%d", c.HeldSlots, c.BudgetSlots))
 	}
 	if c.BudgetMB > 0 {
-		mem := fmt.Sprintf("mem %s/%s", cache.FormatMB(c.HeldMB), cache.FormatMB(c.BudgetMB))
+		mem := fmt.Sprintf("mem %s/%s", types.FormatMB(c.HeldMB), types.FormatMB(c.BudgetMB))
 		if r := c.Reserve; r.TotalMB > 0 {
-			mem += fmt.Sprintf(" (%s less %s: %s)", cache.FormatMB(r.TotalMB), cache.FormatMB(r.ReservedMB), r.Rule)
+			mem += fmt.Sprintf(" (%s less %s: %s)", types.FormatMB(r.TotalMB), types.FormatMB(r.ReservedMB), r.Rule)
 		}
 		parts = append(parts, mem)
 	}
@@ -744,7 +744,7 @@ func mbText(prefix string, mb int) string {
 	if mb <= 0 {
 		return ""
 	}
-	return prefix + cache.FormatMB(mb)
+	return prefix + types.FormatMB(mb)
 }
 
 // holderMemText is a holder's memory claim, naming the runs it was measured over when
