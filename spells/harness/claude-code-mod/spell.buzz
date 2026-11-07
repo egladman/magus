@@ -8,9 +8,9 @@
 // Claude Code reads extraKnownMarketplaces only after the person trusts the folder, and
 // enabling a plugin installs it for nobody: each person runs
 // `claude plugin marketplace add egladman/magus` once, or trusts the folder and starts a
-// session. `magus agent harness verify` fails until the plugin is listed in
-// installed_plugins.json or cached under the plugins root, and `magus doctor` advises on the
-// same gap. See
+// session. `magus agent harness verify` fails until installed_plugins.json
+// records the plugin for this checkout. `magus doctor` advises on that gap.
+// See
 // docs/guides/integrations/agents/claude-code.md.
 
 import "magus/spell";

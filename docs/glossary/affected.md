@@ -31,9 +31,9 @@ In the docs:
 - [S3: Affected dry-run (1 file changed)](../benchmarks/build-tools.md#s3-affected-dry-run-1-file-changed)
 - [How this connects to affected and the cache](../concepts/workspace.md#how-this-connects-to-affected-and-the-cache)
 - [Affected](../concepts/workspace/affected.md#affected)
+- [6. affected, the cache and CI](../decisions/0028-workspaces-see-each-other.md#6-affected-the-cache-and-ci)
 - [Sharding by affected project](../guides/integrations/github-actions.md#sharding-by-affected-project)
 - [Re-run only affected projects on each save](../guides/tips.md#re-run-only-affected-projects-on-each-save)
-- [Affected](../reference/api/graph/v1alpha1/graph.md#affected)
 
 <!-- END GLOSSARY USAGE -->
 

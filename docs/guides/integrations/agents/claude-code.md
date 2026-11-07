@@ -724,14 +724,20 @@ magus\harness.provider(claudeMod);
 reads the marketplace only once the person trusts the folder. The settings do not
 install the mod: each person runs the line above once, or trusts the folder and
 starts a session, and until then the mod never appears. `magus agent harness verify
-claude-code-mod` and `magus doctor` count the mod as installed when
-`installed_plugins.json` lists it or when the cache directory for the `magus`
-plugin holds a version directory, both under the `plugins` directory of `CLAUDE_CONFIG_DIR` (`~/.claude`
-by default) or under `CLAUDE_CODE_PLUGIN_CACHE_DIR` when that is set. Claude Code
-caches a plugin from a relative-path marketplace without recording it, which the
-cache check covers. Verify fails naming the line above while the workspace enables
-the mod and neither is found; doctor advises on that gap so CI is not red for a
-personal install. A workspace that does not enable the mod is not checked.
+claude-code-mod` and `magus doctor` read what the host records, in the `plugins`
+directory of `CLAUDE_CONFIG_DIR` (`~/.claude` by default) or in
+`CLAUDE_CODE_PLUGIN_CACHE_DIR` when that is set. The mod counts as installed only
+when `installed_plugins.json` lists `magus@magus` in the user scope, or in a local
+or project scope for this checkout; a cached plugin directory alone no longer
+counts. An install that `.claude/settings.local.json` turns off reads as disabled,
+with the `claude plugin enable` command. An installed mod is current when its
+recorded commit is the HEAD of the marketplace clone `known_marketplaces.json`
+names; an older commit reads as behind, with the `claude plugin update` command,
+and a record that cannot prove either reads as unknown. When the host has never
+run here (no config directory), the check is skipped. Verify fails while the
+workspace enables the mod and it is not installed; doctor advises on that gap so
+CI is not red for a personal install. A workspace that does not enable the mod is
+not checked.
 
 ## Coverage and limits
 
