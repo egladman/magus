@@ -1,6 +1,6 @@
 ---
-title: "ADR 0028: the mod draws magus figures it does not compute"
-order: 28
+title: "ADR 0029: the mod draws magus figures it does not compute"
+order: 29
 description: >-
   The Claude Code mod gets three inline views: the job plan an agent forks, a live run of magus run or magus affected, and the shape of a magus query and its answer. Each figure is composed in Buzz with magus/figure and drawn by libs/figure, from data core already serves or will journal. The mod's TypeScript only notices the call, runs the Buzz script through magus, and places the SVG. A mod cannot load WebAssembly, so the OpenCode wasm shim does not carry over; a process per frame does.
 tags: [adr, decision, agents, claude-code, mod, figure, buzz]
@@ -8,7 +8,7 @@ status: proposed
 date: 2026-11-07
 ---
 
-# ADR 0028: the mod draws magus figures it does not compute
+# ADR 0029: the mod draws magus figures it does not compute
 
 ## Context
 
