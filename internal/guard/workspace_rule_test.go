@@ -122,8 +122,10 @@ func TestLoadFailureDenyNamesTheRebuildInMagusOwnCheckout(t *testing.T) {
 		"So does getting the tree back to one a binary can be built from, each alone on its line: "+
 		"`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort` or `--skip`, "+
 		"`git cherry-pick <commit>...` to finish a series, `git worktree add`, and `git reset --keep <checkpoint>` to a revision a job row records as its checkpoint. "+
+		"So do `git revert <commit>` and `git reset --keep <commit>` when every commit they undo is one no remote holds. "+
 		"So do writes outside any workspace, such as memory or a scratchpad, by a file write or a shell redirect. "+
-		"So does putting back a file the load error names as an import it cannot find: `git mv` onto it, `git restore` or `git checkout --` of it, or a write to it.\n"+
+		"So does putting back a file the load error names as an import it cannot find: `git mv` onto it, `git restore` or `git checkout --` of it, or a write to it. "+
+		"`git restore` and `git checkout --` also put back any other file the load error names.\n"+
 		"If the rebuild cannot load the tree either, bootstrap over it, alone on its line: "+
 		"`GOEXPERIMENT=jsonv2 go -C %[4]s run -trimpath ./cmd/magus run go-build --no-cache .`. If the error names a magusfile line instead, fix that line.\n"+
 		"see: %[3]sstale-binary/", staleOwnSay, errStaleLoad.Error(), ruleDocsBase, shellQuoted(root)), stored)

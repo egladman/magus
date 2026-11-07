@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -903,6 +904,7 @@ type LoadRecoverySuite struct {
 	layers     ctxLayers
 	deps       Dependencies
 	checkpoint string
+	root       string
 }
 
 func TestLoadRecoverySuite(t *testing.T) {
@@ -914,6 +916,7 @@ func (s *LoadRecoverySuite) SetupTest() {
 	repo := testkit.NewRepository(s.T(), nil)
 	s.checkpoint = repo.Head()
 	repo.Commit("breaks the load", map[string]string{"notes.txt": "x\n"})
+	s.root = repo.Root()
 	ctx = WithLocation(ctx, cacheDir, repo.Root(), repo.Root())
 	ownCheckout(s.T(), ctx, true)
 	declareGuardRule(s.T(), repo.Root())
@@ -953,8 +956,62 @@ func (s *LoadRecoverySuite) TestAResetToARevisionNoRowRecordsIsDenied() {
 }
 
 func (s *LoadRecoverySuite) TestAResetToADirtyCheckpointIsDenied() {
+	s.push()
 	s.layers = append(s.layers, s.pin(s.checkpoint+"+0123abcd"))
 	s.Equal(decisionDeny, s.judge("git reset --keep "+s.checkpoint).Decision)
+}
+
+func (s *LoadRecoverySuite) git(args ...string) string {
+	out, err := exec.Command("git", append([]string{"-C", s.root, "-c", "user.name=t", "-c", "user.email=t@t"}, args...)...).CombinedOutput()
+	s.Require().NoError(err, "%s", out)
+	return strings.TrimSpace(string(out))
+}
+
+// push publishes HEAD, so no commit on the branch is the caller's alone.
+func (s *LoadRecoverySuite) push() {
+	remote := s.T().TempDir()
+	s.git("init", "-q", "--bare", remote)
+	s.git("remote", "add", "origin", remote)
+	s.git("push", "-q", "origin", "HEAD:refs/heads/main")
+}
+
+func (s *LoadRecoverySuite) TestARevertOfAnUnpushedCommitPasses() {
+	head := s.git("rev-parse", "HEAD")
+	for _, line := range []string{"git revert " + head, "git revert --no-edit " + head[:9]} {
+		v := s.judge(line)
+		s.NotEqual(decisionDeny, v.Decision, "%s: %s", line, v.Reason)
+	}
+}
+
+func (s *LoadRecoverySuite) TestARevertOfAPushedCommitIsDenied() {
+	s.push()
+	s.Equal(decisionDeny, s.judge("git revert "+s.git("rev-parse", "HEAD")).Decision)
+}
+
+func (s *LoadRecoverySuite) TestARevertOfSeveralCommitsIsDenied() {
+	s.Equal(decisionDeny, s.judge("git revert HEAD HEAD~1").Decision)
+}
+
+func (s *LoadRecoverySuite) TestAKeepResetOverUnpushedCommitsPasses() {
+	broken := s.git("rev-parse", "HEAD")
+	s.git("commit", "-q", "--allow-empty", "-m", "more")
+	v := s.judge("git reset --keep " + broken)
+	s.NotEqual(decisionDeny, v.Decision, v.Reason)
+}
+
+func (s *LoadRecoverySuite) TestAKeepResetOverPushedCommitsIsDenied() {
+	broken := s.git("rev-parse", "HEAD")
+	s.git("commit", "-q", "--allow-empty", "-m", "more")
+	s.push()
+	s.Equal(decisionDeny, s.judge("git reset --keep "+broken).Decision)
+}
+
+func (s *LoadRecoverySuite) TestAKeepResetToARevisionOffTheBranchIsDenied() {
+	s.git("checkout", "-q", "-b", "side", s.checkpoint)
+	s.git("commit", "-q", "--allow-empty", "-m", "side")
+	side := s.git("rev-parse", "HEAD")
+	s.git("checkout", "-q", "-")
+	s.Equal(decisionDeny, s.judge("git reset --keep "+side).Decision)
 }
 
 func (s *LoadRecoverySuite) TestASoftResetToACheckpointIsDenied() {

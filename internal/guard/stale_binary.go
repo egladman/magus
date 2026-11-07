@@ -507,6 +507,51 @@ func checkpointReset(ctx context.Context, command string, d Dialect, at location
 	})
 }
 
+// unpushedUndo reports a lone `git revert [--no-edit] <commit>` or
+// `git reset --keep <commit>` that undoes only commits no remote holds.
+// Those are the caller's own, so undoing one cannot lose shared work.
+func unpushedUndo(ctx context.Context, command string, d Dialect, at location) bool {
+	call, ok := soleCall(command, d)
+	if !ok || len(call.Assigns) > 0 {
+		return false
+	}
+	words := literalWords(call.Args)
+	if len(words) < 3 || path.Base(words[0]) != "git" {
+		return false
+	}
+	var rev string
+	reset := false
+	switch {
+	case words[1] == "revert" && len(words) == 3:
+		rev = words[2]
+	case words[1] == "revert" && len(words) == 4 && words[2] == "--no-edit":
+		rev = words[3]
+	case words[1] == "reset" && len(words) == 4 && words[2] == "--keep":
+		rev, reset = words[3], true
+	default:
+		return false
+	}
+	root := cmp.Or(at.dir, at.workspace)
+	if root == "" || strings.HasPrefix(rev, "-") {
+		return false
+	}
+	resolved, err := gitNames(ctx, root, "rev-parse", "--verify", "--quiet", rev+"^{commit}")
+	if err != nil || len(resolved) != 1 {
+		return false
+	}
+	commit := resolved[0]
+	if _, err := gitNames(ctx, root, "merge-base", "--is-ancestor", commit, "HEAD"); err != nil {
+		return false
+	}
+	undone := commit + "^!"
+	if reset {
+		undone = commit + "..HEAD"
+	}
+	all, errAll := gitNames(ctx, root, "rev-list", undone)
+	local, errLocal := gitNames(ctx, root, "rev-list", undone, "--not", "--remotes")
+	return errAll == nil && errLocal == nil && len(all) > 0 && len(local) == len(all)
+}
+
 // onlyEditorAssigns reports an environment prefix that sets nothing but the editor git
 // opens for a continued pick's message.
 func onlyEditorAssigns(assigns []*syntax.Assign) bool {
@@ -539,7 +584,7 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 	}
 	call.changes = !in.readOnly && !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease, call.builds, at) &&
 		!writesOnlyOutside(in.command, in.dialect, cmp.Or(at.dir, at.workspace), at.workspace, userHome()) &&
-		!checkpointReset(ctx, in.command, in.dialect, at)
+		!checkpointReset(ctx, in.command, in.dialect, at) && !unpushedUndo(ctx, in.command, in.dialect, at)
 	if call.changes && in.lease != "" && scoutLine(in.command, in.dialect) {
 		_, row := actingRole(ctx, at, in.lease, "")
 		call.changes = !row.ReadOnly
@@ -576,8 +621,10 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 		"So does getting the tree back to one a binary can be built from, each alone on its line: " +
 		"`git cherry-pick`, `git merge`, `git rebase` or `git revert` with `--abort` or `--skip`, " +
 		"`git cherry-pick <commit>...` to finish a series, `git worktree add`, and `git reset --keep <checkpoint>` to a revision a job row records as its checkpoint. " +
+		"So do `git revert <commit>` and `git reset --keep <commit>` when every commit they undo is one no remote holds. " +
 		"So do writes outside any workspace, such as memory or a scratchpad, by a file write or a shell redirect. " +
-		"So does putting back a file the load error names as an import it cannot find: `git mv` onto it, `git restore` or `git checkout --` of it, or a write to it.")
+		"So does putting back a file the load error names as an import it cannot find: `git mv` onto it, `git restore` or `git checkout --` of it, or a write to it. " +
+		"`git restore` and `git checkout --` also put back any other file the load error names.")
 	if fix.why != "" {
 		why.WriteString("\n" + fix.why)
 	}
