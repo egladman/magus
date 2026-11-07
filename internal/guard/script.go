@@ -65,6 +65,11 @@ func denyScriptContent(deps Dependencies, callDir, command string, d Dialect) Sh
 			lang = detectScriptLang(file, body)
 		}
 		v := judged(judgeScript(deps, lang, body), run.path, fmt.Sprintf("\nJudged from the content of %s, which this line runs: a script gets the verdict its lines would get typed inline.", run.path))
+		if _, inside := workspaceRelative(deps.scope.root, file); v.Deny == "" && lang == scriptBuzz && !inside {
+			if computed, ok := computedSpawnVerdict(deps, body); ok {
+				v = judged(computed, run.path, fmt.Sprintf("\nJudged from the content of %s, which lies outside the workspace.", run.path))
+			}
+		}
 		switch {
 		case v.Deny != "":
 			return v
