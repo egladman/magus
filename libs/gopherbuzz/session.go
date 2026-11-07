@@ -1920,14 +1920,10 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 		// globals don't leak into the parent env. Collect the new globals
 		// and expose them as a map bound under the alias.
 		//
-		// Collect its DECLARATIONS too, exactly as the flat path below does. Only the
-		// runtime values arrive through loadImportAsAlias; the exported object and
-		// enum types are compile-time facts that live nowhere else, and skipping this
-		// left an aliased file import unable to name them: `testing\PrefixMe{}`
-		// reported an undefined type in the checker, and where it did compile the
-		// literal was built with no field defaults because the compiler seeds those
-		// from the same collection (see CompileOptions.ImportedTypes).
-		s.collectImportedModule(imp.Alias, string(data))
+		// Collect its DECLARATIONS too, under the alias alone. Its types live
+		// nowhere else: without them `testing\PrefixMe{}` is an undefined type.
+		// The compiler reads their field defaults from ModuleTypes.
+		s.collectAliasedModule(imp.Alias, string(data))
 		if err = s.loadImportAsAlias(ctx, imp.Path, string(data), imp.Alias); err != nil {
 			return ImportFile, importFailed(imp.Path, path, err)
 		}
@@ -1992,19 +1988,38 @@ func (s *Session) collectImportedModule(boundName, src string) *ast.Program {
 	return prog
 }
 
+// collectAliasedModule is collectImportedModule for an import bound as alias.
+// Its types are nameable only as `alias\Name`: upstream resolves a bare name
+// in the importer's own namespace alone (Parser.zig resolveGlobal).
+func (s *Session) collectAliasedModule(alias, src string) {
+	if prog, err := s.parse(src); err == nil {
+		s.collectDecls(alias, prog, false)
+	}
+}
+
 // collectProgram records prog's exported declarations under boundName; see
 // collectImportedModule.
 func (s *Session) collectProgram(boundName string, prog *ast.Program) {
+	s.collectDecls(boundName, prog, true)
+}
+
+// collectDecls records prog's exported declarations under boundName. bare
+// also makes its types nameable unqualified, as a flat import does.
+func (s *Session) collectDecls(boundName string, prog *ast.Program, bare bool) {
 	for _, stmt := range prog.Stmts {
 		switch d := stmt.(type) {
 		case *ast.ObjectDecl:
 			if d.IsExported {
-				s.importedTypes = append(s.importedTypes, d)
+				if bare {
+					s.importedTypes = append(s.importedTypes, d)
+				}
 				s.rememberModuleType(boundName, d)
 			}
 		case *ast.EnumDecl:
 			if d.IsExported {
-				s.importedTypes = append(s.importedTypes, d)
+				if bare {
+					s.importedTypes = append(s.importedTypes, d)
+				}
 				s.rememberModuleType(boundName, d)
 			}
 		case *ast.FunDecl:
@@ -2379,19 +2394,13 @@ func (s *Session) bindCachedFlat(boundName, importPath string, c *cachedImport, 
 	return nil
 }
 
-// bindCachedAlias binds a file another session already evaluated the way an aliased
-// import binds it: its values as a map under alias, and its object types under their
-// bare names (see loadImportAsAlias for why).
+// bindCachedAlias binds a file another session already evaluated the way an
+// aliased import binds it. See loadImportAsAlias.
 func (s *Session) bindCachedAlias(alias string, c *cachedImport) {
-	s.collectImportedModule(alias, c.src)
+	s.collectAliasedModule(alias, c.src)
 	for _, n := range c.names {
-		v, _ := c.values.MapGet(n)
-		if !v.IsObjectDef() {
-			continue
-		}
-		s.env.Define(QualifiedTypeKey(alias, n), v)
-		if _, exists := s.env.Get(n); !exists {
-			s.env.Define(n, v)
+		if v, _ := c.values.MapGet(n); v.IsObjectDef() {
+			s.env.Define(QualifiedTypeKey(alias, n), v)
 		}
 	}
 	s.env.Define(alias, c.values)
@@ -2644,20 +2653,11 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 		}
 		v := sub.env.Slots()[slot]
 		m.MapSet(name, v)
-		// An object TYPE also gets bound in the parent under its bare name.
-		//
-		// `ns\Name{...}` builds the def under QualifiedTypeKey. The bare name
-		// may hold another module's type, whose def nulls every field.
-		//
-		// Values are NOT bound this way: isolation is the point of an aliased
-		// import, and a type declaration is a compile-time fact rather than state.
-		// An existing binding wins, so a local type still shadows an imported one,
-		// matching how the compiler seeds its typeDecls.
+		// An object TYPE is also bound in the parent, under QualifiedTypeKey
+		// alone: `ns\Name{...}` builds the def found there. The bare name
+		// stays the importer's own, as upstream resolves it.
 		if v.IsObjectDef() {
 			s.env.Define(QualifiedTypeKey(alias, name), v)
-			if _, exists := s.env.Get(name); !exists {
-				s.env.Define(name, v)
-			}
 		}
 	}
 	s.env.Define(alias, m)

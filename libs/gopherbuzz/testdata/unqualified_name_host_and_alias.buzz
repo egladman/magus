@@ -1,0 +1,7 @@
+// @skip: needs the host module TestImport_UnqualifiedNameIsTheImporters binds
+import "host";
+import "module_qualified_object_literal" as models;
+
+final h = Run{ inv = "x" };
+final m = models\Run{ sha = "abc" };
+export final got = "{h.inv} {m.sha}";
