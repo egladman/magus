@@ -245,13 +245,15 @@ the `Step`. magus writes these lines, in this order, into one hash:
 - `charm:` lines: the active [charms](charms.md), sorted by name. A
   charm-variant run (`format:rw`) hashes differently from the bare run, because the
   charm changes behavior. Empty charms add nothing, so charm-less runs are
-  unaffected. A write grant (`rw`, `update`) keys only a step that can read it:
-  something in its `ctx.needs` closure branches on it by name
-  (`ctx.hasCharm("rw")`), declares in-place edits (`editsExistingSource: true`), or
-  drives an op that patches its argv on it. Every other step, a test run say, hashes
-  as it would without the grant, so a local run under `default_charms: [rw]` and the
-  read-only `ci` gate share one entry. The walk is static, so a body that names the
-  charm through a variable counts as not reading it. A display flag such as `-s`
+  unaffected. A charm keys only a step that can read it: something in its
+  `ctx.needs` closure branches on it by name (`ctx.hasCharm("gha")`), declares
+  in-place edits (`editsExistingSource: true`), or drives an op that patches its
+  argv on it. Every other step hashes as it would without the charm. A local run
+  under `default_charms: [rw]` and the read-only `ci` gate share one entry, and a
+  generator reached by `ci:gha` replays the entry a plain `generate` stored. The
+  walk is static and follows helpers in the same file only, so a body that names
+  the charm through a variable, or through a helper in another file, counts as
+  not reading it. A display flag such as `-s`
   (`--silent`) is no charm and never enters the key.
 - `arg:` lines: one per argument after `--` (`magus run test -- -run
   TestFoo`), in the order given. Unlike charms and env these are never sorted,

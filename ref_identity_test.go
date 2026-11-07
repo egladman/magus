@@ -27,7 +27,9 @@ import (
 // instead of taking as a parameter.
 func newIdentityWorkspace(t *testing.T, defaultCharms ...string) *Magus {
 	t.Helper()
-	spellName := register.Spell(t, "zzz-identify-spell", spells.WithTargets("build"))
+	// An op with no Bin computes its argv in the VM, so it reads every charm.
+	spellName := register.Spell(t, "zzz-identify-spell", spells.WithTargets("build"),
+		spells.WithOps(map[string]spells.Op{"build": {}}))
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
@@ -95,8 +97,8 @@ func TestIdentifyRef_ShortenedPrefixMatches(t *testing.T) {
 // workspace's configured default charms and a ref minted bare (as CI's
 // --no-default-charms run would mint it) must BOTH resolve once the workspace has
 // default_charms configured, since a pasted CI ref is exactly the case this method
-// exists for. The default is cd rather than rw: a write grant keys only a step that reads
-// it, and this fixture's build does not.
+// exists for. A charm keys only a step that reads it.
+// This fixture's build reads every charm.
 func TestIdentifyRef_CharmVariants(t *testing.T) {
 	defaultCharms := []string{types.CharmCD}
 	m := newIdentityWorkspace(t, defaultCharms...)
