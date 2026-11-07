@@ -28,7 +28,7 @@ test "tectonic builds the manifest's document project" {
     std\assert(cmd.bin == "tectonic" and cmd.args.join(" ") == "-X build", message: "argv {cmd.args.join(" ")}");
 }
 
-test "chktex lints every tex file quietly" {
+test "chktex lints every tex file with no flag that masks its exit status" {
     final cmd = latex\mgs_listTargets()["chktex"]!(Target{});
     std\assert(cmd.args.join(" ") == "-q", message: "argv {cmd.args.join(" ")}");
     std\assert(cmd.sources.join(" ") == "**/*.tex", message: "sources");

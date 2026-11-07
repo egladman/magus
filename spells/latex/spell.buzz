@@ -1,7 +1,6 @@
 // tectonic fetches the TeX bundle its Tectonic.toml names, over the network,
 // on the first build of a machine. Later builds run from its cache.
 // chktex has no mise backend: install it from a TeX distribution.
-// Its exit status on warnings is unverified.
 
 import "magus/spell";
 // charm constructors derive argv patches from an anchor arg.
@@ -47,6 +46,8 @@ fun tectonic(target: Target) > Command {
     return Command{bin = "tectonic", args = ["-X", "build"]};
 }
 
+// chktex exits 2 on any warning (checked on 1.7.9), so lint fails on one.
+// -q drops only the banner.
 fun chktex(target: Target) > Command {
     return Command{bin = "chktex", args = ["-q"], sources = ["**/*.tex"]};
 }

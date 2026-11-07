@@ -89,7 +89,7 @@ var spellMeta = map[string]spellInfo{
 	"latex": {
 		dir: "latex", language: "LaTeX",
 		description: "LaTeX spell: tectonic builds the PDF, chktex lints, and latexindent formats.",
-		intro:       "The `latex` spell builds a LaTeX project to a PDF with `tectonic`, lints it with `chktex`, and formats it with `latexindent`; the `rw` charm turns the format check into an in-place rewrite. The first build on a machine fetches the TeX bundle its `Tectonic.toml` names over the network, and later builds run from tectonic's cache. mise pins tectonic and latexindent; chktex has no mise backend and no Homebrew formula, so install it from a TeX distribution; its exit status on warnings is unverified.",
+		intro:       "The `latex` spell builds a LaTeX project to a PDF with `tectonic`, lints it with `chktex`, and formats it with `latexindent`; the `rw` charm turns the format check into an in-place rewrite. The first build on a machine fetches the TeX bundle its `Tectonic.toml` names over the network, and later builds run from tectonic's cache. mise pins tectonic and latexindent; chktex has no mise backend and no Homebrew formula, so install it from a TeX distribution. chktex exits 2 on any warning, so `lint` fails on one.",
 		tags:        []string{"latex", "tex", "pdf", "lint"},
 	},
 	"podman": {

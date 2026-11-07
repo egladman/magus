@@ -7,7 +7,7 @@ tags: [latex, spell, tex, pdf, lint, tools]
 
 # latex
 
-The `latex` spell builds a LaTeX project to a PDF with `tectonic`, lints it with `chktex`, and formats it with `latexindent`; the `rw` charm turns the format check into an in-place rewrite. The first build on a machine fetches the TeX bundle its `Tectonic.toml` names over the network, and later builds run from tectonic's cache. mise pins tectonic and latexindent; chktex has no mise backend and no Homebrew formula, so install it from a TeX distribution; its exit status on warnings is unverified.
+The `latex` spell builds a LaTeX project to a PDF with `tectonic`, lints it with `chktex`, and formats it with `latexindent`; the `rw` charm turns the format check into an in-place rewrite. The first build on a machine fetches the TeX bundle its `Tectonic.toml` names over the network, and later builds run from tectonic's cache. mise pins tectonic and latexindent; chktex has no mise backend and no Homebrew formula, so install it from a TeX distribution. chktex exits 2 on any warning, so `lint` fails on one.
 
 **Runtime name:** `latex` (source `spells/latex/`)
 
@@ -34,6 +34,8 @@ Working directory and environment are NOT options: they ride the context, as `la
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
 ## chktex
+
+chktex exits 2 on any warning (checked on 1.7.9), so lint fails on one. -q drops only the banner.
 
 **Command:** `chktex -q`
 
