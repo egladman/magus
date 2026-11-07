@@ -948,6 +948,109 @@ jobs:
           MAGUS_TEST_REQUIRE_LANDLOCK: '1'
         run: go test -count=1 ./internal/sandbox/...
 
+  # The two symbol indexes advice reads, built where a cache may be restored: this job
+  # holds no write token, so trusted-jobs-restore-no-actions-cache allows it. The merge
+  # base's graph is a function of that commit alone and is keyed on it exactly; this
+  # tree's index reruns only for the projects whose sources moved. advice imports both
+  # from this run's artifact.
+  advice-index:
+    name: advice index
+    if: github.event_name == 'pull_request' && vars.MAGUS_PR_COMMENTS != 'false' && needs.plan.outputs.inherit != 'true'
+    needs: [plan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+          cache: true
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: artifact
+          artifact: ${{ needs.plan.outputs.magus_artifact }}
+          artifact-sha256: ${{ needs.plan.outputs.magus_sha256 }}
+          artifact-commit: ${{ github.sha }}
+
+      - uses: ./.github/actions/setup-scip
+
+      - name: Find the merge base
+        id: base
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: echo "sha=$(git merge-base HEAD "origin/$BASE_REF")" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the merge base's symbol graph
+        id: basegraph
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/advice-index/base-graph.json
+          key: advice-base-graph-v1-${{ runner.os }}-${{ steps.base.outputs.sha }}
+
+      - name: Restore the local cache tier
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .magus/cas
+            .magus/manifests
+            .magus/logs
+          key: ${{ github.workflow }}-magus-advice-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ github.workflow }}-magus-advice-v1-${{ runner.os }}-
+
+      - name: Index this tree and the merge base
+        env:
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+          BASE_CACHED: ${{ steps.basegraph.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/advice-index"
+          mkdir -p "$out"
+          magus graph build --no-sessions
+          if [ "$BASE_CACHED" != true ]; then
+            git worktree add "$RUNNER_TEMP/base" "$BASE_SHA"
+            magus --root "$RUNNER_TEMP/base" graph build --no-sessions
+            magus --root "$RUNNER_TEMP/base" graph export --symbols -o json \
+              --tee "$out/base-graph.json" -q > /dev/null
+          fi
+          magus config cache export --to "$out/cache.tar.gz"
+          cd "$out"
+          sha256sum cache.tar.gz base-graph.json > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Save the merge base's symbol graph
+        if: steps.basegraph.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/advice-index/base-graph.json
+          key: advice-base-graph-v1-${{ runner.os }}-${{ steps.base.outputs.sha }}
+
+      - name: Save the local cache tier
+        if: success() || failure()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .magus/cas
+            .magus/manifests
+            .magus/logs
+          key: ${{ github.workflow }}-magus-advice-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Upload the indexes
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: magus-advice-index-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/advice-index/
+          if-no-files-found: error
+          retention-days: 1
+
   advice:
     # Non-blocking nudges about THIS PR - one step per check, each silent unless it has
     # something to say. Named for doctor's [advice] level so the CI comment and the tool
@@ -958,7 +1061,7 @@ jobs:
     # which the last green run already commented on, and re-posting it says nothing new.
     name: advice
     if: github.event_name == 'pull_request' && vars.MAGUS_PR_COMMENTS != 'false' && needs.plan.outputs.inherit != 'true'
-    needs: [plan]
+    needs: [plan, advice-index]
     runs-on: ubuntu-latest
     # Two symbol indexes, this tree's and the merge base's. Measured locally at 30s each on
     # a warm build cache; a cold runner pays the Go compile for both.
@@ -1012,20 +1115,52 @@ jobs:
       # a signature compared across two different environments moves for reasons the author
       # did not write.
       #
+      # The indexes advice-index built, from this run. An accelerator: a missing or
+      # mismatched archive leaves this job indexing both sides itself, and says so.
+      - name: Download the indexes advice-index built
+        id: index-download
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: magus-advice-index-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/advice-index
+
+      - name: Import the indexes advice-index built
+        id: index-import
+        shell: bash
+        env:
+          DOWNLOAD: ${{ steps.index-download.outcome }}
+        run: |
+          dir="$RUNNER_TEMP/advice-index"
+          if [ "$DOWNLOAD" != success ] || [ ! -f "$dir/cache.tar.gz" ]; then
+            echo "::warning title=advice::no advice-index archive (download: $DOWNLOAD); this job indexes both sides itself"
+          elif ! (cd "$dir" && sha256sum --check --strict SHA256SUMS); then
+            echo "::warning title=advice::the advice-index archive does not match its sha256, so it is not imported; this job indexes both sides itself"
+          elif ! magus config cache import "$dir/cache.tar.gz"; then
+            echo "::warning title=advice::importing the advice-index archive failed; this job indexes both sides itself"
+          else
+            cp "$dir/base-graph.json" "$RUNNER_TEMP/base-graph.json"
+            echo "imported=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # continue-on-error: an index that fails leaves the advisors reporting less, and never
-      # fails a pull request. The step after it says so on the run.
+      # fails a pull request. The step after it says so on the run. With the import above,
+      # this tree's build replays from the cache and the base is not built again.
       - name: Index this tree and the merge base
         id: baseline
         continue-on-error: true
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+          IMPORTED: ${{ steps.index-import.outputs.imported }}
         run: |
           set -euo pipefail
           magus graph build --no-sessions
-          git worktree add "$RUNNER_TEMP/base" "$(git merge-base HEAD "origin/$BASE_REF")"
-          magus --root "$RUNNER_TEMP/base" graph build --no-sessions
-          magus --root "$RUNNER_TEMP/base" graph export --symbols -o json \
-            --tee "$RUNNER_TEMP/base-graph.json" -q > /dev/null
+          if [ "$IMPORTED" != true ]; then
+            git worktree add "$RUNNER_TEMP/base" "$(git merge-base HEAD "origin/$BASE_REF")"
+            magus --root "$RUNNER_TEMP/base" graph build --no-sessions
+            magus --root "$RUNNER_TEMP/base" graph export --symbols -o json \
+              --tee "$RUNNER_TEMP/base-graph.json" -q > /dev/null
+          fi
           echo "path=$RUNNER_TEMP/base-graph.json" >> "$GITHUB_OUTPUT"
 
       - name: Report an index that failed
