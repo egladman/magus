@@ -1,0 +1,16 @@
+import "magus";
+import "magus/spell/latex";
+
+magus\project({ "spells": [latex] });
+
+export fun build(ctx: magus\Context, args: [str]) > void {
+    latex["tectonic"](ctx);
+}
+
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    latex["chktex"](ctx);
+}
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    latex["latexindent"](ctx);
+}
