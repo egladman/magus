@@ -1,10 +1,11 @@
 ---
 title: "ADR 0029: a claim counts only what runs in it"
 order: 29
-description: On 2026-11-07 the broker refused 20 runs while slots sat idle. Root lint claimed 16.3 GiB of a 21 GiB budget; its own measured runs peak at 5.0 GiB. The gap is the chain fold, which adds every ctx.needs member's peak to the composer's claim even when that member runs as a step with its own claim, has already passed in this run, or replays from cache, and which drops the whole call to flat summed peaks when one member has no curve. Half the refusals were slots alone. This record proposes that a composer's claim count only the work that runs under it, that members compose curve by curve where curves exist, that a step take its slots elastically between one and its measured width, and that the margin be revisited now that MGS3053 exists. budget_wait stays 0. No role is added.
+description: On 2026-11-07 the broker refused 20 runs while slots sat idle. Root lint claimed 16.3 GiB of a 21 GiB budget; its own measured runs peak at 5.0 GiB. The gap is the chain fold, which adds every ctx.needs member's peak to the composer's claim even when that member runs as a step with its own claim, has already passed in this run, or replays from cache, and which drops the whole call to flat summed peaks when one member has no curve. Half the refusals were slots alone, and 15 of 20 refused agent runs were run again with --budget-wait within seconds. Eli decided on 2026-11-07 that a composer's claim counts only the work that runs under it, that members compose curve by curve where curves exist, that a claim is the highest measured peak with no margin, that a step takes its slots elastically between one and its measured width while leaving room for waiters, that a run that does not fit waits by default and says so, reversing ADR 0001's 2026-11-05 zero default, and that refusals and waits are recorded in a JSON Lines store. No role is added.
 tags: [adr, decision, concurrency, memory, admission, broker, forecast, history, roles]
-status: proposed
+status: accepted
 date: 2026-11-07
+supersedes: "ADR 0001, Amendments: 2026-11-05, waiting is opt-in, budget_wait defaults to 0"
 ---
 
 # ADR 0029: a claim counts only what runs in it
@@ -22,7 +23,8 @@ showed 2 of 10 slots held and many runs refused with MGS3009. Eli:
 
 ### What the broker recorded
 
-The broker's `capacity.refused` log held 20 refusals between 15:05 and 15:46 on 2026-11-07:
+The broker's `capacity.refused` list (`magus server status -o json`) held 20 refusals between
+15:05 and 15:46 on 2026-11-07:
 
 | refused because             | count | example                                                                   |
 | --------------------------- | ----- | ------------------------------------------------------------------------- |
@@ -35,7 +37,7 @@ Every memory refusal had a lint holder claiming 16349 to 17245 MiB.
 ### Lint's claim is not lint's peak
 
 From the forecast history (`~/.local/state/magus/history/v1.json`, 100-outcome window, passing
-runs of root targets, 2026-11-07):
+runs of root targets, read 2026-11-07):
 
 | target      | runs | median MiB | p90 MiB | max MiB | 1.25 x max | claim the broker held |
 | ----------- | ---- | ---------- | ------- | ------- | ---------- | --------------------- |
@@ -75,11 +77,11 @@ one slot is free, and nothing lets it run at 1.
 
 ### What the host really held
 
-At 15:53, with magus holding 3.2 GiB of claims, the host reported 22 GiB used, 1.2 GiB unused,
-7.3 GiB in the compressor and 23.3M pages swapped out since boot. Most of it was not magus:
-the desktop app's helpers, a VM, a browser. The 21 GiB budget is a figure on paper, not free
-memory, and MGS3053 is what notices when the paper and the machine disagree. Raising the
-budget would make the paper wronger. The waste is in the claims.
+At 15:53, with magus holding 3.2 GiB of claims, `top` and `vm_stat` reported 22 GiB used,
+1.2 GiB unused, 7.3 GiB in the compressor and 23.3M pages swapped out since boot. Most of it
+was not magus: the desktop app's helpers, a VM, a browser. The 21 GiB budget is a figure on
+paper, not free memory, and MGS3053 is what notices when the paper and the machine disagree.
+Raising the budget would make the paper wronger. The waste is in the claims.
 
 ### Measurement error runs both ways
 
@@ -92,10 +94,23 @@ leave resident size, so it also reads low under pressure. Neither explains an 11
 ### Waiting
 
 `budget_wait` defaults to 0 since ADR 0001's 2026-11-05 amendment: "A wait nobody asked for
-looks like work, and a caller who wants one can say so." On 2026-11-07 every refused agent ran
-the same command again with `--budget-wait`, and the runs went through one at a time. That is
-a round trip per refusal, but it is the caller asking, which is what the amendment wanted. The
-refusals were wrong because the claims were wrong, not because nobody waited.
+looks like work, and a caller who wants one can say so." The 30-minute default it reversed
+lived only on the #641 branch, from c6f6829ee to 2bb45341c, about 3h47m, and never ran on
+main. No refusal count, hang or complaint precedes the reversal in that day's transcripts.
+
+On 2026-11-07, agent transcripts show 20 MGS3009 refusals. 15 were followed by the same
+command with `--budget-wait`, 13 of those within 7 s (median 3 s). After one refusal an agent
+pasted the flag onto every later run: 160 commands that day carried it. Waits that followed
+lasted 3m03s, over 3m04s and 5m18s; one `--budget-wait 10m` waited the full bound behind a
+45-minute `affected ci` and was refused anyway. Estimates of time-to-seat from the holders'
+recorded durations ran 2.4 to 4 times low, because other waiters take a freed seat first.
+
+The broker keeps only the last 20 refusals, in memory (`refusedKeep`, broker/budget.go:292),
+and every one of its 104 owner fields read `unleased`, so this count rests on transcripts.
+
+Replaying the 20 refusals of 15:05-15:46 under the claims decided below, memory refuses none
+(10 before). 11 are still refused on slots alone, among them the nine-target burst at
+15:33:59, because the holders had taken their full widths.
 
 ### Roles
 
@@ -111,8 +126,8 @@ integrator. Today:
   (default 1) and no memory (cmd/magus/job.go:1730-1810).
 
 One defect: `magus job fork` prints the budget-full advice for every row, read-only included
-(cmd/magus/job.go:1465-1471), where the spawn rule already skips it. It printed three times
-while this record's research was being forked.
+(cmd/magus/job.go:1465-1471), where the spawn rule already skips it. It printed for each
+read-only row forked for this record's research.
 
 ### What other tools do
 
@@ -127,6 +142,11 @@ Fetched 2026-11-07. Input, not justification.
   takes `HOST_RAM*.5`-style expressions. Pants assumes 512 MiB per pooled child process.
 - Tokens taken as needed: the GNU make jobserver hands one token per job, recursive makes
   share the pipe, and a job runs with however many it gets. Ninja joins a FIFO jobserver.
+- Waiting by default: schedulers wait. Bazel blocks, make waits for a token, Kubernetes and
+  Slurm hold a job pending and say why, Buildkite queues, and Cargo waits for its package-cache
+  lock and prints `Blocking waiting for file lock`. Locks held by one person's command refuse:
+  apt's `DPkg::Lock::Timeout` and git's `index.lock` default to 0. No fetched tool varies the
+  default by whether a terminal is attached.
 - A live brake: `make -l` will not start a job while load average is high; Bazel's
   `--experimental_memory_load_scheduling` (default off) schedules from machine memory load;
   systemd-oomd kills on PSI thresholds.
@@ -140,23 +160,24 @@ turbo.build/repo/docs/reference/run, docs.gradle.org build_environment and worke
 gnu.org make manual (Parallel, POSIX-Jobserver), ninja-build.org/manual.html,
 doc.rust-lang.org/cargo/reference/config.html, pkg.go.dev/cmd/go,
 kernel.org accounting/psi.html, freedesktop.org systemd-oomd.service,
-kubernetes.io manage-resources-containers and quality-service-pod, slurm.schedmd.com/sbatch.html,
-pantsbuild.org/stable/reference/global-options.
+kubernetes.io manage-resources-containers and quality-service-pod, slurm.schedmd.com/sbatch.html
+and squeue.html, pantsbuild.org/stable/reference/global-options, Debian apt.conf, git-scm.com.
 
 ## Decision
 
-Every item is proposed; nothing is built until Eli approves.
+Eli decided every item on 2026-11-07. Nothing is built yet.
 
-| item                                                         | State    |
-| ------------------------------------------------------------ | -------- |
-| A composer's claim counts only members that run inline in it | proposed |
-| A call's members compose curve by curve where curves exist   | proposed |
-| A step's slots are elastic, from one to its measured width   | proposed |
-| The memory margin is decided again, with MGS3053 as backstop | proposed |
-| A refusal prints the claim's breakdown                       | proposed |
-| `job fork` prints no budget advice for a seatless row        | proposed |
-| `budget_wait` stays 0                                        | proposed |
-| No new role                                                  | proposed |
+| item                                                              | State   |
+| ----------------------------------------------------------------- | ------- |
+| A composer's claim counts only members that run inline in it      | planned |
+| A call's members compose curve by curve where curves exist        | planned |
+| A claim is the highest measured peak, with no margin              | planned |
+| A step's slots are elastic, and a grant leaves room for waiters   | planned |
+| A run that does not fit waits by default, and says so             | planned |
+| Refusals and waits are recorded in a JSON Lines store             | planned |
+| A refusal and a wait print the claim's breakdown                  | planned |
+| `job fork` prints no budget advice for a seatless row             | planned |
+| No new role                                                       | planned |
 
 ### A composer's claim counts only members that run inline in it
 
@@ -175,7 +196,7 @@ members ran inline, that measured peak, which already saw those members' process
 the fold from above: a measured total beats a summed estimate.
 
 Lint, sized this way on 2026-11-07: install-linter, conventions and harness-drift run as their
-own upstream steps, so lint claims its own work, 1.25 x 5008 = 6261 MiB, instead of 16349.
+own upstream steps, so lint claims its own work, 5008 MiB, instead of 16349.
 
 ### A call's members compose curve by curve where curves exist
 
@@ -183,53 +204,80 @@ own upstream steps, so lint claims its own work, 1.25 x 5008 = 6261 MiB, instead
 compose by bucket as ADR 0012 decided; each member without one adds its flat peak to every
 bucket. The fallback names every member that went flat, not only the first.
 
-### A step's slots are elastic, from one to its measured width
+### A claim is the highest measured peak, with no margin
+
+The claim was ceil(1.25 x the highest passing peak). The margin predates MGS3053
+(2026-10-31), which refuses new steps while the kernel says memory is bad. Against the 21504
+MiB budget, lint, test, buzz-test and spells-generate together need:
+
+| claim basis  | the four, own peaks | all four fit |
+| ------------ | ------------------- | ------------ |
+| 1.25 x max   | 23784 MiB           | no (3 fit)   |
+| max          | 19024 MiB           | yes          |
+| p90 of peaks | 15288 MiB           | yes          |
+
+Eli chose max, no margin: resident-size sums already read high, the window holds 100 runs,
+and an overrun meets MGS3053 before the OOM killer. `peakMargin` (limiter.go) goes.
+
+### A step's slots are elastic, and a grant leaves room for waiters
 
 A claim carries a floor of 1 and a ceiling of its declared or measured width. The broker
-seats it when the floor and its memory fit, and grants up to the ceiling from what is free,
-leaving room for the head of the queue. The step runs Go as wide as it was granted, as it
+seats it when the floor and its memory fit. With nobody queued it grants up to the ceiling
+from what is free. With waiters queued it grants at most a fair share of the free slots,
+free / (waiters + 1), and never less than one, so a burst starts narrow instead of being
+refused behind steps that took every slot. The step runs Go as wide as it was granted, as it
 does today with what it claimed. The outcome records the slots granted, so saturation still
 reads against what the run had. A declared `slots` is a floor and a ceiling both, so `scip`'s
 declared 4 still means 4.
 
-This is the jobserver's rule at the step's grain: run with the tokens you get. It removes
-the slots-only refusals whenever a slot is free, and costs a step's duration when it runs
-narrow. The verdict depends on the held state, as it does now.
+This is the jobserver's rule at the step's grain: run with the tokens you get. A step granted
+narrow runs longer, and its outcome says so.
 
-### The memory margin is decided again, with MGS3053 as backstop
+### A run that does not fit waits by default, and says so
 
-The claim is ceil(1.25 x the highest passing peak). The margin predates MGS3053 (2026-10-31),
-which now refuses new steps while the kernel says memory is bad. Three choices, for Eli:
+This reverses ADR 0001's 2026-11-05 amendment, which made waiting opt-in. Its one recorded
+reason, that a wait nobody asked for looks like work, is answered by printing the wait: a
+wait that names what it waits on does not look like work. The evidence against refusing at
+once is the 2026-11-07 transcripts above: every refusal was answered with the same flag
+within seconds, and the flag then rode along on 160 commands. A refusal every caller answers
+the same way carries no information; it is the toll
+[Friction that carries meaning](../design/principles/friction-that-carries-meaning.md) removes.
 
-| claim basis  | lint + test + buzz-test + spells-generate, own peaks | all four fit in 21504 |
-| ------------ | ---------------------------------------------------- | --------------------- |
-| 1.25 x max   | 23784 MiB                                            | no (3 fit)            |
-| max          | 19024 MiB                                            | yes                   |
-| p90 of peaks | 15288 MiB                                            | yes                   |
+- `budget_wait` defaults to 30 minutes, or the run's own deadline when that is sooner. The
+  flag, `MAGUS_BUDGET_WAIT` and `magus.yaml` still set it, and 0 still refuses at once.
+- A run that parks prints, on stderr, what it waits for, who holds the room (pid, project,
+  target, directory), the claim's breakdown, and its place in the queue; then again whenever
+  the holders change, with the time waited and the time left; nothing on a timer. This is
+  the existing parked-frame text of the 2026-11-05 amendment above it, now on by default.
+- Any time-to-seat it prints says "at least": estimates from recorded durations ran 2.4 to 4
+  times low on 2026-11-07.
+- At the bound it is refused with MGS3009, as today, naming the holders and the bound.
+- A leased worker still never waits: the guard's sleep-poll rule and the owed check are
+  unchanged, and the worker's check is run with `--budget-wait 0`.
 
-This record recommends max, no margin: resident-size sums already read high, the window
-holds 100 runs, and an overrun meets MGS3053 before the OOM killer. p90 is refused below.
+### Refusals and waits are recorded in a JSON Lines store
 
-### A refusal prints the claim's breakdown
+Each refusal and each completed wait appends one entry to a broker store: when, who asked
+(pid, project, target, directory, lease), the claim's breakdown, the held state at the
+verdict, the verdict, and for a wait how long until seated. One `.jsonl` file, last line per
+key wins, compaction by rename, encoding on the entry type. The 20-entry in-memory ring
+stays for `server status`. The owner field records the lease the run's `BAGGAGE` or checkout
+binding names; on 2026-11-07 all 104 read `unleased`, which is fixed with it.
 
-MGS3009 and `magus server status` print, for each holder over a quarter of the budget, what
-its claim is made of: its own measured peak, each folded member and why it folded, and which
-members went flat. For example: "lint 6.1 GiB: own peak 5.0 GiB over 48 runs, x1.25; folded
-nothing: install-linter, conventions, harness-drift run as their own steps". `magus session
--o json` already records sizing; the breakdown is that record, printed.
+### A refusal and a wait print the claim's breakdown
 
-`magus doctor` adds one check over the broker's `capacity.refused` log: refusals in the last
-day where the free slots or memory exceeded the refused ask once the fold is removed. It
-reports a count and the targets; it changes nothing.
+MGS3009, a parked wait and `magus server status` print, for each holder over a quarter of the
+budget, what its claim is made of: its own measured peak, each folded member and why it
+folded, and which members went flat. For example: "lint 4.9 GiB: own peak over 48 runs;
+folded nothing: install-linter, conventions, harness-drift run as their own steps".
+`magus session -o json` already records sizing; the breakdown is that record, printed.
+
+`magus doctor` adds one check over the refusal store: refusals in the last day, and how many
+waits ran past a quarter of their bound. It reports counts and targets; it changes nothing.
 
 ### `job fork` prints no budget advice for a seatless row
 
 `jobFork` (cmd/magus/job.go:1465-1471) checks `holdsNoBuildSeat` as the spawn rule does.
-
-### `budget_wait` stays 0
-
-No new evidence reverses it. The waits on 2026-11-07 were callers asking, as designed, and
-most of the refusals they answered were caused by the fold.
 
 ### No new role
 
@@ -242,24 +290,31 @@ claims of the runs that did take seats.
 ### Principles checked
 
 - [Measured, not asserted](../design/principles/measured-not-asserted.md): relied on. The
-  composer's measured peak bounds the summed estimate, and every figure above has a sample and
-  a date.
+  composer's measured peak bounds the summed estimate, every figure above has a sample and a
+  date, and the refusal store makes the next review rest on records instead of transcripts.
 - [Delete before you add](../design/principles/delete-before-you-add.md): relied on. The fix
-  removes double counting rather than adding a budget, a role or a knob.
+  removes double counting and the margin rather than adding a budget, a role or a knob.
+- [Friction that carries meaning](../design/principles/friction-that-carries-meaning.md):
+  relied on. A refusal by a phantom claim, and a refusal every caller answers with the same
+  flag, are tolls and are removed. A wait at its bound still refuses.
+- [No silent defaults](../design/judgment/no-silent-defaults.md): relied on. The wait is a
+  default, so it prints when it parks and why; every member left out of the fold, and every
+  one held flat, is named in the breakdown.
 - [Determinism at chosen points](../design/judgment/determinism-at-chosen-points.md): bends.
   Sizing at claim time reads which members already passed or hit the cache, facts of this run
-  and this cache, not of the host. Elastic slots make a step's width depend on the held state
-  at its admission, as its admission already does.
-- [No silent defaults](../design/judgment/no-silent-defaults.md): relied on. Every member left
-  out of the fold, and every one held flat, is named in the breakdown.
+  and this cache, not of the host. Elastic grants depend on the held state and the queue at
+  admission, as admission already does. Eli decided this on 2026-11-07.
 - [A refusal carries its reason](../design/judgment/a-refusal-carries-its-reason.md): relied
-  on. The breakdown is the reason for a memory refusal.
-- [Friction that carries meaning](../design/principles/friction-that-carries-meaning.md):
-  relied on. A refusal by a phantom claim is a toll and is removed; a refusal by a real one
-  stays, and waiting stays opt-in.
+  on. The breakdown is the reason for a memory refusal and for a wait.
+- [Automation you can interrogate](../design/judgment/automation-you-can-interrogate.md):
+  relied on. The refusal store answers how often and why after the fact.
+- [Everything is a file](../design/principles/everything-is-a-file.md): relied on. The store
+  is JSON Lines.
 - [A record of refusals](../design/refusals.md): relied on. Claims stay declared or measured
   from recorded runs; nothing observed live enters a verdict beyond MGS3053's existing reading.
-- [The orchestrator plans](../design/principles/the-orchestrator-plans.md): relied on, unchanged.
+  Its machine-wide admission row is updated: the default wait is no longer 0.
+- [The orchestrator plans](../design/principles/the-orchestrator-plans.md): relied on,
+  unchanged. Workers still never wait.
 
 ## Alternatives
 
@@ -273,13 +328,34 @@ claims of the runs that did take seats.
   interceptor under every cacheable body. Leaving out members that run as steps reaches the
   same claim for lint without it. Reopen if a composer is found whose inline members still
   over-claim after this record.
-- **Claim the p90 of peaks.** Lost: one run in ten would exceed its claim by design, and a
-  claim exceeded that often is not a claim. Reopen with ADR 0012's overrun-to-peak rule built
-  and measured.
+- **Keep the 1.25 margin, or take 1.1.** Lost: with the fold fixed, 1.25 fits three of the
+  four targets above and 1.1 fits all four by 0.6 GiB; MGS3053 now covers the overrun the
+  margin guarded. Reopen if MGS3053 fires on a host while every claim fit.
+- **Claim the p90 of peaks.** Lost: one run in ten would exceed its claim by design. Reopen
+  with ADR 0012's overrun-to-peak rule built and measured.
 - **Oversubscribe CPU: budget slots at 1.5 x cores.** Lost: ADR 0001 records four concurrent
   gates at load average 13.7 with tests failing because they were starved. Elastic slots fill
-  idle cores without promising more than exist. Reopen if load average at refusal, recorded
-  beside `capacity.refused`, shows idle cores while slots are full.
+  idle cores without promising more than exist. Reopen if load average at refusal, recorded in
+  the refusal store, shows idle cores while slots are full.
+- **Elastic grants of full width whenever free.** Lost: the replay leaves the nine-target
+  burst refused behind holders that took every slot. Reopen if fair-share grants show steps
+  starved of width while nobody waits.
+- **Keep refusing at once, and print an estimate.** Lost: it keeps the round trip and the
+  copied flag, and the estimates ran 2.4 to 4 times low. Its estimate survives inside the
+  wait's parked line, marked "at least".
+- **Repo policy: this workspace sets `budget_wait` in magus.yaml, the binary stays at 0.**
+  Lost: every workspace with agents pays the same toll, and a shipped default each workspace
+  overrides the same way is the wrong default. Reopen if another workspace shows a reason to
+  refuse at once.
+- **Default by caller: a terminal waits, a leased worker refuses.** Lost: the same command
+  would reach a different verdict by who typed it, and refusals.md removed "detecting where
+  magus runs, to pick a default" (`TestNoEnvironmentSniffing`). The worker already passes
+  `--budget-wait 0` through its check.
+- **A ticket: a refusal holds the caller's place for a short window.** Lost: 2026-11-05
+  deleted exactly this (wait-reserves-its-seat), and ADR 0001's 2026-10-31 amendment says a
+  refused claim holds no place in the queue; a ghost place blocks others.
+- **A short grace wait of 10 to 60 s.** Lost: real waits ran minutes, so a grace absorbs few,
+  and it adds a second constant beside `budget_wait`.
 - **Tune each machine once, at setup.** Lost: a calibration describes the code it ran on and
   goes stale with the next change to a target. The history is already per host and per
   target, read when a claim is sized, and learns from every run. Reopen if a fresh machine's
@@ -288,9 +364,6 @@ claims of the runs that did take seats.
   depend on what else ran last week, the brake the record of refusals refused in its
   2026-10-16 form. MGS3053 reads pressure at admission, which is enough. Reopen if MGS3053
   fires repeatedly on one host while claims fit.
-- **Wait by default, or by role.** Lost: ADR 0001's 2026-11-05 amendment, and no new evidence;
-  see Decision. Reopen if, after the fold is fixed, refusals stay common and callers always
-  run again with a wait.
 - **A seatless role that submits checks to a runner.** Lost: the read-only row and the owed
   check already are that, and a runner that executes on its own is the agentic tool magus
   refuses to be. Reopen if owed checks pile up unrun at integration.
@@ -305,23 +378,31 @@ claims of the runs that did take seats.
 
 - Before, on 2026-11-07's history: lint 16349 MiB; lint and test do not fit together (26662
   MiB); two lints do not fit (32698 MiB); one lint at a time with nothing large beside it.
-  After the fold change alone: lint 6261 MiB; lint and test 15404 MiB fit; two lints 12522 MiB
-  fit. After the margin change too: lint, test, buzz-test and spells-generate all fit
-  (19024 MiB).
-- The slots-only refusals, 10 of the 20, are seated at one slot whenever a slot is free.
-- A step granted fewer slots than its width runs longer; its outcome records the grant, so its
-  duration band widens honestly.
+  After the fold and margin changes: lint 5008 MiB; lint and test 12322 MiB fit; two lints
+  10016 MiB fit; lint, test, buzz-test and spells-generate all fit (19024 MiB).
+- Of the 20 refusals replayed, memory refuses none; the 11 slot refusals start at a fair-share
+  width, and anything still kept out waits instead of exiting 75.
+- A run now blocks by default for up to 30 minutes. An agent harness that moves long calls to
+  the background sees the parked line first; a script that relied on exit 75 at once passes
+  `--budget-wait 0`. This is a deliberate break: the changes fragment says so.
+- A step granted fewer slots than its width runs longer; its outcome records the grant, so
+  its duration band widens honestly.
 - Sizing at claim time runs once per step admission instead of once per plan; its inputs are
   the run's passed set and a local key lookup the admission already makes.
-- Tests that pin the fold change with it: `TestChainMemorySumsOneCallAndPeaksAcrossCalls`
-  (limiter_test.go), `TestChainMemoryMBPeaksOverOneCall` (types/target_test.go), and
-  machine_gate_test.go's lending cases. `types.SizedChainMemory`'s signature gains the run's
-  passed set and a cache probe, which updates internal/commands/testdata/api-go.lock.
+- Tests that pin the fold, the margin and the zero wait change with them:
+  `TestChainMemorySumsOneCallAndPeaksAcrossCalls` (limiter_test.go),
+  `TestChainMemoryMBPeaksOverOneCall` (types/target_test.go), machine_gate_test.go's lending
+  and refusal cases. `types.SizedChainMemory`'s signature gains the run's passed set and a
+  cache probe, which updates internal/commands/testdata/api-go.lock.
 - Docs to update with the code: docs/concepts/concurrency.md's budget section; MGS3009.md,
-  including its stale "maximum rather than the sum" sentence; types/target.go's `MemoryMB` doc
-  and docs/concepts/workspace.md:221, which both still say a chain takes its largest
-  declaration; ADR 0012, whose `cache.ChildrenClaimTheirOwn` names a symbol that no longer
-  exists; and the magus-multi-agent skill's `status --wait`, a flag that was deleted.
+  including its stale "maximum rather than the sum" sentence; ADR 0001 (an amendment pointing
+  here); docs/design/refusals.md's machine-wide admission row;
+  docs/design/principles/friction-that-carries-meaning.md, which already describes a bounded
+  default wait; types/target.go's `MemoryMB` doc and docs/concepts/workspace.md:221, which
+  both still say a chain takes its largest declaration; ADR 0012, whose
+  `cache.ChildrenClaimTheirOwn` names a symbol that no longer exists; the generated config and
+  man pages from internal/config/config.go; and the magus-multi-agent skill's `status --wait`,
+  a flag that was deleted.
 
 ## Open questions
 
