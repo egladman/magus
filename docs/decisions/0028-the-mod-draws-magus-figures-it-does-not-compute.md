@@ -59,6 +59,23 @@ on the next frame, with no magus release and no plugin update. The spell exports
 `mgs_figures()`, a map from view to script path. The mod reads that map through
 `magus describe harness claude-code-mod -o json`, so it never names a path itself.
 
+### Three parts, three update paths
+
+Each part changes for a different reason, so each ships on its own path. No part waits
+on another's release.
+
+| Part | Changes when | Ships as | Updated by | State |
+| --- | --- | --- | --- | --- |
+| mod (TSX) | Claude Code's plugin API changes | the marketplace plugin at `.claude-plugin/marketplace.json`, from this repository's default branch | `claude plugin update`; no magus release | done (as the mod ships today) |
+| figure scripts (Buzz) | a person wants another figure | the `claude-code-mod` spell, pinned per workspace in `magus.lock` | the workspace's spell pin, or its own `path:` override | proposed |
+| data and drawing (Go) | a record or the figure library changes | the magus binary | a magus release | done (as magus ships today) |
+
+The mod talks to magus only through surfaces magus already versions: CLI records
+(`-o json`, `-o svg`), the Connect `v1alpha1` services, and `magus describe harness -o json`.
+Nothing of the mod is embedded in the binary, and nothing of magus is copied into the
+mod. When a workspace's magus lacks a surface a view needs, the view draws one red line
+naming the magus version that has it. It never draws a guess.
+
 ### The three views
 
 | View | Invocation command | Data | State |
@@ -129,6 +146,12 @@ Rejected. That gives one copy, but a workspace can't change it short of a magus 
 That fails the reason the figures are Buzz in the first place. Reopen it if a figure must
 hold for every workspace unchanged, as a guard verdict does.
 
+### Embed the whole mod in the binary and install it with `magus agent install`
+
+Rejected. Each Claude Code plugin API change would then need a magus release, so the
+binary would move in lockstep with Claude Code. The marketplace already updates the mod
+without one. Reopen it if Claude Code drops marketplace installs.
+
 ### Ship the figure scripts in the plugin folder
 
 Rejected. The plugin is installed per person into Claude Code's plugin cache. An edit
@@ -169,6 +192,11 @@ Reopen it if the engine gains a streaming fetch and the poll proves too slow.
 
 ## Open questions
 
+- The marketplace serves the mod from the default branch, so a workspace pinned to an
+  older magus gets the newest mod. A versioned marketplace ref per magus release would
+  let it pin the mod too. The red line covers the gap until then.
+- Whether the remote spell registry publishes `claude-code-mod` apart from a binary
+  release. If it doesn't, a figure change rides the next release.
 - Whether the console runs the workspace's spell copy of a figure or its own. One source
   says the spell's, but the console's wasm build has no spell path today.
 - How a Bash call's invocation is tied to the call. An MCP call can carry its tool call id.
