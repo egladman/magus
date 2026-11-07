@@ -58,7 +58,7 @@ func init() { //nolint:gochecknoinits // golangci-lint's plugin-module-register 
 	register.Plugin("testloops", plugin("testloops", testloops.New))
 }
 
-// inModuleKey holds settings that name paths or packages of one module, keyed
+// inModuleKey holds settings that name paths or packages of one module, listed
 // by that module's path. A block applies when the linted tree is that module or
 // nested in it; elsewhere it is ignored, so a rule naming cmd/magus/shell.go
 // cannot fail a tree that has no such file.
@@ -114,16 +114,16 @@ func scope[O any](name string, raw any) (settings any, applies bool, err error) 
 	delete(merged, inModuleKey)
 	module := tree
 	if hasScoped {
-		blocks, ok := scoped.(map[string]any)
+		list, ok := scoped.([]any)
 		if !ok {
-			return nil, false, fmt.Errorf("%s: settings: %s maps a module path to its settings", name, inModuleKey)
+			return nil, false, fmt.Errorf("%s: settings: %s lists blocks, each naming its module", name, inModuleKey)
+		}
+		blocks, err := moduleBlocks(name, list)
+		if err != nil {
+			return nil, false, err
 		}
 		if owner, found := owningModule(tree, blocks); found {
-			block, ok := blocks[owner].(map[string]any)
-			if !ok {
-				return nil, false, fmt.Errorf("%s: settings: %s %q holds no settings", name, inModuleKey, owner)
-			}
-			maps.Copy(merged, block)
+			maps.Copy(merged, blocks[owner])
 			module = owner
 		} else if len(merged) == 0 {
 			return nil, false, nil
@@ -135,10 +135,33 @@ func scope[O any](name string, raw any) (settings any, applies bool, err error) 
 	return merged, true, nil
 }
 
+// moduleBlocks keys the in-module list by module path. A list rather than a
+// map, because golangci-lint's viper loader splits map keys at their dots.
+func moduleBlocks(name string, list []any) (map[string]map[string]any, error) {
+	blocks := map[string]map[string]any{}
+	for i, item := range list {
+		block, ok := item.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("%s: settings: %s entry %d is not a block", name, inModuleKey, i)
+		}
+		module, _ := block["module"].(string)
+		if module == "" {
+			return nil, fmt.Errorf("%s: settings: %s entry %d names no module", name, inModuleKey, i)
+		}
+		if _, dup := blocks[module]; dup {
+			return nil, fmt.Errorf("%s: settings: %s names module %q twice", name, inModuleKey, module)
+		}
+		settings := maps.Clone(block)
+		delete(settings, "module")
+		blocks[module] = settings
+	}
+	return blocks, nil
+}
+
 // owningModule returns the longest key that is tree or a module path tree is
 // nested under, which is how a lib module's run reaches its enclosing
 // module's rules.
-func owningModule(tree string, blocks map[string]any) (string, bool) {
+func owningModule(tree string, blocks map[string]map[string]any) (string, bool) {
 	owner := ""
 	for key := range blocks {
 		if (key == tree || strings.HasPrefix(tree, key+"/")) && len(key) > len(owner) {

@@ -138,19 +138,27 @@ func (s *ScopeSuite) TestExplicitModuleOverridesTheTree() {
 	s.ErrorContains(err, `module "example.com/other": no go.mod at or above`)
 }
 
+func (s *ScopeSuite) inModule(module string, settings map[string]any) []any {
+	block := map[string]any{"module": module}
+	for k, v := range settings {
+		block[k] = v
+	}
+	return []any{block}
+}
+
 func (s *ScopeSuite) TestInModuleBlockAppliesToItsOwnModule() {
 	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
-	_, err := s.build("errmsg", map[string]any{"in-module": map[string]any{
-		"example.com/m": map[string]any{"allow": []any{map[string]any{"file": "cmd/gone/x.go", "reason": "staged"}}},
-	}})
+	_, err := s.build("errmsg", map[string]any{"in-module": s.inModule("example.com/m", map[string]any{
+		"allow": []any{map[string]any{"file": "cmd/gone/x.go", "reason": "staged"}},
+	})})
 	s.ErrorContains(err, `allow pattern "cmd/gone/x.go" matches no file`)
 }
 
 func (s *ScopeSuite) TestInModuleBlockOfAnotherModuleIsIgnored() {
 	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
-	p, err := s.build("errmsg", map[string]any{"notice-attrs": []any{"example.com/m/attr.Notice"}, "in-module": map[string]any{
-		"example.com/other": map[string]any{"allow": []any{map[string]any{"file": "cmd/gone/x.go", "reason": "staged"}}},
-	}})
+	p, err := s.build("errmsg", map[string]any{"notice-attrs": []any{"example.com/m/attr.Notice"}, "in-module": s.inModule("example.com/other", map[string]any{
+		"allow": []any{map[string]any{"file": "cmd/gone/x.go", "reason": "staged"}},
+	})})
 	s.Require().NoError(err)
 	s.Equal(1, s.analyzerCount(p))
 }
@@ -162,26 +170,54 @@ func (s *ScopeSuite) TestInModuleBlockReachesANestedModule() {
 	s.Require().NoError(os.WriteFile(filepath.Join(inner, "go.mod"), []byte("module example.com/m/libs/inner\n"), 0o644))
 	s.T().Chdir(inner)
 
-	p, err := s.build("errmsg", map[string]any{"in-module": map[string]any{
-		"example.com/m": map[string]any{"allow": []any{map[string]any{"file": "cmd/app/main.go", "reason": "staged"}}},
-	}})
-	s.Require().NoError(err)
-	s.Equal(1, s.analyzerCount(p))
+	_, err := s.build("errmsg", map[string]any{"in-module": s.inModule("example.com/m", map[string]any{
+		"allow": []any{map[string]any{"file": "cmd/gone/x.go", "reason": "staged"}},
+	})})
+	s.ErrorContains(err, `allow pattern "cmd/gone/x.go" matches no file`)
+}
+
+func (s *ScopeSuite) TestInModuleBlockSurvivesAKeyWithSeveralDots() {
+	sourcetest.Module(s.T(), "example.com/a.b/c", "cmd/app/main.go")
+	_, err := s.build("errmsg", map[string]any{"in-module": s.inModule("example.com/a.b/c", map[string]any{
+		"allow": []any{map[string]any{"file": "cmd/gone/x.go", "reason": "staged"}},
+	})})
+	s.ErrorContains(err, `allow pattern "cmd/gone/x.go" matches no file`)
+}
+
+func (s *ScopeSuite) TestInModuleBlockFeedsEveryScopedLinter() {
+	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
+	_, err := s.build("hostvocab", map[string]any{"in-module": s.inModule("example.com/m", map[string]any{
+		"files": []any{"cmd/gone/*.go"}, "words": []any{"Read"},
+	})})
+	s.ErrorContains(err, `files pattern "cmd/gone/*.go" matches no file`)
 }
 
 func (s *ScopeSuite) TestLinterWithOnlyAnotherModulesSettingsIsInert() {
 	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
-	p, err := s.build("ruletext", map[string]any{"in-module": map[string]any{
-		"example.com/other": map[string]any{"files": []any{"cmd/magus/shell.go"}, "prefix": "magus workspace:"},
-	}})
+	p, err := s.build("ruletext", map[string]any{"in-module": s.inModule("example.com/other", map[string]any{
+		"files": []any{"cmd/magus/shell.go"}, "prefix": "magus workspace:",
+	})})
 	s.Require().NoError(err)
 	s.Zero(s.analyzerCount(p))
 }
 
-func (s *ScopeSuite) TestInModuleThatIsNotAMapIsAnError() {
+func (s *ScopeSuite) TestInModuleThatIsNotAListIsAnError() {
 	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
-	_, err := s.build("errmsg", map[string]any{"in-module": []any{"example.com/m"}})
-	s.ErrorContains(err, "in-module maps a module path to its settings")
+	_, err := s.build("errmsg", map[string]any{"in-module": map[string]any{"example.com/m": map[string]any{}}})
+	s.ErrorContains(err, "in-module lists blocks, each naming its module")
+}
+
+func (s *ScopeSuite) TestInModuleBlockWithoutAModuleIsAnError() {
+	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
+	_, err := s.build("errmsg", map[string]any{"in-module": []any{map[string]any{"allow": []any{}}}})
+	s.ErrorContains(err, "in-module entry 0 names no module")
+}
+
+func (s *ScopeSuite) TestTwoInModuleBlocksNamingOneModuleIsAnError() {
+	sourcetest.Module(s.T(), "example.com/m", "cmd/app/main.go")
+	two := append(s.inModule("example.com/m", nil), s.inModule("example.com/m", nil)...)
+	_, err := s.build("errmsg", map[string]any{"in-module": two})
+	s.ErrorContains(err, `in-module names module "example.com/m" twice`)
 }
 
 type repoConfig struct {

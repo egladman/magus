@@ -237,7 +237,7 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           in-module:
-            github.com/egladman/magus:
+            - module: github.com/egladman/magus
               # Generated output, and the packages that embed documentation checked
               # elsewhere. Each must name a directory holding Go files; the go tool
               # never builds dot directories or testdata, so they need no entry.
@@ -262,7 +262,7 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           in-module:
-            github.com/egladman/magus:
+            - module: github.com/egladman/magus
               # The only code that sees a host's hook payload. Tree-wide, "Read" and
               # "Task" are ordinary words and would report hundreds of times.
               files:
@@ -284,7 +284,7 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           in-module:
-            github.com/egladman/magus:
+            - module: github.com/egladman/magus
               files: [cmd/magus/shell.go]
               prefix: "magus workspace:"
               hint: the guard is internal/guard, and `magus session ls` replays its rules
@@ -322,7 +322,7 @@ linters:
           slog: true
           hint: a message is the verdict, one next command and a ref; the rationale goes behind the ref
           in-module:
-            github.com/egladman/magus:
+            - module: github.com/egladman/magus
               # AN ALLOW LIST: every file holding a finding on 2026-10-09 (173 findings in 54
               # files: 87 message-length, 56 message-rationale, 24 message-tag, 6
               # message-commands), exempt until the terse-output rewrites land. Delete an
@@ -394,7 +394,7 @@ linters:
             - github.com/egladman/magus.NewSink
             - github.com/egladman/magus.pickTerminal
           in-module:
-            github.com/egladman/magus:
+            - module: github.com/egladman/magus
               allow:
                 - {file: "cmd/magus-*/*.go", reason: build-time codegen with no log display}
                 - {file: cmd/langservice-manifest/*.go, reason: build-time codegen with no log display}
@@ -432,7 +432,7 @@ linters:
             - github.com/egladman/magus/internal/log/attr.Notice
             - github.com/egladman/magus/internal/log/attr.Hint
           in-module:
-            github.com/egladman/magus:
+            - module: github.com/egladman/magus
               allow:
                 - {file: libs/diagnostics/diagnostics.go, rule: error-newline, reason: "a coded diagnostic renders its see: line for a person; diagmsg judges it"}
 
@@ -442,7 +442,7 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           in-module:
-            github.com/egladman/magus:
+            - module: github.com/egladman/magus
               # Exactly the files the ASCII sweep fixed, not whole packages: cmd/magus,
               # status.go's pool display and internal/cache/log.go keep drawing glyphs on
               # purpose, and files the sweep never touched may carry drift it was not
@@ -477,7 +477,7 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           in-module:
-            github.com/egladman/magus:
+            - module: github.com/egladman/magus
               # A package whose optimization carries no benchmark, with why. The list only
               # shrinks: an entry whose tests gain a func Benchmark fails the load.
               exempt:
@@ -501,7 +501,7 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           in-module:
-            github.com/egladman/magus:
+            - module: github.com/egladman/magus
               # The go tool never builds dot directories or testdata, so the walk skips
               # them without an entry here.
               skip-dirs: [gen]
@@ -525,7 +525,7 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           in-module:
-            github.com/egladman/magus:
+            - module: github.com/egladman/magus
               package: github.com/egladman/magus/cmd/magus
               case-ident: outputName
               emitters: [emitNames, emitItemNames, outputDestination]
@@ -577,7 +577,7 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           in-module:
-            github.com/egladman/magus:
+            - module: github.com/egladman/magus
               # Where magus resolves the per-user runtime directory the broker and the
               # server listen in. libs/testkit points a test process somewhere private.
               package: github.com/egladman/magus/internal/proc/sockdir
@@ -602,7 +602,7 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           in-module:
-            github.com/egladman/magus:
+            - module: github.com/egladman/magus
               dirs: [internal/queue, internal/job, internal/handler, internal/service, cmd/magus]
               hint: >-
                 magus reaches a provider only by a Buzz op it invokes (docs/design/judgment/provider-io-is-buzz.md, "provider
@@ -665,7 +665,7 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           in-module:
-            github.com/egladman/magus:
+            - module: github.com/egladman/magus
               package: github.com/egladman/magus/cmd/magus
               vars: [global, globalCfg]
               hint: add t.Cleanup(snapshotGlobals()) at the top of the test
