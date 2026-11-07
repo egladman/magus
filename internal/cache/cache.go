@@ -1554,6 +1554,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 	}
 
 	upstreams := newUpstreamRuns(steps)
+	c.logPlan(ctx, steps)
 
 	var keysMu sync.Mutex
 	resolvedKeys := make(map[types.TargetRef]string, len(steps))
@@ -1623,7 +1624,10 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// complete on every exit so a failing upstream cascades to its dependents,
 			// carrying this step's own result so a dependent's wait can tell success
 			// from failure rather than just "done" (see waitForUpstreams).
-			defer func() { upstreams.complete(stepRef(s), stepErr) }()
+			defer func() {
+				upstreams.complete(stepRef(s), stepErr)
+				c.logStep(gctx, s, StepDone)
+			}()
 			// fail routes a step's outcome: its run always records it, the group only
 			// when the budget is spent (returning non-nil is what cancels the batch).
 			fail := func(e error) error {
@@ -1677,6 +1681,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// The wait a step reports starts here: its upstreams are done, and what follows
 			// is queueing for seats.
 			queued := time.Now()
+			c.logStep(gctx, s, StepQueued)
 			// admitAndRun takes the local slot beneath whatever machine seat machineCtx
 			// carries and runs the step there.
 			admitAndRun := func(machineCtx context.Context, claim stepClaim, runOpts []RunOption) (Result, error) {
@@ -1710,6 +1715,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				// Past every gate: from here a failure is this step's own, not a consequence
 				// of someone else's, so it counts against the budget and is worth reporting.
 				ran = true
+				c.logStep(gctx, s, StepRunning)
 				return c.Run(stepCtx, s, func(ctx context.Context) error {
 					return runSeated(ctx, lim, slots, func(ctx context.Context) error { return fn(ctx, s) })
 				}, slices.Concat(runOpts, []RunOption{grantedClaim(claim)})...)

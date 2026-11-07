@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -108,7 +109,8 @@ func waitForUpstream(ctx context.Context, done <-chan struct{}, waiting, upstrea
 		case <-beat.C:
 			if elapsed := time.Since(started); elapsed >= next {
 				next *= 2
-				slog.With(attr.Component("magus")).InfoContext(ctx, fmt.Sprintf("%s is waiting for %s to finish (%s so far)",
+				edgeCtx := context.WithValue(ctx, waitEdgeKey{}, WaitEdge{Waiter: waiting, Upstream: upstream})
+				slog.With(attr.Component("magus")).InfoContext(edgeCtx, fmt.Sprintf("%s is waiting for %s to finish (%s so far)",
 					displayNodeLabel(waiting), displayNodeLabel(upstream), elapsed.Round(time.Second)),
 					attr.Elapsed(elapsed))
 			}
@@ -139,9 +141,9 @@ func displayNodeLabel(ref types.TargetRef) string {
 // at one rhythm.
 var upstreamWaitHeartbeat = lockWaitHeartbeat
 
-// checkAcyclic reports a cycle among in-scope DependsOn or RunAfter edges. A batch that
-// passes cannot deadlock on its upstream waits.
-func checkAcyclic(steps []Step) error {
+// inScopeUpstreams maps each step to the batch steps it waits on. The cycle
+// check and the wait board both read it, so they agree on every edge.
+func inScopeUpstreams(steps []Step) map[types.TargetRef][]types.TargetRef {
 	inScope := make(map[types.TargetRef]bool, len(steps))
 	for _, s := range steps {
 		inScope[stepRef(s)] = true
@@ -150,7 +152,7 @@ func checkAcyclic(steps []Step) error {
 	for _, s := range steps {
 		self := stepRef(s)
 		add := func(dep types.TargetRef) {
-			if dep == self || !inScope[dep] {
+			if dep == self || !inScope[dep] || slices.Contains(adj[self], dep) {
 				return
 			}
 			adj[self] = append(adj[self], dep)
@@ -162,6 +164,13 @@ func checkAcyclic(steps []Step) error {
 			add(ref)
 		}
 	}
+	return adj
+}
+
+// checkAcyclic reports a cycle among in-scope DependsOn or RunAfter edges. A batch that
+// passes cannot deadlock on its upstream waits.
+func checkAcyclic(steps []Step) error {
+	adj := inScopeUpstreams(steps)
 
 	const (
 		white = iota
