@@ -1144,9 +1144,9 @@ func TestVerifyGradesAnIntegrationRowOnTheIntegratorsRuns(t *testing.T) {
 
 	row := types.Job{ID: "integrate", Integrates: []string{"a", "b"}, WritePaths: []string{"a.go", "b.go"}, State: types.StateRunning}
 	rep := types.JobResult{
-		Schema:       types.Schema{Version: types.JobResultSchemaVersion},
-		Job:          "integrate",
-		ChangedPaths: []string{"a.go", "MAGUS.md"},
+		Schema:               types.Schema{Version: types.JobResultSchemaVersion},
+		Job:                  "integrate",
+		ChangedPaths:         []string{"a.go", "MAGUS.md"},
 		VerificationEvidence: []types.VerificationEvidence{{GateID: "go-test", OutputRef: "test-ref"}, {GateID: "lint", OutputRef: "lint-ref"}},
 	}
 	attempts := []types.JobGateAttempt{
@@ -1238,7 +1238,7 @@ func TestOwedGoalsRunEveryCheckAMergedWorkerOwes(t *testing.T) {
 		{ID: "lint", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "lint", Project: "."}},
 		{ID: "buzz", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "buzz-test", Project: "docs"}},
 	}, Result: &types.JobResult{
-		Validation:   types.JobResultValidation{Command: "magus run go::go-test . -- ./pkg -run Alpha", Owed: types.OwedNoSeat},
+		Validation:           types.JobResultValidation{Command: "magus run go::go-test . -- ./pkg -run Alpha", Owed: types.OwedNoSeat},
 		VerificationEvidence: []types.VerificationEvidence{{GateID: "lint", Owed: types.OwedNoSeat}, {GateID: "buzz", Owed: types.OwedNoSeat}},
 	}}
 	paid := types.Job{ID: "b", Check: &types.LeaseCheck{Target: "buzz-test", Project: "console"},

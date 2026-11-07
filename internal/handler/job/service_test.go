@@ -371,7 +371,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 			Gates: []types.VerificationStatus{{ID: "lint", Verified: true, OutputRef: "out4"}},
 		},
 		Result: &types.JobResult{
-			Validation:   types.JobResultValidation{Command: "magus run go-test api", OutputRef: "out1"},
+			Validation:           types.JobResultValidation{Command: "magus run go-test api", OutputRef: "out1"},
 			VerificationEvidence: []types.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}},
 		},
 	}

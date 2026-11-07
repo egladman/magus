@@ -21,7 +21,7 @@ const (
 	advisorySkillSource   hint.MarkerKind = "skill-source"
 	advisoryRegenSource   hint.MarkerKind = "regen-source"
 	advisoryGraphStale    hint.MarkerKind = "graph-stale"
-	advisoryVerifyRepeat    hint.MarkerKind = "verify-repeat"
+	advisoryVerifyRepeat  hint.MarkerKind = "verify-repeat"
 	advisoryFocus         hint.MarkerKind = "focus"
 	advisoryHookWiring    hint.MarkerKind = "hook-wiring"
 	advisoryNewFile       hint.MarkerKind = "new-file"

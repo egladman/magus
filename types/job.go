@@ -571,13 +571,13 @@ const (
 
 // JobResult is the result a holder files for a job.
 type JobResult struct {
-	Schema          `yaml:",inline"`
-	Job             string              `json:"job,omitempty" yaml:"job,omitempty"`
-	ChangedPaths    []string            `json:"changed_paths" yaml:"changed_paths"`
-	Validation      JobResultValidation `json:"validation,omitempty" yaml:"validation,omitempty"`
-	VerificationEvidence    []VerificationEvidence      `json:"verification_evidence,omitempty" yaml:"verification_evidence,omitempty"`
-	Descendants     []string            `json:"descendants,omitempty" yaml:"descendants,omitempty"`
-	UnresolvedRisks []string            `json:"unresolved_risks" yaml:"unresolved_risks"`
+	Schema               `yaml:",inline"`
+	Job                  string                 `json:"job,omitempty" yaml:"job,omitempty"`
+	ChangedPaths         []string               `json:"changed_paths" yaml:"changed_paths"`
+	Validation           JobResultValidation    `json:"validation,omitempty" yaml:"validation,omitempty"`
+	VerificationEvidence []VerificationEvidence `json:"verification_evidence,omitempty" yaml:"verification_evidence,omitempty"`
+	Descendants          []string               `json:"descendants,omitempty" yaml:"descendants,omitempty"`
+	UnresolvedRisks      []string               `json:"unresolved_risks" yaml:"unresolved_risks"`
 	// FollowUps is work the holder explicitly leaves for later. Each item
 	// stands until the row's Deferred answers it.
 	FollowUps []string `json:"follow_ups,omitempty" yaml:"follow_ups,omitempty"`
@@ -616,11 +616,11 @@ const OwedNoSeat = "no seat"
 
 // JobStatus reports the result of verifying a job.
 type JobStatus struct {
-	Job             string       `json:"job" yaml:"job"`
-	Verified        bool         `json:"verified" yaml:"verified"`
-	Violations      []string     `json:"violations,omitempty" yaml:"violations,omitempty"`
-	UnresolvedRisks []string     `json:"unresolved_risks,omitempty" yaml:"unresolved_risks,omitempty"`
-	Command         string       `json:"command,omitempty" yaml:"command,omitempty"`
+	Job             string               `json:"job" yaml:"job"`
+	Verified        bool                 `json:"verified" yaml:"verified"`
+	Violations      []string             `json:"violations,omitempty" yaml:"violations,omitempty"`
+	UnresolvedRisks []string             `json:"unresolved_risks,omitempty" yaml:"unresolved_risks,omitempty"`
+	Command         string               `json:"command,omitempty" yaml:"command,omitempty"`
 	Gates           []VerificationStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
 	// Notes are what the grade passed over and says so rather than dropping silently, such
 	// as a changed path magus maintains itself outside the write paths. They never decide
@@ -1058,9 +1058,9 @@ func (w *JobWorktree) Standing() bool { return w != nil && w.Removed == 0 }
 // JobIntegration is a job's check goals graded against runs recorded in Checkout, the tree
 // an integration branch was merged into, at At (unix seconds).
 type JobIntegration struct {
-	Checkout string       `json:"checkout" yaml:"checkout"`
-	At       int64        `json:"at" yaml:"at"`
-	Verified bool         `json:"verified" yaml:"verified"`
+	Checkout string               `json:"checkout" yaml:"checkout"`
+	At       int64                `json:"at" yaml:"at"`
+	Verified bool                 `json:"verified" yaml:"verified"`
 	Gates    []VerificationStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
 	// ObservedGeneration is the row's Generation when the grade was taken.
 	ObservedGeneration int `json:"observed_generation,omitzero" yaml:"observed_generation,omitempty"`
@@ -1069,9 +1069,9 @@ type JobIntegration struct {
 // JobRejection is a `magus job wait` that refused the live attempt, At unix seconds.
 type JobRejection struct {
 	Unmet              []VerificationStatus `json:"unmet,omitempty"               yaml:"unmet,omitempty"`
-	Violations         []string     `json:"violations,omitempty"          yaml:"violations,omitempty"`
-	At                 int64        `json:"at"                            yaml:"at"`
-	ObservedGeneration int          `json:"observed_generation,omitzero"  yaml:"observed_generation,omitempty"`
+	Violations         []string             `json:"violations,omitempty"          yaml:"violations,omitempty"`
+	At                 int64                `json:"at"                            yaml:"at"`
+	ObservedGeneration int                  `json:"observed_generation,omitzero"  yaml:"observed_generation,omitempty"`
 }
 
 // JobDenial is one guard denial of a job's holder, Ts unix seconds. VerdictRef reopens the
@@ -1089,19 +1089,19 @@ type JobDenial struct {
 // DenialsKnown is false once the trail rotated past the attempt, so empty Denials then
 // means unknown rather than none.
 type PriorAttempt struct {
-	N                  int          `json:"n"                             yaml:"n"`
-	State              JobState     `json:"state"                         yaml:"state"`
-	ObservedGeneration int          `json:"observed_generation,omitzero"  yaml:"observed_generation,omitempty"`
-	EndReason          string       `json:"end_reason,omitempty"          yaml:"end_reason,omitempty"`
-	ModelTier          string       `json:"model_tier,omitempty"          yaml:"model_tier,omitempty"`
-	Checkpoint         string       `json:"checkpoint,omitempty"          yaml:"checkpoint,omitempty"`
-	ReportedBase       string       `json:"reported_base,omitempty"       yaml:"reported_base,omitempty"`
-	Ended              int64        `json:"ended,omitempty"               yaml:"ended,omitempty"`
-	ReworkRounds       int          `json:"rework_rounds,omitempty"       yaml:"rework_rounds,omitempty"`
-	Widenings          int          `json:"widenings,omitempty"        yaml:"widenings,omitempty"`
+	N                  int                  `json:"n"                             yaml:"n"`
+	State              JobState             `json:"state"                         yaml:"state"`
+	ObservedGeneration int                  `json:"observed_generation,omitzero"  yaml:"observed_generation,omitempty"`
+	EndReason          string               `json:"end_reason,omitempty"          yaml:"end_reason,omitempty"`
+	ModelTier          string               `json:"model_tier,omitempty"          yaml:"model_tier,omitempty"`
+	Checkpoint         string               `json:"checkpoint,omitempty"          yaml:"checkpoint,omitempty"`
+	ReportedBase       string               `json:"reported_base,omitempty"       yaml:"reported_base,omitempty"`
+	Ended              int64                `json:"ended,omitempty"               yaml:"ended,omitempty"`
+	ReworkRounds       int                  `json:"rework_rounds,omitempty"       yaml:"rework_rounds,omitempty"`
+	Widenings          int                  `json:"widenings,omitempty"        yaml:"widenings,omitempty"`
 	Unmet              []VerificationStatus `json:"unmet,omitempty"               yaml:"unmet,omitempty"`
-	Violations         []string     `json:"violations,omitempty"          yaml:"violations,omitempty"`
-	UnresolvedRisks    []string     `json:"unresolved_risks,omitempty"    yaml:"unresolved_risks,omitempty"`
+	Violations         []string             `json:"violations,omitempty"          yaml:"violations,omitempty"`
+	UnresolvedRisks    []string             `json:"unresolved_risks,omitempty"    yaml:"unresolved_risks,omitempty"`
 	// FailingRefs are the output refs of the attempt's failed runs, to reopen.
 	FailingRefs  []string     `json:"failing_refs,omitempty" yaml:"failing_refs,omitempty"`
 	Denials      []JobDenial  `json:"denials,omitempty"      yaml:"denials,omitempty"`
