@@ -1,0 +1,91 @@
+import "std";
+import "magus";
+import "./hack/policy/helpers" as helpers;
+import "./hack/policy/branches" as branches;
+
+fun fragment(slug: str, headline: str) > branches\Subject {
+    return branches\fragmentSubject("changes/unreleased/{slug}.md", text: "### Added\n\n- **{headline}.** Body.\n");
+}
+
+fun squash() > [branches\Subject] {
+    return [
+        fragment("mod-views-tables", headline: "The mod renders tables"),
+        fragment("mod-views-links", headline: "The mod links references"),
+        fragment("mod-views-figures", headline: "The mod draws ADR figures"),
+        fragment("mod-views-install", headline: "The mod checks its install"),
+        fragment("lint-portable-config", headline: "Portable lint config per workspace"),
+        fragment("lint-vocabulary", headline: "One lint vocabulary file"),
+        fragment("guard-comment-budget", headline: "The guard budgets comments"),
+        fragment("proofread-stop-silent", headline: "Proofread stops silent fixes"),
+    ];
+}
+
+fun rules(v: branches\Verdict) > str {
+    final names = mut [<str>];
+    foreach (f in v.failures) { names.append(f.rule); }
+    return names.join(",");
+}
+
+test "a squash of many topics with a name for two is denied and told to split" {
+    final topic = branches\withSubjects(branches\unknownTopic(), subjects: squash());
+    final v = branches\judgeName("portable-lint", topic: topic);
+    std\assert(rules(v) == "theme", message: rules(v));
+    std\assert(v.failures[0].why.indexOf("Split the branch") != null, message: v.failures[0].why);
+    std\assert(v.failures[0].why.indexOf("proofread-stop-silent") != null, message: "names a topic it misses");
+    std\assert(v.served == "", message: "no name serves a wide branch");
+}
+
+test "a wide branch with a word shared by most topics passes" {
+    final subjects = mut [<branches\Subject>];
+    foreach (s in squash()) { subjects.append(s); }
+    foreach (slug in ["alpha", "bravo", "charlie", "delta"]) {
+        subjects.append(fragment("views-{slug}", headline: "Views gain {slug}"));
+    }
+    final topic = branches\withSubjects(branches\unknownTopic(), subjects: subjects);
+    final v = branches\judgeName("mod-views", topic: topic);
+    std\assert(rules(v) == "", message: rules(v));
+}
+
+test "a branch of one topic named for it passes" {
+    final topic = branches\withSubjects(branches\unknownTopic(), subjects: [fragment("branch-name-covers-topics", headline: "Branch names cover their topics")]);
+    std\assert(rules(branches\judgeName("branch-name-covers-topics", topic: topic)) == "", message: "named for it");
+    std\assert(rules(branches\judgeName("startup-latency", topic: topic)) == "coverage", message: "named for nothing it adds");
+}
+
+test "a narrow branch whose name covers under half is denied with the topics it misses" {
+    final subjects = [
+        fragment("cache-keys", headline: "Cache keys include the toolchain"),
+        fragment("sandbox-grants", headline: "Sandbox grants compose"),
+        fragment("release-notes", headline: "Release notes group by type"),
+        fragment("guard-floors", headline: "Guard floors apply"),
+    ];
+    final topic = branches\withSubjects(branches\unknownTopic(), subjects: subjects);
+    final v = branches\judgeName("cache-keys", topic: topic);
+    std\assert(rules(v) == "coverage", message: rules(v));
+    std\assert(v.failures[0].why.indexOf("1 of the 4") != null, message: v.failures[0].why);
+    std\assert(v.failures[0].why.indexOf("guard-floors") != null, message: v.failures[0].why);
+    std\assert(v.served != "", message: "serves a name");
+    std\assert(rules(branches\judgeName(v.served, topic: topic)) == "", message: "the served name passes: {v.served}");
+    std\assert(rules(branches\judgeName("cache-sandbox", topic: topic)) == "", message: "two of four is half");
+}
+
+test "commit subjects stand in when the branch adds no fragment" {
+    final subjects = [
+        branches\commitSubjectTopic("feat(image): assemble OCI image layouts"),
+        branches\commitSubjectTopic("fix(guard): close the bypasses"),
+    ];
+    final topic = branches\withSubjects(branches\unknownTopic(), subjects: subjects);
+    std\assert(rules(branches\judgeName("image-layouts", topic: topic)) == "", message: "covers one of two");
+    std\assert(rules(branches\judgeName("startup-latency", topic: topic)) == "coverage", message: "covers none");
+}
+
+test "a coverage miss is denied at the push, naming the topics" {
+    final topic = fun () > branches\Topic {
+        return branches\withSubjects(branches\unknownTopic(), subjects: squash());
+    };
+    final push = helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:portable-lint"]]);
+    final remote = branches\Remote{ base = "origin/main", branches = [<str>] };
+    final v = branches\decideNames(push, current: "portable-lint", remote: remote, topic: topic, once: helpers\counter());
+    std\assert(v.decision == magus\GuardDecision.deny, message: "denied");
+    std\assert(v.reason.indexOf("theme:") != null, message: v.reason);
+}
