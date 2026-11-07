@@ -14,3 +14,9 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 export fun format(ctx: magus\Context, args: [str]) > void {
     latex["latexindent"](ctx);
 }
+
+// lint stays out: chktex has no Mac install, so the gate would fail there.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
+    ctx.needs(build);
+}
