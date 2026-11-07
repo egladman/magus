@@ -108,9 +108,9 @@ func TestMemoryDeclarationsNeverReportsOverDeclaration(t *testing.T) {
 	assert.Empty(t, got.Details)
 }
 
-// An undeclared target claims 1.25 times its highest passing peak, so it wants a
-// declaration only when those peaks spread wider than that headroom. A failed run's
-// early death is no spread: a claim is never sized from it.
+// An undeclared target claims its highest passing peak, so it wants a
+// declaration only when those peaks spread by more than a quarter. A failed
+// run's early death is no spread: a claim is never sized from it.
 func TestMemoryDeclarationsReportsAnUnstableUndeclaredTarget(t *testing.T) {
 	check := func(outcomes ...forecast.Outcome) types.Check {
 		h := forecast.History{
@@ -126,7 +126,7 @@ func TestMemoryDeclarationsReportsAnUnstableUndeclaredTarget(t *testing.T) {
 	got := check(run(forecast.OutcomePass, 2900), run(forecast.OutcomePass, 5312), run(forecast.OutcomeVolatile, 4000))
 	assert.Equal(t, types.CheckAdvice, got.Status)
 	require.Len(t, got.Details, 1)
-	assert.Contains(t, got.Details[0], "declares no memory_mb anywhere in what it runs and its passing runs reached from 2900MB to 5312MB")
+	assert.Contains(t, got.Details[0], "declares no memory_mb and its passing runs reached from 2900MB to 5312MB; a claim measured from them is their highest peak")
 
 	got = check(run(forecast.OutcomePass, 5000), run(forecast.OutcomePass, 5312), run(forecast.OutcomeFail, 900))
 	assert.Equal(t, types.CheckOK, got.Status, "a stable heavy target is sized from its runs")
@@ -183,4 +183,17 @@ func TestMemoryDeclarationsSaysWhenNothingHasRun(t *testing.T) {
 
 	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Contains(t, got.Message, "nothing to compare")
+}
+
+// A composer's declaration bounds its own body: a member it runs claims for
+// itself, so the member is graded against its own figure.
+func TestMemoryDeclarationsGradesAMemberAgainstItsOwnDeclaration(t *testing.T) {
+	path := historyWith(t, ".", map[string]int64{"go/test": 9000 * mb})
+	p := projectWith(".", map[string]types.Target{"ci": {MemoryMB: 10240}, "test": {MemoryMB: 2048}})
+	p.TargetChains = map[string][]types.ChainStep{"ci": types.Needs("test")}
+
+	got := newRunner(path).checkMemoryDeclarations(t.Context(), []*types.Project{p})
+
+	require.Len(t, got.Details, 1)
+	assert.Contains(t, got.Details[0], "test declares 2048MB and reached at least 9000MB")
 }

@@ -793,11 +793,8 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// understands. A target declaring memory_mb holds however many slots that memory
 	// is worth on THIS host, so an 8GB suite throttles peers on a 16GB runner and
 	// barely registers on a 64GB workstation, without the magusfile naming either.
-	// Both halves of admission read the SAME folded figure. Slots throttle peers inside
-	// this process; the machine budget arbitrates the host. Feeding slots the target's
-	// own declaration while the claim used the chain's would let several composed steps
-	// take one slot each and a full claim each, so a single invocation queued behind
-	// memory its own siblings held.
+	// Both halves of admission read the SAME figure. Slots throttle peers
+	// inside this process; the machine budget arbitrates the host.
 	//
 	// The declarations as written. A run re-sizes them from its measured runs once it
 	// knows its own shape (executeStages).
@@ -828,6 +825,7 @@ type composedRunner struct {
 	m            *Magus
 	runs         *cache.TargetRuns
 	newStep      func(*types.Project, string) (cache.Step, error)
+	sizeClaims   *claimSizer
 	skipReplay   bool
 	forceNoCache bool
 	cacheOpts    []cache.RunOption
@@ -881,7 +879,8 @@ func (r *composedRunner) runKeyedStep(ctx context.Context, p *types.Project, ste
 		return r.runs.Once(ctx, types.TargetRef{Project: p.Path, Target: step.Target}, func() error {
 			handler := r.m.targetHandler(step.Target)
 			_, err := r.m.cache.RunAside(cache.WithoutSlotHeld(ctx), step, func(ctx context.Context) error {
-				return handler(buzz.WithTargetRuns(ctx, buzz.NewTargetRuns(r.runs.Passed(p.Path)...)), p)
+				ctx = buzz.WithTargetRuns(ctx, buzz.NewTargetRuns(r.runs.Passed(p.Path)...))
+				return handler(r.withBodyInterceptor(ctx, p, step), p)
 			}, r.cacheOpts...)
 			return err
 		})
@@ -920,14 +919,58 @@ func (r *composedRunner) interceptor(p *types.Project) targetInterceptorFunc {
 			res, err := r.m.cache.RunAside(memberCtx, member, func(workerCtx context.Context) error {
 				if !member.NoCache {
 					// A cacheable member is now the lexical cache boundary: its own needs
-					// calls remain inline on a miss and do not acquire extra entries.
-					workerCtx = buzz.WithoutTargetInterceptor(workerCtx)
+					// calls stay inline on a miss and take claims, not entries.
+					workerCtx = r.withBodyInterceptor(workerCtx, p, member)
 				}
 				return invoke(workerCtx)
 			}, r.cacheOpts...)
 			return cache.WrapNeedFailure(err, cache.NeedMember{Target: name, Ref: res.Ref})
 		})
 	}
+}
+
+// inlineClaimer is the interceptor a cacheable body in p runs its ctx.needs
+// members under. Each runs inline and uncached, claiming for itself while
+// its composer's claim is lent. It records its own outcome.
+func (r *composedRunner) inlineClaimer(p *types.Project) targetInterceptorFunc {
+	return func(ctx context.Context, name string, invoke func(context.Context) error) error {
+		member := r.m.inlineStep(p, name, r.sizeClaims)
+		member.Under, _ = ctx.Value(composerKey{}).(string)
+		return r.m.cache.RunInline(ctx, member, func(ctx context.Context) error {
+			return recordInline(underComposer(ctx, member), p, name, invoke)
+		}, r.cacheOpts...)
+	}
+}
+
+// composerKey carries the ref of the body a ctx.needs member runs under.
+type composerKey struct{}
+
+func underComposer(ctx context.Context, s cache.Step) context.Context {
+	ref := types.TargetRef{Project: s.ProjectPath, Target: s.Target}.Ref()
+	return context.WithValue(ctx, composerKey{}, ref)
+}
+
+// withBodyInterceptor is ctx for step's body in p: an uncached body's members
+// become steps of their own, a cached one's claim inline.
+func (r *composedRunner) withBodyInterceptor(ctx context.Context, p *types.Project, step cache.Step) context.Context {
+	ctx = underComposer(ctx, step)
+	if step.NoCache {
+		return buzz.WithTargetInterceptor(ctx, r.interceptor(p))
+	}
+	return buzz.WithTargetInterceptor(ctx, r.inlineClaimer(p))
+}
+
+// inlineStep is the step an inline member claims as: its own declaration or
+// measured peak, never its composer's. A member that has neither says so.
+func (m *Magus) inlineStep(p *types.Project, name string, size *claimSizer) cache.Step {
+	step := m.buildStep(p, name)
+	if size != nil {
+		m.sizeClaim(&step, p, name, size)
+	}
+	if step.MemoryMB <= 0 && step.MemorySizing.Fallback == "" {
+		step.MemorySizing.Fallback = name + ": unmeasured inline member; claims no memory"
+	}
+	return step
 }
 
 // ComputeTargetKey computes target's live cache key and the pre-hash key inputs behind
@@ -2343,10 +2386,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		prober: prober, revision: revision, dirty: dirty, vcsName: vcsName,
 		skipReplay: !opts.Cache, opts: cacheOpts,
 	}))
-	composed := &composedRunner{m: m, runs: runs, newStep: newStep,
+	composed := &composedRunner{m: m, runs: runs, newStep: newStep, sizeClaims: sizeClaims,
 		skipReplay: !opts.Cache, forceNoCache: forcesNoCache(opts), cacheOpts: cacheOpts}
 	// A body that reads a symbol index freshens it through this run (see
 	// freshenSymbolIndexes): a nested `magus run` of the index op is refused MGS3007.
+	cross.InlineWith(func(dep *types.Project) buzz.TargetInterceptor { return composed.inlineClaimer(dep) })
 	cross.RunStepsWith(func(ctx context.Context, p *types.Project, step cache.Step) error {
 		stampRevision(&step)
 		return composed.runKeyedStep(ctx, p, step)
@@ -2374,12 +2418,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			if m.cache.Collapsing() {
 				spanCtx = buzz.WithObserver(spanCtx, stageObserver{out: out, label: s.Label, policies: targetPolicies(p)})
 			}
-			if s.NoCache {
-				// An uncached composer still executes its body, so this is the runtime
-				// boundary at which a same-project ctx.needs target can become an
-				// independently admitted cache step.
-				spanCtx = buzz.WithTargetInterceptor(spanCtx, composed.interceptor(p))
-			}
+			// The boundary where a ctx.needs member becomes a step of its
+			// own or an inline claimant.
+			spanCtx = composed.withBodyInterceptor(spanCtx, p, s)
 			var err error
 			if raceRT != nil {
 				outDirs := outputWatchDirs(m.ws, p, s.Target)
@@ -2897,26 +2938,13 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 	// Reported only when a process actually reported one: an unmeasured target
 	// must stay zero in the record so a reader can tell it apart from a
 	// measured-and-tiny one.
-	peakRSS, cpuMs := types.PeakRSS(ctx), types.CPUMs(ctx)
+	outcome := measuredOutcome(ctx, start, result)
+	outcome.AffectedByDiff, outcome.Attempts = affected, attempts
 	// The cache step's own collector, which its session record reads, sees these
 	// processes only through this hand-over: the collector above hides them from it.
-	types.RecordPeakRSS(step, peakRSS)
-	types.RecordCPUMs(step, cpuMs)
-	// The same shape executeStages sizes claims by, read from the same run options.
-	shape := forecast.NewShape(types.CharmsFromContext(ctx), project.ExtraArgs(ctx))
-	rt.Record(p.Path, volatileTarget, forecast.Outcome{
-		Result:         result,
-		AffectedByDiff: affected,
-		DurationMs:     time.Since(start).Milliseconds(),
-		At:             time.Now(),
-		Attempts:       attempts,
-		MaxRSSBytes:    peakRSS,
-		CPUMs:          cpuMs,
-		Slots:          cache.SlotsHeld(ctx),
-		Curve:          types.Curve(ctx),
-		Charms:         shape.Charms,
-		ArgsHash:       shape.ArgsHash,
-	})
+	types.RecordPeakRSS(step, outcome.MaxRSSBytes)
+	types.RecordCPUMs(step, outcome.CPUMs)
+	rt.Record(p.Path, volatileTarget, outcome)
 
 	if decision.Retry {
 		status := "retry_failed"
@@ -2965,6 +2993,44 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 		}
 	}
 
+	return err
+}
+
+// measuredOutcome is one run's outcome, read from the collector under ctx and
+// the run options executeStages sizes claims by. A target no process measured
+// stays zero, so a reader tells it apart from a measured and tiny one.
+func measuredOutcome(ctx context.Context, start time.Time, result forecast.OutcomeResult) forecast.Outcome {
+	shape := forecast.NewShape(types.CharmsFromContext(ctx), project.ExtraArgs(ctx))
+	return forecast.Outcome{
+		Result:      result,
+		DurationMs:  time.Since(start).Milliseconds(),
+		At:          time.Now(),
+		MaxRSSBytes: types.PeakRSS(ctx),
+		CPUMs:       types.CPUMs(ctx),
+		Slots:       cache.SlotsHeld(ctx),
+		Curve:       types.Curve(ctx),
+		Charms:      shape.Charms,
+		ArgsHash:    shape.ArgsHash,
+	}
+}
+
+// recordInline runs invoke, an inline member's body under the collector
+// RunInline gave it, and records its outcome as a step run of it would.
+// ctx.needs reaches only magusfile targets, so the key names that spell.
+func recordInline(ctx context.Context, p *types.Project, name string, invoke func(context.Context) error) error {
+	rt := volatility.RuntimeFromContext(ctx)
+	if rt == nil {
+		return invoke(ctx)
+	}
+	start := time.Now()
+	err := invoke(ctx)
+	result := forecast.OutcomePass
+	if err != nil {
+		result = forecast.OutcomeFail
+	}
+	outcome := measuredOutcome(ctx, start, result)
+	outcome.AffectedByDiff, outcome.Attempts = rt.IsAffected(p.Path), 1
+	rt.Record(p.Path, fmt.Sprintf("%s/%s", types.MagusfileSpellName, name), outcome)
 	return err
 }
 

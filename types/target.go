@@ -160,9 +160,8 @@ type Target struct {
 	// Undeclared (0) claims what the target's runs measured once enough of them have,
 	// and no memory before that. An unmeasurable host converts no memory to slots.
 	//
-	// A COMPOSED target inherits the largest declaration in its chain; see
-	// ChainMemoryMB. A run claims less than this when it has measured less: see
-	// SizedChainMemory, which is the figure both halves of admission actually read.
+	// It bounds the target's own body: each ctx.needs member claims for
+	// itself. A run claims less than this when it has measured less.
 	MemoryMB int `json:"memory_mb,omitempty" buzz:"memory_mb"`
 	// Timeout is the wall-clock ceiling for one run of this target, as a Go duration
 	// string ("15m", "90s"). Empty means undeclared, which is unbounded: the behavior
@@ -178,10 +177,8 @@ type Target struct {
 	// subprocesses included, so a value near a legitimate run's duration fails builds
 	// that were fine. Declare a multiple of the worst run on record, not its p75.
 	//
-	// NOT folded across a chain, which is where this parts company with ChainMemoryMB.
-	// The fold there takes a MAXIMUM because sequential steps do not add their peaks;
-	// durations do add, so neither the max nor the sum of a chain's ceilings is a figure
-	// anyone declared. It needs no fold anyway: the deadline rides the context, so a
+	// NOT folded across a chain.
+	// It needs no fold anyway: the deadline rides the context, so a
 	// scheduled target's ceiling already bounds every target it composes, and a chain
 	// member's own ceiling fires inside that as the tighter bound.
 	Timeout string `json:"timeout,omitempty" buzz:"timeout"`

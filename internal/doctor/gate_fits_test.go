@@ -26,19 +26,19 @@ func recordedCurve(peakMB uint32) types.MemoryProfile {
 	return p
 }
 
-func TestGateFitsFailsOnEntry94SummedClaim(t *testing.T) {
+func TestGateFitsFailsOnAMemberOverTheWholeBudget(t *testing.T) {
 	t.Parallel()
-	summed := types.MachineClaim{
-		Project: ".", Target: "ci", DeclaredBy: "test", MemoryMB: 19_354, Slots: 1,
-		Sizing: types.MemorySizing{Samples: 8, Fallback: "lint: no memory curve; summed the peaks of its ctx.needs call"},
+	member := types.MachineClaim{
+		Project: ".", Target: "test", DeclaredBy: "test", Under: ".:ci", MemoryMB: 19_354, Slots: 1,
+		Sizing: types.MemorySizing{Samples: 8, Fallback: "test: no memory curve for this shape (2 of 3 runs); claimed the 18.9 GiB peak"},
 	}
-	got := gradeGateFits([]types.MachineClaim{summed}, entry94BudgetMB, entry94Slots)
+	got := gradeGateFits([]types.MachineClaim{member}, entry94BudgetMB, entry94Slots)
 	assert.Equal(t, types.CheckFail, got.Status)
 	assert.Contains(t, got.Message, "1 step(s) of the ci gate claim more than this machine's whole build budget of 18.0 GiB across 10 slots")
 	assert.Contains(t, got.Message, "magus affected ci")
 	require.Len(t, got.Details, 1)
-	assert.Contains(t, got.Details[0], "ci claims 18.9 GiB")
-	assert.Contains(t, got.Details[0], "most of it from test")
+	assert.Contains(t, got.Details[0], "test claims 18.9 GiB")
+	assert.Contains(t, got.Details[0], "running under .:ci")
 }
 
 func TestGateFitsPassesWhenEachStepClaimsItsOwn(t *testing.T) {
@@ -60,7 +60,7 @@ func TestGateFitsFailsOnASlotClaimWiderThanTheMachine(t *testing.T) {
 	assert.Contains(t, got.Details[0], "test claims 1000 MiB (declared) and 12 slot(s)")
 }
 
-func TestGateFitsSizesCiAndItsSameProjectSteps(t *testing.T) {
+func TestGateFitsAsksTheSizerForEachProjectsCi(t *testing.T) {
 	t.Parallel()
 	p := &types.Project{
 		Path: ".",
@@ -78,10 +78,8 @@ func TestGateFitsSizesCiAndItsSameProjectSteps(t *testing.T) {
 
 	got := r.checkGateFits(WithGateClaims(t.Context(), sizer, entry94BudgetMB, entry94Slots), []*types.Project{p, {Path: "libs/x"}})
 	assert.Equal(t, types.CheckFail, got.Status)
-	assert.Equal(t, []types.Target{
-		{Path: ".", Name: "ci"}, {Path: ".", Name: "format"}, {Path: ".", Name: "lint"},
-		{Path: ".", Name: "test"}, {Path: ".", Name: "generate"},
-	}, asked, "cross-project members are inside ci's claim; libs/x composes no ci")
+	assert.Equal(t, []types.Target{{Path: ".", Name: "ci"}}, asked,
+		"the sizer walks ci's members itself; libs/x composes no ci")
 
 	skipped := (&runner{}).checkGateFits(t.Context(), []*types.Project{p})
 	assert.Equal(t, types.Check{

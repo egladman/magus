@@ -38,7 +38,8 @@ func (r *runner) checkGateFits(ctx context.Context, projects []*types.Project) t
 	var targets []types.Target
 	for _, p := range projects {
 		if _, ok := p.TargetChains[types.TargetCI]; ok {
-			targets = append(targets, gateSteps(p)...)
+			// The sizer claims every member ci reaches, each weighed alone.
+			targets = append(targets, types.Target{Path: p.Path, Name: types.TargetCI})
 		}
 	}
 	if len(targets) == 0 {
@@ -49,29 +50,6 @@ func (r *runner) checkGateFits(ctx context.Context, projects []*types.Project) t
 		return types.Check{Name: gateFitsCheck, Status: types.CheckFail, Message: fmt.Sprintf("could not size the ci gate's claims: %v", err)}
 	}
 	return gradeGateFits(claims, sizing.budgetMB, sizing.budgetSlots)
-}
-
-// gateSteps is p's ci and every same-project target its chain reaches. Each is weighed
-// alone: a skip_cache composer's member claims for itself, and a cacheable composer's
-// is inside that composer's figure. Cross-project members run inline under ci's claim.
-func gateSteps(p *types.Project) []types.Target {
-	seen := map[string]bool{}
-	var out []types.Target
-	var walk func(name string)
-	walk = func(name string) {
-		if seen[name] {
-			return
-		}
-		seen[name] = true
-		out = append(out, types.Target{Path: p.Path, Name: name})
-		for _, step := range p.TargetChains[name] {
-			if step.Project == "" {
-				walk(step.Target)
-			}
-		}
-	}
-	walk(types.TargetCI)
-	return out
 }
 
 // gradeGateFits fails on every claim larger than the whole budget on either axis. A
@@ -86,8 +64,8 @@ func gradeGateFits(claims []types.MachineClaim, budgetMB, budgetSlots int) types
 		}
 		what := fmt.Sprintf("%s %s claims %s (%s) and %d slot(s)",
 			types.ProjectDisplayName(c.Project, "", ""), c.Target, types.FormatMB(c.MemoryMB), c.Sizing, max(c.Slots, 1))
-		if c.DeclaredBy != "" && c.DeclaredBy != c.Target {
-			what += ", most of it from " + c.DeclaredBy
+		if c.Under != "" {
+			what += ", running under " + c.Under
 		}
 		details = append(details, what)
 	}

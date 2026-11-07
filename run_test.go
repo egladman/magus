@@ -2261,8 +2261,8 @@ func TestRun_MemoryClaimFollowsTheRunsShape(t *testing.T) {
 
 	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "work"}},
 		WithCharms(types.CharmReadWrite), WithExtraArgs(args)))
-	assert.Contains(t, logged.String(), "memory_mb=13 sizing=\"measured over 3 runs; work: no memory curve for this shape (0 of 3 runs); claimed the 13 MiB peak\"",
-		"ceil(1.25 x the 10MB full-run peak), not the 12MB narrowed one, under the 64MB declared")
+	assert.Contains(t, logged.String(), "memory_mb=10 sizing=\"measured over 3 runs; work: no memory curve for this shape (0 of 3 runs); claimed the 10 MiB peak\"",
+		"the 10MB full-run peak, not the 12MB narrowed one, under the 64MB declared")
 
 	var got forecast.History
 	require.NoError(t, got.Load(context.Background(), historyPath))
@@ -2895,4 +2895,39 @@ export fun image(ctx: magus\Context, args: [str]) > void !> any {
 	third := read()
 	assert.True(t, strings.HasPrefix(third, "two:"), "the edit reran build, then the image: %q", third)
 	assert.NotEqual(t, first, third)
+}
+
+// TestComposerOutcomeCountsOnlyItsBody answers ADR 0029's open question:
+// whose peak holds what a cacheable composer's inline member runs. The
+// composer runs nothing itself, so any peak on it is the member's.
+func TestComposerOutcomeCountsOnlyItsBody(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Magusfile(`import "magus";
+import "proc";
+export fun member(ctx: magus\Context, args: [str]) > void !> any {
+    final c = proc\shell("sleep 0.5");
+    proc\exec(c.bin, c.args, "", null);
+}
+export fun composer(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(member);
+}
+`)
+	historyPath := filepath.Join(w.Root(), "history.json")
+	cfg := config.Defaults()
+	cfg.HistoryPath = historyPath
+	m, err := Open(context.Background(), w.Root(), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "composer"}}, WithCache(false)))
+
+	var got forecast.History
+	require.NoError(t, got.Load(context.Background(), historyPath))
+	composer := got.Projects["."][types.MagusfileSpellName+"/composer"].RecentOutcomes
+	require.Len(t, composer, 1)
+	assert.Zero(t, composer[0].MaxRSSBytes, "the member's process is not the composer's")
+	assert.Zero(t, composer[0].Curve, "nor are its samples")
+	member := got.Projects["."][types.MagusfileSpellName+"/member"].RecentOutcomes
+	require.Len(t, member, 1, "the member records its own run")
+	assert.Positive(t, member[0].MaxRSSBytes)
 }

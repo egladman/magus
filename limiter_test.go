@@ -115,76 +115,20 @@ func chainProject(path string, policies map[string]types.Target, chains map[stri
 	return &types.Project{Path: path, TargetPolicies: policies, TargetChains: chains}
 }
 
-// The defect this fold exists for: `magus affected ci` is the invocation that fills
-// a machine, and only `ci` is scheduled as a step. Without the fold the heaviest
-// target in the workspace runs as if it had declared nothing.
-func TestChainMemoryInheritsFromAComposedTarget(t *testing.T) {
+// A declaration bounds the target's own body. Each ctx.needs member claims
+// for itself while its composer lends, so no member's figure reaches it.
+func TestDeclaredClaimIsTheTargetsOwn(t *testing.T) {
 	p := chainProject(".",
-		map[string]types.Target{"test": {MemoryMB: 10240}},
-		map[string][]types.ChainStep{"ci": types.Needs("lint", "test")})
+		map[string]types.Target{"test": {MemoryMB: 10240}, "ci": {MemoryMB: 512}},
+		map[string][]types.ChainStep{"ci": types.Needs("lint", "test"), "check": types.Needs("test")})
 
 	mb, from := declaredClaim(p, "ci")
-	assert.Equal(t, 10240, mb)
-	assert.Equal(t, "test", from, "the refusal must name the target that wrote the figure")
-}
-
-// One ctx.needs call runs its members together, and with no curve to fold by their
-// declarations add; a second
-// call runs after the first, so the peak is the larger call. Summing across calls would
-// refuse work that fits, and taking the maximum within one would admit work that does
-// not.
-func TestChainMemorySumsOneCallAndPeaksAcrossCalls(t *testing.T) {
-	policies := map[string]types.Target{"test": {MemoryMB: 10240}, "build": {MemoryMB: 4096}}
-	together := chainProject(".", policies,
-		map[string][]types.ChainStep{"ci": types.Needs("build", "test")})
-	mb, _ := declaredClaim(together, "ci")
-	assert.Equal(t, 14336, mb, "ctx.needs(build, test) runs both at once")
-
-	inTurn := chainProject(".", policies,
-		map[string][]types.ChainStep{"ci": types.Needs("build").Needs("test")})
-	mb, _ = declaredClaim(inTurn, "ci")
-	assert.Equal(t, 10240, mb, "ctx.needs(build); ctx.needs(test) runs them in turn")
-}
-
-func TestChainMemoryFollowsNestedChains(t *testing.T) {
-	p := chainProject(".",
-		map[string]types.Target{"test": {MemoryMB: 8192}},
-		map[string][]types.ChainStep{
-			"ci":     types.Needs("verify"),
-			"verify": types.Needs("test"),
-		})
-
-	mb, from := declaredClaim(p, "ci")
-	assert.Equal(t, 8192, mb)
-	assert.Equal(t, "test", from)
-}
-
-// A target's own declaration wins over a lighter chain, and an undeclared target
-// with an undeclared chain still claims nothing.
-func TestChainMemoryKeepsTheTargetsOwnFigure(t *testing.T) {
-	p := chainProject(".",
-		map[string]types.Target{"ci": {MemoryMB: 6144}, "test": {MemoryMB: 1024}},
-		map[string][]types.ChainStep{"ci": types.Needs("test")})
-
-	mb, from := declaredClaim(p, "ci")
-	assert.Equal(t, 6144, mb)
+	assert.Equal(t, 512, mb)
 	assert.Equal(t, "ci", from)
 
-	bare := chainProject(".", nil, map[string][]types.ChainStep{"ci": types.Needs("lint")})
-	mb, from = declaredClaim(bare, "ci")
-	assert.Equal(t, 0, mb)
+	mb, from = declaredClaim(p, "check")
+	assert.Zero(t, mb, "check composes test and declares nothing itself")
 	assert.Empty(t, from)
-}
-
-// A chain that loops back must terminate rather than recurse forever. Cycles are
-// rejected elsewhere, so this only has to not hang.
-func TestChainMemoryTerminatesOnACycle(t *testing.T) {
-	p := chainProject(".",
-		map[string]types.Target{"a": {MemoryMB: 2048}},
-		map[string][]types.ChainStep{"a": types.Needs("b"), "b": types.Needs("a")})
-
-	mb, _ := declaredClaim(p, "a")
-	assert.Equal(t, 2048, mb)
 }
 
 // declaredClaim is the claim buildStep gives a step before a run sizes it.
@@ -209,20 +153,20 @@ func TestSizeMemoryClaim(t *testing.T) {
 			declaredMB: 10240,
 			same:       forecast.Measurement{Value: 4703 * mib, Runs: 54},
 			all:        forecast.Measurement{Value: 5000 * mib, Runs: 80},
-			wantMB:     5879, // ceil(1.25 x 4703)
+			wantMB:     4703, // the highest peak, with no margin
 			wantSizing: types.MemorySizing{Samples: 54},
 		},
 		{
 			name:       "the declaration caps a measurement above it",
 			declaredMB: 4096,
-			same:       forecast.Measurement{Value: 4000 * mib, Runs: 10},
+			same:       forecast.Measurement{Value: 5000 * mib, Runs: 10},
 			wantMB:     4096,
 		},
 		{
 			name:       "a shape never run falls back to every run of the target",
 			declaredMB: 10240,
 			all:        forecast.Measurement{Value: 4000 * mib, Runs: 10},
-			wantMB:     5000,
+			wantMB:     4000,
 			wantSizing: types.MemorySizing{Samples: 10, AnyShape: true},
 		},
 		{
@@ -230,7 +174,7 @@ func TestSizeMemoryClaim(t *testing.T) {
 			declaredMB: 10240,
 			same:       forecast.Measurement{Value: 100 * mib, Runs: minMeasuredRuns - 1},
 			all:        forecast.Measurement{Value: 4000 * mib, Runs: 10},
-			wantMB:     5000,
+			wantMB:     4000,
 			wantSizing: types.MemorySizing{Samples: 10, AnyShape: true},
 		},
 		{
@@ -248,7 +192,7 @@ func TestSizeMemoryClaim(t *testing.T) {
 		{
 			name:       "an undeclared target claims its measured peak, with no ceiling",
 			same:       forecast.Measurement{Value: 9000 * mib, Runs: minMeasuredRuns},
-			wantMB:     11250,
+			wantMB:     9000,
 			wantSizing: types.MemorySizing{Samples: minMeasuredRuns},
 		},
 		{
@@ -268,31 +212,31 @@ func TestSizeMemoryClaim(t *testing.T) {
 }
 
 // A measured claim whose shape has too few curves is its peak held flat, and says so
-// in the words a refusal prints; one with enough carries its curve, every bucket under
-// the same margin and declaration ceiling as the peak.
+// in the words a refusal prints. One with enough carries its curve, every
+// bucket under the declaration ceiling.
 func TestSizeMemoryClaimSaysItFellBackToPeak(t *testing.T) {
 	measured := forecast.Measurement{Value: 5788 * mib, Runs: 13}
 	short := types.MemoryProfile{Runs: minMeasuredRuns - 1}
 	mb, sizing, profile := sizeMemoryClaim("test", 0, measured, measured, forecast.Measurement{}, short)
-	assert.Equal(t, 7235, mb, "ceil(1.25 x 5788)")
+	assert.Equal(t, 5788, mb, "the highest peak")
 	assert.Equal(t, types.MemoryProfile{}, profile)
-	assert.Equal(t, "test: no memory curve for this shape (2 of 3 runs); claimed the 7.1 GiB peak", sizing.Fallback)
-	assert.Equal(t, "measured over 13 runs; test: no memory curve for this shape (2 of 3 runs); claimed the 7.1 GiB peak", sizing.String())
+	assert.Equal(t, "test: no memory curve for this shape (2 of 3 runs); claimed the 5.7 GiB peak", sizing.Fallback)
+	assert.Equal(t, "measured over 13 runs; test: no memory curve for this shape (2 of 3 runs); claimed the 5.7 GiB peak", sizing.String())
 
 	curve := types.MemoryProfile{D10Ms: 40_000, D90Ms: 60_000, Runs: minMeasuredRuns}
-	curve.Curve[0], curve.Curve[19] = 1000, 5000
-	mb, sizing, profile = sizeMemoryClaim("test", 6000, measured, measured, forecast.Measurement{}, curve)
-	assert.Equal(t, 6000, mb, "the declaration caps the peak")
+	curve.Curve[0], curve.Curve[19] = 1000, 5788
+	mb, sizing, profile = sizeMemoryClaim("test", 5000, measured, measured, forecast.Measurement{}, curve)
+	assert.Equal(t, 5000, mb, "the declaration caps the peak")
 	assert.Equal(t, types.MemorySizing{}, sizing, "nothing fell back")
 	want := curve
-	want.Curve[0], want.Curve[19] = 1250, 6000
-	assert.Equal(t, want, profile, "1.25 x each bucket, the last capped at the 6000 MiB declaration")
+	want.Curve[19] = 5000
+	assert.Equal(t, want, profile, "each bucket as measured, the last capped at the 5000 MiB declaration")
 }
 
-// The whole path a run takes: recorded outcomes, the snapshot, and the chain fold. `ci`
-// declares nothing and composes `test`, so the step claims test's SIZED figure, and the
-// failed run that peaked higher is not part of it.
-func TestSizeClaimFoldsSizedFigures(t *testing.T) {
+// The whole path a run takes, from recorded outcomes to the claim. test claims
+// its own sized figure, without the failed run that peaked higher. Its
+// composer ci claims none of it.
+func TestSizeClaimSizesOnlyTheTargetsOwnFigure(t *testing.T) {
 	shape := forecast.NewShape([]string{"rw"}, nil)
 	outcome := func(result forecast.OutcomeResult, mb int64) forecast.Outcome {
 		return forecast.Outcome{Result: result, MaxRSSBytes: mb * mib, Charms: shape.Charms, ArgsHash: shape.ArgsHash}
@@ -314,34 +258,21 @@ func TestSizeClaimFoldsSizedFigures(t *testing.T) {
 	m := &Magus{}
 	m.limOnce.Do(func() { m.lim = cache.NewLimiter(8) })
 	m.hostMemOnce.Do(func() { m.hostMemBytes = 1 << 40 })
+	size := newClaimSizer(&x, shape, m.chainReadsCharm)
 	var step cache.Step
-	sizing := m.sizeClaim(&step, p, "ci", newClaimSizer(&x, shape, m.chainReadsCharm))
-	// test is sized to 1.25 x 4000; lint has no runs, so its declaration stands, and
-	// with no curve on either the call sums their peaks.
+	sizing := m.sizeClaim(&step, p, "test", size)
 	want := types.MemorySizing{Samples: 3, Slots: types.SlotSizing{Source: types.SlotsUnmeasured},
-		Fallback: "lint: no memory curve; summed the peaks of its ctx.needs call"}
-	assert.Equal(t, cache.Step{MemoryMB: 5000 + 1024, MemoryDeclaredBy: "test", MemorySizing: want, Slots: 1}, step)
+		Fallback: "test: no memory curve for this shape (0 of 3 runs); claimed the 3.9 GiB peak"}
+	assert.Equal(t, cache.Step{MemoryMB: 4000, MemoryDeclaredBy: "test", MemorySizing: want, Slots: 1}, step,
+		"the highest passing peak, under the declaration")
 	assert.Equal(t, want, sizing)
 
-	assert.Nil(t, newClaimSizer(nil, shape, m.chainReadsCharm), "no history, no sizer: declarations fold as written")
-}
+	step = cache.Step{}
+	m.sizeClaim(&step, p, "ci", size)
+	assert.Zero(t, step.MemoryMB, "ci declares nothing and has no runs; lint and test claim for themselves")
+	assert.Empty(t, step.MemoryDeclaredBy)
 
-// A skip_cache composer's same-project members run as cache steps of their own, each
-// taking its own machine claim, so the composer's step claims none of their memory.
-func TestSizeClaimLeavesOutMembersThatClaimTheirOwn(t *testing.T) {
-	p := chainProject(".",
-		map[string]types.Target{"ci": {SkipCache: true}, "test": {MemoryMB: 10240}, "lint": {MemoryMB: 1024}},
-		map[string][]types.ChainStep{"ci": types.Needs("lint", "test")})
-	m := &Magus{}
-	m.limOnce.Do(func() { m.lim = cache.NewLimiter(8) })
-	m.hostMemOnce.Do(func() { m.hostMemBytes = 1 << 40 })
-
-	var step cache.Step
-	m.sizeClaim(&step, p, "ci", nil)
-	assert.Zero(t, step.MemoryMB, "lint and test claim for themselves")
-
-	m.sizeClaim(&step, p, "test", nil)
-	assert.Equal(t, 10240, step.MemoryMB)
+	assert.Nil(t, newClaimSizer(nil, shape, m.chainReadsCharm), "no history, no sizer: declarations stand as written")
 }
 
 // A target that declares neither memory nor slots claims what its runs measured once it
@@ -370,12 +301,12 @@ func TestSizeClaimMeasuresAnUndeclaredTarget(t *testing.T) {
 	}
 
 	measuredSlots := types.SlotSizing{Source: types.SlotsMeasured, Samples: minMeasuredRuns}
-	flat := "scip: no memory curve for this shape (0 of 3 runs); claimed the 2.0 GiB peak"
-	assert.Equal(t, cache.Step{MemoryMB: 2000, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Samples: minMeasuredRuns, Slots: measuredSlots, Fallback: flat}, Slots: 3},
-		claim(types.Target{}, minMeasuredRuns), "ceil(1.25 x 1600) MiB and three slots")
+	flat := "scip: no memory curve for this shape (0 of 3 runs); claimed the 1.6 GiB peak"
+	assert.Equal(t, cache.Step{MemoryMB: 1600, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Samples: minMeasuredRuns, Slots: measuredSlots, Fallback: flat}, Slots: 3},
+		claim(types.Target{}, minMeasuredRuns), "the 1600 MiB peak and three slots")
 	assert.Equal(t, cache.Step{MemorySizing: types.MemorySizing{Slots: types.SlotSizing{Source: types.SlotsUnmeasured}}},
 		claim(types.Target{}, minMeasuredRuns-1), "too few runs claim no memory and one slot")
-	assert.Equal(t, cache.Step{MemoryMB: 2000, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Samples: minMeasuredRuns, Slots: types.SlotSizing{Source: types.SlotsDeclared}, Fallback: flat}, Slots: 1},
+	assert.Equal(t, cache.Step{MemoryMB: 1600, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Samples: minMeasuredRuns, Slots: types.SlotSizing{Source: types.SlotsDeclared}, Fallback: flat}, Slots: 1},
 		claim(types.Target{Slots: 1}, minMeasuredRuns), "declared slots beat the measured width")
 	capped := "scip: no memory curve for this shape (0 of 3 runs); claimed the 1.0 GiB peak"
 	assert.Equal(t, cache.Step{MemoryMB: 1024, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Slots: measuredSlots, Fallback: capped}, Slots: 3},
@@ -453,17 +384,17 @@ func TestNarrowedClaimIsCappedByTheFullRunPeak(t *testing.T) {
 
 	mb, sizing := claim(shapedRun(narrowed("A"), 6000), shapedRun(narrowed("B"), 6000), shapedRun(narrowed("C"), 6000),
 		shapedRun(full, 4000), shapedRun(full, 4000), shapedRun(full, 4000))
-	assert.Equal(t, 5000, mb, "ceil(1.25 x the 4000 MiB full-run peak), not the 6000 MiB narrowed one")
+	assert.Equal(t, 4000, mb, "the 4000 MiB full-run peak, not the 6000 MiB narrowed one")
 	assert.Equal(t, 3, sizing.Samples, "sized from the narrowed runs, across three arg hashes")
 	assert.False(t, sizing.AnyShape)
 
 	mb, _ = claim(shapedRun(narrowed("A"), 2000), shapedRun(narrowed("B"), 2000), shapedRun(narrowed("C"), 2000),
 		shapedRun(full, 4000), shapedRun(full, 4000), shapedRun(full, 4000))
-	assert.Equal(t, 2500, mb, "a narrowed peak below the full one lowers the claim")
+	assert.Equal(t, 2000, mb, "a narrowed peak below the full one lowers the claim")
 
 	mb, _ = claim(shapedRun(narrowed("A"), 6000), shapedRun(narrowed("B"), 6000), shapedRun(narrowed("C"), 6000),
 		shapedRun(full, 4000), shapedRun(full, 4000))
-	assert.Equal(t, 7500, mb, "two full runs are too few to cap anything")
+	assert.Equal(t, 6000, mb, "two full runs are too few to cap anything")
 }
 
 // A full run is sized from full runs only. Narrowed runs, however many, neither make its
@@ -504,8 +435,8 @@ func TestSizeSlotClaim(t *testing.T) {
 	}
 }
 
-// A skip_cache composer lends its same-project members claims of their own,
-// so each member's claim is sized for itself, never by its composer.
+// Every member a composer lends to claims for itself, sized on its own. A
+// cacheable composer's members run inline and name it as Under.
 func TestMachineClaimsCoverTheMembersAComposerLends(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.Magusfile(`import "magus";
@@ -531,12 +462,16 @@ export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint, check, f
 	t.Cleanup(func() { _ = m.Close() })
 
 	claims := m.MachineClaims(t.Context(), []types.Target{{Path: ".", Name: "ci"}}, nil, nil)
-	got := map[string][2]int{}
+	got, under := map[string][2]int{}, map[string]string{}
 	for _, c := range claims {
 		got[c.Target] = [2]int{c.MemoryMB, c.Slots}
+		if c.Under != "" {
+			under[c.Target] = c.Under
+		}
 	}
-	// folded caches, so inline runs under folded's seat and claims nothing apart from it.
 	assert.Equal(t, map[string][2]int{
-		"ci": {0, 1}, "lint": {512, 1}, "check": {0, 1}, "test": {4096, 3}, "vet": {0, 2}, "folded": {1024, 1},
+		"ci": {0, 1}, "lint": {512, 1}, "check": {0, 1}, "test": {4096, 3}, "vet": {0, 2}, "folded": {1024, 1}, "inline": {0, 5},
 	}, got)
+	assert.Equal(t, map[string]string{"inline": ".:folded"}, under,
+		"folded caches, so inline runs in its body; the skip_cache composers' members are steps")
 }
