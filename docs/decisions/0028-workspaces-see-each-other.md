@@ -1,7 +1,7 @@
 ---
 title: "ADR 0028: workspaces see each other"
 order: 28
-description: Two magus workspaces on one machine see each other while a person works across them. The existing user-config key `knowledge.workspaces`, given named entries, connects every listed workspace to every other, both ways, and nothing is committed in either repository. Each workspace gets a directory symlink, `.magus/workspaces/<name>`, to every other, so plain paths reach the other tree for a read, an editor, a Buzz import, a read pattern and a generated go.work. Discovery goes through magus verbs, never through the link: grep, ripgrep and `go ./...` skip it by design. Read verbs cross by default and label every row with its workspace, revision and freshness; each graph is built by its own workspace's binary and read in place, and a ranking weight leans toward the workspace the command runs in. A file is judged by the workspace that owns it. magus's lint rules become portable, so the other workspace adopts the config unchanged and makes exceptions with `//nolint` at the line. Removing an entry removes the links in both trees on the next load. A target that reaches a workspace that is not connected refuses. `--global` and the `<basename>//` qualifier are deleted.
+description: "Two magus workspaces on one machine see each other while a person works across them. The existing user-config key `knowledge.workspaces`, given named entries, connects every listed workspace to every other, both ways, and nothing is committed in either repository. Each workspace gets a directory symlink, `.magus/workspaces/<name>`, to every other, so plain paths reach the other tree for a read, an editor, a Buzz import, a read pattern and a generated go.work. Discovery goes through magus verbs, never through the link: grep, ripgrep and `go ./...` skip it by design. Read verbs cross by default and label every row with its workspace, revision and freshness; each graph is built by its own workspace's binary and read in place, and a ranking weight leans toward the workspace the command runs in. A file is judged by the workspace that owns it. magus's lint rules become portable, so the other workspace adopts the config unchanged and makes exceptions with `//nolint` at the line. Removing an entry removes the links in both trees on the next load. A target that reaches a workspace that is not connected refuses. `--global` and the `<basename>//` qualifier are deleted."
 tags: [adr, decision, workspace, config, cache, knowledge-graph, guard, lint]
 status: proposed
 date: 2026-11-06
@@ -710,12 +710,15 @@ Pieces the prototype put in the wrong layer:
 
 | Item | State |
 | --- | --- |
-| Named entries in the user tier; repository tier refused | not built |
-| Links made, retargeted and removed by every load, in both trees | in progress (prototype links `.magus/use/@<name>` one way) |
-| Reads through a link keyed by link-relative name; cache independent of the root | in progress (prototype, `@name/` spelling) |
-| Imports through a link | in progress (prototype, `@name/` spelling) |
-| A target reaching a connection that is absent refuses | in progress (prototype refuses at load, MGS1054) |
-| Read-only sandbox entry per connected root | in progress (prototype) |
+| Named entries in the user tier; repository tier refused | built (MGS1055, MGS1056) |
+| Links made, retargeted and removed by every load, in both trees | built (internal/ward/workspaces.go; MGS1054, MGS1057, MGS1058) |
+| Reads through a link keyed by link-relative name; cache independent of the root | built (internal/cache/hash.go) |
+| Imports through a link | built (a plain path import; `spells.IsRemoteImport` takes a dot-led segment as local) |
+| A target reaching a connection that is absent refuses | built (MGS1059, for a read pattern and for an import) |
+| Read-only sandbox entry per connected root | built |
+| `describe workspace` lists every entry | built (name, path, link; revision and freshness wait for phase 3) |
+| golangci composition in the Go spell | built (spells/golang/golangci.buzz) |
+| `--global` over named entries; the skip and the basename merge refused | built; `--global` itself goes in phase 3 |
 | Stacked graph view, labels, freshness, weight; `--global` deleted | proposed |
 | Symbol store set and moniker joins | proposed |
 | affected across workspaces | proposed |
