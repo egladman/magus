@@ -71,7 +71,7 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	if err != nil {
 		return ctx, err
 	}
-	// The used workspaces' own sandbox allows are never consulted: only their roots.
+	// A used workspace lends its root, never its own sandbox allows.
 	cfg := m.cfg.Sandbox
 	cfg.Allow = append(slices.Clone(cfg.Allow), sandbox.UseAllows(m.ws.Uses)...)
 	p, err := sandbox.FromConfig(m.ws.Root, loc.CacheDir, storeDir, cfg, spells.Sandboxes(loaded), m.serviceSpells(loaded)...)

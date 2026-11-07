@@ -1477,7 +1477,7 @@ func magusSearchPaths(ctx context.Context, projectDir string) []string {
 		if root := ws.Root(); root != "" && root != projectDir {
 			roots = append(roots, root)
 		}
-		// Inside the root, so confineImportReads admits it with no bound of its own.
+		// Inside the root, so confineImportReads needs no bound for it.
 		if root := ws.Root(); root != "" {
 			if links := filepath.Join(root, filepath.FromSlash(types.UseLinkDir)); isDir(links) {
 				roots = append(roots, links)

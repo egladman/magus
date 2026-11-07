@@ -144,8 +144,8 @@ type Config struct {
 	// modules: each entry lends this workspace the rule kinds it shares, read
 	// through `@<name>/` patterns and imports. See UseEntry and MGS1054.
 	//
-	// cli:"-": magus.yaml ONLY. Which workspace's rules apply to this code is
-	// the repository's decision, and a flag or env var would change it per shell.
+	// cli:"-": magus.yaml ONLY. Which rules apply to this code is
+	// the repository's decision. A flag or env var would change it per shell.
 	Use []UseEntry `json:"use" yaml:"use" cli:"-"`
 
 	// Agents states facts about the account agents run under and a person's guard level.
