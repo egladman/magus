@@ -454,6 +454,32 @@ const ModelTierDeclarationUnusable DiagnosticCode = "MGS1052"
 // never replayed or cleaned. The load stops rather than pick one.
 const FootprintDeclaredBothWays DiagnosticCode = "MGS1053"
 
+// WorkspaceMissing is a knowledge.workspaces entry whose path does not exist,
+// is not a directory, or holds no magus workspace. Every listed workspace's
+// load stops until the entry is deleted or the checkout returns.
+const WorkspaceMissing DiagnosticCode = "MGS1054"
+
+// WorkspacesCommitted is knowledge.workspaces set in a repository's magus.yaml.
+// The list is personal: it lives in the user config, so connecting two
+// workspaces commits nothing.
+const WorkspacesCommitted DiagnosticCode = "MGS1055"
+
+// WorkspaceEntryShape is a knowledge.workspaces entry the load cannot read: a
+// bare string, an unknown key, a bad or repeated name, or a relative path.
+const WorkspaceEntryShape DiagnosticCode = "MGS1056"
+
+// WorkspacesTracked is a connected workspace whose VCS does not ignore
+// .magus/workspaces, so the links the load makes could be committed.
+const WorkspacesTracked DiagnosticCode = "MGS1057"
+
+// WorkspacesNotALink is a regular file or directory where the load would put
+// a symlink under .magus/workspaces. The load deletes nothing it did not make.
+const WorkspacesNotALink DiagnosticCode = "MGS1058"
+
+// WorkspaceNotConnected is a read pattern under .magus/workspaces/<name> when
+// no such workspace is connected here, as in CI or a fresh clone.
+const WorkspaceNotConnected DiagnosticCode = "MGS1059"
+
 // SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 // ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 // keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -1098,6 +1124,12 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SpellContractViolated,
 	ModelTierDeclarationUnusable,
 	FootprintDeclaredBothWays,
+	WorkspaceMissing,
+	WorkspacesCommitted,
+	WorkspaceEntryShape,
+	WorkspacesTracked,
+	WorkspacesNotALink,
+	WorkspaceNotConnected,
 	PathReadDenied,
 	PathWriteDenied,
 	EnvStripped,

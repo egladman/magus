@@ -301,9 +301,6 @@ Shows every target's subprocess output live and interleaved, instead of withhold
 \fBMAGUS_HINTS_ENABLED\fR
 Controls whether hint messages (actionable nudges) are printed to stderr. Defaults to true. Set hints.enabled: false in magus.yaml or MAGUS_HINTS_ENABLED=false to suppress all hint output. Pointer to distinguish "not set" from explicit false (default: true). Config file key: \fBhints.enabled\fR.
 .TP
-\fBMAGUS_KNOWLEDGE_WORKSPACES\fR
-Additional workspace roots to union into a `\-\-global` knowledge\-graph query (query/explain/path and graph export/stats). Each is loaded and its node IDs are namespaced by the workspace ("<name>//<id>") so IDs from different repos cannot collide. Empty means \-\-global covers only the current workspace. Config file key: \fBknowledge.workspaces\fR.
-.TP
 \fBMAGUS_KNOWLEDGE_PUBLISHED_REF\fR
 The OCI artifact a published knowledge graph is READ from, as <registry>/<repository>:<tag>. Empty (the default) means this workspace pulls nothing and every graph is built locally. Config file key: \fBknowledge.published_ref\fR.
 .TP

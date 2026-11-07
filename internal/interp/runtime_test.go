@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/observability"
@@ -250,6 +251,38 @@ func TestCheckRemoteSpellImports(t *testing.T) {
 	err = check(declared, "import \""+lint+"\";\nimport \"ghcr.io/team/spells/fmt\" as fmt;\n")
 	require.ErrorIs(t, err, types.RemoteSpellUndeclared)
 	require.ErrorContains(t, err, `"ghcr.io/team/spells/fmt"`)
+}
+
+type WorkspaceImportsSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestWorkspaceImportsSuite(t *testing.T) { suite.Run(t, new(WorkspaceImportsSuite)) }
+
+func (s *WorkspaceImportsSuite) SetupTest() { s.root = s.T().TempDir() }
+
+func (s *WorkspaceImportsSuite) check(code string) error {
+	ctx := types.WithWorkspace(s.T().Context(), rootWorkspace{root: s.root})
+	return checkWorkspaceImports(ctx, "magusfile.buzz", code)
+}
+
+func (s *WorkspaceImportsSuite) TestAnImportThroughAConnectedWorkspacePasses() {
+	dir := filepath.Join(s.root, filepath.FromSlash(types.WorkspacesDir))
+	s.Require().NoError(os.MkdirAll(dir, 0o755))
+	s.Require().NoError(os.Symlink(s.T().TempDir(), filepath.Join(dir, "magus")))
+	s.NoError(s.check(`import ".magus/workspaces/magus/spells/golang/golangci" as g;`))
+}
+
+func (s *WorkspaceImportsSuite) TestAnImportThroughAMissingWorkspaceRefusesWithMGS1059() {
+	err := s.check(`import ".magus/workspaces/magus/spells/golang/golangci" as g;`)
+	s.Require().ErrorIs(err, types.WorkspaceNotConnected)
+	s.Contains(err.Error(), "magusfile.buzz imports")
+	s.Contains(err.Error(), "{name: magus, path: ...}")
+}
+
+func (s *WorkspaceImportsSuite) TestOtherImportsAreNotChecked() {
+	s.NoError(s.check("import \"magus\";\nimport \"./hack/lint\" as lint;\n"))
 }
 
 func TestMentionsRemoteImport(t *testing.T) {

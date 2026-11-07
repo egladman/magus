@@ -23,6 +23,19 @@ func TestAnalyzer(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), analyzer, "cli")
 }
 
+// With no callee-packages, the module's own packages are the callees.
+func TestAnalyzerCalleesDefaultToTheModule(t *testing.T) {
+	testdata := analysistest.TestData()
+	sourcetest.Module(t, "cli")
+	opts := sources
+	opts.Module, opts.CalleePackages = "cli", nil
+	analyzer, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysistest.Run(t, testdata, analyzer, "cli")
+}
+
 // An allowed file is never reported for its writes, and an entry naming one file is
 // reported once that file has none left.
 func TestAnalyzerAllowListOnlyShrinks(t *testing.T) {

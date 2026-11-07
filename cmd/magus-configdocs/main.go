@@ -44,7 +44,7 @@ func render() string {
 	})
 
 	fmt.Fprintf(&b, "# Configuration\n\n")
-	fmt.Fprintf(&b, "magus resolves configuration from three layers, highest precedence first: a CLI flag, a `MAGUS_*` environment variable, then the `magus.yaml` file at the workspace root. This page is the complete inventory of config keys, each with its `magus.yaml` path, environment variable, CLI flag, and value type.\n\n")
+	fmt.Fprintf(&b, "magus resolves configuration from these layers, highest precedence first: a CLI flag, a `MAGUS_*` environment variable, a `magus.yaml` in the working directory below the workspace root, the `magus.yaml` at the workspace root, then the user config at `$XDG_CONFIG_HOME/magus/magus.yaml`. This page is the inventory of config keys a flag or an environment variable can set, each with its `magus.yaml` path, environment variable, CLI flag, and value type. Keys that only a file sets, such as `knowledge.workspaces` in the user config, are documented where they are used.\n\n")
 
 	// Group fields by their top-level yaml section (the segment before the first
 	// "."), so the reference reads section by section.

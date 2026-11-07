@@ -8,6 +8,9 @@ package plugin
 
 import (
 	"fmt"
+	"maps"
+	"reflect"
+	"strings"
 
 	"github.com/egladman/magus/libs/conventions/asciistrings"
 	"github.com/egladman/magus/libs/conventions/benchbeside"
@@ -18,6 +21,7 @@ import (
 	"github.com/egladman/magus/libs/conventions/globalrestore"
 	"github.com/egladman/magus/libs/conventions/hostagnostic"
 	"github.com/egladman/magus/libs/conventions/hostvocab"
+	"github.com/egladman/magus/libs/conventions/internal/source"
 	"github.com/egladman/magus/libs/conventions/nameoutput"
 	"github.com/egladman/magus/libs/conventions/namewords"
 	"github.com/egladman/magus/libs/conventions/providerio"
@@ -56,10 +60,17 @@ func init() { //nolint:gochecknoinits // golangci-lint's plugin-module-register 
 
 // plugin builds a constructor that decodes a settings block straight into the
 // analyzer's own Options, so an option added there cannot be dropped on the
-// way in, and an unknown key is a load error naming it and the linter.
+// way in, and an unknown key is a load error naming the linter.
+//
+// An analyzer with a module option reads the module from the linted tree's
+// go.mod unless the settings name one, and a tree with no go.mod is an error.
 func plugin[O any](name string, build func(O) (*analysis.Analyzer, error)) register.NewPlugin {
 	return func(raw any) (register.LinterPlugin, error) {
-		opts, err := register.DecodeSettings[O](raw)
+		settings, err := withTreeModule[O](name, raw)
+		if err != nil {
+			return nil, err
+		}
+		opts, err := register.DecodeSettings[O](settings)
 		if err != nil {
 			return nil, fmt.Errorf("%s: settings: %w", name, err)
 		}
@@ -69,6 +80,44 @@ func plugin[O any](name string, build func(O) (*analysis.Analyzer, error)) regis
 		}
 		return &linter{analyzer: analyzer}, nil
 	}
+}
+
+// withTreeModule fills the module option from the linted tree's go.mod unless
+// the settings already name one.
+func withTreeModule[O any](name string, raw any) (any, error) {
+	if !hasModuleOption[O]() {
+		return raw, nil
+	}
+	settings, isMap := raw.(map[string]any)
+	if raw == nil {
+		settings, isMap = map[string]any{}, true
+	}
+	if !isMap {
+		return raw, nil
+	}
+	if _, set := settings["module"]; set {
+		return raw, nil
+	}
+	tree, err := source.TreeModule(name)
+	if err != nil {
+		return nil, err
+	}
+	merged := maps.Clone(settings)
+	merged["module"] = tree
+	return merged, nil
+}
+
+func hasModuleOption[O any]() bool {
+	t := reflect.TypeFor[O]()
+	if t.Kind() != reflect.Struct {
+		return false
+	}
+	for f := range t.Fields() {
+		if name, _, _ := strings.Cut(f.Tag.Get("json"), ","); name == "module" {
+			return true
+		}
+	}
+	return false
 }
 
 type linter struct {

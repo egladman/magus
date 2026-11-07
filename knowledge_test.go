@@ -24,6 +24,7 @@ import (
 	"github.com/scip-code/scip/bindings/go/scip"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"google.golang.org/protobuf/proto"
 	"io"
 	"log/slog"
@@ -45,47 +46,53 @@ func mkGlobalWS(t *testing.T, target string) string {
 	return w.Root()
 }
 
-func TestBuildGlobalKnowledgeGraph(t *testing.T) {
-	ctx := context.Background()
-	rootA := mkGlobalWS(t, "build")
-	rootB := mkGlobalWS(t, "deploy")
-
-	wsA, err := Inspect(ctx, rootA, WithSpawnRule(TierCeiling))
-	require.NoError(t, err)
-
-	g, err := buildGlobalKnowledgeGraph(ctx, wsA, config.Config{Knowledge: config.Knowledge{Workspaces: []string{rootB}}}, false, slog.Default())
-	require.NoError(t, err)
-	out := g.Output()
-
-	nameA, nameB := filepath.Base(rootA), filepath.Base(rootB)
-	var haveA, haveB bool
-	for _, n := range out.Nodes {
-		if strings.HasPrefix(n.ID, nameA+"//") {
-			haveA = true
-		}
-		if strings.HasPrefix(n.ID, nameB+"//") {
-			haveB = true
-		}
-	}
-	assert.True(t, haveA, "current workspace nodes present, namespaced by %q", nameA)
-	assert.True(t, haveB, "registered workspace nodes present, namespaced by %q", nameB)
-	// Each workspace declared a distinct target; both should resolve in the union.
-	assert.NotEmpty(t, g.Resolve("build", 1), "build target resolves in the global graph")
-	assert.NotEmpty(t, g.Resolve("deploy", 1), "deploy target resolves in the global graph")
+// GlobalKnowledgeGraphSuite pins how --global unions knowledge.workspaces.
+type GlobalKnowledgeGraphSuite struct {
+	suite.Suite
+	rootA, rootB string
+	wsA          types.WorkspaceRepository
 }
 
-func TestBuildGlobalKnowledgeGraphSkipsUnreachable(t *testing.T) {
-	ctx := context.Background()
-	rootA := mkGlobalWS(t, "build")
-	wsA, err := Inspect(ctx, rootA, WithSpawnRule(TierCeiling))
-	require.NoError(t, err)
+func TestGlobalKnowledgeGraphSuite(t *testing.T) { suite.Run(t, new(GlobalKnowledgeGraphSuite)) }
 
-	// A registered workspace that does not exist is skipped, not fatal: the global
-	// graph degrades to what it can reach rather than failing the whole query.
-	missing := filepath.Join(t.TempDir(), "does-not-exist")
-	g, err := buildGlobalKnowledgeGraph(ctx, wsA, config.Config{Knowledge: config.Knowledge{Workspaces: []string{missing}}}, false, slog.Default())
-	require.NoError(t, err)
-	assert.Positive(t, g.Output().NodeCount, "current workspace still present despite the missing registered one")
+func (s *GlobalKnowledgeGraphSuite) SetupTest() {
+	s.rootA, s.rootB = mkGlobalWS(s.T(), "build"), mkGlobalWS(s.T(), "deploy")
+	ws, err := Inspect(context.Background(), s.rootA, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.wsA = ws
+}
+
+func (s *GlobalKnowledgeGraphSuite) build(entries ...config.KnowledgeWorkspace) (*knowledge.Graph, error) {
+	cfg := config.Config{Knowledge: config.Knowledge{Workspaces: entries}}
+	return buildGlobalKnowledgeGraph(context.Background(), s.wsA, cfg, false, slog.Default())
+}
+
+func (s *GlobalKnowledgeGraphSuite) TestEveryEntryIsQualifiedByItsName() {
+	g, err := s.build(config.KnowledgeWorkspace{Name: "alpha", Path: s.rootA}, config.KnowledgeWorkspace{Name: "beta", Path: s.rootB})
+	s.Require().NoError(err)
+	var haveA, haveB bool
+	for _, n := range g.Output().Nodes {
+		haveA = haveA || strings.HasPrefix(n.ID, "alpha//")
+		haveB = haveB || strings.HasPrefix(n.ID, "beta//")
+	}
+	s.True(haveA, "the current workspace's nodes carry its entry name")
+	s.True(haveB, "the other workspace's nodes carry its entry name")
+	s.NotEmpty(g.Resolve("build", 1))
+	s.NotEmpty(g.Resolve("deploy", 1))
+}
+
+func (s *GlobalKnowledgeGraphSuite) TestAnEntryThatFailsToOpenFailsTheQuery() {
+	missing := filepath.Join(s.T().TempDir(), "does-not-exist")
+	_, err := s.build(config.KnowledgeWorkspace{Name: "alpha", Path: s.rootA},
+		config.KnowledgeWorkspace{Name: "gone", Path: missing, File: "magus.yaml", Line: 4})
+	s.Require().Error(err)
+	s.Contains(err.Error(), "knowledge.workspaces entry gone at magus.yaml:4")
+}
+
+func (s *GlobalKnowledgeGraphSuite) TestAnUnlistedWorkspaceRefuses() {
+	_, err := s.build(config.KnowledgeWorkspace{Name: "beta", Path: s.rootB})
+	s.Require().Error(err)
+	s.Contains(err.Error(), "is not listed")
 }
 
 // ingest builds the symbolIngestInputs the loaders take, with a default logger.

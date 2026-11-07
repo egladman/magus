@@ -826,6 +826,9 @@ type WorkspaceEntry struct {
 	CacheDir     string `json:"cache_dir,omitempty"     yaml:"cache_dir,omitempty"`
 	Concurrency  int    `json:"concurrency,omitempty"   yaml:"concurrency,omitempty"`
 	ProjectCount int    `json:"project_count"           yaml:"project_count"`
+	// Workspaces is every knowledge.workspaces entry when this workspace is
+	// listed, its own first. Their projects are not counted in ProjectCount.
+	Workspaces []ListedWorkspace `json:"workspaces" yaml:"workspaces"`
 }
 
 // WorkspaceConfig carries infrastructure details for Inspector.Workspace
