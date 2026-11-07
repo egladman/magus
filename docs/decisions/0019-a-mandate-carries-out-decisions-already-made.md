@@ -113,9 +113,18 @@ unsettled, never settled, so a worker that says nothing gains nothing.
 
 The tier is what `magus\change().tier` proves for the job's change from its checkpoint:
 diff, graph, `go list` and the syntax-tree compare, and anything unproven is `full`. A
-settled job is integrated at any tier through its gates. An unsettled job above the
-tolerance is held for review: the rule denies the integration fork that names it, the row
-stays as it is for the person, and the root goes on with the next row.
+settled job is integrated at any tier through its gates, up to the mandate's review budget.
+An unsettled job above the tolerance is held for review: the rule denies the integration
+fork that names it, the row stays as it is for the person, and the root goes on with the
+next row.
+
+The review budget bounds what a person meets later. A settled job whose change touches more
+than `--review-budget` lines in its `scoped` or `full` paths is held the same way, since no
+one read it while it was integrated. Lines come from `vcs\diffStat` in the job's checkout;
+a path proven `trivial` or `mechanical` adds none. The budget defaults to, and may not
+exceed, `reviewBudget` in `hack/magusfile/branch-stack.buzz`: the same 400 lines
+`split-into-branches.buzz` packs a layer to. The hold names that script's command for the
+job. The person runs it or integrates the row as it is. The mandate never splits a job.
 
 <!--diagram:mandate-raises-the-bar-->
 
@@ -127,7 +136,8 @@ toward deny:
 | `job fork` of a mandated row or its child                | allow                  | allow                                 |
 | `job fork` of a row the mandate does not name            | allow                  | deny: new scope                       |
 | an integration fork of an unsettled job above tolerance  | allow                  | deny: held for review                 |
-| an integration fork of a settled job                     | allow                  | allow                                 |
+| an integration fork of a settled job within the budget   | allow                  | allow                                 |
+| an integration fork of a settled job past the budget     | allow                  | deny: held for review                 |
 | a write under `docs/decisions/` or `.claude/`            | allow                  | deny: reserved                        |
 | `git push`, `gh pr merge`, `magus job grant`             | as the other rules say | deny: reserved                        |
 | the root's stop with forkable rows and no worker running | deny once, then allow  | deny, until three refusals over a row |
