@@ -5,11 +5,12 @@
 // commits and conflict with main. The first branch's own commits are the ones past the newest
 // squash-merged pull request head it carries; each later branch's are the ones past the branch
 // below it. The work runs in a fresh checkout a `magus job fork --checkout` row owns, so the
-// tree this runs from is never touched. Per branch, in order: `git rebase --onto` --base (the
-// first) or the rebased branch below, a generated file a conflict names taken from the
-// replayed commit, gate-ready (bootstrap-checkout.buzz) so the checkout's ./magus is built at the
-// rebased head, `magus affected ci` to gate and regenerate, the regeneration committed, then
-// `git push --force-with-lease` against the head it read. It stops at the first conflict in a
+// tree this runs from is never touched. Each branch is rebased with
+// `git rebase --onto` onto --base or the rebased branch below. A conflicted
+// generated file is taken from the replayed commit. verify-ready builds
+// ./magus at the rebased head. `magus affected ci` verifies and regenerates,
+// and the regeneration is committed. A `git push --force-with-lease` against
+// the head it read ends the branch. It stops at the first conflict in a
 // source file and lists the files. --dry-run prints the steps and runs none.
 //
 //	magus buzz hack/dev/rebase-branches-onto-base.buzz -- --branches <a,b,c> [--base <ref>] [--dry-run]
@@ -64,7 +65,8 @@ export object Ran {
 
 // Shell is every git, gh and magus call the script makes, so a test answers them. git and
 // run never raise on a failed command; the caller reads code. dir "" is this checkout; run in
-// another dir runs that checkout's own ./magus. ready is bootstrap-checkout's gateReady.
+// another dir runs that checkout's own ./magus. ready is bootstrap-checkout's
+// verifyReady.
 export object Shell {
     git: fun (dir: str, args: [str]) > result\Result::<Ran>,
     gh: fun (args: [str]) > result\Result::<str>,
@@ -143,7 +145,7 @@ export fun plan(s: Step, base: str) > [str] {
     return [
         "git {rebaseArgv(onto, s: s).join(" ")}",
         "git checkout --theirs each generated file a conflict names; stop at a source file",
-        "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --gate-ready",
+        "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready",
         "magus affected ci",
         "git commit -m \"{regenerateMessage(base)}\" (when the gate regenerated anything)",
         "git {pushArgv(s).join(" ")}",
@@ -318,7 +320,7 @@ export fun rebase(sh: Shell, checkout: str, s: Step, onto: str, base: str) > res
         return result\Result::<str>{ error = err };
     }
     foreach (line in ready.value!) {
-        std\print("gate-ready: {line}");
+        std\print("verify-ready: {line}");
     }
     final gate = sh.run(checkout, sub: "affected", args: ["ci"]);
     if (gate.error -> err) {
@@ -443,7 +445,7 @@ fun liveShell() > Shell {
         },
         ready = fun (dir: str) > result\Result::<[str]> {
             try {
-                return result\ok::<[str]>(bootstrap\gateReady(bootstrap\liveHost(), dir: dir));
+                return result\ok::<[str]>(bootstrap\verifyReady(bootstrap\liveHost(), dir: dir));
             } catch (err: any) {
                 return result\caught::<[str]>(err, doing: "rebase-branches-onto-base: ready the checkout for the gate");
             }

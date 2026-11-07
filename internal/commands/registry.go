@@ -2472,16 +2472,16 @@ shows what it is doing.`,
 				"job's calls alone, until --for passes or the job ends, and the advice names who granted it and until when. " +
 				"--revoke ends a grant early. Only a grantable rule is accepted (hooks-off); any other is refused, naming " +
 				"the grantable ones. The guard refuses this verb to every agent and the job store refuses it from a process " +
-				"carrying a lease, so it is typed at a person's own terminal. With --commit the one positional is push-ungated: " +
+				"carrying a lease, so it is typed at a person's own terminal. With --commit the one positional is push-unverified: " +
 				"the waiver lets a push or `gh pr create` of that commit through and names who waived it, when and why; any other " +
 				"commit is still refused, and --revoke removes the waiver.",
 			Flags: []cmdline.Flag{
 				{Name: "for", Kind: cmdline.Duration, Unit: "h", Doc: "End the grant after this long (e.g. 2h); unset, it lasts until the job ends"},
 				{Name: "revoke", Kind: cmdline.Bool, Default: false, Doc: "End the job's grant of the rule"},
-				{Name: "commit", Kind: cmdline.String, Doc: "Waive the push gate for this one commit instead of lowering a rule for a job; takes only push-ungated"},
+				{Name: "commit", Kind: cmdline.String, Doc: "Waive the push gate for this one commit instead of lowering a rule for a job; takes only push-unverified"},
 				{Name: "reason", Kind: cmdline.String, Doc: "Why the gate was skipped, recorded with the waiver; required with --commit unless --revoke"},
 			},
-			Usage: "magus job grant [--for <duration>] [--revoke] <job> <rule> | magus job grant --commit <commit> (--reason <text> | --revoke) push-ungated [flags]",
+			Usage: "magus job grant [--for <duration>] [--revoke] <job> <rule> | magus job grant --commit <commit> (--reason <text> | --revoke) push-unverified [flags]",
 		},
 	},
 	Examples: []cmdline.Example{
@@ -2498,8 +2498,8 @@ shows what it is doing.`,
 		{Comment: "Grade a job's checks in a merged tree", Command: "magus job wait session-load/core --integration --stdin < evidence.json"},
 		{Comment: "See which jobs a prune would end", Command: "magus job prune --dry-run"},
 		{Comment: "Hold a job's runs off the budget, then let them back", Command: "magus job pause session-load/core --reason 'release build needs the machine' --until 2h && magus job resume session-load/core"},
-		{Comment: "Push HEAD without the local gate, saying why", Command: `magus job grant --commit HEAD push-ungated --reason "CI gates this release branch"`},
-		{Comment: "Take that waiver back", Command: "magus job grant --commit HEAD push-ungated --revoke"},
+		{Comment: "Push HEAD without the local gate, saying why", Command: `magus job grant --commit HEAD push-unverified --reason "CI gates this release branch"`},
+		{Comment: "Take that waiver back", Command: "magus job grant --commit HEAD push-unverified --revoke"},
 	},
 }
 

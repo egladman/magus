@@ -2437,19 +2437,7 @@ github.com/egladman/magus/types.FunctionGap.Line field int
 github.com/egladman/magus/types.FunctionGap.Path field string
 github.com/egladman/magus/types.FunctionGap.Reason field string
 github.com/egladman/magus/types.FunctionGap.Symbol field string
-github.com/egladman/magus/types.GateEvidence type struct
-github.com/egladman/magus/types.GateEvidence.GateID field string "json:\"gate_id\" yaml:\"gate_id\""
-github.com/egladman/magus/types.GateEvidence.OutputRef field string "json:\"output_ref\" yaml:\"output_ref\""
-github.com/egladman/magus/types.GateEvidence.Owed field string "json:\"owed,omitempty\" yaml:\"owed,omitempty\""
-github.com/egladman/magus/types.GateEvidence.Unrun field string "json:\"unrun,omitempty\" yaml:\"unrun,omitempty\""
 github.com/egladman/magus/types.GateNotRun const DiagnosticCode = "MGS3045"
-github.com/egladman/magus/types.GateStatus type struct
-github.com/egladman/magus/types.GateStatus.ID field string "json:\"id\" yaml:\"id\""
-github.com/egladman/magus/types.GateStatus.OutputRef field string "json:\"output_ref,omitempty\" yaml:\"output_ref,omitempty\""
-github.com/egladman/magus/types.GateStatus.Owed field string "json:\"owed,omitempty\" yaml:\"owed,omitempty\""
-github.com/egladman/magus/types.GateStatus.Scope field string "json:\"scope,omitempty\" yaml:\"scope,omitempty\""
-github.com/egladman/magus/types.GateStatus.Verified field bool "json:\"verified\" yaml:\"verified\""
-github.com/egladman/magus/types.GateStatus.Violations field []string "json:\"violations,omitempty\" yaml:\"violations,omitempty\""
 github.com/egladman/magus/types.GateSuperseded const DiagnosticCode = "MGS3014"
 github.com/egladman/magus/types.GateWaiver type struct
 github.com/egladman/magus/types.GateWaiver.At field int64 "json:\"at\" yaml:\"at\""
@@ -3207,7 +3195,7 @@ github.com/egladman/magus/types.JobIdleSince func(rows []Job, row Job) (since in
 github.com/egladman/magus/types.JobIntegration type struct
 github.com/egladman/magus/types.JobIntegration.At field int64 "json:\"at\" yaml:\"at\""
 github.com/egladman/magus/types.JobIntegration.Checkout field string "json:\"checkout\" yaml:\"checkout\""
-github.com/egladman/magus/types.JobIntegration.Gates field []GateStatus "json:\"gates,omitempty\" yaml:\"gates,omitempty\""
+github.com/egladman/magus/types.JobIntegration.Gates field []VerificationStatus "json:\"gates,omitempty\" yaml:\"gates,omitempty\""
 github.com/egladman/magus/types.JobIntegration.ObservedGeneration field int "json:\"observed_generation,omitzero\" yaml:\"observed_generation,omitempty\""
 github.com/egladman/magus/types.JobIntegration.Verified field bool "json:\"verified\" yaml:\"verified\""
 github.com/egladman/magus/types.JobKind type string
@@ -3329,7 +3317,7 @@ github.com/egladman/magus/types.JobRegistration.Job field Job "json:\"job\""
 github.com/egladman/magus/types.JobRejection type struct
 github.com/egladman/magus/types.JobRejection.At field int64 "json:\"at\"                            yaml:\"at\""
 github.com/egladman/magus/types.JobRejection.ObservedGeneration field int "json:\"observed_generation,omitzero\"  yaml:\"observed_generation,omitempty\""
-github.com/egladman/magus/types.JobRejection.Unmet field []GateStatus "json:\"unmet,omitempty\"               yaml:\"unmet,omitempty\""
+github.com/egladman/magus/types.JobRejection.Unmet field []VerificationStatus "json:\"unmet,omitempty\"               yaml:\"unmet,omitempty\""
 github.com/egladman/magus/types.JobRejection.Violations field []string "json:\"violations,omitempty\"          yaml:\"violations,omitempty\""
 github.com/egladman/magus/types.JobRelease type struct
 github.com/egladman/magus/types.JobRelease.DeadBecause field string "json:\"dead_because,omitempty\" yaml:\"dead_because,omitempty\""
@@ -3349,13 +3337,13 @@ github.com/egladman/magus/types.JobResult type struct
 github.com/egladman/magus/types.JobResult.ChangedPaths field []string "json:\"changed_paths\" yaml:\"changed_paths\""
 github.com/egladman/magus/types.JobResult.Descendants field []string "json:\"descendants,omitempty\" yaml:\"descendants,omitempty\""
 github.com/egladman/magus/types.JobResult.FollowUps field []string "json:\"follow_ups,omitempty\" yaml:\"follow_ups,omitempty\""
-github.com/egladman/magus/types.JobResult.GateEvidence field []GateEvidence "json:\"gate_evidence,omitempty\" yaml:\"gate_evidence,omitempty\""
 github.com/egladman/magus/types.JobResult.Job field string "json:\"job,omitempty\" yaml:\"job,omitempty\""
 github.com/egladman/magus/types.JobResult.ObservedGeneration field int "json:\"observed_generation,omitzero\" yaml:\"observed_generation,omitempty\""
 github.com/egladman/magus/types.JobResult.Schema embedded Schema "yaml:\",inline\""
 github.com/egladman/magus/types.JobResult.Unmet method func(known []string) []string
 github.com/egladman/magus/types.JobResult.UnresolvedRisks field []string "json:\"unresolved_risks\" yaml:\"unresolved_risks\""
 github.com/egladman/magus/types.JobResult.Validation field JobResultValidation "json:\"validation,omitempty\" yaml:\"validation,omitempty\""
+github.com/egladman/magus/types.JobResult.VerificationEvidence field []VerificationEvidence "json:\"verification_evidence,omitempty\" yaml:\"verification_evidence,omitempty\""
 github.com/egladman/magus/types.JobResultSchema var SchemaLedger
 github.com/egladman/magus/types.JobResultSchemaVersion const untyped int = 2
 github.com/egladman/magus/types.JobResultValidation type struct
@@ -3388,7 +3376,7 @@ github.com/egladman/magus/types.JobStatus.Footprint field []RegionChange "json:\
 github.com/egladman/magus/types.JobStatus.FootprintKnown field bool "json:\"footprint_known\" yaml:\"footprint_known\""
 github.com/egladman/magus/types.JobStatus.FootprintReason field string "json:\"footprint_reason,omitempty\" yaml:\"footprint_reason,omitempty\""
 github.com/egladman/magus/types.JobStatus.FootprintUnclaimed field []string "json:\"footprint_unclaimed,omitempty\" yaml:\"footprint_unclaimed,omitempty\""
-github.com/egladman/magus/types.JobStatus.Gates field []GateStatus "json:\"gates,omitempty\" yaml:\"gates,omitempty\""
+github.com/egladman/magus/types.JobStatus.Gates field []VerificationStatus "json:\"gates,omitempty\" yaml:\"gates,omitempty\""
 github.com/egladman/magus/types.JobStatus.Job field string "json:\"job\" yaml:\"job\""
 github.com/egladman/magus/types.JobStatus.LeftUnreferenced field []string "json:\"left_unreferenced,omitempty\" yaml:\"left_unreferenced,omitempty\""
 github.com/egladman/magus/types.JobStatus.LinesAdded field int "json:\"lines_added\" yaml:\"lines_added\""
@@ -4597,7 +4585,7 @@ github.com/egladman/magus/types.PriorAttempt.ReportedBase field string "json:\"r
 github.com/egladman/magus/types.PriorAttempt.Retry field RetryVerdict "json:\"retry\"                  yaml:\"retry\""
 github.com/egladman/magus/types.PriorAttempt.ReworkRounds field int "json:\"rework_rounds,omitempty\"       yaml:\"rework_rounds,omitempty\""
 github.com/egladman/magus/types.PriorAttempt.State field JobState "json:\"state\"                         yaml:\"state\""
-github.com/egladman/magus/types.PriorAttempt.Unmet field []GateStatus "json:\"unmet,omitempty\"               yaml:\"unmet,omitempty\""
+github.com/egladman/magus/types.PriorAttempt.Unmet field []VerificationStatus "json:\"unmet,omitempty\"               yaml:\"unmet,omitempty\""
 github.com/egladman/magus/types.PriorAttempt.UnresolvedRisks field []string "json:\"unresolved_risks,omitempty\"    yaml:\"unresolved_risks,omitempty\""
 github.com/egladman/magus/types.PriorAttempt.Violations field []string "json:\"violations,omitempty\"          yaml:\"violations,omitempty\""
 github.com/egladman/magus/types.PriorAttempt.Widenings field int "json:\"widenings,omitempty\"        yaml:\"widenings,omitempty\""
@@ -6016,6 +6004,18 @@ github.com/egladman/magus/types.VerdictComment const ReviewVerdict = "comment"
 github.com/egladman/magus/types.VerdictFound const KnowledgeVerdict = "found"
 github.com/egladman/magus/types.VerdictRequestChanges const ReviewVerdict = "request_changes"
 github.com/egladman/magus/types.VerdictUnknown const KnowledgeVerdict = "unknown"
+github.com/egladman/magus/types.VerificationEvidence type struct
+github.com/egladman/magus/types.VerificationEvidence.GateID field string "json:\"gate_id\" yaml:\"gate_id\""
+github.com/egladman/magus/types.VerificationEvidence.OutputRef field string "json:\"output_ref\" yaml:\"output_ref\""
+github.com/egladman/magus/types.VerificationEvidence.Owed field string "json:\"owed,omitempty\" yaml:\"owed,omitempty\""
+github.com/egladman/magus/types.VerificationEvidence.Unrun field string "json:\"unrun,omitempty\" yaml:\"unrun,omitempty\""
+github.com/egladman/magus/types.VerificationStatus type struct
+github.com/egladman/magus/types.VerificationStatus.ID field string "json:\"id\" yaml:\"id\""
+github.com/egladman/magus/types.VerificationStatus.OutputRef field string "json:\"output_ref,omitempty\" yaml:\"output_ref,omitempty\""
+github.com/egladman/magus/types.VerificationStatus.Owed field string "json:\"owed,omitempty\" yaml:\"owed,omitempty\""
+github.com/egladman/magus/types.VerificationStatus.Scope field string "json:\"scope,omitempty\" yaml:\"scope,omitempty\""
+github.com/egladman/magus/types.VerificationStatus.Verified field bool "json:\"verified\" yaml:\"verified\""
+github.com/egladman/magus/types.VerificationStatus.Violations field []string "json:\"violations,omitempty\" yaml:\"violations,omitempty\""
 github.com/egladman/magus/types.Volatility type struct
 github.com/egladman/magus/types.Volatility.Targets field []VolatilityTarget "json:\"targets\"   yaml:\"targets\""
 github.com/egladman/magus/types.Volatility.Threshold field float64 "json:\"threshold\" yaml:\"threshold\""

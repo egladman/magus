@@ -108,7 +108,8 @@ func gradeHumanOnlyPairs(ctx context.Context, deps Dependencies, actingLease, co
 		reasons = append(reasons, reason)
 		fmt.Fprintf(&facts, "`%s` is run by a person: %s. %s\n", humanOnlyRun(p, runs), reason, humanOnlyHistory(ctx, root, p))
 	}
-	// The worker test push-ungated uses: a row that cannot be read stays a worker. The
+	// The worker test push-unverified uses: a row that cannot be read stays a
+	// worker. The
 	// declared reasons ride the first line, the one a fork quotes when it refuses the check.
 	if me, ok := actingLiveLease(ctx, deps, actingLease); actingLease != "" && (!ok || workerRole(me, deps.caller) != "") {
 		return decisionDeny, fmt.Sprintf("`%s` runs a target a person runs (%s), and this session is bound to job %s; name the run in your result's unresolved risks.\nWorkers do not spend for the orchestrator.\n%s", line, strings.Join(reasons, "; "), actingLease, facts.String())

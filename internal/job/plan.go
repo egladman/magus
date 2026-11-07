@@ -616,7 +616,7 @@ func keepFrozenSignatures(row *types.Job, prev types.Job) {
 // emptyResult reports a result with no changed path, evidence or risk.
 func emptyResult(r types.JobResult) bool {
 	return len(r.ChangedPaths) == 0 && r.Validation == (types.JobResultValidation{}) &&
-		len(r.GateEvidence) == 0 && len(r.UnresolvedRisks) == 0
+		len(r.VerificationEvidence) == 0 && len(r.UnresolvedRisks) == 0
 }
 
 // resultShape is the result row's holder files, as JSON naming the row's
@@ -637,14 +637,14 @@ func resultShape(row types.Job) string {
 		case goal.ID == types.PrimaryGoalID:
 			shape.Validation = types.JobResultValidation{Command: goal.Check.String(), OutputRef: "<ref its run printed>"}
 		default:
-			shape.GateEvidence = append(shape.GateEvidence, types.GateEvidence{GateID: goal.ID, OutputRef: "<ref its run printed>"})
+			shape.VerificationEvidence = append(shape.VerificationEvidence, types.VerificationEvidence{GateID: goal.ID, OutputRef: "<ref its run printed>"})
 		}
 	}
 	encoded, err := json.MarshalIndent(shape, "", "  ")
 	if err != nil {
 		return fmt.Sprintf("the shape did not encode: %v", err)
 	}
-	return fmt.Sprintf("%s\nA check the machine would not seat has no ref: set \"output_ref\": \"\" and \"owed\": %q on its validation or gate_evidence entry.",
+	return fmt.Sprintf("%s\nA check the machine would not seat has no ref: set \"output_ref\": \"\" and \"owed\": %q on its validation or verification_evidence entry.",
 		encoded, types.OwedNoSeat)
 }
 

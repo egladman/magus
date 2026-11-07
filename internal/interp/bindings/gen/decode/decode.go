@@ -6796,14 +6796,14 @@ func decodePriorAttempt(v vm.Value, path string) (types.PriorAttempt, error) {
 			}
 			out.Widenings = int(nWidenings)
 		case "unmet":
-			listUnmet, err := decodeList(item, path+".unmet", "[GateStatus]")
+			listUnmet, err := decodeList(item, path+".unmet", "[VerificationStatus]")
 			if err != nil {
 				return out, err
 			}
 			if len(listUnmet) > 0 {
-				itemsUnmet := make([]types.GateStatus, len(listUnmet))
+				itemsUnmet := make([]types.VerificationStatus, len(listUnmet))
 				for indexUnmet, itemUnmet := range listUnmet {
-					xUnmetItem, err := decodeGateStatus(itemUnmet, fmt.Sprintf("%s[%d]", path+".unmet", indexUnmet))
+					xUnmetItem, err := decodeVerificationStatus(itemUnmet, fmt.Sprintf("%s[%d]", path+".unmet", indexUnmet))
 					if err != nil {
 						return out, err
 					}
@@ -6864,16 +6864,16 @@ func decodePriorAttempt(v vm.Value, path string) (types.PriorAttempt, error) {
 	return out, nil
 }
 
-// DecodeGateStatus decodes a Buzz GateStatus, an object instance or a map, into a types.GateStatus.
-func DecodeGateStatus(v vm.Value) (types.GateStatus, error) {
-	return decodeGateStatus(v, "gateStatus")
+// DecodeVerificationStatus decodes a Buzz VerificationStatus, an object instance or a map, into a types.VerificationStatus.
+func DecodeVerificationStatus(v vm.Value) (types.VerificationStatus, error) {
+	return decodeVerificationStatus(v, "verificationStatus")
 }
 
-func decodeGateStatus(v vm.Value, path string) (types.GateStatus, error) {
-	var out types.GateStatus
+func decodeVerificationStatus(v vm.Value, path string) (types.VerificationStatus, error) {
+	var out types.VerificationStatus
 	fields, ok := v.MapView()
 	if !ok {
-		return out, mismatch(path, "GateStatus", v)
+		return out, mismatch(path, "VerificationStatus", v)
 	}
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
@@ -6915,7 +6915,7 @@ func decodeGateStatus(v vm.Value, path string) (types.GateStatus, error) {
 			}
 			out.Violations = strsViolations
 		default:
-			return out, unknownMember(path, "GateStatus", key)
+			return out, unknownMember(path, "VerificationStatus", key)
 		}
 	}
 	return out, nil
@@ -7032,14 +7032,14 @@ func decodeJobRejection(v vm.Value, path string) (types.JobRejection, error) {
 		item, _ := fields.MapGet(key)
 		switch key {
 		case "unmet":
-			listUnmet, err := decodeList(item, path+".unmet", "[GateStatus]")
+			listUnmet, err := decodeList(item, path+".unmet", "[VerificationStatus]")
 			if err != nil {
 				return out, err
 			}
 			if len(listUnmet) > 0 {
-				itemsUnmet := make([]types.GateStatus, len(listUnmet))
+				itemsUnmet := make([]types.VerificationStatus, len(listUnmet))
 				for indexUnmet, itemUnmet := range listUnmet {
-					xUnmetItem, err := decodeGateStatus(itemUnmet, fmt.Sprintf("%s[%d]", path+".unmet", indexUnmet))
+					xUnmetItem, err := decodeVerificationStatus(itemUnmet, fmt.Sprintf("%s[%d]", path+".unmet", indexUnmet))
 					if err != nil {
 						return out, err
 					}
@@ -7497,21 +7497,21 @@ func decodeJobResult(v vm.Value, path string) (types.JobResult, error) {
 				return out, err
 			}
 			out.Validation = xValidation
-		case "gateEvidence":
-			listGateEvidence, err := decodeList(item, path+".gateEvidence", "[GateEvidence]")
+		case "verificationEvidence":
+			listVerificationEvidence, err := decodeList(item, path+".verificationEvidence", "[VerificationEvidence]")
 			if err != nil {
 				return out, err
 			}
-			if len(listGateEvidence) > 0 {
-				itemsGateEvidence := make([]types.GateEvidence, len(listGateEvidence))
-				for indexGateEvidence, itemGateEvidence := range listGateEvidence {
-					xGateEvidenceItem, err := decodeGateEvidence(itemGateEvidence, fmt.Sprintf("%s[%d]", path+".gateEvidence", indexGateEvidence))
+			if len(listVerificationEvidence) > 0 {
+				itemsVerificationEvidence := make([]types.VerificationEvidence, len(listVerificationEvidence))
+				for indexVerificationEvidence, itemVerificationEvidence := range listVerificationEvidence {
+					xVerificationEvidenceItem, err := decodeVerificationEvidence(itemVerificationEvidence, fmt.Sprintf("%s[%d]", path+".verificationEvidence", indexVerificationEvidence))
 					if err != nil {
 						return out, err
 					}
-					itemsGateEvidence[indexGateEvidence] = xGateEvidenceItem
+					itemsVerificationEvidence[indexVerificationEvidence] = xVerificationEvidenceItem
 				}
-				out.GateEvidence = itemsGateEvidence
+				out.VerificationEvidence = itemsVerificationEvidence
 			}
 		case "descendants":
 			strsDescendants, err := decodeStringList(item, path+".descendants")
@@ -7589,16 +7589,16 @@ func decodeJobResultValidation(v vm.Value, path string) (types.JobResultValidati
 	return out, nil
 }
 
-// DecodeGateEvidence decodes a Buzz GateEvidence, an object instance or a map, into a types.GateEvidence.
-func DecodeGateEvidence(v vm.Value) (types.GateEvidence, error) {
-	return decodeGateEvidence(v, "gateEvidence")
+// DecodeVerificationEvidence decodes a Buzz VerificationEvidence, an object instance or a map, into a types.VerificationEvidence.
+func DecodeVerificationEvidence(v vm.Value) (types.VerificationEvidence, error) {
+	return decodeVerificationEvidence(v, "verificationEvidence")
 }
 
-func decodeGateEvidence(v vm.Value, path string) (types.GateEvidence, error) {
-	var out types.GateEvidence
+func decodeVerificationEvidence(v vm.Value, path string) (types.VerificationEvidence, error) {
+	var out types.VerificationEvidence
 	fields, ok := v.MapView()
 	if !ok {
-		return out, mismatch(path, "GateEvidence", v)
+		return out, mismatch(path, "VerificationEvidence", v)
 	}
 	for _, key := range fields.MapKeys() {
 		item, _ := fields.MapGet(key)
@@ -7628,7 +7628,7 @@ func decodeGateEvidence(v vm.Value, path string) (types.GateEvidence, error) {
 			}
 			out.Unrun = sUnrun
 		default:
-			return out, unknownMember(path, "GateEvidence", key)
+			return out, unknownMember(path, "VerificationEvidence", key)
 		}
 	}
 	return out, nil
@@ -7868,14 +7868,14 @@ func decodeJobIntegration(v vm.Value, path string) (types.JobIntegration, error)
 			}
 			out.Verified = bVerified
 		case "gates":
-			listGates, err := decodeList(item, path+".gates", "[GateStatus]")
+			listGates, err := decodeList(item, path+".gates", "[VerificationStatus]")
 			if err != nil {
 				return out, err
 			}
 			if len(listGates) > 0 {
-				itemsGates := make([]types.GateStatus, len(listGates))
+				itemsGates := make([]types.VerificationStatus, len(listGates))
 				for indexGates, itemGates := range listGates {
-					xGatesItem, err := decodeGateStatus(itemGates, fmt.Sprintf("%s[%d]", path+".gates", indexGates))
+					xGatesItem, err := decodeVerificationStatus(itemGates, fmt.Sprintf("%s[%d]", path+".gates", indexGates))
 					if err != nil {
 						return out, err
 					}

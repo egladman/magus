@@ -167,6 +167,12 @@ type PrettyHandler struct {
 	// renderer commits its output, where a live clock is drift on every run.
 	// Never nil: the constructors default it.
 	now func() time.Time
+	// board is what the steps in flight wait on, drawn above the failures.
+	board waitBoard
+	// tickEvery repaints the band while steps are in flight, so its times
+	// move between records. Zero for an injected clock, which cannot move.
+	tickEvery time.Duration
+	tickStop  chan struct{}
 }
 
 // statusLine accumulates what the sticky region's top row shows: pool
@@ -283,7 +289,11 @@ func (h *PrettyHandler) paintStatus() {
 // not pay a blank row for the option, but a run reports pool occupancy as soon
 // as work starts, so the row was claimed in every case that mattered, and
 // latching cost the oldest visible failure whenever it happened late.
-func (h *PrettyHandler) band() []tty.Line {
+func (h *PrettyHandler) band() []tty.Line { return h.bandWithin(h.ceilingLocked()) }
+
+// bandWithin composes the band in at most limit rows. The failures keep their
+// own ceiling. The wait board takes what is left.
+func (h *PrettyHandler) bandWithin(limit int) []tty.Line {
 	// NO_COLOR applies here too. It is easy to miss, because the band only
 	// exists on a terminal and color is what makes it readable, but the
 	// variable says any non-empty value disables color, without an exception
@@ -324,7 +334,7 @@ func (h *PrettyHandler) band() []tty.Line {
 	// the "+N more" count was computed from rows DRAWN, so a band that had
 	// discarded two failures reported none hidden while the title said four
 	// failed. Deciding what fits here is what makes that count honest.
-	drawn = drawn[:fitsInBand(drawn, h.ceilingLocked())]
+	drawn = drawn[:fitsInBand(drawn, h.failureCeilingLocked())]
 	h.rowFailure = h.rowFailure[:0]
 	prev := ""
 	for i, f := range drawn {
@@ -389,7 +399,10 @@ func (h *PrettyHandler) band() []tty.Line {
 		// Harmless today only because nothing clickable follows.
 		h.rowFailure = append(h.rowFailure, -1)
 	}
-	return h.withPreview(rows, dim)
+	if len(h.preview) > 0 {
+		return h.withPreview(rows, dim)
+	}
+	return h.withWaits(rows, limit-len(rows), color, dim)
 }
 
 // withPreview folds the selected failure's output into a second column.
@@ -477,6 +490,11 @@ func (h *PrettyHandler) repaint() bool {
 	// upward as failures aged out, which is motion the reader did not cause.
 	if len(rows) > h.lease.Rows() {
 		_ = h.lease.Grow(min(len(rows), h.ceilingLocked()))
+		// A refused grant would cut the board's last rows silently, its
+		// "+N more" count with them, so it is laid out again to fit.
+		if got := h.lease.Rows(); got < len(rows) {
+			rows = h.bandWithin(got)
+		}
 	}
 	rendered, _ := h.lease.Set(rows)
 	return rendered
@@ -583,9 +601,10 @@ func newPrettyHandlerZone(w io.Writer, level slog.Level, p tty.Probe, z *tty.Zon
 		// failures actually arrive (see repaint), so a run that never fails
 		// never reserves a row for one. stickyRegionRows is the ceiling now,
 		// not the opening claim.
-		lease:    z.Acquire(1),
-		selected: -1,
-		now:      time.Now,
+		lease:     z.Acquire(1),
+		selected:  -1,
+		now:       time.Now,
+		tickEvery: time.Second,
 	}
 }
 
@@ -817,7 +836,23 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		} else {
 			h.printf(ctx, "  $ %s\n", cmd)
 		}
+	case planEvent:
+		if v, ok := recordAttr(r, "steps"); ok {
+			if steps, ok := v.Any().([]PlannedStep); ok {
+				h.board.plan(h.now(), steps)
+			}
+		}
+		h.startTicker()
+		h.paintStatus()
+	case stepEvent:
+		ref := types.TargetRef{Project: project, Target: recordString(r, "target")}
+		h.board.set(h.now(), ref, StepState(recordString(r, "state")))
+		h.paintStatus()
 	default:
+		// The board draws this wait live, so the line would only repeat it.
+		if h.boardShowsWait(ctx) {
+			return nil
+		}
 		h.handleGeneric(ctx, colorize, r)
 	}
 	return h.err
@@ -854,6 +889,8 @@ func (h *PrettyHandler) EndRun(ctx context.Context, footer string) error {
 	defer h.mu.Unlock()
 	h.err = nil
 	colorize := h.WantsColor()
+	h.stopTicker()
+	h.board.reset()
 	h.printBlocked(ctx, colorize)
 	h.printRepeated(ctx, colorize)
 	h.printf(ctx, "%s", footer)
@@ -1832,6 +1869,15 @@ const previewBandRows = 14
 
 // ceilingLocked is the band's row limit for the current mode. Callers hold h.mu.
 func (h *PrettyHandler) ceilingLocked() int {
+	if len(h.preview) == 0 && h.board.inFlight() {
+		return stickyRegionRows + waitBandRows
+	}
+	return h.failureCeilingLocked()
+}
+
+// failureCeilingLocked is the rows the failure tree may take. Callers hold
+// h.mu.
+func (h *PrettyHandler) failureCeilingLocked() int {
 	if len(h.preview) > 0 {
 		return previewBandRows
 	}
@@ -1979,6 +2025,7 @@ func (h *PrettyHandler) ReleaseBand() error {
 // terminal.
 func (h *PrettyHandler) releaseBand() error {
 	h.selected = -1
+	h.stopTicker()
 	return h.lease.Release()
 }
 
@@ -2029,6 +2076,8 @@ func (h *PrettyHandler) resetRun() {
 	// content pinned in a band whose whole promise is that it holds still.
 	h.preview = nil
 	h.rowFailure = h.rowFailure[:0]
+	h.board.reset()
+	h.stopTicker()
 }
 
 // The failure prompt's instruction row: the text, and the click keys that name
@@ -2098,6 +2147,7 @@ func NewPrettyHandlerWith(w io.Writer, level slog.Level, p tty.Probe, now func()
 	h := newPrettyHandler(w, level, p)
 	if now != nil {
 		h.now = now
+		h.tickEvery = 0
 	}
 	return h
 }

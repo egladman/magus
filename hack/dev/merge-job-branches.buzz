@@ -441,10 +441,11 @@ export fun keptTree(dir: str, target: str, text: str) > str {
     return "{KEPT}{dir}\n  failed target: {target}\n  output ref: {ref} (magus query output {ref})\n  cause: {causeLine(text)}\n  remove it with: git worktree remove --force {dir}";
 }
 
-// readyFailure names the target a gateReady error stopped at: its `gate-ready: <what>: exit
+// readyFailure names the target a verifyReady error stopped at: its
+// `verify-ready: <what>: exit
 // N: ...` prefix, else the build that precedes the first of them.
 export fun readyFailure(text: str) > str {
-    final head = "gate-ready: ";
+    final head = "verify-ready: ";
     if (text.startsWith(head)) {
         final stop = text.indexOf(": exit ");
         if (stop != null) { return text.sub(head.len(), len: stop! - head.len()); }
@@ -456,7 +457,7 @@ export fun readyFailure(text: str) > str {
 // needs, with the steps every gate uses.
 fun readyAt(dir: str) > result\Result::<[str]> {
     try {
-        return result\ok::<[str]>(bootstrap\gateReady(bootstrap\liveHost(), dir: dir));
+        return result\ok::<[str]>(bootstrap\verifyReady(bootstrap\liveHost(), dir: dir));
     } catch (err: any) {
         return result\caught::<[str]>(err, doing: "merge-job-branches: ready {dir}");
     }
@@ -749,7 +750,7 @@ export fun verifyLayers(dir: str, s: stack\BranchStack) > result\Result::<[Verdi
         }
         try {
             final rep = serialize\jsonEncode(serialize\Boxed.init({"schema_version": 2, "job": l.job, "changed_paths": [<str>],
-                "validation": {"command": l.check, "output_ref": primary}, "gate_evidence": evidence, "unresolved_risks": [<str>]}));
+                "validation": {"command": l.check, "output_ref": primary}, "verification_evidence": evidence, "unresolved_risks": [<str>]}));
             try {
                 _ = magus\cmd("job", args: ["wait", l.job, "--integration", "--stdin"], opts: magus\CommandOptions{ dir = dir, root = dir, quiet = true, stdin = rep });
                 said.append("recorded: job wait --integration passed");
@@ -1382,7 +1383,7 @@ test "a failed readiness keeps the tree and names its path, target, ref and one 
     final kept = testTree().value!;
     final ran = withTree(root, rev: "main", dir: kept, remove: dropTestTree, body: fun (dir: str) > result\Result::<bool> {
         return regenerateWithMagus("main", ready: fun (d: str) > result\Result::<[str]> {
-            return result\fail::<[str]>("gate-ready: magus run symbol-digest-generate .: exit 1: {dump}MGS8001 digest failed, output: out123abc\n{dump}");
+            return result\fail::<[str]>("verify-ready: magus run symbol-digest-generate .: exit 1: {dump}MGS8001 digest failed, output: out123abc\n{dump}");
         })(dir);
     });
     final said = ran.error!.message;

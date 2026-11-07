@@ -256,7 +256,7 @@ fun resultTemplate(t: Terms) > [str] {
         `  "job": "{t.id}",`,
         `  "changed_paths": {changed},`,
         `  "validation": \{"command": "{t.check.replace("\"", with: "\\\"")}", "output_ref": "<the ref the check printed>"\},`,
-        `  "gate_evidence": [`,
+        `  "verification_evidence": [`,
         evidence.join(",\n"),
         "  ],",
         `  "unresolved_risks": ["<what you could not settle, or nothing>"]`,
@@ -369,7 +369,7 @@ export fun brief(t: Terms, extra: str) > result\Result::<str> {
     text.append("    {t.check}");
     text.append("");
     text.append("Run nothing else that validates: no `magus affected ci`, no other target, no raw tool. The root runs everything else, serially.");
-    text.append("If the build budget refuses your check, set validation.owed to `no seat` and leave output_ref empty; mark any gate_evidence the same way. Do not wait or retry; the root runs the owed check.");
+    text.append("If the build budget refuses your check, set validation.owed to `no seat` and leave output_ref empty; mark any verification_evidence the same way. Do not wait or retry; the root runs the owed check.");
     text.append("");
     text.append("## Finish");
     text.append("");

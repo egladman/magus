@@ -428,6 +428,10 @@ development/libs-testlayout/
 reference/api/insight/
 reference/api/insight/v1alpha1/
 reference/api/insight/v1alpha1/insight/
+# gate-repeat and push-ungated became verify-repeat and push-unverified when gate
+# was renamed to verification. A rule page is generated per rule, so the old pages retire.
+reference/rules/gate-repeat/
+reference/rules/push-ungated/
 # path folded into explain --to; completion and man moved under self. Man pages are
 # generated per top-level command, so the move retires these, now at
 # reference/manpage/magus-explain/ and reference/manpage/magus-self/.

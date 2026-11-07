@@ -2902,7 +2902,7 @@ fun calibration() > [Fixture] {
             title = "fix(guard): ask the workspace command rule on a built-in ask",
             facts = Facts{ known = true, fragments = 1, shipped = 3, lines = 100 },
             verdict = "allow",
-            body = "A push chained with an admin merge (`git push ... && gh pr merge <n> --admin`) only asked: the built-in push-ungated rule answered ask, and the workspace command rule was consulted only on pass or advise. Approving the push ran the admin merge.\n"
+            body = "A push chained with an admin merge (`git push ... && gh pr merge <n> --admin`) only asked: the built-in push-unverified rule answered ask, and the workspace command rule was consulted only on pass or advise. Approving the push ran the admin merge.\n"
                 + "\n"
                 + "- The workspace command and write rules now run on anything but a built-in deny.\n"
                 + "- A workspace deny replaces a built-in ask. A workspace advise on an ask is dropped, like every other notice on an ask.\n"

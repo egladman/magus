@@ -58,6 +58,25 @@ The top row of the band is a live status line: pool occupancy, how many targets
 have passed, how long the run has been going. It repaints in place rather than
 printing again, so it costs nothing to watch and never fills the transcript.
 
+### What a target is waiting on
+
+When targets wait on other targets, the band draws the wait as a tree. Each
+root is a target that is running, or queued for a seat, with the targets
+waiting on it beneath it, and theirs beneath those. Roots are sorted by how
+many targets they hold, and the first is marked `bottleneck`. Each row says
+how long the target has run or waited, and `+N more` on a waiting row counts
+the other unfinished targets it also waits on.
+
+![The band during a run: the root test running and holding three waiting targets, marked bottleneck, above docs build holding a chain of two](../../assets/gen/terminal-run-waits.svg)
+
+A wait shows once it passes three seconds, so a cached run does not flicker.
+The tree repaints every second while targets are in flight. Past six rows its
+last row counts the waiting targets left out.
+
+While the tree shows a wait, the `is waiting for ... to finish` line for it is
+not printed. Without a band (a pipe, a CI log, `-o json`), that line prints as
+before.
+
 The band claims rows only when there is something to put in them, gives them
 back when the run ends, and stands down entirely on a terminal too short to
 leave a useful scrolling area above it.

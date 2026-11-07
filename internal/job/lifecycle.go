@@ -421,7 +421,7 @@ func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row types
 		return graded{}, nil, err
 	}
 	out := graded{result: ev.result, attempt: ev.attempt, gateAttempts: slices.Clone(ev.gateAttempts)}
-	out.result.GateEvidence = slices.Clone(ev.result.GateEvidence)
+	out.result.VerificationEvidence = slices.Clone(ev.result.VerificationEvidence)
 	taken := &types.JobIntegration{Checkout: here}
 	runs := make([]types.JobAttempt, 0, len(ids))
 	for _, goalID := range ids {
@@ -435,7 +435,7 @@ func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row types
 		}
 		ref = cmp.Or(found.AttemptID, ref)
 		out.setGoalRun(goalID, ref, found)
-		taken.Gates = append(taken.Gates, types.GateStatus{ID: goalID, OutputRef: ref})
+		taken.Gates = append(taken.Gates, types.VerificationStatus{ID: goalID, OutputRef: ref})
 		runs = append(runs, found)
 	}
 
@@ -467,8 +467,8 @@ func (ev graded) goalRun(goalID string) (string, types.JobAttempt) {
 		ref     string
 		attempt types.JobAttempt
 	)
-	if j := slices.IndexFunc(ev.result.GateEvidence, func(e types.GateEvidence) bool { return e.GateID == goalID }); j >= 0 {
-		ref = ev.result.GateEvidence[j].OutputRef
+	if j := slices.IndexFunc(ev.result.VerificationEvidence, func(e types.VerificationEvidence) bool { return e.GateID == goalID }); j >= 0 {
+		ref = ev.result.VerificationEvidence[j].OutputRef
 	}
 	if j := slices.IndexFunc(ev.gateAttempts, func(g types.JobGateAttempt) bool { return g.GateID == goalID }); j >= 0 {
 		attempt = ev.gateAttempts[j].Attempt
@@ -483,10 +483,10 @@ func (ev *graded) setGoalRun(goalID, ref string, run types.JobAttempt) {
 		ev.result.Validation.OutputRef, ev.attempt = ref, run
 		return
 	}
-	if j := slices.IndexFunc(ev.result.GateEvidence, func(e types.GateEvidence) bool { return e.GateID == goalID }); j >= 0 {
-		ev.result.GateEvidence[j].OutputRef = ref
+	if j := slices.IndexFunc(ev.result.VerificationEvidence, func(e types.VerificationEvidence) bool { return e.GateID == goalID }); j >= 0 {
+		ev.result.VerificationEvidence[j].OutputRef = ref
 	} else {
-		ev.result.GateEvidence = append(ev.result.GateEvidence, types.GateEvidence{GateID: goalID, OutputRef: ref})
+		ev.result.VerificationEvidence = append(ev.result.VerificationEvidence, types.VerificationEvidence{GateID: goalID, OutputRef: ref})
 	}
 	if j := slices.IndexFunc(ev.gateAttempts, func(g types.JobGateAttempt) bool { return g.GateID == goalID }); j >= 0 {
 		ev.gateAttempts[j].Attempt = run
@@ -501,7 +501,7 @@ func gradedTake(taken types.JobIntegration, status types.JobStatus, at int64) *t
 	taken.At, taken.Verified, taken.ObservedGeneration = at, status.Verified, status.ObservedGeneration
 	taken.Gates = slices.Clone(taken.Gates)
 	for i, g := range taken.Gates {
-		if j := slices.IndexFunc(status.Gates, func(s types.GateStatus) bool { return s.ID == g.ID }); j >= 0 {
+		if j := slices.IndexFunc(status.Gates, func(s types.VerificationStatus) bool { return s.ID == g.ID }); j >= 0 {
 			taken.Gates[i].Verified = status.Gates[j].Verified
 			taken.Gates[i].Violations = slices.Clone(status.Gates[j].Violations)
 		}
@@ -870,11 +870,11 @@ func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve 
 		primary = attempt
 	}
 	seen := map[string]bool{}
-	gates := make([]types.JobGateAttempt, 0, len(result.GateEvidence))
-	for _, evidence := range result.GateEvidence {
+	gates := make([]types.JobGateAttempt, 0, len(result.VerificationEvidence))
+	for _, evidence := range result.VerificationEvidence {
 		switch {
 		case evidence.GateID == "":
-			return types.JobAttempt{}, nil, errors.New("job: each gate_evidence entry requires gate_id")
+			return types.JobAttempt{}, nil, errors.New("job: each verification_evidence entry requires gate_id")
 		case evidence.Owed != "" && evidence.Unrun != "":
 			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q is filed as both owed and unrun, so name one", evidence.GateID)
 		case evidence.Owed != "" && evidence.OutputRef != "":
@@ -907,7 +907,7 @@ func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve 
 // the reasons workers reach for go instead.
 func refuseOwedReason(result types.JobResult) error {
 	owed := map[string]string{types.PrimaryGoalID: result.Validation.Owed}
-	for _, evidence := range result.GateEvidence {
+	for _, evidence := range result.VerificationEvidence {
 		owed[evidence.GateID] = evidence.Owed
 	}
 	for _, goal := range slices.Sorted(maps.Keys(owed)) {
@@ -1013,7 +1013,7 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 	// to hold to them: inherited, they report every unfinished job as failing for reasons
 	// that have nothing to do with what was asked. The violations stay in the status, so a
 	// reader still sees them; only the verdict is narrowed to the question.
-	status.Verified = !slices.ContainsFunc(status.Gates, func(g types.GateStatus) bool { return !g.Verified })
+	status.Verified = !slices.ContainsFunc(status.Gates, func(g types.VerificationStatus) bool { return !g.Verified })
 	return status, nil
 }
 

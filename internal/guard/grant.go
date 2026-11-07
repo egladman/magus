@@ -110,9 +110,10 @@ func gateWaivers(store *job.Store) (file.JSONL[types.GateWaiver], error) {
 	}, nil
 }
 
-// WaiveGate records a person's waiver of the push gate for commit, a full revision id: a
-// push or `gh pr create` publishing that commit passes push-ungated, and no other commit
-// does. A later waiver of the same commit replaces it. It refuses an empty reason and a
+// WaiveGate records a person's waiver of the push gate for commit, a full
+// revision id. A push or `gh pr create` publishing that commit passes
+// push-unverified, and no other commit does. A later waiver of the same
+// commit replaces it. It refuses an empty reason and a
 // process carrying a lease.
 func WaiveGate(ctx context.Context, store *job.Store, commit, reason string) (types.GateWaiver, error) {
 	if strings.TrimSpace(reason) == "" {

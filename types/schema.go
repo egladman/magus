@@ -113,10 +113,11 @@ var DeclarationSchema = SchemaLedger{
 
 // JobResultSchema is the ledger of the result a holder files.
 var JobResultSchema = SchemaLedger{
-	Name:    "job-result",
-	Type:    reflect.TypeFor[JobResult](),
-	Version: JobResultSchemaVersion,
-	Added:   map[string]int{"observed_generation": 2, "follow_ups": 2},
+	Name:     "job-result",
+	Type:     reflect.TypeFor[JobResult](),
+	Version:  JobResultSchemaVersion,
+	Added:    map[string]int{"observed_generation": 2, "follow_ups": 2, "verification_evidence": 2},
+	Reserved: []string{"gate_evidence"},
 }
 
 // StoredOutputSchema is the ledger of the record `magus query output <ref> -o jsonl`

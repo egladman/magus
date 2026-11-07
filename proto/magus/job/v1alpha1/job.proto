@@ -234,11 +234,11 @@ message JobIntegration {
   string checkout = 1;
   int64 at = 2; // unix seconds
   bool verified = 3;
-  repeated JobGateStatus gates = 4;
+  repeated JobVerificationStatus gates = 4;
 }
 
-// JobGateStatus is one gate's verdict at integration.
-message JobGateStatus {
+// JobVerificationStatus is one gate's verdict at integration.
+message JobVerificationStatus {
   string id = 1;
   bool verified = 2;
   string output_ref = 3;
@@ -294,11 +294,11 @@ message JobResult {
   repeated string descendants = 3;
   string validation_command = 4; // the command the holder ran as its check
   string validation_output_ref = 5; // that run's output ref
-  repeated JobGateEvidence gate_evidence = 6;
+  repeated JobVerificationEvidence verification_evidence = 6;
 }
 
-// JobGateEvidence is the run a holder offered for one goal.
-message JobGateEvidence {
+// JobVerificationEvidence is the run a holder offered for one goal.
+message JobVerificationEvidence {
   string gate_id = 1;
   string output_ref = 2;
 }

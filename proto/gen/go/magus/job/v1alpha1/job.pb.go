@@ -1164,11 +1164,11 @@ func (x *JobEntry) GetConsumed() int64 {
 
 // JobIntegration is the integrator's verification of the job in its own checkout.
 type JobIntegration struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Checkout      string                 `protobuf:"bytes,1,opt,name=checkout,proto3" json:"checkout,omitempty"`
-	At            int64                  `protobuf:"varint,2,opt,name=at,proto3" json:"at,omitempty"` // unix seconds
-	Verified      bool                   `protobuf:"varint,3,opt,name=verified,proto3" json:"verified,omitempty"`
-	Gates         []*JobGateStatus       `protobuf:"bytes,4,rep,name=gates,proto3" json:"gates,omitempty"`
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Checkout      string                   `protobuf:"bytes,1,opt,name=checkout,proto3" json:"checkout,omitempty"`
+	At            int64                    `protobuf:"varint,2,opt,name=at,proto3" json:"at,omitempty"` // unix seconds
+	Verified      bool                     `protobuf:"varint,3,opt,name=verified,proto3" json:"verified,omitempty"`
+	Gates         []*JobVerificationStatus `protobuf:"bytes,4,rep,name=gates,proto3" json:"gates,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1224,15 +1224,15 @@ func (x *JobIntegration) GetVerified() bool {
 	return false
 }
 
-func (x *JobIntegration) GetGates() []*JobGateStatus {
+func (x *JobIntegration) GetGates() []*JobVerificationStatus {
 	if x != nil {
 		return x.Gates
 	}
 	return nil
 }
 
-// JobGateStatus is one gate's verdict at integration.
-type JobGateStatus struct {
+// JobVerificationStatus is one gate's verdict at integration.
+type JobVerificationStatus struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Verified      bool                   `protobuf:"varint,2,opt,name=verified,proto3" json:"verified,omitempty"`
@@ -1242,20 +1242,20 @@ type JobGateStatus struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *JobGateStatus) Reset() {
-	*x = JobGateStatus{}
+func (x *JobVerificationStatus) Reset() {
+	*x = JobVerificationStatus{}
 	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *JobGateStatus) String() string {
+func (x *JobVerificationStatus) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*JobGateStatus) ProtoMessage() {}
+func (*JobVerificationStatus) ProtoMessage() {}
 
-func (x *JobGateStatus) ProtoReflect() protoreflect.Message {
+func (x *JobVerificationStatus) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1267,33 +1267,33 @@ func (x *JobGateStatus) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use JobGateStatus.ProtoReflect.Descriptor instead.
-func (*JobGateStatus) Descriptor() ([]byte, []int) {
+// Deprecated: Use JobVerificationStatus.ProtoReflect.Descriptor instead.
+func (*JobVerificationStatus) Descriptor() ([]byte, []int) {
 	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *JobGateStatus) GetId() string {
+func (x *JobVerificationStatus) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *JobGateStatus) GetVerified() bool {
+func (x *JobVerificationStatus) GetVerified() bool {
 	if x != nil {
 		return x.Verified
 	}
 	return false
 }
 
-func (x *JobGateStatus) GetOutputRef() string {
+func (x *JobVerificationStatus) GetOutputRef() string {
 	if x != nil {
 		return x.OutputRef
 	}
 	return ""
 }
 
-func (x *JobGateStatus) GetViolations() []string {
+func (x *JobVerificationStatus) GetViolations() []string {
 	if x != nil {
 		return x.Violations
 	}
@@ -1595,15 +1595,15 @@ func (x *CompletionGate) GetSignature() string {
 // JobResult is what a holder filed when it exited: the paths it changed, the risks it left
 // unresolved, the jobs it spawned, and the runs it offered as evidence.
 type JobResult struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	ChangedPaths        []string               `protobuf:"bytes,1,rep,name=changed_paths,json=changedPaths,proto3" json:"changed_paths,omitempty"`
-	UnresolvedRisks     []string               `protobuf:"bytes,2,rep,name=unresolved_risks,json=unresolvedRisks,proto3" json:"unresolved_risks,omitempty"`
-	Descendants         []string               `protobuf:"bytes,3,rep,name=descendants,proto3" json:"descendants,omitempty"`
-	ValidationCommand   string                 `protobuf:"bytes,4,opt,name=validation_command,json=validationCommand,proto3" json:"validation_command,omitempty"`         // the command the holder ran as its check
-	ValidationOutputRef string                 `protobuf:"bytes,5,opt,name=validation_output_ref,json=validationOutputRef,proto3" json:"validation_output_ref,omitempty"` // that run's output ref
-	GateEvidence        []*JobGateEvidence     `protobuf:"bytes,6,rep,name=gate_evidence,json=gateEvidence,proto3" json:"gate_evidence,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                protoimpl.MessageState     `protogen:"open.v1"`
+	ChangedPaths         []string                   `protobuf:"bytes,1,rep,name=changed_paths,json=changedPaths,proto3" json:"changed_paths,omitempty"`
+	UnresolvedRisks      []string                   `protobuf:"bytes,2,rep,name=unresolved_risks,json=unresolvedRisks,proto3" json:"unresolved_risks,omitempty"`
+	Descendants          []string                   `protobuf:"bytes,3,rep,name=descendants,proto3" json:"descendants,omitempty"`
+	ValidationCommand    string                     `protobuf:"bytes,4,opt,name=validation_command,json=validationCommand,proto3" json:"validation_command,omitempty"`         // the command the holder ran as its check
+	ValidationOutputRef  string                     `protobuf:"bytes,5,opt,name=validation_output_ref,json=validationOutputRef,proto3" json:"validation_output_ref,omitempty"` // that run's output ref
+	VerificationEvidence []*JobVerificationEvidence `protobuf:"bytes,6,rep,name=verification_evidence,json=verificationEvidence,proto3" json:"verification_evidence,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *JobResult) Reset() {
@@ -1671,15 +1671,15 @@ func (x *JobResult) GetValidationOutputRef() string {
 	return ""
 }
 
-func (x *JobResult) GetGateEvidence() []*JobGateEvidence {
+func (x *JobResult) GetVerificationEvidence() []*JobVerificationEvidence {
 	if x != nil {
-		return x.GateEvidence
+		return x.VerificationEvidence
 	}
 	return nil
 }
 
-// JobGateEvidence is the run a holder offered for one goal.
-type JobGateEvidence struct {
+// JobVerificationEvidence is the run a holder offered for one goal.
+type JobVerificationEvidence struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	GateId        string                 `protobuf:"bytes,1,opt,name=gate_id,json=gateId,proto3" json:"gate_id,omitempty"`
 	OutputRef     string                 `protobuf:"bytes,2,opt,name=output_ref,json=outputRef,proto3" json:"output_ref,omitempty"`
@@ -1687,20 +1687,20 @@ type JobGateEvidence struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *JobGateEvidence) Reset() {
-	*x = JobGateEvidence{}
+func (x *JobVerificationEvidence) Reset() {
+	*x = JobVerificationEvidence{}
 	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *JobGateEvidence) String() string {
+func (x *JobVerificationEvidence) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*JobGateEvidence) ProtoMessage() {}
+func (*JobVerificationEvidence) ProtoMessage() {}
 
-func (x *JobGateEvidence) ProtoReflect() protoreflect.Message {
+func (x *JobVerificationEvidence) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1712,19 +1712,19 @@ func (x *JobGateEvidence) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use JobGateEvidence.ProtoReflect.Descriptor instead.
-func (*JobGateEvidence) Descriptor() ([]byte, []int) {
+// Deprecated: Use JobVerificationEvidence.ProtoReflect.Descriptor instead.
+func (*JobVerificationEvidence) Descriptor() ([]byte, []int) {
 	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{15}
 }
 
-func (x *JobGateEvidence) GetGateId() string {
+func (x *JobVerificationEvidence) GetGateId() string {
 	if x != nil {
 		return x.GateId
 	}
 	return ""
 }
 
-func (x *JobGateEvidence) GetOutputRef() string {
+func (x *JobVerificationEvidence) GetOutputRef() string {
 	if x != nil {
 		return x.OutputRef
 	}
@@ -2370,13 +2370,13 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12-\n" +
 	"\x02by\x18\x02 \x01(\v2\x1d.magus.job.v1alpha1.JobOriginR\x02by\x12\x0e\n" +
 	"\x02at\x18\x03 \x01(\x03R\x02at\x12\x1a\n" +
-	"\bconsumed\x18\x04 \x01(\x03R\bconsumed\"\x91\x01\n" +
+	"\bconsumed\x18\x04 \x01(\x03R\bconsumed\"\x99\x01\n" +
 	"\x0eJobIntegration\x12\x1a\n" +
 	"\bcheckout\x18\x01 \x01(\tR\bcheckout\x12\x0e\n" +
 	"\x02at\x18\x02 \x01(\x03R\x02at\x12\x1a\n" +
-	"\bverified\x18\x03 \x01(\bR\bverified\x127\n" +
-	"\x05gates\x18\x04 \x03(\v2!.magus.job.v1alpha1.JobGateStatusR\x05gates\"z\n" +
-	"\rJobGateStatus\x12\x0e\n" +
+	"\bverified\x18\x03 \x01(\bR\bverified\x12?\n" +
+	"\x05gates\x18\x04 \x03(\v2).magus.job.v1alpha1.JobVerificationStatusR\x05gates\"\x82\x01\n" +
+	"\x15JobVerificationStatus\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bverified\x18\x02 \x01(\bR\bverified\x12\x1d\n" +
 	"\n" +
@@ -2405,15 +2405,15 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\asymbols\x18\a \x03(\tR\asymbols\x12\x1d\n" +
 	"\n" +
 	"depends_on\x18\b \x03(\tR\tdependsOn\x12\x1c\n" +
-	"\tsignature\x18\t \x01(\tR\tsignature\"\xaa\x02\n" +
+	"\tsignature\x18\t \x01(\tR\tsignature\"\xc2\x02\n" +
 	"\tJobResult\x12#\n" +
 	"\rchanged_paths\x18\x01 \x03(\tR\fchangedPaths\x12)\n" +
 	"\x10unresolved_risks\x18\x02 \x03(\tR\x0funresolvedRisks\x12 \n" +
 	"\vdescendants\x18\x03 \x03(\tR\vdescendants\x12-\n" +
 	"\x12validation_command\x18\x04 \x01(\tR\x11validationCommand\x122\n" +
-	"\x15validation_output_ref\x18\x05 \x01(\tR\x13validationOutputRef\x12H\n" +
-	"\rgate_evidence\x18\x06 \x03(\v2#.magus.job.v1alpha1.JobGateEvidenceR\fgateEvidence\"I\n" +
-	"\x0fJobGateEvidence\x12\x17\n" +
+	"\x15validation_output_ref\x18\x05 \x01(\tR\x13validationOutputRef\x12`\n" +
+	"\x15verification_evidence\x18\x06 \x03(\v2+.magus.job.v1alpha1.JobVerificationEvidenceR\x14verificationEvidence\"Q\n" +
+	"\x17JobVerificationEvidence\x12\x17\n" +
 	"\agate_id\x18\x01 \x01(\tR\x06gateId\x12\x1d\n" +
 	"\n" +
 	"output_ref\x18\x02 \x01(\tR\toutputRef\"s\n" +
@@ -2490,34 +2490,34 @@ func file_magus_job_v1alpha1_job_proto_rawDescGZIP() []byte {
 var file_magus_job_v1alpha1_job_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_magus_job_v1alpha1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_magus_job_v1alpha1_job_proto_goTypes = []any{
-	(SubmitState)(0),              // 0: magus.job.v1alpha1.SubmitState
-	(JobHolder)(0),                // 1: magus.job.v1alpha1.JobHolder
-	(*RunJobResponse)(nil),        // 2: magus.job.v1alpha1.RunJobResponse
-	(*Job)(nil),                   // 3: magus.job.v1alpha1.Job
-	(*JobModelTier)(nil),          // 4: magus.job.v1alpha1.JobModelTier
-	(*JobOrigin)(nil),             // 5: magus.job.v1alpha1.JobOrigin
-	(*JobAttempt)(nil),            // 6: magus.job.v1alpha1.JobAttempt
-	(*JobGateAttempt)(nil),        // 7: magus.job.v1alpha1.JobGateAttempt
-	(*JobUnattributedWrite)(nil),  // 8: magus.job.v1alpha1.JobUnattributedWrite
-	(*JobEntry)(nil),              // 9: magus.job.v1alpha1.JobEntry
-	(*JobIntegration)(nil),        // 10: magus.job.v1alpha1.JobIntegration
-	(*JobGateStatus)(nil),         // 11: magus.job.v1alpha1.JobGateStatus
-	(*JobBlock)(nil),              // 12: magus.job.v1alpha1.JobBlock
-	(*JobReadOnly)(nil),           // 13: magus.job.v1alpha1.JobReadOnly
-	(*JobOverlapFootprint)(nil),   // 14: magus.job.v1alpha1.JobOverlapFootprint
-	(*CompletionGate)(nil),        // 15: magus.job.v1alpha1.CompletionGate
-	(*JobResult)(nil),             // 16: magus.job.v1alpha1.JobResult
-	(*JobGateEvidence)(nil),       // 17: magus.job.v1alpha1.JobGateEvidence
-	(*JobRelease)(nil),            // 18: magus.job.v1alpha1.JobRelease
-	(*JobOverlap)(nil),            // 19: magus.job.v1alpha1.JobOverlap
-	(*JobRun)(nil),                // 20: magus.job.v1alpha1.JobRun
-	(*ResourceSize)(nil),          // 21: magus.job.v1alpha1.ResourceSize
-	(*RunJobRequest)(nil),         // 22: magus.job.v1alpha1.RunJobRequest
-	(*ListJobsRequest)(nil),       // 23: magus.job.v1alpha1.ListJobsRequest
-	(*ListJobsResponse)(nil),      // 24: magus.job.v1alpha1.ListJobsResponse
-	(*v1alpha1.Credential)(nil),   // 25: magus.activity.v1alpha1.Credential
-	(*timestamppb.Timestamp)(nil), // 26: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 27: google.protobuf.Duration
+	(SubmitState)(0),                // 0: magus.job.v1alpha1.SubmitState
+	(JobHolder)(0),                  // 1: magus.job.v1alpha1.JobHolder
+	(*RunJobResponse)(nil),          // 2: magus.job.v1alpha1.RunJobResponse
+	(*Job)(nil),                     // 3: magus.job.v1alpha1.Job
+	(*JobModelTier)(nil),            // 4: magus.job.v1alpha1.JobModelTier
+	(*JobOrigin)(nil),               // 5: magus.job.v1alpha1.JobOrigin
+	(*JobAttempt)(nil),              // 6: magus.job.v1alpha1.JobAttempt
+	(*JobGateAttempt)(nil),          // 7: magus.job.v1alpha1.JobGateAttempt
+	(*JobUnattributedWrite)(nil),    // 8: magus.job.v1alpha1.JobUnattributedWrite
+	(*JobEntry)(nil),                // 9: magus.job.v1alpha1.JobEntry
+	(*JobIntegration)(nil),          // 10: magus.job.v1alpha1.JobIntegration
+	(*JobVerificationStatus)(nil),   // 11: magus.job.v1alpha1.JobVerificationStatus
+	(*JobBlock)(nil),                // 12: magus.job.v1alpha1.JobBlock
+	(*JobReadOnly)(nil),             // 13: magus.job.v1alpha1.JobReadOnly
+	(*JobOverlapFootprint)(nil),     // 14: magus.job.v1alpha1.JobOverlapFootprint
+	(*CompletionGate)(nil),          // 15: magus.job.v1alpha1.CompletionGate
+	(*JobResult)(nil),               // 16: magus.job.v1alpha1.JobResult
+	(*JobVerificationEvidence)(nil), // 17: magus.job.v1alpha1.JobVerificationEvidence
+	(*JobRelease)(nil),              // 18: magus.job.v1alpha1.JobRelease
+	(*JobOverlap)(nil),              // 19: magus.job.v1alpha1.JobOverlap
+	(*JobRun)(nil),                  // 20: magus.job.v1alpha1.JobRun
+	(*ResourceSize)(nil),            // 21: magus.job.v1alpha1.ResourceSize
+	(*RunJobRequest)(nil),           // 22: magus.job.v1alpha1.RunJobRequest
+	(*ListJobsRequest)(nil),         // 23: magus.job.v1alpha1.ListJobsRequest
+	(*ListJobsResponse)(nil),        // 24: magus.job.v1alpha1.ListJobsResponse
+	(*v1alpha1.Credential)(nil),     // 25: magus.activity.v1alpha1.Credential
+	(*timestamppb.Timestamp)(nil),   // 26: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),     // 27: google.protobuf.Duration
 }
 var file_magus_job_v1alpha1_job_proto_depIdxs = []int32{
 	0,  // 0: magus.job.v1alpha1.RunJobResponse.state:type_name -> magus.job.v1alpha1.SubmitState
@@ -2539,8 +2539,8 @@ var file_magus_job_v1alpha1_job_proto_depIdxs = []int32{
 	25, // 16: magus.job.v1alpha1.JobOrigin.credential:type_name -> magus.activity.v1alpha1.Credential
 	6,  // 17: magus.job.v1alpha1.JobGateAttempt.attempt:type_name -> magus.job.v1alpha1.JobAttempt
 	5,  // 18: magus.job.v1alpha1.JobEntry.by:type_name -> magus.job.v1alpha1.JobOrigin
-	11, // 19: magus.job.v1alpha1.JobIntegration.gates:type_name -> magus.job.v1alpha1.JobGateStatus
-	17, // 20: magus.job.v1alpha1.JobResult.gate_evidence:type_name -> magus.job.v1alpha1.JobGateEvidence
+	11, // 19: magus.job.v1alpha1.JobIntegration.gates:type_name -> magus.job.v1alpha1.JobVerificationStatus
+	17, // 20: magus.job.v1alpha1.JobResult.verification_evidence:type_name -> magus.job.v1alpha1.JobVerificationEvidence
 	14, // 21: magus.job.v1alpha1.JobOverlap.footprint:type_name -> magus.job.v1alpha1.JobOverlapFootprint
 	26, // 22: magus.job.v1alpha1.JobRun.end_time:type_name -> google.protobuf.Timestamp
 	27, // 23: magus.job.v1alpha1.JobRun.duration:type_name -> google.protobuf.Duration

@@ -529,7 +529,7 @@ func ObjectJobDeferred(v types.JobDeferred) vm.Value {
 	return out
 }
 
-func ObjectGateStatus(v types.GateStatus) vm.Value {
+func ObjectVerificationStatus(v types.VerificationStatus) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
 	out.MapSet("verified", vm.BoolValue(v.Verified))
@@ -577,7 +577,7 @@ func ObjectPriorAttempt(v types.PriorAttempt, enums ffi.EnumCases) vm.Value {
 	out.MapSet("widenings", vm.IntValue(int64(v.Widenings)))
 	itemsUnmet := make([]vm.Value, len(v.Unmet))
 	for indexUnmet := range v.Unmet {
-		itemsUnmet[indexUnmet] = ObjectGateStatus(v.Unmet[indexUnmet])
+		itemsUnmet[indexUnmet] = ObjectVerificationStatus(v.Unmet[indexUnmet])
 	}
 	out.MapSet("unmet", vm.ListValue(itemsUnmet))
 	itemsViolations := make([]vm.Value, len(v.Violations))
@@ -609,7 +609,7 @@ func ObjectJobRejection(v types.JobRejection) vm.Value {
 	out := vm.NewMap()
 	itemsUnmet := make([]vm.Value, len(v.Unmet))
 	for indexUnmet := range v.Unmet {
-		itemsUnmet[indexUnmet] = ObjectGateStatus(v.Unmet[indexUnmet])
+		itemsUnmet[indexUnmet] = ObjectVerificationStatus(v.Unmet[indexUnmet])
 	}
 	out.MapSet("unmet", vm.ListValue(itemsUnmet))
 	itemsViolations := make([]vm.Value, len(v.Violations))
@@ -721,7 +721,7 @@ func ObjectJobResultValidation(v types.JobResultValidation) vm.Value {
 	return out
 }
 
-func ObjectGateEvidence(v types.GateEvidence) vm.Value {
+func ObjectVerificationEvidence(v types.VerificationEvidence) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("gateID", vm.StringValue(v.GateID))
 	out.MapSet("outputRef", vm.StringValue(v.OutputRef))
@@ -745,11 +745,11 @@ func ObjectJobResult(v types.JobResult) vm.Value {
 	}
 	out.MapSet("changedPaths", vm.ListValue(itemsChangedPaths))
 	out.MapSet("validation", ObjectJobResultValidation(v.Validation))
-	itemsGateEvidence := make([]vm.Value, len(v.GateEvidence))
-	for indexGateEvidence := range v.GateEvidence {
-		itemsGateEvidence[indexGateEvidence] = ObjectGateEvidence(v.GateEvidence[indexGateEvidence])
+	itemsVerificationEvidence := make([]vm.Value, len(v.VerificationEvidence))
+	for indexVerificationEvidence := range v.VerificationEvidence {
+		itemsVerificationEvidence[indexVerificationEvidence] = ObjectVerificationEvidence(v.VerificationEvidence[indexVerificationEvidence])
 	}
-	out.MapSet("gateEvidence", vm.ListValue(itemsGateEvidence))
+	out.MapSet("verificationEvidence", vm.ListValue(itemsVerificationEvidence))
 	itemsDescendants := make([]vm.Value, len(v.Descendants))
 	for indexDescendants := range v.Descendants {
 		itemsDescendants[indexDescendants] = vm.StringValue(v.Descendants[indexDescendants])
@@ -818,7 +818,7 @@ func ObjectJobIntegration(v types.JobIntegration) vm.Value {
 	out.MapSet("verified", vm.BoolValue(v.Verified))
 	itemsGates := make([]vm.Value, len(v.Gates))
 	for indexGates := range v.Gates {
-		itemsGates[indexGates] = ObjectGateStatus(v.Gates[indexGates])
+		itemsGates[indexGates] = ObjectVerificationStatus(v.Gates[indexGates])
 	}
 	out.MapSet("gates", vm.ListValue(itemsGates))
 	out.MapSet("observedGeneration", vm.IntValue(int64(v.ObservedGeneration)))
@@ -2951,7 +2951,7 @@ func ObjectJobStatus(v types.JobStatus, enums ffi.EnumCases) vm.Value {
 	out.MapSet("command", vm.StringValue(v.Command))
 	itemsGates := make([]vm.Value, len(v.Gates))
 	for indexGates := range v.Gates {
-		itemsGates[indexGates] = ObjectGateStatus(v.Gates[indexGates])
+		itemsGates[indexGates] = ObjectVerificationStatus(v.Gates[indexGates])
 	}
 	out.MapSet("gates", vm.ListValue(itemsGates))
 	itemsNotes := make([]vm.Value, len(v.Notes))

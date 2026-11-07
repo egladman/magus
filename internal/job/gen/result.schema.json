@@ -46,11 +46,11 @@
         },
         "unrun": {
           "type": "string",
-          "description": "Unrun is the environment cause that kept the check from running, as on [GateEvidence]."
+          "description": "Unrun is the environment cause that kept the check from running, as on [VerificationEvidence]."
         }
       }
     },
-    "gate_evidence": {
+    "verification_evidence": {
       "type": "array",
       "items": {
         "type": "object",

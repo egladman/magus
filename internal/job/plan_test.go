@@ -132,7 +132,7 @@ func (s *resultShapeSuite) TestTheShapeDecodesAsAResult() {
 	got, err := DecodeResult(strings.NewReader(shape))
 	s.Require().NoError(err)
 	s.Equal("w", got.Job)
-	s.Equal("lint", got.GateEvidence[0].GateID)
+	s.Equal("lint", got.VerificationEvidence[0].GateID)
 }
 
 func (s *resultShapeSuite) TestTheShapeNamesTheOwedForm() {
@@ -448,7 +448,7 @@ func TestRenderGatesShowsTheScopeOfARun(t *testing.T) {
 	t.Parallel()
 
 	var out strings.Builder
-	RenderGates(&out, types.JobStatus{Job: "unit", Gates: []types.GateStatus{
+	RenderGates(&out, types.JobStatus{Job: "unit", Gates: []types.VerificationStatus{
 		{ID: "check", Verified: true, OutputRef: "out1", Scope: "-- ./internal/job -run Wait"},
 		{ID: "lint", Verified: true, OutputRef: "out2"},
 	}})
@@ -461,7 +461,7 @@ func TestRenderGatesSaysTheGraphWasStale(t *testing.T) {
 	var out strings.Builder
 	RenderGates(&out, types.JobStatus{
 		Job:          "unit",
-		Gates:        []types.GateStatus{{ID: "sym", Verified: true}},
+		Gates:        []types.VerificationStatus{{ID: "sym", Verified: true}},
 		StaleIndexes: []string{".", "console"},
 	})
 	assert.Contains(t, out.String(), "1 of 1 goal(s) met")
@@ -478,7 +478,7 @@ func TestRenderGatesLabelsEvidenceOfAnEarlierSpec(t *testing.T) {
 	var out strings.Builder
 	RenderGates(&out, types.JobStatus{
 		Job:                "unit",
-		Gates:              []types.GateStatus{{ID: "check"}},
+		Gates:              []types.VerificationStatus{{ID: "check"}},
 		ObservedGeneration: 3,
 		PriorGeneration:    2,
 	})
@@ -486,7 +486,7 @@ func TestRenderGatesLabelsEvidenceOfAnEarlierSpec(t *testing.T) {
 		"prior evidence: taken at generation 2, the spec is now generation 3; run it again\n", out.String())
 
 	out.Reset()
-	RenderGates(&out, types.JobStatus{Job: "unit", Gates: []types.GateStatus{{ID: "check", Verified: true}}, ObservedGeneration: 3})
+	RenderGates(&out, types.JobStatus{Job: "unit", Gates: []types.VerificationStatus{{ID: "check", Verified: true}}, ObservedGeneration: 3})
 	assert.NotContains(t, out.String(), "prior evidence")
 }
 
@@ -498,7 +498,7 @@ func TestRenderGatesReportsTheDelta(t *testing.T) {
 		RenderGates(&out, status)
 		return out.String()
 	}
-	gates := []types.GateStatus{{ID: "check", Verified: true}}
+	gates := []types.VerificationStatus{{ID: "check", Verified: true}}
 
 	measured := types.JobStatus{Job: "unit", Gates: gates, FootprintKnown: true, LinesAdded: 4, LinesDeleted: 9,
 		SymbolDeltaKnown: true, UndeclaredExports: []string{"Alpha", "Goal#Extra"}}

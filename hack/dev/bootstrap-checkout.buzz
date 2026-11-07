@@ -6,16 +6,17 @@
 // `./magus version` names the checkout's HEAD, and installs every project's dependencies with it.
 // It seeds the symbol index from the forking checkout.
 //
-//	magus buzz hack/dev/bootstrap-checkout.buzz -- (--checkout <dir> | --here) [--restart | --gate-ready]
+//	magus buzz hack/dev/bootstrap-checkout.buzz --
+//	    (--checkout <dir> | --here) [--restart | --verify-ready]
 //
-// --gate-ready makes the checkout ready to gate instead (gateReady): the build only when ./magus
-// is not at HEAD, then pools, untracked skill installs the placed ./magus would write differently,
-// the graph and the symbol digest. rebase-branches-onto-base, merge-base-into-branches and
-// land-commits call it before they gate.
+// --verify-ready (verifyReady) builds only when ./magus is not at HEAD. It
+// then refreshes pools, stale skill installs, the graph and symbol digest.
+// The rebase, merge and land scripts call it before they verify.
 //
 // The daemon stops before a build, so a project lock it holds cannot fail the build with exit 75.
 // --here builds in the current checkout, which must be clean. --restart ends with the daemon
-// started on the new binary (and, outside --gate-ready, checks `version` again), since the
+// started on the new binary (outside --verify-ready, it checks `version`
+// again), since the
 // daemon has no hot reload. When the checkout has a mise.toml and mise is on PATH, it runs
 // `mise trust <dir>/mise.toml` first, because untrusted config fails the build without
 // naming mise.
@@ -37,7 +38,7 @@ import "vcs";
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/dev/bootstrap-checkout.buzz -- (--checkout <dir> | --here) [--restart | --gate-ready | --recover | --onto <ref>] [--install <p,q|none>]";
+final USAGE = "usage: magus buzz hack/dev/bootstrap-checkout.buzz -- (--checkout <dir> | --here) [--restart | --verify-ready | --recover | --onto <ref>] [--install <p,q|none>]";
 final HELP = "cost: two Go compiles of magus in the checkout\n{USAGE}\n\n--onto <ref> resumes work in a checkout made for something else: it fast-forwards the clean checkout onto <ref> (a dirty tree or a non-fast-forward refuses, and nothing is reset), places ./magus (built when it cannot load the tree), installs dependencies and every harness, ends running rows whose head is already in <ref>, then prunes rows nobody collected like `magus job prune`. It prints a line per thing done. It never fetches.\n--recover only places ./magus from a dirty tree: nothing moves and no row changes. --onto shares its daemon stop and build, and refuses a dirty tree.";
 final SUMMARY = "build ./magus in a checkout at its own revision";
 final SERVES = ["code:MGS1021 -- --checkout \{checkout}"];
@@ -189,8 +190,10 @@ export object Ran {
     code: int = 0,
 }
 
-// Host is every call gateReady makes, so a test answers them. git and magus never raise on a
-// failed command; gateReady reads code. magus runs the checkout's own ./magus.
+// Host is every call verifyReady makes, so a test answers them. git and magus
+// never raise on a
+// failed command; verifyReady reads code. magus runs the checkout's own
+// ./magus.
 export object Host {
     git: fun (dir: str, args: [str]) > Ran !> any,
     magus: fun (dir: str, args: [str]) > Ran !> any,
@@ -227,7 +230,7 @@ fun lines(text: str) > [str] {
 
 fun must(r: Ran, what: str) > str !> any {
     if (r.code != 0) {
-        throw "gate-ready: {what}: exit {r.code}: {r.stderr}{r.stdout}";
+        throw "verify-ready: {what}: exit {r.code}: {r.stderr}{r.stdout}";
     }
     return r.stdout;
 }
@@ -395,15 +398,13 @@ export fun placeBinary(h: Host, dir: str, restart: bool = false, install: str = 
     return did;
 }
 
-// gateReady makes the checkout at dir ready to gate, and returns a line per thing it did. A
-// ./magus built at another commit than the tree fails the gate's symbol index with MGS7003, so
-// it builds one at HEAD when the binary is not, stops the pool parents other builds left, removes
-// the untracked skill installs whose stamp differs from the one the placed ./magus writes (never
-// a tracked file, never a current install), then installs every project's dependencies, builds the graph, the symbol digest and the
-// proofread binary the guard's pull-request-text test runs. Running
-// it twice does the build and the removals once. The daemon stops before a build, and with
-// restart it is running again at the end.
-export fun gateReady(h: Host, dir: str, restart: bool = false) > [str] !> any {
+// verifyReady makes the checkout at dir ready to verify, and returns a line per
+// thing it did. A ./magus built at another commit fails the symbol index
+// (MGS7003), so it builds one at HEAD. It also clears stale pool parents and
+// skill installs, installs dependencies, and builds the graph, digest and
+// proofread. Running it twice does the build and the removals once. The
+// daemon stops before a build, and with restart it is running again at the end.
+export fun verifyReady(h: Host, dir: str, restart: bool = false) > [str] !> any {
     final did = mut [<str>];
     final head = must(h.git(dir, args: ["rev-parse", "HEAD"]), what: "git rev-parse HEAD").trim();
     final version = h.magus(dir, args: ["version", "-o", "json"]);
@@ -686,7 +687,7 @@ export fun liveHost() > Host {
             final root = fs\tempDir("fresh-skills-");
             final r = proc\exec(fs\join(dir, name: "magus"), args: ["agent", "install", "--dir", root] + SKILL_DIRS, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
             if (r.code != 0) {
-                throw "gate-ready: magus agent install into {root}: exit {r.code}: {r.stderr}{r.stdout}";
+                throw "verify-ready: magus agent install into {root}: exit {r.code}: {r.stderr}{r.stdout}";
             }
             return root;
         },
@@ -793,7 +794,7 @@ fun build(dir: str, recovery: bool = false) > str !> any {
 }
 
 export fun main(args: [str]) > void !> any {
-    final parsed = flags\parse(args, switches: ["--help", "--here", "--restart", "--gate-ready", "--recover"], valued: ["--checkout", "--install", "--onto"]);
+    final parsed = flags\parse(args, switches: ["--help", "--here", "--restart", "--verify-ready", "--recover"], valued: ["--checkout", "--install", "--onto"]);
     if (parsed.values["--help"] != null) {
         std\print(HELP);
         return;
@@ -812,8 +813,8 @@ export fun main(args: [str]) > void !> any {
     final h = liveHost();
     final onto = parsed.values["--onto"] ?? "";
     if (onto != "") {
-        if (parsed.values["--recover"] != null or parsed.values["--gate-ready"] != null) {
-            throw "bootstrap-checkout: --onto cannot combine with --recover or --gate-ready";
+        if (parsed.values["--recover"] != null or parsed.values["--verify-ready"] != null) {
+            throw "bootstrap-checkout: --onto cannot combine with --recover or --verify-ready";
         }
         final did = mut [<str>];
         final adopted = adopt(h, dir: dir, onto: onto, did: did, restart: restart, install: parsed.values["--install"] ?? "");
@@ -823,23 +824,23 @@ export fun main(args: [str]) > void !> any {
         return;
     }
     if (parsed.values["--recover"] != null) {
-        if (restart or parsed.values["--gate-ready"] != null or parsed.values["--install"] != null) {
-            throw "bootstrap-checkout: --recover cannot combine with --restart, --gate-ready or --install";
+        if (restart or parsed.values["--verify-ready"] != null or parsed.values["--install"] != null) {
+            throw "bootstrap-checkout: --recover cannot combine with --restart, --verify-ready or --install";
         }
         h.say(stopDaemon(h, dir: dir));
         _ = timed(h, start: "building {dir}/magus from the working tree; a cold build cache takes a minute or more", run: fun () > str !> any => build(dir, recovery: true));
         return;
     }
-    if (parsed.values["--gate-ready"] != null) {
-        _ = gateReady(h, dir: dir, restart: restart);
+    if (parsed.values["--verify-ready"] != null) {
+        _ = verifyReady(h, dir: dir, restart: restart);
         return;
     }
     _ = placeBinary(h, dir: dir, restart: restart, install: parsed.values["--install"] ?? "");
 }
 
-// stubHost answers gateReady from a table keyed by the command line and records each call;
-// a command the table lacks exits 0 with no output, so a daemon is running unless the table
-// says `server status` fails. An exec line's nth run is answered by "<line> #n" first.
+// stubHost answers verifyReady from a table keyed by command line, recording
+// each call. A missing command exits 0 silently, so a daemon runs unless the
+// table fails `server status`. An exec line's nth run reads "<line> #n" first.
 // stamps maps a SKILL.md path to its generated-by line, and any other path to its text.
 fun stubHost(answers: {str: Ran}, stamps: {str: str}, calls: mut [str]) > Host {
     return stubHostSaying(answers, stamps: stamps, calls: calls, said: mut [<str>]);
@@ -996,7 +997,7 @@ test "the stamp is the generated-by line, and a file without one has none" {
     assert\equal(stampLine("body only\n"), want: "", message: "none");
 }
 
-test "gate-ready stops the daemon, rebuilds a skewed binary, removes only untracked installs the placed binary would write differently, then builds the graph, digest and proofread binary" {
+test "verify-ready stops the daemon, rebuilds a skewed binary, removes only untracked installs the placed binary would write differently, then builds the graph, digest and proofread binary" {
     final calls = mut [<str>];
     final h = stubHost({
         "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
@@ -1010,7 +1011,7 @@ test "gate-ready stops the daemon, rebuilds a skewed binary, removes only untrac
         "/fresh/.claude/skills/fresh/SKILL.md": "v2",
         "/c/.claude/skills/kept/SKILL.md": "v1",
     }, calls: calls);
-    final did = gateReady(h, dir: "/c", restart: false);
+    final did = verifyReady(h, dir: "/c", restart: false);
     assert\equal(did, want: [
         "stopped the daemon",
         "placed /c/magus",
@@ -1151,31 +1152,31 @@ test "a failed install stops the build path, naming the command" {
     assert\equal(why, want: "bootstrap-checkout: /c/magus run install /: exit 1: no pnpm", message: why);
 }
 
-test "gate-ready keeps a binary at HEAD and says so" {
+test "verify-ready keeps a binary at HEAD and says so" {
     final calls = mut [<str>];
     final h = stubHost({
         "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
         "magus version -o json": Ran{ stdout = `{"commit": "abc123"}` },
     }, stamps: {}, calls: calls);
-    assert\equal(gateReady(h, dir: "/c", restart: false)[0], want: "./magus is built at HEAD abc123", message: "kept");
+    assert\equal(verifyReady(h, dir: "/c", restart: false)[0], want: "./magus is built at HEAD abc123", message: "kept");
     assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("build")).len(), want: 0, message: "no build");
     assert\equal(calls.indexOf("magus server stop"), want: null, message: "daemon left alone");
 }
 
-test "gate-ready with restart stops the daemon, and ends with it running, saying so" {
+test "verify-ready with restart stops the daemon, and ends with it running, saying so" {
     final calls = mut [<str>];
     final h = stubHost({
         "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
         "magus version -o json": Ran{ stdout = `{"commit": "abc123"}` },
         "magus server status": Ran{ code = 1 },
     }, stamps: {}, calls: calls);
-    final did = gateReady(h, dir: "/c", restart: true);
+    final did = verifyReady(h, dir: "/c", restart: true);
     assert\equal(did[0], want: "no daemon was running", message: "first");
     assert\equal(did[did.len() - 1], want: "started the daemon", message: "last");
     assert\equal(calls[calls.len() - 1], want: "magus server start", message: "start last");
 }
 
-test "a daemon that will not start fails gate-ready loudly" {
+test "a daemon that will not start fails verify-ready loudly" {
     final h = stubHost({
         "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
         "magus version -o json": Ran{ stdout = `{"commit": "abc123"}` },
@@ -1183,14 +1184,14 @@ test "a daemon that will not start fails gate-ready loudly" {
     }, stamps: {}, calls: mut [<str>]);
     var why = "";
     try {
-        _ = gateReady(h, dir: "/c", restart: true);
+        _ = verifyReady(h, dir: "/c", restart: true);
     } catch (e: str) {
         why = e;
     }
-    assert\equal(why, want: "gate-ready: magus server start: exit 1: no socket", message: why);
+    assert\equal(why, want: "verify-ready: magus server start: exit 1: no socket", message: why);
 }
 
-test "a failed graph build stops gate-ready, naming the command" {
+test "a failed graph build stops verify-ready, naming the command" {
     final h = stubHost({
         "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
         "magus version -o json": Ran{ stdout = `{"commit": "abc123"}` },
@@ -1198,14 +1199,14 @@ test "a failed graph build stops gate-ready, naming the command" {
     }, stamps: {}, calls: mut [<str>]);
     var why = "";
     try {
-        _ = gateReady(h, dir: "/c", restart: false);
+        _ = verifyReady(h, dir: "/c", restart: false);
     } catch (e: str) {
         why = e;
     }
-    assert\equal(why, want: "gate-ready: magus graph build: exit 1: boom", message: why);
+    assert\equal(why, want: "verify-ready: magus graph build: exit 1: boom", message: why);
 }
 
-test "a failed proofread build stops gate-ready, naming the command" {
+test "a failed proofread build stops verify-ready, naming the command" {
     final h = stubHost({
         "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
         "magus version -o json": Ran{ stdout = `{"commit": "abc123"}` },
@@ -1213,11 +1214,11 @@ test "a failed proofread build stops gate-ready, naming the command" {
     }, stamps: {}, calls: mut [<str>]);
     var why = "";
     try {
-        _ = gateReady(h, dir: "/c", restart: false);
+        _ = verifyReady(h, dir: "/c", restart: false);
     } catch (e: str) {
         why = e;
     }
-    assert\equal(why, want: "gate-ready: magus run proofread-build libs/proofread: exit 1: no compiler", message: why);
+    assert\equal(why, want: "verify-ready: magus run proofread-build libs/proofread: exit 1: no compiler", message: why);
 }
 
 test "the build is the go-run bootstrap, run through env rather than a shell" {

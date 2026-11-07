@@ -100,8 +100,8 @@ func TestShotsAreNotBlank(t *testing.T) {
 	t.Parallel()
 	shots, err := renderShots()
 	require.NoError(t, err)
-	// Three views, each in both palettes.
-	require.Len(t, shots, 6)
+	// Four views, each in both palettes.
+	require.Len(t, shots, 8)
 
 	for name, svg := range shots {
 		assert.Contains(t, svg, "<text ", "%s drew no text at all", name)
@@ -109,6 +109,7 @@ func TestShotsAreNotBlank(t *testing.T) {
 	assert.Contains(t, shots["terminal-run-band.svg"], "pool 6/8 running")
 	assert.Contains(t, shots["terminal-failure-prompt.svg"], "[esc] done")
 	assert.Contains(t, shots["terminal-picker.svg"], "libs/gopherbuzz")
+	assert.Contains(t, shots["terminal-run-waits.svg"], "bottleneck")
 }
 
 // TestFailurePromptShotShowsTheRealHint is the assertion the drift gate cannot

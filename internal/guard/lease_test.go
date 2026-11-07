@@ -130,7 +130,7 @@ func TestRecentGateRunsIgnoresOtherCommands(t *testing.T) {
 func TestRecentGateRunsIgnoresRunsOutsideTheWindow(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
-	writeRun(t, dir, "old", now.Add(-gateRepeatWindow-time.Hour), time.Minute, "affected", "ci")
+	writeRun(t, dir, "old", now.Add(-verifyRepeatWindow-time.Hour), time.Minute, "affected", "ci")
 
 	runs, _ := recentGateRuns(dir, now)
 	assert.Zero(t, runs)
@@ -138,24 +138,24 @@ func TestRecentGateRunsIgnoresRunsOutsideTheWindow(t *testing.T) {
 
 // Frequency alone is not waste. A repeat gate over an unchanged tree is mostly cache
 // hits and finishes in seconds: the cache working, not something to advise about.
-func TestAdviseRepeatGateIgnoresCheapRepeats(t *testing.T) {
+func TestAdviseRepeatVerifyIgnoresCheapRepeats(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
 	for i := range 6 {
 		writeRun(t, dir, fmt.Sprintf("inv%d", i), now.Add(-time.Duration(i)*time.Minute), 2*time.Second, "affected", "ci")
 	}
-	full, brief := adviseRepeatGate(dir, now)
+	full, brief := adviseRepeatVerify(dir, now)
 	assert.Empty(t, full, "six cached gates cost seconds")
 	assert.Empty(t, brief)
 }
 
-func TestAdviseRepeatGateFiresOnceItHasCost(t *testing.T) {
+func TestAdviseRepeatVerifyFiresOnceItHasCost(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
 	for i := range 3 {
 		writeRun(t, dir, fmt.Sprintf("inv%d", i), now.Add(-time.Duration(i*10)*time.Minute), 150*time.Second, "affected", "ci")
 	}
-	full, brief := adviseRepeatGate(dir, now)
+	full, brief := adviseRepeatVerify(dir, now)
 	got := full.Say
 	assert.Contains(t, got, "3 times")
 	assert.Contains(t, got, "7m30s")
@@ -175,26 +175,26 @@ func TestAdviseRepeatGateFiresOnceItHasCost(t *testing.T) {
 }
 
 // A single run is the practice working, not something to interrupt.
-func TestAdviseRepeatGateIsSilentForOneRun(t *testing.T) {
+func TestAdviseRepeatVerifyIsSilentForOneRun(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
 	writeRun(t, dir, "inv1", now.Add(-time.Minute), 10*time.Minute, "affected", "ci")
 
-	full, _ := adviseRepeatGate(dir, now)
+	full, _ := adviseRepeatVerify(dir, now)
 	assert.Empty(t, full)
 }
 
 // No run log is no data, not zero runs.
-func TestAdviseRepeatGateIsSilentWithoutARunLog(t *testing.T) {
-	absent, _ := adviseRepeatGate("", time.Now())
+func TestAdviseRepeatVerifyIsSilentWithoutARunLog(t *testing.T) {
+	absent, _ := adviseRepeatVerify("", time.Now())
 	assert.Empty(t, absent)
-	missing, _ := adviseRepeatGate(filepath.Join(t.TempDir(), "absent"), time.Now())
+	missing, _ := adviseRepeatVerify(filepath.Join(t.TempDir(), "absent"), time.Now())
 	assert.Empty(t, missing)
 }
 
-// gateRepeatRepository is a git workspace on main whose run log holds runs gate invocations and
-// whose session store holds a gate verdict of outcome at HEAD, recorded now.
-func gateRepeatRepository(t *testing.T, runs int, outcome string) (context.Context, *testkit.Repo) {
+// verifyRepeatRepository is a git workspace on main. Its run log holds runs
+// gate invocations, and its session store holds a verdict of outcome at HEAD.
+func verifyRepeatRepository(t *testing.T, runs int, outcome string) (context.Context, *testkit.Repo) {
 	t.Helper()
 	testkit.Isolate(t)
 	repo := testkit.NewRepository(t, map[string]string{".gitignore": ".magus/\n", "a.go": "package a\n"})
@@ -217,17 +217,17 @@ func gateRepeatRepository(t *testing.T, runs int, outcome string) (context.Conte
 // nothing changed since is refused: it can only pass again, and the advisory that only said
 // so was gated past again and again. A change after the verdict, a red verdict that names
 // no failing target, fewer runs or a command that is not the gate refuse nothing.
-func TestDenyRepeatGate(t *testing.T) {
+func TestDenyRepeatVerify(t *testing.T) {
 	const gate = "./magus affected ci"
 
 	t.Run("a third gate over an unchanged green tree", func(t *testing.T) {
-		ctx, repo := gateRepeatRepository(t, 2, sessions.OutcomePass)
+		ctx, repo := verifyRepeatRepository(t, 2, sessions.OutcomePass)
 		// Dirty before the verdict: the tree the gate passed already held it.
 		repo.Write("a.go", "package a\n\nvar x = 1\n")
 		before := time.Now().Add(-time.Hour)
 		require.NoError(t, os.Chtimes(repo.Path("a.go"), before, before))
 
-		d := denyRepeatGate(ctx, Dependencies{}, "", gate)
+		d := denyRepeatVerify(ctx, Dependencies{}, "", gate)
 		require.NotEmpty(t, d)
 		assert.Contains(t, d.Say, "`ci` passed on this branch")
 		assert.Contains(t, d.Say, "run inv-green", "the refusal names the passing run")
@@ -235,34 +235,34 @@ func TestDenyRepeatGate(t *testing.T) {
 		assert.Contains(t, d.Why, repo.Head(), "the rationale names the verdict's commit")
 		assert.Contains(t, d.Why, "--plan", "and the command that sizes the risk")
 
-		raised := Judge(ctx, Dependencies{Builtins: map[string]builtin.Setting{string(advisoryGateRepeat): {Decision: builtin.Deny}}}, Request{Input: gate})
-		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(advisoryGateRepeat)}, judgedAs(raised),
+		raised := Judge(ctx, Dependencies{Builtins: map[string]builtin.Setting{string(advisoryVerifyRepeat): {Decision: builtin.Deny}}}, Request{Input: gate})
+		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(advisoryVerifyRepeat)}, judgedAs(raised),
 			"Judge reaches the rule through the role-scoped list")
 	})
 	t.Run("a file written after the verdict", func(t *testing.T) {
-		ctx, repo := gateRepeatRepository(t, 2, sessions.OutcomePass)
+		ctx, repo := verifyRepeatRepository(t, 2, sessions.OutcomePass)
 		repo.Write("b.go", "package a\n")
 		after := time.Now().Add(time.Minute)
 		require.NoError(t, os.Chtimes(repo.Path("b.go"), after, after))
-		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", gate))
+		assert.Empty(t, denyRepeatVerify(ctx, Dependencies{}, "", gate))
 	})
 	t.Run("a commit after the verdict", func(t *testing.T) {
-		ctx, repo := gateRepeatRepository(t, 2, sessions.OutcomePass)
+		ctx, repo := verifyRepeatRepository(t, 2, sessions.OutcomePass)
 		repo.Commit("more", map[string]string{"c.go": "package a\n"})
 		after := time.Now().Add(time.Minute)
 		require.NoError(t, os.Chtimes(repo.Path("c.go"), after, after))
-		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", gate))
+		assert.Empty(t, denyRepeatVerify(ctx, Dependencies{}, "", gate))
 	})
 	t.Run("a red verdict whose run recorded no failing target", func(t *testing.T) {
-		ctx, _ := gateRepeatRepository(t, 2, sessions.OutcomeFail)
-		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", gate))
+		ctx, _ := verifyRepeatRepository(t, 2, sessions.OutcomeFail)
+		assert.Empty(t, denyRepeatVerify(ctx, Dependencies{}, "", gate))
 	})
 	t.Run("the second gate", func(t *testing.T) {
-		ctx, _ := gateRepeatRepository(t, 1, sessions.OutcomePass)
-		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", gate))
+		ctx, _ := verifyRepeatRepository(t, 1, sessions.OutcomePass)
+		assert.Empty(t, denyRepeatVerify(ctx, Dependencies{}, "", gate))
 	})
 	t.Run("a gate placed in another checkout with its own changes", func(t *testing.T) {
-		ctx, landing := gateRepeatRepository(t, 2, sessions.OutcomePass)
+		ctx, landing := verifyRepeatRepository(t, 2, sessions.OutcomePass)
 		other := testkit.NewRepository(t, map[string]string{".gitignore": ".magus/\n", "a.go": "package a\n", "magusfile.buzz": "\n"})
 		otherRuns := filepath.Join(other.Root(), ".magus", "runs")
 		require.NoError(t, os.MkdirAll(otherRuns, 0o755))
@@ -279,15 +279,15 @@ func TestDenyRepeatGate(t *testing.T) {
 		require.NoError(t, os.Chtimes(other.Path("b.go"), after, after))
 
 		placed := fmt.Sprintf("%s/magus -C %s affected ci", other.Root(), other.Root())
-		assert.NotEmpty(t, denyRepeatGate(ctx, Dependencies{}, "", fmt.Sprintf("./magus -C %s affected ci", landing.Root())),
+		assert.NotEmpty(t, denyRepeatVerify(ctx, Dependencies{}, "", fmt.Sprintf("./magus -C %s affected ci", landing.Root())),
 			"the landing checkout's own unchanged green tree is still refused")
-		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", placed),
+		assert.Empty(t, denyRepeatVerify(ctx, Dependencies{}, "", placed),
 			"the landing branch's verdict does not judge a gate that runs in another checkout")
 	})
 	t.Run("a command that is not the gate", func(t *testing.T) {
-		ctx, _ := gateRepeatRepository(t, 2, sessions.OutcomePass)
-		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", "./magus run test ."))
-		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", "./magus affected ci --plan"))
+		ctx, _ := verifyRepeatRepository(t, 2, sessions.OutcomePass)
+		assert.Empty(t, denyRepeatVerify(ctx, Dependencies{}, "", "./magus run test ."))
+		assert.Empty(t, denyRepeatVerify(ctx, Dependencies{}, "", "./magus affected ci --plan"))
 	})
 }
 
@@ -307,7 +307,7 @@ const redGate = "./magus affected ci"
 // SetupTest records a red gate at HEAD, run "inv-red", which failed the root's go-test
 // and docs' lint. No gate ran before it in the window.
 func (s *redGateSuite) SetupTest() {
-	ctx, repo := gateRepeatRepository(s.T(), 0, sessions.OutcomeFail)
+	ctx, repo := verifyRepeatRepository(s.T(), 0, sessions.OutcomeFail)
 	s.layers, s.repo = locationLayers(ctx), repo
 	dir, err := sessions.Dir(repo.Root())
 	s.Require().NoError(err)
@@ -328,7 +328,7 @@ func (s *redGateSuite) results(inv string, results ...sessions.TargetResult) {
 }
 
 func (s *redGateSuite) TestTheFirstRepeatIsRefusedNamingEachTargetAndItsNarrowRun() {
-	d := denyRepeatGate(s.testContext(), Dependencies{}, "", redGate)
+	d := denyRepeatVerify(s.testContext(), Dependencies{}, "", redGate)
 	s.Require().NotEmpty(d)
 	s.Contains(d.Say, "`ci` failed on this branch")
 	s.Contains(d.Say, "run inv-green")
@@ -342,19 +342,19 @@ func (s *redGateSuite) TestTheFirstRepeatIsRefusedNamingEachTargetAndItsNarrowRu
 func (s *redGateSuite) TestEachTargetPassingAloneAdmitsTheGate() {
 	time.Sleep(2 * time.Millisecond)
 	s.results("narrow-test", sessions.TargetResult{Project: ".", Target: "go-test", Outcome: sessions.OutcomePass})
-	d := denyRepeatGate(s.testContext(), Dependencies{}, "", redGate)
+	d := denyRepeatVerify(s.testContext(), Dependencies{}, "", redGate)
 	s.Require().NotEmpty(d, "docs' lint is still owed")
 	s.NotContains(d.Say, "go-test")
 
 	s.results("narrow-lint", sessions.TargetResult{Project: "docs", Target: "lint", Outcome: sessions.OutcomePass})
-	s.Empty(denyRepeatGate(s.testContext(), Dependencies{}, "", redGate))
+	s.Empty(denyRepeatVerify(s.testContext(), Dependencies{}, "", redGate))
 }
 
 func (s *redGateSuite) TestAHarnessWriteAfterTheRedGateAdmitsIt() {
 	time.Sleep(2 * time.Millisecond)
 	s.Require().NoError(sessions.RecordHarnessWrite(s.dir, sessions.HarnessWrite{Paths: []string{".claude/skills/x/SKILL.md"}},
 		sessions.InvocationStart{Workspace: s.repo.Root()}))
-	s.Empty(denyRepeatGate(s.testContext(), Dependencies{}, "", redGate))
+	s.Empty(denyRepeatVerify(s.testContext(), Dependencies{}, "", redGate))
 }
 
 func (s *redGateSuite) TestAHarnessWriteBeforeTheRedGateStillRefusesIt() {
@@ -364,14 +364,14 @@ func (s *redGateSuite) TestAHarnessWriteBeforeTheRedGateStillRefusesIt() {
 	s.Require().NoError(sessions.RecordGate(s.dir, sessions.GateResult{
 		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: s.repo.Head(), Outcome: sessions.OutcomeFail, Inv: "inv-green",
 	}, sessions.InvocationStart{Workspace: s.repo.Root()}))
-	s.NotEmpty(denyRepeatGate(s.testContext(), Dependencies{}, "", redGate))
+	s.NotEmpty(denyRepeatVerify(s.testContext(), Dependencies{}, "", redGate))
 }
 
 func (s *redGateSuite) TestAFileWrittenAfterTheRedGateAdmitsIt() {
 	s.repo.Write("a.go", "package a\n\nvar fixed = true\n")
 	after := time.Now().Add(time.Minute)
 	s.Require().NoError(os.Chtimes(s.repo.Path("a.go"), after, after))
-	s.Empty(denyRepeatGate(s.testContext(), Dependencies{}, "", redGate))
+	s.Empty(denyRepeatVerify(s.testContext(), Dependencies{}, "", redGate))
 }
 
 func TestWorkspaceRunsDirNeedsAResolvedCacheDir(t *testing.T) {

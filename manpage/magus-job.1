@@ -208,7 +208,7 @@ Lapse the pause after this long (2h) or at this RFC3339 instant; unset, it holds
 .RS
 .TP
 \fB\-\-commit\fR \fIstring\fR
-Waive the push gate for this one commit instead of lowering a rule for a job; takes only push\-ungated
+Waive the push gate for this one commit instead of lowering a rule for a job; takes only push\-unverified
 .TP
 \fB\-\-for\fR \fIvalue\fR
 End the grant after this long (e.g. 2h); unset, it lasts until the job ends. Bare numbers are hours.
@@ -343,13 +343,13 @@ magus job pause session-load/core --reason 'release build needs the machine' --u
 \fIPush HEAD without the local gate, saying why\fR
 .PP
 .EX
-magus job grant --commit HEAD push-ungated --reason "CI gates this release branch"
+magus job grant --commit HEAD push-unverified --reason "CI gates this release branch"
 .EE
 .PP
 \fITake that waiver back\fR
 .PP
 .EX
-magus job grant --commit HEAD push-ungated --revoke
+magus job grant --commit HEAD push-unverified --revoke
 .EE
 .PP
 .SH SEE ALSO

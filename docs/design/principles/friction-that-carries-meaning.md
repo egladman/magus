@@ -23,7 +23,7 @@ follows.
 - **Time delay.** A pause sits in front of an act that cannot be taken back,
   never inside the loop that verifies. The first Ctrl+C only arms a
   three-second window (`confirmWindow`, [`cmd/magus/interrupt.go`](https://github.com/egladman/magus/blob/main/cmd/magus/interrupt.go)). The
-  `push-ungated` guard rule stops a push at a commit that neither a green
+  `push-unverified` guard rule stops a push at a commit that neither a green
   gate nor passing narrow runs over its changed files cover.
 - **Engage the body.** The verb names the physical act, and the person does it
   with their own hands. Registry transfers are `graph pull` and `spell pull`,
@@ -40,7 +40,7 @@ follows.
   for them ([A refusal carries its reason](../judgment/a-refusal-carries-its-reason.md)).
 
 The test for any new resistance is whether it carries information. The
-`push-ungated` catalog entry names the failure it replaced: an advisory that
+`push-unverified` catalog entry names the failure it replaced: an advisory that
 fired on every push having read nothing was "a toll rather than a reminder".
 Friction that tells the fast caller and the careless caller the same sentence
 is a toll, and a toll is removed. A finding charged to a change that did not cause
@@ -77,18 +77,18 @@ page, and until it is, its smoothness is unexamined rather than chosen.
 
 ## Enforced by
 
-- The `push-ungated` guard rule, `confirmWindow` in [`cmd/magus/interrupt.go`](https://github.com/egladman/magus/blob/main/cmd/magus/interrupt.go),
+- The `push-unverified` guard rule, `confirmWindow` in [`cmd/magus/interrupt.go`](https://github.com/egladman/magus/blob/main/cmd/magus/interrupt.go),
   and the coded refusals linked above.
 - [Rolling out a stricter rule](https://github.com/egladman/magus/blob/main/CONTRIBUTING.md#rolling-out-a-stricter-rule):
   a new rule never charges a change that did not cause its finding.
 
 ## Good
 
-The `push-ungated` rule fires only on the act that leaves the machine, and only
+The `push-unverified` rule fires only on the act that leaves the machine, and only
 when the evidence is missing. Its catalog entry ([`internal/guard/catalog.go`](https://github.com/egladman/magus/blob/main/internal/guard/catalog.go)):
 
 ```text
-push-ungated: a push or `gh pr create` at a commit no green gate or passing narrow run covers
+push-unverified: a push or `gh pr create` at a commit no green gate or passing narrow run covers
 ```
 
 ## Bad

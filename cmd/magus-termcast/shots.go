@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive/screen"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/types"
 )
 
 // The shots: magus's interactive terminal views, rendered as stills for the
@@ -66,6 +67,7 @@ func renderShots() (map[string]string, error) {
 		fn   func(screen.Theme) (string, error)
 	}{
 		{"terminal-run-band.svg", runBand},
+		{"terminal-run-waits.svg", runWaits},
 		{"terminal-failure-prompt.svg", failurePrompt},
 		{"terminal-picker.svg", picker},
 	} {
@@ -114,6 +116,56 @@ func runBand(t screen.Theme) (string, error) {
 		return "", err
 	}
 	return s.SVG(screen.SVGOptions{Theme: t}), nil
+}
+
+// runWaits: the wait board, drawn by a real handler fed the records RunAll
+// emits. The clock is set by hand between records, so each row shows its
+// own age.
+func runWaits(t screen.Theme) (string, error) {
+	s := screen.New(shotCols, shotRows)
+	now := time.Unix(0, 0).UTC()
+	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, tty.CaptureProbe(shotCols, shotRows),
+		func() time.Time { return now })
+
+	fmt.Fprint(s, "$ magus affected ci\n")
+	for _, p := range []string{"internal/cache", "internal/interp", "std", "types"} {
+		fmt.Fprintf(s, "[pass] build %s (cached, 0.0s)\n", p)
+	}
+	ref := func(project, target string) types.TargetRef {
+		return types.TargetRef{Project: project, Target: target}
+	}
+	test, docs := ref("", "test"), ref("docs", "build")
+	console := ref("console", "build")
+	ctx := context.Background()
+	records := []slog.Record{
+		event("cache.plan", slog.Any("steps", []cache.PlannedStep{
+			{Ref: test}, {Ref: docs},
+			{Ref: ref("docs/guides/integrations/agents", "lint"), Upstreams: []types.TargetRef{test}},
+			{Ref: ref("libs/figure", "lint"), Upstreams: []types.TargetRef{test}},
+			{Ref: console, Upstreams: []types.TargetRef{docs}},
+			{Ref: ref("console", "test"), Upstreams: []types.TargetRef{console}},
+			{Ref: ref("deploy", "build"), Upstreams: []types.TargetRef{console, test}},
+		})),
+		step(docs, cache.StepRunning),
+		step(test, cache.StepRunning),
+	}
+	for _, r := range records {
+		if err := h.Handle(ctx, r); err != nil {
+			return "", err
+		}
+	}
+	now = now.Add(8 * time.Minute)
+	pool := event("cache.pool", slog.Int("capacity", 8), slog.Int("running", 2))
+	if err := h.Handle(ctx, pool); err != nil {
+		return "", err
+	}
+	return s.SVG(screen.SVGOptions{Theme: t}), nil
+}
+
+// step is a cache.step record moving ref to state.
+func step(ref types.TargetRef, state cache.StepState) slog.Record {
+	return event("cache.step", slog.String("project", ref.Project),
+		slog.String("target", ref.Target), slog.String("state", string(state)))
 }
 
 // failurePrompt: failures held past the summary so they can be acted on, with

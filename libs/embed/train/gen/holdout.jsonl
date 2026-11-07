@@ -33,7 +33,6 @@
 {"group":"dir:broker","path":"broker/server.go"}
 {"group":"dir:broker","path":"broker/server_test.go"}
 {"group":"dir:broker","path":"broker/service.go"}
-{"group":"dir:broker","path":"broker/socket_name_test.go"}
 {"group":"dir:broker","path":"broker/units.go"}
 {"group":"dir:broker","path":"broker/units_test.go"}
 {"group":"dir:broker","path":"broker/wire.go"}
@@ -84,6 +83,7 @@
 {"group":"file:changes/unreleased/ci-asks-for-whole-machine-explicitly.md","path":"changes/unreleased/ci-asks-for-whole-machine-explicitly.md"}
 {"group":"file:changes/unreleased/ci-gates-in-the-queue-box.md","path":"changes/unreleased/ci-gates-in-the-queue-box.md"}
 {"group":"file:changes/unreleased/ci-plan-cost.md","path":"changes/unreleased/ci-plan-cost.md"}
+{"group":"file:changes/unreleased/ci-shard-stages.md","path":"changes/unreleased/ci-shard-stages.md"}
 {"group":"file:changes/unreleased/ci-shards-anchor-effects.md","path":"changes/unreleased/ci-shards-anchor-effects.md"}
 {"group":"file:changes/unreleased/ci-shards-by-target-labels.md","path":"changes/unreleased/ci-shards-by-target-labels.md"}
 {"group":"file:changes/unreleased/claim-callers-of-a-symbol.md","path":"changes/unreleased/claim-callers-of-a-symbol.md"}
@@ -234,6 +234,7 @@
 {"group":"file:changes/unreleased/more-libs-never-compose-format.md","path":"changes/unreleased/more-libs-never-compose-format.md"}
 {"group":"file:changes/unreleased/needs-at-width-one.md","path":"changes/unreleased/needs-at-width-one.md"}
 {"group":"file:changes/unreleased/needs-failure-is-catchable.md","path":"changes/unreleased/needs-failure-is-catchable.md"}
+{"group":"file:changes/unreleased/needs-ready-probes-registered-spells.md","path":"changes/unreleased/needs-ready-probes-registered-spells.md"}
 {"group":"file:changes/unreleased/no-throw-rest-of-hack-dev.md","path":"changes/unreleased/no-throw-rest-of-hack-dev.md"}
 {"group":"file:changes/unreleased/no-throw-spell-helpers.md","path":"changes/unreleased/no-throw-spell-helpers.md"}
 {"group":"file:changes/unreleased/oci-base-name-matches-digest.md","path":"changes/unreleased/oci-base-name-matches-digest.md"}
@@ -378,7 +379,6 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/checkpoint_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/ci_redundancy.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/ci_redundancy_test.go"}
-{"group":"dir:cmd/magus","path":"cmd/magus/ci_redundancy_unrun_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/clean.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/clean_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/client_mcp_worker.go"}
@@ -534,7 +534,6 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/stale_index_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/startup_trace.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/status.go"}
-{"group":"dir:cmd/magus","path":"cmd/magus/status_reserve_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/status_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/stepper.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/stepper_test.go"}
@@ -993,6 +992,7 @@
 {"group":"dir:hack/dev","path":"hack/dev/prune-changelog-fragments.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/rebase-branches-onto-base.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/reclaim-disk-space.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/rename-gate-to-verification.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/rename-symbol.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/render-brief.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/resolve-conflicts.buzz"}
@@ -1159,7 +1159,6 @@
 {"group":"dir:internal/guard","path":"internal/guard/deadline.go"}
 {"group":"dir:internal/guard","path":"internal/guard/deadline_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/denial.go"}
-{"group":"dir:internal/guard","path":"internal/guard/denial_route_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/denial_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/deviation.go"}
 {"group":"dir:internal/guard","path":"internal/guard/deviation_test.go"}
@@ -1231,7 +1230,6 @@
 {"group":"dir:internal/guard","path":"internal/guard/process_signal_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/push.go"}
 {"group":"dir:internal/guard","path":"internal/guard/push_test.go"}
-{"group":"dir:internal/guard","path":"internal/guard/push_unrun_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/read.go"}
 {"group":"dir:internal/guard","path":"internal/guard/read_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/release_advice.go"}

@@ -19,8 +19,9 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// pushUngatedRule is the one rule a grant scopes to a commit instead of a job.
-const pushUngatedRule = "push-ungated"
+// pushUnverifiedRule is the one rule a grant scopes to a commit instead of a
+// job.
+const pushUnverifiedRule = "push-unverified"
 
 // jobGrant is `magus job grant`, a person's approval lowering one rule for one job, or
 // waiving the push gate for one commit.
@@ -49,14 +50,14 @@ func jobGrant(ctx context.Context, root string, args []string) error {
 		return grantForCommit(ctx, root, commit, rest, grantForCommitOptions{lasting: lasting, revoke: revoke, reason: reason})
 	}
 	if reason != "" {
-		return exit.Usagef("magus job grant: --reason records a commit waiver: use `magus job grant --commit <commit> %s --reason <text>`", pushUngatedRule)
+		return exit.Usagef("magus job grant: --reason records a commit waiver: use `magus job grant --commit <commit> %s --reason <text>`", pushUnverifiedRule)
 	}
 	if len(rest) != 2 {
 		return exit.Usagef("magus job grant: requires a job and a rule")
 	}
 	id, rule := rest[0], rest[1]
-	if rule == pushUngatedRule {
-		return exit.Usagef("magus job grant: %s waives the push gate for one commit, not a job: use `magus job grant --commit <commit> %s --reason <text>`", pushUngatedRule, pushUngatedRule)
+	if rule == pushUnverifiedRule {
+		return exit.Usagef("magus job grant: %s waives the push gate for one commit, not a job: use `magus job grant --commit <commit> %s --reason <text>`", pushUnverifiedRule, pushUnverifiedRule)
 	}
 	if err := grantableRule(rule); err != nil {
 		return err
@@ -116,13 +117,13 @@ type grantForCommitOptions struct {
 // commit, or its revocation.
 func grantForCommit(ctx context.Context, root, rev string, rest []string, opts grantForCommitOptions) error {
 	if len(rest) != 1 {
-		return exit.Usagef("magus job grant: --commit takes one rule, %s", pushUngatedRule)
+		return exit.Usagef("magus job grant: --commit takes one rule, %s", pushUnverifiedRule)
 	}
-	if rest[0] != pushUngatedRule {
+	if rest[0] != pushUnverifiedRule {
 		if err := grantableRule(rest[0]); err == nil {
 			return exit.Usagef("magus job grant: %s is granted to a job, not a commit: use `magus job grant [--for <duration>] <job> %s`", rest[0], rest[0])
 		}
-		return exit.Usagef("magus job grant: --commit takes %s, not %q", pushUngatedRule, rest[0])
+		return exit.Usagef("magus job grant: --commit takes %s, not %q", pushUnverifiedRule, rest[0])
 	}
 	if opts.lasting != 0 {
 		return exit.Usagef("magus job grant: --for does not apply to --commit: a waiver covers its commit until revoked")

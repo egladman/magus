@@ -77,8 +77,8 @@ func TestNewJobOutcomeNumbersTheAttemptAndClassifiesIt(t *testing.T) {
 	row := lease("a")
 	row.State = types.StateFail
 	row.Attempts = 2
-	row.Prior = []types.PriorAttempt{{N: 1, State: types.StateFail, Unmet: []types.GateStatus{{ID: "check"}}}}
-	row.Rejection = &types.JobRejection{Unmet: []types.GateStatus{{ID: "check"}}}
+	row.Prior = []types.PriorAttempt{{N: 1, State: types.StateFail, Unmet: []types.VerificationStatus{{ID: "check"}}}}
+	row.Rejection = &types.JobRejection{Unmet: []types.VerificationStatus{{ID: "check"}}}
 
 	got := newJobOutcome(row, 5_000)
 

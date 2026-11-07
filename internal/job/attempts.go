@@ -141,7 +141,7 @@ func classifyAttempt(p types.PriorAttempt, earlier []types.PriorAttempt) types.R
 	if n := len(earlier); n > 0 {
 		before := earlier[n-1]
 		for _, goal := range p.Unmet {
-			if slices.ContainsFunc(before.Unmet, func(g types.GateStatus) bool { return g.ID == goal.ID }) {
+			if slices.ContainsFunc(before.Unmet, func(g types.VerificationStatus) bool { return g.ID == goal.ID }) {
 				return types.RetryVerdict{Change: types.RetryAfterPerson,
 					Reason: fmt.Sprintf("goal %s was unmet in attempts %d and %d", goal.ID, before.N, p.N)}
 			}
@@ -185,8 +185,8 @@ func evidenceAt(row types.Job) (ev graded, prior int) {
 }
 
 // unmetGates are the goals among gates that did not verify, at most maxFolded, copied.
-func unmetGates(gates []types.GateStatus) []types.GateStatus {
-	var out []types.GateStatus
+func unmetGates(gates []types.VerificationStatus) []types.VerificationStatus {
+	var out []types.VerificationStatus
 	for _, g := range gates {
 		if !g.Verified && len(out) < maxFolded {
 			out = append(out, g)
@@ -195,7 +195,7 @@ func unmetGates(gates []types.GateStatus) []types.GateStatus {
 	return cloneGates(out)
 }
 
-func cloneGates(in []types.GateStatus) []types.GateStatus {
+func cloneGates(in []types.VerificationStatus) []types.VerificationStatus {
 	if in == nil {
 		return nil
 	}
