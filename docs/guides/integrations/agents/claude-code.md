@@ -697,7 +697,7 @@ It adds these to a session:
 - A line of links under each reply and each finished magus call, Bash or MCP, that
   names an output ref, a guard detail or an invocation id. A link's title is the
   command that prints it. Pressing one opens a pane with that command's output and a
-  Copy command button. Where a surface opens links itself and no press reaches the
+  Copy command button. Where the host opens links itself and no press reaches the
   mod, the link opens the page on [output refs](../../../concepts/cache/output-refs.md).
 
 Every threshold is a setting in `/config`: `cacheGate`, `gateMinTokens`, `cacheTtl`,

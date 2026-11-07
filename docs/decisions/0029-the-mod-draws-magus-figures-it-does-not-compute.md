@@ -73,7 +73,7 @@ on another's release.
 The mod talks to magus only through surfaces magus already versions: CLI records
 (`-o json`, `-o svg`), the Connect `v1alpha1` services, and `magus describe harness -o json`.
 Nothing of the mod is embedded in the binary, and nothing of magus is copied into the
-mod. When a workspace's magus lacks a surface a view needs, the view draws one red line
+mod. When a workspace's magus lacks an output a view needs, the view draws one red line
 naming the magus version that has it. It never draws a guess.
 
 ### The three views

@@ -3,9 +3,10 @@ import { describe, expect, test } from 'claude-code/testing'
 import { assess, BOOTSTRAP, inBand, statusText } from '../hooks/health'
 import type { Probe } from '../hooks/health'
 
+// must fails the test when v is absent; the cast is sound once expect passes.
 const must = <T>(v: T | null | undefined): T => {
-  if (v === null || v === undefined) throw new Error('expected a value')
-  return v
+  expect(v ?? null).not.toBeNull()
+  return v as T
 }
 
 const healthy: Probe = {

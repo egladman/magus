@@ -27,12 +27,12 @@ export function refCommand(ref: string, program = './magus'): string {
   return [program, ...refArgs(ref)].join(' ')
 }
 
-// The page that says what a ref is. A surface that opens a link itself,
+// The page that says what a ref is. A host that opens a link itself,
 // so no press reaches the mod, lands there.
 export const REF_DOC = 'https://eli.gladman.cc/magus/concepts/cache/output-refs/'
 
 // refLinks draws refs as one markdown line of links. A link's title is the
-// command that prints its ref, which a surface may show on hover.
+// command that prints its ref, which a host may show on hover.
 export function refLinks(refs: string[]): string {
   return refs.map(r => `[${r}](${REF_DOC}#${r} "${refCommand(r)}")`).join(' · ')
 }

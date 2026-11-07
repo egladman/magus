@@ -119,7 +119,7 @@ proof; a green check or the queue's comment is not.
 
 The bot's advice comment runs the same advisors `./magus diff --impact` runs
 locally (`localAdvisors` in cmd/magus/diff.go). It never blocks a merge, so it is
-not a review comment to answer. Read it locally instead:
+not a review comment to answer. Read it locally:
 `./magus diff --no-tui --impact --rev origin/main...HEAD -o json`. A section the
 comment shows and the local run does not is a bug in that advisor. Fix the
 advisor in `.github/actions/advice/`; don't rename code to quiet it.
