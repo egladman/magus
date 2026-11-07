@@ -161,8 +161,8 @@ func Handle[T any](t *Table[T], v any) (T, error) {
 	return t.Get(h)
 }
 
-// SliceOf reads a Buzz list, decoding each item with one.
-func SliceOf[T any](v any, one func(any) (T, error)) ([]T, error) {
+// DecodeSlice reads a Buzz list, decoding each item with one.
+func DecodeSlice[T any](v any, one func(any) (T, error)) ([]T, error) {
 	items, err := List(v)
 	if err != nil {
 		return nil, err
@@ -176,8 +176,8 @@ func SliceOf[T any](v any, one func(any) (T, error)) ([]T, error) {
 	return out, nil
 }
 
-// ListOf writes a Go slice as a Buzz list, encoding each item with one.
-func ListOf[T any](items []T, one func(T) any) []any {
+// EncodeList writes a Go slice as a Buzz list, encoding each item with one.
+func EncodeList[T any](items []T, one func(T) any) []any {
 	out := make([]any, len(items))
 	for i, it := range items {
 		out[i] = one(it)
@@ -187,12 +187,12 @@ func ListOf[T any](items []T, one func(T) any) []any {
 
 // Bytes reads a Buzz list of ints as bytes.
 func Bytes(v any) ([]byte, error) {
-	return SliceOf(v, IntAs[byte])
+	return DecodeSlice(v, IntAs[byte])
 }
 
 // BytesList writes bytes as a Buzz list of ints.
 func BytesList(b []byte) []any {
-	return ListOf(b, func(x byte) any { return int(x) })
+	return EncodeList(b, func(x byte) any { return int(x) })
 }
 
 // ErrorText is an error's message, or "" for none.

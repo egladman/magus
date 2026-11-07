@@ -188,7 +188,7 @@ func (e *emitter) encode(c *conv, src string) string {
 			return fmt.Sprintf("%s%sHandles.Put(%s)", e.genAlias(c.t.pkg), c.t.name, src)
 		}
 	case convSlice:
-		return fmt.Sprintf("convert.ListOf(%s, func(x %s) any { return %s })", src, e.goExpr(c.elem), e.encode(c.elem, "x"))
+		return fmt.Sprintf("convert.EncodeList(%s, func(x %s) any { return %s })", src, e.goExpr(c.elem), e.encode(c.elem, "x"))
 	}
 	return src
 }
@@ -226,7 +226,7 @@ func (e *emitter) decode(c *conv, src string) string {
 			return fmt.Sprintf("convert.Handle(%s%sHandles, %s)", e.genAlias(c.t.pkg), c.t.name, src)
 		}
 	case convSlice:
-		return fmt.Sprintf("convert.SliceOf(%s, func(x any) (%s, error) { return %s })", src, e.goExpr(c.elem), e.decode(c.elem, "x"))
+		return fmt.Sprintf("convert.DecodeSlice(%s, func(x any) (%s, error) { return %s })", src, e.goExpr(c.elem), e.decode(c.elem, "x"))
 	}
 	return src
 }

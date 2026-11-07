@@ -216,7 +216,7 @@ func ImplLoaderFrame(ctx context.Context, loader int, aElapsed int) (any, error)
 		return nil, fmt.Errorf("elapsed: %w", err)
 	}
 	r0 := recv.Frame(vElapsed)
-	return convert.ListOf(r0, func(x libtermkit.Line) any { return gentermkit.EncodeLine(x) }), nil
+	return convert.EncodeList(r0, func(x libtermkit.Line) any { return gentermkit.EncodeLine(x) }), nil
 }
 
 // ImplNames binds github.com/egladman/magus/libs/termkit/progress.Names.

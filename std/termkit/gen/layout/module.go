@@ -115,7 +115,7 @@ func DecodeHint(v any) (lib.Hint, error) {
 // EncodeRow is a Row as a Buzz map.
 func EncodeRow(v lib.Row) map[string]any {
 	return map[string]any{
-		"label":    convert.ListOf(v.Label, func(x libtermkit.Span) any { return gentermkit.EncodeSpan(x) }),
+		"label":    convert.EncodeList(v.Label, func(x libtermkit.Span) any { return gentermkit.EncodeSpan(x) }),
 		"meta":     v.Meta,
 		"selected": v.Selected,
 	}
@@ -128,7 +128,7 @@ func DecodeRow(v any) (lib.Row, error) {
 	if err != nil {
 		return out, err
 	}
-	if out.Label, err = convert.SliceOf(m["label"], func(x any) (libtermkit.Span, error) { return gentermkit.DecodeSpan(x) }); err != nil {
+	if out.Label, err = convert.DecodeSlice(m["label"], func(x any) (libtermkit.Span, error) { return gentermkit.DecodeSpan(x) }); err != nil {
 		return out, fmt.Errorf("label: %w", err)
 	}
 	if out.Meta, err = convert.String(m["meta"]); err != nil {
@@ -166,7 +166,7 @@ func ImplClipBytes(ctx context.Context, aS string, aNBytes int) (string, error) 
 
 // ImplColumns binds github.com/egladman/magus/libs/termkit/layout.Columns.
 func ImplColumns(ctx context.Context, aRows any, aWidth int, aMeta string, aSelected string) (any, error) {
-	vRows, err := convert.SliceOf(aRows, func(x any) (lib.Row, error) { return DecodeRow(x) })
+	vRows, err := convert.DecodeSlice(aRows, func(x any) (lib.Row, error) { return DecodeRow(x) })
 	if err != nil {
 		return nil, fmt.Errorf("rows: %w", err)
 	}
@@ -179,7 +179,7 @@ func ImplColumns(ctx context.Context, aRows any, aWidth int, aMeta string, aSele
 		return nil, fmt.Errorf("selected: %w", err)
 	}
 	r0 := lib.Columns(vRows, aWidth, vMeta, vSelected)
-	return convert.ListOf(r0, func(x libtermkit.Line) any { return gentermkit.EncodeLine(x) }), nil
+	return convert.EncodeList(r0, func(x libtermkit.Line) any { return gentermkit.EncodeLine(x) }), nil
 }
 
 // ImplTree binds github.com/egladman/magus/libs/termkit/layout.Tree.
@@ -190,7 +190,7 @@ func ImplTree(ctx context.Context, aI int, aN int, aAscii bool) (string, error) 
 
 // ImplHints binds github.com/egladman/magus/libs/termkit/layout.Hints.
 func ImplHints(ctx context.Context, aHints any, aWidth int, aStyle string) (map[string]any, error) {
-	vHints, err := convert.SliceOf(aHints, func(x any) (lib.Hint, error) { return DecodeHint(x) })
+	vHints, err := convert.DecodeSlice(aHints, func(x any) (lib.Hint, error) { return DecodeHint(x) })
 	if err != nil {
 		return nil, fmt.Errorf("hints: %w", err)
 	}

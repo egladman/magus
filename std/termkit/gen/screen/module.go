@@ -460,7 +460,7 @@ func ImplTerminalTrailingSpaceRows(ctx context.Context, terminal int) (any, erro
 		return nil, err
 	}
 	r0 := recv.TrailingSpaceRows()
-	return convert.ListOf(r0, func(x int) any { return x }), nil
+	return convert.EncodeList(r0, func(x int) any { return x }), nil
 }
 
 // ImplTerminalSVG binds github.com/egladman/magus/libs/termkit/screen.Terminal.SVG.
@@ -485,11 +485,11 @@ func ImplVariantPath(ctx context.Context, aPath string, aSuffix string) (string,
 
 // ImplAnimate binds github.com/egladman/magus/libs/termkit/screen.Animate.
 func ImplAnimate(ctx context.Context, aFrames any, aHolds any, aOpts map[string]any) (string, error) {
-	vFrames, err := convert.SliceOf(aFrames, func(x any) (*lib.Terminal, error) { return convert.Handle(TerminalHandles, x) })
+	vFrames, err := convert.DecodeSlice(aFrames, func(x any) (*lib.Terminal, error) { return convert.Handle(TerminalHandles, x) })
 	if err != nil {
 		return "", fmt.Errorf("frames: %w", err)
 	}
-	vHolds, err := convert.SliceOf(aHolds, func(x any) (float64, error) { return convert.Float(x) })
+	vHolds, err := convert.DecodeSlice(aHolds, func(x any) (float64, error) { return convert.Float(x) })
 	if err != nil {
 		return "", fmt.Errorf("holds: %w", err)
 	}
@@ -516,5 +516,5 @@ func ImplLightTheme(ctx context.Context) (map[string]any, error) {
 
 // ImplThemeVariants reads github.com/egladman/magus/libs/termkit/screen.ThemeVariants.
 func ImplThemeVariants(ctx context.Context) (any, error) {
-	return convert.ListOf(lib.ThemeVariants, func(x lib.ThemeVariant) any { return EncodeThemeVariant(x) }), nil
+	return convert.EncodeList(lib.ThemeVariants, func(x lib.ThemeVariant) any { return EncodeThemeVariant(x) }), nil
 }

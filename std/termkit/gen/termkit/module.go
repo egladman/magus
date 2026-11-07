@@ -694,7 +694,7 @@ func EncodeLine(v lib.Line) map[string]any {
 	return map[string]any{
 		"text":  v.Text,
 		"style": string(v.Style),
-		"spans": convert.ListOf(v.Spans, func(x lib.Span) any { return EncodeSpan(x) }),
+		"spans": convert.EncodeList(v.Spans, func(x lib.Span) any { return EncodeSpan(x) }),
 	}
 }
 
@@ -711,7 +711,7 @@ func DecodeLine(v any) (lib.Line, error) {
 	if out.Style, err = convert.StringAs[lib.SGR](m["style"]); err != nil {
 		return out, fmt.Errorf("style: %w", err)
 	}
-	if out.Spans, err = convert.SliceOf(m["spans"], func(x any) (lib.Span, error) { return DecodeSpan(x) }); err != nil {
+	if out.Spans, err = convert.DecodeSlice(m["spans"], func(x any) (lib.Span, error) { return DecodeSpan(x) }); err != nil {
 		return out, fmt.Errorf("spans: %w", err)
 	}
 	return out, nil
@@ -1041,7 +1041,7 @@ func ImplLineSpansCopy(ctx context.Context, line map[string]any) (any, error) {
 		return nil, err
 	}
 	r0 := recv.SpansCopy()
-	return convert.ListOf(r0, func(x lib.Span) any { return EncodeSpan(x) }), nil
+	return convert.EncodeList(r0, func(x lib.Span) any { return EncodeSpan(x) }), nil
 }
 
 // ImplResetScrollMargins binds github.com/egladman/magus/libs/termkit.ResetScrollMargins.
@@ -1116,7 +1116,7 @@ func ImplLeaseSet(ctx context.Context, lease int, aRows any) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	vRows, err := convert.SliceOf(aRows, func(x any) (lib.Line, error) { return DecodeLine(x) })
+	vRows, err := convert.DecodeSlice(aRows, func(x any) (lib.Line, error) { return DecodeLine(x) })
 	if err != nil {
 		return false, fmt.Errorf("rows: %w", err)
 	}
