@@ -18,6 +18,7 @@ package hostmodules
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/std/encoding"
@@ -46,9 +47,9 @@ func Get(name string) (std.Module, bool) {
 	return std.Module{}, false
 }
 
-// termkit validates the generated modules as std validates its own, so a
-// descriptor that disagrees with its Impl fails the first reader.
-func termkit() []std.Module {
+// termkit validates the generated modules once, as std validates its own, so
+// a descriptor that disagrees with its Impl fails the first reader.
+var termkit = sync.OnceValue(func() []std.Module {
 	mods := termkitgen.Modules()
 	for _, m := range mods {
 		if err := std.ValidateModule(m); err != nil {
@@ -56,4 +57,4 @@ func termkit() []std.Module {
 		}
 	}
 	return mods
-}
+})

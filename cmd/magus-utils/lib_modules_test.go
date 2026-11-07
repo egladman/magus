@@ -68,7 +68,7 @@ func (s *LibModulesSuite) TestARecordMethodTakesTheRecordAsAMap() {
 	s.Require().NoError(err)
 	src, err := lib.emitPackage(lib.pkgs[0])
 	s.Require().NoError(err)
-	s.Contains(string(src), `Name: "pair_join"`)
+	s.Regexp(`Name:\s+"pair_join"`, string(src))
 	s.Contains(string(src), `{Name: "pair", Type: std.TypeAnyMap}`)
 	s.Contains(string(src), "func DecodePair(v any) (lib.Pair, error)")
 }

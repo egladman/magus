@@ -100,13 +100,14 @@ func TestShotsAreNotBlank(t *testing.T) {
 	t.Parallel()
 	shots, err := renderShots()
 	require.NoError(t, err)
-	// Four views, each in both palettes.
-	require.Len(t, shots, 8)
+	// Five views, each in both palettes.
+	require.Len(t, shots, 10)
 
 	for name, svg := range shots {
 		assert.Contains(t, svg, "<text ", "%s drew no text at all", name)
 	}
 	assert.Contains(t, shots["terminal-run-band.svg"], "3/8 slots")
+	assert.Contains(t, shots["terminal-loaders.svg"], "glyph/dots")
 	assert.Contains(t, shots["terminal-failure-prompt.svg"], "esc done")
 	assert.Contains(t, shots["terminal-picker.svg"], "libs/gopherbuzz")
 	assert.Contains(t, shots["terminal-run-waits.svg"], "bottleneck")
