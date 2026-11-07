@@ -60,6 +60,13 @@ func (s *ContractSkewDirectionSuite) TestABuildOnASiblingLineIsJudgedByWhatHeadA
 	s.Empty(s.deny(s.decls, s.git("rev-parse", "HEAD")), "the sibling's own line changed no load contract")
 }
 
+func (s *ContractSkewDirectionSuite) TestASquashOfTheBuildsOwnCommitIsNotOlder() {
+	s.git("reset", "-q", "--hard", s.base)
+	s.git("checkout", s.decls, "--", ".")
+	s.git("commit", "-q", "-m", "squash")
+	s.Empty(s.deny(s.decls, s.git("rev-parse", "HEAD")), "the squash carries the tree the binary was built from")
+}
+
 func TestLoadContractNamesTheTriggerPaths(t *testing.T) {
 	for _, p := range []string{
 		"internal/spell/gen/decls/magus.buzz",
