@@ -198,6 +198,28 @@ func Hint(message, hint string) string {
 	return fmt.Sprintf("%s; %s", message, hint)
 }
 
+// TreeModule returns the module path declared by the nearest go.mod at or above
+// the working directory: the module a run lints when no setting names one. A
+// tree with no go.mod, or a go.mod declaring no module, is an error.
+func TreeModule(linter string) (string, error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", linter, err)
+	}
+	for dir := wd; ; dir = filepath.Dir(dir) {
+		if data, err := os.ReadFile(filepath.Join(dir, "go.mod")); err == nil {
+			module := modfile.ModulePath(data)
+			if module == "" {
+				return "", fmt.Errorf("%s: %s declares no module", linter, filepath.Join(dir, "go.mod"))
+			}
+			return module, nil
+		}
+		if filepath.Dir(dir) == dir {
+			return "", fmt.Errorf("%s: no go.mod at or above %s, so there is no tree to lint", linter, wd)
+		}
+	}
+}
+
 // Root returns the directory whose go.mod declares module, searching up from
 // the working directory. golangci-lint runs a nested module from its own
 // directory, and this still resolves the enclosing module's paths from there.
