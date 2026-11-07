@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -311,13 +312,18 @@ func probeArgvs(name string) [][]string {
 // name itself, plus every record filed under a key extending it. The union is the point:
 // a multi-mode command files one record per mode ("affected build", "affected build
 // --plan"), and the man page describes the command, not one mode of it.
+// A subcommand that declares its own flags is left out: its man page entry is its own.
 func recordedFlagsUnder(name string) ([]recordedFlag, bool) {
 	flagRecord.Lock()
 	defer flagRecord.Unlock()
+	children := flaggedChildren(name)
 	seen := map[string]bool{}
 	var out []recordedFlag
 	for key, flags := range flagRecord.byCommand {
 		if key != name && !strings.HasPrefix(key, name+" ") {
+			continue
+		}
+		if rest := strings.Fields(strings.TrimPrefix(key, name)); len(rest) > 0 && children[rest[0]] {
 			continue
 		}
 		for _, f := range flags {
@@ -328,6 +334,25 @@ func recordedFlagsUnder(name string) ([]recordedFlag, bool) {
 		}
 	}
 	return out, len(out) > 0
+}
+
+// flaggedChildren names the subcommands of name that declare their own flags.
+func flaggedChildren(name string) map[string]bool {
+	cmds := commands.Root.Children
+	for _, word := range strings.Fields(name) {
+		i := slices.IndexFunc(cmds, func(c cmdline.Command) bool { return c.Name == word })
+		if i < 0 {
+			return nil
+		}
+		cmds = cmds[i].Children
+	}
+	out := map[string]bool{}
+	for _, c := range cmds {
+		if len(c.Flags) > 0 {
+			out[c.Name] = true
+		}
+	}
+	return out
 }
 
 // flagProbes expands one man-page command into the invocations that actually bind flags.
