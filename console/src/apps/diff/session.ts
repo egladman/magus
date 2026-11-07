@@ -202,7 +202,22 @@ export interface DiffAnnotation {
   // Absent means nobody checked, which must never render as "unread": those are opposite
   // claims and only one of them accuses. See types.DiffReadState.
   readonly read_state?: ReviewReadState;
+  // risk is the tier `magus affected ci` proved for this file. Absent means no
+  // assessment ran, which ranks as full: an unproven file is unbounded.
+  readonly risk?: DiffRisk;
 }
+
+// DiffRisk mirrors types.TierEvidence for one file.
+export interface DiffRisk {
+  readonly path?: string;
+  readonly class?: string;
+  readonly tier: RiskTier;
+  readonly why: string;
+  readonly packages?: readonly string[];
+}
+
+// RiskTier mirrors the types.Tier constants, lowest first.
+export type RiskTier = "trivial" | "mechanical" | "scoped" | "full";
 
 // ReviewReadState mirrors the DiffReadState constants. "stale" is the one worth surfacing
 // hardest: the reader looked, and then the file moved under them.

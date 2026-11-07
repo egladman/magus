@@ -14,6 +14,8 @@ import "fs";
 import "os";
 import "encoding/json";
 import "magus";
+import "vcs";
+import "./hack/magusfile/branch-stack" as branchstack;
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
 
@@ -43,6 +45,9 @@ export object Mandate {
     ends: int = 0,
     tolerance: str = "",
     rows: [str] = [],
+    // budget is the most scoped or full lines a settled job may change and
+    // still be integrated with no one present.
+    budget: int = branchstack\reviewBudget,
 }
 
 // Row is what the rules read of one job store row.
@@ -65,12 +70,15 @@ export object Row {
 export object Assessed {
     tier: str,
     evidence: [str] = [],
+    // lines is how many lines the job changed in its scoped or full paths,
+    // -1 when they could not be counted.
+    lines: int = -1,
 }
 
 // assess is id's proven tier: measure's report on the change in the job's own checkout since
 // the checkpoint it was handed. A row measure cannot reach, or a measure that raises, is full,
 // and its evidence says which, so an unmeasured job never reads as a measured tier.
-export fun assess(id: str, jobs: [Row], measure: fun (row: Row) > TierReport !> any) > Assessed {
+export fun assess(id: str, jobs: [Row], measure: fun (row: Row) > TierReport !> any, count: fun (row: Row) > {str: int} !> any) > Assessed {
     final row = byId(jobs, id: id);
     if (row == null) {
         return Assessed{ tier = "full", evidence = ["{id}: full (no job row by that id, so nothing was measured)"] };
@@ -84,11 +92,40 @@ export fun assess(id: str, jobs: [Row], measure: fun (row: Row) > TierReport !> 
     } catch (e: any) {
         return Assessed{ tier = "full", evidence = ["{id}: full (magus\\change().tier raised: {e})"] };
     }
-    final lines = mut [<str>];
-    foreach (e in report.evidence) {
-        lines.append(evidenceLine(e));
+    var changed = {<str: int>};
+    try {
+        changed = count(row!);
+    } catch (e: any) {
+        changed = {<str: int>};
+        final lines = mut [<str>];
+        foreach (ev in report.evidence) {
+            lines.append(evidenceLine(ev));
+        }
+        lines.append("{id}: lines not counted ({e})");
+        return Assessed{ tier = report.tier.value, evidence = lines };
     }
-    return Assessed{ tier = report.tier.value, evidence = lines };
+    final lines = mut [<str>];
+    var reviewable = 0;
+    foreach (e in report.evidence) {
+        final n = changed[e.path] ?? 0;
+        if (e.path != "" and (e.tier == magus\Tier.scoped or e.tier == magus\Tier.full)) {
+            reviewable = reviewable + n;
+            lines.append("{evidenceLine(e)}, {n} lines");
+        } else {
+            lines.append(evidenceLine(e));
+        }
+    }
+    return Assessed{ tier = report.tier.value, evidence = lines, lines = reviewable };
+}
+
+// counted is assess's count outside a test: each path's changed lines in the
+// job's checkout since its checkpoint, added plus deleted.
+export fun counted(row: Row) > {str: int} !> any {
+    final lines = mut {<str: int>};
+    foreach (s in vcs\diffStat(row.checkpoint, dir: row.checkoutRoot)) {
+        lines[s.path] = s.added + s.deleted;
+    }
+    return lines;
 }
 
 // measured is assess's measure outside a test: the ci gate's tier for the job's change.
@@ -192,12 +229,13 @@ export fun parseMandate(line: str) > Mandate? {
         ends = std\toInt(doc["ends"] ?? 0),
         tolerance = doc["tolerance"] ?? "",
         rows = ids,
+        budget = std\toInt(doc["budget"] ?? branchstack\reviewBudget),
     };
 }
 
 // encodeMandate is m as one mandate line, without its newline.
 export fun encodeMandate(m: Mandate) > str !> any {
-    return json\stringify({"action": m.action, "at": m.at, "until": m.endClock, "ends": m.ends, "tolerance": m.tolerance, "rows": m.rows});
+    return json\stringify({"action": m.action, "at": m.at, "until": m.endClock, "ends": m.ends, "tolerance": m.tolerance, "rows": m.rows, "budget": m.budget});
 }
 
 // lastMandate is the last mandate line in text, null when it holds none.
@@ -244,6 +282,18 @@ export fun pastCap(m: Mandate?, now: int) > bool {
 // rank is tier's place in tiers, full for a tier magus does not prove.
 export fun rank(tier: str) > int {
     return tiers.indexOf(tier) ?? tiers.len() - 1;
+}
+
+// decideBudget holds a settled job whose scoped or full lines pass the
+// mandate's budget, naming the split a person may run. It never splits.
+fun decideBudget(id: str, m: Mandate, row: Row, got: Assessed) > GuardVerdict {
+    if (got.lines >= 0 and got.lines <= m.budget) {
+        return magus\guard.allow();
+    }
+    final split = "magus buzz hack/dev/split-into-branches.buzz -- --by symbols --base {row.checkpoint} --budget {m.budget}";
+    final counted = if (got.lines < 0) "its scoped and full lines could not be counted" else "{got.lines} lines in scoped or full paths, above the mandate's budget of {m.budget}";
+    return deny("{id} is held for review: settled, with {counted}; fork the next row\n"
+        + "ADR 0019 section 4. To split it, run in {row.checkoutRoot}: `{split}`. Evidence:\n" + got.evidence.join("\n"));
 }
 
 // settled reports whether a job is done with no call left for the person: `job wait`
@@ -506,7 +556,7 @@ fun decideJob(p: helpers\Program, verb: [str], body: str, m: Mandate, jobs: [Row
 export fun decideHold(id: str, m: Mandate, jobs: [Row], assess: fun (id: str) > Assessed) > GuardVerdict {
     if (byId(jobs, id: id) -> row) {
         if (settled(row)) {
-            return magus\guard.allow();
+            return decideBudget(id, m: m, row: row, got: assess(id));
         }
     }
     final got = assess(id);
@@ -726,8 +776,10 @@ final store = [
     Row{ id = "landing", state = magus\JobState.declared, created = 500 },
     Row{ id = "late", state = magus\JobState.pass, created = 2000, unresolvedRisks = ["picked a name"] },
 ];
-final fullTier = fun (id: str) > Assessed => Assessed{ tier = "full", evidence = ["x.go: full (unproven)"] };
-final mechanicalTier = fun (id: str) > Assessed => Assessed{ tier = "mechanical" };
+final fullTier = fun (id: str) > Assessed => Assessed{ tier = "full", evidence = ["x.go: full (unproven)"], lines = 120 };
+final mechanicalTier = fun (id: str) > Assessed => Assessed{ tier = "mechanical", lines = 0 };
+final largeTier = fun (id: str) > Assessed => Assessed{ tier = "full", evidence = ["x.go: full (unproven), 900 lines"], lines = 900 };
+final uncountedTier = fun (id: str) > Assessed => Assessed{ tier = "full", evidence = ["x.go: full (unproven)"] };
 
 fun magusLine(args: [str]) > [helpers\Program] {
     return helpers\request([["magus"] + args]);
@@ -795,6 +847,25 @@ test "an unsettled job above the tolerance is held for review and one at or belo
     std\assert(held.reason.indexOf("x.go: full (unproven)") != null, message: "carries the evidence");
 }
 
+test "a settled job over the budget is held and names the split, one within it is integrated" {
+    std\assert(decideHold("go-indexer", m: issued, jobs: store, assess: fullTier).decision == magus\GuardDecision.allow, message: "120 lines is within 400");
+    final held = decideHold("go-indexer", m: issued, jobs: store, assess: largeTier);
+    std\assert(held.decision == magus\GuardDecision.deny, message: "900 lines is past 400");
+    std\assert(held.reason.indexOf("900 lines in scoped or full paths, above the mandate's budget of 400") != null, message: held.reason);
+    std\assert(held.reason.indexOf("split-into-branches.buzz -- --by symbols") != null, message: "names the split a person runs");
+    final tight = Mandate{ action = "issue", at = 1000, endClock = "07:30", ends = 5000, tolerance = "mechanical", rows = ["go-indexer"], budget = 100 };
+    std\assert(decideHold("go-indexer", m: tight, jobs: store, assess: fullTier).decision == magus\GuardDecision.deny, message: "the mandate's own budget decides");
+    final unknown = decideHold("go-indexer", m: issued, jobs: store, assess: uncountedTier);
+    std\assert(unknown.decision == magus\GuardDecision.deny and unknown.reason.indexOf("could not be counted") != null, message: "an uncounted job is never taken as small");
+}
+
+test "a mandate line without a budget reads as the review budget, and one with it round-trips" {
+    final old = parseMandate(`{"action":"issue","at":1,"until":"07:30","ends":2,"tolerance":"mechanical","rows":["a"]}`);
+    std\assert(old!.budget == branchstack\reviewBudget, message: "older lines carry no budget");
+    final kept = parseMandate(encodeMandate(Mandate{ action = "issue", at = 1, tolerance = "mechanical", rows = ["a"], budget = 250 }) catch "");
+    std\assert(kept!.budget == 250, message: "the budget survives its line");
+}
+
 test "a job's tier is measured in its checkout from its checkpoint, and anything unmeasured is full" {
     final measured = [Row{ id = "late", state = magus\JobState.pass, checkpoint = "abc", checkoutRoot = "/w/late" }, Row{ id = "bare", state = magus\JobState.pass }];
     final asked = mut [<str>];
@@ -802,15 +873,19 @@ test "a job's tier is measured in its checkout from its checkpoint, and anything
         asked.append("{row.checkoutRoot}@{row.checkpoint}");
         return TierReport{ tier = magus\Tier.mechanical, evidence = [TierEvidence{ path = "x.go", tier = magus\Tier.mechanical, class = "comment", why = "comments only" }] };
     };
-    final got = assess("late", jobs: measured, measure: mechanical);
+    final none = fun (row: Row) > {str: int} !> any {
+        return {"x.go": 7};
+    };
+    final got = assess("late", jobs: measured, measure: mechanical, count: none);
     std\assert(got.tier == "mechanical" and asked.join(",") == "/w/late@abc", message: "measured in the job's checkout");
     std\assert(got.evidence.join("\n") == "x.go: mechanical (comment: comments only)", message: "evidence as affected ci prints it");
-    std\assert(assess("bare", jobs: measured, measure: mechanical).tier == "full", message: "no checkout recorded");
-    std\assert(assess("gone", jobs: measured, measure: mechanical).tier == "full", message: "no row");
+    std\assert(got.lines == 0, message: "a mechanical path's lines are not reviewable");
+    std\assert(assess("bare", jobs: measured, measure: mechanical, count: none).tier == "full", message: "no checkout recorded");
+    std\assert(assess("gone", jobs: measured, measure: mechanical, count: none).tier == "full", message: "no row");
     final raises = fun (row: Row) > TierReport !> any {
         throw "no workspace";
     };
-    final raised = assess("late", jobs: measured, measure: raises);
+    final raised = assess("late", jobs: measured, measure: raises, count: none);
     std\assert(raised.tier == "full" and raised.evidence[0].indexOf("no workspace") != null, message: "a raise is full and says why");
 }
 

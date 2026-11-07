@@ -272,7 +272,7 @@ fun mandateVerdict(req: CommandRequest, programs: [helpers\Program]) > GuardVerd
     }
     final store = jobs;
     final assess = fun (id: str) > mandate\Assessed {
-        return mandate\assess(id, jobs: store, measure: mandate\measured);
+        return mandate\assess(id, jobs: store, measure: mandate\measured, count: mandate\counted);
     };
     return mandate\decideCommand(programs, line: req.command, m: issued, jobs: jobs, now: now, assess: assess);
 }

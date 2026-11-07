@@ -194,6 +194,19 @@ func (in diffInput) addressable() bool {
 	return in.kind == inputWorkingTree || in.kind == inputRevRange
 }
 
+// riskBase is the revision this input's files are tiered against: HEAD for the
+// working tree, the base of a range. A patch from stdin or a file has none.
+func (in diffInput) riskBase() string {
+	switch in.kind {
+	case inputWorkingTree:
+		return "HEAD"
+	case inputRevRange:
+		return in.base
+	default:
+		return ""
+	}
+}
+
 // revRangeFromFlag resolves --rev, which is written base...head the way git and the branch-overlap
 // reader already spell a symmetric difference.
 //
@@ -440,11 +453,11 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 	content := readReviewedContent(ctx, m, src)
 	if tui {
 		return runDiffTUI(ctx, m, content, diffTUIRequest{
-			patch: patch, base: base, paths: paths, label: src.label,
+			patch: patch, base: base, riskBase: src.riskBase(), paths: paths, label: src.label,
 			showGenerated: rf.Generated, unread: rf.Unread, thread: rf.Thread,
 		})
 	}
-	gates.Patch = patch
+	gates.Patch, gates.RiskBase = patch, src.riskBase()
 	rev, err := annotateDiff(ctx, m, content, paths, base, rf.Baseline, gates)
 	if err != nil {
 		return err
@@ -869,7 +882,9 @@ func pathLinker(root string) func(string) string {
 // diffTUIRequest is what one viewer session opens on.
 type diffTUIRequest struct {
 	patch, base string
-	paths       []string
+	// riskBase is what the files are tiered against; see diffInput.riskBase.
+	riskBase string
+	paths    []string
 	// label names the changeset in a sentence, as diffInput.label does.
 	label         string
 	showGenerated bool
@@ -912,7 +927,7 @@ func keepFilteredHunks(rev types.Diff, parsed []changeset.FileHunks) []changeset
 // look at. Reading a diff is not a report you print once, it is a place you are IN.
 func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, req diffTUIRequest) error {
 	patch := req.patch
-	rev, sess, sync, err := attachDiffReview(ctx, m, content, patch, req.base, req.paths)
+	rev, sess, sync, err := attachDiffReview(ctx, m, content, patch, req.base, req.riskBase, req.paths)
 	if err != nil {
 		return err
 	}
@@ -1003,12 +1018,12 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, re
 // already on it, so the terminal joining anywhere else would be a fourth opinion wearing the
 // same name. Without one there is nobody to pair with, so the changeset is computed here and
 // progress goes straight into the file the server's own store would have written.
-func attachDiffReview(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base string, paths []string) (types.Diff, *types.DiffReview, diffSync, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
+func attachDiffReview(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base, riskBase string, paths []string) (types.Diff, *types.DiffReview, diffSync, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	asOf := changeset.PatchDigest(patch)
 	if b := dialDiffBridge(ctx, paths, asOf); b != nil {
 		return b.session.Diff, b.session, b, nil
 	}
-	rev, err := annotateDiff(ctx, m, content, paths, base, "", types.DiffOptions{Patch: patch})
+	rev, err := annotateDiff(ctx, m, content, paths, base, "", types.DiffOptions{Patch: patch, RiskBase: riskBase})
 	if err != nil {
 		return types.Diff{}, nil, nil, err
 	}

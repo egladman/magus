@@ -25,6 +25,21 @@ const (
 	RiskFull Tier = "full"
 )
 
+// Rank orders tiers lowest first, trivial at 0. An empty or unknown tier ranks
+// as full: a tier nobody proved bounds nothing.
+func (t Tier) Rank() int {
+	switch t {
+	case RiskTrivial:
+		return 0
+	case RiskMechanical:
+		return 1
+	case RiskScoped:
+		return 2
+	default:
+		return 3
+	}
+}
+
 // TierEvidence is one reason behind a TierReport. Path names a changed file,
 // its class and the tier it earned; without a Path, Project and Target name
 // the gate step the reason is about.
