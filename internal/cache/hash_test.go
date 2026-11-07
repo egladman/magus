@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+
 	"github.com/egladman/magus/types"
 )
 
