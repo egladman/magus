@@ -42,20 +42,18 @@ The first row is a live status line: a spinner, how many planned targets have
 finished with a bar to show it, how many pool slots are working, how many
 targets are queued, how many passed and failed, and how long the run has been
 going. A clause with nothing to say is left out. The spinner turns while
-anything is in flight, and gives way to `✓` or `✗` when nothing is. The row
-repaints in place rather than printing again, so it costs nothing to watch and
-never fills the transcript.
+anything is in flight, and gives way to the word `ok` or `FAIL` when nothing
+is. A failing project's row starts with `FAIL` too, so the status reads without
+color and copies as a word. The row repaints in place rather than printing
+again, so it costs nothing to watch and never fills the transcript.
 
-The spinner, the bar and the marks are multi-byte characters, so a terminal
-whose locale is not UTF-8 renders them as mojibake. That is a deliberate trade
-rather than an oversight: the band is only drawn when there is an interactive
-terminal to draw it on, and the environments that still run non-UTF-8 locales
-(CI, cron, minimal containers, `LANG=C` scripts) are the ones where output is
-piped and no band is drawn at all. Choosing per locale would also make a
-committed screenshot a function of whichever shell recorded it.
-
-So magus draws the same characters everywhere and reports the locale instead of
-silently changing what it draws: if yours is not UTF-8, `magus doctor` says so.
+The spinner is the `log.loader` config key: any glyph, rotation or strip loader
+from [termkit](../reference/termkit.md), `glyph/dots` by default. A terminal
+whose locale is not UTF-8 gets `glyph/line`, which is ASCII, and `magus doctor`
+says so. The tree branches and the bar stay multi-byte, which is a deliberate
+trade: the environments that still run non-UTF-8 locales (CI, cron, minimal
+containers, `LANG=C` scripts) are the ones where output is piped and no band is
+drawn at all. A committed screenshot draws Unicode whatever shell recorded it.
 
 ### What a target is waiting on
 
