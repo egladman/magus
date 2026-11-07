@@ -710,15 +710,15 @@ Pieces the prototype put in the wrong layer:
 
 | Item | State |
 | --- | --- |
-| Named entries in the user tier; repository tier refused | built (MGS1055, MGS1056) |
-| Links made, retargeted and removed by every load, in both trees | built (internal/ward/workspaces.go; MGS1054, MGS1057, MGS1058) |
-| Reads through a link keyed by link-relative name; cache independent of the root | built (internal/cache/hash.go) |
-| Imports through a link | built (a plain path import; `spells.IsRemoteImport` takes a dot-led segment as local) |
-| A target reaching a connection that is absent refuses | built (MGS1059, for a read pattern and for an import) |
-| Read-only sandbox entry per connected root | built |
-| `describe workspace` lists every entry | built (name, path, link; revision and freshness wait for phase 3) |
-| golangci composition in the Go spell | built (spells/golang/golangci.buzz) |
-| `--global` over named entries; the skip and the basename merge refused | built; `--global` itself goes in phase 3 |
+| Named entries in the user tier; repository tier refused | done (MGS1055, MGS1056) |
+| Links made, retargeted and removed by every load, in both trees | done (internal/ward/workspaces.go; MGS1054, MGS1057, MGS1058) |
+| Reads through a link keyed by link-relative name; cache independent of the root | done (internal/cache/hash.go) |
+| Imports through a link | done (a plain path import; `spells.IsRemoteImport` takes a dot-led segment as local) |
+| A target reaching a connection that is absent refuses | done (MGS1059, for a read pattern and for an import) |
+| Read-only sandbox entry per connected root | done |
+| `describe workspace` lists every entry | done (name, path, link; revision and freshness wait for phase 3) |
+| golangci composition in the Go spell | done (spells/golang/golangci.buzz) |
+| `--global` over named entries; the skip and the basename merge refused | done (`--global` itself goes in phase 3) |
 | Stacked graph view, labels, freshness, weight; `--global` deleted | proposed |
 | Symbol store set and moniker joins | proposed |
 | affected across workspaces | proposed |
