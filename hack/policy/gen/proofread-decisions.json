@@ -48,6 +48,7 @@
     "leak": "deny",
     "list-marks": "advise",
     "list-parallel": "advise",
+    "local-path": "deny",
     "nit-label": "advise",
     "no-body": "deny",
     "no-reason": "advise",

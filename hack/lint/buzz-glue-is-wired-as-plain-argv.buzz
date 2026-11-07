@@ -23,6 +23,14 @@ export final HOSTS = {
     "codex": "docs/guides/integrations/agents/codex-hooks.json",
 };
 
+// FORMS are the glue commands each host's spell renders. Claude Code
+// picks the session checkout's ./magus before PATH's, and the glue then
+// judges with the event cwd's.
+final FORMS = {
+    "claude-code": "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s <file> [-- flags]",
+    "codex": "magus buzz -C . -s <file> [-- flags]",
+};
+
 export fun reads() > [str] {
     return support\sorted(HOSTS.values());
 }
@@ -74,7 +82,7 @@ export fun check(files: [Path]) > [Finding] !> any {
                     final name = words[0].sub(0, len: eq!);
                     found.append(Finding{ path = p, line = support\findLine(raw, needle: words[0]),
                         message = "wires the Buzz glue on {event} \"{matcher}\" behind a {name}= prefix",
-                        fix = "A Buzz hook command is a plain argv: {host} runs magus buzz [-C <root>] -s <file> [-- flags].\n"
+                        fix = "A Buzz hook command is a plain argv: {host} runs {FORMS[host]!}.\n"
                             + "The glue reads the raw-event question off the event itself and takes its\n"
                             + "flags from the argv after --, so there is nothing left for a variable to say." });
                 }
@@ -106,6 +114,15 @@ test "a working directory before the script is not a knob on the glue" {
     assert\equal(check(configs(rooted)).len(), want: 0, message: "-C");
     final knobbed = "MAGUS_GUARD_ADVISE=1 magus buzz -C \\\"$CLAUDE_PROJECT_DIR\\\" -s docs/guides/integrations/agents/magus-command.buzz";
     assert\equal(check(configs(knobbed)).len(), want: 1, message: "a knob in front of it is still reported");
+}
+
+test "the shipped checkout-first form passes, and a knob on its glue segment does not" {
+    final head = "m=\\\"$CLAUDE_PROJECT_DIR\\\"/magus; [ -x \\\"$m\\\" ] || m=magus; ";
+    final glue = "\\\"$m\\\" buzz -C \\\"$CLAUDE_PROJECT_DIR\\\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code";
+    assert\equal(check(configs(head + glue)).len(), want: 0, message: "the binary choice runs before the glue segment");
+    final got = check(configs(head + "MAGUS_GUARD_ADVISE=1 " + glue));
+    assert\equal(got.len(), want: 1, message: "a knob after the binary choice");
+    assert\isTrue(got[0].fix.indexOf("[ -x \"$m\" ] || m=magus") != null, message: got[0].fix);
 }
 
 test "a prefix on the Buzz glue is reported at its line" {

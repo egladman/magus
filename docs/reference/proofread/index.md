@@ -102,6 +102,7 @@ Each rule also has a dimension, the cost its findings name to the reader:
 | [attribution](attribution.md) | PRF5005 | conventions | off (house) | credit to a tool or an agent, or an account of how the work was produced                                     |
 | [banned-word](banned-word.md) | PRF5006 | conventions | off (house) | a word this repository bans, in a stylesheet comment                                                         |
 | [date-format](date-format.md) | PRF5007 | conventions | off         | dates in more than one style in one text: 2026-10-13, Oct 2026, October 2026, 10/13/2026, or Sep beside Sept |
+| [local-path](local-path.md)   | PRF5008 | conventions | off (house) | a path only the author's machine holds: a home directory, `$HOME`, a temp directory or a drive letter        |
 
 ## Doc comments
 

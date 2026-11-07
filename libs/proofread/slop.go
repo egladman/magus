@@ -47,6 +47,9 @@ const (
 	// RuleASCII reports a curly quote, an ellipsis character or an emoji in
 	// prose.
 	RuleASCII Rule = "ascii"
+	// RuleLocalPath reports a path that only resolves on the author's machine,
+	// such as one under a home directory, in text a repository publishes.
+	RuleLocalPath Rule = "local-path"
 	// RuleHeadingCase reports a heading whose every word after the first is
 	// capitalized.
 	RuleHeadingCase Rule = "heading-case"
@@ -62,6 +65,8 @@ var (
 	// skill's runbook are short imperatives by rule (step-verb, terse-sentence),
 	// so a run of short sentences there is the form, not a drumbeat.
 	prosePages = []Kind{KindReference, KindPrinciple, KindChangeDescription, KindIssue, KindReleaseNotes}
+	// published are the kinds a repository posts for readers on other machines.
+	published = slices.Concat([]Kind{KindChangeDescription}, changeText, reviewText)
 	// pageKinds are the kinds that hold headings.
 	pageKinds = []Kind{KindReference, KindPrinciple, KindGuide, KindAgentBrief, KindIssue, KindReleaseNotes}
 )
@@ -96,6 +101,7 @@ var slopChecks = []check{
 	{rule: RuleStaccato, on: prosePages, graded: true, judge: ownWords(staccato)},
 	{rule: RuleDash, on: agentWords, house: true, judge: dash},
 	{rule: RuleASCII, on: agentWords, house: true, judge: ascii},
+	{rule: RuleLocalPath, on: published, house: true, judge: localPath},
 	{rule: RuleHeadingCase, on: pageKinds, graded: true, judge: headingCase},
 }
 
@@ -580,6 +586,35 @@ func dash(in input) []Finding {
 // quotes, the ellipsis, and the emoji blocks. Arrows and box drawing have no
 // plain spelling and stay legal.
 var asciiMarks = regexp.MustCompile(`[‘’“”…\x{1F300}-\x{1FAFF}\x{2705}\x{274C}\x{2728}\x{2B50}]`)
+
+var (
+	// localPaths are a path after a word boundary that starts at a home
+	// directory, $HOME, an absolute root or a drive letter.
+	localPaths = regexp.MustCompile("(?:^|[\\s`'\"(=])((?:~[\\w.-]*|\\$\\{?HOME\\}?)/[^\\s`'\"()<>]+" +
+		"|/[\\w.-]+/[^\\s`'\"()<>]+|[A-Za-z]:\\\\[^\\s`'\"()<>]+)")
+	// urls are left out first, so a URL's path is never one of localPaths.
+	urls = regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.-]*://\S+`)
+)
+
+// localPath reports each path in the written source that resolves only on
+// the author's machine. Link targets after `](` and /dev/null pass.
+func localPath(in input) []Finding {
+	var out []Finding
+	for i, line := range in.source {
+		line = urls.ReplaceAllStringFunc(line, func(u string) string { return strings.Repeat(" ", len(u)) })
+		for _, at := range localPaths.FindAllStringSubmatchIndex(line, -1) {
+			m := strings.TrimRight(line[at[2]:at[3]], ".,;:!?]")
+			if m == "/dev/null" || strings.HasSuffix(line[:at[2]], "](") {
+				continue
+			}
+			out = append(out, Finding{
+				Message: fmt.Sprintf("Write '%s' as a path from the repository root: it resolves only on the author's machine.", m),
+				Match:   m, Line: i + 1,
+			})
+		}
+	}
+	return out
+}
 
 func ascii(in input) []Finding {
 	var out []Finding
