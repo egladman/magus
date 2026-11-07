@@ -96,6 +96,24 @@ func (s *testSelectionSuite) TestExplicitArgsWrapperIsUnknown() {
 	selection := tempStore(s.T(), s.T().TempDir()).InWorkspace(ws).testSelection()
 	s.False(scopedRun(check, types.JobAttempt{ExtraArgs: []string{"-run", "Beta"}}, selection))
 }
+func (s *testSelectionSuite) TestForwardingTargetWithNeedsReadsDeclaredDialect() {
+	ws := goCheckWorkspace(".")
+	p := ws.Projects[0]
+	p.MagusfileTargets = []string{"go-test"}
+	p.DispatchOnlyTargets = nil
+	p.ForwardingTargets = []string{"go-test"}
+	p.TargetSpellOps = map[string][]types.TargetSpellUse{"go-test": {{Spell: "go", Ops: []string{"go-test"}}}}
+	p.TargetChains = map[string][]types.ChainStep{"go-test": {{Target: "build"}}}
+	dialect, known := resolvedTestSelection(ws, types.LeaseCheck{Target: "go-test", Project: "."})
+	s.True(known)
+	s.Equal("go", dialect)
+	root := testRoot(s.T()).Root()
+	store := tempStore(s.T(), root).InWorkspace(ws)
+	s.Empty(narrowedTestProblems(store, types.Job{ID: "scoped", WritePaths: []string{"pkg/a.go"},
+		Check: &types.LeaseCheck{Target: "go-test", Project: ".", Args: []string{"./pkg", "-run", "Alpha"}}}), "scoped to the written package")
+	s.Len(narrowedTestProblems(store, types.Job{ID: "unscoped", WritePaths: []string{"pkg/a.go"},
+		Check: &types.LeaseCheck{Target: "go-test", Project: ".", Args: []string{"-run", "Alpha"}}}), 1, "-run alone still leaves tests out")
+}
 func (s *testSelectionSuite) TestNeedsCompositionDoesNotInheritSelector() {
 	ws := goCheckWorkspace(".")
 	p := ws.Projects[0]

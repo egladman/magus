@@ -594,6 +594,29 @@ export fun empty(ctx: magus\Context, args: [str]) > void {}
 	assert.Equal(t, want, got)
 }
 
+// TestForwardsArgs pins which bodies pass `--` args to their spell ops.
+// ctx.needs clears them only for the dependencies it runs.
+func TestForwardsArgs(t *testing.T) {
+	g := Extract(`import "magus";
+import "magus/spell/go";
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }
+export fun dispatch(ctx: magus\Context, args: [str]) > void { go["go-test"](ctx); }
+export fun needsFirst(ctx: magus\Context, args: [str]) > void { ctx.needs(build); go["go-test"](ctx); }
+export fun needsOnly(ctx: magus\Context, args: [str]) > void { ctx.needs(build); }
+export fun otherCtx(c: magus\Context, args: [str]) > void { ctx.needs(build); go["go-test"](c); }
+export fun withEnv(ctx: magus\Context, args: [str]) > void { go["go-test"](ctx.withEnv({"A": "1"})); }
+`)
+	got := map[string]bool{}
+	for _, n := range g {
+		got[n.Name] = n.ForwardsArgs
+	}
+	assert.True(t, got["dispatch"], "a dispatch-only body")
+	assert.True(t, got["needs-first"], "ctx.needs beside the dispatch")
+	assert.False(t, got["needs-only"], "no spell op to reach")
+	assert.False(t, got["other-ctx"], "needs on a name that is not the target's context")
+	assert.False(t, got["with-env"], "a derived context")
+}
+
 // TestNameNormalization pins the fix for the node-vs-edge name mismatch: node
 // names and dependency identifiers must both be normalized the way the run path
 // registers targets (kebab-case), so a camelCase function and a hyphenated
