@@ -32,7 +32,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/difftui"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
@@ -143,7 +143,7 @@ func diffCommand(ctx context.Context, root string, args []string) error {
 	}
 	term := diffTUITerm{
 		Reads:  isInteractiveTTY(),
-		Paints: tty.IsTerminalWriter(os.Stdout, tty.SystemProbe),
+		Paints: termkit.IsTerminalWriter(os.Stdout, termkit.SystemProbe),
 	}
 
 	m, err := loadMagus(ctx, root)
@@ -854,7 +854,7 @@ func watchDiff(ctx context.Context, m *magus.Magus, render func() error) error {
 // the local terminal would resolve against the wrong filesystem. Keeping that decision in one
 // place is what preserves the property that piped output carries no escape sequences at all.
 func pathLinker(root string) func(string) string {
-	if !tty.WantsHyperlinks(os.Stdout, tty.SystemProbe) {
+	if !termkit.WantsHyperlinks(os.Stdout, termkit.SystemProbe) {
 		return func(p string) string { return p }
 	}
 	return func(p string) string {
@@ -862,7 +862,7 @@ func pathLinker(root string) func(string) string {
 		if !filepath.IsAbs(abs) {
 			abs = filepath.Join(root, p)
 		}
-		return tty.Hyperlink(p, (&url.URL{Scheme: "file", Path: abs}).String())
+		return termkit.Hyperlink(p, (&url.URL{Scheme: "file", Path: abs}).String())
 	}
 }
 
@@ -964,7 +964,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, re
 	return difftui.Run(ctx, difftui.Options{
 		In:    os.Stdin,
 		Out:   os.Stdout,
-		Probe: tty.SystemProbe,
+		Probe: termkit.SystemProbe,
 		Input: difftui.Input{
 			Files:       files,
 			Unranked:    !rev.Ranked(),
@@ -1475,11 +1475,11 @@ func diffUsage(w io.Writer) {
 	fmt.Fprintln(w, "       magus diff --thread <id> [--rev <base>...<head>]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Read the working tree's uncommitted changes, ordered by what they can break.")
-	tty.Prose(w, tty.SystemProbe,
+	termkit.Prose(w, termkit.SystemProbe,
 		"The uncommitted tree is the default subject;",
 		"--rev reviews a committed range and --patch reviews a patch somebody handed you.")
 	fmt.Fprintln(w, "")
-	tty.Prose(w, tty.SystemProbe,
+	termkit.Prose(w, termkit.SystemProbe,
 		"Generated files - declared target outputs - are folded away:",
 		"reading one is reading a machine's restatement of a change made elsewhere, so the source edit is what to read.")
 	fmt.Fprintln(w, "")
@@ -1487,69 +1487,69 @@ func diffUsage(w io.Writer) {
 	// API and coverage as "the evidence behind its rank" has a reader who sees a hot file
 	// sitting eighth conclude the ranking weighed churn and dismissed it. Printing a number
 	// beside a rank it did not earn teaches the wrong model.
-	tty.Prose(w, tty.SystemProbe,
+	termkit.Prose(w, termkit.SystemProbe,
 		"The order is: declared outputs last, then the widest reach first - how many files reference the most-referenced symbol the file changed.",
 		"Reach needs a symbol index; without one there is no ranking key at all, and diff says so at the top and falls back to path order rather than implying a ranking.",
 		fmt.Sprintf("Build the index with `%s`.", hint.GraphBuild.String()))
 	fmt.Fprintln(w, "")
-	tty.Prose(w, tty.SystemProbe,
+	termkit.Prose(w, termkit.SystemProbe,
 		"Below the files the report prints the reading order of the hunks: a definition before its uses, an interface before its implementations, code before its tests,",
 		"each with the sentence that placed it and a count proving every hunk is placed once.",
 		"With no current symbol index there is no order, and a note names the rebuild.")
 	fmt.Fprintln(w, "")
-	tty.Prose(w, tty.SystemProbe,
+	termkit.Prose(w, termkit.SystemProbe,
 		"Exported API, coverage, churn, and the agent trail are CONTEXT printed beside each file.",
 		"None of them is a sort key.")
 	fmt.Fprintln(w, "")
-	tty.Prose(w, tty.SystemProbe,
+	termkit.Prose(w, termkit.SystemProbe,
 		"--ack records that you have read files, at the content they hold now, so --impact can tell you what changed after you read it.",
 		"Name the paths you read to record just those - read them in whatever editor or pager you already use - or pass none to cover the whole changeset.",
 		"Stepping a file through in the viewer records it too.",
 		"Editing a file afterwards voids its receipt.")
 	fmt.Fprintln(w, "")
 	// State the cutoff rather than leaving a missing rank ambiguous.
-	tty.Prose(w, tty.SystemProbe,
+	termkit.Prose(w, termkit.SystemProbe,
 		fmt.Sprintf("A hotspot rank is shown only inside the workspace's top %d.", types.NotableRankCutoff),
 		"A file that reports a commit count and no rank was measured and sits outside that cutoff;",
 		"a file with no history line at all is one magus has never seen change.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
-	tty.ProseItem(w, tty.SystemProbe, "  --generated   ", "include the folded declared outputs")
-	tty.ProseItem(w, tty.SystemProbe, "  --[no-]tui    ",
+	termkit.ProseItem(w, termkit.SystemProbe, "  --generated   ", "include the folded declared outputs")
+	termkit.ProseItem(w, termkit.SystemProbe, "  --[no-]tui    ",
 		"open the viewer (default: on); --no-tui prints the report instead.",
 		"At a terminal the viewer opens joined to the session the console and an agent share:",
 		"] and [ walk hunks, v marks one read, q leaves.",
 		"Anywhere it cannot draw it stands aside on its own, so a script needs no flag.")
-	tty.ProseItem(w, tty.SystemProbe, "  --impact      ",
+	termkit.ProseItem(w, termkit.SystemProbe, "  --impact      ",
 		"append the blast radius of landing this: which projects rebuild, who owns them,",
 		"an estimate from recorded run times, what the advisors say, which notes anchor what you changed,",
 		"and what the authors asked magus while writing it.",
 		"It gates nothing and changes no exit code.")
-	tty.ProseItem(w, tty.SystemProbe, "  --ack         ",
+	termkit.ProseItem(w, termkit.SystemProbe, "  --ack         ",
 		"record that you have read the named changed files, or all of them when you name none.",
 		"Needs a terminal.")
-	tty.ProseItem(w, tty.SystemProbe, "  --reason      ", "an optional note kept with an --ack")
-	tty.ProseItem(w, tty.SystemProbe, "  --watch       ", "re-read and re-render whenever the working tree changes")
-	tty.ProseItem(w, tty.SystemProbe, "  --unread      ",
+	termkit.ProseItem(w, termkit.SystemProbe, "  --reason      ", "an optional note kept with an --ack")
+	termkit.ProseItem(w, termkit.SystemProbe, "  --watch       ", "re-read and re-render whenever the working tree changes")
+	termkit.ProseItem(w, termkit.SystemProbe, "  --unread      ",
 		"narrow the report to the hunks no read mark covers, under every -o; -o name prints one path:start-end per hunk.",
 		"It always exits 0. Where the marks cannot be read it says the read state is unknown and calls no hunk unread.")
-	tty.ProseItem(w, tty.SystemProbe, "  --rev         ",
+	termkit.ProseItem(w, termkit.SystemProbe, "  --rev         ",
 		"review a committed range instead of the working tree, as base...head:",
 		"a colleague's branch, or an agent's finished work")
-	tty.ProseItem(w, tty.SystemProbe, "  --patch       ", "review a patch file instead of the working tree; - reads stdin")
-	tty.ProseItem(w, tty.SystemProbe, "  --thread      ",
+	termkit.ProseItem(w, termkit.SystemProbe, "  --patch       ", "review a patch file instead of the working tree; - reads stdin")
+	termkit.ProseItem(w, termkit.SystemProbe, "  --thread      ",
 		"narrow the review to one pull request thread, named by its thread id or any of its comments' ids;",
 		"the report lists each thread's id beside its hunk, and -o json under each file's threads.",
 		"The viewer opens on its hunk. Printed, it is the conversation oldest first, the hunk,",
 		"and what the change there reaches: callers, who it is public to, coverage, conformance and notes.")
-	tty.ProseItem(w, tty.SystemProbe, "  --baseline    ",
+	termkit.ProseItem(w, termkit.SystemProbe, "  --baseline    ",
 		fmt.Sprintf("a `%s` of the base, which adds what each changed symbol did to the API", hint.GraphExport.With("--symbols", "-o", "json")),
 		"and the smallest semver bump that proves. Signatures are compared as the indexer rendered them,",
 		"so the base must come from the same indexers this tree is indexed with.")
-	tty.ProseItem(w, tty.SystemProbe, "  --conformance-min-cohort ",
+	termkit.ProseItem(w, termkit.SystemProbe, "  --conformance-min-cohort ",
 		"how many declarations a conformance norm needs before a changed symbol is compared against it;",
 		"defaults to knowledge.conformance.gates.min_cohort")
-	tty.ProseItem(w, tty.SystemProbe, "  --conformance-min-share  ",
+	termkit.ProseItem(w, termkit.SystemProbe, "  --conformance-min-share  ",
 		"the share of a norm's declarations, above 0 and at most 1, that must agree;",
 		"defaults to knowledge.conformance.gates.min_share.",
 		"Both apply to the printed report, not the viewer.")
@@ -1683,7 +1683,7 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 	// What to do next, and where to see the same changeset. Both are for a person: the console
 	// link carries no token (see printJobWatchHint), so the terminal check is an invitation
 	// rather than a secrecy measure, and it keeps `magus diff > file` as data.
-	if tty.IsTerminalWriter(os.Stdout, tty.SystemProbe) {
+	if termkit.IsTerminalWriter(os.Stdout, termkit.SystemProbe) {
 		for _, line := range diffNextStepLines(len(primary)) {
 			fmt.Println(line)
 		}

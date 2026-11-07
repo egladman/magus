@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/interactive/screen"
+	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/egladman/magus/internal/proc/spawn"
 )
 

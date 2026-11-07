@@ -17,7 +17,8 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/pick"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
@@ -81,7 +82,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 
 	chosen, err := pickProject(ctx, root, all, filters)
 	if err != nil {
-		if errors.Is(err, tty.ErrAborted) {
+		if errors.Is(err, pick.ErrAborted) {
 			return nil
 		}
 		return err
@@ -89,7 +90,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 
 	targetName, err := pickTarget(ctx, interactive.LastTarget(chosen.Dir))
 	if err != nil {
-		if errors.Is(err, tty.ErrAborted) {
+		if errors.Is(err, pick.ErrAborted) {
 			return nil
 		}
 		return err
@@ -277,7 +278,7 @@ func pickProject(ctx context.Context, root string, all []*types.Project, filters
 		byPath[p.Path] = p
 	}
 
-	opts := tty.PickOptions{Prompt: "project", InitialFilter: ""}
+	opts := pick.Options{Prompt: "project", InitialFilter: ""}
 	// shown is the list the picker last drew. A live query REPLACES the items,
 	// so the index it returns is into whatever the final keystroke produced,
 	// not into `scored`. Recording it is how the label maps back to a project.
@@ -296,7 +297,7 @@ func pickProject(ctx context.Context, root string, all []*types.Project, filters
 		}
 	}
 
-	idx, err := tty.Pick(ctx, os.Stdin, os.Stderr, tty.SystemProbe, items, opts)
+	idx, err := pick.One(ctx, os.Stdin, os.Stderr, termkit.SystemProbe, items, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +335,7 @@ func pickTarget(ctx context.Context, last string) (string, error) {
 			break
 		}
 	}
-	idx, err := tty.Pick(ctx, os.Stdin, os.Stderr, tty.SystemProbe, xTargets, tty.PickOptions{
+	idx, err := pick.One(ctx, os.Stdin, os.Stderr, termkit.SystemProbe, xTargets, pick.Options{
 		Prompt:  "target",
 		Initial: initial,
 		MaxRows: len(xTargets),
@@ -347,7 +348,7 @@ func pickTarget(ctx context.Context, last string) (string, error) {
 
 // isInteractiveTTY reports whether stdin and stderr are both terminals.
 func isInteractiveTTY() bool {
-	return tty.StdinIsTerminal() && tty.IsTerminalWriter(os.Stderr, tty.SystemProbe)
+	return termkit.StdinIsTerminal() && termkit.IsTerminalWriter(os.Stderr, termkit.SystemProbe)
 }
 
 // outputRefShape matches the refs magus prints. Deliberately a shape test, not a

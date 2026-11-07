@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/screen"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit/screen"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/log/quiet"
 	"github.com/egladman/magus/internal/secret"
@@ -311,7 +311,7 @@ func TestPrettyHandlerPrintsWhyUnderTheMessage(t *testing.T) {
 	t.Setenv("TERM", "xterm-256color")
 	var term ttyBuf
 	require.NoError(t, newTerminalHandler(&term).Handle(context.Background(), rec))
-	assert.Contains(t, term.String(), fmt.Sprintf("       %s\n", tty.Colorize(why, colDim)), "the why is dim on a terminal")
+	assert.Contains(t, term.String(), fmt.Sprintf("       %s\n", termkit.Colorize(why, colDim)), "the why is dim on a terminal")
 
 	var text bytes.Buffer
 	require.NoError(t, slog.NewTextHandler(&text, nil).Handle(context.Background(), rec))
@@ -362,7 +362,7 @@ func TestPrettyHandlerFailureWhyByVerbosity(t *testing.T) {
 	t.Setenv("TERM", "xterm-256color")
 	var term ttyBuf
 	require.NoError(t, newTerminalHandler(&term).Handle(context.Background(), failureWithReason()))
-	assert.Contains(t, term.String(), fmt.Sprintf("       %s\n", tty.Colorize(why, colDim)), "the why is dim on a terminal")
+	assert.Contains(t, term.String(), fmt.Sprintf("       %s\n", termkit.Colorize(why, colDim)), "the why is dim on a terminal")
 }
 
 // A wait note shows from the first beat by default; a quiet display shows it only past a
@@ -585,7 +585,7 @@ func TestPrettyHandlerErrorWritesHeadingToStickyRegion(t *testing.T) {
 
 	out := buf.String()
 	assert.Contains(t, out, "\x1b[1;31m", "heading should use bold-red SGR")
-	assert.Contains(t, out, glyphFail, "the glyph is present")
+	assert.Contains(t, out, wordFail, "the status word is present")
 	assert.Contains(t, out, "build", "the failing target is present, under its project")
 	assert.Contains(t, out, "cause: exit status 2", "cause line stays in scroll region")
 	assert.Contains(t, out, "output: out-42", "output line stays in scroll region")
@@ -1394,9 +1394,9 @@ func TestClickCoordinatesMatchWhereTheBandActuallyDrew(t *testing.T) {
 		// project header rather than on a row naming both.
 		// Matched on the branch too: the transcript above the band also mentions
 		// these targets, and FindRow returns the FIRST match.
-		drawn := s.FindRow(treeEnd + target)
+		drawn := s.FindRow(branch(true) + target)
 		if drawn == 0 {
-			drawn = s.FindRow(treeTee + target)
+			drawn = s.FindRow(branch(false) + target)
 		}
 		require.NotZero(t, drawn, "the failure for %q must be visible somewhere", target)
 
@@ -1416,7 +1416,7 @@ func TestClickCoordinatesMatchWhereTheBandActuallyDrew(t *testing.T) {
 	// A project HEADER names no target, so clicking it must resolve to nothing
 	// rather than to whichever failure happens to sit beneath it. This is the
 	// row the flat-list arithmetic had no concept of.
-	header := s.FindRow(glyphFail + " api")
+	header := s.FindRow(wordFail + statusGap + "api")
 	require.NotZero(t, header)
 	_, ok = h.HitFailure(header)
 	assert.False(t, ok, "a project header is not a failure")

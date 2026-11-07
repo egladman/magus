@@ -6,41 +6,56 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/layout"
+	"github.com/egladman/magus/libs/termkit/progress"
 )
 
 // The band is plain rows with no frame and no padding, so a drag selection
 // copies what the eye reads.
 const (
-	// spinnerEvery is how long one spinner frame shows.
-	spinnerEvery = 80 * time.Millisecond
 	// progressCols is the width of the progress bar.
 	progressCols = 20
-	// maxLabelCols caps the column the metadata aligns to.
-	maxLabelCols = 60
-	// minLabelCols is the narrowest a label is clipped to for metadata.
-	minLabelCols = 8
-	// metaGap separates the longest label from its metadata.
-	metaGap = 2
 
-	glyphFail = "✗"
-	glyphOK   = "✓"
+	// A status is a word in a four-column slot, then two spaces.
+	statusSlot = 4
+	statusGap  = "  "
+	wordFail   = "FAIL"
+	wordOK     = "ok"
 
-	treeTee = "├ "
-	treeEnd = "╰ "
-
-	metaSep = " · "
+	metaSep = layout.Separator
 )
 
-var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+// DefaultLoader is the band's spinner when the config names none.
+const DefaultLoader = "glyph/dots"
 
-// progressEighths are the partial cells of the bar, one eighth to seven.
-var progressEighths = []string{"▏", "▎", "▍", "▌", "▋", "▊", "▉"}
+var defaultLoader = mustLoader(DefaultLoader)
 
-const (
-	barFull  = "█"
-	barTrack = "░"
-)
+func mustLoader(name string) progress.Loader {
+	l, err := progress.Lookup(name)
+	if err != nil {
+		panic(err)
+	}
+	return l
+}
+
+// SetLoader picks the animation the band draws while steps are in flight.
+// Only a loader with a fixed footprint fits the slot before a label.
+func (h *PrettyHandler) SetLoader(l progress.Loader) error {
+	switch l.Kind {
+	case progress.Glyph, progress.Rotation, progress.Strip:
+	default:
+		return fmt.Errorf("the band's loader must be a glyph, rotation or strip loader; %s is a %s loader", l.Name, l.Kind)
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.loader = l
+	// Zero means an injected clock, which cannot move.
+	if h.tickEvery > 0 {
+		h.tickEvery = l.Interval
+	}
+	return nil
+}
 
 // inFlightLocked reports whether anything is running or waiting to. Callers
 // hold h.mu.
@@ -48,63 +63,90 @@ func (h *PrettyHandler) inFlightLocked() bool {
 	return h.board.inFlight() || h.status.running > 0 || h.status.queued > 0
 }
 
-// spinner is the frame for the handler's clock, so a held clock draws the same
-// frame every time.
-func (h *PrettyHandler) spinner() string {
-	if h.status.start.IsZero() {
-		return spinnerFrames[0]
+// activeLoader is the configured loader, or the ASCII one where the terminal
+// cannot draw Unicode.
+func (h *PrettyHandler) activeLoader() progress.Loader {
+	if !termkit.WantsUnicode(h.probe) {
+		return mustLoader(progress.Fallback)
 	}
-	frame := int(h.now().Sub(h.status.start) / spinnerEvery)
-	return spinnerFrames[max(frame, 0)%len(spinnerFrames)]
+	if h.loader.Name == "" {
+		return defaultLoader
+	}
+	return h.loader
 }
 
-// progressBar draws done of total in progressCols cells, in eighths.
-func progressBar(done, total int) (filled, track string) {
-	eighths := min(max(done, 0), total) * progressCols * 8 / total
-	full := eighths / 8
-	filled = strings.Repeat(barFull, full)
-	used := full
-	if part := eighths % 8; part > 0 {
-		filled += progressEighths[part-1]
-		used++
+// spinner is the frame for the handler's clock, padded to the loader's slot so
+// the label after it does not move. A held clock draws the same frame.
+func (h *PrettyHandler) spinner(color bool) []termkit.Span {
+	l := h.activeLoader()
+	var elapsed time.Duration
+	if !h.status.start.IsZero() {
+		elapsed = h.now().Sub(h.status.start)
 	}
-	return filled, strings.Repeat(barTrack, progressCols-used)
+	lines := l.Frame(elapsed)
+	if len(lines) == 0 {
+		return nil
+	}
+	spans := slices.Clone(lines[0].Spans)
+	if !color {
+		for i := range spans {
+			spans[i].Style = ""
+		}
+	}
+	if pad := l.Cols - spansCols(spans); pad > 0 {
+		spans = append(spans, termkit.Span{Text: strings.Repeat(" ", pad)})
+	}
+	return spans
+}
+
+// spinnerText is the spinner without its styles, for a row that colors its
+// own lead.
+func (h *PrettyHandler) spinnerText() string {
+	var b strings.Builder
+	for _, sp := range h.spinner(false) {
+		b.WriteString(sp.Text)
+	}
+	return b.String()
+}
+
+// statusWord is a status in its slot, so the text after it lines up.
+func statusWord(word string, style termkit.SGR) []termkit.Span {
+	return []termkit.Span{
+		{Text: word, Style: style},
+		{Text: strings.Repeat(" ", statusSlot-len(word)) + statusGap},
+	}
 }
 
 // statusRow composes the band's first row. A clause with nothing to say is
 // omitted, so a steady "0 queued" never takes room.
-func (h *PrettyHandler) statusRow(color bool) tty.Line {
-	var bold, dim, red, green tty.SGR
+func (h *PrettyHandler) statusRow(color bool) termkit.Line {
+	var bold, dim, red, green termkit.SGR
 	if color {
-		bold, dim, red, green = tty.SGRBold, tty.SGRDim, tty.SGRRed, tty.SGRGreen
+		bold, dim, red, green = termkit.SGRBold, termkit.SGRDim, termkit.SGRRed, termkit.SGRGreen
 	}
 	s := h.status
-	var spans []tty.Span
+	var spans []termkit.Span
 	switch {
 	case h.inFlightLocked():
-		spans = append(spans, tty.Span{Text: h.spinner(), Style: bold})
+		spans = append(h.spinner(color), termkit.Span{Text: " "})
 	case s.failed > 0:
-		spans = append(spans, tty.Span{Text: glyphFail, Style: red})
+		spans = statusWord(wordFail, red)
 	default:
-		spans = append(spans, tty.Span{Text: glyphOK, Style: green})
+		spans = statusWord(wordOK, green)
 	}
-	spans = append(spans, tty.Span{Text: " "})
+	lead := len(spans)
 
 	first := true
-	clause := func(text string, style tty.SGR) {
+	clause := func(text string, style termkit.SGR) {
 		if !first {
-			spans = append(spans, tty.Span{Text: metaSep, Style: dim})
+			spans = append(spans, termkit.Span{Text: metaSep, Style: dim})
 		}
 		first = false
-		spans = append(spans, tty.Span{Text: text, Style: style})
+		spans = append(spans, termkit.Span{Text: text, Style: style})
 	}
 	if done, total := h.board.progress(); total > 0 {
 		clause(fmt.Sprintf("%d/%d ", done, total), bold)
-		filled, track := progressBar(done, total)
-		spans = append(spans, tty.Span{Text: filled})
-		if track != "" {
-			spans = append(spans, tty.Span{Text: track, Style: dim})
-		}
+		spans = append(spans, progress.Bar(done, total, progressCols, dim).Spans...)
 	}
 	if s.running > 0 && s.capacity > 0 {
 		clause(fmt.Sprintf("%d/%d slots", s.running, s.capacity), bold)
@@ -126,95 +168,79 @@ func (h *PrettyHandler) statusRow(color bool) tty.Line {
 		clause(FormatDuration(h.now().Sub(s.start)), dim)
 	}
 	if first {
-		spans = spans[:1]
+		// Nothing follows the lead, so it must not end in its padding.
+		spans = trimSpans(spans[:lead])
 	}
-	return tty.Line{Spans: spans}
+	return termkit.Line{Spans: spans}
+}
+
+// trimSpans drops trailing blanks, so a row never ends in a space.
+func trimSpans(spans []termkit.Span) []termkit.Span {
+	spans = slices.Clone(spans)
+	for len(spans) > 0 {
+		last := &spans[len(spans)-1]
+		last.Text = strings.TrimRight(last.Text, " ")
+		if last.Text != "" {
+			break
+		}
+		spans = spans[:len(spans)-1]
+	}
+	return spans
 }
 
 // bandRow is one row before its metadata is aligned.
 type bandRow struct {
-	label    []tty.Span
+	label    []termkit.Span
 	meta     string
 	selected bool
 	// failure indexes the drawn failure list, or is -1.
 	failure int
 }
 
-func spansCols(spans []tty.Span) int {
+func spansCols(spans []termkit.Span) int {
 	n := 0
 	for _, sp := range spans {
-		n += tty.Cols(sp.Text)
+		n += layout.Cols(sp.Text)
 	}
 	return n
 }
 
-// clipSpans shortens spans to w columns from the end, marking each cut.
-func clipSpans(spans []tty.Span, w int) []tty.Span {
-	out := slices.Clone(spans)
-	excess := spansCols(out) - w
-	for i := len(out) - 1; i >= 0 && excess > 0; i-- {
-		c := tty.Cols(out[i].Text)
-		out[i].Text = tty.Fit(out[i].Text, max(c-excess, 0))
-		excess -= c - tty.Cols(out[i].Text)
+// alignBlock lines up the metadata of rows; see [layout.Columns].
+func alignBlock(rows []bandRow, width int, selStyle, dim termkit.SGR) []termkit.Line {
+	block := make([]layout.Row, len(rows))
+	for i, r := range rows {
+		block[i] = layout.Row{Label: r.label, Meta: r.meta, Selected: r.selected}
 	}
-	return out
+	return layout.Columns(block, width, dim, selStyle)
 }
 
-// alignBlock starts the metadata of every row in one column after the longest
-// label. The label gives way on a narrow terminal, never the metadata.
-// The gap is mid-row, so no row ends in a space.
-func alignBlock(rows []bandRow, width int, selStyle, dim tty.SGR) []tty.Line {
-	labelW, metaW := 0, 0
-	for _, r := range rows {
-		if r.meta == "" {
-			continue
-		}
-		labelW = max(labelW, spansCols(r.label))
-		metaW = max(metaW, tty.Cols(r.meta))
+// branch is the tree glyph before a child row.
+func branch(last bool) string {
+	if last {
+		return layout.Tree(1, 2, false)
 	}
-	labelW = min(labelW, maxLabelCols)
-	if width > 0 {
-		labelW = min(labelW, max(width-metaGap-metaW, minLabelCols))
-	}
-	lines := make([]tty.Line, 0, len(rows))
-	for _, r := range rows {
-		spans := slices.Clone(r.label)
-		if r.meta != "" {
-			spans = clipSpans(spans, labelW)
-			pad := labelW - spansCols(spans) + metaGap
-			spans = append(spans,
-				tty.Span{Text: strings.Repeat(" ", pad)},
-				tty.Span{Text: r.meta, Style: dim})
-		}
-		if r.selected {
-			for i := range spans {
-				spans[i].Style = selStyle
-			}
-		}
-		lines = append(lines, tty.Line{Spans: spans})
-	}
-	return lines
+	return layout.Tree(0, 2, false)
 }
 
 // band composes this handler's rows: the status row, the wait board, then the
 // failures.
-func (h *PrettyHandler) band() []tty.Line { return h.bandWithin(h.ceilingLocked()) }
+func (h *PrettyHandler) band() []termkit.Line { return h.bandWithin(h.ceilingLocked()) }
 
 // bandWithin composes the band in at most limit rows. The failures keep their
 // own ceiling. The wait board takes what is left.
-func (h *PrettyHandler) bandWithin(limit int) []tty.Line {
+func (h *PrettyHandler) bandWithin(limit int) []termkit.Line {
 	// The selection survives NO_COLOR: reverse video is not a color, and
 	// without it the prompt does not say what a keypress acts on.
 	color := h.WantsColor()
-	var dim tty.SGR
-	selStyle := tty.SGRReverse
+	var dim termkit.SGR
+	selStyle := termkit.SGRReverse
 	if color {
-		dim = tty.SGRDim
-		selStyle += ";" + tty.SGRBoldRed
+		dim = termkit.SGRDim
+		selStyle += ";" + termkit.SGRBoldRed
 	}
 	width := h.lease.Width()
 
-	rows := append(make([]tty.Line, 0, limit), h.statusRow(color))
+	rows := append(make([]termkit.Line, 0, limit), h.statusRow(color))
 	h.rowFailure = append(h.rowFailure[:0], -1)
 
 	// Budgeted before drawing so the "+N more" count matches what fits.
@@ -227,7 +253,7 @@ func (h *PrettyHandler) bandWithin(limit int) []tty.Line {
 	}
 	failLines, failIdx := h.failureBlock(h.failureRows(drawn, color, dim), hidden, width, dim, selStyle)
 	room := min(limit-len(rows)-len(failLines), waitBandRows)
-	waits := waitLines(h.board.tree(h.now()), room, h.spinner(), width, color, dim)
+	waits := waitLines(h.board.tree(h.now()), room, h.spinnerText(), width, color, dim)
 	for range waits {
 		h.rowFailure = append(h.rowFailure, -1)
 	}
@@ -238,34 +264,29 @@ func (h *PrettyHandler) bandWithin(limit int) []tty.Line {
 }
 
 // failureRows is the failure tree before alignment.
-func (h *PrettyHandler) failureRows(drawn []Failure, color bool, dim tty.SGR) []bandRow {
-	var red, weight tty.SGR = "", dim
+func (h *PrettyHandler) failureRows(drawn []Failure, color bool, dim termkit.SGR) []bandRow {
+	var red, weight termkit.SGR = "", dim
 	if color {
-		red, weight = tty.SGRRed, tty.SGRBoldRed
+		red, weight = termkit.SGRRed, termkit.SGRBoldRed
 	}
 	var rows []bandRow
 	prev := ""
 	for i, f := range drawn {
 		if f.Project != prev {
 			prev = f.Project
-			// Once per project: the only mark of a failure without color.
-			rows = append(rows, bandRow{failure: -1, label: []tty.Span{
-				{Text: "  "},
-				{Text: glyphFail, Style: red},
-				{Text: " " + f.Project, Style: dim},
-			}})
+			// Once per project: without color the word marks the failure.
+			label := append([]termkit.Span{{Text: "  "}}, statusWord(wordFail, red)...)
+			label = append(label, termkit.Span{Text: f.Project, Style: dim})
+			rows = append(rows, bandRow{failure: -1, label: label})
 		}
-		branch := treeTee
-		if i == len(drawn)-1 || drawn[i+1].Project != f.Project {
-			branch = treeEnd
-		}
+		last := i == len(drawn)-1 || drawn[i+1].Project != f.Project
 		marker := " "
 		selected := i == h.selected
 		if selected {
-			marker = tty.SelectMark
+			marker = termkit.SelectMark
 		}
-		row := bandRow{failure: i, selected: selected, label: []tty.Span{
-			{Text: fmt.Sprintf("  %s %s", marker, branch), Style: dim},
+		row := bandRow{failure: i, selected: selected, label: []termkit.Span{
+			{Text: fmt.Sprintf("  %s %s", marker, branch(last)), Style: dim},
 			{Text: f.Target, Style: weight},
 		}}
 		if f.Dur > 0 {
@@ -278,7 +299,7 @@ func (h *PrettyHandler) failureRows(drawn []Failure, color bool, dim tty.SGR) []
 
 // failureBlock aligns the failure tree and counts the failures not on screen.
 // The second result is the failure index each line shows.
-func (h *PrettyHandler) failureBlock(rows []bandRow, hidden, width int, dim, selStyle tty.SGR) ([]tty.Line, []int) {
+func (h *PrettyHandler) failureBlock(rows []bandRow, hidden, width int, dim, selStyle termkit.SGR) ([]termkit.Line, []int) {
 	lines := alignBlock(rows, width, selStyle, dim)
 	idx := make([]int, 0, len(rows)+1)
 	for _, r := range rows {
@@ -286,7 +307,7 @@ func (h *PrettyHandler) failureBlock(rows []bandRow, hidden, width int, dim, sel
 	}
 	// The ring holds five. Without this a run that failed fifty never says so.
 	if hidden > 0 {
-		lines = append(lines, tty.Line{
+		lines = append(lines, termkit.Line{
 			Text:  fmt.Sprintf("  +%d more above, in the transcript", hidden),
 			Style: dim,
 		})
@@ -297,16 +318,16 @@ func (h *PrettyHandler) failureBlock(rows []bandRow, hidden, width int, dim, sel
 
 // stackPreview puts the selected failure's output under the tree. Output in
 // focus collapses the tree to the selected failure.
-func (h *PrettyHandler) stackPreview(rows []tty.Line, drawn []Failure, hidden, limit, width int, color bool, dim, selStyle tty.SGR) []tty.Line {
+func (h *PrettyHandler) stackPreview(rows []termkit.Line, drawn []Failure, hidden, limit, width int, color bool, dim, selStyle termkit.SGR) []termkit.Line {
 	sel := h.selected
 	if sel < 0 || sel >= len(drawn) {
 		sel = 0
 	}
-	var lines []tty.Line
+	var lines []termkit.Line
 	var idx []int
 	if h.focus == FocusPreview && len(drawn) > 0 {
 		f := drawn[sel]
-		label := []tty.Span{{Text: fmt.Sprintf("  %s %s %s", tty.SelectMark, f.Project, f.Target)}}
+		label := []termkit.Span{{Text: fmt.Sprintf("  %s %s %s", termkit.SelectMark, f.Project, f.Target)}}
 		meta := fmt.Sprintf("(%d of %d)", sel+1, len(drawn))
 		if f.Dur > 0 {
 			meta = fmt.Sprintf("%s %s", FormatDuration(f.Dur), meta)
@@ -332,52 +353,30 @@ func (h *PrettyHandler) stackPreview(rows []tty.Line, drawn []Failure, hidden, l
 	if len(drawn) > 0 {
 		heading = fmt.Sprintf("output of %s %s, last %d lines", drawn[sel].Project, drawn[sel].Target, len(out))
 	}
-	rows = append(rows, tty.Line{Text: "  " + heading, Style: dim})
+	rows = append(rows, termkit.Line{Text: "  " + heading, Style: dim})
 	h.rowFailure = append(h.rowFailure, -1)
 	for _, l := range out {
 		l = strings.TrimRight(l, " \t")
 		if l == "" {
-			rows = append(rows, tty.Line{})
+			rows = append(rows, termkit.Line{})
 		} else {
-			rows = append(rows, tty.Line{Text: "    " + l, Style: dim})
+			rows = append(rows, termkit.Line{Text: "    " + l, Style: dim})
 		}
 		h.rowFailure = append(h.rowFailure, -1)
 	}
 	return rows
 }
 
-type hintItem struct{ text, key string }
-
 // FailureHint composes the instruction row for a terminal width columns wide.
 // A hint that does not fit is dropped whole, from the right. The way out always
 // stays. A width of 0 means no limit.
-func FailureHint(width int) []tty.Line {
-	hints := []hintItem{
-		{hintSelect, ""},
-		{hintRerun, HintKeyRerun},
-		{hintFocus, HintKeyFocus},
-		{hintCopy, HintKeyCopy},
-		{hintOutput, HintKeyOutput},
-	}
-	done := hintItem{hintDone, HintKeyDone}
-	keep := len(hints)
-	for keep > 0 && width > 0 && hintsCols(hints[:keep], done) > width {
-		keep--
-	}
-	var spans []tty.Span
-	for _, hi := range append(hints[:keep:keep], done) {
-		if len(spans) > 0 {
-			spans = append(spans, tty.Span{Text: metaSep, Style: colDim})
-		}
-		spans = append(spans, tty.Span{Text: hi.text, Style: colDim, Key: hi.key})
-	}
-	return []tty.Line{{Spans: spans}}
-}
-
-func hintsCols(hints []hintItem, done hintItem) int {
-	n := tty.Cols(done.text)
-	for _, hi := range hints {
-		n += tty.Cols(hi.text) + tty.Cols(metaSep)
-	}
-	return n
+func FailureHint(width int) []termkit.Line {
+	return []termkit.Line{layout.Hints([]layout.Hint{
+		{Text: hintSelect},
+		{Text: hintRerun, Key: HintKeyRerun},
+		{Text: hintFocus, Key: HintKeyFocus},
+		{Text: hintCopy, Key: HintKeyCopy},
+		{Text: hintOutput, Key: HintKeyOutput},
+		{Text: hintDone, Key: HintKeyDone},
+	}, width, colDim)}
 }

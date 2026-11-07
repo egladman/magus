@@ -17,9 +17,10 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/progress"
 	"github.com/egladman/magus/types"
 )
 
@@ -90,7 +91,7 @@ func (h jsonlSafetyNetHandler) WithGroup(name string) slog.Handler {
 type PrettyHandler struct {
 	mu    sync.Mutex
 	w     io.Writer // write destination (os.Stderr in production; bytes.Buffer in tests)
-	probe tty.Probe
+	probe termkit.Probe
 	level slog.Level
 	// err latches the first write failure seen during a single Handle
 	// call so the many print helpers can stay linear instead of each
@@ -101,8 +102,8 @@ type PrettyHandler struct {
 	// handler's band within it. The handler no longer sets scroll margins
 	// itself: it used to, and so did the CLI's own handler, and two components
 	// driving one global DECSTBM setting is what tty.Zone exists to end.
-	zone   *tty.Zone
-	lease  *tty.Lease
+	zone   *termkit.Zone
+	lease  *termkit.Lease
 	status statusLine // live counters painted into the band's first row
 	// failures is the pinned failure ring, one entry per row beneath the status
 	// line. A fixed array written at failureAt and rendered in place, so the
@@ -173,6 +174,9 @@ type PrettyHandler struct {
 	// move between records. Zero for an injected clock, which cannot move.
 	tickEvery time.Duration
 	tickStop  chan struct{}
+	// loader animates the band while steps are in flight. A zero Loader draws
+	// the default, so every constructor yields a working spinner.
+	loader progress.Loader
 }
 
 // statusLine accumulates what the sticky region's top row shows: pool
@@ -263,12 +267,12 @@ func NewPrettyHandler(w io.Writer, level slog.Level) *PrettyHandler {
 	// Keyed on w being standard error, the same identity check tty.ResolveZone
 	// makes, so a handler pointed at a log file or test buffer is its own.
 	if w != os.Stderr {
-		return newPrettyHandler(w, level, tty.SystemProbe)
+		return newPrettyHandler(w, level, termkit.SystemProbe)
 	}
 	stderrPrettyMu.Lock()
 	defer stderrPrettyMu.Unlock()
 	if stderrPretty == nil {
-		stderrPretty = newPrettyHandlerZone(w, level, tty.SystemProbe, tty.ResolveZone(w))
+		stderrPretty = newPrettyHandlerZone(w, level, termkit.SystemProbe, termkit.ResolveZone(w))
 		return stderrPretty
 	}
 	// The level comes from the most recent caller. In the CLI both callers read
@@ -318,13 +322,13 @@ func (notTerminal) Size(uintptr) (int, int, error) { return 0, 0, errors.New("no
 
 // newPrettyHandler is the probe-injecting form. Tests use it to render
 // terminal output into a buffer without opening a pty.
-func newPrettyHandler(w io.Writer, level slog.Level, p tty.Probe) *PrettyHandler {
-	return newPrettyHandlerZone(w, level, p, tty.NewZone(w, p))
+func newPrettyHandler(w io.Writer, level slog.Level, p termkit.Probe) *PrettyHandler {
+	return newPrettyHandlerZone(w, level, p, termkit.NewZone(w, p))
 }
 
 // newPrettyHandlerZone is the form that takes an explicit zone, so a test can
 // give two handlers the same one and watch them share the terminal.
-func newPrettyHandlerZone(w io.Writer, level slog.Level, p tty.Probe, z *tty.Zone) *PrettyHandler {
+func newPrettyHandlerZone(w io.Writer, level slog.Level, p termkit.Probe, z *termkit.Zone) *PrettyHandler {
 	return &PrettyHandler{
 		w:     w,
 		probe: p,
@@ -337,7 +341,7 @@ func newPrettyHandlerZone(w io.Writer, level slog.Level, p tty.Probe, z *tty.Zon
 		lease:     z.Acquire(1),
 		selected:  -1,
 		now:       time.Now,
-		tickEvery: spinnerEvery,
+		tickEvery: defaultLoader.Interval,
 	}
 }
 
@@ -376,7 +380,7 @@ func (h *PrettyHandler) Close() error {
 // WantsColor reports whether output to this writer should carry ANSI color. Ask per
 // line rather than once, so a late redirect is noticed. Safe for concurrent use.
 func (h *PrettyHandler) WantsColor() bool {
-	return tty.WantsColor(h.w, h.probe)
+	return termkit.WantsColor(h.w, h.probe)
 }
 
 // fail latches the first write error of the current record. Reading and
@@ -565,7 +569,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 			cmd += " " + strings.Join(args, " ")
 		}
 		if colorize {
-			h.printf(ctx, "  %s\n", tty.Colorize("$ "+cmd, colDim))
+			h.printf(ctx, "  %s\n", termkit.Colorize("$ "+cmd, colDim))
 		} else {
 			h.printf(ctx, "  $ %s\n", cmd)
 		}
@@ -654,11 +658,11 @@ const (
 	// These name the palette tty already defines rather than restating the
 	// codes, so a wrong sequence stays a compile error in one place. The file
 	// used both spellings before, which is how they were free to drift.
-	colDimGreen = tty.SGRDimGreen // cached (passed without running): low signal
-	colGreen    = tty.SGRGreen    // ran and passed
-	colRed      = tty.SGRRed      // failed
-	colYellow   = tty.SGRYellow   // warning
-	colDim      = tty.SGRDim      // info/debug
+	colDimGreen = termkit.SGRDimGreen // cached (passed without running): low signal
+	colGreen    = termkit.SGRGreen    // ran and passed
+	colRed      = termkit.SGRRed      // failed
+	colYellow   = termkit.SGRYellow   // warning
+	colDim      = termkit.SGRDim      // info/debug
 )
 
 // Glyph renders a bracketed status glyph like "[pass]" or "[fail]", ASCII only (no
@@ -666,12 +670,12 @@ const (
 // outcome words; cache state (cached vs ran) is shown separately in the line's
 // parenthetical, the orthogonal split every major build tool uses (e.g. Bazel's
 // "(cached) PASSED"). Named to match the doctor command's statusGlyph.
-func Glyph(colorize bool, label string, color tty.SGR) string {
+func Glyph(colorize bool, label string, color termkit.SGR) string {
 	s := fmt.Sprintf("[%s]", label)
 	if !colorize {
 		return s
 	}
-	return tty.Colorize(s, color)
+	return termkit.Colorize(s, color)
 }
 
 // handleGeneric renders any non-cache slog record (the 76-odd general diagnostics
@@ -699,7 +703,7 @@ func (h *PrettyHandler) handleGeneric(ctx context.Context, colorize bool, r slog
 		attrs = formatAttrs(r)
 	}
 	if colorize && attrs != "" {
-		attrs = tty.Colorize(attrs, colDim)
+		attrs = termkit.Colorize(attrs, colDim)
 	}
 	if isNotice {
 		label := cmp.Or(notice.String(), component)
@@ -735,14 +739,14 @@ func noticeText(label, msg, err string) string {
 
 // printNotice puts the label before the message, colored above info, with no glyph: a
 // line addressed to a person carries no log level.
-func (h *PrettyHandler) printNotice(ctx context.Context, colorize bool, color tty.SGR, label, msg, attrs string) {
+func (h *PrettyHandler) printNotice(ctx context.Context, colorize bool, color termkit.SGR, label, msg, attrs string) {
 	if label == "" {
 		h.printf(ctx, "%s%s\n", msg, attrs)
 		return
 	}
 	label += ":"
 	if colorize && color != colDim {
-		label = tty.Colorize(label, color)
+		label = termkit.Colorize(label, color)
 	}
 	h.printf(ctx, "%s %s%s\n", label, msg, attrs)
 }
@@ -769,7 +773,7 @@ func (h *PrettyHandler) printWhy(ctx context.Context, colorize bool, indent, why
 	}
 	for line := range strings.SplitSeq(why, "\n") {
 		if colorize {
-			line = tty.Colorize(line, colDim)
+			line = termkit.Colorize(line, colDim)
 		}
 		h.printf(ctx, "%s%s\n", indent, line)
 	}
@@ -930,7 +934,7 @@ func (h *PrettyHandler) printFailure(ctx context.Context, colorize bool, f failu
 			// so magus cannot hit-test a click on them; they belong to the
 			// terminal's own selection. Terminals without OSC 8 get the plain
 			// command, which is what a reader copies anyway.
-			h.printf(ctx, "  %s\n", tty.Colorize("inspect: "+h.linkify(full, logPath), colDim))
+			h.printf(ctx, "  %s\n", termkit.Colorize("inspect: "+h.linkify(full, logPath), colDim))
 		} else {
 			h.printf(ctx, "  inspect: %s\n", full)
 		}
@@ -942,7 +946,7 @@ func (h *PrettyHandler) printFailure(ctx context.Context, colorize bool, f failu
 	}
 	repro := hint.Run.With(target, project)
 	if colorize {
-		h.printf(ctx, "  %s\n", tty.Colorize("reproduce: "+repro, colDim))
+		h.printf(ctx, "  %s\n", termkit.Colorize("reproduce: "+repro, colDim))
 	} else {
 		h.printf(ctx, "  reproduce: %s\n", repro)
 	}
@@ -1010,7 +1014,7 @@ func (h *PrettyHandler) printBlocked(ctx context.Context, colorize bool) {
 		}
 		line := fmt.Sprintf("blocked by %s: %s", g.root, strings.Join(g.blocked, ", "))
 		if colorize {
-			line = tty.Colorize(line, colDim)
+			line = termkit.Colorize(line, colDim)
 		}
 		h.printf(ctx, "%s\n", line)
 	}
@@ -1092,7 +1096,7 @@ func (h *PrettyHandler) printRepeated(ctx context.Context, colorize bool) {
 		}
 		line := fmt.Sprintf("%s also hit %d more %s: %s%s", r.code, len(r.steps), noun, strings.Join(names, ", "), more)
 		if colorize {
-			line = tty.Colorize(line, colDim)
+			line = termkit.Colorize(line, colDim)
 		}
 		h.printf(ctx, "%s\n", line)
 	}
@@ -1300,7 +1304,7 @@ func (h *PrettyHandler) printRefLegend(ctx context.Context, colorize bool) {
 	}
 	line := "  outputs: " + hint.QueryOutput.With("<ref>")
 	if colorize {
-		line = tty.Colorize(line, colDim)
+		line = termkit.Colorize(line, colDim)
 	}
 	h.printf(ctx, "%s\n", line)
 }
@@ -1725,14 +1729,14 @@ func (h *PrettyHandler) releaseBand() error {
 // machine and the terminal would resolve it locally), which is why
 // tty.WantsHyperlinks refuses there rather than this deciding it.
 func (h *PrettyHandler) linkify(text, path string) string {
-	if path == "" || !tty.WantsHyperlinks(h.w, h.probe) {
+	if path == "" || !termkit.WantsHyperlinks(h.w, h.probe) {
 		return text
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return text
 	}
-	return tty.Hyperlink(text, "file://"+abs)
+	return termkit.Hyperlink(text, "file://"+abs)
 }
 
 // resetRun clears everything that describes ONE run, leaving what describes the
@@ -1808,7 +1812,7 @@ func FailureHintPlain() string {
 // process band.
 // A nil now defaults to time.Now; pass a fixed one to render a picture whose
 // bytes do not depend on when it was rendered.
-func NewPrettyHandlerWith(w io.Writer, level slog.Level, p tty.Probe, now func() time.Time) *PrettyHandler {
+func NewPrettyHandlerWith(w io.Writer, level slog.Level, p termkit.Probe, now func() time.Time) *PrettyHandler {
 	h := newPrettyHandler(w, level, p)
 	if now != nil {
 		h.now = now
@@ -1825,7 +1829,7 @@ func NewPrettyHandlerWith(w io.Writer, level slog.Level, p tty.Probe, now func()
 // overwrite each other: the exact failure tty.Zone exists to prevent. In
 // production both sides reach the same singleton through standard error and the
 // sharing is invisible; for any other writer it has to be asked for.
-func (h *PrettyHandler) Zone() *tty.Zone { return h.zone }
+func (h *PrettyHandler) Zone() *termkit.Zone { return h.zone }
 
 // onOff renders a posture flag the way the run header renders state: a word, not a
 // boolean, because "verify false" reads as a failure and "verify off" as a setting.

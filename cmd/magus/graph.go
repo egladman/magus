@@ -27,7 +27,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/maintenance"
@@ -452,7 +452,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if opts.Format == outputSCIP {
-		return graphExportSCIP(ctx, root, os.Stdout, tty.SystemProbe, ef.Select != "")
+		return graphExportSCIP(ctx, root, os.Stdout, termkit.SystemProbe, ef.Select != "")
 	}
 	// dot is a graph-layout format; on the whole graph (1000s of nodes) it is
 	// unreadable, so it requires a --select neighborhood to scope down.
@@ -546,11 +546,11 @@ const outputSCIP output.Format = "scip"
 // graphExportSCIP writes the workspace's symbol indexes to out as one SCIP index, judging
 // out a terminal by probe. --select narrows the knowledge graph, which this export does
 // not carry, so it is refused rather than ignored.
-func graphExportSCIP(ctx context.Context, root string, out io.Writer, probe tty.Probe, selected bool) error {
+func graphExportSCIP(ctx context.Context, root string, out io.Writer, probe termkit.Probe, selected bool) error {
 	if selected {
 		return fmt.Errorf("-o %s exports the whole symbol index, and --select narrows the knowledge graph, which it does not carry: drop --select", outputSCIP)
 	}
-	if tty.IsTerminalWriter(out, probe) {
+	if termkit.IsTerminalWriter(out, probe) {
 		return fmt.Errorf("-o %[1]s writes a binary SCIP index: redirect it to a file, as in magus graph export -o %[1]s > index.scip", outputSCIP)
 	}
 	m, err := loadMagus(ctx, root)

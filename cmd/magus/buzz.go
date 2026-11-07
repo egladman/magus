@@ -23,7 +23,7 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/coverage"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
@@ -590,7 +590,7 @@ func buzzCoverPath(name string) string {
 // or one run with stdin redirected from /dev/null, still runs as a whole
 // instead of blocking on a REPL prompt no one can answer.
 func stdinIsTerminal() bool {
-	return tty.StdinIsTerminal()
+	return termkit.StdinIsTerminal()
 }
 
 // runBuzzTests executes every `test "..." {}` block registered while executing the

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/engine"
 	"github.com/egladman/magus/internal/log/attr"
@@ -89,7 +89,7 @@ func newStepGate() spawn.StepGate {
 			// normally point at the same device: with stdin redirected the
 			// terminal went raw, the first read hit EOF, and the run aborted
 			// with no explanation of why.
-			restoreTTY, err := tty.MakeRaw(os.Stdin.Fd())
+			rawTTY, err := termkit.MakeRaw(os.Stdin.Fd())
 			if err != nil {
 				// Can't go raw: fall back to step-always so the user still sees commands.
 				slog.WarnContext(ctx, "(terminal unavailable, stepping)", attr.Notice(""))
@@ -97,7 +97,7 @@ func newStepGate() spawn.StepGate {
 			}
 
 			restore := func() {
-				if err := restoreTTY(); err != nil {
+				if err := rawTTY.Restore(); err != nil {
 					slog.ErrorContext(ctx, "", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 				}
 			}

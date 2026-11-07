@@ -9,7 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/layout"
 	"github.com/egladman/magus/types"
 )
 
@@ -289,7 +290,7 @@ func (h *PrettyHandler) boardShowsWait(ctx context.Context) bool {
 
 // waitLines draws the board's tree in at most budget rows. Past it the last
 // row counts the waiters left out.
-func waitLines(roots []*waitNode, budget int, spin string, width int, color bool, dim tty.SGR) []tty.Line {
+func waitLines(roots []*waitNode, budget int, spin string, width int, color bool, dim termkit.SGR) []termkit.Line {
 	if len(roots) == 0 || budget <= 0 {
 		return nil
 	}
@@ -325,9 +326,9 @@ func waitLines(roots []*waitNode, budget int, spin string, width int, color bool
 		}
 		all = all[:keep]
 	}
-	lines := alignBlock(all, width, tty.SGRReverse, dim)
+	lines := alignBlock(all, width, termkit.SGRReverse, dim)
 	if more > 0 {
-		lines = append(lines, tty.Line{Text: fmt.Sprintf("    +%d more waiting", more), Style: dim})
+		lines = append(lines, termkit.Line{Text: fmt.Sprintf("    +%d more waiting", more), Style: dim})
 	}
 	return lines
 }
@@ -335,14 +336,14 @@ func waitLines(roots []*waitNode, budget int, spin string, width int, color bool
 // waitRow is one row of the board: a holder with how many it holds, or a
 // waiter with how long it has waited.
 func waitRow(n *waitNode, indent string, last, root, top bool, spin string, color bool) bandRow {
-	var label, mark tty.SGR
+	var label, mark termkit.SGR
 	if color {
 		mark = colYellow
 	}
 	age := FormatDuration(n.age)
 	row := bandRow{failure: -1}
 	if root {
-		lead := " "
+		lead := strings.Repeat(" ", max(layout.Cols(spin), 1))
 		if n.state != StepWaiting {
 			lead = spin
 		}
@@ -353,25 +354,21 @@ func waitRow(n *waitNode, indent string, last, root, top bool, spin string, colo
 		if top && n.holds > 1 {
 			meta = append(meta, "bottleneck")
 			if color {
-				label = tty.SGRBold
+				label = termkit.SGRBold
 			}
 		}
 		meta = append(meta, fmt.Sprintf("holds %d", n.holds))
-		row.label = []tty.Span{{Text: indent}, {Text: lead, Style: mark}, {Text: " "}}
+		row.label = []termkit.Span{{Text: indent}, {Text: lead, Style: mark}, {Text: " "}}
 		row.meta = strings.Join(meta, metaSep)
 	} else {
-		branch := treeTee
-		if last {
-			branch = treeEnd
-		}
 		meta := []string{fmt.Sprintf("%s %s", n.state, age)}
 		if n.others > 0 {
 			meta = append(meta, fmt.Sprintf("+%d more", n.others))
 		}
-		row.label = []tty.Span{{Text: indent + branch}}
+		row.label = []termkit.Span{{Text: indent + branch(last)}}
 		row.meta = strings.Join(meta, metaSep)
 	}
-	row.label = append(row.label, tty.Span{Text: displayNodeLabel(n.ref), Style: label})
+	row.label = append(row.label, termkit.Span{Text: displayNodeLabel(n.ref), Style: label})
 	return row
 }
 

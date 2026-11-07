@@ -18,7 +18,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/retry"
 	"github.com/egladman/magus/types"
@@ -292,7 +292,7 @@ func OsExecutable(_ context.Context) (string, error) {
 // ProcStdinIsTerminal reports whether stdin is a TTY, reusing the shared terminal
 // check (see internal/interactive/tty).
 func ProcStdinIsTerminal(_ context.Context) (bool, error) {
-	return tty.StdinIsTerminal(), nil
+	return termkit.StdinIsTerminal(), nil
 }
 
 // ProcWhich resolves cmd against PATH, RAISING when it is not there.

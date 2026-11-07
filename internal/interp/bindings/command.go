@@ -15,7 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/sandbox"
@@ -457,7 +457,7 @@ func collapseRedraws(ctx context.Context) (context.Context, func()) {
 	stdout, stderr := spawn.OutputWriters(ctx)
 	var flushes []func()
 	wrap := func(w io.Writer) io.Writer {
-		if tty.IsTerminalWriter(w, tty.SystemProbe) {
+		if termkit.IsTerminalWriter(w, termkit.SystemProbe) {
 			return w
 		}
 		c := &redrawCollapser{w: w}

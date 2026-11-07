@@ -8,11 +8,15 @@ import (
 	"maps"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/interactive/screen"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/layout"
+	"github.com/egladman/magus/libs/termkit/pick"
+	"github.com/egladman/magus/libs/termkit/progress"
+	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/egladman/magus/types"
 )
 
@@ -70,6 +74,7 @@ func renderShots() (map[string]string, error) {
 		{"terminal-run-waits.svg", runWaits},
 		{"terminal-failure-prompt.svg", failurePrompt},
 		{"terminal-picker.svg", picker},
+		{"terminal-loaders.svg", loaders},
 	} {
 		for _, v := range screen.ThemeVariants {
 			svg, err := s.fn(v.Theme)
@@ -93,7 +98,7 @@ const (
 // a real handler fed the records a run emits.
 func runBand(t screen.Theme) (string, error) {
 	s := screen.New(shotCols, shotRows)
-	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, tty.CaptureProbe(shotCols, shotRows), demoClock())
+	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, termkit.CaptureProbe(shotCols, shotRows), demoClock())
 
 	fmt.Fprint(s, "$ magus affected ci\n")
 	projects := []string{
@@ -132,7 +137,7 @@ func runBand(t screen.Theme) (string, error) {
 func runWaits(t screen.Theme) (string, error) {
 	s := screen.New(shotCols, shotRows)
 	now := time.Unix(0, 0).UTC()
-	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, tty.CaptureProbe(shotCols, shotRows),
+	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, termkit.CaptureProbe(shotCols, shotRows),
 		func() time.Time { return now })
 
 	fmt.Fprint(s, "$ magus affected ci\n")
@@ -186,7 +191,7 @@ func step(ref types.TargetRef, state cache.StepState) slog.Record {
 // throughout.
 func failurePrompt(t screen.Theme) (string, error) {
 	s := screen.New(shotCols, shotRows)
-	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, tty.CaptureProbe(shotCols, shotRows), demoClock())
+	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, termkit.CaptureProbe(shotCols, shotRows), demoClock())
 
 	fmt.Fprint(s, "$ magus affected ci\n")
 	fmt.Fprint(s, "[pass] build std (cached, 0.0s)\n")
@@ -273,13 +278,70 @@ func picker(t screen.Theme) (string, error) {
 	// The REAL picker composition, not an imitation of it. Hand-writing this
 	// block is how the shot came to show a selection marker and a frame the
 	// picker had stopped drawing.
-	p := tty.CaptureProbe(shotCols, shotRows)
-	view := tty.NewInlineView(s, p)
-	frame := tty.RenderPick(s, p,
+	p := termkit.CaptureProbe(shotCols, shotRows)
+	view := termkit.NewInlineView(s, p)
+	frame := pick.Render(s, p,
 		[]string{"console", "docs", "libs/gopherbuzz", "std", "types"},
-		tty.PickOptions{Prompt: "project"}, "gop", 0)
+		pick.Options{Prompt: "project"}, "gop", 0)
 	if !view.Paint(frame) {
 		return "", fmt.Errorf("the picker block does not fit %dx%d", shotCols, shotRows)
 	}
 	return s.SVG(screen.SVGOptions{Theme: t}), nil
+}
+
+const (
+	// loaderAt is the instant every loader is drawn at.
+	loaderAt         = 640 * time.Millisecond
+	loaderSpanCols   = 40
+	loaderColumnRows = 4
+	loaderShotRows   = 32
+)
+
+// loaders: every loader at one instant, its frame, then its name and interval
+// aligned like the band's metadata. A column loader draws its rows downward.
+func loaders(t screen.Theme) (string, error) {
+	s := screen.New(shotCols, loaderShotRows)
+	var rows []layout.Row
+	var tall []progress.Loader
+	for _, name := range progress.Names() {
+		l, err := progress.Lookup(name)
+		if err != nil {
+			return "", err
+		}
+		l = l.Width(loaderSpanCols).Height(loaderColumnRows).Label("building internal/cache")
+		if l.Kind == progress.Column {
+			tall = append(tall, l)
+			continue
+		}
+		label := slices.Clone(l.Frame(loaderAt)[0].Spans)
+		width := 0
+		for _, sp := range label {
+			width += layout.Cols(sp.Text)
+		}
+		pad := strings.Repeat(" ", max(l.Cols-width, 0)+2)
+		label = append(label, termkit.Span{Text: pad + name})
+		rows = append(rows, layout.Row{Label: label, Meta: l.Interval.String()})
+	}
+	for _, line := range layout.Columns(rows, shotCols-1, termkit.SGRDim, termkit.SGRReverse) {
+		writeLine(s, line)
+	}
+	for _, l := range tall {
+		for i, line := range l.Frame(loaderAt) {
+			if i == 0 {
+				line.Spans = append(line.Spans,
+					termkit.Span{Text: "  " + l.Name},
+					termkit.Span{Text: "  " + l.Interval.String(), Style: termkit.SGRDim})
+			}
+			writeLine(s, line)
+		}
+	}
+	return s.SVG(screen.SVGOptions{Theme: t}), nil
+}
+
+// writeLine prints one styled line, as a program writing to a terminal would.
+func writeLine(s *screen.Terminal, line termkit.Line) {
+	for _, sp := range line.Spans {
+		fmt.Fprint(s, termkit.Colorize(sp.Text, sp.Style))
+	}
+	fmt.Fprint(s, "\n")
 }

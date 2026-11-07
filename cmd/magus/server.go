@@ -6,7 +6,7 @@ import (
 	"flag"
 	"fmt"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"log/slog"
 	"os"
@@ -768,7 +768,7 @@ func recordSyncRequest(ctx context.Context, name string, r maintenance.SyncReque
 // invites somebody to go look at something, and the VCS refresh hook is not somebody. A
 // suggestion nobody can act on is noise in a log.
 func printJobWatchHint(ctx context.Context) {
-	if !tty.IsTerminalWriter(os.Stderr, tty.SystemProbe) {
+	if !termkit.IsTerminalWriter(os.Stderr, termkit.SystemProbe) {
 		return
 	}
 	if u := consoleWatchURL(); u != "" {

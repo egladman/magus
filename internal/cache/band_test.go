@@ -13,8 +13,9 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/interactive/screen"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit/screen"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/layout"
 	"github.com/egladman/magus/types"
 )
 
@@ -28,13 +29,13 @@ func (p sizedProbe) Size(uintptr) (int, int, error) { return p.width, p.height, 
 
 // tapScreen is a screen that also keeps the bytes written to it.
 type tapScreen struct {
-	*screen.Screen
+	*screen.Terminal
 	log bytes.Buffer
 }
 
 func (t *tapScreen) Write(p []byte) (int, error) {
 	t.log.Write(p)
-	return t.Screen.Write(p)
+	return t.Terminal.Write(p)
 }
 
 type BandSuite struct {
@@ -47,10 +48,11 @@ func TestBandSuite(t *testing.T) { suite.Run(t, new(BandSuite)) }
 func (s *BandSuite) SetupTest() {
 	s.T().Setenv("TERM", "xterm-256color")
 	s.T().Setenv("NO_COLOR", "")
+	s.T().Setenv("LC_ALL", "en_US.UTF-8")
 	s.now = time.Unix(0, 0)
 }
 
-func (s *BandSuite) handler(width int) (*screen.Screen, *PrettyHandler) {
+func (s *BandSuite) handler(width int) (*screen.Terminal, *PrettyHandler) {
 	sc := screen.New(width, bandScreenRows)
 	return sc, s.handlerOn(sc, width)
 }
@@ -135,7 +137,7 @@ func (s *BandSuite) waiting(h *PrettyHandler) {
 // bandStart is the first row of the handler's band.
 func bandStart(h *PrettyHandler) int { return bandScreenRows - h.lease.Rows() + 1 }
 
-func (s *BandSuite) bandTrailing(sc *screen.Screen, h *PrettyHandler) []int {
+func (s *BandSuite) bandTrailing(sc *screen.Terminal, h *PrettyHandler) []int {
 	var rows []int
 	for _, r := range sc.TrailingSpaceRows() {
 		if r >= bandStart(h) {
@@ -215,24 +217,24 @@ func (s *BandSuite) TestSpinnerFrameFollowsTheHandlerClock() {
 	first := sc.Row(bandScreenRows)
 	s.True(strings.HasPrefix(first, "⠋ 2/8 slots"), first)
 
-	s.now = s.now.Add(spinnerEvery)
+	s.now = s.now.Add(defaultLoader.Interval)
 	s.pool(h, 2, 0)
 	s.True(strings.HasPrefix(sc.Row(bandScreenRows), "⠙ 2/8 slots"), sc.Row(bandScreenRows))
 }
 
-func (s *BandSuite) TestStatusRowShowsACrossOnceAFailureLeavesNothingRunning() {
+func (s *BandSuite) TestStatusRowSaysFAILOnceAFailureLeavesNothingRunning() {
 	sc, h := s.handler(100)
 	s.failed(h)
 	row := sc.Row(bandStart(h))
-	s.True(strings.HasPrefix(row, "✗ 0 ok · 3 failed"), row)
+	s.True(strings.HasPrefix(row, "FAIL  0 ok · 3 failed"), row)
 }
 
-func (s *BandSuite) TestStatusRowShowsACheckForACleanRun() {
+func (s *BandSuite) TestStatusRowSaysOkForACleanRun() {
 	sc, h := s.handler(100)
 	s.handle(h, "cache.miss", slog.String("project", "api"), slog.String("target", "build"),
 		slog.Int64("duration", int64(time.Second)))
 	row := sc.Row(bandScreenRows)
-	s.True(strings.HasPrefix(row, "✓ 1 ok"), row)
+	s.True(strings.HasPrefix(row, "ok    1 ok"), row)
 }
 
 func (s *BandSuite) TestStatusRowOmitsClausesThatSayNothing() {
@@ -244,21 +246,40 @@ func (s *BandSuite) TestStatusRowOmitsClausesThatSayNothing() {
 	s.NotContains(row, "failed")
 }
 
-func (s *BandSuite) TestProgressBarFillsInEighthCells() {
-	filled, track := progressBar(1, 40)
-	s.Equal("▌", filled)
-	s.Equal(strings.Repeat("░", 19), track)
-
-	filled, track = progressBar(10, 10)
-	s.Equal(strings.Repeat("█", progressCols), filled)
-	s.Empty(track)
+func (s *BandSuite) TestProgressBarIsTwentyCells() {
+	sc, h := s.handler(100)
+	s.running(h)
+	row := sc.Row(bandStart(h))
+	cells := 0
+	for _, r := range row {
+		if strings.ContainsRune("█▉▊▋▌▍▎▏░", r) {
+			cells++
+		}
+	}
+	s.Equal(progressCols, cells, row)
 }
 
-func (s *BandSuite) TestProgressBarIsAlwaysTwentyCells() {
-	for done := range 11 {
-		filled, track := progressBar(done, 10)
-		s.Equal(progressCols, utf8.RuneCountInString(filled)+utf8.RuneCountInString(track))
-	}
+func (s *BandSuite) TestConfiguredLoaderDrawsInThePaddedSlot() {
+	sc, h := s.handler(100)
+	s.Require().NoError(h.SetLoader(mustLoader("strip/scanner")))
+	s.pool(h, 2, 0)
+	row := sc.Row(bandScreenRows)
+	s.True(strings.HasPrefix(row, "●······· 2/8 slots"), row)
+}
+
+func (s *BandSuite) TestALoaderWithoutAFixedFootprintIsRefused() {
+	_, h := s.handler(100)
+	err := h.SetLoader(mustLoader("span/comet"))
+	s.Require().Error(err)
+	s.Contains(err.Error(), "span/comet is a span loader")
+}
+
+func (s *BandSuite) TestALocaleThatIsNotUTF8DrawsTheASCIISpinner() {
+	s.T().Setenv("LC_ALL", "C")
+	sc, h := s.handler(100)
+	s.pool(h, 2, 0)
+	row := sc.Row(bandScreenRows)
+	s.True(strings.HasPrefix(row, "| 2/8 slots"), row)
 }
 
 func (s *BandSuite) TestMetadataAlignsToTheLongestLabel() {
@@ -267,14 +288,14 @@ func (s *BandSuite) TestMetadataAlignsToTheLongestLabel() {
 	s.fail(h, "api", "integration-tests", 2500*time.Millisecond)
 	build, tests := sc.Row(sc.FindRow("├ build")), sc.Row(sc.FindRow("╰ integration-tests"))
 	s.Equal(metaColumn(build, "1.0s"), metaColumn(tests, "2.5s"))
-	s.Equal(len("  ▸ ╰ integration-tests")-4+metaGap, metaColumn(tests, "2.5s"))
+	s.Equal(len("  ▸ ╰ integration-tests")-4+2, metaColumn(tests, "2.5s"))
 }
 
 func (s *BandSuite) TestMetadataColumnIsCappedAtSixtyColumns() {
 	sc, h := s.handler(200)
 	s.fail(h, "api", strings.Repeat("t", 100), time.Second)
 	row := sc.Row(bandScreenRows)
-	s.Equal(maxLabelCols+metaGap, metaColumn(row, "1.0s"))
+	s.Equal(layout.MaxLabel+2, metaColumn(row, "1.0s"))
 	s.Contains(row, "...")
 }
 
@@ -287,11 +308,11 @@ func (s *BandSuite) TestNarrowTerminalClipsTheLabelAndKeepsTheMetadata() {
 	s.LessOrEqual(utf8.RuneCountInString(row), 29)
 }
 
-func (s *BandSuite) TestFailureHeadersUseACrossNotABracketGlyph() {
+func (s *BandSuite) TestFailureHeadersUseTheWordNotABracketGlyph() {
 	sc, h := s.handler(100)
 	s.failed(h)
-	s.NotZero(sc.FindRow("✗ api"))
-	row := sc.Row(sc.FindRow("✗ api"))
+	s.NotZero(sc.FindRow("FAIL  api"))
+	row := sc.Row(sc.FindRow("FAIL  api"))
 	s.NotContains(row, "[fail]")
 }
 
@@ -398,7 +419,7 @@ func (s *BandSuite) TestHintShowsEveryActionWhenItFits() {
 func (s *BandSuite) TestHintDropsWholeHintsFromTheRight() {
 	text := hintText(FailureHint(50))
 	s.Equal("↑↓ select · enter rerun · tab focus · esc done", text)
-	s.LessOrEqual(tty.Cols(text), 50)
+	s.LessOrEqual(layout.Cols(text), 50)
 }
 
 func (s *BandSuite) TestHintKeepsTheWayOutOnAVeryNarrowTerminal() {
@@ -451,12 +472,12 @@ func (s *BandSuite) ticking(h *PrettyHandler) bool {
 var cupRow = regexp.MustCompile(`\x1b\[\d+;1H`)
 
 func (s *BandSuite) TestASpinnerFrameRewritesOnlyTheRowsThatChanged() {
-	tap := &tapScreen{Screen: screen.New(120, bandScreenRows)}
+	tap := &tapScreen{Terminal: screen.New(120, bandScreenRows)}
 	h := s.handlerOn(tap, 120)
 	s.waiting(h)
 	tap.log.Reset()
 
-	s.now = s.now.Add(spinnerEvery)
+	s.now = s.now.Add(defaultLoader.Interval)
 	s.pool(h, 2, 0)
 
 	out := tap.log.String()
@@ -465,7 +486,7 @@ func (s *BandSuite) TestASpinnerFrameRewritesOnlyTheRowsThatChanged() {
 }
 
 func (s *BandSuite) TestAnUnchangedFrameWritesNothing() {
-	tap := &tapScreen{Screen: screen.New(120, bandScreenRows)}
+	tap := &tapScreen{Terminal: screen.New(120, bandScreenRows)}
 	h := s.handlerOn(tap, 120)
 	s.failed(h)
 	tap.log.Reset()
@@ -474,7 +495,7 @@ func (s *BandSuite) TestAnUnchangedFrameWritesNothing() {
 	s.Empty(tap.log.String())
 }
 
-func hintText(lines []tty.Line) string {
+func hintText(lines []termkit.Line) string {
 	var b strings.Builder
 	for _, sp := range lines[0].Spans {
 		b.WriteString(sp.Text)
@@ -491,7 +512,7 @@ func metaColumn(row, sub string) int {
 	return utf8.RuneCountInString(row[:i])
 }
 
-func outputRows(sc *screen.Screen) int {
+func outputRows(sc *screen.Terminal) int {
 	n := 0
 	for _, r := range sc.Rows() {
 		if strings.HasPrefix(r, "    line ") {

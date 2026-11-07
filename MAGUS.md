@@ -56,13 +56,13 @@ magus graph export -o json  # the whole graph
 
 | Kind       |     Size | List them                     | Anchors (most connected)                                                                                                                                       |
 | ---------- | -------: | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                                                                             |
+| project    |      20+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                                                                             |
 | target     |     200+ | `magus query kind=target`     | `conventions`, `buzz-test`, `catalog-docs-generate`                                                                                                            |
 | spell      | built in | `magus query kind=spell`      | `go`, `typescript`, `buzz`                                                                                                                                     |
 | op         | built in | `magus query kind=op`         | `go-test`, `go-build`, `go-fmt`                                                                                                                                |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                                                                |
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `mutable`                                                                                                                                          |
-| module     | built in | `magus query kind=module`     |                                                                                                                                                                |
+| module     | built in | `magus query kind=module`     | `archive`, `base64`, `buzz`                                                                                                                                    |
 | method     | built in | `magus query kind=method`     |                                                                                                                                                                |
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS1021`, `MGS3032`                                                                                                                                |
 | doc        |    2000+ | `magus query kind=doc`        | `docs/reference/rules/index.md`, `docs/reference/proofread/index.md`, `docs/guides/integrations/agents/guard.md`                                               |
@@ -93,6 +93,7 @@ magus graph export -o json  # the whole graph
 | [libs/proofread](libs/proofread/MAGUS.md)                                   |      11 | `magus query project=libs/proofread`                  | `proofread-build`, `format`, `wordclass-generate`             |
 | libs/proofread/train                                                        |       7 | `magus query project=libs/proofread/train`            | `test`, `ci`, `format`                                        |
 | [libs/scipbuzz](libs/scipbuzz/MAGUS.md)                                     |       9 | `magus query project=libs/scipbuzz`                   | `format`, `ci`, `test`                                        |
+| [libs/termkit](libs/termkit/MAGUS.md)                                       |       8 | `magus query project=libs/termkit`                    | `format`, `ci`, `build`                                       |
 | [libs/testpairing](libs/testpairing/MAGUS.md)                               |       8 | `magus query project=libs/testpairing`                | `format`, `ci`, `test`                                        |
 | [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                     |
 | [libs/xdg](libs/xdg/MAGUS.md)                                               |       8 | `magus query project=libs/xdg`                        | `format`, `build`, `test`                                     |

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"log/slog"
@@ -417,7 +417,7 @@ func probeUntilReady(ctx context.Context, probe spells.Command, tool, dir string
 	if err == nil {
 		return nil
 	}
-	if !tty.StdinIsTerminal() {
+	if !termkit.StdinIsTerminal() {
 		return notReady(res, err)
 	}
 

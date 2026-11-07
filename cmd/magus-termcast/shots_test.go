@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/interactive/screen"
+	"github.com/egladman/magus/libs/termkit/screen"
 )
 
 // TestShotsUpToDate is the drift gate every generated file in this repo carries.

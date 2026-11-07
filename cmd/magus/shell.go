@@ -25,7 +25,7 @@ import (
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
@@ -341,7 +341,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 // never recorded as one.
 func terminalWindow() string {
 	return hint.WindowFromTerminal(os.Getenv, os.Getppid(),
-		tty.IsTerminalWriter(os.Stdout, tty.SystemProbe))
+		termkit.IsTerminalWriter(os.Stdout, termkit.SystemProbe))
 }
 
 // shellInput resolves the command from the operand a person typed, or from stdin when

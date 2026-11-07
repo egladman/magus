@@ -23,7 +23,7 @@ import (
 	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/workspace"
@@ -114,26 +114,26 @@ func describeUnknownNounUsage() {
 func describeUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus describe <noun> [<name>] [flags]")
 	fmt.Fprintln(os.Stderr, "")
-	tty.Prose(os.Stderr, tty.SystemProbe,
+	termkit.Prose(os.Stderr, termkit.SystemProbe,
 		"Define a magus concept and list every entity of that kind.",
 		"Singular and plural are interchangeable; pass a name to detail one entity.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Nouns (each accepts singular or plural):")
-	tty.ProseItem(os.Stderr, tty.SystemProbe, "  spell        ", "language/runtime adapters")
-	tty.ProseItem(os.Stderr, tty.SystemProbe, "  charm        ", "execution modifiers (rw, gha) and the targets that declare them")
-	tty.ProseItem(os.Stderr, tty.SystemProbe, "  target       ", "targets dispatched to projects; `target <path:target>` evaluates one")
-	tty.ProseItem(os.Stderr, tty.SystemProbe, "  graph        ", "target dependency graph (ctx.needs DAG) per project")
-	tty.ProseItem(os.Stderr, tty.SystemProbe, "  project      ", "directories recognized as units of work; `project <path>` details one")
-	tty.ProseItem(os.Stderr, tty.SystemProbe, "  workspace    ", "the active workspace root and its config")
-	tty.ProseItem(os.Stderr, tty.SystemProbe, "  module       ", "magus stdlib modules; `module <name>` lists its methods + signatures")
-	tty.ProseItem(os.Stderr, tty.SystemProbe, "  mcp-tool     ", "tools exposed to AI agents via the MCP server")
-	tty.ProseItem(os.Stderr, tty.SystemProbe, "  file         ", "classify paths against declared globs: generated output, source, maintained, or unclaimed")
-	tty.ProseItem(os.Stderr, tty.SystemProbe, "  tool         ", "binaries the spells drive, their probed versions, and the window each is held to")
-	tty.ProseItem(os.Stderr, tty.SystemProbe, "  rule         ", "the guard rules enforced here; `rule <name>` details the one a verdict named")
-	tty.ProseItem(os.Stderr, tty.SystemProbe, "  harness      ", "host config a wired harness needs, and the command you run to merge it")
+	termkit.ProseItem(os.Stderr, termkit.SystemProbe, "  spell        ", "language/runtime adapters")
+	termkit.ProseItem(os.Stderr, termkit.SystemProbe, "  charm        ", "execution modifiers (rw, gha) and the targets that declare them")
+	termkit.ProseItem(os.Stderr, termkit.SystemProbe, "  target       ", "targets dispatched to projects; `target <path:target>` evaluates one")
+	termkit.ProseItem(os.Stderr, termkit.SystemProbe, "  graph        ", "target dependency graph (ctx.needs DAG) per project")
+	termkit.ProseItem(os.Stderr, termkit.SystemProbe, "  project      ", "directories recognized as units of work; `project <path>` details one")
+	termkit.ProseItem(os.Stderr, termkit.SystemProbe, "  workspace    ", "the active workspace root and its config")
+	termkit.ProseItem(os.Stderr, termkit.SystemProbe, "  module       ", "magus stdlib modules; `module <name>` lists its methods + signatures")
+	termkit.ProseItem(os.Stderr, termkit.SystemProbe, "  mcp-tool     ", "tools exposed to AI agents via the MCP server")
+	termkit.ProseItem(os.Stderr, termkit.SystemProbe, "  file         ", "classify paths against declared globs: generated output, source, maintained, or unclaimed")
+	termkit.ProseItem(os.Stderr, termkit.SystemProbe, "  tool         ", "binaries the spells drive, their probed versions, and the window each is held to")
+	termkit.ProseItem(os.Stderr, termkit.SystemProbe, "  rule         ", "the guard rules enforced here; `rule <name>` details the one a verdict named")
+	termkit.ProseItem(os.Stderr, termkit.SystemProbe, "  harness      ", "host config a wired harness needs, and the command you run to merge it")
 	fmt.Fprintln(os.Stderr, "")
-	tty.Prose(os.Stderr, tty.SystemProbe, "Each noun accepts -o text|json|yaml|name|wide|template=<go-template>")
-	tty.Prose(os.Stderr, tty.SystemProbe,
+	termkit.Prose(os.Stderr, termkit.SystemProbe, "Each noun accepts -o text|json|yaml|name|wide|template=<go-template>")
+	termkit.Prose(os.Stderr, termkit.SystemProbe,
 		"See also: `magus config view` for runtime configuration;",
 		"`magus graph` for the dependency DAG and the knowledge graph (export, stats).")
 }

@@ -368,6 +368,9 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			cfg.Log.Stream = &b
 		}
 	}
+	if v := getenv("MAGUS_LOG_LOADER"); v != "" {
+		cfg.Log.Loader = v
+	}
 	if v := getenv("MAGUS_HINTS_ENABLED"); v != "" {
 		if b, err := parseBoolEnv(v); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_HINTS_ENABLED: %w", err))

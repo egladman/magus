@@ -927,7 +927,8 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json"]);
     ctx.writesFiles(["internal/interp/bindings/gen/*.go",
         "!internal/interp/bindings/gen/*_test.go",
-        "!internal/interp/bindings/gen/boundary_*.go"]);
+        "!internal/interp/bindings/gen/boundary_*.go",
+        "std/termkit/gen/**/*.go"]);
     _ = proc\exec("go", ["generate", "./std/..."]);
 }
 
@@ -1295,7 +1296,7 @@ export fun termshots_generate(ctx: magus\Context, args: [str]) > void !> any {
     // internal/cache too: the shots drive the real PrettyHandler's band.
     ctx.needs(job_generate);
     ctx.readsFiles(["cmd/magus-termcast/*.go", "internal/interactive/**/*.go",
-        "internal/cache/*.go", "internal/job/gen/*.json"]);
+        "libs/termkit/**/*.go", "internal/cache/*.go", "internal/job/gen/*.json"]);
     ctx.writesFiles(["assets/gen/terminal-*.svg"]);
     _ = proc\exec("go", ["run", "./cmd/magus-termcast", "shots"]);
 }

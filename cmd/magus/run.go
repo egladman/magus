@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
@@ -50,7 +50,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	var saved *planOutput
 	if runReadsPlan(args) {
 		// A read from a terminal would wait for input nobody knows to type.
-		if tty.StdinIsTerminal() {
+		if termkit.StdinIsTerminal() {
 			return refusePlan("--stdin reads a saved plan, and stdin is a terminal; pipe one in (`%s | magus run --stdin`) or redirect a file (< plan.json)",
 				hint.Affected.With("ci", "--plan"))
 		}

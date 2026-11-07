@@ -75,6 +75,7 @@ config knowledge.vcs.max_commits
 config knowledge.workspaces
 config log.format
 config log.level
+config log.loader
 config log.silent
 config log.stream
 config max_failures

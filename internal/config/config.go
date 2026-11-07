@@ -461,6 +461,9 @@ type Log struct {
 	// Normally set via -vv (and implied by -vvv); MAGUS_LOG_STREAM=1 is the env equivalent.
 	// Pointer to distinguish "not set" from explicit false.
 	Stream *bool `json:"stream" yaml:"stream"`
+	// Loader names the animation the run band draws while targets run. Empty
+	// draws glyph/dots. A locale that is not UTF-8 draws glyph/line instead.
+	Loader string `json:"loader" yaml:"loader" validate:"omitempty,oneof=rotation/comet·1 rotation/square·1 rotation/clock·1 rotation/ring·2 rotation/pinwheel·2 rotation/infinity·2 glyph/dots glyph/orbit glyph/pulse glyph/triangle glyph/spark glyph/line strip/scanner strip/equalizer strip/shade strip/snake strip/sine strip/dots"`
 }
 
 // IsSilent reports whether silent output mode is enabled.

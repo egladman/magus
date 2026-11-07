@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -53,8 +52,8 @@ func (r *runner) checkTerminal() types.Check {
 
 	// Both ends, because the interactive views need to paint AND to listen.
 	// A pipe on either is the ordinary CI case and not worth a warning.
-	canRender := tty.CanRender(os.Stderr, tty.SystemProbe)
-	canRead := tty.IsTerminalReader(os.Stdin, tty.SystemProbe)
+	canRender := termkit.CanRender(os.Stderr, termkit.SystemProbe)
+	canRead := termkit.IsTerminalReader(os.Stdin, termkit.SystemProbe)
 	if !canRender || !canRead {
 		return types.Check{
 			Name:    name,
@@ -65,8 +64,8 @@ func (r *runner) checkTerminal() types.Check {
 	}
 
 	width, height := 0, 0
-	if fd, ok := tty.Fd(os.Stderr); ok {
-		width, height, _ = tty.SystemProbe.Size(fd)
+	if fd, ok := termkit.Fd(os.Stderr); ok {
+		width, height, _ = termkit.SystemProbe.Size(fd)
 	}
 
 	// The one real probe. It costs a round trip and briefly takes the terminal
@@ -77,8 +76,8 @@ func (r *runner) checkTerminal() types.Check {
 	details = append(details,
 		formatSource(format),
 		fmt.Sprintf("size: %dx%d", width, height),
-		fmt.Sprintf("color: %s", yesNo(tty.WantsColor(os.Stderr, tty.SystemProbe))),
-		fmt.Sprintf("hyperlinks: %s", yesNo(tty.WantsHyperlinks(os.Stderr, tty.SystemProbe))),
+		fmt.Sprintf("color: %s", yesNo(termkit.WantsColor(os.Stderr, termkit.SystemProbe))),
+		fmt.Sprintf("hyperlinks: %s", yesNo(termkit.WantsHyperlinks(os.Stderr, termkit.SystemProbe))),
 	)
 
 	var degraded []string
@@ -96,16 +95,11 @@ func (r *runner) checkTerminal() types.Check {
 	if !mouse {
 		degraded = append(degraded, "no mouse (this terminal does not report the cursor position, so a click cannot be resolved against an inline view)")
 	}
-	if !tty.WantsColor(os.Stderr, tty.SystemProbe) {
+	if !termkit.WantsColor(os.Stderr, termkit.SystemProbe) {
 		degraded = append(degraded, "no color")
 	}
-	// magus draws the band's border in box-drawing runes on every terminal,
-	// rather than picking per locale, so that one look is the same everywhere
-	// and a committed picture does not depend on the shell that made it. The
-	// cost is that this is the one setting that can make it render wrong, so it
-	// is reported instead.
-	if !utf8Locale() {
-		degraded = append(degraded, fmt.Sprintf("locale is not UTF-8 (%s), so the band's border may render as stray characters; set LANG to a UTF-8 value", localeSource()))
+	if !termkit.UTF8Locale() {
+		degraded = append(degraded, fmt.Sprintf("locale is not UTF-8 (%s), so the band's spinner falls back to ASCII and its tree and progress bar may render as stray characters; set LANG to a UTF-8 value", localeSource()))
 	}
 	if height > 0 && height < minInteractiveHeight {
 		degraded = append(degraded, fmt.Sprintf("only %d rows; the pinned band needs a scrolling area above it and stands down below about %d", height, minInteractiveHeight))
@@ -135,7 +129,7 @@ func (r *runner) checkTerminal() types.Check {
 // terminal has to be asked, and a terminal that does not implement the query
 // says nothing.
 func probeCursorReport() bool {
-	in, err := tty.OpenInput(os.Stdin, os.Stderr, tty.SystemProbe)
+	in, err := termkit.OpenInput(os.Stdin, os.Stderr, termkit.SystemProbe)
 	if err != nil {
 		return false
 	}
@@ -162,18 +156,6 @@ func formatSource(format string) string {
 		return fmt.Sprintf("log format: %q (from MAGUS_LOG_FORMAT, which overrides magus.yaml)", format)
 	}
 	return fmt.Sprintf("log format: %q (from config)", format)
-}
-
-// utf8Locale reports whether the environment claims a UTF-8 character set,
-// checked in the order POSIX resolves them.
-func utf8Locale() bool {
-	for _, k := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
-		if v := os.Getenv(k); v != "" {
-			u := strings.ToUpper(v)
-			return strings.Contains(u, "UTF-8") || strings.Contains(u, "UTF8")
-		}
-	}
-	return false
 }
 
 // localeSource names the variable that decided, so the remedy is unambiguous:

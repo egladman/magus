@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/exit"
@@ -100,11 +100,11 @@ func whereCommand(ctx context.Context, root string, args []string) error {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus where [flags] [filter...]")
 			fmt.Fprintln(os.Stderr, "")
-			tty.Prose(os.Stderr, tty.SystemProbe, "Print the absolute path of a project to stdout.")
-			tty.Prose(os.Stderr, tty.SystemProbe, "Filters are AND-combined substrings; leaf-anchored longest match wins.")
-			tty.Prose(os.Stderr, tty.SystemProbe, "Prints the path and exits 0 on a unique match; exits 2 on ambiguity.")
+			termkit.Prose(os.Stderr, termkit.SystemProbe, "Print the absolute path of a project to stdout.")
+			termkit.Prose(os.Stderr, termkit.SystemProbe, "Filters are AND-combined substrings; leaf-anchored longest match wins.")
+			termkit.Prose(os.Stderr, termkit.SystemProbe, "Prints the path and exits 0 on a unique match; exits 2 on ambiguity.")
 			fmt.Fprintln(os.Stderr, "")
-			tty.Prose(os.Stderr, tty.SystemProbe,
+			termkit.Prose(os.Stderr, termkit.SystemProbe,
 				"When no project matches, falls back to fuzzy file search across the workspace",
 				"(well-known build/vendor dirs are skipped).")
 			fmt.Fprintln(os.Stderr, "")

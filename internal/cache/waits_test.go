@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/interactive/screen"
+	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/egladman/magus/types"
 )
 
@@ -122,7 +122,7 @@ func waitCtx() context.Context {
 
 type WaitBandSuite struct {
 	suite.Suite
-	screen *screen.Screen
+	screen *screen.Terminal
 	h      *PrettyHandler
 	now    time.Time
 }

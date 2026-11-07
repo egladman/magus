@@ -6,7 +6,7 @@ import (
 	"io"
 
 	interactivepkg "github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/interp/bindings/gen/providerops"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/secret"
@@ -66,7 +66,7 @@ func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (types.Secre
 	// the before half, and only this one can be seen while the prompt is on screen.
 	// Budgets from the run's resolver, which carries what magus.yaml configured.
 	budgets := secret.ResolverFromContext(ctx).Timeouts()
-	interactive := tty.StdinIsTerminal()
+	interactive := termkit.StdinIsTerminal()
 	timeout := budgets.Interactive
 	if !interactive {
 		timeout = budgets.Unattended
