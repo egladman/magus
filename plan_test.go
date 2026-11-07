@@ -255,8 +255,11 @@ func (s *PlanUnitsSuite) TestColdHistoryOpensFewShardsAndSaysSo() {
 	s.Require().NoError(err)
 	s.LessOrEqual(len(plan.Shards), forecast.ColdShards)
 	s.Require().NotEmpty(plan.Fallbacks)
-	s.Equal("At most 2 shards", plan.Fallbacks[len(plan.Fallbacks)-1].What)
-	s.Equal("the run history holds no duration for any target", plan.Fallbacks[len(plan.Fallbacks)-1].Why)
+	s.Equal(types.Fallback{
+		What:   "At most 2 shards",
+		Why:    "the run history holds no duration for any target",
+		Effect: "Shards are packed by count, not time, so one can run far longer than the rest. A main run records durations for the next plan.",
+	}, plan.Fallbacks[len(plan.Fallbacks)-1])
 }
 
 func (s *PlanUnitsSuite) TestNoMachineChecksNoBudgetAndSaysSo() {
@@ -264,8 +267,12 @@ func (s *PlanUnitsSuite) TestNoMachineChecksNoBudgetAndSaysSo() {
 	s.Require().NoError(err)
 	s.Nil(plan.Machine)
 	s.Require().NotEmpty(plan.Fallbacks)
-	s.Equal("No memory check", plan.Fallbacks[0].What)
-	s.Equal("magus.yaml sets no `ci.machine`", plan.Fallbacks[0].Why)
+	s.Equal(types.Fallback{
+		What: "No memory check",
+		Why:  "magus.yaml sets no `ci.machine`",
+		Effect: "No shard is checked against a runner's memory. A shard that runs out shows as cancelled, with no logs. " +
+			"Set `ci.machine` to check.",
+	}, plan.Fallbacks[0])
 }
 
 func (s *PlanUnitsSuite) TestTheConfiguredMachineIsRecorded() {
@@ -305,6 +312,23 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any {
 	s.T().Cleanup(func() { _ = m.Close() })
 	_, err = m.planUnits(context.Background(), []types.Target{{Path: "."}}, "ci", nil, nil)
 	s.ErrorContains(err, "ci in . does more than ctx.needs (fs.writeFile)")
+}
+
+func (s *PlanUnitsSuite) TestALeafAnchorWithEffectsIsItsOwnUnit() {
+	root := writeWorkspace(s.T(), map[string]string{
+		"magusfile.buzz": `import "magus";
+import "fs";
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    fs\writeFile("out.txt", "x");
+}
+`,
+	})
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	units, err := m.planUnits(context.Background(), []types.Target{{Path: "."}}, "build", nil, nil)
+	s.Require().NoError(err)
+	s.Equal([]types.Unit{{Project: ".", Target: "build"}}, units)
 }
 
 // PlanReachSuite plans a workspace whose targets declare their reads, so a

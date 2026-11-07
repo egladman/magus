@@ -413,7 +413,9 @@ func (m *Magus) anchorSteps(ctx context.Context, p *types.Project, anchor string
 	if err := m.runTarget(ctx, p, anchor); err != nil {
 		return nil, true, fmt.Errorf("evaluate %s in %s: %w", anchor, p.Path, err)
 	}
-	if effects := rec.Effects(); len(effects) > 0 {
+	units := rec.Units()
+	// A leaf anchor is its own unit, so a shard runs its whole body.
+	if effects := rec.Effects(); len(effects) > 0 && len(units) > 0 {
 		return nil, true, fmt.Errorf(
 			"%s in %s does more than ctx.needs (%s), and a shard runs only the steps it asks for: move that work into a target %s needs",
 			anchor, p.Path, strings.Join(effects, ", "), anchor)
@@ -423,7 +425,7 @@ func (m *Magus) anchorSteps(ctx context.Context, p *types.Project, anchor string
 		declared[types.Unit{Project: cmp.Or(s.Project, p.Path), Target: types.Normalize(s.Target)}] = true
 	}
 	var undeclared []string
-	for _, u := range rec.Units() {
+	for _, u := range units {
 		u = types.Unit{Project: cmp.Or(u.Project, p.Path), Target: types.Normalize(u.Target)}
 		if !declared[u] {
 			undeclared = append(undeclared, u.String())
