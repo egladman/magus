@@ -9,8 +9,10 @@
 // Wire it to your host's stop event. It reads the reply, runs `proofread agent-reply --stdin
 // -o json` over it, and hands back at most 5 findings in the shape the named host takes:
 //
-//   claude-code  Stop: hookSpecificOutput.additionalContext. Advice only; the stop goes
-//                through and the findings ride into the next turn.
+//   claude-code  Stop: nothing, since Stop context starts a turn
+//                the person sees answered. The findings wait in a
+//                store for the next UserPromptSubmit, which hands them
+//                over as additionalContext. Wire both events.
 //   codex        Stop: {"decision": "block", "reason": ...}. Codex continues the turn with
 //                the reason as a new prompt, once: the next Stop carries stop_hook_active.
 //   cursor       stop: {"followup_message": ...}. Cursor submits it as another turn. It
@@ -296,12 +298,12 @@ fun noticeReply(host: str, session: str, why: str, fix: str) > str {
     return "";
 }
 
-// lead opens the advice. claude-code keeps the reply it already sent; codex, cursor and
-// opencode start another turn, so the agent is told to send the reply again.
+// lead opens the advice. claude-code reads it beside the next message.
+// codex, cursor and opencode start another turn to send the reply again.
 fun lead(host: str) > str {
     if (host == CLAUDE_CODE) {
-        return "proofread judged your last reply as agent-reply. These advise; the stop "
-            + "went through. Apply them in your next reply to the person, and do not repost this one.";
+        return "proofread judged your previous reply as agent-reply. These advise: apply "
+            + "them in this reply, and do not mention this check or answer it.";
     }
     return "proofread judged your last reply as agent-reply. Send the reply again with these "
         + "fixed, and do not mention this check.";
@@ -338,7 +340,108 @@ fun shaped(host: str, text: str) > str {
     if (host == OPENCODE) {
         return json\stringify({"prompt": text}) catch "";
     }
-    return json\stringify({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": text}}) catch "";
+    return json\stringify({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": text}}) catch "";
+}
+
+// PENDING_STORE holds claude-code findings until the next prompt.
+final PENDING_STORE = "pending.jsonl";
+
+// COMPACT_AFTER is how many lines the store reaches before a take rewrites it.
+final COMPACT_AFTER = 64;
+
+// Pending is one store line. An empty printed means the session's
+// findings were handed over.
+object Pending {
+    session: str,
+    printed: str,
+
+    fun toJson() > str {
+        return json\stringify({"session": this.session, "printed": this.printed}) catch "";
+    }
+}
+
+fun pendingFrom(line: str) > Pending? {
+    final doc = json\parse(line) catch null;
+    final session = hook\field(doc, dotPath: "session");
+    if (session == "") { return null; }
+    return Pending{ session = session, printed = hook\field(doc, dotPath: "printed") };
+}
+
+// pendingStore is the store's path in the per-user state dir, or "" when
+// there is none.
+fun pendingStore() > str {
+    final dir = fs\stateDir("proofread-reply") catch "";
+    if (dir == "") { return ""; }
+    return "{dir}/{PENDING_STORE}";
+}
+
+// queue records printed for session's next prompt. It returns why it could
+// not, or "".
+fun queue(store: str, session: str, printed: str) > str {
+    if (session == "") {
+        return "the stop carries no session_id, so its findings cannot wait for the next prompt";
+    }
+    if (store == "") { return "no state dir holds the findings for the next prompt"; }
+    final row = Pending{ session = session, printed = printed }.toJson();
+    fs\mkdirAll(fs\dirname(store)) catch void;
+    try {
+        fs\appendFile(store, content: "{row}\n");
+    } catch (err: any) {
+        return "could not append to {store}: {err}";
+    }
+    return "";
+}
+
+// take returns what waits for session and marks it handed over. The last
+// line per session wins.
+fun take(store: str, session: str) > str {
+    if (store == "" or session == "") { return ""; }
+    final lines = fs\readLines(store) catch [<str>];
+    final latest = mut {<str: str>};
+    foreach (line in lines) {
+        final row = pendingFrom(line);
+        if (row != null) { latest[row!.session] = row!.printed; }
+    }
+    final printed = latest[session] ?? "";
+    if (printed == "") { return ""; }
+    latest[session] = "";
+    if (lines.len() + 1 >= COMPACT_AFTER) {
+        compact(store, latest: latest);
+    } else {
+        fs\appendFile(store, content: Pending{ session = session, printed = "" }.toJson() + "\n") catch void;
+    }
+    return printed;
+}
+
+// compact rewrites store to the sessions still waiting, by rename.
+fun compact(store: str, latest: {str: str}) > void {
+    final kept = mut [<str>];
+    foreach (session, printed in latest) {
+        if (printed != "") { kept.append(Pending{ session = session, printed = printed }.toJson()); }
+    }
+    final next = "{store}.next";
+    final body = if (kept.len() == 0) "" else kept.join("\n") + "\n";
+    fs\writeFile(next, content: body) catch void;
+    fs\rename(next, dst: store) catch void;
+}
+
+// held is what a stop prints. claude-code's findings go to store instead.
+fun held(store: str, host: str, session: str, printed: str) > str {
+    if (host != CLAUDE_CODE or printed == "") { return printed; }
+    final why = queue(store, session: session, printed: printed);
+    if (why != "") { warn(why); }
+    return "";
+}
+
+// handOver is what a claude-code prompt event prints: its session's findings.
+fun handOver(store: str, input: str) > str {
+    return take(store, session: hook\field(json\parse(input) catch null, dotPath: "session_id"));
+}
+
+// isPrompt reports whether the claude-code event is the person's message.
+fun isPrompt(input: str) > bool {
+    final doc = json\parse(input) catch null;
+    return hook\field(doc, dotPath: "hook_event_name") == "UserPromptSubmit";
 }
 
 // output is what the hook prints for stop, or "" for a reply made while continuing, an
@@ -376,6 +479,11 @@ fun main(args: [str]) > void {
     if (decisions == "") { decisions = hook\envOr("__PROOFREAD_DECISIONS", fallback: ""); }
 
     final input = io\stdin.readAll() catch "";
+    if (host == CLAUDE_CODE and isPrompt(input)) {
+        final waiting = handOver(pendingStore(), input: input);
+        if (waiting != "") { std\print(waiting); }
+        return;
+    }
     final stop = readStop(input, host: host);
     if (stop.tool != "") {
         warn("the event is a call to tool \"{stop.tool}\", not a stop, so nothing was judged. Wire this hook to the host's stop event.");
@@ -397,7 +505,8 @@ fun main(args: [str]) > void {
             printed = noticeReply(host, session: session, why: judgment.failure,
                 fix: "Run `{reader.bin} agent-reply --stdin` on a reply and read why.");
         } else {
-            printed = output(stop, host: host, judged: judging(judgment.found));
+            printed = held(pendingStore(), host: host, session: session,
+                printed: output(stop, host: host, judged: judging(judgment.found)));
         }
     }
     if (printed != "") {
@@ -420,15 +529,62 @@ test "a Stop envelope gives the reply and whether the agent is continuing" {
     std\assert(empty.reply == "" and !empty.again, message: "unreadable input is an empty stop");
 }
 
-test "claude-code findings go back as Stop context, never as a decision" {
+test "claude-code findings go out on the next prompt, never at Stop" {
     final printed = output(Stop{ reply = "Done.", again = false }, host: CLAUDE_CODE, judged: judging([offer]));
     final doc: {str: any} = json\parse(printed) catch {<str: any>};
     std\assert(doc["decision"] == null, message: "no decision blocks the stop: {printed}");
     final hooked: {str: any} = doc["hookSpecificOutput"] ?? {<str: any>};
-    std\assert(hooked["hookEventName"] == "Stop", message: printed);
+    std\assert(hooked["hookEventName"] == "UserPromptSubmit", message: printed);
     final context: str = hooked["additionalContext"] ?? "";
     std\assert(context.indexOf("- closing-offer (line 3): End on the result") != null, message: context);
-    std\assert(context.indexOf("the stop went through") != null, message: context);
+    std\assert(context.indexOf("do not mention") != null, message: context);
+}
+
+test "a queued finding is handed over once, on the next prompt" {
+    final store = "{fs\tempDir("proofread-reply-store-")}/{PENDING_STORE}";
+    std\assert(queue(store, session: "s1", printed: "first") == "", message: "queued");
+    std\assert(queue(store, session: "s1", printed: "second") == "", message: "queued again");
+    std\assert(queue(store, session: "s2", printed: "other") == "", message: "another session");
+    std\assert(take(store, session: "s1") == "second", message: "a later stop replaces an earlier one");
+    std\assert(take(store, session: "s1") == "", message: "handed over once");
+    std\assert(take(store, session: "s2") == "other", message: "sessions keep their own");
+    std\assert(take(store, session: "s3") == "", message: "nothing queued is nothing");
+    fs\removeAll(fs\dirname(store));
+}
+
+test "the store compacts to what is still queued" {
+    final store = "{fs\tempDir("proofread-reply-store-")}/{PENDING_STORE}";
+    for (var i = 0; i < COMPACT_AFTER + 2; i = i + 1) {
+        std\assert(queue(store, session: "s{i}", printed: "p{i}") == "", message: "queued s{i}");
+        std\assert(take(store, session: "s{i}") == "p{i}", message: "took s{i}");
+    }
+    std\assert(queue(store, session: "kept", printed: "waiting") == "", message: "queued kept");
+    final lines = fs\readLines(store) catch [<str>];
+    std\assert(lines.len() <= COMPACT_AFTER, message: "{lines.len()} lines");
+    std\assert(take(store, session: "kept") == "waiting", message: "compaction keeps what waits");
+    fs\removeAll(fs\dirname(store));
+}
+
+test "a stop with no session id cannot queue its findings" {
+    final store = "{fs\tempDir("proofread-reply-store-")}/{PENDING_STORE}";
+    std\assert(queue(store, session: "", printed: "lost").indexOf("session_id") != null, message: "says why");
+    fs\removeAll(fs\dirname(store));
+}
+
+test "a claude-code stop prints nothing and its next prompt prints the findings" {
+    final store = "{fs\tempDir("proofread-reply-store-")}/{PENDING_STORE}";
+    final printed = output(Stop{ reply = "Done.", again = false }, host: CLAUDE_CODE, judged: judging([offer]));
+    std\assert(held(store, host: CLAUDE_CODE, session: "s1", printed: printed) == "", message: "the stop is silent");
+    final prompt = `{"hook_event_name": "UserPromptSubmit", "session_id": "s1", "prompt": "next"}`;
+    std\assert(handOver(store, input: prompt) == printed, message: "the prompt carries them");
+    std\assert(handOver(store, input: prompt) == "", message: "and only once");
+    std\assert(held(store, host: CODEX, session: "s1", printed: "x") == "x", message: "other hosts print at stop");
+    fs\removeAll(fs\dirname(store));
+}
+
+test "a claude-code prompt event is told apart from its stop" {
+    std\assert(isPrompt(`{"hook_event_name": "UserPromptSubmit", "prompt": "hi"}`), message: "prompt");
+    std\assert(!isPrompt(`{"hook_event_name": "Stop", "last_assistant_message": "Done."}`), message: "stop");
 }
 
 test "codex findings continue the turn with a block decision and a reason" {

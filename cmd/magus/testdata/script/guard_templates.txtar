@@ -855,22 +855,33 @@ env XDG_STATE_HOME=
 chmod 0755 $WORK/fake-proofread
 chmod 0755 $WORK/failing-proofread
 
-# The findings go back as Stop context, capped at five with the rest counted, and no
-# decision is printed. The binary comes from the environment, the decisions file is passed
-# through as --decisions, and the reply is judged as agent-reply.
+# The stop prints nothing: Stop context would start a turn the person sees answered. The
+# next prompt of the session carries the findings as UserPromptSubmit context, capped at
+# five with the rest counted, and no decision. The binary comes from the environment, the
+# decisions file is passed through as --decisions, and the reply is judged as agent-reply.
+env XDG_STATE_HOME=$WORK/state
 env __PROOFREAD_BIN=$WORK/fake-proofread
 stdin $WORK/proofread-stop.json
 exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code --decisions $WORK/proofread-decisions.json
-stdout '"hookEventName":"Stop"'
+! stdout .
+! stderr .
+stdin $WORK/proofread-prompt.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
+stdout '"hookEventName":"UserPromptSubmit"'
 stdout 'closing-offer \(line 3\): argv agent-reply --stdin -o json --decisions'
 stdout 'and 2 more'
 ! stdout '"decision"'
 ! stderr .
 
+# The findings go over once: the prompt after that prints nothing.
+stdin $WORK/proofread-prompt.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
+! stdout .
+
 # --proofread outranks the environment.
 env __PROOFREAD_BIN=$WORK/nonexistent-proofread
 stdin $WORK/proofread-stop.json
-exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code --proofread $WORK/fake-proofread
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name codex --proofread $WORK/fake-proofread
 stdout 'closing-offer'
 
 # A reply made while a stop hook has the agent continuing is never judged, so the context
@@ -916,7 +927,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claud
 
 # An argument it does not take is reported on stderr and changes nothing else.
 stdin $WORK/proofread-stop.json
-exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code --not-a-flag
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name codex --not-a-flag
 stdout 'closing-offer'
 stderr 'unsupported argument'
 env __PROOFREAD_BIN=
@@ -936,6 +947,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name $HOST
 ! stdout .
 stderr 'no reply shape for host'
 env __PROOFREAD_BIN=
+env XDG_STATE_HOME=
 
 # --- fail-closed: a missing magus refuses what it cannot judge, and says so ---
 #
@@ -1822,6 +1834,8 @@ The instruction file the rehydrate wrapper's rules line points back at.
 {"session_id": "s1", "hook_event_name": "Stop", "stop_hook_active": false, "last_assistant_message": "Done. Want me to run the tests?"}
 -- proofread-again.json --
 {"session_id": "s1", "hook_event_name": "Stop", "stop_hook_active": true, "last_assistant_message": "Done. Want me to run the tests?"}
+-- proofread-prompt.json --
+{"session_id": "s1", "hook_event_name": "UserPromptSubmit", "prompt": "next"}
 -- proofread-decisions.json --
 {"rules": {"filler": "deny"}}
 -- fake-proofread --
