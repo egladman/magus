@@ -7,7 +7,7 @@ tags: [config, magus.yaml, configuration, environment variables, flags, referenc
 
 # Configuration
 
-magus resolves configuration from three layers, highest precedence first: a CLI flag, a `MAGUS_*` environment variable, then the `magus.yaml` file at the workspace root. This page is the complete inventory of config keys, each with its `magus.yaml` path, environment variable, CLI flag, and value type.
+magus resolves configuration from these layers, highest precedence first: a CLI flag, a `MAGUS_*` environment variable, a `magus.yaml` in the working directory below the workspace root, the `magus.yaml` at the workspace root, then the user config at `$XDG_CONFIG_HOME/magus/magus.yaml`. This page is the inventory of config keys a flag or an environment variable can set, each with its `magus.yaml` path, environment variable, CLI flag, and value type. Keys that only a file sets, such as `knowledge.workspaces` in the user config, are documented where they are used.
 
 ## cache
 
@@ -99,25 +99,24 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 
 ## knowledge
 
-| Config key                                       | Environment variable                                   | Flag                                               | Type                               |
-| ------------------------------------------------ | ------------------------------------------------------ | -------------------------------------------------- | ---------------------------------- |
-| `knowledge.duplication.include_tests`            | `MAGUS_KNOWLEDGE_DUPLICATION_INCLUDE_TESTS`            | `--knowledge-duplication-include-tests`            | bool                               |
-| `knowledge.duplication.min_callees`              | `MAGUS_KNOWLEDGE_DUPLICATION_MIN_CALLEES`              | `--knowledge-duplication-min-callees`              | int                                |
-| `knowledge.duplication.min_score`                | `MAGUS_KNOWLEDGE_DUPLICATION_MIN_SCORE`                | `--knowledge-duplication-min-score`                | float                              |
-| `knowledge.duplication.min_shared`               | `MAGUS_KNOWLEDGE_DUPLICATION_MIN_SHARED`               | `--knowledge-duplication-min-shared`               | int                                |
-| `knowledge.duplication.min_span_ratio`           | `MAGUS_KNOWLEDGE_DUPLICATION_MIN_SPAN_RATIO`           | `--knowledge-duplication-min-span-ratio`           | float                              |
-| `knowledge.max_size_mb`                          | `MAGUS_KNOWLEDGE_MAX_SIZE_MB`                          | `--knowledge-max-size-mb`                          | int                                |
-| `knowledge.notes.private`                        | `MAGUS_KNOWLEDGE_NOTES_PRIVATE`                        | `--knowledge-notes-private`                        | string                             |
-| `knowledge.notes.shared`                         | `MAGUS_KNOWLEDGE_NOTES_SHARED`                         | `--knowledge-notes-shared`                         | string                             |
-| `knowledge.published_ref`                        | `MAGUS_KNOWLEDGE_PUBLISHED_REF`                        | `--knowledge-published-ref`                        | string                             |
-| `knowledge.sessions.disabled`                    | `MAGUS_KNOWLEDGE_SESSIONS_DISABLED`                    | `--knowledge-sessions-disabled`                    | bool                               |
-| `knowledge.symbol_indexing.disabled`             | `MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED`             | `--knowledge-symbol-indexing-disabled`             | bool                               |
-| `knowledge.symbol_indexing.min_interval_seconds` | `MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS` | `--knowledge-symbol-indexing-min-interval-seconds` | int                                |
-| `knowledge.symbol_indexing.quiet_seconds`        | `MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS`        | `--knowledge-symbol-indexing-quiet-seconds`        | int                                |
-| `knowledge.vcs.authorship`                       | `MAGUS_KNOWLEDGE_VCS_AUTHORSHIP`                       | _(env only)_                                       | bool _(env only)_                  |
-| `knowledge.vcs.enabled`                          | `MAGUS_KNOWLEDGE_VCS_ENABLED`                          | `--knowledge-vcs-enabled`                          | bool                               |
-| `knowledge.vcs.max_commits`                      | `MAGUS_KNOWLEDGE_VCS_MAX_COMMITS`                      | `--knowledge-vcs-max-commits`                      | int                                |
-| `knowledge.workspaces`                           | `MAGUS_KNOWLEDGE_WORKSPACES`                           | _(env only)_                                       | list _(comma-separated, env only)_ |
+| Config key                                       | Environment variable                                   | Flag                                               | Type              |
+| ------------------------------------------------ | ------------------------------------------------------ | -------------------------------------------------- | ----------------- |
+| `knowledge.duplication.include_tests`            | `MAGUS_KNOWLEDGE_DUPLICATION_INCLUDE_TESTS`            | `--knowledge-duplication-include-tests`            | bool              |
+| `knowledge.duplication.min_callees`              | `MAGUS_KNOWLEDGE_DUPLICATION_MIN_CALLEES`              | `--knowledge-duplication-min-callees`              | int               |
+| `knowledge.duplication.min_score`                | `MAGUS_KNOWLEDGE_DUPLICATION_MIN_SCORE`                | `--knowledge-duplication-min-score`                | float             |
+| `knowledge.duplication.min_shared`               | `MAGUS_KNOWLEDGE_DUPLICATION_MIN_SHARED`               | `--knowledge-duplication-min-shared`               | int               |
+| `knowledge.duplication.min_span_ratio`           | `MAGUS_KNOWLEDGE_DUPLICATION_MIN_SPAN_RATIO`           | `--knowledge-duplication-min-span-ratio`           | float             |
+| `knowledge.max_size_mb`                          | `MAGUS_KNOWLEDGE_MAX_SIZE_MB`                          | `--knowledge-max-size-mb`                          | int               |
+| `knowledge.notes.private`                        | `MAGUS_KNOWLEDGE_NOTES_PRIVATE`                        | `--knowledge-notes-private`                        | string            |
+| `knowledge.notes.shared`                         | `MAGUS_KNOWLEDGE_NOTES_SHARED`                         | `--knowledge-notes-shared`                         | string            |
+| `knowledge.published_ref`                        | `MAGUS_KNOWLEDGE_PUBLISHED_REF`                        | `--knowledge-published-ref`                        | string            |
+| `knowledge.sessions.disabled`                    | `MAGUS_KNOWLEDGE_SESSIONS_DISABLED`                    | `--knowledge-sessions-disabled`                    | bool              |
+| `knowledge.symbol_indexing.disabled`             | `MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED`             | `--knowledge-symbol-indexing-disabled`             | bool              |
+| `knowledge.symbol_indexing.min_interval_seconds` | `MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS` | `--knowledge-symbol-indexing-min-interval-seconds` | int               |
+| `knowledge.symbol_indexing.quiet_seconds`        | `MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS`        | `--knowledge-symbol-indexing-quiet-seconds`        | int               |
+| `knowledge.vcs.authorship`                       | `MAGUS_KNOWLEDGE_VCS_AUTHORSHIP`                       | _(env only)_                                       | bool _(env only)_ |
+| `knowledge.vcs.enabled`                          | `MAGUS_KNOWLEDGE_VCS_ENABLED`                          | `--knowledge-vcs-enabled`                          | bool              |
+| `knowledge.vcs.max_commits`                      | `MAGUS_KNOWLEDGE_VCS_MAX_COMMITS`                      | `--knowledge-vcs-max-commits`                      | int               |
 
 ## log
 

@@ -2790,12 +2790,19 @@ export object ToolReport {
     tools: [ToolRow] = [],
 }
 
+export object ListedWorkspace {
+    name: str = "",
+    root: str = "",
+    dir: str = "",
+}
+
 export object WorkspaceEntry {
     root: str = "",
     vcsBaseRef: str = "",
     cacheDir: str = "",
     concurrency: int = 0,
     projectCount: int = 0,
+    workspaces: [ListedWorkspace] = [],
 }
 
 export object ServiceLease {

@@ -375,16 +375,6 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			cfg.Hints.Enabled = &b
 		}
 	}
-	if v := getenv("MAGUS_KNOWLEDGE_WORKSPACES"); v != "" {
-		parts := strings.Split(v, ",")
-		out := parts[:0]
-		for _, p := range parts {
-			if p = strings.TrimSpace(p); p != "" {
-				out = append(out, p)
-			}
-		}
-		cfg.Knowledge.Workspaces = out
-	}
 	if v := getenv("MAGUS_KNOWLEDGE_PUBLISHED_REF"); v != "" {
 		cfg.Knowledge.PublishedRef = v
 	}

@@ -852,6 +852,37 @@ func checkRemoteSpellImports(ctx context.Context, paths []string) error {
 	return errors.Join(errs...)
 }
 
+// checkWorkspaceImports refuses an import through types.WorkspacesDir/<name>
+// when no such workspace is connected here. Without it the import fails as a
+// missing module, which reads as a stale binary.
+func checkWorkspaceImports(ctx context.Context, rel, code string) error {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil || ws.Root() == "" || !strings.Contains(code, types.WorkspacesDir+"/") {
+		return nil
+	}
+	for rest := code; ; {
+		i := strings.Index(rest, `import "`)
+		if i < 0 {
+			return nil
+		}
+		rest = rest[i+len(`import "`):]
+		imported, _, ok := strings.Cut(rest, `"`)
+		if !ok {
+			return nil
+		}
+		after, found := strings.CutPrefix(strings.TrimPrefix(imported, "./"), types.WorkspacesDir+"/")
+		if !found {
+			continue
+		}
+		name, _, _ := strings.Cut(after, "/")
+		if _, err := os.Stat(filepath.Join(ws.Root(), filepath.FromSlash(types.WorkspacesDir), name)); err != nil {
+			return types.DiagnosticErrorf(types.WorkspaceNotConnected,
+				"%s imports %q through %s/%s, not connected here: add {name: %s, path: ...} to knowledge.workspaces in $XDG_CONFIG_HOME/magus/magus.yaml",
+				rel, imported, types.WorkspacesDir, name, name)
+		}
+	}
+}
+
 // remoteImportPaths returns the registry-path imports src makes. A parse error yields
 // nil: Exec re-parses and reports it with position.
 func remoteImportPaths(src string) []string {
@@ -1247,6 +1278,10 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 		// The module resolver has no error channel, so an undeclared remote spell import
 		// is refused here, where the load can stop naming the entry to add.
 		if err := checkRemoteSpellImports(ctx, facts.RemoteImports); err != nil {
+			_ = buzzSess.Close()
+			return nil, &ImportError{Path: path, rel: rel, Err: err}
+		}
+		if err := checkWorkspaceImports(ctx, rel, code); err != nil {
 			_ = buzzSess.Close()
 			return nil, &ImportError{Path: path, rel: rel, Err: err}
 		}

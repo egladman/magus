@@ -21,3 +21,9 @@ gap is visible before CI runs.
 - [MGS1050](MGS1050.md): a `queue.carry_approvals` entry in magus.yaml names no tier, or names code.
 - [MGS1051](MGS1051.md): a spell's `mgs_` functions do not match the spell contract, so it does not load.
 - [MGS1052](MGS1052.md): a `magus\modelTiers` or `magus\modelTier` call names tiers, a default, a harness or a matrix magus cannot use.
+- [MGS1054](MGS1054.md): a `knowledge.workspaces` entry names no workspace.
+- [MGS1055](MGS1055.md): `knowledge.workspaces` is set in a repository's magus.yaml.
+- [MGS1056](MGS1056.md): a `knowledge.workspaces` entry is not `{name, path}` with a valid name and an absolute path.
+- [MGS1057](MGS1057.md): a listed workspace's VCS does not ignore `.magus/workspaces`.
+- [MGS1058](MGS1058.md): a file or directory sits where the load would put a symlink under `.magus/workspaces`.
+- [MGS1059](MGS1059.md): a target reads through `.magus/workspaces/<name>` and no such workspace is connected.

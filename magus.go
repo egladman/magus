@@ -591,6 +591,15 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		}
 		ws.VCSOptions.Driver = vo.VCSDriver
 	}
+	// Before any magusfile is evaluated: one may read or import through
+	// .magus/workspaces, so the paths must be there first.
+	stderr := vo.Stderr
+	if stderr == nil {
+		stderr = io.Discard
+	}
+	if ws.Workspaces, err = reconcileWorkspaces(ctx, root, cfg.Knowledge.Workspaces, ws.VCSOptions, stderr); err != nil {
+		return nil, err
+	}
 	if vo.SpawnRule == nil {
 		return nil, errors.New("magus: no spawn rule: a workspace has no default one, so open it with WithSpawnRule(magus.TierCeiling), the reference rule, or a rule of your own")
 	}

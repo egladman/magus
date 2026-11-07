@@ -531,9 +531,10 @@ const ModulePrefix = "magus/spell/"
 // path element decides, as in Go's module rule: a registry host carries a dot or a
 // port (ghcr.io, localhost:5000), and a workspace directory is written with neither.
 // It does not validate the rest of the path; the magus.yaml declaration does.
+// No host starts with a dot, so `.magus/workspaces/<name>/...` stays local.
 func IsRemoteImport(importPath string) bool {
 	host, rest, ok := strings.Cut(importPath, "/")
-	if !ok || rest == "" || host == "." || host == ".." || strings.HasPrefix(rest, "/") || strings.Contains(rest, "//") {
+	if !ok || rest == "" || strings.HasPrefix(host, ".") || strings.HasPrefix(rest, "/") || strings.Contains(rest, "//") {
 		return false
 	}
 	if strings.Contains(host, ".") {
