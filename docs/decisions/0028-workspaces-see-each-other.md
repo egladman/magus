@@ -35,7 +35,9 @@ libs/conventions and libs/testpairing.
 In this record A is this repository, listed as `magus`, and B is the editor's, listed as
 `buzzed`. Every rule below is symmetric: A sees B as B sees A.
 
-### Decided by Eli
+### Decisions already made
+
+Eli made each one.
 
 | Date | Decision |
 | --- | --- |
