@@ -2325,6 +2325,11 @@ github.com/egladman/magus/types.ExpectPresent const GoalExpect = "present"
 github.com/egladman/magus/types.ExpectSignature const GoalExpect = "signature"
 github.com/egladman/magus/types.ExpectUnreferenced const GoalExpect = "unreferenced"
 github.com/egladman/magus/types.Fail func[T any](d Diagnostic) Result[T]
+github.com/egladman/magus/types.Fallback type struct
+github.com/egladman/magus/types.Fallback.Effect field string "json:\"effect\""
+github.com/egladman/magus/types.Fallback.String method func() string
+github.com/egladman/magus/types.Fallback.What field string "json:\"what\""
+github.com/egladman/magus/types.Fallback.Why field string "json:\"why\""
 github.com/egladman/magus/types.FanOut func(obs ...Observer) Observer
 github.com/egladman/magus/types.FileChange type struct
 github.com/egladman/magus/types.FileChange.Location method func() Location
@@ -5062,7 +5067,7 @@ github.com/egladman/magus/types.ShardPlan type struct
 github.com/egladman/magus/types.ShardPlan.Affected field []string
 github.com/egladman/magus/types.ShardPlan.Args field []string
 github.com/egladman/magus/types.ShardPlan.Charms field []string
-github.com/egladman/magus/types.ShardPlan.Fallbacks field []string
+github.com/egladman/magus/types.ShardPlan.Fallbacks field []Fallback
 github.com/egladman/magus/types.ShardPlan.Machine field *Machine
 github.com/egladman/magus/types.ShardPlan.MaxParallel field int
 github.com/egladman/magus/types.ShardPlan.OverBudget field []string

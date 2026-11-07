@@ -28,7 +28,7 @@ func (s *LeaseDenialTextSuite) TestListsFiveWritePathsWhole() {
 
 func (s *LeaseDenialTextSuite) TestTheRewriteRefusalTrimsItsWritePaths() {
 	row := types.Job{ID: "wide", WritePaths: []string{"a/**", "b/**", "c/**", "d/**", "e/**", "f/**"}}
-	got := rewriteDenial(runVerdict{run: targetRun{verb: "run", target: "generate", projects: []string{"."}},outside: []string{"z.go"}}, row, nil)
+	got := rewriteDenial(runVerdict{run: targetRun{verb: "run", target: "generate", projects: []string{"."}}, outside: []string{"z.go"}}, row, nil)
 	s.Contains(got.Why, "and 1 more (magus describe job wide)")
 	s.NotContains(got.Why, "f/**")
 }

@@ -124,7 +124,7 @@ func conflictRewriteTarget(scope workspaceScope, c hint.Invocation, heredoc stri
 		if !ok {
 			return "", false
 		}
-		hit = conflictedWorkspaceFile(scope,buzzWriteDestinations(script))
+		hit = conflictedWorkspaceFile(scope, buzzWriteDestinations(script))
 		return hit, hit != ""
 	}
 	if !scriptedRewriteInterpreters[name] && name != "awk" {
@@ -142,7 +142,7 @@ func conflictRewriteTarget(scope workspaceScope, c hint.Invocation, heredoc stri
 	if unknown {
 		candidates = append(append(candidates, c.Args...), quotedLiterals(script)...)
 	}
-	if hit = conflictedWorkspaceFile(scope,candidates); hit != "" {
+	if hit = conflictedWorkspaceFile(scope, candidates); hit != "" {
 		return hit, true
 	}
 	return "", unknown && strings.Contains(script, "<<<<<<<")
