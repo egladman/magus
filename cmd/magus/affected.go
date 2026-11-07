@@ -523,10 +523,10 @@ type planOutput struct {
 	// default the plan fell back to.
 	Machine     *types.Machine   `json:"machine,omitempty"`
 	Fallbacks   []types.Fallback `json:"fallbacks,omitempty"`
-	Count       int            `json:"count"`
-	MaxParallel int            `json:"max_parallel"`
-	Source      string         `json:"source"`
-	Matrix      []planShard    `json:"matrix"`
+	Count       int              `json:"count"`
+	MaxParallel int              `json:"max_parallel"`
+	Source      string           `json:"source"`
+	Matrix      []planShard      `json:"matrix"`
 	// StageZero runs before every shard of Matrix and computes, once, the
 	// prerequisites two or more of them share. Absent when none is shared.
 	// It stays out of Outputs, so a plan without it renders as before;
