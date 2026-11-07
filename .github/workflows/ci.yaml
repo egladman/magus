@@ -100,10 +100,8 @@ env:
   CI_PROVIDER: github-actions
 
 jobs:
-  # Named for both halves: the drift-checking generate below runs first and is most
-  # of this job's time, and a name of only "plan" hid it.
   plan:
-    name: generate + plan
+    name: plan
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -177,10 +175,6 @@ jobs:
 
       - uses: ./.github/actions/setup-scip
 
-      # Uncommitted generated output and a non-deterministic generator fail this job hard:
-      # both mean the tree under test is not the tree in the commit, and a shard result
-      # from it describes nothing.
-      #
       # last-passed on a push, the configured default on a pull request.
       #
       # A push to main has no useful default base: magus's is origin/main, which on main
@@ -194,20 +188,6 @@ jobs:
       # a run that was cancelled or failed leaves its commits in the NEXT run's diff
       # instead of being stepped over. A pull request needs none of it: origin/main
       # already IS its merge base, and an empty value falls through to that default.
-      #
-      # generate runs first, across the affected projects, without rw, so it compares
-      # against HEAD and fails on drift. The plan stage waits for it and prints no plan
-      # when it fails, so no shard starts from a drifted tree. Only the affected
-      # projects are checked: index-generate output that is a function of the whole
-      # knowledge graph is not regenerated for a change affected scopes elsewhere.
-      #
-      # The promise covers every generator but the symbol index's readers. Root generate
-      # leaves out symbol-digest-generate, whose gen/symbol-index.json is gitignored and so
-      # has no drift to check, and this step leaves out libs/embed/train, whose generate
-      # needs it. Building the full index cost the plan 7m30s-12m45s, so those drift
-      # gates run in the shard that holds them, and drifted embed training data fails there.
-      # The step names what it dropped and fails if the filter drops anything else.
-      #
       - id: plan
         name: Compute shard matrix
         env:
@@ -223,22 +203,7 @@ jobs:
         # partial file.
         shell: bash
         run: |
-          magus affected list -o name > "$RUNNER_TEMP/affected"
-          grep -vxF libs/embed/train "$RUNNER_TEMP/affected" > "$RUNNER_TEMP/pregate" || true
-          dropped=$(grep -vxF -f "$RUNNER_TEMP/pregate" "$RUNNER_TEMP/affected" || true)
-          if [ -n "$dropped" ] && [ "$dropped" != libs/embed/train ]; then
-            echo "::error::the pre-gate filter dropped more than libs/embed/train: ${dropped//$'\n'/ }"
-            exit 1
-          fi
-          if [ -n "$dropped" ]; then
-            echo "::notice::pre-gate generate skips libs/embed/train: it needs the full symbol index; its shard gates it"
-          fi
-          mapfile -t projects < "$RUNNER_TEMP/pregate"
-          if [ "${#projects[@]}" -gt 0 ]; then
-            magus run generate --no-default-charms --concurrency-profile aggressive "${projects[@]}" | magus affected ci:gha --plan > "$RUNNER_TEMP/plan.json"
-          else
-            magus affected ci:gha --plan > "$RUNNER_TEMP/plan.json"
-          fi
+          magus affected ci:gha --plan > "$RUNNER_TEMP/plan.json"
           magus run --stdin --shard all --dry-run -o 'template={{range .outputs}}{{.name}}={{.value}}{{"\n"}}{{end}}' < "$RUNNER_TEMP/plan.json" >> "$GITHUB_OUTPUT"
           magus run --stdin --shard all --dry-run -o 'template={{.summary}}' < "$RUNNER_TEMP/plan.json" >> "$GITHUB_STEP_SUMMARY"
 
@@ -264,8 +229,110 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      # Determinism, in this job rather than its own: the saving is a runner and a from-source
-      # magus build, not a generate pass.
+  # Beside the plan, not inside it: generate was most of the plan job's time and hid there,
+  # so the plan looked slow for no reason. It runs once per run, here, and the shards
+  # replay it from the cache archive this job exports.
+  generate:
+    name: generate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # The runs API behind last-passed, as in the plan job.
+      actions: read
+    env:
+      # The plan's base (see the plan step), so generate checks the projects the plan shards.
+      MAGUS_VCS_BASE_REF: ${{ github.event_name != 'pull_request' && 'last-passed' || '' }}
+      # Caps the exported tier, as the shard jobs cap theirs.
+      MAGUS_CACHE_SIZE_MB: '256'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      # Built from source as the plan builds it, so generate runs the magus this commit
+      # defines. It publishes nothing: the plan's artifact is the one every job verifies.
+      # The history restore is what last-passed reads.
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+          restore-history: 'true'
+
+      # No cache on main, as in the plan job.
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+          cache: ${{ github.event_name == 'pull_request' }}
+
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
+
+      - uses: ./.github/actions/setup-scip
+
+      # Uncommitted generated output and a non-deterministic generator fail this job hard:
+      # both mean the tree under test is not the tree in the commit, and a shard result
+      # from it describes nothing.
+      #
+      # generate runs first, across the affected projects, without rw, so it compares
+      # against HEAD and fails on drift. The stages need this job, so no shard starts
+      # from a drifted tree. Only the affected
+      # projects are checked: index-generate output that is a function of the whole
+      # knowledge graph is not regenerated for a change affected scopes elsewhere.
+      #
+      # The promise covers every generator but the symbol index's readers. Root generate
+      # leaves out symbol-digest-generate, whose gen/symbol-index.json is gitignored and so
+      # has no drift to check, and this step leaves out libs/embed/train, whose generate
+      # needs it. Building the full index cost the plan 7m30s-12m45s, so those drift
+      # gates run in the shard that holds them, and drifted embed training data fails there.
+      # The step names what it dropped and fails if the filter drops anything else.
+      - name: Check the affected generators for drift
+        env:
+          # Read by the github spell's last_green_run alone, as in the plan job.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          magus affected list -o name > "$RUNNER_TEMP/affected"
+          grep -vxF libs/embed/train "$RUNNER_TEMP/affected" > "$RUNNER_TEMP/pregate" || true
+          dropped=$(grep -vxF -f "$RUNNER_TEMP/pregate" "$RUNNER_TEMP/affected" || true)
+          if [ -n "$dropped" ] && [ "$dropped" != libs/embed/train ]; then
+            echo "::error::the pre-gate filter dropped more than libs/embed/train: ${dropped//$'\n'/ }"
+            exit 1
+          fi
+          if [ -n "$dropped" ]; then
+            echo "::notice::pre-gate generate skips libs/embed/train: it needs the full symbol index; its shard gates it"
+          fi
+          mapfile -t projects < "$RUNNER_TEMP/pregate"
+          if [ "${#projects[@]}" -gt 0 ]; then
+            magus run generate --no-default-charms --concurrency-profile aggressive "${projects[@]}"
+          fi
+
+      # The local tier the drift gate built, for the stages to replay generate from instead
+      # of paying for it per shard. Before the replay: that runs under rw, and its entries
+      # are not the no-rw keys the shards look up. The digest rides in the artifact, as
+      # stage zero's does.
+      - name: Export the cache generate built
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/generate"
+          magus config cache export --to "$RUNNER_TEMP/generate/cache.tar.gz"
+          cd "$RUNNER_TEMP/generate"
+          sha256sum cache.tar.gz > cache.tar.gz.sha256
+          cat cache.tar.gz.sha256
+
+      - name: Upload the cache generate built
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: magus-generate-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/generate/
+          if-no-files-found: error
+          retention-days: 1
+
+      # Determinism, beside the drift gate rather than in a job of its own: the saving is a
+      # runner and a from-source magus build, and this job already holds the build and the
+      # affected list.
       #
       # `--race=replay` rather than running the gate above twice. generate's drift check
       # compares against HEAD, so a generator that always emits different bytes fails a plain
@@ -290,78 +357,6 @@ jobs:
           fi
           magus run generate:rw --race=replay --concurrency-profile aggressive "${projects[@]}"
 
-  # Writes the remote-tier entries the plan's generate pass reads. Every plan run missed
-  # all 21-30 of them: the plan holds no signing key, and main's shards write from inside
-  # a `queue gate` box with its own checkout path and --cache, so no key of theirs is a
-  # plan key. This job runs the plan's generate in the plan's environment, step for step
-  # up to it (checkout, source build, mise with no cache, the pinned Go, scip), so its
-  # keys are the plan's, and signs what it stores.
-  #
-  # main only, and it restores nothing unverified: no history, no mise cache. The key
-  # reaches the generate step alone. The plan job stays keyless, since it restores the
-  # unsigned history.
-  plan-cache:
-    name: plan cache
-    needs: [plan]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          filter: blob:none
-
-      # A source build, as the plan does, rather than the plan's artifact: it leaves the
-      # environment setup-go and the build leave behind, which the cache keys read.
-      - uses: ./.github/actions/setup-magus
-        with:
-          installation-strategy: source
-          source-path: .
-
-      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
-        with:
-          version: '2026.4.8'
-          env: false
-          cache: false
-
-      - name: Restore the mise-pinned Go toolchain
-        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
-
-      - uses: ./.github/actions/setup-scip
-
-      # Same reason as the shards' step of this name: a `run:` step does not see them.
-      - name: Export the Actions cache service credentials
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
-              const value = process.env[name]
-              if (!value) {
-                core.warning(`${name} is not set; this job writes no remote-tier entry`)
-                continue
-              }
-              if (name.endsWith('_TOKEN')) core.setSecret(value)
-              core.exportVariable(name, value)
-            }
-
-      # Every project, so a pull request reaching any of them finds main's entries, but
-      # libs/embed/train, which the plan never generates (see the plan step). Without rw,
-      # as the plan runs it: a charm keys every step. continue-on-error because this job
-      # writes a cache and gates nothing: the generators store their entries before root
-      # generate's drift check runs, and the plan and the shards own drift.
-      - name: Store the plan's generate entries
-        continue-on-error: true
-        shell: bash
-        env:
-          MAGUS_CACHE_SIGNING_KEY: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') && secrets.MAGUS_CACHE_SIGNING_KEY || '' }}
-        run: |
-          magus ls -o name > "$RUNNER_TEMP/projects"
-          mapfile -t projects < <(grep -vxF libs/embed/train "$RUNNER_TEMP/projects")
-          magus run generate --no-default-charms --concurrency-profile aggressive "${projects[@]}"
-
   # Stage zero computes, once, each prerequisite two or more shards would otherwise
   # share, so those shards split instead of fanning in to one (ADR 0027). Each shard
   # here runs its units as a `stage-1` shard does, then exports the local cache tier it
@@ -372,7 +367,7 @@ jobs:
   # truncates; the job ID already says the stage, and the workflow says it is magus.
   stage-0:
     name: "${{ matrix.shard }} ${{ matrix.job_name }}"
-    needs: plan
+    needs: [plan, generate]
     if: fromJSON(needs.plan.outputs.stage_zero_count) > 0 && needs.plan.outputs.inherit != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -432,6 +427,31 @@ jobs:
         with:
           command: queue gate --sandbox=required --cache .magus --env MAGUS_CACHE_REMOTE_TRUSTED_KEYS,ACTIONS_RESULTS_URL,ACTIONS_RUNTIME_TOKEN -- magus config cache import --remote
 
+      # Generate's cache, for the drift check the plan job no longer carries. An
+      # accelerator, as stage zero's is: a missing archive or a digest mismatch leaves
+      # this job computing generate's work itself, and the warning says which.
+      - name: Download the cache generate built
+        id: generate-download
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: magus-generate-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/generate
+
+      - name: Import the cache generate built
+        shell: bash
+        env:
+          DOWNLOAD: ${{ steps.generate-download.outcome }}
+        run: |
+          dir="$RUNNER_TEMP/generate"
+          if [ "$DOWNLOAD" != success ] || [ ! -f "$dir/cache.tar.gz" ]; then
+            echo "::warning title=generate::no generate cache archive (download: $DOWNLOAD); this job computes generate's work itself"
+          elif ! (cd "$dir" && sha256sum --check --strict cache.tar.gz.sha256); then
+            echo "::warning title=generate::the generate archive does not match its sha256, so it is not imported; this job computes generate's work itself"
+          elif ! magus config cache import "$dir/cache.tar.gz"; then
+            echo "::warning title=generate::importing the generate archive failed; this job computes generate's work itself"
+          fi
+
       - name: Download the shard plan
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -488,11 +508,11 @@ jobs:
 
   stage-1:
     name: "${{ matrix.shard }} ${{ matrix.job_name }}"
-    needs: [plan, stage-0]
+    needs: [plan, generate, stage-0]
     # !cancelled() in place of the implied success(): stage zero skips when no shard
     # shares work, and a red stage zero leaves each shard able to compute what it
     # needs, so the run still reports every shard's verdict. The gate fails on it.
-    if: ${{ !cancelled() && needs.plan.result == 'success' && fromJSON(needs.plan.outputs.count) > 0 && needs.plan.outputs.inherit != 'true' }}
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.generate.result == 'success' && fromJSON(needs.plan.outputs.count) > 0 && needs.plan.outputs.inherit != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -661,6 +681,31 @@ jobs:
         with:
           name: magus-plan-${{ github.run_attempt }}
           path: ${{ github.workspace }}/.magus
+
+      # Generate's cache, for the drift check the plan job no longer carries. An
+      # accelerator, as stage zero's is: a missing archive or a digest mismatch leaves
+      # this job computing generate's work itself, and the warning says which.
+      - name: Download the cache generate built
+        id: generate-download
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: magus-generate-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/generate
+
+      - name: Import the cache generate built
+        shell: bash
+        env:
+          DOWNLOAD: ${{ steps.generate-download.outcome }}
+        run: |
+          dir="$RUNNER_TEMP/generate"
+          if [ "$DOWNLOAD" != success ] || [ ! -f "$dir/cache.tar.gz" ]; then
+            echo "::warning title=generate::no generate cache archive (download: $DOWNLOAD); this job computes generate's work itself"
+          elif ! (cd "$dir" && sha256sum --check --strict cache.tar.gz.sha256); then
+            echo "::warning title=generate::the generate archive does not match its sha256, so it is not imported; this job computes generate's work itself"
+          elif ! magus config cache import "$dir/cache.tar.gz"; then
+            echo "::warning title=generate::importing the generate archive failed; this job computes generate's work itself"
+          fi
 
       # Stage zero's caches replay the prerequisites this shard shares with others.
       # The cache is an accelerator: a missing archive, a digest that does not match
@@ -1034,7 +1079,7 @@ jobs:
   # at run time. Requiring "magus shard 1" blocks a PR whose plan needed only one.
   gate:
     name: ci gate
-    needs: [plan, stage-0, stage-1, doctor]
+    needs: [plan, generate, stage-0, stage-1, doctor]
     # always(), or a skipped or failed dependency would skip this job too - and a required
     # check that never reports blocks the pull request instead of failing it, which reads
     # as an infrastructure problem rather than a red build.
@@ -1076,10 +1121,11 @@ jobs:
           merge-history: 'true'
           ci-result: ${{ needs.stage-1.result }}
 
-      - name: Require the plan, doctor and both stages to have passed
+      - name: Require the plan, generate, doctor and both stages to have passed
         if: always()
         env:
           PLAN_RESULT: ${{ needs.plan.result }}
+          GENERATE_RESULT: ${{ needs.generate.result }}
           DOCTOR_RESULT: ${{ needs.doctor.result }}
           STAGE_ZERO_RESULT: ${{ needs.stage-0.result }}
           CI_RESULT: ${{ needs.stage-1.result }}
@@ -1092,6 +1138,10 @@ jobs:
           failed=0
           if [ "$PLAN_RESULT" != "success" ]; then
             echo "::error::plan did not pass (${PLAN_RESULT}); nothing downstream is trustworthy"
+            failed=1
+          fi
+          if [ "$GENERATE_RESULT" != "success" ]; then
+            echo "::error::generate did not pass (${GENERATE_RESULT}); the tree drifts from its generators, or the drift check never ran"
             failed=1
           fi
           # skipped when the plan failed, which the plan check above owns.
