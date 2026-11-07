@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -567,6 +568,38 @@ func (f forkedTier) rankedAbove(host, model string) string {
 // recoversOwnCheckout reports a line that runs root's checkout.bootstrap with
 // --here --recover and nothing else. Only that entry is root work; ordinary
 // builds remain delegated. A workspace declaring no hook has no such line.
+func readsCitedResult(rows []types.Job, line string, at location) bool {
+	paths := focusReadPaths(line, cmp.Or(at.dir, at.workspace), userHome())
+	if len(paths) == 0 {
+		return false
+	}
+	var cited []string
+	for _, row := range rows {
+		if row.Result == nil {
+			continue
+		}
+		cited = append(cited, row.Result.ChangedPaths...)
+		cited = append(cited, row.Result.UnresolvedRisks...)
+		cited = append(cited, row.Result.FollowUps...)
+	}
+	return len(cited) > 0 && !slices.ContainsFunc(paths, func(p string) bool { return !citesPath(cited, p) })
+}
+
+func citesPath(cited []string, abs string) bool {
+	p := filepath.ToSlash(abs)
+	for _, text := range cited {
+		for _, word := range strings.Fields(text) {
+			word = strings.Trim(word, "`'\",;()[]")
+			word, _, _ = strings.Cut(word, ":")
+			word = strings.TrimSuffix(strings.TrimPrefix(word, "./"), ".")
+			if strings.Contains(word, "/") && (p == word || strings.HasSuffix(p, "/"+word)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func recoversOwnCheckout(line, root string) bool {
 	cmds, ok := ParseCommands(line)
 	if !ok || len(cmds) != 1 || !isMagusInvocation(cmds[0]) {

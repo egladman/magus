@@ -65,6 +65,11 @@ func denyScriptContent(deps Dependencies, callDir, command string, d Dialect) Sh
 			lang = detectScriptLang(file, body)
 		}
 		v := judged(judgeScript(deps, lang, body), run.path, fmt.Sprintf("\nJudged from the content of %s, which this line runs: a script gets the verdict its lines would get typed inline.", run.path))
+		if _, inside := workspaceRelative(deps.scope.root, file); v.Deny == "" && lang == scriptBuzz && !inside {
+			if computed, ok := computedSpawnVerdict(deps, body); ok {
+				v = judged(computed, run.path, fmt.Sprintf("\nJudged from the content of %s, which lies outside the workspace.", run.path))
+			}
+		}
 		switch {
 		case v.Deny != "":
 			return v
@@ -126,7 +131,7 @@ func judgeScript(deps Dependencies, lang scriptLang, body string) ShellVerdict {
 	case scriptBuzz:
 		// The verdict an inline interpreter gets for replacing a file the tree carries: fs
 		// in a Buzz script writes exactly what open(p, 'w') does in a python one.
-		if rel := buzzRewrittenFile(deps.scope.root, body); rel != "" {
+		if rel := buzzRewrittenFile(deps.scope, body); rel != "" {
 			return deps.grade(ShellVerdict{
 				Deny: interpreterRewriteDenial(rel) + referenceScriptNote(deps.scope.root, denyRuleInterpreterRewrite),
 				Rule: denyRule{Name: denyRuleInterpreterRewrite},
