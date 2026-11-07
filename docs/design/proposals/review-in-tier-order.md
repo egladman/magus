@@ -6,7 +6,12 @@ tags: [review, risk, diff, console, buzzed, proposal]
 
 # Review in tier order
 
-State: proposed, 2026-11-07. Nothing is built. Eli decides the two questions at the end.
+State: built 2026-11-07, with both recommendations taken: tier is the first key between
+groups, and nothing new folds. Two details differ from the plan below. The tier rank moved
+onto `types.Tier.Rank()`, replacing `internal/risk`'s private map, so the order and the gate
+share one ranking, and an unknown tier now ranks as full instead of trivial. The console
+draws the tier with its own `tierChip`, which `riskChips` calls, and the focus line names a
+tier only when some file in the step was assessed.
 
 ## The idea
 
@@ -83,7 +88,7 @@ its keep). The order says where to spend attention first. It does not decide wha
 - magus computes and refuses, and it does not act. It never skips, approves or marks anything
   for the reader.
 
-## Eli decides
+## Decided
 
-1. Tier as the first key between groups (proposed), or tier only as a label on today's order.
-2. Nothing new folds (proposed), or `trivial` groups fold the way generated ones do.
+1. Tier is the first key between groups, not only a label on today's order.
+2. Nothing new folds; `trivial` groups stay open.
