@@ -1,8 +1,7 @@
-### Fixed
+### Changed
 
-- **Doctor finds a plugin Claude Code cached.** The claude plugin check counts the
-  magus mod as installed when `installed_plugins.json` lists it or when a version
-  directory sits under `cache/<marketplace>/<plugin>/`, which is where Claude Code puts
-  a relative-path marketplace's plugin without recording it. Both are read under
-  `CLAUDE_CODE_PLUGIN_CACHE_DIR` when set. The missing-plugin hint now names
-  `claude plugin marketplace add egladman/magus`.
+- **The plugin check reads only what Claude Code records.** A cached plugin with no
+  `installed_plugins.json` entry never loads, so it now reads as `uninstalled`, not
+  verified. `disabled` and `behind` (the recorded commit is not the marketplace clone's)
+  are new. Each names its `claude plugin` fix, and doctor fails on all three. An
+  unprovable currency says unknown.

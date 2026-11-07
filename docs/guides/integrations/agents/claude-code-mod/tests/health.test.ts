@@ -3,6 +3,11 @@ import { describe, expect, test } from 'claude-code/testing'
 import { assess, BOOTSTRAP, inBand, statusText } from '../hooks/health'
 import type { Probe } from '../hooks/health'
 
+const must = <T>(v: T | null | undefined): T => {
+  if (v === null || v === undefined) throw new Error('expected a value')
+  return v
+}
+
 const healthy: Probe = {
   isMagusSource: true,
   hasLocalBinary: true,
@@ -27,9 +32,13 @@ describe('assess', () => {
   })
 
   test('a borrowed or stale binary is not judged: the guard names the rebuild to the agent', async () => {
-    const borrowed = assess({ ...healthy, hasLocalBinary: false, binary: { ...healthy.binary!, commit: '6eadd1057da4' } })
+    const borrowed = assess({
+      ...healthy,
+      hasLocalBinary: false,
+      binary: { ...must(healthy.binary), commit: '6eadd1057da4' },
+    })
     expect(borrowed).toEqual([])
-    expect(assess({ ...healthy, binary: { ...healthy.binary!, commit: '6eadd1057da4' }, behind: 1 })).toEqual([])
+    expect(assess({ ...healthy, binary: { ...must(healthy.binary), commit: '6eadd1057da4' }, behind: 1 })).toEqual([])
   })
 
   test('another workspace on a PATH binary is fine', async () => {
@@ -37,7 +46,10 @@ describe('assess', () => {
   })
 
   test('a server that is down hides the skew and MCP checks', async () => {
-    const issues = assess({ ...healthy, server: { isRunning: false, version: '', mcpState: 'unreachable', mcpNote: '' } })
+    const issues = assess({
+      ...healthy,
+      server: { isRunning: false, version: '', mcpState: 'unreachable', mcpNote: '' },
+    })
     expect(issues.map(i => i.id)).toEqual(['server-down'])
   })
 
@@ -55,7 +67,10 @@ describe('assess', () => {
 
   test('only the guard failing open and a server on another version reach the band', async () => {
     const down = assess({ ...healthy, server: { isRunning: false, version: '', mcpState: '', mcpNote: '' } })
-    const skew = assess({ ...healthy, server: { isRunning: true, version: 'v0-old', mcpState: 'not-ready', mcpNote: '' } })
+    const skew = assess({
+      ...healthy,
+      server: { isRunning: true, version: 'v0-old', mcpState: 'not-ready', mcpNote: '' },
+    })
     const off = assess({ ...healthy, hasLocalBinary: false, pathBinary: null, binary: null, server: null })
     expect(inBand(down)).toEqual([])
     expect(inBand(skew).map(i => i.id)).toEqual(['server-skew'])

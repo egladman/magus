@@ -173,6 +173,19 @@ export type Budget = {
 // the broker exits once it is idle. readAt is unix milliseconds.
 export type BudgetRead = { budget: Budget | null; readAt: number }
 
+// The ref the ref pane shows. text is what the command printed, colors dropped.
+export type RefView = {
+  ref: string
+  command: string
+  // Why the command ran as it did, for example the fallback to magus on PATH; null when nothing needs saying.
+  note: string | null
+  text: string
+  // Characters of stdout the pane did not draw.
+  omitted: number
+  error: string | null
+  isLoading: boolean
+}
+
 declare module 'claude-code' {
   interface PluginState {
     magus: {
@@ -195,6 +208,7 @@ declare module 'claude-code' {
       budgetError: string | null
       // The `theme` row of /config, read at session start and on each change.
       theme: string | null
+      ref: RefView | null
     }
   }
 }

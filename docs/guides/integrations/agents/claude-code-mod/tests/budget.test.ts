@@ -69,12 +69,55 @@ describe('parseBudget', () => {
     expect(p.value).toMatchObject({ budgetSlots: 10, heldSlots: 8, budgetMb: 24064, heldMb: 8940 })
     expect(p.value?.holders).toEqual([
       HOLDER,
-      { pid: 23224, project: 'console', target: 'test', dir: '', command: '', slots: 1, memoryMb: 512, since: 0, owner: '' },
+      {
+        pid: 23224,
+        project: 'console',
+        target: 'test',
+        dir: '',
+        command: '',
+        slots: 1,
+        memoryMb: 512,
+        since: 0,
+        owner: '',
+      },
     ])
     expect(p.value?.waiting).toEqual([
-      { pid: 30001, project: '.', target: 'lint', dir: '/w/magus-a', command: '', slots: 2, memoryMb: 0, owner: 'unleased', tree: '', since: AT },
-      { pid: 30002, project: '.', target: 'ci', dir: '', command: '', slots: 0, memoryMb: 0, owner: 'job-b', tree: '', since: AT },
-      { pid: 30003, project: 'docs', target: 'ci', dir: '', command: '', slots: 0, memoryMb: 0, owner: 'job-c', tree: 'root-job', since: AT },
+      {
+        pid: 30001,
+        project: '.',
+        target: 'lint',
+        dir: '/w/magus-a',
+        command: '',
+        slots: 2,
+        memoryMb: 0,
+        owner: 'unleased',
+        tree: '',
+        since: AT,
+      },
+      {
+        pid: 30002,
+        project: '.',
+        target: 'ci',
+        dir: '',
+        command: '',
+        slots: 0,
+        memoryMb: 0,
+        owner: 'job-b',
+        tree: '',
+        since: AT,
+      },
+      {
+        pid: 30003,
+        project: 'docs',
+        target: 'ci',
+        dir: '',
+        command: '',
+        slots: 0,
+        memoryMb: 0,
+        owner: 'job-c',
+        tree: 'root-job',
+        since: AT,
+      },
     ])
     expect(p.value?.refused).toEqual([
       {
@@ -152,6 +195,8 @@ describe('refusals', () => {
     expect(r).toBeDefined()
     if (r === undefined) return
     expect(refusalText(r, AT + 2 * 60_000)).toBe('MGS3009 refused ci for spawned by root, pid 30100, in magus-b 2m ago')
-    expect(refusalText({ ...r, fits: false, owner: '', dir: '' }, AT)).toBe('MGS3009 refused ci (never fits) for pid 30100 0s ago')
+    expect(refusalText({ ...r, fits: false, owner: '', dir: '' }, AT)).toBe(
+      'MGS3009 refused ci (never fits) for pid 30100 0s ago',
+    )
   })
 })

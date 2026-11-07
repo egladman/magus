@@ -26,6 +26,7 @@ magus\project({
     "targets": {
         "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
         "mod-test": {"skip_cache": "runs on the installed claude, whose version no input glob can key"},
+        "mod_types_generate": {"skip_cache": "runs on the installed claude, whose version no input glob can key"},
     },
 });
 
@@ -130,10 +131,35 @@ export fun cursor_schemas_generate(ctx: magus\Context, args: [str]) > void !> an
 }
 
 
-// lint runs the TypeScript type-check, Biome, and a Buzz type-check of the templates.
+// Emits claude-code-mod/types/gen from the types the engine writes when a claude session
+// loads its plugin-authoring skill. It runs where claude is installed; CI reads the
+// committed copy, so ci never composes it.
+export fun mod_types_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["claude-code-mod/types/gen/*.d.ts"]);
+    final ask = "/plugin-authoring reply only with the absolute path of the types/claude-code.d.ts file this skill names";
+    final source = proc\exec("claude", args: ["-p", "--model", "haiku", ask], dir: ".",
+        opts: proc\ExecOptions{quiet = true}).stdout.trim();
+    if (!source.endsWith("/types/claude-code.d.ts")) {
+        throw "mod-types-generate: claude did not name the engine's types file; it printed: " + source;
+    }
+    final text = fs\readFile(source);
+    final testing = text.indexOf("declare module 'claude-code/testing'");
+    final tools = text.indexOf("// The inputs of the built-in tools");
+    if (testing == null or tools == null) {
+        throw "mod-types-generate: " + source + " no longer has the testing and tools sections this target splits on";
+    }
+    final dest = "claude-code-mod/types/gen/";
+    fs\writeFile(dest + "claude-code.d.ts", content: text.sub(0, len: testing!));
+    fs\writeFile(dest + "claude-code-testing.d.ts", content: text.sub(testing!, len: tools! - testing!));
+    fs\writeFile(dest + "claude-code-tools.d.ts", content: text.sub(tools!, len: text.len() - tools!));
+}
+
+// lint runs the TypeScript type-check of the templates and of the Claude Code mod, Biome,
+// and a Buzz type-check of the templates. The mod checks against its committed types/gen.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
+    typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "claude-code-mod/tsconfig.json"]});
     typescript["biome-check"](ctx);
     checkBuzz();
 }

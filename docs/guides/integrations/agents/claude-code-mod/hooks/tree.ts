@@ -11,11 +11,15 @@ export type Line = { row: JobRow; depth: number; isContext: boolean }
 // context so a live child never appears without the job it was forked from. live leaves
 // out the rows in stale: a live row nobody has touched within jobs.stale_after is not
 // what a person watching the plan is looking for.
-export function treeLines(rows: JobRow[], filter: Filter, nowS: number, stale: ReadonlySet<string> = new Set()): Line[] {
+export function treeLines(
+  rows: JobRow[],
+  filter: Filter,
+  nowS: number,
+  stale: ReadonlySet<string> = new Set(),
+): Line[] {
   const byId = new Map(rows.map(r => [r.id, r]))
   const matches = (r: JobRow) =>
-    filter === 'all' ||
-    (filter === 'live' ? LIVE.has(r.state) && !stale.has(r.id) : nowS - r.updated <= RECENT_S)
+    filter === 'all' || (filter === 'live' ? LIVE.has(r.state) && !stale.has(r.id) : nowS - r.updated <= RECENT_S)
 
   const kept = new Set<string>()
   const context = new Set<string>()

@@ -18,11 +18,13 @@ export type Settings = {
   ratesFile: string
 }
 
-const num = (v: unknown, fallback: number): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : fallback)
+const num = (v: unknown, fallback: number): number =>
+  typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : fallback
 
 // A confirm or deny that is misspelled reads as the default rather than as off, so a typo
 // never silently drops a guard.
-const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T => (allowed.includes(v as T) ? (v as T) : fallback)
+const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T =>
+  allowed.includes(v as T) ? (v as T) : fallback
 
 // The manifest's userConfig values with its defaults, so a value the engine did not fill
 // still reads as the documented default rather than as zero.

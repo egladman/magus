@@ -25,6 +25,11 @@ import type { CacheState, Spend } from '../hooks/cost'
 import { DEFAULT_RATES } from '../hooks/rates'
 import { readSettings } from '../hooks/settings'
 
+const must = <T>(v: T | null | undefined): T => {
+  if (v === null || v === undefined) throw new Error('expected a value')
+  return v
+}
+
 const MIN = 60_000
 
 // Float sums land a few ulps off the decimal price, so compare within a hair.
@@ -39,15 +44,15 @@ describe('ratesFor', () => {
   })
 
   test('cache writes are input times the TTL multiplier; reads use the model rate or the default', async () => {
-    const opus = ratesFor(DEFAULT_RATES, 'claude-opus-5-5', 1000)!
+    const opus = must(ratesFor(DEFAULT_RATES, 'claude-opus-5-5', 1000))
     expect(opus.cacheWrite).toEqual({ '5m': 5, '1h': 8 })
     expect(opus.cacheRead).toBe(0.2)
-    near(ratesFor(DEFAULT_RATES, 'claude-haiku-5-5', 1000)!.cacheRead, 0.01)
+    near(must(ratesFor(DEFAULT_RATES, 'claude-haiku-5-5', 1000)).cacheRead, 0.01)
   })
 
   test('Haiku switches tier above 100K prompt tokens', async () => {
-    expect(ratesFor(DEFAULT_RATES, 'claude-haiku-5-5', 100_000)!.input).toBe(0.1)
-    const above = ratesFor(DEFAULT_RATES, 'claude-haiku-5-5', 100_001)!
+    expect(must(ratesFor(DEFAULT_RATES, 'claude-haiku-5-5', 100_000)).input).toBe(0.1)
+    const above = must(ratesFor(DEFAULT_RATES, 'claude-haiku-5-5', 100_001))
     expect([above.input, above.output]).toEqual([0.5, 2.5])
     near(above.cacheRead, 0.05)
   })
@@ -56,7 +61,12 @@ describe('ratesFor', () => {
 test('recacheUsd and requestUsd price tokens per million', async () => {
   near(recacheUsd(DEFAULT_RATES, 'claude-opus-5-5', 200_000, '1h'), 1.6)
   expect(recacheUsd(DEFAULT_RATES, 'unknown', 200_000, '1h')).toBeNull()
-  const usd = requestUsd(DEFAULT_RATES, 'claude-sonnet-5-5', { input: 1000, output: 2000, cacheRead: 100_000, cacheCreation: 10_000 }, '5m')
+  const usd = requestUsd(
+    DEFAULT_RATES,
+    'claude-sonnet-5-5',
+    { input: 1000, output: 2000, cacheRead: 100_000, cacheCreation: 10_000 },
+    '5m',
+  )
   near(usd, (1000 * 2 + 2000 * 10 + 100_000 * 0.2 + 10_000 * 2.5) / 1e6)
 })
 
@@ -75,7 +85,13 @@ describe('inferTtl', () => {
 })
 
 describe('cacheNotice', () => {
-  const cache: CacheState = { lastResponseAt: 0, ttl: '5m', ttlSource: 'assumed', contextTokens: 182_000, model: 'claude-opus-5-5' }
+  const cache: CacheState = {
+    lastResponseAt: 0,
+    ttl: '5m',
+    ttlSource: 'assumed',
+    contextTokens: 182_000,
+    model: 'claude-opus-5-5',
+  }
   const at = (ms: number): CacheState => ({ ...cache, lastResponseAt: ms })
 
   test('nothing before the first response', async () => {
@@ -85,10 +101,12 @@ describe('cacheNotice', () => {
   test('quiet while more than the window is left, a countdown inside it, expired after', async () => {
     const start = 1_000_000
     expect(cacheNotice({ ...at(start), ttl: '1h' }, start + MIN, 5 * MIN, 50_000, DEFAULT_RATES)).toBeNull()
-    const soon = cacheNotice(at(start), start + 2 * MIN, 5 * MIN, 50_000, DEFAULT_RATES)!
+    const soon = must(cacheNotice(at(start), start + 2 * MIN, 5 * MIN, 50_000, DEFAULT_RATES))
     expect(soon.isExpired).toBe(false)
-    expect(soon.text).toBe('Cache expires in 3m: after that your next prompt re-caches 182K tokens (≈$0.91) (TTL 5m, assumed).')
-    const gone = cacheNotice(at(start), start + TTL_MS['5m'] + 4 * MIN, 5 * MIN, 50_000, DEFAULT_RATES)!
+    expect(soon.text).toBe(
+      'Cache expires in 3m: after that your next prompt re-caches 182K tokens (≈$0.91) (TTL 5m, assumed).',
+    )
+    const gone = must(cacheNotice(at(start), start + TTL_MS['5m'] + 4 * MIN, 5 * MIN, 50_000, DEFAULT_RATES))
     expect(gone.isExpired).toBe(true)
     expect(gone.text).toContain('Cache expired 4m ago')
   })
@@ -106,7 +124,7 @@ describe('priceStepNotice', () => {
   })
 
   test('names both rates and the room left inside the margin', async () => {
-    const n = priceStepNotice(DEFAULT_RATES, haiku, 95_000, 10_000)!
+    const n = must(priceStepNotice(DEFAULT_RATES, haiku, 95_000, 10_000))
     expect(n.isPast).toBe(false)
     expect(n.text).toBe(
       'Context is 95K tokens, 5K under the 100K step where claude-haiku-5-5 rises from $0.10 to $0.50 per MTok input and $0.50 to $2.50 output. Consider /compact before it crosses.',
@@ -114,7 +132,7 @@ describe('priceStepNotice', () => {
   })
 
   test('past the step, says what every request now pays', async () => {
-    const n = priceStepNotice(DEFAULT_RATES, haiku, 130_000, 10_000)!
+    const n = must(priceStepNotice(DEFAULT_RATES, haiku, 130_000, 10_000))
     expect(n.isPast).toBe(true)
     expect(n.text).toBe(
       'Context is 130K tokens, past the 100K step: every request on claude-haiku-5-5 now pays $0.50 per MTok input and $2.50 output, up from $0.10 and $0.50. Consider /compact.',
@@ -123,7 +141,7 @@ describe('priceStepNotice', () => {
 
   test('the step itself is not past it, as the rates table prices it', async () => {
     expect(priceStepNotice(DEFAULT_RATES, haiku, 100_000, 0)).toBeNull()
-    expect(priceStepNotice(DEFAULT_RATES, haiku, 100_000, 1)!.isPast).toBe(false)
+    expect(must(priceStepNotice(DEFAULT_RATES, haiku, 100_000, 1)).isPast).toBe(false)
   })
 
   test('a model without tiers, or an unpriced one, has no step', async () => {
@@ -134,10 +152,22 @@ describe('priceStepNotice', () => {
   test('the highest step in reach is the one named', async () => {
     const t = {
       ...DEFAULT_RATES,
-      models: [{ match: 'm', input: 1, output: 2, tiers: [{ abovePromptTokens: 100_000, input: 2, output: 4 }, { abovePromptTokens: 500_000, input: 3, output: 6 }] }],
+      models: [
+        {
+          match: 'm',
+          input: 1,
+          output: 2,
+          tiers: [
+            { abovePromptTokens: 100_000, input: 2, output: 4 },
+            { abovePromptTokens: 500_000, input: 3, output: 6 },
+          ],
+        },
+      ],
     }
-    expect(priceStepNotice(t, 'm', 495_000, 10_000)!.text).toContain('under the 500K step where m rises from $2.00 to $3.00')
-    expect(priceStepNotice(t, 'm', 150_000, 10_000)!.text).toContain('past the 100K step')
+    expect(must(priceStepNotice(t, 'm', 495_000, 10_000)).text).toContain(
+      'under the 500K step where m rises from $2.00 to $3.00',
+    )
+    expect(must(priceStepNotice(t, 'm', 150_000, 10_000)).text).toContain('past the 100K step')
   })
 })
 
@@ -162,7 +192,9 @@ describe('the subagent cost cap', () => {
 
   test('the refusal names the cheaper route, and says a fork cannot take model: haiku', async () => {
     const c = { model: 'claude-opus-5-5', input: 4 }
-    expect(spawnWarning(c, 2)).toBe('Subagent will run on claude-opus-5-5 at $4.00 per MTok input, over your $2.00 cap.')
+    expect(spawnWarning(c, 2)).toBe(
+      'Subagent will run on claude-opus-5-5 at $4.00 per MTok input, over your $2.00 cap.',
+    )
     expect(spawnRefusal(c, 2, false)).toContain('magus-scout agent for a lookup or proof, or pass model: haiku.')
     expect(spawnRefusal(c, 2, true)).toContain('A fork always inherits the session model')
   })
@@ -190,7 +222,9 @@ describe('session spend', () => {
   test('the budget notice appears only once the total passes it', async () => {
     expect(budgetNotice(spend(4, 1), 5)).toBeNull()
     expect(budgetNotice(spend(4, 1), 0)).toBeNull()
-    expect(budgetNotice(spend(4, 1.5), 5)).toBe('Session spend $5.50 has passed your $5.00 budget (main $4.00, subagents $1.50).')
+    expect(budgetNotice(spend(4, 1.5), 5)).toBe(
+      'Session spend $5.50 has passed your $5.00 budget (main $4.00, subagents $1.50).',
+    )
   })
 })
 
@@ -236,7 +270,9 @@ test('readSettings fills the documented defaults and ignores values outside the 
 })
 
 test('the new gates take their own words, and 0 is a value, not a missing one', async () => {
-  expect(readSettings({ priceStepGate: 'confirm', spawnGate: 'deny', budgetGate: 'off', spawnMaxInputUsdPerMTok: 0 })).toMatchObject({
+  expect(
+    readSettings({ priceStepGate: 'confirm', spawnGate: 'deny', budgetGate: 'off', spawnMaxInputUsdPerMTok: 0 }),
+  ).toMatchObject({
     priceStepGate: 'confirm',
     spawnGate: 'deny',
     budgetGate: 'off',

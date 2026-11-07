@@ -24,8 +24,7 @@ export type Probe = {
   server: ServerInfo | null
 }
 
-export const BOOTSTRAP =
-  'GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .'
+export const BOOTSTRAP = 'GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .'
 
 export function assess(p: Probe): Issue[] {
   const issues: Issue[] = []

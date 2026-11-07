@@ -34,7 +34,8 @@ export function parseRates(text: string): Result<RateTable> {
   if (!isRecord(cw) || !isNum(cw['5m']) || !isNum(cw['1h'])) {
     return fail(new MagusError({ code: '', message: 'rates: cacheWriteMultiplier needs numeric "5m" and "1h"' }))
   }
-  if (!isNum(t.defaultCacheReadMultiplier)) return fail(new MagusError({ code: '', message: 'rates: defaultCacheReadMultiplier must be a number' }))
+  if (!isNum(t.defaultCacheReadMultiplier))
+    return fail(new MagusError({ code: '', message: 'rates: defaultCacheReadMultiplier must be a number' }))
   if (!Array.isArray(t.models)) return fail(new MagusError({ code: '', message: 'rates: models must be a list' }))
   const models: ModelRates[] = []
   for (const [i, m] of t.models.entries()) {
@@ -55,22 +56,33 @@ function readModel(m: unknown, i: number): Result<ModelRates> {
   if (!isRecord(m) || typeof m.match !== 'string' || !m.match) {
     return fail(new MagusError({ code: '', message: `rates: models[${i}].match must name a model id prefix` }))
   }
-  if (!isNum(m.input) || !isNum(m.output)) return fail(new MagusError({ code: '', message: `rates: models[${i}] (${m.match}) needs numeric input and output` }))
+  if (!isNum(m.input) || !isNum(m.output))
+    return fail(
+      new MagusError({ code: '', message: `rates: models[${i}] (${m.match}) needs numeric input and output` }),
+    )
   const model: ModelRates = { match: m.match, input: m.input, output: m.output }
   if (m.cacheRead !== undefined) {
-    if (!isNum(m.cacheRead)) return fail(new MagusError({ code: '', message: `rates: models[${i}].cacheRead must be a number` }))
+    if (!isNum(m.cacheRead))
+      return fail(new MagusError({ code: '', message: `rates: models[${i}].cacheRead must be a number` }))
     model.cacheRead = m.cacheRead
   }
   if (m.tiers === undefined) return ok(model)
-  if (!Array.isArray(m.tiers)) return fail(new MagusError({ code: '', message: `rates: models[${i}].tiers must be a list` }))
+  if (!Array.isArray(m.tiers))
+    return fail(new MagusError({ code: '', message: `rates: models[${i}].tiers must be a list` }))
   const tiers: Tier[] = []
   for (const [j, tier] of m.tiers.entries()) {
     if (!isRecord(tier) || !isNum(tier.abovePromptTokens) || !isNum(tier.input) || !isNum(tier.output)) {
-      return fail(new MagusError({ code: '', message: `rates: models[${i}].tiers[${j}] needs numeric abovePromptTokens, input and output` }))
+      return fail(
+        new MagusError({
+          code: '',
+          message: `rates: models[${i}].tiers[${j}] needs numeric abovePromptTokens, input and output`,
+        }),
+      )
     }
     const read: Tier = { abovePromptTokens: tier.abovePromptTokens, input: tier.input, output: tier.output }
     if (tier.cacheRead !== undefined) {
-      if (!isNum(tier.cacheRead)) return fail(new MagusError({ code: '', message: `rates: models[${i}].tiers[${j}].cacheRead must be a number` }))
+      if (!isNum(tier.cacheRead))
+        return fail(new MagusError({ code: '', message: `rates: models[${i}].tiers[${j}].cacheRead must be a number` }))
       read.cacheRead = tier.cacheRead
     }
     tiers.push(read)
@@ -116,7 +128,9 @@ export function requestUsd(table: RateTable, model: string, u: Usage, ttl: Ttl):
   const prompt = u.input + u.cacheRead + u.cacheCreation
   const r = ratesFor(table, model, prompt)
   if (!r) return null
-  return (u.input * r.input + u.output * r.output + u.cacheRead * r.cacheRead + u.cacheCreation * r.cacheWrite[ttl]) / 1e6
+  return (
+    (u.input * r.input + u.output * r.output + u.cacheRead * r.cacheRead + u.cacheCreation * r.cacheWrite[ttl]) / 1e6
+  )
 }
 
 // Milliseconds left before the cache written by the last response expires; null before
@@ -166,7 +180,12 @@ export type StepNotice = { isPast: boolean; text: string }
 // The price step the next request meets, or null while the context is more than marginTokens
 // under every step of model's tiers, or the model has none. A request re-sends the whole
 // context, so past a step every request pays the higher rate until the context shrinks.
-export function priceStepNotice(table: RateTable, model: string, contextTokens: number, marginTokens: number): StepNotice | null {
+export function priceStepNotice(
+  table: RateTable,
+  model: string,
+  contextTokens: number,
+  marginTokens: number,
+): StepNotice | null {
   const tier = (entryFor(table, model)?.tiers ?? [])
     .filter(t => contextTokens > t.abovePromptTokens - marginTokens)
     .sort((a, b) => b.abovePromptTokens - a.abovePromptTokens)[0]
@@ -187,7 +206,10 @@ export function priceStepNotice(table: RateTable, model: string, contextTokens: 
 // alias (`haiku`) is the table's first entry of that family, since the table is the only
 // source of prices. null when the table prices nothing under it.
 export function pricedModel(table: RateTable, model: string, parentModel: string): string | null {
-  const m = model.replace(/\[.*\]$/, '').trim().toLowerCase()
+  const m = model
+    .replace(/\[.*\]$/, '')
+    .trim()
+    .toLowerCase()
   const id = m === '' || m === 'inherit' ? parentModel : m
   if (entryFor(table, id)) return id
   return table.models.find(e => e.match.split('-')[1] === id)?.match ?? null

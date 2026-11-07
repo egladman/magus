@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 const ROOT = '/w'
@@ -45,7 +46,9 @@ function engine(on: On, opts: { serverUp: boolean; calls: Call[] }) {
   on('process.run', () => ({
     value: {
       exitCode: opts.serverUp ? 0 : 1,
-      stdout: JSON.stringify(opts.serverUp ? { server: { pid: 1 }, pool: { socket: `unix://${SOCK}` } } : { pool_error: 'no such file' }),
+      stdout: JSON.stringify(
+        opts.serverUp ? { server: { pid: 1 }, pool: { socket: `unix://${SOCK}` } } : { pool_error: 'no such file' },
+      ),
       stderr: '',
       isStdoutTruncated: false,
       isStderrTruncated: false,
@@ -56,7 +59,9 @@ function engine(on: On, opts: { serverUp: boolean; calls: Call[] }) {
     const answers: Record<string, unknown> = {
       'http://magus/magus.job.v1alpha1.JobService/ListJobs': LIST_JOBS,
       'http://magus/magus.activity.v1alpha1.ActivityService/ListActivityEvents': {
-        events: [{ time: '2026-10-09T23:56:00Z', kind: 'KIND_FILE_CHANGE', action: 'write', preview: 'console/app.css' }],
+        events: [
+          { time: '2026-10-09T23:56:00Z', kind: 'KIND_FILE_CHANGE', action: 'write', preview: 'console/app.css' },
+        ],
       },
       'http://magus/magus.viewer.v1alpha1.ViewerService/ListInvocations': {
         invocations: [{ id: 'inv1', command: { arguments: ['affected', 'ci'] }, startTime: '2026-10-09T23:56:00Z' }],
@@ -134,7 +139,9 @@ test('the Agents tab lists spawned subagents and links one to the job its descri
   engine(on, { serverUp: true, calls })
   on('agent.spawn', () => ({ model: 'claude-haiku-5-5', agentId: 'ag1' }))
   on('turn.complete', () => ({ text: 'done' }) as never)
-  on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 1000, window: 1_000_000 }, rateLimits: [] } as never }))
+  on('session.usage', () => ({
+    value: { startedAt: 0, context: { tokens: 1000, window: 1_000_000 }, rateLimits: [] } as never,
+  }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
 
   await $.session.start({ cwd: ROOT, surface: 'desktop', isInteractive: true })
@@ -155,7 +162,14 @@ test('the Agents tab lists spawned subagents and links one to the job its descri
   expect(await ui.find({ type: 'Text', text: 'css-reorg/feat tokens' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '●' })).toBeDefined()
 
-  await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 'x', agentId: 'ag1', reason: 'answer' } as never)
+  await $.turn.complete({
+    answer: 'done',
+    durationMs: 5,
+    isAborted: false,
+    turnId: 'x',
+    agentId: 'ag1',
+    reason: 'answer',
+  } as never)
   expect(await ui.find({ type: 'Text', text: '✓' })).toBeDefined()
 
   await ui.press({ key: 'agent-job-ag1' })
@@ -165,10 +179,12 @@ test('the Agents tab lists spawned subagents and links one to the job its descri
   expect(await ui.find({ type: 'Button', key: 'watch' })).toBeDefined()
 })
 
-function spawnAgents($: Parameters<Parameters<typeof test>[1]>[0], on: On, theme: string) {
+function spawnAgents($: Engine, on: On, theme: string) {
   on('agent.spawn', ($, e) => ({ model: 'claude-haiku-5-5', agentId: e.tool_use_id }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
-  on('config.list', () => ({ value: [{ key: 'theme', label: 'Theme', kind: 'enum', value: theme, provider: { plugin: 'engine' } }] as never }))
+  on('config.list', () => ({
+    value: [{ key: 'theme', label: 'Theme', kind: 'enum', value: theme, provider: { plugin: 'engine' } }] as never,
+  }))
   const spawn = (id: string, description: string) =>
     $.agent.spawn({
       tool_use_id: id,

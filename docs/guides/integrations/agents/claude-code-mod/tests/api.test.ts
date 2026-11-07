@@ -1,6 +1,14 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { candidateJobs, connectError, parseActivity, parseJobs, parseRuns, roleOf, socketFromStatus } from '../hooks/api'
+import {
+  candidateJobs,
+  connectError,
+  parseActivity,
+  parseJobs,
+  parseRuns,
+  roleOf,
+  socketFromStatus,
+} from '../hooks/api'
 
 describe('socketFromStatus', () => {
   test('a running server answers its socket without the scheme', async () => {
@@ -26,7 +34,13 @@ describe('parseJobs', () => {
     const parsed = parseJobs(
       JSON.stringify({
         jobs: [
-          { name: 'jobs/sync-graph', id: 'sync-graph', holder: 'JOB_HOLDER_SERVER', state: 'pass', description: 'reconcile the graph' },
+          {
+            name: 'jobs/sync-graph',
+            id: 'sync-graph',
+            holder: 'JOB_HOLDER_SERVER',
+            state: 'pass',
+            description: 'reconcile the graph',
+          },
           {
             id: 'api/store',
             parent: 'api',
@@ -53,7 +67,12 @@ describe('parseJobs', () => {
     expect(listing.overdue).toEqual(['api/store'])
     expect(listing.stale).toEqual([])
     expect(listing.blocked).toEqual([{ job: 'api/later', on: 'api/store', state: 'running' }])
-    expect(listing.rows[0]).toMatchObject({ id: 'sync-graph', holder: 'server', criteria: 'reconcile the graph', updated: 0 })
+    expect(listing.rows[0]).toMatchObject({
+      id: 'sync-graph',
+      holder: 'server',
+      criteria: 'reconcile the graph',
+      updated: 0,
+    })
     expect(listing.rows[1]).toEqual({
       id: 'api/store',
       parent: 'api',
@@ -76,14 +95,26 @@ test('parseRuns reads invocations; a running one has no end', async () => {
   const parsed = parseRuns(
     JSON.stringify({
       invocations: [
-        { id: 'inv1', command: { arguments: ['run', 'go-build', '.'] }, startTime: '2026-10-09T23:56:00Z', status: 'STATUS_PASS', endTime: '2026-10-09T23:56:33Z' },
+        {
+          id: 'inv1',
+          command: { arguments: ['run', 'go-build', '.'] },
+          startTime: '2026-10-09T23:56:00Z',
+          status: 'STATUS_PASS',
+          endTime: '2026-10-09T23:56:33Z',
+        },
         { id: 'inv2', command: { arguments: ['affected', 'ci'] }, startTime: '2026-10-09T23:57:00Z' },
       ],
     }),
   )
   if (parsed.error) return expect(parsed.error.message).toBe('')
   const runs = parsed.value
-  expect(runs[0]).toEqual({ id: 'inv1', command: 'run go-build .', startedAt: Date.parse('2026-10-09T23:56:00Z'), endedAt: Date.parse('2026-10-09T23:56:33Z'), status: 'pass' })
+  expect(runs[0]).toEqual({
+    id: 'inv1',
+    command: 'run go-build .',
+    startedAt: Date.parse('2026-10-09T23:56:00Z'),
+    endedAt: Date.parse('2026-10-09T23:56:33Z'),
+    status: 'pass',
+  })
   expect(runs[1]?.endedAt).toBe(0)
   expect(runs[1]?.status).toBe('')
 })
@@ -91,13 +122,29 @@ test('parseRuns reads invocations; a running one has no end', async () => {
 test('parseActivity reads events with their kind and outcome words', async () => {
   const parsed = parseActivity(
     JSON.stringify({
-      events: [{ time: '2026-10-09T23:56:00Z', kind: 'KIND_FILE_CHANGE', action: 'write', outcome: 'OUTCOME_ERROR', actor: 'eli', preview: 'api/store.go' }],
+      events: [
+        {
+          time: '2026-10-09T23:56:00Z',
+          kind: 'KIND_FILE_CHANGE',
+          action: 'write',
+          outcome: 'OUTCOME_ERROR',
+          actor: 'eli',
+          preview: 'api/store.go',
+        },
+      ],
     }),
   )
   if (parsed.error) return expect(parsed.error.message).toBe('')
   const lines = parsed.value
   expect(lines).toEqual([
-    { at: Date.parse('2026-10-09T23:56:00Z'), kind: 'file_change', action: 'write', outcome: 'error', actor: 'eli', preview: 'api/store.go' },
+    {
+      at: Date.parse('2026-10-09T23:56:00Z'),
+      kind: 'file_change',
+      action: 'write',
+      outcome: 'error',
+      actor: 'eli',
+      preview: 'api/store.go',
+    },
   ])
 })
 
