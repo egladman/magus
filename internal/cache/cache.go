@@ -220,10 +220,6 @@ type Step struct {
 	// never part of the affected set.
 	RunAfter      []types.TargetRef
 	WorkspaceRoot string
-	// UseRoots maps each used workspace's name to its absolute root. A
-	// source glob spelled as a use reference expands there. The key records
-	// the reference, never the root, so a hit stays portable.
-	UseRoots      map[string]string
 	Target        string   // mixed into key to distinguish targets on the same sources
 	Charms        []string // active charm names (sorted), mixed into key so charm-variant runs differ
 	// UnreadCharms are the active charms this step cannot read, so they stay in its label

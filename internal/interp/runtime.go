@@ -852,6 +852,37 @@ func checkRemoteSpellImports(ctx context.Context, paths []string) error {
 	return errors.Join(errs...)
 }
 
+// checkWorkspaceImports refuses an import through types.WorkspacesDir/<name>
+// when no such workspace is connected here. Without it the import fails as a
+// missing module, which reads as a stale binary.
+func checkWorkspaceImports(ctx context.Context, rel, code string) error {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil || ws.Root() == "" || !strings.Contains(code, types.WorkspacesDir+"/") {
+		return nil
+	}
+	for rest := code; ; {
+		i := strings.Index(rest, `import "`)
+		if i < 0 {
+			return nil
+		}
+		rest = rest[i+len(`import "`):]
+		imported, _, ok := strings.Cut(rest, `"`)
+		if !ok {
+			return nil
+		}
+		after, found := strings.CutPrefix(strings.TrimPrefix(imported, "./"), types.WorkspacesDir+"/")
+		if !found {
+			continue
+		}
+		name, _, _ := strings.Cut(after, "/")
+		if _, err := os.Stat(filepath.Join(ws.Root(), filepath.FromSlash(types.WorkspacesDir), name)); err != nil {
+			return types.DiagnosticErrorf(types.WorkspaceNotConnected,
+				"%s imports %q through %s/%s, which is not connected here; add {name: %s, path: ...} to knowledge.workspaces in $XDG_CONFIG_HOME/magus/magus.yaml",
+				rel, imported, types.WorkspacesDir, name, name)
+		}
+	}
+}
+
 // remoteImportPaths returns the registry-path imports src makes. A parse error yields
 // nil: Exec re-parses and reports it with position.
 func remoteImportPaths(src string) []string {
@@ -1250,6 +1281,10 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 			_ = buzzSess.Close()
 			return nil, &ImportError{Path: path, rel: rel, Err: err}
 		}
+		if err := checkWorkspaceImports(ctx, rel, code); err != nil {
+			_ = buzzSess.Close()
+			return nil, &ImportError{Path: path, rel: rel, Err: err}
+		}
 		// Reject a call magus no longer binds before Exec, so the magusfile fails at
 		// load naming the migration rather than at run time as "null is not callable"
 		// (or, for a shape that predates required parameter annotations, as a parser
@@ -1477,12 +1512,6 @@ func magusSearchPaths(ctx context.Context, projectDir string) []string {
 		if root := ws.Root(); root != "" && root != projectDir {
 			roots = append(roots, root)
 		}
-		// Inside the root, so confineImportReads needs no bound for it.
-		if root := ws.Root(); root != "" {
-			if links := filepath.Join(root, filepath.FromSlash(types.UseLinkDir)); isDir(links) {
-				roots = append(roots, links)
-			}
-		}
 	}
 	if view := remotespell.ImportsFromContext(ctx).View(); view != "" {
 		roots = append(roots, view)
@@ -1546,12 +1575,6 @@ func absClean(p string) string {
 		return abs
 	}
 	return filepath.Clean(p)
-}
-
-// isDir reports whether p names a directory, following a link.
-func isDir(p string) bool {
-	fi, err := os.Stat(p)
-	return err == nil && fi.IsDir()
 }
 
 // within reports whether the clean absolute path p is root or lies under it.

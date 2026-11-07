@@ -140,14 +140,6 @@ type Config struct {
 	// would silently disable the floor for every workspace that session touches.
 	RequiredVersion string `json:"required_version" yaml:"required_version" cli:"-"`
 
-	// Use stitches other magus workspaces in by local path, as go.work stitches
-	// modules: each entry lends this workspace the rule kinds it shares, read
-	// through `@<name>/` patterns and imports. See UseEntry and MGS1054.
-	//
-	// cli:"-": magus.yaml ONLY. Which rules apply to this code is
-	// the repository's decision. A flag or env var would change it per shell.
-	Use []UseEntry `json:"use" yaml:"use" cli:"-"`
-
 	// Agents states facts about the account agents run under and a person's guard level.
 	// See Agents.
 	//
@@ -763,12 +755,9 @@ type VCS struct {
 
 // Knowledge configures the cross-workspace knowledge graph.
 type Knowledge struct {
-	// Workspaces are additional workspace roots to union into a `--global`
-	// knowledge-graph query (query/explain/path and graph export/stats). Each is
-	// loaded and its node IDs are namespaced by the workspace ("<name>//<id>") so
-	// IDs from different repos cannot collide. Empty means --global covers only the
-	// current workspace.
-	Workspaces []string `json:"workspaces" yaml:"workspaces"`
+	// Workspaces connects every listed workspace to every other, both ways.
+	// cli:"-" and user config only (MGS1055): connecting commits nothing.
+	Workspaces []KnowledgeWorkspace `json:"workspaces" yaml:"workspaces" cli:"-"`
 	// PublishedRef is the OCI artifact a published knowledge graph is READ from, as
 	// <registry>/<repository>:<tag>. Empty (the default) means this workspace pulls
 	// nothing and every graph is built locally.

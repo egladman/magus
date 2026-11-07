@@ -120,9 +120,7 @@ func buildDescribe(sess *buzz.Session, obs buzz.DirectObserver, withheld []strin
 			return vm.Null, err
 		}
 		out, err := std.MagusDescribeWorkspace(ctx, opts)
-		return ffi.ObjectSlice(out, func(v types.WorkspaceEntry) vm.Value {
-			return bindgen.ObjectWorkspaceEntry(v, ffi.SessionEnums(ctx, sess, "magus"))
-		}), err
+		return ffi.ObjectSlice(out, bindgen.ObjectWorkspaceEntry), err
 	})
 	bind("tool", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		out, err := std.MagusDescribeTool(ctx)

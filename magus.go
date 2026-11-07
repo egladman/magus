@@ -572,17 +572,10 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if d := ward.CheckRequiredVersion(cfg.RequiredVersion, vo.Version); d != nil {
 		return nil, d
 	}
-	// Beside the floor, and for its reason: rules a used workspace lends
-	// must be there before any magusfile that reads them is evaluated.
-	uses, err := resolveUses(root, cfg.Use)
-	if err != nil {
-		return nil, err
-	}
 	ws, err := project.Discover(ctx, root)
 	if err != nil {
 		return nil, err
 	}
-	ws.Uses = uses
 	// vcs.Resolve falls back to MAGUS_VCS_* env vars on a zero VCSOptions, so this
 	// wiring was the only thing standing between magus.yaml's vcs.* keys and every
 	// caller of vcs.Resolve(..., m.ws.VCSOptions); without it the keys parsed and
@@ -597,6 +590,15 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 				vo.VCSDriver.Name(), cfg.VCS.Name)
 		}
 		ws.VCSOptions.Driver = vo.VCSDriver
+	}
+	// Before any magusfile is evaluated: one may read or import through
+	// .magus/workspaces, so the paths must be there first.
+	stderr := vo.Stderr
+	if stderr == nil {
+		stderr = io.Discard
+	}
+	if ws.Workspaces, err = reconcileWorkspaces(ctx, root, cfg.Knowledge.Workspaces, ws.VCSOptions, stderr); err != nil {
+		return nil, err
 	}
 	if vo.SpawnRule == nil {
 		return nil, errors.New("magus: no spawn rule: a workspace has no default one, so open it with WithSpawnRule(magus.TierCeiling), the reference rule, or a rule of your own")
@@ -2234,7 +2236,6 @@ func (m *Magus) baseStep(p *types.Project) cache.Step {
 		IgnoreDirs:      ignoreDirs,
 		Outputs:         outputs,
 		WorkspaceRoot:   m.ws.Root,
-		UseRoots:        useRoots(m.ws.Uses),
 		SpellDefVersion: spell.BuiltinsHash(),
 		Label:           types.ProjectDisplayName(p.Path, p.Name, p.Dir),
 	}

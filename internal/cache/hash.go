@@ -278,7 +278,7 @@ func NewSourceMemo() *SourceMemo {
 // safe because every glob carries its own exclusions: expandSources' result is a
 // membership test per file, so two lists differing only in order expand to the same
 // file set. The key only detects that repetition and is never written to the hash.
-func sourceMemoKey(root string, uses map[string]string, sources, outputs []types.Glob, ignoreDirs []string) string {
+func sourceMemoKey(root string, through map[string]string, sources, outputs []types.Glob, ignoreDirs []string) string {
 	var b strings.Builder
 	write := func(ss []string) {
 		sorted := append([]string(nil), ss...)
@@ -298,8 +298,8 @@ func sourceMemoKey(root string, uses map[string]string, sources, outputs []types
 	}
 	b.WriteString(root)
 	b.WriteByte(0)
-	for _, name := range slices.Sorted(maps.Keys(uses)) {
-		fmt.Fprintf(&b, "%s=%s", name, uses[name])
+	for _, name := range slices.Sorted(maps.Keys(through)) {
+		fmt.Fprintf(&b, "%s=%s", name, through[name])
 		b.WriteByte(0)
 	}
 	write(flat(sources))
@@ -312,8 +312,12 @@ func sourceMemoKey(root string, uses map[string]string, sources, outputs []types
 // first when non-nil and populating it on a miss. The nil path is byte-for-byte the
 // prior inline behavior in hashStepInputs.
 func (c *Cache) expandAndHashSources(ctx context.Context, s *Step, memo *SourceMemo) ([]relAbs, []string, []os.FileMode, error) {
+	roots, err := workspaceRoots(s)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	if memo == nil {
-		files, err := expandStepSources(s)
+		files, err := expandStepSources(s, roots)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -324,7 +328,7 @@ func (c *Cache) expandAndHashSources(ctx context.Context, s *Step, memo *SourceM
 		return files, hashes, modes, nil
 	}
 
-	key := sourceMemoKey(s.WorkspaceRoot, s.UseRoots, s.Sources, s.Outputs, s.IgnoreDirs)
+	key := sourceMemoKey(s.WorkspaceRoot, roots, s.Sources, s.Outputs, s.IgnoreDirs)
 	memo.mu.Lock()
 	if e, ok := memo.entries[key]; ok {
 		memo.mu.Unlock()
@@ -332,7 +336,7 @@ func (c *Cache) expandAndHashSources(ctx context.Context, s *Step, memo *SourceM
 	}
 	memo.mu.Unlock()
 
-	files, err := expandStepSources(s)
+	files, err := expandStepSources(s, roots)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -843,24 +847,21 @@ func shortHash(h string) string {
 	return h[:8]
 }
 
-// expandStepSources expands s.Sources as the key reads them. A glob spelled
-// as a use reference expands under that used root and keeps the reference
-// as its name, so the key never carries the root. A glob reaching past the
-// workspace root is refused, since no walk could match it.
-func expandStepSources(s *Step) ([]relAbs, error) {
+// expandStepSources expands s.Sources as the key reads them. A glob under
+// types.WorkspacesDir/<name> expands under the workspace that symlink names
+// and keys by the path through it, never the other root. A glob reaching past
+// the root is refused, since no walk could match it.
+func expandStepSources(s *Step, roots map[string]string) ([]relAbs, error) {
 	var local []types.Glob
-	used := map[string][]types.Glob{}
+	through := map[string][]types.Glob{}
 	for _, g := range s.Sources {
-		if name, rel, ok := types.CutUseRef(g.Pattern); ok {
-			if _, known := s.UseRoots[name]; !known {
-				return nil, fmt.Errorf("source glob %q names %s, which magus.yaml use does not declare", g.Pattern, types.UseRef(name, ""))
-			}
-			used[name] = append(used[name], types.Glob{Pattern: rel, Except: exceptUnder(name, g.Except)})
+		if name, rel, ok := cutWorkspacePath(g.Pattern); ok {
+			through[name] = append(through[name], types.Glob{Pattern: rel, Except: exceptUnder(name, g.Except)})
 			continue
 		}
 		if escapesRoot(g.Pattern) {
 			return nil, fmt.Errorf("source glob %q reaches outside the workspace root, so it could never key this target: "+
-				"declare the other workspace in magus.yaml use and read it as %s", g.Pattern, types.UseRef("<name>", "<glob>"))
+				"list the other workspace in knowledge.workspaces and read it as %s/<name>/<glob>", g.Pattern, types.WorkspacesDir)
 		}
 		local = append(local, g)
 	}
@@ -868,25 +869,63 @@ func expandStepSources(s *Step) ([]relAbs, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, name := range slices.Sorted(maps.Keys(used)) {
-		files, err := expandSources(used[name], s.UseRoots[name], nil, s.IgnoreDirs)
+	for _, name := range slices.Sorted(maps.Keys(through)) {
+		files, err := expandSources(through[name], roots[name], nil, s.IgnoreDirs)
 		if err != nil {
 			return nil, err
 		}
 		for _, f := range files {
-			out = append(out, relAbs{rel: types.UseRef(name, f.rel), abs: f.abs})
+			out = append(out, relAbs{rel: path.Join(types.WorkspacesDir, name, f.rel), abs: f.abs})
 		}
 	}
 	slices.SortFunc(out, func(a, b relAbs) int { return cmp.Compare(a.rel, b.rel) })
 	return out, nil
 }
 
-// exceptUnder keeps the exclusions that name a path under the used
-// workspace name, relative to its root.
+// workspaceRoots resolves the symlink of each workspace a source glob of s
+// reads through. A missing one refuses with MGS1059, naming the config line
+// that would connect it.
+func workspaceRoots(s *Step) (map[string]string, error) {
+	var out map[string]string
+	for _, g := range s.Sources {
+		name, _, ok := cutWorkspacePath(g.Pattern)
+		if !ok || out[name] != "" {
+			continue
+		}
+		dir := path.Join(types.WorkspacesDir, name)
+		real, err := filepath.EvalSymlinks(filepath.Join(s.WorkspaceRoot, filepath.FromSlash(dir)))
+		if err != nil {
+			return nil, types.DiagnosticErrorf(types.WorkspaceNotConnected,
+				"%s:%s reads %s, which is not connected here; add {name: %s, path: ...} to knowledge.workspaces in $XDG_CONFIG_HOME/magus/magus.yaml",
+				s.Label, s.Target, dir, name)
+		}
+		if out == nil {
+			out = map[string]string{}
+		}
+		out[name] = real
+	}
+	return out, nil
+}
+
+// cutWorkspacePath splits a workspace-rooted slash path under
+// types.WorkspacesDir into the entry name and the path below it.
+func cutWorkspacePath(p string) (name, rel string, ok bool) {
+	rest, found := strings.CutPrefix(path.Clean(p), types.WorkspacesDir+"/")
+	if !found {
+		return "", "", false
+	}
+	name, rel, found = strings.Cut(rest, "/")
+	if !found || name == "" || rel == "" {
+		return "", "", false
+	}
+	return name, rel, true
+}
+
+// exceptUnder keeps the exclusions under the workspace name, relative to it.
 func exceptUnder(name string, except []string) []string {
 	var out []string
 	for _, e := range except {
-		if n, rel, ok := types.CutUseRef(e); ok && n == name {
+		if n, rel, ok := cutWorkspacePath(e); ok && n == name {
 			out = append(out, rel)
 		}
 	}

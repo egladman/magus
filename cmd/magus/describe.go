@@ -1480,12 +1480,12 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 		if w.Concurrency > 0 {
 			fmt.Printf("  concurrency: %d\n", w.Concurrency)
 		}
-		for _, u := range w.Use {
-			kinds := make([]string, len(u.Share))
-			for i, k := range u.Share {
-				kinds[i] = string(k)
+		for _, l := range w.Workspaces {
+			if l.Dir == "" {
+				fmt.Printf("  workspace %s: %s (this one)\n", l.Name, l.Root)
+				continue
 			}
-			fmt.Printf("  use %s: %s (shares %s)\n", u.Name, u.Root, strings.Join(kinds, ", "))
+			fmt.Printf("  workspace %s: %s -> %s\n", l.Name, l.Dir, l.Root)
 		}
 	}
 	return nil

@@ -3907,6 +3907,10 @@ github.com/egladman/magus/types.ListPullsRequest type struct
 github.com/egladman/magus/types.ListPullsRequest.Authors field []string
 github.com/egladman/magus/types.ListPullsRequest.Base field string
 github.com/egladman/magus/types.ListPullsRequest.Remote field string
+github.com/egladman/magus/types.ListedWorkspace type struct
+github.com/egladman/magus/types.ListedWorkspace.Dir field string "json:\"dir\" yaml:\"dir\""
+github.com/egladman/magus/types.ListedWorkspace.Name field string "json:\"name\" yaml:\"name\""
+github.com/egladman/magus/types.ListedWorkspace.Root field string "json:\"root\" yaml:\"root\""
 github.com/egladman/magus/types.ListenerHTTP const ListenerKind = "http"
 github.com/egladman/magus/types.ListenerKind type string
 github.com/egladman/magus/types.ListenerSocket const ListenerKind = "socket"
@@ -6071,6 +6075,7 @@ github.com/egladman/magus/types.Workspace.Root field string
 github.com/egladman/magus/types.Workspace.SetGraphObserver method(ptr) func(o Observer)
 github.com/egladman/magus/types.Workspace.UnderPath method(ptr) func(prefix string) []*Project
 github.com/egladman/magus/types.Workspace.VCSOptions field VCSOptions
+github.com/egladman/magus/types.Workspace.Workspaces field []ListedWorkspace
 github.com/egladman/magus/types.WorkspaceActive const WorkspaceState = "active"
 github.com/egladman/magus/types.WorkspaceConfig type struct
 github.com/egladman/magus/types.WorkspaceConfig.CacheDir field string
@@ -6083,6 +6088,8 @@ github.com/egladman/magus/types.WorkspaceEntry.Concurrency field int "json:\"con
 github.com/egladman/magus/types.WorkspaceEntry.ProjectCount field int "json:\"project_count\"           yaml:\"project_count\""
 github.com/egladman/magus/types.WorkspaceEntry.Root field string "json:\"root\"                    yaml:\"root\""
 github.com/egladman/magus/types.WorkspaceEntry.VCSBaseRef field string "json:\"vcs_base_ref,omitempty\"  yaml:\"vcs_base_ref,omitempty\""
+github.com/egladman/magus/types.WorkspaceEntry.Workspaces field []ListedWorkspace "json:\"workspaces\" yaml:\"workspaces\""
+github.com/egladman/magus/types.WorkspaceEntryShape const DiagnosticCode = "MGS1056"
 github.com/egladman/magus/types.WorkspaceFailed const WorkspaceState = "failed"
 github.com/egladman/magus/types.WorkspaceFailure type struct
 github.com/egladman/magus/types.WorkspaceFailure.Diagnostics field []SourceDiagnostic "json:\"diagnostics,omitempty\" yaml:\"diagnostics,omitempty\""
@@ -6090,7 +6097,9 @@ github.com/egladman/magus/types.WorkspaceFailure.Message field string "json:\"me
 github.com/egladman/magus/types.WorkspaceFromContext func(ctx context.Context) WorkspaceRepository
 github.com/egladman/magus/types.WorkspaceLoadFailed const DiagnosticCode = "MGS3016"
 github.com/egladman/magus/types.WorkspaceLoading const WorkspaceState = "loading"
+github.com/egladman/magus/types.WorkspaceMissing const DiagnosticCode = "MGS1054"
 github.com/egladman/magus/types.WorkspaceNeedsNewerMagus const DiagnosticCode = "MGS1021"
+github.com/egladman/magus/types.WorkspaceNotConnected const DiagnosticCode = "MGS1059"
 github.com/egladman/magus/types.WorkspaceNotWired const DiagnosticCode = "MGS9026"
 github.com/egladman/magus/types.WorkspaceReader type interface
 github.com/egladman/magus/types.WorkspaceReader.All imethod func() []*Project
@@ -6110,6 +6119,10 @@ github.com/egladman/magus/types.WorkspaceRepository.embeds TargetExpander
 github.com/egladman/magus/types.WorkspaceRepository.embeds WorkspaceReader
 github.com/egladman/magus/types.WorkspaceState type string
 github.com/egladman/magus/types.WorkspaceStillLoading const DiagnosticCode = "MGS3017"
+github.com/egladman/magus/types.WorkspacesCommitted const DiagnosticCode = "MGS1055"
+github.com/egladman/magus/types.WorkspacesDir const untyped string = ".magus/workspaces"
+github.com/egladman/magus/types.WorkspacesNotALink const DiagnosticCode = "MGS1058"
+github.com/egladman/magus/types.WorkspacesTracked const DiagnosticCode = "MGS1057"
 github.com/egladman/magus/types.WrapDiagnostic func(c DiagnosticCode, cause error, format string, args ...any) *DiagnosticError
 github.com/egladman/magus/types.WrapperInvocation func(id string) string
 github.com/egladman/magus/types.WritePathClaimUngradable const DiagnosticCode = "MGS3031"

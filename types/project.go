@@ -350,12 +350,8 @@ func (p *Project) AllOutputs() []Glob {
 // A glob reaching PAST the workspace root is rejected where it is declared
 // (workspace.WithSources), not here: this is a pure path operation with one answer, and
 // only the declaration site can name the option that wrote it.
-//
-// A use reference ([UseRef]) is rooted at its used workspace, not this one,
-// so it passes through cleaned and never joined.
 func RootGlob(projectPath, glob string) string {
-	_, _, used := CutUseRef(glob)
-	if used || projectPath == "" || projectPath == "." {
+	if projectPath == "" || projectPath == "." {
 		return path.Clean(glob)
 	}
 	return path.Clean(fmt.Sprintf("%s/%s", projectPath, glob))

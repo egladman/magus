@@ -429,10 +429,6 @@ export enum<str> HarnessChangeOp {
     write = "write",
 }
 
-export enum<str> ShareKind {
-    lint = "lint",
-}
-
 export object ChangeOptions {
     rev: str = "",
     patch: str = "",
@@ -2794,10 +2790,10 @@ export object ToolReport {
     tools: [ToolRow] = [],
 }
 
-export object UsedWorkspace {
+export object ListedWorkspace {
     name: str = "",
     root: str = "",
-    share: [ShareKind] = [],
+    dir: str = "",
 }
 
 export object WorkspaceEntry {
@@ -2806,7 +2802,7 @@ export object WorkspaceEntry {
     cacheDir: str = "",
     concurrency: int = 0,
     projectCount: int = 0,
-    use: [UsedWorkspace] = [],
+    workspaces: [ListedWorkspace] = [],
 }
 
 export object ServiceLease {

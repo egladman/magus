@@ -198,6 +198,11 @@ func loadRepositoryDirInto(cfg Config, dir string) (Config, error) {
 	if overlay.Sources != nil && !isUserConfigDir(dir) {
 		return Config{}, fmt.Errorf("config: %s sets sources, a personal reading list: move it to the user-level %s under $XDG_CONFIG_HOME/magus", path, Filename)
 	}
+	if !isUserConfigDir(dir) {
+		if err := workspacesCommittedError(overlay.Knowledge.Workspaces); err != nil {
+			return Config{}, err
+		}
+	}
 	return mergeOverlay(cfg, overlay, data), nil
 }
 
@@ -274,6 +279,9 @@ func decodeFile(path string) ([]byte, Config, error) {
 	var extra yaml.Node
 	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		return nil, Config{}, fmt.Errorf("config: %s: expected a single document in the stream", path)
+	}
+	for i := range overlay.Knowledge.Workspaces {
+		overlay.Knowledge.Workspaces[i].File = path
 	}
 	return data, overlay, nil
 }

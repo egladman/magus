@@ -565,21 +565,24 @@ func TestCheckDeclarationRefusesANegativeTrim(t *testing.T) {
 	assert.NoError(t, CheckDeclaration(sb))
 }
 
-type UseAllowsSuite struct{ suite.Suite }
+type WorkspaceAllowsSuite struct{ suite.Suite }
 
-func TestUseAllowsSuite(t *testing.T) { suite.Run(t, new(UseAllowsSuite)) }
+func TestWorkspaceAllowsSuite(t *testing.T) { suite.Run(t, new(WorkspaceAllowsSuite)) }
 
-func (s *UseAllowsSuite) TestEachUsedRootIsReadOnly() {
-	got := UseAllows([]types.UsedWorkspace{{Name: "magus", Root: "/src/magus"}})
-	s.Equal([]spells.SandboxAllow{{Name: types.UseRef("magus", ""), Path: "/src/magus", Mode: spells.SandboxAccessRO}}, got)
+func (s *WorkspaceAllowsSuite) TestEachOtherRootIsReadOnly() {
+	got := WorkspaceAllows([]types.ListedWorkspace{
+		{Name: "buzzed", Root: "/src/buzzed"},
+		{Name: "magus", Root: "/src/magus", Dir: ".magus/workspaces/magus"},
+	})
+	s.Equal([]spells.SandboxAllow{{Name: "workspace-magus", Path: "/src/magus", Mode: spells.SandboxAccessRO}}, got)
 }
 
-func (s *UseAllowsSuite) TestTheEntriesPassTheAllowCheck() {
-	for _, a := range UseAllows([]types.UsedWorkspace{{Name: "magus", Root: s.T().TempDir()}}) {
+func (s *WorkspaceAllowsSuite) TestTheEntriesPassTheAllowCheck() {
+	for _, a := range WorkspaceAllows([]types.ListedWorkspace{{Name: "magus", Root: s.T().TempDir(), Dir: ".magus/workspaces/magus"}}) {
 		s.NoError(checkAllow(a))
 	}
 }
 
-func (s *UseAllowsSuite) TestNoUseGrantsNothing() {
-	s.Empty(UseAllows(nil))
+func (s *WorkspaceAllowsSuite) TestAnUnlistedWorkspaceGrantsNothing() {
+	s.Empty(WorkspaceAllows(nil))
 }
