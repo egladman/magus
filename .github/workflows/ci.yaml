@@ -444,6 +444,25 @@ jobs:
 
       - uses: ./.github/actions/codec-deps
 
+      # The gate box builds with GOCACHE and GOMODCACHE under its --cache, in
+      # .magus/spell-caches/golang (internal/queue's spellCacheEnv, internal/cache's
+      # SpellCacheDir), which the local tier's cas, manifests and logs leave out. Only
+      # a green main run exports them as a signed bundle, so while main is red every
+      # shard compiles Go and downloads modules cold. A pull request keeps its own
+      # copy, saved by its previous run and keyed on go.sum so a changed module set
+      # falls back to the newest older copy.
+      - name: Restore the Go caches of the pull request
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .magus/spell-caches/golang/GOCACHE
+            .magus/spell-caches/golang/GOMODCACHE
+          key: ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-stage0-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-
+            ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-
+
       - name: Restore the spells' caches
         uses: ./.github/actions/magus
         env:
@@ -513,6 +532,17 @@ jobs:
           cd "$RUNNER_TEMP/stage-zero"
           sha256sum cache.tar.gz > cache.tar.gz.sha256
           cat cache.tar.gz.sha256
+
+      # Saved on a red shard too, as the local tier is. The run id and attempt end the
+      # key because Actions never overwrites one.
+      - name: Save the Go caches of the pull request
+        if: github.event_name == 'pull_request' && (success() || failure())
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .magus/spell-caches/golang/GOCACHE
+            .magus/spell-caches/golang/GOMODCACHE
+          key: ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-stage0-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload the cache stage zero built
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -666,6 +696,20 @@ jobs:
           restore-keys: |
             ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.digest }}-
             ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-
+
+      # See the `stage-0` job's step of this name for why a pull request needs its own
+      # Go caches.
+      - name: Restore the Go caches of the pull request
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .magus/spell-caches/golang/GOCACHE
+            .magus/spell-caches/golang/GOMODCACHE
+          key: ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-stage1-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-
+            ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-
 
       # The caches the spells declare (Go's GOCACHE and GOMODCACHE), from the bundle main
       # signed, so a magus miss rebuilds only what changed. Restored in a box of the same
@@ -862,6 +906,17 @@ jobs:
             .magus/manifests
             .magus/logs
           key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.digest }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      # Saved on a red shard too, as the local tier is. The run id and attempt end the
+      # key because Actions never overwrites one.
+      - name: Save the Go caches of the pull request
+        if: github.event_name == 'pull_request' && (success() || failure())
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .magus/spell-caches/golang/GOCACHE
+            .magus/spell-caches/golang/GOMODCACHE
+          key: ${{ github.workflow }}-magus-go-v1-${{ runner.os }}-${{ hashFiles('**/go.sum') }}-stage1-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       # The notes store's anchors, gated on the ONE finding worth blocking a merge for.
       #
