@@ -25,7 +25,7 @@ event.
 | MCP              | [MCP](../mcp.md)                                              |
 | attention events | `Notification`, `Stop`, `SubagentStop`                        |
 | checkpoint       | `Stop`                                                        |
-| reply check      | opt-in: `Stop`, advice for the next turn; you wire it         |
+| reply check      | opt-in: `Stop` judges, `UserPromptSubmit` hands it over       |
 | your messages    | `UserPromptSubmit`, recorded and never answered               |
 | rehydration      | `SessionStart` (`compact`, `resume`)                          |
 | lease            | `PreToolUse` on the sub-agent tool                            |
@@ -549,10 +549,12 @@ that trims caches when free space runs low.
 The spell does not wire this. The reply check judges your agent's replies against the
 rules in `proofread`, which is a choice about how your agent writes and not part of the
 guard, so a merge never writes it and never removes one you add. To turn it on, download
-[`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz) and add a second `Stop`
-entry to `.claude/settings.json` by hand. The script runs the `proofread` binary over the
-turn's last message and hands up to five findings back to the agent as
-`additionalContext`. It needs no magus workspace, only `proofread` on `PATH`, in
+[`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz) and add it under both
+`Stop` and `UserPromptSubmit` in `.claude/settings.json` by hand. At `Stop` the script
+runs the `proofread` binary over the turn's last message and prints nothing. Context a
+`Stop` hook prints starts a turn, and you would see the agent answer advice you never saw.
+It keeps up to five findings per session in `$XDG_STATE_HOME/magus/proofread-reply/` and
+hands them to the agent as `additionalContext` with your next message. It needs no magus workspace, only `proofread` on `PATH`, in
 `__PROOFREAD_BIN`, or named with `-- --proofread PATH`; `__PROOFREAD_DECISIONS` or
 `-- --decisions FILE` sets your own decisions. It never blocks the stop and prints
 nothing when proofread is missing or the agent is already continuing.
@@ -562,6 +564,17 @@ nothing when proofread is missing or the agent is already continuing.
 {
   "hooks": {
     "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name claude-code",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
       {
         "hooks": [
           {

@@ -217,13 +217,26 @@ judges nothing while the agent is already continuing, so it cannot loop.
 
 1. Install proofread as in step 1, and copy
    `proofread-reply.buzz` into your repository.
-2. Wire it to the stop event. In Claude Code, add a `Stop` entry to
-   `.claude/settings.json`:
+2. Wire it to the stop event. In Claude Code, add the same command under `Stop` and
+   `UserPromptSubmit` in `.claude/settings.json`. Context a `Stop` hook prints starts a
+   turn, and you would see the agent answer advice you never saw, so the script holds the
+   findings at `Stop` and hands them over with your next message:
 
    ```json
    {
      "hooks": {
        "Stop": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name claude-code",
+               "timeout": 10
+             }
+           ]
+         }
+       ],
+       "UserPromptSubmit": [
          {
            "hooks": [
              {
@@ -243,5 +256,5 @@ judges nothing while the agent is already continuing, so it cannot loop.
 4. Choose your own decisions. Write a JSON file of `{"rules": {"<rule>": "deny"}}`
    and append `--decisions FILE` after `--`. Keep it to `rules`: a reply is read from
    stdin, and proofread refuses a `paths` glob that matches no file argument.
-5. End a turn and read the next one. The agent sees at most five findings, each with
-   its line in the reply it just wrote.
+5. End a turn and send your next message. The agent sees at most five findings beside
+   it, each with its line in the reply it wrote before.

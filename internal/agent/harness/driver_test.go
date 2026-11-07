@@ -26,10 +26,13 @@ func claudeDriver() *hostDriver {
 	h.locate("CLAUDE", e2e.Candidate{Path: os.Getenv("CLAUDE_CODE_EXECPATH"), Source: "CLAUDE_CODE_EXECPATH"})
 	h.env = func(*testing.T, *workspace) []string { return nil }
 	h.wire = func(t *testing.T, w *workspace) {
-		w.wireReplyCheck(t, ".claude/settings.json", "Stop", map[string]any{"hooks": []any{map[string]any{
+		reply := map[string]any{"hooks": []any{map[string]any{
 			"type": "command", "timeout": 10,
 			"command": fmt.Sprintf(`magus buzz -C "$CLAUDE_PROJECT_DIR" -s %s -- --agent-name claude-code`, replyCheckScript),
-		}}})
+		}}}
+		// Stop judges the reply and the next prompt hands the findings over.
+		w.wireReplyCheck(t, ".claude/settings.json", "Stop", reply)
+		w.wireReplyCheck(t, ".claude/settings.json", "UserPromptSubmit", reply)
 		// The command `magus describe harness claude-code` prints for MCP.
 		w.run(t, h.install.Path, "mcp", "add", "--scope", "project", "magus", "--", "./magus", "mcp")
 	}
