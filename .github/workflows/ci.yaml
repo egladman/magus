@@ -272,6 +272,20 @@ jobs:
 
       - uses: ./.github/actions/setup-scip
 
+      # PRs write no remote entry, so without this every run of a PR regenerates
+      # cold. Keyed as the shard job keys its tier; the save is the last step.
+      - name: Restore the local cache tier
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .magus/cas
+            .magus/manifests
+            .magus/logs
+          key: ${{ github.workflow }}-magus-generate-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ github.workflow }}-magus-generate-v1-${{ runner.os }}-
+
       # Uncommitted generated output and a non-deterministic generator fail this job hard:
       # both mean the tree under test is not the tree in the commit, and a shard result
       # from it describes nothing.
@@ -356,6 +370,17 @@ jobs:
             exit 0
           fi
           magus run generate:rw --race=replay --concurrency-profile aggressive "${projects[@]}"
+
+      # Saved on a red run too, as the shard job saves its tier.
+      - name: Save the local cache tier
+        if: github.event_name == 'pull_request' && (success() || failure())
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .magus/cas
+            .magus/manifests
+            .magus/logs
+          key: ${{ github.workflow }}-magus-generate-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   # Stage zero computes, once, each prerequisite two or more shards would otherwise
   # share, so those shards split instead of fanning in to one (ADR 0027). Each shard
