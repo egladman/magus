@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io/fs"
 
-	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/termkit"
 	"log/slog"
 	"maps"
 	"os"

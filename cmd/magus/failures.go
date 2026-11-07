@@ -11,10 +11,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/termkit/layout"
 	"github.com/egladman/magus/libs/termkit/notify"
-	"github.com/egladman/magus/internal/log/attr"
 )
 
 // The end-of-run failure prompt: the failures a run pinned are already on

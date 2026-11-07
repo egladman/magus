@@ -67,7 +67,9 @@ func feed(events ...termkit.Event) func() (termkit.Event, error) {
 }
 
 func key(k termkit.Key) termkit.Event { return termkit.Event{Kind: termkit.EventKey, Key: k} }
-func char(r rune) termkit.Event   { return termkit.Event{Kind: termkit.EventKey, Key: termkit.KeyRune, Rune: r} }
+func char(r rune) termkit.Event {
+	return termkit.Event{Kind: termkit.EventKey, Key: termkit.KeyRune, Rune: r}
+}
 func click(row, clicks int) termkit.Event {
 	return termkit.Event{Kind: termkit.EventMouse, Button: termkit.MouseLeft, Row: row, Press: true, Clicks: clicks}
 }

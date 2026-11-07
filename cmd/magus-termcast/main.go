@@ -40,8 +40,8 @@ import (
 
 	"github.com/rogpeppe/go-internal/txtar"
 
-	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/termkit/screen"
 )
 
 const (

@@ -13,9 +13,9 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/termkit/layout"
+	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/egladman/magus/types"
 )
 

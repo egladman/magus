@@ -12,9 +12,9 @@ import (
 
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )

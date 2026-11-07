@@ -23,7 +23,6 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/coverage"
-	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
@@ -38,6 +37,7 @@ import (
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/token"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )

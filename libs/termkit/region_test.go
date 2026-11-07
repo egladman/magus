@@ -9,8 +9,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/egladman/magus/libs/termkit/internal/cells"
+	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

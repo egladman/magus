@@ -78,9 +78,9 @@ func (s *ProgressSuite) TestGlyphDotsCyclesInkFrames() {
 	l := s.mustLookup("glyph/dots")
 	s.Equal(80*time.Millisecond, l.Interval)
 	s.Equal("⠋", text(l.Frame(0)[0]))
-	s.Equal("⠙", text(l.Frame(80*time.Millisecond)[0]))
-	s.Equal("⠏", text(l.Frame(9*80*time.Millisecond)[0]))
-	s.Equal("⠋", text(l.Frame(10*80*time.Millisecond)[0]))
+	s.Equal("⠙", text(l.Frame(80 * time.Millisecond)[0]))
+	s.Equal("⠏", text(l.Frame(9 * 80 * time.Millisecond)[0]))
+	s.Equal("⠋", text(l.Frame(10 * 80 * time.Millisecond)[0]))
 }
 
 func (s *ProgressSuite) TestFrameIsPure() {
@@ -96,7 +96,7 @@ func (s *ProgressSuite) TestNegativeElapsedDrawsTheFirstFrame() {
 func (s *ProgressSuite) TestCometCellTrailsTwoDots() {
 	l := s.mustLookup("rotation/comet·1")
 	// Frame 2 lights rim dots 2, 1 and 0: (1,1), (1,0) and (0,0).
-	s.Equal(string(rune(0x2800+0x10+0x08+0x01)), text(l.Frame(2*l.Interval)[0]))
+	s.Equal(string(rune(0x2800+0x10+0x08+0x01)), text(l.Frame(2 * l.Interval)[0]))
 }
 
 func (s *ProgressSuite) TestScannerHeadStartsAtTheLeft() {
@@ -117,7 +117,7 @@ func (s *ProgressSuite) TestSpanFillsTheGivenWidth() {
 func (s *ProgressSuite) TestSpanProgressFillsInEighths() {
 	l := s.mustLookup("span/progress").Width(10)
 	// Frame 75 is a quarter of the way: two full cells and four eighths.
-	s.Equal("██▌░░░░░░░", text(l.Frame(75*l.Interval)[0]))
+	s.Equal("██▌░░░░░░░", text(l.Frame(75 * l.Interval)[0]))
 }
 
 func (s *ProgressSuite) TestColumnFillsTheGivenHeight() {
@@ -136,7 +136,7 @@ func (s *ProgressSuite) TestWidthLeavesAFixedLoaderAlone() {
 
 func (s *ProgressSuite) TestTypewriterTypesTheLabel() {
 	l := s.mustLookup("text/typewriter").Label("abc")
-	s.Equal("ab", text(l.Frame(2*l.Interval)[0]))
+	s.Equal("ab", text(l.Frame(2 * l.Interval)[0]))
 }
 
 func (s *ProgressSuite) TestFallbackIsASCII() {

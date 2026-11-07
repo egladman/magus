@@ -11,9 +11,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/interp/engine"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/fatih/color"
 	"golang.org/x/term"
 )

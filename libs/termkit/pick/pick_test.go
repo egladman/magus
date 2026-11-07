@@ -645,7 +645,7 @@ func BenchmarkPickerArrowNavigation(b *testing.B) {
 // resizingProbe is a terminal whose size a test changes mid-session.
 type resizingProbe struct{ width, height int }
 
-func (p *resizingProbe) IsTerminal(uintptr) bool       { return true }
+func (p *resizingProbe) IsTerminal(uintptr) bool        { return true }
 func (p *resizingProbe) Size(uintptr) (int, int, error) { return p.width, p.height, nil }
 
 // countingTTY counts the bytes written to a terminal it pretends to be.

@@ -32,7 +32,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/difftui"
-	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
@@ -43,6 +42,7 @@ import (
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )

@@ -6,10 +6,10 @@ import (
 	"io"
 
 	interactivepkg "github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/interp/bindings/gen/providerops"
 	"github.com/egladman/magus/internal/proc/spawn"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"

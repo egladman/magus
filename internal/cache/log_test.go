@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/libs/termkit/screen"
-	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/log/quiet"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

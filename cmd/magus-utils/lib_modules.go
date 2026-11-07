@@ -134,10 +134,10 @@ type libParam struct {
 }
 
 type libValue struct {
-	name  string
-	typ   ast.Expr
-	doc   string
-	file  *libFile
+	name string
+	typ  ast.Expr
+	doc  string
+	file *libFile
 	// typeName is the named type of an untyped const in a typed group.
 	typeName string
 	// lit is the token of an untyped const's literal value.

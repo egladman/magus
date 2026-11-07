@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/termkit/screen"
 )
 
 // repositoryFile reads a path relative to the repo root. The tests run in the command's

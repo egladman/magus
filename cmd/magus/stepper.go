@@ -8,11 +8,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/engine"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/termkit"
 )
 
 // withStepGate installs the TTY step gate on ctx, together with the REPL it
