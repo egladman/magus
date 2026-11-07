@@ -4602,6 +4602,7 @@ github.com/egladman/magus/types.Project.DeclaredGlobs method(ptr) func() []Glob
 github.com/egladman/magus/types.Project.DependsOn field []string
 github.com/egladman/magus/types.Project.Dir field string
 github.com/egladman/magus/types.Project.DispatchOnlyTargets field []string
+github.com/egladman/magus/types.Project.ForwardingTargets field []string
 github.com/egladman/magus/types.Project.GateInheritOff field bool
 github.com/egladman/magus/types.Project.GateLowRisk field []string
 github.com/egladman/magus/types.Project.GateLowRiskDeclared field bool
@@ -5568,6 +5569,7 @@ github.com/egladman/magus/types.TargetGraphNode.DynamicIO field bool "json:\"-\"
 github.com/egladman/magus/types.TargetGraphNode.EnvAllow field []string "json:\"env_allow,omitempty\" yaml:\"env_allow,omitempty\""
 github.com/egladman/magus/types.TargetGraphNode.ExecOverrides field []string "json:\"exec_overrides,omitempty\" yaml:\"exec_overrides,omitempty\""
 github.com/egladman/magus/types.TargetGraphNode.FootprintErr field error "json:\"-\" yaml:\"-\" buzz:\"-\""
+github.com/egladman/magus/types.TargetGraphNode.ForwardsArgs field bool "json:\"forwards_args,omitempty\" yaml:\"forwards_args,omitempty\""
 github.com/egladman/magus/types.TargetGraphNode.ModifiesExistingFiles field []UpdateRef "json:\"modifies_existing_files,omitempty\" yaml:\"modifies_existing_files,omitempty\""
 github.com/egladman/magus/types.TargetGraphNode.Name field string "json:\"name\" yaml:\"name\""
 github.com/egladman/magus/types.TargetGraphNode.Observations field []string "json:\"observations,omitempty\" yaml:\"observations,omitempty\""

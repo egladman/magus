@@ -4293,6 +4293,7 @@ func ObjectTargetGraphNode(v types.TargetGraphNode) vm.Value {
 	}
 	out.MapSet("spells", vm.ListValue(itemsSpells))
 	out.MapSet("dispatchOnly", vm.BoolValue(v.DispatchOnly))
+	out.MapSet("forwardsArgs", vm.BoolValue(v.ForwardsArgs))
 	itemsCrossDependencies := make([]vm.Value, len(v.CrossDependencies))
 	for indexCrossDependencies := range v.CrossDependencies {
 		itemsCrossDependencies[indexCrossDependencies] = ObjectCrossTargetRef(v.CrossDependencies[indexCrossDependencies])

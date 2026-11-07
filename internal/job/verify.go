@@ -858,8 +858,8 @@ func ranOver(c types.LeaseCheck, a types.JobAttempt, defaults, changed []string,
 }
 
 // fileScoped reports whether c's args name the files it judges. Lint reads
-// them that way with or without a list. A script's args are its argv, and a
-// package argument does not scope go-test. Any other target's args must each
+// them that way with or without a list. A script's args are its argv, and
+// go-test's are packages and flags. Any other target's args must each
 // be in named, or an argument like an environment name reads as a file list.
 func fileScoped(c types.LeaseCheck, named map[string]bool, selection testSelection) bool {
 	if c.Script != "" || selection.goTests(c) || !selection.known(c) {
