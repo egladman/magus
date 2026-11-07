@@ -1,0 +1,72 @@
+// golangci.buzz builds a custom golangci-lint from a .custom-gcl.yml and
+// runs it with a config, for a workspace linting with another's analyzers,
+// such as one knowledge.workspaces lists. A module beside the Go spell, not
+// an op: an op is one forked command, and this runs two.
+//
+//   import ".magus/workspaces/magus/spells/golang/golangci" as golangci;
+//   golangci\buildFrom("<plugins>/.custom-gcl.yml", into: ".magus");
+//   golangci\lintWith(".magus", config: "<config>", dir: ".", args: []);
+import "fs";
+import "os";
+import "proc";
+import "encoding/yaml";
+
+import "assert";
+
+// buildFrom builds the golangci-lint that custom names into into/custom-gcl.
+// `golangci-lint custom` reads its config from its cwd and resolves plugin
+// paths against it, so into gets a copy naming each path absolute.
+export fun buildFrom(custom: str, into: str) > void !> any {
+    final doc: {str: any} = yaml\parse(fs\readFile(custom));
+    final build = into + "/custom-gcl-build";
+    fs\mkdirAll(build);
+    fs\writeFile(build + "/.custom-gcl.yml", content: customConfig(doc, plugins: dirOf(custom), into: into));
+    fs\remove(into + "/custom-gcl");
+    fs\removeAll(into + "/golangci-lint");
+    _ = proc\exec("golangci-lint", args: ["custom"], dir: build);
+}
+
+// customConfig is doc with each plugin path made absolute under plugins and
+// the destination set to into.
+fun customConfig(doc: {str: any}, plugins: str, into: str) > str {
+    final version: str = doc["version"] ?? "";
+    final listed: [any] = doc["plugins"] ?? [<any>];
+    final lines = mut ["version: {version}", "destination: {into}", "plugins:"];
+    foreach (entry in listed) {
+        final plugin: {str: any} = entry;
+        final module: str = plugin["module"] ?? "";
+        final imported: str = plugin["import"] ?? "";
+        final rel: str = plugin["path"] ?? ".";
+        lines.append("  - module: {module}\n    import: {imported}\n    path: {plugins}/{rel}");
+    }
+    return lines.join("\n") + "\n";
+}
+
+// dirOf is the directory holding path, "." for a bare name.
+fun dirOf(path: str) > str {
+    final parts = path.split("/");
+    if (parts.len() == 1) {
+        return ".";
+    }
+    return parts.sub(0, len: parts.len() - 1).join("/");
+}
+
+// lintWith runs into/custom-gcl, built by buildFrom, with config over the
+// module at dir. Its cache sits in into: findings key by absolute path.
+export fun lintWith(into: str, config: str, dir: str, args: [str]) > void !> any {
+    os\withEnv({"GOLANGCI_LINT_CACHE": into + "/golangci-lint"}, callback: fun () > void !> any {
+        _ = proc\exec(into + "/custom-gcl", args: ["run", "--config", config] + args, dir: dir);
+    });
+}
+
+test "a build names absolute plugin paths and the caller's destination" {
+    final doc: {str: any} = yaml\parse("version: v2.12.2\nplugins:\n  - module: m\n    import: m/plugin\n    path: ../c\n");
+    final got = customConfig(doc, plugins: "/a/libs/testpairing", into: "/b/.magus");
+    assert\equal(got.indexOf("version: v2.12.2\ndestination: /b/.magus\n") != null, want: true, message: "the version is kept and the build lands in the caller");
+    assert\equal(got.indexOf("    path: /a/libs/testpairing/../c\n") != null, want: true, message: "a plugin path resolves under the config's directory");
+}
+
+test "a config's directory is the path before its name" {
+    assert\equal(dirOf("/a/libs/testpairing/.custom-gcl.yml"), want: "/a/libs/testpairing", message: "an absolute path");
+    assert\equal(dirOf(".custom-gcl.yml"), want: ".", message: "a bare name");
+}

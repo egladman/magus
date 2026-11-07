@@ -9,7 +9,6 @@ import "proc";
 import "std";
 import "magus";
 import "encoding/json";
-import "encoding/yaml";
 
 import "assert";
 
@@ -50,45 +49,6 @@ export fun run(dir: str, args: [str]) > void !> any {
     // worktrees would replay each other's. The go spell's sandbox entry reaches only its ops.
     os\withEnv({"GOLANGCI_LINT_CACHE": root + "/.magus/golangci-lint"}, callback: fun () > void !> any {
         _ = proc\exec(bin, args: ["run", "--config", root + "/.golangci.yml"] + args, dir: root + "/" + dir);
-    });
-}
-
-// buildFrom builds the custom golangci-lint of the workspace at source into
-// into/custom-gcl, for a workspace that stitches source in with `use`.
-// `golangci-lint custom` reads its config from its cwd and resolves plugin
-// paths against it, so a copy with absolute paths is written into `into`.
-export fun buildFrom(source: str, into: str) > void !> any {
-    final plugins = source + "/libs/testpairing";
-    final doc: {str: any} = yaml\parse(fs\readFile(plugins + "/.custom-gcl.yml"));
-    final build = into + "/custom-gcl-build";
-    fs\mkdirAll(build);
-    fs\writeFile(build + "/.custom-gcl.yml", content: customConfig(doc, plugins: plugins, into: into));
-    fs\remove(into + "/custom-gcl");
-    fs\removeAll(into + "/golangci-lint");
-    _ = proc\exec("golangci-lint", args: ["custom"], dir: build);
-}
-
-// customConfig is doc with each plugin path made absolute under plugins and
-// the destination set to into.
-fun customConfig(doc: {str: any}, plugins: str, into: str) > str {
-    final version: str = doc["version"] ?? "";
-    final listed: [any] = doc["plugins"] ?? [<any>];
-    final lines = mut ["version: {version}", "destination: {into}", "plugins:"];
-    foreach (entry in listed) {
-        final plugin: {str: any} = entry;
-        final module: str = plugin["module"] ?? "";
-        final imported: str = plugin["import"] ?? "";
-        final rel: str = plugin["path"] ?? ".";
-        lines.append("  - module: {module}\n    import: {imported}\n    path: {plugins}/{rel}");
-    }
-    return lines.join("\n") + "\n";
-}
-
-// lintWith runs into/custom-gcl, built by buildFrom, with config over the
-// module at dir. Its cache sits in into: findings key by absolute path.
-export fun lintWith(into: str, config: str, dir: str, args: [str]) > void !> any {
-    os\withEnv({"GOLANGCI_LINT_CACHE": into + "/golangci-lint"}, callback: fun () > void !> any {
-        _ = proc\exec(into + "/custom-gcl", args: ["run", "--config", config] + args, dir: dir);
     });
 }
 
@@ -216,13 +176,6 @@ test "only the issues at the files are kept" {
     final report = "\{\"Issues\":[" + mine + "," + theirs + "]\}";
     assert\equal(issuesIn(report, root: "/w", files: ["internal/job/a.go"]), want: ["internal/job/a.go:3: mine (revive)"], message: "one inside, one outside");
     assert\equal(issuesIn(`{"Issues":null}`, root: "/w", files: ["a.go"]).len(), want: 0, message: "a clean run");
-}
-
-test "a stitched build names absolute plugin paths and the consumer's destination" {
-    final doc: {str: any} = yaml\parse("version: v2.12.2\nplugins:\n  - module: m\n    import: m/plugin\n    path: ../c\n");
-    final got = customConfig(doc, plugins: "/a/libs/testpairing", into: "/b/.magus");
-    assert\equal(got.indexOf("version: v2.12.2\ndestination: /b/.magus\n") != null, want: true, message: "the version is kept and the build lands in the consumer");
-    assert\equal(got.indexOf("    path: /a/libs/testpairing/../c\n") != null, want: true, message: "a plugin path resolves under the used workspace");
 }
 
 test "the text report goes to stderr so stdout stays JSON" {
