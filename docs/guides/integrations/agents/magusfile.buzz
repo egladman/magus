@@ -22,7 +22,7 @@ magus\project({
                 "dprint.json",
                 // The Claude Code mod. Only Claude Code's engine can test or type-check
                 // it, so only mod-test runs on it, and ci cannot compose that.
-                "claude-code-mod/**"],
+                "claude-code/mod/**"],
     "targets": {
         "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
         "mod-test": {"skip_cache": "runs on the installed claude, whose version no input glob can key"},
@@ -131,11 +131,11 @@ export fun cursor_schemas_generate(ctx: magus\Context, args: [str]) > void !> an
 }
 
 
-// Emits claude-code-mod/types/gen from the types the engine writes when a claude session
+// Emits claude-code/mod/types/gen from the types the engine writes when a claude session
 // loads its plugin-authoring skill. It runs where claude is installed; CI reads the
 // committed copy, so ci never composes it.
 export fun mod_types_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles(["claude-code-mod/types/gen/*.d.ts"]);
+    ctx.writesFiles(["claude-code/mod/types/gen/*.d.ts"]);
     final ask = "/plugin-authoring reply only with the absolute path of the types/claude-code.d.ts file this skill names";
     final source = proc\exec("claude", args: ["-p", "--model", "haiku", ask], dir: ".",
         opts: proc\ExecOptions{quiet = true}).stdout.trim();
@@ -148,7 +148,7 @@ export fun mod_types_generate(ctx: magus\Context, args: [str]) > void !> any {
     if (testing == null or tools == null) {
         throw "mod-types-generate: " + source + " no longer has the testing and tools sections this target splits on";
     }
-    final dest = "claude-code-mod/types/gen/";
+    final dest = "claude-code/mod/types/gen/";
     fs\writeFile(dest + "claude-code.d.ts", content: text.sub(0, len: testing!));
     fs\writeFile(dest + "claude-code-testing.d.ts", content: text.sub(testing!, len: tools! - testing!));
     fs\writeFile(dest + "claude-code-tools.d.ts", content: text.sub(tools!, len: text.len() - tools!));
@@ -159,7 +159,7 @@ export fun mod_types_generate(ctx: magus\Context, args: [str]) > void !> any {
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
-    typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "claude-code-mod/tsconfig.json"]});
+    typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "claude-code/mod/tsconfig.json"]});
     typescript["biome-check"](ctx);
     checkBuzz();
 }
@@ -198,7 +198,7 @@ export fun mod_test(ctx: magus\Context, args: [str]) > void !> any {
     if (!semver\isValid(version) or !semver\satisfies(version, constraint: ">= 2.1.308")) {
         throw "mod-test: `claude plugin test` needs claude 2.1.308 or newer; `claude --version` on PATH printed: " + printed.trim();
     }
-    _ = proc\exec("claude", args: ["plugin", "test", "claude-code-mod"], dir: ".");
+    _ = proc\exec("claude", args: ["plugin", "test", "claude-code/mod"], dir: ".");
 }
 
 // The anchor `magus affected ci` keys off.

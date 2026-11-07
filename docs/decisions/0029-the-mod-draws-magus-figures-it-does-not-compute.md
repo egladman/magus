@@ -31,8 +31,8 @@ What exists on main at `d29cea148`:
 - Buzz composes figures with `magus/figure` outside the docs site:
   `hack/dev/show-session-figure.buzz` draws a box per job and an edge per spawn. The
   console runs the same figures in wasm (`console/src/apps/graph/diagrams/wasm.ts`).
-- The mod (`docs/guides/integrations/agents/claude-code-mod`) is TSX, 948 lines in
-  `docs/guides/integrations/agents/claude-code-mod/hooks/register.tsx`. Its environment has no `WebAssembly`, no `eval` and no Node; the
+- The mod (`docs/guides/integrations/agents/claude-code/mod`) is TSX, 948 lines in
+  `docs/guides/integrations/agents/claude-code/mod/hooks/register.tsx`. Its environment has no `WebAssembly`, no `eval` and no Node; the
   engine types say compiled code "runs it in a process of its own through `$.process.run`".
 - A mod draws `Svg` on desktop, vscode and mobile, with SMIL and CSS animation and hover
   under `isInteractive`, up to 131,072 characters. The terminal has no `Svg`.
@@ -135,7 +135,7 @@ carries.
 
 Rejected. It would be a second layout beside libs/figure, a second query parser, and a
 third copy of the job tree (the mod's
-`docs/guides/integrations/agents/claude-code-mod/hooks/tree.ts` is already one). The
+`docs/guides/integrations/agents/claude-code/mod/hooks/tree.ts` is already one). The
 console could not reuse it. A workspace could change it only by forking the plugin. Reopen
 it if a frame must update faster than a process spawn allows. No such frame has been
 measured.

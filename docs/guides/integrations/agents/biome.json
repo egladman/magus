@@ -4,9 +4,9 @@
   "files": {
     "includes": [
       "*.ts",
-      "claude-code-mod/**/*.ts",
-      "claude-code-mod/**/*.tsx",
-      "!claude-code-mod/types/gen"
+      "claude-code/mod/**/*.ts",
+      "claude-code/mod/**/*.tsx",
+      "!claude-code/mod/types/gen"
     ]
   },
   "formatter": {
@@ -18,7 +18,7 @@
   "javascript": { "formatter": { "quoteStyle": "double" } },
   "overrides": [
     {
-      "includes": ["claude-code-mod/**"],
+      "includes": ["claude-code/mod/**"],
       "formatter": { "lineWidth": 120 },
       "javascript": {
         "formatter": {
