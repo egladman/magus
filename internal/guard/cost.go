@@ -1176,6 +1176,11 @@ func mainWork(ctx context.Context, at location, st costState, line string) types
 	if class != types.DelegableRun && class != types.DelegableRead {
 		return class
 	}
+	if class == types.DelegableRead {
+		if rows, err := leaseRows(ctx, at); err == nil && readsCitedResult(rows, line, at) {
+			return ""
+		}
+	}
 	cmds, ok := ParseCommands(line)
 	if !ok {
 		return class
