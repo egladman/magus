@@ -92,7 +92,7 @@ function demoSource(): Source {
 // The sync block changes every poll; the rest only when the forge data does.
 function bodyKey(board: Board): string {
   const copy = clone(BoardSchema, board);
-  copy.sync = undefined;
+  delete copy.sync;
   return toJsonString(BoardSchema, copy);
 }
 

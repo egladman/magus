@@ -56,7 +56,9 @@ test("a row expands in place to its failed jobs", async () => {
   row.open = true;
   assert.ok(row.querySelector("pre")?.textContent?.includes("src/session.ts:41 unused import"));
   assert.match(row.querySelector("code")?.textContent ?? "", /^magus query output grd/);
-  assert.ok(row.querySelector("summary [data-field=blocked]")?.textContent?.includes("review required"));
+  assert.ok(
+    row.querySelector("summary [data-field=blocked]")?.textContent?.includes("review required"),
+  );
   assert.equal(host.querySelectorAll("details[data-pull]").length, 3);
 });
 
@@ -69,7 +71,9 @@ test("renderCheckout states what the checkout does before it runs", () => {
 
 test("renderCheckout clicks report the pull number", () => {
   const seen: number[] = [];
-  renderCheckout(7, undefined, (n) => seen.push(n)).querySelector("button")?.click();
+  renderCheckout(7, undefined, (n) => seen.push(n))
+    .querySelector("button")
+    ?.click();
   assert.deepEqual(seen, [7]);
 });
 
