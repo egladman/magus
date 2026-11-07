@@ -619,6 +619,8 @@ func heldRowFixture(t *testing.T, held, worktreeRoot, role string) (context.Cont
 func TestDenyLeaseCheckoutPlacesACallByItsLine(t *testing.T) {
 	held, other := markedWorkspace(t), markedWorkspace(t)
 	ctx, deps, row := heldRowFixture(t, held, held, "feat")
+	// The remedy names ./magus only where one exists (row 567).
+	require.NoError(t, os.WriteFile(filepath.Join(held, "magus"), nil, 0o755))
 
 	for _, command := range []string{
 		fmt.Sprintf("cd %s && ./magus run go-test .", held),
@@ -1812,7 +1814,7 @@ func TestDenyLeaseScopedVCSRefusesACommitAnywhereElse(t *testing.T) {
 	} {
 		reason := denyLeaseScopedVCS(ctx, deps, worker.ID, command)
 		require.NotEmpty(t, reason, "%q", command)
-		assert.Contains(t, reason, "A worker may commit, with any backend, cherry-pick, apply a patch or merge its base, on its own branch in "+wt, "%q", command)
+		assert.Contains(t, reason, "A worker may commit, with any backend, cherry-pick, revert, apply a patch or merge its base, on its own branch in "+wt, "%q", command)
 		assert.Contains(t, reason, "a worker under orchestrator", "%q", command)
 	}
 	assert.Contains(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, "git commit -m done"),
@@ -2343,7 +2345,7 @@ func TestVCSCmdRefusalDecidesAsTheShellRuleDoes(t *testing.T) {
 		err := vcsCommandRefusal(ctx, worker, c.backend, c.args, c.dir, nil)
 		require.Error(t, err, "%s %v", c.backend, c.args)
 		assert.Contains(t, err.Error(), "`vcs\\cmd(", "%s %v", c.backend, c.args)
-		assert.Contains(t, err.Error(), "A worker may commit, with any backend, cherry-pick, apply a patch or merge its base, on its own branch in "+wt)
+		assert.Contains(t, err.Error(), "A worker may commit, with any backend, cherry-pick, revert, apply a patch or merge its base, on its own branch in "+wt)
 	}
 }
 
