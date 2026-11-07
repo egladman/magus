@@ -2,7 +2,12 @@
   "$schema": "https://biomejs.dev/schemas/2.5.3/schema.json",
   "vcs": { "enabled": false },
   "files": {
-    "includes": ["*.ts"]
+    "includes": [
+      "*.ts",
+      "claude-code-mod/**/*.ts",
+      "claude-code-mod/**/*.tsx",
+      "!claude-code-mod/types/gen"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -11,6 +16,19 @@
     "lineWidth": 100
   },
   "javascript": { "formatter": { "quoteStyle": "double" } },
+  "overrides": [
+    {
+      "includes": ["claude-code-mod/**"],
+      "formatter": { "lineWidth": 120 },
+      "javascript": {
+        "formatter": {
+          "quoteStyle": "single",
+          "semicolons": "asNeeded",
+          "arrowParentheses": "asNeeded"
+        }
+      }
+    }
+  ],
   "assist": { "enabled": false },
   "linter": {
     "enabled": true,
