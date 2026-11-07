@@ -195,6 +195,41 @@ fun sites(root: str) > result\Result::<[str]> {
     return result\ok::<[str]>(paths);
 }
 
+object Tally {
+    changed: int = 0,
+    generated: int = 0,
+    refused: mut [str],
+}
+
+fun renameAll(root: str, paths: [str], apply: bool) > Tally !> any {
+    final t = mut Tally{ refused = mut [<str>] };
+    foreach (f in magus\describe.file(paths).files) {
+        if (f.role == "output") {
+            t.generated = t.generated + 1;
+            continue;
+        }
+        final abs = "{root}/{f.path}";
+        final before = fs\readFile(abs);
+        final after = renamed(before);
+        if (after == before) {
+            continue;
+        }
+        t.changed = t.changed + 1;
+        if (apply) {
+            // A longer name can push a comment past the house width, and the
+            // guard refuses that write; the file is named for a hand rewrap.
+            try {
+                fs\writeFile(abs, content: after);
+            } catch (err: any) {
+                t.refused.append("{f.path}: {firstFinding("{err}")}");
+            }
+        } else {
+            std\print("  {f.path}");
+        }
+    }
+    return t;
+}
+
 export fun main(args: [str]) > void !> any {
     final parsed = flags\parse(args, switches: ["--apply", "--help"], valued: [<str>]);
     if (parsed.values["--help"] != null) {
@@ -215,33 +250,10 @@ export fun main(args: [str]) > void !> any {
         std\print("nothing to rename");
         return;
     }
-    var changed = 0;
-    var generated = 0;
-    final refused = mut [<str>];
-    foreach (f in magus\describe.file(paths).files) {
-        if (f.role == "output") {
-            generated = generated + 1;
-            continue;
-        }
-        final abs = "{root}/{f.path}";
-        final before = fs\readFile(abs);
-        final after = renamed(before);
-        if (after == before) {
-            continue;
-        }
-        changed = changed + 1;
-        if (apply) {
-            // A longer name can push a comment past the house width, and the
-            // guard refuses that write; the file is named for a hand rewrap.
-            try {
-                fs\writeFile(abs, content: after);
-            } catch (err: any) {
-                refused.append("{f.path}: {firstFinding("{err}")}");
-            }
-        } else {
-            std\print("  {f.path}");
-        }
-    }
+    final t = renameAll(root, paths: paths, apply: apply);
+    final changed = t.changed;
+    final generated = t.generated;
+    final refused = t.refused;
     final lockPath = "{root}/{RETIRED_LOCK}";
     final block = retiredBlock(fs\readFile(lockPath));
     if (apply and block.len() > 0) {
