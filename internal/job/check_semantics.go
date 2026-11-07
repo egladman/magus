@@ -41,8 +41,9 @@ func (store *Store) testSelection() testSelection {
 }
 
 // resolvedTestSelection follows the same direct dispatch the runner proves.
-// ctx.needs clears forwarded args; a body merely mentioning an op, or supplying
-// explicit opts.args, is not evidence that its caller's selector reaches that op.
+// ctx.needs clears forwarded args only for its dependencies.
+// A body merely mentioning an op, or supplying explicit opts.args,
+// is not evidence that its caller's selector reaches that op.
 func resolvedTestSelection(ws Workspace, check types.LeaseCheck) (string, bool) {
 	if check.Script != "" {
 		return "", true
@@ -101,9 +102,9 @@ func opSelection(p *types.Project, spell, name string) (string, bool) {
 	return "", false
 }
 
-// dispatchedSelection judges a target that only dispatches to spell ops.
+// dispatchedSelection judges a target whose forwarded args reach its spell ops.
 func dispatchedSelection(p *types.Project, target string) (string, bool) {
-	if !slices.Contains(p.DispatchOnlyTargets, target) {
+	if !slices.Contains(p.DispatchOnlyTargets, target) && !slices.Contains(p.ForwardingTargets, target) {
 		return "", false
 	}
 	uses := p.TargetSpellOps[target]

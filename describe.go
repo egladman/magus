@@ -519,6 +519,9 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 				if n.DispatchOnly && !slices.Contains(p.DispatchOnlyTargets, n.Name) {
 					p.DispatchOnlyTargets = append(p.DispatchOnlyTargets, n.Name)
 				}
+				if n.ForwardsArgs && !slices.Contains(p.ForwardingTargets, n.Name) {
+					p.ForwardingTargets = append(p.ForwardingTargets, n.Name)
+				}
 				if len(n.CrossDependencies) > 0 {
 					if p.TargetCrossDeps == nil {
 						p.TargetCrossDeps = map[string][]types.CrossTargetRef{}

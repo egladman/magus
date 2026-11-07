@@ -283,6 +283,9 @@ type Project struct {
 	// DispatchOnlyTargets are the magusfile targets whose body does nothing but call the
 	// ops in TargetSpellOps; see TargetGraphNode.DispatchOnly. Normalized names.
 	DispatchOnlyTargets []string
+	// ForwardingTargets are the magusfile targets whose `--` args
+	// reach every op in TargetSpellOps; see TargetGraphNode.ForwardsArgs.
+	ForwardingTargets []string
 	// InboundOutputs are output globs OTHER projects declare INTO this project's tree
 	// via ctx.writesFiles(<alias>.file(...)), keyed by the WRITING project's path. Globs are
 	// relative to THIS project's root, so they compose with Outputs directly, which is
