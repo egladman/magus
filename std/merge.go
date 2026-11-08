@@ -7,8 +7,6 @@ import (
 	"github.com/egladman/magus/internal/json"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module merge -lang buzz -out ../internal/interp/bindings/gen/merge.go -pkg bindgen
-
 // Merge is the "merge" host module: combine two values.
 //
 // Buzz already merges map literals with `+`, one level, right-hand keys

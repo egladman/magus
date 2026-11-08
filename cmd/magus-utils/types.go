@@ -21,8 +21,12 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
@@ -32,8 +36,12 @@ func runTypes(args []string) error {
 	fs := flag.NewFlagSet("types", flag.ExitOnError)
 	typeName := fs.String("type", "", "value type to mirror (e.g. ExecResult)")
 	outPath := fs.String("out", "", "output .buzz file path")
+	from := fs.String("from", "", "a Go file whose types go:generate lines are all rendered, concurrently")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *from != "" {
+		return renderListedMirrors(*from)
 	}
 	if *outPath == "" {
 		return fmt.Errorf("usage: magus-utils types -type <Name> -out <path.buzz>")
@@ -54,6 +62,59 @@ func runTypes(args []string) error {
 		return fmt.Errorf("write %s: %w", *outPath, err)
 	}
 	return nil
+}
+
+// renderListedMirrors renders every mirror the `types` go:generate lines of
+// goFile name, each in its own goroutine, writing paths relative to goFile's
+// dir.
+func renderListedMirrors(goFile string) error {
+	data, err := os.ReadFile(goFile)
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(goFile)
+	var g errgroup.Group
+	for _, line := range strings.Split(string(data), "\n") {
+		typeName, out, ok := typesDirective(line)
+		if !ok {
+			continue
+		}
+		g.Go(func() error {
+			entry, found := boundaryTypeNamed(typeName)
+			if !found {
+				return fmt.Errorf("%s: unknown boundary type %q: declare it in boundaryTypes first", goFile, typeName)
+			}
+			src, err := renderBuzzMirror(entry.Name, entry.Type)
+			if err != nil {
+				return fmt.Errorf("%s: %w", typeName, err)
+			}
+			path := filepath.Join(dir, out)
+			if err := emit.File(path, src); err != nil {
+				return fmt.Errorf("write %s: %w", path, err)
+			}
+			return nil
+		})
+	}
+	return g.Wait()
+}
+
+// typesDirective reads the -type and -out of one
+// `//go:generate go run .../magus-utils types` line.
+func typesDirective(line string) (typeName, out string, ok bool) {
+	line = strings.TrimSpace(line)
+	if !strings.HasPrefix(line, "//go:generate ") || !strings.Contains(line, "magus-utils types ") {
+		return "", "", false
+	}
+	fields := strings.Fields(line)
+	for i := 0; i+1 < len(fields); i++ {
+		switch fields[i] {
+		case "-type":
+			typeName = strings.ReplaceAll(strings.Trim(fields[i+1], `"`), `\\`, `\`)
+		case "-out":
+			out = fields[i+1]
+		}
+	}
+	return typeName, out, typeName != "" && out != ""
 }
 
 // mirrorOptions is magus's configuration of the shared renderer: resolve a struct

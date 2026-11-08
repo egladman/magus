@@ -30,8 +30,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module magus -lang buzz -out ../internal/interp/bindings/gen/magus.go -pkg bindgen
-
 // Magus declares the host-declarable subset of the magus module. The remaining
 // methods (target, dispatch, deps, pry, register) and the PROVIDER NAMESPACES
 // (magus\cache, magus\ci, magus\secret) are VM-infrastructure:

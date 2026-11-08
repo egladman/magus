@@ -28,8 +28,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module archive -lang buzz -out ../internal/interp/bindings/gen/archive.go -pkg bindgen
-
 const archiveDefaultMaxSize int64 = 10 << 30 // 10 GiB
 
 // Archive is the Buzz archive module; the Impl of each function is the Go door a

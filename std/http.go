@@ -26,8 +26,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module http -lang buzz -out ../internal/interp/bindings/gen/http.go -pkg bindgen
-
 // optsDoc is the trailing line shared by every method's Doc describing the
 // optional curl-style options map (last argument).
 const optsDoc = " opts is an Options (curl-style): fail, failWithBody, failEarly; " +

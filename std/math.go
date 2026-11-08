@@ -7,8 +7,6 @@ import (
 	"sort"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module math -lang buzz -out ../internal/interp/bindings/gen/math.go -pkg bindgen
-
 // Math is the "math" host module: the arithmetic Buzz's own math module lacks,
 // layered onto it rather than replacing it.
 //

@@ -13,8 +13,6 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../../../cmd/magus-utils bindings -module csv -lang buzz -out ../../../internal/interp/bindings/gen/csv.go -pkg bindgen
-
 // Module is the "encoding/csv" host module: delimiter-separated tabular text, in and
 // out. Nothing in Buzz or in magus could read a table before this: a magusfile
 // handed a coverage export, a dependency inventory, or any tool's --format=csv

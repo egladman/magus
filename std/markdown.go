@@ -20,8 +20,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module markdown -lang buzz -out ../internal/interp/bindings/gen/markdown.go -pkg bindgen
-
 // Markdown is the "markdown" host module: GitHub-Flavored Markdown to semantic
 // HTML. It backs the docs-site generator, which renders each docs/*.md page.
 var Markdown = Module{

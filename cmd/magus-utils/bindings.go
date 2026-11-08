@@ -8,15 +8,18 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 	"go/format"
 	"path"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
+	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/std"
@@ -28,9 +31,17 @@ func runBindings(args []string) error {
 	moduleName := fs.String("module", "", "module name to generate (e.g. fs)")
 	lang := fs.String("lang", "buzz", "codegen target: buzz")
 	outPath := fs.String("out", "", "output file path")
+	outDir := fs.String("outdir", "", "with -all, the directory each <module>.go is written to")
+	all := fs.Bool("all", false, "generate every module with an Impl, concurrently")
 	pkg := fs.String("pkg", "", "package clause of the generated file")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *all {
+		if *outDir == "" || *pkg == "" {
+			return fmt.Errorf("usage: magus-utils bindings -all -outdir <dir> -pkg <package>")
+		}
+		return runAllBindings(*outDir, *pkg)
 	}
 
 	if *moduleName == "" || *outPath == "" || *pkg == "" {
@@ -60,6 +71,52 @@ func runBindings(args []string) error {
 		return fmt.Errorf("write %s: %w", *outPath, err)
 	}
 	return nil
+}
+
+// runAllBindings writes every module's trampolines in one process, one
+// goroutine per module. A `go run` per module relinked magus-utils each
+// time and ran the modules one after another.
+func runAllBindings(outDir, pkg string) error {
+	mods := hostmodules.All()
+	if err := checkObjectDecls(mods); err != nil {
+		return err
+	}
+	var g errgroup.Group
+	for _, m := range mods {
+		if !hasImpl(m) {
+			continue
+		}
+		g.Go(func() error {
+			out, err := emitBuzz(m, pkg)
+			if err != nil {
+				return fmt.Errorf("%s: render buzz declarations: %w", m.Name, err)
+			}
+			path := filepath.Join(outDir, m.Name+".go")
+			if err := emit.File(path, out); err != nil {
+				return fmt.Errorf("write %s: %w", path, err)
+			}
+			return nil
+		})
+	}
+	return g.Wait()
+}
+
+// hasImpl reports whether a module binds any Go function, so it has
+// trampolines to generate.
+func hasImpl(m std.Module) bool {
+	for _, meth := range m.Methods {
+		if meth.Impl != nil {
+			return true
+		}
+	}
+	for _, o := range m.Objects {
+		for _, meth := range o.Methods {
+			if meth.Impl != nil {
+				return true
+			}
+		}
+	}
+	return len(m.Fields) > 0
 }
 
 func titleCase(s string) string {
@@ -213,7 +270,12 @@ func emitBuzz(m std.Module, pkg string) ([]byte, error) {
 		fmt.Fprintf(&b, "\t%q\n", implPath)
 	}
 	for _, p := range pkgs.packages() {
-		if p != implPath {
+		if p == implPath {
+			continue
+		}
+		if alias := packageAlias(p); alias != path.Base(p) {
+			fmt.Fprintf(&b, "\t%s %q\n", alias, p)
+		} else {
 			fmt.Fprintf(&b, "\t%q\n", p)
 		}
 	}
@@ -779,6 +841,17 @@ func qualifyType(t reflect.Type) string {
 // typeIdent names t in a generated identifier (ObjectFileInfo, DecodeQueueChange).
 func typeIdent(t reflect.Type) string {
 	return typePackage(t).prefix + t.Name()
+}
+
+// packageAlias is the name generated code uses for the package at
+// importPath: its boundaryPackages alias, else its base name.
+func packageAlias(importPath string) string {
+	for _, p := range boundaryPackages {
+		if p.path == importPath {
+			return p.alias
+		}
+	}
+	return path.Base(importPath)
 }
 
 // importLines renders the import of each package in used, which is keyed by alias, in

@@ -13,8 +13,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module buzz -lang buzz -out ../internal/interp/bindings/gen/buzz.go -pkg bindgen
-
 // Buzz is the "buzz" host module: Buzz source read as data, through the
 // parser magus itself runs.
 var Buzz = Module{

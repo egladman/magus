@@ -15,9 +15,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module term -lang buzz -out ../internal/interp/bindings/gen/term.go -pkg bindgen
-//go:generate go run ../cmd/magus-utils libmodules -dir ../libs/termkit -outdir termkit/gen -import github.com/egladman/magus/std/termkit/gen
-
 // Term is the "term" host module: the terminal renderer magus already draws its
 // own output with, exposed so a magusfile can use it too.
 //

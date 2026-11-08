@@ -8,8 +8,6 @@ import (
 	"strconv"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module charm -lang buzz -out ../internal/interp/bindings/gen/charm.go -pkg bindgen
-
 // charmPredicate is the type of every *_func anchor: called with one argv element,
 // truthy on the one to anchor at.
 const charmPredicate = "fun (s: str) > bool !> any"
