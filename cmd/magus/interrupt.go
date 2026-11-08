@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 )
 
 // confirmWindow is how long a first Ctrl+C stays armed. Long enough to
@@ -60,7 +60,7 @@ func watchInterrupts(parent context.Context) (context.Context, func(), func() (s
 		// The warning answers a keypress, so it is written to the terminal itself: a
 		// quiet display would drop it and the run would look hung.
 		confirmInterrupts(ctx, sigs, cancel, os.Stderr,
-			tty.IsTerminalWriter(os.Stderr, tty.SystemProbe), confirmWindow, cache.InFlight,
+			termkit.IsTerminalWriter(os.Stderr, termkit.SystemProbe), confirmWindow, cache.InFlight,
 			func(sig syscall.Signal) { stopped.Store(int32(sig)) },
 			func() { signal.Stop(sigs) })
 	}()

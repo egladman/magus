@@ -10,10 +10,12 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/quiet"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/notify"
+	"github.com/egladman/magus/libs/termkit/progress"
 	"github.com/egladman/magus/std"
 )
 
@@ -150,7 +152,7 @@ func releaseDisplay() {
 	if h != nil {
 		_ = h.Close()
 	}
-	_ = tty.ReleaseStderr()
+	_ = notify.ReleaseStderr()
 }
 
 // restoreTerminal undoes any terminal state this run reserved. runCLI calls it
@@ -174,12 +176,12 @@ func restoreTerminal() {
 	// Give back every leased row on stderr and stop the notification band's
 	// expiry sweeper. This is the ordered teardown; the unconditional reset
 	// below is still the backstop for margins nothing here owns.
-	_ = tty.ReleaseStderr()
-	_ = tty.ResetScrollMargins(os.Stderr, tty.SystemProbe)
+	_ = notify.ReleaseStderr()
+	_ = termkit.ResetScrollMargins(os.Stderr, termkit.SystemProbe)
 	// And mouse reporting, for the same reason and on the same unconditional
 	// terms: a process that exits with tracking on leaves the user unable to
 	// select text in their own shell.
-	_ = tty.ResetMouseTracking(os.Stderr, tty.SystemProbe)
+	_ = termkit.ResetMouseTracking(os.Stderr, termkit.SystemProbe)
 }
 
 // applyDisplay writes the -v/-q/-s flags into globalCfg.Log when given, then installs
@@ -193,8 +195,8 @@ func applyDisplay() {
 	// path yet, so the escape burst would be pure output.
 	releaseDisplay()
 	resetOnce.Do(func() {
-		_ = tty.ResetScrollMargins(os.Stderr, tty.SystemProbe)
-		_ = tty.ResetMouseTracking(os.Stderr, tty.SystemProbe)
+		_ = termkit.ResetScrollMargins(os.Stderr, termkit.SystemProbe)
+		_ = termkit.ResetMouseTracking(os.Stderr, termkit.SystemProbe)
 	})
 
 	// --silent implies --quiet's suppression; the extra behavior rides on Log.Silent.
@@ -242,6 +244,15 @@ func applyDisplay() {
 		// events so they share one style and stop interleaving as raw
 		// "time=... level=..." lines with the pretty output.
 		ph := cache.NewPrettyHandler(os.Stderr, lvl)
+		if name := globalCfg.Log.Loader; name != "" {
+			l, err := progress.Lookup(name)
+			if err == nil {
+				err = ph.SetLoader(l)
+			}
+			if err != nil {
+				slog.Error("log.loader", "error", err)
+			}
+		}
 		displayMu.Lock()
 		displayHandler = ph
 		displayMu.Unlock()

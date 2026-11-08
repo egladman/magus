@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -54,11 +54,11 @@ func (f *recordingBand) HitFailure(row int) (cache.Failure, bool) {
 
 // feed turns a fixed event list into the reader dispatchFailureKeys takes. Once
 // exhausted it errors, which is what a closed terminal looks like.
-func feed(events ...tty.Event) func() (tty.Event, error) {
+func feed(events ...termkit.Event) func() (termkit.Event, error) {
 	i := 0
-	return func() (tty.Event, error) {
+	return func() (termkit.Event, error) {
 		if i >= len(events) {
-			return tty.Event{}, errors.New("no more input")
+			return termkit.Event{}, errors.New("no more input")
 		}
 		ev := events[i]
 		i++
@@ -66,10 +66,12 @@ func feed(events ...tty.Event) func() (tty.Event, error) {
 	}
 }
 
-func key(k tty.Key) tty.Event { return tty.Event{Kind: tty.EventKey, Key: k} }
-func char(r rune) tty.Event   { return tty.Event{Kind: tty.EventKey, Key: tty.KeyRune, Rune: r} }
-func click(row, clicks int) tty.Event {
-	return tty.Event{Kind: tty.EventMouse, Button: tty.MouseLeft, Row: row, Press: true, Clicks: clicks}
+func key(k termkit.Key) termkit.Event { return termkit.Event{Kind: termkit.EventKey, Key: k} }
+func char(r rune) termkit.Event {
+	return termkit.Event{Kind: termkit.EventKey, Key: termkit.KeyRune, Rune: r}
+}
+func click(row, clicks int) termkit.Event {
+	return termkit.Event{Kind: termkit.EventMouse, Button: termkit.MouseLeft, Row: row, Press: true, Clicks: clicks}
 }
 
 // TestFailurePromptEscapesEveryWayAUserMightTry is the rule that matters most:
@@ -80,10 +82,10 @@ func click(row, clicks int) tty.Event {
 // would leave that key doing nothing, which is exactly the experience that ends
 // with someone killing the terminal.
 func TestFailurePromptEscapesEveryWayAUserMightTry(t *testing.T) {
-	for name, ev := range map[string]tty.Event{
-		"escape": key(tty.KeyEscape),
-		"ctrl-c": key(tty.KeyCtrlC),
-		"ctrl-d": key(tty.KeyCtrlD),
+	for name, ev := range map[string]termkit.Event{
+		"escape": key(termkit.KeyEscape),
+		"ctrl-c": key(termkit.KeyCtrlC),
+		"ctrl-d": key(termkit.KeyCtrlD),
 		"q":      char('q'),
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -107,7 +109,7 @@ func TestFailurePromptClearsTheHighlightWhenInputEnds(t *testing.T) {
 func TestFailurePromptSelectsAndActs(t *testing.T) {
 	b := newRecordingBand()
 	sel := 0
-	action, item := dispatchFailureKeys(feed(key(tty.KeyDown), key(tty.KeyEnter)), b, nil, &sel)
+	action, item := dispatchFailureKeys(feed(key(termkit.KeyDown), key(termkit.KeyEnter)), b, nil, &sel)
 	assert.Equal(t, actionRerun, action)
 	assert.Equal(t, "test", item.Target)
 	assert.Equal(t, 1, b.selected, "the band shows which row is selected")
@@ -123,19 +125,19 @@ func TestFailurePromptSelectionStopsAtTheEnds(t *testing.T) {
 	// failure back to the first reads as the selection having been lost.
 	b := newRecordingBand()
 	sel := 0
-	_, item := dispatchFailureKeys(feed(key(tty.KeyUp), key(tty.KeyUp), key(tty.KeyEnter)), b, nil, &sel)
+	_, item := dispatchFailureKeys(feed(key(termkit.KeyUp), key(termkit.KeyUp), key(termkit.KeyEnter)), b, nil, &sel)
 	assert.Equal(t, "build", item.Target)
 
 	b, sel = newRecordingBand(), 0
 	_, item = dispatchFailureKeys(
-		feed(key(tty.KeyDown), key(tty.KeyDown), key(tty.KeyDown), key(tty.KeyEnter)), b, nil, &sel)
+		feed(key(termkit.KeyDown), key(termkit.KeyDown), key(termkit.KeyDown), key(termkit.KeyEnter)), b, nil, &sel)
 	assert.Equal(t, "test", item.Target)
 }
 
 func TestFailurePromptClickSelectsAndDoubleClickActs(t *testing.T) {
 	b := newRecordingBand()
 	sel := 0
-	action, item := dispatchFailureKeys(feed(click(21, 1), key(tty.KeyEnter)), b, nil, &sel)
+	action, item := dispatchFailureKeys(feed(click(21, 1), key(termkit.KeyEnter)), b, nil, &sel)
 	assert.Equal(t, actionRerun, action)
 	assert.Equal(t, "test", item.Target, "a single click selects; enter acts")
 
@@ -151,7 +153,7 @@ func TestFailurePromptIgnoresAStrayClick(t *testing.T) {
 	b := newRecordingBand()
 	sel := 0
 	action, item := dispatchFailureKeys(
-		feed(click(5, 1), click(19, 1), click(24, 1), key(tty.KeyEnter)), b, nil, &sel)
+		feed(click(5, 1), click(19, 1), click(24, 1), key(termkit.KeyEnter)), b, nil, &sel)
 	assert.Equal(t, actionRerun, action)
 	assert.Equal(t, "build", item.Target,
 		"clicks on the transcript, the status row and an empty slot all did nothing")
@@ -162,15 +164,15 @@ func TestFailurePromptIgnoresReleasesAndTheWheel(t *testing.T) {
 	// belongs to scrolling.
 	b := newRecordingBand()
 	sel := 0
-	release := tty.Event{Kind: tty.EventMouse, Button: tty.MouseLeft, Row: 21, Press: false, Clicks: 1}
-	wheel := tty.Event{Kind: tty.EventMouse, Button: tty.MouseWheelDown, Row: 21, Press: true, Clicks: 1}
-	action, item := dispatchFailureKeys(feed(release, wheel, key(tty.KeyEnter)), b, nil, &sel)
+	release := termkit.Event{Kind: termkit.EventMouse, Button: termkit.MouseLeft, Row: 21, Press: false, Clicks: 1}
+	wheel := termkit.Event{Kind: termkit.EventMouse, Button: termkit.MouseWheelDown, Row: 21, Press: true, Clicks: 1}
+	action, item := dispatchFailureKeys(feed(release, wheel, key(termkit.KeyEnter)), b, nil, &sel)
 	assert.Equal(t, actionRerun, action)
 	assert.Equal(t, "build", item.Target)
 }
 
-func motion(row int) tty.Event {
-	return tty.Event{Kind: tty.EventMouse, Row: row, Motion: true}
+func motion(row int) termkit.Event {
+	return termkit.Event{Kind: termkit.EventMouse, Row: row, Motion: true}
 }
 
 // TestFailurePromptHoverMovesTheHighlight is the affordance that makes a
@@ -179,7 +181,7 @@ func motion(row int) tty.Event {
 func TestFailurePromptHoverMovesTheHighlight(t *testing.T) {
 	b := newRecordingBand()
 	sel := 0
-	action, item := dispatchFailureKeys(feed(motion(21), key(tty.KeyEnter)), b, nil, &sel)
+	action, item := dispatchFailureKeys(feed(motion(21), key(termkit.KeyEnter)), b, nil, &sel)
 	assert.Equal(t, actionRerun, action)
 	assert.Equal(t, "test", item.Target, "enter acts on whatever the pointer highlighted")
 	assert.Equal(t, 1, b.selected)
@@ -201,7 +203,7 @@ func TestFailurePromptHoverOffTheBandKeepsTheHighlight(t *testing.T) {
 	b := newRecordingBand()
 	sel := 0
 	action, item := dispatchFailureKeys(
-		feed(motion(21), motion(5), motion(19), key(tty.KeyEnter)), b, nil, &sel)
+		feed(motion(21), motion(5), motion(19), key(termkit.KeyEnter)), b, nil, &sel)
 	assert.Equal(t, actionRerun, action)
 	assert.Equal(t, "test", item.Target, "the highlight stayed where the pointer left it")
 }
@@ -218,10 +220,10 @@ func TestHintIsAlwaysVisible(t *testing.T) {
 	t.Run("pinned when the zone has room", func(t *testing.T) {
 		var band ttyBuf
 		var transcript bytes.Buffer
-		z := tty.NewZone(&band, fixedSizeTerminal{w: 80, h: 40})
+		z := termkit.NewZone(&band, fixedSizeTerminal{w: 80, h: 40})
 		require.NoError(t, showHint(z.Acquire(1), &transcript))
 
-		assert.Contains(t, band.String(), "[esc] done", "it goes in the band")
+		assert.Contains(t, band.String(), "esc done", "it goes in the band")
 		assert.Empty(t, transcript.String(), "and does not also clutter the transcript")
 	})
 
@@ -229,12 +231,12 @@ func TestHintIsAlwaysVisible(t *testing.T) {
 		var band ttyBuf
 		var transcript bytes.Buffer
 		// A window with no room to reserve anything.
-		z := tty.NewZone(&band, fixedSizeTerminal{w: 80, h: 6})
+		z := termkit.NewZone(&band, fixedSizeTerminal{w: 80, h: 6})
 		lease := z.Acquire(1)
 		require.False(t, lease.Enabled(), "the premise: this grant is refused")
 
 		require.NoError(t, showHint(lease, &transcript))
-		assert.Contains(t, transcript.String(), "[esc] done",
+		assert.Contains(t, transcript.String(), "esc done",
 			"a prompt with no way out on screen is the thing people kill the terminal to escape")
 		// Against the composition, not a copy of its wording: a literal here
 		// would have to be edited every time an action is added, and would
@@ -265,12 +267,12 @@ func (f hintsByColumn) HitSpan(_, col int) (string, bool) {
 
 // TestFailurePromptClicksTheHintActions is the parity guarantee: every action
 // the hint row NAMES can be taken with the mouse, not just with the key it
-// names. Without it the row printed "[esc] done" at a spot that ignored clicks,
+// names. Without it the row printed "esc done" at a spot that ignored clicks,
 // which is worse than printing nothing: it draws a target that does not work.
 func TestFailurePromptClicksTheHintActions(t *testing.T) {
 	hintRow := 30
-	click := func(col int) tty.Event {
-		return tty.Event{Kind: tty.EventMouse, Button: tty.MouseLeft, Row: hintRow, Col: col, Press: true, Clicks: 1}
+	click := func(col int) termkit.Event {
+		return termkit.Event{Kind: termkit.EventMouse, Button: termkit.MouseLeft, Row: hintRow, Col: col, Press: true, Clicks: 1}
 	}
 	hints := hintsByColumn{10: cache.HintKeyDone, 20: cache.HintKeyRerun, 30: cache.HintKeyOutput}
 
@@ -296,7 +298,7 @@ func TestFailurePromptClicksTheHintActions(t *testing.T) {
 // cannot rerun anything.
 func TestFailurePromptHintClickNeedsOneClick(t *testing.T) {
 	b, sel := newRecordingBand(), 0
-	single := tty.Event{Kind: tty.EventMouse, Button: tty.MouseLeft, Row: 30, Col: 10, Press: true, Clicks: 1}
+	single := termkit.Event{Kind: termkit.EventMouse, Button: termkit.MouseLeft, Row: 30, Col: 10, Press: true, Clicks: 1}
 	action, _ := dispatchFailureKeys(feed(single), b, hintsByColumn{10: cache.HintKeyDone}, &sel)
 	assert.Equal(t, actionNone, action)
 }
@@ -307,7 +309,7 @@ func TestFailurePromptHintClickNeedsOneClick(t *testing.T) {
 func TestPreviewFollowsTheSelection(t *testing.T) {
 	b, sel := newRecordingBand(), 0
 	b.items[0].LogPath = "" // no file: loadPreview yields nil, which is still a SET
-	dispatchFailureKeys(feed(key(tty.KeyDown), key(tty.KeyEscape)), b, nil, &sel)
+	dispatchFailureKeys(feed(key(termkit.KeyDown), key(termkit.KeyEscape)), b, nil, &sel)
 	assert.Equal(t, 1, sel, "the selection moved")
 }
 
@@ -342,12 +344,12 @@ func TestSanitizeLogLineFlattensWhatWouldBreakTheBox(t *testing.T) {
 // the hint that names it.
 func TestTabTogglesWhichViewIsLarge(t *testing.T) {
 	b, sel := newRecordingBand(), 0
-	dispatchFailureKeys(feed(key(tty.KeyTab), key(tty.KeyEscape)), b, nil, &sel)
+	dispatchFailureKeys(feed(key(termkit.KeyTab), key(termkit.KeyEscape)), b, nil, &sel)
 	assert.Equal(t, cache.PaneFocus(1), b.focus, "tab swapped the focus")
 
 	b, sel = newRecordingBand(), 0
-	click := tty.Event{Kind: tty.EventMouse, Button: tty.MouseLeft, Row: 30, Col: 5, Press: true, Clicks: 1}
-	dispatchFailureKeys(feed(click, key(tty.KeyEscape)), b, hintsByColumn{5: cache.HintKeyFocus}, &sel)
+	click := termkit.Event{Kind: termkit.EventMouse, Button: termkit.MouseLeft, Row: 30, Col: 5, Press: true, Clicks: 1}
+	dispatchFailureKeys(feed(click, key(termkit.KeyEscape)), b, hintsByColumn{5: cache.HintKeyFocus}, &sel)
 	assert.Equal(t, cache.PaneFocus(1), b.focus, "and so did clicking [tab] focus")
 }
 

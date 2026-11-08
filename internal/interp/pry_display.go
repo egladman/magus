@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/fatih/color"
 )
 
@@ -24,7 +24,7 @@ func colorEnabledForFile(f *os.File) bool {
 	if f == nil {
 		return false
 	}
-	return tty.WantsColor(f, tty.SystemProbe)
+	return termkit.WantsColor(f, termkit.SystemProbe)
 }
 
 // printSourceContext prints radius lines on each side of line from path, with

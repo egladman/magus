@@ -9,11 +9,14 @@ import (
 	"os"
 	"time"
 
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/notify"
+	"github.com/egladman/magus/libs/termkit/pick"
 	"github.com/egladman/magus/types"
 )
 
 //go:generate go run ../cmd/magus-utils bindings -module term -lang buzz -out ../internal/interp/bindings/gen/term.go -pkg bindgen
+//go:generate go run ../cmd/magus-utils libmodules -dir ../libs/termkit -outdir termkit/gen -import github.com/egladman/magus/std/termkit/gen
 
 // Term is the "term" host module: the terminal renderer magus already draws its
 // own output with, exposed so a magusfile can use it too.
@@ -112,21 +115,21 @@ var Term = Module{
 // terminal is the case that makes this concrete: stderr is a TTY, stdin is not,
 // and a prompt would block forever on a read that can never arrive.
 func TermIsInteractive(_ context.Context) (bool, error) {
-	return tty.StdinIsTerminal() && tty.IsTerminalWriter(os.Stderr, tty.SystemProbe), nil
+	return termkit.StdinIsTerminal() && termkit.IsTerminalWriter(os.Stderr, termkit.SystemProbe), nil
 }
 
 // TermWantsColor reports whether styled output should be emitted to stderr.
 func TermWantsColor(_ context.Context) (bool, error) {
-	return tty.WantsColor(os.Stderr, tty.SystemProbe), nil
+	return termkit.WantsColor(os.Stderr, termkit.SystemProbe), nil
 }
 
 // TermSize returns the terminal's dimensions, or zeroes when unmeasurable.
 func TermSize(_ context.Context) (types.TermSize, error) {
-	fd, ok := tty.Fd(os.Stderr)
+	fd, ok := termkit.Fd(os.Stderr)
 	if !ok {
 		return types.TermSize{}, nil
 	}
-	w, h, err := tty.SystemProbe.Size(fd)
+	w, h, err := termkit.SystemProbe.Size(fd)
 	if err != nil {
 		// Not a raise: "there is no size" is an ordinary answer for a pipe, and a
 		// caller that has to try/catch to lay out a line will not measure.
@@ -137,10 +140,10 @@ func TermSize(_ context.Context) (types.TermSize, error) {
 
 // TermColorize wraps s in style, honoring the terminal's color capability.
 func TermColorize(_ context.Context, s, style string) (string, error) {
-	if !tty.WantsColor(os.Stderr, tty.SystemProbe) {
+	if !termkit.WantsColor(os.Stderr, termkit.SystemProbe) {
 		return s, nil
 	}
-	return tty.Colorize(s, tty.SGR(style)), nil
+	return termkit.Colorize(s, termkit.SGR(style)), nil
 }
 
 // TermPick prompts for a choice among items and returns the chosen index.
@@ -161,14 +164,14 @@ func TermPick(ctx context.Context, items []string, prompt, initialFilter string,
 		return -1, fmt.Errorf("term.pick: nothing to prompt on (standard input and standard error are not both terminals), " +
 			"guard the call with term.isInteractive() and choose a default for unattended runs")
 	}
-	idx, err := tty.Pick(ctx, os.Stdin, os.Stderr, tty.SystemProbe, items, tty.PickOptions{
+	idx, err := pick.One(ctx, os.Stdin, os.Stderr, termkit.SystemProbe, items, pick.Options{
 		Prompt:        prompt,
 		InitialFilter: initialFilter,
 		Initial:       initial,
 		MaxRows:       maxRows,
 	})
 	if err != nil {
-		if errors.Is(err, tty.ErrAborted) {
+		if errors.Is(err, pick.ErrAborted) {
 			// An abort RAISES rather than returning -1. Ctrl-C means stop, and a
 			// sentinel return would let a magusfile that forgot to check it carry on
 			// with a choice the reader explicitly declined to make.
@@ -214,7 +217,7 @@ func TermNotify(ctx context.Context, message, level string, ttlMs int) error {
 		ttl = 0
 	}
 	style := notifyStyle(types.LogLevel(level))
-	if !tty.WantsColor(os.Stderr, tty.SystemProbe) {
+	if !termkit.WantsColor(os.Stderr, termkit.SystemProbe) {
 		// NO_COLOR asks for plain text, and the band is text like any other.
 		// Severity still reads from the message; it just is not colored.
 		style = ""
@@ -225,7 +228,7 @@ func TermNotify(ctx context.Context, message, level string, ttlMs int) error {
 	// bytes. Making every magusfile wrap a notification in try/catch to handle
 	// "stderr write failed" would be a tax paid on every call site for a
 	// condition no author can act on.
-	_ = tty.StderrNotifier().Notify(message, style, ttl)
+	_ = notify.Stderr().Notify(message, style, ttl)
 	return nil
 }
 
@@ -234,14 +237,14 @@ func TermNotify(ctx context.Context, message, level string, ttlMs int) error {
 // LogLevel rather than a TermNotifyLevel of its own: a notification's severity
 // is the same question log.at asks, and answering it twice with two enums would
 // mean a magusfile author choosing between two spellings of "warn".
-func notifyStyle(level types.LogLevel) tty.SGR {
+func notifyStyle(level types.LogLevel) termkit.SGR {
 	switch level {
 	case types.LogError:
-		return tty.SGRRed
+		return termkit.SGRRed
 	case types.LogWarn:
-		return tty.SGRYellow
+		return termkit.SGRYellow
 	case types.LogTrace, types.LogDebug:
-		return tty.SGRDim
+		return termkit.SGRDim
 	default:
 		// Info, and the empty level a caller who omitted the argument sends.
 		// Unstyled: an ordinary notification should not compete with the
@@ -252,8 +255,8 @@ func notifyStyle(level types.LogLevel) tty.SGR {
 
 // TermClearScreen erases the screen, or does nothing when stderr is not a terminal.
 func TermClearScreen(_ context.Context) error {
-	if !tty.IsTerminalWriter(os.Stderr, tty.SystemProbe) {
+	if !termkit.IsTerminalWriter(os.Stderr, termkit.SystemProbe) {
 		return nil
 	}
-	return tty.ClearScreen(os.Stderr)
+	return termkit.ClearScreen(os.Stderr)
 }

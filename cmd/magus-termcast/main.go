@@ -40,8 +40,8 @@ import (
 
 	"github.com/rogpeppe/go-internal/txtar"
 
-	"github.com/egladman/magus/internal/interactive/screen"
 	"github.com/egladman/magus/internal/proc/spawn"
+	"github.com/egladman/magus/libs/termkit/screen"
 )
 
 const (
@@ -317,14 +317,14 @@ func render(capture string, theme screen.Theme) (string, error) {
 // command finished. Split out from render so a test can assert what a frame
 // SHOWS, which is not the same question as what the capture contains; a line
 // present in the bytes may have scrolled off the top before the frame was taken.
-func replay(capture string) ([]*screen.Screen, error) {
+func replay(capture string) ([]*screen.Terminal, error) {
 	segments := split(capture)
 	if len(segments) < 2 {
 		return nil, fmt.Errorf("capture has %d command segments, expected the session's several", len(segments))
 	}
 
 	s := screen.New(cols, rows)
-	frames := make([]*screen.Screen, 0, len(segments))
+	frames := make([]*screen.Terminal, 0, len(segments))
 	for i, seg := range segments {
 		if _, err := s.Write([]byte(seg)); err != nil {
 			return nil, fmt.Errorf("replay segment %d: %w", i, err)
@@ -403,7 +403,7 @@ func (p pace) hold(i, n, added int) float64 {
 
 // holds paces a whole recording, scaling each frame by what it adds over its
 // predecessor. The first frame is measured against an empty screen.
-func (p pace) holds(frames []*screen.Screen) []float64 {
+func (p pace) holds(frames []*screen.Terminal) []float64 {
 	out := make([]float64, len(frames))
 	for i := range frames {
 		grew := frames[i].LastUsedRow() + 1
@@ -418,7 +418,7 @@ func (p pace) holds(frames []*screen.Screen) []float64 {
 // added reports how many lines of output cur shows that prev did not, counting
 // what scrolled off the top as well as what appeared at the bottom; a frame
 // that filled the screen and pushed the earlier output away added all of it.
-func added(prev, cur *screen.Screen) int {
+func added(prev, cur *screen.Terminal) int {
 	n := (cur.LastUsedRow() - prev.LastUsedRow()) + (cur.Scrolled() - prev.Scrolled())
 	return max(n, 0)
 }

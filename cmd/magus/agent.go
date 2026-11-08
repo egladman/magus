@@ -17,11 +17,11 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -60,29 +60,29 @@ func agentUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: magus agent <install|harness|starter|adoption> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
-	tty.ProseItem(w, tty.SystemProbe, "  install            ",
+	termkit.ProseItem(w, termkit.SystemProbe, "  install            ",
 		"render the embedded skills and write or stream them into named destinations",
 		"(<skills-dir>, ...)")
-	tty.ProseItem(w, tty.SystemProbe, "  harness            ",
+	termkit.ProseItem(w, termkit.SystemProbe, "  harness            ",
 		"install skills for, or verify, a harness wired in the magusfile")
-	tty.ProseItem(w, tty.SystemProbe, "  starter            ",
+	termkit.ProseItem(w, termkit.SystemProbe, "  starter            ",
 		"print a starter AGENTS.md to stdout to own and tweak; never writes a file")
-	tty.ProseItem(w, tty.SystemProbe, "  adoption           ",
+	termkit.ProseItem(w, termkit.SystemProbe, "  adoption           ",
 		"report how often agents used the graph versus grep, over shell commands",
 		"piped in (stdin or --commands)")
 	fmt.Fprintln(w, "")
-	tty.Prose(w, tty.SystemProbe,
+	termkit.Prose(w, termkit.SystemProbe,
 		"magus never writes your AGENTS.md.",
 		"That file is yours, and an installer that edits a file you own leaves bytes you did not write and cannot audit.",
 		"So `install` PRINTS the managed magus block for you to paste, and only when your AGENTS.md is missing it or carrying a stale one.")
 	fmt.Fprintln(w, "")
-	tty.Prose(w, tty.SystemProbe,
+	termkit.Prose(w, termkit.SystemProbe,
 		"Stdout philosophy: `magus agent` is a pure data generator.",
 		"To install skills anywhere your shell can reach, use --tar and pipe to tar:")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "  magus agent install --tar | tar -xf - -C <skills-dir>")
 	fmt.Fprintln(w, "")
-	tty.Prose(w, tty.SystemProbe,
+	termkit.Prose(w, termkit.SystemProbe,
 		"The write-to-disk form is only for the in-repo, paths-relative-to-<dir> case, where it preserves the previous one-line ergonomics.",
 		"Absolute destinations are refused unless --global is set, to keep magus from silently writing outside the working tree.")
 	fmt.Fprintln(w, "")
@@ -90,11 +90,11 @@ func agentUsage(w io.Writer) {
 	// flags are reachable but undiscoverable, and an agent told to "defer to -h"
 	// would conclude they do not exist.
 	fmt.Fprintln(w, "install flags:")
-	tty.ProseItem(w, tty.SystemProbe, "  --dir <path>   ", "repo directory to install into (default .)")
-	tty.ProseItem(w, tty.SystemProbe, "  --force        ", "overwrite existing installed skill files")
-	tty.ProseItem(w, tty.SystemProbe, "  --tar          ", "stream a tar archive to stdout instead of writing files")
-	tty.ProseItem(w, tty.SystemProbe, "  --global       ", "allow absolute destination paths in write mode")
-	tty.ProseItem(w, tty.SystemProbe, "  --skill-form   ", "skill form: both (default), short, or full; choose explicitly when one body per skill is wanted")
+	termkit.ProseItem(w, termkit.SystemProbe, "  --dir <path>   ", "repo directory to install into (default .)")
+	termkit.ProseItem(w, termkit.SystemProbe, "  --force        ", "overwrite existing installed skill files")
+	termkit.ProseItem(w, termkit.SystemProbe, "  --tar          ", "stream a tar archive to stdout instead of writing files")
+	termkit.ProseItem(w, termkit.SystemProbe, "  --global       ", "allow absolute destination paths in write mode")
+	termkit.ProseItem(w, termkit.SystemProbe, "  --skill-form   ", "skill form: both (default), short, or full; choose explicitly when one body per skill is wanted")
 }
 
 func agentUsageError() error {

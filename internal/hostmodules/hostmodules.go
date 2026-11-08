@@ -17,20 +17,44 @@
 package hostmodules
 
 import (
+	"fmt"
+	"sync"
+
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/std/encoding"
+	termkitgen "github.com/egladman/magus/std/termkit/gen"
 )
 
-// All returns every host module: std's own set plus
-// std/encoding's explicitly aggregated set.
+// All returns every host module: std's own set, std/encoding's aggregated
+// set, and the terminal UI library's generated set.
 func All() []std.Module {
-	return append(std.All(), encoding.Modules()...)
+	return append(append(std.All(), encoding.Modules()...), termkit()...)
 }
 
-// Get looks up a module by name across both sets.
+// Get looks up a module by name across every set.
 func Get(name string) (std.Module, bool) {
 	if m, ok := std.Get(name); ok {
 		return m, true
 	}
-	return encoding.Get(name)
+	if m, ok := encoding.Get(name); ok {
+		return m, true
+	}
+	for _, m := range termkit() {
+		if m.Name == name {
+			return m, true
+		}
+	}
+	return std.Module{}, false
 }
+
+// termkit validates the generated modules once, as std validates its own, so
+// a descriptor that disagrees with its Impl fails the first reader.
+var termkit = sync.OnceValue(func() []std.Module {
+	mods := termkitgen.Modules()
+	for _, m := range mods {
+		if err := std.ValidateModule(m); err != nil {
+			panic(fmt.Sprintf("std/termkit/gen: module %q: %s", m.Name, err))
+		}
+	}
+	return mods
+})

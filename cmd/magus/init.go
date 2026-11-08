@@ -16,11 +16,12 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/settle"
 	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/pick"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -353,7 +354,7 @@ func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error 
 
 	name, err := chooseInitVCS(ctx, root, m, vcsFlag)
 	if err != nil {
-		if errors.Is(err, tty.ErrAborted) {
+		if errors.Is(err, pick.ErrAborted) {
 			slog.With(attr.Component("init")).InfoContext(ctx, "merge-driver setup skipped")
 			return nil
 		}
@@ -444,7 +445,7 @@ func chooseInitVCS(ctx context.Context, root string, m *magus.Magus, vcsFlag str
 			}
 		}
 	}
-	idx, err := tty.Pick(ctx, os.Stdin, os.Stderr, tty.SystemProbe, choices, tty.PickOptions{Prompt: "vcs", Initial: initial, MaxRows: len(choices)})
+	idx, err := pick.One(ctx, os.Stdin, os.Stderr, termkit.SystemProbe, choices, pick.Options{Prompt: "vcs", Initial: initial, MaxRows: len(choices)})
 	if err != nil {
 		return "", err
 	}

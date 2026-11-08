@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -37,7 +37,7 @@ type Options struct {
 	// already refused otherwise, and OpenInput refuses again rather than trusting that.
 	In    *os.File
 	Out   io.Writer
-	Probe tty.Probe
+	Probe termkit.Probe
 	Input Input
 	// Sync is nil when nothing is listening: no server, no console, no agent.
 	Sync Sync
@@ -59,7 +59,7 @@ const defaultHeight = 24
 // It never touches the alternate screen buffer: the transcript above stays where it is and
 // survives the session, which is the rule every interactive view in magus follows.
 func Run(ctx context.Context, opts Options) error {
-	input, err := tty.OpenInput(opts.In, opts.Out, opts.Probe)
+	input, err := termkit.OpenInput(opts.In, opts.Out, opts.Probe)
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func Run(ctx context.Context, opts Options) error {
 			fmt.Fprintln(opts.Out, opts.Summary(m.Unfolded()))
 		}
 	}()
-	view := tty.NewInlineView(opts.Out, opts.Probe)
+	view := termkit.NewInlineView(opts.Out, opts.Probe)
 	defer func() { _ = view.Clear() }()
 	defer func() { _ = input.Close() }()
 
@@ -82,7 +82,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Asked once: nothing it reads (the descriptor, TERM, NO_COLOR) changes while the viewer
 	// holds the terminal, and this is the single gate for every escape the frame carries.
-	color := tty.WantsColor(opts.Out, opts.Probe)
+	color := termkit.WantsColor(opts.Out, opts.Probe)
 
 	for {
 		m.resize(viewportRows(opts.Out, opts.Probe, Chrome(m)))
@@ -120,8 +120,8 @@ const wheelRows = 3
 
 // apply folds one event into the model and tells the session what moved. It reports whether the
 // reader asked to leave.
-func apply(m *Model, ev tty.Event, sync Sync) (quit bool) {
-	if ev.Kind != tty.EventKey {
+func apply(m *Model, ev termkit.Event, sync Sync) (quit bool) {
+	if ev.Kind != termkit.EventKey {
 		// The wheel scrolls, which is a DELIBERATE divergence from the picker: that view leaves
 		// the wheel to the terminal so a reader keeps their own scrollback, and it can afford to
 		// because it is open for seconds. This one holds the terminal (and therefore the
@@ -131,16 +131,16 @@ func apply(m *Model, ev tty.Event, sync Sync) (quit bool) {
 		// Every other mouse event is dropped rather than guessed at: they are reported only
 		// because opening the input turns tracking on.
 		switch ev.Button {
-		case tty.MouseWheelUp:
+		case termkit.MouseWheelUp:
 			m.scroll(-wheelRows)
-		case tty.MouseWheelDown:
+		case termkit.MouseWheelDown:
 			m.scroll(wheelRows)
 		}
 		return false
 	}
 	moved := false
 	switch ev.Key {
-	case tty.KeyRune:
+	case termkit.KeyRune:
 		switch ev.Rune {
 		case 'q':
 			return true
@@ -163,30 +163,30 @@ func apply(m *Model, ev tty.Event, sync Sync) (quit bool) {
 			// their current content. Folded by default, so the second pass opens on the work.
 			m.toggleSettled()
 		}
-	case tty.KeyCtrlC, tty.KeyCtrlD:
+	case termkit.KeyCtrlC, termkit.KeyCtrlD:
 		return true
-	case tty.KeyEscape:
+	case termkit.KeyEscape:
 		m.toggleOverview()
-	case tty.KeyEnter:
+	case termkit.KeyEnter:
 		if m.Overview() {
 			m.overviewEnter()
 			moved = true
 		}
-	case tty.KeyUp:
+	case termkit.KeyUp:
 		if m.Overview() {
 			m.overviewMove(-1)
 		} else {
 			m.scroll(-1)
 		}
-	case tty.KeyDown:
+	case termkit.KeyDown:
 		if m.Overview() {
 			m.overviewMove(1)
 		} else {
 			m.scroll(1)
 		}
-	case tty.KeyPageUp, tty.KeyCtrlP:
+	case termkit.KeyPageUp, termkit.KeyCtrlP:
 		m.page(-1)
-	case tty.KeyPageDown, tty.KeyCtrlN:
+	case termkit.KeyPageDown, termkit.KeyCtrlN:
 		m.page(1)
 	}
 	if moved && sync != nil {
@@ -198,9 +198,9 @@ func apply(m *Model, ev tty.Event, sync Sync) (quit bool) {
 // viewportRows is how many changeset rows fit, leaving the frame strictly shorter than the
 // terminal: a block as tall as the screen has nowhere to walk back to and would eat the
 // transcript above it on the next redraw.
-func viewportRows(out io.Writer, p tty.Probe, chrome int) int {
+func viewportRows(out io.Writer, p termkit.Probe, chrome int) int {
 	height := defaultHeight
-	if fd, ok := tty.Fd(out); ok {
+	if fd, ok := termkit.Fd(out); ok {
 		if _, h, err := p.Size(fd); err == nil && h > 0 {
 			height = h
 		}

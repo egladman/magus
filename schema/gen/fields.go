@@ -500,6 +500,15 @@ var Fields = []fieldtype.Field{
 		Doc:      "Shows every target's subprocess output live and interleaved, instead of withholding a passing target's output until it fails. This is deliberately NOT derived from Level: what gets logged and whether a target's own output is withheld are separate questions, and conflating them is why -v used to ambush people with a wall of concurrent output when they wanted a little more detail. Normally set via -vv (and implied by -vvv); MAGUS_LOG_STREAM=1 is the env equivalent. Pointer to distinguish \"not set\" from explicit false",
 	},
 	{
+		GoPath:   "Log.Loader",
+		YamlPath: "log.loader",
+		EnvVar:   "MAGUS_LOG_LOADER",
+		Flag:     fieldtype.FlagNames{Long: "log-loader"},
+		Kind:     fieldtype.KindString,
+		Usage:    "MAGUS_LOG_LOADER: Loader names the animation the run band draws while targets run.",
+		Doc:      "Names the animation the run band draws while targets run. Empty draws glyph/dots. A locale that is not UTF-8 draws glyph/line instead",
+	},
+	{
 		GoPath:   "Hints.Enabled",
 		YamlPath: "hints.enabled",
 		EnvVar:   "MAGUS_HINTS_ENABLED",
@@ -507,6 +516,15 @@ var Fields = []fieldtype.Field{
 		Kind:     fieldtype.KindBoolPtr,
 		Usage:    "MAGUS_HINTS_ENABLED: Enabled controls whether hint messages (actionable nudges) are printed to stderr.",
 		Doc:      "Controls whether hint messages (actionable nudges) are printed to stderr. Defaults to true. Set hints.enabled: false in magus.yaml or MAGUS_HINTS_ENABLED=false to suppress all hint output. Pointer to distinguish \"not set\" from explicit false",
+	},
+	{
+		GoPath:   "Knowledge.Workspaces",
+		YamlPath: "knowledge.workspaces",
+		EnvVar:   "MAGUS_KNOWLEDGE_WORKSPACES",
+		Flag:     fieldtype.FlagNames{Long: ""},
+		Kind:     fieldtype.KindStringSlice,
+		Usage:    "MAGUS_KNOWLEDGE_WORKSPACES: Workspaces are additional workspace roots to union into a '--global' knowledge-graph query (query/explain/path and gr...",
+		Doc:      "Additional workspace roots to union into a `--global` knowledge-graph query (query/explain/path and graph export/stats). Each is loaded and its node IDs are namespaced by the workspace (\"<name>//<id>\") so IDs from different repos cannot collide. Empty means --global covers only the current workspace",
 	},
 	{
 		GoPath:   "Knowledge.PublishedRef",

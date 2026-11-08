@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -133,12 +133,12 @@ func TestTermNotifyNeverRaises(t *testing.T) {
 func TestNotifyStyle(t *testing.T) {
 	for _, tc := range []struct {
 		level types.LogLevel
-		want  tty.SGR
+		want  termkit.SGR
 	}{
-		{types.LogError, tty.SGRRed},
-		{types.LogWarn, tty.SGRYellow},
-		{types.LogTrace, tty.SGRDim},
-		{types.LogDebug, tty.SGRDim},
+		{types.LogError, termkit.SGRRed},
+		{types.LogWarn, termkit.SGRYellow},
+		{types.LogTrace, termkit.SGRDim},
+		{types.LogDebug, termkit.SGRDim},
 		{types.LogInfo, ""},
 		{"", ""},
 		{"shouting", ""},

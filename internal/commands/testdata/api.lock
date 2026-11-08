@@ -72,10 +72,10 @@ config knowledge.symbol_indexing.quiet_seconds
 config knowledge.vcs.authorship
 config knowledge.vcs.enabled
 config knowledge.vcs.max_commits
-config knowledge.workspaces.<name>.name
-config knowledge.workspaces.<name>.path
+config knowledge.workspaces
 config log.format
 config log.level
+config log.loader
 config log.silent
 config log.stream
 config max_failures

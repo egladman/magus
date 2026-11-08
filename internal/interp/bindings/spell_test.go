@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -1165,9 +1165,9 @@ func TestReadinessDoesNotWaitWhenNotInteractive(t *testing.T) {
 // canceled" for as long as the daemon lived, even once the tool was actually ready.
 func TestReadinessCancelledProbeIsNotMemoized(t *testing.T) {
 	readinessMemo.Clear()
-	prev := tty.SystemProbe
-	tty.SystemProbe = alwaysTerminalProbe{}
-	defer func() { tty.SystemProbe = prev }()
+	prev := termkit.SystemProbe
+	termkit.SystemProbe = alwaysTerminalProbe{}
+	defer func() { termkit.SystemProbe = prev }()
 
 	dir := t.TempDir()
 	readiness := map[string]spells.Tool{

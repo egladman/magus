@@ -22,11 +22,11 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/guard"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
-	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -1243,7 +1243,7 @@ func TestDrawPoolGridDistinguishesEverySlotKind(t *testing.T) {
 		// An idle in-pool slot is painted bare; a CPU thread outside the pool is dimmed,
 		// so the reset sequence sits between its glyph and the following space.
 		assert.Contains(t, out, "○ ")
-		assert.Contains(t, out, tty.Colorize("·", sgrPoolIdle))
+		assert.Contains(t, out, termkit.Colorize("·", sgrPoolIdle))
 		assert.NotContains(t, out, "queued")
 	})
 

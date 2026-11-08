@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -183,7 +183,7 @@ func emitDoctor(opts output.Options, out types.DoctorReport) error {
 	// Doctor's report stays on stdout (it is the command's primary output, meant to be
 	// piped/grepped) but shares the cache's colored [pass]/[fail] status glyphs so the
 	// whole tool reads consistently. Color only when stdout is a TTY and NO_COLOR is unset.
-	color := tty.WantsColor(os.Stdout, tty.SystemProbe)
+	color := termkit.WantsColor(os.Stdout, termkit.SystemProbe)
 
 	if out.Workspace != "" {
 		fmt.Printf("workspace: %s\n\n", out.Workspace)

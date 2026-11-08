@@ -7,7 +7,7 @@ import (
 	"flag"
 	"fmt"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"io"
 	"net/http"
 	"net/url"
@@ -277,7 +277,7 @@ func selfUpdateCommand(ctx context.Context, args []string) error {
 	if structured {
 		prompt = os.Stderr
 	}
-	if err := confirmInstall(prompt, os.Stdin, tty.StdinIsTerminal(), uf.Yes, manifest.Version, discoveryHost(opts), targetPath); err != nil {
+	if err := confirmInstall(prompt, os.Stdin, termkit.StdinIsTerminal(), uf.Yes, manifest.Version, discoveryHost(opts), targetPath); err != nil {
 		return err
 	}
 
