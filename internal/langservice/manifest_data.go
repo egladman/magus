@@ -527,7 +527,7 @@ var modules = []Module{
 		Doc:  "Bindings for the Go package github.com/egladman/magus/libs/termkit/screen, generated from its exported API. A value with state is an int handle and a record is a map. Writers are standard error and readers standard input.",
 		Methods: []Method{
 			{Name: "new", Doc: "New returns a Terminal of the given size, cursor at the top left and the whole grid scrollable.", Sig: "screen\\new(width, height) -> int"},
-			{Name: "terminal_fd", Doc: "Fd and Write make a Terminal usable directly as a writer wherever production code expects a terminal, so a test drives the real code path rather than a transcript of it.", Sig: "screen\\terminalFd(terminal) -> int"},
+			{Name: "terminal_fd", Doc: "Fd and Write let a test hand a Terminal to code that expects one, so it drives the real code path.", Sig: "screen\\terminalFd(terminal) -> int"},
 			{Name: "terminal_write", Doc: "Calls Terminal.Write.", Sig: "screen\\terminalWrite(terminal, p) -> int"},
 			{Name: "terminal_rows", Doc: "Rows renders the grid as right-trimmed text, one string per terminal row.", Sig: "screen\\terminalRows(terminal) -> []string"},
 			{Name: "terminal_string", Doc: "String renders the whole screen, for a failure message that shows what the user would have been looking at.", Sig: "screen\\terminalString(terminal) -> string"},
