@@ -406,15 +406,13 @@ func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, co
 	if d := denyLeaseGate(ctx, deps, actingLease, command); d.refused() {
 		return d
 	}
-	if d := denyWorkerCheckOnly(ctx, deps, actingLease, command); d.refused() {
-		return d
-	}
-	return denyWorkerBudgetWait(ctx, deps, actingLease, command)
+	return denyWorkerCheckOnly(ctx, deps, actingLease, command)
 }
 
 // denyWorkerBudgetWait refuses a bound worker's run that may queue for the
 // budget. A claim waits 30m by default and a worker never waits. It is silent
-// wherever denyWorkerCheckOnly is.
+// wherever denyWorkerCheckOnly is. Judge asks it last, so a rule that refuses
+// the run outright speaks first, and a served next stands it down.
 func denyWorkerBudgetWait(ctx context.Context, deps Dependencies, actingLease, command string) denial {
 	if actingLease == "" {
 		return denial{}

@@ -412,7 +412,7 @@ func TestDenyLeaseScopedGate(t *testing.T) {
 	} {
 		reason := denyLeaseScopedGate(ctx, Dependencies{}, "harness/lease-scoped-deny", command)
 		require.NotEmpty(t, reason, "%q", command)
-		assert.Equal(t, fmt.Sprintf("magus workspace: `%s` is the integrator's gate; run your check: `magus run go::go-test . -- ./internal/ledger/`.", command), reason.Say,
+		assert.Equal(t, fmt.Sprintf("magus workspace: `%s` is the integrator's gate; run your check: `magus run go::go-test . --budget-wait 0 -- ./internal/ledger/`.", command), reason.Say,
 			"the verdict names what it refused and hands back the check to run instead")
 		assert.Contains(t, reason.Why, "harness/lease-scoped-deny", "the rationale must name the lease")
 		assert.Contains(t, reason.Why, "the check on lease", "the rationale must name the field that decided it")
@@ -1407,13 +1407,16 @@ func TestWorkerRunWithoutZeroBudgetWaitIsDenied(t *testing.T) {
 	ctx, _ := fleetFixture(t, figuresLease())
 	const lease = "figures/flow"
 
-	d := denyLeaseScopedGate(ctx, deps, lease, "./magus run diagrams_generate docs")
+	d := denyWorkerBudgetWait(ctx, deps, lease, "./magus run diagrams_generate docs")
 	require.True(t, d.refused())
 	assert.Contains(t, d.Say, "run diagrams_generate docs --budget-wait 0`")
-	assert.Empty(t, denyLeaseScopedGate(ctx, deps, lease, "./magus run diagrams_generate docs --budget-wait 0"))
-	assert.Empty(t, denyLeaseScopedGate(ctx, deps, lease, "./magus run diagrams_generate docs --budget-wait=0s"))
-	assert.True(t, denyLeaseScopedGate(ctx, deps, lease, "./magus run diagrams_generate docs --budget-wait 30m").refused())
-	assert.Empty(t, denyLeaseScopedGate(ctx, deps, "", "./magus run lint docs"), "an unbound caller waits as it likes")
+	assert.Empty(t, denyWorkerBudgetWait(ctx, deps, lease, "./magus run diagrams_generate docs --budget-wait 0"))
+	assert.Empty(t, denyWorkerBudgetWait(ctx, deps, lease, "./magus run diagrams_generate docs --budget-wait=0s"))
+	assert.True(t, denyWorkerBudgetWait(ctx, deps, lease, "./magus run diagrams_generate docs --budget-wait 30m").refused())
+	assert.Empty(t, denyWorkerBudgetWait(ctx, deps, "", "./magus run lint docs"), "an unbound caller waits as it likes")
+
+	judged := Judge(ctx, deps, Request{Input: "./magus run diagrams_generate docs", Lease: lease})
+	assert.Equal(t, verdictWithRule("deny", string(denyRuleLeaseGate)), unworded(judged), "Judge asks it")
 }
 
 // TestWorkerCheckOnlyStaysQuiet covers every caller with nothing to hold a run to.

@@ -82,7 +82,7 @@ func TestDenyWorkerBackgroundRunRefusesOnlyABackgroundedCheck(t *testing.T) {
 func TestJudgeRefusesABackgroundedWorkerRun(t *testing.T) {
 	row := figuresLease()
 	ctx, _ := fleetFixture(t, row)
-	const command = "./magus run diagrams_generate docs"
+	const command = "./magus run diagrams_generate docs --budget-wait 0"
 
 	flagged := Judge(ctx, Dependencies{}, Request{Input: command, Lease: row.ID, CallBackground: true})
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleWorkerBackgroundRun)), unworded(flagged))
@@ -186,7 +186,7 @@ func TestAdviseCheckTimeoutCoversTheLastRealRun(t *testing.T) {
 		ctx, root := fleetFixture(t, row)
 		recordRun(t, root, "docs", "diagrams-generate", 5*time.Minute)
 		// A subagent, which holds a worker's lease whatever its row says.
-		req := Request{Input: command, Lease: row.ID, Host: "h", Session: "s1", Agent: "a1b2c3", HostForegroundDefault: 2 * time.Minute, HostForegroundMax: 10 * time.Minute}
+		req := Request{Input: command + " --budget-wait 0", Lease: row.ID, Host: "h", Session: "s1", Agent: "a1b2c3", HostForegroundDefault: 2 * time.Minute, HostForegroundMax: 10 * time.Minute}
 		denied := Judge(ctx, Dependencies{}, req)
 		assert.Equal(t, verdictWithRule("deny", string(advisoryCheckTimeout)), unworded(denied), "refused by default")
 		assert.Contains(t, denied.Reason, "480000 ms")
@@ -315,13 +315,13 @@ func TestCheckTimeoutRefusesOncePerTarget(t *testing.T) {
 	row := figuresLease()
 	ctx, root := fleetFixture(t, row)
 	recordRun(t, root, "docs", "diagrams-generate", 5*time.Minute)
-	req := Request{Input: "./magus run diagrams_generate docs", Lease: row.ID, Host: "h", Session: "s1", Agent: "a1b2c3",
+	req := Request{Input: "./magus run diagrams_generate docs --budget-wait 0", Lease: row.ID, Host: "h", Session: "s1", Agent: "a1b2c3",
 		HostForegroundDefault: 2 * time.Minute, HostForegroundMax: 10 * time.Minute}
 
 	first := Judge(ctx, Dependencies{}, req)
 	require.Equal(t, verdictWithRule("deny", string(advisoryCheckTimeout)), unworded(first))
 
-	req.Input = "./magus run diagrams_generate docs -- -run TestFlow"
+	req.Input = "./magus run diagrams_generate docs --budget-wait 0 -- -run TestFlow"
 	narrowed := Judge(ctx, Dependencies{}, req)
 	assert.NotEqual(t, string(advisoryCheckTimeout), narrowed.Rule, narrowed.Reason)
 

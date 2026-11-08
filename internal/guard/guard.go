@@ -1346,6 +1346,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				verdict.Rule = string(denyRuleHumanOnly)
 			}
 		}
+		// Last of the worker rules: one that refuses the run outright
+		// names the bigger fix.
+		if verdict.Decision != decisionDeny && verdict.Decision != decisionAsk && preauth == "" {
+			if d := denyWorkerBudgetWait(ctx, deps, actingLease, input); d.refused() {
+				refuseWith(denyRuleLeaseGate, d)
+			}
+		}
 		// The push gate, upgraded from the advisory gitGuard returned when the run log proves
 		// no green gate covers this commit: every session is refused, and a leased worker's
 		// reason sends the commit to its orchestrator (see gradePushWithoutGate).
