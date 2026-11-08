@@ -1,6 +1,7 @@
 package ffi
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"errors"
 	"testing"
@@ -231,7 +232,7 @@ func TestAnyValNamedStringType(t *testing.T) {
 
 // The same hole, one type over: TargetRun.state is types.TargetRunState.
 func TestAnyValNamedStringOnTargetRun(t *testing.T) {
-	got, ok := AnyVal(map[string]any{"state": types.TargetRunPassed}).MapGet("state")
+	got, ok := AnyVal(map[string]any{"state": daemon.TargetRunPassed}).MapGet("state")
 	require.True(t, ok)
 	require.True(t, got.IsString(), "a named string crossed as %s", got.Kind())
 	assert.Equal(t, "passed", got.AsString())

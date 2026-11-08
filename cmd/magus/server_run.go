@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"fmt"
 	"log/slog"
@@ -81,18 +82,18 @@ func watching(root string) {
 }
 
 // serverInfo is the server's own report, read on every Status RPC.
-func serverInfo(sock string) *types.StatusServer {
+func serverInfo(sock string) *daemon.Server {
 	exe, _ := os.Executable()
-	st := &types.StatusServer{
+	st := &daemon.Server{
 		PID:        os.Getpid(),
 		Version:    version,
 		Socket:     sock,
 		Executable: exe,
 		StartTime:  serverStarted,
-		Listeners:  []types.StatusListener{{Kind: types.ListenerSocket, Address: sock}},
+		Listeners:  []daemon.Listener{{Kind: daemon.ListenerSocket, Address: sock}},
 	}
 	if a, _ := serverHTTPAddr.Load().(string); a != "" {
-		st.Listeners = append(st.Listeners, types.StatusListener{Kind: types.ListenerHTTP, Address: a})
+		st.Listeners = append(st.Listeners, daemon.Listener{Kind: daemon.ListenerHTTP, Address: a})
 	}
 	serverWatch.mu.Lock()
 	st.Watch = slices.Clone(serverWatch.roots)
@@ -176,7 +177,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 		OnJobDone:       recordJobActivity,
 		WorkspaceLister: reg.status,
 		ConfigReloader:  reg.evictAll,
-		Server:          func() *types.StatusServer { return serverInfo(addr) },
+		Server:          func() *daemon.Server { return serverInfo(addr) },
 		Limiter:         lim,
 		Version:         version,
 		Address:         cfg.Server.Address,

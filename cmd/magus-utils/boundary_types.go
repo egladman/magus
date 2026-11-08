@@ -4,6 +4,7 @@ package main
 //go:generate go run . boundaryobjects -out ../../internal/interp/bindings/gen/boundary_objects.go -pkg bindgen
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"github.com/egladman/magus/types/image"
 	"fmt"
 	"reflect"
@@ -373,8 +374,8 @@ var boundaryTypes = []boundaryType{
 	{Name: "ImpactProject", Type: reflect.TypeFor[types.ImpactProject](), RuntimeObject: true},
 	{Name: "Impact", Type: reflect.TypeFor[types.ImpactResult](), RuntimeObject: true},
 	{Name: "ImportGraph", Type: reflect.TypeFor[types.ImportGraph](), RuntimeObject: true},
-	{Name: "TargetRun", Type: reflect.TypeFor[types.StatusTargetRun](), RuntimeObject: true},
-	{Name: "Run", Type: reflect.TypeFor[types.StatusRun](), RuntimeObject: true},
+	{Name: "TargetRun", Type: reflect.TypeFor[daemon.TargetRun](), RuntimeObject: true},
+	{Name: "Run", Type: reflect.TypeFor[daemon.Run](), RuntimeObject: true},
 	// magus\job's bundle (put/list), leaf-first: Job.releases and
 	// JobList.overlaps are each a list of the other two, and Job.registeredBy is
 	// an Origin.
@@ -545,14 +546,14 @@ var boundaryEnumTypes = []reflect.Type{
 	reflect.TypeFor[types.CheckStatus](),
 	reflect.TypeFor[types.EventOutcome](),
 	reflect.TypeFor[types.EventSeverity](),
-	reflect.TypeFor[types.ServiceState](),
+	reflect.TypeFor[daemon.ServiceState](),
 	reflect.TypeFor[types.PatternType](),
 	reflect.TypeFor[types.SymbolIndexFreshness](),
 	reflect.TypeFor[types.DiffUncoveredReason](),
 	reflect.TypeFor[types.DiffReadState](),
 	reflect.TypeFor[types.DiffGroupKind](),
 	reflect.TypeFor[types.DiffWhyRelation](),
-	reflect.TypeFor[types.TargetRunState](),
+	reflect.TypeFor[daemon.TargetRunState](),
 	reflect.TypeFor[types.VCSSource](),
 	reflect.TypeFor[types.ConflictKind](),
 	reflect.TypeFor[spells.PatchOpKind](),
@@ -615,13 +616,13 @@ var boundaryEnumTypes = []reflect.Type{
 	reflect.TypeFor[types.KnowledgeUnknownReason](),
 	reflect.TypeFor[types.KnowledgeVerdict](),
 	reflect.TypeFor[types.LeaseSource](),
-	reflect.TypeFor[types.ListenerKind](),
+	reflect.TypeFor[daemon.ListenerKind](),
 	reflect.TypeFor[types.MarkerFamily](),
 	reflect.TypeFor[types.MarkerVerb](),
 	reflect.TypeFor[types.Orchestration](),
 	reflect.TypeFor[types.PrecedentFamily](),
-	reflect.TypeFor[types.ReadinessName](),
-	reflect.TypeFor[types.ReadinessStatus](),
+	reflect.TypeFor[daemon.ReadinessName](),
+	reflect.TypeFor[daemon.Readiness](),
 	reflect.TypeFor[types.RegionSide](),
 	reflect.TypeFor[types.RelationID](),
 	reflect.TypeFor[types.RetryChange](),
@@ -636,7 +637,7 @@ var boundaryEnumTypes = []reflect.Type{
 	reflect.TypeFor[types.TrailSection](),
 	reflect.TypeFor[types.TrailVerdict](),
 	reflect.TypeFor[types.VCSCapability](),
-	reflect.TypeFor[types.WorkspaceState](),
+	reflect.TypeFor[daemon.WorkspaceState](),
 }
 
 // openStringTypes are the named string types that cross as a bare str on purpose, each
@@ -738,11 +739,9 @@ func (b boundaryType) key() string {
 	return fmt.Sprintf(`%s\%s`, b.Module, b.Name)
 }
 
-// buzzName returns the BUZZ name a Go type mirrors as, which is the registry key
-// and not always the Go type's own name: types.ProjectsOutput is `Projects`,
-// types.StatusTargetRun is `TargetRun`. A struct-valued field must reference the Buzz
-// name, so the registry is what resolves it, falling back to the Go name only for a
-// type no entry claims, which the caller then reports as undeclared.
+// buzzName returns the Buzz name a Go type mirrors as: its registry key,
+// not always its Go name (types.ProjectsOutput is `Projects`). An
+// unclaimed type falls back to its Go name, which the caller reports.
 func buzzName(rt reflect.Type) string {
 	for _, entry := range boundaryTypes {
 		if entry.Type == rt {

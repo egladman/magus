@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"fmt"
 	"net/url"
@@ -52,7 +53,7 @@ type servedSkew struct {
 // checkout it serves.
 type served struct {
 	root  string
-	build types.BuildInfo
+	build daemon.BuildInfo
 	exe   string
 	start os.FileInfo
 	// roots returns the caller's declared roots, ok false when the caller declared none.
@@ -61,7 +62,7 @@ type served struct {
 
 // newServed records the identity of the process serving root. A missing executable (or
 // one that cannot be stat'ed) leaves build skew unreported.
-func newServed(root string, build types.BuildInfo) *served {
+func newServed(root string, build daemon.BuildInfo) *served {
 	s := &served{root: root, build: build, roots: newSessionRoots().lookup}
 	if exe, err := os.Executable(); err == nil {
 		s.watchExecutable(exe)

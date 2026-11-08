@@ -9,6 +9,7 @@
 package server
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"errors"
 	"fmt"
@@ -82,8 +83,8 @@ var connectReadMax = connect.WithReadMaxBytes(handler.MaxWireBodyBytes)
 // options.
 type Server struct {
 	opts       mcp.Options
-	runs       func() []types.StatusRun
-	broker     func() *types.StatusBroker
+	runs       func() []daemon.Run
+	broker     func() *daemon.Broker
 	workspaces func() []activityhandler.Workspace
 	// unloaded is set by NewUnloaded: the workspace failed, so only the routes that
 	// need none are served.
@@ -105,14 +106,14 @@ type Option func(*Server)
 // WithRuns supplies the server's live-run source (the run registry's Snapshot). When
 // set, the StatusService (GetStatus/StreamStatus) and the status SSE frame carry the per-target
 // execution state of every adopted run alongside the pool: the same status routes, more live state.
-func WithRuns(fn func() []types.StatusRun) Option {
+func WithRuns(fn func() []daemon.Run) Option {
 	return func(d *Server) { d.runs = fn }
 }
 
 // WithBrokerStatus supplies the broker's status: its capacity, the claims holding it and the
 // shared services it keeps warm. When set, the StatusService and the status SSE frame
 // carry them alongside the pool and runs. fn returns nil when no broker answers.
-func WithBrokerStatus(fn func() *types.StatusBroker) Option {
+func WithBrokerStatus(fn func() *daemon.Broker) Option {
 	return func(d *Server) { d.broker = fn }
 }
 

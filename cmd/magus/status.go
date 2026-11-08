@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"cmp"
 	"context"
 	"errors"
@@ -152,7 +153,7 @@ func status(ctx context.Context, args []string) error {
 // statusReport is the snapshot with the leases whose session has gone silent. They sit
 // beside the snapshot, not in it, while the report is a shadow measurement.
 type statusReport struct {
-	types.StatusSnapshot `yaml:",inline"`
+	daemon.Snapshot `yaml:",inline"`
 	SilentLeases         []guard.SilentLease `json:"silent_leases,omitempty" yaml:"silent_leases,omitempty"`
 	SilentLeasesError    string              `json:"silent_leases_error,omitempty" yaml:"silent_leases_error,omitempty"`
 }
@@ -177,7 +178,7 @@ func loadSilentLeases(now time.Time) ([]guard.SilentLease, error) {
 }
 
 // statusNames is the identifier of each run the server is executing.
-func statusNames(r types.StatusSnapshot) []string {
+func statusNames(r daemon.Snapshot) []string {
 	names := make([]string, len(r.Runs))
 	for i, run := range r.Runs {
 		names[i] = run.Inv
@@ -187,10 +188,10 @@ func statusNames(r types.StatusSnapshot) []string {
 
 // printStatusWithSilent renders the snapshot, then the silent leases: appended to the text
 // form, a field of the structured ones.
-func printStatusWithSilent(w io.Writer, snapshot types.StatusSnapshot, silent []guard.SilentLease, silentErr error, opts output.Options, compact bool) error {
+func printStatusWithSilent(w io.Writer, snapshot daemon.Snapshot, silent []guard.SilentLease, silentErr error, opts output.Options, compact bool) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		report := statusReport{StatusSnapshot: snapshot, SilentLeases: silent}
+		report := statusReport{Snapshot: snapshot, SilentLeases: silent}
 		if silentErr != nil {
 			report.SilentLeasesError = silentErr.Error()
 		}
@@ -241,13 +242,13 @@ func clampStatusWatch(interval time.Duration) time.Duration {
 }
 
 // printStatus renders one status snapshot; animFrame drives the active-cell pulse (0 = static).
-func printStatus(r types.StatusSnapshot, opts output.Options, animFrame int, compact bool) error {
+func printStatus(r daemon.Snapshot, opts output.Options, animFrame int, compact bool) error {
 	return writeStatus(os.Stdout, r, opts, animFrame, compact)
 }
 
 // writeStatus renders one status frame to w, so the watch loop can redraw a buffer
 // in place rather than erase the whole screen.
-func writeStatus(w io.Writer, r types.StatusSnapshot, opts output.Options, animFrame int, compact bool) error {
+func writeStatus(w io.Writer, r daemon.Snapshot, opts output.Options, animFrame int, compact bool) error {
 	// TTY-ness is measured on os.Stdout, not on w, and that is deliberate: in
 	// watch mode w is a buffer this renders into before redrawing it in place,
 	// so the terminal being rendered FOR is still standard output.
@@ -277,23 +278,23 @@ func gridEnabled(opts output.Options, canRender bool) bool {
 // buildStatusBase constructs the static portions of a StatusSnapshot that depend
 // on the selfUpdateCompiled build-tag constant and the resolved config. Called at
 // MCP-server start to inject into dashboard.Options so the bridge can serve the full
-// types.StatusSnapshot without importing cmd/magus.
-func buildStatusBase() types.StatusBase {
-	return types.StatusBase{
+// daemon.Snapshot without importing cmd/magus.
+func buildStatusBase() daemon.Base {
+	return daemon.Base{
 		Telemetry: buildTelemetryStatus(globalCfg.Telemetry),
 		Cache:     buildCacheStatus(globalCfg.Cache),
-		Build: types.BuildStatus{
+		Build: daemon.Build{
 			SelfUpdate: selfUpdateCompiled,
 		},
 	}
 }
 
-func buildStatusSnapshot(ctx context.Context, socket string, symbols bool) types.StatusSnapshot {
-	snapshot := types.StatusSnapshot{
+func buildStatusSnapshot(ctx context.Context, socket string, symbols bool) daemon.Snapshot {
+	snapshot := daemon.Snapshot{
 		Telemetry: buildTelemetryStatus(globalCfg.Telemetry),
 		Cache:     buildCacheStatus(globalCfg.Cache),
 		Config:    buildConfigStatus(globalCfg),
-		Build: types.BuildStatus{
+		Build: daemon.Build{
 			SelfUpdate: selfUpdateCompiled,
 		},
 		// Held locks are read from the workspace cache, not the server: a lock is taken by
@@ -341,8 +342,8 @@ type statusQuery func(ctx context.Context, addr string) (*proc.StatusReply, erro
 // server that died between discovery and the query is dropped rather than failing the
 // snapshot; PoolError is set only when nothing answered, so more than one server is
 // reported, never refused. The one that says it is the server fills the server section.
-func applyStatusPools(ctx context.Context, snapshot *types.StatusSnapshot, addrs []string, query statusQuery) {
-	var pools []types.StatusOutput
+func applyStatusPools(ctx context.Context, snapshot *daemon.Snapshot, addrs []string, query statusQuery) {
+	var pools []daemon.Output
 	var failed []string
 	for _, addr := range addrs {
 		reply, err := query(ctx, addr)
@@ -386,7 +387,7 @@ func loadSymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus {
 // loadHeldLocks reads the workspace's held locks. Like the symbol-index probe above
 // it is workspace-local and server-independent: a lock is taken by whichever process
 // mutates a project, which is usually a plain `magus run` with no server at all.
-func loadHeldLocks(ctx context.Context) []types.StatusLock {
+func loadHeldLocks(ctx context.Context) []daemon.Lock {
 	// No Close here, for the same reason as the probe above: nothing closes the
 	// singleton.
 	m, err := loadMagus(ctx, "")
@@ -398,7 +399,7 @@ func loadHeldLocks(ctx context.Context) []types.StatusLock {
 
 // loadPipeWaits reads the runs waiting on a magus upstream of them in a pipe, from the
 // same workspace lock directory as loadHeldLocks.
-func loadPipeWaits(ctx context.Context) []types.StatusPipeWait {
+func loadPipeWaits(ctx context.Context) []daemon.PipeWait {
 	m, err := loadMagus(ctx, "")
 	if err != nil {
 		return nil
@@ -406,8 +407,8 @@ func loadPipeWaits(ctx context.Context) []types.StatusPipeWait {
 	return m.PipeWaits()
 }
 
-func buildTelemetryStatus(t config.Telemetry) types.TelemetryStatus {
-	st := types.TelemetryStatus{
+func buildTelemetryStatus(t config.Telemetry) daemon.Telemetry {
+	st := daemon.Telemetry{
 		Enabled:     t.Enabled,
 		Endpoint:    t.Endpoint,
 		Protocol:    t.Protocol,
@@ -430,17 +431,17 @@ func buildTelemetryStatus(t config.Telemetry) types.TelemetryStatus {
 	return st
 }
 
-func buildCacheStatus(c config.Cache) types.CacheStatus {
-	return types.CacheStatus{Immutable: !c.WriteEnabled(), Dir: c.Dir, SizeMB: c.SizeMB}
+func buildCacheStatus(c config.Cache) daemon.Cache {
+	return daemon.Cache{Immutable: !c.WriteEnabled(), Dir: c.Dir, SizeMB: c.SizeMB}
 }
 
 // buildConfigStatus reports the resolved config a run executes under. Concurrency.Effective
 // is resolved by the run path's own function so status cannot drift from the width a build
 // actually gets.
-func buildConfigStatus(c config.Config) types.StatusConfig {
-	return types.StatusConfig{
+func buildConfigStatus(c config.Config) daemon.Config {
+	return daemon.Config{
 		DefaultCharms: c.DefaultCharms,
-		Concurrency: types.StatusConcurrency{
+		Concurrency: daemon.Concurrency{
 			Configured: c.Concurrency,
 			Profile:    c.ConcurrencyProfile,
 			Effective:  cache.ResolveConcurrency(c.Concurrency, c.ConcurrencyProfile),
@@ -449,7 +450,7 @@ func buildConfigStatus(c config.Config) types.StatusConfig {
 	}
 }
 
-func printStatusText(w io.Writer, r types.StatusSnapshot, useGrid bool, animFrame int) {
+func printStatusText(w io.Writer, r daemon.Snapshot, useGrid bool, animFrame int) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "telemetry")
 	fmt.Fprintf(tw, "  enabled\t%t\n", r.Telemetry.Enabled)
@@ -539,12 +540,12 @@ func printStatusText(w io.Writer, r types.StatusSnapshot, useGrid bool, animFram
 			fmt.Fprintln(w, strings.Repeat("-", 60))
 			for _, ws := range r.Pool.Workspaces {
 				switch ws.State {
-				case types.WorkspaceFailed:
+				case daemon.WorkspaceFailed:
 					fmt.Fprintf(w, "  %s  (failed to load)\n", ws.Root)
 					if ws.Error != nil {
 						fmt.Fprintf(w, "    %s\n", strings.ReplaceAll(ws.Error.Message, "\n", "\n    "))
 					}
-				case types.WorkspaceLoading:
+				case daemon.WorkspaceLoading:
 					fmt.Fprintf(w, "  %s  (loading)\n", ws.Root)
 				default:
 					idle := time.Since(ws.LastAccess).Round(time.Second)
@@ -564,7 +565,7 @@ func printStatusText(w io.Writer, r types.StatusSnapshot, useGrid bool, animFram
 
 // printPipeWaitStatus renders the runs holding no lock yet because a magus upstream of
 // them in a pipe still needs their projects.
-func printPipeWaitStatus(w io.Writer, waits []types.StatusPipeWait) {
+func printPipeWaitStatus(w io.Writer, waits []daemon.PipeWait) {
 	if len(waits) == 0 {
 		return
 	}
@@ -588,7 +589,7 @@ func printPipeWaitStatus(w io.Writer, waits []types.StatusPipeWait) {
 // answer it, every service it hosts, and when it exits.
 // Printed whenever a broker answered, held or idle, because "nothing holds it" is the
 // answer to the question people ask it.
-func printBrokerRows(w io.Writer, st types.StatusBroker, policy types.BrokerPolicy, now time.Time) {
+func printBrokerRows(w io.Writer, st daemon.Broker, policy types.BrokerPolicy, now time.Time) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(tw, "broker\t%d\t%s\n", st.PID, strings.Join(nonEmpty(
 		upText(st.StartTime, now),
@@ -708,12 +709,12 @@ func printBrokerDown(w io.Writer, policy types.BrokerPolicy) {
 
 // printServerRows renders the server one fact per row: the server itself, each listener,
 // and the workspaces whose graph and symbols it keeps current.
-func printServerRows(w io.Writer, st *types.StatusServer, now time.Time) {
+func printServerRows(w io.Writer, st *daemon.Server, now time.Time) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(tw, "server\t%d\t%s\n", st.PID, strings.Join(nonEmpty(
 		upText(st.StartTime, now), st.Version, st.Executable, st.Socket), "  "))
 	for _, l := range st.Listeners {
-		if l.Kind == types.ListenerSocket {
+		if l.Kind == daemon.ListenerSocket {
 			continue
 		}
 		fmt.Fprintf(tw, "listen\t%d\t%s %s\n", st.PID, l.Kind, l.Address)
@@ -822,7 +823,7 @@ func nonEmpty(fields ...string) []string {
 // printPoolServers lists every live proc server when this machine is running more than
 // one, each with the slots it holds. One server is already rendered above as THE pool, so
 // the list would only repeat it and is omitted.
-func printPoolServers(w io.Writer, pools []types.StatusOutput) {
+func printPoolServers(w io.Writer, pools []daemon.Output) {
 	if len(pools) < 2 {
 		return
 	}
@@ -838,7 +839,7 @@ func printPoolServers(w io.Writer, pools []types.StatusOutput) {
 // connect to. This is the answer to "are my magus tools actually reachable", separate
 // from the pool block above (which reports the proc socket). Omitted only when
 // the snapshot carries no MCP section (e.g. a server's own snapshot).
-func printMCPEndpointStatus(w io.Writer, m *types.MCPEndpointStatus) {
+func printMCPEndpointStatus(w io.Writer, m *daemon.MCPEndpoint) {
 	if m == nil {
 		return
 	}
@@ -873,7 +874,7 @@ func printMCPEndpointStatus(w io.Writer, m *types.MCPEndpointStatus) {
 // It names the workspaces the server has loaded because that is the only provenance a
 // client can see, and the one that ate rows here belonged to another worktree entirely
 // while looking exactly like this one's.
-func serverVersionSkew(pool *types.StatusOutput) string {
+func serverVersionSkew(pool *daemon.Output) string {
 	if pool == nil || pool.Version == "" || version == "" || pool.Version == version {
 		return ""
 	}
@@ -909,7 +910,7 @@ func serverVersionSkew(pool *types.StatusOutput) string {
 // ONE renderer, which `magus server status` prints beside the server rows. A
 // second spelling of these two lines would drift first in wording, then in
 // which number they read.
-func printPoolSummary(w io.Writer, p *types.StatusOutput, label string) {
+func printPoolSummary(w io.Writer, p *daemon.Output, label string) {
 	fmt.Fprintf(w, "%s pid %d\n", label, p.ParentPID)
 	fmt.Fprintf(w, "width: %d   running: %d   available: %d   queued: %d\n",
 		p.Capacity, p.Running, p.Available, p.Queued)
@@ -917,7 +918,7 @@ func printPoolSummary(w io.Writer, p *types.StatusOutput, label string) {
 
 // printConsoleStatus renders where a person opens the console. It is the answer to "where
 // do I look at this", which until now lived only in the server's log.
-func printConsoleStatus(w io.Writer, c *types.ConsoleStatus) {
+func printConsoleStatus(w io.Writer, c *daemon.Console) {
 	if c == nil {
 		return
 	}
@@ -971,7 +972,7 @@ const compactRunningBudget = 32
 // targets multiplexer sidebars: ANSI-free, no telemetry/cache config (those are
 // static), oldest running targets first so the long-running work stays visible.
 // now is the reference time for per-target durations (parameterised for tests).
-func printStatusCompact(w io.Writer, r types.StatusSnapshot, now time.Time) {
+func printStatusCompact(w io.Writer, r daemon.Snapshot, now time.Time) {
 	parts := []string{compactBrokerToken(r.Broker, r.BrokerPolicy), compactServerToken(r.Server)}
 	if r.Pool == nil {
 		fmt.Fprintln(w, strings.Join(parts, " · "))
@@ -1010,7 +1011,7 @@ func printStatusCompact(w io.Writer, r types.StatusSnapshot, now time.Time) {
 // compactBrokerToken says what a missing broker means rather than one word for every
 // absence: "broker off" is the policy, "no broker" is a broker a run would start. A
 // running one shows the slots it has seated when it measured the host.
-func compactBrokerToken(b *types.StatusBroker, policy types.BrokerPolicy) string {
+func compactBrokerToken(b *daemon.Broker, policy types.BrokerPolicy) string {
 	switch {
 	case b == nil && policy.Resolved() == types.BrokerOff:
 		return "broker off"
@@ -1023,14 +1024,14 @@ func compactBrokerToken(b *types.StatusBroker, policy types.BrokerPolicy) string
 	}
 }
 
-func compactServerToken(s *types.StatusServer) string {
+func compactServerToken(s *daemon.Server) string {
 	if s == nil {
 		return "no server"
 	}
 	return "server up"
 }
 
-func compactServiceToken(services []types.StatusService) string {
+func compactServiceToken(services []daemon.Service) string {
 	if len(services) == 0 {
 		return ""
 	}
@@ -1047,14 +1048,14 @@ func compactServiceToken(services []types.StatusService) string {
 // compactMCPToken renders the MCP endpoint as one sidebar-friendly token, or "" when
 // there is no MCP section to show. Only a degraded endpoint is worth the width in the
 // compact line: "mcp serving" is the expected steady state and would just be noise.
-func compactMCPToken(m *types.MCPEndpointStatus) string {
+func compactMCPToken(m *daemon.MCPEndpoint) string {
 	if m == nil || m.State == "serving" {
 		return ""
 	}
 	return "mcp " + m.State
 }
 
-func compactRunningParts(targets []types.StatusRunningTarget, now time.Time) []string {
+func compactRunningParts(targets []daemon.RunningTarget, now time.Time) []string {
 	if len(targets) == 0 {
 		return nil
 	}
@@ -1066,7 +1067,7 @@ func compactRunningParts(targets []types.StatusRunningTarget, now time.Time) []s
 	showWS := len(wsSet) > 1
 
 	// Sort by duration descending (oldest first); zero durations sort last.
-	sorted := make([]types.StatusRunningTarget, len(targets))
+	sorted := make([]daemon.RunningTarget, len(targets))
 	copy(sorted, targets)
 	sort.SliceStable(sorted, func(i, j int) bool {
 		di := runningDuration(sorted[i], now)
@@ -1095,14 +1096,14 @@ func compactRunningParts(targets []types.StatusRunningTarget, now time.Time) []s
 	return out
 }
 
-func runningDuration(c types.StatusRunningTarget, now time.Time) time.Duration {
+func runningDuration(c daemon.RunningTarget, now time.Time) time.Duration {
 	if c.StartedAt.IsZero() {
 		return 0
 	}
 	return now.Sub(c.StartedAt)
 }
 
-func formatCompactRunningTarget(c types.StatusRunningTarget, showWS bool, now time.Time) string {
+func formatCompactRunningTarget(c daemon.RunningTarget, showWS bool, now time.Time) string {
 	project, target := parseRunning(c.Args)
 	label := fmt.Sprintf("%s:%s", project, target)
 	if label == ":" {
@@ -1183,7 +1184,7 @@ const (
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 // drawPoolGrid renders the dot-matrix pool visualization; animFrame drives the pulse (0 = static).
-func drawPoolGrid(w io.Writer, pool *types.StatusOutput, numCPU int, animFrame int) {
+func drawPoolGrid(w io.Writer, pool *daemon.Output, numCPU int, animFrame int) {
 	total := numCPU
 	if pool.Capacity > total {
 		total = pool.Capacity
@@ -1240,7 +1241,7 @@ func drawPoolGrid(w io.Writer, pool *types.StatusOutput, numCPU int, animFrame i
 		termkit.Colorize("●", sgrPoolRunning), termkit.Colorize("·", sgrPoolIdle))
 }
 
-func poolHeader(pool *types.StatusOutput, numCPU int) string {
+func poolHeader(pool *daemon.Output, numCPU int) string {
 	parts := []string{"pool"}
 	parts = append(parts, fmt.Sprintf("pid %d", pool.ParentPID))
 	if pool.Version != "" {
@@ -1257,7 +1258,7 @@ func poolHeader(pool *types.StatusOutput, numCPU int) string {
 }
 
 // drawRunningTree renders running targets grouped by workspace → project → target; collapses workspace when single.
-func drawRunningTree(w io.Writer, running []types.StatusRunningTarget, now time.Time) {
+func drawRunningTree(w io.Writer, running []daemon.RunningTarget, now time.Time) {
 	const indent = "  "
 	// Group: workspace → project → []leafEntry
 	type projMap map[string][]leafEntry
@@ -1443,7 +1444,7 @@ func truncate(s string, n int) string {
 // Held is normal, so this is never styled as a failure. Age is the column that
 // matters: seconds means a peer is mid-run, days means a holder nobody remembers
 // starting, and every other run is being refused by it.
-func printLockStatus(w io.Writer, locks []types.StatusLock) {
+func printLockStatus(w io.Writer, locks []daemon.Lock) {
 	if len(locks) == 0 {
 		return
 	}
@@ -1473,7 +1474,7 @@ func printLockStatus(w io.Writer, locks []types.StatusLock) {
 // tall as the terminal, where erasing upward would walk off the top and eat the
 // transcript above. Falling back is worse than redrawing in place and much
 // better than a corrupted screen.
-func paintStatusFrame(p *termkit.InlineView, inline bool, r types.StatusSnapshot, opts output.Options, animFrame int, compact bool) error {
+func paintStatusFrame(p *termkit.InlineView, inline bool, r daemon.Snapshot, opts output.Options, animFrame int, compact bool) error {
 	if !inline {
 		return printStatus(r, opts, animFrame, compact)
 	}

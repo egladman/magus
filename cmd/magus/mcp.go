@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"flag"
 	"fmt"
@@ -139,7 +140,7 @@ func serveMCPStdio(ctx context.Context, m *magus.Magus, in io.Reader, wire io.Wr
 		Magus:    m,
 		Logger:   slog.Default(),
 		Version:  version,
-		Build:    types.BuildInfo(selfBuild()),
+		Build:    daemon.BuildInfo(selfBuild()),
 		Config:   globalCfg,
 		HTTPAddr: addr,
 		// The store the server and `magus diff` use, so an agent joins the session a person
@@ -272,7 +273,7 @@ func serveUnloadedBridge(ctx context.Context, cancel context.CancelFunc, root st
 	d := server.NewUnloaded(internalmcp.Options{
 		Logger:     slog.Default(),
 		Version:    version,
-		Build:      types.BuildInfo(selfBuild()),
+		Build:      daemon.BuildInfo(selfBuild()),
 		Config:     globalCfg,
 		HTTPAddr:   addr,
 		StatusBase: buildStatusBase(),
@@ -308,7 +309,7 @@ func serveUnloadedBridge(ctx context.Context, cancel context.CancelFunc, root st
 // bridgeServices is the hosted-services source the console and /readyz read: the broker's,
 // since the broker hosts them. Nil when no broker answers. Asking holds nothing, so it
 // never keeps the broker awake.
-func bridgeServices() []types.StatusService {
+func bridgeServices() []daemon.Service {
 	if st := bridgeBroker(); st != nil {
 		return st.Services
 	}
@@ -316,7 +317,7 @@ func bridgeServices() []types.StatusService {
 }
 
 // bridgeBroker is the broker's status for the console, nil when none answers.
-func bridgeBroker() *types.StatusBroker {
+func bridgeBroker() *daemon.Broker {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	st, err := broker.QueryStatus(ctx, broker.DefaultAddr())
@@ -374,7 +375,7 @@ func serveBridge(ctx context.Context, cancel context.CancelFunc, m *magus.Magus,
 		Magus:      m,
 		Logger:     slog.Default(),
 		Version:    version,
-		Build:      types.BuildInfo(selfBuild()),
+		Build:      daemon.BuildInfo(selfBuild()),
 		Config:     globalCfg,
 		HTTPAddr:   addr,
 		StatusBase: buildStatusBase(),

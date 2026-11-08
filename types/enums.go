@@ -67,11 +67,6 @@ func (v EventSeverity) Values() []string { return eventSeverities.Strings() }
 func (v EventSeverity) Valid() bool      { return eventSeverities.Valid(v) }
 func (v EventSeverity) String() string   { return enum.String(v) }
 
-var serviceStates = enum.Set[ServiceState]{"starting", "running", "idle", "failed"}
-
-func (v ServiceState) Values() []string { return serviceStates.Strings() }
-func (v ServiceState) Valid() bool      { return serviceStates.Valid(v) }
-func (v ServiceState) String() string   { return enum.String(v) }
 
 var patternTypes = enum.Set[PatternType]{"glob", "regex", "literal"}
 
@@ -97,11 +92,6 @@ func (v DiffReadState) Values() []string { return diffReadStates.Strings() }
 func (v DiffReadState) Valid() bool      { return diffReadStates.Valid(v) }
 func (v DiffReadState) String() string   { return enum.String(v) }
 
-var targetRunStates = enum.Set[TargetRunState]{"queued", "running", "passed", "failed", "cached", "permitted"}
-
-func (v TargetRunState) Values() []string { return targetRunStates.Strings() }
-func (v TargetRunState) Valid() bool      { return targetRunStates.Valid(v) }
-func (v TargetRunState) String() string   { return enum.String(v) }
 
 var vcsSources = enum.Set[VCSSource]{"explicit", "auto", "default", "disabled"}
 

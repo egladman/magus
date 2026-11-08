@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"errors"
 	"fmt"
@@ -978,7 +979,7 @@ func (l *projectLocker) removeOwner(projectPath string) {
 // Best-effort throughout: an unreadable owner record is skipped rather than failing the
 // caller. An owner record can outlive its flock if a holder was killed between unlocking and
 // cleanup, so treat an entry as a strong hint, never proof.
-func (m *Magus) HeldLocks() []types.StatusLock {
+func (m *Magus) HeldLocks() []daemon.Lock {
 	return heldLocks(resolveCacheDir(m.ws.Root, m.cfg), m.ws.Root)
 }
 
@@ -986,9 +987,9 @@ func (m *Magus) HeldLocks() []types.StatusLock {
 // temp dir without constructing a whole workspace. It reports only THIS workspace's
 // locks: under a shared cache dir the others are unrelated runs, and their project
 // paths mean nothing here.
-func heldLocks(cacheDir, workspaceRoot string) []types.StatusLock {
+func heldLocks(cacheDir, workspaceRoot string) []daemon.Lock {
 	dir := workspace.LocksDir(cacheDir, workspaceRoot)
-	var out []types.StatusLock
+	var out []daemon.Lock
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		// The owner record is a FILE holding the whole record, so this matches on the name and
 		// takes only files: a directory of that name is not one of ours.
@@ -1015,7 +1016,7 @@ func heldLocks(cacheDir, workspaceRoot string) []types.StatusLock {
 		if !lockIsHeld(strings.TrimSuffix(path, ownerSuffix)) {
 			return nil
 		}
-		lock := types.StatusLock{
+		lock := daemon.Lock{
 			Project: project, PID: o.PID, Command: o.Command, Dir: o.Dir,
 			StaleAfterSeconds: int(lockStaleAfter / time.Second),
 			AcquireTime:       o.Started,
@@ -1023,7 +1024,7 @@ func heldLocks(cacheDir, workspaceRoot string) []types.StatusLock {
 		out = append(out, lock)
 		return nil
 	})
-	slices.SortFunc(out, func(a, b types.StatusLock) int { return strings.Compare(a.Project, b.Project) })
+	slices.SortFunc(out, func(a, b daemon.Lock) int { return strings.Compare(a.Project, b.Project) })
 	return out
 }
 

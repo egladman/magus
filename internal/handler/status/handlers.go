@@ -1,6 +1,7 @@
 package status
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -11,14 +12,13 @@ import (
 
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/rpcerr"
-	"github.com/egladman/magus/types"
 )
 
 // statusSource is the narrow consumer contract these handlers need from the console
 // service: assemble the current domain status report. It is satisfied by
 // *console.Service; the handler package never imports the service concretely.
 type statusSource interface {
-	StatusSnapshot(context.Context) types.StatusSnapshot
+	StatusSnapshot(context.Context) daemon.Snapshot
 }
 
 // EventsHandler serves GET /api/v1/events as a Server-Sent Events stream.
@@ -37,7 +37,7 @@ type statusSource interface {
 type EventsHandler struct {
 	handler.Base
 	src            statusSource
-	build          types.BuildInfo
+	build          daemon.BuildInfo
 	metrics        func(ctx context.Context) ([]byte, error)
 	invalidate     <-chan struct{}
 	heartbeat      time.Duration
@@ -48,7 +48,7 @@ type EventsHandler struct {
 // version) the status frames; metrics, when non-nil, feeds the metrics channel; invalidate
 // drives the graph channel; heartbeat and statusInterval override the default 25s / 2s periods
 // (zero uses the defaults).
-func NewEventsHandler(src statusSource, build types.BuildInfo, metrics func(ctx context.Context) ([]byte, error), invalidate <-chan struct{}, heartbeat, statusInterval time.Duration, log *slog.Logger) *EventsHandler {
+func NewEventsHandler(src statusSource, build daemon.BuildInfo, metrics func(ctx context.Context) ([]byte, error), invalidate <-chan struct{}, heartbeat, statusInterval time.Duration, log *slog.Logger) *EventsHandler {
 	h := &EventsHandler{
 		src:            src,
 		build:          build,

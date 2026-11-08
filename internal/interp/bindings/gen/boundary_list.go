@@ -8,6 +8,7 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/daemon"
 	imagetypes "github.com/egladman/magus/types/image"
 )
 
@@ -358,7 +359,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ReviewDraft", Zero: types.ReviewDraft{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReviewDraft(v.(types.ReviewDraft)) }},
 	{Name: "ReviewRef", Zero: types.ReviewRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReviewRef(v.(types.ReviewRef)) }},
 	{Name: "Rule", Zero: types.RuleDoc{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRuleDoc(v.(types.RuleDoc), enums) }},
-	{Name: "Run", Zero: types.StatusRun{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusRun(v.(types.StatusRun), enums) }},
+	{Name: "Run", Zero: daemon.Run{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusRun(v.(daemon.Run), enums) }},
 	{Name: "Sandbox", Zero: spells.Sandbox{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSandbox(v.(spells.Sandbox), enums) }},
 	{Name: "SandboxAllow", Zero: spells.SandboxAllow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSandboxAllow(v.(spells.SandboxAllow), enums) }},
 	{Name: "SandboxCache", Zero: spells.SandboxCache{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSandboxCache(v.(spells.SandboxCache)) }},
@@ -397,9 +398,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectTargetGraphProject(v.(types.TargetGraphProject))
 	}},
 	{Name: "TargetRef", Zero: types.TargetRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTargetRef(v.(types.TargetRef)) }},
-	{Name: "TargetRun", Zero: types.StatusTargetRun{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectStatusTargetRun(v.(types.StatusTargetRun), enums)
-	}},
+	{Name: "TargetRun", Zero: daemon.TargetRun{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusTargetRun(v.(daemon.TargetRun), enums) }},
 	{Name: "TargetSpellUse", Zero: types.TargetSpellUse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTargetSpellUse(v.(types.TargetSpellUse)) }},
 	{Name: "TermSize", Zero: types.TermSize{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTermSize(v.(types.TermSize)) }},
 	{Name: "TierEvidence", Zero: types.TierEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTierEvidence(v.(types.TierEvidence), enums) }},

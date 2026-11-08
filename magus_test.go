@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"bufio"
 	"bytes"
 	"context"
@@ -934,9 +935,9 @@ func TestWorkspaceLoadFailureLocatesEachJoinedFile(t *testing.T) {
 			errors.New("load spell: buzz: line 3:7: expected expression"),
 		)},
 	))
-	assert.Equal(t, &types.WorkspaceFailure{
+	assert.Equal(t, &daemon.WorkspaceFailure{
 		Message: err.Error(),
-		Diagnostics: []types.SourceDiagnostic{
+		Diagnostics: []daemon.SourceDiagnostic{
 			{File: "a/magusfile.buzz", Line: 2, Column: 1, Message: "expected identifier"},
 			{File: "/elsewhere/spell.buzz", Line: 5, Column: 4, Message: "unexpected }"},
 			{File: "b/magusfile.buzz", Line: 3, Column: 7, Message: "expected expression"},
@@ -949,7 +950,7 @@ func TestWorkspaceLoadFailureLocatesEachJoinedFile(t *testing.T) {
 
 func TestWorkspaceLoadFailureWithoutAPosition(t *testing.T) {
 	err := errors.New("load config /repo: magus.yaml: unknown key")
-	assert.Equal(t, &types.WorkspaceFailure{Message: err.Error()}, WorkspaceLoadFailure("/repo", err))
+	assert.Equal(t, &daemon.WorkspaceFailure{Message: err.Error()}, WorkspaceLoadFailure("/repo", err))
 }
 
 // The wiring, not the comparison: internal/ward covers the semver logic, and this

@@ -1,6 +1,7 @@
 package status
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -12,19 +13,18 @@ import (
 	"time"
 
 	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"
-	"github.com/egladman/magus/types"
 	"google.golang.org/protobuf/proto"
 )
 
 // cannedSnapshot is a statusSource returning a canned report.
 type cannedSnapshot struct {
-	report types.StatusSnapshot
+	report daemon.Snapshot
 }
 
-func (f cannedSnapshot) StatusSnapshot(context.Context) types.StatusSnapshot { return f.report }
+func (f cannedSnapshot) StatusSnapshot(context.Context) daemon.Snapshot { return f.report }
 
 func TestEventsHandler_OptionsNoContent(t *testing.T) {
-	h := NewEventsHandler(cannedSnapshot{}, types.BuildInfo{}, nil, nil, 0, 0, nil)
+	h := NewEventsHandler(cannedSnapshot{}, daemon.BuildInfo{}, nil, nil, 0, 0, nil)
 	r := httptest.NewRequest(http.MethodOptions, "/api/v1/events", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -34,7 +34,7 @@ func TestEventsHandler_OptionsNoContent(t *testing.T) {
 }
 
 func TestEventsHandler_MethodNotAllowed(t *testing.T) {
-	h := NewEventsHandler(cannedSnapshot{}, types.BuildInfo{}, nil, nil, 0, 0, nil)
+	h := NewEventsHandler(cannedSnapshot{}, daemon.BuildInfo{}, nil, nil, 0, 0, nil)
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/events", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -55,7 +55,7 @@ func (n *nonFlusherWriter) Write(b []byte) (int, error) { return len(b), nil }
 func (n *nonFlusherWriter) WriteHeader(code int)        { n.code = code }
 
 func TestEventsHandler_StreamingUnsupported(t *testing.T) {
-	h := NewEventsHandler(cannedSnapshot{}, types.BuildInfo{}, nil, nil, 0, 0, nil)
+	h := NewEventsHandler(cannedSnapshot{}, daemon.BuildInfo{}, nil, nil, 0, 0, nil)
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil)
 	w := &nonFlusherWriter{header: make(http.Header)}
 	h.ServeHTTP(w, r)
@@ -67,7 +67,7 @@ func TestEventsHandler_StreamingUnsupported(t *testing.T) {
 // --- eventsHandler ---
 
 func TestEventsHandler_HeartbeatOnly(t *testing.T) {
-	h := NewEventsHandler(cannedSnapshot{}, types.BuildInfo{}, nil, nil, 50*time.Millisecond, 0, nil)
+	h := NewEventsHandler(cannedSnapshot{}, daemon.BuildInfo{}, nil, nil, 50*time.Millisecond, 0, nil)
 	data := drainSSE(t, h, "/api/v1/events", ": heartbeat")
 	if !strings.Contains(data, ": heartbeat") {
 		t.Errorf("want heartbeat, got %q", data)
@@ -76,7 +76,7 @@ func TestEventsHandler_HeartbeatOnly(t *testing.T) {
 
 func TestEventsHandler_GraphEvent(t *testing.T) {
 	inv := make(chan struct{}, 1)
-	h := NewEventsHandler(cannedSnapshot{}, types.BuildInfo{}, nil, inv, 0, 0, nil)
+	h := NewEventsHandler(cannedSnapshot{}, daemon.BuildInfo{}, nil, inv, 0, 0, nil)
 	inv <- struct{}{}
 	data := drainSSE(t, h, "/api/v1/events", "event: graph")
 	if !strings.Contains(data, "event: graph") || !strings.Contains(data, `"seq":`) {
@@ -85,8 +85,8 @@ func TestEventsHandler_GraphEvent(t *testing.T) {
 }
 
 func TestEventsHandler_StatusEvent(t *testing.T) {
-	src := cannedSnapshot{report: types.StatusSnapshot{Pool: &types.StatusOutput{Capacity: 4, Running: 1}}}
-	h := NewEventsHandler(src, types.BuildInfo{Version: "1.2.3"}, nil, nil, 0, 50*time.Millisecond, nil)
+	src := cannedSnapshot{report: daemon.Snapshot{Pool: &daemon.Output{Capacity: 4, Running: 1}}}
+	h := NewEventsHandler(src, daemon.BuildInfo{Version: "1.2.3"}, nil, nil, 0, 50*time.Millisecond, nil)
 	data := drainSSE(t, h, "/api/v1/events", "event: status")
 
 	raw, err := base64.StdEncoding.DecodeString(sseDataLine(t, data))
@@ -113,7 +113,7 @@ func TestEventsHandler_StatusEvent(t *testing.T) {
 func TestEventsHandler_InvalidateClosed(t *testing.T) {
 	inv := make(chan struct{})
 	close(inv)
-	h := NewEventsHandler(cannedSnapshot{}, types.BuildInfo{}, nil, inv, 30*time.Millisecond, 0, nil)
+	h := NewEventsHandler(cannedSnapshot{}, daemon.BuildInfo{}, nil, inv, 30*time.Millisecond, 0, nil)
 	data := drainSSE(t, h, "/api/v1/events", ": heartbeat")
 	if !strings.Contains(data, ": heartbeat") {
 		t.Errorf("want heartbeat after invalidate close, got %q", data)
@@ -123,7 +123,7 @@ func TestEventsHandler_InvalidateClosed(t *testing.T) {
 // TestEventsHandler_MetricsError confirms a metrics-snapshot error suppresses the metrics frame
 // (no event: metrics) while heartbeats still flow.
 func TestEventsHandler_MetricsError(t *testing.T) {
-	h := NewEventsHandler(cannedSnapshot{}, types.BuildInfo{},
+	h := NewEventsHandler(cannedSnapshot{}, daemon.BuildInfo{},
 		func(context.Context) ([]byte, error) { return nil, io.ErrUnexpectedEOF },
 		nil, 30*time.Millisecond, 30*time.Millisecond, nil)
 	data := drainSSE(t, h, "/api/v1/events", ": heartbeat")
@@ -134,7 +134,7 @@ func TestEventsHandler_MetricsError(t *testing.T) {
 
 func TestEventsHandler_MetricsEvent(t *testing.T) {
 	want := []byte{0x0a, 0x02, 0x08, 0x01}
-	h := NewEventsHandler(cannedSnapshot{}, types.BuildInfo{}, func(context.Context) ([]byte, error) { return want, nil }, nil, 0, 50*time.Millisecond, nil)
+	h := NewEventsHandler(cannedSnapshot{}, daemon.BuildInfo{}, func(context.Context) ([]byte, error) { return want, nil }, nil, 0, 50*time.Millisecond, nil)
 	data := drainSSE(t, h, "/api/v1/events", "event: metrics")
 
 	raw, err := base64.StdEncoding.DecodeString(sseDataLine(t, data))

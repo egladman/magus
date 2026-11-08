@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"fmt"
 	"os"
@@ -82,7 +83,7 @@ func workspaceDir(t *testing.T) string {
 	return w.Root()
 }
 
-var testBuild = types.BuildInfo{Version: "v0.4.3-234", Commit: "00fd71e20"}
+var testBuild = daemon.BuildInfo{Version: "v0.4.3-234", Commit: "00fd71e20"}
 
 func TestServedNamesTheServedRootAndBuildOnEveryResult(t *testing.T) {
 	root := workspaceDir(t)

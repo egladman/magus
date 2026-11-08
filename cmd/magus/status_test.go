@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"bytes"
 	"context"
 	"errors"
@@ -54,7 +55,7 @@ func TestPrintSilentLeases(t *testing.T) {
 
 func TestStatusReportInlinesTheSnapshot(t *testing.T) {
 	report := statusReport{
-		StatusSnapshot: types.StatusSnapshot{PoolError: "no pool"},
+		Snapshot: daemon.Snapshot{PoolError: "no pool"},
 		SilentLeases:   []guard.SilentLease{{Lease: "job-a", Session: "s1", SilentSeconds: 2700}},
 	}
 	raw, err := json.Marshal(report)
@@ -74,7 +75,7 @@ func TestPrintStatusCompact(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	at := func(ago time.Duration) time.Time { return now.Add(-ago) }
 
-	assertCompact := func(name string, snapshot types.StatusSnapshot, want string) {
+	assertCompact := func(name string, snapshot daemon.Snapshot, want string) {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
 			printStatusCompact(&buf, snapshot, now)
@@ -83,56 +84,56 @@ func TestPrintStatusCompact(t *testing.T) {
 		})
 	}
 
-	server := &types.StatusServer{PID: 1}
+	server := &daemon.Server{PID: 1}
 	assertCompact("nothing running",
-		types.StatusSnapshot{PoolError: "no running magus proc server found"},
+		daemon.Snapshot{PoolError: "no running magus proc server found"},
 		"no broker · no server\n")
 
 	// Off is the setting, not an absence: a run under it never starts one.
 	assertCompact("the broker policy is off",
-		types.StatusSnapshot{BrokerPolicy: types.BrokerOff},
+		daemon.Snapshot{BrokerPolicy: types.BrokerOff},
 		"broker off · no server\n")
 
 	assertCompact("a broker that measured the host shows its seated slots",
-		types.StatusSnapshot{Broker: &types.StatusBroker{Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 3}}},
+		daemon.Snapshot{Broker: &daemon.Broker{Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 3}}},
 		"broker 3/8 slots · no server\n")
 
 	assertCompact("server idle",
-		types.StatusSnapshot{Server: server, Pool: &types.StatusOutput{Capacity: 8, Running: 0}},
+		daemon.Snapshot{Server: server, Pool: &daemon.Output{Capacity: 8, Running: 0}},
 		"no broker · server up · pool 0/8 idle\n")
 
 	assertCompact("a per-process pool without a server",
-		types.StatusSnapshot{Pool: &types.StatusOutput{
+		daemon.Snapshot{Pool: &daemon.Output{
 			Capacity: 8, Running: 1,
-			RunningTargets: []types.StatusRunningTarget{
+			RunningTargets: []daemon.RunningTarget{
 				{Args: []string{"test", "web"}, Workspace: "/w", StartedAt: at(400 * time.Millisecond)},
 			},
 		}},
 		"no broker · no server · pool 1/8 running · web:test(0.4s)\n")
 
 	assertCompact("running with targets, sorted oldest first",
-		types.StatusSnapshot{Server: server, Pool: &types.StatusOutput{
+		daemon.Snapshot{Server: server, Pool: &daemon.Output{
 			Capacity: 8, Running: 3,
-			RunningTargets: []types.StatusRunningTarget{
+			RunningTargets: []daemon.RunningTarget{
 				{Args: []string{"test", "ui"}, Workspace: "/w", StartedAt: at(500 * time.Millisecond)},
 				{Args: []string{"build", "api"}, Workspace: "/w", StartedAt: at(2100 * time.Millisecond)},
 				{Args: []string{"lint", "ledger"}, Workspace: "/w", StartedAt: at(300 * time.Millisecond)},
 			},
-			Workspaces: []types.StatusWorkspace{{Root: "/w", LastAccess: now}},
+			Workspaces: []daemon.Workspace{{Root: "/w", LastAccess: now}},
 		}},
 		"no broker · server up · pool 3/8 running · api:build(2.1s) · ui:test(0.5s) · ledger:lint(0.3s) · 1 workspace\n")
 
 	assertCompact("queued and overflow running",
-		types.StatusSnapshot{Server: server, Pool: &types.StatusOutput{
+		daemon.Snapshot{Server: server, Pool: &daemon.Output{
 			Capacity: 8, Running: 8, Queued: 2,
-			RunningTargets: []types.StatusRunningTarget{
+			RunningTargets: []daemon.RunningTarget{
 				{Args: []string{"build", "api"}, Workspace: "/w", StartedAt: at(15 * time.Second)},
 				{Args: []string{"test", "ui"}, Workspace: "/w", StartedAt: at(4 * time.Second)},
 				{Args: []string{"lint", "ledger"}, Workspace: "/w", StartedAt: at(2 * time.Second)},
 				{Args: []string{"build", "store"}, Workspace: "/w", StartedAt: at(1 * time.Second)},
 				{Args: []string{"test", "search"}, Workspace: "/w", StartedAt: at(900 * time.Millisecond)},
 			},
-			Workspaces: []types.StatusWorkspace{
+			Workspaces: []daemon.Workspace{
 				{Root: "/w1", LastAccess: now},
 				{Root: "/w2", LastAccess: now},
 			},
@@ -140,9 +141,9 @@ func TestPrintStatusCompact(t *testing.T) {
 		"no broker · server up · pool 8/8 running +2 queued · api:build(15s) · ui:test(4.0s) · ledger:lint(2.0s) · +2 more · 2 workspaces\n")
 
 	assertCompact("multi-workspace running prefixes ws",
-		types.StatusSnapshot{Server: server, Pool: &types.StatusOutput{
+		daemon.Snapshot{Server: server, Pool: &daemon.Output{
 			Capacity: 4, Running: 2,
-			RunningTargets: []types.StatusRunningTarget{
+			RunningTargets: []daemon.RunningTarget{
 				{Args: []string{"build", "api"}, Workspace: "/srv/alpha", StartedAt: at(1 * time.Second)},
 				{Args: []string{"test", "ui"}, Workspace: "/srv/beta", StartedAt: at(500 * time.Millisecond)},
 			},
@@ -150,10 +151,10 @@ func TestPrintStatusCompact(t *testing.T) {
 		"no broker · server up · pool 2/4 running · alpha/api:build(1.0s) · beta/ui:test(0.5s)\n")
 
 	assertCompact("the broker's services report activity and dependents",
-		types.StatusSnapshot{
+		daemon.Snapshot{
 			Server: server,
-			Pool:   &types.StatusOutput{Capacity: 4},
-			Broker: &types.StatusBroker{Services: []types.StatusService{
+			Pool:   &daemon.Output{Capacity: 4},
+			Broker: &daemon.Broker{Services: []daemon.Service{
 				{State: "running", Dependents: 2},
 				{State: "idle", Dependents: 0},
 			}},
@@ -161,9 +162,9 @@ func TestPrintStatusCompact(t *testing.T) {
 		"broker up · server up · pool 0/4 idle · services 1/2 active, 2 dependents\n")
 
 	assertCompact("unparsable args fall back to ?:?",
-		types.StatusSnapshot{Server: server, Pool: &types.StatusOutput{
+		daemon.Snapshot{Server: server, Pool: &daemon.Output{
 			Capacity: 4, Running: 1,
-			RunningTargets: []types.StatusRunningTarget{{Args: []string{}, Workspace: "/w", StartedAt: at(100 * time.Millisecond)}},
+			RunningTargets: []daemon.RunningTarget{{Args: []string{}, Workspace: "/w", StartedAt: at(100 * time.Millisecond)}},
 		}},
 		"no broker · server up · pool 1/4 running · ?:?(0.1s)\n")
 }
@@ -216,9 +217,9 @@ func TestClampStatusWatchFloorsANegativeInterval(t *testing.T) {
 func TestPrintStatusCompactTruncatesLongLabel(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	long := strings.Repeat("x", 80)
-	r := types.StatusSnapshot{Pool: &types.StatusOutput{
+	r := daemon.Snapshot{Pool: &daemon.Output{
 		Capacity: 4, Running: 1,
-		RunningTargets: []types.StatusRunningTarget{{
+		RunningTargets: []daemon.RunningTarget{{
 			Args:      []string{"build", long},
 			Workspace: "/w",
 			StartedAt: now.Add(-time.Second),
@@ -324,7 +325,7 @@ func TestParseRunning(t *testing.T) {
 }
 
 func TestDrawRunningTreeGrouping(t *testing.T) {
-	running := []types.StatusRunningTarget{
+	running := []daemon.RunningTarget{
 		{Args: []string{"build", "api"}, Workspace: "/home/u/foo"},
 		{Args: []string{"test", "api"}, Workspace: "/home/u/foo"},
 		{Args: []string{"test", "pkg/x"}, Workspace: "/home/u/foo"},
@@ -364,7 +365,7 @@ func TestFormatDur(t *testing.T) {
 
 func TestDrawRunningTreeDuration(t *testing.T) {
 	now := time.Now()
-	running := []types.StatusRunningTarget{
+	running := []daemon.RunningTarget{
 		{Args: []string{"build", "api"}, Workspace: "/home/u/foo", StartedAt: now.Add(-3*time.Second - 400*time.Millisecond)},
 		{Args: []string{"test", "api"}, Workspace: "/home/u/foo", StartedAt: now.Add(-45 * time.Second)},
 	}
@@ -376,7 +377,7 @@ func TestDrawRunningTreeDuration(t *testing.T) {
 }
 
 func TestDrawRunningTreeSingleWorkspaceCollapses(t *testing.T) {
-	running := []types.StatusRunningTarget{
+	running := []daemon.RunningTarget{
 		{Args: []string{"build", "api"}, Workspace: "/home/u/foo"},
 		{Args: []string{"test", "api"}, Workspace: "/home/u/foo"},
 	}
@@ -396,7 +397,7 @@ func TestDrawRunningTreeSingleWorkspaceCollapses(t *testing.T) {
 // works on it.
 func TestBrokerRowsNameEveryClaim(t *testing.T) {
 	var buf bytes.Buffer
-	printBrokerRows(&buf, types.StatusBroker{
+	printBrokerRows(&buf, daemon.Broker{
 		PID: 48213,
 		Capacity: types.MachineSnapshot{
 			BudgetMB: 48 << 10, HeldMB: 10 << 10, BudgetSlots: 8, HeldSlots: 6,
@@ -405,7 +406,7 @@ func TestBrokerRowsNameEveryClaim(t *testing.T) {
 				{Project: "docs", Target: "ci", PID: 41999, Slots: 2, Dir: "/tree/hardening"},
 			},
 		},
-		Services: []types.StatusService{{Label: "postgres-15", State: types.ServiceRunning, Dependents: 2, Ports: []string{"5432"}}},
+		Services: []daemon.Service{{Label: "postgres-15", State: daemon.ServiceRunning, Dependents: 2, Ports: []string{"5432"}}},
 	}, types.BrokerRequired, time.Now())
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	require.Len(t, lines, 5)
@@ -423,7 +424,7 @@ func TestBrokerRowsNameEveryClaim(t *testing.T) {
 func TestBrokerRowsNameOwnersWaitersAndRefusals(t *testing.T) {
 	now := time.Now()
 	var buf bytes.Buffer
-	printBrokerRows(&buf, types.StatusBroker{
+	printBrokerRows(&buf, daemon.Broker{
 		PID: 48213,
 		Capacity: types.MachineSnapshot{
 			BudgetSlots: 8, HeldSlots: 8,
@@ -452,7 +453,7 @@ func TestBrokerRowsNameOwnersWaitersAndRefusals(t *testing.T) {
 // A request the broker holds parked shows as its own row, after the claims keeping it out.
 func TestBrokerRowsNameEveryParkedRequest(t *testing.T) {
 	var buf bytes.Buffer
-	printBrokerRows(&buf, types.StatusBroker{
+	printBrokerRows(&buf, daemon.Broker{
 		PID: 48213,
 		Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 8, Waiting: []types.MachineWaiter{
 			{Project: "docs", Target: "lint", PID: 41300, MemoryMB: 2 << 10, Slots: 2, Dir: "/tree/polish", Command: "magus run lint docs"},
@@ -476,7 +477,7 @@ func TestHolderMemTextNamesTheSizing(t *testing.T) {
 // where its figure came from, and a small one adds no row.
 func TestStatusBreaksDownOnlyHoldersOverAQuarterOfTheBudget(t *testing.T) {
 	var buf bytes.Buffer
-	printBrokerRows(&buf, types.StatusBroker{
+	printBrokerRows(&buf, daemon.Broker{
 		PID: 1,
 		Capacity: types.MachineSnapshot{BudgetMB: 16 << 10, BudgetSlots: 8, Holders: []types.MachineClaimant{
 			{Project: ".", Target: "test", PID: 10, MemoryMB: 5 << 10, Sizing: types.MemorySizing{Samples: 54}},
@@ -491,7 +492,7 @@ func TestStatusBreaksDownOnlyHoldersOverAQuarterOfTheBudget(t *testing.T) {
 // question people open status to ask, and a silent section reads as a missing feature.
 func TestBrokerRowsIdle(t *testing.T) {
 	var idle bytes.Buffer
-	printBrokerRows(&idle, types.StatusBroker{PID: 7, Capacity: types.MachineSnapshot{BudgetMB: 48 << 10, BudgetSlots: 8}}, "", time.Now())
+	printBrokerRows(&idle, daemon.Broker{PID: 7, Capacity: types.MachineSnapshot{BudgetMB: 48 << 10, BudgetSlots: 8}}, "", time.Now())
 	assert.Contains(t, idle.String(), "slots 0/8  mem 0 MiB/48.0 GiB  broker: best-effort")
 	assert.NotContains(t, idle.String(), "held")
 }
@@ -585,7 +586,7 @@ func TestBuildMCPEndpointStatus(t *testing.T) {
 }
 
 func TestPrintMCPEndpointStatus(t *testing.T) {
-	render := func(m *types.MCPEndpointStatus) string {
+	render := func(m *daemon.MCPEndpoint) string {
 		var b strings.Builder
 		printMCPEndpointStatus(&b, m)
 		return b.String()
@@ -595,18 +596,18 @@ func TestPrintMCPEndpointStatus(t *testing.T) {
 		assert.Empty(t, render(nil))
 	})
 	t.Run("serving-shows-url-and-state", func(t *testing.T) {
-		out := render(&types.MCPEndpointStatus{Enabled: true, URL: "http://127.0.0.1:7391/mcp", Reachable: true, State: "serving"})
+		out := render(&daemon.MCPEndpoint{Enabled: true, URL: "http://127.0.0.1:7391/mcp", Reachable: true, State: "serving"})
 		assert.Contains(t, out, "mcp endpoint")
 		assert.Contains(t, out, "http://127.0.0.1:7391/mcp")
 		assert.Contains(t, out, "serving")
 	})
 	t.Run("unreachable-shows-note", func(t *testing.T) {
-		out := render(&types.MCPEndpointStatus{Enabled: true, URL: "http://127.0.0.1:7391/mcp", State: "unreachable", Note: "start the server: magus server start"})
+		out := render(&daemon.MCPEndpoint{Enabled: true, URL: "http://127.0.0.1:7391/mcp", State: "unreachable", Note: "start the server: magus server start"})
 		assert.Contains(t, out, "unreachable")
 		assert.Contains(t, out, "magus server start")
 	})
 	t.Run("disabled-omits-url", func(t *testing.T) {
-		out := render(&types.MCPEndpointStatus{State: "disabled", Note: "MCP is disabled (mcp.enabled=false); no agent tools are served."})
+		out := render(&daemon.MCPEndpoint{State: "disabled", Note: "MCP is disabled (mcp.enabled=false); no agent tools are served."})
 		assert.Contains(t, out, "disabled")
 		assert.NotContains(t, out, "url")
 	})
@@ -670,22 +671,22 @@ func TestParseProbeKinds(t *testing.T) {
 
 func TestEvaluateMCPHealth(t *testing.T) {
 	t.Run("serving-passes", func(t *testing.T) {
-		ok, reason := evaluateMCPHealth(&types.MCPEndpointStatus{Reachable: true, State: "serving", URL: "http://127.0.0.1:7391/mcp"})
+		ok, reason := evaluateMCPHealth(&daemon.MCPEndpoint{Reachable: true, State: "serving", URL: "http://127.0.0.1:7391/mcp"})
 		assert.True(t, ok)
 		assert.Contains(t, reason, "serving")
 	})
 	t.Run("not-ready-passes", func(t *testing.T) {
 		// The endpoint is up; a liveness/ensure check should not restart the server.
-		ok, _ := evaluateMCPHealth(&types.MCPEndpointStatus{Reachable: true, State: "not-ready", URL: "http://127.0.0.1:7391/mcp"})
+		ok, _ := evaluateMCPHealth(&daemon.MCPEndpoint{Reachable: true, State: "not-ready", URL: "http://127.0.0.1:7391/mcp"})
 		assert.True(t, ok)
 	})
 	t.Run("unreachable-fails-with-note", func(t *testing.T) {
-		ok, reason := evaluateMCPHealth(&types.MCPEndpointStatus{State: "unreachable", Note: "start the server: magus server start"})
+		ok, reason := evaluateMCPHealth(&daemon.MCPEndpoint{State: "unreachable", Note: "start the server: magus server start"})
 		assert.False(t, ok)
 		assert.Contains(t, reason, "magus server start")
 	})
 	t.Run("disabled-fails", func(t *testing.T) {
-		ok, reason := evaluateMCPHealth(&types.MCPEndpointStatus{State: "disabled", Note: "MCP is disabled (mcp.enabled=false); no agent tools are served."})
+		ok, reason := evaluateMCPHealth(&daemon.MCPEndpoint{State: "disabled", Note: "MCP is disabled (mcp.enabled=false); no agent tools are served."})
 		assert.False(t, ok)
 		assert.Contains(t, reason, "disabled")
 	})
@@ -694,7 +695,7 @@ func TestEvaluateMCPHealth(t *testing.T) {
 		assert.False(t, ok)
 	})
 	t.Run("unreachable-without-note-falls-back-to-state", func(t *testing.T) {
-		ok, reason := evaluateMCPHealth(&types.MCPEndpointStatus{State: "unreachable"})
+		ok, reason := evaluateMCPHealth(&daemon.MCPEndpoint{State: "unreachable"})
 		assert.False(t, ok)
 		assert.Equal(t, "mcp endpoint unreachable", reason)
 	})
@@ -702,8 +703,8 @@ func TestEvaluateMCPHealth(t *testing.T) {
 
 // recordingStatus is a statusFunc that counts calls and returns a fixed snapshot/err, so
 // tests can assert how many times (if at all) the server socket was dialed.
-func recordingStatus(calls *int, out *types.StatusOutput, err error) statusFunc {
-	return func(context.Context) (*types.StatusOutput, error) {
+func recordingStatus(calls *int, out *daemon.Output, err error) statusFunc {
+	return func(context.Context) (*daemon.Output, error) {
 		*calls++
 		return out, err
 	}
@@ -711,7 +712,7 @@ func recordingStatus(calls *int, out *types.StatusOutput, err error) statusFunc 
 
 func TestEvaluateProbes(t *testing.T) {
 	ctx := context.Background()
-	aliveServer := &types.StatusOutput{ParentPID: 42, Workspaces: []types.StatusWorkspace{{Root: "/ws"}}}
+	aliveServer := &daemon.Output{ParentPID: 42, Workspaces: []daemon.Workspace{{Root: "/ws"}}}
 
 	t.Run("liveness-alone-passes-and-dials-once", func(t *testing.T) {
 		calls := 0
@@ -804,8 +805,8 @@ func TestRenderProbeResults(t *testing.T) {
 func TestPrintStatusTextRendersMCPEndpoint(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
-	r := types.StatusSnapshot{
-		MCPEndpoint: &types.MCPEndpointStatus{Enabled: true, URL: "http://127.0.0.1:7391/mcp", Reachable: true, State: "serving"},
+	r := daemon.Snapshot{
+		MCPEndpoint: &daemon.MCPEndpoint{Enabled: true, URL: "http://127.0.0.1:7391/mcp", Reachable: true, State: "serving"},
 	}
 	printStatusText(f, r, false, 0)
 	require.NoError(t, f.Close())
@@ -824,20 +825,20 @@ func TestPrintStatusTextRendersMCPEndpoint(t *testing.T) {
 func TestPrintStatusTextFullSnapshot(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
-	r := types.StatusSnapshot{
-		Telemetry: types.TelemetryStatus{Note: "telemetry is disabled."},
-		Cache:     types.CacheStatus{Dir: "/cache", SizeMB: 10},
-		Pool: &types.StatusOutput{
+	r := daemon.Snapshot{
+		Telemetry: daemon.Telemetry{Note: "telemetry is disabled."},
+		Cache:     daemon.Cache{Dir: "/cache", SizeMB: 10},
+		Pool: &daemon.Output{
 			ParentPID: 4242, Capacity: 8, Running: 1,
-			RunningTargets: []types.StatusRunningTarget{{Args: []string{"run", "build", "web"}, Workspace: "/repo"}},
-			Workspaces:     []types.StatusWorkspace{{Root: "/repo"}},
+			RunningTargets: []daemon.RunningTarget{{Args: []string{"run", "build", "web"}, Workspace: "/repo"}},
+			Workspaces:     []daemon.Workspace{{Root: "/repo"}},
 		},
-		MCPEndpoint:  &types.MCPEndpointStatus{Enabled: true, URL: "http://127.0.0.1:7391/mcp", Reachable: true, State: "serving"},
+		MCPEndpoint:  &daemon.MCPEndpoint{Enabled: true, URL: "http://127.0.0.1:7391/mcp", Reachable: true, State: "serving"},
 		BrokerPolicy: types.BrokerBestEffort,
-		Broker: &types.StatusBroker{PID: 48213, Services: []types.StatusService{
+		Broker: &daemon.Broker{PID: 48213, Services: []daemon.Service{
 			{ID: "service-1", Label: "postgres", State: "running", Dependents: 2},
 		}},
-		Server: &types.StatusServer{PID: 4242},
+		Server: &daemon.Server{PID: 4242},
 	}
 	printStatusText(f, r, false, 0)
 	require.NoError(t, f.Close())
@@ -859,7 +860,7 @@ func TestPrintStatusTextFullSnapshot(t *testing.T) {
 func TestPrintStatusTextNamesWhatIsNotRunning(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
-	printStatusText(f, types.StatusSnapshot{BrokerPolicy: types.BrokerRequired}, false, 0)
+	printStatusText(f, daemon.Snapshot{BrokerPolicy: types.BrokerRequired}, false, 0)
 	require.NoError(t, f.Close())
 	body, err := os.ReadFile(f.Name())
 	require.NoError(t, err)
@@ -870,7 +871,7 @@ func TestPrintStatusTextNamesWhatIsNotRunning(t *testing.T) {
 func TestPrintStatusTextDoesNotCallActiveLocalWorkIdle(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
-	printStatusText(f, types.StatusSnapshot{Pool: &types.StatusOutput{
+	printStatusText(f, daemon.Snapshot{Pool: &daemon.Output{
 		Capacity: 8, Running: 1,
 	}}, false, 0)
 	require.NoError(t, f.Close())
@@ -898,32 +899,32 @@ func TestApplyStatusPools(t *testing.T) {
 	const sockA, sockB = "unix:///run/magus-111.sock", "unix:///run/magus-222.sock"
 	servers := map[string]*proc.StatusReply{
 		sockA: {ParentPID: 111, Capacity: 8, Running: 3},
-		sockB: {ParentPID: 222, Capacity: 4, Running: 4, Server: &types.StatusServer{PID: 222}},
+		sockB: {ParentPID: 222, Capacity: 4, Running: 4, Server: &daemon.Server{PID: 222}},
 	}
 
 	t.Run("one server fills pool and leaves the list empty", func(t *testing.T) {
-		snapshot := types.StatusSnapshot{}
+		snapshot := daemon.Snapshot{}
 		applyStatusPools(ctx, &snapshot, []string{sockA}, answeringServers(servers))
 		require.NotNil(t, snapshot.Pool)
 		// Available is 8 capacity less 3 running.
-		assert.Equal(t, types.StatusOutput{ParentPID: 111, Socket: sockA, Capacity: 8, Running: 3, Available: 5}, *snapshot.Pool)
+		assert.Equal(t, daemon.Output{ParentPID: 111, Socket: sockA, Capacity: 8, Running: 3, Available: 5}, *snapshot.Pool)
 		assert.Empty(t, snapshot.Pools, "a single server is not repeated as a list")
 		assert.Empty(t, snapshot.PoolError)
 	})
 
 	t.Run("the reply that reports itself as the server fills the server section", func(t *testing.T) {
-		snapshot := types.StatusSnapshot{}
+		snapshot := daemon.Snapshot{}
 		applyStatusPools(ctx, &snapshot, []string{sockA, sockB}, answeringServers(servers))
 		require.NotNil(t, snapshot.Server)
 		assert.Equal(t, 222, snapshot.Server.PID)
 
-		alone := types.StatusSnapshot{}
+		alone := daemon.Snapshot{}
 		applyStatusPools(ctx, &alone, []string{sockA}, answeringServers(servers))
 		assert.Nil(t, alone.Server, "a per-process pool is never reported as the server")
 	})
 
 	t.Run("two servers report as two entries, never an error", func(t *testing.T) {
-		snapshot := types.StatusSnapshot{}
+		snapshot := daemon.Snapshot{}
 		applyStatusPools(ctx, &snapshot, []string{sockA, sockB}, answeringServers(servers))
 		assert.Empty(t, snapshot.PoolError, "more than one server is reported, not refused")
 		require.Len(t, snapshot.Pools, 2)
@@ -935,7 +936,7 @@ func TestApplyStatusPools(t *testing.T) {
 	})
 
 	t.Run("a server that died is dropped, the rest still report", func(t *testing.T) {
-		snapshot := types.StatusSnapshot{}
+		snapshot := daemon.Snapshot{}
 		applyStatusPools(ctx, &snapshot, []string{"unix:///run/magus-gone.sock", sockB}, answeringServers(servers))
 		assert.Empty(t, snapshot.PoolError)
 		require.NotNil(t, snapshot.Pool)
@@ -944,7 +945,7 @@ func TestApplyStatusPools(t *testing.T) {
 	})
 
 	t.Run("nothing answered reports why", func(t *testing.T) {
-		snapshot := types.StatusSnapshot{}
+		snapshot := daemon.Snapshot{}
 		applyStatusPools(ctx, &snapshot, []string{"unix:///run/magus-gone.sock"}, answeringServers(servers))
 		assert.Nil(t, snapshot.Pool)
 		assert.Contains(t, snapshot.PoolError, "magus-gone.sock")
@@ -1000,7 +1001,7 @@ func TestBuildConfigStatusConcurrency(t *testing.T) {
 			t.Setenv("MAGUS_CONCURRENCY", tc.env)
 			got := buildConfigStatus(config.Config{Concurrency: tc.configured})
 			// The configured value is kept alongside the effective one.
-			assert.Equal(t, types.StatusConcurrency{Configured: tc.configured, Effective: tc.want}, got.Concurrency)
+			assert.Equal(t, daemon.Concurrency{Configured: tc.configured, Effective: tc.want}, got.Concurrency)
 		})
 	}
 }
@@ -1010,11 +1011,11 @@ func TestBuildConfigStatusConcurrency(t *testing.T) {
 func TestPrintStatusTextListsEveryProcServer(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
-	pools := []types.StatusOutput{
+	pools := []daemon.Output{
 		{ParentPID: 111, Socket: "unix:///run/magus-111.sock", Capacity: 8, Running: 3, Available: 5},
 		{ParentPID: 222, Socket: "unix:///run/magus-222.sock", Capacity: 4, Running: 4},
 	}
-	printStatusText(f, types.StatusSnapshot{Pool: &pools[0], Pools: pools}, false, 0)
+	printStatusText(f, daemon.Snapshot{Pool: &pools[0], Pools: pools}, false, 0)
 	require.NoError(t, f.Close())
 	body, err := os.ReadFile(f.Name())
 	require.NoError(t, err)
@@ -1035,9 +1036,9 @@ func TestPrintStatusTextListsEveryProcServer(t *testing.T) {
 func TestPrintStatusTextReportsSlotsAndConcurrency(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
-	r := types.StatusSnapshot{
-		Config: types.StatusConfig{Concurrency: types.StatusConcurrency{Effective: 8}},
-		Pool:   &types.StatusOutput{ParentPID: 4242, Capacity: 8, Running: 2, Available: 6},
+	r := daemon.Snapshot{
+		Config: daemon.Config{Concurrency: daemon.Concurrency{Effective: 8}},
+		Pool:   &daemon.Output{ParentPID: 4242, Capacity: 8, Running: 2, Available: 6},
 	}
 	printStatusText(f, r, false, 0)
 	require.NoError(t, f.Close())
@@ -1054,18 +1055,18 @@ func TestPrintStatusTextReportsSlotsAndConcurrency(t *testing.T) {
 
 func TestCompactMCPToken(t *testing.T) {
 	assert.Empty(t, compactMCPToken(nil))
-	assert.Empty(t, compactMCPToken(&types.MCPEndpointStatus{State: "serving"}), "serving is the steady state; omitted from the compact line")
-	assert.Equal(t, "mcp unreachable", compactMCPToken(&types.MCPEndpointStatus{State: "unreachable"}))
-	assert.Equal(t, "mcp not-ready", compactMCPToken(&types.MCPEndpointStatus{State: "not-ready"}))
+	assert.Empty(t, compactMCPToken(&daemon.MCPEndpoint{State: "serving"}), "serving is the steady state; omitted from the compact line")
+	assert.Equal(t, "mcp unreachable", compactMCPToken(&daemon.MCPEndpoint{State: "unreachable"}))
+	assert.Equal(t, "mcp not-ready", compactMCPToken(&daemon.MCPEndpoint{State: "not-ready"}))
 }
 
 // statusFixture is one snapshot carrying every optional section, so the renderers below are
 // exercised against the same data instead of each against a fixture shaped to suit it.
 // now anchors the durations: every StartedAt is an offset from it, so the rendered clock
 // is the same on every run.
-func statusFixture(now time.Time) types.StatusSnapshot {
-	return types.StatusSnapshot{
-		Telemetry: types.TelemetryStatus{
+func statusFixture(now time.Time) daemon.Snapshot {
+	return daemon.Snapshot{
+		Telemetry: daemon.Telemetry{
 			Enabled:     true,
 			Endpoint:    "localhost:4317",
 			Protocol:    "grpc",
@@ -1074,54 +1075,54 @@ func statusFixture(now time.Time) types.StatusSnapshot {
 			SampleRatio: 0.25,
 			Note:        "traces are sampled",
 		},
-		Cache: types.CacheStatus{Immutable: true, Dir: "/tmp/magus-cache", SizeMB: 512},
-		Build: types.BuildStatus{SelfUpdate: true},
-		Config: types.StatusConfig{
-			Concurrency:   types.StatusConcurrency{Configured: 8, Effective: 8},
+		Cache: daemon.Cache{Immutable: true, Dir: "/tmp/magus-cache", SizeMB: 512},
+		Build: daemon.Build{SelfUpdate: true},
+		Config: daemon.Config{
+			Concurrency:   daemon.Concurrency{Configured: 8, Effective: 8},
 			DefaultCharms: []string{"rw"},
 		},
-		Pool: &types.StatusOutput{
+		Pool: &daemon.Output{
 			ParentPID: 4242,
 			Version:   "v1.2.3",
 			Capacity:  4,
 			Running:   2,
 			Available: 2,
 			Queued:    3,
-			RunningTargets: []types.StatusRunningTarget{
+			RunningTargets: []daemon.RunningTarget{
 				{Args: []string{"run", "build", "web"}, Workspace: "/repos/alpha", StartedAt: now.Add(-90 * time.Second), Step: "tsc --noEmit"},
 				{Args: []string{"run", "test", "api"}, Workspace: "/repos/beta", StartedAt: now.Add(-3 * time.Second)},
 				{Args: []string{"--totally", "--flags"}, Workspace: "/repos/beta"},
 			},
-			Workspaces: []types.StatusWorkspace{{Root: "/repos/alpha", LastAccess: now.Add(-time.Minute)}},
+			Workspaces: []daemon.Workspace{{Root: "/repos/alpha", LastAccess: now.Add(-time.Minute)}},
 		},
-		Pools: []types.StatusOutput{
+		Pools: []daemon.Output{
 			{ParentPID: 4242, Capacity: 4, Running: 2, Available: 2, Socket: "unix:///tmp/a.sock"},
 			{ParentPID: 5353, Capacity: 2, Running: 0, Available: 2, Socket: "unix:///tmp/b.sock"},
 		},
 		BrokerPolicy: types.BrokerBestEffort,
-		Broker: &types.StatusBroker{
+		Broker: &daemon.Broker{
 			PID: 48213, Protocol: 1, Socket: "unix:///run/magus/" + broker.SocketName, StartTime: now.Add(-time.Hour),
 			Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 2, BudgetMB: 4096, HeldMB: 1024},
-			Services: []types.StatusService{
-				{ID: "svc-db", Label: "postgres", Command: "docker compose up db", Ports: []string{"5432"}, State: types.ServiceRunning, Dependents: 2},
+			Services: []daemon.Service{
+				{ID: "svc-db", Label: "postgres", Command: "docker compose up db", Ports: []string{"5432"}, State: daemon.ServiceRunning, Dependents: 2},
 				{ID: "svc-bare"},
 			},
 			IdleExitSeconds: 600,
 		},
-		Server: &types.StatusServer{
+		Server: &daemon.Server{
 			PID: 4242, Socket: "unix:///run/magus/server.sock", StartTime: now.Add(-2 * time.Hour),
-			Listeners: []types.StatusListener{{Kind: types.ListenerHTTP, Address: "127.0.0.1:7777"}},
+			Listeners: []daemon.Listener{{Kind: daemon.ListenerHTTP, Address: "127.0.0.1:7777"}},
 			Watch:     []string{"/repos/alpha"},
 		},
 		SymbolIndexes: []types.SymbolIndexStatus{
 			{Project: types.ProjectRef{Path: "web"}, Language: "typescript", Freshness: types.SymbolIndexFresh},
 			{Project: types.ProjectRef{Path: ".", Dir: "/repos/named-root"}, Freshness: types.SymbolIndexNotBuilt},
 		},
-		Locks: []types.StatusLock{
+		Locks: []daemon.Lock{
 			{Project: "web", PID: 999, Command: "magus run build", AcquireTime: now.Add(-2 * time.Hour)},
 			{Project: "."},
 		},
-		MCPEndpoint: &types.MCPEndpointStatus{Enabled: true, URL: "http://127.0.0.1:7777/mcp", State: "serving"},
+		MCPEndpoint: &daemon.MCPEndpoint{Enabled: true, URL: "http://127.0.0.1:7777/mcp", State: "serving"},
 	}
 }
 
@@ -1178,7 +1179,7 @@ func TestPrintStatusTextRendersEverySection(t *testing.T) {
 
 func TestPrintStatusTextOmitsWhatWasNotMeasured(t *testing.T) {
 	var buf bytes.Buffer
-	printStatusText(&buf, types.StatusSnapshot{}, false, 0)
+	printStatusText(&buf, daemon.Snapshot{}, false, 0)
 	out := buf.String()
 
 	assert.Contains(t, out, "broker   -      not running")
@@ -1196,14 +1197,14 @@ func TestPrintStatusTextOmitsWhatWasNotMeasured(t *testing.T) {
 func TestPrintStatusTextPoolWithoutTargetDetail(t *testing.T) {
 	t.Run("idle", func(t *testing.T) {
 		var buf bytes.Buffer
-		printStatusText(&buf, types.StatusSnapshot{Pool: &types.StatusOutput{Capacity: 4}}, false, 0)
+		printStatusText(&buf, daemon.Snapshot{Pool: &daemon.Output{Capacity: 4}}, false, 0)
 		assert.Contains(t, buf.String(), "nothing running")
 		assert.Contains(t, buf.String(), "pool pid 0")
 	})
 
 	t.Run("busy but blind", func(t *testing.T) {
 		var buf bytes.Buffer
-		printStatusText(&buf, types.StatusSnapshot{Pool: &types.StatusOutput{Capacity: 4, Running: 2}}, false, 0)
+		printStatusText(&buf, daemon.Snapshot{Pool: &daemon.Output{Capacity: 4, Running: 2}}, false, 0)
 		assert.Contains(t, buf.String(), "local work active; detailed target data unavailable")
 	})
 }
@@ -1216,12 +1217,12 @@ func TestPrintStatusTextVerboseAddsTheBuildBlock(t *testing.T) {
 
 	var quiet bytes.Buffer
 	global.verbose = 0
-	printStatusText(&quiet, types.StatusSnapshot{}, false, 0)
+	printStatusText(&quiet, daemon.Snapshot{}, false, 0)
 	assert.NotContains(t, quiet.String(), "selfupdate")
 
 	var loud bytes.Buffer
 	global.verbose = 1
-	printStatusText(&loud, types.StatusSnapshot{Build: types.BuildStatus{SelfUpdate: true}}, false, 0)
+	printStatusText(&loud, daemon.Snapshot{Build: daemon.Build{SelfUpdate: true}}, false, 0)
 	assert.Contains(t, loud.String(), "selfupdate")
 	assert.Contains(t, loud.String(), "engine")
 }
@@ -1232,7 +1233,7 @@ func TestPrintStatusTextVerboseAddsTheBuildBlock(t *testing.T) {
 func TestDrawPoolGridDistinguishesEverySlotKind(t *testing.T) {
 	t.Run("oversubscribed pool", func(t *testing.T) {
 		var buf bytes.Buffer
-		pool := &types.StatusOutput{ParentPID: 7, Version: "v9", Capacity: 12, Running: 2, Available: 10, Queued: 1}
+		pool := &daemon.Output{ParentPID: 7, Version: "v9", Capacity: 12, Running: 2, Available: 10, Queued: 1}
 		drawPoolGrid(&buf, pool, 4, 0)
 		out := buf.String()
 
@@ -1250,7 +1251,7 @@ func TestDrawPoolGridDistinguishesEverySlotKind(t *testing.T) {
 
 	t.Run("machine wider than the pool", func(t *testing.T) {
 		var buf bytes.Buffer
-		drawPoolGrid(&buf, &types.StatusOutput{Capacity: 2, Running: 1, Available: 1}, 8, 3)
+		drawPoolGrid(&buf, &daemon.Output{Capacity: 2, Running: 1, Available: 1}, 8, 3)
 		out := buf.String()
 
 		assert.Contains(t, out, "pool")
@@ -1264,13 +1265,13 @@ func TestDrawPoolGridDistinguishesEverySlotKind(t *testing.T) {
 
 	t.Run("no slots at all draws nothing", func(t *testing.T) {
 		var buf bytes.Buffer
-		drawPoolGrid(&buf, &types.StatusOutput{}, 0, 0)
+		drawPoolGrid(&buf, &daemon.Output{}, 0, 0)
 		assert.Empty(t, buf.String())
 	})
 
 	t.Run("running targets get the tree and a spinner frame", func(t *testing.T) {
 		var buf bytes.Buffer
-		pool := &types.StatusOutput{Capacity: 2, Running: 1, RunningTargets: []types.StatusRunningTarget{
+		pool := &daemon.Output{Capacity: 2, Running: 1, RunningTargets: []daemon.RunningTarget{
 			{Args: []string{"run", "build", "web"}, Workspace: "/repos/alpha"},
 		}}
 		drawPoolGrid(&buf, pool, 2, 1)
@@ -1283,7 +1284,7 @@ func TestDrawPoolGridDistinguishesEverySlotKind(t *testing.T) {
 }
 
 func TestPoolHeader(t *testing.T) {
-	plain := poolHeader(&types.StatusOutput{ParentPID: 1, Capacity: 2, Available: 2}, 4)
+	plain := poolHeader(&daemon.Output{ParentPID: 1, Capacity: 2, Available: 2}, 4)
 	assert.Contains(t, plain, "pool")
 	assert.Contains(t, plain, "pid 1")
 	assert.Contains(t, plain, "0/2 running")
@@ -1291,7 +1292,7 @@ func TestPoolHeader(t *testing.T) {
 	assert.Contains(t, plain, "4 cpu")
 	assert.NotContains(t, plain, "queued")
 
-	busy := poolHeader(&types.StatusOutput{ParentPID: 1, Version: "v1", Queued: 5}, 4)
+	busy := poolHeader(&daemon.Output{ParentPID: 1, Version: "v1", Queued: 5}, 4)
 	assert.Contains(t, busy, "v1")
 	assert.Contains(t, busy, "(+5 queued)")
 }
@@ -1303,7 +1304,7 @@ func TestPrintStatusCompactStaysOneLine(t *testing.T) {
 
 	t.Run("nothing running", func(t *testing.T) {
 		var buf bytes.Buffer
-		printStatusCompact(&buf, types.StatusSnapshot{}, now)
+		printStatusCompact(&buf, daemon.Snapshot{}, now)
 		assert.Equal(t, "no broker · no server\n", buf.String())
 	})
 
@@ -1328,15 +1329,15 @@ func TestPrintStatusCompactStaysOneLine(t *testing.T) {
 
 	t.Run("an idle pool says idle", func(t *testing.T) {
 		var buf bytes.Buffer
-		printStatusCompact(&buf, types.StatusSnapshot{Pool: &types.StatusOutput{Capacity: 4}}, now)
+		printStatusCompact(&buf, daemon.Snapshot{Pool: &daemon.Output{Capacity: 4}}, now)
 		assert.Contains(t, buf.String(), "0/4 idle")
 	})
 
 	t.Run("a degraded endpoint earns its width", func(t *testing.T) {
 		var buf bytes.Buffer
-		printStatusCompact(&buf, types.StatusSnapshot{
-			Pool:        &types.StatusOutput{Capacity: 1},
-			MCPEndpoint: &types.MCPEndpointStatus{State: "unreachable"},
+		printStatusCompact(&buf, daemon.Snapshot{
+			Pool:        &daemon.Output{Capacity: 1},
+			MCPEndpoint: &daemon.MCPEndpoint{State: "unreachable"},
 		}, now)
 		assert.Contains(t, buf.String(), "mcp unreachable")
 	})
@@ -1344,9 +1345,9 @@ func TestPrintStatusCompactStaysOneLine(t *testing.T) {
 
 func TestCompactRunningPartsCollapsesTheTail(t *testing.T) {
 	now := time.Now()
-	var targets []types.StatusRunningTarget
+	var targets []daemon.RunningTarget
 	for i := range 6 {
-		targets = append(targets, types.StatusRunningTarget{
+		targets = append(targets, daemon.RunningTarget{
 			Args:      []string{"run", "build", "p" + string(rune('a'+i))},
 			StartedAt: now.Add(-time.Duration(i+1) * time.Minute),
 		})
@@ -1363,29 +1364,29 @@ func TestCompactRunningPartsCollapsesTheTail(t *testing.T) {
 
 func TestDurationOfTreatsAnUnsetStartAsZero(t *testing.T) {
 	now := time.Now()
-	assert.Zero(t, runningDuration(types.StatusRunningTarget{}, now))
-	assert.Equal(t, time.Minute, runningDuration(types.StatusRunningTarget{StartedAt: now.Add(-time.Minute)}, now))
+	assert.Zero(t, runningDuration(daemon.RunningTarget{}, now))
+	assert.Equal(t, time.Minute, runningDuration(daemon.RunningTarget{StartedAt: now.Add(-time.Minute)}, now))
 }
 
 func TestFormatCompactRunningTargetNamesTheUnparseable(t *testing.T) {
 	now := time.Now()
 
 	assert.Equal(t, "web:build(30s)", formatCompactRunningTarget(
-		types.StatusRunningTarget{Args: []string{"run", "build", "web"}, StartedAt: now.Add(-30 * time.Second)}, false, now))
+		daemon.RunningTarget{Args: []string{"run", "build", "web"}, StartedAt: now.Add(-30 * time.Second)}, false, now))
 
 	assert.Equal(t, "alpha/web:build", formatCompactRunningTarget(
-		types.StatusRunningTarget{Args: []string{"run", "build", "web"}, Workspace: "/repos/alpha"}, true, now))
+		daemon.RunningTarget{Args: []string{"run", "build", "web"}, Workspace: "/repos/alpha"}, true, now))
 
-	assert.Equal(t, "?:?", formatCompactRunningTarget(types.StatusRunningTarget{}, false, now))
+	assert.Equal(t, "?:?", formatCompactRunningTarget(daemon.RunningTarget{}, false, now))
 }
 
 func TestCompactServiceToken(t *testing.T) {
 	assert.Equal(t, "", compactServiceToken(nil))
 	assert.Equal(t, "services 0/1 active, 1 dependent",
-		compactServiceToken([]types.StatusService{{State: types.ServiceIdle, Dependents: 1}}))
-	assert.Equal(t, "services 2/2 active, 3 dependents", compactServiceToken([]types.StatusService{
-		{State: types.ServiceRunning, Dependents: 1},
-		{State: types.ServiceStarting, Dependents: 2},
+		compactServiceToken([]daemon.Service{{State: daemon.ServiceIdle, Dependents: 1}}))
+	assert.Equal(t, "services 2/2 active, 3 dependents", compactServiceToken([]daemon.Service{
+		{State: daemon.ServiceRunning, Dependents: 1},
+		{State: daemon.ServiceStarting, Dependents: 2},
 	}))
 }
 
@@ -1408,7 +1409,7 @@ func TestWriteStatusStructuredFormats(t *testing.T) {
 	t.Cleanup(func() { global.tee = prevTee })
 	global.tee = ""
 
-	r := types.StatusSnapshot{Cache: types.CacheStatus{Dir: "/tmp/c"}}
+	r := daemon.Snapshot{Cache: daemon.Cache{Dir: "/tmp/c"}}
 
 	t.Run("json", func(t *testing.T) {
 		out := captureStdout(t, func() {
@@ -1457,7 +1458,7 @@ func TestServerVersionSkewPoolParentRemedy(t *testing.T) {
 	t.Cleanup(func() { version = saved })
 	version = "current-build"
 
-	pool := &types.StatusOutput{
+	pool := &daemon.Output{
 		ParentPID: 1314,
 		Version:   "stale-build",
 		Socket:    "unix:///tmp/magus-1314-deadbeef.sock",
@@ -1468,7 +1469,7 @@ func TestServerVersionSkewPoolParentRemedy(t *testing.T) {
 	assert.Contains(t, got, "--pools")
 	assert.NotContains(t, got, "server start")
 
-	server := &types.StatusOutput{
+	server := &daemon.Output{
 		ParentPID: 99,
 		Version:   "stale-build",
 		Socket:    "unix:///tmp/server.sock",

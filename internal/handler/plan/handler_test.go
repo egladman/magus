@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"errors"
 	"fmt"
@@ -26,14 +27,14 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 type cannedPlanSource struct {
 	graph    types.TargetGraphOutput
 	graphErr error
-	report   types.StatusSnapshot
+	report   daemon.Snapshot
 }
 
 func (f cannedPlanSource) TargetGraph(context.Context) (types.TargetGraphOutput, error) {
 	return f.graph, f.graphErr
 }
 
-func (f cannedPlanSource) StatusSnapshot(context.Context) types.StatusSnapshot { return f.report }
+func (f cannedPlanSource) StatusSnapshot(context.Context) daemon.Snapshot { return f.report }
 
 // cannedPlanOutputs is a planOutputs over a fixed descriptor list, newest first (the order the
 // real store returns).
@@ -190,11 +191,11 @@ func TestPlanHandler_PassAndFailComeFromTheMostRecentOutput(t *testing.T) {
 func TestPlanHandler_RunningWinsOverAStalePass(t *testing.T) {
 	src := cannedPlanSource{
 		graph: planFixture(),
-		report: types.StatusSnapshot{Runs: []types.StatusRun{{
+		report: daemon.Snapshot{Runs: []daemon.Run{{
 			Inv: "inv1",
-			Targets: []types.StatusTargetRun{
-				{Project: "app", Target: "build:rw", State: types.TargetRunRunning},
-				{Project: "libs/api", Target: "test", State: types.TargetRunQueued},
+			Targets: []daemon.TargetRun{
+				{Project: "app", Target: "build:rw", State: daemon.TargetRunRunning},
+				{Project: "libs/api", Target: "test", State: daemon.TargetRunQueued},
 			},
 		}}},
 	}
@@ -222,7 +223,7 @@ func TestPlanHandler_RunningWinsOverAStalePass(t *testing.T) {
 func TestPlanHandler_PoolEntryMarksTheInvokedTargetRunning(t *testing.T) {
 	src := cannedPlanSource{
 		graph: planFixture(),
-		report: types.StatusSnapshot{Pool: &types.StatusOutput{RunningTargets: []types.StatusRunningTarget{
+		report: daemon.Snapshot{Pool: &daemon.Output{RunningTargets: []daemon.RunningTarget{
 			{Args: []string{"run", "test"}, Workspace: "/w"},
 		}}},
 	}
@@ -236,7 +237,7 @@ func TestPlanHandler_PoolEntryMarksTheInvokedTargetRunning(t *testing.T) {
 func TestPlanHandler_PoolEntryFromAnotherWorkspaceIsIgnored(t *testing.T) {
 	src := cannedPlanSource{
 		graph: planFixture(),
-		report: types.StatusSnapshot{Pool: &types.StatusOutput{RunningTargets: []types.StatusRunningTarget{
+		report: daemon.Snapshot{Pool: &daemon.Output{RunningTargets: []daemon.RunningTarget{
 			{Args: []string{"run", "test"}, Workspace: "/other"},
 		}}},
 	}
@@ -252,7 +253,7 @@ func TestPlanHandler_PoolEntryFromAnotherWorkspaceIsIgnored(t *testing.T) {
 func TestPlanHandler_AnchorFollowsTheInFlightRun(t *testing.T) {
 	src := cannedPlanSource{
 		graph: planFixture(),
-		report: types.StatusSnapshot{Pool: &types.StatusOutput{RunningTargets: []types.StatusRunningTarget{
+		report: daemon.Snapshot{Pool: &daemon.Output{RunningTargets: []daemon.RunningTarget{
 			{Args: []string{"run", "build:rw", "app"}, Workspace: "/w", StartedAt: time.Unix(100, 0)},
 		}}},
 	}
@@ -264,7 +265,7 @@ func TestPlanHandler_AnchorFollowsTheInFlightRun(t *testing.T) {
 func TestPlanHandler_AnchorPrefersTheMostRecentlyStartedRun(t *testing.T) {
 	src := cannedPlanSource{
 		graph: planFixture(),
-		report: types.StatusSnapshot{Pool: &types.StatusOutput{RunningTargets: []types.StatusRunningTarget{
+		report: daemon.Snapshot{Pool: &daemon.Output{RunningTargets: []daemon.RunningTarget{
 			{Args: []string{"run", "build"}, Workspace: "/w", StartedAt: time.Unix(100, 0)},
 			{Args: []string{"affected", "ci"}, Workspace: "/w", StartedAt: time.Unix(200, 0)},
 		}}},
@@ -292,7 +293,7 @@ func TestPlanHandler_AnchorDefaultsToCI(t *testing.T) {
 func TestPlanHandler_UndefinedDerivedAnchorFallsThrough(t *testing.T) {
 	src := cannedPlanSource{
 		graph: planFixture(),
-		report: types.StatusSnapshot{Pool: &types.StatusOutput{RunningTargets: []types.StatusRunningTarget{
+		report: daemon.Snapshot{Pool: &daemon.Output{RunningTargets: []daemon.RunningTarget{
 			{Args: []string{"x", "aa11"}, Workspace: "/w"},
 		}}},
 	}
@@ -304,7 +305,7 @@ func TestPlanHandler_UndefinedDerivedAnchorFallsThrough(t *testing.T) {
 func TestPlanHandler_ExplicitTargetOverridesTheRunningOne(t *testing.T) {
 	src := cannedPlanSource{
 		graph: planFixture(),
-		report: types.StatusSnapshot{Pool: &types.StatusOutput{RunningTargets: []types.StatusRunningTarget{
+		report: daemon.Snapshot{Pool: &daemon.Output{RunningTargets: []daemon.RunningTarget{
 			{Args: []string{"run", "build"}, Workspace: "/w"},
 		}}},
 	}

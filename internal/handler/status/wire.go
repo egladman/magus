@@ -3,6 +3,7 @@
 package status
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"encoding/base64"
 	"errors"
 	"slices"
@@ -11,17 +12,16 @@ import (
 
 	"github.com/egladman/magus/internal/rpcerr"
 	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"
-	"github.com/egladman/magus/types"
 )
 
-// statusSnapshotToProto maps the LIVE portion of the domain status snapshot (types.StatusSnapshot)
+// statusSnapshotToProto maps the LIVE portion of the domain status snapshot (daemon.Snapshot)
 // onto the magus.status.v1alpha1 wire message, deriving the at-a-glance Health from the
 // pool's presence and error state. Static config (telemetry/cache/build) is
 // left to `magus server status` and config.
 //
 // The message is always whole but for the error details err names, which a caller logs
 // and still sends: a dashboard short one error detail beats no dashboard.
-func statusSnapshotToProto(r types.StatusSnapshot, build types.BuildInfo) (*statusv1.Status, error) {
+func statusSnapshotToProto(r daemon.Snapshot, build daemon.BuildInfo) (*statusv1.Status, error) {
 	var dropped error
 	s := &statusv1.Status{
 		Health: deriveHealth(r),
@@ -70,7 +70,7 @@ func statusSnapshotToProto(r types.StatusSnapshot, build types.BuildInfo) (*stat
 
 // brokerToProto maps the broker's report onto the wire. Its services ride Status.services,
 // where the dashboard already reads them.
-func brokerToProto(b *types.StatusBroker) *statusv1.Broker {
+func brokerToProto(b *daemon.Broker) *statusv1.Broker {
 	c := b.Capacity
 	out := &statusv1.Broker{
 		Pid:        int32(b.PID),
@@ -103,7 +103,7 @@ func brokerToProto(b *types.StatusBroker) *statusv1.Broker {
 	return out
 }
 
-func serverToProto(s *types.StatusServer) *statusv1.Server {
+func serverToProto(s *daemon.Server) *statusv1.Server {
 	out := &statusv1.Server{
 		Pid:        int32(s.PID),
 		Version:    s.Version,
@@ -121,7 +121,7 @@ func serverToProto(s *types.StatusServer) *statusv1.Server {
 // lockToProto maps one held workspace lock onto the wire message. It deliberately
 // does not influence deriveHealth above: a held lock is what a working run looks
 // like, and reporting it as unhealthy would make a busy peer look like an outage.
-func lockToProto(l types.StatusLock) *statusv1.Lock {
+func lockToProto(l daemon.Lock) *statusv1.Lock {
 	return &statusv1.Lock{
 		Project: l.Project,
 		Pid:     int32(l.PID),
@@ -136,7 +136,7 @@ func lockToProto(l types.StatusLock) *statusv1.Lock {
 }
 
 // serviceToProto maps one hosted shared service onto the wire message.
-func serviceToProto(s types.StatusService) *statusv1.Service {
+func serviceToProto(s daemon.Service) *statusv1.Service {
 	return &statusv1.Service{
 		Id:         s.ID,
 		Label:      s.Label,
@@ -149,7 +149,7 @@ func serviceToProto(s types.StatusService) *statusv1.Service {
 }
 
 // runToProto maps one live run and its per-target execution state onto the wire message.
-func runToProto(r types.StatusRun) *statusv1.Run {
+func runToProto(r daemon.Run) *statusv1.Run {
 	out := &statusv1.Run{
 		Inv:       r.Inv,
 		Trigger:   r.Trigger,
@@ -169,19 +169,19 @@ func runToProto(r types.StatusRun) *statusv1.Run {
 	return out
 }
 
-func targetStateToProto(s types.TargetRunState) statusv1.TargetRun_State {
+func targetStateToProto(s daemon.TargetRunState) statusv1.TargetRun_State {
 	switch s {
-	case types.TargetRunQueued:
+	case daemon.TargetRunQueued:
 		return statusv1.TargetRun_STATE_QUEUED
-	case types.TargetRunRunning:
+	case daemon.TargetRunRunning:
 		return statusv1.TargetRun_STATE_RUNNING
-	case types.TargetRunPassed:
+	case daemon.TargetRunPassed:
 		return statusv1.TargetRun_STATE_PASSED
-	case types.TargetRunFailed:
+	case daemon.TargetRunFailed:
 		return statusv1.TargetRun_STATE_FAILED
-	case types.TargetRunCached:
+	case daemon.TargetRunCached:
 		return statusv1.TargetRun_STATE_CACHED
-	case types.TargetRunPermitted:
+	case daemon.TargetRunPermitted:
 		return statusv1.TargetRun_STATE_PERMITTED
 	default:
 		return statusv1.TargetRun_STATE_UNSPECIFIED
@@ -201,12 +201,12 @@ func EncodeStatusEvent(s *statusv1.Status) (string, error) {
 
 // deriveHealth agrees with the readiness probe's workspaces component: a pool where every
 // workspace that tried to load failed is down, not degraded, since nothing it holds serves.
-func deriveHealth(r types.StatusSnapshot) statusv1.Health {
+func deriveHealth(r daemon.Snapshot) statusv1.Health {
 	if r.Pool == nil {
 		return statusv1.Health_HEALTH_DOWN
 	}
-	failed := slices.ContainsFunc(r.Pool.Workspaces, func(w types.StatusWorkspace) bool { return w.State == types.WorkspaceFailed })
-	loaded := slices.ContainsFunc(r.Pool.Workspaces, types.StatusWorkspace.Loaded)
+	failed := slices.ContainsFunc(r.Pool.Workspaces, func(w daemon.Workspace) bool { return w.State == daemon.WorkspaceFailed })
+	loaded := slices.ContainsFunc(r.Pool.Workspaces, daemon.Workspace.Loaded)
 	switch {
 	case failed && !loaded:
 		return statusv1.Health_HEALTH_DOWN
@@ -217,25 +217,25 @@ func deriveHealth(r types.StatusSnapshot) statusv1.Health {
 	}
 }
 
-// workspaceStateToProto converts s to the wire enum. compat: see types.StatusWorkspace.Loaded
+// workspaceStateToProto converts s to the wire enum. compat: see daemon.Workspace.Loaded
 // for why "" maps to ACTIVE; any OTHER value this build does not recognize maps to
 // STATE_UNSPECIFIED instead, never silently reading as active.
-func workspaceStateToProto(s types.WorkspaceState) statusv1.Workspace_State {
+func workspaceStateToProto(s daemon.WorkspaceState) statusv1.Workspace_State {
 	switch s {
 	case "":
 		return statusv1.Workspace_STATE_ACTIVE
-	case types.WorkspaceLoading:
+	case daemon.WorkspaceLoading:
 		return statusv1.Workspace_STATE_LOADING
-	case types.WorkspaceActive:
+	case daemon.WorkspaceActive:
 		return statusv1.Workspace_STATE_ACTIVE
-	case types.WorkspaceFailed:
+	case daemon.WorkspaceFailed:
 		return statusv1.Workspace_STATE_FAILED
 	default:
 		return statusv1.Workspace_STATE_UNSPECIFIED
 	}
 }
 
-func poolToProto(p *types.StatusOutput) (*statusv1.Pool, error) {
+func poolToProto(p *daemon.Output) (*statusv1.Pool, error) {
 	var dropped []error
 	out := &statusv1.Pool{
 		ParentPid:    int32(p.ParentPID),
@@ -257,7 +257,7 @@ func poolToProto(p *types.StatusOutput) (*statusv1.Pool, error) {
 			SecretProvider: w.SecretProvider,
 			State:          workspaceStateToProto(w.State),
 		}
-		if w.State == types.WorkspaceFailed {
+		if w.State == daemon.WorkspaceFailed {
 			var err error
 			ws.Error, err = rpcerr.WorkspaceFailed(w.Root, w.Error).Status()
 			dropped = append(dropped, err)

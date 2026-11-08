@@ -1,6 +1,7 @@
 package proc
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
@@ -124,7 +125,7 @@ type Options struct {
 	ConfigReloader func() (dropped, busy int)
 	// Server, if set, is read on every Status RPC and reported as StatusReply.Server.
 	// Only `magus server` sets it.
-	Server func() *types.StatusServer
+	Server func() *daemon.Server
 	// Read, if set, answers a client's read-only question (see [Read]) about the workspace
 	// at root: verb and request are the client's, the returned bytes are its answer. It runs
 	// on the request's context, so a client that hangs up cancels it. An error wrapping
@@ -507,7 +508,7 @@ type service struct {
 	version         string // human-facing display version; surfaced as StatusReply.Version
 	gateVersion     string // adoption identity for the version gate (see adoptionIdentity); "" disables the gate
 	workspaceLister func() []Workspace
-	serverInfo      func() *types.StatusServer
+	serverInfo      func() *daemon.Server
 	configReloader  func() (dropped, busy int)
 	onJobDone       func(ctx context.Context, args []string, dur time.Duration, err error)
 	inflight        sync.Map // cycleKey → struct{}, for cycle detection

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"errors"
 	"fmt"
@@ -85,7 +86,7 @@ func TestEvaluateHealth(t *testing.T) {
 	assertHealth("readiness/root-given-no-workspaces", makeReply(1), nil, probeReadiness, "/repo", false, "/repo")
 	assertHealth("readiness/root-trailing-slash-normalised", makeReply(1, "/repo"), nil, probeReadiness, "/repo/", true, "/repo")
 	failed := &proc.StatusReply{ParentPID: 1, Workspaces: []proc.Workspace{
-		{Root: "/repo", State: types.WorkspaceFailed}, {Root: "/loading", State: types.WorkspaceLoading},
+		{Root: "/repo", State: daemon.WorkspaceFailed}, {Root: "/loading", State: daemon.WorkspaceLoading},
 	}}
 	assertHealth("readiness/failed-root-names-the-code", failed, nil, probeReadiness, "/repo", false, "MGS3016")
 	assertHealth("readiness/loading-root-not-ready", failed, nil, probeReadiness, "/loading", false, "is loading")
@@ -107,7 +108,7 @@ func TestServerSnapshotRefusesAPerProcessPool(t *testing.T) {
 
 	server, err := proc.New(t.Context(), proc.Options{
 		Handler: func(context.Context, []string) error { return nil },
-		Server:  func() *types.StatusServer { return &types.StatusServer{PID: 1} },
+		Server:  func() *daemon.Server { return &daemon.Server{PID: 1} },
 	})
 	require.NoError(t, err)
 	defer server.Close()
@@ -131,7 +132,7 @@ func TestServerSnapshotAsksTheServerNotTheRunsPool(t *testing.T) {
 
 	server, err := proc.New(t.Context(), proc.Options{
 		Handler: func(context.Context, []string) error { return nil },
-		Server:  func() *types.StatusServer { return &types.StatusServer{PID: 7} },
+		Server:  func() *daemon.Server { return &daemon.Server{PID: 7} },
 	})
 	require.NoError(t, err)
 	defer server.Close()
@@ -153,7 +154,7 @@ func TestHealthHTTPHandler(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			reply := makeReply(1, workspaces...)
 			// Build a handler with a fake querier instead of dialing a real socket.
-			h := healthHTTPHandler(kind, func(context.Context) (*types.StatusOutput, error) {
+			h := healthHTTPHandler(kind, func(context.Context) (*daemon.Output, error) {
 				return reply.StatusOutput(), nil
 			})
 			url := "/"
@@ -188,7 +189,7 @@ func TestHealthHTTPHandler(t *testing.T) {
 func TestHealthHTTPHandlerUnreachable(t *testing.T) {
 	// A proc-dial error carrying the server socket path is exactly the kind of text
 	// evaluateHealth would fold into its reason ("server unreachable: ...dial <socket>").
-	h := healthHTTPHandler(probeLiveness, func(context.Context) (*types.StatusOutput, error) {
+	h := healthHTTPHandler(probeLiveness, func(context.Context) (*daemon.Output, error) {
 		return nil, errors.New("proc: query: dial /var/run/magus/server.sock: connection refused")
 	})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -211,7 +212,7 @@ func TestHealthEndpointBodiesRedactSensitiveDetail(t *testing.T) {
 		sentinelRoot = "/Users/secret/private-repo"
 	)
 	snapshot := makeReply(sentinelPID, sentinelRoot, "/srv/another/workspace").StatusOutput()
-	statusFn := func(context.Context) (*types.StatusOutput, error) { return snapshot, nil }
+	statusFn := func(context.Context) (*daemon.Output, error) { return snapshot, nil }
 
 	// leaks lists the sentinels no unguarded health body may echo.
 	leaks := []string{
@@ -246,7 +247,7 @@ func TestHealthEndpointBodiesRedactSensitiveDetail(t *testing.T) {
 			symbolIndexes: func(context.Context) []types.SymbolIndexStatus {
 				return []types.SymbolIndexStatus{{Freshness: types.SymbolIndexFresh}}
 			},
-			services:       func() []types.StatusService { return []types.StatusService{{State: "running"}} },
+			services:       func() []daemon.Service { return []daemon.Service{{State: "running"}} },
 			knowledgeGraph: func() (bool, bool) { return true, true },
 		}
 		rec := httptest.NewRecorder()
@@ -261,16 +262,16 @@ func TestHealthEndpointBodiesRedactSensitiveDetail(t *testing.T) {
 func TestWorkspacesComponent(t *testing.T) {
 	cases := []struct {
 		name     string
-		snapshot *types.StatusOutput
-		want     types.ReadinessComponent
+		snapshot *daemon.Output
+		want     daemon.ReadinessComponent
 	}{
-		{"nil-snapshot", nil, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "server unreachable"}},
-		{"no-workspaces", &types.StatusOutput{}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "no workspaces loaded"}},
+		{"nil-snapshot", nil, daemon.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "server unreachable"}},
+		{"no-workspaces", &daemon.Output{}, daemon.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "no workspaces loaded"}},
 		// Two workspaces with recognizable roots: the count is wanted in Detail, but the
 		// roots themselves must NOT leak into it on this unguarded endpoint.
-		{"two-workspaces", &types.StatusOutput{Workspaces: []types.StatusWorkspace{{Root: "/a"}, {Root: "/b"}}}, types.ReadinessComponent{Name: "workspaces", Status: "ok", Detail: "2 loaded"}},
-		{"one-failed", &types.StatusOutput{Workspaces: []types.StatusWorkspace{{Root: "/a", State: types.WorkspaceActive}, {Root: "/b", State: types.WorkspaceFailed}}}, types.ReadinessComponent{Name: "workspaces", Status: "degraded", Detail: "1 loaded, 1 failed to load"}},
-		{"all-failed", &types.StatusOutput{Workspaces: []types.StatusWorkspace{{Root: "/b", State: types.WorkspaceFailed}}}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "1 failed to load"}},
+		{"two-workspaces", &daemon.Output{Workspaces: []daemon.Workspace{{Root: "/a"}, {Root: "/b"}}}, daemon.ReadinessComponent{Name: "workspaces", Status: "ok", Detail: "2 loaded"}},
+		{"one-failed", &daemon.Output{Workspaces: []daemon.Workspace{{Root: "/a", State: daemon.WorkspaceActive}, {Root: "/b", State: daemon.WorkspaceFailed}}}, daemon.ReadinessComponent{Name: "workspaces", Status: "degraded", Detail: "1 loaded, 1 failed to load"}},
+		{"all-failed", &daemon.Output{Workspaces: []daemon.Workspace{{Root: "/b", State: daemon.WorkspaceFailed}}}, daemon.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "1 failed to load"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -283,11 +284,11 @@ func TestSymbolIndexComponent(t *testing.T) {
 	cases := []struct {
 		name    string
 		indexes []types.SymbolIndexStatus
-		want    types.ReadinessComponent
+		want    daemon.ReadinessComponent
 	}{
-		{"none", nil, types.ReadinessComponent{Name: "symbol_index", Status: "disabled", Detail: "no symbol-capable project"}},
-		{"all-fresh", []types.SymbolIndexStatus{{Freshness: types.SymbolIndexFresh}, {Freshness: types.SymbolIndexFresh}}, types.ReadinessComponent{Name: "symbol_index", Status: "ok", Detail: "2 of 2 up to date"}},
-		{"one-stale-one-not-built", []types.SymbolIndexStatus{{Freshness: types.SymbolIndexFresh}, {Freshness: types.SymbolIndexStale}, {Freshness: types.SymbolIndexNotBuilt}}, types.ReadinessComponent{Name: "symbol_index", Status: "degraded", Detail: "1 of 3 up to date"}},
+		{"none", nil, daemon.ReadinessComponent{Name: "symbol_index", Status: "disabled", Detail: "no symbol-capable project"}},
+		{"all-fresh", []types.SymbolIndexStatus{{Freshness: types.SymbolIndexFresh}, {Freshness: types.SymbolIndexFresh}}, daemon.ReadinessComponent{Name: "symbol_index", Status: "ok", Detail: "2 of 2 up to date"}},
+		{"one-stale-one-not-built", []types.SymbolIndexStatus{{Freshness: types.SymbolIndexFresh}, {Freshness: types.SymbolIndexStale}, {Freshness: types.SymbolIndexNotBuilt}}, daemon.ReadinessComponent{Name: "symbol_index", Status: "degraded", Detail: "1 of 3 up to date"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -299,13 +300,13 @@ func TestSymbolIndexComponent(t *testing.T) {
 func TestServicesComponent(t *testing.T) {
 	cases := []struct {
 		name     string
-		services []types.StatusService
-		want     types.ReadinessComponent
+		services []daemon.Service
+		want     daemon.ReadinessComponent
 	}{
-		{"none", nil, types.ReadinessComponent{Name: "services", Status: "disabled", Detail: "no hosted services"}},
-		{"all-running", []types.StatusService{{State: "running"}, {State: "idle"}}, types.ReadinessComponent{Name: "services", Status: "ok", Detail: "2 running, 0 failed"}},
-		{"some-failed", []types.StatusService{{State: "running"}, {State: "failed"}}, types.ReadinessComponent{Name: "services", Status: "degraded", Detail: "1 running, 1 failed"}},
-		{"all-failed", []types.StatusService{{State: "failed"}, {State: "failed"}}, types.ReadinessComponent{Name: "services", Status: "down", Detail: "0 running, 2 failed"}},
+		{"none", nil, daemon.ReadinessComponent{Name: "services", Status: "disabled", Detail: "no hosted services"}},
+		{"all-running", []daemon.Service{{State: "running"}, {State: "idle"}}, daemon.ReadinessComponent{Name: "services", Status: "ok", Detail: "2 running, 0 failed"}},
+		{"some-failed", []daemon.Service{{State: "running"}, {State: "failed"}}, daemon.ReadinessComponent{Name: "services", Status: "degraded", Detail: "1 running, 1 failed"}},
+		{"all-failed", []daemon.Service{{State: "failed"}, {State: "failed"}}, daemon.ReadinessComponent{Name: "services", Status: "down", Detail: "0 running, 2 failed"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -319,11 +320,11 @@ func TestKnowledgeGraphComponent(t *testing.T) {
 		name     string
 		watching bool
 		valid    bool
-		want     types.ReadinessComponent
+		want     daemon.ReadinessComponent
 	}{
-		{"watching-and-valid", true, true, types.ReadinessComponent{Name: "knowledge_graph", Status: "ok", Detail: "watcher active, graph fresh"}},
-		{"watching-not-valid", true, false, types.ReadinessComponent{Name: "knowledge_graph", Status: "degraded", Detail: "watcher active, graph rebuilding"}},
-		{"not-watching", false, false, types.ReadinessComponent{Name: "knowledge_graph", Status: "down", Detail: "no watcher; falling back to cache-first rebuild per query"}},
+		{"watching-and-valid", true, true, daemon.ReadinessComponent{Name: "knowledge_graph", Status: "ok", Detail: "watcher active, graph fresh"}},
+		{"watching-not-valid", true, false, daemon.ReadinessComponent{Name: "knowledge_graph", Status: "degraded", Detail: "watcher active, graph rebuilding"}},
+		{"not-watching", false, false, daemon.ReadinessComponent{Name: "knowledge_graph", Status: "down", Detail: "no watcher; falling back to cache-first rebuild per query"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -339,7 +340,7 @@ func TestKnowledgeGraphComponent(t *testing.T) {
 func TestReadinessHTTPHandler(t *testing.T) {
 	statusOf := func(workspaces ...string) statusFunc {
 		reply := makeReply(1, workspaces...)
-		return func(context.Context) (*types.StatusOutput, error) {
+		return func(context.Context) (*daemon.Output, error) {
 			return reply.StatusOutput(), nil
 		}
 	}
@@ -354,8 +355,8 @@ func TestReadinessHTTPHandler(t *testing.T) {
 			symbolIndexes: func(context.Context) []types.SymbolIndexStatus {
 				return []types.SymbolIndexStatus{{Freshness: types.SymbolIndexFresh}}
 			},
-			services: func() []types.StatusService {
-				return []types.StatusService{{State: "running"}}
+			services: func() []daemon.Service {
+				return []daemon.Service{{State: "running"}}
 			},
 			knowledgeGraph: func() (bool, bool) { return true, true },
 		}
@@ -364,11 +365,11 @@ func TestReadinessHTTPHandler(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 		require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
-		var report types.ReadinessReport
+		var report daemon.ReadinessReport
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &report))
-		require.Equal(t, types.ReadinessReport{
+		require.Equal(t, daemon.ReadinessReport{
 			Ready: true,
-			Components: []types.ReadinessComponent{
+			Components: []daemon.ReadinessComponent{
 				{Name: "workspaces", Status: "ok", Detail: "1 loaded"},
 				{Name: "symbol_index", Status: "ok", Detail: "1 of 1 up to date"},
 				{Name: "services", Status: "ok", Detail: "1 running, 0 failed"},
@@ -384,7 +385,7 @@ func TestReadinessHTTPHandler(t *testing.T) {
 		rec := do(readinessHTTPHandler(statusOf(), extra))
 		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 
-		var report types.ReadinessReport
+		var report daemon.ReadinessReport
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &report))
 		require.False(t, report.Ready)
 	})
@@ -393,11 +394,11 @@ func TestReadinessHTTPHandler(t *testing.T) {
 		rec := do(readinessHTTPHandler(statusOf("/ws"), readinessExtras{}))
 		require.Equal(t, http.StatusOK, rec.Code)
 
-		var report types.ReadinessReport
+		var report daemon.ReadinessReport
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &report))
-		require.Equal(t, types.ReadinessReport{
+		require.Equal(t, daemon.ReadinessReport{
 			Ready: true,
-			Components: []types.ReadinessComponent{
+			Components: []daemon.ReadinessComponent{
 				{Name: "workspaces", Status: "ok", Detail: "1 loaded"},
 				{Name: "symbol_index", Status: "disabled", Detail: "no symbol-capable project"},
 				{Name: "services", Status: "disabled", Detail: "no hosted services"},
@@ -422,7 +423,7 @@ func TestReadinessHTTPHandlerMatchesHealthHTTPHandlerGate(t *testing.T) {
 	}
 	for _, s := range scenarios {
 		t.Run(s.name, func(t *testing.T) {
-			statusFn := func(context.Context) (*types.StatusOutput, error) {
+			statusFn := func(context.Context) (*daemon.Output, error) {
 				return makeReply(1, s.workspaces...).StatusOutput(), nil
 			}
 

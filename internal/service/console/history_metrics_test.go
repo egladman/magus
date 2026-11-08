@@ -1,6 +1,7 @@
 package console
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"path/filepath"
 	"sync/atomic"
@@ -55,7 +56,7 @@ func TestServiceVolatility(t *testing.T) {
 			"proj/a": {"test": st},
 		},
 	}
-	svc := NewService(nil, volatilityConfigFixture(writeHistory(t, hist)), types.StatusBase{}, "1.0.0")
+	svc := NewService(nil, volatilityConfigFixture(writeHistory(t, hist)), daemon.Base{}, "1.0.0")
 
 	report, err := svc.volatility(context.Background())
 	require.NoError(t, err)
@@ -72,7 +73,7 @@ func TestServiceVolatility(t *testing.T) {
 }
 
 func TestServiceVolatilityNoHistoryPath(t *testing.T) {
-	svc := NewService(nil, config.Config{Volatility: config.Volatility{Threshold: 0.2}}, types.StatusBase{}, "1.0.0")
+	svc := NewService(nil, config.Config{Volatility: config.Volatility{Threshold: 0.2}}, daemon.Base{}, "1.0.0")
 	report, err := svc.volatility(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, 0.2, report.Threshold)
@@ -80,7 +81,7 @@ func TestServiceVolatilityNoHistoryPath(t *testing.T) {
 }
 
 func TestServiceHistoryMetricsNoWorkspace(t *testing.T) {
-	svc := NewService(nil, config.Config{}, types.StatusBase{}, "1.0.0")
+	svc := NewService(nil, config.Config{}, daemon.Base{}, "1.0.0")
 	_, err := svc.HistoryMetrics(context.Background())
 	assert.ErrorIs(t, err, ErrNoWorkspace)
 }
@@ -88,7 +89,7 @@ func TestServiceHistoryMetricsNoWorkspace(t *testing.T) {
 func TestServiceHistoryMetricsCacheHit(t *testing.T) {
 	var calls atomic.Int64
 	board := Board{Hotspots: types.Hotspots{Commits: 7}}
-	svc := NewService(nil, config.Config{}, types.StatusBase{}, "1.0.0",
+	svc := NewService(nil, config.Config{}, daemon.Base{}, "1.0.0",
 		WithHistoryMetricsTTL(time.Minute),
 		WithHistoryMetricsFunction(func(context.Context) (Board, error) {
 			calls.Add(1)
@@ -108,7 +109,7 @@ func TestServiceHistoryMetricsCacheHit(t *testing.T) {
 
 func TestServiceHistoryMetricsCacheExpires(t *testing.T) {
 	var calls atomic.Int64
-	svc := NewService(nil, config.Config{}, types.StatusBase{}, "1.0.0",
+	svc := NewService(nil, config.Config{}, daemon.Base{}, "1.0.0",
 		WithHistoryMetricsTTL(time.Millisecond),
 		WithHistoryMetricsFunction(func(context.Context) (Board, error) {
 			calls.Add(1)
@@ -125,7 +126,7 @@ func TestServiceHistoryMetricsCacheExpires(t *testing.T) {
 
 func TestServiceHistoryMetricsCacheDisabled(t *testing.T) {
 	var calls atomic.Int64
-	svc := NewService(nil, config.Config{}, types.StatusBase{}, "1.0.0",
+	svc := NewService(nil, config.Config{}, daemon.Base{}, "1.0.0",
 		WithHistoryMetricsTTL(0),
 		WithHistoryMetricsFunction(func(context.Context) (Board, error) {
 			calls.Add(1)

@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"errors"
 	"fmt"
@@ -25,7 +26,7 @@ import (
 // a generated snapshot is only as fresh as the last `generate`, and this route reports live.
 type Source interface {
 	TargetGraph(ctx context.Context) (types.TargetGraphOutput, error)
-	StatusSnapshot(ctx context.Context) types.StatusSnapshot
+	StatusSnapshot(ctx context.Context) daemon.Snapshot
 }
 
 // planOutputs is the stored-run half of the state overlay: the same descriptor list
@@ -155,7 +156,7 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 // caller's spelling back for the message). A DERIVED candidate that no project defines is
 // silently skipped instead, so `magus x <ref>` running in the pool falls through to the
 // most recent output rather than serving an empty graph while a build is visibly in flight.
-func (h *Handler) resolveAnchor(raw string, index planTargets, report types.StatusSnapshot, descs []cache.OutputDescriptor) (target, anchor string, ok bool) {
+func (h *Handler) resolveAnchor(raw string, index planTargets, report daemon.Snapshot, descs []cache.OutputDescriptor) (target, anchor string, ok bool) {
 	if raw != "" {
 		t, err := types.ParseTarget(raw)
 		if err != nil || !index.defines(t.Name) {
@@ -181,11 +182,11 @@ func (h *Handler) resolveAnchor(raw string, index planTargets, report types.Stat
 // A pool entry identifies its work by ARGV. This reads it like parseRunning
 // in cmd/magus/status.go, for the target only. A plan covers every project
 // defining it.
-func runningAnchor(pool *types.StatusOutput, root string) string {
+func runningAnchor(pool *daemon.Output, root string) string {
 	if pool == nil {
 		return ""
 	}
-	var best types.StatusRunningTarget
+	var best daemon.RunningTarget
 	found := false
 	for _, c := range pool.RunningTargets {
 		if root != "" && c.Workspace != "" && c.Workspace != root {
@@ -342,7 +343,7 @@ func planClosure(index planTargets, projects []types.TargetGraphProject, anchor 
 // Running WINS over a stored outcome, always: the outcome describes a run that has already
 // ended, and showing a green node for work restarted ten seconds ago is the one reading that
 // makes the view useless.
-func overlayPlanState(nodes []planNode, report types.StatusSnapshot, descs []cache.OutputDescriptor, root string) {
+func overlayPlanState(nodes []planNode, report daemon.Snapshot, descs []cache.OutputDescriptor, root string) {
 	last := lastOutcomes(descs)
 	live := runningNodes(report.Runs)
 	invoked := runningInvocations(report.Pool, root)
@@ -388,11 +389,11 @@ func lastOutcomes(descs []cache.OutputDescriptor) map[planKey]cache.OutputDescri
 //
 // Queued targets are reported as idle: the wire contract has no queued state (see above),
 // and calling work that has not started "running" would be a straight lie.
-func runningNodes(runs []types.StatusRun) map[planKey]bool {
+func runningNodes(runs []daemon.Run) map[planKey]bool {
 	out := map[planKey]bool{}
 	for _, run := range runs {
 		for _, t := range run.Targets {
-			if t.State == types.TargetRunRunning {
+			if t.State == daemon.TargetRunRunning {
 				out[planKey{t.Project, bareTarget(t.Target)}] = true
 			}
 		}
@@ -406,7 +407,7 @@ func runningNodes(runs []types.StatusRun) map[planKey]bool {
 // an anchor dispatched across the workspace, and deliberately loose about which project's
 // step holds a slot at this instant. It exists so a run the server did not adopt (no journal
 // events, so nothing in runningNodes) still shows as live rather than as idle.
-func runningInvocations(pool *types.StatusOutput, root string) map[string]bool {
+func runningInvocations(pool *daemon.Output, root string) map[string]bool {
 	out := map[string]bool{}
 	if pool == nil {
 		return out

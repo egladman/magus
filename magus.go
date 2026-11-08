@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"bytes"
 	"cmp"
 	"context"
@@ -329,14 +330,14 @@ func (m *Magus) explainStale(err error) error {
 // WorkspaceLoadFailure describes err, a failed Open of root, as the server reports a FAILED
 // workspace: the error as rendered, plus the source position of each failing file that has
 // one. A position outside root keeps its absolute path.
-func WorkspaceLoadFailure(root string, err error) *types.WorkspaceFailure {
-	f := &types.WorkspaceFailure{Message: err.Error()}
+func WorkspaceLoadFailure(root string, err error) *daemon.WorkspaceFailure {
+	f := &daemon.WorkspaceFailure{Message: err.Error()}
 	for _, branch := range joinedBranches(err, "") {
 		d, ok := buzz.DiagnosticFromError(branch.err)
 		if !ok {
 			continue
 		}
-		sd := types.SourceDiagnostic{Code: d.Code, Line: d.Line, Column: d.Col, Message: d.Msg}
+		sd := daemon.SourceDiagnostic{Code: d.Code, Line: d.Line, Column: d.Col, Message: d.Msg}
 		// A BZZ code's error carries its docs URL; an outer MGS wrapper must not lend its own.
 		var de *types.DiagnosticError
 		if d.Code != "" && errors.As(branch.err, &de) && de.Code == d.Code {

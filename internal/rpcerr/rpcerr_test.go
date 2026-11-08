@@ -1,6 +1,7 @@
 package rpcerr
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -66,9 +67,9 @@ func unpack(t *testing.T, e Error) []proto.Message {
 
 func TestWorkspaceFailedCarriesEveryDiagnostic(t *testing.T) {
 	t.Parallel()
-	f := &types.WorkspaceFailure{
+	f := &daemon.WorkspaceFailure{
 		Message: "magus: repo: magusfile: exec magusfile.buzz: [BZZ1005] ...",
-		Diagnostics: []types.SourceDiagnostic{{
+		Diagnostics: []daemon.SourceDiagnostic{{
 			Code: "BZZ1005", URL: "https://example.test/BZZ1005.md",
 			File: "magusfile.buzz", Line: 3, Column: 7, Message: "cannot assign str to int",
 		}},
@@ -104,7 +105,7 @@ func TestWorkspaceFailedCarriesEveryDiagnostic(t *testing.T) {
 // nothing about what to fix.
 func TestWorkspaceFailedWithoutPosition(t *testing.T) {
 	t.Parallel()
-	got := unpack(t, WorkspaceFailed("/repo", &types.WorkspaceFailure{Message: "magus.yaml: unknown key"}))
+	got := unpack(t, WorkspaceFailed("/repo", &daemon.WorkspaceFailure{Message: "magus.yaml: unknown key"}))
 	want := &errdetails.PreconditionFailure{Violations: []*errdetails.PreconditionFailure_Violation{{
 		Type: loadErrorViolation, Subject: "/repo", Description: "magus.yaml: unknown key",
 	}}}

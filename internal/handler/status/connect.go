@@ -1,6 +1,7 @@
 package status
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"log/slog"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/egladman/magus/internal/log/attr"
 	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1/statusv1alpha1connect"
-	"github.com/egladman/magus/types"
 )
 
 // defaultStreamInterval is how often StreamStatus re-samples the live report to decide whether
@@ -26,7 +26,7 @@ const defaultStreamInterval = 2 * time.Second
 // the GetStatus envelope) instead of parsing JSON. Read-only: it only reports, never mutates.
 type ConnectService struct {
 	src      statusSource
-	build    types.BuildInfo
+	build    daemon.BuildInfo
 	log      *slog.Logger
 	interval time.Duration
 }
@@ -34,7 +34,7 @@ type ConnectService struct {
 // NewConnectService builds the StatusService Connect handler over src (the live report source,
 // satisfied by *console.Service). build stamps the reporting binary's identity onto every
 // snapshot, as the SSE status frame does.
-func NewConnectService(src statusSource, build types.BuildInfo, log *slog.Logger) *ConnectService {
+func NewConnectService(src statusSource, build daemon.BuildInfo, log *slog.Logger) *ConnectService {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -43,7 +43,7 @@ func NewConnectService(src statusSource, build types.BuildInfo, log *slog.Logger
 
 // liveStatus is statusSnapshotToProto at a serving boundary: a dropped error detail is
 // logged, and the rest of the message still goes out.
-func liveStatus(ctx context.Context, log *slog.Logger, r types.StatusSnapshot, build types.BuildInfo) *statusv1.Status {
+func liveStatus(ctx context.Context, log *slog.Logger, r daemon.Snapshot, build daemon.BuildInfo) *statusv1.Status {
 	s, dropped := statusSnapshotToProto(r, build)
 	if dropped != nil {
 		log.With(attr.Component("status")).WarnContext(ctx, "sending a snapshot without an error detail", attr.Error(dropped))

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"cmp"
 	"context"
 	"errors"
@@ -408,7 +409,7 @@ func processCommand(ctx context.Context, pid int) string {
 
 // queryBroker reads the broker's status, bounded so a wedged broker cannot hang a
 // status command.
-func queryBroker(ctx context.Context) (types.StatusBroker, error) {
+func queryBroker(ctx context.Context) (daemon.Broker, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	return broker.QueryStatus(ctx, broker.DefaultAddr())

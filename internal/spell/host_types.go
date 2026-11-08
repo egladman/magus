@@ -65,7 +65,7 @@ var CommitAuthorSource string
 var CommitSource string
 
 // TargetRunSource / RunSource are the generated Buzz mirrors of one run and the
-// targets in it (types.StatusTargetRun and types.StatusRun), the shape
+// targets in it (daemon.TargetRun and daemon.Run), the shape
 // `magus server status` reports. A caller can ITERATE a run with them. Each
 // target carries its state, duration and output ref, so nobody parses
 // console output.

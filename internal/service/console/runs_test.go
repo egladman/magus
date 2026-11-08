@@ -1,12 +1,12 @@
 package console
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,14 +30,14 @@ func TestRunRegistryFoldsTargetLifecycle(t *testing.T) {
 	emit(reg, "inv1", journal.Event{Ts: doneAt.UnixMilli(), Kind: journal.KindResult, Project: "svc/api", Target: "build", Status: journal.StatusPass, Ref: "out1a2b3c", DurationMs: 3_000})
 
 	got := reg.Snapshot()
-	want := []types.StatusRun{{
+	want := []daemon.Run{{
 		Inv:       "inv1",
 		Trigger:   journal.TriggerRun,
 		StartedAt: start,
-		Targets: []types.StatusTargetRun{{
+		Targets: []daemon.TargetRun{{
 			Project:    "svc/api",
 			Target:     "build",
-			State:      types.TargetRunPassed,
+			State:      daemon.TargetRunPassed,
 			StartedAt:  execAt,
 			EndedAt:    doneAt,
 			OutputRef:  "out1a2b3c",
@@ -54,14 +54,14 @@ func TestRunRegistryRunningTarget(t *testing.T) {
 	emit(reg, "inv1", journal.Event{Ts: 2_000, Kind: journal.KindExec, Project: "svc/api", Target: "test"})
 
 	got := reg.Snapshot()
-	want := []types.StatusRun{{
+	want := []daemon.Run{{
 		Inv:       "inv1",
 		Trigger:   journal.TriggerAffected,
 		StartedAt: time.UnixMilli(1_000),
-		Targets: []types.StatusTargetRun{{
+		Targets: []daemon.TargetRun{{
 			Project:   "svc/api",
 			Target:    "test",
-			State:     types.TargetRunRunning,
+			State:     daemon.TargetRunRunning,
 			StartedAt: time.UnixMilli(2_000),
 		}},
 	}}
@@ -76,10 +76,10 @@ func TestRunRegistryCachedResultAnchorsStart(t *testing.T) {
 
 	got := reg.Snapshot()
 	require.Len(t, got, 1)
-	require.Equal(t, []types.StatusTargetRun{{
+	require.Equal(t, []daemon.TargetRun{{
 		Project:   "svc/api",
 		Target:    "lint",
-		State:     types.TargetRunCached,
+		State:     daemon.TargetRunCached,
 		StartedAt: time.UnixMilli(4_000),
 		EndedAt:   time.UnixMilli(4_000),
 		OutputRef: "outcafe",
@@ -94,7 +94,7 @@ func TestRunRegistryFailedResult(t *testing.T) {
 
 	got := reg.Snapshot()
 	require.Len(t, got, 1)
-	require.Equal(t, types.TargetRunFailed, got[0].Targets[0].State)
+	require.Equal(t, daemon.TargetRunFailed, got[0].Targets[0].State)
 }
 
 // Multiple targets keep first-seen order within a run; multiple runs sort newest-started first.
@@ -126,7 +126,7 @@ func TestRunRegistryResultNotRegressedByLaterExec(t *testing.T) {
 	emit(reg, "inv1", journal.Event{Ts: 4_000, Kind: journal.KindExec, Project: "p", Target: "t"})
 
 	got := reg.Snapshot()
-	require.Equal(t, types.TargetRunPassed, got[0].Targets[0].State)
+	require.Equal(t, daemon.TargetRunPassed, got[0].Targets[0].State)
 }
 
 // A finished run lingers within the retention window, then is pruned.
@@ -151,11 +151,11 @@ func TestRunRegistryPrunesAfterRetention(t *testing.T) {
 // resultState maps known journal statuses onto explicit run states; an unrecognized status
 // (a future journal status) maps to the zero/unspecified state, never silently to PASSED.
 func TestResultState(t *testing.T) {
-	require.Equal(t, types.TargetRunPassed, resultState(journal.StatusPass))
-	require.Equal(t, types.TargetRunCached, resultState(journal.StatusCached))
-	require.Equal(t, types.TargetRunPermitted, resultState(journal.StatusPermitted))
-	require.Equal(t, types.TargetRunFailed, resultState(journal.StatusFail))
-	require.Equal(t, types.TargetRunState(""), resultState("some-future-status"))
+	require.Equal(t, daemon.TargetRunPassed, resultState(journal.StatusPass))
+	require.Equal(t, daemon.TargetRunCached, resultState(journal.StatusCached))
+	require.Equal(t, daemon.TargetRunPermitted, resultState(journal.StatusPermitted))
+	require.Equal(t, daemon.TargetRunFailed, resultState(journal.StatusFail))
+	require.Equal(t, daemon.TargetRunState(""), resultState("some-future-status"))
 }
 
 // An unfinished run that never emits KindFinished is evicted once its last event ages past

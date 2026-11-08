@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"errors"
 	"log/slog"
@@ -36,7 +37,7 @@ type Options struct {
 
 	// Build is the running binary's full identity (version, commit, date), reported on
 	// the status wire so the console shows which server it is talking to.
-	Build types.BuildInfo
+	Build daemon.BuildInfo
 
 	// Config is the resolved workspace configuration. Used to check the
 	// server address for the status tool.
@@ -59,7 +60,7 @@ type Options struct {
 	// build-tag constant and the config-to-status
 	// converters. When zero-valued the bridge returns an empty telemetry/cache
 	// block but still serves the live pool state.
-	StatusBase types.StatusBase
+	StatusBase daemon.Base
 
 	// DiffSessions is the server's shared diff-session store, the SAME one the console's
 	// /api/v1/diff and /api/v1/diff/session routes use. Sharing it is what makes pairing work:

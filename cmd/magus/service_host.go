@@ -1,12 +1,12 @@
 package main
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"context"
 	"time"
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/service"
-	"github.com/egladman/magus/types"
 )
 
 // defaultServiceIdle is how long the broker keeps a shared service warm after its
@@ -20,7 +20,7 @@ const defaultServiceIdle = 30 * time.Minute
 // to that. Release maps straight through.
 type serviceHost struct{ reg *service.Registry }
 
-func (h serviceHost) Snapshot() []types.StatusService { return serviceStatuses(h.reg) }
+func (h serviceHost) Snapshot() []daemon.Service { return serviceStatuses(h.reg) }
 
 func (h serviceHost) Acquire(ctx context.Context, key string, spec broker.ServiceSpec) (bool, error) {
 	handle, err := h.reg.Acquire(ctx, key, spec.Service())
@@ -41,17 +41,17 @@ func (h serviceHost) StopAll() int {
 }
 
 // serviceStatuses adapts the registry's introspection snapshot (service.ServiceStatus)
-// to the status-wire shape (types.StatusService) the console and the Status RPC serve.
-func serviceStatuses(reg *service.Registry) []types.StatusService {
+// to the status-wire shape (daemon.Service) the console and the Status RPC serve.
+func serviceStatuses(reg *service.Registry) []daemon.Service {
 	snap := reg.Snapshot()
-	out := make([]types.StatusService, 0, len(snap))
+	out := make([]daemon.Service, 0, len(snap))
 	for _, s := range snap {
-		out = append(out, types.StatusService{
+		out = append(out, daemon.Service{
 			ID:         s.ID,
 			Label:      s.Label,
 			Command:    s.Command,
 			Ports:      s.Ports,
-			State:      types.ServiceState(s.State),
+			State:      daemon.ServiceState(s.State),
 			Dependents: s.Dependents,
 			StartedAt:  s.StartedAt,
 		})

@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"bufio"
 	"context"
 	"errors"
@@ -116,7 +117,7 @@ func TestClaimGrantReleaseAndStatus(t *testing.T) {
 
 	st, err := c.Status(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, types.StatusBroker{
+	assert.Equal(t, daemon.Broker{
 		PID:             os.Getpid(),
 		Version:         "v-test",
 		Protocol:        ProtocolVersion,
@@ -512,12 +513,12 @@ func (h *refCountingHost) StopAll() int {
 	return len(h.refs)
 }
 
-func (h *refCountingHost) Snapshot() []types.StatusService {
+func (h *refCountingHost) Snapshot() []daemon.Service {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	var out []types.StatusService
+	var out []daemon.Service
 	for k, n := range h.refs {
-		out = append(out, types.StatusService{ID: k, Dependents: n})
+		out = append(out, daemon.Service{ID: k, Dependents: n})
 	}
 	return out
 }

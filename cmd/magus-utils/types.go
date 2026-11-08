@@ -119,8 +119,8 @@ func typesDirective(line string) (typeName, out string, ok bool) {
 
 // mirrorOptions is magus's configuration of the shared renderer: resolve a struct
 // field's object name through the boundary registry, and mirror a timestamp as a string.
-// The Namer is what keeps a RENAMED mirror referenceable: types.StatusTargetRun declares
-// as TargetRun, and emitting the Go name would reference an object nothing declares.
+// The Namer keeps a RENAMED mirror referenceable: types.ProjectsOutput
+// declares as Projects, and its Go name would name an undeclared object.
 func mirrorOptions() buzzgen.Options {
 	opts := buzzgen.DefaultOptions()
 	opts.Namer = buzzName

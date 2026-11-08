@@ -122,7 +122,7 @@ github.com/egladman/magus.Magus.FreshenSymbolIndexes method(ptr) func(ctx contex
 github.com/egladman/magus.Magus.Get method(ptr) func(path string) *github.com/egladman/magus/types.Project
 github.com/egladman/magus.Magus.Graph method(ptr) func() (*github.com/egladman/magus/types.Graph, error)
 github.com/egladman/magus.Magus.GroupingLens method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.Grouping, error)
-github.com/egladman/magus.Magus.HeldLocks method(ptr) func() []github.com/egladman/magus/types.StatusLock
+github.com/egladman/magus.Magus.HeldLocks method(ptr) func() []github.com/egladman/magus/types/daemon.Lock
 github.com/egladman/magus.Magus.Hotspots method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Hotspots, error)
 github.com/egladman/magus.Magus.IdentifyRef method(ptr) func(ctx context.Context, ref string) ([]github.com/egladman/magus/types.RefMatch, error)
 github.com/egladman/magus.Magus.ImportCache method(ptr) func(ctx context.Context, r io.Reader) error
@@ -152,7 +152,7 @@ github.com/egladman/magus.Magus.OutputKeyInputs method(ptr) func(ctx context.Con
 github.com/egladman/magus.Magus.OutputRecordByRef method(ptr) func(ctx context.Context, ref string) (github.com/egladman/magus/types.StoredOutput, error)
 github.com/egladman/magus.Magus.Ownership method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Ownership, error)
 github.com/egladman/magus.Magus.PayloadByRef method(ptr) func(ctx context.Context, ref string) ([]byte, error)
-github.com/egladman/magus.Magus.PipeWaits method(ptr) func() []github.com/egladman/magus/types.StatusPipeWait
+github.com/egladman/magus.Magus.PipeWaits method(ptr) func() []github.com/egladman/magus/types/daemon.PipeWait
 github.com/egladman/magus.Magus.Plan method(ptr) func(ctx context.Context, target string, opts PlanOptions) (github.com/egladman/magus/types.ShardPlan, error)
 github.com/egladman/magus.Magus.ProjectTargets method(ptr) func(ctx context.Context, project string) []string
 github.com/egladman/magus.Magus.PruneCache method(ptr) func(ctx context.Context, cutoff time.Time, dryRun bool) (removed int, freed int64, err error)
@@ -304,7 +304,7 @@ github.com/egladman/magus.WithWorkspaceRegistry func(reg *WorkspaceRegistry) Opt
 github.com/egladman/magus.WithWorkspaceRegistryContext func(ctx context.Context, reg *WorkspaceRegistry) context.Context
 github.com/egladman/magus.WithWrite func() RunOption
 github.com/egladman/magus.WithoutWorkspaceProviders func() Option
-github.com/egladman/magus.WorkspaceLoadFailure func(root string, err error) *github.com/egladman/magus/types.WorkspaceFailure
+github.com/egladman/magus.WorkspaceLoadFailure func(root string, err error) *github.com/egladman/magus/types/daemon.WorkspaceFailure
 github.com/egladman/magus.WorkspaceRegistry type struct
 github.com/egladman/magus.WorkspaceRegistry.AddProvider method(ptr) func(spellName string)
 github.com/egladman/magus.WorkspaceRegistry.RegisterProject method(ptr) func(path string, opts ...ProjectOption)
@@ -1114,18 +1114,11 @@ github.com/egladman/magus/types.BrokerPolicy.Valid method func() bool
 github.com/egladman/magus/types.BrokerPolicy.Values method func() []string
 github.com/egladman/magus/types.BrokerRequired const BrokerPolicy = "required"
 github.com/egladman/magus/types.BrokerUnavailable const DiagnosticCode = "MGS3022"
-github.com/egladman/magus/types.BuildInfo type struct
-github.com/egladman/magus/types.BuildInfo.Commit field string "json:\"commit\" yaml:\"commit\""
-github.com/egladman/magus/types.BuildInfo.Date field string "json:\"date\" yaml:\"date\""
-github.com/egladman/magus/types.BuildInfo.Fingerprint method func() string
-github.com/egladman/magus/types.BuildInfo.Version field string "json:\"version\" yaml:\"version\""
 github.com/egladman/magus/types.BuildSlotsDeadlocked const DiagnosticCode = "MGS3013"
 github.com/egladman/magus/types.BuildStamp type struct
 github.com/egladman/magus/types.BuildStamp.BuildDate field string "json:\"build_date\""
 github.com/egladman/magus/types.BuildStamp.Commit field string "json:\"commit\""
 github.com/egladman/magus/types.BuildStamp.Dirty field bool "json:\"dirty\""
-github.com/egladman/magus/types.BuildStatus type struct
-github.com/egladman/magus/types.BuildStatus.SelfUpdate field bool "json:\"selfupdate\" yaml:\"selfupdate\""
 github.com/egladman/magus/types.BundleRange type struct
 github.com/egladman/magus/types.BundleRange.Base field string
 github.com/egladman/magus/types.BundleRange.Head field string
@@ -1179,10 +1172,6 @@ github.com/egladman/magus/types.CacheBackend.GetArtifact imethod func(ctx contex
 github.com/egladman/magus/types.CacheBackend.HasArtifact imethod func(ctx context.Context, namespace string, key string) (bool, error)
 github.com/egladman/magus/types.CacheBackend.Name imethod func() string
 github.com/egladman/magus/types.CacheBackend.PutArtifact imethod func(ctx context.Context, namespace string, key string, r io.Reader) error
-github.com/egladman/magus/types.CacheStatus type struct
-github.com/egladman/magus/types.CacheStatus.Dir field string "json:\"dir,omitempty\" yaml:\"dir,omitempty\""
-github.com/egladman/magus/types.CacheStatus.Immutable field bool "json:\"immutable\" yaml:\"immutable\""
-github.com/egladman/magus/types.CacheStatus.SizeMB field int "json:\"size_mb,omitempty\" yaml:\"size_mb,omitempty\""
 github.com/egladman/magus/types.CacheableExternalOp const DiagnosticCode = "MGS1033"
 github.com/egladman/magus/types.CacheableSecretRead const DiagnosticCode = "MGS1026"
 github.com/egladman/magus/types.CapAncestryReporter const VCSCapability = "AncestryReporter"
@@ -1614,13 +1603,6 @@ github.com/egladman/magus/types.ConformanceUnmeasured.Language field string "jso
 github.com/egladman/magus/types.ConformanceUnmeasured.Reason field string "json:\"reason\"   yaml:\"reason\""
 github.com/egladman/magus/types.ConsoleFileWithheld const DiagnosticCode = "MGS9010"
 github.com/egladman/magus/types.ConsoleNotBuilt const DiagnosticCode = "MGS9013"
-github.com/egladman/magus/types.ConsoleStatus type struct
-github.com/egladman/magus/types.ConsoleStatus.Address field string "json:\"address,omitempty\" yaml:\"address,omitempty\""
-github.com/egladman/magus/types.ConsoleStatus.Enabled field bool "json:\"enabled\" yaml:\"enabled\""
-github.com/egladman/magus/types.ConsoleStatus.Note field string "json:\"note,omitempty\" yaml:\"note,omitempty\""
-github.com/egladman/magus/types.ConsoleStatus.Reachable field bool "json:\"reachable\" yaml:\"reachable\""
-github.com/egladman/magus/types.ConsoleStatus.State field string "json:\"state\" yaml:\"state\""
-github.com/egladman/magus/types.ConsoleStatus.URL field string "json:\"url,omitempty\" yaml:\"url,omitempty\""
 github.com/egladman/magus/types.ContextFromTranscript const ContextSource = "transcript"
 github.com/egladman/magus/types.ContextParamAnnotation const untyped string = "magus\\Context"
 github.com/egladman/magus/types.ContextSource type string
@@ -2795,151 +2777,6 @@ github.com/egladman/magus/types.IgnorePattern.Pattern field string "json:\"patte
 github.com/egladman/magus/types.IgnorePattern.Type field PatternType "json:\"type\" yaml:\"type\" validate:\"required,oneof=glob regex literal\""
 github.com/egladman/magus/types.IgnoredFileReporter type interface
 github.com/egladman/magus/types.IgnoredFileReporter.IgnoredFiles imethod func(ctx context.Context, dir string, paths []string) ([]string, error)
-github.com/egladman/magus/types.ImageAddedLayer type = github.com/egladman/magus/types/image.AddedLayer
-github.com/egladman/magus/types.ImageAddedLayer.Descriptor field github.com/egladman/magus/types/image.Descriptor
-github.com/egladman/magus/types.ImageAddedLayer.DiffID field github.com/egladman/magus/types/image.Digest
-github.com/egladman/magus/types.ImageAddedLayer.Directories field int
-github.com/egladman/magus/types.ImageAddedLayer.Entries field []github.com/egladman/magus/types/image.Entry
-github.com/egladman/magus/types.ImageAddedLayer.Files field int
-github.com/egladman/magus/types.ImageAddedLayer.Symlinks field int
-github.com/egladman/magus/types.ImageArchitecture type = github.com/egladman/magus/types/image.Architecture
-github.com/egladman/magus/types.ImageArchitectureAMD64 const github.com/egladman/magus/types/image.Architecture = "amd64"
-github.com/egladman/magus/types.ImageArchitectureARM64 const github.com/egladman/magus/types/image.Architecture = "arm64"
-github.com/egladman/magus/types.ImageArchitectureNone const github.com/egladman/magus/types/image.Architecture = ""
-github.com/egladman/magus/types.ImageConfig type = github.com/egladman/magus/types/image.Config
-github.com/egladman/magus/types.ImageConfig.Cmd field *[]string
-github.com/egladman/magus/types.ImageConfig.Entrypoint field *[]string
-github.com/egladman/magus/types.ImageConfig.Env field map[string]string
-github.com/egladman/magus/types.ImageConfig.ExposedPorts field *[]string
-github.com/egladman/magus/types.ImageConfig.Labels field map[string]string
-github.com/egladman/magus/types.ImageConfig.StopSignal field *string
-github.com/egladman/magus/types.ImageConfig.UnsetEnv field []string
-github.com/egladman/magus/types.ImageConfig.User field *string
-github.com/egladman/magus/types.ImageConfig.Volumes field *[]string
-github.com/egladman/magus/types.ImageConfig.WorkingDir field *string
-github.com/egladman/magus/types.ImageDependency type = github.com/egladman/magus/types/image.Dependency
-github.com/egladman/magus/types.ImageDependency.Digest field github.com/egladman/magus/types/image.Digest
-github.com/egladman/magus/types.ImageDependency.URI field string "buzz:\"uri\""
-github.com/egladman/magus/types.ImageDescriptor type = github.com/egladman/magus/types/image.Descriptor
-github.com/egladman/magus/types.ImageDescriptor.Annotations field map[string]string
-github.com/egladman/magus/types.ImageDescriptor.ArtifactType field string
-github.com/egladman/magus/types.ImageDescriptor.Digest field github.com/egladman/magus/types/image.Digest
-github.com/egladman/magus/types.ImageDescriptor.MediaType field string
-github.com/egladman/magus/types.ImageDescriptor.Platform field *github.com/egladman/magus/types/image.Platform
-github.com/egladman/magus/types.ImageDescriptor.Size field int
-github.com/egladman/magus/types.ImageDigest type = github.com/egladman/magus/types/image.Digest
-github.com/egladman/magus/types.ImageDigest.Algorithm field string
-github.com/egladman/magus/types.ImageDigest.Encoded field string
-github.com/egladman/magus/types.ImageDigest.String method func() string
-github.com/egladman/magus/types.ImageDirectory type = github.com/egladman/magus/types/image.Directory
-github.com/egladman/magus/types.ImageDirectory.GID field int "buzz:\"gid\""
-github.com/egladman/magus/types.ImageDirectory.Mode field int
-github.com/egladman/magus/types.ImageDirectory.Path field string
-github.com/egladman/magus/types.ImageDirectory.UID field int "buzz:\"uid\""
-github.com/egladman/magus/types.ImageDocument type = github.com/egladman/magus/types/image.Document
-github.com/egladman/magus/types.ImageDocument.Descriptor field github.com/egladman/magus/types/image.Descriptor
-github.com/egladman/magus/types.ImageDocument.Path field string
-github.com/egladman/magus/types.ImageEntry type = github.com/egladman/magus/types/image.Entry
-github.com/egladman/magus/types.ImageEntry.GID field int "buzz:\"gid\""
-github.com/egladman/magus/types.ImageEntry.Kind field github.com/egladman/magus/types/image.EntryKind
-github.com/egladman/magus/types.ImageEntry.ModTime field string
-github.com/egladman/magus/types.ImageEntry.Mode field string
-github.com/egladman/magus/types.ImageEntry.Origin field string
-github.com/egladman/magus/types.ImageEntry.Path field string
-github.com/egladman/magus/types.ImageEntry.Size field int
-github.com/egladman/magus/types.ImageEntry.Target field string
-github.com/egladman/magus/types.ImageEntry.UID field int "buzz:\"uid\""
-github.com/egladman/magus/types.ImageEntryKind type = github.com/egladman/magus/types/image.EntryKind
-github.com/egladman/magus/types.ImageEntryKindDirectory const github.com/egladman/magus/types/image.EntryKind = "directory"
-github.com/egladman/magus/types.ImageEntryKindFile const github.com/egladman/magus/types/image.EntryKind = "file"
-github.com/egladman/magus/types.ImageEntryKindNone const github.com/egladman/magus/types/image.EntryKind = ""
-github.com/egladman/magus/types.ImageEntryKindSymlink const github.com/egladman/magus/types/image.EntryKind = "symlink"
-github.com/egladman/magus/types.ImageFile type = github.com/egladman/magus/types/image.File
-github.com/egladman/magus/types.ImageFile.GID field int "buzz:\"gid\""
-github.com/egladman/magus/types.ImageFile.Mode field int
-github.com/egladman/magus/types.ImageFile.Path field string
-github.com/egladman/magus/types.ImageFile.Source field string
-github.com/egladman/magus/types.ImageFile.UID field int "buzz:\"uid\""
-github.com/egladman/magus/types.ImageLayout type = github.com/egladman/magus/types/image.Layout
-github.com/egladman/magus/types.ImageLayout.Added field *github.com/egladman/magus/types/image.AddedLayer
-github.com/egladman/magus/types.ImageLayout.Config field *github.com/egladman/magus/types/image.Descriptor
-github.com/egladman/magus/types.ImageLayout.Created field string
-github.com/egladman/magus/types.ImageLayout.Descriptor field github.com/egladman/magus/types/image.Descriptor
-github.com/egladman/magus/types.ImageLayout.Layers field []github.com/egladman/magus/types/image.Descriptor
-github.com/egladman/magus/types.ImageLayout.Path field string
-github.com/egladman/magus/types.ImageLayout.Platform field *github.com/egladman/magus/types/image.Platform
-github.com/egladman/magus/types.ImageLayout.Referrers field []github.com/egladman/magus/types/image.Descriptor
-github.com/egladman/magus/types.ImageMediaType type = github.com/egladman/magus/types/image.MediaType
-github.com/egladman/magus/types.ImageMediaTypeConfig const github.com/egladman/magus/types/image.MediaType = "application/vnd.oci.image.config.v1+json"
-github.com/egladman/magus/types.ImageMediaTypeEmpty const github.com/egladman/magus/types/image.MediaType = "application/vnd.oci.empty.v1+json"
-github.com/egladman/magus/types.ImageMediaTypeInToto const github.com/egladman/magus/types/image.MediaType = "application/vnd.in-toto+json"
-github.com/egladman/magus/types.ImageMediaTypeIndex const github.com/egladman/magus/types/image.MediaType = "application/vnd.oci.image.index.v1+json"
-github.com/egladman/magus/types.ImageMediaTypeLayer const github.com/egladman/magus/types/image.MediaType = "application/vnd.oci.image.layer.v1.tar"
-github.com/egladman/magus/types.ImageMediaTypeLayerGzip const github.com/egladman/magus/types/image.MediaType = "application/vnd.oci.image.layer.v1.tar+gzip"
-github.com/egladman/magus/types.ImageMediaTypeLayerZstd const github.com/egladman/magus/types/image.MediaType = "application/vnd.oci.image.layer.v1.tar+zstd"
-github.com/egladman/magus/types.ImageMediaTypeManifest const github.com/egladman/magus/types/image.MediaType = "application/vnd.oci.image.manifest.v1+json"
-github.com/egladman/magus/types.ImageMediaTypeSPDX const github.com/egladman/magus/types/image.MediaType = "application/spdx+json"
-github.com/egladman/magus/types.ImageModePolicy type = github.com/egladman/magus/types/image.ModePolicy
-github.com/egladman/magus/types.ImageModePolicyExecutableBit const github.com/egladman/magus/types/image.ModePolicy = "executable-bit"
-github.com/egladman/magus/types.ImageModePolicyFixed const github.com/egladman/magus/types/image.ModePolicy = "fixed"
-github.com/egladman/magus/types.ImageModePolicyNone const github.com/egladman/magus/types/image.ModePolicy = ""
-github.com/egladman/magus/types.ImageOS type = github.com/egladman/magus/types/image.OS
-github.com/egladman/magus/types.ImageOSLinux const github.com/egladman/magus/types/image.OS = "linux"
-github.com/egladman/magus/types.ImageOSNone const github.com/egladman/magus/types/image.OS = ""
-github.com/egladman/magus/types.ImagePlatform type = github.com/egladman/magus/types/image.Platform
-github.com/egladman/magus/types.ImagePlatform.Architecture field github.com/egladman/magus/types/image.Architecture
-github.com/egladman/magus/types.ImagePlatform.OS field github.com/egladman/magus/types/image.OS
-github.com/egladman/magus/types.ImagePlatform.OSFeatures field []string
-github.com/egladman/magus/types.ImagePlatform.OSVersion field string
-github.com/egladman/magus/types.ImagePlatform.Variant field github.com/egladman/magus/types/image.Variant
-github.com/egladman/magus/types.ImageProvenance type = github.com/egladman/magus/types/image.Provenance
-github.com/egladman/magus/types.ImageProvenance.BuilderID field string
-github.com/egladman/magus/types.ImageProvenance.Dependencies field []github.com/egladman/magus/types/image.Dependency
-github.com/egladman/magus/types.ImageProvenance.SourceRevision field string
-github.com/egladman/magus/types.ImagePushed type = github.com/egladman/magus/types/image.Pushed
-github.com/egladman/magus/types.ImagePushed.Digest field github.com/egladman/magus/types/image.Digest
-github.com/egladman/magus/types.ImagePushed.Reference field string
-github.com/egladman/magus/types.ImagePushed.Repository field string
-github.com/egladman/magus/types.ImagePushed.Tags field []string
-github.com/egladman/magus/types.ImageRegistryAuth type = github.com/egladman/magus/types/image.RegistryAuth
-github.com/egladman/magus/types.ImageRegistryAuth.Password field github.com/egladman/magus/spells.Secret
-github.com/egladman/magus/types.ImageRegistryAuth.Username field string
-github.com/egladman/magus/types.ImageSpec type = github.com/egladman/magus/types/image.Spec
-github.com/egladman/magus/types.ImageSpec.Annotations field map[string]string
-github.com/egladman/magus/types.ImageSpec.Base field string
-github.com/egladman/magus/types.ImageSpec.Config field github.com/egladman/magus/types/image.Config
-github.com/egladman/magus/types.ImageSpec.Created field string
-github.com/egladman/magus/types.ImageSpec.Directories field []github.com/egladman/magus/types/image.Directory
-github.com/egladman/magus/types.ImageSpec.Files field []github.com/egladman/magus/types/image.File
-github.com/egladman/magus/types.ImageSpec.Platform field github.com/egladman/magus/types/image.Platform
-github.com/egladman/magus/types.ImageSpec.Scratch field bool
-github.com/egladman/magus/types.ImageSpec.Symlinks field []github.com/egladman/magus/types/image.Symlink
-github.com/egladman/magus/types.ImageSpec.Trees field []github.com/egladman/magus/types/image.Tree
-github.com/egladman/magus/types.ImageSymlink type = github.com/egladman/magus/types/image.Symlink
-github.com/egladman/magus/types.ImageSymlink.GID field int "buzz:\"gid\""
-github.com/egladman/magus/types.ImageSymlink.Path field string
-github.com/egladman/magus/types.ImageSymlink.Target field string
-github.com/egladman/magus/types.ImageSymlink.UID field int "buzz:\"uid\""
-github.com/egladman/magus/types.ImageSymlinkPolicy type = github.com/egladman/magus/types/image.SymlinkPolicy
-github.com/egladman/magus/types.ImageSymlinkPolicyFollow const github.com/egladman/magus/types/image.SymlinkPolicy = "follow"
-github.com/egladman/magus/types.ImageSymlinkPolicyKeep const github.com/egladman/magus/types/image.SymlinkPolicy = "keep"
-github.com/egladman/magus/types.ImageSymlinkPolicyNone const github.com/egladman/magus/types/image.SymlinkPolicy = ""
-github.com/egladman/magus/types.ImageSymlinkPolicyRefuse const github.com/egladman/magus/types/image.SymlinkPolicy = "refuse"
-github.com/egladman/magus/types.ImageTree type = github.com/egladman/magus/types/image.Tree
-github.com/egladman/magus/types.ImageTree.Exclude field []string
-github.com/egladman/magus/types.ImageTree.GID field int "buzz:\"gid\""
-github.com/egladman/magus/types.ImageTree.Include field []string
-github.com/egladman/magus/types.ImageTree.ModePolicy field github.com/egladman/magus/types/image.ModePolicy
-github.com/egladman/magus/types.ImageTree.Path field string
-github.com/egladman/magus/types.ImageTree.Source field string
-github.com/egladman/magus/types.ImageTree.Symlinks field github.com/egladman/magus/types/image.SymlinkPolicy
-github.com/egladman/magus/types.ImageTree.UID field int "buzz:\"uid\""
-github.com/egladman/magus/types.ImageVariant type = github.com/egladman/magus/types/image.Variant
-github.com/egladman/magus/types.ImageVariantNone const github.com/egladman/magus/types/image.Variant = ""
-github.com/egladman/magus/types.ImageVariantV1 const github.com/egladman/magus/types/image.Variant = "v1"
-github.com/egladman/magus/types.ImageVariantV2 const github.com/egladman/magus/types/image.Variant = "v2"
-github.com/egladman/magus/types.ImageVariantV3 const github.com/egladman/magus/types/image.Variant = "v3"
-github.com/egladman/magus/types.ImageVariantV8 const github.com/egladman/magus/types/image.Variant = "v8"
 github.com/egladman/magus/types.ImpactCoverage type struct
 github.com/egladman/magus/types.ImpactCoverage.Covered field int "json:\"covered_stmts\" yaml:\"covered_stmts\""
 github.com/egladman/magus/types.ImpactCoverage.Ratio field float64 "json:\"ratio\"         yaml:\"ratio\""
@@ -3927,9 +3764,6 @@ github.com/egladman/magus/types.ListedWorkspace type struct
 github.com/egladman/magus/types.ListedWorkspace.Dir field string "json:\"dir\" yaml:\"dir\""
 github.com/egladman/magus/types.ListedWorkspace.Name field string "json:\"name\" yaml:\"name\""
 github.com/egladman/magus/types.ListedWorkspace.Root field string "json:\"root\" yaml:\"root\""
-github.com/egladman/magus/types.ListenerHTTP const ListenerKind = "http"
-github.com/egladman/magus/types.ListenerKind type string
-github.com/egladman/magus/types.ListenerSocket const ListenerKind = "socket"
 github.com/egladman/magus/types.LiteralPrefix func(p string) string
 github.com/egladman/magus/types.Location type struct
 github.com/egladman/magus/types.Location.Declaration field string "json:\"declaration,omitempty\""
@@ -3962,13 +3796,6 @@ github.com/egladman/magus/types.LsFilesExcluded.Paths field []string "json:\"pat
 github.com/egladman/magus/types.LsFilesExcluded.URL field string "json:\"url,omitempty\" yaml:\"url,omitempty\""
 github.com/egladman/magus/types.MCPBuzzFailed const DiagnosticCode = "MGS3033"
 github.com/egladman/magus/types.MCPClientFailed const DiagnosticCode = "MGS3034"
-github.com/egladman/magus/types.MCPEndpointStatus type struct
-github.com/egladman/magus/types.MCPEndpointStatus.Address field string "json:\"address,omitempty\" yaml:\"address,omitempty\""
-github.com/egladman/magus/types.MCPEndpointStatus.Enabled field bool "json:\"enabled\" yaml:\"enabled\""
-github.com/egladman/magus/types.MCPEndpointStatus.Note field string "json:\"note,omitempty\" yaml:\"note,omitempty\""
-github.com/egladman/magus/types.MCPEndpointStatus.Reachable field bool "json:\"reachable\" yaml:\"reachable\""
-github.com/egladman/magus/types.MCPEndpointStatus.State field string "json:\"state\" yaml:\"state\""
-github.com/egladman/magus/types.MCPEndpointStatus.URL field string "json:\"url,omitempty\" yaml:\"url,omitempty\""
 github.com/egladman/magus/types.MCPTool type struct
 github.com/egladman/magus/types.MCPTool.Description field string "json:\"description,omitempty\" yaml:\"description,omitempty\""
 github.com/egladman/magus/types.MCPTool.Name field string "json:\"name\"                  yaml:\"name\""
@@ -4776,24 +4603,6 @@ github.com/egladman/magus/types.RateLimit type struct
 github.com/egladman/magus/types.RateLimit.Limit field int
 github.com/egladman/magus/types.RateLimit.Remaining field int
 github.com/egladman/magus/types.RateLimit.Reset field string
-github.com/egladman/magus/types.ReadinessComponent type struct
-github.com/egladman/magus/types.ReadinessComponent.Detail field string "json:\"detail\""
-github.com/egladman/magus/types.ReadinessComponent.Name field ReadinessName "json:\"name\""
-github.com/egladman/magus/types.ReadinessComponent.Status field ReadinessStatus "json:\"status\""
-github.com/egladman/magus/types.ReadinessDegraded const ReadinessStatus = "degraded"
-github.com/egladman/magus/types.ReadinessDisabled const ReadinessStatus = "disabled"
-github.com/egladman/magus/types.ReadinessDown const ReadinessStatus = "down"
-github.com/egladman/magus/types.ReadinessIdle const ReadinessStatus = "idle"
-github.com/egladman/magus/types.ReadinessKnowledgeGraph const ReadinessName = "knowledge_graph"
-github.com/egladman/magus/types.ReadinessName type string
-github.com/egladman/magus/types.ReadinessOK const ReadinessStatus = "ok"
-github.com/egladman/magus/types.ReadinessReport type struct
-github.com/egladman/magus/types.ReadinessReport.Components field []ReadinessComponent "json:\"components\""
-github.com/egladman/magus/types.ReadinessReport.Ready field bool "json:\"ready\""
-github.com/egladman/magus/types.ReadinessServices const ReadinessName = "services"
-github.com/egladman/magus/types.ReadinessStatus type string
-github.com/egladman/magus/types.ReadinessSymbolIndex const ReadinessName = "symbol_index"
-github.com/egladman/magus/types.ReadinessWorkspaces const ReadinessName = "workspaces"
 github.com/egladman/magus/types.ReasonCoverageUnknown const KnowledgeUnknownReason = "coverage-unknown"
 github.com/egladman/magus/types.ReasonIndexStale const KnowledgeUnknownReason = "index-stale"
 github.com/egladman/magus/types.ReasonSymbolIndexMissing const KnowledgeUnknownReason = "symbol-index-missing"
@@ -5054,20 +4863,12 @@ github.com/egladman/magus/types.SemverVersion.Patch field int
 github.com/egladman/magus/types.SemverVersion.Prerelease field string
 github.com/egladman/magus/types.SemverVersion.String method func() string
 github.com/egladman/magus/types.ServerProtocolOutdated const DiagnosticCode = "MGS3025"
-github.com/egladman/magus/types.ServiceFailed const ServiceState = "failed"
-github.com/egladman/magus/types.ServiceIdle const ServiceState = "idle"
 github.com/egladman/magus/types.ServiceLease type struct
 github.com/egladman/magus/types.ServiceLease.Brokered field bool "json:\"brokered\""
 github.com/egladman/magus/types.ServiceLease.Idle field string "json:\"idle\""
 github.com/egladman/magus/types.ServiceLease.Key field string "json:\"key\""
 github.com/egladman/magus/types.ServiceLease.Owned field bool "json:\"owned\""
 github.com/egladman/magus/types.ServiceOpDetached const DiagnosticCode = "MGS5002"
-github.com/egladman/magus/types.ServiceRunning const ServiceState = "running"
-github.com/egladman/magus/types.ServiceStarting const ServiceState = "starting"
-github.com/egladman/magus/types.ServiceState type string
-github.com/egladman/magus/types.ServiceState.String method func() string
-github.com/egladman/magus/types.ServiceState.Valid method func() bool
-github.com/egladman/magus/types.ServiceState.Values method func() []string
 github.com/egladman/magus/types.Session type struct
 github.com/egladman/magus/types.Session.Session field string "json:\"session\""
 github.com/egladman/magus/types.Session.Since field string "json:\"since\""
@@ -5162,13 +4963,6 @@ github.com/egladman/magus/types.SlotsForMemory const SlotSource = "memory"
 github.com/egladman/magus/types.SlotsMeasured const SlotSource = "measured"
 github.com/egladman/magus/types.SlotsUnmeasured const SlotSource = "unmeasured"
 github.com/egladman/magus/types.SocketPeerNotOwner const DiagnosticCode = "MGS9022"
-github.com/egladman/magus/types.SourceDiagnostic type struct
-github.com/egladman/magus/types.SourceDiagnostic.Code field DiagnosticCode "json:\"code,omitempty\" yaml:\"code,omitempty\""
-github.com/egladman/magus/types.SourceDiagnostic.Column field int "json:\"column\" yaml:\"column\""
-github.com/egladman/magus/types.SourceDiagnostic.File field string "json:\"file\" yaml:\"file\""
-github.com/egladman/magus/types.SourceDiagnostic.Line field int "json:\"line\" yaml:\"line\""
-github.com/egladman/magus/types.SourceDiagnostic.Message field string "json:\"message\" yaml:\"message\""
-github.com/egladman/magus/types.SourceDiagnostic.URL field string "json:\"url,omitempty\" yaml:\"url,omitempty\""
 github.com/egladman/magus/types.SourceGlobInAnotherProject const DiagnosticCode = "MGS1060"
 github.com/egladman/magus/types.SourceIsAlsoOutput const DiagnosticCode = "MGS1034"
 github.com/egladman/magus/types.SourceProjects func(files []FileEntry) map[string]bool
@@ -5282,127 +5076,9 @@ github.com/egladman/magus/types.Status type struct
 github.com/egladman/magus/types.Status.BuzzObject method func() BuzzObject
 github.com/egladman/magus/types.Status.Clean field bool
 github.com/egladman/magus/types.Status.Files field []Path
-github.com/egladman/magus/types.StatusBase type struct
-github.com/egladman/magus/types.StatusBase.Build field BuildStatus
-github.com/egladman/magus/types.StatusBase.Cache field CacheStatus
-github.com/egladman/magus/types.StatusBase.Telemetry field TelemetryStatus
-github.com/egladman/magus/types.StatusBroker type struct
-github.com/egladman/magus/types.StatusBroker.Capacity field MachineSnapshot "json:\"capacity\" yaml:\"capacity\""
-github.com/egladman/magus/types.StatusBroker.Draining field bool "json:\"draining,omitzero\" yaml:\"draining,omitempty\""
-github.com/egladman/magus/types.StatusBroker.Executable field string "json:\"executable,omitempty\" yaml:\"executable,omitempty\""
-github.com/egladman/magus/types.StatusBroker.IdleExitSeconds field int "json:\"idle_exit_seconds,omitzero\" yaml:\"idle_exit_seconds,omitempty\""
-github.com/egladman/magus/types.StatusBroker.PID field int "json:\"pid\" yaml:\"pid\""
-github.com/egladman/magus/types.StatusBroker.Protocol field int "json:\"protocol\" yaml:\"protocol\""
-github.com/egladman/magus/types.StatusBroker.Services field []StatusService "json:\"services,omitempty\" yaml:\"services,omitempty\""
-github.com/egladman/magus/types.StatusBroker.Socket field string "json:\"socket\" yaml:\"socket\""
-github.com/egladman/magus/types.StatusBroker.StartTime field time.Time "json:\"start_time\" yaml:\"start_time\""
-github.com/egladman/magus/types.StatusBroker.Version field string "json:\"version,omitempty\" yaml:\"version,omitempty\""
-github.com/egladman/magus/types.StatusConcurrency type struct
-github.com/egladman/magus/types.StatusConcurrency.Configured field int "json:\"configured,omitempty\" yaml:\"configured,omitempty\""
-github.com/egladman/magus/types.StatusConcurrency.Effective field int "json:\"effective\" yaml:\"effective\""
-github.com/egladman/magus/types.StatusConcurrency.Profile field ConcurrencyProfile "json:\"profile,omitempty\" yaml:\"profile,omitempty\""
-github.com/egladman/magus/types.StatusConfig type struct
-github.com/egladman/magus/types.StatusConfig.Concurrency field StatusConcurrency "json:\"concurrency\" yaml:\"concurrency\""
-github.com/egladman/magus/types.StatusConfig.DefaultCharms field []string "json:\"default_charms,omitempty\" yaml:\"default_charms,omitempty\""
-github.com/egladman/magus/types.StatusConfig.Sandbox field bool "json:\"sandbox\" yaml:\"sandbox\""
-github.com/egladman/magus/types.StatusListener type struct
-github.com/egladman/magus/types.StatusListener.Address field string "json:\"address\" yaml:\"address\""
-github.com/egladman/magus/types.StatusListener.Kind field ListenerKind "json:\"kind\" yaml:\"kind\""
-github.com/egladman/magus/types.StatusLock type struct
-github.com/egladman/magus/types.StatusLock.AcquireTime field time.Time "json:\"acquire_time,omitempty\" yaml:\"acquire_time,omitempty\""
-github.com/egladman/magus/types.StatusLock.Command field string "json:\"command,omitempty\" yaml:\"command,omitempty\""
-github.com/egladman/magus/types.StatusLock.Dir field string "json:\"dir,omitempty\" yaml:\"dir,omitempty\""
-github.com/egladman/magus/types.StatusLock.PID field int "json:\"pid,omitempty\" yaml:\"pid,omitempty\""
-github.com/egladman/magus/types.StatusLock.Project field string "json:\"project\" yaml:\"project\""
-github.com/egladman/magus/types.StatusLock.StaleAfterSeconds field int "json:\"stale_after_seconds,omitempty\" yaml:\"stale_after_seconds,omitempty\""
-github.com/egladman/magus/types.StatusOutput type struct
-github.com/egladman/magus/types.StatusOutput.Affected field []string "json:\"affected,omitempty\" yaml:\"affected,omitempty\""
-github.com/egladman/magus/types.StatusOutput.Available field int "json:\"available\" yaml:\"available\""
-github.com/egladman/magus/types.StatusOutput.Capacity field int "json:\"capacity\" yaml:\"capacity\""
-github.com/egladman/magus/types.StatusOutput.ParentPID field int "json:\"parent_pid\" yaml:\"parent_pid\""
-github.com/egladman/magus/types.StatusOutput.Queued field int "json:\"queued\" yaml:\"queued\""
-github.com/egladman/magus/types.StatusOutput.Running field int "json:\"running\" yaml:\"running\""
-github.com/egladman/magus/types.StatusOutput.RunningTargets field []StatusRunningTarget "json:\"running_targets,omitempty\" yaml:\"running_targets,omitempty\""
-github.com/egladman/magus/types.StatusOutput.Socket field string "json:\"socket,omitempty\" yaml:\"socket,omitempty\""
-github.com/egladman/magus/types.StatusOutput.Version field string "json:\"version,omitempty\" yaml:\"version,omitempty\""
-github.com/egladman/magus/types.StatusOutput.Workspaces field []StatusWorkspace "json:\"workspaces,omitempty\" yaml:\"workspaces,omitempty\""
-github.com/egladman/magus/types.StatusPipeWait type struct
-github.com/egladman/magus/types.StatusPipeWait.Command field string "json:\"command,omitempty\" yaml:\"command,omitempty\""
-github.com/egladman/magus/types.StatusPipeWait.Dir field string "json:\"dir,omitempty\" yaml:\"dir,omitempty\""
-github.com/egladman/magus/types.StatusPipeWait.PID field int "json:\"pid\" yaml:\"pid\""
-github.com/egladman/magus/types.StatusPipeWait.UpstreamCommand field string "json:\"upstream_command,omitempty\" yaml:\"upstream_command,omitempty\""
-github.com/egladman/magus/types.StatusPipeWait.UpstreamPID field int "json:\"upstream_pid\" yaml:\"upstream_pid\""
-github.com/egladman/magus/types.StatusPipeWait.WaitTime field time.Time "json:\"wait_time,omitempty\" yaml:\"wait_time,omitempty\""
 github.com/egladman/magus/types.StatusRecord type struct
 github.com/egladman/magus/types.StatusRecord.Clean field bool
 github.com/egladman/magus/types.StatusRecord.Files field []Path
-github.com/egladman/magus/types.StatusRun type struct
-github.com/egladman/magus/types.StatusRun.Inv field string "json:\"inv\" yaml:\"inv\""
-github.com/egladman/magus/types.StatusRun.StartedAt field time.Time "json:\"started_at,omitempty\" yaml:\"started_at,omitempty\""
-github.com/egladman/magus/types.StatusRun.Targets field []StatusTargetRun "json:\"targets,omitempty\" yaml:\"targets,omitempty\""
-github.com/egladman/magus/types.StatusRun.Trigger field string "json:\"trigger,omitempty\" yaml:\"trigger,omitempty\""
-github.com/egladman/magus/types.StatusRunningTarget type struct
-github.com/egladman/magus/types.StatusRunningTarget.Args field []string "json:\"args\" yaml:\"args\""
-github.com/egladman/magus/types.StatusRunningTarget.Inv field string "json:\"inv,omitempty\" yaml:\"inv,omitempty\""
-github.com/egladman/magus/types.StatusRunningTarget.StartedAt field time.Time "json:\"started_at,omitempty\" yaml:\"started_at,omitempty\""
-github.com/egladman/magus/types.StatusRunningTarget.Step field string "json:\"step,omitempty\" yaml:\"step,omitempty\""
-github.com/egladman/magus/types.StatusRunningTarget.Workspace field string "json:\"workspace,omitempty\" yaml:\"workspace,omitempty\""
-github.com/egladman/magus/types.StatusServer type struct
-github.com/egladman/magus/types.StatusServer.Executable field string "json:\"executable,omitempty\" yaml:\"executable,omitempty\""
-github.com/egladman/magus/types.StatusServer.Listeners field []StatusListener "json:\"listeners,omitempty\" yaml:\"listeners,omitempty\""
-github.com/egladman/magus/types.StatusServer.PID field int "json:\"pid\" yaml:\"pid\""
-github.com/egladman/magus/types.StatusServer.Socket field string "json:\"socket\" yaml:\"socket\""
-github.com/egladman/magus/types.StatusServer.StartTime field time.Time "json:\"start_time\" yaml:\"start_time\""
-github.com/egladman/magus/types.StatusServer.Version field string "json:\"version,omitempty\" yaml:\"version,omitempty\""
-github.com/egladman/magus/types.StatusServer.Watch field []string "json:\"watch,omitempty\" yaml:\"watch,omitempty\""
-github.com/egladman/magus/types.StatusService type struct
-github.com/egladman/magus/types.StatusService.Command field string "json:\"command,omitempty\" yaml:\"command,omitempty\""
-github.com/egladman/magus/types.StatusService.Dependents field int "json:\"dependents,omitempty\" yaml:\"dependents,omitempty\""
-github.com/egladman/magus/types.StatusService.ID field string "json:\"id\" yaml:\"id\""
-github.com/egladman/magus/types.StatusService.Label field string "json:\"label,omitempty\" yaml:\"label,omitempty\""
-github.com/egladman/magus/types.StatusService.Ports field []string "json:\"ports,omitempty\" yaml:\"ports,omitempty\""
-github.com/egladman/magus/types.StatusService.StartedAt field time.Time "json:\"started_at,omitempty\" yaml:\"started_at,omitempty\""
-github.com/egladman/magus/types.StatusService.State field ServiceState "json:\"state,omitempty\" yaml:\"state,omitempty\""
-github.com/egladman/magus/types.StatusSnapshot type struct
-github.com/egladman/magus/types.StatusSnapshot.Broker field *StatusBroker "json:\"broker,omitempty\" yaml:\"broker,omitempty\""
-github.com/egladman/magus/types.StatusSnapshot.BrokerPolicy field BrokerPolicy "json:\"broker_policy,omitempty\" yaml:\"broker_policy,omitempty\""
-github.com/egladman/magus/types.StatusSnapshot.Build field BuildStatus "json:\"build\" yaml:\"build\""
-github.com/egladman/magus/types.StatusSnapshot.BuildInfo field BuildInfo "json:\"build_info\" yaml:\"build_info\""
-github.com/egladman/magus/types.StatusSnapshot.Cache field CacheStatus "json:\"cache\" yaml:\"cache\""
-github.com/egladman/magus/types.StatusSnapshot.Config field StatusConfig "json:\"config,omitempty\" yaml:\"config,omitempty\""
-github.com/egladman/magus/types.StatusSnapshot.Console field *ConsoleStatus "json:\"console,omitempty\" yaml:\"console,omitempty\""
-github.com/egladman/magus/types.StatusSnapshot.Locks field []StatusLock "json:\"locks,omitempty\" yaml:\"locks,omitempty\""
-github.com/egladman/magus/types.StatusSnapshot.MCPEndpoint field *MCPEndpointStatus "json:\"mcp_endpoint,omitempty\" yaml:\"mcp_endpoint,omitempty\""
-github.com/egladman/magus/types.StatusSnapshot.ObservingSince field time.Time "json:\"observing_since,omitempty\" yaml:\"observing_since,omitempty\""
-github.com/egladman/magus/types.StatusSnapshot.PipeWaits field []StatusPipeWait "json:\"pipe_waits,omitempty\" yaml:\"pipe_waits,omitempty\""
-github.com/egladman/magus/types.StatusSnapshot.Pool field *StatusOutput "json:\"pool,omitempty\" yaml:\"pool,omitempty\""
-github.com/egladman/magus/types.StatusSnapshot.PoolError field string "json:\"pool_error,omitempty\" yaml:\"pool_error,omitempty\""
-github.com/egladman/magus/types.StatusSnapshot.Pools field []StatusOutput "json:\"pools,omitempty\" yaml:\"pools,omitempty\""
-github.com/egladman/magus/types.StatusSnapshot.Runs field []StatusRun "json:\"runs,omitempty\" yaml:\"runs,omitempty\""
-github.com/egladman/magus/types.StatusSnapshot.Server field *StatusServer "json:\"server,omitempty\" yaml:\"server,omitempty\""
-github.com/egladman/magus/types.StatusSnapshot.SymbolIndexes field []SymbolIndexStatus "json:\"symbol_indexes,omitempty\" yaml:\"symbol_indexes,omitempty\""
-github.com/egladman/magus/types.StatusSnapshot.Telemetry field TelemetryStatus "json:\"telemetry\" yaml:\"telemetry\""
-github.com/egladman/magus/types.StatusTargetRun type struct
-github.com/egladman/magus/types.StatusTargetRun.DurationMs field int64 "json:\"duration_ms,omitempty\" yaml:\"duration_ms,omitempty\""
-github.com/egladman/magus/types.StatusTargetRun.EndedAt field time.Time "json:\"ended_at,omitempty\" yaml:\"ended_at,omitempty\""
-github.com/egladman/magus/types.StatusTargetRun.OutputRef field string "json:\"output_ref,omitempty\" yaml:\"output_ref,omitempty\""
-github.com/egladman/magus/types.StatusTargetRun.Project field string "json:\"project,omitempty\" yaml:\"project,omitempty\""
-github.com/egladman/magus/types.StatusTargetRun.StartedAt field time.Time "json:\"started_at,omitempty\" yaml:\"started_at,omitempty\""
-github.com/egladman/magus/types.StatusTargetRun.State field TargetRunState "json:\"state\" yaml:\"state\""
-github.com/egladman/magus/types.StatusTargetRun.Target field string "json:\"target,omitempty\" yaml:\"target,omitempty\""
-github.com/egladman/magus/types.StatusWorkspace type struct
-github.com/egladman/magus/types.StatusWorkspace.CacheBytes field int64 "json:\"cache_bytes,omitempty\" yaml:\"cache_bytes,omitempty\""
-github.com/egladman/magus/types.StatusWorkspace.CacheError field int "json:\"cache_error,omitempty\" yaml:\"cache_error,omitempty\""
-github.com/egladman/magus/types.StatusWorkspace.CacheHit field int "json:\"cache_hit,omitempty\" yaml:\"cache_hit,omitempty\""
-github.com/egladman/magus/types.StatusWorkspace.CacheMiss field int "json:\"cache_miss,omitempty\" yaml:\"cache_miss,omitempty\""
-github.com/egladman/magus/types.StatusWorkspace.CacheSavedMs field int64 "json:\"cache_saved_ms,omitempty\" yaml:\"cache_saved_ms,omitempty\""
-github.com/egladman/magus/types.StatusWorkspace.Error field *WorkspaceFailure "json:\"error,omitempty\" yaml:\"error,omitempty\""
-github.com/egladman/magus/types.StatusWorkspace.LastAccess field time.Time "json:\"last_access\" yaml:\"last_access\""
-github.com/egladman/magus/types.StatusWorkspace.Loaded method func() bool
-github.com/egladman/magus/types.StatusWorkspace.LoadedAt field time.Time "json:\"loaded_at\" yaml:\"loaded_at\""
-github.com/egladman/magus/types.StatusWorkspace.Root field string "json:\"root\" yaml:\"root\""
-github.com/egladman/magus/types.StatusWorkspace.SecretProvider field string "json:\"secret_provider,omitempty\" yaml:\"secret_provider,omitempty\""
-github.com/egladman/magus/types.StatusWorkspace.State field WorkspaceState "json:\"state,omitempty\" yaml:\"state,omitempty\""
 github.com/egladman/magus/types.StepLog type struct
 github.com/egladman/magus/types.StepLog.Effects method(ptr) func() []string
 github.com/egladman/magus/types.StepLog.Record method(ptr) func(u Unit)
@@ -5659,27 +5335,9 @@ github.com/egladman/magus/types.TargetReport type struct
 github.com/egladman/magus/types.TargetReport.Count field int "json:\"count\"      yaml:\"count\""
 github.com/egladman/magus/types.TargetReport.Definition field string "json:\"definition\" yaml:\"definition\""
 github.com/egladman/magus/types.TargetReport.Targets field []TargetEntry "json:\"targets\"    yaml:\"targets\""
-github.com/egladman/magus/types.TargetRunCached const TargetRunState = "cached"
-github.com/egladman/magus/types.TargetRunFailed const TargetRunState = "failed"
-github.com/egladman/magus/types.TargetRunPassed const TargetRunState = "passed"
-github.com/egladman/magus/types.TargetRunPermitted const TargetRunState = "permitted"
-github.com/egladman/magus/types.TargetRunQueued const TargetRunState = "queued"
-github.com/egladman/magus/types.TargetRunRunning const TargetRunState = "running"
-github.com/egladman/magus/types.TargetRunState type string
-github.com/egladman/magus/types.TargetRunState.String method func() string
-github.com/egladman/magus/types.TargetRunState.Valid method func() bool
-github.com/egladman/magus/types.TargetRunState.Values method func() []string
 github.com/egladman/magus/types.TargetSpellUse type struct
 github.com/egladman/magus/types.TargetSpellUse.Ops field []string "json:\"ops,omitempty\" yaml:\"ops,omitempty\""
 github.com/egladman/magus/types.TargetSpellUse.Spell field string "json:\"spell\"         yaml:\"spell\""
-github.com/egladman/magus/types.TelemetryStatus type struct
-github.com/egladman/magus/types.TelemetryStatus.Enabled field bool "json:\"enabled\" yaml:\"enabled\""
-github.com/egladman/magus/types.TelemetryStatus.Endpoint field string "json:\"endpoint,omitempty\" yaml:\"endpoint,omitempty\""
-github.com/egladman/magus/types.TelemetryStatus.Insecure field bool "json:\"insecure,omitempty\" yaml:\"insecure,omitempty\""
-github.com/egladman/magus/types.TelemetryStatus.Note field string "json:\"note,omitempty\" yaml:\"note,omitempty\""
-github.com/egladman/magus/types.TelemetryStatus.Protocol field string "json:\"protocol,omitempty\" yaml:\"protocol,omitempty\""
-github.com/egladman/magus/types.TelemetryStatus.SampleRatio field float64 "json:\"sample_ratio,omitempty\" yaml:\"sample_ratio,omitempty\""
-github.com/egladman/magus/types.TelemetryStatus.ServiceName field string "json:\"service_name,omitempty\" yaml:\"service_name,omitempty\""
 github.com/egladman/magus/types.TermBold const TermStyle = "1"
 github.com/egladman/magus/types.TermBrightGreen const TermStyle = "1;32"
 github.com/egladman/magus/types.TermDim const TermStyle = "2"
@@ -6117,7 +5775,6 @@ github.com/egladman/magus/types.Workspace.SetGraphObserver method(ptr) func(o Ob
 github.com/egladman/magus/types.Workspace.UnderPath method(ptr) func(prefix string) []*Project
 github.com/egladman/magus/types.Workspace.VCSOptions field VCSOptions
 github.com/egladman/magus/types.Workspace.Workspaces field []ListedWorkspace
-github.com/egladman/magus/types.WorkspaceActive const WorkspaceState = "active"
 github.com/egladman/magus/types.WorkspaceConfig type struct
 github.com/egladman/magus/types.WorkspaceConfig.CacheDir field string
 github.com/egladman/magus/types.WorkspaceConfig.Concurrency field int
@@ -6131,13 +5788,8 @@ github.com/egladman/magus/types.WorkspaceEntry.Root field string "json:\"root\" 
 github.com/egladman/magus/types.WorkspaceEntry.VCSBaseRef field string "json:\"vcs_base_ref,omitempty\"  yaml:\"vcs_base_ref,omitempty\""
 github.com/egladman/magus/types.WorkspaceEntry.Workspaces field []ListedWorkspace "json:\"workspaces\" yaml:\"workspaces\""
 github.com/egladman/magus/types.WorkspaceEntryShape const DiagnosticCode = "MGS1056"
-github.com/egladman/magus/types.WorkspaceFailed const WorkspaceState = "failed"
-github.com/egladman/magus/types.WorkspaceFailure type struct
-github.com/egladman/magus/types.WorkspaceFailure.Diagnostics field []SourceDiagnostic "json:\"diagnostics,omitempty\" yaml:\"diagnostics,omitempty\""
-github.com/egladman/magus/types.WorkspaceFailure.Message field string "json:\"message\" yaml:\"message\""
 github.com/egladman/magus/types.WorkspaceFromContext func(ctx context.Context) WorkspaceRepository
 github.com/egladman/magus/types.WorkspaceLoadFailed const DiagnosticCode = "MGS3016"
-github.com/egladman/magus/types.WorkspaceLoading const WorkspaceState = "loading"
 github.com/egladman/magus/types.WorkspaceMissing const DiagnosticCode = "MGS1054"
 github.com/egladman/magus/types.WorkspaceNeedsNewerMagus const DiagnosticCode = "MGS1021"
 github.com/egladman/magus/types.WorkspaceNotConnected const DiagnosticCode = "MGS1059"
@@ -6158,7 +5810,6 @@ github.com/egladman/magus/types.WorkspaceRepository.embeds AffectedComputer
 github.com/egladman/magus/types.WorkspaceRepository.embeds Inspector
 github.com/egladman/magus/types.WorkspaceRepository.embeds TargetExpander
 github.com/egladman/magus/types.WorkspaceRepository.embeds WorkspaceReader
-github.com/egladman/magus/types.WorkspaceState type string
 github.com/egladman/magus/types.WorkspaceStillLoading const DiagnosticCode = "MGS3017"
 github.com/egladman/magus/types.WorkspacesCommitted const DiagnosticCode = "MGS1055"
 github.com/egladman/magus/types.WorkspacesDir const untyped string = ".magus/workspaces"

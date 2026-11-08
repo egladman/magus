@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"bufio"
 	"bytes"
 	"context"
@@ -138,11 +139,11 @@ func TestBrokerDownRowNamesThePolicy(t *testing.T) {
 
 func TestServerRowsNameEveryListener(t *testing.T) {
 	var buf bytes.Buffer
-	printServerRows(&buf, &types.StatusServer{
+	printServerRows(&buf, &daemon.Server{
 		PID: 47001, Socket: "unix:///run/magus/server.sock", StartTime: time.Now().Add(-time.Hour),
-		Listeners: []types.StatusListener{
-			{Kind: types.ListenerSocket, Address: "unix:///run/magus/server.sock"},
-			{Kind: types.ListenerHTTP, Address: "127.0.0.1:7391"},
+		Listeners: []daemon.Listener{
+			{Kind: daemon.ListenerSocket, Address: "unix:///run/magus/server.sock"},
+			{Kind: daemon.ListenerHTTP, Address: "127.0.0.1:7391"},
 		},
 		Watch: []string{"/repo"},
 	}, time.Now())

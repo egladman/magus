@@ -8,6 +8,7 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/daemon"
 	imagetypes "github.com/egladman/magus/types/image"
 	"time"
 )
@@ -4900,7 +4901,7 @@ func ObjectConformance(v types.Conformance, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectStatusTargetRun(v types.StatusTargetRun, enums ffi.EnumCases) vm.Value {
+func ObjectStatusTargetRun(v daemon.TargetRun, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StringValue(v.Project))
 	out.MapSet("target", vm.StringValue(v.Target))
@@ -4920,7 +4921,7 @@ func ObjectStatusTargetRun(v types.StatusTargetRun, enums ffi.EnumCases) vm.Valu
 	return out
 }
 
-func ObjectStatusRun(v types.StatusRun, enums ffi.EnumCases) vm.Value {
+func ObjectStatusRun(v daemon.Run, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("inv", vm.StringValue(v.Inv))
 	out.MapSet("trigger", vm.StringValue(v.Trigger))
