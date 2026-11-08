@@ -7,8 +7,8 @@ import (
 )
 
 // The case lists of this package's closed string types, excluding each zero value.
-// cmd/magus-utils's boundaryEnums names the same values for the Buzz mirror, and
-// TestBoundaryEnumsMatchTheirSets holds the two to one list.
+// buzzgen derives the Buzz mirror's cases from the constants, and
+// TestBoundaryEnumsMatchTheirSets holds each set equal to them.
 
 var diagnosticOrigins = enum.Set[DiagnosticOrigin]{"builtin", "workspace"}
 
@@ -97,7 +97,7 @@ func (v DiffReadState) Values() []string { return diffReadStates.Strings() }
 func (v DiffReadState) Valid() bool      { return diffReadStates.Valid(v) }
 func (v DiffReadState) String() string   { return enum.String(v) }
 
-var targetRunStates = enum.Set[TargetRunState]{"queued", "running", "passed", "failed", "cached"}
+var targetRunStates = enum.Set[TargetRunState]{"queued", "running", "passed", "failed", "cached", "permitted"}
 
 func (v TargetRunState) Values() []string { return targetRunStates.Strings() }
 func (v TargetRunState) Valid() bool      { return targetRunStates.Valid(v) }
