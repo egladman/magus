@@ -144,8 +144,10 @@ func gitRun(t *testing.T, dir string, args ...string) {
 
 // historyMetricsGitEnv is the test's environment with the user's global and system git config
 // switched off, so a signing key or a hooks path there cannot reach the fixture.
+// git commit detaches auto maintenance, which can still write .git at cleanup.
 func historyMetricsGitEnv() []string {
-	return append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
+	return append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1",
+		"GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=maintenance.auto", "GIT_CONFIG_VALUE_0=false")
 }
 
 func commitHistoryMetricsFiles(t *testing.T, dir, author, when string, files map[string]string) {
