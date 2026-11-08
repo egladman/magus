@@ -4,6 +4,8 @@ package main
 //go:generate go run . boundaryobjects -out ../../internal/interp/bindings/gen/boundary_objects.go -pkg bindgen
 
 import (
+	"github.com/egladman/magus/types/events"
+	"github.com/egladman/magus/types/trail"
 	"github.com/egladman/magus/types/daemon"
 	"github.com/egladman/magus/types/image"
 	"fmt"
@@ -501,10 +503,10 @@ var boundaryTypes = []boundaryType{
 	// magus\service.acquire returns it and magus\service.release takes it back.
 	{Name: "ServiceLease", Type: reflect.TypeFor[types.ServiceLease](), RuntimeObject: true},
 	// magus\trail's records, leaf first: Trail holds lists of the two before it.
-	{Name: "TrailObservation", Type: reflect.TypeFor[types.TrailObservation](), RuntimeObject: true},
-	{Name: "TrailSpawn", Type: reflect.TypeFor[types.TrailSpawn](), RuntimeObject: true},
-	{Name: "Trail", Type: reflect.TypeFor[types.Trail](), RuntimeObject: true},
-	{Name: "TrailMark", Type: reflect.TypeFor[types.TrailMark](), RuntimeObject: true},
+	{Name: "TrailObservation", Type: reflect.TypeFor[trail.Observation](), RuntimeObject: true},
+	{Name: "TrailSpawn", Type: reflect.TypeFor[trail.Spawn](), RuntimeObject: true},
+	{Name: "Trail", Type: reflect.TypeFor[trail.Trail](), RuntimeObject: true},
+	{Name: "TrailMark", Type: reflect.TypeFor[trail.Mark](), RuntimeObject: true},
 	// A buzz-format brief is one magus\Brief literal the guard type-checks; nothing hands
 	// one back, so none is a runtime object. Leaf first: Brief holds lists of the two.
 	{Name: "BriefDecision", Type: reflect.TypeFor[types.BriefDecision]()},
@@ -515,7 +517,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "ChangeOptions", Type: reflect.TypeFor[types.ChangeOptions]()},
 	{Name: "Change", Type: reflect.TypeFor[types.Change](), RuntimeObject: true},
 	{Name: "History", Type: reflect.TypeFor[types.History](), RuntimeObject: true},
-	{Name: "SessionOptions", Type: reflect.TypeFor[types.TrailReadOptions]()},
+	{Name: "SessionOptions", Type: reflect.TypeFor[trail.ReadOptions]()},
 	{Name: "Session", Type: reflect.TypeFor[types.Session](), RuntimeObject: true},
 	{Name: "JobRegistration", Type: reflect.TypeFor[types.JobRegistration](), RuntimeObject: true},
 	{Name: "PrecedentScope", Type: reflect.TypeFor[types.PrecedentScope](), RuntimeObject: true},
@@ -634,8 +636,8 @@ var boundaryEnumTypes = []reflect.Type{
 	reflect.TypeFor[types.SuggestionStatus](),
 	reflect.TypeFor[types.SymbolOccurrenceStatus](),
 	reflect.TypeFor[types.ThreadSource](),
-	reflect.TypeFor[types.TrailSection](),
-	reflect.TypeFor[types.TrailVerdict](),
+	reflect.TypeFor[trail.Section](),
+	reflect.TypeFor[trail.Verdict](),
 	reflect.TypeFor[types.VCSCapability](),
 	reflect.TypeFor[daemon.WorkspaceState](),
 }
@@ -647,7 +649,7 @@ var boundaryEnumTypes = []reflect.Type{
 var openStringTypes = map[reflect.Type]string{
 	reflect.TypeFor[types.ProjectOrigin]():   "a provider-declared project carries its provider's name",
 	reflect.TypeFor[diagnostics.Code]():      "a workspace mints its own codes through magus\\raise beside magus's catalog",
-	reflect.TypeFor[types.StreamEventType](): "a subscriber skips a type it does not know, so new types are added without a release of every reader",
+	reflect.TypeFor[events.EventType](): "a subscriber skips a type it does not know, so new types are added without a release of every reader",
 	reflect.TypeFor[types.ReviewVerdict]():   "a review provider op carries it, and a provider op's request encoder writes no session enum case",
 	// The merge queue provider script compares these as str. They become enums with that
 	// script's typed rewrite (job queue-github-typed), which a str field here keeps checking.

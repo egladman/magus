@@ -1,6 +1,7 @@
 package eventstream
 
 import (
+	"github.com/egladman/magus/types/events"
 	"context"
 	"fmt"
 	"os"
@@ -8,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,8 +26,8 @@ func writeLog(t *testing.T, dir, inv, content string) {
 }
 
 // collect drains events into a slice via the emit callback the Follower takes.
-func collect(got *[]types.StreamEvent) func(types.StreamEvent) error {
-	return func(e types.StreamEvent) error {
+func collect(got *[]events.Event) func(events.Event) error {
+	return func(e events.Event) error {
 		*got = append(*got, e)
 		return nil
 	}
@@ -40,14 +40,14 @@ func TestFollowerReplaysRetainedRuns(t *testing.T) {
 {"ts":3,"inv":"inv1","kind":"finished","status":"pass"}
 `)
 
-	var got []types.StreamEvent
+	var got []events.Event
 	f := NewFollower(dir, "/repo")
 	require.NoError(t, f.Replay(0, collect(&got)))
 
 	require.Len(t, got, 3)
-	assert.Equal(t, types.StreamRunStarted, got[0].Body.StreamType())
-	assert.Equal(t, types.StreamTarget{Project: "api", Target: "build", Status: "ok", Ref: "out_1"}, got[1].Body)
-	assert.Equal(t, types.StreamRunFinished, got[2].Body.StreamType())
+	assert.Equal(t, events.RunStarted, got[0].Body.StreamType())
+	assert.Equal(t, events.Target{Project: "api", Target: "build", Status: "ok", Ref: "out_1"}, got[1].Body)
+	assert.Equal(t, events.RunFinished, got[2].Body.StreamType())
 	assert.Equal(t, "/repo", got[0].Workspace)
 }
 
@@ -57,12 +57,12 @@ func TestFollowerReplayDoesNotRepeatOnFollow(t *testing.T) {
 	dir := t.TempDir()
 	writeLog(t, dir, "inv1", `{"ts":1,"inv":"inv1","kind":"finished","status":"pass"}`+"\n")
 
-	var replayed []types.StreamEvent
+	var replayed []events.Event
 	f := NewFollower(dir, "/repo")
 	require.NoError(t, f.Replay(0, collect(&replayed)))
 	require.Len(t, replayed, 1)
 
-	var fresh []types.StreamEvent
+	var fresh []events.Event
 	require.NoError(t, f.drain("inv1.jsonl", collect(&fresh)))
 	assert.Empty(t, fresh)
 }
@@ -75,7 +75,7 @@ func TestFollowerSkipsPartialLines(t *testing.T) {
 	dir := t.TempDir()
 	writeLog(t, dir, "inv1", `{"ts":1,"inv":"inv1","kind":"finished","status":"pass"}`+"\n"+`{"ts":2,"inv":"inv1","kind":"res`)
 
-	var got []types.StreamEvent
+	var got []events.Event
 	f := NewFollower(dir, "/repo")
 	require.NoError(t, f.Replay(0, collect(&got)))
 	require.Len(t, got, 1, "the torn line must not be emitted")
@@ -83,7 +83,7 @@ func TestFollowerSkipsPartialLines(t *testing.T) {
 	writeLog(t, dir, "inv1", `ult","project":"api","target":"build","status":"pass"}`+"\n")
 	require.NoError(t, f.drain("inv1.jsonl", collect(&got)))
 	require.Len(t, got, 2, "the completed line must be picked up, not lost")
-	assert.Equal(t, types.StreamTargetResult, got[1].Body.StreamType())
+	assert.Equal(t, events.TargetResult, got[1].Body.StreamType())
 }
 
 // TestFollowerReplayLimitKeepsNewest: attaching to a workspace with a long
@@ -97,7 +97,7 @@ func TestFollowerReplayLimitKeepsNewest(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	var got []types.StreamEvent
+	var got []events.Event
 	require.NoError(t, NewFollower(dir, "/repo").Replay(2, collect(&got)))
 	require.Len(t, got, 2)
 	assert.Equal(t, "inv2", got[0].Inv)
@@ -115,11 +115,11 @@ func TestFollowerReplayLimitSurvivesTheFirstFollowTick(t *testing.T) {
 	}
 
 	f := NewFollower(dir, "/repo")
-	var replayed []types.StreamEvent
+	var replayed []events.Event
 	require.NoError(t, f.Replay(1, collect(&replayed)))
 	require.Len(t, replayed, 1)
 
-	var followed []types.StreamEvent
+	var followed []events.Event
 	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
 	defer cancel()
 	require.NoError(t, f.Follow(ctx, 10*time.Millisecond, collect(&followed)))
@@ -135,21 +135,21 @@ func TestFollowerSkipDeliversOnlyWhatHappensNext(t *testing.T) {
 	f := NewFollower(dir, "/repo")
 	require.NoError(t, f.Skip())
 
-	var got []types.StreamEvent
+	var got []events.Event
 	require.NoError(t, f.drain("inv1.jsonl", collect(&got)))
 	assert.Empty(t, got)
 
 	writeLog(t, dir, "inv1", `{"ts":2,"inv":"inv1","kind":"result","project":"api","target":"test","status":"fail"}`+"\n")
 	require.NoError(t, f.drain("inv1.jsonl", collect(&got)))
 	require.Len(t, got, 1)
-	assert.Equal(t, types.StreamTarget{Project: "api", Target: "test", Status: "failed"}, got[0].Body)
+	assert.Equal(t, events.Target{Project: "api", Target: "test", Status: "failed"}, got[0].Body)
 }
 
 // TestFollowerMissingDirectoryIsNotAnError: a workspace that has never run
 // anything is a normal state for an editor attaching at startup.
 func TestFollowerMissingDirectoryIsNotAnError(t *testing.T) {
 	f := NewFollower(filepath.Join(t.TempDir(), "absent"), "/repo")
-	var got []types.StreamEvent
+	var got []events.Event
 	require.NoError(t, f.Replay(0, collect(&got)))
 	assert.Empty(t, got)
 }
@@ -166,10 +166,10 @@ func TestFollowPicksUpANewInvocation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	seen := make(chan types.StreamEvent, 4)
+	seen := make(chan events.Event, 4)
 	done := make(chan error, 1)
 	go func() {
-		done <- f.Follow(ctx, 10*time.Millisecond, func(e types.StreamEvent) error {
+		done <- f.Follow(ctx, 10*time.Millisecond, func(e events.Event) error {
 			seen <- e
 			return nil
 		})
@@ -179,7 +179,7 @@ func TestFollowPicksUpANewInvocation(t *testing.T) {
 
 	select {
 	case got := <-seen:
-		assert.Equal(t, types.StreamTarget{Project: "api", Target: "build", Status: "failed"}, got.Body)
+		assert.Equal(t, events.Target{Project: "api", Target: "build", Status: "failed"}, got.Body)
 		assert.Equal(t, "inv9", got.Inv)
 	case <-time.After(3 * time.Second):
 		t.Fatal("a run started elsewhere never reached the follower")

@@ -1,6 +1,7 @@
 package dry
 
 import (
+	trailtypes "github.com/egladman/magus/types/trail"
 	"cmp"
 	"context"
 	"errors"
@@ -535,7 +536,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	// marks find no trail; mark echoes a zero row for the reason job.put does.
 
 	m.MapSet("magus__Session__trail", function("magus.trail.read", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectTrail(types.Trail{}), nil
+		return bindgen.ObjectTrail(trailtypes.Trail{}), nil
 	}))
 	guard.MapSet("shape", function("magus.trail.shape", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.StringValue(""), nil
@@ -547,7 +548,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		return vm.ListValue(nil), nil
 	}))
 	m.MapSet("magus__Session__mark", function("magus.trail.mark", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectTrailMark(types.TrailMark{}, ffi.SessionEnums(ctx, sess, "magus")), nil
+		return bindgen.ObjectTrailMark(trailtypes.Mark{}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 
 	// A tier is proven from a checkout's diff and go list, neither of which the sandbox has,

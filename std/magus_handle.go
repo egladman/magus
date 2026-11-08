@@ -3,6 +3,7 @@
 package std
 
 import (
+	"github.com/egladman/magus/types/trail"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -53,7 +54,7 @@ func MagusHistoryOpen(ctx context.Context, opts types.HistoryMetricsOptions) (ty
 
 // MagusSessionOpen backs magus\session(opts): which session's trail a read
 // covers. The window is checked when it is read.
-func MagusSessionOpen(ctx context.Context, opts types.TrailReadOptions) (types.Session, error) {
+func MagusSessionOpen(ctx context.Context, opts trail.ReadOptions) (types.Session, error) {
 	if types.WorkspaceFromContext(ctx) == nil {
 		return types.Session{}, errorNoWorkspace("session")
 	}
@@ -429,18 +430,18 @@ func MagusHistoryTrend(ctx context.Context, h types.History) (types.Trend, error
 
 // MagusSessionTrail answers Session.trail.
 // It reads this repository's trail store.
-func MagusSessionTrail(ctx context.Context, s types.Session) (types.Trail, error) {
-	return MagusTrailRead(ctx, s.TrailOptions())
+func MagusSessionTrail(ctx context.Context, s types.Session) (trail.Trail, error) {
+	return MagusTrailRead(ctx, trail.ReadOptions(s))
 }
 
 // MagusSessionMarks is Session.marks: every mark in the repository.
-func MagusSessionMarks(ctx context.Context, _ types.Session) ([]types.TrailMark, error) {
+func MagusSessionMarks(ctx context.Context, _ types.Session) ([]trail.Mark, error) {
 	return MagusTrailMarks(ctx)
 }
 
 // MagusSessionMark answers Session.mark.
 // It reads this repository's trail store.
-func MagusSessionMark(ctx context.Context, _ types.Session, mark map[string]any) (types.TrailMark, error) {
+func MagusSessionMark(ctx context.Context, _ types.Session, mark map[string]any) (trail.Mark, error) {
 	return MagusTrailMark(ctx, mark)
 }
 

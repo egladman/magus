@@ -3,6 +3,7 @@
 package std
 
 import (
+	trailtypes "github.com/egladman/magus/types/trail"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -26,14 +27,14 @@ type cacheDirer interface {
 
 // MagusTrailRead backs magus\session().trail().
 // It is one session's guard record from every checkout's trail.
-func MagusTrailRead(ctx context.Context, opts types.TrailReadOptions) (types.Trail, error) {
+func MagusTrailRead(ctx context.Context, opts trailtypes.ReadOptions) (trailtypes.Trail, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.Trail{}, errorNoWorkspace("trail.read")
+		return trailtypes.Trail{}, errorNoWorkspace("trail.read")
 	}
 	w, err := feedbackWindow(opts, time.Now())
 	if err != nil {
-		return types.Trail{}, err
+		return trailtypes.Trail{}, err
 	}
 	root := ws.Root()
 	cacheDir := filepath.Join(root, ".magus")
@@ -67,7 +68,7 @@ func listCheckouts(ctx context.Context, root string) []string {
 
 // feedbackWindow reads the trail call's window. A value that does not parse raises rather
 // than reading as its default, which would be a report about the wrong window.
-func feedbackWindow(opts types.TrailReadOptions, now time.Time) (trail.FeedbackWindow, error) {
+func feedbackWindow(opts trailtypes.ReadOptions, now time.Time) (trail.FeedbackWindow, error) {
 	w := trail.FeedbackWindow{Until: now, Session: strings.TrimSpace(opts.Session)}
 	var err error
 	if until := strings.TrimSpace(opts.Until); until != "" {
@@ -94,7 +95,7 @@ func feedbackWindow(opts types.TrailReadOptions, now time.Time) (trail.FeedbackW
 }
 
 // MagusTrailMarks backs magus\session().marks(): repo marks, oldest first.
-func MagusTrailMarks(ctx context.Context) ([]types.TrailMark, error) {
+func MagusTrailMarks(ctx context.Context) ([]trailtypes.Mark, error) {
 	dir, err := feedbackMarksDir(ctx, "trail.marks")
 	if err != nil {
 		return nil, err
@@ -103,14 +104,14 @@ func MagusTrailMarks(ctx context.Context) ([]types.TrailMark, error) {
 }
 
 // MagusTrailMark backs magus\session().mark: one mark in the repo's store.
-func MagusTrailMark(ctx context.Context, mark map[string]any) (types.TrailMark, error) {
+func MagusTrailMark(ctx context.Context, mark map[string]any) (trailtypes.Mark, error) {
 	dir, err := feedbackMarksDir(ctx, "trail.mark")
 	if err != nil {
-		return types.TrailMark{}, err
+		return trailtypes.Mark{}, err
 	}
 	m, err := decodeTrailMark(mark)
 	if err != nil {
-		return types.TrailMark{}, err
+		return trailtypes.Mark{}, err
 	}
 	return trail.AppendFeedbackMark(dir, m, time.Now())
 }
@@ -125,8 +126,8 @@ func feedbackMarksDir(ctx context.Context, member string) (string, error) {
 
 // decodeTrailMark reads a TrailMark object, raising on a field of the wrong type
 // rather than storing its zero value.
-func decodeTrailMark(in map[string]any) (types.TrailMark, error) {
-	var m types.TrailMark
+func decodeTrailMark(in map[string]any) (trailtypes.Mark, error) {
+	var m trailtypes.Mark
 	str := func(k string) (string, error) {
 		v, ok := in[k]
 		if !ok || v == nil {
@@ -148,7 +149,7 @@ func decodeTrailMark(in map[string]any) (types.TrailMark, error) {
 			return m, err
 		}
 	}
-	m.Section, m.Verdict = types.TrailSection(section), types.TrailVerdict(verdict)
+	m.Section, m.Verdict = trailtypes.Section(section), trailtypes.Verdict(verdict)
 	switch ex := in["examples"].(type) {
 	case nil:
 	case []any:

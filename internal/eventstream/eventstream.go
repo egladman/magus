@@ -12,13 +12,13 @@
 package eventstream
 
 import (
+	"github.com/egladman/magus/types/events"
 	"bufio"
 	"io"
 	"sync"
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
 )
 
 // fromJournal maps one journal event onto the stream envelope, reporting false
@@ -34,21 +34,21 @@ import (
 // workspace is stamped on every result because journal events carry an
 // invocation id but not a root, and a subscriber watching two repositories
 // cannot route an event without one.
-func fromJournal(workspace string, e journal.Event) (types.StreamEvent, bool) {
-	out := types.StreamEvent{Ts: e.Ts, Workspace: workspace, Inv: e.Inv}
+func fromJournal(workspace string, e journal.Event) (events.Event, bool) {
+	out := events.Event{Ts: e.Ts, Workspace: workspace, Inv: e.Inv}
 	switch e.Kind {
 	case journal.KindStarted:
-		b := types.StreamRun{Phase: "started", MagusVersion: e.MagusVersion}
+		b := events.Run{Phase: "started", MagusVersion: e.MagusVersion}
 		if e.Command != nil {
 			b.Command = e.Command.Arguments
 			b.Trigger = e.Command.Trigger
 		}
 		out.Body = b
 	case journal.KindFinished:
-		out.Body = types.StreamRun{Phase: "finished", Status: e.Status}
+		out.Body = events.Run{Phase: "finished", Status: e.Status}
 	case journal.KindResult:
 		status, cached := targetStatus(e.Status)
-		out.Body = types.StreamTarget{
+		out.Body = events.Target{
 			Project:    e.Project,
 			Target:     e.Target,
 			Status:     status,
@@ -59,14 +59,14 @@ func fromJournal(workspace string, e journal.Event) (types.StreamEvent, bool) {
 			Error: e.Text,
 		}
 	case journal.KindOutput:
-		out.Body = types.StreamOutput{
+		out.Body = events.Output{
 			Project: e.Project,
 			Target:  e.Target,
 			Stream:  e.Stream,
 			Text:    e.Text,
 		}
 	default:
-		return types.StreamEvent{}, false
+		return events.Event{}, false
 	}
 	return out, true
 }
@@ -102,13 +102,13 @@ func targetStatus(journalStatus string) (status string, cacheHit bool) {
 type Writer struct {
 	mu     sync.Mutex
 	bw     *bufio.Writer
-	filter types.StreamFilter
+	filter events.Filter
 }
 
 // NewWriter returns a Writer emitting to dst under filter. The caller owns dst
 // and must call [Writer.Close] to flush; a Writer that is never closed loses
 // whatever is still buffered.
-func NewWriter(dst io.Writer, filter types.StreamFilter) *Writer {
+func NewWriter(dst io.Writer, filter events.Filter) *Writer {
 	return &Writer{bw: bufio.NewWriter(dst), filter: filter}
 }
 
@@ -117,7 +117,7 @@ func NewWriter(dst io.Writer, filter types.StreamFilter) *Writer {
 // It flushes per event rather than relying on the buffer filling: a subscriber
 // is usually a pipe being read live, and a status bar that learns about a failed
 // build once 4KB has accumulated is worse than no status bar.
-func (w *Writer) Emit(e types.StreamEvent) error {
+func (w *Writer) Emit(e events.Event) error {
 	if e.Body == nil || !w.filter.Allows(e.Body.StreamType()) {
 		return nil
 	}

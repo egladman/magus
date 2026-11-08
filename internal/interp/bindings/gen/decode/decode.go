@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	imagetypes "github.com/egladman/magus/types/image"
+	"github.com/egladman/magus/types/trail"
 )
 
 // DecodePath decodes a Buzz Path, an object instance or a map, into a types.Path.
@@ -8400,13 +8401,13 @@ func decodeHistory(v vm.Value, path string) (types.History, error) {
 	return out, nil
 }
 
-// DecodeTrailReadOptions decodes a Buzz SessionOptions, an object instance or a map, into a types.TrailReadOptions.
-func DecodeTrailReadOptions(v vm.Value) (types.TrailReadOptions, error) {
+// DecodeTrailReadOptions decodes a Buzz SessionOptions, an object instance or a map, into a trail.ReadOptions.
+func DecodeTrailReadOptions(v vm.Value) (trail.ReadOptions, error) {
 	return decodeTrailReadOptions(v, "sessionOptions")
 }
 
-func decodeTrailReadOptions(v vm.Value, path string) (types.TrailReadOptions, error) {
-	var out types.TrailReadOptions
+func decodeTrailReadOptions(v vm.Value, path string) (trail.ReadOptions, error) {
+	var out trail.ReadOptions
 	fields, ok := v.MapView()
 	if !ok {
 		return out, mismatch(path, "SessionOptions", v)

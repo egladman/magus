@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
 	imagetypes "github.com/egladman/magus/types/image"
+	"github.com/egladman/magus/types/trail"
 	"time"
 )
 
@@ -3013,7 +3014,7 @@ func ObjectJobRegistration(v types.JobRegistration, enums ffi.EnumCases) vm.Valu
 	return out
 }
 
-func ObjectTrailObservation(v types.TrailObservation) vm.Value {
+func ObjectTrailObservation(v trail.Observation) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("at", vm.IntValue(int64(v.At)))
 	out.MapSet("agent", vm.StringValue(v.Agent))
@@ -3038,7 +3039,7 @@ func ObjectTrailObservation(v types.TrailObservation) vm.Value {
 	return out
 }
 
-func ObjectTrailSpawn(v types.TrailSpawn) vm.Value {
+func ObjectTrailSpawn(v trail.Spawn) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("at", vm.IntValue(int64(v.At)))
 	out.MapSet("agent", vm.StringValue(v.Agent))
@@ -3048,7 +3049,7 @@ func ObjectTrailSpawn(v types.TrailSpawn) vm.Value {
 	return out
 }
 
-func ObjectTrail(v types.Trail) vm.Value {
+func ObjectTrail(v trail.Trail) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("session", vm.StringValue(v.Session))
 	out.MapSet("host", vm.StringValue(v.Host))
@@ -3072,7 +3073,7 @@ func ObjectTrail(v types.Trail) vm.Value {
 	return out
 }
 
-func ObjectTrailMark(v types.TrailMark, enums ffi.EnumCases) vm.Value {
+func ObjectTrailMark(v trail.Mark, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
 	out.MapSet("section", enums.Case("TrailSection", string(v.Section)))
@@ -6451,7 +6452,7 @@ func ObjectChangeOptions(v types.ChangeOptions) vm.Value {
 	return out
 }
 
-func ObjectTrailReadOptions(v types.TrailReadOptions) vm.Value {
+func ObjectTrailReadOptions(v trail.ReadOptions) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("session", vm.StringValue(v.Session))
 	out.MapSet("since", vm.StringValue(v.Since))

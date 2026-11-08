@@ -1,6 +1,7 @@
 package trail
 
 import (
+	trailtypes "github.com/egladman/magus/types/trail"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,15 +10,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/types"
 )
 
 func TestFeedbackMarksRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	at := time.UnixMilli(1790000000000)
-	first := types.TrailMark{
-		ID: "fb0123456789ab", Section: types.TrailUnguarded, Key: "grep -nr <arg>",
-		Verdict: types.TrailShouldDeny, Note: "guard it next time", Session: "s1",
+	first := trailtypes.Mark{
+		ID: "fb0123456789ab", Section: trailtypes.Unguarded, Key: "grep -nr <arg>",
+		Verdict: trailtypes.ShouldDeny, Note: "guard it next time", Session: "s1",
 		Examples: []string{"grep -rn a b", "grep -rn c d", "grep -rn e f", "grep -rn g h"},
 	}
 	stored, err := AppendFeedbackMark(dir, first, at)
@@ -26,7 +26,7 @@ func TestFeedbackMarksRoundTrip(t *testing.T) {
 	assert.Len(t, stored.Examples, 3, "a mark keeps a few examples, not the trail")
 
 	second := first
-	second.Verdict, second.Session, second.Examples = types.TrailFine, "s2", nil
+	second.Verdict, second.Session, second.Examples = trailtypes.Fine, "s2", nil
 	_, err = AppendFeedbackMark(dir, second, at.Add(time.Minute))
 	require.NoError(t, err)
 
@@ -34,17 +34,17 @@ func TestFeedbackMarksRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, marks, 2)
 	assert.Equal(t, stored, marks[0])
-	assert.Equal(t, types.TrailFine, marks[1].Verdict, "a later mark is kept beside the earlier one, never over it")
+	assert.Equal(t, trailtypes.Fine, marks[1].Verdict, "a later mark is kept beside the earlier one, never over it")
 }
 
 func TestAppendFeedbackMarkRefusesAMalformedMark(t *testing.T) {
 	dir := t.TempDir()
-	valid := types.TrailMark{ID: "fb0123456789ab", Section: types.TrailRefused, Key: "raw-tool", Verdict: types.TrailWrongDeny}
-	for name, mutate := range map[string]func(*types.TrailMark){
-		"page label as id": func(m *types.TrailMark) { m.ID = "C3" },
-		"unknown section":  func(m *types.TrailMark) { m.Section = "passed" },
-		"unknown verdict":  func(m *types.TrailMark) { m.Verdict = "bad" },
-		"no key":           func(m *types.TrailMark) { m.Key = " " },
+	valid := trailtypes.Mark{ID: "fb0123456789ab", Section: trailtypes.Refused, Key: "raw-tool", Verdict: trailtypes.WrongDeny}
+	for name, mutate := range map[string]func(*trailtypes.Mark){
+		"page label as id": func(m *trailtypes.Mark) { m.ID = "C3" },
+		"unknown section":  func(m *trailtypes.Mark) { m.Section = "passed" },
+		"unknown verdict":  func(m *trailtypes.Mark) { m.Verdict = "bad" },
+		"no key":           func(m *trailtypes.Mark) { m.Key = " " },
 	} {
 		m := valid
 		mutate(&m)

@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	imagetypes "github.com/egladman/magus/types/image"
+	"github.com/egladman/magus/types/trail"
 )
 
 var inboundTypes = []inboundType{
@@ -168,7 +169,7 @@ var inboundTypes = []inboundType{
 	{Name: "FunctionGap", Zero: types.FunctionGap{}, Encode: func(v any) vm.Value { return ObjectFunctionGap(v.(types.FunctionGap), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeFunctionGap(v) }},
 	{Name: "ChangeRiskFunction", Zero: types.ChangeRiskFunction{}, Encode: func(v any) vm.Value { return ObjectChangeRiskFunction(v.(types.ChangeRiskFunction), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeChangeRiskFunction(v) }},
 	{Name: "History", Zero: types.History{}, Encode: func(v any) vm.Value { return ObjectHistory(v.(types.History), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHistory(v) }},
-	{Name: "SessionOptions", Zero: types.TrailReadOptions{}, Encode: func(v any) vm.Value { return ObjectTrailReadOptions(v.(types.TrailReadOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTrailReadOptions(v) }},
+	{Name: "SessionOptions", Zero: trail.ReadOptions{}, Encode: func(v any) vm.Value { return ObjectTrailReadOptions(v.(trail.ReadOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTrailReadOptions(v) }},
 	{Name: "Session", Zero: types.Session{}, Encode: func(v any) vm.Value { return ObjectSession(v.(types.Session), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSession(v) }},
 	{Name: "Workspace", Zero: types.MagusWorkspace{}, Encode: func(v any) vm.Value { return ObjectMagusWorkspace(v.(types.MagusWorkspace), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeMagusWorkspace(v) }},
 	{Name: "TierOptions", Zero: types.TierOptions{}, Encode: func(v any) vm.Value { return ObjectTierOptions(v.(types.TierOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTierOptions(v) }},

@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
 	imagetypes "github.com/egladman/magus/types/image"
+	"github.com/egladman/magus/types/trail"
 )
 
 // RuntimeBoundaryTypes is every value magus encodes for Buzz, zero-valued and paired
@@ -406,10 +407,10 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "TierReport", Zero: types.TierReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTierReport(v.(types.TierReport), enums) }},
 	{Name: "ToolReport", Zero: types.ToolReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectToolReport(v.(types.ToolReport)) }},
 	{Name: "ToolRow", Zero: types.ToolRow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectToolRow(v.(types.ToolRow)) }},
-	{Name: "Trail", Zero: types.Trail{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrail(v.(types.Trail)) }},
-	{Name: "TrailMark", Zero: types.TrailMark{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailMark(v.(types.TrailMark), enums) }},
-	{Name: "TrailObservation", Zero: types.TrailObservation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailObservation(v.(types.TrailObservation)) }},
-	{Name: "TrailSpawn", Zero: types.TrailSpawn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailSpawn(v.(types.TrailSpawn)) }},
+	{Name: "Trail", Zero: trail.Trail{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrail(v.(trail.Trail)) }},
+	{Name: "TrailMark", Zero: trail.Mark{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailMark(v.(trail.Mark), enums) }},
+	{Name: "TrailObservation", Zero: trail.Observation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailObservation(v.(trail.Observation)) }},
+	{Name: "TrailSpawn", Zero: trail.Spawn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailSpawn(v.(trail.Spawn)) }},
 	{Name: "Trend", Zero: types.Trend{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrend(v.(types.Trend)) }},
 	{Name: "TrendEntry", Zero: types.TrendEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrendEntry(v.(types.TrendEntry)) }},
 	{Name: "TrimReport", Zero: types.TrimReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrimReport(v.(types.TrimReport)) }},

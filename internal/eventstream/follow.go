@@ -1,6 +1,7 @@
 package eventstream
 
 import (
+	"github.com/egladman/magus/types/events"
 	"bytes"
 	"context"
 	"errors"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
 )
 
 // runLogExt is the suffix of one invocation's union event log.
@@ -58,7 +58,7 @@ func NewFollower(runsDir, workspace string) *Follower {
 // A limit of 0 or less replays every retained invocation. Ordering is by file
 // modification time rather than by the timestamps inside, because an invocation
 // still running has no final timestamp to sort on.
-func (f *Follower) Replay(limit int, emit func(types.StreamEvent) error) error {
+func (f *Follower) Replay(limit int, emit func(events.Event) error) error {
 	logs, err := f.logs()
 	if err != nil {
 		return err
@@ -111,7 +111,7 @@ func (f *Follower) skip(names []string) {
 // closing, and continuing to read a directory nobody is listening to is waste. A
 // read error on one log is skipped rather than fatal, because a log being written
 // concurrently is the normal case.
-func (f *Follower) Follow(ctx context.Context, interval time.Duration, emit func(types.StreamEvent) error) error {
+func (f *Follower) Follow(ctx context.Context, interval time.Duration, emit func(events.Event) error) error {
 	if interval <= 0 {
 		interval = 250 * time.Millisecond
 	}
@@ -172,7 +172,7 @@ func (f *Follower) logs() ([]string, error) {
 // drain reads whatever is new in one log and emits it, advancing the stored
 // offset to the last COMPLETE line. Stopping short of a partial line is what
 // makes a concurrent writer safe to read.
-func (f *Follower) drain(name string, emit func(types.StreamEvent) error) error {
+func (f *Follower) drain(name string, emit func(events.Event) error) error {
 	path := filepath.Join(f.dir, name)
 	info, err := os.Stat(path)
 	if err != nil {

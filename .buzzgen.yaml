@@ -3,6 +3,10 @@
 # then a package's config, then a type's config.
 version: v1alpha1
 packages:
+  github.com/egladman/magus/types/trail:
+    types:
+      Section: {config: {name: TrailSection}}
+      Verdict: {config: {name: TrailVerdict}}
   github.com/egladman/magus/types/daemon:
     types:
       ListenerKind: {}
@@ -109,8 +113,6 @@ packages:
       Tier: {}
       TimeLayout: {config: {zeroCase: ""}}
       ToolCapability: {}
-      TrailSection: {}
-      TrailVerdict: {}
       VCSCapability: {}
       VCSSource: {}
       WalkStep: {config: {module: fs, zeroCase: ""}}

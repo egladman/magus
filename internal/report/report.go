@@ -22,7 +22,7 @@ import (
 // v3 unified the per-target cache.hit/cache.miss/cache.error events into a single
 // target-result event (see TargetResult).
 // v4 prefixed that event and the diagnostic one with "run.": both collided by name
-// with types.StreamEvent, which stamps its own schema number on a line of nearly the
+// with events.Event, which stamps its own schema number on a line of nearly the
 // same shape.
 // v5 dropped run.base's vcs field and the lock.wait and lock.released events, and a
 // -o jsonl run's stderr moved from slog's {time,level,msg} lines to run.notice records.

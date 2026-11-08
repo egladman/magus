@@ -819,6 +819,8 @@ var boundaryPackages = []boundaryPackage{
 	{path: "github.com/egladman/magus/types", alias: "types"},
 	{path: "github.com/egladman/magus/types/image", alias: "imagetypes", prefix: "Image"},
 	{path: "github.com/egladman/magus/types/daemon", alias: "daemon", prefix: "Status"},
+	{path: "github.com/egladman/magus/types/trail", alias: "trail", prefix: "Trail"},
+	{path: "github.com/egladman/magus/types/events", alias: "events", prefix: "Stream"},
 	{path: "github.com/egladman/magus/internal/queue/types", alias: "queuetypes", prefix: "Queue"},
 	{path: "github.com/egladman/magus/libs/diagnostics", alias: "diagnostics"},
 }
@@ -842,7 +844,11 @@ func qualifyType(t reflect.Type) string {
 
 // typeIdent names t in a generated identifier (ObjectFileInfo, DecodeQueueChange).
 func typeIdent(t reflect.Type) string {
-	return typePackage(t).prefix + t.Name()
+	prefix := typePackage(t).prefix
+	if strings.HasPrefix(t.Name(), prefix) {
+		return t.Name()
+	}
+	return prefix + t.Name()
 }
 
 // packageAlias is the name generated code uses for the package at
