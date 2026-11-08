@@ -63,11 +63,11 @@ type Reader struct {
 | Every `kind ==` branch in a judge or reader reads a `Reader` property or a spec field instead                              | built     |
 | `judgeText` picks the reader from `spec.Reader.Format`; the `switch` on kind is deleted                                    | built     |
 | An equivalence test: every built-in kind judges the same rules at the same defaults as before, over every calibration case | built     |
-| A decisions table's `kinds` object declares kinds; `proofread <name>` resolves a declared name after the built-ins         | not built |
-| A declared kind naming a rule its format cannot feed, an unknown rule or an unknown base is an error naming the field      | not built |
-| The `lines` format: each non-blank line or list item is one unit, with no title and no headings                            | not built |
-| `Terms` per kind, merged over the built-in glossary, so a kind can hold its own phrasing                                   | not built |
-| `Weights` per kind; a set weight is marked as set, not measured, wherever the grade is reported                            | not built |
+| A decisions table's `kinds` object declares kinds; `proofread <name>` resolves a declared name after the built-ins         | built     |
+| A declared kind naming a rule its format cannot feed, an unknown rule or an unknown base is an error naming the field      | built     |
+| The `lines` format: each non-blank line or list item is one unit, with no title and no headings                            | built     |
+| `Terms` per kind, merged over the built-in glossary, so a kind can hold its own phrasing                                   | built     |
+| `Weights` per kind; a set weight is marked as set, not measured, wherever the grade is reported                            | built     |
 | The rule pages' decision tables are generated from the specs                                                               | built     |
 
 A declared kind in a decisions table looks like this, and is a fact, never an algorithm:
