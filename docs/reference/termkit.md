@@ -1,6 +1,6 @@
 ---
 title: termkit
-description: The terminal UI library magus draws its run band with, for Go and Buzz alike: zones of pinned rows, aligned columns, 24 loaders, a picker, notifications and a fake terminal for tests.
+description: "The terminal UI library magus draws its run band with, for Go and Buzz alike: zones of pinned rows, aligned columns, 24 loaders, a picker, notifications and a fake terminal for tests."
 tags: [terminal, tui, library, go, buzz, reference, termkit]
 ---
 
