@@ -33,13 +33,13 @@ In the docs:
 - [lease-checkout](../decisions/0015-a-call-runs-where-its-line-says.md#lease-checkout)
 - [Correlating a spawn to a lease](../guides/integrations/agents/any-host.md#correlating-a-spawn-to-a-lease)
 - [Lease capture](../guides/integrations/agents/claude-code.md#lease-capture)
+- [leaseEnabled](../reference/buzz/termkit.md#leaseenabled)
 - [lease-checkout](../reference/rules/lease-checkout.md#lease-checkout)
-- [lease-claim](../reference/rules/lease-claim.md#lease-claim)
 
 In the code (`magus refs <name>` lists every site):
 
 - `reclaimdisk\Lease` (Buzz host type)
-- `tty.Lease` (Go)
+- `termkit.Lease` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

@@ -29,11 +29,11 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 In the docs:
 
 - [The magusfile](../concepts/workspace.md#the-magusfile)
+- [An explicit import "project/." as self; in every magusfile](../decisions/0032-one-dependency-mechanism.md#an-explicit-import-project-as-self-in-every-magusfile)
 - [magus\pry(): breakpoint in a magusfile](../guides/debugging.md#maguspry-breakpoint-in-a-magusfile)
 - [3. Read your first magusfile](../guides/getting-started.md#3-read-your-first-magusfile)
 - [Magusfile API: a locked namespace](../guides/migrating/breaking-changes.md#magusfile-api-a-locked-namespace)
 - [Magusfile Module Reference](../reference/buzz/index.md#magusfile-module-reference)
-- [MGS1017: magusfile is not a spell](../reference/codes/magusfile/MGS1017.md#mgs1017-magusfile-is-not-a-spell)
 
 <!-- END GLOSSARY USAGE -->
 

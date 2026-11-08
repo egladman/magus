@@ -39,10 +39,10 @@ In the docs:
 In the code (`magus refs <name>` lists every site):
 
 - `forecast.Run` (Go)
-- `screen.run` (Go)
 - `queue.run` (Go)
 - `magus.run` (Go)
 - `rankeval.Run` (Go)
+- `screen.run` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

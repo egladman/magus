@@ -35,7 +35,7 @@ In the docs:
 - [needs and glob: functions and patterns, same-project globs](../concepts/dependencies.md#needs-and-glob-functions-and-patterns-same-project-globs)
 - [The workflow hardcodes the project list](../concepts/targets/ci.md#the-workflow-hardcodes-the-project-list)
 - [Running targets in a provided project](../concepts/workspace/providers.md#running-targets-in-a-provided-project)
-- [Project references](../guides/integrations/agents.md#project-references)
+- [Prerequisites another project needs](../decisions/0027-shared-prerequisites-run-once-in-stage-zero.md#prerequisites-another-project-needs)
 
 In the code (`magus refs <name>` lists every site):
 

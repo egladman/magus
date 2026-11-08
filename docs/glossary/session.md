@@ -38,10 +38,10 @@ In the docs:
 In the code (`magus refs <name>` lists every site):
 
 - `broker.session` (Go)
-- `tty.session` (Go)
 - `buzz.session` (Go)
 - `engine.Session` (Go)
 - `service.Session` (Go)
+- `types.Session` (Go)
 
 <!-- END GLOSSARY USAGE -->
 
