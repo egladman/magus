@@ -877,19 +877,8 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
         if (branches.value != null) {
             fs\remove(branches.value!) catch void;
         }
-        // proofread exits 1 when it writes a deny finding, a grade under its kind's minimum among them.
-        if (run == null or (run!.code != 0 and run!.code != 1)) {
-            var why = "{bin} did not start";
-            if (run != null) {
-                why = judgeFailure(code: run!.code, stdout: run!.stdout, stderr: run!.stderr, bin: bin);
-            }
-            found.append(Judged{ rule = "judge", line = 0,
-                message = "proofread did not run ({why}); run {proofread\home}/{proofread\binary} {kind} "
-                    + "--stdin with the text on stdin, and read why" });
-        } else {
-            foreach (f in parseJudged(run!.stdout) + notices(run!.stderr)) {
-                found.append(f);
-            }
+        foreach (f in ranFindings(run, bin: bin, kind: kind)) {
+            found.append(f);
         }
         foreach (outside in OUTSIDE_JUDGES) {
             if (outside.kinds.indexOf(words[0]) != null) {
@@ -900,6 +889,21 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
         }
         return found;
     };
+}
+
+// ranFindings are what a proofread run reported, or why it did not run.
+// It exits 1 on a deny finding, a grade under the minimum among them.
+fun ranFindings(run: proc\ExecResult?, bin: str, kind: str) > [Judged] {
+    if (run == null or (run!.code != 0 and run!.code != 1)) {
+        var why = "{bin} did not start";
+        if (run != null) {
+            why = judgeFailure(code: run!.code, stdout: run!.stdout, stderr: run!.stderr, bin: bin);
+        }
+        return [Judged{ rule = "judge", line = 0,
+            message = "proofread did not run ({why}); run {proofread\home}/{proofread\binary} {kind} "
+                + "--stdin with the text on stdin, and read why" }];
+    }
+    return parseJudged(run!.stdout) + notices(run!.stderr);
 }
 
 // localBranchesFile writes the branches this clone holds and no remote does

@@ -1,6 +1,6 @@
 ---
 name: self-review-comments
-description: "Draft the inline comments an author leaves on their own pull request before a reviewer reads it: where behavior changed, what needs more scrutiny, and the open questions. Use after drafting a PR description, when a PR is in draft, or when asked to self-review a branch. The drafts are for the author to rewrite in their own words; never post one. Repo-only; never shipped."
+description: "Draft the inline comments an author leaves on their own draft pull request. Use after drafting a PR description, or when asked to self-review a branch. The author rewrites each draft in their own words; never post one. Repo-only."
 metadata:
   source: workspace
 ---
