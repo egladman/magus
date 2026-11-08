@@ -819,9 +819,7 @@ func (e *moduleEmitter) source() ([]byte, error) {
 	out.Write(e.body.Bytes())
 	src, err := format.Source(out.Bytes())
 	if err != nil {
-		// The source goes to stderr so the error stays one line.
-		fmt.Fprintf(os.Stderr, "--- source ---\n%s\n", out.String())
-		return nil, fmt.Errorf("gofmt: %w", err)
+		return nil, fmt.Errorf("gofmt: %w\n--- source ---\n%s", err, out.String())
 	}
 	return src, nil
 }

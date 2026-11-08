@@ -30,7 +30,7 @@ func (s *ForeignSourcesSuite) apply(path string, globs ...string) error {
 func (s *ForeignSourcesSuite) TestAGlobReachingIntoASiblingRefusesWithMGS1060() {
 	err := s.apply("docs", "../proto/magus/**/*.proto")
 	s.Require().ErrorIs(err, types.SourceGlobInAnotherProject)
-	s.Contains(err.Error(), `reaches into project "proto", which owns "proto/magus"`)
+	s.Contains(err.Error(), `reaches into project "proto"; name it in depends_on`)
 }
 
 func (s *ForeignSourcesSuite) TestAGlobReachingIntoTheRootsTreeRefusesWithMGS1060() {

@@ -483,7 +483,7 @@ func foreignSources(projects []*types.Project) []error {
 	for _, p := range projects {
 		for _, g := range p.Sources {
 			prefix := staticPrefix(g.Root(p.Path).Pattern)
-			owner, ok := ownerOf(projects, prefix)
+			owner, ok := owningProject(projects, prefix)
 			if !ok || owner == p.Path {
 				continue
 			}
@@ -492,8 +492,8 @@ func foreignSources(projects []*types.Project) []error {
 				read = "read it with ctx.readsFiles on the targets that do"
 			}
 			errs = append(errs, types.DiagnosticErrorf(types.SourceGlobInAnotherProject,
-				"project %q: source glob %q reaches into project %q, which owns %q; %s",
-				p.Path, g.Pattern, owner, prefix, read))
+				"project %q: source glob %q reaches into project %q; %s",
+				p.Path, g.Pattern, owner, read))
 		}
 	}
 	return errs
@@ -512,8 +512,8 @@ func staticPrefix(glob string) string {
 	return ""
 }
 
-// ownerOf is the deepest project whose directory holds rel.
-func ownerOf(projects []*types.Project, rel string) (string, bool) {
+// owningProject is the deepest project whose directory holds rel.
+func owningProject(projects []*types.Project, rel string) (string, bool) {
 	owner, found := "", false
 	for _, p := range projects {
 		holds := p.Path == types.RootProject || rel == p.Path || strings.HasPrefix(rel, p.Path+"/")

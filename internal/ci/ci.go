@@ -132,7 +132,7 @@ func uncrossed(f forecast.Model, one []types.Unit) error {
 		names[i] = u.String()
 	}
 	return types.DiagnosticErrorf(types.ShardCrossesProjects,
-		"ci: stage one computes %s beside a unit of another project that needs it; stage zero must compute it",
+		"stage one computes %s beside a unit of another project that needs it; stage zero must compute it",
 		strings.Join(names, ", "))
 }
 
