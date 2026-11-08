@@ -34,6 +34,10 @@ Considerations is optional and holds three bullets at most: the trade-off taken,
 constraint, the alternative set aside, a risk. Never a reading order ("Start with X");
 name a file only with why it matters.
 
+When this change lays groundwork, a `## Later` section names the follow-up pull requests,
+one line each. It's the one section that may speak in the future tense, and it holds no
+tasks.
+
 End with `## Next` when work is left: `- [ ]` tasks and nothing else, one per thing not
 done or not checked. A person or an agent ticks them without touching the prose.
 
@@ -42,6 +46,9 @@ your voice, so draft the lead from what you said about the change.
 
 Keep it short. A reviewer reads the diff anyway, so don't restate it. Say what the diff
 can't: why, and what's missing.
+
+After the description, load self-review-comments to draft the inline comments the author
+may leave on their own draft.
 
 ## Voice
 

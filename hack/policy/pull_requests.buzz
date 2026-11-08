@@ -78,6 +78,8 @@ final inlineField = "comments[][body]";
 
 // A Considerations list longer than this rambles.
 final maxConsiderations = 3;
+// LATER heads the follow-up pull requests a change lays groundwork for.
+final LATER = "Later";
 
 // example is the shape a denial teaches, since an agent sees only the denial text.
 final example = "    fix(cache): sort the key's inputs before hashing\n"
@@ -97,7 +99,8 @@ final example = "    fix(cache): sort the key's inputs before hashing\n"
 final fixLine = "Rewrite it in this shape: a conventional title; a lead of one to three sentences saying "
     + "what you set out to do and why; one present-tense bullet per change; then, if a reviewer must "
     + "weigh something, a Considerations section of at most {maxConsiderations} bullets: the trade-off "
-    + "taken, a constraint, the alternative set aside, a risk. Never a reading order. Last, a Next "
+    + "taken, a constraint, the alternative set aside, a risk. Never a reading order. A Later section "
+    + "may name the follow-up pull requests this one lays groundwork for. Last, a Next "
     + "section of `- [ ]` tasks for what is not done or not verified, and nothing else. Keep it short "
     + "and in your own words, within the budget the change earns, in plain "
     + "ASCII. Skip \"This PR\", lists of exactly three and credit to a tool or an agent. For example:\n"
@@ -868,7 +871,7 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
             branchArgs = ["--local-branches", branches.value!];
         }
         final words = kind.split(" ");
-        final run = proc\exec(bin, args: words + voiceArgs(words[0]) + ["--stdin", "--decisions", table] + branchArgs,
+        final run = proc\exec(bin, args: words + voiceArgs(words[0]) + ["--stdin", "--decisions", table] + branchArgs + futureArgs(words[0]),
             opts: proc\ExecOptions{stdin = text, quiet = true, allowFailure = true}) catch null;
         fs\remove(table) catch void;
         if (branches.value != null) {
@@ -922,6 +925,14 @@ fun localBranchesFile(workspace: str) > result\Result::<str> {
     } catch (err: any) {
         return result\caught::<str>(err, doing: "list the unpushed branches");
     }
+}
+
+// futureArgs lets a description's Later section name follow-up work.
+fun futureArgs(kind: str) > [str] {
+    if (kind == descriptionKind) {
+        return ["--future-sections", LATER];
+    }
+    return [<str>];
 }
 
 // voiceArgs judges pull request text and reviews with the author's voice.
@@ -2421,6 +2432,8 @@ test "pull request text is judged with the author's voice, and a notice proofrea
     std\assert(argv[1].startsWith("review-reply --voice default --stdin"), message: argv[1]);
     std\assert(argv[2].indexOf("--voice") == null, message: argv[2]);
     std\assert(argv[0].indexOf("--local-branches ") != null, message: argv[0]);
+    std\assert(argv[0].endsWith("--future-sections Later"), message: argv[0]);
+    std\assert(argv[1].indexOf("--future-sections") == null, message: argv[1]);
     fs\removeAll(ws) catch void;
 }
 
@@ -2823,6 +2836,12 @@ test "unfinished work is a task under Next, and Next holds only tasks" {
     final prose = taskDenies("## Next\n- Run the full CI gate.");
     std\assert(prose.len() == 2 and prose[0].indexOf("holds only tasks") != null and prose[1].indexOf("holds no task") != null,
         message: "{prose}");
+}
+
+test "a Later section names follow-up work and holds no task" {
+    std\assert(taskDenies("## Later\n- `magus diff` reads the new index.").len() == 0, message: "a follow-up");
+    final task = taskDenies("## Later\n- [ ] `magus diff` reads the new index.");
+    std\assert(task.len() == 1 and task[0].indexOf("belongs under `## Next`") != null, message: "{task}");
 }
 
 test "Considerations holds at most three bullets" {
