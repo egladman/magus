@@ -11,8 +11,8 @@
 // The pr-description CI step runs judgeText too, so the guard and CI reach one decision.
 // This rule keeps what proofread does not read: the spaced hyphen, the word budget, the
 // shape past the lead, the areas the diff touches, an unfinished-work checklist and the
-// title. Unfinished work a Considerations section names is a GitHub task-list item, so a
-// draft's next steps are legible and cannot look finished. When the text cannot be read,
+// title. Unfinished work is a task under Next, which holds
+// nothing else, so it cannot look finished. When the text cannot be read,
 // the whole line is judged for credit and typography instead.
 //
 // A description gets a word budget that grows with the change, counted after its lead so a
@@ -76,6 +76,9 @@ final events = ["APPROVE", "REQUEST_CHANGES", "COMMENT"];
 // inlineField is the field of a review POST carrying one inline comment's text.
 final inlineField = "comments[][body]";
 
+// A Considerations list longer than this rambles.
+final maxConsiderations = 3;
+
 // example is the shape a denial teaches, since an agent sees only the denial text.
 final example = "    fix(cache): sort the key's inputs before hashing\n"
     + "    Make warm builds hit the cache again. A CI run showed the key hashing its inputs in\n"
@@ -86,17 +89,23 @@ final example = "    fix(cache): sort the key's inputs before hashing\n"
     + "\n"
     + "    ## Considerations\n"
     + "\n"
-    + "    - [ ] Not verified: a cold cache on Windows.";
+    + "    - Sorting costs a copy of the inputs per key.\n"
+    + "\n"
+    + "    ## Next\n"
+    + "\n"
+    + "    - [ ] Check a cold cache on Windows.";
 final fixLine = "Rewrite it in this shape: a conventional title; a lead of one to three sentences saying "
-    + "what you set out to do and why; one present-tense bullet per change; then a Considerations "
-    + "section for the implementation considerations: the trade-off taken, a constraint the code works "
-    + "under, the alternative set aside, a risk, and the one file that matters most with the reason it "
-    + "does. Never a reading order. Each unfinished item is a task opening Not verified: or Not done:. Keep it short and in your own words, within the budget the change earns, in plain "
+    + "what you set out to do and why; one present-tense bullet per change; then, if a reviewer must "
+    + "weigh something, a Considerations section of at most {maxConsiderations} bullets: the trade-off "
+    + "taken, a constraint, the alternative set aside, a risk. Never a reading order. Last, a Next "
+    + "section of `- [ ]` tasks for what is not done or not verified, and nothing else. Keep it short "
+    + "and in your own words, within the budget the change earns, in plain "
     + "ASCII. Skip \"This PR\", lists of exactly three and credit to a tool or an agent. For example:\n"
     + example;
 final shapeLine = "The shape: what you set out to do and why in one to three sentences, one bullet per "
-    + "change, then a Considerations section with trade-offs, constraints, alternatives set aside and "
-    + "risks (a file may be named only with why it matters), and each unfinished item as a task. Short, in your own words. This is said once per pull request. For example:\n" + example;
+    + "change, then at most {maxConsiderations} Considerations bullets of trade-offs and risks (a file "
+    + "may be named only with why it matters), then a Next section of `- [ ]` tasks for unfinished "
+    + "work. Short, in your own words. This is said once per pull request. For example:\n" + example;
 final replyLine = "Rewrite the reply: say whether you made the change, and if not, why, in a sentence or "
     + "two. For example: \"Done, the retry is in the client now.\" or \"Kept it here, since the client "
     + "never sees the backoff state. Happy to move it if you see a cleaner seam.\"";
@@ -147,7 +156,9 @@ final considerationsHeading = $"^#{1,6}\s+considerations\s*$";
 final unfinishedOpener = $"^(\[ \]\s+)?(not verified|not tested|not done|not measured|untested)\b";
 // readingOpener is a Considerations item that says where to begin reading.
 final readingOpener = $"^(\[ \]\s+)?(start (with|at)|begin (with|at)|(read|look at|review)\b.*\bfirst\b)";
-final uncheckedTask = $"^\[ \]\s+\S";
+final nextHeading = $"^#{1,6}\s+next\s*$";
+// anyTask is a GitHub task-list item, open or ticked.
+final anyTask = $"^\[[ xX]\]\s+\S";
 final sourceLine = $":([0-9]+)$";
 final outputRef = $"\bout[0-9a-f]{6,}\b";
 final maxCitedRefs = 10;
@@ -1179,25 +1190,53 @@ fun listItems(list: Block) > [str] {
     return items;
 }
 
-// unfinishedChecklistProblems makes the unfinished work a Considerations section names an
-// explicit list. GitHub renders an unchecked Markdown task as both a visible status and a task
-// a reviewer can follow; an ordinary bullet looks too much like finished work.
-fun unfinishedChecklistProblems(body: str) > [str] {
+// taskProblems keeps tasks under Next, which holds nothing else, so a
+// person or an agent ticks one without editing the prose. Unfinished work
+// elsewhere moves there, and Considerations stays short.
+fun taskProblems(body: str) > [str] {
     final problems = mut [<str>];
-    var considerations = false;
+    var section = "";
+    var considerationItems = 0;
+    var nextTasks = 0;
+    var sawNext = false;
     foreach (b in splitBlocks(body)) {
         if (b.kind == "heading") {
-            considerations = considerationsHeading.match(b.lines[0].trim().lower()) != null;
+            final title = b.lines[0].trim().lower();
+            section = "";
+            if (considerationsHeading.match(title) != null) {
+                section = "considerations";
+            } else if (nextHeading.match(title) != null) {
+                section = "next";
+                sawNext = true;
+            }
             continue;
         }
-        if (!considerations or b.kind != "list") {
+        if (b.kind != "list") {
             continue;
         }
         foreach (item in listItems(b)) {
-            if (unfinishedOpener.match(item.lower()) != null and uncheckedTask.match(item) == null) {
-                problems.append("an unfinished item under Considerations is not an unchecked GitHub task: write `- [ ] {item}`");
+            final task = anyTask.match(item) != null;
+            if (section == "next") {
+                if (task) {
+                    nextTasks = nextTasks + 1;
+                } else {
+                    problems.append("`## Next` holds only tasks: write `- [ ] {item}`");
+                }
+                continue;
+            }
+            if (section == "considerations") {
+                considerationItems = considerationItems + 1;
+            }
+            if (task or unfinishedOpener.match(item.lower()) != null) {
+                problems.append("a task belongs under `## Next`, the last section: move `{item}` there as `- [ ] ...`");
             }
         }
+    }
+    if (considerationItems > maxConsiderations) {
+        problems.append("Considerations holds {considerationItems} bullets, past {maxConsiderations}: keep the trade-offs and risks a reviewer must weigh, and cut the rest");
+    }
+    if (sawNext and nextTasks == 0) {
+        problems.append("`## Next` holds no task: add `- [ ] ...` items or drop the heading");
     }
     return problems;
 }
@@ -1382,7 +1421,7 @@ export fun judgeText(t: Text, facts: fun () > Facts, judge: fun (text: str, kind
         foreach (question in areaQuestions(unnamedAreas(read.areas, text: text))) {
             advice.append(question);
         }
-        foreach (problem in unfinishedChecklistProblems(t.body!)) {
+        foreach (problem in taskProblems(t.body!)) {
             problems.append(problem);
         }
         foreach (problem in readingOrderProblems(t.body!)) {
@@ -2673,7 +2712,7 @@ test "the shape is a lead, bullets, at most one closing sentence, then headed se
         lead + "\n\nInside the key:\n- The digest.\n- The platform.\n\nA test pins both.",
         lead + "\n\n- Pins it.\n\n```\nmagus run build\n```",
         lead + "\n\n- Pins it.\n\n## Considerations\n\n- A per-process cache suited one worker. It stops holding at eight.\n"
-            + "- [ ] Not verified: Linux, which CI runs.",
+            + "\n## Next\n\n- [ ] Check Linux, which CI runs.",
     ]) {
         final v = verdictWith(goodTitle, body: body, f: readable());
         std\assert(v.decision == magus\GuardDecision.allow, message: "{body}: {v.reason}");
@@ -2765,15 +2804,32 @@ test "no message sends the reader to a skill" {
     std\assert(reason != "" and reason.indexOf("Skill(") == null, message: reason);
 }
 
-test "unfinished work under Considerations is an unchecked GitHub task" {
-    final plain = judgeText(Text{ kind = descriptionKind, title = goodTitle,
-        body = "The fix is ready for review.\n\n## Considerations\n- The key trades a longer digest for fewer misses.\n- Not verified: the full CI gate." },
-        facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited);
-    std\assert(plain.denies.len() == 1 and plain.denies[0].indexOf("unchecked GitHub task") != null, message: "{plain.denies}");
-    final tasks = judgeText(Text{ kind = descriptionKind, title = goodTitle,
-        body = "The fix is ready for review.\n\n## Considerations\n- The key trades a longer digest for fewer misses.\n- [ ] Not verified: the full CI gate." },
-        facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited);
-    std\assert(tasks.denies.len() == 0, message: "{tasks.denies}");
+// taskDenies are what judgeText denies in a description with body.
+fun taskDenies(body: str) > [str] {
+    return judgeText(Text{ kind = descriptionKind, title = goodTitle, body = "The fix is ready for review.\n\n" + body },
+        facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited).denies;
+}
+
+test "unfinished work is a task under Next, and Next holds only tasks" {
+    final note = "## Considerations\n- The key trades a longer digest for fewer misses.\n";
+    std\assert(taskDenies(note + "\n## Next\n- [ ] Run the full CI gate.").len() == 0, message: "tasks under Next");
+    std\assert(taskDenies(note + "\n## Next\n- [x] Run the full CI gate.").len() == 0, message: "a ticked task");
+    final unchecked = taskDenies(note + "- Not verified: the full CI gate.");
+    std\assert(unchecked.len() == 1 and unchecked[0].indexOf("belongs under `## Next`") != null, message: "{unchecked}");
+    final misplaced = taskDenies(note + "- [ ] Not verified: the full CI gate.");
+    std\assert(misplaced.len() == 1 and misplaced[0].indexOf("belongs under `## Next`") != null, message: "{misplaced}");
+    final inBullets = taskDenies("- [ ] Pin the key.");
+    std\assert(inBullets.len() == 1 and inBullets[0].indexOf("belongs under `## Next`") != null, message: "{inBullets}");
+    final prose = taskDenies("## Next\n- Run the full CI gate.");
+    std\assert(prose.len() == 2 and prose[0].indexOf("holds only tasks") != null and prose[1].indexOf("holds no task") != null,
+        message: "{prose}");
+}
+
+test "Considerations holds at most three bullets" {
+    final three = "## Considerations\n- A trades B.\n- C bounds D.\n- E risks F.\n";
+    std\assert(taskDenies(three).len() == 0, message: "three");
+    final four = taskDenies(three + "- G sets H aside.\n");
+    std\assert(four.len() == 1 and four[0].startsWith("Considerations holds 4 bullets, past 3"), message: "{four}");
 }
 
 test "a Considerations item that tells the reader where to start is flagged" {

@@ -669,8 +669,9 @@ push reports all three:
   affects every project takes `kitchen-sink` alone. Leave the scope out otherwise.
 - The title and description follow the proofread rules (`pr-description`). The description
   opens with what the change set out to do and why, says what it changes in meaning
-  rather than files, gathers what a reviewer should weigh under Considerations (with
-  unfinished work as unchecked tasks), keeps its claims next to their evidence, and describes the situation rather than a person or the earlier code.
+  rather than files, gathers what a reviewer should weigh under Considerations (three
+  bullets at most), lists unfinished work as `- [ ]` tasks under a closing Next section
+  that holds nothing else, keeps its claims next to their evidence, and describes the situation rather than a person or the earlier code.
   The guard's `pull-request-text` rule runs the same checks when a description is posted.
   The shape, the claim and tone rules, and the decisions they take are in [Writing rules](https://github.com/egladman/magus/blob/main/docs/conventions.md#writing-rules),
   and each rule has a [page](https://github.com/egladman/magus/blob/main/docs/reference/proofread/index.md). Check a draft with
