@@ -2973,7 +2973,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 }
 `)
 	w.Magusfile(`import "magus";
-import "project/leaf" as leaf;
+import "project/leaf";
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(leaf\build);
 }
