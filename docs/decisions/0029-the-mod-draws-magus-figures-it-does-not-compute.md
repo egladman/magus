@@ -53,7 +53,7 @@ The figure scripts are part of the `claude-code-mod` harness spell
 (`spells/harness/claude-code-mod/figures/<view>.buzz`), not the Go source and not the
 plugin folder. A workspace that wants other figures copies the spell into its tree and
 declares the copy as a `path:` override of the registry path in `magus.yaml`, the
-ownership switch [Agents](../guides/integrations/AGENTS.md#set-up-your-host) already
+ownership switch [Agents](../guides/integrations/agents.md#set-up-your-host) already
 documents for a shipped harness. Its agents and people edit that Buzz and see the change
 on the next frame, with no magus release and no plugin update. The spell exports
 `mgs_figures()`, a map from view to script path. The mod reads that map through
