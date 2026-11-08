@@ -801,12 +801,36 @@ fun pull_request_title(ctx: magus\Context, args: [str], target: str) > str !> an
     return event?.q("title").stringValue() ?? "";
 }
 
+// workspaceProjects are every project's path, as `magus ls` lists them.
+fun workspaceProjects() > [str] !> any {
+    final listed = magus\cmd("ls", args: ["-o", "name"], opts: magus\CommandOptions{ quiet = true });
+    final paths = mut [<str>];
+    foreach (line in listed.stdout.trim().split("\n")) {
+        if (line != "") {
+            paths.append(line);
+        }
+    }
+    return paths;
+}
+
+// affectedProjects are the projects the change against the base reaches.
+fun affectedProjects() > [str] !> any {
+    final paths = mut [<str>];
+    foreach (p in magus\change("").affected().affected) {
+        paths.append(p);
+    }
+    return paths;
+}
+
 // Fails a pull request title that is not a conventional commit subject, or whose subject
 // is not imperative or carries a selling word.
 export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
     final title = pull_request_title(ctx, args: args, target: "pr-title");
     final problems = mut [<str>];
-    final problem = commits\problem(title);
+    var problem = commits\problem(title);
+    if (problem == "" and commits\scopes(title).len() > 0) {
+        problem = commits\scopeProblem(title, projects: workspaceProjects(), affected: affectedProjects());
+    }
     if (problem != "") {
         problems.append(problem);
     } else {

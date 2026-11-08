@@ -900,7 +900,8 @@ fun localBranchesFile(workspace: str) > result\Result::<str> {
         final pushed = vcs\cmd(["for-each-ref", "--format=%(refname:lstrip=3)", "refs/remotes"], opts: opts).stdout.split("\n");
         final local = mut [<str>];
         foreach (head in heads) {
-            if (head != "" and pushed.indexOf(head) == null) {
+            // The scope word stays usable whatever a local branch is named.
+            if (head != "" and head != conventional\KITCHEN_SINK and pushed.indexOf(head) == null) {
                 local.append(head);
             }
         }

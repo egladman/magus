@@ -55,7 +55,7 @@ fun subjectHeader(subject: str) > str? {
 // ("Add x", "A fix"), so "add x" and an identifier such as "MGS1039" or "README" both
 // pass, and it must not end with a period.
 export fun problem(subject: str) > str {
-    final form = "want `<type>(<scope>): <description>`, e.g. `fix(cache): keep the key stable across runs`";
+    final form = "want `<type>(<scope>): <description>`, e.g. `fix(proofread): keep the key stable across runs`";
     if (subject.len() > maxLength()) {
         return "{subject.len()} bytes, over the {maxLength()} a subject may run";
     }
@@ -74,8 +74,8 @@ export fun problem(subject: str) > str {
             return "unclosed scope in `{head}`; " + form;
         }
         final scope = head.sub(open + 1, len: head.len() - open - 2);
-        if (scope == "" or scope.lower() != scope or scope.indexOf(" ") != null) {
-            return "scope `{scope}` must be lowercase with no spaces";
+        if (scope == "" or scope.lower() != scope or scope.indexOf(" ") != null or scope.split(",").indexOf("") != null) {
+            return "scope `{scope}` must be lowercase project names joined by commas, with no spaces";
         }
     }
     final kind = commitType(subject);
@@ -95,6 +95,68 @@ export fun problem(subject: str) > str {
     final first = word.sub(0, len: 1);
     if (first != first.lower() and (word.len() == 1 or word != word.upper())) {
         return "description opens in sentence case (`{word}`); write it lowercase imperative";
+    }
+    return "";
+}
+
+// KITCHEN_SINK is the scope of a change that affects every project.
+export final KITCHEN_SINK = "kitchen-sink";
+
+// scopes are the names in subject's scope, empty when it has none.
+export fun scopes(subject: str) > [str] {
+    final head = subjectHeader(subject) ?? "";
+    final open = head.indexOf("(");
+    final close = head.indexOf(")");
+    if (open == null or close == null or close! < open!) {
+        return [<str>];
+    }
+    return head.sub(open! + 1, len: close! - open! - 1).split(",");
+}
+
+// projectName is how a scope names the project at path. The root is magus.
+// Any other is its last segment, or its path when another project shares it.
+export fun projectName(path: str, projects: [str]) > str {
+    if (path == ".") {
+        return "magus";
+    }
+    final parts = path.split("/");
+    final last = parts[parts.len() - 1];
+    foreach (other in projects) {
+        final otherParts = other.split("/");
+        if (other != path and otherParts[otherParts.len() - 1] == last) {
+            return path;
+        }
+    }
+    return last;
+}
+
+// scopeProblem returns "" when every name in subject's scope is a project the
+// change affects, or the scope is kitchen-sink alone and it affects them all.
+// projects are every project's path and affected the change's.
+export fun scopeProblem(subject: str, projects: [str], affected: [str]) > str {
+    final names = scopes(subject);
+    if (names.len() == 0) {
+        return "";
+    }
+    if (names.indexOf(KITCHEN_SINK) != null) {
+        if (names.len() > 1) {
+            return "`{KITCHEN_SINK}` stands alone; drop the other names";
+        }
+        if (affected.len() < projects.len()) {
+            return "`{KITCHEN_SINK}` is for a change that affects every project; "
+                + "this one affects {affected.len()} of {projects.len()}";
+        }
+        return "";
+    }
+    final wanted = mut [<str>];
+    foreach (p in affected) {
+        wanted.append(projectName(p, projects: projects));
+    }
+    foreach (name in names) {
+        if (wanted.indexOf(name) == null) {
+            return "scope `{name}` names no project this change affects; "
+                + "want some of {wanted.join(",")}, or no scope";
+        }
     }
     return "";
 }
@@ -151,6 +213,33 @@ test "a subject outside the form names what is wrong" {
     std\assert(problem("feat: add a hook.") == "description ends with a period", message: "trailing period");
     std\assert(problem("feat:  add").startsWith("empty description"), message: "double space");
     std\assert(problem("feat: " + "x".repeat(100)).endsWith("over the 100 a subject may run"), message: "too long");
+}
+
+test "a scope is project names joined by commas" {
+    std\assert(problem("fix(proofread,embed): bump compress") == "", message: "two names");
+    std\assert(problem("fix(proofread, embed): bump").startsWith("scope `proofread, embed`"), message: "a space");
+    std\assert(problem("fix(proofread,): bump").startsWith("scope `proofread,`"), message: "an empty name");
+    std\assert(scopes("fix(proofread,embed): bump").join(",") == "proofread,embed", message: "parsed");
+    std\assert(scopes("fix: bump").len() == 0, message: "no scope");
+}
+
+test "a project is named by its last segment, or its path when that is shared" {
+    final projects = [".", "docs", "libs/proofread", "libs/proofread/train", "libs/embed/train"];
+    std\assert(projectName(".", projects: projects) == "magus", message: "root");
+    std\assert(projectName("libs/proofread", projects: projects) == "proofread", message: "unique");
+    std\assert(projectName("libs/embed/train", projects: projects) == "libs/embed/train", message: "shared");
+}
+
+test "a scope names projects the change affects, and kitchen-sink every one" {
+    final projects = [".", "docs", "libs/proofread"];
+    std\assert(scopeProblem("fix(proofread): x", projects: projects, affected: ["libs/proofread"]) == "", message: "affected");
+    std\assert(scopeProblem("fix(magus,docs): x", projects: projects, affected: [".", "docs"]) == "", message: "two");
+    std\assert(scopeProblem("fix: x", projects: projects, affected: [<str>]) == "", message: "no scope");
+    std\assert(scopeProblem("fix(cache): x", projects: projects, affected: ["libs/proofread"]).startsWith("scope `cache` names no project"), message: "unknown");
+    std\assert(scopeProblem("fix(docs): x", projects: projects, affected: ["libs/proofread"]).startsWith("scope `docs` names no project"), message: "not affected");
+    std\assert(scopeProblem("chore(kitchen-sink): x", projects: projects, affected: projects) == "", message: "everything");
+    std\assert(scopeProblem("chore(kitchen-sink): x", projects: projects, affected: ["docs"]).endsWith("affects 1 of 3"), message: "not everything");
+    std\assert(scopeProblem("chore(kitchen-sink,docs): x", projects: projects, affected: projects).startsWith("`kitchen-sink` stands alone"), message: "alone");
 }
 
 test "the base branch is read off a remote-qualified base ref" {
