@@ -1,20 +1,20 @@
 ---
-title: "brief-command: a spawn or continuation brief that teaches a command the guard denies"
-description: "A deny rule by default: it refuses a spawn or continuation brief that teaches a command the guard denies, and names what to run instead."
+title: "brief-command: a spawn or continuation brief that teaches a command the guard denies, or a stopping reply that hands one to the person"
+description: "A deny rule by default: it refuses a spawn or continuation brief that teaches a command the guard denies, or a stopping reply that hands one to the person, and names what to run instead."
 tags: [guard, rules, brief-command, deny]
 ---
 
 # brief-command
 
-A deny rule by default: it refuses a spawn or continuation brief that teaches a command the guard denies, and names what to run instead.
+A deny rule by default: it refuses a spawn or continuation brief that teaches a command the guard denies, or a stopping reply that hands one to the person, and names what to run instead.
 
 ## What it catches
 
-A spawn or continuation brief that teaches a command the guard denies.
+A spawn or continuation brief that teaches a command the guard denies, or a stopping reply that hands one to the person.
 
 ## Why
 
-A worker runs the commands in its brief as written, so a denied one is refused in every worker the brief reaches, or teaches each of them a way around the refusal. Only what the brief presents as a command is graded, a fenced shell block or an inline code span, with the same rules a shell line gets. A line naming a command to forbid it (never, do not, denied, instead of) is passed over, and a `<placeholder>` reads as a word rather than a redirect.
+A worker runs the commands in its brief as written, so a denied one is refused in every worker the brief reaches, or teaches each of them a way around the refusal. Only what the brief presents as a command is graded, a fenced shell block or an inline code span, with the same rules a shell line gets. A line naming a command to forbid it (never, do not, denied, instead of) is passed over, and a `<placeholder>` reads as a word rather than a redirect. A command the person runs reaches no hook, so a reply's fenced shell blocks are judged at stop as if the agent ran them, and the first denied one refuses the stop once. Its inline spans are not: a reply names commands in prose.
 
 ## Default and override
 
