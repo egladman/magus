@@ -60,6 +60,7 @@ func (m *Magus) MachineClaims(ctx context.Context, targets []types.Target, charm
 		out = append(out, types.MachineClaim{
 			Project: p.Path, Target: target, DeclaredBy: step.MemoryDeclaredBy, Under: under,
 			MemoryMB: step.MemoryMB, Profile: step.MemoryProfile, Sizing: step.MemorySizing, Slots: slots,
+			SlotsFloor: min(step.SlotsFloor, slots),
 		})
 		for _, member := range p.TargetChains[target] {
 			owner := p

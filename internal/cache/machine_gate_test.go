@@ -209,9 +209,9 @@ func (s *MemoryPressureSuite) TestARunningStepRetakesItsClaimUnderPressure() {
 	s.reading("", nil)
 	g, _ := s.gate()
 	claim := types.MachineClaim{Target: "ci", PID: 100}
-	id, release, err := g.claim(s.T().Context(), claim)
+	seat, err := g.claim(s.T().Context(), claim)
 	s.Require().NoError(err)
-	h := &machineHold{gate: g, claim: claim, id: id, release: release}
+	h := &machineHold{gate: g, claim: claim, id: seat.id, release: seat.release, slots: seat.slots}
 	h.lend()
 	s.Empty(h.current())
 
@@ -895,9 +895,9 @@ func (s *BudgetWaitSuite) TestANestedChildUnderAHolderIsFreeSeatedNotQueued() {
 func (s *BudgetWaitSuite) TestAComposersRetakeWaitsInsteadOfFailing() {
 	s.adm.Release(s.T().Context(), s.holder)
 	claim := types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 6000, PID: 500}
-	id, release, err := s.gate.claim(s.T().Context(), claim)
+	seat, err := s.gate.claim(s.T().Context(), claim)
 	s.Require().NoError(err)
-	h := &machineHold{gate: s.gate, claim: claim, id: id, release: release}
+	h := &machineHold{gate: s.gate, claim: claim, id: seat.id, release: seat.release, slots: seat.slots}
 	h.lend()
 	member := s.b.Request(types.MachineClaim{Project: "x", Target: "build", MemoryMB: 9000, PID: 600}, 0)
 	s.Require().True(member.Granted)
@@ -995,6 +995,24 @@ func TestBudgetWaitLineNamesEachHoldersBreakdownAndTheSoonestEndAsAtLeast(t *tes
 	assert.Equal(t, "held by pid 10 (root) lint 4.8 GiB: own peak over 48 runs, in /a; "+
 		"pid 10 (root) conventions 4.2 GiB under .:lint: own peak over 12 runs; pid 11 (root) vet; "+
 		"the first holder ends in at least 30s", describeMachineWait(v, now))
+}
+
+func TestGrantedSlotsFromABrokerWithoutGrantsAreTheFullWidthSaidOnce(t *testing.T) {
+	var logged bytes.Buffer
+	g := &machineGate{log: slog.New(slog.NewTextHandler(&logged, nil))}
+	elastic := types.MachineClaim{Project: ".", Target: "test", Slots: 6, SlotsFloor: 1}
+
+	first := g.granted(t.Context(), elastic, types.MachineVerdict{Granted: true, ID: "1.1"})
+	second := g.granted(t.Context(), elastic, types.MachineVerdict{Granted: true, ID: "1.2"})
+	assert.Equal(t, [2]int{6, 6}, [2]int{first.slots, second.slots})
+	assert.Equal(t, 1, strings.Count(logged.String(), "the broker grants no elastic slots"))
+	assert.Equal(t, 2, g.granted(t.Context(), elastic, types.MachineVerdict{Granted: true, ID: "1.3", Slots: 2}).slots)
+}
+
+func TestAComposersRetakeAsksTheWidthItRunsWith(t *testing.T) {
+	h := &machineHold{claim: types.MachineClaim{Target: "lint", Slots: 8, SlotsFloor: 1}, slots: 3}
+	assert.Equal(t, types.MachineClaim{Target: "lint", Slots: 3, SlotsFloor: 3}, h.retake(),
+		"its jobserver and GOMAXPROCS were fixed at three")
 }
 
 func TestBudgetWaitLineSaysItsPlaceInTheQueue(t *testing.T) {

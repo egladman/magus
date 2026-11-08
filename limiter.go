@@ -101,6 +101,12 @@ func (m *Magus) sizeClaim(step *cache.Step, p *types.Project, target string, siz
 	if step.Slots > max(slots, 1) {
 		slotSizing = types.SlotSizing{Source: types.SlotsForMemory}
 	}
+	// A declared width is what the target needs; any other runs with
+	// what the machine grants it.
+	step.SlotsFloor = min(1, step.Slots)
+	if slotSizing.Source == types.SlotsDeclared {
+		step.SlotsFloor = step.Slots
+	}
 	sizing.Slots = slotSizing
 	step.MemoryMB, step.MemorySizing, step.MemoryProfile, step.MemoryDeclaredBy = max(mb, 0), sizing, profile, ""
 	if mb > 0 {

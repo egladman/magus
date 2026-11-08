@@ -268,6 +268,10 @@ type Step struct {
 	NoCache       bool // when true, always run fn; never replay or snapshot (long-running targets)
 	SkipReplay    bool // when true, never replay a hit (always run fn), but still snapshot on success: a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
 	Slots         int  // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
+	// SlotsFloor is the fewest slots the step runs with. The machine
+	// budget grants floor to Slots, and the step runs with the grant.
+	// 0 means Slots, a fixed width. Never hashed.
+	SlotsFloor int
 	// MemoryMB is RunAll only: the declared peak memory this step will reach,
 	// including every target it composes, carried alongside the slot count Slots
 	// derives from the same figure. Slots throttle peers inside THIS process; the
@@ -1315,21 +1319,22 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 	h := &machineHold{gate: c.machine, claim: types.MachineClaim{
 		Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
 		MemoryMB: s.MemoryMB, Profile: s.MemoryProfile, Sizing: s.MemorySizing, Slots: slots,
-		PID: os.Getpid(), Dir: workingDir(),
+		SlotsFloor: min(max(s.SlotsFloor, 0), slots),
+		PID:        os.Getpid(), Dir: workingDir(),
 		Invocation: selfInvocation(ctx), Ancestors: ancestorInvocations(ctx),
 		Under: s.Under,
 	}}
 	if c.machine != nil {
 		h.claim.Weight = leaseWeight(ctx, c.dir)
 	}
-	id, release, err := c.machine.claim(ctx, h.claim)
+	seat, err := c.machine.claim(ctx, h.claim)
 	if err != nil {
 		return ctx, nil, err
 	}
-	h.id, h.release = id, release
+	h.id, h.release, h.slots = seat.id, seat.release, seat.slots
 	held.machineClaim = true
 	ctx = withMachineHold(ctx, h)
-	if id != "" {
+	if seat.id != "" {
 		ctx = withStepGroups(ctx, c.machine.admit, h.current)
 		ctx = withOverrunWatch(ctx, c.machine.admit, h.current, s.MemoryProfile)
 	}
@@ -1407,7 +1412,7 @@ func withWhy(err error, attrs ...slog.Attr) []any {
 // Factored out of RunAll so work running OUTSIDE the batch is accounted the same way
 // rather than through a second, quietly divergent path; see [Cache.RunAside].
 func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Context, int, func(), error) {
-	slots := stepSlots(s, lim)
+	slots := grantedSlots(ctx, s, stepSlots(s, lim))
 	hold, err := lim.acquireWatched(ctx, slots, stepLabel(s))
 	if err != nil {
 		return ctx, 0, nil, err

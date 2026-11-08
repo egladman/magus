@@ -1388,6 +1388,49 @@ func TestRunAllSeatsAJobserverOnlyForAMultiSlotStep(t *testing.T) {
 	}, got)
 }
 
+// An elastic step granted fewer slots than it asked for runs that narrow:
+// its limiter seat, the Go toolchain's width and the slots its outcome records.
+func TestGrantedSlotsReachGOMAXPROCSAndTheRecordedWidth(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the probe reads the child's environment through sh")
+	}
+	t.Setenv("MAGUS_LEVEL", "")
+	b, _ := testBudget(t, 0, 10)
+	require.True(t, b.Request(types.MachineClaim{Project: "other", Target: "test", Slots: 7, PID: os.Getpid() + 1}, 0).Granted)
+	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
+	require.NoError(t, err)
+
+	var held int
+	var procs string
+	step := Step{ProjectPath: ".", Target: "test", WorkspaceRoot: t.TempDir(), Slots: 8, SlotsFloor: 1, NoCache: true}
+	_, err = c.RunAll(t.Context(), []Step{step}, func(ctx context.Context, _ Step) error {
+		held = SlotsHeld(ctx)
+		out, err := spawn.Exec(ctx, "sh", []string{"-c", `printf %s "$GOMAXPROCS"`}, spawn.ExecOptions{Capture: true, Quiet: true})
+		procs = out.Stdout
+		return err
+	}, WithLimiter(NewLimiter(8)))
+	require.NoError(t, err)
+
+	assert.Equal(t, [2]any{3, "3"}, [2]any{held, procs}, "the three slots the budget had free")
+}
+
+// A step the budget seated at full width keeps it.
+func TestGrantedSlotsOfAFixedStepAreItsWidth(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "")
+	b, _ := testBudget(t, 0, 10)
+	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
+	require.NoError(t, err)
+
+	var held int
+	step := Step{ProjectPath: ".", Target: "scip", WorkspaceRoot: t.TempDir(), Slots: 4, NoCache: true}
+	_, err = c.RunAll(t.Context(), []Step{step}, func(ctx context.Context, _ Step) error {
+		held = SlotsHeld(ctx)
+		return nil
+	}, WithLimiter(NewLimiter(8)))
+	require.NoError(t, err)
+	assert.Equal(t, 4, held)
+}
+
 // A declared remote write with no backend to write is refused at Open, whether none was
 // wired or the wired one did not start.
 func TestBuildTiersRefusesARequiredWriteWithoutABackend(t *testing.T) {

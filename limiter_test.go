@@ -263,7 +263,7 @@ func TestSizeClaimSizesOnlyTheTargetsOwnFigure(t *testing.T) {
 	sizing := m.sizeClaim(&step, p, "test", size)
 	want := types.MemorySizing{Samples: 3, Slots: types.SlotSizing{Source: types.SlotsUnmeasured},
 		Fallback: "test: no memory curve for this shape (0 of 3 runs); claimed the 3.9 GiB peak"}
-	assert.Equal(t, cache.Step{MemoryMB: 4000, MemoryDeclaredBy: "test", MemorySizing: want, Slots: 1}, step,
+	assert.Equal(t, cache.Step{MemoryMB: 4000, MemoryDeclaredBy: "test", MemorySizing: want, Slots: 1, SlotsFloor: 1}, step,
 		"the highest passing peak, under the declaration")
 	assert.Equal(t, want, sizing)
 
@@ -302,14 +302,14 @@ func TestSizeClaimMeasuresAnUndeclaredTarget(t *testing.T) {
 
 	measuredSlots := types.SlotSizing{Source: types.SlotsMeasured, Samples: minMeasuredRuns}
 	flat := "scip: no memory curve for this shape (0 of 3 runs); claimed the 1.6 GiB peak"
-	assert.Equal(t, cache.Step{MemoryMB: 1600, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Samples: minMeasuredRuns, Slots: measuredSlots, Fallback: flat}, Slots: 3},
-		claim(types.Target{}, minMeasuredRuns), "the 1600 MiB peak and three slots")
+	assert.Equal(t, cache.Step{MemoryMB: 1600, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Samples: minMeasuredRuns, Slots: measuredSlots, Fallback: flat}, Slots: 3, SlotsFloor: 1},
+		claim(types.Target{}, minMeasuredRuns), "the 1600 MiB peak and three slots, granted from one")
 	assert.Equal(t, cache.Step{MemorySizing: types.MemorySizing{Slots: types.SlotSizing{Source: types.SlotsUnmeasured}}},
 		claim(types.Target{}, minMeasuredRuns-1), "too few runs claim no memory and one slot")
-	assert.Equal(t, cache.Step{MemoryMB: 1600, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Samples: minMeasuredRuns, Slots: types.SlotSizing{Source: types.SlotsDeclared}, Fallback: flat}, Slots: 1},
+	assert.Equal(t, cache.Step{MemoryMB: 1600, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Samples: minMeasuredRuns, Slots: types.SlotSizing{Source: types.SlotsDeclared}, Fallback: flat}, Slots: 1, SlotsFloor: 1},
 		claim(types.Target{Slots: 1}, minMeasuredRuns), "declared slots beat the measured width")
 	capped := "scip: no memory curve for this shape (0 of 3 runs); claimed the 1.0 GiB peak"
-	assert.Equal(t, cache.Step{MemoryMB: 1024, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Slots: measuredSlots, Fallback: capped}, Slots: 3},
+	assert.Equal(t, cache.Step{MemoryMB: 1024, MemoryDeclaredBy: "scip", MemorySizing: types.MemorySizing{Slots: measuredSlots, Fallback: capped}, Slots: 3, SlotsFloor: 1},
 		claim(types.Target{MemoryMB: 1024}, minMeasuredRuns), "declared memory caps the measured peak")
 }
 
@@ -333,6 +333,7 @@ func TestSizeClaimNamesSlotsTakenForMemory(t *testing.T) {
 	step = cache.Step{}
 	sizing = m.sizeClaim(&step, p, "test", nil)
 	assert.Equal(t, 2, step.Slots)
+	assert.Equal(t, 2, step.SlotsFloor, "a declared width is its floor too")
 	assert.Equal(t, types.SlotSizing{Source: types.SlotsDeclared}, sizing.Slots)
 }
 

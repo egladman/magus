@@ -124,6 +124,8 @@ type machineGate struct {
 	wait time.Duration
 	log  *slog.Logger
 	lost sync.Once
+	// ungranted says once that the broker seats elastic claims at full width.
+	ungranted sync.Once
 	// unread says once that this host's memory state has no reading.
 	unread sync.Once
 	// required refuses a step the admitter could not answer for, where the default
@@ -144,8 +146,37 @@ type machineGate struct {
 // under best-effort; under required it refuses with MGS3022 (exit 69).
 // A machine short of memory refuses with MGS3053 (exit 75) before that.
 func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func(), error) {
-	_, release, err := g.claim(ctx, c)
-	return release, err
+	seat, err := g.claim(ctx, c)
+	return seat.release, err
+}
+
+// machineSeat is what a claim was seated with: the id that releases it, ""
+// when nothing arbitrates the step, and the slots it was granted.
+type machineSeat struct {
+	id      string
+	slots   int
+	release func()
+}
+
+// unarbitrated is the seat of a claim no budget judged: its full width.
+func unarbitrated(c types.MachineClaim, release func()) machineSeat {
+	return machineSeat{slots: max(c.Slots, 1), release: release}
+}
+
+// granted is the seat verdict v gave c. A broker that names no grant
+// predates them and seated the full width, which is said once.
+func (g *machineGate) granted(ctx context.Context, c types.MachineClaim, v types.MachineVerdict) machineSeat {
+	seat := machineSeat{id: v.ID, slots: v.Slots, release: g.releaser(v.ID)}
+	if seat.slots < 1 {
+		seat.slots = max(c.Slots, 1)
+		if c.SlotsFloor > 0 && c.SlotsFloor < c.Slots {
+			g.ungranted.Do(func() {
+				g.log.InfoContext(ctx, fmt.Sprintf("the broker grants no elastic slots, so %s %s and every step after it run at full width",
+					displayProject(c.Project), c.Target), attr.Notice("machine budget"))
+			})
+		}
+	}
+	return seat
 }
 
 // machineHold is the machine claim one step took, kept so the step can hand it back
@@ -157,6 +188,8 @@ type machineHold struct {
 	mu      sync.Mutex
 	id      string
 	release func()
+	// slots is the width the claim was granted, which the step runs with.
+	slots int
 	// lent counts the dispatches waiting with the claim handed back. A count, not a flag:
 	// the first hands it back and the last takes it again.
 	lent int
@@ -210,18 +243,40 @@ func (h *machineHold) reclaim(ctx context.Context) error {
 	}
 	// Claimed unlocked, so a wait starting meanwhile never blocks behind it; such a wait
 	// gets the claim handed straight back.
-	id, release, err := h.gate.seat(ctx, h.claim)
+	seat, err := h.gate.seat(ctx, h.retake())
 	if err != nil {
 		return err
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.lent > 0 || h.release != nil {
-		release()
+		seat.release()
 		return nil
 	}
-	h.id, h.release = id, release
+	h.id, h.release = seat.id, seat.release
 	return nil
+}
+
+// retake is the claim reclaim asks for: fixed at the width the step
+// already runs with, since its jobserver and GOMAXPROCS cannot change.
+func (h *machineHold) retake() types.MachineClaim {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	c := h.claim
+	if h.slots > 0 {
+		c.Slots, c.SlotsFloor = h.slots, h.slots
+	}
+	return c
+}
+
+// grantedSlots is slots narrowed to what s's own machine claim was
+// granted. A step riding another's claim, or with none, keeps slots.
+func grantedSlots(ctx context.Context, s Step, slots int) int {
+	h, _ := ctx.Value(machineHoldKey{}).(*machineHold)
+	if h == nil || h.slots < 1 || h.claim.Project != s.ProjectPath || h.claim.Target != s.Target {
+		return slots
+	}
+	return min(slots, h.slots)
 }
 
 // LendMachineClaim runs fn, a wait on ctx.needs members, with the step's machine claim
@@ -249,25 +304,25 @@ func LendMachineClaim(ctx context.Context, fn func(context.Context) error) error
 	return lim.Yield(ctx, func() error { return lent(WithoutSlotHeld(ctx)) })
 }
 
-// claim is acquire, also returning the id of the claim granted: "" when nothing
-// arbitrates the step. broker: off is that case, and reads no memory either.
-func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (string, func(), error) {
+// claim is acquire, returning the whole seat. broker: off arbitrates nothing
+// and reads no memory either.
+func (g *machineGate) claim(ctx context.Context, c types.MachineClaim) (machineSeat, error) {
 	if g == nil || g.admit == nil {
-		return "", func() {}, nil
+		return unarbitrated(c, func() {}), nil
 	}
 	if err := g.refuseUnderPressure(ctx, c); err != nil {
-		return "", nil, err
+		return machineSeat{}, err
 	}
-	id, release, err := g.seat(ctx, c)
+	seat, err := g.seat(ctx, c)
 	if err != nil {
-		return "", nil, err
+		return machineSeat{}, err
 	}
 	// A long wait can end on a machine that went bad meanwhile.
 	if err := g.refuseUnderPressure(ctx, c); err != nil {
-		release()
-		return "", nil, err
+		seat.release()
+		return machineSeat{}, err
 	}
-	return id, release, nil
+	return seat, nil
 }
 
 // refuseUnderPressure is the MGS3053 refusal while the kernel says memory is
@@ -291,9 +346,9 @@ func (g *machineGate) refuseUnderPressure(ctx context.Context, c types.MachineCl
 
 // seat asks the budget for c, with no reading of memory. It waits in the
 // budget's queue, and a wait on other invocations ends at g's bound.
-func (g *machineGate) seat(ctx context.Context, c types.MachineClaim) (string, func(), error) {
+func (g *machineGate) seat(ctx context.Context, c types.MachineClaim) (machineSeat, error) {
 	if g == nil || g.admit == nil {
-		return "", func() {}, nil
+		return unarbitrated(c, func() {}), nil
 	}
 	wctx, w := g.newBudgetWait(ctx, c)
 	defer w.stop()
@@ -301,7 +356,7 @@ func (g *machineGate) seat(ctx context.Context, c types.MachineClaim) (string, f
 	v, err := g.ask(wctx, c, func(v types.MachineVerdict) { w.parked(ctx, v) })
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", nil, fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(c.Project), c.Target, ctx.Err())
+			return machineSeat{}, fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(c.Project), c.Target, ctx.Err())
 		}
 		if w.expired() {
 			return g.atBound(ctx, c, w)
@@ -309,28 +364,28 @@ func (g *machineGate) seat(ctx context.Context, c types.MachineClaim) (string, f
 		// An admitter that answers with an exit status refused the step itself (its
 		// workspace's admission config does not read), which no broker policy excuses.
 		if exit := (types.ExitError{}); errors.As(err, &exit) {
-			return "", nil, err
+			return machineSeat{}, err
 		}
 		if g.required {
-			return "", nil, brokerUnavailableError(c, err)
+			return machineSeat{}, brokerUnavailableError(c, err)
 		}
-		return "", g.admitOpen(ctx, err), nil
+		return unarbitrated(c, g.admitOpen(ctx, err)), nil
 	}
 	switch {
 	case v.Granted:
 		w.seated(ctx)
-		return v.ID, g.releaser(v.ID), nil
+		return g.granted(ctx, c, v), nil
 	case !v.Fits:
-		return "", nil, machineDoesNotFitError(c, v)
+		return machineSeat{}, machineDoesNotFitError(c, v)
 	default:
-		return "", nil, fmt.Errorf("machine budget: the admitter answered %s %s without seating it or holding the claim until it is seated", displayProject(c.Project), c.Target)
+		return machineSeat{}, fmt.Errorf("machine budget: the admitter answered %s %s without seating it or holding the claim until it is seated", displayProject(c.Project), c.Target)
 	}
 }
 
 // atBound is the one unparked ask a wait gets at its bound: the room may
 // have come free as the bound passed. Otherwise it is MGS3009 naming the
 // holders now.
-func (g *machineGate) atBound(ctx context.Context, c types.MachineClaim, w *budgetWait) (string, func(), error) {
+func (g *machineGate) atBound(ctx context.Context, c types.MachineClaim, w *budgetWait) (machineSeat, error) {
 	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
 	defer cancel()
 	// The broker records the wait this ask ends.
@@ -341,16 +396,16 @@ func (g *machineGate) atBound(ctx context.Context, c types.MachineClaim, w *budg
 		v = w.last()
 	case v.Granted:
 		w.seated(ctx)
-		return v.ID, g.releaser(v.ID), nil
+		return g.granted(ctx, c, v), nil
 	case !v.Fits:
-		return "", nil, machineDoesNotFitError(c, v)
+		return machineSeat{}, machineDoesNotFitError(c, v)
 	}
 	if w.blind {
 		// A nested magus that cannot name its ancestors cannot be excused
 		// from its parent's claim, so the refusal names the fix.
-		return "", nil, machineBlindError(c, v)
+		return machineSeat{}, machineBlindError(c, v)
 	}
-	return "", nil, machineBusyError(c, v, time.Now(), claimLease(ctx), w.waited(), w.bound)
+	return machineSeat{}, machineBusyError(c, v, time.Now(), claimLease(ctx), w.waited(), w.bound)
 }
 
 // waitBound is how long a wait on other invocations may last, and what
