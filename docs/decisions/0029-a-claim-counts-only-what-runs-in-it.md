@@ -165,44 +165,29 @@ and squeue.html, pantsbuild.org/stable/reference/global-options, Debian apt.conf
 
 ## Decision
 
-Eli decided every item on 2026-11-07. Nothing is built yet.
+An inline member takes a machine claim of its own, sized from its own history, while its composer's claim is lent (`LendMachineClaim`). No cache step is added, so the cache boundary stays where ADR 0012 put it. The composer claims, measures and records only its own body. A cross-project member claims the same way. The fold of `ctx.needs` members into one claim is gone. Lint, on 2026-11-07, claims its own 5008 MiB; install-linter, conventions and harness-drift each hold a seat of their own while they run.
 
-| item                                                              | State   |
-| ----------------------------------------------------------------- | ------- |
-| A composer's claim counts only members that run inline in it      | planned |
-| A call's members compose curve by curve where curves exist        | planned |
-| A claim is the highest measured peak, with no margin              | planned |
-| A step's slots are elastic, and a grant leaves room for waiters   | planned |
-| A run that does not fit waits by default, and says so             | planned |
-| Refusals and waits are recorded in a JSON Lines store             | planned |
-| A refusal and a wait print the claim's breakdown                  | planned |
-| `job fork` prints no budget advice for a seatless row             | planned |
-| No new role                                                       | planned |
+Eli decided every item on 2026-11-07. Jobs A to F built every item marked done. The curve row is not built: no fold is left for it to compose.
 
-### A composer's claim counts only members that run inline in it
+| item                                                                 | State     |
+| -------------------------------------------------------------------- | --------- |
+| A composer claims its own body; each inline `ctx.needs` member claims its own seat | done      |
+| A call's members compose curve by curve where curves exist          | not built |
+| A claim is the highest measured peak, with no margin                 | done      |
+| A step's slots are elastic, and a grant leaves room for waiters      | done      |
+| A run that does not fit waits by default, and says so                | done      |
+| Refusals and waits are recorded in a JSON Lines store                | done      |
+| A refusal and a wait print the claim's breakdown                     | done      |
+| `job fork` prints no budget advice for a seatless row                | done      |
+| No new role                                                          | done      |
 
-The fold adds a member only when that member's processes will run under the composer's
-collector. A member is left out when:
+### A composer claims its own body; each inline ctx.needs member claims its own seat
 
-- it already passed in this run (the set `body.MarkDone` reads);
-- it is a local cache hit at sizing time (the same key `RunAside` tries before
-  `claimMachine`, internal/cache/cache.go:1495-1520);
-- the scheduler runs it as its own step with its own claim, which is the case for every
-  member the graph lists as an upstream dependency of the composer, `skip_cache` or not.
-
-Sizing moves from before the body to the moment the claim is taken, which is when those
-three facts are known. When the composer has three or more measured runs of its shape whose
-members ran inline, that measured peak, which already saw those members' processes, bounds
-the fold from above: a measured total beats a summed estimate.
-
-Lint, sized this way on 2026-11-07: install-linter, conventions and harness-drift run as their
-own upstream steps, so lint claims its own work, 5008 MiB, instead of 16349.
+The composer's claim, its measured peak and its recorded outcome cover its body alone. An inline `ctx.needs` member takes its own claim, sized from its own runs, while the composer's claim is lent (`LendMachineClaim`), and the broker packs it like any other claim. A target that a step and an inline member both reach runs once per invocation; the second waits on the first, with its claim and slots lent. Before this record, a composer's recorded peak included its inline members' processes: T1 (out1c639c47c5dd) showed it.
 
 ### A call's members compose curve by curve where curves exist
 
-`foldCall` stops returning at the first member without a curve. Members with a profile
-compose by bucket as ADR 0012 decided; each member without one adds its flat peak to every
-bucket. The fallback names every member that went flat, not only the first.
+Not built. Nothing composes a call's members into one claim any more, so there is no fold to compose curve by curve; the broker packs each member's claim by its own curve.
 
 ### A claim is the highest measured peak, with no margin
 
@@ -217,7 +202,7 @@ MiB budget, lint, test, buzz-test and spells-generate together need:
 | p90 of peaks | 15288 MiB           | yes          |
 
 Eli chose max, no margin: resident-size sums already read high, the window holds 100 runs,
-and an overrun meets MGS3053 before the OOM killer. `peakMargin` (limiter.go) goes.
+and an overrun meets MGS3053 before the OOM killer. `peakMargin` (limiter.go) is removed.
 
 ### A step's slots are elastic, and a grant leaves room for waiters
 
@@ -257,7 +242,7 @@ the same way carries no information; it is the toll
 
 ### Refusals and waits are recorded in a JSON Lines store
 
-Each refusal and each completed wait appends one entry to a broker store: when, who asked
+Each refusal, and each claim seated after waiting on other runs, appends one entry to `admissions.jsonl`, beside `broker.log`, which keeps the newest 5000: when, who asked
 (pid, project, target, directory, lease), the claim's breakdown, the held state at the
 verdict, the verdict, and for a wait how long until seated. One `.jsonl` file, last line per
 key wins, compaction by rename, encoding on the entry type. The 20-entry in-memory ring
@@ -267,17 +252,16 @@ binding names; on 2026-11-07 all 104 read `unleased`, which is fixed with it.
 ### A refusal and a wait print the claim's breakdown
 
 MGS3009, a parked wait and `magus server status` print, for each holder over a quarter of the
-budget, what its claim is made of: its own measured peak, each folded member and why it
-folded, and which members went flat. For example: "lint 4.9 GiB: own peak over 48 runs;
-folded nothing: install-linter, conventions, harness-drift run as their own steps".
+budget, what its claim is made of: its own measured peak and the number of runs it was
+measured over. For example: "conventions 4.3 GiB under lint: own peak over 12 runs".
 `magus session -o json` already records sizing; the breakdown is that record, printed.
 
-`magus doctor` adds one check over the refusal store: refusals in the last day, and how many
+`magus doctor` adds one check, `budget-admissions`, over the admission store: refusals in the last day, and how many
 waits ran past a quarter of their bound. It reports counts and targets; it changes nothing.
 
 ### `job fork` prints no budget advice for a seatless row
 
-`jobFork` (cmd/magus/job.go:1465-1471) checks `holdsNoBuildSeat` as the spawn rule does.
+`job fork` prints no budget advice for a row that holds no seat, as the spawn rule already does.
 
 ### No new role
 
@@ -301,9 +285,9 @@ claims of the runs that did take seats.
   default, so it prints when it parks and why; every member left out of the fold, and every
   one held flat, is named in the breakdown.
 - [Determinism at chosen points](../design/judgment/determinism-at-chosen-points.md): bends.
-  Sizing at claim time reads which members already passed or hit the cache, facts of this run
-  and this cache, not of the host. Elastic grants depend on the held state and the queue at
-  admission, as admission already does. Eli decided this on 2026-11-07.
+  Sizing reads each claimant's own history, not which members already passed or hit the
+  cache. Elastic grants depend on the held state and the queue at admission, as admission
+  already does. Eli decided this on 2026-11-07.
 - [A refusal carries its reason](../design/judgment/a-refusal-carries-its-reason.md): relied
   on. The breakdown is the reason for a memory refusal and for a wait.
 - [Automation you can interrogate](../design/judgment/automation-you-can-interrogate.md):
@@ -322,12 +306,10 @@ claims of the runs that did take seats.
   unused while magus held 3.2 GiB of claims; the rest was other software. A larger budget
   admits more against memory that is not there. Reopen if a host's non-magus use is measured
   low across a week of refusals.
-- **Every composer's same-project members claim their own seat, as `skip_cache` composers'
-  do.** Lost for now: it moves the cache boundary, since a cacheable member is "the lexical
-  cache boundary: its own needs calls remain inline" (run.go:921-926), and it runs the
-  interceptor under every cacheable body. Leaving out members that run as steps reaches the
-  same claim for lint without it. Reopen if a composer is found whose inline members still
-  over-claim after this record.
+- **Taken, without the cache step.** Every composer's inline members claim their own seat,
+  as `skip_cache` composers' do, and no cache step is added: a claim without one leaves the
+  lexical cache boundary (run.go:921-926) unmoved. Eli chose this on 2026-11-07. Reopen if a
+  composer is found whose inline members still over-claim after this record.
 - **Keep the 1.25 margin, or take 1.1.** Lost: with the fold fixed, 1.25 fits three of the
   four targets above and 1.1 fits all four by 0.6 GiB; MGS3053 now covers the overrun the
   margin guarded. Reopen if MGS3053 fires on a host while every claim fit.
@@ -389,26 +371,22 @@ claims of the runs that did take seats.
   its duration band widens honestly.
 - Sizing at claim time runs once per step admission instead of once per plan; its inputs are
   the run's passed set and a local key lookup the admission already makes.
-- Tests that pin the fold, the margin and the zero wait change with them:
-  `TestChainMemorySumsOneCallAndPeaksAcrossCalls` (limiter_test.go),
-  `TestChainMemoryMBPeaksOverOneCall` (types/target_test.go), machine_gate_test.go's lending
-  and refusal cases. `types.SizedChainMemory`'s signature gains the run's passed set and a
-  cache probe, which updates internal/commands/testdata/api-go.lock.
-- Docs to update with the code: docs/concepts/concurrency.md's budget section; MGS3009.md,
-  including its stale "maximum rather than the sum" sentence; ADR 0001 (an amendment pointing
-  here); docs/design/refusals.md's machine-wide admission row;
-  docs/design/principles/friction-that-carries-meaning.md, which already describes a bounded
-  default wait; types/target.go's `MemoryMB` doc and docs/concepts/workspace.md:221, which
-  both still say a chain takes its largest declaration; ADR 0012, whose
-  `cache.ChildrenClaimTheirOwn` names a symbol that no longer exists; the generated config and
-  man pages from internal/config/config.go; and the magus-multi-agent skill's `status --wait`,
-  a flag that was deleted.
+- Tests that pinned the fold, the margin and the zero wait changed with them.
+  `types.SizedChainMemory`, `types.ChainMemoryMB`, `types.ChainMemory`, `types.MemorySizer`
+  and `types.MembersClaimTheirOwn` are removed, which updates
+  internal/commands/testdata/api-go.lock.
+- Docs updated with the code: docs/concepts/concurrency.md's budget section; MGS3009.md,
+  which no longer says the maximum rather than the sum; ADR 0001 and ADR 0012, each with an
+  amendment pointing here; docs/design/refusals.md's machine-wide admission row;
+  docs/design/principles/friction-that-carries-meaning.md; docs/concepts/workspace.md's
+  `memory_mb` row; and the magus-multi-agent skill's wait default. The generated config and
+  man pages follow from internal/config/config.go and are regenerated by the integrator.
 
 ## Open questions
 
-- Does lint's recorded peak include its inline members' processes, or only its body? The code
-  reading infers that inline members feed the composer's collector; no run has proven it.
-  Measure one `magus run lint . --no-cache` with members cold before building the upper bound.
+- Answered by T1 (out1c639c47c5dd): before this record, a composer's recorded peak included
+  its inline members' processes. No upper bound was built, so the measurement it asked for is
+  not needed.
 - How wide is the duration band once grants vary? Elastic slots may widen D90/D10 enough to
   blunt ADR 0012's packing.
 - Which `concurrency_profile` is the default? docs/concepts/concurrency.md says `balanced` in
