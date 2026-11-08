@@ -852,6 +852,7 @@ github.com/egladman/magus/std.VCSBase func(ctx context.Context, dir string) (str
 github.com/egladman/magus/std.VCSChangedFiles func(ctx context.Context, base string, dir string) ([]github.com/egladman/magus/types.Path, error)
 github.com/egladman/magus/std.VCSCommand func(ctx context.Context, args []string, opts github.com/egladman/magus/types.VCSCommandOptions) (github.com/egladman/magus/types.ExecResult, error)
 github.com/egladman/magus/std.VCSCommit func(ctx context.Context, rev string) (github.com/egladman/magus/types.Commit, error)
+github.com/egladman/magus/std.VCSCommits func(ctx context.Context, base string, dir string) ([]github.com/egladman/magus/types.Commit, error)
 github.com/egladman/magus/std.VCSDescribe func(ctx context.Context) (string, error)
 github.com/egladman/magus/std.VCSDiffStat func(ctx context.Context, base string, dir string) ([]github.com/egladman/magus/types.FileStat, error)
 github.com/egladman/magus/std.VCSDirtyDiff func(ctx context.Context, paths []string) (string, error)
