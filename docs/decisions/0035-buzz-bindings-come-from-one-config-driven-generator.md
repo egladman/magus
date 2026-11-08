@@ -422,6 +422,13 @@ are measured to dominate `types_generate`.
   `CTypeLayout`, writes its zdef struct declaration beside the mirror, and refuses a
   field with no C layout by name. It needs zdef struct support in gopherbuzz matching
   upstream Buzz first.
+- How a large Go slice crosses (raised by Eli, 2026-11-08). Every conversion copies
+  eagerly: `ByteSliceVal` and `StringSliceVal` (`internal/interp/bindings/ffi/convert.go`)
+  box each element into an 8-byte `vm.Value`, so 32 MiB of `[]byte` becomes a 256 MiB
+  list, and nothing caps it. The one 32 MiB limit in the tree is the HTTP upload chunk
+  (`internal/interp/bindings/http_bytes.go`), which keeps the bytes in Go. The proposal:
+  `[]byte` crosses as an opaque handle object (length, slice, hex) by default, and a
+  layered setting turns another slice into a lazy list view instead of an eager copy.
 
 ## Amendments
 
