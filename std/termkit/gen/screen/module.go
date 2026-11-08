@@ -29,7 +29,7 @@ var Module = std.Module{
 		},
 		{
 			Name:    "terminal_fd",
-			Doc:     "Fd and Write make a Terminal usable directly as a writer wherever production code expects a terminal, so a test drives the real code path rather than a transcript of it.",
+			Doc:     "Fd and Write let a test hand a Terminal to code that expects one, so it drives the real code path.",
 			Args:    []std.Arg{{Name: "terminal", Type: std.TypeInt}},
 			Returns: []std.Ret{{Type: std.TypeInt}},
 			Raises:  true,

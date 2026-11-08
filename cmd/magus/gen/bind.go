@@ -57,6 +57,7 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.DurationVar(&cfg.Console.Pulls.StaleAfter, "console-pulls-stale-after", cfg.Console.Pulls.StaleAfter, "MAGUS_CONSOLE_PULLS_STALE_AFTER: StaleAfter is how long a pull request may go unpushed before it is stale.")
 	fs.StringVar(&cfg.Log.Format, "log-format", cfg.Log.Format, "MAGUS_LOG_FORMAT: Format is the log format: pretty, plain, text or json.")
 	fs.StringVar(&cfg.Log.Level, "log-level", cfg.Log.Level, "MAGUS_LOG_LEVEL: Level is the minimum log level; 'trace' also enables the startup timing table.")
+	fs.StringVar(&cfg.Log.Loader, "log-loader", cfg.Log.Loader, "MAGUS_LOG_LOADER: Loader names the animation the run band draws while targets run.")
 	fs.StringVar(&cfg.Knowledge.PublishedRef, "knowledge-published-ref", cfg.Knowledge.PublishedRef, "MAGUS_KNOWLEDGE_PUBLISHED_REF: PublishedRef is the OCI artifact a published knowledge graph is READ from, as <registry>/<repository>:<tag>.")
 	fs.IntVar(&cfg.Knowledge.MaxSizeMB, "knowledge-max-size-mb", cfg.Knowledge.MaxSizeMB, "MAGUS_KNOWLEDGE_MAX_SIZE_MB: MaxSizeMB is a soft cap on the knowledge shard store (<cache>/knowledge).")
 	fs.BoolVar(&cfg.Knowledge.VCS.Enabled, "knowledge-vcs-enabled", cfg.Knowledge.VCS.Enabled, "MAGUS_KNOWLEDGE_VCS_ENABLED: Enabled folds VCS history (last commit, commit count) onto file nodes as the @vcs shard.")

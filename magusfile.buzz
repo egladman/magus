@@ -134,7 +134,7 @@ magus\project({
     // The rest are the libs whose targets these targets ctx.needs (MGS1062).
     "depends_on": ["proto", "libs/figure", "libs/embed", "libs/cmdline", "libs/conventions",
                    "libs/diagnostics", "libs/gopherbuzz", "libs/proofread", "libs/scipbuzz",
-                   "libs/testpairing", "libs/textsearch", "libs/xdg"],
+                   "libs/termkit", "libs/testpairing", "libs/textsearch", "libs/xdg"],
     "layers": {
         "internal/httpx": "transport",
         "internal/handler/*": "handler",

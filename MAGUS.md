@@ -19,6 +19,7 @@ A **target** is a named unit of work (build, test, lint, ...) declared as an `ex
 - Project: libs/embed/train
 - Project: libs/figure
 - Project: libs/proofread/train
+- Project: testdata/latex/onepage
 
 ## Route by question
 
@@ -62,7 +63,7 @@ magus graph export -o json  # the whole graph
 | op         | built in | `magus query kind=op`         | `go-test`, `go-build`, `go-fmt`                                                                                                                                |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                                                                |
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `mutable`                                                                                                                                          |
-| module     | built in | `magus query kind=module`     | `archive`, `base64`, `buzz`                                                                                                                                    |
+| module     | built in | `magus query kind=module`     |                                                                                                                                                                |
 | method     | built in | `magus query kind=method`     |                                                                                                                                                                |
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS1021`, `MGS3032`                                                                                                                                |
 | doc        |    2000+ | `magus query kind=doc`        | `docs/reference/rules/index.md`, `docs/reference/proofread/index.md`, `docs/guides/integrations/agents/guard.md`                                               |
@@ -81,7 +82,7 @@ magus graph export -o json  # the whole graph
 | [.](MAGUS.md)                                                               |      67 | `magus query project=.`                               | `conventions`, `buzz-test`, `test`                            |
 | [console](console/MAGUS.md)                                                 |      11 | `magus query project=console`                         | `lint`, `build`, `install`                                    |
 | [docs](docs/MAGUS.md)                                                       |      28 | `magus query project=docs`                            | `catalog-docs-generate`, `site-generate`, `diagrams-generate` |
-| [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |       9 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                               |
+| [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |      10 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                               |
 | [libs/cmdline](libs/cmdline/MAGUS.md)                                       |       8 | `magus query project=libs/cmdline`                    | `format`, `ci`, `test`                                        |
 | [libs/conventions](libs/conventions/MAGUS.md)                               |       8 | `magus query project=libs/conventions`                | `format`, `ci`, `test`                                        |
 | [libs/diagnostics](libs/diagnostics/MAGUS.md)                               |       8 | `magus query project=libs/diagnostics`                | `format`, `ci`, `test`                                        |
@@ -98,6 +99,7 @@ magus graph export -o json  # the whole graph
 | [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                     |
 | [libs/xdg](libs/xdg/MAGUS.md)                                               |       8 | `magus query project=libs/xdg`                        | `format`, `build`, `test`                                     |
 | [proto](proto/MAGUS.md)                                                     |       6 | `magus query project=proto`                           | `generate`, `breaking`, `ci`                                  |
+| testdata/latex/onepage                                                      |       4 | `magus query project=testdata/latex/onepage`          | `build`, `format`, `ci`                                       |
 
 ## Project: magus
 
@@ -222,3 +224,12 @@ magus graph export -o json  # the whole graph
 | `build`    |                                                                                                                             |
 | `test`     | The calibrate tests replay the cases internal/calibrate embeds and judge with the libs/proofread rules, so both are inputs. |
 | `security` | Fails on a vulnerable symbol this module calls.                                                                             |
+
+## Project: testdata/latex/onepage
+
+| Target   | What it does                  |
+| -------- | ----------------------------- |
+| `lint`   |                               |
+| `ci`     | Formats, then builds the PDF. |
+| `build`  |                               |
+| `format` |                               |

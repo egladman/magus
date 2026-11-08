@@ -124,6 +124,7 @@ magus resolves configuration from these layers, highest precedence first: a CLI 
 | ------------ | -------------------- | -------------- | ----------------- |
 | `log.format` | `MAGUS_LOG_FORMAT`   | `--log-format` | string            |
 | `log.level`  | `MAGUS_LOG_LEVEL`    | `--log-level`  | string            |
+| `log.loader` | `MAGUS_LOG_LOADER`   | `--log-loader` | string            |
 | `log.silent` | `MAGUS_LOG_SILENT`   | _(env only)_   | bool _(env only)_ |
 | `log.stream` | `MAGUS_LOG_STREAM`   | _(env only)_   | bool _(env only)_ |
 
