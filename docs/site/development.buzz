@@ -8,10 +8,10 @@ import "markdown";
 import "fs";
 import "io";
 import "template";
-import "lib/text" as _;
-import "lib/html" as _;
+import "../libs/ssg/text" as _;
+import "../libs/ssg/html" as _;
 import "engine/meta" as _;
-import "engine/path" as _;
+import "../libs/ssg/paths" as _;
 import "engine/types" as _;
 import "engine/page" as _;
 

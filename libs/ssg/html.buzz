@@ -1,10 +1,10 @@
-// lib/html.buzz - link rewriting and goldmark-output post-processing for the
+// html.buzz - link rewriting and goldmark-output post-processing for the
 // directory-index layout. Pure string transforms; golden-gated.
 namespace html;
 
 import "assert";
-import "lib/text" as _;
-import "lib/dom" as _;
+import "text" as _;
+import "dom" as _;
 
 // resolvePath resolves a relative link against a gen-root-relative dir, normalizing
 // ".." and dropping "." / empty segments ("" for the root).

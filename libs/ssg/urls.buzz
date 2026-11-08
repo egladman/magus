@@ -1,6 +1,6 @@
-// lib/url.buzz - source-path -> clean-URL mapping for the directory-index layout.
+// urls.buzz - source-path -> clean-URL mapping for the directory-index layout.
 // Pure: cleanURL/cleanDepth take the blog dir as an arg, not a global.
-namespace url;
+namespace urls;
 
 import "assert";
 import "strings";

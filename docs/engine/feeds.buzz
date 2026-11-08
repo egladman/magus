@@ -8,8 +8,8 @@ import "fs";
 import "semver";
 import "assert";
 import "engine/types" as _;
-import "lib/text" as _;
-import "lib/feed" as _;
+import "../libs/ssg/text" as _;
+import "../libs/ssg/feed" as _;
 
 // renderBlogAtom writes gen/public/atom/blog.atom.xml: an Atom 1.0 feed of
 // site.blogPosts, newest first. Per <entry>: title, link (absolute), id (same URL),

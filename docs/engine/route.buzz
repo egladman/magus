@@ -1,10 +1,10 @@
 // engine/route.buzz - path/URL routing: source path -> clean output URL, the "../" depth
 // back to site root, and the deploy base path from the configured site URL. Site-aware, so
-// it imports engine/types and stays out of the leaf engine/path.buzz.
+// it imports engine/types and stays out of the leaf libs/ssg/paths.buzz.
 namespace route;
 
 import "assert";
-import "lib/url" as _;
+import "../libs/ssg/urls" as _;
 import "engine/types" as _;
 
 // LANDING_SRC is the srcRel of the hand-built home page (site/landing.buzz). It names no

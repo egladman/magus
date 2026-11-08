@@ -8,8 +8,8 @@ import "os";
 import "crypto";
 import "serialize";
 import "engine/types" as _;
-import "lib/text" as _;
-import "lib/csp" as _;
+import "../libs/ssg/text" as _;
+import "../libs/ssg/csp" as _;
 import "engine/route" as _;
 
 // writeManifest writes gen/manifest.webmanifest - the PWA metadata browsers read to allow

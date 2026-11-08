@@ -15,11 +15,11 @@ namespace tags;
 
 import "fs";
 import "template";
-import "lib/text" as _;
-import "lib/url" as _;
+import "../libs/ssg/text" as _;
+import "../libs/ssg/urls" as _;
 import "engine/types" as _;
 import "engine/page" as _;
-import "engine/path" as _;
+import "../libs/ssg/paths" as _;
 
 // writeTagPage renders one synthesized page and records it everywhere the site tracks output.
 // srcRel carries the "/_index.md" synthesized-page marker so renderPage knows there is no

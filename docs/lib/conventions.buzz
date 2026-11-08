@@ -7,9 +7,9 @@
 namespace conventions;
 
 import "assert";
-import "lib/text" as _;       // escapeAttr, splitPath
+import "../libs/ssg/text" as _;       // escapeAttr, splitPath
 import "lib/glossary" as _;   // glossarySlug, for the goldmark anchors
-import "lib/html" as _;       // resolvePath, to resolve a relative link against its file's dir
+import "../libs/ssg/html" as _;       // resolvePath, to resolve a relative link against its file's dir
 import "lib/adr" as _;        // adrProblems, the ADR template
 import "lib/design" as _;     // designProblems, the design page template
 import "lib/dictionary" as dictionary;   // termProblems, the glossary term page template

@@ -19,14 +19,14 @@ import "serialize";
 import "markdown";
 import "template";
 import "assert";
-import "lib/text" as _;
-import "lib/url" as _;
-import "lib/html" as _;
+import "../libs/ssg/text" as _;
+import "../libs/ssg/urls" as _;
+import "../libs/ssg/html" as _;
 import "lib/glossary" as _;
 import "lib/conventions" as _;
-import "lib/csp" as _;
+import "../libs/ssg/csp" as _;
 import "engine/meta" as _;
-import "engine/path" as _;
+import "../libs/ssg/paths" as _;
 
 // NavLink is one top-nav entry. suffix is appended to the per-page root prefix to
 // form the href (so it is host- and depth-independent); key is what renderSiteNav

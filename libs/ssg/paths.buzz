@@ -1,8 +1,8 @@
-// engine/path.buzz - walk predicates: is a path a directory, and which docs-root children
+// paths.buzz - walk predicates: is a path a directory, and which docs-root children
 // are the SSG's own files rather than content. Pure (os only, no Site) so it stays a leaf
 // that both engine/types.buzz and render.buzz flat-import without a cycle. The
 // generated-name lists come from Config (generatorDirs/generatorFiles), not hardcoded.
-namespace path;
+namespace paths;
 
 import "assert";
 import "fs";

@@ -6,8 +6,8 @@ namespace meta;
 
 import "markdown";
 import "serialize";
-import "lib/text" as _;
-import "lib/dom" as _;
+import "../libs/ssg/text" as _;
+import "../libs/ssg/dom" as _;
 import "assert";
 
 // deriveTitle reads the title from the first H1, stripping backticks (a heading like

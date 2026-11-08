@@ -1,5 +1,5 @@
-// lib/text.buzz - pure text/path/URL helpers. No site state; flat-imported by
-// render.buzz (`import "lib/text" as _`).
+// text.buzz - pure text/path/URL helpers. No site state; flat-imported by
+// render.buzz (`import "text" as _`).
 namespace text;
 
 import "assert";

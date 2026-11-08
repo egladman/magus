@@ -6,7 +6,7 @@
 namespace glossary;
 
 import "assert";
-import "lib/text" as _;
+import "../libs/ssg/text" as _;
 
 // GlossaryTerm is one glossary entry: the display term, its slug (the term page's file
 // name), and the one-line definition the popover shows. Terms are matched longest-first

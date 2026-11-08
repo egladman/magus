@@ -1,10 +1,10 @@
-// lib/date.buzz - pure date formatting for bylines, feeds, and the recent-changes
+// date.buzz - pure date formatting for bylines, feeds, and the recent-changes
 // footer. Flat-imported by render.buzz (`import "lib/date" as _`).
 namespace date;
 
 import "time";
 import "assert";
-import "lib/text" as _;
+import "text" as _;
 
 // formatISO renders an ISO 8601 UTC string as "June 29, 2026, 1:41 AM UTC" (no-JS
 // fallback; client JS rewrites it to the viewer's local zone).

@@ -17,8 +17,8 @@ import "template";
 // Term linking: the landing gets the same glossary popovers and code cross-references
 // every docs page gets. Both maskers skip fenced <pre>, so the transcript and the
 // magusfile listing are left alone.
-import "lib/text" as _;
-import "lib/url" as _;
+import "../libs/ssg/text" as _;
+import "../libs/ssg/urls" as _;
 import "lib/glossary" as _;
 import "engine/meta" as _;
 import "engine/types" as _;

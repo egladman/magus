@@ -1,11 +1,11 @@
-// lib/dom.buzz - a typed HTML tree, rendered once. Text and attribute
-// values are escaped on render. Markup another renderer built enters only
-// as a markup node. Attributes render in the order given, so output
-// matches hand-written markup byte for byte.
+// dom.buzz - a typed HTML tree, rendered once. Text and attribute values
+// are escaped on render. Markup another renderer built enters only as a
+// markup node. Attributes render in the order given, so output matches
+// hand-written markup byte for byte.
 namespace dom;
 
 import "assert";
-import "lib/text" as _;
+import "text" as _;
 
 // NodeKind says how render writes a node.
 export enum NodeKind { element, text, markup }

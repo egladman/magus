@@ -14,22 +14,22 @@ import "assert";
 // Text/path/URL helpers. Flat import (`as _`) merges a module's exports into this scope,
 // so callers name them unqualified (escapeAttr, relativePath, ...); same for the imports
 // below.
-import "lib/text" as _;
+import "../libs/ssg/text" as _;
 // Source-path -> clean-URL mapping (directory-index scheme, blog date scoping):
 // cleanURL/cleanDepth/blogURLPath.
-import "lib/url" as _;
+import "../libs/ssg/urls" as _;
 // Sitemap/Atom XML serialization + Atom date normalization: escapeXml/xmlElement/atomDate.
-import "lib/feed" as _;
+import "../libs/ssg/feed" as _;
 // Date formatting (bylines, feed dates, recent-changes stamps): formatISO/blogDate/...
-import "lib/date" as _;
+import "../libs/ssg/date" as _;
 // Directory-index link rewriting (resolve, old->new URL map, re-relativize):
 // rewriteHref/resolvePath/cleanTarget.
-import "lib/html" as _;
+import "../libs/ssg/html" as _;
 import "lib/glossary" as _;
 import "lib/conventions" as _;
 // Content-Security-Policy construction + the content hashing under it:
 // computeCSP/scriptHash/fileSha256/cspForRedirectStub and the CSP_* constants.
-import "lib/csp" as _;
+import "../libs/ssg/csp" as _;
 // Per-page facts read from a page's Markdown (title, tags, page_type, reading time,
 // fallback description, since-badge): deriveTitle/parseTags/pageType/readingTime/
 // deriveDescription/insertSinceBadge.
@@ -40,7 +40,7 @@ import "engine/meta" as _;
 import "site/release" as _;
 // Filesystem/walk predicates (isDirectory + the docs-root generator-file/dir skips); a
 // leaf shared with engine/types.buzz.
-import "engine/path" as _;
+import "../libs/ssg/paths" as _;
 // The Site data model + record types (the walk's build state); shared with every writer
 // module so they take a `site: Site` without a cycle back to this file.
 import "engine/types" as _;
@@ -182,8 +182,8 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
     }
     // Computed once so every page threads a stable string instead of recomputing per
     // page. See Site.csp/Site.cspBadges and computeCSP for which pages get which.
-    site.csp = computeCSP(CSP_IMG_SRC_DEFAULT);
-    site.cspBadges = computeCSP(CSP_IMG_SRC_BADGES);
+    site.csp = computeCSP(CSP_IMG_SRC_DEFAULT, scriptSrc: CSP_SCRIPT_SRC, inlineScriptFiles: CSP_INLINE_SCRIPT_SOURCES);
+    site.cspBadges = computeCSP(CSP_IMG_SRC_BADGES, scriptSrc: CSP_SCRIPT_SRC, inlineScriptFiles: CSP_INLINE_SCRIPT_SOURCES);
     // gen/ is NOT wiped and rebuilt: outDir is created if missing, every render below
     // overwrites in place, and pruneStaleOutputs() (near the end, once every write is
     // known) deletes only the leftovers whose source is gone - a renamed page, a deleted

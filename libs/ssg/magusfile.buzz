@@ -1,0 +1,20 @@
+// ssg is a static site generator written in Buzz: text, URL, HTML, feed, date, CSP and
+// path helpers a site's render imports by name. docs/ is its first user. No build
+// target: a consumer imports these files.
+import "magus";
+import "fs";
+
+magus\project({
+    // No spell claims .buzz, so this line declares the modules a source.
+    "sources": ["*.buzz"],
+});
+
+// test runs each module's in-file test blocks.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(["*.buzz"]);
+    foreach (mod in fs\glob("*.buzz")) {
+        if (mod.value != "magusfile.buzz") {
+            _ = magus\cmd("buzz", args: ["-t", "--embedded", mod.value]);
+        }
+    }
+}

@@ -15,7 +15,7 @@ namespace download;
 import "fs";
 import "io";
 import "template";
-import "lib/url" as _;
+import "../libs/ssg/urls" as _;
 import "engine/types" as _;
 import "engine/route" as _;
 import "engine/page" as _;

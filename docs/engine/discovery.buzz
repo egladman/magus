@@ -7,8 +7,8 @@ namespace discovery;
 import "fs";
 import "assert";
 import "engine/types" as _;
-import "lib/text" as _;
-import "lib/feed" as _;
+import "../libs/ssg/text" as _;
+import "../libs/ssg/feed" as _;
 
 // writeSEOFiles writes sitemap.xml + robots.txt from the real page URLs (sorted, so
 // byte-stable), each an absolute baseURL loc - "index.html" maps to the bare site root.

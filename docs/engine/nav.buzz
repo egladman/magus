@@ -10,10 +10,10 @@ import "markdown";
 import "template";
 import "engine/types" as _;
 import "engine/route" as _;
-import "lib/html" as _;
-import "lib/text" as _;
-import "lib/dom" as _;
-import "lib/date" as _;
+import "../libs/ssg/html" as _;
+import "../libs/ssg/text" as _;
+import "../libs/ssg/dom" as _;
+import "../libs/ssg/date" as _;
 
 // Footer crediting the last commit that touched a page's source, falling back to HEAD for
 // a not-yet-committed file. Keying off the file's own history means a page changes when its

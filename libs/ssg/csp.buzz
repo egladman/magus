@@ -1,4 +1,4 @@
-// lib/csp.buzz - Content-Security-Policy construction and the content hashing it rests
+// csp.buzz - Content-Security-Policy construction and the content hashing it rests
 // on. Self-contained (stdlib crypto/fs/io/encoding only); flat-imported by render.buzz
 // (`import "lib/csp" as _`). Site-wide and redirect-stub policies both live here so they
 // never drift. Inline-<script> hashing makes "add a script, forget to regenerate" fail
@@ -49,56 +49,30 @@ export fun extractInlineScripts(html: str) > [str] {
     // is one of the returns above and anything here is unreachable.
 }
 
-// CSP_INLINE_SCRIPT_SOURCES lists the source HTML files scanned for inline <script>
-// blocks whose hashes the site-wide CSP must allow. Every renderPage()-based page
-// carries no inline script; only hand-authored playground.html does today (WASM
-// bootstrap, syntax-overlay resize sync, draft persistence, fullscreen toggle - 4
-// blocks). An inline <script> on a listed file, or a new unlisted file, surfaces as a
-// browser CSP violation on that page - the intended failure mode (see computeCSP).
-export final CSP_INLINE_SCRIPT_SOURCES = ["playground.html"];
-
-// CSP_IMG_SRC_DEFAULT is the img-src every page gets except the home page: same-origin
-// plus data: URIs, nothing else. img-src is a GET-only exfiltration channel connect-src
-// cannot restrict (an `<img src="https://host/?leaked=...">` still fires), so graph and
-// playground - which hold the reader's own graph or source - carry no external image
-// allowance at all.
+// CSP_IMG_SRC_DEFAULT is the img-src a page gets unless its site passes a wider one:
+// same-origin plus data: URIs, nothing else. img-src is a GET-only exfiltration channel
+// connect-src cannot restrict (an `<img src="https://host/?leaked=...">` still fires).
 export final CSP_IMG_SRC_DEFAULT = "'self' data:";
 
-// CSP_IMG_SRC_BADGES extends CSP_IMG_SRC_DEFAULT with the two hosts the README's status
-// badges load from (github.com Actions badge, pkg.go.dev reference badge). Only the page
-// rendered FROM the README embeds them - /development/, not the site root - so only its
-// CSP (Site.cspBadges) passes this value.
-export final CSP_IMG_SRC_BADGES = CSP_IMG_SRC_DEFAULT + " https://github.com https://pkg.go.dev";
-
-// computeCSP builds one page's Content-Security-Policy meta content (see Site.csp/
-// Site.cspBadges for which pages get which img-src). default-src is 'self', not 'none':
-// manifest-src, the same-origin <link rel=prefetch> hover-warm, and the service worker
-// registration all fall back to default-src (via worker-src -> child-src), and 'none'
-// would break the service worker outright. 'self' is the minimal fallback that keeps
-// them working without opening any directive wider than same-origin. Every directive the
-// site needs is then named explicitly:
-//   - script-src: 'self' for bundles, 'wasm-unsafe-eval' because the Go/TinyGo wasm
-//     runtime (playground, run-example.js's "Run" buttons) needs it and there is no
-//     narrower source, plus one sha256- hash per inline script in
-//     CSP_INLINE_SCRIPT_SOURCES. Hashing the ACTUAL bytes (not a hand-copied constant)
+// computeCSP builds one page's Content-Security-Policy meta content. default-src is
+// 'self', not 'none': manifest-src, a same-origin <link rel=prefetch> and the service
+// worker registration all fall back to default-src (via worker-src -> child-src), and
+// 'none' would break the service worker outright. Every directive is then named:
+//   - script-src: 'self' for bundles, then scriptSrc verbatim (a site whose runtime
+//     needs 'wasm-unsafe-eval' passes it), plus one sha256- hash per inline <script> in
+//     inlineScriptFiles. Hashing the files' actual bytes, not a hand-copied constant,
 //     makes "add a script, forget to regenerate" fail loudly in the browser.
-//   - style-src: 'unsafe-inline' because a few pages carry a <style> block or style=""
-//     attr rather than an external sheet; CSP has no hash-source for style ATTRIBUTES
-//     (only style-src-attr's not-yet-universal 'unsafe-hashes'), so a per-block hash
-//     scheme would leave the attribute case uncovered anyway.
-//   - img-src: imgSrc verbatim (CSP_IMG_SRC_BADGES only for the README page's two live
-//     status badges, which vendoring would make permanently stale; every other page,
-//     notably graph/playground, stays same-origin-only).
-//   - connect-src: 'self' plus loopback wildcards - the browser-enforced form of the
-//     loopback-only rule, matching the 127.0.0.1/[::1] check the graph explorer's live
-//     mode makes client-side. Deliberately NOT loosened for graph/playground's
-//     `#src=<url>` loader: a third-party #src= fails at the CSP layer rather than being
-//     fetched, and both loaders handle the fetch failure gracefully.
+//   - style-src: 'unsafe-inline' because a page may carry a <style> block or a style=""
+//     attribute; CSP has no hash-source for style attributes (only style-src-attr's
+//     not-yet-universal 'unsafe-hashes'), so a per-block hash would leave that uncovered.
+//   - img-src: imgSrc verbatim, CSP_IMG_SRC_DEFAULT unless a page needs more.
+//   - connect-src: 'self' plus loopback wildcards, so a page may reach a local server
+//     and nothing beyond it.
 //   - form-action/object-src/frame-src 'none': no <form>, <object>/<embed>, <iframe>.
 //   - base-uri 'self': nothing sets <base>; pins it against injection anyway.
-export fun computeCSP(imgSrc: str) > str !> any {
+export fun computeCSP(imgSrc: str, scriptSrc: str, inlineScriptFiles: [str]) > str !> any {
     var hashes: mut [str] = mut [<str>];
-    foreach (path in CSP_INLINE_SCRIPT_SOURCES) {
+    foreach (path in inlineScriptFiles) {
         final f = io\File.open(path, io\FileMode.read);
         final html = f.readAll();
         f.close();
@@ -106,8 +80,8 @@ export fun computeCSP(imgSrc: str) > str !> any {
             hashes.append(" '" + scriptHash(js) + "'");
         }
     }
-    final scriptSrc = "'self' 'wasm-unsafe-eval'" + hashes.join("");
-    return "default-src 'self'; script-src " + scriptSrc
+    final extra = if (scriptSrc != "") " " + scriptSrc else "";
+    return "default-src 'self'; script-src 'self'" + extra + hashes.join("")
         + "; style-src 'self' 'unsafe-inline'"
         + "; img-src " + imgSrc
         + "; connect-src 'self' http://127.0.0.1:* http://[::1]:*"
@@ -138,31 +112,20 @@ test "scriptHash matches a known sha256-then-base64 digest" {
 }
 
 test "computeCSP names every directive exactly once and includes the loopback hosts" {
-    final got = computeCSP(CSP_IMG_SRC_DEFAULT);
+    final got = computeCSP(CSP_IMG_SRC_DEFAULT, scriptSrc: "", inlineScriptFiles: []);
     assert\equal(got.indexOf("default-src 'self'") != null, true, "default-src present");
-    assert\equal(got.indexOf("'wasm-unsafe-eval'") != null, true, "wasm-unsafe-eval present for the playground's wasm runtime");
+    assert\equal(got.indexOf("script-src 'self';") != null, true, "script-src is 'self' alone with no extra source or file");
     assert\equal(got.indexOf("connect-src 'self' http://127.0.0.1:* http://[::1]:*") != null, true, "connect-src carries exactly the loopback wildcards");
     assert\equal(got.indexOf("object-src 'none'") != null, true, "object-src 'none'");
     assert\equal(got.indexOf("frame-src 'none'") != null, true, "frame-src 'none'");
-    // Every playground.html inline <script> contributes exactly one sha256- source.
-    final f = io\File.open("playground.html", io\FileMode.read);
-    final n = extractInlineScripts(f.readAll()).len();
-    f.close();
-    // Counting via split, not a sub() walk: splitting on the needle yields one
-    // more part than there are occurrences, in a single pass. The walk it
-    // replaced re-copied the remaining string on every hit.
-    final hashCount = got.split("'sha256-").len() - 1;
-    assert\equal(hashCount, n, "one script-src hash per playground.html inline script");
 }
 
-test "computeCSP's img-src is exactly the caller's imgSrc argument - the per-page hook" {
-    final withDefault = computeCSP(CSP_IMG_SRC_DEFAULT);
-    assert\equal(withDefault.indexOf("img-src 'self' data:;") != null, true, "default img-src has no external host");
-    assert\equal(withDefault.indexOf("github.com") != null, false, "default img-src never carries the badge hosts");
-    assert\equal(withDefault.indexOf("pkg.go.dev") != null, false, "default img-src never carries the badge hosts");
-
-    final withBadges = computeCSP(CSP_IMG_SRC_BADGES);
-    assert\equal(withBadges.indexOf("img-src 'self' data: https://github.com https://pkg.go.dev;") != null, true, "badge img-src carries both badge hosts, verbatim");
+test "computeCSP's script-src and img-src are the caller's" {
+    final got = computeCSP(CSP_IMG_SRC_DEFAULT + " https://example.com", scriptSrc: "'wasm-unsafe-eval'", inlineScriptFiles: []);
+    assert\equal(got.indexOf("script-src 'self' 'wasm-unsafe-eval';") != null, true, "scriptSrc follows 'self'");
+    assert\equal(got.indexOf("img-src 'self' data: https://example.com;") != null, true, "imgSrc verbatim");
+    final plain = computeCSP(CSP_IMG_SRC_DEFAULT, scriptSrc: "", inlineScriptFiles: []);
+    assert\equal(plain.indexOf("example.com") != null, false, "the default img-src carries no external host");
 }
 
 test "cspForRedirectStub is scoped tighter than computeCSP and hashes exactly the given script" {
