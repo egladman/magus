@@ -409,10 +409,10 @@ func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, co
 	return denyWorkerCheckOnly(ctx, deps, actingLease, command)
 }
 
-// denyWorkerBudgetWait refuses a bound worker's run that may queue for the
-// budget. A claim waits 30m by default and a worker never waits. It is silent
-// wherever denyWorkerCheckOnly is. Judge asks it last, so a rule that refuses
-// the run outright speaks first, and a served next stands it down.
+// denyWorkerBudgetWait refuses a bound worker's run of its own row's check
+// without --budget-wait 0. A claim waits 30m by default and a worker never
+// waits. Every other run is the other rules' to judge. Judge asks it last, so
+// a rule that refuses the run outright speaks first.
 func denyWorkerBudgetWait(ctx context.Context, deps Dependencies, actingLease, command string) denial {
 	if actingLease == "" {
 		return denial{}
@@ -421,22 +421,19 @@ func denyWorkerBudgetWait(ctx context.Context, deps Dependencies, actingLease, c
 	if !ok {
 		return denial{}
 	}
+	me, ok := actingLiveLease(ctx, deps, actingLease)
+	if !ok || actingIntegrator(ctx, deps, me, command) {
+		return denial{}
+	}
+	checks := rowChecks(me)
 	var waits *targetRun
 	for _, c := range cmds {
-		if r, ok := parseTargetRun(c); ok && !r.zeroBudgetWait {
+		if r, ok := parseTargetRun(c); ok && !r.zeroBudgetWait && r.isCheck(checks) {
 			waits = &r
 			break
 		}
 	}
 	if waits == nil {
-		return denial{}
-	}
-	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || actingIntegrator(ctx, deps, me, command) || (commandRunsGate(command) && gatesInHeldCheckout(ctx, deps, me, command)) {
-		return denial{}
-	}
-	checks := rowChecks(me)
-	if len(checks) == 0 {
 		return denial{}
 	}
 	return denial{
@@ -1062,6 +1059,14 @@ func verbFlagTakesValue(verb, name string) bool {
 	return takes
 }
 
+// isCheck reports whether r runs one of checks over that check's project alone.
+func (r targetRun) isCheck(checks []types.LeaseCheck) bool {
+	projects := r.selection()
+	return r.verb == "run" && slices.ContainsFunc(checks, func(c types.LeaseCheck) bool {
+		return sameTarget(c.Target, r.target) && !slices.ContainsFunc(projects, func(p string) bool { return path.Clean(p) != path.Clean(c.Project) })
+	})
+}
+
 // allowed reports whether a bound worker may make this run: its row's check, or a target
 // declaring an output in its write paths. A rebuild of magus's own binary is never on the
 // list: there is one binary per base, the integrator builds it and a copy is placed in each
@@ -1069,15 +1074,13 @@ func verbFlagTakesValue(verb, name string) bool {
 //
 // `affected` is never a check: it picks its projects from the diff, and a check names one.
 func (r targetRun) allowed(checks []types.LeaseCheck, produces lazyProducers) bool {
-	projects := r.selection()
-	if r.verb == "run" && slices.ContainsFunc(checks, func(c types.LeaseCheck) bool {
-		return sameTarget(c.Target, r.target) && !slices.ContainsFunc(projects, func(p string) bool { return path.Clean(p) != path.Clean(c.Project) })
-	}) {
+	if r.isCheck(checks) {
 		return true
 	}
 	if r.verb != "run" {
 		return false
 	}
+	projects := r.selection()
 	writes := produces()
 	return !slices.ContainsFunc(projects, func(p string) bool { return !writes(r.target, p) })
 }
