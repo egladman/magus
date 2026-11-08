@@ -460,7 +460,7 @@ try {
 
 ### walk
 
-Recursively walk the directory tree rooted at root, calling callback(path, is_dir) for each entry. Return true from callback to stop the walk early. Sandbox-denied entries are silently skipped.
+Recursively walk the directory tree rooted at root in lexical order, calling callback(path, isDir) for each entry. The callback returns a WalkStep, as a Go fs.WalkDirFunc returns nil, fs.SkipDir or fs.SkipAll: next continues, skipDir skips a directory's contents (or, for a file, the rest of its directory) and skipAll ends the walk. Sandbox-denied entries are silently skipped.
 
 **Signature:** `fs\walk(root, callback)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go)
 
@@ -475,16 +475,14 @@ Recursively walk the directory tree rooted at root, calling callback(path, is_di
 import "std";
 import "fs";
 
-try {
-    fs\walk(".", fun (path: str, isDir: bool) > bool {
+fun main(args: [str]) > void {
+    fs\walk(".", callback: fun (path: str, isDir: bool) > fs\WalkStep {
         if (isDir and fs\basename(path) == "node_modules") {
-            return false;   // skip descent
+            return fs\WalkStep.skipDir;
         }
         if (fs\ext(path) == ".go") { std\print(path); }
-        return true;
-    });
-} catch (e) {
-    std\print("walk stopped early");
+        return fs\WalkStep.next;
+    }) catch void;
 }
 ```
 
