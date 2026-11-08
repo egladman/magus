@@ -401,24 +401,20 @@ export object Site {
         });
     }
 
-    // collectDocPages walks the docs/ subtree (same order as walk()) filling docPages
-    // before any page renders, so renderRelated() sees every page.
-    fun collectDocPages(rel: str) > void !> any {
-        var dir = this.inputs.root + "/" + this.inputs.docs;
-        if (rel != "") { dir = this.inputs.root + "/" + this.inputs.docs + "/" + rel; }
-        foreach (name in fs\listDir(dir)) {
-            var childRel = name;
-            if (rel != "") { childRel = rel + "/" + name; }
-            if (isDirectory(this.inputs.root + "/" + this.inputs.docs + "/" + childRel)) {
-                // Skip the SSG's own root children (node_modules/gen/src/tour) - same skip as
-                // walk(), only at the docs root, so metadata matches what actually renders.
-                if (isNeverContentDir(name)) { continue; }
-                if (rel == "" and isGeneratorDir(name, this.inputs.config.generatorDirs)) { continue; }
-                this.collectDocPages(childRel);
-            } else {
-                if (name.endsWith(".md") and isGeneratorFile(name, this.inputs.config.generatorFiles) == false) { this.collectDocPage(childRel); }
-            }
-        }
+    // docSourcePaths lists the markdown sources under docs/, relative to it.
+    fun docSourcePaths() > [str] !> any {
+        final sources = docSources(
+            this.inputs.root + "/" + this.inputs.docs,
+            generatorDirs: this.inputs.config.generatorDirs,
+            generatorFiles: this.inputs.config.generatorFiles,
+        );
+        if (sources.error -> e) { throw e; }
+        return sources.value!;
+    }
+
+    // collectDocPages fills docPages before any page renders.
+    fun collectDocPages() > void !> any {
+        foreach (rel in this.docSourcePaths()) { this.collectDocPage(rel); }
     }
 
     // renderBreadcrumb builds the breadcrumb <nav> for one page. Blog, search, tour,
