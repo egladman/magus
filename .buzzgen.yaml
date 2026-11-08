@@ -12,6 +12,15 @@ packages:
       SandboxAccess: {}
       SymbolFormat: {}
       VersionComponent: {}
+  github.com/egladman/magus/types/image:
+    types:
+      Architecture: {}
+      EntryKind: {}
+      MediaType: {config: {module: image, zeroCase: ""}}
+      ModePolicy: {}
+      OS: {}
+      SymlinkPolicy: {}
+      Variant: {}
   github.com/egladman/magus/types:
     types:
       AgentBilling: {}
@@ -54,13 +63,6 @@ packages:
       GuardProfile: {}
       HarnessChangeOp: {}
       HookPoint: {}
-      ImageArchitecture: {config: {name: Architecture}}
-      ImageEntryKind: {config: {name: EntryKind}}
-      ImageMediaType: {config: {name: MediaType, module: image, zeroCase: ""}}
-      ImageModePolicy: {config: {name: ModePolicy}}
-      ImageOS: {config: {name: OS}}
-      ImageSymlinkPolicy: {config: {name: SymlinkPolicy}}
-      ImageVariant: {config: {name: Variant}}
       InflightAttention: {config: {zeroCase: unset}}
       JobBaseVerdict: {config: {cases: {"match": matches}}}
       JobHolder: {}

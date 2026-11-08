@@ -8,6 +8,7 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	imagetypes "github.com/egladman/magus/types/image"
 	"time"
 )
 
@@ -198,11 +199,11 @@ func ObjectHTTPResponse(v types.HTTPResponse) vm.Value {
 	return out
 }
 
-func ObjectImageDigest(v types.ImageDigest, enums ffi.EnumCases) vm.Value {
+func ObjectImageDigest(v imagetypes.Digest, enums ffi.EnumCases) vm.Value {
 	return enums.Instance("Digest", []string{"algorithm", "encoded"}, []vm.Value{vm.StringValue(v.Algorithm), vm.StringValue(v.Encoded)})
 }
 
-func ObjectImagePlatform(v types.ImagePlatform, enums ffi.EnumCases) vm.Value {
+func ObjectImagePlatform(v imagetypes.Platform, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("os", enums.Case("OS", string(v.OS)))
 	out.MapSet("architecture", enums.Case("Architecture", string(v.Architecture)))
@@ -216,7 +217,7 @@ func ObjectImagePlatform(v types.ImagePlatform, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectImageDescriptor(v types.ImageDescriptor, enums ffi.EnumCases) vm.Value {
+func ObjectImageDescriptor(v imagetypes.Descriptor, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("mediaType", vm.StringValue(v.MediaType))
 	out.MapSet("artifactType", vm.StringValue(v.ArtifactType))
@@ -235,7 +236,7 @@ func ObjectImageDescriptor(v types.ImageDescriptor, enums ffi.EnumCases) vm.Valu
 	return out
 }
 
-func ObjectImageEntry(v types.ImageEntry, enums ffi.EnumCases) vm.Value {
+func ObjectImageEntry(v imagetypes.Entry, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("kind", enums.Case("EntryKind", string(v.Kind)))
@@ -249,7 +250,7 @@ func ObjectImageEntry(v types.ImageEntry, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectImageAddedLayer(v types.ImageAddedLayer, enums ffi.EnumCases) vm.Value {
+func ObjectImageAddedLayer(v imagetypes.AddedLayer, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("descriptor", ObjectImageDescriptor(v.Descriptor, enums))
 	out.MapSet("diffID", ObjectImageDigest(v.DiffID, enums))
@@ -264,7 +265,7 @@ func ObjectImageAddedLayer(v types.ImageAddedLayer, enums ffi.EnumCases) vm.Valu
 	return out
 }
 
-func ObjectImageLayout(v types.ImageLayout, enums ffi.EnumCases) vm.Value {
+func ObjectImageLayout(v imagetypes.Layout, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("descriptor", ObjectImageDescriptor(v.Descriptor, enums))
@@ -297,7 +298,7 @@ func ObjectImageLayout(v types.ImageLayout, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectImagePushed(v types.ImagePushed, enums ffi.EnumCases) vm.Value {
+func ObjectImagePushed(v imagetypes.Pushed, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("repository", vm.StringValue(v.Repository))
 	out.MapSet("digest", ObjectImageDigest(v.Digest, enums))
@@ -310,7 +311,7 @@ func ObjectImagePushed(v types.ImagePushed, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectImageDocument(v types.ImageDocument, enums ffi.EnumCases) vm.Value {
+func ObjectImageDocument(v imagetypes.Document, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("descriptor", ObjectImageDescriptor(v.Descriptor, enums))
@@ -6093,7 +6094,7 @@ func ObjectLimits(v types.Limits) vm.Value {
 	return out
 }
 
-func ObjectImageFile(v types.ImageFile) vm.Value {
+func ObjectImageFile(v imagetypes.File) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("source", vm.StringValue(v.Source))
 	out.MapSet("path", vm.StringValue(v.Path))
@@ -6103,7 +6104,7 @@ func ObjectImageFile(v types.ImageFile) vm.Value {
 	return out
 }
 
-func ObjectImageTree(v types.ImageTree, enums ffi.EnumCases) vm.Value {
+func ObjectImageTree(v imagetypes.Tree, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("source", vm.StringValue(v.Source))
 	out.MapSet("path", vm.StringValue(v.Path))
@@ -6124,7 +6125,7 @@ func ObjectImageTree(v types.ImageTree, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectImageSymlink(v types.ImageSymlink) vm.Value {
+func ObjectImageSymlink(v imagetypes.Symlink) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("target", vm.StringValue(v.Target))
@@ -6133,7 +6134,7 @@ func ObjectImageSymlink(v types.ImageSymlink) vm.Value {
 	return out
 }
 
-func ObjectImageDirectory(v types.ImageDirectory) vm.Value {
+func ObjectImageDirectory(v imagetypes.Directory) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("mode", vm.IntValue(int64(v.Mode)))
@@ -6142,7 +6143,7 @@ func ObjectImageDirectory(v types.ImageDirectory) vm.Value {
 	return out
 }
 
-func ObjectImageConfig(v types.ImageConfig) vm.Value {
+func ObjectImageConfig(v imagetypes.Config) vm.Value {
 	out := vm.NewMap()
 	optUser := vm.Null
 	if v.User != nil {
@@ -6213,7 +6214,7 @@ func ObjectImageConfig(v types.ImageConfig) vm.Value {
 	return out
 }
 
-func ObjectImageSpec(v types.ImageSpec, enums ffi.EnumCases) vm.Value {
+func ObjectImageSpec(v imagetypes.Spec, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StringValue(v.Base))
 	out.MapSet("scratch", vm.BoolValue(v.Scratch))
@@ -6248,21 +6249,21 @@ func ObjectImageSpec(v types.ImageSpec, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectImageRegistryAuth(v types.ImageRegistryAuth) vm.Value {
+func ObjectImageRegistryAuth(v imagetypes.RegistryAuth) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("username", vm.StringValue(v.Username))
 	out.MapSet("password", ObjectSecret(v.Password))
 	return out
 }
 
-func ObjectImageDependency(v types.ImageDependency, enums ffi.EnumCases) vm.Value {
+func ObjectImageDependency(v imagetypes.Dependency, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("uri", vm.StringValue(v.URI))
 	out.MapSet("digest", ObjectImageDigest(v.Digest, enums))
 	return out
 }
 
-func ObjectImageProvenance(v types.ImageProvenance, enums ffi.EnumCases) vm.Value {
+func ObjectImageProvenance(v imagetypes.Provenance, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("builderID", vm.StringValue(v.BuilderID))
 	out.MapSet("sourceRevision", vm.StringValue(v.SourceRevision))

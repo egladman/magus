@@ -817,6 +817,7 @@ type boundaryPackage struct {
 var boundaryPackages = []boundaryPackage{
 	{path: "github.com/egladman/magus/spells", alias: "spells"},
 	{path: "github.com/egladman/magus/types", alias: "types"},
+	{path: "github.com/egladman/magus/types/image", alias: "imagetypes", prefix: "Image"},
 	{path: "github.com/egladman/magus/internal/queue/types", alias: "queuetypes", prefix: "Queue"},
 	{path: "github.com/egladman/magus/libs/diagnostics", alias: "diagnostics"},
 }
