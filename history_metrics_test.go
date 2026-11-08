@@ -53,6 +53,7 @@ func (s *HistoryMetricsSuite) SetupTest() {
 	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	s.m = ws.(*Magus)
+	t.Cleanup(func() { assert.NoError(t, s.m.Close()) })
 	canonicalRoot, err := filepath.EvalSymlinks(root)
 	require.NoError(t, err)
 	s.root = canonicalRoot
