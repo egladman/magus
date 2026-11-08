@@ -362,6 +362,9 @@ func (s *Store) endCheckouts(ctx context.Context, written WrittenPaths, ended []
 		if !row.State.Terminal() || (onlyNamed && !slices.Contains(ended, row.ID)) {
 			continue
 		}
+		// A row taken from a plain shell bound this checkout. Only the guard
+		// releases a binding, and only when the holder ends the row itself.
+		dropRecord(s.place().MarkerPath(), Binding{Job: row.ID})
 		wt := row.Worktree
 		if !wt.Standing() {
 			continue
