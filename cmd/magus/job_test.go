@@ -1403,11 +1403,9 @@ func bindCheckout(t *testing.T, cacheDir, id string) {
 	require.NoError(t, job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir}).Bind(job.Caller{}, id))
 }
 
-// TestJobExecWritesNoMarker pins the half of the 2026-09-26 fix that lives in the CLI: exec
-// records the base and the checkout, and binds nobody. A CLI process cannot tell a subagent
-// from its parent, so a binding it wrote was the checkout's, and the parent sharing that
-// checkout was graded as the subagent from its next call.
-func TestJobExecWritesNoMarker(t *testing.T) {
+// TestJobExecBindsTheCheckoutLease: a run after exec reaches the broker with
+// the lease. On 2026-11-07 all 104 recorded owners read unleased.
+func TestJobExecBindsTheCheckoutLease(t *testing.T) {
 	row := leaseRow("lease-enforcement/wave4/docs", "")
 	row.State = types.StateRunning
 	repo, cacheDir := execRepositoryFixture(t, row)
@@ -1419,10 +1417,9 @@ func TestJobExecWritesNoMarker(t *testing.T) {
 	assert.Contains(t, out, "took "+row.ID)
 
 	loc := job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}
-	_, err := os.Stat(loc.MarkerPath())
-	assert.True(t, os.IsNotExist(err), "exec writes no checkout record")
 	lease, from := job.ActingLease(loc, "")
-	assert.Equal(t, []any{"", types.LeaseSource("")}, []any{lease, from}, "the checkout acts under nothing")
+	assert.Equal(t, []any{row.ID, types.LeaseSourceMarker}, []any{lease, from}, "the checkout acts under the job")
+	assert.Equal(t, row.ID, processLease(root), "a run after exec reaches the broker with the lease")
 
 	store := job.NewStore(loc)
 	rows, err := store.List()
@@ -1481,6 +1478,34 @@ func TestJobExecRefusesAnythingButOneLiveJob(t *testing.T) {
 	} {
 		assert.Error(t, jobExec(t.Context(), root, args), name)
 	}
+}
+
+// TestJobForkReadOnlyRowPrintsNoBudgetAdvice: a row that runs no target has no
+// holder to hold back, so a full budget is not its forker's news.
+func TestJobForkReadOnlyRowPrintsNoBudgetAdvice(t *testing.T) {
+	root, _ := execFixture(t)
+	privateSockDir(t)
+	t.Setenv("MAGUS_BROKER", "")
+	ln, err := broker.Listen(t.Context(), broker.DefaultAddr())
+	require.NoError(t, err)
+	done := make(chan error, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { done <- broker.Serve(ctx, ln, broker.WithCapacity(0, 1)) }()
+	t.Cleanup(func() { cancel(); <-done })
+	holder, err := broker.Dial(t.Context(), broker.DefaultAddr())
+	require.NoError(t, err)
+	defer func() { _ = holder.Close() }()
+	_, err = holder.Request(t.Context(), types.MachineClaim{Project: "other", Target: "test", Slots: 1, PID: 1})
+	require.NoError(t, err)
+
+	reader := captureStdout(t, func() {
+		require.NoError(t, jobFork(t.Context(), root, []string{"reader", "--read-only", "--criteria", "find the callers"}))
+	})
+	assert.NotContains(t, reader, "the build budget is full")
+	writer := captureStdout(t, func() {
+		require.NoError(t, jobFork(t.Context(), root, []string{"writer", "--check", "test .", "--write-paths", "magus.yaml"}))
+	})
+	assert.Contains(t, writer, "the build budget is full")
 }
 
 // A fork under `job exec --timeout` bootstraps with the wrapper holding the

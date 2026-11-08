@@ -406,7 +406,45 @@ func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, co
 	if d := denyLeaseGate(ctx, deps, actingLease, command); d.refused() {
 		return d
 	}
-	return denyWorkerCheckOnly(ctx, deps, actingLease, command)
+	if d := denyWorkerCheckOnly(ctx, deps, actingLease, command); d.refused() {
+		return d
+	}
+	return denyWorkerBudgetWait(ctx, deps, actingLease, command)
+}
+
+// denyWorkerBudgetWait refuses a bound worker's run that may queue for the
+// budget. A claim waits 30m by default and a worker never waits. It is silent
+// wherever denyWorkerCheckOnly is.
+func denyWorkerBudgetWait(ctx context.Context, deps Dependencies, actingLease, command string) denial {
+	if actingLease == "" {
+		return denial{}
+	}
+	cmds, ok := ParseCommands(command)
+	if !ok {
+		return denial{}
+	}
+	var waits *targetRun
+	for _, c := range cmds {
+		if r, ok := parseTargetRun(c); ok && !r.zeroBudgetWait {
+			waits = &r
+			break
+		}
+	}
+	if waits == nil {
+		return denial{}
+	}
+	me, ok := actingLiveLease(ctx, deps, actingLease)
+	if !ok || actingIntegrator(ctx, deps, me, command) || (commandRunsGate(command) && gatesInHeldCheckout(ctx, deps, me, command)) {
+		return denial{}
+	}
+	checks := rowChecks(me)
+	if len(checks) == 0 {
+		return denial{}
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: `%s` may wait for the build budget; lease %s's runs carry --budget-wait 0: `%s`.", elideCommand(command), me.ID, checkCommand(checks[0])),
+		Why: fmt.Sprintf("A claim waits in the broker's queue for budget_wait, 30m by default. A worker never queues for a seat, so `%s` takes `--budget-wait 0`: a full budget refuses it with MGS3009 at once, and the check is filed owed %q.", waits.target, types.OwedNoSeat),
+	}
 }
 
 // denyLeaseGate refuses the gate to a lease that was handed a narrower check, and
@@ -957,6 +995,8 @@ type targetRun struct {
 	// noDefaultCharms is --no-default-charms, which keeps the workspace's default_charms
 	// off this run.
 	noDefaultCharms bool
+	// zeroBudgetWait is --budget-wait 0: a full budget refuses the run at once.
+	zeroBudgetWait bool
 }
 
 // runReportFlags turn a run into a report about one: nothing executes, so nothing contends.
@@ -987,6 +1027,12 @@ func parseTargetRun(c hint.Invocation) (targetRun, bool) {
 			}
 			if name == "no-default-charms" {
 				r.noDefaultCharms = !joined || value != "false"
+			}
+			if name == "budget-wait" {
+				if !joined && i+1 < len(c.Args) {
+					value = c.Args[i+1]
+				}
+				r.zeroBudgetWait = zeroDuration(value)
 			}
 			skip = !joined && verbFlagTakesValue(r.verb, name)
 		case r.verb == "":
@@ -1493,9 +1539,22 @@ func leaseProducers(ctx context.Context, workspace func() (types.WorkspaceReposi
 	}
 }
 
+// zeroDuration reports a duration word that parses to zero, as "0" and "0s" do.
+func zeroDuration(word string) bool {
+	if word == "0" {
+		return true
+	}
+	d, err := time.ParseDuration(word)
+	return err == nil && d == 0
+}
+
+// WorkerCheckCommand is the check as its worker types it, for a fork to grade.
+func WorkerCheckCommand(c types.LeaseCheck) string { return checkCommand(c) }
+
 // checkCommand renders a check as the command that runs it, quoted for a shell.
+// It carries --budget-wait 0 because a worker never queues for a seat.
 func checkCommand(c types.LeaseCheck) string {
-	args := []string{c.Target, cmp.Or(c.Project, ".")}
+	args := []string{c.Target, cmp.Or(c.Project, "."), "--budget-wait", "0"}
 	if c.NoDefaultCharms {
 		args = append(args, "--no-default-charms")
 	}

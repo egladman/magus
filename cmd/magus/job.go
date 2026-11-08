@@ -333,6 +333,15 @@ func (g gradingRules) unchanged() bool {
 // not whichever binary the PATH holds.
 const ownBinaryPrefix = "./"
 
+// workerCheckLine renders c with --budget-wait 0, which a worker's run needs.
+// A script check has no such flag and is rendered as stored.
+func workerCheckLine(c types.LeaseCheck) string {
+	if c.Script != "" {
+		return c.String()
+	}
+	return guard.WorkerCheckCommand(c)
+}
+
 // gradeCheck judges row's check as the guard would judge its holder typing it where it is
 // taken ([job.WorkingCheckout]), the row standing in for a lease not stored yet.
 //
@@ -361,7 +370,7 @@ func gradeCheck(ctx context.Context, deps guard.Dependencies, root string, row t
 	}
 	judge := func(pending types.Job) (types.GuardJudgment, bool) {
 		return guard.JudgeLapsed(ctx, deps, guard.Request{
-			Input:      ownBinaryPrefix + pending.Check.String(),
+			Input:      ownBinaryPrefix + workerCheckLine(*pending.Check),
 			DryRun:     true,
 			Lease:      pending.ID,
 			PendingRow: &pending,
@@ -1462,8 +1471,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		job.RenderDeletionCandidates(os.Stdout, deletionCandidates(ctx, graph.load, stored))
 		job.RenderReferencedOutside(os.Stdout, referenced, referencedGap)
 		job.RenderForegroundOverrun(os.Stdout, overrun)
-		// The forker waits for the build budget so the job's holder never does.
-		if globalCfg.Broker.Resolved() != types.BrokerOff {
+		// The forker waits for the budget so the holder never does.
+		// A seatless row has no holder to hold back.
+		if globalCfg.Broker.Resolved() != types.BrokerOff && !stored.HoldsNoBuildSeat() {
 			if capacity, err := queryCapacity(ctx); err == nil {
 				if full := guard.BudgetFull(capacity, time.Now()); full != "" {
 					fmt.Println(full)
@@ -1792,6 +1802,11 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("magus job exec: %w", err)
 	}
+	// The guard binds the session, not the checkout. Without this record the
+	// broker names no lease for this checkout's runs.
+	if err := store.Bind(job.Caller{}, stored.ID); err != nil {
+		return fmt.Errorf("magus job exec: %w", err)
+	}
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -2032,6 +2047,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return exit.Usagef("magus job exit: %s", err)
 	}
+	store.Release(job.Caller{}, stored.ID)
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {

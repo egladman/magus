@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/doctor"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
@@ -98,6 +99,9 @@ func doctorCommand(ctx context.Context, root string, rc runConfig, args []string
 		}
 		return m.MachineClaims(ctx, targets, nil, nil), nil
 	}, mem.BudgetMB(mem.UsableBytes(ctx), globalCfg.ConcurrencyProfile), cache.MachineCeiling())
+	ctx = doctor.WithAdmissions(ctx, func(context.Context) ([]types.MachineAdmission, error) {
+		return file.Log[types.MachineAdmission]{Path: admissionLogPath()}.Load()
+	})
 	out := doctor.Run(ctx, root, ws, wsErr, dopts...)
 
 	if err := emitDoctor(opts, out); err != nil {

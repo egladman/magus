@@ -81,7 +81,7 @@ export fun checkCommand(check: any?, validation: str) > str {
         }
         return validation;
     }
-    final words = mut ["./magus", "run", target, check!["project"] ?? "."];
+    final words = mut ["./magus", "run", target, check!["project"] ?? ".", "--budget-wait", "0"];
     final extra = check!["args"] ?? [];
     if (extra.len() > 0) {
         words.append("--");
@@ -467,7 +467,7 @@ test "the fixture row renders the golden brief" {
 
 test "a check renders with its project and quoted tool args; a bare validation gets ./" {
     assert\equal(checkCommand({"target": "go::go-test", "project": ".", "args": ["-run", "Guard|Shell"]}, validation: ""),
-        want: "./magus run go::go-test . -- -run 'Guard|Shell'", message: "args");
+        want: "./magus run go::go-test . --budget-wait 0 -- -run 'Guard|Shell'", message: "args");
     assert\equal(checkCommand(null, validation: "magus run conventions ."), want: "./magus run conventions .", message: "validation");
 }
 

@@ -123,6 +123,15 @@ var allChecks = []checkDef{
 		},
 	},
 	{
+		Name:     budgetAdmissionsCheck,
+		Doc:      "the refusals and long waits the broker recorded for the build budget",
+		Code:     types.MachineBudgetExhausted,
+		Evidence: types.EvidenceMeasured,
+		run: func(ctx context.Context, r *runner, _ []*types.Project) types.Check {
+			return r.checkBudgetAdmissions(ctx)
+		},
+	},
+	{
 		Name:           "timeout-declarations",
 		Doc:            "a target's declared timeout against the durations magus has recorded for it",
 		Code:           types.TimeoutDeclarationDrift,

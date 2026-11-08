@@ -472,6 +472,21 @@ func TestHolderMemTextNamesTheSizing(t *testing.T) {
 	assert.Empty(t, holderMemText(types.MachineClaimant{Slots: 2}), "a slots-only claim has no memory to explain")
 }
 
+// TestStatusBreaksDownOnlyHoldersOverAQuarterOfTheBudget: a big claim says
+// where its figure came from, and a small one adds no row.
+func TestStatusBreaksDownOnlyHoldersOverAQuarterOfTheBudget(t *testing.T) {
+	var buf bytes.Buffer
+	printBrokerRows(&buf, types.StatusBroker{
+		PID: 1,
+		Capacity: types.MachineSnapshot{BudgetMB: 16 << 10, BudgetSlots: 8, Holders: []types.MachineClaimant{
+			{Project: ".", Target: "test", PID: 10, MemoryMB: 5 << 10, Sizing: types.MemorySizing{Samples: 54}},
+			{Project: ".", Target: "lint", PID: 11, MemoryMB: 1 << 10},
+		}},
+	}, types.BrokerRequired, time.Now())
+	assert.Contains(t, buf.String(), "sized     10  (root) test 5.0 GiB: own peak over 54 runs")
+	assert.NotContains(t, buf.String(), "sized     11")
+}
+
 // An idle broker still prints its capacity: "nothing is held" is the answer to the
 // question people open status to ask, and a silent section reads as a missing feature.
 func TestBrokerRowsIdle(t *testing.T) {

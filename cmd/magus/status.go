@@ -602,6 +602,9 @@ func printBrokerRows(w io.Writer, st types.StatusBroker, policy types.BrokerPoli
 			holderMemText(h),
 			fmt.Sprintf("%s %s", holderProject(h.Project), h.Target),
 			h.Owner, h.Dir, h.Command, sinceText(h.Since)), "  "))
+		if holdsOverAQuarter(h, c.BudgetMB) {
+			fmt.Fprintf(tw, "sized\t%d\t%s\n", h.PID, h.Sizing.Breakdown(fmt.Sprintf("%s %s", holderProject(h.Project), h.Target), h.Under, h.MemoryMB))
+		}
 	}
 	for _, q := range c.Waiting {
 		why := ""
@@ -756,6 +759,12 @@ func holderMemText(h types.MachineClaimant) string {
 		text += " " + h.Sizing.String()
 	}
 	return text
+}
+
+// holdsOverAQuarter reports a holder big enough that where its figure came
+// from is worth a row.
+func holdsOverAQuarter(h types.MachineClaimant, budgetMB int) bool {
+	return budgetMB > 0 && h.MemoryMB*4 > budgetMB
 }
 
 // refusedHoldersText names the holders that kept a refused claim out, by pid and owner.

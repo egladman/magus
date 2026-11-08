@@ -166,6 +166,7 @@ func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
 // failed target result and as an MGS3009 diagnostic, both naming the holder.
 func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
+	t.Setenv("MAGUS_BUDGET_WAIT", "0")
 	spellName := register.Spell(t, "zzz-machine-refusal-spell",
 		spells.WithTargets("build"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
