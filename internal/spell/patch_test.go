@@ -425,6 +425,29 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			Envs: []map[string]string{{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}, {"GOOS": "js", "GOARCH": "wasm"}}},
 		Coverage: &spells.Coverage{Format: spells.CoverageFormatGoProfile, Profile: ".magus/coverage.out"},
 	},
+	"latex": {
+		Name: "latex",
+		Needs: []string{"**/*.tex", "**/*.sty", "**/*.cls", "**/*.bib", "**/Tectonic.toml", ".chktexrc",
+			"latexindent.yaml", ".latexindent.yaml", "localSettings.yaml", ".localSettings.yaml"},
+		Provides:           []string{"build/**"},
+		IgnoreDirs:         []string{"build", "node_modules", "worktrees"},
+		Language:           "latex",
+		LanguageExtensions: []string{".tex", ".sty", ".cls"},
+		Syntax:             &spells.Syntax{Comments: &spells.CommentSyntax{LineComments: []string{"%"}}},
+		Tools: map[string]spells.Tool{
+			"tectonic":    {Probe: spells.Command{Bin: "tectonic", Args: []string{"--version"}}},
+			"chktex":      {Probe: spells.Command{Bin: "chktex", Args: []string{"--version"}}},
+			"latexindent": {Probe: spells.Command{Bin: "latexindent", Args: []string{"--version"}}},
+		},
+		Ops: map[string]spells.Op{
+			"tectonic": {Command: spells.Command{Bin: "tectonic", Args: []string{"-X", "build"}}},
+			"chktex":   {Command: spells.Command{Bin: "chktex", Args: []string{"-q"}, Sources: []string{"**/*.tex"}}},
+			"latexindent": {Command: spells.Command{Bin: "latexindent", Args: []string{"-k", "-s", "-g=/dev/null", "-c=build/latexindent"},
+				Sources: []string{"**/*.tex", "**/*.sty", "**/*.cls"}, SourcesEach: true, Charms: map[string]spells.Charm{
+					"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-wd"}}},
+				}}},
+		},
+	},
 	"markdown": {
 		Name:  "markdown",
 		Needs: []string{"**/*.md", "**/*.MD", "**/*.markdown", ".markdownlint.json", ".markdownlint.yaml", "dprint.json"},
