@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -1413,6 +1414,10 @@ func BenchmarkRunBuzzParallel(b *testing.B) {
 // after two forced collections. Before sessions released their heap slots every
 // evaluation kept its whole session, about 600KB; the bound leaves room for
 // allocator noise from tests running alongside and no room for a session.
+//
+// The race build poisons a released slot instead of recycling it, so there the
+// slot table grows by every object an evaluation allocates, by design. Only the
+// Buzz object count holds under race; the Go heap bound holds without it.
 func TestRunDirRetainsNothingPerEvaluation(t *testing.T) {
 	const nProjects = 4
 	body := "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n"
@@ -1441,12 +1446,25 @@ func TestRunDirRetainsNothingPerEvaluation(t *testing.T) {
 	evaluate(300)
 	retained := (int64(heapAlloc()) - int64(warm)) / 300
 	const bound = 32 << 10
-	if retained > bound {
+	if !raceBuild(t) && retained > bound {
 		t.Fatalf("each evaluation retained %d bytes of Go heap; want at most %d", retained, bound)
 	}
 	if grew := vm.ReadHeapStats().Objects - objects; grew > 300 {
 		t.Fatalf("300 evaluations grew the Buzz heap by %d objects; a closed session must leave none", grew)
 	}
+}
+
+// raceBuild reports whether the test binary was built with -race, read from the
+// build settings because vm keeps its own switch unexported.
+func raceBuild(t *testing.T) bool {
+	info, ok := debug.ReadBuildInfo()
+	require.True(t, ok, "the test binary carries no build info")
+	for _, setting := range info.Settings {
+		if setting.Key == "-race" {
+			return setting.Value == "true"
+		}
+	}
+	return false
 }
 
 // testBoundaryTypesPath is a private, test-only import path bundling every
