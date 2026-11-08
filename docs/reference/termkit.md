@@ -40,15 +40,15 @@ band := z.Acquire(2)
 
 dots, err := progress.Lookup("glyph/dots")
 if err != nil {
-	return err
+    return err
 }
 start := time.Now()
 for range time.Tick(dots.Interval) {
-	spin := dots.Frame(time.Since(start))[0].Spans
-	row := append(spin, termkit.Span{Text: " building internal/cache"})
-	if _, err := band.Set([]termkit.Line{{Spans: row}, progress.Bar(3, 8, 20, termkit.SGRDim)}); err != nil {
-		return err
-	}
+    spin := dots.Frame(time.Since(start))[0].Spans
+    row := append(spin, termkit.Span{Text: " building internal/cache"})
+    if _, err := band.Set([]termkit.Line{{Spans: row}, progress.Bar(3, 8, 20, termkit.SGRDim)}); err != nil {
+        return err
+    }
 }
 ```
 
