@@ -955,29 +955,41 @@ edge that keeps those three is not reported as a change.
 
 ## Global graph (across workspaces)
 
-An org running magus across many repos can query all of them at once. Register
-extra workspace roots in config, then pass `--global`:
+`--global` unions the knowledge graphs of the workspaces `knowledge.workspaces` lists in
+your user config, the list that also links them on disk
+([Connect two workspaces](../guides/connecting-workspaces.md) covers the list, the links
+and what each is for):
 
 ```yaml
-# magus.yaml
+# ~/Library/Application Support/magus/magus.yaml on macOS; $XDG_CONFIG_HOME/magus/magus.yaml elsewhere
 knowledge:
   workspaces:
-    - ../api
-    - ../web
+    - name: magus
+      path: ~/Repos/magus-main
+    - name: buzzed
+      path: ~/Repos/buzzed
 ```
 
 ```sh
-magus query "kind=spell" --global   # matches across every registered workspace
-magus graph stats --global          # union shape across repos
+magus query "kind=spell" --global   # matches across every listed workspace
+magus graph stats --global          # union shape across them
 ```
 
 `--global` is available on query, explain, path, and `magus graph export`/`stats`.
-Each workspace's node IDs are namespaced by the workspace (`api//spell:go`,
-`web//spell:go`) so IDs from different repos cannot collide; the unqualified ID
-stays a readable substring, so `magus explain go --global` still resolves. A
-registered workspace that cannot be opened is skipped rather than failing the
-query. There is no cross-workspace edge inference: a union with qualified IDs
-only.
+
+- **The workspace you run in must be listed.** Its entry name qualifies its own node IDs,
+  so an unlisted root refuses and names the entry to add.
+- **IDs are qualified by entry name**, never a directory basename: `magus//spell:go`,
+  `buzzed//spell:go`. The unqualified ID stays a readable substring, so
+  `magus explain go --global` still resolves.
+- **An entry that fails to open fails the query.** A union quietly missing a workspace
+  would read as complete.
+- **Each graph is built by the binary you run**, into that workspace's own `.magus/`.
+- **No cross-workspace edges.** It is a union with qualified IDs only, and symbol
+  queries stay domain-only under `--global`.
+
+[ADR 0028](../decisions/0028-workspaces-see-each-other.md) proposes read verbs that cross
+by default with labeled rows, which would retire `--global`; that is not built.
 
 ## Extraction diagnostics
 
