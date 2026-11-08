@@ -3184,26 +3184,6 @@ func ObjectURL(v types.URL) vm.Value {
 	return out
 }
 
-func ObjectFileStat(v types.FileStat) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("path", vm.StringValue(v.Path))
-	out.MapSet("added", vm.IntValue(int64(v.Added)))
-	out.MapSet("deleted", vm.IntValue(int64(v.Deleted)))
-	out.MapSet("binary", vm.BoolValue(v.Binary))
-	return out
-}
-
-func ObjectStatus(v types.Status) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("clean", vm.BoolValue(v.Clean))
-	itemsFiles := make([]vm.Value, len(v.Files))
-	for indexFiles := range v.Files {
-		itemsFiles[indexFiles] = ObjectPath(v.Files[indexFiles])
-	}
-	out.MapSet("files", vm.ListValue(itemsFiles))
-	return out
-}
-
 func ObjectPerson(v types.Person) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StringValue(v.Name))
@@ -3231,6 +3211,26 @@ func ObjectCommit(v types.Commit) vm.Value {
 	itemsFiles := make([]vm.Value, len(v.Files))
 	for indexFiles := range v.Files {
 		itemsFiles[indexFiles] = vm.StringValue(v.Files[indexFiles])
+	}
+	out.MapSet("files", vm.ListValue(itemsFiles))
+	return out
+}
+
+func ObjectFileStat(v types.FileStat) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StringValue(v.Path))
+	out.MapSet("added", vm.IntValue(int64(v.Added)))
+	out.MapSet("deleted", vm.IntValue(int64(v.Deleted)))
+	out.MapSet("binary", vm.BoolValue(v.Binary))
+	return out
+}
+
+func ObjectStatus(v types.Status) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("clean", vm.BoolValue(v.Clean))
+	itemsFiles := make([]vm.Value, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = ObjectPath(v.Files[indexFiles])
 	}
 	out.MapSet("files", vm.ListValue(itemsFiles))
 	return out

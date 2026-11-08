@@ -219,6 +219,7 @@ vcs.base
 vcs.changedFiles
 vcs.cmd
 vcs.commit
+vcs.commits
 vcs.describe
 vcs.diffStat
 vcs.dirtyDiff
