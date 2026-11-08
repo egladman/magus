@@ -37,7 +37,7 @@ func declareError(t *testing.T, decl KindDecl) string {
 	return err.Error()
 }
 
-func rulesOf(found []Finding) []Rule {
+func reportedRules(found []Finding) []Rule {
 	out := make([]Rule, len(found))
 	for i, f := range found {
 		out[i] = f.Rule
@@ -77,8 +77,8 @@ func TestADeclaredKindJudgesEachLineByItsRules(t *testing.T) {
 		t.Errorf("terms replaced %q, want %q", replaced, want)
 	}
 
-	if !slices.Contains(rulesOf(found), RuleTense) {
-		t.Errorf("findings %v hold no tense finding for 'will'", rulesOf(found))
+	if !slices.Contains(reportedRules(found), RuleTense) {
+		t.Errorf("findings %v hold no tense finding for 'will'", reportedRules(found))
 	}
 }
 
@@ -86,7 +86,7 @@ func TestADeclaredKindKeepsTheBuiltInGlossary(t *testing.T) {
 	found := JudgeText("Hand the work to a sub-agent", "entry", WithKinds(entryKind(t)))
 
 	if !slices.ContainsFunc(found, func(f Finding) bool { return f.Rule == RuleTerms && f.Match == "sub-agent" }) {
-		t.Errorf("findings %v do not replace sub-agent", rulesOf(found))
+		t.Errorf("findings %v do not replace sub-agent", reportedRules(found))
 	}
 }
 
@@ -94,8 +94,8 @@ func TestADeclaredKindIsGradedAtItsMinimum(t *testing.T) {
 	text := strings.Repeat("Basically the cache really works\n", 6)
 
 	found := JudgeText(text, "entry", WithKinds(entryKind(t)))
-	if !slices.Contains(rulesOf(found), RuleGrade) {
-		t.Errorf("findings %v hold no grade finding under the declared minimum of 90", rulesOf(found))
+	if !slices.Contains(reportedRules(found), RuleGrade) {
+		t.Errorf("findings %v hold no grade finding under the declared minimum of 90", reportedRules(found))
 	}
 }
 
@@ -142,7 +142,7 @@ func TestADeclaredDecisionRunsAnUnmeasuredRule(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !slices.Contains(rulesOf(JudgeText("run **build** first\n", "notes", WithKinds(specs...))), RuleCompactMarkup) {
+	if !slices.Contains(reportedRules(JudgeText("run **build** first\n", "notes", WithKinds(specs...))), RuleCompactMarkup) {
 		t.Error("a declared advise on compact-markup did not run it")
 	}
 }

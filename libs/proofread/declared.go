@@ -1,6 +1,7 @@
 package proofread
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -39,8 +40,12 @@ func DeclareKinds(decls map[string]KindDecl) ([]KindSpec, error) {
 
 	for _, name := range slices.Sorted(maps.Keys(decls)) {
 		s, err := declareKind(name, decls[name])
-		if err != nil {
-			return nil, fmt.Errorf("kinds.%s%w", name, err)
+		if fe := (fieldError{}); errors.As(err, &fe) {
+			fe.field = "kinds." + name + "." + fe.field
+
+			return nil, fe
+		} else if err != nil {
+			return nil, fmt.Errorf("kinds.%s: %w", name, err)
 		}
 
 		out = append(out, s)
@@ -56,7 +61,7 @@ type fieldError struct {
 	err   error
 }
 
-func (e fieldError) Error() string { return "." + e.field + ": " + e.err.Error() }
+func (e fieldError) Error() string { return e.field + ": " + e.err.Error() }
 func (e fieldError) Unwrap() error { return e.err }
 
 func at(field, format string, args ...any) error {
@@ -72,30 +77,12 @@ func declareKind(name string, d KindDecl) (KindSpec, error) {
 		return KindSpec{}, at("name", "%q is a built-in kind: give the declared one its own name", name)
 	}
 
-	var s KindSpec
-
-	if d.Extends != "" {
-		base, ok := builtins[d.Extends]
-		if !ok {
-			return KindSpec{}, at("extends", "unknown kind %q: want one of %s", d.Extends, kindList(kinds))
-		}
-
-		// The base's rules come over at the defaults they run at, since a
-		// declared kind's decisions are not [unmeasured]'s to turn off.
-		s = base.clone()
-		s.Extends = base.Name
-
-		for _, c := range checks {
-			if base.judges(c.rule) {
-				s.Rules[c.rule] = c.defaultDecision(base)
-			}
-		}
+	s, err := extend(d.Extends)
+	if err != nil {
+		return KindSpec{}, err
 	}
 
 	s.Name, s.declared = Kind(name), true
-	if s.Rules == nil {
-		s.Rules = map[Rule]Decision{}
-	}
 
 	switch {
 	case d.Reader != nil:
@@ -104,36 +91,60 @@ func declareKind(name string, d KindDecl) (KindSpec, error) {
 		return KindSpec{}, at("reader", "set a reader, or extend a kind for its reader")
 	}
 
-	if err := checkReader(s.Reader); err != nil {
-		return KindSpec{}, err
-	}
-
-	if err := s.setRules(d.Rules); err != nil {
-		return KindSpec{}, err
-	}
-
-	if err := s.setTerms(d.Terms, d.Rules); err != nil {
-		return KindSpec{}, err
-	}
-
-	if err := s.checkFormat(); err != nil {
-		return KindSpec{}, err
-	}
-
-	if err := s.setWeights(d.Weights); err != nil {
-		return KindSpec{}, err
-	}
-
-	if d.Minimum != nil {
-		if *d.Minimum < 0 || *d.Minimum > 100 {
-			return KindSpec{}, at("minimum", "want a grade from 0 to 100, not %d", *d.Minimum)
+	for _, step := range []func() error{
+		func() error { return checkReader(s.Reader) },
+		func() error { return s.setRules(d.Rules) },
+		func() error { return s.setTerms(d.Terms, d.Rules) },
+		s.checkFormat,
+		func() error { return s.setWeights(d.Weights) },
+		func() error { return s.setMinimum(d.Minimum) },
+	} {
+		if err := step(); err != nil {
+			return KindSpec{}, err
 		}
-
-		m := *d.Minimum
-		s.Minimum = &m
 	}
 
 	return s, nil
+}
+
+// extend returns the spec a declared kind starts from: base's, or an empty
+// one for no base. The base's rules come over at the defaults they run at,
+// since a declared kind's decisions are not [unmeasured]'s to turn off.
+func extend(base Kind) (KindSpec, error) {
+	if base == "" {
+		return KindSpec{Rules: map[Rule]Decision{}}, nil
+	}
+
+	b, ok := builtins[base]
+	if !ok {
+		return KindSpec{}, at("extends", "unknown kind %q: want one of %s", base, kindList(kinds))
+	}
+
+	s := b.clone()
+	s.Extends = b.Name
+
+	for _, c := range checks {
+		if b.judges(c.rule) {
+			s.Rules[c.rule] = c.defaultDecision(b)
+		}
+	}
+
+	return s, nil
+}
+
+func (s *KindSpec) setMinimum(m *int) error {
+	if m == nil {
+		return nil
+	}
+
+	if *m < 0 || *m > 100 {
+		return at("minimum", "want a grade from 0 to 100, not %d", *m)
+	}
+
+	v := *m
+	s.Minimum = &v
+
+	return nil
 }
 
 // checkReader refuses a format proofread has no reader for, and a Markdown

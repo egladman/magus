@@ -292,7 +292,7 @@ func terms(in input) []Finding {
 		}
 
 		for _, at := range own.FindAllStringIndex(para.text, -1) {
-			out = append(out, termFinding(para, at, replacementOf(in.spec.Terms, para.text[at[0]:at[1]])))
+			out = append(out, termFinding(para, at, termReplacement(in.spec.Terms, para.text[at[0]:at[1]])))
 		}
 	}
 
@@ -314,9 +314,9 @@ func termsRegexp(terms map[string]string) *regexp.Regexp {
 	return regexp.MustCompile(`(?i)\b(?:` + strings.Join(alts, "|") + `)\b`)
 }
 
-// replacementOf is the replacement terms holds for m, matched without regard
+// termReplacement is the replacement terms holds for m, matched without regard
 // to case or spacing.
-func replacementOf(terms map[string]string, m string) string {
+func termReplacement(terms map[string]string, m string) string {
 	for k, v := range terms {
 		if strings.EqualFold(strings.Join(strings.Fields(k), " "), strings.Join(strings.Fields(m), " ")) {
 			return v

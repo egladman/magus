@@ -756,28 +756,12 @@ func parseTable(data []byte) (table, error) {
 		return table{}, err
 	}
 
-	t := table{rules: rules, minimums: map[proofread.Kind]int{}, kinds: kinds}
-
-	for _, name := range slices.Sorted(maps.Keys(raw.Minimums)) {
-		kind, ok := proofread.ParseKind(name)
-		if decl, isDeclared := raw.Kinds[name]; isDeclared {
-			if decl.Minimum != nil {
-				return table{}, fmt.Errorf("minimums: %s: kinds.%s.minimum sets it too: keep one", name, name)
-			}
-
-			kind, ok = proofread.Kind(name), true
-		}
-
-		if !ok || string(kind) != name {
-			return table{}, fmt.Errorf("minimums: unknown kind %q", name)
-		}
-
-		if n := raw.Minimums[name]; n < 0 || n > 100 {
-			return table{}, fmt.Errorf("minimums: %s: want a grade from 0 to 100, not %d", name, n)
-		}
-
-		t.minimums[kind] = raw.Minimums[name]
+	minimums, err := parseMinimums(raw.Minimums, raw.Kinds)
+	if err != nil {
+		return table{}, err
 	}
+
+	t := table{rules: rules, minimums: minimums, kinds: kinds}
 
 	if len(raw.Paths) == 0 || string(raw.Paths) == "null" {
 		return t, nil
@@ -813,6 +797,36 @@ func parseTable(data []byte) (table, error) {
 	}
 
 	return t, nil
+}
+
+// parseMinimums checks each kind a table's minimums name, built in or
+// declared, and each grade. A declared kind that sets its own minimum may not
+// be named here too.
+func parseMinimums(in map[string]int, declared map[string]proofread.KindDecl) (map[proofread.Kind]int, error) {
+	out := map[proofread.Kind]int{}
+
+	for _, name := range slices.Sorted(maps.Keys(in)) {
+		kind, ok := proofread.ParseKind(name)
+		if decl, isDeclared := declared[name]; isDeclared {
+			if decl.Minimum != nil {
+				return nil, fmt.Errorf("minimums: %s: kinds.%s.minimum sets it too: keep one", name, name)
+			}
+
+			kind, ok = proofread.Kind(name), true
+		}
+
+		if !ok || string(kind) != name {
+			return nil, fmt.Errorf("minimums: unknown kind %q", name)
+		}
+
+		if n := in[name]; n < 0 || n > 100 {
+			return nil, fmt.Errorf("minimums: %s: want a grade from 0 to 100, not %d", name, n)
+		}
+
+		out[kind] = in[name]
+	}
+
+	return out, nil
 }
 
 // checkGlob refuses an empty glob and one path.Match cannot read.
