@@ -2465,7 +2465,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     ".agents/skills/*/SKILL.md", ".claude/skills/*/SKILL.md", ".gitignore",
                     "types/diagnostic.go",
                     ".github/workflows/*.yaml", ".github/actions/setup-magus/action.yml",
-                    ".claude/settings.json", "docs/guides/integrations/agents/codex-hooks.json",
+                    "docs/guides/integrations/agents/codex-hooks.json",
                     "docs/site/landing.buzz", "docs/src/styles/site.css",
                     "docs/site/diagrams/*.buzz", "libs/figure/figure.buzz",
                     "**/*.md", "console/**/*.md", "docs/**/*.md",
