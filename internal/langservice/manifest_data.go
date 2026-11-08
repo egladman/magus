@@ -185,7 +185,7 @@ var modules = []Module{
 			{Name: "copy_file", Doc: "Copy the file at src to dst (overwriting), preserving its permission bits.", Sig: "fs\\copyFile(src, dst)"},
 			{Name: "copy_dir", Doc: "Recursively copy the directory tree at src to dst, preserving permission bits.", Sig: "fs\\copyDir(src, dst)"},
 			{Name: "watch", Doc: "Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.", Sig: "fs\\watch(paths, callback)"},
-			{Name: "walk", Doc: "Recursively walk the directory tree rooted at root, calling callback(path, is_dir) for each entry. Return true from callback to stop the walk early. Sandbox-denied entries are silently skipped.", Sig: "fs\\walk(root, callback)"},
+			{Name: "walk", Doc: "Recursively walk the directory tree rooted at root in lexical order, calling callback(path, isDir) for each entry. The callback returns a WalkStep, as a Go fs.WalkDirFunc returns nil, fs.SkipDir or fs.SkipAll: next continues, skipDir skips a directory's contents (or, for a file, the rest of its directory) and skipAll ends the walk. Sandbox-denied entries are silently skipped.", Sig: "fs\\walk(root, callback)"},
 			{Name: "append_file", Doc: "Append content to path (creating if absent, mode 0644).", Sig: "fs\\appendFile(path, content)"},
 			{Name: "mode", Doc: "Permission bits from octal (\"0755\", \"1777\") or ls notation (\"rwxr-xr-x\"), for chmod, mkdirAll and image placements. Zero and bits beyond setuid, setgid and sticky raise.", Sig: "fs\\mode(notation) -> int"},
 			{Name: "chmod", Doc: "Change the permission bits of path to mode (an integer; fs\\mode(\"0755\") spells one).", Sig: "fs\\chmod(path, mode)"},

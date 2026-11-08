@@ -557,8 +557,8 @@ type visits struct {
 }
 
 // recordVisits is a Callback that records each (path, isDir) FsWalk visits and answers
-// stop, which ends the walk when true.
-func recordVisits(t *testing.T, stop bool) (*stdtest.MockCallback, *visits) {
+// step for every entry.
+func recordVisits(t *testing.T, step types.WalkStep) (*stdtest.MockCallback, *visits) {
 	v := &visits{}
 	cb := stdtest.NewMockCallback(t)
 	cb.EXPECT().Call(mock.Anything, mock.Anything, mock.Anything).RunAndReturn(
@@ -568,7 +568,7 @@ func recordVisits(t *testing.T, stop bool) (*stdtest.MockCallback, *visits) {
 			if isDir, _ := args[1].(bool); isDir {
 				v.dirs = append(v.dirs, path)
 			}
-			return []any{stop}, nil
+			return []any{string(step)}, nil
 		})
 	return cb, v
 }
@@ -624,7 +624,7 @@ func TestFsWalk(t *testing.T) {
 
 	ctx := WithCurrentWorkingDirectory(context.Background(), dir)
 
-	cb, v := recordVisits(t, false)
+	cb, v := recordVisits(t, types.WalkNext)
 	require.NoError(t, FsWalk(ctx, ".", cb))
 
 	sort.Strings(v.seen)
@@ -633,17 +633,51 @@ func TestFsWalk(t *testing.T) {
 	assert.Equal(t, []string{".", "sub"}, v.dirs)
 }
 
-// TestFsWalkStopsEarly: a truthy callback ends the whole walk, not just the
-// current directory.
-func TestFsWalkStopsEarly(t *testing.T) {
+// walkTree makes a.txt, sub/b.txt and sub/deep/c.txt under a temp dir.
+func walkTree(t *testing.T) string {
+	t.Helper()
 	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub", "deep"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "b.txt"), []byte("b"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "deep", "c.txt"), []byte("c"), 0o644))
+	return dir
+}
 
-	cb, v := recordVisits(t, true)
-	require.NoError(t, FsWalk(WithCurrentWorkingDirectory(context.Background(), dir), ".", cb))
-	assert.Len(t, v.seen, 1, "the first truthy answer ends the walk")
+// TestFsWalkSkipAllEndsTheWalk: skipAll ends the whole walk, not just the
+// current directory.
+func TestFsWalkSkipAllEndsTheWalk(t *testing.T) {
+	cb, v := recordVisits(t, types.WalkSkipAll)
+	require.NoError(t, FsWalk(WithCurrentWorkingDirectory(context.Background(), walkTree(t)), ".", cb))
+	assert.Len(t, v.seen, 1, "the first skipAll ends the walk")
+}
+
+// TestFsWalkSkipDirPrunesOneDirectory: skipDir on sub leaves out everything
+// under it and keeps walking its siblings.
+func TestFsWalkSkipDirPrunesOneDirectory(t *testing.T) {
+	var seen []string
+	cb := stdtest.NewMockCallback(t)
+	cb.EXPECT().Call(mock.Anything, mock.Anything, mock.Anything).RunAndReturn(
+		func(_ context.Context, args ...any) ([]any, error) {
+			path, _ := args[0].(string)
+			seen = append(seen, path)
+			if path == "sub" {
+				return []any{string(types.WalkSkipDir)}, nil
+			}
+			return []any{string(types.WalkNext)}, nil
+		})
+	require.NoError(t, FsWalk(WithCurrentWorkingDirectory(context.Background(), walkTree(t)), ".", cb))
+	assert.Equal(t, []string{".", "a.txt", "sub"}, seen)
+}
+
+// TestFsWalkRefusesAnythingButAStep: a bool, the old contract, is an error
+// that names the steps.
+func TestFsWalkRefusesAnythingButAStep(t *testing.T) {
+	cb := stdtest.NewMockCallback(t)
+	cb.EXPECT().Call(mock.Anything, mock.Anything, mock.Anything).Return([]any{true}, nil).Once()
+	err := FsWalk(WithCurrentWorkingDirectory(context.Background(), walkTree(t)), ".", cb)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "want WalkStep.next, WalkStep.skipDir or WalkStep.skipAll")
 }
 
 func TestFsWalkPropagatesACallbackFailure(t *testing.T) {

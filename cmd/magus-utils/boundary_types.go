@@ -572,6 +572,13 @@ var boundaryEnums = []boundaryEnum{
 			{"rfc1123", "Mon, 02 Jan 2006 15:04:05 MST"}, {"kitchen", "3:04PM"}},
 	},
 	{
+		Name:   "WalkStep",
+		Module: "fs",
+		Type:   reflect.TypeFor[types.WalkStep](),
+		Cases: []enumCase{{"next", string(types.WalkNext)}, {"skipDir", string(types.WalkSkipDir)},
+			{"skipAll", string(types.WalkSkipAll)}},
+	},
+	{
 		Name:  "LogLevel",
 		Type:  reflect.TypeFor[types.LogLevel](),
 		Cases: []enumCase{{"trace", "trace"}, {"debug", "debug"}, {"info", "info"}, {"warn", "warn"}, {"error", "error"}},

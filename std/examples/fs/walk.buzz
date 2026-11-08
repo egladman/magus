@@ -1,14 +1,12 @@
 import "std";
 import "fs";
 
-try {
-    fs\walk(".", fun (path: str, isDir: bool) > bool {
+fun main(args: [str]) > void {
+    fs\walk(".", callback: fun (path: str, isDir: bool) > fs\WalkStep {
         if (isDir and fs\basename(path) == "node_modules") {
-            return false;   // skip descent
+            return fs\WalkStep.skipDir;
         }
         if (fs\ext(path) == ".go") { std\print(path); }
-        return true;
-    });
-} catch (e) {
-    std\print("walk stopped early");
+        return fs\WalkStep.next;
+    }) catch void;
 }

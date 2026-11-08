@@ -224,10 +224,10 @@ var Fs = Module{
 		},
 		{
 			Name: "walk",
-			Doc:  "Recursively walk the directory tree rooted at root, calling callback(path, is_dir) for each entry. Return true from callback to stop the walk early. Sandbox-denied entries are silently skipped.",
+			Doc:  "Recursively walk the directory tree rooted at root in lexical order, calling callback(path, isDir) for each entry. The callback returns a WalkStep, as a Go fs.WalkDirFunc returns nil, fs.SkipDir or fs.SkipAll: next continues, skipDir skips a directory's contents (or, for a file, the rest of its directory) and skipAll ends the walk. Sandbox-denied entries are silently skipped.",
 			Args: []Arg{
 				{Name: "root", Type: TypeString},
-				{Name: "callback", Type: TypeFunc, Func: "fun (path: str, isDir: bool) > bool !> any"},
+				{Name: "callback", Type: TypeFunc, Func: "fun (path: str, isDir: bool) > WalkStep !> any"},
 			},
 			Returns: nil,
 			Raises:  true,
@@ -945,7 +945,8 @@ func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 }
 
 // FsWalk walks the directory tree rooted at root, calling cb(path, isDir) for
-// each entry in lexical order. If the callback returns true the walk stops early.
+// each entry in lexical order. The callback's [types.WalkStep] maps to what
+// a fs.WalkDirFunc returns; any other value is an error naming the steps.
 // Sandbox-denied entries are silently skipped (dirs skip their whole subtree;
 // files are just omitted), matching the filtering policy of FsGlob.
 func FsWalk(ctx context.Context, root string, cb Callback) error {
@@ -976,11 +977,26 @@ func FsWalk(ctx context.Context, root string, cb Callback) error {
 		if callErr != nil {
 			return callErr
 		}
-		if callbackTruthy(ret) {
-			return filepath.SkipAll
-		}
-		return nil
+		return walkStepResult(ret, cbPath)
 	})
+}
+
+// walkStepResult turns a callback's WalkStep into the error fs.WalkDirFunc
+// returns for it.
+func walkStepResult(ret []any, path string) error {
+	var step string
+	if len(ret) > 0 {
+		step, _ = ret[0].(string)
+	}
+	switch types.WalkStep(step) {
+	case types.WalkNext:
+		return nil
+	case types.WalkSkipDir:
+		return filepath.SkipDir
+	case types.WalkSkipAll:
+		return filepath.SkipAll
+	}
+	return fmt.Errorf("fs.walk: the callback returned %v for %s, want WalkStep.next, WalkStep.skipDir or WalkStep.skipAll", ret, path)
 }
 
 // FsAppendFile appends content to path (creating the file if absent, mode 0644),

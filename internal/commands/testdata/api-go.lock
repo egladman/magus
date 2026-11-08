@@ -6066,6 +6066,10 @@ github.com/egladman/magus/types.VolatilityTarget.Target field string "json:\"tar
 github.com/egladman/magus/types.VolatilityTarget.Volatile field bool "json:\"volatile,omitempty\"  yaml:\"volatile,omitempty\""
 github.com/egladman/magus/types.VolatilityTarget.VolatileCount field int "json:\"volatile_count\"      yaml:\"volatile_count\""
 github.com/egladman/magus/types.WalkChain func(p *Project, target string, lookup func(path string) *Project, fn ChainWalkFunc) error
+github.com/egladman/magus/types.WalkNext const WalkStep = "next"
+github.com/egladman/magus/types.WalkSkipAll const WalkStep = "skipAll"
+github.com/egladman/magus/types.WalkSkipDir const WalkStep = "skipDir"
+github.com/egladman/magus/types.WalkStep type string
 github.com/egladman/magus/types.WithActiveDispatch func(ctx context.Context, a *ActiveDispatch) context.Context
 github.com/egladman/magus/types.WithCaptureLog func(ctx context.Context, path string) context.Context
 github.com/egladman/magus/types.WithCharms func(ctx context.Context, charms []string) context.Context
