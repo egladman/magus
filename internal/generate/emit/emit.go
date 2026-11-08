@@ -819,7 +819,7 @@ func (e *moduleEmitter) source() ([]byte, error) {
 	out.Write(e.body.Bytes())
 	src, err := format.Source(out.Bytes())
 	if err != nil {
-		return nil, fmt.Errorf("gofmt: %w\n--- source ---\n%s", err, out.String())
+		return nil, fmt.Errorf("gofmt the generated source: %w", err)
 	}
 	return src, nil
 }
