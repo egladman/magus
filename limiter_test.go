@@ -471,8 +471,9 @@ export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint, check, f
 			under[c.Target] = c.Under
 		}
 	}
+	capped := func(n int) int { return min(n, m.limiter().Capacity()) }
 	assert.Equal(t, map[string][2]int{
-		"ci": {0, 1}, "lint": {512, 1}, "check": {0, 1}, "test": {4096, 3}, "vet": {0, 2}, "folded": {1024, 1}, "inline": {0, 5},
+		"ci": {0, 1}, "lint": {512, 1}, "check": {0, 1}, "test": {4096, capped(3)}, "vet": {0, capped(2)}, "folded": {1024, 1}, "inline": {0, capped(5)},
 	}, got)
 	assert.Equal(t, map[string]string{"inline": ".:folded"}, under,
 		"folded caches, so inline runs in its body; the skip_cache composers' members are steps")
