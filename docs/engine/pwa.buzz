@@ -17,8 +17,8 @@ import "engine/route" as _;
 // inside /magus/. Gated on baseURL so the scope is well-defined; without it we'd default
 // to "/" and mis-scope.
 export fun writeManifest(site: Site) > void !> any {
-    if (site.config.baseURL == "") { return; }
-    final basePath = sitePathPrefix(site.config.baseURL);
+    if (site.inputs.config.baseURL == "") { return; }
+    final basePath = sitePathPrefix(site.inputs.config.baseURL);
     // Buzz interpolates { ... } in strings, so JSON braces are escaped as \{ \}
     // (see gopherbuzz/testdata/54_raw_string.buzz).
     // Icons: favicon-32 + apple-touch-icon are the legacy set; icon-192/512 target
@@ -35,11 +35,11 @@ export fun writeManifest(site: Site) > void !> any {
     // user on every launch, which costs more than the brief seam of a dark splash handing off
     // to a pale icon.
     final body = "\{\n"
-        + "  \"name\": \"" + site.config.title + "\",\n"
-        + "  \"short_name\": \"" + site.config.title + "\",\n"
+        + "  \"name\": \"" + site.inputs.config.title + "\",\n"
+        + "  \"short_name\": \"" + site.inputs.config.title + "\",\n"
         + "  \"id\": \"" + basePath + "\",\n"
         + "  \"lang\": \"en\",\n"
-        + "  \"description\": \"" + escapeAttr(site.config.description) + "\",\n"
+        + "  \"description\": \"" + escapeAttr(site.inputs.config.description) + "\",\n"
         + "  \"start_url\": \"" + basePath + "\",\n"
         + "  \"scope\": \"" + basePath + "\",\n"
         + "  \"display\": \"standalone\",\n"
@@ -63,7 +63,7 @@ export fun writeManifest(site: Site) > void !> any {
         + "  ],\n"
         + "  \"launch_handler\": \{ \"client_mode\": \"focus-existing\" \}\n"
         + "\}\n";
-    fs\writeFile(site.outDir + "/manifest.webmanifest", body);
+    fs\writeFile(site.inputs.outDir + "/manifest.webmanifest", body);
 }
 
 
@@ -73,19 +73,19 @@ export fun writeManifest(site: Site) > void !> any {
 // does (and is byte-stable otherwise) - and that byte change is the signal a browser uses
 // to fetch the new worker.
 export fun buildServiceWorker(site: Site) > void !> any {
-    if (site.config.baseURL == "") { return; }
+    if (site.inputs.config.baseURL == "") { return; }
     final manifest = mut [<str>];
-    foreach (asset in site.config.precacheAssets) {
+    foreach (asset in site.inputs.config.precacheAssets) {
         // a dir URL caches its index.html
         final rel = if (asset.endsWith("/")) asset + "index.html" else asset;
-        final p = fs\join(site.outDir, rel);
+        final p = fs\join(site.inputs.outDir, rel);
         if (fs\isFile(p)) {
             manifest.append(rel + ":" + fileSha256(p) + "\n");
         }
     }
-    final version = site.config.title + "-" + crypto\hash(crypto\HashAlgorithm.Sha256, manifest.join("")).hex().sub(0, 12);
+    final version = site.inputs.config.title + "-" + crypto\hash(crypto\HashAlgorithm.Sha256, manifest.join("")).hex().sub(0, 12);
     _ = os\execute(["esbuild", "src/site/service-worker.ts", "--bundle", "--minify", "--format=iife",
         "--define:SERVICE_WORKER_VERSION=\"" + version + "\"",
-        "--define:SERVICE_WORKER_PRECACHE=" + serialize\jsonEncode(site.config.precacheAssets),
-        "--outfile=" + site.outDir + "/service-worker.js"]);
+        "--define:SERVICE_WORKER_PRECACHE=" + serialize\jsonEncode(site.inputs.config.precacheAssets),
+        "--outfile=" + site.inputs.outDir + "/service-worker.js"]);
 }

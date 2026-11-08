@@ -16,7 +16,7 @@ import "../libs/ssg/feed" as _;
 // updated (post date), summary (description), author. Feed-level updated = newest
 // post's date. Gated on site.config.baseURL so it can ship dark until the host is confirmed.
 export fun renderBlogAtom(site: Site) > void !> any {
-    if (site.config.baseURL == "") { return; }
+    if (site.inputs.config.baseURL == "") { return; }
     if (site.blogPosts.len() == 0) { return; }
     final sorted = site.blogPosts.sort(fun (a: BlogPost, b: BlogPost) > bool {
         if (a.date != b.date) { return strLess(b.date, a.date); }
@@ -26,13 +26,13 @@ export fun renderBlogAtom(site: Site) > void !> any {
     final body = mut [<str>];
     body.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
         + "<feed xmlns=\"http://www.w3.org/2005/Atom\">\n"
-        + "  " + xmlElement("title", site.config.title + " blog") + "\n"
-        + "  " + xmlSelfClose("link", xmlAttribute("href", site.config.baseURL + "blog/") + xmlAttribute("rel", "alternate")) + "\n"
-        + "  " + xmlSelfClose("link", xmlAttribute("href", site.config.baseURL + "public/atom/blog.atom.xml") + xmlAttribute("rel", "self")) + "\n"
-        + "  " + xmlElement("id", site.config.baseURL + "blog/") + "\n"
+        + "  " + xmlElement("title", site.inputs.config.title + " blog") + "\n"
+        + "  " + xmlSelfClose("link", xmlAttribute("href", site.inputs.config.baseURL + "blog/") + xmlAttribute("rel", "alternate")) + "\n"
+        + "  " + xmlSelfClose("link", xmlAttribute("href", site.inputs.config.baseURL + "public/atom/blog.atom.xml") + xmlAttribute("rel", "self")) + "\n"
+        + "  " + xmlElement("id", site.inputs.config.baseURL + "blog/") + "\n"
         + "  " + xmlElement("updated", feedUpdated) + "\n");
     foreach (p in sorted) {
-        final entryUrl = site.config.baseURL + p.url;
+        final entryUrl = site.inputs.config.baseURL + p.url;
         body.append("  <entry>\n"
             + "    " + xmlElement("title", p.title) + "\n"
             + "    " + xmlSelfClose("link", xmlAttribute("href", entryUrl)) + "\n"
@@ -42,8 +42,8 @@ export fun renderBlogAtom(site: Site) > void !> any {
             + "  </entry>\n");
     }
     body.append("</feed>\n");
-    fs\mkdirAll(site.outDir + "/public/atom");
-    fs\writeFile(site.outDir + "/public/atom/blog.atom.xml", body.join(""));
+    fs\mkdirAll(site.inputs.outDir + "/public/atom");
+    fs\writeFile(site.inputs.outDir + "/public/atom/blog.atom.xml", body.join(""));
     // Register it: pruneStaleOutputs deletes a directory whose index.html is no
     // longer produced, and /public/atom/ has no page of its own.
     site.writtenPaths["public/atom/blog.atom.xml"] = true;
@@ -63,20 +63,20 @@ fun releaseEntryTitle(version: str) > str {
 // body. Feed-level updated = newest entry's date, a candidate's included, as Atom defines it.
 // Gated on site.config.baseURL and on having at least one released version.
 export fun renderReleasesAtom(site: Site) > void !> any {
-    if (site.config.baseURL == "") { return; }
-    if (site.releases.len() == 0) { return; }
-    final feedUpdated = atomDate(site.releases[0].date);
+    if (site.inputs.config.baseURL == "") { return; }
+    if (site.inputs.releases.len() == 0) { return; }
+    final feedUpdated = atomDate(site.inputs.releases[0].date);
     final body = mut [<str>];
     body.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
         + "<feed xmlns=\"http://www.w3.org/2005/Atom\">\n"
-        + "  " + xmlElement("title", site.config.title + " releases") + "\n"
-        + "  " + xmlSelfClose("link", xmlAttribute("href", site.config.repoURL + "/releases") + xmlAttribute("rel", "alternate")) + "\n"
-        + "  " + xmlSelfClose("link", xmlAttribute("href", site.config.baseURL + "public/atom/releases.atom.xml") + xmlAttribute("rel", "self")) + "\n"
-        + "  " + xmlElement("id", site.config.repoURL + "/releases") + "\n"
+        + "  " + xmlElement("title", site.inputs.config.title + " releases") + "\n"
+        + "  " + xmlSelfClose("link", xmlAttribute("href", site.inputs.config.repoURL + "/releases") + xmlAttribute("rel", "alternate")) + "\n"
+        + "  " + xmlSelfClose("link", xmlAttribute("href", site.inputs.config.baseURL + "public/atom/releases.atom.xml") + xmlAttribute("rel", "self")) + "\n"
+        + "  " + xmlElement("id", site.inputs.config.repoURL + "/releases") + "\n"
         + "  " + xmlElement("updated", feedUpdated) + "\n");
-    foreach (r in site.releases) {
+    foreach (r in site.inputs.releases) {
         final ver = r.version;
-        final link = site.config.repoURL + "/releases/tag/" + ver;
+        final link = site.inputs.config.repoURL + "/releases/tag/" + ver;
         body.append("  <entry>\n"
             + "    " + xmlElement("title", releaseEntryTitle(ver)) + "\n"
             + "    " + xmlSelfClose("link", xmlAttribute("href", link)) + "\n"
@@ -86,8 +86,8 @@ export fun renderReleasesAtom(site: Site) > void !> any {
             + "  </entry>\n");
     }
     body.append("</feed>\n");
-    fs\mkdirAll(site.outDir + "/public/atom");
-    fs\writeFile(site.outDir + "/public/atom/releases.atom.xml", body.join(""));
+    fs\mkdirAll(site.inputs.outDir + "/public/atom");
+    fs\writeFile(site.inputs.outDir + "/public/atom/releases.atom.xml", body.join(""));
     // Register it: pruneStaleOutputs deletes a directory whose index.html is no
     // longer produced, and /public/atom/ has no page of its own.
     site.writtenPaths["public/atom/releases.atom.xml"] = true;

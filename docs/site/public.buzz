@@ -39,14 +39,14 @@ import "engine/page" as _;
 // the version across the site on a clone depth setting, so when no tags are visible
 // the manifests are used as the list, exactly as before.
 export fun loadReleases(site: Site) > void !> any {
-    site.releases = mut [<Release>];
+    site.inputs.releases = mut [<Release>];
 
     // Phase 1: read every manifest, keyed by version. manifestOrder preserves the
     // semver-descending order for the no-tags fallback (v0.10.0 before v0.2.0; a
     // lexicographic reversal gets that wrong).
     var manifests: mut {str: Release} = mut {};
     var manifestOrder: mut [str] = mut [<str>];
-    final relDir = site.root + "/releases";
+    final relDir = site.inputs.root + "/releases";
     if (fs\isDir(relDir)) {
         var names: mut [str] = mut [<str>];
         foreach (name in fs\listDir(relDir)) {
@@ -126,21 +126,21 @@ export fun loadReleases(site: Site) > void !> any {
         // No tags visible - a shallow clone, or a genuinely untagged repository. The
         // binding cannot tell those apart, so trust the manifests rather than publish
         // an empty release list that would blank the version site-wide.
-        foreach (ver in manifestOrder) { site.releases.append(manifests[ver]); }
+        foreach (ver in manifestOrder) { site.inputs.releases.append(manifests[ver]); }
         return;
     }
     foreach (t in tags) {
         final ver = t["name"];
         final known = manifests[ver];
         if (known != null) {
-            site.releases.append(known);
+            site.inputs.releases.append(known);
             continue;
         }
         // Tagged with no manifest: real, and dated, but with no prose or artifacts.
         // The tag date is RFC3339; the manifests carry a bare date, so match them.
         var when = t["date"];
         if (when.len() >= 10) { when = when.sub(0, 10); }
-        site.releases.append(Release{ version = ver, date = when });
+        site.inputs.releases.append(Release{ version = ver, date = when });
     }
 }
 
@@ -173,17 +173,17 @@ export fun loadReleases(site: Site) > void !> any {
 // are real files and are written exactly as before; the signed release manifest at
 // public/release/index.json is tracked rather than rendered, for the reason above.
 export fun renderPublic(site: Site) > void !> any {
-    if (site.config.baseURL == "") { return; }
+    if (site.inputs.config.baseURL == "") { return; }
 
     // Releases stay newest-first (loadReleases sorts by semver); each card is a
     // deep link to that version's GitHub release page rather than to any asset,
     // so there is one place that lists what a release actually contains.
     var releases: mut [{str: any}] = mut [<{str: any}>];
-    foreach (rel in site.releases) {
+    foreach (rel in site.inputs.releases) {
         releases.append(mut {
             "version": rel.version,
             "date": rel.date,
-            "href": site.config.repoURL + "/releases/tag/" + rel.version,
+            "href": site.inputs.config.repoURL + "/releases/tag/" + rel.version,
             "yanked": rel.yanked,
         });
     }
@@ -192,11 +192,11 @@ export fun renderPublic(site: Site) > void !> any {
     if (site.blogPosts.len() > 0) {
         feeds.append(mut {"name": "blog.atom.xml", "href": "atom/blog.atom.xml", "desc": "Blog posts, Atom 1.0"});
     }
-    if (site.releases.len() > 0) {
+    if (site.inputs.releases.len() > 0) {
         feeds.append(mut {"name": "releases.atom.xml", "href": "atom/releases.atom.xml", "desc": "Releases, Atom 1.0"});
     }
 
-    final hasReleases = site.releases.len() > 0;
+    final hasReleases = site.inputs.releases.len() > 0;
     final body = template\render(`<h1>Public files</h1>
 <p>Endpoints this site serves for machines rather than readers. Release binaries
 are hosted on GitHub; the links below go there.</p>
@@ -223,21 +223,21 @@ are hosted on GitHub; the links below go there.</p>
 </ul>
 `, {"hasReleases": hasReleases, "releases": releases, "hasFeeds": feeds.len() > 0, "feeds": feeds});
 
-    fs\mkdirAll(site.outDir + "/public");
+    fs\mkdirAll(site.inputs.outDir + "/public");
     // srcRel is a synthesized-page marker, not a file: the "/_index.md" suffix is
     // what tells renderPage there is no source to view or edit, and the depth is
     // what rootPrefix climbs. Pin its commit footer to the newest release manifest
     // (this tree's real source) so it does not advance with HEAD every commit; fall
     // back to HEAD before any manifest is committed.
     final srcMarker = "public/_index.md";
-    final chLog = site.metaCommits[site.metaPrefix + "releases"];
+    final chLog = site.inputs.metaCommits[site.inputs.metaPrefix + "releases"];
     if (chLog != null) {
-        site.metaCommits[site.metaPrefix + srcMarker] = chLog;
+        site.inputs.metaCommits[site.inputs.metaPrefix + srcMarker] = chLog;
     } else {
-        site.metaCommits[site.metaPrefix + srcMarker] = site.metaFull + "|" + site.metaShort + "|" + site.metaStamp;
+        site.inputs.metaCommits[site.inputs.metaPrefix + srcMarker] = site.inputs.metaFull + "|" + site.inputs.metaShort + "|" + site.inputs.metaStamp;
     }
     final doc = renderPage("Public files", "Machine-readable endpoints served by this site: release manifest, Atom feeds, sitemap, and robots policy.", body, srcMarker, "", "public/", "", mut [], "", site);
-    fs\writeFile(site.outDir + "/public/index.html", doc);
+    fs\writeFile(site.inputs.outDir + "/public/index.html", doc);
     site.pageUrls["public/"] = true;
     site.writtenPaths["public/index.html"] = true;
 }

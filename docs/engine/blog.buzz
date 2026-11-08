@@ -39,12 +39,12 @@ export fun isPublishablePost(site: Site, name: str) > bool !> any {
     if (name.endsWith(".md") == false or name == "index.md" or name.startsWith("_")) {
         return false;
     }
-    final f = io\File.open(site.root + "/" + site.blog + "/" + name, io\FileMode.read);
+    final f = io\File.open(site.inputs.root + "/" + site.inputs.blog + "/" + name, io\FileMode.read);
     final md = f.readAll();
     f.close();
     final fm = serialize\jsonDecode(markdown\frontmatter(md));
     if (fm.q("draft").booleanValue()) { return false; }
-    return isFuturePost(fm.q("date").stringValue(), site.metaStamp) == false;
+    return isFuturePost(fm.q("date").stringValue(), site.inputs.metaStamp) == false;
 }
 
 // findReleasePost sets site.releaseBlogURL to the post whose frontmatter `release:` names
@@ -59,11 +59,11 @@ export fun isPublishablePost(site: Site, name: str) > bool !> any {
 export fun findReleasePost(site: Site) > void !> any {
     // Cleared up front, like loadReleases does with site.releases: `serve` re-renders into
     // a Site that already ran, and a post that stops claiming the release must stop linking.
-    site.releaseBlogURL = "";
+    site.inputs.releaseBlogURL = "";
     final latest = site.latestStable();
     if (latest == null) { return; }
     final ver = latest!.version;
-    final dir = fs\join(site.root, site.blog);
+    final dir = fs\join(site.inputs.root, site.inputs.blog);
     if (fs\isDir(dir) == false) { return; }
     foreach (name in fs\listDir(dir)) {
         if (isPublishablePost(site, name) == false) { continue; }
@@ -71,7 +71,7 @@ export fun findReleasePost(site: Site) > void !> any {
         final md = f.readAll();
         f.close();
         if (serialize\jsonDecode(markdown\frontmatter(md)).q("release").stringValue() == ver) {
-            site.releaseBlogURL = site.blog + "/" + blogURLPath(name) + "/";
+            site.inputs.releaseBlogURL = site.inputs.blog + "/" + blogURLPath(name) + "/";
             return;
         }
     }
@@ -82,8 +82,8 @@ export fun findReleasePost(site: Site) > void !> any {
 // (via blogURLPath), so permalinks sort by date and never collide across years. Post
 // metadata is captured into site.blogPosts for the index page.
 export fun renderBlogPost(base: str, site: Site) > void !> any {
-    final rel = site.blog + "/" + base;
-    final f = io\File.open(site.root + "/" + rel, io\FileMode.read);
+    final rel = site.inputs.blog + "/" + base;
+    final f = io\File.open(site.inputs.root + "/" + rel, io\FileMode.read);
     final md = f.readAll();
     f.close();
 
@@ -115,15 +115,15 @@ export fun renderBlogPost(base: str, site: Site) > void !> any {
 
     final slug = blogSlug(base);
     final urlPath = blogURLPath(base);        // "2026/07/01/hello-blog"
-    final url = site.blog + "/" + urlPath + "/";
+    final url = site.inputs.blog + "/" + urlPath + "/";
     // Blog posts sit at gen/blog/<urlPath>/index.html. The link rewriter needs both the flat
     // directory ("blog") and the date-scoped clean directory ("blog/<urlPath>") so
     // cross-references (../../documentation/) resolve at the post's real depth.
-    final html = diagrams\inlinePageDiagrams(renderContentHTML(markdown\toHtml(md), site.blog, site.blog + "/" + urlPath));
+    final html = diagrams\inlinePageDiagrams(renderContentHTML(markdown\toHtml(md), site.inputs.blog, site.inputs.blog + "/" + urlPath));
 
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }
-    if (desc == "") { desc = site.config.description; }
+    if (desc == "") { desc = site.inputs.config.description; }
 
     // Dateline: a byline under the post's H1 - date, author, and a permalink to the canonical
     // URL. Inside the <article> after the title, so it reads as post metadata, not page
@@ -135,7 +135,7 @@ export fun renderBlogPost(base: str, site: Site) > void !> any {
         var meta = "<p class=\"blog-post-meta\"><time datetime=\"" + blogDateAttr(date)
             + "\">" + blogDate(date) + "</time>";
         if (author != "") { meta = meta + " &middot; " + author; }
-        meta = meta + " &middot; <a href=\"" + site.config.baseURL + url + "\" rel=\"bookmark\">Permalink</a></p>\n";
+        meta = meta + " &middot; <a href=\"" + site.inputs.config.baseURL + url + "\" rel=\"bookmark\">Permalink</a></p>\n";
         final cut = h1End + 5;   // length of "</h1>"
         article = html.sub(0, cut) + "\n" + meta + html.sub(cut);
     }
@@ -144,11 +144,11 @@ export fun renderBlogPost(base: str, site: Site) > void !> any {
     final pager = renderBlogPager(base, site);
 
     final doc = renderPage(title, desc, article, rel, pager, url, readingTime(md), parseTags(md), generatedFrom(md), site);
-    makeOutputDir(site.outDir + "/" + site.blog + "/" + urlPath, rel, url);
-    final of = io\File.open(site.outDir + "/" + site.blog + "/" + urlPath + "/index.html", io\FileMode.write);
+    makeOutputDir(site.inputs.outDir + "/" + site.inputs.blog + "/" + urlPath, rel, url);
+    final of = io\File.open(site.inputs.outDir + "/" + site.inputs.blog + "/" + urlPath + "/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
-    fs\writeFile(fs\join(site.outDir, site.blog, urlPath, "index.md"), md);
+    fs\writeFile(fs\join(site.inputs.outDir, site.inputs.blog, urlPath, "index.md"), md);
 
     site.addRecord(url, title, desc, md);
     foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), url); }
@@ -167,9 +167,9 @@ fun renderBlogPager(base: str, site: Site) > str !> any {
     // Rebuild the ordering deterministically from disk (site.blogPosts may be partial
     // during the walk). Newest first.
     var posts: mut [BlogPost] = mut [<BlogPost>];
-    foreach (name in fs\listDir(fs\join(site.root, site.blog))) {
+    foreach (name in fs\listDir(fs\join(site.inputs.root, site.inputs.blog))) {
         if (isPublishablePost(site, name)) {
-            final f = io\File.open(site.root + "/" + site.blog + "/" + name, io\FileMode.read);
+            final f = io\File.open(site.inputs.root + "/" + site.inputs.blog + "/" + name, io\FileMode.read);
             final md = f.readAll();
             f.close();
             final fm = serialize\jsonDecode(markdown\frontmatter(md));
@@ -197,19 +197,19 @@ fun renderBlogPager(base: str, site: Site) > str !> any {
     // Posts are date-scoped (blog/YYYY/MM/DD/slug/), so a sibling link isn't a flat
     // "../<slug>/": relativePath walks from this post's dir to the target and writes the
     // minimal climb, correct across any shared date prefix.
-    final fromDir = site.blog + "/" + blogURLPath(base);
+    final fromDir = site.inputs.blog + "/" + blogURLPath(base);
     var body = "";
     // Previous = newer post (earlier in ordered), Next = older post (later).
     if (pos > 0) {
         final prev = ordered[pos - 1];
-        final href = relativePath(fromDir, site.blog + "/" + blogURLPath(prev.base) + "/");
+        final href = relativePath(fromDir, site.inputs.blog + "/" + blogURLPath(prev.base) + "/");
         body = body + "      <a class=\"page-nav-prev\" href=\"" + href + "\">"
             + "<span class=\"page-nav-dir\">Newer</span>"
             + "<span class=\"page-nav-title\">" + prev.title + "</span></a>\n";
     }
     if (pos < ordered.len() - 1) {
         final nxt = ordered[pos + 1];
-        final href = relativePath(fromDir, site.blog + "/" + blogURLPath(nxt.base) + "/");
+        final href = relativePath(fromDir, site.inputs.blog + "/" + blogURLPath(nxt.base) + "/");
         body = body + "      <a class=\"page-nav-next\" href=\"" + href + "\">"
             + "<span class=\"page-nav-dir\">Older</span>"
             + "<span class=\"page-nav-title\">" + nxt.title + "</span></a>\n";
@@ -264,18 +264,18 @@ export fun renderBlogIndex(site: Site) > void !> any {
 
     final title = "Blog";
     final desc = "The magus blog. Release notes, deep dives, and behind-the-scenes writeups.";
-    final url = site.blog + "/";
+    final url = site.inputs.blog + "/";
     // srcRel is a blog/index.md marker (no source file) so renderPage() picks the "blog"
     // nav key and roots the breadcrumb. Alias its commit-footer key to the newest post's
     // commit so "Last updated" is a stable snapshot, not HEAD - which would drift every
     // commit and break the drift gate.
     if (sorted.len() > 0) {
-        final rec = site.metaCommits[site.metaPrefix + site.blog + "/" + sorted[0].base];
-        if (rec != null) { site.metaCommits[site.metaPrefix + site.blog + "/index.md"] = rec; }
+        final rec = site.inputs.metaCommits[site.inputs.metaPrefix + site.inputs.blog + "/" + sorted[0].base];
+        if (rec != null) { site.inputs.metaCommits[site.inputs.metaPrefix + site.inputs.blog + "/index.md"] = rec; }
     }
-    final doc = renderPage(title, desc, body, site.blog + "/index.md", "", url, "", mut [], "", site);
-    fs\mkdirAll(fs\join(site.outDir, site.blog));
-    final of = io\File.open(site.outDir + "/" + site.blog + "/index.html", io\FileMode.write);
+    final doc = renderPage(title, desc, body, site.inputs.blog + "/index.md", "", url, "", mut [], "", site);
+    fs\mkdirAll(fs\join(site.inputs.outDir, site.inputs.blog));
+    final of = io\File.open(site.inputs.outDir + "/" + site.inputs.blog + "/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
     // A real page, so it belongs in the search index and sitemap. No frontmatter
@@ -284,5 +284,5 @@ export fun renderBlogIndex(site: Site) > void !> any {
     // Build a fake mini record so addRecord's shape stays consistent.
     final recStub = "---\ntitle: " + title + "\ndescription: " + desc + "\ntags: []\n---\nBlog listing.\n";
     site.addRecord(url, title, desc, recStub);
-    std\print("  blog index -> " + site.outDir + "/" + site.blog + "/index.html");
+    std\print("  blog index -> " + site.inputs.outDir + "/" + site.inputs.blog + "/index.html");
 }

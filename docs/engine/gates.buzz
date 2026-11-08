@@ -40,26 +40,26 @@ import "lib/crosscheck" as _;
 // A tree with no VCS at all (a release tarball) renders with no provenance; a VCS that
 // is present and fails throws.
 export fun loadMeta(site: Site) > void !> any {
-    if (site.metaLoaded) { return; }
-    site.metaBranch = "HEAD";
+    if (site.inputs.metaLoaded) { return; }
+    site.inputs.metaBranch = "HEAD";
     if (vcs\name() != "") {
-        site.metaPrefix = sitePrefix(site);
+        site.inputs.metaPrefix = sitePrefix(site);
         final head = vcs\commit();
-        site.metaFull = head.id;
-        site.metaShort = head.short;
-        site.metaStamp = utcStamp(head.date);
-        site.metaCommits = buildCommits(site);
+        site.inputs.metaFull = head.id;
+        site.inputs.metaShort = head.short;
+        site.inputs.metaStamp = utcStamp(head.date);
+        site.inputs.metaCommits = buildCommits(site);
     }
-    site.metaLoaded = true;
+    site.inputs.metaLoaded = true;
 }
 
 // sitePrefix is site.root relative to the repository root, "" at the root and slash-
 // terminated below it: the prefix every repo-relative path the history reports carries.
 fun sitePrefix(site: Site) > str !> any {
-    final fromRoot = filepath\rel(vcs\root(), filepath\abs(site.root));
+    final fromRoot = filepath\rel(vcs\root(), filepath\abs(site.inputs.root));
     if (fromRoot == ".") { return ""; }
     if (fromRoot == ".." or fromRoot.startsWith("../")) {
-        throw "site root " + site.root + " is outside the repository at " + vcs\root() + " (a symlinked checkout path?)";
+        throw "site root " + site.inputs.root + " is outside the repository at " + vcs\root() + " (a symlinked checkout path?)";
     }
     return fromRoot + "/";
 }
@@ -106,7 +106,7 @@ export fun assetIntegrityCheck(site: Site) > void !> any {
         if (f.endsWith(".html") == false and f.endsWith(".xml") == false and f.endsWith(".txt") == false) {
             // Non-textual asset: nothing to scan for refs.
         } else {
-            final fh = io\File.open(site.outDir + "/" + f, io\FileMode.read);
+            final fh = io\File.open(site.inputs.outDir + "/" + f, io\FileMode.read);
             final html = fh.readAll();
             fh.close();
             final parts = f.split("/");
@@ -143,8 +143,8 @@ export fun orphanCheck(site: Site) > void !> any {
     while (head < queue.len()) {
         final key = queue[head];
         head = head + 1;
-        var path = site.outDir + "/index.html";
-        if (key != "") { path = site.outDir + "/" + key + "/index.html"; }
+        var path = site.inputs.outDir + "/index.html";
+        if (key != "") { path = site.inputs.outDir + "/" + key + "/index.html"; }
         final fh = io\File.open(path, io\FileMode.read);
         final html = fh.readAll();
         fh.close();
@@ -183,21 +183,21 @@ final HISTORY_MAX = 8;
 // metaCommits also keys the releases directory itself, for the pages the manifests feed.
 export fun buildCommits(site: Site) > {str: str} !> any {
     var m: mut {str: str} = mut {};
-    site.metaHistory = mut {};
+    site.inputs.metaHistory = mut {};
     var sources: mut [str] = mut [<str>];
-    final releases = site.metaPrefix + "releases";
-    foreach (p in ["README.md", "docs", "blog", "releases"]) { sources.append(site.metaPrefix + p); }
+    final releases = site.inputs.metaPrefix + "releases";
+    foreach (p in ["README.md", "docs", "blog", "releases"]) { sources.append(site.inputs.metaPrefix + p); }
     foreach (c in vcs\history(0, paths: sources, firstParent: true)) {
         final header = c.id + "|" + c.short + "|" + utcStamp(c.date);
         foreach (file in c.files) {
             if (m[releases] == null and file.startsWith(releases + "/")) { m[releases] = header; }
             if (m[file] == null) { m[file] = header; }
-            var hist = site.metaHistory[file];
+            var hist = site.inputs.metaHistory[file];
             if (hist == null) { hist = mut [<str>]; }
             if (hist.len() < HISTORY_MAX) {
                 hist.append(header + "|" + c.subject);
             }
-            site.metaHistory[file] = hist;
+            site.inputs.metaHistory[file] = hist;
         }
     }
     return m;
@@ -216,13 +216,13 @@ export fun checkPathExists(target: str, site: Site) > bool !> any {
     // Empty target = gen/'s root, always the index.html landing. This shows up
     // when a page links to "../" (Parent Directory in an autoindex root) and the
     // resolver pops back to the root.
-    if (target == "") { return fs\isFile(site.outDir + "/index.html"); }
-    if (fs\isFile(fs\join(site.outDir, target))) { return true; }
-    if (fs\isDir(fs\join(site.outDir, target))) {
-        return fs\isFile(fs\join(site.outDir, target, "index.html"));
+    if (target == "") { return fs\isFile(site.inputs.outDir + "/index.html"); }
+    if (fs\isFile(fs\join(site.inputs.outDir, target))) { return true; }
+    if (fs\isDir(fs\join(site.inputs.outDir, target))) {
+        return fs\isFile(fs\join(site.inputs.outDir, target, "index.html"));
     }
     if (target.endsWith("/")) {
-        return fs\isFile(fs\join(site.outDir, target + "index.html"));
+        return fs\isFile(fs\join(site.inputs.outDir, target + "index.html"));
     }
     return false;
 }
@@ -284,12 +284,12 @@ export fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
 // walkGen recursively enumerates every written file under gen/ so the integrity check
 // reads each once.
 export fun walkGen(rel: str, acc: mut [str], site: Site) > void !> any {
-    var dir = site.outDir;
-    if (rel != "") { dir = site.outDir + "/" + rel; }
+    var dir = site.inputs.outDir;
+    if (rel != "") { dir = site.inputs.outDir + "/" + rel; }
     foreach (name in fs\listDir(dir)) {
         var childRel = name;
         if (rel != "") { childRel = rel + "/" + name; }
-        if (fs\isDir(fs\join(site.outDir, childRel))) {
+        if (fs\isDir(fs\join(site.inputs.outDir, childRel))) {
             walkGen(childRel, acc, site);
         } else {
             acc.append(childRel);
@@ -347,7 +347,7 @@ export fun pruneStaleOutputs(site: Site) > void !> any {
         }
         if (produced) { continue; }
         std\print("  pruning stale " + dir + "/ (no longer produced)");
-        fs\removeAll(fs\join(site.outDir, dir));
+        fs\removeAll(fs\join(site.inputs.outDir, dir));
     }
 }
 
@@ -362,9 +362,9 @@ export fun writeSiteManifest(site: Site) > void !> any {
     final body = mut [<str>];
     foreach (rel in sorted) {
         if (rel == "site-manifest.sha256") { continue; }
-        body.append(fileSha256(site.outDir + "/" + rel) + "  " + rel + "\n");
+        body.append(fileSha256(site.inputs.outDir + "/" + rel) + "  " + rel + "\n");
     }
-    fs\writeFile(site.outDir + "/site-manifest.sha256", body.join(""));
+    fs\writeFile(site.inputs.outDir + "/site-manifest.sha256", body.join(""));
 }
 
 // pageKey normalizes a scanReferencesInHTML result (a gen-root-relative path with no

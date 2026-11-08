@@ -1,7 +1,7 @@
 ---
 title: "ADR 0034: the docs site renders in typed passes"
 order: 34
-description: The docs site generator stops threading one mutable Site object through forty phases. It reads its sources into an immutable corpus, has each section return the pages it renders, writes every page in one place, and checks the written site afterward, with the HTML it produces unchanged.
+description: The docs site generator stops threading one mutable Site object through forty phases. It reads its sources once into an immutable Inputs value, has each section return the pages it renders, writes every page in one place, and checks the written site afterward, with the HTML it produces unchanged.
 tags: [adr, decision, docs, ssg, buzz]
 status: proposed
 date: 2026-11-08
@@ -35,17 +35,17 @@ The render is four passes, each a function from typed values to typed values. No
 mutates a value another pass reads.
 
 1. Collect: read the docs tree, blog, glossary, conventions, releases and demos into a
-   `Corpus`, built once and immutable after.
+   `Inputs`, built once and immutable after.
 2. Plan: derive every page's URL, the aliases, the tag index and the navigation from the
-   corpus, as an immutable `Plan`.
+   inputs, as an immutable `Plan`.
 3. Render: each section of the site implements one protocol and returns its pages as
-   values, reading only the corpus and the plan.
+   values, reading only the inputs and the plan.
 4. Write and check: one writer writes every page, prunes what no page claims, then the
    gates read the written set.
 
 ```buzz
 protocol Section {
-    fun pages(corpus: Corpus, plan: Plan) > [Output];
+    fun pages(inputs: Inputs, plan: Plan) > [Output];
 }
 
 protocol Gate {
@@ -64,21 +64,21 @@ abandoned-link checks each become a `Gate`. A site adds a section or a gate by a
 one object to a list, never by editing the render function.
 
 The layout follows Go's package nesting. `libs/ssg/` holds what any site could use: the
-node tree, text, URL, date, feed and CSP helpers, plus the `Section`, `Gate`, `Corpus`
+node tree, text, URL, date, feed and CSP helpers, plus the `Section`, `Gate`, `Inputs`
 and `Output` types. `docs/site/` holds magus's own sections, one directory each, and
 `docs/render.buzz` keeps only the list of sections and gates.
 
-| Item                                                                                  | State     |
-| ------------------------------------------------------------------------------------- | --------- |
-| `libs/ssg/dom.buzz`: HTML as a typed node tree rendered once                          | done      |
-| `libs/ssg/` holds the site-agnostic helpers moved out of `docs/lib` and `docs/engine` | done      |
-| `Corpus`, built once by the collect pass and read-only after                          | not built |
-| `Plan`: URLs, aliases, tag index and navigation, derived from the corpus              | not built |
-| `Section` and `Gate` protocols; each site section and each check implements one       | not built |
-| One writer writes every `Output` and prunes what no output claims                     | not built |
-| The `Site` object and the three `var`s in `docs/engine/nav.buzz` are deleted          | not built |
-| Every remaining HTML string built by concatenation is a `libs/ssg/dom.buzz` node      | not built |
-| The render's wall time before and after, measured on one machine                      | not built |
+| Item                                                                                  | State                                                    |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `libs/ssg/dom.buzz`: HTML as a typed node tree rendered once                          | done                                                     |
+| `libs/ssg/` holds the site-agnostic helpers moved out of `docs/lib` and `docs/engine` | done                                                     |
+| `Inputs`, built once by the collect pass and read-only after                          | in progress (split out of `Site`; still filled in place) |
+| `Plan`: URLs, aliases, tag index and navigation, derived from the inputs              | not built                                                |
+| `Section` and `Gate` protocols; each site section and each check implements one       | not built                                                |
+| One writer writes every `Output` and prunes what no output claims                     | not built                                                |
+| The `Site` object and the three `var`s in `docs/engine/nav.buzz` are deleted          | not built                                                |
+| Every remaining HTML string built by concatenation is a `libs/ssg/dom.buzz` node      | not built                                                |
+| The render's wall time before and after, measured on one machine                      | not built                                                |
 
 Every step is proven the same way: the rendered `docs/gen` tree matches, file for file
 and byte for byte, the tree rendered before the step.
@@ -86,7 +86,7 @@ and byte for byte, the tree rendered before the step.
 ### Principles checked
 
 - [Behavior is code, facts are data](../design/principles/behavior-is-code-facts-are-data.md):
-  a section is code behind a protocol; the corpus and the plan are facts it reads.
+  a section is code behind a protocol; the inputs and the plan are facts it reads.
 - [Clear is better than clever](../design/principles/clear-is-better-than-clever.md): a
   pass's inputs are its parameters, so what a page depends on reads off its signature.
 - [Delete before you add](../design/principles/delete-before-you-add.md): the `Site`
@@ -98,7 +98,7 @@ and byte for byte, the tree rendered before the step.
   lives in comments and still has to be traced by hand; 72 mutations stay 72 mutations.
   Reopen if the passes cost measurably more time than the shared object.
 - Split the render into separate magus targets per section. It lost because sections share
-  the corpus, so each target would re-read the whole docs tree. Reopen if one section
+  the inputs, so each target would re-read the whole docs tree. Reopen if one section
   becomes slow enough to want its own cache key.
 - Keep the helpers under `docs/lib`. It lost because a second site cannot import them
   without importing magus's docs; `libs/ssg` makes the boundary a project.
