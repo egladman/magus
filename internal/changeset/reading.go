@@ -21,10 +21,10 @@ const ReadingTTL = 12 * time.Hour
 // does not look at it. It exists so that a merge landing under the reader can be reported, and the
 // time lost to it measured, by whichever process notices the merge.
 type ReadingMark struct {
-	// Review is the [types.ReviewTarget] ID the mark was set against. A mark for one review says
+	// Review is the [diff.ReviewTarget] ID the mark was set against. A mark for one review says
 	// nothing about another, so a branch that moves to a new pull request starts unmarked.
 	Review string `json:"review"`
-	// Repo is [types.ReviewTarget].Repo, kept so two forges that number their reviews alike do not
+	// Repo is [diff.ReviewTarget].Repo, kept so two forges that number their reviews alike do not
 	// share a mark.
 	Repo string `json:"repo,omitempty"`
 	// Since is when the reading began, in unix milliseconds.

@@ -15,7 +15,7 @@ import (
 //
 // There is deliberately no read side. A cursor coming BACK from the session would be some
 // other client moving this reader's viewport, and a viewport that moves on its own is the
-// one thing the whole suggestion design exists to prevent; see types.DiffSuggestion. An
+// one thing the whole suggestion design exists to prevent; see diff.Suggestion. An
 // agent suggests; only the person at the keyboard navigates.
 //
 // No method reports an error, and that is the contract rather than an omission: a

@@ -403,7 +403,7 @@ type reviewSessionRequest struct {
 	// resolve / answer, and the review comment a reply answers. One field because they are the
 	// same question (which one) and never asked together.
 	ID string `json:"id,omitempty"`
-	// Thread is, for reply, the thread to answer: the [types.ReviewComment].Root of any reply in
+	// Thread is, for reply, the thread to answer: the [diff.ReviewComment].Root of any reply in
 	// it, or the ID of its top-level comment. It wins over ID, so a client holding a reply can
 	// name its thread without finding the top-level comment, and may leave ID empty. The wire
 	// name stays "root", the name a reply's own Root field has.

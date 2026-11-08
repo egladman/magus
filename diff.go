@@ -49,7 +49,7 @@ func (m *Magus) DiffAgainst(ctx context.Context, paths []string, base types.Know
 	return m.DiffWith(ctx, paths, difftypes.Options{Baseline: &base, BaselineLabel: label})
 }
 
-// DiffWith is [Magus.Diff] with the options [types.DiffOptions] describes: the changeset's own
+// DiffWith is [Magus.Diff] with the options [diff.Options] describes: the changeset's own
 // patch, a baseline to compare against, and the conformance checks' silence gates, which
 // default to knowledge.conformance.gates and which opts overrides for the one call. A review of
 // anything but the working tree passes its patch, since without a baseline the patch is what

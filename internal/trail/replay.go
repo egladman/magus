@@ -16,7 +16,7 @@ import (
 
 // A touch is one agent session's contact with one file: that it wrote the file, what it had
 // READ beforehand in the same session, and where the host's own transcript of that session
-// lives. It is the review's own types.DiffTouch, produced here rather than through a
+// lives. It is the review's own diff.Touch, produced here rather than through a
 // trail-side twin, because the read list is the part no other review tool has: a guard hook
 // sees every path an agent reaches, so magus can say what an agent was LOOKING AT
 // immediately before it wrote something, which is the closest thing to "why is this change

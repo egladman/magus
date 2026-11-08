@@ -28,7 +28,7 @@ var errNoReviewProvider = errors.New(
 // because a review lookup failed would be a worse tool than one that shows the change.
 //
 // The branch and remote are passed IN rather than discovered by the spell; see
-// types.ReviewOrigin for why.
+// diff.ReviewOrigin for why.
 func FindReview(ctx context.Context, branch, remote string) diff.ReviewTarget {
 	drv, ok := reviewDriver()
 	if !ok {
@@ -99,7 +99,7 @@ func rememberViewer(name string) {
 // this file that changes something a colleague can see, so a caller must never be told it
 // happened when it did not.
 //
-// want is the verdict the person asked for; what goes is [types.ReviewTarget.PermittedVerdict]'s
+// want is the verdict the person asked for; what goes is [diff.ReviewTarget.PermittedVerdict]'s
 // answer, decided HERE rather than in the spell because a spell is workspace-authored and a rule
 // living there could be edited out by the person it constrains.
 //

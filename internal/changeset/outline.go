@@ -10,9 +10,9 @@ import (
 
 )
 
-// ErrOutline marks an outline refused as more than a few pointers. The contract is on
-// [types.DiffOutline]. The person types the reply, and the agent that reads this text is the one
-// who tried to write more, so the text says what an outline is. A refusal names what broke, then
+// ErrOutline marks an outline refused as more than a few pointers. The
+// contract is on [diff.Outline]. The agent reading this text tried to write
+// more, so the text says what an outline is. A refusal names what broke, then
 // wraps it.
 var ErrOutline = errors.New("an outline is a few short pointers the person reads, not a reply")
 
@@ -21,7 +21,7 @@ var ErrOutline = errors.New("an outline is a few short pointers the person reads
 var ErrNoSession = errors.New("no review session is attached")
 
 // NormalizeOutline returns o with its text trimmed, or an error wrapping [ErrOutline] when it
-// breaks the bounds in [types.DiffOutline].
+// breaks the bounds in [diff.Outline].
 //
 // Text is refused rather than stripped, so the agent learns the rule instead of having its words
 // quietly rewritten into something it did not write. A topic or an agent name is one line of

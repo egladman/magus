@@ -305,7 +305,7 @@ func (s *Service) Diff(ctx context.Context, paths []string) (diff.Diff, error) {
 	return s.DiffWith(ctx, paths, diff.Options{})
 }
 
-// DiffWith is [Service.Diff] with the options [types.DiffOptions] describes. A caller that reads
+// DiffWith is [Service.Diff] with the options [diff.Options] describes. A caller that reads
 // no ranking of the changeset, such as a thread brief, sets SkipOrder so the order is never
 // computed.
 func (s *Service) DiffWith(ctx context.Context, paths []string, opts diff.Options) (diff.Diff, error) {

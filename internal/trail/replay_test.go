@@ -32,7 +32,7 @@ func TestReplayThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 	require.Len(t, touches, 1)
 
 	// Read is most recent first: this is the "what was it looking at" ordering. Ran is the
-	// PROGRAM, not the command line; see types.DiffTouch.Ran. The argument list is dropped at
+	// PROGRAM, not the command line; see diff.Touch.Ran. The argument list is dropped at
 	// ingest, so this asserts the reduction rather than the recorded text.
 	assert.Equal(t, diff.Touch{
 		Host:       "claude-code",

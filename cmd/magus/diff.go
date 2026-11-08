@@ -1909,7 +1909,7 @@ type diffReport struct {
 // diffImpact is what a disposer should know before landing: the consequences a file list
 // structurally cannot show.
 //
-// Every field distinguishes "nothing" from "nobody measured", the same refusal types.DiffFile
+// Every field distinguishes "nothing" from "nobody measured", the same refusal diff.File
 // makes with its pointers. An absent cost is a workspace with no run history, and rendering it
 // as zero would tell a reader the build is free.
 type diffImpact struct {
@@ -1926,7 +1926,7 @@ type diffImpact struct {
 	Anchors     []review.AnchorHit `json:"anchors,omitempty"      yaml:"anchors,omitempty"`
 	LeftBehind  *impactLeftBehind  `json:"left_behind,omitempty"  yaml:"left_behind,omitempty"`
 	// Evidence is what this changeset's authors asked magus before writing it. It is the
-	// reasoning half of the record types.DiffTouch carries: that one names the files an agent
+	// reasoning half of the record diff.Touch carries: that one names the files an agent
 	// had READ, this one the questions it put to the graph.
 	Evidence []trail.Consultation `json:"evidence,omitempty" yaml:"evidence,omitempty"`
 	// EvidenceGap says which silence an empty Evidence is, so a consumer of the document can
@@ -3023,7 +3023,7 @@ type impactReview struct {
 	Files int `json:"files" yaml:"files"`
 	Read  int `json:"read"  yaml:"read"`
 	// Stale are files read and then edited. They lead the section: the signal is derived from
-	// CONTENT rather than from a claim, so inattention cannot fake it. See types.DiffReadStale
+	// CONTENT rather than from a claim, so inattention cannot fake it. See diff.ReadStale
 	// for why it outranks unread.
 	Stale  []string `json:"stale,omitempty"  yaml:"stale,omitempty"`
 	Unread []string `json:"unread,omitempty" yaml:"unread,omitempty"`
