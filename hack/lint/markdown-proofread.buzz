@@ -598,8 +598,10 @@ test "proofread runs once over every hand-written file and reports at the file's
     foreach (f in got) {
         where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[") ?? 0));
     }
-    assert\equal(where, want: ["docs/note.md:3 [wordy]", "docs/page.md:3 [tense]", "docs/page.md:0 [grade]"],
-        message: "the table exempts blog/ from tense, and the hedged page is under its minimum grade");
+    assert\equal(where, want: ["docs/note.md:3 [wordy]", "docs/page.md:3 [tense]",
+        "docs/page.md:3 [!AUTHOR]): the rest of the page speaks for magus, not its author. [first-person]",
+        "docs/page.md:0 [grade]"],
+        message: "the table exempts blog/ from tense and first-person, and the hedged page is under its minimum grade");
 }
 
 test "a judge that does not run is an error, not a pass" {
