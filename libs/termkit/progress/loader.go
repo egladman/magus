@@ -141,5 +141,5 @@ func Lookup(name string) (Loader, error) {
 			return l, nil
 		}
 	}
-	return Loader{}, fmt.Errorf("progress: no loader %q; the loaders are %s", name, strings.Join(Names(), ", "))
+	return Loader{}, fmt.Errorf("progress: no loader %q, the loaders are %s", name, strings.Join(Names(), ", "))
 }
