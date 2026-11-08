@@ -414,6 +414,14 @@ are measured to dominate `types_generate`.
 - Whether any of the 305 `RuntimeObject` entries is reached by no signature, only by an
   untyped binding. Each one found gets the typed signature that reaches it, or is
   deleted.
+- How a mirrored Go type reaches a C API (raised by Eli, 2026-11-08). A Go host
+  function that calls C through cgo or purego needs nothing from buzzgen: its Impl is
+  typed Go. Buzz calling C through `zdef` reaches only scalars, `char*`, `void*` and two
+  fixed structs today (`libs/gopherbuzz/ffi.go`). The proposal is a layered `ffi`
+  setting: buzzgen derives the C layout of the Go struct from go/types and
+  `CTypeLayout`, writes its zdef struct declaration beside the mirror, and refuses a
+  field with no C layout by name. It needs zdef struct support in gopherbuzz matching
+  upstream Buzz first.
 
 ## Amendments
 
