@@ -426,9 +426,14 @@ are measured to dominate `types_generate`.
   eagerly: `ByteSliceVal` and `StringSliceVal` (`internal/interp/bindings/ffi/convert.go`)
   box each element into an 8-byte `vm.Value`, so 32 MiB of `[]byte` becomes a 256 MiB
   list, and nothing caps it. The one 32 MiB limit in the tree is the HTTP upload chunk
-  (`internal/interp/bindings/http_bytes.go`), which keeps the bytes in Go. The proposal:
-  `[]byte` crosses as an opaque handle object (length, slice, hex) by default, and a
-  layered setting turns another slice into a lazy list view instead of an eager copy.
+  (`internal/interp/bindings/http_bytes.go`), which keeps the bytes in Go. Eli asked for
+  the systemic fix in gopherbuzz, not a workaround at each site. The proposal uses two
+  constructs upstream Buzz already has, so no language type is added. `[]byte` crosses
+  as upstream `buffer\Buffer` (`libs/gopherbuzz/std/buffer.go`), adopting the Go slice
+  without a copy; its `ptr()` is also what a `zdef` function takes, which answers the C
+  question above for bytes. A Go `iter.Seq[T]` crosses as a Buzz fiber, `fib<T, void>`,
+  read with `foreach` as it yields, so a host function with a large result returns an
+  iterator. An eager `[]T` stays a list.
 
 ## Amendments
 
