@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/egladman/magus/internal/interactive/screen"
+	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/egladman/magus/types"
 )
 
@@ -80,18 +80,20 @@ func (s *WaitBoardSuite) TestWaiterOnTwoUpstreamsIsDrawnOnceUnderTheRunningOne()
 	s.board.set(s.start, wait, StepQueued)
 	roots := s.board.tree(s.later())
 	s.Require().Len(roots, 1)
-	s.Equal(run, roots[0].ref)
-	s.Require().Len(roots[0].children, 1)
-	s.Equal(1, roots[0].children[0].others)
+	s.Equal([]*waitNode{{ref: run, state: StepRunning, age: time.Minute, holds: 1, children: []*waitNode{
+		{ref: w, state: StepWaiting, age: time.Minute, others: 1},
+	}}}, roots)
 }
 
 func (s *WaitBoardSuite) TestDoneUpstreamReleasesItsWaiter() {
 	s.chain()
 	s.board.set(s.start, ref("a", "build"), StepDone)
 	s.board.set(s.start, ref("b", "build"), StepRunning)
-	c := &waitNode{ref: ref("c", "build"), state: StepWaiting, age: time.Minute}
-	b := &waitNode{ref: ref("b", "build"), state: StepRunning, age: time.Minute, holds: 1, children: []*waitNode{c}}
-	s.Equal([]*waitNode{b}, s.board.tree(s.later()))
+	roots := s.board.tree(s.later())
+	s.Require().Len(roots, 1)
+	s.Equal([]*waitNode{{ref: ref("b", "build"), state: StepRunning, age: time.Minute, holds: 1, children: []*waitNode{
+		{ref: ref("c", "build"), state: StepWaiting, age: time.Minute},
+	}}}, roots)
 }
 
 func (s *WaitBoardSuite) TestBoardIsIdleOnceEveryStepIsDone() {
@@ -118,7 +120,7 @@ func waitContext() context.Context {
 
 type WaitBandSuite struct {
 	suite.Suite
-	screen *screen.Screen
+	screen *screen.Terminal
 	h      *PrettyHandler
 	now    time.Time
 }
@@ -167,7 +169,7 @@ func (s *WaitBandSuite) TestBandDrawsTheBottleneckAndItsWaiters() {
 	s.plan(2)
 	row := s.screen.FindRow("(root) test")
 	s.Require().NotZero(row)
-	s.Contains(s.screen.Row(row), "bottleneck, holds 2, running 8m0s")
+	s.Contains(s.screen.Row(row), "8m0s · bottleneck · holds 2")
 	s.NotZero(s.screen.FindRow("w0 lint"))
 	s.Contains(s.screen.Row(s.screen.FindRow("console build")), "waiting 8m0s")
 }
