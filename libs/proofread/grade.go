@@ -23,7 +23,7 @@ const (
 // gradeCheck has no judge: [input.grade] reports it once every other rule has.
 // A diagnostic's rules all deny, so it has no grade.
 var gradeCheck = check{
-	rule: RuleGrade, on: slices.DeleteFunc(slices.Clone(kinds), func(k Kind) bool { return k == KindDiagnostic }),
+	rule: RuleGrade, reads: []Format{FormatMarkdown, FormatLines, FormatPlain, FormatDocComment, FormatStylesheet, FormatTemplate},
 }
 
 var gradeTexts = map[Rule]ruleText{
@@ -67,20 +67,25 @@ func points(cost float64, words int) float64 {
 // grade is the [RuleGrade] finding for found, the findings of the text in
 // holds, when a minimum is set, the rule runs and the grade is under it.
 func (in input) grade(found []Finding) (Finding, bool) {
-	d := in.opts.decide(gradeCheck, in.kind)
-	if in.opts.minimum == nil || d == DecisionOff {
+	set := in.opts.minimum
+	if set == nil {
+		set = in.spec.Minimum
+	}
+
+	d := in.opts.decide(gradeCheck, in.spec)
+	if set == nil || d == DecisionOff {
 		return Finding{}, false
 	}
 
 	words := in.words()
-	minimum := *in.opts.minimum
+	minimum := *set
 
 	g := Grade(found, words)
 	if g >= float64(minimum) {
 		return Finding{}, false
 	}
 
-	return in.opts.settle(gradeCheck, Finding{Message: gradeMessage(found, words, g, minimum)}, d), true
+	return in.opts.settle(in.spec, gradeCheck, Finding{Message: gradeMessage(found, words, g, minimum)}, d), true
 }
 
 // words counts the prose the rules read, or the whole text of a kind that
@@ -99,13 +104,16 @@ func (in input) words() int {
 }
 
 // gradeMessage names the grade, the minimum and the three rules whose
-// findings cost the most, so the reader knows what to fix first.
+// findings cost the most, so the reader knows what to fix first. A rule whose
+// weight the kind set is marked, since no labeling round measured it.
 func gradeMessage(found []Finding, words int, g float64, minimum int) string {
 	cost := map[Rule]float64{}
+	set := map[Rule]bool{}
 
 	for _, f := range found {
 		if f.Weight > 0 {
 			cost[f.Rule] += f.Weight
+			set[f.Rule] = set[f.Rule] || f.WeightSet
 		}
 	}
 
@@ -115,7 +123,12 @@ func gradeMessage(found []Finding, words int, g float64, minimum int) string {
 
 	parts := make([]string, 0, 3)
 	for _, r := range rules[:min(3, len(rules))] {
-		parts = append(parts, fmt.Sprintf("%s %.1f", r, points(cost[r], words)))
+		part := fmt.Sprintf("%s %.1f", r, points(cost[r], words))
+		if set[r] {
+			part += " (weight set, not measured)"
+		}
+
+		parts = append(parts, part)
 	}
 
 	return fmt.Sprintf("Grade %.1f is under the minimum of %d. The findings that cost the most: %s. Fix those "+

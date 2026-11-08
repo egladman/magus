@@ -45,6 +45,9 @@ type finding struct {
 	URL      string `json:"url"`
 	// Weight is what the finding costs its text's grade, 0 on a deny finding.
 	Weight float64 `json:"weight"`
+	// WeightSet marks a Weight the kind's declaration set, which no labeling
+	// round measured.
+	WeightSet bool `json:"weight_set,omitempty"`
 	// Line, Column, EndLine and EndColumn place Match in its file, 1-based,
 	// the end just past it; each is omitted when it is not known.
 	Line         int      `json:"line,omitempty"`
@@ -84,7 +87,9 @@ const (
 	inputStdin                // one text on stdin
 )
 
-// kindCommand returns the subcommand that judges kind.
+// kindCommand returns the subcommand that judges kind. A name that is no
+// built-in kind is one a decisions table may declare, read from files or
+// stdin.
 func kindCommand(kind proofread.Kind) (subcommand, bool) {
 	if kind == "" {
 		return subcommand{}, false
@@ -92,10 +97,18 @@ func kindCommand(kind proofread.Kind) (subcommand, bool) {
 
 	i := slices.IndexFunc(subcommands, func(s subcommand) bool { return s.kind == kind })
 	if i < 0 {
-		return subcommand{}, false
+		return subcommand{string(kind), kind, inputStdin, "FILE...|--stdin", "judge text of a declared kind"}, true
 	}
 
 	return subcommands[i], true
+}
+
+// declared reports whether kind is no built-in kind, so only a decisions
+// table can declare it.
+func declared(kind proofread.Kind) bool {
+	_, builtin := proofread.ParseKind(string(kind))
+
+	return !builtin
 }
 
 var subcommands = []subcommand{
@@ -136,6 +149,7 @@ func usage() string {
 		fmt.Fprintf(&b, "  %-28s %-16s %s\n", s.name, s.operand, s.summary)
 	}
 
+	fmt.Fprintf(&b, "  %-28s %-16s %s\n", "KIND", "FILE...|--stdin", "judge text of a kind the --decisions table declares")
 	b.WriteString("\nflags, after a kind:\n")
 	b.WriteString("  --stdin              read the text to judge from stdin\n")
 	b.WriteString("  --decisions FILE     read the decisions table from FILE, or - for stdin\n")
@@ -198,6 +212,16 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 	}
 
+	if strings.HasPrefix(name, "-") {
+		return unknownSubcommand(stderr, name)
+	}
+
+	// Any other name may be a kind the decisions table declares, which
+	// runKind resolves once it has read the table.
+	return runKind(proofread.Kind(name), rest, stdin, stdout, stderr)
+}
+
+func unknownSubcommand(stderr io.Writer, name string) int {
 	fmt.Fprintf(stderr, "proofread: unknown subcommand %q\n\n%s", name, usage())
 
 	return exitError
@@ -271,11 +295,25 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 		kind = proofread.KindReviewInline
 	}
 
+	t, err := readTable(*decisionsPath, kind, stdin, fs.Args())
+	if err != nil {
+		return failure(stderr, err)
+	}
+
+	s, known := t.spec(kind)
+	if !known {
+		return unknownSubcommand(stderr, string(kind))
+	}
+
 	if err := checkInput(kind, *fromStdin, fs.Args()); err != nil {
 		return failure(stderr, err)
 	}
 
 	if *metrics {
+		if declared(kind) {
+			return failure(stderr, fmt.Errorf("--metrics measures the built-in kinds, and %s is declared", kind))
+		}
+
 		return runMetrics(kind, fs.Args(), stdin, stdout, stderr)
 	}
 
@@ -287,11 +325,6 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 		return failure(stderr, errors.New("--record needs a file to judge, since an outcome is kept per path"))
 	}
 
-	t, err := readTable(*decisionsPath, kind, stdin, fs.Args())
-	if err != nil {
-		return failure(stderr, err)
-	}
-
 	onlyRules, err := onlyList(*only, t)
 	if err != nil {
 		return failure(stderr, err)
@@ -299,6 +332,7 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 
 	opts := []proofread.Option{
 		proofread.WithOnly(onlyRules...), proofread.WithThreadLength(*threadLength), proofread.WithEvent(proofread.Event(*event)),
+		proofread.WithKinds(t.kinds...),
 	}
 
 	if *futureSections != "" {
@@ -323,7 +357,11 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	}
 
 	set, fromTable := t.minimums[kind]
-	grades := slices.Contains(proofread.KindRules(kind), proofread.RuleGrade) && t.turnsOn(proofread.RuleGrade, false) &&
+	if s.Minimum != nil {
+		set, fromTable = *s.Minimum, true
+	}
+
+	grades := slices.Contains(s.RuleList(), proofread.RuleGrade) && t.turnsOn(proofread.RuleGrade, false) &&
 		(len(onlyRules) == 0 || slices.Contains(onlyRules, proofread.RuleGrade))
 
 	switch {
@@ -536,7 +574,7 @@ func sourceAt(name string, line int) string {
 func toFinding(node, source string, kind proofread.Kind, f proofread.Finding) finding {
 	return finding{
 		Node: node, Source: source, Kind: string(kind), Rule: string(f.Rule), Code: string(f.Code),
-		Decision: f.Decision.String(), Message: f.Message, Match: f.Match, URL: f.URL, Weight: f.Weight,
+		Decision: f.Decision.String(), Message: f.Message, Match: f.Match, URL: f.URL, Weight: f.Weight, WeightSet: f.WeightSet,
 		Line: f.Line, Column: f.Column, EndLine: f.EndLine, EndColumn: f.EndColumn, Replacements: f.Replacements,
 	}
 }
@@ -587,6 +625,23 @@ type table struct {
 	rules    map[proofread.Rule]proofread.Decision
 	paths    []scoped
 	minimums map[proofread.Kind]int
+	// kinds are the kinds the table declares, resolved.
+	kinds []proofread.KindSpec
+}
+
+// spec returns kind's spec: a built-in kind's, then one t declares.
+func (t table) spec(kind proofread.Kind) (proofread.KindSpec, bool) {
+	if s, ok := proofread.BuiltinKind(kind); ok {
+		return s, true
+	}
+
+	for _, s := range t.kinds {
+		if s.Name == kind {
+			return s, true
+		}
+	}
+
+	return proofread.KindSpec{}, false
 }
 
 type scoped struct {
@@ -674,12 +729,14 @@ func readTable(p string, kind proofread.Kind, stdin io.Reader, args []string) (t
 
 // parseTable reads {"rules": {rule: decision}, "paths": {glob: {rule:
 // decision}}, "minimums": {kind: grade}}, keeping the globs in the order the
-// file lists them.
+// file lists them. Its "kinds" object declares kinds, as
+// [proofread.DeclareKinds] reads them.
 func parseTable(data []byte) (table, error) {
 	var raw struct {
-		Rules    map[string]string `json:"rules"`
-		Paths    json.RawMessage   `json:"paths"`
-		Minimums map[string]int    `json:"minimums"`
+		Rules    map[string]string             `json:"rules"`
+		Paths    json.RawMessage               `json:"paths"`
+		Minimums map[string]int                `json:"minimums"`
+		Kinds    map[string]proofread.KindDecl `json:"kinds"`
 	}
 
 	dec := json.NewDecoder(bytes.NewReader(data))
@@ -694,20 +751,17 @@ func parseTable(data []byte) (table, error) {
 		return table{}, err
 	}
 
-	t := table{rules: rules, minimums: map[proofread.Kind]int{}}
-
-	for _, name := range slices.Sorted(maps.Keys(raw.Minimums)) {
-		kind, ok := proofread.ParseKind(name)
-		if !ok || string(kind) != name {
-			return table{}, fmt.Errorf("minimums: unknown kind %q", name)
-		}
-
-		if n := raw.Minimums[name]; n < 0 || n > 100 {
-			return table{}, fmt.Errorf("minimums: %s: want a grade from 0 to 100, not %d", name, n)
-		}
-
-		t.minimums[kind] = raw.Minimums[name]
+	kinds, err := proofread.DeclareKinds(raw.Kinds)
+	if err != nil {
+		return table{}, err
 	}
+
+	minimums, err := parseMinimums(raw.Minimums, raw.Kinds)
+	if err != nil {
+		return table{}, err
+	}
+
+	t := table{rules: rules, minimums: minimums, kinds: kinds}
 
 	if len(raw.Paths) == 0 || string(raw.Paths) == "null" {
 		return t, nil
@@ -743,6 +797,36 @@ func parseTable(data []byte) (table, error) {
 	}
 
 	return t, nil
+}
+
+// parseMinimums checks each kind a table's minimums name, built in or
+// declared, and each grade. A declared kind that sets its own minimum may not
+// be named here too.
+func parseMinimums(in map[string]int, declared map[string]proofread.KindDecl) (map[proofread.Kind]int, error) {
+	out := map[proofread.Kind]int{}
+
+	for _, name := range slices.Sorted(maps.Keys(in)) {
+		kind, ok := proofread.ParseKind(name)
+		if decl, isDeclared := declared[name]; isDeclared {
+			if decl.Minimum != nil {
+				return nil, fmt.Errorf("minimums: %s: kinds.%s.minimum sets it too: keep one", name, name)
+			}
+
+			kind, ok = proofread.Kind(name), true
+		}
+
+		if !ok || string(kind) != name {
+			return nil, fmt.Errorf("minimums: unknown kind %q", name)
+		}
+
+		if n := in[name]; n < 0 || n > 100 {
+			return nil, fmt.Errorf("minimums: %s: want a grade from 0 to 100, not %d", name, n)
+		}
+
+		out[kind] = in[name]
+	}
+
+	return out, nil
 }
 
 // checkGlob refuses an empty glob and one path.Match cannot read.

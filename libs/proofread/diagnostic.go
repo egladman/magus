@@ -18,10 +18,10 @@ const MessageRunes = 160
 // verb, replaces it with one rune first. Each finding's line is its line in
 // text.
 func JudgeMessage(text string, maxRunes int, opts ...Option) []Finding {
-	return judgeMessage(text, maxRunes, collect(opts))
+	return judgeMessage(text, maxRunes, spec(KindDiagnostic), collect(opts))
 }
 
-func judgeMessage(text string, maxRunes int, o options) []Finding {
+func judgeMessage(text string, maxRunes int, s *KindSpec, o options) []Finding {
 	if maxRunes <= 0 {
 		maxRunes = MessageRunes
 	}
@@ -29,7 +29,7 @@ func judgeMessage(text string, maxRunes int, o options) []Finding {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	lines := strings.Split(text, "\n")
 
-	return run(input{kind: KindDiagnostic, text: text, lines: lines, source: lines, maxRunes: maxRunes, opts: o})
+	return run(input{spec: s, text: text, lines: lines, source: lines, maxRunes: maxRunes, opts: o})
 }
 
 // lineAt is the 1-based line of text holding offset.

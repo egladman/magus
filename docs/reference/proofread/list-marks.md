@@ -30,16 +30,16 @@ The code is `PRF1060`. The decision depends on the kind of text judged:
 | -------------------- | ------- |
 | `reference`          | off     |
 | `principle`          | off     |
-| `guide`              | off     |
 | `change-description` | off     |
 | `agent-brief`        | off     |
+| `guide`              | off     |
+| `review-summary`     | off     |
+| `review-inline`      | off     |
+| `review-reply`       | off     |
 | `commit-message`     | off     |
 | `issue`              | off     |
 | `release-notes`      | off     |
 | `changelog`          | off     |
-| `review-summary`     | off     |
-| `review-inline`      | off     |
-| `review-reply`       | off     |
 | `agent-reply`        | off     |
 
 ## Changing it

@@ -28,9 +28,9 @@ The code is `PRF4021`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `change-description` | advise  |
 | `reference`          | advise  |
 | `principle`          | advise  |
+| `change-description` | advise  |
 | `guide`              | advise  |
 | `issue`              | advise  |
 

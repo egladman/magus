@@ -34,22 +34,19 @@ const MinVoiceWords = 1000
 // its name, a map entry as "<map>.<key>".
 type Feature string
 
-// voiceKinds are the kinds a [Voice] measures.
-var voiceKinds = []Kind{KindChangeDescription, KindReviewReply, KindCommitMessage, KindIssue}
+// voiceKinds are the kinds a [Voice] measures: each built-in kind that a
+// voice holds to its own measures.
+var voiceKinds = func() []Kind {
+	var out []Kind
 
-// voiceJudged are the kinds held to a voice: voiceKinds and every review text.
-var voiceJudged = slices.Concat(voiceKinds, []Kind{KindReviewSummary, KindReviewInline})
-
-// heldKind is the kind whose measures in a [Voice] k is held to. A person writes
-// a review's summary, its inline comments and its replies in one voice, which a
-// voice keeps under review-reply.
-func heldKind(k Kind) Kind {
-	if isReview(k) {
-		return KindReviewReply
+	for _, s := range builtinKinds {
+		if s.Voice == s.Name {
+			out = append(out, s.Name)
+		}
 	}
 
-	return k
-}
+	return out
+}()
 
 // Voice is one author's measured style per kind of text. It holds aggregates
 // alone: counts, rates and window measures, never a text, a word the author
@@ -140,7 +137,7 @@ func BuildVoice(texts map[Kind][]string) (*Voice, error) {
 		switch {
 		case k.Words < MinVoiceWords:
 			// Too few words to rank a draft against: the tense counts alone stand.
-		case kind == KindCommitMessage:
+		case spec(kind).Reader.Subject:
 			k.SubjectP95 = subjectP95(kept)
 		default:
 			k.Windows = buildWindows(kind, kept)
@@ -243,11 +240,11 @@ func checkVoiceStats(kind Kind, k VoiceStats) error {
 		return fmt.Errorf("a voice measures %s, not %s", kindList(voiceKinds), kind)
 	case k.SubjectP95 < 0:
 		return fmt.Errorf("%s: subject length %v is negative", kind, k.SubjectP95)
-	case k.SubjectP95 > 0 && kind != KindCommitMessage:
+	case k.SubjectP95 > 0 && !spec(kind).Reader.Subject:
 		return fmt.Errorf("%s: only commit messages keep a subject length", kind)
 	case k.Windows == nil:
 		return nil
-	case kind == KindCommitMessage:
+	case spec(kind).Reader.Subject:
 		return fmt.Errorf("%s: commit messages keep no windows", kind)
 	}
 
@@ -287,9 +284,9 @@ func (v *Voice) RelaxesTense() bool {
 // when v [Voice.RelaxesTense]. A nil v gives no voice.
 func WithVoice(v *Voice) Option { return func(o *options) { o.voice = v } }
 
-// relaxes reports whether v turns rule's deny into advice on kind.
-func (v *Voice) relaxes(rule Rule, kind Kind) bool {
-	return rule == RuleTense && kind == KindChangeDescription && v.RelaxesTense()
+// relaxes reports whether v turns rule's deny into advice on s.
+func (v *Voice) relaxes(rule Rule, s *KindSpec) bool {
+	return rule == RuleTense && s.TenseByVoice && v.RelaxesTense()
 }
 
 func kindList(kinds []Kind) string {

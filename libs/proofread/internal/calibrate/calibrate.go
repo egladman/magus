@@ -289,6 +289,12 @@ func parseHeader(header string, doc proofread.RuleDoc) (labeledCase, bool, error
 // style, under the case's voice when it has one. The other rules run because a
 // rule leaves a span to another that reports it.
 func (c labeledCase) Fires() bool {
+	return slices.ContainsFunc(c.Findings(), func(f proofread.Finding) bool { return f.Rule == c.Rule })
+}
+
+// Findings are what every rule reports on the case's text, judged as [Fires]
+// judges it, with extra applied after the case's own options.
+func (c labeledCase) Findings(extra ...proofread.Option) []proofread.Finding {
 	opts := []proofread.Option{
 		proofread.WithThreadLength(c.ThreadLength), proofread.WithEvent(c.Event), proofread.WithVoice(c.Voice),
 		proofread.WithLocalBranches(c.LocalBranches...),
@@ -298,17 +304,16 @@ func (c labeledCase) Fires() bool {
 		opts = append(opts, proofread.WithDecisions(map[proofread.Rule]proofread.Decision{c.Rule: proofread.DecisionDeny}))
 	}
 
-	var found []proofread.Finding
+	opts = append(opts, extra...)
 
 	if c.Kind == proofread.KindDocComment {
 		s := c.Symbol
 		s.Doc = c.Text
-		found = proofread.Judge(s, opts...)
-	} else {
-		found = proofread.JudgeText(c.Text, c.Kind, opts...)
+
+		return proofread.Judge(s, opts...)
 	}
 
-	return slices.ContainsFunc(found, func(f proofread.Finding) bool { return f.Rule == c.Rule })
+	return proofread.JudgeText(c.Text, c.Kind, opts...)
 }
 
 // Agrees reports whether the rule still does what the case's label records.

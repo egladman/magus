@@ -222,8 +222,8 @@ func TestEveryVoiceFeatureReadsOnALongDraft(t *testing.T) {
 }
 
 func TestEveryJudgedKindHasAName(t *testing.T) {
-	for _, kind := range voiceJudged {
-		if voiceDraftNames[kind] == "" || voicePlurals[heldKind(kind)] == "" {
+	for _, s := range builtinKinds {
+		if kind := s.Name; s.Voice != "" && (voiceDraftNames[kind] == "" || voicePlurals[s.Voice] == "") {
 			t.Errorf("%s has no draft name or no plural for its held kind", kind)
 		}
 	}
@@ -280,7 +280,7 @@ func TestDriftMessageNamesTheThreeSmallestP(t *testing.T) {
 	want := `This description reads further from your own change descriptions than 95% of your writing does ` +
 		`(346 words): parentheses 2.9 per 100 words (yours: 0 to 0.5), higher; semicolons 2.9 per 100 words ` +
 		`(yours: none), higher; "and" 29 per 1000 words (yours: 2 to 15), higher. Read it against how you write.`
-	if got := driftMessage(KindChangeDescription, 346, parts, reference); got != want {
+	if got := driftMessage(spec(KindChangeDescription), 346, parts, reference); got != want {
 		t.Errorf("driftMessage =\n%s\nwant\n%s", got, want)
 	}
 }

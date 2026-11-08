@@ -31,18 +31,18 @@ The code is `PRF4001`. The decision depends on the kind of text judged:
 | `doc-comment`        | advise  |
 | `reference`          | advise  |
 | `principle`          | advise  |
-| `guide`              | advise  |
 | `change-description` | advise  |
 | `agent-brief`        | advise  |
 | `agent-compact`      | advise  |
-| `commit-message`     | advise  |
-| `issue`              | advise  |
-| `release-notes`      | advise  |
-| `changelog`          | advise  |
-| `cli-help`           | advise  |
+| `guide`              | advise  |
 | `review-summary`     | advise  |
 | `review-inline`      | advise  |
 | `review-reply`       | advise  |
+| `commit-message`     | advise  |
+| `cli-help`           | advise  |
+| `issue`              | advise  |
+| `release-notes`      | advise  |
+| `changelog`          | advise  |
 | `agent-reply`        | advise  |
 | `stylesheet`         | advise  |
 

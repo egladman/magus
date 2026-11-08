@@ -25,7 +25,7 @@ func TestListsGroupItemsByIndentAndMarker(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, prose := readMarkdown(strings.Split(tc.text, "\n"), KindReference)
+			_, prose := readMarkdown(strings.Split(tc.text, "\n"), spec(KindReference).Reader)
 
 			var got [][]int
 

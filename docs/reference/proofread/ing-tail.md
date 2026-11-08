@@ -30,9 +30,9 @@ The code is `PRF4011`. The decision depends on the kind of text judged:
 | -------------------- | ------- |
 | `reference`          | off     |
 | `principle`          | off     |
-| `guide`              | off     |
 | `change-description` | off     |
 | `agent-brief`        | off     |
+| `guide`              | off     |
 | `commit-message`     | off     |
 | `issue`              | off     |
 | `release-notes`      | off     |

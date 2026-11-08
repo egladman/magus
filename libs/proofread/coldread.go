@@ -259,7 +259,7 @@ func history(in input) []Finding {
 	var out []Finding
 
 	patterns := historyPatterns
-	if in.kind == KindStylesheet {
+	if in.spec.Reader.Format == FormatStylesheet {
 		patterns = append(slices.Clone(patterns), cssHistoryPatterns...)
 	}
 

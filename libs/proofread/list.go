@@ -20,15 +20,12 @@ const (
 	RuleListParallel Rule = "list-parallel"
 )
 
-// listKinds are the Markdown kinds, each of which writes lists and dates.
-var listKinds = slices.Concat(withReply, agentReply)
-
 // listChecks judge a text's lists and dates. Each is graded, and ships off
 // until a labeling round measures it.
 var listChecks = []check{
-	{rule: RuleListMarks, on: listKinds, graded: true, judge: listMarks},
-	{rule: RuleListParallel, on: listKinds, graded: true, judge: listParallel},
-	{rule: RuleDateFormat, on: listKinds, graded: true, judge: dateFormat},
+	{rule: RuleListMarks, reads: proseFormats, judge: listMarks},
+	{rule: RuleListParallel, reads: proseFormats, judge: listParallel},
+	{rule: RuleDateFormat, reads: proseFormats, judge: dateFormat},
 }
 
 const listConvention = "Google's developer style guide (developers.google.com/style/lists) asks for \"the same " +

@@ -3,7 +3,6 @@ package proofread
 import (
 	"fmt"
 	"regexp"
-	"slices"
 	"strings"
 )
 
@@ -32,26 +31,14 @@ const (
 	RuleAgreementOpener Rule = "agreement-opener"
 )
 
-// agentReply is the kind the rules in this file judge. Each advises: whether
-// the person asked for the options, the question or the label is in the
-// conversation, which the rules cannot read.
-var agentReply = []Kind{KindAgentReply}
-
-// agentWords are the kinds the word tells judge: withReply, an agent's reply,
-// which its person reads as the agent's own words, and compact agent text,
-// where a buzzword costs tokens and says nothing. chatbot and
-// reply-voice stay off the reply, since its offers and openers are this file's
-// rules to report.
-var agentWords = slices.Concat(withReply, agentReply, compact)
-
 var agentReplyChecks = []check{
-	{rule: RuleBoldLabel, on: agentReply, graded: true, judge: boldLabels},
-	{rule: RuleClosingOffer, on: agentReply, graded: true, judge: closingOffer},
-	{rule: RuleRequestRecap, on: agentReply, graded: true, judge: requestRecap},
-	{rule: RuleOptionList, on: agentReply, graded: true, judge: optionList},
-	{rule: RuleUnbackedDone, on: slices.Concat(agentReply, []Kind{KindChangeDescription}), graded: true, judge: unbackedDone},
-	{rule: RuleShortReplyHeading, on: agentReply, graded: true, judge: shortReplyHeading},
-	{rule: RuleAgreementOpener, on: agentReply, graded: true, judge: agreementOpener},
+	{rule: RuleBoldLabel, reads: proseFormats, judge: boldLabels},
+	{rule: RuleClosingOffer, reads: proseFormats, judge: closingOffer},
+	{rule: RuleRequestRecap, reads: proseFormats, judge: requestRecap},
+	{rule: RuleOptionList, reads: proseFormats, judge: optionList},
+	{rule: RuleUnbackedDone, reads: proseFormats, judge: unbackedDone},
+	{rule: RuleShortReplyHeading, reads: proseFormats, judge: shortReplyHeading},
+	{rule: RuleAgreementOpener, reads: proseFormats, judge: agreementOpener},
 }
 
 var agentReplyTexts = map[Rule]ruleText{

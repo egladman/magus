@@ -39,8 +39,8 @@ func TestReviewRulesJudgeEveryReviewKind(t *testing.T) {
 			t.Fatalf("no check for %s", rule)
 		}
 
-		for _, k := range reviewText {
-			if c.declaredDecision(k) == DecisionOff {
+		for _, k := range reviewKinds() {
+			if d, ok := spec(k).Rules[c.rule]; !ok || d == DecisionOff {
 				t.Errorf("%s does not judge %s", rule, k)
 			}
 		}
@@ -67,7 +67,7 @@ func TestReviewKindRulesAdviseOnTheirKindAlone(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(string(tc.rule), func(t *testing.T) {
 			want := map[Kind]Decision{tc.kind: DecisionAdvise}
-			if got := decisions(tc.rule, tc.text, []Option{WithEvent(tc.event)}, reviewText...); !reflect.DeepEqual(got, want) {
+			if got := decisions(tc.rule, tc.text, []Option{WithEvent(tc.event)}, reviewKinds()...); !reflect.DeepEqual(got, want) {
 				t.Errorf("%s judged %v, want %v", tc.rule, got, want)
 			}
 		})

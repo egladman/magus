@@ -37,25 +37,19 @@ const (
 	RuleReviewLength Rule = "review-length"
 )
 
-var (
-	inlineOnly  = []Kind{KindReviewInline}
-	summaryOnly = []Kind{KindReviewSummary}
-	replyOnly   = []Kind{KindReviewReply}
-)
-
 // reviewKindChecks are the rules for one review text in particular: an inline
 // comment, a summary or a reply. Each is graded, and ships off until a labeling
 // round measures it.
 var reviewKindChecks = []check{
-	{rule: RuleNoReason, on: inlineOnly, graded: true, judge: ownWords(unexplainedRequest)},
-	{rule: RuleNitLabel, on: inlineOnly, graded: true, judge: nitLabel},
-	{rule: RuleEmptyRequestChanges, on: summaryOnly, graded: true, judge: emptyRequestChanges},
-	{rule: RuleApproveBlocker, on: summaryOnly, graded: true, judge: ownWords(approveBlocker)},
-	{rule: RuleBareLGTM, on: summaryOnly, graded: true, judge: bareLGTM},
-	{rule: RuleDeferralNoLink, on: replyOnly, graded: true, judge: ownWords(deferralNoLink)},
-	{rule: RuleDeclineNoReason, on: replyOnly, graded: true, judge: ownWords(declineNoReason)},
-	{rule: RuleImpatience, on: replyOnly, graded: true, judge: ownWords(impatience)},
-	{rule: RuleReviewLength, on: reviewText, graded: true, judge: reviewLength},
+	{rule: RuleNoReason, reads: proseFormats, judge: ownWords(unexplainedRequest)},
+	{rule: RuleNitLabel, reads: proseFormats, judge: nitLabel},
+	{rule: RuleEmptyRequestChanges, reads: proseFormats, judge: emptyRequestChanges},
+	{rule: RuleApproveBlocker, reads: proseFormats, judge: ownWords(approveBlocker)},
+	{rule: RuleBareLGTM, reads: proseFormats, judge: bareLGTM},
+	{rule: RuleDeferralNoLink, reads: proseFormats, judge: ownWords(deferralNoLink)},
+	{rule: RuleDeclineNoReason, reads: proseFormats, judge: ownWords(declineNoReason)},
+	{rule: RuleImpatience, reads: proseFormats, judge: ownWords(impatience)},
+	{rule: RuleReviewLength, reads: proseFormats, judge: reviewLength},
 }
 
 var reviewKindTexts = map[Rule]ruleText{
@@ -509,11 +503,9 @@ func impatience(in input) []Finding {
 	return out
 }
 
-var reviewWordCaps = map[Kind]int{KindReviewInline: 60, KindReviewSummary: 100, KindReviewReply: 80}
-
 func reviewLength(in input) []Finding {
-	limit, ok := reviewWordCaps[in.kind]
-	if !ok {
+	limit := in.spec.ReviewWords
+	if limit == 0 {
 		return nil
 	}
 
