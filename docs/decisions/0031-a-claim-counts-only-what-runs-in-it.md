@@ -1,6 +1,6 @@
 ---
-title: "ADR 0029: a claim counts only what runs in it"
-order: 29
+title: "ADR 0031: a claim counts only what runs in it"
+order: 31
 description: On 2026-11-07 the broker refused 20 runs while slots sat idle. Root lint claimed 16.3 GiB of a 21 GiB budget; its own measured runs peak at 5.0 GiB. The gap is the chain fold, which adds every ctx.needs member's peak to the composer's claim even when that member runs as a step with its own claim, has already passed in this run, or replays from cache, and which drops the whole call to flat summed peaks when one member has no curve. Half the refusals were slots alone, and 15 of 20 refused agent runs were run again with --budget-wait within seconds. Eli decided on 2026-11-07 that a composer's claim counts only the work that runs under it, that members compose curve by curve where curves exist, that a claim is the highest measured peak with no margin, that a step takes its slots elastically between one and its measured width while leaving room for waiters, that a run that does not fit waits by default and says so, reversing ADR 0001's 2026-11-05 zero default, and that refusals and waits are recorded in a JSON Lines store. No role is added.
 tags: [adr, decision, concurrency, memory, admission, broker, forecast, history, roles]
 status: accepted
@@ -8,7 +8,7 @@ date: 2026-11-07
 supersedes: "ADR 0001, Amendments: 2026-11-05, waiting is opt-in, budget_wait defaults to 0"
 ---
 
-# ADR 0029: a claim counts only what runs in it
+# ADR 0031: a claim counts only what runs in it
 
 ## Context
 

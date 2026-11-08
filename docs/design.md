@@ -87,7 +87,7 @@ automates a decision and when it hands the decision to you.
 - [The model proposes, the harness executes](design/principles/the-model-proposes-the-harness-executes.md): A model emits text that proposes an action; a harness runs the tool, reads and writes the files, refuses the call that breaks a rule and keeps the state. Harnesses come in layers, and the layers compose.
 - [Postel's law: accept liberally, name the default](design/principles/postels-law.md): Accept every well-formed spelling of a value, and make the unit a bare number takes loud in help; never encode the unit in the flag name.
 - [A measure is not the goal](design/principles/a-measure-is-not-the-goal.md): A gate raises the floor and never certifies the ceiling; each gate says what it measures and what it cannot, every refusal teaches, and a gain is measured against a person's judgment before it is claimed.
-- [Terminal output stays copyable](design/principles/terminal-output-stays-copyable.md): A live region writes only real text; no trailing fill, no frame runes on a content row, a layout that stacks instead of splitting into columns, and nothing left in scrollback when it ends.
+- [Terminal output stays copyable](design/principles/terminal-output-stays-copyable.md): Scrollback is one column of records; the live band reads left to right as one record per row; a tiled view lives only behind a flag on the alternate screen.
 
 ### Judgment
 

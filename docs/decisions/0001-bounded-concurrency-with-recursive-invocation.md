@@ -355,4 +355,4 @@ minutes to 0, and a leased worker's check is refused at once unless its caller s
 
 ### 2026-11-07: a claim counts only what runs in it
 
-ADR 0029 reverses the default set on 2026-11-05 above: `budget_wait` is 30 minutes again, or the run's sooner deadline, and 0 refuses at once. It also removes the chain memory fold that the 2026-10-20 amendment kept, drops the 1.25 margin over a measured peak, and grants a step its slots elastically. The queue, the parked line and protocol 5 stand. See [ADR 0029](0029-a-claim-counts-only-what-runs-in-it.md).
+ADR 0031 reverses the default set on 2026-11-05 above: `budget_wait` is 30 minutes again, or the run's sooner deadline, and 0 refuses at once. It also removes the chain memory fold that the 2026-10-20 amendment kept, drops the 1.25 margin over a measured peak, and grants a step its slots elastically. The queue, the parked line and protocol 5 stand. See [ADR 0031](0031-a-claim-counts-only-what-runs-in-it.md).

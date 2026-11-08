@@ -368,25 +368,12 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			cfg.Log.Stream = &b
 		}
 	}
-	if v := getenv("MAGUS_LOG_LOADER"); v != "" {
-		cfg.Log.Loader = v
-	}
 	if v := getenv("MAGUS_HINTS_ENABLED"); v != "" {
 		if b, err := parseBoolEnv(v); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_HINTS_ENABLED: %w", err))
 		} else {
 			cfg.Hints.Enabled = &b
 		}
-	}
-	if v := getenv("MAGUS_KNOWLEDGE_WORKSPACES"); v != "" {
-		parts := strings.Split(v, ",")
-		out := parts[:0]
-		for _, p := range parts {
-			if p = strings.TrimSpace(p); p != "" {
-				out = append(out, p)
-			}
-		}
-		cfg.Knowledge.Workspaces = out
 	}
 	if v := getenv("MAGUS_KNOWLEDGE_PUBLISHED_REF"); v != "" {
 		cfg.Knowledge.PublishedRef = v

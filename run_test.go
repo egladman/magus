@@ -2898,7 +2898,7 @@ export fun image(ctx: magus\Context, args: [str]) > void !> any {
 	assert.NotEqual(t, first, third)
 }
 
-// TestComposerOutcomeCountsOnlyItsBody answers ADR 0029's open question:
+// TestComposerOutcomeCountsOnlyItsBody answers ADR 0031's open question:
 // whose peak holds what a cacheable composer's inline member runs. The
 // composer runs nothing itself, so any peak on it is the member's.
 func TestComposerOutcomeCountsOnlyItsBody(t *testing.T) {

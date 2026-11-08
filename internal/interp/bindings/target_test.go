@@ -1155,7 +1155,7 @@ export fun lint(ctx: magus\Context, _a: [str]) > void !> any {
 }
 
 // TestInlineMemberClaimsItsOwnSeatWhileTheComposerLends pins both sides of
-// ADR 0029. With no interceptor a member under a lent claim holds nothing.
+// ADR 0031. With no interceptor a member under a lent claim holds nothing.
 // Through cache.RunInline it holds a claim of its own, under its composer.
 func TestInlineMemberClaimsItsOwnSeatWhileTheComposerLends(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
