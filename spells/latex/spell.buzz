@@ -73,12 +73,14 @@ export fun mgs_getTools() > {str: Tool} {
     };
 }
 
-// The bundle cache sits in the OS cache directory, named differently per OS.
+// The bundle cache sits in the OS cache directory, named differently per OS:
+// TectonicProject.Tectonic on macOS, tectonic on Linux.
 export fun mgs_getSandbox() > Sandbox {
     return Sandbox{
         allow = [
             SandboxAllow{env = "TECTONIC_CACHE_DIR", base = "userCache", path = "TectonicProject.Tectonic", mode = SandboxAccess.rw},
             SandboxAllow{env = "TECTONIC_CACHE_DIR", base = "userCache", path = "Tectonic", mode = SandboxAccess.rw},
+            SandboxAllow{env = "TECTONIC_CACHE_DIR", base = "userCache", path = "tectonic", mode = SandboxAccess.rw},
         ],
         env = SandboxEnv{passthrough = ["TECTONIC_CACHE_DIR"]},
     };
