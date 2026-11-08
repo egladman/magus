@@ -12,6 +12,7 @@ export enum<str> TargetRunState {
     passed = "passed",
     failed = "failed",
     cached = "cached",
+    permitted = "permitted",
 }
 
 export object TargetRun {

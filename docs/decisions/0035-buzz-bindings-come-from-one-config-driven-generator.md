@@ -416,3 +416,29 @@ are measured to dominate `types_generate`.
   deleted.
 
 ## Amendments
+
+### 2026-11-08: settings layer, and cases are named for their values
+
+Measured against the 103 hand-listed enums, part 3's naming rule matched few of them,
+and about 85 types declare no constant for `""` while every hand list names that case
+`none`. Two changes, so every Buzz-visible name stays as it was:
+
+- A case is named for its value in lower camel case (`executable-bit` is
+  `executableBit`). A value that is not a word or a dashed run of words, such as a media
+  type, is named for its constant less the leading words it shares with the type
+  (`ImageMediaTypeManifest` is `manifest`).
+- Every enum has a zero case named `none`, first, whether or not Go declares a constant
+  for `""`. A type sets `zeroCase` to rename it, or to `""` to declare the enum without
+  one (9 do, among them `LogLevel` and `WalkStep`).
+
+Settings layer, as Eli asked: keys at the top level are every package's defaults, a
+package's `config:` overrides them, and a type's `config:` overrides its package. The
+keys are `name` (type only), `module`, `open`, `required`, `ts`, `zeroCase`, `cases`
+(value to case name, merged by key) and `pkgname` (the Go package a `go` or `go-decode`
+output declares, which an output's own `pkgname` overrides). A derived name that is a
+Buzz keyword is refused and must be set under `cases` (`SpawnKind`'s `continue`).
+
+With this rule 22 of the 103 enums need any setting. Two hand lists had drifted from Go:
+`TargetRunState` lacked `permitted` and `VCSCapability` lacked `checkoutFastForwarder`
+and `branchHeadReporter`, so the derived enums gain them. `types.TargetRunState.Values`
+lacked `permitted` too, so `Valid` refused a state the server writes.

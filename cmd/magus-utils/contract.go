@@ -257,7 +257,7 @@ func contractFieldType(expr ast.Expr, imports map[string]string) (reflect.Type, 
 				return entry.Type, nil
 			}
 		}
-		for _, en := range boundaryEnums {
+		for _, en := range boundaryEnumList() {
 			if en.Type.PkgPath() == pkgPath && en.Type.Name() == x.Sel.Name {
 				return en.Type, nil
 			}

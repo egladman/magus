@@ -675,7 +675,7 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 			}
 		}
 	}
-	for _, e := range boundaryEnums {
+	for _, e := range boundaryEnumList() {
 		if e.Module == mod.Name {
 			if err := add(e.Name, mod.Name); err != nil {
 				return nil, err

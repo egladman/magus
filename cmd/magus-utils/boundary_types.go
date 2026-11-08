@@ -530,563 +530,112 @@ var boundaryTypes = []boundaryType{
 	{Name: "AttentionList", Type: reflect.TypeFor[types.AttentionList](), RuntimeObject: true},
 }
 
-// boundaryEnums declares the Go named string types that mirror as Buzz `enum<str>`
-// rather than as a bare `str`.
-//
-// The cases are listed here rather than derived because reflect cannot enumerate a
-// named type's constants: it sees only the underlying kind. That is the whole reason
-// a registry exists: without it every one of these crosses as an untyped string, and a
-// magusfile typo is a silent miss instead of a compile error.
-//
-// A case must be a legal Buzz identifier, and the first entry is the field's default,
-// so a zero-valued case belongs first.
-var boundaryEnums = []boundaryEnum{
-	{
-		Name:  "KnowledgeResolution",
-		Type:  reflect.TypeFor[types.KnowledgeResolution](),
-		Cases: []enumCase{{"none", ""}, {"id", "id"}, {"path", "path"}, {"fuzzy", "fuzzy"}},
-	},
-	{
-		Name:  "DiagnosticOrigin",
-		Type:  reflect.TypeFor[types.DiagnosticOrigin](),
-		Cases: []enumCase{{"unknown", ""}, {"builtin", "builtin"}, {"workspace", "workspace"}},
-	},
-	{
-		Name:  "SignAlgorithm",
-		Type:  reflect.TypeFor[types.SignAlgorithm](),
-		Cases: []enumCase{{"Ed25519", "ed25519"}},
-	},
-	{
-		Name: "TermStyle",
-		Type: reflect.TypeFor[types.TermStyle](),
-		Cases: []enumCase{{"none", ""}, {"bold", "1"}, {"dim", "2"}, {"red", "31"}, {"green", "32"},
-			{"yellow", "33"}, {"dimGreen", "2;32"}, {"dimGrey", "2;37"}, {"brightGreen", "1;32"}},
-	},
-	{
-		Name: "TimeLayout",
-		Type: reflect.TypeFor[types.TimeLayout](),
-		Cases: []enumCase{{"rfc3339", "2006-01-02T15:04:05Z07:00"},
-			{"rfc3339Nano", "2006-01-02T15:04:05.999999999Z07:00"},
-			{"dateOnly", "2006-01-02"}, {"timeOnly", "15:04:05"},
-			{"dateTime", "2006-01-02 15:04:05"},
-			{"rfc1123", "Mon, 02 Jan 2006 15:04:05 MST"}, {"kitchen", "3:04PM"}},
-	},
-	{
-		Name:   "WalkStep",
-		Module: "fs",
-		Type:   reflect.TypeFor[types.WalkStep](),
-		Cases: []enumCase{{"next", string(types.WalkNext)}, {"skipDir", string(types.WalkSkipDir)},
-			{"skipAll", string(types.WalkSkipAll)}},
-	},
-	{
-		Name:  "LogLevel",
-		Type:  reflect.TypeFor[types.LogLevel](),
-		Cases: []enumCase{{"trace", "trace"}, {"debug", "debug"}, {"info", "info"}, {"warn", "warn"}, {"error", "error"}},
-	},
-	{
-		Name:  "PlatformStyle",
-		Type:  reflect.TypeFor[types.PlatformStyle](),
-		Cases: []enumCase{{"none", ""}, {"go", "go"}, {"uname", "uname"}},
-	},
-	{
-		Name:  "CheckStatus",
-		Type:  reflect.TypeFor[types.CheckStatus](),
-		Cases: []enumCase{{"none", ""}, {"ok", "ok"}, {"fail", "fail"}, {"advice", "advice"}},
-	},
-	{
-		Name: "EventOutcome",
-		Type: reflect.TypeFor[types.EventOutcome](),
-		Cases: []enumCase{{"none", ""}, {"waiting", "waiting"}, {"permission", "permission"}, {"failed", "failed"},
-			{"finished", "finished"}, {"diagnostic", "diagnostic"}, {"update", "update"}, {"other", "other"}},
-	},
-	{
-		Name: "EventSeverity",
-		Type: reflect.TypeFor[types.EventSeverity](),
-		Cases: []enumCase{{"none", ""}, {"info", "info"}, {"notice", "notice"}, {"warning", "warning"},
-			{"critical", "critical"}},
-	},
-	{
-		Name: "ServiceState",
-		Type: reflect.TypeFor[types.ServiceState](),
-		Cases: []enumCase{{"none", ""}, {"starting", "starting"}, {"running", "running"},
-			{"idle", "idle"}, {"failed", "failed"}},
-	},
-	{
-		Name:  "PatternType",
-		Type:  reflect.TypeFor[types.PatternType](),
-		Cases: []enumCase{{"none", ""}, {"glob", "glob"}, {"regex", "regex"}, {"literal", "literal"}},
-	},
-	{
-		Name: "SymbolIndexFreshness",
-		Type: reflect.TypeFor[types.SymbolIndexFreshness](),
-		Cases: []enumCase{{"none", ""}, {"upToDate", "up-to-date"}, {"outOfDate", "out-of-date"},
-			{"notIndexed", "not-indexed"}, {"unvouched", "unvouched"}},
-	},
-	{
-		Name:  "DiffUncoveredReason",
-		Type:  reflect.TypeFor[types.DiffUncoveredReason](),
-		Cases: []enumCase{{"none", ""}, {"noIndexer", "no-indexer"}},
-	},
-	{
-		Name:  "DiffReadState",
-		Type:  reflect.TypeFor[types.DiffReadState](),
-		Cases: []enumCase{{"none", ""}, {"known", "known"}, {"unknown", "unknown"}},
-	},
-	{
-		Name: "DiffGroupKind",
-		Type: reflect.TypeFor[types.DiffGroupKind](),
-		Cases: []enumCase{{"none", ""}, {"connected", "connected"}, {"generated", "generated"},
-			{"unranked", "unranked"}},
-	},
-	{
-		Name: "DiffWhyRelation",
-		Type: reflect.TypeFor[types.DiffWhyRelation](),
-		Cases: []enumCase{{"none", ""}, {"starts", "starts"}, {"uses", "uses"}, {"usedBy", "used_by"},
-			{"implements", "implements"}, {"implementedBy", "implemented_by"}, {"continues", "continues"}, {"continuedBy", "continued_by"},
-			{"sameStep", "same_step"}, {"tests", "tests"}, {"generated", "generated"}, {"unranked", "unranked"}},
-	},
-	{
-		Name: "TargetRunState",
-		Type: reflect.TypeFor[types.TargetRunState](),
-		Cases: []enumCase{{"none", ""}, {"queued", "queued"}, {"running", "running"}, {"passed", "passed"},
-			{"failed", "failed"}, {"cached", "cached"}},
-	},
-	{
-		Name: "VCSSource",
-		Type: reflect.TypeFor[types.VCSSource](),
-		Cases: []enumCase{{"none", ""}, {"explicit", "explicit"}, {"auto", "auto"}, {"default", "default"},
-			{"disabled", "disabled"}},
-	},
-	{
-		Name: "ConflictKind",
-		Type: reflect.TypeFor[types.ConflictKind](),
-		Cases: []enumCase{{"none", ""}, {"content", "content"}, {"deleted", "deleted"},
-			{"bothDeleted", "both-deleted"}},
-	},
-	{
-		Name: "PatchOpKind",
-		Type: reflect.TypeFor[spells.PatchOpKind](),
-		Cases: []enumCase{{"none", ""}, {"add", "add"}, {"remove", "remove"},
-			{"replace", "replace"}, {"move", "move"}, {"copy", "copy"}, {"test", "test"}},
-	},
-	{
-		Name:  "VersionComponent",
-		Type:  reflect.TypeFor[spells.VersionComponent](),
-		Cases: []enumCase{{"none", ""}, {"major", "major"}, {"minor", "minor"}, {"patch", "patch"}},
-	},
-	{
-		Name:  "SymbolFormat",
-		Type:  reflect.TypeFor[spells.SymbolFormat](),
-		Cases: []enumCase{{"none", ""}, {"scip", "scip"}, {"goPackages", "go-packages"}, {"buzzModule", "buzz-module"}, {"shellScript", "shell-script"}},
-	},
-	{
-		Name:  "CoverageFormat",
-		Type:  reflect.TypeFor[spells.CoverageFormat](),
-		Cases: []enumCase{{"none", ""}, {"lcov", "lcov"}, {"goProfile", "go-coverprofile"}},
-	},
-	{
-		Name:  "External",
-		Type:  reflect.TypeFor[spells.External](),
-		Cases: []enumCase{{"none", ""}, {"reads", "reads-external"}, {"mutates", "mutates-external"}},
-	},
-	{
-		Name:  "SandboxAccess",
-		Type:  reflect.TypeFor[spells.SandboxAccess](),
-		Cases: []enumCase{{"none", ""}, {"ro", "ro"}, {"rx", "rx"}, {"rw", "rw"}, {"rwx", "rwx"}},
-	},
-	{
-		Name:  "SkillVariant",
-		Type:  reflect.TypeFor[types.SkillVariant](),
-		Cases: []enumCase{{"short", "short"}, {"full", "full"}},
-	},
-	{
-		Name: "JobKind",
-		Type: reflect.TypeFor[types.JobKind](),
-		Cases: []enumCase{{"check", "check"}, {"symbol", "symbol"}, {"paths", "paths"},
-			{"script", "script"}, {"prose", "prose"}},
-	},
-	{
-		Name:  "SkillForm",
-		Type:  reflect.TypeFor[types.SkillForm](),
-		Cases: []enumCase{{"none", ""}, {"both", "both"}, {"short", "short"}, {"full", "full"}},
-	},
-	{
-		Name:  "DiscoveryRole",
-		Type:  reflect.TypeFor[spells.DiscoveryRole](),
-		Cases: []enumCase{{"none", ""}, {"project", "project"}, {"member", "member"}},
-	},
-	{
-		Name: "ToolCapability",
-		Type: reflect.TypeFor[types.ToolCapability](),
-		Cases: []enumCase{{"none", ""}, {"runs", "runs"}, {"reads", "reads"}, {"writes", "writes"}, {"spawns", "spawns"},
-			{"network", "network"}, {"inert", "inert"}},
-	},
-	{
-		Name: "HookPoint",
-		Type: reflect.TypeFor[types.HookPoint](),
-		Cases: []enumCase{{"none", ""}, {"shell", "shell"}, {"edit", "edit"}, {"stop", "stop"},
-			{"subagentStop", "subagent-stop"}, {"spawn", "spawn"}, {"sessionStart", "session-start"},
-			{"compact", "compact"}, {"mcp", "mcp"}, {"attach", "attach"}},
-	},
-	{
-		Name:  "BindingStatus",
-		Type:  reflect.TypeFor[types.BindingStatus](),
-		Cases: []enumCase{{"none", ""}, {"bound", "bound"}, {"unsupported", "unsupported"}},
-	},
-	{
-		Name:  "McpTransport",
-		Type:  reflect.TypeFor[types.McpTransport](),
-		Cases: []enumCase{{"none", ""}, {"stdio", "stdio"}, {"http", "http"}},
-	},
-	{
-		Name:  "ModelTierSource",
-		Type:  reflect.TypeFor[types.ModelTierSource](),
-		Cases: []enumCase{{"row", "row"}, {"matrix", "matrix"}, {"default", "default"}},
-	},
-	{
-		Name:  "GroupingShape",
-		Type:  reflect.TypeFor[types.GroupingShape](),
-		Cases: []enumCase{{"none", ""}, {"chained", "chained"}, {"split", "split"}, {"solo", "solo"}},
-	},
-	{
-		Name:  "BriefFormat",
-		Type:  reflect.TypeFor[types.BriefFormat](),
-		Cases: []enumCase{{"none", ""}, {"markdown", "markdown"}, {"buzz", "buzz"}},
-	},
-	{
-		Name: "BriefRefKind",
-		Type: reflect.TypeFor[types.BriefRefKind](),
-		Cases: []enumCase{{"output", "output"}, {"verdict", "verdict"}, {"invocation", "invocation"},
-			{"file", "file"}, {"plan", "plan"}, {"commit", "commit"}},
-	},
-	{
-		Name: "ClaimKind",
-		Type: reflect.TypeFor[types.ClaimKind](),
-		Cases: []enumCase{{"none", ""}, {"refs", "refs"}, {"test", "test"}, {"output", "output"},
-			{"released", "released"}, {"dead", "dead"}},
-	},
-	// The image module's closed sets. Each starts with its unset case, so a Platform or
-	// Tree that omits the field reaches Go as "" and is refused rather than read as
-	// linux/amd64 or as some policy nobody chose.
-	{Name: "OS", Type: reflect.TypeFor[types.ImageOS](), Cases: []enumCase{{"none", ""}, {"linux", "linux"}}},
-	{
-		Name:  "Architecture",
-		Type:  reflect.TypeFor[types.ImageArchitecture](),
-		Cases: []enumCase{{"none", ""}, {"amd64", "amd64"}, {"arm64", "arm64"}},
-	},
-	{
-		Name:  "Variant",
-		Type:  reflect.TypeFor[types.ImageVariant](),
-		Cases: []enumCase{{"none", ""}, {"v1", "v1"}, {"v2", "v2"}, {"v3", "v3"}, {"v8", "v8"}},
-	},
-	{
-		// Named values, not a closed set: a descriptor's mediaType and artifactType are str,
-		// since a pulled base or a referrer may carry any type.
-		Name:   "MediaType",
-		Module: "image",
-		Type:   reflect.TypeFor[types.ImageMediaType](),
-		Cases: []enumCase{
-			{"manifest", string(types.ImageMediaTypeManifest)}, {"index", string(types.ImageMediaTypeIndex)},
-			{"config", string(types.ImageMediaTypeConfig)}, {"layer", string(types.ImageMediaTypeLayer)},
-			{"layerGzip", string(types.ImageMediaTypeLayerGzip)}, {"layerZstd", string(types.ImageMediaTypeLayerZstd)},
-			{"empty", string(types.ImageMediaTypeEmpty)}, {"spdx", string(types.ImageMediaTypeSPDX)},
-			{"inToto", string(types.ImageMediaTypeInToto)}},
-	},
-	{
-		Name:  "ModePolicy",
-		Type:  reflect.TypeFor[types.ImageModePolicy](),
-		Cases: []enumCase{{"none", ""}, {"fixed", "fixed"}, {"executableBit", "executable-bit"}},
-	},
-	{
-		Name:  "SymlinkPolicy",
-		Type:  reflect.TypeFor[types.ImageSymlinkPolicy](),
-		Cases: []enumCase{{"none", ""}, {"refuse", "refuse"}, {"keep", "keep"}, {"follow", "follow"}},
-	},
-	{
-		Name:  "EntryKind",
-		Type:  reflect.TypeFor[types.ImageEntryKind](),
-		Cases: []enumCase{{"none", ""}, {"file", "file"}, {"symlink", "symlink"}, {"directory", "directory"}},
-	},
-	{
-		Name:  "GroupingVerdict",
-		Type:  reflect.TypeFor[types.GroupingVerdict](),
-		Cases: []enumCase{{"none", ""}, {"measured", "measured"}, {"unknown", "unknown"}},
-	},
-	{
-		Name:  "AgentBilling",
-		Type:  reflect.TypeFor[types.AgentBilling](),
-		Cases: []enumCase{{"none", ""}, {"metered", "metered"}, {"quota", "quota"}},
-	},
-	{
-		Name:  "AgentRole",
-		Type:  reflect.TypeFor[types.AgentRole](),
-		Cases: []enumCase{{"none", ""}, {"root", "root"}, {"worker", "worker"}, {"integrator", "integrator"}},
-	},
-	{
-		Name:  "AgentThread",
-		Type:  reflect.TypeFor[types.AgentThread](),
-		Cases: []enumCase{{"none", ""}, {"main", "main"}, {"sub", "sub"}, {"unknown", "unknown"}},
-	},
-	{
-		Name:  "BrokerPolicy",
-		Type:  reflect.TypeFor[types.BrokerPolicy](),
-		Cases: []enumCase{{"none", ""}, {"required", "required"}, {"bestEffort", "best-effort"}, {"off", "off"}},
-	},
-	{
-		Name:  "ChangeStatus",
-		Type:  reflect.TypeFor[types.ChangeStatus](),
-		Cases: []enumCase{{"none", ""}, {"added", "added"}, {"modified", "modified"}, {"deleted", "deleted"}, {"renamed", "renamed"}},
-	},
-	{
-		Name:  "CommentAnchorRung",
-		Type:  reflect.TypeFor[types.CommentAnchorRung](),
-		Cases: []enumCase{{"none", ""}, {"exact", "exact"}, {"moved", "moved"}, {"declaration", "declaration"}, {"lost", "lost"}},
-	},
-	{
-		Name:  "ConcurrencyProfile",
-		Type:  reflect.TypeFor[types.ConcurrencyProfile](),
-		Cases: []enumCase{{"none", ""}, {"conservative", "conservative"}, {"balanced", "balanced"}, {"aggressive", "aggressive"}},
-	},
-	{
-		Name:  "ConformanceMetric",
-		Type:  reflect.TypeFor[types.ConformanceMetric](),
-		Cases: []enumCase{{"none", ""}, {"fileLines", "file-lines"}, {"funcLines", "func-lines"}, {"typeMethods", "type-methods"}, {"fileSymbols", "file-symbols"}, {"depFanout", "dep-fanout"}, {"cloneTokens", "clone-tokens"}, {"exportScope", "export-scope"}, {"callSequence", "call-sequence"}, {"sharedBody", "shared-body"}, {"sharedReach", "shared-reach"}, {"callerSpread", "caller-spread"}, {"modeKnobs", "mode-knobs"}, {"aliasShare", "alias-share"}, {"nameClash", "name-clash"}, {"mainLogic", "main-logic"}, {"storePathExport", "store-path-export"}, {"fileSplit", "file-split"}},
-	},
-	{
-		Name:  "ConformancePopulation",
-		Type:  reflect.TypeFor[types.ConformancePopulation](),
-		Cases: []enumCase{{"none", ""}, {"source", "source"}, {"main", "main"}, {"test", "test"}},
-	},
-	{
-		Name:  "ContextSource",
-		Type:  reflect.TypeFor[types.ContextSource](),
-		Cases: []enumCase{{"none", ""}, {"transcript", "transcript"}},
-	},
-	{
-		Name:  "CredentialKind",
-		Type:  reflect.TypeFor[types.CredentialKind](),
-		Cases: []enumCase{{"none", ""}, {"operator", "operator"}, {"stored", "stored"}, {"share", "share"}, {"exchange", "exchange"}, {"stdio", "stdio"}, {"socketPeer", "socket-peer"}},
-	},
-	{
-		Name:  "DelegableClass",
-		Type:  reflect.TypeFor[types.DelegableClass](),
-		Cases: []enumCase{{"none", ""}, {"search", "search"}, {"read", "read"}, {"diff", "diff"}, {"run", "run"}, {"fetch", "fetch"}, {"edit", "edit"}},
-	},
-	{
-		Name:  "DiffAuthor",
-		Type:  reflect.TypeFor[types.DiffAuthor](),
-		Cases: []enumCase{{"none", ""}, {"unattributed", "unattributed"}, {"agent", "agent"}},
-	},
-	{
-		Name:  "DriftPolicy",
-		Type:  reflect.TypeFor[types.DriftPolicy](),
-		Cases: []enumCase{{"none", ""}, {"fail", "fail"}, {"warn", "warn"}, {"off", "off"}},
-	},
-	{
-		Name:  "DuplicationPlacement",
-		Type:  reflect.TypeFor[types.DuplicationPlacement](),
-		Cases: []enumCase{{"none", ""}, {"member", "member"}, {"dependency", "dependency"}, {"newPackage", "new-package"}, {"blocked", "blocked"}, {"unknown", "unknown"}},
-	},
-	{
-		Name:  "DuplicationShape",
-		Type:  reflect.TypeFor[types.DuplicationShape](),
-		Cases: []enumCase{{"none", ""}, {"parameterize", "parameterize"}, {"sharedCore", "shared-core"}, {"siblingHelper", "sibling-helper"}, {"leave", "leave"}},
-	},
-	{
-		Name:  "EdgeDirection",
-		Type:  reflect.TypeFor[types.EdgeDirection](),
-		Cases: []enumCase{{"none", ""}, {"outward", "out"}, {"inward", "in"}},
-	},
-	{
-		Name:  "EntryPoint",
-		Type:  reflect.TypeFor[types.EntryPoint](),
-		Cases: []enumCase{{"none", ""}, {"cli", "cli"}, {"hook", "hook"}, {"mcp", "mcp"}, {"rpc", "rpc"}, {"server", "server"}},
-	},
-	{
-		Name:  "Evidence",
-		Type:  reflect.TypeFor[types.Evidence](),
-		Cases: []enumCase{{"none", ""}, {"measured", "measured"}, {"declared", "declared"}, {"inferred", "inferred"}, {"unknown", "unknown"}},
-	},
-	{
-		Name:  "GoalExpect",
-		Type:  reflect.TypeFor[types.GoalExpect](),
-		Cases: []enumCase{{"none", ""}, {"passed", "passed"}, {"changed", "changed"}, {"present", "present"}, {"absent", "absent"}, {"unreferenced", "unreferenced"}, {"signature", "signature"}},
-	},
-	{
-		Name:  "GoalKind",
-		Type:  reflect.TypeFor[types.GoalKind](),
-		Cases: []enumCase{{"none", ""}, {"check", "check"}, {"paths", "paths"}, {"symbol", "symbol"}},
-	},
-	{
-		Name:  "GuardDecision",
-		Type:  reflect.TypeFor[types.GuardDecision](),
-		Cases: []enumCase{{"none", ""}, {"allow", "allow"}, {"advise", "advise"}, {"deny", "deny"}},
-	},
-	{
-		Name:  "GuardProfile",
-		Type:  reflect.TypeFor[types.GuardProfile](),
-		Cases: []enumCase{{"none", ""}, {"off", "off"}, {"light", "light"}, {"standard", "standard"}, {"strict", "strict"}},
-	},
-	{
-		Name:  "HarnessChangeOp",
-		Type:  reflect.TypeFor[types.HarnessChangeOp](),
-		Cases: []enumCase{{"none", ""}, {"add", "add"}, {"replace", "replace"}, {"retire", "retire"}, {"set", "set"}, {"write", "write"}},
-	},
-	{
-		Name:  "InflightAttention",
-		Type:  reflect.TypeFor[types.InflightAttention](),
-		Cases: []enumCase{{"unset", ""}, {"author", "author"}, {"review", "review"}, {"queue", "queue"}, {"none", "none"}},
-	},
-	{
-		Name:  "JobBaseVerdict",
-		Type:  reflect.TypeFor[types.JobBaseVerdict](),
-		Cases: []enumCase{{"none", ""}, {"matches", "match"}, {"revisionMatch", "revision-match"}, {"diverged", "diverged"}, {"unknown", "unknown"}},
-	},
-	{
-		Name:  "JobHolder",
-		Type:  reflect.TypeFor[types.JobHolder](),
-		Cases: []enumCase{{"none", ""}, {"server", "server"}, {"session", "session"}},
-	},
-	{
-		Name:  "JobState",
-		Type:  reflect.TypeFor[types.JobState](),
-		Cases: []enumCase{{"none", ""}, {"declared", "declared"}, {"running", "running"}, {"exited", "exited"}, {"pass", "pass"}, {"fail", "fail"}, {"noReturn", "no_return"}},
-	},
-	{
-		Name:  "JobWriteProof",
-		Type:  reflect.TypeFor[types.JobWriteProof](),
-		Cases: []enumCase{{"none", ""}, {"alone", "alone"}, {"disjoint", "disjoint"}, {"overlapping", "overlapping"}},
-	},
-	{
-		Name:  "KnowledgeDefinitionStatus",
-		Type:  reflect.TypeFor[types.KnowledgeDefinitionStatus](),
-		Cases: []enumCase{{"none", ""}, {"verified", "verified"}, {"changed", "changed"}, {"unverified", "unverified"}, {"unreadable", "unreadable"}},
-	},
-	{
-		Name:  "KnowledgeUnknownReason",
-		Type:  reflect.TypeFor[types.KnowledgeUnknownReason](),
-		Cases: []enumCase{{"none", ""}, {"symbolIndexMissing", "symbol-index-missing"}, {"symbolsNotLoaded", "symbols-not-loaded"}, {"coverageUnknown", "coverage-unknown"}, {"indexStale", "index-stale"}},
-	},
-	{
-		Name:  "KnowledgeVerdict",
-		Type:  reflect.TypeFor[types.KnowledgeVerdict](),
-		Cases: []enumCase{{"none", ""}, {"found", "found"}, {"absent", "absent"}, {"unknown", "unknown"}},
-	},
-	{
-		Name:  "LeaseSource",
-		Type:  reflect.TypeFor[types.LeaseSource](),
-		Cases: []enumCase{{"none", ""}, {"flag", "flag"}, {"agent", "agent"}, {"marker", "marker"}, {"contested", "contested"}, {"env", "env"}},
-	},
-	{
-		Name:  "ListenerKind",
-		Type:  reflect.TypeFor[types.ListenerKind](),
-		Cases: []enumCase{{"none", ""}, {"socket", "socket"}, {"http", "http"}},
-	},
-	{
-		Name:  "MarkerFamily",
-		Type:  reflect.TypeFor[types.MarkerFamily](),
-		Cases: []enumCase{{"none", ""}, {"diagram", "diagram"}, {"calls", "calls"}, {"skills", "skills"}, {"observed", "observed"}, {"harness", "harness"}},
-	},
-	{
-		Name:  "MarkerVerb",
-		Type:  reflect.TypeFor[types.MarkerVerb](),
-		Cases: []enumCase{{"none", ""}, {"point", "point"}, {"block", "block"}},
-	},
-	{
-		Name:  "Orchestration",
-		Type:  reflect.TypeFor[types.Orchestration](),
-		Cases: []enumCase{{"none", ""}, {"inferred", "inferred"}, {"proven", "proven"}},
-	},
-	{
-		Name:  "PrecedentFamily",
-		Type:  reflect.TypeFor[types.PrecedentFamily](),
-		Cases: []enumCase{{"none", ""}, {"depDirection", "dep-direction"}, {"depFanout", "dep-fanout"}, {"errSentinelName", "err-sentinel-name"}, {"testPackageName", "test-package-name"}, {"paramNameByType", "param-name-by-type"}, {"paramOrder", "param-order"}, {"ctxFirst", "ctx-first"}, {"errorLast", "error-last"}},
-	},
-	{
-		Name:  "ReadinessName",
-		Type:  reflect.TypeFor[types.ReadinessName](),
-		Cases: []enumCase{{"none", ""}, {"workspaces", "workspaces"}, {"symbolIndex", "symbol_index"}, {"services", "services"}, {"knowledgeGraph", "knowledge_graph"}},
-	},
-	{
-		Name:  "ReadinessStatus",
-		Type:  reflect.TypeFor[types.ReadinessStatus](),
-		Cases: []enumCase{{"none", ""}, {"ok", "ok"}, {"degraded", "degraded"}, {"down", "down"}, {"idle", "idle"}, {"disabled", "disabled"}},
-	},
-	{
-		Name:  "RegionSide",
-		Type:  reflect.TypeFor[types.RegionSide](),
-		Cases: []enumCase{{"none", ""}, {"old", "old"}, {"new", "new"}},
-	},
-	{
-		Name:  "RelationID",
-		Type:  reflect.TypeFor[types.RelationID](),
-		Cases: []enumCase{{"none", ""}, {"dependsOn", "depends_on"}, {"contains", "contains"}, {"uses", "uses"}, {"references", "references"}, {"documents", "documents"}, {"calls", "calls"}, {"implements", "implements"}, {"imports", "imports"}, {"rationaleFor", "rationale_for"}, {"emits", "emits"}, {"owns", "owns"}, {"defines", "defines"}, {"produces", "produces"}, {"consumes", "consumes"}, {"authored", "authored"}, {"annotates", "annotates"}, {"depicts", "depicts"}, {"coChanges", "co_changes"}, {"splits", "splits"}},
-	},
-	{
-		Name:  "RetryChange",
-		Type:  reflect.TypeFor[types.RetryChange](),
-		Cases: []enumCase{{"none", ""}, {"config", "config"}, {"widening", "widening"}, {"person", "person"}, {"upgrade", "upgrade"}},
-	},
-	{
-		Name:  "Tier",
-		Type:  reflect.TypeFor[types.Tier](),
-		Cases: []enumCase{{"none", ""}, {"trivial", "trivial"}, {"mechanical", "mechanical"}, {"scoped", "scoped"}, {"full", "full"}},
-	},
-	{
-		Name:  "SandboxMode",
-		Type:  reflect.TypeFor[types.SandboxMode](),
-		Cases: []enumCase{{"none", ""}, {"off", "off"}, {"bestEffort", "best-effort"}, {"required", "required"}},
-	},
-	{
-		Name:  "Scope",
-		Type:  reflect.TypeFor[types.Scope](),
-		Cases: []enumCase{{"none", ""}, {"tokens", "tokens"}, {"mcp", "mcp"}, {"console", "console"}},
-	},
-	{
-		Name:  "SlotSource",
-		Type:  reflect.TypeFor[types.SlotSource](),
-		Cases: []enumCase{{"none", ""}, {"unmeasured", "unmeasured"}, {"declared", "declared"}, {"measured", "measured"}, {"memory", "memory"}},
-	},
-	{
-		Name:  "SpawnKind",
-		Type:  reflect.TypeFor[types.SpawnKind](),
-		Cases: []enumCase{{"none", ""}, {"spawn", "spawn"}, {"continuation", "continue"}},
-	},
-	{
-		Name:  "SuggestionStatus",
-		Type:  reflect.TypeFor[types.SuggestionStatus](),
-		Cases: []enumCase{{"none", ""}, {"accepted", "accepted"}, {"declined", "declined"}},
-	},
-	{
-		Name:  "SymbolOccurrenceStatus",
-		Type:  reflect.TypeFor[types.SymbolOccurrenceStatus](),
-		Cases: []enumCase{{"none", ""}, {"verified", "verified"}, {"mismatch", "mismatch"}, {"unreadable", "unreadable"}},
-	},
-	{
-		Name:  "ThreadSource",
-		Type:  reflect.TypeFor[types.ThreadSource](),
-		Cases: []enumCase{{"none", ""}, {"reported", "reported"}, {"inferred", "inferred"}},
-	},
-	{
-		Name:  "TrailSection",
-		Type:  reflect.TypeFor[types.TrailSection](),
-		Cases: []enumCase{{"none", ""}, {"refused", "refused"}, {"advised", "advised"}, {"unguarded", "unguarded"}, {"nextNotTaken", "next-not-taken"}},
-	},
-	{
-		Name:  "TrailVerdict",
-		Type:  reflect.TypeFor[types.TrailVerdict](),
-		Cases: []enumCase{{"none", ""}, {"shouldDeny", "should-deny"}, {"shouldAdvise", "should-advise"}, {"wrongDeny", "wrong-deny"}, {"fine", "fine"}},
-	},
-	{
-		Name:  "VCSCapability",
-		Type:  reflect.TypeFor[types.VCSCapability](),
-		Cases: []enumCase{{"none", ""}, {"bisector", "Bisector"}, {"mergeDriverInstaller", "MergeDriverInstaller"}, {"refreshHookInstaller", "RefreshHookInstaller"}, {"driftHookInstaller", "DriftHookInstaller"}, {"remoteReporter", "RemoteReporter"}, {"remoteConfigReporter", "RemoteConfigReporter"}, {"defaultRefReporter", "DefaultRefReporter"}, {"checkoutStateReporter", "CheckoutStateReporter"}, {"operationReporter", "OperationReporter"}, {"pushStatusReporter", "PushStatusReporter"}, {"revTimeReporter", "RevTimeReporter"}, {"trackedFileReporter", "TrackedFileReporter"}, {"ignoredFileReporter", "IgnoredFileReporter"}, {"churnReporter", "ChurnReporter"}, {"branchChangeReporter", "BranchChangeReporter"}, {"rangeReporter", "RangeReporter"}, {"regionReporter", "RegionReporter"}, {"ancestryReporter", "AncestryReporter"}, {"conflictResolver", "ConflictResolver"}, {"revisionFileReader", "RevisionFileReader"}, {"revisionExporter", "RevisionExporter"}, {"mergeStarter", "MergeStarter"}, {"commitWriter", "CommitWriter"}, {"treeReporter", "TreeReporter"}, {"treeMerger", "TreeMerger"}, {"generatedPathReporter", "GeneratedPathReporter"}, {"checkoutProvisioner", "CheckoutProvisioner"}, {"checkoutLister", "CheckoutLister"}, {"checkoutReporter", "CheckoutReporter"}, {"revisionFetcher", "RevisionFetcher"}, {"pusher", "Pusher"}, {"bundler", "Bundler"}, {"diffStater", "DiffStater"}},
-	},
-	{
-		Name:  "WorkspaceState",
-		Type:  reflect.TypeFor[types.WorkspaceState](),
-		Cases: []enumCase{{"none", ""}, {"loading", "loading"}, {"active", "active"}, {"failed", "failed"}},
-	},
+// boundaryEnumTypes are the Go types .buzzgen.yaml lists as
+// enums. buzzgen derives their cases; this only resolves each type.
+var boundaryEnumTypes = []reflect.Type{
+	reflect.TypeFor[types.KnowledgeResolution](),
+	reflect.TypeFor[types.DiagnosticOrigin](),
+	reflect.TypeFor[types.SignAlgorithm](),
+	reflect.TypeFor[types.TermStyle](),
+	reflect.TypeFor[types.TimeLayout](),
+	reflect.TypeFor[types.WalkStep](),
+	reflect.TypeFor[types.LogLevel](),
+	reflect.TypeFor[types.PlatformStyle](),
+	reflect.TypeFor[types.CheckStatus](),
+	reflect.TypeFor[types.EventOutcome](),
+	reflect.TypeFor[types.EventSeverity](),
+	reflect.TypeFor[types.ServiceState](),
+	reflect.TypeFor[types.PatternType](),
+	reflect.TypeFor[types.SymbolIndexFreshness](),
+	reflect.TypeFor[types.DiffUncoveredReason](),
+	reflect.TypeFor[types.DiffReadState](),
+	reflect.TypeFor[types.DiffGroupKind](),
+	reflect.TypeFor[types.DiffWhyRelation](),
+	reflect.TypeFor[types.TargetRunState](),
+	reflect.TypeFor[types.VCSSource](),
+	reflect.TypeFor[types.ConflictKind](),
+	reflect.TypeFor[spells.PatchOpKind](),
+	reflect.TypeFor[spells.VersionComponent](),
+	reflect.TypeFor[spells.SymbolFormat](),
+	reflect.TypeFor[spells.CoverageFormat](),
+	reflect.TypeFor[spells.External](),
+	reflect.TypeFor[spells.SandboxAccess](),
+	reflect.TypeFor[types.SkillVariant](),
+	reflect.TypeFor[types.JobKind](),
+	reflect.TypeFor[types.SkillForm](),
+	reflect.TypeFor[spells.DiscoveryRole](),
+	reflect.TypeFor[types.ToolCapability](),
+	reflect.TypeFor[types.HookPoint](),
+	reflect.TypeFor[types.BindingStatus](),
+	reflect.TypeFor[types.McpTransport](),
+	reflect.TypeFor[types.ModelTierSource](),
+	reflect.TypeFor[types.GroupingShape](),
+	reflect.TypeFor[types.BriefFormat](),
+	reflect.TypeFor[types.BriefRefKind](),
+	reflect.TypeFor[types.ClaimKind](),
+	reflect.TypeFor[types.ImageOS](),
+	reflect.TypeFor[types.ImageArchitecture](),
+	reflect.TypeFor[types.ImageVariant](),
+	reflect.TypeFor[types.ImageMediaType](),
+	reflect.TypeFor[types.ImageModePolicy](),
+	reflect.TypeFor[types.ImageSymlinkPolicy](),
+	reflect.TypeFor[types.ImageEntryKind](),
+	reflect.TypeFor[types.GroupingVerdict](),
+	reflect.TypeFor[types.AgentBilling](),
+	reflect.TypeFor[types.AgentRole](),
+	reflect.TypeFor[types.AgentThread](),
+	reflect.TypeFor[types.BrokerPolicy](),
+	reflect.TypeFor[types.ChangeStatus](),
+	reflect.TypeFor[types.CommentAnchorRung](),
+	reflect.TypeFor[types.ConcurrencyProfile](),
+	reflect.TypeFor[types.ConformanceMetric](),
+	reflect.TypeFor[types.ConformancePopulation](),
+	reflect.TypeFor[types.ContextSource](),
+	reflect.TypeFor[types.CredentialKind](),
+	reflect.TypeFor[types.DelegableClass](),
+	reflect.TypeFor[types.DiffAuthor](),
+	reflect.TypeFor[types.DriftPolicy](),
+	reflect.TypeFor[types.DuplicationPlacement](),
+	reflect.TypeFor[types.DuplicationShape](),
+	reflect.TypeFor[types.EdgeDirection](),
+	reflect.TypeFor[types.EntryPoint](),
+	reflect.TypeFor[types.Evidence](),
+	reflect.TypeFor[types.GoalExpect](),
+	reflect.TypeFor[types.GoalKind](),
+	reflect.TypeFor[types.GuardDecision](),
+	reflect.TypeFor[types.GuardProfile](),
+	reflect.TypeFor[types.HarnessChangeOp](),
+	reflect.TypeFor[types.InflightAttention](),
+	reflect.TypeFor[types.JobBaseVerdict](),
+	reflect.TypeFor[types.JobHolder](),
+	reflect.TypeFor[types.JobState](),
+	reflect.TypeFor[types.JobWriteProof](),
+	reflect.TypeFor[types.KnowledgeDefinitionStatus](),
+	reflect.TypeFor[types.KnowledgeUnknownReason](),
+	reflect.TypeFor[types.KnowledgeVerdict](),
+	reflect.TypeFor[types.LeaseSource](),
+	reflect.TypeFor[types.ListenerKind](),
+	reflect.TypeFor[types.MarkerFamily](),
+	reflect.TypeFor[types.MarkerVerb](),
+	reflect.TypeFor[types.Orchestration](),
+	reflect.TypeFor[types.PrecedentFamily](),
+	reflect.TypeFor[types.ReadinessName](),
+	reflect.TypeFor[types.ReadinessStatus](),
+	reflect.TypeFor[types.RegionSide](),
+	reflect.TypeFor[types.RelationID](),
+	reflect.TypeFor[types.RetryChange](),
+	reflect.TypeFor[types.Tier](),
+	reflect.TypeFor[types.SandboxMode](),
+	reflect.TypeFor[types.Scope](),
+	reflect.TypeFor[types.SlotSource](),
+	reflect.TypeFor[types.SpawnKind](),
+	reflect.TypeFor[types.SuggestionStatus](),
+	reflect.TypeFor[types.SymbolOccurrenceStatus](),
+	reflect.TypeFor[types.ThreadSource](),
+	reflect.TypeFor[types.TrailSection](),
+	reflect.TypeFor[types.TrailVerdict](),
+	reflect.TypeFor[types.VCSCapability](),
+	reflect.TypeFor[types.WorkspaceState](),
 }
 
 // openStringTypes are the named string types that cross as a bare str on purpose, each
@@ -1159,7 +708,7 @@ type enumCase struct {
 
 // buzzEnum returns the enum a Go type mirrors as, if any.
 func buzzEnum(rt reflect.Type) (boundaryEnum, bool) {
-	for _, e := range boundaryEnums {
+	for _, e := range boundaryEnumList() {
 		if e.Type == rt {
 			return e, true
 		}
@@ -1248,7 +797,7 @@ func boundaryTypeIn(module, name string) (boundaryType, bool) {
 // boundaryTypeNamed, for the generator that has to declare an enum a signature
 // references.
 func boundaryEnumNamed(name string) (boundaryEnum, bool) {
-	for _, e := range boundaryEnums {
+	for _, e := range boundaryEnumList() {
 		if e.Name == name {
 			return e, true
 		}

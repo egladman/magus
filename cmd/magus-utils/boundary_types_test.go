@@ -9,11 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A closed string type declares its cases by hand in its own package, and the Buzz
-// mirror names the same values here. This holds the two to one list: a case added to
-// either side alone fails.
+// A closed string type's Values set is written by hand, and buzzgen
+// derives the mirror's cases from its constants. A constant the set
+// leaves out fails here.
 func TestBoundaryEnumsMatchTheirSets(t *testing.T) {
-	for _, e := range boundaryEnums {
+	for _, e := range boundaryEnumList() {
 		values, ok := reflect.Zero(e.Type).Interface().(interface{ Values() []string })
 		if !ok {
 			continue
@@ -25,7 +25,7 @@ func TestBoundaryEnumsMatchTheirSets(t *testing.T) {
 			}
 		}
 		require.NotEmpty(t, mirrored, e.Name)
-		assert.Equal(t, values.Values(), mirrored, "%s: boundaryEnums and the type's declared set differ", e.Name)
+		assert.Equal(t, values.Values(), mirrored, "%s: the Values set and the type's constants differ", e.Name)
 	}
 }
 

@@ -1,0 +1,112 @@
+# The Go types and host modules that cross into Buzz. libs/gopherbuzz/buzzgen
+# reads it; ADR 0035 records the design. Settings layer: the top level,
+# then a package's config, then a type's config.
+version: v1alpha1
+packages:
+  github.com/egladman/magus/spells:
+    types:
+      CoverageFormat: {config: {cases: {"go-coverprofile": goProfile}}}
+      DiscoveryRole: {}
+      External: {config: {cases: {"reads-external": reads, "mutates-external": mutates}}}
+      PatchOpKind: {}
+      SandboxAccess: {}
+      SymbolFormat: {}
+      VersionComponent: {}
+  github.com/egladman/magus/types:
+    types:
+      AgentBilling: {}
+      AgentRole: {}
+      AgentThread: {}
+      BindingStatus: {}
+      BriefFormat: {}
+      BriefRefKind: {config: {zeroCase: ""}}
+      BrokerPolicy: {}
+      ChangeStatus: {}
+      CheckStatus: {}
+      ClaimKind: {}
+      CommentAnchorRung: {}
+      ConcurrencyProfile: {}
+      ConflictKind: {}
+      ConformanceMetric: {}
+      ConformancePopulation: {}
+      ContextSource: {}
+      CredentialKind: {}
+      DelegableClass: {}
+      DiagnosticOrigin: {config: {zeroCase: unknown}}
+      DiffAuthor: {}
+      DiffGroupKind: {}
+      DiffReadState: {}
+      DiffUncoveredReason: {}
+      DiffWhyRelation: {}
+      DriftPolicy: {}
+      DuplicationPlacement: {}
+      DuplicationShape: {}
+      EdgeDirection: {config: {cases: {"out": outward, "in": inward}}}
+      EntryPoint: {}
+      EventOutcome: {}
+      EventSeverity: {}
+      Evidence: {}
+      GoalExpect: {}
+      GoalKind: {}
+      GroupingShape: {}
+      GroupingVerdict: {}
+      GuardDecision: {}
+      GuardProfile: {}
+      HarnessChangeOp: {}
+      HookPoint: {}
+      ImageArchitecture: {config: {name: Architecture}}
+      ImageEntryKind: {config: {name: EntryKind}}
+      ImageMediaType: {config: {name: MediaType, module: image, zeroCase: ""}}
+      ImageModePolicy: {config: {name: ModePolicy}}
+      ImageOS: {config: {name: OS}}
+      ImageSymlinkPolicy: {config: {name: SymlinkPolicy}}
+      ImageVariant: {config: {name: Variant}}
+      InflightAttention: {config: {zeroCase: unset}}
+      JobBaseVerdict: {config: {cases: {"match": matches}}}
+      JobHolder: {}
+      JobKind: {config: {zeroCase: ""}}
+      JobState: {}
+      JobWriteProof: {}
+      KnowledgeDefinitionStatus: {}
+      KnowledgeResolution: {}
+      KnowledgeUnknownReason: {}
+      KnowledgeVerdict: {}
+      LeaseSource: {}
+      ListenerKind: {}
+      LogLevel: {config: {zeroCase: ""}}
+      MarkerFamily: {}
+      MarkerVerb: {}
+      McpTransport: {}
+      ModelTierSource: {config: {zeroCase: ""}}
+      Orchestration: {}
+      PatternType: {}
+      PlatformStyle: {}
+      PrecedentFamily: {}
+      ReadinessName: {}
+      ReadinessStatus: {}
+      RegionSide: {}
+      RelationID: {}
+      RetryChange: {}
+      SandboxMode: {}
+      Scope: {}
+      ServiceState: {}
+      SignAlgorithm: {config: {zeroCase: "", cases: {"ed25519": Ed25519}}}
+      SkillForm: {}
+      SkillVariant: {config: {zeroCase: ""}}
+      SlotSource: {}
+      SpawnKind: {config: {cases: {"continue": continuation}}}
+      SuggestionStatus: {}
+      SymbolIndexFreshness: {}
+      SymbolOccurrenceStatus: {}
+      TargetRunState: {}
+      TermStyle: {}
+      ThreadSource: {}
+      Tier: {}
+      TimeLayout: {config: {zeroCase: ""}}
+      ToolCapability: {}
+      TrailSection: {}
+      TrailVerdict: {}
+      VCSCapability: {}
+      VCSSource: {}
+      WalkStep: {config: {module: fs, zeroCase: ""}}
+      WorkspaceState: {}
