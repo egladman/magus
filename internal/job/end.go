@@ -356,15 +356,13 @@ func (s *Store) endCheckouts(ctx context.Context, written WrittenPaths, ended []
 	if err != nil {
 		return nil, err
 	}
+	s.releaseEnded(rows)
 	here, _ := filepath.Abs(s.root)
 	var changed []types.Job
 	for _, row := range rows {
 		if !row.State.Terminal() || (onlyNamed && !slices.Contains(ended, row.ID)) {
 			continue
 		}
-		// A row taken from a plain shell bound this checkout. Only the guard
-		// releases a binding, and only when the holder ends the row itself.
-		dropRecord(s.place().MarkerPath(), Binding{Job: row.ID})
 		wt := row.Worktree
 		if !wt.Standing() {
 			continue
@@ -389,6 +387,33 @@ func (s *Store) endCheckouts(ctx context.Context, written WrittenPaths, ended []
 		changed = append(changed, stored)
 	}
 	return changed, nil
+}
+
+// releaseEnded drops every binding that still names an ended row. The guard
+// releases one only when the holder ends its own row, so a row ended by
+// anyone else kept refusing its caller's forks.
+func (s *Store) releaseEnded(rows []types.Job) {
+	ended := map[string]bool{}
+	for _, row := range rows {
+		if row.State.Terminal() {
+			ended[row.ID] = true
+		}
+	}
+	paths := []string{s.place().MarkerPath()}
+	if s.err == nil && s.path != "" {
+		dir := filepath.Join(filepath.Dir(s.path), agentRecordDir)
+		entries, _ := os.ReadDir(dir)
+		for _, e := range entries {
+			if !e.IsDir() && !strings.HasSuffix(e.Name(), ".sweep") {
+				paths = append(paths, filepath.Join(dir, e.Name()))
+			}
+		}
+	}
+	for _, path := range paths {
+		if id := readRecord(path); id != "" && ended[id] {
+			dropRecord(path, Binding{Job: id})
+		}
+	}
 }
 
 // endCheckout removes wt, the checkout ended job row worked in, and returns "", or returns

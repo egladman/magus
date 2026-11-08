@@ -157,7 +157,7 @@ func TestEndCheckoutsReleasesTheCheckoutBindingOfAnEndedRow(t *testing.T) {
 	_, err := s.EndNamedCheckouts(t.Context(), nil, "w1")
 	require.NoError(t, err)
 	assert.Empty(t, s.Bound(Caller{}), "the checkout's binding goes with the row")
-	assert.Equal(t, "w1", s.Bound(session), "a session's own record is the guard's to release")
+	assert.Empty(t, s.Bound(session), "so does a session's binding")
 }
 
 func TestExitWithAResultRefusesADescendantStillWorking(t *testing.T) {
