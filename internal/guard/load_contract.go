@@ -200,10 +200,17 @@ func checkoutSkew(ctx context.Context, deps Dependencies, at location) (binarySk
 	}
 	// Three dots: only what HEAD carries that the build lacks.
 	// A build descending from HEAD lacks nothing, and its load says the rest.
-	changed, err := gitNames(ctx, root, "diff", "--name-only", deps.BinaryCommit+"...HEAD")
+	sinceBase, err := gitNames(ctx, root, "diff", "--name-only", deps.BinaryCommit+"...HEAD")
 	if err != nil {
 		return binarySkew{}, false
 	}
+	// Two dots: a path HEAD changed whose content the build already has
+	// is no skew. A squash of the build's own branch is all such paths.
+	differs, err := gitNames(ctx, root, "diff", "--name-only", deps.BinaryCommit, "HEAD")
+	if err != nil {
+		return binarySkew{}, false
+	}
+	changed := slices.DeleteFunc(sinceBase, func(p string) bool { return !slices.Contains(differs, p) })
 	skew := binarySkew{Head: head, Built: deps.BinaryCommit, Dirty: deps.BinaryDirty, Contract: contractPaths(changed)}
 	if at.cacheDir != "" {
 		_ = store.Update(ctx, func([]binarySkew) []binarySkew { return []binarySkew{skew} })

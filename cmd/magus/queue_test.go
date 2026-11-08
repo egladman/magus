@@ -816,7 +816,7 @@ func ciShardBoxes(t *testing.T) ([][]string, []workflowStep) {
 	t.Helper()
 	var argvs [][]string
 	var steps []workflowStep
-	for _, s := range workflowJob(t, ".github/workflows/ci.yaml", "ci") {
+	for _, s := range workflowJob(t, ".github/workflows/ci.yaml", "stage-1") {
 		if s.Uses == "./.github/actions/magus" && strings.HasPrefix(s.With["command"], "queue gate ") {
 			command := regexp.MustCompile(`\$\{\{[^}]*\}\}`).ReplaceAllString(s.With["command"], "")
 			argvs = append(argvs, strings.Fields(harnessCall.ReplaceAllLiteralString(command, " -- magus ")))
@@ -885,7 +885,7 @@ func TestCIShardsGateInTheBoxTheQueueGatesACandidateIn(t *testing.T) {
 		require.FailNow(t, "no checkout", "%s %s", path, job)
 		return nil
 	}
-	assert.Equal(t, checkout(".github/workflows/queue.yaml", "validate"), checkout(".github/workflows/ci.yaml", "ci"),
+	assert.Equal(t, checkout(".github/workflows/queue.yaml", "validate"), checkout(".github/workflows/ci.yaml", "stage-1"),
 		"the shards check out as validate does, the ref aside")
 
 	cache := flags[slices.Index(flags, "--cache")+1]
@@ -957,7 +957,7 @@ func TestCIShardsCarryTheSpellsCachesTheGateBuildsWith(t *testing.T) {
 	// Every other step of the job (third-party actions, the unboxed describe and notes
 	// verify steps, and the restore box above) must never see the raw key: only the gate
 	// and save steps that the --env allowlists above hand it into their own sandbox.
-	for _, s := range workflowJob(t, ".github/workflows/ci.yaml", "ci") {
+	for _, s := range workflowJob(t, ".github/workflows/ci.yaml", "stage-1") {
 		_, carries := s.Env["MAGUS_CACHE_SIGNING_KEY"]
 		assert.Equal(t, s.Name == gateStep.Name || s.Name == save.Name, carries, s.Name)
 	}

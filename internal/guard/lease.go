@@ -832,17 +832,9 @@ func heldDenial(v runVerdict, me types.Job, root string) denial {
 	}
 }
 
-// rewriteDenial words the refusal of a run the rw charm would have write past the row's
-// write paths.
-func rewriteDenial(v runVerdict, me types.Job, defaults []string) denial {
-	r, next := v.run, v.run.readOnly(defaults)
-	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` rewrites files outside lease %s's write paths; run `%s`.", r.target, me.ID, next),
-		Why: fmt.Sprintf("Under the rw charm `%s` writes `%s`, which lease %s's write paths (%s) do not cover.\n"+
-			"`%s` reports the same drift without writing it. The checkout's integrator, "+integratorIs+", rewrites the rest after it integrates the units; name the files in your result's unresolved risks if the unit needs them.",
-			r.target, strings.Join(v.outside, "`, `"), me.ID, strings.Join(me.WritePaths, ", "), next),
-	}
-}
+// writePathsShownMax bounds the write paths a refusal lists. A wide row's
+// whole list buried the paths the refusal was about.
+const writePathsShownMax = 5
 
 // opRewriteDenial words the refusal of a spell op run on its own under the rw charm. It
 // names a magusfile target composing the op, whose declarations the rule judges, or the
@@ -1908,7 +1900,9 @@ func (r rebind) refuses() bool { return r.problem != "" }
 // `magus agent harness install` refuses itself too, but a CLI process knows only the
 // checkout's binding and its own BAGGAGE claim. The guard also knows the calling subagent
 // and the host session, so a worker attributed by either is refused here.
-func denyLeaseScopedHarness(_ context.Context, _ Dependencies, actingLease, command string) denial {
+//
+// The checkout's integrator installs there: it gates with those skills.
+func denyLeaseScopedHarness(ctx context.Context, deps Dependencies, actingLease, command string) denial {
 	if actingLease == "" {
 		return denial{}
 	}
@@ -1922,6 +1916,9 @@ func denyLeaseScopedHarness(_ context.Context, _ Dependencies, actingLease, comm
 		}
 		words := magusSubcommandWords(c.Args)
 		if hint.AgentHarnessInstall.MatchedBy(words) {
+			if me, ok := actingLiveLease(ctx, deps, actingLease); ok && actingIntegrator(ctx, deps, me, command) {
+				continue
+			}
 			return denial{
 				Say: fmt.Sprintf("magus workspace: `%s` would rewrite the skills that steer lease %s's calls; %s",
 					elideCommand(command), actingLease, leaseActorClause("rewrite a harness's skills")),
@@ -2317,15 +2314,28 @@ const integratorIs = "the subagent spawned `<parent>/" + integrateRole + " <job>
 // The role, not the row's check: a job's check is never the gate, so the check cannot say
 // who integrates. One build at a time per checkout is the project lock's, which refuses a
 // second run of a project the checkout is already running and names its holder.
+//
+// An integration row needs no such title: a continue never rewrites one.
+// A resumed integrator still carries its first job's title.
 func integrates(row types.Job, spawned, workspace string) bool {
+	if spawned == "" || !row.State.Live() || row.CheckoutRoot == "" || workspace == "" || !samePath(row.CheckoutRoot, workspace) {
+		return false
+	}
+	if row.Integrating() {
+		return true
+	}
 	head, _, ok := strings.Cut(spawned, " ")
-	if !ok || path.Base(head) != integrateRole || !row.State.Live() || row.CheckoutRoot == "" || workspace == "" {
+	if !ok || path.Base(head) != integrateRole {
 		return false
 	}
-	if titled, ok := spawnTitleRow([]types.Job{row}, spawned); !ok || titled.ID != row.ID {
-		return false
-	}
-	return samePath(row.CheckoutRoot, workspace)
+	titled, ok := spawnTitleRow([]types.Job{row}, spawned)
+	return ok && titled.ID == row.ID
+}
+
+// integratesOwnCheckout is integrates for the checkout row was taken in.
+// A VCS call is placed by its own site, never by a magus call.
+func integratesOwnCheckout(deps Dependencies, row types.Job) bool {
+	return integrates(row, spawnedAs(deps.facts, deps.caller.Agent), row.CheckoutRoot)
 }
 
 // holdsCheckout reports whether row is a live row taken with `magus job fork --checkout` in
@@ -2448,44 +2458,6 @@ func actingIntegrator(ctx context.Context, deps Dependencies, me types.Job, comm
 
 const denyRuleLeaseCheckout denyRuleName = "lease-checkout"
 
-// denyLeaseCheckout refuses the holder of a row with a standing checkout a magus call that
-// runs outside it. The call is placed by its line (a cd, -C or --root), and one whose
-// directory cannot be read is placed where the host started. Reports pass, and so does
-// everything for a caller with no lease, a row with no checkout, and the root.
-func denyLeaseCheckout(ctx context.Context, deps Dependencies, actingLease, command string) denial {
-	if actingLease == "" {
-		return denial{}
-	}
-	runs := func(c hint.Invocation) bool { return isMagusInvocation(c) && !reportsOnly(c.Args) }
-	calls, ok := placeMagusCalls(ctx, deps, command, runs)
-	if !ok || len(calls) == 0 {
-		return denial{}
-	}
-	me, ok := actingLiveLease(ctx, deps, actingLease)
-	if !ok || me.Worktree == nil || me.Worktree.Root == "" || workerRole(me, deps.caller) == "" {
-		return denial{}
-	}
-	// Nobody took a row bound to a checkout its fork adopted, so its worker's exec binds it
-	// where the worker runs (see job.Store.Exec): no tree is its own yet.
-	if !me.Worktree.Made && me.CheckoutRoot == "" {
-		return denial{}
-	}
-	root := me.Worktree.Root
-	envelope := hookLocation(ctx, deps).workspace
-	for _, c := range calls {
-		if there := cmp.Or(c.root, envelope); there == "" || samePath(there, root) || scratchWorkspace(there, root) {
-			continue
-		}
-		remedy := strings.Join(slices.Concat([]string{"cd", root, "&&", "./magus"}, withoutRelocation(c.inv.Args)), " ")
-		return denial{
-			Say: fmt.Sprintf("magus workspace: `%s` runs outside lease %s's checkout %s; run it there: `%s`.", elideCommand(command), me.ID, root, remedy),
-			Why: "A host shell can start a subagent's call in its parent's directory, and a cd does not persist between calls, so a worker's magus run lands in a tree its row does not own and is graded against that tree. " +
-				"Naming the checkout on the line places the call there, and that checkout's binary judges it with the sources it was linked from.",
-		}
-	}
-	return denial{}
-}
-
 // reportsOnly reports magus args that run nothing, such as a describe or help.
 func reportsOnly(args []string) bool {
 	if kept := withoutRelocation(args); len(kept) > 0 && kept[0] == "describe" {
@@ -2587,13 +2559,15 @@ func denyLeaseLineVCS(ctx context.Context, deps Dependencies, actingLease, comma
 	if !ok {
 		return ""
 	}
-	placed := workerLands
-	if refMoveRoot(me) != "" {
-		placed = func(c hint.Invocation) bool { return workerLands(c) || workerVCSMovesRefs(c) && workerVCSOp(c) == "" }
-	}
 	role := workerRole(me, deps.caller)
 	if role == "" {
 		return ""
+	}
+	integrator := integratesOwnCheckout(deps, me)
+	lands := func(c hint.Invocation) bool { return workerLands(c) || integrator && integratorLands(c) }
+	placed := lands
+	if refMoveRoot(me) != "" {
+		placed = func(c hint.Invocation) bool { return lands(c) || workerVCSMovesRefs(c) && workerVCSOp(c) == "" }
 	}
 	// Rendered words drop a loop's variable; the located call has it bound.
 	placedByWords := func(c hint.Invocation) bool { return movesNamedPaths(c) || reattachesOwnBranch(c, me) }
@@ -2602,7 +2576,7 @@ func denyLeaseLineVCS(ctx context.Context, deps Dependencies, actingLease, comma
 	creates := slices.ContainsFunc(cmds, isInit)
 	if !creates {
 		for _, c := range cmds {
-			if op := workerVCSOp(c); op != "" && !workerLands(c) && !integrationMerge(c, me) && !placedByWords(c) {
+			if op := workerVCSOp(c); op != "" && !lands(c) && !integrationMerge(c, me) && !placedByWords(c) {
 				cwd, _ := deps.workingDir()
 				if isWorktreeRemove(c) && removesOwnCheckout(command, cwd, me) {
 					continue
@@ -2656,7 +2630,7 @@ func denyLeaseLineVCS(ctx context.Context, deps Dependencies, actingLease, comma
 		if _, picks := pickOperands(c.inv); picks || recordsCommit(c.inv) {
 			site.regenerated = rowRegenerates(ctx, deps, me)
 		}
-		r := workerVCSRefusal(ctx, deps.VCS, me, c.inv, site, unlocated)
+		r := workerVCSRefusal(ctx, deps.VCS, me, c.inv, site, unlocated, integrator)
 		if r.refused() {
 			return workerVCSDenial(fmt.Sprintf("`%s`", command), r, me, role)
 		}
@@ -2704,7 +2678,7 @@ func vcsCommandRefusal(ctx context.Context, row types.Job, backend string, args 
 	if unlocated == "" && !relocated && integrationScratchCall(ctx, row, inv, site) {
 		return nil
 	}
-	r := workerVCSRefusal(ctx, types.VCSOptions{}, row, inv, site, unlocated)
+	r := workerVCSRefusal(ctx, types.VCSOptions{}, row, inv, site, unlocated, false)
 	if !r.refused() {
 		return nil
 	}
@@ -2866,7 +2840,7 @@ func workerVCSDenial(what string, r vcsRefusal, row types.Job, role string) stri
 // worker may land and where.
 func landDenial(what, op string, row types.Job, role, lead, why string) string {
 	checkout := cmp.Or(row.CheckoutRoot, "the checkout its lease was taken in")
-	return fmt.Sprintf("%s\n%s runs `%s`, and lease %s is %s. %s A worker may commit, with any backend, cherry-pick, apply a patch or merge its base, on its own branch in %s; every other version-control mutation changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. %s",
+	return fmt.Sprintf("%s\n%s runs `%s`, and lease %s is %s. %s A worker may commit, with any backend, cherry-pick, revert, apply a patch or merge its base, on its own branch in %s; every other version-control mutation changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. %s",
 		lead, what, op, row.ID, role, why, checkout, leaseActorClause("land it"))
 }
 
@@ -2923,7 +2897,8 @@ type vcsSite struct {
 // vcs\cmd so the two cannot disagree: whether a worker lease may run inv at site.
 // unlocated is why site could not be read, which refuses a commit, since a commit that
 // cannot be placed cannot be shown to be in the worker's own checkout.
-func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string) vcsRefusal {
+// integrator says the caller integrates row's checkout; see integratorLands.
+func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string, integrator bool) vcsRefusal {
 	if movesNamedPaths(inv) {
 		return moveRefusal(ctx, opts, row, inv, site, unlocated)
 	}
@@ -2939,7 +2914,7 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 		return vcsRefusal{}
 	case isInit(inv):
 		return initRefusal(row, inv, site, unlocated)
-	case !workerLands(inv):
+	case !workerLands(inv) && (!integrator || !integratorLands(inv)):
 		return vcsRefusal{op: op, kind: vcsOpOrchestrated}
 	case unlocated != "":
 		return vcsRefusal{op: op, kind: vcsOpLands, why: unlocated}
@@ -2947,6 +2922,13 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 	why, base := commitRefusal(ctx, opts, row, inv.Name, site)
 	if operand, merge := workerMerge(inv); why == "" && merge && operand != "" && !mergesBase(operand, base, row) {
 		why = mergeRefusal(operand, base, row)
+	}
+	if operand, rebase := integratorRebase(inv); why == "" && rebase && operand != "" && !mergesBase(operand, base, row) {
+		why = rebaseRefusal(operand, base, row)
+	}
+	// It lands other rows' commits, so their paths are not its write paths.
+	if why == "" && integrator && integratorLands(inv) {
+		return vcsRefusal{}
 	}
 	if why == "" {
 		why = site.stagedUnread
@@ -3383,7 +3365,20 @@ func workerLands(inv hint.Invocation) bool {
 		return true
 	}
 	sub, _ := vcsSubcommand(inv)
-	return inv.Name == "git" && (sub == "cherry-pick" || sub == "apply")
+	return inv.Name == "git" && (sub == "cherry-pick" || sub == "revert" || sub == "apply")
+}
+
+// rebaseRefusal is why an integrator may not rebase onto operand, naming
+// each revision mergesBase accepts.
+func rebaseRefusal(operand, base string, row types.Job) string {
+	var accepts []string
+	if base != "" {
+		accepts = append(accepts, "origin/"+path.Base(base))
+	}
+	accepts = append(accepts, "the revision its job was handed")
+	accepts = append(accepts, slices.DeleteFunc(slices.Clone(row.DependsOn), func(d string) bool { return d == "" })...)
+	accepts = append(accepts, row.Integrates...)
+	return fmt.Sprintf("It rebases onto %s, and an integrator rebases only onto %s.", operand, strings.Join(accepts, ", "))
 }
 
 // initArgs returns the words after an init's subcommand and reports whether inv is one:
@@ -3709,7 +3704,7 @@ func gitDirCheckout(gitDir string) (string, bool) {
 func shellCommitSite(c locatedCall) (vcsSite, string) {
 	switch {
 	case c.unfollowed:
-		return vcsSite{}, "It runs inside a conditional, a loop or a function, so where it commits cannot be read without running it."
+		return vcsSite{}, "It runs inside a conditional, a loop or a function, so where it commits cannot be read without running it. A for loop is read only when its list is literal words, such as `for b in a b; do ...; done`."
 	case !c.at.known:
 		return vcsSite{}, "A cd before it does not name one literal directory, so where it commits cannot be read."
 	case c.args == nil:

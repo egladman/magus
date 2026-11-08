@@ -751,7 +751,6 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	if m.binaryAnswerTargets[types.TargetRef{Project: p.Path, Target: target}] {
 		step.Catalogs = answerCatalogs()
 	}
-	step.UnreadCharms = m.unreadWriteGrants(p, target)
 	updates := make([]types.Glob, 0, len(p.TargetUpdates[target]))
 	for _, ref := range p.TargetUpdates[target] {
 		updates = append(updates, ref.Rooted(p.Path))
@@ -1006,6 +1005,7 @@ func (m *Magus) targetStep(ctx context.Context, p *types.Project, target string,
 		keyTools = toolVersions[p.Path]
 	}
 	applyRunKeying(&step, p, m.cfg.Spells, keyTools, observationsForTarget(p, target, observations[p.Path]), charms)
+	step.UnreadCharms = m.unreadCharms(p, target, step.Charms)
 	return step, nil
 }
 
@@ -1023,29 +1023,18 @@ func alwaysRuns(p *types.Project, target string) bool {
 	return p.TargetPolicies[target].SkipCache || servesTarget(p.ResolvedSpells, target) || len(findInstallOps(p, target)) > 0
 }
 
-// unreadWriteGrants returns the write-granting charms (rw, update) that target's step on p
-// cannot read, which its key leaves out: a run under default_charms: [rw] and a ci run,
-// which strips rw, then share one entry. A step reads one when anything in its ctx.needs
-// closure declares in-place edits, branches on the charm by name, or drives an op that
-// patches its argv on the charm or computes its argv in the VM. An op whose spell does
-// not resolve counts as reading every charm. Declared outputs do not count: whether a
-// hit may restore them is VerifyOutputs, set from the same by-name read.
-//
-// Static, so it under-reports the way the drift gate's own detection does: a body that
-// names the charm through a variable, or reaches it through a helper the walk cannot
-// follow, is not seen.
-func (m *Magus) unreadWriteGrants(p *types.Project, target string) []string {
-	grants := []string{types.CharmReadWrite, types.CharmUpdate}
-	read := map[string]bool{}
-	_ = types.WalkChain(p, target, m.Get, func(v types.ChainVisit) error {
-		for _, c := range grants {
-			if !read[c] && m.readsCharm(v.Project, v.Target, c) {
-				read[c] = true
-			}
+// unreadCharms returns the charms no target in target's chain reads.
+// Its key leaves them out, so generate and generate:gha share an entry.
+// The walk is static: a charm read through a variable or another
+// file's helper counts as unread.
+func (m *Magus) unreadCharms(p *types.Project, target string, charms []string) []string {
+	var unread []string
+	for _, c := range charms {
+		if !m.chainReadsCharm(p, target, c) {
+			unread = append(unread, c)
 		}
-		return nil
-	})
-	return slices.DeleteFunc(grants, func(c string) bool { return read[c] })
+	}
+	return unread
 }
 
 // chainReadsCharm reports whether target or any target its ctx.needs closure reaches
@@ -1062,7 +1051,7 @@ func (m *Magus) chainReadsCharm(p *types.Project, target, charm string) bool {
 }
 
 // readsCharm reports whether target's own body or ops on p can behave differently under
-// charm; see unreadWriteGrants for what counts.
+// charm. docs/concepts/cache.md lists what counts.
 func (m *Magus) readsCharm(p *types.Project, target, charm string) bool {
 	if len(p.TargetUpdates[target]) > 0 {
 		return true
@@ -2112,6 +2101,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			toolVersions = byProject[p.Path]
 		}
 		applyRunKeying(&step, p, m.cfg.Spells, toolVersions, observationsForTarget(p, target, obs[p.Path]), charmKey)
+		step.UnreadCharms = m.unreadCharms(p, target, step.Charms)
 		return step, nil
 	}
 	newStep := func(p *types.Project, target string) (cache.Step, error) {

@@ -37,8 +37,10 @@ import type {
   Diff,
   DiffAnnotation,
   DiffReview,
+  DiffRisk,
   DiffUncoveredReason,
   ReviewChange,
+  RiskTier,
 } from "./session";
 
 export interface OrderedFile {
@@ -196,6 +198,36 @@ const UNCOVERED_REASON: Record<DiffUncoveredReason, string> = {
   "no-indexer": "no symbol indexer",
 };
 
+const TIER_TONE: Record<RiskTier, Chip["tone"]> = {
+  trivial: "neutral",
+  mechanical: "neutral",
+  scoped: "info",
+  full: "warn",
+};
+
+// tierChip names the tier magus proved and, on hover, the fact that decided it,
+// in the words `magus affected ci` prints. No chip when no assessment ran.
+export function tierChip(risk: DiffRisk | undefined): Chip | undefined {
+  if (!risk) return undefined;
+  const why = risk.class ? `${risk.class}: ${risk.why}` : risk.why;
+  return { text: risk.tier, tone: TIER_TONE[risk.tier] ?? "warn", title: why };
+}
+
+const TIER_ORDER: readonly RiskTier[] = ["trivial", "mechanical", "scoped", "full"];
+
+// highestTier is the tier a step is read at: the highest of its files', with
+// a file no assessment reached counting as full. Undefined when no file was
+// assessed at all, since then there is no tier to state.
+export function highestTier(risks: readonly (DiffRisk | undefined)[]): RiskTier | undefined {
+  if (!risks.some((r) => r)) return undefined;
+  let at = 0;
+  for (const r of risks) {
+    const i = r ? TIER_ORDER.indexOf(r.tier) : -1;
+    at = Math.max(at, i < 0 ? TIER_ORDER.length - 1 : i);
+  }
+  return TIER_ORDER[at] ?? "full";
+}
+
 export function riskChips(a: DiffAnnotation | undefined): Chip[] {
   if (!a) return [];
   const chips: Chip[] = [];
@@ -232,6 +264,9 @@ export function riskChips(a: DiffAnnotation | undefined): Chip[] {
         "from wherever you did read it with `magus diff --ack <path>`.",
     });
   }
+
+  const tier = tierChip(a.risk);
+  if (tier) chips.push(tier);
 
   if (a.visibility === "public") {
     const api = (a.symbols ?? [])

@@ -21,6 +21,8 @@ final RULES: {str: str} = {
     "ascii": "deny",
     // A commit, a pull request and a page in this repository credit no tool and no session.
     "attribution": "deny",
+    // A published path starts at the repository root, never at home.
+    "local-path": "deny",
     // A subject is lowercase. An acronym may lead. A capital after a conventional
     // prefix is the base-branch grammar's check, not this one.
     "subject-case": "deny",

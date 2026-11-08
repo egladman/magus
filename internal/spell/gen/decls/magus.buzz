@@ -1868,6 +1868,7 @@ export object DiffFile {
     noHistory: bool = false,
     reach: int? = null,
     threads: [DiffThreadRef] = [],
+    risk: TierEvidence? = null,
 }
 
 export object ImpactProject {
@@ -2557,6 +2558,7 @@ export object TargetGraphNode {
     charms: [str] = [],
     spells: [TargetSpellUse] = [],
     dispatchOnly: bool = false,
+    forwardsArgs: bool = false,
     crossDependencies: [CrossTargetRef] = [],
     chain: [ChainStep] = [],
     readsFiles: [InputRef] = [],
@@ -2790,12 +2792,19 @@ export object ToolReport {
     tools: [ToolRow] = [],
 }
 
+export object ListedWorkspace {
+    name: str = "",
+    root: str = "",
+    dir: str = "",
+}
+
 export object WorkspaceEntry {
     root: str = "",
     vcsBaseRef: str = "",
     cacheDir: str = "",
     concurrency: int = 0,
     projectCount: int = 0,
+    workspaces: [ListedWorkspace] = [],
 }
 
 export object ServiceLease {

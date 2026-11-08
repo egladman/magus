@@ -175,6 +175,12 @@ decisions/0020-the-person-directs-sessions-report/
 decisions/0021-a-change-accepts-the-findings-it-causes/
 decisions/0022-domain-nouns-not-output-result-report/
 decisions/0023-touched-functions-meet-change-risk-and-their-mutants/
+decisions/0024-magus-queue-is-a-plugin-binary/
+decisions/0025-finished-jobs-merge-through-the-queue/
+decisions/0026-refs-gets-no-new-subcommands/
+decisions/0027-shared-prerequisites-run-once-in-stage-zero/
+decisions/0028-workspaces-see-each-other/
+decisions/0029-the-mod-draws-magus-figures-it-does-not-compute/
 dependencies/
 design/
 design/judgment/
@@ -228,6 +234,9 @@ design/principles/unix-survives-at-the-verb/
 design/principles/verdicts-are-provenance-blind/
 design/principles/what-we-do-not-build/
 design/principles/worth-cloning/
+design/proposals/
+design/proposals/reading-budget-for-held-jobs/
+design/proposals/review-in-tier-order/
 design/refusals/
 design/standard/
 design/strained/
@@ -515,6 +524,9 @@ reference/api/metrics/v1alpha1/metrics/
 reference/api/notes/
 reference/api/notes/v1alpha1/
 reference/api/notes/v1alpha1/notes/
+reference/api/pulls/
+reference/api/pulls/v1alpha1/
+reference/api/pulls/v1alpha1/pulls/
 reference/api/query/
 reference/api/query/v1alpha1/
 reference/api/query/v1alpha1/query/
@@ -679,6 +691,12 @@ reference/codes/magusfile/MGS1050/
 reference/codes/magusfile/MGS1051/
 reference/codes/magusfile/MGS1052/
 reference/codes/magusfile/MGS1053/
+reference/codes/magusfile/MGS1054/
+reference/codes/magusfile/MGS1055/
+reference/codes/magusfile/MGS1056/
+reference/codes/magusfile/MGS1057/
+reference/codes/magusfile/MGS1058/
+reference/codes/magusfile/MGS1059/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -696,6 +714,7 @@ reference/codes/race/MGS4007/
 reference/codes/race/MGS4008/
 reference/codes/race/MGS4009/
 reference/codes/race/MGS4010/
+reference/codes/race/MGS4011/
 reference/codes/sandbox/
 reference/codes/sandbox/MGS2001/
 reference/codes/sandbox/MGS2002/
@@ -884,6 +903,7 @@ reference/proofread/lead-context/
 reference/proofread/leak/
 reference/proofread/list-marks/
 reference/proofread/list-parallel/
+reference/proofread/local-path/
 reference/proofread/long-thread/
 reference/proofread/message-commands/
 reference/proofread/message-length/
@@ -1021,6 +1041,7 @@ reference/rules/process-poll/
 reference/rules/process-signal/
 reference/rules/push-gate/
 reference/rules/push-ungated/
+reference/rules/push-unverified/
 reference/rules/raw-tool/
 reference/rules/read-ack/
 reference/rules/read-navigation/
@@ -1069,6 +1090,7 @@ reference/rules/unknown-env/
 reference/rules/unleased-write/
 reference/rules/unread-command/
 reference/rules/vcs-off-switch/
+reference/rules/verify-repeat/
 reference/rules/waiver-is-a-persons/
 reference/rules/whole-tree/
 reference/rules/worker-background-run/
@@ -1328,6 +1350,7 @@ tags/judgment/
 tags/keep-warm/
 tags/kernel/
 tags/knowledge-graph/
+tags/knowledge-workspaces/
 tags/knowledge/
 tags/kubernetes/
 tags/landlock/
@@ -1357,6 +1380,7 @@ tags/magus-no-wait/
 tags/magus-query/
 tags/magus-queue/
 tags/magus-run/
+tags/magus-server-status/
 tags/magus-server/
 tags/magus-status/
 tags/magus-vcs/
@@ -1413,6 +1437,7 @@ tags/philosophy/
 tags/picker/
 tags/pinning/
 tags/pipe/
+tags/plan/
 tags/platform/
 tags/plugin/
 tags/podman/
@@ -1426,6 +1451,7 @@ tags/probe/
 tags/project/
 tags/projects/
 tags/proofread/
+tags/proposal/
 tags/proto/
 tags/protobuf/
 tags/protocol/
@@ -1447,6 +1473,7 @@ tags/recursion/
 tags/redaction/
 tags/redundancy/
 tags/reference/
+tags/refs/
 tags/registry/
 tags/release/
 tags/remote-cache/

@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // writeJournal fabricates the run journal StalledTargets reads: one JSONL record per
@@ -388,37 +389,84 @@ func writeModHarness(t *testing.T, w *testkit.Workspace, enable bool, installed 
 	}
 }
 
-func TestDoctorGuardWiringHarnessReportsAnEnabledModNobodyInstalled(t *testing.T) {
-	t.Run("enabled and missing -> advice naming the install line", func(t *testing.T) {
-		w := testkit.NewWorkspace(t)
-		w.WriteExecutable("magus", denyingProbeScript)
-		writeModHarness(t, w, true, "")
+// modPluginSuite runs the guard wiring check over a workspace enabling
+// the magus mod.
+type modPluginSuite struct {
+	suite.Suite
+	w *testkit.Workspace
+}
 
-		c := checkGuardWiring(harnessProbeContext(), w.Root(), testProbeBudget, "mod-host")
-		// Personal plugin installs cannot be fixed in CI; doctor advises, verify still fails.
-		require.Equal(t, types.CheckAdvice, c.Status)
-		assert.Contains(t, strings.Join(c.Details, "\n"), "claude plugin marketplace add egladman/magus")
-	})
+func TestModPluginSuite(t *testing.T) { suite.Run(t, new(modPluginSuite)) }
 
-	t.Run("enabled and installed -> no plugin problem", func(t *testing.T) {
-		w := testkit.NewWorkspace(t)
-		w.WriteExecutable("magus", denyingProbeScript)
-		writeModHarness(t, w, true, `{"version": 2, "plugins": {"magus@magus": [{"scope": "user"}]}}`)
+const modHead = "971497a65ff397184686fb3e1168586c73ea2c30"
 
-		c := checkGuardWiring(harnessProbeContext(), w.Root(), testProbeBudget, "mod-host")
-		assert.NotEqual(t, types.CheckFail, c.Status)
-		assert.NotContains(t, strings.Join(c.Details, "\n"), "plugin")
-	})
+func (s *modPluginSuite) SetupTest() {
+	s.w = testkit.NewWorkspace(s.T())
+	s.w.WriteExecutable("magus", denyingProbeScript)
+}
 
-	t.Run("not enabled -> silent", func(t *testing.T) {
-		w := testkit.NewWorkspace(t)
-		w.WriteExecutable("magus", denyingProbeScript)
-		writeModHarness(t, w, false, "")
+// marketplace clones the magus marketplace with its branch at modHead.
+func (s *modPluginSuite) marketplace() {
+	plugins := filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "plugins")
+	clone := filepath.Join(plugins, "marketplaces", "magus")
+	s.write(filepath.Join(clone, ".git", "HEAD"), "ref: refs/heads/main\n")
+	s.write(filepath.Join(clone, ".git", "refs", "heads", "main"), modHead+"\n")
+	s.write(filepath.Join(clone, ".claude-plugin", "marketplace.json"), `{"plugins": [{"name": "magus", "source": "./mod"}]}`)
+	s.write(filepath.Join(plugins, "known_marketplaces.json"), fmt.Sprintf(`{"magus": {"installLocation": %q}}`, clone))
+}
 
-		c := checkGuardWiring(harnessProbeContext(), w.Root(), testProbeBudget, "mod-host")
-		assert.NotEqual(t, types.CheckFail, c.Status)
-		assert.NotContains(t, strings.Join(c.Details, "\n"), "plugin")
-	})
+func (s *modPluginSuite) write(path, body string) {
+	s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
+	s.Require().NoError(os.WriteFile(path, []byte(body), 0o644))
+}
+
+func (s *modPluginSuite) check() types.Check {
+	return checkGuardWiring(harnessProbeContext(), s.w.Root(), testProbeBudget, "mod-host")
+}
+
+func (s *modPluginSuite) TestUninstalledModFailsNamingTheInstallLine() {
+	writeModHarness(s.T(), s.w, true, "")
+	c := s.check()
+	s.Equal(types.CheckFail, c.Status)
+	s.Contains(strings.Join(c.Details, "\n"), "claude plugin install magus@magus")
+}
+
+func (s *modPluginSuite) TestModBehindTheMarketplaceFailsNamingTheUpdateLine() {
+	writeModHarness(s.T(), s.w, true, `{"version": 2, "plugins": {"magus@magus": [{"scope": "user", "gitCommitSha": "0e683071aaaabbbb"}]}}`)
+	s.marketplace()
+	c := s.check()
+	s.Equal(types.CheckFail, c.Status)
+	s.Contains(strings.Join(c.Details, "\n"), "claude plugin update magus@magus")
+}
+
+func (s *modPluginSuite) TestModWithAnUnknownCurrencyIsAdvice() {
+	writeModHarness(s.T(), s.w, true, `{"version": 2, "plugins": {"magus@magus": [{"scope": "user"}]}}`)
+	c := s.check()
+	s.Equal(types.CheckAdvice, c.Status)
+	s.Contains(strings.Join(c.Details, "\n"), "unknown")
+}
+
+func (s *modPluginSuite) TestModAtTheMarketplaceHeadIsNoProblem() {
+	writeModHarness(s.T(), s.w, true, fmt.Sprintf(`{"version": 2, "plugins": {"magus@magus": [{"scope": "user", "gitCommitSha": %q}]}}`, modHead))
+	s.marketplace()
+	c := s.check()
+	s.NotEqual(types.CheckFail, c.Status)
+	s.NotContains(strings.Join(c.Details, "\n"), "plugin")
+}
+
+func (s *modPluginSuite) TestModTheWorkspaceDoesNotEnableIsSilent() {
+	writeModHarness(s.T(), s.w, false, "")
+	c := s.check()
+	s.NotEqual(types.CheckFail, c.Status)
+	s.NotContains(strings.Join(c.Details, "\n"), "plugin")
+}
+
+func (s *modPluginSuite) TestMachineWhereTheHostNeverRanIsSilent() {
+	writeModHarness(s.T(), s.w, true, "")
+	s.T().Setenv("CLAUDE_CONFIG_DIR", filepath.Join(s.T().TempDir(), "absent"))
+	c := s.check()
+	s.NotEqual(types.CheckFail, c.Status)
+	s.NotContains(strings.Join(c.Details, "\n"), "plugin")
 }
 
 // TestLanguageCoverageRespectsNoLanguage covers both halves of the opt-out: a declared reason

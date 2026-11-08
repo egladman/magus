@@ -213,6 +213,9 @@ func buzzSpawnVerdict(deps Dependencies, held *heldAdvice, command string, d Dia
 		if v, ok := buzzProgramSpawnVerdict(deps, held, program); ok {
 			return v, true
 		}
+		if v, ok := computedSpawnVerdict(deps, program); ok {
+			return v, true
+		}
 	}
 	return ShellVerdict{}, false
 }
@@ -296,6 +299,40 @@ func buzzSpawns(program string) []string {
 		}
 	}
 	return out
+}
+
+func computesSpawn(program string) bool {
+	for _, m := range procCallRe.FindAllStringSubmatchIndex(program, -1) {
+		args, ok := callArguments(program, m[1]-1)
+		if !ok {
+			return true
+		}
+		parts := splitArguments(args)
+		if len(parts) == 0 {
+			return true
+		}
+		if program[m[2]:m[3]] != "exec" {
+			if _, ok := buzzString(parts[0]); !ok {
+				return true
+			}
+			continue
+		}
+		if _, ok := procExecArgv(parts); !ok {
+			return true
+		}
+	}
+	return false
+}
+
+func computedSpawnVerdict(deps Dependencies, program string) (ShellVerdict, bool) {
+	if !deps.worker || !computesSpawn(program) {
+		return ShellVerdict{}, false
+	}
+	return ShellVerdict{
+		Deny: "magus workspace: this Buzz program starts a proc command from a computed argv the guard cannot judge; spell each proc\\exec and proc\\shell from literals.",
+		Why:  "A leased worker's guard reads the commands a scratch or inline Buzz program starts. A command computed at run time, such as one per file of a loop, reaches no rule. Repository scripts are reviewed in the diff and stay unjudged.",
+		Rule: denyRule{Name: denyRuleInterpreterScript},
+	}, true
 }
 
 // procExecArgv is the argv a proc\exec call's arguments spell: its command, then the list

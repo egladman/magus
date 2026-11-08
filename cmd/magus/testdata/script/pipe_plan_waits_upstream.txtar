@@ -28,7 +28,7 @@ exec bash -c 'set -o pipefail; magus affected generate --no-default-charms | mag
 cmp stdout want.json
 ! stderr 'MGS3030'
 
-exec bash -c 'set -o pipefail; magus affected generate --no-default-charms | magus affected ci --plan | magus run --stdin --dry-run -o ''template={{range .outputs}}{{.name}}={{.value}}{{"\n"}}{{end}}'''
+exec bash -c 'set -o pipefail; magus affected generate --no-default-charms | magus affected ci --plan | magus run --stdin --shard all --dry-run -o ''template={{range .outputs}}{{.name}}={{.value}}{{"\n"}}{{end}}'''
 stdout '^count=2$'
 stdout '^matrix='
 ! stderr 'MGS30'

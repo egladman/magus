@@ -25,7 +25,7 @@ event.
 | MCP              | [MCP](../mcp.md)                                              |
 | attention events | `Notification`, `Stop`, `SubagentStop`                        |
 | checkpoint       | `Stop`                                                        |
-| reply check      | opt-in: `Stop`, advice for the next turn; you wire it         |
+| reply check      | opt-in: `Stop` judges, `UserPromptSubmit` hands it over       |
 | your messages    | `UserPromptSubmit`, recorded and never answered               |
 | rehydration      | `SessionStart` (`compact`, `resume`)                          |
 | lease            | `PreToolUse` on the sub-agent tool                            |
@@ -107,7 +107,7 @@ claude-code` prints it, in the place it lands in `.claude/settings.json`:
         "hooks": [{
           "type": "command",
           "timeout": 10,
-          "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code"
+          "command": "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code"
         }]
       }
     ]
@@ -140,8 +140,8 @@ the root the session started in ([hooks reference](https://code.claude.com/docs/
 So the string is the same on every machine, never an absolute path. `-C` makes the
 root the working directory before anything else, so the root-relative script path
 resolves wherever the session is; the glue reads the session's own directory off
-the event. The glue is Buzz and needs no `jq`, and no entry carries any shell of
-its own.
+the event. The glue is Buzz and needs no `jq`. The only shell an entry carries is
+the binary choice before `buzz`, POSIX `sh` with no pipe or substitution.
 
 Flags an entry declares ride after `--`, which `magus buzz` forwards to the script,
 never in a leading `VAR=value`: the glue reads whether to forward the whole event
@@ -153,15 +153,18 @@ Three things in a session resolve the word `magus`, and each has its own owner:
 
 | Who runs `magus`                                        | Resolved by                                                               | Owner                                                                                                                                              |
 | ------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Hook commands (the guard's interpreter)                 | PATH, then the `./magus` of the tree `-C` names when that tree builds one | every hook entry, and magus's own re-exec                                                                                                          |
+| Hook commands (the guard's interpreter)                 | `$CLAUDE_PROJECT_DIR/magus` when executable, else PATH                    | every hook entry, in the shell before `buzz`                                                                                                       |
 | The binary that judges a call                           | `./magus` beside the nearest `magus.yaml` above the call's cwd, else PATH | `magus-command.buzz` and the other glue, from the event's `cwd`                                                                                    |
 | The agent's own Bash tool commands                      | PATH, with the session root put first                                     | the `SessionStart` entry (matcher `startup\|resume\|clear`), whose `magus-session.buzz` appends `export PATH="<root>:$PATH"` to `$CLAUDE_ENV_FILE` |
 | Commands magus itself starts (targets, spells, scripts) | PATH, with the running binary's directory put first                       | magus, on every child it spawns                                                                                                                    |
 
-A hook's `magus` is whatever the PATH Claude Code was started with finds. Before it
-does anything else, that magus walks up from the `-C` directory to the workspace root
-and re-execs into the `./magus` there when one exists, so a workspace that builds its
-own binary is judged by it and one that builds none uses the installed one. The
+A hook entry runs the session root's `./magus` when it is executable, and the magus on
+the PATH Claude Code was started with otherwise. That binary only interprets the glue.
+The glue reads the event's `cwd`, walks up to that checkout's workspace root, and
+judges the call with the `./magus` there; only a checkout with none falls back to PATH.
+The shell cannot read the event, so it cannot pick the cwd's binary itself, and magus
+does not re-exec the guard into another binary. When a linked checkout has no `./magus`
+while the session root does, the glue says which PATH binary judged instead. The
 `SessionStart` entry cannot serve hooks: the hooks reference says `CLAUDE_ENV_FILE`
 persists variables "for subsequent Bash commands", and names no other consumer.
 
@@ -298,7 +301,7 @@ as the reason to fix it:
         "hooks": [
           {
             "type": "command",
-            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name claude-code",
+            "command": "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-buzz-check.buzz -- --agent-name claude-code",
             "timeout": 30
           }
         ]
@@ -546,10 +549,12 @@ that trims caches when free space runs low.
 The spell does not wire this. The reply check judges your agent's replies against the
 rules in `proofread`, which is a choice about how your agent writes and not part of the
 guard, so a merge never writes it and never removes one you add. To turn it on, download
-[`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz) and add a second `Stop`
-entry to `.claude/settings.json` by hand. The script runs the `proofread` binary over the
-turn's last message and hands up to five findings back to the agent as
-`additionalContext`. It needs no magus workspace, only `proofread` on `PATH`, in
+[`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz) and add it under both
+`Stop` and `UserPromptSubmit` in `.claude/settings.json` by hand. At `Stop` the script
+runs the `proofread` binary over the turn's last message and prints nothing. Context a
+`Stop` hook prints starts a turn, and you would see the agent answer advice you never saw.
+It keeps up to five findings per session in `$XDG_STATE_HOME/magus/proofread-reply/` and
+hands them to the agent as `additionalContext` with your next message. It needs no magus workspace, only `proofread` on `PATH`, in
 `__PROOFREAD_BIN`, or named with `-- --proofread PATH`; `__PROOFREAD_DECISIONS` or
 `-- --decisions FILE` sets your own decisions. It never blocks the stop and prints
 nothing when proofread is missing or the agent is already continuing.
@@ -559,6 +564,17 @@ nothing when proofread is missing or the agent is already continuing.
 {
   "hooks": {
     "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name claude-code",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
       {
         "hooks": [
           {
@@ -624,7 +640,7 @@ is handed.
 ## The magus mod
 
 The repository is a Claude Code plugin marketplace with one mod in it, `magus`,
-whose source is `claude-code-mod/` beside this page. Add the marketplace once per person:
+whose source is `claude-code/mod/` beside this page. Add the marketplace once per person:
 
 ```text
 claude plugin marketplace add egladman/magus
@@ -672,6 +688,17 @@ It adds these to a session:
   [MGS3009](../../../reference/codes/sandbox/MGS3009.md) refusals, on the pane's
   Budget tab. Nothing about it reaches the status line or the band: an agent reads
   a refusal and retries.
+- A table under each reply that names a `.jsonl` file, as a link, a code span or a
+  bare path, and under each `SendUserFile` call that sends one: one column per key
+  in the order the file first names it, rows in file order, nested values as
+  one-line JSON, and a red `✖ line N:` for each line that is not a JSON object.
+  A named file that is not there draws one dim line. A cell past 160 characters,
+  and the rows past 200, are cut, and the table says how many rows it left out.
+- A line of links under each reply and each finished magus call, Bash or MCP, that
+  names an output ref, a guard detail or an invocation id. A link's title is the
+  command that prints it. Pressing one opens a pane with that command's output and a
+  Copy command button. Where the host opens links itself and no press reaches the
+  mod, the link opens the page on [output refs](../../../concepts/cache/output-refs.md).
 
 Every threshold is a setting in `/config`: `cacheGate`, `gateMinTokens`, `cacheTtl`,
 `priceStepGate`, `priceStepMarginTokens`, `spawnGate`, `spawnMaxInputUsdPerMTok`,
@@ -697,14 +724,20 @@ magus\harness.provider(claudeMod);
 reads the marketplace only once the person trusts the folder. The settings do not
 install the mod: each person runs the line above once, or trusts the folder and
 starts a session, and until then the mod never appears. `magus agent harness verify
-claude-code-mod` and `magus doctor` count the mod as installed when
-`installed_plugins.json` lists it or when the cache directory for the `magus`
-plugin holds a version directory, both under the `plugins` directory of `CLAUDE_CONFIG_DIR` (`~/.claude`
-by default) or under `CLAUDE_CODE_PLUGIN_CACHE_DIR` when that is set. Claude Code
-caches a plugin from a relative-path marketplace without recording it, which the
-cache check covers. Verify fails naming the line above while the workspace enables
-the mod and neither is found; doctor advises on that gap so CI is not red for a
-personal install. A workspace that does not enable the mod is not checked.
+claude-code-mod` and `magus doctor` read what the host records, in the `plugins`
+directory of `CLAUDE_CONFIG_DIR` (`~/.claude` by default) or in
+`CLAUDE_CODE_PLUGIN_CACHE_DIR` when that is set. The mod counts as installed only
+when `installed_plugins.json` lists `magus@magus` in the user scope, or in a local
+or project scope for this checkout; a cached plugin directory alone no longer
+counts. An install that `.claude/settings.local.json` turns off reads as disabled,
+with the `claude plugin enable` command. An installed mod is current when its
+recorded commit is the HEAD of the marketplace clone `known_marketplaces.json`
+names; an older commit reads as behind, with the `claude plugin update` command,
+and a record that cannot prove either reads as unknown. When the host has never
+run here (no config directory), the check is skipped. Verify fails while the
+workspace enables the mod and it is not installed; doctor advises on that gap so
+CI is not red for a personal install. A workspace that does not enable the mod is
+not checked.
 
 ## Coverage and limits
 

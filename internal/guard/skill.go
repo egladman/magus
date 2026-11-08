@@ -168,7 +168,27 @@ func denyUntilSkillLoaded(markers hint.Gate, observesSkillLoads bool, workspace 
 	// The SHORT name, always. The full twin is not installed everywhere (one shipped harness
 	// asks for the short form alone), and naming a skill the reader cannot load is the
 	// failure agent.MustSkill exists to prevent.
-	return fmt.Sprintf("%s before the %s skill loaded; load Skill(%s), then retry.\n%s", act, skill.String(), skill.String(), carries)
+	load := fmt.Sprintf("load Skill(%s)", skill.String())
+	if file := installedSkillFile(workspace, skill); file != "" {
+		load += " or read " + file
+	}
+	return fmt.Sprintf("%s before the %s skill loaded; %s, then retry.\n%s", act, skill.String(), load, carries)
+}
+
+func installedSkillFile(workspace string, skill agent.SkillRef) string {
+	if workspace == "" {
+		return ""
+	}
+	files, err := filepath.Glob(filepath.Join(workspace, ".*", "skills", skill.String(), "SKILL.md"))
+	if err != nil || len(files) == 0 {
+		return ""
+	}
+	slices.Sort(files)
+	rel, err := filepath.Rel(workspace, files[0])
+	if err != nil {
+		return ""
+	}
+	return filepath.ToSlash(rel)
 }
 
 // missingSkillInstall reports a workspace-relative skill directory that holds a magus install

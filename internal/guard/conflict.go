@@ -53,10 +53,10 @@ func holdsConflictMarkers(file string) bool {
 
 // conflictedWorkspaceFile names the first candidate that is a file in the workspace holding
 // conflict markers, or "".
-func conflictedWorkspaceFile(workspace string, candidates []string) string {
+func conflictedWorkspaceFile(scope workspaceScope, candidates []string) string {
 	for _, c := range candidates {
-		rel := existingWorkspaceFile(workspace, []string{c})
-		if rel != "" && holdsConflictMarkers(filepath.Join(workspace, rel)) {
+		rel := existingWorkspaceFile(scope, []string{c})
+		if rel != "" && holdsConflictMarkers(filepath.Join(scope.root, rel)) {
 			return rel
 		}
 	}
@@ -103,7 +103,7 @@ func denyConflictRewrite(location location, command string, d Dialect) string {
 			return true
 		}
 		for _, c := range peelWrappers(literalWords(call.Args), d) {
-			if hit, found = conflictRewriteTarget(location.workspace, c, heredocText(st)); found {
+			if hit, found = conflictRewriteTarget(scopeAt(location), c, heredocText(st)); found {
 				return false
 			}
 		}
@@ -117,14 +117,14 @@ func denyConflictRewrite(location location, command string, d Dialect) string {
 
 // conflictRewriteTarget names the conflicted file c's program would write, "" with found
 // true when it would write one it does not name.
-func conflictRewriteTarget(workspace string, c hint.Invocation, heredoc string) (hit string, found bool) {
+func conflictRewriteTarget(scope workspaceScope, c hint.Invocation, heredoc string) (hit string, found bool) {
 	name := path.Base(c.Name)
 	if name == "magus" {
 		script, ok := inlineBuzz(c.Args, heredoc)
 		if !ok {
 			return "", false
 		}
-		hit = conflictedWorkspaceFile(workspace, buzzWriteDestinations(script))
+		hit = conflictedWorkspaceFile(scope, buzzWriteDestinations(script))
 		return hit, hit != ""
 	}
 	if !scriptedRewriteInterpreters[name] && name != "awk" {
@@ -142,7 +142,7 @@ func conflictRewriteTarget(workspace string, c hint.Invocation, heredoc string) 
 	if unknown {
 		candidates = append(append(candidates, c.Args...), quotedLiterals(script)...)
 	}
-	if hit = conflictedWorkspaceFile(workspace, candidates); hit != "" {
+	if hit = conflictedWorkspaceFile(scope, candidates); hit != "" {
 		return hit, true
 	}
 	return "", unknown && strings.Contains(script, "<<<<<<<")

@@ -254,14 +254,25 @@ func (s *PlanUnitsSuite) TestColdHistoryOpensFewShardsAndSaysSo() {
 	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"magusfile.buzz", "api/main.go"}, MaxShards: -1})
 	s.Require().NoError(err)
 	s.LessOrEqual(len(plan.Shards), forecast.ColdShards)
-	s.Contains(plan.Fallbacks, "the history holds no duration for any unit, so the plan opens at most 2 shards")
+	s.Require().NotEmpty(plan.Fallbacks)
+	s.Equal(types.Fallback{
+		What:   "At most 2 shards",
+		Why:    "the run history holds no duration for any target",
+		Effect: "Shards are packed by count, not time, so one can run far longer than the rest. A main run records durations for the next plan.",
+	}, plan.Fallbacks[len(plan.Fallbacks)-1])
 }
 
 func (s *PlanUnitsSuite) TestNoMachineChecksNoBudgetAndSaysSo() {
 	plan, err := s.m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"api/main.go"}, MaxShards: -1})
 	s.Require().NoError(err)
 	s.Nil(plan.Machine)
-	s.Contains(plan.Fallbacks, "no ci.machine is configured, so the plan checks no shard against a memory budget")
+	s.Require().NotEmpty(plan.Fallbacks)
+	s.Equal(types.Fallback{
+		What: "No memory check",
+		Why:  "magus.yaml sets no `ci.machine`",
+		Effect: "No shard is checked against a runner's memory. A shard that runs out shows as cancelled, with no logs. " +
+			"Set `ci.machine` to check.",
+	}, plan.Fallbacks[0])
 }
 
 func (s *PlanUnitsSuite) TestTheConfiguredMachineIsRecorded() {
@@ -301,6 +312,23 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any {
 	s.T().Cleanup(func() { _ = m.Close() })
 	_, err = m.planUnits(context.Background(), []types.Target{{Path: "."}}, "ci", nil, nil)
 	s.ErrorContains(err, "ci in . does more than ctx.needs (fs.writeFile)")
+}
+
+func (s *PlanUnitsSuite) TestALeafAnchorWithEffectsIsItsOwnUnit() {
+	root := writeWorkspace(s.T(), map[string]string{
+		"magusfile.buzz": `import "magus";
+import "fs";
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    fs\writeFile("out.txt", "x");
+}
+`,
+	})
+	m, err := Open(context.Background(), root, WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	units, err := m.planUnits(context.Background(), []types.Target{{Path: "."}}, "build", nil, nil)
+	s.Require().NoError(err)
+	s.Equal([]types.Unit{{Project: ".", Target: "build"}}, units)
 }
 
 // PlanReachSuite plans a workspace whose targets declare their reads, so a
@@ -534,7 +562,7 @@ func (s *PlanStageSuite) TestADependencySharedByTwoShardsIsPlannedOnceInStageZer
 	plan := s.plan("build")
 	build := []types.Unit{{Project: ".", Target: "build"}}
 	s.Equal([]types.Shard{{
-		ID: "stage-zero-0", Digest: types.UnitsDigest(build), ProjectPaths: []string{"."}, Units: build,
+		ID: "0a", Digest: types.UnitsDigest(build), ProjectPaths: []string{"."}, Units: build,
 	}}, plan.StageZero, "duties stay on the last stage")
 	s.Require().Len(plan.Shards, 2)
 	for _, sh := range plan.Shards {
@@ -548,7 +576,7 @@ func (s *PlanStageSuite) TestAPlanWithNoSharedWorkHasOneStage() {
 	test := []types.Unit{{Project: ".", Target: "test"}}
 	vet := []types.Unit{{Project: ".", Target: "vet"}}
 	s.Equal([]types.Shard{
-		{ID: "0", Digest: types.UnitsDigest(test), ProjectPaths: []string{"."}, Units: test, Duties: []types.Duty{types.DutyCacheExport, types.DutyNotesVerify}},
-		{ID: "1", Digest: types.UnitsDigest(vet), ProjectPaths: []string{"."}, Units: vet},
+		{ID: "1a", Digest: types.UnitsDigest(test), ProjectPaths: []string{"."}, Units: test, Duties: []types.Duty{types.DutyCacheExport, types.DutyNotesVerify}},
+		{ID: "1b", Digest: types.UnitsDigest(vet), ProjectPaths: []string{"."}, Units: vet},
 	}, plan.Shards)
 }

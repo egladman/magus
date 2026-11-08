@@ -585,11 +585,6 @@ fun applyProjects(groups: [Group], base: str, prefix: str, changed: [str]) > res
     return writeLayers(root, mergeBase: merged.value!, layers: writes, changed: changed);
 }
 
-// The review budget --by symbols packs layers up to, in changed lines. The SmartBear study of
-// 2,500 reviews at Cisco (Cohen, "Best Kept Secrets of Peer Code Review", 2006) found defect
-// detection falls off past 200 to 400 lines per review; 400 is that range's ceiling, so a
-// layer is as large as a reviewer still reads well and no larger.
-final BUDGET = 400;
 
 // The conventional commit types a branch name must not open with.
 final TYPE_PREFIXES = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "revert", "style", "test"];
@@ -2155,7 +2150,7 @@ export fun main(args: [str]) > void !> any {
     if (minFiles == null or minFiles! < 1) {
         throw "split-into-branches: --min-files takes a positive integer\n{USAGE}";
     }
-    final budget = std\parseInt(parsed.values["--budget"] ?? "{BUDGET}");
+    final budget = std\parseInt(parsed.values["--budget"] ?? "{branchstack\reviewBudget}");
     if (budget == null or budget! < 1) {
         throw "split-into-branches: --budget takes a positive number of changed lines\n{USAGE}";
     }

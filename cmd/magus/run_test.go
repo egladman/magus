@@ -780,7 +780,7 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, yaml.Unmarshal(raw, &workflow))
 	var shard string
-	for _, s := range workflow.Jobs["ci"].Steps {
+	for _, s := range workflow.Jobs["stage-1"].Steps {
 		command := s.With["command"]
 		// A shard gated in the queue's box names the command it runs after `-- magus`.
 		if _, inner, boxed := strings.Cut(harnessCall.ReplaceAllLiteralString(command, " -- magus "), " -- magus "); boxed && strings.HasPrefix(command, "queue gate ") {

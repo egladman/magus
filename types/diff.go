@@ -219,6 +219,9 @@ type DiffOptions struct {
 	// SkipOrder leaves Diff.Order unset. A reader of the order asks for it; a thread brief reads
 	// the code around one comment and has no use for a ranking of the whole changeset.
 	SkipOrder bool `json:"-" yaml:"-"`
+	// RiskBase is the revision the change is tiered against, filling
+	// DiffFile.Risk. Empty skips the assessment, and a Note says so.
+	RiskBase string `json:"-" yaml:"-"`
 }
 
 // The conformance checks, by Check.Name. Each derives its norm from the workspace's own symbol
@@ -412,6 +415,10 @@ type DiffFile struct {
 	// Threads are the review threads on this file, one per thread, in the host's order. Empty
 	// when no review is open for the branch or the report did not read one.
 	Threads []DiffThreadRef `json:"threads,omitempty" yaml:"threads,omitempty"`
+	// Risk is the tier `magus affected ci` proved for this file.
+	// Nil when no assessment ran, and Diff.Notes says why.
+	// Nil ranks as full: an unproven file is unbounded.
+	Risk *TierEvidence `json:"risk,omitempty" yaml:"risk,omitempty"`
 }
 
 // DiffThreadRef names one review thread where a report lists it: the id `magus diff --thread`
@@ -441,6 +448,15 @@ func (f DiffFile) ReachOr(def int) int {
 
 // Generated reports whether reviewing this file's diff is reading generated output.
 func (f DiffFile) Generated() bool { return f.Role == DiffRoleOutput }
+
+// RiskRank is the file's proven tier as Tier.Rank orders it, full when no
+// assessment ran.
+func (f DiffFile) RiskRank() int {
+	if f.Risk == nil {
+		return RiskFull.Rank()
+	}
+	return f.Risk.Tier.Rank()
+}
 
 // Diff is the whole annotated changeset.
 type Diff struct {
@@ -1209,6 +1225,9 @@ func (r Diff) AttachReadState(byPath map[string]string) {
 //  4. Path, last, purely so the order is deterministic. It is a TIEBREAK and never a
 //     ranking: alphabetical order is what this exists to replace.
 //
+// Between role and reach, the highest proven tier goes first (RiskRank).
+// A file magus could not bound is read before one it proved mechanical.
+//
 // A file whose reach was NOT MEASURED sorts above one measured at zero and below any measured
 // positive. Unknown is not zero: a measured zero is a promise that nothing references the file,
 // and an unmeasured file has made no promise. Ranking the two together is what let an
@@ -1240,6 +1259,9 @@ func (r Diff) SortForReading() {
 	slices.SortFunc(r.Files, func(a, b DiffFile) int {
 		if ra, rb := rank(a), rank(b); ra != rb {
 			return ra - rb
+		}
+		if ta, tb := a.RiskRank(), b.RiskRank(); ta != tb {
+			return tb - ta
 		}
 		if ba, bb := band(a), band(b); ba != bb {
 			return ba - bb

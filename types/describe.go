@@ -203,6 +203,10 @@ type TargetGraphNode struct {
 	// op with the target's own context, and nothing else runs. It is the static proof that
 	// the target does no work of its own, so the engine can schedule it as those ops.
 	DispatchOnly bool `json:"dispatch_only,omitempty" yaml:"dispatch_only,omitempty"`
+	// ForwardsArgs means `--` args reach every spell op the body calls.
+	// The body is DispatchOnly's calls plus any ctx.needs.
+	// ctx.needs clears the args only for its dependencies.
+	ForwardsArgs bool `json:"forwards_args,omitempty" yaml:"forwards_args,omitempty"`
 	// CrossDependencies are dependencies on specific targets in *other* projects,
 	// declared via a project import (<alias>.<target>). Unlike Dependencies (same-project
 	// target names), each carries the other project's path, so the graph can draw a
@@ -826,6 +830,9 @@ type WorkspaceEntry struct {
 	CacheDir     string `json:"cache_dir,omitempty"     yaml:"cache_dir,omitempty"`
 	Concurrency  int    `json:"concurrency,omitempty"   yaml:"concurrency,omitempty"`
 	ProjectCount int    `json:"project_count"           yaml:"project_count"`
+	// Workspaces is every knowledge.workspaces entry when this workspace is
+	// listed, its own first. Their projects are not counted in ProjectCount.
+	Workspaces []ListedWorkspace `json:"workspaces" yaml:"workspaces"`
 }
 
 // WorkspaceConfig carries infrastructure details for Inspector.Workspace

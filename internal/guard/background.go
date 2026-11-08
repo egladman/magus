@@ -139,19 +139,14 @@ func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 		if len(projects) == 0 {
 			projects = []string{"."}
 		}
-		var last time.Duration
-		for _, p := range projects {
-			if d, ok := sessions.LastRunDuration(dir, p, r.target); ok {
-				last = max(last, d)
-			}
-		}
+		last, sameArgs := lastRunPriced(dir, projects, r)
 		need, bound := checkMargin(last)
 		if last == 0 || limit >= need {
 			continue
 		}
-		why := "A call the host times out moves to the background, and a worker that then ends its turn parks until the run ends, with nobody told the result. " +
-			"The duration is the newest real run of this target in the repository's session store; the advised timeout leaves half again as much for a cold cache or a loaded machine. " +
-			"It speaks once per target per session, a refusal included, so a narrowed rerun after it goes through."
+		why := fmt.Sprintf("A call the host times out moves to the background, and a worker that then ends its turn parks until the run ends, with nobody told the result. %s; "+
+			"the advised timeout leaves half again as much for a cold cache or a loaded machine. "+
+			"It speaks once per target per session, a refusal included, so a narrowed rerun after it goes through.", pricedBy(sameArgs))
 		key := checkTimeoutKey(r)
 		if run.refusals.MarkFired(denyMarker(string(key))) {
 			continue
@@ -161,7 +156,7 @@ func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 			return advice{
 				Say: fmt.Sprintf("magus workspace: `%s` last ran %s here and needs %s with room, past the %s a foreground call may wait; run it bounded in the background: `%s`.",
 					r.target, last.Round(time.Second), need.Round(time.Second), call.foregroundMax, execBounded(r, bound)),
-				Why: fmt.Sprintf("%s\nRun it in the background and end your turn: its completion notice is the wait. `magus job exec --timeout` stops the run at its deadline, so it is the form a worker may leave in the background and still hear from: the host's completion notice wakes you with the result, and your stop is not refused while it runs. A run narrowed after `--` is priced as the whole target: no per-test durations are recorded.", why),
+				Why: fmt.Sprintf("%s\nRun it in the background and end your turn: its completion notice is the wait. `magus job exec --timeout` stops the run at its deadline, so it is the form a worker may leave in the background and still hear from: the host's completion notice wakes you with the result, and your stop is not refused while it runs.", why),
 				Key: key,
 			}
 		}
@@ -177,6 +172,35 @@ func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 
 // checkMargin allows a run half again as long as took, for a cold cache or a
 // loaded machine. bound rounds that up to a minute.
+func lastRunPriced(dir string, projects []string, r targetRun) (time.Duration, bool) {
+	var last time.Duration
+	for _, p := range projects {
+		d, ok := sessions.LastRunDurationWith(dir, p, r.target, r.forwarded)
+		if !ok {
+			return lastTargetRun(dir, projects, r.target), false
+		}
+		last = max(last, d)
+	}
+	return last, true
+}
+
+func lastTargetRun(dir string, projects []string, target string) time.Duration {
+	var last time.Duration
+	for _, p := range projects {
+		if d, ok := sessions.LastRunDuration(dir, p, target); ok {
+			last = max(last, d)
+		}
+	}
+	return last
+}
+
+func pricedBy(sameArgs bool) string {
+	if sameArgs {
+		return "The duration is the newest real run of this command line in the repository's session store"
+	}
+	return "The duration is the newest real run of this target under any arguments in the repository's session store, since this command line has none recorded"
+}
+
 func checkMargin(took time.Duration) (need, bound time.Duration) {
 	need = took * 3 / 2
 	return need, (need + time.Minute - time.Nanosecond).Truncate(time.Minute)

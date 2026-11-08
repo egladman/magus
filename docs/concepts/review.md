@@ -407,6 +407,8 @@ group 1 of 1: unranked (1 hunk)
 conformance did not check .: no symbol indexer
 
 note: no symbol index loaded: changed-symbol callers and coverage overlays are unavailable (build it with `magus graph build`)
+
+note: risk tiers skipped: no revision names what the change is tiered against
 ```
 
 <!-- /example -->

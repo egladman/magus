@@ -58,6 +58,7 @@ import {
 import {
   conformanceUncovered,
   conformanceUnchecked,
+  highestTier,
   modeChange,
   order,
   visibleFiles,
@@ -2402,7 +2403,9 @@ export function activate(host: HTMLElement): AppInstance {
     // The step is the unit of the pass; with no order from the server each step is one hunk. The
     // read count stays in hunks, in the bar: a step holds several, and "3 of 9 read" would be a
     // different count from the bar beside it.
-    progressText.textContent = `Step ${at + 1} of ${state.steps.length}`;
+    const tier = highestTier(state.files.map((f) => findAnnotation(f.path)?.risk));
+    const position = `Step ${at + 1} of ${state.steps.length}`;
+    progressText.textContent = tier ? `${position}, ${tier}` : position;
     progressPath.replaceChildren(h("bdi", undefined, state.files[0]?.path ?? ""));
     prevStepBtn.disabled = at <= 0;
     const drafted = drafts().length;

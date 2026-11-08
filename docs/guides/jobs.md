@@ -155,6 +155,9 @@ deny paths the workspace declares
   checkout/tax.sh: owned by live lease refactor/tax: coordinate, never work around
   magus.yaml: workspace configuration: changing it changes the plan every lease is running
 
+narrow test scope
+  .: not narrowed: no spell bound to . claims its extension ".sh" (pricing/total.sh)
+
 grouping history
   none recorded for these projects
 
@@ -414,6 +417,9 @@ projects
 deny paths the workspace declares
   pricing/total.sh: owned by live lease cents: coordinate, never work around
   magus.yaml: workspace configuration: changing it changes the plan every lease is running
+
+narrow test scope
+  .: not narrowed: no spell bound to . claims its extension ".sh" (pricing/format.sh, checkout/tax.sh)
 
 grouping history
   none recorded for these projects

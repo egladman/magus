@@ -171,7 +171,7 @@ test "a test double passes only under a marker naming a platform API" {
 }
 
 test "a throw in the mod's tsx is read with or without a semicolon" {
-    final got = check(support\fixture({"docs/guides/integrations/agents/claude-code-mod/hooks/a.tsx": "  throw err\n  throw err;\n"}));
+    final got = check(support\fixture({"docs/guides/integrations/agents/claude-code/mod/hooks/a.tsx": "  throw err\n  throw err;\n"}));
     assert\equal(got.len(), want: 2, message: "with and without a semicolon");
 }
 

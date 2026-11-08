@@ -272,7 +272,7 @@ fun mandateVerdict(req: CommandRequest, programs: [helpers\Program]) > GuardVerd
     }
     final store = jobs;
     final assess = fun (id: str) > mandate\Assessed {
-        return mandate\assess(id, jobs: store, measure: mandate\measured);
+        return mandate\assess(id, jobs: store, measure: mandate\measured, count: mandate\counted);
     };
     return mandate\decideCommand(programs, line: req.command, m: issued, jobs: jobs, now: now, assess: assess);
 }
@@ -378,7 +378,36 @@ fun branchTopic(dir: str) > branches\Topic {
     } catch (e) {
         return branches\unknownTopic();
     }
-    return branches\readTopic(paths);
+    return branches\withSubjects(branches\readTopic(paths), subjects: branchSubjects(dir, paths: paths));
+}
+
+// branchSubjects are the topics the branch adds: its changelog fragments,
+// else its commit subjects. A fragment or a log it cannot read adds none.
+fun branchSubjects(dir: str, paths: [str]) > [branches\Subject] {
+    final found = mut [<branches\Subject>];
+    foreach (path in paths) {
+        if (!path.startsWith("changes/unreleased/") or !path.endsWith(".md")) {
+            continue;
+        }
+        final file = fs\join(dir, name: path);
+        if (fs\exists(file) catch false) {
+            found.append(branches\fragmentSubject(path, text: fs\readFile(file) catch ""));
+        }
+    }
+    if (found.len() > 0) {
+        return found;
+    }
+    try {
+        final log = vcs\cmd(["log", "--format=%s", vcs\base(dir: dir) + "..HEAD"], opts: vcs\CommandOptions{ dir = dir, quiet = true });
+        foreach (line in log.stdout.split("\n")) {
+            if (line.trim() != "") {
+                found.append(branches\commitSubjectTopic(line.trim()));
+            }
+        }
+    } catch (e) {
+        return [<branches\Subject>];
+    }
+    return found;
 }
 
 // withHeredocs fills each commit message, title and description the parser rendered empty

@@ -258,7 +258,13 @@ fun stopDaemon(h: Host, dir: str) > str !> any {
     if (h.magus(dir, args: ["server", "status"]).code != 0) {
         return "no daemon was running";
     }
-    _ = must(h.magus(dir, args: ["server", "stop"]), what: "magus server stop");
+    // status exits 0 while only the broker is up, so stop can still find
+    // no server to stop.
+    final stopped = h.magus(dir, args: ["server", "stop"]);
+    if (stopped.code != 0 and stopped.stderr.indexOf("no server is running") != null) {
+        return "no daemon was running";
+    }
+    _ = must(stopped, what: "magus server stop");
     return "stopped the daemon";
 }
 
@@ -1174,6 +1180,15 @@ test "verify-ready with restart stops the daemon, and ends with it running, sayi
     assert\equal(did[0], want: "no daemon was running", message: "first");
     assert\equal(did[did.len() - 1], want: "started the daemon", message: "last");
     assert\equal(calls[calls.len() - 1], want: "magus server start", message: "start last");
+}
+
+test "verify-ready reads a stop that finds no server as no daemon" {
+    final h = stubHost({
+        "git rev-parse HEAD": Ran{ stdout = "abc123\n" },
+        "magus version -o json": Ran{ stdout = `{"commit": "abc123"}` },
+        "magus server stop": Ran{ code = 1, stderr = "magus: no server is running at unix:///s.sock" },
+    }, stamps: {}, calls: mut [<str>]);
+    assert\equal(verifyReady(h, dir: "/c", restart: true)[0], want: "no daemon was running", message: "first");
 }
 
 test "a daemon that will not start fails verify-ready loudly" {

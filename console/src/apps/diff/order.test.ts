@@ -8,6 +8,8 @@ import {
   settled,
   stats,
   riskChips,
+  highestTier,
+  tierChip,
 } from "./order";
 import type { DiffFile } from "./parse";
 import type { DiffAnnotation, DiffReview, DiffSymbol } from "./session";
@@ -402,4 +404,22 @@ test("stats counts what the fold hides, so the toolbar can say it", () => {
   assert.equal(s.settled, 1);
   // The denominator is unchanged: folding is a view, not a smaller changeset.
   assert.equal(s.files, 3);
+});
+
+test("a step reads at its highest tier, and an unassessed file counts as full", () => {
+  const scoped = { tier: "scoped", why: "Go package x" } as const;
+  const mechanical = { tier: "mechanical", why: "comment-only" } as const;
+  assert.equal(highestTier([mechanical, scoped]), "scoped");
+  assert.equal(highestTier([mechanical, undefined]), "full");
+});
+
+test("a step with no assessed file states no tier", () => {
+  assert.equal(highestTier([undefined, undefined]), undefined);
+  assert.equal(highestTier([]), undefined);
+});
+
+test("the tier chip names the tier and keeps the deciding fact for hover", () => {
+  const chip = tierChip({ tier: "full", class: "code", why: "no prover placed it" });
+  assert.deepEqual(chip, { text: "full", tone: "warn", title: "code: no prover placed it" });
+  assert.equal(tierChip(undefined), undefined);
 });

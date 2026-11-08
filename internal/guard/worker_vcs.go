@@ -63,29 +63,6 @@ func fastForwardWords(words []string) bool {
 	return flag == "--ff-only" && commitID(commit)
 }
 
-// integrationMerge reports `git merge --no-ff [--no-edit] <branch>` for a branch row, an
-// integration job, names in integrates: the one merge its holder exists to run. Any other
-// branch, option or verb is judged as for every worker, so the allowance widens nothing else.
-func integrationMerge(c hint.Invocation, row types.Job) bool {
-	if c.Name != "git" || !row.Integrating() || len(c.Args) < 3 || len(c.Args) > 4 || c.Args[0] != "merge" {
-		return false
-	}
-	var noFF bool
-	branch := ""
-	for _, a := range c.Args[1:] {
-		switch {
-		case a == "--no-ff":
-			noFF = true
-		case a == "--no-edit":
-		case strings.HasPrefix(a, "-") || branch != "":
-			return false
-		default:
-			branch = a
-		}
-	}
-	return noFF && slices.Contains(row.Integrates, branch)
-}
-
 // workerMergeFlags are the git merge options a worker's merge of its base may carry: none
 // picks a strategy, so neither side of the merge can be dropped.
 var workerMergeFlags = []string{"--no-edit", "--edit", "-e", "--ff", "--no-ff", "--ff-only", "--commit", "--no-commit",
@@ -152,10 +129,11 @@ func mergesBase(operand, base string, row types.Job) bool {
 	return base != "" && (operand == base || operand == "origin/"+path.Base(base))
 }
 
-// pickOperands is the revisions a `git cherry-pick` names; false for any other.
+// pickOperands is the revisions a `git cherry-pick` or `git revert` names;
+// false for any other. A revert writes the paths its revisions wrote.
 func pickOperands(inv hint.Invocation) (revs []string, ok bool) {
 	sub, rest := vcsSubcommand(inv)
-	if inv.Name != "git" || sub != "cherry-pick" {
+	if inv.Name != "git" || sub != "cherry-pick" && sub != "revert" {
 		return nil, false
 	}
 	return patchFlags(rest, "mX", cherryPickLongValued, func(string, string) {}, func(string) {}), true

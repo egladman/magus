@@ -309,9 +309,6 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_HINTS_ENABLED**
 : Controls whether hint messages (actionable nudges) are printed to stderr. Defaults to true. Set hints.enabled: false in magus.yaml or MAGUS_HINTS_ENABLED=false to suppress all hint output. Pointer to distinguish "not set" from explicit false (default: true). Config file key: **hints.enabled**.
 
-**MAGUS_KNOWLEDGE_WORKSPACES**
-: Additional workspace roots to union into a \`--global\` knowledge-graph query (query/explain/path and graph export/stats). Each is loaded and its node IDs are namespaced by the workspace ("\<name\>//\<id\>") so IDs from different repos cannot collide. Empty means --global covers only the current workspace. Config file key: **knowledge.workspaces**.
-
 **MAGUS_KNOWLEDGE_PUBLISHED_REF**
 : The OCI artifact a published knowledge graph is READ from, as \<registry\>/\<repository\>:\<tag\>. Empty (the default) means this workspace pulls nothing and every graph is built locally. Config file key: **knowledge.published_ref**.
 

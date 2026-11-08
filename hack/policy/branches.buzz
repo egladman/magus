@@ -16,6 +16,8 @@
 //   case, underscore, character: anything but lowercase letters, digits, `-` and `.`.
 //   length: more than maxWords words or maxChars characters.
 //   topic: no word naming what the branch touches.
+//   coverage: the name relates to under half of the topics the branch adds.
+//   theme: over maxNarrow topics and no name word relates to most of them.
 // The bounds come from the 372 merged pull requests whose head carried no `/` (as of
 // 2026-09-30): characters p50 17, p90 24, p95 26, p99 29, max 34; 98.7% are at most 28
 // characters and 98.1% at most 4 words.
@@ -26,6 +28,13 @@
 // merged pull requests' own diffs, 86 of the 344 names the mechanical rules pass (25%) miss
 // their topic, most of them good names (startup-latency, generate-race, sandbox-composed-
 // grants), so a topic miss alone advises, once per session, and the mechanical rules deny.
+//
+// A topic the branch adds is a changelog fragment it adds, else a commit
+// subject. theme denies, and coverage denies past maxAdvised topics.
+//
+// Replayed over merged pull requests (2026-11-07), coverage fails 13 of 123
+// one-fragment branches and 2 of 25 with two, most of them good names. So a
+// miss on up to maxAdvised topics advises, once per session.
 //
 // Each refusal names every failed rule with its evidence and serves a name built from the
 // one pushed, or, when nothing of it survives, from the diff's words. A branch the remote
@@ -40,6 +49,9 @@ import "./hack/policy/verdict" as verdict;
 
 final maxWords = 4;
 final maxChars = 28;
+// A branch adding more topics than this is wide: its name needs a theme word.
+final maxNarrow = 6;
+final maxAdvised = 2;
 
 final commitTypes = ["feat", "fix", "chore", "refactor", "docs", "perf", "test", "build", "ci",
     "style", "revert"];
@@ -277,10 +289,63 @@ export object Topic {
     words: [str],
     counts: {str: int},
     depths: {str: int},
+    subjects: [Subject] = [<Subject>],
 }
 
 export fun unknownTopic() > Topic {
     return Topic{ known = false, words = [<str>], counts = {<str: int>}, depths = {<str: int>} };
+}
+
+// Subject is one thing a branch adds: a changelog fragment or a commit
+// subject. label names it in a denial; words are what a name word matches.
+export object Subject {
+    label: str,
+    words: [str],
+}
+
+// subjectWords are the words of text a name could relate to.
+fun subjectWords(text: str) > [str] {
+    final words = mut [<str>];
+    foreach (w in splitWords(text)) {
+        if (w.len() < 3 or isDigits(w) or genericWords.indexOf(w) != null or stopWords.indexOf(w) != null or words.indexOf(w) != null) {
+            continue;
+        }
+        words.append(w);
+    }
+    return words;
+}
+
+// fragmentSubject is a changelog fragment's file name, which is its branch,
+// and the bold headline of its first entry.
+export fun fragmentSubject(path: str, text: str) > Subject {
+    final parts = withoutExtension(path).split("/");
+    final slug = parts[parts.len() - 1];
+    var headline = "";
+    final open = text.indexOf("**");
+    if (open != null) {
+        final rest = text.sub(open! + 2);
+        final close = rest.indexOf("**");
+        if (close != null) {
+            headline = rest.sub(0, len: close!);
+        }
+    }
+    return Subject{ label = slug, words = subjectWords(slug + " " + headline) };
+}
+
+// commitSubjectTopic is a commit subject without its conventional type.
+export fun commitSubjectTopic(subject: str) > Subject {
+    final all = splitWords(subject);
+    final words = mut [<str>];
+    foreach (w in subjectWords(subject)) {
+        if (all.len() > 1 and w == all[0] and commitTypes.indexOf(w) != null) { continue; }
+        words.append(w);
+    }
+    return Subject{ label = subject, words = words };
+}
+
+// withSubjects is topic with the subjects the branch adds.
+export fun withSubjects(topic: Topic, subjects: [Subject]) > Topic {
+    return Topic{ known = topic.known, words = topic.words, counts = topic.counts, depths = topic.depths, subjects = subjects };
 }
 
 // readTopic reads the words of paths, extensions, numbers and stop words left out. A changelog
@@ -388,6 +453,113 @@ fun topicalWord(words: [str], topic: Topic) > str? {
         }
     }
     return null;
+}
+
+// covers: name word w relates to a word of s, or is a synonym for one.
+fun covers(w: str, s: Subject) > bool {
+    foreach (t in s.words) {
+        if (related(w, b: t)) {
+            return true;
+        }
+    }
+    foreach (t in synonyms[w] ?? [<str>]) {
+        if (s.words.indexOf(t) != null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// reach is how many of subjects w covers.
+fun reach(w: str, subjects: [Subject]) > int {
+    var n = 0;
+    foreach (s in subjects) {
+        if (covers(w, s: s)) { n = n + 1; }
+    }
+    return n;
+}
+
+// coverageFailures judges the name's words against the subjects. A wide
+// branch needs one word covering most: unrelated words are no theme.
+fun coverageFailures(content: [str], subjects: [Subject]) > [Failure] {
+    final failures = mut [<Failure>];
+    final n = subjects.len();
+    if (n == 0) {
+        return failures;
+    }
+    final missed = mut [<str>];
+    var hit = 0;
+    foreach (s in subjects) {
+        var seen = false;
+        foreach (w in content) {
+            if (covers(w, s: s)) { seen = true; break; }
+        }
+        if (seen) { hit = hit + 1; } else { missed.append(s.label); }
+    }
+    if (n > maxNarrow) {
+        var best = "";
+        var bestReach = 0;
+        foreach (w in content) {
+            final r = reach(w, subjects: subjects);
+            if (r > bestReach) { best = w; bestReach = r; }
+        }
+        if (bestReach * 2 > n) {
+            return failures;
+        }
+        var closest = "no word of it relates to any of them";
+        if (best != "") {
+            closest = "the closest, `{best}`, relates to {bestReach}";
+        }
+        failures.append(Failure{ rule = "theme", why = "the branch adds {n} topics, over {maxNarrow}, so its name needs a theme word that relates to most of them; {closest}. Split the branch into branches of one theme each. Not named: {listed(missed)}" });
+        return failures;
+    }
+    if (hit * 2 < n) {
+        failures.append(Failure{ rule = "coverage", why = "the name relates to {hit} of the {n} topics the branch adds, and at least half are required. Not named: {listed(missed)}" });
+    }
+    return failures;
+}
+
+// listed is up to eight labels, then how many more.
+fun listed(labels: [str]) > str {
+    if (labels.len() <= 8) {
+        return labels.join(", ");
+    }
+    return labels.sub(0, len: 8).join(", ") + ", and {labels.len() - 8} more";
+}
+
+// coverName joins the subject words that cover the most uncovered subjects,
+// until half are covered. "" for a wide branch, which has no such name.
+fun coverName(subjects: [Subject]) > str {
+    if (subjects.len() > maxNarrow) {
+        return "";
+    }
+    final chosen = mut [<str>];
+    final done = mut [<bool>];
+    foreach (s in subjects) { done.append(false); }
+    var covered = 0;
+    var chars = 0;
+    while (covered * 2 < subjects.len() and chosen.len() < 3) {
+        var best = "";
+        var bestGain = 0;
+        foreach (s in subjects) {
+            foreach (w in s.words) {
+                var gain = 0;
+                foreach (i, t in subjects) {
+                    if (!done[i] and covers(w, s: t)) { gain = gain + 1; }
+                }
+                if (gain > bestGain) { best = w; bestGain = gain; }
+            }
+        }
+        if (best == "" or chars + best.len() + 1 > maxChars) {
+            break;
+        }
+        chosen.append(best);
+        chars = chars + best.len() + 1;
+        foreach (i, t in subjects) {
+            if (!done[i] and covers(best, s: t)) { done[i] = true; covered = covered + 1; }
+        }
+    }
+    return chosen.join("-");
 }
 
 // Failure is one rule a name breaks, and the evidence for it.
@@ -528,17 +700,22 @@ export fun judgeName(name: str, topic: Topic) > Verdict {
     if (words.len() > maxWords or rest.len() > maxChars) {
         failures.append(Failure{ rule = "length", why = "{words.len()} words and {rest.len()} characters; at most {maxWords} and {maxChars}, which 98% of this repository's merged branches keep" });
     }
-    if (topic.known) {
-        final content = mut [<str>];
-        foreach (w in kept) {
-            if (stopWords.indexOf(w) == null) { content.append(w); }
-        }
-        if (topicalWord(content, topic: topic) == null) {
-            failures.append(Failure{ rule = "topic", why = "no word of it names what the branch touches, whose paths say {leading(topic, n: 6).join(", ")}" });
-        }
+    final content = mut [<str>];
+    foreach (w in kept) {
+        if (stopWords.indexOf(w) == null) { content.append(w); }
+    }
+    if (topic.known and topicalWord(content, topic: topic) == null) {
+        failures.append(Failure{ rule = "topic", why = "no word of it names what the branch touches, whose paths say {leading(topic, n: 6).join(", ")}" });
+    }
+    final uncovered = coverageFailures(content, subjects: topic.subjects);
+    foreach (f in uncovered) {
+        failures.append(f);
     }
     if (failures.len() == 0) {
         return Verdict{ failures = failures, served = "" };
+    }
+    if (uncovered.len() > 0) {
+        return Verdict{ failures = failures, served = coverName(topic.subjects) };
     }
     return Verdict{ failures = failures, served = serve(kept, topic: topic) };
 }
@@ -680,7 +857,8 @@ export fun decideNames(programs: [helpers\Program], current: str, remote: Remote
         }
         foreach (f in verdict.failures) {
             lines.append("- {f.rule}: {f.why}");
-            if (f.rule != "topic") { mechanical = true; }
+            final small = f.rule == "coverage" and read!.subjects.len() <= maxAdvised;
+            if (f.rule != "topic" and !small) { mechanical = true; }
         }
         final update = p.tool == "gh" or remote.branches.indexOf("{p.remote}/{p.name}") != null;
         if ((update or !mechanical) and !once("branch-name:{p.name}")) {

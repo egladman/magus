@@ -41,6 +41,7 @@ import (
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -129,22 +130,26 @@ func readRecordedStaleIndexes(ctx context.Context, ws types.Inspector, cfg confi
 	return recordedStaleIndexes(ctx, lw, cfg)
 }
 
-// buildGlobalKnowledgeGraph unions the current workspace with each registered one
-// (cfg.Knowledge.Workspaces), namespacing node IDs by workspace so repos can't
-// collide. A workspace that fails to open is skipped with a warning, not fatal:
-// the query degrades to what it can reach.
+// buildGlobalKnowledgeGraph unions the current workspace with every other
+// knowledge.workspaces entry, qualifying node IDs by entry name. The current
+// workspace must be listed. An entry that fails to open fails the query: a
+// union quietly missing a workspace reads as complete.
 func buildGlobalKnowledgeGraph(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, refresh bool, log *slog.Logger) (*knowledge.Graph, error) {
 	if log == nil {
 		log = slog.Default()
 	}
 	root := ws.Root()
+	self, others, err := globalEntries(root, cfg.Knowledge.Workspaces)
+	if err != nil {
+		return nil, err
+	}
 	merged := knowledge.NewGraph()
 
 	cur, err := buildKnowledgeGraph(ctx, ws, root, cfg, refresh, log)
 	if err != nil {
 		return nil, err
 	}
-	knowledge.UnionInto(merged, knowledge.Qualified(cur, workspaceName(root)))
+	knowledge.UnionInto(merged, knowledge.Qualified(cur, self))
 
 	// A registered workspace is opened with what the current one was given: its
 	// environment, its stderr and its command line.
@@ -153,24 +158,44 @@ func buildGlobalKnowledgeGraph(ctx context.Context, ws types.WorkspaceRepository
 	if m := magusBehind(ctx, ws); m != nil {
 		opts, getenv = m.processOptions(), m.env
 	}
-	seen := map[string]bool{cleanRoot(root): true}
-	for _, wr := range cfg.Knowledge.Workspaces {
-		abs := cleanRoot(wr)
-		if abs == "" || seen[abs] {
-			continue // skip blanks and the current workspace re-listed
-		}
-		seen[abs] = true
-		g, err := buildRegisteredWorkspace(ctx, abs, getenv, opts, refresh, log)
+	for _, e := range others {
+		g, err := buildRegisteredWorkspace(ctx, e.Root, getenv, opts, refresh, log)
 		if err != nil {
-			log.With(attr.Component("magus")).WarnContext(ctx, "skipping registered workspace in global graph", slog.String("workspace", wr), attr.Error(err))
-			continue
+			return nil, fmt.Errorf("--global: knowledge.workspaces entry %s at %s: %w", e.Name, e.Where, err)
 		}
-		knowledge.UnionInto(merged, knowledge.Qualified(g, workspaceName(abs)))
+		knowledge.UnionInto(merged, knowledge.Qualified(g, e.Name))
 	}
 	// A pasted path is measured from the workspace the command was run in; the registered
 	// ones contribute nodes, not a second frame of reference.
 	merged.SetRoot(root)
 	return merged, nil
+}
+
+// globalEntries is root's own entry name and every other entry, resolved.
+// An unlisted root refuses, since no name would qualify its node IDs.
+func globalEntries(root string, entries []config.KnowledgeWorkspace) (string, []ward.ListedEntry, error) {
+	listed := make([]ward.ListedEntry, 0, len(entries))
+	for _, e := range entries {
+		r, err := e.Root()
+		if err != nil {
+			return "", nil, err
+		}
+		listed = append(listed, ward.ListedEntry{Name: e.Name, Root: r, Where: e.Where()})
+	}
+	self := ""
+	var others []ward.ListedEntry
+	for _, e := range listed {
+		if ward.Listed(root, []ward.ListedEntry{e}) {
+			self = e.Name
+			continue
+		}
+		others = append(others, e)
+	}
+	if self == "" {
+		return "", nil, fmt.Errorf("--global unions the workspaces knowledge.workspaces lists, and %s is not listed: "+
+			"add {name: <name>, path: %s} to it in $XDG_CONFIG_HOME/magus/%s", root, root, config.Filename)
+	}
+	return self, others, nil
 }
 
 // buildRegisteredWorkspace opens a registered workspace read-only, loads its own
@@ -189,21 +214,6 @@ func buildRegisteredWorkspace(ctx context.Context, root string, getenv func(stri
 		return nil, err
 	}
 	return buildKnowledgeGraph(ctx, wsRepo, root, wcfg, refresh, log)
-}
-
-// workspaceName is the qualifier for a workspace root: its basename. Collisions
-// (two repos with the same directory name) merge in the union view, which is
-// acceptable: the alternative (full paths) makes node IDs unreadable.
-func workspaceName(root string) string {
-	return filepath.Base(filepath.Clean(root))
-}
-
-// cleanRoot resolves root to an absolute, cleaned path for de-duplication.
-func cleanRoot(root string) string {
-	if abs, err := filepath.Abs(root); err == nil {
-		return abs
-	}
-	return filepath.Clean(root)
 }
 
 // resolveCacheDir is config.CacheDir, the one resolution the root, the pipe records

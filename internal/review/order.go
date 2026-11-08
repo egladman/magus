@@ -55,9 +55,32 @@ func OrderLines(rev types.Diff, showGenerated bool) []string {
 			for _, sig := range stepSignatures(rev, s) {
 				lines = append(lines, "    signature: "+sig)
 			}
+			for _, r := range stepRisks(rev, s) {
+				lines = append(lines, "    risk: "+r)
+			}
 		}
 	}
 	return append(lines, "", OrderCountLine(order.Count))
+}
+
+// stepRisks is the tier evidence of each file a step reads, once per file,
+// in the words `magus affected ci` prints. A file with no tier is left out.
+func stepRisks(rev types.Diff, s types.DiffStep) []string {
+	risk := map[string]*types.TierEvidence{}
+	for _, f := range rev.Files {
+		risk[f.Path] = f.Risk
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, h := range s.Hunks {
+		e := risk[h.Ref.Path]
+		if e == nil || seen[h.Ref.Path] {
+			continue
+		}
+		seen[h.Ref.Path] = true
+		out = append(out, e.Line())
+	}
+	return out
 }
 
 // GroupTitle is "kind around label (n hunks)", the heading a group carries wherever it is shown.

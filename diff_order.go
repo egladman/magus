@@ -78,6 +78,45 @@ func (m *Magus) attachOrder(ctx context.Context, out *types.Diff, graph *knowled
 	out.Order = &order
 }
 
+// attachRisk fills each file's Risk with its `magus affected ci` evidence,
+// tiered against base. A file it cannot tier keeps a nil Risk and a Note.
+// A moved file is one, since the assessment reads the working tree.
+func (m *Magus) attachRisk(ctx context.Context, out *types.Diff, base, patch string) {
+	if base == "" {
+		out.Notes = append(out.Notes, "risk tiers skipped: no revision names what the change is tiered against")
+		return
+	}
+	paths := make([]string, 0, len(out.Files))
+	for _, f := range out.Files {
+		paths = append(paths, f.Path)
+	}
+	report, err := m.AssessChange(ctx, types.TargetCI, AssessOptions{Base: base, ChangedPaths: paths})
+	if err != nil {
+		out.Notes = append(out.Notes, fmt.Sprintf("risk tiers skipped: %v", err))
+		return
+	}
+	byPath := make(map[string]types.TierEvidence, len(report.Evidence))
+	for _, e := range report.Evidence {
+		if e.Path != "" {
+			byPath[e.Path] = e
+		}
+	}
+	moved := movedFiles(m.ws.Root, patch)
+	var untiered []string
+	for i := range out.Files {
+		f := &out.Files[i]
+		e, ok := byPath[f.Path]
+		if !ok || moved[f.Path] {
+			untiered = append(untiered, f.Path)
+			continue
+		}
+		f.Risk = &e
+	}
+	if len(untiered) > 0 {
+		out.Notes = append(out.Notes, fmt.Sprintf("no risk tier for %s: moved since the reviewed range or given no evidence; each ranks as full", strings.Join(untiered, ", ")))
+	}
+}
+
 // orderSkip says why the symbol index cannot back a reading order, or "" when it can. touched
 // are the projects holding a changed file and indexed says the graph loaded symbols at all.
 //
@@ -144,9 +183,17 @@ func orderFiles(files []types.DiffFile, moved map[string]bool) []changeset.Order
 			Hunks:     f.Hunks,
 			Symbols:   f.Symbols,
 			Reach:     f.ReachOr(0),
+			Tier:      riskTier(f),
 		})
 	}
 	return out
+}
+
+func riskTier(f types.DiffFile) types.Tier {
+	if f.Risk == nil {
+		return types.RiskFull
+	}
+	return f.Risk.Tier
 }
 
 // movedFiles names the files whose working tree does not hold the lines the patch puts there.

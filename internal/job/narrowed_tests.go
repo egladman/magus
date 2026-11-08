@@ -140,14 +140,13 @@ func summarizeTests(names []string) string {
 	return fmt.Sprintf("%s and %d more", strings.Join(names[:maxListedTests], ", "), len(names)-maxListedTests)
 }
 
-// widenRunFix is the advice for tests -run leaves out: the pattern that covers them when it
-// is short enough to paste, else dropping -run, since a package argument forwarded to
-// go-test does not scope the run.
+// widenRunFix is the advice for tests -run leaves out.
+// Naming every written package scopes the run, so -run may narrow inside it.
 func widenRunFix(runArg string, notRun []string) string {
 	if covering := fmt.Sprintf("%s|%s", runArg, exactTestPattern(notRun)); len(covering) <= maxPastedPattern {
-		return fmt.Sprintf("widen -run to `%s` or drop -run", covering)
+		return fmt.Sprintf("widen -run to `%s`, drop -run, or name every written package (`./<dir>`) beside it", covering)
 	}
-	return "drop -run, since the tests it leaves out are too many for one pattern and a package argument does not scope go-test"
+	return "drop -run, or name every written package (`./<dir>`) beside it, since the tests it leaves out are too many for one pattern"
 }
 
 // narrowSkipFix is widenRunFix for the tests -skip drops.
@@ -155,7 +154,7 @@ func narrowSkipFix(skipArg string, skipped []string) string {
 	if exact := exactTestPattern(skipped); len(skipArg)+len(exact) <= maxPastedPattern {
 		return fmt.Sprintf("narrow -skip %q so it matches none of `%s` or drop -skip", skipArg, exact)
 	}
-	return "drop -skip, since the tests it drops are too many for one pattern and a package argument does not scope go-test"
+	return "drop -skip, since the tests it drops are too many for one pattern"
 }
 
 // exactTestPattern is a pattern matching exactly the named tests.

@@ -386,6 +386,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 		slices.Sort(node.Charms)
 		node.Spells = groupSpellOps(spellHits)
 		node.DispatchOnly = dispatchOnly(fn, spellHandles)
+		node.ForwardsArgs = forwardsArgs(fn, spellHandles)
 		nodes = append(nodes, node)
 	}
 	return nodes, attributedIO, prog
@@ -930,34 +931,77 @@ func dispatchOnly(fn *ast.FunDecl, spellHandles map[string]bool) bool {
 		return false
 	}
 	for _, stmt := range fn.Body.Stmts {
-		es, ok := stmt.(*ast.ExprStmt)
-		if !ok {
-			return false
-		}
-		call, ok := es.Expr.(*ast.CallExpr)
-		if !ok || len(call.Args) != 1 {
-			return false
-		}
-		if arg, ok := call.Args[0].(*ast.IdentExpr); !ok || arg.Name != fn.Params[0] {
-			return false
-		}
-		var handle ast.Node
-		switch c := call.Callee.(type) {
-		case *ast.IndexExpr:
-			if _, ok := c.Index.(*ast.StringLit); !ok {
-				return false
-			}
-			handle = c.Object
-		case *ast.MemberExpr:
-			handle = c.Object
-		default:
-			return false
-		}
-		if id, ok := handle.(*ast.IdentExpr); !ok || !spellHandles[id.Name] {
+		if !dispatchStmt(stmt, fn.Params[0], spellHandles) {
 			return false
 		}
 	}
 	return true
+}
+
+// forwardsArgs reports whether fn's body is dispatchOnly's calls,
+// at least one, beside ctx.needs statements on fn's own context.
+func forwardsArgs(fn *ast.FunDecl, spellHandles map[string]bool) bool {
+	if fn.Body == nil || len(fn.Params) == 0 {
+		return false
+	}
+	dispatches := 0
+	for _, stmt := range fn.Body.Stmts {
+		switch {
+		case dispatchStmt(stmt, fn.Params[0], spellHandles):
+			dispatches++
+		case !needsStmt(stmt, fn.Params[0]):
+			return false
+		}
+	}
+	return dispatches > 0
+}
+
+// dispatchStmt reports whether stmt is handle["op"](ctx) or
+// handle.op(ctx), with handle an imported spell and ctx named ctxParam.
+func dispatchStmt(stmt ast.Node, ctxParam string, spellHandles map[string]bool) bool {
+	es, ok := stmt.(*ast.ExprStmt)
+	if !ok {
+		return false
+	}
+	call, ok := es.Expr.(*ast.CallExpr)
+	if !ok || len(call.Args) != 1 {
+		return false
+	}
+	if arg, ok := call.Args[0].(*ast.IdentExpr); !ok || arg.Name != ctxParam {
+		return false
+	}
+	var handle ast.Node
+	switch c := call.Callee.(type) {
+	case *ast.IndexExpr:
+		if _, ok := c.Index.(*ast.StringLit); !ok {
+			return false
+		}
+		handle = c.Object
+	case *ast.MemberExpr:
+		handle = c.Object
+	default:
+		return false
+	}
+	id, ok := handle.(*ast.IdentExpr)
+	return ok && spellHandles[id.Name]
+}
+
+// needsStmt reports whether stmt is ctxParam.needs(...).
+func needsStmt(stmt ast.Node, ctxParam string) bool {
+	es, ok := stmt.(*ast.ExprStmt)
+	if !ok {
+		return false
+	}
+	call, ok := es.Expr.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	me, ok := call.Callee.(*ast.MemberExpr)
+	if !ok || me.Name != "needs" || me.Namespaced {
+		return false
+	}
+	id, ok := me.Object.(*ast.IdentExpr)
+	return ok && id.Name == ctxParam
 }
 
 // projectImport returns the alias and project path of an `import "project/<path>"`

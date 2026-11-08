@@ -39,7 +39,7 @@ func (s *BuildSuite) TestOneUnitIsOneShard() {
 	plan, err := Build(units(1), "test", WithMaxShards(8))
 	s.Require().NoError(err)
 	s.Require().Len(plan.Shards, 1)
-	s.Equal("0", plan.Shards[0].ID)
+	s.Equal("1a", plan.Shards[0].ID)
 }
 
 func (s *BuildSuite) TestOneOverTheCapDoublesTheFirstShard() {
@@ -70,11 +70,20 @@ func (s *BuildSuite) TestMaxShardsClampsToTheUnitCount() {
 	s.Len(plan.Shards, 1)
 }
 
+func (s *BuildSuite) TestIDsTakeOneLetterUpTo26Shards() {
+	plan, err := Build(units(26), "test", WithMaxShards(26))
+	s.Require().NoError(err)
+	s.Equal("1a", plan.Shards[0].ID)
+	s.Equal("1z", plan.Shards[25].ID)
+}
+
 func (s *BuildSuite) TestIDsPadToTheLastIndex() {
 	plan, err := Build(units(100), "test", WithMaxShards(100))
 	s.Require().NoError(err)
-	s.Equal("00", plan.Shards[0].ID)
-	s.Equal("99", plan.Shards[99].ID)
+	s.Equal("1aa", plan.Shards[0].ID)
+	s.Equal("1az", plan.Shards[25].ID)
+	s.Equal("1ba", plan.Shards[26].ID)
+	s.Equal("1dv", plan.Shards[99].ID)
 }
 
 func (s *BuildSuite) TestAModelReplacesCeilDivision() {
@@ -94,7 +103,7 @@ func (s *BuildSuite) TestAnUnlimitedRequestPastTheCeilingSaysItWasCapped() {
 	s.Require().NoError(err)
 	s.Len(plan.Shards, hardCeiling)
 	s.Len(plan.Fallbacks, 1)
-	s.Contains(plan.Fallbacks[0], "at most 256 shards")
+	s.Contains(plan.Fallbacks[0].What, "At most 256 shards")
 }
 
 func (s *BuildSuite) TestARequestUnderTheCeilingFallsBackOnNothing() {
@@ -182,8 +191,8 @@ func (s *StageZeroSuite) TestASharedPrerequisiteIsPlannedOnceInStageZero() {
 	plan, err := Build([]types.Unit{s.lint, s.test}, "test", WithMaxShards(8), WithModel(&s.model))
 	s.Require().NoError(err)
 	s.Equal(Plan{
-		StageZero: []Shard{{ID: "stage-zero-0", Units: []types.Unit{s.build}}},
-		Shards:    []Shard{{ID: "0", Units: []types.Unit{s.lint}}, {ID: "1", Units: []types.Unit{s.test}}},
+		StageZero: []Shard{{ID: "0a", Units: []types.Unit{s.build}}},
+		Shards:    []Shard{{ID: "1a", Units: []types.Unit{s.lint}}, {ID: "1b", Units: []types.Unit{s.test}}},
 		Source:    "test",
 	}, plan)
 }
@@ -192,8 +201,8 @@ func (s *StageZeroSuite) TestAUnitAnotherNeedsMovesToStageZero() {
 	plan, err := Build([]types.Unit{s.build, s.lint, s.test}, "test", WithMaxShards(8), WithModel(&s.model))
 	s.Require().NoError(err)
 	s.Equal(Plan{
-		StageZero: []Shard{{ID: "stage-zero-0", Units: []types.Unit{s.build}}},
-		Shards:    []Shard{{ID: "0", Units: []types.Unit{s.lint}}, {ID: "1", Units: []types.Unit{s.test}}},
+		StageZero: []Shard{{ID: "0a", Units: []types.Unit{s.build}}},
+		Shards:    []Shard{{ID: "1a", Units: []types.Unit{s.lint}}, {ID: "1b", Units: []types.Unit{s.test}}},
 		Source:    "test",
 	}, plan)
 }
@@ -203,7 +212,7 @@ func (s *StageZeroSuite) TestAPlanWithNoSharedWorkIsTheSingleStagePlan() {
 	us := []types.Unit{s.lint, s.test}
 	plan, err := Build(us, "test", WithMaxShards(8), WithModel(&s.model))
 	s.Require().NoError(err)
-	s.Equal(Plan{Shards: numbered("", s.model.Plan(us, 2)), Source: "test"}, plan)
+	s.Equal(Plan{Shards: numbered(1, s.model.Plan(us, 2)), Source: "test"}, plan)
 }
 
 func (s *StageZeroSuite) TestAReplayedPrerequisiteNeedsNoStageZero() {
@@ -211,7 +220,7 @@ func (s *StageZeroSuite) TestAReplayedPrerequisiteNeedsNoStageZero() {
 	plan, err := Build([]types.Unit{s.lint, s.test}, "test", WithMaxShards(8), WithModel(&s.model))
 	s.Require().NoError(err)
 	s.Equal(Plan{
-		Shards: []Shard{{ID: "0", Units: []types.Unit{s.lint}}, {ID: "1", Units: []types.Unit{s.test}}},
+		Shards: []Shard{{ID: "1a", Units: []types.Unit{s.lint}}, {ID: "1b", Units: []types.Unit{s.test}}},
 		Source: "test",
 	}, plan)
 }

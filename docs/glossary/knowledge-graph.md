@@ -29,6 +29,7 @@ magus query "kind=spell"
 In the docs:
 
 - [Knowledge graph](../concepts/knowledge.md#knowledge-graph)
+- [5. The knowledge graph, and what every verb returns](../decisions/0028-workspaces-see-each-other.md#5-the-knowledge-graph-and-what-every-verb-returns)
 
 <!-- END GLOSSARY USAGE -->
 

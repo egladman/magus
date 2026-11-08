@@ -509,15 +509,6 @@ var Fields = []fieldtype.Field{
 		Doc:      "Controls whether hint messages (actionable nudges) are printed to stderr. Defaults to true. Set hints.enabled: false in magus.yaml or MAGUS_HINTS_ENABLED=false to suppress all hint output. Pointer to distinguish \"not set\" from explicit false",
 	},
 	{
-		GoPath:   "Knowledge.Workspaces",
-		YamlPath: "knowledge.workspaces",
-		EnvVar:   "MAGUS_KNOWLEDGE_WORKSPACES",
-		Flag:     fieldtype.FlagNames{Long: ""},
-		Kind:     fieldtype.KindStringSlice,
-		Usage:    "MAGUS_KNOWLEDGE_WORKSPACES: Workspaces are additional workspace roots to union into a '--global' knowledge-graph query (query/explain/path and gr...",
-		Doc:      "Additional workspace roots to union into a `--global` knowledge-graph query (query/explain/path and graph export/stats). Each is loaded and its node IDs are namespaced by the workspace (\"<name>//<id>\") so IDs from different repos cannot collide. Empty means --global covers only the current workspace",
-	},
-	{
 		GoPath:   "Knowledge.PublishedRef",
 		YamlPath: "knowledge.published_ref",
 		EnvVar:   "MAGUS_KNOWLEDGE_PUBLISHED_REF",

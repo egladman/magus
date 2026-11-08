@@ -26,6 +26,28 @@ const invocationPrefix = "inv"
 // no duration are not a run. The charm and a spell filter are ignored, so `lint:rw` answers
 // for `lint`. ok is false when none of the newest files records one.
 func LastRunDuration(dir, project, target string) (time.Duration, bool) {
+	return lastRunDuration(dir, project, target, func(InvocationStart) bool { return true })
+}
+
+// LastRunDurationWith is LastRunDuration over the runs whose
+// command forwarded exactly forwarded after `--`. Nil matches a
+// run that forwarded nothing.
+func LastRunDurationWith(dir, project, target string, forwarded []string) (time.Duration, bool) {
+	want := strings.Join(forwarded, " ")
+	return lastRunDuration(dir, project, target, func(s InvocationStart) bool { return forwardedArgs(s.Command) == want })
+}
+
+// forwardedArgs is what a recorded command line passed after
+// `--`, joined by spaces as the line was.
+func forwardedArgs(command string) string {
+	if strings.HasSuffix(command, " --") {
+		return ""
+	}
+	_, after, _ := strings.Cut(command, " -- ")
+	return after
+}
+
+func lastRunDuration(dir, project, target string, ran func(InvocationStart) bool) (time.Duration, bool) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return 0, false
@@ -41,6 +63,12 @@ func LastRunDuration(dir, project, target string) (time.Duration, bool) {
 	newest := names[max(0, len(names)-maxInvocationFiles):]
 	for _, name := range slices.Backward(newest) {
 		records, _, _, _ := readFile(filepath.Join(dir, name))
+		if !slices.ContainsFunc(records, func(rec Record) bool {
+			var s InvocationStart
+			return rec.Kind == KindInvocationStart && json.Unmarshal(rec.Payload, &s) == nil && ran(s)
+		}) {
+			continue
+		}
 		for _, rec := range slices.Backward(records) {
 			if rec.Kind != KindTargetResult {
 				continue

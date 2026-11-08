@@ -232,6 +232,36 @@ func TestOrderRanksGroupsBySizeThenReachThenPath(t *testing.T) {
 	assert.Equal(t, []string{"P:3:0", "Q:2:9", "N:2:0"}, labels, "largest first, then reach, then path")
 }
 
+func TestOrderRanksAFullGroupBeforeALargerMechanicalOne(t *testing.T) {
+	t.Parallel()
+
+	big := []OrderFile{
+		orderFile("big0.go", orderHunk(0, 1, 5, "B")),
+		orderFile("big1.go", orderHunk(0, 1, 5)),
+		orderFile("big2.go", orderHunk(0, 1, 5)),
+	}
+	for i := range big {
+		big[i].Tier = types.RiskMechanical
+	}
+	small := []OrderFile{
+		orderFile("small0.go", orderHunk(0, 1, 5, "S")),
+		orderFile("small1.go", orderHunk(0, 1, 5)),
+	}
+	order := OrderHunks(OrderInput{
+		Files: append(big, small...),
+		Sites: []OrderSite{
+			orderUse("B", "big1.go", 2), orderUse("B", "big2.go", 2),
+			orderUse("S", "small1.go", 2),
+		},
+	})
+
+	var labels []string
+	for _, g := range order.Groups {
+		labels = append(labels, g.Label)
+	}
+	assert.Equal(t, []string{"S", "B"}, labels, "an unproven group reads before a proven-mechanical one of any size")
+}
+
 func TestOrderMergesConsecutiveStepsOfOneFile(t *testing.T) {
 	t.Parallel()
 

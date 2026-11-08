@@ -104,6 +104,22 @@ type Machine struct {
 	Cores    int    `json:"cores"`
 }
 
+// Fallback is one default a plan used because an input was missing. Each
+// field is one sentence, so a summary can lay them out as table columns.
+type Fallback struct {
+	// What is the default the plan used, e.g. "At most 8 shards".
+	What string `json:"what"`
+	// Why names the missing input.
+	Why string `json:"why"`
+	// Effect is what the default means for the run, and how to stop it.
+	Effect string `json:"effect"`
+}
+
+// String is the fallback on one line, for a log.
+func (f Fallback) String() string {
+	return fmt.Sprintf("%s: %s. %s", f.What, f.Why, f.Effect)
+}
+
 // ShardPlan is a provider-neutral CI shard plan produced by Magus.Plan.
 type ShardPlan struct {
 	// StageZero is the stage every shard of Shards waits for. Its shards
@@ -123,9 +139,9 @@ type ShardPlan struct {
 	// Machine is what the shards were packed for. Nil when none is
 	// configured, and Fallbacks then says no memory budget was checked.
 	Machine *Machine
-	// Fallbacks says each default the plan fell back to, one sentence each.
-	// Empty when every input was given.
-	Fallbacks []string
+	// Fallbacks says each default the plan fell back to. Empty when every
+	// input was given.
+	Fallbacks []Fallback
 	// Sufficient is the fewest shards that pack by duration as fast as
 	// this plan's count. Memory splits are not counted. 0 when no unit
 	// outlasts setup.

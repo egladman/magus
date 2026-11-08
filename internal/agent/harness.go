@@ -49,6 +49,15 @@ const (
 	// harnessSkipped is a check that could not run against this descriptor, with Reason
 	// saying why. It is reported, never read as verified.
 	harnessSkipped HarnessStatus = "skipped"
+	// HarnessPluginUninstalled: the host records no install reaching
+	// this checkout. A cached copy does not count; the host never loads it.
+	HarnessPluginUninstalled HarnessStatus = "uninstalled"
+	// HarnessPluginDisabled: a settings file that outranks the
+	// workspace's turns the installed plugin off.
+	HarnessPluginDisabled HarnessStatus = "disabled"
+	// HarnessPluginBehind: the recorded commit differs from the
+	// marketplace clone's.
+	HarnessPluginBehind HarnessStatus = "behind"
 )
 
 var (
@@ -712,17 +721,40 @@ func verifyHarnessPlugins(root string, d HarnessDescriptor, result *HarnessVerif
 		if file, err := planHarnessSetting(root, s); err != nil || len(file.Changes) > 0 {
 			continue
 		}
-		installed, err := claudePluginInstalled(id)
-		switch {
-		case err != nil:
-			result.Plugin = HarnessCheck{Status: HarnessUnprobed, Reason: err.Error()}
-			return
-		case !installed:
-			result.Plugin = HarnessCheck{Status: HarnessUncovered, Reason: pluginMissingReason(d, s, id)}
+		result.Plugin = judgeEnabledPlugin(root, d, s, id)
+		if result.Plugin.Status != HarnessVerified {
 			return
 		}
-		result.Plugin = HarnessCheck{Status: HarnessVerified}
 	}
+}
+
+// judgeEnabledPlugin judges one plugin by what the host records.
+// A currency the record cannot prove reads as unprobed.
+func judgeEnabledPlugin(root string, d HarnessDescriptor, enabled types.Setting, id string) HarnessCheck {
+	configDir := claudeConfigDir()
+	if _, err := os.Stat(configDir); err != nil {
+		if os.IsNotExist(err) {
+			return HarnessCheck{Status: harnessSkipped, Reason: fmt.Sprintf(
+				"skipped: %s does not exist, so the host has never run for this person here", configDir)}
+		}
+		return HarnessCheck{Status: HarnessUnprobed, Reason: err.Error()}
+	}
+	install, found, err := recordedPluginInstall(root, id)
+	switch {
+	case err != nil:
+		return HarnessCheck{Status: HarnessUnprobed, Reason: err.Error()}
+	case !found:
+		return HarnessCheck{Status: HarnessPluginUninstalled, Reason: pluginMissingReason(d, enabled, id)}
+	}
+	off, err := pluginTurnedOff(root, enabled, id)
+	switch {
+	case err != nil:
+		return HarnessCheck{Status: HarnessUnprobed, Reason: err.Error()}
+	case off != "":
+		return HarnessCheck{Status: HarnessPluginDisabled, Reason: fmt.Sprintf(
+			"%s is installed but %s turns it off; run: %s --scope local", id, off, pluginCommand("enable", id))}
+	}
+	return pluginCurrency(id, install)
 }
 
 // verifyHarnessHooks reports whether every hook d lists runs from one of its managed
@@ -793,7 +825,7 @@ func enabledPluginID(s types.Setting) (string, bool) {
 // extraKnownMarketplaces setting the descriptor keeps for the plugin's marketplace, and
 // falls back to the marketplace name when it keeps none.
 func pluginMissingReason(d HarnessDescriptor, enabled types.Setting, id string) string {
-	name, marketplace, _ := strings.Cut(id, "@")
+	_, marketplace, _ := strings.Cut(id, "@")
 	source := marketplace
 	for _, s := range d.Settings {
 		if len(s.Key) != 2 || s.Key[0] != "extraKnownMarketplaces" || s.Key[1] != marketplace {
@@ -803,12 +835,19 @@ func pluginMissingReason(d HarnessDescriptor, enabled types.Setting, id string) 
 			source = repo
 		}
 	}
-	reason := fmt.Sprintf("%s is enabled in %s but not installed for this person (%s lists it nowhere, and %s holds no cached %s); run once: claude plugin marketplace add %s (or trust the folder and start a session)", //nolint:hostagnostic // only the host spell that has plugins sets enabledPlugins
-		id, enabled.Path, filepath.Join(claudePluginsRoot(), "installed_plugins.json"), filepath.Join(claudePluginsRoot(), "cache", marketplace, name), name, source)
-	if registered, err := claudeMarketplaceKnown(marketplace); err == nil && !registered {
-		reason += fmt.Sprintf(" (marketplace %s is not registered either)", marketplace)
+	fix := pluginCommand("install", id)
+	if known, err := knownMarketplaces(); err == nil {
+		if _, registered := known[marketplace]; !registered {
+			fix = fmt.Sprintf("%s, then %s (marketplace %s is not registered)", pluginCommand("marketplace add", source), fix, marketplace)
+		}
 	}
-	return reason
+	return fmt.Sprintf("%s is enabled in %s but %s records no install of it for this checkout; run: %s",
+		id, enabled.Path, filepath.Join(claudePluginsRoot(), installedPluginsFile), fix)
+}
+
+// pluginCommand is the host's plugin command line running verb on arg.
+func pluginCommand(verb, arg string) string {
+	return fmt.Sprintf("claude plugin %s %s", verb, arg) //nolint:hostagnostic // only the host spell that has plugins sets enabledPlugins
 }
 
 func marketplaceRepository(value any) string {
@@ -838,63 +877,6 @@ func claudePluginsRoot() string {
 		return dir
 	}
 	return filepath.Join(claudeConfigDir(), "plugins")
-}
-
-// readClaudePluginStore decodes one JSON file of the host's plugin store. An absent file
-// reads as an empty document: a person who never installed a plugin has none.
-func readClaudePluginStore(name string) (map[string]any, error) {
-	path := filepath.Join(claudePluginsRoot(), name)
-	body, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return map[string]any{}, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", path, err)
-	}
-	doc := map[string]any{}
-	if err := decodeHarnessJSON(body, &doc); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
-	}
-	return doc, nil
-}
-
-// claudePluginInstalled counts an install in any scope, listed in installed_plugins.json,
-// or a version dir under cache/<marketplace>/<plugin>: the host caches a relative-path
-// marketplace's plugin without recording it.
-func claudePluginInstalled(id string) (bool, error) {
-	doc, err := readClaudePluginStore("installed_plugins.json")
-	if err != nil {
-		return false, err
-	}
-	plugins, _ := doc["plugins"].(map[string]any)
-	switch v := plugins[id].(type) {
-	case []any:
-		if len(v) > 0 {
-			return true, nil
-		}
-	case map[string]any:
-		if len(v) > 0 {
-			return true, nil
-		}
-	}
-	name, marketplace, _ := strings.Cut(id, "@")
-	entries, err := os.ReadDir(filepath.Join(claudePluginsRoot(), "cache", marketplace, name))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, fmt.Errorf("read plugin cache for %s: %w", id, err)
-	}
-	return slices.ContainsFunc(entries, func(e os.DirEntry) bool { return e.IsDir() }), nil
-}
-
-func claudeMarketplaceKnown(name string) (bool, error) {
-	doc, err := readClaudePluginStore("known_marketplaces.json")
-	if err != nil {
-		return false, err
-	}
-	_, ok := doc[name]
-	return ok, nil
 }
 
 func verifyHarnessConfig(ctx context.Context, root string, d HarnessDescriptor, source string) (HarnessVerification, error) {

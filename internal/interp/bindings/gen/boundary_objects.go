@@ -2367,6 +2367,11 @@ func ObjectDiffFile(v types.DiffFile, enums ffi.EnumCases) vm.Value {
 		itemsThreads[indexThreads] = ObjectDiffThreadRef(v.Threads[indexThreads])
 	}
 	out.MapSet("threads", vm.ListValue(itemsThreads))
+	optRisk := vm.Null
+	if v.Risk != nil {
+		optRisk = ObjectTierEvidence((*v.Risk), enums)
+	}
+	out.MapSet("risk", optRisk)
 	return out
 }
 
@@ -4293,6 +4298,7 @@ func ObjectTargetGraphNode(v types.TargetGraphNode) vm.Value {
 	}
 	out.MapSet("spells", vm.ListValue(itemsSpells))
 	out.MapSet("dispatchOnly", vm.BoolValue(v.DispatchOnly))
+	out.MapSet("forwardsArgs", vm.BoolValue(v.ForwardsArgs))
 	itemsCrossDependencies := make([]vm.Value, len(v.CrossDependencies))
 	for indexCrossDependencies := range v.CrossDependencies {
 		itemsCrossDependencies[indexCrossDependencies] = ObjectCrossTargetRef(v.CrossDependencies[indexCrossDependencies])
@@ -4739,6 +4745,14 @@ func ObjectEvaluatedProject(v types.EvaluatedProject, enums ffi.EnumCases) vm.Va
 	return out
 }
 
+func ObjectListedWorkspace(v types.ListedWorkspace) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("name", vm.StringValue(v.Name))
+	out.MapSet("root", vm.StringValue(v.Root))
+	out.MapSet("dir", vm.StringValue(v.Dir))
+	return out
+}
+
 func ObjectWorkspaceEntry(v types.WorkspaceEntry) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("root", vm.StringValue(v.Root))
@@ -4746,6 +4760,11 @@ func ObjectWorkspaceEntry(v types.WorkspaceEntry) vm.Value {
 	out.MapSet("cacheDir", vm.StringValue(v.CacheDir))
 	out.MapSet("concurrency", vm.IntValue(int64(v.Concurrency)))
 	out.MapSet("projectCount", vm.IntValue(int64(v.ProjectCount)))
+	itemsWorkspaces := make([]vm.Value, len(v.Workspaces))
+	for indexWorkspaces := range v.Workspaces {
+		itemsWorkspaces[indexWorkspaces] = ObjectListedWorkspace(v.Workspaces[indexWorkspaces])
+	}
+	out.MapSet("workspaces", vm.ListValue(itemsWorkspaces))
 	return out
 }
 

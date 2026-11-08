@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/types"
@@ -21,7 +22,7 @@ const (
 // any negative integer other than -1 (the sentinel for "unlimited").
 var ErrInvalidMaxShards = errors.New("ci: max shards must be -1 (unlimited) or a positive integer")
 
-// Shard is one runner's worth of work; ID is zero-padded so log entries sort correctly.
+// Shard is one runner's worth of work; ID is its stage and letters, e.g. 1a.
 type Shard struct {
 	ID    string
 	Units []types.Unit
@@ -30,14 +31,15 @@ type Shard struct {
 // Plan is the output of Build: shards for a CI matrix plus source label and concurrency cap.
 type Plan struct {
 	// StageZero runs before Shards and computes the prerequisites Shards
-	// share; see [forecast.Model.PlanStages]. Each ID starts with
-	// "stage-zero-". Empty without a model, or when no shard shares one.
+	// share; see [forecast.Model.PlanStages]. Its IDs start with 0, and
+	// those of Shards with 1. Empty without a model, or when no shard
+	// shares one.
 	StageZero   []Shard
 	Shards      []Shard
 	Source      string
 	MaxParallel int // 0 = no cap (renderers emit max-parallel = len(Shards))
 	// Fallbacks says each limit Build applied that was not asked for.
-	Fallbacks []string
+	Fallbacks []types.Fallback
 }
 
 type config struct {
@@ -82,10 +84,13 @@ func Build(units []types.Unit, source string, opts ...Option) (Plan, error) {
 	if maxShards == -1 {
 		maxShards = len(units)
 	}
-	var fallbacks []string
+	var fallbacks []types.Fallback
 	if maxShards > hardCeiling && len(units) > hardCeiling {
-		fallbacks = append(fallbacks, fmt.Sprintf(
-			"the plan opens at most %d shards, the matrix-job ceiling, not the %d asked for", hardCeiling, maxShards))
+		fallbacks = append(fallbacks, types.Fallback{
+			What:   fmt.Sprintf("At most %d shards, not the %d asked for", hardCeiling, maxShards),
+			Why:    fmt.Sprintf("%d is the most jobs one matrix holds", hardCeiling),
+			Effect: "Each shard holds more targets and runs longer than the cap asked for.",
+		})
 	}
 	maxShards = min(maxShards, hardCeiling, len(units))
 
@@ -102,29 +107,40 @@ func Build(units []types.Unit, source string, opts ...Option) (Plan, error) {
 		return Plan{}, err
 	}
 	return Plan{
-		StageZero: numbered(stageZeroPrefix, stages.Zero),
-		Shards:    numbered("", stages.One),
+		StageZero: numbered(0, stages.Zero),
+		Shards:    numbered(1, stages.One),
 		Source:    source,
 		Fallbacks: fallbacks,
 	}, nil
 }
 
-// stageZeroPrefix starts every stage-zero shard ID, so one --shard value
-// names a shard of either stage.
-const stageZeroPrefix = "stage-zero-"
-
-// numbered is assignments as shards whose IDs are prefix and a zero-padded
-// index.
-func numbered(prefix string, assignments [][]types.Unit) []Shard {
+// numbered is assignments as the shards of stage. An ID is the stage numeral
+// and then the shard's letters, as an ordered list numbers its second level.
+// The numeral keeps one --shard value unique across stages.
+func numbered(stage int, assignments [][]types.Unit) []Shard {
 	if len(assignments) == 0 {
 		return nil
 	}
-	idWidth := digits(len(assignments) - 1)
 	shards := make([]Shard, len(assignments))
 	for i, us := range assignments {
-		shards[i] = Shard{ID: fmt.Sprintf("%s%0*d", prefix, idWidth, i), Units: us}
+		shards[i] = Shard{ID: strconv.Itoa(stage) + letters(i, len(assignments)), Units: us}
 	}
 	return shards
+}
+
+// letters is index i of n as lowercase letters, a for 0. Every index of n
+// takes the same width, aa to zz past 26, so IDs sort in shard order.
+func letters(i, n int) string {
+	width := 1
+	for capacity := 26; capacity < n; capacity *= 26 {
+		width++
+	}
+	b := make([]byte, width)
+	for j := width - 1; j >= 0; j-- {
+		b[j] = byte('a' + i%26)
+		i /= 26
+	}
+	return string(b)
 }
 
 // placedOnce checks that assignments hold every unit exactly once, in at most
@@ -181,18 +197,4 @@ func ceilDivide(units []types.Unit, maxShards int) [][]types.Unit {
 		idx += count
 	}
 	return out
-}
-
-// digits returns the number of decimal digits needed to represent n.
-// digits(0) == 1.
-func digits(n int) int {
-	if n <= 0 {
-		return 1
-	}
-	d := 0
-	for n > 0 {
-		d++
-		n /= 10
-	}
-	return d
 }

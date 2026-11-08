@@ -8,6 +8,11 @@ export final SCHEMA = "magus.branch-stack/v1";
 
 export final STATUSES = ["planned", "created", "merged", "needs-stub", "conflict"];
 
+// reviewBudget is how many changed lines one person reviews well in a sitting.
+// SmartBear's study of 2,500 Cisco reviews (Cohen, 2006) saw defect detection
+// fall off past 200 to 400 lines; this is that range's ceiling.
+export final reviewBudget = 400;
+
 // CheckGoal is a job row goal of kind check: `magus run <target> <project> -- <args>`.
 export object CheckGoal {
     id: str,

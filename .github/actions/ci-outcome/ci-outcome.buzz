@@ -15,16 +15,18 @@ import "std";
 export fun outcome(result: str, shards: str) > str {
     final text = "## CI outcome\n\n";
     if (result == "success") {
-        return text + "Passed across " + shards + " affected shard(s).\n";
+        return text + "Every stage 1 shard passed (" + shards + " in all).\n";
     }
     if (result == "skipped") {
-        return text + "No affected projects required a CI shard.\n";
+        return text + "No shard ran: no affected project needed one.\n";
     }
     if (result == "failure" or result == "cancelled") {
-        return text + "**" + result + ":** open the failed shard job above, then fetch its "
-            + "magus output reference before retrying.\n\n"
-            + "Local triage: `magus affected ci` - "
-            + "[Affected CI guide](https://eli.gladman.cc/magus/guides/affected/) - "
+        return text + "**Stage 1 " + result + ".** In the run graph, open the red job; "
+            + "its name starts with the shard ID, such as `1b`. Its log ends with a magus "
+            + "output reference, and its logs upload as `magus-logs-<ID>`.\n\n"
+            + "To rerun that shard locally, download the run's `magus-plan-<attempt>` "
+            + "artifact and run `magus run --stdin --shard <ID> < plan.json`. "
+            + "[Affected CI guide](https://eli.gladman.cc/magus/guides/affected/), "
             + "[CI target guide](https://eli.gladman.cc/magus/concepts/targets/ci/)\n";
     }
     // Not a result GitHub documents. Say so plainly rather than mapping it onto one of
@@ -85,12 +87,12 @@ fun main() > void !> any {
 
 test "outcome reports a pass with the shard count" {
     final got = outcome("success", shards: "3");
-    std\assert(got.indexOf("3 affected shard(s)") != null, message: "names the shard count");
+    std\assert(got.indexOf("(3 in all)") != null, message: "names the shard count");
 }
 
 test "outcome explains a failure and offers local triage" {
     final got = outcome("failure", shards: "2");
-    std\assert(got.indexOf("magus affected ci") != null, message: "names the local command");
+    std\assert(got.indexOf("--shard <ID>") != null, message: "names the local command");
     std\assert(got.indexOf("output reference") != null, message: "points at the output ref");
 }
 
@@ -100,5 +102,5 @@ test "outcome says so when the result is not one GitHub documents" {
 }
 
 test "outcome distinguishes skipped from passed" {
-    std\assert(outcome("skipped", shards: "0").indexOf("No affected projects") != null, message: "skipped is not a pass");
+    std\assert(outcome("skipped", shards: "0").indexOf("No shard ran") != null, message: "skipped is not a pass");
 }

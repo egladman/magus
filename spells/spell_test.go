@@ -257,6 +257,10 @@ func TestIsRemoteImport(t *testing.T) {
 	}
 }
 
+func TestIsRemoteImportTakesADotDirectoryAsLocal(t *testing.T) {
+	assert.False(t, IsRemoteImport(".magus/workspaces/magus/spells/golang/golangci"))
+}
+
 func TestIsEmbeddedImport(t *testing.T) {
 	assert.True(t, IsEmbeddedImport("magus/spell/go"))
 	assert.False(t, IsEmbeddedImport("magus"))

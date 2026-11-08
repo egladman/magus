@@ -1,0 +1,9 @@
+A path that only resolves on the author's machine.
+-- hit/change-description --
+- Moves the store under `~/Repos/magus/.cache`.
+- Reads /Users/eli/Repos/magus/magus.yaml on start.
+-- hit/commit-message --
+read $HOME/Repos/magus/keys on start
+-- pass/change-description --
+- Edits `internal/guard/stale_binary.go` and writes to /dev/null.
+- See https://eli.gladman.cc/magus/guides/setup/ for the setup.
