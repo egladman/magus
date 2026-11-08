@@ -4,7 +4,7 @@
 
 Up: [workspace index](../MAGUS.md)
 
-Depends on: [(workspace root)](../MAGUS.md), [docs/guides/integrations/agents](guides/integrations/agents/MAGUS.md), libs/figure, [libs/gopherbuzz](../libs/gopherbuzz/MAGUS.md), [libs/kustomize](../libs/kustomize/MAGUS.md), [libs/proofread](../libs/proofread/MAGUS.md), [libs/textsearch](../libs/textsearch/MAGUS.md), [proto](../proto/MAGUS.md)
+Depends on: [(workspace root)](../MAGUS.md), [docs/guides/integrations/agents](guides/integrations/agents/MAGUS.md), [libs/cmdline](../libs/cmdline/MAGUS.md), [libs/diagnostics](../libs/diagnostics/MAGUS.md), libs/embed, libs/figure, [libs/gopherbuzz](../libs/gopherbuzz/MAGUS.md), [libs/kustomize](../libs/kustomize/MAGUS.md), [libs/proofread](../libs/proofread/MAGUS.md), [libs/scipbuzz](../libs/scipbuzz/MAGUS.md), [libs/textsearch](../libs/textsearch/MAGUS.md), [libs/xdg](../libs/xdg/MAGUS.md), [proto](../proto/MAGUS.md)
 
 Query: `magus query project=docs`
 

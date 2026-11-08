@@ -20,7 +20,7 @@ magus\project({
     "tools": {"node": policy\node},
     "spells": [typescript],
     // proto writes src/gen/; without this edge a .proto change leaves the console unaffected.
-    "depends_on": ["../proto"],
+    "depends_on": ["..", "../docs", "../proto"],
     // Affected tracks this glob, not the import graph, so it names every input.
     "sources": ["*.buzz",
                 "src/**/*.ts", "src/**/*.css", "src/**/*.html",
