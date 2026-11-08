@@ -297,6 +297,7 @@ func (g *machineGate) seat(ctx context.Context, c types.MachineClaim) (string, f
 	}
 	wctx, w := g.newBudgetWait(ctx, c)
 	defer w.stop()
+	c = w.claim
 	v, err := g.ask(wctx, c, func(v types.MachineVerdict) { w.parked(ctx, v) })
 	if err != nil {
 		if ctx.Err() != nil {
@@ -332,6 +333,8 @@ func (g *machineGate) seat(ctx context.Context, c types.MachineClaim) (string, f
 func (g *machineGate) atBound(ctx context.Context, c types.MachineClaim, w *budgetWait) (string, func(), error) {
 	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), machineReleaseTimeout)
 	defer cancel()
+	// The broker records the wait this ask ends.
+	c.WaitedMS = w.waited().Milliseconds()
 	v, err := g.admit.Request(rctx, c)
 	switch {
 	case err != nil:
@@ -394,7 +397,9 @@ type budgetWait struct {
 
 func (g *machineGate) newBudgetWait(ctx context.Context, c types.MachineClaim) (context.Context, *budgetWait) {
 	wctx, cancel := context.WithCancel(ctx)
-	return wctx, &budgetWait{cancel: cancel, gate: g, claim: c, bound: budgetBound(ctx, g.wait), blind: blindToOwnAncestry(ctx)}
+	bound := budgetBound(ctx, g.wait)
+	c.WaitBoundMS = bound.d.Milliseconds()
+	return wctx, &budgetWait{cancel: cancel, gate: g, claim: c, bound: bound, blind: blindToOwnAncestry(ctx)}
 }
 
 // parked hears each report of what keeps the claim out. A wait on its own
@@ -429,19 +434,75 @@ func (w *budgetWait) parked(ctx context.Context, v types.MachineVerdict) {
 		w.gen++
 		gen := w.gen
 		w.timer = time.AfterFunc(w.bound.d, func() { w.expire(gen) })
-		w.say(ctx, fmt.Sprintf("waiting for a seat for %s %s: %s, and %s; %s. It gives up after %s (%s)",
+		w.say(ctx, fmt.Sprintf("waiting for a seat for %s %s: %s, and %s; %s%s. It gives up after %s (%s)",
 			displayProject(w.claim.Project), w.claim.Target, describeMachineDeclaration(w.claim),
-			describeMachineRemaining(v), held, w.bound.d, w.bound.source))
+			describeMachineRemaining(v), describeMachineWait(v, time.Now()), describeMachineQueue(v),
+			w.bound.d, w.bound.source))
 		return
 	}
 	if held == w.holders {
 		return
 	}
 	w.holders = held
-	elapsed := time.Since(w.since)
-	w.say(ctx, fmt.Sprintf("still waiting for a seat for %s %s after %s: now %s; it gives up in %s",
-		displayProject(w.claim.Project), w.claim.Target, elapsed.Round(time.Second), held,
-		max(w.bound.d-elapsed, 0).Round(time.Second)))
+	now := time.Now()
+	elapsed := now.Sub(w.since)
+	w.say(ctx, fmt.Sprintf("still waiting for a seat for %s %s after %s: now %s%s; it gives up in %s",
+		displayProject(w.claim.Project), w.claim.Target, elapsed.Round(time.Second),
+		describeMachineWait(v, now), describeMachineQueue(v), max(w.bound.d-elapsed, 0).Round(time.Second)))
+}
+
+// describeMachineWait names each holder with what its claim is made of,
+// and the soonest a holder's own history says it may finish. Durations ran
+// 2.4 to 4 times low on 2026-11-07, so that is only ever "at least".
+func describeMachineWait(v types.MachineVerdict, now time.Time) string {
+	if len(v.Holders) == 0 {
+		return "nothing else holds a claim"
+	}
+	const show = 4
+	parts := make([]string, 0, min(len(v.Holders), show))
+	var soonest time.Duration
+	for i, h := range v.Holders {
+		if d10 := time.Duration(h.Profile.D10Ms) * time.Millisecond; h.Profile.Runs > 0 && d10 > 0 {
+			if left := h.Since.Add(d10).Sub(now); left > 0 && (soonest == 0 || left < soonest) {
+				soonest = left
+			}
+		}
+		if i >= show {
+			continue
+		}
+		what := fmt.Sprintf("%s %s", displayProject(h.Project), h.Target)
+		desc := fmt.Sprintf("pid %d %s", h.PID, what)
+		if h.MemoryMB > 0 {
+			desc = fmt.Sprintf("pid %d %s", h.PID, h.Sizing.Breakdown(what, h.Under, h.MemoryMB))
+		} else if h.Under != "" {
+			desc += " under " + h.Under
+		}
+		if h.Dir != "" {
+			desc += ", in " + h.Dir
+		}
+		parts = append(parts, desc)
+	}
+	list := "held by " + strings.Join(parts, "; ")
+	if len(v.Holders) > show {
+		list = fmt.Sprintf("%s and %d more", list, len(v.Holders)-show)
+	}
+	if soonest > 0 {
+		list += fmt.Sprintf("; the first holder ends in at least %s", soonest.Round(time.Second))
+	}
+	return list
+}
+
+// describeMachineQueue is the parked claims ahead of this one. A broker
+// without a queue position sends none, and this says nothing.
+func describeMachineQueue(v types.MachineVerdict) string {
+	switch v.Ahead {
+	case 0:
+		return ""
+	case 1:
+		return "; 1 claim is ahead of it in the queue"
+	default:
+		return fmt.Sprintf("; %d claims are ahead of it in the queue", v.Ahead)
+	}
 }
 
 // expire ends the wait unless its timer was cleared as it fired.
@@ -780,7 +841,7 @@ func machineBusyError(c types.MachineClaim, v types.MachineVerdict, now time.Tim
 	next := fmt.Sprintf("Raise %s, or free a holder, then run the same command again", BudgetWaitSource)
 	if bound.d == 0 {
 		why = fmt.Sprintf("no seat is free, %s. It did not wait, since %s is 0", describeMachineHolders(v.Holders), BudgetWaitSource)
-		next = "To wait for a seat instead, run the same command again with --budget-wait 30m, or set MAGUS_BUDGET_WAIT or budget_wait in magus.yaml"
+		next = "To wait for a seat instead, run the same command again with --budget-wait 30m, the default, or drop the 0 from MAGUS_BUDGET_WAIT or budget_wait in magus.yaml"
 	}
 	if lease != "" {
 		next = fmt.Sprintf("Job %s got no seat: %s", lease, owedFiling(lease))

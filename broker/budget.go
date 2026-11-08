@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
@@ -91,12 +92,16 @@ func (s *server) park(p *parked) {
 	s.markGateLocked(p.sess, p.claim)
 	p.gate = s.gateLocked(p.sess, p.claim) != nil
 	r, o := s.judgeLocked(p, s.aheadLocked(p, false))
-	why := p.why
+	var why parkedReply
 	var seq uint64
 	if o == waiting {
+		s.enqueueLocked(p)
+		if !p.why.Verdict.OwnRun {
+			p.why.Verdict.Ahead = slices.Index(s.queue, p)
+		}
+		why = p.why
 		p.sent = why.key()
 		seq = p.nextFrameLocked()
-		s.enqueueLocked(p)
 		s.armWakeLocked()
 	}
 	others := o == seated && len(s.queue) > 0
@@ -144,7 +149,7 @@ func (s *server) judgeLocked(p, starved *parked) (reply, outcome) {
 		return r, o
 	}
 	head := starved.claim
-	head.Slots = max(head.Slots, 1)
+	head.Slots = cache.SlotsFloor(head)
 	id := s.budget.Assert(head)
 	defer s.budget.Release(id)
 	return p.try(p)
@@ -263,19 +268,37 @@ func (s *server) claimTry(sess *session, c types.MachineClaim) func(*parked) (re
 			p.why = parkedReply{Verdict: types.MachineVerdict{Fits: true, OwnRun: true}, Seat: wait}
 			return reply{}, waiting
 		}
-		v := s.budget.Request(c)
+		v := s.budget.Request(c, s.othersParkedLocked(p))
 		switch {
 		case v.Granted:
-			sess.claims[v.ID] = max(c.Slots, 1)
+			sess.claims[v.ID] = v.Slots
+			if p.sent != "" && !p.why.Verdict.OwnRun {
+				waited := c
+				waited.WaitedMS = max(time.Since(p.since).Milliseconds(), 1)
+				s.ledger.claimed(s.conns, sess, waited, v, time.Now())
+			}
 			return reply{typeClaimReply, claimReply{Verdict: v}}, seated
 		case v.Fits:
 			v.Holders = ownedHolders(s.conns, v.Holders)
+			if i := slices.Index(s.queue, p); i >= 0 {
+				v.Ahead = i
+			}
 			p.why = parkedReply{Verdict: v}
 			return reply{}, waiting
 		}
 		s.ledger.claimed(s.conns, sess, c, v, time.Now())
 		return reply{typeClaimReply, claimReply{Verdict: v}}, answered
 	}
+}
+
+// othersParkedLocked counts the parked requests other than p, the waiters a
+// grant to p leaves room for. Callers hold s.mu.
+func (s *server) othersParkedLocked(p *parked) int {
+	n := len(s.queue)
+	if slices.Contains(s.queue, p) {
+		n--
+	}
+	return n
 }
 
 // ownedHolders is holders with each one's owner named. Callers hold s.mu.
@@ -291,20 +314,30 @@ func ownedHolders(conns map[net.Conn]*session, holders []types.MachineClaimant) 
 // refusedKeep bounds the refusals a broker remembers for status.
 const refusedKeep = 20
 
-// budgetLedger is the last MGS3009 refusals the broker answered, bounded.
+// budgetLedger is the last MGS3009 refusals the broker answered, bounded,
+// and the store every refusal and seated wait goes to.
 // The zero value is ready; s.mu guards it.
 type budgetLedger struct {
 	// refused is newest first.
 	refused []types.MachineAdmission
+	store   *admissionWriter
 }
 
 // claimed records a claim's verdict when it is the MGS3009 refusal the client turns it
-// into: neither a grant nor a wait on the caller's own run.
+// into. A grant is recorded when the claim waited on other runs (WaitedMS).
 func (l *budgetLedger) claimed(conns map[net.Conn]*session, sess *session, c types.MachineClaim, v types.MachineVerdict, now time.Time) {
-	if v.Granted || v.Fits && v.OwnRun {
+	outcome := types.AdmissionRefused
+	switch {
+	case v.Granted && c.WaitedMS > 0:
+		outcome = types.AdmissionSeated
+	case v.Granted, v.Fits && v.OwnRun:
 		return
 	}
-	l.refuse(machineRefusal(c, sessionOwner(sess), v, connectionOwners(conns), now))
+	a := machineAdmission(c, sessionOwner(sess), v, connectionOwners(conns), now, outcome)
+	if outcome == types.AdmissionRefused {
+		l.refuse(a)
+	}
+	l.store.add(a)
 }
 
 // capacity is snap with each holder's owner, the connection that holds its
@@ -322,14 +355,23 @@ func (l *budgetLedger) refuse(r types.MachineAdmission) {
 	}
 }
 
-func machineRefusal(c types.MachineClaim, owner string, v types.MachineVerdict, owners map[int]string, now time.Time) types.MachineAdmission {
+// machineAdmission is the record of verdict v on c. A seat records the
+// slots it granted, a refusal the slots asked for.
+func machineAdmission(c types.MachineClaim, owner string, v types.MachineVerdict, owners map[int]string, now time.Time, outcome types.AdmissionOutcome) types.MachineAdmission {
 	holders := slices.Clone(v.Holders)
 	for i, h := range holders {
 		holders[i].Owner = owners[h.PID]
 	}
+	slots := max(c.Slots, 1)
+	if v.Granted && v.Slots > 0 {
+		slots = v.Slots
+	}
 	return types.MachineAdmission{
-		At: now, PID: c.PID, Project: c.Project, Target: c.Target, MemoryMB: c.MemoryMB, Slots: max(c.Slots, 1),
-		Dir: c.Dir, Command: c.Command, Owner: owner, Fits: v.Fits, Holders: holders,
+		At: now, Outcome: outcome, PID: c.PID, Project: c.Project, Target: c.Target, Under: c.Under,
+		MemoryMB: c.MemoryMB, Slots: slots, Dir: c.Dir, Command: c.Command, Owner: owner, Fits: v.Fits,
+		WaitedMS: c.WaitedMS, WaitBoundMS: c.WaitBoundMS, Sizing: c.Sizing,
+		BudgetMB: v.BudgetMB, HeldMB: v.HeldMB, BudgetSlots: v.BudgetSlots, HeldSlots: v.HeldSlots,
+		Holders: holders,
 	}
 }
 

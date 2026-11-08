@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/types"
 )
 
@@ -60,11 +61,11 @@ func (s *server) requestLocked(sess *session, c types.MachineClaim) types.Machin
 	p := &parked{sess: sess, claim: c, gate: s.gateLocked(sess, c) != nil}
 	if ahead := s.aheadLocked(p, true); ahead != nil {
 		head := ahead.claim
-		head.Slots = max(head.Slots, 1)
+		head.Slots = cache.SlotsFloor(head)
 		id := s.budget.Assert(head)
 		defer s.budget.Release(id)
 	}
-	return s.budget.Request(c)
+	return s.budget.Request(c, len(s.queue))
 }
 
 // enqueueLocked queues p: a gate behind the gates waiting, ahead of the rest;

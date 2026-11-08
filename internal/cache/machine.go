@@ -78,19 +78,27 @@ func (b *MachineBudget) clock() time.Time {
 // Memory is admitted by curve: c is seated when at every future instant it fits beside
 // what counts against it (see fitsOverTime), so two claims whose peaks would not fit
 // together are seated when their curves say the peaks fall apart. Slots stay peaks.
-func (b *MachineBudget) Request(c types.MachineClaim) types.MachineVerdict {
+//
+// c is seated at SlotsFloor(c) and granted more up to Slots.
+// queued is the other claims the broker holds parked. With
+// none a grant takes what is free; with some, a fair share.
+// Slots carries the grant. A verdict that does not grant
+// names queued in Ahead.
+func (b *MachineBudget) Request(c types.MachineClaim, queued int) types.MachineVerdict {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	if c.Slots < 1 {
 		c.Slots = 1
 	}
-	held := b.held(c)
+	seat := c
+	seat.Slots = SlotsFloor(c)
+	held := b.held(seat)
 	heldMB, heldSlots := b.sum(held)
 	v := types.MachineVerdict{
-		Fits:        b.fitsOverTime(c, func(string, types.MachineClaim) bool { return true }),
-		Packed:      b.packs(c, held),
-		Holders:     b.holders(c),
+		Fits:        b.fitsOverTime(seat, func(string, types.MachineClaim) bool { return true }),
+		Packed:      b.packs(seat, held),
+		Holders:     b.holders(seat),
 		BudgetMB:    b.budgetMB,
 		HeldMB:      heldMB,
 		BudgetSlots: b.budgetSlots,
@@ -99,14 +107,40 @@ func (b *MachineBudget) Request(c types.MachineClaim) types.MachineVerdict {
 	if !v.Fits {
 		return v
 	}
-	if !b.fitsOverTime(c, held) && !b.freeSlot(c.Ancestors) {
-		v.OwnRun = b.fitsOverTime(c, b.heldByOthers(c))
+	if !b.fitsOverTime(seat, held) && !b.freeSlot(seat.Ancestors) {
+		v.OwnRun = b.fitsOverTime(seat, b.heldByOthers(seat))
+		v.Ahead = queued
 		return v
 	}
 
-	v.Granted, v.ID = true, b.record(c)
-	v.HeldMB, v.HeldSlots = heldMB+c.MemoryMB, heldSlots+c.Slots
+	seat.Slots = b.grant(c.Slots, seat.Slots, heldSlots, queued)
+	v.Granted, v.ID, v.Slots = true, b.record(seat), seat.Slots
+	v.HeldMB, v.HeldSlots = heldMB+c.MemoryMB, heldSlots+seat.Slots
 	return v
+}
+
+// SlotsFloor is the fewest slots c runs with. An unset or
+// oversized SlotsFloor means Slots: a claim of fixed width.
+func SlotsFloor(c types.MachineClaim) int {
+	ceiling := max(c.Slots, 1)
+	if c.SlotsFloor < 1 || c.SlotsFloor > ceiling {
+		return ceiling
+	}
+	return c.SlotsFloor
+}
+
+// grant is the slots a seated claim takes beside heldSlots.
+// Each waiter keeps a share of what is free, so a burst
+// starts narrow. One seated past a full budget takes its floor.
+func (b *MachineBudget) grant(ceiling, floor, heldSlots, queued int) int {
+	if b.budgetSlots <= 0 {
+		return ceiling
+	}
+	share := b.budgetSlots - heldSlots
+	if queued > 0 {
+		share = max(1, share/(queued+1))
+	}
+	return max(floor, min(ceiling, share))
 }
 
 // Assert records a claim without asking whether it fits, and returns its id. It is for
@@ -411,7 +445,7 @@ func (b *MachineBudget) holders(c types.MachineClaim) []types.MachineClaimant {
 		out = append(out, types.MachineClaimant{
 			Project: e.claim.Project, Target: e.claim.Target, PID: e.claim.PID,
 			MemoryMB: e.claim.MemoryMB, Profile: e.claim.Profile, Sizing: e.claim.Sizing, Slots: e.claim.Slots,
-			Dir: e.claim.Dir, Command: e.claim.Command, Since: e.started,
+			Dir: e.claim.Dir, Command: e.claim.Command, Since: e.started, Under: e.claim.Under,
 		})
 	}
 	slices.SortFunc(out, func(a, b types.MachineClaimant) int {

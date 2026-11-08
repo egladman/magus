@@ -339,7 +339,7 @@ func TestLedgerRemembersTheLastRefusalsNewestFirstWithTheirHolders(t *testing.T)
 	assert.Equal(t, fmt.Sprintf("t%d", refusedKeep+4), r[0].Target)
 	assert.Equal(t, "t5", r[refusedKeep-1].Target)
 	assert.Equal(t, types.MachineAdmission{
-		At: t0.Add(time.Duration(refusedKeep+4) * time.Second), PID: 61, Project: ".", Target: r[0].Target, Slots: 1,
+		At: t0.Add(time.Duration(refusedKeep+4) * time.Second), Outcome: types.AdmissionRefused, PID: 61, Project: ".", Target: r[0].Target, Slots: 1,
 		Dir: "/w", Owner: "unleased", Fits: true,
 		Holders: []types.MachineClaimant{{Project: ".", Target: "go-test", PID: 60, Slots: 8, Owner: "holder-job"}},
 	}, r[0])

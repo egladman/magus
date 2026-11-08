@@ -500,15 +500,6 @@ var Fields = []fieldtype.Field{
 		Doc:      "Shows every target's subprocess output live and interleaved, instead of withholding a passing target's output until it fails. This is deliberately NOT derived from Level: what gets logged and whether a target's own output is withheld are separate questions, and conflating them is why -v used to ambush people with a wall of concurrent output when they wanted a little more detail. Normally set via -vv (and implied by -vvv); MAGUS_LOG_STREAM=1 is the env equivalent. Pointer to distinguish \"not set\" from explicit false",
 	},
 	{
-		GoPath:   "Log.Loader",
-		YamlPath: "log.loader",
-		EnvVar:   "MAGUS_LOG_LOADER",
-		Flag:     fieldtype.FlagNames{Long: "log-loader"},
-		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_LOG_LOADER: Loader names the animation the run band draws while targets run.",
-		Doc:      "Names the animation the run band draws while targets run. Empty draws glyph/dots. A locale that is not UTF-8 draws glyph/line instead",
-	},
-	{
 		GoPath:   "Hints.Enabled",
 		YamlPath: "hints.enabled",
 		EnvVar:   "MAGUS_HINTS_ENABLED",
@@ -847,8 +838,8 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_BUDGET_WAIT",
 		Flag:     fieldtype.FlagNames{Long: "budget-wait"},
 		Kind:     fieldtype.KindDuration,
-		Usage:    "MAGUS_BUDGET_WAIT: BudgetWait bounds a step's wait for budget other runs hold.",
-		Doc:      "Bounds a step's wait for budget other runs hold. Past it, MGS3009 names them. Zero refuses at once. A sooner run deadline bounds it instead",
+		Usage:    "MAGUS_BUDGET_WAIT: BudgetWait bounds a step's wait for budget other runs hold, 30m by default.",
+		Doc:      "Bounds a step's wait for budget other runs hold, 30m by default. Past it, MGS3009 names them. Zero refuses at once. A sooner run deadline bounds it instead",
 	},
 	{
 		GoPath:   "ShutdownGrace",

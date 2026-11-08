@@ -22,6 +22,7 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
@@ -193,6 +194,7 @@ func brokerServe(ctx context.Context, args []string) error {
 		broker.WithVersion(version),
 		broker.WithDrain(drain, globalCfg.ShutdownGrace),
 		broker.WithCrashDir(crashReportDir()),
+		broker.WithAdmissionLog(file.Log[types.MachineAdmission]{Path: admissionLogPath(), Keep: admissionsKeep}),
 	)
 	// The broker's own context may be done (a signal), and Shutdown's wait for a service
 	// still starting returns at once on a done context, so teardown gets a fresh bound.
@@ -427,6 +429,9 @@ func brokerLogPath() string { return stateLogPath("broker.log") }
 // admissionLogPath is the store of the admissions the broker recorded, one
 // types.MachineAdmission per line.
 func admissionLogPath() string { return stateLogPath("admissions.jsonl") }
+
+// admissionsKeep is the admissions a compaction of the store leaves.
+const admissionsKeep = 5000
 
 // serverLogPath is brokerLogPath's counterpart for a server `server start` detached.
 func serverLogPath() string { return stateLogPath("server.log") }

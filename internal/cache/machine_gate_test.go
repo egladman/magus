@@ -509,9 +509,9 @@ func TestMachineGateRefusesWhatTheAdmitterRefused(t *testing.T) {
 
 func TestVerdictSaysItPackedByCurve(t *testing.T) {
 	b, now := testBudget(t, 10_000, 8)
-	require.True(t, b.Request(curveClaim(100, 7000, 1000, 50_000)).Granted)
+	require.True(t, b.Request(curveClaim(100, 7000, 1000, 50_000), 0).Granted)
 	c := curveClaim(200, 1000, 7000, 50_000)
-	v := b.Request(c)
+	v := b.Request(c, 0)
 	require.False(t, v.Granted)
 
 	assert.Contains(t, machineBusyError(c, v, *now, "", 0, waitBound{}).Error(),
@@ -801,7 +801,7 @@ func (s *BudgetWaitSuite) SetupTest() {
 	s.adm = &budgetAdmitter{budget: s.b}
 	s.logged = &lockedLog{}
 	s.gate = &machineGate{admit: s.adm, wait: time.Minute, log: slog.New(slog.NewTextHandler(s.logged, nil))}
-	v := s.b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
+	v := s.b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100}, 0)
 	s.Require().True(v.Granted)
 	s.holder = v.ID
 }
@@ -859,7 +859,7 @@ func (s *BudgetWaitSuite) TestAHolderChangeSaysSoOnce() {
 	done := acquireAsync(s.T().Context(), s.gate, stranger)
 	s.Eventually(func() bool { return s.said("waiting for a seat") }, 5*time.Second, 5*time.Millisecond)
 
-	s.Require().True(s.b.Request(types.MachineClaim{Project: "web", Target: "lint", MemoryMB: 500, PID: 300}).Granted)
+	s.Require().True(s.b.Request(types.MachineClaim{Project: "web", Target: "lint", MemoryMB: 500, PID: 300}, 0).Granted)
 	s.adm.wake()
 	s.Eventually(func() bool { return s.said("still waiting for a seat for docs ci") }, 5*time.Second, 5*time.Millisecond)
 	s.True(s.said("pid 300 web lint"))
@@ -881,7 +881,7 @@ func (s *BudgetWaitSuite) TestAFinalAskAtTheBoundThatFitsIsSeated() {
 }
 
 func (s *BudgetWaitSuite) TestANestedChildUnderAHolderIsFreeSeatedNotQueued() {
-	parent := s.b.Request(types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 500, PID: 400, Invocation: "400:root"})
+	parent := s.b.Request(types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 500, PID: 400, Invocation: "400:root"}, 0)
 	s.Require().True(parent.Granted)
 	release, err := s.gate.acquire(s.T().Context(), types.MachineClaim{
 		Project: ".", Target: "go-test", MemoryMB: 4000, PID: 401, Invocation: "401:child", Ancestors: []string{"400:root"},
@@ -899,7 +899,7 @@ func (s *BudgetWaitSuite) TestAComposersRetakeWaitsInsteadOfFailing() {
 	s.Require().NoError(err)
 	h := &machineHold{gate: s.gate, claim: claim, id: id, release: release}
 	h.lend()
-	member := s.b.Request(types.MachineClaim{Project: "x", Target: "build", MemoryMB: 9000, PID: 600})
+	member := s.b.Request(types.MachineClaim{Project: "x", Target: "build", MemoryMB: 9000, PID: 600}, 0)
 	s.Require().True(member.Granted)
 
 	retaken := make(chan error, 1)
@@ -982,4 +982,23 @@ func (s *BudgetWaitSuite) TestAWaitThatTurnsToStrangersAgainStartsItsBoundAgain(
 
 	s.Eventually(w.expired, 5*time.Second, 10*time.Millisecond)
 	s.Error(wctx.Err())
+}
+
+func TestBudgetWaitLineNamesEachHoldersBreakdownAndTheSoonestEndAsAtLeast(t *testing.T) {
+	now := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
+	v := types.MachineVerdict{Holders: []types.MachineClaimant{
+		{Project: ".", Target: "lint", PID: 10, MemoryMB: 4915, Sizing: types.MemorySizing{Samples: 48}, Dir: "/a",
+			Since: now.Add(-time.Minute), Profile: types.MemoryProfile{Runs: 48, D10Ms: 90_000, D90Ms: 300_000}},
+		{Project: ".", Target: "conventions", Under: ".:lint", PID: 10, MemoryMB: 4300, Sizing: types.MemorySizing{Samples: 12}},
+		{Project: ".", Target: "vet", PID: 11},
+	}}
+	assert.Equal(t, "held by pid 10 (root) lint 4.8 GiB: own peak over 48 runs, in /a; "+
+		"pid 10 (root) conventions 4.2 GiB under .:lint: own peak over 12 runs; pid 11 (root) vet; "+
+		"the first holder ends in at least 30s", describeMachineWait(v, now))
+}
+
+func TestBudgetWaitLineSaysItsPlaceInTheQueue(t *testing.T) {
+	assert.Empty(t, describeMachineQueue(types.MachineVerdict{}), "a broker without positions says nothing")
+	assert.Equal(t, "; 1 claim is ahead of it in the queue", describeMachineQueue(types.MachineVerdict{Ahead: 1}))
+	assert.Equal(t, "; 3 claims are ahead of it in the queue", describeMachineQueue(types.MachineVerdict{Ahead: 3}))
 }

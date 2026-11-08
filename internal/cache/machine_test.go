@@ -32,12 +32,12 @@ func testBudget(t *testing.T, mb, slots int) (*MachineBudget, *time.Time) {
 func TestMachineBudgetAdmitsUntilFull(t *testing.T) {
 	b, now := testBudget(t, 10_000, 8)
 
-	first := b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 8000, Slots: 4, PID: 100})
+	first := b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 8000, Slots: 4, PID: 100}, 0)
 	require.True(t, first.Granted, "an empty machine seats the first claim")
 	assert.Equal(t, 8000, first.HeldMB)
 
 	// A second invocation, in another worktree, asking for more than what is left.
-	second := b.Request(types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 8000, Slots: 4, PID: 200})
+	second := b.Request(types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 8000, Slots: 4, PID: 200}, 0)
 	assert.False(t, second.Granted, "the machine cannot seat both")
 	assert.True(t, second.Fits, "it would fit on an idle machine, so the refusal is temporary")
 	assert.False(t, second.OwnRun, "what fills the machine is another process's run")
@@ -46,16 +46,75 @@ func TestMachineBudgetAdmitsUntilFull(t *testing.T) {
 	}, second.Holders, "the refusal names who holds the budget")
 
 	b.Release(first.ID)
-	third := b.Request(types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 8000, Slots: 4, PID: 200})
+	third := b.Request(types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 8000, Slots: 4, PID: 200}, 0)
 	assert.True(t, third.Granted, "the same claim is seated once the holder releases")
 }
 
 func TestMachineBudgetRefusesWhatCanNeverFit(t *testing.T) {
 	b, _ := testBudget(t, 4000, 8)
 
-	v := b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 64_000, Slots: 1, PID: 100})
+	v := b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 64_000, Slots: 1, PID: 100}, 0)
 	assert.False(t, v.Granted)
 	assert.False(t, v.Fits, "no state of the machine seats a claim larger than the whole budget")
+}
+
+func TestRequestGrantsAnElasticClaimEveryFreeSlotWhenNobodyWaits(t *testing.T) {
+	b, now := testBudget(t, 0, 10)
+	vet := b.Request(types.MachineClaim{Project: ".", Target: "vet", Slots: 4, PID: 100}, 0)
+	require.True(t, vet.Granted)
+
+	v := b.Request(types.MachineClaim{Project: ".", Target: "test", Slots: 8, SlotsFloor: 1, PID: 200}, 0)
+	assert.Equal(t, types.MachineVerdict{
+		Granted: true, ID: v.ID, Fits: true, BudgetSlots: 10, HeldSlots: 10, Slots: 6,
+		Holders: []types.MachineClaimant{{Project: ".", Target: "vet", PID: 100, Slots: 4, Since: *now}},
+	}, v, "it takes what is free, short of its ceiling")
+	assert.Equal(t, []types.MachineClaimant{
+		{Project: ".", Target: "test", PID: 200, Slots: 6, Since: *now},
+		{Project: ".", Target: "vet", PID: 100, Slots: 4, Since: *now},
+	}, b.Snapshot().Holders, "the claim holds what it was granted")
+}
+
+func TestRequestLeavesEachWaiterAShareOfTheFreeSlots(t *testing.T) {
+	b, _ := testBudget(t, 0, 10)
+
+	v := b.Request(types.MachineClaim{Project: ".", Target: "test", Slots: 8, SlotsFloor: 1, PID: 200}, 3)
+	require.True(t, v.Granted)
+	assert.Equal(t, 2, v.Slots, "10 free among itself and 3 waiters")
+
+	narrow := b.Request(types.MachineClaim{Project: ".", Target: "lint", Slots: 8, SlotsFloor: 1, PID: 300}, 20)
+	require.True(t, narrow.Granted)
+	assert.Equal(t, 1, narrow.Slots, "a share never falls under one slot")
+}
+
+func TestRequestSeatsAnElasticClaimAtItsFloor(t *testing.T) {
+	b, _ := testBudget(t, 0, 4)
+	require.True(t, b.Request(types.MachineClaim{Project: ".", Target: "vet", Slots: 3, PID: 100}, 0).Granted)
+
+	v := b.Request(types.MachineClaim{Project: ".", Target: "test", Slots: 8, SlotsFloor: 1, PID: 200}, 0)
+	require.True(t, v.Granted, "the floor fits where the ceiling does not")
+	assert.Equal(t, 1, v.Slots)
+
+	fixed := b.Request(types.MachineClaim{Project: ".", Target: "scip", Slots: 4, SlotsFloor: 4, PID: 300}, 0)
+	assert.False(t, fixed.Granted, "a declared width is its floor as well as its ceiling")
+}
+
+func TestRequestNamesTheParkedClaimsAheadOfOneItDoesNotSeat(t *testing.T) {
+	b, _ := testBudget(t, 0, 2)
+	require.True(t, b.Request(types.MachineClaim{Project: ".", Target: "vet", Slots: 2, PID: 100}, 0).Granted)
+
+	v := b.Request(types.MachineClaim{Project: ".", Target: "test", Slots: 1, PID: 200}, 3)
+	require.False(t, v.Granted)
+	assert.Equal(t, 3, v.Ahead)
+	assert.Zero(t, v.Slots, "nothing was granted")
+}
+
+func TestRequestNamesTheComposerAHolderRunsUnder(t *testing.T) {
+	b, _ := testBudget(t, 0, 2)
+	require.True(t, b.Request(types.MachineClaim{Project: ".", Target: "conventions", Under: ".:lint", Slots: 2, PID: 100}, 0).Granted)
+
+	v := b.Request(types.MachineClaim{Project: ".", Target: "test", Slots: 1, PID: 200}, 0)
+	require.Len(t, v.Holders, 1)
+	assert.Equal(t, ".:lint", v.Holders[0].Under)
 }
 
 // curveClaim is a claim over a 100s run holding early for its first half and late for
@@ -73,9 +132,9 @@ func curveClaim(pid int, early, late uint32, d10Ms int64) types.MachineClaim {
 
 func TestRequestPacksCurvesWhosePeaksDoNotOverlap(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
-	require.True(t, b.Request(curveClaim(100, 7000, 1000, 100_000)).Granted)
+	require.True(t, b.Request(curveClaim(100, 7000, 1000, 100_000), 0).Granted)
 
-	v := b.Request(curveClaim(200, 1000, 7000, 100_000))
+	v := b.Request(curveClaim(200, 1000, 7000, 100_000), 0)
 	assert.True(t, v.Granted, "an early peak and a late one sum to 8000 at every instant")
 	assert.True(t, v.Packed)
 	assert.Equal(t, 14_000, v.HeldMB, "what is held is still reported as peaks")
@@ -83,9 +142,9 @@ func TestRequestPacksCurvesWhosePeaksDoNotOverlap(t *testing.T) {
 
 func TestRequestRefusesWhenBandsOverlapAtThePeak(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
-	require.True(t, b.Request(curveClaim(100, 7000, 1000, 50_000)).Granted)
+	require.True(t, b.Request(curveClaim(100, 7000, 1000, 50_000), 0).Granted)
 
-	v := b.Request(curveClaim(200, 1000, 7000, 50_000))
+	v := b.Request(curveClaim(200, 1000, 7000, 50_000), 0)
 	assert.False(t, v.Granted, "with D10 at half of D90 the first may still be early when the second is late")
 	assert.True(t, v.Fits)
 	assert.True(t, v.Packed)
@@ -93,53 +152,53 @@ func TestRequestRefusesWhenBandsOverlapAtThePeak(t *testing.T) {
 
 func TestOverrunClaimCountsItsPeak(t *testing.T) {
 	b, now := testBudget(t, 10_000, 8)
-	require.True(t, b.Request(curveClaim(100, 7000, 1000, 100_000)).Granted)
+	require.True(t, b.Request(curveClaim(100, 7000, 1000, 100_000), 0).Granted)
 
 	*now = now.Add(60 * time.Second)
-	within := b.Request(curveClaim(200, 1000, 7000, 100_000))
+	within := b.Request(curveClaim(200, 1000, 7000, 100_000), 0)
 	require.True(t, within.Granted, "60s in, the first holds its late 1000 and is expected released at 100s")
 	b.Release(within.ID)
 
 	*now = now.Add(41 * time.Second)
-	v := b.Request(curveClaim(200, 1000, 7000, 100_000))
+	v := b.Request(curveClaim(200, 1000, 7000, 100_000), 0)
 	assert.False(t, v.Granted, "past its D90 the first is charged its 7000 peak until released")
 	assert.True(t, v.Fits)
 }
 
 func TestOverrunCurveCountsItsPeak(t *testing.T) {
 	b, now := testBudget(t, 10_000, 8)
-	first := b.Request(curveClaim(100, 7000, 1000, 100_000))
+	first := b.Request(curveClaim(100, 7000, 1000, 100_000), 0)
 	require.True(t, first.Granted)
 	*now = now.Add(60 * time.Second)
 
 	b.Overrun(first.ID)
 	b.Overrun("unknown")
-	v := b.Request(curveClaim(200, 1000, 7000, 100_000))
+	v := b.Request(curveClaim(200, 1000, 7000, 100_000), 0)
 	assert.False(t, v.Granted, "an overrun claim is charged its 7000 peak, not its late 1000")
 	assert.True(t, v.Fits)
 
 	b.Release(first.ID)
-	assert.True(t, b.Request(curveClaim(200, 1000, 7000, 100_000)).Granted, "released, it holds nothing")
+	assert.True(t, b.Request(curveClaim(200, 1000, 7000, 100_000), 0).Granted, "released, it holds nothing")
 }
 
 func TestClaimWithoutProfileCountsItsPeak(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
-	require.True(t, b.Request(curveClaim(100, 1000, 7000, 100_000)).Granted)
+	require.True(t, b.Request(curveClaim(100, 1000, 7000, 100_000), 0).Granted)
 
 	flat := types.MachineClaim{Project: ".", Target: "lint", MemoryMB: 7000, Slots: 1, PID: 200}
-	v := b.Request(flat)
+	v := b.Request(flat, 0)
 	assert.False(t, v.Granted, "a claim with no curve holds 7000 from now, across the first's late 7000")
 	assert.True(t, v.Packed, "the held claim is still judged by its curve")
 
 	peaks, _ := testBudget(t, 10_000, 8)
 	held := curveClaim(100, 1000, 7000, 100_000)
 	held.Profile = types.MemoryProfile{}
-	require.True(t, peaks.Request(held).Granted)
-	v = peaks.Request(flat)
+	require.True(t, peaks.Request(held, 0).Granted)
+	v = peaks.Request(flat, 0)
 	assert.False(t, v.Granted, "two peaks held flat sum to 14000")
 	assert.False(t, v.Packed)
 
-	early := b.Request(types.MachineClaim{Project: ".", Target: "vet", MemoryMB: 3000, Slots: 1, PID: 300})
+	early := b.Request(types.MachineClaim{Project: ".", Target: "vet", MemoryMB: 3000, Slots: 1, PID: 300}, 0)
 	assert.True(t, early.Granted, "3000 flat fits beside the first's 7000 peak")
 }
 
@@ -148,11 +207,11 @@ func TestClaimWithoutProfileCountsItsPeak(t *testing.T) {
 // spurious exit 75 for a run that nothing was in the way of.
 func TestMachineBudgetKeepsNothingForARefusedClaim(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
-	held := b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, Slots: 1, PID: 100})
+	held := b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, Slots: 1, PID: 100}, 0)
 	require.True(t, held.Granted)
-	require.False(t, b.Request(types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 9000, Slots: 1, PID: 200}).Granted)
+	require.False(t, b.Request(types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 9000, Slots: 1, PID: 200}, 0).Granted)
 
-	light := b.Request(types.MachineClaim{Project: "docs", Target: "lint", MemoryMB: 500, Slots: 1, PID: 300})
+	light := b.Request(types.MachineClaim{Project: "docs", Target: "lint", MemoryMB: 500, Slots: 1, PID: 300}, 0)
 	assert.True(t, light.Granted, "the refused claim holds no room")
 	assert.Len(t, b.Snapshot().Holders, 2, "only the granted claims are on record")
 }
@@ -162,7 +221,7 @@ func TestMachineBudgetKeepsNothingForARefusedClaim(t *testing.T) {
 // arithmetic, and the next request sees the memory as spent.
 func TestMachineBudgetAssertRecordsWhatDoesNotFit(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
-	require.True(t, b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100}).Granted)
+	require.True(t, b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100}, 0).Granted)
 
 	id := b.Assert(types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
 	require.NotEmpty(t, id)
@@ -173,7 +232,7 @@ func TestMachineBudgetAssertRecordsWhatDoesNotFit(t *testing.T) {
 		Holders: snap.Holders, // the two claimants are asserted by the releases below
 	}, snap)
 
-	v := b.Request(types.MachineClaim{Project: "x", Target: "lint", MemoryMB: 500, PID: 300})
+	v := b.Request(types.MachineClaim{Project: "x", Target: "lint", MemoryMB: 500, PID: 300}, 0)
 	assert.False(t, v.Granted, "new work is not admitted against memory a running step holds")
 
 	b.Release(id)
@@ -184,14 +243,14 @@ func TestMachineBudgetExcludesAnAncestorsClaim(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
 	parent := b.Request(types.MachineClaim{
 		Project: ".", Target: "ci", MemoryMB: 9000, PID: 100, Invocation: "100:aaa",
-	})
+	}, 0)
 	require.True(t, parent.Granted)
 
 	// The suite this claim covers runs `magus run test .`, which is a DESCENDANT of the
 	// run already holding the declaration. Counting it would refuse its own child.
 	child := b.Request(types.MachineClaim{
 		Project: ".", Target: "test", MemoryMB: 9000, PID: 200, Ancestors: []string{"100:aaa"},
-	})
+	}, 0)
 	assert.True(t, child.Granted)
 	assert.Empty(t, child.Holders, "an ancestor is not a peer")
 }
@@ -206,7 +265,7 @@ func TestMachineBudgetSeatsEveryChildOfAFannedOutParent(t *testing.T) {
 	for _, target := range targets {
 		require.True(t, b.Request(types.MachineClaim{
 			Project: ".", Target: target, MemoryMB: 3000, Slots: 1, PID: 100, Invocation: "100:aaa",
-		}).Granted, target)
+		}, 0).Granted, target)
 	}
 
 	child := func(i int) types.MachineClaim {
@@ -217,7 +276,7 @@ func TestMachineBudgetSeatsEveryChildOfAFannedOutParent(t *testing.T) {
 	}
 	first := ""
 	for i := range 3 {
-		v := b.Request(child(i))
+		v := b.Request(child(i), 0)
 		require.True(t, v.Granted, targets[i])
 		if first == "" {
 			first = v.ID
@@ -226,7 +285,7 @@ func TestMachineBudgetSeatsEveryChildOfAFannedOutParent(t *testing.T) {
 
 	// Still a budget: the fourth child is a peer of the three now running, not of the
 	// parents it is excused from, and 16 GB of concurrent declarations do not fit in 12.
-	last := b.Request(child(3))
+	last := b.Request(child(3), 0)
 	assert.False(t, last.Granted, "a fourth concurrent 4 GB child does not fit in 12 GB")
 	assert.True(t, last.Fits)
 	assert.True(t, last.OwnRun, "what keeps it out is its own run's siblings, so it waits rather than failing the parent")
@@ -234,7 +293,7 @@ func TestMachineBudgetSeatsEveryChildOfAFannedOutParent(t *testing.T) {
 
 	// A wait, not a deadlock: what it waits for is running and not blocked on it.
 	b.Release(first)
-	assert.True(t, b.Request(child(3)).Granted, "the waiting child is seated once a peer finishes")
+	assert.True(t, b.Request(child(3), 0).Granted, "the waiting child is seated once a peer finishes")
 }
 
 // The pair no exclusion can reach: two independent roots, each blocked in exec on a child
@@ -245,25 +304,25 @@ func TestMachineBudgetSeatsAChildOfEachStalledRoot(t *testing.T) {
 
 	rootA := b.Request(types.MachineClaim{
 		Project: "a", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 100, Invocation: "100:aaa",
-	})
+	}, 0)
 	require.True(t, rootA.Granted)
 	rootB := b.Request(types.MachineClaim{
 		Project: "b", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 200, Invocation: "200:bbb",
-	})
+	}, 0)
 	require.True(t, rootB.Granted)
 
 	*now = now.Add(time.Second)
 	childA := b.Request(types.MachineClaim{
 		Project: "a", Target: "test", MemoryMB: 7000, Slots: 1, PID: 300,
 		Invocation: "300:ccc", Ancestors: []string{"100:aaa"},
-	})
+	}, 0)
 	assert.True(t, childA.Granted, "the bottom of a stalled chain always has a seat")
 
 	// The control. A top-level run has no stalled ancestor to charge a seat to, so this
 	// cannot become a way past a full machine.
 	*now = now.Add(time.Second)
 	stranger := types.MachineClaim{Project: "c", Target: "build", MemoryMB: 7000, Slots: 1, PID: 400}
-	v := b.Request(stranger)
+	v := b.Request(stranger, 0)
 	assert.False(t, v.Granted, "a stranger does not get a seat out of somebody else's stall")
 	assert.True(t, v.Fits)
 	assert.False(t, v.OwnRun, "and nothing in its way belongs to it, so it is refused")
@@ -272,14 +331,14 @@ func TestMachineBudgetSeatsAChildOfEachStalledRoot(t *testing.T) {
 	childB := b.Request(types.MachineClaim{
 		Project: "b", Target: "test", MemoryMB: 7000, Slots: 1, PID: 500,
 		Invocation: "500:ddd", Ancestors: []string{"200:bbb"},
-	})
+	}, 0)
 	assert.True(t, childB.Granted, "the symmetric root is seated too, so both chains finish")
 
 	b.Release(childA.ID)
 	b.Release(rootA.ID)
 	b.Release(childB.ID)
 	b.Release(rootB.ID)
-	assert.True(t, b.Request(stranger).Granted, "and the machine drains")
+	assert.True(t, b.Request(stranger, 0).Granted, "and the machine drains")
 }
 
 // TestMachineBudgetFreeSeatsOneChildPerStalledAncestor is the bound. Make's tokens are
@@ -289,11 +348,11 @@ func TestMachineBudgetFreeSeatsOneChildPerStalledAncestor(t *testing.T) {
 	b, now := testBudget(t, 12_000, 16)
 	stranger := b.Request(types.MachineClaim{
 		Project: "other", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 100,
-	})
+	}, 0)
 	require.True(t, stranger.Granted)
 	require.True(t, b.Request(types.MachineClaim{
 		Project: ".", Target: "ci", MemoryMB: 6000, Slots: 1, PID: 200, Invocation: "200:bbb",
-	}).Granted)
+	}, 0).Granted)
 
 	child := func(i int) types.MachineClaim {
 		return types.MachineClaim{
@@ -301,12 +360,12 @@ func TestMachineBudgetFreeSeatsOneChildPerStalledAncestor(t *testing.T) {
 			Invocation: fmt.Sprintf("%d:ccc", 300+i), Ancestors: []string{"200:bbb"},
 		}
 	}
-	first := b.Request(child(0))
+	first := b.Request(child(0), 0)
 	require.True(t, first.Granted, "one child of a stalled parent is seated over budget")
 
 	*now = now.Add(time.Second)
 	for i := 1; i < 4; i++ {
-		v := b.Request(child(i))
+		v := b.Request(child(i), 0)
 		assert.False(t, v.Granted, "the parent's one seat is spent on a child that IS running")
 		assert.True(t, v.Fits)
 		assert.False(t, v.OwnRun, "the stranger alone leaves too little room, so the child is refused")
@@ -315,7 +374,7 @@ func TestMachineBudgetFreeSeatsOneChildPerStalledAncestor(t *testing.T) {
 
 	b.Release(stranger.ID)
 	b.Release(first.ID)
-	assert.True(t, b.Request(child(1)).Granted, "a sibling is seated as peers release")
+	assert.True(t, b.Request(child(1), 0).Granted, "a sibling is seated as peers release")
 }
 
 // wrapped is a `magus job exec --timeout` hold, as the broker asserts it.
@@ -331,21 +390,21 @@ func TestMachineBudgetSharesAWrappersClaimWithItsChild(t *testing.T) {
 	b, _ := testBudget(t, 0, 1)
 	w := wrapped(100)
 	b.Assert(w)
-	v := b.Request(types.MachineClaim{Project: "x", Target: "install", Slots: 1, PID: 200, Ancestors: []string{w.Invocation}})
+	v := b.Request(types.MachineClaim{Project: "x", Target: "install", Slots: 1, PID: 200, Ancestors: []string{w.Invocation}}, 0)
 	assert.True(t, v.Granted, "the only slot is its wrapper's")
 
-	stranger := b.Request(types.MachineClaim{Project: "other", Target: "build", Slots: 1, PID: 300})
+	stranger := b.Request(types.MachineClaim{Project: "other", Target: "build", Slots: 1, PID: 300}, 0)
 	assert.False(t, stranger.Granted, "a stranger gets neither")
 }
 
 // A full machine has no stalled step to charge a wrapper's child a seat to.
 func TestMachineBudgetGivesAWrappersChildNoSeatOnAFullMachine(t *testing.T) {
 	b, _ := testBudget(t, 1000, 4)
-	require.True(t, b.Request(types.MachineClaim{Project: "other", Target: "test", MemoryMB: 900, Slots: 1, PID: 300}).Granted)
+	require.True(t, b.Request(types.MachineClaim{Project: "other", Target: "test", MemoryMB: 900, Slots: 1, PID: 300}, 0).Granted)
 	w := wrapped(100)
 	b.Assert(w)
 
-	v := b.Request(types.MachineClaim{Project: "x", Target: "test", MemoryMB: 500, Slots: 1, PID: 200, Ancestors: []string{w.Invocation}})
+	v := b.Request(types.MachineClaim{Project: "x", Target: "test", MemoryMB: 500, Slots: 1, PID: 200, Ancestors: []string{w.Invocation}}, 0)
 	assert.False(t, v.Granted, "it would hold 1400 MB of a 1000 MB budget")
 	assert.True(t, v.Fits)
 	assert.False(t, v.OwnRun, "a stranger keeps it out, so it is refused")
@@ -358,13 +417,13 @@ func TestMachineBudgetSeatsAChildOfEachStalledRootUnderAWrapper(t *testing.T) {
 	seat := func(pid int, ancestors ...string) types.MachineVerdict {
 		return b.Request(types.MachineClaim{
 			Target: "test", MemoryMB: 7000, Slots: 1, PID: pid, Invocation: fmt.Sprintf("%d:child", pid), Ancestors: ancestors,
-		})
+		}, 0)
 	}
 	wrapA, wrapB := wrapped(100), wrapped(200)
 	b.Assert(wrapA)
 	b.Assert(wrapB)
-	require.True(t, b.Request(types.MachineClaim{Target: "ci", MemoryMB: 6000, Slots: 1, PID: 110, Invocation: "110:a", Ancestors: []string{wrapA.Invocation}}).Granted)
-	require.True(t, b.Request(types.MachineClaim{Target: "ci", MemoryMB: 6000, Slots: 1, PID: 210, Invocation: "210:b", Ancestors: []string{wrapB.Invocation}}).Granted)
+	require.True(t, b.Request(types.MachineClaim{Target: "ci", MemoryMB: 6000, Slots: 1, PID: 110, Invocation: "110:a", Ancestors: []string{wrapA.Invocation}}, 0).Granted)
+	require.True(t, b.Request(types.MachineClaim{Target: "ci", MemoryMB: 6000, Slots: 1, PID: 210, Invocation: "210:b", Ancestors: []string{wrapB.Invocation}}, 0).Granted)
 
 	assert.True(t, seat(120, wrapA.Invocation, "110:a").Granted)
 	assert.True(t, seat(220, wrapB.Invocation, "210:b").Granted)
@@ -373,8 +432,8 @@ func TestMachineBudgetSeatsAChildOfEachStalledRootUnderAWrapper(t *testing.T) {
 // A wrapper under a step does not spend that step's seat; what it starts does.
 func TestMachineBudgetSeatsAChildThroughAWrapperUnderAStalledStep(t *testing.T) {
 	b, _ := testBudget(t, 1000, 8)
-	require.True(t, b.Request(types.MachineClaim{Target: "other", MemoryMB: 500, Slots: 1, PID: 300}).Granted)
-	require.True(t, b.Request(types.MachineClaim{Target: "ci", MemoryMB: 500, Slots: 1, PID: 100, Invocation: "100:run"}).Granted)
+	require.True(t, b.Request(types.MachineClaim{Target: "other", MemoryMB: 500, Slots: 1, PID: 300}, 0).Granted)
+	require.True(t, b.Request(types.MachineClaim{Target: "ci", MemoryMB: 500, Slots: 1, PID: 100, Invocation: "100:run"}, 0).Granted)
 	w := wrapped(200, "100:run")
 	b.Assert(w)
 
@@ -384,19 +443,19 @@ func TestMachineBudgetSeatsAChildThroughAWrapperUnderAStalledStep(t *testing.T) 
 			Invocation: fmt.Sprintf("%d:child", pid), Ancestors: []string{"100:run", w.Invocation},
 		}
 	}
-	assert.True(t, b.Request(child(210)).Granted, "the step above the wrapper is blocked on it")
-	assert.False(t, b.Request(child(220)).Granted, "and that step has one seat")
+	assert.True(t, b.Request(child(210), 0).Granted, "the step above the wrapper is blocked on it")
+	assert.False(t, b.Request(child(220), 0).Granted, "and that step has one seat")
 }
 
 func TestMachineBudgetFreeSeatIsNotABypassForWhatCanNeverFit(t *testing.T) {
 	b, _ := testBudget(t, 4000, 8)
 	require.True(t, b.Request(types.MachineClaim{
 		Project: ".", Target: "ci", MemoryMB: 1000, Slots: 1, PID: 100, Invocation: "100:aaa",
-	}).Granted)
+	}, 0).Granted)
 
 	v := b.Request(types.MachineClaim{
 		Project: ".", Target: "test", MemoryMB: 64_000, Slots: 1, PID: 200, Ancestors: []string{"100:aaa"},
-	})
+	}, 0)
 	assert.False(t, v.Granted)
 	assert.False(t, v.Fits, "a seat is room for a claim this machine can hold, not a waiver of the budget")
 }
@@ -405,7 +464,7 @@ func TestMachineSnapshotReportsHolders(t *testing.T) {
 	b, now := testBudget(t, 10_000, 8)
 	require.True(t, b.Request(types.MachineClaim{
 		Project: ".", Target: "test", MemoryMB: 9000, Slots: 2, PID: 100, Dir: "/tree/a",
-	}).Granted)
+	}, 0).Granted)
 
 	// A holder names the tree to go and look at.
 	assert.Equal(t, types.MachineSnapshot{
@@ -451,7 +510,7 @@ func (f *budgetAdmitter) Claim(ctx context.Context, c types.MachineClaim, parked
 	defer stop()
 	sent := ""
 	for {
-		v := f.budget.Request(c)
+		v := f.budget.Request(c, 0)
 		if v.Granted || !v.Fits {
 			return v, nil
 		}
@@ -474,7 +533,7 @@ func (f *budgetAdmitter) Request(_ context.Context, c types.MachineClaim) (types
 	if f.fail != nil {
 		return types.MachineVerdict{}, f.fail
 	}
-	return f.budget.Request(c), nil
+	return f.budget.Request(c, 0), nil
 }
 
 // wake re-judges every parked claim, as a broker does when a holder joins.
@@ -526,7 +585,7 @@ func TestAdmitMachineClaimsAndReleasesNonRunWork(t *testing.T) {
 		Since:   *now,
 	}, holders[0])
 
-	other := budget.Request(types.MachineClaim{Project: ".", Target: "build", MemoryMB: 600, PID: os.Getpid() + 1})
+	other := budget.Request(types.MachineClaim{Project: ".", Target: "build", MemoryMB: 600, PID: os.Getpid() + 1}, 0)
 	assert.False(t, other.Granted, "the brief's claim must count against another invocation")
 	release()
 	assert.Empty(t, budget.Snapshot().Holders)
@@ -661,7 +720,7 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
 	held := b.Request(types.MachineClaim{
 		Project: ".", Target: "test", MemoryMB: 9000, PID: 100, Dir: "/elsewhere/checkout",
-	})
+	}, 0)
 	require.True(t, held.Granted, "the fixture's holder must own the budget")
 
 	var out bytes.Buffer
@@ -731,7 +790,7 @@ func TestRunAsideJournalsAMachineRefusal(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
 	held := b.Request(types.MachineClaim{
 		Project: ".", Target: "test", MemoryMB: 9000, PID: 100, Dir: "/elsewhere/checkout",
-	})
+	}, 0)
 	require.True(t, held.Granted, "the fixture's holder must own the budget")
 
 	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}, 0))
@@ -776,7 +835,7 @@ func cachedUnderFullBudget(t *testing.T, step Step) (*Cache, *budgetAdmitter) {
 	b, _ := testBudget(t, 10_000, 8)
 	held := b.Request(types.MachineClaim{
 		Project: ".", Target: "test", MemoryMB: 9000, PID: 100, Dir: "/elsewhere/checkout",
-	})
+	}, 0)
 	require.True(t, held.Granted, "the fixture's holder must own the budget")
 	adm := &budgetAdmitter{budget: b}
 	c, err := Open(t.Context(), cdir, WithLocalWrite(true), WithMachineAdmission(adm, 0))
@@ -1051,7 +1110,7 @@ func TestLibraryCallerIsExcusedFromItsParentsClaim(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
 	parent := b.Request(types.MachineClaim{
 		Project: ".", Target: "ci", MemoryMB: 10_000, Slots: 1, PID: 3217, Invocation: "3217:inv-parent",
-	})
+	}, 0)
 	require.True(t, parent.Granted, "the shard's own run fills the machine")
 
 	// The ctx admit actually sees for an SDK consumer: attributeRun adopted the parent
