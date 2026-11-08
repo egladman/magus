@@ -250,6 +250,7 @@ magus\project({
         "release-manifest": {"skip_cache": "reads the published release and main's manifest, which no file input carries"},
         "release": {"skip_cache": "mutates go.mod and creates VCS tags, an order-sensitive side effect"},
         // memory_mb: -race shadow memory in every test binary exhausts a 16GB runner.
+        // test's own body runs the raced go-test op; no member races.
         // Linux pipepeer tests read their children's /proc entries.
         // The raced suite measured 13m21s of its own work on a loaded 8-core machine, with
         // vcs, cmd/magus and internal/guard each over five minutes: the hg and sl parity

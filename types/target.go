@@ -177,10 +177,8 @@ type Target struct {
 	// subprocesses included, so a value near a legitimate run's duration fails builds
 	// that were fine. Declare a multiple of the worst run on record, not its p75.
 	//
-	// NOT folded across a chain.
-	// It needs no fold anyway: the deadline rides the context, so a
-	// scheduled target's ceiling already bounds every target it composes, and a chain
-	// member's own ceiling fires inside that as the tighter bound.
+	// The deadline rides the context. A scheduled target's ceiling bounds
+	// every target it composes; a member's own ceiling fires inside it.
 	Timeout string `json:"timeout,omitempty" buzz:"timeout"`
 	// Sandbox is the target layer of the sandbox declaration: what this target's
 	// processes may use beyond the workspace's and its spells' grants, merged over them
