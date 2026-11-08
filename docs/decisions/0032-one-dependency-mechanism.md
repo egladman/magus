@@ -3,7 +3,7 @@ title: "ADR 0032: one dependency mechanism"
 order: 32
 description: A magusfile stops writing depends_on. Every edge is a typed reference written where it is used, always qualified by its project, this one included (self\lint, never a bare lint). A target edge is ctx.needs(proofread\build); an edge on another project's files is a read, proofread\sources() or proofread\file(glob), which orders nothing. The project graph is derived and printed read-only as upstream and downstream, each edge with the call that drew it. Same-name ordering ends, spells contribute the same typed references, and a written depends_on is refused by MGS1063 with the exact replacement.
 tags: [adr, decision, dependencies, needs, magusfile, naming, project-graph, cache, affected, spells]
-status: proposed (Eli reads it before any code)
+status: accepted
 date: 2026-11-07
 ---
 
@@ -105,7 +105,7 @@ because the two kinds do different things.
 
 | the downstream... | writes | runs upstream work | orders | key gains |
 | --- | --- | --- | --- | --- |
-| needs a target's result | `ctx.needs(proofread\build)` | yes, once per invocation | that target first | the target's key |
+| needs a target's result | `ctx.needs([proofread\build])` | yes, once per invocation | that target first | the target's key |
 | reads another project's sources, in one target | `ctx.readsFiles([proofread\sources()])` | no | nothing | the upstream source digest |
 | reads some of another project's files, in one target | `ctx.readsFiles([figure\file("figure.buzz")])` | no | nothing | those files' bytes |
 | reads another project's sources, in every target | `"sources": [..., embed\sources()]` in `magus\project` | no | nothing | the upstream source digest, in every key |
@@ -439,3 +439,27 @@ yes, per AGENTS.md.
   label beside `upstream` for projects is not decided.
 
 ## Amendments
+
+### 2026-11-07: accepted, with typed arguments
+
+Eli accepted the names in parts 2 and 3 (`self`, `upstream` and `downstream`,
+`graph projects`, `--downstream`) and settled part 1 from the argument types rather
+than the verbs. There are two argument types, each with one effect:
+
+```buzz
+export object TargetRef { project: str, target: str }
+export object InputRef  { project: str, glob: str, except: [str] = [] }
+export object Context {
+    extern fun needs(targets: [TargetRef]) > void;
+    extern fun readsFiles(files: [InputRef]) > void;
+}
+```
+
+`p\<target>` is a `TargetRef`; `p\sources()` and `p\file(glob)` both return `InputRef`,
+so a whole-project edge is a larger file set, not a third kind. `ctx.needs` takes a list
+because a Buzz declaration has no variadic parameter. A union parameter (`T | U`) does
+not parse in gopherbuzz, and one `Dependency` protocol would leave ordering to each
+element's kind, so both were rejected. Go keeps one `types.TargetRef`, which absorbs
+`CrossTargetRef` and the bindings' `externalTarget`; `InputRef` always names its
+project. The helper names (`readsFiles`, `file`) may change later; the types are the
+decision.
