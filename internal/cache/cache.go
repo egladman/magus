@@ -293,7 +293,7 @@ type Step struct {
 	// Under is "<project>:<target>" of the composer an inline member runs
 	// under, "" otherwise. Never hashed.
 	Under string
-	Label        string // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
+	Label string // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
 	// Revision and Dirty are the VCS state the run's inputs were read at, resolved ONCE
 	// per invocation by the caller (a per-target probe would spawn a VCS subprocess per
 	// step) and copied onto every step. Display-only provenance for the output

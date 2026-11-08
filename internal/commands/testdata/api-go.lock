@@ -875,6 +875,9 @@ github.com/egladman/magus/types.ActiveDispatch type struct
 github.com/egladman/magus/types.ActiveDispatch.Has method(ptr) func(dir string) bool
 github.com/egladman/magus/types.ActiveDispatch.Mark method(ptr) func(dir string)
 github.com/egladman/magus/types.ActiveDispatchFromContext func(ctx context.Context) *ActiveDispatch
+github.com/egladman/magus/types.AdmissionOutcome type string
+github.com/egladman/magus/types.AdmissionRefused const AdmissionOutcome = "refused"
+github.com/egladman/magus/types.AdmissionSeated const AdmissionOutcome = "seated"
 github.com/egladman/magus/types.AffectedComputer type interface
 github.com/egladman/magus/types.AffectedComputer.Affected imethod func(ctx context.Context, base string) (*AffectedResult, error)
 github.com/egladman/magus/types.AffectedComputer.AffectedFromPaths imethod func(ctx context.Context, paths []string) (*AffectedResult, error)
@@ -1227,12 +1230,6 @@ github.com/egladman/magus/types.CeilingExceededError func(ctx context.Context, e
 github.com/egladman/magus/types.Chain type []ChainStep
 github.com/egladman/magus/types.Chain.Needs method func(refs ...string) Chain
 github.com/egladman/magus/types.Chain.String method func() string
-github.com/egladman/magus/types.ChainMemory type struct
-github.com/egladman/magus/types.ChainMemory.DeclaredBy field string
-github.com/egladman/magus/types.ChainMemory.MB field int
-github.com/egladman/magus/types.ChainMemory.Profile field MemoryProfile
-github.com/egladman/magus/types.ChainMemory.Sizing field MemorySizing
-github.com/egladman/magus/types.ChainMemoryMB func(p *Project, target string, lookup func(path string) *Project) (mb int, declaredBy string)
 github.com/egladman/magus/types.ChainSkipCacheOutputs func(p *Project, target string, lookup func(path string) *Project) []Glob
 github.com/egladman/magus/types.ChainSkipCacheSteps func(p *Project, target string, lookup func(path string) *Project, args ...string) []ChainStep
 github.com/egladman/magus/types.ChainStep type struct
@@ -1639,7 +1636,6 @@ github.com/egladman/magus/types.CredentialSocketPeer var Credential
 github.com/egladman/magus/types.CredentialStdio var Credential
 github.com/egladman/magus/types.CrossDepOwnerUnknown const DiagnosticCode = "MGS1015"
 github.com/egladman/magus/types.CrossFileMember const untyped string = "file"
-github.com/egladman/magus/types.CrossNeedsUndeclared const DiagnosticCode = "MGS1062"
 github.com/egladman/magus/types.CrossOutputCycle const DiagnosticCode = "MGS1012"
 github.com/egladman/magus/types.CrossOutputGlobEscapes const DiagnosticCode = "MGS1013"
 github.com/egladman/magus/types.CrossOutputNotProduced const DiagnosticCode = "MGS1014"
@@ -1735,7 +1731,6 @@ github.com/egladman/magus/types.DependencyWait.Elapsed method(ptr) func() time.D
 github.com/egladman/magus/types.DependencyWait.Nested method(ptr) func() *DependencyWait
 github.com/egladman/magus/types.DependencyWait.Request method(ptr) func(run func(context.Context) error)
 github.com/egladman/magus/types.DependencyWaitFromContext func(ctx context.Context) *DependencyWait
-github.com/egladman/magus/types.DependsOnRoot const DiagnosticCode = "MGS1061"
 github.com/egladman/magus/types.DescendantBoundaryCrossed const DiagnosticCode = "MGS3001"
 github.com/egladman/magus/types.DescribeGaps func(gaps []KnowledgeSymbolGap) string
 github.com/egladman/magus/types.DescribeStaleIndexes func(stale []KnowledgeStaleIndex) string
@@ -1878,8 +1873,6 @@ github.com/egladman/magus/types.DiffFile.Project field string "json:\"project,om
 github.com/egladman/magus/types.DiffFile.Reach field *int "json:\"reach\" yaml:\"reach\""
 github.com/egladman/magus/types.DiffFile.ReachOr method func(def int) int
 github.com/egladman/magus/types.DiffFile.ReadState field string "json:\"read_state,omitempty\" yaml:\"read_state,omitempty\""
-github.com/egladman/magus/types.DiffFile.Risk field *TierEvidence "json:\"risk,omitempty\" yaml:\"risk,omitempty\""
-github.com/egladman/magus/types.DiffFile.RiskRank method func() int
 github.com/egladman/magus/types.DiffFile.Role field string "json:\"role\" yaml:\"role\""
 github.com/egladman/magus/types.DiffFile.Symbols field []DiffSymbol "json:\"symbols,omitempty\" yaml:\"symbols,omitempty\""
 github.com/egladman/magus/types.DiffFile.Threads field []DiffThreadRef "json:\"threads,omitempty\" yaml:\"threads,omitempty\""
@@ -1915,7 +1908,6 @@ github.com/egladman/magus/types.DiffOptions.BaselineLabel field string "json:\"-
 github.com/egladman/magus/types.DiffOptions.MinCohort field int "json:\"-\" yaml:\"-\""
 github.com/egladman/magus/types.DiffOptions.MinShare field float64 "json:\"-\" yaml:\"-\""
 github.com/egladman/magus/types.DiffOptions.Patch field string "json:\"-\" yaml:\"-\""
-github.com/egladman/magus/types.DiffOptions.RiskBase field string "json:\"-\" yaml:\"-\""
 github.com/egladman/magus/types.DiffOptions.SkipOrder field bool "json:\"-\" yaml:\"-\""
 github.com/egladman/magus/types.DiffOrder type struct
 github.com/egladman/magus/types.DiffOrder.Count field DiffOrderCount "json:\"count\" yaml:\"count\""
@@ -2330,11 +2322,6 @@ github.com/egladman/magus/types.ExpectPresent const GoalExpect = "present"
 github.com/egladman/magus/types.ExpectSignature const GoalExpect = "signature"
 github.com/egladman/magus/types.ExpectUnreferenced const GoalExpect = "unreferenced"
 github.com/egladman/magus/types.Fail func[T any](d Diagnostic) Result[T]
-github.com/egladman/magus/types.Fallback type struct
-github.com/egladman/magus/types.Fallback.Effect field string "json:\"effect\""
-github.com/egladman/magus/types.Fallback.String method func() string
-github.com/egladman/magus/types.Fallback.What field string "json:\"what\""
-github.com/egladman/magus/types.Fallback.Why field string "json:\"why\""
 github.com/egladman/magus/types.FanOut func(obs ...Observer) Observer
 github.com/egladman/magus/types.FileChange type struct
 github.com/egladman/magus/types.FileChange.Location method func() Location
@@ -2438,6 +2425,7 @@ github.com/egladman/magus/types.ForgePull.Review field string
 github.com/egladman/magus/types.ForgePull.Title field string
 github.com/egladman/magus/types.ForgePull.URL field string
 github.com/egladman/magus/types.FormatDiagnostic func(c DiagnosticCode, msg string) string
+github.com/egladman/magus/types.FormatMB func(mb int) string
 github.com/egladman/magus/types.FunctionGap type struct
 github.com/egladman/magus/types.FunctionGap.Complexity field int
 github.com/egladman/magus/types.FunctionGap.Decided method func(threshold int) bool
@@ -3071,6 +3059,7 @@ github.com/egladman/magus/types.Job.Goals field []Goal "json:\"goals,omitempty\"
 github.com/egladman/magus/types.Job.HardPaths method func() []string
 github.com/egladman/magus/types.Job.Holder field JobHolder "json:\"holder,omitempty\" yaml:\"holder,omitempty\""
 github.com/egladman/magus/types.Job.HolderStopped field int64 "json:\"holder_stopped,omitempty\" yaml:\"holder_stopped,omitempty\""
+github.com/egladman/magus/types.Job.HoldsNoBuildSeat method func() bool
 github.com/egladman/magus/types.Job.ID field string "json:\"id\" yaml:\"id\""
 github.com/egladman/magus/types.Job.Integrates field []string "json:\"integrates,omitempty\" yaml:\"integrates,omitempty\""
 github.com/egladman/magus/types.Job.Integrating method func() bool
@@ -3917,10 +3906,6 @@ github.com/egladman/magus/types.ListPullsRequest type struct
 github.com/egladman/magus/types.ListPullsRequest.Authors field []string
 github.com/egladman/magus/types.ListPullsRequest.Base field string
 github.com/egladman/magus/types.ListPullsRequest.Remote field string
-github.com/egladman/magus/types.ListedWorkspace type struct
-github.com/egladman/magus/types.ListedWorkspace.Dir field string "json:\"dir\" yaml:\"dir\""
-github.com/egladman/magus/types.ListedWorkspace.Name field string "json:\"name\" yaml:\"name\""
-github.com/egladman/magus/types.ListedWorkspace.Root field string "json:\"root\" yaml:\"root\""
 github.com/egladman/magus/types.ListenerHTTP const ListenerKind = "http"
 github.com/egladman/magus/types.ListenerKind type string
 github.com/egladman/magus/types.ListenerSocket const ListenerKind = "socket"
@@ -3981,6 +3966,29 @@ github.com/egladman/magus/types.Machine type struct
 github.com/egladman/magus/types.Machine.Cores field int "json:\"cores\""
 github.com/egladman/magus/types.Machine.MemoryMB field int "json:\"memory_mb\""
 github.com/egladman/magus/types.Machine.Name field string "json:\"name\""
+github.com/egladman/magus/types.MachineAdmission type struct
+github.com/egladman/magus/types.MachineAdmission.At field time.Time "json:\"at\" yaml:\"at\""
+github.com/egladman/magus/types.MachineAdmission.BudgetMB field int "json:\"budget_mb,omitzero\" yaml:\"budget_mb,omitempty\""
+github.com/egladman/magus/types.MachineAdmission.BudgetSlots field int "json:\"budget_slots,omitzero\" yaml:\"budget_slots,omitempty\""
+github.com/egladman/magus/types.MachineAdmission.Command field string "json:\"command,omitempty\" yaml:\"command,omitempty\""
+github.com/egladman/magus/types.MachineAdmission.Dir field string "json:\"dir,omitempty\" yaml:\"dir,omitempty\""
+github.com/egladman/magus/types.MachineAdmission.Fits field bool "json:\"fits\" yaml:\"fits\""
+github.com/egladman/magus/types.MachineAdmission.HeldMB field int "json:\"held_mb,omitzero\" yaml:\"held_mb,omitempty\""
+github.com/egladman/magus/types.MachineAdmission.HeldSlots field int "json:\"held_slots,omitzero\" yaml:\"held_slots,omitempty\""
+github.com/egladman/magus/types.MachineAdmission.Holders field []MachineClaimant "json:\"holders,omitempty\" yaml:\"holders,omitempty\""
+github.com/egladman/magus/types.MachineAdmission.MarshalJSON method func() ([]byte, error)
+github.com/egladman/magus/types.MachineAdmission.MemoryMB field int "json:\"memory_mb,omitzero\" yaml:\"memory_mb,omitempty\""
+github.com/egladman/magus/types.MachineAdmission.Outcome field AdmissionOutcome "json:\"outcome,omitempty\" yaml:\"outcome,omitempty\""
+github.com/egladman/magus/types.MachineAdmission.Owner field string "json:\"owner,omitempty\" yaml:\"owner,omitempty\""
+github.com/egladman/magus/types.MachineAdmission.PID field int "json:\"pid\" yaml:\"pid\""
+github.com/egladman/magus/types.MachineAdmission.Project field string "json:\"project\" yaml:\"project\""
+github.com/egladman/magus/types.MachineAdmission.Sizing field MemorySizing "json:\"sizing,omitzero\" yaml:\"sizing,omitempty\""
+github.com/egladman/magus/types.MachineAdmission.Slots field int "json:\"slots,omitzero\" yaml:\"slots,omitempty\""
+github.com/egladman/magus/types.MachineAdmission.Target field string "json:\"target\" yaml:\"target\""
+github.com/egladman/magus/types.MachineAdmission.Under field string "json:\"under,omitempty\" yaml:\"under,omitempty\""
+github.com/egladman/magus/types.MachineAdmission.UnmarshalJSON method(ptr) func(b []byte) error
+github.com/egladman/magus/types.MachineAdmission.WaitBoundMS field int64 "json:\"wait_bound_ms,omitzero\" yaml:\"wait_bound_ms,omitempty\""
+github.com/egladman/magus/types.MachineAdmission.WaitedMS field int64 "json:\"waited_ms,omitzero\" yaml:\"waited_ms,omitempty\""
 github.com/egladman/magus/types.MachineBudgetExhausted const DiagnosticCode = "MGS3009"
 github.com/egladman/magus/types.MachineClaim type struct
 github.com/egladman/magus/types.MachineClaim.Ancestors field []string "json:\"ancestors,omitempty\" yaml:\"ancestors,omitempty\""
@@ -3995,7 +4003,11 @@ github.com/egladman/magus/types.MachineClaim.Project field string "json:\"projec
 github.com/egladman/magus/types.MachineClaim.Run method func() string
 github.com/egladman/magus/types.MachineClaim.Sizing field MemorySizing "json:\"sizing,omitzero\" yaml:\"sizing,omitempty\""
 github.com/egladman/magus/types.MachineClaim.Slots field int "json:\"slots,omitzero\" yaml:\"slots,omitempty\""
+github.com/egladman/magus/types.MachineClaim.SlotsFloor field int "json:\"slots_floor,omitzero\" yaml:\"slots_floor,omitempty\""
 github.com/egladman/magus/types.MachineClaim.Target field string "json:\"target\" yaml:\"target\""
+github.com/egladman/magus/types.MachineClaim.Under field string "json:\"under,omitempty\" yaml:\"under,omitempty\""
+github.com/egladman/magus/types.MachineClaim.WaitBoundMS field int64 "json:\"wait_bound_ms,omitzero\" yaml:\"wait_bound_ms,omitempty\""
+github.com/egladman/magus/types.MachineClaim.WaitedMS field int64 "json:\"waited_ms,omitzero\" yaml:\"waited_ms,omitempty\""
 github.com/egladman/magus/types.MachineClaim.Weight field float64 "json:\"weight,omitzero\" yaml:\"weight,omitempty\""
 github.com/egladman/magus/types.MachineClaimant type struct
 github.com/egladman/magus/types.MachineClaimant.Command field string "json:\"command,omitempty\" yaml:\"command,omitempty\""
@@ -4009,18 +4021,7 @@ github.com/egladman/magus/types.MachineClaimant.Since field time.Time "json:\"si
 github.com/egladman/magus/types.MachineClaimant.Sizing field MemorySizing "json:\"sizing,omitzero\" yaml:\"sizing,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Slots field int "json:\"slots,omitzero\" yaml:\"slots,omitempty\""
 github.com/egladman/magus/types.MachineClaimant.Target field string "json:\"target\" yaml:\"target\""
-github.com/egladman/magus/types.MachineRefusal type struct
-github.com/egladman/magus/types.MachineRefusal.At field time.Time "json:\"at\" yaml:\"at\""
-github.com/egladman/magus/types.MachineRefusal.Command field string "json:\"command,omitempty\" yaml:\"command,omitempty\""
-github.com/egladman/magus/types.MachineRefusal.Dir field string "json:\"dir,omitempty\" yaml:\"dir,omitempty\""
-github.com/egladman/magus/types.MachineRefusal.Fits field bool "json:\"fits\" yaml:\"fits\""
-github.com/egladman/magus/types.MachineRefusal.Holders field []MachineClaimant "json:\"holders,omitempty\" yaml:\"holders,omitempty\""
-github.com/egladman/magus/types.MachineRefusal.MemoryMB field int "json:\"memory_mb,omitzero\" yaml:\"memory_mb,omitempty\""
-github.com/egladman/magus/types.MachineRefusal.Owner field string "json:\"owner,omitempty\" yaml:\"owner,omitempty\""
-github.com/egladman/magus/types.MachineRefusal.PID field int "json:\"pid\" yaml:\"pid\""
-github.com/egladman/magus/types.MachineRefusal.Project field string "json:\"project\" yaml:\"project\""
-github.com/egladman/magus/types.MachineRefusal.Slots field int "json:\"slots,omitzero\" yaml:\"slots,omitempty\""
-github.com/egladman/magus/types.MachineRefusal.Target field string "json:\"target\" yaml:\"target\""
+github.com/egladman/magus/types.MachineClaimant.Under field string "json:\"under,omitempty\" yaml:\"under,omitempty\""
 github.com/egladman/magus/types.MachineSnapshot type struct
 github.com/egladman/magus/types.MachineSnapshot.BudgetMB field int "json:\"budget_mb,omitzero\" yaml:\"budget_mb,omitempty\""
 github.com/egladman/magus/types.MachineSnapshot.BudgetSlots field int "json:\"budget_slots,omitzero\" yaml:\"budget_slots,omitempty\""
@@ -4028,10 +4029,11 @@ github.com/egladman/magus/types.MachineSnapshot.HeldMB field int "json:\"held_mb
 github.com/egladman/magus/types.MachineSnapshot.HeldSlots field int "json:\"held_slots,omitzero\" yaml:\"held_slots,omitempty\""
 github.com/egladman/magus/types.MachineSnapshot.HolderList method func(now time.Time) string
 github.com/egladman/magus/types.MachineSnapshot.Holders field []MachineClaimant "json:\"holders,omitempty\" yaml:\"holders,omitempty\""
-github.com/egladman/magus/types.MachineSnapshot.Refused field []MachineRefusal "json:\"refused,omitempty\" yaml:\"refused,omitempty\""
+github.com/egladman/magus/types.MachineSnapshot.Refused field []MachineAdmission "json:\"refused,omitempty\" yaml:\"refused,omitempty\""
 github.com/egladman/magus/types.MachineSnapshot.Reserve field MemoryReserve "json:\"reserve,omitzero\" yaml:\"reserve,omitempty\""
 github.com/egladman/magus/types.MachineSnapshot.Waiting field []MachineWaiter "json:\"waiting,omitempty\" yaml:\"waiting,omitempty\""
 github.com/egladman/magus/types.MachineVerdict type struct
+github.com/egladman/magus/types.MachineVerdict.Ahead field int "json:\"ahead,omitzero\" yaml:\"ahead,omitempty\""
 github.com/egladman/magus/types.MachineVerdict.BudgetMB field int "json:\"budget_mb,omitzero\" yaml:\"budget_mb,omitempty\""
 github.com/egladman/magus/types.MachineVerdict.BudgetSlots field int "json:\"budget_slots,omitzero\" yaml:\"budget_slots,omitempty\""
 github.com/egladman/magus/types.MachineVerdict.Fits field bool "json:\"fits\" yaml:\"fits\""
@@ -4042,6 +4044,7 @@ github.com/egladman/magus/types.MachineVerdict.Holders field []MachineClaimant "
 github.com/egladman/magus/types.MachineVerdict.ID field string "json:\"id,omitempty\" yaml:\"id,omitempty\""
 github.com/egladman/magus/types.MachineVerdict.OwnRun field bool "json:\"own_run,omitzero\" yaml:\"own_run,omitempty\""
 github.com/egladman/magus/types.MachineVerdict.Packed field bool "json:\"packed,omitempty\" yaml:\"packed,omitempty\""
+github.com/egladman/magus/types.MachineVerdict.Slots field int "json:\"slots,omitzero\" yaml:\"slots,omitempty\""
 github.com/egladman/magus/types.MachineWaiter type struct
 github.com/egladman/magus/types.MachineWaiter.Command field string "json:\"command,omitempty\" yaml:\"command,omitempty\""
 github.com/egladman/magus/types.MachineWaiter.Dir field string "json:\"dir,omitempty\" yaml:\"dir,omitempty\""
@@ -4128,7 +4131,6 @@ github.com/egladman/magus/types.McpTransport type string
 github.com/egladman/magus/types.McpTransport.String method func() string
 github.com/egladman/magus/types.McpTransport.Valid method func() bool
 github.com/egladman/magus/types.McpTransport.Values method func() []string
-github.com/egladman/magus/types.MembersClaimTheirOwn func(p *Project, target string) bool
 github.com/egladman/magus/types.MemoryCurve type [20]uint32
 github.com/egladman/magus/types.MemoryCurve.MarshalJSON method(ptr) func() ([]byte, error)
 github.com/egladman/magus/types.MemoryCurve.PeakMB method func() int
@@ -4149,9 +4151,9 @@ github.com/egladman/magus/types.MemoryReserve.TotalMB field int "json:\"total_mb
 github.com/egladman/magus/types.MemorySample type struct
 github.com/egladman/magus/types.MemorySample.At field time.Duration
 github.com/egladman/magus/types.MemorySample.Bytes field int64
-github.com/egladman/magus/types.MemorySizer type func(proj *Project, target string, declaredMB int) (mb int, sizing MemorySizing, profile MemoryProfile)
 github.com/egladman/magus/types.MemorySizing type struct
 github.com/egladman/magus/types.MemorySizing.AnyShape field bool "json:\"any_shape,omitzero\" yaml:\"any_shape,omitempty\""
+github.com/egladman/magus/types.MemorySizing.Breakdown method func(target string, under string, mb int) string
 github.com/egladman/magus/types.MemorySizing.Fallback field string "json:\"fallback,omitempty\" yaml:\"fallback,omitempty\""
 github.com/egladman/magus/types.MemorySizing.Measured method func() bool
 github.com/egladman/magus/types.MemorySizing.Samples field int "json:\"samples,omitzero\" yaml:\"samples,omitempty\""
@@ -4616,7 +4618,6 @@ github.com/egladman/magus/types.Project.DeclaredGlobs method(ptr) func() []Glob
 github.com/egladman/magus/types.Project.DependsOn field []string
 github.com/egladman/magus/types.Project.Dir field string
 github.com/egladman/magus/types.Project.DispatchOnlyTargets field []string
-github.com/egladman/magus/types.Project.ForwardingTargets field []string
 github.com/egladman/magus/types.Project.GateInheritOff field bool
 github.com/egladman/magus/types.Project.GateLowRisk field []string
 github.com/egladman/magus/types.Project.GateLowRiskDeclared field bool
@@ -5068,12 +5069,11 @@ github.com/egladman/magus/types.Shard.Duties field []Duty
 github.com/egladman/magus/types.Shard.ID field string
 github.com/egladman/magus/types.Shard.ProjectPaths field []string
 github.com/egladman/magus/types.Shard.Units field []Unit
-github.com/egladman/magus/types.ShardCrossesProjects const DiagnosticCode = "MGS3054"
 github.com/egladman/magus/types.ShardPlan type struct
 github.com/egladman/magus/types.ShardPlan.Affected field []string
 github.com/egladman/magus/types.ShardPlan.Args field []string
 github.com/egladman/magus/types.ShardPlan.Charms field []string
-github.com/egladman/magus/types.ShardPlan.Fallbacks field []Fallback
+github.com/egladman/magus/types.ShardPlan.Fallbacks field []string
 github.com/egladman/magus/types.ShardPlan.Machine field *Machine
 github.com/egladman/magus/types.ShardPlan.MaxParallel field int
 github.com/egladman/magus/types.ShardPlan.OverBudget field []string
@@ -5101,7 +5101,6 @@ github.com/egladman/magus/types.SignAlgorithm.String method func() string
 github.com/egladman/magus/types.SignAlgorithm.Valid method func() bool
 github.com/egladman/magus/types.SignAlgorithm.Values method func() []string
 github.com/egladman/magus/types.SignEd25519 const SignAlgorithm = "ed25519"
-github.com/egladman/magus/types.SizedChainMemory func(p *Project, target string, lookup func(path string) *Project, size MemorySizer, ownClaims func(p *Project, target string) bool) ChainMemory
 github.com/egladman/magus/types.Skill type struct
 github.com/egladman/magus/types.Skill.Body field string
 github.com/egladman/magus/types.Skill.Current field bool
@@ -5147,7 +5146,6 @@ github.com/egladman/magus/types.SourceDiagnostic.File field string "json:\"file\
 github.com/egladman/magus/types.SourceDiagnostic.Line field int "json:\"line\" yaml:\"line\""
 github.com/egladman/magus/types.SourceDiagnostic.Message field string "json:\"message\" yaml:\"message\""
 github.com/egladman/magus/types.SourceDiagnostic.URL field string "json:\"url,omitempty\" yaml:\"url,omitempty\""
-github.com/egladman/magus/types.SourceGlobInAnotherProject const DiagnosticCode = "MGS1060"
 github.com/egladman/magus/types.SourceIsAlsoOutput const DiagnosticCode = "MGS1034"
 github.com/egladman/magus/types.SourceProjects func(files []FileEntry) map[string]bool
 github.com/egladman/magus/types.SourcesChangedSinceBase func(ctx context.Context, insp Inspector, res VCSResolution, root string) map[string]bool
@@ -5585,7 +5583,6 @@ github.com/egladman/magus/types.TargetGraphNode.DynamicIO field bool "json:\"-\"
 github.com/egladman/magus/types.TargetGraphNode.EnvAllow field []string "json:\"env_allow,omitempty\" yaml:\"env_allow,omitempty\""
 github.com/egladman/magus/types.TargetGraphNode.ExecOverrides field []string "json:\"exec_overrides,omitempty\" yaml:\"exec_overrides,omitempty\""
 github.com/egladman/magus/types.TargetGraphNode.FootprintErr field error "json:\"-\" yaml:\"-\" buzz:\"-\""
-github.com/egladman/magus/types.TargetGraphNode.ForwardsArgs field bool "json:\"forwards_args,omitempty\" yaml:\"forwards_args,omitempty\""
 github.com/egladman/magus/types.TargetGraphNode.ModifiesExistingFiles field []UpdateRef "json:\"modifies_existing_files,omitempty\" yaml:\"modifies_existing_files,omitempty\""
 github.com/egladman/magus/types.TargetGraphNode.Name field string "json:\"name\" yaml:\"name\""
 github.com/egladman/magus/types.TargetGraphNode.Observations field []string "json:\"observations,omitempty\" yaml:\"observations,omitempty\""
@@ -5685,7 +5682,6 @@ github.com/egladman/magus/types.ThreadSource.UnmarshalText method(ptr) func(text
 github.com/egladman/magus/types.ThreadSource.Valid method func() bool
 github.com/egladman/magus/types.ThreadSource.Values method func() []string
 github.com/egladman/magus/types.Tier type string
-github.com/egladman/magus/types.Tier.Rank method func() int
 github.com/egladman/magus/types.TierEvidence type struct
 github.com/egladman/magus/types.TierEvidence.Class field string "json:\"class,omitempty\"   yaml:\"class,omitempty\""
 github.com/egladman/magus/types.TierEvidence.Line method func() string
@@ -6090,7 +6086,6 @@ github.com/egladman/magus/types.Workspace.Root field string
 github.com/egladman/magus/types.Workspace.SetGraphObserver method(ptr) func(o Observer)
 github.com/egladman/magus/types.Workspace.UnderPath method(ptr) func(prefix string) []*Project
 github.com/egladman/magus/types.Workspace.VCSOptions field VCSOptions
-github.com/egladman/magus/types.Workspace.Workspaces field []ListedWorkspace
 github.com/egladman/magus/types.WorkspaceActive const WorkspaceState = "active"
 github.com/egladman/magus/types.WorkspaceConfig type struct
 github.com/egladman/magus/types.WorkspaceConfig.CacheDir field string
@@ -6103,8 +6098,6 @@ github.com/egladman/magus/types.WorkspaceEntry.Concurrency field int "json:\"con
 github.com/egladman/magus/types.WorkspaceEntry.ProjectCount field int "json:\"project_count\"           yaml:\"project_count\""
 github.com/egladman/magus/types.WorkspaceEntry.Root field string "json:\"root\"                    yaml:\"root\""
 github.com/egladman/magus/types.WorkspaceEntry.VCSBaseRef field string "json:\"vcs_base_ref,omitempty\"  yaml:\"vcs_base_ref,omitempty\""
-github.com/egladman/magus/types.WorkspaceEntry.Workspaces field []ListedWorkspace "json:\"workspaces\" yaml:\"workspaces\""
-github.com/egladman/magus/types.WorkspaceEntryShape const DiagnosticCode = "MGS1056"
 github.com/egladman/magus/types.WorkspaceFailed const WorkspaceState = "failed"
 github.com/egladman/magus/types.WorkspaceFailure type struct
 github.com/egladman/magus/types.WorkspaceFailure.Diagnostics field []SourceDiagnostic "json:\"diagnostics,omitempty\" yaml:\"diagnostics,omitempty\""
@@ -6112,9 +6105,7 @@ github.com/egladman/magus/types.WorkspaceFailure.Message field string "json:\"me
 github.com/egladman/magus/types.WorkspaceFromContext func(ctx context.Context) WorkspaceRepository
 github.com/egladman/magus/types.WorkspaceLoadFailed const DiagnosticCode = "MGS3016"
 github.com/egladman/magus/types.WorkspaceLoading const WorkspaceState = "loading"
-github.com/egladman/magus/types.WorkspaceMissing const DiagnosticCode = "MGS1054"
 github.com/egladman/magus/types.WorkspaceNeedsNewerMagus const DiagnosticCode = "MGS1021"
-github.com/egladman/magus/types.WorkspaceNotConnected const DiagnosticCode = "MGS1059"
 github.com/egladman/magus/types.WorkspaceNotWired const DiagnosticCode = "MGS9026"
 github.com/egladman/magus/types.WorkspaceReader type interface
 github.com/egladman/magus/types.WorkspaceReader.All imethod func() []*Project
@@ -6134,10 +6125,6 @@ github.com/egladman/magus/types.WorkspaceRepository.embeds TargetExpander
 github.com/egladman/magus/types.WorkspaceRepository.embeds WorkspaceReader
 github.com/egladman/magus/types.WorkspaceState type string
 github.com/egladman/magus/types.WorkspaceStillLoading const DiagnosticCode = "MGS3017"
-github.com/egladman/magus/types.WorkspacesCommitted const DiagnosticCode = "MGS1055"
-github.com/egladman/magus/types.WorkspacesDir const untyped string = ".magus/workspaces"
-github.com/egladman/magus/types.WorkspacesNotALink const DiagnosticCode = "MGS1058"
-github.com/egladman/magus/types.WorkspacesTracked const DiagnosticCode = "MGS1057"
 github.com/egladman/magus/types.WrapDiagnostic func(c DiagnosticCode, cause error, format string, args ...any) *DiagnosticError
 github.com/egladman/magus/types.WrapperInvocation func(id string) string
 github.com/egladman/magus/types.WritePathClaimUngradable const DiagnosticCode = "MGS3031"

@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
