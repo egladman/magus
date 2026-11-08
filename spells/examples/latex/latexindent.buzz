@@ -1,0 +1,9 @@
+// latexindent checks the project's LaTeX indentation.
+import "magus";
+import "magus/spell/latex";
+
+magus\project({ "spells": [latex] });
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    latex["latexindent"](ctx);
+}
