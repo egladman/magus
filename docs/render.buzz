@@ -104,27 +104,9 @@ fun walkBlog(site: Site) > void !> any {
     renderBlogIndex(site);
 }
 
-// Recursively walk docs/ (the render reads its co-located markdown; the SSG's own
-// root children - gen/, src/, tour/ - are skipped at the root, node_modules/ and
-// MAGUS.md at any depth).
-fun walk(rel: str, site: Site) > void !> any {
-    var dir = fs\join(site.inputs.root, site.inputs.docs);
-    if (rel != "") { dir = site.inputs.root + "/" + site.inputs.docs + "/" + rel; }
-
-    foreach (name in fs\listDir(dir)) {
-        var childRel = name;
-        if (rel != "") { childRel = rel + "/" + name; }
-
-        if (isDirectory(site.inputs.root + "/" + site.inputs.docs + "/" + childRel)) {
-            if (isNeverContentDir(name)) { continue; }
-            if (rel == "" and isGeneratorDir(name, site.inputs.config.generatorDirs)) { continue; }
-            walk(childRel, site);
-        } else {
-            if (name.endsWith(".md") and isGeneratorFile(name, site.inputs.config.generatorFiles) == false) {
-                renderFile(childRel, site);
-            }
-        }
-    }
+// renderDocs renders every markdown source under docs/.
+fun renderDocs(site: Site) > void !> any {
+    foreach (rel in site.docSourcePaths()) { renderFile(rel, site); }
 }
 
 
@@ -224,7 +206,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
     // Gather every docs page's relatedness metadata BEFORE any page renders, so each page's
     // "Related" cards resolve titles/URLs against the full docPages set. collectDocPages reads only
     // frontmatter, so it is free of the render state below.
-    site.collectDocPages("");
+    site.collectDocPages();
     // Parse the glossary vocabulary before the walk so every page can auto-link its terms.
     site.collectGlossaryTerms();
     site.collectConventions();
@@ -267,7 +249,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
     // gen/index.html; renderRoot writes gen/development/index.html.
     renderLanding(site);
     renderRoot(site);
-    walk("", site);
+    renderDocs(site);
     walkBlog(site);
 
     // Build /development/ before writeAliases so its pages are in site.pageUrls for the

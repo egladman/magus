@@ -6,6 +6,7 @@ namespace paths;
 
 import "assert";
 import "fs";
+import "result";
 
 // True if path is a directory.
 //
@@ -70,6 +71,48 @@ export fun isGeneratorFile(name: str, files: [str]) > bool {
         if (name == f) { return true; }
     }
     return false;
+}
+
+// docSources lists the markdown pages under dir, relative to dir, in
+// lexical order. The collect pass and the render both read it, so they
+// cannot disagree on what a page is. Pruning follows isNeverContentDir,
+// isGeneratorDir (dir's direct children only) and isGeneratorFile.
+export fun docSources(dir: str, generatorDirs: [str], generatorFiles: [str]) > result\Result::<[str]> {
+    final found: mut [str] = mut [];
+    final misses: mut [str] = mut [];
+    final prefixes: mut [str] = mut [];
+    try {
+        fs\walk(dir, callback: fun (path: str, isDir: bool) > fs\WalkStep {
+            // Paths are relative to the working directory, not dir. The first
+            // entry is dir itself and fixes the prefix.
+            if (prefixes.len() == 0) {
+                prefixes.append(if (path == ".") "" else path + "/");
+                return fs\WalkStep.next;
+            }
+            final prefix = prefixes[0];
+            if (!path.startsWith(prefix)) {
+                misses.append(path);
+                return fs\WalkStep.skipAll;
+            }
+            final rel = path.sub(prefix.len());
+            final name = fs\basename(path);
+            if (isDir) {
+                final atRoot = rel.indexOf("/") == null;
+                if (isNeverContentDir(name) or (atRoot and isGeneratorDir(name, generatorDirs))) {
+                    return fs\WalkStep.skipDir;
+                }
+            } else if (name.endsWith(".md") and isGeneratorFile(name, generatorFiles) == false) {
+                found.append(rel);
+            }
+            return fs\WalkStep.next;
+        });
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "docSources: walk {dir}");
+    }
+    if (misses.len() > 0) {
+        return result\fail::<[str]>("docSources: fs\\walk gave {misses[0]}, which is not under {prefixes[0]}");
+    }
+    return result\ok::<[str]>(found);
 }
 
 // isNeverContentDir reports whether a directory can never hold site content, at ANY
