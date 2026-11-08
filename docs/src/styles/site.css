@@ -2535,6 +2535,21 @@ a code {
 .admonition-caution   { border-left-color: #d13438; }
 .admonition-caution   .admonition-title { color: #d13438; }
 
+/* An author's note (> [!AUTHOR]) is one person's practice, not the page's contract, so
+   it must never pass for a callout: a dashed frame instead of the solid accent, and the
+   body in italics, the way a printed aside sets a voice apart from the text. */
+.admonition-author {
+  border: 1px dashed var(--pico-muted-border-color);
+  border-left: 4px dashed var(--pico-muted-color);
+  background: transparent;
+}
+.admonition-author .admonition-byline {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+}
+.admonition-author .admonition-byline ~ p { font-style: italic; }
+
 /* Code-block titles: authoring marker
      <!-- code-title: magusfile.buzz -->
      ```buzz

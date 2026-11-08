@@ -327,8 +327,14 @@ export fun tagCodeTitle(html: str) > str {
     return parts.join("");
 }
 
+// AUTHOR_BYLINE is what an author's note says it is: the one place a page speaks as its
+// author, which proofread's first-person rule leaves alone.
+final AUTHOR_BYLINE = "How Eli, who writes magus, works: personal practice, not something magus promises.";
+
 // tagAdmonition turns GitHub-alert blockquotes ("<blockquote>\n<p>[!TYPE]\n...") into
-// <div class="admonition admonition-<type>"> callouts. Unknown types pass through.
+// <div class="admonition admonition-<type>"> callouts, and [!AUTHOR] into an
+// <aside class="admonition admonition-author"> carrying AUTHOR_BYLINE. Unknown types pass
+// through.
 export fun tagAdmonition(html: str) > str {
     final parts: mut [str] = mut [<str>];
     var rest = html;
@@ -346,6 +352,7 @@ export fun tagAdmonition(html: str) > str {
         if (typ == "IMPORTANT") { kind = "important"; }
         if (typ == "WARNING") { kind = "warning"; }
         if (typ == "CAUTION") { kind = "caution"; }
+        if (typ == "AUTHOR") { kind = "author"; }
         if (kind == "") {
             parts.append(rest.sub(0, len: 12));   // 12 = len("<blockquote>")
             rest = rest.sub(12);
@@ -357,9 +364,16 @@ export fun tagAdmonition(html: str) > str {
             if (inner.startsWith(prefix)) {
                 inner = "\n<p>" + inner.sub(prefix.len());
             }
-            final label = typ.sub(0, len: 1) + typ.sub(1).lower();
-            parts.append(el(tag: "div", attrs: attr(name: "class", value: "admonition admonition-" + kind),
-                body: el(tag: "p", attrs: attr(name: "class", value: "admonition-title"), body: label) + inner));
+            final classes = attr(name: "class", value: "admonition admonition-" + kind);
+            if (kind == "author") {
+                final title = el(tag: "p", attrs: attr(name: "class", value: "admonition-title"), body: "Author's note");
+                final byline = el(tag: "p", attrs: attr(name: "class", value: "admonition-byline"), body: AUTHOR_BYLINE);
+                parts.append(el(tag: "aside", attrs: classes, body: title + byline + inner));
+            } else {
+                final label = typ.sub(0, len: 1) + typ.sub(1).lower();
+                parts.append(el(tag: "div", attrs: classes,
+                    body: el(tag: "p", attrs: attr(name: "class", value: "admonition-title"), body: label) + inner));
+            }
             rest = rest.sub(closeBq + 13);   // 13 = len("</blockquote>")
         }
     }
@@ -446,6 +460,13 @@ test "tagAdmonition builds a callout div" {
         message: "note callout");
     assert\equal(got: tagAdmonition(html: "<blockquote>\n<p>hi</p>\n</blockquote>"),
         want: "<blockquote>\n<p>hi</p>\n</blockquote>", message: "no marker, unchanged");
+}
+
+test "tagAdmonition builds an author's note as an aside with its byline" {
+    assert\equal(got: tagAdmonition(html: "<blockquote>\n<p>[!AUTHOR]\nI use this.</p>\n</blockquote>"),
+        want: "<aside class=\"admonition admonition-author\"><p class=\"admonition-title\">Author's note</p>"
+            + "<p class=\"admonition-byline\">" + AUTHOR_BYLINE + "</p>\n<p>I use this.</p>\n</aside>",
+        message: "author's note");
 }
 
 test "tagRunnable tags a fenced block after a run marker" {
