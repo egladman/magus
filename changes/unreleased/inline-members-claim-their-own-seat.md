@@ -8,6 +8,9 @@
   a composer no longer covers its members: declare it on the member that needs it. Older
   outcomes still count the members until they age out.
 - **Inline members record their own outcomes in the run history.**
+- **A target runs once per invocation, as a step or inline.** A member named on the
+  command line beside its composer no longer runs twice: whichever path reaches it second
+  waits on the first, with its claim and slots lent.
 - **`magus doctor` grades each target's own figure.** The gate-fits check weighs each ci
   member's claim alone, and MGS1030 grades each target against its own declaration.
 - **Breaking: a measured claim is the highest measured peak.** The 1.25 margin over that

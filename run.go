@@ -936,10 +936,32 @@ func (r *composedRunner) inlineClaimer(p *types.Project) targetInterceptorFunc {
 	return func(ctx context.Context, name string, invoke func(context.Context) error) error {
 		member := r.m.inlineStep(p, name, r.sizeClaims)
 		member.Under, _ = ctx.Value(composerKey{}).(string)
-		return r.m.cache.RunInline(ctx, member, func(ctx context.Context) error {
-			return recordInline(underComposer(ctx, member), p, name, invoke)
-		}, r.cacheOpts...)
+		// A member this run already reached, as a step or inline, is waited on.
+		// The wait holds nothing: the composer lent its claim and slots.
+		return r.runs.Once(ctx, types.TargetRef{Project: p.Path, Target: name}, func() error {
+			return r.m.cache.RunInline(ctx, member, func(ctx context.Context) error {
+				return recordInline(underComposer(ctx, member), p, name, invoke)
+			}, r.cacheOpts...)
+		})
 	}
+}
+
+// runStepOnce runs a scheduled step's body unless another path of this run
+// reached its target first. Then the step waits on that run with its claim
+// and slots lent, so a run still waiting for a seat can take one.
+func runStepOnce(ctx context.Context, runs *cache.TargetRuns, ref types.TargetRef, body func() error) (err error) {
+	run, first := runs.TryRun(ref)
+	if !first {
+		return cache.LendMachineClaim(ctx, run.Wait)
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			run.Complete(fmt.Errorf("%s panicked: %v", ref.Ref(), p))
+			panic(p)
+		}
+		run.Complete(err)
+	}()
+	return body()
 }
 
 // composerKey carries the ref of the body a ctx.needs member runs under.
@@ -2421,15 +2443,16 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			// The boundary where a ctx.needs member becomes a step of its
 			// own or an inline claimant.
 			spanCtx = composed.withBodyInterceptor(spanCtx, p, s)
-			var err error
+			body := func() error { return handler(spanCtx, p) }
 			if raceRT != nil {
 				outDirs := outputWatchDirs(m.ws, p, s.Target)
-				err = raceRT.TrackProject(s.ProjectPath, s.Target, outDirs, func() error {
-					return handler(spanCtx, p)
-				})
-			} else {
-				err = handler(spanCtx, p)
+				body = func() error {
+					return raceRT.TrackProject(s.ProjectPath, s.Target, outDirs, func() error {
+						return handler(spanCtx, p)
+					})
+				}
 			}
+			err := runStepOnce(spanCtx, runs, types.TargetRef{Project: s.ProjectPath, Target: s.Target}, body)
 			endSpan(err)
 			return err
 		}

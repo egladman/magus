@@ -2931,3 +2931,30 @@ export fun composer(ctx: magus\Context, args: [str]) > void !> any {
 	require.Len(t, member, 1, "the member records its own run")
 	assert.Positive(t, member[0].MaxRSSBytes)
 }
+
+// TestInlineMemberAlsoABatchStepRunsOnce pins that a member named on the
+// command line beside its composer runs once: inline in the composer's body
+// or as its own step, never both.
+func TestInlineMemberAlsoABatchStepRunsOnce(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Magusfile(`import "magus";
+import "proc";
+export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
+    final c = proc\shell("printf x >> conventions.ran");
+    proc\exec(c.bin, c.args, "", null);
+}
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(conventions);
+}
+`)
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.Run(context.Background(),
+		[]types.Target{{Path: ".", Name: "lint"}, {Path: ".", Name: "conventions"}}, WithCache(false)))
+
+	ran, err := os.ReadFile(w.Path("conventions.ran"))
+	require.NoError(t, err)
+	assert.Equal(t, "x", string(ran), "conventions ran once")
+}
