@@ -312,7 +312,6 @@ func TestTypeTagGoType(t *testing.T) {
 		{TypeStringMapMap, "map[string]map[string]string"},
 		{TypeStringMap, "map[string]string"},
 		{TypeAnyMap, "map[string]any"},
-		{TypeFunc, "Callback"},
 		{TypeAny, "any"},
 		{TypeInvalid, "<invalid>"},
 		{TypeTag(9999), "<invalid>"},

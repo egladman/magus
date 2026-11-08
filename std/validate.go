@@ -135,6 +135,11 @@ func validateMethod(meth Method) error {
 	if rt.NumIn() != wantArgs {
 		return fmt.Errorf("method Impl takes %d args, declaration has %d (incl. ctx)", rt.NumIn(), wantArgs)
 	}
+	for i, a := range meth.Args {
+		if err := validateCallback(rt.In(i + 1)); err != nil {
+			return fmt.Errorf("arg %s: %w", a.Name, err)
+		}
+	}
 
 	// Last return must be error.
 	if rt.NumOut() < 1 {
@@ -145,6 +150,25 @@ func validateMethod(meth Method) error {
 	}
 	if rt.NumOut()-1 != len(meth.Returns) {
 		return fmt.Errorf("method Impl has %d non-error returns, declaration has %d", rt.NumOut()-1, len(meth.Returns))
+	}
+	return nil
+}
+
+// validateCallback checks a func-typed parameter has the one shape a Buzz
+// function value adapts to: context.Context first, then error last after at
+// most one value. Any other parameter passes.
+func validateCallback(param reflect.Type) error {
+	if param.Kind() != reflect.Func {
+		return nil
+	}
+	if param.IsVariadic() {
+		return fmt.Errorf("callback %s is variadic, and a Buzz function takes no variadic parameter", param)
+	}
+	if param.NumIn() < 1 || param.In(0).String() != "context.Context" {
+		return fmt.Errorf("callback %s must take context.Context first", param)
+	}
+	if param.NumOut() < 1 || param.NumOut() > 2 || param.Out(param.NumOut()-1).String() != "error" {
+		return fmt.Errorf("callback %s must return error, or one value and error", param)
 	}
 	return nil
 }

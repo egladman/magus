@@ -279,7 +279,7 @@ is green without switching a gate off.
 | `libs/gopherbuzz/host` holds the module descriptor types; `std` declares `host.Module`            | not built |
 | `.buzzgen.yaml` at the root carries the 413 types and 10 open strings                             | not built |
 | Enum cases derived from constants; 532 `enumCase` values deleted                                  | not built |
-| Typed callbacks and `gen/callbacks.go`; `std.Callback`, `callbackTruthy`, `callPredicate` deleted | not built |
+| Typed callbacks and `gen/callbacks.go`; `std.Callback`, `callbackTruthy`, `callPredicate` deleted | done      |
 | Spell contract and provider ops generated as typed exports                                        | not built |
 | `!> result\Diagnostic` on every raising declaration; `result\caught` typed                        | not built |
 | `TypeTag` deleted; untyped Impl arguments and returns become structs or `modules.dynamic`         | not built |
@@ -481,7 +481,7 @@ construct upstream Buzz already has over a new gopherbuzz type:
 | `map[K]V`                                 | `{K: V}`                                | in progress (some shapes) |
 | `[]byte`                                  | `buffer\Buffer`, adopting the slice     | not built |
 | `iter.Seq[T]`, `<-chan T`                 | `fib<T, void>`                          | not built |
-| `func(...)` parameter                     | `fun (...)`                             | not built |
+| `func(...)` parameter                     | `fun (...)`                             | done      |
 | interface with methods                    | `protocol`                              | not built |
 | generic type                              | generic `object::<T>`                   | in progress (some shapes) |
 | `error`                                   | `result\Diagnostic`                     | not built |

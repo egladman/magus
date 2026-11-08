@@ -129,29 +129,18 @@ func TestCharmMoveUsesTheBuzzFieldName(t *testing.T) {
 		"the wire form stays RFC 6902's `from`")
 }
 
-// covPredicate adapts a Go func to the VM predicate a charm _func constructor
-// calls. It returns `any` rather than bool on purpose: callPredicate's truthiness
-// follows the source language, where every value but nil and false is true.
-type covPredicate func(string) any
-
-func (f covPredicate) Call(_ context.Context, args ...any) ([]any, error) {
-	s, _ := args[0].(string)
-	return []any{f(s)}, nil
+// covPredicate is the predicate a charm _func constructor takes, answering f.
+func covPredicate(f func(string) bool) func(context.Context, string) (bool, error) {
+	return func(_ context.Context, s string) (bool, error) { return f(s), nil }
 }
 
 // covRaisingPredicate is a predicate that fails instead of answering.
-type covRaisingPredicate struct{ err error }
-
-func (c covRaisingPredicate) Call(context.Context, ...any) ([]any, error) { return nil, c.err }
-
-// covSilentPredicate returns no values at all, the shape a VM function with no
-// return statement produces.
-type covSilentPredicate struct{}
-
-func (covSilentPredicate) Call(context.Context, ...any) ([]any, error) { return nil, nil }
+func covRaisingPredicate(err error) func(context.Context, string) (bool, error) {
+	return func(context.Context, string) (bool, error) { return false, err }
+}
 
 // covIsCheck matches the one argv element the predicate-form tests anchor on.
-var covIsCheck = covPredicate(func(s string) any { return s == "check" })
+var covIsCheck = covPredicate(func(s string) bool { return s == "check" })
 
 // TestCharmFuncConstructors is the predicate half of the constructor set: the
 // anchor is found by calling back into the VM rather than by string equality, and
@@ -206,7 +195,7 @@ func TestCharmFuncConstructors(t *testing.T) {
 func TestCharmFuncNoMatch(t *testing.T) {
 	ctx := context.Background()
 	argv := []string{"a", "b"}
-	never := covPredicate(func(string) any { return false })
+	never := covPredicate(func(string) bool { return false })
 
 	for _, tc := range []struct {
 		name string
@@ -233,7 +222,7 @@ func TestCharmFuncNoMatch(t *testing.T) {
 // caller's error, not a silent "no match".
 func TestCharmFuncPropagatesAPredicateFailure(t *testing.T) {
 	boom := errors.New("predicate exploded")
-	fn := covRaisingPredicate{err: boom}
+	fn := covRaisingPredicate(boom)
 
 	_, err := CharmPathFunc(context.Background(), []string{"a", "b"}, fn)
 	assert.ErrorIs(t, err, boom)
@@ -242,42 +231,6 @@ func TestCharmFuncPropagatesAPredicateFailure(t *testing.T) {
 	assert.ErrorIs(t, err, boom)
 }
 
-// TestCharmFuncTruthiness pins the truthiness rule the predicate form inherits
-// from the source language: only nil, false, and a return of nothing are false.
-func TestCharmFuncTruthiness(t *testing.T) {
-	ctx := context.Background()
-	argv := []string{"a", "b"}
-
-	for _, tc := range []struct {
-		name    string
-		ret     any
-		wantPtr string
-	}{
-		{"a string is truthy", "yes", "/0"},
-		{"zero is truthy", 0, "/0"},
-		{"true is truthy", true, "/0"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := CharmPathFunc(ctx, argv, covPredicate(func(string) any { return tc.ret }))
-			require.NoError(t, err)
-			assert.Equal(t, tc.wantPtr, got)
-		})
-	}
-
-	for _, tc := range []struct {
-		name string
-		fn   Callback
-	}{
-		{"nil is falsy", covPredicate(func(string) any { return nil })},
-		{"false is falsy", covPredicate(func(string) any { return false })},
-		{"returning nothing is falsy", covSilentPredicate{}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := CharmPathFunc(ctx, argv, tc.fn)
-			assert.Error(t, err, "a falsy predicate matches nothing")
-		})
-	}
-}
 
 // TestCharmDestinationMustBeAPointer: move and copy validate the destination at
 // author time so the hint arrives with the magusfile, not at patch-decode time.

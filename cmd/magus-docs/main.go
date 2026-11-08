@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -21,9 +22,6 @@ import (
 	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/std"
 )
-
-// callbackURL is the source link for the Callback type.
-var callbackURL = docs.SourceURL("std/module.go")
 
 // repoRoot is the module root. It is a package var initializer rather than set in
 // main() so the docs the tests generate via renderModule match the ones `go run`
@@ -155,11 +153,16 @@ func modulePageGenerated(source string) bool {
 // its source definition when it is a host-defined type. Primitive types (string,
 // int, []string, ...) stay unlinked, the way godoc only links named types.
 func typeMarkdown(t std.TypeTag) string {
-	name := t.GoType()
-	if t == std.TypeFunc { // GoType() == "Callback"
-		return fmt.Sprintf("[`%s`](%s)", name, callbackURL)
+	return fmt.Sprintf("`%s`", t.GoType())
+}
+
+// argTypeMarkdown renders argument i of meth. A callback has no tag, so it
+// renders as its Go func type.
+func argTypeMarkdown(meth std.Method, i int) string {
+	if sig := meth.Signature(); sig != nil && sig.In(i+1).Kind() == reflect.Func {
+		return fmt.Sprintf("`%s`", sig.In(i+1))
 	}
-	return fmt.Sprintf("`%s`", name)
+	return typeMarkdown(meth.Args[i].Type)
 }
 
 // methodSourceLink renders a `" - [source](...)"` suffix linking a method to the file
@@ -321,12 +324,12 @@ func renderModule(m std.Module) string {
 			fmt.Fprintf(&b, "%s\n\n", sig)
 			if len(meth.Args) > 0 {
 				args := make([][]string, 0, len(meth.Args))
-				for _, a := range meth.Args {
+				for i, a := range meth.Args {
 					opt := ""
 					if a.Optional {
 						opt = "yes"
 					}
-					args = append(args, []string{md.Code(a.Name), typeMarkdown(a.Type), opt, ""})
+					args = append(args, []string{md.Code(a.Name), argTypeMarkdown(meth, i), opt, ""})
 				}
 				b.WriteString(md.Table([]string{"Parameter", "Type", "Optional", "Description"}, nil, args))
 			}
@@ -334,9 +337,6 @@ func renderModule(m std.Module) string {
 				rets := make([]string, len(meth.Returns))
 				for i, r := range meth.Returns {
 					typ := r.Type.GoType()
-					if r.Type == std.TypeFunc {
-						typ = fmt.Sprintf("[%s](%s)", typ, callbackURL)
-					}
 					if r.Nullable {
 						typ += " or null"
 					}

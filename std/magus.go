@@ -334,8 +334,8 @@ var Magus = Module{
 				"history alone. A non-null answer lacking tier, skills or a reason fails the fork. " +
 				"Declared at the top level of the root magusfile, once; a second call, a call from " +
 				"another project, or a non-function is MGS1052.",
-			Args:   []Arg{{Name: "matrix", Func: "fun (req: ModelTierRequest) > any !> any"}},
-			Extern: (func(context.Context, Callback) error)(nil),
+			Args:   []Arg{{Name: "matrix"}},
+			Extern: (func(ctx context.Context, matrix func(ctx context.Context, req types.ModelTierRequest) (any, error)) error)(nil),
 		},
 	},
 	// The objects a modelTiers declaration and a modelTier function take,
@@ -453,8 +453,8 @@ var Magus = Module{
 						"naming the failure. When the magusfile is tracked, the committed and the " +
 						"working-tree rule both run and the stricter answer stands. Registering twice, from " +
 						"another project, or with a non-function is MGS1045. magus ships no rule.",
-					Args:   []Arg{{Name: "rule", Func: "fun (req: SpawnRequest) > GuardVerdict !> any"}},
-					Extern: (func(context.Context, Callback) error)(nil),
+					Args:   []Arg{{Name: "rule"}},
+					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.SpawnRequest) (types.GuardVerdict, error)) error)(nil),
 				},
 				{
 					Name: "command",
@@ -465,8 +465,8 @@ var Magus = Module{
 						"from both the committed and the working-tree sources, exactly as guard.spawn is. " +
 						"Registering twice, from another project, or with a non-function is MGS1045. magus " +
 						"ships no rule.",
-					Args:   []Arg{{Name: "rule", Func: "fun (req: CommandRequest) > GuardVerdict !> any"}},
-					Extern: (func(context.Context, Callback) error)(nil),
+					Args:   []Arg{{Name: "rule"}},
+					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.CommandRequest) (types.GuardVerdict, error)) error)(nil),
 				},
 				{
 					Name: "write",
@@ -476,8 +476,8 @@ var Magus = Module{
 						"from both the committed and the working-tree sources, exactly as guard.command is. " +
 						"Registering twice, from another project, or with a non-function is MGS1045. magus " +
 						"ships no rule.",
-					Args:   []Arg{{Name: "rule", Func: "fun (req: WriteRequest) > GuardVerdict !> any"}},
-					Extern: (func(context.Context, Callback) error)(nil),
+					Args:   []Arg{{Name: "rule"}},
+					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.WriteRequest) (types.GuardVerdict, error)) error)(nil),
 				},
 				{
 					Name: "stop",
@@ -490,8 +490,8 @@ var Magus = Module{
 						"rule that fails lets the stop through and says so, since refusing on a broken rule " +
 						"would hold the session open. Registering twice, from another project, or with a " +
 						"non-function is MGS1045. magus ships no rule.",
-					Args:   []Arg{{Name: "rule", Func: "fun (req: StopRequest) > GuardVerdict !> any"}},
-					Extern: (func(context.Context, Callback) error)(nil),
+					Args:   []Arg{{Name: "rule"}},
+					Extern: (func(ctx context.Context, rule func(ctx context.Context, req types.StopRequest) (types.GuardVerdict, error)) error)(nil),
 				},
 				{
 					Name:    "allow",
