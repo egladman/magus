@@ -15,10 +15,9 @@
     "noEmit": true,
     "forceConsistentCasingInFileNames": true,
     "types": [],
-    "baseUrl": ".",
     "paths": {
       "@magus/textsearch": ["../libs/textsearch/src/textsearch"],
-      "@wire/*": ["src/gen/magus/*"]
+      "@wire/*": ["./src/gen/magus/*"]
     }
   },
   "//wire": "@wire/* maps to the generated protobuf tree. A module imports @wire/viewer/v1alpha1/viewer_pb rather than reaching ../../gen/magus/... - the codegen LAYOUT then lives in this file instead of in 26 modules, and the contract VERSION stays visible at every call site, which is the half worth keeping. Deliberately not a barrel module re-exporting the types: that would add a second name for everything and hide which service a symbol comes from.",
