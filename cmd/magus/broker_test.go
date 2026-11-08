@@ -418,3 +418,7 @@ func (s *BrokerStopSuite) TestNoBrokerIsStillNoBroker() {
 	privateSockDir(s.T())
 	s.Equal(exit.Reported(exit.Failure), brokerStop(s.T().Context(), nil))
 }
+
+func (s *BrokerStopSuite) TestAdmissionsLiveBesideTheBrokerLog() {
+	s.Equal(filepath.Join(filepath.Dir(brokerLogPath()), "admissions.jsonl"), admissionLogPath())
+}

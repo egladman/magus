@@ -75,20 +75,13 @@ func (r *runner) checkMemoryDeclarations(ctx context.Context, projects []*types.
 		}
 	}
 
-	// The SAME fold admission gates on, or doctor tells an author `ci` declares
-	// nothing while the machine holds ten gigabytes for it.
-	byPath := make(map[string]*types.Project, len(projects))
-	for _, p := range projects {
-		byPath[p.Path] = p
-	}
-	lookup := func(path string) *types.Project { return byPath[path] }
-
+	// A target's own declaration, the one admission claims: each ctx.needs
+	// member runs under a claim of its own.
 	var details []string
 	for _, p := range projects {
 		label := types.ProjectDisplayName(p.Path, p.Name, p.Dir)
 		for target, peaks := range measuredPeaksMB(&h, p.Path) {
-			declaredMB, declaredBy := types.ChainMemoryMB(p, target, lookup)
-			if d := gradeDeclaration(label, target, declaredBy, declaredMB, peaks); d != "" {
+			if d := gradeDeclaration(label, target, p.TargetPolicies[target].MemoryMB, peaks); d != "" {
 				details = append(details, d)
 			}
 		}
@@ -113,30 +106,24 @@ func (r *runner) checkMemoryDeclarations(ctx context.Context, projects []*types.
 }
 
 // gradeDeclaration renders the finding for one target, or "" when the declaration
-// and the measurement agree closely enough to leave alone. declaredBy names the
-// target the figure came from, which is not this one when it was inherited from a
-// composed target. The reader needs the line to edit, not the line they ran.
+// and the measurement agree closely enough to leave alone.
 //
-// An undeclared target claims 1.25 times its highest passing peak once three runs
-// measured it, so it wants a declaration only when its passing peaks spread wider than
-// that headroom: then the next run can outgrow a claim sized from the last ones.
-func gradeDeclaration(project, target, declaredBy string, declaredMB int, peaks peakRange) string {
-	declares := "declares"
-	if declaredBy != "" && declaredBy != target {
-		declares = fmt.Sprintf("runs %s, which declares", declaredBy)
-	}
+// An undeclared target claims its highest passing peak once three runs
+// measured it. Peaks spread by more than a quarter want a declaration: the
+// next run can outgrow a claim sized from the last ones.
+func gradeDeclaration(project, target string, declaredMB int, peaks peakRange) string {
 	switch {
 	case declaredMB <= 0:
 		if peaks.highMB < undeclaredFloorMB || !peaks.unstable() {
 			return ""
 		}
 		return fmt.Sprintf(
-			"%s %s declares no memory_mb anywhere in what it runs and its passing runs reached from %dMB to %dMB; a claim measured from them carries a quarter's headroom, which that spread outgrows",
+			"%s %s declares no memory_mb and its passing runs reached from %dMB to %dMB; a claim measured from them is their highest peak, which that spread can outgrow",
 			project, target, peaks.passLowMB, peaks.passHighMB)
 	case float64(peaks.highMB) > float64(declaredMB)*underDeclaredRatio && peaks.highMB-declaredMB >= materialGapMB:
 		return fmt.Sprintf(
-			"%s %s %s %dMB and reached at least %dMB; admission seats it against a figure it exceeds",
-			project, target, declares, declaredMB, peaks.highMB)
+			"%s %s declares %dMB and reached at least %dMB; admission seats it against a figure it exceeds",
+			project, target, declaredMB, peaks.highMB)
 	}
 	// No over-declared finding, deliberately. The symmetric case ("declares far
 	// more than it has ever used, lower it") is the one a measured PEAK could
@@ -163,8 +150,7 @@ type peakRange struct {
 	passLowMB, passHighMB, passRuns int
 }
 
-// unstable reports whether the passing peaks spread wider than the headroom a claim
-// measured from them carries.
+// unstable reports whether the passing peaks spread by more than a quarter.
 func (r peakRange) unstable() bool {
 	return r.passRuns >= 2 && float64(r.passHighMB) > float64(r.passLowMB)*underDeclaredRatio
 }

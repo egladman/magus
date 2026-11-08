@@ -11,9 +11,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/engine"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/fatih/color"
 	"golang.org/x/term"
 )
@@ -109,19 +109,19 @@ func (r *ctrlTracker) take() byte {
 func newReplInput(opts ReplOptions, complete func(line string, pos int, key rune) (string, int, bool)) *replInput {
 	in := &replInput{out: opts.Stdout}
 	stdin, isFile := opts.Stdin.(*os.File)
-	if !isFile || !tty.StdinIsTerminal() || !tty.IsTerminalWriter(opts.Stdout, tty.SystemProbe) {
+	if !isFile || !termkit.StdinIsTerminal() || !termkit.IsTerminalWriter(opts.Stdout, termkit.SystemProbe) {
 		in.scanner = bufio.NewScanner(opts.Stdin)
 		in.scanner.Buffer(make([]byte, 0, 64<<10), 1<<20)
 		return in
 	}
 	in.fd = stdin.Fd()
-	restore, err := tty.MakeRaw(in.fd)
+	raw, err := termkit.MakeRaw(in.fd)
 	if err != nil {
 		in.scanner = bufio.NewScanner(opts.Stdin)
 		in.scanner.Buffer(make([]byte, 0, 64<<10), 1<<20)
 		return in
 	}
-	in.restore = restore
+	in.restore = raw.Restore
 	in.sig = &ctrlTracker{Reader: opts.Stdin}
 	in.editor = term.NewTerminal(struct {
 		io.Reader
@@ -130,7 +130,7 @@ func newReplInput(opts ReplOptions, complete func(line string, pos int, key rune
 	in.editor.AutoCompleteCallback = complete
 	// Without a size the editor assumes 80 columns and wraps a longer line in the
 	// wrong place, which makes editing the tail of a long expression unusable.
-	if w, h, err := tty.SystemProbe.Size(stdin.Fd()); err == nil {
+	if w, h, err := termkit.SystemProbe.Size(stdin.Fd()); err == nil {
 		_ = in.editor.SetSize(w, h)
 	}
 	// Output must go through the editor once it owns the line: writing to the raw
@@ -175,8 +175,8 @@ func (in *replInput) suspendRaw(fn func()) {
 	_ = in.restore()
 	in.restore = nil
 	defer func() {
-		if r, err := tty.MakeRaw(in.fd); err == nil {
-			in.restore = r
+		if raw, err := termkit.MakeRaw(in.fd); err == nil {
+			in.restore = raw.Restore
 		}
 	}()
 	fn()
@@ -405,11 +405,11 @@ const stickyFooterRows = 1
 // It degrades to nothing off a TTY: the lease reports disabled, and every method
 // here is a no-op, so a piped or scripted session behaves exactly as before.
 type replFooter struct {
-	lease *tty.Lease
+	lease *termkit.Lease
 }
 
 func newReplFooter(out io.Writer) *replFooter {
-	return &replFooter{lease: tty.ResolveZone(out).Acquire(stickyFooterRows)}
+	return &replFooter{lease: termkit.ResolveZone(out).Acquire(stickyFooterRows)}
 }
 
 // paint redraws the footer. It needs no cursor bookkeeping: Region painting is
@@ -423,7 +423,7 @@ func (f *replFooter) paint(state string) {
 	// decoration on an interactive session: a terminal that refuses the escape
 	// sequence should cost the reader a status line, never an aborted REPL or a
 	// diagnostic interleaved with their own typing.
-	_, _ = f.lease.Set([]tty.Line{{Text: state, Style: tty.SGRDim}})
+	_, _ = f.lease.Set([]termkit.Line{{Text: state, Style: termkit.SGRDim}})
 }
 
 func (f *replFooter) release() {

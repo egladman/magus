@@ -123,6 +123,7 @@ concepts/spells/buzz/
 concepts/spells/cosign/
 concepts/spells/docker/
 concepts/spells/go/
+concepts/spells/latex/
 concepts/spells/markdown/
 concepts/spells/md/
 concepts/spells/podman/
@@ -181,6 +182,9 @@ decisions/0026-refs-gets-no-new-subcommands/
 decisions/0027-shared-prerequisites-run-once-in-stage-zero/
 decisions/0028-workspaces-see-each-other/
 decisions/0029-the-mod-draws-magus-figures-it-does-not-compute/
+decisions/0030-buzz-reads-state-through-typed-repositories/
+decisions/0031-a-claim-counts-only-what-runs-in-it/
+decisions/0032-one-dependency-mechanism/
 dependencies/
 design/
 design/judgment/
@@ -225,6 +229,7 @@ design/principles/one-source-every-door/
 design/principles/optimize-the-loop-that-verifies/
 design/principles/postels-law/
 design/principles/sit-next-to-the-tools/
+design/principles/terminal-output-stays-copyable/
 design/principles/the-checker-catches-it/
 design/principles/the-go-proverbs/
 design/principles/the-harness-sits-on-the-tool-layer/
@@ -266,6 +271,7 @@ development/libs-pricing/
 development/libs-proofread-train/
 development/libs-proofread/
 development/libs-scipbuzz/
+development/libs-termkit/
 development/libs-testpairing/
 development/libs-testsprawl/
 development/libs-textsearch/
@@ -276,6 +282,7 @@ development/projects/gopherbuzz/
 development/projects/magus/
 development/projects/website/
 development/proto/
+development/testdata-latex-onepage/
 development/website/
 diagnostics/
 doctrine/
@@ -562,6 +569,7 @@ reference/buzz/http/
 reference/buzz/image/
 reference/buzz/ini/
 reference/buzz/json/
+reference/buzz/layout/
 reference/buzz/lcov/
 reference/buzz/log/
 reference/buzz/magus/
@@ -570,18 +578,23 @@ reference/buzz/math/
 reference/buzz/merge/
 reference/buzz/modeltiers/
 reference/buzz/net/
+reference/buzz/notify/
 reference/buzz/os/
 reference/buzz/path/
+reference/buzz/pick/
 reference/buzz/pipe/
 reference/buzz/platform/
 reference/buzz/proc/
+reference/buzz/progress/
 reference/buzz/reclaimdisk/
 reference/buzz/result/
+reference/buzz/screen/
 reference/buzz/semver/
 reference/buzz/sort/
 reference/buzz/strings/
 reference/buzz/template/
 reference/buzz/term/
+reference/buzz/termkit/
 reference/buzz/time/
 reference/buzz/toml/
 reference/buzz/url/
@@ -697,6 +710,9 @@ reference/codes/magusfile/MGS1056/
 reference/codes/magusfile/MGS1057/
 reference/codes/magusfile/MGS1058/
 reference/codes/magusfile/MGS1059/
+reference/codes/magusfile/MGS1060/
+reference/codes/magusfile/MGS1061/
+reference/codes/magusfile/MGS1062/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -783,6 +799,7 @@ reference/codes/sandbox/MGS3050/
 reference/codes/sandbox/MGS3051/
 reference/codes/sandbox/MGS3052/
 reference/codes/sandbox/MGS3053/
+reference/codes/sandbox/MGS3054/
 reference/codes/services/
 reference/codes/services/MGS5001/
 reference/codes/services/MGS5002/
@@ -1130,6 +1147,7 @@ reference/skills/magus-vcs-hygiene/
 reference/skills/magus-vcs/
 reference/skills/magus-workspace-rules/
 reference/spell-contract/
+reference/termkit/
 remote-cache/
 sandbox/
 scope/
@@ -1167,6 +1185,7 @@ tags/admission/
 tags/adoption/
 tags/adr/
 tags/advise/
+tags/affected-plan/
 tags/affected/
 tags/agent-install/
 tags/agent/
@@ -1208,6 +1227,7 @@ tags/charms/
 tags/checkout/
 tags/checkouts/
 tags/checkpoint/
+tags/ci-matrix/
 tags/ci-provider/
 tags/ci/
 tags/claims/
@@ -1295,6 +1315,7 @@ tags/fingerprint/
 tags/fish/
 tags/flags/
 tags/footprint/
+tags/forecast/
 tags/fork/
 tags/format/
 tags/formatter/
@@ -1355,6 +1376,7 @@ tags/knowledge/
 tags/kubernetes/
 tags/landlock/
 tags/layers/
+tags/layout/
 tags/leases/
 tags/ledger/
 tags/library/
@@ -1410,6 +1432,7 @@ tags/needs/
 tags/node/
 tags/notes/
 tags/notifications/
+tags/notify/
 tags/nx/
 tags/observations/
 tags/oci/
@@ -1448,6 +1471,7 @@ tags/preflight/
 tags/prettier/
 tags/principle/
 tags/probe/
+tags/progress/
 tags/project/
 tags/projects/
 tags/proofread/
@@ -1515,6 +1539,7 @@ tags/services/
 tags/session/
 tags/sessions-and-leases/
 tags/setup/
+tags/shard/
 tags/sharding/
 tags/share/
 tags/shared-services/
@@ -1554,7 +1579,9 @@ tags/targets/
 tags/telemetry-and-health/
 tags/telemetry/
 tags/template/
+tags/terminal/
 tags/terminology/
+tags/termkit/
 tags/test/
 tags/timeout/
 tags/token/

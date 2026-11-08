@@ -52,8 +52,8 @@ type Config struct {
 	// Broker decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and shared services: required (refuse a step when none answers), best-effort (the default: run unarbitrated and say so once), or off (never start or contact one; a run hosts its services itself).
 	Broker types.BrokerPolicy `json:"broker" yaml:"broker"`
 
-	// BudgetWait bounds a step's wait for budget other runs hold.
-	// Past it, MGS3009 names them. Zero refuses at once. A sooner
+	// BudgetWait bounds a step's wait for budget other runs hold, 30m
+	// by default. Past it, MGS3009 names them. Zero refuses at once. A sooner
 	// run deadline bounds it instead.
 	BudgetWait time.Duration `json:"budget_wait" yaml:"budget_wait" validate:"gte=0"`
 
@@ -461,6 +461,9 @@ type Log struct {
 	// Normally set via -vv (and implied by -vvv); MAGUS_LOG_STREAM=1 is the env equivalent.
 	// Pointer to distinguish "not set" from explicit false.
 	Stream *bool `json:"stream" yaml:"stream"`
+	// Loader names the animation the run band draws while targets run. Empty
+	// draws glyph/dots. A locale that is not UTF-8 draws glyph/line instead.
+	Loader string `json:"loader" yaml:"loader" validate:"omitempty,oneof=rotation/comet·1 rotation/square·1 rotation/clock·1 rotation/ring·2 rotation/pinwheel·2 rotation/infinity·2 glyph/dots glyph/orbit glyph/pulse glyph/triangle glyph/spark glyph/line strip/scanner strip/equalizer strip/shade strip/snake strip/sine strip/dots"`
 }
 
 // IsSilent reports whether silent output mode is enabled.
@@ -1240,6 +1243,7 @@ func Defaults() Config {
 		},
 		Console:       Console{Pulls: pullsDefaults()},
 		ShutdownGrace: defaultShutdownGrace,
+		BudgetWait:    30 * time.Minute,
 		Disk:          Disk{MinFreeMB: 51200, CriticalFreeMB: 10240, GrowthMBPerHour: 20480, SampleEvery: 10 * time.Minute},
 		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour, MaxValidations: 1, MaxClaimFiles: 50, MaxClaimProjects: 1, MaxClaims: 10},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},

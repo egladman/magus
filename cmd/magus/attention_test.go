@@ -10,10 +10,10 @@ import (
 	"testing"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -44,9 +44,9 @@ func attentionTestRoot(t *testing.T) string {
 // terminal, so it stands in for both stdin and stderr's checks at once.
 func withInteractiveTTY(t *testing.T) {
 	t.Helper()
-	prev := tty.SystemProbe
-	tty.SystemProbe = tty.FixedProbe(80, 24)
-	t.Cleanup(func() { tty.SystemProbe = prev })
+	prev := termkit.SystemProbe
+	termkit.SystemProbe = termkit.FixedProbe(80, 24)
+	t.Cleanup(func() { termkit.SystemProbe = prev })
 }
 
 // withoutInteractiveTTY is withInteractiveTTY's opposite: every descriptor reads as NOT
@@ -54,9 +54,9 @@ func withInteractiveTTY(t *testing.T) {
 // TestAttentionDisposeRefusesWithoutATerminal does not depend on how it was invoked.
 func withoutInteractiveTTY(t *testing.T) {
 	t.Helper()
-	prev := tty.SystemProbe
-	tty.SystemProbe = neverTerminalProbe{}
-	t.Cleanup(func() { tty.SystemProbe = prev })
+	prev := termkit.SystemProbe
+	termkit.SystemProbe = neverTerminalProbe{}
+	t.Cleanup(func() { termkit.SystemProbe = prev })
 }
 
 type neverTerminalProbe struct{}

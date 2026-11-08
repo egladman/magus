@@ -11,7 +11,47 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type ForeignSourcesSuite struct{ suite.Suite }
+
+func TestForeignSourcesSuite(t *testing.T) { suite.Run(t, new(ForeignSourcesSuite)) }
+
+func (s *ForeignSourcesSuite) apply(path string, globs ...string) error {
+	w := newRootedWorkspace("/repo",
+		&types.Project{Path: "."}, &types.Project{Path: "docs"},
+		&types.Project{Path: "libs/embed"}, &types.Project{Path: "proto"})
+	r := NewWorkspaceRegistry()
+	r.RegisterProject(path, WithSources(globs...))
+	return r.Apply(w)
+}
+
+func (s *ForeignSourcesSuite) TestAGlobReachingIntoASiblingRefusesWithMGS1060() {
+	err := s.apply("docs", "../proto/magus/**/*.proto")
+	s.Require().ErrorIs(err, types.SourceGlobInAnotherProject)
+	s.Contains(err.Error(), `reaches into project "proto"; name it in depends_on`)
+}
+
+func (s *ForeignSourcesSuite) TestAGlobReachingIntoTheRootsTreeRefusesWithMGS1060() {
+	err := s.apply("docs", "../README.md")
+	s.Require().ErrorIs(err, types.SourceGlobInAnotherProject)
+	s.Contains(err.Error(), "read it with ctx.readsFiles")
+}
+
+func (s *ForeignSourcesSuite) TestAGlobNamingANestedProjectsTreeRefusesWithMGS1060() {
+	err := s.apply(".", "libs/embed/testdata/*")
+	s.Require().ErrorIs(err, types.SourceGlobInAnotherProject)
+	s.Contains(err.Error(), `reaches into project "libs/embed"`)
+}
+
+func (s *ForeignSourcesSuite) TestABroadGlobOverTheProjectsOwnTreePasses() {
+	s.NoError(s.apply(".", "**/*.go", "testdata/*"))
+}
+
+func (s *ForeignSourcesSuite) TestAGlobInsideTheProjectPasses() {
+	s.NoError(s.apply("docs", "**/*.md", "src/**/*.ts"))
+}
 
 func TestNewWorkspaceRegistry(t *testing.T) {
 	r := NewWorkspaceRegistry()

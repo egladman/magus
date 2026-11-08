@@ -766,7 +766,34 @@ func (x *conformanceIndex) computes(s conformanceSymbol, file string) bool {
 			return false
 		}
 	}
-	return len(x.packageReach(s.id, path.Dir(file), types.RelationCalls, false, nonTest)) == 0
+	return !x.callsOut(s, file)
+}
+
+// callsOut reports whether s calls a callable of another workspace package.
+// Call edges stop at the caller's own index. A call into another Go module
+// is read from file's references inside the body of s.
+func (x *conformanceIndex) callsOut(s conformanceSymbol, file string) bool {
+	own := path.Dir(file)
+	if len(x.packageReach(s.id, own, types.RelationCalls, false, nonTest)) > 0 {
+		return true
+	}
+	_, start, _ := splitPathLine(s.node.Source)
+	end := defEndLine(s.node)
+	for _, e := range x.g.out[fileID(file)] {
+		local := x.local[e.Target]
+		if e.Relation != types.RelationReferences || len(local) == 0 || local[len(local)-1].Suffix != '(' {
+			continue
+		}
+		def, _, ok := splitPathLine(x.g.nodes[e.Target].Source)
+		if !ok || path.Dir(def) == own || !nonTest(def) {
+			continue
+		}
+		_, lines, _ := parseRefProvenance(e.Provenance)
+		if slices.ContainsFunc(lines, func(l int) bool { return l >= start && l <= end }) {
+			return true
+		}
+	}
+	return false
 }
 
 // interfaceNames are the names of the workspace interfaces file defines or references.

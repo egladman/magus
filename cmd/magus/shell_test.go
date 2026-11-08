@@ -1644,7 +1644,7 @@ func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
 	run := func(flags ...string) types.GuardJudgment {
 		var out bytes.Buffer
 		args := append([]string{"--lease", row.ID, "-o", "json"}, flags...)
-		_ = shellStdin(ctx, strings.NewReader("magus run test ."), &out, args)
+		_ = shellStdin(ctx, strings.NewReader("magus run test . --budget-wait 0"), &out, args)
 		var v types.GuardJudgment
 		require.NoError(t, json.Unmarshal(out.Bytes(), &v), out.String())
 		return v

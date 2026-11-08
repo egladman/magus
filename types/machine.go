@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 // MachineClaim is one step's request on the machine-wide admission budget.
@@ -42,6 +44,15 @@ type MachineClaim struct {
 	// Weight is the Job.Weight of the job the run is bound to, zero for
 	// none. It orders the broker's parked requests and decides no verdict.
 	Weight float64 `json:"weight,omitzero" yaml:"weight,omitempty"`
+	// Under is "<project>:<target>" of the composer an inline member runs
+	// under, empty for a claim that runs on its own.
+	Under string `json:"under,omitempty" yaml:"under,omitempty"`
+	// SlotsFloor is the fewest slots the claim runs with; 0 means Slots.
+	SlotsFloor int `json:"slots_floor,omitzero" yaml:"slots_floor,omitempty"`
+	// WaitBoundMS is the client's budget_wait or sooner deadline.
+	WaitBoundMS int64 `json:"wait_bound_ms,omitzero" yaml:"wait_bound_ms,omitempty"`
+	// WaitedMS is set on the ask made at the bound.
+	WaitedMS int64 `json:"waited_ms,omitzero" yaml:"waited_ms,omitempty"`
 }
 
 // Run is the outermost invocation the claim runs underneath, or its own when it has no
@@ -71,6 +82,8 @@ type MachineClaimant struct {
 	// Owner is who answers for the holder: its job lease, else `spawned by <job>`, else
 	// "unleased". Empty when no connection to the broker names the holder's pid.
 	Owner string `json:"owner,omitempty" yaml:"owner,omitempty"`
+	// Under is the composer the holder runs under, as on MachineClaim.
+	Under string `json:"under,omitempty" yaml:"under,omitempty"`
 }
 
 // MachineWaiter is a claim the broker holds until the budget can seat it.
@@ -93,21 +106,61 @@ type MachineWaiter struct {
 	WaitedMS int64 `json:"waited_ms" yaml:"waited_ms"`
 }
 
-// MachineRefusal is one MGS3009 refusal the broker answered: the claim it turned away
-// and the holders keeping it out at that moment.
-type MachineRefusal struct {
-	At       time.Time `json:"at" yaml:"at"`
-	PID      int       `json:"pid" yaml:"pid"`
-	Project  string    `json:"project" yaml:"project"`
-	Target   string    `json:"target" yaml:"target"`
-	MemoryMB int       `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
-	Slots    int       `json:"slots,omitzero" yaml:"slots,omitempty"`
-	Dir      string    `json:"dir,omitempty" yaml:"dir,omitempty"`
-	Command  string    `json:"command,omitempty" yaml:"command,omitempty"`
-	Owner    string    `json:"owner,omitempty" yaml:"owner,omitempty"`
-	// Fits is false when no state of the machine admits the claim, which no wait mends.
-	Fits    bool              `json:"fits" yaml:"fits"`
-	Holders []MachineClaimant `json:"holders,omitempty" yaml:"holders,omitempty"`
+// AdmissionOutcome is how the broker answered a claim it recorded.
+type AdmissionOutcome string
+
+const (
+	// AdmissionRefused is a claim turned away with MGS3009.
+	AdmissionRefused AdmissionOutcome = "refused"
+	// AdmissionSeated is a claim granted after it waited.
+	AdmissionSeated AdmissionOutcome = "seated"
+)
+
+// MachineAdmission is one admission the broker recorded: the claim it
+// answered, and the budget and holders at that moment. It is a line of the
+// admissions store, so its encoding lives here.
+type MachineAdmission struct {
+	At       time.Time        `json:"at" yaml:"at"`
+	Outcome  AdmissionOutcome `json:"outcome,omitempty" yaml:"outcome,omitempty"`
+	PID      int              `json:"pid" yaml:"pid"`
+	Project  string           `json:"project" yaml:"project"`
+	Target   string           `json:"target" yaml:"target"`
+	Under    string           `json:"under,omitempty" yaml:"under,omitempty"`
+	MemoryMB int              `json:"memory_mb,omitzero" yaml:"memory_mb,omitempty"`
+	Slots    int              `json:"slots,omitzero" yaml:"slots,omitempty"`
+	Dir      string           `json:"dir,omitempty" yaml:"dir,omitempty"`
+	Command  string           `json:"command,omitempty" yaml:"command,omitempty"`
+	Owner    string           `json:"owner,omitempty" yaml:"owner,omitempty"`
+	// Fits is false when no state of the machine admits the claim.
+	Fits bool `json:"fits" yaml:"fits"`
+	// WaitedMS and WaitBoundMS are how long the claim waited, and the bound.
+	WaitedMS    int64             `json:"waited_ms,omitzero" yaml:"waited_ms,omitempty"`
+	WaitBoundMS int64             `json:"wait_bound_ms,omitzero" yaml:"wait_bound_ms,omitempty"`
+	Sizing      MemorySizing      `json:"sizing,omitzero" yaml:"sizing,omitempty"`
+	BudgetMB    int               `json:"budget_mb,omitzero" yaml:"budget_mb,omitempty"`
+	HeldMB      int               `json:"held_mb,omitzero" yaml:"held_mb,omitempty"`
+	BudgetSlots int               `json:"budget_slots,omitzero" yaml:"budget_slots,omitempty"`
+	HeldSlots   int               `json:"held_slots,omitzero" yaml:"held_slots,omitempty"`
+	Holders     []MachineClaimant `json:"holders,omitempty" yaml:"holders,omitempty"`
+}
+
+// machineAdmissionWire has MachineAdmission's fields and tags but none of its
+// methods, so encoding it cannot call MarshalJSON again.
+type machineAdmissionWire MachineAdmission
+
+// MarshalJSON encodes the admission through its wire shape.
+func (a MachineAdmission) MarshalJSON() ([]byte, error) {
+	return json.Marshal(machineAdmissionWire(a))
+}
+
+// UnmarshalJSON decodes an admission from its wire shape.
+func (a *MachineAdmission) UnmarshalJSON(b []byte) error {
+	var w machineAdmissionWire
+	if err := json.Unmarshal(b, &w); err != nil {
+		return fmt.Errorf("decode machine admission: %w", err)
+	}
+	*a = MachineAdmission(w)
+	return nil
 }
 
 // MachineVerdict is the budget's answer to one admission request.
@@ -130,6 +183,11 @@ type MachineVerdict struct {
 	HeldMB      int               `json:"held_mb,omitzero" yaml:"held_mb,omitempty"`
 	BudgetSlots int               `json:"budget_slots,omitzero" yaml:"budget_slots,omitempty"`
 	HeldSlots   int               `json:"held_slots,omitzero" yaml:"held_slots,omitempty"`
+	// Slots is what a grant seated, floor to Slots; 0 from a broker without
+	// grants.
+	Slots int `json:"slots,omitzero" yaml:"slots,omitempty"`
+	// Ahead is the parked claims ahead of this one, on a parked verdict.
+	Ahead int `json:"ahead,omitzero" yaml:"ahead,omitempty"`
 }
 
 // MachineSnapshot is the whole machine budget: what it is, what is spent, and the
@@ -143,8 +201,8 @@ type MachineSnapshot struct {
 	Holders []MachineClaimant `json:"holders,omitempty" yaml:"holders,omitempty"`
 	// Waiting is every caller blocked on a seat now, longest waiting first.
 	Waiting []MachineWaiter `json:"waiting,omitempty" yaml:"waiting,omitempty"`
-	// Refused is the last MGS3009 refusals the broker answered, newest first.
-	Refused []MachineRefusal `json:"refused,omitempty" yaml:"refused,omitempty"`
+	// Refused is the last admissions the broker recorded, newest first.
+	Refused []MachineAdmission `json:"refused,omitempty" yaml:"refused,omitempty"`
 	// Reserve is what BudgetMB leaves the OS and desktop, and why.
 	Reserve MemoryReserve `json:"reserve,omitzero" yaml:"reserve,omitempty"`
 }

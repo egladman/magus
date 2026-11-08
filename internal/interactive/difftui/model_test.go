@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -414,18 +414,18 @@ func TestPlainFrameIsByteForByteTheUnstyledOne(t *testing.T) {
 func TestNoColorSilencesTheWholeFrame(t *testing.T) {
 	// Not parallel: it sets the environment the colour gate reads.
 	out := termWriter{io.Discard}
-	probe := tty.FixedProbe(80, 24)
+	probe := termkit.FixedProbe(80, 24)
 	m := New(Input{Files: testFiles()})
 	m.resize(9)
 
 	t.Setenv("TERM", "xterm-256color")
 	t.Setenv("NO_COLOR", "1")
-	require.False(t, tty.WantsColor(out, probe), "NO_COLOR is the gate the viewer asks")
-	assert.NotContains(t, Frame(m, tty.WantsColor(out, probe)), "\x1b")
+	require.False(t, termkit.WantsColor(out, probe), "NO_COLOR is the gate the viewer asks")
+	assert.NotContains(t, Frame(m, termkit.WantsColor(out, probe)), "\x1b")
 
 	t.Setenv("NO_COLOR", "")
-	require.True(t, tty.WantsColor(out, probe))
-	assert.Contains(t, Frame(m, tty.WantsColor(out, probe)), "\x1b[",
+	require.True(t, termkit.WantsColor(out, probe))
+	assert.Contains(t, Frame(m, termkit.WantsColor(out, probe)), "\x1b[",
 		"and with it unset the same frame is styled, so the test above is not vacuous")
 }
 
@@ -465,24 +465,24 @@ func TestWheelScrollsTheViewportAndNothingElseDoes(t *testing.T) {
 	m.resize(4)
 	where := m.cursor()
 
-	assert.False(t, apply(m, wheel(tty.MouseWheelDown), nil))
+	assert.False(t, apply(m, wheel(termkit.MouseWheelDown), nil))
 	assert.Equal(t, wheelRows, m.Top(), "a notch down moves the viewport by three rows")
-	apply(m, wheel(tty.MouseWheelDown), nil)
+	apply(m, wheel(termkit.MouseWheelDown), nil)
 	assert.Equal(t, 2*wheelRows, m.Top())
 	assert.Equal(t, where, m.cursor(), "scrolling is looking around, so the cursor stays put")
 
-	apply(m, wheel(tty.MouseWheelUp), nil)
+	apply(m, wheel(termkit.MouseWheelUp), nil)
 	assert.Equal(t, wheelRows, m.Top())
-	apply(m, wheel(tty.MouseWheelUp), nil)
-	apply(m, wheel(tty.MouseWheelUp), nil)
+	apply(m, wheel(termkit.MouseWheelUp), nil)
+	apply(m, wheel(termkit.MouseWheelUp), nil)
 	assert.Equal(t, 0, m.Top(), "and it clamps at the top like every other scroll")
 
 	// Every other mouse event is still dropped rather than guessed at.
-	apply(m, wheel(tty.MouseWheelDown), nil)
-	for _, ev := range []tty.Event{
-		{Kind: tty.EventMouse, Button: tty.MouseLeft, Press: true, Row: 2},
-		{Kind: tty.EventMouse, Button: tty.MouseRight, Press: true, Row: 2},
-		{Kind: tty.EventMouse, Motion: true, Row: 2},
+	apply(m, wheel(termkit.MouseWheelDown), nil)
+	for _, ev := range []termkit.Event{
+		{Kind: termkit.EventMouse, Button: termkit.MouseLeft, Press: true, Row: 2},
+		{Kind: termkit.EventMouse, Button: termkit.MouseRight, Press: true, Row: 2},
+		{Kind: termkit.EventMouse, Motion: true, Row: 2},
 	} {
 		assert.False(t, apply(m, ev, nil))
 		assert.Equal(t, wheelRows, m.Top(), "a click is not a scroll")
@@ -490,8 +490,8 @@ func TestWheelScrollsTheViewportAndNothingElseDoes(t *testing.T) {
 }
 
 // wheel is one notch of the wheel, as the terminal reports it: a press with no release.
-func wheel(b tty.MouseButton) tty.Event {
-	return tty.Event{Kind: tty.EventMouse, Button: b, Press: true, Clicks: 1}
+func wheel(b termkit.MouseButton) termkit.Event {
+	return termkit.Event{Kind: termkit.EventMouse, Button: b, Press: true, Clicks: 1}
 }
 
 // termWriter looks like a terminal to tty.Fd so the colour gate can be asked without a pty.

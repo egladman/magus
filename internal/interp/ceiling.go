@@ -35,7 +35,7 @@ const levelTrace slog.Level = slog.LevelDebug - 4
 // scheduled target reaches it through runBuzz, and every ctx.needs-composed one
 // reaches the same closure through the Buzz pool. Bounding only the scheduled target
 // would leave a declaration on a composed target inert for the command people
-// actually type, which is the shape ChainMemoryMB exists to avoid on the memory side.
+// actually type.
 //
 // Nesting is deliberate and needs no coordination: a composed target's ceiling is a
 // second, tighter deadline inside its parent's, and whichever expires first cancels.

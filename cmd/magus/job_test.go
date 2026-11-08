@@ -1483,6 +1483,34 @@ func TestJobExecRefusesAnythingButOneLiveJob(t *testing.T) {
 	}
 }
 
+// TestJobForkReadOnlyRowPrintsNoBudgetAdvice: a row that runs no target has no
+// holder to hold back, so a full budget is not its forker's news.
+func TestJobForkReadOnlyRowPrintsNoBudgetAdvice(t *testing.T) {
+	root, _ := execFixture(t)
+	privateSockDir(t)
+	t.Setenv("MAGUS_BROKER", "")
+	ln, err := broker.Listen(t.Context(), broker.DefaultAddr())
+	require.NoError(t, err)
+	done := make(chan error, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { done <- broker.Serve(ctx, ln, broker.WithCapacity(0, 1)) }()
+	t.Cleanup(func() { cancel(); <-done })
+	holder, err := broker.Dial(t.Context(), broker.DefaultAddr())
+	require.NoError(t, err)
+	defer func() { _ = holder.Close() }()
+	_, err = holder.Request(t.Context(), types.MachineClaim{Project: "other", Target: "test", Slots: 1, PID: 1})
+	require.NoError(t, err)
+
+	reader := captureStdout(t, func() {
+		require.NoError(t, jobFork(t.Context(), root, []string{"reader", "--read-only", "--criteria", "find the callers"}))
+	})
+	assert.NotContains(t, reader, "the build budget is full")
+	writer := captureStdout(t, func() {
+		require.NoError(t, jobFork(t.Context(), root, []string{"writer", "--check", "test .", "--write-paths", "magus.yaml"}))
+	})
+	assert.Contains(t, writer, "the build budget is full")
+}
+
 // A fork under `job exec --timeout` bootstraps with the wrapper holding the
 // whole budget. Under budget_wait 0 a stranger's claim of that size refuses the
 // same run.
@@ -1980,7 +2008,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	t.Run("the rule answers differently from elsewhere", func(t *testing.T) {
 		t.Chdir(elsewhere)
 		unplaced := guard.Judge(t.Context(), guardDependencies(t.Context(), root), guard.Request{
-			Input:      ownBinaryPrefix + row.Check.String(),
+			Input:      ownBinaryPrefix + workerCheckLine(*row.Check),
 			DryRun:     true,
 			Lease:      row.ID,
 			PendingRow: &row,
@@ -2076,7 +2104,7 @@ func TestGradeCheckJudgesInTheJobsOwnCheckout(t *testing.T) {
 
 		taken := held
 		taken.State, taken.CheckoutRoot = types.StateRunning, own
-		ran := guard.Judge(t.Context(), deps, guard.Request{Input: ownBinaryPrefix + ci.String(), DryRun: true, Lease: taken.ID, PendingRow: &taken, Dir: own})
+		ran := guard.Judge(t.Context(), deps, guard.Request{Input: ownBinaryPrefix + workerCheckLine(*ci), DryRun: true, Lease: taken.ID, PendingRow: &taken, Dir: own})
 		assert.NotEqual(t, string(types.GuardDeny), ran.Decision, "the guard lets the holder run it there: %s", ran.Reason)
 	})
 

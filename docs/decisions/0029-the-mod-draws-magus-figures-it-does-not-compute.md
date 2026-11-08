@@ -41,11 +41,11 @@ What exists on main at `d29cea148`:
 
 The mod draws three figures. It computes none of them.
 
-| Layer | Owns | Language |
-| --- | --- | --- |
-| core | the data: job rows, the run journal, the query record; the figure library | Go |
-| figure scripts, in the `claude-code-mod` spell | which boxes, edges, zones and states each view draws | Buzz, `magus/figure` |
-| mod | noticing the call, running the script, placing the SVG, the terminal fallback | TSX |
+| Layer                                          | Owns                                                                          | Language             |
+| ---------------------------------------------- | ----------------------------------------------------------------------------- | -------------------- |
+| core                                           | the data: job rows, the run journal, the query record; the figure library     | Go                   |
+| figure scripts, in the `claude-code-mod` spell | which boxes, edges, zones and states each view draws                          | Buzz, `magus/figure` |
+| mod                                            | noticing the call, running the script, placing the SVG, the terminal fallback | TSX                  |
 
 ### The workspace owns the figures
 
@@ -53,7 +53,7 @@ The figure scripts are part of the `claude-code-mod` harness spell
 (`spells/harness/claude-code-mod/figures/<view>.buzz`), not the Go source and not the
 plugin folder. A workspace that wants other figures copies the spell into its tree and
 declares the copy as a `path:` override of the registry path in `magus.yaml`, the
-ownership switch [Agents](../guides/integrations/AGENTS.md#set-up-your-host) already
+ownership switch [Agents](../guides/integrations/agents.md#set-up-your-host) already
 documents for a shipped harness. Its agents and people edit that Buzz and see the change
 on the next frame, with no magus release and no plugin update. The spell exports
 `mgs_figures()`, a map from view to script path. The mod reads that map through
@@ -64,11 +64,11 @@ on the next frame, with no magus release and no plugin update. The spell exports
 Each part changes for a different reason, so each ships on its own path. No part waits
 on another's release.
 
-| Part | Changes when | Ships as | Updated by | State |
-| --- | --- | --- | --- | --- |
-| mod (TSX) | Claude Code's plugin API changes | the marketplace plugin at `.claude-plugin/marketplace.json`, from this repository's default branch | `claude plugin update`; no magus release | done (as the mod ships today) |
-| figure scripts (Buzz) | a person wants another figure | the `claude-code-mod` spell, pinned per workspace in `magus.lock` | the workspace's spell pin, or its own `path:` override | proposed |
-| data and drawing (Go) | a record or the figure library changes | the magus binary | a magus release | done (as magus ships today) |
+| Part                  | Changes when                           | Ships as                                                                                           | Updated by                                             | State                         |
+| --------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ----------------------------- |
+| mod (TSX)             | Claude Code's plugin API changes       | the marketplace plugin at `.claude-plugin/marketplace.json`, from this repository's default branch | `claude plugin update`; no magus release               | done (as the mod ships today) |
+| figure scripts (Buzz) | a person wants another figure          | the `claude-code-mod` spell, pinned per workspace in `magus.lock`                                  | the workspace's spell pin, or its own `path:` override | proposed                      |
+| data and drawing (Go) | a record or the figure library changes | the magus binary                                                                                   | a magus release                                        | done (as magus ships today)   |
 
 The mod talks to magus only through surfaces magus already versions: CLI records
 (`-o json`, `-o svg`), the Connect `v1alpha1` services, and `magus describe harness -o json`.
@@ -78,11 +78,11 @@ naming the magus version that has it. It never draws a guess.
 
 ### The three views
 
-| View | Invocation command | Data | State |
-| --- | --- | --- | --- |
-| job plan | `job fork`, `job graph`; also the pane's Plan tab | `magus job graph -o svg`, as built | proposed |
-| live run | `run`, `affected` | the run's journal, read by `magus query invocation <id> -o json` | proposed |
-| query | `query`, `explain`, `refs` | the invocation's query record | proposed |
+| View     | Invocation command                                | Data                                                             | State    |
+| -------- | ------------------------------------------------- | ---------------------------------------------------------------- | -------- |
+| job plan | `job fork`, `job graph`; also the pane's Plan tab | `magus job graph -o svg`, as built                               | proposed |
+| live run | `run`, `affected`                                 | the run's journal, read by `magus query invocation <id> -o json` | proposed |
+| query    | `query`, `explain`, `refs`                        | the invocation's query record                                    | proposed |
 
 A view is chosen by the command of the invocation a call started, never by the call's
 text. A Bash call running `./magus` and a magus MCP tool call (`client`, `buzz`, `status`,
@@ -92,12 +92,12 @@ carries.
 
 ### What core adds
 
-| Change | Why | State |
-| --- | --- | --- |
-| journal `cache.plan` as `KIND_PLAN` and `cache.step` as `KIND_STEP` (`v1alpha1`, additive) | a run figure needs the planned targets, their edges and when each started | proposed |
-| a `parsed` field on the query record: each filter's field, operator and value, and the free terms | the parser stays the one in Go; a script never splits a query string | proposed |
-| a running state in libs/figure that animates (a SMIL pulse on the box) | every figure, console included, gets the same running mark | proposed |
-| every MCP tool call journals an invocation with its command and the tool call's id, as a CLI call does | the mod finds a call's invocation the same way for both doors | proposed (not yet checked for each tool) |
+| Change                                                                                                 | Why                                                                       | State                                    |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | ---------------------------------------- |
+| journal `cache.plan` as `KIND_PLAN` and `cache.step` as `KIND_STEP` (`v1alpha1`, additive)             | a run figure needs the planned targets, their edges and when each started | proposed                                 |
+| a `parsed` field on the query record: each filter's field, operator and value, and the free terms      | the parser stays the one in Go; a script never splits a query string      | proposed                                 |
+| a running state in libs/figure that animates (a SMIL pulse on the box)                                 | every figure, console included, gets the same running mark                | proposed                                 |
+| every MCP tool call journals an invocation with its command and the tool call's id, as a CLI call does | the mod finds a call's invocation the same way for both doors             | proposed (not yet checked for each tool) |
 
 ### What the mod adds
 

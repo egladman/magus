@@ -261,11 +261,11 @@ func TestWorkerRetryAfterTheBoundIsRefused(t *testing.T) {
 	ctx, _ := fleetFixture(t, worker)
 	runsDir := filepath.Join(ctx.Value(locationKey{}).(location).cacheDir, cache.RunsDir)
 	require.NoError(t, os.MkdirAll(runsDir, 0o755))
-	writeRefusalLog(t, runsDir, "invrefused", time.Now().Add(-10*time.Second), true, "run", "diagrams_generate", "docs")
+	writeRefusalLog(t, runsDir, "invrefused", time.Now().Add(-10*time.Second), true, "run", "diagrams_generate", "docs", "--budget-wait", "0")
 
-	bare := Judge(ctx, Dependencies{}, Request{Input: "./magus run diagrams_generate docs", Lease: worker.ID})
+	bare := Judge(ctx, Dependencies{}, Request{Input: "./magus run diagrams_generate docs --budget-wait 0", Lease: worker.ID})
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleSleepPoll)), unworded(bare))
-	assert.Contains(t, bare.Reason, "within its budget_wait")
+	assert.Contains(t, bare.Reason, "never waits for the budget")
 }
 
 // The orchestrator is who waits for the build budget, so the same lines pass for it.
@@ -388,7 +388,7 @@ func (s *PressureRetrySuite) TestALeasedRetryIsToldTheOwedFilingAndNotTheWait() 
 	s.Require().True(d.refused())
 	s.Contains(d.Say, "refused with MGS3053 10s ago")
 	s.Contains(d.Say, cache.LeasedPressureNext("figures"), "the guard and the refusal say one thing")
-	s.NotContains(d.Say, "within its budget_wait", "no seat clears this")
+	s.NotContains(d.Say, "never waits for the budget", "no seat clears this")
 }
 
 func (s *PressureRetrySuite) TestEachListedCodeIsReadBack() {
@@ -438,7 +438,7 @@ func TestDenyRefusedRetry(t *testing.T) {
 		d := denyRefusedRetry(at(t, 10*time.Second, true), Dependencies{lease: "figures"}, "", retry)
 		require.True(t, d.refused())
 		assert.Contains(t, d.Say, "refused with MGS3009 10s ago")
-		assert.Contains(t, d.Say, "within its budget_wait", "the run already waited, so the next line raises the bound or files it owed")
+		assert.Contains(t, d.Say, "never waits for the budget", "the run already waited, so the next line frees a holder or files it owed")
 		assert.Contains(t, d.Say, " run go-test . -s -- -run 'TestHookCmd|TestJudge'`", "quoted so the pipe in the pattern stays an argument")
 	})
 	t.Run("a repeat after the minute", func(t *testing.T) {
@@ -565,7 +565,7 @@ func TestRefusedRetryServesTheRootAForkedJob(t *testing.T) {
 
 	leased := denyRefusedRetry(ctx, Dependencies{lease: "figures"}, "", "./magus run lint .")
 	require.True(t, leased.refused())
-	assert.Contains(t, leased.Say, "within its budget_wait")
+	assert.Contains(t, leased.Say, "never waits for the budget")
 	assert.NotContains(t, leased.Say, hint.JobFork.String())
 }
 

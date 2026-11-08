@@ -166,6 +166,7 @@ func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
 // failed target result and as an MGS3009 diagnostic, both naming the holder.
 func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
+	t.Setenv("MAGUS_BUDGET_WAIT", "0")
 	spellName := register.Spell(t, "zzz-machine-refusal-spell",
 		spells.WithTargets("build"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
@@ -2261,8 +2262,8 @@ func TestRun_MemoryClaimFollowsTheRunsShape(t *testing.T) {
 
 	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "work"}},
 		WithCharms(types.CharmReadWrite), WithExtraArgs(args)))
-	assert.Contains(t, logged.String(), "memory_mb=13 sizing=\"measured over 3 runs; work: no memory curve for this shape (0 of 3 runs); claimed the 13 MiB peak\"",
-		"ceil(1.25 x the 10MB full-run peak), not the 12MB narrowed one, under the 64MB declared")
+	assert.Contains(t, logged.String(), "memory_mb=10 sizing=\"measured over 3 runs; work: no memory curve for this shape (0 of 3 runs); claimed the 10 MiB peak\"",
+		"the 10MB full-run peak, not the 12MB narrowed one, under the 64MB declared")
 
 	var got forecast.History
 	require.NoError(t, got.Load(context.Background(), historyPath))
@@ -2895,4 +2896,114 @@ export fun image(ctx: magus\Context, args: [str]) > void !> any {
 	third := read()
 	assert.True(t, strings.HasPrefix(third, "two:"), "the edit reran build, then the image: %q", third)
 	assert.NotEqual(t, first, third)
+}
+
+// TestComposerOutcomeCountsOnlyItsBody answers ADR 0031's open question:
+// whose peak holds what a cacheable composer's inline member runs. The
+// composer runs nothing itself, so any peak on it is the member's.
+func TestComposerOutcomeCountsOnlyItsBody(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Magusfile(`import "magus";
+import "proc";
+export fun member(ctx: magus\Context, args: [str]) > void !> any {
+    final c = proc\shell("sleep 0.5");
+    proc\exec(c.bin, c.args, "", null);
+}
+export fun composer(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(member);
+}
+`)
+	historyPath := filepath.Join(w.Root(), "history.json")
+	cfg := config.Defaults()
+	cfg.HistoryPath = historyPath
+	m, err := Open(context.Background(), w.Root(), workspace.WithLoadedConfig(cfg), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "composer"}}, WithCache(false)))
+
+	var got forecast.History
+	require.NoError(t, got.Load(context.Background(), historyPath))
+	composer := got.Projects["."][types.MagusfileSpellName+"/composer"].RecentOutcomes
+	require.Len(t, composer, 1)
+	assert.Zero(t, composer[0].MaxRSSBytes, "the member's process is not the composer's")
+	assert.Zero(t, composer[0].Curve, "nor are its samples")
+	member := got.Projects["."][types.MagusfileSpellName+"/member"].RecentOutcomes
+	require.Len(t, member, 1, "the member records its own run")
+	assert.Positive(t, member[0].MaxRSSBytes)
+}
+
+// TestInlineMemberAlsoABatchStepRunsOnce pins that a member named on the
+// command line beside its composer runs once: inline in the composer's body
+// or as its own step, never both.
+func TestInlineMemberAlsoABatchStepRunsOnce(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Magusfile(`import "magus";
+import "proc";
+export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
+    final c = proc\shell("printf x >> conventions.ran");
+    proc\exec(c.bin, c.args, "", null);
+}
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(conventions);
+}
+`)
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	require.NoError(t, m.Run(context.Background(),
+		[]types.Target{{Path: ".", Name: "lint"}, {Path: ".", Name: "conventions"}}, WithCache(false)))
+
+	ran, err := os.ReadFile(w.Path("conventions.ran"))
+	require.NoError(t, err)
+	assert.Equal(t, "x", string(ran), "conventions ran once")
+}
+
+// TestCrossProjectNeedOfACacheableComposerRuns pins that a cacheable
+// composer's cross-project member runs rather than waiting on itself. Both
+// CrossDispatch and the remote interceptor took it once in one TargetRuns.
+func TestCrossProjectNeedOfACacheableComposerRuns(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Write("leaf/magusfile.buzz", `import "magus";
+import "proc";
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    final c = proc\shell("printf x >> build.ran");
+    proc\exec(c.bin, c.args, "", null);
+}
+`)
+	w.Magusfile(`import "magus";
+import "project/leaf";
+magus\project({"depends_on": ["leaf"]});
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(leaf\build);
+}
+`)
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	require.NoError(t, m.Run(ctx, []types.Target{{Path: ".", Name: "lint"}}))
+
+	ran, err := os.ReadFile(w.Path("leaf/build.ran"))
+	require.NoError(t, err)
+	assert.Equal(t, "x", string(ran), "the cross-project member ran once")
+}
+
+// TestRunOnceWaitEndedByContextNamesTheTarget pins that a wait on a run
+// another path reached first names that target when ctx ends it.
+func TestRunOnceWaitEndedByContextNamesTheTarget(t *testing.T) {
+	runs := cache.NewTargetRuns()
+	ref := types.TargetRef{Project: "leaf", Target: "build"}
+	_, first := runs.TryRun(ref)
+	require.True(t, first)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := runOnce(ctx, runs, ref, func() error { return nil })
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Contains(t, err.Error(), "waiting on "+ref.Ref())
 }

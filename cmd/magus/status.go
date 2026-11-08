@@ -22,11 +22,12 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/layout"
 	"github.com/egladman/magus/types"
 )
 
@@ -104,7 +105,7 @@ func status(ctx context.Context, args []string) error {
 	// cursor), and asking it twice with different answers is how a repaint gets set up on a
 	// terminal that cannot repaint: InlineView measures with CanRender, so a weaker gate here
 	// only ever produced a view that fell back to appending, one full frame per tick.
-	canRender := tty.CanRender(os.Stdout, tty.SystemProbe)
+	canRender := termkit.CanRender(os.Stdout, termkit.SystemProbe)
 	useGrid := gridEnabled(opts, canRender) && !f.Compact
 
 	// In watch+grid mode, animate at 150ms ticks (fluid spinner rotation)
@@ -121,7 +122,7 @@ func status(ctx context.Context, args []string) error {
 
 	animFrame := 0
 	snapshot := buildStatusSnapshot(ctx, f.Socket, f.Symbols)
-	repaint := tty.NewInlineView(os.Stdout, tty.SystemProbe)
+	repaint := termkit.NewInlineView(os.Stdout, termkit.SystemProbe)
 	defer repaint.Finish()
 	inline := opts.Format == outputText && canRender
 	for {
@@ -260,7 +261,7 @@ func writeStatus(w io.Writer, r types.StatusSnapshot, opts output.Options, animF
 			printStatusCompact(w, r, time.Now())
 			return nil
 		}
-		printStatusText(w, r, gridEnabled(opts, tty.CanRender(os.Stdout, tty.SystemProbe)), animFrame)
+		printStatusText(w, r, gridEnabled(opts, termkit.CanRender(os.Stdout, termkit.SystemProbe)), animFrame)
 	}
 	return nil
 }
@@ -601,6 +602,9 @@ func printBrokerRows(w io.Writer, st types.StatusBroker, policy types.BrokerPoli
 			holderMemText(h),
 			fmt.Sprintf("%s %s", holderProject(h.Project), h.Target),
 			h.Owner, h.Dir, h.Command, sinceText(h.Since)), "  "))
+		if holdsOverAQuarter(h, c.BudgetMB) {
+			fmt.Fprintf(tw, "sized\t%d\t%s\n", h.PID, h.Sizing.Breakdown(fmt.Sprintf("%s %s", holderProject(h.Project), h.Target), h.Under, h.MemoryMB))
+		}
 	}
 	for _, q := range c.Waiting {
 		why := ""
@@ -727,9 +731,9 @@ func capacityText(c types.MachineSnapshot) string {
 		parts = append(parts, fmt.Sprintf("slots %d/%d", c.HeldSlots, c.BudgetSlots))
 	}
 	if c.BudgetMB > 0 {
-		mem := fmt.Sprintf("mem %s/%s", cache.FormatMB(c.HeldMB), cache.FormatMB(c.BudgetMB))
+		mem := fmt.Sprintf("mem %s/%s", types.FormatMB(c.HeldMB), types.FormatMB(c.BudgetMB))
 		if r := c.Reserve; r.TotalMB > 0 {
-			mem += fmt.Sprintf(" (%s less %s: %s)", cache.FormatMB(r.TotalMB), cache.FormatMB(r.ReservedMB), r.Rule)
+			mem += fmt.Sprintf(" (%s less %s: %s)", types.FormatMB(r.TotalMB), types.FormatMB(r.ReservedMB), r.Rule)
 		}
 		parts = append(parts, mem)
 	}
@@ -743,7 +747,7 @@ func mbText(prefix string, mb int) string {
 	if mb <= 0 {
 		return ""
 	}
-	return prefix + cache.FormatMB(mb)
+	return prefix + types.FormatMB(mb)
 }
 
 // holderMemText is a holder's memory claim, naming the runs it was measured over when
@@ -755,6 +759,12 @@ func holderMemText(h types.MachineClaimant) string {
 		text += " " + h.Sizing.String()
 	}
 	return text
+}
+
+// holdsOverAQuarter reports a holder big enough that where its figure came
+// from is worth a row.
+func holdsOverAQuarter(h types.MachineClaimant, budgetMB int) bool {
+	return budgetMB > 0 && h.MemoryMB*4 > budgetMB
 }
 
 // refusedHoldersText names the holders that kept a refused claim out, by pid and owner.
@@ -1165,9 +1175,9 @@ func cellState(i, running, capacity, numCPU int) cellKind {
 // The pool grid's palette, as SGR parameter codes. The escape wrapping
 // itself lives in tty.Colorize; these only choose the colors.
 const (
-	sgrPoolRunning = tty.SGRBrightGreen // a slot doing work
-	sgrPoolIdle    = tty.SGRDimGrey     // a free slot
-	sgrPoolQueued  = tty.SGRYellow      // work waiting for a slot
+	sgrPoolRunning = termkit.SGRBrightGreen // a slot doing work
+	sgrPoolIdle    = termkit.SGRDimGrey     // a free slot
+	sgrPoolQueued  = termkit.SGRYellow      // work waiting for a slot
 )
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
@@ -1208,13 +1218,13 @@ func drawPoolGrid(w io.Writer, pool *types.StatusOutput, numCPU int, animFrame i
 			kind := cellState(i, pool.Running, pool.Capacity, numCPU)
 			switch kind {
 			case cellRunning:
-				sb.WriteString(tty.Colorize("●", sgrPoolRunning) + " ")
+				sb.WriteString(termkit.Colorize("●", sgrPoolRunning) + " ")
 			case cellIdle:
 				sb.WriteString("○ ")
 			case cellOutOfPool:
-				sb.WriteString(tty.Colorize("·", sgrPoolIdle) + " ")
+				sb.WriteString(termkit.Colorize("·", sgrPoolIdle) + " ")
 			case cellOverSubscribed:
-				sb.WriteString(tty.Colorize("●", sgrPoolQueued) + " ")
+				sb.WriteString(termkit.Colorize("●", sgrPoolQueued) + " ")
 			}
 		}
 		fmt.Fprintln(w, sb.String())
@@ -1227,7 +1237,7 @@ func drawPoolGrid(w io.Writer, pool *types.StatusOutput, numCPU int, animFrame i
 	}
 
 	fmt.Fprintf(w, "\n  %s running  ○ idle  %s cpu\n",
-		tty.Colorize("●", sgrPoolRunning), tty.Colorize("·", sgrPoolIdle))
+		termkit.Colorize("●", sgrPoolRunning), termkit.Colorize("·", sgrPoolIdle))
 }
 
 func poolHeader(pool *types.StatusOutput, numCPU int) string {
@@ -1319,12 +1329,12 @@ func drawProjectTree(w io.Writer, indent string, projects map[string][]leafEntry
 			vPrefix, actIndent := branchPrefix(vIndent, vLast)
 			line := truncate(lf.target, runningLineWidth)
 			if d := formatDur(lf.duration); d != "" {
-				line += " " + tty.Colorize(fmt.Sprintf("(%s)", d), sgrPoolIdle)
+				line += " " + termkit.Colorize(fmt.Sprintf("(%s)", d), sgrPoolIdle)
 			}
 			fmt.Fprintf(w, "%s%s\n", vPrefix, line)
 			if lf.step != "" {
 				actPrefix, _ := branchPrefix(actIndent, true)
-				fmt.Fprintf(w, "%s%s\n", actPrefix, tty.Colorize(truncate(lf.step, runningLineWidth), sgrPoolIdle))
+				fmt.Fprintf(w, "%s%s\n", actPrefix, termkit.Colorize(truncate(lf.step, runningLineWidth), sgrPoolIdle))
 			}
 		}
 	}
@@ -1425,7 +1435,7 @@ func parseRunning(args []string) (project, target string) {
 // is no ASCII substitute that draws them. That is a different question from
 // prose typography, which the repo does keep to ASCII.
 func truncate(s string, n int) string {
-	return tty.ClipBytes(s, n)
+	return layout.ClipBytes(s, n)
 }
 
 // printLockStatus renders the workspace locks held right now.
@@ -1463,7 +1473,7 @@ func printLockStatus(w io.Writer, locks []types.StatusLock) {
 // tall as the terminal, where erasing upward would walk off the top and eat the
 // transcript above. Falling back is worse than redrawing in place and much
 // better than a corrupted screen.
-func paintStatusFrame(p *tty.InlineView, inline bool, r types.StatusSnapshot, opts output.Options, animFrame int, compact bool) error {
+func paintStatusFrame(p *termkit.InlineView, inline bool, r types.StatusSnapshot, opts output.Options, animFrame int, compact bool) error {
 	if !inline {
 		return printStatus(r, opts, animFrame, compact)
 	}
@@ -1475,7 +1485,7 @@ func paintStatusFrame(p *tty.InlineView, inline bool, r types.StatusSnapshot, op
 		return nil
 	}
 	p.Reset()
-	if err := tty.ClearScreen(os.Stdout); err != nil {
+	if err := termkit.ClearScreen(os.Stdout); err != nil {
 		return err
 	}
 	return printStatus(r, opts, animFrame, compact)

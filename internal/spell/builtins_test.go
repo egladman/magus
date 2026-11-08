@@ -69,7 +69,7 @@ func TestShippedSpellsLoad(t *testing.T) {
 		assert.Equal(t, Builtins()[spec.Name], spec, "spells/%s", e.Name())
 	}
 	assert.ElementsMatch(t, []string{
-		"bash", "buf", "buzz", "cosign", "docker", "go", "markdown", "podman", "python", "rust", "typescript",
+		"bash", "buf", "buzz", "cosign", "docker", "go", "latex", "markdown", "podman", "python", "rust", "typescript",
 	}, slices.Collect(maps.Keys(Builtins())))
 	assert.Equal(t, []string{"endoflife-date", "onepassword", "system-keychain"}, sourceOnly)
 	assert.Equal(t, []string{"aws", "code", "github", "gitlab", "harness"}, nesting)

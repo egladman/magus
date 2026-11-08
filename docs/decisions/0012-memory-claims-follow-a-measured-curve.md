@@ -279,7 +279,7 @@ run's interceptor already makes each same-project member a cache step of its own
 steps from claiming.
 
 - Each member that `dispatchBuzzTargets` hands to the interceptor takes its own machine
-  claim (`cache.ChildrenClaimTheirOwn`). A member that fits waits for a seat beside its
+  claim (the claim each inline member takes, which ADR 0031 keeps). A member that fits waits for a seat beside its
   siblings, so four members that each fit and together do not all run, in turn.
 - The composer's claim leaves those members out (`SizedChainMemory`'s `ownClaims`). One
   predicate, `types.MembersClaimTheirOwn` (the composer's skip_cache), decides both the
@@ -322,3 +322,7 @@ stalled 90 seconds. Nothing declared or measured could see what filled that mach
 - Determinism bends further: the same command can now reach a different verdict on a
   machine the kernel says is failing. A retake (`machineHold.reclaim`) reads no memory, so
   running work is never refused.
+
+### 2026-11-07: the fold is gone
+
+The fold that this ADR's 2026-10-21 amendment kept is gone. [ADR 0031](0031-a-claim-counts-only-what-runs-in-it.md) stops composing a composer's members into its claim: the composer claims, measures and records only its own body, and each inline member takes its own claim. `SizedChainMemory` and `ChainMemoryMB` are deleted, and the broker packs each member's claim by its own curve. Curves are still recorded and packed; nothing folds members into one claim any more.

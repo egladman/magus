@@ -11,8 +11,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/layout"
+	"github.com/egladman/magus/libs/termkit/notify"
 )
 
 // The end-of-run failure prompt: the failures a run pinned are already on
@@ -52,7 +54,7 @@ type failureBand interface {
 	HitFailure(row int) (cache.Failure, bool)
 	SetSelection(n int)
 	SetPreview(lines []string)
-	ToggleFocus() cache.PaneFocus
+	ToggleFocus()
 }
 
 // hintHitter resolves a click on the hint row to the action it names. Separate
@@ -80,7 +82,7 @@ func loadPreview(f cache.Failure, width int) []string {
 		return nil
 	}
 	unreadable := func(err error) []string {
-		return []string{tty.ClipCols(sanitizeLogLine("could not read the log: "+err.Error()), width)}
+		return []string{layout.Clip(sanitizeLogLine("could not read the log: "+err.Error()), width)}
 	}
 	// The TAIL is read, not the whole file. This runs on every selection change,
 	// including mouse motion across the band, and a failed build's captured log
@@ -112,7 +114,7 @@ func loadPreview(f cache.Failure, width int) []string {
 		lines = lines[len(lines)-previewRows:]
 	}
 	for i, l := range lines {
-		lines[i] = tty.ClipCols(sanitizeLogLine(l), width)
+		lines[i] = layout.Clip(sanitizeLogLine(l), width)
 	}
 	return lines
 }
@@ -223,12 +225,12 @@ func promptFailures(ctx context.Context, root string, h *cache.PrettyHandler) er
 // keeps the guarantee above: whatever runs next finds a terminal in its normal
 // state, and a panic anywhere in the action cannot leave mouse reporting on.
 func runFailurePrompt(ctx context.Context, h failureBand, selected *int) (failureAction, cache.Failure, error) {
-	in, err := tty.OpenInput(os.Stdin, os.Stderr, tty.SystemProbe)
+	in, err := termkit.OpenInput(os.Stdin, os.Stderr, termkit.SystemProbe)
 	if err != nil {
 		// Not a terminal on both ends: an ordinary answer, not a failure.
 		return actionNone, cache.Failure{}, nil
 	}
-	hint := tty.StderrZone().Acquire(hintRows)
+	hint := termkit.StderrZone().Acquire(hintRows)
 	defer func() {
 		h.SetSelection(-1)
 		_ = hint.Release()
@@ -239,7 +241,7 @@ func runFailurePrompt(ctx context.Context, h failureBand, selected *int) (failur
 	if err := showHint(hint, os.Stderr); err != nil {
 		return actionNone, cache.Failure{}, err
 	}
-	action, item := dispatchFailureKeys(func() (tty.Event, error) { return in.Read(ctx) }, h, tty.StderrZone(), selected)
+	action, item := dispatchFailureKeys(func() (termkit.Event, error) { return in.Read(ctx) }, h, termkit.StderrZone(), selected)
 	return action, item, nil
 }
 
@@ -256,10 +258,10 @@ func runFailurePrompt(ctx context.Context, h failureBand, selected *int) (failur
 //
 // Printed to the scrolling transcript rather than skipped, because nothing else
 // writes there while the prompt is open.
-func showHint(l *tty.Lease, w io.Writer) error {
+func showHint(l *termkit.Lease, w io.Writer) error {
 	// Composed by the package that owns the band, not here, so the row the
 	// documentation renders and the row a reader sees are the same object.
-	rendered, err := l.Set(cache.FailureHint())
+	rendered, err := l.Set(cache.FailureHint(l.Width()))
 	if err != nil {
 		return err
 	}
@@ -277,7 +279,7 @@ func showHint(l *tty.Lease, w io.Writer) error {
 // the prompt is an offer made after the run already succeeded or failed on its
 // own terms. An error return here would advertise a failure mode that cannot
 // happen and force every caller to handle it.
-func dispatchFailureKeys(next func() (tty.Event, error), h failureBand, hints hintHitter, selected *int) (failureAction, cache.Failure) {
+func dispatchFailureKeys(next func() (termkit.Event, error), h failureBand, hints hintHitter, selected *int) (failureAction, cache.Failure) {
 	items := h.Failures()
 	if len(items) == 0 {
 		return actionNone, cache.Failure{}
@@ -292,14 +294,14 @@ func dispatchFailureKeys(next func() (tty.Event, error), h failureBand, hints hi
 			return actionNone, cache.Failure{} // see the doc comment: ending is an answer
 		}
 
-		if ev.Kind == tty.EventMouse {
+		if ev.Kind == termkit.EventMouse {
 			// The wheel is deliberately NOT taken here, and that is not a gap in
 			// the mouse support. The whole band is on screen at once, so there
 			// is nothing to scroll WITHIN it, while the wheel is how a reader
 			// scrolls back through the build output above, which magus never
 			// takes. Binding it would trade the transcript for nothing.
 			// TestFailurePromptIgnoresReleasesAndTheWheel pins this.
-			if !ev.Motion && (!ev.Press || ev.Button != tty.MouseLeft) {
+			if !ev.Motion && (!ev.Press || ev.Button != termkit.MouseLeft) {
 				continue
 			}
 			// A click on the row that NAMES an action takes it. One click, not
@@ -351,23 +353,23 @@ func dispatchFailureKeys(next func() (tty.Event, error), h failureBand, hints hi
 		}
 
 		switch ev.Key {
-		case tty.KeyEscape, tty.KeyCtrlC, tty.KeyCtrlD:
+		case termkit.KeyEscape, termkit.KeyCtrlC, termkit.KeyCtrlD:
 			return actionNone, cache.Failure{}
-		case tty.KeyUp:
+		case termkit.KeyUp:
 			*selected = clampIndex(*selected-1, len(items))
 			h.SetSelection(*selected)
 			showPreview(h, items, *selected)
-		case tty.KeyDown:
+		case termkit.KeyDown:
 			*selected = clampIndex(*selected+1, len(items))
 			h.SetSelection(*selected)
 			showPreview(h, items, *selected)
-		case tty.KeyTab:
+		case termkit.KeyTab:
 			// Focus resizes the two views: the one you are working in takes the
 			// golden ratio's major share.
 			h.ToggleFocus()
-		case tty.KeyEnter:
+		case termkit.KeyEnter:
 			return actionRerun, items[*selected]
-		case tty.KeyRune:
+		case termkit.KeyRune:
 			switch ev.Rune {
 			case 'q':
 				return actionNone, cache.Failure{}
@@ -404,12 +406,12 @@ func copyFailure(f cache.Failure) {
 		text = string(raw) // the WHOLE log, not the tail the band happens to show
 	}
 	// An OSC 52 escape for the terminal, not text for a reader.
-	n, err := tty.Copy(os.Stderr, text)
+	n, err := termkit.Copy(os.Stderr, text)
 	msg := fmt.Sprintf("copied %d bytes of %s %s to the clipboard", n, f.Project, f.Target)
 	if err != nil || n == 0 {
 		msg = "could not reach the clipboard; press o to print the output instead"
 	}
-	_ = tty.StderrNotifier().Notify(msg, tty.SGRGreen, 4*time.Second)
+	_ = notify.Stderr().Notify(msg, termkit.SGRGreen, 4*time.Second)
 }
 
 // showPreview puts the selected failure's output in the band's second column.

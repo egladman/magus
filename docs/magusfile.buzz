@@ -37,36 +37,20 @@ magus\project({
     "spells": [typescript, buzz],
     // API docs read proto's descriptor, the render reads libs/figure and the figures
     // read libs/kustomize; without these edges the reads are unordered (MGS4004).
-    "depends_on": ["..", "../proto", "../libs/figure", "../libs/kustomize"],
-    // Affected tracks this glob, not the import graph, so it names every input,
-    // including the Go trees content-generate renders pages from.
+    // The catalog and reference generators compile the Go libs below into the binaries
+    // they run, so each is named here instead of globbing its tree.
+    // The rest are projects whose targets these targets ctx.needs (MGS1062).
+    "depends_on": ["../proto", "../libs/figure", "../libs/kustomize", "../libs/cmdline",
+                   "../libs/diagnostics", "../libs/embed", "../libs/scipbuzz", "../libs/xdg",
+                   "../libs/gopherbuzz", "../libs/proofread", "../libs/textsearch",
+                   "./guides/integrations/agents"],
+    // Affected tracks this glob, not the import graph. Another project's files arrive
+    // through depends_on, the root's through the targets' readsFiles.
     "sources": ["*.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
                 "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html",
                 "tour/*.buzz", "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
-                // The binary embeds magus/figure from this file.
-                "../libs/figure/figure.buzz",
                 // Hand-authored exemptions for abandonedLinkCheck, so a source, not an output.
-                "retired.urls.lock",
-                // Not the .proto files: src/**/*.ts already covers the client proto generates.
-                "../README.md", "../CONTRIBUTING.md", "../blog/**", "../assets/**",
-                // The catalog examples compile the full CLI, including embedded assets.
-                "../*.go", "../internal/**/*.go", "../types/**/*.go", "../schema/**/*.go",
-                "../std/**/*.go", "../host/**/*.go", "../libs/**/*.go",
-                "../libs/**/go.mod", "../libs/**/go.sum",
-                "../go.mod", "../go.sum", "../go.work", "../go.work.sum",
-                "../spells/**", "../std/lib/*.buzz", "../internal/spell/**/*.buzz",
-                "../internal/queue/provider/*.buzz",
-                "../internal/selfupdate/release-keys.json", "../internal/textrank/weights.json",
-                "../libs/embed/testdata/probe.txt", "../internal/agent/agents/**",
-                "../internal/agent/agents-section.md", "../internal/agent/skills/**",
-                "../libs/gopherbuzz/std/*.buzz", "../libs/proofread/internal/wordclass/gen/model.gz",
-                "../libs/proofread/internal/calibrate/cases/*.txtar",
-                "../cmd/magus-docs/**/*.go", "../cmd/magus-utils/**/*.go", "../cmd/magus-spelldocs/**/*.go",
-                "../cmd/magus-configdocs/**/*.go", "../cmd/magus-manpage/**/*.go", "../cmd/magus-skilldocs/**/*.go",
-                "../cmd/magus/**/*.go", "../cmd/magus-examples/**/*.go", "../cmd/magus-protodocs/**/*.go",
-                "../cmd/magus/starter/*.buzz", "../cmd/magus/completions/*",
-                "../proto/gen/descriptor.binpb", "../hack/magusfile/ruledocs.buzz",
-                "../benchmarks/agent/reports/**/*.md", "../benchmarks/BENCHMARKS.md"],
+                "retired.urls.lock"],
     // No project-wide outputs: each stage declares its own, so a hit restores only its files.
     "targets": {
         "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
@@ -464,7 +448,6 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(conventions);
     ctx.needs(textsearch\lint);
     ctx.needs(agents\lint);
-    ctx.needs(workspace\conventions);
     markdown.typos(ctx);
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
     _ = proc\exec("pnpm", ["exec", "biome", "check", "src"], ".");

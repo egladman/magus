@@ -22,11 +22,11 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/guard"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
-	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -432,7 +432,7 @@ func TestBrokerRowsNameOwnersWaitersAndRefusals(t *testing.T) {
 				{PID: 41300, Project: ".", Target: "lint", Slots: 2, Dir: "/tree/a", Owner: "unleased", Since: now.Add(-time.Minute)},
 				{PID: 41301, Project: "docs", Target: "ci", Owner: "job-b", Tree: "root-job", Since: now},
 			},
-			Refused: []types.MachineRefusal{{
+			Refused: []types.MachineAdmission{{
 				At: now.Add(-2 * time.Minute), PID: 41400, Project: ".", Target: "ci", Slots: 4, Dir: "/tree/b",
 				Owner: "spawned by root", Fits: true,
 				Holders: []types.MachineClaimant{{PID: 41221, Owner: "fix-cache"}, {PID: 41222}},
@@ -470,6 +470,21 @@ func TestHolderMemTextNamesTheSizing(t *testing.T) {
 		holderMemText(types.MachineClaimant{MemoryMB: 5879, Sizing: types.MemorySizing{Samples: 54}}))
 	assert.Equal(t, "mem 10.0 GiB", holderMemText(types.MachineClaimant{MemoryMB: 10 << 10}), "a declaration reads bare")
 	assert.Empty(t, holderMemText(types.MachineClaimant{Slots: 2}), "a slots-only claim has no memory to explain")
+}
+
+// TestStatusBreaksDownOnlyHoldersOverAQuarterOfTheBudget: a big claim says
+// where its figure came from, and a small one adds no row.
+func TestStatusBreaksDownOnlyHoldersOverAQuarterOfTheBudget(t *testing.T) {
+	var buf bytes.Buffer
+	printBrokerRows(&buf, types.StatusBroker{
+		PID: 1,
+		Capacity: types.MachineSnapshot{BudgetMB: 16 << 10, BudgetSlots: 8, Holders: []types.MachineClaimant{
+			{Project: ".", Target: "test", PID: 10, MemoryMB: 5 << 10, Sizing: types.MemorySizing{Samples: 54}},
+			{Project: ".", Target: "lint", PID: 11, MemoryMB: 1 << 10},
+		}},
+	}, types.BrokerRequired, time.Now())
+	assert.Contains(t, buf.String(), "sized     10  (root) test 5.0 GiB: own peak over 54 runs")
+	assert.NotContains(t, buf.String(), "sized     11")
 }
 
 // An idle broker still prints its capacity: "nothing is held" is the answer to the
@@ -1243,7 +1258,7 @@ func TestDrawPoolGridDistinguishesEverySlotKind(t *testing.T) {
 		// An idle in-pool slot is painted bare; a CPU thread outside the pool is dimmed,
 		// so the reset sequence sits between its glyph and the following space.
 		assert.Contains(t, out, "○ ")
-		assert.Contains(t, out, tty.Colorize("·", sgrPoolIdle))
+		assert.Contains(t, out, termkit.Colorize("·", sgrPoolIdle))
 		assert.NotContains(t, out, "queued")
 	})
 

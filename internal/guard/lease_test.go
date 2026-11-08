@@ -412,7 +412,7 @@ func TestDenyLeaseScopedGate(t *testing.T) {
 	} {
 		reason := denyLeaseScopedGate(ctx, Dependencies{}, "harness/lease-scoped-deny", command)
 		require.NotEmpty(t, reason, "%q", command)
-		assert.Equal(t, fmt.Sprintf("magus workspace: `%s` is the integrator's gate; run your check: `magus run go::go-test . -- ./internal/ledger/`.", command), reason.Say,
+		assert.Equal(t, fmt.Sprintf("magus workspace: `%s` is the integrator's gate; run your check: `magus run go::go-test . --budget-wait 0 -- ./internal/ledger/`.", command), reason.Say,
 			"the verdict names what it refused and hands back the check to run instead")
 		assert.Contains(t, reason.Why, "harness/lease-scoped-deny", "the rationale must name the lease")
 		assert.Contains(t, reason.Why, "the check on lease", "the rationale must name the field that decided it")
@@ -882,7 +882,7 @@ func TestWorkerCheckOnlyLetsASliceOfTheCheckRun(t *testing.T) {
 			continue
 		}
 		require.NotEmpty(t, reason, tt.name)
-		assert.Contains(t, reason.Say, "run test .`.", tt.name)
+		assert.Contains(t, reason.Say, "run test . --budget-wait 0`.", tt.name)
 	}
 
 	assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run go-fmt ."), "an op a target it needs runs")
@@ -951,7 +951,7 @@ func TestWorkerRawTool(t *testing.T) {
 	reason := denyWorkerRawTool(ctx, deps, row.ID, "go test ./internal/guard")
 	require.NotEmpty(t, reason)
 	assert.Contains(t, reason.Say, "runs go::go-test outside magus; run lease guard/fix's check: `")
-	assert.True(t, strings.HasSuffix(reason.Say, " run test .`."), reason.Say)
+	assert.True(t, strings.HasSuffix(reason.Say, " run test . --budget-wait 0`."), reason.Say)
 	assert.Contains(t, reason.Why, "run go::go-test .`", "the check composes go-test, so the narrower run is named")
 
 	lint := denyWorkerRawTool(ctx, deps, row.ID, "golangci-lint run ./...")
@@ -1009,7 +1009,7 @@ func TestWorkerCheckOnly(t *testing.T) {
 		}
 		require.NotEmpty(t, reason, tt.name)
 		assert.NotContains(t, reason.Say, "\n", "%s: the verdict is one line", tt.name)
-		assert.Contains(t, reason.Say, "run diagrams_generate docs`.", "%s: the verdict ends in the check's command", tt.name)
+		assert.Contains(t, reason.Say, "run diagrams_generate docs --budget-wait 0`.", "%s: the verdict ends in the check's command", tt.name)
 		assert.Contains(t, reason.Why, "The checkout's integrator, the subagent spawned `<parent>/integrate <job>` for a row taken in that checkout, runs every other target serially", tt.name)
 	}
 
@@ -1400,6 +1400,25 @@ func TestLeaseCoversGlob(t *testing.T) {
 	}
 }
 
+// TestWorkerRunWithoutZeroBudgetWaitIsDenied: a worker never queues for the
+// budget, which waits 30m by default.
+func TestWorkerRunWithoutZeroBudgetWaitIsDenied(t *testing.T) {
+	deps := figuresWorkspace(t)
+	ctx, _ := fleetFixture(t, figuresLease())
+	const lease = "figures/flow"
+
+	d := denyWorkerBudgetWait(ctx, deps, lease, "./magus run diagrams_generate docs")
+	require.True(t, d.refused())
+	assert.Contains(t, d.Say, "run diagrams_generate docs --budget-wait 0`")
+	assert.Empty(t, denyWorkerBudgetWait(ctx, deps, lease, "./magus run diagrams_generate docs --budget-wait 0"))
+	assert.Empty(t, denyWorkerBudgetWait(ctx, deps, lease, "./magus run diagrams_generate docs --budget-wait=0s"))
+	assert.True(t, denyWorkerBudgetWait(ctx, deps, lease, "./magus run diagrams_generate docs --budget-wait 30m").refused())
+	assert.Empty(t, denyWorkerBudgetWait(ctx, deps, "", "./magus run lint docs"), "an unbound caller waits as it likes")
+
+	judged := Judge(ctx, deps, Request{Input: "./magus run diagrams_generate docs", Lease: lease})
+	assert.Equal(t, verdictWithRule("deny", string(denyRuleLeaseGate)), unworded(judged), "Judge asks it")
+}
+
 // TestWorkerCheckOnlyStaysQuiet covers every caller with nothing to hold a run to.
 func TestWorkerCheckOnlyStaysQuiet(t *testing.T) {
 	deps := figuresWorkspace(t)
@@ -1436,10 +1455,10 @@ func TestWorkerCheckOnlyStaysQuiet(t *testing.T) {
 // quoted, and the next is a command a reader runs as printed.
 func TestWorkerCheckOnlyNextQuotesTheCheck(t *testing.T) {
 	c := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Lease|CheckOnly", "./internal/guard/"}}
-	assert.True(t, strings.HasSuffix(checkCommand(c), " run go::go-test . -- -run 'Lease|CheckOnly' ./internal/guard/"), checkCommand(c))
+	assert.True(t, strings.HasSuffix(checkCommand(c), " run go::go-test . --budget-wait 0 -- -run 'Lease|CheckOnly' ./internal/guard/"), checkCommand(c))
 
 	c.NoDefaultCharms = true
-	assert.True(t, strings.HasSuffix(checkCommand(c), " run go::go-test . --no-default-charms -- -run 'Lease|CheckOnly' ./internal/guard/"), checkCommand(c))
+	assert.True(t, strings.HasSuffix(checkCommand(c), " run go::go-test . --budget-wait 0 --no-default-charms -- -run 'Lease|CheckOnly' ./internal/guard/"), checkCommand(c))
 }
 
 // TestIdentityLessCallersShareTheCheckoutRecord pins the one binding keyed on the checkout:

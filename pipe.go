@@ -14,6 +14,7 @@ import (
 
 	"github.com/gofrs/flock"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/journal"
@@ -27,46 +28,53 @@ import (
 // would ask the machine budget for: one claim per step the run admits, sized as the run
 // sizes it. `magus doctor` reads these.
 //
-// The steps are the selected targets and, through each skip_cache composer, the
-// same-project ctx.needs members it lends claims of their own (types.MembersClaimTheirOwn),
-// transitively. Every other member runs under its composer's seat and is already folded
-// into that claim.
+// The steps are the selected targets and every ctx.needs member they reach, in
+// any project, transitively. A cacheable composer's members name it as Under.
 func (m *Magus) MachineClaims(ctx context.Context, targets []types.Target, charms, extraArgs []string) []types.MachineClaim {
 	size := newClaimSizer(m.measuredRuns(m.loadHistory(ctx)), forecast.NewShape(charms, extraArgs), m.chainReadsCharm)
 	capacity := m.limiter().Capacity()
 	out := make([]types.MachineClaim, 0, len(targets))
 	seen := map[types.TargetRef]bool{}
-	var claim func(p *types.Project, target string)
-	claim = func(p *types.Project, target string) {
+	var claim func(p *types.Project, target string, composer *cache.Step)
+	claim = func(p *types.Project, target string, composer *cache.Step) {
 		ref := types.TargetRef{Project: p.Path, Target: target}
 		if seen[ref] {
 			return
 		}
 		seen[ref] = true
-		step := m.buildStep(p, target)
-		if size != nil {
-			m.sizeClaim(&step, p, target, size)
+		var step cache.Step
+		var under string
+		if composer != nil && !composer.NoCache {
+			step = m.inlineStep(p, target, size)
+			under = types.TargetRef{Project: composer.ProjectPath, Target: composer.Target}.Ref()
+		} else {
+			step = m.buildStep(p, target)
+			if size != nil {
+				m.sizeClaim(&step, p, target, size)
+			}
 		}
 		slots := max(step.Slots, 1)
 		if capacity > 0 {
 			slots = min(slots, capacity)
 		}
 		out = append(out, types.MachineClaim{
-			Project: p.Path, Target: target, DeclaredBy: step.MemoryDeclaredBy,
+			Project: p.Path, Target: target, DeclaredBy: step.MemoryDeclaredBy, Under: under,
 			MemoryMB: step.MemoryMB, Profile: step.MemoryProfile, Sizing: step.MemorySizing, Slots: slots,
+			SlotsFloor: min(step.SlotsFloor, slots),
 		})
-		if !types.MembersClaimTheirOwn(p, target) {
-			return
-		}
 		for _, member := range p.TargetChains[target] {
-			if member.Project == "" {
-				claim(p, member.Target)
+			owner := p
+			if member.Project != "" {
+				owner = m.Get(member.Project)
+			}
+			if owner != nil {
+				claim(owner, member.Target, &step)
 			}
 		}
 	}
 	for _, t := range targets {
 		if p := m.Get(t.Path); p != nil {
-			claim(p, t.Name)
+			claim(p, t.Name, nil)
 		}
 	}
 	return out

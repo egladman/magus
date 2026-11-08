@@ -28,7 +28,13 @@ final plainFix = "Write one subject line, lowercase and imperative, in plain ASC
     + "attribution. Detail belongs in the pull request description.";
 
 final attribution = $"(?i)co-authored-by|generated with";
-final nonASCII = $"[^ -~\n\t]";
+// attributes reports whether text credits someone the way a commit must not.
+// The guard and the pr-commits target both ask it, so one pattern judges both.
+export fun attributes(text: str) > bool {
+    return attribution.match(text) != null;
+}
+
+final nonASCII =$"[^ -~\n\t]";
 final conventionalPrefix = $"^[a-z]+(\([^)\n]*\))?!?: ";
 final pastOrThirdPerson = $"(?i)^(added|adds|adding|fixed|fixes|fixing|updated|updates|updating|removed|removes|removing|changed|changes|changing|implemented|implements|implementing|refactored|refactors|refactoring|improved|improves|improving|created|creates|creating|introduced|introduces|introducing|renamed|renames|renaming|moved|moves|moving|made|makes|making)\b";
 // Syntax is how one tool's commit command spells its options: the long options and the
@@ -185,7 +191,7 @@ export fun wordingProblems(subject: str, conventional: bool) > [str] {
 // time, so its subject goes unjudged.
 fun subjectProblems(call: helpers\VcsCall, syntax: Syntax, baseBranch: str) > [str] {
     final problems = mut [<str>];
-    if (attribution.match(call.args.join("\n")) != null) {
+    if (attributes(call.args.join("\n"))) {
         problems.append("an attribution (Co-Authored-By, Generated with): credit nobody in a commit");
     }
     final messages = parseMessages(call.args, syntax: syntax);
@@ -404,6 +410,12 @@ test "a commit on the base branch keeps its prefix out of the wording rules" {
     };
     std\assert(onBase("fix(cache): keep the key stable").decision == magus\GuardDecision.allow, message: "conventional");
     std\assert(onBase("feat(proofread): adds a vale spell").decision == magus\GuardDecision.allow, message: "mood is proofread's");
+}
+
+test "an attribution is found in any case, on any line" {
+    std\assert(attributes("trim a fragment\n\nco-authored-by: a <b@c>"), message: "a trailer");
+    std\assert(attributes("Generated with a tool"), message: "a generated-with line");
+    std\assert(!attributes("trim a fragment\n\nReviewed-by: a <b@c>"), message: "another trailer");
 }
 
 test "a body, a second -m and an attribution are denied" {

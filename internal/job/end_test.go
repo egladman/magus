@@ -144,6 +144,22 @@ func TestEndNamedCheckoutsLeavesOtherEndedRowsCheckouts(t *testing.T) {
 	assert.NoDirExists(t, second.Worktree.Root)
 }
 
+// A row taken from a plain shell binds the checkout; ending the row
+// must not leave the checkout bound to it.
+func TestEndCheckoutsReleasesTheCheckoutBindingOfAnEndedRow(t *testing.T) {
+	t.Parallel()
+	s, _ := gitRepository(t, map[string]string{"a.txt": "a\n"})
+	endedFork(t, s, "w1")
+	session := Caller{Host: "claude-code", Session: "s1"}
+	require.NoError(t, s.Bind(Caller{}, "w1"))
+	require.NoError(t, s.Bind(session, "w1"))
+
+	_, err := s.EndNamedCheckouts(t.Context(), nil, "w1")
+	require.NoError(t, err)
+	assert.Empty(t, s.Bound(Caller{}), "the checkout's binding goes with the row")
+	assert.Empty(t, s.Bound(session), "so does a session's binding")
+}
+
 func TestExitWithAResultRefusesADescendantStillWorking(t *testing.T) {
 	t.Parallel()
 	row := acceptRow()

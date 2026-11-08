@@ -313,28 +313,46 @@ Key properties:
   missing or partial reading says so once per run. A low-headroom warning still speaks
   separately while a run works. A declaration always wins: `slots` is claimed as
   written, and `memory_mb` is a ceiling a measurement only narrows. A target that
-  declares nothing claims, once it has three successful measured runs, 1.25 times their
-  highest peak memory and the 75th percentile of their CPU time over wall time as slots,
-  rounded up; before that, no memory and one slot. A run that kept 90% of its slots busy
+  declares nothing claims, once it has three successful measured runs, their highest peak memory, with no margin, and the 75th percentile of their CPU time
+  over wall time as slots, rounded up; before that, no memory and one slot. A target that
+  declares `slots` claims that width as its floor and its ceiling; any other target asks
+  from one slot up to its measured width, and the broker grants what is free. A composer's
+  claim covers its own body: each inline `ctx.needs` member claims a seat of its own, sized
+  from its own runs, while the composer's claim is lent. A run that kept 90% of its slots busy
   is saturated: its claim capped it, so it sits out the percentile and the next claim
   doubles, up to the budget, until a run granted more slots comes back unsaturated. A
   replayed step claims nothing. [MGS3009](../reference/codes/sandbox/MGS3009.md) has the
   whole rule, and `magus session -o json` records how each step's claim was sized.
-- **A step runs Go as wide as it claims.** Every process a step starts gets
-  `GOMAXPROCS` and `-p` equal to its slots, one included, since `go` reads no jobserver
-  and would otherwise take every core the budget counted as free. So a Go target's
-  measured width never exceeds its claim, and saturation above is how it widens.
-- **It waits for its seat only when asked.** `budget_wait` defaults to 0, so a step kept
-  out by another magus invocation is refused at once, exiting **75**
-  ([MGS3009](../reference/codes/sandbox/MGS3009.md)) and naming who holds the budget
-  (pid, project, target, and directory) and how to wait. With `--budget-wait 30m`,
-  `MAGUS_BUDGET_WAIT` or `budget_wait` in `magus.yaml`, it waits in the broker's queue up
-  to that bound, or the run's own deadline when that is sooner. It says on stderr when it
-  parks and whenever the holders change, with the time waited and the time left, and
-  nothing on a timer. At the bound it asks once more, then is refused the same way. A step kept out only by its own process or its own run waits for them with no
-  bound, on the same terms as the lock. A nested magus that waits prints those lines to
-  its parent's step, and they count as that step's progress for `stall_timeout`, quiet
-  or not.
+- **A step runs Go as wide as the broker grants it.** Every process a step starts gets
+  `GOMAXPROCS` and `-p` equal to its granted slots, one included, since `go` reads no
+  jobserver and would otherwise take every core the budget counted as free. A grant can
+  be narrower than the claim. With nothing queued a step takes up to its ceiling from what
+  is free; with waiters it takes at most a fair share, the free slots divided by the
+  waiters plus one, and never less than one, so a burst starts narrow instead of queuing
+  behind holders that took every slot. A narrow grant runs longer, and its outcome records
+  the grant. So a Go target's measured width never exceeds its grant, and saturation above
+  is how it widens.
+- **It waits for its seat, bounded.** `budget_wait` defaults to 30 minutes, or the run's
+  own deadline when that is sooner, so a step kept out by another magus invocation waits in
+  the broker's queue. `--budget-wait 0`, `MAGUS_BUDGET_WAIT` or `budget_wait` in
+  `magus.yaml` sets the bound. At 0 the step is refused at once, exiting **75**
+  ([MGS3009](../reference/codes/sandbox/MGS3009.md)), naming who holds the budget (pid,
+  project, target, and directory) and how to wait. While it parks, it says on stderr what
+  it waits for, the claim's breakdown and its place in the queue, and again whenever the
+  holders change, with the time waited and the time left; nothing repeats on a timer. A
+  time to seat is printed as "at least", since recorded durations ran low. At the bound it
+  asks once more, then is refused the same way. A step kept out only by its own process or
+  its own run waits for them with no bound, on the same terms as the lock. A nested magus
+  that waits prints those lines to its parent's step, and they count as that step's
+  progress for `stall_timeout`, quiet or not.
+- **Refusals and waits are recorded.** The broker appends each refusal, and each claim
+  seated after waiting on other runs, to `admissions.jsonl` beside `broker.log`, keeping
+  the newest 5000. `server status` still shows the last 20 refusals. `magus doctor` reports
+  `budget-admissions`: refusals in the last day, and waits past a quarter of their bound.
+  It changes nothing.
+- **A leased worker never waits for the budget.** Its check runs with `--budget-wait 0`,
+  and the guard denies a worker's `magus run` that omits the flag, naming the check. A
+  refused check is filed owed, and the integrator runs it.
 - **A gate goes first.** A gate is `magus affected ci` or `magus run ci`, and every magus
   it runs. Gates queue ahead of every other request, in the order they asked, and while a
   gate's claim waits no other run is seated in the room it waits for. Two gates on
@@ -343,7 +361,7 @@ Key properties:
 - **A person can get one job out of a bind.** `magus job pause <job>...` refuses that
   job's holder its next magus run, through `magus job exec` and the guard, until
   `magus job resume <job>...`; a run already holding the budget finishes, since nothing
-  is preempted. A run is charged to the lease its checkout's `magus job exec` binds, else
+  is preempted. A run is charged to the lease its checkout's `magus job exec` binds (every `job exec` does), else
   to the one `BAGGAGE` names, and `magus server status` names it, or says `unleased`. A job's
   `weight`, in (0,1] on its record and 0.5 when omitted, orders the claims the broker
   holds. A gate still goes first, then the heavier job, and equal weights go in the order

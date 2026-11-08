@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/types"
@@ -106,12 +107,33 @@ func Build(units []types.Unit, source string, opts ...Option) (Plan, error) {
 	if err := placedOnce(one, stages.One, maxShards); err != nil {
 		return Plan{}, err
 	}
+	if cfg.model != nil {
+		if err := uncrossed(cfg.model.Replaying(zero), one); err != nil {
+			return Plan{}, err
+		}
+	}
 	return Plan{
 		StageZero: numbered(0, stages.Zero),
 		Shards:    numbered(1, stages.One),
 		Source:    source,
 		Fallbacks: fallbacks,
 	}, nil
+}
+
+// uncrossed refuses a stage one whose units need another project's computing
+// prerequisite (MGS3054). f replays what stage zero computed.
+func uncrossed(f forecast.Model, one []types.Unit) error {
+	crossed := f.Crossing(one)
+	if len(crossed) == 0 {
+		return nil
+	}
+	names := make([]string, len(crossed))
+	for i, u := range crossed {
+		names[i] = u.String()
+	}
+	return types.DiagnosticErrorf(types.ShardCrossesProjects,
+		"stage one computes %s beside a unit of another project that needs it; stage zero must compute it",
+		strings.Join(names, ", "))
 }
 
 // numbered is assignments as the shards of stage. An ID is the stage numeral

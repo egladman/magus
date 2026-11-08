@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/interactive/screen"
+	"github.com/egladman/magus/libs/termkit/screen"
 )
 
 // The interactive showcase: a real session, driven by real keystrokes, that
@@ -125,7 +125,7 @@ func renderShowcase(capture string, theme screen.Theme) (string, error) {
 		return "", fmt.Errorf("showcase capture has %d frames, expected the script's several", len(frames))
 	}
 	s := screen.New(showCols, showRows)
-	shots := make([]*screen.Screen, 0, len(frames))
+	shots := make([]*screen.Terminal, 0, len(frames))
 	for i, f := range frames {
 		if _, err := s.Write([]byte(f)); err != nil {
 			return "", fmt.Errorf("replay frame %d: %w", i, err)

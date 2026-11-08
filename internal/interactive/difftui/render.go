@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 )
 
 // The keys, stated on screen. A viewer whose bindings are only in the documentation is a
@@ -24,12 +24,12 @@ const (
 // SGRReverse: reverse means "the selected row" everywhere else in magus, and a diff where every
 // changed word looked selected would be saying something it does not mean.
 const (
-	sgrAdd      = tty.SGRGreen
-	sgrAddEmph  = tty.SGRBrightGreen // bold green
-	sgrDel      = tty.SGRRed
-	sgrDelEmph  = tty.SGRBoldRed
-	sgrFileHead = tty.SGRBold
-	sgrHunkHead = tty.SGRDim
+	sgrAdd      = termkit.SGRGreen
+	sgrAddEmph  = termkit.SGRBrightGreen // bold green
+	sgrDel      = termkit.SGRRed
+	sgrDelEmph  = termkit.SGRBoldRed
+	sgrFileHead = termkit.SGRBold
+	sgrHunkHead = termkit.SGRDim
 )
 
 // unrankedBanner is the caveat that changes how the whole list should be read, so it is
@@ -123,9 +123,9 @@ func rowText(r Row, color bool) string {
 	}
 	switch r.Kind {
 	case RowFile:
-		return tty.Colorize(r.Text, sgrFileHead)
+		return termkit.Colorize(r.Text, sgrFileHead)
 	case RowHunk:
-		return tty.Colorize(r.Text, sgrHunkHead)
+		return termkit.Colorize(r.Text, sgrHunkHead)
 	case RowLine:
 		return lineText(r)
 	}
@@ -139,7 +139,7 @@ func rowText(r Row, color bool) string {
 // rather than a slightly wrong one. Each piece closes its own style, so nothing bleeds into the
 // next.
 func lineText(r Row) string {
-	var base, emph tty.SGR
+	var base, emph termkit.SGR
 	switch {
 	case isAdd(r.Text):
 		base, emph = sgrAdd, sgrAddEmph
@@ -151,18 +151,18 @@ func lineText(r Row) string {
 		return r.Text
 	}
 	if r.Emph.Empty() {
-		return tty.Colorize(r.Text, base)
+		return termkit.Colorize(r.Text, base)
 	}
 	return fmt.Sprintf("%s%s%s", paint(r.Text[:r.Emph.Start], base), paint(r.Text[r.Emph.Start:r.Emph.End], emph), paint(r.Text[r.Emph.End:], base))
 }
 
 // paint styles a piece of a line, and leaves an empty piece empty rather than emitting a pair of
 // escapes that style nothing.
-func paint(s string, sgr tty.SGR) string {
+func paint(s string, sgr termkit.SGR) string {
 	if s == "" {
 		return ""
 	}
-	return tty.Colorize(s, sgr)
+	return termkit.Colorize(s, sgr)
 }
 
 // gutter is the two columns every row starts with: the mark on the row a keypress acts on,
@@ -170,7 +170,7 @@ func paint(s string, sgr tty.SGR) string {
 // gesture looks like one affordance across every interactive view.
 func gutter(cursor bool) string {
 	if cursor {
-		return tty.SelectMark + " "
+		return termkit.SelectMark + " "
 	}
 	return "  "
 }

@@ -1384,6 +1384,8 @@ func (s *reapplySuite) reappliedIs(from, to types.JobState) {
 	s.Empty(next.Releases)
 	want.Releases, want.Version, want.Generation, want.Attempts = next.Releases, next.Version, next.Generation, next.Attempts
 	want.Validation, want.Validated, want.WriteProof = next.Validation, next.Validated, next.WriteProof
+	s.GreaterOrEqual(next.Updated, want.Updated)
+	want.Updated = next.Updated
 	s.Equal(want, next)
 }
 

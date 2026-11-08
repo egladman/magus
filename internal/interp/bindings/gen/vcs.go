@@ -62,6 +62,15 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.ObjectSlice(ret0, func(v types.RegionChange) vm.Value { return ObjectRegionChange(v, enums) }), nil
 	}))
+	m.MapSet("commits", vm.DirectValue("vcs.commits", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		base := ffi.String(bzArgs, 0)
+		dir := ffi.String(bzArgs, 1)
+		ret0, err := std.VCSCommits(ctx, base, dir)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.ObjectSlice(ret0, ObjectCommit), nil
+	}))
 	m.MapSet("diffStat", vm.DirectValue("vcs.diffStat", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		base := ffi.String(bzArgs, 0)
 		dir := ffi.String(bzArgs, 1)

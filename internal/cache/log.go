@@ -17,9 +17,10 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/progress"
 	"github.com/egladman/magus/types"
 )
 
@@ -90,7 +91,7 @@ func (h jsonlSafetyNetHandler) WithGroup(name string) slog.Handler {
 type PrettyHandler struct {
 	mu    sync.Mutex
 	w     io.Writer // write destination (os.Stderr in production; bytes.Buffer in tests)
-	probe tty.Probe
+	probe termkit.Probe
 	level slog.Level
 	// err latches the first write failure seen during a single Handle
 	// call so the many print helpers can stay linear instead of each
@@ -101,8 +102,8 @@ type PrettyHandler struct {
 	// handler's band within it. The handler no longer sets scroll margins
 	// itself: it used to, and so did the CLI's own handler, and two components
 	// driving one global DECSTBM setting is what tty.Zone exists to end.
-	zone   *tty.Zone
-	lease  *tty.Lease
+	zone   *termkit.Zone
+	lease  *termkit.Lease
 	status statusLine // live counters painted into the band's first row
 	// failures is the pinned failure ring, one entry per row beneath the status
 	// line. A fixed array written at failureAt and rendered in place, so the
@@ -152,7 +153,7 @@ type PrettyHandler struct {
 	rowFailure []int
 	// focus is the view the keys drive, and so the one the golden ratio gives
 	// the major share of the width to. See splitAt.
-	focus PaneFocus
+	focus paneFocus
 	// preview is the selected failure's captured output, as the right-hand
 	// column of the band shows it. Empty means one column.
 	//
@@ -173,6 +174,9 @@ type PrettyHandler struct {
 	// move between records. Zero for an injected clock, which cannot move.
 	tickEvery time.Duration
 	tickStop  chan struct{}
+	// loader animates the band while steps are in flight. A zero Loader draws
+	// the default, so every constructor yields a working spinner.
+	loader progress.Loader
 }
 
 // statusLine accumulates what the sticky region's top row shows: pool
@@ -191,82 +195,6 @@ type statusLine struct {
 	start time.Time
 }
 
-// render composes the status row. Clauses that carry no information are
-// omitted: a steady "0 queued" or "0 failed" is noise on a line whose
-// whole job is to show change.
-// render composes the status row: everything that reads left to right, and
-// separately the elapsed time, which the band pins to the right edge.
-func (s statusLine) render(now time.Time) (left, elapsed string) {
-	if !s.start.IsZero() {
-		elapsed = FormatDuration(now.Sub(s.start))
-	}
-	var b strings.Builder
-	if g := PoolGauge(s.running, s.capacity); g != "" {
-		b.WriteString(g)
-	} else {
-		fmt.Fprintf(&b, "pool %d/%d", s.running, s.capacity)
-	}
-	if s.queued > 0 {
-		fmt.Fprintf(&b, ", %d queued", s.queued)
-	}
-	if done := s.passed + s.cached + s.failed; done > 0 {
-		fmt.Fprintf(&b, "   %d ok", s.passed+s.cached)
-		if s.cached > 0 {
-			fmt.Fprintf(&b, " (%d cached)", s.cached)
-		}
-		if s.failed > 0 {
-			fmt.Fprintf(&b, "  %d failed", s.failed)
-		}
-	}
-	return b.String(), elapsed
-}
-
-// Pool slots, drawn as the console draws them: ONE mark per slot, filled when
-// that slot is working. A ratio is a shape before it is a number, and "6/8" made
-// the reader parse two integers to see something the eye can take in whole.
-const (
-	slotBusy = "\u25a0" // filled square
-	slotIdle = "\u25a1" // hollow square
-	// slotCap is where slot-for-slot stops being readable. Past it the gauge is
-	// dropped rather than SCALED: a scaled bar looks identical to a literal one
-	// while meaning something else entirely, and a reader who has learned that
-	// one mark is one slot would be quietly misled. The numbers still say it.
-	slotCap = 16
-
-	// The tree's branches. A target under its project, and the last one closing
-	// the group so the eye can see where a project's failures end.
-	treeTee = "\u251c\u2500 "
-	treeEnd = "\u2570\u2500 "
-)
-
-// PoolGauge renders the pool as filled and empty slots, or "" when there are too
-// many slots to draw honestly.
-// PoolGauge is exported for the documentation renderer, which draws the same
-// gauge a run draws rather than a copy of what it looks like.
-func PoolGauge(running, capacity int) string {
-	if capacity <= 0 || capacity > slotCap {
-		return ""
-	}
-	running = min(max(running, 0), capacity)
-	marks := make([]string, 0, capacity)
-	for i := range capacity {
-		if i < running {
-			marks = append(marks, slotBusy)
-			continue
-		}
-		marks = append(marks, slotIdle)
-	}
-	// SPACED, not butted together. Contiguous blocks read as one bar being
-	// filled (a proportion), and this is not a proportion: it is eight
-	// discrete slots, and a reader should be able to count them. The space is
-	// what makes them countable.
-	//
-	// The numbers ride along in parentheses because the gauge answers "how
-	// busy" at a glance and the digits answer "exactly how many" on a second
-	// look. Neither replaces the other.
-	return strings.Join(marks, " ") + fmt.Sprintf(" (%d/%d)", running, capacity)
-}
-
 // paintStatus repaints the region's status row. It is called after every
 // event that moves a counter, so the row tracks the run rather than only
 // the pool samples that first populated it. A disabled region drops it.
@@ -279,195 +207,11 @@ func (h *PrettyHandler) paintStatus() {
 		h.status.start = h.now()
 	}
 	h.repaint()
-}
-
-// band composes this handler's rows: the live status line on top, then the
-// failure ring beneath it.
-//
-// The status row is reserved unconditionally rather than latched on first use.
-// The old Region latched it so a handler that never showed a status line did
-// not pay a blank row for the option, but a run reports pool occupancy as soon
-// as work starts, so the row was claimed in every case that mattered, and
-// latching cost the oldest visible failure whenever it happened late.
-func (h *PrettyHandler) band() []tty.Line { return h.bandWithin(h.ceilingLocked()) }
-
-// bandWithin composes the band in at most limit rows. The failures keep their
-// own ceiling. The wait board takes what is left.
-func (h *PrettyHandler) bandWithin(limit int) []tty.Line {
-	// NO_COLOR applies here too. It is easy to miss, because the band only
-	// exists on a terminal and color is what makes it readable, but the
-	// variable says any non-empty value disables color, without an exception
-	// for the parts an author is fond of. Position and wording already carry
-	// the meaning: the status line is on top, failures below it.
-	//
-	// The selection is the one thing that CANNOT be dropped, since it is not
-	// decoration: it says which row a keypress will act on, and without it the
-	// prompt is unusable. Reverse video is not a color, so it stays.
-	color := h.WantsColor()
-	var dim tty.SGR
-	if color {
-		dim = tty.SGRDim
+	if h.inFlightLocked() {
+		h.startTicker()
+	} else {
+		h.stopTicker()
 	}
-	rows := make([]tty.Line, 0, stickyRegionRows)
-	shown := 0
-	// The elapsed time goes to the right edge. It is the one clause that grows
-	// a character at a time, so left-aligned it shoved everything before it
-	// sideways once a second; pinned right, the counters hold still and the
-	// eye stops chasing them.
-	// The status goes in the box's TOP RULE, not in a row of its own. It
-	// describes the band, so the frame is where it belongs, and it stops
-	// costing a row, which on a run with nothing wrong was the difference
-	// between a two-row band and a three-row one.
-	left, elapsed := h.status.render(h.now())
-	_, _ = h.zone.SetTitle(left, elapsed)
-	// Grouped by project, drawn as a tree: one project in trouble reads
-	// differently from five at a glance, without counting. The band is the tree
-	// PRUNED to what went wrong, so a run with nothing wrong draws no tree.
-	//
-	// rowFailure is built here because only this loop knows which rows are
-	// targets and which are headers: hit-testing by position resolved a click
-	// one row off.
-	drawn := h.drawnLocked()
-	// BUDGETED before drawing, because a tree costs a header row as well as a
-	// row per failure and the band's ceiling did not move when it stopped being
-	// a flat list. Rows past the ceiling are dropped by Lease.Set, silently, and
-	// the "+N more" count was computed from rows DRAWN, so a band that had
-	// discarded two failures reported none hidden while the title said four
-	// failed. Deciding what fits here is what makes that count honest.
-	drawn = drawn[:fitsInBand(drawn, h.failureCeilingLocked())]
-	h.rowFailure = h.rowFailure[:0]
-	prev := ""
-	for i, f := range drawn {
-		if f.Project != prev {
-			prev = f.Project
-			// The glyph rides the HEADER, once per project, not once per
-			// target. It is the only thing saying these rows are failures on a
-			// terminal with no color, and repeating it down every branch of a
-			// tree is noise the tree already carries structurally.
-			rows = append(rows, tty.Line{Spans: []tty.Span{
-				{Text: Glyph(color, "fail", colRed) + " ", Style: dim},
-				{Text: f.Project, Style: dim},
-			}})
-			h.rowFailure = append(h.rowFailure, -1)
-		}
-		shown++
-		branch := treeTee
-		if i == len(drawn)-1 || drawn[i+1].Project != f.Project {
-			branch = treeEnd
-		}
-		marker := " "
-		selected := i == h.selected
-		if selected {
-			marker = tty.SelectMark
-		}
-		weight := dim
-		if color {
-			weight = tty.SGRBoldRed
-		}
-		row := tty.Line{Spans: []tty.Span{
-			{Text: marker + branch, Style: dim},
-			{Text: f.Target, Style: weight},
-		}}
-		if f.Dur > 0 {
-			row.Spans = append(row.Spans, tty.Span{Text: FormatDuration(f.Dur), Style: dim, Align: tty.AlignRight})
-		}
-		if selected {
-			for j := range row.Spans {
-				row.Spans[j].Style = tty.SGRReverse
-				if color {
-					row.Spans[j].Style += ";" + tty.SGRBoldRed
-				}
-			}
-		}
-		rows = append(rows, row)
-		h.rowFailure = append(h.rowFailure, i)
-	}
-	// Say what is NOT on screen. The ring holds five, and a run can fail fifty:
-	// without this the band shows the newest five under a status row reading
-	// "50 failed" and never states the relationship, so forty-five targets are
-	// missing with nothing to suggest they exist. The count comes from the
-	// status counters, which see every failure rather than only the ones that
-	// fit.
-	if hidden := h.status.failed - len(drawn); hidden > 0 {
-		rows = append(rows, tty.Line{
-			Text:  fmt.Sprintf("  +%d more above, in the transcript", hidden),
-			Style: dim,
-		})
-		// Kept in step. rowFailure is a parallel array, and its whole
-		// justification is that the code DRAWING a row records what it is, so
-		// a row appended without an entry silently shifts every index below it.
-		// Harmless today only because nothing clickable follows.
-		h.rowFailure = append(h.rowFailure, -1)
-	}
-	if len(h.preview) > 0 {
-		return h.withPreview(rows, dim)
-	}
-	return h.withWaits(rows, limit-len(rows), color, dim)
-}
-
-// withPreview folds the selected failure's output into a second column.
-//
-// The divider and the right column are appended to each row as SPANS, so the
-// existing layout does the alignment and clipping; there is no second region,
-// no pty, and nothing here that could hold content the handler did not produce.
-// A vertical split drawn by the terminal would need DECSLRM, which is not
-// portable; composing the columns into rows magus already repaints is.
-//
-// The band grows to whichever column is taller, so the output is not truncated
-// to the number of failures that happen to be showing.
-func (h *PrettyHandler) withPreview(rows []tty.Line, dim tty.SGR) []tty.Line {
-	if len(h.preview) == 0 {
-		return rows
-	}
-	// The band is capped (see repaint), so the preview is windowed to what will
-	// actually be drawn, and the window is taken from the END.
-	//
-	// Assigning preview[i] to row i showed the FIRST lines of a tail that was
-	// collected precisely because the last ones matter: a reader saw
-	// "go: downloading ..." and never the assertion or the FAIL line. The tail
-	// of the tail is the part worth the rows.
-	// Recomputed per paint: the terminal can be resized under a running prompt,
-	// and a split cached from the old width puts the divider through the text.
-	split := splitAt(h.lease.Width(), h.focus)
-	preview := h.preview
-	if room := h.ceilingLocked() - len(rows); room > 0 && len(preview) > room {
-		preview = preview[len(preview)-room:]
-	}
-	for len(rows) < len(preview) {
-		rows = append(rows, tty.Line{})
-		h.rowFailure = append(h.rowFailure, -1)
-	}
-	for i := range rows {
-		// Anything the row aligned RIGHT was aligned against the whole terminal,
-		// which is no longer where its column ends: a duration would sail past
-		// the divider and land beyond the output. So the left column is
-		// flattened here: its right-aligned spans are padded into place inside
-		// the split column and then laid out left, which is the only way a
-		// row-global alignment can serve a column.
-		var left, tail []tty.Span
-		for _, sp := range rows[i].SpansCopy() {
-			if sp.Align == tty.AlignRight {
-				sp.Align = tty.AlignLeft
-				tail = append(tail, sp)
-				continue
-			}
-			left = append(left, sp)
-		}
-		pad := split - spansCols(left) - spansCols(tail)
-		if pad < 1 {
-			pad = 1
-		}
-		var right string
-		if i < len(preview) {
-			right = preview[i]
-		}
-		out := append(left, tty.Span{Text: strings.Repeat(" ", pad), Style: dim})
-		out = append(out, tail...)
-		out = append(out, tty.Span{Text: previewDivider, Style: dim}, tty.Span{Text: right, Style: dim})
-		rows[i].Spans = out
-		rows[i].Text, rows[i].Style = "", ""
-	}
-	return rows
 }
 
 // repaint pushes the current band to the lease, reporting whether it landed.
@@ -479,15 +223,8 @@ func (h *PrettyHandler) withPreview(rows []tty.Line, dim tty.SGR) []tty.Line {
 // cause and reproduce lines a reader needs most.
 func (h *PrettyHandler) repaint() bool {
 	rows := h.band()
-	// The band is sized to what it HAS, not to what it might one day hold.
-	// It used to lease six rows from the first paint, so a run with nothing
-	// wrong reserved five blank rows for failures that never came, and once
-	// the zone drew a box around them, the emptiness became the most visible
-	// thing on screen. Growing on demand costs one Grow per new failure and
-	// gives the scrolling transcript back the rows nobody was using.
-	//
-	// It only ever grows. Shrinking mid-run would make the transcript jump
-	// upward as failures aged out, which is motion the reader did not cause.
+	// Grown on demand and never shrunk: a run with nothing wrong reserves one
+	// row, and shrinking mid-run would make the transcript jump upward.
 	if len(rows) > h.lease.Rows() {
 		_ = h.lease.Grow(min(len(rows), h.ceilingLocked()))
 		// A refused grant would cut the board's last rows silently, its
@@ -530,12 +267,12 @@ func NewPrettyHandler(w io.Writer, level slog.Level) *PrettyHandler {
 	// Keyed on w being standard error, the same identity check tty.ResolveZone
 	// makes, so a handler pointed at a log file or test buffer is its own.
 	if w != os.Stderr {
-		return newPrettyHandler(w, level, tty.SystemProbe)
+		return newPrettyHandler(w, level, termkit.SystemProbe)
 	}
 	stderrPrettyMu.Lock()
 	defer stderrPrettyMu.Unlock()
 	if stderrPretty == nil {
-		stderrPretty = newPrettyHandlerZone(w, level, tty.SystemProbe, tty.ResolveZone(w))
+		stderrPretty = newPrettyHandlerZone(w, level, termkit.SystemProbe, termkit.ResolveZone(w))
 		return stderrPretty
 	}
 	// The level comes from the most recent caller. In the CLI both callers read
@@ -585,13 +322,13 @@ func (notTerminal) Size(uintptr) (int, int, error) { return 0, 0, errors.New("no
 
 // newPrettyHandler is the probe-injecting form. Tests use it to render
 // terminal output into a buffer without opening a pty.
-func newPrettyHandler(w io.Writer, level slog.Level, p tty.Probe) *PrettyHandler {
-	return newPrettyHandlerZone(w, level, p, tty.NewZone(w, p))
+func newPrettyHandler(w io.Writer, level slog.Level, p termkit.Probe) *PrettyHandler {
+	return newPrettyHandlerZone(w, level, p, termkit.NewZone(w, p))
 }
 
 // newPrettyHandlerZone is the form that takes an explicit zone, so a test can
 // give two handlers the same one and watch them share the terminal.
-func newPrettyHandlerZone(w io.Writer, level slog.Level, p tty.Probe, z *tty.Zone) *PrettyHandler {
+func newPrettyHandlerZone(w io.Writer, level slog.Level, p termkit.Probe, z *termkit.Zone) *PrettyHandler {
 	return &PrettyHandler{
 		w:     w,
 		probe: p,
@@ -604,18 +341,18 @@ func newPrettyHandlerZone(w io.Writer, level slog.Level, p tty.Probe, z *tty.Zon
 		lease:     z.Acquire(1),
 		selected:  -1,
 		now:       time.Now,
-		tickEvery: time.Second,
+		tickEvery: defaultLoader.Interval,
 	}
 }
 
-// stickyRegionRows is how many terminal rows this handler leases: one for the
-// live pool status line, five for failures. Small on purpose, so the scrolling
+// stickyRegionRows is how many terminal rows this handler leases: the status
+// row and up to six for failures. Small on purpose, so the scrolling
 // output above stays the main view, and so a second consumer of the zone (a
 // notification band) can still be granted rows on an ordinary 24-row terminal.
-const stickyRegionRows = 6
+const stickyRegionRows = 7
 
-// failureRows is the ring beneath the status line.
-const failureRows = stickyRegionRows - 1
+// failureRows is the ring of pinned failures.
+const failureRows = 5
 
 // RendersBand reports whether this handler has a live band to paint into. The
 // cache asks before emitting pool samples, so a piped, JSON, or CI run pays
@@ -643,7 +380,7 @@ func (h *PrettyHandler) Close() error {
 // WantsColor reports whether output to this writer should carry ANSI color. Ask per
 // line rather than once, so a late redirect is noticed. Safe for concurrent use.
 func (h *PrettyHandler) WantsColor() bool {
-	return tty.WantsColor(h.w, h.probe)
+	return termkit.WantsColor(h.w, h.probe)
 }
 
 // fail latches the first write error of the current record. Reading and
@@ -832,7 +569,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 			cmd += " " + strings.Join(args, " ")
 		}
 		if colorize {
-			h.printf(ctx, "  %s\n", tty.Colorize("$ "+cmd, colDim))
+			h.printf(ctx, "  %s\n", termkit.Colorize("$ "+cmd, colDim))
 		} else {
 			h.printf(ctx, "  $ %s\n", cmd)
 		}
@@ -921,11 +658,11 @@ const (
 	// These name the palette tty already defines rather than restating the
 	// codes, so a wrong sequence stays a compile error in one place. The file
 	// used both spellings before, which is how they were free to drift.
-	colDimGreen = tty.SGRDimGreen // cached (passed without running): low signal
-	colGreen    = tty.SGRGreen    // ran and passed
-	colRed      = tty.SGRRed      // failed
-	colYellow   = tty.SGRYellow   // warning
-	colDim      = tty.SGRDim      // info/debug
+	colDimGreen = termkit.SGRDimGreen // cached (passed without running): low signal
+	colGreen    = termkit.SGRGreen    // ran and passed
+	colRed      = termkit.SGRRed      // failed
+	colYellow   = termkit.SGRYellow   // warning
+	colDim      = termkit.SGRDim      // info/debug
 )
 
 // Glyph renders a bracketed status glyph like "[pass]" or "[fail]", ASCII only (no
@@ -933,12 +670,12 @@ const (
 // outcome words; cache state (cached vs ran) is shown separately in the line's
 // parenthetical, the orthogonal split every major build tool uses (e.g. Bazel's
 // "(cached) PASSED"). Named to match the doctor command's statusGlyph.
-func Glyph(colorize bool, label string, color tty.SGR) string {
+func Glyph(colorize bool, label string, color termkit.SGR) string {
 	s := fmt.Sprintf("[%s]", label)
 	if !colorize {
 		return s
 	}
-	return tty.Colorize(s, color)
+	return termkit.Colorize(s, color)
 }
 
 // handleGeneric renders any non-cache slog record (the 76-odd general diagnostics
@@ -966,7 +703,7 @@ func (h *PrettyHandler) handleGeneric(ctx context.Context, colorize bool, r slog
 		attrs = formatAttrs(r)
 	}
 	if colorize && attrs != "" {
-		attrs = tty.Colorize(attrs, colDim)
+		attrs = termkit.Colorize(attrs, colDim)
 	}
 	if isNotice {
 		label := cmp.Or(notice.String(), component)
@@ -1002,14 +739,14 @@ func noticeText(label, msg, err string) string {
 
 // printNotice puts the label before the message, colored above info, with no glyph: a
 // line addressed to a person carries no log level.
-func (h *PrettyHandler) printNotice(ctx context.Context, colorize bool, color tty.SGR, label, msg, attrs string) {
+func (h *PrettyHandler) printNotice(ctx context.Context, colorize bool, color termkit.SGR, label, msg, attrs string) {
 	if label == "" {
 		h.printf(ctx, "%s%s\n", msg, attrs)
 		return
 	}
 	label += ":"
 	if colorize && color != colDim {
-		label = tty.Colorize(label, color)
+		label = termkit.Colorize(label, color)
 	}
 	h.printf(ctx, "%s %s%s\n", label, msg, attrs)
 }
@@ -1036,7 +773,7 @@ func (h *PrettyHandler) printWhy(ctx context.Context, colorize bool, indent, why
 	}
 	for line := range strings.SplitSeq(why, "\n") {
 		if colorize {
-			line = tty.Colorize(line, colDim)
+			line = termkit.Colorize(line, colDim)
 		}
 		h.printf(ctx, "%s%s\n", indent, line)
 	}
@@ -1197,7 +934,7 @@ func (h *PrettyHandler) printFailure(ctx context.Context, colorize bool, f failu
 			// so magus cannot hit-test a click on them; they belong to the
 			// terminal's own selection. Terminals without OSC 8 get the plain
 			// command, which is what a reader copies anyway.
-			h.printf(ctx, "  %s\n", tty.Colorize("inspect: "+h.linkify(full, logPath), colDim))
+			h.printf(ctx, "  %s\n", termkit.Colorize("inspect: "+h.linkify(full, logPath), colDim))
 		} else {
 			h.printf(ctx, "  inspect: %s\n", full)
 		}
@@ -1209,7 +946,7 @@ func (h *PrettyHandler) printFailure(ctx context.Context, colorize bool, f failu
 	}
 	repro := hint.Run.With(target, project)
 	if colorize {
-		h.printf(ctx, "  %s\n", tty.Colorize("reproduce: "+repro, colDim))
+		h.printf(ctx, "  %s\n", termkit.Colorize("reproduce: "+repro, colDim))
 	} else {
 		h.printf(ctx, "  reproduce: %s\n", repro)
 	}
@@ -1277,7 +1014,7 @@ func (h *PrettyHandler) printBlocked(ctx context.Context, colorize bool) {
 		}
 		line := fmt.Sprintf("blocked by %s: %s", g.root, strings.Join(g.blocked, ", "))
 		if colorize {
-			line = tty.Colorize(line, colDim)
+			line = termkit.Colorize(line, colDim)
 		}
 		h.printf(ctx, "%s\n", line)
 	}
@@ -1359,7 +1096,7 @@ func (h *PrettyHandler) printRepeated(ctx context.Context, colorize bool) {
 		}
 		line := fmt.Sprintf("%s also hit %d more %s: %s%s", r.code, len(r.steps), noun, strings.Join(names, ", "), more)
 		if colorize {
-			line = tty.Colorize(line, colDim)
+			line = termkit.Colorize(line, colDim)
 		}
 		h.printf(ctx, "%s\n", line)
 	}
@@ -1567,7 +1304,7 @@ func (h *PrettyHandler) printRefLegend(ctx context.Context, colorize bool) {
 	}
 	line := "  outputs: " + hint.QueryOutput.With("<ref>")
 	if colorize {
-		line = tty.Colorize(line, colDim)
+		line = termkit.Colorize(line, colDim)
 	}
 	h.printf(ctx, "%s\n", line)
 }
@@ -1727,13 +1464,10 @@ type Failure struct {
 	Dur time.Duration
 }
 
-// SetFocus moves focus between the two views, which resizes them: the focused
-// one takes the golden ratio's major share.
-//
-// Resizing on focus rather than offering a drag handle is deliberate: there is
-// no pointer contract to invent, and the pane you are working in is the one
-// that should be big.
-func (h *PrettyHandler) SetFocus(f PaneFocus) {
+// setFocus moves focus, and so rows, between the tree and the output. Focus
+// resizes rather than a drag handle: the pane in use is the one to enlarge,
+// with no pointer contract to invent.
+func (h *PrettyHandler) setFocus(f paneFocus) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.focus == f {
@@ -1743,25 +1477,19 @@ func (h *PrettyHandler) SetFocus(f PaneFocus) {
 	h.repaint()
 }
 
-// ToggleFocus swaps which view has the major share, and reports the new focus.
-func (h *PrettyHandler) ToggleFocus() PaneFocus {
+// ToggleFocus swaps which view has the major share.
+func (h *PrettyHandler) ToggleFocus() {
 	h.mu.Lock()
-	f := FocusPreview
-	if h.focus == FocusPreview {
-		f = FocusTree
+	f := focusPreview
+	if h.focus == focusPreview {
+		f = focusTree
 	}
 	h.mu.Unlock()
-	h.SetFocus(f)
-	return f
+	h.setFocus(f)
 }
 
-// SetPreview gives the band a right-hand column: the captured output of
-// whatever is selected. Nil or empty returns it to a single column.
-//
-// This is the "two views, one run" layout. It is deliberately not two PANES:
-// nothing here manages a terminal, and a caller cannot put arbitrary content in
-// it. Both columns are things this handler already owns, which is the line
-// between showing a reader their run and becoming a multiplexer.
+// SetPreview puts the captured output of whatever is selected under the tree.
+// Nil or empty returns the band to the tree alone.
 func (h *PrettyHandler) SetPreview(lines []string) {
 	// The lock is held ACROSS the repaint, like every other caller: repaint
 	// composes the band, which reads the failure ring and writes rowFailure.
@@ -1772,49 +1500,13 @@ func (h *PrettyHandler) SetPreview(lines []string) {
 	h.repaint()
 }
 
-// The GOLDEN RATIO governs the split: the focused view gets the major share,
-// the other the minor.
-//
-// phiMajor is 1/phi. The two shares sum to 1, so the divider lands at the same
-// place whichever view has focus: the panes trade sizes rather than the layout
-// reflowing around a third number.
-//
-// A ratio rather than a fixed column because a fixed one is only ever right at
-// one terminal width: 34 columns is a third of a 100-column window and nearly
-// half an 80-column one, so the same layout read as balanced on one machine and
-// cramped on another.
-const (
-	phiMajor = 0.6180339887
-	phiMinor = 1 - phiMajor
-	// previewMinCols keeps both views legible on a narrow terminal, where a
-	// share of a small number rounds to nothing useful.
-	previewMinCols = 12
-)
-
-// splitAt is the column the divider sits at, given the width available to both
-// views and which one has focus.
-func splitAt(inner int, focus PaneFocus) int {
-	usable := inner - len(previewDivider)
-	if usable < 2*previewMinCols {
-		return usable / 2
-	}
-	share := phiMinor
-	if focus == FocusTree {
-		share = phiMajor
-	}
-	at := int(float64(usable)*share + 0.5)
-	return min(max(at, previewMinCols), usable-previewMinCols)
-}
-
-// PaneFocus names the view the keys are driving, which is the one the golden
-
-// PaneFocus names the view the keys are driving, which is the one the golden
-
-type PaneFocus int
+// paneFocus names the view the keys are driving: the tree, or the output under
+// it.
+type paneFocus int
 
 const (
-	FocusTree PaneFocus = iota
-	FocusPreview
+	focusTree paneFocus = iota
+	focusPreview
 )
 
 // HitFailure maps an absolute terminal row to the failure drawn on it.
@@ -1858,31 +1550,24 @@ func (h *PrettyHandler) HitFailure(row int) (Failure, bool) {
 	return drawn[at], true
 }
 
-// previewBandRows is the band's ceiling while a second column is showing.
-//
-// Taller than the one-column ceiling on purpose: the tree and the output share
-// the rows, so at six the tree took five and left the log ONE line, of a tail
-// collected precisely because the last lines matter. This is a deliberate
-// interaction a reader opened, not a background band, so it may take the room;
-// it goes back to stickyRegionRows the moment the preview is cleared.
+// previewBandRows is the band's ceiling while the output shows under the tree.
 const previewBandRows = 14
 
 // ceilingLocked is the band's row limit for the current mode. Callers hold h.mu.
 func (h *PrettyHandler) ceilingLocked() int {
-	if len(h.preview) == 0 && h.board.inFlight() {
-		return stickyRegionRows + waitBandRows
-	}
-	return h.failureCeilingLocked()
-}
-
-// failureCeilingLocked is the rows the failure tree may take. Callers hold
-// h.mu.
-func (h *PrettyHandler) failureCeilingLocked() int {
 	if len(h.preview) > 0 {
 		return previewBandRows
 	}
+	if h.board.inFlight() {
+		return stickyRegionRows + waitBandRows
+	}
 	return stickyRegionRows
 }
+
+// failureCeilingLocked is the rows the failure tree may take. It does not
+// change with the preview, so the list the arrow keys walk keeps its length.
+// Callers hold h.mu.
+func (h *PrettyHandler) failureCeilingLocked() int { return stickyRegionRows - 1 }
 
 // fitsInBand returns how many of drawn can be shown without the band silently
 // discarding rows.
@@ -2041,14 +1726,14 @@ func (h *PrettyHandler) releaseBand() error {
 // machine and the terminal would resolve it locally), which is why
 // tty.WantsHyperlinks refuses there rather than this deciding it.
 func (h *PrettyHandler) linkify(text, path string) string {
-	if path == "" || !tty.WantsHyperlinks(h.w, h.probe) {
+	if path == "" || !termkit.WantsHyperlinks(h.w, h.probe) {
 		return text
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return text
 	}
-	return tty.Hyperlink(text, "file://"+abs)
+	return termkit.Hyperlink(text, "file://"+abs)
 }
 
 // resetRun clears everything that describes ONE run, leaving what describes the
@@ -2098,38 +1783,19 @@ const (
 	HintKeyOutput = "output"
 	HintKeyDone   = "done"
 
-	hintLead   = "[up/down] select   "
-	hintRerun  = "[enter] rerun"
-	hintFocus  = "[tab] focus"
-	hintCopy   = "[y] copy"
-	hintOutput = "[o] output"
-	hintDone   = "[esc] done"
+	hintSelect = "\u2191\u2193 select"
+	hintRerun  = "enter rerun"
+	hintFocus  = "tab focus"
+	hintCopy   = "y copy"
+	hintOutput = "o output"
+	hintDone   = "esc done"
 )
 
-// FailureHint composes the instruction row.
-//
-// The way out is aligned RIGHT so it is the last thing clipped rather than the
-// first: as one string this row was 86 columns, and an 80-column terminal cut
-// it to exactly "[esc] do".
-func FailureHint() []tty.Line {
-	return []tty.Line{{Spans: []tty.Span{
-		{Text: hintLead, Style: colDim},
-		{Text: hintRerun, Style: colDim, Key: HintKeyRerun},
-		{Text: "   ", Style: colDim},
-		{Text: hintFocus, Style: colDim, Key: HintKeyFocus},
-		{Text: "   ", Style: colDim},
-		{Text: hintCopy, Style: colDim, Key: HintKeyCopy},
-		{Text: "   ", Style: colDim},
-		{Text: hintOutput, Style: colDim, Key: HintKeyOutput},
-		{Text: hintDone, Style: colDim, Align: tty.AlignRight, Key: HintKeyDone},
-	}}}
-}
-
 // FailureHintPlain is the same instruction as one line, for a terminal with no
-// room to pin it. Printed rather than dropped: every other thing the prompt
-// draws is a view, but this is the only statement of how to leave.
+// room to pin it. Printed rather than dropped: it is the only statement of how
+// to leave.
 func FailureHintPlain() string {
-	return hintLead + hintRerun + "   " + hintFocus + "   " + hintCopy + "   " + hintOutput + "   " + hintDone
+	return strings.Join([]string{hintSelect, hintRerun, hintFocus, hintCopy, hintOutput, hintDone}, metaSep)
 }
 
 // NewPrettyHandlerWith returns a handler that draws into w, measured through p.
@@ -2143,7 +1809,7 @@ func FailureHintPlain() string {
 // process band.
 // A nil now defaults to time.Now; pass a fixed one to render a picture whose
 // bytes do not depend on when it was rendered.
-func NewPrettyHandlerWith(w io.Writer, level slog.Level, p tty.Probe, now func() time.Time) *PrettyHandler {
+func NewPrettyHandlerWith(w io.Writer, level slog.Level, p termkit.Probe, now func() time.Time) *PrettyHandler {
 	h := newPrettyHandler(w, level, p)
 	if now != nil {
 		h.now = now
@@ -2160,29 +1826,7 @@ func NewPrettyHandlerWith(w io.Writer, level slog.Level, p tty.Probe, now func()
 // overwrite each other: the exact failure tty.Zone exists to prevent. In
 // production both sides reach the same singleton through standard error and the
 // sharing is invisible; for any other writer it has to be asked for.
-func (h *PrettyHandler) Zone() *tty.Zone { return h.zone }
-
-// previewDivider separates the band's two columns.
-// previewDivider separates the two views, with a column of air on BOTH sides.
-//
-// Without the leading space the left column ran straight into it: a duration
-// touching the rule reads as a rendering fault rather than as a boundary, and
-// the line stops looking like a line.
-const previewDivider = " │ "
-
-// spansCols is the display width a run of spans occupies, so the divider lands
-// in the same column on every row.
-//
-// Delegated to tty rather than counted here: this package composes rows for
-// tty's layout, and measuring them differently is precisely how the same
-// byte-for-column bug reached four copies.
-func spansCols(spans []tty.Span) int {
-	n := 0
-	for _, sp := range spans {
-		n += tty.Cols(sp.Text)
-	}
-	return n
-}
+func (h *PrettyHandler) Zone() *termkit.Zone { return h.zone }
 
 // onOff renders a posture flag the way the run header renders state: a word, not a
 // boolean, because "verify false" reads as a failure and "verify off" as a setting.

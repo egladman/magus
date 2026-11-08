@@ -519,25 +519,32 @@ func proseTargetRun(rest string) (targetRun, bool) {
 	return r, ok
 }
 
-// briefCommands are the commands a brief presents as ones to run: each shell block whole,
-// then each inline span outside the blocks.
-func briefCommands(brief string) []string {
+// shellBlocks is each shell-tagged fenced block in text, whole. It skips a
+// block that a line forbidding it introduces.
+func shellBlocks(text string) []string {
 	var out []string
-	lines := strings.Split(brief, "\n")
-	for _, m := range briefFenceRe.FindAllStringSubmatchIndex(brief, -1) {
-		lang := strings.ToLower(brief[m[2]:m[3]])
+	lines := strings.Split(text, "\n")
+	for _, m := range briefFenceRe.FindAllStringSubmatchIndex(text, -1) {
+		lang := strings.ToLower(text[m[2]:m[3]])
 		if !shellFence(lang) {
 			continue
 		}
-		if briefNegationRe.MatchString(lineBefore(lines, strings.Count(brief[:m[0]], "\n"))) {
+		if briefNegationRe.MatchString(lineBefore(lines, strings.Count(text[:m[0]], "\n"))) {
 			continue
 		}
 		var block []string
-		for _, l := range strings.Split(brief[m[4]:m[5]], "\n") {
+		for _, l := range strings.Split(text[m[4]:m[5]], "\n") {
 			block = append(block, strings.TrimPrefix(strings.TrimSpace(l), "$ "))
 		}
 		out = append(out, strings.Join(block, "\n"))
 	}
+	return out
+}
+
+// briefCommands are the commands a brief presents as ones to run: each shell block whole,
+// then each inline span outside the blocks.
+func briefCommands(brief string) []string {
+	out := shellBlocks(brief)
 	for _, line := range strings.Split(briefFenceRe.ReplaceAllString(brief, ""), "\n") {
 		if briefNegationRe.MatchString(line) {
 			continue

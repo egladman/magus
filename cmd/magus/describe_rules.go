@@ -12,10 +12,10 @@ import (
 
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -165,7 +165,7 @@ func emitRuleDetail(opts output.Options, doc types.RuleDoc) error {
 	fmt.Println()
 	if doc.Why != "" {
 		fmt.Println("why")
-		tty.Prose(os.Stdout, tty.SystemProbe, doc.Why)
+		termkit.Prose(os.Stdout, termkit.SystemProbe, doc.Why)
 		fmt.Println()
 	}
 	switch appliedDecision(doc) {

@@ -513,7 +513,8 @@ func (f Model) Repeats(shards [][]types.Unit) []types.Unit {
 // Stages is a plan in two stages: every shard of Zero runs before any of One.
 type Stages struct {
 	// Zero computes each prerequisite that two or more shards of One would
-	// otherwise both compute. Empty when no shard shares one.
+	// otherwise both compute, and each one a unit of another project needs.
+	// Empty when there is neither.
 	Zero [][]types.Unit
 	// One holds the units Zero does not compute. Its shards replay Zero's
 	// units from the cache Zero leaves.
@@ -523,16 +524,52 @@ type Stages struct {
 // PlanStages is Plan with shared computing work moved to a stage before it.
 // It packs with the shared prerequisites counted as repeatable, so their
 // dependents may split. Each one the split leaves on two shards goes to
-// Zero, packed under the same maxShards and memory budget. With none, One is
+// Zero, and so does each one Crossing names, wherever the split put it. Zero
+// packs under the same maxShards and memory budget. With none, One is
 // Plan(units, maxShards). Needs must answer for prerequisites too.
 func (f Model) PlanStages(units []types.Unit, maxShards int) Stages {
-	if shared := f.shared(units); len(shared) > 0 {
+	crossing := f.Crossing(units)
+	if shared := union(f.shared(units), crossing); len(shared) > 0 {
 		split := f.Replaying(shared).Plan(units, maxShards)
-		if zero := f.Repeats(split); len(zero) > 0 {
+		if zero := union(f.Repeats(split), crossing); len(zero) > 0 {
 			return Stages{Zero: f.Plan(zero, maxShards), One: without(split, zero)}
 		}
 	}
 	return Stages{One: f.Plan(units, maxShards)}
+}
+
+// Crossing names each prerequisite Repeatable refuses that a unit of another
+// project needs, sorted by project:target. A shard holding that unit computes
+// each one too, so the other project's work gates its dependent's runner.
+func (f Model) Crossing(units []types.Unit) []types.Unit {
+	if f.Needs == nil {
+		return nil
+	}
+	seen := map[types.Unit]bool{}
+	var out []types.Unit
+	for _, u := range units {
+		for _, n := range f.Needs(u) {
+			if n.Project == u.Project || seen[n] || f.repeatable(n) {
+				continue
+			}
+			seen[n] = true
+			out = append(out, n)
+		}
+	}
+	sortUnits(out)
+	return out
+}
+
+// union is a and b, each unit once, sorted by project:target.
+func union(a, b []types.Unit) []types.Unit {
+	out := slices.Clone(a)
+	for _, u := range b {
+		if !slices.Contains(out, u) {
+			out = append(out, u)
+		}
+	}
+	sortUnits(out)
+	return out
 }
 
 // Replaying is f with units counted as Repeatable, as a stage that runs

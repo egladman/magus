@@ -224,3 +224,28 @@ func (s *StageZeroSuite) TestAReplayedPrerequisiteNeedsNoStageZero() {
 		Source: "test",
 	}, plan)
 }
+
+type UncrossedSuite struct {
+	suite.Suite
+	f forecast.Model
+}
+
+func TestUncrossedSuite(t *testing.T) { suite.Run(t, new(UncrossedSuite)) }
+
+func (s *UncrossedSuite) SetupTest() {
+	edges := map[types.Unit][]types.Unit{
+		{Project: "docs", Target: "build"}: {{Project: "docs", Target: "build"}, {Project: ".", Target: "build"}},
+	}
+	s.f = forecast.Model{Needs: func(u types.Unit) []types.Unit { return edges[u] }}
+}
+
+func (s *UncrossedSuite) TestAStageOneComputingAnotherProjectsPrerequisiteRefusesWithMGS3054() {
+	err := uncrossed(s.f, []types.Unit{{Project: "docs", Target: "build"}})
+	s.Require().ErrorIs(err, types.ShardCrossesProjects)
+	s.Contains(err.Error(), ".:build")
+}
+
+func (s *UncrossedSuite) TestAStageOneReplayingWhatStageZeroComputedPasses() {
+	f := s.f.Replaying([]types.Unit{{Project: ".", Target: "build"}})
+	s.NoError(uncrossed(f, []types.Unit{{Project: "docs", Target: "build"}}))
+}

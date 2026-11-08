@@ -194,3 +194,42 @@ type passThroughInterceptor struct{}
 func (passThroughInterceptor) InterceptTarget(ctx context.Context, _ string, invoke func(context.Context) error) error {
 	return invoke(ctx)
 }
+
+// TestCrossDispatchRunsTheDepThroughTheRemoteInterceptor pins that a remote
+// target claims as a member of its own project. The interceptor InlineWith
+// builds for the dep runs it, never the caller's.
+func TestCrossDispatchRunsTheDepThroughTheRemoteInterceptor(t *testing.T) {
+	remote := &namingInterceptor{}
+	var builtFor string
+	cd := NewCrossDispatch(cache.NewTargetRuns())
+	cd.InlineWith(func(dep *types.Project) buzz.TargetInterceptor {
+		builtFor = dep.Path
+		return remote
+	})
+	var ranInside, sawInterceptor bool
+	cd.run = func(ctx context.Context, _, _ string) error {
+		ranInside, sawInterceptor = remote.inside, buzz.HasTargetInterceptor(ctx)
+		return nil
+	}
+
+	ctx := buzz.WithTargetInterceptor(context.Background(), passThroughInterceptor{})
+	require.NoError(t, cd.Dispatch(ctx, wsProject("sub"), "build"))
+
+	assert.Equal(t, "sub", builtFor, "the interceptor is built for the remote project")
+	assert.Equal(t, []string{"build"}, remote.names)
+	assert.True(t, ranInside, "the remote target runs under its own claim")
+	assert.True(t, sawInterceptor, "and its own needs claim too")
+}
+
+// namingInterceptor records the targets it intercepts and whether one runs.
+type namingInterceptor struct {
+	names  []string
+	inside bool
+}
+
+func (n *namingInterceptor) InterceptTarget(ctx context.Context, name string, invoke func(context.Context) error) error {
+	n.names = append(n.names, name)
+	n.inside = true
+	defer func() { n.inside = false }()
+	return invoke(ctx)
+}

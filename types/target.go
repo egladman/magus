@@ -160,9 +160,8 @@ type Target struct {
 	// Undeclared (0) claims what the target's runs measured once enough of them have,
 	// and no memory before that. An unmeasurable host converts no memory to slots.
 	//
-	// A COMPOSED target inherits the largest declaration in its chain; see
-	// ChainMemoryMB. A run claims less than this when it has measured less: see
-	// SizedChainMemory, which is the figure both halves of admission actually read.
+	// It bounds the target's own body: each ctx.needs member claims for
+	// itself. A run claims less than this when it has measured less.
 	MemoryMB int `json:"memory_mb,omitempty" buzz:"memory_mb"`
 	// Timeout is the wall-clock ceiling for one run of this target, as a Go duration
 	// string ("15m", "90s"). Empty means undeclared, which is unbounded: the behavior
@@ -178,12 +177,8 @@ type Target struct {
 	// subprocesses included, so a value near a legitimate run's duration fails builds
 	// that were fine. Declare a multiple of the worst run on record, not its p75.
 	//
-	// NOT folded across a chain, which is where this parts company with ChainMemoryMB.
-	// The fold there takes a MAXIMUM because sequential steps do not add their peaks;
-	// durations do add, so neither the max nor the sum of a chain's ceilings is a figure
-	// anyone declared. It needs no fold anyway: the deadline rides the context, so a
-	// scheduled target's ceiling already bounds every target it composes, and a chain
-	// member's own ceiling fires inside that as the tighter bound.
+	// The deadline rides the context. A scheduled target's ceiling bounds
+	// every target it composes; a member's own ceiling fires inside it.
 	Timeout string `json:"timeout,omitempty" buzz:"timeout"`
 	// Sandbox is the target layer of the sandbox declaration: what this target's
 	// processes may use beyond the workspace's and its spells' grants, merged over them
@@ -562,6 +557,39 @@ func (s MemorySizing) String() string {
 		return from
 	}
 	return fmt.Sprintf("%s; %s", from, s.Fallback)
+}
+
+// Breakdown renders one line of a claim's memory: the target, its figure and
+// where the figure came from. under names the composer an inline member runs
+// beneath, "" for a target that claims for itself.
+func (s MemorySizing) Breakdown(target, under string, mb int) string {
+	head := fmt.Sprintf("%s %s", target, FormatMB(mb))
+	if under != "" {
+		head += " under " + under
+	}
+	var from string
+	switch {
+	case !s.Measured():
+		from = "declared"
+	case s.AnyShape:
+		from = fmt.Sprintf("own peak over %d runs of any shape", s.Samples)
+	default:
+		from = fmt.Sprintf("own peak over %d runs", s.Samples)
+	}
+	if s.Fallback != "" {
+		from += "; " + s.Fallback
+	}
+	return fmt.Sprintf("%s: %s", head, from)
+}
+
+// FormatMB renders a memory figure in base-1024 units with a space, the
+// spelling FormatBytes uses, so a refusal and `magus server status` say the
+// same figure the same way.
+func FormatMB(mb int) string {
+	if mb >= 1024 {
+		return fmt.Sprintf("%.1f GiB", float64(mb)/1024)
+	}
+	return fmt.Sprintf("%d MiB", mb)
 }
 
 // ErrSkipChain is a ChainWalkFunc's answer that keeps WalkChain from descending under the

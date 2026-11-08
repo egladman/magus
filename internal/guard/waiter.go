@@ -187,7 +187,8 @@ type refusedRun struct {
 
 // denyRefusedRetry refuses a magus run repeating a refusal this checkout's log
 // holds inside refusedRetryWindow, while it is the command's newest run.
-// Nothing freed a seat or memory meanwhile, and MGS3009 already waited as long as budget_wait allows, which is not at all by default.
+// Nothing freed a seat or memory meanwhile, and MGS3009 already waited as long
+// as budget_wait allows: 30m by default, none for a worker's check.
 func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string) denial {
 	runs := magusRuns(command)
 	if len(runs) == 0 {
@@ -218,14 +219,14 @@ func denyRefusedRetry(ctx context.Context, deps Dependencies, _, command string)
 		}
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago, within its budget_wait: raise %s or free a holder first, or file the check as owed %q with `%s --stdin`.",
-			run, r.code, ago, cache.BudgetWaitSource, types.OwedNoSeat, hint.JobExit.With(deps.lease)),
+		Say: fmt.Sprintf("magus workspace: `%s` was refused with %s %s ago, and a worker's check never waits for the budget: free a holder, or file the check as owed %q with `%s --stdin`.",
+			run, r.code, ago, types.OwedNoSeat, hint.JobExit.With(deps.lease)),
 		Why: denyRefusedRetryWhy,
 	}
 }
 
 var (
-	denyRefusedRetryWhy = "An MGS3009 comes after the run waited as long as budget_wait allows (not at all when it is 0), and the same command run again inside a minute meets the same holders: one checkout was once refused 63 times in 12 minutes, each retry a turn spent on a look."
+	denyRefusedRetryWhy = "An MGS3009 comes after the run waited as long as budget_wait allows (none when it is 0, as every worker's check sets it), and the same command run again inside a minute meets the same holders: one checkout was once refused 63 times in 12 minutes, each retry a turn spent on a look."
 
 	denyPressureRetryWhy = "A refusal frees no memory, and a retry within the minute reads the same failing machine. On 2026-10-31 this state ended in a kernel panic, so an agent looping here spends turns on the machine least able to afford them."
 )
@@ -379,7 +380,7 @@ func BudgetFull(s types.MachineSnapshot, now time.Time) string {
 		held = append(held, fmt.Sprintf("slots %d/%d", s.HeldSlots, s.BudgetSlots))
 	}
 	if s.BudgetMB > 0 && s.HeldMB >= s.BudgetMB {
-		held = append(held, fmt.Sprintf("mem %s/%s", cache.FormatMB(s.HeldMB), cache.FormatMB(s.BudgetMB)))
+		held = append(held, fmt.Sprintf("mem %s/%s", types.FormatMB(s.HeldMB), types.FormatMB(s.BudgetMB)))
 	}
 	if len(held) == 0 {
 		return ""
@@ -396,15 +397,6 @@ func BudgetFull(s types.MachineSnapshot, now time.Time) string {
 		}
 	}
 	return text + ". A seat frees as each run ends: hold this worker until the completion notice of work you already started arrives, since a worker whose check finds no seat reports and stops."
-}
-
-// holdsNoBuildSeat reports whether the worker for row can never take a build seat: it writes
-// nothing and declares no check, so it runs no target.
-func holdsNoBuildSeat(row types.Job) bool {
-	if !row.ReadOnly || len(row.WritePaths) > 0 {
-		return false
-	}
-	return !slices.ContainsFunc(row.EffectiveGoals(), func(g types.Goal) bool { return g.Resolve().Kind == types.GoalKindCheck })
 }
 
 // adviseBudgetFull is the advisory for an orchestrator spawning into a full build budget,

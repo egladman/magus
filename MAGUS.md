@@ -19,6 +19,7 @@ A **target** is a named unit of work (build, test, lint, ...) declared as an `ex
 - Project: libs/embed/train
 - Project: libs/figure
 - Project: libs/proofread/train
+- Project: testdata/latex/onepage
 
 ## Route by question
 
@@ -56,7 +57,7 @@ magus graph export -o json  # the whole graph
 
 | Kind       |     Size | List them                     | Anchors (most connected)                                                                                                                                       |
 | ---------- | -------: | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                                                                             |
+| project    |      20+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                                                                             |
 | target     |     200+ | `magus query kind=target`     | `conventions`, `buzz-test`, `catalog-docs-generate`                                                                                                            |
 | spell      | built in | `magus query kind=spell`      | `go`, `typescript`, `buzz`                                                                                                                                     |
 | op         | built in | `magus query kind=op`         | `go-test`, `go-build`, `go-fmt`                                                                                                                                |
@@ -78,7 +79,7 @@ magus graph export -o json  # the whole graph
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                                   |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | ------------------------------------------------------------- |
-| [.](MAGUS.md)                                                               |      67 | `magus query project=.`                               | `conventions`, `buzz-test`, `test`                            |
+| [.](MAGUS.md)                                                               |      68 | `magus query project=.`                               | `conventions`, `buzz-test`, `test`                            |
 | [console](console/MAGUS.md)                                                 |      11 | `magus query project=console`                         | `lint`, `build`, `install`                                    |
 | [docs](docs/MAGUS.md)                                                       |      28 | `magus query project=docs`                            | `catalog-docs-generate`, `site-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |      10 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                               |
@@ -93,10 +94,12 @@ magus graph export -o json  # the whole graph
 | [libs/proofread](libs/proofread/MAGUS.md)                                   |      11 | `magus query project=libs/proofread`                  | `proofread-build`, `format`, `wordclass-generate`             |
 | libs/proofread/train                                                        |       7 | `magus query project=libs/proofread/train`            | `test`, `ci`, `format`                                        |
 | [libs/scipbuzz](libs/scipbuzz/MAGUS.md)                                     |       9 | `magus query project=libs/scipbuzz`                   | `format`, `ci`, `test`                                        |
+| [libs/termkit](libs/termkit/MAGUS.md)                                       |       8 | `magus query project=libs/termkit`                    | `format`, `ci`, `test`                                        |
 | [libs/testpairing](libs/testpairing/MAGUS.md)                               |       8 | `magus query project=libs/testpairing`                | `format`, `ci`, `test`                                        |
 | [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                     |
 | [libs/xdg](libs/xdg/MAGUS.md)                                               |       8 | `magus query project=libs/xdg`                        | `format`, `build`, `test`                                     |
 | [proto](proto/MAGUS.md)                                                     |       6 | `magus query project=proto`                           | `generate`, `breaking`, `ci`                                  |
+| testdata/latex/onepage                                                      |       4 | `magus query project=testdata/latex/onepage`          | `build`, `format`, `ci`                                       |
 
 ## Project: magus
 
@@ -112,6 +115,7 @@ magus graph export -o json  # the whole graph
 | `pr-title`                     | Fails a pull request title that is not a conventional commit subject, or whose subject is not imperative or carries a selling word.                                                                                                    |
 | `pr-description`               | Fails a pull request whose title or description the guard's pull-request-text rule would deny.                                                                                                                                         |
 | `pr-changelog`                 | Fails a feat, fix, perf or breaking pull request that ships code without a changelog fragment under changes/unreleased/, and any malformed fragment.                                                                                   |
+| `pr-commits`                   | Fails a pull request any of whose commits carries an attribution.                                                                                                                                                                      |
 | `pr-deliberate-break`          | Lists the deviation lines a pull request adds and the gate files it edits.                                                                                                                                                             |
 | `git-hooks-remove`             | Deletes the shims once installed from hack/git-hooks, and no other hook.                                                                                                                                                               |
 | `bindings-generate`            | Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.                                                                                                                                   |
@@ -221,3 +225,12 @@ magus graph export -o json  # the whole graph
 | `build`    |                                                                                                                             |
 | `test`     | The calibrate tests replay the cases internal/calibrate embeds and judge with the libs/proofread rules, so both are inputs. |
 | `security` | Fails on a vulnerable symbol this module calls.                                                                             |
+
+## Project: testdata/latex/onepage
+
+| Target   | What it does                  |
+| -------- | ----------------------------- |
+| `lint`   |                               |
+| `ci`     | Formats, then builds the PDF. |
+| `build`  |                               |
+| `format` |                               |

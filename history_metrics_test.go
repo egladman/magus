@@ -36,8 +36,8 @@ func (s *HistoryMetricsSuite) SetupTest() {
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	gitRun(t, root, "init", "-q")
 	commitHistoryMetricsFiles(t, root, "Ada", "2026-01-01T00:00:00Z", map[string]string{
-		"magusfile.buzz":      "// root\n",
-		"api/magusfile.buzz":  "// api\n",
+		"magusfile.buzz":      rootBuild,
+		"api/magusfile.buzz":  needsRootBuild,
 		"api/service.go":      "package api\n",
 		"docs/magusfile.buzz": "// docs\n",
 		"docs/guide.md":       "# guide\n",
@@ -48,11 +48,12 @@ func (s *HistoryMetricsSuite) SetupTest() {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".")
-	reg.RegisterProject("api", WithDependsOn(".."))
+	reg.RegisterProject("api")
 	reg.RegisterProject("docs", WithDependsOn("api"))
 	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	s.m = ws.(*Magus)
+	t.Cleanup(func() { assert.NoError(t, s.m.Close()) })
 	canonicalRoot, err := filepath.EvalSymlinks(root)
 	require.NoError(t, err)
 	s.root = canonicalRoot
@@ -143,8 +144,10 @@ func gitRun(t *testing.T, dir string, args ...string) {
 
 // historyMetricsGitEnv is the test's environment with the user's global and system git config
 // switched off, so a signing key or a hooks path there cannot reach the fixture.
+// git commit detaches auto maintenance, which can still write .git at cleanup.
 func historyMetricsGitEnv() []string {
-	return append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
+	return append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1",
+		"GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=maintenance.auto", "GIT_CONFIG_VALUE_0=false")
 }
 
 func commitHistoryMetricsFiles(t *testing.T, dir, author, when string, files map[string]string) {

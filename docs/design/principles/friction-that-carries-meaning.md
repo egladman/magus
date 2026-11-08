@@ -33,7 +33,7 @@ follows.
   [A record of refusals](../refusals.md), and a claim larger than the whole
   budget is refused at once ([MGS3009](../../reference/codes/sandbox/MGS3009.md))
   rather than queued behind a spinner. A claim that can fit waits instead,
-  bounded, saying who holds the room: the refusal at once told every caller the
+  up to 30 minutes by default, saying who holds the room: the refusal at once told every caller the
   same sentence, every caller typed the same wait, and that toll was removed.
 - **Unpredictable self.** A refusal hands back the command to run, so the
   person decides the next move instead of following a default the tool picked

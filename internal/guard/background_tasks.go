@@ -65,11 +65,12 @@ const rootBackgroundAge = 30 * time.Minute
 // stopEnvelope is a host's stop event: an agent ending its turn. stop_hook_active is the
 // field that marks one, on a Stop or SubagentStop event.
 type stopEnvelope struct {
-	StopHookActive      *bool  `json:"stop_hook_active"`
-	ToolName            string `json:"tool_name"`
-	TranscriptPath      string `json:"transcript_path"`
-	AgentID             string `json:"agent_id"`
-	AgentTranscriptPath string `json:"agent_transcript_path"`
+	StopHookActive       *bool  `json:"stop_hook_active"`
+	ToolName             string `json:"tool_name"`
+	TranscriptPath       string `json:"transcript_path"`
+	AgentID              string `json:"agent_id"`
+	AgentTranscriptPath  string `json:"agent_transcript_path"`
+	LastAssistantMessage string `json:"last_assistant_message"`
 }
 
 // decodeStop reads raw as a stop event, false for anything else.

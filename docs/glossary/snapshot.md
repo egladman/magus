@@ -30,6 +30,7 @@ In the docs:
 
 - [Live pool snapshot in a multiplexer sidebar](../guides/tips.md#live-pool-snapshot-in-a-multiplexer-sidebar)
 - [Snapshot](../reference/api/metrics/v1alpha1/metrics.md#snapshot)
+- [terminalSnapshot](../reference/buzz/screen.md#terminalsnapshot)
 
 In the code (`magus refs <name>` lists every site):
 

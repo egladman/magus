@@ -1,0 +1,101 @@
+import "std";
+import "magus/spell";
+import "./spell" as latex;
+
+fun manifest(input: str) > str {
+    return "[doc]\nname = \"main\"\nbundle = \"https://example.test/bundle.tar\"\n\n[[output]]\nname = \"main\"\ntype = \"pdf\"\ninputs = [\"{input}\"]\n";
+}
+
+fun discover(files: [DiscoveryFile]) > [DiscoveredProject] {
+    return latex\discover_projects(Target{}, req: DiscoveryQuery{root = "/repo", files = files});
+}
+
+fun plain(path: str) > DiscoveryFile {
+    return DiscoveryFile{path = path};
+}
+
+fun patched(args: [str], charm: Charm) > [str] {
+    final result = args.cloneMutable();
+    foreach (patch in charm.ops) {
+        std\assert(patch.op == PatchOpKind.replace, message: "rw replaces by index: {patch.op.value}");
+        result[std\parseInt(patch.path.sub(1, len: patch.path.len() - 1))!] = patch.value;
+    }
+    return result;
+}
+
+test "tectonic builds the manifest's document project" {
+    final cmd = latex\mgs_listTargets()["tectonic"]!(Target{});
+    std\assert(cmd.bin == "tectonic" and cmd.args.join(" ") == "-X build", message: "argv {cmd.args.join(" ")}");
+}
+
+test "chktex lints every tex file with no flag that masks its exit status" {
+    final cmd = latex\mgs_listTargets()["chktex"]!(Target{});
+    std\assert(cmd.args.join(" ") == "-q", message: "argv {cmd.args.join(" ")}");
+    std\assert(cmd.sources.join(" ") == "**/*.tex", message: "sources");
+}
+
+test "latexindent checks one file per run and keeps log and backups out of the tree" {
+    final cmd = latex\mgs_listTargets()["latexindent"]!(Target{});
+    std\assert(cmd.args.join(" ") == "-k -s -g=/dev/null -c=build/latexindent", message: "argv {cmd.args.join(" ")}");
+    std\assert(cmd.sourcesEach, message: "latexindent takes one file");
+}
+
+test "the rw charm swaps the check for an in-place write" {
+    final cmd = latex\mgs_listTargets()["latexindent"]!(Target{});
+    std\assert(patched(cmd.args, charm: cmd.charms["rw"]!).join(" ") == "-wd -s -g=/dev/null -c=build/latexindent",
+        message: "rw argv");
+}
+
+test "the pdf directory is a declared output" {
+    std\assert(latex\mgs_listProvidedGlobs().map(fun (index: int, p: Path) > str => p.value).join(" ") == "build/**",
+        message: "provided globs");
+}
+
+test "a Tectonic.toml roots a project that builds, lints and formats" {
+    final claims = discover([
+        DiscoveryFile{path = "resume/Tectonic.toml", content = manifest("main.tex")},
+        plain("resume/src/main.tex"),
+        plain("resume/src/part.tex"),
+    ]);
+    std\assert(claims.len() == 1, message: "one claim: {claims.len()}");
+    std\assert(claims[0].path == "resume" and claims[0].role == DiscoveryRole.project, message: "project at the manifest");
+    std\assert((claims[0].targets["build"] ?? []).join(" ") == "tectonic", message: "build");
+    std\assert((claims[0].targets["lint"] ?? []).join(" ") == "chktex", message: "lint");
+    std\assert((claims[0].targets["format"] ?? []).join(" ") == "latexindent", message: "format");
+    std\assert(claims[0].notInferred.len() == 0, message: "no gap");
+}
+
+test "an output input missing under src is a gap" {
+    final claims = discover([DiscoveryFile{path = "Tectonic.toml", content = manifest("gone.tex")}, plain("src/main.tex")]);
+    std\assert(claims[0].notInferred.len() == 1 and claims[0].notInferred[0].file == "Tectonic.toml", message: "gap names the manifest");
+}
+
+test "a manifest with no output is a gap" {
+    final claims = discover([DiscoveryFile{path = "Tectonic.toml", content = "[doc]\nname = \"x\"\n"}]);
+    std\assert(claims[0].notInferred.len() == 1, message: "one gap");
+}
+
+test "invalid TOML is a gap" {
+    final claims = discover([DiscoveryFile{path = "Tectonic.toml", content = "[doc"}]);
+    std\assert(claims.len() == 1 and claims[0].notInferred.len() == 1, message: "one gap");
+}
+
+test "tex sources under no manifest are members with a gap naming the file" {
+    final claims = discover([plain("cv/resume.tex"), plain("cv/part.tex"), plain("notes.tex")]);
+    std\assert(claims.map(fun (index: int, c: DiscoveredProject) > str => c.path).join(" ") == ". cv", message: "sorted directories");
+    foreach (claim in claims) {
+        std\assert(claim.role == DiscoveryRole.member, message: "{claim.path} is a member");
+        std\assert(!claim.targets.hasKey("build"), message: "{claim.path} wires no build");
+        std\assert(claim.notInferred.len() == 1, message: "{claim.path} has one gap");
+    }
+    std\assert(claims[1].notInferred[0].file == "cv/resume.tex", message: "names the first file");
+}
+
+test "sources under a manifest are not strays" {
+    final claims = discover([DiscoveryFile{path = "doc/Tectonic.toml", content = manifest("main.tex")}, plain("doc/src/main.tex")]);
+    std\assert(claims.len() == 1, message: "only the project");
+}
+
+test "no latex files claim nothing" {
+    std\assert(discover([]).len() == 0, message: "no claim");
+}

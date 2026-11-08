@@ -66,6 +66,17 @@ var Vcs = Module{
 			Impl:    VCSRegions,
 		},
 		{
+			Name: "commits",
+			Doc:  "The commits the current revision holds and base (defaults to the base vcs\\base resolves for dir) does not, newest first, each the object vcs\\commit returns with files left empty, meaning not asked. Merges are included; drop those with more than one parent to keep only a branch's own commits. dir reads the repository holding that directory as vcs\\changedFiles does. Raises when no VCS is resolved or the range cannot be read, since an empty list would read as a branch with no commits.",
+			Args: []Arg{
+				{Name: "base", Type: TypeString, Optional: true},
+				{Name: "dir", Type: TypeString, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAny, Object: "[Commit]"}},
+			Raises:  true,
+			Impl:    VCSCommits,
+		},
+		{
 			Name: "diff_stat",
 			Doc:  "Line counts for the change the checked-out revision carries past its merge base with base (defaults to vcs\\base): one {path, added, deleted, binary} per file, ordered by path, with repository-relative forward-slash paths; dir reads the repository holding that directory as vcs\\changedFiles does. The working copy is not read, so uncommitted edits are not counted (on jj the checked-out revision is @, which is the working copy). Renames are not detected: a rename is a delete of the old path plus an add of the new one. A binary file reports binary true with zero counts. It never fetches, so a base the repository does not hold, or one sharing no history with the revision, raises. Empty when no VCS is resolved or the revision changed nothing; raises when the backend cannot count lines (all four built-in backends can), since an empty list reads as a change that touched nothing.",
 			Args: []Arg{
@@ -356,6 +367,31 @@ func VCSRegions(ctx context.Context, base, dir string) ([]types.RegionChange, er
 		return nil, fmt.Errorf("vcs.regions: %w", err)
 	}
 	return regions, nil
+}
+
+// VCSCommits lists the commits the current revision holds and base does
+// not, base defaulting to the one resolved for dir's repository. head is
+// the current revision's id: each backend spells it differently.
+func VCSCommits(ctx context.Context, base, dir string) ([]types.Commit, error) {
+	v, defaultBase, dir, err := vcsAt(ctx, "commits", dir)
+	if err != nil {
+		return nil, err
+	}
+	if v == nil {
+		return nil, types.DiagnosticErrorf(types.VCSUnavailable, "no VCS resolved for this workspace; use vcs\\name() to test before listing commits")
+	}
+	if base == "" {
+		base = defaultBase
+	}
+	head, err := v.FindCommit(ctx, dir, "")
+	if err != nil {
+		return nil, vcsFailed(err, "look up the current revision in %s", v.Name())
+	}
+	commits, err := v.RangeCommits(ctx, dir, base, head.ID, nil)
+	if err != nil {
+		return nil, vcsFailed(err, "list the %s commits since %s", v.Name(), base)
+	}
+	return commits, nil
 }
 
 // vcsDir is the directory every vcs probe runs in: the target's, not the process's.

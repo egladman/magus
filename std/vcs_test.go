@@ -456,6 +456,29 @@ func TestVcsRegionsNamesEachChangedDeclaration(t *testing.T) {
 	}, placed)
 }
 
+func TestVcsCommitsRaisesWithNoVCS(t *testing.T) {
+	chdirOutsideAnyRepository(t)
+
+	got, err := VCSCommits(context.Background(), "", "")
+	require.Error(t, err)
+	assert.Nil(t, got)
+}
+
+func TestVcsCommitsListsWhatTheBranchAddsWithBodies(t *testing.T) {
+	repo := testkit.NewRepository(t, map[string]string{"a.txt": "a"})
+	repo.Git("checkout", "-q", "-b", "topic")
+	repo.Commit("first", map[string]string{"b.txt": "b"})
+	repo.Git("commit", "-q", "--allow-empty", "-m", "second", "-m", "a body line")
+
+	got, err := VCSCommits(WithCurrentWorkingDirectory(context.Background(), repo.Root()), "main", "")
+	require.NoError(t, err)
+	var seen []string
+	for _, c := range got {
+		seen = append(seen, fmt.Sprintf("%s|%s", c.Subject, strings.TrimSpace(c.Body)))
+	}
+	assert.Equal(t, []string{"second|a body line", "first|"}, seen)
+}
+
 // vcs.cmd asks the lease gate before it runs anything, with the directory the command
 // would run in, so a worker cannot reach past lease-vcs through the escape hatch. Not
 // parallel: the job store resolves the per-repository state directory from the environment.

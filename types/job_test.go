@@ -1303,3 +1303,11 @@ func (s *deliverySuite) TestApplyCarriesDeliveryAndTheParentHead() {
 	s.Empty(row.Delivery, "a spec naming no delivery clears it")
 	s.Empty(row.ParentHead)
 }
+
+func TestHoldsNoBuildSeat(t *testing.T) {
+	check := Goal{Kind: GoalKindCheck, Check: LeaseCheck{Target: "test", Project: "."}}
+	assert.True(t, Job{ReadOnly: true}.HoldsNoBuildSeat())
+	assert.False(t, Job{ReadOnly: true, Goals: []Goal{check}}.HoldsNoBuildSeat(), "a check runs a target")
+	assert.False(t, Job{ReadOnly: true, WritePaths: []string{"a/**"}}.HoldsNoBuildSeat())
+	assert.False(t, Job{}.HoldsNoBuildSeat(), "a writer is not read-only")
+}

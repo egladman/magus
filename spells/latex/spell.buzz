@@ -1,0 +1,200 @@
+// tectonic fetches the TeX bundle its Tectonic.toml names, over the network,
+// on the first build of a machine. Later builds run from its cache.
+// chktex has no mise backend: install it from a TeX distribution.
+
+import "magus/spell";
+// charm constructors derive argv patches from an anchor arg.
+import "magus/charm";
+import "encoding/toml";
+
+export fun mgs_getName() > str { return "latex"; }
+
+export fun mgs_getLanguage() > Language {
+    return Language{
+        name = "latex",
+        extensions = [".tex", ".sty", ".cls"],
+        syntax = Syntax{comments = CommentSyntax{lineComments = ["%"]}},
+    };
+}
+
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [
+        Path{value = "**/*.tex"},
+        Path{value = "**/*.sty"},
+        Path{value = "**/*.cls"},
+        Path{value = "**/*.bib"},
+        Path{value = "**/Tectonic.toml"},
+        Path{value = ".chktexrc"},
+        Path{value = "latexindent.yaml"},
+        Path{value = ".latexindent.yaml"},
+        Path{value = "localSettings.yaml"},
+        Path{value = ".localSettings.yaml"},
+    ];
+}
+
+// tectonic -X build writes build/<output>/<output>.pdf beside Tectonic.toml.
+// latexindent's backups land there too.
+export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "build/**"}]; }
+
+export fun mgs_listIgnoreDirs() > [Path] {
+    return [Path{value = "build", isDir = true}, Path{value = "node_modules", isDir = true}, Path{value = "worktrees", isDir = true}];
+}
+
+// The bare form needs its output directory to exist, which a static argv
+// cannot ensure. -X reads outputs and inputs from Tectonic.toml.
+fun tectonic(target: Target) > Command {
+    return Command{bin = "tectonic", args = ["-X", "build"]};
+}
+
+// chktex exits 2 on any warning (checked on 1.7.9), so lint fails on one.
+// -q drops only the banner.
+fun chktex(target: Target) > Command {
+    return Command{bin = "chktex", args = ["-q"], sources = ["**/*.tex"]};
+}
+
+// -k exits 1 when indenting would change the file; rw swaps it for -wd.
+// -g keeps indent.log out of the tree. -c moves the backup into build/.
+fun latexindent(target: Target) > Command {
+    final args = ["-k", "-s", "-g=/dev/null", "-c=build/latexindent"];
+    return Command{bin = "latexindent", args = args, sources = ["**/*.tex", "**/*.sty", "**/*.cls"], sourcesEach = true, charms = {
+        "rw": set(args, "-k", "-wd"),
+    }};
+}
+
+export fun mgs_listTargets() > {str: fun(Target) Command} {
+    return {"tectonic": tectonic, "chktex": chktex, "latexindent": latexindent};
+}
+
+export fun mgs_getTools() > {str: Tool} {
+    return {
+        "tectonic": Tool{probe = Command{bin = "tectonic", args = ["--version"]}},
+        "chktex": Tool{probe = Command{bin = "chktex", args = ["--version"]}},
+        "latexindent": Tool{probe = Command{bin = "latexindent", args = ["--version"]}},
+    };
+}
+
+// The bundle cache sits in the OS cache directory, named differently per OS:
+// TectonicProject.Tectonic on macOS, tectonic on Linux.
+export fun mgs_getSandbox() > Sandbox {
+    return Sandbox{
+        allow = [
+            SandboxAllow{env = "TECTONIC_CACHE_DIR", base = "userCache", path = "TectonicProject.Tectonic", mode = SandboxAccess.rw},
+            SandboxAllow{env = "TECTONIC_CACHE_DIR", base = "userCache", path = "Tectonic", mode = SandboxAccess.rw},
+            SandboxAllow{env = "TECTONIC_CACHE_DIR", base = "userCache", path = "tectonic", mode = SandboxAccess.rw},
+        ],
+        env = SandboxEnv{passthrough = ["TECTONIC_CACHE_DIR"]},
+    };
+}
+
+fun dirOf(path: str) > str {
+    final parts = path.split("/");
+    if (parts.len() == 1) {
+        return ".";
+    }
+    return parts.sub(0, len: parts.len() - 1).join("/");
+}
+
+fun isUnder(path: str, dir: str) > bool {
+    return dir == "." or path == dir or path.startsWith("{dir}/");
+}
+
+fun isSource(path: str) > bool {
+    return path.endsWith(".tex") or path.endsWith(".sty") or path.endsWith(".cls");
+}
+
+fun isMarker(path: str) > bool {
+    return path == "Tectonic.toml" or path.endsWith("/Tectonic.toml");
+}
+
+fun sorted(items: [str]) > [str] {
+    final copy = items.cloneMutable();
+    _ = copy.sort(fun (left: str, right: str) > bool => left < right);
+    return copy;
+}
+
+fun hasPath(files: [DiscoveryFile], path: str) > bool {
+    return files.filter(fun (index: int, f: DiscoveryFile) > bool => f.path == path).len() > 0;
+}
+
+// outputGaps reads a Tectonic.toml as tectonic does: each [[output]] lists
+// inputs, and each input is a file under src/.
+fun outputGaps(file: DiscoveryFile, files: [DiscoveryFile]) > [DiscoveryGap] {
+    final gaps = mut [<DiscoveryGap>];
+    final dir = dirOf(file.path);
+    final prefix = if (dir == ".") "src" else "{dir}/src";
+    var doc: {str: any}? = null;
+    if (file.content -> text) {
+        try {
+            doc = toml\parse(text) as? {str: any};
+        } catch (e) {
+            gaps.append(DiscoveryGap{file = file.path, why = "not valid TOML ({e}), so tectonic would refuse it too"});
+            return gaps;
+        }
+    } else {
+        gaps.append(DiscoveryGap{file = file.path, why = "magus passed no content for this marker, so its outputs are unknown"});
+        return gaps;
+    }
+    final outputs = ((doc?["output"]) as? [any]) ?? [];
+    if (outputs.len() == 0) {
+        gaps.append(DiscoveryGap{file = file.path, why = "declares no [[output]], so tectonic -X build writes no PDF"});
+    }
+    foreach (output in outputs) {
+        final inputs = (((output as? {str: any})?["inputs"]) as? [any]) ?? [];
+        if (inputs.len() == 0) {
+            gaps.append(DiscoveryGap{file = file.path, why = "an [[output]] lists no inputs, so tectonic builds it from nothing"});
+        }
+        foreach (input in inputs) {
+            if (input as? str -> name) {
+                if (!hasPath(files, path: "{prefix}/{name}")) {
+                    gaps.append(DiscoveryGap{file = file.path, why = "input {name} is not a file at {prefix}/{name}, so tectonic -X build fails"});
+                }
+            }
+        }
+    }
+    return gaps;
+}
+
+// discover_projects roots a project at each Tectonic.toml. Core passes content
+// only for a marker with a literal name, so a .tex file arrives without its
+// text and a \documentclass root cannot be told from an \input fragment.
+// Sources under no manifest lint and format where they sit, with a gap.
+export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] {
+    final roots = mut [<str>];
+    final answer = mut [<DiscoveredProject>];
+    foreach (file in req.files) {
+        if (isMarker(file.path)) {
+            roots.append(dirOf(file.path));
+            answer.append(DiscoveredProject{
+                path = dirOf(file.path),
+                role = DiscoveryRole.project,
+                targets = {"build": ["tectonic"], "lint": ["chktex"], "format": ["latexindent"]},
+                notInferred = outputGaps(file, files: req.files),
+            });
+        }
+    }
+
+    final strayDirs = mut [<str>];
+    final strayFirst = mut {<str: str>};
+    foreach (file in req.files) {
+        if (!isSource(file.path) or roots.filter(fun (index: int, root: str) > bool => isUnder(file.path, dir: root)).len() > 0) {
+            continue;
+        }
+        final dir = dirOf(file.path);
+        if (strayFirst[dir] == null) {
+            strayDirs.append(dir);
+            strayFirst[dir] = file.path;
+        }
+    }
+    foreach (dir in sorted(strayDirs)) {
+        answer.append(DiscoveredProject{
+            path = dir,
+            role = DiscoveryRole.member,
+            targets = {"lint": ["chktex"], "format": ["latexindent"]},
+            notInferred = [DiscoveryGap{
+                file = strayFirst[dir]!,
+                why = "no Tectonic.toml at or above {dir}, so no PDF target is wired; tectonic -X init writes one",
+            }],
+        });
+    }
+    return answer;
+}

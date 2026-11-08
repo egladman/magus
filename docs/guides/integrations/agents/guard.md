@@ -296,7 +296,7 @@ lets the call run, or to `off`, with
 | rule                                                                           | denies                                                                 |
 | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
 | [`architecture-unbriefed`](../../../reference/rules/architecture-unbriefed.md) | an agent acting on structure before it read the architecture skill     |
-| [`brief-command`](../../../reference/rules/brief-command.md)                   | a spawn or continuation brief that teaches a command the guard refuses |
+| [`brief-command`](../../../reference/rules/brief-command.md)                   | a brief or stopping reply that hands over a command the guard refuses  |
 | [`brief-plain-commands`](../../../reference/rules/brief-plain-commands.md)     | a brief for an isolated worker that shows a substitution, loop or exec |
 | [`busy-wait`](../../../reference/rules/busy-wait.md)                           | a while or until loop that sleeps; a for loop that sleeps until break  |
 | [`buzz-unbriefed`](../../../reference/rules/buzz-unbriefed.md)                 | the first Buzz a session authors, before it read the Buzz skill        |

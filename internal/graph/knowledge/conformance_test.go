@@ -671,3 +671,56 @@ func TestConformanceFileSplitNamesOneConcept(t *testing.T) {
 		"; beside job_claim.go, job_claim_callers.go splits job_claim.go and would fit in it"+
 		"; the test and the linux build are never findings")
 }
+
+// MainLogicReachSuite pins which references in a command's body count as a
+// call into another package. compute in cmd/tool/main.go spans lines 10-15.
+type MainLogicReachSuite struct {
+	suite.Suite
+}
+
+func TestMainLogicReachSuite(t *testing.T) {
+	suite.Run(t, new(MainLogicReachSuite))
+}
+
+const kitGo = "libs/kit/kit.go"
+
+// kitSym is a symbol of module example.com/kit that main.go references on
+// line.
+func kitSym(desc, kind string, line int) types.KnowledgeSymbol {
+	ns := "gomod example.com/kit `example.com/kit`/"
+	return types.KnowledgeSymbol{
+		Key: ns + desc, Language: "go", Namespace: ns, SymbolKind: kind,
+		Source: kitGo + ":3", DefEndLine: 8, SourceLines: 10, Defs: []string{kitGo},
+		Refs: []types.KnowledgeSymbolRef{{Path: "cmd/tool/main.go", Count: 1, Lines: []int{line}}},
+	}
+}
+
+// flagged lists the main-logic violations beside extra.
+func (s *MainLogicReachSuite) flagged(extra ...types.KnowledgeSymbol) []string {
+	syms := append(boundarySymbols(), extra...)
+	row := findConformanceRow(s.T(), assembleLens(syms).Conformance(boundaryOptions()),
+		types.ConformanceMainLogic, types.ConformancePopMain, "")
+	var out []string
+	for _, v := range row.Violations {
+		out = append(out, v.ID)
+	}
+	return out
+}
+
+func (s *MainLogicReachSuite) TestACallIntoAnotherModuleIsAPackageCall() {
+	s.Empty(s.flagged(kitSym("Say().", "Function", 12)))
+}
+
+func (s *MainLogicReachSuite) TestACallOutsideTheBodyIsNotItsCall() {
+	s.Equal([]string{"cmd/tool/main.go#compute"}, s.flagged(kitSym("Say().", "Function", 5)))
+}
+
+func (s *MainLogicReachSuite) TestATypeOfAnotherModuleIsNoCall() {
+	s.Equal([]string{"cmd/tool/main.go#compute"}, s.flagged(kitSym("Writer#", "Struct", 12)))
+}
+
+func (s *MainLogicReachSuite) TestACallOutsideTheWorkspaceIsNoPackageCall() {
+	dep := kitSym("Say().", "Function", 12)
+	dep.Source, dep.Defs = "", nil
+	s.Equal([]string{"cmd/tool/main.go#compute"}, s.flagged(dep))
+}

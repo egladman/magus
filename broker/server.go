@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
@@ -52,6 +53,7 @@ type serveOptions struct {
 	drain                 <-chan struct{}
 	drainGrace            time.Duration
 	crashDir              string
+	admissions            *file.Log[types.MachineAdmission]
 }
 
 // WithCapacity sizes the host's budget. A non-positive figure leaves that axis
@@ -127,6 +129,8 @@ func Serve(ctx context.Context, ln net.Listener, opts ...Option) error {
 		stop:       make(chan struct{}),
 		released:   make(chan struct{}, 1),
 	}
+	s.ledger.store = newAdmissionWriter(o.admissions, o.log)
+	defer s.ledger.store.close()
 	s.touch()
 
 	acceptErr := make(chan error, 1)
@@ -529,10 +533,15 @@ func (s *server) dispatch(ctx context.Context, sess *session, w *frameWriter, f 
 			s.markGateLocked(sess, c)
 			v = s.requestLocked(sess, c)
 		}
-		if v.Granted {
+		switch {
+		case req.Reassert:
 			sess.claims[v.ID] = max(c.Slots, 1)
+		case v.Granted:
+			sess.claims[v.ID] = v.Slots
+			s.ledger.claimed(s.conns, sess, c, v, time.Now())
+		default:
+			s.ledger.claimed(s.conns, sess, c, v, time.Now())
 		}
-		s.ledger.claimed(s.conns, sess, c, v, time.Now())
 		s.mu.Unlock()
 		_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: v})
 		if v.Granted {

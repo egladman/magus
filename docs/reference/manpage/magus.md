@@ -306,6 +306,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_LOG_STREAM**
 : Shows every target's subprocess output live and interleaved, instead of withholding a passing target's output until it fails. This is deliberately NOT derived from Level: what gets logged and whether a target's own output is withheld are separate questions, and conflating them is why -v used to ambush people with a wall of concurrent output when they wanted a little more detail. Normally set via -vv (and implied by -vvv); MAGUS_LOG_STREAM=1 is the env equivalent. Pointer to distinguish "not set" from explicit false. Config file key: **log.stream**.
 
+**MAGUS_LOG_LOADER**
+: Names the animation the run band draws while targets run. Empty draws glyph/dots. A locale that is not UTF-8 draws glyph/line instead. Config file key: **log.loader**.
+
 **MAGUS_HINTS_ENABLED**
 : Controls whether hint messages (actionable nudges) are printed to stderr. Defaults to true. Set hints.enabled: false in magus.yaml or MAGUS_HINTS_ENABLED=false to suppress all hint output. Pointer to distinguish "not set" from explicit false (default: true). Config file key: **hints.enabled**.
 
@@ -415,7 +418,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and shared services: required (refuse a step when none answers), best-effort (the default: run unarbitrated and say so once), or off (never start or contact one; a run hosts its services itself). Config file key: **broker**.
 
 **MAGUS_BUDGET_WAIT**
-: Bounds a step's wait for budget other runs hold. Past it, MGS3009 names them. Zero refuses at once. A sooner run deadline bounds it instead. Config file key: **budget_wait**.
+: Bounds a step's wait for budget other runs hold, 30m by default. Past it, MGS3009 names them. Zero refuses at once. A sooner run deadline bounds it instead (default: 30m). Config file key: **budget_wait**.
 
 **MAGUS_SHUTDOWN_GRACE**
 : Bounds how long the broker and the server take to stop after a first SIGTERM. The broker seats nothing new and waits this long for the runs holding claims or services to finish; the server cancels the runs it adopted and waits this long for them to unwind. A second SIGTERM, or a SIGINT to the broker, stops either at once. Zero stops at once on the first signal; negative is an error (default: 5m). Config file key: **shutdown_grace**.

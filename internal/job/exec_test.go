@@ -1,9 +1,9 @@
 package job
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
@@ -509,7 +509,7 @@ func TestExitSaysAnEndedJobAlreadyEnded(t *testing.T) {
 	var over *alreadyEndedError
 	require.ErrorAs(t, err, &over)
 	assert.Equal(t, ended, over.Row)
-	assert.Equal(t, fmt.Sprintf("u1 already ended no_return %s ago (%s)", updatedAgo(ended), ended.EndReason), err.Error())
+	assert.Regexp(t, `^u1 already ended no_return \d+s ago \(`+regexp.QuoteMeta(ended.EndReason)+`\)$`, err.Error())
 	assert.Equal(t, "abandoned by its holder, which filed no result", ended.EndReason)
 }
 

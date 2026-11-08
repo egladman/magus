@@ -68,6 +68,10 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
             why: "the registry client; no figure passes through it")
         .except([magus\graph().dir("libs/result")],
             why: "the Buzz Result type embedded by go-build; no figure passes through it")
+        .except([magus\graph().dir("libs/termkit")],
+            why: "the terminal UI library; no figure passes through it")
+        .except(goPackages("std/termkit/**"),
+            why: "the termkit host modules; a figure source reads the graph through the magus module alone")
         .except([magus\graph().dir("std/gen/stdtest")], why: "generated test mocks")
         .except(goPackages("std/encoding/**"),
             why: "the encoding host modules; a figure source reads the graph through the magus module alone")

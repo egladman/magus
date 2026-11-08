@@ -63,6 +63,7 @@ import "project/libs/proofread" as proofreadlib;
 import "project/libs/testpairing";
 import "project/libs/scipbuzz";
 import "project/libs/xdg";
+import "project/libs/termkit";
 import "project/libs/cmdline";
 import "project/libs/textsearch";
 
@@ -130,7 +131,10 @@ magus\project({
     // libs/figure: go-build embeds figure.buzz.
     // libs/embed: go.mod replaces it with the local module, so its Go builds into magus.
     // libs/result is not a project: result.buzz lives under this tree (go-build embeds it).
-    "depends_on": ["proto", "libs/figure", "libs/embed"],
+    // The rest are the libs whose targets these targets ctx.needs (MGS1062).
+    "depends_on": ["proto", "libs/figure", "libs/embed", "libs/cmdline", "libs/conventions",
+                   "libs/diagnostics", "libs/gopherbuzz", "libs/proofread", "libs/scipbuzz",
+                   "libs/termkit", "libs/testpairing", "libs/textsearch", "libs/xdg"],
     "layers": {
         "internal/httpx": "transport",
         "internal/handler/*": "handler",
@@ -165,7 +169,6 @@ magus\project({
         "internal/hint/testdata/*",
         "internal/job/testdata/*",
         "benchmarks/agent/internal/bench/testdata/*",
-        "libs/embed/testdata/*",
         // Embedded in the textrank package, and no other glob matches it.
         "internal/textrank/weights.json",
         // The retrieval eval's judgments and its holdout ledger.
@@ -247,6 +250,7 @@ magus\project({
         "release-manifest": {"skip_cache": "reads the published release and main's manifest, which no file input carries"},
         "release": {"skip_cache": "mutates go.mod and creates VCS tags, an order-sensitive side effect"},
         // memory_mb: -race shadow memory in every test binary exhausts a 16GB runner.
+        // test's own body runs the raced go-test op; no member races.
         // Linux pipepeer tests read their children's /proc entries.
         // The raced suite measured 13m21s of its own work on a loaded 8-core machine, with
         // vcs, cmd/magus and internal/guard each over five minutes: the hg and sl parity
@@ -273,6 +277,7 @@ magus\project({
         "pr-title": {"skip_cache": "judges the pull request event, which no file input carries"},
         "pr-changelog": {"skip_cache": "judges the pull request event and the base ref, which no file input carries"},
         "pr-description": {"skip_cache": "judges the title and description its flags carry, which no file input holds"},
+        "pr-commits": {"skip_cache": "judges the commit messages against the base ref, which no file input carries"},
         "git-hooks-remove": {"skip_cache": "reconciles the git hooks directory, which is outside the tree and no input carries"},
         "termcast-record": {"skip_cache": "records a real session, so its bytes differ every run and a replay would show different code"},
         "termcast-showcase": {"skip_cache": "drives a live interactive session, so its bytes differ every run"},
@@ -867,6 +872,28 @@ export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
     magus\log.info("pr-changelog: {added.len()} changelog fragment(s) cover {owed.len()} shipped path(s)");
 }
 
+// Fails a pull request any of whose commits carries an attribution.
+// A person's own commit, or one an agent handed a person, reaches no
+// guard, so the pull request judges it by the commit rule's pattern.
+export fun pr_commits(ctx: magus\Context, args: [str]) > void !> any {
+    if (args.len() > 0) {
+        throw "pr-commits: unexpected arguments {args.join(" ")}; it takes none";
+    }
+    final base = vcs\base();
+    final commits = vcs\commits(base);
+    final attributed = mut [<str>];
+    foreach (c in commits) {
+        if (wording\attributes("{c.subject}\n{c.body}")) {
+            attributed.append("{c.short} {c.subject}");
+        }
+    }
+    if (attributed.len() > 0) {
+        throw "pr-commits: against {base}, {attributed.len()} commit(s) carry an attribution "
+            + "(Co-Authored-By, Generated with); reword them to credit nobody:\n  " + attributed.join("\n  ");
+    }
+    magus\log.info("pr-commits: none of {commits.len()} commit(s) against {base} carries an attribution");
+}
+
 // Lists the deviation lines a pull request adds and the gate files it edits.
 // --files is the JSON the workflow fetched from the pull request files API.
 // It never fails: a person reads the list, and the gate stays the check.
@@ -927,7 +954,8 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json"]);
     ctx.writesFiles(["internal/interp/bindings/gen/*.go",
         "!internal/interp/bindings/gen/*_test.go",
-        "!internal/interp/bindings/gen/boundary_*.go"]);
+        "!internal/interp/bindings/gen/boundary_*.go",
+        "std/termkit/gen/**/*.go"]);
     _ = proc\exec("go", ["generate", "./std/..."]);
 }
 
@@ -1295,7 +1323,7 @@ export fun termshots_generate(ctx: magus\Context, args: [str]) > void !> any {
     // internal/cache too: the shots drive the real PrettyHandler's band.
     ctx.needs(job_generate);
     ctx.readsFiles(["cmd/magus-termcast/*.go", "internal/interactive/**/*.go",
-        "internal/cache/*.go", "internal/job/gen/*.json"]);
+        "libs/termkit/**/*.go", "internal/cache/*.go", "internal/job/gen/*.json"]);
     ctx.writesFiles(["assets/gen/terminal-*.svg"]);
     _ = proc\exec("go", ["run", "./cmd/magus-termcast", "shots"]);
 }
@@ -2277,7 +2305,7 @@ fun coverage_blocks_ran(profiles: [str]) > {str: bool} !> any {
 export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     // generate first: the denominator reads every Go file the generators write.
     ctx.needs(generate, test, gopherbuzz\test, diagnostics\test,
-        conventionslib\test, testpairing\test, scipbuzz\test, xdg\test, cmdline\test, buzz_test);
+        conventionslib\test, testpairing\test, scipbuzz\test, xdg\test, cmdline\test, termkit\test, buzz_test);
     ctx.writesFiles(["gen/site/assets/go-coverage.svg", "gen/site/assets/buzz-coverage.svg",
         "gen/site/assets/typescript-coverage.svg"]);
     if (!fs\exists("gen/site/index.html")) {
@@ -2295,7 +2323,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     final go_totals = cov\treeTotals(tables, blocks: coverage_blocks_ran(
         [COVERAGE_PROFILE, "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
          "libs/conventions/coverage.out", "libs/testpairing/coverage.out",
-         "libs/scipbuzz/coverage.out", "libs/xdg/coverage.out", "libs/cmdline/coverage.out"]));
+         "libs/scipbuzz/coverage.out", "libs/xdg/coverage.out", "libs/cmdline/coverage.out", "libs/termkit/coverage.out"]));
     final go_pct = cov\formatPercent(go_totals["covered"], statements: go_totals["statements"]);
     final buzz_pct = fs\readFile("coverage/buzz/coverage.txt").trim();
     final typescript_pct = fs\readFile(typescript).trim();
@@ -2381,7 +2409,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
     // This rule reads broad source and prose globs. Run every formatter CI uses first so
     // the scheduler can order those writes before its reads (MGS4008).
     ctx.needs(format, gopherbuzz\format, diagnostics\format, conventionslib\format,
-        testpairing\format, scipbuzz\format, xdg\format, cmdline\format,
+        testpairing\format, scipbuzz\format, xdg\format, cmdline\format, termkit\format,
         proofreadlib\proofread_build, conformance_base, textsearch\install);
     ctx.readsFiles(["hack/lint/*.buzz",
                     "spells/**/*.buzz", "internal/queue/provider/*.buzz", "hack/**/*.buzz",
@@ -2401,7 +2429,8 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "libs/diagnostics/magusfile.buzz",
                     "libs/figure/magusfile.buzz", "libs/gopherbuzz/magusfile.buzz",
                     "libs/testpairing/magusfile.buzz", "libs/textsearch/magusfile.buzz",
-                    "libs/scipbuzz/magusfile.buzz", "libs/xdg/magusfile.buzz",
+                    "libs/scipbuzz/magusfile.buzz", "libs/xdg/magusfile.buzz", "libs/termkit/magusfile.buzz",
+                    "testdata/latex/onepage/magusfile.buzz",
                     "libs/cmdline/magusfile.buzz", "libs/kustomize/*.buzz",
                     "libs/kustomize/testdata/*.yaml",
                     "proto/magusfile.buzz", "docs/tour/*.buzz",
@@ -2420,19 +2449,19 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "libs/conventions/**/*.md", "libs/proofread/**/*.md",
                     "libs/diagnostics/**/*.md", "libs/figure/**/*.md",
                     "libs/gopherbuzz/**/*.md", "libs/testpairing/**/*.md",
-                    "libs/textsearch/**/*.md", "libs/scipbuzz/**/*.md", "libs/xdg/**/*.md",
+                    "libs/textsearch/**/*.md", "libs/scipbuzz/**/*.md", "libs/xdg/**/*.md", "libs/termkit/**/*.md",
                     "libs/cmdline/**/*.md", "libs/kustomize/**/*.md",
                     "proto/**/*.md",
                     "**/*_test.go", "libs/conventions/**/*_test.go", "libs/proofread/**/*_test.go",
                     "libs/diagnostics/**/*_test.go", "libs/figure/**/*_test.go",
                     "libs/gopherbuzz/**/*_test.go", "libs/testpairing/**/*_test.go",
-                    "libs/scipbuzz/**/*_test.go", "libs/xdg/**/*_test.go",
+                    "libs/scipbuzz/**/*_test.go", "libs/xdg/**/*_test.go", "libs/termkit/**/*_test.go",
                     "libs/cmdline/**/*_test.go",
                     "**/*.go",
                     "libs/conventions/**/*.go", "libs/proofread/go.mod", "libs/proofread/go.sum",
                     "libs/proofread/**/*.go", "libs/proofread/train/**/*.go",
                     "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
-                    "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go", "libs/xdg/**/*.go",
+                    "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go", "libs/xdg/**/*.go", "libs/termkit/**/*.go",
                     "libs/cmdline/**/*.go", "libs/embed/**/*.go", "libs/embed/train/**/*.go",
                     "**/*.ts", "console/**/*.ts", "docs/**/*.ts",
                     "docs/guides/integrations/agents/**/*.ts", "libs/textsearch/**/*.ts",
@@ -2442,7 +2471,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "docs/guides/integrations/agents/**/*.buzz", "libs/conventions/**/*.buzz",
                     "libs/diagnostics/**/*.buzz", "libs/figure/**/*.buzz", "libs/gopherbuzz/**/*.buzz",
                     "libs/scipbuzz/**/*.buzz", "libs/testpairing/**/*.buzz", "libs/textsearch/**/*.buzz",
-                    "libs/xdg/**/*.buzz", "libs/cmdline/**/*.buzz", "libs/embed/**/*.buzz",
+                    "libs/xdg/**/*.buzz", "libs/cmdline/**/*.buzz", "libs/termkit/**/*.buzz", "libs/embed/**/*.buzz",
                     "libs/embed/train/**/*.buzz", "libs/proofread/train/**/*.buzz",
                     "proto/**/*.buzz",
                     "**/*.css", "console/**/*.css", "docs/**/*.css",
@@ -2637,7 +2666,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     // tree. lint reads libs/**/*.go and test reads **/*.go, which each nested module's
     // format rewrites (MGS4008).
     ctx.needs(format, gopherbuzz\format, diagnostics\format, conventionslib\format,
-        testpairing\format, scipbuzz\format, xdg\format, cmdline\format);
+        testpairing\format, scipbuzz\format, xdg\format, cmdline\format, termkit\format);
     if (!advisories\inheritedFatal(args)) {
         ctx.needs(lint, build, test, security);
         return;

@@ -162,6 +162,10 @@ type Magus struct {
 	// charmReads are the charms each target's body reads by literal name
 	// (ctx.hasCharm("rw")), which keyedWriteGrants consults. Written once by the load.
 	charmReads map[types.TargetRef][]string
+	// foldedEdges are, by project path, the dependencies the load folded
+	// from a cross-project ctx.needs or ctx.readsFiles that no depends_on
+	// declares. They order no same-name target. Written once by the load.
+	foldedEdges map[string][]string
 
 	// resolver is shared with preloadMagusfiles, so a magusfile with a top-level
 	// magus\secret.read costs one provider invocation rather than two.

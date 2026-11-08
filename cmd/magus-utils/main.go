@@ -33,6 +33,7 @@ var scribes = map[string]func(args []string) error{
 	"moduledecls":     runModuleDecls,
 	"moduleset":       runModuleSet,
 	"bindings":        runBindings,
+	"libmodules":      runLibModules,
 	"completions":     runCompletions,
 	"diffdemo":        runDiffDemo,
 	"cliflags":        runCLIFlags,

@@ -338,8 +338,8 @@ func TestLedgerRemembersTheLastRefusalsNewestFirstWithTheirHolders(t *testing.T)
 	require.Len(t, r, refusedKeep)
 	assert.Equal(t, fmt.Sprintf("t%d", refusedKeep+4), r[0].Target)
 	assert.Equal(t, "t5", r[refusedKeep-1].Target)
-	assert.Equal(t, types.MachineRefusal{
-		At: t0.Add(time.Duration(refusedKeep+4) * time.Second), PID: 61, Project: ".", Target: r[0].Target, Slots: 1,
+	assert.Equal(t, types.MachineAdmission{
+		At: t0.Add(time.Duration(refusedKeep+4) * time.Second), Outcome: types.AdmissionRefused, PID: 61, Project: ".", Target: r[0].Target, Slots: 1,
 		Dir: "/w", Owner: "unleased", Fits: true,
 		Holders: []types.MachineClaimant{{Project: ".", Target: "go-test", PID: 60, Slots: 8, Owner: "holder-job"}},
 	}, r[0])
@@ -352,7 +352,7 @@ func TestCapacityJSONCarriesOwnersWaitersAndRefusals(t *testing.T) {
 		BudgetSlots: 10, HeldSlots: 8,
 		Holders: []types.MachineClaimant{holder},
 		Waiting: []types.MachineWaiter{{PID: 2, Project: ".", Target: "lint", Slots: 1, Dir: "/w", Owner: "unleased", Since: at, WaitedMS: 1500}},
-		Refused: []types.MachineRefusal{{At: at, PID: 3, Project: ".", Target: "ci", Slots: 4, Owner: "spawned by root", Fits: true,
+		Refused: []types.MachineAdmission{{At: at, PID: 3, Project: ".", Target: "ci", Slots: 4, Owner: "spawned by root", Fits: true,
 			Holders: []types.MachineClaimant{holder}}},
 	})
 	require.NoError(t, err)

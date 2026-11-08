@@ -269,7 +269,7 @@ func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hook
 	// The orchestrator waits for the build budget so its workers never do; a subagent
 	// spawning is a worker, which reports a full budget rather than waiting on it. A read-only
 	// row without a check runs no target, so its worker never queues for a seat.
-	seatless := titled && holdsNoBuildSeat(row)
+	seatless := titled && row.HoldsNoBuildSeat()
 	if who.Agent == "" && !seatless {
 		if note := adviseBudgetFull(ctx, time.Now()); note.Say != "" {
 			shown, ref := shapeAdvice(ctx, gate, string(denyRuleSleepPoll), note.Say, map[string]string{note.Say: note.Why}, false)

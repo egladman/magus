@@ -12,9 +12,9 @@ import (
 
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -136,7 +136,7 @@ func pushedUnread(ctx context.Context, res types.VCSResolution, root, cacheDir, 
 // hookStdin is what git wrote the hook running this command, and nothing when a person typed
 // the command at a terminal, where reading would wait for input that never comes.
 func hookStdin() io.Reader {
-	if tty.StdinIsTerminal() {
+	if termkit.StdinIsTerminal() {
 		return strings.NewReader("")
 	}
 	return os.Stdin

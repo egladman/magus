@@ -8,11 +8,15 @@ import (
 	"maps"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/interactive/screen"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/layout"
+	"github.com/egladman/magus/libs/termkit/pick"
+	"github.com/egladman/magus/libs/termkit/progress"
+	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/egladman/magus/types"
 )
 
@@ -70,6 +74,7 @@ func renderShots() (map[string]string, error) {
 		{"terminal-run-waits.svg", runWaits},
 		{"terminal-failure-prompt.svg", failurePrompt},
 		{"terminal-picker.svg", picker},
+		{"terminal-loaders.svg", loaders},
 	} {
 		for _, v := range screen.ThemeVariants {
 			svg, err := s.fn(v.Theme)
@@ -83,37 +88,45 @@ func renderShots() (map[string]string, error) {
 }
 
 const (
-	// Wide enough for the failure prompt's instruction row to sit clear of the
-	// right edge. At 84 the row is 83 columns and "[o] output" touched
-	// "[esc] done", which reads as a rendering fault rather than as the tight
-	// right-alignment it is. 132 also matches the showcase recording's width.
-	shotCols = 132
-	// Tall enough that the command producing the scene stays on screen. The real
-	// handler prints four lines per failure, which at 15 scrolled "$ magus
-	// affected ci" away and left a picture that could not say what made it.
+	// Wide enough for the longest row the shots draw.
+	shotCols = 100
+	// Tall enough that the command producing the scene stays on screen.
 	shotRows = 21
 )
 
-// newTerminal returns a screen and a zone that draws on it.
-func newTerminal() (*screen.Screen, *tty.Zone) {
-	s := screen.New(shotCols, shotRows)
-	return s, tty.NewZone(s, tty.CaptureProbe(shotCols, shotRows))
-}
-
-// runBand: ordinary output scrolling past a band that does not move. The
-// property the whole design rests on, and the one a still picture shows best.
+// runBand: ordinary output scrolling past a band that does not move, drawn by
+// a real handler fed the records a run emits.
 func runBand(t screen.Theme) (string, error) {
-	s, z := newTerminal()
-	band := z.Acquire(5)
+	s := screen.New(shotCols, shotRows)
+	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, termkit.CaptureProbe(shotCols, shotRows), demoClock())
 
 	fmt.Fprint(s, "$ magus affected ci\n")
-	for _, p := range []string{"internal/cache", "internal/interp", "internal/spell", "std", "types", "cmd/magus"} {
-		fmt.Fprintf(s, "[pass] build %s (cached, 0.0s)\n", p)
+	projects := []string{
+		"internal/cache", "internal/interp", "internal/spell", "std", "types", "cmd/magus",
+		"console", "docs", "libs/figure", "libs/gopherbuzz",
 	}
-	if _, err := band.Set([]tty.Line{
-		{Text: "pool 6/8 running   6 ok", Style: tty.SGRDim},
-	}); err != nil {
-		return "", err
+	plan := make([]cache.PlannedStep, 0, len(projects))
+	for _, p := range projects {
+		plan = append(plan, cache.PlannedStep{Ref: types.TargetRef{Project: p, Target: "build"}})
+	}
+	records := make([]slog.Record, 0, 18)
+	records = append(records,
+		event("cache.pool", slog.Int("capacity", 8), slog.Int("running", 0)),
+		event("cache.plan", slog.Any("steps", plan)))
+	for _, p := range projects[:6] {
+		records = append(records,
+			event("cache.hit", slog.String("project", p), slog.String("target", "build"),
+				slog.Int64("duration", 0)),
+			step(types.TargetRef{Project: p, Target: "build"}, cache.StepDone))
+	}
+	for _, p := range projects[6:9] {
+		records = append(records, step(types.TargetRef{Project: p, Target: "build"}, cache.StepRunning))
+	}
+	records = append(records, event("cache.pool", slog.Int("capacity", 8), slog.Int("running", 3)))
+	for _, r := range records {
+		if err := h.Handle(context.Background(), r); err != nil {
+			return "", err
+		}
 	}
 	return s.SVG(screen.SVGOptions{Theme: t}), nil
 }
@@ -124,7 +137,7 @@ func runBand(t screen.Theme) (string, error) {
 func runWaits(t screen.Theme) (string, error) {
 	s := screen.New(shotCols, shotRows)
 	now := time.Unix(0, 0).UTC()
-	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, tty.CaptureProbe(shotCols, shotRows),
+	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, termkit.CaptureProbe(shotCols, shotRows),
 		func() time.Time { return now })
 
 	fmt.Fprint(s, "$ magus affected ci\n")
@@ -137,7 +150,8 @@ func runWaits(t screen.Theme) (string, error) {
 	test, docs := ref("", "test"), ref("docs", "build")
 	console := ref("console", "build")
 	ctx := context.Background()
-	records := []slog.Record{
+	records := make([]slog.Record, 0, 3)
+	records = append(records,
 		event("cache.plan", slog.Any("steps", []cache.PlannedStep{
 			{Ref: test}, {Ref: docs},
 			{Ref: ref("docs/guides/integrations/agents", "lint"), Upstreams: []types.TargetRef{test}},
@@ -147,8 +161,7 @@ func runWaits(t screen.Theme) (string, error) {
 			{Ref: ref("deploy", "build"), Upstreams: []types.TargetRef{console, test}},
 		})),
 		step(docs, cache.StepRunning),
-		step(test, cache.StepRunning),
-	}
+		step(test, cache.StepRunning))
 	for _, r := range records {
 		if err := h.Handle(ctx, r); err != nil {
 			return "", err
@@ -169,7 +182,7 @@ func step(ref types.TargetRef, state cache.StepState) slog.Record {
 }
 
 // failurePrompt: failures held past the summary so they can be acted on, with
-// the way out pinned to the right edge where it is the last thing clipped.
+// the instruction row beneath the tree.
 //
 // The band is drawn by a REAL PrettyHandler fed real records, not composed here.
 // Hand-writing its rows meant the picture stated a status line magus never
@@ -178,7 +191,7 @@ func step(ref types.TargetRef, state cache.StepState) slog.Record {
 // throughout.
 func failurePrompt(t screen.Theme) (string, error) {
 	s := screen.New(shotCols, shotRows)
-	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, tty.CaptureProbe(shotCols, shotRows), demoClock())
+	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, termkit.CaptureProbe(shotCols, shotRows), demoClock())
 
 	fmt.Fprint(s, "$ magus affected ci\n")
 	fmt.Fprint(s, "[pass] build std (cached, 0.0s)\n")
@@ -199,17 +212,15 @@ func failurePrompt(t screen.Theme) (string, error) {
 		event("cache.error", slog.String("project", "std"),
 			slog.String("target", "test"), slog.Int64("duration", int64(1100*time.Millisecond)),
 			slog.String("error", "exit status 1"), slog.String("ref", "out8b12cc90")),
+		event("cache.pool", slog.Int("capacity", 8), slog.Int("running", 0)),
 	} {
 		if err := h.Handle(ctx, r); err != nil {
 			return "", err
 		}
 	}
 	h.SetSelection(0)
-	// Focus on the OUTPUT, so the golden ratio gives it the major share; this
-	// is the picture of a reader reading a failure, not navigating the list.
-	h.SetFocus(cache.FocusPreview)
-	// The second view: the selected failure's captured output, beside the tree
-	// rather than replacing it. Both columns are this handler's own data.
+	// Output under the tree, the tree in focus: the picture of a reader who has
+	// just opened a failure.
 	h.SetPreview([]string{
 		"=== RUN   TestSandboxDeniesWrite",
 		"    sandbox_test.go:118: expected EPERM,",
@@ -225,7 +236,7 @@ func failurePrompt(t screen.Theme) (string, error) {
 	// were the drift this whole pipeline exists to end, one layer up: the gate
 	// compared the copy against itself, so editing the prompt left the picture
 	// byte-identical and green while the terminal said something else.
-	if _, err := hint.Set(cache.FailureHint()); err != nil {
+	if _, err := hint.Set(cache.FailureHint(hint.Width())); err != nil {
 		return "", err
 	}
 	return s.SVG(screen.SVGOptions{Theme: t}), nil
@@ -267,13 +278,70 @@ func picker(t screen.Theme) (string, error) {
 	// The REAL picker composition, not an imitation of it. Hand-writing this
 	// block is how the shot came to show a selection marker and a frame the
 	// picker had stopped drawing.
-	p := tty.CaptureProbe(shotCols, shotRows)
-	view := tty.NewInlineView(s, p)
-	frame := tty.RenderPick(s, p,
+	p := termkit.CaptureProbe(shotCols, shotRows)
+	view := termkit.NewInlineView(s, p)
+	frame := pick.Render(s, p,
 		[]string{"console", "docs", "libs/gopherbuzz", "std", "types"},
-		tty.PickOptions{Prompt: "project"}, "gop", 0)
+		pick.Options{Prompt: "project"}, "gop", 0)
 	if !view.Paint(frame) {
 		return "", fmt.Errorf("the picker block does not fit %dx%d", shotCols, shotRows)
 	}
 	return s.SVG(screen.SVGOptions{Theme: t}), nil
+}
+
+const (
+	// loaderAt is the instant every loader is drawn at.
+	loaderAt         = 640 * time.Millisecond
+	loaderSpanCols   = 40
+	loaderColumnRows = 4
+	loaderShotRows   = 32
+)
+
+// loaders: every loader at one instant, its frame, then its name and interval
+// aligned like the band's metadata. A column loader draws its rows downward.
+func loaders(t screen.Theme) (string, error) {
+	s := screen.New(shotCols, loaderShotRows)
+	var rows []layout.Row
+	var tall []progress.Loader
+	for _, name := range progress.Names() {
+		l, err := progress.Lookup(name)
+		if err != nil {
+			return "", err
+		}
+		l = l.Width(loaderSpanCols).Height(loaderColumnRows).Label("building internal/cache")
+		if l.Kind == progress.Column {
+			tall = append(tall, l)
+			continue
+		}
+		label := slices.Clone(l.Frame(loaderAt)[0].Spans)
+		width := 0
+		for _, sp := range label {
+			width += layout.Cols(sp.Text)
+		}
+		pad := strings.Repeat(" ", max(l.Cols-width, 0)+2)
+		label = append(label, termkit.Span{Text: pad + name})
+		rows = append(rows, layout.Row{Label: label, Meta: l.Interval.String()})
+	}
+	for _, line := range layout.Columns(rows, shotCols-1, termkit.SGRDim, termkit.SGRReverse) {
+		writeLine(s, line)
+	}
+	for _, l := range tall {
+		for i, line := range l.Frame(loaderAt) {
+			if i == 0 {
+				line.Spans = append(line.Spans,
+					termkit.Span{Text: "  " + l.Name},
+					termkit.Span{Text: "  " + l.Interval.String(), Style: termkit.SGRDim})
+			}
+			writeLine(s, line)
+		}
+	}
+	return s.SVG(screen.SVGOptions{Theme: t}), nil
+}
+
+// writeLine prints one styled line, as a program writing to a terminal would.
+func writeLine(s *screen.Terminal, line termkit.Line) {
+	for _, sp := range line.Spans {
+		fmt.Fprint(s, termkit.Colorize(sp.Text, sp.Style))
+	}
+	fmt.Fprint(s, "\n")
 }

@@ -72,5 +72,7 @@ export fun buzzEngineFigure() > figure\Figure !> any {
             why: "the MCP client and transform workers run Buzz apart from the two hosts compared here")
         .except([magus\graph().dir("std/gen/stdtest")], why: "generated test mocks")
         .except(goPackages("std/encoding/**"),
-            why: "the encoding host modules, wired through the trampolines like every module in the Host modules box");
+            why: "the encoding host modules, wired through the trampolines like every module in the Host modules box")
+        .except(goPackages("std/termkit/**"),
+            why: "the termkit host modules, wired through the trampolines like every module in the Host modules box");
 }

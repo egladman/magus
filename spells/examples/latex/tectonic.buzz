@@ -1,0 +1,9 @@
+// tectonic builds the PDF a Tectonic.toml declares.
+import "magus";
+import "magus/spell/latex";
+
+magus\project({ "spells": [latex] });
+
+export fun build(ctx: magus\Context, args: [str]) > void {
+    latex["tectonic"](ctx);
+}

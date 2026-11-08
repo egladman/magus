@@ -27,8 +27,10 @@ owns that story end to end.
 **Rule of thumb:** reach for `needs` inside a magusfile to sequence work
 ("run `generate` before I `build`"); reach for `depends_on` to declare that
 another project's changes affect you, independent of whether any target
-calls into it directly. A cross-project `needs` gives you both at
-once; see the fold, below.
+calls into it directly. A cross-project `needs` also names its project in
+`depends_on` ([MGS1062](../reference/codes/magusfile/MGS1062.md)), except a
+`needs` on the root, which `depends_on` cannot name
+([MGS1061](../reference/codes/magusfile/MGS1061.md)); see the fold, below.
 
 ## The fold: a cross-project `needs` also declares `depends_on`
 
@@ -39,7 +41,20 @@ consuming project's `DependsOn`** at workspace-open time
 (`applyCrossProjectDependencies`, called from `Magus.Open`'s `load`). You
 declare the dependency once, at the target that needs it, and it
 counts toward the affected closure and cache-key propagation exactly as if
-you had also written a `depends_on` entry; you never write both.
+you had also written a `depends_on` entry. The load still refuses a
+cross-project `needs` whose project `depends_on` leaves out
+([MGS1062](../reference/codes/magusfile/MGS1062.md)), so a project's couplings
+read from its declaration. A `needs` on a root target is the exception: naming
+the root in `depends_on` is refused
+([MGS1061](../reference/codes/magusfile/MGS1061.md)), so the fold is that
+edge's only spelling.
+
+**A folded edge orders only the target it names.** An edge no `depends_on`
+declares, folded from a cross-project `ctx.needs` or `ctx.readsFiles`, seeds the
+affected closure but orders no same-target run. The docs `needs` the root's
+`symbol-digest-generate`, so that target runs first; `build` in the docs does not
+wait on `build` in the root, even when one run holds both. Same-target ordering
+holds only for an edge a `depends_on` declares.
 
 **The fold is a static read, so a computed edge is invisible.** The extractor
 reads the magusfile's AST; it resolves a same-project target passed by
@@ -63,7 +78,8 @@ via `depends_on` instead.
   a `magus\needs` in the dependent.
 - It only orders **same-target** runs within one dispatch (`build` in a
   dependent waits on `build` in its dependency, if both are in the current
-  scope); it does not order arbitrary target pairs.
+  scope); it does not order arbitrary target pairs. An edge only the fold
+  adds orders no same-target run at all.
 - It seeds the affected closure and feeds `dep:` lines into the cache key
   (see [cache.md](cache.md#the-cache-key)); that is the entirety of its
   runtime effect.

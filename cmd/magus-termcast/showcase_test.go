@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/interactive/screen"
+	"github.com/egladman/magus/libs/termkit/screen"
 )
 
 // TestShowcaseUpToDate is the same drift gate the core loop gets, for the same

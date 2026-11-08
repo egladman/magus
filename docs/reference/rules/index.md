@@ -28,7 +28,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [background-silent](background-silent.md)             | a background task of the session that has written nothing for advise_minutes (30 unset)             |
 | [background-unbounded](background-unbounded.md)       | a shell command run in the background with nothing to end it                                        |
 | [backtick-substitution](backtick-substitution.md)     | a backtick command substitution, which inside double quotes runs a command                          |
-| [brief-command](brief-command.md)                     | a spawn or continuation brief that teaches a command the guard denies                               |
+| [brief-command](brief-command.md)                     | a brief or stopping reply that hands over a command the guard denies                                |
 | [brief-plain-commands](brief-plain-commands.md)       | a brief for an isolated worker that teaches a substitution, a loop or an exec                       |
 | [busy-wait](busy-wait.md)                             | a while or until loop that sleeps, or a for loop that sleeps until it breaks out                    |
 | [buzz-unbriefed](buzz-unbriefed.md)                   | the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill   |

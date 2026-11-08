@@ -798,6 +798,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			}
 			lease, _ := resolveLease(who, req.Lease, boundJob(who, at).Job)
 			v = gradeWorkspaceStop(withJobStoreRows(ctx, at), deps, v, input, who, at, lease)
+			if v.Decision != decisionDeny {
+				if handed, refused := judgeHandedCommands(ctx, deps, req, at.dir, input); refused {
+					v = handed
+				}
+			}
 			if !req.DryRun && !req.Observe {
 				if _, err := endStoppedSession(ctx, job.NewStore(at.jobs()), who.caller(), input, req.HostResumesOnBackgroundFrom, v); err != nil {
 					v.Context = fmt.Sprintf("%smagus workspace: the job store did not end the job this session held: %s", strings.TrimPrefix(v.Context+"\n", "\n"), err)
@@ -1344,6 +1349,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			case decisionDeny:
 				verdict.Decision, verdict.Context, verdict.Reason = decisionDeny, "", reason
 				verdict.Rule = string(denyRuleHumanOnly)
+			}
+		}
+		// Last of the worker rules: one that refuses the run outright
+		// names the bigger fix.
+		if verdict.Decision != decisionDeny && verdict.Decision != decisionAsk && preauth == "" {
+			if d := denyWorkerBudgetWait(ctx, deps, actingLease, input); d.refused() {
+				refuseWith(denyRuleLeaseGate, d)
 			}
 		}
 		// The push gate, upgraded from the advisory gitGuard returned when the run log proves

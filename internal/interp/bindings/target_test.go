@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/secret"
@@ -1152,3 +1153,97 @@ export fun lint(ctx: magus\Context, _a: [str]) > void !> any {
 	assert.Contains(t, err.Error(), `ctx.glob: "scip" matches no exported target`)
 	assert.NoFileExists(t, filepath.Join(dir, "body-ran"), "the body must not run past an empty dependency")
 }
+
+// TestInlineMemberClaimsItsOwnSeatWhileTheComposerLends pins both sides of
+// ADR 0031. With no interceptor a member under a lent claim holds nothing.
+// Through cache.RunInline it holds a claim of its own, under its composer.
+func TestInlineMemberClaimsItsOwnSeatWhileTheComposerLends(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "")
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+export fun conventions(ctx: magus\Context, _a: [str]) > void {}
+export fun lint(ctx: magus\Context, _a: [str]) > void { ctx.needs(conventions); }
+`)
+	run := func(t *testing.T, intercept bool) *claimLog {
+		claims := &claimLog{}
+		c, err := cache.Open(t.Context(), t.TempDir(), cache.WithMachineAdmission(claims, 0))
+		require.NoError(t, err)
+		lim := cache.WithLimiter(cache.NewLimiter(4))
+		reg := buzz.NewPoolRegistry(nil, 4)
+		t.Cleanup(func() { _ = reg.Close() })
+		composer := cache.Step{ProjectPath: ".", Target: "lint", MemoryMB: 5000, NoCache: true}
+		_, err = c.RunAside(t.Context(), composer, func(ctx context.Context) error {
+			ctx = buzz.WithTargetRuns(buzz.WithPoolRegistry(ctx, reg), buzz.NewTargetRuns())
+			if intercept {
+				ctx = buzz.WithTargetInterceptor(ctx, inlineInterceptor{c: c, lim: lim})
+			}
+			_, err := interp.RunDir(ctx, dir, "lint", nil)
+			return err
+		}, lim)
+		require.NoError(t, err)
+		return claims
+	}
+
+	assert.Equal(t, []string{"lint", "lint"}, run(t, false).claimed(),
+		"the composer lends and retakes; its member runs holding nothing")
+
+	claims := run(t, true)
+	assert.Equal(t, []string{"lint", "conventions under .:lint", "lint"}, claims.claimed())
+	assert.Contains(t, claims.released, "conventions", "the member gives its seat back")
+}
+
+// inlineInterceptor runs each member through cache.RunInline, as the run's
+// own interceptor does for a cacheable composer.
+type inlineInterceptor struct {
+	c   *cache.Cache
+	lim cache.RunOption
+}
+
+func (i inlineInterceptor) InterceptTarget(ctx context.Context, name string, invoke func(context.Context) error) error {
+	return i.c.RunInline(ctx, cache.Step{ProjectPath: ".", Target: name, MemoryMB: 300, Under: ".:lint"}, invoke, i.lim)
+}
+
+// claimLog is a machine admitter that seats every claim and records it.
+type claimLog struct {
+	mu       sync.Mutex
+	claims   []types.MachineClaim
+	released []string
+}
+
+func (l *claimLog) claimed() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []string
+	for _, c := range l.claims {
+		name := c.Target
+		if c.Under != "" {
+			name += " under " + c.Under
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+func (l *claimLog) Claim(_ context.Context, c types.MachineClaim, _ func(types.MachineVerdict)) (types.MachineVerdict, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.claims = append(l.claims, c)
+	return types.MachineVerdict{Granted: true, Fits: true, ID: c.Target}, nil
+}
+
+func (l *claimLog) Request(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
+	return l.Claim(ctx, c, nil)
+}
+
+func (l *claimLog) Release(_ context.Context, id string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.released = append(l.released, id)
+}
+
+func (*claimLog) Overrun(context.Context, string) {}
+
+func (*claimLog) HoldGroup(context.Context, string, int, string) (string, error) { return "", nil }
+
+func (*claimLog) ReleaseHold(context.Context, string) error { return nil }

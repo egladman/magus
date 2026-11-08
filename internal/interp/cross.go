@@ -23,6 +23,15 @@ type CrossDispatch struct {
 	runs    *cache.TargetRuns
 	run     func(ctx context.Context, dir, target string) error // RunDir; swappable in tests
 	runStep func(ctx context.Context, p *types.Project, step cache.Step) error
+	inline  func(dep *types.Project) buzz.TargetInterceptor
+}
+
+// InlineWith sets how a remote target and its own ctx.needs run: through
+// the interceptor intercept returns for the remote project. Without one
+// they run inline and claim nothing. The interceptor owns running each
+// target once in the TargetRuns c was built with: Dispatch defers to it.
+func (c *CrossDispatch) InlineWith(intercept func(dep *types.Project) buzz.TargetInterceptor) {
+	c.inline = intercept
 }
 
 // RunStepsWith sets how DispatchStep runs a step a reader keyed itself. The run scheduler
@@ -94,6 +103,11 @@ func (c *CrossDispatch) Dispatch(ctx context.Context, dep *types.Project, target
 	if slices.Contains(crossAncestors(ctx), ref.Ref()) {
 		return types.DiagnosticErrorf(types.TargetDependencyCycle, "a cross-project cycle returns to %s", ref.Ref())
 	}
+	if c.inline != nil {
+		// The interceptor runs ref once in the same TargetRuns; a Once here
+		// too makes it wait on its own run until the stall watchdog fires.
+		return c.runRemote(ctx, dep, ref)
+	}
 	return c.runs.Once(ctx, ref, func() error { return c.runRemote(ctx, dep, ref) })
 }
 
@@ -118,13 +132,18 @@ func (c *CrossDispatch) runRemote(ctx context.Context, dep *types.Project, ref t
 	// remote target minted a step against the CALLER: the remote project's work cached
 	// under the caller's key, re-run by the caller's edits and never by its own. Nothing
 	// errors; buildStep is map lookups, so it mints a plausible entry and moves on.
-	//
-	// Stripped rather than rebuilt for the remote project: without one, that target's own
-	// needs run inline and uncached, which is what run.go does for a cacheable member too.
 	rctx = buzz.WithoutTargetInterceptor(rctx)
 	// `--` args belong to the target the user named, so a remote dependency drops them as
 	// a same-project one does in runBuzzDependencies; ops read them from the context.
 	rctx = project.WithExtraArgs(rctx, nil)
 	rctx = withCrossAncestor(rctx, ref.Ref())
-	return c.run(rctx, dep.Dir, ref.Target)
+	if c.inline == nil {
+		return c.run(rctx, dep.Dir, ref.Target)
+	}
+	// Built for the remote project, so the target and its own needs claim
+	// as members of dep.
+	intercept := c.inline(dep)
+	return intercept.InterceptTarget(rctx, ref.Target, func(ctx context.Context) error {
+		return c.run(buzz.WithTargetInterceptor(ctx, intercept), dep.Dir, ref.Target)
+	})
 }

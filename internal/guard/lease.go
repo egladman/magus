@@ -409,6 +409,39 @@ func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, co
 	return denyWorkerCheckOnly(ctx, deps, actingLease, command)
 }
 
+// denyWorkerBudgetWait refuses a bound worker's run of its own row's check
+// without --budget-wait 0. A claim waits 30m by default and a worker never
+// waits. Every other run is the other rules' to judge. Judge asks it last, so
+// a rule that refuses the run outright speaks first.
+func denyWorkerBudgetWait(ctx context.Context, deps Dependencies, actingLease, command string) denial {
+	if actingLease == "" {
+		return denial{}
+	}
+	cmds, ok := ParseCommands(command)
+	if !ok {
+		return denial{}
+	}
+	me, ok := actingLiveLease(ctx, deps, actingLease)
+	if !ok || actingIntegrator(ctx, deps, me, command) {
+		return denial{}
+	}
+	checks := rowChecks(me)
+	var waits *targetRun
+	for _, c := range cmds {
+		if r, ok := parseTargetRun(c); ok && !r.zeroBudgetWait && r.isCheck(checks) {
+			waits = &r
+			break
+		}
+	}
+	if waits == nil {
+		return denial{}
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: `%s` may wait for the build budget; lease %s's runs carry --budget-wait 0: `%s`.", elideCommand(command), me.ID, checkCommand(checks[0])),
+		Why: fmt.Sprintf("A claim waits in the broker's queue for budget_wait, 30m by default. A worker never queues for a seat, so `%s` takes `--budget-wait 0`: a full budget refuses it with MGS3009 at once, and the check is filed owed %q.", waits.target, types.OwedNoSeat),
+	}
+}
+
 // denyLeaseGate refuses the gate to a lease that was handed a narrower check, and
 // refuses nothing for everybody else.
 //
@@ -957,6 +990,8 @@ type targetRun struct {
 	// noDefaultCharms is --no-default-charms, which keeps the workspace's default_charms
 	// off this run.
 	noDefaultCharms bool
+	// zeroBudgetWait is --budget-wait 0: a full budget refuses the run at once.
+	zeroBudgetWait bool
 }
 
 // runReportFlags turn a run into a report about one: nothing executes, so nothing contends.
@@ -988,6 +1023,12 @@ func parseTargetRun(c hint.Invocation) (targetRun, bool) {
 			if name == "no-default-charms" {
 				r.noDefaultCharms = !joined || value != "false"
 			}
+			if name == "budget-wait" {
+				if !joined && i+1 < len(c.Args) {
+					value = c.Args[i+1]
+				}
+				r.zeroBudgetWait = zeroDuration(value)
+			}
 			skip = !joined && verbFlagTakesValue(r.verb, name)
 		case r.verb == "":
 			if a != "run" && a != "affected" {
@@ -1018,6 +1059,14 @@ func verbFlagTakesValue(verb, name string) bool {
 	return takes
 }
 
+// isCheck reports whether r runs one of checks over that check's project alone.
+func (r targetRun) isCheck(checks []types.LeaseCheck) bool {
+	projects := r.selection()
+	return r.verb == "run" && slices.ContainsFunc(checks, func(c types.LeaseCheck) bool {
+		return sameTarget(c.Target, r.target) && !slices.ContainsFunc(projects, func(p string) bool { return path.Clean(p) != path.Clean(c.Project) })
+	})
+}
+
 // allowed reports whether a bound worker may make this run: its row's check, or a target
 // declaring an output in its write paths. A rebuild of magus's own binary is never on the
 // list: there is one binary per base, the integrator builds it and a copy is placed in each
@@ -1025,15 +1074,13 @@ func verbFlagTakesValue(verb, name string) bool {
 //
 // `affected` is never a check: it picks its projects from the diff, and a check names one.
 func (r targetRun) allowed(checks []types.LeaseCheck, produces lazyProducers) bool {
-	projects := r.selection()
-	if r.verb == "run" && slices.ContainsFunc(checks, func(c types.LeaseCheck) bool {
-		return sameTarget(c.Target, r.target) && !slices.ContainsFunc(projects, func(p string) bool { return path.Clean(p) != path.Clean(c.Project) })
-	}) {
+	if r.isCheck(checks) {
 		return true
 	}
 	if r.verb != "run" {
 		return false
 	}
+	projects := r.selection()
 	writes := produces()
 	return !slices.ContainsFunc(projects, func(p string) bool { return !writes(r.target, p) })
 }
@@ -1493,9 +1540,22 @@ func leaseProducers(ctx context.Context, workspace func() (types.WorkspaceReposi
 	}
 }
 
+// zeroDuration reports a duration word that parses to zero, as "0" and "0s" do.
+func zeroDuration(word string) bool {
+	if word == "0" {
+		return true
+	}
+	d, err := time.ParseDuration(word)
+	return err == nil && d == 0
+}
+
+// WorkerCheckCommand is the check as its worker types it, for a fork to grade.
+func WorkerCheckCommand(c types.LeaseCheck) string { return checkCommand(c) }
+
 // checkCommand renders a check as the command that runs it, quoted for a shell.
+// It carries --budget-wait 0 because a worker never queues for a seat.
 func checkCommand(c types.LeaseCheck) string {
-	args := []string{c.Target, cmp.Or(c.Project, ".")}
+	args := []string{c.Target, cmp.Or(c.Project, "."), "--budget-wait", "0"}
 	if c.NoDefaultCharms {
 		args = append(args, "--no-default-charms")
 	}

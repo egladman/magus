@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/libs/termkit"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/doctor"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
@@ -98,6 +99,9 @@ func doctorCommand(ctx context.Context, root string, rc runConfig, args []string
 		}
 		return m.MachineClaims(ctx, targets, nil, nil), nil
 	}, mem.BudgetMB(mem.UsableBytes(ctx), globalCfg.ConcurrencyProfile), cache.MachineCeiling())
+	ctx = doctor.WithAdmissions(ctx, func(context.Context) ([]types.MachineAdmission, error) {
+		return file.Log[types.MachineAdmission]{Path: admissionLogPath()}.Load()
+	})
 	out := doctor.Run(ctx, root, ws, wsErr, dopts...)
 
 	if err := emitDoctor(opts, out); err != nil {
@@ -183,7 +187,7 @@ func emitDoctor(opts output.Options, out types.DoctorReport) error {
 	// Doctor's report stays on stdout (it is the command's primary output, meant to be
 	// piped/grepped) but shares the cache's colored [pass]/[fail] status glyphs so the
 	// whole tool reads consistently. Color only when stdout is a TTY and NO_COLOR is unset.
-	color := tty.WantsColor(os.Stdout, tty.SystemProbe)
+	color := termkit.WantsColor(os.Stdout, termkit.SystemProbe)
 
 	if out.Workspace != "" {
 		fmt.Printf("workspace: %s\n\n", out.Workspace)

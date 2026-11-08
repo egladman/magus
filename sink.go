@@ -16,10 +16,10 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -479,7 +479,7 @@ func (t textEncoder) info(ctx context.Context, format string, args ...any) {
 
 func (t textEncoder) dim(s string) string {
 	if t.term.WantsColor() {
-		return tty.Colorize(s, tty.SGRDim)
+		return termkit.Colorize(s, termkit.SGRDim)
 	}
 	return s
 }
@@ -492,20 +492,20 @@ func (t textEncoder) dim(s string) string {
 func (t textEncoder) step(ctx context.Context, e report.RunStep) {
 	colorize := t.term.WantsColor()
 	if e.Status == "dry" {
-		line := fmt.Sprintf("%s %s\n", cache.Glyph(colorize, "dry", tty.SGRDim), e.Label)
+		line := fmt.Sprintf("%s %s\n", cache.Glyph(colorize, "dry", termkit.SGRDim), e.Label)
 		if e.Project != "" && e.Target != "" {
 			line += hint.Run.With(e.Target, e.Project) + "\n"
 		}
 		t.info(ctx, "%s", line)
 		return
 	}
-	name, color := "pass", tty.SGRGreen
+	name, color := "pass", termkit.SGRGreen
 	switch e.Status {
 	case "pass":
 	case "advisory":
-		name, color = "advisory", tty.SGRYellow
+		name, color = "advisory", termkit.SGRYellow
 	default:
-		name, color = "fail", tty.SGRRed
+		name, color = "fail", termkit.SGRRed
 	}
 	t.info(ctx, "  %s %s %s (%s)\n", cache.Glyph(colorize, name, color), e.Label, e.Target,
 		cache.FormatDuration(time.Duration(e.DurationMs)*time.Millisecond))

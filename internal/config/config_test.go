@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,6 +25,11 @@ func TestDefaults_VolatilityEnabled(t *testing.T) {
 	t.Parallel()
 	cfg := Defaults()
 	assert.True(t, cfg.Volatility.Enabled, "Defaults().Volatility.Enabled should be true")
+}
+
+func TestDefaults_ARunWaitsHalfAnHourForTheBudget(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, 30*time.Minute, Defaults().BudgetWait)
 }
 
 func TestJobsClaimBounds(t *testing.T) {

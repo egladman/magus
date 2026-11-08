@@ -81,7 +81,7 @@ Measured during the pass:
 | `client` is bounded at 10 minutes when called directly and declares MCP task support, so a task-capable host runs it in the background and can cancel it | done      |
 | Nested magus runs from a worker no longer inherit the worker flag, and their output no longer corrupts the worker's JSON reply                           | done      |
 | The workers live in `internal/interp/mcpclient` and `internal/interp/transform`, sharing one stdlib allowlist                                            | done      |
-| `magus server status --probe=mcp` checks only the loopback HTTP listener, so skills no longer gate the CLI fallback on it                                       | done      |
+| `magus server status --probe=mcp` checks only the loopback HTTP listener, so skills no longer gate the CLI fallback on it                                | done      |
 | `magus affected ci --plan -o json` is typed; the Markdown summary exists only for `-o template`                                                          | done      |
 | The guard grades only calls addressed to the magus server (`mcp__magus__<tool>`), and parses a `client` script to see its gate runs and job writes       | done      |
 | One merged package for both workers (research favored it)                                                                                                | not built |

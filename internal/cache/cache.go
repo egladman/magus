@@ -268,6 +268,10 @@ type Step struct {
 	NoCache       bool // when true, always run fn; never replay or snapshot (long-running targets)
 	SkipReplay    bool // when true, never replay a hit (always run fn), but still snapshot on success: a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
 	Slots         int  // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
+	// SlotsFloor is the fewest slots the step runs with. The machine
+	// budget grants floor to Slots, and the step runs with the grant.
+	// 0 means Slots, a fixed width. Never hashed.
+	SlotsFloor int
 	// MemoryMB is RunAll only: the declared peak memory this step will reach,
 	// including every target it composes, carried alongside the slot count Slots
 	// derives from the same figure. Slots throttle peers inside THIS process; the
@@ -286,7 +290,10 @@ type Step struct {
 	// MemoryProfile is the curve MemoryMB peaks over, zero when the claim is a peak
 	// held flat. Never hashed.
 	MemoryProfile types.MemoryProfile
-	Label         string // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
+	// Under is "<project>:<target>" of the composer an inline member runs
+	// under, "" otherwise. Never hashed.
+	Under string
+	Label string // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
 	// Revision and Dirty are the VCS state the run's inputs were read at, resolved ONCE
 	// per invocation by the caller (a per-target probe would spawn a VCS subprocess per
 	// step) and copied onto every step. Display-only provenance for the output
@@ -400,13 +407,6 @@ type runCtx struct {
 	runTarget func(context.Context, types.TargetRef) error
 	// claim is the admission RunAll granted this step; see grantedClaim.
 	claim stepClaim
-}
-
-// grantedClaim hands Run the admission RunAll took for the step, so a miss reports it.
-// An option rather than a context value, because a nested step runs under its parent's
-// context and would otherwise report the parent's claim as its own.
-func grantedClaim(claim stepClaim) RunOption {
-	return func(rc *runCtx) { rc.claim = claim }
 }
 
 // fireResults notifies every registered result observer, in registration order.
@@ -1260,25 +1260,6 @@ func reproTarget(s Step) string {
 	return fmt.Sprintf("%s:%s", s.Target, strings.Join(s.Charms, ","))
 }
 
-// stepSlots is the limiter weight one step takes: Step.Slots clamped to [1, budget], so
-// a heavy step can throttle the parallel work around itself.
-//
-// 0 means one slot, and a request above the budget would exceed capacity and error, so
-// it caps. A request >= the budget holds every slot and no peer can enter fn while it
-// runs; it takes no isolation lock, so unlike an exclusive step it does not also
-// serialize replays. On an unlimited limiter (budget <= 0) there is nothing to throttle
-// against and AcquireN returns immediately.
-func stepSlots(s Step, lim *Limiter) int {
-	slots := s.Slots
-	if slots < 1 {
-		slots = 1
-	}
-	if budget := lim.Capacity(); budget > 0 && slots > budget {
-		slots = budget
-	}
-	return slots
-}
-
 // claimMachine takes the machine-wide half of a step's admission: the concurrency slot
 // and the declared memory arbitrated across every magus on the host. It returns ctx
 // marked as holding the claim, plus the release that hands it back. A process group
@@ -1312,20 +1293,22 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 	h := &machineHold{gate: c.machine, claim: types.MachineClaim{
 		Project: s.ProjectPath, Target: s.Target, DeclaredBy: s.MemoryDeclaredBy,
 		MemoryMB: s.MemoryMB, Profile: s.MemoryProfile, Sizing: s.MemorySizing, Slots: slots,
-		PID: os.Getpid(), Dir: workingDir(),
+		SlotsFloor: min(max(s.SlotsFloor, 0), slots),
+		PID:        os.Getpid(), Dir: workingDir(),
 		Invocation: selfInvocation(ctx), Ancestors: ancestorInvocations(ctx),
+		Under: s.Under,
 	}}
 	if c.machine != nil {
 		h.claim.Weight = leaseWeight(ctx, c.dir)
 	}
-	id, release, err := c.machine.claim(ctx, h.claim)
+	seat, err := c.machine.claim(ctx, h.claim)
 	if err != nil {
 		return ctx, nil, err
 	}
-	h.id, h.release = id, release
+	h.id, h.release, h.slots = seat.id, seat.release, seat.slots
 	held.machineClaim = true
 	ctx = withMachineHold(ctx, h)
-	if id != "" {
+	if seat.id != "" {
 		ctx = withStepGroups(ctx, c.machine.admit, h.current)
 		ctx = withOverrunWatch(ctx, c.machine.admit, h.current, s.MemoryProfile)
 	}
@@ -1403,7 +1386,7 @@ func withWhy(err error, attrs ...slog.Attr) []any {
 // Factored out of RunAll so work running OUTSIDE the batch is accounted the same way
 // rather than through a second, quietly divergent path; see [Cache.RunAside].
 func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Context, int, func(), error) {
-	slots := stepSlots(s, lim)
+	slots := grantedSlots(ctx, s, stepSlots(s, lim))
 	hold, err := lim.acquireWatched(ctx, slots, stepLabel(s))
 	if err != nil {
 		return ctx, 0, nil, err
@@ -1528,23 +1511,6 @@ func (c *Cache) runAsideAdmitted(ctx context.Context, s Step, lim *Limiter, fn f
 	return c.Run(ctx, s, func(ctx context.Context) error {
 		return runSeated(ctx, lim, slots, fn)
 	}, opts...)
-}
-
-// runSeated runs a step's body holding what admission seated it with: the limiter it
-// draws from, its slots, and a jobserver that holds make, cargo and any other client of
-// the GNU make protocol to those slots (spawn.SeatJobserver says when there is none).
-//
-// Inside Cache.Run's callback, so a replayed step opens no pipe, and the pool closes the
-// moment the body returns: whatever tokens a child still holds die with it.
-func runSeated(ctx context.Context, lim *Limiter, slots int, fn func(context.Context) error) error {
-	ctx = ContextWithLimiter(ctx, lim)
-	ctx = WithSlotsHeld(ctx, slots)
-	ctx, closeJobserver, err := spawn.SeatJobserver(ctx, slots)
-	if err != nil {
-		return err
-	}
-	defer closeJobserver()
-	return fn(ctx)
 }
 
 // RunAll schedules steps concurrently (bounded by WithLimiter, or DefaultConcurrency).

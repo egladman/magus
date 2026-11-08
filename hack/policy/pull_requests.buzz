@@ -60,7 +60,8 @@ import "./libs/proofread/proofread" as proofread;
 // HYGIENE_TARGETS are the magus targets CI's hygiene job runs over a pull request. The
 // guard runs the same checks (judgeText for pr-description, the changelog functions for
 // pr-changelog) before the text is posted.
-export final HYGIENE_TARGETS = ["pr-description", "pr-changelog"];
+// The commit rule judges each agent commit that pr-commits reads.
+export final HYGIENE_TARGETS = ["pr-description", "pr-commits", "pr-changelog"];
 
 final descriptionKind = "change-description";
 final summaryKind = "review-summary";
@@ -2523,7 +2524,7 @@ test "numstat rows become file stats, a binary file with zero counts" {
 }
 
 test "the guard runs the checks of the targets CI's hygiene job runs" {
-    std\assert(HYGIENE_TARGETS.join(",") == "pr-description,pr-changelog", message: "targets {HYGIENE_TARGETS}");
+    std\assert(HYGIENE_TARGETS.join(",") == "pr-description,pr-commits,pr-changelog", message: "targets {HYGIENE_TARGETS}");
 }
 
 test "an area the diff touches and the description never names is a question, not a denial" {

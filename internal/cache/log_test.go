@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/interactive/screen"
-	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/log/quiet"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/termkit/screen"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -311,7 +311,7 @@ func TestPrettyHandlerPrintsWhyUnderTheMessage(t *testing.T) {
 	t.Setenv("TERM", "xterm-256color")
 	var term ttyBuf
 	require.NoError(t, newTerminalHandler(&term).Handle(context.Background(), rec))
-	assert.Contains(t, term.String(), fmt.Sprintf("       %s\n", tty.Colorize(why, colDim)), "the why is dim on a terminal")
+	assert.Contains(t, term.String(), fmt.Sprintf("       %s\n", termkit.Colorize(why, colDim)), "the why is dim on a terminal")
 
 	var text bytes.Buffer
 	require.NoError(t, slog.NewTextHandler(&text, nil).Handle(context.Background(), rec))
@@ -362,7 +362,7 @@ func TestPrettyHandlerFailureWhyByVerbosity(t *testing.T) {
 	t.Setenv("TERM", "xterm-256color")
 	var term ttyBuf
 	require.NoError(t, newTerminalHandler(&term).Handle(context.Background(), failureWithReason()))
-	assert.Contains(t, term.String(), fmt.Sprintf("       %s\n", tty.Colorize(why, colDim)), "the why is dim on a terminal")
+	assert.Contains(t, term.String(), fmt.Sprintf("       %s\n", termkit.Colorize(why, colDim)), "the why is dim on a terminal")
 }
 
 // A wait note shows from the first beat by default; a quiet display shows it only past a
@@ -585,15 +585,12 @@ func TestPrettyHandlerErrorWritesHeadingToStickyRegion(t *testing.T) {
 
 	out := buf.String()
 	assert.Contains(t, out, "\x1b[1;31m", "heading should use bold-red SGR")
-	// The duration is now its own right-aligned span, so the heading is the
-	// target alone rather than one pre-formatted string.
-	assert.Contains(t, out, "[fail]", "the glyph is present")
+	assert.Contains(t, out, wordFail, "the status word is present")
 	assert.Contains(t, out, "build", "the failing target is present, under its project")
 	assert.Contains(t, out, "cause: exit status 2", "cause line stays in scroll region")
 	assert.Contains(t, out, "output: out-42", "output line stays in scroll region")
 	assert.Contains(t, out, "inspect: magus query output out-42", "inspect line stays in scroll region")
-	// 24 rows less the band's six and the zone's box.
-	// One failure row, inside the box, with the status in the top rule.
+	// 24 rows less the status row, the project header and the failure.
 	assert.Contains(t, out, "\x1b[1;21r", "scroll margins reserve the bottom rows for the sticky region")
 }
 
@@ -692,59 +689,13 @@ func TestPrettyHandlerNonTTYSkipsStickyRegion(t *testing.T) {
 	assert.Contains(t, out, "[fail] api build (ran,", "plain prefix still present")
 }
 
-func TestStatusLineRender(t *testing.T) {
-	t.Parallel()
-	base := time.Now()
-	for _, tc := range []struct {
-		name string
-		line statusLine
-		want string
-	}{
-		{"pool only, nothing done yet", statusLine{capacity: 8, running: 3}, "■ ■ ■ □ □ □ □ □ (3/8)"},
-		{"queued work is shown", statusLine{capacity: 8, running: 8, queued: 2}, "■ ■ ■ ■ ■ ■ ■ ■ (8/8), 2 queued"},
-		{"a quiet queue is omitted", statusLine{capacity: 4}, "□ □ □ □ (0/4)"},
-		{
-			"tally appears once work completes",
-			statusLine{capacity: 8, running: 2, passed: 3, cached: 2},
-			"■ ■ □ □ □ □ □ □ (2/8)   5 ok (2 cached)",
-		},
-		{
-			"failures are called out",
-			statusLine{capacity: 8, running: 1, passed: 4, failed: 1},
-			"■ □ □ □ □ □ □ □ (1/8)   4 ok  1 failed",
-		},
-		{
-			"a clean run shows no cached or failed clause",
-			statusLine{capacity: 8, running: 1, passed: 4},
-			"■ □ □ □ □ □ □ □ (1/8)   4 ok",
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			left, _ := tc.line.render(base)
-			assert.Equal(t, tc.want, left)
-		})
-	}
-}
-
-// TestStatusLineRenderShowsElapsed keeps the progress readout honest: the
-// row is what a reader watches to know a long run is still moving.
-func TestStatusLineRenderShowsElapsed(t *testing.T) {
-	t.Parallel()
-	start := time.Now()
-	line := statusLine{capacity: 4, running: 1, start: start}
-	left, elapsed := line.render(start.Add(90 * time.Second))
-	assert.Equal(t, "1m30s", elapsed, "elapsed is returned separately so the band can pin it right")
-	assert.NotContains(t, left, "1m30s", "and does not shove the counters sideways once a second")
-}
-
 // TestPrettyHandlerPoolEventPaintsTheStatusRow verifies a cache.pool
-// record lands in the region's status row rather than the scrolling
+// record lands in the band's status row rather than the scrolling
 // output, so it repaints in place instead of accumulating.
 func TestPrettyHandlerPoolEventPaintsTheStatusRow(t *testing.T) {
 	t.Setenv("TERM", "xterm-256color")
-	var buf ttyBuf
-	h := newTerminalHandler(&buf)
+	s := screen.New(80, 24)
+	h := newPrettyHandler(s, slog.LevelInfo, terminalProbe{})
 
 	require.NoError(t, h.Handle(context.Background(), buildRecord(
 		"cache.pool",
@@ -753,9 +704,7 @@ func TestPrettyHandlerPoolEventPaintsTheStatusRow(t *testing.T) {
 		slog.Int("queued", 1),
 	)), "Handle cache.pool")
 
-	out := buf.String()
-	assert.Contains(t, out, "■ ■ ■ □ □ □ □ □ (3/8), 1 queued", "the pool sample is rendered")
-	assert.Contains(t, out, "\x1b[23;1H", "it is pinned under the region's top rule")
+	assert.Contains(t, s.Row(24), "3/8 slots \u00b7 1 queued", "the pool sample is rendered on the one row")
 }
 
 // TestPrettyHandlerPoolEventIsSilentOffATerminal is what keeps two events
@@ -1272,23 +1221,21 @@ func TestHitFailureResolvesAClickToTheTargetThatFailed(t *testing.T) {
 		)), "Handle cache.error")
 	}
 
-	// The band holds only what it has, and the status now lives in the top
-	// rule rather than a row: on a 24-row terminal that is the captioned rule
-	// on 21, the two failures on 22 and 23, and the bottom rule on 24.
-	_, ok := h.HitFailure(21)
-	assert.False(t, ok, "the status row is not a failure")
+	// The band is the status row, the project header and the two failures: on a
+	// 24-row terminal that is rows 21 to 24.
+	for _, row := range []int{21, 22} {
+		_, ok := h.HitFailure(row)
+		assert.False(t, ok, "row %d is the status row or a project header", row)
+	}
 
-	got, ok := h.HitFailure(22)
+	got, ok := h.HitFailure(23)
 	require.True(t, ok)
 	// The ref travels with the row, so the output is one click away.
 	assert.Equal(t, Failure{Project: "api", Target: "build", OutputRef: "out-build", Dur: 250 * time.Millisecond}, got)
 
-	got, ok = h.HitFailure(23)
+	got, ok = h.HitFailure(24)
 	require.True(t, ok)
 	assert.Equal(t, "test", got.Target)
-
-	_, ok = h.HitFailure(24)
-	assert.False(t, ok, "the bottom rule is not a failure")
 
 	// Rows above the band belong to the scrolling transcript and the terminal's
 	// own selection.
@@ -1447,9 +1394,9 @@ func TestClickCoordinatesMatchWhereTheBandActuallyDrew(t *testing.T) {
 		// project header rather than on a row naming both.
 		// Matched on the branch too: the transcript above the band also mentions
 		// these targets, and FindRow returns the FIRST match.
-		drawn := s.FindRow(treeEnd + target)
+		drawn := s.FindRow(branch(true) + target)
 		if drawn == 0 {
-			drawn = s.FindRow(treeTee + target)
+			drawn = s.FindRow(branch(false) + target)
 		}
 		require.NotZero(t, drawn, "the failure for %q must be visible somewhere", target)
 
@@ -1469,7 +1416,7 @@ func TestClickCoordinatesMatchWhereTheBandActuallyDrew(t *testing.T) {
 	// A project HEADER names no target, so clicking it must resolve to nothing
 	// rather than to whichever failure happens to sit beneath it. This is the
 	// row the flat-list arithmetic had no concept of.
-	header := s.FindRow(Glyph(false, "fail", colRed) + " api")
+	header := s.FindRow(wordFail + statusGap + "api")
 	require.NotZero(t, header)
 	_, ok = h.HitFailure(header)
 	assert.False(t, ok, "a project header is not a failure")
@@ -1557,125 +1504,6 @@ func TestPrettyHandlerRefLegend(t *testing.T) {
 			assert.NotContains(t, strings.ToLower(buf.String()), vendor)
 		}
 	})
-}
-
-// TestPoolGaugeIsSlotForSlot pins the meaning, not the look: one mark is one
-// slot, which is what makes it readable as the console's cubes are.
-func TestPoolGaugeIsSlotForSlot(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "■ ■ ■ □ □ □ □ □ (3/8)", PoolGauge(3, 8))
-	assert.Equal(t, "□ □ □ □ (0/4)", PoolGauge(0, 4))
-	assert.Equal(t, "■ ■ ■ ■ (4/4)", PoolGauge(4, 4), "a saturated pool is solid")
-	assert.Equal(t, 5, strings.Count(PoolGauge(2, 5), "■")+strings.Count(PoolGauge(2, 5), "□"), "one mark per slot, always")
-}
-
-// TestPoolGaugeDropsRatherThanScales is the honesty guard. A scaled bar looks
-// exactly like a literal one while meaning something else, so past the cap the
-// gauge is omitted and the numbers carry it alone.
-func TestPoolGaugeDropsRatherThanScales(t *testing.T) {
-	t.Parallel()
-	assert.Empty(t, PoolGauge(30, 64), "too many slots to draw one-for-one")
-	assert.Empty(t, PoolGauge(0, 0), "no pool, no gauge")
-	assert.Equal(t, slotCap, strings.Count(PoolGauge(1, slotCap), "■")+strings.Count(PoolGauge(1, slotCap), "□"), "the cap itself still draws")
-}
-
-// TestPoolGaugeClampsImpossibleCounts: a sample can report more running than
-// capacity across a resize, and a gauge must not panic or overdraw.
-func TestPoolGaugeClampsImpossibleCounts(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "■ ■ ■ ■ (4/4)", PoolGauge(9, 4))
-	assert.Equal(t, "□ □ □ □ (0/4)", PoolGauge(-1, 4))
-}
-
-// TestPreviewMakesASecondColumn is the "two views, one run" layout: the
-// failure tree on the left, the selected failure's captured output on the
-// right, in rows this handler already owns.
-func TestPreviewMakesASecondColumn(t *testing.T) {
-	t.Setenv("TERM", "xterm-256color")
-	s := screen.New(120, 24)
-	h := newPrettyHandler(s, slog.LevelInfo, terminalProbe{})
-	require.NoError(t, h.Handle(context.Background(), buildRecord("cache.error",
-		slog.String("project", "api"), slog.String("target", "test"),
-		slog.Int64("duration", int64(time.Second)), slog.String("error", "boom"))))
-
-	h.SetPreview([]string{"--- FAIL: TestThing", "    thing_test.go:42: boom"})
-
-	// Both columns are on the SAME rows, so neither can scroll away from the
-	// other and the transcript above is untouched.
-	row := s.FindRow("--- FAIL: TestThing")
-	require.NotZero(t, row, "the output is shown")
-	assert.Contains(t, s.Row(row), previewDivider, "divided from the left column")
-
-	// And the band grew to fit the taller column rather than truncating it.
-	assert.NotZero(t, s.FindRow("thing_test.go:42: boom"),
-		"the preview is not clipped to the number of failures")
-}
-
-// TestPreviewIsNotClickable: only the left column names targets. A click on the
-// output must not resolve to whatever failure shares its row.
-func TestPreviewIsNotClickable(t *testing.T) {
-	t.Setenv("TERM", "xterm-256color")
-	s := screen.New(120, 24)
-	h := newPrettyHandler(s, slog.LevelInfo, terminalProbe{})
-	require.NoError(t, h.Handle(context.Background(), buildRecord("cache.error",
-		slog.String("project", "api"), slog.String("target", "test"),
-		slog.Int64("duration", int64(time.Second)), slog.String("error", "boom"))))
-	h.SetPreview([]string{"one", "two", "three", "four"})
-
-	// A row that exists only because the preview is taller than the tree.
-	row := s.FindRow("four")
-	require.NotZero(t, row)
-	_, ok := h.HitFailure(row)
-	assert.False(t, ok, "a row carrying only output is not a failure")
-}
-
-// TestPreviewClearsBackToOneColumn: dropping the preview must not leave the
-// divider behind.
-func TestPreviewClearsBackToOneColumn(t *testing.T) {
-	t.Setenv("TERM", "xterm-256color")
-	s := screen.New(120, 24)
-	h := newPrettyHandler(s, slog.LevelInfo, terminalProbe{})
-	require.NoError(t, h.Handle(context.Background(), buildRecord("cache.error",
-		slog.String("project", "api"), slog.String("target", "test"),
-		slog.Int64("duration", int64(time.Second)), slog.String("error", "boom"))))
-	h.SetPreview([]string{"PREVIEWLINE"})
-	require.NotZero(t, s.FindRow("PREVIEWLINE"))
-
-	h.SetPreview(nil)
-	assert.Zero(t, s.FindRow("PREVIEWLINE"), "the second column is gone")
-}
-
-// TestSplitFollowsTheGoldenRatio pins the proportion, not a column number.
-//
-// A fixed split is only ever right at one width: 34 columns is a third of a
-// 100-column window and nearly half an 80-column one, so the same layout read
-// as balanced on one machine and cramped on another. The ratio holds at every
-// width, and the two shares sum to one, so focus TRADES the space rather than
-// reflowing the layout around a third number.
-func TestSplitFollowsTheGoldenRatio(t *testing.T) {
-	t.Parallel()
-	for _, inner := range []int{80, 100, 132, 200} {
-		usable := inner - len(previewDivider)
-		tree := splitAt(inner, FocusTree)
-		preview := splitAt(inner, FocusPreview)
-
-		assert.InDelta(t, phiMajor, float64(tree)/float64(usable), 0.01,
-			"the focused tree takes the major share at width %d", inner)
-		assert.InDelta(t, phiMinor, float64(preview)/float64(usable), 0.01,
-			"and yields it when the preview is focused at width %d", inner)
-		assert.Equal(t, usable, tree+(usable-tree), "the shares account for every column")
-	}
-}
-
-// TestSplitStaysLegibleWhenNarrow: a share of a small number rounds to nothing
-// useful, so both views keep a floor.
-func TestSplitStaysLegibleWhenNarrow(t *testing.T) {
-	t.Parallel()
-	for _, inner := range []int{10, 20, 26, 40} {
-		at := splitAt(inner, FocusPreview)
-		assert.GreaterOrEqual(t, at, 0, "never negative at width %d", inner)
-		assert.LessOrEqual(t, at, inner, "never wider than the band at width %d", inner)
-	}
 }
 
 // TestFitsInBandDrawsTheLastFailureWhenItFits is the off-by-one regression: the

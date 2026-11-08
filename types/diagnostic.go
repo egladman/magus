@@ -480,6 +480,20 @@ const WorkspacesNotALink DiagnosticCode = "MGS1058"
 // no such workspace is connected here, as in CI or a fresh clone.
 const WorkspaceNotConnected DiagnosticCode = "MGS1059"
 
+// SourceGlobInAnotherProject is a project source glob whose static prefix
+// lies in another project's directory: outside its own tree, or in a project
+// nested in it. The edge to that project is a depends_on or a ctx.readsFiles.
+const SourceGlobInAnotherProject DiagnosticCode = "MGS1060"
+
+// DependsOnRoot is a nested project's depends_on naming the root project,
+// whose directory is the whole workspace.
+const DependsOnRoot DiagnosticCode = "MGS1061"
+
+// CrossNeedsUndeclared is a ctx.needs on another project's target that the
+// project's depends_on does not name. A ctx.needs on the root needs none,
+// since MGS1061 refuses naming the root.
+const CrossNeedsUndeclared DiagnosticCode = "MGS1062"
+
 // SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 // ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 // keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -845,6 +859,11 @@ const DiskFull DiagnosticCode = "MGS3052"
 // memory is in a bad state right now. It exits 75 like MGS3009, but no seat
 // clears it: the cause may be nothing magus holds.
 const MemoryPressureHigh DiagnosticCode = "MGS3053"
+
+// ShardCrossesProjects is a stage-one plan shard computing one project's
+// prerequisite beside a unit of another project that needs it. Stage zero
+// computes each such prerequisite, so one left in stage one is a planner bug.
+const ShardCrossesProjects DiagnosticCode = "MGS3054"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
 const NondeterministicOutput DiagnosticCode = "MGS4003"
@@ -1130,6 +1149,9 @@ var allDiagnosticCodes = []DiagnosticCode{
 	WorkspacesTracked,
 	WorkspacesNotALink,
 	WorkspaceNotConnected,
+	SourceGlobInAnotherProject,
+	DependsOnRoot,
+	CrossNeedsUndeclared,
 	PathReadDenied,
 	PathWriteDenied,
 	EnvStripped,
@@ -1193,6 +1215,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	JobStoreWriterOlder,
 	DiskFull,
 	MemoryPressureHigh,
+	ShardCrossesProjects,
 	RaceDetected,
 	OutputOverlapDetected,
 	NondeterministicOutput,

@@ -437,6 +437,7 @@ func (r *WorkspaceRegistry) Apply(w types.WorkspaceRepository) error {
 			}
 		}
 	}
+	errs = append(errs, foreignSources(w.All())...)
 	// Resolve spell names to *spells.Spell and accumulate spell-declared deps.
 	// If any spell name is missing, the project's ResolvedSpells is left nil
 	// so that Spells/Bindings/ResolvedSpells stay index-aligned: either all
@@ -472,6 +473,55 @@ func (r *WorkspaceRegistry) Apply(w types.WorkspaceRepository) error {
 		return errors.Join(errs...)
 	}
 	return nil
+}
+
+// foreignSources is MGS1060: each source glob whose static prefix lies in
+// another project's directory. A broad glob over the project's own tree, such
+// as the root's **/*.go, reaches no other project and passes.
+func foreignSources(projects []*types.Project) []error {
+	var errs []error
+	for _, p := range projects {
+		for _, g := range p.Sources {
+			prefix := staticPrefix(g.Root(p.Path).Pattern)
+			owner, ok := owningProject(projects, prefix)
+			if !ok || owner == p.Path {
+				continue
+			}
+			read := "name it in depends_on"
+			if owner == types.RootProject {
+				read = "read it with ctx.readsFiles on the targets that do"
+			}
+			errs = append(errs, types.DiagnosticErrorf(types.SourceGlobInAnotherProject,
+				"project %q: source glob %q reaches into project %q; %s",
+				p.Path, g.Pattern, owner, read))
+		}
+	}
+	return errs
+}
+
+// staticPrefix is glob's directory before its first metacharacter, or glob
+// itself when it has none.
+func staticPrefix(glob string) string {
+	i := strings.IndexAny(glob, "*?[{")
+	if i < 0 {
+		return glob
+	}
+	if j := strings.LastIndex(glob[:i], "/"); j >= 0 {
+		return glob[:j]
+	}
+	return ""
+}
+
+// owningProject is the deepest project whose directory holds rel.
+func owningProject(projects []*types.Project, rel string) (string, bool) {
+	owner, found := "", false
+	for _, p := range projects {
+		holds := p.Path == types.RootProject || rel == p.Path || strings.HasPrefix(rel, p.Path+"/")
+		if holds && (!found || len(p.Path) > len(owner) || owner == types.RootProject) {
+			owner, found = p.Path, true
+		}
+	}
+	return owner, found
 }
 
 // unprobedReadiness is each needs_ready tool that no spell p binds or the

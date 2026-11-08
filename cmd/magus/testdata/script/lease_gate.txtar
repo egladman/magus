@@ -36,11 +36,11 @@ exec magus shell
 
 stdin lint.txt
 ! exec magus shell
-stdout 'deny \[lease-gate\]: magus workspace: `lint` is not lease wave/guard''s check; run `magus run test \.`\.'
+stdout 'deny \[lease-gate\]: magus workspace: `lint` is not lease wave/guard''s check; run `magus run test \. --budget-wait 0`\.'
 
 stdin raw.txt
 ! exec magus shell
-stdout 'deny \[worker-check-only\]: magus workspace: `go test ./src/pkg` runs go::go-test outside magus; run lease wave/guard''s check: `magus run test \.`\.'
+stdout 'deny \[worker-check-only\]: magus workspace: `go test ./src/pkg` runs go::go-test outside magus; run lease wave/guard''s check: `magus run test \. --budget-wait 0`\.'
 
 # --- the same raw tool with no lease is raw-tool's, which names no check ---------------
 
@@ -75,7 +75,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 -- src/pkg/code.go --
 package pkg
 -- check.txt --
-magus run test .
+magus run test . --budget-wait 0
 -- slice.txt --
 magus run go-test . -- -run TestCode
 -- needed.txt --

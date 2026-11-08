@@ -76,6 +76,7 @@ config knowledge.workspaces.<name>.name
 config knowledge.workspaces.<name>.path
 config log.format
 config log.level
+config log.loader
 config log.silent
 config log.stream
 config max_failures

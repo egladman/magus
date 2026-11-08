@@ -68,6 +68,11 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: magus run pr-description . -- "--title=$PR_TITLE" "--body=$PR_BODY"
 
+      # A person's own commit reaches no guard, so every commit is judged here.
+      - name: No commit carries an attribution
+        if: ${{ !cancelled() }}
+        run: magus run pr-commits .
+
       # Runs even when an earlier check failed, for the same reason.
       - name: Shipped feat, fix and perf changes carry a changelog entry
         if: ${{ !cancelled() }}

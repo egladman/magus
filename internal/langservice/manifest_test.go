@@ -46,6 +46,8 @@ func TestExcludedModules(t *testing.T) {
 		"pipe",        // reads and writes the process's own stdio
 		"diskwatch",   // samples free disk space into a per-user store
 		"reclaimdisk", // removes worktrees and trims the Go build cache
+		// The terminal UI library draws on a terminal, which a browser lacks.
+		"termkit", "layout", "notify", "pick", "progress", "screen",
 		// A Buzz module dry.PlaygroundSourceModules does not list.
 		"modeltiers",
 	}, got, "only the process/filesystem/network modules and unvetted Buzz modules should be excluded")
