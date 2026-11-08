@@ -42,7 +42,7 @@ export fun voidElement(tag: str, attrs: [Attr]) > Node {
     return Node{ tag = tag, attrs = attrs, selfClosing = true };
 }
 
-// textNode is s as element content, escaped on render.
+// textNode is s as element content; render escapes & " < and >.
 export fun textNode(s: str) > Node {
     return Node{ kind = NodeKind.text, content = s };
 }
@@ -54,7 +54,7 @@ export fun markup(html: str) > Node {
 
 export fun render(node: Node) > str {
     if (node.kind == NodeKind.text) {
-        return esc(node.content);
+        return escapeAttr(node.content).replace(">", with: "&gt;");
     }
     if (node.kind == NodeKind.markup) {
         return node.content;
