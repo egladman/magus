@@ -332,8 +332,9 @@ func TestSizeClaimNamesSlotsTakenForMemory(t *testing.T) {
 	m.cache = c
 	step = cache.Step{}
 	sizing = m.sizeClaim(&step, p, "test", nil)
-	assert.Equal(t, 2, step.Slots)
-	assert.Equal(t, 2, step.SlotsFloor, "a declared width is its floor too")
+	assert.Equal(t, cache.Step{Slots: 2, SlotsFloor: 2, MemoryMB: 3072, MemoryDeclaredBy: "test",
+		MemorySizing: types.MemorySizing{Slots: types.SlotSizing{Source: types.SlotsDeclared}}}, step,
+		"a declared width is its floor too")
 	assert.Equal(t, types.SlotSizing{Source: types.SlotsDeclared}, sizing.Slots)
 }
 
