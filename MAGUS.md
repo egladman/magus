@@ -98,7 +98,7 @@ magus graph export -o json  # the whole graph
 | [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                     |
 | [libs/xdg](libs/xdg/MAGUS.md)                                               |       8 | `magus query project=libs/xdg`                        | `format`, `build`, `test`                                     |
 | [proto](proto/MAGUS.md)                                                     |       6 | `magus query project=proto`                           | `generate`, `breaking`, `ci`                                  |
-| testdata/latex/onepage                                                      |       4 | `magus query project=testdata/latex/onepage`          | `build`, `format`, `ci`                                       |
+| testdata/latex/onepage                                                      |       4 | `magus query project=testdata/latex/onepage`          | `build`, `ci`, `format`                                       |
 
 ## Project: magus
 
@@ -226,9 +226,9 @@ magus graph export -o json  # the whole graph
 
 ## Project: testdata/latex/onepage
 
-| Target   | What it does                  |
-| -------- | ----------------------------- |
-| `lint`   |                               |
-| `ci`     | Formats, then builds the PDF. |
-| `build`  |                               |
-| `format` |                               |
+| Target   | What it does                              |
+| -------- | ----------------------------------------- |
+| `ci`     | Formats, then lints, then builds the PDF. |
+| `build`  |                                           |
+| `lint`   |                                           |
+| `format` |                                           |
