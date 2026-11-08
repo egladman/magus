@@ -60,6 +60,9 @@ test "prepareLoad writes the docker-save manifest classic load needs" {
     assert\contains(body, item: "\"Config\":\"blobs/sha256/" + loaded.id.sub(7), message: "config blob path");
     assert\contains(body, item: "\"RepoTags\":[\"magus:test\"]", message: "load tags the image itself");
     assert\contains(body, item: "\"Layers\":[\"blobs/sha256/", message: "layer blob paths");
+    final index = fs\readFile(layout.path + "/index.json");
+    assert\contains(index, item: "\"io.containerd.image.name\":\"docker.io/library/magus:test\"", message: "the containerd store tags the image too");
+    assert\equal(image\open(layout.path).descriptor.digest.string(), want: layout.descriptor.digest.string(), message: "the layout still opens to its image");
     assert\isTrue(images\prepareLoad(dir + "/missing", tag: "magus:test").error.startsWith("image-build: prepareLoad "), message: "missing names the path");
     fs\removeAll(dir);
 }
