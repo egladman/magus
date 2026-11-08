@@ -34,7 +34,7 @@ func houseDecisions(d Decision) map[Rule]Decision {
 	out := map[Rule]Decision{}
 
 	for _, c := range checks {
-		if c.house {
+		if isHouse(c.rule) {
 			out[c.rule] = d
 		}
 	}
@@ -44,7 +44,7 @@ func houseDecisions(d Decision) map[Rule]Decision {
 
 // isGraded reports whether r's check is graded.
 func isGraded(r Rule) bool {
-	return slices.ContainsFunc(checks, func(c check) bool { return c.rule == r && c.graded })
+	return everyDecision(r, DecisionAdvise)
 }
 
 // assertFindings reads a want with no Decision as its rule's declared one and

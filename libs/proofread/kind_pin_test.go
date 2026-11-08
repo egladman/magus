@@ -62,13 +62,38 @@ func TestEveryBuiltInKindJudgesItsPinnedRules(t *testing.T) {
 	}
 }
 
-// declaredDecision is what kind declares for r before [unmeasured].
-func declaredDecision(kind Kind, r Rule) Decision {
-	for _, c := range checks {
-		if c.rule == r {
-			return c.declaredDecision(kind)
+// reviewKinds are the built-in kinds a review posts.
+func reviewKinds() []Kind {
+	var out []Kind
+
+	for _, s := range builtinKinds {
+		if s.Review {
+			out = append(out, s.Name)
 		}
 	}
 
-	return 0
+	return out
+}
+
+// everyDecision reports whether every built-in kind that judges r declares d
+// for it, and some kind judges it.
+func everyDecision(r Rule, d Decision) bool {
+	judged := false
+
+	for _, s := range builtinKinds {
+		if got, ok := s.Rules[r]; ok {
+			if got != d {
+				return false
+			}
+
+			judged = true
+		}
+	}
+
+	return judged
+}
+
+// declaredDecision is what kind declares for r before [unmeasured].
+func declaredDecision(kind Kind, r Rule) Decision {
+	return spec(kind).Rules[r]
 }

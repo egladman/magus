@@ -19,8 +19,8 @@ const (
 )
 
 var helpChecks = []check{
-	{rule: RuleHelpSentence, on: help, judge: helpSentence},
-	{rule: RuleHelpLength, on: help, judge: helpLength},
+	{rule: RuleHelpSentence, reads: []Format{FormatPlain}, judge: helpSentence},
+	{rule: RuleHelpLength, reads: []Format{FormatPlain}, judge: helpLength},
 }
 
 var helpTexts = map[Rule]ruleText{
@@ -40,21 +40,6 @@ var helpTexts = map[Rule]ruleText{
 			"Over the same 326 strings the median is 69 runes and the 90th percentile 146; 5 run past 240, " +
 			"and the longest is 364.",
 	},
-}
-
-// judgeHelp judges one command's or flag's help text as plain text: no
-// Markdown is read, so a backtick still marks a literal and an indented line
-// still reads as an example. A URL is not prose.
-func judgeHelp(raw []string, o options) []Finding {
-	lines := make([]string, len(raw))
-	for i, ln := range raw {
-		lines[i] = bareURL.ReplaceAllString(ln, "")
-	}
-
-	return run(input{
-		kind: KindCLIHelp, prose: readProse(lines, false), lines: lines, source: raw,
-		text: strings.Join(raw, "\n"), opts: o,
-	})
 }
 
 func helpSentence(in input) []Finding {

@@ -17,15 +17,10 @@ const (
 	RuleChangelogEntry Rule = "changelog-entry"
 )
 
-var (
-	releaseKinds = []Kind{KindReleaseNotes, KindChangelog}
-	changelog    = []Kind{KindChangelog}
-)
-
 var changelogChecks = []check{
-	{rule: RuleChangelogHeading, on: changelog, judge: changelogHeading},
-	{rule: RuleChangelogGroup, on: releaseKinds, graded: true, judge: changelogGroup},
-	{rule: RuleChangelogEntry, on: releaseKinds, graded: true, judge: changelogEntry},
+	{rule: RuleChangelogHeading, reads: proseFormats, judge: changelogHeading},
+	{rule: RuleChangelogGroup, reads: proseFormats, judge: changelogGroup},
+	{rule: RuleChangelogEntry, reads: proseFormats, judge: changelogEntry},
 }
 
 var changelogTexts = map[Rule]ruleText{
@@ -122,13 +117,13 @@ func changelogGroup(in input) []Finding {
 		body := strings.TrimSpace(ln.body())
 
 		switch level := headingLevel(ln); {
-		case in.kind == KindChangelog && level == 3 && !changelogGroups[body]:
+		case in.spec.Groups == GroupsKeepAChangelog && level == 3 && !changelogGroups[body]:
 			out = append(out, Finding{
 				Message: fmt.Sprintf("Name the group Added, Changed, Deprecated, Removed, Fixed or Security, not '%s'.",
 					body),
 				Match: body, Line: ln.line,
 			})
-		case in.kind == KindReleaseNotes && level >= 2 && level <= 3 && groupSynonyms[strings.ToLower(body)] != "" &&
+		case in.spec.Groups == GroupsSynonyms && level >= 2 && level <= 3 && groupSynonyms[strings.ToLower(body)] != "" &&
 			!changelogGroups[body]:
 			want := groupSynonyms[strings.ToLower(body)]
 			out = append(out, Finding{

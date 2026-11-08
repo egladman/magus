@@ -31,18 +31,18 @@ The code is `PRF5001`. The decision depends on the kind of text judged:
 | `doc-comment`        | off     |
 | `reference`          | off     |
 | `principle`          | off     |
-| `guide`              | off     |
 | `change-description` | off     |
 | `agent-brief`        | off     |
 | `agent-compact`      | off     |
-| `commit-message`     | off     |
-| `issue`              | off     |
-| `release-notes`      | off     |
-| `changelog`          | off     |
-| `cli-help`           | off     |
+| `guide`              | off     |
 | `review-summary`     | off     |
 | `review-inline`      | off     |
 | `review-reply`       | off     |
+| `commit-message`     | off     |
+| `cli-help`           | off     |
+| `issue`              | off     |
+| `release-notes`      | off     |
+| `changelog`          | off     |
 | `agent-reply`        | off     |
 | `stylesheet`         | off     |
 

@@ -21,16 +21,12 @@ const (
 	RuleRestatesDiff Rule = "restates-diff"
 )
 
-// triadKinds are the texts that describe a change or answer one: a pull request,
-// a commit and every review text.
-var triadKinds = slices.Concat(reviewed, []Kind{KindCommitMessage})
-
 // triadChecks are the tells of a text no one wrote for the person reading it.
 // Each is graded, and ships off until a labeling round measures it.
 var triadChecks = []check{
-	{rule: RuleTriad, on: triadKinds, graded: true, judge: ownWords(triad)},
-	{rule: RuleStackedColon, on: triadKinds, graded: true, judge: ownWords(stackedColon)},
-	{rule: RuleRestatesDiff, on: triadKinds, graded: true, judge: ownWords(restatesDiff)},
+	{rule: RuleTriad, reads: proseFormats, judge: ownWords(triad)},
+	{rule: RuleStackedColon, reads: proseFormats, judge: ownWords(stackedColon)},
+	{rule: RuleRestatesDiff, reads: proseFormats, judge: ownWords(restatesDiff)},
 }
 
 var triadTexts = map[Rule]ruleText{
@@ -177,7 +173,7 @@ func triad(in input) []Finding {
 // first sentence ends, or -1 for each when the text has no lead.
 func triadLead(in input, paras []maskedParagraph) (at, end int) {
 	for i, p := range paras {
-		if p.head.heading || p.head.item || (titled(in.kind) && p.head.line == 1) {
+		if p.head.heading || p.head.item || in.titleLine(p.head) {
 			continue
 		}
 

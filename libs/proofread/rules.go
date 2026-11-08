@@ -1,8 +1,11 @@
 package proofread
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -231,13 +234,13 @@ func endsSentence(token string) bool {
 
 func filler(in input) []Finding {
 	pattern := fillerPattern
-	if in.kind != KindDocComment {
+	if in.spec.Reader.Format != FormatDocComment {
 		pattern = writtenFillerPattern
 	}
 
 	var out []Finding
 
-	for _, para := range paragraphs(in.prose, mentions(in.kind)) {
+	for _, para := range paragraphs(in.prose, mentions(in.spec.Reader.Format)) {
 		for _, at := range fillerSpans(para.text, pattern) {
 			m := para.text[at[0]:at[1]]
 			out = append(out, Finding{
@@ -267,7 +270,12 @@ func fillerSpans(text string, pattern *regexp.Regexp) [][]int {
 func terms(in input) []Finding {
 	var out []Finding
 
-	for _, para := range paragraphs(in.prose, mentions(in.kind)) {
+	var own *regexp.Regexp
+	if len(in.spec.Terms) > 0 {
+		own = termsRegexp(in.spec.Terms)
+	}
+
+	for _, para := range paragraphs(in.prose, mentions(in.spec.Reader.Format)) {
 		for _, at := range termsPattern.FindAllStringIndex(para.text, -1) {
 			m := para.text[at[0]:at[1]]
 
@@ -276,14 +284,56 @@ func terms(in input) []Finding {
 				want += "s"
 			}
 
-			out = append(out, Finding{
-				Message: fmt.Sprintf("Write '%s', not '%s'.", want, m), Match: m, Line: para.lineAt(at[0]),
-				Replacements: []string{matchCase(want, m)},
-			})
+			out = append(out, termFinding(para, at, want))
+		}
+
+		if own == nil {
+			continue
+		}
+
+		for _, at := range own.FindAllStringIndex(para.text, -1) {
+			out = append(out, termFinding(para, at, replacementOf(in.spec.Terms, para.text[at[0]:at[1]])))
 		}
 	}
 
 	return out
+}
+
+// termsRegexp matches any of terms' keys as whole words, longest first, so a
+// phrase wins over a word it holds.
+func termsRegexp(terms map[string]string) *regexp.Regexp {
+	keys := slices.SortedFunc(maps.Keys(terms), func(a, b string) int {
+		return cmp.Or(len(b)-len(a), strings.Compare(a, b))
+	})
+
+	alts := make([]string, len(keys))
+	for i, k := range keys {
+		alts[i] = strings.ReplaceAll(regexp.QuoteMeta(strings.TrimSpace(k)), " ", `\s+`)
+	}
+
+	return regexp.MustCompile(`(?i)\b(?:` + strings.Join(alts, "|") + `)\b`)
+}
+
+// replacementOf is the replacement terms holds for m, matched without regard
+// to case or spacing.
+func replacementOf(terms map[string]string, m string) string {
+	for k, v := range terms {
+		if strings.EqualFold(strings.Join(strings.Fields(k), " "), strings.Join(strings.Fields(m), " ")) {
+			return v
+		}
+	}
+
+	return ""
+}
+
+// termFinding reports the spelling at in para, to be replaced with want.
+func termFinding(para paragraph, at []int, want string) Finding {
+	m := para.text[at[0]:at[1]]
+
+	return Finding{
+		Message: fmt.Sprintf("Write '%s', not '%s'.", want, m), Match: m, Line: para.lineAt(at[0]),
+		Replacements: []string{matchCase(want, m)},
+	}
 }
 
 func keep(s string) string { return s }

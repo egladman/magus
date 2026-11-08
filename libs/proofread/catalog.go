@@ -14,6 +14,9 @@ type RuleDoc struct {
 	Code diagnostics.Code `json:"code"`
 	// Kinds are the kinds of text the rule judges.
 	Kinds []Kind `json:"kinds"`
+	// Reads are the formats the rule's judge can read, so the formats a
+	// declared kind must read to judge by it.
+	Reads []Format `json:"reads"`
 	// Decisions is the rule's default on each of Kinds: [DecisionOff] on every
 	// kind for a house rule.
 	Decisions map[Kind]Decision `json:"decisions"`
@@ -50,15 +53,22 @@ func Catalog() []RuleDoc {
 	out := make([]RuleDoc, len(checks))
 
 	for i, c := range checks {
-		decisions := make(map[Kind]Decision, len(c.on))
-		for _, k := range c.on {
-			decisions[k] = c.defaultDecision(k)
+		var judged []Kind
+
+		decisions := map[Kind]Decision{}
+
+		for j := range builtinKinds {
+			s := &builtinKinds[j]
+			if s.judges(c.rule) {
+				judged = append(judged, s.Name)
+				decisions[s.Name] = c.defaultDecision(s)
+			}
 		}
 
 		t := ruleTexts[c.rule]
 		out[i] = RuleDoc{
-			Name: c.rule, Code: t.code, Kinds: slices.Clone(c.on), Decisions: decisions, House: c.house, Weight: weights[c.rule],
-			Catches: t.catches, Why: t.why, Dimension: t.dimension,
+			Name: c.rule, Code: t.code, Kinds: judged, Reads: slices.Clone(c.reads), Decisions: decisions,
+			House: isHouse(c.rule), Weight: weights[c.rule], Catches: t.catches, Why: t.why, Dimension: t.dimension,
 		}
 	}
 

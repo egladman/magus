@@ -28,8 +28,8 @@ The code is `PRF8024`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `agent-reply`        | advise  |
 | `change-description` | advise  |
+| `agent-reply`        | advise  |
 
 ## Changing it
 

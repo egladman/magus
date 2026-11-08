@@ -15,12 +15,9 @@ const (
 	RuleBareSymbol Rule = "bare-symbol"
 )
 
-// forgeText is the text a forge posts for a reviewer to read.
-var forgeText = slices.Concat([]Kind{KindChangeDescription}, reviewText)
-
 var markupChecks = []check{
-	{rule: RuleEmphasis, on: forgeText, house: true, judge: emphasis},
-	{rule: RuleBareSymbol, on: forgeText, house: true, judge: bareSymbol},
+	{rule: RuleEmphasis, reads: proseFormats, judge: emphasis},
+	{rule: RuleBareSymbol, reads: proseFormats, judge: bareSymbol},
 }
 
 var markupTexts = map[Rule]ruleText{

@@ -33,16 +33,14 @@ const (
 // rule off, advise or deny.
 const subjectMaxBytes = 100
 
-var commitKind = []Kind{KindCommitMessage}
-
 var commitChecks = []check{
-	{rule: RuleSubjectMood, on: commitKind, graded: true, judge: subjectMood},
-	{rule: RuleSubjectLength, on: commitKind, judge: subjectLength},
-	{rule: RuleSubjectPeriod, on: commitKind, judge: subjectPeriod},
-	{rule: RuleBodySeparator, on: commitKind, judge: bodySeparator},
-	{rule: RuleSubjectCase, on: commitKind, house: true, judge: subjectCase},
-	{rule: RuleSubjectPunct, on: commitKind, house: true, judge: subjectPunct},
-	{rule: RuleNoBody, on: commitKind, house: true, judge: noBody},
+	{rule: RuleSubjectMood, reads: proseFormats, judge: subjectMood},
+	{rule: RuleSubjectLength, reads: proseFormats, judge: subjectLength},
+	{rule: RuleSubjectPeriod, reads: proseFormats, judge: subjectPeriod},
+	{rule: RuleBodySeparator, reads: proseFormats, judge: bodySeparator},
+	{rule: RuleSubjectCase, reads: proseFormats, judge: subjectCase},
+	{rule: RuleSubjectPunct, reads: proseFormats, judge: subjectPunct},
+	{rule: RuleNoBody, reads: proseFormats, judge: noBody},
 }
 
 var commitTexts = map[Rule]ruleText{

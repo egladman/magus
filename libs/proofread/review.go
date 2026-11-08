@@ -32,11 +32,11 @@ const (
 )
 
 var reviewChecks = []check{
-	{rule: RuleNonspecific, on: reviewText, graded: true, judge: nonspecific},
-	{rule: RuleWhyOpener, on: reviewText, graded: true, judge: whyOpener},
-	{rule: RuleBareImperative, on: reviewText, graded: true, judge: bareImperative},
-	{rule: RuleAllCaps, on: reviewText, graded: true, judge: allCaps},
-	{rule: RuleRepeatedMarks, on: reviewText, graded: true, judge: repeatedMarks},
+	{rule: RuleNonspecific, reads: proseFormats, judge: nonspecific},
+	{rule: RuleWhyOpener, reads: proseFormats, judge: whyOpener},
+	{rule: RuleBareImperative, reads: proseFormats, judge: bareImperative},
+	{rule: RuleAllCaps, reads: proseFormats, judge: allCaps},
+	{rule: RuleRepeatedMarks, reads: proseFormats, judge: repeatedMarks},
 }
 
 var reviewTexts = map[Rule]ruleText{
@@ -303,7 +303,7 @@ func judged(text string) []int {
 func nonspecific(in input) []Finding {
 	// A block quote is the comment the reply answers: its referent, as the
 	// line is an inline comment's, and words the writer did not write.
-	if in.kind == KindReviewInline || slices.ContainsFunc(in.source, inQuote) {
+	if in.spec.Anchored || slices.ContainsFunc(in.source, inQuote) {
 		return nil
 	}
 

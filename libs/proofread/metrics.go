@@ -46,34 +46,47 @@ func maskSpans(s string) string { return anySpan.ReplaceAllString(s, " "+codeWor
 // '.', '!' or '?', or at the end of its paragraph or list item.
 func Measure(text string, kind Kind) Metrics { return measure(readKind(text, kind)) }
 
-// readKind returns the paragraphs and list items of text read as kind, the one
-// reading [Measure], [MeasureShape] and the voice measures share. Headings
-// stay in, marked, for the measures that count them.
+// readKind returns the paragraphs and list items of text read as the built-in
+// kind, the one reading [Measure], [MeasureShape] and the voice measures
+// share. Headings stay in, marked, for the measures that count them.
 func readKind(text string, kind Kind) []paragraph {
 	raw := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 
-	switch kind {
-	case KindDocComment, KindDiagnostic, KindCLIHelp, KindToolDescription:
+	// A kind that is no built-in, a template or a stylesheet is measured as
+	// a Markdown page.
+	r := markdownPage
+	if s, ok := builtins[kind]; ok {
+		r = s.Reader
+	}
+
+	switch r.Format {
+	case FormatDocComment, FormatMessage, FormatPlain:
 		for i, ln := range raw {
 			raw[i] = bareURL.ReplaceAllString(ln, "")
 		}
 
 		return paragraphs(readProse(raw, false), keep)
+	case FormatLines:
+		_, prose := readLines(raw)
+
+		return paragraphs(prose, keep)
+	case FormatTemplate, FormatStylesheet:
+		r = markdownPage
 	}
 
-	_, prose := readMarkdown(blankBoilerplate(raw), kind)
+	_, prose := readMarkdown(blankBoilerplate(raw), r)
 
 	return paragraphs(prose, keep)
 }
 
-// readMarkdown reads raw, its boilerplate already blanked, as kind's Markdown:
-// the lines with everything but prose blanked, and the prose they hold.
-func readMarkdown(raw []string, kind Kind) ([]string, []proseLine) {
-	lines := markdownProse(raw, !isReview(kind) && !titled(kind))
+// readMarkdown reads raw, its boilerplate already blanked, as Markdown by r.
+// It returns the lines with all but prose blanked, and the prose they hold.
+func readMarkdown(raw []string, r Reader) ([]string, []proseLine) {
+	lines := markdownProse(raw, r.FrontMatter)
 	wrapCodeSpans(lines)
-	prose := readProse(lines, kind != KindCommitMessage)
+	prose := readProse(lines, r.Headings)
 
-	if titled(kind) {
+	if r.Titled {
 		// The title is a paragraph of its own, however close the description
 		// starts below it.
 		for i := range prose {

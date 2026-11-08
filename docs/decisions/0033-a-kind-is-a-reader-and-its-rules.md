@@ -58,17 +58,17 @@ type Reader struct {
 
 | Item                                                                                                                       | State     |
 | -------------------------------------------------------------------------------------------------------------------------- | --------- |
-| `KindSpec` and `Reader` types; the 20 built-in kinds as `KindSpec` values in one file of the library                       | not built |
-| A check declares the formats its judge can read (`reads []Format`) in place of `on []Kind`                                 | not built |
-| Every `kind ==` branch in a judge or reader reads a `Reader` property or a spec field instead                              | not built |
-| `judgeText` picks the reader from `spec.Reader.Format`; the `switch` on kind is deleted                                    | not built |
+| `KindSpec` and `Reader` types; the 20 built-in kinds as `KindSpec` values in one file of the library                       | built     |
+| A check declares the formats its judge can read (`reads []Format`) in place of `on []Kind`                                 | built     |
+| Every `kind ==` branch in a judge or reader reads a `Reader` property or a spec field instead                              | built     |
+| `judgeText` picks the reader from `spec.Reader.Format`; the `switch` on kind is deleted                                    | built     |
 | An equivalence test: every built-in kind judges the same rules at the same defaults as before, over every calibration case | built     |
 | A decisions table's `kinds` object declares kinds; `proofread <name>` resolves a declared name after the built-ins         | not built |
 | A declared kind naming a rule its format cannot feed, an unknown rule or an unknown base is an error naming the field      | not built |
 | The `lines` format: each non-blank line or list item is one unit, with no title and no headings                            | not built |
 | `Terms` per kind, merged over the built-in glossary, so a kind can hold its own phrasing                                   | not built |
 | `Weights` per kind; a set weight is marked as set, not measured, wherever the grade is reported                            | not built |
-| The rule pages' decision tables are generated from the specs                                                               | not built |
+| The rule pages' decision tables are generated from the specs                                                               | built     |
 
 A declared kind in a decisions table looks like this, and is a fact, never an algorithm:
 
@@ -145,3 +145,38 @@ into a language.
 
 Eli decided a declared kind may set a rule's grade weight as well as its decision. A weight
 a team sets claims no measured precision, so the grade report marks it as set.
+
+### 2026-11-08: what each name branch became
+
+`Titled`, `Headings` and `Sections` did not cover every branch. Each one below reads a
+named property now, and no judge or reader compares a kind's name.
+
+| Where                                  | Branch                                          | Became                                                |
+| -------------------------------------- | ----------------------------------------------- | ----------------------------------------------------- |
+| `judgeText`, `readKind`                | `switch` on 8 kinds                             | `Reader.Format`                                       |
+| `readMarkdown`                         | not a review and not titled                     | `Reader.FrontMatter`                                  |
+| `readMarkdown`                         | not a commit message                            | `Reader.Headings`                                     |
+| `readMarkdown`, slop, tone, triad      | `titled(kind)`, 4 sites                         | `Reader.Titled`                                       |
+| `mentions`, `filler`                   | a doc comment                                   | `Reader.Format == doc-comment`                        |
+| `history` (coldread)                   | a stylesheet                                    | `Reader.Format == stylesheet`                         |
+| `quotedLines` (tone)                   | `quotesOthers`                                  | `Reader.Quotes`                                       |
+| `replyVoice`                           | a description or a review is sectioned          | `Reader.Sections`                                     |
+| `replyVoice`                           | a review's label on line 1                      | `!Reader.Titled`                                      |
+| `replyVoice`                           | a description, before lead-context              | `reports(leadContextCheck)` alone                     |
+| `replyVoice`                           | not agent-compact                               | `Compact`                                             |
+| `replyVoice`, `attribution`, guide     | `isReview`, 4 sites                             | `Review`                                              |
+| `replyVoice`, `attribution`            | a description                                   | `Prompted` (you-asked), `ToReviewers` (work story)    |
+| `attribution`, `condescension`         | `reviewed`, 2 sites                             | `ToReviewers`                                         |
+| `condescension`                        | a guide                                         | `Procedure`                                           |
+| `nonspecific`                          | an inline comment                               | `Anchored`                                            |
+| `reviewLength`                         | a word cap per review kind                      | `ReviewWords`                                         |
+| `wordy`                                | an agent brief                                  | `Terse`                                               |
+| `changelogGroup`                       | a changelog, release notes                      | `Groups`                                              |
+| chatbot tells                          | `proseKinds`, a description                     | `!Review && !Compact`, `Prompted`                     |
+| voice and voice-drift                  | `heldKind`, a commit message, 5 sites           | `Voice`, `Reader.Subject`                             |
+| `relaxes`                              | a description                                   | `TenseByVoice`                                        |
+| help, tool, message, stylesheet, skill | a reader naming its own kind in `input`         | the spec `judgeText` passes in                        |
+
+The voice file still keys its measures by the four kinds a voice measures, which are a
+format's keys, not branches. The CLI still routes input by kind (a commit message's file,
+a stylesheet on stdin); that is input, not judging.
