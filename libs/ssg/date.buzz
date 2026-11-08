@@ -40,28 +40,28 @@ export fun blogDateAttr(d: str) > str {
 // fails open, since a missing git stamp should not blank every dated post.
 export fun isFuturePost(date: str, asOf: str) > bool {
     if (asOf == "") { return false; }
-    return strLess(blogDateAttr(asOf), blogDateAttr(date));
+    return strLess(blogDateAttr(asOf), b: blogDateAttr(date));
 }
 
 test "blogDateAttr keeps just the calendar day" {
-    assert\equal(blogDateAttr("2026-07-01T12:00:00Z"), "2026-07-01", "drops the time part");
-    assert\equal(blogDateAttr("2026-07-01"), "2026-07-01", "date-only unchanged");
+    assert\equal(blogDateAttr("2026-07-01T12:00:00Z"), want: "2026-07-01", message: "drops the time part");
+    assert\equal(blogDateAttr("2026-07-01"), want: "2026-07-01", message: "date-only unchanged");
 }
 
 test "blogDate renders a calendar byline" {
-    assert\equal(blogDate("2026-07-01"), "July 1, 2026", "date-only byline");
-    assert\equal(blogDate("2026-07-01T12:00:00Z"), "July 1, 2026", "RFC3339 byline");
+    assert\equal(blogDate("2026-07-01"), want: "July 1, 2026", message: "date-only byline");
+    assert\equal(blogDate("2026-07-01T12:00:00Z"), want: "July 1, 2026", message: "RFC3339 byline");
 }
 
 test "formatISO renders human-readable UTC" {
-    assert\equal(formatISO("2026-06-29T01:41:51Z"), "June 29, 2026, 1:41 AM UTC", "full form");
-    assert\equal(formatISOShort("2026-06-29T01:41:51Z"), "Jun 29, 2026", "compact form");
+    assert\equal(formatISO("2026-06-29T01:41:51Z"), want: "June 29, 2026, 1:41 AM UTC", message: "full form");
+    assert\equal(formatISOShort("2026-06-29T01:41:51Z"), want: "Jun 29, 2026", message: "compact form");
 }
 
 test "isFuturePost gates on the calendar day, inclusive of the day itself" {
-    assert\equal(isFuturePost("2026-08-25", "2026-08-24T23:00:00Z"), true, "a later day is future");
-    assert\equal(isFuturePost("2026-08-25T00:00:00Z", "2026-08-25T23:59:59Z"), false, "same day at any hour is not");
-    assert\equal(isFuturePost("2026-08-24", "2026-08-25T00:00:00Z"), false, "an earlier day is not");
-    assert\equal(isFuturePost("", "2026-08-25T00:00:00Z"), false, "an undated post is not");
-    assert\equal(isFuturePost("2026-08-25", ""), false, "no asOf fails open");
+    assert\equal(isFuturePost("2026-08-25", asOf: "2026-08-24T23:00:00Z"), want: true, message: "a later day is future");
+    assert\equal(isFuturePost("2026-08-25T00:00:00Z", asOf: "2026-08-25T23:59:59Z"), want: false, message: "same day at any hour is not");
+    assert\equal(isFuturePost("2026-08-24", asOf: "2026-08-25T00:00:00Z"), want: false, message: "an earlier day is not");
+    assert\equal(isFuturePost("", asOf: "2026-08-25T00:00:00Z"), want: false, message: "an undated post is not");
+    assert\equal(isFuturePost("2026-08-25", asOf: ""), want: false, message: "no asOf fails open");
 }

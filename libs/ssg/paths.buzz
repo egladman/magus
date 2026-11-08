@@ -86,7 +86,7 @@ export fun isNeverContentDir(name: str) > bool {
 }
 
 test "isNeverContentDir catches node_modules at any depth, and nothing else" {
-    assert\equal(isNeverContentDir("node_modules"), true, "node_modules is never content");
-    assert\equal(isNeverContentDir("gen"), false, "gen is root-only, handled by isGeneratorDir");
-    assert\equal(isNeverContentDir("guides"), false, "a content dir is walked");
+    assert\equal(isNeverContentDir("node_modules"), want: true, message: "node_modules is never content");
+    assert\equal(isNeverContentDir("gen"), want: false, message: "gen is root-only, handled by isGeneratorDir");
+    assert\equal(isNeverContentDir("guides"), want: false, message: "a content dir is walked");
 }

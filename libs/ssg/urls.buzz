@@ -27,14 +27,14 @@ export fun allDigits(s: str) > bool {
 // hasDatePrefix detects a leading YYYY-MM-DD- prefix (11 chars) on a slugged filename.
 export fun hasDatePrefix(s: str) > bool {
     if (s.len() < 11) { return false; }
-    return allDigits(s.sub(0, 4)) and allDigits(s.sub(5, 2)) and allDigits(s.sub(8, 2))
-        and s.sub(4, 1) == "-" and s.sub(7, 1) == "-" and s.sub(10, 1) == "-";
+    return allDigits(s.sub(0, len: 4)) and allDigits(s.sub(5, len: 2)) and allDigits(s.sub(8, len: 2))
+        and s.sub(4, len: 1) == "-" and s.sub(7, len: 1) == "-" and s.sub(10, len: 1) == "-";
 }
 
 // blogSlug drops a leading YYYY-MM-DD- date prefix, leaving the title slug.
 export fun blogSlug(base: str) > str {
     var s = base;
-    if (s.endsWith(".md")) { s = s.sub(0, s.len() - 3); }
+    if (s.endsWith(".md")) { s = s.sub(0, len: s.len() - 3); }
     if (hasDatePrefix(s)) { s = s.sub(11); }
     return s;
 }
@@ -42,9 +42,9 @@ export fun blogSlug(base: str) > str {
 // blogDateDirectory turns a YYYY-MM-DD- prefix into nested "YYYY/MM/DD", or null.
 export fun blogDateDirectory(base: str) > str? {
     var s = base;
-    if (s.endsWith(".md")) { s = s.sub(0, s.len() - 3); }
+    if (s.endsWith(".md")) { s = s.sub(0, len: s.len() - 3); }
     if (!hasDatePrefix(s)) { return null; }
-    return s.sub(0, 4) + "/" + s.sub(5, 2) + "/" + s.sub(8, 2);
+    return s.sub(0, len: 4) + "/" + s.sub(5, len: 2) + "/" + s.sub(8, len: 2);
 }
 
 // blogURLPath is a post's URL path below blog/: date scope + slug, or just the slug.
@@ -65,7 +65,7 @@ export fun cleanURL(rel: str, blogDir: str) > str {
         return blogDir + "/" + blogURLPath(rel.sub((blogDir + "/").len())) + "/";
     }
     var base = rel;
-    if (base.endsWith(".md")) { base = base.sub(0, base.len() - 3); }
+    if (base.endsWith(".md")) { base = base.sub(0, len: base.len() - 3); }
     final parts = base.split("/");
     var segs: mut [str] = mut [<str>];
     var i = 0;
@@ -85,7 +85,7 @@ export fun cleanURL(rel: str, blogDir: str) > str {
 
 // cleanDepth is the segment count of a page's clean URL (how many "../" reach root).
 export fun cleanDepth(rel: str, blogDir: str) > int {
-    final u = cleanURL(rel, blogDir);
+    final u = cleanURL(rel, blogDir: blogDir);
     if (u == "") { return 0; }
     return u.split("/").len() - 1;
 }
@@ -93,15 +93,15 @@ export fun cleanDepth(rel: str, blogDir: str) > int {
 // "_index" must strip like "index"/"README": a stray segment inflates the "../"
 // climb by one and 404s every asset/nav link.
 test "cleanURL strips the _index landing marker like index" {
-    assert\equal(cleanURL("public/_index.md", "blog"), "public/", "public/_index.md -> public/");
-    assert\equal(cleanDepth("public/_index.md", "blog"), 1, "public landing is one level deep");
-    assert\equal(cleanDepth("public/atom/_index.md", "blog"), 2, "public/atom landing is two levels deep");
-    assert\equal(cleanDepth("development/_index.md", "blog"), 1, "development landing is one level deep");
+    assert\equal(cleanURL("public/_index.md", blogDir: "blog"), want: "public/", message: "public/_index.md -> public/");
+    assert\equal(cleanDepth("public/_index.md", blogDir: "blog"), want: 1, message: "public landing is one level deep");
+    assert\equal(cleanDepth("public/atom/_index.md", blogDir: "blog"), want: 2, message: "public/atom landing is two levels deep");
+    assert\equal(cleanDepth("development/_index.md", blogDir: "blog"), want: 1, message: "development landing is one level deep");
 }
 
 // Manpage Markdown (docs/manpage/*.md) maps straight to /manpage/<cmd>/; no "gen"
 // build segment to flatten.
 test "cleanURL maps a manpage page to its flat URL" {
-    assert\equal(cleanURL("manpage/magus-graph.md", "blog"), "manpage/magus-graph/", "manpage page URL");
-    assert\equal(cleanURL("manpage/magus.md", "blog"), "manpage/magus/", "manpage umbrella page URL");
+    assert\equal(cleanURL("manpage/magus-graph.md", blogDir: "blog"), want: "manpage/magus-graph/", message: "manpage page URL");
+    assert\equal(cleanURL("manpage/magus.md", blogDir: "blog"), want: "manpage/magus/", message: "manpage umbrella page URL");
 }
