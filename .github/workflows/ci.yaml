@@ -234,6 +234,7 @@ jobs:
   # replay it from the cache archive this job exports.
   generate:
     name: generate
+    needs: [plan]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -251,13 +252,14 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
-      # Built from source as the plan builds it, so generate runs the magus this commit
-      # defines. It publishes nothing: the plan's artifact is the one every job verifies.
-      # The history restore is what last-passed reads.
+      # The plan's build of this commit, verified, as every later job installs it: magus is
+      # compiled once per run. The history restore is what last-passed reads.
       - uses: ./.github/actions/setup-magus
         with:
-          installation-strategy: source
-          source-path: .
+          installation-strategy: artifact
+          artifact: ${{ needs.plan.outputs.magus_artifact }}
+          artifact-sha256: ${{ needs.plan.outputs.magus_sha256 }}
+          artifact-commit: ${{ github.sha }}
           restore-history: 'true'
 
       # No cache on main, as in the plan job.
@@ -266,9 +268,6 @@ jobs:
           version: '2026.4.8'
           env: false
           cache: ${{ github.event_name == 'pull_request' }}
-
-      - name: Restore the mise-pinned Go toolchain
-        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       - uses: ./.github/actions/setup-scip
 
@@ -1165,16 +1164,16 @@ jobs:
       # doing here; without one of the merge base there is nothing to compare a signature
       # against, so no bump can be computed.
       #
-      # Built here rather than pulled from the published graph: that artifact is per main
-      # commit, and a pull request's merge base need not have one yet.
+      # Built in this run rather than pulled from the published graph: that artifact is per
+      # main commit, and a pull request's merge base need not have one yet.
       #
-      # The base is indexed in a worktree of the SAME checkout, so both sides see the same
-      # paths, the same toolchain and the same missing node_modules. Symmetry is the point:
-      # a signature compared across two different environments moves for reasons the author
-      # did not write.
+      # advice-index indexes the base in a worktree of the SAME checkout, so both sides see
+      # the same paths, the same toolchain and the same missing node_modules. Symmetry is
+      # the point: a signature compared across two different environments moves for
+      # reasons the author did not write.
       #
-      # The indexes advice-index built, from this run. An accelerator: a missing or
-      # mismatched archive leaves this job indexing both sides itself, and says so.
+      # A missing or mismatched archive leaves this job indexing this tree alone, with no
+      # baseline, and says so: only advice-index builds the base's magus.
       - name: Download the indexes advice-index built
         id: index-download
         continue-on-error: true
@@ -1191,11 +1190,11 @@ jobs:
         run: |
           dir="$RUNNER_TEMP/advice-index"
           if [ "$DOWNLOAD" != success ] || [ ! -f "$dir/cache.tar.gz" ]; then
-            echo "::warning title=advice::no advice-index archive (download: $DOWNLOAD); this job indexes both sides itself"
+            echo "::warning title=advice::no advice-index archive (download: $DOWNLOAD); this job indexes this tree alone"
           elif ! (cd "$dir" && sha256sum --check --strict SHA256SUMS); then
-            echo "::warning title=advice::the advice-index archive does not match its sha256, so it is not imported; this job indexes both sides itself"
+            echo "::warning title=advice::the advice-index archive does not match its sha256, so it is not imported; this job indexes this tree alone"
           elif ! magus config cache import "$dir/cache.tar.gz"; then
-            echo "::warning title=advice::importing the advice-index archive failed; this job indexes both sides itself"
+            echo "::warning title=advice::importing the advice-index archive failed; this job indexes this tree alone"
           else
             cp "$dir/base-graph.json" "$RUNNER_TEMP/base-graph.json"
             echo "imported=true" >> "$GITHUB_OUTPUT"
@@ -1213,13 +1212,11 @@ jobs:
         run: |
           set -euo pipefail
           magus graph build --no-sessions
+          # Only advice-index builds the base's magus, so without its archive
+          # there is no baseline to compare against.
           if [ "$IMPORTED" != true ]; then
-            # The base loads with its own magus, as in advice-index.
-            git worktree add "$RUNNER_TEMP/base" "$(git merge-base HEAD "origin/$BASE_REF")"
-            go -C "$RUNNER_TEMP/base" build -trimpath -o "$RUNNER_TEMP/base-magus" ./cmd/magus
-            "$RUNNER_TEMP/base-magus" --root "$RUNNER_TEMP/base" graph build --no-sessions
-            "$RUNNER_TEMP/base-magus" --root "$RUNNER_TEMP/base" graph export --symbols -o json \
-              --tee "$RUNNER_TEMP/base-graph.json" -q > /dev/null
+            echo "::warning title=advice::no merge-base graph from advice-index; exported-api and conformance run without a baseline"
+            exit 0
           fi
           echo "path=$RUNNER_TEMP/base-graph.json" >> "$GITHUB_OUTPUT"
 
