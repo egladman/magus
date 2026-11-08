@@ -131,7 +131,7 @@ or `MAGUS_LOG_STREAM=1`. `-vvv` implies `-vv`.
 
 Trace is not "even more debug". It is two specific questions.
 
-**Why is my build serialized?** Trace adds exactly two events: `schedule.wait`
+**Why is a build serialized?** Trace adds exactly two events: `schedule.wait`
 (a step's upstream dependencies) and `schedule.run` (its admission to the pool,
 with its slot count and whether it holds the pool exclusively). Together they
 answer what a step is waiting on, without a profiler.

@@ -166,6 +166,16 @@ var coreTexts = map[Rule]ruleText{
 			"only when one of its items opens with an imperative, so a recap, a precedence order or a list " +
 			"of reasons is left alone.",
 	},
+	RuleFirstPerson: {
+		code:      "PRF1005",
+		dimension: DimensionConventions,
+		catches:   "I, me or my on a reference page or in a guide, outside an author's note",
+		why: "A page states what the product does, so a reader takes every sentence as its contract. " +
+			"\"I use a worktree\" in that voice reads as advice the product gives, or as a promise it " +
+			"keeps. An author's note, a blockquote opened with [!AUTHOR], marks the one place a page " +
+			"speaks as its author, and the rule leaves it alone. Quoted words and code are mentions, so " +
+			"a reader's question (\"how do I build this?\") passes, as do \"I/O\" and a link's text.",
+	},
 	RuleBlame: {
 		code:      "PRF2001",
 		dimension: DimensionStance,

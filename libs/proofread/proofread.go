@@ -67,6 +67,9 @@ const (
 	// RuleSecondPerson reports we, us, our or ours in a guide, which speaks to
 	// the reader as you.
 	RuleSecondPerson Rule = "second-person"
+	// RuleFirstPerson reports I, me or my in a reference page or a guide
+	// outside an author's note, the one place a page speaks as its author.
+	RuleFirstPerson Rule = "first-person"
 	// RuleStepVerb reports a step of a numbered procedure in a guide that does
 	// not open with its imperative verb.
 	RuleStepVerb Rule = "step-verb"
@@ -391,6 +394,7 @@ var coreChecks = []check{
 	{rule: RuleBareRule, on: slices.Concat(brief, compact), house: true, judge: bareRule},
 	{rule: RuleSecondPerson, on: guide, judge: secondPerson},
 	{rule: RuleStepVerb, on: guide, judge: stepVerb},
+	{rule: RuleFirstPerson, on: []Kind{KindReference, KindGuide}, house: true, judge: firstPersonSingular},
 	{rule: RuleCondescension, on: slices.Concat(withReply, compact, help, agentReply), judge: condescension},
 }
 

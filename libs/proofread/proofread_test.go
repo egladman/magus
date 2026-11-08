@@ -101,7 +101,7 @@ func TestRulesListsEveryRuleInReportOrder(t *testing.T) {
 		RuleAside, RuleHistory, RuleDocStub,
 		RuleLeadContext, RuleReplyVoice, RuleTense, RuleHedge, RuleAttribution,
 		RuleTerseSentence, RuleTerseParagraph, RuleWordy, RuleBareRule,
-		RuleSecondPerson, RuleStepVerb, RuleCondescension,
+		RuleSecondPerson, RuleStepVerb, RuleFirstPerson, RuleCondescension,
 		RuleRestates, RuleCommentBudget, RuleBlockBudget, RuleBannedWord,
 	}, ruleNames(toneChecks), ruleNames(slopChecks), ruleNames(markupChecks), ruleNames(messageChecks), ruleNames(commitChecks),
 		ruleNames(helpChecks), ruleNames(issueChecks), ruleNames(densityChecks), ruleNames(reviewChecks),

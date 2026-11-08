@@ -14,6 +14,9 @@ final RULES: {str: str} = {
     "terms": "deny",
     // A page and a description state what the code does now; "will" and "I added" date it.
     "tense": "deny",
+    // A page speaks for magus, so a reader holds magus to each sentence; the author's own
+    // practice goes in an author's note (> [!AUTHOR]), the one place first-person passes.
+    "first-person": "deny",
     // An em or en dash has a plain spelling everyone can type and grep for; a page mixing
     // the two is searched with two patterns or not at all.
     "dash": "deny",
@@ -167,8 +170,19 @@ final PATHS: {str: {str: str}} = {
     "blog/**": {
         "reply-voice": "off", "tense": "off", "hedge": "off", "signpost": "off", "buzzword": "off",
         "buzzword-weak": "off", "contrast": "off", "vague": "off", "closer": "off", "ing-tail": "off",
-        "staccato": "off", "filler": "advise",
+        "staccato": "off", "first-person": "off", "filler": "advise",
     },
+    // The rest are written as Eli on purpose, the way a post is. CONTRIBUTING.md is a
+    // letter to a contributor. The design index, the standard and the proposals argue in
+    // the voice the principle pages argue in. A decision record quotes the decision as it
+    // was made. A benchmark task is a person asking an agent. The proofread fixtures hold
+    // first person for the rules that measure it.
+    "CONTRIBUTING.md": {"first-person": "off"},
+    "docs/design.md": {"first-person": "off"},
+    "docs/design/**": {"first-person": "off"},
+    "docs/decisions/**": {"first-person": "off"},
+    "benchmarks/agent/tasks/**": {"first-person": "off"},
+    "libs/proofread/testdata/**": {"first-person": "off"},
 };
 
 // table is the decisions file proofread reads, for a run over files: a PATHS entry joins
