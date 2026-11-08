@@ -408,6 +408,8 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 			return traceFromContext(ctx).phase(phase)
 		},
 	})
+	// The rule cliOptions opens every workspace with.
+	deps.TierRule = magus.TierCeiling
 	index := newGuardLookups(rootOverride)
 	deps.GraphStaleAdvice = index.staleGraphAdvice
 	deps.SymbolDefined = index.symbolDefined

@@ -1511,9 +1511,11 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	type modelTiered interface {
 		ModelTiers(ctx context.Context) *types.ModelTierSet
 		ModelTierMatrix() types.ModelTierMatrix
+		CheckSpawn(parent, child types.ModelTier) error
 	}
 	if tiers, ok := ws.(modelTiered); ok {
 		loc.ModelTiers, loc.ModelTierMatrix = tiers.ModelTiers(ctx), tiers.ModelTierMatrix()
+		loc.SpawnRule = tiers.CheckSpawn
 	}
 	// std cannot import internal/agent, which loads the harness spells, so the workspace
 	// supplies the reader.

@@ -4233,6 +4233,7 @@ github.com/egladman/magus/types.ModelTier.MarshalText method func() ([]byte, err
 github.com/egladman/magus/types.ModelTier.Name method func() string
 github.com/egladman/magus/types.ModelTier.Rank method func() int
 github.com/egladman/magus/types.ModelTier.Within method func(ceiling ModelTier) error
+github.com/egladman/magus/types.ModelTierAboveParent const DiagnosticCode = "MGS3055"
 github.com/egladman/magus/types.ModelTierBounds type struct
 github.com/egladman/magus/types.ModelTierBounds.MaxContext field int64
 github.com/egladman/magus/types.ModelTierBounds.MaxLive field int
@@ -4305,6 +4306,7 @@ github.com/egladman/magus/types.ModelTiers type struct
 github.com/egladman/magus/types.ModelTiers.Definition field string "json:\"definition\" yaml:\"definition\""
 github.com/egladman/magus/types.ModelTiers.Rows field []ModelTierRecord "json:\"rows\"       yaml:\"rows\""
 github.com/egladman/magus/types.ModelTiersDefinition const untyped string = "Model tiers reads job history, not git: each (model tier, job kind) pair's recorded outcomes. A tier's pass rate is scored by its Wilson lower bound, set beside how many checks, re-forks, rework rounds (a worker sent more work after it handed back) and widenings (write paths added to a taken job) its jobs took, and what they cost. It reports what each tier achieved; changing a tier is a person editing the declaration or matrix it names."
+github.com/egladman/magus/types.ModelTiersIncomparable const DiagnosticCode = "MGS3056"
 github.com/egladman/magus/types.ModuleDefinition const untyped string = "A module is a magus standard-library namespace a magusfile imports for host capabilities - filesystem, exec, vcs, crypto, http, and more. Import each under its bare name (import \"fs\", then fs\\glob(...)); magus layers these methods onto Buzz's own stdlib. The magus forms are sandbox-aware; some methods also exist in Buzz's own stdlib."
 github.com/egladman/magus/types.ModuleEntry type struct
 github.com/egladman/magus/types.ModuleEntry.Doc field string "json:\"doc,omitempty\"     yaml:\"doc,omitempty\""

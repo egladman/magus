@@ -864,6 +864,15 @@ const MemoryPressureHigh DiagnosticCode = "MGS3053"
 // prerequisite beside a unit of another project that needs it. Stage zero
 // computes each such prerequisite, so one left in stage one is a planner bug.
 const ShardCrossesProjects DiagnosticCode = "MGS3054"
+
+// ModelTierAboveParent is a spawn or fork at a model tier ranked above its
+// parent's, which the workspace's spawn rule refuses. A person forks the
+// higher-tier work as a row of its own.
+const ModelTierAboveParent DiagnosticCode = "MGS3055"
+
+// ModelTiersIncomparable is a spawn or fork whose tier and its parent's come
+// from two model-tier declarations. The spawn rule cannot order them.
+const ModelTiersIncomparable DiagnosticCode = "MGS3056"
 const RaceDetected DiagnosticCode = "MGS4001"
 const OutputOverlapDetected DiagnosticCode = "MGS4002"
 const NondeterministicOutput DiagnosticCode = "MGS4003"
@@ -1216,6 +1225,8 @@ var allDiagnosticCodes = []DiagnosticCode{
 	DiskFull,
 	MemoryPressureHigh,
 	ShardCrossesProjects,
+	ModelTierAboveParent,
+	ModelTiersIncomparable,
 	RaceDetected,
 	OutputOverlapDetected,
 	NondeterministicOutput,
