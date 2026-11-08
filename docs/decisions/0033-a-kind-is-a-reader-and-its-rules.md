@@ -43,6 +43,7 @@ type KindSpec struct {
     Extends Kind              // a declared kind starts from this kind's spec
     Reader  Reader            // how text becomes input, with its properties
     Rules   map[Rule]Decision // each rule this kind judges, and its default
+    Weights map[Rule]float64  // a grade weight in place of the rule's measured one
     Minimum *int              // the grade a text of this kind must reach
     Terms   map[string]string // spellings this kind replaces, as RuleTerms reports them
 }
@@ -66,6 +67,7 @@ type Reader struct {
 | A declared kind naming a rule its format cannot feed, an unknown rule or an unknown base is an error naming the field      | not built |
 | The `lines` format: each non-blank line or list item is one unit, with no title and no headings                            | not built |
 | `Terms` per kind, merged over the built-in glossary, so a kind can hold its own phrasing                                   | not built |
+| `Weights` per kind; a set weight is marked as set, not measured, wherever the grade is reported                            | not built |
 | The rule pages' decision tables are generated from the specs                                                               | not built |
 
 A declared kind in a decisions table looks like this, and is a fact, never an algorithm:
@@ -133,8 +135,13 @@ into a language.
 
 ## Open questions
 
-- Whether `Sections` and `Titled` cover every name branch, or a third property is needed;
-  the migration lists each branch and the property it became.
-- Whether a declared kind may set a rule's weight, or only its decision.
+- Whether `Titled`, `Headings` and `Sections` cover every name branch. A branch none of
+  them fits gets a new named property, never a kept name check; the migration lists each
+  branch and the property it became.
 
 ## Amendments
+
+### 2026-11-08: a declared kind may set weights
+
+Eli decided a declared kind may set a rule's grade weight as well as its decision. A weight
+a team sets claims no measured precision, so the grade report marks it as set.
