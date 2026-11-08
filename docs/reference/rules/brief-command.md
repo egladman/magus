@@ -1,16 +1,16 @@
 ---
-title: "brief-command: a spawn or continuation brief that teaches a command the guard denies, or a stopping reply that hands one to the person"
-description: "A deny rule by default: it refuses a spawn or continuation brief that teaches a command the guard denies, or a stopping reply that hands one to the person, and names what to run instead."
+title: "brief-command: a brief or stopping reply that hands over a command the guard denies"
+description: "A deny rule by default: it refuses a brief or stopping reply that hands over a command the guard denies, and names what to run instead."
 tags: [guard, rules, brief-command, deny]
 ---
 
 # brief-command
 
-A deny rule by default: it refuses a spawn or continuation brief that teaches a command the guard denies, or a stopping reply that hands one to the person, and names what to run instead.
+A deny rule by default: it refuses a brief or stopping reply that hands over a command the guard denies, and names what to run instead.
 
 ## What it catches
 
-A spawn or continuation brief that teaches a command the guard denies, or a stopping reply that hands one to the person.
+A brief or stopping reply that hands over a command the guard denies.
 
 ## Why
 

@@ -474,7 +474,7 @@ func TestVcsCommitsListsWhatTheBranchAddsWithBodies(t *testing.T) {
 	require.NoError(t, err)
 	var seen []string
 	for _, c := range got {
-		seen = append(seen, c.Subject+"|"+strings.TrimSpace(c.Body))
+		seen = append(seen, fmt.Sprintf("%s|%s", c.Subject, strings.TrimSpace(c.Body)))
 	}
 	assert.Equal(t, []string{"second|a body line", "first|"}, seen)
 }

@@ -644,7 +644,7 @@ var ruleDocUnreadCommand = types.RuleDoc{
 
 var ruleDocBriefCommand = types.RuleDoc{
 	Name:    string(denyRuleBriefCommand),
-	Catches: "a spawn or continuation brief that teaches a command the guard denies, or a stopping reply that hands one to the person",
+	Catches: "a brief or stopping reply that hands over a command the guard denies",
 	Why: "A worker runs the commands in its brief as written, so a denied one is refused in every worker the brief reaches, or teaches each of them a way around the refusal. " +
 		"Only what the brief presents as a command is graded, a fenced shell block or an inline code span, with the same rules a shell line gets. A line naming a command to forbid it (never, do not, denied, instead of) is passed over, and a `<placeholder>` reads as a word rather than a redirect. " +
 		"A command the person runs reaches no hook, so a reply's fenced shell blocks are judged at stop as if the agent ran them, and the first denied one refuses the stop once. Its inline spans are not: a reply names commands in prose.",
