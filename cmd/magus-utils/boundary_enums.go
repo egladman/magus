@@ -54,7 +54,7 @@ func loadBoundaryEnums() ([]boundaryEnum, error) {
 			errs = append(errs, err)
 			continue
 		}
-		enums = append(enums, boundaryEnumFrom(e, rt, ref))
+		enums = append(enums, newBoundaryEnum(e, rt, ref))
 	}
 	for key := range byKey {
 		errs = append(errs, fmt.Errorf("%s is in boundaryEnumTypes but not in .buzzgen.yaml", key))
@@ -62,7 +62,7 @@ func loadBoundaryEnums() ([]boundaryEnum, error) {
 	return enums, errors.Join(errs...)
 }
 
-func boundaryEnumFrom(e buzzgen.Enum, rt reflect.Type, ref buzzgen.TypeRef) boundaryEnum {
+func newBoundaryEnum(e buzzgen.Enum, rt reflect.Type, ref buzzgen.TypeRef) boundaryEnum {
 	out := boundaryEnum{Name: e.Name, Type: rt}
 	if ref.Settings.Module != nil {
 		out.Module = *ref.Settings.Module
