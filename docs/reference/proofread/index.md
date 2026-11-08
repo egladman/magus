@@ -104,6 +104,8 @@ Each rule also has a dimension, the cost its findings name to the reader:
 | [date-format](date-format.md)   | PRF5007 | conventions | off         | dates in more than one style in one text: 2026-10-13, Oct 2026, October 2026, 10/13/2026, or Sep beside Sept |
 | [local-path](local-path.md)     | PRF5008 | conventions | off (house) | a path only the author's machine holds: a home directory, `$HOME`, a temp directory or a drive letter        |
 | [local-branch](local-branch.md) | PRF5009 | conventions | off (house) | a branch that exists only on the author's machine, from the names the caller passes                          |
+| [emphasis](emphasis.md)         | PRF5010 | conventions | off (house) | a bold or italic span in a pull request description or a review                                              |
+| [bare-symbol](bare-symbol.md)   | PRF5011 | conventions | off (house) | a code name outside backticks: a call, a dotted name, a lowerCamel or a snake_case word                      |
 
 ## Doc comments
 

@@ -142,6 +142,7 @@ func usage() string {
 	b.WriteString("  --only RULES         judge by these comma-separated rules alone\n")
 	b.WriteString("  --thread-length N    the count of replies the author already posted in the thread\n")
 	b.WriteString("  --event EVENT        the verdict a review summary is posted with: APPROVE, REQUEST_CHANGES or COMMENT\n")
+	b.WriteString("  --future-sections H  let the sections under these comma-separated headings speak in the future tense\n")
 	b.WriteString("  --local-branches FILE  report the branches FILE names, one a line, as only this machine's\n")
 	b.WriteString("  --anchored           with review-reply, judge as review-inline\n")
 	b.WriteString("  --voice FILE         judge with the voice file proofread voice build wrote\n")
@@ -235,6 +236,7 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	only := fs.String("only", "", "judge by these comma-separated `rules` alone")
 	threadLength := fs.Int("thread-length", 0, "the `count` of replies the author already posted in the thread")
 	event := fs.String("event", "", "the `verdict` a review summary is posted with: APPROVE, REQUEST_CHANGES or COMMENT")
+	futureSections := fs.String("future-sections", "", "let the sections under these comma-separated `headings` speak in the future tense")
 	localBranchesPath := fs.String("local-branches", "", "report the branches this `file` names, one a line, as only this machine's")
 	anchored := fs.Bool("anchored", false, "with review-reply, judge as review-inline")
 	voicePath := fs.String("voice", "", "judge with the voice `file` proofread voice build wrote, or default for the one it writes with no --out")
@@ -297,6 +299,10 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 
 	opts := []proofread.Option{
 		proofread.WithOnly(onlyRules...), proofread.WithThreadLength(*threadLength), proofread.WithEvent(proofread.Event(*event)),
+	}
+
+	if *futureSections != "" {
+		opts = append(opts, proofread.WithFutureSections(strings.Split(*futureSections, ",")...))
 	}
 
 	if *localBranchesPath != "" {

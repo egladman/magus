@@ -49,7 +49,7 @@ var agentReplyChecks = []check{
 	{rule: RuleClosingOffer, on: agentReply, graded: true, judge: closingOffer},
 	{rule: RuleRequestRecap, on: agentReply, graded: true, judge: requestRecap},
 	{rule: RuleOptionList, on: agentReply, graded: true, judge: optionList},
-	{rule: RuleUnbackedDone, on: agentReply, graded: true, judge: unbackedDone},
+	{rule: RuleUnbackedDone, on: slices.Concat(agentReply, []Kind{KindChangeDescription}), graded: true, judge: unbackedDone},
 	{rule: RuleShortReplyHeading, on: agentReply, graded: true, judge: shortReplyHeading},
 	{rule: RuleAgreementOpener, on: agentReply, graded: true, judge: agreementOpener},
 }
@@ -106,7 +106,9 @@ var agentReplyTexts = map[Rule]ruleText{
 			"a magus output ref or a file beside the claim lets them check it. Measured 2026-10-10 over " +
 			"the 400 replies: it fires on 55 (a 13.8% firing rate), \"Done\", \"Fixed\" and \"gate green\" most. A " +
 			"negated or conditional claim (\"not verified\", \"once it passes\") is left alone. It " +
-			"advises: the person may have watched the run, and evidence may sit in another paragraph.",
+			"advises: the person may have watched the run, and evidence may sit in another paragraph. " +
+			"A pull request description is judged too, since its reviewer cannot open an unnamed run " +
+			"either; its precision there is not measured yet.",
 	},
 	RuleShortReplyHeading: {
 		code:      "PRF8025",

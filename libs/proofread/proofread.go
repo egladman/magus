@@ -342,7 +342,7 @@ func (c check) declaredDecision(kind Kind) Decision {
 // in. A doc keeps the rules it was always judged by: the rules written for
 // Markdown and pull requests would hold every doc comment in the tree to
 // them at once, with no sweep behind it.
-var checks = slices.Concat(coreChecks, cssChecks, toneChecks, slopChecks, messageChecks, commitChecks, helpChecks,
+var checks = slices.Concat(coreChecks, cssChecks, toneChecks, slopChecks, markupChecks, messageChecks, commitChecks, helpChecks,
 	issueChecks, densityChecks, reviewChecks, reviewKindChecks, suppressChecks, agentReplyChecks, toolChecks, listChecks, voiceChecks,
 	compactChecks, skillChecks, []check{templateCheck, gradeCheck}, triadChecks)
 
@@ -496,6 +496,8 @@ type options struct {
 	voice        *Voice
 	// localBranches are the names [RuleLocalBranch] reports.
 	localBranches []string
+	// futureSections are the headings [RuleTense] lets speak of later work.
+	futureSections []string
 	// minimum is the grade under which a text gets a [RuleGrade] finding, nil
 	// for a call that grades nothing.
 	minimum *int

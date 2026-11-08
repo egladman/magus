@@ -25,6 +25,9 @@ final RULES: {str: str} = {
     "local-path": "deny",
     // A published branch is one a reader can fetch, never an unpushed one.
     "local-branch": "deny",
+    // Text a reviewer reads has no bold or italics; code goes in backticks.
+    "emphasis": "deny",
+    "bare-symbol": "deny",
     // A subject is lowercase. An acronym may lead. A capital after a conventional
     // prefix is the base-branch grammar's check, not this one.
     "subject-case": "deny",

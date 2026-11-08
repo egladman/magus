@@ -40,6 +40,30 @@ directive, so `go install` also builds it from a `libs/proofread/v*` tag. The
 [verify guide](https://eli.gladman.cc/magus/guides/setup/verify/) covers the
 download and both checks.
 
+## As a git hook
+
+This repository runs proofread through the magus guard, but the binary works alone. To
+judge every commit message, save this as `.git/hooks/commit-msg` and make it executable:
+
+```sh
+#!/bin/sh
+exec proofread commit-message -o text --minimum 20 "$1"
+```
+
+Proofread exits 1 when a finding is decided `deny` or the grade falls under the minimum,
+which stops the commit, and 0 otherwise, printing advice without stopping. It refuses to
+run with no minimum for the kind, so pass `--minimum` or set `minimums` in a decisions
+table. Add `--decisions FILE` to turn on the house
+rules your team keeps (`emphasis`, `bare-symbol`, `local-path` and the rest are off until a
+table names them). Judge a pull request description before posting it the same way:
+
+```sh
+printf '%s\n%s\n' "$TITLE" "$BODY" | proofread change-description --stdin -o text --minimum 80
+```
+
+A pass means proofread found nothing it can count. It does not mean the text is right.
+Read what you post, since your name is on it.
+
 ## Decisions
 
 Proofread speaks the decisions of a magus guard rule. Each rule ships a default

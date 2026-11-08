@@ -171,10 +171,14 @@ var (
 func tense(in input) []Finding {
 	var out []Finding
 
+	later := futureLines(in.source, in.opts.futureSections)
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
 		for _, at := range future.FindAllStringIndex(para.text, -1) {
 			m := para.text[at[0]:at[1]]
 			if strings.EqualFold(m, "will") && strings.HasSuffix(strings.ToLower(para.text[:at[0]]), "at ") {
+				continue
+			}
+			if later[para.lineAt(at[0])] {
 				continue
 			}
 
@@ -191,6 +195,42 @@ func tense(in input) []Finding {
 				Message: fmt.Sprintf("Name the code, not the author, in '%s': say what the change does.", m),
 				Match:   m, Line: para.lineAt(at[0]),
 			})
+		}
+	}
+
+	return out
+}
+
+// WithFutureSections names the Markdown headings whose sections may speak in
+// the future tense, such as a list of follow-up work. A name matches a
+// heading's text without its #s, ignoring case.
+func WithFutureSections(names ...string) Option {
+	return func(o *options) { o.futureSections = append(o.futureSections, names...) }
+}
+
+// futureLines are the 1-based lines of source under a heading names lists,
+// up to the next heading of the same or a higher level.
+func futureLines(source, names []string) map[int]bool {
+	out := map[int]bool{}
+	if len(names) == 0 {
+		return out
+	}
+
+	level := 0
+	for i, line := range source {
+		trimmed := strings.TrimSpace(line)
+		if hashes := len(trimmed) - len(strings.TrimLeft(trimmed, "#")); hashes > 0 && hashes <= 6 {
+			title := strings.TrimSpace(trimmed[hashes:])
+			switch {
+			case slices.ContainsFunc(names, func(n string) bool { return strings.EqualFold(n, title) }):
+				level = hashes
+				continue
+			case level > 0 && hashes <= level:
+				level = 0
+			}
+		}
+		if level > 0 {
+			out[i+1] = true
 		}
 	}
 
