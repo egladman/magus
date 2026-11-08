@@ -220,6 +220,27 @@ fun removeSteps(at: Layout, dir: str) > result\Result::<[Step]> {
     return result\ok::<[Step]>(steps);
 }
 
+// orphanSteps finds shims, from any dir, whose script top no longer holds.
+// Such a shim only says it did not run. After a dir rename, nothing else
+// finds it.
+fun orphanSteps(at: Layout, top: str) > result\Result::<[Step]> {
+    var steps = mut [<Step>];
+    try {
+        foreach (hook in fs\listDir(at.hooksDir)) {
+            final path = "{at.hooksDir}/{hook}";
+            if (!fs\isFile(path)) { continue; }
+            if (shimScript(fs\readFile(path)) -> script) {
+                if (!fs\exists("{top}/{script}")) {
+                    steps.append(Step{hook = hook, path = path, change = Change.remove});
+                }
+            }
+        }
+    } catch (err: any) {
+        return result\caught::<[Step]>(err, doing: "git hooks: read {at.hooksDir}");
+    }
+    return result\ok::<[Step]>(steps);
+}
+
 fun summary(steps: [Step]) > str {
     var lines = mut [<str>];
     foreach (step in steps) {
@@ -300,7 +321,8 @@ export fun install(ctx: magus\Context, dir: str) > void !> any { //nolint:no-thr
     }
 }
 
-// remove deletes every shim install wrote for a script under dir, and nothing else.
+// remove deletes every shim install wrote for a script under dir, and every
+// shim whose script the checkout no longer holds, and nothing else.
 export fun remove(ctx: magus\Context, dir: str) > void !> any { //nolint:no-throw // a target calls it and remove raises its refusals
     final located = layout();
     if (located.error -> e) {
@@ -316,7 +338,16 @@ export fun remove(ctx: magus\Context, dir: str) > void !> any { //nolint:no-thro
     if (steps.error -> e) {
         throw e.message; //nolint:no-throw // a target calls it and remove raises its refusals
     }
-    final applied = apply(ctx, steps: steps.value!);
+    final orphans = orphanSteps(at, top: vcs\root());
+    if (orphans.error -> e) {
+        throw e.message; //nolint:no-throw // a target calls it and remove raises its refusals
+    }
+    final removals = steps.value!.cloneMutable();
+    final listed = removals.map(fun (index: int, step: Step) > str => step.path);
+    foreach (orphan in orphans.value!) {
+        if (listed.indexOf(orphan.path) == null) { removals.append(orphan); }
+    }
+    final applied = apply(ctx, steps: removals);
     if (applied.error -> e) {
         throw e.message; //nolint:no-throw // a target calls it and remove raises its refusals
     }
@@ -373,4 +404,20 @@ test "install removes only shims whose script left the directory" {
     std\assert(gone[0].hook == "pre-commit", message: "the dropped hook");
     std\assert(gone[0].change == Change.remove, message: "as a removal");
     fs\removeAll(hooksDir);
+}
+
+test "remove finds a shim whose script left the checkout, from any dir" {
+    final top = fs\tempDir("top");
+    final hooksDir = fs\tempDir("hooks");
+    final at = Layout{hooksDir = hooksDir, prefix = ""};
+    fs\mkdirAll("{top}/hack/git-hooks");
+    fs\writeFile("{top}/hack/git-hooks/pre-commit.buzz", content: "");
+    fs\writeFile("{hooksDir}/pre-commit", content: shim("pre-commit", script: "hack/git-hooks/pre-commit.buzz", include: ""));
+    fs\writeFile("{hooksDir}/commit-msg", content: shim("commit-msg", script: "tools/git-hooks/commit-msg.buzz", include: ""));
+    fs\writeFile("{hooksDir}/post-merge", content: "#!/bin/sh\necho mine\n");
+    final gone = orphanSteps(at, top: top).value!;
+    std\assert(gone.len() == 1, message: "one orphan, got {gone.len()}");
+    std\assert(gone[0].hook == "commit-msg", message: "the shim whose script moved");
+    fs\removeAll(hooksDir);
+    fs\removeAll(top);
 }
