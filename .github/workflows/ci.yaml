@@ -1071,9 +1071,12 @@ jobs:
           mkdir -p "$out"
           magus graph build --no-sessions
           if [ "$BASE_CACHED" != true ]; then
+            # The base loads with its own magus: a rule this pull request adds
+            # can refuse the base's magusfiles.
             git worktree add "$RUNNER_TEMP/base" "$BASE_SHA"
-            magus --root "$RUNNER_TEMP/base" graph build --no-sessions
-            magus --root "$RUNNER_TEMP/base" graph export --symbols -o json \
+            go -C "$RUNNER_TEMP/base" build -trimpath -o "$RUNNER_TEMP/base-magus" ./cmd/magus
+            "$RUNNER_TEMP/base-magus" --root "$RUNNER_TEMP/base" graph build --no-sessions
+            "$RUNNER_TEMP/base-magus" --root "$RUNNER_TEMP/base" graph export --symbols -o json \
               --tee "$out/base-graph.json" -q > /dev/null
           fi
           magus config cache export --to "$out/cache.tar.gz"
@@ -1211,9 +1214,11 @@ jobs:
           set -euo pipefail
           magus graph build --no-sessions
           if [ "$IMPORTED" != true ]; then
+            # The base loads with its own magus, as in advice-index.
             git worktree add "$RUNNER_TEMP/base" "$(git merge-base HEAD "origin/$BASE_REF")"
-            magus --root "$RUNNER_TEMP/base" graph build --no-sessions
-            magus --root "$RUNNER_TEMP/base" graph export --symbols -o json \
+            go -C "$RUNNER_TEMP/base" build -trimpath -o "$RUNNER_TEMP/base-magus" ./cmd/magus
+            "$RUNNER_TEMP/base-magus" --root "$RUNNER_TEMP/base" graph build --no-sessions
+            "$RUNNER_TEMP/base-magus" --root "$RUNNER_TEMP/base" graph export --symbols -o json \
               --tee "$RUNNER_TEMP/base-graph.json" -q > /dev/null
           fi
           echo "path=$RUNNER_TEMP/base-graph.json" >> "$GITHUB_OUTPUT"
