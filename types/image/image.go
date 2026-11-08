@@ -1,5 +1,3 @@
-// Package image holds the image module's records at the Buzz boundary. The
-// package namespaces them in Go as the module does in Buzz (image\Spec).
 package image
 
 import (
@@ -7,6 +5,9 @@ import (
 
 	"github.com/egladman/magus/spells"
 )
+
+// The image module's records at the Buzz boundary. The package namespaces
+// them in Go as the module does in Buzz (image\Spec).
 
 // OS is an OCI platform os; OSNone is unset and refused.
 type OS string
