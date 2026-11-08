@@ -45,6 +45,7 @@
     "docstub": "deny",
     "emphasis": "deny",
     "empty-request-changes": "advise",
+    "first-person": "deny",
     "impatience": "advise",
     "instruction-position": "advise",
     "leak": "deny",
