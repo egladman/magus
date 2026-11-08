@@ -60,17 +60,18 @@ func TestWithDependsOnRelativeUpTwo(t *testing.T) {
 	root := makeWorkspaceRoot(
 		t,
 		"magusfile.buzz",
+		"x/magusfile.buzz",
 		"a/b/c/magusfile.buzz",
 	)
 
 	reg := NewWorkspaceRegistry()
-	reg.RegisterProject("a/b/c", WithDependsOn("../../.."))
+	reg.RegisterProject("a/b/c", WithDependsOn("../../../x"))
 
 	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 	p := ws.Get("a/b/c")
 	require.NotNil(t, p, "project a/b/c not found")
-	assert.Contains(t, p.DependsOn, ".")
+	assert.Contains(t, p.DependsOn, "x")
 }
 
 // TestWithDependsOnBarePathUnchanged verifies that a bare repo-relative

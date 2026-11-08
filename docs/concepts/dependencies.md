@@ -27,8 +27,10 @@ owns that story end to end.
 **Rule of thumb:** reach for `needs` inside a magusfile to sequence work
 ("run `generate` before I `build`"); reach for `depends_on` to declare that
 another project's changes affect you, independent of whether any target
-calls into it directly. A cross-project `needs` gives you both at
-once; see the fold, below.
+calls into it directly. A cross-project `needs` also names its project in
+`depends_on` ([MGS1062](../reference/codes/magusfile/MGS1062.md)), except a
+`needs` on the root, which `depends_on` cannot name
+([MGS1061](../reference/codes/magusfile/MGS1061.md)); see the fold, below.
 
 ## The fold: a cross-project `needs` also declares `depends_on`
 
@@ -39,7 +41,13 @@ consuming project's `DependsOn`** at workspace-open time
 (`applyCrossProjectDependencies`, called from `Magus.Open`'s `load`). You
 declare the dependency once, at the target that needs it, and it
 counts toward the affected closure and cache-key propagation exactly as if
-you had also written a `depends_on` entry; you never write both.
+you had also written a `depends_on` entry. The load still refuses a
+cross-project `needs` whose project `depends_on` leaves out
+([MGS1062](../reference/codes/magusfile/MGS1062.md)), so a project's couplings
+read from its declaration. A `needs` on a root target is the exception: naming
+the root in `depends_on` is refused
+([MGS1061](../reference/codes/magusfile/MGS1061.md)), so the fold is that
+edge's only spelling.
 
 **The fold is a static read, so a computed edge is invisible.** The extractor
 reads the magusfile's AST; it resolves a same-project target passed by

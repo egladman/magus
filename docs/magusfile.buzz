@@ -39,19 +39,18 @@ magus\project({
     // read libs/kustomize; without these edges the reads are unordered (MGS4004).
     // The catalog and reference generators compile the Go libs below into the binaries
     // they run, so each is named here instead of globbing its tree.
+    // The rest are projects whose targets these targets ctx.needs (MGS1062).
     "depends_on": ["../proto", "../libs/figure", "../libs/kustomize", "../libs/cmdline",
-                   "../libs/diagnostics", "../libs/embed", "../libs/scipbuzz", "../libs/xdg"],
+                   "../libs/diagnostics", "../libs/embed", "../libs/scipbuzz", "../libs/xdg",
+                   "../libs/gopherbuzz", "../libs/proofread", "../libs/textsearch",
+                   "./guides/integrations/agents"],
     // Affected tracks this glob, not the import graph. Another project's files arrive
-    // through depends_on; the root's Go trees through the targets' readsFiles.
+    // through depends_on, the root's through the targets' readsFiles.
     "sources": ["*.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
                 "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html",
                 "tour/*.buzz", "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
                 // Hand-authored exemptions for abandonedLinkCheck, so a source, not an output.
-                "retired.urls.lock",
-                // Not the .proto files: src/**/*.ts already covers the client proto generates.
-                "../README.md", "../CONTRIBUTING.md", "../blog/**", "../assets/**",
-                "../hack/magusfile/ruledocs.buzz",
-                "../benchmarks/agent/reports/**/*.md", "../benchmarks/BENCHMARKS.md"],
+                "retired.urls.lock"],
     // No project-wide outputs: each stage declares its own, so a hit restores only its files.
     "targets": {
         "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},

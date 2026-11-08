@@ -411,9 +411,16 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					// Skip a self-resolving import (r == p.Path): a self-edge is both
 					// unnecessary and rejected by the depgraph as a self-loop, same guard
 					// the input loop below applies.
-					if r != p.Path {
-						extra = append(extra, r)
+					if r == p.Path {
+						continue
 					}
+					// The root is exempt because MGS1061 refuses naming it.
+					if r != types.RootProject && !slices.Contains(p.DependsOn, r) {
+						return types.DiagnosticErrorf(types.CrossNeedsUndeclared,
+							"%s: target %q: ctx.needs names a target in %q, which depends_on does not name; add %q to depends_on",
+							types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, r, ref.Project)
+					}
+					extra = append(extra, r)
 				}
 				// Unconditional: the footprint half of the ctx API is a no-op at run
 				// time, so a computed argument is unreadable rather than merely unread and

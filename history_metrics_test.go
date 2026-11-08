@@ -36,8 +36,8 @@ func (s *HistoryMetricsSuite) SetupTest() {
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	gitRun(t, root, "init", "-q")
 	commitHistoryMetricsFiles(t, root, "Ada", "2026-01-01T00:00:00Z", map[string]string{
-		"magusfile.buzz":      "// root\n",
-		"api/magusfile.buzz":  "// api\n",
+		"magusfile.buzz":      rootBuild,
+		"api/magusfile.buzz":  needsRootBuild,
 		"api/service.go":      "package api\n",
 		"docs/magusfile.buzz": "// docs\n",
 		"docs/guide.md":       "# guide\n",
@@ -48,7 +48,7 @@ func (s *HistoryMetricsSuite) SetupTest() {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".")
-	reg.RegisterProject("api", WithDependsOn(".."))
+	reg.RegisterProject("api")
 	reg.RegisterProject("docs", WithDependsOn("api"))
 	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
 	require.NoError(t, err)

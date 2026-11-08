@@ -2,6 +2,7 @@ package forecast
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/egladman/magus/internal/sys/mem"
@@ -366,6 +367,50 @@ func (s *PlanStagesSuite) TestPlanStagesWithNoSharedPrerequisiteIsPlan() {
 	got := f.PlanStages(us, 8)
 	s.Empty(got.Zero)
 	s.Equal(f.Plan(us, 8), got.One)
+}
+
+func (s *PlanStagesSuite) TestPlanStagesComputesAPrerequisiteTwoProjectsNeedFirstWhenSplittingDoesNotPay() {
+	h := measured(10_000, map[string]int64{".:build": 200_000, "docs:build": 50_000, "console:build": 50_000})
+	needs := closures(map[string][]string{"docs:build": {".:build"}, "console:build": {".:build"}})
+	f := Model{History: h, MemoryBudgetBytes: noBudget, Needs: needs}
+	got := f.PlanStages(unitList("docs:build", "console:build"), 8)
+	s.Equal([][]string{{".:build"}}, names(got.Zero))
+	s.Equal([][]string{{"console:build", "docs:build"}}, names(got.One))
+}
+
+func (s *PlanStagesSuite) TestPlanStagesComputesAPrerequisiteOneOtherProjectNeedsFirst() {
+	needs := closures(map[string][]string{"docs:build": {".:symbol-digest-generate"}})
+	f := Model{History: s.h, MemoryBudgetBytes: noBudget, Needs: needs}
+	got := f.PlanStages(unitList("docs:build"), 8)
+	s.Equal([][]string{{".:symbol-digest-generate"}}, names(got.Zero))
+	s.Equal([][]string{{"docs:build"}}, names(got.One))
+}
+
+func (s *PlanStagesSuite) TestPlanStagesTakesAUnitAnotherProjectNeedsOutOfStageOne() {
+	needs := closures(map[string][]string{"docs:build": {".:build"}})
+	f := Model{History: s.h, MemoryBudgetBytes: noBudget, Needs: needs}
+	got := f.PlanStages(unitList(".:build", ".:lint", "docs:build"), 8)
+	s.Equal([][]string{{".:build"}}, names(got.Zero))
+	s.ElementsMatch([]string{".:lint", "docs:build"}, slices.Concat(names(got.One)...))
+}
+
+func (s *PlanStagesSuite) TestCrossingSkipsAPrerequisiteOfTheUnitsOwnProject() {
+	s.Empty(Model{Needs: s.needs}.Crossing(unitList(".:lint", ".:test")))
+}
+
+func (s *PlanStagesSuite) TestCrossingSkipsAPrerequisiteThatReplays() {
+	needs := closures(map[string][]string{"docs:build": {".:build"}})
+	f := Model{Needs: needs}.Replaying(unitList(".:build"))
+	s.Empty(f.Crossing(unitList("docs:build")))
+}
+
+func (s *PlanStagesSuite) TestCrossingNamesEachComputingPrerequisiteOfAnotherProjectOnce() {
+	needs := closures(map[string][]string{
+		"docs:build":    {".:build", ".:generate", "docs:install"},
+		"console:build": {".:build"},
+	})
+	got := Model{Needs: needs}.Crossing(unitList("docs:build", "console:build"))
+	s.Equal([]types.Unit{unit(".:build"), unit(".:generate")}, got)
 }
 
 func (s *PlanStagesSuite) TestReplayingLetsAStageRepeatWhatAnEarlierOneComputed() {

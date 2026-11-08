@@ -1639,6 +1639,7 @@ github.com/egladman/magus/types.CredentialSocketPeer var Credential
 github.com/egladman/magus/types.CredentialStdio var Credential
 github.com/egladman/magus/types.CrossDepOwnerUnknown const DiagnosticCode = "MGS1015"
 github.com/egladman/magus/types.CrossFileMember const untyped string = "file"
+github.com/egladman/magus/types.CrossNeedsUndeclared const DiagnosticCode = "MGS1062"
 github.com/egladman/magus/types.CrossOutputCycle const DiagnosticCode = "MGS1012"
 github.com/egladman/magus/types.CrossOutputGlobEscapes const DiagnosticCode = "MGS1013"
 github.com/egladman/magus/types.CrossOutputNotProduced const DiagnosticCode = "MGS1014"
@@ -1734,6 +1735,7 @@ github.com/egladman/magus/types.DependencyWait.Elapsed method(ptr) func() time.D
 github.com/egladman/magus/types.DependencyWait.Nested method(ptr) func() *DependencyWait
 github.com/egladman/magus/types.DependencyWait.Request method(ptr) func(run func(context.Context) error)
 github.com/egladman/magus/types.DependencyWaitFromContext func(ctx context.Context) *DependencyWait
+github.com/egladman/magus/types.DependsOnRoot const DiagnosticCode = "MGS1061"
 github.com/egladman/magus/types.DescendantBoundaryCrossed const DiagnosticCode = "MGS3001"
 github.com/egladman/magus/types.DescribeGaps func(gaps []KnowledgeSymbolGap) string
 github.com/egladman/magus/types.DescribeStaleIndexes func(stale []KnowledgeStaleIndex) string
@@ -5066,6 +5068,7 @@ github.com/egladman/magus/types.Shard.Duties field []Duty
 github.com/egladman/magus/types.Shard.ID field string
 github.com/egladman/magus/types.Shard.ProjectPaths field []string
 github.com/egladman/magus/types.Shard.Units field []Unit
+github.com/egladman/magus/types.ShardCrossesProjects const DiagnosticCode = "MGS3054"
 github.com/egladman/magus/types.ShardPlan type struct
 github.com/egladman/magus/types.ShardPlan.Affected field []string
 github.com/egladman/magus/types.ShardPlan.Args field []string
@@ -5144,6 +5147,7 @@ github.com/egladman/magus/types.SourceDiagnostic.File field string "json:\"file\
 github.com/egladman/magus/types.SourceDiagnostic.Line field int "json:\"line\" yaml:\"line\""
 github.com/egladman/magus/types.SourceDiagnostic.Message field string "json:\"message\" yaml:\"message\""
 github.com/egladman/magus/types.SourceDiagnostic.URL field string "json:\"url,omitempty\" yaml:\"url,omitempty\""
+github.com/egladman/magus/types.SourceGlobInAnotherProject const DiagnosticCode = "MGS1060"
 github.com/egladman/magus/types.SourceIsAlsoOutput const DiagnosticCode = "MGS1034"
 github.com/egladman/magus/types.SourceProjects func(files []FileEntry) map[string]bool
 github.com/egladman/magus/types.SourcesChangedSinceBase func(ctx context.Context, insp Inspector, res VCSResolution, root string) map[string]bool

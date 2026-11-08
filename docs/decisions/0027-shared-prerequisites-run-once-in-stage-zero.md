@@ -52,6 +52,8 @@ with no `--shard` (MGS3029).
 | The symbol index's pack path names no checkout, so a cached index replays anywhere        | done (62823db95, #625) |
 | Each project's index op as a planned unit, beside the root's symbol digest                 | not built |
 | A measured makespan on this repository's CI, staged against unstaged                       | planned |
+| A computing prerequisite a unit of another project needs goes to stage zero               | done  |
+| A stage-one shard computing one is refused (MGS3054)                                        | done  |
 
 ### The plan
 
@@ -71,8 +73,28 @@ and that went to stage zero leaves stage one. Stage one is checked against
 computed and nothing else. Stage zero carries no duties: `placeDuties` runs on stage
 one alone.
 
-When the split shares nothing, stage one is `forecast.Model.Plan` as before and stage
-zero is empty. The ID, digest, duties and JSON of every shard are then unchanged.
+### Prerequisites another project needs
+
+Amended 2026-11-07. A computing prerequisite that a unit of another project needs goes
+to stage zero whatever the split does with it (`forecast.Model.Crossing`). The split
+rule alone left one in stage one whenever its dependents did not pay to split, and
+the union-find then put every project that needed it on one shard. A change to a
+root library put the root's generators, `libs/gopherbuzz:build` and the docs
+playground bundle on the shard that ran the docs and the console, and each of those
+shards waited on work another project owns.
+
+`ci.Build` checks stage one against `Replaying(stageZero)` and refuses a unit whose
+closure still holds one (MGS3054). The planner never produces that plan, so the code
+names a planner fault rather than a workspace mistake.
+
+Units that only wait on each other are not prerequisites. A run orders a target after
+the same-name target of each project its project depends on, but only when one run
+holds both. `ctx.needs` closures are what the plan reads, so the root's `build` can
+still share a shard with the docs when packing puts it there. Counting each such wait
+as a prerequisite would move the root's whole CI ahead of every other project.
+
+When the split shares nothing and no unit needs another project's computing work,
+stage one is `forecast.Model.Plan` as before and stage zero is empty. The ID, digest, duties and JSON of every shard are then unchanged.
 `stage_zero` stays out of the plan's job `outputs` for the same reason, and the
 workflow reads it from the plan file.
 
@@ -143,6 +165,9 @@ not built here.
 - [Built for the largest monorepos](../design/principles/built-for-the-largest-monorepos.md):
   the more units a change reaches through one prerequisite, the more the flat plan
   lost.
+- [Enforcement, not pinky promises](../design/principles/enforcement-not-pinky-promises.md):
+  the cross-project rule is checked where the plan is built (MGS3054), and the
+  couplings that fed it are refused at load (MGS1060, MGS1061, MGS1062).
 
 ## Alternatives
 

@@ -17,20 +17,20 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
-// TestDeriveCrossProjectDeps verifies that a target-level cross-project dependency
-// (a project import + <alias>.<target>) is folded into the depending project's
-// DependsOn, so it counts toward the affected set without a separate project-level
-// depends_on.
+// TestDeriveCrossProjectDeps verifies that a ctx.needs on a root target folds
+// the root into the depending project's DependsOn. MGS1061 refuses declaring
+// that edge, so the fold is its only spelling.
 func TestDeriveCrossProjectDeps(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	files := map[string]string{
-		"gopherbuzz/magusfile.buzz": "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n",
+		"magusfile.buzz": "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n",
 		"web/magusfile.buzz": `import "magus";
-import "project/../gopherbuzz";
+import "project/.." as workspace;
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(gopherbuzz.build);
+    ctx.needs(workspace.build);
 }
 `,
 	}
@@ -48,8 +48,40 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 		}
 	}
 	require.NotNil(t, web, "web project missing from graph")
-	assert.Contains(t, web.DependsOn, "gopherbuzz",
-		"web.DependsOn should contain \"gopherbuzz\" (derived from the target-level external dep)")
+	assert.Contains(t, web.DependsOn, ".",
+		"web.DependsOn should contain \".\" (derived from the target-level external dep)")
+}
+
+type CrossNeedsSuite struct{ suite.Suite }
+
+func TestCrossNeedsSuite(t *testing.T) { suite.Run(t, new(CrossNeedsSuite)) }
+
+// inspect loads a workspace whose web project needs gopherbuzz's build, with
+// webProject as web's magus\project options.
+func (s *CrossNeedsSuite) inspect(webProject string) error {
+	w := testkit.NewWorkspace(s.T())
+	w.WriteTree(map[string]string{
+		"gopherbuzz/magusfile.buzz": "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n",
+		"web/magusfile.buzz": fmt.Sprintf(`import "magus";
+import "project/../gopherbuzz";
+%s
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(gopherbuzz.build);
+}
+`, webProject),
+	})
+	_, err := Inspect(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	return err
+}
+
+func (s *CrossNeedsSuite) TestANeedsWithNoDependsOnRefusesWithMGS1062() {
+	err := s.inspect("")
+	s.Require().ErrorIs(err, types.CrossNeedsUndeclared)
+	s.Contains(err.Error(), `add "../gopherbuzz" to depends_on`)
+}
+
+func (s *CrossNeedsSuite) TestANeedsItsDependsOnNamesLoads() {
+	s.NoError(s.inspect(`magus\project({"depends_on": ["../gopherbuzz"]});`))
 }
 
 // TestAnyProjectDeclaresCI verifies that ci detection extracts target nodes
@@ -1212,6 +1244,7 @@ func TestEvaluateTarget_ReportsTheChainInOrder(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{
 		"magusfile.buzz": `import "magus";
 import "project/api";
+magus\project({"depends_on": ["api"]});
 export fun generate(ctx: magus\Context, args: [str]) > void {}
 export fun build(ctx: magus\Context, args: [str]) > void {}
 export fun ci(ctx: magus\Context, args: [str]) > void {

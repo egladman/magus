@@ -6,7 +6,24 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+type DependsOnSuite struct{ suite.Suite }
+
+func TestDependsOnSuite(t *testing.T) { suite.Run(t, new(DependsOnSuite)) }
+
+func (s *DependsOnSuite) TestANestedProjectNamingTheRootRefusesWithMGS1061() {
+	err := WithDependsOn("..")(&types.Project{Path: "docs"})
+	s.Require().ErrorIs(err, types.DependsOnRoot)
+	s.Contains(err.Error(), `depends_on ".." names the root project`)
+}
+
+func (s *DependsOnSuite) TestANestedProjectNamingASiblingKeepsIt() {
+	p := &types.Project{Path: "docs"}
+	s.Require().NoError(WithDependsOn("../proto")(p))
+	s.Equal([]string{"proto"}, p.DependsOn)
+}
 
 func TestWithOutputs(t *testing.T) {
 	p := &types.Project{Path: "."}

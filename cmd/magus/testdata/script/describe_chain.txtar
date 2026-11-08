@@ -39,7 +39,7 @@ concurrency: 1
 import "magus";
 import "spells/acme";
 import "project/api";
-magus\project({ "spells": [acme] });
+magus\project({ "spells": [acme], "depends_on": ["api"] });
 export fun generate(ctx: magus\Context, args: [str]) > void {}
 export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
 export fun build(ctx: magus\Context, args: [str]) > void {}

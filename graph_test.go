@@ -17,6 +17,18 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// rootBuild and needsRootBuild give a project an edge to the root the only
+// way one may spell it: a ctx.needs the load folds (MGS1061).
+const (
+	rootBuild = `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {}
+`
+	needsRootBuild = `import "magus";
+import "project/.." as workspace;
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(workspace.build); }
+`
+)
+
 func TestComposeGraph(t *testing.T) {
 	// A workspace named "magus" so the root display reads as "magus" rather
 	// than as the temp dir's auto-generated basename.
@@ -24,14 +36,14 @@ func TestComposeGraph(t *testing.T) {
 	require.NoError(t, os.MkdirAll(root, 0o755))
 	canonicalRoot, err := filepath.EvalSymlinks(root)
 	require.NoError(t, err)
-	for _, path := range []string{".", "api", "docs"} {
+	for path, src := range map[string]string{".": rootBuild, "api": needsRootBuild, "docs": ""} {
 		dir := filepath.Join(root, path)
 		require.NoError(t, os.MkdirAll(dir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(src), 0o644))
 	}
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".")
-	reg.RegisterProject("api", WithDependsOn(".."))
+	reg.RegisterProject("api")
 	reg.RegisterProject("docs", WithDependsOn("api"))
 
 	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))

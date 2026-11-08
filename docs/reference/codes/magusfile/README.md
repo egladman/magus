@@ -27,3 +27,6 @@ gap is visible before CI runs.
 - [MGS1057](MGS1057.md): a listed workspace's VCS does not ignore `.magus/workspaces`.
 - [MGS1058](MGS1058.md): a file or directory sits where the load would put a symlink under `.magus/workspaces`.
 - [MGS1059](MGS1059.md): a target reads through `.magus/workspaces/<name>` and no such workspace is connected.
+- [MGS1060](MGS1060.md): a project source glob reaches into another project's directory.
+- [MGS1061](MGS1061.md): a nested project's `depends_on` names the root project.
+- [MGS1062](MGS1062.md): a cross-project `ctx.needs` whose project `depends_on` does not name.

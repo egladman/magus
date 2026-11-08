@@ -1,23 +1,24 @@
 # The settledness oracle for derived target ordering. The fixture is the
-# entangled shape hand-wiring used to be the only answer for: root's
+# entangled shape hand-wiring used to be the only answer for: base's
 # first-generate writes SEED.md, site's page-generate derives page.md from it,
-# and root's index-generate derives index.txt from every .md in the tree -
-# page.md included. site depends_on "..", so the steps must run root first, and
-# no step order can put page-generate before index-generate: at project
+# and base's index-generate derives index.txt from every .md it reads -
+# page.md included. site, nested in base, depends_on "..", so base runs first,
+# and no step order can put page-generate before index-generate: at project
 # granularity the data flow is a cycle. Target by target it is acyclic
 # (first-generate -> page-generate -> index-generate), which is what the
 # scheduler derives from the declarations; the against-the-grain hop is settled
-# by re-running index-generate once its input actually moved.
+# by re-running index-generate once its input actually moved. The upstream is a
+# project of its own because a depends_on may not name the root (MGS1061).
 #
 # The workspace is ws/, so audit's probe log sits outside it and is no undeclared
 # write (MGS4011).
 cd ws
 
 # The committed state is settled for seed "one". Move the seed.
-cp seed2.txt src/seed.txt
+cp seed2.txt base/src/seed.txt
 
 # ONE invocation must settle the whole chain.
-exec magus run assemble . site
+exec magus run assemble base base/site
 # The settle re-run is accounted like a batch step - a limiter slot, the inflight
 # set, a journal result event with its own captured log - so it REPORTS like one.
 # The repro line comes from the cache's result record and from nowhere else, so it
@@ -27,9 +28,9 @@ exec magus run assemble . site
 # NOT the target name: the settle log line above already names the target, so an
 # assertion on that alone passes either way.
 stderr 'magus run index-generate'
-cmp SEED.md want-seed.md
-cmp site/page.md want-page.md
-cmp index.txt want-index.txt
+cmp base/SEED.md want-seed.md
+cmp base/site/page.md want-page.md
+cmp base/index.txt want-index.txt
 
 # audit is a skip-cache VERIFIER: its fallback reads overlap page-generate's
 # writes exactly as index-generate's do, but it declares no writes, so settling
@@ -40,18 +41,20 @@ cmp ../audit.log want-audit-once
 
 # A second identical invocation changes nothing: the settle step re-runs a
 # reader only when a writer's bytes moved, and nothing moves on a settled tree.
-cp index.txt index.settled
-exec magus run assemble . site
-cmp index.txt index.settled
+cp base/index.txt index.settled
+exec magus run assemble base base/site
+cmp base/index.txt index.settled
 cmp ../audit.log want-audit-twice
 
 -- ws/magus.yaml --
 concurrency: 2
--- ws/src/seed.txt --
+-- ws/magusfile.buzz --
+import "magus";
+-- ws/base/src/seed.txt --
 one
--- ws/SEED.md --
+-- ws/base/SEED.md --
 one
--- ws/index.txt --
+-- ws/base/index.txt --
 one
 page: one
 -- ws/want-seed.md --
@@ -63,7 +66,7 @@ two
 page: two
 -- ws/seed2.txt --
 two
--- ws/magusfile.buzz --
+-- ws/base/magusfile.buzz --
 import "magus";
 import "proc";
 magus\project({
@@ -83,7 +86,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("sh", ["-c", "cat SEED.md site/page.md > index.txt"]);
 }
 export fun audit(ctx: magus\Context, args: [str]) > void !> any {
-    proc\exec("sh", ["-c", "echo ran >> ../audit.log"]);
+    proc\exec("sh", ["-c", "echo ran >> ../../audit.log"]);
 }
 export fun assemble(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(first_generate);
@@ -95,15 +98,15 @@ ran
 -- ws/want-audit-twice --
 ran
 ran
--- ws/site/page.md --
+-- ws/base/site/page.md --
 page: one
--- ws/site/magusfile.buzz --
+-- ws/base/site/magusfile.buzz --
 import "magus";
 import "proc";
-import "project/.." as ws;
+import "project/.." as base;
 magus\project({ "depends_on": [".."], "sources": ["*.md"] });
 export fun page_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles([ws\file("SEED.md")]);
+    ctx.readsFiles([base\file("SEED.md")]);
     ctx.writesFiles(["page.md"]);
     proc\exec("sh", ["-c", "sed 's/^/page: /' ../SEED.md > page.md"]);
 }

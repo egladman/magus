@@ -17,6 +17,7 @@ import (
 )
 
 // WithDependsOn adds upstream project paths as dependencies. Paths may be repo-relative or dot-relative to the project.
+// A nested project naming the root is refused with MGS1061.
 //
 // This is the one caller that wants ResolveDependsOn.s two-mode reading, because a human
 // hand-writes these entries and both spellings are a deliberate affordance. Paths that
@@ -29,6 +30,11 @@ func WithDependsOn(paths ...string) ProjectOption {
 			r, err := file.ResolveDependsOn(raw, p.Path)
 			if err != nil {
 				return err
+			}
+			if r == types.RootProject && p.Path != types.RootProject {
+				return types.DiagnosticErrorf(types.DependsOnRoot,
+					"project %q: depends_on %q names the root project; a ctx.needs on a root target carries that edge",
+					p.Path, raw)
 			}
 			resolved = append(resolved, r)
 		}
