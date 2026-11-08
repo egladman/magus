@@ -2005,7 +2005,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	t.Run("the rule answers differently from elsewhere", func(t *testing.T) {
 		t.Chdir(elsewhere)
 		unplaced := guard.Judge(t.Context(), guardDependencies(t.Context(), root), guard.Request{
-			Input:      ownBinaryPrefix + row.Check.String(),
+			Input:      ownBinaryPrefix + workerCheckLine(*row.Check),
 			DryRun:     true,
 			Lease:      row.ID,
 			PendingRow: &row,
@@ -2101,7 +2101,7 @@ func TestGradeCheckJudgesInTheJobsOwnCheckout(t *testing.T) {
 
 		taken := held
 		taken.State, taken.CheckoutRoot = types.StateRunning, own
-		ran := guard.Judge(t.Context(), deps, guard.Request{Input: ownBinaryPrefix + ci.String(), DryRun: true, Lease: taken.ID, PendingRow: &taken, Dir: own})
+		ran := guard.Judge(t.Context(), deps, guard.Request{Input: ownBinaryPrefix + workerCheckLine(*ci), DryRun: true, Lease: taken.ID, PendingRow: &taken, Dir: own})
 		assert.NotEqual(t, string(types.GuardDeny), ran.Decision, "the guard lets the holder run it there: %s", ran.Reason)
 	})
 
