@@ -102,6 +102,7 @@ var slopChecks = []check{
 	{rule: RuleDash, on: agentWords, house: true, judge: dash},
 	{rule: RuleASCII, on: agentWords, house: true, judge: ascii},
 	{rule: RuleLocalPath, on: published, house: true, judge: localPath},
+	{rule: RuleLocalBranch, on: published, house: true, judge: localBranch},
 	{rule: RuleHeadingCase, on: pageKinds, graded: true, judge: headingCase},
 }
 

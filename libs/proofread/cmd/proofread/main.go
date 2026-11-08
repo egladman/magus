@@ -142,6 +142,7 @@ func usage() string {
 	b.WriteString("  --only RULES         judge by these comma-separated rules alone\n")
 	b.WriteString("  --thread-length N    the count of replies the author already posted in the thread\n")
 	b.WriteString("  --event EVENT        the verdict a review summary is posted with: APPROVE, REQUEST_CHANGES or COMMENT\n")
+	b.WriteString("  --local-branches FILE  report the branches FILE names, one a line, as only this machine's\n")
 	b.WriteString("  --anchored           with review-reply, judge as review-inline\n")
 	b.WriteString("  --voice FILE         judge with the voice file proofread voice build wrote\n")
 	b.WriteString("  -o FORMAT            write findings as json (default), sarif, rdjson or text\n")
@@ -234,6 +235,7 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	only := fs.String("only", "", "judge by these comma-separated `rules` alone")
 	threadLength := fs.Int("thread-length", 0, "the `count` of replies the author already posted in the thread")
 	event := fs.String("event", "", "the `verdict` a review summary is posted with: APPROVE, REQUEST_CHANGES or COMMENT")
+	localBranchesPath := fs.String("local-branches", "", "report the branches this `file` names, one a line, as only this machine's")
 	anchored := fs.Bool("anchored", false, "with review-reply, judge as review-inline")
 	voicePath := fs.String("voice", "", "judge with the voice `file` proofread voice build wrote, or default for the one it writes with no --out")
 	format := fs.String("o", "json", "write findings as `json`, sarif, rdjson or text")
@@ -295,6 +297,14 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 
 	opts := []proofread.Option{
 		proofread.WithOnly(onlyRules...), proofread.WithThreadLength(*threadLength), proofread.WithEvent(proofread.Event(*event)),
+	}
+
+	if *localBranchesPath != "" {
+		body, err := os.ReadFile(*localBranchesPath)
+		if err != nil {
+			return failure(stderr, fmt.Errorf("--local-branches: %w", err))
+		}
+		opts = append(opts, proofread.WithLocalBranches(strings.Fields(string(body))...))
 	}
 
 	if *voicePath != "" {

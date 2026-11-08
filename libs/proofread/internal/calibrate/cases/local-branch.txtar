@@ -1,0 +1,12 @@
+A branch only the author's machine holds, named where readers on other machines read it.
+-- hit/change-description branches=feat/great-pasteur-51bbcb,latex-spell --
+- The rest of `feat/great-pasteur-51bbcb` is on main.
+- What latex-spell held is superseded.
+-- hit/commit-message branches=embed-index --
+squash embed-index into the cache
+-- pass/change-description branches=embed,latex-spell --
+- The index stores each embed once.
+- `embed-index` reads the table once.
+- https://github.com/egladman/magus/tree/latex-spell is the old branch.
+-- pass/change-description --
+- The rest of `feat/great-pasteur-51bbcb` is on main.

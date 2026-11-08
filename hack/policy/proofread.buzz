@@ -23,6 +23,8 @@ final RULES: {str: str} = {
     "attribution": "deny",
     // A published path starts at the repository root, never at home.
     "local-path": "deny",
+    // A published branch is one a reader can fetch, never an unpushed one.
+    "local-branch": "deny",
     // A subject is lowercase. An acronym may lead. A capital after a conventional
     // prefix is the base-branch grammar's check, not this one.
     "subject-case": "deny",

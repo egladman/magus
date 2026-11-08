@@ -58,6 +58,8 @@ type labeledCase struct {
 	ThreadLength int
 	// Event is the verdict a review-summary case is posted with, "" for none.
 	Event proofread.Event
+	// LocalBranches are the local-only branch names a case is judged with.
+	LocalBranches []string
 	// Voice is what the case file's author sections measure, or nil when it
 	// has none.
 	Voice *proofread.Voice
@@ -98,6 +100,7 @@ const caseLead = "fix(cache): keep the key stable\n" +
 // section header reads
 //
 //	<label>/<kind> [whole] [name=NAME] [owner=OWNER] [thread=N] [event=EVENT]
+//	    [branches=A,B]
 //
 // where label is hit, pass, fp or fn and kind is one the rule judges. Each
 // non-blank line of a section is one case; whole makes the section one case,
@@ -105,7 +108,8 @@ const caseLead = "fix(cache): keep the key stable\n" +
 // is judged as a bullet under a fixed title and opening paragraph; a whole one
 // as written. name and owner describe a doc-comment case's symbol,
 // thread sets a review case's thread length, and event a review-summary case's
-// verdict: APPROVE, REQUEST_CHANGES or COMMENT.
+// verdict: APPROVE, REQUEST_CHANGES or COMMENT. branches lists the
+// local-only branch names a case is judged with.
 //
 // A section labeled author holds no case. Its texts, one per non-blank line or
 // the whole section, are one author's own writing of its kind: every author
@@ -264,6 +268,8 @@ func parseHeader(header string, doc proofread.RuleDoc) (labeledCase, bool, error
 			if !slices.Contains(events, out.Event) {
 				return labeledCase{}, false, fmt.Errorf("event=%q is none of APPROVE, REQUEST_CHANGES or COMMENT", value)
 			}
+		case "branches":
+			out.LocalBranches = strings.Split(value, ",")
 		case "was":
 			// The label a case carried in a labeling round before a fix moved it, as
 			// fp:<round>:<id>; hack/lint holds a moved fp to it, and calibrate ignores it.
@@ -285,6 +291,7 @@ func parseHeader(header string, doc proofread.RuleDoc) (labeledCase, bool, error
 func (c labeledCase) Fires() bool {
 	opts := []proofread.Option{
 		proofread.WithThreadLength(c.ThreadLength), proofread.WithEvent(c.Event), proofread.WithVoice(c.Voice),
+		proofread.WithLocalBranches(c.LocalBranches...),
 	}
 
 	if doc, ok := catalog()[c.Rule]; ok && doc.Decisions[c.Kind] == proofread.DecisionOff {

@@ -458,6 +458,14 @@ var coreTexts = map[Rule]ruleText{
 			"author's machine and resolves nowhere else. URLs, link targets and `/dev/null` are left alone, " +
 			"and a reply to the person at that machine is not judged.",
 	},
+	RuleLocalBranch: {
+		code:      "PRF5009",
+		dimension: DimensionConventions,
+		catches:   "a branch that exists only on the author's machine, from the names the caller passes",
+		why: "House style: a branch that was never pushed resolves on no reader's machine, the way a home " +
+			"directory path does not. Proofread cannot tell a local branch from text, so the caller lists the " +
+			"local-only names; with none, the rule judges nothing. A one-word name counts only in backticks.",
+	},
 	RuleTense: {
 		code:      "PRF5004",
 		dimension: DimensionConventions,

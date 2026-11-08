@@ -494,6 +494,8 @@ type options struct {
 	threadLength int
 	event        Event
 	voice        *Voice
+	// localBranches are the names [RuleLocalBranch] reports.
+	localBranches []string
 	// minimum is the grade under which a text gets a [RuleGrade] finding, nil
 	// for a call that grades nothing.
 	minimum *int

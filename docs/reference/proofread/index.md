@@ -93,16 +93,17 @@ Each rule also has a dimension, the cost its findings name to the reader:
 
 ## House style
 
-| Rule                          | Code    | Dimension   | Default     | Catches                                                                                                      |
-| ----------------------------- | ------- | ----------- | ----------- | ------------------------------------------------------------------------------------------------------------ |
-| [terms](terms.md)             | PRF5001 | conventions | off (house) | a spelling the glossary replaces ("sub-agent")                                                               |
-| [dash](dash.md)               | PRF5002 | conventions | off (house) | an em dash, an en dash or a spaced double hyphen in prose                                                    |
-| [ascii](ascii.md)             | PRF5003 | conventions | off (house) | a curly quote, an ellipsis character or an emoji in prose                                                    |
-| [tense](tense.md)             | PRF5004 | conventions | off (house) | a claim in the future tense, or a first-person account of a change                                           |
-| [attribution](attribution.md) | PRF5005 | conventions | off (house) | credit to a tool or an agent, or an account of how the work was produced                                     |
-| [banned-word](banned-word.md) | PRF5006 | conventions | off (house) | a word this repository bans, in a stylesheet comment                                                         |
-| [date-format](date-format.md) | PRF5007 | conventions | off         | dates in more than one style in one text: 2026-10-13, Oct 2026, October 2026, 10/13/2026, or Sep beside Sept |
-| [local-path](local-path.md)   | PRF5008 | conventions | off (house) | a path only the author's machine holds: a home directory, `$HOME`, a temp directory or a drive letter        |
+| Rule                            | Code    | Dimension   | Default     | Catches                                                                                                      |
+| ------------------------------- | ------- | ----------- | ----------- | ------------------------------------------------------------------------------------------------------------ |
+| [terms](terms.md)               | PRF5001 | conventions | off (house) | a spelling the glossary replaces ("sub-agent")                                                               |
+| [dash](dash.md)                 | PRF5002 | conventions | off (house) | an em dash, an en dash or a spaced double hyphen in prose                                                    |
+| [ascii](ascii.md)               | PRF5003 | conventions | off (house) | a curly quote, an ellipsis character or an emoji in prose                                                    |
+| [tense](tense.md)               | PRF5004 | conventions | off (house) | a claim in the future tense, or a first-person account of a change                                           |
+| [attribution](attribution.md)   | PRF5005 | conventions | off (house) | credit to a tool or an agent, or an account of how the work was produced                                     |
+| [banned-word](banned-word.md)   | PRF5006 | conventions | off (house) | a word this repository bans, in a stylesheet comment                                                         |
+| [date-format](date-format.md)   | PRF5007 | conventions | off         | dates in more than one style in one text: 2026-10-13, Oct 2026, October 2026, 10/13/2026, or Sep beside Sept |
+| [local-path](local-path.md)     | PRF5008 | conventions | off (house) | a path only the author's machine holds: a home directory, `$HOME`, a temp directory or a drive letter        |
+| [local-branch](local-branch.md) | PRF5009 | conventions | off (house) | a branch that exists only on the author's machine, from the names the caller passes                          |
 
 ## Doc comments
 

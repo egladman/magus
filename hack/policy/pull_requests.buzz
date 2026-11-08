@@ -848,10 +848,21 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
         // judge must run from the path stale checked.
         final bin = "{dir}/{proofread\binary}";
         final found = mut [<Judged>];
+        final branches = localBranchesFile(workspace);
+        var branchArgs = [<str>];
+        if (branches.error != null) {
+            found.append(Judged{ rule = "judge", line = 0, decision = "advise",
+                message = "local-branch judged nothing: {branches.error!.message}" });
+        } else {
+            branchArgs = ["--local-branches", branches.value!];
+        }
         final words = kind.split(" ");
-        final run = proc\exec(bin, args: words + voiceArgs(words[0]) + ["--stdin", "--decisions", table],
+        final run = proc\exec(bin, args: words + voiceArgs(words[0]) + ["--stdin", "--decisions", table] + branchArgs,
             opts: proc\ExecOptions{stdin = text, quiet = true, allowFailure = true}) catch null;
         fs\remove(table) catch void;
+        if (branches.value != null) {
+            fs\remove(branches.value!) catch void;
+        }
         // proofread exits 1 when it writes a deny finding, a grade under its kind's minimum among them.
         if (run == null or (run!.code != 0 and run!.code != 1)) {
             var why = "{bin} did not start";
@@ -875,6 +886,30 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
         }
         return found;
     };
+}
+
+// localBranchesFile writes the branches this clone holds and no remote does
+// to a temp file, for `proofread --local-branches`. The caller removes it.
+fun localBranchesFile(workspace: str) > result\Result::<str> {
+    if (vcs\name() != "git") {
+        return result\fail::<str>("listing unpushed branches is written for git, not {vcs\name()}");
+    }
+    try {
+        final opts = vcs\CommandOptions{ dir = workspace, quiet = true };
+        final heads = vcs\cmd(["for-each-ref", "--format=%(refname:short)", "refs/heads"], opts: opts).stdout.split("\n");
+        final pushed = vcs\cmd(["for-each-ref", "--format=%(refname:lstrip=3)", "refs/remotes"], opts: opts).stdout.split("\n");
+        final local = mut [<str>];
+        foreach (head in heads) {
+            if (head != "" and pushed.indexOf(head) == null) {
+                local.append(head);
+            }
+        }
+        final file = fs\tempFile("proofread-local-branches");
+        fs\writeFile(file, content: local.join("\n"));
+        return result\ok::<str>(file);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "list the unpushed branches");
+    }
 }
 
 // voiceArgs judges pull request text and reviews with the author's voice.
@@ -2281,7 +2316,24 @@ fun proofreadSources() > str {
     fs\writeFile("{dir}/go.sum", content: "") catch void;
     fs\writeFile("{dir}/proofread.go", content: "package proofread\n") catch void;
     fs\writeFile("{dir}/cmd/proofread/main.go", content: "package main\n") catch void;
+    final repo = seedGit(ws, args: ["init", "-q"]);
+    std\assert(repo.error == null, message: repo.error?.message ?? "");
     return ws;
+}
+
+test "the judge hears of each branch this clone holds and no remote does" {
+    final ws = proofreadSources();
+    foreach (args in [["commit", "-q", "--allow-empty", "-m", "seed"], ["branch", "feat/unpushed"],
+        ["update-ref", "refs/remotes/origin/pushed", "HEAD"], ["branch", "pushed"]]) {
+        final step = seedGit(ws, args: args);
+        std\assert(step.error == null, message: step.error?.message ?? "");
+    }
+    final file = localBranchesFile(ws);
+    std\assert(file.error == null, message: file.error?.message ?? "");
+    final names = fs\readLines(file.value!) catch [<str>];
+    fs\remove(file.value!) catch void;
+    std\assert(names.indexOf("feat/unpushed") != null and names.indexOf("pushed") == null, message: names.join(","));
+    fs\removeAll(ws) catch void;
 }
 
 // fakeProofread builds ws's proofread as a shell script, fresh against its sources.
@@ -2328,6 +2380,7 @@ test "pull request text is judged with the author's voice, and a notice proofrea
     std\assert(argv[0].startsWith("change-description --voice default --stdin"), message: argv[0]);
     std\assert(argv[1].startsWith("review-reply --voice default --stdin"), message: argv[1]);
     std\assert(argv[2].indexOf("--voice") == null, message: argv[2]);
+    std\assert(argv[0].indexOf("--local-branches ") != null, message: argv[0]);
     fs\removeAll(ws) catch void;
 }
 
