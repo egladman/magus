@@ -16,7 +16,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/google/uuid v1.6.0
 	github.com/kkyr/fig v0.5.0
-	github.com/klauspost/compress v1.19.1
+	github.com/klauspost/compress v1.20.2
 	github.com/klauspost/pgzip v1.2.6
 	github.com/mark3labs/mcp-go v0.48.0
 	github.com/minio/selfupdate v0.6.0
