@@ -117,7 +117,7 @@ type Fallback struct {
 
 // String is the fallback on one line, for a log.
 func (f Fallback) String() string {
-	return f.What + ": " + f.Why + ". " + f.Effect
+	return fmt.Sprintf("%s: %s. %s", f.What, f.Why, f.Effect)
 }
 
 // ShardPlan is a provider-neutral CI shard plan produced by Magus.Plan.

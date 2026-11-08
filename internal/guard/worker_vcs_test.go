@@ -812,3 +812,51 @@ func (s *LeaseWriteMoveSuite) TestAClaimOnOneDeclarationCoversAMoveOfItsFile() {
 func (s *LeaseWriteMoveSuite) testContext() context.Context { return s.layers.of(s.T()) }
 
 func (s *standingWorker) testContext() context.Context { return s.layers.of(s.T()) }
+
+func ledgerAt(t *testing.T, ctx context.Context) location {
+	t.Helper()
+	at, ok := ctx.Value(locationKey{}).(location)
+	require.True(t, ok)
+	return at
+}
+
+// contextWithLedger lets a suite keep the ledger location instead of a context field.
+func contextWithLedger(t *testing.T, at location) context.Context {
+	return context.WithValue(t.Context(), locationKey{}, at)
+}
+
+// WorkerRevertSuite pins row 602: a worker reverts its own commit on its own
+// branch, graded like a cherry-pick by the paths it writes.
+type WorkerRevertSuite struct {
+	suite.Suite
+	at     location
+	repo   worktreeRepo
+	worker types.Job
+	wt     string
+}
+
+func TestWorkerRevertSuite(t *testing.T) { suite.Run(t, new(WorkerRevertSuite)) }
+
+func (s *WorkerRevertSuite) SetupTest() {
+	var ctx context.Context
+	ctx, s.repo, s.worker, s.wt = leaseVCSRepository(s.T())
+	s.at = ledgerAt(s.T(), ctx)
+}
+
+func (s *WorkerRevertSuite) judge(command string) string {
+	return denyLeaseScopedVCS(contextWithLedger(s.T(), s.at), Dependencies{callDir: s.wt}, s.worker.ID, command)
+}
+
+func (s *WorkerRevertSuite) TestRevertsItsOwnCommit() {
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.wt, "cmd", "magus"), 0o755))
+	s.repo.commitFiles(s.wt, map[string]string{"cmd/magus/x.go": "package main\n"})
+	s.Empty(s.judge("git revert --no-edit HEAD"))
+}
+
+func (s *WorkerRevertSuite) TestIsRefusedARevertOutsideItsWritePaths() {
+	s.Contains(s.judge("git revert --no-edit HEAD"), "a.txt", "the base commit wrote a.txt")
+}
+
+func (s *WorkerRevertSuite) TestIsRefusedARebase() {
+	s.NotEmpty(s.judge("git rebase origin/main"), "only an integrator rebases")
+}

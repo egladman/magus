@@ -3,8 +3,6 @@ package guard
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -16,7 +14,7 @@ import (
 // Rows 498, 559, 1267 and the 11-07 restack deadlock.
 type IntegratorVCSSuite struct {
 	suite.Suite
-	ctx     context.Context
+	at      location
 	deps    Dependencies
 	repo    worktreeRepo
 	row     types.Job
@@ -37,12 +35,13 @@ func (s *IntegratorVCSSuite) SetupTest() {
 }
 
 func (s *IntegratorVCSSuite) integrateAs(title string) {
-	s.ctx, s.deps = integratorFixture(s.T(), s.row, title)
+	ctx, deps := integratorFixture(s.T(), s.row, title)
+	s.at, s.deps = ledgerAt(s.T(), ctx), deps
 	s.deps.callDir = s.landing
 }
 
 func (s *IntegratorVCSSuite) judge(command string) string {
-	return denyLeaseScopedVCS(s.ctx, s.deps, s.row.ID, command)
+	return denyLeaseScopedVCS(s.ledgerContext(), s.deps, s.row.ID, command)
 }
 
 func (s *IntegratorVCSSuite) TestRebasesItsCheckoutOntoItsBase() {
@@ -144,42 +143,10 @@ func (s *IntegratorVCSSuite) TestInstallsTheHarnessInItsCheckout() {
 	s.row.CheckoutRoot = ""
 	s.integrateAs("orchestrator/integrate " + s.row.ID)
 	s.deps.callDir = ""
-	s.Empty(denyLeaseScopedHarness(s.ctx, s.deps, s.row.ID, "magus agent harness install").Say, "row 527")
+	s.Empty(denyLeaseScopedHarness(s.ledgerContext(), s.deps, s.row.ID, "magus agent harness install").Say, "row 527")
 	worker := s.deps
 	worker.caller.Agent = ""
-	s.NotEmpty(denyLeaseScopedHarness(s.ctx, worker, s.row.ID, "magus agent harness install").Say)
+	s.NotEmpty(denyLeaseScopedHarness(s.ledgerContext(), worker, s.row.ID, "magus agent harness install").Say)
 }
 
-// WorkerRevertSuite pins row 602: a worker reverts its own commit on its
-// own branch, graded like a cherry-pick by the paths it writes.
-type WorkerRevertSuite struct {
-	suite.Suite
-	ctx    context.Context
-	repo   worktreeRepo
-	worker types.Job
-	wt     string
-}
-
-func TestWorkerRevertSuite(t *testing.T) { suite.Run(t, new(WorkerRevertSuite)) }
-
-func (s *WorkerRevertSuite) SetupTest() {
-	s.ctx, s.repo, s.worker, s.wt = leaseVCSRepository(s.T())
-}
-
-func (s *WorkerRevertSuite) judge(command string) string {
-	return denyLeaseScopedVCS(s.ctx, Dependencies{callDir: s.wt}, s.worker.ID, command)
-}
-
-func (s *WorkerRevertSuite) TestRevertsItsOwnCommit() {
-	s.Require().NoError(os.MkdirAll(filepath.Join(s.wt, "cmd", "magus"), 0o755))
-	s.repo.commitFiles(s.wt, map[string]string{"cmd/magus/x.go": "package main\n"})
-	s.Empty(s.judge("git revert --no-edit HEAD"))
-}
-
-func (s *WorkerRevertSuite) TestIsRefusedARevertOutsideItsWritePaths() {
-	s.Contains(s.judge("git revert --no-edit HEAD"), "a.txt", "the base commit wrote a.txt")
-}
-
-func (s *WorkerRevertSuite) TestIsRefusedARebase() {
-	s.NotEmpty(s.judge("git rebase origin/main"), "only an integrator rebases")
-}
+func (s *IntegratorVCSSuite) ledgerContext() context.Context { return contextWithLedger(s.T(), s.at) }

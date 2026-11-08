@@ -225,7 +225,7 @@ func TestCheckTimeoutSendsANarrowedRunToTheBoundedForm(t *testing.T) {
 type NarrowedRunPriceSuite struct {
 	suite.Suite
 	lease string
-	ctx   context.Context
+	at    location
 	root  string
 }
 
@@ -234,7 +234,9 @@ func TestNarrowedRunPriceSuite(t *testing.T) { suite.Run(t, new(NarrowedRunPrice
 func (s *NarrowedRunPriceSuite) SetupTest() {
 	row := figuresLease()
 	s.lease = row.ID
-	s.ctx, s.root = fleetFixture(s.T(), row)
+	var ctx context.Context
+	ctx, s.root = fleetFixture(s.T(), row)
+	s.at = ledgerAt(s.T(), ctx)
 	recordRun(s.T(), s.root, "docs", "diagrams-generate", 13*time.Minute)
 }
 
@@ -253,25 +255,25 @@ const narrowedRun = "./magus run diagrams_generate docs -- -run 'TestA|TestB'"
 
 func (s *NarrowedRunPriceSuite) TestARecordedNarrowedRunPricesItself() {
 	s.recordNarrowed(30 * time.Second)
-	s.Empty(checkTimeoutAdvice(s.ctx, s.lease, narrowedRun, claudeLimits).Say, "30s fits the default wait")
+	s.Empty(checkTimeoutAdvice(contextWithLedger(s.T(), s.at), s.lease, narrowedRun, claudeLimits).Say, "30s fits the default wait")
 }
 
 func (s *NarrowedRunPriceSuite) TestTheAdviceSaysItPricedTheCommandLine() {
 	s.recordNarrowed(5 * time.Minute)
-	a := checkTimeoutAdvice(s.ctx, s.lease, narrowedRun, claudeLimits)
+	a := checkTimeoutAdvice(contextWithLedger(s.T(), s.at), s.lease, narrowedRun, claudeLimits)
 	s.Contains(a.Say, "last ran 5m0s here")
 	s.Contains(a.Why, "the newest real run of this command line")
 }
 
 func (s *NarrowedRunPriceSuite) TestAnUnrecordedNarrowedRunSaysItPricedTheTarget() {
-	a := checkTimeoutAdvice(s.ctx, s.lease, narrowedRun, claudeLimits)
+	a := checkTimeoutAdvice(contextWithLedger(s.T(), s.at), s.lease, narrowedRun, claudeLimits)
 	s.Contains(a.Say, "last ran 13m0s here")
 	s.Contains(a.Why, "since this command line has none recorded")
 }
 
 func (s *NarrowedRunPriceSuite) TestAWholeRunIsNotPricedByANarrowedOne() {
 	s.recordNarrowed(30 * time.Second)
-	a := checkTimeoutAdvice(s.ctx, s.lease, "./magus run diagrams_generate docs", claudeLimits)
+	a := checkTimeoutAdvice(contextWithLedger(s.T(), s.at), s.lease, "./magus run diagrams_generate docs", claudeLimits)
 	s.Contains(a.Say, "last ran 13m0s here")
 }
 

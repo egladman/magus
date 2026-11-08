@@ -329,7 +329,7 @@ func computedSpawnVerdict(deps Dependencies, program string) (ShellVerdict, bool
 		return ShellVerdict{}, false
 	}
 	return ShellVerdict{
-		Deny: "magus workspace: this Buzz program starts a command through proc from a computed argv, which the guard cannot judge; spell each proc\\exec and proc\\shell from literals.",
+		Deny: "magus workspace: this Buzz program starts a proc command from a computed argv the guard cannot judge; spell each proc\\exec and proc\\shell from literals.",
 		Why:  "A leased worker's guard reads the commands a scratch or inline Buzz program starts. A command computed at run time, such as one per file of a loop, reaches no rule. Repository scripts are reviewed in the diff and stay unjudged.",
 		Rule: denyRule{Name: denyRuleInterpreterScript},
 	}, true

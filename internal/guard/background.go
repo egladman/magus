@@ -144,9 +144,9 @@ func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 		if last == 0 || limit >= need {
 			continue
 		}
-		why := "A call the host times out moves to the background, and a worker that then ends its turn parks until the run ends, with nobody told the result. " +
-			pricedBy(sameArgs) + "; the advised timeout leaves half again as much for a cold cache or a loaded machine. " +
-			"It speaks once per target per session, a refusal included, so a narrowed rerun after it goes through."
+		why := fmt.Sprintf("A call the host times out moves to the background, and a worker that then ends its turn parks until the run ends, with nobody told the result. %s; "+
+			"the advised timeout leaves half again as much for a cold cache or a loaded machine. "+
+			"It speaks once per target per session, a refusal included, so a narrowed rerun after it goes through.", pricedBy(sameArgs))
 		key := checkTimeoutKey(r)
 		if run.refusals.MarkFired(denyMarker(string(key))) {
 			continue
