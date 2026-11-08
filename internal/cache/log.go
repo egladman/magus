@@ -153,7 +153,7 @@ type PrettyHandler struct {
 	rowFailure []int
 	// focus is the view the keys drive, and so the one the golden ratio gives
 	// the major share of the width to. See splitAt.
-	focus PaneFocus
+	focus paneFocus
 	// preview is the selected failure's captured output, as the right-hand
 	// column of the band shows it. Empty means one column.
 	//
@@ -1464,12 +1464,10 @@ type Failure struct {
 	Dur time.Duration
 }
 
-// SetFocus moves focus between the tree and the output, which moves the rows
-// between them.
-// Resizing on focus rather than offering a drag handle is deliberate: there is
-// no pointer contract to invent, and the pane you are working in is the one
-// that should be big.
-func (h *PrettyHandler) SetFocus(f PaneFocus) {
+// setFocus moves focus, and so rows, between the tree and the output. Focus
+// resizes rather than a drag handle: the pane in use is the one to enlarge,
+// with no pointer contract to invent.
+func (h *PrettyHandler) setFocus(f paneFocus) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.focus == f {
@@ -1479,16 +1477,15 @@ func (h *PrettyHandler) SetFocus(f PaneFocus) {
 	h.repaint()
 }
 
-// ToggleFocus swaps which view has the major share, and reports the new focus.
-func (h *PrettyHandler) ToggleFocus() PaneFocus {
+// ToggleFocus swaps which view has the major share.
+func (h *PrettyHandler) ToggleFocus() {
 	h.mu.Lock()
-	f := FocusPreview
-	if h.focus == FocusPreview {
-		f = FocusTree
+	f := focusPreview
+	if h.focus == focusPreview {
+		f = focusTree
 	}
 	h.mu.Unlock()
-	h.SetFocus(f)
-	return f
+	h.setFocus(f)
 }
 
 // SetPreview puts the captured output of whatever is selected under the tree.
@@ -1503,13 +1500,13 @@ func (h *PrettyHandler) SetPreview(lines []string) {
 	h.repaint()
 }
 
-// PaneFocus names the view the keys are driving: the tree, or the output under
+// paneFocus names the view the keys are driving: the tree, or the output under
 // it.
-type PaneFocus int
+type paneFocus int
 
 const (
-	FocusTree PaneFocus = iota
-	FocusPreview
+	focusTree paneFocus = iota
+	focusPreview
 )
 
 // HitFailure maps an absolute terminal row to the failure drawn on it.

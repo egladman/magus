@@ -26,10 +26,8 @@ const (
 	metaSep = layout.Separator
 )
 
-// DefaultLoader is the band's spinner when the config names none.
-const DefaultLoader = "glyph/dots"
-
-var defaultLoader = mustLoader(DefaultLoader)
+// defaultLoader is the band's spinner when the config names none.
+var defaultLoader = mustLoader("glyph/dots")
 
 func mustLoader(name string) progress.Loader {
 	l, err := progress.Lookup(name)
@@ -125,15 +123,7 @@ func (h *PrettyHandler) statusRow(color bool) termkit.Line {
 		bold, dim, red, green = termkit.SGRBold, termkit.SGRDim, termkit.SGRRed, termkit.SGRGreen
 	}
 	s := h.status
-	var spans []termkit.Span
-	switch {
-	case h.inFlightLocked():
-		spans = append(h.spinner(color), termkit.Span{Text: " "})
-	case s.failed > 0:
-		spans = statusWord(wordFail, red)
-	default:
-		spans = statusWord(wordOK, green)
-	}
+	spans := h.statusLead(color, red, green)
 	lead := len(spans)
 
 	first := true
@@ -172,6 +162,18 @@ func (h *PrettyHandler) statusRow(color bool) termkit.Line {
 		spans = trimSpans(spans[:lead])
 	}
 	return termkit.Line{Spans: spans}
+}
+
+// statusLead is the spinner while work runs, else the run's verdict word.
+func (h *PrettyHandler) statusLead(color bool, red, green termkit.SGR) []termkit.Span {
+	switch {
+	case h.inFlightLocked():
+		return append(h.spinner(color), termkit.Span{Text: " "})
+	case h.status.failed > 0:
+		return statusWord(wordFail, red)
+	default:
+		return statusWord(wordOK, green)
+	}
 }
 
 // trimSpans drops trailing blanks, so a row never ends in a space.
@@ -325,7 +327,7 @@ func (h *PrettyHandler) stackPreview(rows []termkit.Line, drawn []Failure, hidde
 	}
 	var lines []termkit.Line
 	var idx []int
-	if h.focus == FocusPreview && len(drawn) > 0 {
+	if h.focus == focusPreview && len(drawn) > 0 {
 		f := drawn[sel]
 		label := []termkit.Span{{Text: fmt.Sprintf("  %s %s %s", termkit.SelectMark, f.Project, f.Target)}}
 		meta := fmt.Sprintf("(%d of %d)", sel+1, len(drawn))

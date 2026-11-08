@@ -54,7 +54,7 @@ type failureBand interface {
 	HitFailure(row int) (cache.Failure, bool)
 	SetSelection(n int)
 	SetPreview(lines []string)
-	ToggleFocus() cache.PaneFocus
+	ToggleFocus()
 }
 
 // hintHitter resolves a click on the hint row to the action it names. Separate

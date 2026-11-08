@@ -22,7 +22,7 @@ type recordingBand struct {
 	// test can assert the two views track the selection without a filesystem.
 	preview []string
 	// focus counts how many times the prompt asked to swap which view is large.
-	focus cache.PaneFocus
+	focus int
 }
 
 func newRecordingBand() *recordingBand {
@@ -37,11 +37,8 @@ func newRecordingBand() *recordingBand {
 
 func (f *recordingBand) Failures() []cache.Failure { return f.items }
 func (f *recordingBand) SetPreview(lines []string) { f.preview = lines }
-func (f *recordingBand) ToggleFocus() cache.PaneFocus {
-	f.focus++
-	return f.focus
-}
-func (f *recordingBand) SetSelection(n int) { f.selected = n }
+func (f *recordingBand) ToggleFocus()              { f.focus++ }
+func (f *recordingBand) SetSelection(n int)        { f.selected = n }
 func (f *recordingBand) HitFailure(row int) (cache.Failure, bool) {
 	switch row {
 	case 20:
@@ -345,12 +342,12 @@ func TestSanitizeLogLineFlattensWhatWouldBreakTheBox(t *testing.T) {
 func TestTabTogglesWhichViewIsLarge(t *testing.T) {
 	b, sel := newRecordingBand(), 0
 	dispatchFailureKeys(feed(key(termkit.KeyTab), key(termkit.KeyEscape)), b, nil, &sel)
-	assert.Equal(t, cache.PaneFocus(1), b.focus, "tab swapped the focus")
+	assert.Equal(t, 1, b.focus, "tab swapped the focus")
 
 	b, sel = newRecordingBand(), 0
 	click := termkit.Event{Kind: termkit.EventMouse, Button: termkit.MouseLeft, Row: 30, Col: 5, Press: true, Clicks: 1}
 	dispatchFailureKeys(feed(click, key(termkit.KeyEscape)), b, hintsByColumn{5: cache.HintKeyFocus}, &sel)
-	assert.Equal(t, cache.PaneFocus(1), b.focus, "and so did clicking [tab] focus")
+	assert.Equal(t, 1, b.focus, "and so did clicking [tab] focus")
 }
 
 func TestClampIndexStopsAtTheEnds(t *testing.T) {

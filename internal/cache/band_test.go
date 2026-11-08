@@ -183,7 +183,7 @@ func (s *BandSuite) TestPreviewWithTheTreeInFocusWritesNoTrailingSpace() {
 }
 
 func (s *BandSuite) TestPreviewWithTheOutputInFocusWritesNoTrailingSpace() {
-	draw := func(h *PrettyHandler) { s.failed(h); s.preview(h, 20); h.SetFocus(FocusPreview) }
+	draw := func(h *PrettyHandler) { s.failed(h); s.preview(h, 20); h.setFocus(focusPreview) }
 	s.noTrailingSpace(80, draw)
 	s.noTrailingSpace(120, draw)
 	s.noTrailingSpace(200, draw)
@@ -365,7 +365,7 @@ func (s *BandSuite) TestOutputFocusCollapsesTheTreeToTheSelectedFailure() {
 	sc, h := s.handler(100)
 	s.failed(h)
 	s.preview(h, 6)
-	h.SetFocus(FocusPreview)
+	h.setFocus(focusPreview)
 
 	s.Zero(sc.FindRow("╰ lint"), "the rest of the tree is gone")
 	collapsed := sc.Row(sc.FindRow("api build"))
@@ -380,7 +380,7 @@ func (s *BandSuite) TestOutputFocusGivesTheOutputMoreRows() {
 	s.preview(h, 40)
 	treeFocus := outputRows(sc)
 
-	h.SetFocus(FocusPreview)
+	h.setFocus(focusPreview)
 	s.Greater(outputRows(sc), treeFocus)
 }
 
@@ -404,7 +404,7 @@ func (s *BandSuite) TestClickingTheCollapsedRowResolvesTheSelectedFailure() {
 	sc, h := s.handler(100)
 	s.failed(h)
 	s.preview(h, 6)
-	h.SetFocus(FocusPreview)
+	h.setFocus(focusPreview)
 
 	got, ok := h.HitFailure(sc.FindRow("▸ api build"))
 	s.Require().True(ok)
