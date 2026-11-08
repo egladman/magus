@@ -640,7 +640,7 @@ is handed.
 ## The magus mod
 
 The repository is a Claude Code plugin marketplace with one mod in it, `magus`,
-whose source is `claude-code/mod/` beside this page. Add the marketplace once per person:
+whose source is `docs/guides/integrations/agents/claude-code/mod/`. Add the marketplace once per person:
 
 ```text
 claude plugin marketplace add egladman/magus
