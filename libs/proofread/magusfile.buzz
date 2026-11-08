@@ -86,7 +86,8 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     // readsFiles replaces the project baseline, so it names the fixtures the tests read
     // as well as the sources.
     ctx.readsFiles(["*.go", "cmd/**/*.go", "internal/**/*.go", "go.mod", "go.sum", "testdata/**/*",
-                    "internal/wordclass/gen/model.gz", "internal/wordclass/testdata/*", "internal/calibrate/cases/*.txtar"]);
+                    "internal/wordclass/gen/model.gz", "internal/wordclass/testdata/*", "internal/calibrate/cases/*.txtar",
+                    "internal/calibrate/testdata/*"]);
     ctx.writesFiles(["coverage.out"]);
     go["go-test"](ctx, {"args": ["-covermode=atomic", "-coverprofile=coverage.out", "./..."] + args});
 }

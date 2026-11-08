@@ -62,7 +62,7 @@ type Reader struct {
 | A check declares the formats its judge can read (`reads []Format`) in place of `on []Kind`                                 | not built |
 | Every `kind ==` branch in a judge or reader reads a `Reader` property or a spec field instead                              | not built |
 | `judgeText` picks the reader from `spec.Reader.Format`; the `switch` on kind is deleted                                    | not built |
-| An equivalence test: every built-in kind judges the same rules at the same defaults as before, over every calibration case | not built |
+| An equivalence test: every built-in kind judges the same rules at the same defaults as before, over every calibration case | built     |
 | A decisions table's `kinds` object declares kinds; `proofread <name>` resolves a declared name after the built-ins         | not built |
 | A declared kind naming a rule its format cannot feed, an unknown rule or an unknown base is an error naming the field      | not built |
 | The `lines` format: each non-blank line or list item is one unit, with no title and no headings                            | not built |
