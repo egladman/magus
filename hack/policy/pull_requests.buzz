@@ -689,6 +689,35 @@ export fun unnamedAreas(areas: [str], text: str) > [str] {
     return unnamed;
 }
 
+// elidedScopeProblems holds a title whose scope ends in `...` to name, in
+// the description, each area the change touches that the scope left out.
+export fun elidedScopeProblems(title: str, areas: [str], body: str) > [str] {
+    final names = conventional\scopes(title);
+    if (names.len() == 0 or names[names.len() - 1] != conventional\ELIDED) {
+        return [<str>];
+    }
+    final left = mut [<str>];
+    foreach (area in unnamedAreas(areas, text: body)) {
+        final parts = area.split("/");
+        if (names.indexOf(parts[parts.len() - 1]) == null) {
+            left.append(area);
+        }
+    }
+    if (left.len() == 0) {
+        return [<str>];
+    }
+    return ["this also touches {left.join(", ")}, which the title's `...` stands for; say what changed there"];
+}
+
+test "a scope's ellipsis asks the description to name what it left out" {
+    final title = "fix(proofread,...): keep the key";
+    final areas = ["libs/proofread", "docs", "internal/guard"];
+    final missing = elidedScopeProblems(title, areas: areas, body: "The docs page moves.");
+    std\assert(missing.len() == 1 and missing[0].startsWith("this also touches internal/guard,"), message: "{missing}");
+    std\assert(elidedScopeProblems(title, areas: areas, body: "The docs page and the guard move.").len() == 0, message: "named");
+    std\assert(elidedScopeProblems("fix(proofread): x", areas: areas, body: "").len() == 0, message: "no ellipsis");
+}
+
 // areaQuestions asks of each unnamed area what a reviewer asks first.
 export fun areaQuestions(unnamed: [str]) > [str] {
     final asked = mut [<str>];
@@ -1435,6 +1464,9 @@ export fun judgeText(t: Text, facts: fun () > Facts, judge: fun (text: str, kind
         }
         foreach (question in areaQuestions(unnamedAreas(read.areas, text: text))) {
             advice.append(question);
+        }
+        foreach (problem in elidedScopeProblems(t.title ?? "", areas: read.areas, body: t.body!)) {
+            problems.append(problem);
         }
         foreach (problem in taskProblems(t.body!)) {
             problems.append(problem);

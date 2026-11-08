@@ -665,8 +665,10 @@ push reports all three:
   does not. Check one with `magus run pr-title . -- "<title>"`.
 - A scope names projects the change affects, joined by commas with no spaces:
   `fix(proofread,embed): ...`. A project is named by its last path segment, the
-  root as `magus`, or by its whole path when two projects end alike. A change that
-  affects every project takes `kitchen-sink` alone. Leave the scope out otherwise.
+  root as `magus`, or by its whole path when two projects end alike. A title names at
+  most three, then `...` for the rest, and the description says what changed in each
+  one the title left out. A change that affects every project takes `kitchen-sink`
+  alone. Leave the scope out otherwise.
 - The title and description follow the proofread rules (`pr-description`). The description
   opens with what the change set out to do and why, says what it changes in meaning
   rather than files, gathers what a reviewer should weigh under Considerations (three

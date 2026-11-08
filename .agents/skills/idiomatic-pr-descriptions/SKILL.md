@@ -38,6 +38,10 @@ When this change lays groundwork, a `## Later` section names the follow-up pull 
 one line each. It's the one section that may speak in the future tense, and it holds no
 tasks.
 
+Add `## Tested` only when someone checked the change by hand in the session, beyond the
+test targets: the commands they ran, in a fenced block, and what they saw. Leave it out
+otherwise; it is never a default section.
+
 End with `## Next` when work is left: `- [ ]` tasks and nothing else, one per thing not
 done or not checked. A person or an agent ticks them without touching the prose.
 

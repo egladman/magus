@@ -77,6 +77,12 @@ export fun problem(subject: str) > str {
         if (scope == "" or scope.lower() != scope or scope.indexOf(" ") != null or scope.split(",").indexOf("") != null) {
             return "scope `{scope}` must be lowercase project names joined by commas, with no spaces";
         }
+        final listed = scope.split(",");
+        final elided = listed[listed.len() - 1] == ELIDED;
+        final named = if (elided) listed.len() - 1 else listed.len();
+        if (named > MAX_SCOPES or named == 0 or listed.sub(0, len: named).indexOf(ELIDED) != null) {
+            return "scope `{scope}` names at most {MAX_SCOPES} projects, then `{ELIDED}` for the rest";
+        }
     }
     final kind = commitType(subject);
     if (types().indexOf(kind) == null) {
@@ -101,6 +107,10 @@ export fun problem(subject: str) > str {
 
 // KITCHEN_SINK is the scope of a change that affects every project.
 export final KITCHEN_SINK = "kitchen-sink";
+// MAX_SCOPES is the projects a title names before it reads as a list.
+export final MAX_SCOPES = 3;
+// ELIDED closes a scope that leaves projects out; the description names them.
+export final ELIDED = "...";
 
 // scopes are the names in subject's scope, empty when it has none.
 export fun scopes(subject: str) > [str] {
@@ -153,7 +163,7 @@ export fun scopeProblem(subject: str, projects: [str], affected: [str]) > str {
         wanted.append(projectName(p, projects: projects));
     }
     foreach (name in names) {
-        if (wanted.indexOf(name) == null) {
+        if (name != ELIDED and wanted.indexOf(name) == null) {
             return "scope `{name}` names no project this change affects; "
                 + "want some of {wanted.join(",")}, or no scope";
         }
@@ -221,6 +231,15 @@ test "a scope is project names joined by commas" {
     std\assert(problem("fix(proofread,): bump").startsWith("scope `proofread,`"), message: "an empty name");
     std\assert(scopes("fix(proofread,embed): bump").join(",") == "proofread,embed", message: "parsed");
     std\assert(scopes("fix: bump").len() == 0, message: "no scope");
+}
+
+test "a scope names at most three projects, then an ellipsis" {
+    std\assert(problem("fix(proofread,embed,docs,...): bump") == "", message: "three and the rest");
+    std\assert(problem("fix(a,b,c,d): bump").startsWith("scope `a,b,c,d` names at most 3"), message: "four");
+    std\assert(problem("fix(...): bump").startsWith("scope `...` names at most 3"), message: "nothing named");
+    std\assert(problem("fix(a,...,b): bump").startsWith("scope `a,...,b` names at most 3"), message: "not last");
+    final projects = [".", "docs", "libs/proofread"];
+    std\assert(scopeProblem("fix(proofread,...): x", projects: projects, affected: projects) == "", message: "elided");
 }
 
 test "a project is named by its last segment, or its path when that is shared" {
