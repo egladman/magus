@@ -1403,9 +1403,11 @@ func bindCheckout(t *testing.T, cacheDir, id string) {
 	require.NoError(t, job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir}).Bind(job.Caller{}, id))
 }
 
-// TestJobExecBindsTheCheckoutLease: a run after exec reaches the broker with
-// the lease. On 2026-11-07 all 104 recorded owners read unleased.
-func TestJobExecBindsTheCheckoutLease(t *testing.T) {
+// TestJobExecWritesNoMarker pins the half of the 2026-09-26 fix that lives in the CLI: exec
+// records the base and the checkout, and binds nobody. A CLI process cannot tell a subagent
+// from its parent, so a binding it wrote was the checkout's, and the parent sharing that
+// checkout was graded as the subagent from its next call.
+func TestJobExecWritesNoMarker(t *testing.T) {
 	row := leaseRow("lease-enforcement/wave4/docs", "")
 	row.State = types.StateRunning
 	repo, cacheDir := execRepositoryFixture(t, row)
@@ -1417,9 +1419,10 @@ func TestJobExecBindsTheCheckoutLease(t *testing.T) {
 	assert.Contains(t, out, "took "+row.ID)
 
 	loc := job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}
+	_, err := os.Stat(loc.MarkerPath())
+	assert.True(t, os.IsNotExist(err), "exec writes no checkout record")
 	lease, from := job.ActingLease(loc, "")
-	assert.Equal(t, []any{row.ID, types.LeaseSourceMarker}, []any{lease, from}, "the checkout acts under the job")
-	assert.Equal(t, row.ID, processLease(root), "a run after exec reaches the broker with the lease")
+	assert.Equal(t, []any{"", types.LeaseSource("")}, []any{lease, from}, "the checkout acts under nothing")
 
 	store := job.NewStore(loc)
 	rows, err := store.List()

@@ -1802,11 +1802,6 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("magus job exec: %w", err)
 	}
-	// The guard binds the session, not the checkout. Without this record the
-	// broker names no lease for this checkout's runs.
-	if err := store.Bind(job.Caller{}, stored.ID); err != nil {
-		return fmt.Errorf("magus job exec: %w", err)
-	}
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -2047,7 +2042,6 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return exit.Usagef("magus job exit: %s", err)
 	}
-	store.Release(job.Caller{}, stored.ID)
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
