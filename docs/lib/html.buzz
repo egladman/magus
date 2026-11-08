@@ -169,7 +169,7 @@ export fun wrapTables(html: str) > str {
         final end = rest.indexOf(close);
         if (end == null) { return parts.join("") + rest; }
         final block = rest.sub(0, len: end + close.len());
-        parts.append(el(tag: "figure", attrs: attr(name: "class", value: "table-scroll"), body: block));
+        parts.append(render(element("figure", attrs: [attr("class", value: "table-scroll")], children: [markup(block)])));
         rest = rest.sub(end + close.len());
         idx = rest.indexOf(open);
     }
@@ -245,16 +245,21 @@ export fun redirectScript(rel: str) > str {
 // caller-computed policy (cspForRedirectStub, hashing redirectScript(rel) - the page's
 // only content, so default-src 'none' plus that one script hash suffices).
 export fun aliasStub(rel: str, csp: str) > str {
-    return "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n"
-        + voidEl(tag: "meta", attrs: attr(name: "charset", value: "utf-8")) + "\n"
-        + voidEl(tag: "meta", attrs: attr(name: "http-equiv", value: "Content-Security-Policy") + attr(name: "content", value: csp)) + "\n"
-        + voidEl(tag: "meta", attrs: attr(name: "http-equiv", value: "refresh") + attr(name: "content", value: "0; url=" + rel)) + "\n"
-        + voidEl(tag: "link", attrs: attr(name: "rel", value: "canonical") + attr(name: "href", value: rel)) + "\n"
-        + el(tag: "title", attrs: "", body: "Redirecting") + "\n"
-        + el(tag: "script", attrs: "", body: redirectScript(rel)) + "\n"
-        + "</head>\n<body>\n"
-        + el(tag: "p", attrs: "", body: "This page moved. " + el(tag: "a", attrs: attr(name: "href", value: rel), body: "Continue to its new location") + ".") + "\n"
-        + "</body>\n</html>\n";
+    final nl = markup("\n");
+    final head = element("head", attrs: [<Attr>], children: [nl,
+        voidElement("meta", attrs: [attr("charset", value: "utf-8")]), nl,
+        voidElement("meta", attrs: [attr("http-equiv", value: "Content-Security-Policy"), attr("content", value: csp)]), nl,
+        voidElement("meta", attrs: [attr("http-equiv", value: "refresh"), attr("content", value: "0; url=" + rel)]), nl,
+        voidElement("link", attrs: [attr("rel", value: "canonical"), attr("href", value: rel)]), nl,
+        element("title", attrs: [<Attr>], children: [textNode("Redirecting")]), nl,
+        // A script body is JavaScript, which HTML text escaping would corrupt.
+        element("script", attrs: [<Attr>], children: [markup(redirectScript(rel))]), nl]);
+    final moved = element("p", attrs: [<Attr>], children: [textNode("This page moved. "),
+        element("a", attrs: [attr("href", value: rel)], children: [textNode("Continue to its new location")]),
+        textNode(".")]);
+    final body = element("body", attrs: [<Attr>], children: [nl, moved, nl]);
+    return "<!DOCTYPE html>\n"
+        + render(element("html", attrs: [attr("lang", value: "en")], children: [nl, head, nl, body, nl])) + "\n";
 }
 
 // tagCodeTitle wraps the <pre> after a "<!-- magus-code-title: NAME -->" marker in a
@@ -283,7 +288,7 @@ fun versionNoteMarker(html: str, open: str, verb: str) > str {
         if (closeMarker == null) { return parts.join("") + open + rest; }
         final version = rest.sub(0, len: closeMarker).trim();
         rest = rest.sub(closeMarker + 3);
-        parts.append(el(tag: "p", attrs: attr(name: "class", value: "since-badge"), body: verb + " " + version));
+        parts.append(render(element("p", attrs: [attr("class", value: "since-badge")], children: [textNode(verb + " " + version)])));
         idx = rest.indexOf(open);
     }
     parts.append(rest);
@@ -313,7 +318,8 @@ export fun tagCodeTitle(html: str) > str {
             if (endPre != null) {
                 final preBlock = rest.sub(i, len: endPre + 6 - i);
                 parts.append(rest.sub(0, len: i)
-                    + el(tag: "figure", attrs: attr(name: "class", value: "code-block-titled"), body: el(tag: "figcaption", attrs: "", body: title) + preBlock));
+                    + render(element("figure", attrs: [attr("class", value: "code-block-titled")], children: [
+                        element("figcaption", attrs: [<Attr>], children: [textNode(title)]), markup(preBlock)])));
                 rest = rest.sub(endPre + 6);
                 idx = rest.indexOf(open);
                 continue;
@@ -331,10 +337,53 @@ export fun tagCodeTitle(html: str) > str {
 // author, which proofread's first-person rule leaves alone.
 final AUTHOR_BYLINE = "How Eli, who writes magus, works: personal practice, not something magus promises.";
 
-// tagAdmonition turns GitHub-alert blockquotes ("<blockquote>\n<p>[!TYPE]\n...") into
-// <div class="admonition admonition-<type>"> callouts, and [!AUTHOR] into an
-// <aside class="admonition admonition-author"> carrying AUTHOR_BYLINE. Unknown types pass
-// through.
+// Alert is one GitHub alert type a page may write as `[!MARKER]`.
+export object Alert {
+    marker: str,
+    // slug names the admonition-<slug> class.
+    slug: str,
+    title: str,
+    // tag is the element the callout renders as.
+    tag: str = "div",
+    // byline follows the title when the alert names whose words it holds.
+    byline: str = "",
+}
+
+// ALERTS are the alert types the site renders; other markers pass through.
+final ALERTS = [
+    Alert{ marker = "NOTE", slug = "note", title = "Note" },
+    Alert{ marker = "TIP", slug = "tip", title = "Tip" },
+    Alert{ marker = "IMPORTANT", slug = "important", title = "Important" },
+    Alert{ marker = "WARNING", slug = "warning", title = "Warning" },
+    Alert{ marker = "CAUTION", slug = "caution", title = "Caution" },
+    Alert{ marker = "AUTHOR", slug = "author", title = "Author's note", tag = "aside", byline = AUTHOR_BYLINE },
+];
+
+// alertFor is the alert a marker names, or null for one the site leaves be.
+export fun alertFor(marker: str) > Alert? {
+    foreach (alert in ALERTS) {
+        if (alert.marker == marker) {
+            return alert;
+        }
+    }
+    return null;
+}
+
+// callout is alert's callout: its title, its byline, then the body.
+fun callout(alert: Alert, body: str) > Node {
+    final children = mut [element("p", attrs: [attr("class", value: "admonition-title")],
+        children: [textNode(alert.title)])];
+    if (alert.byline != "") {
+        children.append(element("p", attrs: [attr("class", value: "admonition-byline")],
+            children: [textNode(alert.byline)]));
+    }
+    children.append(markup(body));
+    return element(alert.tag, attrs: [attr("class", value: "admonition admonition-" + alert.slug)],
+        children: children);
+}
+
+// tagAdmonition turns GitHub-alert blockquotes ("<blockquote>\n<p>[!TYPE]")
+// into the callouts ALERTS describe. Unknown types pass through.
 export fun tagAdmonition(html: str) > str {
     final parts: mut [str] = mut [<str>];
     var rest = html;
@@ -346,14 +395,8 @@ export fun tagAdmonition(html: str) > str {
         final tagEnd = rest.indexOf("]");
         if (tagEnd == null) { return parts.join("") + rest; }
         final typ = rest.sub(18, len: tagEnd - 18);   // 18 = len("<blockquote>\n<p>[!")
-        var kind = "";
-        if (typ == "NOTE") { kind = "note"; }
-        if (typ == "TIP") { kind = "tip"; }
-        if (typ == "IMPORTANT") { kind = "important"; }
-        if (typ == "WARNING") { kind = "warning"; }
-        if (typ == "CAUTION") { kind = "caution"; }
-        if (typ == "AUTHOR") { kind = "author"; }
-        if (kind == "") {
+        final alert = alertFor(typ);
+        if (alert == null) {
             parts.append(rest.sub(0, len: 12));   // 12 = len("<blockquote>")
             rest = rest.sub(12);
         } else {
@@ -364,16 +407,7 @@ export fun tagAdmonition(html: str) > str {
             if (inner.startsWith(prefix)) {
                 inner = "\n<p>" + inner.sub(prefix.len());
             }
-            final classes = attr(name: "class", value: "admonition admonition-" + kind);
-            if (kind == "author") {
-                final title = el(tag: "p", attrs: attr(name: "class", value: "admonition-title"), body: "Author's note");
-                final byline = el(tag: "p", attrs: attr(name: "class", value: "admonition-byline"), body: AUTHOR_BYLINE);
-                parts.append(el(tag: "aside", attrs: classes, body: title + byline + inner));
-            } else {
-                final label = typ.sub(0, len: 1) + typ.sub(1).lower();
-                parts.append(el(tag: "div", attrs: classes,
-                    body: el(tag: "p", attrs: attr(name: "class", value: "admonition-title"), body: label) + inner));
-            }
+            parts.append(render(callout(alert!, body: inner)));
             rest = rest.sub(closeBq + 13);   // 13 = len("</blockquote>")
         }
     }

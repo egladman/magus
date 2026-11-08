@@ -1,48 +1,106 @@
-// lib/dom.buzz - a small HTML builder. Attribute values are escaped; element bodies
-// are inserted raw (already-built HTML). Caller orders the attrs, so output matches
-// hand-written markup byte for byte.
+// lib/dom.buzz - a typed HTML tree, rendered once. Text and attribute
+// values are escaped on render. Markup another renderer built enters only
+// as a markup node. Attributes render in the order given, so output
+// matches hand-written markup byte for byte.
 namespace dom;
 
 import "assert";
 import "lib/text" as _;
 
-// attr renders one escaped attribute with a leading space: ` name="value"`.
-export fun attr(name: str, value: str) > str {
-    return " " + name + "=\"" + escapeAttr(value) + "\"";
+// NodeKind says how render writes a node.
+export enum NodeKind { element, text, markup }
+
+// Attr is one attribute; render escapes its value.
+export object Attr {
+    name: str,
+    value: str,
 }
 
-// el wraps raw body in <tag attrs>...</tag>. attrs is "" or a run of attr() calls.
-export fun el(tag: str, attrs: str, body: str) > str {
-    return "<" + tag + attrs + ">" + body + "</" + tag + ">";
+// Node is an element, a run of text, or markup taken as written.
+export object Node {
+    kind: NodeKind = NodeKind.element,
+    tag: str = "",
+    attrs: [Attr] = [<Attr>],
+    children: [Node] = [<Node>],
+    // selfClosing marks an element written with no end tag (meta, img).
+    selfClosing: bool = false,
+    // content is a text node's text or a markup node's HTML.
+    content: str = "",
 }
 
-// voidEl is an unclosed element: <tag attrs> (meta, link, img).
-export fun voidEl(tag: str, attrs: str) > str {
-    return "<" + tag + attrs + ">";
+export fun attr(name: str, value: str) > Attr {
+    return Attr{ name = name, value = value };
+}
+
+// element is <tag attrs>children</tag>.
+export fun element(tag: str, attrs: [Attr], children: [Node]) > Node {
+    return Node{ tag = tag, attrs = attrs, children = children };
+}
+
+// voidElement is <tag attrs> with no end tag.
+export fun voidElement(tag: str, attrs: [Attr]) > Node {
+    return Node{ tag = tag, attrs = attrs, selfClosing = true };
+}
+
+// textNode is s as element content, escaped on render.
+export fun textNode(s: str) > Node {
+    return Node{ kind = NodeKind.text, content = s };
+}
+
+// markup is HTML another renderer already built, written as is.
+export fun markup(html: str) > Node {
+    return Node{ kind = NodeKind.markup, content = html };
+}
+
+export fun render(node: Node) > str {
+    if (node.kind == NodeKind.text) {
+        return esc(node.content);
+    }
+    if (node.kind == NodeKind.markup) {
+        return node.content;
+    }
+    final open = mut ["<" + node.tag];
+    foreach (a in node.attrs) {
+        open.append(" " + a.name + "=\"" + escapeAttr(a.value) + "\"");
+    }
+    open.append(">");
+    if (node.selfClosing) {
+        return open.join("");
+    }
+    return open.join("") + renderAll(node.children) + "</" + node.tag + ">";
+}
+
+export fun renderAll(nodes: [Node]) > str {
+    final parts = mut [<str>];
+    foreach (n in nodes) {
+        parts.append(render(n));
+    }
+    return parts.join("");
 }
 
 // esc escapes text for HTML element content (& < >).
 export fun esc(s: str) > str {
-    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    return s.replace("&", with: "&amp;").replace("<", with: "&lt;").replace(">", with: "&gt;");
 }
 
-test "attr escapes and el/voidEl wrap" {
-    assert\equal(attr("class", "a & b"), " class=\"a &amp; b\"", "escaped attribute");
-    assert\equal(el("p", attr("id", "x"), "hi"), "<p id=\"x\">hi</p>", "element with attr");
-    assert\equal(el("div", "", "raw"), "<div>raw</div>", "no attrs");
-    assert\equal(voidEl("meta", attr("charset", "utf-8")), "<meta charset=\"utf-8\">", "void element");
-    assert\equal(esc("<a & b>"), "&lt;a &amp; b&gt;", "text escape");
+test "render escapes text and attributes and closes elements" {
+    assert\equal(render(element("p", attrs: [attr("class", value: "a & b")], children: [textNode("x < y")])),
+        want: "<p class=\"a &amp; b\">x &lt; y</p>", message: "element");
+    assert\equal(render(element("div", attrs: [<Attr>], children: [markup("<b>raw</b>")])),
+        want: "<div><b>raw</b></div>", message: "markup is written as is");
+    assert\equal(render(voidElement("meta", attrs: [attr("charset", value: "utf-8")])),
+        want: "<meta charset=\"utf-8\">", message: "void element");
+    assert\equal(esc("<a & b>"), want: "&lt;a &amp; b&gt;", message: "text escape");
 }
 
-// EVERY occurrence. The fixture above has exactly one of each character, which is the
-// shape that hid a real defect: str.replace substituted only the FIRST match until
-// 2026-08-09, so this escaper encoded the first ampersand of a fragment and left the
-// rest raw. Repetition is the axis that catches it, not character coverage.
-test "esc and attr escape EVERY occurrence, not just the first" {
-    assert\equal(esc("&a&b&"), "&amp;a&amp;b&amp;", "ampersands at both edges and between");
-    assert\equal(esc("<a><b>"), "&lt;a&gt;&lt;b&gt;", "repeated angle brackets");
-    assert\equal(esc("&&"), "&amp;&amp;", "adjacent ampersands");
+// EVERY occurrence. str.replace once substituted only the FIRST match, so
+// this escaper encoded one ampersand of a fragment and left the rest raw.
+test "esc and attributes escape EVERY occurrence, not just the first" {
+    assert\equal(esc("&a&b&"), want: "&amp;a&amp;b&amp;", message: "ampersands at both edges and between");
+    assert\equal(esc("<a><b>"), want: "&lt;a&gt;&lt;b&gt;", message: "repeated angle brackets");
+    assert\equal(esc("&&"), want: "&amp;&amp;", message: "adjacent ampersands");
     // Ampersand first, so the & introduced by &lt;/&gt; is never rescanned.
-    assert\equal(esc("<&>"), "&lt;&amp;&gt;", "no double-encoding of introduced entities");
-    assert\equal(attr("id", "a&b&c"), " id=\"a&amp;b&amp;c\"", "attribute values too");
+    assert\equal(esc("<&>"), want: "&lt;&amp;&gt;", message: "no double-encoding of introduced entities");
+    assert\equal(render(voidElement("i", attrs: [attr("id", value: "a&b&c")])), want: "<i id=\"a&amp;b&amp;c\">",
+        message: "attribute values too");
 }
