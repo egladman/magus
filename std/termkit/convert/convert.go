@@ -120,17 +120,7 @@ func Strings(v any) ([]string, error) {
 	if l, ok := v.([]string); ok {
 		return l, nil
 	}
-	items, err := List(v)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]string, len(items))
-	for i, it := range items {
-		if out[i], err = String(it); err != nil {
-			return nil, fmt.Errorf("item %d: %w", i, err)
-		}
-	}
-	return out, nil
+	return DecodeSlice(v, String)
 }
 
 // IntAs reads a Buzz number as the named integer type T.
@@ -208,15 +198,5 @@ func Floats(v any) ([]float64, error) {
 	if l, ok := v.([]float64); ok {
 		return l, nil
 	}
-	items, err := List(v)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]float64, len(items))
-	for i, it := range items {
-		if out[i], err = Float(it); err != nil {
-			return nil, fmt.Errorf("item %d: %w", i, err)
-		}
-	}
-	return out, nil
+	return DecodeSlice(v, Float)
 }
