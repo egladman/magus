@@ -19,6 +19,7 @@ A **target** is a named unit of work (build, test, lint, ...) declared as an `ex
 - Project: libs/embed/train
 - Project: libs/figure
 - Project: libs/proofread/train
+- Project: libs/ssg
 - Project: testdata/latex/onepage
 
 ## Route by question
@@ -94,6 +95,7 @@ magus graph export -o json  # the whole graph
 | [libs/proofread](libs/proofread/MAGUS.md)                                   |      11 | `magus query project=libs/proofread`                  | `proofread-build`, `format`, `wordclass-generate`             |
 | libs/proofread/train                                                        |       7 | `magus query project=libs/proofread/train`            | `test`, `ci`, `format`                                        |
 | [libs/scipbuzz](libs/scipbuzz/MAGUS.md)                                     |       9 | `magus query project=libs/scipbuzz`                   | `format`, `ci`, `test`                                        |
+| libs/ssg                                                                    |       1 | `magus query project=libs/ssg`                        | `test`                                                        |
 | [libs/termkit](libs/termkit/MAGUS.md)                                       |       8 | `magus query project=libs/termkit`                    | `format`, `ci`, `test`                                        |
 | [libs/testpairing](libs/testpairing/MAGUS.md)                               |       8 | `magus query project=libs/testpairing`                | `format`, `ci`, `test`                                        |
 | [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                     |
@@ -225,6 +227,12 @@ magus graph export -o json  # the whole graph
 | `build`    |                                                                                                                             |
 | `test`     | The calibrate tests replay the cases internal/calibrate embeds and judge with the libs/proofread rules, so both are inputs. |
 | `security` | Fails on a vulnerable symbol this module calls.                                                                             |
+
+## Project: libs/ssg
+
+| Target | What it does                                 |
+| ------ | -------------------------------------------- |
+| `test` | test runs each module's in-file test blocks. |
 
 ## Project: testdata/latex/onepage
 
