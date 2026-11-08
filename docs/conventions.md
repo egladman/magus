@@ -162,7 +162,7 @@ printed, which suits standard-library examples. `<!-- magus-run-recorder -->` is
 magusfile and spell examples: those fork real tools, which a browser cannot do, so it
 runs the snippet in dry-run and reports the tool invocations it WOULD have triggered as
 a trace. Both are wired in
-[`docs/lib/html.buzz`](https://github.com/egladman/magus/blob/main/docs/lib/html.buzz) (the
+[`libs/ssg/html.buzz`](https://github.com/egladman/magus/blob/main/libs/ssg/html.buzz) (the
 marker becomes a `data-magus-run` attribute at build time) and driven by
 [`docs/src/site/run-example.ts`](https://github.com/egladman/magus/blob/main/docs/src/site/run-example.ts).
 
