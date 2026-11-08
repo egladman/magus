@@ -487,3 +487,26 @@ construct upstream Buzz already has over a new gopherbuzz type:
 | `error`                                   | `result\Diagnostic`                     | not built |
 | `time.Time`, `time.Duration`              | `str` (RFC 3339), `int` (nanoseconds)   | in progress (some shapes) |
 | `complex*`, `unsafe.Pointer`, `uintptr`   | refused, naming the field               | not built |
+
+### 2026-11-08: names come from packages, and objects get constructors
+
+Eli on naming: a Buzz name that carries its Go prefix (`ImageArchitecture`) reads as
+generated code, and the `name` overrides `.buzzgen.yaml` needs for the seven `Image*`
+types say the prefix is standing in for a package. So a Buzz name is the Go type's own
+name and its module is its Go package, with no prefix stripping and no rename rule: a
+type that wants a shorter Buzz name moves to a scoped Go package (`types/image`'s
+`Architecture` mirrors as `image\Architecture`), and `name` stays for the rare real
+rename. `types/` holds 732 exported types in 107 files; its prefix groups (`Knowledge`
+55, `Job` 42, `Diff` 35, `Image` 24, `Status` 17) move to scoped packages before the
+emitters move, since part 8 writes each mirror beside its type. The repository
+interfaces and the core domain records stay in `types/`.
+
+Every mirrored object also gets a generated constructor, `newX(...)`, taking its
+`required` fields as labeled arguments and defaulting the rest. The object literal
+stays valid.
+
+Types are selected by reach: a type any host signature reaches, directly or through a
+field, is mirrored with no config line. A package sets `all: true`, with
+`include-type-regex` and `exclude-type-regex`, for types scripts build that no
+signature reaches. A type is listed only for a setting. Keys are kebab-case
+(`zero-case`), as mockery v3's are.
