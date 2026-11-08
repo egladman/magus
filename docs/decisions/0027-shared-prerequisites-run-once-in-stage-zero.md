@@ -54,6 +54,7 @@ with no `--shard` (MGS3029).
 | A measured makespan on this repository's CI, staged against unstaged                       | planned |
 | A computing prerequisite a unit of another project needs goes to stage zero               | done  |
 | A stage-one shard computing one is refused (MGS3054)                                        | done  |
+| An edge folded from a cross-project `ctx.needs` orders no same-name target                 | done  |
 
 ### The plan
 
@@ -88,10 +89,14 @@ closure still holds one (MGS3054). The planner never produces that plan, so the 
 names a planner fault rather than a workspace mistake.
 
 Units that only wait on each other are not prerequisites. A run orders a target after
-the same-name target of each project its project depends on, but only when one run
-holds both. `ctx.needs` closures are what the plan reads, so the root's `build` can
-still share a shard with the docs when packing puts it there. Counting each such wait
-as a prerequisite would move the root's whole CI ahead of every other project.
+the same-name target of each project its project declares in `depends_on`, and only
+when one run holds both. An edge the load folds from a cross-project `ctx.needs` or
+`ctx.readsFiles` orders only the target the call names (Eli, 2026-11-07). The docs and
+the console reach the root only through such calls, so their `build` no longer waits on
+the root's `build` in a shard that holds both. `ctx.needs` closures are what the plan
+reads, and the plan never modeled same-name waits, so where the root's `build` lands is
+the packer's choice and costs the docs nothing. Counting declared waits as
+prerequisites would move every upstream's same-name targets ahead of stage one.
 
 When the split shares nothing and no unit needs another project's computing work,
 stage one is `forecast.Model.Plan` as before and stage zero is empty. The ID, digest, duties and JSON of every shard are then unchanged.

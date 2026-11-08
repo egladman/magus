@@ -49,6 +49,13 @@ the root in `depends_on` is refused
 ([MGS1061](../reference/codes/magusfile/MGS1061.md)), so the fold is that
 edge's only spelling.
 
+**A folded edge orders only the target it names.** An edge no `depends_on`
+declares, folded from a cross-project `ctx.needs` or `ctx.readsFiles`, seeds the
+affected closure but orders no same-target run. The docs `needs` the root's
+`symbol-digest-generate`, so that target runs first; `build` in the docs does not
+wait on `build` in the root, even when one run holds both. Same-target ordering
+holds only for an edge a `depends_on` declares.
+
 **The fold is a static read, so a computed edge is invisible.** The extractor
 reads the magusfile's AST; it resolves a same-project target passed by
 reference (`ctx.needs(build)`), a cross-project handle passed as a member
@@ -71,7 +78,8 @@ via `depends_on` instead.
   a `magus\needs` in the dependent.
 - It only orders **same-target** runs within one dispatch (`build` in a
   dependent waits on `build` in its dependency, if both are in the current
-  scope); it does not order arbitrary target pairs.
+  scope); it does not order arbitrary target pairs. An edge only the fold
+  adds orders no same-target run at all.
 - It seeds the affected closure and feeds `dep:` lines into the cache key
   (see [cache.md](cache.md#the-cache-key)); that is the entirety of its
   runtime effect.

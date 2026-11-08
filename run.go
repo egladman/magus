@@ -778,7 +778,10 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 		}
 		step.RequiredOutputs = types.CompactGlobs(append(step.RequiredOutputs, outputs[i]))
 	}
-	step.DependsOn = p.DependsOn
+	// A folded edge orders only the target its ctx.needs names, not this one.
+	step.DependsOn = slices.DeleteFunc(slices.Clone(p.DependsOn), func(dep string) bool {
+		return slices.Contains(m.foldedEdges[p.Path], dep)
+	})
 	// A service op is a long-running process: it must never be cached, or a re-run
 	// would replay a completed-target result instead of restarting the process. This
 	// is inherent (not an author opt-in), so OR it into the explicit SkipCache policy.

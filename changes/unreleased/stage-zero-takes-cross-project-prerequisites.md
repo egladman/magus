@@ -10,3 +10,6 @@
   and a cross-project `ctx.needs` that `depends_on` leaves out
   ([MGS1062](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1062/)). Root, docs and
   console now declare each project they need, and docs reads root files through `readsFiles`.
+- **An edge folded from a cross-project `ctx.needs` orders only the target it names.** Docs
+  `build` no longer waits on the root's `build`. Same-target ordering holds only for an
+  edge `depends_on` declares.

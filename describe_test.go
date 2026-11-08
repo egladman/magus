@@ -1784,3 +1784,43 @@ func TestMatchedClaims(t *testing.T) {
 		"an inbound glob belongs to the writer's own walk, not the owner's")
 	assert.Empty(t, matchedClaims(p, nil, "other/file.txt"))
 }
+
+type FoldedEdgeSuite struct{ suite.Suite }
+
+func TestFoldedEdgeSuite(t *testing.T) { suite.Run(t, new(FoldedEdgeSuite)) }
+
+const buildAndGen = `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun gen(ctx: magus\Context, args: [str]) > void {}
+`
+
+func (s *FoldedEdgeSuite) open(webProject string) *Magus {
+	w := testkit.NewWorkspace(s.T())
+	w.WriteTree(map[string]string{
+		"magusfile.buzz":     buildAndGen,
+		"lib/magusfile.buzz": buildAndGen,
+		"web/magusfile.buzz": fmt.Sprintf(`import "magus";
+import "project/.." as workspace;
+import "project/../lib";
+%s
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(workspace.gen, lib.gen);
+}
+`, webProject),
+	})
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	return m
+}
+
+func (s *FoldedEdgeSuite) TestANeedsOnARootTargetOrdersNoSameNameTarget() {
+	m := s.open(`magus\project({"depends_on": ["../lib"]});`)
+	web := m.Get("web")
+	s.Contains(web.DependsOn, ".", "the fold still seeds affected")
+	s.NotContains(m.buildStep(web, "build").DependsOn, ".")
+}
+
+func (s *FoldedEdgeSuite) TestADeclaredDependsOnOrdersTheSameNameTarget() {
+	m := s.open(`magus\project({"depends_on": ["../lib"]});`)
+	s.Contains(m.buildStep(m.Get("web"), "build").DependsOn, "lib")
+}

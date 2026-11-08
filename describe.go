@@ -343,8 +343,10 @@ func collectTargetNodes(src *interp.Source) []types.TargetGraphNode {
 // target body into the workspace's projects: cross-project dependencies and the
 // per-target cache footprint (ctx.readsFiles / ctx.writesFiles).
 //
-// Cross-project deps union into DependsOn, so affected and scheduling treat them like a
-// project-level depends_on and a magusfile declares one once, at the target. Per-target
+// Cross-project deps union into DependsOn, so affected treats them like a
+// project-level depends_on. One no depends_on declares goes in foldedEdges:
+// it orders only the target its ctx.needs names, never a same-name one.
+// Per-target
 // reads populate TargetInputs (resolved to the owning project's workspace-relative
 // path); writes populate TargetOutputs (project-root relative). Both union onto the
 // project-wide globs, never replacing them. A cross-project input's owning project also
@@ -367,8 +369,10 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 	binaryAnswerTargets := map[types.TargetRef]bool{}
 	driftGateTargets := map[types.TargetRef]bool{}
 	charmReads := map[types.TargetRef][]string{}
+	foldedEdges := map[string][]string{}
 	defer func() {
 		m.binaryAnswerTargets, m.driftGateTargets, m.charmReads = binaryAnswerTargets, driftGateTargets, charmReads
+		m.foldedEdges = foldedEdges
 	}()
 	for _, p := range m.ws.All() {
 		if err := ctx.Err(); err != nil {
@@ -647,6 +651,11 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 			}
 		}
 		if len(extra) > 0 {
+			for _, dep := range extra {
+				if !slices.Contains(p.DependsOn, dep) && !slices.Contains(foldedEdges[p.Path], dep) {
+					foldedEdges[p.Path] = append(foldedEdges[p.Path], dep)
+				}
+			}
 			p.DependsOn = append(p.DependsOn, extra...)
 			slices.Sort(p.DependsOn)
 			p.DependsOn = slices.Compact(p.DependsOn)
@@ -687,6 +696,8 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 			slices.Sort(op.DependsOn)
 			op.DependsOn = slices.Compact(op.DependsOn)
 		}
+		// The owner must run after the writer, so this edge orders.
+		foldedEdges[co.owner] = slices.DeleteFunc(foldedEdges[co.owner], func(d string) bool { return d == co.writer })
 		// File the glob on the OWNER, keyed by the writer. This is what makes the file
 		// visible to everything that asks a project what lands in its tree (clean,
 		// watch's rebuild-loop guard, ownership lookup, the merge driver), none of which
