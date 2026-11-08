@@ -54,34 +54,34 @@ func TestValidateModuleAcceptsWellFormedDeclarations(t *testing.T) {
 		{
 			name: "method with one arg and one return",
 			mod: Module{Name: "covok", Methods: []Method{{
-				Name: "f", Args: []Arg{{Name: "a", Type: TypeString}},
-				Returns: []Ret{{Type: TypeString}}, Impl: covImplementationStringString,
+				Name: "f", Args: []Arg{{Name: "a"}},
+				Returns: []Ret{{}}, Impl: covImplementationStringString,
 			}}},
 		},
 		{
 			name: "variadic method",
 			mod: Module{Name: "covok", Methods: []Method{{
-				Name: "f", Args: []Arg{{Name: "parts", Type: TypeString, Variadic: true}},
-				Returns: []Ret{{Type: TypeString}}, Impl: covImplementationVariadic,
+				Name: "f", Args: []Arg{{Name: "parts", Variadic: true}},
+				Returns: []Ret{{}}, Impl: covImplementationVariadic,
 			}}},
 		},
 		{
 			name: "extern method carries no Impl",
-			mod:  Module{Name: "covok", Methods: []Method{{Name: "f", Extern: true}}},
+			mod:  Module{Name: "covok", Methods: []Method{{Name: "f", Extern: (func(context.Context) error)(nil)}}},
 		},
 		{
 			name: "namespace of externs",
 			mod: Module{Name: "covok", Namespaces: []Namespace{{
-				Name: "ns", Methods: []Method{{Name: "f", Extern: true}},
+				Name: "ns", Methods: []Method{{Name: "f", Extern: (func(context.Context) error)(nil)}},
 			}}},
 		},
 		{
 			name: "field resolver taking a context",
-			mod:  Module{Name: "covok", Fields: []Field{{Name: "v", Type: TypeString, Resolver: covResolverContext}}},
+			mod:  Module{Name: "covok", Fields: []Field{{Name: "v", Resolver: covResolverContext}}},
 		},
 		{
 			name: "field resolver taking nothing",
-			mod:  Module{Name: "covok", Fields: []Field{{Name: "v", Type: TypeString, Resolver: covResolverBare}}},
+			mod:  Module{Name: "covok", Fields: []Field{{Name: "v", Resolver: covResolverBare}}},
 		},
 	}
 	for _, tc := range tests {
@@ -106,7 +106,7 @@ func TestValidateModuleRejectsMismatchedDeclarations(t *testing.T) {
 	}{
 		{
 			name: "extern carrying an Impl",
-			mod:  method(Method{Name: "f", Extern: true, Impl: covImplementationStringString}),
+			mod:  method(Method{Name: "f", Extern: (func(context.Context) error)(nil), Impl: covImplementationStringString}),
 			want: "method is Extern but carries an Impl",
 		},
 		{
@@ -126,22 +126,22 @@ func TestValidateModuleRejectsMismatchedDeclarations(t *testing.T) {
 		},
 		{
 			name: "Impl first arg is not a context",
-			mod:  method(Method{Name: "f", Args: []Arg{{Name: "a", Type: TypeString}}, Returns: []Ret{{Type: TypeString}}, Impl: covImplementationNoContext}),
+			mod:  method(Method{Name: "f", Args: []Arg{{Name: "a"}}, Returns: []Ret{{}}, Impl: covImplementationNoContext}),
 			want: "method Impl first arg must be context.Context, got string",
 		},
 		{
 			name: "declared variadic but Impl is not",
-			mod:  method(Method{Name: "f", Args: []Arg{{Name: "a", Type: TypeString, Variadic: true}}, Returns: []Ret{{Type: TypeString}}, Impl: covImplementationStringString}),
+			mod:  method(Method{Name: "f", Args: []Arg{{Name: "a", Variadic: true}}, Returns: []Ret{{}}, Impl: covImplementationStringString}),
 			want: "declaration says variadic but Impl is not variadic",
 		},
 		{
 			name: "Impl is variadic but the declaration is not",
-			mod:  method(Method{Name: "f", Args: []Arg{{Name: "a", Type: TypeString}}, Returns: []Ret{{Type: TypeString}}, Impl: covImplementationVariadic}),
+			mod:  method(Method{Name: "f", Args: []Arg{{Name: "a"}}, Returns: []Ret{{}}, Impl: covImplementationVariadic}),
 			want: "method Impl is variadic but declaration has no variadic arg",
 		},
 		{
 			name: "arg count disagrees",
-			mod:  method(Method{Name: "f", Returns: []Ret{{Type: TypeString}}, Impl: covImplementationStringString}),
+			mod:  method(Method{Name: "f", Returns: []Ret{{}}, Impl: covImplementationStringString}),
 			want: "method Impl takes 2 args, declaration has 1 (incl. ctx)",
 		},
 		{
@@ -156,7 +156,7 @@ func TestValidateModuleRejectsMismatchedDeclarations(t *testing.T) {
 		},
 		{
 			name: "return count disagrees",
-			mod:  method(Method{Name: "f", Args: []Arg{{Name: "a", Type: TypeString}}, Impl: covImplementationStringString}),
+			mod:  method(Method{Name: "f", Args: []Arg{{Name: "a"}}, Impl: covImplementationStringString}),
 			want: "method Impl has 1 non-error returns, declaration has 0",
 		},
 		{
@@ -167,45 +167,45 @@ func TestValidateModuleRejectsMismatchedDeclarations(t *testing.T) {
 		{
 			name: "namespace method that is not Extern",
 			mod: Module{Name: "covbad", Namespaces: []Namespace{{
-				Name: "ns", Methods: []Method{{Name: "f", Args: []Arg{{Name: "a", Type: TypeString}}, Returns: []Ret{{Type: TypeString}}, Impl: covImplementationStringString}},
+				Name: "ns", Methods: []Method{{Name: "f", Args: []Arg{{Name: "a"}}, Returns: []Ret{{}}, Impl: covImplementationStringString}},
 			}}},
 			want: `namespace "ns" method "f" must be Extern`,
 		},
 		{
 			name: "namespace method that is Extern and carries an Impl",
 			mod: Module{Name: "covbad", Namespaces: []Namespace{{
-				Name: "ns", Methods: []Method{{Name: "f", Extern: true, Impl: covImplementationStringString}},
+				Name: "ns", Methods: []Method{{Name: "f", Extern: (func(context.Context) error)(nil), Impl: covImplementationStringString}},
 			}}},
 			want: `namespace "ns" method "f": method is Extern but carries an Impl`,
 		},
 		{
 			name: "nil field resolver",
-			mod:  field(Field{Name: "v", Type: TypeString}),
+			mod:  field(Field{Name: "v"}),
 			want: `field "v": field Resolver must not be nil`,
 		},
 		{
 			name: "field resolver is not a function",
-			mod:  field(Field{Name: "v", Type: TypeString, Resolver: "nope"}),
+			mod:  field(Field{Name: "v", Resolver: "nope"}),
 			want: "field Resolver must be a function, got string",
 		},
 		{
 			name: "field resolver takes two arguments",
-			mod:  field(Field{Name: "v", Type: TypeString, Resolver: covImplementationStringString}),
+			mod:  field(Field{Name: "v", Resolver: covImplementationStringString}),
 			want: "field Resolver must take 0 or 1 args (ctx), got 2",
 		},
 		{
 			name: "field resolver's single argument is not a context",
-			mod:  field(Field{Name: "v", Type: TypeString, Resolver: covImplementationNoContext}),
+			mod:  field(Field{Name: "v", Resolver: covImplementationNoContext}),
 			want: "field Resolver single arg must be context.Context, got string",
 		},
 		{
 			name: "field resolver returns one value",
-			mod:  field(Field{Name: "v", Type: TypeString, Resolver: covImplementationNoError}),
+			mod:  field(Field{Name: "v", Resolver: covImplementationNoError}),
 			want: "field Resolver must return (T, error), got 1 returns",
 		},
 		{
 			name: "field resolver's second return is not an error",
-			mod:  field(Field{Name: "v", Type: TypeString, Resolver: covImplementationTwoStrings}),
+			mod:  field(Field{Name: "v", Resolver: covImplementationTwoStrings}),
 			want: "field Resolver second return must be error, got string",
 		},
 	}
@@ -221,7 +221,7 @@ func TestValidateModuleRejectsMismatchedDeclarations(t *testing.T) {
 // TestValidateModuleRejectsMalformedMCPTools covers the MCP-tool half of
 // validation.
 func TestValidateModuleRejectsMalformedMCPTools(t *testing.T) {
-	base := Method{Name: "look", Doc: "d", Impl: covImplementationStringString, Args: []Arg{{Name: "s", Type: TypeString}}, Returns: []Ret{{Type: TypeString}}}
+	base := Method{Name: "look", Doc: "d", Impl: covImplementationStringString, Args: []Arg{{Name: "s"}}, Returns: []Ret{{}}}
 	tests := []struct {
 		name string
 		tool MCPTool
@@ -449,8 +449,8 @@ func TestObject(t *testing.T) {
 
 func (s *ObjectSuite) object() Object {
 	return Object{Name: "Rec", Methods: []Method{{
-		Name: "label_of", Args: []Arg{{Name: "prefix", Type: TypeString}},
-		Returns: []Ret{{Type: TypeString}}, Impl: covRecordMethod,
+		Name: "label_of", Args: []Arg{{Name: "prefix"}},
+		Returns: []Ret{{}}, Impl: covRecordMethod,
 	}}}
 }
 
@@ -486,15 +486,15 @@ func (s *ObjectSuite) TestAWellFormedObjectValidates() {
 
 func (s *ObjectSuite) TestAnImplementationWithoutTheRecordIsRefused() {
 	o := Object{Name: "Rec", Methods: []Method{{
-		Name: "f", Args: []Arg{{Name: "a", Type: TypeString}},
-		Returns: []Ret{{Type: TypeString}}, Impl: covImplementationStringString,
+		Name: "f", Args: []Arg{{Name: "a"}},
+		Returns: []Ret{{}}, Impl: covImplementationStringString,
 	}}}
 	err := ValidateModule(Module{Name: "covbad", Objects: []Object{o}})
 	s.ErrorContains(err, `object "Rec" method "f"`)
 }
 
 func (s *ObjectSuite) TestAnExternObjectMethodIsRefused() {
-	o := Object{Name: "Rec", Methods: []Method{{Name: "f", Extern: true}}}
+	o := Object{Name: "Rec", Methods: []Method{{Name: "f", Extern: (func(context.Context) error)(nil)}}}
 	s.ErrorContains(ValidateModule(Module{Name: "covbad", Objects: []Object{o}}), "needs an Impl")
 }
 

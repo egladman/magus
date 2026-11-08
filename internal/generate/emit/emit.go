@@ -1085,12 +1085,12 @@ func (e *moduleEmitter) receiver(fn *libFunc, b *binding) {
 	recvName := lowerFirst(fn.recv.name)
 	alias := e.genAlias(fn.recv.pkg)
 	if fn.recv.kind == kindRecord {
-		b.args = append(b.args, fmt.Sprintf("{Name: %q, Type: std.TypeAnyMap}", recvName))
+		b.args = append(b.args, fmt.Sprintf("{Name: %q}", recvName))
 		b.params = append(b.params, recvName+" map[string]any")
 		b.pre = append(b.pre, fmt.Sprintf("recv, err := %sDecode%s(%s)\nif err != nil {\nreturn ZERO, err\n}", alias, fn.recv.name, recvName))
 		return
 	}
-	b.args = append(b.args, fmt.Sprintf("{Name: %q, Type: std.TypeInt}", recvName))
+	b.args = append(b.args, fmt.Sprintf("{Name: %q}", recvName))
 	b.params = append(b.params, recvName+" int")
 	b.pre = append(b.pre, fmt.Sprintf("recv, err := %s%sHandles.Get(%s)\nif err != nil {\nreturn ZERO, err\n}", alias, fn.recv.name, recvName))
 }
@@ -1117,7 +1117,7 @@ func (e *moduleEmitter) arguments(fn *libFunc, b *binding) error {
 			continue
 		}
 		t := tag(c)
-		b.args = append(b.args, fmt.Sprintf("{Name: %q, Type: %s}", prm.name, t))
+		b.args = append(b.args, fmt.Sprintf("{Name: %q}", prm.name))
 		goName := "a" + upperFirst(prm.name)
 		b.params = append(b.params, fmt.Sprintf("%s %s", goName, implementationParam(t)))
 		direct := (c.kind == convPrim && implementationParam(t) == c.prim) || c.kind == convBytes || t == "std.TypeStringSlice"
@@ -1208,7 +1208,7 @@ func (e *moduleEmitter) method(fn *libFunc, name, impl, retTag string, b *bindin
 		fmt.Fprintf(&m, "\t\t\tArgs: []std.Arg{%s},\n", strings.Join(b.args, ", "))
 	}
 	if retTag != "" {
-		fmt.Fprintf(&m, "\t\t\tReturns: []std.Ret{{Type: %s}},\n", retTag)
+		fmt.Fprintln(&m, "\t\t\tReturns: []std.Ret{{}},")
 	}
 	if b.raises || len(b.pre) > 0 {
 		m.WriteString("\t\t\tRaises: true,\n")
@@ -1231,8 +1231,8 @@ func (e *moduleEmitter) getter(t *libType, f libField) error {
 	fmt.Fprintf(&e.body, "// %s reads the %s field of a %s.\nfunc %s(ctx context.Context, %s int) (%s, error) {\n", impl, f.name, t.name, impl, recv, retType)
 	fmt.Fprintf(&e.body, "recv, err := %sHandles.Get(%s)\nif err != nil {\nreturn %s, err\n}\nreturn %s, nil\n}\n\n",
 		t.name, recv, zeroLiteral(retType), e.encodeTop(c, "recv."+f.name, retType))
-	e.methods = append(e.methods, fmt.Sprintf("\t\t{\n\t\t\tName: %q,\n\t\t\tDoc: %q,\n\t\t\tArgs: []std.Arg{{Name: %q, Type: std.TypeInt}},\n\t\t\tReturns: []std.Ret{{Type: %s}},\n\t\t\tRaises: true,\n\t\t\tImpl: %s,\n\t\t},\n",
-		fmt.Sprintf("%s_%s", snake(t.name), snake(f.name)), fmt.Sprintf("The %s field of a %s.", f.name, t.name), recv, retTag, impl))
+	e.methods = append(e.methods, fmt.Sprintf("\t\t{\n\t\t\tName: %q,\n\t\t\tDoc: %q,\n\t\t\tArgs: []std.Arg{{Name: %q}},\n\t\t\tReturns: []std.Ret{{}},\n\t\t\tRaises: true,\n\t\t\tImpl: %s,\n\t\t},\n",
+		fmt.Sprintf("%s_%s", snake(t.name), snake(f.name)), fmt.Sprintf("The %s field of a %s.", f.name, t.name), recv, impl))
 	return nil
 }
 
@@ -1269,8 +1269,8 @@ func (e *moduleEmitter) value(v *libValue) error {
 	// A method rather than a std.Field: the checker declares methods, so a
 	// script that names a value gets it checked.
 	fmt.Fprintf(&e.body, "// %s reads %s.%s.\nfunc %s(ctx context.Context) (%s, error) { return %s, nil }\n\n", impl, e.p.importPath, v.name, impl, goT, val)
-	e.methods = append(e.methods, fmt.Sprintf("\t\t{\n\t\t\tName: %q,\n\t\t\tDoc: %q,\n\t\t\tReturns: []std.Ret{{Type: %s}},\n\t\t\tImpl: %s,\n\t\t},\n",
-		snake(v.name), valueDoc(v), t, impl))
+	e.methods = append(e.methods, fmt.Sprintf("\t\t{\n\t\t\tName: %q,\n\t\t\tDoc: %q,\n\t\t\tReturns: []std.Ret{{}},\n\t\t\tImpl: %s,\n\t\t},\n",
+		snake(v.name), valueDoc(v), impl))
 	return nil
 }
 

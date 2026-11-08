@@ -85,11 +85,11 @@ var Magus = Module{
 			Name: "cmd",
 			Doc:  "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus\\cmd(sub, args, [opts]) beside magus\\run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, doctor, the magus\\describe methods) when one exists - magus\\cmd warns when sub, or a describe noun, names one that has; a describe noun with no method (job), and any noun's text in an explicit -o format, is reached here without a warning. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.AllowFailure is set. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc\\exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input, which is how a credential reaches a subcommand (`graph push`) without passing through a process listing or a run log.",
 			Args: []Arg{
-				{Name: "sub", Type: TypeString},
-				{Name: "args", Type: TypeStringSlice},
-				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"},
+				{Name: "sub"},
+				{Name: "args"},
+				{Name: "opts", Optional: true, Object: "CommandOptions"},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
+			Returns: []Ret{{Object: "ExecResult"}},
 			Raises:  true,
 			Impl:    MagusCommand,
 		},
@@ -97,9 +97,9 @@ var Magus = Module{
 			Name: "where",
 			Doc:  "Return the project path containing dir, or null when dir is inside no project. Served in-process from the workspace on the context - no subprocess.",
 			Args: []Arg{
-				{Name: "dir", Type: TypeString},
+				{Name: "dir"},
 			},
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    MagusWhere,
 		},
@@ -107,9 +107,9 @@ var Magus = Module{
 			Name: "raise",
 			Doc:  "Fail with a CODED diagnostic instead of a bare string, so a caller can branch on the code: `catch (e) { if (e.code == \"WS1001\") ... }`. code is a DiagnosticCode from magus\\diagnosticCode, and it is checked again here against the prefix magus.yaml's diagnostics.prefix declares, so a raise from an imported spell carries the importing workspace's prefix or fails. opts.cause is the error being wrapped, usually the value from an inner catch; it is appended to the message the way Go's %w renders one, and the failure it came from stays reachable underneath. The `see:` line under the message is opts.url when given, else the page diagnostics.docs names for the code, else none.",
 			Args: []Arg{
-				{Name: "code", Type: TypeAnyMap, Object: "DiagnosticCode"},
-				{Name: "message", Type: TypeString},
-				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "RaiseOptions"},
+				{Name: "code", Object: "DiagnosticCode"},
+				{Name: "message"},
+				{Name: "opts", Optional: true, Object: "RaiseOptions"},
 			},
 			Returns: nil,
 			Raises:  true,
@@ -118,8 +118,8 @@ var Magus = Module{
 		{
 			Name:    "diagnosticCode",
 			Doc:     "Mint a workspace diagnostic code for magus\\raise: {code, origin}. text is the prefix magus.yaml's diagnostics.prefix declares followed by four digits (WS1003). Raises on an MGS, BZZ or other built-in prefix, which only magus mints, on a prefix this workspace did not declare, on a malformed code, and on any code when no prefix is declared, naming the magus.yaml key.",
-			Args:    []Arg{{Name: "text", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "DiagnosticCode"}},
+			Args:    []Arg{{Name: "text"}},
+			Returns: []Ret{{Object: "DiagnosticCode"}},
 			Raises:  true,
 			Impl:    MagusDiagnosticCode,
 		},
@@ -127,10 +127,10 @@ var Magus = Module{
 			Name: "run",
 			Doc:  "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.AllowFailure is set. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc\\exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input.",
 			Args: []Arg{
-				{Name: "args", Type: TypeStringSlice},
-				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"},
+				{Name: "args"},
+				{Name: "opts", Optional: true, Object: "CommandOptions"},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
+			Returns: []Ret{{Object: "ExecResult"}},
 			Raises:  true,
 			Impl:    MagusRun,
 		},
@@ -138,9 +138,9 @@ var Magus = Module{
 			Name: "output",
 			Doc:  "One target run's captured output by its ref: {ref, project, target, failed, durationMs, output}. Annotate the result `> OutputRecord`. ref is an output ref (out1a2b3c) or a unique prefix of one. Raises on a value that is not a ref, a prefix that matches several, and a ref this checkout's output store does not hold: output lives in the checkout that ran the target. Read in-process from the workspace on the context, or inside a guard rule from the checkout the guard judges; raises MGS1022 outside both.",
 			Args: []Arg{
-				{Name: "ref", Type: TypeString},
+				{Name: "ref"},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "OutputRecord"}},
+			Returns: []Ret{{Object: "OutputRecord"}},
 			Raises:  true,
 			Impl:    MagusOutput,
 		},
@@ -148,10 +148,10 @@ var Magus = Module{
 			Name: "doctor",
 			Doc:  "Validate the workspace and return what every check found: {workspace, checks, summary}, each check {name, status, message, details} with status `ok`, `fail`, or `advice` (advice is worth knowing and never a gate). Annotate the result `> DoctorReport` for compile-checked field access. A caller branches on a check's status rather than grepping console text for the word fail. It does NOT raise when a check fails: doctor exits non-zero precisely when it has something to report, and raising would discard the report. Gate on `summary.fail` instead, which says more than an exit code does. It DOES raise when the underlying `magus doctor` subprocess itself cannot be launched or its output cannot be decoded - an infrastructure failure, not a check result. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc\\exec).",
 			Args: []Arg{
-				{Name: "args", Type: TypeStringSlice},
-				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"},
+				{Name: "args"},
+				{Name: "opts", Optional: true, Object: "CommandOptions"},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "DoctorReport"}},
+			Returns: []Ret{{Object: "DoctorReport"}},
 			Raises:  true,
 			Impl:    MagusDoctor,
 		},
@@ -159,10 +159,10 @@ var Magus = Module{
 			Name: "clean",
 			Doc:  "Remove the declared outputs of the selected projects: {removed, tracked, dryRun}. Arguments are `magus clean`'s: project paths, `--cache`, `--dry-run`. With no projects, the cwd project is selected, or the whole workspace from the root. Tracked outputs stay, because they are committed. Annotate the result `> CleanReport`. opts.root and opts.dir as on doctor.",
 			Args: []Arg{
-				{Name: "args", Type: TypeStringSlice},
-				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"},
+				{Name: "args"},
+				{Name: "opts", Optional: true, Object: "CommandOptions"},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "CleanReport"}},
+			Returns: []Ret{{Object: "CleanReport"}},
 			Raises:  true,
 			Impl:    MagusClean,
 		},
@@ -170,9 +170,9 @@ var Magus = Module{
 			Name: "has_charm",
 			Doc:  "True when execution charm `name` is active, letting a target body branch on a charm carried in context (e.g. has_charm(\"rw\")).",
 			Args: []Arg{
-				{Name: "name", Type: TypeString},
+				{Name: "name"},
 			},
-			Returns: []Ret{{Type: TypeBool}},
+			Returns: []Ret{{}},
 			Impl:    MagusHasCharm,
 		},
 		{
@@ -180,8 +180,8 @@ var Magus = Module{
 			Doc: "The workspace this call reads, as a Workspace whose methods are the job store, the run-outcome reads, " +
 				"the skills, disk reclaim and drift diagnosis. dir names the checkout whose branch forkFacts and " +
 				"unmerged read; empty is the workspace root. Raises MGS1022 outside a workspace.",
-			Args:    []Arg{{Name: "dir", Type: TypeString, Optional: true}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Workspace"}},
+			Args:    []Arg{{Name: "dir", Optional: true}},
+			Returns: []Ret{{Object: "Workspace"}},
 			Raises:  true,
 			Impl:    MagusWorkspaceOpen,
 		},
@@ -195,8 +195,8 @@ var Magus = Module{
 				"empty when no index was ingested; gaps are the projects declaring an index magus could not read. Raises " +
 				"MGS1022 outside a workspace, and when the gap probe cannot run. languages names the languages whose " +
 				"symbol indexes to freshen; empty is every index.",
-			Args:    []Arg{{Name: "languages", Type: TypeStringSlice, Optional: true}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Graph"}},
+			Args:    []Arg{{Name: "languages", Optional: true}},
+			Returns: []Ret{{Object: "Graph"}},
 			Raises:  true,
 			Impl:    MagusGraphOpen,
 		},
@@ -209,10 +209,10 @@ var Magus = Module{
 				"path), and each method raises once that tree moved, naming the paths that moved. Raises MGS1022 outside " +
 				"a workspace.",
 			Args: []Arg{
-				{Name: "base", Type: TypeString, Optional: true},
-				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "ChangeOptions"},
+				{Name: "base", Optional: true},
+				{Name: "opts", Optional: true, Object: "ChangeOptions"},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Change"}},
+			Returns: []Ret{{Object: "Change"}},
 			Raises:  true,
 			Impl:    MagusChangeOpen,
 		},
@@ -221,8 +221,8 @@ var Magus = Module{
 			Doc: "The window of version-control history a metric reads, as a History whose methods are hotspots, " +
 				"affinity, ownership and trend. opts is a HistoryMetricsOptions: commits (default 500), since, dir, and " +
 				"files for file granularity. Raises MGS1022 outside a workspace.",
-			Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "HistoryMetricsOptions"}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "History"}},
+			Args:    []Arg{{Name: "opts", Optional: true, Object: "HistoryMetricsOptions"}},
+			Returns: []Ret{{Object: "History"}},
 			Raises:  true,
 			Impl:    MagusHistoryOpen,
 		},
@@ -231,8 +231,8 @@ var Magus = Module{
 			Doc: "One row of the declared job store, as a Job whose methods are exit, wait and register. The store is " +
 				"what an orchestrating agent said about work it handed out: rows are DECLARATIONS, gating no run; the " +
 				"agent guard reads them to grade a write. An id no row carries raises. Raises MGS1022 outside a workspace.",
-			Args:    []Arg{{Name: "id", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Job"}},
+			Args:    []Arg{{Name: "id"}},
+			Returns: []Ret{{Object: "Job"}},
 			Raises:  true,
 			Impl:    MagusJobOpen,
 		},
@@ -242,8 +242,8 @@ var Magus = Module{
 				"opts.session is the host's session id, empty for the one with the newest observation; opts.since is a " +
 				"duration back from opts.until (`6h`) or an RFC3339 time, default 24h; opts.until is an RFC3339 time, " +
 				"default now. An unknown option raises, and MGS1022 outside a workspace.",
-			Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "SessionOptions"}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Session"}},
+			Args:    []Arg{{Name: "opts", Optional: true, Object: "SessionOptions"}},
+			Returns: []Ret{{Object: "Session"}},
 			Raises:  true,
 			Impl:    MagusSessionOpen,
 		},
@@ -260,43 +260,43 @@ var Magus = Module{
 			// `any` rather than a shape: the binding accepts BOTH project(config) and
 			// project(path, config), which one Buzz signature cannot express, and the
 			// config map's keys are validated by the loader rather than the checker.
-			Args: []Arg{{Name: "config", Type: TypeAny}, {Name: "opts", Type: TypeAny, Optional: true}},
+			Args: []Arg{{Name: "config"}, {Name: "opts", Optional: true}},
 			// NOT Raises, though the script-mode binding does fail: a magusfile calls
 			// this at TOP LEVEL, where there is no enclosing function to declare !> and
 			// nothing to catch with. Declaring it raising makes the one mandatory call in
 			// every magusfile unwritable.
-			Extern: true,
+			Extern: (func(context.Context, any, any) error)(nil),
 		},
 		{
 			Name:    "canonical_name",
 			Doc:     "The canonical form of a magus entity name - a target, charm, or spell op. `build2` gains a '-' you did not type; `HTTPServer` breaks before its last letter. Returns the NAME, never a spell handle: a handle can only come from a literal import, because the target graph is built by reading imports statically.",
-			Args:    []Arg{{Name: "name", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "name"}},
+			Returns: []Ret{{}},
 			// NOT Raises. The binding's only failure is a non-string argument, and the
 			// declared `str` parameter now rejects that statically, so the raise is
 			// unreachable for any call the checker admits. Declaring it would force a
 			// try/catch around a pure string transform, including in the `magus buzz -e`
 			// one-liners where there is no enclosing function to propagate from.
-			Extern: true,
+			Extern: (func(context.Context, string) (string, error))(nil),
 		},
 		{
 			Name: "fatal",
 			Doc:  "Log at error level, then abort the run with exit status 1.",
-			Args: []Arg{{Name: "msg", Type: TypeString, Optional: true}},
+			Args: []Arg{{Name: "msg", Optional: true}},
 			// NOT Raises: it aborts by design. Requiring every call to be caught would
 			// ask callers to handle the thing they invoked to be unhandleable.
-			Extern: true,
+			Extern: (func(context.Context, string) error)(nil),
 		},
 		{
 			Name:   "pry",
 			Doc:    "Drop into an interactive REPL at this point, with the calling scope in hand. A no-op while the magusfile is only being parsed.",
-			Extern: true,
+			Extern: (func(context.Context) error)(nil),
 		},
 		{
 			Name:   "workspaceProvider",
 			Doc:    "Select the workspace provider, given an imported spell handle. Declared at the top level of the root magusfile.",
-			Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
-			Extern: true,
+			Args:   []Arg{{Name: "spell"}},
+			Extern: (func(context.Context, map[string]any) error)(nil),
 		},
 		{
 			Name: "modelTiers",
@@ -316,13 +316,13 @@ var Magus = Module{
 				"it never selects a model for a call, retries or escalates, and prints nothing. " +
 				"The recorded outcomes per tier are magus\\workspace().tierOutcomes().",
 			Args: []Arg{
-				{Name: "tiers", Type: TypeAny},
-				{Name: "default", Type: TypeAny, Optional: true},
-				{Name: "hosts", Type: TypeAny, Optional: true},
-				{Name: "bounds", Type: TypeAny, Optional: true},
-				{Name: "skills", Type: TypeAny, Optional: true},
+				{Name: "tiers"},
+				{Name: "default", Optional: true},
+				{Name: "hosts", Optional: true},
+				{Name: "bounds", Optional: true},
+				{Name: "skills", Optional: true},
 			},
-			Extern: true,
+			Extern: (func(context.Context, any, any, any, any, any) error)(nil),
 		},
 		{
 			Name: "modelTier",
@@ -335,8 +335,8 @@ var Magus = Module{
 				"history alone. A non-null answer lacking tier, skills or a reason fails the fork. " +
 				"Declared at the top level of the root magusfile, once; a second call, a call from " +
 				"another project, or a non-function is MGS1052.",
-			Args:   []Arg{{Name: "matrix", Type: TypeFunc, Func: "fun (req: ModelTierRequest) > any !> any"}},
-			Extern: true,
+			Args:   []Arg{{Name: "matrix", Func: "fun (req: ModelTierRequest) > any !> any"}},
+			Extern: (func(context.Context, Callback) error)(nil),
 		},
 	},
 	// The objects a modelTiers declaration and a modelTier function take,
@@ -360,32 +360,32 @@ var Magus = Module{
 				{
 					Name:   "debug",
 					Doc:    "Log at debug level. See magus\\log.info.",
-					Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
-					Extern: true,
+					Args:   []Arg{{Name: "msg", Optional: true}, {Name: "fields", Optional: true}},
+					Extern: (func(context.Context, string, map[string]string) error)(nil),
 				},
 				{
 					Name:   "error",
 					Doc:    "Log at error level. See magus\\log.info. Logging an error does not abort; magus\\fatal does.",
-					Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
-					Extern: true,
+					Args:   []Arg{{Name: "msg", Optional: true}, {Name: "fields", Optional: true}},
+					Extern: (func(context.Context, string, map[string]string) error)(nil),
 				},
 				{
 					Name:   "hint",
 					Doc:    "Emit an advisory nudge: non-fatal, deduped, and suppressed when hints are toggled off.",
-					Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}},
-					Extern: true,
+					Args:   []Arg{{Name: "msg", Optional: true}},
+					Extern: (func(context.Context, string) error)(nil),
 				},
 				{
 					Name:   "info",
 					Doc:    "Log at info level. The only way to log from a magusfile; there is no separate log module.",
-					Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
-					Extern: true,
+					Args:   []Arg{{Name: "msg", Optional: true}, {Name: "fields", Optional: true}},
+					Extern: (func(context.Context, string, map[string]string) error)(nil),
 				},
 				{
 					Name:   "warn",
 					Doc:    "Log at warn level. See magus\\log.info.",
-					Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
-					Extern: true,
+					Args:   []Arg{{Name: "msg", Optional: true}, {Name: "fields", Optional: true}},
+					Extern: (func(context.Context, string, map[string]string) error)(nil),
 				},
 			},
 		},
@@ -395,8 +395,8 @@ var Magus = Module{
 			Methods: []Method{{
 				Name:   "remote",
 				Doc:    "Select the remote cache provider, given an imported spell handle. Declared at the top level of the root magusfile.",
-				Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
-				Extern: true,
+				Args:   []Arg{{Name: "spell"}},
+				Extern: (func(context.Context, map[string]any) error)(nil),
 			}},
 		},
 		{
@@ -405,8 +405,8 @@ var Magus = Module{
 			Methods: []Method{{
 				Name:   "provider",
 				Doc:    "Select the CI provider, given an imported spell handle.",
-				Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
-				Extern: true,
+				Args:   []Arg{{Name: "spell"}},
+				Extern: (func(context.Context, map[string]any) error)(nil),
 			}},
 		},
 		{
@@ -423,8 +423,8 @@ var Magus = Module{
 						"stricter of the committed and the working-tree setting, so a loosening applies only " +
 						"once committed. An unknown rule name, an unknown decision, a parameter on a rule that " +
 						"takes none or out of its range, declaring twice or from another project is MGS1045.",
-					Args:   []Arg{{Name: "rules", Type: TypeAnyMap}},
-					Extern: true,
+					Args:   []Arg{{Name: "rules"}},
+					Extern: (func(context.Context, map[string]any) error)(nil),
 				},
 				{
 					Name: "profile",
@@ -435,14 +435,14 @@ var Magus = Module{
 						"committed and the working-tree level applies, and a person's agents.profile in " +
 						"magus.yaml may raise it, never lower it. An unknown level, declaring twice or " +
 						"from another project is MGS1045.",
-					Args:   []Arg{{Name: "level", Type: TypeString}},
-					Extern: true,
+					Args:   []Arg{{Name: "level"}},
+					Extern: (func(context.Context, string) error)(nil),
 				},
 				{
 					Name:   "shell",
 					Doc:    "Declare one additive shell rule matched on a resolved program name and optional arg subset. Declared at the top level of the root magusfile. decision is deny or advise; optional dialect selects the parser (posix, bash, mksh, zsh, bats).",
-					Args:   []Arg{{Name: "rule", Type: TypeAnyMap}},
-					Extern: true,
+					Args:   []Arg{{Name: "rule"}},
+					Extern: (func(context.Context, map[string]any) error)(nil),
 				},
 				{
 					Name: "spawn",
@@ -454,8 +454,8 @@ var Magus = Module{
 						"naming the failure. When the magusfile is tracked, the committed and the " +
 						"working-tree rule both run and the stricter answer stands. Registering twice, from " +
 						"another project, or with a non-function is MGS1045. magus ships no rule.",
-					Args:   []Arg{{Name: "rule", Type: TypeFunc, Func: "fun (req: SpawnRequest) > GuardVerdict !> any"}},
-					Extern: true,
+					Args:   []Arg{{Name: "rule", Func: "fun (req: SpawnRequest) > GuardVerdict !> any"}},
+					Extern: (func(context.Context, Callback) error)(nil),
 				},
 				{
 					Name: "command",
@@ -466,8 +466,8 @@ var Magus = Module{
 						"from both the committed and the working-tree sources, exactly as guard.spawn is. " +
 						"Registering twice, from another project, or with a non-function is MGS1045. magus " +
 						"ships no rule.",
-					Args:   []Arg{{Name: "rule", Type: TypeFunc, Func: "fun (req: CommandRequest) > GuardVerdict !> any"}},
-					Extern: true,
+					Args:   []Arg{{Name: "rule", Func: "fun (req: CommandRequest) > GuardVerdict !> any"}},
+					Extern: (func(context.Context, Callback) error)(nil),
 				},
 				{
 					Name: "write",
@@ -477,8 +477,8 @@ var Magus = Module{
 						"from both the committed and the working-tree sources, exactly as guard.command is. " +
 						"Registering twice, from another project, or with a non-function is MGS1045. magus " +
 						"ships no rule.",
-					Args:   []Arg{{Name: "rule", Type: TypeFunc, Func: "fun (req: WriteRequest) > GuardVerdict !> any"}},
-					Extern: true,
+					Args:   []Arg{{Name: "rule", Func: "fun (req: WriteRequest) > GuardVerdict !> any"}},
+					Extern: (func(context.Context, Callback) error)(nil),
 				},
 				{
 					Name: "stop",
@@ -491,69 +491,69 @@ var Magus = Module{
 						"rule that fails lets the stop through and says so, since refusing on a broken rule " +
 						"would hold the session open. Registering twice, from another project, or with a " +
 						"non-function is MGS1045. magus ships no rule.",
-					Args:   []Arg{{Name: "rule", Type: TypeFunc, Func: "fun (req: StopRequest) > GuardVerdict !> any"}},
-					Extern: true,
+					Args:   []Arg{{Name: "rule", Func: "fun (req: StopRequest) > GuardVerdict !> any"}},
+					Extern: (func(context.Context, Callback) error)(nil),
 				},
 				{
 					Name:    "allow",
 					Doc:     "The verdict a spawn, command, write or stop rule returns to add nothing.",
-					Returns: []Ret{{Type: TypeAnyMap, Object: "GuardVerdict"}},
-					Extern:  true,
+					Returns: []Ret{{Object: "GuardVerdict"}},
+					Extern: (func(context.Context) (map[string]any, error))(nil),
 				},
 				{
 					Name: "advise",
 					Doc: "The verdict a spawn, command, write or stop rule returns to let the call through with text for the agent. " +
 						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>.",
-					Args:    []Arg{{Name: "text", Type: TypeString}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
-					Returns: []Ret{{Type: TypeAnyMap, Object: "GuardVerdict"}},
-					Extern:  true,
+					Args:    []Arg{{Name: "text"}, {Name: "opts", Optional: true}},
+					Returns: []Ret{{Object: "GuardVerdict"}},
+					Extern: (func(context.Context, string, map[string]any) (map[string]any, error))(nil),
 				},
 				{
 					Name: "deny",
 					Doc: "The verdict a spawn, command, write or stop rule returns to block the call, with text saying why. " +
 						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>, is stored, " +
 						"and a repeat in the same session shortens to its first line.",
-					Args:    []Arg{{Name: "text", Type: TypeString}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
-					Returns: []Ret{{Type: TypeAnyMap, Object: "GuardVerdict"}},
-					Extern:  true,
+					Args:    []Arg{{Name: "text"}, {Name: "opts", Optional: true}},
+					Returns: []Ret{{Object: "GuardVerdict"}},
+					Extern: (func(context.Context, string, map[string]any) (map[string]any, error))(nil),
 				},
 				{
 					Name: "once",
 					Doc: "True the first time key is asked in the calling agent's session, false after. " +
 						"Only callable inside a spawn, command, write or stop rule while the guard runs it.",
-					Args:    []Arg{{Name: "key", Type: TypeString}},
-					Returns: []Ret{{Type: TypeBool}},
-					Extern:  true,
+					Args:    []Arg{{Name: "key"}},
+					Returns: []Ret{{}},
+					Extern: (func(context.Context, string) (bool, error))(nil),
 				},
 				{
 					Name: "count",
 					Doc: "Adds one to key's tally in the calling agent's session and returns the new " +
 						"total, starting at 1. Only callable inside a spawn, command, write or stop rule while the guard runs it.",
-					Args:    []Arg{{Name: "key", Type: TypeString}},
-					Returns: []Ret{{Type: TypeInt}},
-					Extern:  true,
+					Args:    []Arg{{Name: "key"}},
+					Returns: []Ret{{}},
+					Extern: (func(context.Context, string) (int, error))(nil),
 				},
 				{
 					Name: "binary",
 					Doc: "The magus binary answering the guard: {path, stamp}. path is the running executable " +
 						"with symlinks resolved; stamp is the text its build passed through the linker, empty " +
 						"when it passed none, so a rule can tell which sources that build came from.",
-					Returns: []Ret{{Type: TypeAnyMap, Object: "GuardBinary"}},
-					Extern:  true,
+					Returns: []Ret{{Object: "GuardBinary"}},
+					Extern: (func(context.Context) (map[string]any, error))(nil),
 				},
 				{
 					Name:    "shape",
 					Doc:     "A shell line with its paths, patterns and literals normalized away, so calls differing only in what they name read alike: `grep -rn foo src` and `grep -rn bar lib` are both `grep -rn <arg>`. Programs, flags, operators and redirections stay. \"\" for a line the shell parser cannot read.",
-					Args:    []Arg{{Name: "command", Type: TypeString}},
-					Returns: []Ret{{Type: TypeString}},
-					Extern:  true,
+					Args:    []Arg{{Name: "command"}},
+					Returns: []Ret{{}},
+					Extern: (func(context.Context, string) (string, error))(nil),
 				},
 				{
 					Name:    "shapes",
 					Doc:     "The shape of each program a shell line runs, in order, each with its own redirections: `cd x && grep -rn foo src | head -5` is [`cd <path>`, `grep -rn <arg>`, `head -<n>`]. Programs inside a loop or a command substitution count. Empty for a line the shell parser cannot read.",
-					Args:    []Arg{{Name: "command", Type: TypeString}},
-					Returns: []Ret{{Type: TypeStringSlice}},
-					Extern:  true,
+					Args:    []Arg{{Name: "command"}},
+					Returns: []Ret{{}},
+					Extern: (func(context.Context, string) ([]string, error))(nil),
 				},
 			},
 			// Brief is no method's: a buzz-format spawn brief is one magus\Brief literal the
@@ -566,9 +566,9 @@ var Magus = Module{
 			Methods: []Method{{
 				Name:    "provider",
 				Doc:     "Wire an imported harness spell for this workspace. A workspace may use several (one per agent host), same append-on-repeat shape as workspace.provider. Declared at the top level of the root magusfile. Returns the harness id, which keys the hosts map of magus\\modelTiers; a call that ignores it wires the harness all the same.",
-				Args:    []Arg{{Name: "spell", Type: TypeAnyMap}},
-				Returns: []Ret{{Type: TypeString}},
-				Extern:  true,
+				Args:    []Arg{{Name: "spell"}},
+				Returns: []Ret{{}},
+				Extern: (func(context.Context, map[string]any) (string, error))(nil),
 			}},
 		},
 		{
@@ -578,18 +578,18 @@ var Magus = Module{
 				{
 					Name:   "provider",
 					Doc:    "Select the secret provider, given an imported spell handle.",
-					Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
-					Extern: true,
+					Args:   []Arg{{Name: "spell"}},
+					Extern: (func(context.Context, map[string]any) error)(nil),
 				},
 				{
 					Name: "read",
 					Doc:  "Read a credential by reference through the selected provider. Unlike the selections, this is called from inside a target, so its failure IS something a caller can handle.",
-					Args: []Arg{{Name: "ref", Type: TypeString}},
+					Args: []Arg{{Name: "ref"}},
 					// A magus-resolved value rather than a bare str, which is what lets
 					// magus recognize it and keep it out of logs and cache keys.
-					Returns: []Ret{{Type: TypeString}},
+					Returns: []Ret{{}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context, string) (string, error))(nil),
 				},
 				{
 					Name: "endpoint",
@@ -598,10 +598,10 @@ var Magus = Module{
 					// magusfile declares itself (ref/host/header/prefix), and an object
 					// does not satisfy a {str: any} annotation. The shape is checked at
 					// the call, by secretGrantArg.
-					Args:    []Arg{{Name: "grant", Type: TypeAny}},
-					Returns: []Ret{{Type: TypeString}},
+					Args:    []Arg{{Name: "grant"}},
+					Returns: []Ret{{}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context, any) (string, error))(nil),
 				},
 			},
 		},
@@ -615,8 +615,8 @@ var Magus = Module{
 			Methods: []Method{{
 				Name:   "provider",
 				Doc:    "Select the review provider, given an imported spell handle.",
-				Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
-				Extern: true,
+				Args:   []Arg{{Name: "spell"}},
+				Extern: (func(context.Context, map[string]any) error)(nil),
 			}},
 		},
 		{
@@ -629,8 +629,8 @@ var Magus = Module{
 			Methods: []Method{{
 				Name:   "provider",
 				Doc:    "Select the lifecycle provider, given an imported spell handle. Declared at the top level of the root magusfile; wiring a second, different spell is an error.",
-				Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
-				Extern: true,
+				Args:   []Arg{{Name: "spell"}},
+				Extern: (func(context.Context, map[string]any) error)(nil),
 			}},
 		},
 		{
@@ -648,120 +648,120 @@ var Magus = Module{
 				{
 					Name:    "file",
 					Doc:     "Classify paths against the workspace's declared globs: for each, the owning project and whether it is a declared `output` (generated - regenerate it, never hand-edit), a declared `source` (it feeds cache keys and the affected set), `maintained` (magus writes it outside any target - commit it, never ignore it), or `unclaimed`. Returns a typed DoctorReport-style envelope {definition, count, files, overlaps}, not text to re-parse: this is the question \"can I disregard this changed file\", and a caller branches on `role` rather than grepping. Runs a nested magus.",
-					Args:    []Arg{{Name: "paths", Type: TypeStringSlice}, {Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"}},
-					Returns: []Ret{{Type: TypeAnyMap, Object: "FileReport"}},
+					Args:    []Arg{{Name: "paths"}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
+					Returns: []Ret{{Object: "FileReport"}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context, []string, map[string]any) (map[string]any, error))(nil),
 				},
 				{
 					Name:    "module",
 					Doc:     "The host modules magus exposes, with their fields, methods and rendered Buzz signatures - the records `magus describe module` prints. Omit `name` for every module; an unknown name raises. Read in-process from the host module registry.",
-					Args:    []Arg{{Name: "name", Type: TypeString, Optional: true}},
-					Returns: []Ret{{Type: TypeAny, Object: "[Module]"}},
+					Args:    []Arg{{Name: "name", Optional: true}},
+					Returns: []Ret{{Object: "[Module]"}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context, string) (any, error))(nil),
 				},
 				{
 					Name:    "spell",
 					Doc:     "The registered spells, sorted by name: each Spell carries its targets, the language it adapts and the rest of its mgs_getLanguage record (extensions, and syntax with its comments and stubs), so a script reads a language's comment and stub syntax as typed fields. Omit `name` for every spell; an unknown name raises. Runs a nested magus.",
-					Args:    []Arg{{Name: "name", Type: TypeString, Optional: true}, {Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"}},
-					Returns: []Ret{{Type: TypeAny, Object: "[Spell]"}},
+					Args:    []Arg{{Name: "name", Optional: true}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
+					Returns: []Ret{{Object: "[Spell]"}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context, string, map[string]any) (any, error))(nil),
 				},
 				{
 					Name:    "charm",
 					Doc:     "The charms in the workspace's inverse index: each {name, builtin, default, doc, declarations}, declarations naming every target that patches its argv for that charm. Omit `name` for every charm; an unknown name raises. Runs a nested magus.",
-					Args:    []Arg{{Name: "name", Type: TypeString, Optional: true}, {Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"}},
-					Returns: []Ret{{Type: TypeAny, Object: "[CharmEntry]"}},
+					Args:    []Arg{{Name: "name", Optional: true}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
+					Returns: []Ret{{Object: "[CharmEntry]"}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context, string, map[string]any) (any, error))(nil),
 				},
 				{
 					Name:    "target",
 					Doc:     "The target catalog: each target NAME once, {name, kind, spells, projects}, across every project that declares it. evaluatedTarget details one project's target. Runs a nested magus.",
-					Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"}},
-					Returns: []Ret{{Type: TypeAny, Object: "[TargetEntry]"}},
+					Args:    []Arg{{Name: "opts", Optional: true, Object: "CommandOptions"}},
+					Returns: []Ret{{Object: "[TargetEntry]"}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context, map[string]any) (any, error))(nil),
 				},
 				{
 					Name:    "evaluated_target",
 					Doc:     "The targets `ref` names (path:target, or a bare target name for every project declaring it), as magus would run them: sources, outputs, the dependency chain, the charms and each spell's rendered command. Raises on a ref nothing matches. Runs a nested magus.",
-					Args:    []Arg{{Name: "ref", Type: TypeString}, {Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"}},
-					Returns: []Ret{{Type: TypeAny, Object: "[EvaluatedTarget]"}},
+					Args:    []Arg{{Name: "ref"}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
+					Returns: []Ret{{Object: "[EvaluatedTarget]"}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context, string, map[string]any) (any, error))(nil),
 				},
 				{
 					Name:    "project",
 					Doc:     "The workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Read in-process from the workspace on the context; raises MGS1022 outside one.",
-					Returns: []Ret{{Type: TypeAnyMap, Object: "Projects"}},
+					Returns: []Ret{{Object: "Projects"}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context) (map[string]any, error))(nil),
 				},
 				{
 					Name:    "evaluated_project",
 					Doc:     "The projects with their spells resolved: each project's fields plus resolvedSpells and targetPolicies, as `magus describe project --evaluated` prints them. Omit `path` for every project; an unknown path raises. Runs a nested magus.",
-					Args:    []Arg{{Name: "path", Type: TypeString, Optional: true}, {Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"}},
-					Returns: []Ret{{Type: TypeAny, Object: "[EvaluatedProject]"}},
+					Args:    []Arg{{Name: "path", Optional: true}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
+					Returns: []Ret{{Object: "[EvaluatedProject]"}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context, string, map[string]any) (any, error))(nil),
 				},
 				{
 					Name:    "graph",
 					Doc:     "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. This is the per-project view magus\\graph().projectGraph() does not carry. Read statically from the magusfile source, so it never runs a target body. Served in-process from the workspace on the context when there is one, and through a nested magus when there is not.",
-					Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"}},
-					Returns: []Ret{{Type: TypeAnyMap, Object: "TargetGraph"}},
+					Args:    []Arg{{Name: "opts", Optional: true, Object: "CommandOptions"}},
+					Returns: []Ret{{Object: "TargetGraph"}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context, map[string]any) (map[string]any, error))(nil),
 				},
 				{
 					Name:    "graph_markdown",
 					Doc:     "The routing index `magus describe graph -o markdown` renders (MAGUS.md), as text. `projects` scopes it to those project paths and leaves out the workspace-wide tables; omit it for the whole index. Runs a nested magus.",
-					Args:    []Arg{{Name: "projects", Type: TypeStringSlice, Optional: true}, {Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"}},
-					Returns: []Ret{{Type: TypeString}},
+					Args:    []Arg{{Name: "projects", Optional: true}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
+					Returns: []Ret{{}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context, []string, map[string]any) (string, error))(nil),
 				},
 				{
 					Name:    "workspace",
 					Doc:     "The workspace this call runs in: {root, vcsBaseRef, cacheDir, concurrency, projectCount}, as a one-element collection. Runs a nested magus.",
-					Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"}},
-					Returns: []Ret{{Type: TypeAny, Object: "[WorkspaceEntry]"}},
+					Args:    []Arg{{Name: "opts", Optional: true, Object: "CommandOptions"}},
+					Returns: []Ret{{Object: "[WorkspaceEntry]"}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context, map[string]any) (any, error))(nil),
 				},
 				{
 					Name:    "tool",
 					Doc:     "Every project's tools: {workspace, count, lifecycle, tools}, each tool {project, bin, spell, installedVersion, probeError, spellBounds, workspaceBounds, effective, verdict, diagnosticCode, lifecycle, cycle, eol, support}. Probes every tool's version, and asks the wired lifecycle provider (magus\\lifecycle.provider) when each installed cycle reaches its end of life; lifecycle.state says whether that answer is live, cached, offline, unreached or unwired, and support reads unknown for a row it could not answer. Served in-process from the workspace on the context when there is one, and through a nested magus when there is not.",
-					Returns: []Ret{{Type: TypeAnyMap, Object: "ToolReport"}},
+					Returns: []Ret{{Object: "ToolReport"}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context) (map[string]any, error))(nil),
 				},
 				{
 					Name:    "rule",
 					Doc:     "The guard rules this workspace enforces: each {name, decision, catches, why}, decision `deny` or `advise`. Omit `name` for every rule; an unknown name raises. Runs a nested magus.",
-					Args:    []Arg{{Name: "name", Type: TypeString, Optional: true}, {Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"}},
-					Returns: []Ret{{Type: TypeAny, Object: "[Rule]"}},
+					Args:    []Arg{{Name: "name", Optional: true}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
+					Returns: []Ret{{Object: "[Rule]"}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context, string, map[string]any) (any, error))(nil),
 				},
 				{
 					Name:    "harness",
 					Doc:     "What the wired harness id's host config needs merged: {id, files, merge, mcpHint, wired}, files keyed by workspace path. magus never writes host config; the person runs merge. An empty or unknown id raises, naming the wired ids. Runs a nested magus.",
-					Args:    []Arg{{Name: "id", Type: TypeString}},
-					Returns: []Ret{{Type: TypeAnyMap, Object: "HarnessInstallation"}},
+					Args:    []Arg{{Name: "id"}},
+					Returns: []Ret{{Object: "HarnessInstallation"}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context, string) (map[string]any, error))(nil),
 				},
 				{
 					Name:    "mcp_tool",
 					Doc:     "The MCP tools the magus server exposes: each {name, description, params}. Omit `name` for every tool; an unknown name raises. Runs a nested magus.",
-					Args:    []Arg{{Name: "name", Type: TypeString, Optional: true}, {Name: "opts", Type: TypeAnyMap, Optional: true, Object: "CommandOptions"}},
-					Returns: []Ret{{Type: TypeAny, Object: "[MCPTool]"}},
+					Args:    []Arg{{Name: "name", Optional: true}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
+					Returns: []Ret{{Object: "[MCPTool]"}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context, string, map[string]any) (any, error))(nil),
 				},
 			},
 		},
@@ -782,12 +782,12 @@ var Magus = Module{
 						"when the spell or op is unknown, the op is not a service, or the service never " +
 						"becomes ready.",
 					Args: []Arg{
-						{Name: "spell", Type: TypeString},
-						{Name: "op", Type: TypeString},
+						{Name: "spell"},
+						{Name: "op"},
 					},
-					Returns: []Ret{{Type: TypeAnyMap, Object: "ServiceLease"}},
+					Returns: []Ret{{Object: "ServiceLease"}},
 					Raises:  true,
-					Extern:  true,
+					Extern: (func(context.Context, string, string) (map[string]any, error))(nil),
 				},
 				{
 					Name: "release",
@@ -795,9 +795,9 @@ var Magus = Module{
 						"while another lease holds it; the broker keeps an owned one warm for its idle " +
 						"window, and an in-process one stops. Each call drops one reference to the " +
 						"lease's service, so release a lease once.",
-					Args:   []Arg{{Name: "lease", Type: TypeAnyMap, Object: "ServiceLease"}},
+					Args:   []Arg{{Name: "lease", Object: "ServiceLease"}},
 					Raises: true,
-					Extern: true,
+					Extern: (func(context.Context, map[string]any) error)(nil),
 				},
 			},
 		},

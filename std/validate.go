@@ -30,7 +30,7 @@ func validateModule(m Module) error {
 			// no Impl to reflect over or generate a trampoline from. Requiring Extern
 			// here keeps that from being an accident: a namespace method carrying an
 			// Impl would generate nothing and silently never be bound.
-			if !meth.Extern {
+			if meth.Extern == nil {
 				return fmt.Errorf("namespace %q method %q must be Extern, the runtime binds it", ns.Name, meth.Name)
 			}
 			if err := validateMethod(meth); err != nil {
@@ -103,21 +103,13 @@ func validateField(f Field) error {
 }
 
 func validateMethod(meth Method) error {
-	if meth.Extern {
-		// Declared here, bound at run time elsewhere: there is no Impl to reflect over,
-		// and everything below this point reflects. Args/Returns still matter (they are
-		// what the generated declaration is built from), but nothing here can check them
-		// against a Go signature that does not exist.
-		if meth.Impl != nil {
-			return fmt.Errorf("method is Extern but carries an Impl, it is one or the other")
-		}
-		return nil
+	if meth.Extern != nil && meth.Impl != nil {
+		return fmt.Errorf("method is Extern but carries an Impl, it is one or the other")
 	}
-	if meth.Impl == nil {
+	rt := meth.Signature()
+	if rt == nil {
 		return fmt.Errorf("method Impl must not be nil (set Extern if it is bound at run time)")
 	}
-	rv := reflect.ValueOf(meth.Impl)
-	rt := rv.Type()
 	if rt.Kind() != reflect.Func {
 		return fmt.Errorf("method Impl must be a function, got %s", rt.Kind())
 	}

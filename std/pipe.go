@@ -40,7 +40,7 @@ var Pipe = Module{
 			Name: "more",
 			Doc: "Report whether another record is coming from the magus stage writing this script's stdin, " +
 				"waiting for it or for that stage to end. Errors when no magus stage writing records feeds this script.",
-			Returns: []Ret{{Type: TypeBool}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    PipeMore,
 		},
@@ -48,7 +48,7 @@ var Pipe = Module{
 			Name: "next",
 			Doc: "Return the next record from the magus stage writing this script's stdin, waiting for it. " +
 				"Errors past the last record, and when no magus stage writing records feeds this script.",
-			Returns: []Ret{{Type: TypeAnyMap, Object: "PipeRecord"}},
+			Returns: []Ret{{Object: "PipeRecord"}},
 			Raises:  true,
 			Impl:    PipeNext,
 		},
@@ -56,7 +56,7 @@ var Pipe = Module{
 			Name: "all",
 			Doc: "Return every record not yet read, once the magus stage writing this script's stdin has ended. " +
 				"Errors when no magus stage writing records feeds this script.",
-			Returns: []Ret{{Type: TypeAny, Object: "[PipeRecord]"}},
+			Returns: []Ret{{Object: "[PipeRecord]"}},
 			Raises:  true,
 			Impl:    PipeAll,
 		},
@@ -65,7 +65,7 @@ var Pipe = Module{
 			Doc: "Write record to stdout for the stage downstream. A record read from upstream passes through " +
 				"byte for byte; one built here is written from its fields, and needs a type. " +
 				"A run.scope record's projects are what a run downstream that names none runs on.",
-			Args:   []Arg{{Name: "record", Type: TypeAnyMap, Object: "PipeRecord"}},
+			Args:   []Arg{{Name: "record", Object: "PipeRecord"}},
 			Raises: true,
 			Impl:   PipeEmit,
 		},
@@ -73,8 +73,8 @@ var Pipe = Module{
 			Name: "outputs",
 			Doc: "Return the files the target of record declared as outputs and that exist on disk now, " +
 				"sorted by workspace-relative path. record names a project and a target, like a run.target.result.",
-			Args:    []Arg{{Name: "record", Type: TypeAnyMap, Object: "PipeRecord"}},
-			Returns: []Ret{{Type: TypeAny, Object: "[Artifact]"}},
+			Args:    []Arg{{Name: "record", Object: "PipeRecord"}},
+			Returns: []Ret{{Object: "[Artifact]"}},
 			Raises:  true,
 			Impl:    PipeOutputs,
 		},
@@ -85,10 +85,10 @@ var Pipe = Module{
 				"beside dest and renames it into place, so a symlink at dest is replaced rather than " +
 				"written through and an artifact exported onto itself survives.",
 			Args: []Arg{
-				{Name: "artifact", Type: TypeAnyMap, Object: "Artifact"},
-				{Name: "dest", Type: TypeString},
+				{Name: "artifact", Object: "Artifact"},
+				{Name: "dest"},
 			},
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    PipeExport,
 		},
@@ -96,8 +96,8 @@ var Pipe = Module{
 			Name: "history",
 			Doc: "Return every version of artifact the cache stored, newest first, with identical " +
 				"consecutive content collapsed: when its bytes changed, which its VCS history cannot say.",
-			Args:    []Arg{{Name: "artifact", Type: TypeAnyMap, Object: "Artifact"}},
-			Returns: []Ret{{Type: TypeAny, Object: "[ArtifactVersion]"}},
+			Args:    []Arg{{Name: "artifact", Object: "Artifact"}},
+			Returns: []Ret{{Object: "[ArtifactVersion]"}},
 			Raises:  true,
 			Impl:    PipeHistory,
 		},
@@ -105,7 +105,7 @@ var Pipe = Module{
 			Name: "diff",
 			Doc: "Compare artifact on disk against its most recent different cached version with your " +
 				"difftool: $MAGUS_DIFFTOOL, else $DIFFTOOL, else `git diff --no-index`. It renders nothing itself.",
-			Args:   []Arg{{Name: "artifact", Type: TypeAnyMap, Object: "Artifact"}},
+			Args:   []Arg{{Name: "artifact", Object: "Artifact"}},
 			Raises: true,
 			Impl:   PipeDiff,
 		},
@@ -113,8 +113,8 @@ var Pipe = Module{
 			Name: "value",
 			Doc: "Return what a target returned, a str or a [str], from its run.target.value record. " +
 				"Errors for any other record.",
-			Args:    []Arg{{Name: "record", Type: TypeAnyMap, Object: "PipeRecord"}},
-			Returns: []Ret{{Type: TypeAny}},
+			Args:    []Arg{{Name: "record", Object: "PipeRecord"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    PipeValue,
 		},

@@ -28,8 +28,8 @@ var Module = std.Module{
 		{
 			Name:    "parse",
 			Doc:     "Decode a YAML string into a value (maps, lists, strings, numbers, bools, null); errors on invalid input.",
-			Args:    []std.Arg{{Name: "source", Type: std.TypeString}},
-			Returns: []std.Ret{{Type: std.TypeAny}},
+			Args:    []std.Arg{{Name: "source"}},
+			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    YAMLParse,
 		},
@@ -40,16 +40,16 @@ var Module = std.Module{
 				"~ and / in a key). A mapping entry is keyed at its value, so /jobs/build is where that job's body " +
 				"starts. An alias is keyed where it appears and not followed. What parse returns carries no positions; " +
 				"this is how a check over it points at a line. Errors on invalid input.",
-			Args:    []std.Arg{{Name: "source", Type: std.TypeString}},
-			Returns: []std.Ret{{Type: std.TypeAnyMap, Object: "YamlPositions"}},
+			Args:    []std.Arg{{Name: "source"}},
+			Returns: []std.Ret{{Object: "YamlPositions"}},
 			Raises:  true,
 			Impl:    Positions,
 		},
 		{
 			Name:    "stringify",
 			Doc:     "Encode a value to a YAML string; errors on unencodable input.",
-			Args:    []std.Arg{{Name: "value", Type: std.TypeAny}},
-			Returns: []std.Ret{{Type: std.TypeString}},
+			Args:    []std.Arg{{Name: "value"}},
+			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    YAMLStringify,
 		},

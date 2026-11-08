@@ -108,6 +108,7 @@ func goLiteral(v any) string {
 // object returns get a concrete, generated encoder in this package: no reflection
 // and no map[string]any intermediary are linked into the magus runtime path.
 func emitBuzz(m std.Module, pkg string) ([]byte, error) {
+	m = m.WithTags()
 	// Every Method's Impl (and Field's Resolver) has to live in the SAME Go
 	// package: one generated file makes one Register<Module> call, importing
 	// one Impl package under one qualifier. That was always true when every
@@ -155,7 +156,7 @@ func emitBuzz(m std.Module, pkg string) ([]byte, error) {
 	for _, meth := range slices.Concat(m.Methods, m.ObjectExterns()) {
 		// An Extern member has no Impl to wrap; internal/interp/bindings MapSets it
 		// onto the namespace at run time. It is declared, not trampolined.
-		if meth.Extern {
+		if meth.Extern != nil {
 			continue
 		}
 		if err := emitBuzzMethod(&members, m, meth, objects, pkgs, implPkg); err != nil {
@@ -255,7 +256,7 @@ func resolveImplementationPackage(m std.Module) (importPath, pkgIdent string, er
 		}
 	}
 	for _, meth := range slices.Concat(m.Methods, m.ObjectExterns()) {
-		if meth.Extern {
+		if meth.Extern != nil {
 			continue // no Impl, so no package to import
 		}
 		path, pkg := std.MethodImplementationPackage(meth)

@@ -46,7 +46,7 @@ func runBoundaryObjects(args []string) error {
 	sort.Slice(mods, func(i, j int) bool { return mods[i].Name < mods[j].Name })
 	for _, m := range mods {
 		for _, meth := range slices.Concat(m.Methods, m.ObjectExterns()) {
-			if meth.Extern || meth.Impl == nil {
+			if meth.Extern != nil || meth.Impl == nil {
 				continue
 			}
 			if err := emitReturnObjects(e, m, meth); err != nil {

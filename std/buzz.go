@@ -25,10 +25,10 @@ var Buzz = Module{
 			Name: "parse",
 			Doc:  `Parse the Buzz file at path into {path, error, functions, statements, tests}. It never raises: a file that cannot be read or parsed comes back with error set and empty lists. Functions holds every fun, method and function literal with its extent, its !> error type and the lines of the throw statements it owns; statements holds the top-level statements; tests holds the test blocks. Lines are 1-based. embedded parses the way a magusfile's imports load.`,
 			Args: []Arg{
-				{Name: "path", Type: TypeString},
-				{Name: "embedded", Type: TypeBool, Optional: true, Default: false},
+				{Name: "path"},
+				{Name: "embedded", Optional: true, Default: false},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "BuzzFile"}},
+			Returns: []Ret{{Object: "BuzzFile"}},
 			Impl:    BuzzParse,
 		},
 	},

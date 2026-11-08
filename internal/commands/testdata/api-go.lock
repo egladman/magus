@@ -667,14 +667,18 @@ github.com/egladman/magus/std.MergeDeep func(_ context.Context, base any, overla
 github.com/egladman/magus/std.MergeJSON func(_ context.Context, base string, overlay string) (string, error)
 github.com/egladman/magus/std.MergeShallow func(_ context.Context, base any, overlay any) (any, error)
 github.com/egladman/magus/std.Method type struct
+github.com/egladman/magus/std.Method.ArgTag method func(i int) TypeTag
 github.com/egladman/magus/std.Method.Args field []Arg
 github.com/egladman/magus/std.Method.BuzzName field string
 github.com/egladman/magus/std.Method.Doc field string
-github.com/egladman/magus/std.Method.Extern field bool
+github.com/egladman/magus/std.Method.Extern field any
 github.com/egladman/magus/std.Method.Impl field any
 github.com/egladman/magus/std.Method.Name field string
 github.com/egladman/magus/std.Method.Raises field bool
+github.com/egladman/magus/std.Method.RetTag method func(i int) TypeTag
 github.com/egladman/magus/std.Method.Returns field []Ret
+github.com/egladman/magus/std.Method.Signature method func() reflect.Type
+github.com/egladman/magus/std.Method.WithTags method func() Method
 github.com/egladman/magus/std.MethodFuncName func(m Method) string
 github.com/egladman/magus/std.MethodImplementationPackage func(m Method) (importPath string, pkgIdent string)
 github.com/egladman/magus/std.MethodSource func(m Method, repoRoot string) string
@@ -693,6 +697,7 @@ github.com/egladman/magus/std.Module.Objects field []Object
 github.com/egladman/magus/std.Module.Path field string
 github.com/egladman/magus/std.Module.Protocols field []Protocol
 github.com/egladman/magus/std.Module.WASM field bool
+github.com/egladman/magus/std.Module.WithTags method func() Module
 github.com/egladman/magus/std.Namespace type struct
 github.com/egladman/magus/std.Namespace.Doc field string
 github.com/egladman/magus/std.Namespace.Methods field []Method
@@ -807,6 +812,7 @@ github.com/egladman/magus/std.StringsTrimPrefix func(_ context.Context, s string
 github.com/egladman/magus/std.StringsTrimSuffix func(_ context.Context, s string, suffix string) (string, error)
 github.com/egladman/magus/std.StringsUpperFirst func(_ context.Context, s string) (string, error)
 github.com/egladman/magus/std.StringsWords func(_ context.Context, s string) ([]string, error)
+github.com/egladman/magus/std.TagOf func(t reflect.Type) TypeTag
 github.com/egladman/magus/std.Template var Module
 github.com/egladman/magus/std.TemplateRender func(_ context.Context, tmpl string, data any) (string, error)
 github.com/egladman/magus/std.TemplateRenderPartials func(_ context.Context, tmpl string, data any, partials map[string]string) (string, error)

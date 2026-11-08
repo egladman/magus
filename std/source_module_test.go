@@ -53,22 +53,22 @@ func TestDescribeSourceDerivesTheMethodList(t *testing.T) {
 		{
 			Name: "percent", BuzzName: "percent",
 			Doc:     "percent renders the covered-line percentage.",
-			Args:    []Arg{{Name: "lcov", Type: TypeAny, Object: "str"}, {Name: "keep", Type: TypeAny, Object: "str"}},
-			Returns: []Ret{{Type: TypeAny, Object: "str"}},
+			Args:    []Arg{{Name: "lcov", Object: "str"}, {Name: "keep", Object: "str"}},
+			Returns: []Ret{{Object: "str"}},
 		},
 		{
 			Name: "bump", BuzzName: "bump",
 			Doc:     "bump adds a step, defaulting when the caller omits it.",
-			Args:    []Arg{{Name: "value", Type: TypeAny, Object: "str"}, {Name: "step", Type: TypeAny, Optional: true, Object: "str"}},
-			Returns: []Ret{{Type: TypeAny, Object: "str"}},
+			Args:    []Arg{{Name: "value", Object: "str"}, {Name: "step", Optional: true, Object: "str"}},
+			Returns: []Ret{{Object: "str"}},
 		},
 		{
 			Name: "quiet", BuzzName: "quiet",
-			Args: []Arg{{Name: "name", Type: TypeAny, Object: "str"}},
+			Args: []Arg{{Name: "name", Object: "str"}},
 		},
 		{
 			Name: "unannotated", BuzzName: "unannotated",
-			Args: []Arg{{Name: "name", Type: TypeAny, Object: "str"}},
+			Args: []Arg{{Name: "name", Object: "str"}},
 		},
 	}, got,
 		"a private fun and an extern contribute nothing; a void or unannotated return contributes no Ret")

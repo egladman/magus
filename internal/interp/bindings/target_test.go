@@ -753,7 +753,7 @@ func TestMagusExternsAreBound(t *testing.T) {
 			continue
 		}
 		for _, meth := range m.Methods {
-			if !meth.Extern {
+			if meth.Extern == nil {
 				continue
 			}
 			key := std.CamelCase(meth.Name)

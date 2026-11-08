@@ -19,8 +19,8 @@ var Fmt = Module{
 		{
 			Name:    "sprintf",
 			Doc:     "Format string args into the template using Go printf verbs (e.g. %s, %q). Returns the formatted string.",
-			Args:    []Arg{{Name: "format", Type: TypeString}, {Name: "args", Type: TypeString, Variadic: true}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "format"}, {Name: "args", Variadic: true}},
+			Returns: []Ret{{}},
 			Impl:    FmtSprintf,
 		},
 	},

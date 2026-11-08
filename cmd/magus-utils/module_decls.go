@@ -72,6 +72,7 @@ func runModuleDecls(args []string) error {
 // returns reference (leaf-first, since a field referencing an object needs that
 // object declared already), then an extern per method.
 func renderModuleDecls(mod std.Module) (string, error) {
+	mod = mod.WithTags()
 	records, err := renderRecordDecls(mod)
 	if err != nil {
 		return "", err
@@ -134,6 +135,7 @@ func renderModuleDecls(mod std.Module) (string, error) {
 // renderRecordDecls renders the enums and object mirrors of one module's declarations,
 // the part a session executes so a script can construct them.
 func renderRecordDecls(mod std.Module) (string, error) {
+	mod = mod.WithTags()
 	var b strings.Builder
 	mirrors, err := collectMirrors(mod)
 	if err != nil {
