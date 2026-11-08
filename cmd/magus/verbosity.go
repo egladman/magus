@@ -224,7 +224,19 @@ func applyDisplay() {
 		globalCfg.Log.Stream = &stream
 	}
 
-	opts := &slog.HandlerOptions{Level: lvl, AddSource: addSource}
+	h := displayLogHandler(&slog.HandlerOptions{Level: lvl, AddSource: addSource})
+	// -o jsonl notices stay whole: a parser selects what it reads. The run log
+	// never passes through here, so it keeps what a quiet display drops.
+	if global.output != string(outputJSONL) && quietDisplay() {
+		h = quiet.Wrap(h, global.verbose >= 1)
+	}
+	slog.SetDefault(slog.New(dirHandler{h}))
+}
+
+// displayLogHandler builds the stderr handler for the -o and log.format in
+// force, and records a pretty handler as displayHandler.
+func displayLogHandler(opts *slog.HandlerOptions) slog.Handler {
+	lvl := opts.Level.Level()
 	var h slog.Handler
 	// -o jsonl reads global.output directly rather than globalCfg.Log.Format (which
 	// finalizeConfig also points at "jsonl", for the CACHE logger -- see its
@@ -258,10 +270,5 @@ func applyDisplay() {
 		displayMu.Unlock()
 		h = ph
 	}
-	// -o jsonl notices stay whole: a parser selects what it reads. The run log never passes
-	// through here, so it keeps what a quiet display drops.
-	if global.output != string(outputJSONL) && quietDisplay() {
-		h = quiet.Wrap(h, global.verbose >= 1)
-	}
-	slog.SetDefault(slog.New(dirHandler{h}))
+	return h
 }
