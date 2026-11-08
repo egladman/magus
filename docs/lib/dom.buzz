@@ -54,14 +54,14 @@ export fun markup(html: str) > Node {
 
 export fun render(node: Node) > str {
     if (node.kind == NodeKind.text) {
-        return escapeAttr(node.content).replace(">", with: "&gt;");
+        return escapeHTML(node.content);
     }
     if (node.kind == NodeKind.markup) {
         return node.content;
     }
     final open = mut ["<" + node.tag];
     foreach (a in node.attrs) {
-        open.append(" " + a.name + "=\"" + escapeAttr(a.value) + "\"");
+        open.append(" " + a.name + "=\"" + escapeHTML(a.value) + "\"");
     }
     open.append(">");
     if (node.selfClosing) {
@@ -78,9 +78,28 @@ export fun renderAll(nodes: [Node]) > str {
     return parts.join("");
 }
 
-// esc escapes text for HTML element content (& < >).
-export fun esc(s: str) > str {
-    return s.replace("&", with: "&amp;").replace("<", with: "&lt;").replace(">", with: "&gt;");
+// Entity is one character HTML text or an attribute value cannot hold as is.
+export object Entity {
+    char: str,
+    escaped: str,
+}
+
+// ENTITIES escape text and attribute values alike. The ampersand comes
+// first, so an entity written by a later row is never rescanned.
+final ENTITIES = [
+    Entity{ char = "&", escaped = "&amp;" },
+    Entity{ char = "\"", escaped = "&quot;" },
+    Entity{ char = "<", escaped = "&lt;" },
+    Entity{ char = ">", escaped = "&gt;" },
+];
+
+// escapeHTML replaces every character ENTITIES names.
+export fun escapeHTML(s: str) > str {
+    var escaped = s;
+    foreach (e in ENTITIES) {
+        escaped = escaped.replace(e.char, with: e.escaped);
+    }
+    return escaped;
 }
 
 test "render escapes text and attributes and closes elements" {
@@ -90,17 +109,17 @@ test "render escapes text and attributes and closes elements" {
         want: "<div><b>raw</b></div>", message: "markup is written as is");
     assert\equal(render(voidElement("meta", attrs: [attr("charset", value: "utf-8")])),
         want: "<meta charset=\"utf-8\">", message: "void element");
-    assert\equal(esc("<a & b>"), want: "&lt;a &amp; b&gt;", message: "text escape");
+    assert\equal(escapeHTML("<a & \"b\">"), want: "&lt;a &amp; &quot;b&quot;&gt;", message: "text escape");
 }
 
 // EVERY occurrence. str.replace once substituted only the FIRST match, so
 // this escaper encoded one ampersand of a fragment and left the rest raw.
-test "esc and attributes escape EVERY occurrence, not just the first" {
-    assert\equal(esc("&a&b&"), want: "&amp;a&amp;b&amp;", message: "ampersands at both edges and between");
-    assert\equal(esc("<a><b>"), want: "&lt;a&gt;&lt;b&gt;", message: "repeated angle brackets");
-    assert\equal(esc("&&"), want: "&amp;&amp;", message: "adjacent ampersands");
+test "escapeHTML and attributes escape EVERY occurrence, not just the first" {
+    assert\equal(escapeHTML("&a&b&"), want: "&amp;a&amp;b&amp;", message: "ampersands at both edges and between");
+    assert\equal(escapeHTML("<a><b>"), want: "&lt;a&gt;&lt;b&gt;", message: "repeated angle brackets");
+    assert\equal(escapeHTML("&&"), want: "&amp;&amp;", message: "adjacent ampersands");
     // Ampersand first, so the & introduced by &lt;/&gt; is never rescanned.
-    assert\equal(esc("<&>"), want: "&lt;&amp;&gt;", message: "no double-encoding of introduced entities");
+    assert\equal(escapeHTML("<&>"), want: "&lt;&amp;&gt;", message: "no double-encoding of introduced entities");
     assert\equal(render(voidElement("i", attrs: [attr("id", value: "a&b&c")])), want: "<i id=\"a&amp;b&amp;c\">",
         message: "attribute values too");
 }

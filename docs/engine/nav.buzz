@@ -12,6 +12,7 @@ import "engine/types" as _;
 import "engine/route" as _;
 import "lib/html" as _;
 import "lib/text" as _;
+import "lib/dom" as _;
 import "lib/date" as _;
 
 // Footer crediting the last commit that touched a page's source, falling back to HEAD for
@@ -94,10 +95,7 @@ export fun renderTocList(content: str) > str !> any {
     }
     if (nHead < 3) { return ""; }
 
-    final ul = mut [<str>];
-    ul.append("<ul>");
-    var haveLi = false;   // an h2 <li> is open, awaiting its </li>
-    var inSub = false;    // an h3 sublist <ul> is open
+    final items = mut [<TocItem>];
     foreach (line in lines) {
         var lvl = 0;
         if (line.startsWith("<h2 id=\"")) { lvl = 2; }
@@ -116,30 +114,39 @@ export fun renderTocList(content: str) > str !> any {
                     // TOC entries are plain text: drop inline <code>/<strong>/<em> so
                     // nothing in the sidebar looks bold, italic, or code-styled.
                     final plain = stripTags(label);
-                    final link = "<a href=\"#" + id + "\" title=\"" + plain + "\">" + plain + "</a>";
-                    if (lvl == 2) {
-                        if (inSub) { ul.append("</ul>"); inSub = false; }
-                        if (haveLi) { ul.append("</li>"); }
-                        ul.append("<li>" + link);
-                        haveLi = true;
+                    // plain is escaped already: the link shows
+                    // it as markup, the title decoded.
+                    final link = element("a", attrs: [attr("href", value: "#" + id),
+                        attr("title", value: decodeEntities(plain))], children: [markup(plain)]);
+                    final last = items.len() - 1;
+                    if (lvl == 3 and last >= 0 and items[last].section) {
+                        items[last].subs.append(element("li", attrs: [<Attr>], children: [link]));
                     } else {
-                        if (haveLi == false) {
-                            ul.append("<li>" + link + "</li>");
-                        } else {
-                            if (inSub == false) { ul.append("<ul>"); inSub = true; }
-                            ul.append("<li>" + link + "</li>");
-                        }
+                        items.append(mut TocItem{ link = link, section = lvl == 2, subs = mut [<Node>] });
                     }
                 }
             }
         }
     }
-    if (inSub) { ul.append("</ul>"); }
-    if (haveLi) { ul.append("</li>"); }
-    ul.append("</ul>");
+    final top = mut [<Node>];
+    foreach (item in items) {
+        final children = mut [item.link];
+        if (item.subs.len() > 0) {
+            children.append(element("ul", attrs: [<Attr>], children: item.subs));
+        }
+        top.append(element("li", attrs: [<Attr>], children: children));
+    }
     return template\render(`        <p class="toc-title">On this page</p>
         {{{ul}}}
-`, {"ul": ul.join("")});
+`, {"ul": render(element("ul", attrs: [<Attr>], children: top))});
+}
+
+// TocItem is one top-level table-of-contents entry: an h2 with the h3s
+// under it, or an h3 that came before any h2.
+object TocItem {
+    link: Node,
+    section: bool,
+    subs: mut [Node],
 }
 
 // renderSettingsPanel renders the gear button and its dropdown, the rightmost control in
