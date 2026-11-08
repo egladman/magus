@@ -28,7 +28,8 @@ type CrossDispatch struct {
 
 // InlineWith sets how a remote target and its own ctx.needs run: through
 // the interceptor intercept returns for the remote project. Without one
-// they run inline and claim nothing.
+// they run inline and claim nothing. The interceptor owns running each
+// target once in the TargetRuns c was built with: Dispatch defers to it.
 func (c *CrossDispatch) InlineWith(intercept func(dep *types.Project) buzz.TargetInterceptor) {
 	c.inline = intercept
 }
@@ -101,6 +102,11 @@ func (c *CrossDispatch) Dispatch(ctx context.Context, dep *types.Project, target
 	ref := types.TargetRef{Project: dep.Path, Target: target}
 	if slices.Contains(crossAncestors(ctx), ref.Ref()) {
 		return types.DiagnosticErrorf(types.TargetDependencyCycle, "a cross-project cycle returns to %s", ref.Ref())
+	}
+	if c.inline != nil {
+		// The interceptor runs ref once in the same TargetRuns; a Once here
+		// too makes it wait on its own run until the stall watchdog fires.
+		return c.runRemote(ctx, dep, ref)
 	}
 	return c.runs.Once(ctx, ref, func() error { return c.runRemote(ctx, dep, ref) })
 }

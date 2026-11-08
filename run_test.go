@@ -2959,3 +2959,50 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 	require.NoError(t, err)
 	assert.Equal(t, "x", string(ran), "conventions ran once")
 }
+
+// TestCrossProjectNeedOfACacheableComposerRuns pins that a cacheable
+// composer's cross-project member runs rather than waiting on itself. Both
+// CrossDispatch and the remote interceptor took it once in one TargetRuns.
+func TestCrossProjectNeedOfACacheableComposerRuns(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Write("leaf/magusfile.buzz", `import "magus";
+import "proc";
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    final c = proc\shell("printf x >> build.ran");
+    proc\exec(c.bin, c.args, "", null);
+}
+`)
+	w.Magusfile(`import "magus";
+import "project/leaf" as leaf;
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(leaf\build);
+}
+`)
+	m, err := Open(context.Background(), w.Root(), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	require.NoError(t, m.Run(ctx, []types.Target{{Path: ".", Name: "lint"}}))
+
+	ran, err := os.ReadFile(w.Path("leaf/build.ran"))
+	require.NoError(t, err)
+	assert.Equal(t, "x", string(ran), "the cross-project member ran once")
+}
+
+// TestRunOnceWaitEndedByContextNamesTheTarget pins that a wait on a run
+// another path reached first names that target when ctx ends it.
+func TestRunOnceWaitEndedByContextNamesTheTarget(t *testing.T) {
+	runs := cache.NewTargetRuns()
+	ref := types.TargetRef{Project: "leaf", Target: "build"}
+	_, first := runs.TryRun(ref)
+	require.True(t, first)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := runOnce(ctx, runs, ref, func() error { return nil })
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Contains(t, err.Error(), "waiting on "+ref.Ref())
+}

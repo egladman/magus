@@ -907,7 +907,7 @@ func (r *composedRunner) interceptor(p *types.Project) targetInterceptorFunc {
 		}
 		member.SkipReplay = r.skipReplay
 		member.NoCache = member.NoCache || r.forceNoCache
-		return r.runs.Once(memberCtx, types.TargetRef{Project: p.Path, Target: name}, func() error {
+		return runOnce(memberCtx, r.runs, types.TargetRef{Project: p.Path, Target: name}, func() error {
 			if err := r.beforeKey(memberCtx, member); err != nil {
 				return err
 			}
@@ -938,7 +938,7 @@ func (r *composedRunner) inlineClaimer(p *types.Project) targetInterceptorFunc {
 		member.Under, _ = ctx.Value(composerKey{}).(string)
 		// A member this run already reached, as a step or inline, is waited on.
 		// The wait holds nothing: the composer lent its claim and slots.
-		return r.runs.Once(ctx, types.TargetRef{Project: p.Path, Target: name}, func() error {
+		return runOnce(ctx, r.runs, types.TargetRef{Project: p.Path, Target: name}, func() error {
 			return r.m.cache.RunInline(ctx, member, func(ctx context.Context) error {
 				return recordInline(underComposer(ctx, member), p, name, invoke)
 			}, r.cacheOpts...)
@@ -946,13 +946,19 @@ func (r *composedRunner) inlineClaimer(p *types.Project) targetInterceptorFunc {
 	}
 }
 
-// runStepOnce runs a scheduled step's body unless another path of this run
-// reached its target first. Then the step waits on that run with its claim
-// and slots lent, so a run still waiting for a seat can take one.
-func runStepOnce(ctx context.Context, runs *cache.TargetRuns, ref types.TargetRef, body func() error) (err error) {
+// runOnce runs body unless another path of this run reached ref first.
+// Then it waits on that run with ctx's claim and slots lent. A wait ctx
+// ends names ref, since a bare context.Canceled names nothing.
+func runOnce(ctx context.Context, runs *cache.TargetRuns, ref types.TargetRef, body func() error) (err error) {
 	run, first := runs.TryRun(ref)
 	if !first {
-		return cache.LendMachineClaim(ctx, run.Wait)
+		return cache.LendMachineClaim(ctx, func(ctx context.Context) error {
+			err := run.Wait(ctx)
+			if err != nil && ctx.Err() != nil {
+				return fmt.Errorf("waiting on %s, which another path of this run reached first: %w", ref.Ref(), err)
+			}
+			return err
+		})
 	}
 	defer func() {
 		if p := recover(); p != nil {
@@ -2452,7 +2458,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 					})
 				}
 			}
-			err := runStepOnce(spanCtx, runs, types.TargetRef{Project: s.ProjectPath, Target: s.Target}, body)
+			err := runOnce(spanCtx, runs, types.TargetRef{Project: s.ProjectPath, Target: s.Target}, body)
 			endSpan(err)
 			return err
 		}
