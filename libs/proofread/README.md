@@ -263,7 +263,7 @@ where a decisions table would deny it. The [proofread guide](https://eli.gladman
 | `bare-rule`          | PRF7003 | agent instructions               | off (house)                          | "rule" with no mechanism named, in either form of a template                     |
 | `second-person`      | PRF1003 | guide                            | deny                                 | we, us, our or ours where a guide addresses you                                  |
 | `step-verb`          | PRF1004 | guide                            | deny                                 | a numbered step that opens with no verb ("1. The target...")                     |
-| `first-person`       | PRF1005 | reference, guide                 | off (house)                          | I, me or my outside an author's note (`> [!AUTHOR]`)                              |
+| `first-person`       | PRF1005 | reference, guide                 | off (house)                          | I, me or my outside an author's note (`> [!AUTHOR]`)                             |
 | `condescension`      | PRF2006 | pages, change description, reply | deny                                 | in a guide, a step called easy; elsewhere a word that presumes ("of course")     |
 | `suppression-unused` | PRF1090 | every kind                       | deny                                 | a suppression with no reason, or one that matched no finding                     |
 | `blame`              | PRF2001 | change description, reply        | deny                                 | a person or a pull request as the subject of a fault; contempt ("sloppy")        |
