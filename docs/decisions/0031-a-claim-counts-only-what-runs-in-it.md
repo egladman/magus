@@ -169,17 +169,17 @@ An inline member takes a machine claim of its own, sized from its own history, w
 
 Eli decided every item on 2026-11-07. Jobs A to F built every item marked done. The curve row is not built: no fold is left for it to compose.
 
-| item                                                                 | State     |
-| -------------------------------------------------------------------- | --------- |
+| item                                                                               | State     |
+| ---------------------------------------------------------------------------------- | --------- |
 | A composer claims its own body; each inline `ctx.needs` member claims its own seat | done      |
-| A call's members compose curve by curve where curves exist          | not built |
-| A claim is the highest measured peak, with no margin                 | done      |
-| A step's slots are elastic, and a grant leaves room for waiters      | done      |
-| A run that does not fit waits by default, and says so                | done      |
-| Refusals and waits are recorded in a JSON Lines store                | done      |
-| A refusal and a wait print the claim's breakdown                     | done      |
-| `job fork` prints no budget advice for a seatless row                | done      |
-| No new role                                                          | done      |
+| A call's members compose curve by curve where curves exist                         | not built |
+| A claim is the highest measured peak, with no margin                               | done      |
+| A step's slots are elastic, and a grant leaves room for waiters                    | done      |
+| A run that does not fit waits by default, and says so                              | done      |
+| Refusals and waits are recorded in a JSON Lines store                              | done      |
+| A refusal and a wait print the claim's breakdown                                   | done      |
+| `job fork` prints no budget advice for a seatless row                              | done      |
+| No new role                                                                        | done      |
 
 ### A composer claims its own body; each inline ctx.needs member claims its own seat
 

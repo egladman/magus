@@ -22,17 +22,17 @@ skeptic) over the store layer:
 
 14 call sites in 10 hand-written Buzz files:
 
-| file | store | what it does | door today |
-| --- | --- | --- | --- |
-| `hack/policy/mandate.buzz` (4 sites) | mandate, mandate attention | names `mandate.jsonl` and `mandate-attention.jsonl`, splits, last line wins, appends | none: repo Buzz owns the store |
-| `hack/dev/issue-mandate.buzz` (3) | mandate, attention | appends, splits, last line wins | none |
-| `std/lib/diskwatch.buzz` | disk samples (`$XDG_STATE_HOME/magus/disk/samples.jsonl`) | the only writer: `append`, compaction, `read`, `storePath` over `fs`; Go's doctor reads the same file | none: two owners |
-| `hack/retro/trace.buzz` | guard trail | reads `events.jsonl` and blobs, splits, filters | `session().trail()`, which drops the request ref |
-| `hack/retro/cursor-audit.buzz` | guard trail | reads `.magus/activity/events.jsonl`, splits | `session().trail()` |
-| `hack/ci/show-failures.buzz` | `.magus/logs/failed-outputs.jsonl` | names the path, splits; a shell step in `.github/workflows/ci.yaml:836` writes it | none: no magus owner |
-| `hack/dev/bootstrap-checkout.buzz` | jobs | parses `magus ls jobs -o json` text | `workspace().jobs()` |
-| `hack/dev/bootstrap-worktree.buzz` | jobs | parses `magus describe job -o json` text | `magus\job(id)` |
-| `hack/dev/count-feedback.buzz`, `merge-job-branches.buzz` | marks, jobs | decode fixture lines in tests | `session().marks()`, `workspace().jobs()` |
+| file                                                      | store                                                     | what it does                                                                                          | door today                                       |
+| --------------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `hack/policy/mandate.buzz` (4 sites)                      | mandate, mandate attention                                | names `mandate.jsonl` and `mandate-attention.jsonl`, splits, last line wins, appends                  | none: repo Buzz owns the store                   |
+| `hack/dev/issue-mandate.buzz` (3)                         | mandate, attention                                        | appends, splits, last line wins                                                                       | none                                             |
+| `std/lib/diskwatch.buzz`                                  | disk samples (`$XDG_STATE_HOME/magus/disk/samples.jsonl`) | the only writer: `append`, compaction, `read`, `storePath` over `fs`; Go's doctor reads the same file | none: two owners                                 |
+| `hack/retro/trace.buzz`                                   | guard trail                                               | reads `events.jsonl` and blobs, splits, filters                                                       | `session().trail()`, which drops the request ref |
+| `hack/retro/cursor-audit.buzz`                            | guard trail                                               | reads `.magus/activity/events.jsonl`, splits                                                          | `session().trail()`                              |
+| `hack/ci/show-failures.buzz`                              | `.magus/logs/failed-outputs.jsonl`                        | names the path, splits; a shell step in `.github/workflows/ci.yaml:836` writes it                     | none: no magus owner                             |
+| `hack/dev/bootstrap-checkout.buzz`                        | jobs                                                      | parses `magus ls jobs -o json` text                                                                   | `workspace().jobs()`                             |
+| `hack/dev/bootstrap-worktree.buzz`                        | jobs                                                      | parses `magus describe job -o json` text                                                              | `magus\job(id)`                                  |
+| `hack/dev/count-feedback.buzz`, `merge-job-branches.buzz` | marks, jobs                                               | decode fixture lines in tests                                                                         | `session().marks()`, `workspace().jobs()`        |
 
 ### The Go layer under the doors is uneven
 
@@ -155,12 +155,12 @@ per-target probes (MGS1049) and figure drawing; its rule is that a snippet that 
 there passes in a magusfile (`internal/dry/host.go:62-66`). Each declaration names one
 dry mode from a closed set (Eli, 2026-11-07):
 
-| mode | dry result | today's doors it covers |
-| --- | --- | --- |
-| `zero` | the zero value of the declared return | about 35 report and read doors |
-| `echo` | the declared return with the named arguments copied in | `putJob`, `Job.exit`, `Session.mark`, `Graph.dir`, `Graph.layer`, the `change()` and `job()` constructors |
-| `unknown` | the declared return with its own verdict or reason field set to unknown | `Graph.neighborhood`, `Job.register` (`base_verdict`) |
-| `refuse` | an error naming the door and why it cannot run dry | `Change.tier` ("no checkout") |
+| mode      | dry result                                                              | today's doors it covers                                                                                   |
+| --------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `zero`    | the zero value of the declared return                                   | about 35 report and read doors                                                                            |
+| `echo`    | the declared return with the named arguments copied in                  | `putJob`, `Job.exit`, `Session.mark`, `Graph.dir`, `Graph.layer`, the `change()` and `job()` constructors |
+| `unknown` | the declared return with its own verdict or reason field set to unknown | `Graph.neighborhood`, `Job.register` (`base_verdict`)                                                     |
+| `refuse`  | an error naming the door and why it cannot run dry                      | `Change.tier` ("no checkout")                                                                             |
 
 `echo` copies the `id` and each option key that maps one-to-one to a field of the
 return, generated from the input type's tags (`types.JobPut` for `putJob`); computed
@@ -258,11 +258,11 @@ mandate stores). The path list is generated from the repository declarations, so
 new store joins it when it is declared; a bare `.jsonl` never triggers it. Measured on
 this tree, 2026-11-07, excluding `libs/gopherbuzz/**` and `gen/`:
 
-| rule | files hit | true positives | precision |
-| --- | --- | --- | --- |
-| any `.jsonl` literal or magus state-dir read | 40 | 3 | 0.075 |
-| only paths under a magus state dir | 12 | 3 | 0.25 |
-| only a path a store declares | 3 | 3 | 1.0 |
+| rule                                         | files hit | true positives | precision |
+| -------------------------------------------- | --------- | -------------- | --------- |
+| any `.jsonl` literal or magus state-dir read | 40        | 3              | 0.075     |
+| only paths under a magus state dir           | 12        | 3              | 0.25      |
+| only a path a store declares                 | 3         | 3              | 1.0       |
 
 The three true positives are `hack/retro/{cursor-audit,denials,trace}.buzz`; they move
 onto the trail door before the lint denies. The sample is three files, so the 1.0 is
@@ -271,25 +271,25 @@ store reached through a computed path or an environment variable (none on this t
 
 ### State
 
-| item | State |
-| --- | --- |
-| `trail.Log` and `trail.Marks` repositories; readers on `file.ReadLines`; `Rotate` under the lock; window and checkouts out of `std` | proposed |
-| `file.JSONL` gains header, delete, migration hook, changed-only append, first-appearance order | proposed |
-| `job.Store` and its side ledgers on `file.JSONL`; `Path()` unexported | proposed |
-| unexported persistence type per repository, inline conversion; AGENTS.md encoding rule reworded | proposed |
-| doors declared once; binding, dry mirror, guard class and cost class generated; unknown door is a write; `std` forwarders deleted | proposed |
+| item                                                                                                                                                                                            | State    |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `trail.Log` and `trail.Marks` repositories; readers on `file.ReadLines`; `Rotate` under the lock; window and checkouts out of `std`                                                             | proposed |
+| `file.JSONL` gains header, delete, migration hook, changed-only append, first-appearance order                                                                                                  | proposed |
+| `job.Store` and its side ledgers on `file.JSONL`; `Path()` unexported                                                                                                                           | proposed |
+| unexported persistence type per repository, inline conversion; AGENTS.md encoding rule reworded                                                                                                 | proposed |
+| doors declared once; binding, dry mirror, guard class and cost class generated; unknown door is a write; `std` forwarders deleted                                                               | proposed |
 | every door names a dry mode (`zero`, `echo`, `unknown`, `refuse`); hand-written dry bodies deleted; `Job.wait` dry returns a `JobStatus`; a generated test decodes each dry value as its return | proposed |
-| write doors take `JobPut`, a job result and `TrailMark`; hand decoders deleted | proposed |
-| `hack/dev/bootstrap-{checkout,worktree}.buzz` call the jobs door instead of parsing CLI JSON | proposed |
-| `hack/retro/{trace,cursor-audit,denials}.buzz` move onto the trail door with the request ref | proposed |
-| `hack/dev/issue-mandate.buzz` calls `mandate.buzz` instead of splitting the mandate file | proposed |
-| `hack/dev/{count-feedback,merge-job-branches}.buzz` fixtures build typed records | proposed |
-| magus records failed outputs through a Go repository, replacing the `ci.yaml` shell step; `hack/ci/show-failures.buzz` reads its door | proposed |
-| a Go repository owns the disk samples; `std/lib/{diskwatch,reclaimdisk}.buzz` and doctor go through it; the Buzz line code is deleted | proposed |
-| `ConformanceRow` renamed `ConformanceThreshold`; `historymetrics` moves to `v1alpha2` | proposed |
-| `ToolRow`, `ModelRow`, `rows` fields and every user-facing "row" renamed; ADR 0019 and 0022 amended | proposed |
-| the store-layer defects listed above fixed | proposed |
-| a Buzz lint refusing a path a store declares, outside that store's owning module; path list generated from the repository declarations; denies after the three `hack/retro` readers move | proposed |
+| write doors take `JobPut`, a job result and `TrailMark`; hand decoders deleted                                                                                                                  | proposed |
+| `hack/dev/bootstrap-{checkout,worktree}.buzz` call the jobs door instead of parsing CLI JSON                                                                                                    | proposed |
+| `hack/retro/{trace,cursor-audit,denials}.buzz` move onto the trail door with the request ref                                                                                                    | proposed |
+| `hack/dev/issue-mandate.buzz` calls `mandate.buzz` instead of splitting the mandate file                                                                                                        | proposed |
+| `hack/dev/{count-feedback,merge-job-branches}.buzz` fixtures build typed records                                                                                                                | proposed |
+| magus records failed outputs through a Go repository, replacing the `ci.yaml` shell step; `hack/ci/show-failures.buzz` reads its door                                                           | proposed |
+| a Go repository owns the disk samples; `std/lib/{diskwatch,reclaimdisk}.buzz` and doctor go through it; the Buzz line code is deleted                                                           | proposed |
+| `ConformanceRow` renamed `ConformanceThreshold`; `historymetrics` moves to `v1alpha2`                                                                                                           | proposed |
+| `ToolRow`, `ModelRow`, `rows` fields and every user-facing "row" renamed; ADR 0019 and 0022 amended                                                                                             | proposed |
+| the store-layer defects listed above fixed                                                                                                                                                      | proposed |
+| a Buzz lint refusing a path a store declares, outside that store's owning module; path list generated from the repository declarations; denies after the three `hack/retro` readers move        | proposed |
 
 ### Deliberate break
 

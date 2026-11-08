@@ -41,20 +41,20 @@ with no `--shard` (MGS3029).
 
 ## Decision
 
-| Item                                                                                       | State |
-| ------------------------------------------------------------------------------------------ | ----- |
-| `forecast.Model.PlanStages` splits a plan into stage zero and stage one                    | done  |
-| `ci.Plan.StageZero` and `types.ShardPlan.StageZero`; shard IDs are stage then letters: `0a`, `1a` | done  |
-| The `--plan` document's `stage_zero` key, absent when stage zero is empty                  | done  |
-| `magus run --stdin --shard 0a` runs one stage-zero shard                                   | done  |
-| ci.yaml: a `stage-0` job, its cache archive and sha256, imported by every `stage-1` shard  | done  |
-| docs `ci` asks for diagrams-generate and glossary-usage-generate under gha; no `figures` job | done  |
-| The symbol index's pack path names no checkout, so a cached index replays anywhere        | done (62823db95, #625) |
-| Each project's index op as a planned unit, beside the root's symbol digest                 | not built |
-| A measured makespan on this repository's CI, staged against unstaged                       | planned |
-| A computing prerequisite a unit of another project needs goes to stage zero               | done  |
-| A stage-one shard computing one is refused (MGS3054)                                        | done  |
-| An edge folded from a cross-project `ctx.needs` orders no same-name target                 | done  |
+| Item                                                                                              | State                  |
+| ------------------------------------------------------------------------------------------------- | ---------------------- |
+| `forecast.Model.PlanStages` splits a plan into stage zero and stage one                           | done                   |
+| `ci.Plan.StageZero` and `types.ShardPlan.StageZero`; shard IDs are stage then letters: `0a`, `1a` | done                   |
+| The `--plan` document's `stage_zero` key, absent when stage zero is empty                         | done                   |
+| `magus run --stdin --shard 0a` runs one stage-zero shard                                          | done                   |
+| ci.yaml: a `stage-0` job, its cache archive and sha256, imported by every `stage-1` shard         | done                   |
+| docs `ci` asks for diagrams-generate and glossary-usage-generate under gha; no `figures` job      | done                   |
+| The symbol index's pack path names no checkout, so a cached index replays anywhere                | done (62823db95, #625) |
+| Each project's index op as a planned unit, beside the root's symbol digest                        | not built              |
+| A measured makespan on this repository's CI, staged against unstaged                              | planned                |
+| A computing prerequisite a unit of another project needs goes to stage zero                       | done                   |
+| A stage-one shard computing one is refused (MGS3054)                                              | done                   |
+| An edge folded from a cross-project `ctx.needs` orders no same-name target                        | done                   |
 
 ### The plan
 

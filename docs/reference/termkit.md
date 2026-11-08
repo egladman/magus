@@ -19,14 +19,14 @@ pinned zone is erased when it is released.
 
 Each Go package is one Buzz module, imported by the same path under `termkit`.
 
-| Go import                                         | Buzz import                 | What it holds                                                    |
-| ------------------------------------------------- | --------------------------- | ---------------------------------------------------------------- |
-| `github.com/egladman/magus/libs/termkit`          | `import "termkit"`          | `Zone`, `Lease`, `Line`, `Span`, `SGR`, `Probe`, `Colorize`      |
-| `github.com/egladman/magus/libs/termkit/layout`   | `import "termkit/layout"`   | `Cols`, `Fit`, `Columns`, `Tree`, `Hints`                        |
-| `github.com/egladman/magus/libs/termkit/progress` | `import "termkit/progress"` | the loaders and `Bar`                                            |
-| `github.com/egladman/magus/libs/termkit/pick`     | `import "termkit/pick"`     | `One`, the interactive picker                                    |
-| `github.com/egladman/magus/libs/termkit/notify`   | `import "termkit/notify"`   | `New`, a stack of expiring notifications                         |
-| `github.com/egladman/magus/libs/termkit/screen`   | `import "termkit/screen"`   | `New`, a fake terminal with `Rows` and `TrailingSpaceRows`       |
+| Go import                                         | Buzz import                 | What it holds                                               |
+| ------------------------------------------------- | --------------------------- | ----------------------------------------------------------- |
+| `github.com/egladman/magus/libs/termkit`          | `import "termkit"`          | `Zone`, `Lease`, `Line`, `Span`, `SGR`, `Probe`, `Colorize` |
+| `github.com/egladman/magus/libs/termkit/layout`   | `import "termkit/layout"`   | `Cols`, `Fit`, `Columns`, `Tree`, `Hints`                   |
+| `github.com/egladman/magus/libs/termkit/progress` | `import "termkit/progress"` | the loaders and `Bar`                                       |
+| `github.com/egladman/magus/libs/termkit/pick`     | `import "termkit/pick"`     | `One`, the interactive picker                               |
+| `github.com/egladman/magus/libs/termkit/notify`   | `import "termkit/notify"`   | `New`, a stack of expiring notifications                    |
+| `github.com/egladman/magus/libs/termkit/screen`   | `import "termkit/screen"`   | `New`, a fake terminal with `Rows` and `TrailingSpaceRows`  |
 
 Imports point toward the root: every package may import `termkit`, none
 imports a sibling.
@@ -89,14 +89,14 @@ test fails when an exported function or type has no binding.
 Every loader has a name, an interval and a fixed footprint. Look one up by name;
 an unknown name is an error that lists them all.
 
-| Kind       | Footprint             | Loaders                                                                            |
-| ---------- | --------------------- | ---------------------------------------------------------------------------------- |
-| `rotation` | 1, 2 or 3 columns     | `comet·1`, `square·1`, `clock·1`, `ring·2`, `pinwheel·2`, `infinity·2`             |
-| `glyph`    | 1 column              | `dots`, `orbit`, `pulse`, `triangle`, `spark`, `line`                              |
-| `strip`    | 8 columns             | `scanner`, `equalizer`, `shade`, `snake`, `sine`, `dots`                           |
-| `text`     | the label's width     | `shimmer`, `typewriter`                                                            |
-| `span`     | the width you give    | `comet`, `progress`                                                                |
-| `column`   | the height you give   | `fill`, `elevator`                                                                 |
+| Kind       | Footprint           | Loaders                                                                |
+| ---------- | ------------------- | ---------------------------------------------------------------------- |
+| `rotation` | 1, 2 or 3 columns   | `comet·1`, `square·1`, `clock·1`, `ring·2`, `pinwheel·2`, `infinity·2` |
+| `glyph`    | 1 column            | `dots`, `orbit`, `pulse`, `triangle`, `spark`, `line`                  |
+| `strip`    | 8 columns           | `scanner`, `equalizer`, `shade`, `snake`, `sine`, `dots`               |
+| `text`     | the label's width   | `shimmer`, `typewriter`                                                |
+| `span`     | the width you give  | `comet`, `progress`                                                    |
+| `column`   | the height you give | `fill`, `elevator`                                                     |
 
 `glyph/line` is ASCII and is what to draw where the locale is not UTF-8. The run
 band's loader is the `log.loader` config key; it takes any glyph, rotation or

@@ -25,12 +25,12 @@ evidence says one verb is one too few.
 Measured on `kitchen-sink-again` at d91f85ec3, 2026-11-07, over the 20 magusfiles
 outside `libs/gopherbuzz`:
 
-| form | where | what it does | count |
-| --- | --- | --- | --- |
-| `"depends_on": [...]` in `magus\project` | project options | orders same-name targets, seeds affected, puts `dep:` lines in every key | 3 keys (root 13 entries, docs 12, console) |
-| `ctx.needs(alias\target)` | target body | runs the target first; folds into `depends_on` | 23 lines |
-| `ctx.needs(target)`, bare | target body | runs a same-project target first | 125 lines |
-| `ctx.readsFiles([alias\file(glob)])` | target body | hashes another project's files; folds into `depends_on` | docs alone: 11 entries on the root in one call |
+| form                                     | where           | what it does                                                             | count                                          |
+| ---------------------------------------- | --------------- | ------------------------------------------------------------------------ | ---------------------------------------------- |
+| `"depends_on": [...]` in `magus\project` | project options | orders same-name targets, seeds affected, puts `dep:` lines in every key | 3 keys (root 13 entries, docs 12, console)     |
+| `ctx.needs(alias\target)`                | target body     | runs the target first; folds into `depends_on`                           | 23 lines                                       |
+| `ctx.needs(target)`, bare                | target body     | runs a same-project target first                                         | 125 lines                                      |
+| `ctx.readsFiles([alias\file(glob)])`     | target body     | hashes another project's files; folds into `depends_on`                  | docs alone: 11 entries on the root in one call |
 
 Two more channels exist outside magusfiles: a Go spell's `WithDependsOn(func(dir)
 []string)` (`spells/spell.go`, unioned in `WorkspaceRegistry.Apply`,
@@ -54,13 +54,13 @@ Two more channels exist outside magusfiles: a Go spell's `WithDependsOn(func(dir
 
 Read from the comments beside the keys, 2026-11-07:
 
-| project | entry | what it stands for |
-| --- | --- | --- |
-| root | `proto` | "orders proto's generate first" and puts a `.proto` edit in the affected set |
-| root | `libs/figure` | go-build embeds `figure.buzz` |
-| root | `libs/embed` | `go.mod` replaces it with the local module, so its Go builds into magus |
-| docs | `../proto`, `../libs/figure`, `../libs/kustomize` | API docs, the render and the figures read their files |
-| docs | `../libs/cmdline`, `diagnostics`, `embed`, `scipbuzz`, `xdg`, `gopherbuzz` | generators compile these Go libs into the binaries they run |
+| project | entry                                                                      | what it stands for                                                           |
+| ------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| root    | `proto`                                                                    | "orders proto's generate first" and puts a `.proto` edit in the affected set |
+| root    | `libs/figure`                                                              | go-build embeds `figure.buzz`                                                |
+| root    | `libs/embed`                                                               | `go.mod` replaces it with the local module, so its Go builds into magus      |
+| docs    | `../proto`, `../libs/figure`, `../libs/kustomize`                          | API docs, the render and the figures read their files                        |
+| docs    | `../libs/cmdline`, `diagnostics`, `embed`, `scipbuzz`, `xdg`, `gopherbuzz` | generators compile these Go libs into the binaries they run                  |
 
 None of these is "run that project first". Each is either a target the downstream
 needs (proto's `generate`) or files the downstream reads (a Go module, one `.buzz`
@@ -103,12 +103,12 @@ because the two kinds do different things.
 
 ### 1. A target edge is `ctx.needs`; a file edge is a read
 
-| the downstream... | writes | runs upstream work | orders | key gains |
-| --- | --- | --- | --- | --- |
-| needs a target's result | `ctx.needs([proofread\build])` | yes, once per invocation | that target first | the target's key |
-| reads another project's sources, in one target | `ctx.readsFiles([proofread\sources()])` | no | nothing | the upstream source digest |
-| reads some of another project's files, in one target | `ctx.readsFiles([figure\file("figure.buzz")])` | no | nothing | those files' bytes |
-| reads another project's sources, in every target | `"sources": [..., embed\sources()]` in `magus\project` | no | nothing | the upstream source digest, in every key |
+| the downstream...                                    | writes                                                 | runs upstream work       | orders            | key gains                                |
+| ---------------------------------------------------- | ------------------------------------------------------ | ------------------------ | ----------------- | ---------------------------------------- |
+| needs a target's result                              | `ctx.needs([proofread\build])`                         | yes, once per invocation | that target first | the target's key                         |
+| reads another project's sources, in one target       | `ctx.readsFiles([proofread\sources()])`                | no                       | nothing           | the upstream source digest               |
+| reads some of another project's files, in one target | `ctx.readsFiles([figure\file("figure.buzz")])`         | no                       | nothing           | those files' bytes                       |
+| reads another project's sources, in every target     | `"sources": [..., embed\sources()]` in `magus\project` | no                       | nothing           | the upstream source digest, in every key |
 
 The whole-project edge ("my key includes your sources") is not `needs`. A need runs
 something and waits for it; a read runs nothing and orders nothing, because sources are
@@ -259,20 +259,20 @@ code the pending design names, for either reference.
 
 ### State
 
-| item | State |
-| --- | --- |
-| `depends_on` removed from `magus\project`; MGS1063 refuses it, one remedy line per entry | proposed |
-| MGS1061 and MGS1062 deleted; pages retired | proposed |
-| `self` bound in every magusfile; `ctx.needs` takes target references only; bare names refused by the checker | proposed |
-| `self\glob` replaces `ctx.glob` | proposed |
-| `alias\sources()` beside `alias\file()`; `file`, `sources`, `glob` reserved target names | proposed |
-| same-name ordering removed from the scheduler; root `generate` needs `proto\generate` | proposed |
-| `describe project` and `explain` print `upstream` and `downstream` with `via`; `types.Project.DependsOn` and `ProjectGraph.DependsOn` become `Upstream` | proposed |
-| `graph deps` becomes `graph projects`; `--upstream` becomes `--downstream` | proposed |
+| item                                                                                                                                                                             | State    |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `depends_on` removed from `magus\project`; MGS1063 refuses it, one remedy line per entry                                                                                         | proposed |
+| MGS1061 and MGS1062 deleted; pages retired                                                                                                                                       | proposed |
+| `self` bound in every magusfile; `ctx.needs` takes target references only; bare names refused by the checker                                                                     | proposed |
+| `self\glob` replaces `ctx.glob`                                                                                                                                                  | proposed |
+| `alias\sources()` beside `alias\file()`; `file`, `sources`, `glob` reserved target names                                                                                         | proposed |
+| same-name ordering removed from the scheduler; root `generate` needs `proto\generate`                                                                                            | proposed |
+| `describe project` and `explain` print `upstream` and `downstream` with `via`; `types.Project.DependsOn` and `ProjectGraph.DependsOn` become `Upstream`                          | proposed |
+| `graph deps` becomes `graph projects`; `--upstream` becomes `--downstream`                                                                                                       | proposed |
 | spells contribute `SourceRef` and `TargetRef`; `WithDependsOn` and `DiscoveredProject.dependsOn` deleted; the TypeScript spell wires `build` needs for build-output entry points | proposed |
-| spell contract `needs`/`provides` renamed `sources`/`outputs` | proposed |
-| [dependencies.md](../concepts/dependencies.md) rewritten around two verbs; `magus\needs` in the docs becomes `ctx.needs` | proposed |
-| ADR 0027 gains an amendment pointing here | proposed |
+| spell contract `needs`/`provides` renamed `sources`/`outputs`                                                                                                                    | proposed |
+| [dependencies.md](../concepts/dependencies.md) rewritten around two verbs; `magus\needs` in the docs becomes `ctx.needs`                                                         | proposed |
+| ADR 0027 gains an amendment pointing here                                                                                                                                        | proposed |
 
 ### Principles checked
 

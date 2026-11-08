@@ -149,14 +149,14 @@ carries the comparison.
 
 While a mandate is in force the guard denies, beyond what it denies always:
 
-| Reserved act                    | The rule denies                                                                          |
-| ------------------------------- | ---------------------------------------------------------------------------------------- |
-| new scope                       | `magus job fork` of a row the mandate does not name, and any `job apply`                 |
-| reversing a decision            | writes under `docs/decisions/` and `docs/design/`                                        |
-| hook and permission config      | writes to `.claude/`, `.codex/`, `hack/policy/`, `spells/harness/`, `magus.yaml`         |
-| a grant                         | `magus job grant` (person-only already; listed so the report names it)                   |
+| Reserved act                    | The rule denies                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------------- |
+| new scope                       | `magus job fork` of a row the mandate does not name, and any `job apply`                    |
+| reversing a decision            | writes under `docs/decisions/` and `docs/design/`                                           |
+| hook and permission config      | writes to `.claude/`, `.codex/`, `hack/policy/`, `spells/harness/`, `magus.yaml`            |
+| a grant                         | `magus job grant` (person-only already; listed so the report names it)                      |
 | merge and push                  | `gh pr merge`, `git push` (push-unverified stands; merge is never the root's or a worker's) |
-| deleting work not made under it | `magus job rm`, `git branch -D`, `git worktree remove` of a row or branch made before it |
+| deleting work not made under it | `magus job rm`, `git branch -D`, `git worktree remove` of a row or branch made before it    |
 
 A mandate only adds denials. It lowers no rule, and the guide's "An unattended mode, a
 relaxed rule set" refusal stands: with no one present, a point that needs judgment
