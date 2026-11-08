@@ -147,7 +147,7 @@ Fetched 2026-11-07. Input, not justification.
   lock and prints `Blocking waiting for file lock`. Locks held by one person's command refuse:
   apt's `DPkg::Lock::Timeout` and git's `index.lock` default to 0. No fetched tool varies the
   default by whether a terminal is attached.
-- A live brake: `make -l` will not start a job while load average is high; Bazel's
+- A live brake: `make -l` starts no job while load average is high; Bazel's
   `--experimental_memory_load_scheduling` (default off) schedules from machine memory load;
   systemd-oomd kills on PSI thresholds.
 - Overcommit with a backstop: Kubernetes admits on requests, lets limits exceed the node, and
@@ -240,7 +240,7 @@ the same way carries no information; it is the toll
 - A leased worker still never waits: the guard's sleep-poll rule and the owed check are
   unchanged, and the worker's check is run with `--budget-wait 0`.
 
-### Refusals and waits are recorded in a JSON Lines store
+### Refusals and waits are appended to `admissions.jsonl`
 
 Each refusal, and each claim seated after waiting on other runs, appends one entry to `admissions.jsonl`, beside `broker.log`, which keeps the newest 5000: when, who asked
 (pid, project, target, directory, lease), the claim's breakdown, the held state at the

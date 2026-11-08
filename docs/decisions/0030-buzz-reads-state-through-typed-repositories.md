@@ -407,7 +407,7 @@ Lost because the docs example that calls `putJob` would fail dry and pass in a
 magusfile, against the dry host's rule. Reopens if a dry consumer starts branching on a
 computed field of the put's result.
 
-### Rename the Row types and stop there
+### Rename the row types and stop there
 
 Lost because it fixes the word and leaves the CLI-text parsers, the trail readers and
 the untyped doors. It is a subset of this decision.
