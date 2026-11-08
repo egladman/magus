@@ -13,7 +13,6 @@
     "noEmit": true,
     "forceConsistentCasingInFileNames": true,
     "types": [],
-    "baseUrl": ".",
     "paths": {
       "@magus/textsearch": ["../libs/textsearch/src/textsearch"]
     }

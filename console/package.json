@@ -28,7 +28,7 @@
     "@types/node": "22.13.10",
     "stylelint": "16.24.0",
     "stylelint-config-standard": "39.0.0",
-    "typescript": "5.8.3"
+    "typescript": "7.0.2"
   },
   "pnpm": {
     "overrides": {
