@@ -49,7 +49,7 @@ type MagusCommandOptions struct {
 }
 
 // MagusDiffOptions are magus\change().diff's options.
-// types.DiffOptions is the in-process
+// diff.Options is the in-process
 // review's, which takes a parsed baseline; this one names files and a range for the
 // nested `magus diff` to read.
 type MagusDiffOptions struct {

@@ -11,6 +11,7 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	difftypes "github.com/egladman/magus/types/diff"
 	imagetypes "github.com/egladman/magus/types/image"
 	"github.com/egladman/magus/types/trail"
 )
@@ -47,8 +48,8 @@ var inboundTypes = []inboundType{
 	{Name: "Secret", Zero: spells.Secret{}, Encode: func(v any) vm.Value { return ObjectSecret(v.(spells.Secret)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSecret(v) }},
 	{Name: "ReleaseCycle", Zero: spells.ReleaseCycle{}, Encode: func(v any) vm.Value { return ObjectReleaseCycle(v.(spells.ReleaseCycle)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeReleaseCycle(v) }},
 	{Name: "Lifecycle", Zero: spells.Lifecycle{}, Encode: func(v any) vm.Value { return ObjectLifecycle(v.(spells.Lifecycle)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeLifecycle(v) }},
-	{Name: "ReviewTarget", Zero: types.ReviewTarget{}, Encode: func(v any) vm.Value { return ObjectReviewTarget(v.(types.ReviewTarget)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeReviewTarget(v) }},
-	{Name: "ReviewComment", Zero: types.ReviewComment{}, Encode: func(v any) vm.Value { return ObjectReviewComment(v.(types.ReviewComment)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeReviewComment(v) }},
+	{Name: "ReviewTarget", Zero: difftypes.ReviewTarget{}, Encode: func(v any) vm.Value { return ObjectDiffReviewTarget(v.(difftypes.ReviewTarget)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeDiffReviewTarget(v) }},
+	{Name: "ReviewComment", Zero: difftypes.ReviewComment{}, Encode: func(v any) vm.Value { return ObjectDiffReviewComment(v.(difftypes.ReviewComment)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeDiffReviewComment(v) }},
 	{Name: "RateLimit", Zero: types.RateLimit{}, Encode: func(v any) vm.Value { return ObjectRateLimit(v.(types.RateLimit)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeRateLimit(v) }},
 	{Name: "ForgeCheck", Zero: types.ForgeCheck{}, Encode: func(v any) vm.Value { return ObjectForgeCheck(v.(types.ForgeCheck)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeForgeCheck(v) }},
 	{Name: "BaseCommit", Zero: types.BaseCommit{}, Encode: func(v any) vm.Value { return ObjectBaseCommit(v.(types.BaseCommit)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeBaseCommit(v) }},

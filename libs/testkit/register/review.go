@@ -1,12 +1,12 @@
 package register
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"fmt"
 	"strings"
 
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
-	"github.com/egladman/magus/types"
 )
 
 // ReviewSpell registers, through [Spell], a Buzz review provider whose find_review answers
@@ -15,7 +15,7 @@ import (
 //
 // It answers the way a real provider does, as typed Buzz the provider ops decode strictly,
 // so a test using it covers that decode rather than standing in for it.
-func ReviewSpell(tb testkit.TB, at types.ReviewTarget, threads []types.ReviewComment) string {
+func ReviewSpell(tb testkit.TB, at diff.ReviewTarget, threads []diff.ReviewComment) string {
 	tb.Helper()
 	var src strings.Builder
 	src.WriteString("import \"magus/spell\";\n\n")

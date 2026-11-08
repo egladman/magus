@@ -6,6 +6,7 @@
 package diff
 
 import (
+	difftypes "github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
@@ -41,7 +42,7 @@ type patchSource interface {
 // one without the expensive one.
 type diffSource interface {
 	patchSource
-	Diff(ctx context.Context, paths []string) (types.Diff, error)
+	Diff(ctx context.Context, paths []string) (difftypes.Diff, error)
 }
 
 // Handler serves GET /api/v1/diff: the changed files annotated with what the
@@ -115,7 +116,7 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 		handler.WriteJSON(w, r, h.sessions.Attach(h.root, out.Base, out, asOf))
 		return
 	}
-	handler.WriteJSON(w, r, types.DiffReview{Base: out.Base, Diff: out, Cursor: types.DiffCursor{Hunk: -1}})
+	handler.WriteJSON(w, r, difftypes.Review{Base: out.Base, Diff: out, Cursor: difftypes.Cursor{Hunk: -1}})
 }
 
 // PatchHandler serves GET /api/v1/diff/patch: the working tree's uncommitted changes as one unified
@@ -366,7 +367,7 @@ type reviewRecorder interface {
 // browser knows the paths it is reviewing and nothing about remotes, and one that supplied a
 // remote could aim a review at another repository.
 type reviewSource interface {
-	ReviewOrigin(ctx context.Context) types.ReviewOrigin
+	ReviewOrigin(ctx context.Context) difftypes.ReviewOrigin
 	WorkingDiff(ctx context.Context, paths []string) (string, error)
 }
 
@@ -428,14 +429,14 @@ type reviewSessionRequest struct {
 // A draft with no line stays a draft. A provider anchors an inline comment to a line and drops
 // one that has none, so including it would mark it published against a send that never
 // happened, and publish only considers unpublished drafts, so it could never go again.
-func (h *ReviewHandler) publish(ctx context.Context, req reviewSessionRequest) (*types.DiffReview, error) {
+func (h *ReviewHandler) publish(ctx context.Context, req reviewSessionRequest) (*difftypes.Review, error) {
 	sess := h.Sessions.Get(h.Root)
 	if sess == nil {
 		return nil, errors.New("no review session attached")
 	}
-	var drafts, unplaceable []types.DiffComment
+	var drafts, unplaceable []difftypes.Comment
 	for _, c := range sess.Comments {
-		if c.Author != types.DiffAuthorUnattributed || c.Published {
+		if c.Author != difftypes.AuthorUnattributed || c.Published {
 			continue
 		}
 		if c.Line == 0 {
@@ -491,7 +492,7 @@ func (h *ReviewHandler) publish(ctx context.Context, req reviewSessionRequest) (
 
 // reply answers one thread on the host's review. It writes no session state: the reply belongs
 // to the host's record, and the client re-reads the review to see it.
-func (h *ReviewHandler) reply(ctx context.Context, req reviewSessionRequest) (*types.DiffReview, error) {
+func (h *ReviewHandler) reply(ctx context.Context, req reviewSessionRequest) (*difftypes.Review, error) {
 	at, err := h.findReview(ctx)
 	if err != nil {
 		return nil, err
@@ -505,7 +506,7 @@ func (h *ReviewHandler) reply(ctx context.Context, req reviewSessionRequest) (*t
 	if sess := h.Sessions.Get(h.Root); sess != nil {
 		return sess, nil
 	}
-	return &types.DiffReview{Cursor: types.DiffCursor{Hunk: -1}}, nil
+	return &difftypes.Review{Cursor: difftypes.Cursor{Hunk: -1}}, nil
 }
 
 // replyThread is the thread id a reply goes to. Hosts attach a reply to a thread by its
@@ -516,7 +517,7 @@ func (h *ReviewHandler) reply(ctx context.Context, req reviewSessionRequest) (*t
 // A review that cannot be read, or that holds no such comment, sends the name as given. The
 // host knows its own ids and refuses one it does not; this lookup only corrects the one mistake
 // a client can make from what it was shown.
-func replyThread(ctx context.Context, at types.ReviewTarget, req reviewSessionRequest) string {
+func replyThread(ctx context.Context, at difftypes.ReviewTarget, req reviewSessionRequest) string {
 	name := requestedThread(req)
 	comments, _, _ := bindings.ReviewCommentsReached(ctx, at)
 	if th, err := changeset.FindThread(comments, name); err == nil {
@@ -537,9 +538,9 @@ func requestedThread(req reviewSessionRequest) string {
 // findReview resolves the review publish and reply both need, or the reason there is none.
 // The reason travels, because "no provider wired" and "no pull request for this branch" send
 // the reader to different places.
-func (h *ReviewHandler) findReview(ctx context.Context) (types.ReviewTarget, error) {
+func (h *ReviewHandler) findReview(ctx context.Context) (difftypes.ReviewTarget, error) {
 	if h.Workspace == nil {
-		return types.ReviewTarget{}, errors.New("this server has no workspace to publish from")
+		return difftypes.ReviewTarget{}, errors.New("this server has no workspace to publish from")
 	}
 	from := h.Workspace.ReviewOrigin(ctx)
 	at := bindings.FindReview(ctx, from.Branch, from.Remote)
@@ -547,9 +548,9 @@ func (h *ReviewHandler) findReview(ctx context.Context) (types.ReviewTarget, err
 		if at.Reason == "" {
 			// A provider may close a target without saying why. "publish: " with nothing after
 			// the colon tells the reader less than nothing.
-			return types.ReviewTarget{}, errors.New("no review is open for this branch")
+			return difftypes.ReviewTarget{}, errors.New("no review is open for this branch")
 		}
-		return types.ReviewTarget{}, errors.New(at.Reason)
+		return difftypes.ReviewTarget{}, errors.New(at.Reason)
 	}
 	return at, nil
 }
@@ -579,7 +580,7 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var sess *types.DiffReview
+	var sess *difftypes.Review
 	switch req.Op {
 	case "reading":
 		// Answers with its own shape rather than the session, and needs no attached session: the
@@ -588,7 +589,7 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 		h.reading(w, r, req)
 		return
 	case "cursor":
-		sess = h.Sessions.SetCursor(h.Root, types.DiffCursor{Path: req.Path, Hunk: req.Hunk})
+		sess = h.Sessions.SetCursor(h.Root, difftypes.Cursor{Path: req.Path, Hunk: req.Hunk})
 	case "viewed":
 		var finished string
 		sess, finished = h.Sessions.MarkViewed(h.Root, req.Digest, req.On)
@@ -605,13 +606,13 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 		// patch this session tracked, so it can record what the reader was actually shown; a
 		// client-supplied anchor would be three implementations of one thing, each able to be
 		// wrong in its own way. The wire field is gone for the same reason.
-		sess = h.Sessions.AddComment(h.Root, types.DiffComment{
+		sess = h.Sessions.AddComment(h.Root, difftypes.Comment{
 			Path: req.Path, Hunk: req.Hunk, Line: req.Line, Body: req.Body,
 			Anchor: h.Sessions.Anchor(h.Root, req.Path, req.Line),
 			Origin: trail.StampOrigin(r.Context(), types.Origin{}),
-		}, types.DiffAuthorUnattributed)
+		}, difftypes.AuthorUnattributed)
 		if h.Telemetry != nil {
-			h.Telemetry.RecordReviewRemark(r.Context(), string(types.DiffAuthorUnattributed))
+			h.Telemetry.RecordReviewRemark(r.Context(), string(difftypes.AuthorUnattributed))
 		}
 	case "seen":
 		// The reader's claim that these threads were put in front of them, which is the ONLY
@@ -651,9 +652,9 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	case "resolve":
 		sess = h.Sessions.ResolveComment(h.Root, req.ID, req.On)
 	case "answer":
-		status := types.SuggestionDeclined
+		status := difftypes.SuggestionDeclined
 		if req.On {
-			status = types.SuggestionAccepted
+			status = difftypes.SuggestionAccepted
 		}
 		sess = h.Sessions.AnswerSuggestion(h.Root, req.ID, status)
 	default:
@@ -729,7 +730,7 @@ func NewReviewLookupHandler(workspace reviewSource, log *slog.Logger) *ReviewLoo
 // place resolves each comment onto the hunk holding its line, so the terminal viewer and the
 // console read one answer instead of computing it twice. An unreadable patch leaves them at -1,
 // which renders against the file rather than against the wrong hunk.
-func (h *ReviewLookupHandler) place(ctx context.Context, comments []types.ReviewComment) []types.ReviewComment {
+func (h *ReviewLookupHandler) place(ctx context.Context, comments []difftypes.ReviewComment) []difftypes.ReviewComment {
 	if len(comments) == 0 {
 		return comments
 	}
@@ -766,7 +767,7 @@ type diffReviewResponse struct {
 	// on.
 	Verdicts     []types.ReviewVerdict `json:"verdicts"`
 	VerdictLimit string                `json:"verdict_limit,omitempty"`
-	Comments     []types.ReviewComment `json:"threads"`
+	Comments     []difftypes.ReviewComment `json:"threads"`
 }
 
 // remoteHost reduces a git remote URL to the host a reader would recognize. Empty when it is
@@ -801,7 +802,7 @@ func (h *ReviewLookupHandler) serve(w http.ResponseWriter, r *http.Request) {
 		Reason:       at.Reason,
 		Verdicts:     at.AllowedVerdicts(),
 		VerdictLimit: at.VerdictLimit(),
-		Comments:     []types.ReviewComment{},
+		Comments:     []difftypes.ReviewComment{},
 	}
 	if at.Open() && h.workspace != nil {
 		out.Host = remoteHost(h.workspace.ReviewOrigin(r.Context()).Remote)
@@ -827,7 +828,7 @@ func (h *ReviewLookupHandler) serve(w http.ResponseWriter, r *http.Request) {
 // mid-flight, or a second tab silently consumed the marks, and the notification with them, since
 // the job that raises it compares against this same watermark. The client says when it has shown
 // them, through the session's `seen` op; until it does, the same comments keep arriving marked.
-func (h *ReviewLookupHandler) markNew(comments []types.ReviewComment) {
+func (h *ReviewLookupHandler) markNew(comments []difftypes.ReviewComment) {
 	if h.Sessions == nil || len(comments) == 0 {
 		return
 	}
@@ -850,9 +851,9 @@ func (h *ReviewLookupHandler) markNew(comments []types.ReviewComment) {
 	}
 }
 
-func (h *ReviewLookupHandler) lookup(ctx context.Context) types.ReviewTarget {
+func (h *ReviewLookupHandler) lookup(ctx context.Context) difftypes.ReviewTarget {
 	if h.workspace == nil {
-		return types.ReviewTarget{Reason: "no workspace"}
+		return difftypes.ReviewTarget{Reason: "no workspace"}
 	}
 	from := h.workspace.ReviewOrigin(ctx)
 	return bindings.FindReview(ctx, from.Branch, from.Remote)

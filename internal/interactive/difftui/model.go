@@ -12,6 +12,7 @@
 package difftui
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"cmp"
 	"fmt"
 	"slices"
@@ -19,7 +20,6 @@ import (
 	"unicode"
 
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/types"
 )
 
 // Hunk is one @@ section as the viewer shows it. Digest is the content address the viewed
@@ -73,8 +73,8 @@ type Input struct {
 	Unranked bool
 	// Viewed carries the digests already marked read, from the session or the local store.
 	Viewed      []string
-	Comments    []types.DiffComment
-	Suggestions []types.DiffSuggestion
+	Comments    []diff.Comment
+	Suggestions []diff.Suggestion
 	// ReviewComments are the remarks already on the host's review, with Hunk resolved by
 	// changeset.PlaceThreads. A comment whose line this changeset does not contain (Hunk < 0)
 	// renders under the file heading rather than being dropped: a colleague said it, and a viewer
@@ -83,7 +83,7 @@ type Input struct {
 	// One entry per comment, in the host's order. The viewer groups them with
 	// changeset.GroupThreads and draws each reply under its thread's top-level comment, oldest
 	// first, so the watermark still counts each comment.
-	ReviewComments []types.ReviewComment
+	ReviewComments []diff.ReviewComment
 	// Unfolded starts with generated files expanded, which is what --generated asks for.
 	Unfolded bool
 	// Link decorates a path for display (an OSC 8 hyperlink). Nil renders it plain.
@@ -91,7 +91,7 @@ type Input struct {
 	// Start is where the cursor opens: Hunk is the patch index (Hunk.Index), and -1 is the
 	// file's heading. An empty Path, or one no file carries, opens at the top. A start inside a
 	// folded file unfolds it, since the reader asked to see it.
-	Start types.DiffCursor
+	Start diff.Cursor
 }
 
 // RowKind says what one visible row is, so the renderer can mark the cursor and the tests
@@ -143,12 +143,12 @@ type Model struct {
 	// unsettled shows the already-reviewed files that are folded away by default.
 	unsettled bool
 	viewed    map[string]bool
-	comments  map[hunkRef][]types.DiffComment
-	suggests  map[hunkRef][]types.DiffSuggestion
+	comments  map[hunkRef][]diff.Comment
+	suggests  map[hunkRef][]diff.Suggestion
 	// reviewAt is the host's comments by hunk; unplaced holds, per path, the ones whose line this
 	// changeset does not contain.
-	reviewAt map[hunkRef][]types.ReviewComment
-	unplaced map[string][]types.ReviewComment
+	reviewAt map[hunkRef][]diff.ReviewComment
+	unplaced map[string][]diff.ReviewComment
 	// hostIndex is each review comment's position in the host's list, which is the order a
 	// thread's replies read in. The buckets above lose it once the elsewhere list gathers them
 	// from maps.
@@ -183,10 +183,10 @@ func New(in Input) *Model {
 		unranked:  in.Unranked,
 		unfolded:  in.Unfolded,
 		viewed:    make(map[string]bool, len(in.Viewed)),
-		comments:  map[hunkRef][]types.DiffComment{},
-		suggests:  map[hunkRef][]types.DiffSuggestion{},
-		reviewAt:  map[hunkRef][]types.ReviewComment{},
-		unplaced:  map[string][]types.ReviewComment{},
+		comments:  map[hunkRef][]diff.Comment{},
+		suggests:  map[hunkRef][]diff.Suggestion{},
+		reviewAt:  map[hunkRef][]diff.ReviewComment{},
+		unplaced:  map[string][]diff.ReviewComment{},
 		hostIndex: map[string]int{},
 		shown:     map[string]bool{},
 		hunk:      -1,
@@ -205,7 +205,7 @@ func New(in Input) *Model {
 	for _, s := range in.Suggestions {
 		// Answered suggestions are history, not an affordance: showing a declined one again
 		// is the repetition DiffSuggestion.Status exists to stop.
-		if s.Status != types.SuggestionPending {
+		if s.Status != diff.SuggestionPending {
 			continue
 		}
 		k := hunkRef{path: s.Path, hunk: s.Hunk}
@@ -228,7 +228,7 @@ func New(in Input) *Model {
 // start moves the cursor to at. The viewer can split one path across several files (one per
 // reading-order step), so the file is the one holding that hunk, or the path's first for a
 // heading or a hunk no file holds.
-func (m *Model) start(at types.DiffCursor) {
+func (m *Model) start(at diff.Cursor) {
 	if at.Path == "" {
 		return
 	}
@@ -298,15 +298,15 @@ func (m *Model) overviewCursor() int { return m.overCursor }
 // addresses talk by: the same one talkRows joins comments on. It is NOT the row position the
 // cursor walks: those coincide only while the viewer holds every hunk of every file, so
 // publishing the position would key the shared cursor by something no other client can resolve.
-func (m *Model) cursor() types.DiffCursor {
+func (m *Model) cursor() diff.Cursor {
 	if len(m.files) == 0 {
-		return types.DiffCursor{Hunk: -1}
+		return diff.Cursor{Hunk: -1}
 	}
 	f := &m.files[m.file]
 	if m.hunk < 0 || m.hunk >= len(f.Hunks) {
-		return types.DiffCursor{Path: f.Path, Hunk: -1}
+		return diff.Cursor{Path: f.Path, Hunk: -1}
 	}
-	return types.DiffCursor{Path: f.Path, Hunk: f.Hunks[m.hunk].Index}
+	return diff.Cursor{Path: f.Path, Hunk: f.Hunks[m.hunk].Index}
 }
 
 // resize sets the viewport height and keeps the cursor in view.
@@ -636,7 +636,7 @@ func (m *Model) rebuild() {
 // Sorted, because they are gathered from maps and an unsorted read would reorder the tail of the
 // changeset between frames.
 func (m *Model) elsewhereRows(shown map[string]bool) []Row {
-	var out []types.ReviewComment
+	var out []diff.ReviewComment
 	for path, cs := range m.unplaced {
 		if !shown[path] {
 			out = append(out, cs...)
@@ -675,9 +675,9 @@ func (m *Model) elsewhereRows(shown map[string]bool) []Row {
 // hostOrderedThreads groups cs into threads with [changeset.GroupThreads], after putting them back
 // in the host's order: the buckets they came from are gathered from maps, and replies read in the
 // order they were written.
-func (m *Model) hostOrderedThreads(cs []types.ReviewComment) []changeset.Thread {
+func (m *Model) hostOrderedThreads(cs []diff.ReviewComment) []changeset.Thread {
 	ordered := slices.Clone(cs)
-	slices.SortStableFunc(ordered, func(a, b types.ReviewComment) int {
+	slices.SortStableFunc(ordered, func(a, b diff.ReviewComment) int {
 		return cmp.Compare(m.hostIndex[a.ID], m.hostIndex[b.ID])
 	})
 	return changeset.GroupThreads(ordered)
@@ -775,7 +775,7 @@ func threadRows(th changeset.Thread, file, hunk int) []Row {
 // It says "on the review" rather than naming the author alone, because the reader has to be
 // able to tell what the world has already seen from what is still theirs to send. The console
 // draws the same distinction with a colour it cannot use here.
-func commentRows(t types.ReviewComment, file, hunk int, lead string, head bool) []Row {
+func commentRows(t diff.ReviewComment, file, hunk int, lead string, head bool) []Row {
 	who := plain(t.Author)
 	if who == "" {
 		who = "review"

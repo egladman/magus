@@ -80,17 +80,6 @@ func (v SymbolIndexFreshness) Values() []string { return symbolIndexFreshnesses.
 func (v SymbolIndexFreshness) Valid() bool      { return symbolIndexFreshnesses.Valid(v) }
 func (v SymbolIndexFreshness) String() string   { return enum.String(v) }
 
-var diffUncoveredReasons = enum.Set[DiffUncoveredReason]{"no-indexer"}
-
-func (v DiffUncoveredReason) Values() []string { return diffUncoveredReasons.Strings() }
-func (v DiffUncoveredReason) Valid() bool      { return diffUncoveredReasons.Valid(v) }
-func (v DiffUncoveredReason) String() string   { return enum.String(v) }
-
-var diffReadStates = enum.Set[DiffReadState]{"known", "unknown"}
-
-func (v DiffReadState) Values() []string { return diffReadStates.Strings() }
-func (v DiffReadState) Valid() bool      { return diffReadStates.Valid(v) }
-func (v DiffReadState) String() string   { return enum.String(v) }
 
 
 var vcsSources = enum.Set[VCSSource]{"explicit", "auto", "default", "disabled"}

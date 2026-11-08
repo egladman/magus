@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"cmp"
 	"fmt"
 	"maps"
@@ -43,7 +44,7 @@ const callSeqWrapperUsers = 3
 // percentile; a population with neither, and a workspace with no symbol index, are silent.
 type callSeqCheck struct{}
 
-func (callSeqCheck) name() string { return types.CheckCallSequence }
+func (callSeqCheck) name() string { return diff.CheckCallSequence }
 
 func (callSeqCheck) run(x *namingIndex) []finding {
 	o := x.change.Conformance

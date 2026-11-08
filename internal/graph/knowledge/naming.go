@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"cmp"
 	"fmt"
 	"maps"
@@ -345,7 +346,7 @@ func sharesAffixWord(words []string, a affix) bool {
 // one false finding among its first three.
 type affixCheck struct{}
 
-func (affixCheck) name() string { return types.CheckNamingAffix }
+func (affixCheck) name() string { return diff.CheckNamingAffix }
 
 func (affixCheck) run(x *namingIndex) []finding {
 	var out []finding
@@ -480,7 +481,7 @@ var namingDomainKinds = []string{
 // reader. It states the match and asks nothing of the name itself.
 type collisionCheck struct{}
 
-func (collisionCheck) name() string { return types.CheckNameCollision }
+func (collisionCheck) name() string { return diff.CheckNameCollision }
 
 func (collisionCheck) run(x *namingIndex) []finding {
 	var out []finding

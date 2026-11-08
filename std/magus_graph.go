@@ -3,6 +3,7 @@
 package std
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
@@ -318,7 +319,7 @@ func judgedGraph(ctx context.Context, member string, languages []string) (indexe
 	}
 	generated := map[string]bool{}
 	for _, e := range entries {
-		if e.Role == types.DiffRoleOutput {
+		if e.Role == diff.RoleOutput {
 			generated[e.Path] = true
 		}
 	}

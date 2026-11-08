@@ -1,6 +1,7 @@
 package console
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"github.com/egladman/magus/types/daemon"
 	"context"
 	"testing"
@@ -130,18 +131,18 @@ func TestResolveStatusAddr(t *testing.T) {
 }
 
 func TestDiffWithPassesTheOptionsToTheAnnotation(t *testing.T) {
-	var got []types.DiffOptions
-	svc := &Service{diffFn: func(_ context.Context, _ []string, opts types.DiffOptions) (types.Diff, error) {
+	var got []diff.Options
+	svc := &Service{diffFn: func(_ context.Context, _ []string, opts diff.Options) (diff.Diff, error) {
 		got = append(got, opts)
-		return types.Diff{}, nil
+		return diff.Diff{}, nil
 	}}
 
 	_, err := svc.Diff(context.Background(), []string{"a.go"})
 	require.NoError(t, err)
-	_, err = svc.DiffWith(context.Background(), []string{"a.go"}, types.DiffOptions{SkipOrder: true})
+	_, err = svc.DiffWith(context.Background(), []string{"a.go"}, diff.Options{SkipOrder: true})
 	require.NoError(t, err)
 
-	assert.Equal(t, []types.DiffOptions{{}, {SkipOrder: true}}, got, "Diff asks for the order; a brief opts out")
+	assert.Equal(t, []diff.Options{{}, {SkipOrder: true}}, got, "Diff asks for the order; a brief opts out")
 }
 
 func TestIsGraphRelevant(t *testing.T) {

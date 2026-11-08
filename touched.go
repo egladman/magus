@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"maps"
 	"slices"
 	"strconv"
@@ -23,7 +24,7 @@ type changeClasses struct {
 func (c changeClasses) introduced() map[string]bool {
 	out := map[string]bool{}
 	for id, change := range c.change {
-		if change == types.DiffChangeAdded {
+		if change == diff.ChangeAdded {
 			out[id] = true
 		}
 	}
@@ -33,7 +34,7 @@ func (c changeClasses) introduced() map[string]bool {
 // classifyChanges is the classification attachConformance and
 // touchedFunctions share. With a baseline it reads in.changes; without one it
 // reads the patch, where only an added or renamed symbol shows.
-func classifyChanges(defs map[string]symbolDef, byPath map[string]*types.DiffFile, in conformanceInput) changeClasses {
+func classifyChanges(defs map[string]symbolDef, byPath map[string]*diff.File, in conformanceInput) changeClasses {
 	c := changeClasses{renamed: map[string]string{}, change: map[string]string{}}
 	pf := baselineOrPatchFacts(in)
 	for _, id := range slices.Sorted(maps.Keys(defs)) {
@@ -66,11 +67,11 @@ func (c *changeClasses) classify(id string, def symbolDef, in conformanceInput, 
 
 func (c *changeClasses) fromBaseline(id, change string) {
 	switch change {
-	case types.DiffChangeAdded:
+	case diff.ChangeAdded:
 		c.subjects = append(c.subjects, id)
-	case types.DiffChangeSignature:
+	case diff.ChangeSignature:
 		c.subjects = append(c.subjects, id)
-	case types.DiffChangeBody:
+	case diff.ChangeBody:
 		c.touched = append(c.touched, id)
 	default:
 		return
@@ -87,7 +88,7 @@ func (c *changeClasses) fromPatch(id string, def symbolDef, pf patchFacts) {
 		return
 	}
 	c.subjects = append(c.subjects, id)
-	c.change[id] = types.DiffChangeAdded
+	c.change[id] = diff.ChangeAdded
 	if old := knowledge.PreviousName(text, label, pf.removed[def.path]); old != "" {
 		c.renamed[id] = old
 	}
@@ -111,7 +112,7 @@ var functionKinds = map[string]bool{"Function": true, "Method": true, "Construct
 
 // touchedFunctions names the functions the change touches, in symbol ID
 // order. Tests and generated files are never touched.
-func touchedFunctions(defs map[string]symbolDef, byPath map[string]*types.DiffFile, in conformanceInput) []touchedFunction {
+func touchedFunctions(defs map[string]symbolDef, byPath map[string]*diff.File, in conformanceInput) []touchedFunction {
 	c := classifyChanges(defs, byPath, in)
 	var out []touchedFunction
 	for _, id := range slices.Sorted(maps.Keys(c.change)) {

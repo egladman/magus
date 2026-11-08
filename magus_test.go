@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"github.com/egladman/magus/types/daemon"
 	"bufio"
 	"bytes"
@@ -1270,7 +1271,7 @@ func TestReviewOriginReadsRefWithoutMetadata(t *testing.T) {
 
 	got := m.resolveReviewOrigin(t.Context(), d)
 
-	assert.Equal(t, types.ReviewOrigin{Branch: "feat/x", Remote: "https://example.com/o/r.git"}, got)
+	assert.Equal(t, diff.ReviewOrigin{Branch: "feat/x", Remote: "https://example.com/o/r.git"}, got)
 	d.AssertNotCalled(t, "Metadata", mock.Anything, mock.Anything)
 }
 
@@ -1282,7 +1283,7 @@ func TestReviewOriginRefErrorLeavesBranchEmpty(t *testing.T) {
 	d.EXPECT().RemoteURL(mock.Anything, root, "").Return("", errors.New("no remote")).Once()
 	m := &Magus{ws: &types.Workspace{Root: root}}
 
-	assert.Equal(t, types.ReviewOrigin{}, m.resolveReviewOrigin(t.Context(), d))
+	assert.Equal(t, diff.ReviewOrigin{}, m.resolveReviewOrigin(t.Context(), d))
 	d.AssertNotCalled(t, "Metadata", mock.Anything, mock.Anything)
 }
 
@@ -1357,11 +1358,11 @@ func TestTouchedSymbolsAreTheOnesThePatchChanged(t *testing.T) {
 		rangedSymbol(goSymbol("api", "Fresh()."), "Fresh", "api.go:11", 13, "Function"),
 		rangedSymbol(goSymbol("api", "Elsewhere()."), "Elsewhere", "other.go:4", 6, "Function"),
 	)
-	got := touchedSymbols(head, patch, map[string]*types.DiffFile{"api.go": {Path: "api.go"}})
+	got := touchedSymbols(head, patch, map[string]*diff.File{"api.go": {Path: "api.go"}})
 	require.Equal(t, map[string]touchedSymbol{
-		goSymbol("api", "Open()."):  {change: types.DiffChangeBody, signature: "func Open()", kind: "Function", place: hunkPlace{hunks: []int{0}, start: 3, extent: 3}},
-		goSymbol("api", "Close()."): {change: types.DiffChangeSignature, signature: "func Close()", kind: "Function", place: hunkPlace{hunks: []int{0}, start: 7, extent: 3}},
-		goSymbol("api", "Fresh()."): {change: types.DiffChangeAdded, signature: "func Fresh()", kind: "Function", place: hunkPlace{hunks: []int{0}, start: 11, extent: 3}},
+		goSymbol("api", "Open()."):  {change: diff.ChangeBody, signature: "func Open()", kind: "Function", place: hunkPlace{hunks: []int{0}, start: 3, extent: 3}},
+		goSymbol("api", "Close()."): {change: diff.ChangeSignature, signature: "func Close()", kind: "Function", place: hunkPlace{hunks: []int{0}, start: 7, extent: 3}},
+		goSymbol("api", "Fresh()."): {change: diff.ChangeAdded, signature: "func Fresh()", kind: "Function", place: hunkPlace{hunks: []int{0}, start: 11, extent: 3}},
 	}, got)
 }
 
@@ -1384,7 +1385,7 @@ const twoHunkPatch = `diff --git a/api.go b/api.go
 // A hunk no listed symbol sits in is still a hunk, and a file the patch has no hunks for
 // gets none.
 func TestDiffHunksIncludeHunksWithoutSymbols(t *testing.T) {
-	files := []types.DiffFile{{Path: "api.go"}, {Path: "other.go"}}
+	files := []diff.File{{Path: "api.go"}, {Path: "other.go"}}
 
 	attachHunks(files, twoHunkPatch, nil)
 
@@ -1396,7 +1397,7 @@ func TestDiffHunksIncludeHunksWithoutSymbols(t *testing.T) {
 
 // Symbols a hunk shares come innermost first: the smaller definition, then the later start.
 func TestDiffHunkSymbolsAreInnermostFirst(t *testing.T) {
-	files := []types.DiffFile{{Path: "api.go", Symbols: []types.DiffSymbol{{ID: "outer"}, {ID: "inner"}, {ID: "sibling"}}}}
+	files := []diff.File{{Path: "api.go", Symbols: []diff.Symbol{{ID: "outer"}, {ID: "inner"}, {ID: "sibling"}}}}
 	places := map[string]map[string]hunkPlace{"api.go": {
 		"outer":   {hunks: []int{0}, start: 3, extent: 10},
 		"inner":   {hunks: []int{0}, start: 5, extent: 2},
@@ -1412,14 +1413,14 @@ func TestDiffHunkSymbolsAreInnermostFirst(t *testing.T) {
 // declaration a reviewer and a split plan need named. An object-literal property SCIP
 // indexes as a symbol is not.
 func TestListedDiffSymbolsKeepTouchedDeclarations(t *testing.T) {
-	unreferenced := types.DiffSymbol{ID: goSymbol("api", "TestOpen()."), Label: "TestOpen"}
+	unreferenced := diff.Symbol{ID: goSymbol("api", "TestOpen()."), Label: "TestOpen"}
 	assert.True(t, listedDiffSymbol(unreferenced, "Function"), "a touched test function")
 	assert.True(t, listedDiffSymbol(unreferenced, "Method"), "a touched method")
 	assert.False(t, listedDiffSymbol(unreferenced, ""), "untouched and unreferenced")
 	assert.False(t, listedDiffSymbol(unreferenced, "UnspecifiedKind"), "a TypeScript property")
 	assert.False(t, listedDiffSymbol(unreferenced, "Parameter"))
-	assert.True(t, listedDiffSymbol(types.DiffSymbol{RefCount: 2, FileCount: 1}, ""), "referenced")
-	assert.True(t, listedDiffSymbol(types.DiffSymbol{PublicBeyondWorkspace: true}, ""), "exported")
+	assert.True(t, listedDiffSymbol(diff.Symbol{RefCount: 2, FileCount: 1}, ""), "referenced")
+	assert.True(t, listedDiffSymbol(diff.Symbol{PublicBeyondWorkspace: true}, ""), "exported")
 }
 
 func TestTouchedSymbolsNeverIncludeANamespace(t *testing.T) {
@@ -1469,11 +1470,11 @@ func TestPublicThroughCrossesPackagesAndProjects(t *testing.T) {
 	cg := newCallGraph(g, owner)
 
 	assert.Empty(t, cg.Boundary(helper))
-	assert.Equal(t, types.DiffBoundaryPackage, cg.Boundary(public))
-	assert.Equal(t, types.DiffBoundaryProject, cg.Boundary(exported))
-	assert.Equal(t, []types.DiffPublicPath{
-		{ID: exported, Qualified: "Exported", Boundary: types.DiffBoundaryProject},
-		{ID: public, Qualified: "Public", Boundary: types.DiffBoundaryPackage},
+	assert.Equal(t, diff.BoundaryPackage, cg.Boundary(public))
+	assert.Equal(t, diff.BoundaryProject, cg.Boundary(exported))
+	assert.Equal(t, []diff.PublicPath{
+		{ID: exported, Qualified: "Exported", Boundary: diff.BoundaryProject},
+		{ID: public, Qualified: "Public", Boundary: diff.BoundaryPackage},
 	}, impact.PublicThrough(cg, helper))
 }
 

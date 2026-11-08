@@ -1,6 +1,7 @@
 package review
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"cmp"
 	"fmt"
 	"slices"
@@ -14,17 +15,17 @@ import (
 // and the sentence that placed them, then the completeness line. A generated group is folded
 // to one line unless showGenerated. Nothing for a diff with no order, because the note it
 // carries says why.
-func OrderLines(rev types.Diff, showGenerated bool) []string {
+func OrderLines(rev diff.Diff, showGenerated bool) []string {
 	order := rev.Order
 	if order == nil {
 		return nil
 	}
 	ranges := hunkRanges(rev)
-	threads := map[string][]types.DiffThreadRef{}
+	threads := map[string][]diff.ThreadRef{}
 	for _, f := range rev.Files {
 		for _, t := range f.Threads {
 			if t.Hunk >= 0 {
-				key := types.DiffHunkRef{Path: f.Path, Index: t.Hunk}.Key()
+				key := diff.HunkRef{Path: f.Path, Index: t.Hunk}.Key()
 				threads[key] = append(threads[key], t)
 			}
 		}
@@ -32,7 +33,7 @@ func OrderLines(rev types.Diff, showGenerated bool) []string {
 	lines := []string{"", "reading order"}
 	for gi, g := range order.Groups {
 		lines = append(lines, "", fmt.Sprintf("group %d of %d: %s", gi+1, len(order.Groups), GroupTitle(g)))
-		if g.Kind == types.DiffGroupGenerated && !showGenerated {
+		if g.Kind == diff.GroupGenerated && !showGenerated {
 			lines = append(lines, "  folded: a target rewrites these; show them with --generated")
 			continue
 		}
@@ -65,7 +66,7 @@ func OrderLines(rev types.Diff, showGenerated bool) []string {
 
 // stepRisks is the tier evidence of each file a step reads, once per file,
 // in the words `magus affected ci` prints. A file with no tier is left out.
-func stepRisks(rev types.Diff, s types.DiffStep) []string {
+func stepRisks(rev diff.Diff, s diff.Step) []string {
 	risk := map[string]*types.TierEvidence{}
 	for _, f := range rev.Files {
 		risk[f.Path] = f.Risk
@@ -84,7 +85,7 @@ func stepRisks(rev types.Diff, s types.DiffStep) []string {
 }
 
 // GroupTitle is "kind around label (n hunks)", the heading a group carries wherever it is shown.
-func GroupTitle(g types.DiffGroup) string {
+func GroupTitle(g diff.Group) string {
 	title := string(g.Kind)
 	if g.Label != "" {
 		title += " around " + g.Label
@@ -97,7 +98,7 @@ func GroupTitle(g types.DiffGroup) string {
 
 // OrderCountLine states what was placed, and names every hunk or file the order could not
 // account for, so a reader never takes a short list for a whole one.
-func OrderCountLine(c types.DiffOrderCount) string {
+func OrderCountLine(c diff.OrderCount) string {
 	line := fmt.Sprintf("%d hunks, %d placed", c.HunkCount, c.Placed)
 	if len(c.Repeated) > 0 {
 		line += fmt.Sprintf("; %d placed more than once: %s", len(c.Repeated), refList(c.Repeated))
@@ -111,7 +112,7 @@ func OrderCountLine(c types.DiffOrderCount) string {
 	return line
 }
 
-func refList(refs []types.DiffHunkRef) string {
+func refList(refs []diff.HunkRef) string {
 	names := make([]string, 0, len(refs))
 	for _, r := range refs {
 		names = append(names, r.Key())
@@ -123,10 +124,10 @@ func refList(refs []types.DiffHunkRef) string {
 // declaration as the indexer rendered it, then "was" and the base declaration when the
 // signature changed. A symbol the indexer rendered no declaration for says so under its label,
 // so a missing line never reads as an unchanged one.
-func stepSignatures(rev types.Diff, step types.DiffStep) []string {
+func stepSignatures(rev diff.Diff, step diff.Step) []string {
 	type changed struct {
 		path string
-		sym  types.DiffSymbol
+		sym  diff.Symbol
 	}
 	var found []changed
 	seen := map[string]bool{}
@@ -174,11 +175,11 @@ func stepSignatures(rev types.Diff, step types.DiffStep) []string {
 }
 
 // hunkRanges names each hunk's lines of the new file, keyed by DiffHunkRef.Key.
-func hunkRanges(rev types.Diff) map[string]string {
+func hunkRanges(rev diff.Diff) map[string]string {
 	out := map[string]string{}
 	for _, f := range rev.Files {
 		for _, h := range f.Hunks {
-			out[types.DiffHunkRef{Path: f.Path, Index: h.Index}.Key()] = changeset.NewRange(f.Path, h.NewStart, h.NewCount)
+			out[diff.HunkRef{Path: f.Path, Index: h.Index}.Key()] = changeset.NewRange(f.Path, h.NewStart, h.NewCount)
 		}
 	}
 	return out

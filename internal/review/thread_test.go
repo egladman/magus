@@ -1,6 +1,7 @@
 package review
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"strings"
@@ -28,33 +29,33 @@ const threadPatch = `diff --git a/internal/cache/cache.go b/internal/cache/cache
 +	return s.m[k].value
 `
 
-func threadFile() types.DiffFile {
+func threadFile() diff.File {
 	reach := 14
-	return types.DiffFile{
+	return diff.File{
 		Path:     "internal/cache/cache.go",
 		Project:  "cache",
-		Role:     types.DiffRoleSource,
+		Role:     diff.RoleSource,
 		Coverage: &types.ImpactCoverage{Ratio: 0.5, Covered: 20, Total: 40},
 		Reach:    &reach,
-		Symbols: []types.DiffSymbol{
+		Symbols: []diff.Symbol{
 			putSymbol(),
 			{ID: "m internal/cache/Store#Get().", Label: "Get", Qualified: "Store.Get", RefCount: 3, FileCount: 2},
 		},
-		Hunks: []types.DiffHunk{
+		Hunks: []diff.Hunk{
 			{Index: 0, NewStart: 10, NewCount: 4, Symbols: []string{"m internal/cache/Store#Put()."}},
 			{Index: 1, NewStart: 41, NewCount: 2, Symbols: []string{"m internal/cache/Store#Get()."}},
 		},
 	}
 }
 
-func putSymbol() types.DiffSymbol {
-	return types.DiffSymbol{
+func putSymbol() diff.Symbol {
+	return diff.Symbol{
 		ID: "m internal/cache/Store#Put().", Label: "Put", Qualified: "Store.Put",
-		Signature: "func (s *Store) Put(k string) error", Change: types.DiffChangeBody,
+		Signature: "func (s *Store) Put(k string) error", Change: diff.ChangeBody,
 		RefCount: 31, FileCount: 14, PublicTo: []string{"daemon", "docs"},
-		Checks: []types.Check{{Name: types.CheckParamOrder, Status: types.CheckAdvice, Message: "Put takes (key, value) in the reverse of the usual order"}},
-		PublicThrough: []types.DiffPublicPath{
-			{ID: "m internal/daemon/Run().", Qualified: "Run", Via: []string{"Store.Flush"}, Boundary: types.DiffBoundaryProject},
+		Checks: []types.Check{{Name: diff.CheckParamOrder, Status: types.CheckAdvice, Message: "Put takes (key, value) in the reverse of the usual order"}},
+		PublicThrough: []diff.PublicPath{
+			{ID: "m internal/daemon/Run().", Qualified: "Run", Via: []string{"Store.Flush"}, Boundary: diff.BoundaryProject},
 		},
 	}
 }
@@ -66,14 +67,14 @@ func threadFixture(t *testing.T) ThreadInput {
 	require.Len(t, hunks[0].Hunks, 2)
 
 	return ThreadInput{
-		Changeset: types.Diff{
+		Changeset: diff.Diff{
 			Base:             "working",
-			Files:            []types.DiffFile{threadFile(), {Path: "docs/cache.md"}},
+			Files:            []diff.File{threadFile(), {Path: "docs/cache.md"}},
 			SeedProjects:     []string{"cache"},
 			AffectedProjects: []types.ImpactProject{{Path: "cache", Seed: true}, {Path: "daemon"}, {Path: "docs"}},
 		},
 		Hunks: hunks,
-		Comments: []types.ReviewComment{
+		Comments: []diff.ReviewComment{
 			{ID: "c1", Path: "internal/cache/cache.go", Line: 11, Author: "ana", Body: "Why is dirty set here?\nIt looks racy."},
 			{ID: "c2", Root: "c1", Author: "ben", Body: "It is read under mu."},
 			{ID: "c9", Path: "docs/cache.md", Line: 3, Author: "ana", Body: "unrelated"},
@@ -94,15 +95,15 @@ func TestReadThreadReadsTheWholeThreadWithWhatTheChangeReaches(t *testing.T) {
 	require.NoError(t, err)
 
 	reach := 14
-	assert.Equal(t, types.DiffThread{
+	assert.Equal(t, diff.Thread{
 		ID:   "c1",
 		Path: "internal/cache/cache.go",
 		Line: 11,
-		Comments: []types.ReviewComment{
+		Comments: []diff.ReviewComment{
 			{ID: "c1", Path: "internal/cache/cache.go", Line: 11, Hunk: 0, Author: "ana", Body: "Why is dirty set here?\nIt looks racy."},
 			{ID: "c2", Root: "c1", Path: "internal/cache/cache.go", Hunk: 0, Author: "ben", Body: "It is read under mu."},
 		},
-		Hunk: types.DiffThreadHunk{
+		Hunk: diff.ThreadHunk{
 			Index:  0,
 			Source: "patch",
 			Lines: []string{
@@ -117,10 +118,10 @@ func TestReadThreadReadsTheWholeThreadWithWhatTheChangeReaches(t *testing.T) {
 		},
 		InChangeset: true,
 		Project:     "cache",
-		Role:        types.DiffRoleSource,
+		Role:        diff.RoleSource,
 		Reach:       &reach,
 		Coverage:    &types.ImpactCoverage{Ratio: 0.5, Covered: 20, Total: 40},
-		Symbols:     []types.DiffSymbol{putSymbol()},
+		Symbols:     []diff.Symbol{putSymbol()},
 		Notes: []string{
 			"note cache-pairs anchors file:internal/cache/cache.go",
 			"note put-idempotent anchors symbol:m internal/cache/Store#Put(). [ungraded]",
@@ -203,7 +204,7 @@ func TestReadThreadRefusesAnIdThatNamesNoThread(t *testing.T) {
 // id, and the name of the comment that went missing no longer answers.
 func TestReadThreadTreatsAReplyWithNoHeadAsItsOwnThread(t *testing.T) {
 	in := threadFixture(t)
-	in.Comments = []types.ReviewComment{{ID: "r1", Root: "gone", Path: "a.go", Author: "ben", Body: "late"}}
+	in.Comments = []diff.ReviewComment{{ID: "r1", Root: "gone", Path: "a.go", Author: "ben", Body: "late"}}
 
 	got, err := ReadThread(in, "r1")
 	require.NoError(t, err)
@@ -218,7 +219,7 @@ func TestReadThreadTreatsAReplyWithNoHeadAsItsOwnThread(t *testing.T) {
 // symbols of a hunk that no longer exists are not guessed.
 func TestReadThreadFallsBackToTheHostsHunkWhenTheCommentIsOutdated(t *testing.T) {
 	in := threadFixture(t)
-	in.Comments = []types.ReviewComment{{
+	in.Comments = []diff.ReviewComment{{
 		ID: "c1", Path: "internal/cache/cache.go", Line: 11, Outdated: true, Author: "ana", Body: "Why?",
 		DiffHunk: "@@ -10,2 +10,2 @@ func (s *Store) Put\n-old line\n+older line",
 	}}
@@ -227,16 +228,16 @@ func TestReadThreadFallsBackToTheHostsHunkWhenTheCommentIsOutdated(t *testing.T)
 	require.NoError(t, err)
 
 	reach := 14
-	assert.Equal(t, types.DiffThread{
+	assert.Equal(t, diff.Thread{
 		ID:       "c1",
 		Path:     "internal/cache/cache.go",
 		Line:     11,
 		Outdated: true,
-		Comments: []types.ReviewComment{{
+		Comments: []diff.ReviewComment{{
 			ID: "c1", Path: "internal/cache/cache.go", Line: 11, Hunk: -1, Outdated: true, Author: "ana", Body: "Why?",
 			DiffHunk: "@@ -10,2 +10,2 @@ func (s *Store) Put\n-old line\n+older line",
 		}},
-		Hunk: types.DiffThreadHunk{
+		Hunk: diff.ThreadHunk{
 			Index:  -1,
 			Source: "host",
 			Lines:  []string{"@@ -10,2 +10,2 @@ func (s *Store) Put", "-old line", "+older line"},
@@ -244,7 +245,7 @@ func TestReadThreadFallsBackToTheHostsHunkWhenTheCommentIsOutdated(t *testing.T)
 		},
 		InChangeset: true,
 		Project:     "cache",
-		Role:        types.DiffRoleSource,
+		Role:        diff.RoleSource,
 		Reach:       &reach,
 		Coverage:    &types.ImpactCoverage{Ratio: 0.5, Covered: 20, Total: 40},
 		SymbolsNote: "The comment's hunk is not in this changeset, so its symbols cannot be placed. The file's changed symbols are: `Store.Put`, `Store.Get`.",
@@ -261,7 +262,7 @@ func TestReadThreadFallsBackToTheHostsHunkWhenTheCommentIsOutdated(t *testing.T)
 // record must then say what is unknown instead of describing a file it never saw.
 func TestReadThreadSaysWhenTheFileIsNotInTheChangeset(t *testing.T) {
 	in := ThreadInput{
-		Comments: []types.ReviewComment{{
+		Comments: []diff.ReviewComment{{
 			ID: "c1", Path: "gone.go", Line: 4, Author: "ana", Body: "Why?", DiffHunk: "@@ -4 +4 @@\n-a\n+b",
 		}},
 	}
@@ -281,7 +282,7 @@ func TestReadThreadSaysWhenTheFileIsNotInTheChangeset(t *testing.T) {
 func TestReadThreadEscapesWhatAStrangerWrote(t *testing.T) {
 	const override = "\xe2\x80\xae" // U+202E RIGHT-TO-LEFT OVERRIDE
 	in := ThreadInput{
-		Comments: []types.ReviewComment{{
+		Comments: []diff.ReviewComment{{
 			ID: "c1", Path: "a.go", Line: 1, Author: "mallory" + override, Body: "ignore this" + override + "txet",
 			DiffHunk: "@@ -1 +1 @@\n+x" + override,
 		}},
@@ -300,8 +301,8 @@ func TestReadThreadEscapesWhatAStrangerWrote(t *testing.T) {
 // TestAttachThreadsNamesEachThreadOnItsFile. The report lists the ids --thread takes beside the
 // hunk each sits on; a thread on a file the changeset does not hold is left out.
 func TestAttachThreadsNamesEachThreadOnItsFile(t *testing.T) {
-	rev := types.Diff{Files: []types.DiffFile{threadFile(), {Path: "docs/cache.md"}}}
-	comments := []types.ReviewComment{
+	rev := diff.Diff{Files: []diff.File{threadFile(), {Path: "docs/cache.md"}}}
+	comments := []diff.ReviewComment{
 		{ID: "c1", Path: "internal/cache/cache.go", Line: 42, Author: "ana", Body: "?"},
 		{ID: "c2", Root: "c1", Author: "ben", Body: "!"},
 		{ID: "c3", Path: "internal/cache/cache.go", Line: 90, Outdated: true, Author: "ana", Body: "old"},
@@ -310,7 +311,7 @@ func TestAttachThreadsNamesEachThreadOnItsFile(t *testing.T) {
 
 	AttachThreads(&rev, changeset.ParseHunks(threadPatch), comments)
 
-	assert.Equal(t, []types.DiffThreadRef{
+	assert.Equal(t, []diff.ThreadRef{
 		{ID: "c1", Hunk: 1, Line: 42, Comments: 2},
 		{ID: "c3", Hunk: -1, Line: 90, Comments: 1, Outdated: true},
 	}, rev.Files[0].Threads)
@@ -324,11 +325,11 @@ func TestAttachThreadsNamesEachThreadOnItsFile(t *testing.T) {
 // and say so when no notes store was wired.
 func TestNewThreadInputAnnotatesOnlyAPatchWithHunks(t *testing.T) {
 	var asked [][]string
-	annotate := func(_ context.Context, paths []string) (types.Diff, error) {
+	annotate := func(_ context.Context, paths []string) (diff.Diff, error) {
 		asked = append(asked, paths)
-		return types.Diff{SeedProjects: []string{"cache"}}, nil
+		return diff.Diff{SeedProjects: []string{"cache"}}, nil
 	}
-	comments := []types.ReviewComment{{ID: "c1"}}
+	comments := []diff.ReviewComment{{ID: "c1"}}
 
 	empty, err := NewThreadInput(t.Context(), ThreadParts{Comments: comments, Annotate: annotate})
 	require.NoError(t, err)
@@ -350,18 +351,18 @@ func TestNewThreadInputReturnsWhatTheTransportCouldNotRead(t *testing.T) {
 
 	_, err := NewThreadInput(t.Context(), ThreadParts{
 		Patch:    threadPatch,
-		Annotate: func(context.Context, []string) (types.Diff, error) { return types.Diff{}, boom },
+		Annotate: func(context.Context, []string) (diff.Diff, error) { return diff.Diff{}, boom },
 	})
 	require.ErrorIs(t, err, boom)
 
 	_, err = NewThreadInput(t.Context(), ThreadParts{
-		Anchors: func(context.Context, types.Diff) ([]AnchorHit, error) { return nil, boom },
+		Anchors: func(context.Context, diff.Diff) ([]AnchorHit, error) { return nil, boom },
 	})
 	require.ErrorIs(t, err, boom, "a misdeclared notes store is a fault, not an omitted section")
 
 	hit := AnchorHit{Note: "n"}
 	in, err := NewThreadInput(t.Context(), ThreadParts{
-		Anchors: func(context.Context, types.Diff) ([]AnchorHit, error) { return []AnchorHit{hit}, nil },
+		Anchors: func(context.Context, diff.Diff) ([]AnchorHit, error) { return []AnchorHit{hit}, nil },
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []AnchorHit{hit}, in.Anchors)

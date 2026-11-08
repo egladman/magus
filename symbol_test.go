@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"bytes"
 	"context"
 	"errors"
@@ -1488,15 +1489,15 @@ func TestInstalledIndexesKeepsInProcessIndexers(t *testing.T) {
 // A touched project with no indexer is named, so "found nothing" is only ever said about
 // projects that were checked. A regenerated file is not a change of its own.
 func TestUncoveredProjectsAreTheOnesTheChecksCannotSee(t *testing.T) {
-	files := []types.DiffFile{
+	files := []diff.File{
 		{Path: "a.go", Project: "."},
 		{Path: "docs/x.md", Project: "docs"},
 		{Path: "docs/y.md", Project: "docs"},
-		{Path: "web/gen/z.ts", Project: "web", Role: types.DiffRoleOutput},
+		{Path: "web/gen/z.ts", Project: "web", Role: diff.RoleOutput},
 		{Path: "README", Project: ""},
 	}
 
-	assert.Equal(t, []types.DiffUncovered{{Project: "docs", Reason: types.DiffUncoveredNoIndexer}},
+	assert.Equal(t, []diff.Uncovered{{Project: "docs", Reason: diff.UncoveredNoIndexer}},
 		uncoveredProjects(files, []string{"."}))
 }
 

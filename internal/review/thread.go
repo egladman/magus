@@ -1,13 +1,13 @@
 package review
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"context"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/types"
 )
 
 // threadCallerLimit caps the callers named per symbol. The cut is announced in the line it
@@ -20,12 +20,12 @@ type ThreadInput struct {
 	// Changeset is the annotated changeset the thread is read against. It may be the zero value:
 	// a thread outlives the working tree it was written on, and the record then carries the
 	// thread and the host's own hunk text alone.
-	Changeset types.Diff
+	Changeset diff.Diff
 	// Hunks are the patch's hunks, which give the text of the hunk a comment sits in and place
 	// each comment onto it. Nil leaves every comment unplaced.
 	Hunks []changeset.FileHunks
 	// Comments are the review's comments, flat as the host reports them, oldest first.
-	Comments []types.ReviewComment
+	Comments []diff.ReviewComment
 	// Anchors are the note anchors the changeset touches; the record keeps the ones that name
 	// the thread's file or the symbols changed in it.
 	Anchors []AnchorHit
@@ -42,15 +42,15 @@ type ThreadParts struct {
 	// the tree it was written on.
 	Patch string
 	// Comments are the review's comments, as the host reports them.
-	Comments []types.ReviewComment
+	Comments []diff.ReviewComment
 	// Annotate computes the annotated changeset for the paths the patch touches. It is called
 	// only when the patch has hunks, and with no bound of its own: only a forge call is worth
 	// cutting short. The record never reads the reading order, so an Annotate that can skip it
 	// should.
-	Annotate func(ctx context.Context, paths []string) (types.Diff, error)
+	Annotate func(ctx context.Context, paths []string) (diff.Diff, error)
 	// Anchors joins the notes stores against the changeset. Nil is a transport with no notes
 	// store wired, and the record then names note anchors among what it could not measure.
-	Anchors func(ctx context.Context, rev types.Diff) ([]AnchorHit, error)
+	Anchors func(ctx context.Context, rev diff.Diff) ([]AnchorHit, error)
 }
 
 // NewThreadInput assembles a record's input from what a transport read. It returns the error of
@@ -90,14 +90,14 @@ func NewThreadInput(ctx context.Context, p ThreadParts) (ThreadInput, error) {
 //
 // Everything quoted from the host (comment bodies, authors and hunk text) is escaped of the
 // characters a renderer obeys but a reader cannot see.
-func ReadThread(in ThreadInput, id string) (types.DiffThread, error) {
+func ReadThread(in ThreadInput, id string) (diff.Thread, error) {
 	thread, err := changeset.FindThread(changeset.PlaceThreads(in.Hunks, in.Comments), id)
 	if err != nil {
-		return types.DiffThread{}, err
+		return diff.Thread{}, err
 	}
 	head := thread.Head
 	file, inChangeset := changedFile(in.Changeset, head.Path)
-	out := types.DiffThread{
+	out := diff.Thread{
 		ID:          thread.ID(),
 		Path:        head.Path,
 		Line:        head.Line,
@@ -118,10 +118,10 @@ func ReadThread(in ThreadInput, id string) (types.DiffThread, error) {
 
 // AttachThreads sets each changed file's Threads from the review's comments, placed onto
 // hunks. A thread on a file the changeset does not hold is left out, since a report lists files.
-func AttachThreads(rev *types.Diff, hunks []changeset.FileHunks, comments []types.ReviewComment) {
-	byPath := map[string][]types.DiffThreadRef{}
+func AttachThreads(rev *diff.Diff, hunks []changeset.FileHunks, comments []diff.ReviewComment) {
+	byPath := map[string][]diff.ThreadRef{}
 	for _, t := range changeset.GroupThreads(changeset.PlaceThreads(hunks, comments)) {
-		byPath[t.Head.Path] = append(byPath[t.Head.Path], types.DiffThreadRef{
+		byPath[t.Head.Path] = append(byPath[t.Head.Path], diff.ThreadRef{
 			ID:       t.ID(),
 			Hunk:     t.Head.Hunk,
 			Line:     t.Head.Line,
@@ -135,7 +135,7 @@ func AttachThreads(rev *types.Diff, hunks []changeset.FileHunks, comments []type
 }
 
 // ThreadRefLine is how a report names one thread beside the code it sits on.
-func ThreadRefLine(r types.DiffThreadRef) string {
+func ThreadRefLine(r diff.ThreadRef) string {
 	line := fmt.Sprintf("thread %s, %d %s", r.ID, r.Comments, plural(r.Comments, "comment", "comments"))
 	if r.Outdated {
 		line += ", outdated"
@@ -144,7 +144,7 @@ func ThreadRefLine(r types.DiffThreadRef) string {
 }
 
 // ThreadLines renders a record for the person reading it in a terminal.
-func ThreadLines(t types.DiffThread) []string {
+func ThreadLines(t diff.Thread) []string {
 	lines := []string{fmt.Sprintf("thread %s on %s", t.ID, threadWhere(t)), ""}
 	lines = append(lines, "conversation, oldest first, quoted from the review:")
 	for _, c := range t.Comments {
@@ -190,18 +190,18 @@ func ThreadLines(t types.DiffThread) []string {
 
 // changedFile finds path in the changeset. The thread can sit on a file the working tree no
 // longer changes, and the record then says so instead of describing some other file.
-func changedFile(rev types.Diff, path string) (types.DiffFile, bool) {
+func changedFile(rev diff.Diff, path string) (diff.File, bool) {
 	for _, f := range rev.Files {
 		if f.Path == path {
 			return f, true
 		}
 	}
-	return types.DiffFile{}, false
+	return diff.File{}, false
 }
 
 // quoted returns the comments with their author and body escaped.
-func quoted(comments []types.ReviewComment) []types.ReviewComment {
-	out := make([]types.ReviewComment, len(comments))
+func quoted(comments []diff.ReviewComment) []diff.ReviewComment {
+	out := make([]diff.ReviewComment, len(comments))
 	for i, c := range comments {
 		c.Author, c.Body, c.DiffHunk = printable(c.Author), printable(c.Body), printable(c.DiffHunk)
 		out[i] = c
@@ -211,7 +211,7 @@ func quoted(comments []types.ReviewComment) []types.ReviewComment {
 
 // threadWhere is path:line for the thread's first comment, saying when the host marked the
 // line as gone from the head.
-func threadWhere(t types.DiffThread) string {
+func threadWhere(t diff.Thread) string {
 	where := t.Path
 	if t.Path != "" && t.Line > 0 {
 		where = fmt.Sprintf("%s:%d", t.Path, t.Line)
@@ -228,7 +228,7 @@ func threadWhere(t types.DiffThread) string {
 // it now. An outdated comment, or one on a file the changeset no longer holds, falls back to the
 // host's own copy, the only record of the code it was about. Both can be absent, and then the
 // lines are empty and the note says why rather than leaving a heading with nothing under it.
-func threadHunk(files []changeset.FileHunks, head types.ReviewComment) types.DiffThreadHunk {
+func threadHunk(files []changeset.FileHunks, head diff.ReviewComment) diff.ThreadHunk {
 	if head.Hunk >= 0 && !head.Outdated {
 		for _, f := range files {
 			if f.Path != head.Path {
@@ -242,7 +242,7 @@ func threadHunk(files []changeset.FileHunks, head types.ReviewComment) types.Dif
 				if h.Display != nil {
 					body = h.Display
 				}
-				return types.DiffThreadHunk{
+				return diff.ThreadHunk{
 					Index:  h.Index,
 					Source: "patch",
 					Lines:  printableLines(append([]string{h.Header}, body...)),
@@ -252,14 +252,14 @@ func threadHunk(files []changeset.FileHunks, head types.ReviewComment) types.Dif
 		}
 	}
 	if head.DiffHunk != "" {
-		return types.DiffThreadHunk{
+		return diff.ThreadHunk{
 			Index:  -1,
 			Source: "host",
 			Lines:  printableLines(strings.Split(strings.TrimRight(head.DiffHunk, "\n"), "\n")),
 			Note:   "the host's copy of the hunk, as it was when the comment was made",
 		}
 	}
-	return types.DiffThreadHunk{Index: -1, Note: "no hunk text: the comment sits outside this changeset and the host sent none"}
+	return diff.ThreadHunk{Index: -1, Note: "no hunk text: the comment sits outside this changeset and the host sent none"}
 }
 
 // hunkSymbols returns the changed symbols in the hunk the thread sits in.
@@ -267,7 +267,7 @@ func threadHunk(files []changeset.FileHunks, head types.ReviewComment) types.Dif
 // The second result is set when the question has no per-hunk answer, and says why. A comment
 // whose hunk is gone cannot be matched to symbols, and listing the whole file's would put
 // symbols that were never discussed under the comment; the note says what was left out.
-func hunkSymbols(file types.DiffFile, head types.ReviewComment) ([]types.DiffSymbol, string) {
+func hunkSymbols(file diff.File, head diff.ReviewComment) ([]diff.Symbol, string) {
 	if len(file.Symbols) == 0 {
 		return nil, "No symbol index covers this file, so the symbols changed here are unknown. That is not a finding that there are none."
 	}
@@ -281,9 +281,9 @@ func hunkSymbols(file types.DiffFile, head types.ReviewComment) ([]types.DiffSym
 			ids = h.Symbols
 		}
 	}
-	var out []types.DiffSymbol
+	var out []diff.Symbol
 	for _, id := range ids {
-		if i := slices.IndexFunc(file.Symbols, func(s types.DiffSymbol) bool { return s.ID == id }); i >= 0 {
+		if i := slices.IndexFunc(file.Symbols, func(s diff.Symbol) bool { return s.ID == id }); i >= 0 {
 			out = append(out, file.Symbols[i])
 		}
 	}
@@ -293,7 +293,7 @@ func hunkSymbols(file types.DiffFile, head types.ReviewComment) ([]types.DiffSym
 	return out, ""
 }
 
-func symbolNames(syms []types.DiffSymbol) []string {
+func symbolNames(syms []diff.Symbol) []string {
 	out := make([]string, 0, len(syms))
 	for _, s := range syms {
 		out = append(out, fmt.Sprintf("`%s`", changeset.SymbolName(s)))
@@ -303,7 +303,7 @@ func symbolNames(syms []types.DiffSymbol) []string {
 
 // fileLine is the file's role, project, reach and coverage in one line. Facts nobody measured
 // are omitted rather than zeroed.
-func fileLine(t types.DiffThread) string {
+func fileLine(t diff.Thread) string {
 	facts := []string{t.Path}
 	if t.Role != "" {
 		facts = append(facts, t.Role)
@@ -322,7 +322,7 @@ func fileLine(t types.DiffThread) string {
 
 // symbolLines renders one changed symbol per line: its definition, then the facts that say who
 // feels it. Facts the index did not record are omitted rather than zeroed.
-func symbolLines(syms []types.DiffSymbol) []string {
+func symbolLines(syms []diff.Symbol) []string {
 	out := make([]string, 0, len(syms))
 	for _, s := range syms {
 		facts := []string{}
@@ -352,7 +352,7 @@ func symbolLines(syms []types.DiffSymbol) []string {
 
 // callerLines names the callers through which a symbol reaches code used outside its package or
 // project, nearest chain first.
-func callerLines(paths []types.DiffPublicPath) string {
+func callerLines(paths []diff.PublicPath) string {
 	if len(paths) == 0 {
 		return ""
 	}
@@ -379,7 +379,7 @@ func callerLines(paths []types.DiffPublicPath) string {
 }
 
 // fileAnchorLines keeps the anchor hits that name this file or one of its changed symbols.
-func fileAnchorLines(hits []AnchorHit, file types.DiffFile) []string {
+func fileAnchorLines(hits []AnchorHit, file diff.File) []string {
 	if file.Path == "" {
 		return nil
 	}
@@ -397,7 +397,7 @@ func fileAnchorLines(hits []AnchorHit, file types.DiffFile) []string {
 }
 
 // changeLine is the change as a whole, in one sentence.
-func changeLine(rev types.Diff) string {
+func changeLine(rev diff.Diff) string {
 	if len(rev.Files) == 0 {
 		return ""
 	}
@@ -413,7 +413,7 @@ func changeLine(rev types.Diff) string {
 
 // threadGaps lists what the record could not say, so each missing field reads as a gap rather
 // than as a clean result.
-func threadGaps(in ThreadInput, file types.DiffFile, inChangeset bool) []string {
+func threadGaps(in ThreadInput, file diff.File, inChangeset bool) []string {
 	rev := in.Changeset
 	var gaps []string
 	if in.AnchorsUnread != "" {

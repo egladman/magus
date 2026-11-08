@@ -21,6 +21,7 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	difftypes "github.com/egladman/magus/types/diff"
 	imagetypes "github.com/egladman/magus/types/image"
 	"github.com/egladman/magus/types/trail"
 )
@@ -1490,13 +1491,13 @@ func decodeLifecycle(v vm.Value, path string) (spells.Lifecycle, error) {
 	return out, nil
 }
 
-// DecodeReviewTarget decodes a Buzz ReviewTarget, an object instance or a map, into a types.ReviewTarget.
-func DecodeReviewTarget(v vm.Value) (types.ReviewTarget, error) {
-	return decodeReviewTarget(v, "reviewTarget")
+// DecodeDiffReviewTarget decodes a Buzz ReviewTarget, an object instance or a map, into a difftypes.ReviewTarget.
+func DecodeDiffReviewTarget(v vm.Value) (difftypes.ReviewTarget, error) {
+	return decodeDiffReviewTarget(v, "reviewTarget")
 }
 
-func decodeReviewTarget(v vm.Value, path string) (types.ReviewTarget, error) {
-	var out types.ReviewTarget
+func decodeDiffReviewTarget(v vm.Value, path string) (difftypes.ReviewTarget, error) {
+	var out difftypes.ReviewTarget
 	fields, ok := v.MapView()
 	if !ok {
 		return out, mismatch(path, "ReviewTarget", v)
@@ -1547,13 +1548,13 @@ func decodeReviewTarget(v vm.Value, path string) (types.ReviewTarget, error) {
 	return out, nil
 }
 
-// DecodeReviewComment decodes a Buzz ReviewComment, an object instance or a map, into a types.ReviewComment.
-func DecodeReviewComment(v vm.Value) (types.ReviewComment, error) {
-	return decodeReviewComment(v, "reviewComment")
+// DecodeDiffReviewComment decodes a Buzz ReviewComment, an object instance or a map, into a difftypes.ReviewComment.
+func DecodeDiffReviewComment(v vm.Value) (difftypes.ReviewComment, error) {
+	return decodeDiffReviewComment(v, "reviewComment")
 }
 
-func decodeReviewComment(v vm.Value, path string) (types.ReviewComment, error) {
-	var out types.ReviewComment
+func decodeDiffReviewComment(v vm.Value, path string) (difftypes.ReviewComment, error) {
+	var out difftypes.ReviewComment
 	fields, ok := v.MapView()
 	if !ok {
 		return out, mismatch(path, "ReviewComment", v)
@@ -9272,9 +9273,9 @@ func decodeProviderListLifecycles(v vm.Value) ([]spells.Lifecycle, error) {
 	return out, nil
 }
 
-func decodeProviderFindReview(v vm.Value) (types.ReviewTarget, error) {
-	var out types.ReviewTarget
-	xFindReview, err := decodeReviewTarget(v, "find_review")
+func decodeProviderFindReview(v vm.Value) (difftypes.ReviewTarget, error) {
+	var out difftypes.ReviewTarget
+	xFindReview, err := decodeDiffReviewTarget(v, "find_review")
 	if err != nil {
 		return out, err
 	}
@@ -9302,16 +9303,16 @@ func decodeProviderReplyReview(v vm.Value) (types.Ack, error) {
 	return out, nil
 }
 
-func decodeProviderReviewThreads(v vm.Value) ([]types.ReviewComment, error) {
-	var out []types.ReviewComment
+func decodeProviderReviewThreads(v vm.Value) ([]difftypes.ReviewComment, error) {
+	var out []difftypes.ReviewComment
 	listReviewThreads, err := decodeList(v, "review_threads", "[ReviewComment]")
 	if err != nil {
 		return out, err
 	}
 	if len(listReviewThreads) > 0 {
-		itemsReviewThreads := make([]types.ReviewComment, len(listReviewThreads))
+		itemsReviewThreads := make([]difftypes.ReviewComment, len(listReviewThreads))
 		for indexReviewThreads, itemReviewThreads := range listReviewThreads {
-			xReviewThreadsItem, err := decodeReviewComment(itemReviewThreads, fmt.Sprintf("%s[%d]", "review_threads", indexReviewThreads))
+			xReviewThreadsItem, err := decodeDiffReviewComment(itemReviewThreads, fmt.Sprintf("%s[%d]", "review_threads", indexReviewThreads))
 			if err != nil {
 				return out, err
 			}

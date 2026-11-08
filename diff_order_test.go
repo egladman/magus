@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"context"
 	"fmt"
 	"os"
@@ -48,15 +49,15 @@ func orderTreeAt(t *testing.T, files map[string]string) string {
 
 // orderDiffFiles reads the files of patch the way attachHunks would, attaching the symbols
 // named per path to each file's first hunk.
-func orderDiffFiles(patch string, symbols map[string][]string) []types.DiffFile {
-	var out []types.DiffFile
+func orderDiffFiles(patch string, symbols map[string][]string) []diff.File {
+	var out []diff.File
 	for _, pf := range changeset.Parse(patch) {
-		f := types.DiffFile{Path: pf.Path}
+		f := diff.File{Path: pf.Path}
 		for _, id := range symbols[pf.Path] {
-			f.Symbols = append(f.Symbols, types.DiffSymbol{ID: id, Label: id})
+			f.Symbols = append(f.Symbols, diff.Symbol{ID: id, Label: id})
 		}
 		for i, h := range pf.Hunks {
-			dh := types.DiffHunk{Index: h.Index, Digest: h.Digest, OldStart: h.OldStart, OldCount: h.OldCount, NewStart: h.NewStart, NewCount: h.NewCount}
+			dh := diff.Hunk{Index: h.Index, Digest: h.Digest, OldStart: h.OldStart, OldCount: h.OldCount, NewStart: h.NewStart, NewCount: h.NewCount}
 			if i == 0 {
 				dh.Symbols = symbols[pf.Path]
 			}
@@ -67,7 +68,7 @@ func orderDiffFiles(patch string, symbols map[string][]string) []types.DiffFile 
 	return out
 }
 
-func orderStepPaths(o types.DiffOrder) []string {
+func orderStepPaths(o diff.Order) []string {
 	var out []string
 	for _, g := range o.Groups {
 		for _, s := range g.Steps {
@@ -173,7 +174,7 @@ deleted file mode 100644
 func TestDiffOrderIsAbsentWhenTheIndexIsNotCurrent(t *testing.T) {
 	t.Parallel()
 
-	out := types.Diff{Files: orderDiffFiles(orderPatch, nil)}
+	out := diff.Diff{Files: orderDiffFiles(orderPatch, nil)}
 	var m *Magus
 
 	m.attachOrder(context.Background(), &out, nil, orderPatch, "the symbol index is not current for this tree")
@@ -295,9 +296,9 @@ func TestDiffOrderRefusesAPatchPathOutsideTheWorkspace(t *testing.T) {
 func TestDiffOrderChangedDefinitionsAreUniqueAndSorted(t *testing.T) {
 	t.Parallel()
 
-	files := []types.DiffFile{
-		{Hunks: []types.DiffHunk{{Symbols: []string{"b", "a"}}, {Symbols: []string{"a"}}}},
-		{Hunks: []types.DiffHunk{{Symbols: []string{"c"}}, {}}},
+	files := []diff.File{
+		{Hunks: []diff.Hunk{{Symbols: []string{"b", "a"}}, {Symbols: []string{"a"}}}},
+		{Hunks: []diff.Hunk{{Symbols: []string{"c"}}, {}}},
 	}
 
 	assert.Equal(t, []string{"a", "b", "c"}, changedDefinitions(files))
@@ -312,7 +313,7 @@ func TestDiffOrderLinksKeepOnlyPairsOfChangedSymbols(t *testing.T) {
 		{Source: "impl", Target: "unchanged", Relation: types.RelationImplements},
 		{Source: "impl", Target: "iface", Relation: types.RelationCalls},
 	})
-	files := []types.DiffFile{{Hunks: []types.DiffHunk{{Symbols: []string{"impl", "iface"}}}}}
+	files := []diff.File{{Hunks: []diff.Hunk{{Symbols: []string{"impl", "iface"}}}}}
 
 	assert.Equal(t, []changeset.OrderLink{{Implementer: "impl", Interface: "iface"}}, orderLinks(g, files))
 	assert.Nil(t, orderLinks(nil, files))
@@ -326,8 +327,8 @@ func TestDiffHunksSplitSymbolsAcrossHunks(t *testing.T) {
 		rangedSymbol(open, "Open", "api.go:3", 5, "Function"),
 		rangedSymbol(closeID, "Close", "api.go:20", 22, "Function"),
 	)
-	files := []types.DiffFile{{Path: "api.go", Symbols: []types.DiffSymbol{{ID: closeID}, {ID: open}}}}
-	touched := touchedSymbols(head, twoHunkPatch, map[string]*types.DiffFile{"api.go": &files[0]})
+	files := []diff.File{{Path: "api.go", Symbols: []diff.Symbol{{ID: closeID}, {ID: open}}}}
+	touched := touchedSymbols(head, twoHunkPatch, map[string]*diff.File{"api.go": &files[0]})
 	places := map[string]map[string]hunkPlace{"api.go": {}}
 	for id, ts := range touched {
 		places["api.go"][id] = ts.place
@@ -339,7 +340,7 @@ func TestDiffHunksSplitSymbolsAcrossHunks(t *testing.T) {
 	require.Len(t, parsed, 1)
 	require.Len(t, parsed[0].Hunks, 2)
 	h0, h1 := parsed[0].Hunks[0], parsed[0].Hunks[1]
-	assert.Equal(t, []types.DiffHunk{
+	assert.Equal(t, []diff.Hunk{
 		{Index: 0, Digest: h0.Digest, OldStart: 2, OldCount: 4, NewStart: 2, NewCount: 4, Declaration: "package api", Symbols: []string{open}},
 		{Index: 1, Digest: h1.Digest, OldStart: 20, OldCount: 3, NewStart: 20, NewCount: 3, Declaration: "func Close() {", Symbols: []string{closeID}},
 	}, files[0].Hunks)

@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"fmt"
 	"testing"
 
@@ -14,7 +15,7 @@ type TouchedFunctionsSuite struct {
 	suite.Suite
 	defs   map[string]symbolDef
 	ids    map[string]string
-	byPath map[string]*types.DiffFile
+	byPath map[string]*diff.File
 }
 
 func TestTouchedFunctionsSuite(t *testing.T) { suite.Run(t, new(TouchedFunctionsSuite)) }
@@ -52,21 +53,21 @@ func (s *TouchedFunctionsSuite) SetupTest() {
 	for id, def := range s.defs {
 		s.ids[def.node.Label] = id
 	}
-	s.byPath = map[string]*types.DiffFile{
+	s.byPath = map[string]*diff.File{
 		file:                           {Path: file, Project: "."},
 		"internal/trail/trail_test.go": {Path: "internal/trail/trail_test.go", Project: "."},
-		"internal/trail/gen.go":        {Path: "internal/trail/gen.go", Project: ".", Role: types.DiffRoleOutput},
+		"internal/trail/gen.go":        {Path: "internal/trail/gen.go", Project: ".", Role: diff.RoleOutput},
 	}
 }
 
 func (s *TouchedFunctionsSuite) baseline() conformanceInput {
 	return conformanceInput{changes: map[string]string{
-		s.ids["Add"]:      types.DiffChangeAdded,
-		s.ids["Resign"]:   types.DiffChangeSignature,
-		s.ids["Grow"]:     types.DiffChangeBody,
-		s.ids["Shape"]:    types.DiffChangeBody,
-		s.ids["TestGrow"]: types.DiffChangeBody,
-		s.ids["Made"]:     types.DiffChangeBody,
+		s.ids["Add"]:      diff.ChangeAdded,
+		s.ids["Resign"]:   diff.ChangeSignature,
+		s.ids["Grow"]:     diff.ChangeBody,
+		s.ids["Shape"]:    diff.ChangeBody,
+		s.ids["TestGrow"]: diff.ChangeBody,
+		s.ids["Made"]:     diff.ChangeBody,
 	}}
 }
 
@@ -95,7 +96,7 @@ func (s *TouchedFunctionsSuite) TestAFunctionCarriesItsExtentDigestAndLanguage()
 
 	s.Equal(touchedFunction{
 		Symbol: s.ids["Grow"], Label: "Grow", Path: "internal/trail/trail.go", Language: "go",
-		Digest: "d-Grow", Change: types.DiffChangeBody, Line: 30, EndLine: 40,
+		Digest: "d-Grow", Change: diff.ChangeBody, Line: 30, EndLine: 40,
 	}, got[1])
 }
 

@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"cmp"
 	"fmt"
 	"maps"
@@ -67,7 +68,7 @@ const (
 // therefore needs one of the three.
 type sprawlCheck struct{}
 
-func (sprawlCheck) name() string { return types.CheckSiblingSprawl }
+func (sprawlCheck) name() string { return diff.CheckSiblingSprawl }
 
 func (sprawlCheck) run(x *namingIndex) []finding {
 	subjects := map[*namingDecl]bool{}

@@ -34,6 +34,7 @@
 package review
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -192,11 +193,11 @@ func ReadStates(cacheDir string, paths []string, digestOf func(path string) stri
 		}
 		switch {
 		case store.Covers(p, digest):
-			out[p] = types.DiffReadRead
+			out[p] = diff.ReadRead
 		case store[p].Digest != "":
-			out[p] = types.DiffReadStale
+			out[p] = diff.ReadStale
 		default:
-			out[p] = types.DiffReadUnread
+			out[p] = diff.ReadUnread
 		}
 	}
 	return out, nil

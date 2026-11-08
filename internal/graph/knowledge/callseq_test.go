@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"fmt"
 	"slices"
 	"strings"
@@ -119,7 +120,7 @@ func callSeqAdvice(t *testing.T, got map[string][]types.Check, id string) []stri
 	t.Helper()
 	var out []string
 	for _, c := range got[id] {
-		require.Equal(t, types.CheckCallSequence, c.Name)
+		require.Equal(t, diff.CheckCallSequence, c.Name)
 		out = append(out, c.Message)
 	}
 	return out
@@ -133,7 +134,7 @@ func TestCallSeqCheckReportsACopiedPipeline(t *testing.T) {
 		Subjects: []string{symbolID(b)}, Introduced: map[string]bool{symbolID(b): true}, Conformance: callSeqOptions(),
 	})
 
-	assert.Equal(t, map[string][]types.Check{symbolID(b): {advice(types.CheckCallSequence,
+	assert.Equal(t, map[string][]types.Check{symbolID(b): {advice(diff.CheckCallSequence,
 		"`B` calls 8 workspace functions in the order `A` does, past the configured anchor of 7 for call-sequence source",
 		"in order: S1, S2, S3, S4, S5, S6, S7, S8",
 		"partner: internal/a/a.go#A at internal/a/a.go:1",

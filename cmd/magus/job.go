@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"bytes"
 	"cmp"
 	"context"
@@ -2143,7 +2144,7 @@ func endCheckouts(ctx context.Context, out io.Writer, store *job.Store, ended []
 		var out []string
 		for _, f := range files {
 			installed := slices.ContainsFunc(toolRows, func(t types.HarnessTools) bool { return t.Holds(f.Path) })
-			if installed || f.Role == types.DiffRoleOutput || f.Role == types.DiffRoleMaintained {
+			if installed || f.Role == diff.RoleOutput || f.Role == diff.RoleMaintained {
 				out = append(out, f.Path)
 			}
 		}

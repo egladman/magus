@@ -3,6 +3,15 @@
 # then a package's config, then a type's config.
 version: v1alpha1
 packages:
+  github.com/egladman/magus/types/diff:
+    types:
+      Author: {config: {name: DiffAuthor}}
+      GroupKind: {config: {name: DiffGroupKind}}
+      ReadState: {config: {name: DiffReadState}}
+      UncoveredReason: {config: {name: DiffUncoveredReason}}
+      WhyRelation: {config: {name: DiffWhyRelation}}
+      CommentAnchorRung: {}
+      SuggestionStatus: {}
   github.com/egladman/magus/types/trail:
     types:
       Section: {config: {name: TrailSection}}
@@ -45,7 +54,6 @@ packages:
       ChangeStatus: {}
       CheckStatus: {}
       ClaimKind: {}
-      CommentAnchorRung: {}
       ConcurrencyProfile: {}
       ConflictKind: {}
       ConformanceMetric: {}
@@ -54,11 +62,6 @@ packages:
       CredentialKind: {}
       DelegableClass: {}
       DiagnosticOrigin: {config: {zeroCase: unknown}}
-      DiffAuthor: {}
-      DiffGroupKind: {}
-      DiffReadState: {}
-      DiffUncoveredReason: {}
-      DiffWhyRelation: {}
       DriftPolicy: {}
       DuplicationPlacement: {}
       DuplicationShape: {}
@@ -105,7 +108,6 @@ packages:
       SkillVariant: {config: {zeroCase: ""}}
       SlotSource: {}
       SpawnKind: {config: {cases: {"continue": continuation}}}
-      SuggestionStatus: {}
       SymbolIndexFreshness: {}
       SymbolOccurrenceStatus: {}
       TermStyle: {}

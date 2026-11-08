@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -295,7 +296,7 @@ func (s *refsSourceSuite) TestMarksATestFile() {
 func (s *refsSourceSuite) TestMarksAGeneratedFile() {
 	files := []types.SymbolOccurrenceFile{{File: "gen/a.go"}, {File: "a.go"}}
 	s.Empty(markOccurrenceFiles(context.Background(), files, func(context.Context, []string) ([]types.FileEntry, error) {
-		return []types.FileEntry{{Path: "gen/a.go", Role: types.DiffRoleOutput}, {Path: "a.go", Role: "source"}}, nil
+		return []types.FileEntry{{Path: "gen/a.go", Role: diff.RoleOutput}, {Path: "a.go", Role: "source"}}, nil
 	}))
 	s.True(files[0].Generated)
 	s.False(files[1].Generated)

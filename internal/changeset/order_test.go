@@ -1,6 +1,7 @@
 package changeset
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"fmt"
 	"math/rand/v2"
 	"strings"
@@ -11,19 +12,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func orderHunk(index, start, count int, symbols ...string) types.DiffHunk {
-	return types.DiffHunk{Index: index, Digest: fmt.Sprintf("digest-%d", index), NewStart: start, NewCount: count, Symbols: symbols}
+func orderHunk(index, start, count int, symbols ...string) diff.Hunk {
+	return diff.Hunk{Index: index, Digest: fmt.Sprintf("digest-%d", index), NewStart: start, NewCount: count, Symbols: symbols}
 }
 
 // orderFile builds an OrderFile whose Symbols are the ones its hunks name.
-func orderFile(path string, hunks ...types.DiffHunk) OrderFile {
+func orderFile(path string, hunks ...diff.Hunk) OrderFile {
 	f := OrderFile{Path: path, Hunks: hunks}
 	seen := map[string]bool{}
 	for _, h := range hunks {
 		for _, s := range h.Symbols {
 			if !seen[s] {
 				seen[s] = true
-				f.Symbols = append(f.Symbols, types.DiffSymbol{ID: s, Label: s})
+				f.Symbols = append(f.Symbols, diff.Symbol{ID: s, Label: s})
 			}
 		}
 	}
@@ -38,7 +39,7 @@ func orderIsTest(path string) bool { return strings.HasSuffix(path, "_test.go") 
 
 // orderOutline renders an order as "step path#index relation" lines under "group kind label
 // size" headers, the shape the ordering tests assert against.
-func orderOutline(o types.DiffOrder) []string {
+func orderOutline(o diff.Order) []string {
 	var out []string
 	for _, g := range o.Groups {
 		out = append(out, fmt.Sprintf("group %s %q %d", g.Kind, g.Label, g.HunkCount))
@@ -51,7 +52,7 @@ func orderOutline(o types.DiffOrder) []string {
 	return out
 }
 
-func orderStepHunk(t *testing.T, o types.DiffOrder, path string, index int) types.DiffStepHunk {
+func orderStepHunk(t *testing.T, o diff.Order, path string, index int) diff.StepHunk {
 	t.Helper()
 	for _, g := range o.Groups {
 		for _, st := range g.Steps {
@@ -63,7 +64,7 @@ func orderStepHunk(t *testing.T, o types.DiffOrder, path string, index int) type
 		}
 	}
 	require.FailNow(t, "hunk not in order", "%s#%d", path, index)
-	return types.DiffStepHunk{}
+	return diff.StepHunk{}
 }
 
 func TestOrderPutsDefinitionsFirstAndTestsAfterCode(t *testing.T) {
@@ -89,13 +90,13 @@ func TestOrderPutsDefinitionsFirstAndTestsAfterCode(t *testing.T) {
 		"4 c_test.go#0 tests",
 	}, orderOutline(order), "the test hunk waits though it is ready as early as b.go")
 
-	assert.Equal(t, types.DiffStepHunk{
-		Ref:   types.DiffHunkRef{Path: "b.go", Index: 0, Digest: "digest-0"},
+	assert.Equal(t, diff.StepHunk{
+		Ref:   diff.HunkRef{Path: "b.go", Index: 0, Digest: "digest-0"},
 		Label: "A",
-		Why:   types.DiffWhy{Relation: types.DiffWhyUses, Step: 1, Symbol: "B", Text: "uses B, defined in step 1"},
+		Why:   diff.Why{Relation: diff.WhyUses, Step: 1, Symbol: "B", Text: "uses B, defined in step 1"},
 	}, orderStepHunk(t, order, "b.go", 0))
 	test := orderStepHunk(t, order, "c_test.go", 0)
-	assert.Equal(t, types.DiffWhy{Relation: types.DiffWhyTests, Step: 1, Symbol: "B", Text: "tests B, defined in step 1"}, test.Why)
+	assert.Equal(t, diff.Why{Relation: diff.WhyTests, Step: 1, Symbol: "B", Text: "tests B, defined in step 1"}, test.Why)
 	assert.True(t, order.Count.Complete)
 }
 
@@ -187,19 +188,19 @@ func TestOrderCollapsesACycleIntoOneStep(t *testing.T) {
 		"3 c.go#0 uses",
 	}, orderOutline(order), "the cycle is step 1; the second root says which later step uses it")
 
-	assert.Equal(t, types.DiffWhy{
-		Relation: types.DiffWhyStarts,
+	assert.Equal(t, diff.Why{
+		Relation: diff.WhyStarts,
 		Cycle:    []string{"X", "Y"},
 		Text:     "starts the group; 2 hunks share this step because they use each other through X, Y",
 	}, orderStepHunk(t, order, "a.go", 0).Why)
-	assert.Equal(t, types.DiffWhy{
-		Relation: types.DiffWhySameStep,
+	assert.Equal(t, diff.Why{
+		Relation: diff.WhySameStep,
 		Step:     1,
 		Cycle:    []string{"X", "Y"},
 		Text:     "shares its step with the hunks it uses and is used by, through X, Y",
 	}, orderStepHunk(t, order, "b.go", 0).Why)
 	root := orderStepHunk(t, order, "d.go", 0)
-	assert.Equal(t, types.DiffWhy{Relation: types.DiffWhyUsedBy, Step: 3, Symbol: "Z", Text: "defines Z, used in step 3"}, root.Why)
+	assert.Equal(t, diff.Why{Relation: diff.WhyUsedBy, Step: 3, Symbol: "Z", Text: "defines Z, used in step 3"}, root.Why)
 	assert.Equal(t, 2, orderStepHunk(t, order, "c.go", 0).Why.Step, "the latest-placed definer explains c.go")
 }
 
@@ -304,8 +305,8 @@ func TestOrderChainsHunksOfOneDefinition(t *testing.T) {
 		`group connected "G" 1`,
 		"2 b.go#0 starts",
 	}, orderOutline(order), "a hunk with symbols but no link is its own group, not unranked")
-	assert.Equal(t, types.DiffWhy{Relation: types.DiffWhyContinues, Step: 1, Symbol: "F", Text: "continues F from above"}, orderStepHunk(t, order, "a.go", 1).Why)
-	assert.Equal(t, types.DiffWhy{Relation: types.DiffWhyStarts, Text: "stands alone: no other changed hunk uses, implements or continues what it changes"}, orderStepHunk(t, order, "b.go", 0).Why)
+	assert.Equal(t, diff.Why{Relation: diff.WhyContinues, Step: 1, Symbol: "F", Text: "continues F from above"}, orderStepHunk(t, order, "a.go", 1).Why)
+	assert.Equal(t, diff.Why{Relation: diff.WhyStarts, Text: "stands alone: no other changed hunk uses, implements or continues what it changes"}, orderStepHunk(t, order, "b.go", 0).Why)
 }
 
 func TestOrderNamesTheContinuationOfAHunkPlacedBeforeIt(t *testing.T) {
@@ -326,7 +327,7 @@ func TestOrderNamesTheContinuationOfAHunkPlacedBeforeIt(t *testing.T) {
 		"2 b.go#0 continued_by",
 		"3 c.go#0 continues",
 	}, orderOutline(order))
-	assert.Equal(t, types.DiffWhy{Relation: types.DiffWhyContinuedBy, Step: 3, Symbol: "F", Text: "begins F, which continues in step 3"}, orderStepHunk(t, order, "b.go", 0).Why)
+	assert.Equal(t, diff.Why{Relation: diff.WhyContinuedBy, Step: 3, Symbol: "F", Text: "begins F, which continues in step 3"}, orderStepHunk(t, order, "b.go", 0).Why)
 }
 
 func TestOrderPlacesAnInterfaceBeforeItsImplementation(t *testing.T) {
@@ -345,7 +346,7 @@ func TestOrderPlacesAnInterfaceBeforeItsImplementation(t *testing.T) {
 		"1 iface.go#0 starts",
 		"2 impl.go#0 implements",
 	}, orderOutline(order))
-	assert.Equal(t, types.DiffWhy{Relation: types.DiffWhyImplements, Step: 1, Symbol: "Doer", Text: "implements Doer, declared in step 1"}, orderStepHunk(t, order, "impl.go", 0).Why)
+	assert.Equal(t, diff.Why{Relation: diff.WhyImplements, Step: 1, Symbol: "Doer", Text: "implements Doer, declared in step 1"}, orderStepHunk(t, order, "impl.go", 0).Why)
 }
 
 func TestOrderNamesAnInterfaceThatIsNotFirst(t *testing.T) {
@@ -401,7 +402,7 @@ func TestOrderPutsGeneratedThenUnrankedGroupsLast(t *testing.T) {
 	moved := orderFile("moved.go", orderHunk(0, 1, 5, "Moved"))
 	moved.Moved = true
 	withSymbols := orderFile("withsyms.go", orderHunk(0, 1, 5))
-	withSymbols.Symbols = []types.DiffSymbol{{ID: "K"}}
+	withSymbols.Symbols = []diff.Symbol{{ID: "K"}}
 	order := OrderHunks(OrderInput{
 		Files: []OrderFile{
 			moved,
@@ -445,7 +446,7 @@ func TestOrderNamesAFileWithNoHunk(t *testing.T) {
 		},
 	})
 
-	assert.Equal(t, types.DiffOrderCount{
+	assert.Equal(t, diff.OrderCount{
 		HunkCount:         1,
 		Placed:            1,
 		Complete:          true,
@@ -457,7 +458,7 @@ func TestOrderLabelsAGroupByItsFirstDefinedSymbol(t *testing.T) {
 	t.Parallel()
 
 	a := orderFile("a.go", orderHunk(0, 1, 5, "m/pkg/Type#Method()."))
-	a.Symbols = []types.DiffSymbol{{ID: "m/pkg/Type#Method().", Label: "Method", Qualified: "Type.Method"}}
+	a.Symbols = []diff.Symbol{{ID: "m/pkg/Type#Method().", Label: "Method", Qualified: "Type.Method"}}
 	order := OrderHunks(OrderInput{
 		Files: []OrderFile{a, orderFile("b.go", orderHunk(0, 1, 5))},
 		Sites: []OrderSite{orderUse("m/pkg/Type#Method().", "b.go", 2)},
@@ -475,7 +476,7 @@ func TestOrderLabelsASymbolTheFileDoesNotListFromItsID(t *testing.T) {
 	id := "symbol:gomod m `m/pkg/knowledge`/goShapes#typeClass()."
 	order := OrderHunks(OrderInput{
 		Files: []OrderFile{
-			{Path: "a.go", Hunks: []types.DiffHunk{orderHunk(0, 1, 5, id)}},
+			{Path: "a.go", Hunks: []diff.Hunk{orderHunk(0, 1, 5, id)}},
 			orderFile("b.go", orderHunk(0, 1, 5)),
 		},
 		Sites: []OrderSite{orderUse(id, "b.go", 2)},
@@ -514,10 +515,10 @@ func TestOrderCountFlagsAHunkPlacedTwice(t *testing.T) {
 		orderFile("a.go", orderHunk(0, 1, 5)),
 	}})
 
-	assert.Equal(t, types.DiffOrderCount{
+	assert.Equal(t, diff.OrderCount{
 		HunkCount: 2,
 		Placed:    2,
-		Repeated:  []types.DiffHunkRef{{Path: "a.go", Index: 0, Digest: "digest-0"}},
+		Repeated:  []diff.HunkRef{{Path: "a.go", Index: 0, Digest: "digest-0"}},
 	}, order.Count)
 }
 
@@ -596,11 +597,11 @@ func TestOrderPlacesEveryHunkExactlyOnce(t *testing.T) {
 	for _, f := range in.Files {
 		for _, h := range f.Hunks {
 			hunks++
-			ref := types.DiffHunkRef{Path: f.Path, Index: h.Index}
+			ref := diff.HunkRef{Path: f.Path, Index: h.Index}
 			assert.Equal(t, 1, counted[ref.Key()], ref.Key())
 		}
 	}
-	assert.Equal(t, types.DiffOrderCount{HunkCount: hunks, Placed: hunks, Complete: true, FilesWithoutHunks: []string{"logo.png"}}, order.Count)
+	assert.Equal(t, diff.OrderCount{HunkCount: hunks, Placed: hunks, Complete: true, FilesWithoutHunks: []string{"logo.png"}}, order.Count)
 
 	step := 0
 	for _, g := range order.Groups {
@@ -610,7 +611,7 @@ func TestOrderPlacesEveryHunkExactlyOnce(t *testing.T) {
 		}
 	}
 	last := order.Groups[len(order.Groups)-1]
-	assert.Equal(t, types.DiffGroupUnranked, last.Kind)
+	assert.Equal(t, diff.GroupUnranked, last.Kind)
 }
 
 func TestOrderOfNothingIsAnEmptyCompleteOrder(t *testing.T) {

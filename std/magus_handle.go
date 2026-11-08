@@ -3,6 +3,7 @@
 package std
 
 import (
+	difftypes "github.com/egladman/magus/types/diff"
 	"github.com/egladman/magus/types/trail"
 	"bytes"
 	"context"
@@ -214,9 +215,9 @@ func tierOptions(c types.Change, opts types.TierOptions) types.TierOptions {
 
 // MagusChangeDiff is Change.diff(opts): the review of c, its rev or patch
 // standing in for the working tree when opts names neither.
-func MagusChangeDiff(ctx context.Context, c types.Change, opts types.MagusDiffOptions) (types.Diff, error) {
+func MagusChangeDiff(ctx context.Context, c types.Change, opts types.MagusDiffOptions) (difftypes.Diff, error) {
 	if _, err := heldChange(ctx, c, "diff"); err != nil {
-		return types.Diff{}, err
+		return difftypes.Diff{}, err
 	}
 	if opts.Rev == "" && opts.Patch == "" {
 		opts.Rev, opts.Patch = c.Rev, c.Patch

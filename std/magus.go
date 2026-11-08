@@ -3,6 +3,7 @@
 package std
 
 import (
+	difftypes "github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
@@ -1810,15 +1811,15 @@ func MagusDescribeSpell(ctx context.Context, name string, opts types.MagusComman
 // --generated is passed so the caller sees every file and decides what to fold.
 // opts.from reads a review an earlier `magus diff -o json` saved.
 // So advisors reading one change compute it once.
-func MagusDiff(ctx context.Context, opts types.MagusDiffOptions) (types.Diff, error) {
+func MagusDiff(ctx context.Context, opts types.MagusDiffOptions) (difftypes.Diff, error) {
 	if opts.From != "" {
-		var saved types.Diff
+		var saved difftypes.Diff
 		raw, err := os.ReadFile(opts.From)
 		if err != nil {
-			return types.Diff{}, fmt.Errorf(`magus\change().diff: read opts.from: %w`, err)
+			return difftypes.Diff{}, fmt.Errorf(`magus\change().diff: read opts.from: %w`, err)
 		}
 		if err := json.Unmarshal(raw, &saved); err != nil {
-			return types.Diff{}, fmt.Errorf("magus\\change().diff: decode opts.from %s (expected `magus diff -o json` output): %w", opts.From, err)
+			return difftypes.Diff{}, fmt.Errorf("magus\\change().diff: decode opts.from %s (expected `magus diff -o json` output): %w", opts.From, err)
 		}
 		return saved, nil
 	}
@@ -1843,7 +1844,7 @@ func MagusDiff(ctx context.Context, opts types.MagusDiffOptions) (types.Diff, er
 	if opts.MinShare != 0 {
 		args = append(args, "--conformance-min-share", strconv.FormatFloat(opts.MinShare, 'f', -1, 64))
 	}
-	return runMagusJSON[types.Diff](ctx, "diff", args, run)
+	return runMagusJSON[difftypes.Diff](ctx, "diff", args, run)
 }
 
 // runMagusJSON runs a nested magus subcommand and decodes its report into T.

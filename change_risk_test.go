@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"cmp"
 	"context"
 	"fmt"
@@ -89,7 +90,7 @@ func (s *ChangeRiskSuite) scorer() riskScorer {
 }
 
 func scoredFunction() touchedFunction {
-	return touchedFunction{Symbol: "sym F", Label: "F", Path: "lib/a.go", Language: "go", Digest: "d", Change: types.DiffChangeBody, Line: 3, EndLine: 8}
+	return touchedFunction{Symbol: "sym F", Label: "F", Path: "lib/a.go", Language: "go", Digest: "d", Change: diff.ChangeBody, Line: 3, EndLine: 8}
 }
 
 func (s *ChangeRiskSuite) gap(complexity int, reason string) types.ChangeRisk {
@@ -274,7 +275,7 @@ func (s *ChangeRiskSuite) TestBaseSpanGoesThroughTheWorkingTreeThenTheCommits() 
 
 func (s *ChangeRiskSuite) TestAnAddedFunctionHasNoBaseSpan() {
 	fn := scoredFunction()
-	fn.Change = types.DiffChangeAdded
+	fn.Change = diff.ChangeAdded
 	_, _, ok := sinceBase{}.baseSpan(fn)
 	s.False(ok)
 }
@@ -302,7 +303,7 @@ func (s *ChangeRiskSuite) TestSpansTouchedMarksADefinitionAChangedLineFallsIn() 
 	got, err := spansTouched(defs, sinceBase{lines: map[string][]int{"a.go": {12, 30}}}, func(string) (string, bool) { return "", false })
 
 	s.Require().NoError(err)
-	s.Equal(map[string]string{"in": types.DiffChangeBody, "one": types.DiffChangeBody}, got)
+	s.Equal(map[string]string{"in": diff.ChangeBody, "one": diff.ChangeBody}, got)
 }
 
 func (s *ChangeRiskSuite) TestSpansTouchedRefusesAnEndLineThatIsNotANumber() {
@@ -358,13 +359,13 @@ func (s *ChangeRiskSuite) TestKeepReportsReadsEachReportOnce() {
 }
 
 func (s *ChangeRiskSuite) TestSymbolChangesListsEachChangedSymbol() {
-	files := []types.DiffFile{{Symbols: []types.DiffSymbol{{ID: "a", Change: types.DiffChangeBody}, {ID: "b"}}}}
+	files := []diff.File{{Symbols: []diff.Symbol{{ID: "a", Change: diff.ChangeBody}, {ID: "b"}}}}
 
-	s.Equal(map[string]string{"a": types.DiffChangeBody}, symbolChanges(files))
+	s.Equal(map[string]string{"a": diff.ChangeBody}, symbolChanges(files))
 }
 
 func (s *ChangeRiskSuite) TestAttachChangeRiskChecksAddsAScoreAndAGap() {
-	files := []types.DiffFile{{Symbols: []types.DiffSymbol{
+	files := []diff.File{{Symbols: []diff.Symbol{
 		{ID: "f", Checks: []types.Check{{Name: "naming"}}}, {ID: "g"}, {ID: "h"},
 	}}}
 	risk := types.ChangeRisk{
@@ -374,7 +375,7 @@ func (s *ChangeRiskSuite) TestAttachChangeRiskChecksAddsAScoreAndAGap() {
 
 	attachChangeRiskChecks(files, risk)
 
-	s.Equal([]types.DiffSymbol{
+	s.Equal([]diff.Symbol{
 		{ID: "f", Checks: []types.Check{{Name: "naming"}, {
 			Name: riskCheck, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
 			Message: "change risk 3.0: complexity 3, 3 of 4 coverable units covered",
@@ -836,7 +837,7 @@ func (s *RiskMeterSuite) TestAFunctionWorseThanAtBaseIsCharged() {
 
 func (s *RiskMeterSuite) TestANewFunctionHasNoBase() {
 	fn := scoredFunction()
-	fn.Change = types.DiffChangeAdded
+	fn.Change = diff.ChangeAdded
 	got, err := s.meter.measure(context.Background(), []touchedFunction{fn})
 	s.Require().NoError(err)
 	s.Equal(newSinceBase, got.Functions[0].BaseReason)

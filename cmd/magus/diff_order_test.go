@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"bytes"
 	"testing"
 
@@ -8,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/types"
 )
 
 const orderTestPatch = "diff --git a/core.go b/core.go\n" +
@@ -27,38 +27,38 @@ const orderTestPatch = "diff --git a/core.go b/core.go\n" +
 
 // orderTestDiff is orderTestPatch with its hunks attached to the files and an order over them:
 // F first, then its use in other.go, then G in core.go, then the generated output.
-func orderTestDiff(t *testing.T) types.Diff {
+func orderTestDiff(t *testing.T) diff.Diff {
 	t.Helper()
-	var rev types.Diff
+	var rev diff.Diff
 	digest := map[string]string{}
 	for _, f := range changeset.ParseHunks(orderTestPatch) {
-		df := types.DiffFile{Path: f.Path}
+		df := diff.File{Path: f.Path}
 		if f.Path == "gen/out.json" {
-			df.Role = types.DiffRoleOutput
+			df.Role = diff.RoleOutput
 		}
 		for _, h := range f.Hunks {
-			df.Hunks = append(df.Hunks, types.DiffHunk{Index: h.Index, Digest: h.Digest, NewStart: h.NewStart, NewCount: h.NewCount})
-			digest[types.DiffHunkRef{Path: f.Path, Index: h.Index}.Key()] = h.Digest
+			df.Hunks = append(df.Hunks, diff.Hunk{Index: h.Index, Digest: h.Digest, NewStart: h.NewStart, NewCount: h.NewCount})
+			digest[diff.HunkRef{Path: f.Path, Index: h.Index}.Key()] = h.Digest
 		}
 		rev.Files = append(rev.Files, df)
 	}
-	ref := func(path string, index int) types.DiffHunkRef {
-		r := types.DiffHunkRef{Path: path, Index: index}
+	ref := func(path string, index int) diff.HunkRef {
+		r := diff.HunkRef{Path: path, Index: index}
 		r.Digest = digest[r.Key()]
 		return r
 	}
-	rev.Order = &types.DiffOrder{
-		Groups: []types.DiffGroup{
-			{Kind: types.DiffGroupConnected, Label: "F", HunkCount: 3, Steps: []types.DiffStep{
-				{Number: 1, Hunks: []types.DiffStepHunk{{Ref: ref("core.go", 0), Label: "F", Why: types.DiffWhy{Relation: types.DiffWhyStarts, Text: "starts the group"}}}},
-				{Number: 2, Hunks: []types.DiffStepHunk{{Ref: ref("other.go", 0), Label: "Use", Why: types.DiffWhy{Relation: types.DiffWhyUses, Step: 1, Symbol: "F", Text: "uses F, defined in step 1"}}}},
-				{Number: 3, Hunks: []types.DiffStepHunk{{Ref: ref("core.go", 1), Label: "G", Why: types.DiffWhy{Relation: types.DiffWhyUses, Step: 1, Symbol: "F", Text: "uses F, defined in step 1"}}}},
+	rev.Order = &diff.Order{
+		Groups: []diff.Group{
+			{Kind: diff.GroupConnected, Label: "F", HunkCount: 3, Steps: []diff.Step{
+				{Number: 1, Hunks: []diff.StepHunk{{Ref: ref("core.go", 0), Label: "F", Why: diff.Why{Relation: diff.WhyStarts, Text: "starts the group"}}}},
+				{Number: 2, Hunks: []diff.StepHunk{{Ref: ref("other.go", 0), Label: "Use", Why: diff.Why{Relation: diff.WhyUses, Step: 1, Symbol: "F", Text: "uses F, defined in step 1"}}}},
+				{Number: 3, Hunks: []diff.StepHunk{{Ref: ref("core.go", 1), Label: "G", Why: diff.Why{Relation: diff.WhyUses, Step: 1, Symbol: "F", Text: "uses F, defined in step 1"}}}},
 			}},
-			{Kind: types.DiffGroupGenerated, HunkCount: 1, Steps: []types.DiffStep{
-				{Number: 4, Hunks: []types.DiffStepHunk{{Ref: ref("gen/out.json", 0), Why: types.DiffWhy{Relation: types.DiffWhyGenerated, Text: "generated output; its source carries the review"}}}},
+			{Kind: diff.GroupGenerated, HunkCount: 1, Steps: []diff.Step{
+				{Number: 4, Hunks: []diff.StepHunk{{Ref: ref("gen/out.json", 0), Why: diff.Why{Relation: diff.WhyGenerated, Text: "generated output; its source carries the review"}}}},
 			}},
 		},
-		Count: types.DiffOrderCount{HunkCount: 4, Placed: 4, Complete: true},
+		Count: diff.OrderCount{HunkCount: 4, Placed: 4, Complete: true},
 	}
 	return rev
 }
@@ -104,7 +104,7 @@ func TestDiffOrderTUIFilesWalksTheStepsAndKeepsEveryHunkOnce(t *testing.T) {
 
 func TestDiffOrderTUIFilesKeepsAFileWithNoHunk(t *testing.T) {
 	rev := orderTestDiff(t)
-	rev.Files = append(rev.Files, types.DiffFile{Path: "logo.png"})
+	rev.Files = append(rev.Files, diff.File{Path: "logo.png"})
 
 	files := diffOrderTUIFiles(rev, changeset.ParseHunks(orderTestPatch))
 
@@ -122,7 +122,7 @@ func TestDiffOrderTUIFilesFallsBackToFilesWhenTheOrderIsMissingOrIncomplete(t *t
 
 	rev = orderTestDiff(t)
 	rev.Order.Groups[0].Steps = rev.Order.Groups[0].Steps[:2]
-	rev.Order.Count = types.DiffOrderCount{HunkCount: 4, Placed: 3, Missing: []types.DiffHunkRef{rev.Order.Groups[0].Steps[0].Hunks[0].Ref}}
+	rev.Order.Count = diff.OrderCount{HunkCount: 4, Placed: 3, Missing: []diff.HunkRef{rev.Order.Groups[0].Steps[0].Hunks[0].Ref}}
 	assert.Equal(t, diffTUIFiles(rev, parsed), diffOrderTUIFiles(rev, parsed), "an order whose count is incomplete is not shown")
 }
 

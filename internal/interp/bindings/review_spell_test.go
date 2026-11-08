@@ -1,6 +1,7 @@
 package bindings
 
 import (
+	difftypes "github.com/egladman/magus/types/diff"
 	"context"
 	"fmt"
 	"testing"
@@ -87,7 +88,7 @@ func TestFindReviewDecodesTheTargetAndCarriesTheRepo(t *testing.T) {
 	withReviewSpell(t, openReview)
 	at := FindReview(context.Background(), "feat/x", "git@github.com:acme/acme.git")
 	assert.True(t, at.Open())
-	assert.Equal(t, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, at)
+	assert.Equal(t, difftypes.ReviewTarget{ID: "482", Repo: "acme/acme"}, at)
 }
 
 func TestFindReviewHandsTheBranchAndRemoteThrough(t *testing.T) {
@@ -137,11 +138,11 @@ func TestReviewCommentsDecodesEveryFieldAndDefaultsTheHunkToUnplaced(t *testing.
 export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] {
     return [ReviewComment{ id = "t1", path = "a.go", line = 12, author = "priya", body = "why" }];
 }`)
-	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
+	got, err := ReviewComments(context.Background(), difftypes.ReviewTarget{ID: "482"})
 	require.NoError(t, err)
 	// -1, not 0. The zero value is a VALID hunk index, so a thread nothing placed would
 	// otherwise render against the first hunk of its file: the wrong code, stated confidently.
-	assert.Equal(t, []types.ReviewComment{{
+	assert.Equal(t, []difftypes.ReviewComment{{
 		ID: "t1", Path: "a.go", Line: 12, Hunk: -1, Author: "priya", Body: "why",
 	}}, got)
 }
@@ -154,9 +155,9 @@ export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] {
         outdated = true, diffHunk = "@@ -1,2 +1,3 @@",
     }];
 }`)
-	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
+	got, err := ReviewComments(context.Background(), difftypes.ReviewTarget{ID: "482"})
 	require.NoError(t, err)
-	assert.Equal(t, []types.ReviewComment{{
+	assert.Equal(t, []difftypes.ReviewComment{{
 		ID: "t2", Root: "t1", Path: "a.go", Hunk: -1, Author: "eli", Body: "because",
 		Outdated: true, DiffHunk: "@@ -1,2 +1,3 @@",
 	}}, got)
@@ -167,7 +168,7 @@ func TestReviewCommentsHandsTheReviewThrough(t *testing.T) {
 export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] {
     return [ReviewComment{ id = req.repo + "#" + req.id }];
 }`)
-	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482", Repo: "acme/acme"})
+	got, err := ReviewComments(context.Background(), difftypes.ReviewTarget{ID: "482", Repo: "acme/acme"})
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "acme/acme#482", got[0].ID)
@@ -180,7 +181,7 @@ func TestReviewCommentsFailsLoudlyOnAMalformedRow(t *testing.T) {
 export fun review_threads(target: Target, req: ReviewRef) > any {
     return [{"id": "t1", "path": "a.go", "body": "readable"}, {"id": "t2", "line": "not a number"}];
 }`)
-	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
+	got, err := ReviewComments(context.Background(), difftypes.ReviewTarget{ID: "482"})
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "review_threads")
 	assert.ErrorContains(t, err, "[1].line")
@@ -189,7 +190,7 @@ export fun review_threads(target: Target, req: ReviewRef) > any {
 
 func TestReviewCommentsTreatsAMissingOpAsNoComments(t *testing.T) {
 	withReviewSpell(t, openReview)
-	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
+	got, err := ReviewComments(context.Background(), difftypes.ReviewTarget{ID: "482"})
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
@@ -203,14 +204,14 @@ func TestReviewCommentsReachedTellsAnUnreachableHostFromAnEmptyReview(t *testing
 export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] !> any {
     throw "dial: connection refused";
 }`)
-	comments, reached, err := ReviewCommentsReached(context.Background(), types.ReviewTarget{ID: "482"})
+	comments, reached, err := ReviewCommentsReached(context.Background(), difftypes.ReviewTarget{ID: "482"})
 	require.NoError(t, err, "an unreachable host is still not this call's failure")
 	assert.Empty(t, comments)
 	assert.False(t, reached)
 
 	withReviewSpell(t, `
 export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] { return [<ReviewComment>]; }`)
-	_, reached, err = ReviewCommentsReached(context.Background(), types.ReviewTarget{ID: "482"})
+	_, reached, err = ReviewCommentsReached(context.Background(), difftypes.ReviewTarget{ID: "482"})
 	require.NoError(t, err)
 	assert.True(t, reached, "a review with no threads is a host that answered")
 
@@ -218,7 +219,7 @@ export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] { re
 	// as unreachable is what made a merge with one bad thread report nothing at all.
 	withReviewSpell(t, `
 export fun review_threads(target: Target, req: ReviewRef) > any { return [{"id": "t2", "line": "not a number"}]; }`)
-	_, reached, err = ReviewCommentsReached(context.Background(), types.ReviewTarget{ID: "482"})
+	_, reached, err = ReviewCommentsReached(context.Background(), difftypes.ReviewTarget{ID: "482"})
 	require.Error(t, err)
 	assert.True(t, reached)
 }
@@ -231,10 +232,10 @@ export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] {
     return [ReviewComment{ id = "t1", path = "a.go", body = "why" }];
 }`)
 
-	at, comments, err := OriginReviewComments(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, time.Minute)
+	at, comments, err := OriginReviewComments(t.Context(), difftypes.ReviewOrigin{Branch: "feat/x"}, time.Minute)
 
 	require.NoError(t, err)
-	assert.Equal(t, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, at)
+	assert.Equal(t, difftypes.ReviewTarget{ID: "482", Repo: "acme/acme"}, at)
 	require.Len(t, comments, 1)
 	assert.Equal(t, "t1", comments[0].ID)
 
@@ -246,7 +247,7 @@ export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget !>
 export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] {
     return [ReviewComment{ id = "asked" }];
 }`)
-	at, comments, err = OriginReviewComments(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, time.Minute)
+	at, comments, err = OriginReviewComments(t.Context(), difftypes.ReviewOrigin{Branch: "feat/x"}, time.Minute)
 	require.NoError(t, err)
 	assert.False(t, at.Open())
 	assert.Contains(t, at.Reason, "boom")
@@ -259,7 +260,7 @@ func TestReviewCommentsAsksNothingWithoutAnOpenReview(t *testing.T) {
 export fun review_threads(target: Target, req: ReviewRef) > [ReviewComment] {
     return [ReviewComment{ id = "asked" }];
 }`)
-	got, err := ReviewComments(context.Background(), types.ReviewTarget{})
+	got, err := ReviewComments(context.Background(), difftypes.ReviewTarget{})
 	require.NoError(t, err)
 	assert.Empty(t, got, "a closed target must not reach the provider")
 }
@@ -273,15 +274,15 @@ export fun publish_review(target: Target, req: PublishReviewRequest) > Ack {
         and req.drafts.len() == 1 and req.drafts[0].path == "a.go"
         and req.drafts[0].line == 4 and req.drafts[0].body == "why" };
 }`)
-	_, err := PublishReview(context.Background(), types.ReviewTarget{ID: "482", Repo: "acme/acme"}, "pass",
-		types.VerdictComment, []types.DiffComment{{Path: "a.go", Line: 4, Body: "why"}})
+	_, err := PublishReview(context.Background(), difftypes.ReviewTarget{ID: "482", Repo: "acme/acme"}, "pass",
+		types.VerdictComment, []difftypes.Comment{{Path: "a.go", Line: 4, Body: "why"}})
 	require.NoError(t, err)
 }
 
 func TestPublishReviewReportsARefusal(t *testing.T) {
 	withReviewSpell(t, `
 export fun publish_review(target: Target, req: PublishReviewRequest) > Ack { return Ack{}; }`)
-	_, err := PublishReview(context.Background(), types.ReviewTarget{ID: "482"}, "pass", types.VerdictComment, nil)
+	_, err := PublishReview(context.Background(), difftypes.ReviewTarget{ID: "482"}, "pass", types.VerdictComment, nil)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "publish_review")
 }
@@ -308,8 +309,8 @@ export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget {
 func TestPublishReviewRefusesAProviderThatCannotPublish(t *testing.T) {
 	withReviewSpell(t, openReview)
 
-	_, err := PublishReview(context.Background(), types.ReviewTarget{ID: "482", Repo: "acme/acme"}, "pass",
-		types.VerdictComment, []types.DiffComment{{Path: "a.go", Line: 4, Body: "why"}})
+	_, err := PublishReview(context.Background(), difftypes.ReviewTarget{ID: "482", Repo: "acme/acme"}, "pass",
+		types.VerdictComment, []difftypes.Comment{{Path: "a.go", Line: 4, Body: "why"}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), spells.PublishReviewContract)
 }
@@ -319,9 +320,9 @@ func TestPublishAndReplyRefuseWithNoProviderWired(t *testing.T) {
 	SetReviewProvider("")
 	t.Cleanup(func() { SetReviewProvider(prev) })
 
-	_, perr := PublishReview(context.Background(), types.ReviewTarget{ID: "1"}, "", types.VerdictComment, nil)
+	_, perr := PublishReview(context.Background(), difftypes.ReviewTarget{ID: "1"}, "", types.VerdictComment, nil)
 	assert.ErrorIs(t, perr, errNoReviewProvider)
-	assert.ErrorIs(t, ReplyReview(context.Background(), types.ReviewTarget{ID: "1"}, "t1", "ok"), errNoReviewProvider)
+	assert.ErrorIs(t, ReplyReview(context.Background(), difftypes.ReviewTarget{ID: "1"}, "t1", "ok"), errNoReviewProvider)
 }
 
 // A spell that answers false is a REFUSAL, and one that exports no reply_review cannot have
@@ -331,14 +332,14 @@ func TestReplyReviewTreatsAnythingButAcceptanceAsARefusal(t *testing.T) {
 export fun reply_review(target: Target, req: ReplyReviewRequest) > Ack {
     return Ack{ ok = req.repo == "acme/acme" and req.id == "482" and req.thread == "t1" and req.body == "agreed" };
 }`)
-	require.NoError(t, ReplyReview(context.Background(), types.ReviewTarget{ID: "482", Repo: "acme/acme"}, "t1", "agreed"))
+	require.NoError(t, ReplyReview(context.Background(), difftypes.ReviewTarget{ID: "482", Repo: "acme/acme"}, "t1", "agreed"))
 
-	err := ReplyReview(context.Background(), types.ReviewTarget{ID: "482", Repo: "acme/acme"}, "t1", "not this")
+	err := ReplyReview(context.Background(), difftypes.ReviewTarget{ID: "482", Repo: "acme/acme"}, "t1", "not this")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "t1", "the error names the thread that did not take it")
 
 	withReviewSpell(t, openReview)
-	err = ReplyReview(context.Background(), types.ReviewTarget{ID: "482"}, "t1", "agreed")
+	err = ReplyReview(context.Background(), difftypes.ReviewTarget{ID: "482"}, "t1", "agreed")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), spells.ReplyReviewContract)
 }
@@ -366,21 +367,21 @@ export fun find_review(target: Target, req: FindReviewRequest) > ReviewTarget {
 }`)
 
 	first := FindReview(context.Background(), "feat/x", "")
-	assert.Equal(t, types.ReviewTarget{ID: "482", Author: "priya", Viewer: "eli", Reason: "asked"}, first)
+	assert.Equal(t, difftypes.ReviewTarget{ID: "482", Author: "priya", Viewer: "eli", Reason: "asked"}, first)
 	opened, known := first.OpenedByViewer()
 	assert.True(t, known, "both names present means the question is answerable")
 	assert.False(t, opened, "priya's review is not eli's")
 
 	// Asked once, then never again, and the cached owner rides along on every later answer.
 	second := FindReview(context.Background(), "feat/x", "")
-	assert.Equal(t, types.ReviewTarget{ID: "482", Author: "priya", Viewer: "eli", Reason: "not asked"}, second)
+	assert.Equal(t, difftypes.ReviewTarget{ID: "482", Author: "priya", Viewer: "eli", Reason: "not asked"}, second)
 }
 
 // A provider that names neither party leaves the question UNANSWERED, which is not the same as
 // answering no: guessing "yours" would refuse a legitimate approval on a colleague's change, and
 // guessing "theirs" would let a change approve itself.
 func TestOpenedByViewerIsUnknownWhenEitherNameIsMissing(t *testing.T) {
-	for _, at := range []types.ReviewTarget{
+	for _, at := range []difftypes.ReviewTarget{
 		{ID: "1"},
 		{ID: "1", Author: "priya"},
 		{ID: "1", Viewer: "eli"},
@@ -403,14 +404,14 @@ export fun publish_review(target: Target, req: PublishReviewRequest) > Ack {
 	}
 
 	accepting(types.VerdictComment)
-	published, err := PublishReview(context.Background(), types.ReviewTarget{ID: "1", Author: "ada", Viewer: "ada"}, "s",
-		types.VerdictApprove, []types.DiffComment{{Path: "a.go", Line: 4, Body: "why"}})
+	published, err := PublishReview(context.Background(), difftypes.ReviewTarget{ID: "1", Author: "ada", Viewer: "ada"}, "s",
+		types.VerdictApprove, []difftypes.Comment{{Path: "a.go", Line: 4, Body: "why"}})
 	require.NoError(t, err, "a change must not approve itself at the wire")
 	assert.Equal(t, types.VerdictComment, published, "and the caller is told what actually went")
 
 	accepting(types.VerdictApprove)
-	published, err = PublishReview(context.Background(), types.ReviewTarget{ID: "1", Author: "grace", Viewer: "ada"}, "s",
-		types.VerdictApprove, []types.DiffComment{{Path: "a.go", Line: 4, Body: "why"}})
+	published, err = PublishReview(context.Background(), difftypes.ReviewTarget{ID: "1", Author: "grace", Viewer: "ada"}, "s",
+		types.VerdictApprove, []difftypes.Comment{{Path: "a.go", Line: 4, Body: "why"}})
 	require.NoError(t, err, "a colleague's change may be approved")
 	assert.Equal(t, types.VerdictApprove, published)
 }

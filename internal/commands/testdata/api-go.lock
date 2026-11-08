@@ -102,10 +102,10 @@ github.com/egladman/magus.Magus.ConformanceOptions method(ptr) func() (github.co
 github.com/egladman/magus.Magus.Context method(ptr) func(parent context.Context) context.Context
 github.com/egladman/magus.Magus.ContextWithSecrets method(ptr) func(ctx context.Context) context.Context
 github.com/egladman/magus.Magus.CurrentRevision method(ptr) func(ctx context.Context) (name string, revision string, dirty bool)
-github.com/egladman/magus.Magus.Diff method(ptr) func(ctx context.Context, paths []string) (github.com/egladman/magus/types.Diff, error)
-github.com/egladman/magus.Magus.DiffAgainst method(ptr) func(ctx context.Context, paths []string, base github.com/egladman/magus/types.KnowledgeGraphOutput, label string) (github.com/egladman/magus/types.Diff, error)
+github.com/egladman/magus.Magus.Diff method(ptr) func(ctx context.Context, paths []string) (github.com/egladman/magus/types/diff.Diff, error)
+github.com/egladman/magus.Magus.DiffAgainst method(ptr) func(ctx context.Context, paths []string, base github.com/egladman/magus/types.KnowledgeGraphOutput, label string) (github.com/egladman/magus/types/diff.Diff, error)
 github.com/egladman/magus.Magus.DiffTUIEnabled method(ptr) func() bool
-github.com/egladman/magus.Magus.DiffWith method(ptr) func(ctx context.Context, paths []string, opts github.com/egladman/magus/types.DiffOptions) (github.com/egladman/magus/types.Diff, error)
+github.com/egladman/magus.Magus.DiffWith method(ptr) func(ctx context.Context, paths []string, opts github.com/egladman/magus/types/diff.Options) (github.com/egladman/magus/types/diff.Diff, error)
 github.com/egladman/magus.Magus.DiskReclaim method(ptr) func() (github.com/egladman/magus/types.DiskReclaim, error)
 github.com/egladman/magus.Magus.Duplication method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.Duplication, error)
 github.com/egladman/magus.Magus.EvaluateProjects method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.EvaluatedProjectsOutput, error)
@@ -166,7 +166,7 @@ github.com/egladman/magus.Magus.ReindexSymbols method(ptr) func(ctx context.Cont
 github.com/egladman/magus.Magus.ResolveProjects method(ptr) func(targets []github.com/egladman/magus/types.Target) []*github.com/egladman/magus/types.Project
 github.com/egladman/magus.Magus.ResolveTargetOutputs method(ptr) func(ctx context.Context, projects []*github.com/egladman/magus/types.Project, target string) ([]github.com/egladman/magus/types.TargetArtifact, error)
 github.com/egladman/magus.Magus.RestoreSpellCaches method(ptr) func(ctx context.Context) ([]SpellCache, error)
-github.com/egladman/magus.Magus.ReviewOrigin method(ptr) func(ctx context.Context) github.com/egladman/magus/types.ReviewOrigin
+github.com/egladman/magus.Magus.ReviewOrigin method(ptr) func(ctx context.Context) github.com/egladman/magus/types/diff.ReviewOrigin
 github.com/egladman/magus.Magus.RevisionCheckpoint method(ptr) func(ctx context.Context, rev string) (github.com/egladman/magus/types.VCSCheckpoint, error)
 github.com/egladman/magus.Magus.Root method(ptr) func() string
 github.com/egladman/magus.Magus.Run method(ptr) func(ctx context.Context, targets []github.com/egladman/magus/types.Target, opts ...RunOption) error
@@ -346,7 +346,7 @@ github.com/egladman/magus/libs/testkit.Workspace.Root method(ptr) func() string
 github.com/egladman/magus/libs/testkit.Workspace.Write method(ptr) func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Workspace.WriteExecutable method(ptr) func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Workspace.WriteTree method(ptr) func(files map[string]string)
-github.com/egladman/magus/libs/testkit/register.ReviewSpell func(tb github.com/egladman/magus/libs/testkit.TB, at github.com/egladman/magus/types.ReviewTarget, threads []github.com/egladman/magus/types.ReviewComment) string
+github.com/egladman/magus/libs/testkit/register.ReviewSpell func(tb github.com/egladman/magus/libs/testkit.TB, at github.com/egladman/magus/types/diff.ReviewTarget, threads []github.com/egladman/magus/types/diff.ReviewComment) string
 github.com/egladman/magus/libs/testkit/register.Spell func(tb github.com/egladman/magus/libs/testkit.TB, name string, opts ...github.com/egladman/magus/spells.Option) string
 github.com/egladman/magus/std.All func() []Module
 github.com/egladman/magus/std.AllSource func() []SourceModule
@@ -530,7 +530,7 @@ github.com/egladman/magus/std.MagusAttention func(ctx context.Context, args []st
 github.com/egladman/magus/std.MagusBustCache func(ctx context.Context, projectPath string) error
 github.com/egladman/magus/std.MagusChangeAffected func(ctx context.Context, c github.com/egladman/magus/types.Change) (github.com/egladman/magus/types.AffectedResult, error)
 github.com/egladman/magus/std.MagusChangeConformance func(ctx context.Context, c github.com/egladman/magus/types.Change, checks []string) (github.com/egladman/magus/types.ConformanceReport, error)
-github.com/egladman/magus/std.MagusChangeDiff func(ctx context.Context, c github.com/egladman/magus/types.Change, opts github.com/egladman/magus/types.MagusDiffOptions) (github.com/egladman/magus/types.Diff, error)
+github.com/egladman/magus/std.MagusChangeDiff func(ctx context.Context, c github.com/egladman/magus/types.Change, opts github.com/egladman/magus/types.MagusDiffOptions) (github.com/egladman/magus/types/diff.Diff, error)
 github.com/egladman/magus/std.MagusChangeImpact func(ctx context.Context, c github.com/egladman/magus/types.Change, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ImpactResult, error)
 github.com/egladman/magus/std.MagusChangeMergeBase func(ctx context.Context, c github.com/egladman/magus/types.Change) (string, error)
 github.com/egladman/magus/std.MagusChangeOpen func(ctx context.Context, base string, opts github.com/egladman/magus/types.ChangeOptions) (github.com/egladman/magus/types.Change, error)
@@ -558,7 +558,7 @@ github.com/egladman/magus/std.MagusDescribeTool func(ctx context.Context) (githu
 github.com/egladman/magus/std.MagusDescribeWorkspace func(ctx context.Context, opts github.com/egladman/magus/types.MagusCommandOptions) ([]github.com/egladman/magus/types.WorkspaceEntry, error)
 github.com/egladman/magus/std.MagusDiagnoseDrift func(ctx context.Context, outputs []string, inputs []string) (github.com/egladman/magus/types.DriftResult, error)
 github.com/egladman/magus/std.MagusDiagnosticCode func(ctx context.Context, text string) (github.com/egladman/magus/types.DiagnosticCodeRef, error)
-github.com/egladman/magus/std.MagusDiff func(ctx context.Context, opts github.com/egladman/magus/types.MagusDiffOptions) (github.com/egladman/magus/types.Diff, error)
+github.com/egladman/magus/std.MagusDiff func(ctx context.Context, opts github.com/egladman/magus/types.MagusDiffOptions) (github.com/egladman/magus/types/diff.Diff, error)
 github.com/egladman/magus/std.MagusDir func(ctx context.Context, dir string) (github.com/egladman/magus/types.Dir, error)
 github.com/egladman/magus/std.MagusDirs func(ctx context.Context, glob string, opts github.com/egladman/magus/types.DirsOptions) ([]github.com/egladman/magus/types.Dir, error)
 github.com/egladman/magus/std.MagusDiskReclaim func(ctx context.Context) (github.com/egladman/magus/types.DiskReclaim, error)
@@ -616,16 +616,16 @@ github.com/egladman/magus/std.MagusRefs func(ctx context.Context, symbol string,
 github.com/egladman/magus/std.MagusRegisterJob func(ctx context.Context, id string) (github.com/egladman/magus/types.Job, string, error)
 github.com/egladman/magus/std.MagusRiskAssess func(ctx context.Context, target string, opts github.com/egladman/magus/types.TierOptions) (github.com/egladman/magus/types.TierReport, error)
 github.com/egladman/magus/std.MagusRun func(ctx context.Context, args []string, opts github.com/egladman/magus/types.MagusCommandOptions) (github.com/egladman/magus/types.ExecResult, error)
-github.com/egladman/magus/std.MagusSessionMark func(ctx context.Context, _ github.com/egladman/magus/types.Session, mark map[string]any) (github.com/egladman/magus/types.TrailMark, error)
-github.com/egladman/magus/std.MagusSessionMarks func(ctx context.Context, _ github.com/egladman/magus/types.Session) ([]github.com/egladman/magus/types.TrailMark, error)
-github.com/egladman/magus/std.MagusSessionOpen func(ctx context.Context, opts github.com/egladman/magus/types.TrailReadOptions) (github.com/egladman/magus/types.Session, error)
-github.com/egladman/magus/std.MagusSessionTrail func(ctx context.Context, s github.com/egladman/magus/types.Session) (github.com/egladman/magus/types.Trail, error)
+github.com/egladman/magus/std.MagusSessionMark func(ctx context.Context, _ github.com/egladman/magus/types.Session, mark map[string]any) (github.com/egladman/magus/types/trail.Mark, error)
+github.com/egladman/magus/std.MagusSessionMarks func(ctx context.Context, _ github.com/egladman/magus/types.Session) ([]github.com/egladman/magus/types/trail.Mark, error)
+github.com/egladman/magus/std.MagusSessionOpen func(ctx context.Context, opts github.com/egladman/magus/types/trail.ReadOptions) (github.com/egladman/magus/types.Session, error)
+github.com/egladman/magus/std.MagusSessionTrail func(ctx context.Context, s github.com/egladman/magus/types.Session) (github.com/egladman/magus/types/trail.Trail, error)
 github.com/egladman/magus/std.MagusStats func(ctx context.Context, kind string) (github.com/egladman/magus/types.KnowledgeStats, error)
 github.com/egladman/magus/std.MagusSymbolIndexDigest func(ctx context.Context, languages []string) (github.com/egladman/magus/types.SymbolIndexDigest, error)
 github.com/egladman/magus/std.MagusSymbols func(ctx context.Context, languages []string) (github.com/egladman/magus/types.Symbols, error)
-github.com/egladman/magus/std.MagusTrailMark func(ctx context.Context, mark map[string]any) (github.com/egladman/magus/types.TrailMark, error)
-github.com/egladman/magus/std.MagusTrailMarks func(ctx context.Context) ([]github.com/egladman/magus/types.TrailMark, error)
-github.com/egladman/magus/std.MagusTrailRead func(ctx context.Context, opts github.com/egladman/magus/types.TrailReadOptions) (github.com/egladman/magus/types.Trail, error)
+github.com/egladman/magus/std.MagusTrailMark func(ctx context.Context, mark map[string]any) (github.com/egladman/magus/types/trail.Mark, error)
+github.com/egladman/magus/std.MagusTrailMarks func(ctx context.Context) ([]github.com/egladman/magus/types/trail.Mark, error)
+github.com/egladman/magus/std.MagusTrailRead func(ctx context.Context, opts github.com/egladman/magus/types/trail.ReadOptions) (github.com/egladman/magus/types/trail.Trail, error)
 github.com/egladman/magus/std.MagusTrend func(ctx context.Context, opts github.com/egladman/magus/types.HistoryMetricsOptions) (github.com/egladman/magus/types.Trend, error)
 github.com/egladman/magus/std.MagusUnmergedJob func(ctx context.Context, workspace string) (github.com/egladman/magus/types.JobUnmergedReport, error)
 github.com/egladman/magus/std.MagusUnreferenced func(ctx context.Context) (github.com/egladman/magus/types.Unreferenced, error)
@@ -966,12 +966,6 @@ github.com/egladman/magus/types.AllSymbols var SymbolScope
 github.com/egladman/magus/types.AllowlistUnresolved const DiagnosticCode = "MGS2004"
 github.com/egladman/magus/types.AncestryReporter type interface
 github.com/egladman/magus/types.AncestryReporter.IsAncestor imethod func(ctx context.Context, dir string, ancestor string, descendant string) (bool, error)
-github.com/egladman/magus/types.AnchorContextLines const untyped int = 3
-github.com/egladman/magus/types.AnchorDeclaration const CommentAnchorRung = "declaration"
-github.com/egladman/magus/types.AnchorExact const CommentAnchorRung = "exact"
-github.com/egladman/magus/types.AnchorLost const CommentAnchorRung = "lost"
-github.com/egladman/magus/types.AnchorMoved const CommentAnchorRung = "moved"
-github.com/egladman/magus/types.AnchorUnknown const CommentAnchorRung = ""
 github.com/egladman/magus/types.AppendInvocationAncestor func(ctx context.Context, pid int, id string) context.Context
 github.com/egladman/magus/types.AppendRef func[T InputRef | OutputRef | UpdateRef](refs []T, ref T) []T
 github.com/egladman/magus/types.ArchiveEntry type struct
@@ -1316,20 +1310,9 @@ github.com/egladman/magus/types.Check.Message field string "json:\"message,omite
 github.com/egladman/magus/types.Check.Name field string "json:\"name\" yaml:\"name\""
 github.com/egladman/magus/types.Check.Status field CheckStatus "json:\"status\" yaml:\"status\""
 github.com/egladman/magus/types.CheckAdvice const CheckStatus = "advice"
-github.com/egladman/magus/types.CheckCallSequence const untyped string = "call-sequence"
 github.com/egladman/magus/types.CheckFail const CheckStatus = "fail"
-github.com/egladman/magus/types.CheckImportAlias const untyped string = "import-alias"
 github.com/egladman/magus/types.CheckLayer func(dir string, name string) error
-github.com/egladman/magus/types.CheckNameCollision const untyped string = "name-collision"
-github.com/egladman/magus/types.CheckNamingAffix const untyped string = "naming-affix"
 github.com/egladman/magus/types.CheckOK const CheckStatus = "ok"
-github.com/egladman/magus/types.CheckPackageFiles const untyped string = "package-files"
-github.com/egladman/magus/types.CheckPackageName const untyped string = "package-name"
-github.com/egladman/magus/types.CheckPackageTests const untyped string = "package-tests"
-github.com/egladman/magus/types.CheckParamOrder const untyped string = "param-order"
-github.com/egladman/magus/types.CheckRenameLeftover const untyped string = "rename-leftover"
-github.com/egladman/magus/types.CheckSharedLoop const untyped string = "shared-loop"
-github.com/egladman/magus/types.CheckSiblingSprawl const untyped string = "sibling-sprawl"
 github.com/egladman/magus/types.CheckStatus type string
 github.com/egladman/magus/types.CheckStatus.String method func() string
 github.com/egladman/magus/types.CheckStatus.Valid method func() bool
@@ -1434,13 +1417,6 @@ github.com/egladman/magus/types.CommandRequest.Thread field AgentThread
 github.com/egladman/magus/types.CommandRequest.ThreadFrom field ThreadSource
 github.com/egladman/magus/types.CommandRequest.Window field *ContextWindow
 github.com/egladman/magus/types.CommandRequest.Workspace field string
-github.com/egladman/magus/types.CommentAnchor type struct
-github.com/egladman/magus/types.CommentAnchor.After field []string "json:\"after,omitempty\"  yaml:\"after,omitempty\""
-github.com/egladman/magus/types.CommentAnchor.Before field []string "json:\"before,omitempty\" yaml:\"before,omitempty\""
-github.com/egladman/magus/types.CommentAnchor.Declaration field string "json:\"declaration,omitempty\" yaml:\"declaration,omitempty\""
-github.com/egladman/magus/types.CommentAnchor.Digest field string "json:\"digest,omitempty\" yaml:\"digest,omitempty\""
-github.com/egladman/magus/types.CommentAnchor.Quote field string "json:\"quote,omitempty\" yaml:\"quote,omitempty\""
-github.com/egladman/magus/types.CommentAnchorRung type string
 github.com/egladman/magus/types.Commit type struct
 github.com/egladman/magus/types.Commit.Author field Person
 github.com/egladman/magus/types.Commit.Body field string
@@ -1686,7 +1662,6 @@ github.com/egladman/magus/types.Declaration.Validation field string "json:\"vali
 github.com/egladman/magus/types.Declaration.Weight field *float64 "json:\"weight,omitempty\""
 github.com/egladman/magus/types.Declaration.WritePaths field []string "json:\"write_paths,omitempty\" schema:\"writepath\""
 github.com/egladman/magus/types.DeclarationSchema var SchemaLedger
-github.com/egladman/magus/types.DecodeStreamEvent func(line []byte) (StreamEvent, error)
 github.com/egladman/magus/types.DefaultJobWeight const untyped float = 1/2
 github.com/egladman/magus/types.DefaultRefReporter type interface
 github.com/egladman/magus/types.DefaultRefReporter.DefaultRef imethod func(ctx context.Context, dir string) (string, error)
@@ -1775,73 +1750,9 @@ github.com/egladman/magus/types.DiagnosticOwnerWorkspace const untyped string = 
 github.com/egladman/magus/types.DiagnosticRationale func(err error) string
 github.com/egladman/magus/types.DiagnosticSink type = github.com/egladman/magus/libs/diagnostics.Sink
 github.com/egladman/magus/types.DiagnosticSink.Record imethod func(github.com/egladman/magus/libs/diagnostics.Event)
-github.com/egladman/magus/types.Diff type struct
-github.com/egladman/magus/types.Diff.API field *DiffAPI "json:\"api,omitempty\" yaml:\"api,omitempty\""
-github.com/egladman/magus/types.Diff.AffectedProjects field []ImpactProject "json:\"affected_projects,omitempty\" yaml:\"affected_projects,omitempty\""
-github.com/egladman/magus/types.Diff.AttachChurn method func(files []FileHotspot, projects []TrendEntry)
-github.com/egladman/magus/types.Diff.AttachReadState method func(byPath map[string]string)
-github.com/egladman/magus/types.Diff.AttachReviewed method(ptr) func(at VCSCheckpoint, files int)
-github.com/egladman/magus/types.Diff.Base field string "json:\"base\" yaml:\"base\""
-github.com/egladman/magus/types.Diff.ConformanceError field *Diagnostic "json:\"conformance_error,omitempty\" yaml:\"conformance_error,omitempty\""
-github.com/egladman/magus/types.Diff.Files field []DiffFile "json:\"files,omitempty\" yaml:\"files,omitempty\" jsonl:\"primary\""
-github.com/egladman/magus/types.Diff.GeneratedCount method func() int
-github.com/egladman/magus/types.Diff.Notes field []string "json:\"notes,omitempty\" yaml:\"notes,omitempty\""
-github.com/egladman/magus/types.Diff.Order field *DiffOrder "json:\"order,omitempty\" yaml:\"order,omitempty\""
-github.com/egladman/magus/types.Diff.Ranked method func() bool
-github.com/egladman/magus/types.Diff.Reviewed field DiffReviewed "json:\"reviewed,omitzero\" yaml:\"reviewed,omitzero\""
-github.com/egladman/magus/types.Diff.SeedProjects field []string "json:\"seed_projects,omitempty\" yaml:\"seed_projects,omitempty\""
-github.com/egladman/magus/types.Diff.SortForReading method func()
-github.com/egladman/magus/types.Diff.Uncovered field []DiffUncovered "json:\"uncovered,omitempty\" yaml:\"uncovered,omitempty\""
-github.com/egladman/magus/types.Diff.Unread field *DiffUnread "json:\"unread,omitempty\" yaml:\"unread,omitempty\""
-github.com/egladman/magus/types.DiffAPI type struct
-github.com/egladman/magus/types.DiffAPI.Added field int "json:\"added\"     yaml:\"added\""
-github.com/egladman/magus/types.DiffAPI.Base field string "json:\"base\" yaml:\"base\""
-github.com/egladman/magus/types.DiffAPI.Body field int "json:\"body\"      yaml:\"body\""
-github.com/egladman/magus/types.DiffAPI.Floor field string "json:\"floor\" yaml:\"floor\""
-github.com/egladman/magus/types.DiffAPI.Likely field string "json:\"likely\" yaml:\"likely\""
-github.com/egladman/magus/types.DiffAPI.Removed field int "json:\"removed\"   yaml:\"removed\""
-github.com/egladman/magus/types.DiffAPI.Signature field int "json:\"signature\" yaml:\"signature\""
-github.com/egladman/magus/types.DiffAPI.Stage field ReleaseStage "json:\"stage\" yaml:\"stage\""
-github.com/egladman/magus/types.DiffAuthor type string
-github.com/egladman/magus/types.DiffAuthorAgent const DiffAuthor = "agent"
-github.com/egladman/magus/types.DiffAuthorUnattributed const DiffAuthor = "unattributed"
-github.com/egladman/magus/types.DiffBoundaryPackage const untyped string = "package"
-github.com/egladman/magus/types.DiffBoundaryProject const untyped string = "project"
-github.com/egladman/magus/types.DiffBumpMajor const untyped string = "major"
-github.com/egladman/magus/types.DiffBumpMinor const untyped string = "minor"
-github.com/egladman/magus/types.DiffBumpNone const untyped string = "none"
-github.com/egladman/magus/types.DiffBumpPatch const untyped string = "patch"
-github.com/egladman/magus/types.DiffChangeAdded const untyped string = "added"
-github.com/egladman/magus/types.DiffChangeBody const untyped string = "body"
-github.com/egladman/magus/types.DiffChangeRemoved const untyped string = "removed"
-github.com/egladman/magus/types.DiffChangeSignature const untyped string = "signature"
-github.com/egladman/magus/types.DiffChurn type struct
-github.com/egladman/magus/types.DiffChurn.Authors field int "json:\"authors,omitempty\" yaml:\"authors,omitempty\""
-github.com/egladman/magus/types.DiffChurn.Commits field int "json:\"commits\" yaml:\"commits\""
-github.com/egladman/magus/types.DiffChurn.NotableRank method func() bool
-github.com/egladman/magus/types.DiffChurn.ProjectTrend field int "json:\"project_trend,omitempty\" yaml:\"project_trend,omitempty\""
-github.com/egladman/magus/types.DiffChurn.Rank field int "json:\"rank,omitempty\" yaml:\"rank,omitempty\""
-github.com/egladman/magus/types.DiffChurn.Rising method func() bool
-github.com/egladman/magus/types.DiffChurn.Score field int "json:\"score\" yaml:\"score\""
 github.com/egladman/magus/types.DiffCommandHints type struct
 github.com/egladman/magus/types.DiffCommandHints.CLI field string
 github.com/egladman/magus/types.DiffCommandHints.GUI field string
-github.com/egladman/magus/types.DiffComment type struct
-github.com/egladman/magus/types.DiffComment.AgentName field string "json:\"agent_name,omitempty\" yaml:\"agent_name,omitempty\""
-github.com/egladman/magus/types.DiffComment.Anchor field CommentAnchor "json:\"anchor,omitzero\" yaml:\"anchor,omitzero\""
-github.com/egladman/magus/types.DiffComment.Author field DiffAuthor "json:\"author\" yaml:\"author\""
-github.com/egladman/magus/types.DiffComment.Body field string "json:\"body\" yaml:\"body\""
-github.com/egladman/magus/types.DiffComment.Hunk field int "json:\"hunk\" yaml:\"hunk\""
-github.com/egladman/magus/types.DiffComment.ID field string "json:\"id\" yaml:\"id\""
-github.com/egladman/magus/types.DiffComment.Line field int "json:\"line,omitempty\" yaml:\"line,omitempty\""
-github.com/egladman/magus/types.DiffComment.Origin field Origin "json:\"origin,omitzero\" yaml:\"origin,omitzero\""
-github.com/egladman/magus/types.DiffComment.Path field string "json:\"path\" yaml:\"path\""
-github.com/egladman/magus/types.DiffComment.Published field bool "json:\"published,omitempty\" yaml:\"published,omitempty\""
-github.com/egladman/magus/types.DiffComment.Resolved field bool "json:\"resolved\" yaml:\"resolved\""
-github.com/egladman/magus/types.DiffComment.Rung field CommentAnchorRung "json:\"rung,omitempty\" yaml:\"rung,omitempty\""
-github.com/egladman/magus/types.DiffCursor type struct
-github.com/egladman/magus/types.DiffCursor.Hunk field int "json:\"hunk\" yaml:\"hunk\""
-github.com/egladman/magus/types.DiffCursor.Path field string "json:\"path,omitempty\" yaml:\"path,omitempty\""
 github.com/egladman/magus/types.DiffDriver type struct
 github.com/egladman/magus/types.DiffDriver.Builtin field bool
 github.com/egladman/magus/types.DiffDriver.Conform method func(lines []string, decls []string)
@@ -1851,208 +1762,8 @@ github.com/egladman/magus/types.DiffDriver.Globs field []string
 github.com/egladman/magus/types.DiffDriver.Name field string
 github.com/egladman/magus/types.DiffDriver.OpaqueLines method func(lines []string) []bool
 github.com/egladman/magus/types.DiffDrivers var []DiffDriver
-github.com/egladman/magus/types.DiffFile type struct
-github.com/egladman/magus/types.DiffFile.Churn field *DiffChurn "json:\"churn,omitempty\" yaml:\"churn,omitempty\""
-github.com/egladman/magus/types.DiffFile.Coverage field *ImpactCoverage "json:\"coverage,omitempty\" yaml:\"coverage,omitempty\""
-github.com/egladman/magus/types.DiffFile.Generated method func() bool
-github.com/egladman/magus/types.DiffFile.Hint field string "json:\"hint,omitempty\" yaml:\"hint,omitempty\""
-github.com/egladman/magus/types.DiffFile.Hunks field []DiffHunk "json:\"hunks,omitempty\" yaml:\"hunks,omitempty\""
-github.com/egladman/magus/types.DiffFile.Layout field []Check "json:\"layout,omitempty\" yaml:\"layout,omitempty\""
-github.com/egladman/magus/types.DiffFile.NoHistory field bool "json:\"no_history,omitempty\" yaml:\"no_history,omitempty\""
-github.com/egladman/magus/types.DiffFile.Path field string "json:\"path\" yaml:\"path\""
-github.com/egladman/magus/types.DiffFile.Project field string "json:\"project,omitempty\" yaml:\"project,omitempty\""
-github.com/egladman/magus/types.DiffFile.Reach field *int "json:\"reach\" yaml:\"reach\""
-github.com/egladman/magus/types.DiffFile.ReachOr method func(def int) int
-github.com/egladman/magus/types.DiffFile.ReadState field string "json:\"read_state,omitempty\" yaml:\"read_state,omitempty\""
-github.com/egladman/magus/types.DiffFile.Risk field *TierEvidence "json:\"risk,omitempty\" yaml:\"risk,omitempty\""
-github.com/egladman/magus/types.DiffFile.RiskRank method func() int
-github.com/egladman/magus/types.DiffFile.Role field string "json:\"role\" yaml:\"role\""
-github.com/egladman/magus/types.DiffFile.Symbols field []DiffSymbol "json:\"symbols,omitempty\" yaml:\"symbols,omitempty\""
-github.com/egladman/magus/types.DiffFile.Threads field []DiffThreadRef "json:\"threads,omitempty\" yaml:\"threads,omitempty\""
-github.com/egladman/magus/types.DiffFile.Touches field []DiffTouch "json:\"touches,omitempty\" yaml:\"touches,omitempty\""
-github.com/egladman/magus/types.DiffFile.Visibility field string "json:\"visibility\" yaml:\"visibility\""
-github.com/egladman/magus/types.DiffGroup type struct
-github.com/egladman/magus/types.DiffGroup.HunkCount field int "json:\"hunk_count\" yaml:\"hunk_count\""
-github.com/egladman/magus/types.DiffGroup.Kind field DiffGroupKind "json:\"kind\" yaml:\"kind\""
-github.com/egladman/magus/types.DiffGroup.Label field string "json:\"label,omitempty\" yaml:\"label,omitempty\""
-github.com/egladman/magus/types.DiffGroup.Reach field int "json:\"reach\" yaml:\"reach\""
-github.com/egladman/magus/types.DiffGroup.Steps field []DiffStep "json:\"steps\" yaml:\"steps\""
-github.com/egladman/magus/types.DiffGroupConnected const DiffGroupKind = "connected"
-github.com/egladman/magus/types.DiffGroupGenerated const DiffGroupKind = "generated"
-github.com/egladman/magus/types.DiffGroupKind type string
-github.com/egladman/magus/types.DiffGroupUnranked const DiffGroupKind = "unranked"
-github.com/egladman/magus/types.DiffHunk type struct
-github.com/egladman/magus/types.DiffHunk.Declaration field string "json:\"declaration,omitempty\" yaml:\"declaration,omitempty\""
-github.com/egladman/magus/types.DiffHunk.Digest field string "json:\"digest\" yaml:\"digest\""
-github.com/egladman/magus/types.DiffHunk.Index field int "json:\"index\" yaml:\"index\""
-github.com/egladman/magus/types.DiffHunk.NewCount field int "json:\"new_count\" yaml:\"new_count\""
-github.com/egladman/magus/types.DiffHunk.NewStart field int "json:\"new_start\" yaml:\"new_start\""
-github.com/egladman/magus/types.DiffHunk.OldCount field int "json:\"old_count\" yaml:\"old_count\""
-github.com/egladman/magus/types.DiffHunk.OldStart field int "json:\"old_start\" yaml:\"old_start\""
-github.com/egladman/magus/types.DiffHunk.Symbols field []string "json:\"symbols,omitempty\" yaml:\"symbols,omitempty\""
-github.com/egladman/magus/types.DiffHunkRef type struct
-github.com/egladman/magus/types.DiffHunkRef.Digest field string "json:\"digest\" yaml:\"digest\""
-github.com/egladman/magus/types.DiffHunkRef.Index field int "json:\"index\" yaml:\"index\""
-github.com/egladman/magus/types.DiffHunkRef.Key method func() string
-github.com/egladman/magus/types.DiffHunkRef.Path field string "json:\"path\" yaml:\"path\""
-github.com/egladman/magus/types.DiffOptions type struct
-github.com/egladman/magus/types.DiffOptions.Baseline field *KnowledgeGraphOutput "json:\"-\" yaml:\"-\""
-github.com/egladman/magus/types.DiffOptions.BaselineLabel field string "json:\"-\" yaml:\"-\""
-github.com/egladman/magus/types.DiffOptions.MinCohort field int "json:\"-\" yaml:\"-\""
-github.com/egladman/magus/types.DiffOptions.MinShare field float64 "json:\"-\" yaml:\"-\""
-github.com/egladman/magus/types.DiffOptions.Patch field string "json:\"-\" yaml:\"-\""
-github.com/egladman/magus/types.DiffOptions.RiskBase field string "json:\"-\" yaml:\"-\""
-github.com/egladman/magus/types.DiffOptions.SkipOrder field bool "json:\"-\" yaml:\"-\""
-github.com/egladman/magus/types.DiffOrder type struct
-github.com/egladman/magus/types.DiffOrder.Count field DiffOrderCount "json:\"count\" yaml:\"count\""
-github.com/egladman/magus/types.DiffOrder.Groups field []DiffGroup "json:\"groups\" yaml:\"groups\""
-github.com/egladman/magus/types.DiffOrderCount type struct
-github.com/egladman/magus/types.DiffOrderCount.Complete field bool "json:\"complete\" yaml:\"complete\""
-github.com/egladman/magus/types.DiffOrderCount.FilesWithoutHunks field []string "json:\"files_without_hunks,omitempty\" yaml:\"files_without_hunks,omitempty\""
-github.com/egladman/magus/types.DiffOrderCount.HunkCount field int "json:\"hunk_count\" yaml:\"hunk_count\""
-github.com/egladman/magus/types.DiffOrderCount.Missing field []DiffHunkRef "json:\"missing,omitempty\" yaml:\"missing,omitempty\""
-github.com/egladman/magus/types.DiffOrderCount.Placed field int "json:\"placed\" yaml:\"placed\""
-github.com/egladman/magus/types.DiffOrderCount.Repeated field []DiffHunkRef "json:\"repeated,omitempty\" yaml:\"repeated,omitempty\""
-github.com/egladman/magus/types.DiffOutline type struct
-github.com/egladman/magus/types.DiffOutline.AgentName field string "json:\"agent_name,omitempty\" yaml:\"agent_name,omitempty\""
-github.com/egladman/magus/types.DiffOutline.Thread field string "json:\"thread\" yaml:\"thread\""
-github.com/egladman/magus/types.DiffOutline.Topics field []string "json:\"topics\" yaml:\"topics\""
-github.com/egladman/magus/types.DiffOutlineMaxAgentNameRunes const untyped int = 40
-github.com/egladman/magus/types.DiffOutlineMaxTopicRunes const untyped int = 60
-github.com/egladman/magus/types.DiffOutlineMaxTopics const untyped int = 5
-github.com/egladman/magus/types.DiffPublicPath type struct
-github.com/egladman/magus/types.DiffPublicPath.Boundary field string "json:\"boundary\" yaml:\"boundary\""
-github.com/egladman/magus/types.DiffPublicPath.ID field string "json:\"id\" yaml:\"id\""
-github.com/egladman/magus/types.DiffPublicPath.Qualified field string "json:\"qualified,omitempty\" yaml:\"qualified,omitempty\""
-github.com/egladman/magus/types.DiffPublicPath.Via field []string "json:\"via,omitempty\" yaml:\"via,omitempty\""
-github.com/egladman/magus/types.DiffReadRead const untyped string = "read"
-github.com/egladman/magus/types.DiffReadStale const untyped string = "stale"
-github.com/egladman/magus/types.DiffReadState type string
-github.com/egladman/magus/types.DiffReadState.String method func() string
-github.com/egladman/magus/types.DiffReadState.Valid method func() bool
-github.com/egladman/magus/types.DiffReadState.Values method func() []string
-github.com/egladman/magus/types.DiffReadStateKnown const DiffReadState = "known"
-github.com/egladman/magus/types.DiffReadStateUnknown const DiffReadState = "unknown"
-github.com/egladman/magus/types.DiffReadUnknown const untyped string = ""
-github.com/egladman/magus/types.DiffReadUnread const untyped string = "unread"
-github.com/egladman/magus/types.DiffReview type struct
-github.com/egladman/magus/types.DiffReview.AsOf field string "json:\"as_of,omitempty\" yaml:\"as_of,omitempty\""
-github.com/egladman/magus/types.DiffReview.Base field string "json:\"base\" yaml:\"base\""
-github.com/egladman/magus/types.DiffReview.Comments field []DiffComment "json:\"comments,omitempty\"     yaml:\"comments,omitempty\""
-github.com/egladman/magus/types.DiffReview.Cursor field DiffCursor "json:\"cursor\" yaml:\"cursor\""
-github.com/egladman/magus/types.DiffReview.Diff field Diff "json:\"diff\" yaml:\"diff\""
-github.com/egladman/magus/types.DiffReview.ID field string "json:\"id\" yaml:\"id\""
-github.com/egladman/magus/types.DiffReview.Outlines field []DiffOutline "json:\"outlines,omitempty\" yaml:\"outlines,omitempty\""
-github.com/egladman/magus/types.DiffReview.SeenComments field []string "json:\"seen_threads,omitempty\" yaml:\"seen_threads,omitempty\""
-github.com/egladman/magus/types.DiffReview.Suggestions field []DiffSuggestion "json:\"suggestions,omitempty\"  yaml:\"suggestions,omitempty\""
-github.com/egladman/magus/types.DiffReview.UnseenComments method func(comments []ReviewComment) []string
-github.com/egladman/magus/types.DiffReview.Viewed field []string "json:\"viewed,omitempty\"      yaml:\"viewed,omitempty\""
-github.com/egladman/magus/types.DiffReviewed type struct
-github.com/egladman/magus/types.DiffReviewed.At field VCSCheckpoint "json:\"at,omitzero\" yaml:\"at,omitzero\""
-github.com/egladman/magus/types.DiffReviewed.Files field int "json:\"files,omitempty\" yaml:\"files,omitempty\""
-github.com/egladman/magus/types.DiffRoleMaintained const untyped string = "maintained"
-github.com/egladman/magus/types.DiffRoleOutput const untyped string = "output"
-github.com/egladman/magus/types.DiffRoleSource const untyped string = "source"
-github.com/egladman/magus/types.DiffRoleUnclaimed const untyped string = "unclaimed"
 github.com/egladman/magus/types.DiffStater type interface
 github.com/egladman/magus/types.DiffStater.DiffStat imethod func(ctx context.Context, dir string, base string) ([]FileStat, error)
-github.com/egladman/magus/types.DiffStep type struct
-github.com/egladman/magus/types.DiffStep.Hunks field []DiffStepHunk "json:\"hunks\" yaml:\"hunks\""
-github.com/egladman/magus/types.DiffStep.Number field int "json:\"number\" yaml:\"number\""
-github.com/egladman/magus/types.DiffStepHunk type struct
-github.com/egladman/magus/types.DiffStepHunk.Label field string "json:\"label,omitempty\" yaml:\"label,omitempty\""
-github.com/egladman/magus/types.DiffStepHunk.Ref field DiffHunkRef "json:\"ref\" yaml:\"ref\""
-github.com/egladman/magus/types.DiffStepHunk.Why field DiffWhy "json:\"why\" yaml:\"why\""
-github.com/egladman/magus/types.DiffSuggestion type struct
-github.com/egladman/magus/types.DiffSuggestion.AgentName field string "json:\"agent_name,omitempty\" yaml:\"agent_name,omitempty\""
-github.com/egladman/magus/types.DiffSuggestion.Hunk field int "json:\"hunk\" yaml:\"hunk\""
-github.com/egladman/magus/types.DiffSuggestion.ID field string "json:\"id\" yaml:\"id\""
-github.com/egladman/magus/types.DiffSuggestion.Path field string "json:\"path\" yaml:\"path\""
-github.com/egladman/magus/types.DiffSuggestion.Reason field string "json:\"reason\" yaml:\"reason\""
-github.com/egladman/magus/types.DiffSuggestion.Status field SuggestionStatus "json:\"status,omitempty\" yaml:\"status,omitempty\""
-github.com/egladman/magus/types.DiffSymbol type struct
-github.com/egladman/magus/types.DiffSymbol.BaseSignature field string "json:\"base_signature,omitempty\" yaml:\"base_signature,omitempty\""
-github.com/egladman/magus/types.DiffSymbol.Change field string "json:\"change,omitempty\" yaml:\"change,omitempty\""
-github.com/egladman/magus/types.DiffSymbol.Checks field []Check "json:\"checks,omitempty\" yaml:\"checks,omitempty\""
-github.com/egladman/magus/types.DiffSymbol.FileCount field int "json:\"file_count\" yaml:\"file_count\""
-github.com/egladman/magus/types.DiffSymbol.ID field string "json:\"id\" yaml:\"id\""
-github.com/egladman/magus/types.DiffSymbol.Label field string "json:\"label,omitempty\" yaml:\"label,omitempty\""
-github.com/egladman/magus/types.DiffSymbol.PublicBeyondWorkspace field bool "json:\"public_beyond_workspace,omitempty\" yaml:\"public_beyond_workspace,omitempty\""
-github.com/egladman/magus/types.DiffSymbol.PublicFileCount field int "json:\"public_file_count\" yaml:\"public_file_count\""
-github.com/egladman/magus/types.DiffSymbol.PublicThrough field []DiffPublicPath "json:\"public_through,omitempty\" yaml:\"public_through,omitempty\""
-github.com/egladman/magus/types.DiffSymbol.PublicTo field []string "json:\"public_to,omitempty\" yaml:\"public_to,omitempty\""
-github.com/egladman/magus/types.DiffSymbol.Qualified field string "json:\"qualified,omitempty\" yaml:\"qualified,omitempty\""
-github.com/egladman/magus/types.DiffSymbol.RefCount field int "json:\"ref_count\"  yaml:\"ref_count\""
-github.com/egladman/magus/types.DiffSymbol.Signature field string "json:\"signature,omitempty\"      yaml:\"signature,omitempty\""
-github.com/egladman/magus/types.DiffThread type struct
-github.com/egladman/magus/types.DiffThread.Change field string "json:\"change,omitempty\" yaml:\"change,omitempty\""
-github.com/egladman/magus/types.DiffThread.Comments field []ReviewComment "json:\"comments\" yaml:\"comments\""
-github.com/egladman/magus/types.DiffThread.Coverage field *ImpactCoverage "json:\"coverage,omitempty\" yaml:\"coverage,omitempty\""
-github.com/egladman/magus/types.DiffThread.Hunk field DiffThreadHunk "json:\"hunk\" yaml:\"hunk\""
-github.com/egladman/magus/types.DiffThread.ID field string "json:\"id\" yaml:\"id\""
-github.com/egladman/magus/types.DiffThread.InChangeset field bool "json:\"in_changeset\" yaml:\"in_changeset\""
-github.com/egladman/magus/types.DiffThread.Line field int "json:\"line,omitempty\" yaml:\"line,omitempty\""
-github.com/egladman/magus/types.DiffThread.Notes field []string "json:\"notes,omitempty\" yaml:\"notes,omitempty\""
-github.com/egladman/magus/types.DiffThread.Outdated field bool "json:\"outdated,omitempty\" yaml:\"outdated,omitempty\""
-github.com/egladman/magus/types.DiffThread.Path field string "json:\"path\" yaml:\"path\""
-github.com/egladman/magus/types.DiffThread.Project field string "json:\"project,omitempty\" yaml:\"project,omitempty\""
-github.com/egladman/magus/types.DiffThread.Reach field *int "json:\"reach,omitempty\" yaml:\"reach,omitempty\""
-github.com/egladman/magus/types.DiffThread.Role field string "json:\"role,omitempty\" yaml:\"role,omitempty\""
-github.com/egladman/magus/types.DiffThread.Symbols field []DiffSymbol "json:\"symbols,omitempty\" yaml:\"symbols,omitempty\""
-github.com/egladman/magus/types.DiffThread.SymbolsNote field string "json:\"symbols_note,omitempty\" yaml:\"symbols_note,omitempty\""
-github.com/egladman/magus/types.DiffThread.Unmeasured field []string "json:\"unmeasured,omitempty\" yaml:\"unmeasured,omitempty\""
-github.com/egladman/magus/types.DiffThreadHunk type struct
-github.com/egladman/magus/types.DiffThreadHunk.Index field int "json:\"index\" yaml:\"index\""
-github.com/egladman/magus/types.DiffThreadHunk.Lines field []string "json:\"lines,omitempty\" yaml:\"lines,omitempty\""
-github.com/egladman/magus/types.DiffThreadHunk.Note field string "json:\"note\" yaml:\"note\""
-github.com/egladman/magus/types.DiffThreadHunk.Source field string "json:\"source,omitempty\" yaml:\"source,omitempty\""
-github.com/egladman/magus/types.DiffThreadRef type struct
-github.com/egladman/magus/types.DiffThreadRef.Comments field int "json:\"comments\" yaml:\"comments\""
-github.com/egladman/magus/types.DiffThreadRef.Hunk field int "json:\"hunk\" yaml:\"hunk\""
-github.com/egladman/magus/types.DiffThreadRef.ID field string "json:\"id\" yaml:\"id\""
-github.com/egladman/magus/types.DiffThreadRef.Line field int "json:\"line,omitempty\" yaml:\"line,omitempty\""
-github.com/egladman/magus/types.DiffThreadRef.Outdated field bool "json:\"outdated,omitempty\" yaml:\"outdated,omitempty\""
-github.com/egladman/magus/types.DiffTouch type struct
-github.com/egladman/magus/types.DiffTouch.Host field string "json:\"host,omitempty\" yaml:\"host,omitempty\""
-github.com/egladman/magus/types.DiffTouch.Ran field []string "json:\"ran,omitempty\" yaml:\"ran,omitempty\""
-github.com/egladman/magus/types.DiffTouch.Read field []string "json:\"read,omitempty\" yaml:\"read,omitempty\""
-github.com/egladman/magus/types.DiffTouch.Session field string "json:\"session,omitempty\"    yaml:\"session,omitempty\""
-github.com/egladman/magus/types.DiffTouch.Transcript field string "json:\"transcript,omitempty\" yaml:\"transcript,omitempty\""
-github.com/egladman/magus/types.DiffUncovered type struct
-github.com/egladman/magus/types.DiffUncovered.Project field string "json:\"project\" yaml:\"project\""
-github.com/egladman/magus/types.DiffUncovered.Reason field DiffUncoveredReason "json:\"reason\"  yaml:\"reason\""
-github.com/egladman/magus/types.DiffUncoveredNoIndexer const DiffUncoveredReason = "no-indexer"
-github.com/egladman/magus/types.DiffUncoveredReason type string
-github.com/egladman/magus/types.DiffUncoveredReason.Sentence method func() string
-github.com/egladman/magus/types.DiffUncoveredReason.String method func() string
-github.com/egladman/magus/types.DiffUncoveredReason.Valid method func() bool
-github.com/egladman/magus/types.DiffUncoveredReason.Values method func() []string
-github.com/egladman/magus/types.DiffUnread type struct
-github.com/egladman/magus/types.DiffUnread.Hunks field int "json:\"hunks\" yaml:\"hunks\""
-github.com/egladman/magus/types.DiffUnread.ReadState field DiffReadState "json:\"read_state\" yaml:\"read_state\""
-github.com/egladman/magus/types.DiffUnread.Reason field string "json:\"reason,omitempty\" yaml:\"reason,omitempty\""
-github.com/egladman/magus/types.DiffUnread.Unread field int "json:\"unread\" yaml:\"unread\""
-github.com/egladman/magus/types.DiffVisibilityInternal const untyped string = "internal"
-github.com/egladman/magus/types.DiffVisibilityPublic const untyped string = "public"
-github.com/egladman/magus/types.DiffVisibilityUnknown const untyped string = "unknown"
-github.com/egladman/magus/types.DiffWhy type struct
-github.com/egladman/magus/types.DiffWhy.Cycle field []string "json:\"cycle,omitempty\" yaml:\"cycle,omitempty\""
-github.com/egladman/magus/types.DiffWhy.Relation field DiffWhyRelation "json:\"relation\" yaml:\"relation\""
-github.com/egladman/magus/types.DiffWhy.Step field int "json:\"step,omitempty\" yaml:\"step,omitempty\""
-github.com/egladman/magus/types.DiffWhy.Symbol field string "json:\"symbol,omitempty\" yaml:\"symbol,omitempty\""
-github.com/egladman/magus/types.DiffWhy.Text field string "json:\"text\" yaml:\"text\""
-github.com/egladman/magus/types.DiffWhyContinuedBy const DiffWhyRelation = "continued_by"
-github.com/egladman/magus/types.DiffWhyContinues const DiffWhyRelation = "continues"
-github.com/egladman/magus/types.DiffWhyGenerated const DiffWhyRelation = "generated"
-github.com/egladman/magus/types.DiffWhyImplementedBy const DiffWhyRelation = "implemented_by"
-github.com/egladman/magus/types.DiffWhyImplements const DiffWhyRelation = "implements"
-github.com/egladman/magus/types.DiffWhyRelation type string
-github.com/egladman/magus/types.DiffWhySameStep const DiffWhyRelation = "same_step"
-github.com/egladman/magus/types.DiffWhyStarts const DiffWhyRelation = "starts"
-github.com/egladman/magus/types.DiffWhyTests const DiffWhyRelation = "tests"
-github.com/egladman/magus/types.DiffWhyUnranked const DiffWhyRelation = "unranked"
-github.com/egladman/magus/types.DiffWhyUsedBy const DiffWhyRelation = "used_by"
-github.com/egladman/magus/types.DiffWhyUses const DiffWhyRelation = "uses"
 github.com/egladman/magus/types.DigestAbsent const untyped string = "absent"
 github.com/egladman/magus/types.DigestDir const untyped string = "dir"
 github.com/egladman/magus/types.DigestUnreadable const untyped string = "unreadable"
@@ -4223,7 +3934,6 @@ github.com/egladman/magus/types.NoopObserver.Observe method func(GraphEvent)
 github.com/egladman/magus/types.Normalize func(name string) string
 github.com/egladman/magus/types.NormalizeCharm func(name string) string
 github.com/egladman/magus/types.NormalizeExitCode func(code int) int
-github.com/egladman/magus/types.NotableRankCutoff const untyped int = 50
 github.com/egladman/magus/types.ObservationKeyedAsVersion const DiagnosticCode = "MGS1037"
 github.com/egladman/magus/types.Observer type interface
 github.com/egladman/magus/types.Observer.Observe imethod func(GraphEvent)
@@ -4336,7 +4046,6 @@ github.com/egladman/magus/types.ParseLeaseCheck func(s string) (LeaseCheck, erro
 github.com/egladman/magus/types.ParseLeaseRunLine func(s string) (LeaseCheck, error)
 github.com/egladman/magus/types.ParseLevel func(s string) (Level, error)
 github.com/egladman/magus/types.ParsePauseUntil func(raw string, now time.Time) (int64, error)
-github.com/egladman/magus/types.ParseStreamEventType func(s string) (StreamEventType, error)
 github.com/egladman/magus/types.ParseTarget func(s string) (Target, error)
 github.com/egladman/magus/types.ParseTimeout func(s string) (time.Duration, error)
 github.com/egladman/magus/types.ParseVersion func(s string) (v SemverVersion, ok bool)
@@ -4720,43 +4429,15 @@ github.com/egladman/magus/types.Returns type map[string]any
 github.com/egladman/magus/types.RevTimeReporter type interface
 github.com/egladman/magus/types.RevTimeReporter.RevTime imethod func(ctx context.Context, dir string, rev string) (t time.Time, found bool, err error)
 github.com/egladman/magus/types.ReviewAuthorshipUnknown const DiagnosticCode = "MGS1103"
-github.com/egladman/magus/types.ReviewComment type struct
-github.com/egladman/magus/types.ReviewComment.Author field string "json:\"author\" yaml:\"author\""
-github.com/egladman/magus/types.ReviewComment.Body field string "json:\"body\" yaml:\"body\""
-github.com/egladman/magus/types.ReviewComment.DiffHunk field string "json:\"diff_hunk,omitempty\" yaml:\"diff_hunk,omitempty\""
-github.com/egladman/magus/types.ReviewComment.Hunk field int "json:\"hunk\" yaml:\"hunk\""
-github.com/egladman/magus/types.ReviewComment.ID field string "json:\"id\" yaml:\"id\""
-github.com/egladman/magus/types.ReviewComment.Line field int "json:\"line\" yaml:\"line\""
-github.com/egladman/magus/types.ReviewComment.New field bool "json:\"new,omitempty\" yaml:\"new,omitempty\""
-github.com/egladman/magus/types.ReviewComment.Outdated field bool "json:\"outdated,omitempty\" yaml:\"outdated,omitempty\""
-github.com/egladman/magus/types.ReviewComment.Path field string "json:\"path\" yaml:\"path\""
-github.com/egladman/magus/types.ReviewComment.Root field string "json:\"root,omitempty\" yaml:\"root,omitempty\""
 github.com/egladman/magus/types.ReviewDraft type struct
 github.com/egladman/magus/types.ReviewDraft.Body field string
 github.com/egladman/magus/types.ReviewDraft.Line field int
 github.com/egladman/magus/types.ReviewDraft.Path field string
 github.com/egladman/magus/types.ReviewHostFailed const DiagnosticCode = "MGS9029"
 github.com/egladman/magus/types.ReviewOpMissing const DiagnosticCode = "MGS1102"
-github.com/egladman/magus/types.ReviewOrigin type struct
-github.com/egladman/magus/types.ReviewOrigin.Branch field string "json:\"branch,omitempty\" yaml:\"branch,omitempty\""
-github.com/egladman/magus/types.ReviewOrigin.Remote field string "json:\"remote,omitempty\" yaml:\"remote,omitempty\""
 github.com/egladman/magus/types.ReviewRef type struct
 github.com/egladman/magus/types.ReviewRef.ID field string
 github.com/egladman/magus/types.ReviewRef.Repo field string
-github.com/egladman/magus/types.ReviewTarget type struct
-github.com/egladman/magus/types.ReviewTarget.AllowedVerdicts method func() []ReviewVerdict
-github.com/egladman/magus/types.ReviewTarget.Author field string "json:\"author,omitempty\" yaml:\"author,omitempty\""
-github.com/egladman/magus/types.ReviewTarget.Closed method func() bool
-github.com/egladman/magus/types.ReviewTarget.ID field string "json:\"id\" yaml:\"id\""
-github.com/egladman/magus/types.ReviewTarget.Merged method func() bool
-github.com/egladman/magus/types.ReviewTarget.Open method func() bool
-github.com/egladman/magus/types.ReviewTarget.OpenedByViewer method func() (opened bool, known bool)
-github.com/egladman/magus/types.ReviewTarget.PermittedVerdict method func(want ReviewVerdict) ReviewVerdict
-github.com/egladman/magus/types.ReviewTarget.Reason field string "json:\"reason,omitempty\" yaml:\"reason,omitempty\""
-github.com/egladman/magus/types.ReviewTarget.Repo field string "json:\"repo,omitempty\" yaml:\"repo,omitempty\""
-github.com/egladman/magus/types.ReviewTarget.State field string "json:\"state,omitempty\" yaml:\"state,omitempty\""
-github.com/egladman/magus/types.ReviewTarget.VerdictLimit method func() string
-github.com/egladman/magus/types.ReviewTarget.Viewer field string "json:\"viewer,omitempty\" yaml:\"viewer,omitempty\""
 github.com/egladman/magus/types.ReviewVerdict type string
 github.com/egladman/magus/types.ReviewVerdict.Asserts method func() bool
 github.com/egladman/magus/types.RevisionExporter type interface
@@ -4872,7 +4553,6 @@ github.com/egladman/magus/types.ServiceOpDetached const DiagnosticCode = "MGS500
 github.com/egladman/magus/types.Session type struct
 github.com/egladman/magus/types.Session.Session field string "json:\"session\""
 github.com/egladman/magus/types.Session.Since field string "json:\"since\""
-github.com/egladman/magus/types.Session.TrailOptions method func() TrailReadOptions
 github.com/egladman/magus/types.Session.Until field string "json:\"until\""
 github.com/egladman/magus/types.Setting type struct
 github.com/egladman/magus/types.Setting.Key field []string "json:\"key\""
@@ -5113,56 +4793,11 @@ github.com/egladman/magus/types.StoredOutput.Schema embedded Schema
 github.com/egladman/magus/types.StoredOutput.Unmet method func(known []string) []string
 github.com/egladman/magus/types.StoredOutputSchema var SchemaLedger
 github.com/egladman/magus/types.StoredOutputSchemaVersion const untyped int = 1
-github.com/egladman/magus/types.StreamBody type interface
-github.com/egladman/magus/types.StreamBody.StreamType imethod func() StreamEventType
-github.com/egladman/magus/types.StreamEvent type struct
-github.com/egladman/magus/types.StreamEvent.Body field StreamBody "json:\"-\""
-github.com/egladman/magus/types.StreamEvent.Inv field string "json:\"-\""
-github.com/egladman/magus/types.StreamEvent.MarshalJSON method func() ([]byte, error)
-github.com/egladman/magus/types.StreamEvent.Ts field int64 "json:\"-\""
-github.com/egladman/magus/types.StreamEvent.UnmarshalJSON method(ptr) func(line []byte) error
-github.com/egladman/magus/types.StreamEvent.Workspace field string "json:\"-\""
-github.com/egladman/magus/types.StreamEventType type string
-github.com/egladman/magus/types.StreamEventTypes func() []StreamEventType
-github.com/egladman/magus/types.StreamFilter type struct
-github.com/egladman/magus/types.StreamFilter.Allows method func(t StreamEventType) bool
-github.com/egladman/magus/types.StreamFilter.Types field []StreamEventType
-github.com/egladman/magus/types.StreamOutput type struct
-github.com/egladman/magus/types.StreamOutput.Project field string "json:\"project,omitempty\""
-github.com/egladman/magus/types.StreamOutput.Stream field string "json:\"stream\""
-github.com/egladman/magus/types.StreamOutput.StreamType method func() StreamEventType
-github.com/egladman/magus/types.StreamOutput.Target field string "json:\"target,omitempty\""
-github.com/egladman/magus/types.StreamOutput.Text field string "json:\"text\""
-github.com/egladman/magus/types.StreamRun type struct
-github.com/egladman/magus/types.StreamRun.Command field []string "json:\"command,omitempty\""
-github.com/egladman/magus/types.StreamRun.MagusVersion field string "json:\"magus_version,omitempty\""
-github.com/egladman/magus/types.StreamRun.Phase field string "json:\"phase\""
-github.com/egladman/magus/types.StreamRun.Status field string "json:\"status,omitempty\""
-github.com/egladman/magus/types.StreamRun.StreamType method func() StreamEventType
-github.com/egladman/magus/types.StreamRun.Trigger field string "json:\"trigger,omitempty\""
-github.com/egladman/magus/types.StreamRunFinished const StreamEventType = "run.finished"
-github.com/egladman/magus/types.StreamRunStarted const StreamEventType = "run.started"
-github.com/egladman/magus/types.StreamSchema const untyped int = 1
-github.com/egladman/magus/types.StreamTarget type struct
-github.com/egladman/magus/types.StreamTarget.CacheHit field bool "json:\"cache_hit\""
-github.com/egladman/magus/types.StreamTarget.DurationMs field int64 "json:\"duration_ms,omitzero\""
-github.com/egladman/magus/types.StreamTarget.Error field string "json:\"error,omitempty\""
-github.com/egladman/magus/types.StreamTarget.Project field string "json:\"project\""
-github.com/egladman/magus/types.StreamTarget.Ref field string "json:\"ref,omitempty\""
-github.com/egladman/magus/types.StreamTarget.Status field string "json:\"status\""
-github.com/egladman/magus/types.StreamTarget.StreamType method func() StreamEventType
-github.com/egladman/magus/types.StreamTarget.Target field string "json:\"target\""
-github.com/egladman/magus/types.StreamTargetOutput const StreamEventType = "target.output"
-github.com/egladman/magus/types.StreamTargetResult const StreamEventType = "target.result"
 github.com/egladman/magus/types.StreamingUnsupported const DiagnosticCode = "MGS9028"
 github.com/egladman/magus/types.StricterGuardVerdict func(a GuardVerdict, b GuardVerdict) GuardVerdict
 github.com/egladman/magus/types.Strings type struct
 github.com/egladman/magus/types.Strings.Items field []string
 github.com/egladman/magus/types.Stubbed func(ctx context.Context, op string) bool
-github.com/egladman/magus/types.SuggestionAccepted const SuggestionStatus = "accepted"
-github.com/egladman/magus/types.SuggestionDeclined const SuggestionStatus = "declined"
-github.com/egladman/magus/types.SuggestionPending const SuggestionStatus = ""
-github.com/egladman/magus/types.SuggestionStatus type string
 github.com/egladman/magus/types.SymbolDecl type struct
 github.com/egladman/magus/types.SymbolDecl.Doc field string "json:\"doc\""
 github.com/egladman/magus/types.SymbolDecl.Kind field string "json:\"kind\""
@@ -5467,62 +5102,6 @@ github.com/egladman/magus/types.ToolWrites const ToolCapability = "writes"
 github.com/egladman/magus/types.Tracing func(ctx context.Context) bool
 github.com/egladman/magus/types.TrackedFileReporter type interface
 github.com/egladman/magus/types.TrackedFileReporter.TrackedFiles imethod func(ctx context.Context, dir string, paths []string) ([]string, error)
-github.com/egladman/magus/types.Trail type struct
-github.com/egladman/magus/types.Trail.Checkouts field []string
-github.com/egladman/magus/types.Trail.End field int64
-github.com/egladman/magus/types.Trail.Host field string
-github.com/egladman/magus/types.Trail.Observations field []TrailObservation
-github.com/egladman/magus/types.Trail.Session field string
-github.com/egladman/magus/types.Trail.Spawns field []TrailSpawn
-github.com/egladman/magus/types.Trail.Start field int64
-github.com/egladman/magus/types.TrailAdvised const TrailSection = "advised"
-github.com/egladman/magus/types.TrailFine const TrailVerdict = "fine"
-github.com/egladman/magus/types.TrailMark type struct
-github.com/egladman/magus/types.TrailMark.At field int64 "json:\"at\""
-github.com/egladman/magus/types.TrailMark.Examples field []string "json:\"examples,omitempty\""
-github.com/egladman/magus/types.TrailMark.ID field string "json:\"id\""
-github.com/egladman/magus/types.TrailMark.Key field string "json:\"key\""
-github.com/egladman/magus/types.TrailMark.Note field string "json:\"note,omitempty\""
-github.com/egladman/magus/types.TrailMark.Rule field string "json:\"rule,omitempty\""
-github.com/egladman/magus/types.TrailMark.Section field TrailSection "json:\"section\""
-github.com/egladman/magus/types.TrailMark.Session field string "json:\"session\""
-github.com/egladman/magus/types.TrailMark.Verdict field TrailVerdict "json:\"verdict\""
-github.com/egladman/magus/types.TrailNextNotTaken const TrailSection = "next-not-taken"
-github.com/egladman/magus/types.TrailObservation type struct
-github.com/egladman/magus/types.TrailObservation.Agent field string
-github.com/egladman/magus/types.TrailObservation.At field int64
-github.com/egladman/magus/types.TrailObservation.Command field string
-github.com/egladman/magus/types.TrailObservation.Decision field string
-github.com/egladman/magus/types.TrailObservation.Lease field string
-github.com/egladman/magus/types.TrailObservation.Nexts field []string
-github.com/egladman/magus/types.TrailObservation.Path field string
-github.com/egladman/magus/types.TrailObservation.PreauthorizedBy field string
-github.com/egladman/magus/types.TrailObservation.Rule field string
-github.com/egladman/magus/types.TrailObservation.Shape field string
-github.com/egladman/magus/types.TrailObservation.Shapes field []string
-github.com/egladman/magus/types.TrailObservation.Tool field string
-github.com/egladman/magus/types.TrailReadOptions type struct
-github.com/egladman/magus/types.TrailReadOptions.Session field string "json:\"session,omitempty\""
-github.com/egladman/magus/types.TrailReadOptions.Since field string "json:\"since,omitempty\""
-github.com/egladman/magus/types.TrailReadOptions.Until field string "json:\"until,omitempty\""
-github.com/egladman/magus/types.TrailRefused const TrailSection = "refused"
-github.com/egladman/magus/types.TrailSection type string
-github.com/egladman/magus/types.TrailSection.Letter method func() string
-github.com/egladman/magus/types.TrailSection.Validate method func() error
-github.com/egladman/magus/types.TrailSections var []TrailSection
-github.com/egladman/magus/types.TrailShouldAdvise const TrailVerdict = "should-advise"
-github.com/egladman/magus/types.TrailShouldDeny const TrailVerdict = "should-deny"
-github.com/egladman/magus/types.TrailSpawn type struct
-github.com/egladman/magus/types.TrailSpawn.Agent field string
-github.com/egladman/magus/types.TrailSpawn.At field int64
-github.com/egladman/magus/types.TrailSpawn.Child field string
-github.com/egladman/magus/types.TrailSpawn.Lease field string
-github.com/egladman/magus/types.TrailSpawn.Model field string
-github.com/egladman/magus/types.TrailUnguarded const TrailSection = "unguarded"
-github.com/egladman/magus/types.TrailVerdict type string
-github.com/egladman/magus/types.TrailVerdict.Validate method func() error
-github.com/egladman/magus/types.TrailVerdicts var []TrailVerdict
-github.com/egladman/magus/types.TrailWrongDeny const TrailVerdict = "wrong-deny"
 github.com/egladman/magus/types.TreeCommit type struct
 github.com/egladman/magus/types.TreeCommit.CommitMeta embedded CommitMeta
 github.com/egladman/magus/types.TreeCommit.Parents field []string

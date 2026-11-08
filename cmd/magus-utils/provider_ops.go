@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"bytes"
 	"fmt"
 	"go/format"
@@ -54,10 +55,10 @@ var providerOps = []providerOp{
 
 	{Family: "lifecycle", Op: "list_lifecycles", Req: reflect.TypeFor[types.LifecycleQuery](), Resp: reflect.TypeFor[[]spells.Lifecycle]()},
 
-	{Family: "review", Op: "find_review", Req: reflect.TypeFor[types.FindReviewRequest](), Resp: reflect.TypeFor[types.ReviewTarget]()},
+	{Family: "review", Op: "find_review", Req: reflect.TypeFor[types.FindReviewRequest](), Resp: reflect.TypeFor[diff.ReviewTarget]()},
 	{Family: "review", Op: "publish_review", Req: reflect.TypeFor[types.PublishReviewRequest](), Resp: reflect.TypeFor[types.Ack]()},
 	{Family: "review", Op: "reply_review", Req: reflect.TypeFor[types.ReplyReviewRequest](), Resp: reflect.TypeFor[types.Ack]()},
-	{Family: "review", Op: "review_threads", Req: reflect.TypeFor[types.ReviewRef](), Resp: reflect.TypeFor[[]types.ReviewComment](), Optional: true},
+	{Family: "review", Op: "review_threads", Req: reflect.TypeFor[types.ReviewRef](), Resp: reflect.TypeFor[[]diff.ReviewComment](), Optional: true},
 	{Family: "review", Op: "list_pulls", Req: reflect.TypeFor[types.ListPullsRequest](), Resp: reflect.TypeFor[types.PullList](), Optional: true},
 
 	{Family: "workspace", Op: "list_projects", Req: reflect.TypeFor[types.ProjectQuery](), Resp: reflect.TypeFor[[]spells.ProvidedProject]()},

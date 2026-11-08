@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"fmt"
 	"strings"
 
@@ -87,13 +88,13 @@ type thresholdHit struct {
 // one is named once. The coupling metrics are conjuncts of shared-loop: past any one alone is
 // what a codebase keeps on purpose.
 var ownCheck = map[types.ConformanceMetric]string{
-	types.ConformanceCallSequence: types.CheckCallSequence,
-	types.ConformanceSharedBody:   types.CheckSharedLoop,
-	types.ConformanceSharedReach:  types.CheckSharedLoop,
-	types.ConformanceCallerSpread: types.CheckSharedLoop,
-	types.ConformanceModeKnobs:    types.CheckSharedLoop,
-	types.ConformanceAliasShare:   types.CheckImportAlias,
-	types.ConformanceNameClash:    types.CheckImportAlias,
+	types.ConformanceCallSequence: diff.CheckCallSequence,
+	types.ConformanceSharedBody:   diff.CheckSharedLoop,
+	types.ConformanceSharedReach:  diff.CheckSharedLoop,
+	types.ConformanceCallerSpread: diff.CheckSharedLoop,
+	types.ConformanceModeKnobs:    diff.CheckSharedLoop,
+	types.ConformanceAliasShare:   diff.CheckImportAlias,
+	types.ConformanceNameClash:    diff.CheckImportAlias,
 }
 
 // thresholdPast finds the subjects among the violations of out, past a metric no other check

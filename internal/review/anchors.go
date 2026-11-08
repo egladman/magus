@@ -1,13 +1,13 @@
 package review
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/notes"
-	"github.com/egladman/magus/types"
 )
 
 // AnchorHit is one note anchor that names something in a changeset, shaped for a report rather
@@ -94,7 +94,7 @@ func NoteStores(workspaceRoot string, dirs NoteDirs) ([]NoteStore, error) {
 // symbol shards, because without them every symbol anchor would report as dangling. A graph
 // that will not load costs the drift column, and a workspace declaring no store costs the
 // section; the report around either still prints.
-func ChangesetAnchors(ctx context.Context, workspaceRoot string, dirs NoteDirs, loadGraph func(context.Context) (*knowledge.Graph, error), rev types.Diff) ([]AnchorHit, error) {
+func ChangesetAnchors(ctx context.Context, workspaceRoot string, dirs NoteDirs, loadGraph func(context.Context) (*knowledge.Graph, error), rev diff.Diff) ([]AnchorHit, error) {
 	stores, err := NoteStores(workspaceRoot, dirs)
 	if err != nil {
 		return nil, fmt.Errorf("note anchors: %w", err)
@@ -162,7 +162,7 @@ func stampAnchorNodeIDs(res []notes.ResolvedAnchor, scope string) []notes.Resolv
 }
 
 // ChangedPaths is the changed file set, generated files included: a note may anchor one.
-func ChangedPaths(rev types.Diff) []string {
+func ChangedPaths(rev diff.Diff) []string {
 	out := make([]string, 0, len(rev.Files))
 	for _, f := range rev.Files {
 		out = append(out, f.Path)
@@ -171,7 +171,7 @@ func ChangedPaths(rev types.Diff) []string {
 }
 
 // changedSymbolIDs is every changed symbol's index id, which is what a symbol anchor names.
-func changedSymbolIDs(rev types.Diff) []string {
+func changedSymbolIDs(rev diff.Diff) []string {
 	var out []string
 	seen := map[string]bool{}
 	for _, f := range rev.Files {

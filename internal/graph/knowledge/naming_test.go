@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"fmt"
 	"math/rand/v2"
 	"os"
@@ -106,7 +107,7 @@ func TestConformanceFlagsEntryPointFrom(t *testing.T) {
 
 	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(subj), Introduced: introduced(subj)})
 
-	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(types.CheckNamingAffix,
+	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(diff.CheckNamingAffix,
 		"`EntryPointFrom`: 8 of 9 functions shaped `func(ctx) value` that say From or Context are named `<X>FromContext`",
 		"named <X>FromContext: BaseFromContext, CharmsFromContext, CwdFromContext",
 		"not: RecorderFrom",
@@ -148,7 +149,7 @@ func TestConformanceSilentOnSplitIdiom(t *testing.T) {
 	alone := namingGraph(t, append(setters, short))
 	got := alone.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(short)})
 	require.Len(t, got[symID(short)], 1)
-	assert.Equal(t, types.CheckNamingAffix, got[symID(short)][0].Name)
+	assert.Equal(t, diff.CheckNamingAffix, got[symID(short)][0].Name)
 }
 
 func TestConformanceIgnoresGeneratedAndTestCode(t *testing.T) {
@@ -223,7 +224,7 @@ func TestConformanceNamesAnEntityOfTheSameName(t *testing.T) {
 
 	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(format, internal)})
 
-	assert.Equal(t, map[string][]types.Check{symID(format): {advice(types.CheckNameCollision,
+	assert.Equal(t, map[string][]types.Check{symID(format): {advice(diff.CheckNameCollision,
 		"`Format` is also the name of op `format`, target `.:format` in this workspace",
 		"op `format`", "target `.:format`",
 	)}}, got, "only a symbol at a project's top level travels far enough to report")
@@ -245,7 +246,7 @@ func TestConformanceNamesAnEntityOfTheSameNameInTypeScript(t *testing.T) {
 
 	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(top, nested)})
 
-	assert.Equal(t, map[string][]types.Check{symID(top): {advice(types.CheckNameCollision,
+	assert.Equal(t, map[string][]types.Check{symID(top): {advice(diff.CheckNameCollision,
 		"`lint` is also the name of target `web:lint` in this workspace", "target `web:lint`",
 	)}}, got)
 }
@@ -264,7 +265,7 @@ func TestConformanceSkipsTheTargetAMagusfileFunctionDeclares(t *testing.T) {
 
 	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(fn)})
 
-	assert.Equal(t, map[string][]types.Check{symID(fn): {advice(types.CheckNameCollision,
+	assert.Equal(t, map[string][]types.Check{symID(fn): {advice(diff.CheckNameCollision,
 		"`design_index_generate` is also the name of target `web:design-index-generate` in this workspace",
 		"target `web:design-index-generate`",
 	)}}, got, "the target the function declares is itself; another project's target of that name still collides")
@@ -308,7 +309,7 @@ func TestConformanceFindsDriftInAnIndexWithNoSignatures(t *testing.T) {
 
 	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(subj, inTest)})
 
-	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(types.CheckNamingAffix,
+	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(diff.CheckNamingAffix,
 		"`offsetFrom`: 6 of 7 functions shaped `function` that say From or Event are named `<X>FromEvent`",
 		"named <X>FromEvent: chordFromEvent, keyFromEvent, modsFromEvent",
 		"not: parseEvent",

@@ -1,18 +1,18 @@
 package knowledge
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"fmt"
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/types"
 )
 
 // orderCheck reports a function taking two parameters in the reverse of the order most
 // functions in its scope that take both, by name, do.
 type orderCheck struct{}
 
-func (orderCheck) name() string { return types.CheckParamOrder }
+func (orderCheck) name() string { return diff.CheckParamOrder }
 
 func (orderCheck) run(x *namingIndex) []finding {
 	byScope := map[string][]*namingDecl{}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
@@ -350,9 +351,9 @@ func checkReviewWorkspace(t *testing.T, provider string, opts ...magus.Option) (
 }
 
 // reviewIn registers a provider whose review 482 on acme/acme is in state and holds threads.
-func reviewIn(t *testing.T, state string, threads ...types.ReviewComment) string {
+func reviewIn(t *testing.T, state string, threads ...diff.ReviewComment) string {
 	t.Helper()
-	return register.ReviewSpell(t, types.ReviewTarget{ID: "482", Repo: "acme/acme", State: state}, threads)
+	return register.ReviewSpell(t, diff.ReviewTarget{ID: "482", Repo: "acme/acme", State: state}, threads)
 }
 
 // mergedReviewAnswering registers a provider whose merged review answers review_threads with
@@ -392,7 +393,7 @@ func TestCheckReviewReportsAMergeDespiteAMalformedRemark(t *testing.T) {
 	// The watermark is the opt-in: without it the job asks the forge nothing at all. Marking the
 	// readable thread seen also keeps review.said out of the way of the assertion below.
 	reader := changeset.NewStore(m.CacheDir())
-	reader.Attach(root, "main", types.Diff{Base: "main"}, "asof")
+	reader.Attach(root, "main", diff.Diff{Base: "main"}, "asof")
 	reader.MarkCommentsSeen(root, []string{"t1"})
 
 	require.NoError(t, serverCheckReview(ctx, root, nil))
@@ -411,8 +412,8 @@ func TestCheckReviewSaysNothingWhenTheForgeCouldNotBeReached(t *testing.T) {
 	ctx, root, m := checkReviewWorkspace(t, mergedReviewAnswering(t, `
     throw "dial: connection refused";`))
 	reader := changeset.NewStore(m.CacheDir())
-	reader.Attach(root, "main", types.Diff{Base: "main"}, "asof")
-	reader.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "mine"}, types.DiffAuthorUnattributed)
+	reader.Attach(root, "main", diff.Diff{Base: "main"}, "asof")
+	reader.AddComment(root, diff.Comment{Path: "a.go", Line: 4, Body: "mine"}, diff.AuthorUnattributed)
 
 	require.NoError(t, serverCheckReview(ctx, root, nil))
 
@@ -444,7 +445,7 @@ func TestCheckReviewReportsAMergeUnderAReaderWithNothingSaid(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
 	ctx, _, m := checkReviewWorkspace(t, reviewIn(t, "merged"), workspace.WithTelemetryProvider(rec))
 	started := time.Now().Add(-90 * time.Second)
-	_, err := changeset.NewStore(m.CacheDir()).SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, started)
+	_, err := changeset.NewStore(m.CacheDir()).SetReading(ctx, diff.ReviewTarget{ID: "482", Repo: "acme/acme"}, started)
 	require.NoError(t, err)
 
 	require.NoError(t, serverCheckReview(ctx, m.Root(), nil))
@@ -467,7 +468,7 @@ func TestCheckReviewReportsAMergeUnderAReaderWithNothingSaid(t *testing.T) {
 func TestCheckReviewIgnoresAMarkForAnotherReview(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
 	ctx, _, m := checkReviewWorkspace(t, reviewIn(t, "merged"), workspace.WithTelemetryProvider(rec))
-	_, err := changeset.NewStore(m.CacheDir()).SetReading(ctx, types.ReviewTarget{ID: "7", Repo: "acme/acme"}, time.Now())
+	_, err := changeset.NewStore(m.CacheDir()).SetReading(ctx, diff.ReviewTarget{ID: "7", Repo: "acme/acme"}, time.Now())
 	require.NoError(t, err)
 
 	require.NoError(t, serverCheckReview(ctx, m.Root(), nil))
@@ -486,7 +487,7 @@ func TestCheckReviewKeepsAMarkSetWhileItWasAskingTheForge(t *testing.T) {
 	// reader sets a mark on another review mid-job.
 	var store *changeset.Store
 	host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, err := store.SetReading(context.Background(), types.ReviewTarget{ID: "7", Repo: "acme/acme"}, time.Now())
+		_, err := store.SetReading(context.Background(), diff.ReviewTarget{ID: "7", Repo: "acme/acme"}, time.Now())
 		assert.NoError(t, err)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -495,7 +496,7 @@ func TestCheckReviewKeepsAMarkSetWhileItWasAskingTheForge(t *testing.T) {
     http\get("%s");
     return [<ReviewComment>];`, host.URL)), workspace.WithTelemetryProvider(rec))
 	store = changeset.NewStore(m.CacheDir())
-	_, err := store.SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, time.Now().Add(-time.Minute))
+	_, err := store.SetReading(ctx, diff.ReviewTarget{ID: "482", Repo: "acme/acme"}, time.Now().Add(-time.Minute))
 	require.NoError(t, err)
 
 	require.NoError(t, serverCheckReview(ctx, m.Root(), nil))
@@ -511,7 +512,7 @@ func TestCheckReviewIgnoresAndClearsAnExpiredMark(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
 	ctx, _, m := checkReviewWorkspace(t, reviewIn(t, "merged"), workspace.WithTelemetryProvider(rec))
 	store := changeset.NewStore(m.CacheDir())
-	_, err := store.SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, time.Now().Add(-changeset.ReadingTTL-time.Minute))
+	_, err := store.SetReading(ctx, diff.ReviewTarget{ID: "482", Repo: "acme/acme"}, time.Now().Add(-changeset.ReadingTTL-time.Minute))
 	require.NoError(t, err)
 
 	require.NoError(t, serverCheckReview(ctx, m.Root(), nil))
@@ -526,7 +527,7 @@ func TestCheckReviewClearsTheMarkOfAReviewClosedUnmerged(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
 	ctx, _, m := checkReviewWorkspace(t, reviewIn(t, "closed"), workspace.WithTelemetryProvider(rec))
 	store := changeset.NewStore(m.CacheDir())
-	_, err := store.SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, time.Now())
+	_, err := store.SetReading(ctx, diff.ReviewTarget{ID: "482", Repo: "acme/acme"}, time.Now())
 	require.NoError(t, err)
 
 	require.NoError(t, serverCheckReview(ctx, m.Root(), nil))
@@ -581,10 +582,10 @@ func TestShutdownOneShotTelemetryFlushesOnlyAProviderThisProcessOwns(t *testing.
 func TestCheckReviewCountsNoReadingWhenNobodyWasReading(t *testing.T) {
 	rec := newMergeWhileReadingRecorder(t)
 	ctx, root, m := checkReviewWorkspace(t,
-		reviewIn(t, "merged", types.ReviewComment{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "theirs"}),
+		reviewIn(t, "merged", diff.ReviewComment{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "theirs"}),
 		workspace.WithTelemetryProvider(rec))
 	reader := changeset.NewStore(m.CacheDir())
-	reader.Attach(root, "main", types.Diff{Base: "main"}, "asof")
+	reader.Attach(root, "main", diff.Diff{Base: "main"}, "asof")
 	reader.MarkCommentsSeen(root, []string{"t1"})
 
 	require.NoError(t, serverCheckReview(ctx, root, nil))

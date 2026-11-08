@@ -7,6 +7,7 @@
 package console
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"github.com/egladman/magus/types/daemon"
 	"context"
 	"path/filepath"
@@ -61,7 +62,7 @@ type Service struct {
 	describeGraphFn  func() types.TargetGraphOutput
 	historyMetricsFn func(ctx context.Context) (Board, error)
 	workingDiffFn    func(ctx context.Context, paths []string) (string, error)
-	diffFn           func(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error)
+	diffFn           func(ctx context.Context, paths []string, opts diff.Options) (diff.Diff, error)
 }
 
 // Option customizes a Service. The With* options inject test seams and the explicit
@@ -265,9 +266,9 @@ func (s *Service) WorkingDiff(ctx context.Context, paths []string) (string, erro
 // ReviewOrigin reports the branch and remote a provider needs to find the review open for this
 // tree. Empty on a workspace-less service, which is the same answer a tree with no remote
 // gives and needs no separate branch in any caller.
-func (s *Service) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
+func (s *Service) ReviewOrigin(ctx context.Context) diff.ReviewOrigin {
 	if s.magus == nil {
-		return types.ReviewOrigin{}
+		return diff.ReviewOrigin{}
 	}
 	return s.magus.ReviewOrigin(ctx)
 }
@@ -300,23 +301,23 @@ func (s *Service) ProjectTargets(ctx context.Context, project string) []string {
 // its symbol shards and computes a reverse closure. Folding them into one route would hold
 // the whole diff behind the slowest overlay, so the console paints the patch from the first
 // call and decorates it when this one lands. A reader is scrolling code either way.
-func (s *Service) Diff(ctx context.Context, paths []string) (types.Diff, error) {
-	return s.DiffWith(ctx, paths, types.DiffOptions{})
+func (s *Service) Diff(ctx context.Context, paths []string) (diff.Diff, error) {
+	return s.DiffWith(ctx, paths, diff.Options{})
 }
 
 // DiffWith is [Service.Diff] with the options [types.DiffOptions] describes. A caller that reads
 // no ranking of the changeset, such as a thread brief, sets SkipOrder so the order is never
 // computed.
-func (s *Service) DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
+func (s *Service) DiffWith(ctx context.Context, paths []string, opts diff.Options) (diff.Diff, error) {
 	if s.diffFn != nil {
 		return s.diffFn(ctx, paths, opts)
 	}
 	if s.magus == nil {
-		return types.Diff{}, ErrNoWorkspace
+		return diff.Diff{}, ErrNoWorkspace
 	}
 	rev, err := s.magus.DiffWith(ctx, paths, opts)
 	if err != nil {
-		return types.Diff{}, err
+		return diff.Diff{}, err
 	}
 	// Fold on the churn lenses from the CACHED insight scan rather than a fresh one. This is
 	// the reason AttachChurn takes its data as an argument: the server already keeps a bounded

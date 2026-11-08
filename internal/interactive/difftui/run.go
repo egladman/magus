@@ -1,6 +1,7 @@
 package difftui
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
@@ -8,7 +9,6 @@ import (
 	"os"
 
 	"github.com/egladman/magus/libs/termkit"
-	"github.com/egladman/magus/types"
 )
 
 // Sync is the human's half of the session: where they are looking, and what they have read.
@@ -21,7 +21,7 @@ import (
 // No method reports an error, and that is the contract rather than an omission: a
 // coordination write that failed must not interrupt somebody reading a diff.
 type Sync interface {
-	SetCursor(c types.DiffCursor)
+	SetCursor(c diff.Cursor)
 	SetViewed(digest string, on bool)
 	// SetThreadsSeen records that these of the host's review threads have been in front of the
 	// reader, which is the watermark deciding what still counts as NEW. A workspace whose

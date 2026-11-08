@@ -1,9 +1,9 @@
 package changeset
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"strings"
 
-	"github.com/egladman/magus/types"
 )
 
 // CaptureAnchor records what a remark on line of path's hunks should remember about the code it
@@ -16,17 +16,17 @@ import (
 // A line the changeset does not contain yields a zero anchor rather than a guess. That is the
 // AnchorUnknown rung, and it is honest: a remark on a file heading, or on a line no hunk covers,
 // has no text under it to remember.
-func CaptureAnchor(hunks []Hunk, line int) types.CommentAnchor {
+func CaptureAnchor(hunks []Hunk, line int) diff.CommentAnchor {
 	h, idx, ok := newSideLine(hunks, line)
 	if !ok {
-		return types.CommentAnchor{}
+		return diff.CommentAnchor{}
 	}
 	body := newSideBody(h)
-	return types.CommentAnchor{
+	return diff.CommentAnchor{
 		Digest:      h.Digest,
 		Quote:       body[idx],
-		Before:      window(body, idx-types.AnchorContextLines, idx),
-		After:       window(body, idx+1, idx+1+types.AnchorContextLines),
+		Before:      window(body, idx-diff.AnchorContextLines, idx),
+		After:       window(body, idx+1, idx+1+diff.AnchorContextLines),
 		Declaration: h.Declaration,
 	}
 }
@@ -41,9 +41,9 @@ func CaptureAnchor(hunks []Hunk, line int) types.CommentAnchor {
 // remembered is the line the remark was written on. It stops being the answer the moment the file
 // moves, and becomes the tie-breaker among equal matches, which is what makes a search for a
 // non-unique line land where the reader meant rather than on the file's first closing brace.
-func LocateAnchor(a types.CommentAnchor, hunks []Hunk, remembered int) (int, types.CommentAnchorRung) {
+func LocateAnchor(a diff.CommentAnchor, hunks []Hunk, remembered int) (int, diff.CommentAnchorRung) {
 	if a.Quote == "" {
-		return remembered, types.AnchorUnknown
+		return remembered, diff.AnchorUnknown
 	}
 	// The remembered line is NOT checked first and trusted. It is scored like every other
 	// candidate, because the text alone does not identify a position: a closing brace still sits
@@ -73,14 +73,14 @@ func LocateAnchor(a types.CommentAnchor, hunks []Hunk, remembered int) (int, typ
 		// The quote is gone. The declaration it sat in may not be, and "this remark was about
 		// AttachChurn, which is here" is worth more to a reader than nothing at all.
 		if line, ok := declarationLine(a, hunks); ok {
-			return line, types.AnchorDeclaration
+			return line, diff.AnchorDeclaration
 		}
-		return 0, types.AnchorLost
+		return 0, diff.AnchorLost
 	}
 	if best == remembered {
-		return best, types.AnchorExact
+		return best, diff.AnchorExact
 	}
-	return best, types.AnchorMoved
+	return best, diff.AnchorMoved
 }
 
 // HunkDeclaration is the enclosing declaration git named in a hunk header line: everything after
@@ -109,7 +109,7 @@ func HunkDeclaration(header string) string {
 // The START of the hunk rather than a line within it, because the remark's own line is gone by the
 // time this is reached: pointing at the declaration is a claim magus can support, and pointing at a
 // line inside it would be the guess this whole ladder exists to refuse.
-func declarationLine(a types.CommentAnchor, hunks []Hunk) (int, bool) {
+func declarationLine(a diff.CommentAnchor, hunks []Hunk) (int, bool) {
 	if a.Declaration == "" {
 		return 0, false
 	}
@@ -126,7 +126,7 @@ func declarationLine(a types.CommentAnchor, hunks []Hunk) (int, bool) {
 // A count rather than a threshold, because the caller is choosing BETWEEN candidates rather than
 // deciding whether one is good enough. A candidate with no context match still wins over no
 // candidate at all: the quote itself matched, and that is more than the line number offered.
-func contextScore(a types.CommentAnchor, body []string, idx int) int {
+func contextScore(a diff.CommentAnchor, body []string, idx int) int {
 	score := 0
 	for n, want := range a.Before {
 		at := idx - len(a.Before) + n

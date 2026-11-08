@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"cmp"
 	"fmt"
 	"maps"
@@ -223,9 +224,9 @@ type layoutCheck struct {
 }
 
 var layoutChecks = []layoutCheck{
-	{name: types.CheckPackageFiles, norm: "hold more than one", breaks: func(d dirShape) bool { return d.files == 1 }},
-	{name: types.CheckPackageTests, norm: "hold a test file", breaks: func(d dirShape) bool { return d.tests == 0 }},
-	{name: types.CheckPackageName, norm: "carry no digit in their names", breaks: dirShape.digit},
+	{name: diff.CheckPackageFiles, norm: "hold more than one", breaks: func(d dirShape) bool { return d.files == 1 }},
+	{name: diff.CheckPackageTests, norm: "hold a test file", breaks: func(d dirShape) bool { return d.tests == 0 }},
+	{name: diff.CheckPackageName, norm: "carry no digit in their names", breaks: dirShape.digit},
 }
 
 // importingDirs counts the directories, other than dir, holding a file that references a symbol

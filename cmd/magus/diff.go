@@ -1,6 +1,7 @@
 package main
 
 import (
+	difftypes "github.com/egladman/magus/types/diff"
 	"bytes"
 	"cmp"
 	"context"
@@ -56,7 +57,7 @@ import (
 // tools' opinions of one changeset.
 func diffCommand(ctx context.Context, root string, args []string) error {
 	var rf *flaggen.DiffFlags
-	var gates types.DiffOptions
+	var gates difftypes.Options
 	rest, err := commandParse("diff", args, func(fs *flag.FlagSet) {
 		rf = flaggen.BindDiff(fs)
 		fs.Float64Var(&gates.MinShare, flaggen.FlagDiffConformanceMinShare, 0,
@@ -391,7 +392,7 @@ func (in diffInput) readPatch(ctx context.Context, m *magus.Magus, paths []strin
 // impact is ADDITIVE: with it off, every byte emitted here is what this command emitted
 // before the flag existed, which is what lets a script parsing `magus diff -o json` keep
 // working and what keeps the flag honest about being context rather than a gate.
-func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.Options, rf *flaggen.DiffFlags, gates types.DiffOptions, rootOverride string, tui, impact bool, scopePaths []string) error {
+func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.Options, rf *flaggen.DiffFlags, gates difftypes.Options, rootOverride string, tui, impact bool, scopePaths []string) error {
 	patch, base, err := src.readPatch(ctx, m, scopePaths)
 	if err != nil {
 		return err
@@ -401,13 +402,13 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 			opts:  opts,
 			id:    rf.Thread,
 			patch: patch,
-			annotate: func(ctx context.Context, paths []string) (types.Diff, error) {
+			annotate: func(ctx context.Context, paths []string) (difftypes.Diff, error) {
 				// The record never reads the reading order, and ranking the whole changeset is not cheap.
 				g := gates
 				g.Patch, g.SkipOrder = patch, true
 				return annotateDiff(ctx, m, readReviewedContent(ctx, m, src), paths, base, rf.Baseline, g)
 			},
-			anchors: func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error) {
+			anchors: func(ctx context.Context, rev difftypes.Diff) ([]review.AnchorHit, error) {
 				return impactAnchors(ctx, rootOverride, rev)
 			},
 		})
@@ -424,7 +425,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 			}
 			return nil
 		}
-		return emitFormatted(opts, types.Diff{Base: base})
+		return emitFormatted(opts, difftypes.Diff{Base: base})
 	}
 
 	paths := changedPathsFromPatch(patch)
@@ -465,7 +466,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 	if rf.Unread {
 		viewed, verr := changeset.NewStore(m.CacheDir()).LoadViewed()
 		rev = review.FilterUnread(rev, viewed, verr)
-		if rev.Unread.ReadState == types.DiffReadStateUnknown {
+		if rev.Unread.ReadState == difftypes.ReadStateUnknown {
 			warnUnreadUnknown(ctx, *rev.Unread, src.label, verr)
 		}
 	}
@@ -516,7 +517,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 	case outputName:
 		// Left alone under --impact: -o name is the shape a shell loop reads, and one
 		// non-path line in it would break every one of them.
-		shown := make([]types.DiffFile, 0, len(rev.Files))
+		shown := make([]difftypes.File, 0, len(rev.Files))
 		for _, f := range rev.Files {
 			if f.Generated() && !rf.Generated {
 				continue
@@ -526,7 +527,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 		// Narrowed to hunks, a name is a hunk: one path:start-end each, so a loop reaches
 		// every unread hunk rather than every file that holds one.
 		if rev.Unread != nil {
-			return emitNames(os.Stdout, review.HunkNames(types.Diff{Files: shown}))
+			return emitNames(os.Stdout, review.HunkNames(difftypes.Diff{Files: shown}))
 		}
 		paths := make([]string, 0, len(shown))
 		for _, f := range shown {
@@ -535,7 +536,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 		return emitNames(os.Stdout, paths)
 	}
 	if rev.Unread != nil {
-		if rev.Unread.ReadState == types.DiffReadStateUnknown {
+		if rev.Unread.ReadState == difftypes.ReadStateUnknown {
 			return nil
 		}
 		fmt.Println(review.UnreadLine(*rev.Unread, src.label))
@@ -563,7 +564,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts output.
 // Silent unless there is a genuine earlier pass to subtract: no receipts, receipts from a
 // working-tree review that names no revision, or an earlier pass at the revision already in front
 // of them all print nothing.
-func hintSinceLastReview(ctx context.Context, rev types.Diff, src diffInput) {
+func hintSinceLastReview(ctx context.Context, rev difftypes.Diff, src diffInput) {
 	if !interactive.HintsEnabled() || src.kind != inputRevRange {
 		return
 	}
@@ -578,7 +579,7 @@ func hintSinceLastReview(ctx context.Context, rev types.Diff, src diffInput) {
 
 // warnUnreadUnknown tells the person the read marks could not be loaded, with the load error as
 // the record's error.
-func warnUnreadUnknown(ctx context.Context, u types.DiffUnread, source string, loadErr error) {
+func warnUnreadUnknown(ctx context.Context, u difftypes.Unread, source string, loadErr error) {
 	slog.WarnContext(ctx, review.UnreadLine(u, source),
 		attr.Notice(""), attr.Component("magus"), attr.Why("the read marks could not be read"), attr.Error(loadErr))
 }
@@ -598,8 +599,8 @@ type threadPrint struct {
 	// id names the thread: its first comment, or any reply in it.
 	id       string
 	patch    string
-	annotate func(ctx context.Context, paths []string) (types.Diff, error)
-	anchors  func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error)
+	annotate func(ctx context.Context, paths []string) (difftypes.Diff, error)
+	anchors  func(ctx context.Context, rev difftypes.Diff) ([]review.AnchorHit, error)
 }
 
 // printThread prints one review thread and returns: the conversation, the hunk, and what the
@@ -667,22 +668,22 @@ func threadLookupError(err error, reason string, comments int) error {
 // baselinePath, when set, is a `graph export --symbols -o json` the changed symbols are
 // compared against for the API delta. opts carries the changeset's patch and the conformance
 // gates.
-func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, paths []string, base, baselinePath string, opts types.DiffOptions) (types.Diff, error) {
+func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, paths []string, base, baselinePath string, opts difftypes.Options) (difftypes.Diff, error) {
 	if baselinePath != "" {
 		var baseline types.KnowledgeGraphOutput
 		raw, rerr := os.ReadFile(baselinePath)
 		if rerr != nil {
-			return types.Diff{}, fmt.Errorf("magus diff: read --baseline: %w", rerr)
+			return difftypes.Diff{}, fmt.Errorf("magus diff: read --baseline: %w", rerr)
 		}
 		if uerr := json.Unmarshal(raw, &baseline); uerr != nil {
-			return types.Diff{}, fmt.Errorf("magus diff: decode --baseline %s (expected `%s` output): %w",
+			return difftypes.Diff{}, fmt.Errorf("magus diff: decode --baseline %s (expected `%s` output): %w",
 				baselinePath, hint.GraphExport.With("--symbols", "-o", "json"), uerr)
 		}
 		opts.Baseline, opts.BaselineLabel = &baseline, baselinePath
 	}
 	rev, err := m.DiffWith(ctx, paths, opts)
 	if err != nil {
-		return types.Diff{}, err
+		return difftypes.Diff{}, err
 	}
 	rev.Base = base
 	attachLayout(ctx, m, &rev, opts)
@@ -720,7 +721,7 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, 
 // attachLayout runs the package checks over the directories the change creates and sets Layout
 // on the first changed file of each. It loads the graph a second time, so it first asks the disk
 // whether an added file opened a directory at all: most changes open none.
-func attachLayout(ctx context.Context, m *magus.Magus, rev *types.Diff, opts types.DiffOptions) {
+func attachLayout(ctx context.Context, m *magus.Magus, rev *difftypes.Diff, opts difftypes.Options) {
 	// An index that could not be brought current would count a stale tree's files.
 	if rev.ConformanceError != nil {
 		return
@@ -755,7 +756,7 @@ func attachLayout(ctx context.Context, m *magus.Magus, rev *types.Diff, opts typ
 	}
 	generated := map[string]bool{}
 	for _, e := range entries {
-		if e.Role == types.DiffRoleOutput {
+		if e.Role == difftypes.RoleOutput {
 			generated[e.Path] = true
 		}
 	}
@@ -768,7 +769,7 @@ func attachLayout(ctx context.Context, m *magus.Magus, rev *types.Diff, opts typ
 	gates := conformance.Gates.Override(opts.MinCohort, opts.MinShare)
 	found := graph.Layout(knowledge.LayoutChange{Added: added, Generated: generated, Gates: gates})
 	for dir, checks := range found {
-		i := slices.IndexFunc(rev.Files, func(f types.DiffFile) bool { return path.Dir(f.Path) == dir })
+		i := slices.IndexFunc(rev.Files, func(f difftypes.File) bool { return path.Dir(f.Path) == dir })
 		if i >= 0 {
 			rev.Files[i].Layout = checks
 		}
@@ -896,18 +897,18 @@ type diffTUIRequest struct {
 
 // keepFilteredHunks drops the parsed hunks rev no longer holds, so a viewer drawn from a filtered
 // changeset shows only what the filter kept.
-func keepFilteredHunks(rev types.Diff, parsed []changeset.FileHunks) []changeset.FileHunks {
+func keepFilteredHunks(rev difftypes.Diff, parsed []changeset.FileHunks) []changeset.FileHunks {
 	kept := map[string]bool{}
 	for _, f := range rev.Files {
 		for _, h := range f.Hunks {
-			kept[types.DiffHunkRef{Path: f.Path, Index: h.Index}.Key()] = true
+			kept[difftypes.HunkRef{Path: f.Path, Index: h.Index}.Key()] = true
 		}
 	}
 	out := make([]changeset.FileHunks, 0, len(parsed))
 	for _, f := range parsed {
 		var hunks []changeset.Hunk
 		for _, h := range f.Hunks {
-			if kept[types.DiffHunkRef{Path: f.Path, Index: h.Index}.Key()] {
+			if kept[difftypes.HunkRef{Path: f.Path, Index: h.Index}.Key()] {
 				hunks = append(hunks, h)
 			}
 		}
@@ -935,7 +936,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, re
 	if req.unread {
 		viewed, verr := changeset.NewStore(m.CacheDir()).LoadViewed()
 		rev = review.FilterUnread(rev, viewed, verr)
-		if rev.Unread.ReadState == types.DiffReadStateUnknown {
+		if rev.Unread.ReadState == difftypes.ReadStateUnknown {
 			warnUnreadUnknown(ctx, *rev.Unread, req.label, verr)
 			sync.close()
 			return nil
@@ -964,7 +965,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, re
 	// file, because the viewer presents it with no hedge.
 	comments, reason := reviewComments(ctx, m)
 	comments = changeset.PlaceThreads(changeset.ParseHunks(patch), comments)
-	start := types.DiffCursor{Hunk: -1}
+	start := difftypes.Cursor{Hunk: -1}
 	if req.thread != "" {
 		thread, terr := changeset.FindThread(comments, req.thread)
 		if terr != nil {
@@ -974,7 +975,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, re
 			return fmt.Errorf("magus diff: thread %s sits on %s, which %s does not change: `%s` prints it",
 				thread.ID(), thread.Head.Path, req.label, hint.Diff.With("--thread", thread.ID(), "--no-tui"))
 		}
-		start = types.DiffCursor{Path: thread.Head.Path, Hunk: thread.Head.Hunk}
+		start = difftypes.Cursor{Path: thread.Head.Path, Hunk: thread.Head.Hunk}
 	}
 	return difftui.Run(ctx, difftui.Options{
 		In:    os.Stdin,
@@ -1018,14 +1019,14 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, re
 // already on it, so the terminal joining anywhere else would be a fourth opinion wearing the
 // same name. Without one there is nobody to pair with, so the changeset is computed here and
 // progress goes straight into the file the server's own store would have written.
-func attachDiffReview(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base, riskBase string, paths []string) (types.Diff, *types.DiffReview, diffSync, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
+func attachDiffReview(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base, riskBase string, paths []string) (difftypes.Diff, *difftypes.Review, diffSync, error) { //nolint:ireturn // the VCS driver is picked by detection at runtime
 	asOf := changeset.PatchDigest(patch)
 	if b := dialDiffBridge(ctx, paths, asOf); b != nil {
 		return b.session.Diff, b.session, b, nil
 	}
-	rev, err := annotateDiff(ctx, m, content, paths, base, "", types.DiffOptions{Patch: patch, RiskBase: riskBase})
+	rev, err := annotateDiff(ctx, m, content, paths, base, "", difftypes.Options{Patch: patch, RiskBase: riskBase})
 	if err != nil {
-		return types.Diff{}, nil, nil, err
+		return difftypes.Diff{}, nil, nil, err
 	}
 	// Written straight into the store rather than through the server, which is sound only
 	// because there is no server: with one running it owns this file, and two writers would
@@ -1041,7 +1042,7 @@ func attachDiffReview(ctx context.Context, m *magus.Magus, content reviewedConte
 //
 // The annotation order is authoritative and is never recomputed here: types.Diff.
 // SortForReading is the single definition of review order.
-func diffTUIFiles(rev types.Diff, parsed []changeset.FileHunks) []difftui.File {
+func diffTUIFiles(rev difftypes.Diff, parsed []changeset.FileHunks) []difftui.File {
 	byPath := make(map[string][]changeset.Hunk, len(parsed))
 	for _, f := range parsed {
 		byPath[f.Path] = f.Hunks
@@ -1052,7 +1053,7 @@ func diffTUIFiles(rev types.Diff, parsed []changeset.FileHunks) []difftui.File {
 		// DIFFERENT content, which is the file that most needs a second look rather than the least.
 		file := difftui.File{
 			Path:      f.Path,
-			Settled:   f.ReadState == types.DiffReadRead,
+			Settled:   f.ReadState == difftypes.ReadRead,
 			Generated: f.Generated(),
 			Facts:     diffFileFacts(f),
 		}
@@ -1096,7 +1097,7 @@ type diffStoreSync struct {
 	root  string
 }
 
-func (diffStoreSync) SetCursor(types.DiffCursor) {}
+func (diffStoreSync) SetCursor(difftypes.Cursor) {}
 
 // SetViewed stays SYNCHRONOUS, unlike the bridge's: this is memory and a file under the cache
 // dir, so it costs a keypress nothing that a queue would win back.
@@ -1131,7 +1132,7 @@ type diffBridge struct {
 	addr    string
 	token   types.Secret
 	tokenID string // revoked at close; empty when the bridge minted no record
-	session *types.DiffReview
+	session *difftypes.Review
 
 	cursors chan diffSessionOp
 	marks   chan diffSessionOp
@@ -1221,7 +1222,7 @@ func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridg
 		warn("the review is not shared with the server: it refused the session", attr.Why(resp.Status))
 		return nil
 	}
-	var sess types.DiffReview
+	var sess difftypes.Review
 	if err := json.NewDecoder(resp.Body).Decode(&sess); err != nil {
 		warn("the review is not shared with the server: its session did not decode", attr.Error(err))
 		return nil
@@ -1311,7 +1312,7 @@ type diffSessionOp struct {
 // SetCursor publishes where the reader is looking. The reply is discarded on purpose: it
 // carries the session's own cursor, and applying that would let another client move this
 // reader's viewport, which is the one thing the paired-review design forbids.
-func (b *diffBridge) SetCursor(c types.DiffCursor) {
+func (b *diffBridge) SetCursor(c difftypes.Cursor) {
 	b.queueCursor(diffSessionOp{Op: "cursor", Path: c.Path, Hunk: c.Hunk})
 }
 
@@ -1524,7 +1525,7 @@ func diffUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	// State the cutoff rather than leaving a missing rank ambiguous.
 	termkit.Prose(w, termkit.SystemProbe,
-		fmt.Sprintf("A hotspot rank is shown only inside the workspace's top %d.", types.NotableRankCutoff),
+		fmt.Sprintf("A hotspot rank is shown only inside the workspace's top %d.", difftypes.NotableRankCutoff),
 		"A file that reports a commit count and no rank was measured and sits outside that cutoff;",
 		"a file with no history line at all is one magus has never seen change.")
 	fmt.Fprintln(w, "")
@@ -1595,7 +1596,7 @@ const diffHistoryCommits = 500
 // leave the scrollback with no record that a review happened at all.
 // The fold state is threaded rather than assumed: under --generated every generated file is
 // printed right below this line, so calling them folded would contradict the page it introduces.
-func diffCountsLine(rev types.Diff, showGenerated bool) string {
+func diffCountsLine(rev difftypes.Diff, showGenerated bool) string {
 	gen := rev.GeneratedCount()
 	line := fmt.Sprintf("%d files to read", len(rev.Files)-gen)
 	if gen > 0 {
@@ -1618,8 +1619,8 @@ func diffCountsLine(rev types.Diff, showGenerated bool) string {
 //
 // pre is nil unless --impact was passed, and nil prints nothing at all: the report above
 // it must not change shape because a second one was appended.
-func printDiffText(rev types.Diff, showGenerated bool, link func(string) string, pre *diffImpact) error {
-	var primary, generated []types.DiffFile
+func printDiffText(rev difftypes.Diff, showGenerated bool, link func(string) string, pre *diffImpact) error {
+	var primary, generated []difftypes.File
 	for _, f := range rev.Files {
 		if f.Generated() {
 			generated = append(generated, f)
@@ -1729,7 +1730,7 @@ func diffNextStepLines(readable int) []string {
 	}
 }
 
-func printDiffFile(f types.DiffFile, link func(string) string) {
+func printDiffFile(f difftypes.File, link func(string) string) {
 	fmt.Printf("  %s\n", link(f.Path))
 	for _, fact := range diffFileFacts(f) {
 		fmt.Printf("      %s\n", fact)
@@ -1766,7 +1767,7 @@ func printDiffFile(f types.DiffFile, link func(string) string) {
 // The floor leads because it is the only claim magus can prove; the likely bump follows with
 // the count that raised it, so a reader who knows the signature change is compatible can see
 // exactly what they are overruling.
-func diffAPILines(api *types.DiffAPI) []string {
+func diffAPILines(api *difftypes.API) []string {
 	if api == nil {
 		return nil
 	}
@@ -1794,9 +1795,9 @@ func diffAPILines(api *types.DiffAPI) []string {
 // One definition for the printer and the interactive reader, so both show the SAME sentences:
 // two renderings of "12 files reference its widest changed symbol" would drift, and the drift
 // would be invisible until somebody compared two views side by side.
-func diffFileFacts(f types.DiffFile) []string {
+func diffFileFacts(f difftypes.File) []string {
 	var facts []string
-	if f.Visibility == types.DiffVisibilityPublic {
+	if f.Visibility == difftypes.VisibilityPublic {
 		var api []string
 		var across []string
 		seen := map[string]bool{}
@@ -1826,11 +1827,11 @@ func diffFileFacts(f types.DiffFile) []string {
 				continue
 			}
 			switch s.Change {
-			case types.DiffChangeRemoved:
+			case difftypes.ChangeRemoved:
 				facts = append(facts, "REMOVED "+s.Qualified)
-			case types.DiffChangeAdded:
+			case difftypes.ChangeAdded:
 				facts = append(facts, "ADDED "+s.Qualified)
-			case types.DiffChangeSignature:
+			case difftypes.ChangeSignature:
 				facts = append(facts, fmt.Sprintf("SIGNATURE %s: `%s` -> `%s`", s.Qualified, s.BaseSignature, s.Signature))
 			}
 		}
@@ -1901,7 +1902,7 @@ func capSlice(xs []string, n int) []string {
 // It exists ONLY under the flag. Without it the emitted value is types.Diff exactly as
 // before, so nothing reading `magus diff -o json` today meets a key it has never seen.
 type diffReport struct {
-	types.Diff `yaml:",inline"`
+	difftypes.Diff `yaml:",inline"`
 	Impact     *diffImpact `json:"impact,omitempty" yaml:"impact,omitempty"`
 }
 
@@ -2006,7 +2007,7 @@ const impactListCap = 10
 // Every lens is best-effort and every failure degrades to that lens's empty form. A impact
 // that refuses to print because the symbol index is cold or no server is running is a
 // impact nobody runs, and this command reports context rather than passing judgement.
-func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev types.Diff, patch string, working bool) (diffImpact, error) {
+func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev difftypes.Diff, patch string, working bool) (diffImpact, error) {
 	p := diffImpact{Reach: computeImpactReach(rev)}
 
 	// The same bounded git-log walk annotateDiff pays for the churn lenses, so the two
@@ -2065,7 +2066,7 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 //
 // nil when the closure is empty, which is a real state: a change entirely outside every
 // project directory seeds nothing.
-func computeImpactReach(rev types.Diff) *impactReach {
+func computeImpactReach(rev difftypes.Diff) *impactReach {
 	if len(rev.AffectedProjects) == 0 {
 		return nil
 	}
@@ -2411,7 +2412,7 @@ func changedPathsFromPatch(patch string) []string {
 
 // impactAnchors joins the declared notes stores against the changeset. root is the override
 // diffCommand's own load was handed, because the graph loader is once-per-process and keyed on it.
-func impactAnchors(ctx context.Context, root string, rev types.Diff) ([]review.AnchorHit, error) {
+func impactAnchors(ctx context.Context, root string, rev difftypes.Diff) ([]review.AnchorHit, error) {
 	declared := globalCfg.Knowledge.Notes
 	dirs := review.NoteDirs{Shared: declared.Shared, Private: declared.Private}
 	return review.ChangesetAnchors(ctx, root, dirs, func(ctx context.Context) (*knowledge.Graph, error) {
@@ -2584,7 +2585,7 @@ type leftMarker struct {
 // collectLeftBehind reads the markers from the patch's added lines, in any file the change
 // did not generate, and the symbols it left unused from the graph. Only a working-tree diff
 // reads symbols: the graph describes the tree on disk, which is the head of no other diff.
-func collectLeftBehind(ctx context.Context, m *magus.Magus, rootOverride string, rev types.Diff, patch string, working bool) *impactLeftBehind {
+func collectLeftBehind(ctx context.Context, m *magus.Magus, rootOverride string, rev difftypes.Diff, patch string, working bool) *impactLeftBehind {
 	generated := map[string]bool{}
 	for _, f := range rev.Files {
 		generated[f.Path] = f.Generated()
@@ -2786,7 +2787,7 @@ var localAdvisors = []string{
 //
 // rev is the review this run already computed. It is handed to the advisors that read one
 // (advice.buzz's review, through adviceReviewEnv), so none of them diffs the tree again.
-func runLocalAdvisors(ctx context.Context, m *magus.Magus, base string, rev types.Diff) ([]adviceSection, []string, error) {
+func runLocalAdvisors(ctx context.Context, m *magus.Magus, base string, rev difftypes.Diff) ([]adviceSection, []string, error) {
 	dir := filepath.Join(m.Root(), adviceDirRel)
 	if _, err := os.Stat(dir); err != nil {
 		return nil, []string{fmt.Sprintf("no advisors in this workspace: %s is not readable (%v)", dir, err)}, nil
@@ -2891,7 +2892,7 @@ const adviceReviewEnv = "ADVICE_REVIEW"
 
 // shareReview writes rev where the advisors read it and returns the restore, which removes
 // the file and puts the variable back as it was.
-func shareReview(rev types.Diff) (func(), error) {
+func shareReview(rev difftypes.Diff) (func(), error) {
 	f, err := os.CreateTemp("", "magus-advice-review-*.json")
 	if err != nil {
 		return func() {}, fmt.Errorf("magus diff: save the review for the advisors: %w", err)
@@ -3091,7 +3092,7 @@ func reviewRequiredMatcher(ws types.WorkspaceReader) func(string) bool {
 
 // bulkReasons is every distinct reason a bulk ack recorded against a file in this
 // changeset, in first-seen order.
-func bulkReasons(cacheDir string, rev types.Diff) []string {
+func bulkReasons(cacheDir string, rev difftypes.Diff) []string {
 	store, err := review.Load(cacheDir)
 	if err != nil {
 		return nil
@@ -3120,7 +3121,7 @@ func bulkReasons(cacheDir string, rev types.Diff) []string {
 //
 // Generated files are excluded: reading a machine's restatement of an edit made elsewhere
 // is not the review, the same reason the file list folds them away by default.
-func collectReview(rev types.Diff, required func(string) bool, reasons []string) *impactReview {
+func collectReview(rev difftypes.Diff, required func(string) bool, reasons []string) *impactReview {
 	out := &impactReview{Reasons: reasons}
 	measured := false
 	for _, f := range rev.Files {
@@ -3129,18 +3130,18 @@ func collectReview(rev types.Diff, required func(string) bool, reasons []string)
 		}
 		out.Files++
 		switch f.ReadState {
-		case types.DiffReadRead:
+		case difftypes.ReadRead:
 			measured = true
 			out.Read++
 			continue
-		case types.DiffReadStale:
+		case difftypes.ReadStale:
 			measured = true
 			out.Stale = append(out.Stale, f.Path)
 			// Not also Required: the section already names it under "changed after you
 			// read them", and listing it again as "unopened" would both contradict itself
 			// and print one path as two findings.
 			continue
-		case types.DiffReadUnread:
+		case difftypes.ReadUnread:
 			measured = true
 			out.Unread = append(out.Unread, f.Path)
 		default:
@@ -3162,7 +3163,7 @@ func collectReview(rev types.Diff, required func(string) bool, reasons []string)
 // An unnamed path is an ERROR rather than a silent no-op. The whole value of a receipt is
 // that it names something real; a typo that quietly acknowledged nothing would leave the
 // reader believing they had recorded work they had not.
-func scopeAck(rev types.Diff, paths []string) (types.Diff, error) {
+func scopeAck(rev difftypes.Diff, paths []string) (difftypes.Diff, error) {
 	if len(paths) == 0 {
 		return rev, nil
 	}
@@ -3174,11 +3175,11 @@ func scopeAck(rev types.Diff, paths []string) (types.Diff, error) {
 	for _, p := range paths {
 		clean := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(p)), "./")
 		if !inChange[clean] {
-			return types.Diff{}, exit.Usagef("magus diff --ack: %q is not a changed file in this changeset; `%s` lists them", p, hint.Diff.With("-o", "name"))
+			return difftypes.Diff{}, exit.Usagef("magus diff --ack: %q is not a changed file in this changeset; `%s` lists them", p, hint.Diff.With("-o", "name"))
 		}
 		want[clean] = true
 	}
-	out := types.Diff{Base: rev.Base}
+	out := difftypes.Diff{Base: rev.Base}
 	for _, f := range rev.Files {
 		if want[f.Path] {
 			out.Files = append(out.Files, f)
@@ -3244,7 +3245,7 @@ func readReviewedContent(ctx context.Context, m *magus.Magus, src diffInput) rev
 
 // ackChangeset records a receipt for every non-generated changed file at the content the reader
 // was shown, carrying the reason the caller gave for covering them all at once.
-func ackChangeset(content reviewedContent, cacheDir string, rev types.Diff, reason string, now time.Time) (int, error) {
+func ackChangeset(content reviewedContent, cacheDir string, rev difftypes.Diff, reason string, now time.Time) (int, error) {
 	var add []review.Receipt
 	for _, f := range rev.Files {
 		if f.Generated() {

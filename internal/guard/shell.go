@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"cmp"
 	"context"
 	"flag"
@@ -805,12 +806,12 @@ func declaredOutput(ctx context.Context, ws types.WorkspaceRepository, path stri
 		return false, fmt.Sprintf("%s: it gave %d answers, not 1", unclassified, len(entries))
 	}
 	e := entries[0]
-	if e.Role != types.DiffRoleOutput {
+	if e.Role != diff.RoleOutput {
 		return false, ""
 	}
 	var by []string
 	for _, c := range e.Claims {
-		if c.Role == types.DiffRoleOutput {
+		if c.Role == diff.RoleOutput {
 			by = append(by, strings.TrimSuffix(fmt.Sprintf("%s:%s", c.Project, c.Target), ":"))
 		}
 	}

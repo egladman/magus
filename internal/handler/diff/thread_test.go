@@ -1,6 +1,7 @@
 package diff
 
 import (
+	difftypes "github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"net/http"
@@ -13,15 +14,14 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/review"
-	"github.com/egladman/magus/types"
 )
 
 // threadWorkspace answers the three reads the thread route makes: where the review is, the
 // patch, and the annotated changeset for the paths in it.
 type threadWorkspace struct{ patch string }
 
-func (threadWorkspace) ReviewOrigin(context.Context) types.ReviewOrigin {
-	return types.ReviewOrigin{Branch: "feat/x"}
+func (threadWorkspace) ReviewOrigin(context.Context) difftypes.ReviewOrigin {
+	return difftypes.ReviewOrigin{Branch: "feat/x"}
 }
 
 func (w threadWorkspace) WorkingDiff(context.Context, []string) (string, error) {
@@ -30,18 +30,18 @@ func (w threadWorkspace) WorkingDiff(context.Context, []string) (string, error) 
 
 // DiffWith refuses a call that does not set SkipOrder: a thread record reads the code around one
 // thread and must never pay for the reading order of the whole changeset.
-func (threadWorkspace) DiffWith(_ context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
+func (threadWorkspace) DiffWith(_ context.Context, paths []string, opts difftypes.Options) (difftypes.Diff, error) {
 	if !opts.SkipOrder {
-		return types.Diff{}, errors.New("the thread asked for the reading order")
+		return difftypes.Diff{}, errors.New("the thread asked for the reading order")
 	}
 	reach := 9
-	return types.Diff{
+	return difftypes.Diff{
 		Base:         "working",
 		SeedProjects: []string{"root"},
-		Files: []types.DiffFile{{
-			Path: paths[0], Project: "root", Role: types.DiffRoleSource, Reach: &reach,
-			Symbols: []types.DiffSymbol{{ID: "m a/New().", Label: "New", Qualified: "New", FileCount: 9, RefCount: 12}},
-			Hunks:   []types.DiffHunk{{Index: 0, NewStart: 10, NewCount: 3, Symbols: []string{"m a/New()."}}},
+		Files: []difftypes.File{{
+			Path: paths[0], Project: "root", Role: difftypes.RoleSource, Reach: &reach,
+			Symbols: []difftypes.Symbol{{ID: "m a/New().", Label: "New", Qualified: "New", FileCount: 9, RefCount: 12}},
+			Hunks:   []difftypes.Hunk{{Index: 0, NewStart: 10, NewCount: 3, Symbols: []string{"m a/New()."}}},
 		}},
 	}, nil
 }
@@ -55,13 +55,13 @@ func getThread(h http.Handler, query string) *httptest.ResponseRecorder {
 }
 
 func TestThreadRouteServesTheRecordForAThread(t *testing.T) {
-	withReviewProvider(t, []types.ReviewComment{
+	withReviewProvider(t, []difftypes.ReviewComment{
 		{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "why new?"},
 		{ID: "t2", Root: "t1", Author: "marcus", Body: "see the cache"},
 	})
 	h := NewThreadHandler(ThreadOptions{
 		Workspace: threadWorkspace{patch: threadRoutePatch},
-		Anchors: func(_ context.Context, rev types.Diff) ([]review.AnchorHit, error) {
+		Anchors: func(_ context.Context, rev difftypes.Diff) ([]review.AnchorHit, error) {
 			return []review.AnchorHit{{Note: "new-is-cheap", Kind: notes.AnchorFile, Target: "a.go", Matched: rev.Files[0].Path}}, nil
 		},
 	}, nil)
@@ -72,35 +72,35 @@ func TestThreadRouteServesTheRecordForAThread(t *testing.T) {
 	var got ThreadReply
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
 	reach := 9
-	assert.Equal(t, types.DiffThread{
+	assert.Equal(t, difftypes.Thread{
 		ID:   "t1",
 		Path: "a.go",
 		Line: 11,
-		Comments: []types.ReviewComment{
+		Comments: []difftypes.ReviewComment{
 			{ID: "t1", Path: "a.go", Line: 11, Hunk: 0, Author: "priya", Body: "why new?"},
 			{ID: "t2", Root: "t1", Path: "a.go", Hunk: 0, Author: "marcus", Body: "see the cache"},
 		},
-		Hunk: types.DiffThreadHunk{
+		Hunk: difftypes.ThreadHunk{
 			Index: 0, Source: "patch",
 			Lines: []string{"@@ -10,3 +10,3 @@ func New() {", " ten", "-old", "+new"},
 			Note:  "hunk 0 of a.go, as it stands now",
 		},
 		InChangeset: true,
 		Project:     "root",
-		Role:        types.DiffRoleSource,
+		Role:        difftypes.RoleSource,
 		Reach:       &reach,
-		Symbols:     []types.DiffSymbol{{ID: "m a/New().", Label: "New", Qualified: "New", FileCount: 9, RefCount: 12}},
+		Symbols:     []difftypes.Symbol{{ID: "m a/New().", Label: "New", Qualified: "New", FileCount: 9, RefCount: 12}},
 		Notes:       []string{"note new-is-cheap anchors file:a.go"},
 		Change:      "The change touches 1 file(s) in root.",
 		Unmeasured:  []string{"coverage: no coverage run has been observed for this file"},
-	}, got.DiffThread)
+	}, got.Thread)
 	assert.Contains(t, got.Text, "  priya:\n    > why new?\n  marcus:\n    > see the cache\n", "the text is the one --thread prints")
 }
 
 // TestThreadRouteAnswersAReplyIdWithTheThreadId. A client holding the id of the reply it just saw
 // arrive gets the thread, and learns the thread id to key it by.
 func TestThreadRouteAnswersAReplyIdWithTheThreadId(t *testing.T) {
-	withReviewProvider(t, []types.ReviewComment{
+	withReviewProvider(t, []difftypes.ReviewComment{
 		{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "why new?"},
 		{ID: "t2", Root: "t1", Author: "marcus", Body: "see the cache"},
 	})
@@ -117,7 +117,7 @@ func TestThreadRouteAnswersAReplyIdWithTheThreadId(t *testing.T) {
 // TestThreadRouteNamesWhatItCouldNotJoin. A server with no notes wiring must not let an empty
 // anchors section read as "no note anchors this file".
 func TestThreadRouteNamesWhatItCouldNotJoin(t *testing.T) {
-	withReviewProvider(t, []types.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "why new?"}})
+	withReviewProvider(t, []difftypes.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "why new?"}})
 	h := NewThreadHandler(ThreadOptions{Workspace: threadWorkspace{patch: threadRoutePatch}}, nil)
 
 	w := getThread(h, "?id=t1")
@@ -131,7 +131,7 @@ func TestThreadRouteNamesWhatItCouldNotJoin(t *testing.T) {
 }
 
 func TestThreadRouteRefusesWhatItCannotAnswer(t *testing.T) {
-	withReviewProvider(t, []types.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "why new?"}})
+	withReviewProvider(t, []difftypes.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "why new?"}})
 	h := NewThreadHandler(ThreadOptions{Workspace: threadWorkspace{patch: threadRoutePatch}}, nil)
 
 	assert.Equal(t, http.StatusBadRequest, getThread(h, "").Code, "no id")
@@ -157,10 +157,10 @@ func TestThreadRouteWithNoReviewOpenIsNotFound(t *testing.T) {
 // A misdeclared notes store is a fault the person has to fix, so the route reports it rather than
 // serving a record whose notes read as a clean tree nobody checked.
 func TestThreadRouteReportsAnAnchorsFailure(t *testing.T) {
-	withReviewProvider(t, []types.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "why new?"}})
+	withReviewProvider(t, []difftypes.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "why new?"}})
 	h := NewThreadHandler(ThreadOptions{
 		Workspace: threadWorkspace{patch: threadRoutePatch},
-		Anchors: func(context.Context, types.Diff) ([]review.AnchorHit, error) {
+		Anchors: func(context.Context, difftypes.Diff) ([]review.AnchorHit, error) {
 			return nil, errors.New("note anchors: knowledge.notes.shared escapes the workspace")
 		},
 	}, nil)

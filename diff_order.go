@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"cmp"
 	"context"
 	"fmt"
@@ -31,7 +32,7 @@ type hunkPlace struct {
 // and the listed symbols whose changed lines it holds, innermost first (see DiffHunk.Symbols,
 // which changeset.OrderHunks reads the first of to label a hunk). placesByFile says which hunks
 // changed each file's symbols; a listed symbol absent from it sits in no hunk.
-func attachHunks(files []types.DiffFile, patch string, placesByFile map[string]map[string]hunkPlace) {
+func attachHunks(files []diff.File, patch string, placesByFile map[string]map[string]hunkPlace) {
 	parsed := map[string][]changeset.Hunk{}
 	for _, pf := range changeset.Parse(patch) {
 		parsed[pf.Path] = pf.Hunks
@@ -39,7 +40,7 @@ func attachHunks(files []types.DiffFile, patch string, placesByFile map[string]m
 	for i := range files {
 		f := &files[i]
 		for _, h := range parsed[f.Path] {
-			dh := types.DiffHunk{
+			dh := diff.Hunk{
 				Index: h.Index, Digest: h.Digest,
 				OldStart: h.OldStart, OldCount: h.OldCount, NewStart: h.NewStart, NewCount: h.NewCount,
 				Declaration: h.Declaration,
@@ -65,7 +66,7 @@ func attachHunks(files []types.DiffFile, patch string, placesByFile map[string]m
 // the symbol index cannot back an order for the tree under review (see orderSkip): the sites
 // and implementations it would supply are unknown, and an order built on their absence would
 // read as "nothing is related". Order stays nil then, and a Note names the cause.
-func (m *Magus) attachOrder(ctx context.Context, out *types.Diff, graph *knowledge.Graph, patch, skip string) {
+func (m *Magus) attachOrder(ctx context.Context, out *diff.Diff, graph *knowledge.Graph, patch, skip string) {
 	if skip != "" {
 		out.Notes = append(out.Notes, fmt.Sprintf("reading order skipped: %s; rebuild with `%s`", skip, hint.GraphBuild.String()))
 		return
@@ -81,7 +82,7 @@ func (m *Magus) attachOrder(ctx context.Context, out *types.Diff, graph *knowled
 // attachRisk fills each file's Risk with its `magus affected ci` evidence,
 // tiered against base. A file it cannot tier keeps a nil Risk and a Note.
 // A moved file is one, since the assessment reads the working tree.
-func (m *Magus) attachRisk(ctx context.Context, out *types.Diff, base, patch string) {
+func (m *Magus) attachRisk(ctx context.Context, out *diff.Diff, base, patch string) {
 	if base == "" {
 		out.Notes = append(out.Notes, "risk tiers skipped: no revision names what the change is tiered against")
 		return
@@ -163,7 +164,7 @@ func indexGap(freshErr error, indexed bool, capable []string, built map[string]t
 
 // buildOrder orders the hunks of files. root is where the working tree lives, which decides
 // the files whose hunks the index cannot place; sites are the uses of the changed symbols.
-func buildOrder(root, patch string, files []types.DiffFile, graph *knowledge.Graph, sites []changeset.OrderSite) types.DiffOrder {
+func buildOrder(root, patch string, files []diff.File, graph *knowledge.Graph, sites []changeset.OrderSite) diff.Order {
 	return changeset.OrderHunks(changeset.OrderInput{
 		Files:      orderFiles(files, movedFiles(root, patch)),
 		Sites:      sites,
@@ -173,7 +174,7 @@ func buildOrder(root, patch string, files []types.DiffFile, graph *knowledge.Gra
 }
 
 // orderFiles maps the reviewed files onto the ordering input.
-func orderFiles(files []types.DiffFile, moved map[string]bool) []changeset.OrderFile {
+func orderFiles(files []diff.File, moved map[string]bool) []changeset.OrderFile {
 	out := make([]changeset.OrderFile, 0, len(files))
 	for _, f := range files {
 		out = append(out, changeset.OrderFile{
@@ -189,7 +190,7 @@ func orderFiles(files []types.DiffFile, moved map[string]bool) []changeset.Order
 	return out
 }
 
-func riskTier(f types.DiffFile) types.Tier {
+func riskTier(f diff.File) types.Tier {
 	if f.Risk == nil {
 		return types.RiskFull
 	}
@@ -248,7 +249,7 @@ func workingTreeHolds(root string, f changeset.File) bool {
 func trimLine(s string) string { return strings.TrimRight(s, " \t\r") }
 
 // changedDefinitions are the IDs of the symbols some hunk holds, ascending.
-func changedDefinitions(files []types.DiffFile) []string {
+func changedDefinitions(files []diff.File) []string {
 	seen := map[string]bool{}
 	var ids []string
 	for _, f := range files {
@@ -270,7 +271,7 @@ func changedDefinitions(files []types.DiffFile) []string {
 // back to the indexes through one SymbolsOccurrences pass. The note is non-empty when the
 // answer is partial, and names every cause: an index magus could not decode drops that
 // project's sites, and a cancelled or failed listing drops them all.
-func (m *Magus) orderSites(ctx context.Context, files []types.DiffFile) ([]changeset.OrderSite, string) {
+func (m *Magus) orderSites(ctx context.Context, files []diff.File) ([]changeset.OrderSite, string) {
 	changed := map[string]bool{}
 	for _, f := range files {
 		changed[f.Path] = true
@@ -324,7 +325,7 @@ func partialOrderNote(cancelled, listed bool, unreadable []string) string {
 
 // orderLinks pairs the changed symbols with the changed interfaces they implement, from the
 // graph's implements edges.
-func orderLinks(graph *knowledge.Graph, files []types.DiffFile) []changeset.OrderLink {
+func orderLinks(graph *knowledge.Graph, files []diff.File) []changeset.OrderLink {
 	if graph == nil {
 		return nil
 	}

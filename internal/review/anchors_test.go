@@ -1,6 +1,7 @@
 package review
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"context"
 	"os"
 	"path/filepath"
@@ -8,7 +9,6 @@ import (
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/notes"
-	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,9 +17,9 @@ import (
 // anchors a symbol by its index id, so passing labels or paths would match nothing and the
 // section would report a clean tree it never checked.
 func TestChangedSymbolIDsAreWhatASymbolAnchorNames(t *testing.T) {
-	rev := types.Diff{Files: []types.DiffFile{
-		{Path: "a.go", Symbols: []types.DiffSymbol{{ID: "m types/Diff#", Label: "Diff"}, {ID: "", Label: "unindexed"}}},
-		{Path: "b.go", Symbols: []types.DiffSymbol{{ID: "m types/Diff#", Label: "Diff"}}},
+	rev := diff.Diff{Files: []diff.File{
+		{Path: "a.go", Symbols: []diff.Symbol{{ID: "m types/Diff#", Label: "Diff"}, {ID: "", Label: "unindexed"}}},
+		{Path: "b.go", Symbols: []diff.Symbol{{ID: "m types/Diff#", Label: "Diff"}}},
 	}}
 	assert.Equal(t, []string{"a.go", "b.go"}, ChangedPaths(rev))
 	assert.Equal(t, []string{"m types/Diff#"}, changedSymbolIDs(rev), "deduplicated, and an unindexed symbol is not an id")
@@ -78,13 +78,13 @@ func TestChangesetAnchorsReturnsAMisdeclaredStoreAsAnError(t *testing.T) {
 		return nil, nil
 	}
 
-	hits, err := ChangesetAnchors(t.Context(), root, NoteDirs{Shared: "../outside"}, load, types.Diff{})
+	hits, err := ChangesetAnchors(t.Context(), root, NoteDirs{Shared: "../outside"}, load, diff.Diff{})
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "note anchors")
 	assert.Nil(t, hits)
 
-	hits, err = ChangesetAnchors(t.Context(), root, NoteDirs{}, load, types.Diff{})
+	hits, err = ChangesetAnchors(t.Context(), root, NoteDirs{}, load, diff.Diff{})
 	require.NoError(t, err, "declaring no store is the default, not a fault")
 	assert.Nil(t, hits)
 }

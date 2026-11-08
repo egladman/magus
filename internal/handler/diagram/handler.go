@@ -1,6 +1,7 @@
 package diagram
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
@@ -25,7 +26,7 @@ type workspace interface {
 	ImportGraph(ctx context.Context) (types.ImportGraph, error)
 	// SymbolIndex reports whether a symbol index exists without loading its shards.
 	SymbolIndex(ctx context.Context) (types.SymbolIndexDigest, error)
-	ReviewOrigin(ctx context.Context) types.ReviewOrigin
+	ReviewOrigin(ctx context.Context) diff.ReviewOrigin
 	RevisionCheckpoint(ctx context.Context, rev string) (types.VCSCheckpoint, error)
 }
 

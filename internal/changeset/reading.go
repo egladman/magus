@@ -1,13 +1,13 @@
 package changeset
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"context"
 	"fmt"
 	"path/filepath"
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/types"
 )
 
 // ReadingTTL is how long a [ReadingMark] counts. Twelve hours is a long working day: a mark
@@ -35,7 +35,7 @@ type ReadingMark struct {
 func (m ReadingMark) Active() bool { return m.Review != "" }
 
 // Matches reports whether m was set against at.
-func (m ReadingMark) Matches(at types.ReviewTarget) bool {
+func (m ReadingMark) Matches(at diff.ReviewTarget) bool {
 	return m.Active() && m.Review == at.ID && m.Repo == at.Repo
 }
 
@@ -83,7 +83,7 @@ func errorNoReadingDir() error {
 // second tab sending it, must not shorten the interval a later merge is measured against. A mark
 // for a different review is replaced, and so is one that has outlived [ReadingTTL]; a person
 // reads one review at a time.
-func (s *Store) SetReading(ctx context.Context, at types.ReviewTarget, now time.Time) (ReadingMark, error) {
+func (s *Store) SetReading(ctx context.Context, at diff.ReviewTarget, now time.Time) (ReadingMark, error) {
 	path := s.readingPath()
 	if path == "" {
 		return ReadingMark{}, errorNoReadingDir()

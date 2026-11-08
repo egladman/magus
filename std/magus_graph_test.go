@@ -1,6 +1,7 @@
 package std
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
@@ -300,9 +301,9 @@ func (p *precedentGraphs) SymbolIndexStatusByStamp(context.Context) []types.Symb
 func (p *precedentGraphs) ClassifyFiles(_ context.Context, paths []string) ([]types.FileEntry, error) {
 	out := make([]types.FileEntry, len(paths))
 	for i, path := range paths {
-		out[i] = types.FileEntry{Path: path, Role: types.DiffRoleSource}
+		out[i] = types.FileEntry{Path: path, Role: diff.RoleSource}
 		if p.outputs[path] {
-			out[i].Role = types.DiffRoleOutput
+			out[i].Role = diff.RoleOutput
 		}
 	}
 	return out, nil

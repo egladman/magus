@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/daemon"
+	difftypes "github.com/egladman/magus/types/diff"
 	imagetypes "github.com/egladman/magus/types/image"
 	"github.com/egladman/magus/types/trail"
 )
@@ -91,25 +92,25 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "DiagnosticCode", Zero: types.DiagnosticCodeRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectDiagnosticCodeRef(v.(types.DiagnosticCodeRef), enums)
 	}},
-	{Name: "Diff", Zero: types.Diff{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiff(v.(types.Diff), enums) }},
-	{Name: "DiffAPI", Zero: types.DiffAPI{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffAPI(v.(types.DiffAPI)) }},
-	{Name: "DiffChurn", Zero: types.DiffChurn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffChurn(v.(types.DiffChurn)) }},
-	{Name: "DiffFile", Zero: types.DiffFile{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffFile(v.(types.DiffFile), enums) }},
-	{Name: "DiffGroup", Zero: types.DiffGroup{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffGroup(v.(types.DiffGroup), enums) }},
-	{Name: "DiffHunk", Zero: types.DiffHunk{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffHunk(v.(types.DiffHunk)) }},
-	{Name: "DiffHunkRef", Zero: types.DiffHunkRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffHunkRef(v.(types.DiffHunkRef)) }},
-	{Name: "DiffOrder", Zero: types.DiffOrder{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffOrder(v.(types.DiffOrder), enums) }},
-	{Name: "DiffOrderCount", Zero: types.DiffOrderCount{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffOrderCount(v.(types.DiffOrderCount)) }},
-	{Name: "DiffPublicPath", Zero: types.DiffPublicPath{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffPublicPath(v.(types.DiffPublicPath)) }},
-	{Name: "DiffReviewed", Zero: types.DiffReviewed{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffReviewed(v.(types.DiffReviewed)) }},
-	{Name: "DiffStep", Zero: types.DiffStep{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffStep(v.(types.DiffStep), enums) }},
-	{Name: "DiffStepHunk", Zero: types.DiffStepHunk{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffStepHunk(v.(types.DiffStepHunk), enums) }},
-	{Name: "DiffSymbol", Zero: types.DiffSymbol{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffSymbol(v.(types.DiffSymbol), enums) }},
-	{Name: "DiffThreadRef", Zero: types.DiffThreadRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffThreadRef(v.(types.DiffThreadRef)) }},
-	{Name: "DiffTouch", Zero: types.DiffTouch{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffTouch(v.(types.DiffTouch)) }},
-	{Name: "DiffUncovered", Zero: types.DiffUncovered{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffUncovered(v.(types.DiffUncovered), enums) }},
-	{Name: "DiffUnread", Zero: types.DiffUnread{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffUnread(v.(types.DiffUnread), enums) }},
-	{Name: "DiffWhy", Zero: types.DiffWhy{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffWhy(v.(types.DiffWhy), enums) }},
+	{Name: "Diff", Zero: difftypes.Diff{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiff(v.(difftypes.Diff), enums) }},
+	{Name: "DiffAPI", Zero: difftypes.API{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffAPI(v.(difftypes.API)) }},
+	{Name: "DiffChurn", Zero: difftypes.Churn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffChurn(v.(difftypes.Churn)) }},
+	{Name: "DiffFile", Zero: difftypes.File{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffFile(v.(difftypes.File), enums) }},
+	{Name: "DiffGroup", Zero: difftypes.Group{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffGroup(v.(difftypes.Group), enums) }},
+	{Name: "DiffHunk", Zero: difftypes.Hunk{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffHunk(v.(difftypes.Hunk)) }},
+	{Name: "DiffHunkRef", Zero: difftypes.HunkRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffHunkRef(v.(difftypes.HunkRef)) }},
+	{Name: "DiffOrder", Zero: difftypes.Order{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffOrder(v.(difftypes.Order), enums) }},
+	{Name: "DiffOrderCount", Zero: difftypes.OrderCount{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffOrderCount(v.(difftypes.OrderCount)) }},
+	{Name: "DiffPublicPath", Zero: difftypes.PublicPath{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffPublicPath(v.(difftypes.PublicPath)) }},
+	{Name: "DiffReviewed", Zero: difftypes.Reviewed{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffReviewed(v.(difftypes.Reviewed)) }},
+	{Name: "DiffStep", Zero: difftypes.Step{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffStep(v.(difftypes.Step), enums) }},
+	{Name: "DiffStepHunk", Zero: difftypes.StepHunk{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffStepHunk(v.(difftypes.StepHunk), enums) }},
+	{Name: "DiffSymbol", Zero: difftypes.Symbol{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffSymbol(v.(difftypes.Symbol), enums) }},
+	{Name: "DiffThreadRef", Zero: difftypes.ThreadRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffThreadRef(v.(difftypes.ThreadRef)) }},
+	{Name: "DiffTouch", Zero: difftypes.Touch{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffTouch(v.(difftypes.Touch)) }},
+	{Name: "DiffUncovered", Zero: difftypes.Uncovered{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffUncovered(v.(difftypes.Uncovered), enums) }},
+	{Name: "DiffUnread", Zero: difftypes.Unread{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffUnread(v.(difftypes.Unread), enums) }},
+	{Name: "DiffWhy", Zero: difftypes.Why{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffWhy(v.(difftypes.Why), enums) }},
 	{Name: "Digest", Zero: imagetypes.Digest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageDigest(v.(imagetypes.Digest), enums) }},
 	{Name: "Dir", Zero: types.Dir{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDir(v.(types.Dir)) }},
 	{Name: "DirCall", Zero: types.DirCall{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDirCall(v.(types.DirCall)) }},

@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
@@ -2655,13 +2656,13 @@ func (s *GradeEditSuite) grade(ws types.WorkspaceRepository, rel string, o EditG
 }
 
 func (s *GradeEditSuite) TestADeclaredOutputIsRefusedWithNoRule() {
-	rule, reason := s.grade(s.workspace("internal/ledger/store.go", types.DiffRoleOutput), "internal/ledger/store.go", EditGrade{})
+	rule, reason := s.grade(s.workspace("internal/ledger/store.go", diff.RoleOutput), "internal/ledger/store.go", EditGrade{})
 	s.Empty(rule)
 	s.Equal("a declared output of .:gen: change its source and regenerate it", reason)
 }
 
 func (s *GradeEditSuite) TestATargetRunWritesItsDeclaredOutput() {
-	rule, reason := s.grade(s.workspace("cmd/magus/main.go", types.DiffRoleOutput), "cmd/magus/main.go", EditGrade{InRun: true})
+	rule, reason := s.grade(s.workspace("cmd/magus/main.go", diff.RoleOutput), "cmd/magus/main.go", EditGrade{InRun: true})
 	s.Empty(rule+reason, "the lease would refuse it, and the run's output passes before it is asked")
 }
 

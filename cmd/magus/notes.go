@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"bytes"
 	"context"
 	"errors"
@@ -1026,7 +1027,7 @@ func notesCaptureGap(ctx context.Context, root string, g store.Gap, name string,
 // session's own. A transcript holding only your half of a conversation is not a transcript of
 // the conversation: the question a reader has months later is what was decided, and the answer
 // is nearly always in what somebody else said back.
-func captureFromSession(sess *types.DiffReview, comments []types.ReviewComment, title string, tags []string) store.Capture {
+func captureFromSession(sess *diff.Review, comments []diff.ReviewComment, title string, tags []string) store.Capture {
 	// Grouped by file, because that is how a reviewer looks for a thread later ("what did we
 	// say about key.go"). Comment order within a file is left alone: it is the order the
 	// conversation happened in, and sorting it would break the replies.
@@ -1082,8 +1083,8 @@ func captureFromSession(sess *types.DiffReview, comments []types.ReviewComment, 
 // commentAuthor renders who said something. An agent is named as one: a transcript that let a
 // tool's output read as a colleague's opinion would be the capture telling the reader the one
 // thing it must not.
-func commentAuthor(c types.DiffComment) string {
-	if c.Author != types.DiffAuthorAgent {
+func commentAuthor(c diff.Comment) string {
+	if c.Author != diff.AuthorAgent {
 		// "reviewer", not a name. The session records which route and credential wrote this,
 		// never which person, so a name would be invented; and "You" would be a lie to
 		// everyone except the one reader who captured it, which is exactly the wrong reader to
@@ -1099,7 +1100,7 @@ func commentAuthor(c types.DiffComment) string {
 // captureName derives a note name from the patch the thread was written against, so two
 // captures from different reviews cannot collide and a repeat of the SAME review is caught by
 // the exists check rather than silently overwriting.
-func captureName(sess *types.DiffReview) string {
+func captureName(sess *diff.Review) string {
 	digest := sess.AsOf
 	if len(digest) > 12 {
 		digest = digest[:12]
@@ -1118,7 +1119,7 @@ func captureName(sess *types.DiffReview) string {
 // unsent human ones, which is what a person writing alone in `magus diff` produces, so the
 // absence of a server is a smaller transcript rather than no transcript. The caller says which
 // one it got; see notesCapture's output.
-func captureSession(ctx context.Context, m *magus.Magus) (*types.DiffReview, bool, error) {
+func captureSession(ctx context.Context, m *magus.Magus) (*diff.Review, bool, error) {
 	if sess := serverDiffReview(ctx); sess != nil {
 		return sess, true, nil
 	}
@@ -1133,12 +1134,12 @@ func captureSession(ctx context.Context, m *magus.Magus) (*types.DiffReview, boo
 // so the note this capture names is the one either path would have named for this tree. No
 // patch leaves it EMPTY rather than digesting the empty string, which would name every such
 // capture the same note and make the second one collide with the first.
-func storedDiffReview(cacheDir, patch string) (*types.DiffReview, error) {
+func storedDiffReview(cacheDir, patch string) (*diff.Review, error) {
 	drafts, err := changeset.NewStore(cacheDir).LoadDrafts()
 	if err != nil {
 		return nil, err
 	}
-	sess := &types.DiffReview{Comments: drafts}
+	sess := &diff.Review{Comments: drafts}
 	if patch != "" {
 		sess.AsOf = changeset.PatchDigest(patch)
 	}
@@ -1153,7 +1154,7 @@ func storedDiffReview(cacheDir, patch string) (*types.DiffReview, error) {
 // symbol shards and walks a reverse closure, and it wants the paths under review. This one
 // hands back the attached session as it stands, which is all a transcript needs, and answers
 // 409 when nothing is attached.
-func serverDiffReview(ctx context.Context) *types.DiffReview {
+func serverDiffReview(ctx context.Context) *diff.Review {
 	addr := mcpAddrString()
 	token, tokenID, ok := mintReviewToken(ctx, addr, reviewCallTokenTTL)
 	if !ok {
@@ -1175,7 +1176,7 @@ func serverDiffReview(ctx context.Context) *types.DiffReview {
 	if resp.StatusCode != http.StatusOK {
 		return nil
 	}
-	var sess types.DiffReview
+	var sess diff.Review
 	if err := json.NewDecoder(resp.Body).Decode(&sess); err != nil {
 		return nil
 	}
@@ -1189,7 +1190,7 @@ func serverDiffReview(ctx context.Context) *types.DiffReview {
 // reader has already had on screen. Without one the forge is asked directly: a colleague's
 // remark is a fact about the review, not about whether a background process happens to be up,
 // and the same patch on the same branch must not show a different conversation either way.
-func reviewComments(ctx context.Context, m *magus.Magus) ([]types.ReviewComment, string) {
+func reviewComments(ctx context.Context, m *magus.Magus) ([]diff.ReviewComment, string) {
 	if comments, reason, served := serverReviewComments(ctx); served {
 		return comments, reason
 	}
@@ -1203,7 +1204,7 @@ func reviewComments(ctx context.Context, m *magus.Magus) ([]types.ReviewComment,
 // The reason is separate from the emptiness, and only non-empty when magus READ the review and
 // could not understand part of it. That is the one case a caller must not pass over quietly: a
 // transcript silently missing a colleague's remark is worse than no transcript.
-func serverReviewComments(ctx context.Context) (comments []types.ReviewComment, reason string, served bool) {
+func serverReviewComments(ctx context.Context) (comments []diff.ReviewComment, reason string, served bool) {
 	addr := mcpAddrString()
 	token, tokenID, ok := mintReviewToken(ctx, addr, reviewCallTokenTTL)
 	if !ok {
@@ -1227,7 +1228,7 @@ func serverReviewComments(ctx context.Context) (comments []types.ReviewComment, 
 	}
 	var body struct {
 		ID       string                `json:"id"`
-		Comments []types.ReviewComment `json:"threads"`
+		Comments []diff.ReviewComment `json:"threads"`
 		Reason   string                `json:"reason"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
@@ -1247,7 +1248,7 @@ func serverReviewComments(ctx context.Context) (comments []types.ReviewComment, 
 //
 // The origin and the cache dir are passed rather than a workspace, so a test can answer them
 // without a repository, the narrowing the server's own review source uses.
-func localReviewComments(ctx context.Context, from types.ReviewOrigin, cacheDir string) ([]types.ReviewComment, string) {
+func localReviewComments(ctx context.Context, from diff.ReviewOrigin, cacheDir string) ([]diff.ReviewComment, string) {
 	at := bindings.FindReview(ctx, from.Branch, from.Remote)
 	if !at.Open() {
 		return nil, ""
@@ -1259,7 +1260,7 @@ func localReviewComments(ctx context.Context, from types.ReviewOrigin, cacheDir 
 	// with the forge's.
 	seen, seenErr := changeset.NewStore(cacheDir).LoadSeenComments()
 	err = errors.Join(err, seenErr)
-	watermark := types.DiffReview{SeenComments: seen}
+	watermark := diff.Review{SeenComments: seen}
 	fresh := make(map[string]struct{})
 	for _, id := range watermark.UnseenComments(comments) {
 		if seenErr == nil {
@@ -1287,7 +1288,7 @@ func localReviewComments(ctx context.Context, from types.ReviewOrigin, cacheDir 
 // types.ReviewComment.New), so in a transcript a colleague reads next year it would describe
 // somebody else's morning. Said to the person taking the capture, it is the one moment it is
 // worth knowing.
-func newRemarkLine(comments []types.ReviewComment) string {
+func newRemarkLine(comments []diff.ReviewComment) string {
 	fresh := 0
 	for _, t := range comments {
 		if t.New {

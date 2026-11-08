@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"cmp"
 	"context"
 	"errors"
@@ -1228,14 +1229,14 @@ const conformanceSkippedWhy = "The conformance checks read the symbol index, so 
 // uncoveredProjects names each project with a changed file, other than a declared output, that
 // has no symbol indexer: the conformance checks cannot see it, so their silence says nothing
 // about it.
-func uncoveredProjects(files []types.DiffFile, capable []string) []types.DiffUncovered {
-	var out []types.DiffUncovered
+func uncoveredProjects(files []diff.File, capable []string) []diff.Uncovered {
+	var out []diff.Uncovered
 	for _, f := range files {
 		if f.Project == "" || f.Generated() || slices.Contains(capable, f.Project) ||
-			slices.ContainsFunc(out, func(u types.DiffUncovered) bool { return u.Project == f.Project }) {
+			slices.ContainsFunc(out, func(u diff.Uncovered) bool { return u.Project == f.Project }) {
 			continue
 		}
-		out = append(out, types.DiffUncovered{Project: f.Project, Reason: types.DiffUncoveredNoIndexer})
+		out = append(out, diff.Uncovered{Project: f.Project, Reason: diff.UncoveredNoIndexer})
 	}
 	return out
 }
