@@ -329,7 +329,7 @@ func TestCacheRunOptions(t *testing.T) {
 		Target:        "build",
 	}
 
-	opts := RunOptions(w, nil)
+	opts := RunOptions(w, nil, nil)
 
 	c, err := cache.Open(t.Context(), cdir, cache.WithLocalWrite(true))
 	require.NoError(t, err)
@@ -396,12 +396,12 @@ func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
 	served := ServedIn(job.Location{CacheDir: cacheDir, StateBase: stateBase, Root: root})
 	_, err = c.Run(t.Context(), spec, func(_ context.Context) error {
 		return fmt.Errorf("exit 2")
-	}, RunOptions(w, served)...)
+	}, RunOptions(w, served, nil)...)
 	require.Error(t, err)
 
 	passing := spec
 	passing.Target = "build"
-	_, err = c.Run(t.Context(), passing, func(_ context.Context) error { return nil }, RunOptions(w, served)...)
+	_, err = c.Run(t.Context(), passing, func(_ context.Context) error { return nil }, RunOptions(w, served, nil)...)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 
