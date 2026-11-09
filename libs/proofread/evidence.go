@@ -63,7 +63,6 @@ var unmeasured = map[Rule]bool{
 	RuleImpatience:                true, // no labeled firing yet
 	RuleListMarks:                 true, // no labeled firing yet
 	RuleListParallel:              true, // no labeled firing yet
-	RuleRepeatedOpener:            true, // no labeled firing yet
 	RuleDateFormat:                true, // no labeled firing yet
 	RuleCompactFiller:             true, // no labeled firing yet
 	RuleCompactMarkup:             true, // no labeled firing yet
