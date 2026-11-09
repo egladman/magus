@@ -1,10 +1,10 @@
 package eventstream
 
 import (
-	"github.com/egladman/magus/types/events"
 	"bytes"
 	"context"
 	"errors"
+	"github.com/egladman/magus/types/events"
 	"io"
 	"os"
 	"path/filepath"

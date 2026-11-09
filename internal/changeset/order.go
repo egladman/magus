@@ -1,8 +1,8 @@
 package changeset
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"slices"
 	"sort"
 	"strings"

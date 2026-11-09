@@ -1,13 +1,12 @@
 package changeset
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
 )
 
 // ErrOutline marks an outline refused as more than a few pointers. The

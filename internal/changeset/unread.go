@@ -1,9 +1,8 @@
 package changeset
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"fmt"
-
+	"github.com/egladman/magus/types/diff"
 )
 
 // UnreadHunks lists the hunks of files that no read mark covers, in patch order. A mark

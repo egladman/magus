@@ -1,8 +1,8 @@
 package trail
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"context"
+	"github.com/egladman/magus/types/diff"
 	"testing"
 	"time"
 

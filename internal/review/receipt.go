@@ -34,10 +34,10 @@
 package review
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/egladman/magus/types/diff"
 	"os"
 	"path/filepath"
 	"time"

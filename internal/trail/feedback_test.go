@@ -1,8 +1,8 @@
 package trail
 
 import (
-	trailtypes "github.com/egladman/magus/types/trail"
 	"context"
+	trailtypes "github.com/egladman/magus/types/trail"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,7 +10,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 )
 
 func TestCommandShape(t *testing.T) {

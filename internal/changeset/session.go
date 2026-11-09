@@ -28,13 +28,13 @@
 package changeset
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"path/filepath"
 	"slices"
@@ -547,8 +547,8 @@ type (
 		ID string `json:"id"`
 	}
 	draftLine struct {
-		ID      string             `json:"id"`
-		Removed bool               `json:"removed,omitempty"`
+		ID      string        `json:"id"`
+		Removed bool          `json:"removed,omitempty"`
 		Comment *diff.Comment `json:"comment,omitempty"`
 	}
 )

@@ -3,7 +3,6 @@ package changeset
 import (
 	"github.com/egladman/magus/types/diff"
 	"strings"
-
 )
 
 // CaptureAnchor records what a remark on line of path's hunks should remember about the code it

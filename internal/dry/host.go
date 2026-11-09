@@ -1,11 +1,11 @@
 package dry
 
 import (
-	trailtypes "github.com/egladman/magus/types/trail"
 	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	trailtypes "github.com/egladman/magus/types/trail"
 	"log/slog"
 	"strconv"
 	"strings"

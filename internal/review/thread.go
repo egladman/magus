@@ -1,9 +1,9 @@
 package review
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"context"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"slices"
 	"strings"
 

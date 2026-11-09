@@ -1,8 +1,8 @@
 package review
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 
 	"github.com/egladman/magus/internal/changeset"
 )
