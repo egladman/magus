@@ -368,7 +368,7 @@ fun installHarnesses(h: Host, dir: str) > str !> any {
 }
 
 // binaryAtHead reports whether dir's ./magus is a clean build of its HEAD.
-fun binaryAtHead(h: Host, dir: str) > bool !> any {
+export fun binaryAtHead(h: Host, dir: str) > bool !> any {
     final head = must(h.git(dir, args: ["rev-parse", "HEAD"]), what: "git rev-parse HEAD").trim();
     final version = h.magus(dir, args: ["version", "-o", "json"]);
     return version.code == 0 and head != "" and (versionMismatch(version.stdout, head: head) catch "unreadable") == "";
