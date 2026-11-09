@@ -21,6 +21,7 @@ var commonTargets = []cmdline.Operand{
 
 var listCommand = cmdline.Command{
 	Name:        "ls",
+	Effect:      cmdline.EffectRead,
 	Short:       "List all discovered projects",
 	Description: "List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.",
 	Tags:        []string{"cli", "magus ls", "list", "projects", "discovery", "workspace"},
@@ -40,10 +41,10 @@ against the value -o json emits, so its field names are the json keys.`,
 	// The noun is routed positionally by lsCmd (cmd/magus/list.go), whose lsNouns
 	// accept-list these mirror.
 	Children: []cmdline.Command{
-		{Name: "targets", Short: "List what the selected projects can run, with the doc or spell ops behind each"},
-		{Name: "target", Short: "The same listing; the noun takes either spelling"},
-		{Name: "jobs", Short: "List every job this repository carries, whoever holds it, with the pairs that claim the same path"},
-		{Name: "job", Short: "The same listing; the noun takes either spelling"},
+		{Name: "targets", Effect: cmdline.EffectRead, Short: "List what the selected projects can run, with the doc or spell ops behind each"},
+		{Name: "target", Effect: cmdline.EffectRead, Short: "The same listing; the noun takes either spelling"},
+		{Name: "jobs", Effect: cmdline.EffectRead, Short: "List every job this repository carries, whoever holds it, with the pairs that claim the same path"},
+		{Name: "job", Effect: cmdline.EffectRead, Short: "The same listing; the noun takes either spelling"},
 	},
 	Examples: []cmdline.Example{
 		{Comment: "List all projects", Command: "magus ls"},
@@ -86,9 +87,10 @@ step at a time.`,
 	// two different flags sharing a spelling because there was one namespace for
 	// all the nouns. Split, each -e is an ordinary alias of the flag beside it.
 	Children: []cmdline.Command{
-		{Name: "targets", Short: "List every target the workspace defines"},
+		{Name: "targets", Effect: cmdline.EffectRead, Short: "List every target the workspace defines"},
 		{
 			Name:        "job",
+			Effect:      cmdline.EffectRead,
 			Short:       "Print one job's terms: its criteria, paths, check and dependencies",
 			Description: "Print what one job grants its holder: the criteria, the write and read paths, the check, its goals, its dependencies, and the paths out of reach. It adds each write path's blast radius and each goal's grade against current evidence.",
 			Long: `Print one job's terms, which is what a holder reads on arrival.
@@ -113,8 +115,9 @@ job and never blocks the holder still working on it. It is the same grading
 			Usage: "magus describe job <job> [flags]",
 		},
 		{
-			Name:  "target",
-			Short: "Detail one target ref: its dispatch plan, globs, spells and policy",
+			Name:   "target",
+			Effect: cmdline.EffectRead,
+			Short:  "Detail one target ref: its dispatch plan, globs, spells and policy",
 			Flags: []cmdline.Flag{
 				{Name: "explain", Kind: cmdline.Bool, Default: false, Doc: "For a ref with charms: show the per-charm argv trace (base then each charm)"},
 				{Name: "e", Kind: cmdline.Bool, Default: false, AliasOf: "explain", Doc: "Short for --explain"},
@@ -126,8 +129,9 @@ job and never blocks the holder still working on it. It is the same grading
 			},
 		},
 		{
-			Name:  "projects",
-			Short: "List the workspace's projects",
+			Name:   "projects",
+			Effect: cmdline.EffectRead,
+			Short:  "List the workspace's projects",
 			Flags: []cmdline.Flag{
 				{Name: "evaluated", Kind: cmdline.Bool, Default: false, Doc: "Print workspace-rooted globs, effective claims, and per-target policies"},
 				{Name: "e", Kind: cmdline.Bool, Default: false, AliasOf: "evaluated", Doc: "Short for --evaluated"},
@@ -137,28 +141,30 @@ job and never blocks the holder still working on it. It is the same grading
 		// listing into one project's record, which is the form other commands point at.
 		// One noun, one flag set, so the flags stay declared on the plural rather than
 		// generating a second binder and a second identical options section.
-		{Name: "project", Short: "Detail one named project; takes the same flags as projects"},
+		{Name: "project", Effect: cmdline.EffectRead, Short: "Detail one named project; takes the same flags as projects"},
 		{
-			Name:  "spells",
-			Short: "List the spells the workspace resolves",
+			Name:   "spells",
+			Effect: cmdline.EffectRead,
+			Short:  "List the spells the workspace resolves",
 			Flags: []cmdline.Flag{
 				// Bound by the command and declared nowhere until now, so no man page
 				// listed it.
 				{Name: "versions", Kind: cmdline.Bool, Default: false, Doc: "Probe each spell's tools and report the versions that would key a run"},
 			},
 		},
-		{Name: "charms", Short: "List charms and the targets that declare them"},
-		{Name: "workspaces", Short: "List the workspaces registered in config"},
-		{Name: "modules", Short: "List the Buzz host modules a magusfile can import"},
-		{Name: "mcp-tools", Short: "List the tools the MCP server exposes"},
-		{Name: "tools", Short: "List the external tools the workspace's spells require"},
-		{Name: "file", Short: "Classify paths as generated output, declared source, maintained, or unclaimed"},
-		{Name: "graph", Short: "Emit the target catalog and dependency graph"},
-		{Name: "rules", Short: "List the guard rules this workspace enforces, and what each one catches"},
-		{Name: "rule", Short: "Detail one guard rule, by the name a verdict reported"},
+		{Name: "charms", Effect: cmdline.EffectRead, Short: "List charms and the targets that declare them"},
+		{Name: "workspaces", Effect: cmdline.EffectRead, Short: "List the workspaces registered in config"},
+		{Name: "modules", Effect: cmdline.EffectRead, Short: "List the Buzz host modules a magusfile can import"},
+		{Name: "mcp-tools", Effect: cmdline.EffectRead, Short: "List the tools the MCP server exposes"},
+		{Name: "tools", Effect: cmdline.EffectRead, Short: "List the external tools the workspace's spells require"},
+		{Name: "file", Effect: cmdline.EffectRead, Short: "Classify paths as generated output, declared source, maintained, or unclaimed"},
+		{Name: "graph", Effect: cmdline.EffectRead, Short: "Emit the target catalog and dependency graph"},
+		{Name: "rules", Effect: cmdline.EffectRead, Short: "List the guard rules this workspace enforces, and what each one catches"},
+		{Name: "rule", Effect: cmdline.EffectRead, Short: "Detail one guard rule, by the name a verdict reported"},
 		{
-			Name:  "harness",
-			Short: "Print the host config a wired harness needs and the command you run to merge it",
+			Name:   "harness",
+			Effect: cmdline.EffectRead,
+			Short:  "Print the host config a wired harness needs and the command you run to merge it",
 			Description: "Print each entry a wired harness's host files lack, and the one command that merges them. " +
 				"magus never writes host config; -o json prints the exact fragments that command reads back.",
 			Long: `Print what the host files of a harness wired with magus\harness.provider(<spell>)
@@ -193,6 +199,7 @@ const detachDoc = "Run in the background as its own session, writing to a log un
 
 var runCommand = cmdline.Command{
 	Name:        "run",
+	Effect:      cmdline.EffectRun,
 	Short:       "Run a target for selected projects",
 	Description: "Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.",
 	Tags:        []string{"cli", "magus run", "run", "target", "build", "test", "ci"},
@@ -223,7 +230,7 @@ printed, and -o json, yaml or template renders the document as read, so a saved
 plan renders more than once without being computed again.`,
 	Usage: "magus run <target> [flags] [project...] | magus run [<target>] --stdin [--shard <id>] < plan.json",
 	Flags: []cmdline.Flag{
-		{Name: "graph", Kind: cmdline.Bool, Default: false, Doc: "Render the dependency graph for the selected scope instead of executing"},
+		{Name: "graph", Kind: cmdline.Bool, Effect: cmdline.EffectRead, Default: false, Doc: "Render the dependency graph for the selected scope instead of executing"},
 		{Name: "upstream", Kind: cmdline.Bool, Default: false, Doc: "With --graph: show dependents instead of dependencies"},
 		{Name: "depth", Kind: cmdline.Int, Doc: "With --graph: cap displayed depth (0 = unlimited)"},
 		{Name: "skip", Kind: cmdline.Custom, Doc: "Exclude projects from the selection; repeatable or comma-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/*); a value matching nothing is an error"},
@@ -271,6 +278,7 @@ plan renders more than once without being computed again.`,
 
 var whereCommand = cmdline.Command{
 	Name:        "where",
+	Effect:      cmdline.EffectRead,
 	Short:       "Print the absolute path of a project",
 	Description: `Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd "$(magus where api)".`,
 	Tags:        []string{"cli", "magus where", "where", "project", "path", "fuzzy match", "navigation"},
@@ -302,6 +310,7 @@ that.`,
 
 var xCommand = cmdline.Command{
 	Name:        "x",
+	Effect:      cmdline.EffectRun,
 	Short:       "Reproduce an output ref, or pick project + target",
 	Description: "Reproduces the invocation an output ref recorded, or opens a TTY picker for project and target when given filters instead.",
 	Tags:        []string{"cli", "magus x", "interactive", "picker", "shorthand", "run", "tty", "reproduce", "output ref"},
@@ -344,6 +353,7 @@ humans. Scripts should call magus run directly.`,
 
 var affectedCommand = cmdline.Command{
 	Name:        "affected",
+	Effect:      cmdline.EffectRun,
 	Short:       "Run a target for VCS-diff affected projects",
 	Description: "Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.",
 	Tags:        []string{"cli", "magus affected", "affected", "changed files", "vcs", "git", "bisect", "ci"},
@@ -382,7 +392,7 @@ end, and prints no plan if one failed (MGS3030). CI gates its shards on drift
 that way: magus affected generate --no-default-charms | magus affected ci --plan.`,
 	Usage: "magus affected <target> [flags]",
 	Flags: []cmdline.Flag{
-		{Name: "impact", Kind: cmdline.Bool, Default: false, Modes: []string{"impact"}, Doc: "Report the blast radius of the changeset (read-only; runs nothing)"},
+		{Name: "impact", Kind: cmdline.Bool, Effect: cmdline.EffectRead, Default: false, Modes: []string{"impact"}, Doc: "Report the blast radius of the changeset (read-only; runs nothing)"},
 		{Name: "base", Kind: cmdline.String, Modes: []string{"", "plan", "impact"}, Doc: "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)"},
 		{Name: "stdin", Kind: cmdline.Bool, Default: false, Modes: []string{"", "plan"}, Doc: "Read changed file paths from stdin instead of running a VCS diff"},
 		{Name: "null", Kind: cmdline.Bool, Default: false, Modes: []string{"", "plan"}, Doc: "With --stdin: expect NUL-separated paths and double-NUL between batches"},
@@ -395,11 +405,11 @@ that way: magus affected generate --no-default-charms | magus affected ci --plan
 		{Name: "step", Kind: cmdline.Bool, Default: false, Doc: "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)"},
 		{Name: "race", Kind: cmdline.String, Doc: "Race diagnostics: watch, replay, or watch,replay. watch flags a write two projects both claim (MGS4001, 4002, 4004). replay reruns cacheable projects in sequence and compares output hashes for non-determinism (MGS4003), at double the time."},
 		{Name: "timeout", Kind: cmdline.Duration, Unit: "m", Doc: "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)"},
-		{Name: "graph", Kind: cmdline.Bool, Default: false, Doc: "Render the dependency graph for the affected scope instead of executing"},
+		{Name: "graph", Kind: cmdline.Bool, Effect: cmdline.EffectRead, Default: false, Doc: "Render the dependency graph for the affected scope instead of executing"},
 		{Name: "upstream", Kind: cmdline.Bool, Default: false, Doc: "With --graph: show dependents instead of dependencies"},
 		{Name: "depth", Kind: cmdline.Int, Doc: "With --graph: cap displayed depth (0 = unlimited)"},
-		{Name: "explain", Kind: cmdline.Custom, Doc: "Show why <project> is in the affected set instead of executing"},
-		{Name: "plan", Kind: cmdline.Custom, Doc: "Emit a provider-neutral JSON CI shard plan for the affected set"},
+		{Name: "explain", Kind: cmdline.Custom, Effect: cmdline.EffectRead, Doc: "Show why <project> is in the affected set instead of executing"},
+		{Name: "plan", Kind: cmdline.Custom, Effect: cmdline.EffectRead, Doc: "Emit a provider-neutral JSON CI shard plan for the affected set"},
 		{Name: "max-shards", Kind: cmdline.Int, Default: 8, DefaultAtBind: true, Modes: []string{"plan"}, Doc: "With --plan: maximum CI shards (-1 = unlimited)"},
 		{Name: "max-parallel-budget", Kind: cmdline.Int, DefaultAtBind: true, Modes: []string{"plan"}, Doc: "With --plan: cross-shard concurrency cap; 0 = unlimited"},
 		{Name: "detail", Kind: cmdline.Bool, Default: false, Modes: []string{"plan"}, Doc: "With --plan: add per-shard detail: the invocation, its spells, the files it declares it writes, and the skills its work routes to"},
@@ -430,6 +440,7 @@ that way: magus affected generate --no-default-charms | magus affected ci --plan
 
 var queryCommand = cmdline.Command{
 	Name:        "query",
+	Effect:      cmdline.EffectRead,
 	Short:       "Search the knowledge graph, and retrieve a run's output or journal by id",
 	Description: "Resolve search terms to knowledge-graph nodes and return the ranked matches plus their neighborhood; also retrieves a target's captured output by ref and a run's journal by invocation id.",
 	Tags:        []string{"cli", "magus query", "query", "knowledge graph", "search", "output", "reference", "invocation", "journal", "audit"},
@@ -475,7 +486,7 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 		{Name: "global", Kind: cmdline.Bool, Default: false, Doc: "Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace"},
 		{Name: "identity", Kind: cmdline.Bool, Default: false, Doc: "output <ref>: show the run's identity (descriptor, lineage, cache key, component digests)"},
 		{Name: "attempts", Kind: cmdline.Bool, Default: false, Doc: "output <ref>: list the ref's stored attempts (newest first)"},
-		{Name: "publish", Kind: cmdline.Bool, Default: false, Doc: "output <ref>: upload this run's output to the remote cache as a signed bundle"},
+		{Name: "publish", Kind: cmdline.Bool, Effect: cmdline.EffectSharedWrite, Default: false, Doc: "output <ref>: upload this run's output to the remote cache as a signed bundle"},
 		{Name: "stdin", Kind: cmdline.Bool, Default: false, Doc: "output: print records `-o jsonl` wrote, from stdin; writes nothing"},
 		{Name: "open", Kind: cmdline.Bool, Default: false, Doc: "output <ref>: open the captured output in the browser log viewer (delivered privately)"},
 		{Name: "print", Kind: cmdline.Bool, Default: false, Doc: "With --open, print the viewer URL instead of launching a browser"},
@@ -483,8 +494,8 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 		{Name: "secrets", Kind: cmdline.Bool, Default: false, Doc: "invocation <id>: list only the credential reads (reference and provider, never the value)"},
 	},
 	Children: []cmdline.Command{
-		{Name: "output", Short: "Retrieve one target run's captured output by output ref"},
-		{Name: "invocation", Short: "Read one run's journal by invocation id (--secrets for the credential reads)"},
+		{Name: "output", Effect: cmdline.EffectRead, Short: "Retrieve one target run's captured output by output ref"},
+		{Name: "invocation", Effect: cmdline.EffectRead, Short: "Read one run's journal by invocation id (--secrets for the credential reads)"},
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Find a spell by name", Command: "magus query kind=spell go"},
@@ -498,6 +509,7 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 
 var explainCommand = cmdline.Command{
 	Name:        "explain",
+	Effect:      cmdline.EffectRead,
 	Short:       "Show one knowledge-graph node's context: data, edges, and reach",
 	Description: "Show a single knowledge-graph node in context: its data, its incoming and outgoing edges with provenance, and how many nodes reach it.",
 	Tags:        []string{"cli", "magus explain", "explain", "knowledge graph", "node", "edges", "provenance", "impact", "shortest path", "relationship", "coupling"},
@@ -596,16 +608,18 @@ Subcommands (the first argument):
 	Usage: "magus graph <build|push|pull|deps|export|stats|diff> [flags]",
 	Children: []cmdline.Command{
 		{
-			Name:  "build",
-			Short: "Rebuild the knowledge graph now, reindexing code symbols first",
+			Name:   "build",
+			Effect: cmdline.EffectLocalWrite,
+			Short:  "Rebuild the knowledge graph now, reindexing code symbols first",
 			Flags: []cmdline.Flag{
 				{Name: "sessions", Kind: cmdline.Bool, Default: true, Doc: "Run the declared agent-session adapters first; --no-sessions skips them"},
 				{Name: "symbols", Kind: cmdline.Bool, Default: true, Doc: "Reindex code symbols; --no-symbols rebuilds the domain graph only"},
 			},
 		},
 		{
-			Name:  "push",
-			Short: "Push the knowledge graph to a container registry as an OCI artifact",
+			Name:   "push",
+			Effect: cmdline.EffectSharedWrite,
+			Short:  "Push the knowledge graph to a container registry as an OCI artifact",
 			Flags: []cmdline.Flag{
 				{Name: "ref", Kind: cmdline.String, Doc: "The artifact to push to, as <registry>/<repository>:<tag> (required; never derived); with --table, a <registry>/<repository> defaulting to ghcr.io/egladman/magus-embed"},
 				{Name: "username", Kind: cmdline.String, Doc: "The registry username; the token is read from stdin, the way docker login --password-stdin takes one"},
@@ -614,26 +628,27 @@ Subcommands (the first argument):
 			},
 		},
 		{
-			Name:  "pull",
-			Short: "Fetch a published knowledge graph; reads public artifacts with no credentials",
+			Name:   "pull",
+			Effect: cmdline.EffectLocalWrite,
+			Short:  "Fetch a published knowledge graph; reads public artifacts with no credentials",
 			Flags: []cmdline.Flag{
 				{Name: "ref", Kind: cmdline.String, Doc: "The artifact to pull (default: derived from the repository's origin remote); with --table, a <registry>/<repository> defaulting to ghcr.io/egladman/magus-embed"},
 				{Name: "out", Kind: cmdline.String, Doc: "Write the graph here instead of stdout"},
 				{Name: "table", Kind: cmdline.Bool, Default: false, Doc: "Fetch the embedding table the binary pins into the cache instead of the graph"},
 			},
 		},
-		{Name: "deps", Short: "Emit the project dependency DAG (text, json, yaml, dot, tree)", Flags: []cmdline.Flag{
+		{Name: "deps", Effect: cmdline.EffectRead, Short: "Emit the project dependency DAG (text, json, yaml, dot, tree)", Flags: []cmdline.Flag{
 			{Name: "upstream", Kind: cmdline.Bool, Default: false, Doc: "Show dependents instead of dependencies"},
 			{Name: "depth", Kind: cmdline.Int, Doc: "Cap displayed depth (0 = unlimited)"},
 			{Name: "spell", Kind: cmdline.String, Doc: "Only projects driven by this spell"},
 			{Name: "target", Kind: cmdline.String, Doc: "Target whose duration history annotates nodes (default: build)"},
 		}},
-		{Name: "export", Short: "Export the merged knowledge graph (json node-link or graphml), or the symbol index as SCIP", Flags: []cmdline.Flag{
+		{Name: "export", Effect: cmdline.EffectRead, Short: "Export the merged knowledge graph (json node-link or graphml), or the symbol index as SCIP", Flags: []cmdline.Flag{
 			{Name: "refresh", Kind: cmdline.Bool, Default: false, Doc: "Force a full graph rebuild before exporting"},
 			{Name: "global", Kind: cmdline.Bool, Default: false, Doc: "Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace"},
 			{Name: "reproducible", Kind: cmdline.Bool, Default: false, Doc: "Omit everything that is not a function of the source tree (locally observed runtime attrs, git history), so two checkouts of one commit export identical bytes"},
 			{Name: "open", Kind: cmdline.Bool, Default: false, Doc: "Deliver the graph to the hosted Graph Explorer instead of stdout; it never leaves your machine"},
-			{Name: "follow", Kind: cmdline.Bool, Default: false, Doc: "With --open: keep the explorer updating from the running server instead of showing a snapshot (needs magus server start)"},
+			{Name: "follow", Kind: cmdline.Bool, Effect: cmdline.EffectStream, Default: false, Doc: "With --open: keep the explorer updating from the running server instead of showing a snapshot (needs magus server start)"},
 			{Name: "targets", Kind: cmdline.Bool, Default: false, Doc: "With --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it"},
 			{Name: "serve", Kind: cmdline.Bool, Default: false, Doc: "With --open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)"},
 			{Name: "print", Kind: cmdline.Bool, Default: false, Doc: "With --open: print the explorer URL to stdout instead of launching a browser"},
@@ -642,15 +657,16 @@ Subcommands (the first argument):
 			{Name: "budget", Kind: cmdline.Int, Default: 50, DefaultAtBind: true, Doc: "Node budget for --select (how many nodes the neighborhood may collect)"},
 			{Name: "symbols", Kind: cmdline.Bool, Default: false, Doc: "Include every indexed code symbol, which the whole-graph export leaves out; a magus diff --baseline needs them"},
 		}},
-		{Name: "stats", Short: "Report the knowledge graph's shape: god nodes, orphans, doc coverage", Flags: []cmdline.Flag{
+		{Name: "stats", Effect: cmdline.EffectRead, Short: "Report the knowledge graph's shape: god nodes, orphans, doc coverage", Flags: []cmdline.Flag{
 			{Name: "kind", Kind: cmdline.String, Doc: "Scope every section to one node kind (spell, target, doc, ...)"},
 			{Name: "refresh", Kind: cmdline.Bool, Default: false, Doc: "Force a full graph rebuild first"},
 			{Name: "global", Kind: cmdline.Bool, Default: false, Doc: "Union the workspaces registered in config (knowledge.workspaces) before computing stats"},
 			{Name: "symbols", Kind: cmdline.Bool, Default: false, Doc: "Include the lazily-loaded symbol shards in the stats; excluded by default because they can dwarf the domain graph"},
 		}},
 		{
-			Name:  "diff",
-			Short: "Nodes/edges added, removed, or changed vs a baseline export or --rev; PR blast-radius",
+			Name:   "diff",
+			Effect: cmdline.EffectRead,
+			Short:  "Nodes/edges added, removed, or changed vs a baseline export or --rev; PR blast-radius",
 			Flags: []cmdline.Flag{
 				{Name: "refresh", Kind: cmdline.Bool, Default: false, Doc: "Force a full graph rebuild of the current graph before diffing"},
 				{Name: "global", Kind: cmdline.Bool, Default: false, Doc: "Diff the global (all-workspaces) graph; match this to how the baseline was exported"},
@@ -724,16 +740,18 @@ its owner makes it public in the package settings; magus never changes it.`,
 	Usage: "magus spell <build|push|pull|ls|lock> [args] [flags]",
 	Children: []cmdline.Command{
 		{
-			Name:  "build",
-			Short: "Pack a spell directory and print the manifest digest a push would produce",
+			Name:   "build",
+			Effect: cmdline.EffectRead,
+			Short:  "Pack a spell directory and print the manifest digest a push would produce",
 			Flags: []cmdline.Flag{
-				{Name: "out", Kind: cmdline.String, Doc: "Also write the packed layer (an uncompressed tar) to this file"},
+				{Name: "out", Kind: cmdline.String, Effect: cmdline.EffectLocalWrite, Doc: "Also write the packed layer (an uncompressed tar) to this file"},
 				{Name: "source", Kind: cmdline.String, Doc: "The org.opencontainers.image.source URL; default: the VCS remote as https"},
 			},
 		},
 		{
-			Name:  "push",
-			Short: "Push a spell directory's tracked files, or a spell magus ships, as an OCI artifact and print its pinned reference",
+			Name:   "push",
+			Effect: cmdline.EffectSharedWrite,
+			Short:  "Push a spell directory's tracked files, or a spell magus ships, as an OCI artifact and print its pinned reference",
 			Flags: []cmdline.Flag{
 				{Name: "username", Kind: cmdline.String, Doc: "The registry username; the password is then read from stdin, overriding spells.registries"},
 				{Name: "tag", Kind: cmdline.Custom, Doc: "Another tag to write the same manifest under; repeatable"},
@@ -741,24 +759,27 @@ its owner makes it public in the package settings; magus never changes it.`,
 			},
 		},
 		{
-			Name:  "pull",
-			Short: "Fetch and verify a published spell into the cache or a directory, or copy out one magus ships",
+			Name:   "pull",
+			Effect: cmdline.EffectLocalWrite,
+			Short:  "Fetch and verify a published spell into the cache or a directory, or copy out one magus ships",
 			Flags: []cmdline.Flag{
 				{Name: "username", Kind: cmdline.String, Doc: "The registry username; the password is then read from stdin, overriding spells.registries"},
 			},
 		},
 		{
-			Name:  "ls",
-			Short: "List a spell repository's tags, or the spells magus ships",
+			Name:   "ls",
+			Effect: cmdline.EffectRead,
+			Short:  "List a spell repository's tags, or the spells magus ships",
 			Flags: []cmdline.Flag{
 				{Name: "username", Kind: cmdline.String, Doc: "The registry username; the password is then read from stdin, overriding spells.registries"},
 			},
 		},
 		{
-			Name:  "lock",
-			Short: "Check magus.lock against magus.yaml, or rewrite it with --update",
+			Name:   "lock",
+			Effect: cmdline.EffectRead,
+			Short:  "Check magus.lock against magus.yaml, or rewrite it with --update",
 			Flags: []cmdline.Flag{
-				{Name: "update", Kind: cmdline.Bool, Default: false, Doc: "Ask the registry what each declared tag names now, and rewrite magus.lock"},
+				{Name: "update", Kind: cmdline.Bool, Effect: cmdline.EffectLocalWrite, Default: false, Doc: "Ask the registry what each declared tag names now, and rewrite magus.lock"},
 			},
 		},
 	},
@@ -774,6 +795,7 @@ its owner makes it public in the package settings; magus never changes it.`,
 
 var eventsCommand = cmdline.Command{
 	Name:        "events",
+	Effect:      cmdline.EffectRead,
 	Short:       "Stream workspace events as JSONL for an integration to consume",
 	Description: "Stream magus events as JSONL, one event per line, so an editor plugin, a status bar, or any other integration can react to runs and results.",
 	Tags:        []string{"cli", "magus events", "events", "integration", "editor", "plugin", "jsonl", "subscribe"},
@@ -797,7 +819,7 @@ what lets the taxonomy grow without breaking clients built against an earlier
 schema.`,
 	Usage: "magus events [flags]",
 	Flags: []cmdline.Flag{
-		{Name: "follow", Kind: cmdline.Bool, Default: false, Doc: "Keep streaming as events occur instead of exiting after the replay"},
+		{Name: "follow", Kind: cmdline.Bool, Effect: cmdline.EffectStream, Default: false, Doc: "Keep streaming as events occur instead of exiting after the replay"},
 		{Name: "f", Kind: cmdline.Bool, Default: false, AliasOf: "follow", Doc: "Short for --follow"},
 		{Name: "type", Kind: cmdline.String, Doc: "Restrict to these event types (comma-separated); default is every type except target.output"},
 		{Name: "limit", Kind: cmdline.Int, Default: 20, Doc: "Replay this many recent invocations before following; 0 replays nothing (only new events), negative replays every retained run"},
@@ -812,6 +834,7 @@ schema.`,
 
 var watchCommand = cmdline.Command{
 	Name:               "watch",
+	Effect:             cmdline.EffectStream,
 	UnstructuredOutput: true, // streams until interrupted
 	Short:              "Emit changed file paths to stdout",
 	Description:        "Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.",
@@ -843,6 +866,7 @@ trigger a full initial build in the downstream magus affected --stdin.`,
 
 var serverStatusCommand = cmdline.Command{
 	Name:        "status",
+	Effect:      cmdline.EffectRead,
 	Short:       "Whether the server and broker are up, what holds capacity, and the pool (needs neither running)",
 	Description: "Report whether the server is running and where to reach it, the broker's capacity and claims, the live concurrency pool of any running parent magus process, and the effective config, with optional --watch polling and --compact output.",
 	Tags:        []string{"cli", "magus server status", "status", "concurrency", "pool", "server", "broker", "monitoring"},
@@ -861,7 +885,7 @@ TTY the screen is cleared between reprints; piped output appends each
 snapshot on its own line for log capture.`,
 	Usage: "magus server status [flags]",
 	Flags: []cmdline.Flag{
-		{Name: "watch", Kind: cmdline.Duration, Unit: "s", Doc: "Poll and reprint at this interval (minimum 15s; 0 means one-shot)"},
+		{Name: "watch", Kind: cmdline.Duration, Effect: cmdline.EffectStream, Unit: "s", Doc: "Poll and reprint at this interval (minimum 15s; 0 means one-shot)"},
 		{Name: "W", Kind: cmdline.Duration, AliasOf: "watch", Doc: "Short for --watch"},
 		{Name: "compact", Kind: cmdline.Bool, Default: false, Doc: "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)"},
 		{Name: "c", Kind: cmdline.Bool, Default: false, AliasOf: "compact", Doc: "Short for --compact"},
@@ -880,6 +904,7 @@ snapshot on its own line for log capture.`,
 
 var doctorCommand = cmdline.Command{
 	Name:        "doctor",
+	Effect:      cmdline.EffectRead,
 	Short:       "Validate the workspace",
 	Description: "Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.",
 	Tags:        []string{"cli", "magus doctor", "diagnostics", "troubleshooting", "validation", "workspace"},
@@ -909,7 +934,7 @@ without running any, so the name can be looked up rather than provoked.`,
 	Usage: "magus doctor [flags]",
 	Flags: []cmdline.Flag{
 		{Name: "probe", Kind: cmdline.Bool, Default: false, Doc: "Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)"},
-		{Name: "fix", Kind: cmdline.Bool, Default: false, Doc: "Run the remedy each finding names, where one exists (see --dry-run to list them first)"},
+		{Name: "fix", Kind: cmdline.Bool, Effect: cmdline.EffectLocalWrite, Default: false, Doc: "Run the remedy each finding names, where one exists (see --dry-run to list them first)"},
 		{Name: "list", Kind: cmdline.Bool, Default: false, Doc: "Print every check magus would run (name, subject, and MGS code) without running any of them"},
 	},
 	Examples: []cmdline.Example{
@@ -943,10 +968,11 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 	// them, every one of which was documented nowhere, because a child could not
 	// carry flags and nothing walked past the first level.
 	Children: []cmdline.Command{
-		{Name: "view", Short: "Print the effective configuration (defaults + file + env)"},
+		{Name: "view", Effect: cmdline.EffectRead, Short: "Print the effective configuration (defaults + file + env)"},
 		{
-			Name:  "set",
-			Short: "Write a key to the local (or global) config file",
+			Name:   "set",
+			Effect: cmdline.EffectLocalWrite,
+			Short:  "Write a key to the local (or global) config file",
 			Flags: []cmdline.Flag{
 				{Name: "global", Kind: cmdline.Bool, Default: false, Doc: "Write to the global config ($XDG_CONFIG_HOME/magus/magus.yaml)"},
 			},
@@ -956,8 +982,9 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 			Short: "Manage forecaster runtime history",
 			Children: []cmdline.Command{
 				{
-					Name:  "passed",
-					Short: "Record a run outcome in the forecaster history",
+					Name:   "passed",
+					Effect: cmdline.EffectLocalWrite,
+					Short:  "Record a run outcome in the forecaster history",
 					Flags: []cmdline.Flag{
 						{Name: "history", Kind: cmdline.String, DefaultAtBind: true, Doc: "Path to the history JSON to write (default: configured history_path)"},
 						{Name: "ref", Kind: cmdline.String, Doc: "Ref the run was on (git branch, hg named branch, jj bookmark)"},
@@ -967,13 +994,14 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 					},
 				},
 				{
-					Name:  "import",
-					Short: "Merge another history file into this one",
+					Name:   "import",
+					Effect: cmdline.EffectLocalWrite,
+					Short:  "Merge another history file into this one",
 					Flags: []cmdline.Flag{
 						{Name: "history", Kind: cmdline.String, DefaultAtBind: true, Doc: "Path to the history JSON to write (default: configured history_path)"},
 					},
 				},
-				{Name: "dedup", Short: "Collapse duplicate runs in the history file"},
+				{Name: "dedup", Effect: cmdline.EffectLocalWrite, Short: "Collapse duplicate runs in the history file"},
 			},
 		},
 		{
@@ -981,32 +1009,35 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 			Short: "Manage the build cache (prune)",
 			Children: []cmdline.Command{
 				{
-					Name:  "prune",
-					Short: "Evict cache entries by age or count",
+					Name:   "prune",
+					Effect: cmdline.EffectLocalWrite,
+					Short:  "Evict cache entries by age or count",
 					Flags: []cmdline.Flag{
 						{Name: "older-than", Kind: cmdline.Duration, Unit: "h", Doc: "Remove entries older than this duration (e.g. 168h = 7 days)"},
 						{Name: "keep-last", Kind: cmdline.Int, Doc: "Keep only the newest N entries, evict the rest (--remote only)"},
-						{Name: "remote", Kind: cmdline.Bool, Default: false, Doc: "Prune the configured remote backend instead of the local cache"},
-						{Name: "dry-run", Kind: cmdline.Bool, Default: false, Doc: "Print what would be removed without deleting anything"},
+						{Name: "remote", Kind: cmdline.Bool, Effect: cmdline.EffectSharedWrite, Default: false, Doc: "Prune the configured remote backend instead of the local cache"},
+						{Name: "dry-run", Kind: cmdline.Bool, Effect: cmdline.EffectRead, Default: false, Doc: "Print what would be removed without deleting anything"},
 					},
 				},
 				{
 					Name:               "export",
+					Effect:             cmdline.EffectRead,
 					UnstructuredOutput: true, // stdout is the archive
 					Short:              "Write cache entries to an archive",
 					Flags: []cmdline.Flag{
-						{Name: "to", Kind: cmdline.String, Doc: "Write the archive to this file (default: stdout)"},
-						{Name: "remote", Kind: cmdline.Bool, Default: false, Doc: "Sign the caches the workspace's spells declare (go: GOCACHE and GOMODCACHE) and store them in the remote tier, instead of writing the local tier's archive"},
+						{Name: "to", Kind: cmdline.String, Effect: cmdline.EffectLocalWrite, Doc: "Write the archive to this file (default: stdout)"},
+						{Name: "remote", Kind: cmdline.Bool, Effect: cmdline.EffectSharedWrite, Default: false, Doc: "Sign the caches the workspace's spells declare (go: GOCACHE and GOMODCACHE) and store them in the remote tier, instead of writing the local tier's archive"},
 					},
 				},
 				{
-					Name:  "import",
-					Short: "Load cache entries from an archive",
+					Name:   "import",
+					Effect: cmdline.EffectLocalWrite,
+					Short:  "Load cache entries from an archive",
 					Flags: []cmdline.Flag{
 						{Name: "remote", Kind: cmdline.Bool, Default: false, Doc: "Restore the newest verified bundle of each cache the workspace's spells declare from the remote tier, instead of reading an archive"},
 					},
 				},
-				{Name: "key", Short: "Manage the remote cache signing key"},
+				{Name: "key", Effect: cmdline.EffectLocalWrite, Short: "Manage the remote cache signing key"},
 			},
 		},
 		{
@@ -1019,6 +1050,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 					Children: []cmdline.Command{
 						{
 							Name:               "create",
+							Effect:             cmdline.EffectLocalWrite,
 							UnstructuredOutput: true, // --tee would write the secret to a file
 							Short:              "Mint a connector token",
 							Flags: []cmdline.Flag{
@@ -1026,8 +1058,8 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 								{Name: "expires", Kind: cmdline.String, Doc: "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)"},
 							},
 						},
-						{Name: "ls", Short: "List every stored token: names, ids, classes, grants, and expiry (never the secret)"},
-						{Name: "revoke", Short: "Revoke a stored token by exact id or exact name"},
+						{Name: "ls", Effect: cmdline.EffectRead, Short: "List every stored token: names, ids, classes, grants, and expiry (never the secret)"},
+						{Name: "revoke", Effect: cmdline.EffectLocalWrite, Short: "Revoke a stored token by exact id or exact name"},
 					},
 				},
 			},
@@ -1038,15 +1070,16 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 			Children: []cmdline.Command{
 				{
 					Name:               "generate",
+					Effect:             cmdline.EffectLocalWrite,
 					UnstructuredOutput: true, // --tee would write the secret to a file
 					Short:              "Create the operator token",
 					Flags: []cmdline.Flag{
 						{Name: "force", Kind: cmdline.Bool, Default: false, Doc: "Overwrite an existing token (rotation)"},
 					},
 				},
-				{Name: "print", UnstructuredOutput: true, Short: "Print the current operator token to stdout (denied to agent sessions)"}, // --tee would write the secret to a file
-				{Name: "revoke", Short: "Delete the operator token (the server mints a fresh one on next start)"},
-				{Name: "status", Short: "Show whether an operator token exists and its fingerprint"},
+				{Name: "print", Effect: cmdline.EffectRead, UnstructuredOutput: true, Short: "Print the current operator token to stdout (denied to agent sessions)"}, // --tee would write the secret to a file
+				{Name: "revoke", Effect: cmdline.EffectLocalWrite, Short: "Delete the operator token (the server mints a fresh one on next start)"},
+				{Name: "status", Effect: cmdline.EffectRead, Short: "Show whether an operator token exists and its fingerprint"},
 			},
 		},
 		{
@@ -1059,6 +1092,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 					Children: []cmdline.Command{
 						{
 							Name:               "create",
+							Effect:             cmdline.EffectLocalWrite,
 							UnstructuredOutput: true, // --tee would write the secret to a file
 							Short:              "Mint a console token",
 							Flags: []cmdline.Flag{
@@ -1068,8 +1102,8 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 								{Name: "code", Kind: cmdline.Bool, Default: false, Doc: "Print a one-time code instead, for a console link's #code=; the console trades it for the token within a minute, once"},
 							},
 						},
-						{Name: "ls", Short: "List every stored token"},
-						{Name: "revoke", Short: "Revoke a stored token by exact id or exact name"},
+						{Name: "ls", Effect: cmdline.EffectRead, Short: "List every stored token"},
+						{Name: "revoke", Effect: cmdline.EffectLocalWrite, Short: "Revoke a stored token by exact id or exact name"},
 					},
 				},
 			},
@@ -1120,6 +1154,7 @@ Signals:
 	Children: []cmdline.Command{
 		{
 			Name:               "start",
+			Effect:             cmdline.EffectSharedWrite,
 			UnstructuredOutput: true, // runs the server, or detaches it
 			Short:              "Start the server (auto-backgrounds by default; --foreground blocks)",
 			Flags: []cmdline.Flag{
@@ -1127,8 +1162,9 @@ Signals:
 			},
 		},
 		{
-			Name:  "stop",
-			Short: "Send a graceful shutdown request to the running server (needs it running)",
+			Name:   "stop",
+			Effect: cmdline.EffectSharedWrite,
+			Short:  "Send a graceful shutdown request to the running server (needs it running)",
 			Flags: []cmdline.Flag{
 				{Name: "socket", Kind: cmdline.String, Doc: "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)"},
 				{Name: "pools", Kind: cmdline.Bool, Default: false, Doc: "Stop per-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone"},
@@ -1136,8 +1172,9 @@ Signals:
 		},
 		serverStatusCommand,
 		{
-			Name:  "reload",
-			Short: "Re-read configuration without restarting: drop the server's open workspaces (needs it running)",
+			Name:   "reload",
+			Effect: cmdline.EffectSharedWrite,
+			Short:  "Re-read configuration without restarting: drop the server's open workspaces (needs it running)",
 			Flags: []cmdline.Flag{
 				{Name: "socket", Kind: cmdline.String, Doc: "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)"},
 			},
@@ -1158,6 +1195,7 @@ Signals:
 
 var serverBrokerCommand = cmdline.Command{
 	Name:               "broker",
+	Effect:             cmdline.EffectSharedWrite,
 	UnstructuredOutput: true, // runs the broker in the foreground
 	Short:              "The per-user process holding this host's capacity and shared services (needs no server)",
 	Description:        "Check or stop the broker: the per-user process that holds this host's concurrency slots, declared memory and shared services, which a run starts on its own.",
@@ -1210,19 +1248,22 @@ the next one.`,
 	Children: []cmdline.Command{
 		{
 			Name:        "status",
+			Effect:      cmdline.EffectRead,
 			Short:       "The broker: its capacity, every claim holding it, and its services (needs the broker running)",
 			Description: "Report the broker's pid, socket, capacity, each claim holding it and the services it hosts. Exits non-zero when no broker is running.",
 			Usage:       "magus server broker status [flags]",
 		},
 		{
-			Name:  "stop",
-			Short: "Stop the broker, or with --services only the services it hosts (needs the broker running)",
+			Name:   "stop",
+			Effect: cmdline.EffectSharedWrite,
+			Short:  "Stop the broker, or with --services only the services it hosts (needs the broker running)",
 			Flags: []cmdline.Flag{
 				{Name: "services", Kind: cmdline.Bool, Default: false, Doc: "Stop the broker's hosted services, leaving the broker running"},
 			},
 		},
 		{
 			Name:        "units",
+			Effect:      cmdline.EffectRead,
 			Short:       "Print the systemd or launchd units that supervise the broker (needs nothing running)",
 			Description: "Print the unit files a supervisor needs to run the broker: a systemd socket and service that socket-activate it, or a launchd agent that keeps it alive. magus prints them and never installs them.",
 			Usage:       "magus server broker units [systemd|launchd] [flags]",
@@ -1238,6 +1279,7 @@ the next one.`,
 
 var mcpCommand = cmdline.Command{
 	Name:               "mcp",
+	Effect:             cmdline.EffectStream,
 	UnstructuredOutput: true, // serves MCP on stdio
 	Short:              "Serve MCP over stdio for the agent host that launched it",
 	Description:        "Serve the MCP tools over stdin and stdout for the agent host that launched the process, against the workspace it was launched in, with no server and no token.",
@@ -1277,6 +1319,7 @@ magus release.`,
 // embedded in the registry's All list regardless of build tags.
 var initCommand = cmdline.Command{
 	Name:        "init",
+	Effect:      cmdline.EffectLocalWrite,
 	Short:       "Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)",
 	Description: "Bootstrap a magus workspace with a magus.yaml config, magusfile stub, and VCS merge driver; supports global, local, and non-interactive modes.",
 	Tags:        []string{"cli", "magus init", "bootstrap", "setup", "magus.yaml", "magusfile", "workspace"},
@@ -1305,7 +1348,7 @@ mgs_ contract stubbed, each function documented, and a runnable test block.`,
 	Usage: "magus init [flags]",
 	Flags: []cmdline.Flag{
 		{Name: "global", Kind: cmdline.Bool, Default: false, Doc: "Write only the global config; skip the workspace bootstrap"},
-		{Name: "dry-run", Kind: cmdline.Bool, Default: false, Doc: "Print the config, magusfile, and merge-driver destinations without writing any of them"},
+		{Name: "dry-run", Kind: cmdline.Bool, Effect: cmdline.EffectRead, Default: false, Doc: "Print the config, magusfile, and merge-driver destinations without writing any of them"},
 		{Name: "local", Kind: cmdline.Bool, Default: false, Doc: "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/"},
 		{Name: "force", Kind: cmdline.Bool, Default: false, Doc: "Replace an existing config file with one holding no keys"},
 		{Name: "vcs", Kind: cmdline.String, Doc: "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY"},
@@ -1320,6 +1363,7 @@ mgs_ contract stubbed, each function documented, and a runnable test block.`,
 
 var versionCommand = cmdline.Command{
 	Name:        "version",
+	Effect:      cmdline.EffectRead,
 	Short:       "Print the client and server versions",
 	Description: "Print the magus version string, git commit hash, and build date for the currently installed binary, plus the version reported by the server serving this workspace.",
 	Tags:        []string{"cli", "magus version", "version", "build info", "commit", "server"},
@@ -1351,6 +1395,7 @@ renders no server), and an empty value means it ran and nothing answered.`,
 
 var shellCommand = cmdline.Command{
 	Name:        "shell",
+	Effect:      cmdline.EffectRead,
 	Short:       "Check a command against this workspace's conventions before running it",
 	Description: "Read one shell command, or one path an edit is about to write, and report what this workspace would rather you ran.",
 	Tags:        []string{"cli", "magus shell", "guard", "conventions", "hook", "pre-tool-use"},
@@ -1422,8 +1467,8 @@ not block every tool call.`,
 	Usage: "magus shell '<command>' [flags]",
 	Flags: []cmdline.Flag{
 		{Name: "path", Kind: cmdline.Bool, Default: false, Doc: "Judge the input as a file path an edit is about to write, not as a shell command"},
-		{Name: "observe", Kind: cmdline.Bool, Default: false, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
-		{Name: "message", Kind: cmdline.Bool, Default: false, Doc: "Read the input as a message the person typed, without judging it: it records the topics the message raises, which a later rule reads, and the verdict is always pass"},
+		{Name: "observe", Kind: cmdline.Bool, Effect: cmdline.EffectLocalWrite, Default: false, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
+		{Name: "message", Kind: cmdline.Bool, Effect: cmdline.EffectLocalWrite, Default: false, Doc: "Read the input as a message the person typed, without judging it: it records the topics the message raises, which a later rule reads, and the verdict is always pass"},
 		{Name: "lease", Kind: cmdline.String, Doc: "The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE"},
 		{Name: "agent-name", Kind: cmdline.String, Doc: "Name of the agent host this invocation came from, required with --transport; magus reads the host's tool rows, foreground limits, resume release and whether it observes skill loads from the harness spell of that name"},
 		{Name: "transport", Kind: cmdline.String, Doc: "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3024)"},
@@ -1434,7 +1479,7 @@ not block every tool call.`,
 		{Name: "renders-ask", Kind: cmdline.Bool, Default: false, Doc: "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny"},
 		{Name: "call-background", Kind: cmdline.Bool, Default: false, Doc: "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused"},
 		{Name: "call-timeout", Kind: cmdline.Duration, Unit: "ms", Doc: "The timeout the call gave its shell command (e.g. 10m, 600000ms); 0 or absent means the host's foreground default"},
-		{Name: "duration", Kind: cmdline.Duration, Unit: "ms", Doc: "Read the input as a tool's name and record how long the host says it ran (e.g. 420ms), without judging: the verdict is always pass"},
+		{Name: "duration", Kind: cmdline.Duration, Effect: cmdline.EffectLocalWrite, Unit: "ms", Doc: "Read the input as a tool's name and record how long the host says it ran (e.g. 420ms), without judging: the verdict is always pass"},
 		{Name: "call-digest", Kind: cmdline.String, Doc: "With --duration, a fingerprint of the call the host ran, so a repeat of it can be counted; never the call's text"},
 		{Name: "result-digest", Kind: cmdline.String, Doc: "With --duration, a fingerprint of the call's result, so an equal answer can be told from a changed one; never the result's text. Absent means the host gave none, and the record says so"},
 	},
@@ -1460,6 +1505,7 @@ not block every tool call.`,
 
 var refsCommand = cmdline.Command{
 	Name:        "refs",
+	Effect:      cmdline.EffectRead,
 	Short:       "List where an ingested code symbol is defined and referenced",
 	Description: "List a symbol's definition and every file that references it as file:line rows, read from the declared SCIP index rather than found by text search.",
 	Tags:        []string{"cli", "magus refs", "symbols", "scip", "references", "knowledge graph"},
@@ -1533,7 +1579,7 @@ nothing. The inverse is the same command with the two names swapped.`,
 		{Name: "generated", Kind: cmdline.Bool, Default: true, Group: "Search text with no index: magus refs --text <pattern> [<path>...]", Doc: "In the fallback text search shown beside a symbol miss, or with --text, search declared-output files and mark the ones that match; --no-generated excludes them entirely"},
 		{Name: "limit", Kind: cmdline.Int, Group: "Every site: magus refs <symbol> --occurrences [<path>...]", Doc: "Print at most this many --text matches or --occurrences sites, then say how many there were (0 for all). What piping to head would do, without losing the count or the exit code"},
 		{Name: "offset", Kind: cmdline.Int, Group: "Every site: magus refs <symbol> --occurrences [<path>...]", Doc: "With --occurrences, skip this many sites first; a cut page prints the next command"},
-		{Name: "rename", Kind: cmdline.String, Group: "Rename: magus refs <symbol> --rename <new>", Doc: "Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is"},
+		{Name: "rename", Kind: cmdline.String, Effect: cmdline.EffectLocalWrite, Group: "Rename: magus refs <symbol> --rename <new>", Doc: "Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is"},
 	},
 	Usage: "magus refs <symbol> [<path>...] [flags]",
 	Examples: []cmdline.Example{
@@ -1555,6 +1601,7 @@ nothing. The inverse is the same command with the two names swapped.`,
 
 var cleanCommand = cmdline.Command{
 	Name:        "clean",
+	Effect:      cmdline.EffectLocalWrite,
 	Short:       "Remove declared outputs (regenerable, never sources)",
 	Description: "Delete the files each selected project declares as Outputs, optionally dropping the matching cache entries so the next run rebuilds from scratch.",
 	Tags:        []string{"cli", "magus clean", "outputs", "cache", "artifacts", "rebuild"},
@@ -1685,8 +1732,9 @@ prints the path, what ran, and the command that removes it: checkout --remove
 	Usage: "magus vcs <ls-files|resolve|checkpoint|checkout|merge-driver> [flags]",
 	Children: []cmdline.Command{
 		{
-			Name:  "ls-files",
-			Short: "List the dirty paths a commit of this change wants; stages nothing",
+			Name:   "ls-files",
+			Effect: cmdline.EffectRead,
+			Short:  "List the dirty paths a commit of this change wants; stages nothing",
 			Flags: []cmdline.Flag{
 				{Name: "include-untracked", Kind: cmdline.Bool, Default: false, Doc: "Also list untracked files; refused on jj, which has none"},
 				{Name: "include-generated", Kind: cmdline.Bool, Default: false, Doc: "Also list declared outputs a dirty source in this change explains"},
@@ -1700,6 +1748,7 @@ prints the path, what ran, and the command that removes it: checkout --remove
 		},
 		{
 			Name:               "resolve",
+			Effect:             cmdline.EffectRun,
 			UnstructuredOutput: true, // reports through several prose paths
 			Short:              "Settle an in-progress merge's conflicted generated files, then regenerate once",
 			Flags: []cmdline.Flag{
@@ -1707,23 +1756,25 @@ prints the path, what ran, and the command that removes it: checkout --remove
 			},
 		},
 		{
-			Name:  "checkpoint",
-			Short: "Print the working state's identity, for recording what a lease was handed; writes nothing unless --preserve",
+			Name:   "checkpoint",
+			Effect: cmdline.EffectRead,
+			Short:  "Print the working state's identity, for recording what a lease was handed; writes nothing unless --preserve",
 			Flags: []cmdline.Flag{
-				{Name: "preserve", Kind: cmdline.Bool, Default: false, Doc: "Also capture the uncommitted work and print a handle that restores it"},
+				{Name: "preserve", Kind: cmdline.Bool, Effect: cmdline.EffectLocalWrite, Default: false, Doc: "Also capture the uncommitted work and print a handle that restores it"},
 			},
 		},
 		{
-			Name:  "checkout",
-			Short: "Check out one revision in an isolated checkout for review, readied by the workspace's declared install",
-			Usage: "magus vcs checkout <rev> [--fetch <ref>] [--no-bootstrap] | --remove <dir>",
+			Name:   "checkout",
+			Effect: cmdline.EffectRun,
+			Short:  "Check out one revision in an isolated checkout for review, readied by the workspace's declared install",
+			Usage:  "magus vcs checkout <rev> [--fetch <ref>] [--no-bootstrap] | --remove <dir>",
 			Flags: []cmdline.Flag{
 				{Name: "fetch", Kind: cmdline.String, Doc: "Fetch this `ref` from the default remote first, such as refs/pull/<n>/head"},
-				{Name: "bootstrap", Kind: cmdline.Bool, Default: true, Doc: "Run the install targets, the harness install and the checkout.bootstrap hook; --no-bootstrap skips all three"},
-				{Name: "remove", Kind: cmdline.String, Doc: "Remove the checkout at this `dir`, one this command made, instead"},
+				{Name: "bootstrap", Kind: cmdline.Bool, Effect: cmdline.EffectLocalWrite, Default: true, Doc: "Run the install targets, the harness install and the checkout.bootstrap hook; --no-bootstrap skips all three"},
+				{Name: "remove", Kind: cmdline.String, Effect: cmdline.EffectLocalWrite, Doc: "Remove the checkout at this `dir`, one this command made, instead"},
 			},
 		},
-		{Name: "merge-driver", UnstructuredOutput: true, Short: "The per-file merge driver git and hg invoke; you do not run this by hand"}, // git reads only the exit status
+		{Name: "merge-driver", Effect: cmdline.EffectLocalWrite, UnstructuredOutput: true, Short: "The per-file merge driver git and hg invoke; you do not run this by hand"}, // git reads only the exit status
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Stage the dirty sources and nothing else", Command: "magus vcs ls-files -o name | git add --pathspec-from-file=-"},
@@ -1786,8 +1837,9 @@ apply report what would merge and call nothing on the provider.`,
 	Usage: "magus queue <describe|ls|plan|validate|gate|apply|reviews> [flags]",
 	Children: []cmdline.Command{
 		{
-			Name:  "describe",
-			Short: "Ask the provider what it supports on a base and what wiring the queue up still takes; prints the steps to run, or a mergequeue.capabilities/v1 document with -o json",
+			Name:   "describe",
+			Effect: cmdline.EffectRead,
+			Short:  "Ask the provider what it supports on a base and what wiring the queue up still takes; prints the steps to run, or a mergequeue.capabilities/v1 document with -o json",
 			Long: `Ask the provider what it supports on a base, its merge methods and how a change
 is queued, and read how the queue is wired there: the status the base requires
 and which integration it is pinned to, the repository settings the queue depends
@@ -1811,9 +1863,10 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 			}, queueCheckout...),
 		},
 		{
-			Name:  "ls",
-			Short: "Ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1 document",
-			Usage: "magus queue ls --provider <provider> --base <branch> [flags]",
+			Name:   "ls",
+			Effect: cmdline.EffectRead,
+			Short:  "Ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1 document",
+			Usage:  "magus queue ls --provider <provider> --base <branch> [flags]",
 			Flags: append([]cmdline.Flag{
 				{Name: "provider", Kind: cmdline.String, Doc: "`provider`: a built-in name (github) or a .buzz file"},
 				{Name: "base", Kind: cmdline.String, Doc: "`branch` the queue merges into"},
@@ -1821,19 +1874,21 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 		},
 		{
 			Name:               "plan",
+			Effect:             cmdline.EffectRead,
 			UnstructuredOutput: true, // stdout is the provider's event stream
 			Short:              "Check approval, find stacks, drop what conflicts with the base, and partition by affected set",
 			Usage:              "magus queue plan --provider <provider> --out <file> [flags]",
 			Flags: append(append([]cmdline.Flag{
 				{Name: "changes", Kind: cmdline.String, Default: "-", Doc: "The mergequeue.changes/v1 `document`, or `-` for stdin"},
 				{Name: "provider", Kind: cmdline.String, Doc: "`provider` approval at each head is checked with"},
-				{Name: "out", Kind: cmdline.String, Doc: "`file` the mergequeue.plan/v1 document is written to"},
+				{Name: "out", Kind: cmdline.String, Effect: cmdline.EffectLocalWrite, Doc: "`file` the mergequeue.plan/v1 document is written to"},
 				{Name: "depth", Kind: cmdline.Int, Default: 3, Doc: "Candidates of one partition that validate at once"},
 				{Name: "parallel", Kind: cmdline.Int, Doc: "Changes admitted at once; 0 is one per CPU"},
 			}, queueFacts...), queueCheckout...),
 		},
 		{
 			Name:               "validate",
+			Effect:             cmdline.EffectRun,
 			UnstructuredOutput: true, // stdout is the provider's event stream
 			Short:              "Build and gate a candidate per change, writing each verdict the moment it is decided (read access only)",
 			Usage:              "magus queue validate --stdin --gate <command> --verdicts <dir> [flags] < plan.json",
@@ -1850,6 +1905,7 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 		},
 		{
 			Name:               "gate",
+			Effect:             cmdline.EffectRun,
 			UnstructuredOutput: true, // stdout is the provider's event stream
 			Short:              "Run a command in a checkout of HEAD boxed and sandboxed exactly as validate runs --gate in a candidate",
 			Long: `Check the commit HEAD names out into a box of its own under TMPDIR, with a
@@ -1879,6 +1935,7 @@ cache it withholds, is refused.`,
 		},
 		{
 			Name:               "apply",
+			Effect:             cmdline.EffectSharedWrite,
 			UnstructuredOutput: true, // stdout is the provider's event stream
 			Short:              "Rebuild and merge the green verdicts <source> holds as they arrive (holds the write credential; runs no change's code)",
 			Usage:              "magus queue apply --provider <provider> --base <branch> [flags] <source>",
@@ -1897,8 +1954,9 @@ cache it withholds, is refused.`,
 			}, queueFacts...), queueCheckout...),
 		},
 		{
-			Name:  "reviews",
-			Short: "Classify the change since each approval standing on a change, as the queue admits it, and dismiss the approvals it does not carry with --dismiss",
+			Name:   "reviews",
+			Effect: cmdline.EffectRead,
+			Short:  "Classify the change since each approval standing on a change, as the queue admits it, and dismiss the approvals it does not carry with --dismiss",
 			Long: `Read the approvals standing on one change and, for each given at an older commit
 than the one a review of its head covers, classify what changed since, path by
 path, with the classifier plan admits changes by: a rebase with its diff unchanged,
@@ -1920,7 +1978,7 @@ workspace and the compared commits' contents.
 				{Name: "base", Kind: cmdline.String, Doc: "`branch` the change targets"},
 				{Name: "change", Kind: cmdline.String, Doc: "`id` of the change, as the provider names it (github: the pull request number)"},
 				{Name: "head", Kind: cmdline.String, Doc: "`commit` the change's head must be at; when it moved, nothing is classified or dismissed"},
-				{Name: "dismiss", Kind: cmdline.Bool, Default: false, Doc: "Dismiss each approval that does not carry, naming what changed since it"},
+				{Name: "dismiss", Kind: cmdline.Bool, Effect: cmdline.EffectSharedWrite, Default: false, Doc: "Dismiss each approval that does not carry, naming what changed since it"},
 			}, queueFacts...), queueCheckout...),
 		},
 	},
@@ -1942,6 +2000,7 @@ workspace and the compared commits' contents.
 
 var sessionCommand = cmdline.Command{
 	Name:        "session",
+	Effect:      cmdline.EffectRead,
 	Short:       "What magus invocations did and what agents are blocked on: humans read and dispose, hosts write",
 	Description: "One family over the repository's session store: list what magus invocations ran and the host session each ran in, list the blocks agents raised, close one by hand, and take the host-hook ingest that writes it all.",
 	Tags:        []string{"cli", "magus session", "sessions", "attention", "history", "worktrees", "agents", "guard"},
@@ -1995,9 +2054,10 @@ session-start event and hand the model state instead of prose.`,
 		{Name: "since", Kind: cmdline.String, Doc: "Show only invocations active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp"},
 	},
 	Children: []cmdline.Command{
-		{Name: "ls", Short: "List past magus invocations and the targets they ran (the default)"},
+		{Name: "ls", Effect: cmdline.EffectRead, Short: "List past magus invocations and the targets they ran (the default)"},
 		{
 			Name:        "load",
+			Effect:      cmdline.EffectLocalWrite,
 			Short:       "Load a normalized agent-session event stream from a host transcript",
 			Description: "Read one JSON event per line from stdin, re-judge every shell command against the current guard rules, and record the result in this repository's session store.",
 			Long: `Load what an agent host's own transcript says a session did.
@@ -2039,6 +2099,7 @@ transcript pointer lead back to.`,
 		},
 		{
 			Name:        "show",
+			Effect:      cmdline.EffectRead,
 			Short:       "Report one loaded session: what it ran, what the rules say, what it loaded",
 			Description: "Summarize one loaded agent session: events by kind, commands grouped by program with re-judged verdicts, skills loaded, and files read and written.",
 			Long: `Report one loaded session.
@@ -2057,6 +2118,7 @@ results rather than events and is read from the listing instead.`,
 		},
 		{
 			Name:        "hints",
+			Effect:      cmdline.EffectRead,
 			Short:       "Report uptake per hint id: served, followed, rejected, reflex",
 			Description: "Count, per hint id, how often a breadcrumb magus served was followed within the next few calls of the same session.",
 			Long: `Report what sessions did with the suggestions magus made.
@@ -2078,8 +2140,9 @@ nothing, which is a fact about the store rather than about the hints.`,
 			Usage: "magus session hints",
 		},
 		{
-			Name:  "attention",
-			Short: "List the open requests agents raised, oldest first; with -q, print nothing and exit 1 when the queue is empty",
+			Name:   "attention",
+			Effect: cmdline.EffectRead,
+			Short:  "List the open requests agents raised, oldest first; with -q, print nothing and exit 1 when the queue is empty",
 			Long: `List the requests agents have raised in this repository.
 
 A request is opened by ` + "`session notify`" + `: an event whose outcome is waiting
@@ -2093,8 +2156,9 @@ reports a fault - an empty queue is the good state - so this is the form to
 test from a shell prompt or a wrapper script.`,
 		},
 		{
-			Name:  "dispose",
-			Short: "Close one open request by id or unambiguous id prefix",
+			Name:   "dispose",
+			Effect: cmdline.EffectLocalWrite,
+			Short:  "Close one open request by id or unambiguous id prefix",
 			Long: `Close one open request. A request closes once and stays closed;
 re-raising a block that is already open updates nothing and adds no second row.
 
@@ -2108,6 +2172,7 @@ block.`,
 		},
 		{
 			Name:        "checkpoint",
+			Effect:      cmdline.EffectLocalWrite,
 			Short:       "Record where the work stands, so it can be picked up later",
 			Description: "Record one checkpoint for this repository: the revision the work sits on, and a note saying where it stands.",
 			Long: `Record where the work stands, so whoever comes back to it - you tomorrow,
@@ -2148,6 +2213,7 @@ result with ` + "`magus session`" + `.`,
 		},
 		{
 			Name:        "notify",
+			Effect:      cmdline.EffectLocalWrite,
 			Short:       "Normalize an attention event and optionally notify the local desktop",
 			Description: "Raise one canonical attention event from plain text or a JSON envelope, and optionally surface it as an operating-system notification.",
 			Long: `Raise one canonical attention event.
@@ -2273,8 +2339,9 @@ them and magus describe job prints one job's terms.`,
 	Usage: "magus job <fork|apply|exec|exit|wait|watch|run|graph|rm|prune|pause|resume> [flags]",
 	Children: []cmdline.Command{
 		{
-			Name:  "fork",
-			Short: "Declare one job, from flags or a JSON record on stdin",
+			Name:   "fork",
+			Effect: cmdline.EffectLocalWrite,
+			Short:  "Declare one job, from flags or a JSON record on stdin",
 			Description: "Declare one job: what its holder is handed, where it may write, and the one check it runs. " +
 				"It refuses a job whose write paths cover a file the workspace has to LOAD (any project's magusfile.buzz, " +
 				"its magus.yaml, or a spell source a magusfile imports) while another live job with write paths is bound " +
@@ -2306,8 +2373,9 @@ them and magus describe job prints one job's terms.`,
 			},
 		},
 		{
-			Name:  "apply",
-			Short: "Upsert jobs' specs from a file or stdin, keeping each job's state",
+			Name:   "apply",
+			Effect: cmdline.EffectLocalWrite,
+			Short:  "Upsert jobs' specs from a file or stdin, keeping each job's state",
 			Description: "Upsert each record's spec, the way `kubectl apply -f` reads a manifest: criteria, write, deny and " +
 				"read paths, check, goals, model, depends_on, parent and timeout. The record is the whole spec, so a spec " +
 				"field it leaves out is cleared, except an omitted checkpoint or timeout, which keeps the job's. Status is " +
@@ -2359,33 +2427,37 @@ record when it refuses a write it can prove. It applies alone.`,
 		},
 		{
 			Name:        "exec",
+			Effect:      cmdline.EffectLocalWrite,
 			Short:       "Take the lease on a job here, and record the base this checkout landed on",
 			Description: "Record the base this tree is on, as `magus vcs checkpoint -o name` prints it, and the checkout the job was taken in. The guard binds the caller to the job by the session and subagent its host names, else by this checkout.",
 			Flags: []cmdline.Flag{
-				{Name: "timeout", Kind: cmdline.Duration, Unit: "m", Doc: "Run the command after -- and stop its whole process group once this long has passed (e.g. 20m); exits 124 at the deadline"},
+				{Name: "timeout", Kind: cmdline.Duration, Effect: cmdline.EffectRun, Unit: "m", Doc: "Run the command after -- and stop its whole process group once this long has passed (e.g. 20m); exits 124 at the deadline"},
 				{Name: "slots", Kind: cmdline.Int, Default: 1, Doc: "With --timeout: the machine budget slots the command takes while it runs"},
 			},
 		},
 		{
-			Name:  "exit",
-			Short: "Return a job with its result, or abandon it",
+			Name:   "exit",
+			Effect: cmdline.EffectLocalWrite,
+			Short:  "Return a job with its result, or abandon it",
 			Flags: []cmdline.Flag{
 				{Name: "schema", Kind: cmdline.Bool, Default: false, Doc: "Print the JSON schema a result must satisfy, and exit"},
 				{Name: "stdin", Kind: cmdline.Bool, Default: false, Doc: "Read this job's result from stdin; without it the job is abandoned"},
 			},
 		},
 		{
-			Name:  "wait",
-			Short: "Verify the result a job was exited with",
+			Name:   "wait",
+			Effect: cmdline.EffectRead,
+			Short:  "Verify the result a job was exited with",
 			Flags: []cmdline.Flag{
 				{Name: "schema", Kind: cmdline.Bool, Default: false, Doc: "Print the JSON schema a result must satisfy, and exit"},
 				{Name: "stdin", Kind: cmdline.Bool, Default: false, Doc: "Read the result from stdin instead of from the job, for one that was never filed"},
-				{Name: "integration", Kind: cmdline.Bool, Default: false, Doc: "Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state"},
+				{Name: "integration", Kind: cmdline.Bool, Effect: cmdline.EffectLocalWrite, Default: false, Doc: "Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state"},
 				{Name: "evidence", Kind: cmdline.Custom, Doc: "Grade check goal `<goal>` against the run `<ref>` recorded in THIS checkout instead of the job's own; `check` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable"},
 			},
 		},
 		{
 			Name:               "watch",
+			Effect:             cmdline.EffectStream,
 			UnstructuredOutput: true, // streams until the job ends
 			Short:              "Follow what a job's holder is doing, until interrupted",
 			Description:        "Print one line per event as it happens: files changed under the job's declared write paths, tool calls the guard observed under its lease, and the runs magus recorded against it, merged in time order.",
@@ -2407,10 +2479,11 @@ console's Jobs view, which every verb that names a job prints a link to.` + "\n\
 shows what it is doing.`,
 			Usage: "magus job watch <job>",
 		},
-		{Name: "run", Short: "Submit one of the server's own jobs and return"},
+		{Name: "run", Effect: cmdline.EffectSharedWrite, Short: "Submit one of the server's own jobs and return"},
 		{
-			Name:  "graph",
-			Short: "Draw the live plan, one figure per group of jobs",
+			Name:   "graph",
+			Effect: cmdline.EffectRead,
+			Short:  "Draw the live plan, one figure per group of jobs",
 			Description: "Draw the live jobs: a box per job tagged with its state and holder, an edge per fork, merge " +
 				"and declared dependency. A plan larger than one figure holds splits into an overview, one box per " +
 				"group of jobs, and a figure per group, each inside magus/figure's budgets. -o svg writes each figure " +
@@ -2421,8 +2494,9 @@ shows what it is doing.`,
 			Usage: "magus job graph [-o svg] [--dir <dir>] [flags]",
 		},
 		{
-			Name:  "rm",
-			Short: "Remove one job from the plan",
+			Name:   "rm",
+			Effect: cmdline.EffectLocalWrite,
+			Short:  "Remove one job from the plan",
 			Description: "Remove ONE job from the plan, leaving every other row alone. This is not how a job ends: " +
 				"`magus job exit` records what happened and leaves the row as the account of it, while rm is for a row " +
 				"that should never have been written. A row that already ended is refused unless --force, because " +
@@ -2433,8 +2507,9 @@ shows what it is doing.`,
 			Usage: "magus job rm <job> [flags]",
 		},
 		{
-			Name:  "prune",
-			Short: "End every job nobody is working",
+			Name:   "prune",
+			Effect: cmdline.EffectLocalWrite,
+			Short:  "End every job nobody is working",
 			Description: "End, as no_return with an end_reason, every job the store can show nobody is working: exited " +
 				"and never collected with `magus job wait`, overdue, orphaned by an ancestor that ended, or declared and " +
 				"never taken past jobs.stale_after. Each ended job prints with its reason, then the count. A job a holder " +
@@ -2446,8 +2521,9 @@ shows what it is doing.`,
 			Usage: "magus job prune [--all] [flags]",
 		},
 		{
-			Name:  "pause",
-			Short: "Hold jobs' holders off the machine budget until resumed",
+			Name:   "pause",
+			Effect: cmdline.EffectLocalWrite,
+			Short:  "Hold jobs' holders off the machine budget until resumed",
 			Description: "Mark each job paused, so `magus job exec` and the guard refuse its holder's next magus run with one " +
 				"line naming who paused it, why, and `magus job resume <job>`. The pause records its owner (the caller's " +
 				"session, or the person at the terminal) and --reason. While it holds, the read sweep and `magus job prune " +
@@ -2461,13 +2537,15 @@ shows what it is doing.`,
 			Usage: "magus job pause <job>... --reason <text> [--until <duration|time>] [flags]",
 		},
 		{
-			Name:  "resume",
-			Short: "Lift the pause on jobs",
-			Usage: "magus job resume <job>... [flags]",
+			Name:   "resume",
+			Effect: cmdline.EffectLocalWrite,
+			Short:  "Lift the pause on jobs",
+			Usage:  "magus job resume <job>... [flags]",
 		},
 		{
-			Name:  "grant",
-			Short: "Lower one guard rule to advice for one job, typed by a person",
+			Name:   "grant",
+			Effect: cmdline.EffectLocalWrite,
+			Short:  "Lower one guard rule to advice for one job, typed by a person",
 			Description: "Record a person's one-time approval: the guard advises instead of refusing the named rule for the " +
 				"job's calls alone, until --for passes or the job ends, and the advice names who granted it and until when. " +
 				"--revoke ends a grant early. Only a grantable rule is accepted (hooks-off); any other is refused, naming " +
@@ -2505,6 +2583,7 @@ shows what it is doing.`,
 
 var diffCommand = cmdline.Command{
 	Name:        "diff",
+	Effect:      cmdline.EffectRead,
 	Short:       "Read the working tree's changes in the order they deserve attention",
 	Description: "Report every uncommitted change annotated with what the workspace knows: whether it is generated, how widely its changed symbols are referenced, whether its symbols are public API, and what coverage was observed.",
 	Tags:        []string{"cli", "magus diff", "diff", "review", "changeset", "semver"},
@@ -2625,7 +2704,7 @@ performance metric, and a performance metric gets gamed rather than met.`,
 		{Name: "generated", Kind: cmdline.Bool, Default: false, Doc: "Include declared target outputs, which are folded away by default"},
 		{Name: "impact", Kind: cmdline.Bool, Default: false, Doc: "Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, note anchors, and the evidence the authors consulted"},
 		{Name: "tui", Kind: cmdline.Bool, Default: true, Doc: "Open the interactive viewer; --no-tui prints the report instead"},
-		{Name: "watch", Kind: cmdline.Bool, Default: false, Doc: "Re-read and re-render whenever the working tree changes"},
+		{Name: "watch", Kind: cmdline.Bool, Effect: cmdline.EffectStream, Default: false, Doc: "Re-read and re-render whenever the working tree changes"},
 		{Name: "ack", Kind: cmdline.Bool, Default: false, Doc: "Record that you have read the changed files at their current content; --impact reports what carries no such record"},
 		{Name: "reason", Kind: cmdline.String, Doc: "An optional note kept with an --ack, for the next reader of the report"},
 		{Name: "thread", Kind: cmdline.String, Doc: "Narrow the review to one pull request thread, by its id or the id of any comment in it, which the report lists beside each hunk while the server runs. The viewer opens on its hunk; printed, it shows the conversation, the hunk and its reach"},
@@ -2685,8 +2764,9 @@ to declare where they live; with nothing declared the feature is inert.`,
 	Usage: "magus notes <ls|get|edit|verify|capture> [flags]",
 	Children: []cmdline.Command{
 		{
-			Name:  "ls",
-			Short: "Show notes and any repair warnings",
+			Name:   "ls",
+			Effect: cmdline.EffectRead,
+			Short:  "Show notes and any repair warnings",
 			Flags: []cmdline.Flag{
 				{Name: "shared", Kind: cmdline.Bool, Default: false, Doc: "Only notes committed to this repository (your team has these)"},
 				{Name: "private", Kind: cmdline.Bool, Default: false, Doc: "Only your own notes"},
@@ -2694,11 +2774,12 @@ to declare where they live; with nothing declared the feature is inert.`,
 				{Name: "tag", Kind: cmdline.Custom, Doc: "Only notes carrying this tag; repeatable, a note must carry every one (gap/open lists open gaps)"},
 			},
 		},
-		{Name: "get", Short: "Show one note"},
-		{Name: "edit", UnstructuredOutput: true, Short: "Open one note in $VISUAL or $EDITOR"}, // hands the terminal to an editor
-		{Name: "verify", Short: "Check malformed notes and anchors that no longer resolve"},
+		{Name: "get", Effect: cmdline.EffectRead, Short: "Show one note"},
+		{Name: "edit", Effect: cmdline.EffectLocalWrite, UnstructuredOutput: true, Short: "Open one note in $VISUAL or $EDITOR"}, // hands the terminal to an editor
+		{Name: "verify", Effect: cmdline.EffectRead, Short: "Check malformed notes and anchors that no longer resolve"},
 		{
 			Name:               "capture",
+			Effect:             cmdline.EffectLocalWrite,
 			UnstructuredOutput: true, // reports through several prose paths
 			Short:              "Capture the review under way as a note: your own remarks plus any colleagues' comments",
 			Flags: []cmdline.Flag{
@@ -2725,6 +2806,7 @@ to declare where they live; with nothing declared the feature is inert.`,
 
 var buzzCommand = cmdline.Command{
 	Name:               "buzz",
+	Effect:             cmdline.EffectRun,
 	UnstructuredOutput: true, // runs a script whose output is its own
 	Short:              "Run a Buzz script",
 	Description:        "Run Buzz from a REPL, a file, stdin, or an inline snippet, with the Buzz stdlib, every magus host module, and the magus namespace available.",
@@ -2774,7 +2856,7 @@ runs the same from any directory: magus buzz -C "$ROOT" -s hooks/guard.buzz.`,
 		{Name: "e", Kind: cmdline.String, Doc: "Execute `code` given on the command line instead of a file"},
 		{Name: "t", Kind: cmdline.Bool, Default: false, Doc: `Run the test "..." {} blocks of every script given and report pass/fail`},
 		{Name: "test", Kind: cmdline.Bool, Default: false, AliasOf: "t", Doc: "Alias for -t"},
-		{Name: "check", Kind: cmdline.Bool, Default: false, Doc: "Parse and type-check the named files without running them; report every diagnostic"},
+		{Name: "check", Kind: cmdline.Bool, Effect: cmdline.EffectRead, Default: false, Doc: "Parse and type-check the named files without running them; report every diagnostic"},
 		{Name: "coverprofile", Kind: cmdline.String, Doc: "Write one LCOV coverprofile across the files under `-t` (requires `-t`)"},
 		{Name: "profile", Kind: cmdline.Bool, Default: false, Doc: "Print where compile and import time went, after the script runs"},
 		{Name: "record", Kind: cmdline.Bool, Default: false, Doc: "Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (`magus query output <ref>` reopens it)"},
@@ -2784,7 +2866,7 @@ runs the same from any directory: magus buzz -C "$ROOT" -s hooks/guard.buzz.`,
 	},
 	Usage: "magus buzz [-C dir] [file...|-|lsp] [flags]",
 	Children: []cmdline.Command{
-		{Name: "lsp", UnstructuredOutput: true, Short: "Language server over stdio (LSP)"}, // speaks LSP on stdio
+		{Name: "lsp", Effect: cmdline.EffectStream, UnstructuredOutput: true, Short: "Language server over stdio (LSP)"}, // speaks LSP on stdio
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Open a REPL with the magusfile loaded", Command: "magus buzz"},
@@ -2842,21 +2924,21 @@ text report prints the same command after each pattern, and run is empty for
 a pattern no graph verb fits.`,
 	Usage: "magus agent <install|harness|starter|adoption> [flags]",
 	Children: []cmdline.Command{
-		{Name: "install", Short: "Render the embedded skills and write or stream them into named destinations"},
+		{Name: "install", Effect: cmdline.EffectLocalWrite, Short: "Render the embedded skills and write or stream them into named destinations"},
 		{Name: "harness", Short: "Install runtimes and skills, link sources, or verify harnesses", Children: []cmdline.Command{
-			{Name: "verify", Short: "Verify a descriptor and its configured hook file by actually probing the wired guard command", Flags: []cmdline.Flag{{Name: "id", Kind: cmdline.String, Doc: "Harness ID; omit to verify every magusfile-wired provider"}}},
-			{Name: "install", Short: "Install the runtime and skills declared by a harness", Flags: []cmdline.Flag{{Name: "id", Kind: cmdline.String, Doc: "Harness ID; omit to install every magusfile-wired provider"}}},
-			{Name: "link", Short: "Create workspace source links from a JSON plan on stdin", Flags: []cmdline.Flag{{Name: "stdin", Kind: cmdline.Bool, Default: false, Doc: "Read destination-to-source links as JSON from stdin (required)"}}}}},
-		{Name: "starter", UnstructuredOutput: true, Short: "Print a starter AGENTS.md to stdout; never writes a file"}, // stdout is the AGENTS.md text
-		{Name: "adoption", Short: "Report how often agents used the knowledge graph versus a raw text search", Flags: []cmdline.Flag{
+			{Name: "verify", Effect: cmdline.EffectRead, Short: "Verify a descriptor and its configured hook file by actually probing the wired guard command", Flags: []cmdline.Flag{{Name: "id", Kind: cmdline.String, Doc: "Harness ID; omit to verify every magusfile-wired provider"}}},
+			{Name: "install", Effect: cmdline.EffectLocalWrite, Short: "Install the runtime and skills declared by a harness", Flags: []cmdline.Flag{{Name: "id", Kind: cmdline.String, Doc: "Harness ID; omit to install every magusfile-wired provider"}}},
+			{Name: "link", Effect: cmdline.EffectLocalWrite, Short: "Create workspace source links from a JSON plan on stdin", Flags: []cmdline.Flag{{Name: "stdin", Kind: cmdline.Bool, Default: false, Doc: "Read destination-to-source links as JSON from stdin (required)"}}}}},
+		{Name: "starter", Effect: cmdline.EffectRead, UnstructuredOutput: true, Short: "Print a starter AGENTS.md to stdout; never writes a file"}, // stdout is the AGENTS.md text
+		{Name: "adoption", Effect: cmdline.EffectRead, Short: "Report how often agents used the knowledge graph versus a raw text search", Flags: []cmdline.Flag{
 			{Name: "commands", Kind: cmdline.String, Doc: "File of shell commands, one per line; without it commands are read from stdin"},
 		}},
 	},
 	Flags: []cmdline.Flag{
 		{Name: "dir", Kind: cmdline.String, Default: ".", Doc: "Repo directory to install into (agent install)"},
 		{Name: "force", Kind: cmdline.Bool, Default: false, Doc: "Overwrite existing installed skill files (agent install)"},
-		{Name: "dry-run", Kind: cmdline.Bool, Default: false, Doc: "Print what would be written and removed without touching the filesystem (agent install)"},
-		{Name: "tar", Kind: cmdline.Bool, Default: false, Doc: "Stream a tar archive to stdout instead of writing files (agent install)"},
+		{Name: "dry-run", Kind: cmdline.Bool, Effect: cmdline.EffectRead, Default: false, Doc: "Print what would be written and removed without touching the filesystem (agent install)"},
+		{Name: "tar", Kind: cmdline.Bool, Effect: cmdline.EffectRead, Default: false, Doc: "Stream a tar archive to stdout instead of writing files (agent install)"},
 		{Name: "global", Kind: cmdline.Bool, Default: false, Doc: "Allow absolute destination paths in write mode (agent install)"},
 		{Name: "skill-form", Kind: cmdline.String, Default: "both", Doc: "Skill form to install: both (default), short, or full (agent install)"},
 	},

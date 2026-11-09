@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/egladman/magus/libs/cmdline"
 	"github.com/egladman/magus/libs/cmdline/generate"
 )
@@ -117,6 +119,19 @@ func TestNoFlagNameEncodesAUnit(t *testing.T) {
 			}
 		}
 	}
+}
+
+type effectSuite struct{ suite.Suite }
+
+func TestEffect(t *testing.T) { suite.Run(t, new(effectSuite)) }
+
+// A new leaf cannot reach a reader of the tree unclassified.
+func (s *effectSuite) TestEveryLeafDeclaresAnEffect() {
+	cmdline.Walk(Root, func(path string, c cmdline.Command) {
+		if len(c.Children) == 0 {
+			s.NotEmpty(c.Effect, "magus %s declares no Effect: set one of %v", path, cmdline.Effects)
+		}
+	})
 }
 
 func camel(flag string) string {
