@@ -50,10 +50,15 @@ func isWorktreeRemove(c hint.Invocation) bool {
 // safe. callDir is where the line starts, and the checkout it is in is the caller's own.
 func denyWorktreeRemove(ctx context.Context, deps Dependencies, at location, callDir, command string, d Dialect) ShellVerdict {
 	// Every command reaches this rule, so a line that cannot hold a removal skips the parse.
-	if !strings.Contains(command, "worktree") || helpOnlyLine(command, d) {
+	if !mayRemoveWorktree(command) || helpOnlyLine(command, d) {
 		return ShellVerdict{}
 	}
-	calls, parsed := locateCalls(command, d, callDir, isWorktreeRemove, false)
+	for _, path := range removeAllPaths(command) {
+		if r := judgeRmTargets(ctx, deps, at, callDir, callDir, []string{path}); len(r.failed) > 0 {
+			return worktreeRemoveDenial(r)
+		}
+	}
+	calls, parsed := locateCalls(command, d, callDir, isWorktreeRemoval, false)
 	if !parsed {
 		if worktreeRemoveRe.MatchString(command) {
 			return worktreeRemoveDenial(removal{verb: "removing", target: "the worktree", failed: []string{"the line does not parse, so which worktree it removes cannot be read"}})
@@ -91,7 +96,8 @@ func worktreeRemoveDenial(r removal) ShellVerdict {
 			"taken by no live job, every change its unpublished commits made reads the same in your checkout's HEAD, "+
 			"and it is unlocked or locked over a worker your session spawned for a job that finished, which git removes only with -f -f. "+
 			"A checkout a job's fork made and locked is magus's to remove: `%s <job>` once its job ended, `%s <job>` before. "+
-			"An unlock is judged the same, but for the lock. --force changes nothing here but that lock.",
+			"An unlock is judged the same, but for the lock. --force changes nothing here but that lock. "+
+			"`rm -r` and fs\\removeAll of a worktree, or of a directory holding one, are judged as removing it is.",
 			strings.ToUpper(r.verb[:1]), r.verb[1:], r.target, strings.Join(r.failed, "\n  - "), hint.JobWait.String(), hint.JobExit.String()),
 		Rule: denyRule{Name: denyRuleWorktreeRemove},
 	}
@@ -104,17 +110,26 @@ func worktreeRemoveDenial(r removal) ShellVerdict {
 // judgeWorktreeRemove judges one located removal or unlock, each failed condition with
 // the command that inspects it.
 func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, callDir string, c locatedCall) removal {
+	if isRecursiveRm(c.inv) {
+		return judgeRm(ctx, deps, at, callDir, c)
+	}
 	s, why := locateRemoval(c)
 	r := removal{verb: "removing", target: cmp.Or(s.target, "the worktree")}
 	if s.unlock {
 		r.verb = "unlocking"
 	}
-	fail := func(why string) removal {
+	if why != "" {
 		r.failed = []string{why}
 		return r
 	}
-	if why != "" {
-		return fail(why)
+	return judgeRemovalSite(ctx, deps, at, callDir, s, r)
+}
+
+// judgeRemovalSite judges the removal or unlock of the one worktree s names.
+func judgeRemovalSite(ctx context.Context, deps Dependencies, at location, callDir string, s removalSite, r removal) removal {
+	fail := func(why string) removal {
+		r.failed = []string{why}
+		return r
 	}
 	if callDir == "" {
 		return fail("which checkout this session runs in is unknown, so it cannot be told apart from the target")
@@ -241,6 +256,124 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 			"every condition but the lock holds, and the lock is your own finished worker's")
 	}
 	return r
+}
+
+// mayRemoveWorktree is the cheap test that a line can hold a removal.
+func mayRemoveWorktree(command string) bool {
+	return strings.Contains(command, "worktree") || strings.Contains(command, "rm") || strings.Contains(command, "removeAll")
+}
+
+// isRecursiveRm reports an rm that deletes what lies under a directory.
+func isRecursiveRm(c hint.Invocation) bool {
+	if c.Name != "rm" {
+		return false
+	}
+	for _, a := range c.Args {
+		switch {
+		case a == "--":
+			return false
+		case a == "--recursive":
+			return true
+		case strings.HasPrefix(a, "--"):
+		case strings.HasPrefix(a, "-") && strings.ContainsAny(a, "rR"):
+			return true
+		}
+	}
+	return false
+}
+
+func isWorktreeRemoval(c hint.Invocation) bool {
+	return isWorktreeRemove(c) || isRecursiveRm(c)
+}
+
+// buzzRemoveAllRe finds fs\removeAll of a literal path, as in `buzz -e`.
+var buzzRemoveAllRe = regexp.MustCompile(`\bfs\\removeAll\s*\(\s*"([^"\\$]+)"\s*\)`)
+
+func removeAllPaths(command string) []string {
+	var paths []string
+	for _, m := range buzzRemoveAllRe.FindAllStringSubmatch(command, -1) {
+		paths = append(paths, m[1])
+	}
+	return paths
+}
+
+// judgeRm judges an rm -r by its literal operands. An unreadable one passes:
+// an rm names no worktree, so refusing it would refuse every `rm -rf "$tmp"`.
+func judgeRm(ctx context.Context, deps Dependencies, at location, callDir string, c locatedCall) removal {
+	if c.unfollowed || c.args == nil || !c.at.known {
+		return removal{}
+	}
+	var targets []string
+	for _, w := range c.args {
+		lit, ok := literalArg(w.Parts)
+		if !ok || strings.HasPrefix(lit, "-") || strings.HasPrefix(lit, "~") {
+			continue
+		}
+		targets = append(targets, lit)
+	}
+	return judgeRmTargets(ctx, deps, at, callDir, c.at.dir, targets)
+}
+
+// judgeRmTargets judges each registered worktree at or under a target as its
+// removal is judged, and returns the first that fails. Relative targets resolve
+// from dir; a glob expands to what it matches now.
+func judgeRmTargets(ctx context.Context, deps Dependencies, at location, callDir, dir string, targets []string) removal {
+	if dir == "" {
+		return removal{}
+	}
+	var abs []string
+	for _, t := range targets {
+		if !filepath.IsAbs(t) {
+			t = filepath.Join(dir, t)
+		}
+		t = filepath.Clean(t)
+		if strings.ContainsAny(t, "*?[") {
+			matches, _ := filepath.Glob(t)
+			abs = append(abs, matches...)
+			continue
+		}
+		abs = append(abs, t)
+	}
+	if len(abs) == 0 {
+		return removal{}
+	}
+	regDir := ""
+	for _, cand := range append([]string{dir, callDir}, abs...) {
+		if _, _, ok := gitCheckout(cand); ok && cand != "" {
+			regDir = cand
+			break
+		}
+	}
+	if regDir == "" {
+		return removal{}
+	}
+	if a, err := filepath.Abs(regDir); err == nil {
+		regDir = a
+	}
+	r := removal{verb: "removing", target: "the worktree"}
+	opts := deps.VCS
+	opts.Name = "git"
+	res, err := vcs.Resolve(ctx, regDir, "", opts)
+	if err != nil || res.VCS == nil {
+		r.failed = []string{"version control is disabled or unresolvable for this workspace, so which worktrees the deletion reaches cannot be read"}
+		return r
+	}
+	all, err := res.VCS.RegisteredCheckouts(ctx, regDir)
+	if err != nil {
+		r.failed = []string{"the registered worktrees cannot be read (`git worktree list --porcelain`): " + err.Error()}
+		return r
+	}
+	for _, co := range all {
+		if !slices.ContainsFunc(abs, func(t string) bool { return within(co.Root, t) }) {
+			continue
+		}
+		site := removalSite{target: filepath.Clean(co.Root), gitDir: regDir}
+		one := removal{verb: "removing", target: site.target}
+		if got := judgeRemovalSite(ctx, deps, at, callDir, site, one); len(got.failed) > 0 {
+			return got
+		}
+	}
+	return removal{}
 }
 
 // ownsCheckout reports whether root is a standing checkout a fork made for a job the
