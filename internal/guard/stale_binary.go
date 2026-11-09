@@ -609,7 +609,6 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 	}
 	if call.verb = gatedVerb(in.command, in.dialect); call.verb != "" {
 		call.what, call.changes = call.verb, true
-		call.harnessInstall = in.lease == "" && bareHarnessInstall(in.command, in.dialect)
 		return call
 	}
 	if in.mcpTool != "" {
@@ -623,17 +622,6 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 		call.changes = !row.ReadOnly
 	}
 	return call
-}
-
-// bareHarnessInstall reports a line that is only `magus agent harness install`,
-// with no flag or assignment. The guard names it for missing tool rows.
-func bareHarnessInstall(command string, d Dialect) bool {
-	call, ok := soleCall(command, d)
-	if !ok || len(call.Assigns) > 0 {
-		return false
-	}
-	words := literalWords(call.Args)
-	return len(words) == 4 && path.Base(words[0]) == "magus" && slices.Equal(words[1:], []string{"agent", "harness", "install"})
 }
 
 // staleBinaryDenial is the deny for a call that changes state while the binary judging it

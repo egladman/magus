@@ -650,34 +650,30 @@ func TestRuleFailureNoteBuildsTheJudgingLineOnlyForAFailure(t *testing.T) {
 	assert.True(t, called)
 }
 
-// LapsedHarnessInstallSuite judges calls while the approved rule's resolve
+// LapseDeniesStateChangesSuite judges calls while the approved rule's resolve
 // ran out of time.
-type LapsedHarnessInstallSuite struct {
+type LapseDeniesStateChangesSuite struct {
 	suite.Suite
 }
 
-func TestLapsedHarnessInstallSuite(t *testing.T) {
-	suite.Run(t, new(LapsedHarnessInstallSuite))
+func TestLapseDeniesStateChangesSuite(t *testing.T) {
+	suite.Run(t, new(LapseDeniesStateChangesSuite))
 }
 
-func (s *LapsedHarnessInstallSuite) denied(command, lease string) bool {
+func (s *LapseDeniesStateChangesSuite) denied(command, lease string) bool {
 	asked := &rulesAnswer{lapse: &ruleLapse{side: decidedByApproved}}
 	in := commandRuleInput{command: command, dialect: DialectBash, lease: lease}
 	return denyLapse(asked, commandCall(context.Background(), in, magusRepoAt))
 }
 
-func (s *LapsedHarnessInstallSuite) TestAnUnleasedHarnessInstallRuns() {
-	s.False(s.denied("./magus agent harness install", ""))
-}
-
-func (s *LapsedHarnessInstallSuite) TestALeasedHarnessInstallIsDenied() {
+func (s *LapseDeniesStateChangesSuite) TestALeasedHarnessInstallIsDenied() {
 	s.True(s.denied("./magus agent harness install", "lease-a"))
 }
 
-func (s *LapsedHarnessInstallSuite) TestAHarnessInstallWithAFlagIsDenied() {
+func (s *LapseDeniesStateChangesSuite) TestAHarnessInstallWithAFlagIsDenied() {
 	s.True(s.denied("./magus agent harness install --force", ""))
 }
 
-func (s *LapsedHarnessInstallSuite) TestServerStartIsDenied() {
+func (s *LapseDeniesStateChangesSuite) TestServerStartIsDenied() {
 	s.True(s.denied("./magus server start", ""))
 }
