@@ -98,6 +98,34 @@ func (s *UnknownMagusArgvSuite) TestWordsPastTheDoubleDashAreNotRead() {
 	s.passes("magus run go-test . -- bogus --bogus")
 }
 
+func (s *UnknownMagusArgvSuite) TestSilentShortFlagAfterTheTargetPasses() {
+	s.passes("magus run go-test . -s")
+}
+
+func (s *UnknownMagusArgvSuite) TestTeeAndJSONLinesOutputPass() {
+	s.passes("magus run lint . --tee f -o jsonl")
+}
+
+func (s *UnknownMagusArgvSuite) TestNameOutputOnAListPasses() {
+	s.passes("magus ls jobs -o name")
+}
+
+func (s *UnknownMagusArgvSuite) TestJSONOutputOnAQueryPasses() {
+	s.passes(`magus query "kind=x" -o json`)
+}
+
+func (s *UnknownMagusArgvSuite) TestTimeoutBeforeTheDoubleDashPasses() {
+	s.passes("magus job exec x --timeout 20m -- cmd")
+}
+
+func (s *UnknownMagusArgvSuite) TestTemplateOutputPasses() {
+	s.passes("magus describe job x -o template={{.ID}}")
+}
+
+func (s *UnknownMagusArgvSuite) TestBudgetWaitBeforeTheDoubleDashPasses() {
+	s.passes("magus run go-test . --budget-wait 0 -- ./internal/guard")
+}
+
 func (s *UnknownMagusArgvSuite) TestOtherProgramsAreNotJudged() {
 	s.passes("git bogus --bogus")
 }
