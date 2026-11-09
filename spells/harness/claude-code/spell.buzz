@@ -158,6 +158,8 @@ fun claude_session_command() > str {
     return claude_checkout(buzzCommand(HOOK_DIR, script: "magus-session", flags: ["--env-file", "\"$CLAUDE_ENV_FILE\""]));
 }
 
+// Something must answer, so PATH magus stands in for a missing ./magus. In a
+// from-source workspace it answers only "bootstrap ./magus".
 fun claude_checkout(plain: str) > str {
     return "m={HOOK_DIR}/magus; [ -x \"$m\" ] || m=magus; \"$m\" " + plain.sub("magus ".len(), len: plain.len() - "magus ".len());
 }

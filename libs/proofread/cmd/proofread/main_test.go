@@ -107,6 +107,22 @@ func assertArgs(t *testing.T, args []string, stdin, want string) {
 	}
 }
 
+// TestMain points the config directory at an empty one, so no test reads the
+// running person's kinds file.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "proofread-config")
+	if err != nil {
+		panic(err)
+	}
+
+	os.Setenv("XDG_CONFIG_HOME", dir)
+
+	code := m.Run()
+
+	os.RemoveAll(dir)
+	os.Exit(code)
+}
+
 // writeFile writes body to name in dir and returns its path.
 func writeFile(t *testing.T, dir, name, body string) string {
 	t.Helper()
@@ -810,5 +826,92 @@ func TestATableMinimumGradesADeclaredKind(t *testing.T) {
 	code, _, stderr := runArgs(t, []string{"entry", "-decisions", decisions, "-stdin"}, "It basically works.\n")
 	if code != exitFindings {
 		t.Errorf("code %d, want %d: %s", code, exitFindings, stderr)
+	}
+}
+
+func userKinds(t *testing.T, body string) string {
+	t.Helper()
+
+	config := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", config)
+
+	return writeFile(t, config, "proofread/kinds.json", body)
+}
+
+func TestAUserDeclaredKindIsASubcommand(t *testing.T) {
+	userKinds(t, entryTable)
+	entries := writeFile(t, t.TempDir(), "entries.txt", "Spearheaded the cache rewrite\n")
+
+	code, stdout, stderr := runArgs(t, []string{"entry", entries}, "")
+	if code != exitFindings {
+		t.Fatalf("code %d, want %d: %s", code, exitFindings, stderr)
+	}
+
+	if !strings.Contains(stdout, `"kind":"entry"`) {
+		t.Errorf("stdout = %q, want a finding on the entry kind", stdout)
+	}
+}
+
+func TestAUserDeclaredKindJoinsTheRepositoryTable(t *testing.T) {
+	userKinds(t, entryTable)
+	decisions := writeFile(t, t.TempDir(), "decisions.json",
+		`{"kinds": {"note": {"extends": "changelog", "minimum": 0}}}`)
+
+	for _, kind := range []string{"entry", "note"} {
+		if code, _, stderr := runArgs(t, []string{kind, "-decisions", decisions, "-stdin"}, "Fixed the cache\n"); code != exitOK {
+			t.Errorf("%s: code %d, want %d: %s", kind, code, exitOK, stderr)
+		}
+	}
+}
+
+func TestAUserDeclaredKindNamedInTheRepositoryTableIsAnError(t *testing.T) {
+	user := userKinds(t, entryTable)
+	decisions := writeFile(t, t.TempDir(), "decisions.json", entryTable)
+
+	code, _, stderr := runArgs(t, []string{"entry", "-decisions", decisions, "-stdin"}, "")
+	if code != exitError || !strings.Contains(stderr, decisions) || !strings.Contains(stderr, user) ||
+		!strings.Contains(stderr, `kind "entry" is declared in both`) {
+		t.Errorf("code %d, stderr %q", code, stderr)
+	}
+}
+
+func TestAUserKindsFileHoldsKindsOnly(t *testing.T) {
+	userKinds(t, `{"rules": {"terms": "off"}, "kinds": {}}`)
+
+	code, _, stderr := runArgs(t, []string{"entry", "-stdin"}, "")
+	if code != exitError || !strings.Contains(stderr, `unknown field "rules"`) {
+		t.Errorf("code %d, stderr %q", code, stderr)
+	}
+}
+
+func TestAUserKindsFileThatIsNotJSONFailsLoudly(t *testing.T) {
+	userKinds(t, `{"kinds": `)
+
+	code, _, stderr := runArgs(t, []string{"reference", "-minimum", "0", "-stdin"}, "")
+	if code != exitError || !strings.Contains(stderr, "user kinds ") {
+		t.Errorf("code %d, stderr %q", code, stderr)
+	}
+}
+
+func TestAUserKindsFileThatCannotBeReadFailsLoudly(t *testing.T) {
+	config := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", config)
+
+	if err := os.MkdirAll(filepath.Join(config, "proofread", "kinds.json"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	code, _, stderr := runArgs(t, []string{"reference", "-minimum", "0", "-stdin"}, "")
+	if code != exitError || !strings.Contains(stderr, "read user kinds ") {
+		t.Errorf("code %d, stderr %q", code, stderr)
+	}
+}
+
+func TestAnAbsentUserKindsFileDeclaresNothing(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	code, _, stderr := runArgs(t, []string{"entry", "-stdin"}, "")
+	if code != exitError || !strings.HasPrefix(stderr, "proofread: unknown subcommand \"entry\"") {
+		t.Errorf("code %d, stderr %q", code, stderr)
 	}
 }

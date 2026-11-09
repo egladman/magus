@@ -222,9 +222,9 @@ var ruleDocBusyWait = types.RuleDoc{
 	Catches: "a while or until loop that sleeps, or a for loop that sleeps until it breaks out",
 	Why: "A backgrounded command is tracked and announces its own completion, so starting it and doing something else is strictly better than watching it. " +
 		"Whatever the loop tests (a process, a file test on a task's output file, a grep of it) and whatever else each pass runs, a loop that sleeps is waiting. " +
-		"The one wait for work the caller started is that work's completion notice: a run backgrounded as `magus job exec --timeout <d> -- <command>` is announced when it ends, and a subagent may stop while it runs, since the notice resumes it with its job still bound (background-left). A job is waited on with `magus job wait <job>`. " +
+		"The one wait for work the caller started is that work's completion notice: a run backgrounded as `magus job exec --timeout <d> -- <command>` is announced when it ends, and a subagent may stop while it runs, since the notice resumes it with its job still bound (background-left). " +
 		"A loop waiting on one target run is served that run under `magus job exec --timeout`, bounded by the target's last run here plus half, or by background-unbounded's ceiling when nothing measures it. " +
-		"A loop probing a process the caller did not start (`kill -0`, the process table, `magus server status` or a job row) gets no such announcement, so its deny names the record magus keeps of that work instead: `magus job wait <job>` for a job, one `magus server status` for the project lock. " +
+		"A loop probing a process the caller did not start (`kill -0`, the process table, `magus server status` or a job row) gets no such announcement, so its deny names the record magus keeps of that work instead: `magus describe job <job>` for a job, one `magus server status` for the project lock. " +
 		"The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. " +
 		"Several have had to be killed by hand. A host's watcher running the same loop is judged the same way, since it is the same poll that also wakes the agent on every line and at expiry. " +
 		"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the output-pipe, output-redirect and unknown-env rules. " +
@@ -1219,6 +1219,7 @@ var ruleDocGuardUnfinished = types.RuleDoc{
 	Why: "A host stops waiting on a hook that has not answered within its hook timeout, with no trail row and no word to the agent. " +
 		"So a check that has not answered within the guard's own budget, 7s against the host's 10s, stops waiting on its rules and answers unjudged: " +
 		"a call that changes state is denied, to be retried, and one that only reads runs with a note saying no rule judged it. The trail records the check as lapsed. " +
+		"A lapse deny is told in full every time; it is retried, never a standing refusal. " +
 		"Past two such checks in a row in a session, a call that changes state runs too, with a notice, until a check finishes in time; a guard always late would otherwise refuse every edit and spawn. " +
 		"A lapse never degrades a push, a run of a person-only target or of a target whose policy did not read in time, a bound worker's command, or a subagent's call reaching a live job's checkout. " +
 		"The built-in rules that read only the call still judge it through a lapse, the ledger's among them. " +

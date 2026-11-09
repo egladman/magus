@@ -1,0 +1,219 @@
+// Cost: a few git reads, plus one status read per worktree.
+//
+// Lists work that no branch names: stashes, refs/magus/preserved/ checkpoints,
+// and checkouts whose directory is gone. With an item id, it keeps that item
+// on a recover/ branch. It only creates branches and never deletes, pops or
+// prunes, so a second run changes nothing.
+//
+//	magus buzz hack/dev/recover-work.buzz -- [<item>]
+namespace recoverwork;
+
+import "assert";
+import "flags";
+import "fs";
+import "result";
+import "std";
+import "vcs";
+import "magus/reclaimdisk" as reclaim;
+
+final USAGE = "usage: magus buzz hack/dev/recover-work.buzz -- [<item>]";
+final HELP = "cost: a few git reads, plus one status read per worktree\n{USAGE}";
+final PRESERVED = "refs/magus/preserved/";
+final KEPT_PREFIX = "recover/";
+
+export object AtRisk {
+    id: str,
+    kind: str,
+    // commit is what the item holds; "" when there is nothing to keep.
+    commit: str,
+    // target is the recover/ branch that keeps commit.
+    target: str,
+    note: str,
+    // state is restorable, kept, conflict, or nothing.
+    state: str,
+}
+
+// stateOf names what keeping an item would do, given the commit its target
+// branch names now.
+export fun stateOf(commit: str, existing: str) > str {
+    if (commit == "") {
+        return "nothing";
+    }
+    if (existing == "") {
+        return "restorable";
+    }
+    if (existing == commit) {
+        return "kept";
+    }
+    return "conflict";
+}
+
+export fun render(items: [AtRisk]) > [str] {
+    final lines = mut [<str>];
+    foreach (item in items) {
+        lines.append("{item.id}  {item.state}  {item.note}");
+    }
+    return lines;
+}
+
+// revOf is the commit a ref names, "" when the ref does not exist.
+fun revOf(root: str, ref: str) > result\Result::<str> {
+    try {
+        final found = vcs\cmd(["rev-parse", "--verify", "--quiet", ref], opts: vcs\CommandOptions{ dir = root, quiet = true, allowFailure = true });
+        return result\ok::<str>(if (found.ok) found.stdout.trim() else "");
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "recover-work: resolve {ref}");
+    }
+}
+
+// gather reads the stashes, preserved refs and gone checkouts, unresolved.
+fun gather(root: str) > result\Result::<[AtRisk]> {
+    final found = mut [<AtRisk>];
+    try {
+        final stashes = vcs\cmd(["stash", "list", "--format=%H %gs"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout;
+        foreach (line in stashes.split("\n")) {
+            if (line == "") {
+                continue;
+            }
+            final cut = line.indexOf(" ") ?? line.len();
+            final sha = line.sub(0, len: cut);
+            final short = sha.sub(0, len: 7);
+            found.append(AtRisk{ id = "stash:{short}", kind = "stash", commit = sha, target = "{KEPT_PREFIX}stash-{short}", note = line.sub(cut + 1), state = "" });
+        }
+
+        final preserved = vcs\cmd(["for-each-ref", "--format=%(objectname) %(refname)", PRESERVED], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout;
+        foreach (line in preserved.split("\n")) {
+            if (line == "") {
+                continue;
+            }
+            final cut = line.indexOf(" ") ?? 0;
+            final refname = line.sub(cut + 1);
+            final tail = refname.sub(PRESERVED.len());
+            found.append(AtRisk{ id = "preserved:{tail}", kind = "preserved", commit = line.sub(0, len: cut), target = "{KEPT_PREFIX}{tail}", note = refname, state = "" });
+        }
+
+        final trees = reclaim\parseWorktrees(vcs\cmd(["worktree", "list", "--porcelain"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout);
+        final main = if (trees.len() > 0) trees[0].path else "";
+        foreach (t in trees) {
+            if (t.path == main or fs\isDir(t.path)) {
+                continue;
+            }
+            if (t.branch == "(detached)") {
+                found.append(AtRisk{ id = "gone:{t.path}", kind = "gone", commit = "", target = "", note = "{t.path}: gone, detached", state = "" });
+                continue;
+            }
+            found.append(AtRisk{ id = "gone:{t.path}", kind = "gone", commit = t.branch, target = "{KEPT_PREFIX}{t.branch}", note = "{t.path}: gone, branch {t.branch}", state = "" });
+        }
+    } catch (err: any) {
+        return result\caught::<[AtRisk]>(err, doing: "recover-work: list the at-risk work");
+    }
+    return result\ok::<[AtRisk]>(found);
+}
+
+// inventory resolves each item's commit and target, then names its state.
+fun inventory(root: str) > result\Result::<[AtRisk]> {
+    final gathered = gather(root);
+    if (gathered.error != null) {
+        return gathered;
+    }
+    final items = mut [<AtRisk>];
+    foreach (item in gathered.value!) {
+        // A gone checkout holds a branch name; its commit is that branch's tip.
+        var commit = item.commit;
+        if (item.kind == "gone" and item.commit != "") {
+            final tip = revOf(root, ref: "refs/heads/{item.commit}");
+            if (tip.error != null) {
+                return result\Result::<[AtRisk]>{ error = tip.error };
+            }
+            commit = tip.value!;
+        }
+        var existing = "";
+        if (item.target != "") {
+            final at = revOf(root, ref: "refs/heads/{item.target}");
+            if (at.error != null) {
+                return result\Result::<[AtRisk]>{ error = at.error };
+            }
+            existing = at.value!;
+        }
+        items.append(AtRisk{ id = item.id, kind = item.kind, commit = commit, target = item.target, note = item.note, state = stateOf(commit, existing: existing) });
+    }
+    return result\ok::<[AtRisk]>(items);
+}
+
+// keep creates the target branch. It never moves an existing branch.
+fun keep(root: str, item: AtRisk) > result\Result::<str> {
+    try {
+        _ = vcs\cmd(["branch", item.target, item.commit], opts: vcs\CommandOptions{ dir = root, quiet = true });
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "recover-work: keep {item.id} on {item.target}");
+    }
+    return result\ok::<str>("kept {item.id} on {item.target} at {item.commit.sub(0, len: 7)}");
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: [<str>]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 1) {
+        throw "recover-work: unknown {parsed.unknown.join(" ")} {parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    if (vcs\name() != "git") {
+        throw "recover-work: reads git objects, and this checkout is {vcs\name()}";
+    }
+    final root = vcs\root();
+    final listed = inventory(root);
+    if (listed.error != null) {
+        throw listed.error!.message;
+    }
+
+    if (parsed.positionals.len() == 0) {
+        std\print("read-only: pass an item id to keep it on a recover/ branch");
+        foreach (line in render(listed.value!)) {
+            std\print(line);
+        }
+        return;
+    }
+
+    final want = parsed.positionals[0];
+    foreach (item in listed.value!) {
+        if (item.id != want) {
+            continue;
+        }
+        if (item.state == "conflict") {
+            throw "recover-work: {item.target} names another commit; nothing was changed";
+        }
+        if (item.state == "nothing") {
+            std\print("{item.id}: nothing to keep");
+            return;
+        }
+        if (item.state == "kept") {
+            std\print("{item.id}: already kept on {item.target}");
+            return;
+        }
+        final done = keep(root, item);
+        if (done.error != null) {
+            throw done.error!.message;
+        }
+        std\print(done.value!);
+        return;
+    }
+    throw "recover-work: no at-risk item {want}; run without an id to list them";
+}
+
+test "a missing target is restorable, the same commit is kept, another conflicts" {
+    assert\equal(stateOf("abc", existing: ""), want: "restorable", message: "missing");
+    assert\equal(stateOf("abc", existing: "abc"), want: "kept", message: "same");
+    assert\equal(stateOf("abc", existing: "def"), want: "conflict", message: "other");
+}
+
+test "an item with no commit has nothing to keep" {
+    assert\equal(stateOf("", existing: ""), want: "nothing", message: "detached");
+}
+
+test "rows render id, state and note" {
+    assert\equal(render([
+        AtRisk{ id = "stash:1234567", kind = "stash", commit = "1234567", target = "recover/stash-1234567", note = "WIP on main", state = "restorable" },
+    ]), want: ["stash:1234567  restorable  WIP on main"], message: "row");
+}

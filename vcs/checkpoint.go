@@ -9,8 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 )
 
@@ -66,26 +69,126 @@ func Checkpoint(ctx context.Context, dir string, res types.VCSResolution, preser
 	return cp, nil
 }
 
-// PrunePreserved drops every capture --preserve minted in dir that has outlived the
-// retention its handle promises, and reports the handles it dropped.
+// PrunePreserved drops every git capture in dir whose content reads the
+// same in res.Base, and reports the handles it dropped. A capture with a
+// change the base lacks stays, however old.
 //
-// Preserve prunes too, but only a caller who preserves AGAIN reaches that pass, so a
-// repository preserved once would keep its capture past the thirty days the flag
-// advertises. This is the entry point a periodic run calls. The retention stays here
-// rather than travelling through a caller, because a caller-chosen cutoff would enforce a
-// window nothing else in magus has promised.
-//
-// Sapling drops nothing (its snapshot is a hidden commit no Sapling command removes) and
-// Jujutsu mints nothing to drop; both answer with an empty list, which is not an error.
+// Only git can prove a capture landed. Mercurial and Sapling captures
+// accumulate and Jujutsu mints none; all answer with an empty list.
 func PrunePreserved(ctx context.Context, dir string, res types.VCSResolution) ([]string, error) {
 	if res.VCS == nil {
 		return nil, errors.New("vcs prune-preserved: no VCS resolved for this workspace, there is nothing to prune")
 	}
-	dropped, err := res.VCS.PrunePreserved(ctx, dir, time.Now().Add(-preserveRetention))
+	if _, ok := res.VCS.(gitVCS); !ok {
+		return nil, nil
+	}
+	if res.Base == "" {
+		return nil, errors.New("vcs prune-preserved: no base to judge a capture landed against")
+	}
+	return pruneLandedGit(ctx, dir, res.Base)
+}
+
+// pruneLandedGit deletes the refs Preserve anchored whose content landed in
+// into. A ref it cannot judge stays, and the failure is returned.
+func pruneLandedGit(ctx context.Context, dir, into string) ([]string, error) {
+	opts := gitOpts{Isolated: true}
+	listed, err := gitOutput(ctx, dir, opts, "for-each-ref", "--sort=committerdate",
+		"--format=%(refname) %(objectname) %(contents:subject)", preservedRefPrefix)
 	if err != nil {
-		return nil, fmt.Errorf("vcs prune-preserved: %w", err)
+		return nil, fmt.Errorf("vcs prune-preserved: for-each-ref: %w", err)
+	}
+	var (
+		dropped []string
+		failed  []error
+	)
+	for line := range strings.SplitSeq(listed, "\n") {
+		fields := strings.SplitN(strings.TrimSpace(line), " ", 3)
+		if len(fields) < 3 || fields[2] != preserveMessage {
+			continue
+		}
+		name, sha := fields[0], fields[1]
+		unlanded, err := gitVCS{}.UnlandedPaths(ctx, dir, sha, into)
+		if err != nil {
+			failed = append(failed, fmt.Errorf("capture %s: %w", sha, err))
+			continue
+		}
+		if len(unlanded) > 0 {
+			continue
+		}
+		if _, err := gitOutput(ctx, dir, opts, "update-ref", "-d", name, sha); err != nil {
+			failed = append(failed, fmt.Errorf("update-ref -d %s: %w", name, err))
+			continue
+		}
+		dropped = append(dropped, strings.TrimPrefix(name, preservedRefPrefix))
+	}
+	if err := errors.Join(failed...); err != nil {
+		return dropped, fmt.Errorf("vcs prune-preserved: kept what it could not judge: %w", err)
 	}
 	return dropped, nil
+}
+
+// Capture is one automatic preservation of a dirty checkout.
+type Capture struct {
+	Dir             string `json:"dir"`
+	Revision        string `json:"revision"`
+	PatchDigest     string `json:"patch_digest"`
+	UntrackedDigest string `json:"untracked_digest"`
+	Handle          string `json:"handle"`
+	VCS             string `json:"vcs"`
+	At              int64  `json:"at"`
+}
+
+func capturesLedger() (file.JSONL[Capture], error) {
+	state, err := xdg.StateDir()
+	if err != nil {
+		return file.JSONL[Capture]{}, fmt.Errorf("vcs preserve: no state directory for the capture ledger: %w", err)
+	}
+	return file.JSONL[Capture]{
+		Path: filepath.Join(state, "magus", "captures.jsonl"),
+		Key:  func(c Capture) string { return c.Dir },
+	}, nil
+}
+
+// PreserveChanged captures the uncommitted work in dir unless the last
+// capture already holds exactly this work; captured is false then and
+// cp.Preserved is the earlier handle. A clean tree captures nothing. Each
+// capture is recorded in the ledger, and a failure to record is an error.
+func PreserveChanged(ctx context.Context, dir string, res types.VCSResolution) (cp types.VCSCheckpoint, captured bool, err error) {
+	cp, err = Checkpoint(ctx, dir, res, false)
+	if err != nil || !cp.Dirty {
+		return cp, false, err
+	}
+	key := dir
+	if resolved, rerr := filepath.EvalSymlinks(dir); rerr == nil {
+		key = resolved
+	}
+	ledger, err := capturesLedger()
+	if err != nil {
+		return cp, false, err
+	}
+	entries, err := ledger.Load()
+	if err != nil {
+		return cp, false, fmt.Errorf("vcs preserve: read the capture ledger: %w", err)
+	}
+	for _, e := range entries {
+		if e.Dir == key && e.Revision == cp.Revision && e.PatchDigest == cp.PatchDigest && e.UntrackedDigest == cp.UntrackedDigest {
+			cp.Preserved = e.Handle
+			return cp, false, nil
+		}
+	}
+	handle, perr := res.VCS.Preserve(ctx, dir)
+	cp.Preserved = handle
+	if handle != "" {
+		entry := Capture{Dir: key, Revision: cp.Revision, PatchDigest: cp.PatchDigest,
+			UntrackedDigest: cp.UntrackedDigest, Handle: handle, VCS: res.Name, At: time.Now().Unix()}
+		if uerr := ledger.Update(ctx, func([]Capture) []Capture { return []Capture{entry} }); uerr != nil {
+			perr = errors.Join(perr, fmt.Errorf("record capture %s: %w", handle, uerr))
+		}
+	}
+	if perr != nil {
+		return cp, handle != "", fmt.Errorf("vcs preserve: %w", perr)
+	}
+	return cp, handle != "", nil
 }
 
 // untrackedDigest fingerprints the untracked files' paths and content, "" when there are

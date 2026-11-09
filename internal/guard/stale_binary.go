@@ -71,6 +71,9 @@ func unloadCause(loadFailure error, root string) unloadReason {
 	if loadFailure == nil || root == "" {
 		return unloadReason{}
 	}
+	if errors.Is(loadFailure, errNotCheckoutBinary) {
+		return unloadReason{Cause: unloadNoBinary}
+	}
 	if ward.IsStaleBinary(loadFailure) {
 		return unloadReason{Cause: unloadStale, Config: errors.Is(loadFailure, types.UnknownConfigKey)}
 	}
@@ -82,6 +85,35 @@ func unloadCause(loadFailure error, root string) unloadReason {
 		return unloadReason{Cause: unloadSkewedSpell, Spell: spell}
 	}
 	return unloadReason{}
+}
+
+// errNotCheckoutBinary is the load failure of a judge that is not ./magus.
+var errNotCheckoutBinary = errors.New("the judging magus is not this checkout's ./magus")
+
+// foreignJudge reports whether binary is not the ./magus of root, a checkout
+// that builds magus from source. Other workspaces keep PATH magus as install.
+func foreignJudge(root, binary string) bool {
+	if root == "" || binary == "" || BootstrapLine(root) == "" {
+		return false
+	}
+	judge, errJudge := os.Stat(binary)
+	own, errOwn := os.Stat(filepath.Join(root, "magus"))
+	return errJudge != nil || errOwn != nil || !os.SameFile(judge, own)
+}
+
+// ForeignJudgeDeps drops every rule from deps when binary is not root's own
+// ./magus. PATH magus then answers only "bootstrap ./magus".
+func ForeignJudgeDeps(deps Dependencies, root, binary string) Dependencies {
+	if !foreignJudge(root, binary) {
+		return deps
+	}
+	deps.LoadFailure = errNotCheckoutBinary
+	deps.ShellRules, deps.Builtins = nil, nil
+	deps.SpawnRule, deps.ApprovedSpawnRule = nil, nil
+	deps.CommandRule, deps.ApprovedCommandRule = nil, nil
+	deps.WriteRule, deps.ApprovedWriteRule = nil, nil
+	deps.StopRule, deps.ApprovedStopRule = nil, nil
+	return deps
 }
 
 // declaresGuardRule reports whether root's magusfile visibly registers a guard rule. It
@@ -610,6 +642,10 @@ func bareHarnessInstall(command string, d Dialect) bool {
 func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, own bool, root string) denial {
 	hasBinary := hasMagusBinary(root)
 	fix := binaryRemedy(own, root, call.lease, call.builds)
+	if reason.Cause == unloadNoBinary && own && (call.lease == "" || call.builds) {
+		// A foreign judge is not ./magus, so a ./magus rebuild cannot help.
+		fix = binaryFix{say: fmt.Sprintf("bootstrap ./magus with `%s`", BootstrapLine(root))}
+	}
 	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
 	switch {
 	case reason.Cause == unloadSkewedSpell:

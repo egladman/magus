@@ -9,27 +9,41 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// integrationMerge reports `git merge --no-ff [--no-edit] <branch>` for a branch row, an
-// integration job, names in integrates: the one merge its holder exists to run. Any other
-// branch, option or verb is judged as for every worker, so the allowance widens nothing else.
+// integrationMerge reports the one merge an integrate row exists to run:
+// a listed branch, with --no-ff, --no-edit and -m. Anything else is judged
+// as for every worker.
 func integrationMerge(c hint.Invocation, row types.Job) bool {
-	if c.Name != "git" || !row.Integrating() || len(c.Args) < 3 || len(c.Args) > 4 || c.Args[0] != "merge" {
+	if c.Name != "git" || !row.Integrating() || len(c.Args) < 2 || c.Args[0] != "merge" {
 		return false
 	}
-	var noFF bool
 	branch := ""
-	for _, a := range c.Args[1:] {
+	args := c.Args[1:]
+	for i := 0; i < len(args); i++ {
+		a := args[i]
 		switch {
-		case a == "--no-ff":
-			noFF = true
-		case a == "--no-edit":
+		case a == "--no-ff", a == "--no-edit":
+		case a == "-m" || a == "--message":
+			if i+1 >= len(args) {
+				return false
+			}
+			i++
+		case strings.HasPrefix(a, "--message="):
 		case strings.HasPrefix(a, "-") || branch != "":
 			return false
 		default:
 			branch = a
 		}
 	}
-	return noFF && slices.Contains(row.Integrates, branch)
+	return branch != "" && slices.Contains(integrationSpellings(row.Integrates), branch)
+}
+
+// integrationSpellings lists each name git resolves to a listed branch.
+func integrationSpellings(branches []string) []string {
+	var out []string
+	for _, b := range branches {
+		out = append(out, b, "origin/"+b, "refs/heads/"+b, "refs/remotes/origin/"+b)
+	}
+	return out
 }
 
 // integratorLands reports a call an integrator lands in its own checkout:

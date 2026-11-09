@@ -1335,8 +1335,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// Not stood down by a pre-authorization: the person owns what a human-only run
 		// costs, whoever suggested it. An ask is graded as the deny it stands in for.
 		if verdict.Decision != decisionDeny {
-			decision, reason := gradeHumanOnly(ctx, deps, actingLease, input)
-			if decision != "" {
+			decision, reason, lapsed := gradeHumanOnly(ctx, deps, actingLease, input)
+			if decision != "" && !lapsed {
 				if _, refused := pending.hold(deps, ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleHumanOnly}}); !refused {
 					decision = ""
 				}
@@ -1352,6 +1352,10 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			case decisionDeny:
 				verdict.Decision, verdict.Context, verdict.Reason = decisionDeny, "", reason
 				verdict.Rule = string(denyRuleHumanOnly)
+				if lapsed {
+					// A lapse is retried, never a standing refusal.
+					verdict.Rule = string(advisoryUnfinished)
+				}
 			}
 		}
 		// Last of the worker rules: one that refuses the run outright
