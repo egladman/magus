@@ -597,6 +597,74 @@ func sealedBytecodeStoreUnder(name, root string) buzz.BytecodeStore { //nolint:i
 	return sealedBytecodeStore{inner: buzz.NewDiskBytecodeStore(dir), secret: types.NewSecret(string(secret)), scope: dir}
 }
 
+// PolicyStore is the guard's policy snapshot file for one workspace, under
+// <user cache>/magus/guard-policy/<stamp>/<root hash>.jsonl. It sits outside
+// the tree because the agents it judges can write the tree. Each line is
+// sealed with the bytecode key over Path, so a line moved from another
+// workspace, build or cache does not verify.
+type PolicyStore struct {
+	// Path may name a directory not made yet; Prepare makes it.
+	Path   string
+	Stamp  string
+	secret types.Secret
+}
+
+// GuardPolicyStore is the PolicyStore for the workspace at root. It creates
+// nothing. The error says why there is no store: no root, no build id, no
+// user cache, or no sealing key.
+func GuardPolicyStore(root string) (PolicyStore, error) {
+	if root == "" {
+		return PolicyStore{}, errors.New("no workspace root")
+	}
+	stamp := compilerStamp()
+	if stamp == "" {
+		return PolicyStore{}, errors.New("this build has no build id to stamp a snapshot with")
+	}
+	base, err := xdg.CacheDir()
+	if err != nil {
+		return PolicyStore{}, err
+	}
+	secret, err := bytecodeSecret()
+	if err != nil {
+		return PolicyStore{}, err
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return PolicyStore{}, err
+	}
+	sum := sha256.Sum256([]byte(abs))
+	path := filepath.Join(base, "magus", "guard-policy", stamp, hex.EncodeToString(sum[:])+".jsonl")
+	return PolicyStore{Path: path, Stamp: stamp, secret: types.NewSecret(string(secret))}, nil
+}
+
+// Prepare makes the store's directory and prunes other builds' stale ones.
+func (s PolicyStore) Prepare() error {
+	dir := filepath.Dir(s.Path)
+	now := time.Now()
+	if err := os.Chtimes(dir, now, now); !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	pruneStamps(filepath.Dir(dir), s.Stamp, now.Add(-staleStampAge))
+	return nil
+}
+
+// Seal is the hex HMAC of body under the store's key and path.
+func (s PolicyStore) Seal(body []byte) string {
+	m := hmac.New(sha256.New, []byte(s.secret.Reveal()))
+	_, _ = m.Write([]byte(s.Path))
+	_, _ = m.Write([]byte{0})
+	_, _ = m.Write(body)
+	return hex.EncodeToString(m.Sum(nil))
+}
+
+// Verify reports whether seal is Seal(body).
+func (s PolicyStore) Verify(body []byte, seal string) bool {
+	return hmac.Equal([]byte(s.Seal(body)), []byte(seal))
+}
+
 // sealedBytecodeStore prefixes each chunk with an HMAC over the directory it is
 // kept in, its key and its bytes, so a chunk moved from another key, workspace
 // or compiler fails exactly as a forged one does.

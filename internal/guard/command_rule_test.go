@@ -611,7 +611,9 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
 // A hook judges one call, and the compiled rules' settings and every function rule read the
 // approved sources: each read past the first answers from the first, so a slow status or
 // load costs the judgment once and not once per rule. Whether the working tree loads or
-// not, the three resolves after NewDependencies compile nothing.
+// not, the reads after the first compile nothing.
+// The first judgment writes the policy snapshot. The second, a hit,
+// loads the approved sources on its first read.
 func TestOneJudgmentResolvesTheApprovedSourcesOnce(t *testing.T) {
 	for name, worktree := range map[string]string{
 		"loaded":   "import \"magus\";\n",
@@ -648,8 +650,8 @@ func TestOneJudgmentResolvesTheApprovedSourcesOnce(t *testing.T) {
 				require.NotNil(t, spawn)
 				return append(extra, compiles.phases.Load()-mark)
 			}
-			judge()
 			assert.Equal(t, []int32{0, 0, 0}, judge())
+			assert.Equal(t, []int32{0, 0}, judge()[1:])
 		})
 	}
 }

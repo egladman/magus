@@ -151,6 +151,7 @@ func staleConfigDependencies(ctx context.Context, rootOverride string, failure e
 // reason in its host reply and must not leak a second, non-protocol message into the
 // host's hook stream.
 func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.Writer, args []string) error {
+	started := time.Now()
 	// Started here rather than in Judge, so loading the rules spends the same budget.
 	ctx, cancelInherited, deadlineErr := takeDelegation(ctx)
 	defer cancelInherited()
@@ -305,6 +306,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	base := guard.Dependencies{CacheDir: guardCacheDir(""), BinaryVersion: version, Spells: project.DefaultSpellRegistry().All}
 	base.Binary, _ = runningBinaryPath()
 	ctx = agent.ContextWithToolRows(ctx, req.Tools)
+	ctx, finishSnapshot := guard.WithPolicySnapshotWrite(ctx)
 	// The rules load inside the bound too: a magusfile's imports parse to the end however
 	// long they take.
 	verdict := guard.JudgeWithin(ctx, base, req, func(ctx context.Context) types.GuardJudgment {
@@ -327,13 +329,30 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// everywhere else; here there is no progress, so suppressing the verdict is the only
 	// reading that leaves them meaning anything at all. A script asking "would this be
 	// refused" wants the status and nothing on its stdout.
+	var exitErr error
 	if global.quiet || global.silent {
-		return verdictExit(io.Discard, opts, verdict)
+		exitErr = verdictExit(io.Discard, opts, verdict)
+	} else {
+		if err := writeGuardVerdict(out, opts, verdict); err != nil {
+			return err
+		}
+		exitErr = verdictExit(errOut, opts, verdict)
 	}
-	if err := writeGuardVerdict(out, opts, verdict); err != nil {
-		return err
+	if err := finishSnapshot(ctx, snapshotBudget(limits, known, started)); err != nil {
+		slog.WarnContext(ctx, "the policy snapshot was not written, so the next judgment loads the policy too",
+			attr.Error(err), attr.Component("magus shell"))
 	}
-	return verdictExit(errOut, opts, verdict)
+	return exitErr
+}
+
+// snapshotBudget is what a hook may spend on a snapshot write its judgment
+// left over. The host's hook timeout less a second bounds the whole hook.
+// A host that declares no timeout gets no wait.
+func snapshotBudget(limits types.Limits, known bool, started time.Time) time.Duration {
+	if !known || limits.HookTimeoutMs <= 0 {
+		return 0
+	}
+	return time.Duration(limits.HookTimeoutMs)*time.Millisecond - time.Second - time.Since(started)
 }
 
 // terminalWindow names the terminal window this process writes to, or "" when stdout is
