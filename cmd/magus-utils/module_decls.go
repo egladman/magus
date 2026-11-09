@@ -260,7 +260,7 @@ func protocolMethodSig(m std.Method) (string, error) {
 
 // externDecl renders one method as `export extern fun name(params) > ret;`.
 //
-// A variadic method gets a COMMENT instead of a declaration. Buzz has no variadic
+// A variadic method is declared as an `any` value. Buzz has no variadic
 // parameter, and the call it has to accept (fs\join("a", "b", "c")) cannot be
 // spelled with a fixed parameter list. Declaring it as a list parameter would reject
 // every existing call site, so the method keeps today's untyped behavior and says so
@@ -272,12 +272,6 @@ func externDecl(m std.Method) (string, error) {
 	}
 	for _, a := range m.Args {
 		if a.Variadic {
-			// Declared as a VALUE, not a fun. Buzz has no variadic parameter, so no
-			// `extern fun` can accept fs\join("a", "b", "c"); a list parameter would
-			// reject every existing call site. Declaring it `any` keeps the call
-			// untyped, which is what this always did, while still putting the NAME in
-			// the namespace: emitting only a comment left the member undeclared, and an
-			// undeclared member is indistinguishable from one that does not exist.
 			return fmt.Sprintf("// %s is variadic; Buzz has no variadic parameter, so it stays untyped.\nexport final %s: any = null;\n", name, name), nil
 		}
 	}
@@ -473,27 +467,18 @@ func buzzZero(t std.TypeTag) (string, error) {
 		return "0.0", nil
 	case std.TypeBool:
 		return "false", nil
-	case std.TypeStringSlice:
-		return "[<str>]", nil
-	case std.TypeFloatSlice:
-		return "[<double>]", nil
-	case std.TypeByteSlice:
-		return "[<int>]", nil
-	case std.TypeStringSliceSlice:
-		return "[<[str]>]", nil
-	case std.TypeStringMapMap:
-		return "{<str: {str: str}>}", nil
-	case std.TypeStringMap:
-		return "{<str: str>}", nil
-	case std.TypeAnyMap:
-		return "{<str: any>}", nil
 	case std.TypeAny:
 		// The one tag whose zero really is null: `any` is nullable, so `x: any = null`
 		// annotates cleanly.
 		return "null", nil
-	default:
+	}
+	// A list or map zero is its annotation as an empty literal.
+	typ, err := buzzArgType(t)
+	if err != nil || (typ[0] != '[' && typ[0] != '{') {
 		return "", fmt.Errorf("optional arg of type tag %d has no expressible Buzz default", t)
 	}
+	last := len(typ) - 1
+	return typ[:1] + "<" + typ[1:last] + ">" + typ[last:], nil
 }
 
 // buzzReturnType renders a method's Buzz return annotation.
@@ -770,7 +755,7 @@ func sortedMethods(mod std.Module) []std.Method {
 // stated rather than relied upon.
 func referencedObjects(rt reflect.Type) []string {
 	var out []string
-	for _, f := range boundaryFields(rt) {
+	for _, f := range emit.ObjectFields(rt) {
 		t := f.Type
 		for t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Pointer || t.Kind() == reflect.Map {
 			t = t.Elem()
