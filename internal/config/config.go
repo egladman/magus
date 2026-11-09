@@ -339,6 +339,10 @@ type Jobs struct {
 	// max_claims; a fork or a claim past it is refused. Default 10; zero or negative is an
 	// error. Workspace only, like StaleAfter.
 	MaxClaims int `json:"max_claims" yaml:"max_claims" validate:"gt=0" merge:"written"`
+	// ModelTierMatrix is the absolute path of a person's Buzz module.
+	// Its choose function picks a tier when the workspace's matrix declines.
+	// User config only.
+	ModelTierMatrix string `json:"model_tier_matrix" yaml:"model_tier_matrix" cli:"-"`
 }
 
 // TuiEnabled reports whether `magus diff` may open the viewer.

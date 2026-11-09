@@ -202,6 +202,9 @@ func loadRepositoryDirInto(cfg Config, dir string) (Config, error) {
 	if overlay.Work.LocalOnly != nil && !isUserConfigDir(dir) {
 		return Config{}, fmt.Errorf("config: %s sets work.local_only, a person's own never-publish list: move it to the user-level %s under $XDG_CONFIG_HOME/magus", path, Filename)
 	}
+	if overlay.Jobs.ModelTierMatrix != "" && !isUserConfigDir(dir) {
+		return Config{}, fmt.Errorf("config: %s sets jobs.model_tier_matrix, a person's own tier chooser: move it to the user-level %s under $XDG_CONFIG_HOME/magus", path, Filename)
+	}
 	if !isUserConfigDir(dir) {
 		if err := workspacesCommittedError(overlay.Knowledge.Workspaces); err != nil {
 			return Config{}, err

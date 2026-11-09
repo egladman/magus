@@ -307,6 +307,8 @@ const (
 	ModelTierSourceRow ModelTierSource = "row"
 	// ModelTierSourceMatrix is the workspace's registered matrix function's answer.
 	ModelTierSourceMatrix ModelTierSource = "matrix"
+	// ModelTierSourceUserMatrix is the person's own matrix module's answer.
+	ModelTierSourceUserMatrix ModelTierSource = "user-matrix"
 	// ModelTierSourceDefault is the declaration's default.
 	ModelTierSourceDefault ModelTierSource = "default"
 )
