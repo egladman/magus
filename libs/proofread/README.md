@@ -233,11 +233,10 @@ git work tree. The file, schema `proofread-voice/4`, holds aggregates alone, per
 kind: the texts and words counted, the first-person and future-tense rates, the
 features `voice-drift` ranks on for each 200-word window of the author's pooled
 texts, a commit subject's 95th percentile in characters, and the 5th and 95th
-percentile of each feature a budget or `uniform` reads. Those are the triad and
-contrast rates, participial clauses and nominalizations, and the spreads:
-sentence, paragraph and item words, the share of sentences and items on the
-most common opener, the entropy of the openers' parts of speech, and the share
-of sentences with a subordinating conjunction. It holds no text, no content
+percentile of each feature a budget or `uniform` reads: the triad and
+participial-clause rates, the spread of list items' words, the share of items
+on the most common opener, and the entropy of the parts of speech sentences
+open on. It holds no text, no content
 word and no path. It never leaves the machine and is never committed. A file
 in an older schema is refused with the command that rebuilds it.
 
@@ -247,6 +246,15 @@ than 95% of those texts do. A kind under 1,000 words keeps no windows and no
 ranges. A voice whose change descriptions use "I" at 10 or more per 1000
 words and "will" at 2 or more holds `tense` to advice on change descriptions,
 where a decisions table would deny it. The [proofread guide](https://eli.gladman.cc/magus/guides/proofread/) walks through building one.
+
+`proofread voice eval --owner FILE --other FILE` scores how far each shape
+feature separates two sets of texts. With `--paired`, `--other` holds a rewrite
+of each owner text, joined on `--id-field` (`id` by default), and the table
+gives per feature the share of pairs whose rewrite measures higher, the cut at
+5% of the owner texts, and the share of rewrites past it. A feature separates
+when the Wilson lower bound on that share clears the false-alarm rate on 20
+pairs or more. `--pool WORDS` groups shuffled pairs into chunks of that many
+owner words, so each chunk and its rewrite cover the same texts.
 
 ## Rules
 

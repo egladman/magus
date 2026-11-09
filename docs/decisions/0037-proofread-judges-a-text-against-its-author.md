@@ -62,6 +62,34 @@ budget or for `uniform` only if, at 5% false alarms on the author's own windows,
 same cut voice-drift holds to, it still flags rewrites. A feature that fails is dropped,
 and the record below says which.
 
+#### What the paired run kept (2026-11-09)
+
+The run paired 96 of one author's public texts of 40 to 400 words (14 change
+descriptions, 48 issues, 34 review replies) with a rewrite of each by an
+economy-tier agent told to clear every proofread finding and polish the rest.
+Read as one kind and pooled into 200-word chunk pairs under seeds 13, 7 and 29,
+it gave 25, 25 and 26 chunk pairs. Single texts gave 61 pairs with five
+sentences or more.
+
+| Feature                       | Rewrite higher | Separates at 5%     | Kept for                         |
+| ----------------------------- | -------------- | ------------------- | -------------------------------- |
+| commas                        | 0.92 to 0.98   | 3 of 3 seeds        | voice-drift already ranks it     |
+| participial clauses           | 0.57 to 0.60   | 3 of 3 seeds        | a later `participles` budget     |
+| triads                        | 0.58 to 0.62   | 1 of 3; single, yes | the `triad` budget               |
+| opener part-of-speech entropy | 0.28 to 0.35   | 1 of 3              | `uniform`, the one measured lead |
+| item words sd, opener share   | 0.50 to 0.57   | 14 to 16 pairs      | `uniform`, unmeasured            |
+| sentence words sd             | 0.44 to 0.60   | 0 of 3; single, yes | dropped: rewrites raise it       |
+| paragraph words sd            | 0.40 to 0.52   | 0 of 3              | dropped                          |
+| sentence opener share         | 0.60 to 0.66   | 0 of 3              | dropped                          |
+| subordinate share             | 0.44 to 0.58   | 0 of 3              | dropped                          |
+| contrasts (not X but Y)       | 0.50, single   | single, no          | dropped                          |
+
+Rewrites under the current rules do not even out sentence or paragraph length:
+the sentence spread rose in more pairs than it fell. They do narrow the parts of
+speech sentences open on. The item measures, which the rewrites target most, had
+too few lists to measure. A dropped feature stays in `Shape` as information; no
+range is kept of it and no rule reads it.
+
 ### 3. Budgets from the voice
 
 A rule that counts a habit declares the voice feature it counts and a default budget. With
@@ -93,8 +121,8 @@ together on stdin, as one set.
 
 | Item                                                                                       | State   |
 | ------------------------------------------------------------------------------------------ | ------- |
-| Spread measures in `Shape`; per-feature percentiles in `VoiceStats`; `proofread-voice/4`   | planned |
-| `voice eval --paired`, and the calibration re-run on paired text                           | planned |
+| Spread measures in `Shape`; per-feature percentiles in `VoiceStats`; `proofread-voice/4`   | done    |
+| `voice eval --paired`, and the calibration re-run on paired text                           | done    |
 | Voice budgets for the counting rules, `triad` first                                        | planned |
 | `uniform`; `list-parallel` checks grammatical shape and `repeated-opener` checks the words | planned |
 | Protected spans in `-o json` and the text output; a fix that covers one is advise at most  | planned |

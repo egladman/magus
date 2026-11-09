@@ -24,20 +24,14 @@ type rangeFeature struct {
 	read func(Shape) (float64, bool)
 }
 
-// rangeFeatures are the features a budget or the uniform rule reads: the
-// habits counting rules count, and the spreads uniform holds a text to.
+// rangeFeatures are the features a budget or the uniform rule reads, the
+// ones the paired calibration in ADR 0037 kept.
 var rangeFeatures = []rangeFeature{
 	{"triads_per_1000", func(s Shape) (float64, bool) { return s.Triads, s.Words > 0 }},
-	{"not_x_but_y_per_1000", func(s Shape) (float64, bool) { return s.NotXButYPer1000, s.Words > 0 }},
 	{"grammar_per_1000.participial_clause", grammarRate("participial_clause")},
-	{"grammar_per_1000.nominalization", grammarRate("nominalization")},
-	{"sentence_words_sd", withheldUnless("sentence_words_sd", func(s Shape) float64 { return s.SentenceWordsStdDev })},
-	{"paragraph_words_sd", withheldUnless("paragraph_words_sd", func(s Shape) float64 { return s.ParagraphWordsStdDev })},
 	{"item_words_sd", withheldUnless("item_words_sd", func(s Shape) float64 { return s.ItemWordsStdDev })},
-	{"sentence_opener_share", withheldUnless("sentence_opener_share", func(s Shape) float64 { return s.SentenceOpenerShare })},
 	{"item_opener_share", withheldUnless("item_opener_share", func(s Shape) float64 { return s.ItemOpenerShare })},
 	{"opener_class_entropy", withheldUnless("opener_class_entropy", func(s Shape) float64 { return s.OpenerClassEntropy })},
-	{"subordinate_share", withheldUnless("subordinate_share", func(s Shape) float64 { return s.SubordinateShare })},
 }
 
 func grammarRate(key string) func(Shape) (float64, bool) {

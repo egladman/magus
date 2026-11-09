@@ -3,10 +3,10 @@ package proofread
 import "testing"
 
 func TestBuildVoiceKeepsARangeOfEachFeatureItsWindowsMeasure(t *testing.T) {
-	r, ok := authorVoice(t).Kinds[KindReviewReply].Ranges["sentence_opener_share"]
+	r, ok := authorVoice(t).Kinds[KindReviewReply].Ranges["opener_class_entropy"]
 
 	if !ok || r.Windows < minRangeWindows || r.P5 > r.P95 {
-		t.Errorf("sentence_opener_share range = %+v, %v, want one from %d windows or more", r, ok, minRangeWindows)
+		t.Errorf("opener_class_entropy range = %+v, %v, want one from %d windows or more", r, ok, minRangeWindows)
 	}
 }
 

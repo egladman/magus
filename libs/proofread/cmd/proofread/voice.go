@@ -99,6 +99,8 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 	format := fs.String("o", "text", "write the separations as `text` or json")
 	pool := fs.Int("pool", 0, "measure random chunks of at least this many `words` instead of single texts; 0 pools nothing")
 	seed := fs.Uint64("seed", proofread.VoiceSeed, "shuffle the texts under this `seed` before pooling")
+	paired := fs.Bool("paired", false, "read --other as rewrites of the owner's texts, joined by --id-field, and score how each feature moves")
+	idField := fs.String("id-field", "id", "with --paired, join the two files on this `field`")
 
 	if err := fs.Parse(args); err != nil {
 		return exitError
@@ -115,6 +117,15 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 		return failure(stderr, fmt.Errorf("unknown -o %q: write text or json", *format))
 	case *field == "":
 		return failure(stderr, errors.New("voice eval reads JSON lines: name the text's field with --field"))
+	case *paired && *idField == "":
+		return failure(stderr, errors.New("voice eval --paired joins on an id: name its field with --id-field"))
+	}
+
+	if *paired {
+		return runPairedEval(pairedEval{
+			owner: *owner, other: *other, kind: proofread.Kind(*kind), field: *field, kindField: *kindField,
+			idField: *idField, format: *format, pool: *pool, seed: *seed,
+		}, stdout, stderr)
 	}
 
 	read := func(path string) (map[proofread.Kind][]proofread.Shape, error) {
@@ -298,6 +309,29 @@ func voiceTexts(kind proofread.Kind, field, kindField string, paths []string, st
 // jsonLineTexts adds the text each JSON line of r holds in field to out,
 // under the kind kindField names, or kind when the line names none.
 func jsonLineTexts(name string, r io.Reader, kind proofread.Kind, field, kindField string, out map[proofread.Kind][]string) error {
+	records, err := jsonLineRecords(name, r, kind, field, kindField, "")
+	if err != nil {
+		return err
+	}
+
+	for _, rec := range records {
+		out[rec.kind] = append(out[rec.kind], rec.text)
+	}
+
+	return nil
+}
+
+// textRecord is one JSON line's text, its kind and, when asked for, its id.
+type textRecord struct {
+	kind     proofread.Kind
+	id, text string
+}
+
+// jsonLineRecords reads r as [jsonLineTexts] does. With idField, each line
+// must also hold a string id in that field.
+func jsonLineRecords(name string, r io.Reader, kind proofread.Kind, field, kindField, idField string) ([]textRecord, error) {
+	var out []textRecord
+
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 
@@ -309,12 +343,12 @@ func jsonLineTexts(name string, r io.Reader, kind proofread.Kind, field, kindFie
 
 		var record map[string]any
 		if err := json.Unmarshal(line, &record); err != nil {
-			return fmt.Errorf("%s:%d: %w", name, n, err)
+			return nil, fmt.Errorf("%s:%d: %w", name, n, err)
 		}
 
 		text, ok := record[field].(string)
 		if !ok {
-			return fmt.Errorf("%s:%d: no string field %q", name, n, field)
+			return nil, fmt.Errorf("%s:%d: no string field %q", name, n, field)
 		}
 
 		k := kind
@@ -326,17 +360,25 @@ func jsonLineTexts(name string, r io.Reader, kind proofread.Kind, field, kindFie
 		}
 
 		if k == "" {
-			return fmt.Errorf("%s:%d: no string field %q names a kind, and --kind gives none", name, n, kindField)
+			return nil, fmt.Errorf("%s:%d: no string field %q names a kind, and --kind gives none", name, n, kindField)
 		}
 
-		out[k] = append(out[k], text)
+		rec := textRecord{kind: k, text: text}
+
+		if idField != "" {
+			if rec.id, ok = record[idField].(string); !ok || rec.id == "" {
+				return nil, fmt.Errorf("%s:%d: no string field %q holds an id", name, n, idField)
+			}
+		}
+
+		out = append(out, rec)
 	}
 
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("read %s: %w", name, err)
+		return nil, fmt.Errorf("read %s: %w", name, err)
 	}
 
-	return nil
+	return out, nil
 }
 
 // defaultVoicePath is $XDG_CONFIG_HOME/proofread/voice.json (see
