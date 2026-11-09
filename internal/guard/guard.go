@@ -795,6 +795,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				recordAgentUsage(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), who.Agent, env.AgentTranscript)
 			}
 			at := hookLocation(ctx, deps)
+			if env.Schedules {
+				timer := gradeScheduledPrompt(hint.NewGate(at.cacheDir, who.factsKey()), hint.NewGate(at.cacheDir, who.callerKey()), who.Transcript, time.Now())
+				if v := deps.grade(timer); v.Deny != "" {
+					return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
+				}
+			}
 			v, ok := judgeStop(deps, hint.NewGate(at.cacheDir, who.callerKey()), input, req.HostResumesOnBackgroundFrom, time.Now())
 			if !ok {
 				v = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
@@ -2019,7 +2025,7 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		req.NothingToJudge = true
 	case envelopeSchedules(env.ToolInput):
 		// A prompt queued for a later turn of this session, not a brief for a new agent.
-		req.NothingToJudge = true
+		req.NothingToJudge, req.Schedules = true, true
 	case isSpawn || env.Task != "":
 		req.Value = cmp.Or(spawnPrompt, env.Task)
 		req.IsSpawn = true
@@ -2096,6 +2102,29 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 	return req, true
 }
 
+// gradeScheduledPrompt refuses a queued prompt as a timer while the session has
+// work whose own notice would wake it. With nothing pending it passes.
+func gradeScheduledPrompt(facts, stops hint.Gate, transcript string, now time.Time) ShellVerdict {
+	if !pendingWork(facts, stops, transcript, now) {
+		return ShellVerdict{}
+	}
+	return ShellVerdict{Deny: denySleepTimer, Why: denySleepTimerWhy, Rule: denyRule{Name: denyRuleSleepPoll}}
+}
+
+// pendingWork is a background task still running or a child the host has not
+// said stopped.
+func pendingWork(facts, stops hint.Gate, transcript string, now time.Time) bool {
+	if transcript != "" {
+		if tasks, err := liveBackgroundTasks(transcript, facts.CacheDir(), now); err == nil && len(tasks) > 0 {
+			return true
+		}
+	}
+	return slices.ContainsFunc(facts.Kinds(spawnedAgentPrefix), func(kind hint.MarkerKind) bool {
+		rec, ok := readMarker[spawnedAgent](facts, kind)
+		return ok && !stoppedAgent(facts, stops, rec.ID)
+	})
+}
+
 // envelopeSession picks the session pointer from the fields a host may send.
 // session_id wins when both it and conversation_id are present.
 func envelopeSession(env hookEnvelope) string {
@@ -2149,6 +2178,8 @@ type hookRequest struct {
 	// NothingToJudge is a recognized host envelope carrying no command, path or prompt.
 	// Distinct from "not an envelope", which is judged as the literal text it is.
 	NothingToJudge bool
+	// Schedules is a prompt queued for a later turn, judged as a timer.
+	Schedules bool
 	// UnjudgedTool names the tool of a nothing-to-judge call the host's tool rows do not
 	// know, "" for any other: the call no rule could read.
 	UnjudgedTool string
