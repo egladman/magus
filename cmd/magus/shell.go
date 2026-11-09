@@ -373,6 +373,16 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 	return deps
 }
 
+// checkoutJudgeDeps drops deps' rules when binary is not root's ./magus.
+// A delegate keeps them. Its caller picked it as the call's checkout
+// binary, and root is only the hook's working directory.
+func checkoutJudgeDeps(ctx context.Context, deps guard.Dependencies, root, binary string) guard.Dependencies {
+	if delegatedBy(ctx) != "" {
+		return deps
+	}
+	return guard.ForeignJudgeDeps(deps, root, binary)
+}
+
 // loadGuardDependencies is guardDependencies that also returns the rules it loaded, nil
 // when none loaded, for a caller that must know which files they came from.
 func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Dependencies, *guard.WorkspaceRules) {
@@ -404,7 +414,7 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 			return traceFromContext(ctx).phase(phase)
 		},
 	})
-	deps = guard.ForeignJudgeDeps(deps, root, binary)
+	deps = checkoutJudgeDeps(ctx, deps, root, binary)
 	// The rule cliOptions opens every workspace with.
 	deps.TierRule = magus.TierCeiling
 	index := newGuardLookups(rootOverride)

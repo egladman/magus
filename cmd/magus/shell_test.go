@@ -2764,3 +2764,33 @@ func (s *staleConfigSuite) TestTheBootstrapItServesRuns() {
 	v := s.judge(fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", s.root))
 	s.NotEqual("deny", v.Decision, v.Reason)
 }
+
+// CheckoutJudgeDepsSuite judges from a hook whose working directory is a magus
+// source checkout, by a binary that is not that checkout's ./magus.
+type CheckoutJudgeDepsSuite struct {
+	suite.Suite
+	root, binary string
+}
+
+func TestCheckoutJudgeDepsSuite(t *testing.T) {
+	suite.Run(t, new(CheckoutJudgeDepsSuite))
+}
+
+func (s *CheckoutJudgeDepsSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "go.mod"), []byte("module github.com/egladman/magus\n\ngo 1.25\n"), 0o644))
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magus"), []byte("#!/bin/sh\n"), 0o755))
+	s.binary = filepath.Join(s.T().TempDir(), "magus")
+	s.Require().NoError(os.WriteFile(s.binary, []byte("#!/bin/sh\n"), 0o755))
+}
+
+func (s *CheckoutJudgeDepsSuite) TestAnUndelegatedForeignJudgeLoadsNothing() {
+	deps := checkoutJudgeDeps(context.Background(), guard.Dependencies{}, s.root, s.binary)
+	s.Error(deps.LoadFailure)
+}
+
+func (s *CheckoutJudgeDepsSuite) TestADelegateKeepsItsRules() {
+	ctx := context.WithValue(context.Background(), delegatedByKey{}, filepath.Join(s.root, "magus"))
+	deps := checkoutJudgeDeps(ctx, guard.Dependencies{}, s.root, s.binary)
+	s.NoError(deps.LoadFailure)
+}
