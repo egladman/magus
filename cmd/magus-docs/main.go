@@ -68,6 +68,21 @@ var moduleCategories = []struct {
 	{"Magus internals", []string{"magus", "charm"}},
 }
 
+// loadModules returns every documented module with its types filled in.
+// Only std's own registry fills them, so the encoding and termkit sets
+// need WithTags here.
+func loadModules() []std.Module {
+	// hostmodules.All, not std.All: encoding leaves are not in std's registry.
+	modules := append(hostmodules.All(), std.SourceModulesAsModules()...)
+	for i := range modules {
+		modules[i] = modules[i].WithTags()
+	}
+	slices.SortFunc(modules, func(a, b std.Module) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	return modules
+}
+
 func main() {
 	// Default is where the docs ACTUALLY live, which is what docs/magusfile.buzz passes
 	// explicitly. It used to name docs/buzz/modules, a path nothing reads, so running
@@ -80,16 +95,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Both kinds of stdlib module, so the docs site cannot tell a Buzz-implemented
-	// one from a Go-implemented one. std.SourceModulesAsModules derives the method
-	// list from the Buzz source, which is the same shape writeModule already
-	// renders; the alternative was a second template nobody would keep in step.
-	// hostmodules.All(), not std.All(): std/encoding's nine leaf modules do not
-	// self-register into std's own registry (see hostmodules's doc for why).
-	modules := append(hostmodules.All(), std.SourceModulesAsModules()...)
-	slices.SortFunc(modules, func(a, b std.Module) int {
-		return strings.Compare(a.Name, b.Name)
-	})
+	modules := loadModules()
 
 	for _, m := range modules {
 		if err := writeModule(*outDir, m); err != nil {
@@ -162,7 +168,20 @@ func argTypeMarkdown(meth std.Method, i int) string {
 	if sig := meth.Signature(); sig != nil && sig.In(i+1).Kind() == reflect.Func {
 		return fmt.Sprintf("`%s`", sig.In(i+1))
 	}
-	return typeMarkdown(meth.Args[i].Type)
+	a := meth.Args[i]
+	if a.Type == std.TypeInvalid && a.Object != "" {
+		return fmt.Sprintf("`%s`", a.Object)
+	}
+	return typeMarkdown(a.Type)
+}
+
+// retTypeText renders a return type. A Buzz-source method has no tag, only
+// its annotation text in Object.
+func retTypeText(r std.Ret) string {
+	if r.Type == std.TypeInvalid && r.Object != "" {
+		return r.Object
+	}
+	return r.Type.GoType()
 }
 
 // methodSourceLink renders a `" - [source](...)"` suffix linking a method to the file
@@ -336,7 +355,7 @@ func renderModule(m std.Module) string {
 			if len(meth.Returns) > 0 {
 				rets := make([]string, len(meth.Returns))
 				for i, r := range meth.Returns {
-					typ := r.Type.GoType()
+					typ := retTypeText(r)
 					if r.Nullable {
 						typ += " or null"
 					}

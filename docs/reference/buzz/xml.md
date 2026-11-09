@@ -20,11 +20,11 @@ Serialize an XML node to a string. A node is a string (text) or an element map {
 
 **Signature:** `xml\render(node) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/xml/xml.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `node`    | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `node`    | `any` |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### element
 
@@ -32,13 +32,13 @@ Build an element node from a tag, a flat [name, value, ...] attribute list, and 
 
 **Signature:** `xml\element(tag, attrs, children) -> any` - [source](https://github.com/egladman/magus/blob/main/std/encoding/xml/xml.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `tag`      | `<invalid>` |          |             |
-| `attrs`    | `<invalid>` |          |             |
-| `children` | `<invalid>` |          |             |
+| Parameter  | Type       | Optional | Description |
+| ---------- | ---------- | -------- | ----------- |
+| `tag`      | `string`   |          |             |
+| `attrs`    | `[]string` |          |             |
+| `children` | `any`      |          |             |
 
-**Returns:** <invalid>
+**Returns:** any
 
 ### parse
 
@@ -46,9 +46,9 @@ Parse an XML string into a node tree: each element becomes {"tag": name, "attrs"
 
 **Signature:** `xml\parse(s) -> any` - [source](https://github.com/egladman/magus/blob/main/std/encoding/xml/xml.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `s`       | `<invalid>` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
-**Returns:** <invalid>
+**Returns:** any
 

@@ -20,11 +20,11 @@ Encode data as standard (padded) base64.
 
 **Signature:** `base64\encode(data) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/base64/base64.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `data`    | `<invalid>` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `data`    | `string` |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### decode
 
@@ -32,11 +32,11 @@ Decode a standard (padded) base64 string; errors on malformed input.
 
 **Signature:** `base64\decode(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/base64/base64.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `s`       | `<invalid>` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### urlEncode
 
@@ -44,11 +44,11 @@ Encode data as URL-safe (padded) base64.
 
 **Signature:** `base64\urlEncode(data) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/base64/base64.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `data`    | `<invalid>` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `data`    | `string` |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### urlDecode
 
@@ -56,9 +56,9 @@ Decode a URL-safe (padded) base64 string; errors on malformed input.
 
 **Signature:** `base64\urlDecode(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/base64/base64.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `s`       | `<invalid>` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 

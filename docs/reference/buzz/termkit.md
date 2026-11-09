@@ -20,12 +20,12 @@ Colorize wraps s in an SGR sequence and closes it again, so no caller composes e
 
 **Signature:** `termkit\colorize(s, sgr) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `s`       | `<invalid>` |          |             |
-| `sgr`     | `<invalid>` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
+| `sgr`     | `string` |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### hyperlink
 
@@ -33,12 +33,12 @@ Hyperlink makes text a real clickable link to uri, for terminals that support OS
 
 **Signature:** `termkit\hyperlink(text, uri) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `text`    | `<invalid>` |          |             |
-| `uri`     | `<invalid>` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `text`    | `string` |          |             |
+| `uri`     | `string` |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### clearScreen
 
@@ -52,9 +52,9 @@ EraseLines erases n lines ending at the cursor and leaves the cursor at column 0
 
 **Signature:** `termkit\eraseLines(n)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `n`       | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `n`       | `int` |          |             |
 
 ### copy
 
@@ -62,11 +62,11 @@ Copy puts text on the SYSTEM clipboard using OSC 52, reporting whether it was at
 
 **Signature:** `termkit\copy(text) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `text`    | `<invalid>` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `text`    | `string` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### newInlineView
 
@@ -74,11 +74,11 @@ NewInlineView returns a view that redraws its block in place on w, measured thro
 
 **Signature:** `termkit\newInlineView(p) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `p`       | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `p`       | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### inlineViewReset
 
@@ -86,9 +86,9 @@ Reset forgets what is on screen, for a caller that cleared the terminal undernea
 
 **Signature:** `termkit\inlineViewReset(inlineView)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter    | Type        | Optional | Description |
-| ------------ | ----------- | -------- | ----------- |
-| `inlineView` | `<invalid>` |          |             |
+| Parameter    | Type  | Optional | Description |
+| ------------ | ----- | -------- | ----------- |
+| `inlineView` | `int` |          |             |
 
 ### inlineViewLines
 
@@ -96,11 +96,11 @@ Lines reports how many rows the block currently occupies.
 
 **Signature:** `termkit\inlineViewLines(inlineView) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter    | Type        | Optional | Description |
-| ------------ | ----------- | -------- | ----------- |
-| `inlineView` | `<invalid>` |          |             |
+| Parameter    | Type  | Optional | Description |
+| ------------ | ----- | -------- | ----------- |
+| `inlineView` | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### inlineViewClear
 
@@ -108,9 +108,9 @@ Clear erases the block, leaving the terminal as though the view never drew.
 
 **Signature:** `termkit\inlineViewClear(inlineView)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter    | Type        | Optional | Description |
-| ------------ | ----------- | -------- | ----------- |
-| `inlineView` | `<invalid>` |          |             |
+| Parameter    | Type  | Optional | Description |
+| ------------ | ----- | -------- | ----------- |
+| `inlineView` | `int` |          |             |
 
 ### inlineViewPaint
 
@@ -118,12 +118,12 @@ Paint draws frame in place of the previous one, reporting whether it could.
 
 **Signature:** `termkit\inlineViewPaint(inlineView, frame) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter    | Type        | Optional | Description |
-| ------------ | ----------- | -------- | ----------- |
-| `inlineView` | `<invalid>` |          |             |
-| `frame`      | `<invalid>` |          |             |
+| Parameter    | Type     | Optional | Description |
+| ------------ | -------- | -------- | ----------- |
+| `inlineView` | `int`    |          |             |
+| `frame`      | `string` |          |             |
 
-**Returns:** <invalid>
+**Returns:** bool
 
 ### inlineViewFinish
 
@@ -131,9 +131,9 @@ Finish moves off the block so a shell prompt does not land on its last line.
 
 **Signature:** `termkit\inlineViewFinish(inlineView)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter    | Type        | Optional | Description |
-| ------------ | ----------- | -------- | ----------- |
-| `inlineView` | `<invalid>` |          |             |
+| Parameter    | Type  | Optional | Description |
+| ------------ | ----- | -------- | ----------- |
+| `inlineView` | `int` |          |             |
 
 ### resetMouseTracking
 
@@ -141,9 +141,9 @@ ResetMouseTracking turns mouse reporting off unconditionally.
 
 **Signature:** `termkit\resetMouseTracking(p)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `p`       | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `p`       | `int` |          |             |
 
 ### openInput
 
@@ -151,11 +151,11 @@ OpenInput puts in into raw mode, turns on mouse reporting on out, and returns th
 
 **Signature:** `termkit\openInput(p) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `p`       | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `p`       | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### inputClose
 
@@ -163,9 +163,9 @@ Close turns mouse reporting off and restores the terminal.
 
 **Signature:** `termkit\inputClose(input)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `input`   | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `input`   | `int` |          |             |
 
 ### inputRead
 
@@ -173,11 +173,11 @@ Read blocks until the user does something, and reports it.
 
 **Signature:** `termkit\inputRead(input) -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `input`   | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `input`   | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** map[string]any
 
 ### inputCursorPosition
 
@@ -185,11 +185,11 @@ CursorPosition asks the terminal where the cursor is, in absolute 1-based termin
 
 **Signature:** `termkit\inputCursorPosition(input) -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `input`   | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `input`   | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** any
 
 ### fixedProbe
 
@@ -197,12 +197,12 @@ FixedProbe answers as a terminal of the given size, whatever the descriptor.
 
 **Signature:** `termkit\fixedProbe(width, height) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `width`   | `<invalid>` |          |             |
-| `height`  | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `width`   | `int` |          |             |
+| `height`  | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### captureProbe
 
@@ -210,12 +210,12 @@ CaptureProbe models a color-capable terminal for committed recordings.
 
 **Signature:** `termkit\captureProbe(width, height) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `width`   | `<invalid>` |          |             |
-| `height`  | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `width`   | `int` |          |             |
+| `height`  | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### fd
 
@@ -223,7 +223,7 @@ Fd returns the file descriptor backing w, and whether w has one at all.
 
 **Signature:** `termkit\fd() -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** any
 
 ### isTerminalReader
 
@@ -231,11 +231,11 @@ IsTerminalReader reports whether r is a terminal the user is typing at, rather t
 
 **Signature:** `termkit\isTerminalReader(p) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `p`       | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `p`       | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** bool
 
 ### stdinIsTerminal
 
@@ -243,7 +243,7 @@ StdinIsTerminal is [IsTerminalReader] for the process's own standard input.
 
 **Signature:** `termkit\stdinIsTerminal() -> bool` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** bool
 
 ### isTerminalWriter
 
@@ -251,11 +251,11 @@ IsTerminalWriter reports whether w is a terminal according to p.
 
 **Signature:** `termkit\isTerminalWriter(p) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `p`       | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `p`       | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** bool
 
 ### canRender
 
@@ -263,11 +263,11 @@ CanRender reports whether escape sequences may be written to w at all: it must b
 
 **Signature:** `termkit\canRender(p) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `p`       | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `p`       | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** bool
 
 ### wantsHyperlinks
 
@@ -275,11 +275,11 @@ WantsHyperlinks reports whether OSC 8 hyperlinks may be written to w.
 
 **Signature:** `termkit\wantsHyperlinks(p) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `p`       | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `p`       | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** bool
 
 ### utf8Locale
 
@@ -287,7 +287,7 @@ UTF8Locale reports whether the environment claims a UTF-8 character set, checked
 
 **Signature:** `termkit\utf8Locale() -> bool` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** bool
 
 ### wantsUnicode
 
@@ -295,11 +295,11 @@ WantsUnicode reports whether glyphs beyond ASCII may be drawn: the locale is UTF
 
 **Signature:** `termkit\wantsUnicode(p) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `p`       | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `p`       | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** bool
 
 ### wantsColor
 
@@ -307,11 +307,11 @@ WantsColor reports whether output written to w should carry ANSI color: w must b
 
 **Signature:** `termkit\wantsColor(p) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `p`       | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `p`       | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** bool
 
 ### prose
 
@@ -319,10 +319,10 @@ Prose writes sentences to w as one paragraph folded to w's width.
 
 **Signature:** `termkit\prose(p, sentences)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter   | Type        | Optional | Description |
-| ----------- | ----------- | -------- | ----------- |
-| `p`         | `<invalid>` |          |             |
-| `sentences` | `<invalid>` |          |             |
+| Parameter   | Type       | Optional | Description |
+| ----------- | ---------- | -------- | ----------- |
+| `p`         | `int`      |          |             |
+| `sentences` | `[]string` |          |             |
 
 ### proseItem
 
@@ -330,11 +330,11 @@ ProseItem writes label and its sentences as one paragraph whose continuation lin
 
 **Signature:** `termkit\proseItem(p, label, sentences)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter   | Type        | Optional | Description |
-| ----------- | ----------- | -------- | ----------- |
-| `p`         | `<invalid>` |          |             |
-| `label`     | `<invalid>` |          |             |
-| `sentences` | `<invalid>` |          |             |
+| Parameter   | Type       | Optional | Description |
+| ----------- | ---------- | -------- | ----------- |
+| `p`         | `int`      |          |             |
+| `label`     | `string`   |          |             |
+| `sentences` | `[]string` |          |             |
 
 ### makeRaw
 
@@ -342,11 +342,11 @@ MakeRaw switches the terminal behind fd into raw mode, so a reader receives each
 
 **Signature:** `termkit\makeRaw(fd) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `fd`      | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `fd`      | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### rawModeRestore
 
@@ -354,9 +354,9 @@ Restore puts the terminal back the way MakeRaw found it.
 
 **Signature:** `termkit\rawModeRestore(rawMode)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `rawMode` | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `rawMode` | `int` |          |             |
 
 ### lineSpansCopy
 
@@ -364,11 +364,11 @@ SpansCopy returns this line's spans as a fresh slice, normalizing the Text+Style
 
 **Signature:** `termkit\lineSpansCopy(line) -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `line`    | `<invalid>` |          |             |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `line`    | `map[string]any` |          |             |
 
-**Returns:** <invalid>
+**Returns:** any
 
 ### resetScrollMargins
 
@@ -376,9 +376,9 @@ ResetScrollMargins clears any DECSTBM margins on w unconditionally.
 
 **Signature:** `termkit\resetScrollMargins(p)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `p`       | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `p`       | `int` |          |             |
 
 ### newZone
 
@@ -386,11 +386,11 @@ NewZone returns a Zone over w, measured through p.
 
 **Signature:** `termkit\newZone(p) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `p`       | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `p`       | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### stderrZone
 
@@ -398,7 +398,7 @@ StderrZone returns the process-wide owner of standard error's bottom rows.
 
 **Signature:** `termkit\stderrZone() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### releaseStderrZone
 
@@ -412,11 +412,11 @@ WantsColor reports whether this zone's writer should get styled output.
 
 **Signature:** `termkit\zoneWantsColor(zone) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `zone`    | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `zone`    | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** bool
 
 ### resolveZone
 
@@ -424,7 +424,7 @@ ResolveZone returns the Zone that owns w's bottom rows: the process-wide [Stderr
 
 **Signature:** `termkit\resolveZone() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### zoneAcquire
 
@@ -432,12 +432,12 @@ Acquire grants rows at the bottom of the zone, or returns a disabled Lease when 
 
 **Signature:** `termkit\zoneAcquire(zone, rows) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `zone`    | `<invalid>` |          |             |
-| `rows`    | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `zone`    | `int` |          |             |
+| `rows`    | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### leaseEnabled
 
@@ -445,11 +445,11 @@ Enabled reports whether this lease has rows on a real terminal.
 
 **Signature:** `termkit\leaseEnabled(lease) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `lease`   | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `lease`   | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** bool
 
 ### leaseSet
 
@@ -457,12 +457,12 @@ Set replaces this lease's band and repaints the zone, reporting whether the rows
 
 **Signature:** `termkit\leaseSet(lease, rows) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `lease`   | `<invalid>` |          |             |
-| `rows`    | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `lease`   | `int` |          |             |
+| `rows`    | `any` |          |             |
 
-**Returns:** <invalid>
+**Returns:** bool
 
 ### leaseRelease
 
@@ -470,9 +470,9 @@ Release gives this lease's rows back and repaints without them.
 
 **Signature:** `termkit\leaseRelease(lease)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `lease`   | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `lease`   | `int` |          |             |
 
 ### zoneHitTest
 
@@ -480,12 +480,12 @@ HitTest maps an absolute terminal row (the coordinate space a mouse event arrive
 
 **Signature:** `termkit\zoneHitTest(zone, row) -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `zone`    | `<invalid>` |          |             |
-| `row`     | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `zone`    | `int` |          |             |
+| `row`     | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** any
 
 ### leaseWidth
 
@@ -493,11 +493,11 @@ Width reports the columns a row of this lease can use, or 0 when it cannot draw.
 
 **Signature:** `termkit\leaseWidth(lease) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `lease`   | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `lease`   | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### zoneHitSpan
 
@@ -505,13 +505,13 @@ HitSpan reports which keyed span a click at (row, col) landed on.
 
 **Signature:** `termkit\zoneHitSpan(zone, row, col) -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `zone`    | `<invalid>` |          |             |
-| `row`     | `<invalid>` |          |             |
-| `col`     | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `zone`    | `int` |          |             |
+| `row`     | `int` |          |             |
+| `col`     | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** any
 
 ### leaseGrow
 
@@ -519,10 +519,10 @@ Grow enlarges this lease to rows.
 
 **Signature:** `termkit\leaseGrow(lease, rows)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `lease`   | `<invalid>` |          |             |
-| `rows`    | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `lease`   | `int` |          |             |
+| `rows`    | `int` |          |             |
 
 ### leaseRows
 
@@ -530,11 +530,11 @@ Rows reports how many rows this lease holds, for a caller bounds-checking an ind
 
 **Signature:** `termkit\leaseRows(lease) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `lease`   | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `lease`   | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### zoneClose
 
@@ -542,9 +542,9 @@ Close releases every lease and hands the terminal back.
 
 **Signature:** `termkit\zoneClose(zone)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `zone`    | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `zone`    | `int` |          |             |
 
 ### probeIsTerminal
 
@@ -552,12 +552,12 @@ Calls Probe.IsTerminal.
 
 **Signature:** `termkit\probeIsTerminal(probe, fd) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `probe`   | `<invalid>` |          |             |
-| `fd`      | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `probe`   | `int` |          |             |
+| `fd`      | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** bool
 
 ### probeSize
 
@@ -565,12 +565,12 @@ Calls Probe.Size.
 
 **Signature:** `termkit\probeSize(probe, fd) -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `probe`   | `<invalid>` |          |             |
-| `fd`      | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `probe`   | `int` |          |             |
+| `fd`      | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** any
 
 ### sgrBold
 
@@ -578,7 +578,7 @@ SGR parameter codes.
 
 **Signature:** `termkit\sgrBold() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### sgrDim
 
@@ -586,7 +586,7 @@ SGR parameter codes.
 
 **Signature:** `termkit\sgrDim() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### sgrRed
 
@@ -594,7 +594,7 @@ SGR parameter codes.
 
 **Signature:** `termkit\sgrRed() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### sgrGreen
 
@@ -602,7 +602,7 @@ SGR parameter codes.
 
 **Signature:** `termkit\sgrGreen() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### sgrYellow
 
@@ -610,7 +610,7 @@ SGR parameter codes.
 
 **Signature:** `termkit\sgrYellow() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### sgrBlue
 
@@ -618,7 +618,7 @@ SGR parameter codes.
 
 **Signature:** `termkit\sgrBlue() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### sgrBoldRed
 
@@ -626,7 +626,7 @@ SGR parameter codes.
 
 **Signature:** `termkit\sgrBoldRed() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### sgrReverse
 
@@ -634,7 +634,7 @@ SGRReverse swaps foreground and background.
 
 **Signature:** `termkit\sgrReverse() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### sgrDimGreen
 
@@ -642,7 +642,7 @@ SGR parameter codes.
 
 **Signature:** `termkit\sgrDimGreen() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### sgrDimGrey
 
@@ -650,7 +650,7 @@ SGR parameter codes.
 
 **Signature:** `termkit\sgrDimGrey() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### sgrBrightGreen
 
@@ -658,7 +658,7 @@ SGR parameter codes.
 
 **Signature:** `termkit\sgrBrightGreen() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### selectMark
 
@@ -666,7 +666,7 @@ SelectMark marks the row a keypress or click acts on, in every view, so one gest
 
 **Signature:** `termkit\selectMark() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### keyUnknown
 
@@ -674,7 +674,7 @@ The keys magus acts on.
 
 **Signature:** `termkit\keyUnknown() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### keyRune
 
@@ -682,7 +682,7 @@ The keys magus acts on.
 
 **Signature:** `termkit\keyRune() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### keyEnter
 
@@ -690,7 +690,7 @@ The keys magus acts on.
 
 **Signature:** `termkit\keyEnter() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### keyEscape
 
@@ -698,7 +698,7 @@ The keys magus acts on.
 
 **Signature:** `termkit\keyEscape() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### keyTab
 
@@ -706,7 +706,7 @@ The keys magus acts on.
 
 **Signature:** `termkit\keyTab() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### keyBackspace
 
@@ -714,7 +714,7 @@ The keys magus acts on.
 
 **Signature:** `termkit\keyBackspace() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### keyUp
 
@@ -722,7 +722,7 @@ The keys magus acts on.
 
 **Signature:** `termkit\keyUp() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### keyDown
 
@@ -730,7 +730,7 @@ The keys magus acts on.
 
 **Signature:** `termkit\keyDown() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### keyLeft
 
@@ -738,7 +738,7 @@ The keys magus acts on.
 
 **Signature:** `termkit\keyLeft() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### keyRight
 
@@ -746,7 +746,7 @@ The keys magus acts on.
 
 **Signature:** `termkit\keyRight() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### keyCtrlC
 
@@ -754,7 +754,7 @@ The keys magus acts on.
 
 **Signature:** `termkit\keyCtrlC() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### keyCtrlD
 
@@ -762,7 +762,7 @@ The keys magus acts on.
 
 **Signature:** `termkit\keyCtrlD() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### keyCtrlN
 
@@ -770,7 +770,7 @@ KeyCtrlN and KeyCtrlP are the emacs-style down/up an incremental selector is exp
 
 **Signature:** `termkit\keyCtrlN() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### keyCtrlP
 
@@ -778,7 +778,7 @@ The keys magus acts on.
 
 **Signature:** `termkit\keyCtrlP() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### keyCtrlU
 
@@ -786,7 +786,7 @@ KeyCtrlU clears a line of input.
 
 **Signature:** `termkit\keyCtrlU() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### keyPageUp
 
@@ -794,7 +794,7 @@ KeyPageUp and KeyPageDown page a bounded viewport.
 
 **Signature:** `termkit\keyPageUp() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### keyPageDown
 
@@ -802,7 +802,7 @@ The keys magus acts on.
 
 **Signature:** `termkit\keyPageDown() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### mouseNone
 
@@ -810,7 +810,7 @@ The value of MouseNone.
 
 **Signature:** `termkit\mouseNone() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### mouseLeft
 
@@ -818,7 +818,7 @@ The value of MouseLeft.
 
 **Signature:** `termkit\mouseLeft() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### mouseMiddle
 
@@ -826,7 +826,7 @@ The value of MouseMiddle.
 
 **Signature:** `termkit\mouseMiddle() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### mouseRight
 
@@ -834,7 +834,7 @@ The value of MouseRight.
 
 **Signature:** `termkit\mouseRight() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### mouseWheelUp
 
@@ -842,7 +842,7 @@ The value of MouseWheelUp.
 
 **Signature:** `termkit\mouseWheelUp() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### mouseWheelDown
 
@@ -850,7 +850,7 @@ The value of MouseWheelDown.
 
 **Signature:** `termkit\mouseWheelDown() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### eventKey
 
@@ -858,7 +858,7 @@ The value of EventKey.
 
 **Signature:** `termkit\eventKey() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### eventMouse
 
@@ -866,7 +866,7 @@ The value of EventMouse.
 
 **Signature:** `termkit\eventMouse() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### errNotATerminal
 
@@ -874,7 +874,7 @@ ErrNotATerminal is returned by OpenInput when either end is not a terminal.
 
 **Signature:** `termkit\errNotATerminal() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### systemProbe
 
@@ -882,5 +882,5 @@ SystemProbe is the production Probe: it asks the operating system.
 
 **Signature:** `termkit\systemProbe() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/termkit/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 

@@ -20,12 +20,12 @@ without is dirs less drop, in the order dirs holds them.
 
 **Signature:** `figure\without(dirs, drop) -> [magus\Dir]`
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `dirs`    | `<invalid>` |          |             |
-| `drop`    | `<invalid>` |          |             |
+| Parameter | Type          | Optional | Description |
+| --------- | ------------- | -------- | ----------- |
+| `dirs`    | `[magus\Dir]` |          |             |
+| `drop`    | `[magus\Dir]` |          |             |
 
-**Returns:** <invalid>
+**Returns:** [magus\Dir]
 
 ### external
 
@@ -33,15 +33,15 @@ external is an actor the figure draws but no directory holds. look defaults to
 
 **Signature:** `figure\external(name, [sub], [tag], [link], [look]) -> Actor`
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `name`    | `<invalid>` |          |             |
-| `sub`     | `<invalid>` | yes      |             |
-| `tag`     | `<invalid>` | yes      |             |
-| `link`    | `<invalid>` | yes      |             |
-| `look`    | `<invalid>` | yes      |             |
+| Parameter | Type    | Optional | Description |
+| --------- | ------- | -------- | ----------- |
+| `name`    | `str`   |          |             |
+| `sub`     | `str`   | yes      |             |
+| `tag`     | `str`   | yes      |             |
+| `link`    | `str`   | yes      |             |
+| `look`    | `Look?` | yes      |             |
 
-**Returns:** <invalid>
+**Returns:** Actor
 
 ### of
 
@@ -49,15 +49,15 @@ of starts an empty figure. direction defaults to Direction.across.
 
 **Signature:** `figure\of(id, [title], [eyebrow], [desc], [direction]) -> mut Figure`
 
-| Parameter   | Type        | Optional | Description |
-| ----------- | ----------- | -------- | ----------- |
-| `id`        | `<invalid>` |          |             |
-| `title`     | `<invalid>` | yes      |             |
-| `eyebrow`   | `<invalid>` | yes      |             |
-| `desc`      | `<invalid>` | yes      |             |
-| `direction` | `<invalid>` | yes      |             |
+| Parameter   | Type         | Optional | Description |
+| ----------- | ------------ | -------- | ----------- |
+| `id`        | `str`        |          |             |
+| `title`     | `str`        | yes      |             |
+| `eyebrow`   | `str`        | yes      |             |
+| `desc`      | `str`        | yes      |             |
+| `direction` | `Direction?` | yes      |             |
 
-**Returns:** <invalid>
+**Returns:** mut Figure
 
 ### draw
 
@@ -65,13 +65,13 @@ draw lays f out and paints it with theme. anchorHref is a URL template: {path} t
 
 **Signature:** `figure\draw(f, theme, [anchorHref]) -> str`
 
-| Parameter    | Type        | Optional | Description |
-| ------------ | ----------- | -------- | ----------- |
-| `f`          | `<invalid>` |          |             |
-| `theme`      | `<invalid>` |          |             |
-| `anchorHref` | `<invalid>` | yes      |             |
+| Parameter    | Type     | Optional | Description |
+| ------------ | -------- | -------- | ----------- |
+| `f`          | `Figure` |          |             |
+| `theme`      | `Theme`  |          |             |
+| `anchorHref` | `str`    | yes      |             |
 
-**Returns:** <invalid>
+**Returns:** str
 
 ### nodeFact
 
@@ -79,9 +79,9 @@ nodeFact is the line a figure's stamp records for n. A box anchoring a symbol re
 
 **Signature:** `figure\nodeFact(n) -> str`
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `n`       | `<invalid>` |          |             |
+| Parameter | Type   | Optional | Description |
+| --------- | ------ | -------- | ----------- |
+| `n`       | `Node` |          |             |
 
-**Returns:** <invalid>
+**Returns:** str
 

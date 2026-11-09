@@ -20,13 +20,13 @@ Pick blocks until the user selects an item or aborts.
 
 **Signature:** `pick\one(p, items, opts) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/pick/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `p`       | `<invalid>` |          |             |
-| `items`   | `<invalid>` |          |             |
-| `opts`    | `<invalid>` |          |             |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `p`       | `int`            |          |             |
+| `items`   | `[]string`       |          |             |
+| `opts`    | `map[string]any` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### render
 
@@ -34,15 +34,15 @@ RenderPick returns the block a picker WOULD draw for the given state, without op
 
 **Signature:** `pick\render(p, items, opts, filter, cursor) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/pick/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `p`       | `<invalid>` |          |             |
-| `items`   | `<invalid>` |          |             |
-| `opts`    | `<invalid>` |          |             |
-| `filter`  | `<invalid>` |          |             |
-| `cursor`  | `<invalid>` |          |             |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `p`       | `int`            |          |             |
+| `items`   | `[]string`       |          |             |
+| `opts`    | `map[string]any` |          |             |
+| `filter`  | `string`         |          |             |
+| `cursor`  | `int`            |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### errAborted
 
@@ -50,5 +50,5 @@ ErrAborted is returned when the user presses ESC, Ctrl-C, or Ctrl-D.
 
 **Signature:** `pick\errAborted() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/pick/module.go)
 
-**Returns:** <invalid>
+**Returns:** string
 

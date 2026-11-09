@@ -20,11 +20,11 @@ Cols is the display width of s in terminal columns.
 
 **Signature:** `layout\cols(s) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/layout/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `s`       | `<invalid>` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### fit
 
@@ -32,12 +32,12 @@ Fit shortens text to width columns, ending in "..." when it cut.
 
 **Signature:** `layout\fit(text, width) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/layout/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `text`    | `<invalid>` |          |             |
-| `width`   | `<invalid>` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `text`    | `string` |          |             |
+| `width`   | `int`    |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### clip
 
@@ -45,12 +45,12 @@ Clip shortens s to cols columns without an ellipsis, never cutting inside an esc
 
 **Signature:** `layout\clip(s, cols) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/layout/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `s`       | `<invalid>` |          |             |
-| `cols`    | `<invalid>` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
+| `cols`    | `int`    |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### clipBytes
 
@@ -58,12 +58,12 @@ ClipBytes shortens plain text to nBytes bytes, ellipsis included, never splittin
 
 **Signature:** `layout\clipBytes(s, nBytes) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/layout/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `s`       | `<invalid>` |          |             |
-| `nBytes`  | `<invalid>` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
+| `nBytes`  | `int`    |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### columns
 
@@ -71,14 +71,14 @@ Columns starts the metadata of every row one column after the longest label, cap
 
 **Signature:** `layout\columns(rows, width, meta, selected) -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/layout/module.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `rows`     | `<invalid>` |          |             |
-| `width`    | `<invalid>` |          |             |
-| `meta`     | `<invalid>` |          |             |
-| `selected` | `<invalid>` |          |             |
+| Parameter  | Type     | Optional | Description |
+| ---------- | -------- | -------- | ----------- |
+| `rows`     | `any`    |          |             |
+| `width`    | `int`    |          |             |
+| `meta`     | `string` |          |             |
+| `selected` | `string` |          |             |
 
-**Returns:** <invalid>
+**Returns:** any
 
 ### tree
 
@@ -86,13 +86,13 @@ Tree returns the branch drawn before item i of n siblings: a tee for every item 
 
 **Signature:** `layout\tree(i, n, ascii) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/layout/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `i`       | `<invalid>` |          |             |
-| `n`       | `<invalid>` |          |             |
-| `ascii`   | `<invalid>` |          |             |
+| Parameter | Type   | Optional | Description |
+| --------- | ------ | -------- | ----------- |
+| `i`       | `int`  |          |             |
+| `n`       | `int`  |          |             |
+| `ascii`   | `bool` |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### hints
 
@@ -100,13 +100,13 @@ Hints joins hints into one row no wider than width columns.
 
 **Signature:** `layout\hints(hints, width, style) -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/layout/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `hints`   | `<invalid>` |          |             |
-| `width`   | `<invalid>` |          |             |
-| `style`   | `<invalid>` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `hints`   | `any`    |          |             |
+| `width`   | `int`    |          |             |
+| `style`   | `string` |          |             |
 
-**Returns:** <invalid>
+**Returns:** map[string]any
 
 ### maxLabel
 
@@ -114,7 +114,7 @@ MaxLabel caps the column [Columns] aligns metadata to.
 
 **Signature:** `layout\maxLabel() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/layout/module.go)
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### separator
 
@@ -122,5 +122,5 @@ Separator joins metadata items and hints.
 
 **Signature:** `layout\separator() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/layout/module.go)
 
-**Returns:** <invalid>
+**Returns:** string
 

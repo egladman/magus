@@ -20,11 +20,11 @@ Parse INI text into {section: {key: value}}. Entries before the first [section] 
 
 **Signature:** `ini\parse(source) -> map[string]map[string]string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/ini/ini.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `source`  | `<invalid>` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `source`  | `string` |          |             |
 
-**Returns:** <invalid>
+**Returns:** map[string]map[string]string
 
 ### stringify
 
@@ -32,9 +32,9 @@ Render {section: {key: value}} back to INI text. The "" section is written first
 
 **Signature:** `ini\stringify(sections) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/ini/ini.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `sections` | `<invalid>` |          |             |
+| Parameter  | Type                           | Optional | Description |
+| ---------- | ------------------------------ | -------- | ----------- |
+| `sections` | `map[string]map[string]string` |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 

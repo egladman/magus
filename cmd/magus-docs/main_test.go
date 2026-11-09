@@ -41,3 +41,9 @@ func TestSourceLinksNameTheFileNotTheLine(t *testing.T) {
 	}
 	assert.Equal(t, fmt.Sprintf(" - [source](%s/%s)", docs.RepoBlob, file), methodSourceLink(std.Method{Impl: std.FsGlob}))
 }
+
+func TestRenderedTypesAreNeverInvalid(t *testing.T) {
+	for _, m := range loadModules() {
+		assert.NotContains(t, renderModule(m), "<invalid>", "module %s", m.Name)
+	}
+}

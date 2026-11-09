@@ -22,9 +22,9 @@ bounds caps the context an economy worker may reach. It caps no tier's live jobs
 
 | Parameter | Type        | Optional | Description |
 | --------- | ----------- | -------- | ----------- |
-| `tier`    | `<invalid>` |          |             |
+| `tier`    | `ModelTier` |          |             |
 
-**Returns:** <invalid>
+**Returns:** magus\ModelTierBounds
 
 ### skills
 
@@ -34,7 +34,7 @@ skills is the skill variant a tier's workers load. Economy gets the full bodies:
 
 | Parameter | Type        | Optional | Description |
 | --------- | ----------- | -------- | ----------- |
-| `tier`    | `<invalid>` |          |             |
+| `tier`    | `ModelTier` |          |             |
 
-**Returns:** <invalid>
+**Returns:** magus\SkillVariant
 

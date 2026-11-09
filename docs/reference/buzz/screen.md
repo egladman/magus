@@ -20,12 +20,12 @@ New returns a Terminal of the given size, cursor at the top left and the whole g
 
 **Signature:** `screen\new(width, height) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `width`   | `<invalid>` |          |             |
-| `height`  | `<invalid>` |          |             |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `width`   | `int` |          |             |
+| `height`  | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### terminalFd
 
@@ -33,11 +33,11 @@ Fd and Write let a test hand a Terminal to code that expects one, so it drives t
 
 **Signature:** `screen\terminalFd(terminal) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `terminal` | `<invalid>` |          |             |
+| Parameter  | Type  | Optional | Description |
+| ---------- | ----- | -------- | ----------- |
+| `terminal` | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### terminalWrite
 
@@ -45,12 +45,12 @@ Calls Terminal.Write.
 
 **Signature:** `screen\terminalWrite(terminal, p) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `terminal` | `<invalid>` |          |             |
-| `p`        | `<invalid>` |          |             |
+| Parameter  | Type     | Optional | Description |
+| ---------- | -------- | -------- | ----------- |
+| `terminal` | `int`    |          |             |
+| `p`        | `[]byte` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### terminalRows
 
@@ -58,11 +58,11 @@ Rows renders the grid as right-trimmed text, one string per terminal row.
 
 **Signature:** `screen\terminalRows(terminal) -> []string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `terminal` | `<invalid>` |          |             |
+| Parameter  | Type  | Optional | Description |
+| ---------- | ----- | -------- | ----------- |
+| `terminal` | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** []string
 
 ### terminalString
 
@@ -70,11 +70,11 @@ String renders the whole screen, for a failure message that shows what the user 
 
 **Signature:** `screen\terminalString(terminal) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `terminal` | `<invalid>` |          |             |
+| Parameter  | Type  | Optional | Description |
+| ---------- | ----- | -------- | ----------- |
+| `terminal` | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### terminalRow
 
@@ -82,12 +82,12 @@ Row returns one 1-based row's text.
 
 **Signature:** `screen\terminalRow(terminal, n) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `terminal` | `<invalid>` |          |             |
-| `n`        | `<invalid>` |          |             |
+| Parameter  | Type  | Optional | Description |
+| ---------- | ----- | -------- | ----------- |
+| `terminal` | `int` |          |             |
+| `n`        | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### terminalStyleAt
 
@@ -95,13 +95,13 @@ StyleAt reports the SGR parameters in force at a cell, so a test can assert that
 
 **Signature:** `screen\terminalStyleAt(terminal, row, col) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `terminal` | `<invalid>` |          |             |
-| `row`      | `<invalid>` |          |             |
-| `col`      | `<invalid>` |          |             |
+| Parameter  | Type  | Optional | Description |
+| ---------- | ----- | -------- | ----------- |
+| `terminal` | `int` |          |             |
+| `row`      | `int` |          |             |
+| `col`      | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### terminalSnapshot
 
@@ -109,11 +109,11 @@ Snapshot returns an independent copy of the screen as it is right now.
 
 **Signature:** `screen\terminalSnapshot(terminal) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `terminal` | `<invalid>` |          |             |
+| Parameter  | Type  | Optional | Description |
+| ---------- | ----- | -------- | ----------- |
+| `terminal` | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### terminalLastUsedRow
 
@@ -121,11 +121,11 @@ LastUsedRow returns the 1-based row of the last row with any text on it, or 0 wh
 
 **Signature:** `screen\terminalLastUsedRow(terminal) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `terminal` | `<invalid>` |          |             |
+| Parameter  | Type  | Optional | Description |
+| ---------- | ----- | -------- | ----------- |
+| `terminal` | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### terminalCrop
 
@@ -133,12 +133,12 @@ Crop returns a copy holding only the first rows rows.
 
 **Signature:** `screen\terminalCrop(terminal, rows) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `terminal` | `<invalid>` |          |             |
-| `rows`     | `<invalid>` |          |             |
+| Parameter  | Type  | Optional | Description |
+| ---------- | ----- | -------- | ----------- |
+| `terminal` | `int` |          |             |
+| `rows`     | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### terminalCursor
 
@@ -146,11 +146,11 @@ Cursor reports where the cursor is, in 1-based terminal coordinates.
 
 **Signature:** `screen\terminalCursor(terminal) -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `terminal` | `<invalid>` |          |             |
+| Parameter  | Type  | Optional | Description |
+| ---------- | ----- | -------- | ----------- |
+| `terminal` | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** any
 
 ### terminalScrollRegion
 
@@ -158,11 +158,11 @@ ScrollRegion reports the rows the terminal will scroll, 1-based inclusive.
 
 **Signature:** `screen\terminalScrollRegion(terminal) -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `terminal` | `<invalid>` |          |             |
+| Parameter  | Type  | Optional | Description |
+| ---------- | ----- | -------- | ----------- |
+| `terminal` | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** any
 
 ### terminalScrolled
 
@@ -170,11 +170,11 @@ Scrolled reports how many lines have been pushed off the top of the scroll regio
 
 **Signature:** `screen\terminalScrolled(terminal) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `terminal` | `<invalid>` |          |             |
+| Parameter  | Type  | Optional | Description |
+| ---------- | ----- | -------- | ----------- |
+| `terminal` | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### terminalFindRow
 
@@ -182,12 +182,12 @@ FindRow returns the 1-based row whose text contains substr, or 0.
 
 **Signature:** `screen\terminalFindRow(terminal, substr) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `terminal` | `<invalid>` |          |             |
-| `substr`   | `<invalid>` |          |             |
+| Parameter  | Type     | Optional | Description |
+| ---------- | -------- | -------- | ----------- |
+| `terminal` | `int`    |          |             |
+| `substr`   | `string` |          |             |
 
-**Returns:** <invalid>
+**Returns:** int
 
 ### terminalTrailingSpaceRows
 
@@ -195,11 +195,11 @@ TrailingSpaceRows returns the 1-based rows whose last written cell is a space.
 
 **Signature:** `screen\terminalTrailingSpaceRows(terminal) -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `terminal` | `<invalid>` |          |             |
+| Parameter  | Type  | Optional | Description |
+| ---------- | ----- | -------- | ----------- |
+| `terminal` | `int` |          |             |
 
-**Returns:** <invalid>
+**Returns:** any
 
 ### terminalSvg
 
@@ -207,12 +207,12 @@ SVG renders what the terminal currently shows as a standalone SVG picture.
 
 **Signature:** `screen\terminalSvg(terminal, opts) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter  | Type        | Optional | Description |
-| ---------- | ----------- | -------- | ----------- |
-| `terminal` | `<invalid>` |          |             |
-| `opts`     | `<invalid>` |          |             |
+| Parameter  | Type             | Optional | Description |
+| ---------- | ---------------- | -------- | ----------- |
+| `terminal` | `int`            |          |             |
+| `opts`     | `map[string]any` |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### variantPath
 
@@ -220,12 +220,12 @@ VariantPath names the file one variant of a picture is written to, given the uns
 
 **Signature:** `screen\variantPath(path, suffix) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `path`    | `<invalid>` |          |             |
-| `suffix`  | `<invalid>` |          |             |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `path`    | `string` |          |             |
+| `suffix`  | `string` |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### animate
 
@@ -233,13 +233,13 @@ Animate renders a sequence of frames as one self-contained animated SVG.
 
 **Signature:** `screen\animate(frames, holds, opts) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-| Parameter | Type        | Optional | Description |
-| --------- | ----------- | -------- | ----------- |
-| `frames`  | `<invalid>` |          |             |
-| `holds`   | `<invalid>` |          |             |
-| `opts`    | `<invalid>` |          |             |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `frames`  | `any`            |          |             |
+| `holds`   | `any`            |          |             |
+| `opts`    | `map[string]any` |          |             |
 
-**Returns:** <invalid>
+**Returns:** string
 
 ### darkTheme
 
@@ -247,7 +247,7 @@ DarkTheme is the default: a modern terminal profile rather than the sixteen ANSI
 
 **Signature:** `screen\darkTheme() -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-**Returns:** <invalid>
+**Returns:** map[string]any
 
 ### lightTheme
 
@@ -255,7 +255,7 @@ LightTheme renders on a page that is not dark.
 
 **Signature:** `screen\lightTheme() -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-**Returns:** <invalid>
+**Returns:** map[string]any
 
 ### themeVariants
 
@@ -263,5 +263,5 @@ ThemeVariants is every palette a committed picture ships in.
 
 **Signature:** `screen\themeVariants() -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/screen/module.go)
 
-**Returns:** <invalid>
+**Returns:** any
 
