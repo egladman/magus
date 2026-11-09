@@ -696,6 +696,32 @@ func benchRun(b *testing.B, chunk *vmpackage.Chunk, env *vmpackage.Env) {
 	}
 }
 
+// BenchmarkInvokeSites runs chunks that reach thousands of inline-cache sites
+// on a fresh VM. Invoke fills the icache. Member fills the mcache from a
+// function body, since Run pre-sizes it only for the top-level chunk.
+func BenchmarkInvokeSites(b *testing.B) {
+	const sites = 2000
+	b.Run("Invoke", func(b *testing.B) {
+		var src strings.Builder
+		src.WriteString("var xs = mut [];\n")
+		for i := range sites {
+			fmt.Fprintf(&src, "xs.append(%d);\n", i)
+		}
+		chunk, env := benchSetup(b, "", src.String())
+		benchRun(b, chunk, env)
+	})
+	b.Run("Member", func(b *testing.B) {
+		var fn strings.Builder
+		fn.WriteString("object P { x: int }\nfun reads(p: P) > int {\n    var s = 0;\n")
+		for range sites {
+			fn.WriteString("    s = s + p.x;\n")
+		}
+		fn.WriteString("    return s;\n}\n")
+		chunk, env := benchSetup(b, fn.String(), "final __r = reads(P{ x = 1 });")
+		benchRun(b, chunk, env)
+	})
+}
+
 // BenchmarkFib measures recursive fibonacci(30) — call/return overhead, int
 // arithmetic, and conditional branching.
 func BenchmarkFib(b *testing.B) {
