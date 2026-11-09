@@ -41,7 +41,8 @@ export fun golangci_lint(ctx: magus\Context, args: [str]) > void !> any {
     golangci\readLibFiles(ctx);
     golangci\lintLib("libs/text", ctx.hasCharm("rw"));
 }
-export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }
+// Compiles every package; the module root holds no Go files.
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx, {"args": ["./..."]}); }
 // Runs the suite; the root merges coverage.out into its coverage badge.
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles(["coverage.out"]);

@@ -14,5 +14,5 @@ Query: `magus query project=libs/text`
 | `ci`             | The anchor `magus affected ci` keys off.                               |
 | `index-generate` | Renders MAGUS.md, this project's target catalog.                       |
 | `lint`           |                                                                        |
-| `build`          |                                                                        |
+| `build`          | Compiles every package; the module root holds no Go files.             |
 | `test`           | Runs the suite; the root merges coverage.out into its coverage badge.  |
