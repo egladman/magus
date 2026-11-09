@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/gen/typestest"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -820,7 +821,7 @@ func (s *NarrowPushSuite) gitCalls() func() []string {
 	calls := filepath.Join(bin, "calls")
 	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' \"$*\" >> %q\nexec %q \"$@\"\n", calls, real)
 	s.Require().NoError(os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755))
-	s.T().Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	s.T().Setenv("PATH", fmt.Sprintf("%s%c%s", bin, os.PathListSeparator, os.Getenv("PATH")))
 	return func() []string {
 		b, err := os.ReadFile(calls)
 		if os.IsNotExist(err) {
@@ -870,6 +871,34 @@ func (s *NarrowPushSuite) TestAPushJudgmentReadsTheStoreOnceAndGitOnceForEveryGa
 		}
 	}
 	s.Len(walks, 1)
+}
+
+// A git process per changed file spent a 733-file branch's whole deadline.
+func (s *NarrowPushSuite) TestAPushOfManyChangedFilesIsWeighedBeforeTheDeadline() {
+	s.gateAtFirstCommit()
+	files := map[string]string{}
+	for i := range 400 {
+		files[fmt.Sprintf("f%03d.go", i)] = fmt.Sprintf("package a\n\nvar F%d = %d\n", i, i)
+	}
+	head := s.repo.Commit("many", files)
+	s.passed(strings.Repeat("e", 64), "go-test", head)
+	s.deps.Revision = func(context.Context, string, string) string { return head[:12] }
+	deadline, cancel := context.WithTimeout(s.T().Context(), time.Second)
+	defer cancel()
+	ctx := withPhaseLog(deadline, trail.Phase{})
+
+	ev := pushCoverage(ctx, s.deps, s.at, "git push", DialectBash, s.repo.Root())
+	s.Require().NoError(deadline.Err(), "the judgment ran into its deadline")
+	s.Equal(gateNarrow, ev.cover)
+	s.Contains(ev.admitted(), "each of the 400 files")
+	var phases []string
+	for _, p := range judgmentPhases(ctx).finished() {
+		phases = append(phases, p.Name)
+	}
+	s.Equal([]string{
+		phasePushRevision, phasePushGateHistory, phasePushRunLog, phasePushLineage, phasePushWaiver,
+		phaseInspect, phasePushNarrow, phasePushMoves, phasePushCoverage,
+	}, phases)
 }
 
 func (s *NarrowPushSuite) TestAnUncoveredFileIsRefusedByName() {
