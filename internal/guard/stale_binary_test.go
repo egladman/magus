@@ -165,7 +165,7 @@ func TestPathMagusInAFromSourceCheckoutJudgesNothing(t *testing.T) {
 
 	v := judgeUnloaded(ctx, deps, "touch notes.txt")
 	assert.Equal(t, decisionDeny, v.Decision, v.Reason)
-	assert.Contains(t, v.Reason, BootstrapLine(root))
+	assert.Contains(t, v.Reason, ownBootstrapLine(root))
 }
 
 // No rule showing or recorded still denies a change while nothing loads.
