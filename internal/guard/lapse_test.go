@@ -205,7 +205,7 @@ func (s *LapsePersonOnlySuite) TestAnEditDeletingALedgerLineDegrades() {
 }
 
 func (s *LapsePersonOnlySuite) TestAnAgentGrantIsRefusedByItsRule() {
-	for i, v := range s.lapses(s.commandRequest("magus job grant w --rule lease-write"), func(context.Context) {}) {
+	for i, v := range s.lapses(s.commandRequest("magus job grant w lease-write"), func(context.Context) {}) {
 		s.Equal(verdictWithRule(decisionDeny, string(denyRuleGrantIsAPersons)), unworded(v), "lapse %d", i+1)
 	}
 }

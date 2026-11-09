@@ -156,6 +156,7 @@ const (
 	denyRuleInterpreterRewrite denyRuleName = "interpreter-rewrite"
 	denyRuleConflictRewrite    denyRuleName = "conflict-rewrite"
 	denyRuleUnknownEnv         denyRuleName = "unknown-env"
+	denyRuleUnknownMagusArgv   denyRuleName = "unknown-magus-argv"
 
 	// Not shell rules: one fires on a SPAWN and one on a FILE WRITE, and neither reaches a
 	// shell parser. They live in this block because denyRuleName is the one namespace every
@@ -2970,6 +2971,11 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	}
 	if name, msg, ok := misconfiguredMagusEnv(command, d); ok {
 		if v, ok := held.ends(deps, ShellVerdict{Deny: denyMisconfiguredMagusEnv(msg), Rule: denyRule{Name: denyRuleUnknownEnv, Arg: name}}); ok {
+			return v
+		}
+	}
+	if v, ok := unknownMagusArgv(deps, work); ok {
+		if v, ok := held.ends(deps, v); ok {
 			return v
 		}
 	}
