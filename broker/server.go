@@ -1,10 +1,10 @@
 package broker
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"io"
 	"log/slog"
 	"net"
