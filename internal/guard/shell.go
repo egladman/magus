@@ -2388,24 +2388,23 @@ func stageAllRemedy(command string, d Dialect) (string, []types.NextStep) {
 // process by pid or through magus's pool and job rows, which a caller's own backgrounded
 // command never needs: the host announces that one's end.
 func foreignWaitFires(command string, d Dialect) bool {
-	f, err := parseFile(command, d)
-	if err != nil {
-		return false
-	}
 	found := false
-	syntax.Walk(f, func(n syntax.Node) bool {
-		loop, ok := n.(*syntax.WhileClause)
-		if found || !ok || !runsSleeper(loop.Do, d) {
-			return !found
-		}
-		for _, cond := range loop.Cond {
-			syntax.Walk(cond, func(m syntax.Node) bool {
-				if call, ok := m.(*syntax.CallExpr); ok {
-					found = found || slices.ContainsFunc(peelWrappers(literalWords(call.Args), d), probesForeignProcess)
-				}
+	eachScript(command, d, func(sf *scriptFile) bool {
+		syntax.Walk(sf.file, func(n syntax.Node) bool {
+			loop, ok := n.(*syntax.WhileClause)
+			if found || !ok || !runsSleeper(loop.Do, d) {
 				return !found
-			})
-		}
+			}
+			for _, cond := range loop.Cond {
+				syntax.Walk(cond, func(m syntax.Node) bool {
+					if call, ok := m.(*syntax.CallExpr); ok {
+						found = found || slices.ContainsFunc(peelWrappers(literalWords(call.Args), d), probesForeignProcess)
+					}
+					return !found
+				})
+			}
+			return !found
+		})
 		return !found
 	})
 	return found
