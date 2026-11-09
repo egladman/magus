@@ -61,7 +61,9 @@ var listTexts = map[Rule]ruleText{
 			"name, so each item is also tagged after a subject (\"it cut the cost\"), and that past reading " +
 			"counts when more items read as past than as any other tense. Tense is judged per list, so a " +
 			"list of current work may stay in the present while " +
-			"another list is past. Precision is unmeasured, with no labeled firing yet, so it ships off.",
+			"another list is past. It judges the form, never the word: items that all open on one verb " +
+			"pass here and are repeated-opener's to report. Precision is unmeasured, with no labeled firing " +
+			"yet, so it ships off.",
 	},
 	RuleRepeatedOpener: {
 		code:      "PRF1062",
@@ -69,7 +71,9 @@ var listTexts = map[Rule]ruleText{
 		catches:   "a bulleted list of 5 or more items where one opening word starts 70% of them",
 		why: "A list where most items open on one word (\"Wrote\" on 9 of 12 bullets) makes the reader skim " +
 			"past the word to find what each item says, and reads as a template. list-parallel asks the " +
-			"items to share a shape; this asks them not to share a word. The threshold is where the hand-" +
+			"items to share a shape; this asks them not to share a word, so a list of different past-tense " +
+			"verbs passes both, and one verb on every item passes list-parallel and is reported here. " +
+			"uniform, with a voice, also judges the items' lengths. The threshold is where the hand-" +
 			"labeled lists in its case file separate: every hit holds 4 of 5 or more, every pass at most 3 of " +
 			"5 or 4 of 6, and no list under 5 items is a hit. A numbered list, an article opener (a, an, the) " +
 			"and an item that is only code or a link are not judged. The cases are invented and no labeling " +

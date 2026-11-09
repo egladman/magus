@@ -60,3 +60,15 @@ A list item that opens with another word class, or another verb tense, than the 
 - Cut the release.
 - Set the flag.
 - Open the page.
+-- pass/changelog whole --
+- Rewrote the config parser.
+- Cut the build time in half.
+- Moved the loader into its own package.
+- Dropped the legacy flag.
+- Fixed the race on the lock.
+-- pass/changelog whole --
+- Fixed the race on the lock.
+- Fixed the leak in the watcher.
+- Fixed the exit code on a bad flag.
+- Fixed the docs for the cache.
+- Fixed a typo in the guide.

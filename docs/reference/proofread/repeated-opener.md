@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A list where most items open on one word ("Wrote" on 9 of 12 bullets) makes the reader skim past the word to find what each item says, and reads as a template. list-parallel asks the items to share a shape; this asks them not to share a word. The threshold is where the hand-labeled lists in its case file separate: every hit holds 4 of 5 or more, every pass at most 3 of 5 or 4 of 6, and no list under 5 items is a hit. A numbered list, an article opener (a, an, the) and an item that is only code or a link are not judged. The cases are invented and no labeling round has read a firing, so it ships off.
+A list where most items open on one word ("Wrote" on 9 of 12 bullets) makes the reader skim past the word to find what each item says, and reads as a template. list-parallel asks the items to share a shape; this asks them not to share a word, so a list of different past-tense verbs passes both, and one verb on every item passes list-parallel and is reported here. uniform, with a voice, also judges the items' lengths. The threshold is where the hand-labeled lists in its case file separate: every hit holds 4 of 5 or more, every pass at most 3 of 5 or 4 of 6, and no list under 5 items is a hit. A numbered list, an article opener (a, an, the) and an item that is only code or a link are not judged. The cases are invented and no labeling round has read a firing, so it ships off.
 
 ## Default decision
 

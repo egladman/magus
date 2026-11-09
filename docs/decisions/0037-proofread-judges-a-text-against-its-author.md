@@ -106,6 +106,13 @@ item opens with a verb in one tense) and keeps rewarding it. `repeated-opener` a
 `uniform` check the words and lengths. A list of past-tense verbs that are different
 verbs passes both.
 
+`uniform` (PRF1041) reads the three spreads the paired run kept: item length spread
+and item opener share, which it could not measure, and opener part-of-speech entropy,
+the one lead. It ships off, as a rule with no labelled firing does. The author's range
+comes from 200-word windows, and a short text measures a lower opener entropy than a
+window of the same author's text. That bias leans `uniform` toward short texts until
+part 6 judges them as a set.
+
 ### 5. Protected spans
 
 `-o json` gains `protected` spans, and the text output notes them: a rare proper noun,
@@ -124,7 +131,7 @@ together on stdin, as one set.
 | Spread measures in `Shape`; per-feature percentiles in `VoiceStats`; `proofread-voice/4`   | done                       |
 | `voice eval --paired`, and the calibration re-run on paired text                           | done                       |
 | Voice budgets for the counting rules, `triad` first                                        | in progress (`triad` done) |
-| `uniform`; `list-parallel` checks grammatical shape and `repeated-opener` checks the words | planned                    |
+| `uniform`; `list-parallel` checks grammatical shape and `repeated-opener` checks the words | done (`uniform` ships off) |
 | Protected spans in `-o json` and the text output; a fix that covers one is advise at most  | planned                    |
 | Short texts judged as a set: the items of one list, or the texts passed together on stdin  | planned                    |
 

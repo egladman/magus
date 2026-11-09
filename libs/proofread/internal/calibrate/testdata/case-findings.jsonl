@@ -1578,6 +1578,8 @@
 {"file":"list-parallel.txtar","line":45,"kind":"changelog","defaults":[{"rule":"list-parallel","decision":"deny","line":4,"column":3,"match":"Adds"}],"house":[{"rule":"list-parallel","decision":"deny","line":4,"column":3,"match":"Adds"}]}
 {"file":"list-parallel.txtar","line":50,"kind":"changelog","defaults":[],"house":[]}
 {"file":"list-parallel.txtar","line":59,"kind":"guide","defaults":[],"house":[]}
+{"file":"list-parallel.txtar","line":64,"kind":"changelog","defaults":[],"house":[]}
+{"file":"list-parallel.txtar","line":70,"kind":"changelog","defaults":[],"house":[{"rule":"repeated-opener","decision":"deny","line":1,"column":3,"match":"Fixed"}]}
 {"file":"local-branch.txtar","line":3,"kind":"change-description","defaults":[{"rule":"local-branch","decision":"deny","line":4,"column":16,"match":"feat/great-pasteur-51bbcb"}],"house":[{"rule":"local-branch","decision":"deny","line":4,"column":16,"match":"feat/great-pasteur-51bbcb"}]}
 {"file":"local-branch.txtar","line":4,"kind":"change-description","defaults":[{"rule":"local-branch","decision":"deny","line":4,"column":8,"match":"latex-spell"}],"house":[{"rule":"local-branch","decision":"deny","line":4,"column":8,"match":"latex-spell"}]}
 {"file":"local-branch.txtar","line":6,"kind":"commit-message","defaults":[{"rule":"local-branch","decision":"deny","line":1,"column":8,"match":"embed-index"}],"house":[{"rule":"local-branch","decision":"deny","line":1,"column":8,"match":"embed-index"}]}
@@ -1992,6 +1994,8 @@
 {"file":"repeated-opener.txtar","line":169,"kind":"changelog","defaults":[],"house":[]}
 {"file":"repeated-opener.txtar","line":175,"kind":"change-description","defaults":[{"rule":"lead-context","decision":"deny","line":2,"column":1,"match":"- Built a new cache layer."}],"house":[{"rule":"lead-context","decision":"deny","line":2,"column":1,"match":"- Built a new cache layer."}]}
 {"file":"repeated-opener.txtar","line":182,"kind":"guide","defaults":[],"house":[]}
+{"file":"repeated-opener.txtar","line":188,"kind":"changelog","defaults":[],"house":[]}
+{"file":"repeated-opener.txtar","line":194,"kind":"changelog","defaults":[{"rule":"repeated-opener","decision":"deny","line":1,"column":3,"match":"Fixed"}],"house":[{"rule":"repeated-opener","decision":"deny","line":1,"column":3,"match":"Fixed"}]}
 {"file":"reply-opener.txtar","line":4,"kind":"review-reply","defaults":[{"rule":"reply-opener","decision":"advise","line":1,"column":1,"match":"No,","weight":0.37}],"house":[{"rule":"reply-opener","decision":"deny","line":1,"column":1,"match":"No,"},{"rule":"decline-no-reason","decision":"deny","line":1,"column":1,"match":"No,"}]}
 {"file":"reply-opener.txtar","line":5,"kind":"review-reply","defaults":[{"rule":"reply-opener","decision":"advise","line":1,"column":20,"match":"As I said","weight":0.37}],"house":[{"rule":"reply-opener","decision":"deny","line":1,"column":20,"match":"As I said"},{"rule":"impatience","decision":"deny","line":1,"column":20,"match":"As I said"}]}
 {"file":"reply-opener.txtar","line":6,"kind":"review-reply","defaults":[{"rule":"reply-opener","decision":"advise","line":1,"column":1,"match":"Wrong","weight":0.37},{"rule":"nonspecific","decision":"advise","line":1,"column":1,"match":"Wrong","weight":0.29}],"house":[{"rule":"reply-opener","decision":"deny","line":1,"column":1,"match":"Wrong"},{"rule":"nonspecific","decision":"deny","line":1,"column":1,"match":"Wrong"}]}
@@ -2635,6 +2639,8 @@
 {"file":"unbacked-done.txtar","line":69,"kind":"change-description","defaults":[],"house":[]}
 {"file":"unbacked-done.txtar","line":70,"kind":"change-description","defaults":[],"house":[]}
 {"file":"unbacked-done.txtar","line":71,"kind":"change-description","defaults":[],"house":[]}
+{"file":"uniform.txtar","line":204,"kind":"change-description","defaults":[{"rule":"lead-context","decision":"deny","line":3},{"rule":"uniform","decision":"deny","line":0}],"house":[{"rule":"lead-context","decision":"deny","line":3},{"rule":"repeated-opener","decision":"deny","line":5,"column":3,"match":"Updated"},{"rule":"uniform","decision":"deny","line":0}]}
+{"file":"uniform.txtar","line":214,"kind":"change-description","defaults":[],"house":[]}
 {"file":"vague.txtar","line":4,"kind":"reference","defaults":[{"rule":"vague","decision":"deny","line":1,"column":1,"match":"The stakes are high"}],"house":[{"rule":"vague","decision":"deny","line":1,"column":1,"match":"The stakes are high"}]}
 {"file":"vague.txtar","line":5,"kind":"reference","defaults":[{"rule":"vague","decision":"deny","line":1,"column":1,"match":"Experts argue"}],"house":[{"rule":"vague","decision":"deny","line":1,"column":1,"match":"Experts argue"}]}
 {"file":"vague.txtar","line":6,"kind":"reference","defaults":[{"rule":"vague","decision":"deny","line":1,"column":1,"match":"The future looks bright"}],"house":[{"rule":"vague","decision":"deny","line":1,"column":1,"match":"The future looks bright"}]}

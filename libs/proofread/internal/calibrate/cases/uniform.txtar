@@ -1,0 +1,222 @@
+Cases written with the rule (2026-11-09), not drawn from a labeling round.
+An invented author whose change descriptions hold lists of uneven items that
+open on different words. The author sections build the voice; a text is held
+to that author's own range of item length, item openers and sentence openers.
+-- author/change-description whole --
+fix(cache): keep the key stable
+
+Two workers raced on the key, and the loser wrote a stale entry.
+
+- Sorted the inputs before hashing.
+- The lock now covers the read as well as the write, which closes the window where a second worker could see half an entry.
+- Tests.
+- I left the old key format readable for one release so nobody has to wipe their cache by hand.
+-- author/change-description whole --
+feat(cli): read the token from the environment
+
+People kept pasting tokens into the config file and then committing it by accident.
+
+- The CLI checks the flag, then the environment, then the config file.
+- Docs for all three.
+- If the config file holds a token, it prints a warning that names the file and the line.
+- Removed the old prompt.
+-- author/change-description whole --
+fix(parser): accept tabs in the config file
+
+A user pasted a snippet from the docs and got an error about line two that made no sense.
+
+- Tabs and spaces both count as indentation now.
+- Mixed indentation in one block is still an error, but the message says which lines disagree.
+- New test file.
+- The docs snippet used tabs, so I changed it to spaces anyway.
+-- author/change-description whole --
+perf(build): run lint and tests in parallel
+
+A full CI run took about nine minutes, and most of it was waiting.
+
+- Lint, tests and the type check run side by side.
+- Caching the module download saves another minute on a cold runner.
+- I kept the deploy step serial on purpose since it touches shared state.
+- Timings are in the PR comments.
+-- author/change-description whole --
+fix(upload): pick up where a dropped link left off
+
+Big uploads over slow links failed and started over from zero.
+
+- The code to pick up where it left off was there all along; a typo in the offset check meant it never ran.
+- Added a test that drops the link halfway.
+- Progress shows the offset it restarted from now.
+- Nothing changes for small files.
+-- author/change-description whole --
+docs: rewrite the setup guide
+
+I tried the guide fresh on three machines and hit a different wall on each one.
+
+- macOS needed one more package than the guide said.
+- Linux was fine.
+- The Windows steps were missing a whole section about long paths, which is why the build failed with a confusing error about a missing file that was right there.
+- Screenshots are gone; they went stale every release.
+-- author/change-description whole --
+fix(invoice): count refunds once
+
+A refund issued on the same day as the charge was counted twice in the totals.
+
+- Totals read refunds from the ledger instead of the order.
+- Discounts and taxes were already right, so I left them alone.
+- One migration fixes the three invoices this hit.
+- Test.
+-- author/change-description whole --
+feat(search): remember filters
+
+Coming back to the search page after lunch meant setting everything up again.
+
+- Filters, sort order and the last query are kept per user.
+- They clear when you sign out.
+- I stored them in local storage rather than the server because nobody asked to share them across devices.
+- A reset button.
+-- author/change-description whole --
+chore: pin the toolchain
+
+CI and laptops disagreed about formatting about once a week.
+
+- The compiler, linter and formatter versions live in one file.
+- The bootstrap script reads it.
+- Anyone on an older formatter gets one big diff the first time; after that it settles.
+- Renovate bumps the file.
+-- author/change-description whole --
+fix(backup): check space before starting
+
+The nightly backup failed halfway when the disk filled and left a partial archive.
+
+- It checks free space, file count and a checksum first.
+- A partial archive from an earlier failure is deleted on the next run instead of being kept forever.
+- Alerts name the host.
+- I did not touch the restore path.
+-- author/change-description whole --
+fix(menu): stop the footer covering the menu on phones
+
+Below about four hundred pixels the footer slid over the menu, which is most phones held upright.
+
+- The footer is in the page flow again instead of fixed.
+- Search moved into the menu on small screens.
+- I checked it on two phones and the simulator.
+- No change on desktop.
+-- author/change-description whole --
+feat(health): report each dependency
+
+Ops wanted to know which dependency was down without reading logs at three in the morning.
+
+- The health check reports the database, the queue and the cache on their own lines.
+- A slow dependency shows its latency.
+- The overall status is the worst of the three.
+- Dashboards read the new fields; the old single field stays for a release.
+-- author/change-description whole --
+fix(sync): skip hidden and lock files
+
+One user lost an editor swap file when the sync deleted it on the other machine.
+
+- Hidden files, lock files and temp files are never synced.
+- The ignore list is in the settings if someone really wants one of them.
+- Test for each pattern.
+- I wrote to the user who reported it.
+-- author/change-description whole --
+chore(email): shorten the account emails
+
+People told us they skimmed past the long versions anyway.
+
+- Welcome, reset and invite emails are a few lines each.
+- The reset link expires in an hour, and the email says so.
+- Plain text versions match the HTML ones now; they had drifted.
+- Legal footer unchanged.
+-- author/change-description whole --
+refactor(telemetry): one interface for logs and metrics
+
+Swapping the vendor would have meant touching about forty files.
+
+- Logging, metrics and tracing sit behind one small interface.
+- The vendor adapter is one file.
+- Nothing calls the vendor library directly any more; a lint rule keeps it that way.
+- Behavior is the same, so no changelog entry.
+-- author/change-description whole --
+fix(dates): parse two-digit years
+
+A user in Sydney sent a really clear example of a date that came out a century off.
+
+- Two-digit years read as this century unless that lands more than ten years ahead.
+- Time zones are applied before the day is picked, which fixes the off-by-one near midnight.
+- Leap years had a test already; it was just wrong.
+- Changelog entry.
+-- author/change-description whole --
+feat(import): read JSON lines
+
+The importer only took CSV, and two teams were converting by hand every week.
+
+- CSV, TSV and JSON lines all go through one reader.
+- I left Excel out on purpose because the library pulls in far too much for one format.
+- A bad line names its number.
+- Examples in the docs.
+-- author/change-description whole --
+fix(retry): give up on errors that will not pass
+
+The client retried every error five times, which hid real bugs behind a slow failure.
+
+- Timeouts and resets retry.
+- So does the one server error that means try again later.
+- Everything else fails right away with the server's message.
+- The retry count is in the config if someone needs more.
+-- author/change-description whole --
+feat(dashboard): split build time from queue time
+
+When the total grew it was hard to tell whether builds got slower or we just waited longer.
+
+- Build, test and queue time sit side by side.
+- Each one has its own trend line for the last thirty days.
+- The total is still there at the top.
+- I did not add alerts yet; that wants its own discussion.
+-- author/change-description whole --
+fix(errors): name the path in file errors
+
+Missing files, bad permissions and full disks all printed the same vague message.
+
+- Each error names the path and the operation.
+- A permission error says which user the process runs as.
+- A full disk says how much space it needed.
+- Tests for all three, using a small fake filesystem.
+-- author/change-description whole --
+chore(deps): drop the legacy importer
+
+Nothing has called the old importer since the new one shipped in the spring.
+
+- Removed the code, its tests and its docs page.
+- The docs page was confusing people, which is really why I did this now.
+- One config key it read is gone; loading a config that sets it prints a note.
+- The binary is about two megabytes smaller.
+-- author/change-description whole --
+feat(cli): add a dry run
+
+I wanted this while testing the migration and figured others would too.
+
+- The dry run prints the plan, the files it would touch and the commands it would run.
+- Nothing is written.
+- Exit code is the same as a real run would give, so scripts can use it as a check.
+- It is a flag, not a subcommand.
+-- hit/change-description whole --
+fix(parser): read the new header
+
+Updated the parser to read the new header.
+
+- Updated the parser to read the new header format.
+- Updated the writer to emit the new header format.
+- Updated the loader to accept the new header format.
+- Updated the tests to cover the new header format.
+- Updated the docs to describe the new header format.
+-- pass/change-description whole --
+fix(parser): read the new header
+
+The parser reads the new header now, which unblocks the 2.3 release.
+
+- Rewrote the parser.
+- The writer kept its old header until the 2.3 release, so readers built before then still open the files it writes.
+- Tests for the empty file and the file with no trailing newline.
+- Moved the loader into its own package after the cache split.
+- Docs.

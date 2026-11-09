@@ -184,3 +184,15 @@ the passes hold short lists, numbered steps, article openers and lists where the
 - Use `tool test` for the tests.
 - Read the logs under `.tool/logs`.
 - Ask in the forum when stuck.
+-- pass/changelog whole --
+- Rewrote the config parser.
+- Cut the build time in half.
+- Moved the loader into its own package.
+- Dropped the legacy flag.
+- Fixed the race on the lock.
+-- hit/changelog whole --
+- Fixed the race on the lock.
+- Fixed the leak in the watcher.
+- Fixed the exit code on a bad flag.
+- Fixed the docs for the cache.
+- Fixed a typo in the guide.

@@ -305,7 +305,7 @@ func isHouse(r Rule) bool {
 // Markdown and pull requests would hold every doc comment in the tree to
 // them at once, with no sweep behind it.
 var checks = slices.Concat(coreChecks, cssChecks, toneChecks, slopChecks, markupChecks, messageChecks, commitChecks, helpChecks,
-	issueChecks, densityChecks, reviewChecks, reviewKindChecks, suppressChecks, agentReplyChecks, toolChecks, listChecks, voiceChecks,
+	issueChecks, densityChecks, reviewChecks, reviewKindChecks, suppressChecks, agentReplyChecks, toolChecks, listChecks, voiceChecks, uniformChecks,
 	compactChecks, skillChecks, []check{templateCheck, gradeCheck}, triadChecks)
 
 var messageChecks = []check{
@@ -607,7 +607,7 @@ func (in input) locate(f Finding) Finding {
 // c does not run there.
 func (o options) decide(c check, s *KindSpec) Decision {
 	if !s.judges(c.rule) || (len(o.only) > 0 && !slices.Contains(o.only, c.rule)) ||
-		(c.rule == RuleVoiceDrift && o.voice == nil) {
+		((c.rule == RuleVoiceDrift || c.rule == RuleUniform) && o.voice == nil) {
 		return DecisionOff
 	}
 
