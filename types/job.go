@@ -2095,6 +2095,9 @@ type JobRelease struct {
 	// DeadBecause why magus judged it dead. Both are empty on any other release.
 	TakenBy     string `json:"taken_by,omitempty"     yaml:"taken_by,omitempty"`
 	DeadBecause string `json:"dead_because,omitempty" yaml:"dead_because,omitempty"`
+	// Narrowed marks a file the store narrowed to the holder's claims.
+	// Its entry stays in write_paths; a re-fork ends the narrowing.
+	Narrowed bool `json:"narrowed,omitempty" yaml:"narrowed,omitempty"`
 }
 
 // PausedAt reports whether a person's pause holds the job at now, unix seconds. Past
