@@ -38,7 +38,8 @@ var triadTexts = map[Rule]ruleText{
 		why: "Wikipedia's \"Signs of AI writing\" lists the rule of three among the habits of generated prose, " +
 			"and MeasureShape already counts the series per 1000 words as a feature a voice profile can " +
 			"compare. One natural series is ordinary writing, so a single one mid-paragraph is left alone; a " +
-			"text with two, or a lead that opens on one, reads as a template. Code spans, paths, flags, " +
+			"text with two, or a lead that opens on one, reads as a template. A declared kind of short " +
+			"entries may set triads to 1, which reports a single series. Code spans, paths, flags, " +
 			"ALL_CAPS names, numbers and a list the author numbered are not judged. No firing has been " +
 			"labeled, so it ships off.",
 	},
@@ -127,8 +128,9 @@ type triadHit struct {
 	lead  bool
 }
 
-// triad reports each series of exactly three when the text holds two or more,
-// or when one stands in the first sentence of its lead.
+// triad reports each series of exactly three when the text holds its kind's
+// Triads of them, two by default. One in the lead's first sentence reports
+// alone.
 func triad(in input) []Finding {
 	paras := maskedParagraphs(in)
 
@@ -152,7 +154,12 @@ func triad(in input) []Finding {
 		}
 	}
 
-	if len(hits) < 2 && (len(hits) == 0 || !hits[0].lead) {
+	wait := 2
+	if in.spec.Triads > 0 {
+		wait = in.spec.Triads
+	}
+
+	if len(hits) < wait && (len(hits) == 0 || !hits[0].lead) {
 		return nil
 	}
 

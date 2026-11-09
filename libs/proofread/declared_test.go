@@ -254,3 +254,49 @@ func TestTheLinesFormatReadsEachLineAsAUnit(t *testing.T) {
 		t.Errorf("read %d lines, want 4", len(prose))
 	}
 }
+
+func triadKind(t *testing.T, decl KindDecl) []KindSpec {
+	t.Helper()
+
+	specs, err := DeclareKinds(map[string]KindDecl{"notes": decl})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return specs
+}
+
+func TestADeclaredKindReportsASingleSeries(t *testing.T) {
+	one := 1
+	text := "Cut the release\n\nIt stops early.\n\nThe notes cover the cache, the graph, and the log.\n"
+
+	found := JudgeText(text, "notes", WithKinds(triadKind(t, KindDecl{Extends: KindChangeDescription, Triads: &one})...))
+	if !slices.ContainsFunc(found, func(f Finding) bool { return f.Rule == RuleTriad }) {
+		t.Errorf("findings %v hold no triad for one series under triads 1", reportedRules(found))
+	}
+
+	found = JudgeText(text, "notes", WithKinds(triadKind(t, KindDecl{Extends: KindChangeDescription,
+		Rules: map[string]string{"triad": "advise"}})...))
+	if slices.ContainsFunc(found, func(f Finding) bool { return f.Rule == RuleTriad }) {
+		t.Errorf("findings %v report one series under the default of 2", reportedRules(found))
+	}
+}
+
+func TestDeclareKindsRefusesTriadsOutOfRange(t *testing.T) {
+	three := 3
+
+	got := declareError(t, KindDecl{Extends: KindChangeDescription, Triads: &three})
+	if !strings.Contains(got, "kinds.entry.triads") || !strings.Contains(got, "want 1 or 2") {
+		t.Errorf("error %q does not refuse triads 3 at its field", got)
+	}
+}
+
+func TestDeclareKindsRefusesTriadsWithTheTriadRuleOff(t *testing.T) {
+	one := 1
+
+	got := declareError(t, KindDecl{Extends: KindChangeDescription, Triads: &one,
+		Rules: map[string]string{"triad": "off"}})
+	if !strings.Contains(got, "rules.triad is off") {
+		t.Errorf("error %q does not refuse triads with the rule off", got)
+	}
+}

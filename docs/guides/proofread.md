@@ -285,7 +285,9 @@ in the decisions file's `kinds` object, then judge with its name as the subcomma
    `markdown`, `lines`, `plain`, `doc-comment`, `stylesheet`, `template` and `message`;
    `lines` reads each non-blank line as one entry. `rules` sets a rule's decision or adds
    a rule, `weights` sets a rule's grade weight from 0 to 1, and `terms` maps each
-   spelling the kind replaces to its replacement.
+   spelling the kind replaces to its replacement. `triads` is how many series of exactly
+   three a text may hold before `triad` reports them: 2 by default, or 1 for short entries
+   where a single series reads as a template. Setting it turns `triad` on at advise.
 2. Judge a file of entries:
 
    ```sh
