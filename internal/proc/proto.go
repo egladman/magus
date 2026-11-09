@@ -4,6 +4,7 @@
 package proc
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"time"
 
 	"github.com/egladman/magus/internal/json"
@@ -122,12 +123,12 @@ type runReply struct {
 type Workspace struct {
 	Root string `json:"root"`
 	// State is empty from an older server, which reported only loaded workspaces.
-	// compat: see types.StatusWorkspace.Loaded
-	State types.WorkspaceState `json:"state,omitempty"`
+	// compat: see daemon.Workspace.Loaded
+	State daemon.WorkspaceState `json:"state,omitempty"`
 	// Error is set only in WorkspaceFailed.
-	Error      *types.WorkspaceFailure `json:"error,omitempty"`
-	LoadedAt   time.Time               `json:"loaded_at"`
-	LastAccess time.Time               `json:"last_access"`
+	Error      *daemon.WorkspaceFailure `json:"error,omitempty"`
+	LoadedAt   time.Time                `json:"loaded_at"`
+	LastAccess time.Time                `json:"last_access"`
 	// Live cache activity for this workspace's long-lived cache. Zero for pre-cache-aware
 	// servers or an Inspect workspace with no cache.
 	CacheHit   int   `json:"cache_hit,omitempty"`
@@ -141,8 +142,8 @@ type Workspace struct {
 }
 
 // Loaded reports whether w is serving: active, or from a server that reports no state.
-// compat: see types.StatusWorkspace.Loaded
-func (w Workspace) Loaded() bool { return types.StatusWorkspace{State: w.State}.Loaded() }
+// compat: see daemon.Workspace.Loaded
+func (w Workspace) Loaded() bool { return daemon.Workspace{State: w.State}.Loaded() }
 
 // StatusReply carries a point-in-time view of the parent's pool.
 type StatusReply struct {
@@ -156,7 +157,7 @@ type StatusReply struct {
 	// Server is the server's own identity and listeners. Only `magus server` sets it,
 	// so its presence is what tells the server from a per-process proc server, which
 	// dies with the command that started it.
-	Server *types.StatusServer `json:"server,omitempty"`
+	Server *daemon.Server `json:"server,omitempty"`
 }
 
 // StatusOutput is r as the status report's pool section, nil for a nil reply.
@@ -164,11 +165,11 @@ type StatusReply struct {
 //
 // Affected is left unset: it needs a workspace-scoped VCS diff, and neither reader opens a
 // workspace to answer a status query.
-func (r *StatusReply) StatusOutput() *types.StatusOutput {
+func (r *StatusReply) StatusOutput() *daemon.Output {
 	if r == nil {
 		return nil
 	}
-	out := &types.StatusOutput{
+	out := &daemon.Output{
 		ParentPID: r.ParentPID,
 		Version:   r.Version,
 		Capacity:  r.Capacity,
@@ -179,12 +180,12 @@ func (r *StatusReply) StatusOutput() *types.StatusOutput {
 		Queued:    r.Queued,
 	}
 	for _, c := range r.Calls {
-		out.RunningTargets = append(out.RunningTargets, types.StatusRunningTarget{
+		out.RunningTargets = append(out.RunningTargets, daemon.RunningTarget{
 			Args: c.Args, Workspace: c.Workspace, StartedAt: c.StartedAt, Step: c.SubOp, Inv: c.Inv,
 		})
 	}
 	for _, w := range r.Workspaces {
-		out.Workspaces = append(out.Workspaces, types.StatusWorkspace{
+		out.Workspaces = append(out.Workspaces, daemon.Workspace{
 			Root: w.Root, State: w.State, Error: w.Error, LoadedAt: w.LoadedAt, LastAccess: w.LastAccess,
 			CacheHit: w.CacheHit, CacheMiss: w.CacheMiss, CacheError: w.CacheError,
 			CacheBytes: w.CacheBytes, CacheSavedMs: w.CacheSavedMs, SecretProvider: w.SecretProvider,

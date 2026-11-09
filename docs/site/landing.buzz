@@ -17,8 +17,9 @@ import "template";
 // Term linking: the landing gets the same glossary popovers and code cross-references
 // every docs page gets. Both maskers skip fenced <pre>, so the transcript and the
 // magusfile listing are left alone.
-import "lib/text" as _;
-import "lib/url" as _;
+import "html" as htmlcodec;
+import "../libs/ssg/text" as _;
+import "../libs/ssg/urls" as _;
 import "lib/glossary" as _;
 import "engine/meta" as _;
 import "engine/types" as _;
@@ -68,7 +69,7 @@ dry run: commands shown, not executed</span>
 // fs.list returns sorted names and the files are date-prefixed (YYYY-MM-DD-slug.md),
 // so walking the list backwards is newest-first without parsing a date to sort on.
 fun recentPosts(site: Site) > str !> any {
-    final dir = site.root + "/" + site.blog;
+    final dir = site.inputs.root + "/" + site.inputs.blog;
     if (isDirectory(dir) == false) { return ""; }
     var names: mut [str] = mut [<str>];
     foreach (name in fs\listDir(dir)) {
@@ -91,10 +92,10 @@ fun recentPosts(site: Site) > str !> any {
         var title = fm.q("title").stringValue();
         if (title == "") { title = deriveTitle(md, name); }
         final desc = fm.q("description").stringValue();
-        final url = site.blog + "/" + blogURLPath(name) + "/";
+        final url = site.inputs.blog + "/" + blogURLPath(name) + "/";
         cards.append("        <a class=\"landing-card\" href=\"" + url + "\">"
-            + "<span class=\"landing-card-title\">" + escapeAttr(title) + "</span>"
-            + "<span class=\"landing-card-body\">" + escapeAttr(desc) + "</span></a>\n");
+            + "<span class=\"landing-card-title\">" + htmlcodec\escape(title) + "</span>"
+            + "<span class=\"landing-card-body\">" + htmlcodec\escape(desc) + "</span></a>\n");
         shown = shown + 1;
     }
     if (cards.len() == 0) { return ""; }
@@ -557,16 +558,16 @@ std&#92;print(yaml);</code></pre>
     // glossary term (definition baked into the popover) and link inline-code domain
     // references to their reference pages. Root-relative, so "" is both this page's
     // clean directory and the base relativePath resolves from.
-    html = linkGlossaryTerms(html, site.glossaryTerms, relativePath("", "glossary/")).html;
-    html = linkCodeEntities(html, site.codeEntities, "");
+    html = linkGlossaryTerms(html, site.inputs.glossaryTerms, relativePath("", "glossary/")).html;
+    html = linkCodeEntities(html, site.inputs.codeEntities, "");
 
     // Title is the wordmark: renderPage renders the landing's <title> as bare "magus"
     // rather than "<title> - magus", so passing anything else here would only show up in
     // the search result heading.
     final title = "magus";
-    final desc = site.config.description;
+    final desc = site.inputs.config.description;
     final doc = renderPage(title, desc, html, LANDING_SRC, "", "", "", mut [], "", site);
-    fs\writeFile(site.outDir + "/index.html", doc);
+    fs\writeFile(site.inputs.outDir + "/index.html", doc);
     // The plain-text body the search index carries. The HTML above is mostly layout, so
     // indexing it verbatim would fill a result snippet with markup rather than the words
     // someone would actually search for.

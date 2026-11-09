@@ -447,12 +447,12 @@ func trimBanner(text string) string {
 // of its own sits on the line the comment opens. The comment is judged with
 // its delimiters and asterisks gone, so a column would not be the file's and
 // none is given.
-func cssFindings(c cssComment, o options) []Finding {
+func cssFindings(c cssComment, s *KindSpec, o options) []Finding {
 	lines := strings.Split(c.text, "\n")
 
 	in := input{
 		symbol: Symbol{Name: c.target, Owner: c.owner + " " + c.inside, Doc: c.text},
-		kind:   KindStylesheet,
+		spec:   s,
 		prose:  readProse(lines, false),
 		lines:  lines,
 		source: lines,
@@ -518,18 +518,18 @@ func blockFindings(f cssFile) []Finding {
 // the budget of a whole block, and a comment that only repeats the code it
 // sits over. Findings come in [Rules] order, then in line order, each with its
 // line in src.
-func judgeStylesheet(src string, o options) []Finding {
+func judgeStylesheet(src string, s *KindSpec, o options) []Finding {
 	f := readCSS(src)
 
 	var out []Finding
 
 	for _, c := range f.comments {
-		out = append(out, cssFindings(c, o)...)
+		out = append(out, cssFindings(c, s, o)...)
 	}
 
-	if d := o.decide(blockBudgetCheck, KindStylesheet); d != DecisionOff {
+	if d := o.decide(blockBudgetCheck, s); d != DecisionOff {
 		for _, b := range blockFindings(f) {
-			out = append(out, o.settle(blockBudgetCheck, b, d))
+			out = append(out, o.settle(s, blockBudgetCheck, b, d))
 		}
 	}
 

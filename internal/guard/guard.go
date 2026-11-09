@@ -103,11 +103,18 @@ type Dependencies struct {
 	// row the call is bound to records a tier. Nil means no declaration: the tier rules then
 	// have nothing to compare and stay silent.
 	ModelTiers func() *types.ModelTierSet
+	// TierRule is the workspace's magus.WithSpawnRule, which the spawn
+	// ceiling asks. Nil leaves a ceiling it would judge reported unjudged.
+	TierRule func(parent, child types.ModelTier) error
 	// TargetPolicies answers what the workspace at root declares as target policy from the
 	// record the knowledge store keeps of it, without opening the workspace; "" is the
 	// caller's own. false means it cannot prove the record current, and the rule opens
 	// the workspace through Inspect instead. Nil means no record: every judgment opens it.
 	TargetPolicies func(ctx context.Context, root string) (types.TargetPolicyIndex, bool)
+	// RecordTargetPolicies records what ws, the workspace at root, declares, so
+	// TargetPolicies answers the next judgment without an open. Nil records
+	// nothing.
+	RecordTargetPolicies func(ctx context.Context, root string, ws types.WorkspaceRepository) error
 	// CheckoutState reads the checkout holding dir for a command rule judging a push or a
 	// commit, nil when its version control cannot report it.
 	CheckoutState func(ctx context.Context, dir string) *types.CheckoutState
@@ -846,6 +853,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				recordAgentUsage(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), who.Agent, env.AgentTranscript)
 			}
 			at := hookLocation(ctx, deps)
+			if env.Schedules {
+				timer := gradeScheduledPrompt(hint.NewGate(at.cacheDir, who.factsKey()), hint.NewGate(at.cacheDir, who.callerKey()), who.Transcript, time.Now())
+				if v := deps.grade(timer); v.Deny != "" {
+					return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
+				}
+			}
 			v, ok := judgeStop(deps, hint.NewGate(at.cacheDir, who.callerKey()), input, req.HostResumesOnBackgroundFrom, time.Now())
 			if !ok {
 				v = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
@@ -1112,7 +1125,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				refuse(denyBuzzUnbriefed, reason)
 			}
 		}
-		if verdict.Decision != decisionDeny && briefable {
+		if verdict.Decision != decisionDeny && briefable && !removesOnly(write) {
 			if reason := denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, newSourceDir(location.workspace, input)); reason != "" {
 				refuse(denyArchitectureUnbriefed, reason)
 			}
@@ -1386,8 +1399,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		// Not stood down by a pre-authorization: the person owns what a human-only run
 		// costs, whoever suggested it. An ask is graded as the deny it stands in for.
 		if verdict.Decision != decisionDeny {
-			decision, reason := gradeHumanOnly(ctx, deps, actingLease, input)
-			if decision != "" {
+			decision, reason, lapsed := gradeHumanOnly(ctx, deps, actingLease, input)
+			if decision != "" && !lapsed {
 				if _, refused := pending.hold(deps, ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleHumanOnly}}); !refused {
 					decision = ""
 				}
@@ -1403,6 +1416,10 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			case decisionDeny:
 				verdict.Decision, verdict.Context, verdict.Reason = decisionDeny, "", reason
 				verdict.Rule = string(denyRuleHumanOnly)
+				if lapsed {
+					// A lapse is retried, never a standing refusal.
+					verdict.Rule = string(advisoryUnfinished)
+				}
 			}
 		}
 		// Last of the worker rules: one that refuses the run outright
@@ -1544,12 +1561,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	// identical to a session nobody leased. Once per session each, and never on a deny,
 	// which explains itself and was reached by a rule that did not need the row. Graded
 	// before the gate, so one the workspace raised refuses every call.
-	// A release request is the third, told once per lease.
+	// A release request and a narrowed hold follow, told once per lease.
 	judgmentPhases(ctx).enclose(phaseNotices)
 	for kind, notice := range map[hint.MarkerKind]advice{
 		advisoryLeaseTerminal:    adviseTerminalLease(standing, actingLease),
 		advisoryLeaseInvalid:     adviseInvalidLease(actingLease),
 		advisoryReleaseRequested: adviseReleaseRequested(standing.row),
+		advisoryLeaseNarrowed:    adviseLeaseNarrowed(standing.row),
 	} {
 		if notice.Say == "" || req.Observe || verdict.Decision == decisionDeny || verdict.Decision == decisionAsk {
 			continue
@@ -1563,7 +1581,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			continue
 		}
 		gate := markers
-		if kind == advisoryReleaseRequested {
+		if kind == advisoryReleaseRequested || kind == advisoryLeaseNarrowed {
 			gate = stallGate(stateAt.cacheDir, actingLease)
 		}
 		held := gate.Once(kind, notice.Say)
@@ -2066,7 +2084,7 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		req.NothingToJudge = true
 	case envelopeSchedules(env.ToolInput):
 		// A prompt queued for a later turn of this session, not a brief for a new agent.
-		req.NothingToJudge = true
+		req.NothingToJudge, req.Schedules = true, true
 	case isSpawn || env.Task != "":
 		req.Value = cmp.Or(spawnPrompt, env.Task)
 		req.IsSpawn = true
@@ -2143,6 +2161,29 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 	return req, true
 }
 
+// gradeScheduledPrompt refuses a queued prompt as a timer while the session has
+// work whose own notice would wake it. With nothing pending it passes.
+func gradeScheduledPrompt(facts, stops hint.Gate, transcript string, now time.Time) ShellVerdict {
+	if !pendingWork(facts, stops, transcript, now) {
+		return ShellVerdict{}
+	}
+	return ShellVerdict{Deny: denySleepTimer, Why: denySleepTimerWhy, Rule: denyRule{Name: denyRuleSleepPoll}}
+}
+
+// pendingWork is a background task still running or a child the host has not
+// said stopped.
+func pendingWork(facts, stops hint.Gate, transcript string, now time.Time) bool {
+	if transcript != "" {
+		if tasks, err := liveBackgroundTasks(transcript, facts.CacheDir(), now); err == nil && len(tasks) > 0 {
+			return true
+		}
+	}
+	return slices.ContainsFunc(facts.Kinds(spawnedAgentPrefix), func(kind hint.MarkerKind) bool {
+		rec, ok := readMarker[spawnedAgent](facts, kind)
+		return ok && !stoppedAgent(facts, stops, rec.ID)
+	})
+}
+
 // envelopeSession picks the session pointer from the fields a host may send.
 // session_id wins when both it and conversation_id are present.
 func envelopeSession(env hookEnvelope) string {
@@ -2196,6 +2237,8 @@ type hookRequest struct {
 	// NothingToJudge is a recognized host envelope carrying no command, path or prompt.
 	// Distinct from "not an envelope", which is judged as the literal text it is.
 	NothingToJudge bool
+	// Schedules is a prompt queued for a later turn, judged as a timer.
+	Schedules bool
 	// UnjudgedTool names the tool of a nothing-to-judge call the host's tool rows do not
 	// know, "" for any other: the call no rule could read.
 	UnjudgedTool string

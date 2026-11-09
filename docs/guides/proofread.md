@@ -258,3 +258,42 @@ judges nothing while the agent is already continuing, so it cannot loop.
    stdin, and proofread refuses a `paths` glob that matches no file argument.
 5. End a turn and send your next message. The agent sees at most five findings beside
    it, each with its line in the reply it wrote before.
+
+## 10. Declare a kind of your own
+
+A text that is no commit, page or pull request can still have its own kind. Declare it
+in the decisions file's `kinds` object, then judge with its name as the subcommand.
+
+1. Add the kind to your decisions file. This one holds a list of short standalone entries
+   to one phrasing:
+
+   ```json
+   {
+     "kinds": {
+       "entry": {
+         "extends": "release-notes",
+         "reader": {"format": "lines"},
+         "rules": {"tense": "deny", "claim": "deny", "buzzword": "deny"},
+         "minimum": 90,
+         "terms": {"utilize": "use"}
+       }
+     }
+   }
+   ```
+
+   `extends` starts from a built-in kind's reader and rules. `reader.format` is one of
+   `markdown`, `lines`, `plain`, `doc-comment`, `stylesheet`, `template` and `message`;
+   `lines` reads each non-blank line as one entry. `rules` sets a rule's decision or adds
+   a rule, `weights` sets a rule's grade weight from 0 to 1, and `terms` maps each
+   spelling the kind replaces to its replacement. `triads` is how many series of exactly
+   three a text may hold before `triad` reports them: 2 by default, or 1 for short entries
+   where a single series reads as a template. Setting it turns `triad` on at advise.
+2. Judge a file of entries:
+
+   ```sh
+   proofread entry --decisions decisions.json entries.txt
+   ```
+
+A declared kind only chooses among the built-in rules. An unknown rule, an unknown base,
+or a rule the format cannot read is an error that names the field. A weight you set is
+marked `weight_set` on each finding, and the grade names it as set, not measured.

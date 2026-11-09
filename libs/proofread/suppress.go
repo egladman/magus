@@ -11,18 +11,10 @@ import (
 // matched no finding.
 const RuleSuppressionUnused Rule = "suppression-unused"
 
-// everyKind is each kind a text may be judged as, for a rule that reads the
-// text's own markers rather than its prose.
-var everyKind = []Kind{
-	KindDocComment, KindReference, KindPrinciple, KindChangeDescription, KindAgentBrief, KindAgentCompact, KindSkillTemplate,
-	KindGuide, KindReviewSummary, KindReviewInline, KindReviewReply, KindDiagnostic, KindCommitMessage, KindCLIHelp, KindIssue, KindReleaseNotes,
-	KindChangelog, KindAgentReply, KindToolDescription, KindStylesheet,
-}
-
 // suppressUnusedCheck has no judge: [input.suppress] reports its findings
 // after every other rule has run, since only then is a suppression known to
 // have matched nothing.
-var suppressUnusedCheck = check{rule: RuleSuppressionUnused, on: everyKind}
+var suppressUnusedCheck = check{rule: RuleSuppressionUnused, reads: []Format{FormatMarkdown, FormatLines, FormatPlain, FormatDocComment, FormatStylesheet, FormatTemplate, FormatMessage}}
 
 var (
 	suppressChecks = []check{suppressUnusedCheck}
@@ -113,14 +105,14 @@ func (in input) suppress(found []Finding) []Finding {
 		}
 	}
 
-	decision := in.opts.decide(suppressUnusedCheck, in.kind)
+	decision := in.opts.decide(suppressUnusedCheck, in.spec)
 	if decision == DecisionOff {
 		return kept
 	}
 
 	for _, d := range ds {
 		if msg := d.complaint(); msg != "" {
-			kept = append(kept, in.locate(in.opts.settle(suppressUnusedCheck,
+			kept = append(kept, in.locate(in.opts.settle(in.spec, suppressUnusedCheck,
 				Finding{Message: msg, Match: d.text, Line: d.line}, decision)))
 		}
 	}

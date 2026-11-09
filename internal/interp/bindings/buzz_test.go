@@ -697,9 +697,12 @@ func auditFiles(t *testing.T, root string) []auditFile {
 		}
 		done[walked{path, mode}] = true
 		src := auditRead(t, path)
-		out = append(out, auditFile{path: path, src: src, mode: mode, dirs: dirs})
+		// An import resolves from the importing file's own directory first,
+		// so a module's siblings import each other by bare name.
+		search := append([]string{filepath.Dir(path)}, dirs...)
+		out = append(out, auditFile{path: path, src: src, mode: mode, dirs: search})
 		for _, imp := range auditImports(src) {
-			if dep := auditResolve(imp, append([]string{filepath.Dir(path)}, dirs...), mode); dep != "" {
+			if dep := auditResolve(imp, search, mode); dep != "" {
 				walk(dep, mode, dirs)
 			}
 		}

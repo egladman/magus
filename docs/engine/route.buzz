@@ -1,10 +1,10 @@
 // engine/route.buzz - path/URL routing: source path -> clean output URL, the "../" depth
 // back to site root, and the deploy base path from the configured site URL. Site-aware, so
-// it imports engine/types and stays out of the leaf engine/path.buzz.
+// it imports engine/types and stays out of the leaf libs/ssg/paths.buzz.
 namespace route;
 
 import "assert";
-import "lib/url" as _;
+import "../libs/ssg/urls" as _;
 import "engine/types" as _;
 
 // LANDING_SRC is the srcRel of the hand-built home page (site/landing.buzz). It names no
@@ -65,7 +65,7 @@ export fun sitePathPrefix(baseURL: str) > str {
 // slash), the "new dir" arg the link rewriter needs. Reads site state (blog dir via
 // cleanURL), so it lives here; the pure oldFlatDirectory counterpart is in lib/html.
 export fun newCleanDirectory(rel: str, site: Site) > str {
-    final u = cleanURL(rel, site.blog);
+    final u = cleanURL(rel, site.inputs.blog);
     if (u == "") { return ""; }
     return u.sub(0, u.len() - 1);
 }
@@ -79,28 +79,14 @@ export fun rootPrefix(srcRel: str, site: Site) > str {
     // the same arithmetic cleanDepth does - because there is no path to derive it from.
     if (srcRel == "README.md") { return climb(README_URL.split("/").len() - 1); }
     var rel = srcRel;
-    if (rel.startsWith(site.docs + "/")) { rel = rel.sub((site.docs + "/").len()); }
-    return climb(cleanDepth(rel, site.blog));
+    if (rel.startsWith(site.inputs.docs + "/")) { rel = rel.sub((site.inputs.docs + "/").len()); }
+    return climb(cleanDepth(rel, site.inputs.blog));
 }
 
 test "rootPrefix climbs out of the README's /development/ home" {
-    final s = mut Site{
-        docs = "docs",
-        blog = "blog",
-        metaCommits = mut {},
-        metaHistory = mut {},
-        searchRecords = mut [<str>],
-        aliasTarget = mut {},
-        pageUrls = mut {},
-        tagPages = mut {},
-        pageAxes = mut {},
-        writtenPaths = mut {},
-        blogPosts = mut [<BlogPost>],
-        docPages = mut [<DocPage>],
-        pageTerms = mut {},
-        demoBySlug = mut {},
-        releases = mut [<Release>],
-    };
+    final s = newSite();
+    s.inputs.docs = "docs";
+    s.inputs.blog = "blog";
     assert\equal(rootPrefix("README.md", s), "../", "README renders one level deep");
     assert\equal(rootPrefix(LANDING_SRC, s), "", "the landing sits at gen's root");
 }

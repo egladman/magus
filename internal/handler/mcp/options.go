@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 	"errors"
+	"github.com/egladman/magus/types/daemon"
+	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"net/http"
 	"net/netip"
@@ -36,7 +38,7 @@ type Options struct {
 
 	// Build is the running binary's full identity (version, commit, date), reported on
 	// the status wire so the console shows which server it is talking to.
-	Build types.BuildInfo
+	Build daemon.BuildInfo
 
 	// Config is the resolved workspace configuration. Used to check the
 	// server address for the status tool.
@@ -59,7 +61,7 @@ type Options struct {
 	// build-tag constant and the config-to-status
 	// converters. When zero-valued the bridge returns an empty telemetry/cache
 	// block but still serves the live pool state.
-	StatusBase types.StatusBase
+	StatusBase daemon.Base
 
 	// DiffSessions is the server's shared diff-session store, the SAME one the console's
 	// /api/v1/diff and /api/v1/diff/session routes use. Sharing it is what makes pairing work:
@@ -89,10 +91,10 @@ type Options struct {
 // a review thread's record lists. The server's diff thread route and the diff tool share it so
 // both name the same anchors. The graph, with symbol shards, is loaded only when a store is declared, and a
 // misdeclared store is returned as an error rather than as no anchors.
-func (o Options) ReviewAnchors() func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error) {
+func (o Options) ReviewAnchors() func(ctx context.Context, rev diff.Diff) ([]review.AnchorHit, error) {
 	notes := o.Config.Knowledge.Notes
 	dirs := review.NoteDirs{Shared: notes.Shared, Private: notes.Private}
-	return func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error) {
+	return func(ctx context.Context, rev diff.Diff) ([]review.AnchorHit, error) {
 		return review.ChangesetAnchors(ctx, o.Magus.Root(), dirs, func(ctx context.Context) (*knowledge.Graph, error) {
 			return workspace.ViewAs[graphReader](o.Magus).KnowledgeGraph(ctx, types.GraphRequest{Symbols: types.AllSymbols})
 		}, rev)

@@ -12,7 +12,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
-	"github.com/egladman/magus/types"
+	imagetypes "github.com/egladman/magus/types/image"
 )
 
 // RegisterImage builds the "image" module map and returns it.
@@ -61,7 +61,7 @@ func RegisterImage(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, ffi.Error(err)
 		}
 		layout := ffi.String(bzArgs, 2)
-		var auth *types.ImageRegistryAuth
+		var auth *imagetypes.RegistryAuth
 		if ffi.Present(bzArgs, 3) {
 			x, err := ffi.Object("image\\pull", "auth", bzArgs, 3, decode.DecodeImageRegistryAuth)
 			if err != nil {
@@ -79,7 +79,7 @@ func RegisterImage(ctx context.Context, sess *buzz.Session) vm.Value {
 		layout := ffi.String(bzArgs, 0)
 		repository := ffi.String(bzArgs, 1)
 		tags := ffi.StringSlice(bzArgs, 2)
-		var auth *types.ImageRegistryAuth
+		var auth *imagetypes.RegistryAuth
 		if ffi.Present(bzArgs, 3) {
 			x, err := ffi.Object("image\\push", "auth", bzArgs, 3, decode.DecodeImageRegistryAuth)
 			if err != nil {
@@ -144,7 +144,7 @@ func RegisterImage(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.ObjectSlice(ret0, func(v types.ImageDocument) vm.Value { return ObjectImageDocument(v, enums) }), nil
+		return ffi.ObjectSlice(ret0, func(v imagetypes.Document) vm.Value { return ObjectImageDocument(v, enums) }), nil
 	}))
 	m.MapSet("parsePlatform", vm.DirectValue("image.parsePlatform", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		spec := ffi.String(bzArgs, 0)
@@ -160,7 +160,7 @@ func RegisterImage(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.ObjectSlice(ret0, func(v types.ImagePlatform) vm.Value { return ObjectImagePlatform(v, enums) }), nil
+		return ffi.ObjectSlice(ret0, func(v imagetypes.Platform) vm.Value { return ObjectImagePlatform(v, enums) }), nil
 	}))
 	m.MapSet("goEnv", vm.DirectValue("image.goEnv", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		platform, err := ffi.Object("image\\goEnv", "platform", bzArgs, 0, decode.DecodeImagePlatform)

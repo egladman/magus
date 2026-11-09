@@ -12,8 +12,6 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../../../cmd/magus-utils bindings -module hex -lang buzz -out ../../../internal/interp/bindings/gen/hex.go -pkg bindgen
-
 // Module is the "encoding/hex" host module. Buzz strings carry a `.hex()`
 // method already; this is the decode half, which the language has no form of,
 // plus the encode half so a caller reaches both through one import rather than
@@ -27,15 +25,15 @@ var Module = std.Module{
 		{
 			Name:    "encode",
 			Doc:     "Encode data as lowercase hex.",
-			Args:    []std.Arg{{Name: "data", Type: std.TypeString}},
-			Returns: []std.Ret{{Type: std.TypeString}},
+			Args:    []std.Arg{{Name: "data"}},
+			Returns: []std.Ret{{}},
 			Impl:    HexEncode,
 		},
 		{
 			Name:    "decode",
 			Doc:     "Decode a hex string; errors on malformed input.",
-			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
-			Returns: []std.Ret{{Type: std.TypeString}},
+			Args:    []std.Arg{{Name: "s"}},
+			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    HexDecode,
 		},

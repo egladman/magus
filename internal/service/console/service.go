@@ -8,6 +8,8 @@ package console
 
 import (
 	"context"
+	"github.com/egladman/magus/types/daemon"
+	"github.com/egladman/magus/types/diff"
 	"path/filepath"
 	"sync"
 	"time"
@@ -31,7 +33,7 @@ import (
 type Service struct {
 	magus        *magus.Magus
 	config       config.Config
-	statusBase   types.StatusBase
+	statusBase   daemon.Base
 	version      string
 	serverSocket string
 	// startedAt marks when this service (and thus the server it fronts) began observing, stamped
@@ -42,11 +44,11 @@ type Service struct {
 	// runsFn returns the server's live runs, folded onto the status report. Nil when
 	// this service is not backed by a server run registry (a plain CLI status query), leaving
 	// StatusSnapshot.Runs empty.
-	runsFn func() []types.StatusRun
+	runsFn func() []daemon.Run
 
 	// brokerFn returns the broker's status, folded onto the report as its broker section.
 	// Nil when this service fronts no server, leaving StatusSnapshot.Broker nil.
-	brokerFn func() *types.StatusBroker
+	brokerFn func() *daemon.Broker
 
 	// History-metrics cache: git-backed Board fields reused for historyMetricsTTL so
 	// repeated dashboard polls collapse onto one git-log scan. The mutex serializes cold assembly.
@@ -55,12 +57,12 @@ type Service struct {
 	historyMetricsTTL   time.Duration
 
 	// Test seams. Production leaves these nil; the real Magus / server socket is used.
-	statusSnapshotFn func(ctx context.Context) types.StatusSnapshot
+	statusSnapshotFn func(ctx context.Context) daemon.Snapshot
 	knowledgeGraphFn func(ctx context.Context, withSymbols bool) (*knowledge.Graph, error)
 	describeGraphFn  func() types.TargetGraphOutput
 	historyMetricsFn func(ctx context.Context) (Board, error)
 	workingDiffFn    func(ctx context.Context, paths []string) (string, error)
-	diffFn           func(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error)
+	diffFn           func(ctx context.Context, paths []string, opts diff.Options) (diff.Diff, error)
 }
 
 // Option customizes a Service. The With* options inject test seams and the explicit
@@ -75,7 +77,7 @@ func WithServerSocket(addr string) Option {
 
 // WithStatusSnapshotFunction replaces the server query used to assemble StatusSnapshot. Tests
 // pass this to drive status paths without a running server.
-func WithStatusSnapshotFunction(fn func(ctx context.Context) types.StatusSnapshot) Option {
+func WithStatusSnapshotFunction(fn func(ctx context.Context) daemon.Snapshot) Option {
 	return func(s *Service) { s.statusSnapshotFn = fn }
 }
 
@@ -109,14 +111,14 @@ func WithHistoryMetricsTTL(d time.Duration) Option {
 // WithRuns supplies the server's live-run source (RunRegistry.Snapshot). The status
 // report then carries the per-target execution state of every adopted run, on both the GET
 // and the SSE frame. Only the server sets this; a plain CLI status query omits it.
-func WithRuns(fn func() []types.StatusRun) Option {
+func WithRuns(fn func() []daemon.Run) Option {
 	return func(s *Service) { s.runsFn = fn }
 }
 
 // WithBrokerStatus supplies the broker's status: capacity, the claims holding it and the
 // shared services it keeps warm. The status report then carries them, on both the GET and
 // the SSE frame. fn returns nil when no broker answers.
-func WithBrokerStatus(fn func() *types.StatusBroker) Option {
+func WithBrokerStatus(fn func() *daemon.Broker) Option {
 	return func(s *Service) { s.brokerFn = fn }
 }
 
@@ -124,7 +126,7 @@ func WithBrokerStatus(fn func() *types.StatusBroker) Option {
 // static status base (telemetry/cache/build fields the bridge cannot compute itself),
 // and the running magus version. m may be nil only when every graph/status path is
 // overridden by a With* seam (tests).
-func NewService(m *magus.Magus, cfg config.Config, base types.StatusBase, version string, opts ...Option) *Service {
+func NewService(m *magus.Magus, cfg config.Config, base daemon.Base, version string, opts ...Option) *Service {
 	s := &Service{magus: m, config: cfg, statusBase: base, version: version, historyMetricsTTL: defaultHistoryMetricsTTL, startedAt: time.Now().UTC()}
 	for _, o := range opts {
 		o(s)
@@ -140,7 +142,7 @@ func (s *Service) Version() string { return s.version }
 // from the status base merged with the live pool state. The pool comes from the injected
 // StatusSnapshotFn when set (tests), otherwise queried from the server socket.
 // As in `magus server status`, a query failure is a PoolError, not an error.
-func (s *Service) StatusSnapshot(ctx context.Context) types.StatusSnapshot {
+func (s *Service) StatusSnapshot(ctx context.Context) daemon.Snapshot {
 	out := s.statusSnapshot(ctx)
 	// Live runs come from this server's in-process run registry (not the pool query), so
 	// they ride the same report whether the pool is assembled from a seam or a socket query.
@@ -166,19 +168,19 @@ func (s *Service) StatusSnapshot(ctx context.Context) types.StatusSnapshot {
 
 // statusSnapshot assembles the base report (telemetry/cache/build plus live pool), before the
 // server's live runs are folded on by StatusSnapshot.
-func (s *Service) statusSnapshot(ctx context.Context) types.StatusSnapshot {
+func (s *Service) statusSnapshot(ctx context.Context) daemon.Snapshot {
 	if s.statusSnapshotFn != nil {
 		return s.statusSnapshotFn(ctx)
 	}
-	out := types.StatusSnapshot{
+	out := daemon.Snapshot{
 		Telemetry:      s.statusBase.Telemetry,
 		Cache:          s.statusBase.Cache,
 		Build:          s.statusBase.Build,
 		ObservingSince: s.startedAt,
 		BrokerPolicy:   s.config.Broker.Resolved(),
-		Config: types.StatusConfig{
+		Config: daemon.Config{
 			DefaultCharms: s.config.DefaultCharms,
-			Concurrency: types.StatusConcurrency{
+			Concurrency: daemon.Concurrency{
 				Configured: s.config.Concurrency,
 				Profile:    s.config.ConcurrencyProfile,
 				Effective:  cache.ResolveConcurrency(s.config.Concurrency, s.config.ConcurrencyProfile),
@@ -264,9 +266,9 @@ func (s *Service) WorkingDiff(ctx context.Context, paths []string) (string, erro
 // ReviewOrigin reports the branch and remote a provider needs to find the review open for this
 // tree. Empty on a workspace-less service, which is the same answer a tree with no remote
 // gives and needs no separate branch in any caller.
-func (s *Service) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
+func (s *Service) ReviewOrigin(ctx context.Context) diff.ReviewOrigin {
 	if s.magus == nil {
-		return types.ReviewOrigin{}
+		return diff.ReviewOrigin{}
 	}
 	return s.magus.ReviewOrigin(ctx)
 }
@@ -299,23 +301,23 @@ func (s *Service) ProjectTargets(ctx context.Context, project string) []string {
 // its symbol shards and computes a reverse closure. Folding them into one route would hold
 // the whole diff behind the slowest overlay, so the console paints the patch from the first
 // call and decorates it when this one lands. A reader is scrolling code either way.
-func (s *Service) Diff(ctx context.Context, paths []string) (types.Diff, error) {
-	return s.DiffWith(ctx, paths, types.DiffOptions{})
+func (s *Service) Diff(ctx context.Context, paths []string) (diff.Diff, error) {
+	return s.DiffWith(ctx, paths, diff.Options{})
 }
 
-// DiffWith is [Service.Diff] with the options [types.DiffOptions] describes. A caller that reads
+// DiffWith is [Service.Diff] with the options [diff.Options] describes. A caller that reads
 // no ranking of the changeset, such as a thread brief, sets SkipOrder so the order is never
 // computed.
-func (s *Service) DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
+func (s *Service) DiffWith(ctx context.Context, paths []string, opts diff.Options) (diff.Diff, error) {
 	if s.diffFn != nil {
 		return s.diffFn(ctx, paths, opts)
 	}
 	if s.magus == nil {
-		return types.Diff{}, ErrNoWorkspace
+		return diff.Diff{}, ErrNoWorkspace
 	}
 	rev, err := s.magus.DiffWith(ctx, paths, opts)
 	if err != nil {
-		return types.Diff{}, err
+		return diff.Diff{}, err
 	}
 	// Fold on the churn lenses from the CACHED insight scan rather than a fresh one. This is
 	// the reason AttachChurn takes its data as an argument: the server already keeps a bounded

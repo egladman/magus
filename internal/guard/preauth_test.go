@@ -20,8 +20,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/libs/testkit/register"
-	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -209,117 +207,11 @@ func servedNextTemplates(t *testing.T) map[string]string {
 	return rendered
 }
 
-// denyRemedyFixture is one refused line whose rule serves a remedy. ident is the constant
-// the rule hands hint.NextForDenyRemedy, which is how the sweep below finds a rule with no
-// fixture; setup builds whatever the rule reads, in the judged workspace and its cache
-// when it reads either, and returns the call, which Judge makes under each role's lease,
-// and its remedy.
-type denyRemedyFixture struct {
-	ident string
-	rule  denyRuleName
-	setup func(t *testing.T, at location) (call Request, want string)
-}
-
-func fixed(command, want string) func(*testing.T, location) (Request, string) {
-	return func(*testing.T, location) (Request, string) { return Request{Input: command}, want }
-}
-
-func denyRemedyFixtures() []denyRemedyFixture {
-	return []denyRemedyFixture{
-		{"denyRuleOutputPipe", denyRuleOutputPipe, fixed("magus run lint . | tail -20", "magus run lint . -s")},
-		{"denyRuleOutputPipe", denyRuleOutputPipe, fixed("magus ls jobs | wc -l", `magus ls jobs -o "template={{len .jobs}}"`)},
-		{"denyRuleOutputRedirect", denyRuleOutputRedirect, fixed("magus ls jobs -o json > jobs.json", "magus ls jobs -o json --tee jobs.json")},
-		{"denyRuleOutputRedirect", denyRuleOutputRedirect, fixed("magus ls jobs > jobs.txt", "magus ls jobs -o json --tee jobs.txt")},
-		{"denyRuleOutputRedirect", denyRuleOutputRedirect, fixed("magus run lint . > /dev/null 2>&1", "magus run lint . --silent")},
-		{"denyRuleStageAll", denyRuleStageAll, fixed("git add -A", "magus vcs ls-files --include-untracked --include-generated -o name | git add --pathspec-from-file=-")},
-		{"denyRuleStageAll", denyRuleStageAll, fixed("git add -A -- cmd/magus/main.go", "magus vcs ls-files --include-untracked --include-generated cmd/magus/main.go -o name | git add --pathspec-from-file=-")},
-		{"denyRuleProcessPoll", denyRuleProcessPoll, fixed("pgrep -fl magus", "magus server status")},
-		{"denyRuleProcessSignal", denyRuleProcessSignal, fixed("pkill -f 'magus job fork'", "magus server status")},
-		{"denyRuleChainedRun", denyRuleChainedRun, fixed("magus run lint . && magus run lint docs", "magus run lint . | magus run lint docs")},
-		{"denyRuleChainedRun", denyRuleChainedRun, fixed("magus run generate:rw . && magus run test .", "magus run generate:rw . | magus run test .")},
-		{"denyRuleSymbolSearch", denyRuleSymbolSearch, fixed("grep -rn MGS2011 docs/", "magus explain diagnostic:MGS2011")},
-		{"denyRuleMagusTimeout", denyRuleMagusTimeout, fixed("timeout 600 magus run lint .", "magus run --timeout 10m lint .")},
-		{"denyRuleMagusTimeout", denyRuleMagusTimeout, fixed("timeout 60 magus ls jobs", "magus ls jobs")},
-		{"denyRuleGrepReader", denyRuleGrepReader, func(t *testing.T, at location) (Request, string) {
-			src := "package api\n\n// HandleRequest serves one request.\nfunc HandleRequest() {}\n"
-			require.NoError(t, os.WriteFile(filepath.Join(at.workspace, "handler.go"), []byte(src), 0o644))
-			t.Chdir(at.workspace)
-			return Request{Input: "grep -n 'func HandleRequest' -A20 handler.go"}, "sed -n 3,4p handler.go"
-		}},
-		{"denyRuleRawTool", denyRuleRawTool, func(t *testing.T, _ location) (Request, string) {
-			spellName := register.Spell(t, "guard-remedy-test",
-				spells.WithTargets("check"),
-				spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
-					return "remedy-tool", []string{"check"}, target == "check", nil
-				}),
-			)
-			return Request{Input: "remedy-tool check"}, fmt.Sprintf("magus run %s::check", spellName)
-		}},
-		{"denyRuleSiblingCheckout", denyRuleSiblingCheckout, func(t *testing.T, _ location) (Request, string) {
-			main, wt := twoCheckouts(t)
-			require.NoError(t, os.WriteFile(filepath.Join(wt, "magus"), []byte("#!/bin/sh\n"), 0o755))
-			t.Chdir(main)
-			// Relative, so the temp dir the fixture lives in does not read as a throwaway copy.
-			return Request{Input: fmt.Sprintf("cd ../%s && ./magus describe job harness/worker", filepath.Base(wt))},
-				fmt.Sprintf("%s --root %s describe job harness/worker", filepath.Join(wt, "magus"), wt)
-		}},
-		{"denyRuleSiblingCheckout", denyRuleSiblingCheckout, func(t *testing.T, _ location) (Request, string) {
-			main, wt := twoCheckouts(t)
-			require.NoError(t, os.WriteFile(filepath.Join(wt, "magus"), []byte("#!/bin/sh\n"), 0o755))
-			t.Chdir(main)
-			return Request{Input: fmt.Sprintf("cd ../%s && ./magus job exec harness/worker", filepath.Base(wt))},
-				fmt.Sprintf("%s --root %s job exec harness/worker", filepath.Join(wt, "magus"), wt)
-		}},
-		{"denyRuleWorktreeRemove", denyRuleWorktreeRemove, func(t *testing.T, at location) (Request, string) {
-			r := newWorktreeRepository(t)
-			wt, row := r.workerWorktree(types.StatePass)
-			row.ID = "remedy-lock"
-			seedRemedyJob(t, at, row)
-			writeSpawnedAgent(hint.NewGate(at.cacheDir, FactsKey("claude", "remedy")), "agent-remedy", spawnedAgent{Description: "root/worker remedy-lock"})
-			return Request{Input: "git worktree remove " + wt, Dir: r.main, Host: "claude", Session: "remedy"}, "git worktree remove -f -f " + wt
-		}},
-		{"denyRuleWorktreeRemove", denyRuleWorktreeRemove, func(t *testing.T, at location) (Request, string) {
-			r := newWorktreeRepository(t)
-			wt, row := r.workerWorktree(types.StateExited)
-			row.ID, row.Result = "remedy-wait", &types.JobResult{}
-			seedRemedyJob(t, at, row)
-			return Request{Input: "git worktree remove " + wt, Dir: r.main}, hint.JobWait.With("remedy-wait")
-		}},
-	}
-}
-
 // seedRemedyJob files row in the job store the fixtures are judged against.
 func seedRemedyJob(t *testing.T, at location, row types.Job) {
 	t.Helper()
 	_, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
-}
-
-// remedyRe finds the rules that construct a remedy in the guard's own source.
-var remedyRe = regexp.MustCompile(`NextForDenyRemedy\(string\((denyRule\w+)\)`)
-
-// TestEveryServedNextCoversEveryDenyRemedy is the sweep: a rule that serves a remedy with
-// no fixture above is a remedy nothing grades through the guard.
-func TestEveryServedNextCoversEveryDenyRemedy(t *testing.T) {
-	covered := map[string]bool{}
-	for _, f := range denyRemedyFixtures() {
-		covered[f.ident] = true
-	}
-	sources, err := filepath.Glob("*.go")
-	require.NoError(t, err)
-	found := 0
-	for _, src := range sources {
-		if strings.HasSuffix(src, "_test.go") {
-			continue
-		}
-		body, err := os.ReadFile(src)
-		require.NoError(t, err)
-		for _, m := range remedyRe.FindAllStringSubmatch(string(body), -1) {
-			found++
-			assert.True(t, covered[m[1]], "%s serves a %s remedy and no fixture in denyRemedyFixtures drives it", src, m[1])
-		}
-	}
-	require.NotZero(t, found, "remedyRe no longer matches how a rule builds its remedy")
 }
 
 // servedRole is a caller a next is served to, as Judge reads it: who calls and the lease it
@@ -547,27 +439,6 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 				gradeServed(t, ctx, deps, servedAs(Request{}, role), role.name, n.ID, n.Run)
 			}
 		})
-		// A deny's remedy is graded as Judge serves it to this role: whatever it drops was
-		// never served, and whatever it keeps must pass.
-		for _, f := range denyRemedyFixtures() {
-			t.Run(fmt.Sprintf("%s/deny-%s", role.name, string(f.rule)), func(t *testing.T) {
-				call, want := f.setup(t, hookLocation(ctx, Dependencies{}))
-				call = servedAs(call, role)
-				call.DryRun = true
-				v := Judge(ctx, deps, call)
-				if role.call.Host == "" {
-					shape := verdictWithRule("deny", string(f.rule))
-					shape.Next = v.Next
-					require.Equal(t, shape, unworded(v), call.Input)
-					require.Len(t, v.Next, 1, "unbound, %q serves its remedy", call.Input)
-					assert.Equal(t, want, v.Next[0].Run)
-				}
-				for _, n := range v.Next {
-					assert.Equal(t, "deny-"+string(f.rule), n.ID)
-					gradeServed(t, ctx, deps, call, role.name, n.ID, n.Run)
-				}
-			})
-		}
 		for _, f := range servedFixtures() {
 			t.Run(fmt.Sprintf("%s/%s", role.name, f.name), func(t *testing.T) {
 				call, next := f.setup(t, ctx, deps, role)

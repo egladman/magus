@@ -1,6 +1,7 @@
 package register
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,8 +14,8 @@ import (
 )
 
 func TestReviewSpellAnswersThroughTheTypedProviderOps(t *testing.T) {
-	at := types.ReviewTarget{ID: "482", Repo: "acme/acme", State: "merged", Author: "priya", Viewer: "eli"}
-	threads := []types.ReviewComment{
+	at := diff.ReviewTarget{ID: "482", Repo: "acme/acme", State: "merged", Author: "priya", Viewer: "eli"}
+	threads := []diff.ReviewComment{
 		{ID: "t1", Path: "a.go", Line: 9, Author: "priya", Body: "why {this}?\n\"quoted\""},
 		{ID: "t2", Root: "t1", Author: "eli", Body: "because", Outdated: true, DiffHunk: "@@ -1 +1 @@"},
 	}

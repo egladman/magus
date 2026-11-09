@@ -48,21 +48,21 @@ const advisorySpawnNestedWaiter hint.MarkerKind = "spawn-nested-waiter"
 const sleepPollFloor = 10 * time.Second
 
 var (
-	denySleepPoll = fmt.Sprintf("a sleep before a status read is a poll spread over calls; background the work as `%s` and wait for its notice, or `gh run watch` for CI.",
+	denySleepPoll = fmt.Sprintf("a sleep before a status read is a poll spread over calls; background the work as `%s` and wait for its notice.",
 		boundedRunWait)
 	denySleepPollWhy = "Each call spends a turn and the sleep's tool slot to look once, and the next call looks again. " +
-		"A backgrounded run is announced when it ends, and a CI watch ends with its run. Both answer when the state changes, where a sleep answers on its own schedule."
+		"A backgrounded run is announced when it ends, so the notice answers when the state changes, where a sleep answers on its own schedule."
 
 	denySleepTimer    = "a call that only sleeps is a timer; a backgrounded command already announces itself when it ends, so wait for that notice or do other work meanwhile."
 	denySleepTimerWhy = "The work's own backgrounded call is the waiter: its notice arrives with the result, where a timer's says only that time passed. " +
 		"A timer wakes you on a guess, every timer still pending wakes you again after the work is done, and a foreground sleep past the tool timeout is moved to the background and becomes one."
 
 	denySlotWait = fmt.Sprintf("a magus run waits for the build budget itself, up to %s, and names who holds it: run `%s <your check>` and let it wait. A watch, a sleep before a run, or a wait on another run's pid waits for nothing.",
-		cache.BudgetWaitSource, hint.Run.String())
+		cache.BudgetWaitSource, budgetRunForm)
 	denySlotWaitWhy = "A run's claim queues at the broker and is seated the moment room frees, in the call that spends the seat. " +
 		"A wait in front of it holds nothing, so the run still queues behind whoever asked first, and a worker looping on reads spends turns no one who can free a seat sees."
 
-	budgetFullWhy = "Every worker's check needs a seat in the build budget, and a worker that finds none waits in its check's call until one frees, so spawning into a full budget spends a worker's time waiting. " +
+	budgetFullWhy = "Every worker's check needs a seat in the build budget, and a worker's check runs with --budget-wait 0, so a worker that finds none is refused at once and files the check owed; spawning into a full budget spends a worker's turns on refusals. " +
 		"The budget is the machine's, shared by every worktree, so it frees only as the runs holding it end."
 )
 
@@ -506,7 +506,7 @@ func waitRemedy(deps Dependencies, rule denyRuleName, command string, d Dialect)
 	}
 	took, measured := lastRunHere(deps.scope.root, r)
 	bound, note := waitBound(r.target, took, measured, configuredBackgroundLimits(deps).ceiling)
-	argv := append([]string{run[0], "job", "exec", "--timeout", formatLimit(bound), "--"}, run...)
+	argv := boundedRunArgv(run[0], formatLimit(bound), run)
 	next := hint.NextForDenyRemedy(string(rule), argv,
 		"run it in the background: the host announces it when it ends, and job exec stops it at the bound.")
 	return fmt.Sprintf("this line polls for a run the host announces when it ends; run it in the background and wait for its notice: %s.", note), next
@@ -744,7 +744,7 @@ var spawnNestedWordRe = regexp.MustCompile(`(?i)\b(?:wait|poll|monitor|watch|bab
 
 func denySpawnWaiter() denial {
 	return denial{
-		Say: fmt.Sprintf("this child only waits, and the host tells a parent when each child ends: to wait on a job, run `%s`.", hint.JobWait.With("<job>")),
+		Say: "this child only waits, and the host tells a parent when each child ends: return, and the notice reaches your parent.",
 		Why: "A waiter spends a context and a turn per look on work that announces itself, and when the work fails early it waits on until it times out. " +
 			"A child sent to watch another child duplicates the notice the parent already gets.",
 	}
@@ -777,7 +777,7 @@ func denySpawnDuplicate(row types.Job) denial {
 func adviseSpawnNestedWaiter() advice {
 	return advice{
 		Say: "magus workspace: a worker spawning a helper to wait or watch: return to your parent, which is told when each worker ends.",
-		Why: fmt.Sprintf("Waiting belongs to whoever spawned the work: the host tells a parent when its child ends, and a root waits on a job with `%s`. "+
-			"A helper spawned only to wait stacks a third context on the notice the first two already get.", hint.JobWait.With("<job>")),
+		Why: "Waiting belongs to whoever spawned the work: the host tells a parent when its child ends, and a backgrounded run announces its own end. " +
+			"A helper spawned only to wait stacks a third context on the notice the first two already get.",
 	}
 }

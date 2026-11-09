@@ -362,7 +362,7 @@ func TestSharedCheckoutRefusalNamesTheHoldersUnusedPaths(t *testing.T) {
 	assert.Contains(t, ps[0].Message, "; running, updated")
 	assert.Contains(t, ps[0].Message, "wave/worker-one has changed nothing under internal/job/store.go")
 	assert.Contains(t, ps[0].Fix, "--depends-on wave/worker-one")
-	assert.Contains(t, ps[0].Fix, "the root narrows wave/worker-one to what it has changed with `magus job apply -f <record>`")
+	assert.Contains(t, ps[0].Fix, "the root narrows wave/worker-one to what it has changed with `magus job apply wave/worker-one --release-write-path internal/job/store.go`, which keeps its goals")
 
 	requests := releaseRequests(t, root)
 	require.Len(t, requests, 1)

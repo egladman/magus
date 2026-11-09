@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"maps"
 	"os"
@@ -1228,14 +1229,14 @@ const conformanceSkippedWhy = "The conformance checks read the symbol index, so 
 // uncoveredProjects names each project with a changed file, other than a declared output, that
 // has no symbol indexer: the conformance checks cannot see it, so their silence says nothing
 // about it.
-func uncoveredProjects(files []types.DiffFile, capable []string) []types.DiffUncovered {
-	var out []types.DiffUncovered
+func uncoveredProjects(files []diff.File, capable []string) []diff.Uncovered {
+	var out []diff.Uncovered
 	for _, f := range files {
 		if f.Project == "" || f.Generated() || slices.Contains(capable, f.Project) ||
-			slices.ContainsFunc(out, func(u types.DiffUncovered) bool { return u.Project == f.Project }) {
+			slices.ContainsFunc(out, func(u diff.Uncovered) bool { return u.Project == f.Project }) {
 			continue
 		}
-		out = append(out, types.DiffUncovered{Project: f.Project, Reason: types.DiffUncoveredNoIndexer})
+		out = append(out, diff.Uncovered{Project: f.Project, Reason: diff.UncoveredNoIndexer})
 	}
 	return out
 }
@@ -1267,6 +1268,9 @@ func symbolRunError(project types.ProjectRef, language string, err error) error 
 	var busy interface{ ExitCode() int }
 	if errors.As(err, &busy) && busy.ExitCode() == lockContendedExit {
 		return fmt.Errorf("%s: the indexer never ran, so rerun once that finishes: %w", project.Display(), err)
+	}
+	if symbols.MissingFile(err) {
+		return fmt.Errorf("%s: the indexer ran and a path it was given does not exist: %w", project.Display(), err)
 	}
 	if hint := symbols.InstallHint(language); hint != "" {
 		return fmt.Errorf("%s: %s: %w", project.Display(), hint, err)

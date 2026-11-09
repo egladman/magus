@@ -364,6 +364,7 @@ type magusInternals interface {
 	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
 	LastRecordedRun(ctx context.Context, projectPath, target string) (cache.RecordedRun, error)
 	Telemetry() observability.Provider
+	CheckSpawn(parent, child types.ModelTier) error
 }
 
 // viewInternals is m as workspace.ViewAs shows it to magus's own packages. It is also what a

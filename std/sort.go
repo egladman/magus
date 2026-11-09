@@ -8,8 +8,6 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module sort -lang buzz -out ../internal/interp/bindings/gen/sort.go -pkg bindgen
-
 // Sort is the "sort" host module: the orderings a build tool actually needs over
 // a list of strings.
 //
@@ -31,22 +29,22 @@ var Sort = Module{
 		{
 			Name:    "strings",
 			Doc:     "Return a new list ordered lexicographically by byte. The plain alphabetical sort, and the one to reach for when the goal is a stable order rather than a meaningful one - a listing that must not change between runs.",
-			Args:    []Arg{{Name: "items", Type: TypeStringSlice}},
-			Returns: []Ret{{Type: TypeStringSlice}},
+			Args:    []Arg{{Name: "items"}},
+			Returns: []Ret{{}},
 			Impl:    SortStrings,
 		},
 		{
 			Name:    "natural",
 			Doc:     "Return a new list ordered so embedded numbers compare as numbers: file2 before file10, where a lexicographic sort puts file10 first. Use it for anything a human will read - filenames, shard names, versioned directories - and note it is NOT a version sort; semver is.",
-			Args:    []Arg{{Name: "items", Type: TypeStringSlice}},
-			Returns: []Ret{{Type: TypeStringSlice}},
+			Args:    []Arg{{Name: "items"}},
+			Returns: []Ret{{}},
 			Impl:    SortNatural,
 		},
 		{
 			Name:    "semver",
 			Doc:     "Return a new list ordered by semantic version, oldest first, so v1.9.0 precedes v1.10.0 and a prerelease precedes its release. Accepts tags with or without a leading v. Anything that is not a valid version sorts AFTER every valid one, in lexicographic order among themselves - so a stray tag is visible at the end rather than silently reordering the releases.",
-			Args:    []Arg{{Name: "items", Type: TypeStringSlice}},
-			Returns: []Ret{{Type: TypeStringSlice}},
+			Args:    []Arg{{Name: "items"}},
+			Returns: []Ret{{}},
 			Impl:    SortSemver,
 		},
 	},

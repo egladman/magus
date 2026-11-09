@@ -1,6 +1,6 @@
 ---
 title: Using the Go SDK
-description: Task-shaped examples for calling magus from Go (open a workspace, list projects and targets, run a target and read its result, ask what a change affects, query the graph, judge a tool call with the guard) and one program that is its own harness.
+description: Task-shaped examples for calling magus from Go (open a workspace, list projects and targets, run a target and read its typed result, read a failed target's coded error, ask what a change affects, query the graph, judge a tool call with the guard) and one program that is its own harness.
 tags: [go, sdk, library, guide, guard, harness, cache, embedding]
 ---
 
@@ -12,15 +12,12 @@ the shape of the API behind them: `Open` and `Inspect`, the interface roles, the
 `List`/`Evaluate` axis, cancellation, and testing. Read it when an example here leaves you
 asking why.
 
-Every code block on this page is a Go example in
-package magus's tests ([`magus_test.go`](https://github.com/egladman/magus/blob/main/magus_test.go), [`plan_test.go`](https://github.com/egladman/magus/blob/main/plan_test.go), [`diff_test.go`](https://github.com/egladman/magus/blob/main/diff_test.go), [`judge_test.go`](https://github.com/egladman/magus/blob/main/judge_test.go)),
-copied here verbatim. The test suite compiles and runs each one and compares what it
-prints against its `// Output:` comment, so a block that stops working fails the build
-before the page goes stale.
-
-The examples live in package `magus` itself, so they call `Open` where your program
-calls `magus.Open`, and they decode records with magus's `internal/json`, which your
-program replaces with `encoding/json` or its own JSON package.
+Every code block on this page is copied from
+[`example_test.go`](https://github.com/egladman/magus/blob/main/example_test.go), with
+tabs shown as four spaces. That file is in package `magus_test`, so it reaches only what
+your program can import. The test suite runs each example and compares what it prints
+against its `// Output:` comment, and `TestGuideBlocksAreExamples` fails when a block
+here no longer matches the file.
 
 ## Setup
 
@@ -30,20 +27,17 @@ how. The examples import:
 
 ```go
 import (
-    "bufio"
-    "bytes"
     "context"
     "errors"
     "fmt"
-    "io"
     "os"
     "path/filepath"
     "slices"
     "strings"
 
+    "github.com/egladman/magus"
     _ "github.com/egladman/magus/buzzengine"
-    "github.com/egladman/magus/internal/json"
-    "github.com/egladman/magus/libs/cmdline/output"
+    "github.com/egladman/magus/libs/diagnostics"
     "github.com/egladman/magus/project"
     "github.com/egladman/magus/spells"
     "github.com/egladman/magus/std"
@@ -59,8 +53,8 @@ Each example builds a throwaway workspace with this helper. In your own program,
 the root of a real workspace instead, or find it with `magus.FindRoot(dir)`.
 
 ```go
-// newGuideWorkspace writes files, keyed by slash-separated workspace-relative path, into a
-// new temporary directory and returns it with the function that removes it.
+// newGuideWorkspace writes files, keyed by slash-separated relative path,
+// into a new temporary directory. It returns the root and its cleanup.
 func newGuideWorkspace(files map[string]string) (root string, cleanup func()) {
     root, err := os.MkdirTemp("", "magus-guide-*")
     if err != nil {
@@ -86,10 +80,9 @@ target that copies a project's `.txt` files into `out/`, and it declares both: t
 cache the target and know which projects a change reaches.
 
 ```go
-// registerCopySpell registers a spell named name with one target, build, that copies
-// every .txt file of a project into its out directory. The spell declares the .txt
-// files as its inputs and out as its output, which is what lets magus cache the target.
-// runs counts the builds that actually ran. The returned function unregisters it.
+// registerCopySpell registers a spell with one target, build, that copies a
+// project's .txt files into out. Declaring those inputs and that output is
+// what lets magus cache it. runs counts the builds that ran.
 func registerCopySpell(name string, runs *int) (unregister func()) {
     build := func(_ context.Context, req spells.InvokeRequest) (any, error) {
         *runs++
@@ -130,8 +123,8 @@ looks. Every constructor takes a spawn rule, which has no default; `magus.TierCe
 is the one the CLI passes.
 
 ```go
-// Example_openAWorkspace opens a workspace read-only and lists its projects. A
-// directory holding a magusfile.buzz is a project.
+// Example_openAWorkspace opens a workspace read-only and lists its projects.
+// A directory holding a magusfile.buzz is a project.
 func Example_openAWorkspace() {
     root, cleanup := newGuideWorkspace(map[string]string{
         "magusfile.buzz":     "",
@@ -141,7 +134,7 @@ func Example_openAWorkspace() {
     defer cleanup()
 
     ctx := context.Background()
-    ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
+    ws, err := magus.Inspect(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
     if err != nil {
         fmt.Println("inspect:", err)
         return
@@ -164,8 +157,8 @@ across the workspace, with the spells that contribute each one. Here a
 that project's magusfile.
 
 ```go
-// Example_listProjectsAndTargets lists every target the workspace declares, here the
-// build target a spell attached in Go contributes, beside the canonical ci target.
+// Example_listProjectsAndTargets lists every target the workspace declares:
+// the build target a Go spell attaches, beside the canonical ci target.
 func Example_listProjectsAndTargets() {
     root, cleanup := newGuideWorkspace(map[string]string{
         "magusfile.buzz":     "",
@@ -175,11 +168,11 @@ func Example_listProjectsAndTargets() {
     var runs int
     defer registerCopySpell("guide-list", &runs)()
 
-    reg := NewWorkspaceRegistry()
-    reg.RegisterProject("api", WithSpell("guide-list"))
+    reg := magus.NewWorkspaceRegistry()
+    reg.RegisterProject("api", magus.WithSpell("guide-list"))
 
     ctx := context.Background()
-    ws, err := Inspect(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+    ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
     if err != nil {
         fmt.Println("inspect:", err)
         return
@@ -201,56 +194,18 @@ func Example_listProjectsAndTargets() {
 ## Run a target and read its result
 
 Running needs the cache, so open the workspace with `Open`, which returns a
-`*magus.Magus`, and close it when you are done. `Run` reports progress through a sink.
-A sink built for `output.JSONL` writes one JSON record per event, and each
-`run.target.result` record carries the target's status, whether the cache answered it,
-and the ref of its stored output. This helper keeps those records:
-
-```go
-// targetResult is the part of a run.target.result record these examples read.
-type targetResult struct {
-    Type     string `json:"type"`
-    Project  string `json:"project"`
-    Target   string `json:"target"`
-    Status   string `json:"status"`
-    CacheHit bool   `json:"cache_hit"`
-    Ref      string `json:"ref"`
-}
-```
-
-```go
-// runRecorded runs targets on m and returns the per-target results the run recorded.
-func runRecorded(ctx context.Context, m *Magus, targets []types.Target) ([]targetResult, error) {
-    var records bytes.Buffer
-    sink, err := NewSink(output.JSONL, &records, io.Discard)
-    if err != nil {
-        return nil, err
-    }
-    runErr := m.Run(ctx, targets, WithSink(sink))
-    if err := sink.Close(); err != nil {
-        return nil, err
-    }
-    var results []targetResult
-    lines := bufio.NewScanner(&records)
-    for lines.Scan() {
-        var r targetResult
-        if err := json.Unmarshal(lines.Bytes(), &r); err != nil {
-            return nil, err
-        }
-        if r.Type == "run.target.result" {
-            results = append(results, r)
-        }
-    }
-    return results, errors.Join(runErr, lines.Err())
-}
-```
+`*magus.Magus`, and close it when you are done. `magus.WithTargetResults` hands each
+finished target to a function as a `types.TargetResult`: its `Status` (`ok`,
+`permitted` or `failed`), whether the cache answered it, and the ref of its stored
+output. A cache replay reports one too. The calls never overlap, so the function needs
+no lock, and every call has returned before `Run` does.
 
 `OutputByRef` reads what a ref names: the stored output and a descriptor of the run that
 produced it. It is the call behind `magus query output <ref>`.
 
 ```go
-// Example_runATarget runs a target, reads its result from the run's records, and
-// reads the stored output its ref names.
+// Example_runATarget runs a target, reads its typed result, and reads the
+// stored output its ref names.
 func Example_runATarget() {
     root, cleanup := newGuideWorkspace(map[string]string{
         "magusfile.buzz":     "",
@@ -261,19 +216,20 @@ func Example_runATarget() {
     var runs int
     defer registerCopySpell("guide-run", &runs)()
 
-    reg := NewWorkspaceRegistry()
-    reg.RegisterProject("api", WithSpell("guide-run"))
+    reg := magus.NewWorkspaceRegistry()
+    reg.RegisterProject("api", magus.WithSpell("guide-run"))
 
     ctx := context.Background()
-    m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+    m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
     if err != nil {
         fmt.Println("open:", err)
         return
     }
     defer m.Close()
 
-    results, err := runRecorded(ctx, m, []types.Target{{Path: "api", Name: "build"}})
-    if err != nil {
+    var results []types.TargetResult
+    keep := func(r types.TargetResult) { results = append(results, r) }
+    if err := m.Run(ctx, []types.Target{{Path: "api", Name: "build"}}, magus.WithTargetResults(keep)); err != nil {
         fmt.Println("run:", err)
         return
     }
@@ -300,6 +256,88 @@ func Example_runATarget() {
 }
 ```
 
+A sink built with `magus.NewSink(output.JSONL, ...)` and passed with `magus.WithSink`
+writes the same facts as `run.target.result` records, for a reader on the other side of
+a process boundary. A Go caller in the same process reads the typed value instead.
+
+## Read a failed target
+
+A failed target's `Err` is the error its target returned, wrapped but never flattened
+to text. Match it with `errors.Is` and `errors.As`. A program that embeds magus mints its
+own codes with [`libs/diagnostics`](https://pkg.go.dev/github.com/egladman/magus/libs/diagnostics):
+`diagnostics.New` gives a domain whose codes carry the program's own prefix and docs URL.
+`types.ClassifyRetry` says whether trying again can help: a coded error is retryable
+unless it is wrapped in `types.NonRetryable` or its code is listed as needing a change
+first.
+
+```go
+// acme is the diagnostic domain of a program that embeds magus. Its codes
+// carry their own prefix and docs URL, and pass through magus untouched.
+var acme = diagnostics.New(func(c diagnostics.Code) string {
+    return "https://acme.example/codes/" + string(c)
+})
+```
+
+```go
+// acmeSchemaOutside is the code acme's check refuses a query with.
+const acmeSchemaOutside diagnostics.Code = "ACME0001"
+```
+
+```go
+// Example_readAFailedTarget runs a target whose check refuses its input with
+// a coded error. The result's Err is that error, so the caller matches the
+// code and asks whether a retry can help without reading the message.
+func Example_readAFailedTarget() {
+    root, cleanup := newGuideWorkspace(map[string]string{
+        "magusfile.buzz":     "",
+        "api/magusfile.buzz": "",
+    })
+    defer cleanup()
+    check := func(context.Context, spells.InvokeRequest) (any, error) {
+        return nil, acme.Errorf(acmeSchemaOutside, "query touches a table outside the schema")
+    }
+    project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell("guide-check",
+        spells.WithTargets("check"),
+        spells.WithInvoker(check),
+    ))
+    defer project.DefaultSpellRegistry().UnregisterSpell("guide-check")
+
+    reg := magus.NewWorkspaceRegistry()
+    reg.RegisterProject("api", magus.WithSpell("guide-check"))
+
+    ctx := context.Background()
+    m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+    if err != nil {
+        fmt.Println("open:", err)
+        return
+    }
+    defer m.Close()
+
+    var results []types.TargetResult
+    keep := func(r types.TargetResult) { results = append(results, r) }
+    runErr := m.Run(ctx, []types.Target{{Path: "api", Name: "check"}}, magus.WithTargetResults(keep))
+    fmt.Println("run failed:", runErr != nil)
+    for _, r := range results {
+        fmt.Printf("%s:%s %s\n", r.Project, r.Target, r.Status)
+        var d *types.DiagnosticError
+        if errors.As(r.Err, &d) {
+            fmt.Println("code:", d.Code)
+        }
+        fmt.Println("is acme's code:", errors.Is(r.Err, acmeSchemaOutside))
+        fmt.Println("retryable:", types.ClassifyRetry(r.Err).Retryable)
+    }
+    // Output:
+    // run failed: true
+    // api:check failed
+    // code: ACME0001
+    // is acme's code: true
+    // retryable: true
+}
+```
+
+`Run` itself returns an error too, which says the run failed. Read the per-target
+results to learn which target failed and why.
+
 ## Ask what a change affects
 
 `AffectedFromPaths` takes changed paths and answers which projects hold them (`Seed`)
@@ -307,8 +345,8 @@ and which projects depend on those (`Affected`). `Affected(ctx, base)` asks the 
 a version-control diff against `base`. Here `web` declares a dependency on `api`.
 
 ```go
-// Example_whatADiffAffects asks which projects a change to one file reaches. web
-// depends on api, so a change inside api affects both.
+// Example_whatADiffAffects asks which projects a change to one file reaches.
+// web depends on api, so a change inside api affects both.
 func Example_whatADiffAffects() {
     root, cleanup := newGuideWorkspace(map[string]string{
         "magusfile.buzz":     "",
@@ -318,11 +356,11 @@ func Example_whatADiffAffects() {
     })
     defer cleanup()
 
-    reg := NewWorkspaceRegistry()
-    reg.RegisterProject("web", WithDependsOn("api"))
+    reg := magus.NewWorkspaceRegistry()
+    reg.RegisterProject("web", magus.WithDependsOn("api"))
 
     ctx := context.Background()
-    ws, err := Inspect(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+    ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
     if err != nil {
         fmt.Println("inspect:", err)
         return
@@ -348,9 +386,9 @@ It reads the workspace from its context: `m.Context(ctx)` returns one carrying t
 workspace `Open` returned.
 
 ```go
-// ExampleMagus_Context asks the workspace's knowledge graph for every project, on the
-// context m.Context returns. The verdict says whether zero matches would mean absent or
-// unknown.
+// ExampleMagus_Context asks the knowledge graph for every project, on the
+// context m.Context returns. The verdict says whether zero matches would
+// mean absent or unknown.
 func ExampleMagus_Context() {
     root, cleanup := newGuideWorkspace(map[string]string{
         "magusfile.buzz":     "",
@@ -360,7 +398,7 @@ func ExampleMagus_Context() {
     defer cleanup()
 
     ctx := context.Background()
-    m, err := Open(ctx, root, WithSpawnRule(TierCeiling))
+    m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
     if err != nil {
         fmt.Println("open:", err)
         return
@@ -398,19 +436,9 @@ root magusfile registers a rule that denies every program but `magus` and names 
 command to run instead:
 
 ```go
-// guardPolicy is a root magusfile whose command rule denies every program but magus,
-// naming the target to run instead.
+// guardPolicy is a root magusfile whose command rule denies every program
+// but magus, naming the target to run instead.
 const guardPolicy = `import "magus";
-
-magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
-    foreach (c in req.commands) {
-        if (c.program != "magus") {
-            return magus\guard.deny("Build through the target: magus run build api", {"rule": "targets-only"});
-        }
-    }
-    return magus\guard.allow();
-});
-`
 ```
 
 A deny is an answer, not an error: `err` is nil, `Decision` is `deny`, `Rule` names the
@@ -419,8 +447,8 @@ point at the full verdict. A pass has `Decision` set to `pass`. `JudgeWrite` jud
 file write the same way.
 
 ```go
-// Example_judgeAToolCall asks the guard about two shell commands before either runs.
-// A deny is an answer with a nil error.
+// Example_judgeAToolCall asks the guard about two shell commands before
+// either runs. A deny is an answer with a nil error.
 func Example_judgeAToolCall() {
     root, cleanup := newGuideWorkspace(map[string]string{
         "magusfile.buzz":     guardPolicy,
@@ -429,7 +457,7 @@ func Example_judgeAToolCall() {
     defer cleanup()
 
     ctx := context.Background()
-    m, err := Open(ctx, root, WithSpawnRule(TierCeiling))
+    m, err := magus.Open(ctx, root, magus.WithSpawnRule(magus.TierCeiling))
     if err != nil {
         fmt.Println("open:", err)
         return
@@ -451,20 +479,68 @@ func Example_judgeAToolCall() {
 }
 ```
 
+## A run the guard denies
+
+`Run` judges each target itself, as the `magus run <target> <project>` line the CLI
+would be judged by, so a program that skips `JudgeCommand` still cannot run a denied
+target. The deny comes back as a `*types.GuardDeniedError` carrying the whole
+judgment, and nothing runs. Match on `Judgment.Rule`, the stable name of the rule, never
+on the message. `WithSession` names the agent session the guard judges the run for.
+
+```go
+// Example_aDeniedRun runs a target the guard denies. Nothing runs, and the
+// error carries the whole judgment, so the caller reads its rule as a value.
+func Example_aDeniedRun() {
+    root, cleanup := newGuideWorkspace(map[string]string{
+        "magusfile.buzz": `import "magus";
+
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    return magus\guard.deny("Ask a person before you build.", {"rule": "ask-first"});
+});
+`,
+        "api/magusfile.buzz": "",
+        "api/greeting.txt":   "hello\n",
+    })
+    defer cleanup()
+    var runs int
+    defer registerCopySpell("guide-denied", &runs)()
+
+    reg := magus.NewWorkspaceRegistry()
+    reg.RegisterProject("api", magus.WithSpell("guide-denied"))
+
+    ctx := context.Background()
+    m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
+    if err != nil {
+        fmt.Println("open:", err)
+        return
+    }
+    defer m.Close()
+
+    err = m.Run(ctx, []types.Target{{Path: "api", Name: "build"}}, magus.WithSession("guide-session"))
+    var denied *types.GuardDeniedError
+    if errors.As(err, &denied) {
+        fmt.Println("denied by:", denied.Judgment.Rule)
+    }
+    fmt.Println("builds:", runs)
+    // Output:
+    // denied by: workspace:ask-first
+    // builds: 0
+}
+```
+
 ## A program that is its own harness
 
 The pieces above make a harness: deterministic scaffolding around whatever proposes the
 work. Here the proposals are a fixed list standing in for a model. The guard judges each
 one before anything happens; the denied copy never runs, and its reason is what the
 agent would read next. The allowed command runs as a target with declared inputs and
-outputs. The second run of the same inputs is answered from the cache: the record says
+outputs. The second run of the same inputs is answered from the cache: its result says
 `cache hit true`, and the build counter shows the copy did not run again.
 
 ```go
-// Example_aProgramThatIsItsOwnHarness is the whole loop in one program: an agent
-// proposes shell commands, the guard judges each before it runs, the allowed one runs as
-// a target with declared inputs and outputs, and a second run of the same inputs is
-// answered from the cache without running the build again.
+// Example_aProgramThatIsItsOwnHarness is the whole loop. A list stands in
+// for a model's proposals, and the guard judges each before it runs. The
+// allowed one runs as a target, and its second run is a cache hit.
 func Example_aProgramThatIsItsOwnHarness() {
     root, cleanup := newGuideWorkspace(map[string]string{
         "magusfile.buzz":     guardPolicy,
@@ -475,18 +551,22 @@ func Example_aProgramThatIsItsOwnHarness() {
     var runs int
     defer registerCopySpell("guide-harness", &runs)()
 
-    reg := NewWorkspaceRegistry()
-    reg.RegisterProject("api", WithSpell("guide-harness"))
+    reg := magus.NewWorkspaceRegistry()
+    reg.RegisterProject("api", magus.WithSpell("guide-harness"))
 
     ctx := context.Background()
-    m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+    m, err := magus.Open(ctx, root, magus.WithWorkspaceRegistry(reg), magus.WithSpawnRule(magus.TierCeiling))
     if err != nil {
         fmt.Println("open:", err)
         return
     }
     defer m.Close()
 
-    // What a model asked to run, in order. A real harness reads these from its agent loop.
+    report := func(r types.TargetResult) {
+        fmt.Printf("ran %s:%s: %s, cache hit %v, builds so far %d\n", r.Project, r.Target, r.Status, r.CacheHit, runs)
+    }
+
+    // A real harness reads these from its agent loop.
     proposed := []string{"cp api/greeting.txt api/out/", "magus run build api", "magus run build api"}
     for _, command := range proposed {
         j, err := m.JudgeCommand(ctx, "guide-session", root, command)
@@ -505,13 +585,10 @@ func Example_aProgramThatIsItsOwnHarness() {
             fmt.Printf("allowed %q, which this harness does not run\n", command)
             continue
         }
-        results, err := runRecorded(ctx, m, []types.Target{{Path: path, Name: name}})
-        if err != nil {
+        run := []types.Target{{Path: path, Name: name}}
+        if err := m.Run(ctx, run, magus.WithSession("guide-session"), magus.WithTargetResults(report)); err != nil {
             fmt.Println("run:", err)
             return
-        }
-        for _, r := range results {
-            fmt.Printf("ran %s:%s: %s, cache hit %v, builds so far %d\n", r.Project, r.Target, r.Status, r.CacheHit, runs)
         }
     }
     // Output:
@@ -521,10 +598,8 @@ func Example_aProgramThatIsItsOwnHarness() {
 }
 ```
 
-`Run` judges each target itself, as the `magus run <target> <project>` line the CLI
-would be judged by, so a harness that skips `JudgeCommand` still cannot run a denied
-target: the deny comes back as a `*types.GuardDeniedError` and nothing runs. Judging
-first lets the harness hand the reason back to the agent before it tries.
+Judging first lets the harness hand the reason back to the agent before it tries; `Run`
+judges again either way.
 
 ## Next
 

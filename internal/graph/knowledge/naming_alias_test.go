@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -47,7 +48,7 @@ func TestAliasCheckReportsAnAliasedImport(t *testing.T) {
 			require.Greater(t, n, len(tc.past))
 			c.Details = c.Details[n-len(tc.past)-1:]
 			assert.Equal(t, types.Check{
-				Name:     types.CheckImportAlias,
+				Name:     diff.CheckImportAlias,
 				Status:   types.CheckAdvice,
 				Evidence: types.EvidenceInferred,
 				Message:  tc.message,
@@ -72,7 +73,7 @@ func TestAliasCheckReportsANewPackageTakingAName(t *testing.T) {
 
 	got := g.ConformanceChecks(ConformanceChange{Subjects: []string{symID(fresh)}, Introduced: introduced(fresh), Conformance: aliasOptions()})
 
-	assert.Equal(t, map[string][]types.Check{symID(fresh): {advice(types.CheckImportAlias,
+	assert.Equal(t, map[string][]types.Check{symID(fresh): {advice(diff.CheckImportAlias,
 		"internal/newq takes the package name types, which internal/queue/types (13 importers), types (20 importers) already declares: "+
 			"consider another name before anything imports both",
 	)}}, got)

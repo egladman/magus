@@ -10,12 +10,10 @@ import (
 // what was expected, nor steps to reproduce it.
 const RuleIssueRepro Rule = "issue-repro"
 
-var issueKind = []Kind{KindIssue}
-
 // issueChecks hold the issue rule and the release rules: the text a project
 // writes for the people who track it.
 var issueChecks = slices.Concat([]check{
-	{rule: RuleIssueRepro, on: issueKind, graded: true, judge: issueRepro},
+	{rule: RuleIssueRepro, reads: proseFormats, judge: issueRepro},
 }, changelogChecks)
 
 var issueTexts = mergeTexts(map[Rule]ruleText{

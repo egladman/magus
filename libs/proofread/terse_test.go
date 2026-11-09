@@ -147,7 +147,7 @@ func wordyIn(text string, kind Kind) []string {
 
 	var out []string
 
-	for _, f := range wordy(input{kind: kind, prose: readProse(lines, true), lines: lines}) {
+	for _, f := range wordy(input{spec: spec(kind), prose: readProse(lines, true), lines: lines}) {
 		out = append(out, f.Match)
 	}
 

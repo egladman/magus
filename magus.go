@@ -7,6 +7,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
+	difftypes "github.com/egladman/magus/types/diff"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -329,14 +331,14 @@ func (m *Magus) explainStale(err error) error {
 // WorkspaceLoadFailure describes err, a failed Open of root, as the server reports a FAILED
 // workspace: the error as rendered, plus the source position of each failing file that has
 // one. A position outside root keeps its absolute path.
-func WorkspaceLoadFailure(root string, err error) *types.WorkspaceFailure {
-	f := &types.WorkspaceFailure{Message: err.Error()}
+func WorkspaceLoadFailure(root string, err error) *daemon.WorkspaceFailure {
+	f := &daemon.WorkspaceFailure{Message: err.Error()}
 	for _, branch := range joinedBranches(err, "") {
 		d, ok := buzz.DiagnosticFromError(branch.err)
 		if !ok {
 			continue
 		}
-		sd := types.SourceDiagnostic{Code: d.Code, Line: d.Line, Column: d.Col, Message: d.Msg}
+		sd := daemon.SourceDiagnostic{Code: d.Code, Line: d.Line, Column: d.Col, Message: d.Msg}
 		// A BZZ code's error carries its docs URL; an outer MGS wrapper must not lend its own.
 		var de *types.DiagnosticError
 		if d.Code != "" && errors.As(branch.err, &de) && de.Code == d.Code {
@@ -1324,16 +1326,16 @@ func (m *Magus) FileAt(ctx context.Context, rev, path string) (string, error) {
 // The remote is read through the RemoteReporter capability rather than by shelling a git
 // command, so it works on every backend that answers and degrades to empty on the ones that
 // cannot.
-func (m *Magus) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
+func (m *Magus) ReviewOrigin(ctx context.Context) difftypes.ReviewOrigin {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
-		return types.ReviewOrigin{}
+		return difftypes.ReviewOrigin{}
 	}
 	return m.resolveReviewOrigin(ctx, res.VCS)
 }
 
-func (m *Magus) resolveReviewOrigin(ctx context.Context, driver types.VCSDriver) types.ReviewOrigin {
-	var out types.ReviewOrigin
+func (m *Magus) resolveReviewOrigin(ctx context.Context, driver types.VCSDriver) difftypes.ReviewOrigin {
+	var out difftypes.ReviewOrigin
 	if ref, err := driver.Ref(ctx, m.ws.Root); err == nil {
 		out.Branch = ref
 	}
@@ -1455,21 +1457,21 @@ func statusLinePath(line string) string {
 // whole review because coverage was never run would make the useful part unreachable. A
 // reader must be able to tell "nothing depends on this" from "nothing was measured", which is
 // what Notes is for.
-func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
-	return m.DiffWith(ctx, paths, types.DiffOptions{})
+func (m *Magus) Diff(ctx context.Context, paths []string) (difftypes.Diff, error) {
+	return m.DiffWith(ctx, paths, difftypes.Options{})
 }
 
-func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types.Diff, error) {
-	out := types.Diff{Base: "working"}
+func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (difftypes.Diff, error) {
+	out := difftypes.Diff{Base: "working"}
 
 	entries, err := m.ClassifyFiles(ctx, paths)
 	if err != nil {
-		return types.Diff{}, err
+		return difftypes.Diff{}, err
 	}
-	byPath := make(map[string]*types.DiffFile, len(entries))
-	out.Files = make([]types.DiffFile, 0, len(entries))
+	byPath := make(map[string]*difftypes.File, len(entries))
+	out.Files = make([]difftypes.File, 0, len(entries))
 	for _, e := range entries {
-		out.Files = append(out.Files, types.DiffFile{
+		out.Files = append(out.Files, difftypes.File{
 			Path: e.Path, Project: e.Project, Role: e.Role, Hint: e.Hint,
 		})
 	}
@@ -1538,7 +1540,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	// index actually covered. Defaulting to internal would report every unindexed file as
 	// safe, which is the one wrong answer that costs something.
 	for i := range out.Files {
-		out.Files[i].Visibility = types.DiffVisibilityUnknown
+		out.Files[i].Visibility = difftypes.VisibilityUnknown
 	}
 	// Reach gets a measured baseline of zero ONLY when an index was loaded; otherwise it stays
 	// nil and Review.Ranked() reports that there was no ranking key. The flag is workspace-wide
@@ -1570,8 +1572,8 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 			continue
 		}
 		// The index covered this file whether or not the patch touched a symbol in it.
-		if f.Visibility == types.DiffVisibilityUnknown {
-			f.Visibility = types.DiffVisibilityInternal
+		if f.Visibility == difftypes.VisibilityUnknown {
+			f.Visibility = difftypes.VisibilityInternal
 		}
 		// A package symbol is defined by every file of its package and referenced by every
 		// importer, so it would set every file's reach and changes nothing a caller sees.
@@ -1579,7 +1581,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		if namespaceSymbol(s.Symbol, "") || (changed != nil && !hit) {
 			continue
 		}
-		sym := types.DiffSymbol{ID: s.Symbol, Label: s.Label, RefCount: s.RefCount, FileCount: s.FileCount}
+		sym := difftypes.Symbol{ID: s.Symbol, Label: s.Label, RefCount: s.RefCount, FileCount: s.FileCount}
 		if t.change != "" {
 			sym.Change, sym.Qualified, sym.Signature = t.change, qualifiedName(s.Symbol, s.Label), t.signature
 		}
@@ -1607,7 +1609,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		// reviewer needs to know the file contains something a consumer can see, and burying
 		// that because its neighbors are internal is how the signal gets missed.
 		if len(sym.PublicTo) > 0 || sym.PublicBeyondWorkspace {
-			f.Visibility = types.DiffVisibilityPublic
+			f.Visibility = difftypes.VisibilityPublic
 		}
 	}
 	// scip-go indexes only the files that build for the host's GOOS, GOARCH and default
@@ -1703,7 +1705,7 @@ type touchedSymbol struct {
 // how anyone reads the diff, unless the patch touched it and it is a declaration: a changed
 // test function has no referents and is still the declaration a reviewer and a split plan
 // need named. A newly added export has no referents yet and is kept by its exposure.
-func listedDiffSymbol(sym types.DiffSymbol, touchedKind string) bool {
+func listedDiffSymbol(sym difftypes.Symbol, touchedKind string) bool {
 	return sym.RefCount > 0 || sym.FileCount > 0 || sym.PublicBeyondWorkspace || len(sym.PublicTo) > 0 ||
 		declarationKinds[touchedKind]
 }
@@ -1719,7 +1721,7 @@ var declarationKinds = map[string]bool{
 // touchedSymbols reads which symbols the reviewed files define on lines the patch changed, and
 // what it did to each, from the head graph's definition ranges. Package and namespace symbols
 // are never touched.
-func touchedSymbols(head *knowledge.Graph, patch string, byPath map[string]*types.DiffFile) map[string]touchedSymbol {
+func touchedSymbols(head *knowledge.Graph, patch string, byPath map[string]*difftypes.File) map[string]touchedSymbol {
 	lines := impact.ChangedLinesByHunk(patch)
 	pf := readPatchFacts(patch)
 	defs := definedSymbols(head.Nodes())
@@ -1745,11 +1747,11 @@ func touchedSymbols(head *knowledge.Graph, patch string, byPath map[string]*type
 				place.start, place.extent = s.Start, s.End-s.Start+1
 			}
 			def := defs[id]
-			change := types.DiffChangeBody
+			change := difftypes.ChangeBody
 			if _, added := pf.added[path][sourceLine(def.node.Source)]; added {
-				change = types.DiffChangeAdded
+				change = difftypes.ChangeAdded
 				if knowledge.IndexIdentifier(removed, def.node.Label) >= 0 {
-					change = types.DiffChangeSignature
+					change = difftypes.ChangeSignature
 				}
 			}
 			out[id] = touchedSymbol{change: change, signature: def.node.Attrs[knowledge.AttrSignature], kind: def.node.Attrs[attrSymbolKind], place: place}
@@ -1773,7 +1775,7 @@ func namespaceSymbol(id, kind string) bool {
 }
 
 // attachPublicThrough sets PublicThrough on every listed symbol.
-func attachPublicThrough(files []types.DiffFile, g impact.CallGraph) {
+func attachPublicThrough(files []difftypes.File, g impact.CallGraph) {
 	for i := range files {
 		for j := range files[i].Symbols {
 			files[i].Symbols[j].PublicThrough = impact.PublicThrough(g, files[i].Symbols[j].ID)
@@ -1846,10 +1848,10 @@ func (c callGraph) Boundary(id string) string {
 	out := ""
 	for _, site := range refs.Refs {
 		if p := c.owner(site.File); p != "" && p != owner {
-			return types.DiffBoundaryProject
+			return difftypes.BoundaryProject
 		}
 		if theirs := c.namespaces[site.File]; ns != "" && len(theirs) > 0 && !slices.Contains(theirs, ns) {
-			out = types.DiffBoundaryPackage
+			out = difftypes.BoundaryPackage
 		}
 	}
 	return out
@@ -1857,7 +1859,7 @@ func (c callGraph) Boundary(id string) string {
 
 // conformance runs the conformance checks for diff. Whatever keeps them from running is set as
 // out.ConformanceError, in place of findings; a weaker input they fall back to is a Note.
-func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[string]*types.DiffFile,
+func (m *Magus) conformance(ctx context.Context, out *difftypes.Diff, byPath map[string]*difftypes.File,
 	graph *knowledge.Graph, cfg diffConfig, in conformanceInput, patchErr error,
 ) {
 	fail := func(msg string, err error) {
@@ -1900,7 +1902,7 @@ func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[str
 // in the review is kept: that means the review does not know the file's project rather than
 // that the project was untouched, and dropping it would silently shrink the count on the
 // strength of an absence.
-func authorEditedProjects(seeds []string, files []types.DiffFile) []string {
+func authorEditedProjects(seeds []string, files []difftypes.File) []string {
 	authored := make(map[string]bool, len(seeds))
 	known := make(map[string]bool, len(seeds))
 	for _, f := range files {

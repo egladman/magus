@@ -2,6 +2,7 @@ package diff
 
 import (
 	"context"
+	difftypes "github.com/egladman/magus/types/diff"
 	"net/http"
 	"testing"
 
@@ -11,19 +12,18 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit/register"
-	"github.com/egladman/magus/types"
 )
 
 // githubReview is a workspace whose branch lives on github.com, which is what the reading
 // command is built for.
 type githubReview struct{ cleanBranchReview }
 
-func (githubReview) ReviewOrigin(context.Context) types.ReviewOrigin {
-	return types.ReviewOrigin{Branch: "feat/x", Remote: "git@github.com:acme/acme.git"}
+func (githubReview) ReviewOrigin(context.Context) difftypes.ReviewOrigin {
+	return difftypes.ReviewOrigin{Branch: "feat/x", Remote: "git@github.com:acme/acme.git"}
 }
 
 // withReviewTarget registers a provider that answers the review lookup with target.
-func withReviewTarget(t *testing.T, target types.ReviewTarget) {
+func withReviewTarget(t *testing.T, target difftypes.ReviewTarget) {
 	t.Helper()
 	selectReviewProvider(t, register.ReviewSpell(t, target, nil))
 }
@@ -37,7 +37,7 @@ func readingHandler(t *testing.T, ws reviewSource) (*ReviewHandler, *changeset.S
 // The op marks the review locally and answers with the command the person may run. The mark
 // needs no attached session: a reader can say they are reading before any hunk is fetched.
 func TestReadingMarksTheReviewAndPrintsTheForgeCommand(t *testing.T) {
-	withReviewTarget(t, types.ReviewTarget{ID: "482", Repo: "acme/acme", Viewer: "eli"})
+	withReviewTarget(t, difftypes.ReviewTarget{ID: "482", Repo: "acme/acme", Viewer: "eli"})
 	h, store := readingHandler(t, githubReview{})
 
 	w := post(t, h, `{"op":"reading","on":true}`)
@@ -56,7 +56,7 @@ func TestReadingMarksTheReviewAndPrintsTheForgeCommand(t *testing.T) {
 }
 
 func TestReadingOffClearsTheMark(t *testing.T) {
-	withReviewTarget(t, types.ReviewTarget{ID: "482", Repo: "acme/acme"})
+	withReviewTarget(t, difftypes.ReviewTarget{ID: "482", Repo: "acme/acme"})
 	h, store := readingHandler(t, githubReview{})
 	require.Equal(t, http.StatusOK, post(t, h, `{"op":"reading","on":true}`).Code)
 
@@ -78,7 +78,7 @@ func loadReading(t *testing.T, store *changeset.Store) changeset.ReadingMark {
 // Only GitHub's shape is known, so any other forge gets the mark and no command rather than a
 // guessed one.
 func TestReadingOnAnotherForgeMarksWithoutACommand(t *testing.T) {
-	withReviewTarget(t, types.ReviewTarget{ID: "482", Repo: "acme/acme"})
+	withReviewTarget(t, difftypes.ReviewTarget{ID: "482", Repo: "acme/acme"})
 	h, store := readingHandler(t, cleanBranchReview{})
 
 	w := post(t, h, `{"op":"reading","on":true}`)
@@ -94,7 +94,7 @@ func TestReadingOnAnotherForgeMarksWithoutACommand(t *testing.T) {
 // A review that has landed has nothing left to hold, and recording the mark would make the next
 // job tick report a merge under a reader who started after it.
 func TestReadingAMergedReviewIsRefused(t *testing.T) {
-	withReviewTarget(t, types.ReviewTarget{ID: "482", Repo: "acme/acme", State: "merged"})
+	withReviewTarget(t, difftypes.ReviewTarget{ID: "482", Repo: "acme/acme", State: "merged"})
 	h, store := readingHandler(t, githubReview{})
 
 	w := post(t, h, `{"op":"reading","on":true}`)
@@ -104,7 +104,7 @@ func TestReadingAMergedReviewIsRefused(t *testing.T) {
 }
 
 func TestReadingWithNoReviewIsAnError(t *testing.T) {
-	withReviewTarget(t, types.ReviewTarget{Reason: "no pull request for this branch"})
+	withReviewTarget(t, difftypes.ReviewTarget{Reason: "no pull request for this branch"})
 	h, _ := readingHandler(t, githubReview{})
 
 	w := post(t, h, `{"op":"reading","on":true}`)
@@ -115,7 +115,7 @@ func TestReadingWithNoReviewIsAnError(t *testing.T) {
 
 // A server with nowhere to keep the mark must say so rather than answer as if it had recorded one.
 func TestReadingWithNoStateDirIsAnError(t *testing.T) {
-	withReviewTarget(t, types.ReviewTarget{ID: "482", Repo: "acme/acme"})
+	withReviewTarget(t, difftypes.ReviewTarget{ID: "482", Repo: "acme/acme"})
 	h := NewReviewHandler(ReviewOptions{Sessions: changeset.NewStore(""), Workspace: githubReview{}, Root: t.TempDir()}, nil)
 
 	w := post(t, h, `{"op":"reading","on":true}`)

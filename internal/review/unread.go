@@ -2,9 +2,10 @@ package review
 
 import (
 	"fmt"
+	"github.com/egladman/magus/libs/text/plural"
+	"github.com/egladman/magus/types/diff"
 
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/types"
 )
 
 // FilterUnread narrows rev to the hunks no read mark covers: a file keeps only its unread hunks
@@ -14,14 +15,14 @@ import (
 //
 // When loadErr is set the result holds no file at all and Unread says the read state is unknown:
 // an unreadable store says nothing about what is unread, so no hunk is called unread.
-func FilterUnread(rev types.Diff, viewed []string, loadErr error) types.Diff {
+func FilterUnread(rev diff.Diff, viewed []string, loadErr error) diff.Diff {
 	total := 0
 	for _, f := range rev.Files {
 		total += len(f.Hunks)
 	}
 	if loadErr != nil {
 		rev.Files, rev.Order = nil, nil
-		rev.Unread = &types.DiffUnread{ReadState: types.DiffReadStateUnknown, Reason: loadErr.Error(), Hunks: total}
+		rev.Unread = &diff.Unread{ReadState: diff.ReadStateUnknown, Reason: loadErr.Error(), Hunks: total}
 		return rev
 	}
 	read := make(map[string]bool, len(viewed))
@@ -29,13 +30,13 @@ func FilterUnread(rev types.Diff, viewed []string, loadErr error) types.Diff {
 		read[d] = true
 	}
 	keep := map[string]bool{}
-	files := make([]types.DiffFile, 0, len(rev.Files))
+	files := make([]diff.File, 0, len(rev.Files))
 	for _, f := range rev.Files {
-		var hunks []types.DiffHunk
+		var hunks []diff.Hunk
 		for _, h := range f.Hunks {
 			if !read[h.Digest] {
 				hunks = append(hunks, h)
-				keep[types.DiffHunkRef{Path: f.Path, Index: h.Index}.Key()] = true
+				keep[diff.HunkRef{Path: f.Path, Index: h.Index}.Key()] = true
 			}
 		}
 		if len(hunks) == 0 {
@@ -48,19 +49,19 @@ func FilterUnread(rev types.Diff, viewed []string, loadErr error) types.Diff {
 	if rev.Order != nil {
 		rev.Order = filterOrder(*rev.Order, keep)
 	}
-	rev.Unread = &types.DiffUnread{ReadState: types.DiffReadStateKnown, Hunks: total, Unread: len(keep)}
+	rev.Unread = &diff.Unread{ReadState: diff.ReadStateKnown, Hunks: total, Unread: len(keep)}
 	return rev
 }
 
 // filterOrder keeps the placements keep names. Step numbers are not reassigned, because each
 // Why names the step it was placed against by number.
-func filterOrder(o types.DiffOrder, keep map[string]bool) *types.DiffOrder {
-	out := types.DiffOrder{}
+func filterOrder(o diff.Order, keep map[string]bool) *diff.Order {
+	out := diff.Order{}
 	for _, g := range o.Groups {
-		var steps []types.DiffStep
+		var steps []diff.Step
 		n := 0
 		for _, s := range g.Steps {
-			var hunks []types.DiffStepHunk
+			var hunks []diff.StepHunk
 			for _, h := range s.Hunks {
 				if keep[h.Ref.Key()] {
 					hunks = append(hunks, h)
@@ -85,8 +86,8 @@ func filterOrder(o types.DiffOrder, keep map[string]bool) *types.DiffOrder {
 	return &out
 }
 
-func keptRefs(refs []types.DiffHunkRef, keep map[string]bool) []types.DiffHunkRef {
-	var out []types.DiffHunkRef
+func keptRefs(refs []diff.HunkRef, keep map[string]bool) []diff.HunkRef {
+	var out []diff.HunkRef
 	for _, r := range refs {
 		if keep[r.Key()] {
 			out = append(out, r)
@@ -97,7 +98,7 @@ func keptRefs(refs []types.DiffHunkRef, keep map[string]bool) []types.DiffHunkRe
 
 // HunkNames is one path:start-end per hunk of rev, in file order: the -o name shape of a
 // report narrowed to hunks.
-func HunkNames(rev types.Diff) []string {
+func HunkNames(rev diff.Diff) []string {
 	var out []string
 	for _, f := range rev.Files {
 		for _, h := range f.Hunks {
@@ -108,12 +109,12 @@ func HunkNames(rev types.Diff) []string {
 }
 
 // UnreadLine is the one line that states what the unread filter found, for a person.
-func UnreadLine(u types.DiffUnread, source string) string {
+func UnreadLine(u diff.Unread, source string) string {
 	switch {
-	case u.ReadState == types.DiffReadStateUnknown:
+	case u.ReadState == diff.ReadStateUnknown:
 		return fmt.Sprintf("read state unknown for %s; no hunk is called unread", source)
 	case u.Unread == 0:
-		return fmt.Sprintf("every hunk of %s is marked read (%d %s)", source, u.Hunks, plural(u.Hunks, "hunk", "hunks"))
+		return fmt.Sprintf("every hunk of %s is marked read (%d %s)", source, u.Hunks, plural.Word(u.Hunks, "hunk", "hunks"))
 	}
 	return fmt.Sprintf("%d of %d hunks in %s are not marked read", u.Unread, u.Hunks, source)
 }

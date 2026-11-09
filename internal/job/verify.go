@@ -1181,20 +1181,26 @@ func DeniedDeclarations(denyPaths []string, file string) []string {
 
 // ClaimedDeclarations are the declarations row's write paths claim in file, the
 // repository-relative path of one file, or nil when some entry covers the file whole or none
-// covers it at all. A file row released while a pattern still matches it (see
-// [NarrowConfigHold]) is held by its claims alone: the release is what ended the pattern's
-// hold on it.
+// covers it at all. A file whose covering entries all stop short of it
+// (see [releasedReach]) is held by its claims alone. With none, the answer
+// is an empty slice: the row holds nothing of the file.
 func ClaimedDeclarations(row types.Job, file string) []string {
-	released := releasedFile(row, file)
 	var decls []string
+	stopped := false
 	for _, entry := range row.WritePaths {
 		p, decl := types.SplitClaim(entry)
 		switch {
-		case decl == "" && !released && coversPath(p, file):
-			return nil
+		case decl == "" && coversPath(p, file):
+			if !releasedReach(row, entry, file) {
+				return nil
+			}
+			stopped = true
 		case decl != "" && p != "" && path.Clean(p) == path.Clean(file):
 			decls = append(decls, decl)
 		}
+	}
+	if decls == nil && stopped {
+		return []string{}
 	}
 	return decls
 }

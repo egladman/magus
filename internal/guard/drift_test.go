@@ -118,7 +118,7 @@ func TestScopeDriftFiresOncePerProject(t *testing.T) {
 }
 
 // A workspace open that never answers holds the drift rule no longer than ctx allows, and
-// generatedOutput, which has no ctx, no longer than inspectBudget: both go silent.
+// generatedOutput, which has no ctx, no longer than hookBudget: both go silent.
 func TestDriftAndGeneratedOutputBoundAStalledOpen(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	release := make(chan struct{})
@@ -137,7 +137,7 @@ func TestDriftAndGeneratedOutputBoundAStalledOpen(t *testing.T) {
 
 	start = time.Now()
 	assert.False(t, generatedOutput(deps, "gen/out.go"))
-	assert.Less(t, time.Since(start), inspectBudget+time.Second)
+	assert.Less(t, time.Since(start), hookBudget+time.Second)
 }
 
 // A gate with no cache base remembers nothing, and a rule that cannot remember must

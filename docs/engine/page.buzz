@@ -14,13 +14,14 @@ import "serialize";
 import "encoding/url" as urlcodec;
 import "template";
 import "assert";
-import "lib/text" as _;
-import "lib/url" as _;
-import "lib/html" as _;
+import "html" as htmlcodec;
+import "../libs/ssg/text" as _;
+import "../libs/ssg/urls" as _;
+import "../libs/ssg/rewrite" as _;
 import "lib/glossary" as _;
 import "lib/conventions" as _;
 import "engine/meta" as _;
-import "engine/path" as _;
+import "../libs/ssg/paths" as _;
 import "engine/types" as _;
 import "engine/route" as _;
 import "engine/nav" as _;
@@ -37,7 +38,7 @@ import "site/diagrams/all" as diagrams;
 // (https://eli.gladman.cc/magus/ -> "/magus/"), falling back to "/" when empty so the page
 // still renders locally from the server root.
 export fun render404(site: Site) > void !> any {
-    final basePath = sitePathPrefix(site.config.baseURL);
+    final basePath = sitePathPrefix(site.inputs.config.baseURL);
     final title = "Page not found - magus";
     final desc = "You have warped off the map. That page is not here; head back to the documentation, install page, or playground.";
     // Its own template, not renderPage(), because every asset/link here must be root-
@@ -84,10 +85,10 @@ export fun render404(site: Site) > void !> any {
 </html>
 `;
     final doc = template\render(tmpl, {
-        "title": title, "desc": desc, "basePath": basePath, "csp": site.csp,
-        "nav": renderSiteNav(basePath, "", false, site.config), "footer": renderSiteFooter(basePath, site),
+        "title": title, "desc": desc, "basePath": basePath, "csp": site.inputs.csp,
+        "nav": renderSiteNav(basePath, "", false, site.inputs.config), "footer": renderSiteFooter(basePath, site),
     });
-    fs\writeFile(site.outDir + "/404.html", doc);
+    fs\writeFile(site.inputs.outDir + "/404.html", doc);
 }
 
 
@@ -96,7 +97,7 @@ export fun render404(site: Site) > void !> any {
 // asset paths, since its URL depth differs from the rest of the site. Playground is called
 // out because it is precached and fully functional offline.
 export fun writeOffline(site: Site) > void !> any {
-    final basePath = sitePathPrefix(site.config.baseURL);
+    final basePath = sitePathPrefix(site.inputs.config.baseURL);
     final title = "You are offline - magus";
     final desc = "No network connection. The graph explorer and playground are fully functional offline.";
     final tmpl = `<!DOCTYPE html>
@@ -139,11 +140,11 @@ export fun writeOffline(site: Site) > void !> any {
 </html>
 `;
     final doc = template\render(tmpl, {
-        "title": title, "desc": desc, "basePath": basePath, "csp": site.csp,
-        "nav": renderSiteNav(basePath, "", false, site.config), "footer": renderSiteFooter(basePath, site),
+        "title": title, "desc": desc, "basePath": basePath, "csp": site.inputs.csp,
+        "nav": renderSiteNav(basePath, "", false, site.inputs.config), "footer": renderSiteFooter(basePath, site),
     });
-    fs\mkdirAll(site.outDir + "/offline");
-    fs\writeFile(site.outDir + "/offline/index.html", doc);
+    fs\mkdirAll(site.inputs.outDir + "/offline");
+    fs\writeFile(site.inputs.outDir + "/offline/index.html", doc);
     // Register so pruneStaleOutputs doesn't treat it as stale - it is always produced
     // (the SW precaches it).
     site.writtenPaths["offline/index.html"] = true;
@@ -195,7 +196,7 @@ fun pageOrder(srcDir: str, name: str) > int !> any {
 fun renderPager(rel: str, site: Site) > str !> any {
     final parts = rel.split("/");
     final base = parts[parts.len() - 1];
-    var srcDir = fs\join(site.root, site.docs);
+    var srcDir = fs\join(site.inputs.root, site.inputs.docs);
     if (parts.len() > 1) { srcDir = srcDir + "/" + parts.sub(0, parts.len() - 1).join("/"); }
 
     var sibs: mut [str] = mut [<str>];
@@ -205,7 +206,7 @@ fun renderPager(rel: str, site: Site) > str !> any {
         // link can't express - so they stay out. isGeneratorFile drops the SSG's own
         // MAGUS.md: the walk never renders it, so a pager link would dangle.
         if (name.endsWith(".md") and name != "README.md" and name != "index.md"
-            and name.startsWith("_") == false and isGeneratorFile(name, site.config.generatorFiles) == false) {
+            and name.startsWith("_") == false and isGeneratorFile(name, site.inputs.config.generatorFiles) == false) {
             sibs.append(name);
         }
     }
@@ -263,7 +264,7 @@ fun repoBlobHref(site: Site, path: str) > str {
         }
         target = kept.join("/");
     }
-    return site.config.repoURL + "/blob/" + site.metaBranch + "/" + target;
+    return site.inputs.config.repoURL + "/blob/" + site.inputs.metaBranch + "/" + target;
 }
 
 // renderGeneratedChips renders a generated page's provenance as two chips: the existing
@@ -287,12 +288,12 @@ fun renderGeneratedChips(generatedFrom: str, root: str, site: Site) > str {
         + "\">generated</span>";
     if (generatedFrom.endsWith("/")) {
         return status + "<a class=\"tag\" href=\"" + root + generatedFrom + "\">"
-            + escapeAttr(generatedFrom) + "</a>";
+            + htmlcodec\escape(generatedFrom) + "</a>";
     }
     final first = generatedFrom.split(", ")[0];
     return status + "<a class=\"tag\" href=\"" + repoBlobHref(site, first) + "\" data-tooltip=\""
-        + escapeAttr(generatedFrom) + "\" title=\"" + escapeAttr(generatedFrom) + "\">"
-        + escapeAttr(first) + "</a>";
+        + htmlcodec\escape(generatedFrom) + "\" title=\"" + htmlcodec\escape(generatedFrom) + "\">"
+        + htmlcodec\escape(first) + "</a>";
 }
 
 export fun renderPage(title: str, description: str, content: str, srcRel: str, pager: str, canonUrl: str, reading: str, tags: [str], generatedFrom: str, site: Site) > str !> any {
@@ -301,9 +302,9 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     // except the setup section; the home page (README) highlights nothing.
     var active = "documentation";
     if (srcRel == LANDING_SRC) { active = "home"; }
-    if (srcRel == site.docs + "/guides/setup.md" or srcRel.startsWith(site.docs + "/guides/setup/")) { active = "setup"; }
+    if (srcRel == site.inputs.docs + "/guides/setup.md" or srcRel.startsWith(site.inputs.docs + "/guides/setup/")) { active = "setup"; }
     // Blog posts and the blog index live under the "Blog" nav item.
-    if (srcRel.startsWith(site.blog + "/") or srcRel == site.blog + "/index.md") { active = "blog"; }
+    if (srcRel.startsWith(site.inputs.blog + "/") or srcRel == site.inputs.blog + "/index.md") { active = "blog"; }
     // /public/ autoindex pages are meta pages; no nav item is current.
     if (srcRel.startsWith("public/")) { active = ""; }
     // The search page is a tool page with no nav home of its own.
@@ -321,12 +322,12 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     // (og:url/og:image must be absolute), so the site can ship dark until the host is
     // confirmed. baseURL carries the trailing slash; canonUrl is the slashed clean path.
     final hasDescription = description != "";
-    final hasSiteUrl = site.config.baseURL != "";
+    final hasSiteUrl = site.inputs.config.baseURL != "";
     // Advertise each Atom feed only when it was actually written: releases once a version
     // ships, blog on home + blog pages once a post exists. Advertising a missing file would
     // trip the asset-integrity check.
-    final hasReleasesFeed = hasSiteUrl and site.releases.len() > 0;
-    final hasBlogFeed = hasSiteUrl and site.hasBlogPosts and (srcRel == LANDING_SRC or srcRel.startsWith(site.blog + "/"));
+    final hasReleasesFeed = hasSiteUrl and site.inputs.releases.len() > 0;
+    final hasBlogFeed = hasSiteUrl and site.inputs.hasBlogPosts and (srcRel == LANDING_SRC or srcRel.startsWith(site.inputs.blog + "/"));
     // Preload the LCP hero image on the two pages that open with the gopher - the landing
     // and the README - so the browser fetches it in parallel with the CSS.
     final isHome = srcRel == LANDING_SRC;
@@ -335,8 +336,8 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     // The README page is the only one whose CSP img-src reaches past same-origin (its two
     // status badges); every other page keeps site.csp's tighter default. It follows the
     // BADGES, not the front door - the badges moved to /development/ with the README.
-    var pageCsp = site.csp;
-    if (isReadme) { pageCsp = site.cspBadges; }
+    var pageCsp = site.inputs.csp;
+    if (isReadme) { pageCsp = site.inputs.cspBadges; }
     // Reading-time chip, passed in per call (reading; "" for none). Rendered above the
     // <article> card but inside its column, aligned with the card's left edge - not
     // floating far-left above the TOC sidebar.
@@ -363,10 +364,10 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
             // to stay querystring-safe.
             final slug = tagSlug(t);
             if (site.tagPages[slug] != null) {
-                chips.append("<a class=\"tag\" href=\"" + root + "tags/" + slug + "/\">" + escapeAttr(t) + "</a>");
+                chips.append("<a class=\"tag\" href=\"" + root + "tags/" + slug + "/\">" + htmlcodec\escape(t) + "</a>");
             } else {
                 final tagQuery = urlcodec\encode("tag:\"" + t + "\"");
-                chips.append("<a class=\"tag\" href=\"" + root + "search/?q=" + tagQuery + "\">" + escapeAttr(t) + "</a>");
+                chips.append("<a class=\"tag\" href=\"" + root + "search/?q=" + tagQuery + "\">" + htmlcodec\escape(t) + "</a>");
             }
         }
         tagsHtml = "    <div class=\"post-tags\" aria-label=\"Tags\">" + chips.join("") + "</div>\n";
@@ -413,7 +414,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     // right depth, not to name a file, so there is nothing to view or edit.
     final hasSource = srcRel.endsWith(".md") and srcRel.endsWith("/_index.md") == false
         and srcRel.startsWith("public/") == false
-        and srcRel != site.blog + "/index.md" and srcRel != "search/index.md" and srcRel != "tour/index.md"
+        and srcRel != site.inputs.blog + "/index.md" and srcRel != "search/index.md" and srcRel != "tour/index.md"
         and srcRel != LANDING_SRC;
     // A generated page drops "Suggest an edit" entirely: the chips up top
     // already names and links the real source, and editing the generated .md directly is
@@ -429,7 +430,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         if (hasSource) {
             edit = edit + "<a href=\"index.md\" data-tooltip=\"View this page's Markdown source\" title=\"View this page's Markdown source\">&#182; View markdown source</a> &middot; ";
         }
-        edit = edit + "<a href=\"" + site.config.repoURL + "/edit/" + site.metaBranch + "/" + site.metaPrefix + srcRel + "\" data-tooltip=\"Edit this page on GitHub\" title=\"Edit this page on GitHub\">&#x270E; Suggest an edit</a>";
+        edit = edit + "<a href=\"" + site.inputs.config.repoURL + "/edit/" + site.inputs.metaBranch + "/" + site.inputs.metaPrefix + srcRel + "\" data-tooltip=\"Edit this page on GitHub\" title=\"Edit this page on GitHub\">&#x270E; Suggest an edit</a>";
     }
     edit = edit + "</small>";
     // Second row under the search box: "Suggest an edit" hugging the right edge. The search
@@ -539,7 +540,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         "description": description,
         "hasDescription": hasDescription,
         "hasSiteUrl": hasSiteUrl,
-        "siteUrl": site.config.baseURL,
+        "siteUrl": site.inputs.config.baseURL,
         "canonUrl": canonUrl,
         "ogType": ogType,
         "hasReleasesFeed": hasReleasesFeed,
@@ -547,9 +548,9 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         "preloadHero": preloadHero,
         "bodyClass": bodyClass,
         "root": root,
-        "gh": site.config.repoURL,
+        "gh": site.inputs.config.repoURL,
         "announcement": renderAnnouncementBar(root, site),
-        "nav": renderSiteNav(root, active, true, site.config),
+        "nav": renderSiteNav(root, active, true, site.inputs.config),
         // The landing's canonical URL is gen's root, so a breadcrumb there would be a trail
         // back to itself. The install page is excluded by name instead: it keeps a real
         // canonical URL for sharing, and a "Home / Documentation / Download" trail above a
@@ -575,7 +576,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
 // gen/development/index.html the docs tree is one level up, so the prefix is rewritten to
 // "../" rather than stripped.
 export fun renderRoot(site: Site) > void !> any {
-    final f = io\File.open(site.root + "/README.md", io\FileMode.read);
+    final f = io\File.open(site.inputs.root + "/README.md", io\FileMode.read);
     final rawMd = f.readAll();
     f.close();
 
@@ -617,9 +618,9 @@ export fun renderRoot(site: Site) > void !> any {
     // Same cross-linking every other docs page gets: auto-link the first occurrence of each
     // glossary term, link inline-code domain references, and hint rendered convention
     // markers back to their conventions section.
-    html = linkGlossaryTerms(html, site.glossaryTerms, relativePath(pageDir, "glossary/")).html;
-    html = linkCodeEntities(html, site.codeEntities, pageDir);
-    html = injectConventionHints(html, site.conventions, relativePath(pageDir, "conventions/"));
+    html = linkGlossaryTerms(html, site.inputs.glossaryTerms, relativePath(pageDir, "glossary/")).html;
+    html = linkCodeEntities(html, site.inputs.codeEntities, pageDir);
+    html = injectConventionHints(html, site.inputs.conventions, relativePath(pageDir, "conventions/"));
     // The README ships <picture> so GitHub renders the committed pair; inlining swaps it
     // for an SVG that reads the page's CSS variables and so follows the theme toggle.
     html = diagrams\inlinePageDiagrams(html);
@@ -631,10 +632,10 @@ export fun renderRoot(site: Site) > void !> any {
     // so the meta tag fires.
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }
-    if (desc == "") { desc = site.config.description; }
+    if (desc == "") { desc = site.inputs.config.description; }
 
     final doc = renderPage(title, desc, html, "README.md", "", README_URL, readingTime(md), parseTags(md), generatedFrom(md), site);
-    final dir = site.outDir + "/" + pageDir;
+    final dir = site.inputs.outDir + "/" + pageDir;
     fs\mkdirAll(dir);
     fs\writeFile(dir + "/index.html", doc);
     // "View source" targets this file directly - write the original, unamended README so it
@@ -676,7 +677,7 @@ fun injectDemoCallout(html: str, href: str) > str {
 // Render one docs/*.md file to a sibling *.html under gen. rel is relative to the
 // docs/ subtree; srcRel (site.docs/rel) is magus/-relative for the footer/edit link.
 export fun renderFile(rel: str, site: Site) > void !> any {
-    final f = io\File.open(site.root + "/" + site.docs + "/" + rel, io\FileMode.read);
+    final f = io\File.open(site.inputs.root + "/" + site.inputs.docs + "/" + rel, io\FileMode.read);
     var md = f.readAll();
     f.close();
     // Resolve version placeholders once, up front, so every downstream consumer (HTML,
@@ -702,42 +703,42 @@ export fun renderFile(rel: str, site: Site) > void !> any {
     // so the meta tag fires.
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }
-    if (desc == "") { desc = site.config.description; }
+    if (desc == "") { desc = site.inputs.config.description; }
 
-    final url = cleanURL(rel, site.blog);
+    final url = cleanURL(rel, site.inputs.blog);
 
     // Auto-link the first occurrence of each glossary term to its term page, baking the
     // definition into the link. A term page does not link its own term to itself.
     final terms = mut [<GlossaryTerm>];
-    foreach (t in site.glossaryTerms) {
+    foreach (t in site.inputs.glossaryTerms) {
         if (rel != "glossary/" + t.anchor + ".md") { terms.append(t); }
     }
     html = linkGlossaryTerms(html, terms, relativePath(newCleanDirectory(rel, site), "glossary/")).html;
     // Link inline-code domain references (diagnostic codes, ...) to their reference pages on
     // every page, glossary included.
-    html = linkCodeEntities(html, site.codeEntities, newCleanDirectory(rel, site));
+    html = linkCodeEntities(html, site.inputs.codeEntities, newCleanDirectory(rel, site));
 
     // Hint each rendered convention marker (an admonition title, a code caption) back to its
     // section on the conventions page, with the section's blurb baked in for the popover. The
     // conventions page itself is skipped - it defines them.
     if (rel != "conventions.md") {
-        html = injectConventionHints(html, site.conventions, relativePath(newCleanDirectory(rel, site), "conventions/"));
+        html = injectConventionHints(html, site.inputs.conventions, relativePath(newCleanDirectory(rel, site), "conventions/"));
         html = diagrams\inlinePageDiagrams(html);
         }
 
     // If a tour step demonstrates this concept, inject a "see the demo" callout after the
     // intro, deep-linking its tour card.
-    final demo = site.demoBySlug[newCleanDirectory(rel, site)];
+    final demo = site.inputs.demoBySlug[newCleanDirectory(rel, site)];
     if (demo != null) {
         html = injectDemoCallout(html, relativePath(newCleanDirectory(rel, site), "tour/") + "#" + demo!.anchor);
     }
 
-    final doc = renderPage(title, desc, html, site.docs + "/" + rel, renderPager(rel, site), url, readingTime(md), parseTags(md), generatedFrom(md), site);
+    final doc = renderPage(title, desc, html, site.inputs.docs + "/" + rel, renderPager(rel, site), url, readingTime(md), parseTags(md), generatedFrom(md), site);
 
     // Directory-index output: every page is <cleanURL>index.html (extensionless). url is
     // gen-root-relative and ends in a slash, matching search.js/sitemap/canonical.
-    final dir = fs\join(site.outDir, url.sub(0, url.len() - 1));   // drop trailing slash for mkdir
-    makeOutputDir(dir, site.docs + "/" + rel, url);
+    final dir = fs\join(site.inputs.outDir, url.sub(0, url.len() - 1));   // drop trailing slash for mkdir
+    makeOutputDir(dir, site.inputs.docs + "/" + rel, url);
 
     final of = io\File.open(dir + "/index.html", io\FileMode.write);
     of.write(doc);
@@ -754,43 +755,15 @@ export fun renderFile(rel: str, site: Site) > void !> any {
 
 
 test "substituteVersionTokens replaces every __MAGUS_VERSION__ with the latest release tag" {
-    final s = mut Site{
-        metaCommits = mut {},
-        metaHistory = mut {},
-        searchRecords = mut [<str>],
-        aliasTarget = mut {},
-        pageUrls = mut {},
-        tagPages = mut {},
-        pageAxes = mut {},
-        writtenPaths = mut {},
-        blogPosts = mut [<BlogPost>],
-        docPages = mut [<DocPage>],
-        pageTerms = mut {},
-        demoBySlug = mut {},
-        releases = mut [<Release>],
-    };
-    s.releases.append(Release{ version = "v0.3.0-rc.1" });
-    s.releases.append(Release{ version = "v0.2.0" });
+    final s = newSite();
+    s.inputs.releases.append(Release{ version = "v0.3.0-rc.1" });
+    s.inputs.releases.append(Release{ version = "v0.2.0" });
     final got = substituteVersionTokens("get __MAGUS_VERSION__/magus___MAGUS_VERSION___linux.tar.gz", s);
     assert\equal(got, "get v0.2.0/magus_v0.2.0_linux.tar.gz", "both tokens replaced with the stable tag, not the newer candidate");
 }
 
 test "substituteVersionTokens is a no-op before any release has shipped" {
-    final s = mut Site{
-        metaCommits = mut {},
-        metaHistory = mut {},
-        searchRecords = mut [<str>],
-        aliasTarget = mut {},
-        pageUrls = mut {},
-        tagPages = mut {},
-        pageAxes = mut {},
-        writtenPaths = mut {},
-        blogPosts = mut [<BlogPost>],
-        docPages = mut [<DocPage>],
-        pageTerms = mut {},
-        demoBySlug = mut {},
-        releases = mut [<Release>],
-    };
+    final s = newSite();
     assert\equal(substituteVersionTokens("install __MAGUS_VERSION__", s), "install __MAGUS_VERSION__", "token left literal with no releases");
 }
 

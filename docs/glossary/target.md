@@ -39,6 +39,7 @@ In the code (`magus refs <name>` lists every site):
 
 - `dry.Target` (Go)
 - `interp.Target` (Go)
+- `events.Target` (Go)
 - `types.Target` (Go)
 
 <!-- END GLOSSARY USAGE -->

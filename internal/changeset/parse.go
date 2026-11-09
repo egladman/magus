@@ -3,12 +3,11 @@ package changeset
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/egladman/magus/types/diff"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
-
-	"github.com/egladman/magus/types"
 )
 
 // This is the ONE unified-diff reader in the product, and a second one must not be written.
@@ -570,7 +569,7 @@ func PatchDigest(patch string) string {
 //
 // Comments are returned in the order given, so a caller that renders them keeps the thread's
 // order.
-func PlaceThreads(files []FileHunks, comments []types.ReviewComment) []types.ReviewComment {
+func PlaceThreads(files []FileHunks, comments []diff.ReviewComment) []diff.ReviewComment {
 	if len(comments) == 0 {
 		return nil
 	}
@@ -578,7 +577,7 @@ func PlaceThreads(files []FileHunks, comments []types.ReviewComment) []types.Rev
 	for _, f := range files {
 		byPath[f.Path] = f.Hunks
 	}
-	out := make([]types.ReviewComment, 0, len(comments))
+	out := make([]diff.ReviewComment, 0, len(comments))
 	for _, t := range comments {
 		t.Hunk = -1
 		if !t.Outdated && t.Line > 0 {

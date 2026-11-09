@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Google's developer style guide (developers.google.com/style/lists) asks for "the same syntax/structure for all list items in a given list", and Microsoft's (learn.microsoft.com/style-guide/scannable-content/lists) for items "consistent in structure", in capitalization and end punctuation alike. This repository already holds a guide's numbered steps to an imperative opener (step-verb) and a commit subject to the imperative mood (subject-mood); this is the same expectation for any list. Each item's first word is tagged in its sentence by the part-of-speech tagger, which is accurate on sentences but guesses on fragments ("Fixed", "Cache", "Set"), so only a list of 3 or more tagged items is judged, a form must hold two thirds of them, and only the items outside it are named. An adjective opens a noun phrase ("Fast builds"), so it counts as one. Tense is judged per list, so a current role's list may stay in the present while the rest are past. Precision is unmeasured, with no labeled firing yet, so it ships off.
+Google's developer style guide (developers.google.com/style/lists) asks for "the same syntax/structure for all list items in a given list", and Microsoft's (learn.microsoft.com/style-guide/scannable-content/lists) for items "consistent in structure", in capitalization and end punctuation alike. This repository already holds a guide's numbered steps to an imperative opener (step-verb) and a commit subject to the imperative mood (subject-mood); this is the same expectation for any list. Each item's first word is tagged in its sentence by the part-of-speech tagger, which is accurate on sentences but guesses on fragments ("Fixed", "Cache", "Set"), so only a list of 3 or more tagged items is judged, a form must hold two thirds of them, and only the items outside it are named. An adjective opens a noun phrase ("Fast builds"), so it counts as one. An irregular past ("Cut", "Rewrote", "Ran") reads alone as a base form or a name, so each item is also tagged after a subject ("it cut the cost"), and that past reading counts when more items read as past than as any other tense. Tense is judged per list, so a list of current work may stay in the present while another list is past. It judges the form, never the word: items that all open on one verb pass here and are repeated-opener's to report. Precision is unmeasured, with no labeled firing yet, so it ships off.
 
 ## Default decision
 
@@ -30,16 +30,16 @@ The code is `PRF1061`. The decision depends on the kind of text judged:
 | -------------------- | ------- |
 | `reference`          | off     |
 | `principle`          | off     |
-| `guide`              | off     |
 | `change-description` | off     |
 | `agent-brief`        | off     |
+| `guide`              | off     |
+| `review-summary`     | off     |
+| `review-inline`      | off     |
+| `review-reply`       | off     |
 | `commit-message`     | off     |
 | `issue`              | off     |
 | `release-notes`      | off     |
 | `changelog`          | off     |
-| `review-summary`     | off     |
-| `review-inline`      | off     |
-| `review-reply`       | off     |
 | `agent-reply`        | off     |
 
 ## Changing it

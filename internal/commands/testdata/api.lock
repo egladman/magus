@@ -19,6 +19,7 @@ config ci.machine.memory_mb
 config ci.machine.name
 config ci.max_shards
 config ci.record_runs
+config ci.remote_gate
 config ci.runner_pool_budget
 config concurrency
 config concurrency_profile
@@ -47,6 +48,7 @@ config jobs.max_claims
 config jobs.max_depth
 config jobs.max_live
 config jobs.max_validations
+config jobs.model_tier_matrix
 config jobs.retain
 config jobs.stale_after
 config knowledge.conformance.exclude
@@ -129,6 +131,7 @@ config volatility.bootstrap_samples
 config volatility.enabled
 config volatility.min_samples
 config volatility.threshold
+config work.local_only
 flag affected/b
 flag affected/base
 flag affected/bisect

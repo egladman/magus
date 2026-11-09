@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	difftypes "github.com/egladman/magus/types/diff"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -269,7 +270,7 @@ func TestReviewHandler_GetReadsAttachedReviewWithoutMutatingIt(t *testing.T) {
 		t.Fatalf("missing session: want the state-conflict reason, got %q", missing.Body.String())
 	}
 
-	want := store.Attach(root, "main", types.Diff{Base: "main"}, "snapshot-a")
+	want := store.Attach(root, "main", difftypes.Diff{Base: "main"}, "snapshot-a")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/session", nil))
 	if w.Code != http.StatusOK {
@@ -300,8 +301,8 @@ func TestPublishFailsLoudlyWithNoProvider(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
 	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
-	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
-	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "why"}, types.DiffAuthorUnattributed)
+	store.Attach(root, "main", difftypes.Diff{Base: "main"}, "a")
+	store.AddComment(root, difftypes.Comment{Path: "a.go", Line: 4, Body: "why"}, difftypes.AuthorUnattributed)
 
 	w := post(t, h, `{"op":"publish"}`)
 	if w.Code != http.StatusBadGateway {
@@ -327,17 +328,17 @@ func TestAnswerOpRecordsTheSuggestionStatus(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
 	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
-	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
-	store.Suggest(root, types.DiffSuggestion{Path: "a.go", Reason: "one"})
-	store.Suggest(root, types.DiffSuggestion{Path: "b.go", Reason: "two"})
+	store.Attach(root, "main", difftypes.Diff{Base: "main"}, "a")
+	store.Suggest(root, difftypes.Suggestion{Path: "a.go", Reason: "one"})
+	store.Suggest(root, difftypes.Suggestion{Path: "b.go", Reason: "two"})
 
 	require.Equal(t, http.StatusOK, post(t, h, `{"op":"answer","id":"s1","on":true}`).Code)
 	require.Equal(t, http.StatusOK, post(t, h, `{"op":"answer","id":"s2"}`).Code)
 
 	got := store.Get(root).Suggestions
 	require.Len(t, got, 2)
-	assert.Equal(t, types.SuggestionAccepted, got[0].Status)
-	assert.Equal(t, types.SuggestionDeclined, got[1].Status)
+	assert.Equal(t, difftypes.SuggestionAccepted, got[0].Status)
+	assert.Equal(t, difftypes.SuggestionDeclined, got[1].Status)
 }
 
 // Nothing drafted is not a failure. A reader who publishes twice, or who has drafted nothing,
@@ -346,7 +347,7 @@ func TestPublishingNothingIsNotAnError(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
 	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
-	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
+	store.Attach(root, "main", difftypes.Diff{Base: "main"}, "a")
 
 	if w := post(t, h, `{"op":"publish"}`); w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
@@ -360,8 +361,8 @@ func TestAnAgentCommentIsNotPublishable(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
 	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
-	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
-	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 2, Body: "agent"}, types.DiffAuthorAgent)
+	store.Attach(root, "main", difftypes.Diff{Base: "main"}, "a")
+	store.AddComment(root, difftypes.Comment{Path: "a.go", Line: 2, Body: "agent"}, difftypes.AuthorAgent)
 
 	// Only an agent comment exists, so there is nothing to send and no provider is consulted.
 	if w := post(t, h, `{"op":"publish"}`); w.Code != http.StatusOK {
@@ -373,8 +374,8 @@ func TestAnAgentCommentIsNotPublishable(t *testing.T) {
 // reports a branch and a clean tree, so no provider is consulted and no threads are placed.
 type cleanBranchReview struct{}
 
-func (cleanBranchReview) ReviewOrigin(context.Context) types.ReviewOrigin {
-	return types.ReviewOrigin{Branch: "feat/x"}
+func (cleanBranchReview) ReviewOrigin(context.Context) difftypes.ReviewOrigin {
+	return difftypes.ReviewOrigin{Branch: "feat/x"}
 }
 
 func (cleanBranchReview) WorkingDiff(context.Context, []string) (string, error) { return "", nil }
@@ -431,7 +432,7 @@ func TestReplyFailsLoudlyWithNoProvider(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
 	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
-	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
+	store.Attach(root, "main", difftypes.Diff{Base: "main"}, "a")
 
 	w := post(t, h, `{"op":"reply","id":"th1","body":"agreed"}`)
 	if w.Code != http.StatusBadGateway {
@@ -449,7 +450,7 @@ func TestAnEmptyReplyIsRefusedBeforeTheHostIsAsked(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
 	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
-	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
+	store.Attach(root, "main", difftypes.Diff{Base: "main"}, "a")
 
 	w := post(t, h, `{"op":"reply","id":"th1"}`)
 	if w.Code != http.StatusBadRequest {
@@ -488,8 +489,8 @@ func TestAReviewReadCarriesThreadsAndItsReasonTogether(t *testing.T) {
 // through the route rather than only in internal/diff's own tests.
 type patchedReviewWorkspace struct{ patch string }
 
-func (f patchedReviewWorkspace) ReviewOrigin(context.Context) types.ReviewOrigin {
-	return types.ReviewOrigin{Branch: "feat/x"}
+func (f patchedReviewWorkspace) ReviewOrigin(context.Context) difftypes.ReviewOrigin {
+	return difftypes.ReviewOrigin{Branch: "feat/x"}
 }
 
 func (f patchedReviewWorkspace) WorkingDiff(context.Context, []string) (string, error) {
@@ -503,7 +504,7 @@ func TestReviewRoutePlacesThreadsAgainstTheWorkingPatch(t *testing.T) {
 	h := NewReviewLookupHandler(patchedReviewWorkspace{patch: "diff --git a/a.go b/a.go\n" +
 		"--- a/a.go\n+++ b/a.go\n@@ -10,3 +10,3 @@\n ten\n-old\n+new\n"}, nil)
 
-	got := h.place(t.Context(), []types.ReviewComment{
+	got := h.place(t.Context(), []difftypes.ReviewComment{
 		{ID: "t1", Path: "a.go", Line: 11, Hunk: -1},
 		{ID: "t2", Path: "a.go", Line: 900, Hunk: -1},
 		{ID: "t3", Path: "other.go", Line: 1, Hunk: -1},
@@ -519,7 +520,7 @@ func TestReviewRoutePlacesThreadsAgainstTheWorkingPatch(t *testing.T) {
 // against its file is worth far more than one withheld because its line could not be resolved.
 func TestReviewRouteKeepsThreadsWhenThePatchCannotBeRead(t *testing.T) {
 	h := NewReviewLookupHandler(patchedReviewWorkspace{patch: ""}, nil)
-	in := []types.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Hunk: -1}}
+	in := []difftypes.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Hunk: -1}}
 	assert.Equal(t, in, h.place(t.Context(), in))
 }
 
@@ -529,8 +530,8 @@ func TestPublishRefusesWhenNoDraftCanBeAnchored(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
 	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
-	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
-	store.AddComment(root, types.DiffComment{Path: "a.go", Body: "no line"}, types.DiffAuthorUnattributed)
+	store.Attach(root, "main", difftypes.Diff{Base: "main"}, "a")
+	store.AddComment(root, difftypes.Comment{Path: "a.go", Body: "no line"}, difftypes.AuthorUnattributed)
 
 	w := post(t, h, `{"op":"publish"}`)
 	if w.Code != http.StatusBadGateway {
@@ -548,9 +549,9 @@ func TestPublishRefusesWhenNoDraftCanBeAnchored(t *testing.T) {
 // withReviewProvider registers a canned provider for the whole review path, so the handler's
 // SUCCESS branches can be exercised. Without one, these routes could only ever be tested
 // failing, which left the reply and publish paths, where the real bugs were, uncovered.
-func withReviewProvider(t *testing.T, threads []types.ReviewComment) {
+func withReviewProvider(t *testing.T, threads []difftypes.ReviewComment) {
 	t.Helper()
-	selectReviewProvider(t, register.ReviewSpell(t, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, threads))
+	selectReviewProvider(t, register.ReviewSpell(t, difftypes.ReviewTarget{ID: "482", Repo: "acme/acme"}, threads))
 }
 
 // selectReviewProvider makes the registered spell name the review provider for this test.
@@ -568,10 +569,10 @@ func TestPublishMarksExactlyTheDraftsThatLeft(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
 	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
-	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
-	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "anchored"}, types.DiffAuthorUnattributed)
-	store.AddComment(root, types.DiffComment{Path: "b.go", Body: "no line"}, types.DiffAuthorUnattributed)
-	store.AddComment(root, types.DiffComment{Path: "c.go", Line: 9, Body: "agent"}, types.DiffAuthorAgent)
+	store.Attach(root, "main", difftypes.Diff{Base: "main"}, "a")
+	store.AddComment(root, difftypes.Comment{Path: "a.go", Line: 4, Body: "anchored"}, difftypes.AuthorUnattributed)
+	store.AddComment(root, difftypes.Comment{Path: "b.go", Body: "no line"}, difftypes.AuthorUnattributed)
+	store.AddComment(root, difftypes.Comment{Path: "c.go", Line: 9, Body: "agent"}, difftypes.AuthorAgent)
 
 	w := post(t, h, `{"op":"publish","summary":"self-review"}`)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
@@ -599,8 +600,8 @@ func TestPublishingWithEverythingAlreadySentIsNotAnError(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
 	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
-	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
-	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "anchored"}, types.DiffAuthorUnattributed)
+	store.Attach(root, "main", difftypes.Diff{Base: "main"}, "a")
+	store.AddComment(root, difftypes.Comment{Path: "a.go", Line: 4, Body: "anchored"}, difftypes.AuthorUnattributed)
 
 	require.Equal(t, http.StatusOK, post(t, h, `{"op":"publish"}`).Code)
 	require.Equal(t, http.StatusOK, post(t, h, `{"op":"publish"}`).Code)
@@ -625,7 +626,7 @@ func TestReplySucceedsAndLeavesTheSessionAlone(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
 	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
-	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
+	store.Attach(root, "main", difftypes.Diff{Base: "main"}, "a")
 
 	require.Equal(t, http.StatusOK, post(t, h, `{"op":"reply","id":"th1","body":"agreed"}`).Code)
 	assert.Empty(t, store.Get(root).Comments, "a reply belongs to the host's record, not this session")
@@ -720,7 +721,7 @@ func TestReplyToAReplyIdGoesToItsThread(t *testing.T) {
 // The whole route, end to end: the provider's threads come back placed against the working
 // patch, so the client renders them beside the code rather than working the anchors out itself.
 func TestReviewRouteServesPlacedThreads(t *testing.T) {
-	withReviewProvider(t, []types.ReviewComment{
+	withReviewProvider(t, []difftypes.ReviewComment{
 		{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "why"},
 		{ID: "t2", Path: "a.go", Line: 900, Author: "marcus", Body: "moved"},
 	})
@@ -797,10 +798,10 @@ func TestDiscardRemovesOnlyAnUnsentHumanDraft(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
 	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
-	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
-	mine := store.AddComment(root, types.DiffComment{Path: "a.go", Line: 1, Body: "mine"}, types.DiffAuthorUnattributed)
-	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 2, Body: "theirs"}, types.DiffAuthorAgent)
-	sent := store.AddComment(root, types.DiffComment{Path: "a.go", Line: 3, Body: "sent"}, types.DiffAuthorUnattributed)
+	store.Attach(root, "main", difftypes.Diff{Base: "main"}, "a")
+	mine := store.AddComment(root, difftypes.Comment{Path: "a.go", Line: 1, Body: "mine"}, difftypes.AuthorUnattributed)
+	store.AddComment(root, difftypes.Comment{Path: "a.go", Line: 2, Body: "theirs"}, difftypes.AuthorAgent)
+	sent := store.AddComment(root, difftypes.Comment{Path: "a.go", Line: 3, Body: "sent"}, difftypes.AuthorUnattributed)
 	store.MarkPublished(root, sent.Comments[len(sent.Comments)-1].ID)
 
 	ids := map[string]string{}
@@ -865,10 +866,10 @@ func TestDiffBranchesWithNoWorkspaceIsAnEmptyArray(t *testing.T) {
 // that raises it compares against the same watermark. The client says when it has drawn them,
 // through the session's `seen` op.
 func TestReviewLookupMarksNewWithoutConsumingTheWatermark(t *testing.T) {
-	withReviewProvider(t, []types.ReviewComment{{ID: "t1", Path: "a.go", Line: 1, Body: "first", Author: "priya"}})
+	withReviewProvider(t, []difftypes.ReviewComment{{ID: "t1", Path: "a.go", Line: 1, Body: "first", Author: "priya"}})
 	root := t.TempDir()
 	store := changeset.NewStore(t.TempDir())
-	store.Attach(root, "", types.Diff{}, "")
+	store.Attach(root, "", difftypes.Diff{}, "")
 
 	h := NewReviewLookupHandler(cleanBranchReview{}, nil)
 	h.Sessions, h.Root = store, root

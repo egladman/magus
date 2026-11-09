@@ -88,7 +88,7 @@ func TestSuppressionCoversWhatItNamesWithAReason(t *testing.T) {
 }
 
 func TestSuppressionAppliesToEveryKind(t *testing.T) {
-	for _, kind := range everyKind {
+	for _, kind := range kinds {
 		if kind == KindSkillTemplate || !slices.Contains(KindRules(kind), RuleFiller) {
 			continue
 		}
@@ -190,29 +190,13 @@ func TestSuppressionUnusedIsADefaultDenyRuleOnEveryKind(t *testing.T) {
 		t.Fatalf("catalog entry = %+v, want PRF1090 and not house", doc)
 	}
 
-	if len(doc.Kinds) != len(everyKind) {
-		t.Errorf("judges %d kinds, want %d", len(doc.Kinds), len(everyKind))
+	if len(doc.Kinds) != len(kinds) {
+		t.Errorf("judges %d kinds, want %d", len(doc.Kinds), len(kinds))
 	}
 
 	for _, k := range doc.Kinds {
 		if doc.Decisions[k] != DecisionDeny {
 			t.Errorf("%s: default %q, want deny", k, doc.Decisions[k])
-		}
-	}
-}
-
-func TestEveryKindIsListedInEveryKind(t *testing.T) {
-	seen := map[Kind]bool{}
-
-	for _, c := range checks {
-		for _, k := range c.on {
-			seen[k] = true
-		}
-	}
-
-	for k := range seen {
-		if !slices.Contains(everyKind, k) {
-			t.Errorf("kind %q is judged by a rule and missing from everyKind", k)
 		}
 	}
 }

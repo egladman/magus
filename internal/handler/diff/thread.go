@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	difftypes "github.com/egladman/magus/types/diff"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -14,7 +15,6 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/rpcerr"
-	"github.com/egladman/magus/types"
 )
 
 // threadLookupTimeout bounds the forge calls one thread read makes, and only those. A client
@@ -26,7 +26,7 @@ const threadLookupTimeout = 5 * time.Second
 // discussed, the patch, and the annotated changeset the thread is read against.
 type threadSource interface {
 	reviewSource
-	DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error)
+	DiffWith(ctx context.Context, paths []string, opts difftypes.Options) (difftypes.Diff, error)
 }
 
 // ThreadOptions wires a [ThreadHandler].
@@ -36,13 +36,13 @@ type ThreadOptions struct {
 	Workspace threadSource
 	// Anchors joins the workspace's notes stores against the changeset. Nil is a server with no
 	// notes wiring, and the record then names note anchors among what it could not measure.
-	Anchors func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error)
+	Anchors func(ctx context.Context, rev difftypes.Diff) ([]review.AnchorHit, error)
 }
 
 // ThreadReply is the route's answer: the record `magus diff --thread -o json` prints, and Text,
 // the same record as `magus diff --thread` prints it, which the console's copy button copies.
 type ThreadReply struct {
-	types.DiffThread
+	difftypes.Thread
 	Text string `json:"text"`
 }
 
@@ -97,8 +97,8 @@ func (h *ThreadHandler) serve(w http.ResponseWriter, r *http.Request) {
 	in, err := review.NewThreadInput(ctx, review.ThreadParts{
 		Patch:    patch,
 		Comments: comments,
-		Annotate: func(ctx context.Context, paths []string) (types.Diff, error) {
-			return ws.DiffWith(ctx, paths, types.DiffOptions{SkipOrder: true})
+		Annotate: func(ctx context.Context, paths []string) (difftypes.Diff, error) {
+			return ws.DiffWith(ctx, paths, difftypes.Options{SkipOrder: true})
 		},
 		Anchors: h.opts.Anchors,
 	})
@@ -118,6 +118,6 @@ func (h *ThreadHandler) serve(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		h.Fail(w, r, "thread", err)
 	default:
-		handler.WriteJSON(w, r, ThreadReply{DiffThread: rec, Text: strings.Join(review.ThreadLines(rec), "\n") + "\n"})
+		handler.WriteJSON(w, r, ThreadReply{Thread: rec, Text: strings.Join(review.ThreadLines(rec), "\n") + "\n"})
 	}
 }

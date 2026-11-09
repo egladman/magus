@@ -284,7 +284,10 @@ export async function startGo(
   if (wasm.error) return wasm;
   const go = attempt(() => new Go());
   if (go.error) return go;
-  const mod = await fromPromise(WebAssembly.instantiate(wasm.value, go.value.importObject));
+  // instantiate takes only ArrayBuffer-backed bytes; a Buffer's may be shared.
+  const mod = await fromPromise(
+    WebAssembly.instantiate(new Uint8Array(wasm.value), go.value.importObject),
+  );
   if (mod.error) return mod;
   void go.value.run(mod.value.instance);
   const deadline = Date.now() + readyMs;

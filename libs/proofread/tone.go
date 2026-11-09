@@ -47,29 +47,21 @@ const (
 	RuleLongThread Rule = "long-thread"
 )
 
-var (
-	pullRequestOnly = []Kind{KindChangeDescription}
-	// agentTone is toneKinds and an agent's reply. verdict and absolute stay off
-	// the reply: over 400 sampled replies they fired on 40 and 73, nearly all a
-	// status ("nothing pushed", "the test was wrong") rather than a posture.
-	agentTone = slices.Concat(toneKinds, agentReply)
-)
-
 // toneChecks are the rules for posture: blame, verdicts, absolutes, intent,
 // credit, claims without evidence and the review-reply rules. They run after
 // [coreChecks]. Each is graded: its words have senses it cannot tell apart from
 // the one it means, and no labeling round measured one at the deny bar.
 var toneChecks = []check{
-	{rule: RuleBlame, on: agentTone, graded: true, judge: ownWords(blame)},
-	{rule: RuleVerdict, on: toneKinds, graded: true, judge: ownWords(verdict)},
-	{rule: RuleAbsolute, on: toneKinds, graded: true, judge: absolute},
-	{rule: RuleIntent, on: agentTone, graded: true, judge: ownWords(intent)},
-	{rule: RuleCredit, on: pullRequestOnly, graded: true, judge: creditEarlier},
-	{rule: RuleClaim, on: agentTone, graded: true, judge: claim},
-	{rule: RuleReplyOpener, on: reviewText, graded: true, judge: replyOpening},
-	{rule: RuleJudgmentAsFact, on: reviewText, graded: true, judge: judgmentAsFact},
-	{rule: RuleStackedHedge, on: reviewText, graded: true, judge: stackedHedge},
-	{rule: RuleLongThread, on: reviewText, graded: true, judge: longThread},
+	{rule: RuleBlame, reads: proseFormats, judge: ownWords(blame)},
+	{rule: RuleVerdict, reads: proseFormats, judge: ownWords(verdict)},
+	{rule: RuleAbsolute, reads: proseFormats, judge: absolute},
+	{rule: RuleIntent, reads: proseFormats, judge: ownWords(intent)},
+	{rule: RuleCredit, reads: proseFormats, judge: creditEarlier},
+	{rule: RuleClaim, reads: proseFormats, judge: claim},
+	{rule: RuleReplyOpener, reads: proseFormats, judge: replyOpening},
+	{rule: RuleJudgmentAsFact, reads: proseFormats, judge: judgmentAsFact},
+	{rule: RuleStackedHedge, reads: proseFormats, judge: stackedHedge},
+	{rule: RuleLongThread, reads: proseFormats, judge: longThread},
 }
 
 // matchFindings reports each span pattern finds in the prose of in, less those exempt
@@ -96,15 +88,11 @@ func matchFindings(in input, pattern *regexp.Regexp, exempt func(text string, at
 var quotedElement = regexp.MustCompile(`<(/?)(?:issue_description|issue_title|comment_new|comment_old|comments|` +
 	`agent_instructions)\b[^>]*>`)
 
-// quotesOthers are the kinds whose blockquote holds another author's words. A
-// page's blockquote is its own callout.
-var quotesOthers = slices.Concat(toneKinds, agentReply)
-
 // quotedLines reports, for each line of in.source, whether it holds another
 // author's words: a blockquote, or a line inside a [quotedElement].
 func quotedLines(in input) []bool {
 	out := make([]bool, len(in.source))
-	blockquote := slices.Contains(quotesOthers, in.kind)
+	blockquote := in.spec.Reader.Quotes
 	depth := 0
 
 	for i, ln := range in.source {
@@ -669,7 +657,7 @@ func claim(in input) []Finding {
 	var out []Finding
 
 	for i, para := range masked {
-		if para.head.heading || limits[i] || (titled(in.kind) && para.head.line == 1) {
+		if para.head.heading || limits[i] || in.titleLine(para.head) {
 			continue
 		}
 

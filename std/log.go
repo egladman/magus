@@ -10,8 +10,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module log -lang buzz -out ../internal/interp/bindings/gen/log.go -pkg bindgen
-
 // logLevelTrace mirrors config.LevelTrace (slog.LevelDebug-4). Duplicated here
 // for the same reason internal/cache does: config imports this package's tree, so
 // importing it back would cycle.
@@ -46,14 +44,14 @@ var Log = Module{
 		{
 			Name:    "trace",
 			Doc:     "Log at trace level (shown at -vvv). For detail worth having when reconstructing a run and noise at any other time.",
-			Args:    []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}},
+			Args:    []Arg{{Name: "message"}, {Name: "attrs", Optional: true}},
 			Returns: nil,
 			Impl:    LogTrace,
 		},
 		{
 			Name:    "debug",
 			Doc:     "Log at debug level (shown at -v).",
-			Args:    []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}},
+			Args:    []Arg{{Name: "message"}, {Name: "attrs", Optional: true}},
 			Returns: nil,
 			Impl:    LogDebug,
 		},
@@ -61,21 +59,21 @@ var Log = Module{
 			Name: "info",
 			Doc:  "Log at info level (shown by default, hidden by -q). Prefer `log\\info(\"pulled {ref}\", attrs: {\"digest\": d})` over stuffing fields into the message.",
 
-			Args:    []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}},
+			Args:    []Arg{{Name: "message"}, {Name: "attrs", Optional: true}},
 			Returns: nil,
 			Impl:    LogInfo,
 		},
 		{
 			Name:    "warn",
 			Doc:     "Log at warn level: something the reader should act on eventually.",
-			Args:    []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}},
+			Args:    []Arg{{Name: "message"}, {Name: "attrs", Optional: true}},
 			Returns: nil,
 			Impl:    LogWarn,
 		},
 		{
 			Name:    "error",
 			Doc:     "Log at error level. This RECORDS a problem; it does not fail the target - raise (or os\\exit) is what ends a run.",
-			Args:    []Arg{{Name: "message", Type: TypeString}, {Name: "attrs", Type: TypeAnyMap, Optional: true}},
+			Args:    []Arg{{Name: "message"}, {Name: "attrs", Optional: true}},
 			Returns: nil,
 			Impl:    LogError,
 		},
@@ -83,9 +81,9 @@ var Log = Module{
 			Name: "at",
 			Doc:  "Log at a level chosen at runtime. Use it when the level is DATA rather than a literal - mapping a scanner's severity onto magus's levels, say - and the five named methods when it is not.",
 			Args: []Arg{
-				{Name: "level", Type: TypeString, Enum: "LogLevel"},
-				{Name: "message", Type: TypeString},
-				{Name: "attrs", Type: TypeAnyMap, Optional: true},
+				{Name: "level", Enum: "LogLevel"},
+				{Name: "message"},
+				{Name: "attrs", Optional: true},
 			},
 			Returns: nil,
 			Raises:  true,

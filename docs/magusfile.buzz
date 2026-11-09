@@ -41,9 +41,9 @@ magus\project({
     // they run, so each is named here instead of globbing its tree.
     // The rest are projects whose targets these targets ctx.needs (MGS1062).
     "depends_on": ["../proto", "../libs/figure", "../libs/kustomize", "../libs/cmdline",
-                   "../libs/diagnostics", "../libs/embed", "../libs/scipbuzz", "../libs/xdg",
+                   "../libs/diagnostics", "../libs/embed", "../libs/scipbuzz", "../libs/xdg", "../libs/text",
                    "../libs/gopherbuzz", "../libs/proofread", "../libs/textsearch",
-                   "./guides/integrations/agents"],
+                   "../libs/ssg", "./guides/integrations/agents"],
     // Affected tracks this glob, not the import graph. Another project's files arrive
     // through depends_on, the root's through the targets' readsFiles.
     "sources": ["*.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
@@ -85,7 +85,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 
 // glossary-index-generate rewrites the term list in glossary.md from each term page's front matter.
 export fun glossary_index_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(["glossary.md", "glossary/*.md", "lib/dictionary.buzz", "lib/glossary.buzz", "lib/text.buzz"]);
+    ctx.readsFiles(["glossary.md", "glossary/*.md", "lib/dictionary.buzz", "lib/glossary.buzz", "../libs/ssg/text.buzz"]);
     ctx.writesFiles(["glossary.md"], editsExistingSource: true);
     final pages = mut [<dictionary\TermPage>];
     foreach (p in fs\glob("glossary/*.md")) {
@@ -106,7 +106,7 @@ export fun glossary_usage_generate(ctx: magus\Context, args: [str]) > void !> an
     }
     // The index lives outside file hashing; the root's digest of it keys this target.
     ctx.needs(workspace\symbol_digest_generate);
-    ctx.readsFiles(["**/*.md", "lib/dictionary.buzz", "lib/glossary.buzz", "lib/text.buzz",
+    ctx.readsFiles(["**/*.md", "lib/dictionary.buzz", "lib/glossary.buzz", "../libs/ssg/text.buzz",
         workspace\file("**/*.md"), workspace\file("gen/symbol-index.json")]);
     ctx.writesFiles(["glossary/*.md"], editsExistingSource: true);
     final stale = mut [<str>];
@@ -358,7 +358,7 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
     // The render hashes gen/ into the precache manifest, so the bundles must exist first.
     // It bundles src/ too, and a cached build-* target runs no install.
     ctx.needs(install, build_hljs, build_playground_editor, build_playground, changelog_page);
-    ctx.readsFiles(["render.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
+    ctx.readsFiles(["render.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "../libs/ssg/*.buzz", "**/*.md",
         "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html", "tour/*.buzz",
         "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json", "retired.urls.lock",
         "assets/gen/diagram-*-page.svg", workspace\file("libs/figure/figure.buzz"),

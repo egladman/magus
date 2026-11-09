@@ -62,6 +62,7 @@ func init() { //nolint:gochecknoinits // workspacegraph cannot import this packa
 		SymbolIndexTimes:       workspaceSymbolIndexTimes,
 		SymbolOccurrences:      workspaceSymbolOccurrences,
 		RecordedTargetPolicies: readRecordedTargetPolicies,
+		RecordTargetPolicies:   writeTargetPolicyRecord,
 		RecordedStaleIndexes:   readRecordedStaleIndexes,
 		UsePublishedShards:     usePublishedShards,
 		ReaderContext: func(ctx context.Context, _ types.Inspector, root string) ([]string, error) {
@@ -119,6 +120,16 @@ func readRecordedTargetPolicies(ctx context.Context, ws types.Inspector, cfg con
 		return types.TargetPolicyIndex{}, false
 	}
 	return recordedTargetPolicies(ctx, lw, cfg)
+}
+
+// writeTargetPolicyRecord is recordTargetPolicies for a ws that may be no
+// lazy workspace, which has no tree to stamp the record against.
+func writeTargetPolicyRecord(ctx context.Context, ws types.Inspector, cfg config.Config) error {
+	lw, ok := ws.(*LazyWorkspace)
+	if !ok {
+		return errors.New("only a lazy workspace can record its target policy")
+	}
+	return recordTargetPolicies(ctx, lw, cfg)
 }
 
 // readRecordedStaleIndexes is recordedStaleIndexes for a ws that may be no lazy workspace.

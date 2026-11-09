@@ -15,8 +15,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module proc -lang buzz -out ../internal/interp/bindings/gen/proc.go -pkg bindgen
-
 // Proc is running OTHER processes, and it is a separate module from os for a
 // reason that is structural rather than cosmetic.
 //
@@ -40,12 +38,12 @@ var Proc = Module{
 			Name: "exec",
 			Doc:  "Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allowFailure is true. Optional dir runs cmd there (relative to the target's cwd). opts is an ExecOptions: stdin is fed to the process as standard input - pipe by passing a prior call's stdout. quiet captures the output without echoing it to the console. tty runs cmd on a pseudo-terminal so it behaves as it would for a person: tools that check isatty keep their color and progress output instead of the plain form they emit to a pipe. A terminal is a single stream, so stderr arrives merged into stdout and the captured text carries ANSI escapes. Unix only. timeoutMs kills the process group once the call has run that long and raises whatever allowFailure says. detach starts cmd in a session of its own with no stdio and returns at once, so it outlives the script; it takes no timeoutMs, stdin or tty, and a sandbox policy refuses it, so a detached child bounds each call it makes with its own timeoutMs. A version-control binary (git, hg, sl, jj) is refused, whether named, given by path, behind a wrapper such as env, or inside a proc.shell line: run it with vcs\\cmd, which holds it to the lease rules.",
 			Args: []Arg{
-				{Name: "cmd", Type: TypeString},
-				{Name: "args", Type: TypeStringSlice, Optional: true},
-				{Name: "dir", Type: TypeString, Optional: true},
-				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "ExecOptions"},
+				{Name: "cmd"},
+				{Name: "args", Optional: true},
+				{Name: "dir", Optional: true},
+				{Name: "opts", Optional: true, Object: "ExecOptions"},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
+			Returns: []Ret{{Object: "ExecResult"}},
 			Raises:  true,
 			Impl:    ProcExec,
 		},
@@ -53,17 +51,17 @@ var Proc = Module{
 			Name: "shell",
 			Doc:  "Build the command line that runs `line` through the platform shell, WITHOUT running it: returns {bin, args} for proc.exec. Default shell is /bin/sh (cmd on Windows); pass shell (e.g. \"bash\") to override, resolved via PATH. This is a pure function, so the argv is inspectable before anything executes - print it, log it, or assert on it. A shell line is written in the platform shell's dialect, so sh and cmd lines are not portable across OSes; for cross-platform logic prefer proc.exec plus the fs/os helpers.",
 			Args: []Arg{
-				{Name: "line", Type: TypeString},
-				{Name: "shell", Type: TypeString, Optional: true},
+				{Name: "line"},
+				{Name: "shell", Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "ShellCommand"}},
+			Returns: []Ret{{Object: "ShellCommand"}},
 			Impl:    ProcShell,
 		},
 		{
 			Name:    "which",
 			Doc:     "Resolve cmd against PATH and return its absolute path. RAISES when the command is not found - wrap it in try/catch to check a tool is installed and emit a clear hint instead of a cryptic exec failure.",
-			Args:    []Arg{{Name: "cmd", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "cmd"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    ProcWhich,
 		},
@@ -71,8 +69,8 @@ var Proc = Module{
 			Name: "with_slots",
 			Doc:  "Reserve n slots from magus's concurrency budget for the duration of callback. Use when callback runs a command with its own internal parallelism (make, a test runner) that magus can't see, so the global budget is not oversubscribed. Commands callback starts share a GNU make jobserver of n slots, so make run without -j, and cargo, stay within them.",
 			Args: []Arg{
-				{Name: "n", Type: TypeInt},
-				{Name: "callback", Type: TypeFunc, Func: "fun () > void !> any"},
+				{Name: "n"},
+				{Name: "callback"},
 			},
 			Returns: nil,
 			Raises:  true,
@@ -82,7 +80,7 @@ var Proc = Module{
 			Name:    "stdin_is_terminal",
 			Doc:     "Report whether standard input is a terminal (TTY) rather than a pipe, file, or /dev/null. Use it to fail fast with a clear message instead of blocking on a read of stdin that will never receive piped input.",
 			Args:    nil,
-			Returns: []Ret{{Type: TypeBool}},
+			Returns: []Ret{{}},
 			Impl:    ProcStdinIsTerminal,
 		},
 	},

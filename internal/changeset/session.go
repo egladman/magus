@@ -34,6 +34,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"path/filepath"
 	"slices"
@@ -43,7 +44,6 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/types"
 )
 
 // ErrNoStateDir is what a Store with no state directory answers when asked to read or record a
@@ -58,7 +58,7 @@ var ErrNoStateDir = errors.New("no state directory")
 // twice returns the same session, which is what every client actually wants.
 type Store struct {
 	mu       sync.Mutex
-	sessions map[string]*types.DiffReview
+	sessions map[string]*diff.Review
 	// viewedPath is the JSON Lines file of read digests, empty to disable persistence (tests).
 	viewedPath string
 	// draftsPath is the JSON Lines file of unpublished human comments, empty to disable.
@@ -96,7 +96,7 @@ type Store struct {
 // gets.
 func NewStore(stateDir string) *Store {
 	s := &Store{
-		sessions: map[string]*types.DiffReview{},
+		sessions: map[string]*diff.Review{},
 		hunks:    map[string]map[string]string{},
 		counts:   map[string]map[string]int{},
 		parsed:   map[string]map[string][]Hunk{},
@@ -133,17 +133,17 @@ func HunkDigest(path string, lines []string) string {
 // Attach returns the session for root, creating it and adopting any persisted viewed set on
 // first use. review is the freshly computed annotated changeset; an existing session takes it
 // as an update, so a client that recomputes does not clobber the conversation.
-func (s *Store) Attach(root string, base string, rev types.Diff, asOf string) *types.DiffReview {
+func (s *Store) Attach(root string, base string, rev diff.Diff, asOf string) *diff.Review {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	sess, ok := s.sessions[root]
 	if !ok {
 		s.nextID++
-		sess = &types.DiffReview{
+		sess = &diff.Review{
 			ID:     fmt.Sprintf("rev%d", s.nextID),
 			Base:   base,
-			Cursor: types.DiffCursor{Hunk: -1},
+			Cursor: diff.Cursor{Hunk: -1},
 			Viewed: s.loadViewed(),
 			// Restored, or every thread reads as new again after a restart.
 			SeenComments: s.loadSeen(),
@@ -234,7 +234,7 @@ func (s *Store) relocate(root string) {
 // Zero when the session has never tracked that file, which is the same honest answer CaptureAnchor
 // gives for a line no hunk covers: there is nothing under the remark to remember, and inventing
 // something would put a quote on the record that nobody was shown.
-func (s *Store) Anchor(root, path string, line int) types.CommentAnchor {
+func (s *Store) Anchor(root, path string, line int) diff.CommentAnchor {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -254,7 +254,7 @@ func (s *Store) ContentAt(root, path string) string {
 }
 
 // Get returns the session for root, or nil when none is attached.
-func (s *Store) Get(root string) *types.DiffReview {
+func (s *Store) Get(root string) *diff.Review {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sess, ok := s.sessions[root]
@@ -267,8 +267,8 @@ func (s *Store) Get(root string) *types.DiffReview {
 // SetCursor records where the HUMAN is looking. There is no agent equivalent on purpose: an
 // agent that could write this would be moving the reader's viewport, which is the one thing
 // the suggestion queue exists to prevent.
-func (s *Store) SetCursor(root string, c types.DiffCursor) *types.DiffReview {
-	return s.mutate(root, func(sess *types.DiffReview) {
+func (s *Store) SetCursor(root string, c diff.Cursor) *diff.Review {
+	return s.mutate(root, func(sess *diff.Review) {
 		sess.Cursor = c
 	})
 }
@@ -279,12 +279,12 @@ func (s *Store) SetCursor(root string, c types.DiffCursor) *types.DiffReview {
 // Additive and idempotent: a comment never becomes unseen, so re-rendering the same conversation
 // costs nothing and cannot resurrect a remark as new. Ids the session already holds are skipped
 // rather than appended twice, because this runs on every render of the review.
-func (s *Store) MarkCommentsSeen(root string, ids []string) *types.DiffReview {
+func (s *Store) MarkCommentsSeen(root string, ids []string) *diff.Review {
 	if len(ids) == 0 {
 		return s.Get(root)
 	}
 	var persist []string
-	sess := s.mutate(root, func(sess *types.DiffReview) {
+	sess := s.mutate(root, func(sess *diff.Review) {
 		for _, id := range ids {
 			if id != "" && !slices.Contains(sess.SeenComments, id) {
 				sess.SeenComments = append(sess.SeenComments, id)
@@ -306,8 +306,8 @@ func (s *Store) MarkCommentsSeen(root string, ids []string) *types.DiffReview {
 // pressed something), which is the property a receipt rests on. The persisted viewed set is
 // an unauthenticated file, so a file that merely LOOKS complete after a reload must never
 // mint one on its own.
-func (s *Store) MarkViewed(root, digest string, viewed bool) (sess *types.DiffReview, finished string) {
-	sess = s.mutate(root, func(sess *types.DiffReview) {
+func (s *Store) MarkViewed(root, digest string, viewed bool) (sess *diff.Review, finished string) {
+	sess = s.mutate(root, func(sess *diff.Review) {
 		i := slices.Index(sess.Viewed, digest)
 		switch {
 		case viewed && i < 0:
@@ -354,9 +354,9 @@ func (s *Store) completedBy(root, digest string, viewed []string) string {
 
 // AddComment attaches a remark. author is stamped by the CALLER from the route the write
 // arrived on (never from the request body), so a writer cannot choose it. See
-// types.DiffAuthor.
-func (s *Store) AddComment(root string, c types.DiffComment, author types.DiffAuthor) *types.DiffReview {
-	out := s.mutate(root, func(sess *types.DiffReview) {
+// diff.Author.
+func (s *Store) AddComment(root string, c diff.Comment, author diff.Author) *diff.Review {
+	out := s.mutate(root, func(sess *diff.Review) {
 		c.Author = author
 		c.ID = nextCommentID(sess.Comments)
 		sess.Comments = append(sess.Comments, c)
@@ -371,7 +371,7 @@ func (s *Store) AddComment(root string, c types.DiffComment, author types.DiffAu
 // published ones leave the file, so the set has gaps: hold c1, c2, c3, publish c2, restart, and
 // a count would name the next comment c3 as well. Two remarks would answer to one id, and
 // resolving either would resolve both.
-func nextCommentID(existing []types.DiffComment) string {
+func nextCommentID(existing []diff.Comment) string {
 	high := 0
 	for _, c := range existing {
 		var n int
@@ -385,8 +385,8 @@ func nextCommentID(existing []types.DiffComment) string {
 // ResolveComment marks a comment resolved. Either party may resolve: a human closing an
 // agent's point and an agent closing its own after fixing it are both normal, and requiring
 // the author to do it would strand comments whose author has gone away.
-func (s *Store) ResolveComment(root, id string, resolved bool) *types.DiffReview {
-	out := s.mutate(root, func(sess *types.DiffReview) {
+func (s *Store) ResolveComment(root, id string, resolved bool) *diff.Review {
+	out := s.mutate(root, func(sess *diff.Review) {
 		for i := range sess.Comments {
 			if sess.Comments[i].ID == id {
 				sess.Comments[i].Resolved = resolved
@@ -404,10 +404,10 @@ func (s *Store) ResolveComment(root, id string, resolved bool) *types.DiffReview
 // UNPUBLISHED review-route drafts only. A published remark exists somewhere a colleague may already have
 // replied to, and deleting the local copy would not unsay it; it would only hide it from the
 // person who wrote it. An agent's remark is not the reader's to delete.
-func (s *Store) DiscardDraft(root, id string) *types.DiffReview {
-	out := s.mutate(root, func(sess *types.DiffReview) {
+func (s *Store) DiscardDraft(root, id string) *diff.Review {
+	out := s.mutate(root, func(sess *diff.Review) {
 		for i, c := range sess.Comments {
-			if c.ID != id || c.Published || c.Author != types.DiffAuthorUnattributed {
+			if c.ID != id || c.Published || c.Author != diff.AuthorUnattributed {
 				continue
 			}
 			sess.Comments = slices.Delete(sess.Comments, i, i+1)
@@ -423,8 +423,8 @@ func (s *Store) DiscardDraft(root, id string) *types.DiffReview {
 // One comment at a time even though publishing is a batch, because the caller decides which
 // ones count as sent; see the handler's publish, which keeps a draft no provider could anchor
 // out of the batch entirely rather than marking it here.
-func (s *Store) MarkPublished(root, id string) *types.DiffReview {
-	out := s.mutate(root, func(sess *types.DiffReview) {
+func (s *Store) MarkPublished(root, id string) *diff.Review {
+	out := s.mutate(root, func(sess *diff.Review) {
 		for i := range sess.Comments {
 			if sess.Comments[i].ID == id {
 				sess.Comments[i].Published = true
@@ -437,11 +437,11 @@ func (s *Store) MarkPublished(root, id string) *types.DiffReview {
 }
 
 // Suggest enqueues an agent's request for attention. It does NOT move the cursor, and that
-// omission is the design; see types.DiffSuggestion.
-func (s *Store) Suggest(root string, sug types.DiffSuggestion) *types.DiffReview {
-	return s.mutate(root, func(sess *types.DiffReview) {
+// omission is the design; see diff.Suggestion.
+func (s *Store) Suggest(root string, sug diff.Suggestion) *diff.Review {
+	return s.mutate(root, func(sess *diff.Review) {
 		sug.ID = fmt.Sprintf("s%d", len(sess.Suggestions)+1)
-		sug.Status = types.SuggestionPending
+		sug.Status = diff.SuggestionPending
 		sess.Suggestions = append(sess.Suggestions, sug)
 	})
 }
@@ -452,15 +452,15 @@ func (s *Store) Suggest(root string, sug types.DiffSuggestion) *types.DiffReview
 //
 // Declining is recorded rather than discarded so an agent can tell "not yet seen" from "seen
 // and declined" and stop repeating itself.
-func (s *Store) AnswerSuggestion(root, id string, status types.SuggestionStatus) *types.DiffReview {
-	return s.mutate(root, func(sess *types.DiffReview) {
+func (s *Store) AnswerSuggestion(root, id string, status diff.SuggestionStatus) *diff.Review {
+	return s.mutate(root, func(sess *diff.Review) {
 		for i := range sess.Suggestions {
 			if sess.Suggestions[i].ID != id {
 				continue
 			}
 			sess.Suggestions[i].Status = status
-			if status == types.SuggestionAccepted {
-				sess.Cursor = types.DiffCursor{Path: sess.Suggestions[i].Path, Hunk: sess.Suggestions[i].Hunk}
+			if status == diff.SuggestionAccepted {
+				sess.Cursor = diff.Cursor{Path: sess.Suggestions[i].Path, Hunk: sess.Suggestions[i].Hunk}
 			}
 			return
 		}
@@ -468,7 +468,7 @@ func (s *Store) AnswerSuggestion(root, id string, status types.SuggestionStatus)
 }
 
 // mutate applies fn under the lock and returns a copy, or nil when no session is attached.
-func (s *Store) mutate(root string, fn func(*types.DiffReview)) *types.DiffReview {
+func (s *Store) mutate(root string, fn func(*diff.Review)) *diff.Review {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sess, ok := s.sessions[root]
@@ -482,7 +482,7 @@ func (s *Store) mutate(root string, fn func(*types.DiffReview)) *types.DiffRevie
 // clone returns a deep-enough copy that a caller cannot mutate live session state through the
 // slices it was handed. The Review inside is treated as immutable (Attach replaces it whole),
 // so it rides along by reference rather than being copied per read.
-func clone(s *types.DiffReview) *types.DiffReview {
+func clone(s *diff.Review) *diff.Review {
 	out := *s
 	out.Viewed = slices.Clone(s.Viewed)
 	out.SeenComments = slices.Clone(s.SeenComments)
@@ -498,13 +498,13 @@ func clone(s *types.DiffReview) *types.DiffReview {
 func (s *Store) persistDrafts(root string) {
 	s.mu.Lock()
 	sess, ok := s.sessions[root]
-	var keep []types.DiffComment
+	var keep []diff.Comment
 	if ok {
 		for _, c := range sess.Comments {
 			// An agent's remark belongs to the pairing session and dies with it. A published
 			// one lives on the host now, and re-sending it from a restored draft would post it
 			// twice.
-			if c.Author == types.DiffAuthorUnattributed && !c.Published {
+			if c.Author == diff.AuthorUnattributed && !c.Published {
 				keep = append(keep, c)
 			}
 		}
@@ -519,7 +519,7 @@ func (s *Store) persistDrafts(root string) {
 // loadDrafts reads the persisted drafts, for the reason loadViewed gives, and more so here:
 // refusing to open a review because the drafts file is corrupt would take the changeset away
 // along with the remarks.
-func (s *Store) loadDrafts() []types.DiffComment {
+func (s *Store) loadDrafts() []diff.Comment {
 	out, err := s.LoadDrafts()
 	if err != nil {
 		reportStateFailure(context.Background(), "drafts", err)
@@ -529,7 +529,7 @@ func (s *Store) loadDrafts() []types.DiffComment {
 }
 
 // draftOrder sorts drafts by id the way they were made: c2 before c10.
-func draftOrder(a, b types.DiffComment) int {
+func draftOrder(a, b diff.Comment) int {
 	if len(a.ID) != len(b.ID) {
 		return len(a.ID) - len(b.ID)
 	}
@@ -547,9 +547,9 @@ type (
 		ID string `json:"id"`
 	}
 	draftLine struct {
-		ID      string             `json:"id"`
-		Removed bool               `json:"removed,omitempty"`
-		Comment *types.DiffComment `json:"comment,omitempty"`
+		ID      string        `json:"id"`
+		Removed bool          `json:"removed,omitempty"`
+		Comment *diff.Comment `json:"comment,omitempty"`
 	}
 )
 
@@ -580,12 +580,12 @@ func oldFile(path, name string) string {
 // saveDrafts makes the file say drafts: a line for each draft that is new or changed, and a
 // removal for each that is gone. Best-effort, though a failure is logged, since the review
 // goes on without the write.
-func (s *Store) saveDrafts(drafts []types.DiffComment) {
+func (s *Store) saveDrafts(drafts []diff.Comment) {
 	if s.draftsPath == "" {
 		return
 	}
 	err := s.draftsLog().Update(context.Background(), func(stored []draftLine) []draftLine {
-		held := make(map[string]*types.DiffComment, len(stored))
+		held := make(map[string]*diff.Comment, len(stored))
 		for _, l := range stored {
 			held[l.ID] = l.Comment
 		}
@@ -594,7 +594,7 @@ func (s *Store) saveDrafts(drafts []types.DiffComment) {
 		for _, c := range drafts {
 			// Output-only, recomputed whenever the changeset is tracked, and kept out so
 			// that a draft nobody edited does not read as changed.
-			c.Rung = types.AnchorUnknown
+			c.Rung = diff.AnchorUnknown
 			keep[c.ID] = true
 			if old := held[c.ID]; old != nil && sameJSON(*old, c) {
 				continue
@@ -672,7 +672,7 @@ func (s *Store) saveViewed(digests []string) {
 // LoadSeenComments exists: a job in its own process has no session to read. A file that was
 // never written is no error; one that cannot be read, or an older magus's drafts.json beside
 // it, is.
-func (s *Store) LoadDrafts() ([]types.DiffComment, error) {
+func (s *Store) LoadDrafts() ([]diff.Comment, error) {
 	if s.draftsPath == "" {
 		return nil, nil
 	}
@@ -680,7 +680,7 @@ func (s *Store) LoadDrafts() ([]types.DiffComment, error) {
 	if err != nil {
 		return nil, fmt.Errorf("drafts: %w", err)
 	}
-	out := make([]types.DiffComment, 0, len(held))
+	out := make([]diff.Comment, 0, len(held))
 	for _, l := range held {
 		out = append(out, *l.Comment)
 	}

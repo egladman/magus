@@ -52,6 +52,7 @@ export fun inputsOutputsFigure() > figure\Figure !> any {
         .except([magus\graph().dir("internal/cache/reflink")],
             why: "copies files in and out of the store; it reads no glob and keys nothing")
         .except([magus\graph().dir("internal/cache/remotetest")], why: "a fake remote cache for tests")
-        .except([magus\graph().dir("types/enum")],
-            why: "the closed string sets every package checks values against; no claim rule");
+        .except([magus\graph().dir("types/enum"), magus\graph().dir("types/daemon"), magus\graph().dir("types/diff"),
+                 magus\graph().dir("types/events"), magus\graph().dir("types/image"), magus\graph().dir("types/trail")],
+            why: "the closed string sets every package checks values against, and data-type packages the figure does not trace; no claim rule");
 }

@@ -3,9 +3,8 @@ package changeset
 import (
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"strings"
-
-	"github.com/egladman/magus/types"
 )
 
 // ErrNoThread reports that an id names no thread on the review. Callers test for it with
@@ -13,11 +12,11 @@ import (
 var ErrNoThread = errors.New("no review thread has that id")
 
 // Thread is a top-level review comment and the replies made to it, in the order the host listed
-// them. Its id is the Head's ID, which is what [types.ReviewComment].Root and
-// [types.DiffOutline].Thread carry.
+// them. Its id is the Head's ID, which is what [diff.ReviewComment].Root and
+// [diff.Outline].Thread carry.
 type Thread struct {
-	Head    types.ReviewComment
-	Replies []types.ReviewComment
+	Head    diff.ReviewComment
+	Replies []diff.ReviewComment
 }
 
 // ID returns the head comment's id, the value every reply carries in Root. A reply is addressed
@@ -25,8 +24,8 @@ type Thread struct {
 func (t Thread) ID() string { return t.Head.ID }
 
 // Comments returns the head followed by its replies.
-func (t Thread) Comments() []types.ReviewComment {
-	return append([]types.ReviewComment{t.Head}, t.Replies...)
+func (t Thread) Comments() []diff.ReviewComment {
+	return append([]diff.ReviewComment{t.Head}, t.Replies...)
 }
 
 // GroupThreads groups the host's flat comments into threads, in the order their heads first
@@ -38,7 +37,7 @@ func (t Thread) Comments() []types.ReviewComment {
 // at itself, comments rooted at each other, or a reply to a reply. Such a comment is shown rather
 // than dropped or attached somewhere it was not said, because "a colleague said nothing" is the
 // one thing a review reader must not be told by accident.
-func GroupThreads(comments []types.ReviewComment) []Thread {
+func GroupThreads(comments []diff.ReviewComment) []Thread {
 	if len(comments) == 0 {
 		return nil
 	}
@@ -63,7 +62,7 @@ func GroupThreads(comments []types.ReviewComment) []Thread {
 
 // FindThread returns the thread that holds the comment id names, whether that is its head or one
 // of its replies. It returns an error wrapping [ErrNoThread] when comments hold no such comment.
-func FindThread(comments []types.ReviewComment, id string) (Thread, error) {
+func FindThread(comments []diff.ReviewComment, id string) (Thread, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return Thread{}, fmt.Errorf("%w: the id is empty", ErrNoThread)
@@ -84,7 +83,7 @@ func FindThread(comments []types.ReviewComment, id string) (Thread, error) {
 // headIndexes returns, for each comment, the index of the comment that heads its thread: its own
 // index unless it is a reply in the [GroupThreads] sense. When two top-level comments share an
 // id, the first one heads the replies that name it.
-func headIndexes(comments []types.ReviewComment) []int {
+func headIndexes(comments []diff.ReviewComment) []int {
 	topLevel := make(map[string]int, len(comments))
 	for i, c := range comments {
 		if c.Root != "" || c.ID == "" {

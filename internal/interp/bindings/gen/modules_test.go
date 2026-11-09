@@ -97,7 +97,7 @@ func TestBuzzBindingsMatchHostModules(t *testing.T) {
 			// map BY CONSTRUCTION, so requiring it here would fail the gate for the one
 			// case it is meant to describe. TestMagusExternsAreBound covers the other
 			// direction: that something really does bind each one.
-			if meth.Extern {
+			if meth.Extern != nil {
 				continue
 			}
 			// extra is self-complete: every declared method must be on the Buzz

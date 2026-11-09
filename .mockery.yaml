@@ -83,10 +83,6 @@ packages:
   github.com/egladman/magus/project/impact:
     interfaces:
       SymbolStore:
-  # Public: the Buzz host callback a std member invokes.
-  github.com/egladman/magus/std:
-    interfaces:
-      Callback:
   # Internal, imported across packages: the merge queue's contract, the telemetry seam
   # whose callers assert on the metric recorded, and the service runner.
   github.com/egladman/magus/internal/queue/types:

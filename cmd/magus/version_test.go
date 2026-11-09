@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"os"
 	"path/filepath"
 	"testing"
@@ -84,7 +85,7 @@ func TestProbeServerVersionReportsALiveServer(t *testing.T) {
 	srv, err := proc.New(t.Context(), proc.Options{
 		Version: "v9.9.9",
 		Handler: func(context.Context, []string) error { return nil },
-		Server:  func() *types.StatusServer { return &types.StatusServer{PID: 1} },
+		Server:  func() *daemon.Server { return &daemon.Server{PID: 1} },
 	})
 	require.NoError(t, err)
 	defer srv.Close()

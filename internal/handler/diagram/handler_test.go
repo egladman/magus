@@ -3,6 +3,7 @@ package diagram
 import (
 	"context"
 	"errors"
+	"github.com/egladman/magus/types/diff"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -45,8 +46,8 @@ func (f cannedWorkspace) SymbolIndex(context.Context) (types.SymbolIndexDigest, 
 	return types.SymbolIndexDigest{Indexed: f.imports.Indexed}, nil
 }
 
-func (f cannedWorkspace) ReviewOrigin(context.Context) types.ReviewOrigin {
-	return types.ReviewOrigin{Remote: f.remote}
+func (f cannedWorkspace) ReviewOrigin(context.Context) diff.ReviewOrigin {
+	return diff.ReviewOrigin{Remote: f.remote}
 }
 
 func (f cannedWorkspace) RevisionCheckpoint(_ context.Context, rev string) (types.VCSCheckpoint, error) {

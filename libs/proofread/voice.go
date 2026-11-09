@@ -57,11 +57,11 @@ var (
 // openers ("I've pushed") and its references to that thread are left alone.
 func replyVoice(in input) []Finding {
 	leadAt := 0
-	if in.kind == KindChangeDescription && in.reports(leadContextCheck) {
+	if in.reports(leadContextCheck) {
 		leadAt = leadLine(in.lines)
 	}
 
-	sectioned := in.kind == KindChangeDescription || isReview(in.kind)
+	sectioned := in.spec.Reader.Sections
 
 	var out []Finding
 
@@ -75,12 +75,12 @@ func replyVoice(in input) []Finding {
 					Match: body, Line: ln.line,
 				})
 			}
-		case sectioned && (isReview(in.kind) || ln.line > 1) && stockLabel.MatchString(body):
+		case sectioned && (!in.spec.Reader.Titled || ln.line > 1) && stockLabel.MatchString(body):
 			out = append(out, Finding{
 				Message: fmt.Sprintf("Drop the section label '%s': say the thing itself.", body),
 				Match:   body, Line: ln.line,
 			})
-		case ln.item && in.kind != KindAgentCompact:
+		case ln.item && !in.spec.Compact:
 			// compact-markup reports every emphasis marker in compact text.
 			if m := boldLabel.FindString(body); m != "" {
 				out = append(out, Finding{
@@ -92,7 +92,7 @@ func replyVoice(in input) []Finding {
 		}
 	}
 
-	if isReview(in.kind) {
+	if in.spec.Review {
 		return out
 	}
 
@@ -114,7 +114,7 @@ func replyVoice(in input) []Finding {
 		}
 
 		spans := conversation.FindAllStringIndex(para.text, -1)
-		if in.kind == KindChangeDescription {
+		if in.spec.Prompted {
 			spans = append(spans, youAsked.FindAllStringIndex(para.text, -1)...)
 			slices.SortFunc(spans, func(a, b []int) int { return a[0] - b[0] })
 		}
@@ -171,10 +171,14 @@ var (
 func tense(in input) []Finding {
 	var out []Finding
 
+	later := futureLines(in.source, in.opts.futureSections)
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
 		for _, at := range future.FindAllStringIndex(para.text, -1) {
 			m := para.text[at[0]:at[1]]
 			if strings.EqualFold(m, "will") && strings.HasSuffix(strings.ToLower(para.text[:at[0]]), "at ") {
+				continue
+			}
+			if later[para.lineAt(at[0])] {
 				continue
 			}
 
@@ -191,6 +195,42 @@ func tense(in input) []Finding {
 				Message: fmt.Sprintf("Name the code, not the author, in '%s': say what the change does.", m),
 				Match:   m, Line: para.lineAt(at[0]),
 			})
+		}
+	}
+
+	return out
+}
+
+// WithFutureSections names the Markdown headings whose sections may speak in
+// the future tense, such as a list of follow-up work. A name matches a
+// heading's text without its #s, ignoring case.
+func WithFutureSections(names ...string) Option {
+	return func(o *options) { o.futureSections = append(o.futureSections, names...) }
+}
+
+// futureLines are the 1-based lines of source under a heading names lists,
+// up to the next heading of the same or a higher level.
+func futureLines(source, names []string) map[int]bool {
+	out := map[int]bool{}
+	if len(names) == 0 {
+		return out
+	}
+
+	level := 0
+	for i, line := range source {
+		trimmed := strings.TrimSpace(line)
+		if hashes := len(trimmed) - len(strings.TrimLeft(trimmed, "#")); hashes > 0 && hashes <= 6 {
+			title := strings.TrimSpace(trimmed[hashes:])
+			switch {
+			case slices.ContainsFunc(names, func(n string) bool { return strings.EqualFold(n, title) }):
+				level = hashes
+				continue
+			case level > 0 && hashes <= level:
+				level = 0
+			}
+		}
+		if level > 0 {
+			out[i+1] = true
 		}
 	}
 
@@ -352,13 +392,12 @@ func attribution(in input) []Finding {
 	// A reply and a description are both posted to a review, so a tool or an
 	// agent credited in either is the story of the work.
 	patterns := []*regexp.Regexp{credit}
-	switch {
-	case isReview(in.kind):
-		patterns = append(patterns, workNarrative)
-	case in.kind == KindChangeDescription:
-		patterns = append(patterns, narrative, workNarrative)
-	default:
+	if !in.spec.Review {
 		patterns = append(patterns, narrative)
+	}
+
+	if in.spec.ToReviewers {
+		patterns = append(patterns, workNarrative)
 	}
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
@@ -367,7 +406,7 @@ func attribution(in input) []Finding {
 			spans = append(spans, re.FindAllStringIndex(para.text, -1)...)
 		}
 
-		if slices.Contains(reviewed, in.kind) {
+		if in.spec.ToReviewers {
 			for _, at := range toolName.FindAllStringSubmatchIndex(para.text, -1) {
 				if !namesProduct(para.text, at[2], at[3]) && !within(at[2], spans) {
 					spans = append(spans, at[2:4])

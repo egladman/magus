@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"errors"
+	"github.com/egladman/magus/types/daemon"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,7 +12,6 @@ import (
 	"connectrpc.com/connect"
 	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1/metricsv1alpha1connect"
-	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
@@ -25,9 +25,9 @@ func (f cannedCollector) Collect(context.Context) (metricdata.ResourceMetrics, e
 	return f.rm, f.err
 }
 
-type cannedStatus struct{ rep types.StatusSnapshot }
+type cannedStatus struct{ rep daemon.Snapshot }
 
-func (f cannedStatus) StatusSnapshot(context.Context) types.StatusSnapshot { return f.rep }
+func (f cannedStatus) StatusSnapshot(context.Context) daemon.Snapshot { return f.rep }
 
 func fixtureRM() metricdata.ResourceMetrics {
 	return metricdata.ResourceMetrics{
@@ -58,7 +58,7 @@ func TestGetMetrics(t *testing.T) {
 
 func TestSampleOncePopulatesRingFromPoolAndCounters(t *testing.T) {
 	at := time.Unix(1_700_000_000, 0).UTC()
-	stat := cannedStatus{rep: types.StatusSnapshot{Pool: &types.StatusOutput{
+	stat := cannedStatus{rep: daemon.Snapshot{Pool: &daemon.Output{
 		Running: 3, Capacity: 8, Queued: 2,
 	}}}
 	svc := NewService(cannedCollector{rm: fixtureRM()}, stat,

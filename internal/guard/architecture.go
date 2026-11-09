@@ -28,7 +28,7 @@ const topicArchitecture hint.MarkerKind = "topic-architecture"
 // alternative is a whole word or phrase, so "imports" matches and "important" does not.
 var architectureVocabulary = regexp.MustCompile(`(?i)\b(?:` +
 	`architect(?:ure|ures|ural|urally)` +
-	`|seams?|boundary|boundaries|layers?|layering|coupling|cohesion|domains?|bounded\s+contexts?` +
+	`|seams?|boundary|boundaries|layering|coupling|cohesion|bounded\s+contexts?` +
 	`|imports?|importing|(?:circular|cyclic)\s+dependenc(?:y|ies)|dependency\s+direction` +
 	`|package\s+layout|new\s+(?:packages?|modules?)|co-?locat\w*|sprawl\w*|god\s+(?:packages?|objects?)` +
 	`|fan-?(?:in|out)|blast\s+radius|restructur\w*|reorgani[sz]\w*` +
@@ -77,6 +77,23 @@ func recordMessageTopics(facts hint.Gate, message string) bool {
 		marked = true
 	}
 	return marked
+}
+
+// removesOnly reports a write that only deletes text: every edit
+// replaces its old text with nothing, so no structure is added.
+func removesOnly(w writeFields) bool {
+	if w.Content != "" {
+		return false
+	}
+	if len(w.Edits) == 0 {
+		return w.OldText != "" && strings.TrimSpace(w.NewText) == ""
+	}
+	for _, e := range w.Edits {
+		if e.OldText == "" || strings.TrimSpace(e.NewText) != "" {
+			return false
+		}
+	}
+	return true
 }
 
 // denyArchitectureWithoutSkill is architecture-unbriefed: the verdict for a graded call by

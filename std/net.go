@@ -12,8 +12,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module net -lang buzz -out ../internal/interp/bindings/gen/net.go -pkg bindgen
-
 // netDefaultWaitMs bounds wait_for_port when the caller names no timeout. Thirty
 // seconds is long enough for a dev server or a database container to come up and
 // short enough that a wedged one is reported inside a coffee break rather than
@@ -51,11 +49,11 @@ var Net = Module{
 			Name: "wait_for_port",
 			Doc:  "Block until a TCP connection to host:port succeeds, then return true; return false when the timeout elapses first. Use it after starting a dev server or a container instead of sleeping a guessed number of seconds. timeoutMs defaults to 30000. Returns FALSE rather than raising on timeout, so a caller can fall back or report its own message; the run's cancellation is honored, so Ctrl-C does not wait out the timeout.",
 			Args: []Arg{
-				{Name: "host", Type: TypeString},
-				{Name: "port", Type: TypeInt},
-				{Name: "timeoutMs", Type: TypeInt, Optional: true},
+				{Name: "host"},
+				{Name: "port"},
+				{Name: "timeoutMs", Optional: true},
 			},
-			Returns: []Ret{{Type: TypeBool}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    NetWaitForPort,
 		},
@@ -63,17 +61,17 @@ var Net = Module{
 			Name: "is_port_open",
 			Doc:  "Report whether a TCP connection to host:port succeeds right now, with no waiting. The single-shot form of wait_for_port - for deciding whether a service is ALREADY running before starting another one.",
 			Args: []Arg{
-				{Name: "host", Type: TypeString},
-				{Name: "port", Type: TypeInt},
+				{Name: "host"},
+				{Name: "port"},
 			},
-			Returns: []Ret{{Type: TypeBool}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    NetIsPortOpen,
 		},
 		{
 			Name:    "free_port",
 			Doc:     "Ask the operating system for an unused TCP port and return it. Bind it promptly: the port is released before this returns, so between the call and your server's own bind another process could take it. That race is unavoidable for any \"find a free port\" answer and is why this is for choosing a dev-server port, not for anything that must not collide.",
-			Returns: []Ret{{Type: TypeInt}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    NetFreePort,
 		},

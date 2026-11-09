@@ -250,44 +250,66 @@ func actingRole(ctx context.Context, at location, lease, spawned string) (types.
 // ParseCommandsDialect does, and marks each one a polling loop repeats (pollingLoop). Nil
 // when the line does not parse.
 //
-// A loop inside a wrapper's script (`sh -c 'while ...'`) is not marked: the wrapper's
-// payload is parsed on its own, outside the loop walk.
+// A wrapper's script (`sh -c 'while ...'`) is walked as its own script.
+// It repeats when a polling loop of the outer line runs it.
 func commandInvocations(command string, d Dialect, dir string) []types.CommandInvocation {
-	f, err := parseFile(command, d)
-	if err != nil {
-		return nil
-	}
 	var out []types.CommandInvocation
 	moved := false
-	var visit func(root syntax.Node, repeats bool)
-	visit = func(root syntax.Node, repeats bool) {
-		syntax.Walk(root, func(n syntax.Node) bool {
-			switch n := n.(type) {
-			case *syntax.WhileClause, *syntax.ForClause:
-				if _, polls := pollingLoop(n, d); polls && !repeats && n != root {
-					visit(n, true)
-					return false
-				}
-			case *syntax.CallExpr:
-				words := literalWords(n.Args)
-				for _, inv := range peelWrappers(words, d) {
-					out = append(out, types.CommandInvocation{
-						Program: inv.Name,
-						Args:    inv.Args,
-						Repeats: repeats,
-						Path:    programPath(n.Args, words, inv, dir, moved),
-						VCS:     vcsInvocation(inv),
-					})
-					if inv.Name == "cd" || inv.Name == "pushd" || inv.Name == "popd" {
-						moved = true
+	repeating := map[*scriptFile]bool{}
+	eachScript(command, d, func(sf *scriptFile) bool {
+		scriptDir := ""
+		if sf.parent == nil {
+			scriptDir = dir
+		} else {
+			repeating[sf] = repeating[sf.parent] || pollsAround(sf.parent.file, sf.from, d)
+		}
+		var visit func(root syntax.Node, repeats bool)
+		visit = func(root syntax.Node, repeats bool) {
+			syntax.Walk(root, func(n syntax.Node) bool {
+				switch n := n.(type) {
+				case *syntax.WhileClause, *syntax.ForClause:
+					if _, polls := pollingLoop(n, d); polls && !repeats && n != root {
+						visit(n, true)
+						return false
+					}
+				case *syntax.CallExpr:
+					words := literalWords(n.Args)
+					if _, handedOver := shellPayload(words); handedOver {
+						return true
+					}
+					for _, inv := range peelWrappers(words, d) {
+						out = append(out, types.CommandInvocation{
+							Program: inv.Name,
+							Args:    inv.Args,
+							Repeats: repeats,
+							Path:    programPath(n.Args, words, inv, scriptDir, moved),
+							VCS:     vcsInvocation(inv),
+						})
+						if inv.Name == "cd" || inv.Name == "pushd" || inv.Name == "popd" {
+							moved = true
+						}
 					}
 				}
-			}
-			return true
-		})
-	}
-	visit(f, false)
+				return true
+			})
+		}
+		visit(sf.file, repeating[sf])
+		return true
+	})
 	return out
+}
+
+// pollsAround reports whether stmt sits inside a polling loop of f.
+func pollsAround(f *syntax.File, stmt *syntax.Stmt, d Dialect) bool {
+	inside := false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		if _, polls := pollingLoop(n, d); polls &&
+			n.Pos().Offset() <= stmt.Pos().Offset() && stmt.End().Offset() <= n.End().Offset() {
+			inside = true
+		}
+		return !inside
+	})
+	return inside
 }
 
 // vcsInvocation is inv split at its subcommand by the parser every built-in VCS rule reads,

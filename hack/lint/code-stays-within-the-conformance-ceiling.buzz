@@ -15,7 +15,7 @@ import "hack/magusfile/conformance-ceiling" as ceiling;
 // is named.
 export fun reads() > [str] {
     return ["**/*.go", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
-        "libs/figure/**/*.go", "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go", "libs/xdg/**/*.go",
+        "libs/figure/**/*.go", "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go", "libs/text/**/*.go", "libs/xdg/**/*.go",
         "libs/cmdline/**/*.go", "hack/magusfile/conformance-ceiling.buzz", "magus.yaml"];
 }
 

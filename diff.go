@@ -3,6 +3,7 @@ package magus
 import (
 	"context"
 	"fmt"
+	difftypes "github.com/egladman/magus/types/diff"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -44,16 +45,16 @@ type diffConfig struct {
 // are compared as text, so two indexer versions rendering one declaration differently read
 // as a changed signature. A base with no symbol nodes, one exported before signatures were
 // recorded, or a head with no symbol index is reported in Diff.Notes and leaves API nil.
-func (m *Magus) DiffAgainst(ctx context.Context, paths []string, base types.KnowledgeGraphOutput, label string) (types.Diff, error) {
-	return m.DiffWith(ctx, paths, types.DiffOptions{Baseline: &base, BaselineLabel: label})
+func (m *Magus) DiffAgainst(ctx context.Context, paths []string, base types.KnowledgeGraphOutput, label string) (difftypes.Diff, error) {
+	return m.DiffWith(ctx, paths, difftypes.Options{Baseline: &base, BaselineLabel: label})
 }
 
-// DiffWith is [Magus.Diff] with the options [types.DiffOptions] describes: the changeset's own
+// DiffWith is [Magus.Diff] with the options [diff.Options] describes: the changeset's own
 // patch, a baseline to compare against, and the conformance checks' silence gates, which
 // default to knowledge.conformance.gates and which opts overrides for the one call. A review of
 // anything but the working tree passes its patch, since without a baseline the patch is what
 // says which symbols the change adds; with neither, the working tree's patch is read.
-func (m *Magus) DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
+func (m *Magus) DiffWith(ctx context.Context, paths []string, opts difftypes.Options) (difftypes.Diff, error) {
 	return m.diff(ctx, paths, diffConfig{
 		baseline: opts.Baseline, baselineLabel: opts.BaselineLabel,
 		patch: opts.Patch, patchGiven: opts.Patch != "",
@@ -110,7 +111,7 @@ type externalsFunc func(g *knowledge.Graph, symbolID, owner string) ([]string, i
 // DiffChange by ID, public or not, and the base's nodes for the symbols the changed files no
 // longer define, and the graph it built from the baseline; all three are nil when the baseline
 // could not be compared.
-func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *knowledge.Graph, cfg diffConfig, externals externalsFunc) (map[string]string, []types.KnowledgeNode, *knowledge.Graph) {
+func attachAPIDelta(out *difftypes.Diff, byPath map[string]*difftypes.File, head *knowledge.Graph, cfg diffConfig, externals externalsFunc) (map[string]string, []types.KnowledgeNode, *knowledge.Graph) {
 	baseOut := *cfg.baseline
 	if baseOut.SchemaVersion < 14 {
 		out.Notes = append(out.Notes, fmt.Sprintf(
@@ -128,18 +129,18 @@ func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *kn
 	base.Merge(baseOut.Nodes, baseOut.Links)
 	headDefs := definedSymbols(head.Nodes())
 
-	api := types.DiffAPI{Base: cfg.baselineLabel}
+	api := difftypes.API{Base: cfg.baselineLabel}
 	anyChange := false
 	unmeasured := 0
 	classified := map[string]string{}
-	record := func(f *types.DiffFile, graph *knowledge.Graph, def symbolDef, change, sig, baseSig string) {
+	record := func(f *difftypes.File, graph *knowledge.Graph, def symbolDef, change, sig, baseSig string) {
 		anyChange = true
 		classified[def.node.ID] = change
 		label := def.node.Label
 		exported := exportedFromModule(def.path, label, def.node.ID)
 		external, externalFiles := externals(graph, def.node.ID, f.Project)
 		public := exported || len(external) > 0
-		listed := slices.IndexFunc(f.Symbols, func(s types.DiffSymbol) bool { return s.ID == def.node.ID })
+		listed := slices.IndexFunc(f.Symbols, func(s difftypes.Symbol) bool { return s.ID == def.node.ID })
 		qualified := qualifiedName(def.node.ID, label)
 		switch {
 		case listed >= 0:
@@ -147,7 +148,7 @@ func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *kn
 			s.Change, s.Qualified, s.Signature, s.BaseSignature = change, qualified, sig, baseSig
 			public = public || s.PublicBeyondWorkspace || len(s.PublicTo) > 0
 		case public:
-			f.Symbols = append(f.Symbols, types.DiffSymbol{
+			f.Symbols = append(f.Symbols, difftypes.Symbol{
 				ID: def.node.ID, Label: label, PublicBeyondWorkspace: exported,
 				PublicTo: external, PublicFileCount: externalFiles,
 				Change: change, Qualified: qualified, Signature: sig, BaseSignature: baseSig,
@@ -156,15 +157,15 @@ func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *kn
 		if !public {
 			return
 		}
-		f.Visibility = types.DiffVisibilityPublic
+		f.Visibility = difftypes.VisibilityPublic
 		switch change {
-		case types.DiffChangeAdded:
+		case difftypes.ChangeAdded:
 			api.Added++
-		case types.DiffChangeRemoved:
+		case difftypes.ChangeRemoved:
 			api.Removed++
-		case types.DiffChangeSignature:
+		case difftypes.ChangeSignature:
 			api.Signature++
-		case types.DiffChangeBody:
+		case difftypes.ChangeBody:
 			api.Body++
 		}
 	}
@@ -178,12 +179,12 @@ func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *kn
 		sig := def.node.Attrs[knowledge.AttrSignature]
 		prior, inBase := baseDefs[id]
 		if !inBase {
-			record(f, head, def, types.DiffChangeAdded, sig, "")
+			record(f, head, def, difftypes.ChangeAdded, sig, "")
 			continue
 		}
 		baseSig := prior.node.Attrs[knowledge.AttrSignature]
 		if sig != "" && baseSig != "" && sig != baseSig && !hasMembers(id, headDefs, baseDefs) {
-			record(f, head, def, types.DiffChangeSignature, sig, baseSig)
+			record(f, head, def, difftypes.ChangeSignature, sig, baseSig)
 			continue
 		}
 		digest, baseDigest := def.node.Attrs[knowledge.AttrBodyDigest], prior.node.Attrs[knowledge.AttrBodyDigest]
@@ -191,7 +192,7 @@ func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *kn
 		case digest == "" || baseDigest == "":
 			unmeasured++
 		case digest != baseDigest:
-			record(f, head, def, types.DiffChangeBody, sig, baseSig)
+			record(f, head, def, difftypes.ChangeBody, sig, baseSig)
 		}
 	}
 	for _, id := range slices.Sorted(maps.Keys(baseDefs)) {
@@ -203,22 +204,22 @@ func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *kn
 		if _, still := headDefs[id]; still {
 			continue
 		}
-		record(f, base, def, types.DiffChangeRemoved, "", def.node.Attrs[knowledge.AttrSignature])
+		record(f, base, def, difftypes.ChangeRemoved, "", def.node.Attrs[knowledge.AttrSignature])
 		removed = append(removed, def.node)
 	}
 
-	api.Floor = types.DiffBumpNone
+	api.Floor = difftypes.BumpNone
 	switch {
 	case api.Removed > 0:
-		api.Floor = types.DiffBumpMajor
+		api.Floor = difftypes.BumpMajor
 	case api.Added > 0:
-		api.Floor = types.DiffBumpMinor
+		api.Floor = difftypes.BumpMinor
 	case anyChange:
-		api.Floor = types.DiffBumpPatch
+		api.Floor = difftypes.BumpPatch
 	}
 	api.Likely = api.Floor
 	if api.Signature > 0 {
-		api.Likely = types.DiffBumpMajor
+		api.Likely = difftypes.BumpMajor
 	}
 	out.API = &api
 	if unmeasured > 0 {
@@ -253,7 +254,7 @@ type conformanceInput struct {
 // new one's. Without one the patch says it: a symbol is new when its definition line is an
 // added line and no removed line in the patch names it (a moved or re-signed symbol is not new),
 // and it was renamed from the name a removed line of its file spells where it now reads its own.
-func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph, in conformanceInput) {
+func attachConformance(byPath map[string]*difftypes.File, head *knowledge.Graph, in conformanceInput) {
 	defs := definedSymbols(head.Nodes())
 	cls := classifyChanges(defs, byPath, in)
 	found := head.ConformanceChecks(knowledge.ConformanceChange{
@@ -266,13 +267,13 @@ func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph,
 		if !ok || f == nil {
 			continue
 		}
-		i := slices.IndexFunc(f.Symbols, func(s types.DiffSymbol) bool { return s.ID == id })
+		i := slices.IndexFunc(f.Symbols, func(s difftypes.Symbol) bool { return s.ID == id })
 		if i < 0 {
 			change := in.changes[id]
-			if in.changes == nil && cls.change[id] == types.DiffChangeAdded {
-				change = types.DiffChangeAdded
+			if in.changes == nil && cls.change[id] == difftypes.ChangeAdded {
+				change = difftypes.ChangeAdded
 			}
-			f.Symbols = append(f.Symbols, types.DiffSymbol{
+			f.Symbols = append(f.Symbols, difftypes.Symbol{
 				ID: id, Label: def.node.Label, Change: change, Qualified: qualifiedName(id, def.node.Label),
 				Signature: def.node.Attrs[knowledge.AttrSignature],
 			})
@@ -309,7 +310,7 @@ func pairRenames(defs map[string]symbolDef, changes map[string]string, removed [
 		}
 		var match string
 		for id, def := range defs {
-			if changes[id] != types.DiffChangeAdded || id != fmt.Sprintf(`%s%s%s`, r.ID[:i], def.node.Label, r.ID[i+len(r.Label):]) {
+			if changes[id] != difftypes.ChangeAdded || id != fmt.Sprintf(`%s%s%s`, r.ID[:i], def.node.Label, r.ID[i+len(r.Label):]) {
 				continue
 			}
 			sig, baseSig := def.node.Attrs[knowledge.AttrSignature], r.Attrs[knowledge.AttrSignature]
@@ -371,7 +372,7 @@ func readPatchFacts(patch string) patchFacts {
 // The file is parsed once for all its hunks. all lists every symbol any hunk touched, in
 // declaration order, and perHunk[i] lists the ones hunks[i] touched. Both are nil for a file it
 // cannot read, one with no go.mod above it inside root, and no changed lines.
-func parsedGoSymbols(root, path string, hunks []impact.HunkLines, pf patchFacts) (all []types.DiffSymbol, perHunk [][]types.DiffSymbol) {
+func parsedGoSymbols(root, path string, hunks []impact.HunkLines, pf patchFacts) (all []difftypes.Symbol, perHunk [][]difftypes.Symbol) {
 	var changed []int
 	for _, h := range hunks {
 		changed = append(changed, h.Lines...)
@@ -438,15 +439,15 @@ func parsedGoSymbols(root, path string, hunks []impact.HunkLines, pf patchFacts)
 		spans[i] = impact.Span{ID: d.id, Start: d.start, End: d.end}
 	}
 	removed := strings.Join(pf.removed[path], "\n")
-	symbolOf := func(d decl) types.DiffSymbol {
-		change := types.DiffChangeBody
+	symbolOf := func(d decl) difftypes.Symbol {
+		change := difftypes.ChangeBody
 		if _, added := pf.added[path][d.start]; added {
-			change = types.DiffChangeAdded
+			change = difftypes.ChangeAdded
 			if knowledge.IndexIdentifier(removed, d.label) >= 0 {
-				change = types.DiffChangeSignature
+				change = difftypes.ChangeSignature
 			}
 		}
-		return types.DiffSymbol{
+		return difftypes.Symbol{
 			ID: d.id, Label: d.label, Change: change, Qualified: qualifiedName(d.id, d.label),
 			PublicBeyondWorkspace: exportedFromModule(path, d.label, d.id),
 		}
@@ -457,7 +458,7 @@ func parsedGoSymbols(root, path string, hunks []impact.HunkLines, pf patchFacts)
 			all = append(all, symbolOf(d))
 		}
 	}
-	perHunk = make([][]types.DiffSymbol, len(hunks))
+	perHunk = make([][]difftypes.Symbol, len(hunks))
 	for i, h := range hunks {
 		hunkTouched := impact.Touched(spans, h.Lines)
 		for _, d := range decls {
@@ -537,7 +538,7 @@ func (m *Magus) generatedFiles(ctx context.Context, head *knowledge.Graph) (map[
 	}
 	out := map[string]bool{}
 	for _, e := range entries {
-		if e.Role == types.DiffRoleOutput {
+		if e.Role == difftypes.RoleOutput {
 			out[e.Path] = true
 		}
 	}

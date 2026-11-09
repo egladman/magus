@@ -532,6 +532,9 @@ func (f forkedTier) refusal(host, model string) string {
 	if f.record.Model != "" && model == f.record.Model {
 		return ""
 	}
+	if sameListedModel(f.rows, f.record.Model, model) {
+		return ""
+	}
 	alias, err := f.set.Alias(host, f.tier)
 	if err != nil {
 		return fmt.Sprintf("magus workspace: job %s was forked at model tier %s, and %v; add a %s entry to the hosts magus\\modelTiers declares, or spawn the job from a harness it maps.",
@@ -547,6 +550,21 @@ func (f forkedTier) refusal(host, model string) string {
 	}
 	return fmt.Sprintf("magus workspace: this spawn runs %s, and job %s was forked at %s; spawn it on %s, or re-fork the job at the tier its work needs.",
 		runs, f.job, f.line(alias), alias)
+}
+
+// sameListedModel reports whether a and b name one mgs_listModels row by exact
+// id or alias. A tierless row still names a model, so another spelling matches.
+func sameListedModel(rows []types.ModelPricing, a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	idx := func(m string) int {
+		return slices.IndexFunc(rows, func(r types.ModelPricing) bool {
+			return r.ID == m || r.Alias != "" && r.Alias == m
+		})
+	}
+	i := idx(a)
+	return i >= 0 && i == idx(b)
 }
 
 // rankedAbove is spawn-above-model-tier's advice for a spawn of model from host, "" unless

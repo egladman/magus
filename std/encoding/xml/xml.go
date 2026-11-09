@@ -9,13 +9,12 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"strings"
 
 	"github.com/egladman/magus/std"
 )
-
-//go:generate go run ../../../cmd/magus-utils bindings -module xml -lang buzz -out ../../../internal/interp/bindings/gen/xml.go -pkg bindgen
 
 // Module is the "xml" host module: build and serialize an XML/SVG tree, and parse one
 // back. It is the markup counterpart to the json module: render is to stringify what
@@ -37,8 +36,8 @@ var Module = std.Module{
 		{
 			Name:    "render",
 			Doc:     "Serialize an XML node to a string. A node is a string (text) or an element map {\"tag\": name, \"attrs\": [name, value, ...], \"children\": [node, ...]}. Empty-children elements self-close; no whitespace is emitted between tags.",
-			Args:    []std.Arg{{Name: "node", Type: std.TypeAny}},
-			Returns: []std.Ret{{Type: std.TypeString}},
+			Args:    []std.Arg{{Name: "node"}},
+			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    XMLRender,
 		},
@@ -46,19 +45,19 @@ var Module = std.Module{
 			Name: "element",
 			Doc:  "Build an element node from a tag, a flat [name, value, ...] attribute list, and a list of child nodes (elements or strings). Sugar for the {\"tag\", \"attrs\", \"children\"} map that render consumes.",
 			Args: []std.Arg{
-				{Name: "tag", Type: std.TypeString},
-				{Name: "attrs", Type: std.TypeStringSlice},
-				{Name: "children", Type: std.TypeAny},
+				{Name: "tag"},
+				{Name: "attrs"},
+				{Name: "children"},
 			},
-			Returns: []std.Ret{{Type: std.TypeAny}},
+			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    XMLElement,
 		},
 		{
 			Name:    "parse",
 			Doc:     "Parse an XML string into a node tree: each element becomes {\"tag\": name, \"attrs\": [name, value, ...], \"children\": [node, ...]}, character data becomes a string. The inverse shape of render.",
-			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
-			Returns: []std.Ret{{Type: std.TypeAny}},
+			Args:    []std.Arg{{Name: "s"}},
+			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    XMLParse,
 		},
@@ -112,7 +111,7 @@ func renderNode(b *strings.Builder, node any) error {
 			b.WriteByte(' ')
 			b.WriteString(asString(attrs[i]))
 			b.WriteString(`="`)
-			b.WriteString(escapeAttr(asString(attrs[i+1])))
+			b.WriteString(html.EscapeString(asString(attrs[i+1])))
 			b.WriteByte('"')
 		}
 		children, err := asList(n["children"])
@@ -210,12 +209,8 @@ func asString(v any) string {
 	return fmt.Sprint(v)
 }
 
-// escapeText escapes character data (&, <, >). escapeAttr also escapes the quote that
-// delimits an attribute value. Both leave everything else byte-identical.
+// escapeText escapes character data (&, <, >) and leaves quotes alone,
+// unlike html.EscapeString.
 func escapeText(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(s)
-}
-
-func escapeAttr(s string) string {
-	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&#34;").Replace(s)
 }

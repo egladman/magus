@@ -173,6 +173,11 @@ func writeBinder(b *bytes.Buffer, command, constCommand string, flags []cmdline.
 		}
 		for _, name := range g.names {
 			usage := flagDoc(flags, name)
+			if g.primary.Kind == cmdline.StringList {
+				fmt.Fprintf(b, "\tcmdline.StringListVar(fs, &f.%s, %s, %q)\n",
+					g.field, fmt.Sprintf("Flag%s%s", goIdent(constCommand), goIdent(name)), usage)
+				continue
+			}
 			if g.primary.Kind == cmdline.Duration {
 				if name == g.primary.Name {
 					usage = cmdline.DurationUsage(g.primary)
@@ -304,6 +309,8 @@ func goType(k cmdline.Kind) string {
 		return "time.Duration"
 	case cmdline.String:
 		return "string"
+	case cmdline.StringList:
+		return "[]string"
 	}
 	panic("binders: unknown flag kind " + string(k))
 }
@@ -338,6 +345,8 @@ func flagDefaultLiteral(f cmdline.Flag) string {
 		return "0"
 	case cmdline.String:
 		return fmt.Sprintf("%q", cmdline.TypedDefault[string](f))
+	case cmdline.StringList:
+		return "nil"
 	}
 	panic("binders: unknown flag kind " + string(f.Kind))
 }

@@ -5,8 +5,6 @@ import (
 	"fmt"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module fmt -lang buzz -out ../internal/interp/bindings/gen/fmt.go -pkg bindgen
-
 // Fmt is the "fmt" host module: string formatting via Go's printf verbs. It
 // exists to collapse long "+"-concatenation chains into a single readable call.
 // Args are strings (the variadic boundary only carries strings), so use %s/%q:
@@ -19,8 +17,8 @@ var Fmt = Module{
 		{
 			Name:    "sprintf",
 			Doc:     "Format string args into the template using Go printf verbs (e.g. %s, %q). Returns the formatted string.",
-			Args:    []Arg{{Name: "format", Type: TypeString}, {Name: "args", Type: TypeString, Variadic: true}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "format"}, {Name: "args", Variadic: true}},
+			Returns: []Ret{{}},
 			Impl:    FmtSprintf,
 		},
 	},

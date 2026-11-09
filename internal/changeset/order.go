@@ -2,6 +2,7 @@ package changeset
 
 import (
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"slices"
 	"sort"
 	"strings"
@@ -29,9 +30,9 @@ type OrderFile struct {
 	// Moved marks a file whose working tree no longer matches the range head, so the
 	// index's line numbers do not describe its hunks. Its hunks are unranked.
 	Moved bool
-	Hunks []types.DiffHunk
+	Hunks []diff.Hunk
 	// Symbols are the file's changed symbols; hunk Symbols refer to their IDs.
-	Symbols []types.DiffSymbol
+	Symbols []diff.Symbol
 	// Reach is the number of files that reference the file's symbols, the ranking key after
 	// group size.
 	Reach int
@@ -64,10 +65,10 @@ const (
 )
 
 type orderNode struct {
-	ref   types.DiffHunkRef
+	ref   diff.HunkRef
 	path  string
 	file  int
-	hunk  types.DiffHunk
+	hunk  diff.Hunk
 	test  bool
 	reach int
 	tier  int
@@ -102,14 +103,14 @@ type orderPlacement struct {
 	symbol string
 	kind   orderEdgeKind
 	cycle  []string
-	fixed  *types.DiffWhy
+	fixed  *diff.Why
 	// alone marks the only hunk of its group: it changes a symbol, and nothing links it to
 	// another changed hunk.
 	alone bool
 }
 
 type orderGroup struct {
-	kind       types.DiffGroupKind
+	kind       diff.GroupKind
 	placements []orderPlacement
 	size       int
 	reach      int
@@ -135,7 +136,7 @@ type orderBuilder struct {
 // interface before its implementations, code before its tests. The result is a pure function
 // of in, and the same input in any order gives the same output. Every hunk lands in exactly
 // one group; Count on the result is computed by walking the groups it holds.
-func OrderHunks(in OrderInput) types.DiffOrder {
+func OrderHunks(in OrderInput) diff.Order {
 	b := &orderBuilder{in: in, labels: map[string]string{}, definedBy: map[string][]int{}, rep: map[int]int{}, stepOf: map[int]int{}}
 	b.normalize()
 
@@ -145,8 +146,8 @@ func OrderHunks(in OrderInput) types.DiffOrder {
 		f := b.files[n.file]
 		switch {
 		case f.Generated:
-			generated = append(generated, fixedOrderPlacement(id, types.DiffWhy{
-				Relation: types.DiffWhyGenerated,
+			generated = append(generated, fixedOrderPlacement(id, diff.Why{
+				Relation: diff.WhyGenerated,
 				Text:     "generated output; its source carries the review",
 			}))
 		case f.Moved:
@@ -201,10 +202,10 @@ func OrderHunks(in OrderInput) types.DiffOrder {
 
 	groups := connected
 	if len(generated) > 0 {
-		groups = append(groups, orderGroup{kind: types.DiffGroupGenerated, placements: generated, size: len(generated)})
+		groups = append(groups, orderGroup{kind: diff.GroupGenerated, placements: generated, size: len(generated)})
 	}
 	if len(unranked) > 0 {
-		groups = append(groups, orderGroup{kind: types.DiffGroupUnranked, placements: unranked, size: len(unranked)})
+		groups = append(groups, orderGroup{kind: diff.GroupUnranked, placements: unranked, size: len(unranked)})
 	}
 	return b.render(groups)
 }
@@ -216,7 +217,7 @@ func (b *orderBuilder) normalize() {
 	sort.SliceStable(b.files, func(i, j int) bool { return b.files[i].Path < b.files[j].Path })
 	for fi := range b.files {
 		f := &b.files[fi]
-		f.Hunks = append([]types.DiffHunk(nil), f.Hunks...)
+		f.Hunks = append([]diff.Hunk(nil), f.Hunks...)
 		sort.SliceStable(f.Hunks, func(i, j int) bool { return f.Hunks[i].Index < f.Hunks[j].Index })
 		if len(f.Hunks) == 0 && !slices.Contains(b.bare, f.Path) {
 			b.bare = append(b.bare, f.Path)
@@ -229,7 +230,7 @@ func (b *orderBuilder) normalize() {
 		isTest := b.in.IsTest != nil && b.in.IsTest(f.Path)
 		for _, h := range f.Hunks {
 			b.nodes = append(b.nodes, orderNode{
-				ref:   types.DiffHunkRef{Path: f.Path, Index: h.Index, Digest: h.Digest},
+				ref:   diff.HunkRef{Path: f.Path, Index: h.Index, Digest: h.Digest},
 				path:  f.Path,
 				file:  fi,
 				hunk:  h,
@@ -508,7 +509,7 @@ func (b *orderBuilder) orderMembers(members []int) orderGroup {
 		}
 		placements = append(placements, p)
 	}
-	return orderGroup{kind: types.DiffGroupConnected, placements: placements, size: len(members), reach: reach, tier: tier, first: members[0]}
+	return orderGroup{kind: diff.GroupConnected, placements: placements, size: len(members), reach: reach, tier: tier, first: members[0]}
 }
 
 // placedBefore reports whether step a goes before step b: code before tests, then hunk
@@ -522,7 +523,7 @@ func placedBefore(a, b int, testSteps map[int]bool) bool {
 
 // render numbers the steps, merges consecutive placements from one file into one screen
 // and words each hunk's relationship.
-func (b *orderBuilder) render(groups []orderGroup) types.DiffOrder {
+func (b *orderBuilder) render(groups []orderGroup) diff.Order {
 	screens := make([][][]int, len(groups))
 	number := 0
 	for gi, g := range groups {
@@ -542,20 +543,20 @@ func (b *orderBuilder) render(groups []orderGroup) types.DiffOrder {
 		}
 	}
 
-	order := types.DiffOrder{Groups: make([]types.DiffGroup, 0, len(groups))}
+	order := diff.Order{Groups: make([]diff.Group, 0, len(groups))}
 	step := 0
 	for gi, g := range groups {
-		out := types.DiffGroup{Kind: g.kind, HunkCount: g.size, Reach: g.reach}
-		if g.kind == types.DiffGroupConnected {
+		out := diff.Group{Kind: g.kind, HunkCount: g.size, Reach: g.reach}
+		if g.kind == diff.GroupConnected {
 			out.Label = b.groupLabel(g)
 		}
 		for _, screen := range screens[gi] {
 			step++
-			ds := types.DiffStep{Number: step}
+			ds := diff.Step{Number: step}
 			for _, pi := range screen {
 				p := g.placements[pi]
 				for k, n := range p.nodes {
-					ds.Hunks = append(ds.Hunks, types.DiffStepHunk{
+					ds.Hunks = append(ds.Hunks, diff.StepHunk{
 						Ref:   b.nodes[n].ref,
 						Label: b.hunkLabel(n),
 						Why:   b.why(p, k, step),
@@ -600,7 +601,7 @@ func (b *orderBuilder) hunkLabel(n int) string {
 
 // why words the relationship that placed the k-th hunk of p, which sits on step here.
 // Within a cycle only the first hunk carries the placement; the rest share its step.
-func (b *orderBuilder) why(p orderPlacement, k, here int) types.DiffWhy {
+func (b *orderBuilder) why(p orderPlacement, k, here int) diff.Why {
 	if p.fixed != nil {
 		return *p.fixed
 	}
@@ -608,15 +609,15 @@ func (b *orderBuilder) why(p orderPlacement, k, here int) types.DiffWhy {
 	if len(p.nodes) > 1 {
 		cycle = strings.Join(p.cycle, ", ")
 		if k > 0 {
-			return types.DiffWhy{
-				Relation: types.DiffWhySameStep,
+			return diff.Why{
+				Relation: diff.WhySameStep,
 				Step:     here,
 				Cycle:    p.cycle,
 				Text:     "shares its step with the hunks it uses and is used by, through " + cycle,
 			}
 		}
 	}
-	w := types.DiffWhy{Relation: types.DiffWhyStarts, Text: "starts the group"}
+	w := diff.Why{Relation: diff.WhyStarts, Text: "starts the group"}
 	if p.alone {
 		w.Text = "stands alone: no other changed hunk uses, implements or continues what it changes"
 	}
@@ -627,16 +628,16 @@ func (b *orderBuilder) why(p orderPlacement, k, here int) types.DiffWhy {
 		w.Step, w.Symbol = step, symbol
 		switch {
 		case p.kind == orderEdgeImplements:
-			w.Relation = types.DiffWhyImplements
+			w.Relation = diff.WhyImplements
 			w.Text = fmt.Sprintf("implements %s, declared %s", symbol, stepAt(step, here, "above", "in step"))
 		case p.kind == orderEdgeContinues:
-			w.Relation = types.DiffWhyContinues
+			w.Relation = diff.WhyContinues
 			w.Text = fmt.Sprintf("continues %s from %s", symbol, stepAt(step, here, "above", "step"))
 		case b.testOnly(p) && !b.nodes[p.other].test:
-			w.Relation = types.DiffWhyTests
+			w.Relation = diff.WhyTests
 			w.Text = fmt.Sprintf("tests %s, defined %s", symbol, stepAt(step, here, "above", "in step"))
 		default:
-			w.Relation = types.DiffWhyUses
+			w.Relation = diff.WhyUses
 			w.Text = fmt.Sprintf("uses %s, defined %s", symbol, stepAt(step, here, "above", "in step"))
 		}
 	case orderBefore:
@@ -644,13 +645,13 @@ func (b *orderBuilder) why(p orderPlacement, k, here int) types.DiffWhy {
 		w.Step, w.Symbol = step, symbol
 		switch p.kind {
 		case orderEdgeImplements:
-			w.Relation = types.DiffWhyImplementedBy
+			w.Relation = diff.WhyImplementedBy
 			w.Text = fmt.Sprintf("declares %s, implemented %s", symbol, stepAt(step, here, "below", "in step"))
 		case orderEdgeContinues:
-			w.Relation = types.DiffWhyContinuedBy
+			w.Relation = diff.WhyContinuedBy
 			w.Text = fmt.Sprintf("begins %s, which continues %s", symbol, stepAt(step, here, "below", "in step"))
 		default:
-			w.Relation = types.DiffWhyUsedBy
+			w.Relation = diff.WhyUsedBy
 			w.Text = fmt.Sprintf("defines %s, used %s", symbol, stepAt(step, here, "below", "in step"))
 		}
 	}
@@ -681,7 +682,7 @@ func (b *orderBuilder) testOnly(p orderPlacement) bool {
 
 // count walks the groups and checks them against the input, so a hunk lost or placed twice
 // shows up instead of being assumed away.
-func (b *orderBuilder) count(groups []types.DiffGroup) types.DiffOrderCount {
+func (b *orderBuilder) count(groups []diff.Group) diff.OrderCount {
 	seen := map[string]int{}
 	placed := 0
 	for _, g := range groups {
@@ -692,7 +693,7 @@ func (b *orderBuilder) count(groups []types.DiffGroup) types.DiffOrderCount {
 			}
 		}
 	}
-	count := types.DiffOrderCount{HunkCount: len(b.nodes), Placed: placed, FilesWithoutHunks: b.bare}
+	count := diff.OrderCount{HunkCount: len(b.nodes), Placed: placed, FilesWithoutHunks: b.bare}
 	reported := map[string]bool{}
 	for _, n := range b.nodes {
 		k := n.ref.Key()
@@ -721,7 +722,7 @@ func (b *orderBuilder) symbolLabel(id string) string {
 // SymbolName is how a changed symbol reads in prose: its qualified name, else its label, else
 // its ID cut down to the descriptors. It is the one name the reading order and the review
 // text share.
-func SymbolName(s types.DiffSymbol) string {
+func SymbolName(s diff.Symbol) string {
 	switch {
 	case s.Qualified != "":
 		return s.Qualified
@@ -743,10 +744,10 @@ func qualifySymbolID(id string) string {
 	return name
 }
 
-func fixedOrderPlacement(id int, why types.DiffWhy) orderPlacement {
+func fixedOrderPlacement(id int, why diff.Why) orderPlacement {
 	return orderPlacement{nodes: []int{id}, fixed: &why}
 }
 
-func unrankedOrderWhy(reason string) types.DiffWhy {
-	return types.DiffWhy{Relation: types.DiffWhyUnranked, Text: reason}
+func unrankedOrderWhy(reason string) diff.Why {
+	return diff.Why{Relation: diff.WhyUnranked, Text: reason}
 }

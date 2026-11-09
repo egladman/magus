@@ -13,8 +13,6 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../../../cmd/magus-utils bindings -module csv -lang buzz -out ../../../internal/interp/bindings/gen/csv.go -pkg bindgen
-
 // Module is the "encoding/csv" host module: delimiter-separated tabular text, in and
 // out. Nothing in Buzz or in magus could read a table before this: a magusfile
 // handed a coverage export, a dependency inventory, or any tool's --format=csv
@@ -38,11 +36,11 @@ var Module = std.Module{
 			Name: "parse",
 			Doc:  "Parse delimiter-separated text into a list of rows, each a list of fields. Quoted fields, embedded delimiters, and embedded newlines are handled per RFC 4180. delimiter defaults to \",\" - pass \"\\t\" for TSV. When comment is a single character, lines starting with it are skipped. Raises when a row has a different field count than the first, which is the corruption a hand-rolled split would silently pass through.",
 			Args: []std.Arg{
-				{Name: "s", Type: std.TypeString},
-				{Name: "delimiter", Type: std.TypeString, Optional: true, Default: ","},
-				{Name: "comment", Type: std.TypeString, Optional: true},
+				{Name: "s"},
+				{Name: "delimiter", Optional: true, Default: ","},
+				{Name: "comment", Optional: true},
 			},
-			Returns: []std.Ret{{Type: std.TypeStringSliceSlice}},
+			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    CSVParse,
 		},
@@ -50,10 +48,10 @@ var Module = std.Module{
 			Name: "stringify",
 			Doc:  "Render rows (a list of lists of fields) as delimiter-separated text, quoting any field that needs it. delimiter defaults to \",\". The output ends with a newline, so it is ready to write.",
 			Args: []std.Arg{
-				{Name: "rows", Type: std.TypeStringSliceSlice},
-				{Name: "delimiter", Type: std.TypeString, Optional: true, Default: ","},
+				{Name: "rows"},
+				{Name: "delimiter", Optional: true, Default: ","},
 			},
-			Returns: []std.Ret{{Type: std.TypeString}},
+			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    CSVStringify,
 		},

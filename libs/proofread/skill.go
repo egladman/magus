@@ -26,14 +26,14 @@ type skillForm struct {
 // most of their text, so a Markdown finding both report is reported once. A
 // body that does not render is judged by [RuleTemplate] alone, and passes
 // where that rule is off.
-func judgeSkillSource(text string, o options) []Finding {
+func judgeSkillSource(text string, s *KindSpec, o options) []Finding {
 	unrendered := func(message string) []Finding {
-		d := o.decide(templateCheck, KindSkillTemplate)
+		d := o.decide(templateCheck, s)
 		if d == DecisionOff {
 			return nil
 		}
 
-		return []Finding{o.settle(templateCheck, Finding{Message: message}, d)}
+		return []Finding{o.settle(s, templateCheck, Finding{Message: message}, d)}
 	}
 
 	tree, err := parseSkill(text)
@@ -70,8 +70,8 @@ func judgeSkillSource(text string, o options) []Finding {
 		}
 	}
 
-	judged = append(judged, judgeDescriptions(forms, o)...)
-	judged = append(judged, judgeInstructionPosition(forms[1], o)...)
+	judged = append(judged, judgeDescriptions(forms, s, o)...)
+	judged = append(judged, judgeInstructionPosition(forms[1], s, o)...)
 
 	source := input{source: strings.Split(text, "\n")}
 

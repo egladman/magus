@@ -27,17 +27,32 @@ Open with intent, no heading: a sentence or two on what you set out to do and wh
 Then what you implemented, one bullet per change, present tense, the code as subject.
 "`Evict` drops the oldest entry first."
 
-Add where it differs from the intent only when that's true, under the label that fits:
+Put the evidence on the bullet's own line: an output ref, a test name or a path. A
+bullet you can't back that way is a task, not a claim.
 
-- `Cut:` what you dropped on purpose.
-- `Changed from plan:` what you did differently and why.
-- `Not done:` what's left.
-- `Not verified:` what you didn't check.
+Considerations is optional and holds three bullets at most: the trade-off taken, a
+constraint, the alternative set aside, a risk. Never a reading order ("Start with X");
+name a file only with why it matters.
 
-Considerations holds implementation notes: the trade-off taken, a constraint, the alternative set aside, a risk. Never a reading order ("Start with X"); name a file only with why it matters.
+When this change lays groundwork, a `## Later` section names the follow-up pull requests,
+one line each. It's the one section that may speak in the future tense, and it holds no
+tasks.
+
+Add `## Tested` only when someone checked the change by hand, beyond the test targets.
+List the commands they ran in a fenced block, and what they saw. Leave it out otherwise;
+it is never a default section.
+
+End with `## Next` when work is left: `- [ ]` tasks and nothing else, one per thing not
+done or not checked. A person or an agent ticks them without touching the prose.
+
+The lead is the one place for an opinion ("I'd rather pin it now"). Your own words carry
+your voice, so draft the lead from what you said about the change.
 
 Keep it short. A reviewer reads the diff anyway, so don't restate it. Say what the diff
 can't: why, and what's missing.
+
+After the description, load self-review-comments to draft the inline comments the author
+may leave on their own draft.
 
 ## Voice
 
@@ -53,8 +68,8 @@ about what's rough. Contractions are fine. Watch for these tells:
 - puffery ("robust", "seamless", "significantly")
 - bullets that repeat the diff line by line
 
-A claim covers what you measured. If you ran it, give the number. If you didn't, put it
-under `Not verified:` instead of writing "should fix".
+A claim covers what you measured. If you ran it, give the number. If you didn't, make it
+a task under Next instead of writing "should fix".
 
 ## Review comments
 

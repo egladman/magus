@@ -363,9 +363,62 @@ func TestKeyStillDescribesInputsSeesAClaimedOutputMove(t *testing.T) {
 	require.NotEmpty(t, before, "the fingerprint saw no sources, so nothing below proves anything")
 
 	require.NoError(t, os.WriteFile(src, []byte("package pkg // two, rewritten by a peer\n"), 0o644))
-	moved, fresh := c.keyStillDescribesInputs(t.Context(), &s, before)
+	after, err := c.fingerprintSources(t.Context(), &s)
+	require.NoError(t, err)
+	moved, fresh := keyStillDescribesInputs(before, after)
 	assert.False(t, fresh, "a hashed input moved and the key was still called fresh")
 	assert.Equal(t, []string{"pkg/enum.go"}, moved)
+}
+
+func TestASourceEditedDuringTheMissIsNotFiledUnderTheOldKey(t *testing.T) {
+	root, c, step := formatterStep(t)
+	src := filepath.Join(root, "pkg", "enum.go")
+	const keyedAt = "keyed"
+	require.NoError(t, os.WriteFile(src, []byte(keyedAt), 0o644))
+
+	runs := 0
+	body := func(context.Context) error {
+		runs++
+		return os.WriteFile(src, []byte("edited by a peer"), 0o644)
+	}
+	_, err := c.Run(t.Context(), step, body)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(src, []byte(keyedAt), 0o644))
+	_, err = c.Run(t.Context(), step, body)
+	require.NoError(t, err)
+	assert.Equal(t, 2, runs, "the entry was filed under a key the edit had already outdated")
+}
+
+func TestASkippedFreshnessCheckRefusesTheStore(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a mode 0 file, so the re-check cannot fail")
+	}
+	logs := &recordingHandler{}
+	root, c := openCache(t, WithLogger(slog.New(logs)))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
+	src := filepath.Join(root, "pkg", "enum.go")
+	require.NoError(t, os.WriteFile(src, []byte("package pkg"), 0o644))
+	step := Step{ProjectPath: ".", WorkspaceRoot: root, Target: "build",
+		Sources: types.MustParseGlobs("pkg/*.go")}
+
+	runs := 0
+	body := func(context.Context) error {
+		runs++
+		return os.Chmod(src, 0)
+	}
+	_, err := c.Run(t.Context(), step, body)
+	require.NoError(t, err, "a skipped check must not turn the run red")
+	require.NoError(t, os.Chmod(src, 0o644))
+
+	warned := slices.ContainsFunc(logs.lines(), func(l string) bool {
+		return strings.Contains(l, "cache.warn") && strings.Contains(l, "could not be re-checked")
+	})
+	assert.True(t, warned, "the skip is logged at warn with its cause")
+
+	_, err = c.Run(t.Context(), step, body)
+	require.NoError(t, err)
+	assert.Equal(t, 2, runs, "an entry was stored although its freshness was never checked")
 }
 
 // A moved input some target generates is the step's own run rewriting its key, which is

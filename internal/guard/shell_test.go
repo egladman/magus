@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -2035,7 +2036,7 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "announces when it ends", cmd)
 		assert.Contains(t, v.Deny, "magus job exec --timeout <d> -- <command>` and wait for its notice", cmd)
-		assert.Contains(t, v.Deny, hint.JobWait.With("<job>"), cmd)
+		assert.NotContains(t, v.Deny, "job wait", cmd, "a job wait only verifies a result; the notice is the wait")
 	}
 	// A loop that works each pass without sleeping, or a for loop over a list that never
 	// breaks out, is not waiting.
@@ -2065,7 +2066,8 @@ func TestBusyWaitOnAForeignProcessSaysWhatItProves(t *testing.T) {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "waits on work you did not start", cmd)
-		assert.Contains(t, v.Deny, hint.JobWait.With("<job>"), cmd)
+		assert.Contains(t, v.Deny, hint.DescribeJob.With("<job>"), cmd)
+		assert.NotContains(t, v.Deny, "job wait", cmd)
 		assert.Contains(t, v.Deny, "background your own call as `magus job exec --timeout <d> -- <command>`", cmd)
 		assert.NotContains(t, v.Deny, "monitor", cmd)
 		assert.NotContains(t, v.Deny, "announces when it ends", cmd)
@@ -2655,13 +2657,13 @@ func (s *GradeEditSuite) grade(ws types.WorkspaceRepository, rel string, o EditG
 }
 
 func (s *GradeEditSuite) TestADeclaredOutputIsRefusedWithNoRule() {
-	rule, reason := s.grade(s.workspace("internal/ledger/store.go", types.DiffRoleOutput), "internal/ledger/store.go", EditGrade{})
+	rule, reason := s.grade(s.workspace("internal/ledger/store.go", diff.RoleOutput), "internal/ledger/store.go", EditGrade{})
 	s.Empty(rule)
 	s.Equal("a declared output of .:gen: change its source and regenerate it", reason)
 }
 
 func (s *GradeEditSuite) TestATargetRunWritesItsDeclaredOutput() {
-	rule, reason := s.grade(s.workspace("cmd/magus/main.go", types.DiffRoleOutput), "cmd/magus/main.go", EditGrade{InRun: true})
+	rule, reason := s.grade(s.workspace("cmd/magus/main.go", diff.RoleOutput), "cmd/magus/main.go", EditGrade{InRun: true})
 	s.Empty(rule+reason, "the lease would refuse it, and the run's output passes before it is asked")
 }
 

@@ -21,8 +21,12 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
@@ -32,8 +36,20 @@ func runTypes(args []string) error {
 	fs := flag.NewFlagSet("types", flag.ExitOnError)
 	typeName := fs.String("type", "", "value type to mirror (e.g. ExecResult)")
 	outPath := fs.String("out", "", "output .buzz file path")
+	var from []string
+	fs.Func("from", "a Go file whose types go:generate lines are all rendered, concurrently; repeatable", func(v string) error {
+		from = append(from, v)
+		return nil
+	})
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if len(from) > 0 {
+		var g errgroup.Group
+		for _, goFile := range from {
+			g.Go(func() error { return renderListedMirrors(goFile) })
+		}
+		return g.Wait()
 	}
 	if *outPath == "" {
 		return fmt.Errorf("usage: magus-utils types -type <Name> -out <path.buzz>")
@@ -56,10 +72,56 @@ func runTypes(args []string) error {
 	return nil
 }
 
+// renderListedMirrors renders every mirror the `types` go:generate lines of
+// goFile name, each in its own goroutine, writing paths relative to goFile's
+// dir.
+func renderListedMirrors(goFile string) error {
+	data, err := os.ReadFile(goFile)
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(goFile)
+	var g errgroup.Group
+	for _, line := range strings.Split(string(data), "\n") {
+		typeName, out, ok := typesDirective(line)
+		if !ok {
+			continue
+		}
+		g.Go(func() error {
+			entry, found := boundaryTypeNamed(typeName)
+			if !found {
+				return fmt.Errorf("%s: unknown boundary type %q: declare it in boundaryTypes first", goFile, typeName)
+			}
+			src, err := renderBuzzMirror(entry.Name, entry.Type)
+			if err != nil {
+				return fmt.Errorf("%s: %w", typeName, err)
+			}
+			path := filepath.Join(dir, out)
+			if err := emit.File(path, src); err != nil {
+				return fmt.Errorf("write %s: %w", path, err)
+			}
+			return nil
+		})
+	}
+	return g.Wait()
+}
+
+// typesDirective reads the -type and -out of one
+// `//go:generate go run .../magus-utils types` line.
+func typesDirective(line string) (typeName, out string, ok bool) {
+	flags, ok := emit.Directive(line, "magus-utils types")
+	if !ok {
+		return "", "", false
+	}
+	typeName = strings.ReplaceAll(flags["type"], `\\`, `\`)
+	out = flags["out"]
+	return typeName, out, typeName != "" && out != ""
+}
+
 // mirrorOptions is magus's configuration of the shared renderer: resolve a struct
 // field's object name through the boundary registry, and mirror a timestamp as a string.
-// The Namer is what keeps a RENAMED mirror referenceable: types.StatusTargetRun declares
-// as TargetRun, and emitting the Go name would reference an object nothing declares.
+// The Namer keeps a RENAMED mirror referenceable: types.ProjectsOutput
+// declares as Projects, and its Go name would name an undeclared object.
 func mirrorOptions() buzzgen.Options {
 	opts := buzzgen.DefaultOptions()
 	opts.Namer = buzzName
@@ -129,7 +191,7 @@ func renderBuzzMirrorDecl(name string, rt reflect.Type) ([]byte, error) {
 func enumsUsedBy(rt reflect.Type) []boundaryEnum {
 	seen := map[string]bool{}
 	var out []boundaryEnum
-	for _, f := range boundaryFields(rt) {
+	for _, f := range emit.ObjectFields(rt) {
 		t := f.Type
 		for t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Pointer || t.Kind() == reflect.Map {
 			t = t.Elem()

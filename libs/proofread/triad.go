@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+
+	"github.com/egladman/magus/libs/proofread/internal/wordclass"
 )
 
 const (
@@ -21,30 +23,33 @@ const (
 	RuleRestatesDiff Rule = "restates-diff"
 )
 
-// triadKinds are the texts that describe a change or answer one: a pull request,
-// a commit and every review text.
-var triadKinds = slices.Concat(reviewed, []Kind{KindCommitMessage})
-
 // triadChecks are the tells of a text no one wrote for the person reading it.
 // Each is graded, and ships off until a labeling round measures it.
 var triadChecks = []check{
-	{rule: RuleTriad, on: triadKinds, graded: true, judge: ownWords(triad)},
-	{rule: RuleStackedColon, on: triadKinds, graded: true, judge: ownWords(stackedColon)},
-	{rule: RuleRestatesDiff, on: triadKinds, graded: true, judge: ownWords(restatesDiff)},
+	{rule: RuleTriad, reads: proseFormats, judge: ownWords(triad)},
+	{rule: RuleStackedColon, reads: proseFormats, judge: ownWords(stackedColon)},
+	{rule: RuleRestatesDiff, reads: proseFormats, judge: ownWords(restatesDiff)},
 }
 
 var triadTexts = map[Rule]ruleText{
 	RuleTriad: {
 		code:      "PRF4030",
 		dimension: DimensionEconomy,
-		catches: "a series of exactly three (\"X, Y, and Z\", three parallel short sentences, three parallel " +
-			"bullets) twice in a text, or once in the lead's first sentence",
+		catches: "a series of exactly three (\"X, Y, and Z\", three verb phrases such as \"reviewed the plan, " +
+			"rewrote the parser and shipped the fix\", three parallel short sentences, three parallel bullets) " +
+			"twice in a text, or once in the lead's first sentence",
 		why: "Wikipedia's \"Signs of AI writing\" lists the rule of three among the habits of generated prose, " +
 			"and MeasureShape already counts the series per 1000 words as a feature a voice profile can " +
 			"compare. One natural series is ordinary writing, so a single one mid-paragraph is left alone; a " +
-			"text with two, or a lead that opens on one, reads as a template. Code spans, paths, flags, " +
-			"ALL_CAPS names, numbers and a list the author numbered are not judged. No firing has been " +
-			"labeled, so it ships off.",
+			"text with two, or a lead that opens on one, reads as a template. A declared kind of short " +
+			"entries may set triads to 1, which reports a single series. A noun item runs to three " +
+			"words; a verb phrase runs to six, each item opening on a verb the tagger reads after a subject, " +
+			"with or without the Oxford comma. Code spans, paths, flags, " +
+			"ALL_CAPS names, numbers and a list the author numbered are not judged. With a voice file, a " +
+			"text may hold as many series as the author's own 95th percentile per 1000 words allows at its " +
+			"length, the lead included, and the finding says so; a voice never allows fewer than the kind " +
+			"does. No " +
+			"firing has been labeled, so it ships off.",
 	},
 	RuleStackedColon: {
 		code:      "PRF4031",
@@ -76,7 +81,14 @@ var (
 	numberedInline = regexp.MustCompile(`\(\d+\)|\b\d+\)\s`)
 	ordinalWord    = regexp.MustCompile(`(?i)\b(?:first|second|third|finally|lastly)\b`)
 	seriesSplit    = regexp.MustCompile(`,\s+and\s+|\s+and\s+|,\s+`)
+	// verbSeries matches three items of up to six words. The first may start
+	// before its verb, which [verbStart] finds.
+	verbSeries = regexp.MustCompile(`(?:^|[^\w'\x{2019}-]\s*)((` + verbItem + `),\s+(` + verbItem +
+		`),?\s+and\s+(` + verbItem + `))`)
+	wordSpan = regexp.MustCompile(`\S+`)
 )
+
+const verbItem = `[\w'\x{2019}-]+(?:\s+[\w'\x{2019}-]+){0,5}`
 
 // codeLike reports whether word names code rather than saying something: a
 // code span (masked to '#'), a path, a flag, an ALL_CAPS name, a dotted or
@@ -131,8 +143,9 @@ type triadHit struct {
 	lead  bool
 }
 
-// triad reports each series of exactly three when the text holds two or more,
-// or when one stands in the first sentence of its lead.
+// triad reports each series of exactly three when the text holds its kind's
+// Triads of them, two by default. One in the lead's first sentence reports
+// alone.
 func triad(in input) []Finding {
 	paras := maskedParagraphs(in)
 
@@ -156,7 +169,16 @@ func triad(in input) []Finding {
 		}
 	}
 
-	if len(hits) < 2 && (len(hits) == 0 || !hits[0].lead) {
+	wait := 2
+	if in.spec.Triads > 0 {
+		wait = in.spec.Triads
+	}
+
+	// An author who writes more series than the kind allows sets more.
+	b := voiceBudget(in, "triads_per_1000", wait-1)
+
+	leadOnly := !b.fromVoice && len(hits) > 0 && hits[0].lead
+	if len(hits) <= b.allowed && !leadOnly {
 		return nil
 	}
 
@@ -165,7 +187,7 @@ func triad(in input) []Finding {
 	for _, h := range hits {
 		out = append(out, Finding{
 			Message: fmt.Sprintf("Name what is so, however many that is: '%s' is a series of exactly three, "+
-				"a count that reads as a template.", h.match),
+				"a count that reads as a template.%s", h.match, b.note()),
 			Match: h.match, Line: h.line,
 		})
 	}
@@ -177,7 +199,7 @@ func triad(in input) []Finding {
 // first sentence ends, or -1 for each when the text has no lead.
 func triadLead(in input, paras []maskedParagraph) (at, end int) {
 	for i, p := range paras {
-		if p.head.heading || p.head.item || (titled(in.kind) && p.head.line == 1) {
+		if p.head.heading || p.head.item || in.titleLine(p.head) {
 			continue
 		}
 
@@ -193,8 +215,8 @@ func triadLead(in input, paras []maskedParagraph) (at, end int) {
 }
 
 type seriesHit struct {
-	match string
-	at    int
+	match   string
+	at, end int
 }
 
 // paragraphSeries returns the series of exactly three in one paragraph, as
@@ -216,10 +238,84 @@ func paragraphSeries(p maskedParagraph) []seriesHit {
 			continue
 		}
 
-		out = append(out, seriesHit{match: p.text[from:to], at: from})
+		out = append(out, seriesHit{match: p.text[from:to], at: from, end: to})
 	}
 
+	for _, h := range verbPhraseSeries(p) {
+		if !slices.ContainsFunc(out, func(o seriesHit) bool { return o.at < h.end && h.at < o.end }) {
+			out = append(out, h)
+		}
+	}
+
+	slices.SortStableFunc(out, func(a, b seriesHit) int { return a.at - b.at })
+
 	return append(out, parallelSentences(p)...)
+}
+
+// verbPhraseSeries returns each series of exactly three verb phrases:
+// "reviewed the plan, rewrote the config parser, and shipped the fix". The
+// [series] pattern caps an item at three words, which a verb and its object
+// often pass.
+func verbPhraseSeries(p maskedParagraph) []seriesHit {
+	var out []seriesHit
+
+	for _, m := range verbSeries.FindAllStringSubmatchIndex(p.masked, -1) {
+		from, to := m[2], m[3]
+
+		first := verbStart(p.masked[from:m[5]])
+		if first < 0 {
+			continue
+		}
+
+		from += first
+
+		parts := []string{p.masked[from:m[5]], p.masked[m[6]:m[7]], p.masked[m[8]:m[9]]}
+		if partOfLonger(p.masked, from, to) || !plainParts(parts) || !opensWithVerb(parts[1]) ||
+			!opensWithVerb(parts[2]) {
+			continue
+		}
+
+		out = append(out, seriesHit{match: p.text[from:to], at: from, end: to})
+	}
+
+	return out
+}
+
+// verbStart returns the offset of item's first verb, past a subject or an
+// adverb ("then we reviewed the plan"), or -1 when it has none.
+func verbStart(item string) int {
+	if opensWithVerb(item) {
+		return 0
+	}
+
+	spans := wordSpan.FindAllStringIndex(item, -1)
+
+	words := make([]string, len(spans))
+	for i, s := range spans {
+		words[i] = item[s[0]:s[1]]
+	}
+
+	for i, t := range wordclass.Tag(words) {
+		if t.Class == wordclass.Verb {
+			return spans[i][0]
+		}
+	}
+
+	return -1
+}
+
+// opensWithVerb reports whether phrase opens with a verb once a subject leads
+// it. Alone, the tagger reads "Ran the build" as a name.
+func opensWithVerb(phrase string) bool {
+	words := wordclass.Split(phrase)
+	if len(words) == 0 {
+		return false
+	}
+
+	words[0] = strings.ToLower(words[0])
+	tags := wordclass.Tag(append([]string{"it"}, words...))
+
+	return tags[1].Class == wordclass.Verb
 }
 
 // partOfLonger reports whether the series at text[from:to] is a piece of a

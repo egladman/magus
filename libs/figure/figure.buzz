@@ -41,7 +41,9 @@ import "assert";
 import "magus";
 
 // Result is what the private layers return. Exported calls raise it.
-// escapeSvg makes s safe as SVG text or as a double-quoted attribute value.
+// escapeSvg makes s safe as SVG text or as a double-quoted attribute value. It
+// copies html\escape because figure runs in sessions that register only the
+// Buzz stdlib (libs/figure/embed.go), where no host module resolves.
 fun escapeSvg(s: str) > str {
     return s.replace("&", with: "&amp;").replace("\"", with: "&quot;").replace("<", with: "&lt;").replace(">", with: "&gt;");
 }

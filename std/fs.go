@@ -32,8 +32,6 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module fs -lang buzz -out ../internal/interp/bindings/gen/fs.go -pkg bindgen
-
 // Fs is the "fs" host module: filesystem and path primitives.
 var Fs = Module{
 	Name: "fs",
@@ -42,45 +40,45 @@ var Fs = Module{
 		{
 			Name:    "glob",
 			Doc:     "Return paths matching pattern (doublestar-style).",
-			Args:    []Arg{{Name: "pattern", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAny, Object: "[Path]"}},
+			Args:    []Arg{{Name: "pattern"}},
+			Returns: []Ret{{Object: "[Path]"}},
 			Raises:  true,
 			Impl:    FsGlob,
 		},
 		{
 			Name:    "dirname",
 			Doc:     "Directory portion of path.",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
 			Impl:    FsDirname,
 		},
 		{
 			Name:    "basename",
 			Doc:     "Final element of path.",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
 			Impl:    FsBasename,
 		},
 		{
 			Name:    "exists",
 			Doc:     "True iff path exists.",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeBool}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    FsExists,
 		},
 		{
 			Name:    "read_file",
 			Doc:     "Return the contents of path as a string.",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    FsReadFile,
 		},
 		{
 			Name:    "write_file",
 			Doc:     "Write content to path (mode 0644).",
-			Args:    []Arg{{Name: "path", Type: TypeString}, {Name: "content", Type: TypeString}},
+			Args:    []Arg{{Name: "path"}, {Name: "content"}},
 			Returns: nil,
 			Raises:  true,
 			Impl:    FsWriteFile,
@@ -89,8 +87,8 @@ var Fs = Module{
 			Name: "mkdir_all",
 			Doc:  "Create path and parents (default mode 0755).",
 			Args: []Arg{
-				{Name: "path", Type: TypeString},
-				{Name: "perm", Type: TypeInt, Optional: true, Default: int(0o755)},
+				{Name: "path"},
+				{Name: "perm", Optional: true, Default: int(0o755)},
 			},
 			Returns: nil,
 			Raises:  true,
@@ -99,14 +97,14 @@ var Fs = Module{
 		{
 			Name:    "join",
 			Doc:     "Join path elements with the OS separator.",
-			Args:    []Arg{{Name: "parts", Type: TypeString, Variadic: true}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "parts", Variadic: true}},
+			Returns: []Ret{{}},
 			Impl:    FsJoin,
 		},
 		{
 			Name:    "remove_all",
 			Doc:     "Recursively remove path (no error if missing).",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
+			Args:    []Arg{{Name: "path"}},
 			Returns: nil,
 			Raises:  true,
 			Impl:    FsRemoveAll,
@@ -114,7 +112,7 @@ var Fs = Module{
 		{
 			Name:    "remove",
 			Doc:     "Remove a single file or empty directory (no error if missing). Unlike remove_all it refuses a non-empty directory, so a wrong path costs one error rather than a recursive delete.",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
+			Args:    []Arg{{Name: "path"}},
 			Returns: nil,
 			Raises:  true,
 			Impl:    FsRemove,
@@ -122,7 +120,7 @@ var Fs = Module{
 		{
 			Name:    "rename",
 			Doc:     "Move or rename src to dst, creating dst's parent directory if needed. Within one filesystem this is atomic, which is what makes it the last step of a write-to-temp-then-swap. Across filesystems the underlying rename fails rather than silently copying; copy_file plus remove is the explicit form for that.",
-			Args:    []Arg{{Name: "src", Type: TypeString}, {Name: "dst", Type: TypeString}},
+			Args:    []Arg{{Name: "src"}, {Name: "dst"}},
 			Returns: nil,
 			Raises:  true,
 			Impl:    FsRename,
@@ -130,8 +128,8 @@ var Fs = Module{
 		{
 			Name:    "size",
 			Doc:     "Return path's size in bytes. Raises when path does not exist; stat returns the whole FileInfo when more than the size is wanted.",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeInt}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    FsSize,
 		},
@@ -139,9 +137,9 @@ var Fs = Module{
 			Name: "temp_file",
 			Doc:  "Create a new empty temporary file with an optional name prefix and return its path. It is made in the sandbox's private temp dir (the TMPDIR its children get) when the sandbox is on, in the system temp dir otherwise. The file is left in place for the caller to write and remove; temp_dir is the form for a whole tree.",
 			Args: []Arg{
-				{Name: "prefix", Type: TypeString, Optional: true},
+				{Name: "prefix", Optional: true},
 			},
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    FsTempFile,
 		},
@@ -149,8 +147,8 @@ var Fs = Module{
 			Name: "write_file_atomic",
 			Doc:  "Write content to path so a reader sees either the old bytes or the new ones, never a partial file: the content goes to a temporary file in the same directory, is flushed to disk, then renamed over path. Use it for anything another process may read while a target runs - a generated file, a lockfile, a cache index. write_file is the cheaper form when nothing else is looking.",
 			Args: []Arg{
-				{Name: "path", Type: TypeString},
-				{Name: "content", Type: TypeString},
+				{Name: "path"},
+				{Name: "content"},
 			},
 			Returns: nil,
 			Raises:  true,
@@ -159,46 +157,46 @@ var Fs = Module{
 		{
 			Name:    "list_dir",
 			Doc:     "Return directory entries; empty if path does not exist.",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeStringSlice}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    FsListDir,
 		},
 		{
 			Name:    "ext",
 			Doc:     "File-name extension of path, including the leading dot (\"\" if none).",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
 			Impl:    FsExt,
 		},
 		{
 			Name:    "is_dir",
 			Doc:     "True iff path exists and is a directory. A sandbox-denied path raises rather than reading as false.",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeBool}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    FsIsDir,
 		},
 		{
 			Name:    "is_file",
 			Doc:     "True iff path exists and is a regular file. A sandbox-denied path raises rather than reading as false.",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeBool}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    FsIsFile,
 		},
 		{
 			Name:    "stat",
 			Doc:     "Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "FileInfo"}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{Object: "FileInfo"}},
 			Raises:  true,
 			Impl:    FsStat,
 		},
 		{
 			Name:    "copy_file",
 			Doc:     "Copy the file at src to dst (overwriting), preserving its permission bits.",
-			Args:    []Arg{{Name: "src", Type: TypeString}, {Name: "dst", Type: TypeString}},
+			Args:    []Arg{{Name: "src"}, {Name: "dst"}},
 			Returns: nil,
 			Raises:  true,
 			Impl:    FsCopyFile,
@@ -206,7 +204,7 @@ var Fs = Module{
 		{
 			Name:    "copy_dir",
 			Doc:     "Recursively copy the directory tree at src to dst, preserving permission bits.",
-			Args:    []Arg{{Name: "src", Type: TypeString}, {Name: "dst", Type: TypeString}},
+			Args:    []Arg{{Name: "src"}, {Name: "dst"}},
 			Returns: nil,
 			Raises:  true,
 			Impl:    FsCopyDir,
@@ -215,8 +213,8 @@ var Fs = Module{
 			Name: "watch",
 			Doc:  "Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.",
 			Args: []Arg{
-				{Name: "paths", Type: TypeStringSlice},
-				{Name: "callback", Type: TypeFunc, Func: "fun (paths: [str]) > bool !> any"},
+				{Name: "paths"},
+				{Name: "callback"},
 			},
 			Returns: nil,
 			Raises:  true,
@@ -224,10 +222,10 @@ var Fs = Module{
 		},
 		{
 			Name: "walk",
-			Doc:  "Recursively walk the directory tree rooted at root, calling callback(path, is_dir) for each entry. Return true from callback to stop the walk early. Sandbox-denied entries are silently skipped.",
+			Doc:  "Recursively walk the directory tree rooted at root in lexical order, calling callback(path, isDir) for each entry. The callback returns a WalkStep, as a Go fs.WalkDirFunc returns nil, fs.SkipDir or fs.SkipAll: next continues, skipDir skips a directory's contents (or, for a file, the rest of its directory) and skipAll ends the walk. Sandbox-denied entries are silently skipped.",
 			Args: []Arg{
-				{Name: "root", Type: TypeString},
-				{Name: "callback", Type: TypeFunc, Func: "fun (path: str, isDir: bool) > bool !> any"},
+				{Name: "root"},
+				{Name: "callback"},
 			},
 			Returns: nil,
 			Raises:  true,
@@ -236,7 +234,7 @@ var Fs = Module{
 		{
 			Name:    "append_file",
 			Doc:     "Append content to path (creating if absent, mode 0644).",
-			Args:    []Arg{{Name: "path", Type: TypeString}, {Name: "content", Type: TypeString}},
+			Args:    []Arg{{Name: "path"}, {Name: "content"}},
 			Returns: nil,
 			Raises:  true,
 			Impl:    FsAppendFile,
@@ -244,15 +242,15 @@ var Fs = Module{
 		{
 			Name:    "mode",
 			Doc:     "Permission bits from octal (\"0755\", \"1777\") or ls notation (\"rwxr-xr-x\"), for chmod, mkdirAll and image placements. Zero and bits beyond setuid, setgid and sticky raise.",
-			Args:    []Arg{{Name: "notation", Type: TypeString}},
-			Returns: []Ret{{Type: TypeInt}},
+			Args:    []Arg{{Name: "notation"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    FsMode,
 		},
 		{
 			Name:    "chmod",
 			Doc:     "Change the permission bits of path to mode (an integer; fs\\mode(\"0755\") spells one).",
-			Args:    []Arg{{Name: "path", Type: TypeString}, {Name: "mode", Type: TypeInt}},
+			Args:    []Arg{{Name: "path"}, {Name: "mode"}},
 			Returns: nil,
 			Raises:  true,
 			Impl:    FsChmod,
@@ -260,7 +258,7 @@ var Fs = Module{
 		{
 			Name:    "symlink",
 			Doc:     "Create a symbolic link at link pointing to target.",
-			Args:    []Arg{{Name: "target", Type: TypeString}, {Name: "link", Type: TypeString}},
+			Args:    []Arg{{Name: "target"}, {Name: "link"}},
 			Returns: nil,
 			Raises:  true,
 			Impl:    FsSymlink,
@@ -268,8 +266,8 @@ var Fs = Module{
 		{
 			Name:    "readlink",
 			Doc:     "Return the target of the symbolic link at path.",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    FsReadlink,
 		},
@@ -277,32 +275,32 @@ var Fs = Module{
 			Name: "temp_dir",
 			Doc:  "Create a new temporary directory with an optional name prefix and return its path. It is made in the sandbox's private temp dir (the TMPDIR its children get) when the sandbox is on, in the system temp dir otherwise.",
 			Args: []Arg{
-				{Name: "prefix", Type: TypeString, Optional: true},
+				{Name: "prefix", Optional: true},
 			},
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    FsTempDir,
 		},
 		{
 			Name:    "scratch_checkout_dir",
 			Doc:     "Create a new empty 0700 directory for one disposable copy of a repository, in $XDG_CACHE_HOME/magus/checkouts/<purpose>, and return its path. purpose names the feature making copies and must be one path element; the parent of the result is the directory that feature cleans, and one mise trusted_config_paths entry for magus/checkouts trusts every copy. The caller removes the copy. Plain scratch files belong in temp_dir.",
-			Args:    []Arg{{Name: "purpose", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "purpose"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    FsScratchCheckoutDir,
 		},
 		{
 			Name:    "read_lines",
 			Doc:     "Read path and return its lines as a list, with the line terminators stripped. A single trailing newline yields no extra empty element; an empty file yields an empty list.",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeStringSlice}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    FsReadLines,
 		},
 		{
 			Name:    "write_lines",
 			Doc:     "Write lines to path (mode 0644), each followed by a newline. The companion to read_lines: write_lines(p, read_lines(p)) round-trips a newline-terminated file.",
-			Args:    []Arg{{Name: "path", Type: TypeString}, {Name: "lines", Type: TypeStringSlice}},
+			Args:    []Arg{{Name: "path"}, {Name: "lines"}},
 			Returns: nil,
 			Raises:  true,
 			Impl:    FsWriteLines,
@@ -310,16 +308,16 @@ var Fs = Module{
 		{
 			Name:    "disk_usage",
 			Doc:     "Return {path, totalBytes, freeBytes} for the filesystem holding path: statfs on unix, GetDiskFreeSpaceEx on Windows. freeBytes is what this process may still write, so it leaves out the blocks reserved for root.",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "DiskUsage"}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{Object: "DiskUsage"}},
 			Raises:  true,
 			Impl:    FsDiskUsage,
 		},
 		{
 			Name:    "state_dir",
 			Doc:     "Return $XDG_STATE_HOME/magus/<purpose> (LocalAppData on Windows, else ~/.local/state), created 0700: the per-user home for state nothing can rebuild and that outlives any one workspace, such as a store several checkouts append to. purpose must be one path element.",
-			Args:    []Arg{{Name: "purpose", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "purpose"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    FsStateDir,
 		},
@@ -327,12 +325,12 @@ var Fs = Module{
 			Name: "trim_oldest",
 			Doc:  "Remove the least recently modified files under dir, whole hours of age at a time, until what is left fits in maxBytes, and return a TrimReport {dir, beforeBytes, afterBytes, removedFiles, removedBytes, cutoffMs, stopped}. Files modified within keepWithinMs, a whole number of hours and at least one, are never removed; stopped says when they alone pass the budget. Two walks with one counter per hour of age, so it suits a cache of millions of files. timeoutMs bounds the trim, which then stops between files and says so in stopped. Directories stay.",
 			Args: []Arg{
-				{Name: "dir", Type: TypeString},
-				{Name: "maxBytes", Type: TypeInt},
-				{Name: "keepWithinMs", Type: TypeInt},
-				{Name: "timeoutMs", Type: TypeInt, Optional: true},
+				{Name: "dir"},
+				{Name: "maxBytes"},
+				{Name: "keepWithinMs"},
+				{Name: "timeoutMs", Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "TrimReport"}},
+			Returns: []Ret{{Object: "TrimReport"}},
 			Raises:  true,
 			Impl:    FsTrimOldest,
 		},
@@ -883,7 +881,7 @@ func vcsIgnores(ctx context.Context, path string) bool {
 // callback propagates. Because it holds its session for its whole life, the
 // idiomatic use is a reactive loop (rebuild on change) run as its own target,
 // with parallelism coming from magus running other targets concurrently.
-func FsWatch(ctx context.Context, paths []string, cb Callback) error {
+func FsWatch(ctx context.Context, paths []string, cb func(ctx context.Context, paths []string) (bool, error)) error {
 	if len(paths) == 0 {
 		return fmt.Errorf("fs.watch: at least one path is required")
 	}
@@ -933,11 +931,11 @@ func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 			if !ok {
 				return nil
 			}
-			ret, err := cb.Call(ctx, relToCurrentWorkingDirectory(cwd, batch.Paths))
+			done, err := cb(ctx, relToCurrentWorkingDirectory(cwd, batch.Paths))
 			if err != nil {
 				return err
 			}
-			if callbackTruthy(ret) {
+			if done {
 				return nil
 			}
 		}
@@ -945,10 +943,11 @@ func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 }
 
 // FsWalk walks the directory tree rooted at root, calling cb(path, isDir) for
-// each entry in lexical order. If the callback returns true the walk stops early.
+// each entry in lexical order. The callback's [types.WalkStep] maps to what
+// a fs.WalkDirFunc returns.
 // Sandbox-denied entries are silently skipped (dirs skip their whole subtree;
 // files are just omitted), matching the filtering policy of FsGlob.
-func FsWalk(ctx context.Context, root string, cb Callback) error {
+func FsWalk(ctx context.Context, root string, cb func(ctx context.Context, path string, isDir bool) (types.WalkStep, error)) error {
 	base := currentWorkingDirectoryFromContext(ctx)
 	root = resolvePath(ctx, root)
 	if err := checkRead(ctx, root); err != nil {
@@ -972,15 +971,27 @@ func FsWalk(ctx context.Context, root string, cb Callback) error {
 				cbPath = rel
 			}
 		}
-		ret, callErr := cb.Call(ctx, cbPath, d.IsDir())
+		step, callErr := cb(ctx, cbPath, d.IsDir())
 		if callErr != nil {
 			return callErr
 		}
-		if callbackTruthy(ret) {
-			return filepath.SkipAll
-		}
-		return nil
+		return walkStepResult(step, cbPath)
 	})
+}
+
+// walkStepResult turns a callback's WalkStep into the error fs.WalkDirFunc
+// returns for it. The adapter refuses a value outside the cases, so only a
+// zero step reaches the error here.
+func walkStepResult(step types.WalkStep, path string) error {
+	switch step {
+	case types.WalkNext:
+		return nil
+	case types.WalkSkipDir:
+		return filepath.SkipDir
+	case types.WalkSkipAll:
+		return filepath.SkipAll
+	}
+	return fmt.Errorf("fs.walk: the callback returned %q for %s, want WalkStep.next, WalkStep.skipDir or WalkStep.skipAll", step, path)
 }
 
 // FsAppendFile appends content to path (creating the file if absent, mode 0644),
@@ -1158,23 +1169,6 @@ func relToCurrentWorkingDirectory(base string, abs []string) []string {
 		}
 	}
 	return out
-}
-
-// callbackTruthy reports whether a callback's first return value is truthy,
-// matching the host predicate convention (nil/false is false; a bool is its
-// value; any other value is true).
-func callbackTruthy(ret []any) bool {
-	if len(ret) == 0 {
-		return false
-	}
-	switch v := ret[0].(type) {
-	case nil:
-		return false
-	case bool:
-		return v
-	default:
-		return true
-	}
 }
 
 // FsDiskUsage reads the filesystem holding path, subject to the sandbox read policy. The

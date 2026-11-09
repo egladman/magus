@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -41,7 +42,7 @@ type wsEntry struct {
 	// m, loadErr, failure and loadedAt are published by load under wsRegistry.mu.
 	m          *magus.Magus
 	loadErr    error
-	failure    *types.WorkspaceFailure
+	failure    *daemon.WorkspaceFailure
 	loadedAt   time.Time
 	lastAccess atomic.Int64 // unix nanoseconds; updated on every acquire
 	inflight   int          // in-flight dispatches holding m; guarded by wsRegistry.mu
@@ -661,13 +662,13 @@ func (r *wsRegistry) status() []proc.Workspace {
 		switch {
 		case e.failure != nil:
 			out = append(out, proc.Workspace{
-				Root: e.root, State: types.WorkspaceFailed, Error: e.failure,
+				Root: e.root, State: daemon.WorkspaceFailed, Error: e.failure,
 				LastAccess: time.Unix(0, e.lastAccess.Load()),
 			})
 			continue
 		case e.m == nil:
 			out = append(out, proc.Workspace{
-				Root: e.root, State: types.WorkspaceLoading,
+				Root: e.root, State: daemon.WorkspaceLoading,
 				LastAccess: time.Unix(0, e.lastAccess.Load()),
 			})
 			continue
@@ -677,7 +678,7 @@ func (r *wsRegistry) status() []proc.Workspace {
 		st := e.m.CacheStats()
 		out = append(out, proc.Workspace{
 			Root:         e.root,
-			State:        types.WorkspaceActive,
+			State:        daemon.WorkspaceActive,
 			LoadedAt:     e.loadedAt,
 			LastAccess:   time.Unix(0, e.lastAccess.Load()),
 			CacheHit:     st.Hit,

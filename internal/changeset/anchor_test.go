@@ -2,12 +2,11 @@ package changeset
 
 import (
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/egladman/magus/types"
 )
 
 // hunkAt builds a hunk whose new side starts at start and holds body, with every line a context
@@ -25,7 +24,7 @@ func TestCaptureAnchorRemembersTheLineAndItsContext(t *testing.T) {
 
 	got := CaptureAnchor([]Hunk{h}, 12)
 
-	assert.Equal(t, types.CommentAnchor{
+	assert.Equal(t, diff.CommentAnchor{
 		Digest: "d",
 		Quote:  "\treturn x",
 		Before: []string{"func F() {", "\tx := 1"},
@@ -51,7 +50,7 @@ func TestLocateAnchor(t *testing.T) {
 		line, rung := LocateAnchor(a, same, 12)
 
 		assert.Equal(t, 12, line)
-		assert.Equal(t, types.AnchorExact, rung)
+		assert.Equal(t, diff.AnchorExact, rung)
 	})
 
 	t.Run("code that moved is re-found and says so", func(t *testing.T) {
@@ -62,7 +61,7 @@ func TestLocateAnchor(t *testing.T) {
 		line, rung := LocateAnchor(a, moved, 12)
 
 		assert.Equal(t, 32, line)
-		assert.Equal(t, types.AnchorMoved, rung,
+		assert.Equal(t, diff.AnchorMoved, rung,
 			"the reader must be told it moved; presenting this as exact reads as the original position")
 	})
 
@@ -72,14 +71,14 @@ func TestLocateAnchor(t *testing.T) {
 		line, rung := LocateAnchor(a, gone, 12)
 
 		assert.Zero(t, line, "a line that would land on the wrong code is worse than no line")
-		assert.Equal(t, types.AnchorLost, rung)
+		assert.Equal(t, diff.AnchorLost, rung)
 	})
 
 	t.Run("a remark with no quote is unknown, not exact", func(t *testing.T) {
-		line, rung := LocateAnchor(types.CommentAnchor{}, []Hunk{hunkAt(10, "a")}, 10)
+		line, rung := LocateAnchor(diff.CommentAnchor{}, []Hunk{hunkAt(10, "a")}, 10)
 
 		assert.Equal(t, 10, line)
-		assert.Equal(t, types.AnchorUnknown, rung,
+		assert.Equal(t, diff.AnchorUnknown, rung,
 			"still in place and nobody checked are different facts")
 	})
 }
@@ -106,19 +105,19 @@ func TestLocateAnchorUsesContextToPickAmongIdenticalLines(t *testing.T) {
 
 	line, rung := LocateAnchor(a, moved, 6)
 
-	assert.Equal(t, types.AnchorMoved, rung)
+	assert.Equal(t, diff.AnchorMoved, rung)
 	assert.Equal(t, 9, line, "B's closing brace, not A's or C's")
 }
 
 // Without the tie-break an equally-contexted match resolves by hunk order, which is a fact about
 // the patch rather than about the remark.
 func TestLocateAnchorPrefersTheNearerOfEquallyGoodMatches(t *testing.T) {
-	a := types.CommentAnchor{Quote: "\treturn nil"}
+	a := diff.CommentAnchor{Quote: "\treturn nil"}
 	hunks := []Hunk{hunkAt(5, "\treturn nil"), hunkAt(80, "\treturn nil")}
 
 	near, rung := LocateAnchor(a, hunks, 78)
 	assert.Equal(t, 80, near)
-	assert.Equal(t, types.AnchorMoved, rung)
+	assert.Equal(t, diff.AnchorMoved, rung)
 
 	far, _ := LocateAnchor(a, hunks, 7)
 	assert.Equal(t, 5, far)
@@ -149,7 +148,7 @@ func TestLocateAnchorFallsBackToTheDeclaration(t *testing.T) {
 
 	line, rung := LocateAnchor(a, rewritten, 11)
 
-	assert.Equal(t, types.AnchorDeclaration, rung)
+	assert.Equal(t, diff.AnchorDeclaration, rung)
 	assert.Equal(t, 40, line, "the declaration's hunk, never a guessed line inside it")
 }
 
@@ -163,7 +162,7 @@ func TestLocateAnchorPrefersTheQuoteOverTheDeclaration(t *testing.T) {
 
 	line, rung := LocateAnchor(a, moved, 11)
 
-	assert.Equal(t, types.AnchorMoved, rung)
+	assert.Equal(t, diff.AnchorMoved, rung)
 	assert.Equal(t, 41, line, "the quoted line itself, not the declaration's start")
 }
 
@@ -174,7 +173,7 @@ func TestLocateAnchorIsLostWhenTheDeclarationWentWithIt(t *testing.T) {
 	line, rung := LocateAnchor(a, []Hunk{hunkDeclaring(10, "func Other() error", "\treturn nil")}, 10)
 
 	assert.Zero(t, line)
-	assert.Equal(t, types.AnchorLost, rung)
+	assert.Equal(t, diff.AnchorLost, rung)
 }
 
 // A patch with no funcname (the top of a file, or a language git has no pattern for) captures no

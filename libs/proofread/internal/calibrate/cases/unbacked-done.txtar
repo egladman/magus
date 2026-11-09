@@ -62,3 +62,10 @@ I'll push as soon as the gate passes. It's still going.
 -- fp/agent-reply whole --
 **How it works:**
 - **Across calls:** it fires once per session when the same target runs on two sets of projects within ten minutes.
+-- hit/change-description --
+- The cache tests pass now.
+- Fixed the race in the broker, verified locally.
+-- pass/change-description --
+- `TestKeyStable` passes (out1a2b3c4d5e).
+- The key sorts its inputs before hashing.
+- Not verified on Linux.

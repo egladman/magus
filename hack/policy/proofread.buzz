@@ -14,6 +14,9 @@ final RULES: {str: str} = {
     "terms": "deny",
     // A page and a description state what the code does now; "will" and "I added" date it.
     "tense": "deny",
+    // A page speaks for magus, so a reader holds magus to each sentence; the author's own
+    // practice goes in an author's note (> [!AUTHOR]), the one place first-person passes.
+    "first-person": "deny",
     // An em or en dash has a plain spelling everyone can type and grep for; a page mixing
     // the two is searched with two patterns or not at all.
     "dash": "deny",
@@ -23,6 +26,11 @@ final RULES: {str: str} = {
     "attribution": "deny",
     // A published path starts at the repository root, never at home.
     "local-path": "deny",
+    // A published branch is one a reader can fetch, never an unpushed one.
+    "local-branch": "deny",
+    // Text a reviewer reads has no bold or italics; code goes in backticks.
+    "emphasis": "deny",
+    "bare-symbol": "deny",
     // A subject is lowercase. An acronym may lead. A capital after a conventional
     // prefix is the base-branch grammar's check, not this one.
     "subject-case": "deny",
@@ -55,15 +63,13 @@ final RULES: {str: str} = {
     "comment-budget": "deny",
     "block-budget": "deny",
     "banned-word": "deny",
-    // Graded where their words can mean another thing, but the Markdown lint, the
-    // pr-description step and the commit guard denied them on pages, changelog fragments,
-    // descriptions and commits: a stock label, "in order to", "let's dive in", a template's
-    // unfilled placeholder, a fragment's unknown group.
-    "reply-voice": "deny",
-    "wordy": "deny",
-    "signpost": "deny",
-    "leak": "deny",
-    "changelog-group": "deny",
+    // Their measured precision is under the 0.70 a deny needs, so they advise.
+    "reply-voice": "advise",
+    "wordy": "advise",
+    "signpost": "advise",
+    "leak": "advise",
+    // Unmeasured; the fragment grammar rejects an unknown group.
+    "changelog-group": "advise",
     // The review rules ship off until a labeling round measures them; here they run graded,
     // at weight 0 until one does, each backed by the study or convention its page cites.
     "no-reason": "advise",
@@ -162,8 +168,19 @@ final PATHS: {str: {str: str}} = {
     "blog/**": {
         "reply-voice": "off", "tense": "off", "hedge": "off", "signpost": "off", "buzzword": "off",
         "buzzword-weak": "off", "contrast": "off", "vague": "off", "closer": "off", "ing-tail": "off",
-        "staccato": "off", "filler": "advise",
+        "staccato": "off", "first-person": "off", "filler": "advise",
     },
+    // The rest are written as Eli on purpose, the way a post is. CONTRIBUTING.md is a
+    // letter to a contributor. The design index, the standard and the proposals argue in
+    // the voice the principle pages argue in. A decision record quotes the decision as it
+    // was made. A benchmark task is a person asking an agent. The proofread fixtures hold
+    // first person for the rules that measure it.
+    "CONTRIBUTING.md": {"first-person": "off"},
+    "docs/design.md": {"first-person": "off"},
+    "docs/design/**": {"first-person": "off"},
+    "docs/decisions/**": {"first-person": "off"},
+    "benchmarks/agent/tasks/**": {"first-person": "off"},
+    "libs/proofread/testdata/**": {"first-person": "off"},
 };
 
 // table is the decisions file proofread reads, for a run over files: a PATHS entry joins

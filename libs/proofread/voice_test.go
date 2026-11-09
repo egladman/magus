@@ -249,3 +249,46 @@ func TestLeadContextOwnsTheLeadsOpenerAndHeading(t *testing.T) {
 		t.Errorf("findings:\n got %q\nwant %q", rules, want)
 	}
 }
+
+func TestFirstPersonReportsTheAuthorOutsideAnAuthorsNote(t *testing.T) {
+	runTextCases(t, RuleFirstPerson, []textCase{
+		{"I, me and my", KindReference, "I keep my cache. It suits me.", []string{"1:I", "1:my", "1:me"}},
+		{"a guide", KindGuide, "Run the build. I run it twice.", []string{"1:I"}},
+		{"inside an author's note", KindGuide, "Run the build.\n\n> [!AUTHOR]\n> I run it twice, on my laptop.", nil},
+		{
+			"after the note ends", KindReference,
+			"> [!AUTHOR]\n> I run it twice.\n\nI do not.", []string{"4:I"},
+		},
+		{"a plain blockquote is no note", KindReference, "> [!NOTE]\n> I run it twice.", []string{"2:I"}},
+		{"a quoted question", KindGuide, "It answers \"how do I build this?\"", nil},
+		{"code and compounds", KindReference, "Set `my-flag` to bound I/O; it is I-cache-bound, the works-on-my-machine case.", nil},
+		{"a quote across lines", KindReference, "It answers \"what does my diff\ntouch\" at once.", nil},
+		{"a heading asks as the reader", KindReference, "## How do I build only what changed?\n\nRun `magus affected`.", nil},
+		{"a link's text", KindReference, "Read [I think our tools are the problem](blog/tools.md).", nil},
+		{"a principle speaks as its author", KindPrinciple, "I want magus to hold still.", nil},
+	})
+}
+
+const laterBody = "fix(cache): keep the key stable\nThe key drifted between runs.\n\n- The key sorts its inputs.\n\n" +
+	"## Later\n\n- `magus diff` will read the new key.\n\n## Considerations\n\n- It will cost a copy.\n"
+
+func TestFutureSectionsLetLaterSpeakOfLaterWork(t *testing.T) {
+	got := matches(JudgeText(laterBody, KindChangeDescription, houseOn, WithFutureSections("later")), RuleTense)
+	if !slices.Equal(got, []string{"12:will"}) {
+		t.Errorf("tense findings = %q, want only the Considerations line", got)
+	}
+}
+
+func TestWithoutFutureSectionsEveryFutureIsReported(t *testing.T) {
+	got := matches(JudgeText(laterBody, KindChangeDescription, houseOn), RuleTense)
+	if !slices.Equal(got, []string{"8:will", "12:will"}) {
+		t.Errorf("tense findings = %q, want both lines", got)
+	}
+}
+
+func TestAFutureSectionEndsAtTheNextHeadingOfItsLevel(t *testing.T) {
+	got := futureLines([]string{"## Later", "- a", "### Detail", "- b", "## Next", "- c"}, []string{"Later"})
+	if !got[2] || !got[3] || !got[4] || got[5] || got[6] {
+		t.Errorf("futureLines = %v, want lines 2 to 4", got)
+	}
+}

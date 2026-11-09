@@ -6,9 +6,9 @@
 package std
 
 import (
-	"context"
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -17,15 +17,6 @@ import (
 // The module REGISTRY that binds these declarations to their generated trampolines is
 // itself generated, from the WASM field below plus each module's Name and Path. It
 // lives beside the trampolines rather than here because it names them.
-//
-//go:generate go run ../cmd/magus-utils moduleset -outdir ../internal/interp/bindings/gen -pkg bindgen
-
-// Callback is the host-side handle for a VM-side function value passed as
-// an argument. The generated bindings layer wraps a buzz.Session + function value.
-// Impls invoke the callback via Call; args are marshaled per VM convention.
-type Callback interface {
-	Call(ctx context.Context, args ...any) ([]any, error)
-}
 
 // TypeTag classifies the shape of a value crossing the VM boundary. Each tag
 // has a canonical Go type that Impls accept (for args) or return; codegen
@@ -58,7 +49,6 @@ const (
 	// key-value pairs.
 	TypeStringMapMap
 	TypeAnyMap
-	TypeFunc
 	TypeAny
 	// TypeIndex is an int that names a position in a list. Buzz lists are
 	// 0-based, matching the Go Impl, so the index needs no offset on the way in
@@ -92,8 +82,6 @@ func (t TypeTag) GoType() string {
 		return "map[string]string"
 	case TypeAnyMap:
 		return "map[string]any"
-	case TypeFunc:
-		return "Callback"
 	case TypeAny:
 		return "any"
 	default:
@@ -103,7 +91,9 @@ func (t TypeTag) GoType() string {
 
 // Arg is one positional parameter of a Method.
 type Arg struct {
-	Name     string
+	Name string
+	// Type is filled from the method's Go signature when the module is
+	// registered; a descriptor never sets it.
 	Type     TypeTag
 	Optional bool
 	Variadic bool
@@ -128,15 +118,12 @@ type Arg struct {
 	// closed-set parameter reads as `str`, and naming an algorithm magus does not
 	// implement is a runtime throw rather than something the checker catches.
 	Enum string
-	// Func is the Buzz function type a TypeFunc argument must match, such as
-	// `fun (path: str, isDir: bool) > bool !> any`. Empty declares `any`, which lets
-	// a callback of the wrong shape through the checker to fail at the call.
-	Func string
 }
 
 // Ret is one return value of a Method.
 type Ret struct {
 	Name string
+	// Type is filled from the signature, as Arg.Type is.
 	Type TypeTag
 	// Object names the Buzz object this return marshals to, for a method whose
 	// Impl returns a Go struct carrying BuzzObject (or a slice of them). Empty for a
@@ -188,7 +175,7 @@ type Namespace struct {
 // top-level extern, upstream's Socket pattern.
 //
 // Each Impl takes the decoded record after ctx, as in
-// func(ctx context.Context, recv types.ImageDigest) (string, error), so Name
+// func(ctx context.Context, recv image.Digest) (string, error), so Name
 // must be an inbound mirror with a generated decoder.
 type Object struct {
 	Name    string
@@ -204,8 +191,8 @@ func (m Module) ObjectExtern(o Object, meth Method) Method {
 	ext := meth
 	ext.Name = fmt.Sprintf("%s__%s__%s", m.Name, o.Name, o.MethodName(meth))
 	ext.BuzzName = ext.Name
-	ext.Args = append([]Arg{{Name: "recv", Type: TypeAnyMap, Object: o.Name}}, meth.Args...)
-	return ext
+	ext.Args = append([]Arg{{Name: "recv", Object: o.Name}}, meth.Args...)
+	return ext.WithTags()
 }
 
 // Signature renders meth's Buzz call form on a record, as in
@@ -279,7 +266,98 @@ type Method struct {
 	//
 	// Set it only when something really does bind the member at run time: an Extern
 	// with nothing behind it declares a member that does not exist.
-	Extern bool
+	//
+	// It holds a nil value of the bound Go func type, so the declaration is
+	// checked against a signature as an Impl's is. Nil means not extern.
+	Extern any
+}
+
+// ArgTag is the tag argument i crosses as, read from the signature. A
+// variadic argument's tag is its element's.
+func (m Method) ArgTag(i int) TypeTag {
+	sig := m.Signature()
+	if sig == nil || i+1 >= sig.NumIn() {
+		return TypeInvalid
+	}
+	param := sig.In(i + 1)
+	if m.Args[i].Variadic {
+		param = param.Elem()
+	}
+	return TagOf(param)
+}
+
+// RetTag is the tag return i crosses as, read from the signature.
+func (m Method) RetTag(i int) TypeTag {
+	sig := m.Signature()
+	if sig == nil || i >= sig.NumOut() {
+		return TypeInvalid
+	}
+	return TagOf(sig.Out(i))
+}
+
+// TagOf is the tag a Go type crosses as. A struct crosses as a map the
+// generated decoder reads; a pointer as what it points to. A func has no
+// tag: the generator renders it from its Go signature.
+func TagOf(t reflect.Type) TypeTag {
+	switch t.Kind() {
+	case reflect.String:
+		return TypeString
+	case reflect.Int, reflect.Int64:
+		return TypeInt
+	case reflect.Float64:
+		return TypeFloat
+	case reflect.Bool:
+		return TypeBool
+	case reflect.Interface:
+		return TypeAny
+	case reflect.Pointer:
+		return TagOf(t.Elem())
+	case reflect.Struct:
+		return TypeAnyMap
+	case reflect.Slice:
+		return sliceTag(t.Elem())
+	case reflect.Map:
+		return mapTag(t.Elem())
+	}
+	return TypeInvalid
+}
+
+func sliceTag(elem reflect.Type) TypeTag {
+	switch {
+	case elem.Kind() == reflect.Uint8:
+		return TypeByteSlice
+	case elem.Kind() == reflect.String:
+		return TypeStringSlice
+	case elem.Kind() == reflect.Float64:
+		return TypeFloatSlice
+	case elem.Kind() == reflect.Slice && elem.Elem().Kind() == reflect.String:
+		return TypeStringSliceSlice
+	}
+	return TypeAny
+}
+
+func mapTag(elem reflect.Type) TypeTag {
+	switch elem.Kind() {
+	case reflect.String:
+		return TypeStringMap
+	case reflect.Map:
+		return TypeStringMapMap
+	case reflect.Interface:
+		return TypeAnyMap
+	}
+	return TypeInvalid
+}
+
+// Signature is the Go func type of the method: its Impl's, else its
+// Extern's. Nil for a method with neither.
+func (m Method) Signature() reflect.Type {
+	if m.Impl != nil {
+		return reflect.TypeOf(m.Impl)
+	}
+	if m.Extern != nil {
+		return reflect.TypeOf(m.Extern)
+	}
+	return nil
 }
 
 // Field is a static, table-level value on a Module: resolved once at registration
@@ -415,7 +493,7 @@ func (m Module) ObjectExterns() []Method {
 // vocabulary, so std naming them would cycle. std/encoding/register.go collects
 // them and internal/hostmodules unions both sets, the only place that imports both.
 var portable = []Module{
-	Charm, Crypto, Diff, Env, Flags, Fmt, Log, Markdown, Math, Merge,
+	Charm, Crypto, Diff, Env, Flags, Fmt, HTML, Log, Markdown, Math, Merge,
 	Path, Platform, Semver, Sort, Strings, Template, Time, UUID,
 }
 
@@ -427,12 +505,61 @@ var registry = sync.OnceValue(func() map[string]Module {
 	return indexModules(append(slices.Clone(portable), nativeModules...))
 })
 
+// WithTags fills every Arg.Type and Ret.Type from each method's Go
+// signature, so a descriptor never writes one by hand.
+func (m Module) WithTags() Module {
+	m.Methods = methodsWithTags(m.Methods)
+	m.Namespaces = slices.Clone(m.Namespaces)
+	for i := range m.Namespaces {
+		m.Namespaces[i].Methods = methodsWithTags(m.Namespaces[i].Methods)
+	}
+	m.Objects = slices.Clone(m.Objects)
+	for i, o := range m.Objects {
+		methods := slices.Clone(o.Methods)
+		for j, meth := range methods {
+			// An object method's Impl takes the record first, so the
+			// declared args start at its second parameter.
+			filled := m.ObjectExtern(o, meth).WithTags()
+			methods[j].Args = filled.Args[1:]
+			methods[j].Returns = filled.Returns
+		}
+		m.Objects[i].Methods = methods
+	}
+	return m
+}
+
+func methodsWithTags(methods []Method) []Method {
+	out := slices.Clone(methods)
+	for i := range out {
+		out[i] = out[i].WithTags()
+	}
+	return out
+}
+
+// WithTags returns m with each Arg.Type and Ret.Type read from its
+// signature. A method with no signature is returned unchanged.
+func (m Method) WithTags() Method {
+	if m.Signature() == nil {
+		return m
+	}
+	m.Args = slices.Clone(m.Args)
+	for i := range m.Args {
+		m.Args[i].Type = m.ArgTag(i)
+	}
+	m.Returns = slices.Clone(m.Returns)
+	for i := range m.Returns {
+		m.Returns[i].Type = m.RetTag(i)
+	}
+	return m
+}
+
 func indexModules(mods []Module) map[string]Module {
 	idx := make(map[string]Module, len(mods))
 	for _, m := range mods {
 		if _, exists := idx[m.Name]; exists {
 			panic(fmt.Sprintf("host: duplicate module registration: %q", m.Name))
 		}
+		m = m.WithTags()
 		if err := ValidateModule(m); err != nil {
 			panic(fmt.Sprintf("host: module %q: %s", m.Name, err))
 		}
@@ -460,7 +587,7 @@ func validateObjects(m Module) error {
 			return fmt.Errorf("object %q declares no methods", o.Name)
 		}
 		for _, meth := range o.Methods {
-			if meth.Extern {
+			if meth.Extern != nil {
 				return fmt.Errorf("object %q method %q is Extern, an object method needs an Impl", o.Name, meth.Name)
 			}
 			if err := validateMethod(m.ObjectExtern(o, meth)); err != nil {

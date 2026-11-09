@@ -14,22 +14,22 @@ import "assert";
 // Text/path/URL helpers. Flat import (`as _`) merges a module's exports into this scope,
 // so callers name them unqualified (escapeAttr, relativePath, ...); same for the imports
 // below.
-import "lib/text" as _;
+import "../libs/ssg/text" as _;
 // Source-path -> clean-URL mapping (directory-index scheme, blog date scoping):
 // cleanURL/cleanDepth/blogURLPath.
-import "lib/url" as _;
+import "../libs/ssg/urls" as _;
 // Sitemap/Atom XML serialization + Atom date normalization: escapeXml/xmlElement/atomDate.
-import "lib/feed" as _;
+import "../libs/ssg/feed" as _;
 // Date formatting (bylines, feed dates, recent-changes stamps): formatISO/blogDate/...
-import "lib/date" as _;
+import "../libs/ssg/date" as _;
 // Directory-index link rewriting (resolve, old->new URL map, re-relativize):
 // rewriteHref/resolvePath/cleanTarget.
-import "lib/html" as _;
+import "../libs/ssg/rewrite" as _;
 import "lib/glossary" as _;
 import "lib/conventions" as _;
 // Content-Security-Policy construction + the content hashing under it:
 // computeCSP/scriptHash/fileSha256/cspForRedirectStub and the CSP_* constants.
-import "lib/csp" as _;
+import "../libs/ssg/csp" as _;
 // Per-page facts read from a page's Markdown (title, tags, page_type, reading time,
 // fallback description, since-badge): deriveTitle/parseTags/pageType/readingTime/
 // deriveDescription/insertSinceBadge.
@@ -40,7 +40,7 @@ import "engine/meta" as _;
 import "site/release" as _;
 // Filesystem/walk predicates (isDirectory + the docs-root generator-file/dir skips); a
 // leaf shared with engine/types.buzz.
-import "engine/path" as _;
+import "../libs/ssg/paths" as _;
 // The Site data model + record types (the walk's build state); shared with every writer
 // module so they take a `site: Site` without a cycle back to this file.
 import "engine/types" as _;
@@ -95,8 +95,8 @@ fun esbuild(args: [str]) > void !> any {
 // an _underscored fixture, not `draft: true`) in fs.list's sorted order, so the walk is
 // deterministic. Posts are flat: no nested subdirs under blog/.
 fun walkBlog(site: Site) > void !> any {
-    if (isDirectory(site.root + "/" + site.blog) == false) { return; }
-    foreach (name in fs\listDir(fs\join(site.root, site.blog))) {
+    if (isDirectory(site.inputs.root + "/" + site.inputs.blog) == false) { return; }
+    foreach (name in fs\listDir(fs\join(site.inputs.root, site.inputs.blog))) {
         if (isPublishablePost(site, name)) {
             renderBlogPost(name, site);
         }
@@ -104,27 +104,9 @@ fun walkBlog(site: Site) > void !> any {
     renderBlogIndex(site);
 }
 
-// Recursively walk docs/ (the render reads its co-located markdown; the SSG's own
-// root children - gen/, src/, tour/ - are skipped at the root, node_modules/ and
-// MAGUS.md at any depth).
-fun walk(rel: str, site: Site) > void !> any {
-    var dir = fs\join(site.root, site.docs);
-    if (rel != "") { dir = site.root + "/" + site.docs + "/" + rel; }
-
-    foreach (name in fs\listDir(dir)) {
-        var childRel = name;
-        if (rel != "") { childRel = rel + "/" + name; }
-
-        if (isDirectory(site.root + "/" + site.docs + "/" + childRel)) {
-            if (isNeverContentDir(name)) { continue; }
-            if (rel == "" and isGeneratorDir(name, site.config.generatorDirs)) { continue; }
-            walk(childRel, site);
-        } else {
-            if (name.endsWith(".md") and isGeneratorFile(name, site.config.generatorFiles) == false) {
-                renderFile(childRel, site);
-            }
-        }
-    }
+// renderDocs renders every markdown source under docs/.
+fun renderDocs(site: Site) > void !> any {
+    foreach (rel in site.docSourcePaths()) { renderFile(rel, site); }
 }
 
 
@@ -139,59 +121,34 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
     // Before anything else: a build too old to honor str.indexOf(from:) would not fail
     // here, it would HANG in the glossary linker. Probe once and say so instead.
     requireIndexOfFrom();
-    var site: Site = mut Site{
-        metaCommits = mut {},
-        metaHistory = mut {},
-        searchRecords = mut [<str>],
-        aliasTarget = mut {},
-        pageUrls = mut {},
-        tagPages = mut {},
-        pageAxes = mut {},
-        writtenPaths = mut {},
-        blogPosts = mut [<BlogPost>],
-        docPages = mut [<DocPage>],
-        pageTerms = mut {},
-        demoBySlug = mut {},
-        releases = mut [<Release>],
-    };
-    site.config = magusConfig();
-    site.targets = targets;
-    site.graph = graph;
-    site.root = root;
-    site.docs = docs;
-    site.blog = blog;
-    site.outDir = outDir;
+    var site: Site = newSite();
+    site.inputs.config = magusConfig();
+    site.inputs.targets = targets;
+    site.inputs.graph = graph;
+    site.inputs.root = root;
+    site.inputs.docs = docs;
+    site.inputs.blog = blog;
+    site.inputs.outDir = outDir;
     loadMeta(site);
-    site.searchRecords = mut [];
-    site.aliasTarget = mut {};
-    site.pageUrls = mut {};
-    site.writtenPaths = mut {};
-    site.docPages = mut [<DocPage>];
-    site.glossaryTerms = mut [<GlossaryTerm>];
-    site.pageTerms = mut {};
-    site.codeEntities = mut [<Entity>];
-    site.demoBySlug = mut {};
-    site.blogPosts = mut [<BlogPost>];
-    site.hasBlogPosts = false;
-    if (isDirectory(site.root + "/" + site.blog)) {
-        foreach (name in fs\listDir(fs\join(site.root, site.blog))) {
+    if (isDirectory(site.inputs.root + "/" + site.inputs.blog)) {
+        foreach (name in fs\listDir(fs\join(site.inputs.root, site.inputs.blog))) {
             if (isPublishablePost(site, name)) {
-                site.hasBlogPosts = true;
+                site.inputs.hasBlogPosts = true;
             }
         }
     }
     // Computed once so every page threads a stable string instead of recomputing per
     // page. See Site.csp/Site.cspBadges and computeCSP for which pages get which.
-    site.csp = computeCSP(CSP_IMG_SRC_DEFAULT);
-    site.cspBadges = computeCSP(CSP_IMG_SRC_BADGES);
+    site.inputs.csp = computeCSP(CSP_IMG_SRC_DEFAULT, scriptSrc: CSP_SCRIPT_SRC, inlineScriptFiles: CSP_INLINE_SCRIPT_SOURCES);
+    site.inputs.cspBadges = computeCSP(CSP_IMG_SRC_BADGES, scriptSrc: CSP_SCRIPT_SRC, inlineScriptFiles: CSP_INLINE_SCRIPT_SOURCES);
     // gen/ is NOT wiped and rebuilt: outDir is created if missing, every render below
     // overwrites in place, and pruneStaleOutputs() (near the end, once every write is
     // known) deletes only the leftovers whose source is gone - a renamed page, a deleted
     // post, a dropped alias, a release out of CHANGELOG.md. Committed-but-not-rendered
     // artifacts (the playground WASM/editor bundle) persist untouched, since nothing here
     // writes or deletes them.
-    fs\mkdirAll(site.outDir);
-    std\print("generating site from " + site.root + "/" + site.docs + "/ -> " + site.outDir + "/");
+    fs\mkdirAll(site.inputs.outDir);
+    std\print("generating site from " + site.inputs.root + "/" + site.inputs.docs + "/ -> " + site.inputs.outDir + "/");
 
     // Copy static assets the root README references (images, badges). Scoped delete-
     // then-recopy: cp -r alone wouldn't drop a since-deleted source image, so the copied
@@ -205,14 +162,14 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
     // command line, so a path with a space in it was a latent bug rather than a caught
     // one. The typed calls are also the readable form - the intent is "keep these two
     // files, drop the rest", which the find invocation stated as a double negative.
-    fs\mkdirAll(site.outDir + "/assets");
-    foreach (name in fs\listDir(site.outDir + "/assets")) {
+    fs\mkdirAll(site.inputs.outDir + "/assets");
+    foreach (name in fs\listDir(site.inputs.outDir + "/assets")) {
         if (name != "hljs.js") {
-            fs\removeAll(site.outDir + "/assets/" + name);
+            fs\removeAll(site.inputs.outDir + "/assets/" + name);
         }
     }
-    if (fs\isDir(site.root + "/assets")) {
-        fs\copyDir(site.root + "/assets", site.outDir + "/assets");
+    if (fs\isDir(site.inputs.root + "/assets")) {
+        fs\copyDir(site.inputs.root + "/assets", site.inputs.outDir + "/assets");
     }
 
     // Bundle + minify the client assets with esbuild (pinned in mise.toml). Two outputs:
@@ -221,21 +178,21 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
     // gen/assets/hljs.js bundle (built by build-hljs); esbuild leaves dynamic
     // imports external. CSS is minified per-file, not bundled. Pinned esbuild ->
     // byte-stable output, so the drift gate holds.
-    esbuild(["src/styles/site.css", "--minify", "--outfile=" + site.outDir + "/site.css"]);
+    esbuild(["src/styles/site.css", "--minify", "--outfile=" + site.inputs.outDir + "/site.css"]);
     // console.css: the console-app-only shell (app bar, launcher, status bar, full-height
     // layout), loaded by /dashboard/, /logs/, /graph/ and the playground status bar but NOT
     // the docs pages. Minified to gen root, enumerated in the precache/allowlist next to
     // site.css.
-    esbuild(["src/styles/console.css", "--minify", "--outfile=" + site.outDir + "/console.css"]);
+    esbuild(["src/styles/console.css", "--minify", "--outfile=" + site.inputs.outDir + "/console.css"]);
     // ui-panels.css: the shared nav-triggered UI panels (settings gear dropdown + reference
     // drawer) used by BOTH docs pages and console apps. Separate from console.css so the docs
     // pages can load only this. Gen-root, precached like the others.
-    esbuild(["src/styles/ui-panels.css", "--minify", "--outfile=" + site.outDir + "/ui-panels.css"]);
-    esbuild(["src/styles/theme.css", "--minify", "--outfile=" + site.outDir + "/theme.css"]);
+    esbuild(["src/styles/ui-panels.css", "--minify", "--outfile=" + site.inputs.outDir + "/ui-panels.css"]);
+    esbuild(["src/styles/theme.css", "--minify", "--outfile=" + site.inputs.outDir + "/theme.css"]);
     // The console apps (graph/logs/dashboard/activity) live in the standalone console/
     // project (its own build, deployed to /console/); the docs site renders none of them.
-    esbuild(["src/theme.ts", "--minify", "--outfile=" + site.outDir + "/theme.js"]);
-    esbuild(["src/site/main.ts", "--bundle", "--minify", "--format=esm", "--outfile=" + site.outDir + "/main.js"]);
+    esbuild(["src/theme.ts", "--minify", "--outfile=" + site.inputs.outDir + "/theme.js"]);
+    esbuild(["src/site/main.ts", "--bundle", "--minify", "--format=esm", "--outfile=" + site.inputs.outDir + "/main.js"]);
 
     // The playground's wasm and its TinyGo glue are the only published bytes nothing here
     // can produce: TinyGo builds them and CI has none. They are committed under vendor/ as
@@ -249,7 +206,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
     // Gather every docs page's relatedness metadata BEFORE any page renders, so each page's
     // "Related" cards resolve titles/URLs against the full docPages set. collectDocPages reads only
     // frontmatter, so it is free of the render state below.
-    site.collectDocPages("");
+    site.collectDocPages();
     // Parse the glossary vocabulary before the walk so every page can auto-link its terms.
     site.collectGlossaryTerms();
     site.collectConventions();
@@ -292,7 +249,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
     // gen/index.html; renderRoot writes gen/development/index.html.
     renderLanding(site);
     renderRoot(site);
-    walk("", site);
+    renderDocs(site);
     walkBlog(site);
 
     // Build /development/ before writeAliases so its pages are in site.pageUrls for the
@@ -334,7 +291,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: ma
     // Flat {url, title, text, tags, description?} record per page; search.js fetches it
     // lazily on first focus. serialize sorts keys and the walk order is fs.list's (sorted),
     // so the file is byte-stable across runs.
-    fs\writeFile(site.outDir + "/search-index.json", "[" + site.searchRecords.join(",") + "]");
+    fs\writeFile(site.inputs.outDir + "/search-index.json", "[" + site.searchRecords.join(",") + "]");
 
     // Built last: the cache version digests the precached assets (incl. search-index.json
     // just above), so every one of them must already exist.

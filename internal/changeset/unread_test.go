@@ -1,6 +1,7 @@
 package changeset
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/types"
 )
 
 func TestUnreadHunksListsWhatNoMarkCoversInPatchOrder(t *testing.T) {
@@ -20,7 +20,7 @@ func TestUnreadHunksListsWhatNoMarkCoversInPatchOrder(t *testing.T) {
 		{Path: "b.go", Hunks: []Hunk{{Index: 0, Digest: "b0"}}},
 	}
 
-	assert.Equal(t, []types.DiffHunkRef{
+	assert.Equal(t, []diff.HunkRef{
 		{Path: "a.go", Index: 1, Digest: "a1"},
 		{Path: "b.go", Index: 0, Digest: "b0"},
 	}, UnreadHunks(files, []string{"a0", "elsewhere"}))

@@ -182,7 +182,8 @@ fun checkBuzz() > void !> any {
 
 // test runs the OpenCode plugin's transport cases under node; the test supplies Bun.spawn.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(install, workspace\opencode_runtime_generate);
+    // go_build places the <root>/magus the live test's guard judges with.
+    ctx.needs(install, workspace\opencode_runtime_generate, workspace\go_build);
     ctx.readsFiles(["*.ts", "*.json", "../../../../spells/harness/opencode/plugins/*.js", "../../../../spells/harness/opencode/probe.ts", "../../../../spells/harness/opencode/gen/*"]);
     final run = mut ["--test"];
     foreach (t in fs\glob("*.test.ts")) { run.append(t.value); }

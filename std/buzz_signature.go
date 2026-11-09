@@ -62,7 +62,11 @@ func returnSuffix(m Method) string {
 			// binary, unlike the generator that fills the field in.
 			rets[i] = r.Object
 		default:
-			rets[i] = r.Type.GoType()
+			tag := r.Type
+			if m.Signature() != nil {
+				tag = m.RetTag(i)
+			}
+			rets[i] = tag.GoType()
 		}
 		if r.Nullable {
 			rets[i] += "?"

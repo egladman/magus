@@ -3,16 +3,15 @@ package changeset
 import (
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/egladman/magus/types"
 )
 
-// ErrOutline marks an outline refused as more than a few pointers. The contract is on
-// [types.DiffOutline]. The person types the reply, and the agent that reads this text is the one
-// who tried to write more, so the text says what an outline is. A refusal names what broke, then
+// ErrOutline marks an outline refused as more than a few pointers. The
+// contract is on [diff.Outline]. The agent reading this text tried to write
+// more, so the text says what an outline is. A refusal names what broke, then
 // wraps it.
 var ErrOutline = errors.New("an outline is a few short pointers the person reads, not a reply")
 
@@ -21,36 +20,36 @@ var ErrOutline = errors.New("an outline is a few short pointers the person reads
 var ErrNoSession = errors.New("no review session is attached")
 
 // NormalizeOutline returns o with its text trimmed, or an error wrapping [ErrOutline] when it
-// breaks the bounds in [types.DiffOutline].
+// breaks the bounds in [diff.Outline].
 //
 // Text is refused rather than stripped, so the agent learns the rule instead of having its words
 // quietly rewritten into something it did not write. A topic or an agent name is one line of
 // visible characters: control characters (a newline included), U+2028, U+2029, bidirectional
 // overrides and every other format (Cf) rune are refused, since a renderer obeys them and a
 // reader cannot see them.
-func NormalizeOutline(o types.DiffOutline) (types.DiffOutline, error) {
+func NormalizeOutline(o diff.Outline) (diff.Outline, error) {
 	o.Thread = strings.TrimSpace(o.Thread)
 	if o.Thread == "" {
-		return types.DiffOutline{}, fmt.Errorf("it names no thread: %w", ErrOutline)
+		return diff.Outline{}, fmt.Errorf("it names no thread: %w", ErrOutline)
 	}
 	if len(o.Topics) == 0 {
-		return types.DiffOutline{}, fmt.Errorf("it has no topics: %w", ErrOutline)
+		return diff.Outline{}, fmt.Errorf("it has no topics: %w", ErrOutline)
 	}
-	if len(o.Topics) > types.DiffOutlineMaxTopics {
-		return types.DiffOutline{}, fmt.Errorf("%d topics is more than %d: %w",
-			len(o.Topics), types.DiffOutlineMaxTopics, ErrOutline)
+	if len(o.Topics) > diff.OutlineMaxTopics {
+		return diff.Outline{}, fmt.Errorf("%d topics is more than %d: %w",
+			len(o.Topics), diff.OutlineMaxTopics, ErrOutline)
 	}
 	topics := make([]string, 0, len(o.Topics))
 	for i, topic := range o.Topics {
 		topic = strings.TrimSpace(topic)
 		switch n := utf8.RuneCountInString(topic); {
 		case topic == "":
-			return types.DiffOutline{}, fmt.Errorf("topic %d is empty: %w", i+1, ErrOutline)
-		case n > types.DiffOutlineMaxTopicRunes:
-			return types.DiffOutline{}, fmt.Errorf("topic %d is %d characters, more than %d: %w",
-				i+1, n, types.DiffOutlineMaxTopicRunes, ErrOutline)
+			return diff.Outline{}, fmt.Errorf("topic %d is empty: %w", i+1, ErrOutline)
+		case n > diff.OutlineMaxTopicRunes:
+			return diff.Outline{}, fmt.Errorf("topic %d is %d characters, more than %d: %w",
+				i+1, n, diff.OutlineMaxTopicRunes, ErrOutline)
 		case !visibleLine(topic):
-			return types.DiffOutline{}, fmt.Errorf("topic %d spans lines or holds a character a reader cannot see: %w",
+			return diff.Outline{}, fmt.Errorf("topic %d spans lines or holds a character a reader cannot see: %w",
 				i+1, ErrOutline)
 		}
 		topics = append(topics, topic)
@@ -59,11 +58,11 @@ func NormalizeOutline(o types.DiffOutline) (types.DiffOutline, error) {
 
 	o.AgentName = strings.TrimSpace(o.AgentName)
 	switch n := utf8.RuneCountInString(o.AgentName); {
-	case n > types.DiffOutlineMaxAgentNameRunes:
-		return types.DiffOutline{}, fmt.Errorf("agent_name is %d characters, more than %d: %w",
-			n, types.DiffOutlineMaxAgentNameRunes, ErrOutline)
+	case n > diff.OutlineMaxAgentNameRunes:
+		return diff.Outline{}, fmt.Errorf("agent_name is %d characters, more than %d: %w",
+			n, diff.OutlineMaxAgentNameRunes, ErrOutline)
 	case !visibleLine(o.AgentName):
-		return types.DiffOutline{}, fmt.Errorf("agent_name spans lines or holds a character a reader cannot see: %w",
+		return diff.Outline{}, fmt.Errorf("agent_name spans lines or holds a character a reader cannot see: %w",
 			ErrOutline)
 	}
 	return o, nil
@@ -90,13 +89,13 @@ func visibleLine(s string) bool {
 //
 // The slice is rebuilt rather than appended to: clone shares it with every copy handed out
 // earlier, and writing into a shared backing array would change an outline under a reader.
-func (s *Store) SetOutline(workspaceRoot string, o types.DiffOutline) (*types.DiffReview, error) {
+func (s *Store) SetOutline(workspaceRoot string, o diff.Outline) (*diff.Review, error) {
 	o, err := NormalizeOutline(o)
 	if err != nil {
 		return nil, err
 	}
-	sess := s.mutate(workspaceRoot, func(sess *types.DiffReview) {
-		next := make([]types.DiffOutline, 0, len(sess.Outlines)+1)
+	sess := s.mutate(workspaceRoot, func(sess *diff.Review) {
+		next := make([]diff.Outline, 0, len(sess.Outlines)+1)
 		for _, have := range sess.Outlines {
 			if have.Thread != o.Thread {
 				next = append(next, have)

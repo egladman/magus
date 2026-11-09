@@ -1,0 +1,11 @@
+A code name written outside backticks.
+-- hit/change-description --
+- The test calls prepareLoad() once per layout.
+- The pattern goes through fmt.Sprintf now.
+- localBranchesFile lists the unpushed branches.
+- The go_test target reads it.
+-- pass/change-description --
+- `prepareLoad` runs once per layout.
+- It builds on macOS and Node.js alike.
+- GitHub and TypeScript both pass.
+- See https://example.com/tree/fooBar for the run.

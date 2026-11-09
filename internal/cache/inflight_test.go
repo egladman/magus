@@ -20,12 +20,21 @@ import (
 // synthesized rather than produced.
 func writeCorpse(t *testing.T, dir, host string, pid int, project, target string, started time.Time) {
 	t.Helper()
-	b, err := json.Marshal([]inflightTarget{{
-		Project: project, Target: target, Pid: pid, Host: host, Started: started,
-	}})
-	require.NoError(t, err)
+	live := &inflightTarget{Project: project, Target: target, Pid: pid, Host: host, Started: started}
+	done := &inflightTarget{Project: "done", Target: "build", Pid: pid, Host: host, Started: started}
+	var log []byte
+	for _, e := range []inflightEvent{
+		{Op: inflightStart, Key: 1, Target: done},
+		{Op: inflightStart, Key: 2, Target: live},
+		{Op: inflightStop, Key: 1},
+	} {
+		b, err := json.Marshal(e)
+		require.NoError(t, err)
+		log = append(append(log, b...), '\n')
+	}
+	log = append(log, `{"op":"start","key":3,"tar`...)
 	require.NoError(t, os.WriteFile(
-		filepath.Join(dir, inflightPrefix+"424242.json"), b, 0o644))
+		filepath.Join(dir, inflightPrefix+"424242"+inflightExt), log, 0o644))
 }
 
 // TestInflightReportsAKilledRun is the whole point: a run that is SIGKILLed cannot say
@@ -104,8 +113,11 @@ func TestInflightConcurrentEdges(t *testing.T) {
 
 	assert.Empty(t, f.Running(), "every edge closed")
 	if b, err := os.ReadFile(f.path); err == nil {
-		var got []inflightTarget
-		require.NoError(t, json.Unmarshal(b, &got), "the file must never be left torn")
+		for line := range strings.SplitSeq(strings.TrimSuffix(string(b), "\n"), "\n") {
+			var e inflightEvent
+			require.NoError(t, json.Unmarshal([]byte(line), &e), "no line may be torn")
+		}
+		assert.Empty(t, replayInflight(b))
 	}
 	// No stray temp files: a failed write must clean up after itself.
 	entries, err := os.ReadDir(dir)

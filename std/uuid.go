@@ -10,8 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module uuid -lang buzz -out ../internal/interp/bindings/gen/uuid.go -pkg bindgen
-
 // UUID is the "uuid" host module: unique identifiers and random tokens for run
 // ids, cache-busting suffixes, and artifact names. Native Buzz can only produce a
 // bounded random int, so anything needing a collision-free id previously reached
@@ -25,30 +23,30 @@ var UUID = Module{
 		{
 			Name:    "v4",
 			Doc:     "A random (version 4) UUID string, e.g. \"9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d\".",
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    UUIDv4,
 		},
 		{
 			Name:    "v7",
 			Doc:     "A time-ordered (version 7) UUID string; lexically sorts by creation time, which makes it a good ordered run/build id.",
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    UUIDv7,
 		},
 		{
 			Name:    "randomHex",
 			Doc:     "A cryptographically random lowercase hex string of n bytes (2*n characters); errors when n is not positive.",
-			Args:    []Arg{{Name: "n", Type: TypeInt}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "n"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    UUIDRandomHex,
 		},
 		{
 			Name:    "randomToken",
 			Doc:     "A cryptographically random URL-safe base64 token from n bytes of entropy (no padding); errors when n is not positive.",
-			Args:    []Arg{{Name: "n", Type: TypeInt}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "n"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    UUIDRandomToken,
 		},

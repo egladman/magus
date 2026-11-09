@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -444,7 +445,7 @@ func printFailedResults(w io.Writer, events []journal.Event) {
 	if len(events) == 0 {
 		return
 	}
-	_, _ = fmt.Fprintf(w, "\nfailed: %s; `magus query output <ref>` prints a whole log\n", countLabel(len(events), "target", "targets"))
+	_, _ = fmt.Fprintf(w, "\nfailed: %s; `magus query output <ref>` prints a whole log\n", plural.Count(len(events), "target", "targets"))
 	for _, e := range events {
 		ref := e.Ref
 		if ref == "" {
@@ -755,7 +756,7 @@ func planSummaryMarkdown(out planOutput) string {
 
 // shardCount is n shards, singular for one.
 func shardCount(n int) string {
-	return fmt.Sprintf("%d %s", n, plural(n, "shard", "shards"))
+	return fmt.Sprintf("%d %s", n, plural.Word(n, "shard", "shards"))
 }
 
 // shardDetail is what each shard actually DOES: the invocation, what it runs, and what it
@@ -1346,9 +1347,9 @@ func printImpactText(out *types.ImpactResult) error {
 
 	fmt.Printf("Changeset impact (base: %s)\n", out.Base)
 	fmt.Printf("%s changed, seeding %s, affecting %s.\n",
-		countLabel(out.ChangedFileCount, "file", "files"),
-		countLabel(len(out.SeedProjects), "project", "projects"),
-		countLabel(len(out.AffectedProjects), "project", "projects"))
+		plural.Count(out.ChangedFileCount, "file", "files"),
+		plural.Count(len(out.SeedProjects), "project", "projects"),
+		plural.Count(len(out.AffectedProjects), "project", "projects"))
 
 	if len(out.AffectedProjects) == 0 {
 		fmt.Printf("\nNo projects are affected (every changed file sits outside a project).\n")
@@ -1369,7 +1370,7 @@ func printImpactText(out *types.ImpactResult) error {
 		// from. Some of them may be seeding it by directory containment alone, which
 		// is a rerun whose result was already correct, so the count says how many,
 		// and the listing below marks which.
-		label := countLabel(len(p.Files), "changed file", "changed files")
+		label := plural.Count(len(p.Files), "changed file", "changed files")
 		if n := len(p.UndeclaredFiles); n > 0 {
 			label += fmt.Sprintf(", %d declared by no project", n)
 		}
@@ -1403,7 +1404,7 @@ func printImpactText(out *types.ImpactResult) error {
 	}
 
 	if outside := out.ChangedFileCount - seeded; outside > 0 {
-		fmt.Printf("\n%s changed outside any project (seeded nothing).\n", countLabel(outside, "file", "files"))
+		fmt.Printf("\n%s changed outside any project (seeded nothing).\n", plural.Count(outside, "file", "files"))
 	}
 
 	printImpactOverlays(out)
@@ -1446,8 +1447,8 @@ func printImpactOverlays(out *types.ImpactResult) {
 			files[s.File] = struct{}{}
 		}
 		fmt.Printf("\nChanged-symbol callers (%s across %s):\n",
-			countLabel(len(out.ChangedSymbols), "symbol", "symbols"),
-			countLabel(len(files), "changed file", "changed files"))
+			plural.Count(len(out.ChangedSymbols), "symbol", "symbols"),
+			plural.Count(len(files), "changed file", "changed files"))
 		shown := out.ChangedSymbols
 		if len(shown) > impactSymbolCap {
 			shown = shown[:impactSymbolCap]
@@ -1458,8 +1459,8 @@ func printImpactOverlays(out *types.ImpactResult) {
 				name = s.Symbol
 			}
 			line := fmt.Sprintf("  %s (%s): %s across %s", name, s.File,
-				countLabel(s.RefCount, "caller", "callers"),
-				countLabel(s.FileCount, "file", "files"))
+				plural.Count(s.RefCount, "caller", "callers"),
+				plural.Count(s.FileCount, "file", "files"))
 			if s.Coverage.Total > 0 {
 				line += fmt.Sprintf(" [coverage %s]", impactPct(s.Coverage.Ratio))
 			}
@@ -1472,7 +1473,7 @@ func printImpactOverlays(out *types.ImpactResult) {
 
 	if len(out.ChangedFileCoverage) > 0 {
 		fmt.Printf("\nCoverage on changed files (%s):\n",
-			countLabel(len(out.ChangedFileCoverage), "file", "files"))
+			plural.Count(len(out.ChangedFileCoverage), "file", "files"))
 		for _, c := range out.ChangedFileCoverage {
 			fmt.Printf("  %s: %s (%d/%d stmts)\n", c.File,
 				impactPct(c.Coverage.Ratio), c.Coverage.Covered, c.Coverage.Total)
@@ -1483,14 +1484,6 @@ func printImpactOverlays(out *types.ImpactResult) {
 // impactPct renders a 0..1 coverage ratio as a whole-percent string ("80%").
 func impactPct(ratio float64) string {
 	return fmt.Sprintf("%.0f%%", ratio*100)
-}
-
-// countLabel formats n with a singular/plural noun ("1 file", "3 files").
-func countLabel(n int, singular, plural string) string {
-	if n == 1 {
-		return fmt.Sprintf("%d %s", n, singular)
-	}
-	return fmt.Sprintf("%d %s", n, plural)
 }
 
 // parseExplainArgs scans args for --explain[=<project>] and optionally --base.

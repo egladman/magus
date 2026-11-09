@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -33,7 +34,7 @@ func sprawlMessages(t *testing.T, got map[string][]types.Check) map[string][]str
 	out := map[string][]string{}
 	for id, checks := range got {
 		for _, c := range checks {
-			require.Equal(t, types.CheckSiblingSprawl, c.Name)
+			require.Equal(t, diff.CheckSiblingSprawl, c.Name)
 			require.Equal(t, types.CheckAdvice, c.Status)
 			out[id] = append(out[id], c.Message)
 		}
@@ -50,7 +51,7 @@ func TestSprawlCheckReportsTheCacheTrio(t *testing.T) {
 
 	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(subj), Introduced: introduced(subj)})
 
-	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(types.CheckSiblingSprawl, cacheTrioMessage,
+	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(diff.CheckSiblingSprawl, cacheTrioMessage,
 		"members: RecordCacheError, RecordCacheHit, RecordCacheMiss",
 		"3 share the parameters func(ctx, string) none: RecordCacheError, RecordCacheHit, RecordCacheMiss",
 	)}}, got)

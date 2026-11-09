@@ -5,6 +5,7 @@ import (
 	stdjson "encoding/json"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -370,10 +371,10 @@ func TestDiffToolIsWiredWithReviewAnchors(t *testing.T) {
 	}
 	require.NotNil(t, tool, "allToolDrivers builds the diff tool")
 	require.NotNil(t, tool.anchors, "the diff tool is wired with the shared anchors closure")
-	hits, err := tool.anchors(context.Background(), types.Diff{})
+	hits, err := tool.anchors(context.Background(), diff.Diff{})
 	require.NoError(t, err)
 	assert.Empty(t, hits)
-	hits, err = opts.ReviewAnchors()(context.Background(), types.Diff{})
+	hits, err = opts.ReviewAnchors()(context.Background(), diff.Diff{})
 	require.NoError(t, err)
 	assert.Empty(t, hits)
 }

@@ -178,6 +178,9 @@ One runner's memory in megabytes. Config file key: \fBci.machine.memory_mb\fR.
 \fBMAGUS_CI_MACHINE_CORES\fR
 One runner's CPU cores. Config file key: \fBci.machine.cores\fR.
 .TP
+\fBMAGUS_CI_REMOTE_GATE\fR
+Names the CI that runs `ci` on every pushed commit, such as github\-actions. Set, the push gate admits a push with no local run. Config file key: \fBci.remote_gate\fR.
+.TP
 \fBMAGUS_VOLATILITY_ENABLED\fR
 The master switch for volatility detection and auto\-retry; false disables all retry logic (default: true). Config file key: \fBvolatility.enabled\fR.
 .TP

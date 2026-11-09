@@ -224,7 +224,7 @@ func TestHumanOnlyLeavesOtherRunsAlone(t *testing.T) {
 			"magus explain target:.:agent-bench-run",
 			"echo magus run agent-bench-run .",
 		} {
-			decision, reason := gradeHumanOnly(ctx, deps, "", command)
+			decision, reason, _ := gradeHumanOnly(ctx, deps, "", command)
 			assert.Empty(t, decision, "%s, %q: %s", src.name, command, reason)
 		}
 	}
@@ -243,8 +243,9 @@ func TestHumanOnlyRefusesARunWhosePoliciesLapsed(t *testing.T) {
 		<-release
 		return types.TargetPolicyIndex{}, false
 	}}
-	decision, reason := gradeHumanOnly(ctx, deps, "", "magus run agent-bench-run .")
+	decision, reason, lapsed := gradeHumanOnly(ctx, deps, "", "magus run agent-bench-run .")
 	assert.Equal(t, decisionDeny, decision)
+	assert.True(t, lapsed, "a lapse is filed under guard-unfinished, not human-only")
 	assert.Contains(t, reason, "reading this workspace's target policies")
 }
 
@@ -252,7 +253,7 @@ func TestHumanOnlyRefusesARunWhosePoliciesLapsed(t *testing.T) {
 func TestHumanOnlyPassesAWorkspaceThatDidNotOpen(t *testing.T) {
 	ctx, _ := fleetFixture(t)
 	ctx = context.WithValue(ctx, phaseLogKey{}, &phaseLog{start: time.Now()})
-	decision, _ := gradeHumanOnly(ctx, Dependencies{}, "", "magus run agent-bench-run .")
+	decision, _, _ := gradeHumanOnly(ctx, Dependencies{}, "", "magus run agent-bench-run .")
 	assert.Empty(t, decision)
 }
 
@@ -285,8 +286,8 @@ func TestHumanOnlyCurrentRecordOpensNothing(t *testing.T) {
 		TargetPolicies: func(context.Context, string) (types.TargetPolicyIndex, bool) { return benchRecord(), true },
 	}
 	for _, line := range humanOnlyLines {
-		wantDecision, wantReason := gradeHumanOnly(ctx, opened, "", line)
-		decision, reason := gradeHumanOnly(ctx, recorded, "", line)
+		wantDecision, wantReason, _ := gradeHumanOnly(ctx, opened, "", line)
+		decision, reason, _ := gradeHumanOnly(ctx, recorded, "", line)
 		assert.Equal(t, wantDecision, decision, line)
 		if wantReason != "" {
 			assert.Contains(t, wantReason, policyOpenedNote, "an open the record did not vouch for says so: %s", line)
@@ -297,7 +298,7 @@ func TestHumanOnlyCurrentRecordOpensNothing(t *testing.T) {
 	recorded.TargetPolicies = func(context.Context, string) (types.TargetPolicyIndex, bool) {
 		return types.TargetPolicyIndex{Projects: []string{"."}}, true
 	}
-	decision, _ := gradeHumanOnly(ctx, recorded, "", "magus run agent-bench-run .")
+	decision, _, _ := gradeHumanOnly(ctx, recorded, "", "magus run agent-bench-run .")
 	assert.Empty(t, decision, "a workspace recorded as declaring none reaches nothing, unopened")
 }
 
@@ -316,7 +317,7 @@ func TestHumanOnlyOpensTheWorkspaceWhenTheRecordCannotVouch(t *testing.T) {
 	deps.TargetPolicies = func(context.Context, string) (types.TargetPolicyIndex, bool) {
 		return types.TargetPolicyIndex{Projects: []string{"."}}, false
 	}
-	decision, reason := gradeHumanOnly(ctx, deps, "", "magus run agent-bench-run .")
+	decision, reason, _ := gradeHumanOnly(ctx, deps, "", "magus run agent-bench-run .")
 	assert.Equal(t, "ask", decision)
 	assert.Contains(t, reason, benchReason)
 	assert.Equal(t, 1, opens)
@@ -363,7 +364,7 @@ func TestHumanOnlyReasonCarriesTheRecord(t *testing.T) {
 	t.Setenv("MAGUS_HISTORY_PATH", history)
 
 	for _, src := range humanOnlySources {
-		decision, reason := gradeHumanOnly(ctx, src.deps(t), "", "magus run agent-bench-run .")
+		decision, reason, _ := gradeHumanOnly(ctx, src.deps(t), "", "magus run agent-bench-run .")
 		assert.Equal(t, "ask", decision, src.name)
 		assert.Contains(t, reason, "Recorded: p75 6m12s over 4 runs; never cached (skip_cache).", src.name)
 	}

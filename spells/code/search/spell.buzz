@@ -23,6 +23,7 @@ import "fs";
 import "magus";
 import "result";
 import "std";
+import "strings";
 
 import "assert";
 
@@ -696,11 +697,11 @@ fun references(h: Hit, opts: Options) > result\Result::<Section> {
         }
         final shown = r.lines.sub(0, len: least(r.lines.len(), b: 5)).map(fun (_: int, n: int) > str => "{n}");
         final more = if (r.lines.len() > 5) ",+{r.lines.len() - 5}" else "";
-        files.append(Neighbor{ relation = "referenced in", id = "file:{r.file}", label = plural(r.count, word: "use"), at = "{r.file}:{shown.join(",")}{more}" });
+        files.append(Neighbor{ relation = "referenced in", id = "file:{r.file}", label = strings\pluralCount(r.count, one: "use", many: "uses"), at = "{r.file}:{shown.join(",")}{more}" });
     }
     final s = section("references", all: files, limit: opts.neighbors);
     s.total = refs.fileCount;
-    s.note = "{plural(refs.refCount, word: "use")} in {plural(refs.fileCount, word: "file")}, {plural(testFiles, word: "test file")}";
+    s.note = "{strings\pluralCount(refs.refCount, one: "use", many: "uses")} in {strings\pluralCount(refs.fileCount, one: "file", many: "files")}, {strings\pluralCount(testFiles, one: "test file", many: "test files")}";
     if (refs.answer.verdict.value == UNKNOWN) {
         s.verdict = UNKNOWN;
         s.note = "unknown: {refs.answer.reason.value}";
@@ -827,9 +828,6 @@ fun clip(text: str, width: int) > str {
     return "{text.sub(0, len: width)} ...+{text.len() - width} chars";
 }
 
-fun plural(n: int, word: str) > str {
-    return if (n == 1) "{n} {word}" else "{n} {word}s";
-}
 
 fun excerptLines(title: str, ex: Excerpt, flag: str, width: int) > [str] {
     final lines = mut [<str>];

@@ -70,7 +70,6 @@ export fun buzzEngineFigure() > figure\Figure !> any {
             why: "the generic engine interface and its buzz adapter; the magusfile engine drives the session directly")
         .except([magus\graph().dir("internal/interp/mcpclient"), magus\graph().dir("internal/interp/transform")],
             why: "the MCP client and transform workers run Buzz apart from the two hosts compared here")
-        .except([magus\graph().dir("std/gen/stdtest")], why: "generated test mocks")
         .except(goPackages("std/encoding/**"),
             why: "the encoding host modules, wired through the trampolines like every module in the Host modules box")
         .except(goPackages("std/termkit/**"),

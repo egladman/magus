@@ -1,0 +1,11 @@
+Bold or italic text where a reviewer reads beside the diff.
+-- hit/change-description --
+- The key is **stable** across runs now.
+- It is *never* reset between workers.
+-- pass/change-description --
+- The key is stable across runs.
+- `**kwargs` and `__init__` stay code.
+-- hit/review-inline --
+This is **not** safe under two workers.
+-- pass/review-inline --
+This races when two workers share the cache.

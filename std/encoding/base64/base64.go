@@ -18,8 +18,6 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../../../cmd/magus-utils bindings -module base64 -lang buzz -out ../../../internal/interp/bindings/gen/base64.go -pkg bindgen
-
 // Module is the "encoding/base64" host module. Buzz's own stdlib hashes
 // (crypto.hash) and serializes JSON but has no general-purpose binary-to-text
 // codec, so a spell that signs a request or embeds a blob in a config would
@@ -38,30 +36,30 @@ var Module = std.Module{
 		{
 			Name:    "encode",
 			Doc:     "Encode data as standard (padded) base64.",
-			Args:    []std.Arg{{Name: "data", Type: std.TypeString}},
-			Returns: []std.Ret{{Type: std.TypeString}},
+			Args:    []std.Arg{{Name: "data"}},
+			Returns: []std.Ret{{}},
 			Impl:    Base64Encode,
 		},
 		{
 			Name:    "decode",
 			Doc:     "Decode a standard (padded) base64 string; errors on malformed input.",
-			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
-			Returns: []std.Ret{{Type: std.TypeString}},
+			Args:    []std.Arg{{Name: "s"}},
+			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    Base64Decode,
 		},
 		{
 			Name:    "url_encode",
 			Doc:     "Encode data as URL-safe (padded) base64.",
-			Args:    []std.Arg{{Name: "data", Type: std.TypeString}},
-			Returns: []std.Ret{{Type: std.TypeString}},
+			Args:    []std.Arg{{Name: "data"}},
+			Returns: []std.Ret{{}},
 			Impl:    Base64URLEncode,
 		},
 		{
 			Name:    "url_decode",
 			Doc:     "Decode a URL-safe (padded) base64 string; errors on malformed input.",
-			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
-			Returns: []std.Ret{{Type: std.TypeString}},
+			Args:    []std.Arg{{Name: "s"}},
+			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    Base64URLDecode,
 		},

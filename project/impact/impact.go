@@ -13,6 +13,7 @@ package impact
 import (
 	"cmp"
 	"context"
+	"github.com/egladman/magus/types/diff"
 	"slices"
 
 	"github.com/egladman/magus/internal/changeset"
@@ -306,14 +307,14 @@ const (
 // PublicThrough walks id's callers breadth first and returns each one that crosses a package or
 // project boundary, with the callers between. A path stops at its first such caller, because
 // that is where the change becomes visible to other code.
-func PublicThrough(g CallGraph, id string) []types.DiffPublicPath {
+func PublicThrough(g CallGraph, id string) []diff.PublicPath {
 	type hop struct {
 		id  string
 		via []string
 	}
 	seen := map[string]bool{id: true}
 	frontier := []hop{{id: id}}
-	var out []types.DiffPublicPath
+	var out []diff.PublicPath
 	for depth := 0; depth < reachDepth && len(frontier) > 0 && len(seen) < reachVisit; depth++ {
 		var next []hop
 		for _, h := range frontier {
@@ -323,7 +324,7 @@ func PublicThrough(g CallGraph, id string) []types.DiffPublicPath {
 				}
 				seen[c] = true
 				if b := g.Boundary(c); b != "" {
-					out = append(out, types.DiffPublicPath{ID: c, Qualified: g.Qualified(c), Via: h.via, Boundary: b})
+					out = append(out, diff.PublicPath{ID: c, Qualified: g.Qualified(c), Via: h.via, Boundary: b})
 					if len(out) == reachLimit {
 						return out
 					}

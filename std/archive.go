@@ -28,8 +28,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module archive -lang buzz -out ../internal/interp/bindings/gen/archive.go -pkg bindgen
-
 const archiveDefaultMaxSize int64 = 10 << 30 // 10 GiB
 
 // Archive is the Buzz archive module; the Impl of each function is the Go door a
@@ -42,11 +40,11 @@ var Archive = Module{
 			Name: "uncompress",
 			Doc:  "Extract the archive at src into dest. Returns a table with fields: files (extracted paths relative to dest) and bytes (total uncompressed bytes written). opts is an Options: strip drops N leading path components, maxSize caps the uncompressed bytes (default 10 GiB), threads sets the parallel decode workers (0 = auto).",
 			Args: []Arg{
-				{Name: "src", Type: TypeString},
-				{Name: "dest", Type: TypeString},
-				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "Options"},
+				{Name: "src"},
+				{Name: "dest"},
+				{Name: "opts", Optional: true, Object: "Options"},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "UncompressResult"}},
+			Returns: []Ret{{Object: "UncompressResult"}},
 			Raises:  true,
 			Impl:    ArchiveUncompress,
 		},
@@ -54,11 +52,11 @@ var Archive = Module{
 			Name: "compress",
 			Doc:  "Create an archive at dest from src (a file or directory). Format is inferred from dest extension (.tar, .tar.gz, .tgz, .tar.zst, .zip). Returns a table with fields: files (archived paths relative to src), bytes_in (raw bytes read), bytes_out (compressed bytes written). opts is an Options: format overrides format detection, threads sets the parallel encode workers (0 = auto), level is the compression level (null = format default), followSymlinks archives what a link points at, maxSize caps the output bytes (default 10 GiB).",
 			Args: []Arg{
-				{Name: "src", Type: TypeString},
-				{Name: "dest", Type: TypeString},
-				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "Options"},
+				{Name: "src"},
+				{Name: "dest"},
+				{Name: "opts", Optional: true, Object: "Options"},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "CompressResult"}},
+			Returns: []Ret{{Object: "CompressResult"}},
 			Raises:  true,
 			Impl:    ArchiveCompress,
 		},
@@ -66,10 +64,10 @@ var Archive = Module{
 			Name: "list",
 			Doc:  "List the archive at src without extracting it, as entries of {name, size, is_dir} sorted by name. Use it to check what an archive holds - that a release tarball carries the binary you expect, or how large an entry is - before paying to extract it. Symlinks and devices are skipped, matching uncompress. opts is an Options: threads sets the parallel decode workers (0 = auto).",
 			Args: []Arg{
-				{Name: "src", Type: TypeString},
-				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "Options"},
+				{Name: "src"},
+				{Name: "opts", Optional: true, Object: "Options"},
 			},
-			Returns: []Ret{{Type: TypeAny, Object: "[ArchiveEntry]"}},
+			Returns: []Ret{{Object: "[ArchiveEntry]"}},
 			Raises:  true,
 			Impl:    ArchiveList,
 		},
@@ -77,11 +75,11 @@ var Archive = Module{
 			Name: "read_file",
 			Doc:  "Return the contents of the single entry named name inside the archive at src, without extracting anything to disk. Reading one manifest out of a release tarball is the usual reason. Raises when name is not in the archive, or when the entry exceeds maxSize. opts is an Options: maxSize caps the entry (default 10 GiB), threads sets the parallel decode workers (0 = auto).",
 			Args: []Arg{
-				{Name: "src", Type: TypeString},
-				{Name: "name", Type: TypeString},
-				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "Options"},
+				{Name: "src"},
+				{Name: "name"},
+				{Name: "opts", Optional: true, Object: "Options"},
 			},
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    ArchiveReadFile,
 		},

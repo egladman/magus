@@ -7,8 +7,6 @@ import (
 	"github.com/egladman/magus/internal/json"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module merge -lang buzz -out ../internal/interp/bindings/gen/merge.go -pkg bindgen
-
 // Merge is the "merge" host module: combine two values.
 //
 // Buzz already merges map literals with `+`, one level, right-hand keys
@@ -36,30 +34,30 @@ var Merge = Module{
 			Name: "shallow",
 			Doc:  "Return a new value with overlay applied one level deep. When both are objects, overlay's keys replace base's and nested objects are replaced whole, so a sibling key inside a nested object is dropped. Any other overlay replaces base entirely. Neither input is modified.",
 			Args: []Arg{
-				{Name: "base", Type: TypeAny},
-				{Name: "overlay", Type: TypeAny},
+				{Name: "base"},
+				{Name: "overlay"},
 			},
-			Returns: []Ret{{Type: TypeAny}},
+			Returns: []Ret{{}},
 			Impl:    MergeShallow,
 		},
 		{
 			Name: "deep",
 			Doc:  "Return a new value with overlay applied through every nested object. Objects merge key by key; an array, a scalar, or null in overlay replaces the base value at that key, because a managed list is already the whole list. Neither input is modified.",
 			Args: []Arg{
-				{Name: "base", Type: TypeAny},
-				{Name: "overlay", Type: TypeAny},
+				{Name: "base"},
+				{Name: "overlay"},
 			},
-			Returns: []Ret{{Type: TypeAny}},
+			Returns: []Ret{{}},
 			Impl:    MergeDeep,
 		},
 		{
 			Name: "json",
 			Doc:  "Deep-merge two JSON documents and return the indented text, with a trailing newline. Integers keep the digits that were in the text, which merge\\deep cannot promise once a number has been a Buzz value. Objects merge key by key; arrays and other values are replaced by overlay. Object keys are emitted sorted, so the result does not keep base's key order.",
 			Args: []Arg{
-				{Name: "base", Type: TypeString},
-				{Name: "overlay", Type: TypeString},
+				{Name: "base"},
+				{Name: "overlay"},
 			},
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    MergeJSON,
 		},

@@ -91,7 +91,7 @@ func TestAShortCommitPassesOneFindingOfItsStrongestRuleAndFailsTwo(t *testing.T)
 	strongest := RuleSubjectMood
 
 	for _, c := range checks {
-		if c.defaultDecision(KindCommitMessage) == DecisionAdvise && weights[c.rule] > weights[strongest] {
+		if c.defaultDecision(spec(KindCommitMessage)) == DecisionAdvise && weights[c.rule] > weights[strongest] {
 			t.Fatalf("%s weighs %v, past %s: test the strongest rule", c.rule, weights[c.rule], strongest)
 		}
 	}

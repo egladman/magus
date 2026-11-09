@@ -13,8 +13,6 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../../../cmd/magus-utils bindings -module toml -lang buzz -out ../../../internal/interp/bindings/gen/toml.go -pkg bindgen
-
 // Module is the "toml" host module: TOML parse and stringify via pelletier/go-toml/v2.
 // It mirrors the json and yaml modules so a magusfile can read a value out of a
 // pyproject.toml / Cargo.toml the same way it reads package.json.
@@ -27,16 +25,16 @@ var Module = std.Module{
 		{
 			Name:    "parse",
 			Doc:     "Decode a TOML document into a value (tables become maps, arrays become lists, plus strings, numbers, bools, and datetimes); errors on invalid input.",
-			Args:    []std.Arg{{Name: "source", Type: std.TypeString}},
-			Returns: []std.Ret{{Type: std.TypeAny}},
+			Args:    []std.Arg{{Name: "source"}},
+			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    TOMLParse,
 		},
 		{
 			Name:    "stringify",
 			Doc:     "Encode a value to a TOML string; the top level must be a table/map, as TOML requires. Errors on unencodable input.",
-			Args:    []std.Arg{{Name: "value", Type: std.TypeAny}},
-			Returns: []std.Ret{{Type: std.TypeString}},
+			Args:    []std.Arg{{Name: "value"}},
+			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    TOMLStringify,
 		},

@@ -58,6 +58,8 @@ type labeledCase struct {
 	ThreadLength int
 	// Event is the verdict a review-summary case is posted with, "" for none.
 	Event proofread.Event
+	// LocalBranches are the local-only branch names a case is judged with.
+	LocalBranches []string
 	// Voice is what the case file's author sections measure, or nil when it
 	// has none.
 	Voice *proofread.Voice
@@ -66,7 +68,8 @@ type labeledCase struct {
 //go:embed cases/*.txtar
 var labeledCases embed.FS
 
-// LabeledCases returns the case files proofread carries, one per rule.
+// LabeledCases returns the case files proofread carries, one or more per
+// rule.
 func LabeledCases() fs.FS {
 	sub, err := fs.Sub(labeledCases, "cases")
 	if err != nil {
@@ -94,10 +97,12 @@ const caseLead = "fix(cache): keep the key stable\n" +
 	"sorts its inputs before hashing.\n\n"
 
 // LoadCases reads every .txtar file at the root of fsys. A file is named for
-// the rule its cases judge, <rule>.txtar, and its comment is free text. Each
+// the rule its cases judge, <rule>.txtar, and its comment is free text. A
+// rule's cases under a voice go in <rule>.<set>.txtar beside it. Each
 // section header reads
 //
 //	<label>/<kind> [whole] [name=NAME] [owner=OWNER] [thread=N] [event=EVENT]
+//	    [branches=A,B]
 //
 // where label is hit, pass, fp or fn and kind is one the rule judges. Each
 // non-blank line of a section is one case; whole makes the section one case,
@@ -105,7 +110,8 @@ const caseLead = "fix(cache): keep the key stable\n" +
 // is judged as a bullet under a fixed title and opening paragraph; a whole one
 // as written. name and owner describe a doc-comment case's symbol,
 // thread sets a review case's thread length, and event a review-summary case's
-// verdict: APPROVE, REQUEST_CHANGES or COMMENT.
+// verdict: APPROVE, REQUEST_CHANGES or COMMENT. branches lists the
+// local-only branch names a case is judged with.
 //
 // A section labeled author holds no case. Its texts, one per non-blank line or
 // the whole section, are one author's own writing of its kind: every author
@@ -141,7 +147,8 @@ func LoadCases(fsys fs.FS) ([]labeledCase, error) {
 }
 
 func parseCases(name string, data []byte) ([]labeledCase, error) {
-	rule := proofread.Rule(strings.TrimSuffix(path.Base(name), ".txtar"))
+	stem, _, _ := strings.Cut(strings.TrimSuffix(path.Base(name), ".txtar"), ".")
+	rule := proofread.Rule(stem)
 
 	doc, ok := catalog()[rule]
 	if !ok {
@@ -264,6 +271,8 @@ func parseHeader(header string, doc proofread.RuleDoc) (labeledCase, bool, error
 			if !slices.Contains(events, out.Event) {
 				return labeledCase{}, false, fmt.Errorf("event=%q is none of APPROVE, REQUEST_CHANGES or COMMENT", value)
 			}
+		case "branches":
+			out.LocalBranches = strings.Split(value, ",")
 		case "was":
 			// The label a case carried in a labeling round before a fix moved it, as
 			// fp:<round>:<id>; hack/lint holds a moved fp to it, and calibrate ignores it.
@@ -283,25 +292,31 @@ func parseHeader(header string, doc proofread.RuleDoc) (labeledCase, bool, error
 // style, under the case's voice when it has one. The other rules run because a
 // rule leaves a span to another that reports it.
 func (c labeledCase) Fires() bool {
+	return slices.ContainsFunc(c.Findings(), func(f proofread.Finding) bool { return f.Rule == c.Rule })
+}
+
+// Findings are what every rule reports on the case's text, judged as [Fires]
+// judges it, with extra applied after the case's own options.
+func (c labeledCase) Findings(extra ...proofread.Option) []proofread.Finding {
 	opts := []proofread.Option{
 		proofread.WithThreadLength(c.ThreadLength), proofread.WithEvent(c.Event), proofread.WithVoice(c.Voice),
+		proofread.WithLocalBranches(c.LocalBranches...),
 	}
 
 	if doc, ok := catalog()[c.Rule]; ok && doc.Decisions[c.Kind] == proofread.DecisionOff {
 		opts = append(opts, proofread.WithDecisions(map[proofread.Rule]proofread.Decision{c.Rule: proofread.DecisionDeny}))
 	}
 
-	var found []proofread.Finding
+	opts = append(opts, extra...)
 
 	if c.Kind == proofread.KindDocComment {
 		s := c.Symbol
 		s.Doc = c.Text
-		found = proofread.Judge(s, opts...)
-	} else {
-		found = proofread.JudgeText(c.Text, c.Kind, opts...)
+
+		return proofread.Judge(s, opts...)
 	}
 
-	return slices.ContainsFunc(found, func(f proofread.Finding) bool { return f.Rule == c.Rule })
+	return proofread.JudgeText(c.Text, c.Kind, opts...)
 }
 
 // Agrees reports whether the rule still does what the case's label records.

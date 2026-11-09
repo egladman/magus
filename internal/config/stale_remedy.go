@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -45,6 +46,43 @@ func RequiredVersionAt(root string) string {
 		}
 	}
 	return ""
+}
+
+// CheckoutHookAt is the checkout.bootstrap root's magus.yaml declares,
+// read leniently like [RequiredVersionAt].
+// "" for none, or for a path that leaves root.
+func CheckoutHookAt(root string) string {
+	for _, name := range []string{Filename, DottedFilename} {
+		if data, err := os.ReadFile(filepath.Join(root, name)); err == nil {
+			return checkoutHook(data)
+		}
+	}
+	return ""
+}
+
+func checkoutHook(data []byte) string {
+	var head struct {
+		Checkout struct {
+			Bootstrap string `yaml:"bootstrap"`
+		} `yaml:"checkout"`
+	}
+	if yaml.Unmarshal(data, &head) != nil {
+		return ""
+	}
+	hook := head.Checkout.Bootstrap
+	if hook == "" || !filepath.IsLocal(filepath.FromSlash(hook)) {
+		return ""
+	}
+	return path.Clean(filepath.ToSlash(hook))
+}
+
+// ReadyCheckoutCommand readies the checkout after the bootstrap builds ./magus.
+// A declared hook runs it; with none, only the harness rows are installed.
+func ReadyCheckoutCommand(hook string) string {
+	if hook == "" {
+		return "magus agent harness install"
+	}
+	return shellLine([]string{"./magus", "buzz", hook, "--", "--here", "--verify-ready"})
 }
 
 func requiredVersion(data []byte) string {

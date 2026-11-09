@@ -47,6 +47,35 @@ type unloadReason struct {
 	Spell string
 	// Config marks a stale failure on a magus.yaml key the binary predates.
 	Config bool
+	// Keys is that failure as data, nil when the error carries none.
+	Keys *config.UnknownKeysError
+}
+
+// userTier reports that the key is in the user-level magus.yaml. Rebuilding
+// ./magus does not fix that. The loader names a file inside the workspace
+// relative to its root, so only one outside it is absolute.
+func (r unloadReason) userTier() bool {
+	return r.Keys != nil && filepath.IsAbs(r.Keys.File)
+}
+
+// configProblem names the file and keys the judge predates, and its version.
+func (r unloadReason) configProblem(judge string) string {
+	if r.Keys == nil {
+		return judge + " predates this workspace's magus.yaml, which sets a key it does not know"
+	}
+	keys := make([]string, 0, len(r.Keys.Keys))
+	for _, k := range r.Keys.Keys {
+		keys = append(keys, k.Key)
+	}
+	version := r.Keys.Build.Running
+	if version == "" {
+		version = "an unknown version"
+	}
+	file := "this workspace's " + r.Keys.File
+	if r.userTier() {
+		file = "the user-level " + r.Keys.File
+	}
+	return fmt.Sprintf("%s (%s) predates %s, which sets %s, a key it does not know", judge, version, file, strings.Join(keys, ", "))
 }
 
 // The rules denyUnloaded refuses under, while no side of the workspace's guard policy loads.
@@ -71,8 +100,15 @@ func unloadCause(loadFailure error, root string) unloadReason {
 	if loadFailure == nil || root == "" {
 		return unloadReason{}
 	}
+	if errors.Is(loadFailure, errNotCheckoutBinary) {
+		return unloadReason{Cause: unloadNoBinary}
+	}
 	if ward.IsStaleBinary(loadFailure) {
-		return unloadReason{Cause: unloadStale, Config: errors.Is(loadFailure, types.UnknownConfigKey)}
+		reason := unloadReason{Cause: unloadStale, Config: errors.Is(loadFailure, types.UnknownConfigKey)}
+		if keys := (*config.UnknownKeysError)(nil); reason.Config && errors.As(loadFailure, &keys) {
+			reason.Keys = keys
+		}
+		return reason
 	}
 	spell := skewedSpell(loadFailure, root)
 	switch {
@@ -82,6 +118,35 @@ func unloadCause(loadFailure error, root string) unloadReason {
 		return unloadReason{Cause: unloadSkewedSpell, Spell: spell}
 	}
 	return unloadReason{}
+}
+
+// errNotCheckoutBinary is the load failure of a judge that is not ./magus.
+var errNotCheckoutBinary = errors.New("the judging magus is not this checkout's ./magus")
+
+// foreignJudge reports whether binary is not the ./magus of root, a checkout
+// that builds magus from source. Other workspaces keep PATH magus as install.
+func foreignJudge(root, binary string) bool {
+	if root == "" || binary == "" || ownBootstrapLine(root) == "" {
+		return false
+	}
+	judge, errJudge := os.Stat(binary)
+	own, errOwn := os.Stat(filepath.Join(root, "magus"))
+	return errJudge != nil || errOwn != nil || !os.SameFile(judge, own)
+}
+
+// ForeignJudgeDeps drops every rule from deps when binary is not root's own
+// ./magus. PATH magus then answers only "bootstrap ./magus".
+func ForeignJudgeDeps(deps Dependencies, root, binary string) Dependencies {
+	if !foreignJudge(root, binary) {
+		return deps
+	}
+	deps.LoadFailure = errNotCheckoutBinary
+	deps.ShellRules, deps.Builtins = nil, nil
+	deps.SpawnRule, deps.ApprovedSpawnRule = nil, nil
+	deps.CommandRule, deps.ApprovedCommandRule = nil, nil
+	deps.WriteRule, deps.ApprovedWriteRule = nil, nil
+	deps.StopRule, deps.ApprovedStopRule = nil, nil
+	return deps
 }
 
 // declaresGuardRule reports whether root's magusfile visibly registers a guard rule. It
@@ -598,16 +663,23 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, own bool, root string) denial {
 	hasBinary := hasMagusBinary(root)
 	fix := binaryRemedy(own, root, call.lease, call.builds)
+	if reason.Cause == unloadNoBinary && own && (call.lease == "" || call.builds) {
+		// A foreign judge is not ./magus, so a ./magus rebuild cannot help.
+		fix = binaryFix{say: fmt.Sprintf("bootstrap ./magus with `%s`", ownBootstrapLine(root))}
+	}
 	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
 	switch {
 	case reason.Cause == unloadSkewedSpell:
 		problem = fmt.Sprintf("./magus was built from another commit than this tree: it ships no spell %q, which the tree carries, so it cannot load its guard policy", reason.Spell)
+	case reason.userTier():
+		problem = reason.configProblem("the magus judging this") + ", so it cannot load its guard policy"
+		fix = binaryFix{say: fmt.Sprintf("remove the key from %s, or judge with a magus that knows it; rebuilding this checkout does not change that file", reason.Keys.File)}
 	case reason.Cause == unloadNoBinary, own && !hasBinary:
 		problem = "this checkout has no ./magus to load its guard policy"
 	case reason.Config && own && hasBinary:
-		problem = "./magus predates this workspace's magus.yaml, which sets a key it does not know, so it cannot load its guard policy"
+		problem = reason.configProblem("./magus") + ", so it cannot load its guard policy"
 	case reason.Config:
-		problem = "the magus judging this predates this workspace's magus.yaml, which sets a key it does not know, so it cannot load its guard policy"
+		problem = reason.configProblem("the magus judging this") + ", so it cannot load its guard policy"
 	case own && hasBinary:
 		problem = "./magus is older than this workspace and cannot load its guard policy"
 	}
@@ -635,8 +707,10 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 }
 
 // binaryFix is the fix for a binary that cannot load the tree: say is the likeliest one,
-// carrying at most one command, and why the rationale and the fallbacks. placeFor is the
-// lease whose checkout the main session places ./magus in, "" when the fix is not that.
+// carrying at most one command, and why the rationale and the fallbacks.
+// A bootstrap also names the checkout hook it needs.
+// placeFor is the lease whose checkout the main session places ./magus in,
+// "" when the fix is not that.
 type binaryFix struct{ say, why, placeFor string }
 
 // next is the fix's command, served as the deny's next under rule.
@@ -687,7 +761,12 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 			why: fmt.Sprintf("If the rebuild cannot load the tree either, bootstrap over it, alone on its line: `%s`. If the error names a magusfile line instead, fix that line.", bootstrap),
 		}
 	case own:
-		return binaryFix{say: fmt.Sprintf("bootstrap ./magus with `%s`", bootstrap)}
+		ready := readyCheckoutLine(root)
+		return binaryFix{
+			say: fmt.Sprintf("bootstrap ./magus with `%s`, then ready the checkout with `%s`, each alone on its line", bootstrap, ready),
+			why: "The bootstrap builds ./magus and nothing else. The checkout hook then installs every project's dependencies and every declared harness's tool rows, " +
+				"and builds the graph, the symbol digest and the proofread binary the commit guard runs.",
+		}
 	}
 	return binaryFix{
 		say: fmt.Sprintf("install a magus that loads this workspace with `%s`", config.ReleaseCommand(config.RequiredVersionAt(root))),
@@ -695,13 +774,19 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 	}
 }
 
-// BootstrapLine is the line that builds a ./magus at the HEAD of root, a checkout of magus
-// itself, "" for any other workspace.
-func BootstrapLine(root string) string {
+// ownBootstrapLine is the line that builds a ./magus at the HEAD of root, a
+// checkout of magus itself, "" for any other workspace.
+func ownBootstrapLine(root string) string {
 	if !ownSourceRoot(root) {
 		return ""
 	}
 	return config.SourceCommand(root, "", "", true)
+}
+
+// readyCheckoutLine is the line that runs root's checkout hook after
+// [ownBootstrapLine], "" when root declares none.
+func readyCheckoutLine(root string) string {
+	return config.ReadyCheckoutCommand(config.CheckoutHookAt(root))
 }
 
 // placementScript copies the main checkout's ./magus into a worker's checkout.

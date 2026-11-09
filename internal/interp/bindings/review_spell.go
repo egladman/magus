@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"sync"
 	"time"
 
@@ -27,11 +28,11 @@ var errNoReviewProvider = errors.New(
 // because a review lookup failed would be a worse tool than one that shows the change.
 //
 // The branch and remote are passed IN rather than discovered by the spell; see
-// types.ReviewOrigin for why.
-func FindReview(ctx context.Context, branch, remote string) types.ReviewTarget {
+// diff.ReviewOrigin for why.
+func FindReview(ctx context.Context, branch, remote string) diff.ReviewTarget {
 	drv, ok := reviewDriver()
 	if !ok {
-		return types.ReviewTarget{Reason: "no review provider wired"}
+		return diff.ReviewTarget{Reason: "no review provider wired"}
 	}
 	// Ask who the credential belongs to ONCE per process, then never again.
 	//
@@ -49,10 +50,10 @@ func FindReview(ctx context.Context, branch, remote string) types.ReviewTarget {
 		// render identically and mean opposite things. Silently emptying `id` would say
 		// "no pull request for this branch", sending the reader to look at their branch when
 		// the fault is in their spell.
-		return types.ReviewTarget{Reason: "review provider: " + err.Error()}
+		return diff.ReviewTarget{Reason: "review provider: " + err.Error()}
 	}
 	if !exported {
-		return types.ReviewTarget{Reason: "review provider: the spell does not export " + op.Name}
+		return diff.ReviewTarget{Reason: "review provider: the spell does not export " + op.Name}
 	}
 	// Remember what the provider named, or reuse what it named earlier. Either way the answer
 	// carries it, so a caller never has to know which lookup paid for it.
@@ -98,13 +99,13 @@ func rememberViewer(name string) {
 // this file that changes something a colleague can see, so a caller must never be told it
 // happened when it did not.
 //
-// want is the verdict the person asked for; what goes is [types.ReviewTarget.PermittedVerdict]'s
+// want is the verdict the person asked for; what goes is [diff.ReviewTarget.PermittedVerdict]'s
 // answer, decided HERE rather than in the spell because a spell is workspace-authored and a rule
 // living there could be edited out by the person it constrains.
 //
 // It returns the verdict actually published, so a caller that asked to approve can see it became
 // a comment and say so, rather than being left to assume either outcome.
-func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, want types.ReviewVerdict, drafts []types.DiffComment) (types.ReviewVerdict, error) {
+func PublishReview(ctx context.Context, at diff.ReviewTarget, summary string, want types.ReviewVerdict, drafts []diff.Comment) (types.ReviewVerdict, error) {
 	drv, ok := reviewDriver()
 	if !ok {
 		return "", errNoReviewProvider
@@ -169,7 +170,7 @@ func ListPulls(ctx context.Context, req types.ListPullsRequest) (types.PullList,
 // waiting for, and a caller told it was sent when it was not will believe the conversation is
 // finished. A spell that answers false without erroring is reported as a refusal here rather
 // than passed off as success: the ONLY thing this function may not do is stay quiet.
-func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string) error {
+func ReplyReview(ctx context.Context, at diff.ReviewTarget, thread, body string) error {
 	drv, ok := reviewDriver()
 	if !ok {
 		return errNoReviewProvider
@@ -198,7 +199,7 @@ func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string
 //
 // at is not Open when there is nothing to read, and at.Reason says why. err is
 // [ReviewComments]'s.
-func OriginReviewComments(ctx context.Context, from types.ReviewOrigin, bound time.Duration) (at types.ReviewTarget, comments []types.ReviewComment, err error) {
+func OriginReviewComments(ctx context.Context, from diff.ReviewOrigin, bound time.Duration) (at diff.ReviewTarget, comments []diff.ReviewComment, err error) {
 	ctx, cancel := context.WithTimeout(ctx, bound)
 	defer cancel()
 	at = FindReview(ctx, from.Branch, from.Remote)
@@ -219,7 +220,7 @@ func OriginReviewComments(ctx context.Context, from types.ReviewOrigin, bound ti
 // A MALFORMED answer is different, and is reported. The list decodes strictly, so one bad
 // comment fails the whole answer and none come back: a provider bug shows as an error,
 // never as a review a colleague said nothing on.
-func ReviewComments(ctx context.Context, at types.ReviewTarget) ([]types.ReviewComment, error) {
+func ReviewComments(ctx context.Context, at diff.ReviewTarget) ([]diff.ReviewComment, error) {
 	comments, _, err := ReviewCommentsReached(ctx, at)
 	return comments, err
 }
@@ -234,7 +235,7 @@ func ReviewComments(ctx context.Context, at types.ReviewTarget) ([]types.ReviewC
 //
 // reached is false only when the host was asked and did not answer. Nothing to ask (no provider
 // wired, no review open) reports true, because no host failed.
-func ReviewCommentsReached(ctx context.Context, at types.ReviewTarget) (comments []types.ReviewComment, reached bool, err error) {
+func ReviewCommentsReached(ctx context.Context, at diff.ReviewTarget) (comments []diff.ReviewComment, reached bool, err error) {
 	drv, ok := reviewDriver()
 	if !ok || !at.Open() {
 		return nil, true, nil

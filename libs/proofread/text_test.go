@@ -40,7 +40,7 @@ func BenchmarkJudgeText(b *testing.B) {
 
 // Every line below that is not prose carries a word the filler rule refuses,
 // so a line the reader fails to skip shows up as a finding.
-const markdownPage = `---
+const markdownPageText = `---
 title: Simply a page
 ---
 
@@ -80,7 +80,7 @@ func TestJudgeTextSkipsWhatIsNotProse(t *testing.T) {
 		{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 32},
 	}
 
-	assertFindings(t, JudgeText(markdownPage, KindReference, houseOn), want)
+	assertFindings(t, JudgeText(markdownPageText, KindReference, houseOn), want)
 }
 
 // A page's description is the sentence a search result shows, so it is prose; every

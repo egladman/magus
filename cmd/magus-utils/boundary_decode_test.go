@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -119,7 +120,7 @@ func boundaryClosure(t *testing.T, root reflect.Type) []boundaryType {
 			return
 		}
 		seen[rt] = true
-		for _, f := range boundaryFields(rt) {
+		for _, f := range emit.ObjectFields(rt) {
 			visit(f.Type)
 		}
 		entry, ok := boundaryTypeNamed(buzzName(rt))

@@ -14,10 +14,8 @@ import (
 
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
-	"github.com/egladman/magus/std/gen/stdtest"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -556,20 +554,20 @@ type visits struct {
 	dirs []string
 }
 
-// recordVisits is a Callback that records each (path, isDir) FsWalk visits and answers
-// stop, which ends the walk when true.
-func recordVisits(t *testing.T, stop bool) (*stdtest.MockCallback, *visits) {
+// walkCallback is the callback FsWalk takes.
+type walkCallback = func(ctx context.Context, path string, isDir bool) (types.WalkStep, error)
+
+// recordVisits is a callback that records each (path, isDir) FsWalk visits and
+// answers step for every entry.
+func recordVisits(step types.WalkStep) (walkCallback, *visits) {
 	v := &visits{}
-	cb := stdtest.NewMockCallback(t)
-	cb.EXPECT().Call(mock.Anything, mock.Anything, mock.Anything).RunAndReturn(
-		func(_ context.Context, args ...any) ([]any, error) {
-			path, _ := args[0].(string)
-			v.seen = append(v.seen, path)
-			if isDir, _ := args[1].(bool); isDir {
-				v.dirs = append(v.dirs, path)
-			}
-			return []any{stop}, nil
-		})
+	cb := func(_ context.Context, path string, isDir bool) (types.WalkStep, error) {
+		v.seen = append(v.seen, path)
+		if isDir {
+			v.dirs = append(v.dirs, path)
+		}
+		return step, nil
+	}
 	return cb, v
 }
 
@@ -624,7 +622,7 @@ func TestFsWalk(t *testing.T) {
 
 	ctx := WithCurrentWorkingDirectory(context.Background(), dir)
 
-	cb, v := recordVisits(t, false)
+	cb, v := recordVisits(types.WalkNext)
 	require.NoError(t, FsWalk(ctx, ".", cb))
 
 	sort.Strings(v.seen)
@@ -633,25 +631,59 @@ func TestFsWalk(t *testing.T) {
 	assert.Equal(t, []string{".", "sub"}, v.dirs)
 }
 
-// TestFsWalkStopsEarly: a truthy callback ends the whole walk, not just the
-// current directory.
-func TestFsWalkStopsEarly(t *testing.T) {
+// walkTree makes a.txt, sub/b.txt and sub/deep/c.txt under a temp dir.
+func walkTree(t *testing.T) string {
+	t.Helper()
 	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub", "deep"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "b.txt"), []byte("b"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "deep", "c.txt"), []byte("c"), 0o644))
+	return dir
+}
 
-	cb, v := recordVisits(t, true)
-	require.NoError(t, FsWalk(WithCurrentWorkingDirectory(context.Background(), dir), ".", cb))
-	assert.Len(t, v.seen, 1, "the first truthy answer ends the walk")
+// TestFsWalkSkipAllEndsTheWalk: skipAll ends the whole walk, not just the
+// current directory.
+func TestFsWalkSkipAllEndsTheWalk(t *testing.T) {
+	cb, v := recordVisits(types.WalkSkipAll)
+	require.NoError(t, FsWalk(WithCurrentWorkingDirectory(context.Background(), walkTree(t)), ".", cb))
+	assert.Len(t, v.seen, 1, "the first skipAll ends the walk")
+}
+
+// TestFsWalkSkipDirPrunesOneDirectory: skipDir on sub leaves out everything
+// under it and keeps walking its siblings.
+func TestFsWalkSkipDirPrunesOneDirectory(t *testing.T) {
+	var seen []string
+	cb := func(_ context.Context, path string, _ bool) (types.WalkStep, error) {
+		seen = append(seen, path)
+		if path == "sub" {
+			return types.WalkSkipDir, nil
+		}
+		return types.WalkNext, nil
+	}
+	require.NoError(t, FsWalk(WithCurrentWorkingDirectory(context.Background(), walkTree(t)), ".", cb))
+	assert.Equal(t, []string{".", "a.txt", "sub"}, seen)
+}
+
+// TestFsWalkRefusesAZeroStep: a step that is no case is an error that names
+// the steps.
+func TestFsWalkRefusesAZeroStep(t *testing.T) {
+	cb, _ := recordVisits("")
+	err := FsWalk(WithCurrentWorkingDirectory(context.Background(), walkTree(t)), ".", cb)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "want WalkStep.next, WalkStep.skipDir or WalkStep.skipAll")
 }
 
 func TestFsWalkPropagatesACallbackFailure(t *testing.T) {
 	boom := errors.New("callback failed")
-	cb := stdtest.NewMockCallback(t)
-	cb.EXPECT().Call(mock.Anything, mock.Anything, mock.Anything).Return(nil, boom).Once()
+	calls := 0
+	cb := func(context.Context, string, bool) (types.WalkStep, error) {
+		calls++
+		return "", boom
+	}
 	err := FsWalk(context.Background(), t.TempDir(), cb)
-	assert.ErrorIs(t, err, boom)
+	require.ErrorIs(t, err, boom)
+	assert.Equal(t, 1, calls)
 }
 
 // agedFile writes size bytes to dir/name, last modified days before now.
@@ -780,7 +812,8 @@ func TestFsStateDirIsOnePrivateDirectoryUnderXDGState(t *testing.T) {
 }
 
 func TestFsWalkOnAMissingRoot(t *testing.T) {
-	// No expectation: the callback must not be called.
-	err := FsWalk(context.Background(), filepath.Join(t.TempDir(), "absent"), stdtest.NewMockCallback(t))
+	cb, v := recordVisits(types.WalkNext)
+	err := FsWalk(context.Background(), filepath.Join(t.TempDir(), "absent"), cb)
 	assert.Error(t, err, "walking a root that does not exist raises rather than visiting nothing")
+	assert.Empty(t, v.seen, "the callback is not called")
 }

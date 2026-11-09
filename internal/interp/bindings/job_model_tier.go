@@ -393,30 +393,78 @@ func defaultModelTierSet(ctx context.Context, wired []string) (*types.ModelTierS
 // buzzModelTierMatrix checks the answer against the declaration in force when it is
 // called, since the modelTiers and modelTier calls may come in either order.
 func buzzModelTierMatrix(sess *buzz.Session, reg *workspace.WorkspaceRegistry, matrix vm.Value, site string) types.ModelTierMatrix {
-	return func(ctx context.Context, req types.ModelTierRequest) (choice *types.JobModelTier, err error) {
+	return func(ctx context.Context, req types.ModelTierRequest) (*types.JobModelTier, error) {
 		set := reg.ModelTiers(ctx)
 		if set == nil {
 			return nil, fmt.Errorf("%s: the workspace has no model tiers to choose among: magus\\modelTiers(null) turned them off", modelTierMember)
 		}
-		// The fork runs the matrix inside the store's own write, so a read of the store
-		// would wait on itself: every magus\job member raises under a failed snapshot.
-		ctx = job.WithSnapshot(ctx, job.Snapshot{Err: errors.New(
-			`magus\job: the job store is read-only inside magus\modelTier: decide from the request and its history`)})
-		defer func() {
-			if r := recover(); r != nil {
-				choice, err = nil, fmt.Errorf("%s: the matrix faulted the interpreter: %v", modelTierMember, r)
-			}
-		}()
-		reqValue := bindgen.ObjectModelTierRequest(req, ffi.SessionEnums(ctx, sess, "magus"))
-		rv, err := sess.CallValue(ctx, matrix, []vm.Value{reqValue})
-		if err != nil {
-			return nil, fmt.Errorf("%s: the matrix raised: %w", modelTierMember, err)
-		}
-		return decodeModelTierChoice(set, rv, site)
+		return callModelTierMatrix(ctx, sess, set, matrix, req, site, types.ModelTierSourceMatrix)
 	}
 }
 
-func decodeModelTierChoice(set *types.ModelTierSet, v vm.Value, site string) (*types.JobModelTier, error) {
+// callModelTierMatrix calls choose in sess and checks its answer against set.
+func callModelTierMatrix(ctx context.Context, sess *buzz.Session, set *types.ModelTierSet, choose vm.Value, req types.ModelTierRequest, site string, source types.ModelTierSource) (choice *types.JobModelTier, err error) {
+	// The fork runs the matrix inside the store's own write, so a read of the store
+	// would wait on itself: every magus\job member raises under a failed snapshot.
+	ctx = job.WithSnapshot(ctx, job.Snapshot{Err: errors.New(
+		`magus\job: the job store is read-only inside magus\modelTier: decide from the request and its history`)})
+	defer func() {
+		if r := recover(); r != nil {
+			choice, err = nil, fmt.Errorf("%s: the matrix faulted the interpreter: %v", modelTierMember, r)
+		}
+	}()
+	reqValue := bindgen.ObjectModelTierRequest(req, ffi.SessionEnums(ctx, sess, "magus"))
+	rv, err := sess.CallValue(ctx, choose, []vm.Value{reqValue})
+	if err != nil {
+		return nil, fmt.Errorf("%s: the matrix raised: %w", modelTierMember, err)
+	}
+	return decodeModelTierChoice(set, rv, site, source)
+}
+
+// UserModelTierMatrix is the person's matrix: choose, from the module at path.
+// tiers names the declaration its answer must be a case of.
+func UserModelTierMatrix(path string, tiers func(context.Context) *types.ModelTierSet) types.ModelTierMatrix {
+	return userModelTierMatrix(path, tiers)
+}
+
+// userModelTierMatrix loads path afresh per call and closes it after.
+// A daemon holds no session between forks. Every failure is an error.
+func userModelTierMatrix(path string, tiers func(context.Context) *types.ModelTierSet) types.ModelTierMatrix {
+	label := fmt.Sprintf("the user model tier matrix %s", path)
+	return func(ctx context.Context, req types.ModelTierRequest) (*types.JobModelTier, error) {
+		if !filepath.IsAbs(path) || filepath.Ext(path) != ".buzz" {
+			return nil, fmt.Errorf("%s: jobs.model_tier_matrix must be the absolute path of a .buzz module", label)
+		}
+		set := tiers(ctx)
+		if set == nil {
+			return nil, fmt.Errorf("%s: the workspace has no model tiers to choose among: magus\\modelTiers(null) turned them off", label)
+		}
+		// The module declares nothing into the workspace.
+		ctx = workspace.ContextWithRegistry(ctx, nil)
+		sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithParseCache(parsecache.Shared()))
+		defer func() { _ = sess.Close() }()
+		RegisterMagusNamespace(ctx, sess)
+		if err := registerMagusModules(ctx, sess); err != nil {
+			return nil, fmt.Errorf("%s: %w", label, err)
+		}
+		sess.SetIncludeDirs(append([]string{filepath.Dir(path)}, sess.IncludeDirs()...))
+		stem := strings.TrimSuffix(filepath.Base(path), ".buzz")
+		if err := sess.Exec(ctx, fmt.Sprintf("import %q as userMatrix;", stem)); err != nil {
+			return nil, fmt.Errorf("%s does not load: %w", label, err)
+		}
+		choose, err := sess.Eval(ctx, `return userMatrix\choose;`)
+		if err != nil || !choose.IsFun() {
+			return nil, fmt.Errorf("%s exports no choose function: export fun choose(req: ModelTierRequest) > Choice?", label)
+		}
+		choice, err := callModelTierMatrix(ctx, sess, set, choose, req, path, types.ModelTierSourceUserMatrix)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", label, err)
+		}
+		return choice, nil
+	}
+}
+
+func decodeModelTierChoice(set *types.ModelTierSet, v vm.Value, site string, source types.ModelTierSource) (*types.JobModelTier, error) {
 	if v.IsNull() {
 		return nil, nil //nolint:nilnil // documented: nil leaves the declared default to decide
 	}
@@ -452,7 +500,7 @@ func decodeModelTierChoice(set *types.ModelTierSet, v vm.Value, site string) (*t
 		Name:   tier.Name(),
 		Rank:   tier.Rank(),
 		Skills: skills,
-		Source: types.ModelTierSourceMatrix,
+		Source: source,
 		Reason: strings.TrimSpace(reasonValue.AsString()),
 		Site:   site,
 	}, nil

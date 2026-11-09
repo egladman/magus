@@ -72,7 +72,6 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
             why: "the terminal UI library; no figure passes through it")
         .except(goPackages("std/termkit/**"),
             why: "the termkit host modules; a figure source reads the graph through the magus module alone")
-        .except([magus\graph().dir("std/gen/stdtest")], why: "generated test mocks")
         .except(goPackages("std/encoding/**"),
             why: "the encoding host modules; a figure source reads the graph through the magus module alone")
         .except(figure\without(magus\graph().layer("handler").dirs, drop: [server]),

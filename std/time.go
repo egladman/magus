@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module time -lang buzz -out ../internal/interp/bindings/gen/time.go -pkg bindgen
-
 // Time is the "time" host module: timestamp formatting/parsing and duration
 // parsing, delegated straight to Go's time package so a spell doesn't reinvent
 // calendar math. Times cross the VM boundary as Unix epoch milliseconds carried
@@ -24,23 +22,23 @@ var Time = Module{
 		{
 			Name:    "format",
 			Doc:     "Render Unix-millis as a string using a Go reference layout (UTC).",
-			Args:    []Arg{{Name: "layout", Type: TypeString, Enum: "TimeLayout"}, {Name: "unixMillis", Type: TypeFloat}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "layout", Enum: "TimeLayout"}, {Name: "unixMillis"}},
+			Returns: []Ret{{}},
 			Impl:    TimeFormat,
 		},
 		{
 			Name:    "parse",
 			Doc:     "Parse a string with a Go reference layout into Unix-millis (UTC); errors on mismatch.",
-			Args:    []Arg{{Name: "layout", Type: TypeString, Enum: "TimeLayout"}, {Name: "value", Type: TypeString}},
-			Returns: []Ret{{Type: TypeFloat}},
+			Args:    []Arg{{Name: "layout", Enum: "TimeLayout"}, {Name: "value"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    TimeParse,
 		},
 		{
 			Name:    "parse_duration",
 			Doc:     "Parse a Go duration string (e.g. \"168h\", \"1h30m\") into milliseconds; errors on mismatch.",
-			Args:    []Arg{{Name: "duration", Type: TypeString}},
-			Returns: []Ret{{Type: TypeFloat}},
+			Args:    []Arg{{Name: "duration"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    TimeParseDuration,
 		},
@@ -48,22 +46,22 @@ var Time = Module{
 			Name:    "now_iso",
 			Doc:     "Return the current UTC time as an RFC 3339 string. For the raw epoch-millis value use Buzz's os.time().",
 			Args:    nil,
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Impl:    TimeNowISO,
 		},
 		{
 			Name:    "add",
 			Doc:     "Add a Go duration string (e.g. \"24h\", \"-1h30m\") to a Unix-millis timestamp; returns the new Unix-millis timestamp.",
-			Args:    []Arg{{Name: "unixMillis", Type: TypeFloat}, {Name: "duration", Type: TypeString}},
-			Returns: []Ret{{Type: TypeFloat}},
+			Args:    []Arg{{Name: "unixMillis"}, {Name: "duration"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    TimeAdd,
 		},
 		{
 			Name:    "diff",
 			Doc:     "Return a minus b in milliseconds (positive when a is later than b).",
-			Args:    []Arg{{Name: "a", Type: TypeFloat}, {Name: "b", Type: TypeFloat}},
-			Returns: []Ret{{Type: TypeFloat}},
+			Args:    []Arg{{Name: "a"}, {Name: "b"}},
+			Returns: []Ret{{}},
 			Impl:    TimeDiff,
 		},
 	},

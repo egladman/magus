@@ -1,0 +1,118 @@
+// decisions-meet-their-evidence refuses a deny in this repository's proofread
+// table for a rule weighing under the evidence gate. A house rule has no weight
+// and encodes the repository's own convention, so it may deny.
+//
+// Tier 1, mechanical: the fix is advise in the table.
+namespace decisionsevidence;
+
+import "assert";
+import "fs";
+import "path";
+import "proc";
+import "std";
+import "encoding/json";
+import "magus/lint";
+import "hack/lint/support" as support;
+import "hack/policy/proofread" as decisions;
+import "libs/proofread/proofread" as proofread;
+
+// GATE is the Wilson lower bound on precision a rule needs to be denied.
+export final GATE = 0.70;
+
+final TABLE = "hack/policy/proofread.buzz";
+
+export fun reads() > [str] {
+    return [TABLE];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    if (files.len() == 0) {
+        return [<Finding>];
+    }
+    final bin = path\abs("{proofread\home}/{proofread\binary}");
+    final fix = "Run `{proofread\build}`, then {bin} rules, and read why it stopped.";
+    final run = proc\exec(bin, args: ["rules"], opts: proc\ExecOptions{ quiet = true, allowFailure = true }) catch null;
+    if (run == null or run!.code != 0) {
+        return [Finding{ path = TABLE, message = "proofread rules did not run, so no decision was held to its evidence", fix = fix }];
+    }
+    final catalog: [any]? = json\parse(run!.stdout) catch null;
+    if (catalog == null) {
+        return [Finding{ path = TABLE, message = "proofread rules printed no JSON array", fix = fix }];
+    }
+    final table = decisions\table([<str>]);
+    final rules: {str: str} = table["rules"] ?? {<str: str>};
+    return judge(rules, catalog: catalog!, src: support\read(files[0]));
+}
+
+// judge is a finding per rule that rules denies below GATE. A rule the catalog
+// lacks is a finding too, since its evidence cannot be read.
+export fun judge(rules: {str: str}, catalog: [any], src: str) > [Finding] {
+    final weights = mut {<str: float>};
+    final houses = mut {<str: bool>};
+    foreach (row in catalog) {
+        final name: str = row["name"] ?? "";
+        weights[name] = std\toDouble(row["weight"] ?? 0.0);
+        houses[name] = row["house"] ?? false;
+    }
+    final lines = src.split("\n");
+    final found = mut [<Finding>];
+    foreach (rule in support\sorted(rules.keys())) {
+        if (rules[rule] != "deny") {
+            continue;
+        }
+        final line = lineOf(lines, rule: rule);
+        if (weights[rule] == null) {
+            found.append(Finding{ path = TABLE, line = line,
+                message = "{rule} is denied but proofread has no such rule, so its evidence cannot be read",
+                fix = "Drop the entry, or fix the name to a rule `proofread rules` lists." });
+            continue;
+        }
+        final weight = weights[rule]!;
+        if (houses[rule] == true or weight >= GATE) {
+            continue;
+        }
+        found.append(Finding{ path = TABLE, line = line,
+            message = "{rule} is denied at weight {weight}, under the evidence gate {GATE}",
+            fix = "Set it to advise until a labeling round measures its precision at {GATE} or more." });
+    }
+    return found;
+}
+
+// lineOf is the 1-based line of rule's entry in lines, or 1.
+fun lineOf(lines: [str], rule: str) > int {
+    final key = "\"{rule}\":";
+    foreach (i, l in lines) {
+        if (l.trim().startsWith(key)) {
+            return i + 1;
+        }
+    }
+    return 1;
+}
+
+test "a deny under the gate is a finding at its line" {
+    final catalog = [{"name": "wordy", "weight": 0.57, "house": false}];
+    final got = judge({"wordy": "deny"}, catalog: catalog, src: "x\n    \"wordy\": \"deny\",\n");
+    assert\equal(got.len(), want: 1, message: support\messages(got).join("; "));
+    assert\equal(got[0].line, want: 2, message: "line");
+}
+
+test "a deny at the gate, an advise and a house rule pass" {
+    final catalog = [{"name": "claim", "weight": 0.70, "house": false}, {"name": "wordy", "weight": 0.57, "house": false},
+        {"name": "terms", "weight": 0.0, "house": true}];
+    final got = judge({"claim": "deny", "wordy": "advise", "terms": "deny", "tense": "off"}, catalog: catalog, src: "");
+    assert\equal(got.len(), want: 0, message: support\messages(got).join("; "));
+}
+
+test "a denied rule the catalog lacks is a finding" {
+    final got = judge({"nope": "deny"}, catalog: [<any>], src: "");
+    assert\equal(got.len(), want: 1, message: "unknown");
+}
+
+test "the repository's table holds up against the catalog" {
+    final bin = path\abs("{proofread\home}/{proofread\binary}");
+    if (!fs\exists(bin)) {
+        return;
+    }
+    final got = check([Path{ value = TABLE }]) catch [<Finding>];
+    assert\equal(got.len(), want: 0, message: support\messages(got).join("; "));
+}

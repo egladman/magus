@@ -4,7 +4,29 @@
 // this; render.buzz injects magusConfig() into the Site once at build start.
 namespace config;
 
+import "io";
+import "assert";
 import "engine/types" as _;
+import "../libs/ssg/csp" as _;
+
+// CSP_INLINE_SCRIPT_SOURCES lists the source HTML files scanned for inline <script>
+// blocks whose hashes the site-wide CSP must allow. Every renderPage()-based page
+// carries no inline script; only hand-authored playground.html does today (WASM
+// bootstrap, syntax-overlay resize sync, draft persistence, fullscreen toggle - 4
+// blocks). An inline <script> on a listed file, or a new unlisted file, surfaces as a
+// browser CSP violation on that page - the intended failure mode (see computeCSP).
+export final CSP_INLINE_SCRIPT_SOURCES = ["playground.html"];
+
+// CSP_SCRIPT_SRC is the script source the Go/TinyGo wasm runtime (playground,
+// run-example.js's "Run" buttons) needs, for which there is no narrower one.
+export final CSP_SCRIPT_SRC = "'wasm-unsafe-eval'";
+
+// CSP_IMG_SRC_BADGES extends CSP_IMG_SRC_DEFAULT with the two hosts the README's status
+// badges load from (github.com Actions badge, pkg.go.dev reference badge). Only the page
+// rendered FROM the README embeds them - /development/, not the site root - so only its
+// CSP (Site.cspBadges) passes this value. Graph and playground, which hold the reader's
+// own graph or source, keep the default.
+export final CSP_IMG_SRC_BADGES = CSP_IMG_SRC_DEFAULT + " https://github.com https://pkg.go.dev";
 
 // Nav links in display order; Console opens blank (new tab) - it is a standalone app,
 // not a docs page.
@@ -54,4 +76,18 @@ export fun magusConfig() > Config {
             "offline/",
         ],
     };
+}
+
+test "the site CSP carries one script-src hash per playground.html inline script" {
+    final got = computeCSP(CSP_IMG_SRC_DEFAULT, scriptSrc: CSP_SCRIPT_SRC, inlineScriptFiles: CSP_INLINE_SCRIPT_SOURCES);
+    assert\equal(got.indexOf("'wasm-unsafe-eval'") != null, true, "wasm-unsafe-eval present for the playground's wasm runtime");
+    final f = io\File.open("playground.html", io\FileMode.read);
+    final n = extractInlineScripts(f.readAll()).len();
+    f.close();
+    assert\equal(got.split("'sha256-").len() - 1, n, "one script-src hash per playground.html inline script");
+}
+
+test "only the badge CSP carries the badge hosts" {
+    final withBadges = computeCSP(CSP_IMG_SRC_BADGES, scriptSrc: CSP_SCRIPT_SRC, inlineScriptFiles: []);
+    assert\equal(withBadges.indexOf("img-src 'self' data: https://github.com https://pkg.go.dev;") != null, true, "badge img-src carries both badge hosts, verbatim");
 }

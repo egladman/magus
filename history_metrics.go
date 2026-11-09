@@ -3,6 +3,7 @@ package magus
 import (
 	"context"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -322,7 +323,7 @@ func (m *Magus) declaredOutputs(ctx context.Context, g *knowledge.Graph) (map[st
 	}
 	out := map[string]bool{}
 	for _, e := range entries {
-		if e.Role == types.DiffRoleOutput {
+		if e.Role == diff.RoleOutput {
 			out[e.Path] = true
 		}
 	}

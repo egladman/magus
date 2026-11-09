@@ -7,6 +7,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/libs/text/plural"
+	"github.com/egladman/magus/types/diff"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -27,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
@@ -253,7 +256,13 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 				attr.Unchecked(), attr.Error(err))
 			return job.NewStore(loc), nil
 		}
-		loc.ModelTiers, loc.ModelTierMatrix = m.ModelTiers(ctx), m.ModelTierMatrix()
+		user, err := config.LoadWithRoot("", root)
+		if err != nil {
+			return nil, err
+		}
+		loc.ModelTiers = m.ModelTiers(ctx)
+		loc.ModelTierMatrix = composeModelTierMatrix(m.ModelTierMatrix(), user.Jobs.ModelTierMatrix, m.ModelTiers)
+		loc.SpawnRule = viewInternals(m).CheckSpawn
 		loc.Owners = func(ctx context.Context, files []string) ([]string, error) {
 			res, err := m.AffectedFromPaths(ctx, files)
 			if err != nil {
@@ -263,6 +272,24 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 		}
 	}
 	return job.NewStore(loc), nil
+}
+
+// composeModelTierMatrix asks the workspace matrix, then the person's on a nil.
+// An error from either stands.
+func composeModelTierMatrix(workspace types.ModelTierMatrix, userPath string, tiers func(context.Context) *types.ModelTierSet) types.ModelTierMatrix {
+	if userPath == "" {
+		return workspace
+	}
+	user := bindings.UserModelTierMatrix(userPath, tiers)
+	return func(ctx context.Context, req types.ModelTierRequest) (*types.JobModelTier, error) {
+		if workspace != nil {
+			choice, err := workspace(ctx, req)
+			if err != nil || choice != nil {
+				return choice, err
+			}
+		}
+		return user(ctx, req)
+	}
 }
 
 // newCheckGrader grades a declared check against the guard's rules for the workspace at the
@@ -539,7 +566,7 @@ func lsJobs(root string, args []string) error {
 		var ended int
 		list, ended = withoutEnded(list)
 		if ended > 0 {
-			slog.InfoContext(ctx, fmt.Sprintf("%d ended %s left out; `%s` lists them", ended, plural(ended, "job", "jobs"), hint.LsJobs.With("--all")),
+			slog.InfoContext(ctx, fmt.Sprintf("%d ended %s left out; `%s` lists them", ended, plural.Word(ended, "job", "jobs"), hint.LsJobs.With("--all")),
 				attr.Notice("jobs-ended"))
 		}
 	}
@@ -1069,6 +1096,35 @@ func (l *listFlag) Set(value string) error {
 	return nil
 }
 
+// claimListFlag is a path flag whose value may be a declaration claim.
+// A value holding # is one path: a claim runs to the end of its value.
+type claimListFlag []string
+
+func (l *claimListFlag) String() string { return strings.Join(*l, ",") }
+
+func (l *claimListFlag) Set(value string) error {
+	if !strings.Contains(value, "#") {
+		return (*listFlag)(l).Set(value)
+	}
+	if value = strings.TrimSpace(value); value == "" {
+		return errors.New("empty entry")
+	}
+	*l = append(*l, value)
+	return nil
+}
+
+// claimPaths splits each value of the path flag name as [claimListFlag.Set]
+// does, so a declaration claim stays one path.
+func claimPaths(name string, values []string) (claimListFlag, error) {
+	var paths claimListFlag
+	for _, v := range values {
+		if err := paths.Set(v); err != nil {
+			return nil, exit.Usagef("magus job apply: --%s %q: %s", name, v, err)
+		}
+	}
+	return paths, nil
+}
+
 // evidenceFlagDoc is `job wait --evidence`, spelled once for the flag set and the registry.
 const evidenceFlagDoc = "Grade check goal `<goal>` against the run `<ref>` recorded in THIS checkout instead of the job's own; `" +
 	types.PrimaryGoalID + "` names the job's check. The paths the job changed must read the same here as in the job's checkout," +
@@ -1454,6 +1510,30 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	var asked types.Job
 	row.Apply(&asked)
 	derived := slices.DeleteFunc(slices.Clone(stored.WritePaths), func(p string) bool { return slices.Contains(asked.WritePaths, p) })
+	wholeHeld := map[string][]string{}
+	for _, claim := range derived {
+		file, decl := types.SplitClaim(claim)
+		if slices.ContainsFunc(asked.WritePaths, func(entry string) bool {
+			p, d := types.SplitClaim(entry)
+			return d == "" && !strings.ContainsAny(p, "*?[{") && filepath.ToSlash(filepath.Clean(p)) == file
+		}) {
+			wholeHeld[file] = append(wholeHeld[file], decl)
+		}
+	}
+	var narrowedLines []string
+	for _, file := range slices.Sorted(maps.Keys(wholeHeld)) {
+		narrowed, _, err := job.NarrowHold(ctx, store, stored.ID, file, wholeHeld[file], "")
+		if err != nil {
+			slog.InfoContext(ctx, fmt.Sprintf("%s stays whole: %s", file, err), attr.Notice("note"))
+			continue
+		}
+		stored = narrowed
+		claims := make([]string, len(wholeHeld[file]))
+		for i, decl := range wholeHeld[file] {
+			claims[i] = file + "#" + decl
+		}
+		narrowedLines = append(narrowedLines, fmt.Sprintf("narrowed %s to %s; a write to another declaration of %s claims it", file, strings.Join(claims, ", "), file))
+	}
 
 	if opts.Format == outputName {
 		return emitNames(os.Stdout, []string{stored.ID})
@@ -1487,6 +1567,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			printLandingBootstrap(ctx, os.Stdout, store, stored)
 		}
 		printClaimNotes(os.Stdout, slices.Concat(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored), job.ReleasedUnderPattern(stored)))
+		for _, line := range narrowedLines {
+			fmt.Println(line)
+		}
 		if len(derived) > 0 {
 			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover: -o json lists each\n", len(derived))
 		}
@@ -2165,7 +2248,7 @@ func endCheckouts(ctx context.Context, out io.Writer, store *job.Store, ended []
 		var out []string
 		for _, f := range files {
 			installed := slices.ContainsFunc(toolRows, func(t types.HarnessTools) bool { return t.Holds(f.Path) })
-			if installed || f.Role == types.DiffRoleOutput || f.Role == types.DiffRoleMaintained {
+			if installed || f.Role == diff.RoleOutput || f.Role == diff.RoleMaintained {
 				out = append(out, f.Path)
 			}
 		}
@@ -2990,36 +3073,40 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 // upserted in order. Nothing magus records about the job moves.
 // A new id creates the job.
 func jobApply(ctx context.Context, root string, args []string) error {
-	var (
-		flags    *flaggen.JobApplyFlags
-		addPaths listFlag
-	)
+	var flags *flaggen.JobApplyFlags
 	pos, err := commandParse("job apply", args, func(fs *flag.FlagSet) {
 		flags = flaggen.BindJobApply(fs)
-		fs.Var(&addPaths, flaggen.FlagJobApplyAddWritePath, registeredFlagDoc(fs.Name(), flaggen.FlagJobApplyAddWritePath))
 		fs.Usage = func() { printRegisteredHelp(fs) }
 	})
 	if err != nil {
 		return err
 	}
-	adding := len(addPaths) > 0
+	addPaths, err := claimPaths(flaggen.FlagJobApplyAddWritePath, flags.AddWritePath)
+	if err != nil {
+		return err
+	}
+	releasePaths, err := claimPaths(flaggen.FlagJobApplyReleaseWritePath, flags.ReleaseWritePath)
+	if err != nil {
+		return err
+	}
+	editing := len(addPaths) > 0 || len(releasePaths) > 0
 	var (
 		records []types.Declaration
 		store   *job.Store
 	)
 	root = resolveRootOrEmpty(root)
 	switch {
-	case adding && (flags.F != "" || flags.Stdin):
-		return exit.Usagef("magus job apply: --add-write-path widens the job it names, and -f or --stdin applies whole records: name one or the other")
+	case editing && (flags.F != "" || flags.Stdin):
+		return exit.Usagef("magus job apply: --add-write-path and --release-write-path edit the job they name, and -f or --stdin applies whole records: name one or the other")
 	case flags.F != "" && flags.Stdin:
 		return exit.Usagef("magus job apply: -f reads a file and --stdin reads stdin: name one")
 	case flags.F == "-":
 		return exit.Usagef("magus job apply: stdin is --stdin, as on job fork, not -f -")
-	case adding && len(pos) != 1:
-		return exit.Usagef("magus job apply: --add-write-path widens one job: name its id as the one argument")
-	case !adding && len(pos) > 0:
+	case editing && len(pos) != 1:
+		return exit.Usagef("magus job apply: --add-write-path and --release-write-path edit one job: name its id as the one argument")
+	case !editing && len(pos) > 0:
 		return exit.Usagef("magus job apply: the records name their jobs, so %q is one argument too many", pos[0])
-	case !adding:
+	case !editing:
 		var in io.Reader
 		switch {
 		case flags.Stdin:
@@ -3046,12 +3133,15 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if adding {
-		widened, err := widenedDeclaration(store, pos[0], addPaths)
+	if editing {
+		edited, err := widenedDeclaration(store, pos[0], addPaths)
+		if err == nil {
+			edited, err = narrowedDeclaration(edited, pos[0], releasePaths)
+		}
 		if err != nil {
 			return fmt.Errorf("magus job apply: %w", err)
 		}
-		records = []types.Declaration{widened}
+		records = []types.Declaration{edited}
 	}
 	jobWS := jobWorkspace(ctx, root)
 	store = store.InWorkspace(jobWS)
@@ -3141,12 +3231,6 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	return emitFormatted(opts, report)
 }
 
-// registeredFlagDoc is the doc the tree gives a hand-bound flag of command.
-func registeredFlagDoc(command, name string) string {
-	spec, _ := commandAt(command)
-	return spec.Flags[slices.IndexFunc(spec.Flags, func(f cmdline.Flag) bool { return f.Name == name })].Doc
-}
-
 // widenedDeclaration is the job's own spec plus the paths it lacks, so a
 // widening is validated as a whole record is.
 func widenedDeclaration(store *job.Store, id string, add []string) (types.Declaration, error) {
@@ -3164,6 +3248,20 @@ func widenedDeclaration(store *job.Store, id string, add []string) (types.Declar
 		if !slices.Contains(rec.WritePaths, p) {
 			rec.WritePaths = append(rec.WritePaths, p)
 		}
+	}
+	return rec, nil
+}
+
+// narrowedDeclaration is rec without the paths in release; goals stay.
+// A path the job does not hold is refused, so a typo is never a no-op.
+func narrowedDeclaration(rec types.Declaration, id string, release []string) (types.Declaration, error) {
+	rec.WritePaths = slices.Clone(rec.WritePaths)
+	for _, p := range release {
+		i := slices.Index(rec.WritePaths, p)
+		if i < 0 {
+			return types.Declaration{}, exit.Usagef("%s holds no write path %q to release", id, p)
+		}
+		rec.WritePaths = slices.Delete(rec.WritePaths, i, i+1)
 	}
 	return rec, nil
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -155,6 +156,7 @@ const (
 	denyRuleInterpreterRewrite denyRuleName = "interpreter-rewrite"
 	denyRuleConflictRewrite    denyRuleName = "conflict-rewrite"
 	denyRuleUnknownEnv         denyRuleName = "unknown-env"
+	denyRuleUnknownMagusArgv   denyRuleName = "unknown-magus-argv"
 
 	// Not shell rules: one fires on a SPAWN and one on a FILE WRITE, and neither reaches a
 	// shell parser. They live in this block because denyRuleName is the one namespace every
@@ -805,12 +807,12 @@ func declaredOutput(ctx context.Context, ws types.WorkspaceRepository, path stri
 		return false, fmt.Sprintf("%s: it gave %d answers, not 1", unclassified, len(entries))
 	}
 	e := entries[0]
-	if e.Role != types.DiffRoleOutput {
+	if e.Role != diff.RoleOutput {
 		return false, ""
 	}
 	var by []string
 	for _, c := range e.Claims {
-		if c.Role == types.DiffRoleOutput {
+		if c.Role == diff.RoleOutput {
 			by = append(by, strings.TrimSuffix(fmt.Sprintf("%s:%s", c.Project, c.Target), ":"))
 		}
 	}
@@ -2077,8 +2079,8 @@ var (
 	// host announces when it ends, which a subagent's stop leaves standing (refuseLeftStop).
 	boundedRunWait = hint.JobExec.With("--timeout", "<d>", "--", "<command>")
 
-	denyBusyWait = fmt.Sprintf("this loop polls for work the host announces when it ends; background that work as `%s` and wait for its notice, or `%s` for a job.",
-		boundedRunWait, hint.JobWait.With("<job>"))
+	denyBusyWait = fmt.Sprintf("this loop polls for work the host announces when it ends; background that work as `%s` and wait for its notice.",
+		boundedRunWait)
 	denyBusyWaitWhy = "Past the tool timeout this loop is BACKGROUNDED rather than killed, and keeps polling a condition a failed run never prints.\n" +
 		"A watcher running the same loop is the same poll, and it wakes you again each time it fires or expires."
 
@@ -2086,8 +2088,8 @@ var (
 	// here announces that process's end to the caller, so it is sent to the record magus
 	// keeps of that work instead. Sending it to "your host's monitor" built piles of
 	// watchers, each running this loop.
-	denyBusyWaitForeign = fmt.Sprintf("this loop waits on work you did not start; wait on its record: `%s` for a job, or background your own call as `%s`.",
-		hint.JobWait.With("<job>"), boundedRunWait)
+	denyBusyWaitForeign = fmt.Sprintf("this loop waits on work you did not start, which announces nothing to you; read its record once with `%s`, or background your own call as `%s`.",
+		hint.DescribeJob.With("<job>"), boundedRunWait)
 	denyBusyWaitForeignWhy = "Past the tool timeout it is backgrounded rather than killed, and polls on. " +
 		"A watcher running the same loop is the same poll; if nothing else records the work, one watcher, armed once, is the most it earns."
 
@@ -2387,24 +2389,23 @@ func stageAllRemedy(command string, d Dialect) (string, []types.NextStep) {
 // process by pid or through magus's pool and job rows, which a caller's own backgrounded
 // command never needs: the host announces that one's end.
 func foreignWaitFires(command string, d Dialect) bool {
-	f, err := parseFile(command, d)
-	if err != nil {
-		return false
-	}
 	found := false
-	syntax.Walk(f, func(n syntax.Node) bool {
-		loop, ok := n.(*syntax.WhileClause)
-		if found || !ok || !runsSleeper(loop.Do, d) {
-			return !found
-		}
-		for _, cond := range loop.Cond {
-			syntax.Walk(cond, func(m syntax.Node) bool {
-				if call, ok := m.(*syntax.CallExpr); ok {
-					found = found || slices.ContainsFunc(peelWrappers(literalWords(call.Args), d), probesForeignProcess)
-				}
+	eachScript(command, d, func(sf *scriptFile) bool {
+		syntax.Walk(sf.file, func(n syntax.Node) bool {
+			loop, ok := n.(*syntax.WhileClause)
+			if found || !ok || !runsSleeper(loop.Do, d) {
 				return !found
-			})
-		}
+			}
+			for _, cond := range loop.Cond {
+				syntax.Walk(cond, func(m syntax.Node) bool {
+					if call, ok := m.(*syntax.CallExpr); ok {
+						found = found || slices.ContainsFunc(peelWrappers(literalWords(call.Args), d), probesForeignProcess)
+					}
+					return !found
+				})
+			}
+			return !found
+		})
 		return !found
 	})
 	return found
@@ -2970,6 +2971,11 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	}
 	if name, msg, ok := misconfiguredMagusEnv(command, d); ok {
 		if v, ok := held.ends(deps, ShellVerdict{Deny: denyMisconfiguredMagusEnv(msg), Rule: denyRule{Name: denyRuleUnknownEnv, Arg: name}}); ok {
+			return v
+		}
+	}
+	if v, ok := unknownMagusArgv(deps, work); ok {
+		if v, ok := held.ends(deps, v); ok {
 			return v
 		}
 	}

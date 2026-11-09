@@ -8,8 +8,6 @@ import (
 	"github.com/pmezard/go-difflib/difflib"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module diff -lang buzz -out ../internal/interp/bindings/gen/diff.go -pkg bindgen
-
 // diffDefaultContext is how many unchanged lines surround each hunk when the
 // caller names none. Three is what `git diff` and `diff -u` both default to, and
 // matching them means a magusfile's output is readable by every tool and person
@@ -42,33 +40,33 @@ var Diff = Module{
 			Name: "unified",
 			Doc:  "Return a unified diff of a and b, or \"\" when they are identical - so the result doubles as the check. fromLabel and toLabel name the two sides in the +++/--- header (default \"a\" and \"b\"); pass the file path and something like \"regenerated\" to make a drift report read like a patch. context is the unchanged lines kept around each hunk, defaulting to 3 as git does.",
 			Args: []Arg{
-				{Name: "a", Type: TypeString},
-				{Name: "b", Type: TypeString},
-				{Name: "fromLabel", Type: TypeString, Optional: true},
-				{Name: "toLabel", Type: TypeString, Optional: true},
-				{Name: "context", Type: TypeInt, Optional: true},
+				{Name: "a"},
+				{Name: "b"},
+				{Name: "fromLabel", Optional: true},
+				{Name: "toLabel", Optional: true},
+				{Name: "context", Optional: true},
 			},
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Impl:    DiffUnified,
 		},
 		{
 			Name: "equal",
 			Doc:  "Report whether a and b are identical after normalizing line endings and a single trailing newline. It is the comparison a drift gate wants: a file that differs only by CRLF or by whether the last line is newline-terminated has not drifted in any sense a reader cares about, and a bare == would say it had.",
 			Args: []Arg{
-				{Name: "a", Type: TypeString},
-				{Name: "b", Type: TypeString},
+				{Name: "a"},
+				{Name: "b"},
 			},
-			Returns: []Ret{{Type: TypeBool}},
+			Returns: []Ret{{}},
 			Impl:    DiffEqual,
 		},
 		{
 			Name: "stat",
 			Doc:  "Return a one-line summary of the change: \"3 added, 1 removed\", or \"\" when a and b are identical. For a report that wants the shape of a drift without the whole patch - a summary line per file, with unified reserved for the one the reader drills into.",
 			Args: []Arg{
-				{Name: "a", Type: TypeString},
-				{Name: "b", Type: TypeString},
+				{Name: "a"},
+				{Name: "b"},
 			},
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Impl:    DiffStat,
 		},
 	},

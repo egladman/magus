@@ -661,12 +661,19 @@ push reports all three:
   with the scope and a `!` optional. The types are `build`, `chore`, `ci`, `docs`,
   `feat`, `fix`, `perf`, `refactor`, `revert` and `test`. The description keeps
   the lowercase imperative this repository writes, with no trailing period, in 100
-  bytes at most. `feat(git): install version-controlled buzz hooks` passes;
-  `Add git hooks.` does not. Check one with `magus run pr-title . -- "<title>"`.
+  bytes at most. `fix(proofread): keep the key stable` passes; `Add git hooks.`
+  does not. Check one with `magus run pr-title . -- "<title>"`.
+- A scope names projects the change affects, joined by commas with no spaces:
+  `fix(proofread,embed): ...`. A project is named by its last path segment, the
+  root as `magus`, or by its whole path when two projects end alike. A title names at
+  most three, then `...` for the rest, and the description says what changed in each
+  one the title left out. A change that affects every project takes `kitchen-sink`
+  alone. Leave the scope out otherwise.
 - The title and description follow the proofread rules (`pr-description`). The description
   opens with what the change set out to do and why, says what it changes in meaning
-  rather than files, gathers what a reviewer should weigh under Considerations (with
-  unfinished work as unchecked tasks), keeps its claims next to their evidence, and describes the situation rather than a person or the earlier code.
+  rather than files, gathers what a reviewer should weigh under Considerations (three
+  bullets at most), lists unfinished work as `- [ ]` tasks under a closing Next section
+  that holds nothing else, keeps its claims next to their evidence, and describes the situation rather than a person or the earlier code.
   The guard's `pull-request-text` rule runs the same checks when a description is posted.
   The shape, the claim and tone rules, and the decisions they take are in [Writing rules](https://github.com/egladman/magus/blob/main/docs/conventions.md#writing-rules),
   and each rule has a [page](https://github.com/egladman/magus/blob/main/docs/reference/proofread/index.md). Check a draft with

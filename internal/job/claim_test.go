@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestRefuseUngradableClaims(t *testing.T) {
@@ -232,7 +233,7 @@ func TestUnorderedFileShareNamesTheHoldersUnusedPaths(t *testing.T) {
 	assert.Contains(t, ps[0].Message, "A (running, updated")
 	assert.Contains(t, ps[0].Message, "A has changed nothing under notes.md")
 	assert.Contains(t, ps[0].Fix, "--depends-on A")
-	assert.Contains(t, ps[0].Fix, "the root narrows A to what it has changed with `magus job apply -f <record>`, dropping notes.md")
+	assert.Contains(t, ps[0].Fix, "the root narrows A to what it has changed with `magus job apply A --release-write-path notes.md`, which keeps its goals")
 
 	requests := releaseRequests(t, bRoot)
 	require.Len(t, requests, 1, "a shared file that is not a project's configuration asks too")
@@ -373,15 +374,106 @@ func TestIntegrationHoldNarrowsToTheDeclarationsItsMergeChanged(t *testing.T) {
 		})
 	}
 
-	t.Run("a worker's whole-file hold still refuses a claim on a declaration it left alone", func(t *testing.T) {
+	t.Run("a worker's whole-file hold grants a claim on a declaration it left alone", func(t *testing.T) {
 		t.Parallel()
 		s := NewStore(tempLocation(t, bRoot))
 		seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"run.go"}, Checkpoint: aRev, CheckoutRoot: aRepo.Root()})
 		rows, err := s.List()
 		require.NoError(t, err)
-		err = unorderedFileShareProblems(t.Context(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go#C"}}).Error()
-		require.ErrorIs(t, err, types.WritePathFileShared)
+		require.NoError(t, unorderedFileShareProblems(t.Context(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go#C"}}).Error())
+		holder, err := s.stored("A")
+		require.NoError(t, err)
+		assert.True(t, Narrowed(holder, "run.go"))
 	})
+}
+
+// grantUntouchedSuite pins the grant of declarations a holder left alone,
+// and each case that still refuses.
+type grantUntouchedSuite struct {
+	suite.Suite
+	root, holderRoot, checkpoint string
+}
+
+func TestGrantUntouched(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(grantUntouchedSuite))
+}
+
+func (s *grantUntouchedSuite) SetupTest() {
+	s.root = testkit.NewRepository(s.T(), claimFiles).Root()
+	holder := testkit.NewRepository(s.T(), claimFiles)
+	s.checkpoint = holder.Head()
+	holder.WriteTree(map[string]string{"run.go": strings.Replace(claimGo, "a()", "a2()", 1)})
+	s.holderRoot = holder.Root()
+}
+
+// judge seeds A, holding run.go whole with A touched, and judges fork B.
+// It answers A as stored afterwards.
+func (s *grantUntouchedSuite) judge(store *Store, checkpoint string, paths ...string) (types.Job, error) {
+	seed(s.T(), store, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"run.go"}, Checkpoint: checkpoint, CheckoutRoot: s.holderRoot})
+	rows, err := store.List()
+	s.Require().NoError(err)
+	err = unorderedFileShareProblems(s.T().Context(), store, rows, types.Job{ID: "B", WritePaths: paths}).Error()
+	holder, serr := store.stored("A")
+	s.Require().NoError(serr)
+	return holder, err
+}
+
+func (s *grantUntouchedSuite) TestAnUntouchedDeclarationIsGranted() {
+	store := NewStore(tempLocation(s.T(), s.root))
+	holder, err := s.judge(store, s.checkpoint, "run.go#C")
+	s.Require().NoError(err)
+	s.Equal([]string{"run.go", "run.go#A"}, holder.WritePaths)
+	s.Require().Len(holder.Releases, 1)
+	s.Equal(types.JobRelease{Path: "run.go", Digest: holder.Releases[0].Digest, ReleasedAt: holder.Releases[0].ReleasedAt, Narrowed: true, TakenBy: "B"}, holder.Releases[0])
+	s.Empty(holder.ReleaseRequests, "a grant files no release request")
+	s.Equal([]string{"granted run.go#C: A had not touched it; A now holds run.go by run.go#A (and grows on write)"},
+		grantNotes([]types.Job{holder}, types.Job{ID: "B", WritePaths: []string{"run.go#C"}}))
+}
+
+func (s *grantUntouchedSuite) TestASecondJudgmentChangesNothing() {
+	store := NewStore(tempLocation(s.T(), s.root))
+	first, err := s.judge(store, s.checkpoint, "run.go#C")
+	s.Require().NoError(err)
+	rows, err := store.List()
+	s.Require().NoError(err)
+	s.Require().NoError(unorderedFileShareProblems(s.T().Context(), store, rows, types.Job{ID: "B", WritePaths: []string{"run.go#C"}}).Error())
+	again, err := store.stored("A")
+	s.Require().NoError(err)
+	s.Equal(first.WritePaths, again.WritePaths)
+	s.Equal("B", again.Releases[0].TakenBy)
+}
+
+func (s *grantUntouchedSuite) TestATouchedDeclarationIsRefused() {
+	store := NewStore(tempLocation(s.T(), s.root))
+	holder, err := s.judge(store, s.checkpoint, "run.go#C", "run.go#A")
+	s.Require().ErrorIs(err, types.WritePathFileShared)
+	s.Contains(err.Error(), "Not granted: A has touched run.go#A")
+	s.False(Narrowed(holder, "run.go"))
+}
+
+func (s *grantUntouchedSuite) TestAWholeFileWantIsRefused() {
+	store := NewStore(tempLocation(s.T(), s.root))
+	holder, err := s.judge(store, s.checkpoint, "run.go")
+	s.Require().ErrorIs(err, types.WritePathFileShared)
+	s.Contains(err.Error(), "Not granted: B wants run.go whole")
+	s.False(Narrowed(holder, "run.go"))
+}
+
+func (s *grantUntouchedSuite) TestAnUnreadableFootprintIsRefused() {
+	store := NewStore(tempLocation(s.T(), s.root))
+	holder, err := s.judge(store, "not-a-revision", "run.go#C")
+	s.Require().ErrorIs(err, types.WritePathFileShared)
+	s.Contains(err.Error(), "Not granted: A's footprint is unknown")
+	s.False(Narrowed(holder, "run.go"))
+}
+
+func (s *grantUntouchedSuite) TestADryRunWritesNothing() {
+	store := NewStore(tempLocation(s.T(), s.root))
+	holder, err := s.judge(store.dry(), s.checkpoint, "run.go#C")
+	s.Require().NoError(err, "a dry run passes what the fork would be granted")
+	s.Equal([]string{"run.go"}, holder.WritePaths)
+	s.Empty(holder.Releases)
 }
 
 // A claim word that several declarations of its file share guards all of them, not the one

@@ -57,7 +57,7 @@ func TestAgentReplyDeniesOnlyTheRulesSureInAReply(t *testing.T) {
 
 	for rule, d := range want {
 		c, _ := ruleCheck(rule)
-		if got := c.defaultDecision(KindAgentReply); got != d {
+		if got := c.defaultDecision(spec(KindAgentReply)); got != d {
 			t.Errorf("%s decides %s on an agent reply, want %s", rule, got, d)
 		}
 	}

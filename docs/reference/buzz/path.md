@@ -51,6 +51,30 @@ Return the shortest lexically-equivalent path (resolves . and .., collapses sepa
 
 **Returns:** string
 
+### dir
+
+Return every element of path but the last, cleaned: "." for a bare name, "/" for a child of the root.
+
+**Signature:** `path\dir(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/path.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `path`    | `string` |          |             |
+
+**Returns:** string
+
+### base
+
+Return the last element of path, trailing separators removed: "." for an empty path.
+
+**Signature:** `path\base(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/path.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `path`    | `string` |          |             |
+
+**Returns:** string
+
 ### isAbs
 
 Report whether path is absolute.
@@ -100,4 +124,29 @@ Expand a leading ~ (or ~/...) to the current user's home directory; other paths 
 | `path`    | `string` |          |             |
 
 **Returns:** string
+
+### join
+
+Join parts with the OS separator and clean the result. Unlike fs.join, which takes its parts as variadic arguments, this takes a list, so a caller holding one needs no spread.
+
+**Signature:** `path\join(parts) -> string` - [source](https://github.com/egladman/magus/blob/main/std/path.go)
+
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `parts`   | `[]string` |          |             |
+
+**Returns:** string
+
+### within
+
+Report whether path equals dir or lies under it, comparing the cleaned forms lexically. A sibling that shares dir as a string prefix ("/a/bc" against "/a/b") is not within.
+
+**Signature:** `path\within(dir, path) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/path.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `dir`     | `string` |          |             |
+| `path`    | `string` |          |             |
+
+**Returns:** bool
 

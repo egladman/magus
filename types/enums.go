@@ -7,8 +7,8 @@ import (
 )
 
 // The case lists of this package's closed string types, excluding each zero value.
-// cmd/magus-utils's boundaryEnums names the same values for the Buzz mirror, and
-// TestBoundaryEnumsMatchTheirSets holds the two to one list.
+// buzzgen derives the Buzz mirror's cases from the constants, and
+// TestBoundaryEnumsMatchTheirSets holds each set equal to them.
 
 var diagnosticOrigins = enum.Set[DiagnosticOrigin]{"builtin", "workspace"}
 
@@ -67,12 +67,6 @@ func (v EventSeverity) Values() []string { return eventSeverities.Strings() }
 func (v EventSeverity) Valid() bool      { return eventSeverities.Valid(v) }
 func (v EventSeverity) String() string   { return enum.String(v) }
 
-var serviceStates = enum.Set[ServiceState]{"starting", "running", "idle", "failed"}
-
-func (v ServiceState) Values() []string { return serviceStates.Strings() }
-func (v ServiceState) Valid() bool      { return serviceStates.Valid(v) }
-func (v ServiceState) String() string   { return enum.String(v) }
-
 var patternTypes = enum.Set[PatternType]{"glob", "regex", "literal"}
 
 func (v PatternType) Values() []string { return patternTypes.Strings() }
@@ -84,24 +78,6 @@ var symbolIndexFreshnesses = enum.Set[SymbolIndexFreshness]{"up-to-date", "out-o
 func (v SymbolIndexFreshness) Values() []string { return symbolIndexFreshnesses.Strings() }
 func (v SymbolIndexFreshness) Valid() bool      { return symbolIndexFreshnesses.Valid(v) }
 func (v SymbolIndexFreshness) String() string   { return enum.String(v) }
-
-var diffUncoveredReasons = enum.Set[DiffUncoveredReason]{"no-indexer"}
-
-func (v DiffUncoveredReason) Values() []string { return diffUncoveredReasons.Strings() }
-func (v DiffUncoveredReason) Valid() bool      { return diffUncoveredReasons.Valid(v) }
-func (v DiffUncoveredReason) String() string   { return enum.String(v) }
-
-var diffReadStates = enum.Set[DiffReadState]{"known", "unknown"}
-
-func (v DiffReadState) Values() []string { return diffReadStates.Strings() }
-func (v DiffReadState) Valid() bool      { return diffReadStates.Valid(v) }
-func (v DiffReadState) String() string   { return enum.String(v) }
-
-var targetRunStates = enum.Set[TargetRunState]{"queued", "running", "passed", "failed", "cached"}
-
-func (v TargetRunState) Values() []string { return targetRunStates.Strings() }
-func (v TargetRunState) Valid() bool      { return targetRunStates.Valid(v) }
-func (v TargetRunState) String() string   { return enum.String(v) }
 
 var vcsSources = enum.Set[VCSSource]{"explicit", "auto", "default", "disabled"}
 
@@ -229,7 +205,7 @@ func (v BriefRefKind) Values() []string { return briefRefKinds.Strings() }
 func (v BriefRefKind) Valid() bool      { return briefRefKinds.Valid(v) }
 func (v BriefRefKind) String() string   { return enum.String(v) }
 
-var modelTierSources = enum.Set[ModelTierSource]{ModelTierSourceRow, ModelTierSourceMatrix, ModelTierSourceDefault}
+var modelTierSources = enum.Set[ModelTierSource]{ModelTierSourceRow, ModelTierSourceMatrix, ModelTierSourceUserMatrix, ModelTierSourceDefault}
 
 func (v ModelTierSource) Values() []string { return modelTierSources.Strings() }
 func (v ModelTierSource) Valid() bool      { return modelTierSources.Valid(v) }

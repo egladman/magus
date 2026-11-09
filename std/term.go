@@ -15,9 +15,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module term -lang buzz -out ../internal/interp/bindings/gen/term.go -pkg bindgen
-//go:generate go run ../cmd/magus-utils libmodules -dir ../libs/termkit -outdir termkit/gen -import github.com/egladman/magus/std/termkit/gen
-
 // Term is the "term" host module: the terminal renderer magus already draws its
 // own output with, exposed so a magusfile can use it too.
 //
@@ -48,42 +45,42 @@ var Term = Module{
 		{
 			Name:    "is_interactive",
 			Doc:     "Report whether this run can prompt at all: both standard input and standard error are terminals. Branch on it before calling pick - in CI, behind a pipe, or under a server this is false, and pick would raise. It is the one call that makes an interactive step safe to add to a target that also runs unattended.",
-			Returns: []Ret{{Type: TypeBool}},
+			Returns: []Ret{{}},
 			Impl:    TermIsInteractive,
 		},
 		{
 			Name:    "wants_color",
 			Doc:     "Report whether styled output should be emitted: standard error is a terminal and the environment does not ask for plain text (NO_COLOR, TERM=dumb). colorize already consults this, so a caller needs it only to make a wider rendering choice - a box-drawing table versus a plain one.",
-			Returns: []Ret{{Type: TypeBool}},
+			Returns: []Ret{{}},
 			Impl:    TermWantsColor,
 		},
 		{
 			Name:    "size",
 			Doc:     "Return the terminal's {width, height} in character cells. Both are 0 when there is no terminal to measure - piped output, no controlling terminal - so check width rather than expecting a raise. Use it to wrap or truncate output to the reader's actual window instead of assuming 80 columns.",
-			Returns: []Ret{{Type: TypeAnyMap, Object: "TermSize"}},
+			Returns: []Ret{{Object: "TermSize"}},
 			Impl:    TermSize,
 		},
 		{
 			Name: "colorize",
 			Doc:  "Wrap s in the given style and close it again. Returns s UNCHANGED when the output is not a terminal or the environment asked for plain text, so a magusfile never has to guard the call and escape codes cannot leak into a CI log. A style of none is also pass-through, which lets a conditionally-computed style be passed without branching.",
 			Args: []Arg{
-				{Name: "s", Type: TypeString},
-				{Name: "style", Type: TypeString, Enum: "TermStyle"},
+				{Name: "s"},
+				{Name: "style", Enum: "TermStyle"},
 			},
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Impl:    TermColorize,
 		},
 		{
 			Name: "pick",
 			Doc:  "Prompt the reader to choose one of items and return its index. Type to filter (matching every whitespace-separated token), arrow keys or Ctrl-N/Ctrl-P to move, Enter to choose. RAISES when there is no terminal to prompt on - guard with is_interactive - and raises when the reader aborts with ESC, Ctrl-C or Ctrl-D, so a cancel ends the run rather than quietly returning a choice nobody made. Renders to stderr.",
 			Args: []Arg{
-				{Name: "items", Type: TypeStringSlice},
-				{Name: "prompt", Type: TypeString, Optional: true},
-				{Name: "initialFilter", Type: TypeString, Optional: true},
-				{Name: "initial", Type: TypeInt, Optional: true},
-				{Name: "maxRows", Type: TypeInt, Optional: true},
+				{Name: "items"},
+				{Name: "prompt", Optional: true},
+				{Name: "initialFilter", Optional: true},
+				{Name: "initial", Optional: true},
+				{Name: "maxRows", Optional: true},
 			},
-			Returns: []Ret{{Type: TypeIndex}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    TermPick,
 		},
@@ -91,9 +88,9 @@ var Term = Module{
 			Name: "notify",
 			Doc:  "Raise a notification into the band magus pins at the bottom of the terminal, where it shows for a few seconds and then disappears on its own. Unlike log.info it does not join the scrolling transcript: it is for something worth GLANCING at during a long run, not for the record. Returns immediately - the message expires on its own clock - and never raises: it is DROPPED when there is no terminal to show it on, or when the band has no room, so a piped or CI run is never given a repainted view it cannot use and no caller has to guard a notification. Log the same fact if it also needs recording. ttlMs defaults to 5000; a negative ttlMs pins the notification until newer ones push it out.",
 			Args: []Arg{
-				{Name: "message", Type: TypeString},
-				{Name: "level", Type: TypeString, Enum: "LogLevel", Optional: true},
-				{Name: "ttlMs", Type: TypeInt, Optional: true},
+				{Name: "message"},
+				{Name: "level", Enum: "LogLevel", Optional: true},
+				{Name: "ttlMs", Optional: true},
 			},
 			Returns: nil,
 			Impl:    TermNotify,

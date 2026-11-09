@@ -16,7 +16,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/config"
@@ -666,37 +665,15 @@ func EffectiveProfile(ctx context.Context, rules *WorkspaceRules, root string) t
 // working tree's load, nil when it did not load, in which case root's approved sources
 // decide alone, as they do for the function rules.
 //
-// A side that does not resolve leaves the defaults at the light level in its place rather
-// than failing: a broken commit must not take down every hook any more than a broken
-// working tree does.
+// Nil is the bare defaults. A side that does not resolve adds nothing, and
+// Wiring reports its error as the load failure.
 func BuiltinSettings(ctx context.Context, rules *WorkspaceRules, root string) map[string]builtin.Setting {
-	var effective map[string]builtin.Setting
 	if rules != nil {
-		effective, _ = rules.effectiveBuiltins(ctx)
-	} else if approved, err := LoadApprovedBuiltins(ctx, root); err == nil {
-		effective = approved
-	}
-	if effective != nil {
+		effective, _ := rules.effectiveBuiltins(ctx)
 		return effective
 	}
-	return lightBuiltins()
-}
-
-// lightBuiltins is every compiled rule's setting at the light level. The guard reads nil as
-// the bare defaults, which would drop what the light level sets, so nil is the answer only
-// when the compiled-in light row does not resolve: a magus bug, which
-// TestBuiltinSettingsFallsBackToTheLightLevel pins away, and which leaves the defaults
-// rather than taking down every hook.
-func lightBuiltins() map[string]builtin.Setting {
-	light, err := builtin.ResolveProfile(types.GuardProfileLight, nil)
-	if err != nil || len(light) == 0 {
-		return nil
-	}
-	effective, err := builtin.Resolve(light)
-	if err != nil {
-		return nil
-	}
-	return effective
+	approved, _ := LoadApprovedBuiltins(ctx, root)
+	return approved
 }
 
 func loadApprovedRegistry(ctx context.Context, root string) (*workspace.WorkspaceRegistry, error) {
@@ -744,12 +721,8 @@ func approvedReader(ctx context.Context, approved headPolicy, pending []string) 
 // deleted is still found. It must be the whole tree's answer when approved is not
 // batched. Nil with no error when there is no magusfile to evaluate, and a
 // *types.EngineNotLinkedError when there is one and this program links no Buzz engine.
-//
-// The load may run up to approvedLoadGrace past ctx's deadline; see approvedLoadContext.
 func approvedRegistry(ctx context.Context, root string, approved headPolicy, pending []string) (*workspace.WorkspaceRegistry, error) {
 	defer func() { _ = approved.Close() }()
-	ctx, cancel := approvedLoadContext(ctx)
-	defer cancel()
 	read := approvedReader(ctx, approved, pending)
 	files, err := approvedMagusfiles(root, pending, read, func() ([]string, error) {
 		// The single magusfile is absent from the approved state, so the load is
@@ -774,32 +747,6 @@ func approvedRegistry(ctx context.Context, root string, approved headPolicy, pen
 		}
 	}
 	return reg, nil
-}
-
-// approvedLoadGrace is how far past its caller's deadline the approved load may run.
-const approvedLoadGrace = 2 * time.Second
-
-// approvedLoadContext bounds the approved load to approvedLoadGrace past ctx's deadline, and
-// leaves a ctx with no deadline as it is. A compile does not stop at a deadline anyway, but
-// the reads and the run after it do, and a chunk is stored only once its run finishes: a
-// load cut off there would spend every hook's time on the same compile and keep none of it.
-// The caller still sees its own deadline pass and reads the answer as late. Cancelling ctx
-// for any other reason cancels the load.
-func approvedLoadContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		return ctx, func() {}
-	}
-	lctx, cancel := context.WithDeadline(context.WithoutCancel(ctx), deadline.Add(approvedLoadGrace))
-	stop := context.AfterFunc(ctx, func() {
-		if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			cancel()
-		}
-	})
-	return lctx, func() {
-		stop()
-		cancel()
-	}
 }
 
 // approvedMagusfiles is the root magusfile's files as approved holds them, in whichever
@@ -911,34 +858,11 @@ type WorkspaceRules struct {
 	// cacheDir is where the approval authority records what it found pending, nil for
 	// nowhere. NewDependencies sets it from its Wiring.
 	cacheDir func(root string) (string, error)
-	approved approvedOnce
-}
-
-// approvedOnce keeps the first approved registry a judgment resolved, so the compiled rules'
-// settings, the level and each function rule share one VCS status and at most one load of
-// the approved sources. A WorkspaceRules lives for one judgment, which is what bounds how
-// stale the kept answer can be.
-type approvedOnce struct {
-	mu   sync.Mutex
-	done bool
-	reg  *workspace.WorkspaceRegistry
-	err  error
-}
-
-// get answers from the kept resolve, or runs resolve and keeps its answer. An answer read
-// under an expired or cancelled ctx is returned and not kept: "no rule" from a status cut
-// short may be a read that failed.
-func (o *approvedOnce) get(ctx context.Context, resolve func(context.Context) (*workspace.WorkspaceRegistry, error)) (*workspace.WorkspaceRegistry, error) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if o.done {
-		return o.reg, o.err
-	}
-	reg, err := resolve(ctx)
-	if ctx.Err() == nil {
-		o.done, o.reg, o.err = true, reg, err
-	}
-	return reg, err
+	// approved is shared by the settings, the level and every function
+	// rule: one status and one approved load per judgment.
+	approved onceAnswer[*workspace.WorkspaceRegistry]
+	// approvedPending is the pending answer the kept resolve loaded with.
+	approvedPending []string
 }
 
 // LoadWorkspaceRules evaluates the root magusfile of the workspace at root on its own, and
@@ -1040,8 +964,10 @@ func (r *WorkspaceRules) Policy() WorkspacePolicy {
 // policyState is Policy as the trail's lineage records it. The approved ids are left to a
 // callback, since reading them runs a process per file and the lineage asks only when the
 // policy moved.
-func (r *WorkspaceRules) policyState() PolicyState {
-	policy := r.Policy()
+func (r *WorkspaceRules) policyState() PolicyState { return r.policyStateOf(r.Policy()) }
+
+// policyStateOf is policyState for a policy a snapshot may have kept.
+func (r *WorkspaceRules) policyStateOf(policy WorkspacePolicy) PolicyState {
 	files := make([]string, len(policy.Sources))
 	for i, s := range policy.Sources {
 		files[i] = s.Path
@@ -1130,6 +1056,7 @@ func (r *WorkspaceRules) resolveApprovedIfChanged(ctx context.Context) (*workspa
 			return nil, err
 		}
 	}
+	r.approvedPending = pending
 	return approvedRegistry(ctx, r.root, approved, pending)
 }
 
@@ -1251,7 +1178,9 @@ type Wiring struct {
 	// Inspect, TargetPolicies and CacheDir become the Dependencies members of the same name.
 	Inspect        func(ctx context.Context, root string) (types.WorkspaceRepository, error)
 	TargetPolicies func(ctx context.Context, root string) (types.TargetPolicyIndex, bool)
-	CacheDir       func(root string) (string, error)
+	// RecordTargetPolicies becomes that Dependencies member too.
+	RecordTargetPolicies func(ctx context.Context, root string, ws types.WorkspaceRepository) error
+	CacheDir             func(root string) (string, error)
 	// Trace starts the named phase of the caller's trace and returns its end. Nil traces
 	// nothing.
 	Trace func(ctx context.Context, phase string) (end func())
@@ -1276,30 +1205,25 @@ func (w Wiring) vcsOptions() types.VCSOptions {
 // A working tree whose rules do not load is not an error here: Dependencies.LoadFailure
 // says why, the approved sources still judge, and the verdict reports the failure. The
 // graph-index lookups and the model facts are left nil for a caller that has them.
+//
+// A policy snapshot naming the state on disk answers with no load. The
+// rules come back nil, and each function rule loads on its first call.
 func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRules) {
-	end := w.trace(ctx, "guard.load_rules")
-	rules, loaded, loadErr := TimeRuleLoad(ctx, func() (*WorkspaceRules, error) {
-		if w.Root == "" {
-			return nil, nil //nolint:nilnil // outside a workspace there are no rules and nothing failed
-		}
-		return LoadWorkspaceRules(ctx, w.Root, w.vcsOptions())
-	})
-	end()
 	deps := Dependencies{
-		Inspect:        w.Inspect,
-		TargetPolicies: w.TargetPolicies,
-		CacheDir:       w.CacheDir,
-		NotesShared:    w.Config.Knowledge.Notes.Shared,
-		Spells:         project.DefaultSpellRegistry().All,
-		Revision:       revisionAt,
-		TrackedFiles:   trackedFilesAt,
-		CheckoutState:  checkoutStateAt,
-		VCS:            w.vcsOptions(),
-		DefaultCharms:  w.Config.DefaultCharms,
-		BinaryVersion:  w.BinaryVersion,
-		Binary:         w.Binary,
-		BinaryDirty:    buildinfo.Modified() || strings.HasSuffix(w.BinaryVersion, "-dirty"),
-		RuleLoad:       loaded,
+		Inspect:              w.Inspect,
+		TargetPolicies:       w.TargetPolicies,
+		RecordTargetPolicies: w.RecordTargetPolicies,
+		CacheDir:             w.CacheDir,
+		NotesShared:          w.Config.Knowledge.Notes.Shared,
+		Spells:               project.DefaultSpellRegistry().All,
+		Revision:             revisionAt,
+		TrackedFiles:         trackedFilesAt,
+		CheckoutState:        checkoutStateAt,
+		VCS:                  w.vcsOptions(),
+		DefaultCharms:        w.Config.DefaultCharms,
+		BinaryVersion:        w.BinaryVersion,
+		Binary:               w.Binary,
+		BinaryDirty:          buildinfo.Modified() || strings.HasSuffix(w.BinaryVersion, "-dirty"),
 	}
 	if commit, _ := buildinfo.Commit(); commit != "unknown" {
 		deps.BinaryCommit = commit
@@ -1309,6 +1233,23 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 	if agents, err := config.LoadAgents(w.Root); err == nil {
 		deps.BriefFormat = agents.BriefFormat
 	}
+	var site snapshotSite
+	if w.Root != "" {
+		hit, at, ok := snapshotDependencies(ctx, w, deps)
+		if ok {
+			return hit, nil
+		}
+		site = at
+	}
+	end := w.trace(ctx, "guard.load_rules")
+	rules, loaded, loadErr := TimeRuleLoad(ctx, func() (*WorkspaceRules, error) {
+		if w.Root == "" {
+			return nil, nil //nolint:nilnil // outside a workspace there are no rules and nothing failed
+		}
+		return loadPolicyRules(ctx, w.Root, w.vcsOptions())
+	})
+	end()
+	deps.RuleLoad = loaded
 	if rules != nil {
 		rules.cacheDir = w.CacheDir
 		deps.ShellRules, deps.ShellDialect = rules.ShellRules()
@@ -1325,10 +1266,16 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 		deps.ApprovedStopRule = rules.ApprovedStopRule
 		deps.Policy = rules.policyState
 		deps.Builtins = w.builtins(ctx, rules)
+		keepSnapshot(ctx, site, rules)
 		return deps, rules
 	}
 	if w.Root == "" {
 		return deps, nil
+	}
+	if loaded.Lapsed && site.store.Path != "" {
+		pendingSnapshotWrite(ctx).set(func(ctx context.Context) error {
+			return WritePolicySnapshot(ctx, w)
+		})
 	}
 	// The approved sources load when the working tree does not, and they are what an agent
 	// breaking the working tree must not be able to turn off.
@@ -1337,13 +1284,15 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 	deps.LoadFailure = ward.ExplainStaleBinary(loadErr, w.BinaryVersion, w.Config.RequiredVersion)
 	// One load of the approved sources for the settings and every function rule, as
 	// WorkspaceRules keeps for a working tree that loads.
-	var approved approvedOnce
+	var approved onceAnswer[*workspace.WorkspaceRegistry]
 	registry := func(ctx context.Context) (*workspace.WorkspaceRegistry, error) {
 		return approved.get(ctx, func(ctx context.Context) (*workspace.WorkspaceRegistry, error) {
 			return loadApprovedRegistry(ctx, w.Root)
 		})
 	}
-	deps.Builtins = w.approvedBuiltins(ctx, registry)
+	var builtinsErr error
+	deps.Builtins, builtinsErr = w.approvedBuiltins(ctx, registry)
+	deps.LoadFailure = errors.Join(deps.LoadFailure, builtinsErr)
 	deps.ApprovedSpawnRule = func(ctx context.Context) (workspace.SpawnRule, error) {
 		reg, err := registry(ctx)
 		if err != nil || reg == nil {
@@ -1381,16 +1330,16 @@ func (w Wiring) builtins(ctx context.Context, rules *WorkspaceRules) map[string]
 	return BuiltinSettings(ctx, rules, "")
 }
 
-// approvedBuiltins is BuiltinSettings for a working tree that did not load, traced, read off
-// the registry the function rules share.
-func (w Wiring) approvedBuiltins(ctx context.Context, registry func(context.Context) (*workspace.WorkspaceRegistry, error)) map[string]builtin.Setting {
+// approvedBuiltins is BuiltinSettings for a working tree that did not load,
+// read off the registry the function rules share. The error says why the
+// approved side did not resolve.
+func (w Wiring) approvedBuiltins(ctx context.Context, registry func(context.Context) (*workspace.WorkspaceRegistry, error)) (map[string]builtin.Setting, error) {
 	defer w.trace(ctx, "guard.builtins_resolve")()
-	if reg, err := registry(ctx); err == nil {
-		if settings, err := approvedBuiltins(w.Root, reg); err == nil && settings != nil {
-			return settings
-		}
+	reg, err := registry(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return lightBuiltins()
+	return approvedBuiltins(w.Root, reg)
 }
 
 // revisionAt answers the revision rev names in the checkout holding dir, for the push gate,

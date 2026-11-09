@@ -235,7 +235,7 @@ func TestEnumModelTierVocabulariesCloseTheirSets(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, []string{"short", "full"}, SkillVariant("").Values())
 	assert.Equal(t, []string{"check", "symbol", "paths", "script", "prose"}, JobKind("").Values())
-	assert.Equal(t, []string{"row", "matrix", "default"}, ModelTierSource("").Values())
+	assert.Equal(t, []string{"row", "matrix", "user-matrix", "default"}, ModelTierSource("").Values())
 	assert.False(t, SkillVariant("medium").Valid())
 	assert.True(t, SkillVariantFull.Full())
 	assert.False(t, SkillVariantFull.Short())

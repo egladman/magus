@@ -2,6 +2,7 @@ package changeset
 
 import (
 	"context"
+	"github.com/egladman/magus/types/diff"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/types"
 )
 
 // loadReading is the store's mark, failing the test when it cannot be read.
@@ -26,7 +26,7 @@ func TestReadingMarkSetLoadClear(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	s := NewStore(dir)
-	at := types.ReviewTarget{ID: "42", Repo: "o/r"}
+	at := diff.ReviewTarget{ID: "42", Repo: "o/r"}
 	start := time.UnixMilli(1_000_000)
 
 	assert.False(t, loadReading(t, s).Active(), "a store nobody marked reads as not reading")
@@ -48,7 +48,7 @@ func TestReadingMarkSetLoadClear(t *testing.T) {
 func TestReadingMarkKeepsItsStartForTheSameReview(t *testing.T) {
 	ctx := context.Background()
 	s := NewStore(t.TempDir())
-	at := types.ReviewTarget{ID: "42", Repo: "o/r"}
+	at := diff.ReviewTarget{ID: "42", Repo: "o/r"}
 
 	_, err := s.SetReading(ctx, at, time.UnixMilli(1_000))
 	require.NoError(t, err)
@@ -62,9 +62,9 @@ func TestReadingMarkForAnotherReviewReplacesIt(t *testing.T) {
 	ctx := context.Background()
 	s := NewStore(t.TempDir())
 
-	_, err := s.SetReading(ctx, types.ReviewTarget{ID: "42", Repo: "o/r"}, time.UnixMilli(1_000))
+	_, err := s.SetReading(ctx, diff.ReviewTarget{ID: "42", Repo: "o/r"}, time.UnixMilli(1_000))
 	require.NoError(t, err)
-	got, err := s.SetReading(ctx, types.ReviewTarget{ID: "43", Repo: "o/r"}, time.UnixMilli(2_000))
+	got, err := s.SetReading(ctx, diff.ReviewTarget{ID: "43", Repo: "o/r"}, time.UnixMilli(2_000))
 	require.NoError(t, err)
 
 	assert.Equal(t, ReadingMark{Review: "43", Repo: "o/r", Since: 2_000}, got)
@@ -75,7 +75,7 @@ func TestReadingMarkForAnotherReviewReplacesIt(t *testing.T) {
 func TestReadingMarkPastItsTTLStartsOverForTheSameReview(t *testing.T) {
 	ctx := context.Background()
 	s := NewStore(t.TempDir())
-	at := types.ReviewTarget{ID: "42", Repo: "o/r"}
+	at := diff.ReviewTarget{ID: "42", Repo: "o/r"}
 	start := time.UnixMilli(1_000)
 
 	_, err := s.SetReading(ctx, at, start)
@@ -98,10 +98,10 @@ func TestReadingMarkExpiresAfterItsTTL(t *testing.T) {
 func TestReadingMatchesOnlyTheReviewItWasSetAgainst(t *testing.T) {
 	m := ReadingMark{Review: "42", Repo: "o/r", Since: 1}
 
-	assert.True(t, m.Matches(types.ReviewTarget{ID: "42", Repo: "o/r"}))
-	assert.False(t, m.Matches(types.ReviewTarget{ID: "43", Repo: "o/r"}), "another review")
-	assert.False(t, m.Matches(types.ReviewTarget{ID: "42", Repo: "o/other"}), "the same number on another forge repo")
-	assert.False(t, ReadingMark{}.Matches(types.ReviewTarget{}), "no mark matches a target with no review")
+	assert.True(t, m.Matches(diff.ReviewTarget{ID: "42", Repo: "o/r"}))
+	assert.False(t, m.Matches(diff.ReviewTarget{ID: "43", Repo: "o/r"}), "another review")
+	assert.False(t, m.Matches(diff.ReviewTarget{ID: "42", Repo: "o/other"}), "the same number on another forge repo")
+	assert.False(t, ReadingMark{}.Matches(diff.ReviewTarget{}), "no mark matches a target with no review")
 }
 
 func TestReadingElapsedNeverGoesNegative(t *testing.T) {
@@ -116,9 +116,9 @@ func TestReadingElapsedNeverGoesNegative(t *testing.T) {
 func TestClearReadingIfLeavesAMarkThatChangedSinceItWasRead(t *testing.T) {
 	ctx := context.Background()
 	s := NewStore(t.TempDir())
-	read, err := s.SetReading(ctx, types.ReviewTarget{ID: "42", Repo: "o/r"}, time.UnixMilli(1_000))
+	read, err := s.SetReading(ctx, diff.ReviewTarget{ID: "42", Repo: "o/r"}, time.UnixMilli(1_000))
 	require.NoError(t, err)
-	replaced, err := s.SetReading(ctx, types.ReviewTarget{ID: "43", Repo: "o/r"}, time.UnixMilli(2_000))
+	replaced, err := s.SetReading(ctx, diff.ReviewTarget{ID: "43", Repo: "o/r"}, time.UnixMilli(2_000))
 	require.NoError(t, err)
 
 	cleared, err := s.ClearReadingIf(ctx, read)
@@ -131,7 +131,7 @@ func TestClearReadingIfLeavesAMarkThatChangedSinceItWasRead(t *testing.T) {
 func TestClearReadingIfClearsTheMarkItWasGiven(t *testing.T) {
 	ctx := context.Background()
 	s := NewStore(t.TempDir())
-	read, err := s.SetReading(ctx, types.ReviewTarget{ID: "42", Repo: "o/r"}, time.UnixMilli(1_000))
+	read, err := s.SetReading(ctx, diff.ReviewTarget{ID: "42", Repo: "o/r"}, time.UnixMilli(1_000))
 	require.NoError(t, err)
 
 	cleared, err := s.ClearReadingIf(ctx, read)
@@ -150,7 +150,7 @@ func TestReadingMarkWithoutAStateDirIsAnError(t *testing.T) {
 	ctx := context.Background()
 	s := NewStore("")
 
-	_, err := s.SetReading(ctx, types.ReviewTarget{ID: "42"}, time.Now())
+	_, err := s.SetReading(ctx, diff.ReviewTarget{ID: "42"}, time.Now())
 	require.ErrorIs(t, err, ErrNoStateDir)
 	require.ErrorIs(t, s.ClearReading(ctx), ErrNoStateDir)
 	assert.False(t, loadReading(t, s).Active())
@@ -173,7 +173,7 @@ func TestReadingMarkCorruptFileIsAnError(t *testing.T) {
 func TestReadingMarkIsAppendedAsJSONLines(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)
-	_, err := s.SetReading(context.Background(), types.ReviewTarget{ID: "42", Repo: "acme/web"}, time.UnixMilli(1700000000000))
+	_, err := s.SetReading(context.Background(), diff.ReviewTarget{ID: "42", Repo: "acme/web"}, time.UnixMilli(1700000000000))
 	require.NoError(t, err)
 
 	path := filepath.Join(dir, "review", "reading.jsonl")

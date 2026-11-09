@@ -7,9 +7,13 @@
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
 export extern fun abs(path: str) > str !> any;
+export extern fun base(path: str) > str;
 export extern fun clean(path: str) > str;
+export extern fun dir(path: str) > str;
 export extern fun expandUser(path: str) > str !> any;
 export extern fun isAbs(path: str) > bool;
+export extern fun join(parts: [str]) > str;
 export extern fun matches(pattern: str, path: str) > bool !> any;
 export extern fun matchesAny(patterns: [str], path: str) > bool !> any;
 export extern fun rel(base: str, target: str) > str !> any;
+export extern fun within(dir: str, path: str) > bool;

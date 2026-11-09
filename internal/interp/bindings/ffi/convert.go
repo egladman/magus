@@ -1,13 +1,13 @@
 package ffi
 
 import (
-	"context"
 	"errors"
+	"fmt"
 	"reflect"
+	"slices"
+	"strings"
 
-	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
-	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -160,16 +160,38 @@ func VariadicString(args []vm.Value, n int) []string {
 	return out
 }
 
-// CallbackArg wraps arg n (a Buzz function value) as a std.Callback, nil if
-// absent or not callable.
-func CallbackArg(sess *buzz.Session, args []vm.Value, n int) std.Callback { //nolint:ireturn // the engine implementation is chosen by the interpreter at runtime
-	if n >= len(args) {
-		return nil
+// Fun returns arg n when it is a Buzz function value. A generated callback
+// adapter wraps it as the Go func type its Impl takes.
+func Fun(args []vm.Value, n int) (vm.Value, bool) {
+	if n >= len(args) || !args[n].IsFun() {
+		return vm.Null, false
 	}
-	if v := args[n]; v.IsFun() {
-		return &buzzCallback{sess: sess, fn: v}
+	return args[n], true
+}
+
+// ResultBool decodes a callback's result as the bool its Go type declares.
+func ResultBool(v vm.Value) (bool, error) {
+	if !v.IsBool() {
+		return false, fmt.Errorf("the callback returned %s, want bool", v.Kind())
 	}
-	return nil
+	return v.AsBool(), nil
+}
+
+// ResultEnum decodes a callback's result as a case of enum typ, or its
+// backing string, refusing any other value with the cases it accepts.
+func ResultEnum(v vm.Value, typ string, cases []string) (string, error) {
+	if backing, ok := v.EnumValue(); ok {
+		v = backing
+	}
+	if v.IsString() && slices.Contains(cases, v.AsString()) {
+		return v.AsString(), nil
+	}
+	return "", fmt.Errorf("the callback returned %s, want a %s: %s", v.String(), typ, strings.Join(cases, ", "))
+}
+
+// ResultAny is a callback's result as a plain Go value.
+func ResultAny(v vm.Value) any {
+	return valToAny(v)
 }
 
 func StringVal(s string) vm.Value { return vm.StringValue(s) }
@@ -512,31 +534,6 @@ func ObjectSlice[T any](values []T, encode func(T) vm.Value) vm.Value {
 		items[i] = encode(v)
 	}
 	return vm.ListValue(items)
-}
-
-// buzzCallback implements std.Callback for a Buzz function value.
-type buzzCallback struct {
-	sess *buzz.Session
-	fn   vm.Value
-}
-
-// Call invokes the Buzz function and returns its result as a plain Go value.
-// Predicate helpers (fs.walk, charm.*_func, ...) derive truthiness from it via
-// callbackTruthy/callPredicate (nil/false -> false, anything else -> true), so
-// returning the marshalled value rather than a pre-reduced bool keeps those
-// callers correct while also letting value-returning callbacks (os.retry, which
-// hands back fn's result on success) see what the callback actually produced.
-// Void callbacks ignore the return.
-func (c *buzzCallback) Call(ctx context.Context, args ...any) ([]any, error) {
-	bargs := make([]vm.Value, len(args))
-	for i, a := range args {
-		bargs[i] = AnyVal(a)
-	}
-	res, err := c.sess.CallValue(ctx, c.fn, bargs)
-	if err != nil {
-		return nil, err
-	}
-	return []any{valToAny(res)}, nil
 }
 
 // Error wraps an error on its way from a host method into the VM so a magusfile

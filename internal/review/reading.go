@@ -2,9 +2,8 @@ package review
 
 import (
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"regexp"
-
-	"github.com/egladman/magus/types"
 )
 
 var (
@@ -23,7 +22,7 @@ var (
 //
 // Every part is checked against the shape GitHub gives it before it reaches a shell line the
 // person will paste, because the repo and the login arrive from a provider and a remote.
-func ReadingCommand(at types.ReviewTarget, host string) string {
+func ReadingCommand(at diff.ReviewTarget, host string) string {
 	if host != "github.com" || !githubNumber.MatchString(at.ID) || !githubRepo.MatchString(at.Repo) {
 		return ""
 	}

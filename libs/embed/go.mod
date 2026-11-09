@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/egladman/magus/libs/xdg v0.1.0
-	github.com/klauspost/compress v1.19.1
+	github.com/klauspost/compress v1.20.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.23.0
 )

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"slices"
@@ -99,6 +100,8 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 	format := fs.String("o", "text", "write the separations as `text` or json")
 	pool := fs.Int("pool", 0, "measure random chunks of at least this many `words` instead of single texts; 0 pools nothing")
 	seed := fs.Uint64("seed", proofread.VoiceSeed, "shuffle the texts under this `seed` before pooling")
+	paired := fs.Bool("paired", false, "read --other as rewrites of the owner's texts, joined by --id-field, and score how each feature moves")
+	idField := fs.String("id-field", "id", "with --paired, join the two files on this `field`")
 
 	if err := fs.Parse(args); err != nil {
 		return exitError
@@ -115,6 +118,15 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 		return failure(stderr, fmt.Errorf("unknown -o %q: write text or json", *format))
 	case *field == "":
 		return failure(stderr, errors.New("voice eval reads JSON lines: name the text's field with --field"))
+	case *paired && *idField == "":
+		return failure(stderr, errors.New("voice eval --paired joins on an id: name its field with --id-field"))
+	}
+
+	if *paired {
+		return runPairedEval(pairedEval{
+			owner: *owner, other: *other, kind: proofread.Kind(*kind), field: *field, kindField: *kindField,
+			idField: *idField, format: *format, pool: *pool, seed: *seed,
+		}, stdout, stderr)
 	}
 
 	read := func(path string) (map[proofread.Kind][]proofread.Shape, error) {
@@ -298,6 +310,29 @@ func voiceTexts(kind proofread.Kind, field, kindField string, paths []string, st
 // jsonLineTexts adds the text each JSON line of r holds in field to out,
 // under the kind kindField names, or kind when the line names none.
 func jsonLineTexts(name string, r io.Reader, kind proofread.Kind, field, kindField string, out map[proofread.Kind][]string) error {
+	records, err := jsonLineRecords(name, r, kind, field, kindField, "")
+	if err != nil {
+		return err
+	}
+
+	for _, rec := range records {
+		out[rec.kind] = append(out[rec.kind], rec.text)
+	}
+
+	return nil
+}
+
+// textRecord is one JSON line's text, its kind and, when asked for, its id.
+type textRecord struct {
+	kind     proofread.Kind
+	id, text string
+}
+
+// jsonLineRecords reads r as [jsonLineTexts] does. With idField, each line
+// must also hold a string id in that field.
+func jsonLineRecords(name string, r io.Reader, kind proofread.Kind, field, kindField, idField string) ([]textRecord, error) {
+	var out []textRecord
+
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 
@@ -309,12 +344,12 @@ func jsonLineTexts(name string, r io.Reader, kind proofread.Kind, field, kindFie
 
 		var record map[string]any
 		if err := json.Unmarshal(line, &record); err != nil {
-			return fmt.Errorf("%s:%d: %w", name, n, err)
+			return nil, fmt.Errorf("%s:%d: %w", name, n, err)
 		}
 
 		text, ok := record[field].(string)
 		if !ok {
-			return fmt.Errorf("%s:%d: no string field %q", name, n, field)
+			return nil, fmt.Errorf("%s:%d: no string field %q", name, n, field)
 		}
 
 		k := kind
@@ -326,17 +361,25 @@ func jsonLineTexts(name string, r io.Reader, kind proofread.Kind, field, kindFie
 		}
 
 		if k == "" {
-			return fmt.Errorf("%s:%d: no string field %q names a kind, and --kind gives none", name, n, kindField)
+			return nil, fmt.Errorf("%s:%d: no string field %q names a kind, and --kind gives none", name, n, kindField)
 		}
 
-		out[k] = append(out[k], text)
+		rec := textRecord{kind: k, text: text}
+
+		if idField != "" {
+			if rec.id, ok = record[idField].(string); !ok || rec.id == "" {
+				return nil, fmt.Errorf("%s:%d: no string field %q holds an id", name, n, idField)
+			}
+		}
+
+		out = append(out, rec)
 	}
 
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("read %s: %w", name, err)
+		return nil, fmt.Errorf("read %s: %w", name, err)
 	}
 
-	return nil
+	return out, nil
 }
 
 // defaultVoicePath is $XDG_CONFIG_HOME/proofread/voice.json (see
@@ -482,4 +525,120 @@ func voiceOptions(name string, stderr io.Writer) ([]proofread.Option, error) {
 	}
 
 	return []proofread.Option{proofread.WithVoice(v)}, nil
+}
+
+// pairedEval is what `voice eval --paired` was asked for.
+type pairedEval struct {
+	owner, other, field, kindField, idField, format string
+	kind                                            proofread.Kind
+	pool                                            int
+	seed                                            uint64
+}
+
+// runPairedEval joins the owner's texts with their rewrites by id, per kind,
+// and writes how far each feature moves across the pairs.
+func runPairedEval(e pairedEval, stdout, stderr io.Writer) int {
+	owners, err := e.read(e.owner)
+	if err != nil {
+		return failure(stderr, err)
+	}
+
+	others, err := e.read(e.other)
+	if err != nil {
+		return failure(stderr, err)
+	}
+
+	byKind := calibrate.JoinPairs(owners, others)
+	kinds := slices.Sorted(maps.Keys(byKind))
+	seps := make(map[proofread.Kind][]calibrate.PairedSeparation, len(kinds))
+	units := make(map[proofread.Kind]int, len(kinds))
+
+	for _, k := range kinds {
+		owners, others := e.measure(k, byKind[k].Pairs)
+		seps[k], units[k] = calibrate.SeparatePairs(owners, others), len(owners)
+	}
+
+	if e.format == "json" {
+		data, err := json.MarshalIndent(seps, "", "  ")
+		if err != nil {
+			return failure(stderr, fmt.Errorf("encode the separations: %w", err))
+		}
+
+		fmt.Fprintf(stdout, "%s\n", data)
+
+		return exitOK
+	}
+
+	for i, k := range kinds {
+		if i > 0 {
+			fmt.Fprintln(stdout)
+		}
+
+		fmt.Fprint(stdout, calibrate.PairedTable(k, units[k], byKind[k].Unpaired, e.pool, seps[k]))
+	}
+
+	return exitOK
+}
+
+// read returns path's texts by kind and id.
+func (e pairedEval) read(path string) (map[proofread.Kind]map[string]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", path, err)
+	}
+	defer f.Close()
+
+	records, err := jsonLineRecords(path, f, e.kind, e.field, e.kindField, e.idField)
+	if err != nil {
+		return nil, err
+	}
+
+	texts := make([]calibrate.KeyedText, 0, len(records))
+
+	for _, rec := range records {
+		if !slices.ContainsFunc(subcommands, func(s subcommand) bool { return s.kind == rec.kind }) {
+			return nil, fmt.Errorf("%s: unknown kind %q", path, rec.kind)
+		}
+
+		texts = append(texts, calibrate.KeyedText{Kind: rec.kind, ID: rec.id, Text: rec.text})
+	}
+
+	return calibrate.IndexTexts(path, texts)
+}
+
+// measure returns each pair's two shapes. A pool groups shuffled pairs until
+// the owner side holds pool words. Each chunk and its rewrite then cover the
+// same texts, which keeps the topic fixed.
+func (e pairedEval) measure(kind proofread.Kind, pairs []calibrate.TextPair) (owners, others []proofread.Shape) {
+	if e.pool == 0 {
+		for _, p := range pairs {
+			owners = append(owners, proofread.MeasureShape(p.Owner, kind))
+			others = append(others, proofread.MeasureShape(p.Other, kind))
+		}
+
+		return owners, others
+	}
+
+	shuffled := slices.Clone(pairs)
+	rand.New(rand.NewPCG(e.seed, e.seed)).Shuffle(len(shuffled), func(i, j int) {
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	})
+
+	var (
+		ownerChunk, otherChunk []string
+		words                  int
+	)
+
+	for _, p := range shuffled {
+		ownerChunk, otherChunk = append(ownerChunk, p.Owner), append(otherChunk, p.Other)
+		words += proofread.Measure(p.Owner, kind).Words
+
+		if words >= e.pool {
+			owners = append(owners, proofread.MeasureShape(strings.Join(ownerChunk, "\n\n"), kind))
+			others = append(others, proofread.MeasureShape(strings.Join(otherChunk, "\n\n"), kind))
+			ownerChunk, otherChunk, words = nil, nil, 0
+		}
+	}
+
+	return owners, others
 }

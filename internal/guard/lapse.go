@@ -85,10 +85,6 @@ func lapsedLedgerWrite(deps Dependencies, env hookRequest, target string) ShellV
 	return deps.grade(ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleDeviationAuthor}})
 }
 
-// lapsedPolicyBudget bounds the policy read a lapse makes past the hook's own
-// budget: the host is still waiting, and little of its timeout is left.
-const lapsedPolicyBudget = 500 * time.Millisecond
-
 // lapsedPersonOnly reports a line that runs a target and is not shown clear
 // of human_only. A lapse never degrades it: nothing finished to ask the person.
 func lapsedPersonOnly(ctx context.Context, base Dependencies, log *phaseLog, root, line string) bool {
@@ -112,7 +108,8 @@ func lapsedPersonOnly(ctx context.Context, base Dependencies, log *phaseLog, roo
 	if deps.TargetPolicies == nil {
 		return true
 	}
-	wait, cancel := context.WithTimeout(ctx, lapsedPolicyBudget)
+	// ctx lost the judgment's deadline; the host's timeout leaves this much.
+	wait, cancel := context.WithTimeout(ctx, judgeReserve)
 	defer cancel()
 	ix, err := awaitDeadline(wait, func() (types.TargetPolicyIndex, error) {
 		ix, ok := deps.TargetPolicies(wait, root)

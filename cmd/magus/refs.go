@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"io"
 	"log/slog"
 	"os"
@@ -1057,7 +1058,7 @@ func markOccurrenceFiles(ctx context.Context, files []types.SymbolOccurrenceFile
 	}
 	generated := map[string]bool{}
 	for _, e := range entries {
-		generated[e.Path] = e.Role == types.DiffRoleOutput
+		generated[e.Path] = e.Role == diff.RoleOutput
 	}
 	for i := range files {
 		files[i].Generated = generated[files[i].File]

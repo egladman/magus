@@ -20,14 +20,12 @@ const (
 	RuleInstructionPosition Rule = "instruction-position"
 )
 
-var skillKind = []Kind{KindSkillTemplate}
-
 // No check here has a judge: each reads both renders of a skill body, which
 // only [judgeSkillSource] holds.
 var (
-	descriptionCheck    = check{rule: RuleSkillDescriptionBudget, on: skillKind, graded: true}
-	setDescriptionCheck = check{rule: RuleSkillSetDescriptionBudget, on: skillKind, graded: true}
-	positionCheck       = check{rule: RuleInstructionPosition, on: skillKind, graded: true}
+	descriptionCheck    = check{rule: RuleSkillDescriptionBudget, reads: []Format{FormatTemplate}}
+	setDescriptionCheck = check{rule: RuleSkillSetDescriptionBudget, reads: []Format{FormatTemplate}}
+	positionCheck       = check{rule: RuleInstructionPosition, reads: []Format{FormatTemplate}}
 	skillChecks         = []check{descriptionCheck, setDescriptionCheck, positionCheck}
 )
 
@@ -125,16 +123,16 @@ func (f skillForm) sourceLine(line int) int {
 
 // judgeDescriptions judges each skill's descriptions in forms, and then the
 // set they make together.
-func judgeDescriptions(forms [2]skillForm, o options) []Finding {
+func judgeDescriptions(forms [2]skillForm, s *KindSpec, o options) []Finding {
 	var out []Finding
 
-	if d := o.decide(descriptionCheck, KindSkillTemplate); d != DecisionOff {
+	if d := o.decide(descriptionCheck, s); d != DecisionOff {
 		for _, pair := range pairEntries(forms[0].entries(), forms[1].entries()) {
-			out = append(out, judgeDescription(forms, pair, d, o)...)
+			out = append(out, judgeDescription(forms, pair, s, d, o)...)
 		}
 	}
 
-	return append(out, judgeSetDescriptions(forms, o)...)
+	return append(out, judgeSetDescriptions(forms, s, o)...)
 }
 
 // pairEntries pairs each short entry with the full entry of the same skill
@@ -173,14 +171,14 @@ func pairEntries(shorts, fulls []skillEntry) [][2]skillEntry {
 
 // judgeDescription judges one skill's short and full descriptions, pair[0]
 // read from forms[0] and pair[1] from forms[1].
-func judgeDescription(forms [2]skillForm, pair [2]skillEntry, d Decision, o options) []Finding {
+func judgeDescription(forms [2]skillForm, pair [2]skillEntry, s *KindSpec, d Decision, o options) []Finding {
 	var out []Finding
 
 	short, full := pair[0].description, pair[1].description
 
 	for i, e := range pair {
 		if n := len(strings.Fields(e.description)); n > maxDescriptionWords && (i == 0 || e.description != short) {
-			out = append(out, o.settle(descriptionCheck, Finding{
+			out = append(out, o.settle(s, descriptionCheck, Finding{
 				Message: fmt.Sprintf("Cut the description to %d words (it has %d): it loads into every session "+
 					"whether or not the skill is used.", maxDescriptionWords, n),
 				Line: forms[i].sourceLine(e.line),
@@ -199,7 +197,7 @@ func judgeDescription(forms [2]skillForm, pair [2]skillEntry, d Decision, o opti
 
 	repeat := float64(shared(fullWords, descriptionWords(short))) / float64(len(fullWords))
 	if repeat >= maxTwinRepeat {
-		out = append(out, o.settle(descriptionCheck, Finding{
+		out = append(out, o.settle(s, descriptionCheck, Finding{
 			Message: fmt.Sprintf("Give the full form a description of its own: %d%% of its words repeat the short "+
 				"form's, and both load into every session.", int(repeat*100)),
 			Line: forms[1].sourceLine(pair[1].line),
@@ -212,8 +210,8 @@ func judgeDescription(forms [2]skillForm, pair [2]skillEntry, d Decision, o opti
 // judgeSetDescriptions sums the description words of every skill in forms,
 // the short form's and the full form's both, since an install of both forms
 // lists each skill twice.
-func judgeSetDescriptions(forms [2]skillForm, o options) []Finding {
-	d := o.decide(setDescriptionCheck, KindSkillTemplate)
+func judgeSetDescriptions(forms [2]skillForm, s *KindSpec, o options) []Finding {
+	d := o.decide(setDescriptionCheck, s)
 	if d == DecisionOff {
 		return nil
 	}
@@ -257,7 +255,7 @@ func judgeSetDescriptions(forms [2]skillForm, o options) []Finding {
 		largest = append(largest, fmt.Sprintf("%s %d", label, words[name]))
 	}
 
-	return []Finding{o.settle(setDescriptionCheck, Finding{
+	return []Finding{o.settle(s, setDescriptionCheck, Finding{
 		Message: fmt.Sprintf("Cut the set's descriptions to %d words (they have %d): every one loads into every "+
 			"session. The largest are %s; the full twins carry %d (%d%%).",
 			maxSetDescriptionWords, total, strings.Join(largest, ", "), twins, 100*twins/total),
@@ -276,13 +274,13 @@ const minPositionWords = 1500
 
 var mustOrNever = regexp.MustCompile(`(?i)\b(?:must|never)\b`)
 
-func judgeInstructionPosition(full skillForm, o options) []Finding {
-	d := o.decide(positionCheck, KindSkillTemplate)
+func judgeInstructionPosition(full skillForm, s *KindSpec, o options) []Finding {
+	d := o.decide(positionCheck, s)
 	if d == DecisionOff {
 		return nil
 	}
 
-	_, prose := readMarkdown(blankBoilerplate(strings.Split(full.text, "\n")), KindReference)
+	_, prose := readMarkdown(blankBoilerplate(strings.Split(full.text, "\n")), spec(KindReference).Reader)
 
 	total, before, at := 0, 0, 0
 
@@ -300,7 +298,7 @@ func judgeInstructionPosition(full skillForm, o options) []Finding {
 		return nil
 	}
 
-	return []Finding{o.settle(positionCheck, Finding{
+	return []Finding{o.settle(s, positionCheck, Finding{
 		Message: fmt.Sprintf("Move the first must or never up: it sits %d%% of the way into a %d-word body, "+
 			"past the middle a weaker model reads least.", 100*before/total, total),
 		Line: full.sourceLine(at),

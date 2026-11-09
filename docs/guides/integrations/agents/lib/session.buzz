@@ -53,9 +53,9 @@ export fun parseOffset(mark: str) > int {
 // transcripts lists every JSONL file under dir, nested ones included.
 export fun transcripts(dir: str) > [str] {
     final found = mut [<str>];
-    fs\walk(dir, callback: fun (path: str, isDir: bool) > bool {
+    fs\walk(dir, callback: fun (path: str, isDir: bool) > fs\WalkStep {
         if (!isDir and path.endsWith(".jsonl")) { found.append(path); }
-        return false;
+        return fs\WalkStep.next;
     }) catch void;
     return found;
 }

@@ -158,6 +158,8 @@ fun claude_session_command() > str {
     return claude_checkout(buzzCommand(HOOK_DIR, script: "magus-session", flags: ["--env-file", "\"$CLAUDE_ENV_FILE\""]));
 }
 
+// Something must answer, so PATH magus stands in for a missing ./magus. In a
+// from-source workspace it answers only "bootstrap ./magus".
 fun claude_checkout(plain: str) > str {
     return "m={HOOK_DIR}/magus; [ -x \"$m\" ] || m=magus; \"$m\" " + plain.sub("magus ".len(), len: plain.len() - "magus ".len());
 }
@@ -206,11 +208,11 @@ fun claude_tools() > [HarnessTool] {
     foreach (name in ["Bash", "Monitor"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.runs}); }
     foreach (name in ["Read", "NotebookRead", "Glob", "Grep", "LS"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.reads}); }
     foreach (name in ["Write", "Edit", "MultiEdit", "NotebookEdit"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.writes}); }
-    foreach (name in ["Agent", "Task", "SendMessage"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.spawns}); }
+    foreach (name in ["Agent", "Task", "SendMessage", "ScheduleWakeup"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.spawns}); }
     rows.append(HarnessTool{name = "ReadNotifications", capability = ToolCapability.reads});
     foreach (name in [
         "BashOutput", "KillShell", "TaskOutput", "TaskStop", "TodoWrite", "WebFetch", "WebSearch",
-        "ExitPlanMode", "EnterPlanMode", "AskUserQuestion", "Skill", "ToolSearch", "ScheduleWakeup",
+        "ExitPlanMode", "EnterPlanMode", "AskUserQuestion", "Skill", "ToolSearch",
         "CronCreate", "ListMcpResourcesTool", "ReadMcpResourceTool", "SubagentHandback", "ListAgents",
         "ListSkills", "SearchSkills", "ListPlugins", "SearchPlugins", "Artifact", "SendUserFile",
     ]) { rows.append(HarnessTool{name = name, capability = ToolCapability.inert}); }

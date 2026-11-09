@@ -72,6 +72,38 @@ func (s *targetPolicySuite) TestAnUnprovenRecordOpensTheWorkspaceAndSaysSo() {
 	s.Equal(policyOpenedNote, note)
 }
 
+func (s *targetPolicySuite) TestAnOpenRecordsWhatItRead() {
+	var recorded []string
+	deps := Dependencies{
+		TargetPolicies: func(context.Context, string) (types.TargetPolicyIndex, bool) { return types.TargetPolicyIndex{}, false },
+		RecordTargetPolicies: func(_ context.Context, root string, ws types.WorkspaceRepository) error {
+			recorded = append(recorded, root)
+			s.Equal(policyWorkspace{}, ws)
+			return nil
+		},
+	}
+	_, note, ok := declaredPolicies(s.T().Context(), deps, "/r", func() (types.WorkspaceRepository, error) {
+		return policyWorkspace{}, nil
+	})
+	s.True(ok)
+	s.Equal(policyOpenedNote, note)
+	s.Equal([]string{"/r"}, recorded)
+}
+
+func (s *targetPolicySuite) TestAnOpenThatCannotRecordSaysWhy() {
+	deps := Dependencies{
+		TargetPolicies: func(context.Context, string) (types.TargetPolicyIndex, bool) { return types.TargetPolicyIndex{}, false },
+		RecordTargetPolicies: func(context.Context, string, types.WorkspaceRepository) error {
+			return errors.New("the cache is read-only")
+		},
+	}
+	_, note, ok := declaredPolicies(s.T().Context(), deps, "/r", func() (types.WorkspaceRepository, error) {
+		return policyWorkspace{}, nil
+	})
+	s.True(ok)
+	s.Equal(policyOpenedNote+" It could not be recorded for the next judgment: the cache is read-only.", note)
+}
+
 func (s *targetPolicySuite) TestNoRecordAndNoWorkspaceSaysNothingWasRead() {
 	_, note, ok := declaredPolicies(s.T().Context(), Dependencies{}, "/r", func() (types.WorkspaceRepository, error) {
 		return nil, errors.New("does not load")

@@ -38,6 +38,7 @@ import "result";
 import "serialize";
 import "sort";
 import "std";
+import "strings";
 import "template";
 import "vcs";
 
@@ -211,11 +212,6 @@ export fun slug(key: str) > str {
     return acc.join("");
 }
 
-fun plural(n: int, word: str, many: str = "") > str {
-    if (n == 1) { return "1 {word}"; }
-    if (many != "") { return "{n} {many}"; }
-    return "{n} {word}s";
-}
 
 // plan groups changes by owning project, folds project groups under minFiles upward and attaches
 // each generated output to the highest group holding its generator's changed sources. The
@@ -292,7 +288,7 @@ export fun plan(changes: [Change], deps: {str: [str]}, minFiles: int, prefix: st
         foreach (p in projects[target]!) { merged.append(p); }
         foreach (p in projects[k]!) { merged.append(p); }
         projects[target] = sort\strings(merged);
-        notes.append(Note{ key = target, text = "folded {k} ({plural(n, word: "file")}, under --min-files {minFiles}): {why}" });
+        notes.append(Note{ key = target, text = "folded {k} ({strings\pluralCount(n, one: "file", many: "files")}, under --min-files {minFiles}): {why}" });
         live.remove(i);
     }
 
@@ -318,7 +314,7 @@ export fun plan(changes: [Change], deps: {str: [str]}, minFiles: int, prefix: st
         if (holders.len() > 1) {
             where = "in {holders.join(", ")}; the highest holds it";
         }
-        notes.append(Note{ key = key, text = "attached {c.path}: output of {changeGenerator(c)}, whose {plural(srcs.len(), word: "changed source")} {verb} {where}" });
+        notes.append(Note{ key = key, text = "attached {c.path}: output of {changeGenerator(c)}, whose {strings\pluralCount(srcs.len(), one: "changed source", many: "changed sources")} {verb} {where}" });
     }
 
     final files = mut {<str: [str]>};
@@ -348,10 +344,10 @@ export fun plan(changes: [Change], deps: {str: [str]}, minFiles: int, prefix: st
 export fun render(groups: [Group], base: str) > str {
     var total = 0;
     foreach (g in groups) { total = total + g.files.len(); }
-    final lines = mut ["{plural(total, word: "file")} in {plural(groups.len(), word: "stacked branch", many: "stacked branches")} on {base}"];
+    final lines = mut ["{strings\pluralCount(total, one: "file", many: "files")} in {strings\pluralCount(groups.len(), one: "stacked branch", many: "stacked branches")} on {base}"];
     foreach (n, g in groups) {
         lines.append("");
-        lines.append("{n + 1}. {g.branch} <- {g.base}  ({plural(g.files.len(), word: "file")}: {g.projects.join(", ")})");
+        lines.append("{n + 1}. {g.branch} <- {g.base}  ({strings\pluralCount(g.files.len(), one: "file", many: "files")}: {g.projects.join(", ")})");
         foreach (note in g.notes) { lines.append("   {note}"); }
         foreach (f in g.files) { lines.append("     {f}"); }
     }
@@ -1655,7 +1651,7 @@ export fun planSymbols(change: SymbolChange, budget: int, stem: str, base: str, 
     foreach (r in order) {
         final n = groupLines(members[r]!, units: units);
         if (cur.len() > 0 and curLines + n > budget) {
-            curNotes.append("ends here: {ids(members[r]!, units: units)} ({plural(n, word: "line")}) would take it to {curLines + n}, past --budget {budget}");
+            curNotes.append("ends here: {ids(members[r]!, units: units)} ({strings\pluralCount(n, one: "line", many: "lines")}) would take it to {curLines + n}, past --budget {budget}");
             layerGroups.append(cur);
             layerNotes.append(curNotes);
             cur = mut [<str>];
@@ -1663,7 +1659,7 @@ export fun planSymbols(change: SymbolChange, budget: int, stem: str, base: str, 
             curLines = 0;
         }
         if (n > budget) {
-            curNotes.append("over --budget {budget} at {plural(n, word: "line")}: {ids(members[r]!, units: units)} cannot be split");
+            curNotes.append("over --budget {budget} at {strings\pluralCount(n, one: "line", many: "lines")}: {ids(members[r]!, units: units)} cannot be split");
         }
         cur.append(r);
         curLines = curLines + n;
@@ -1815,14 +1811,14 @@ export fun symbolStack(p: SymPlan, base: str) > branchstack\BranchStack {
 export fun renderSymbols(p: SymPlan, base: str) > str {
     var total = 0;
     foreach (l in p.layers) { total = total + l.lines; }
-    final lines = mut ["{plural(total, word: "changed line")} in {plural(p.layers.len(), word: "stacked branch", many: "stacked branches")} on {base}"];
+    final lines = mut ["{strings\pluralCount(total, one: "changed line", many: "changed lines")} in {strings\pluralCount(p.layers.len(), one: "stacked branch", many: "stacked branches")} on {base}"];
     foreach (note in p.notes) { lines.append("  {note}"); }
     foreach (n, l in p.layers) {
         lines.append("");
-        lines.append("{n + 1}. {l.branch} <- {l.parent}  ({plural(l.lines, word: "line")}, {plural(l.units.len(), word: "declaration")}, {l.status})");
+        lines.append("{n + 1}. {l.branch} <- {l.parent}  ({strings\pluralCount(l.lines, one: "line", many: "lines")}, {strings\pluralCount(l.units.len(), one: "declaration", many: "declarations")}, {l.status})");
         if (l.reason != "") { lines.append("   {l.status}: {l.reason}"); }
         foreach (note in l.notes) { lines.append("   {note}"); }
-        foreach (un in l.units) { lines.append("     {un.id}  ({un.change}, {plural(un.lines, word: "line")})"); }
+        foreach (un in l.units) { lines.append("     {un.id}  ({un.change}, {strings\pluralCount(un.lines, one: "line", many: "lines")})"); }
         lines.append("   proof: {l.check}");
     }
     return lines.join("\n");
@@ -2247,7 +2243,7 @@ fun report(stack: branchstack\BranchStack, format: str, text: str, applied: bool
         std\print(text);
         return;
     }
-    std\print("created {plural(stack.layers.len(), word: "local branch", many: "local branches")}; nothing was pushed");
+    std\print("created {strings\pluralCount(stack.layers.len(), one: "local branch", many: "local branches")}; nothing was pushed");
     std\print(text);
     std\print("");
     std\print("to publish the stack:");

@@ -42,6 +42,22 @@ func RegisterPath(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.StringVal(ret0), nil
 	}))
+	m.MapSet("dir", vm.DirectValue("path.dir", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		path := ffi.String(bzArgs, 0)
+		ret0, err := std.PathDir(ctx, path)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("base", vm.DirectValue("path.base", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		path := ffi.String(bzArgs, 0)
+		ret0, err := std.PathBase(ctx, path)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
 	m.MapSet("isAbs", vm.DirectValue("path.isAbs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		path := ffi.String(bzArgs, 0)
 		ret0, err := std.PathIsAbs(ctx, path)
@@ -75,6 +91,23 @@ func RegisterPath(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, ffi.Error(err)
 		}
 		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("join", vm.DirectValue("path.join", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		parts := ffi.StringSlice(bzArgs, 0)
+		ret0, err := std.PathJoin(ctx, parts)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("within", vm.DirectValue("path.within", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		dir := ffi.String(bzArgs, 0)
+		path := ffi.String(bzArgs, 1)
+		ret0, err := std.PathWithin(ctx, dir, path)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.BoolVal(ret0), nil
 	}))
 	return m
 }

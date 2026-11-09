@@ -45,16 +45,11 @@ func (h History) Options() HistoryMetricsOptions {
 }
 
 // Session is magus\session(): which session's guard record a read
-// covers, and inside which window, each as TrailReadOptions reads it.
+// covers, and inside which window, each as trail.ReadOptions reads it.
 type Session struct {
 	Session string `json:"session"`
 	Since   string `json:"since"`
 	Until   string `json:"until"`
-}
-
-// TrailOptions is s as a trail read takes it.
-func (s Session) TrailOptions() TrailReadOptions {
-	return TrailReadOptions(s)
 }
 
 // JobRegistration is Job.register()'s answer: the stored row and the

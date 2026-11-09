@@ -2,6 +2,7 @@ package status
 
 import (
 	"encoding/base64"
+	"github.com/egladman/magus/types/daemon"
 	"testing"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func toProto(t *testing.T, r types.StatusSnapshot, build types.BuildInfo) *statusv1.Status {
+func toProto(t *testing.T, r daemon.Snapshot, build daemon.BuildInfo) *statusv1.Status {
 	t.Helper()
 	s, err := statusSnapshotToProto(r, build)
 	require.NoError(t, err)
@@ -25,13 +26,13 @@ func toProto(t *testing.T, r types.StatusSnapshot, build types.BuildInfo) *statu
 // health, slots, and the in-flight calls a dashboard shows.
 func TestStatusProtoMapsPool(t *testing.T) {
 	started := time.UnixMilli(1700)
-	r := types.StatusSnapshot{
-		Pool: &types.StatusOutput{
+	r := daemon.Snapshot{
+		Pool: &daemon.Output{
 			ParentPID: 42, Capacity: 8, Running: 3, Queued: 1,
-			RunningTargets: []types.StatusRunningTarget{{Args: []string{"run", "build", "api"}, Workspace: "/ws", StartedAt: started, Step: "go-build"}},
+			RunningTargets: []daemon.RunningTarget{{Args: []string{"run", "build", "api"}, Workspace: "/ws", StartedAt: started, Step: "go-build"}},
 		},
 	}
-	s := toProto(t, r, types.BuildInfo{Version: "v1.2.3"})
+	s := toProto(t, r, daemon.BuildInfo{Version: "v1.2.3"})
 
 	assert.Equal(t, statusv1.Health_HEALTH_HEALTHY, s.GetHealth())
 	assert.Equal(t, "v1.2.3", s.GetBuild().GetVersion())
@@ -52,18 +53,18 @@ func TestStatusProtoMapsPool(t *testing.T) {
 // configured cap) onto Pool.cache, the data the dashboard's cache tiles and per-target
 // live-log deep-links read.
 func TestStatusProtoMapsCacheAndInv(t *testing.T) {
-	r := types.StatusSnapshot{
-		Cache: types.CacheStatus{SizeMB: 2048},
-		Pool: &types.StatusOutput{
+	r := daemon.Snapshot{
+		Cache: daemon.Cache{SizeMB: 2048},
+		Pool: &daemon.Output{
 			Capacity: 4, Running: 2,
-			RunningTargets: []types.StatusRunningTarget{{Args: []string{"run", "build"}, Inv: "inv7c3a9f2"}},
-			Workspaces: []types.StatusWorkspace{
+			RunningTargets: []daemon.RunningTarget{{Args: []string{"run", "build"}, Inv: "inv7c3a9f2"}},
+			Workspaces: []daemon.Workspace{
 				{Root: "/repo", CacheHit: 1284, CacheMiss: 217, CacheError: 3, CacheBytes: 734003200},
 				{Root: "/svc", CacheHit: 512, CacheMiss: 98, CacheBytes: 120586240},
 			},
 		},
 	}
-	p := toProto(t, r, types.BuildInfo{Version: "v1"}).GetPool()
+	p := toProto(t, r, daemon.BuildInfo{Version: "v1"}).GetPool()
 	require.NotNil(t, p)
 
 	// Per-running-target invocation id.
@@ -88,22 +89,22 @@ func TestStatusProtoMapsCacheAndInv(t *testing.T) {
 
 // TestStatusProtoHealth derives DOWN when no pool is present and DEGRADED on a pool error.
 func TestStatusProtoHealth(t *testing.T) {
-	assert.Equal(t, statusv1.Health_HEALTH_DOWN, toProto(t, types.StatusSnapshot{}, types.BuildInfo{Version: "v1"}).GetHealth())
+	assert.Equal(t, statusv1.Health_HEALTH_DOWN, toProto(t, daemon.Snapshot{}, daemon.BuildInfo{Version: "v1"}).GetHealth())
 	assert.Equal(t, statusv1.Health_HEALTH_DEGRADED,
-		toProto(t, types.StatusSnapshot{Pool: &types.StatusOutput{}, PoolError: "boom"}, types.BuildInfo{Version: "v1"}).GetHealth())
+		toProto(t, daemon.Snapshot{Pool: &daemon.Output{}, PoolError: "boom"}, daemon.BuildInfo{Version: "v1"}).GetHealth())
 }
 
 // A failed workspace is a resource in STATE_FAILED carrying the same google.rpc.Status a
 // call against it returns, and it rolls the dashboard's health up to degraded.
 func TestStatusProtoCarriesAFailedWorkspace(t *testing.T) {
-	failure := &types.WorkspaceFailure{Message: "boom", Diagnostics: []types.SourceDiagnostic{{
+	failure := &daemon.WorkspaceFailure{Message: "boom", Diagnostics: []daemon.SourceDiagnostic{{
 		Code: "BZZ1005", File: "magusfile.buzz", Line: 3, Column: 3, Message: "cannot assign",
 	}}}
-	s := toProto(t, types.StatusSnapshot{Pool: &types.StatusOutput{Workspaces: []types.StatusWorkspace{
+	s := toProto(t, daemon.Snapshot{Pool: &daemon.Output{Workspaces: []daemon.Workspace{
 		{Root: "/ok"},
-		{Root: "/loading", State: types.WorkspaceLoading},
-		{Root: "/repo", State: types.WorkspaceFailed, Error: failure},
-	}}}, types.BuildInfo{Version: "v1"})
+		{Root: "/loading", State: daemon.WorkspaceLoading},
+		{Root: "/repo", State: daemon.WorkspaceFailed, Error: failure},
+	}}}, daemon.BuildInfo{Version: "v1"})
 
 	assert.Equal(t, statusv1.Health_HEALTH_DEGRADED, s.GetHealth())
 	ws := s.GetPool().GetWorkspaces()
@@ -121,21 +122,21 @@ func TestStatusProtoCarriesAFailedWorkspace(t *testing.T) {
 // Health agrees with readiness: every workspace that tried to load failing is down, and a
 // loaded one beside a failed one is degraded.
 func TestStatusProtoHealthMatchesReadiness(t *testing.T) {
-	failed := types.StatusWorkspace{Root: "/bad", State: types.WorkspaceFailed}
+	failed := daemon.Workspace{Root: "/bad", State: daemon.WorkspaceFailed}
 	cases := []struct {
 		name string
-		ws   []types.StatusWorkspace
+		ws   []daemon.Workspace
 		want statusv1.Health
 	}{
-		{"every workspace failed", []types.StatusWorkspace{failed}, statusv1.Health_HEALTH_DOWN},
-		{"one failed, one still loading", []types.StatusWorkspace{failed, {Root: "/l", State: types.WorkspaceLoading}}, statusv1.Health_HEALTH_DOWN},
-		{"one failed, one loaded", []types.StatusWorkspace{failed, {Root: "/ok", State: types.WorkspaceActive}}, statusv1.Health_HEALTH_DEGRADED},
-		{"one loaded", []types.StatusWorkspace{{Root: "/ok", State: types.WorkspaceActive}}, statusv1.Health_HEALTH_HEALTHY},
+		{"every workspace failed", []daemon.Workspace{failed}, statusv1.Health_HEALTH_DOWN},
+		{"one failed, one still loading", []daemon.Workspace{failed, {Root: "/l", State: daemon.WorkspaceLoading}}, statusv1.Health_HEALTH_DOWN},
+		{"one failed, one loaded", []daemon.Workspace{failed, {Root: "/ok", State: daemon.WorkspaceActive}}, statusv1.Health_HEALTH_DEGRADED},
+		{"one loaded", []daemon.Workspace{{Root: "/ok", State: daemon.WorkspaceActive}}, statusv1.Health_HEALTH_HEALTHY},
 		{"none yet", nil, statusv1.Health_HEALTH_HEALTHY},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := toProto(t, types.StatusSnapshot{Pool: &types.StatusOutput{Workspaces: tc.ws}}, types.BuildInfo{Version: "v1"})
+			s := toProto(t, daemon.Snapshot{Pool: &daemon.Output{Workspaces: tc.ws}}, daemon.BuildInfo{Version: "v1"})
 			assert.Equal(t, tc.want, s.GetHealth())
 		})
 	}
@@ -143,7 +144,7 @@ func TestStatusProtoHealthMatchesReadiness(t *testing.T) {
 
 // TestEncodeStatusEventRoundTrip confirms a status snapshot decodes back: base64 -> proto.
 func TestEncodeStatusEventRoundTrip(t *testing.T) {
-	ev, err := EncodeStatusEvent(toProto(t, types.StatusSnapshot{Pool: &types.StatusOutput{Capacity: 4}}, types.BuildInfo{Version: "v1"}))
+	ev, err := EncodeStatusEvent(toProto(t, daemon.Snapshot{Pool: &daemon.Output{Capacity: 4}}, daemon.BuildInfo{Version: "v1"}))
 	require.NoError(t, err)
 	raw, err := base64.StdEncoding.DecodeString(ev)
 	require.NoError(t, err)
@@ -154,7 +155,7 @@ func TestEncodeStatusEventRoundTrip(t *testing.T) {
 }
 
 func TestTargetStateToProtoKeepsAPermitDistinct(t *testing.T) {
-	assert.Equal(t, statusv1.TargetRun_STATE_PERMITTED, targetStateToProto(types.TargetRunPermitted))
+	assert.Equal(t, statusv1.TargetRun_STATE_PERMITTED, targetStateToProto(daemon.TargetRunPermitted))
 }
 
 // TestStatusProtoMapsRuns maps the server's live runs and their per-target execution
@@ -163,19 +164,19 @@ func TestStatusProtoMapsRuns(t *testing.T) {
 	started := time.UnixMilli(1_000)
 	execAt := time.UnixMilli(2_000)
 	doneAt := time.UnixMilli(5_000)
-	r := types.StatusSnapshot{
-		Runs: []types.StatusRun{{
+	r := daemon.Snapshot{
+		Runs: []daemon.Run{{
 			Inv:       "inv1a2b3c",
 			Trigger:   "run",
 			StartedAt: started,
-			Targets: []types.StatusTargetRun{
-				{Project: "svc/api", Target: "build", State: types.TargetRunPassed, StartedAt: execAt, EndedAt: doneAt, OutputRef: "outcafef00d", DurationMs: 3_000},
-				{Project: "svc/api", Target: "test", State: types.TargetRunRunning, StartedAt: execAt},
-				{Project: "svc/web", Target: "lint", State: types.TargetRunCached, StartedAt: doneAt, EndedAt: doneAt, OutputRef: "outbeef"},
+			Targets: []daemon.TargetRun{
+				{Project: "svc/api", Target: "build", State: daemon.TargetRunPassed, StartedAt: execAt, EndedAt: doneAt, OutputRef: "outcafef00d", DurationMs: 3_000},
+				{Project: "svc/api", Target: "test", State: daemon.TargetRunRunning, StartedAt: execAt},
+				{Project: "svc/web", Target: "lint", State: daemon.TargetRunCached, StartedAt: doneAt, EndedAt: doneAt, OutputRef: "outbeef"},
 			},
 		}},
 	}
-	s := toProto(t, r, types.BuildInfo{Version: "v1"})
+	s := toProto(t, r, daemon.BuildInfo{Version: "v1"})
 
 	require.Len(t, s.GetRuns(), 1)
 	run := s.GetRuns()[0]
@@ -198,9 +199,9 @@ func TestStatusProtoMapsRuns(t *testing.T) {
 // server's listeners and the broker's services.
 func TestStatusProtoCarriesTheBrokerAndTheServer(t *testing.T) {
 	since := time.UnixMilli(1700)
-	r := types.StatusSnapshot{
+	r := daemon.Snapshot{
 		BrokerPolicy: types.BrokerRequired,
-		Broker: &types.StatusBroker{
+		Broker: &daemon.Broker{
 			PID: 48213, Protocol: 1, Socket: "unix:///run/magus/broker.sock", IdleExitSeconds: 600,
 			Capacity: types.MachineSnapshot{
 				BudgetMB: 48 << 10, HeldMB: 12 << 10, BudgetSlots: 10, HeldSlots: 4,
@@ -209,15 +210,15 @@ func TestStatusProtoCarriesTheBrokerAndTheServer(t *testing.T) {
 					Dir: "/src/a", Command: "magus affected ci", Since: since,
 				}},
 			},
-			Services: []types.StatusService{{ID: "pg", Label: "postgres-15", Dependents: 2}},
+			Services: []daemon.Service{{ID: "pg", Label: "postgres-15", Dependents: 2}},
 		},
-		Server: &types.StatusServer{
+		Server: &daemon.Server{
 			PID: 47001, Socket: "unix:///run/magus/server.sock",
-			Listeners: []types.StatusListener{{Kind: types.ListenerHTTP, Address: "127.0.0.1:7391"}},
+			Listeners: []daemon.Listener{{Kind: daemon.ListenerHTTP, Address: "127.0.0.1:7391"}},
 			Watch:     []string{"/repo"},
 		},
 	}
-	s := toProto(t, r, types.BuildInfo{Version: "v1"})
+	s := toProto(t, r, daemon.BuildInfo{Version: "v1"})
 
 	assert.Equal(t, "required", s.GetBrokerPolicy())
 	b := s.GetBroker()
@@ -239,7 +240,7 @@ func TestStatusProtoCarriesTheBrokerAndTheServer(t *testing.T) {
 	assert.Equal(t, "http", srv.GetListeners()[0].GetKind())
 	assert.Equal(t, []string{"/repo"}, srv.GetWatch())
 
-	none := toProto(t, types.StatusSnapshot{}, types.BuildInfo{Version: "v1"})
+	none := toProto(t, daemon.Snapshot{}, daemon.BuildInfo{Version: "v1"})
 	assert.Nil(t, none.GetBroker(), "no broker running is an absent section")
 	assert.Nil(t, none.GetServer())
 }
@@ -253,15 +254,15 @@ func TestStatusProtoCarriesTheBrokerAndTheServer(t *testing.T) {
 // there must not be. magus does not store secrets (it reads them through a provider), so
 // publishing what a build CAN reach would be a map of what to go after.
 func TestStatusProtoCarriesSecretProviderName(t *testing.T) {
-	r := types.StatusSnapshot{
-		Pool: &types.StatusOutput{
-			Workspaces: []types.StatusWorkspace{
+	r := daemon.Snapshot{
+		Pool: &daemon.Output{
+			Workspaces: []daemon.Workspace{
 				{Root: "/repo", SecretProvider: "onepassword"},
 				{Root: "/svc"},
 			},
 		},
 	}
-	p := toProto(t, r, types.BuildInfo{Version: "v1"}).GetPool()
+	p := toProto(t, r, daemon.BuildInfo{Version: "v1"}).GetPool()
 	require.NotNil(t, p)
 	require.Len(t, p.GetWorkspaces(), 2)
 
@@ -279,12 +280,12 @@ func TestStatusProtoCarriesSecretProviderName(t *testing.T) {
 // shares the server's judgment instead of picking its own constant.
 func TestStatusProtoCarriesTheStaleLockThreshold(t *testing.T) {
 	held := time.UnixMilli(1700)
-	r := types.StatusSnapshot{Locks: []types.StatusLock{{
+	r := daemon.Snapshot{Locks: []daemon.Lock{{
 		Project: ".", PID: 4242, Command: "magus run build .", Dir: "/ws",
 		AcquireTime: held, StaleAfterSeconds: 600,
 	}}}
 
-	locks := toProto(t, r, types.BuildInfo{Version: "v1"}).GetLocks()
+	locks := toProto(t, r, daemon.BuildInfo{Version: "v1"}).GetLocks()
 
 	require.Len(t, locks, 1)
 	assert.Equal(t, int32(600), locks[0].GetStaleAfterSeconds())

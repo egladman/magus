@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -20,7 +19,6 @@ import (
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/guard"
@@ -34,7 +32,6 @@ import (
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 )
 
 // magus shell is the guard with one door.
@@ -151,6 +148,7 @@ func staleConfigDependencies(ctx context.Context, rootOverride string, failure e
 // reason in its host reply and must not leak a second, non-protocol message into the
 // host's hook stream.
 func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.Writer, args []string) error {
+	started := time.Now()
 	// Started here rather than in Judge, so loading the rules spends the same budget.
 	ctx, cancelInherited, deadlineErr := takeDelegation(ctx)
 	defer cancelInherited()
@@ -237,8 +235,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	}
 	var judge, judgeRoot string
 	if sf.Transport != "" {
-		commit, _ := buildinfo.Commit()
-		handled, declined, err := delegateToCheckout(ctx, commit, input, opts, out, errOut)
+		handled, declined, err := delegateToCheckout(ctx, input, opts, out, errOut)
 		if handled {
 			return err
 		}
@@ -305,6 +302,7 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	base := guard.Dependencies{CacheDir: guardCacheDir(""), BinaryVersion: version, Spells: project.DefaultSpellRegistry().All}
 	base.Binary, _ = runningBinaryPath()
 	ctx = agent.ContextWithToolRows(ctx, req.Tools)
+	ctx, finishSnapshot := guard.WithPolicySnapshotWrite(ctx)
 	// The rules load inside the bound too: a magusfile's imports parse to the end however
 	// long they take.
 	verdict := guard.JudgeWithin(ctx, base, req, func(ctx context.Context) types.GuardJudgment {
@@ -327,13 +325,30 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 	// everywhere else; here there is no progress, so suppressing the verdict is the only
 	// reading that leaves them meaning anything at all. A script asking "would this be
 	// refused" wants the status and nothing on its stdout.
+	var exitErr error
 	if global.quiet || global.silent {
-		return verdictExit(io.Discard, opts, verdict)
+		exitErr = verdictExit(io.Discard, opts, verdict)
+	} else {
+		if err := writeGuardVerdict(out, opts, verdict); err != nil {
+			return err
+		}
+		exitErr = verdictExit(errOut, opts, verdict)
 	}
-	if err := writeGuardVerdict(out, opts, verdict); err != nil {
-		return err
+	if err := finishSnapshot(ctx, snapshotBudget(limits, known, started)); err != nil {
+		slog.WarnContext(ctx, "the policy snapshot was not written, so the next judgment loads the policy too",
+			attr.Error(err), attr.Component("magus shell"))
 	}
-	return verdictExit(errOut, opts, verdict)
+	return exitErr
+}
+
+// snapshotBudget is what a hook may spend on a snapshot write its judgment
+// left over. The host's hook timeout less a second bounds the whole hook.
+// A host that declares no timeout gets no wait.
+func snapshotBudget(limits types.Limits, known bool, started time.Time) time.Duration {
+	if !known || limits.HookTimeoutMs <= 0 {
+		return 0
+	}
+	return time.Duration(limits.HookTimeoutMs)*time.Millisecond - time.Second - time.Since(started)
 }
 
 // terminalWindow names the terminal window this process writes to, or "" when stdout is
@@ -377,6 +392,16 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 	return deps
 }
 
+// checkoutJudgeDeps drops deps' rules when binary is not root's ./magus.
+// A delegate keeps them. Its caller picked it as the call's checkout
+// binary, and root is only the hook's working directory.
+func checkoutJudgeDeps(ctx context.Context, deps guard.Dependencies, root, binary string) guard.Dependencies {
+	if delegatedBy(ctx) != "" {
+		return deps
+	}
+	return guard.ForeignJudgeDeps(deps, root, binary)
+}
+
 // loadGuardDependencies is guardDependencies that also returns the rules it loaded, nil
 // when none loaded, for a caller that must know which files they came from.
 func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Dependencies, *guard.WorkspaceRules) {
@@ -397,17 +422,21 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 	// An unresolvable path leaves the trail row without one; the version still records.
 	binary, _ := runningBinaryPath()
 	deps, rules := guard.NewDependencies(ctx, guard.Wiring{
-		Root:           root,
-		Config:         globalCfg,
-		BinaryVersion:  version,
-		Binary:         binary,
-		Inspect:        inspect,
-		TargetPolicies: guardTargetPolicies(rootOverride, inspect),
-		CacheDir:       guardCacheDir(rootOverride),
+		Root:                 root,
+		Config:               globalCfg,
+		BinaryVersion:        version,
+		Binary:               binary,
+		Inspect:              inspect,
+		TargetPolicies:       guardTargetPolicies(rootOverride, inspect),
+		RecordTargetPolicies: guardRecordTargetPolicies(rootOverride),
+		CacheDir:             guardCacheDir(rootOverride),
 		Trace: func(ctx context.Context, phase string) func() {
 			return traceFromContext(ctx).phase(phase)
 		},
 	})
+	deps = checkoutJudgeDeps(ctx, deps, root, binary)
+	// The rule cliOptions opens every workspace with.
+	deps.TierRule = magus.TierCeiling
 	index := newGuardLookups(rootOverride)
 	deps.GraphStaleAdvice = index.staleGraphAdvice
 	deps.SymbolDefined = index.symbolDefined
@@ -481,6 +510,24 @@ func guardTargetPolicies(rootOverride string, inspect func(context.Context, stri
 			return asMagus(ws)
 		})
 		return workspacegraph.RecordedTargetPolicies(ctx, lw, globalCfg)
+	}
+}
+
+// guardRecordTargetPolicies records what ws, opened for root, declares as
+// target policy, so the next judgment answers from guardTargetPolicies.
+func guardRecordTargetPolicies(rootOverride string) func(context.Context, string, types.WorkspaceRepository) error {
+	return func(ctx context.Context, root string, ws types.WorkspaceRepository) error {
+		if root == "" {
+			found, err := workspace.FindRoot(rootOverride)
+			if err != nil {
+				return err
+			}
+			root = found
+		}
+		lw := magus.NewLazyWorkspace(root, func(context.Context) (*magus.Magus, error) {
+			return asMagus(ws)
+		})
+		return workspacegraph.RecordTargetPolicies(ctx, lw, globalCfg)
 	}
 }
 
@@ -1006,14 +1053,11 @@ func checkoutBinary(dir, running string) string {
 	return own
 }
 
-// delegateToCheckout hands a hook call to the ./magus of the checkout it lands in when that
-// was built at its HEAD or later, since a branch extending types or bindings loads only in
-// its own build. The delegate runs here, so this session's policy still applies. On handled
-// false this binary judges, and declined says why the checkout's ./magus did not.
-//
-// A build behind HEAD still judges when newer than runningCommit.
-// An older judge cannot read a newer row, and denied every call.
-func delegateToCheckout(ctx context.Context, runningCommit, input string, opts output.Options, out, errOut io.Writer) (handled bool, declined checkoutDecline, err error) {
+// delegateToCheckout hands a hook call to the ./magus of the checkout
+// it lands in. A ./magus behind HEAD judges too, and its own stale-binary
+// rules name the bootstrap. On handled false this binary judges, and declined
+// says why.
+func delegateToCheckout(ctx context.Context, input string, opts output.Options, out, errOut io.Writer) (handled bool, declined checkoutDecline, err error) {
 	if delegatedBy(ctx) != "" {
 		return false, checkoutDecline{}, nil
 	}
@@ -1035,13 +1079,6 @@ func delegateToCheckout(ctx context.Context, runningCommit, input string, opts o
 	// The sentinel keeps the delegate from re-execing into the ./magus of this process's
 	// directory, which is the binary handing the call over.
 	env := append(os.Environ(), fmt.Sprintf("%s=%s", delegatedEnv, running), bootstrapExecSentinelVar+"=1")
-	built, behind := checkoutBinaryBehind(ctx, own, env)
-	if behind != "" && !newerThanRunning(ctx, filepath.Dir(own), built, runningCommit) {
-		if line := guard.BootstrapLine(filepath.Dir(own)); line != "" {
-			behind += fmt.Sprintf(". A ./magus at HEAD judges here once the main session places one, or the bootstrap builds it, alone on its line: `%s`", line)
-		}
-		return false, decline(behind), nil
-	}
 	end, err := guard.RunDelegate(ctx, own, os.Args[1:], env, strings.NewReader(input), out, errOut)
 	switch end {
 	case guard.DelegateExited:
@@ -1083,56 +1120,6 @@ func unloadableCheckout(ctx context.Context, root string) string {
 		return ""
 	}
 	return root
-}
-
-// checkoutBinaryBehind is the commit own was built at, "" when unstamped.
-// why says it is not the checkout's HEAD or after it, "" when it is.
-// The binary is asked for its own stamp, run with env.
-func checkoutBinaryBehind(ctx context.Context, own string, env []string) (built, why string) {
-	root := filepath.Dir(own)
-	var stamp bytes.Buffer
-	probe := exec.CommandContext(ctx, own, "version", "--client", "-o", "template={{.commit}}")
-	probe.Dir, probe.Env, probe.Stdout = root, env, &stamp
-	if err := probe.Run(); err != nil {
-		return "", fmt.Sprintf("`%s version` failed: %v", own, err)
-	}
-	built = strings.TrimSpace(stamp.String())
-	if built == "" || built == unknownVersion {
-		return "", "it carries no commit stamp"
-	}
-	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
-	if err != nil || res.VCS == nil {
-		return built, fmt.Sprintf("no version control answered in %s to place its commit %s (%v)", root, shortCommit(built), err)
-	}
-	head, err := res.VCS.FindCommit(ctx, root, "")
-	if err != nil {
-		return built, fmt.Sprintf("the checkout's HEAD could not be read to place its commit %s: %v", shortCommit(built), err)
-	}
-	if head.ID == built {
-		return built, ""
-	}
-	after, err := res.VCS.IsAncestor(ctx, root, head.ID, built)
-	switch {
-	case err != nil:
-		return built, fmt.Sprintf("it was built at %s, which could not be placed against HEAD %s: %v", shortCommit(built), shortCommit(head.ID), err)
-	case !after:
-		return built, fmt.Sprintf("it was built at %s, which is neither the checkout's HEAD %s nor a commit after it", shortCommit(built), shortCommit(head.ID))
-	}
-	return built, ""
-}
-
-// newerThanRunning reports whether built descends from running, this binary's
-// commit. An unknown commit, or one the checkout cannot place, is not newer.
-func newerThanRunning(ctx context.Context, root, built, running string) bool {
-	if built == "" || running == "" || running == unknownVersion || built == running {
-		return false
-	}
-	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
-	if err != nil || res.VCS == nil {
-		return false
-	}
-	newer, err := res.VCS.IsAncestor(ctx, root, running, built)
-	return err == nil && newer
 }
 
 // judgedBy appends note, which says which binary judged, to the verdict's text. A pass

@@ -29,8 +29,8 @@ The code is `PRF6004`. The decision depends on the kind of text judged:
 | Kind          | Default |
 | ------------- | ------- |
 | `doc-comment` | off     |
-| `stylesheet`  | off     |
 | `cli-help`    | off     |
+| `stylesheet`  | off     |
 
 House style ships `off`: the rule encodes one repository's conventions, not
 a rule of plain writing. A repository turns it on in its decisions table.

@@ -1,0 +1,193 @@
+// text.buzz - pure text/path/URL helpers. No site state; flat-imported by
+// render.buzz (`import "text" as _`).
+namespace text;
+
+import "assert";
+
+// splitPath splits a gen-root-relative path into non-empty segments, dropping ".".
+export fun splitPath(p: str) > [str] {
+    var segs: mut [str] = mut [<str>];
+    foreach (s in p.split("/")) {
+        if (s != "" and s != ".") { segs.append(s); }
+    }
+    return segs;
+}
+
+// relativePath returns the path from fromDir to toUrl. Trailing slash on toUrl
+// means it is a directory; "./" when they resolve to the same place.
+export fun relativePath(fromDir: str, toUrl: str) > str {
+    final fromSegs = splitPath(fromDir);
+    final toSegs = splitPath(toUrl);
+    final dirLike = (toUrl == "" or toUrl.endsWith("/"));
+    var i = 0;
+    while (i < fromSegs.len() and i < toSegs.len() and fromSegs[i] == toSegs[i]) { i = i + 1; }
+    final parts = mut [<str>];
+    var j = i;
+    while (j < fromSegs.len()) { parts.append("../"); j = j + 1; }
+    var k = i;
+    while (k < toSegs.len()) {
+        parts.append(toSegs[k]);
+        if (k < toSegs.len() - 1 or dirLike) { parts.append("/"); }
+        k = k + 1;
+    }
+    if (parts.len() == 0) { return "./"; }
+    return parts.join("");
+}
+
+// firstPathSegment returns the leading segment of a clean URL ("spells/go/" -> "spells").
+export fun firstPathSegment(url: str) > str {
+    if (url == "") { return ""; }
+    final i = url.indexOf("/");
+    if (i == null) { return url; }
+    return url.sub(0, len: i);
+}
+
+// sharedTagCount counts tags common to two ||-joined tag strings (relatedness signal).
+export fun sharedTagCount(aJoined: str, bJoined: str) > int {
+    if (aJoined == "" or bJoined == "") { return 0; }
+    final aList = aJoined.split("||");
+    final bList = bJoined.split("||");
+    var n = 0;
+    foreach (t in aList) {
+        if (t != "") {
+            foreach (u in bList) {
+                if (t == u) { n = n + 1; break; }
+            }
+        }
+    }
+    return n;
+}
+
+// pad4 zero-pads a small non-negative int to four digits so scores sort lexically.
+export fun pad4(n: int) > str {
+    final s = "{n}";
+    if (s.len() >= 4) { return s; }
+    return "0".repeat(4 - s.len()) + s;
+}
+
+// strToNat parses a decimal digit string to a non-negative int, ignoring
+// non-digits. Used for semver segment parsing.
+export fun strToNat(s: str) > int {
+    var n = 0;
+    var i = 0;
+    while (i < s.len()) {
+        final b = s.byte(i);
+        if (b >= 48 and b <= 57) { // '0'..'9' are codepoints 48-57
+            n = n * 10 + (b - 48);
+        }
+        i = i + 1;
+    }
+    return n;
+}
+
+// strLess is lexicographic byte ordering; buzz has no `<` on str, so the sibling
+// pager spells it out to sort filenames deterministically.
+export fun strLess(a: str, b: str) > bool {
+    final n = a.len();
+    final m = b.len();
+    var i = 0;
+    while (i < n and i < m) {
+        if (a.byte(i) != b.byte(i)) { return a.byte(i) < b.byte(i); }
+        i = i + 1;
+    }
+    return n < m;
+}
+
+// capitalizeFirst upper-cases the first character of a slug (a breadcrumb label).
+export fun capitalizeFirst(s: str) > str {
+    if (s == "") { return s; }
+    return s.sub(0, len: 1).upper() + s.sub(1);
+}
+
+// stripTags removes HTML tags, leaving text. Entities goldmark produced stay
+// encoded, so the result drops into a double-quoted attribute (TOC link tooltips)
+// without re-escaping.
+export fun stripTags(s: str) > str {
+    var r = s;
+    var lt = r.indexOf("<");
+    while (lt != null) {
+        final gt = r.indexOf(">");
+        if (gt == null) { return r; }
+        r = r.sub(0, len: lt) + r.sub(gt + 1);
+        lt = r.indexOf("<");
+    }
+    return r;
+}
+
+// collapseWs folds any whitespace run into a single space, so a derived
+// description reads as one clean line.
+export fun collapseWs(s: str) > str {
+    // split().join(), not replace(): str.replace substitutes only the FIRST
+    // occurrence, so the chained calls this replaced collapsed just the first
+    // newline, tab and carriage return of a page and left every later one intact.
+    // The `while (indexOf) replace()` that followed did work, at the price of
+    // copying the whole string once per run of spaces - and every copy is a
+    // distinct string the VM interns for the life of the process.
+    final flat = s.split("\n").join(" ").split("\t").join(" ").split("\r").join(" ");
+    // Runs of spaces cannot collapse with one split().join(): splitting on two
+    // spaces leaves the odd one behind, which is why the original had to loop.
+    // Splitting on ONE space and dropping the empties between adjacent
+    // separators collapses any run in a single pass instead.
+    var parts = mut [];
+    foreach (p in flat.split(" ")) {
+        if (p != "") { parts.append(p); }
+    }
+    return parts.join(" ").trim();
+}
+
+// decodeEntities turns HTML entities back into characters for a plain-text
+// description. &amp; decodes LAST so "&amp;lt;" is not double-decoded into "<".
+export fun decodeEntities(s: str) > str {
+    return s.replace("&lt;", with: "<").replace("&gt;", with: ">").replace("&quot;", with: "\"")
+        .replace("&#39;", with: "'").replace("&#34;", with: "\"").replace("&amp;", with: "&");
+}
+
+// truncateWords caps s at about n characters, cutting on a word boundary so it
+// never ends mid-word. Short paragraphs pass through.
+export fun truncateWords(s: str, n: int) > str {
+    if (s.len() <= n) { return s; }
+    final head = s.sub(0, len: n);
+    var i = head.len() - 1;
+    while (i > 0) {
+        if (head.sub(i, len: 1) == " ") { return head.sub(0, len: i); }
+        i = i - 1;
+    }
+    return head;
+}
+
+test "firstPathSegment returns a clean URL's leading segment" {
+    assert\equal(firstPathSegment("spells/go/"), want: "spells", message: "spells/go/ -> spells");
+    assert\equal(firstPathSegment("targets"), want: "targets", message: "no slash -> whole string");
+    assert\equal(firstPathSegment(""), want: "", message: "empty -> empty");
+}
+
+test "pad4 left-pads to width four" {
+    assert\equal(pad4(7), want: "0007", message: "7 -> 0007");
+    assert\equal(pad4(1234), want: "1234", message: "1234 unchanged");
+    assert\equal(pad4(12345), want: "12345", message: "wider than four is kept");
+}
+
+// decodeEntities had NO test at all, despite being six chained substitutions on the
+// path that builds every page description (docs/engine/meta.buzz). It is the inverse of
+// html\escape and carries the mirror-image ordering hazard, so it gets the same
+// repetition fixture.
+test "decodeEntities decodes EVERY occurrence, ampersand last" {
+    assert\equal(decodeEntities("&lt;a&gt;&lt;b&gt;"), want: "<a><b>", message: "repeated angle entities");
+    assert\equal(decodeEntities("&amp;&amp;"), want: "&&", message: "adjacent ampersand entities");
+    assert\equal(decodeEntities("&quot;a&quot;"), want: "\"a\"", message: "repeated quote entities");
+    // &amp; is decoded LAST, the opposite of the escape direction: decoding it first
+    // would turn the literal text "&amp;lt;" into "<" instead of "&lt;".
+    assert\equal(decodeEntities("&amp;lt;"), want: "&lt;", message: "an escaped entity survives one decode");
+    assert\equal(decodeEntities("no entities here"), want: "no entities here", message: "no-op on plain text");
+}
+
+test "sharedTagCount counts common bar-joined tags" {
+    assert\equal(sharedTagCount("a||b||c", bJoined: "b||c||d"), want: 2, message: "b and c shared");
+    assert\equal(sharedTagCount("a", bJoined: "b"), want: 0, message: "none shared");
+    assert\equal(sharedTagCount("", bJoined: "a||b"), want: 0, message: "empty side -> 0");
+}
+
+test "relativePath walks from a dir to a target URL" {
+    assert\equal(relativePath("a/b", toUrl: "a/c/"), want: "../c/", message: "sibling directory");
+    assert\equal(relativePath("development/projects", toUrl: "development/"), want: "../", message: "up one level");
+}

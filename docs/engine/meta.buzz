@@ -6,7 +6,8 @@ namespace meta;
 
 import "markdown";
 import "serialize";
-import "lib/text" as _;
+import "../libs/ssg/text" as _;
+import "../libs/ssg/dom" as _;
 import "assert";
 
 // deriveTitle reads the title from the first H1, stripping backticks (a heading like
@@ -131,11 +132,9 @@ export fun insertSinceBadge(html: str, since: str) > str {
     if (since == "") { return html; }
     final marker = html.indexOf("</h1>");
     if (marker == null) { return html; }
-    final badge = "\n<p class=\"since-badge\" title=\"Available since magus " + escapeAttr(since)
-        + "\">Added in <code>" + escapeAttr(since) + "</code></p>";
-    // sub(start, length): keep everything through the "</h1>" (5 bytes), splice the
-    // badge in, then append the rest of the document.
-    return html.sub(0, marker + 5) + badge + html.sub(marker + 5);
+    final badge = element("p", attrs: [attr("class", value: "since-badge"), attr("title", value: "Available since magus " + since)],
+        children: [textNode("Added in "), element("code", attrs: [<Attr>], children: [textNode(since)])]);
+    return afterHeading(html, at: marker, node: badge);
 }
 
 test "insertSinceBadge places an Added-in marker right after the h1" {
@@ -150,24 +149,29 @@ test "insertSinceBadge is a no-op without a since value or without an h1" {
     assert\equal(insertSinceBadge("<p>no heading</p>", "v1.0.0"), "<p>no heading</p>", "no h1 leaves html untouched");
 }
 
-// codeSpans escapes s for HTML text and turns each backticked run into <code>, the one piece
-// of Markdown a front matter value carries. An unpaired backtick stays literal.
-fun codeSpans(s: str) > str {
+// afterHeading splices node into html just after the "</h1>" that starts at.
+fun afterHeading(html: str, at: int, node: Node) > str {
+    final end = at + 5;
+    return html.sub(0, len: end) + "\n" + render(node) + html.sub(end);
+}
+
+// codeSpans turns each backticked run of s into <code>, the one piece of
+// Markdown a front matter value carries. An unpaired backtick stays literal.
+fun codeSpans(s: str) > [Node] {
     final parts = s.split("`");
-    final res = mut [<str>];
+    final res = mut [<Node>];
     var i = 0;
     while (i < parts.len()) {
-        final text = escapeAttr(parts[i]).replace(">", with: "&gt;");
         if (i % 2 == 0) {
-            res.append(text);
+            res.append(textNode(parts[i]));
         } else if (i < parts.len() - 1) {
-            res.append("<code>" + text + "</code>");
+            res.append(element("code", attrs: [<Attr>], children: [textNode(parts[i])]));
         } else {
-            res.append("`" + text);
+            res.append(textNode("`" + parts[i]));
         }
         i = i + 1;
     }
-    return res.join("");
+    return res;
 }
 
 // insertAdrMeta places an ADR's status, date and what it supersedes under the H1, in the
@@ -182,11 +186,17 @@ export fun insertAdrMeta(html: str, status: str, date: str, supersedes: str) > s
     final day = date.split("T")[0];
     // A sentence, not "Status:" and "Date:" labels. The code cross-linker
     // links a bare command word, and a label line reads as a form.
-    var meta = "\n<p class=\"adr-meta\">Decision <strong>" + escapeAttr(status) + "</strong> on <time datetime=\""
-        + escapeAttr(day) + "\">" + escapeAttr(day) + "</time>.";
-    if (supersedes != "") { meta = meta + "<br>Supersedes: " + codeSpans(supersedes); }
-    meta = meta + "</p>";
-    return html.sub(0, marker + 5) + meta + html.sub(marker + 5);
+    final line = mut [textNode("Decision "), element("strong", attrs: [<Attr>], children: [textNode(status)]),
+        textNode(" on "), element("time", attrs: [attr("datetime", value: day)], children: [textNode(day)]),
+        textNode(".")];
+    if (supersedes != "") {
+        line.append(voidElement("br", attrs: [<Attr>]));
+        line.append(textNode("Supersedes: "));
+        foreach (n in codeSpans(supersedes)) {
+            line.append(n);
+        }
+    }
+    return afterHeading(html, at: marker, node: element("p", attrs: [attr("class", value: "adr-meta")], children: line));
 }
 
 test "insertAdrMeta places status and date right after the h1" {
@@ -246,10 +256,13 @@ export fun insertSizeRatio(html: str, fullOpt: int?, shortOpt: int?) > str {
     // Caption BEFORE the bar. A bare progress element leading the page is a graphic
     // with nothing saying what is being measured, and a reader meets it before the
     // sentence that would have explained it.
-    final bar = "\n<p><small>" + escapeAttr(label) + "</small><br>"
-        + "<progress value=\"{short}\" max=\"{full}\" aria-label=\""
-        + escapeAttr(label) + "\"></progress></p>";
-    return html.sub(0, marker + 5) + bar + html.sub(marker + 5);
+    final bar = element("p", attrs: [<Attr>], children: [
+        element("small", attrs: [<Attr>], children: [textNode(label)]),
+        voidElement("br", attrs: [<Attr>]),
+        element("progress", attrs: [attr("value", value: "{short}"), attr("max", value: "{full}"),
+            attr("aria-label", value: label)], children: [<Node>]),
+    ]);
+    return afterHeading(html, at: marker, node: bar);
 }
 
 test "insertSizeRatio renders a progress bar and the saved percentage" {

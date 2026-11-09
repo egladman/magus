@@ -11,6 +11,9 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	difftypes "github.com/egladman/magus/types/diff"
+	imagetypes "github.com/egladman/magus/types/image"
+	"github.com/egladman/magus/types/trail"
 )
 
 var inboundTypes = []inboundType{
@@ -45,8 +48,8 @@ var inboundTypes = []inboundType{
 	{Name: "Secret", Zero: spells.Secret{}, Encode: func(v any) vm.Value { return ObjectSecret(v.(spells.Secret)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSecret(v) }},
 	{Name: "ReleaseCycle", Zero: spells.ReleaseCycle{}, Encode: func(v any) vm.Value { return ObjectReleaseCycle(v.(spells.ReleaseCycle)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeReleaseCycle(v) }},
 	{Name: "Lifecycle", Zero: spells.Lifecycle{}, Encode: func(v any) vm.Value { return ObjectLifecycle(v.(spells.Lifecycle)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeLifecycle(v) }},
-	{Name: "ReviewTarget", Zero: types.ReviewTarget{}, Encode: func(v any) vm.Value { return ObjectReviewTarget(v.(types.ReviewTarget)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeReviewTarget(v) }},
-	{Name: "ReviewComment", Zero: types.ReviewComment{}, Encode: func(v any) vm.Value { return ObjectReviewComment(v.(types.ReviewComment)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeReviewComment(v) }},
+	{Name: "ReviewTarget", Zero: difftypes.ReviewTarget{}, Encode: func(v any) vm.Value { return ObjectDiffReviewTarget(v.(difftypes.ReviewTarget)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeDiffReviewTarget(v) }},
+	{Name: "ReviewComment", Zero: difftypes.ReviewComment{}, Encode: func(v any) vm.Value { return ObjectDiffReviewComment(v.(difftypes.ReviewComment)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeDiffReviewComment(v) }},
 	{Name: "RateLimit", Zero: types.RateLimit{}, Encode: func(v any) vm.Value { return ObjectRateLimit(v.(types.RateLimit)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeRateLimit(v) }},
 	{Name: "ForgeCheck", Zero: types.ForgeCheck{}, Encode: func(v any) vm.Value { return ObjectForgeCheck(v.(types.ForgeCheck)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeForgeCheck(v) }},
 	{Name: "BaseCommit", Zero: types.BaseCommit{}, Encode: func(v any) vm.Value { return ObjectBaseCommit(v.(types.BaseCommit)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeBaseCommit(v) }},
@@ -97,19 +100,19 @@ var inboundTypes = []inboundType{
 	{Name: "Prompt", Zero: types.Prompt{}, Encode: func(v any) vm.Value { return ObjectPrompt(v.(types.Prompt)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodePrompt(v) }},
 	{Name: "Setting", Zero: types.Setting{}, Encode: func(v any) vm.Value { return ObjectSetting(v.(types.Setting)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSetting(v) }},
 	{Name: "Limits", Zero: types.Limits{}, Encode: func(v any) vm.Value { return ObjectLimits(v.(types.Limits)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeLimits(v) }},
-	{Name: "Platform", Zero: types.ImagePlatform{}, Encode: func(v any) vm.Value { return ObjectImagePlatform(v.(types.ImagePlatform), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImagePlatform(v) }},
-	{Name: "Digest", Zero: types.ImageDigest{}, Encode: func(v any) vm.Value { return ObjectImageDigest(v.(types.ImageDigest), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageDigest(v) }},
-	{Name: "Descriptor", Zero: types.ImageDescriptor{}, Encode: func(v any) vm.Value { return ObjectImageDescriptor(v.(types.ImageDescriptor), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageDescriptor(v) }},
-	{Name: "File", Zero: types.ImageFile{}, Encode: func(v any) vm.Value { return ObjectImageFile(v.(types.ImageFile)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageFile(v) }},
-	{Name: "Tree", Zero: types.ImageTree{}, Encode: func(v any) vm.Value { return ObjectImageTree(v.(types.ImageTree), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageTree(v) }},
-	{Name: "Symlink", Zero: types.ImageSymlink{}, Encode: func(v any) vm.Value { return ObjectImageSymlink(v.(types.ImageSymlink)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageSymlink(v) }},
-	{Name: "Directory", Zero: types.ImageDirectory{}, Encode: func(v any) vm.Value { return ObjectImageDirectory(v.(types.ImageDirectory)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageDirectory(v) }},
-	{Name: "Config", Zero: types.ImageConfig{}, Encode: func(v any) vm.Value { return ObjectImageConfig(v.(types.ImageConfig)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageConfig(v) }},
-	{Name: "Spec", Zero: types.ImageSpec{}, Encode: func(v any) vm.Value { return ObjectImageSpec(v.(types.ImageSpec), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageSpec(v) }},
-	{Name: "RegistryAuth", Zero: types.ImageRegistryAuth{}, Encode: func(v any) vm.Value { return ObjectImageRegistryAuth(v.(types.ImageRegistryAuth)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageRegistryAuth(v) }},
-	{Name: "Dependency", Zero: types.ImageDependency{}, Encode: func(v any) vm.Value { return ObjectImageDependency(v.(types.ImageDependency), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageDependency(v) }},
-	{Name: "Provenance", Zero: types.ImageProvenance{}, Encode: func(v any) vm.Value { return ObjectImageProvenance(v.(types.ImageProvenance), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageProvenance(v) }},
-	{Name: "Document", Zero: types.ImageDocument{}, Encode: func(v any) vm.Value { return ObjectImageDocument(v.(types.ImageDocument), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageDocument(v) }},
+	{Name: "Platform", Zero: imagetypes.Platform{}, Encode: func(v any) vm.Value { return ObjectImagePlatform(v.(imagetypes.Platform), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImagePlatform(v) }},
+	{Name: "Digest", Zero: imagetypes.Digest{}, Encode: func(v any) vm.Value { return ObjectImageDigest(v.(imagetypes.Digest), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageDigest(v) }},
+	{Name: "Descriptor", Zero: imagetypes.Descriptor{}, Encode: func(v any) vm.Value { return ObjectImageDescriptor(v.(imagetypes.Descriptor), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageDescriptor(v) }},
+	{Name: "File", Zero: imagetypes.File{}, Encode: func(v any) vm.Value { return ObjectImageFile(v.(imagetypes.File)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageFile(v) }},
+	{Name: "Tree", Zero: imagetypes.Tree{}, Encode: func(v any) vm.Value { return ObjectImageTree(v.(imagetypes.Tree), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageTree(v) }},
+	{Name: "Symlink", Zero: imagetypes.Symlink{}, Encode: func(v any) vm.Value { return ObjectImageSymlink(v.(imagetypes.Symlink)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageSymlink(v) }},
+	{Name: "Directory", Zero: imagetypes.Directory{}, Encode: func(v any) vm.Value { return ObjectImageDirectory(v.(imagetypes.Directory)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageDirectory(v) }},
+	{Name: "Config", Zero: imagetypes.Config{}, Encode: func(v any) vm.Value { return ObjectImageConfig(v.(imagetypes.Config)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageConfig(v) }},
+	{Name: "Spec", Zero: imagetypes.Spec{}, Encode: func(v any) vm.Value { return ObjectImageSpec(v.(imagetypes.Spec), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageSpec(v) }},
+	{Name: "RegistryAuth", Zero: imagetypes.RegistryAuth{}, Encode: func(v any) vm.Value { return ObjectImageRegistryAuth(v.(imagetypes.RegistryAuth)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageRegistryAuth(v) }},
+	{Name: "Dependency", Zero: imagetypes.Dependency{}, Encode: func(v any) vm.Value { return ObjectImageDependency(v.(imagetypes.Dependency), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageDependency(v) }},
+	{Name: "Provenance", Zero: imagetypes.Provenance{}, Encode: func(v any) vm.Value { return ObjectImageProvenance(v.(imagetypes.Provenance), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageProvenance(v) }},
+	{Name: "Document", Zero: imagetypes.Document{}, Encode: func(v any) vm.Value { return ObjectImageDocument(v.(imagetypes.Document), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeImageDocument(v) }},
 	{Name: "DirsOptions", Zero: types.DirsOptions{}, Encode: func(v any) vm.Value { return ObjectDirsOptions(v.(types.DirsOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeDirsOptions(v) }},
 	{Name: "NeighborhoodOptions", Zero: types.KnowledgeNeighborhoodOptions{}, Encode: func(v any) vm.Value {
 		return ObjectKnowledgeNeighborhoodOptions(v.(types.KnowledgeNeighborhoodOptions), ffi.EnumBacking)
@@ -167,7 +170,7 @@ var inboundTypes = []inboundType{
 	{Name: "FunctionGap", Zero: types.FunctionGap{}, Encode: func(v any) vm.Value { return ObjectFunctionGap(v.(types.FunctionGap), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeFunctionGap(v) }},
 	{Name: "ChangeRiskFunction", Zero: types.ChangeRiskFunction{}, Encode: func(v any) vm.Value { return ObjectChangeRiskFunction(v.(types.ChangeRiskFunction), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeChangeRiskFunction(v) }},
 	{Name: "History", Zero: types.History{}, Encode: func(v any) vm.Value { return ObjectHistory(v.(types.History), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeHistory(v) }},
-	{Name: "SessionOptions", Zero: types.TrailReadOptions{}, Encode: func(v any) vm.Value { return ObjectTrailReadOptions(v.(types.TrailReadOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTrailReadOptions(v) }},
+	{Name: "SessionOptions", Zero: trail.ReadOptions{}, Encode: func(v any) vm.Value { return ObjectTrailReadOptions(v.(trail.ReadOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTrailReadOptions(v) }},
 	{Name: "Session", Zero: types.Session{}, Encode: func(v any) vm.Value { return ObjectSession(v.(types.Session), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSession(v) }},
 	{Name: "Workspace", Zero: types.MagusWorkspace{}, Encode: func(v any) vm.Value { return ObjectMagusWorkspace(v.(types.MagusWorkspace), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeMagusWorkspace(v) }},
 	{Name: "TierOptions", Zero: types.TierOptions{}, Encode: func(v any) vm.Value { return ObjectTierOptions(v.(types.TierOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTierOptions(v) }},
@@ -175,7 +178,7 @@ var inboundTypes = []inboundType{
 }
 
 var enumCases = map[reflect.Type][]string{
-	reflect.TypeFor[types.ImageArchitecture]():    {"", "amd64", "arm64"},
+	reflect.TypeFor[imagetypes.Architecture]():    {"", "amd64", "arm64"},
 	reflect.TypeFor[types.BindingStatus]():        {"", "bound", "unsupported"},
 	reflect.TypeFor[types.BriefFormat]():          {"", "markdown", "buzz"},
 	reflect.TypeFor[types.ClaimKind]():            {"", "refs", "test", "output", "released", "dead"},
@@ -194,9 +197,9 @@ var enumCases = map[reflect.Type][]string{
 	reflect.TypeFor[types.JobState]():             {"", "declared", "running", "exited", "pass", "fail", "no_return"},
 	reflect.TypeFor[types.JobWriteProof]():        {"", "alone", "disjoint", "overlapping"},
 	reflect.TypeFor[types.McpTransport]():         {"", "stdio", "http"},
-	reflect.TypeFor[types.ImageModePolicy]():      {"", "fixed", "executable-bit"},
-	reflect.TypeFor[types.ModelTierSource]():      {"row", "matrix", "default"},
-	reflect.TypeFor[types.ImageOS]():              {"", "linux"},
+	reflect.TypeFor[imagetypes.ModePolicy]():      {"", "fixed", "executable-bit"},
+	reflect.TypeFor[types.ModelTierSource]():      {"row", "matrix", "user-matrix", "default"},
+	reflect.TypeFor[imagetypes.OS]():              {"", "linux"},
 	reflect.TypeFor[spells.PatchOpKind]():         {"", "add", "remove", "replace", "move", "copy", "test"},
 	reflect.TypeFor[types.RelationID]():           {"", "depends_on", "contains", "uses", "references", "documents", "calls", "implements", "imports", "rationale_for", "emits", "owns", "defines", "produces", "consumes", "authored", "annotates", "depicts", "co_changes", "splits"},
 	reflect.TypeFor[types.RetryChange]():          {"", "config", "widening", "person", "upgrade"},
@@ -205,8 +208,8 @@ var enumCases = map[reflect.Type][]string{
 	reflect.TypeFor[types.SkillVariant]():         {"short", "full"},
 	reflect.TypeFor[spells.SymbolFormat]():        {"", "scip", "go-packages", "buzz-module", "shell-script"},
 	reflect.TypeFor[types.SymbolIndexFreshness](): {"", "up-to-date", "out-of-date", "not-indexed", "unvouched"},
-	reflect.TypeFor[types.ImageSymlinkPolicy]():   {"", "refuse", "keep", "follow"},
+	reflect.TypeFor[imagetypes.SymlinkPolicy]():   {"", "refuse", "keep", "follow"},
 	reflect.TypeFor[types.ToolCapability]():       {"", "runs", "reads", "writes", "spawns", "network", "inert"},
-	reflect.TypeFor[types.ImageVariant]():         {"", "v1", "v2", "v3", "v8"},
+	reflect.TypeFor[imagetypes.Variant]():         {"", "v1", "v2", "v3", "v8"},
 	reflect.TypeFor[spells.VersionComponent]():    {"", "major", "minor", "patch"},
 }

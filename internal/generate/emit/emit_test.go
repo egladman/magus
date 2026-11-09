@@ -273,7 +273,8 @@ func (s *LibModulesSuite) TestARecordMethodTakesTheRecordAsAMap() {
 	src, err := lib.emitPackage(lib.pkgs[0])
 	s.Require().NoError(err)
 	s.Regexp(`Name:\s+"pair_join"`, string(src))
-	s.Contains(string(src), `{Name: "pair", Type: std.TypeAnyMap}`)
+	s.Contains(string(src), `{Name: "pair"}`)
+	s.Contains(string(src), "pair map[string]any")
 	s.Contains(string(src), "func DecodePair(v any) (lib.Pair, error)")
 }
 
@@ -283,7 +284,8 @@ func (s *LibModulesSuite) TestAStatefulTypeCrossesAsAHandle() {
 	src, err := lib.emitPackage(lib.pkgs[0])
 	s.Require().NoError(err)
 	s.Contains(string(src), `var BoxHandles = convert.NewTable[*lib.Box]("Box")`)
-	s.Contains(string(src), `{Name: "box", Type: std.TypeInt}`)
+	s.Contains(string(src), `{Name: "box"}`)
+	s.Contains(string(src), "box int")
 }
 
 func (s *LibModulesSuite) TestSnakeSplitsAcronyms() {

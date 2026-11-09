@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	difftypes "github.com/egladman/magus/types/diff"
 	"strings"
 	"time"
 
@@ -56,7 +57,7 @@ type diffTool struct {
 	// anchors joins the workspace's notes stores against a changeset, for op=thread. Nil is a
 	// server wired with no notes store, and the record then names note anchors among what it
 	// could not measure.
-	anchors func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error)
+	anchors func(ctx context.Context, rev difftypes.Diff) ([]review.AnchorHit, error)
 }
 
 // reviewLookupTimeout bounds the two forge calls op=state makes. An agent asked for the
@@ -67,13 +68,13 @@ const reviewLookupTimeout = 5 * time.Second
 // Named for the workspace rather than the diff because it reads three unrelated facts, and
 // because internal/handler/status has its own diffSource meaning something narrower.
 type workspaceSource interface {
-	Diff(ctx context.Context, paths []string) (types.Diff, error)
+	Diff(ctx context.Context, paths []string) (difftypes.Diff, error)
 	// DiffWith is Diff with options; op=thread passes SkipOrder.
-	DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error)
+	DiffWith(ctx context.Context, paths []string, opts difftypes.Options) (difftypes.Diff, error)
 	WorkingDiff(ctx context.Context, paths []string) (string, error)
 	// ReviewOrigin says where this tree's changes are discussed, so the threads on that review
 	// can be read.
-	ReviewOrigin(ctx context.Context) types.ReviewOrigin
+	ReviewOrigin(ctx context.Context) difftypes.ReviewOrigin
 }
 
 // diffState is what op=state returns: the session, plus the change it describes.
@@ -85,7 +86,7 @@ type workspaceSource interface {
 // what its own description promises ("it tells you what they have already seen, so you can
 // skip it").
 type diffState struct {
-	*types.DiffReview
+	*difftypes.Review
 	// Patch is the unified diff the hunks below index into.
 	Patch string `json:"patch"`
 	// Hunks are the addressable coordinates, with the same content digests Viewed holds.
@@ -102,7 +103,7 @@ type diffState struct {
 	// READ-ONLY here, deliberately: an agent may draft a comment into the session, which a
 	// person then sends, and nothing in this tool can put words on a review under the
 	// person's name.
-	ReviewComments []types.ReviewComment `json:"threads,omitempty"`
+	ReviewComments []difftypes.ReviewComment `json:"threads,omitempty"`
 }
 
 // diffSummary is op=state's projection=summary shape: the session's identity plus counts,
@@ -113,7 +114,7 @@ type diffSummary struct {
 	Base       string           `json:"base"`
 	AsOf       string           `json:"as_of,omitempty"`
 	Recomputed bool             `json:"recomputed,omitempty"`
-	Cursor     types.DiffCursor `json:"cursor"`
+	Cursor     difftypes.Cursor `json:"cursor"`
 	Counts     diffCounts       `json:"counts"`
 }
 
@@ -134,13 +135,13 @@ type diffConversation struct {
 	ID          string                 `json:"id"`
 	Base        string                 `json:"base"`
 	AsOf        string                 `json:"as_of,omitempty"`
-	Cursor      types.DiffCursor       `json:"cursor"`
+	Cursor      difftypes.Cursor       `json:"cursor"`
 	Viewed      []string               `json:"viewed,omitempty"`
-	Comments    []types.DiffComment    `json:"comments,omitempty"`
-	Suggestions []types.DiffSuggestion `json:"suggestions,omitempty"`
+	Comments    []difftypes.Comment    `json:"comments,omitempty"`
+	Suggestions []difftypes.Suggestion `json:"suggestions,omitempty"`
 	// The conversation is not only the local half. A projection called "conversation" that
 	// omitted what a reviewer said would be the tool's worst possible lie.
-	ReviewComments []types.ReviewComment `json:"threads,omitempty"`
+	ReviewComments []difftypes.ReviewComment `json:"threads,omitempty"`
 }
 
 // diffPatch is op=state's projection=patch shape: the unified diff and its addressable hunks,
@@ -277,18 +278,18 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 		}
 		// The MCP client's name is recorded once, as the origin's Host the call's ctx carries;
 		// agent_name stays the separate label the caller chose.
-		out := t.sessions.AddComment(t.workspaceRoot, types.DiffComment{
+		out := t.sessions.AddComment(t.workspaceRoot, difftypes.Comment{
 			Path:      path,
 			Hunk:      hunk,
 			Body:      body,
 			AgentName: strings.TrimSpace(paramString(req.Params, "agent_name", "")),
 			Origin:    trail.StampOrigin(ctx, types.Origin{}),
-		}, types.DiffAuthorAgent)
+		}, difftypes.AuthorAgent)
 		// The author here is transport-stamped, never read off the payload, which is what makes
 		// it safe as an attribute: it says which DOOR the remark came through, and the agent's
 		// own agent_name label (unbounded, and a claim) stays out of the metric.
 		if p := observability.FromContext(ctx); p != nil {
-			p.RecordReviewRemark(ctx, string(types.DiffAuthorAgent))
+			p.RecordReviewRemark(ctx, string(difftypes.AuthorAgent))
 		}
 		return spells.InvokeResponse{Data: out}, nil
 
@@ -304,7 +305,7 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 		if verr := t.validateAnchor(ctx, path, hunk); verr != nil {
 			return spells.InvokeResponse{}, verr
 		}
-		out := t.sessions.Suggest(t.workspaceRoot, types.DiffSuggestion{
+		out := t.sessions.Suggest(t.workspaceRoot, difftypes.Suggestion{
 			Path:      path,
 			Hunk:      hunk,
 			Reason:    reason,
@@ -337,7 +338,7 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 		}
 		// SetOutline is where an outline is validated, once, so no transport can hold one it
 		// would refuse.
-		out, oerr := t.sessions.SetOutline(t.workspaceRoot, types.DiffOutline{
+		out, oerr := t.sessions.SetOutline(t.workspaceRoot, difftypes.Outline{
 			Thread:    threadID,
 			Topics:    topics,
 			AgentName: paramString(req.Params, "agent_name", ""),
@@ -365,23 +366,23 @@ func wantsThreads(projection string) bool {
 	return projection == "" || projection == "full" || projection == "conversation"
 }
 
-func (t *diffTool) state(ctx context.Context, sess *types.DiffReview, withThreads bool) (diffState, error) {
+func (t *diffTool) state(ctx context.Context, sess *difftypes.Review, withThreads bool) (diffState, error) {
 	if t.src == nil {
 		// No recompute source: serve what is held rather than nothing, and say the change
 		// itself is unavailable rather than implying there is none.
-		return diffState{DiffReview: sess}, nil
+		return diffState{Review: sess}, nil
 	}
 	patch, err := t.src.WorkingDiff(ctx, nil)
 	if err != nil {
 		return diffState{}, err
 	}
-	st := diffState{DiffReview: sess, Patch: patch, Hunks: changeset.ParseHunks(patch)}
+	st := diffState{Review: sess, Patch: patch, Hunks: changeset.ParseHunks(patch)}
 	if now := changeset.PatchDigest(patch); now != sess.AsOf {
 		rev, rerr := t.src.Diff(ctx, changedPaths(st.Hunks))
 		if rerr != nil {
 			return diffState{}, rerr
 		}
-		st.DiffReview = t.sessions.Attach(t.workspaceRoot, rev.Base, rev, now)
+		st.Review = t.sessions.Attach(t.workspaceRoot, rev.Base, rev, now)
 		st.Recomputed = true
 	}
 	if withThreads {
@@ -398,40 +399,40 @@ func (t *diffTool) state(ctx context.Context, sess *types.DiffReview, withThread
 // console gave this a separate route. The error is dropped and the comments are not:
 // OriginReviewComments returns everything it could read alongside it, and a malformed remark is no
 // reason to hide the rest of a thread from the agent working on it.
-func (t *diffTool) reviewComments(ctx context.Context) []types.ReviewComment {
+func (t *diffTool) reviewComments(ctx context.Context) []difftypes.ReviewComment {
 	_, comments, _ := bindings.OriginReviewComments(ctx, t.src.ReviewOrigin(ctx), reviewLookupTimeout)
 	return comments
 }
 
 // thread reads the thread id names: the same record `magus diff --thread -o json` prints and
 // the console's route serves. It posts nothing to the review.
-func (t *diffTool) thread(ctx context.Context, id string) (types.DiffThread, error) {
+func (t *diffTool) thread(ctx context.Context, id string) (difftypes.Thread, error) {
 	if id == "" {
-		return types.DiffThread{}, errors.New(
+		return difftypes.Thread{}, errors.New(
 			"mcp: thread needs thread, the id of a thread's top-level comment in op=state's threads")
 	}
 	if t.src == nil {
-		return types.DiffThread{}, errors.New("mcp: thread needs the workspace, which this server has not wired")
+		return difftypes.Thread{}, errors.New("mcp: thread needs the workspace, which this server has not wired")
 	}
 	comments := t.reviewComments(ctx)
 	patch, err := t.src.WorkingDiff(ctx, nil)
 	if err != nil {
-		return types.DiffThread{}, err
+		return difftypes.Thread{}, err
 	}
 	in, err := review.NewThreadInput(ctx, review.ThreadParts{
 		Patch:    patch,
 		Comments: comments,
-		Annotate: func(ctx context.Context, paths []string) (types.Diff, error) {
-			return t.src.DiffWith(ctx, paths, types.DiffOptions{SkipOrder: true})
+		Annotate: func(ctx context.Context, paths []string) (difftypes.Diff, error) {
+			return t.src.DiffWith(ctx, paths, difftypes.Options{SkipOrder: true})
 		},
 		Anchors: t.anchors,
 	})
 	if err != nil {
-		return types.DiffThread{}, err
+		return difftypes.Thread{}, err
 	}
 	rec, err := review.ReadThread(in, id)
 	if errors.Is(err, changeset.ErrNoThread) {
-		return types.DiffThread{}, fmt.Errorf("op=state lists the thread ids on this review: %w", err)
+		return difftypes.Thread{}, fmt.Errorf("op=state lists the thread ids on this review: %w", err)
 	}
 	return rec, err
 }

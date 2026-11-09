@@ -54,6 +54,35 @@ func TestTriadReportsThreeParallelSentencesAndBullets(t *testing.T) {
 	}
 }
 
+func TestTriadReportsSeriesOfVerbPhrases(t *testing.T) {
+	text := "Cut the release\n\nIt stops early.\n\n" +
+		"Then we reviewed the release plan, rewrote the config parser, and shipped the fix. " +
+		"Later we ran the full build, fixed the lint warnings and tagged the release.\n"
+
+	got := triadMatches(JudgeText(text, KindChangeDescription, WithOnly(RuleTriad)))
+	want := []string{
+		"reviewed the release plan, rewrote the config parser, and shipped the fix",
+		"ran the full build, fixed the lint warnings and tagged the release",
+	}
+
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("triad matched %q, want %q", got, want)
+	}
+}
+
+func TestTriadReportsAVerbPhraseSeriesInTheLead(t *testing.T) {
+	for _, lead := range []string{
+		"Reviewed the plan, rewrote the parser, and shipped the fix.",
+		"Ran the build, fixed the lint and tagged the release.",
+		"Rewrote the release script, cut the build time in half and published the notes.",
+	} {
+		got := triadMatches(JudgeText(lead+" The notes follow.\n", KindReviewReply, WithOnly(RuleTriad)))
+		if len(got) != 1 || got[0] != strings.TrimSuffix(lead, ".") {
+			t.Errorf("triad matched %q, want %q", got, lead)
+		}
+	}
+}
+
 func TestTriadReportsOnCommitMessages(t *testing.T) {
 	text := "Read the cache\n\nThe reader keeps the cache, the graph and the log. It then drops stale, old and dead rows.\n"
 
@@ -87,6 +116,15 @@ func TestTriadLeavesAlone(t *testing.T) {
 		"long bullets":          "- Reads the cache before it touches the network at all\n- Writes\n- Stops\n",
 		"bullets with code":     "- Adds `a`\n- Adds `b`\n- Adds `c`\n",
 		"a series after a list": "The whole flow.\n\n" + numbered + "\nIt reads the cache, the graph, and the log.\n",
+		"one verb series mid-paragraph": "The loader now retries. It reviewed the release plan, rewrote the " +
+			"config parser, and shipped the fix.\n",
+		"four verb phrases": "We reviewed the release plan, rewrote the config parser, ran the full build, and " +
+			"shipped the fix.\n\nThen we read the cache, wrote the log, cut the tag, and stopped.\n",
+		"verb phrases with code": "We edited the `a` file, rewrote the `b` file, and moved the `c` file.\n\n" +
+			"We ran `make`, fixed `lint` and tagged `v1`.\n",
+		"long noun phrases": "We thanked the maintainers of the old release tooling, the authors of the " +
+			"changelog generator and the reviewers.\n\nThe notes cover the parser, the cache layer and its eviction " +
+			"policy, and the docs.\n",
 	} {
 		if got := triadMatches(JudgeText(lead+text, KindChangeDescription, WithOnly(RuleTriad))); len(got) != 0 {
 			t.Errorf("%s: triad matched %q, want nothing", name, got)

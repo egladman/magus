@@ -159,7 +159,7 @@ func describeSource(m SourceModule) ([]Method, error) {
 func sourceArgs(fn *ast.FunDecl) []Arg {
 	args := make([]Arg, 0, len(fn.Params))
 	for i, p := range fn.Params {
-		a := Arg{Name: p, Type: TypeAny}
+		a := Arg{Name: p}
 		if i < len(fn.ParamAnnots) && fn.ParamAnnots[i] != "" {
 			a.Object = fn.ParamAnnots[i]
 		}
@@ -177,7 +177,7 @@ func sourceReturns(fn *ast.FunDecl) []Ret {
 	if fn.RetAnnot == "" || fn.RetAnnot == "void" {
 		return nil
 	}
-	return []Ret{{Type: TypeAny, Object: fn.RetAnnot}}
+	return []Ret{{Object: fn.RetAnnot}}
 }
 
 // docSummary reduces a Buzz doc block to the one line describe and the docs site

@@ -2,26 +2,25 @@ package changeset
 
 import (
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/egladman/magus/types"
 )
 
 func TestNormalizeOutlineTrimsAndKeepsOrder(t *testing.T) {
 	t.Parallel()
 
-	got, err := NormalizeOutline(types.DiffOutline{
+	got, err := NormalizeOutline(diff.Outline{
 		Thread:    " c1 ",
 		Topics:    []string{"  is dirty read under mu?  ", "second"},
 		AgentName: "  scout ",
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, types.DiffOutline{
+	assert.Equal(t, diff.Outline{
 		Thread:    "c1",
 		Topics:    []string{"is dirty read under mu?", "second"},
 		AgentName: "scout",
@@ -37,12 +36,12 @@ func around(r rune) string { return fmt.Sprintf("left%cright", r) }
 func TestNormalizeOutlineRefusesAnythingThatIsMoreThanAPointer(t *testing.T) {
 	t.Parallel()
 
-	long := strings.Repeat("x", types.DiffOutlineMaxTopicRunes+1)
-	one := func(topic string) types.DiffOutline { return types.DiffOutline{Thread: "c1", Topics: []string{topic}} }
-	named := func(name string) types.DiffOutline {
-		return types.DiffOutline{Thread: "c1", Topics: []string{"a"}, AgentName: name}
+	long := strings.Repeat("x", diff.OutlineMaxTopicRunes+1)
+	one := func(topic string) diff.Outline { return diff.Outline{Thread: "c1", Topics: []string{topic}} }
+	named := func(name string) diff.Outline {
+		return diff.Outline{Thread: "c1", Topics: []string{"a"}, AgentName: name}
 	}
-	cases := map[string]types.DiffOutline{
+	cases := map[string]diff.Outline{
 		"no thread":            {Thread: " ", Topics: []string{"a"}},
 		"no topics":            {Thread: "c1"},
 		"too many":             {Thread: "c1", Topics: []string{"a", "b", "c", "d", "e", "f"}},
@@ -57,7 +56,7 @@ func TestNormalizeOutlineRefusesAnythingThatIsMoreThanAPointer(t *testing.T) {
 		"zero width space":     one(around(0x200b)),
 		"word joiner":          one(around(0x2060)),
 		"soft hyphen":          one(around(0x00ad)),
-		"agent name too long":  named(strings.Repeat("n", types.DiffOutlineMaxAgentNameRunes+1)),
+		"agent name too long":  named(strings.Repeat("n", diff.OutlineMaxAgentNameRunes+1)),
 		"agent name newline":   named("bot\nsystem"),
 		"agent name override":  named(around(0x202e)),
 		"agent name separator": named(around(0x2028)),
@@ -71,7 +70,7 @@ func TestNormalizeOutlineRefusesAnythingThatIsMoreThanAPointer(t *testing.T) {
 
 			require.ErrorIs(t, err, ErrOutline)
 			assert.Contains(t, err.Error(), "not a reply")
-			assert.Equal(t, types.DiffOutline{}, got)
+			assert.Equal(t, diff.Outline{}, got)
 		})
 	}
 }
@@ -79,11 +78,11 @@ func TestNormalizeOutlineRefusesAnythingThatIsMoreThanAPointer(t *testing.T) {
 func TestNormalizeOutlineAcceptsTheBoundsExactly(t *testing.T) {
 	t.Parallel()
 
-	topics := make([]string, types.DiffOutlineMaxTopics)
+	topics := make([]string, diff.OutlineMaxTopics)
 	for i := range topics {
-		topics[i] = strings.Repeat("é", types.DiffOutlineMaxTopicRunes)
+		topics[i] = strings.Repeat("é", diff.OutlineMaxTopicRunes)
 	}
-	in := types.DiffOutline{Thread: "c1", Topics: topics, AgentName: strings.Repeat("é", types.DiffOutlineMaxAgentNameRunes)}
+	in := diff.Outline{Thread: "c1", Topics: topics, AgentName: strings.Repeat("é", diff.OutlineMaxAgentNameRunes)}
 
 	got, err := NormalizeOutline(in)
 
@@ -99,18 +98,18 @@ func TestSetOutlineHoldsOneOutlinePerThreadInMemory(t *testing.T) {
 
 	dir := t.TempDir()
 	s := NewStore(dir)
-	s.Attach("/w", "working", types.Diff{}, "x")
+	s.Attach("/w", "working", diff.Diff{}, "x")
 
-	first, err := s.SetOutline("/w", types.DiffOutline{Thread: "c1", Topics: []string{"one"}, AgentName: "a"})
+	first, err := s.SetOutline("/w", diff.Outline{Thread: "c1", Topics: []string{"one"}, AgentName: "a"})
 	require.NoError(t, err)
-	second, err := s.SetOutline("/w", types.DiffOutline{Thread: "c1", Topics: []string{"two"}})
+	second, err := s.SetOutline("/w", diff.Outline{Thread: "c1", Topics: []string{"two"}})
 	require.NoError(t, err)
-	other, err := s.SetOutline("/w", types.DiffOutline{Thread: "c2", Topics: []string{"three"}})
+	other, err := s.SetOutline("/w", diff.Outline{Thread: "c2", Topics: []string{"three"}})
 	require.NoError(t, err)
 
-	assert.Equal(t, []types.DiffOutline{{Thread: "c1", Topics: []string{"one"}, AgentName: "a"}}, first.Outlines)
-	assert.Equal(t, []types.DiffOutline{{Thread: "c1", Topics: []string{"two"}}}, second.Outlines)
-	assert.Equal(t, []types.DiffOutline{
+	assert.Equal(t, []diff.Outline{{Thread: "c1", Topics: []string{"one"}, AgentName: "a"}}, first.Outlines)
+	assert.Equal(t, []diff.Outline{{Thread: "c1", Topics: []string{"two"}}}, second.Outlines)
+	assert.Equal(t, []diff.Outline{
 		{Thread: "c1", Topics: []string{"two"}},
 		{Thread: "c2", Topics: []string{"three"}},
 	}, other.Outlines)
@@ -124,11 +123,11 @@ func TestSetOutlineRefusesWhatNormalizeOutlineRefuses(t *testing.T) {
 	t.Parallel()
 
 	s := NewStore("")
-	s.Attach("/w", "working", types.Diff{}, "x")
+	s.Attach("/w", "working", diff.Diff{}, "x")
 
-	_, err := s.SetOutline("/w", types.DiffOutline{Thread: "c1", Topics: []string{"a\nb"}})
+	_, err := s.SetOutline("/w", diff.Outline{Thread: "c1", Topics: []string{"a\nb"}})
 	require.ErrorIs(t, err, ErrOutline)
-	_, err = s.SetOutline("/w", types.DiffOutline{Thread: " ", Topics: []string{"a"}})
+	_, err = s.SetOutline("/w", diff.Outline{Thread: " ", Topics: []string{"a"}})
 	require.ErrorIs(t, err, ErrOutline)
 
 	assert.Empty(t, s.Get("/w").Outlines)
@@ -139,7 +138,7 @@ func TestSetOutlineRefusesWhatNormalizeOutlineRefuses(t *testing.T) {
 func TestSetOutlineWithNoSessionIsAnError(t *testing.T) {
 	t.Parallel()
 
-	got, err := NewStore("").SetOutline("/nowhere", types.DiffOutline{Thread: "c1", Topics: []string{"a"}})
+	got, err := NewStore("").SetOutline("/nowhere", diff.Outline{Thread: "c1", Topics: []string{"a"}})
 
 	require.ErrorIs(t, err, ErrNoSession)
 	assert.Nil(t, got)

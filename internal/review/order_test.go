@@ -1,47 +1,46 @@
 package review
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/egladman/magus/types"
 )
 
 // orderTestDiff has four hunks over three files and an order over them: F first, then its use
 // in other.go, then G in core.go, then the generated output.
-func orderTestDiff() types.Diff {
-	hunk := func(index, start, count int) types.DiffHunk {
-		return types.DiffHunk{Index: index, NewStart: start, NewCount: count}
+func orderTestDiff() diff.Diff {
+	hunk := func(index, start, count int) diff.Hunk {
+		return diff.Hunk{Index: index, NewStart: start, NewCount: count}
 	}
-	step := func(n int, path string, index int, label string, why types.DiffWhy) types.DiffStep {
-		return types.DiffStep{Number: n, Hunks: []types.DiffStepHunk{{Ref: types.DiffHunkRef{Path: path, Index: index}, Label: label, Why: why}}}
+	step := func(n int, path string, index int, label string, why diff.Why) diff.Step {
+		return diff.Step{Number: n, Hunks: []diff.StepHunk{{Ref: diff.HunkRef{Path: path, Index: index}, Label: label, Why: why}}}
 	}
-	uses := types.DiffWhy{Relation: types.DiffWhyUses, Step: 1, Symbol: "F", Text: "uses F, defined in step 1"}
-	return types.Diff{
-		Files: []types.DiffFile{
-			{Path: "core.go", Hunks: []types.DiffHunk{hunk(0, 3, 1), hunk(1, 9, 2)}},
-			{Path: "other.go", Hunks: []types.DiffHunk{hunk(0, 20, 1)}},
-			{Path: "gen/out.json", Role: types.DiffRoleOutput, Hunks: []types.DiffHunk{hunk(0, 1, 1)}},
+	uses := diff.Why{Relation: diff.WhyUses, Step: 1, Symbol: "F", Text: "uses F, defined in step 1"}
+	return diff.Diff{
+		Files: []diff.File{
+			{Path: "core.go", Hunks: []diff.Hunk{hunk(0, 3, 1), hunk(1, 9, 2)}},
+			{Path: "other.go", Hunks: []diff.Hunk{hunk(0, 20, 1)}},
+			{Path: "gen/out.json", Role: diff.RoleOutput, Hunks: []diff.Hunk{hunk(0, 1, 1)}},
 		},
-		Order: &types.DiffOrder{
-			Groups: []types.DiffGroup{
-				{Kind: types.DiffGroupConnected, Label: "F", HunkCount: 3, Steps: []types.DiffStep{
-					step(1, "core.go", 0, "F", types.DiffWhy{Relation: types.DiffWhyStarts, Text: "starts the group"}),
+		Order: &diff.Order{
+			Groups: []diff.Group{
+				{Kind: diff.GroupConnected, Label: "F", HunkCount: 3, Steps: []diff.Step{
+					step(1, "core.go", 0, "F", diff.Why{Relation: diff.WhyStarts, Text: "starts the group"}),
 					step(2, "other.go", 0, "Use", uses),
 					step(3, "core.go", 1, "G", uses),
 				}},
-				{Kind: types.DiffGroupGenerated, HunkCount: 1, Steps: []types.DiffStep{
-					step(4, "gen/out.json", 0, "", types.DiffWhy{Relation: types.DiffWhyGenerated, Text: "generated output; its source carries the review"}),
+				{Kind: diff.GroupGenerated, HunkCount: 1, Steps: []diff.Step{
+					step(4, "gen/out.json", 0, "", diff.Why{Relation: diff.WhyGenerated, Text: "generated output; its source carries the review"}),
 				}},
 			},
-			Count: types.DiffOrderCount{HunkCount: 4, Placed: 4, Complete: true},
+			Count: diff.OrderCount{HunkCount: 4, Placed: 4, Complete: true},
 		},
 	}
 }
 
-func orderText(rev types.Diff, showGenerated bool) string {
+func orderText(rev diff.Diff, showGenerated bool) string {
 	return strings.Join(OrderLines(rev, showGenerated), "\n") + "\n"
 }
 
@@ -77,7 +76,7 @@ group 2 of 2: generated (1 hunk)
 func TestOrderLinesNameEachThreadBesideItsHunk(t *testing.T) {
 	t.Parallel()
 	rev := orderTestDiff()
-	rev.Files[0].Threads = []types.DiffThreadRef{
+	rev.Files[0].Threads = []diff.ThreadRef{
 		{ID: "2193847561", Hunk: 1, Line: 9, Comments: 3},
 		{ID: "77", Hunk: -1, Line: 40, Comments: 1, Outdated: true},
 	}
@@ -110,10 +109,10 @@ func TestOrderLinesNameWhatTheOrderCouldNotAccountFor(t *testing.T) {
 	t.Parallel()
 
 	rev := orderTestDiff()
-	rev.Order.Count = types.DiffOrderCount{
+	rev.Order.Count = diff.OrderCount{
 		HunkCount: 5, Placed: 4,
-		Repeated:          []types.DiffHunkRef{{Path: "core.go", Index: 1}},
-		Missing:           []types.DiffHunkRef{{Path: "other.go", Index: 2}},
+		Repeated:          []diff.HunkRef{{Path: "core.go", Index: 1}},
+		Missing:           []diff.HunkRef{{Path: "other.go", Index: 2}},
 		FilesWithoutHunks: []string{"logo.png", "go.sum"},
 	}
 
@@ -130,7 +129,7 @@ func TestOrderLinesNameAHunkThatLeavesNoLine(t *testing.T) {
 }
 
 // withSymbols puts F in core.go's first hunk and M, G in its second, innermost first.
-func withSymbols(rev types.Diff, syms ...types.DiffSymbol) types.Diff {
+func withSymbols(rev diff.Diff, syms ...diff.Symbol) diff.Diff {
 	rev.Files[0].Hunks[0].Symbols = []string{"F"}
 	rev.Files[0].Hunks[1].Symbols = []string{"M", "G"}
 	rev.Files[0].Symbols = syms
@@ -140,9 +139,9 @@ func withSymbols(rev types.Diff, syms ...types.DiffSymbol) types.Diff {
 func TestOrderPrintsEachStepsSignature(t *testing.T) {
 	t.Parallel()
 	rev := withSymbols(orderTestDiff(),
-		types.DiffSymbol{ID: "G", Label: "G", Signature: "func G(n int)\n\terror"},
-		types.DiffSymbol{ID: "F", Label: "F", Signature: "func F()"},
-		types.DiffSymbol{ID: "M", Label: "M", Signature: "func (T) M()"},
+		diff.Symbol{ID: "G", Label: "G", Signature: "func G(n int)\n\terror"},
+		diff.Symbol{ID: "F", Label: "F", Signature: "func F()"},
+		diff.Symbol{ID: "M", Label: "M", Signature: "func (T) M()"},
 	)
 
 	got := orderText(rev, true)
@@ -154,9 +153,9 @@ func TestOrderPrintsEachStepsSignature(t *testing.T) {
 func TestOrderMarksAChangedSignature(t *testing.T) {
 	t.Parallel()
 	rev := withSymbols(orderTestDiff(),
-		types.DiffSymbol{ID: "F", Label: "F", Signature: "func F(n int)", BaseSignature: "func F()"},
-		types.DiffSymbol{ID: "G", Label: "G", Signature: "func G()", BaseSignature: "func G()"},
-		types.DiffSymbol{ID: "M", Label: "M", Signature: "func (T) M()"},
+		diff.Symbol{ID: "F", Label: "F", Signature: "func F(n int)", BaseSignature: "func F()"},
+		diff.Symbol{ID: "G", Label: "G", Signature: "func G()", BaseSignature: "func G()"},
+		diff.Symbol{ID: "M", Label: "M", Signature: "func (T) M()"},
 	)
 
 	got := orderText(rev, true)
@@ -170,9 +169,9 @@ func TestOrderMarksAChangedSignature(t *testing.T) {
 func TestOrderSaysWhenTheIndexerGaveNoSignature(t *testing.T) {
 	t.Parallel()
 	rev := withSymbols(orderTestDiff(),
-		types.DiffSymbol{ID: "F", Label: "F"},
-		types.DiffSymbol{ID: "G", Label: "G", Signature: "func G()"},
-		types.DiffSymbol{ID: "M", Label: "M"},
+		diff.Symbol{ID: "F", Label: "F"},
+		diff.Symbol{ID: "G", Label: "G", Signature: "func G()"},
+		diff.Symbol{ID: "M", Label: "M"},
 	)
 
 	got := orderText(rev, true)

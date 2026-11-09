@@ -12,8 +12,6 @@ import (
 	"github.com/egladman/magus/internal/sys/mem"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module platform -lang buzz -out ../internal/interp/bindings/gen/platform.go -pkg bindgen
-
 // HostPlatform returns the Docker/OCI platform triple (GOOS, OCI arch, ARM variant).
 // variant is "v6"/"v7"/"v8" for ARM, "" otherwise; arm reads /proc/cpuinfo on Linux.
 func HostPlatform() (osName, arch, variant string) {
@@ -94,10 +92,10 @@ var Platform = Module{
 			Name: "arch",
 			Doc:  "Normalize an architecture identifier (x86_64, aarch64, armv7l, ...) to canonical Go GOARCH (amd64, arm64, arm). With style, render that result in a convention (go|uname); raises on an unknown style. Returns \"\" when the identifier is unrecognized.",
 			Args: []Arg{
-				{Name: "name", Type: TypeString},
-				{Name: "style", Type: TypeString, Optional: true, Enum: "PlatformStyle"},
+				{Name: "name"},
+				{Name: "style", Optional: true, Enum: "PlatformStyle"},
 			},
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    PlatformArch,
 		},
@@ -105,23 +103,23 @@ var Platform = Module{
 			Name: "os",
 			Doc:  "Normalize an OS identifier (Darwin, macOS, win, ...) to canonical Go GOOS (darwin, windows). With style, render that result in a convention (go|uname); raises on an unknown style. Returns \"\" when the identifier is unrecognized.",
 			Args: []Arg{
-				{Name: "name", Type: TypeString},
-				{Name: "style", Type: TypeString, Optional: true, Enum: "PlatformStyle"},
+				{Name: "name"},
+				{Name: "style", Optional: true, Enum: "PlatformStyle"},
 			},
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    PlatformOS,
 		},
 		{
 			Name:    "memory_bytes",
 			Doc:     "How much memory this process may commit, in BYTES, or 0 when it cannot be determined (any host other than Linux or macOS). Narrowed by a container's memory ceiling where there is one, the way cpus() honors a CPU quota. Note magus.project targets take memory_mb in MEGABYTES. Size work that scales on memory rather than cores with this: `go test` defaults its package parallelism to the CPU count, which is the wrong axis under -race, where each test binary carries the race detector's shadow memory. Branch on 0 rather than treating it as \"no memory\".",
-			Returns: []Ret{{Type: TypeInt}},
+			Returns: []Ret{{}},
 			Impl:    PlatformMemoryBytes,
 		},
 		{
 			Name:    "cpus",
 			Doc:     "How many CPUs this process may use (Go's GOMAXPROCS, which honors a container quota where the OS-visible core count does not). Pair with memory_bytes() when sizing parallel work: the smaller of the two limits is the one that matters.",
-			Returns: []Ret{{Type: TypeInt}},
+			Returns: []Ret{{}},
 			Impl:    PlatformCPUs,
 		},
 	},

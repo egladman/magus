@@ -13,14 +13,14 @@ import (
 
 // VoiceSchema names the shape of a voice file, so a file written by another
 // version of proofread is refused rather than misread.
-const VoiceSchema = "proofread-voice/3"
+const VoiceSchema = "proofread-voice/4"
 
 // olderVoiceSchemas are the schemas earlier proofread versions wrote. A file
 // in one is refused with the command that rebuilds it.
 //
-// compat(until: no voice file in proofread-voice/1 or /2 is still read):
-// naming the rebuild beats the bare "not proofread-voice/3" refusal.
-var olderVoiceSchemas = []string{"proofread-voice/1", "proofread-voice/2"}
+// compat(until: no voice file in proofread-voice/1, /2 or /3 is still read):
+// naming the rebuild beats the bare "not proofread-voice/4" refusal.
+var olderVoiceSchemas = []string{"proofread-voice/1", "proofread-voice/2", "proofread-voice/3"}
 
 // MinVoiceTexts is the fewest change descriptions a [Voice] relaxes the tense
 // rule from.
@@ -34,22 +34,19 @@ const MinVoiceWords = 1000
 // its name, a map entry as "<map>.<key>".
 type Feature string
 
-// voiceKinds are the kinds a [Voice] measures.
-var voiceKinds = []Kind{KindChangeDescription, KindReviewReply, KindCommitMessage, KindIssue}
+// voiceKinds are the kinds a [Voice] measures: each built-in kind that a
+// voice holds to its own measures.
+var voiceKinds = func() []Kind {
+	var out []Kind
 
-// voiceJudged are the kinds held to a voice: voiceKinds and every review text.
-var voiceJudged = slices.Concat(voiceKinds, []Kind{KindReviewSummary, KindReviewInline})
-
-// heldKind is the kind whose measures in a [Voice] k is held to. A person writes
-// a review's summary, its inline comments and its replies in one voice, which a
-// voice keeps under review-reply.
-func heldKind(k Kind) Kind {
-	if isReview(k) {
-		return KindReviewReply
+	for _, s := range builtinKinds {
+		if s.Voice == s.Name {
+			out = append(out, s.Name)
+		}
 	}
 
-	return k
-}
+	return out
+}()
 
 // Voice is one author's measured style per kind of text. It holds aggregates
 // alone: counts, rates and window measures, never a text, a word the author
@@ -76,6 +73,10 @@ type VoiceStats struct {
 	// commit subjects. It is set on commit messages of [MinVoiceWords] words
 	// or more, and 0 otherwise.
 	SubjectP95 float64 `json:"subject_chars_p95,omitempty"`
+	// Ranges are the author's 5th and 95th percentiles of each feature a
+	// budget or the uniform rule reads, over the same windows. It is nil
+	// under [MinVoiceWords] words.
+	Ranges map[Feature]Range `json:"ranges,omitempty"`
 }
 
 // Windows is what an author's texts of one kind measure when shuffled and
@@ -111,39 +112,20 @@ func BuildVoice(texts map[Kind][]string) (*Voice, error) {
 			return nil, fmt.Errorf("a voice measures %s, not %s", kindList(voiceKinds), kind)
 		}
 
-		var (
-			k                   VoiceStats
-			kept                []string
-			firstPerson, future int
-		)
-
-		for _, text := range list {
-			words, fp, fut := tenseCounts(text, kind)
-			if words == 0 {
-				continue
-			}
-
-			k.Texts++
-			k.Words += words
-			firstPerson += fp
-			future += fut
-			kept = append(kept, text)
-		}
-
+		k, kept := tenseStats(kind, list)
 		if k.Texts == 0 {
 			continue
 		}
 
-		k.FirstPerson = round2(1000 * float64(firstPerson) / float64(k.Words))
-		k.Future = round2(1000 * float64(future) / float64(k.Words))
-
 		switch {
 		case k.Words < MinVoiceWords:
 			// Too few words to rank a draft against: the tense counts alone stand.
-		case kind == KindCommitMessage:
+		case spec(kind).Reader.Subject:
 			k.SubjectP95 = subjectP95(kept)
+			k.Ranges = buildRanges(kind, kept)
 		default:
 			k.Windows = buildWindows(kind, kept)
+			k.Ranges = buildRanges(kind, kept)
 		}
 
 		v.Kinds[kind] = k
@@ -154,6 +136,36 @@ func BuildVoice(texts map[Kind][]string) (*Voice, error) {
 	}
 
 	return v, nil
+}
+
+// tenseStats counts the texts of list with a prose word, their words and
+// their tense rates, and returns those texts.
+func tenseStats(kind Kind, list []string) (VoiceStats, []string) {
+	var (
+		k                   VoiceStats
+		kept                []string
+		firstPerson, future int
+	)
+
+	for _, text := range list {
+		words, fp, fut := tenseCounts(text, kind)
+		if words == 0 {
+			continue
+		}
+
+		k.Texts++
+		k.Words += words
+		firstPerson += fp
+		future += fut
+		kept = append(kept, text)
+	}
+
+	if k.Texts > 0 {
+		k.FirstPerson = round2(1000 * float64(firstPerson) / float64(k.Words))
+		k.Future = round2(1000 * float64(future) / float64(k.Words))
+	}
+
+	return k, kept
 }
 
 // tenseCounts returns text's prose words and its counts of the first-person
@@ -238,16 +250,22 @@ func ReadVoice(r io.Reader) (*Voice, error) {
 }
 
 func checkVoiceStats(kind Kind, k VoiceStats) error {
-	switch {
-	case !slices.Contains(voiceKinds, kind):
+	if !slices.Contains(voiceKinds, kind) {
 		return fmt.Errorf("a voice measures %s, not %s", kindList(voiceKinds), kind)
+	}
+
+	if err := checkRanges(kind, k.Ranges); err != nil {
+		return err
+	}
+
+	switch {
 	case k.SubjectP95 < 0:
 		return fmt.Errorf("%s: subject length %v is negative", kind, k.SubjectP95)
-	case k.SubjectP95 > 0 && kind != KindCommitMessage:
+	case k.SubjectP95 > 0 && !spec(kind).Reader.Subject:
 		return fmt.Errorf("%s: only commit messages keep a subject length", kind)
 	case k.Windows == nil:
 		return nil
-	case kind == KindCommitMessage:
+	case spec(kind).Reader.Subject:
 		return fmt.Errorf("%s: commit messages keep no windows", kind)
 	}
 
@@ -287,9 +305,9 @@ func (v *Voice) RelaxesTense() bool {
 // when v [Voice.RelaxesTense]. A nil v gives no voice.
 func WithVoice(v *Voice) Option { return func(o *options) { o.voice = v } }
 
-// relaxes reports whether v turns rule's deny into advice on kind.
-func (v *Voice) relaxes(rule Rule, kind Kind) bool {
-	return rule == RuleTense && kind == KindChangeDescription && v.RelaxesTense()
+// relaxes reports whether v turns rule's deny into advice on s.
+func (v *Voice) relaxes(rule Rule, s *KindSpec) bool {
+	return rule == RuleTense && s.TenseByVoice && v.RelaxesTense()
 }
 
 func kindList(kinds []Kind) string {
@@ -299,4 +317,143 @@ func kindList(kinds []Kind) string {
 	}
 
 	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
+
+// budget is how many times a counting rule lets a text show its habit
+// before it reports, and where that number came from.
+type budget struct {
+	allowed int
+	// fromVoice reports whether the author's own texts set allowed.
+	fromVoice bool
+}
+
+// voiceBudget scales the author's 95th percentile of feature, a rate per
+// 1000 words, to in's words, rounded down. A voice never lowers a budget,
+// so defaultAllowed stands with no range or a lower one.
+func voiceBudget(in input, feature Feature, defaultAllowed int) budget {
+	out := budget{allowed: defaultAllowed}
+
+	if in.opts.voice == nil || in.spec.Voice == "" {
+		return out
+	}
+
+	r, ok := in.opts.voice.Kinds[in.spec.Voice].Ranges[feature]
+	if !ok {
+		return out
+	}
+
+	words := Measure(strings.Join(in.source, "\n"), in.spec.Voice).Words
+
+	if own := int(math.Floor(r.P95 * float64(words) / 1000)); own > defaultAllowed {
+		out = budget{allowed: own, fromVoice: true}
+	}
+
+	return out
+}
+
+// note is the clause a finding adds to say a voice set its budget.
+func (b budget) note() string {
+	if !b.fromVoice {
+		return ""
+	}
+
+	return fmt.Sprintf(" Your own texts of this length allow %d; this one has more.", b.allowed)
+}
+
+// minRangeWindows is the fewest windows with data for a feature that a
+// [Range] is taken from. Under it the feature has no range, and a rule
+// reading it keeps its default.
+const minRangeWindows = 5
+
+// Range is an author's 5th and 95th percentile of one feature over the
+// windows [BuildVoice] pools, and how many windows had data for it.
+type Range struct {
+	P5      float64 `json:"p5"`
+	P95     float64 `json:"p95"`
+	Windows int     `json:"windows"`
+}
+
+// rangeFeature is one feature a voice keeps a [Range] of.
+type rangeFeature struct {
+	name Feature
+	read func(Shape) (float64, bool)
+}
+
+// rangeFeatures are the features a budget or the uniform rule reads, the
+// ones the paired calibration in ADR 0037 kept.
+var rangeFeatures = []rangeFeature{
+	{"triads_per_1000", func(s Shape) (float64, bool) { return s.Triads, s.Words > 0 }},
+	{"grammar_per_1000.participial_clause", grammarRate("participial_clause")},
+	{"item_words_sd", withheldUnless("item_words_sd", func(s Shape) float64 { return s.ItemWordsStdDev })},
+	{"item_opener_share", withheldUnless("item_opener_share", func(s Shape) float64 { return s.ItemOpenerShare })},
+	{"opener_class_entropy", withheldUnless("opener_class_entropy", func(s Shape) float64 { return s.OpenerClassEntropy })},
+}
+
+func grammarRate(key string) func(Shape) (float64, bool) {
+	return func(s Shape) (float64, bool) {
+		v, ok := s.Grammar[key]
+
+		return v, ok
+	}
+}
+
+func withheldUnless(name string, value func(Shape) float64) func(Shape) (float64, bool) {
+	return func(s Shape) (float64, bool) { return value(s), !slices.Contains(s.Withheld, name) }
+}
+
+// readRangeFeature reads the named range feature from s.
+func readRangeFeature(s Shape, name Feature) (float64, bool) {
+	i := slices.IndexFunc(rangeFeatures, func(f rangeFeature) bool { return f.name == name })
+	if i < 0 {
+		return 0, false
+	}
+
+	return rangeFeatures[i].read(s)
+}
+
+// buildRanges pools texts into windows as voice-drift does. It returns each
+// range feature's percentiles over the windows with data for it, and nil
+// when no feature has [minRangeWindows].
+func buildRanges(kind Kind, texts []string) map[Feature]Range {
+	values := map[Feature][]float64{}
+
+	for _, s := range MeasureWindowShapes(texts, kind, voiceWindowWords, VoiceSeed) {
+		for _, f := range rangeFeatures {
+			if v, ok := f.read(s); ok {
+				values[f.name] = append(values[f.name], v)
+			}
+		}
+	}
+
+	var out map[Feature]Range
+
+	for name, vs := range values {
+		if len(vs) < minRangeWindows {
+			continue
+		}
+
+		if out == nil {
+			out = map[Feature]Range{}
+		}
+
+		slices.Sort(vs)
+		out[name] = Range{P5: round4(percentile(vs, 0.05)), P95: round4(percentile(vs, 0.95)), Windows: len(vs)}
+	}
+
+	return out
+}
+
+func checkRanges(kind Kind, ranges map[Feature]Range) error {
+	for name, r := range ranges {
+		switch {
+		case !slices.ContainsFunc(rangeFeatures, func(f rangeFeature) bool { return f.name == name }):
+			return fmt.Errorf("%s: no range is kept of feature %q", kind, name)
+		case r.Windows < minRangeWindows:
+			return fmt.Errorf("%s: range of %s comes from %d windows, want %d or more", kind, name, r.Windows, minRangeWindows)
+		case r.P5 > r.P95:
+			return fmt.Errorf("%s: range of %s has p5 %v over p95 %v", kind, name, r.P5, r.P95)
+		}
+	}
+
+	return nil
 }

@@ -3,6 +3,7 @@ package magus
 import (
 	"context"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -334,13 +335,13 @@ func (l *projectLocker) writePipeWait(ctx context.Context, up pipe.Stage) func()
 
 // PipeWaits reports every run in this workspace waiting, before taking its locks, on the
 // magus upstream of it in a pipe. A record whose waiter has exited is swept.
-func (m *Magus) PipeWaits() []types.StatusPipeWait {
+func (m *Magus) PipeWaits() []daemon.PipeWait {
 	return pipeWaits(resolveCacheDir(m.ws.Root, m.cfg), m.ws.Root)
 }
 
-func pipeWaits(cacheDir, workspaceRoot string) []types.StatusPipeWait {
+func pipeWaits(cacheDir, workspaceRoot string) []daemon.PipeWait {
 	matches, _ := filepath.Glob(filepath.Join(pipe.Dir(cacheDir, workspaceRoot), "*"+pipeWaitSuffix))
-	var out []types.StatusPipeWait
+	var out []daemon.PipeWait
 	for _, path := range matches {
 		var rec pipeWaitRecord
 		if record.Read(path, &rec) != nil || rec.PID == 0 {
@@ -350,11 +351,11 @@ func pipeWaits(cacheDir, workspaceRoot string) []types.StatusPipeWait {
 			_ = record.Remove(path)
 			continue
 		}
-		out = append(out, types.StatusPipeWait{
+		out = append(out, daemon.PipeWait{
 			PID: rec.PID, Command: rec.Command, Dir: rec.Dir,
 			UpstreamPID: rec.UpstreamPID, UpstreamCommand: rec.UpstreamCommand, WaitTime: rec.Started,
 		})
 	}
-	slices.SortFunc(out, func(a, b types.StatusPipeWait) int { return a.PID - b.PID })
+	slices.SortFunc(out, func(a, b daemon.PipeWait) int { return a.PID - b.PID })
 	return out
 }

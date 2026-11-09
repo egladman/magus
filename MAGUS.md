@@ -19,6 +19,7 @@ A **target** is a named unit of work (build, test, lint, ...) declared as an `ex
 - Project: libs/embed/train
 - Project: libs/figure
 - Project: libs/proofread/train
+- Project: libs/ssg
 - Project: testdata/latex/onepage
 
 ## Route by question
@@ -69,7 +70,7 @@ magus graph export -o json  # the whole graph
 | doc        |    2000+ | `magus query kind=doc`        | `docs/reference/rules/index.md`, `docs/reference/proofread/index.md`, `docs/guides/integrations/agents/guard.md`                                               |
 | dir        |     600+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/proofread`                                                                                       |
 | file       |     600+ | `magus query kind=file`       | `magusfile.buzz`, `libs/figure/figure.buzz`, `hack/ci/pull-requests.buzz`                                                                                      |
-| function   |    4000+ | `magus query kind=function`   | `apiBase`, `main`, `textProblems`                                                                                                                              |
+| function   |    4000+ | `magus query kind=function`   | `apiBase`, `main`, `judgeText`                                                                                                                                 |
 | import     |     100+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                                                                           |
 | rationale  |      10+ | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                                                                         |
 | package    |     100+ | `magus query kind=package`    | `gopkg.in/yaml.v3`, `github.com/davecgh/go-spew`, `github.com/pmezard/go-difflib`                                                                              |
@@ -94,8 +95,10 @@ magus graph export -o json  # the whole graph
 | [libs/proofread](libs/proofread/MAGUS.md)                                   |      11 | `magus query project=libs/proofread`                  | `proofread-build`, `format`, `wordclass-generate`             |
 | libs/proofread/train                                                        |       7 | `magus query project=libs/proofread/train`            | `test`, `ci`, `format`                                        |
 | [libs/scipbuzz](libs/scipbuzz/MAGUS.md)                                     |       9 | `magus query project=libs/scipbuzz`                   | `format`, `ci`, `test`                                        |
+| libs/ssg                                                                    |       1 | `magus query project=libs/ssg`                        | `test`                                                        |
 | [libs/termkit](libs/termkit/MAGUS.md)                                       |       8 | `magus query project=libs/termkit`                    | `format`, `ci`, `test`                                        |
 | [libs/testpairing](libs/testpairing/MAGUS.md)                               |       8 | `magus query project=libs/testpairing`                | `format`, `ci`, `test`                                        |
+| [libs/text](libs/text/MAGUS.md)                                             |       8 | `magus query project=libs/text`                       | `format`, `ci`, `test`                                        |
 | [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                     |
 | [libs/xdg](libs/xdg/MAGUS.md)                                               |       8 | `magus query project=libs/xdg`                        | `format`, `build`, `test`                                     |
 | [proto](proto/MAGUS.md)                                                     |       6 | `magus query project=proto`                           | `generate`, `breaking`, `ci`                                  |
@@ -118,10 +121,10 @@ magus graph export -o json  # the whole graph
 | `pr-commits`                   | Fails a pull request any of whose commits carries an attribution.                                                                                                                                                                      |
 | `pr-deliberate-break`          | Lists the deviation lines a pull request adds and the gate files it edits.                                                                                                                                                             |
 | `git-hooks-remove`             | Deletes the shims once installed from hack/git-hooks, and no other hook.                                                                                                                                                               |
-| `bindings-generate`            | Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.                                                                                                                                   |
+| `buzz-generate`                | Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.                                                                                                                                   |
 | `magusfile-api-generate`       | Regenerates the magusfile API lock through TestMagusAPILocked and the std method-name lock through TestStdAPILocked.                                                                                                                   |
 | `langservice-generate`         | Regenerates the host-module snapshot the playground's completion and hover read (internal/langservice/manifest_data.go).                                                                                                               |
-| `mcp-tools-generate`           | Regenerates the MCP tool catalog (internal/handler/mcp/gen/registry.go) from the same std descriptors bindings_generate reads.                                                                                                         |
+| `mcp-tools-generate`           | Regenerates the MCP tool catalog (internal/handler/mcp/gen/registry.go) from the same std descriptors buzz_generate reads.                                                                                                             |
 | `job-generate`                 | Regenerates the published job schemas (internal/job/gen/*.schema.json) from the structs that decode a job declaration and a holder's result.                                                                                           |
 | `spells-generate`              | Regenerates the Buzz value-type mirrors (internal/spell/gen/types) and the per-module host declarations (internal/spell/gen/decls).                                                                                                    |
 | `mocks-generate`               | Regenerates the testify mocks (mockery, driven by .mockery.yaml): into the interface's gen/<pkg>test when other packages import the mock (types' into internal/gen/typestest), beside it in mocks_test.go otherwise.                   |
@@ -225,6 +228,12 @@ magus graph export -o json  # the whole graph
 | `build`    |                                                                                                                             |
 | `test`     | The calibrate tests replay the cases internal/calibrate embeds and judge with the libs/proofread rules, so both are inputs. |
 | `security` | Fails on a vulnerable symbol this module calls.                                                                             |
+
+## Project: libs/ssg
+
+| Target | What it does                                 |
+| ------ | -------------------------------------------- |
+| `test` | test runs each module's in-file test blocks. |
 
 ## Project: testdata/latex/onepage
 
