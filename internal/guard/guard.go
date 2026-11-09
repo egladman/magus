@@ -1503,12 +1503,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	// identical to a session nobody leased. Once per session each, and never on a deny,
 	// which explains itself and was reached by a rule that did not need the row. Graded
 	// before the gate, so one the workspace raised refuses every call.
-	// A release request is the third, told once per lease.
+	// A release request and a narrowed hold follow, told once per lease.
 	judgmentPhases(ctx).enclose(phaseNotices)
 	for kind, notice := range map[hint.MarkerKind]advice{
 		advisoryLeaseTerminal:    adviseTerminalLease(standing, actingLease),
 		advisoryLeaseInvalid:     adviseInvalidLease(actingLease),
 		advisoryReleaseRequested: adviseReleaseRequested(standing.row),
+		advisoryLeaseNarrowed:    adviseLeaseNarrowed(standing.row),
 	} {
 		if notice.Say == "" || req.Observe || verdict.Decision == decisionDeny || verdict.Decision == decisionAsk {
 			continue
@@ -1522,7 +1523,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 			continue
 		}
 		gate := markers
-		if kind == advisoryReleaseRequested {
+		if kind == advisoryReleaseRequested || kind == advisoryLeaseNarrowed {
 			gate = stallGate(stateAt.cacheDir, actingLease)
 		}
 		held := gate.Once(kind, notice.Say)
