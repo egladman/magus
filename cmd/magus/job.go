@@ -1060,6 +1060,23 @@ func (l *listFlag) Set(value string) error {
 	return nil
 }
 
+// claimListFlag is a path flag whose value may be a declaration claim.
+// A value holding # is one path: a claim runs to the end of its value.
+type claimListFlag []string
+
+func (l *claimListFlag) String() string { return strings.Join(*l, ",") }
+
+func (l *claimListFlag) Set(value string) error {
+	if !strings.Contains(value, "#") {
+		return (*listFlag)(l).Set(value)
+	}
+	if value = strings.TrimSpace(value); value == "" {
+		return errors.New("empty entry")
+	}
+	*l = append(*l, value)
+	return nil
+}
+
 // evidenceFlagDoc is `job wait --evidence`, spelled once for the flag set and the registry.
 const evidenceFlagDoc = "Grade check goal `<goal>` against the run `<ref>` recorded in THIS checkout instead of the job's own; `" +
 	types.PrimaryGoalID + "` names the job's check. The paths the job changed must read the same here as in the job's checkout," +
@@ -2972,35 +2989,37 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 // A new id creates the job.
 func jobApply(ctx context.Context, root string, args []string) error {
 	var (
-		flags    *flaggen.JobApplyFlags
-		addPaths listFlag
+		flags        *flaggen.JobApplyFlags
+		addPaths     claimListFlag
+		releasePaths claimListFlag
 	)
 	pos, err := commandParse("job apply", args, func(fs *flag.FlagSet) {
 		flags = flaggen.BindJobApply(fs)
 		fs.Var(&addPaths, flaggen.FlagJobApplyAddWritePath, registeredFlagDoc(fs.Name(), flaggen.FlagJobApplyAddWritePath))
+		fs.Var(&releasePaths, flaggen.FlagJobApplyReleaseWritePath, registeredFlagDoc(fs.Name(), flaggen.FlagJobApplyReleaseWritePath))
 		fs.Usage = func() { printRegisteredHelp(fs) }
 	})
 	if err != nil {
 		return err
 	}
-	adding := len(addPaths) > 0
+	editing := len(addPaths) > 0 || len(releasePaths) > 0
 	var (
 		records []types.Declaration
 		store   *job.Store
 	)
 	root = resolveRootOrEmpty(root)
 	switch {
-	case adding && (flags.F != "" || flags.Stdin):
-		return exit.Usagef("magus job apply: --add-write-path widens the job it names, and -f or --stdin applies whole records: name one or the other")
+	case editing && (flags.F != "" || flags.Stdin):
+		return exit.Usagef("magus job apply: --add-write-path and --release-write-path edit the job they name, and -f or --stdin applies whole records: name one or the other")
 	case flags.F != "" && flags.Stdin:
 		return exit.Usagef("magus job apply: -f reads a file and --stdin reads stdin: name one")
 	case flags.F == "-":
 		return exit.Usagef("magus job apply: stdin is --stdin, as on job fork, not -f -")
-	case adding && len(pos) != 1:
-		return exit.Usagef("magus job apply: --add-write-path widens one job: name its id as the one argument")
-	case !adding && len(pos) > 0:
+	case editing && len(pos) != 1:
+		return exit.Usagef("magus job apply: --add-write-path and --release-write-path edit one job: name its id as the one argument")
+	case !editing && len(pos) > 0:
 		return exit.Usagef("magus job apply: the records name their jobs, so %q is one argument too many", pos[0])
-	case !adding:
+	case !editing:
 		var in io.Reader
 		switch {
 		case flags.Stdin:
@@ -3027,12 +3046,15 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if adding {
-		widened, err := widenedDeclaration(store, pos[0], addPaths)
+	if editing {
+		edited, err := widenedDeclaration(store, pos[0], addPaths)
+		if err == nil {
+			edited, err = narrowedDeclaration(edited, pos[0], releasePaths)
+		}
 		if err != nil {
 			return fmt.Errorf("magus job apply: %w", err)
 		}
-		records = []types.Declaration{widened}
+		records = []types.Declaration{edited}
 	}
 	jobWS := jobWorkspace(ctx, root)
 	store = store.InWorkspace(jobWS)
@@ -3145,6 +3167,20 @@ func widenedDeclaration(store *job.Store, id string, add []string) (types.Declar
 		if !slices.Contains(rec.WritePaths, p) {
 			rec.WritePaths = append(rec.WritePaths, p)
 		}
+	}
+	return rec, nil
+}
+
+// narrowedDeclaration is rec without the paths in release; goals stay.
+// A path the job does not hold is refused, so a typo is never a no-op.
+func narrowedDeclaration(rec types.Declaration, id string, release []string) (types.Declaration, error) {
+	rec.WritePaths = slices.Clone(rec.WritePaths)
+	for _, p := range release {
+		i := slices.Index(rec.WritePaths, p)
+		if i < 0 {
+			return types.Declaration{}, exit.Usagef("%s holds no write path %q to release", id, p)
+		}
+		rec.WritePaths = slices.Delete(rec.WritePaths, i, i+1)
 	}
 	return rec, nil
 }
