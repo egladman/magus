@@ -36,12 +36,20 @@ func runTypes(args []string) error {
 	fs := flag.NewFlagSet("types", flag.ExitOnError)
 	typeName := fs.String("type", "", "value type to mirror (e.g. ExecResult)")
 	outPath := fs.String("out", "", "output .buzz file path")
-	from := fs.String("from", "", "a Go file whose types go:generate lines are all rendered, concurrently")
+	var from []string
+	fs.Func("from", "a Go file whose types go:generate lines are all rendered, concurrently; repeatable", func(v string) error {
+		from = append(from, v)
+		return nil
+	})
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *from != "" {
-		return renderListedMirrors(*from)
+	if len(from) > 0 {
+		var g errgroup.Group
+		for _, goFile := range from {
+			g.Go(func() error { return renderListedMirrors(goFile) })
+		}
+		return g.Wait()
 	}
 	if *outPath == "" {
 		return fmt.Errorf("usage: magus-utils types -type <Name> -out <path.buzz>")
