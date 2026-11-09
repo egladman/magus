@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/commands"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
@@ -255,7 +256,12 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 				attr.Unchecked(), attr.Error(err))
 			return job.NewStore(loc), nil
 		}
-		loc.ModelTiers, loc.ModelTierMatrix = m.ModelTiers(ctx), m.ModelTierMatrix()
+		user, err := config.LoadWithRoot("", root)
+		if err != nil {
+			return nil, err
+		}
+		loc.ModelTiers = m.ModelTiers(ctx)
+		loc.ModelTierMatrix = composeModelTierMatrix(m.ModelTierMatrix(), user.Jobs.ModelTierMatrix, m.ModelTiers)
 		loc.SpawnRule = viewInternals(m).CheckSpawn
 		loc.Owners = func(ctx context.Context, files []string) ([]string, error) {
 			res, err := m.AffectedFromPaths(ctx, files)
@@ -266,6 +272,24 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 		}
 	}
 	return job.NewStore(loc), nil
+}
+
+// composeModelTierMatrix asks the workspace matrix, then the person's on a nil.
+// An error from either stands.
+func composeModelTierMatrix(workspace types.ModelTierMatrix, userPath string, tiers func(context.Context) *types.ModelTierSet) types.ModelTierMatrix {
+	if userPath == "" {
+		return workspace
+	}
+	user := bindings.UserModelTierMatrix(userPath, tiers)
+	return func(ctx context.Context, req types.ModelTierRequest) (*types.JobModelTier, error) {
+		if workspace != nil {
+			choice, err := workspace(ctx, req)
+			if err != nil || choice != nil {
+				return choice, err
+			}
+		}
+		return user(ctx, req)
+	}
 }
 
 // newCheckGrader grades a declared check against the guard's rules for the workspace at the

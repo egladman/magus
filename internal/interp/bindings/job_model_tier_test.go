@@ -3,6 +3,8 @@ package bindings
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -294,6 +296,73 @@ magus\modelTier(fun (req: ModelTierRequest) > any !> any {
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
+}
+
+func levelSet(t *testing.T) *types.ModelTierSet {
+	t.Helper()
+	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+		Enum: "Level", Site: "magusfile", Cases: []string{"low", "high"},
+		Bounds: make([]types.ModelTierBounds, 2),
+		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+	})
+	require.NoError(t, err)
+	return set
+}
+
+func userMatrixModule(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "matrix.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`import "magus";
+enum Level { low, middle, high }
+export fun choose(req: ModelTierRequest) > any {
+`+body+`
+}
+`), 0o644))
+	return path
+}
+
+func TestUserModelTierMatrix(t *testing.T) {
+	set := levelSet(t)
+	tiers := func(context.Context) *types.ModelTierSet { return set }
+
+	ask := func(t *testing.T, path string, tiers func(context.Context) *types.ModelTierSet) (*types.JobModelTier, error) {
+		t.Helper()
+		return userModelTierMatrix(path, tiers)(t.Context(), types.ModelTierRequest{ID: "j"})
+	}
+
+	t.Run("answers carry the user source", func(t *testing.T) {
+		path := userMatrixModule(t, `return .{ tier = Level.high, skills = magus\SkillVariant.short, reason = "mine" };`)
+		got, err := ask(t, path, tiers)
+		require.NoError(t, err)
+		assert.Equal(t, &types.JobModelTier{
+			Name: "high", Rank: 1, Skills: types.SkillVariantShort,
+			Source: types.ModelTierSourceUserMatrix, Reason: "mine", Site: path,
+		}, got)
+	})
+	t.Run("null declines", func(t *testing.T) {
+		got, err := ask(t, userMatrixModule(t, `return null;`), tiers)
+		require.NoError(t, err)
+		assert.Nil(t, got)
+	})
+	t.Run("a tier the workspace lacks fails", func(t *testing.T) {
+		path := userMatrixModule(t, `return .{ tier = Level.middle, skills = magus\SkillVariant.short, reason = "x" };`)
+		_, err := ask(t, path, tiers)
+		require.ErrorContains(t, err, "middle")
+	})
+	t.Run("tiers off fails", func(t *testing.T) {
+		_, err := ask(t, userMatrixModule(t, `return null;`), func(context.Context) *types.ModelTierSet { return nil })
+		require.ErrorContains(t, err, "turned them off")
+	})
+	t.Run("a module that does not load fails", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "broken.buzz")
+		require.NoError(t, os.WriteFile(path, []byte("this is not buzz"), 0o644))
+		_, err := ask(t, path, tiers)
+		require.ErrorContains(t, err, "does not load")
+	})
+	t.Run("a relative path fails", func(t *testing.T) {
+		_, err := ask(t, "matrix.buzz", tiers)
+		require.ErrorContains(t, err, "absolute path")
+	})
 }
 
 func TestModelTierMatrixCannotTouchTheJobStore(t *testing.T) {
