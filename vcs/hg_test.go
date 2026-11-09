@@ -205,40 +205,23 @@ func TestHgPrunePreservedSparesAShelfMagusDidNotWrite(t *testing.T) {
 	assert.NotContains(t, names, handle, "pruning reported a handle it did not delete")
 }
 
-// Cutoffs an hour either side of now leave preserveRetention itself untested: the constant
-// could be thirty SECONDS and every assertion stays green. So this runs through Preserve
-// rather than passing PrunePreserved a cutoff of its own, and asserts both sides of the
-// window, since only the survival half pins the length.
-//
-// The two ages are LITERAL days, not preserveRetention plus or minus a day: written against
-// the constant they move with it, and 29 either side of thirty seconds is still one on each
-// side. Measured by setting the constant to thirty seconds.
-func TestHgPreserveRetentionBoundaryIsThirtyDays(t *testing.T) {
+func TestHgPreserveKeepsACaptureOfAnyAge(t *testing.T) {
 	if _, err := exec.LookPath("hg"); err != nil {
 		t.Skip("hg not available")
 	}
 	dir := t.TempDir()
 	hgInitRepository(t, dir, map[string]string{"a.txt": "one\n"})
 
-	// The timestamp shelfName writes into the name is the only thing dating an hg shelf.
-	aged := func(days int, suffix string) string {
-		age := time.Duration(days) * 24 * time.Hour
-		name := fmt.Sprintf("%s%d-%s", shelfPrefix, time.Now().Add(-age).Unix(), suffix)
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte(name+"\n"), 0o644))
-		vcsTestRun(t, dir, "hg", "--config", "extensions.shelve=", "shelve",
-			"--keep", "--name", name, "--message", preserveMessage)
-		return name
-	}
-	inside := aged(29, "inside")
-	outside := aged(31, "outside")
+	name := fmt.Sprintf("%s%d-old", shelfPrefix, time.Now().Add(-90*24*time.Hour).Unix())
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("old\n"), 0o644))
+	vcsTestRun(t, dir, "hg", "--config", "extensions.shelve=", "shelve",
+		"--keep", "--name", name, "--message", preserveMessage)
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("current\n"), 0o644))
 	_, err := hgVCS{}.Preserve(t.Context(), dir)
 	require.NoError(t, err)
 
-	names := hgListPreserved(t, dir)
-	assert.Contains(t, names, inside, "dropped a capture still inside the retention window")
-	assert.NotContains(t, names, outside, "kept a capture past the retention window")
+	assert.Contains(t, hgListPreserved(t, dir), name, "dropped a capture for its age alone")
 }
 
 // A leading space is legal in a filename, and trimming it off a status line fails
