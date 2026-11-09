@@ -103,6 +103,9 @@ type Dependencies struct {
 	// row the call is bound to records a tier. Nil means no declaration: the tier rules then
 	// have nothing to compare and stay silent.
 	ModelTiers func() *types.ModelTierSet
+	// TierRule is the workspace's magus.WithSpawnRule, which the spawn
+	// ceiling asks. Nil leaves a ceiling it would judge reported unjudged.
+	TierRule func(parent, child types.ModelTier) error
 	// TargetPolicies answers what the workspace at root declares as target policy from the
 	// record the knowledge store keeps of it, without opening the workspace; "" is the
 	// caller's own. false means it cannot prove the record current, and the rule opens

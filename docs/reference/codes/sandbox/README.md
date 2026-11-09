@@ -171,6 +171,8 @@ Two layers run together:
 - [MGS3046](MGS3046.md): a job holds a workspace load file in a checkout another live job is working in.
 - [MGS3051](MGS3051.md): a job store write from a magus older than the newest build that wrote it.
 - [MGS3054](MGS3054.md): a stage-one plan shard computes another project's prerequisite beside its dependent.
+- [MGS3055](MGS3055.md): a spawn or fork whose model tier ranks above its parent's.
+- [MGS3056](MGS3056.md): a spawn rule asked to order model tiers from two declarations.
 
 MGS3015 was retired in 2026-09. It refused a run when every holder of the
 isolation gate looked stalled, and it read that from a record the gate did not

@@ -255,6 +255,7 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 			return job.NewStore(loc), nil
 		}
 		loc.ModelTiers, loc.ModelTierMatrix = m.ModelTiers(ctx), m.ModelTierMatrix()
+		loc.SpawnRule = viewInternals(m).CheckSpawn
 		loc.Owners = func(ctx context.Context, files []string) ([]string, error) {
 			res, err := m.AffectedFromPaths(ctx, files)
 			if err != nil {
