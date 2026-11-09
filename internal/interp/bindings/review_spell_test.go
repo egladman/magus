@@ -1,9 +1,9 @@
 package bindings
 
 import (
-	difftypes "github.com/egladman/magus/types/diff"
 	"context"
 	"fmt"
+	difftypes "github.com/egladman/magus/types/diff"
 	"testing"
 	"time"
 

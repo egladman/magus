@@ -1,8 +1,8 @@
 package rpcerr
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"errors"
+	"github.com/egladman/magus/types/daemon"
 	"net/http"
 	"net/http/httptest"
 	"strings"

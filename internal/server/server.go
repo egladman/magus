@@ -9,10 +9,10 @@
 package server
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"maps"
 	"net/http"

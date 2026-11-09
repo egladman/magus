@@ -1,10 +1,10 @@
 package difftui
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"io"
 	"os"
 

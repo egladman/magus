@@ -1,13 +1,13 @@
 package proc
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"net"
 	"net/http"

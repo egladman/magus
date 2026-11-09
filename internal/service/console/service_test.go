@@ -1,9 +1,9 @@
 package console
 
 import (
-	"github.com/egladman/magus/types/diff"
-	"github.com/egladman/magus/types/daemon"
 	"context"
+	"github.com/egladman/magus/types/daemon"
+	"github.com/egladman/magus/types/diff"
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
