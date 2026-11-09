@@ -5,8 +5,8 @@
 // on a recover/ branch. It only creates branches and never deletes, pops or
 // prunes, so a second run changes nothing.
 //
-//	magus buzz hack/dev/recover-work.buzz -- [<item>]
-namespace recoverwork;
+//	magus buzz hack/dev/reclaim-lost-work.buzz -- [<item>]
+namespace reclaimlostwork;
 
 import "assert";
 import "flags";
@@ -16,7 +16,7 @@ import "std";
 import "vcs";
 import "magus/reclaimdisk" as reclaim;
 
-final USAGE = "usage: magus buzz hack/dev/recover-work.buzz -- [<item>]";
+final USAGE = "usage: magus buzz hack/dev/reclaim-lost-work.buzz -- [<item>]";
 final HELP = "cost: a few git reads, plus one status read per worktree\n{USAGE}";
 final PRESERVED = "refs/magus/preserved/";
 final KEPT_PREFIX = "recover/";
