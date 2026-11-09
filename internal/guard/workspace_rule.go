@@ -313,8 +313,10 @@ func raisedDenial(verb string, seam functionSeam, raised []trail.RuleFailure) de
 // denyLapse turns asked into a deny when a phase of the judgment ran out of time and the
 // call changes state, and reports whether it denied. A call that only reads stands on what
 // did answer, with the failure note naming the phase that ran out.
+// An unleased harness install stands too: a cold judge must not
+// refuse the fix the guard names.
 func denyLapse(asked *rulesAnswer, call judgedCall) bool {
-	if asked.lapse == nil || !call.changes || asked.answer.Decision == types.GuardDeny {
+	if asked.lapse == nil || !call.changes || call.harnessInstall || asked.answer.Decision == types.GuardDeny {
 		return false
 	}
 	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: lapseReason(call, *asked.lapse, asked.dryRun)}
@@ -332,6 +334,9 @@ type judgedCall struct {
 	// changes is whether the call changes state: a file write, a spawn, or a shell line
 	// that neither reads only nor is the fix.
 	changes bool
+	// harnessInstall is an unleased, flag-free `magus agent harness install`
+	// alone on its line, which denyLapse lets through.
+	harnessInstall bool
 	// what names the call in the deny.
 	what string
 	// lease is the acting lease, "" for the orchestrator or a person.

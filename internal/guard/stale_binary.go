@@ -577,6 +577,7 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 	}
 	if call.verb = gatedVerb(in.command, in.dialect); call.verb != "" {
 		call.what, call.changes = call.verb, true
+		call.harnessInstall = in.lease == "" && bareHarnessInstall(in.command, in.dialect)
 		return call
 	}
 	if in.mcpTool != "" {
@@ -590,6 +591,17 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCa
 		call.changes = !row.ReadOnly
 	}
 	return call
+}
+
+// bareHarnessInstall reports a line that is only `magus agent harness install`,
+// with no flag or assignment. The guard names it for missing tool rows.
+func bareHarnessInstall(command string, d Dialect) bool {
+	call, ok := soleCall(command, d)
+	if !ok || len(call.Assigns) > 0 {
+		return false
+	}
+	words := literalWords(call.Args)
+	return len(words) == 4 && path.Base(words[0]) == "magus" && slices.Equal(words[1:], []string{"agent", "harness", "install"})
 }
 
 // staleBinaryDenial is the deny for a call that changes state while the binary judging it
@@ -635,7 +647,9 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 }
 
 // binaryFix is the fix for a binary that cannot load the tree: say is the likeliest one,
-// carrying at most one command, and why the rationale and the fallbacks. placeFor is the
+// carrying at most one command, and why the rationale and the fallbacks.
+// The one exception is a bootstrap and the checkout hook it needs.
+// placeFor is the
 // lease whose checkout the main session places ./magus in, "" when the fix is not that.
 type binaryFix struct{ say, why, placeFor string }
 
@@ -687,7 +701,15 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 			why: fmt.Sprintf("If the rebuild cannot load the tree either, bootstrap over it, alone on its line: `%s`. If the error names a magusfile line instead, fix that line.", bootstrap),
 		}
 	case own:
-		return binaryFix{say: fmt.Sprintf("bootstrap ./magus with `%s`", bootstrap)}
+		hook := checkoutHook(root)
+		if hook == "" {
+			return binaryFix{say: fmt.Sprintf("bootstrap ./magus with `%s`", bootstrap)}
+		}
+		return binaryFix{
+			say: fmt.Sprintf("bootstrap ./magus with `%s`, then ready the checkout with `%s`, each alone on its line", bootstrap, readyCheckout(hook)),
+			why: "The bootstrap builds ./magus and nothing else. The checkout hook then installs every project's dependencies and every declared harness's tool rows, " +
+				"and builds the graph, the symbol digest and the proofread binary the commit guard runs.",
+		}
 	}
 	return binaryFix{
 		say: fmt.Sprintf("install a magus that loads this workspace with `%s`", config.ReleaseCommand(config.RequiredVersionAt(root))),
@@ -702,6 +724,12 @@ func BootstrapLine(root string) string {
 		return ""
 	}
 	return config.SourceCommand(root, "", "", true)
+}
+
+// readyCheckout runs hook, the workspace's checkout.bootstrap,
+// on the checkout it is called in. recoveryLine passes it.
+func readyCheckout(hook string) string {
+	return fmt.Sprintf("./magus buzz %s -- --here --verify-ready", hook)
 }
 
 // placementScript copies the main checkout's ./magus into a worker's checkout.

@@ -1038,3 +1038,29 @@ func (s *LoadRecoverySuite) TestAWriteOutsideByAProgramThatWritesIsDenied() {
 }
 
 func (s *LoadRecoverySuite) testContext() context.Context { return s.layers.of(s.T()) }
+
+// NoBinaryRemedySuite judges the fix a magus checkout with no ./magus is named.
+type NoBinaryRemedySuite struct {
+	suite.Suite
+	root string
+}
+
+func TestNoBinaryRemedySuite(t *testing.T) {
+	suite.Run(t, new(NoBinaryRemedySuite))
+}
+
+func (s *NoBinaryRemedySuite) SetupTest() {
+	s.root = s.T().TempDir()
+	mod := []byte("module " + ownModule + "\n\ngo 1.25\n")
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "go.mod"), mod, 0o644))
+	declareCheckoutHook(s.T(), s.root)
+}
+
+func (s *NoBinaryRemedySuite) TestItNamesTheBootstrapThenTheCheckoutHook() {
+	ready := "./magus buzz " + testCheckoutHook + " -- --here --verify-ready"
+	bootstrap := config.SourceCommand(s.root, "", "", true)
+	fix := binaryRemedy(true, s.root, "", true)
+	s.Equal(fmt.Sprintf("bootstrap ./magus with `%s`, then ready the checkout with `%s`, each alone on its line", bootstrap, ready), fix.say)
+	at := location{workspace: s.root, policies: magusRepoAt.policies}
+	s.True(recoveryLine(ready, DialectBash, "", true, at), ready)
+}
