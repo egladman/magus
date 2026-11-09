@@ -51,7 +51,7 @@ The constraints:
 | Item                                                                                                                                   | State    |
 | -------------------------------------------------------------------------------------------------------------------------------------- | -------- |
 | `<XDG state>/magus/advisories/<repo>-<hash12>/advisories.jsonl`, keyed through `vcs.StateDir` as the session store is, so every worktree reads it | done     |
-| One entry type, `sessions.AdvisoryEntry`, with its own `MarshalJSON` and `UnmarshalJSON`; `kind` is `post`, `retract`, `delivered` or `acted` | done     |
+| One entry type, `sessions.DirectiveEntry`, with its own `MarshalJSON` and `UnmarshalJSON`; `kind` is `post`, `retract`, `delivered` or `acted` | done     |
 | The last line per key wins: a post and its retraction key on the advisory id, a delivery or an action on the id and the host session    | done     |
 | The text is clamped to `sessions.MaxMessageBytes`, the bound attention messages already carry                                           | done     |
 
