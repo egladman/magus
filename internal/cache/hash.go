@@ -40,13 +40,20 @@ const KeyVersion = 7
 // hashStep computes the cache key for a Step (version, path, target, sources,
 // env, deps, spell version, tool versions). Sources use an mtime fast-path.
 func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
-	key, _, err := c.hashStepInputsMemo(ctx, s, nil, nil)
+	key, _, err := c.hashStepInputsMemo(ctx, s, nil, nil, nil)
 	return key, err
 }
 
 // hashStepFiles is hashStep plus the count of input files hashed.
 func (c *Cache) hashStepFiles(ctx context.Context, s *Step) (string, int, error) {
-	return c.hashStepInputsMemo(ctx, s, nil, nil)
+	return c.hashStepInputsMemo(ctx, s, nil, nil, nil)
+}
+
+// hashStepSources is hashStepFiles plus the per-file hashes the key consumed.
+func (c *Cache) hashStepSources(ctx context.Context, s *Step) (string, int, sourceFingerprint, error) {
+	var fp sourceFingerprint
+	key, files, err := c.hashStepInputsMemo(ctx, s, nil, nil, &fp)
+	return key, files, fp, err
 }
 
 // hashStepInputs is hashStep with an optional collector: when lines is non-nil, every
@@ -56,7 +63,7 @@ func (c *Cache) hashStepFiles(ctx context.Context, s *Step) (string, int, error)
 // byte-identical to what the hash consumed; collecting inside the same writeLine keeps
 // that true by construction. The nil path adds no allocations to the hot path.
 func (c *Cache) hashStepInputs(ctx context.Context, s *Step, lines *[]string) (string, error) {
-	key, _, err := c.hashStepInputsMemo(ctx, s, lines, nil)
+	key, _, err := c.hashStepInputsMemo(ctx, s, lines, nil, nil)
 	return key, err
 }
 
@@ -66,8 +73,9 @@ func (c *Cache) hashStepInputs(ctx context.Context, s *Step, lines *[]string) (s
 // post-run key-inputs recompute in Run all pass nil); only a read-only prediction
 // sweep (ComputeTargetKey via IdentifyRef) constructs and threads a real one.
 //
-// The int is the number of input files hashed: one src: line each.
-func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string, memo *SourceMemo) (string, int, error) {
+// The int is the number of input files hashed: one src: line each. A non-nil fp
+// receives each file's hash by relative path; nil builds no map.
+func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string, memo *SourceMemo, fp *sourceFingerprint) (string, int, error) {
 	h := sha256.New()
 
 	// Build each key input in a reused scratch buffer and write it straight to the
@@ -150,6 +158,12 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 	files, hashes, modes, err := c.expandAndHashSources(ctx, s, memo)
 	if err != nil {
 		return "", 0, err
+	}
+	if fp != nil {
+		*fp = make(sourceFingerprint, len(files))
+		for i, f := range files {
+			(*fp)[f.rel] = hashes[i]
+		}
 	}
 	for i, f := range files {
 		// Fold the executable bit (not full perms — that would miss across
@@ -237,7 +251,7 @@ func (c *Cache) StepKey(ctx context.Context, s *Step) (key string, lines []strin
 // StepKey's own doc describes, calls StepKeyMemo directly rather than through StepKey;
 // only tests exercise StepKey itself.
 func (c *Cache) StepKeyMemo(ctx context.Context, s *Step, memo *SourceMemo) (key string, lines []string, err error) {
-	key, _, err = c.hashStepInputsMemo(ctx, s, &lines, memo)
+	key, _, err = c.hashStepInputsMemo(ctx, s, &lines, memo, nil)
 	return key, lines, err
 }
 

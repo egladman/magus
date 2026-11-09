@@ -393,6 +393,8 @@ type runCtx struct {
 	localHit string
 	// files is the input file count behind the key.
 	files int
+	// sources is what the key hashed; nil under localHit.
+	sources sourceFingerprint
 	// onResults all fire after each Run (in registration order); multiple
 	// observers (report, telemetry, diagnostic capture) coexist without clobbering.
 	onResults []func(*Step, *Result, error)
@@ -697,7 +699,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	if hash == "" {
 		hashCtx, endHash := tracer.StartSpan(ctx, "magus.cache.hash")
 		var err error
-		hash, rc.files, err = c.hashStepFiles(hashCtx, rc.step)
+		hash, rc.files, rc.sources, err = c.hashStepSources(hashCtx, rc.step)
 		endHash(err)
 		if err != nil {
 			return result, fmt.Errorf("magus/cache: hash %q: %w", s.ProjectPath, err)
@@ -926,11 +928,10 @@ func (c *Cache) backfill(ctx context.Context, s Step, hash string, i int) {
 // runMiss executes fn, then stores the entry in every tier this run may write.
 func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn func(context.Context) error, start time.Time, netRec *httpx.Recorder, result Result) (Result, error) {
 	tracer := tracerFromContext(ctx)
-	// Taken here rather than threaded out of hashStep, to leave that pinned hot path
-	// alone; the files were just hashed, so the mtime fast-path makes this a stat sweep.
-	preSources, preErr := c.fingerprintSources(ctx, rc.step)
-	if preErr != nil {
-		preSources = nil
+	preSources := rc.sources
+	var preErr error
+	if preSources == nil {
+		preErr = errors.New("no fingerprint was taken with the key")
 	}
 	win := c.writers.open(rc.step, enclosingWriteWindow(ctx))
 	defer c.writers.release(win)
