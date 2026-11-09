@@ -58,7 +58,7 @@ var (
 		"A timer wakes you on a guess, every timer still pending wakes you again after the work is done, and a foreground sleep past the tool timeout is moved to the background and becomes one."
 
 	denySlotWait = fmt.Sprintf("a magus run waits for the build budget itself, up to %s, and names who holds it: run `%s <your check>` and let it wait. A watch, a sleep before a run, or a wait on another run's pid waits for nothing.",
-		cache.BudgetWaitSource, hint.Run.String())
+		cache.BudgetWaitSource, budgetRunForm)
 	denySlotWaitWhy = "A run's claim queues at the broker and is seated the moment room frees, in the call that spends the seat. " +
 		"A wait in front of it holds nothing, so the run still queues behind whoever asked first, and a worker looping on reads spends turns no one who can free a seat sees."
 
@@ -506,7 +506,7 @@ func waitRemedy(deps Dependencies, rule denyRuleName, command string, d Dialect)
 	}
 	took, measured := lastRunHere(deps.scope.root, r)
 	bound, note := waitBound(r.target, took, measured, configuredBackgroundLimits(deps).ceiling)
-	argv := append([]string{run[0], "job", "exec", "--timeout", formatLimit(bound), "--"}, run...)
+	argv := boundedRunArgv(run[0], formatLimit(bound), run)
 	next := hint.NextForDenyRemedy(string(rule), argv,
 		"run it in the background: the host announces it when it ends, and job exec stops it at the bound.")
 	return fmt.Sprintf("this line polls for a run the host announces when it ends; run it in the background and wait for its notice: %s.", note), next
