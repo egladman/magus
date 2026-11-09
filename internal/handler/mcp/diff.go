@@ -1,10 +1,10 @@
 package mcp
 
 import (
-	difftypes "github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
+	difftypes "github.com/egladman/magus/types/diff"
 	"strings"
 	"time"
 

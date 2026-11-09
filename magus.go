@@ -1,14 +1,14 @@
 package magus
 
 import (
-	difftypes "github.com/egladman/magus/types/diff"
-	"github.com/egladman/magus/types/daemon"
 	"bytes"
 	"cmp"
 	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
+	difftypes "github.com/egladman/magus/types/diff"
 	"io"
 	"io/fs"
 	"log/slog"

@@ -364,7 +364,6 @@ func resumedStop(raw, resumesFrom string, now time.Time) bool {
 	return resumes
 }
 
-
 // describeTasks lists tasks one per line: id, start, age and the command's first line.
 func describeTasks(tasks []backgroundTask, now time.Time) string {
 	const commandWidth = 100

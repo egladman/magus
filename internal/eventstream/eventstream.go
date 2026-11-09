@@ -12,8 +12,8 @@
 package eventstream
 
 import (
-	"github.com/egladman/magus/types/events"
 	"bufio"
+	"github.com/egladman/magus/types/events"
 	"io"
 	"sync"
 

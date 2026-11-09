@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/queue"
+	"github.com/egladman/magus/libs/text/plural"
 	pullsv1 "github.com/egladman/magus/proto/gen/go/magus/pulls/v1alpha1"
 	"github.com/egladman/magus/types"
 )

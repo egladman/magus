@@ -1,13 +1,13 @@
 package main
 
 import (
-	"github.com/egladman/magus/libs/text/plural"
-	"github.com/egladman/magus/types/daemon"
 	"cmp"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/libs/text/plural"
+	"github.com/egladman/magus/types/daemon"
 	"io"
 	"os"
 	"path/filepath"
@@ -154,9 +154,9 @@ func status(ctx context.Context, args []string) error {
 // statusReport is the snapshot with the leases whose session has gone silent. They sit
 // beside the snapshot, not in it, while the report is a shadow measurement.
 type statusReport struct {
-	daemon.Snapshot `yaml:",inline"`
-	SilentLeases         []guard.SilentLease `json:"silent_leases,omitempty" yaml:"silent_leases,omitempty"`
-	SilentLeasesError    string              `json:"silent_leases_error,omitempty" yaml:"silent_leases_error,omitempty"`
+	daemon.Snapshot   `yaml:",inline"`
+	SilentLeases      []guard.SilentLease `json:"silent_leases,omitempty" yaml:"silent_leases,omitempty"`
+	SilentLeasesError string              `json:"silent_leases_error,omitempty" yaml:"silent_leases_error,omitempty"`
 }
 
 // loadSilentLeases reads the workspace's silent leased rows. Outside a workspace it returns

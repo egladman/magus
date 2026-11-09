@@ -1,8 +1,8 @@
 package eventstream
 
 import (
-	"github.com/egladman/magus/types/events"
 	"bytes"
+	"github.com/egladman/magus/types/events"
 	"strings"
 	"sync"
 	"testing"

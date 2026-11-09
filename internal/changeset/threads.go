@@ -1,11 +1,10 @@
 package changeset
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"strings"
-
 )
 
 // ErrNoThread reports that an id names no thread on the review. Callers test for it with

@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
 )
 
 // orderTestDiff has four hunks over three files and an order over them: F first, then its use

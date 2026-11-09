@@ -1,9 +1,9 @@
 package trail
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"bufio"
 	"cmp"
+	"github.com/egladman/magus/types/diff"
 	"os"
 	"slices"
 	"strings"

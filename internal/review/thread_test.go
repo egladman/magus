@@ -1,9 +1,9 @@
 package review
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
+	"github.com/egladman/magus/types/diff"
 	"strings"
 	"testing"
 

@@ -1,11 +1,11 @@
 package broker
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"io"
 	"os"
 	"os/exec"

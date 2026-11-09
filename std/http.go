@@ -131,7 +131,7 @@ var HTTP = Module{
 			Args:    []Arg{{Name: "path"}},
 			Returns: []Ret{{}},
 			Raises:  true,
-			Extern: (func(context.Context, string) (int, error))(nil),
+			Extern:  (func(context.Context, string) (int, error))(nil),
 		},
 		{
 			Name: "upload_chunked",
@@ -148,7 +148,7 @@ var HTTP = Module{
 			},
 			Returns: []Ret{{}},
 			Raises:  true,
-			Extern: (func(context.Context, string, string, string, int, map[string]string) (any, error))(nil),
+			Extern:  (func(context.Context, string, string, string, int, map[string]string) (any, error))(nil),
 		},
 	},
 }

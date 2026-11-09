@@ -1,10 +1,10 @@
 package review
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/notes"

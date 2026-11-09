@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-
 )
 
 // Output is the one StatusReply conversion `magus server status` and the

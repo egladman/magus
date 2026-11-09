@@ -1,10 +1,10 @@
 package review
 
 import (
-	"github.com/egladman/magus/libs/text/plural"
-	"github.com/egladman/magus/types/diff"
 	"context"
 	"fmt"
+	"github.com/egladman/magus/libs/text/plural"
+	"github.com/egladman/magus/types/diff"
 	"slices"
 	"strings"
 
@@ -457,4 +457,3 @@ func printableLines(lines []string) []string {
 	}
 	return out
 }
-

@@ -1,13 +1,13 @@
 package main
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"io"
 	"log/slog"
 	"os"

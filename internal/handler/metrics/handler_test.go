@@ -1,9 +1,9 @@
 package metrics
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"context"
 	"errors"
+	"github.com/egladman/magus/types/daemon"
 	"net/http"
 	"net/http/httptest"
 	"testing"

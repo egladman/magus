@@ -4,12 +4,12 @@ package main
 //go:generate go run . boundaryobjects -out ../../internal/interp/bindings/gen/boundary_objects.go -pkg bindgen
 
 import (
+	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"github.com/egladman/magus/types/diff"
 	"github.com/egladman/magus/types/events"
-	"github.com/egladman/magus/types/trail"
-	"github.com/egladman/magus/types/daemon"
 	"github.com/egladman/magus/types/image"
-	"fmt"
+	"github.com/egladman/magus/types/trail"
 	"reflect"
 	"strings"
 
@@ -648,10 +648,10 @@ var boundaryEnumTypes = []reflect.Type{
 // list nor boundaryEnums is refused by the mirror generator: crossing as str, a typo in
 // a closed set compares false where the checker could have refused it.
 var openStringTypes = map[reflect.Type]string{
-	reflect.TypeFor[types.ProjectOrigin]():   "a provider-declared project carries its provider's name",
-	reflect.TypeFor[diagnostics.Code]():      "a workspace mints its own codes through magus\\raise beside magus's catalog",
-	reflect.TypeFor[events.EventType](): "a subscriber skips a type it does not know, so new types are added without a release of every reader",
-	reflect.TypeFor[types.ReviewVerdict]():   "a review provider op carries it, and a provider op's request encoder writes no session enum case",
+	reflect.TypeFor[types.ProjectOrigin](): "a provider-declared project carries its provider's name",
+	reflect.TypeFor[diagnostics.Code]():    "a workspace mints its own codes through magus\\raise beside magus's catalog",
+	reflect.TypeFor[events.EventType]():    "a subscriber skips a type it does not know, so new types are added without a release of every reader",
+	reflect.TypeFor[types.ReviewVerdict](): "a review provider op carries it, and a provider op's request encoder writes no session enum case",
 	// The merge queue provider script compares these as str. They become enums with that
 	// script's typed rewrite (job queue-github-typed), which a str field here keeps checking.
 	reflect.TypeFor[queuetypes.StackMerge]():  "the queue provider script reads it as str until its typed rewrite",

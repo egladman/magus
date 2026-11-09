@@ -1,8 +1,8 @@
 package difftui
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"io"
 	"regexp"
 	"strings"

@@ -214,7 +214,7 @@ type Options struct {
 	// Baseline is a `magus graph export --symbols` of the revision the change started from,
 	// which fills Symbol.Change and Diff.API; BaselineLabel names it for the reader.
 	Baseline      *types.KnowledgeGraphOutput `json:"-" yaml:"-"`
-	BaselineLabel string                `json:"-" yaml:"-"`
+	BaselineLabel string                      `json:"-" yaml:"-"`
 	// MinCohort and MinShare override knowledge.conformance.gates' silence gates for this review:
 	// how many declarations a norm needs, and the share that must agree. Zero keeps the
 	// configured gate.
@@ -538,14 +538,14 @@ type Thread struct {
 	Outdated bool `json:"outdated,omitempty" yaml:"outdated,omitempty"`
 	// Comments are the first comment and its replies, oldest first.
 	Comments []ReviewComment `json:"comments" yaml:"comments"`
-	Hunk     ThreadHunk  `json:"hunk" yaml:"hunk"`
+	Hunk     ThreadHunk      `json:"hunk" yaml:"hunk"`
 	// InChangeset reports that the thread's file is in the changeset this was read against.
 	// When false, every field below is empty because nothing was read, not because nothing is there.
 	InChangeset bool   `json:"in_changeset" yaml:"in_changeset"`
 	Project     string `json:"project,omitempty" yaml:"project,omitempty"`
 	Role        string `json:"role,omitempty" yaml:"role,omitempty"`
 	// Reach is the file's widest reach; nil when no symbol index covered it.
-	Reach    *int            `json:"reach,omitempty" yaml:"reach,omitempty"`
+	Reach    *int                  `json:"reach,omitempty" yaml:"reach,omitempty"`
 	Coverage *types.ImpactCoverage `json:"coverage,omitempty" yaml:"coverage,omitempty"`
 	// Symbols are the changed symbols in the thread's hunk, each with who references it, who it
 	// is public to, the callers it is reached through and its conformance findings.
@@ -577,7 +577,7 @@ type ThreadHunk struct {
 // Uncovered is one touched project the conformance checks did not cover. A coverage fact,
 // not a finding: it says what was not looked at, where a Check says what was found.
 type Uncovered struct {
-	Project string              `json:"project" yaml:"project"`
+	Project string          `json:"project" yaml:"project"`
 	Reason  UncoveredReason `json:"reason"  yaml:"reason"`
 }
 
@@ -720,9 +720,9 @@ const AnchorContextLines = 3
 // a commit, which nobody will do. A comment worth keeping graduates into a note by hand,
 // which re-attributes it to a person and a commit.
 type Comment struct {
-	ID     string     `json:"id" yaml:"id"`
-	Path   string     `json:"path" yaml:"path"`
-	Hunk   int        `json:"hunk" yaml:"hunk"`
+	ID     string `json:"id" yaml:"id"`
+	Path   string `json:"path" yaml:"path"`
+	Hunk   int    `json:"hunk" yaml:"hunk"`
 	Author Author `json:"author" yaml:"author"`
 	// Origin is where the write came from, stamped by the server: the OS account, the entry
 	// point, and the credential or MCP client that carried it.
@@ -812,7 +812,6 @@ type ReviewTarget struct {
 	Author string `json:"author,omitempty" yaml:"author,omitempty"`
 	Viewer string `json:"viewer,omitempty" yaml:"viewer,omitempty"`
 }
-
 
 // PermittedVerdict returns the verdict this review may actually carry, which is want unless magus
 // will not permit it, and [VerdictComment] when it will not.
@@ -1050,7 +1049,7 @@ type Review struct {
 	// compat(until: no installed magus or console build reads "seen_threads"): the wire name
 	// predates the comment/thread vocabulary and stays so a client built before the rename keeps
 	// reading the watermark.
-	SeenComments []string         `json:"seen_threads,omitempty" yaml:"seen_threads,omitempty"`
+	SeenComments []string     `json:"seen_threads,omitempty" yaml:"seen_threads,omitempty"`
 	Comments     []Comment    `json:"comments,omitempty"     yaml:"comments,omitempty"`
 	Suggestions  []Suggestion `json:"suggestions,omitempty"  yaml:"suggestions,omitempty"`
 	// Outlines are the agents' outlines of review threads, at most one per thread.

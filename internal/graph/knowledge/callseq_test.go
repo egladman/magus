@@ -1,8 +1,8 @@
 package knowledge
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"slices"
 	"strings"
 	"testing"

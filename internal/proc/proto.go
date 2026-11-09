@@ -127,8 +127,8 @@ type Workspace struct {
 	State daemon.WorkspaceState `json:"state,omitempty"`
 	// Error is set only in WorkspaceFailed.
 	Error      *daemon.WorkspaceFailure `json:"error,omitempty"`
-	LoadedAt   time.Time               `json:"loaded_at"`
-	LastAccess time.Time               `json:"last_access"`
+	LoadedAt   time.Time                `json:"loaded_at"`
+	LastAccess time.Time                `json:"last_access"`
 	// Live cache activity for this workspace's long-lived cache. Zero for pre-cache-aware
 	// servers or an Inspect workspace with no cache.
 	CacheHit   int   `json:"cache_hit,omitempty"`

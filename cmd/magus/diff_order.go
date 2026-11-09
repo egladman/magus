@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"io"
 
 	"github.com/egladman/magus/internal/changeset"

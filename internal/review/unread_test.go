@@ -1,8 +1,8 @@
 package review
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"errors"
+	"github.com/egladman/magus/types/diff"
 	"testing"
 
 	"github.com/stretchr/testify/assert"

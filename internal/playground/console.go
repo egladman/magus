@@ -411,7 +411,6 @@ func (s *Console) directDeps(key string) []string {
 
 func esc(s string) string { return html.EscapeString(s) }
 
-
 func orDot(s string) string {
 	if s == "" {
 		return "."

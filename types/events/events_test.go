@@ -82,7 +82,7 @@ func TestStreamEventRejectsUnusableBody(t *testing.T) {
 // scalarBody marshals to a JSON scalar, which the splice cannot flatten.
 type scalarBody struct{}
 
-func (scalarBody) StreamType() EventType  { return RunStarted }
+func (scalarBody) StreamType() EventType        { return RunStarted }
 func (scalarBody) MarshalJSON() ([]byte, error) { return []byte(`"nope"`), nil }
 
 // TestStreamRunPhaseDefaultsToFinished: a body with no phase must still close a

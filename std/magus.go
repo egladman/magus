@@ -3,10 +3,10 @@
 package std
 
 import (
-	difftypes "github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
+	difftypes "github.com/egladman/magus/types/diff"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -497,7 +497,7 @@ var Magus = Module{
 					Name:    "allow",
 					Doc:     "The verdict a spawn, command, write or stop rule returns to add nothing.",
 					Returns: []Ret{{Object: "GuardVerdict"}},
-					Extern: (func(context.Context) (map[string]any, error))(nil),
+					Extern:  (func(context.Context) (map[string]any, error))(nil),
 				},
 				{
 					Name: "advise",
@@ -505,7 +505,7 @@ var Magus = Module{
 						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>.",
 					Args:    []Arg{{Name: "text"}, {Name: "opts", Optional: true}},
 					Returns: []Ret{{Object: "GuardVerdict"}},
-					Extern: (func(context.Context, string, map[string]any) (map[string]any, error))(nil),
+					Extern:  (func(context.Context, string, map[string]any) (map[string]any, error))(nil),
 				},
 				{
 					Name: "deny",
@@ -514,7 +514,7 @@ var Magus = Module{
 						"and a repeat in the same session shortens to its first line.",
 					Args:    []Arg{{Name: "text"}, {Name: "opts", Optional: true}},
 					Returns: []Ret{{Object: "GuardVerdict"}},
-					Extern: (func(context.Context, string, map[string]any) (map[string]any, error))(nil),
+					Extern:  (func(context.Context, string, map[string]any) (map[string]any, error))(nil),
 				},
 				{
 					Name: "once",
@@ -522,7 +522,7 @@ var Magus = Module{
 						"Only callable inside a spawn, command, write or stop rule while the guard runs it.",
 					Args:    []Arg{{Name: "key"}},
 					Returns: []Ret{{}},
-					Extern: (func(context.Context, string) (bool, error))(nil),
+					Extern:  (func(context.Context, string) (bool, error))(nil),
 				},
 				{
 					Name: "count",
@@ -530,7 +530,7 @@ var Magus = Module{
 						"total, starting at 1. Only callable inside a spawn, command, write or stop rule while the guard runs it.",
 					Args:    []Arg{{Name: "key"}},
 					Returns: []Ret{{}},
-					Extern: (func(context.Context, string) (int, error))(nil),
+					Extern:  (func(context.Context, string) (int, error))(nil),
 				},
 				{
 					Name: "binary",
@@ -538,21 +538,21 @@ var Magus = Module{
 						"with symlinks resolved; stamp is the text its build passed through the linker, empty " +
 						"when it passed none, so a rule can tell which sources that build came from.",
 					Returns: []Ret{{Object: "GuardBinary"}},
-					Extern: (func(context.Context) (map[string]any, error))(nil),
+					Extern:  (func(context.Context) (map[string]any, error))(nil),
 				},
 				{
 					Name:    "shape",
 					Doc:     "A shell line with its paths, patterns and literals normalized away, so calls differing only in what they name read alike: `grep -rn foo src` and `grep -rn bar lib` are both `grep -rn <arg>`. Programs, flags, operators and redirections stay. \"\" for a line the shell parser cannot read.",
 					Args:    []Arg{{Name: "command"}},
 					Returns: []Ret{{}},
-					Extern: (func(context.Context, string) (string, error))(nil),
+					Extern:  (func(context.Context, string) (string, error))(nil),
 				},
 				{
 					Name:    "shapes",
 					Doc:     "The shape of each program a shell line runs, in order, each with its own redirections: `cd x && grep -rn foo src | head -5` is [`cd <path>`, `grep -rn <arg>`, `head -<n>`]. Programs inside a loop or a command substitution count. Empty for a line the shell parser cannot read.",
 					Args:    []Arg{{Name: "command"}},
 					Returns: []Ret{{}},
-					Extern: (func(context.Context, string) ([]string, error))(nil),
+					Extern:  (func(context.Context, string) ([]string, error))(nil),
 				},
 			},
 			// Brief is no method's: a buzz-format spawn brief is one magus\Brief literal the
@@ -567,7 +567,7 @@ var Magus = Module{
 				Doc:     "Wire an imported harness spell for this workspace. A workspace may use several (one per agent host), same append-on-repeat shape as workspace.provider. Declared at the top level of the root magusfile. Returns the harness id, which keys the hosts map of magus\\modelTiers; a call that ignores it wires the harness all the same.",
 				Args:    []Arg{{Name: "spell"}},
 				Returns: []Ret{{}},
-				Extern: (func(context.Context, map[string]any) (string, error))(nil),
+				Extern:  (func(context.Context, map[string]any) (string, error))(nil),
 			}},
 		},
 		{
@@ -588,7 +588,7 @@ var Magus = Module{
 					// magus recognize it and keep it out of logs and cache keys.
 					Returns: []Ret{{}},
 					Raises:  true,
-					Extern: (func(context.Context, string) (string, error))(nil),
+					Extern:  (func(context.Context, string) (string, error))(nil),
 				},
 				{
 					Name: "endpoint",
@@ -600,7 +600,7 @@ var Magus = Module{
 					Args:    []Arg{{Name: "grant"}},
 					Returns: []Ret{{}},
 					Raises:  true,
-					Extern: (func(context.Context, any) (string, error))(nil),
+					Extern:  (func(context.Context, any) (string, error))(nil),
 				},
 			},
 		},
@@ -650,7 +650,7 @@ var Magus = Module{
 					Args:    []Arg{{Name: "paths"}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
 					Returns: []Ret{{Object: "FileReport"}},
 					Raises:  true,
-					Extern: (func(context.Context, []string, map[string]any) (map[string]any, error))(nil),
+					Extern:  (func(context.Context, []string, map[string]any) (map[string]any, error))(nil),
 				},
 				{
 					Name:    "module",
@@ -658,7 +658,7 @@ var Magus = Module{
 					Args:    []Arg{{Name: "name", Optional: true}},
 					Returns: []Ret{{Object: "[Module]"}},
 					Raises:  true,
-					Extern: (func(context.Context, string) (any, error))(nil),
+					Extern:  (func(context.Context, string) (any, error))(nil),
 				},
 				{
 					Name:    "spell",
@@ -666,7 +666,7 @@ var Magus = Module{
 					Args:    []Arg{{Name: "name", Optional: true}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
 					Returns: []Ret{{Object: "[Spell]"}},
 					Raises:  true,
-					Extern: (func(context.Context, string, map[string]any) (any, error))(nil),
+					Extern:  (func(context.Context, string, map[string]any) (any, error))(nil),
 				},
 				{
 					Name:    "charm",
@@ -674,7 +674,7 @@ var Magus = Module{
 					Args:    []Arg{{Name: "name", Optional: true}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
 					Returns: []Ret{{Object: "[CharmEntry]"}},
 					Raises:  true,
-					Extern: (func(context.Context, string, map[string]any) (any, error))(nil),
+					Extern:  (func(context.Context, string, map[string]any) (any, error))(nil),
 				},
 				{
 					Name:    "target",
@@ -682,7 +682,7 @@ var Magus = Module{
 					Args:    []Arg{{Name: "opts", Optional: true, Object: "CommandOptions"}},
 					Returns: []Ret{{Object: "[TargetEntry]"}},
 					Raises:  true,
-					Extern: (func(context.Context, map[string]any) (any, error))(nil),
+					Extern:  (func(context.Context, map[string]any) (any, error))(nil),
 				},
 				{
 					Name:    "evaluated_target",
@@ -690,14 +690,14 @@ var Magus = Module{
 					Args:    []Arg{{Name: "ref"}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
 					Returns: []Ret{{Object: "[EvaluatedTarget]"}},
 					Raises:  true,
-					Extern: (func(context.Context, string, map[string]any) (any, error))(nil),
+					Extern:  (func(context.Context, string, map[string]any) (any, error))(nil),
 				},
 				{
 					Name:    "project",
 					Doc:     "The workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 					Returns: []Ret{{Object: "Projects"}},
 					Raises:  true,
-					Extern: (func(context.Context) (map[string]any, error))(nil),
+					Extern:  (func(context.Context) (map[string]any, error))(nil),
 				},
 				{
 					Name:    "evaluated_project",
@@ -705,7 +705,7 @@ var Magus = Module{
 					Args:    []Arg{{Name: "path", Optional: true}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
 					Returns: []Ret{{Object: "[EvaluatedProject]"}},
 					Raises:  true,
-					Extern: (func(context.Context, string, map[string]any) (any, error))(nil),
+					Extern:  (func(context.Context, string, map[string]any) (any, error))(nil),
 				},
 				{
 					Name:    "graph",
@@ -713,7 +713,7 @@ var Magus = Module{
 					Args:    []Arg{{Name: "opts", Optional: true, Object: "CommandOptions"}},
 					Returns: []Ret{{Object: "TargetGraph"}},
 					Raises:  true,
-					Extern: (func(context.Context, map[string]any) (map[string]any, error))(nil),
+					Extern:  (func(context.Context, map[string]any) (map[string]any, error))(nil),
 				},
 				{
 					Name:    "graph_markdown",
@@ -721,7 +721,7 @@ var Magus = Module{
 					Args:    []Arg{{Name: "projects", Optional: true}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
 					Returns: []Ret{{}},
 					Raises:  true,
-					Extern: (func(context.Context, []string, map[string]any) (string, error))(nil),
+					Extern:  (func(context.Context, []string, map[string]any) (string, error))(nil),
 				},
 				{
 					Name:    "workspace",
@@ -729,14 +729,14 @@ var Magus = Module{
 					Args:    []Arg{{Name: "opts", Optional: true, Object: "CommandOptions"}},
 					Returns: []Ret{{Object: "[WorkspaceEntry]"}},
 					Raises:  true,
-					Extern: (func(context.Context, map[string]any) (any, error))(nil),
+					Extern:  (func(context.Context, map[string]any) (any, error))(nil),
 				},
 				{
 					Name:    "tool",
 					Doc:     "Every project's tools: {workspace, count, lifecycle, tools}, each tool {project, bin, spell, installedVersion, probeError, spellBounds, workspaceBounds, effective, verdict, diagnosticCode, lifecycle, cycle, eol, support}. Probes every tool's version, and asks the wired lifecycle provider (magus\\lifecycle.provider) when each installed cycle reaches its end of life; lifecycle.state says whether that answer is live, cached, offline, unreached or unwired, and support reads unknown for a row it could not answer. Served in-process from the workspace on the context when there is one, and through a nested magus when there is not.",
 					Returns: []Ret{{Object: "ToolReport"}},
 					Raises:  true,
-					Extern: (func(context.Context) (map[string]any, error))(nil),
+					Extern:  (func(context.Context) (map[string]any, error))(nil),
 				},
 				{
 					Name:    "rule",
@@ -744,7 +744,7 @@ var Magus = Module{
 					Args:    []Arg{{Name: "name", Optional: true}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
 					Returns: []Ret{{Object: "[Rule]"}},
 					Raises:  true,
-					Extern: (func(context.Context, string, map[string]any) (any, error))(nil),
+					Extern:  (func(context.Context, string, map[string]any) (any, error))(nil),
 				},
 				{
 					Name:    "harness",
@@ -752,7 +752,7 @@ var Magus = Module{
 					Args:    []Arg{{Name: "id"}},
 					Returns: []Ret{{Object: "HarnessInstallation"}},
 					Raises:  true,
-					Extern: (func(context.Context, string) (map[string]any, error))(nil),
+					Extern:  (func(context.Context, string) (map[string]any, error))(nil),
 				},
 				{
 					Name:    "mcp_tool",
@@ -760,7 +760,7 @@ var Magus = Module{
 					Args:    []Arg{{Name: "name", Optional: true}, {Name: "opts", Optional: true, Object: "CommandOptions"}},
 					Returns: []Ret{{Object: "[MCPTool]"}},
 					Raises:  true,
-					Extern: (func(context.Context, string, map[string]any) (any, error))(nil),
+					Extern:  (func(context.Context, string, map[string]any) (any, error))(nil),
 				},
 			},
 		},
@@ -786,7 +786,7 @@ var Magus = Module{
 					},
 					Returns: []Ret{{Object: "ServiceLease"}},
 					Raises:  true,
-					Extern: (func(context.Context, string, string) (map[string]any, error))(nil),
+					Extern:  (func(context.Context, string, string) (map[string]any, error))(nil),
 				},
 				{
 					Name: "release",

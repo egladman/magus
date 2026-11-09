@@ -1,12 +1,12 @@
 package main
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"cmp"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"os"
 	"os/exec"

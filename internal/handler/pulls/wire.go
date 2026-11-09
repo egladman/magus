@@ -83,4 +83,3 @@ func shortSHA(sha string) string {
 	}
 	return sha
 }
-

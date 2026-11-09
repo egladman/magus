@@ -168,20 +168,20 @@ var Strings = Module{
 			Returns: []Ret{{}},
 			Impl:    StringsCollapseWs,
 		},
-			{
-				Name:    "plural",
-				Doc:     "Return one when n is 1, else many; zero is plural. The caller spells both forms, so no rule derives \"es\" or \"ies\".",
-				Args:    []Arg{{Name: "n"}, {Name: "one"}, {Name: "many"}},
-				Returns: []Ret{{}},
-				Impl:    StringsPlural,
-			},
-			{
-				Name:    "plural_count",
-				Doc:     "Return n and the matching form of one or many, as \"1 target\" or \"3 targets\".",
-				Args:    []Arg{{Name: "n"}, {Name: "one"}, {Name: "many"}},
-				Returns: []Ret{{}},
-				Impl:    StringsPluralCount,
-			},
+		{
+			Name:    "plural",
+			Doc:     "Return one when n is 1, else many; zero is plural. The caller spells both forms, so no rule derives \"es\" or \"ies\".",
+			Args:    []Arg{{Name: "n"}, {Name: "one"}, {Name: "many"}},
+			Returns: []Ret{{}},
+			Impl:    StringsPlural,
+		},
+		{
+			Name:    "plural_count",
+			Doc:     "Return n and the matching form of one or many, as \"1 target\" or \"3 targets\".",
+			Args:    []Arg{{Name: "n"}, {Name: "one"}, {Name: "many"}},
+			Returns: []Ret{{}},
+			Impl:    StringsPluralCount,
+		},
 	},
 }
 

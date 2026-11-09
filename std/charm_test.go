@@ -231,7 +231,6 @@ func TestCharmFuncPropagatesAPredicateFailure(t *testing.T) {
 	assert.ErrorIs(t, err, boom)
 }
 
-
 // TestCharmDestinationMustBeAPointer: move and copy validate the destination at
 // author time so the hint arrives with the magusfile, not at patch-decode time.
 func TestCharmDestinationMustBeAPointer(t *testing.T) {

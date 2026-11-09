@@ -214,4 +214,3 @@ func asString(v any) string {
 func escapeText(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(s)
 }
-

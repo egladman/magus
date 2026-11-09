@@ -95,20 +95,20 @@ var Path = Module{
 			Raises:  true,
 			Impl:    PathExpandUser,
 		},
-			{
-				Name:    "join",
-				Doc:     "Join parts with the OS separator and clean the result. Unlike fs.join, which takes its parts as variadic arguments, this takes a list, so a caller holding one needs no spread.",
-				Args:    []Arg{{Name: "parts"}},
-				Returns: []Ret{{}},
-				Impl:    PathJoin,
-			},
-			{
-				Name:    "within",
-				Doc:     "Report whether path equals dir or lies under it, comparing the cleaned forms lexically. A sibling that shares dir as a string prefix (\"/a/bc\" against \"/a/b\") is not within.",
-				Args:    []Arg{{Name: "dir"}, {Name: "path"}},
-				Returns: []Ret{{}},
-				Impl:    PathWithin,
-			},
+		{
+			Name:    "join",
+			Doc:     "Join parts with the OS separator and clean the result. Unlike fs.join, which takes its parts as variadic arguments, this takes a list, so a caller holding one needs no spread.",
+			Args:    []Arg{{Name: "parts"}},
+			Returns: []Ret{{}},
+			Impl:    PathJoin,
+		},
+		{
+			Name:    "within",
+			Doc:     "Report whether path equals dir or lies under it, comparing the cleaned forms lexically. A sibling that shares dir as a string prefix (\"/a/bc\" against \"/a/b\") is not within.",
+			Args:    []Arg{{Name: "dir"}, {Name: "path"}},
+			Returns: []Ret{{}},
+			Impl:    PathWithin,
+		},
 	},
 }
 

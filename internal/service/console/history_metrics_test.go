@@ -1,8 +1,8 @@
 package console
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"context"
+	"github.com/egladman/magus/types/daemon"
 	"path/filepath"
 	"sync/atomic"
 	"testing"

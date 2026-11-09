@@ -193,11 +193,11 @@ func (Output) StreamType() EventType { return TargetOutput }
 // [Event.MarshalJSON] can encode the fixed fields with the standard
 // marshaller and splice the body beside them, rather than hand-writing JSON.
 type streamHead struct {
-	Schema    int             `json:"schema"`
+	Schema    int       `json:"schema"`
 	Type      EventType `json:"type"`
-	Ts        int64           `json:"ts"`
-	Workspace string          `json:"workspace"`
-	Inv       string          `json:"inv,omitempty"`
+	Ts        int64     `json:"ts"`
+	Workspace string    `json:"workspace"`
+	Inv       string    `json:"inv,omitempty"`
 }
 
 // MarshalJSON encodes the event as one flat JSON object: the envelope fields

@@ -3,9 +3,9 @@
 package std
 
 import (
-	trailtypes "github.com/egladman/magus/types/trail"
 	"context"
 	"fmt"
+	trailtypes "github.com/egladman/magus/types/trail"
 	"path/filepath"
 	"strings"
 	"time"

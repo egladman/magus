@@ -1,8 +1,8 @@
 package daemon
 
 import (
-	"github.com/egladman/magus/types"
 	"fmt"
+	"github.com/egladman/magus/types"
 	"time"
 )
 
@@ -40,9 +40,9 @@ type Snapshot struct {
 	Build     Build     `json:"build" yaml:"build"`
 	// BuildInfo is the reporting binary's identity (version/commit/date), so a Service
 	// client knows which magus it is talking to. Distinct from Build above.
-	BuildInfo BuildInfo     `json:"build_info" yaml:"build_info"`
-	Pool      *Output `json:"pool,omitempty" yaml:"pool,omitempty"`
-	PoolError string        `json:"pool_error,omitempty" yaml:"pool_error,omitempty"` // reason Pool is absent
+	BuildInfo BuildInfo `json:"build_info" yaml:"build_info"`
+	Pool      *Output   `json:"pool,omitempty" yaml:"pool,omitempty"`
+	PoolError string    `json:"pool_error,omitempty" yaml:"pool_error,omitempty"` // reason Pool is absent
 	// Pools is every live proc server found on this machine, one entry each, and is set
 	// only when there is more than one: Pool above is the first of them, so a single
 	// server would just be repeated here. Enumerating them is the point: a multi-server
@@ -142,9 +142,9 @@ type ReadinessReport struct {
 // identifying detail lives behind the bearer-guarded Service. Never the sole
 // signal: a client should key off Status.
 type ReadinessComponent struct {
-	Name   ReadinessName   `json:"name"`
-	Status Readiness `json:"status"`
-	Detail string          `json:"detail"`
+	Name   ReadinessName `json:"name"`
+	Status Readiness     `json:"status"`
+	Detail string        `json:"detail"`
 }
 
 // ReadinessName identifies which subsystem a readiness component reports on, and
@@ -351,9 +351,9 @@ const (
 // Run is one in-flight invocation the server has adopted, keyed by its invocation id,
 // carrying the per-target execution state a dashboard renders as a live run.
 type Run struct {
-	Inv       string            `json:"inv" yaml:"inv"`
-	Trigger   string            `json:"trigger,omitempty" yaml:"trigger,omitempty"`
-	StartedAt time.Time         `json:"started_at,omitempty" yaml:"started_at,omitempty"`
+	Inv       string      `json:"inv" yaml:"inv"`
+	Trigger   string      `json:"trigger,omitempty" yaml:"trigger,omitempty"`
+	StartedAt time.Time   `json:"started_at,omitempty" yaml:"started_at,omitempty"`
 	Targets   []TargetRun `json:"targets,omitempty" yaml:"targets,omitempty"`
 }
 
@@ -405,11 +405,11 @@ type Output struct {
 	// Available is the free slots: Capacity minus Running, floored at zero. Carried as a
 	// number because the question it answers (how much work can I hand this box right
 	// now) should not require the reader to subtract.
-	Available      int                   `json:"available" yaml:"available"`
-	Queued         int                   `json:"queued" yaml:"queued"`
+	Available      int             `json:"available" yaml:"available"`
+	Queued         int             `json:"queued" yaml:"queued"`
 	RunningTargets []RunningTarget `json:"running_targets,omitempty" yaml:"running_targets,omitempty"`
 	Workspaces     []Workspace     `json:"workspaces,omitempty" yaml:"workspaces,omitempty"`
-	Affected       []string              `json:"affected,omitempty" yaml:"affected,omitempty"`
+	Affected       []string        `json:"affected,omitempty" yaml:"affected,omitempty"`
 }
 
 // RunningTarget describes one running target in the pool.

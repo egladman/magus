@@ -22,7 +22,6 @@ import (
 
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
-	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/internal/agent"
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/hint"
@@ -33,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"

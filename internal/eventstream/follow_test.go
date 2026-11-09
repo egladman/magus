@@ -1,9 +1,9 @@
 package eventstream
 
 import (
-	"github.com/egladman/magus/types/events"
 	"context"
 	"fmt"
+	"github.com/egladman/magus/types/events"
 	"os"
 	"path/filepath"
 	"testing"

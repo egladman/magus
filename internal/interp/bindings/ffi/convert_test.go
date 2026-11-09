@@ -1,8 +1,8 @@
 package ffi
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"context"
+	"github.com/egladman/magus/types/daemon"
 	"testing"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"

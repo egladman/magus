@@ -1,14 +1,13 @@
 package changeset
 
 import (
-	difftypes "github.com/egladman/magus/types/diff"
 	"fmt"
+	difftypes "github.com/egladman/magus/types/diff"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 )
 
 // These cases came from the console's parse.test.ts when the two readers were consolidated

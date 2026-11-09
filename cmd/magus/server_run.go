@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"context"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"os"
 	"slices"

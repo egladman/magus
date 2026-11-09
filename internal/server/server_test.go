@@ -1,12 +1,12 @@
 package server
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"io"
 	"log/slog"
 	"net"

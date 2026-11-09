@@ -1,13 +1,12 @@
 package changeset
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 )
 
 // hunkAt builds a hunk whose new side starts at start and holds body, with every line a context

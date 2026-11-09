@@ -1,11 +1,11 @@
 package trail
 
 import (
-	trailtypes "github.com/egladman/magus/types/trail"
 	"bufio"
 	"cmp"
 	"errors"
 	"fmt"
+	trailtypes "github.com/egladman/magus/types/trail"
 	"os"
 	"path/filepath"
 	"slices"

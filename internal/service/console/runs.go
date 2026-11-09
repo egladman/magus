@@ -1,9 +1,9 @@
 package console
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"context"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"sort"
 	"sync"
@@ -46,8 +46,8 @@ type runState struct {
 	startedAt   time.Time
 	finished    bool
 	finishedAt  time.Time
-	lastEventAt time.Time                         // wall-clock time of the most recent folded event
-	order       []string                          // target keys, first-seen order (stable render)
+	lastEventAt time.Time                    // wall-clock time of the most recent folded event
+	order       []string                     // target keys, first-seen order (stable render)
 	targets     map[string]*daemon.TargetRun // keyed by targetKey(project, target)
 }
 

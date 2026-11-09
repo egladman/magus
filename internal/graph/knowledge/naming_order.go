@@ -1,11 +1,10 @@
 package knowledge
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"slices"
 	"strings"
-
 )
 
 // orderCheck reports a function taking two parameters in the reverse of the order most

@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
 )
 
 func TestReadingCommandRefusesWhatIsNotSafeToPaste(t *testing.T) {

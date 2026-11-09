@@ -12,10 +12,10 @@
 package difftui
 
 import (
-	"github.com/egladman/magus/libs/text/plural"
-	"github.com/egladman/magus/types/diff"
 	"cmp"
 	"fmt"
+	"github.com/egladman/magus/libs/text/plural"
+	"github.com/egladman/magus/types/diff"
 	"slices"
 	"strings"
 	"unicode"
@@ -870,4 +870,3 @@ func clamp(v, lo, hi int) int {
 	}
 	return v
 }
-

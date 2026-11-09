@@ -1,9 +1,9 @@
 package review
 
 import (
+	"fmt"
 	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types/diff"
-	"fmt"
 
 	"github.com/egladman/magus/internal/changeset"
 )

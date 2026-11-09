@@ -1,14 +1,13 @@
 package changeset
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 )
 
 func TestNormalizeOutlineTrimsAndKeepsOrder(t *testing.T) {

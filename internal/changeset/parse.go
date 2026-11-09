@@ -1,14 +1,13 @@
 package changeset
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/egladman/magus/types/diff"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
-
 )
 
 // This is the ONE unified-diff reader in the product, and a second one must not be written.
