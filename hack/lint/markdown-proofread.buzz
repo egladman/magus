@@ -598,10 +598,10 @@ test "proofread runs once over every hand-written file and reports at the file's
     foreach (f in got) {
         where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[") ?? 0));
     }
-    assert\equal(where, want: ["docs/note.md:3 [wordy]", "docs/page.md:3 [tense]",
+    assert\equal(where, want: ["docs/note.md:0 [grade]", "docs/page.md:3 [tense]",
         "docs/page.md:3 [!AUTHOR]): the rest of the page speaks for magus, not its author. [first-person]",
         "docs/page.md:0 [grade]"],
-        message: "the table exempts blog/ from tense and first-person, and the hedged page is under its minimum grade");
+        message: "the table exempts blog/ from tense and first-person, wordy only advises, and the hedged page and the wordy note are under their minimum grade");
 }
 
 test "a judge that does not run is an error, not a pass" {
@@ -643,8 +643,8 @@ test "a fragment is judged as a changelog" {
     foreach (f in got) {
         where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[") ?? 0));
     }
-    assert\equal(where, want: ["changes/unreleased/a.md:1 [changelog-group]", "changes/unreleased/c.md:3 [wordy]"],
-        message: "a group deny and a word deny; an advised entry is not reported");
+    assert\equal(where, want: ["changes/unreleased/c.md:0 [grade]"],
+        message: "the table advises changelog-group and wordy, so only the grade deny reports");
 }
 
 test "a guide is held to the guide rules and a concept page is not" {
@@ -658,7 +658,7 @@ test "a guide is held to the guide rules and a concept page is not" {
         message: "guide findings only on the guide; second-person ships off on its labeled precision");
 }
 
-test "a brief and a full form are held to the wordy phrases, and a compact short form is not" {
+test "a brief and a full form are graded on wordy phrases, and a compact short form is not" {
     final got = check(support\fixture({
         "internal/agent/skills/magus-x/SKILL.md": "# X\n\nRun it\{\{if .Full}} in order to replay\{\{else}} in order to warm it\{\{end}}.\n",
         ".claude/skills/y/SKILL.md": "---\nname: y\ndescription: \"Y.\"\n---\n\n# Y\n\nRun it in order to replay.\n",
@@ -669,8 +669,8 @@ test "a brief and a full form are held to the wordy phrases, and a compact short
     foreach (f in got) {
         where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[")!));
     }
-    assert\equal(where, want: [".claude/skills/y/SKILL.md:8 [wordy]", "internal/agent/skills/magus-x/SKILL.md:3 [wordy]"],
-        message: "the brief's phrase and the full form's, none from the short form or the page");
+    assert\equal(where, want: [".claude/skills/y/SKILL.md:0 [grade]", "internal/agent/skills/magus-x/SKILL.md:0 [grade]"],
+        message: "wordy only advises, so the briefs report their grade and the page reports nothing");
 }
 
 test "ignore globs anchor a slashed entry and float a bare one" {
