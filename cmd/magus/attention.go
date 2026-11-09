@@ -206,10 +206,8 @@ func attentionDispose(root string, args []string) error {
 	// removes the person the queue exists to reach. The guard denies this outright
 	// (rule agent-sign-off), but it fails OPEN where it is not wired, the same gap
 	// --ack closed this way first (diff.go).
-	if !isInteractiveTTY() {
-		slog.ErrorContext(context.Background(), "session dispose records that a person closed this request, so it needs an interactive terminal",
-			attr.Notice(""), attr.Component("magus"))
-		return exit.Reported(exit.Usage)
+	if err := requirePerson(context.Background(), "session dispose records that a person closed this request"); err != nil {
+		return err
 	}
 
 	dir, err := sessions.Dir(root)

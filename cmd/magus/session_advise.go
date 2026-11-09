@@ -5,13 +5,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
 	"strings"
 	"time"
 
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
-	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/types"
@@ -24,17 +22,6 @@ func directiveStore(root string) (sessions.DirectiveStore, error) {
 		return sessions.DirectiveStore{}, err
 	}
 	return sessions.OpenDirectiveStore(root)
-}
-
-// requirePerson refuses verb without an interactive terminal. The guard denies
-// it to an agent too, but fails open where no guard is wired.
-func requirePerson(verb string) error {
-	if isInteractiveTTY() {
-		return nil
-	}
-	slog.ErrorContext(context.Background(), fmt.Sprintf("session %s records a person's words, so it needs an interactive terminal", verb),
-		attr.Notice(""), attr.Component("magus"))
-	return exit.Reported(exit.Usage)
 }
 
 func adviseCommand(root string, args []string) error {
@@ -50,7 +37,7 @@ func adviseCommand(root string, args []string) error {
 	if text == "" {
 		return exit.Usagef(`magus session advise: needs the text to show every session, as in magus session advise "push what you have"`)
 	}
-	if err := requirePerson("advise"); err != nil {
+	if err := requirePerson(context.Background(), "session advise records a person's words"); err != nil {
 		return err
 	}
 	store, err := directiveStore(root)
@@ -72,7 +59,7 @@ func retractCommand(root string, args []string) error {
 	if len(rest) != 1 {
 		return exit.Usagef("magus session retract: needs exactly one advisory id (got %d); `magus session advisories` lists them", len(rest))
 	}
-	if err := requirePerson("retract"); err != nil {
+	if err := requirePerson(context.Background(), "session retract records that a person withdrew their words"); err != nil {
 		return err
 	}
 	store, err := directiveStore(root)
