@@ -9,6 +9,7 @@ import (
 	"go/build"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -142,26 +143,66 @@ func gateCoverageAt(runsDir, commit string) gateCoverage {
 // as absent in the log while the redundancy check (MGS3010) refuses to run it again: two
 // rules each blocking the only way past the other.
 func gateVerdictAt(workspace, commit string) gateCoverage {
-	cover, _ := gateRecordAt(workspace, commit)
+	cover, _ := readGateHistory(workspace).recordAt(commit)
 	return cover
 }
 
-// gateRecordAt is gateVerdictAt with the record it read.
-func gateRecordAt(workspace, commit string) (gateCoverage, sessions.GateRecord) {
-	if workspace == "" || !matchableRevision(commit) {
-		return gateUnknown, sessions.GateRecord{}
+// readGateFold reads a store's gate verdicts. A test counts reads through it.
+var readGateFold = sessions.ReadGateResults
+
+// gateHistory is the store's gate verdicts, read once per push judgment.
+// A fold lists and stats every invocation in the store.
+type gateHistory struct {
+	fold sessions.Fold
+	// read is false when there was no store to read.
+	read bool
+}
+
+func readGateHistory(workspace string) gateHistory {
+	if workspace == "" {
+		return gateHistory{}
 	}
 	dir, err := sessions.Dir(workspace)
 	if err != nil {
-		return gateUnknown, sessions.GateRecord{}
+		return gateHistory{}
 	}
-	// Gate verdicts only, through the store's per-kind fold cache: a push used to decode
-	// every invocation in the store to find one record.
-	fold, err := sessions.ReadGateResults(dir)
+	fold, err := readGateFold(dir)
 	if err != nil {
+		return gateHistory{}
+	}
+	return gateHistory{fold: fold, read: true}
+}
+
+// gateReplayScanLimit bounds how many distinct gated commits a push is
+// placed against, newest first.
+const gateReplayScanLimit = 64
+
+// passedBranchGates are the distinct commits with a passing branch `ci`,
+// newest first, at most gateReplayScanLimit of them.
+func (h gateHistory) passedBranchGates() []sessions.GateRecord {
+	var out []sessions.GateRecord
+	seen := map[string]bool{}
+	for i := len(h.fold.Records) - 1; i >= 0 && len(out) < gateReplayScanLimit; i-- {
+		rec := h.fold.Records[i]
+		var g sessions.GateResult
+		if rec.Kind != sessions.KindGateResult || json.Unmarshal(rec.Payload, &g) != nil {
+			continue
+		}
+		if g.Target != string(types.TargetCI) || g.Outcome != sessions.OutcomePass || !g.Scope.CoversBranch() || !matchableRevision(g.Commit) || seen[g.Commit] {
+			continue
+		}
+		seen[g.Commit] = true
+		out = append(out, sessions.GateRecord{GateResult: g, At: time.UnixMilli(rec.Ts)})
+	}
+	return out
+}
+
+// recordAt is the verdict h holds for commit, with the record it read.
+func (h gateHistory) recordAt(commit string) (gateCoverage, sessions.GateRecord) {
+	if !h.read || !matchableRevision(commit) {
 		return gateUnknown, sessions.GateRecord{}
 	}
-	rec, ok := sessions.GateAt(fold, commit, string(types.TargetCI))
+	rec, ok := sessions.GateAt(h.fold, commit, string(types.TargetCI))
 	switch {
 	case !ok:
 		return gateUnknown, rec
@@ -384,10 +425,17 @@ func (ev pushEvidence) admitted() string {
 	return ""
 }
 
+// phasePushCoverage runs inside builtin_rules, so the two overlap.
+const phasePushCoverage = "push_coverage"
+
 // pushCoverage is what the stores say about the revision the push on command
 // publishes, read in the checkout it runs in. It is gateUnknown when the line
 // relocates the push somewhere this cannot name.
 func pushCoverage(ctx context.Context, deps Dependencies, hook location, command string, d Dialect, cwd string) pushEvidence {
+	log := judgmentPhases(ctx)
+	log.begin(phasePushCoverage)
+	start := time.Now()
+	defer func() { log.record(timedPhase(phasePushCoverage, time.Since(start), 0, false)) }()
 	push, located := locatePush(command, d, cwd)
 	if !located {
 		return pushEvidence{}
@@ -397,18 +445,21 @@ func pushCoverage(ctx context.Context, deps Dependencies, hook location, command
 		at = hookLocationAt(deps, push.dir)
 	}
 	ev := pushEvidence{commit: deps.revision(ctx, push.dir, push.rev)}
+	gates := readGateHistory(at.workspace)
 	var rec sessions.GateRecord
-	ev.cover, rec = gateRecordAt(at.workspace, ev.commit)
+	ev.cover, rec = gates.recordAt(ev.commit)
 	if ev.cover == gateUnrun {
 		ev.unrun = rec
 	}
 	if ev.cover == gateUnknown {
 		ev.cover = gateCoverageAt(workspaceRunsDir(at.cacheDir), ev.commit)
 	}
+	var lineage gateLineage
 	// A replay (cherry-pick, rebase) mints new commits over a tree a gate already passed.
 	if ev.cover != gatePassed {
-		if rec, replayed := gateReplayAt(ctx, at.workspace, cmp.Or(push.dir, at.workspace), ev.commit); replayed {
-			ev.cover, ev.replay = gatePassed, rec
+		lineage = gateLineageAt(ctx, deps.VCS, cmp.Or(push.dir, at.workspace), ev.commit, gates)
+		if lineage.replayed {
+			ev.cover, ev.replay = gatePassed, lineage.replay
 		}
 	}
 	if ev.cover != gatePassed && ev.cover != gateUnknown {
@@ -419,7 +470,7 @@ func pushCoverage(ctx context.Context, deps Dependencies, hook location, command
 	// A failed gate here is a red verdict that no narrow pass outweighs.
 	switch ev.cover {
 	case gateAbsent, gateIncomplete, gateProjectScoped, gateUnscoped:
-		ev.narrow = narrowCoverageAt(ctx, deps, at, cmp.Or(push.dir, at.workspace), ev.commit)
+		ev.narrow = narrowCoverageAt(ctx, deps, at, cmp.Or(push.dir, at.workspace), ev.commit, lineage)
 		if ev.narrow.covers() {
 			ev.cover = gateNarrow
 		}
@@ -1093,8 +1144,9 @@ func (n narrowCoverage) shortfall() string {
 
 // narrowCoverageAt weighs the passing runs the checkout's output store holds
 // against each file commit changed since its newest gated ancestor, else since
-// the merge base. dir is the checkout the push runs in.
-func narrowCoverageAt(ctx context.Context, deps Dependencies, at location, dir, commit string) narrowCoverage {
+// the merge base. dir is the checkout the push runs in, and lineage names
+// that ancestor.
+func narrowCoverageAt(ctx context.Context, deps Dependencies, at location, dir, commit string, lineage gateLineage) narrowCoverage {
 	if deps.Inspect == nil || at.workspace == "" || at.cacheDir == "" || !matchableRevision(commit) {
 		return narrowCoverage{unread: "this caller cannot open the workspace or its output store"}
 	}
@@ -1107,8 +1159,8 @@ func narrowCoverageAt(ctx context.Context, deps Dependencies, at location, dir, 
 		return narrowCoverage{unread: fmt.Sprintf("the checkout root is unread: %v", err)}
 	}
 	n := narrowCoverage{since: res.Base}
-	if gated, ok := lastGatedAncestor(ctx, res.VCS, at.workspace, dir, commit); ok {
-		n.since, n.gated = gated, true
+	if lineage.descends {
+		n.since, n.gated = lineage.ancestor, true
 	}
 	changed, err := res.VCS.RangeFiles(ctx, dir, n.since, commit, nil)
 	if err != nil {
@@ -1139,33 +1191,150 @@ func narrowCoverageAt(ctx context.Context, deps Dependencies, at location, dir, 
 	return n
 }
 
-// lastGatedAncestor is the newest recorded commit with a passing branch `ci`
-// that commit descends from.
-func lastGatedAncestor(ctx context.Context, driver types.VCSDriver, workspace, dir, commit string) (string, bool) {
-	store, err := sessions.Dir(workspace)
-	if err != nil {
-		return "", false
+// gateLineage places commit against the passing branch gates of a history.
+type gateLineage struct {
+	// replay is the newest gate on a tree equal to commit's.
+	replay   sessions.GateRecord
+	replayed bool
+	// ancestor is the newest gated commit that commit descends from.
+	ancestor string
+	descends bool
+}
+
+// gateLineageAt places commit, in the checkout holding dir, against the
+// passing branch gates h holds. An unread revision places nothing, so the
+// push is graded by its commit alone.
+func gateLineageAt(ctx context.Context, opts types.VCSOptions, dir, commit string, h gateHistory) gateLineage {
+	gates := h.passedBranchGates()
+	if dir == "" || !matchableRevision(commit) || len(gates) == 0 {
+		return gateLineage{}
 	}
-	fold, err := sessions.ReadGateResults(store)
-	if err != nil {
-		return "", false
+	res, err := vcs.Resolve(ctx, dir, "", opts)
+	if err != nil || res.VCS == nil {
+		return gateLineage{}
 	}
-	seen := map[string]bool{}
-	for i := len(fold.Records) - 1; i >= 0 && len(seen) < gateReplayScanLimit; i-- {
-		rec := fold.Records[i]
-		var g sessions.GateResult
-		if rec.Kind != sessions.KindGateResult || json.Unmarshal(rec.Payload, &g) != nil {
+	if res.VCS.Name() == string(backendGit) {
+		return gitGateLineage(ctx, dir, commit, gates)
+	}
+	return driverGateLineage(ctx, res.VCS, dir, commit, gates)
+}
+
+// gitGateLineage reads every gate's tree and ancestry in one `git rev-list`.
+// Asking per gate cost two processes each, about a hundred on a busy store.
+func gitGateLineage(ctx context.Context, dir, commit string, gates []sessions.GateRecord) gateLineage {
+	revs := []string{commit}
+	for _, g := range gates {
+		revs = append(revs, g.Commit)
+	}
+	graph, err := gitCommitGraph(ctx, dir, revs)
+	if err != nil {
+		return gateLineage{}
+	}
+	head, ok := graph.resolve(commit)
+	if !ok {
+		return gateLineage{}
+	}
+	ancestors := graph.ancestors(head)
+	var out gateLineage
+	for _, g := range gates {
+		id, ok := graph.resolve(g.Commit)
+		if !ok {
 			continue
 		}
-		if g.Target != string(types.TargetCI) || g.Outcome != sessions.OutcomePass || !g.Scope.CoversBranch() || g.Commit == "" || seen[g.Commit] {
-			continue
+		if !out.replayed && graph.trees[id] == graph.trees[head] {
+			out.replay, out.replayed = g, true
 		}
-		seen[g.Commit] = true
-		if ok, err := driver.IsAncestor(ctx, dir, g.Commit, commit); err == nil && ok {
-			return g.Commit, true
+		if !out.descends && ancestors[id] {
+			out.ancestor, out.descends = g.Commit, true
 		}
 	}
-	return "", false
+	return out
+}
+
+// driverGateLineage is gitGateLineage for a backend without one batched
+// read: one tree read and one ancestry check per gate.
+func driverGateLineage(ctx context.Context, driver types.VCSDriver, dir, commit string, gates []sessions.GateRecord) gateLineage {
+	tree, err := driver.TreeID(ctx, dir, commit)
+	if err != nil || tree == "" {
+		return gateLineage{}
+	}
+	var out gateLineage
+	for _, g := range gates {
+		if !out.replayed {
+			if id, err := driver.TreeID(ctx, dir, g.Commit); err == nil && id == tree {
+				out.replay, out.replayed = g, true
+			}
+		}
+		if !out.descends {
+			if ok, err := driver.IsAncestor(ctx, dir, g.Commit, commit); err == nil && ok {
+				out.ancestor, out.descends = g.Commit, true
+			}
+		}
+		if out.replayed && out.descends {
+			break
+		}
+	}
+	return out
+}
+
+// commitGraph is the commits reachable from some revisions: each one's tree
+// and parents, keyed by full id.
+type commitGraph struct {
+	trees   map[string]string
+	parents map[string][]string
+}
+
+// gitCommitGraph walks every commit reachable from revs in one process. A rev
+// git cannot find, such as a gated commit since collected, is left out.
+func gitCommitGraph(ctx context.Context, dir string, revs []string) (commitGraph, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", dir, "rev-list", "--ignore-missing", "--stdin", "--format=%H %T %P")
+	// Replacement refs would swap the trees compared.
+	cmd.Env = append(os.Environ(), "GIT_NO_REPLACE_OBJECTS=1", "GIT_OPTIONAL_LOCKS=0")
+	cmd.Stdin = strings.NewReader(strings.Join(revs, "\n") + "\n")
+	out, err := cmd.Output()
+	if err != nil {
+		return commitGraph{}, fmt.Errorf("git rev-list: %w", err)
+	}
+	g := commitGraph{trees: map[string]string{}, parents: map[string][]string{}}
+	for line := range strings.Lines(string(out)) {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || fields[0] == "commit" {
+			continue
+		}
+		g.trees[fields[0]], g.parents[fields[0]] = fields[1], fields[2:]
+	}
+	return g, nil
+}
+
+// resolve is the one commit in g that rev abbreviates.
+func (g commitGraph) resolve(rev string) (string, bool) {
+	if _, ok := g.trees[rev]; ok {
+		return rev, true
+	}
+	found := ""
+	for id := range g.trees {
+		if strings.HasPrefix(id, rev) {
+			if found != "" {
+				return "", false
+			}
+			found = id
+		}
+	}
+	return found, found != ""
+}
+
+// ancestors is every commit in g that id descends from, id included.
+func (g commitGraph) ancestors(id string) map[string]bool {
+	seen := map[string]bool{id: true}
+	for queue := []string{id}; len(queue) > 0; queue = queue[1:] {
+		for _, p := range g.parents[queue[0]] {
+			if !seen[p] {
+				seen[p] = true
+				queue = append(queue, p)
+			}
+		}
+	}
+	return seen
 }
 
 // runEvidence matches the checkout's recorded runs to the files a push changes.
