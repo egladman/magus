@@ -26,6 +26,7 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.StringVar(&cfg.CI.Machine.Name, "ci-machine-name", cfg.CI.Machine.Name, "MAGUS_CI_MACHINE_NAME: the provider's label, e.g.")
 	fs.IntVar(&cfg.CI.Machine.MemoryMB, "ci-machine-memory-mb", cfg.CI.Machine.MemoryMB, "MAGUS_CI_MACHINE_MEMORY_MB: one runner's memory in megabytes")
 	fs.IntVar(&cfg.CI.Machine.Cores, "ci-machine-cores", cfg.CI.Machine.Cores, "MAGUS_CI_MACHINE_CORES: one runner's CPU cores")
+	fs.StringVar(&cfg.CI.RemoteGate, "ci-remote-gate", cfg.CI.RemoteGate, "MAGUS_CI_REMOTE_GATE: RemoteGate names the CI that runs 'ci' on every pushed commit, such as github-actions.")
 	fs.BoolVar(&cfg.Volatility.Enabled, "volatility-enabled", cfg.Volatility.Enabled, "MAGUS_VOLATILITY_ENABLED: Enabled is the master switch for volatility detection and auto-retry; false disables all retry logic.")
 	fs.IntVar(&cfg.Volatility.BootstrapSamples, "volatility-bootstrap-samples", cfg.Volatility.BootstrapSamples, "MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES: outcomes below which all failures retry once")
 	fs.IntVar(&cfg.Volatility.MinSamples, "volatility-min-samples", cfg.Volatility.MinSamples, "MAGUS_VOLATILITY_MIN_SAMPLES: minimum outcomes before Wilson-score gates retry")

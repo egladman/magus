@@ -993,3 +993,66 @@ func (s *UnrunGateSuite) TestAnUnrunBranchGateOutranksAProjectPass() {
 	s.record(sessions.OutcomePass, sessions.GateScopeProject)
 	s.Equal(gateUnrun, gateVerdictAt(s.root, unrunCommit[:12]))
 }
+
+// RemoteGatePushSuite pins the push gate under ci.remote_gate.
+type RemoteGatePushSuite struct {
+	suite.Suite
+	repo *testkit.Repo
+	at   location
+	deps Dependencies
+}
+
+func TestPushGateRemoteSuite(t *testing.T) { suite.Run(t, new(RemoteGatePushSuite)) }
+
+func (s *RemoteGatePushSuite) SetupTest() {
+	testkit.Isolate(s.T())
+	s.repo = testkit.NewRepository(s.T(), map[string]string{".gitignore": ".magus/\n", "a.go": "package a\n"})
+	s.at = location{cacheDir: filepath.Join(s.repo.Root(), ".magus"), workspace: s.repo.Root()}
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.at.cacheDir, cache.RunsDir), 0o755))
+}
+
+func (s *RemoteGatePushSuite) declare() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.repo.Root(), "magus.yaml"), []byte("ci:\n  remote_gate: github-actions\n"), 0o644))
+}
+
+func (s *RemoteGatePushSuite) push(commit string) pushEvidence {
+	s.deps.Revision = func(context.Context, string, string) string { return commit[:12] }
+	return pushCoverage(s.T().Context(), s.deps, s.at, "git push", DialectBash, s.repo.Root())
+}
+
+func (s *RemoteGatePushSuite) TestPushGateAdmitsARemoteGate() {
+	s.declare()
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+
+	ev := s.push(head)
+	s.Equal(gateRemote, ev.cover)
+	decision, _ := gradePushWithoutGate(ev, "")
+	s.Empty(decision)
+	s.Contains(ev.admitted(), "no local `ci` at "+head[:12])
+	s.Contains(ev.admitted(), "github-actions runs it on the pull request (ci.remote_gate)")
+}
+
+func (s *RemoteGatePushSuite) TestPushGateStillRefusesAFailedGateUnderARemoteGate() {
+	s.declare()
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+	dir, err := sessions.Dir(s.repo.Root())
+	s.Require().NoError(err)
+	s.Require().NoError(sessions.RecordGate(dir, sessions.GateResult{
+		Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: head, Outcome: sessions.OutcomeFail, Inv: "inv-red",
+	}, sessions.InvocationStart{Workspace: s.repo.Root()}))
+
+	ev := s.push(head)
+	s.Equal(gateFailed, ev.cover)
+	decision, _ := gradePushWithoutGate(ev, "")
+	s.Equal(decisionDeny, decision)
+}
+
+func (s *RemoteGatePushSuite) TestPushGateWithoutARemoteGateRefusesAsToday() {
+	head := s.repo.Commit("change", map[string]string{"a.go": "package a\n\nvar A = 1\n"})
+
+	ev := s.push(head)
+	s.Equal(gateAbsent, ev.cover)
+	decision, reason := gradePushWithoutGate(ev, "")
+	s.Equal(decisionDeny, decision)
+	s.Contains(reason, "no `ci` run is recorded at this commit")
+}

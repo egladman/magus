@@ -119,6 +119,14 @@ func (s *configSuite) TestLoadReadsSourcesFromTheUserConfig() {
 		Why: "upstream", Contradicts: "https://blog.example/go"}}, cfg.Sources)
 }
 
+func (s *configSuite) TestLoadReadsCIRemoteGate() {
+	path := filepath.Join(s.T().TempDir(), Filename)
+	s.Require().NoError(os.WriteFile(path, []byte("ci:\n  remote_gate: github-actions\n"), 0o644))
+	cfg, err := LoadFile(path, true)
+	s.Require().NoError(err)
+	s.Equal("github-actions", cfg.CI.RemoteGate)
+}
+
 func (s *configSuite) TestLoadRefusesABadVerdictInTheUserConfig() {
 	home := s.T().TempDir()
 	s.T().Setenv("XDG_CONFIG_HOME", home)

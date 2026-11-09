@@ -32,6 +32,7 @@ magus resolves configuration from these layers, highest precedence first: a CLI 
 | `ci.machine.name`       | `MAGUS_CI_MACHINE_NAME`       | `--ci-machine-name`       | string |
 | `ci.max_shards`         | `MAGUS_CI_MAX_SHARDS`         | `--ci-max-shards`         | int    |
 | `ci.record_runs`        | `MAGUS_CI_RECORD_RUNS`        | `--ci-record-runs`        | bool   |
+| `ci.remote_gate`        | `MAGUS_CI_REMOTE_GATE`        | `--ci-remote-gate`        | string |
 | `ci.runner_pool_budget` | `MAGUS_CI_RUNNER_POOL_BUDGET` | `--ci-runner-pool-budget` | int    |
 
 ## console

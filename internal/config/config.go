@@ -604,6 +604,9 @@ type CI struct {
 	// Machine is the machine every shard runs on. The plan packs shards
 	// against its memory, never the planning host's. Unset, the plan says so.
 	Machine CIMachine `json:"machine" yaml:"machine"`
+	// RemoteGate names the CI that runs `ci` on every pushed commit, such as
+	// github-actions. Set, the push gate admits a push with no local run.
+	RemoteGate string `json:"remote_gate" yaml:"remote_gate"`
 }
 
 // CIMachine is the size of one CI machine. It sets both sizes or none.

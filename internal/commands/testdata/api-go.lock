@@ -4028,6 +4028,7 @@ github.com/egladman/magus/types.OutputRefMalformed const DiagnosticCode = "MGS80
 github.com/egladman/magus/types.OutputRefMissing const DiagnosticCode = "MGS8001"
 github.com/egladman/magus/types.OutputReplayedFromAnotherCheckout const DiagnosticCode = "MGS8005"
 github.com/egladman/magus/types.OwedNoSeat const untyped string = "no seat"
+github.com/egladman/magus/types.OwedRemoteCI const untyped string = "remote CI runs it"
 github.com/egladman/magus/types.Ownership type struct
 github.com/egladman/magus/types.Ownership.Commits field int "json:\"commits\"    yaml:\"commits\""
 github.com/egladman/magus/types.Ownership.Definition field string "json:\"definition\" yaml:\"definition\""

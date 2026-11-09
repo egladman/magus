@@ -903,7 +903,8 @@ func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve 
 	return primary, gates, nil
 }
 
-// refuseOwedReason refuses any owed reason but a missing seat, and names where
+// refuseOwedReason refuses any owed reason but a missing seat or remote
+// CI, and names where
 // the reasons workers reach for go instead.
 func refuseOwedReason(result types.JobResult) error {
 	owed := map[string]string{types.PrimaryGoalID: result.Validation.Owed}
@@ -911,13 +912,13 @@ func refuseOwedReason(result types.JobResult) error {
 		owed[evidence.GateID] = evidence.Owed
 	}
 	for _, goal := range slices.Sorted(maps.Keys(owed)) {
-		if reason := owed[goal]; reason != "" && reason != types.OwedNoSeat {
-			return fmt.Errorf("job: goal %q is filed as owed because %q, and the one reason a run is owed is %q:"+
+		if reason := owed[goal]; reason != "" && reason != types.OwedNoSeat && reason != types.OwedRemoteCI {
+			return fmt.Errorf("job: goal %q is filed as owed because %q, and the reasons a run is owed are %q and %q:"+
 				" a check the environment kept from running is filed as unrun with that cause, which fails the job,"+
 				" the integrator regenerates an output outside the write paths, so that files nothing,"+
 				" your orchestrator drops a goal that is not this job's or adds a deviation,"+
 				" and a lint finding in a file this job did not change clears by linting the files it changed",
-				goal, reason, types.OwedNoSeat)
+				goal, reason, types.OwedNoSeat, types.OwedRemoteCI)
 		}
 	}
 	return nil

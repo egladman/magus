@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
@@ -83,6 +84,10 @@ const (
 	// gateUnrun is a branch gate at this commit that passed everything this
 	// host could run. What it could not run is owed to PR CI.
 	gateUnrun
+	// gateRemote is no local `ci` verdict at this commit, and a workspace that
+	// declares the remote CI that runs it (ci.remote_gate). A failed local run
+	// is never this.
+	gateRemote
 )
 
 // gateCoverageAt reads the run log for gate invocations built from commit.
@@ -303,7 +308,7 @@ func gradePushWithoutGate(ev pushEvidence, lease string) (decision, reason strin
 	// Unknown passes. This rule refuses on evidence or not at all: no run log, no VCS, or a
 	// host magus cannot read the revision from all mean the question was never asked, and
 	// a refusal there is one nobody can clear.
-	case gateUnknown, gatePassed, gateWaived, gateNarrow, gateUnrun:
+	case gateUnknown, gatePassed, gateWaived, gateNarrow, gateUnrun, gateRemote:
 		return "", ""
 	case gateAbsent:
 		state = "no `" + string(types.TargetCI) + "` run is recorded at this commit"
@@ -349,6 +354,9 @@ type pushEvidence struct {
 	// unrun is the gate at commit that could not run every target here.
 	unrun  sessions.GateRecord
 	waiver types.GateWaiver
+	// remoteGate is the workspace's ci.remote_gate, read when no local verdict
+	// covers the commit.
+	remoteGate string
 	// narrow is weighed only when nothing else covers the commit and no
 	// gate failed there.
 	narrow narrowCoverage
@@ -367,6 +375,8 @@ func (ev pushEvidence) admitted() string {
 		return waiverNote(ev.commit, ev.waiver)
 	case ev.cover == gateNarrow:
 		return ev.narrow.admission(ev.commit)
+	case ev.cover == gateRemote:
+		return fmt.Sprintf("magus workspace: no local `%s` at %s; %s runs it on the pull request (ci.remote_gate).", types.TargetCI, ev.commit, ev.remoteGate)
 	case ev.cover == gateUnrun:
 		return fmt.Sprintf("magus workspace: PR CI owes what `%s` at %s (%s) could not run here:\n  %s",
 			types.TargetCI, ev.commit, gateRunRef(ev.unrun), strings.Join(ev.unrun.Unrun, "\n  "))
@@ -412,6 +422,12 @@ func pushCoverage(ctx context.Context, deps Dependencies, hook location, command
 		ev.narrow = narrowCoverageAt(ctx, deps, at, cmp.Or(push.dir, at.workspace), ev.commit)
 		if ev.narrow.covers() {
 			ev.cover = gateNarrow
+		}
+	}
+	switch ev.cover {
+	case gateAbsent, gateIncomplete, gateProjectScoped, gateUnscoped:
+		if cfg, err := config.LoadWorkspaceOnly(at.workspace); err == nil && cfg.CI.RemoteGate != "" {
+			ev.cover, ev.remoteGate = gateRemote, cfg.CI.RemoteGate
 		}
 	}
 	// Only a question that could be asked becomes a refusal: a fresh clone or a host with
