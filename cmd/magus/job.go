@@ -1452,6 +1452,30 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	var asked types.Job
 	row.Apply(&asked)
 	derived := slices.DeleteFunc(slices.Clone(stored.WritePaths), func(p string) bool { return slices.Contains(asked.WritePaths, p) })
+	wholeHeld := map[string][]string{}
+	for _, claim := range derived {
+		file, decl := types.SplitClaim(claim)
+		if slices.ContainsFunc(asked.WritePaths, func(entry string) bool {
+			p, d := types.SplitClaim(entry)
+			return d == "" && !strings.ContainsAny(p, "*?[{") && filepath.ToSlash(filepath.Clean(p)) == file
+		}) {
+			wholeHeld[file] = append(wholeHeld[file], decl)
+		}
+	}
+	var narrowedLines []string
+	for _, file := range slices.Sorted(maps.Keys(wholeHeld)) {
+		narrowed, _, err := job.NarrowHold(ctx, store, stored.ID, file, wholeHeld[file], "")
+		if err != nil {
+			slog.InfoContext(ctx, fmt.Sprintf("%s stays whole: %s", file, err), attr.Notice("note"))
+			continue
+		}
+		stored = narrowed
+		claims := make([]string, len(wholeHeld[file]))
+		for i, decl := range wholeHeld[file] {
+			claims[i] = file + "#" + decl
+		}
+		narrowedLines = append(narrowedLines, fmt.Sprintf("narrowed %s to %s; a write to another declaration of %s claims it", file, strings.Join(claims, ", "), file))
+	}
 
 	if opts.Format == outputName {
 		return emitNames(os.Stdout, []string{stored.ID})
@@ -1485,6 +1509,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			printLandingBootstrap(ctx, os.Stdout, store, stored)
 		}
 		printClaimNotes(os.Stdout, slices.Concat(job.ForkNotes(ctx, store, plan, stored), job.IntegrationOverlaps(plan, stored), job.ReleasedUnderPattern(stored)))
+		for _, line := range narrowedLines {
+			fmt.Println(line)
+		}
 		if len(derived) > 0 {
 			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover: -o json lists each\n", len(derived))
 		}
