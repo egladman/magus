@@ -229,19 +229,22 @@ FILE...|--stdin` measures the author's own texts, one per file, NUL-separated on
 stdin, or as JSON lines with `--field` (and `--kind-field` for a kind per line),
 and writes the file to `--out`, by default `$XDG_CONFIG_HOME/proofread/voice.json`
 (under the OS config directory when unset, as magus resolves its own). It refuses that default inside a
-git work tree. The file holds aggregates alone, per kind: the texts and words
-counted, the first-person and future-tense rates, and the p10, p50 and p90 of
-each feature: words, words per sentence, the longest paragraph's words, colons,
-parentheses and dashes per 100 words, code spans, contractions, headings and
-bold, the marker words its, every, one, with, all, and, the, and a commit
-subject's characters. It holds no text, no content word and no path. It never
-leaves the machine and is never committed. Spelling, casing and semicolons are
-not measured.
+git work tree. The file, schema `proofread-voice/4`, holds aggregates alone, per
+kind: the texts and words counted, the first-person and future-tense rates, the
+features `voice-drift` ranks on for each 200-word window of the author's pooled
+texts, a commit subject's 95th percentile in characters, and the 5th and 95th
+percentile of each feature a budget or `uniform` reads. Those are the triad and
+contrast rates, participial clauses and nominalizations, and the spreads:
+sentence, paragraph and item words, the share of sentences and items on the
+most common opener, the entropy of the openers' parts of speech, and the share
+of sentences with a subordinating conjunction. It holds no text, no content
+word and no path. It never leaves the machine and is never committed. A file
+in an older schema is refused with the command that rebuilds it.
 
 `--voice FILE` on any kind runs `voice-drift` (PRF1040), an advise-only rule
-that reports a text once when two or more features measure outside the author's
-p10 to p90 range, naming each feature and its direction. A kind under 30 texts
-sets no range. A voice whose change descriptions use "I" at 10 or more per 1000
+that reports a draft that reads further from the author's own texts of its kind
+than 95% of those texts do. A kind under 1,000 words keeps no windows and no
+ranges. A voice whose change descriptions use "I" at 10 or more per 1000
 words and "will" at 2 or more holds `tense` to advice on change descriptions,
 where a decisions table would deny it. The [proofread guide](https://eli.gladman.cc/magus/guides/proofread/) walks through building one.
 

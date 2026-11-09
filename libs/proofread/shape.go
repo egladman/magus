@@ -38,6 +38,20 @@ type Shape struct {
 	SentenceWordsStdDev float64            `json:"sentence_words_sd"`
 	// ParagraphWordsMean is the mean words per paragraph or list item.
 	ParagraphWordsMean float64 `json:"paragraph_words_mean"`
+	// ParagraphWordsStdDev and ItemWordsStdDev are the standard deviations of
+	// the words per paragraph or list item, and per list item alone.
+	ParagraphWordsStdDev float64 `json:"paragraph_words_sd"`
+	ItemWordsStdDev      float64 `json:"item_words_sd"`
+	// SentenceOpenerShare and ItemOpenerShare are the share of sentences, and
+	// of list items, whose first word is the text's most common first word.
+	SentenceOpenerShare float64 `json:"sentence_opener_share"`
+	ItemOpenerShare     float64 `json:"item_opener_share"`
+	// OpenerClassEntropy is the Shannon entropy, in bits, of the part of
+	// speech each sentence opens on.
+	OpenerClassEntropy float64 `json:"opener_class_entropy"`
+	// SubordinateShare is the share of sentences holding a subordinating
+	// conjunction.
+	SubordinateShare float64 `json:"subordinate_share"`
 	// Punctuation is per 100 words: colon, semicolon, paren (opening), dash
 	// (em, en and a spaced hyphen), comma, exclamation and question.
 	Punctuation map[string]float64 `json:"punctuation,omitempty"`
@@ -72,6 +86,8 @@ type Shape struct {
 	// under 100 words outside code spans, FunctionWords, Grammar,
 	// TemplateRate and TagCompression under 200, and SentenceWordsMean,
 	// SentenceWordsStdDev and AdjacentOverlap under 5 sentences.
+	// The opener and subordinate measures need 5 sentences too. The
+	// paragraph and item spreads need 3 paragraphs or 3 items.
 	Withheld []string `json:"withheld,omitempty"`
 }
 
@@ -112,6 +128,7 @@ func MeasureShape(text string, kind Kind) Shape {
 		colons, semicolons, parens, dashes int
 		commas, exclamations, questions    int
 		headings, bold, items, spans       int
+		sp                                 spread
 	)
 
 	for _, para := range paras {
@@ -144,6 +161,8 @@ func MeasureShape(text string, kind Kind) Shape {
 		if len(split) > 0 {
 			paragraphCount++
 		}
+
+		sp.add(split, para.head.item)
 
 		for i, sentence := range split {
 			if i+1 < len(split) && asks(sentence) && !asks(split[i+1]) {
@@ -202,6 +221,9 @@ func MeasureShape(text string, kind Kind) Shape {
 	} else {
 		withhold("sentence_words_mean", "sentence_words_sd", "adjacent_overlap")
 	}
+
+	sp.sentences = sentences
+	sp.measure(&s)
 
 	return s
 }

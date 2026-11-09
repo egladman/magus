@@ -30,6 +30,8 @@ var (
 	lexicalWithheld  = []string{"mattr", "word_entropy", "hapax_ratio", "lexical_density"}
 	countWithheld    = []string{"function_words", "grammar_per_1000", "template_rate", "tag_compression"}
 	sentenceWithheld = []string{"sentence_words_mean", "sentence_words_sd", "adjacent_overlap"}
+	unitWithheld     = []string{"paragraph_words_sd", "item_words_sd", "item_opener_share"}
+	openerWithheld   = []string{"sentence_opener_share", "opener_class_entropy", "subordinate_share"}
 )
 
 func TestMeasureShapeCountsPunctuationPer100Words(t *testing.T) {
@@ -157,7 +159,7 @@ func TestShapeFunctionWordsAreDistinct(t *testing.T) {
 }
 
 func TestMeasureShapeWithholdsWhatTheTextIsTooShortFor(t *testing.T) {
-	everything := slices.Concat(lexicalWithheld, countWithheld, sentenceWithheld)
+	everything := slices.Concat(lexicalWithheld, countWithheld, sentenceWithheld, unitWithheld, openerWithheld)
 
 	cases := map[string]struct {
 		text string
@@ -165,11 +167,11 @@ func TestMeasureShapeWithholdsWhatTheTextIsTooShortFor(t *testing.T) {
 	}{
 		"no prose":       {"```\ncode\n```\n", everything},
 		"99 words":       {repeat("the cat", 49) + " the", everything},
-		"100 words":      {repeat("the cat", 50), slices.Concat(countWithheld, sentenceWithheld)},
-		"199 words":      {repeat("the cat", 99) + " the", slices.Concat(countWithheld, sentenceWithheld)},
-		"200 words":      {repeat("the cat", 100), sentenceWithheld},
+		"100 words":      {repeat("the cat", 50), slices.Concat(countWithheld, sentenceWithheld, unitWithheld, openerWithheld)},
+		"199 words":      {repeat("the cat", 99) + " the", slices.Concat(countWithheld, sentenceWithheld, unitWithheld, openerWithheld)},
+		"200 words":      {repeat("the cat", 100), slices.Concat(sentenceWithheld, unitWithheld, openerWithheld)},
 		"4 sentences":    {repeat("One two.", 4), everything},
-		"5 sentences":    {repeat("One two.", 5), slices.Concat(lexicalWithheld, countWithheld)},
+		"5 sentences":    {repeat("One two.", 5), slices.Concat(lexicalWithheld, countWithheld, unitWithheld)},
 		"100 code spans": {repeat("`x`", 100), everything},
 	}
 

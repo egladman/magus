@@ -13,14 +13,14 @@ import (
 
 // VoiceSchema names the shape of a voice file, so a file written by another
 // version of proofread is refused rather than misread.
-const VoiceSchema = "proofread-voice/3"
+const VoiceSchema = "proofread-voice/4"
 
 // olderVoiceSchemas are the schemas earlier proofread versions wrote. A file
 // in one is refused with the command that rebuilds it.
 //
-// compat(until: no voice file in proofread-voice/1 or /2 is still read):
-// naming the rebuild beats the bare "not proofread-voice/3" refusal.
-var olderVoiceSchemas = []string{"proofread-voice/1", "proofread-voice/2"}
+// compat(until: no voice file in proofread-voice/1, /2 or /3 is still read):
+// naming the rebuild beats the bare "not proofread-voice/4" refusal.
+var olderVoiceSchemas = []string{"proofread-voice/1", "proofread-voice/2", "proofread-voice/3"}
 
 // MinVoiceTexts is the fewest change descriptions a [Voice] relaxes the tense
 // rule from.
@@ -73,6 +73,10 @@ type VoiceStats struct {
 	// commit subjects. It is set on commit messages of [MinVoiceWords] words
 	// or more, and 0 otherwise.
 	SubjectP95 float64 `json:"subject_chars_p95,omitempty"`
+	// Ranges are the author's 5th and 95th percentiles of each feature a
+	// budget or the uniform rule reads, over the same windows. It is nil
+	// under [MinVoiceWords] words.
+	Ranges map[Feature]Range `json:"ranges,omitempty"`
 }
 
 // Windows is what an author's texts of one kind measure when shuffled and
@@ -139,8 +143,10 @@ func BuildVoice(texts map[Kind][]string) (*Voice, error) {
 			// Too few words to rank a draft against: the tense counts alone stand.
 		case spec(kind).Reader.Subject:
 			k.SubjectP95 = subjectP95(kept)
+			k.Ranges = buildRanges(kind, kept)
 		default:
 			k.Windows = buildWindows(kind, kept)
+			k.Ranges = buildRanges(kind, kept)
 		}
 
 		v.Kinds[kind] = k
@@ -235,9 +241,15 @@ func ReadVoice(r io.Reader) (*Voice, error) {
 }
 
 func checkVoiceStats(kind Kind, k VoiceStats) error {
-	switch {
-	case !slices.Contains(voiceKinds, kind):
+	if !slices.Contains(voiceKinds, kind) {
 		return fmt.Errorf("a voice measures %s, not %s", kindList(voiceKinds), kind)
+	}
+
+	if err := checkRanges(kind, k.Ranges); err != nil {
+		return err
+	}
+
+	switch {
 	case k.SubjectP95 < 0:
 		return fmt.Errorf("%s: subject length %v is negative", kind, k.SubjectP95)
 	case k.SubjectP95 > 0 && !spec(kind).Reader.Subject:
