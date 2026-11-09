@@ -84,7 +84,7 @@ func (c *Changes) lines(path string) ([]Span, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	return Hunks(diff), rev, nil
+	return hunks(diff), rev, nil
 }
 
 func (c *Changes) merge(dir string) (string, error) {
@@ -101,9 +101,9 @@ func (c *Changes) merge(dir string) (string, error) {
 
 var hunkHeader = regexp.MustCompile(`(?m)^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@`)
 
-// Hunks returns the working-copy line ranges of a zero-context diff. A pure
+// hunks returns the working-copy line ranges of a zero-context diff. A pure
 // deletion at line n spans n and the line after it, where the removal shows.
-func Hunks(diff string) []Span {
+func hunks(diff string) []Span {
 	var spans []Span
 	for _, m := range hunkHeader.FindAllStringSubmatch(diff, -1) {
 		start, _ := strconv.Atoi(m[1])
