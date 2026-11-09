@@ -123,6 +123,7 @@ type storeConfig struct {
 	modelTiers      *types.ModelTierSet
 	modelRows       func() []types.ModelPricing
 	modelTierMatrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error)
+	spawnRule       func(parent, child types.ModelTier) error
 	owners          func(context.Context, []string) ([]string, error)
 	// priceContext is Location.PriceContext.
 	priceContext func(calls []types.AgentFacts) (tokens int64, usd float64, ok bool)
@@ -200,6 +201,10 @@ type Location struct {
 	// It runs inside the write, while the Store's locks are held, so it must not touch
 	// the Store.
 	ModelTierMatrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error)
+	// SpawnRule is the workspace's magus.WithSpawnRule. It judges a row
+	// whose tier and its parent's are both proven. Such a row with no rule
+	// is refused.
+	SpawnRule func(parent, child types.ModelTier) error
 	// Owners names the projects that own a list of files, the ownership `describe job`
 	// reports as a job's projects. It is asked only to fill a matrix's request, so a Store
 	// with no matrix never calls it; nil leaves the request's WriteProjects empty.
@@ -223,7 +228,7 @@ type Location struct {
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
 	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()),
-		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, priceContext: loc.PriceContext,
+		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, spawnRule: loc.SpawnRule, owners: loc.Owners, priceContext: loc.PriceContext,
 		migrations: jobMigrations}}
 	s.path, s.err = jobsPath(loc)
 	return s
@@ -783,7 +788,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			row.ModelTier = &assigned
 		}
 		if i < 0 || prev.Model != row.Model || prev.Parent != row.Parent {
-			if aerr := refuseAboveParent(s.modelTiers, row, f.Jobs); aerr != nil {
+			if aerr := refuseAboveParent(s.modelTiers, s.spawnRule, row, f.Jobs); aerr != nil {
 				return aerr
 			}
 		}

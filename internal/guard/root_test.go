@@ -804,8 +804,11 @@ func levelDeps(t *testing.T, level types.GuardProfile) Dependencies {
 	require.NoError(t, err)
 	resolved, err := builtin.Resolve(expanded)
 	require.NoError(t, err)
-	return Dependencies{Builtins: resolved}
+	return Dependencies{Builtins: resolved, TierRule: tierWithin}
 }
+
+// tierWithin is magus.TierCeiling's ordering, which this package cannot import.
+func tierWithin(parent, child types.ModelTier) error { return child.Within(parent) }
 
 // testModelTiers is the shipped tier shape with host mapping its aliases and an economy
 // context cap of 100k.
@@ -830,7 +833,7 @@ func tierFixture(t *testing.T, set *types.ModelTierSet, rows ...types.Job) conte
 	matrix := func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error) {
 		return &types.JobModelTier{Name: "economy", Rank: 0, Skills: types.SkillVariantFull, Reason: "two files", Site: "hack/tiers.buzz:12"}, nil
 	}
-	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root, ModelTiers: set, ModelTierMatrix: matrix})
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root, ModelTiers: set, ModelTierMatrix: matrix, SpawnRule: tierWithin})
 	for _, row := range rows {
 		row.Validated = 1
 		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })

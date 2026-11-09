@@ -258,7 +258,7 @@ func (s *Store) writeProjects(ctx context.Context, row types.Job) ([]string, err
 // was forked at. Only a proven pair is judged: a parent missing from plan, recording no
 // tier, or recording one set no longer declares at that rank bounds nothing. The way up is
 // a person's: a child never outranks the work that handed it out.
-func refuseAboveParent(set *types.ModelTierSet, row types.Job, plan []types.Job) error {
+func refuseAboveParent(set *types.ModelTierSet, rule func(parent, child types.ModelTier) error, row types.Job, plan []types.Job) error {
 	if set == nil || row.Parent == "" || row.ModelTier == nil {
 		return nil
 	}
@@ -274,12 +274,16 @@ func refuseAboveParent(set *types.ModelTierSet, row types.Job, plan []types.Job)
 	if !ok {
 		return nil
 	}
-	if child.Within(parent) == nil {
+	if rule == nil {
+		return fmt.Errorf("job: %s and its parent %s both carry a model tier, and this store was opened with no spawn rule to judge them", row.ID, row.Parent)
+	}
+	refused := rule(parent, child)
+	if refused == nil {
 		return nil
 	}
-	err := fmt.Errorf("job: %s would run at model tier %s, and its parent %s was forked at %s, and a child never outranks its parent,"+
-		" so fork it at %s or lower (`--model %s`), or a person forks it at %s as a row of its own",
-		row.ID, row.ModelTier, row.Parent, plan[i].ModelTier, parent.Name(), parent.Name(), child.Name())
+	err := fmt.Errorf("job: %s would run at model tier %s, and its parent %s was forked at %s,"+
+		" so fork it at %s or lower (`--model %s`), or a person forks it at %s as a row of its own: %w",
+		row.ID, row.ModelTier, row.Parent, plan[i].ModelTier, parent.Name(), parent.Name(), child.Name(), refused)
 	return types.NonRetryable(err, types.RetryAfterPerson, "a person forks the higher-tier row")
 }
 

@@ -11,7 +11,7 @@ import (
 	types "github.com/egladman/magus/types"
 )
 
-// callbackReturnsAny adapts a Buzz function value as a func(context.Context) (interface {}, error).
+// callbackReturnsAny adapts a Buzz function value as a Go func.
 func callbackReturnsAny(sess *buzz.Session, args []vm.Value, n int) func(ctx context.Context) (any, error) {
 	fn, ok := ffi.Fun(args, n)
 	if !ok {
@@ -27,7 +27,7 @@ func callbackReturnsAny(sess *buzz.Session, args []vm.Value, n int) func(ctx con
 	}
 }
 
-// callbackStringBoolReturnsWalkStep adapts a Buzz function value as a func(context.Context, string, bool) (types.WalkStep, error).
+// callbackStringBoolReturnsWalkStep adapts a Buzz function value as a Go func.
 func callbackStringBoolReturnsWalkStep(sess *buzz.Session, args []vm.Value, n int) func(ctx context.Context, path string, isDir bool) (types.WalkStep, error) {
 	fn, ok := ffi.Fun(args, n)
 	if !ok {
@@ -44,7 +44,7 @@ func callbackStringBoolReturnsWalkStep(sess *buzz.Session, args []vm.Value, n in
 	}
 }
 
-// callbackStringReturnsBool adapts a Buzz function value as a func(context.Context, string) (bool, error).
+// callbackStringReturnsBool adapts a Buzz function value as a Go func.
 func callbackStringReturnsBool(sess *buzz.Session, args []vm.Value, n int) func(ctx context.Context, s string) (bool, error) {
 	fn, ok := ffi.Fun(args, n)
 	if !ok {
@@ -60,7 +60,7 @@ func callbackStringReturnsBool(sess *buzz.Session, args []vm.Value, n int) func(
 	}
 }
 
-// callbackStringSliceReturnsBool adapts a Buzz function value as a func(context.Context, []string) (bool, error).
+// callbackStringSliceReturnsBool adapts a Buzz function value as a Go func.
 func callbackStringSliceReturnsBool(sess *buzz.Session, args []vm.Value, n int) func(ctx context.Context, paths []string) (bool, error) {
 	fn, ok := ffi.Fun(args, n)
 	if !ok {
@@ -76,7 +76,7 @@ func callbackStringSliceReturnsBool(sess *buzz.Session, args []vm.Value, n int) 
 	}
 }
 
-// callbackVoid adapts a Buzz function value as a func(context.Context) error.
+// callbackVoid adapts a Buzz function value as a Go func.
 func callbackVoid(sess *buzz.Session, args []vm.Value, n int) func(ctx context.Context) error {
 	fn, ok := ffi.Fun(args, n)
 	if !ok {

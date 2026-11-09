@@ -359,7 +359,6 @@ github.com/egladman/magus/std.ArchiveUncompress func(ctx context.Context, src st
 github.com/egladman/magus/std.Arg type struct
 github.com/egladman/magus/std.Arg.Default field any
 github.com/egladman/magus/std.Arg.Enum field string
-github.com/egladman/magus/std.Arg.Func field string
 github.com/egladman/magus/std.Arg.Name field string
 github.com/egladman/magus/std.Arg.Object field string
 github.com/egladman/magus/std.Arg.Optional field bool
@@ -370,28 +369,26 @@ github.com/egladman/magus/std.BuzzMethodName func(m Method) string
 github.com/egladman/magus/std.BuzzParse func(ctx context.Context, path string, embedded bool) (github.com/egladman/magus/types.BuzzFile, error)
 github.com/egladman/magus/std.BuzzSignature func(mod Module, m Method) string
 github.com/egladman/magus/std.BuzzStdlibEquiv func(module string, method string) (string, bool)
-github.com/egladman/magus/std.Callback type interface
-github.com/egladman/magus/std.Callback.Call imethod func(ctx context.Context, args ...any) ([]any, error)
 github.com/egladman/magus/std.CamelCase func(s string) string
 github.com/egladman/magus/std.Charm var Module
 github.com/egladman/magus/std.CharmAfter func(_ context.Context, argv []string, anchor string, vals []string) (github.com/egladman/magus/spells.Charm, error)
-github.com/egladman/magus/std.CharmAfterFunc func(ctx context.Context, argv []string, fn Callback, vals []string) (github.com/egladman/magus/spells.Charm, error)
+github.com/egladman/magus/std.CharmAfterFunc func(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error), vals []string) (github.com/egladman/magus/spells.Charm, error)
 github.com/egladman/magus/std.CharmAppend func(_ context.Context, vals []string) (github.com/egladman/magus/spells.Charm, error)
 github.com/egladman/magus/std.CharmBefore func(_ context.Context, argv []string, anchor string, vals []string) (github.com/egladman/magus/spells.Charm, error)
-github.com/egladman/magus/std.CharmBeforeFunc func(ctx context.Context, argv []string, fn Callback, vals []string) (github.com/egladman/magus/spells.Charm, error)
+github.com/egladman/magus/std.CharmBeforeFunc func(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error), vals []string) (github.com/egladman/magus/spells.Charm, error)
 github.com/egladman/magus/std.CharmCopy func(_ context.Context, argv []string, anchor string, to string) (github.com/egladman/magus/spells.Charm, error)
-github.com/egladman/magus/std.CharmCopyFunc func(ctx context.Context, argv []string, fn Callback, to string) (github.com/egladman/magus/spells.Charm, error)
+github.com/egladman/magus/std.CharmCopyFunc func(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error), to string) (github.com/egladman/magus/spells.Charm, error)
 github.com/egladman/magus/std.CharmDrop func(_ context.Context, argv []string, anchor string) (github.com/egladman/magus/spells.Charm, error)
-github.com/egladman/magus/std.CharmDropFunc func(ctx context.Context, argv []string, fn Callback) (github.com/egladman/magus/spells.Charm, error)
+github.com/egladman/magus/std.CharmDropFunc func(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error)) (github.com/egladman/magus/spells.Charm, error)
 github.com/egladman/magus/std.CharmMove func(_ context.Context, argv []string, anchor string, to string) (github.com/egladman/magus/spells.Charm, error)
-github.com/egladman/magus/std.CharmMoveFunc func(ctx context.Context, argv []string, fn Callback, to string) (github.com/egladman/magus/spells.Charm, error)
+github.com/egladman/magus/std.CharmMoveFunc func(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error), to string) (github.com/egladman/magus/spells.Charm, error)
 github.com/egladman/magus/std.CharmPath func(_ context.Context, argv []string, anchor string) (string, error)
-github.com/egladman/magus/std.CharmPathFunc func(ctx context.Context, argv []string, fn Callback) (string, error)
+github.com/egladman/magus/std.CharmPathFunc func(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error)) (string, error)
 github.com/egladman/magus/std.CharmPrepend func(_ context.Context, vals []string) (github.com/egladman/magus/spells.Charm, error)
 github.com/egladman/magus/std.CharmSet func(_ context.Context, argv []string, anchor string, val string) (github.com/egladman/magus/spells.Charm, error)
-github.com/egladman/magus/std.CharmSetFunc func(ctx context.Context, argv []string, fn Callback, val string) (github.com/egladman/magus/spells.Charm, error)
+github.com/egladman/magus/std.CharmSetFunc func(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error), val string) (github.com/egladman/magus/spells.Charm, error)
 github.com/egladman/magus/std.CharmTest func(_ context.Context, argv []string, anchor string) (github.com/egladman/magus/spells.Charm, error)
-github.com/egladman/magus/std.CharmTestFunc func(ctx context.Context, argv []string, fn Callback) (github.com/egladman/magus/spells.Charm, error)
+github.com/egladman/magus/std.CharmTestFunc func(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error)) (github.com/egladman/magus/spells.Charm, error)
 github.com/egladman/magus/std.CheckRead func(ctx context.Context, path string) error
 github.com/egladman/magus/std.CheckWrite func(ctx context.Context, path string) error
 github.com/egladman/magus/std.Crypto var Module
@@ -477,8 +474,8 @@ github.com/egladman/magus/std.FsSymlink func(ctx context.Context, target string,
 github.com/egladman/magus/std.FsTempDir func(ctx context.Context, prefix string) (string, error)
 github.com/egladman/magus/std.FsTempFile func(ctx context.Context, prefix string) (string, error)
 github.com/egladman/magus/std.FsTrimOldest func(ctx context.Context, dir string, maxBytes int, keepWithinMs int, timeoutMs int) (github.com/egladman/magus/types.TrimReport, error)
-github.com/egladman/magus/std.FsWalk func(ctx context.Context, root string, cb Callback) error
-github.com/egladman/magus/std.FsWatch func(ctx context.Context, paths []string, cb Callback) error
+github.com/egladman/magus/std.FsWalk func(ctx context.Context, root string, cb func(ctx context.Context, path string, isDir bool) (github.com/egladman/magus/types.WalkStep, error)) error
+github.com/egladman/magus/std.FsWatch func(ctx context.Context, paths []string, cb func(ctx context.Context, paths []string) (bool, error)) error
 github.com/egladman/magus/std.FsWriteFile func(ctx context.Context, path string, content string) error
 github.com/egladman/magus/std.FsWriteFileAtomic func(ctx context.Context, path string, content string) error
 github.com/egladman/magus/std.FsWriteLines func(ctx context.Context, path string, lines []string) error
@@ -719,9 +716,9 @@ github.com/egladman/magus/std.OsExit func(ctx context.Context, code int) error
 github.com/egladman/magus/std.OsHostname func(_ context.Context) (string, error)
 github.com/egladman/magus/std.OsNumCPU func(_ context.Context) (int, error)
 github.com/egladman/magus/std.OsPlatform func(_ context.Context) (string, string, string, error)
-github.com/egladman/magus/std.OsRetry func(ctx context.Context, max int, fn Callback, opts github.com/egladman/magus/types.RetryOptions) (any, error)
+github.com/egladman/magus/std.OsRetry func(ctx context.Context, max int, fn func(ctx context.Context) (any, error), opts github.com/egladman/magus/types.RetryOptions) (any, error)
 github.com/egladman/magus/std.OsSleep func(ctx context.Context, ms float64) error
-github.com/egladman/magus/std.OsWithEnv func(ctx context.Context, env map[string]string, cb Callback) error
+github.com/egladman/magus/std.OsWithEnv func(ctx context.Context, env map[string]string, cb func(ctx context.Context) error) error
 github.com/egladman/magus/std.Path var Module
 github.com/egladman/magus/std.PathAbs func(ctx context.Context, path string) (string, error)
 github.com/egladman/magus/std.PathClean func(_ context.Context, path string) (string, error)
@@ -750,7 +747,7 @@ github.com/egladman/magus/std.ProcExec func(ctx context.Context, cmd string, arg
 github.com/egladman/magus/std.ProcShell func(_ context.Context, line string, shell string) (github.com/egladman/magus/types.ShellCommand, error)
 github.com/egladman/magus/std.ProcStdinIsTerminal func(_ context.Context) (bool, error)
 github.com/egladman/magus/std.ProcWhich func(ctx context.Context, cmd string) (string, error)
-github.com/egladman/magus/std.ProcWithSlots func(ctx context.Context, n int, cb Callback) error
+github.com/egladman/magus/std.ProcWithSlots func(ctx context.Context, n int, cb func(ctx context.Context) error) error
 github.com/egladman/magus/std.Protocol type struct
 github.com/egladman/magus/std.Protocol.Doc field string
 github.com/egladman/magus/std.Protocol.Methods field []Method
@@ -832,14 +829,13 @@ github.com/egladman/magus/std.TimeNowISO func(_ context.Context) (string, error)
 github.com/egladman/magus/std.TimeParse func(_ context.Context, layout string, value string) (float64, error)
 github.com/egladman/magus/std.TimeParseDuration func(_ context.Context, duration string) (float64, error)
 github.com/egladman/magus/std.TrimOldest func(ctx context.Context, dir string, maxBytes int64, keepWithin time.Duration, timeout time.Duration, now time.Time) (github.com/egladman/magus/types.TrimReport, error)
-github.com/egladman/magus/std.TypeAny const TypeTag = 13
+github.com/egladman/magus/std.TypeAny const TypeTag = 12
 github.com/egladman/magus/std.TypeAnyMap const TypeTag = 11
 github.com/egladman/magus/std.TypeBool const TypeTag = 4
 github.com/egladman/magus/std.TypeByteSlice const TypeTag = 7
 github.com/egladman/magus/std.TypeFloat const TypeTag = 3
 github.com/egladman/magus/std.TypeFloatSlice const TypeTag = 6
-github.com/egladman/magus/std.TypeFunc const TypeTag = 12
-github.com/egladman/magus/std.TypeIndex const TypeTag = 14
+github.com/egladman/magus/std.TypeIndex const TypeTag = 13
 github.com/egladman/magus/std.TypeInt const TypeTag = 2
 github.com/egladman/magus/std.TypeInvalid const TypeTag = 0
 github.com/egladman/magus/std.TypeString const TypeTag = 1
@@ -3777,6 +3773,7 @@ github.com/egladman/magus/types.ModelTier.MarshalText method func() ([]byte, err
 github.com/egladman/magus/types.ModelTier.Name method func() string
 github.com/egladman/magus/types.ModelTier.Rank method func() int
 github.com/egladman/magus/types.ModelTier.Within method func(ceiling ModelTier) error
+github.com/egladman/magus/types.ModelTierAboveParent const DiagnosticCode = "MGS3055"
 github.com/egladman/magus/types.ModelTierBounds type struct
 github.com/egladman/magus/types.ModelTierBounds.MaxContext field int64
 github.com/egladman/magus/types.ModelTierBounds.MaxLive field int
@@ -3849,6 +3846,7 @@ github.com/egladman/magus/types.ModelTiers type struct
 github.com/egladman/magus/types.ModelTiers.Definition field string "json:\"definition\" yaml:\"definition\""
 github.com/egladman/magus/types.ModelTiers.Rows field []ModelTierRecord "json:\"rows\"       yaml:\"rows\""
 github.com/egladman/magus/types.ModelTiersDefinition const untyped string = "Model tiers reads job history, not git: each (model tier, job kind) pair's recorded outcomes. A tier's pass rate is scored by its Wilson lower bound, set beside how many checks, re-forks, rework rounds (a worker sent more work after it handed back) and widenings (write paths added to a taken job) its jobs took, and what they cost. It reports what each tier achieved; changing a tier is a person editing the declaration or matrix it names."
+github.com/egladman/magus/types.ModelTiersIncomparable const DiagnosticCode = "MGS3056"
 github.com/egladman/magus/types.ModuleDefinition const untyped string = "A module is a magus standard-library namespace a magusfile imports for host capabilities - filesystem, exec, vcs, crypto, http, and more. Import each under its bare name (import \"fs\", then fs\\glob(...)); magus layers these methods onto Buzz's own stdlib. The magus forms are sandbox-aware; some methods also exist in Buzz's own stdlib."
 github.com/egladman/magus/types.ModuleEntry type struct
 github.com/egladman/magus/types.ModuleEntry.Doc field string "json:\"doc,omitempty\"     yaml:\"doc,omitempty\""

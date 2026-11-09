@@ -75,7 +75,14 @@ func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookR
 				strings.Join(unknown, " and "), why, declaredAliases(set, host), strings.Join(missing, " and "), host),
 		}}, from)
 	}
-	if child.Within(parent) == nil {
+	if deps.TierRule == nil {
+		return applyFindings(gate, verdict, []costFinding{{
+			rule: denyRuleSpawnAboveParentTier,
+			key:  hint.MarkerKind(denyRuleSpawnAboveParentTier) + "-unruled",
+			say:  "magus workspace: this spawn's tier ceiling is not judged: the guard was wired with no spawn rule (magus.WithSpawnRule).",
+		}}, from)
+	}
+	if deps.TierRule(parent, child) == nil {
 		return verdict
 	}
 	// A parent resolved through a harness row runs on a host the declaration does not map,

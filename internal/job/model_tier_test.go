@@ -386,9 +386,12 @@ func TestRefuseModelTierLimitsNamesTheBoundAndTheWayOut(t *testing.T) {
 func tieredStore(t *testing.T, set *types.ModelTierSet, matrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error)) *Store {
 	t.Helper()
 	loc := tempLocation(t, t.TempDir())
-	loc.ModelTiers, loc.ModelTierMatrix = set, matrix
+	loc.ModelTiers, loc.ModelTierMatrix, loc.SpawnRule = set, matrix, tierWithin
 	return NewStore(loc)
 }
+
+// tierWithin is magus.TierCeiling's ordering, which this package cannot import.
+func tierWithin(parent, child types.ModelTier) error { return child.Within(parent) }
 
 func TestStoreAssignsTheTierWhenARowIsCreated(t *testing.T) {
 	t.Parallel()
@@ -684,11 +687,12 @@ func TestRefuseAboveParentJudgesOnlyAProvenPair(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.NoError(t, refuseAboveParent(set, types.Job{ID: "c", Parent: "p", ModelTier: principal}, tt.plan))
+			assert.NoError(t, refuseAboveParent(set, tierWithin, types.Job{ID: "c", Parent: "p", ModelTier: principal}, tt.plan))
 		})
 	}
 
 	proven := []types.Job{{ID: "p", ModelTier: &types.JobModelTier{Name: "economy", Rank: 0}}}
-	require.Error(t, refuseAboveParent(set, types.Job{ID: "c", Parent: "p", ModelTier: principal}, proven))
-	assert.NoError(t, refuseAboveParent(nil, types.Job{ID: "c", Parent: "p", ModelTier: principal}, proven), "a workspace without tiers bounds nothing")
+	require.Error(t, refuseAboveParent(set, tierWithin, types.Job{ID: "c", Parent: "p", ModelTier: principal}, proven))
+	assert.NoError(t, refuseAboveParent(nil, tierWithin, types.Job{ID: "c", Parent: "p", ModelTier: principal}, proven), "a workspace without tiers bounds nothing")
+	assert.ErrorContains(t, refuseAboveParent(set, nil, types.Job{ID: "c", Parent: "p", ModelTier: principal}, proven), "no spawn rule", "a proven pair with no rule is refused, never allowed")
 }
