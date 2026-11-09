@@ -999,7 +999,8 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 
 	// Before the snapshot, never after: an entry whose key no longer describes its
 	// inputs must not reach the local store or the shared remote.
-	if mutErr := c.checkSourceMutation(ctx, rc.step, preSources); mutErr != nil {
+	postSources, postErr := c.fingerprintSources(ctx, rc.step)
+	if mutErr := checkSourceMutation(rc.step, preSources, postSources); mutErr != nil {
 		return fail(mutErr)
 	}
 	if err := c.checkUndeclaredWrites(ctx, rc.step, win, preTree, preSources); err != nil {
@@ -1020,9 +1021,17 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	// depends on a base the key does not hold.
 	storable := c.local.writes() && !s.NoCache && result.Permitted == 0
 	if storable {
-		if moved, fresh := c.keyStillDescribesInputs(ctx, rc.step, preSources); !fresh {
+		switch {
+		case preErr != nil || postErr != nil:
 			storable = false
-			c.reportUnrecorded(ctx, *rc.step, hash, moved)
+			c.log.WarnContext(ctx, "cache.warn", slog.String("msg", fmt.Sprintf(
+				"not recording %s:%s under %s: the inputs could not be re-checked after the run: %v",
+				s.ProjectPath, s.Target, shortHash(hash), cmp.Or(preErr, postErr))))
+		default:
+			if moved, fresh := keyStillDescribesInputs(preSources, postSources); !fresh {
+				storable = false
+				c.reportUnrecorded(ctx, *rc.step, hash, moved)
+			}
 		}
 	}
 
