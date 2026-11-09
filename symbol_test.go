@@ -390,6 +390,17 @@ func TestReindexRefusedByAnAncestorLockGetsNoInstallHint(t *testing.T) {
 	assert.NotContains(t, err.Error(), "rerun once", "rerunning inside the same outer run is refused again")
 }
 
+// An indexer that hit a missing file was found, so it is not uninstalled.
+func TestSymbolRunErrorNamesAMissingFileNotAMissingIndexer(t *testing.T) {
+	enoent := errors.New("Error: ENOENT: no such file or directory, open 'cmd/magus/notes.go'")
+
+	err := symbolRunError(types.NewProjectRef("docs", "/ws/docs"), "typescript", enoent)
+
+	require.ErrorIs(t, err, enoent)
+	assert.Contains(t, err.Error(), "a path it was given does not exist")
+	assert.NotContains(t, err.Error(), "may not be installed")
+}
+
 // indexerOnPath puts the fixture indexer on PATH, which installedIndexes requires before
 // freshenSymbolIndexes will rebuild its index.
 func indexerOnPath(t *testing.T) {

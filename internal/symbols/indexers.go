@@ -2,7 +2,11 @@ package symbols
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
+	"io/fs"
+	"os/exec"
+	"strings"
 )
 
 // Indexer describes the SCIP indexer a language's spell drives: the tool it forks and
@@ -37,6 +41,15 @@ func MissingIndexerHint(language, bin string) string {
 		hint += "; get it from " + i.URL
 	}
 	return hint
+}
+
+// MissingFile reports whether err is the indexer failing to open a path it
+// was given. An absent indexer binary is exec.ErrNotFound, not this.
+func MissingFile(err error) bool {
+	if errors.Is(err, exec.ErrNotFound) {
+		return false
+	}
+	return errors.Is(err, fs.ErrNotExist) || strings.Contains(err.Error(), "ENOENT")
 }
 
 // InstallHint returns a one-line, actionable suffix naming the language's indexer and

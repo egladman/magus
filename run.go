@@ -902,6 +902,8 @@ func (r *composedRunner) runKeyedStep(ctx context.Context, p *types.Project, ste
 			handler := r.m.targetHandler(step.Target)
 			_, err := r.m.cache.RunAside(cache.WithoutSlotHeld(ctx), step, func(ctx context.Context) error {
 				ctx = buzz.WithTargetRuns(ctx, buzz.NewTargetRuns(r.runs.Passed(p.Path)...))
+				// The caller's args are not this step's.
+				ctx = project.WithExtraArgs(ctx, step.ExtraArgs)
 				return handler(r.withBodyInterceptor(ctx, p, step), p)
 			}, r.cacheOpts...)
 			return err

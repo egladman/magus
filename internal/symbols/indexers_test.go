@@ -1,5 +1,19 @@
 package symbols
 
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"os/exec"
+)
+
+func (s *symbolsSuite) TestMissingFileIsAPathTheIndexerWasGivenNotItsOwnAbsence() {
+	s.True(MissingFile(errors.New("Error: ENOENT: no such file or directory, open 'cmd/magus/notes.go'")))
+	s.True(MissingFile(fmt.Errorf("read: %w", fs.ErrNotExist)))
+	s.False(MissingFile(&exec.Error{Name: "scip-typescript", Err: exec.ErrNotFound}))
+	s.False(MissingFile(errors.New("exit status 127")))
+}
+
 func (s *symbolsSuite) TestInstallHintNamesTheIndexerAndWhereToGetIt() {
 	s.Equal("the typescript SCIP indexer (scip-typescript) may not be installed; get it from https://github.com/sourcegraph/scip-typescript",
 		InstallHint("typescript"))
