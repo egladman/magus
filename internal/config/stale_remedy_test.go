@@ -42,12 +42,12 @@ func (s *CheckoutHookAtSuite) TestNoMagusYAMLIsNone() {
 	s.Empty(CheckoutHookAt(s.root))
 }
 
-func (s *CheckoutHookAtSuite) TestTheReadyLineRunsTheHookHere() {
+func (s *CheckoutHookAtSuite) TestTheRemedyRunsTheDeclaredBootstrap() {
 	s.Equal("./magus buzz hack/dev/boot.buzz -- --here --verify-ready", ReadyCheckoutCommand("hack/dev/boot.buzz"))
 }
 
-func (s *CheckoutHookAtSuite) TestNoHookHasNoReadyLine() {
-	s.Empty(ReadyCheckoutCommand(""))
+func (s *CheckoutHookAtSuite) TestWithoutAHookTheRemedyInstallsHarnesses() {
+	s.Equal("magus agent harness install", ReadyCheckoutCommand(""))
 }
 
 func TestStaleRemedyRendersEachCase(t *testing.T) {

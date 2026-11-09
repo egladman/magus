@@ -762,9 +762,6 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 		}
 	case own:
 		ready := ReadyCheckoutLine(root)
-		if ready == "" {
-			return binaryFix{say: fmt.Sprintf("bootstrap ./magus with `%s`", bootstrap)}
-		}
 		return binaryFix{
 			say: fmt.Sprintf("bootstrap ./magus with `%s`, then ready the checkout with `%s`, each alone on its line", bootstrap, ready),
 			why: "The bootstrap builds ./magus and nothing else. The checkout hook then installs every project's dependencies and every declared harness's tool rows, " +
