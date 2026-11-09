@@ -2,19 +2,128 @@ package calibrate
 
 import (
 	"cmp"
+	"fmt"
+	"maps"
 	"math"
 	"slices"
+	"strings"
+	"text/tabwriter"
 
 	"github.com/egladman/magus/libs/proofread"
 )
+
+// TextPair is one owner text and its rewrite.
+type TextPair struct{ Owner, Other string }
+
+// PairedTexts is one kind's pairs and the texts its two sides held unpaired.
+type PairedTexts struct {
+	Pairs    []TextPair
+	Unpaired int
+}
+
+// KeyedText is one text of a paired file, by kind and id.
+type KeyedText struct {
+	Kind     proofread.Kind
+	ID, Text string
+}
+
+// IndexTexts returns texts by kind and id. An id twice for one kind is an
+// error naming path.
+func IndexTexts(path string, texts []KeyedText) (map[proofread.Kind]map[string]string, error) {
+	out := map[proofread.Kind]map[string]string{}
+
+	for _, t := range texts {
+		if out[t.Kind] == nil {
+			out[t.Kind] = map[string]string{}
+		}
+
+		if _, dup := out[t.Kind][t.ID]; dup {
+			return nil, fmt.Errorf("%s: %s %q appears twice", path, t.Kind, t.ID)
+		}
+
+		out[t.Kind][t.ID] = t.Text
+	}
+
+	return out, nil
+}
+
+// JoinPairs pairs owner and other texts by kind and id, in id order. An id on
+// one side alone counts as unpaired.
+func JoinPairs(owners, others map[proofread.Kind]map[string]string) map[proofread.Kind]*PairedTexts {
+	out := map[proofread.Kind]*PairedTexts{}
+	at := func(k proofread.Kind) *PairedTexts {
+		if out[k] == nil {
+			out[k] = &PairedTexts{}
+		}
+
+		return out[k]
+	}
+
+	for k, texts := range owners {
+		for _, id := range slices.Sorted(maps.Keys(texts)) {
+			if rewrite, ok := others[k][id]; ok {
+				at(k).Pairs = append(at(k).Pairs, TextPair{Owner: texts[id], Other: rewrite})
+			} else {
+				at(k).Unpaired++
+			}
+		}
+	}
+
+	for k, texts := range others {
+		for id := range texts {
+			if _, ok := owners[k][id]; !ok {
+				at(k).Unpaired++
+			}
+		}
+	}
+
+	return out
+}
+
+// PairedTable is a header naming kind and its counts, then one aligned line
+// per feature. A pool above 0 names the units chunk pairs of pool words.
+func PairedTable(kind proofread.Kind, units, unpaired, pool int, seps []PairedSeparation) string {
+	var b strings.Builder
+
+	unit := "pairs"
+	if pool > 0 {
+		unit = fmt.Sprintf("chunk pairs of %d+ owner words", pool)
+	}
+
+	fmt.Fprintf(&b, "%s: %d %s, %d texts unpaired; cut at %d%% owner false alarms\n",
+		kind, units, unit, unpaired, PairedFalseAlarmPercent)
+
+	if len(seps) == 0 {
+		fmt.Fprintf(&b, "  no feature measured on %d pairs\n", MinSeparationTexts)
+
+		return b.String()
+	}
+
+	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "  feature\tpairs\trewrite higher\tcut\tfalse alarms\tdetected\tseparates")
+
+	for _, s := range seps {
+		verdict := "no"
+		if s.Separates {
+			verdict = "yes"
+		}
+
+		fmt.Fprintf(tw, "  %s\t%d\t%.3f\t%g\t%.3f\t%.3f\t%s\n",
+			s.Feature, s.Pairs, s.Higher, s.Cut, s.FalseAlarms, s.Detected, verdict)
+	}
+
+	_ = tw.Flush() // a strings.Builder never fails a write
+
+	return b.String()
+}
 
 // PairedFalseAlarmPercent is the share of owner texts a [PairedSeparation]'s
 // cut lets past, the rate voice-drift holds to.
 const PairedFalseAlarmPercent = 5
 
-// MinCutPairs is the fewest pairs a cut at [PairedFalseAlarmPercent] can sit
-// below the owners' maximum on; under it no feature separates.
-const MinCutPairs = 100 / PairedFalseAlarmPercent
+// minCutPairs is the fewest pairs a cut at [PairedFalseAlarmPercent] can sit
+// below the owners' maximum on. Under it no feature separates.
+const minCutPairs = 100 / PairedFalseAlarmPercent
 
 // PairedSeparation is how one [proofread.Shape] feature moves from an owner's
 // texts to rewrites of the same texts.
@@ -32,8 +141,8 @@ type PairedSeparation struct {
 	// past the cut.
 	FalseAlarms float64 `json:"false_alarms"`
 	Detected    float64 `json:"detected"`
-	// Separates reports whether Pairs reach [MinCutPairs] and the 95% Wilson
-	// lower bound on Detected is above FalseAlarms and the 5% rate.
+	// Separates reports whether Pairs reach 100 / [PairedFalseAlarmPercent] and
+	// the 95% Wilson lower bound on Detected is above FalseAlarms and the 5% rate.
 	Separates bool `json:"separates"`
 }
 
@@ -113,7 +222,7 @@ func pairedSeparation(feature proofread.Feature, ov, xv []float64) PairedSeparat
 	alarms, detected := countPast(ov, past), countPast(xv, past)
 	s.FalseAlarms = round3(float64(alarms) / float64(len(ov)))
 	s.Detected = round3(float64(detected) / float64(len(xv)))
-	s.Separates = len(ov) >= MinCutPairs &&
+	s.Separates = len(ov) >= minCutPairs &&
 		WilsonLower(detected, len(xv), z95) > max(s.FalseAlarms, PairedFalseAlarmPercent/100.0)
 
 	return s

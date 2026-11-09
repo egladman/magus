@@ -55,10 +55,10 @@ func TestSeparatePairsFindsNoSeparationInUnchangedPairs(t *testing.T) {
 }
 
 func TestSeparatePairsSeparatesNothingUnderTwentyPairs(t *testing.T) {
-	o, x := pairedShapes(MinCutPairs-1, func(int) float64 { return 0 }, func(int) float64 { return 50 })
+	o, x := pairedShapes(minCutPairs-1, func(int) float64 { return 0 }, func(int) float64 { return 50 })
 
 	if s, _ := triads(SeparatePairs(o, x)); s.Separates {
-		t.Errorf("triads = %+v, want no separation on %d pairs", s, MinCutPairs-1)
+		t.Errorf("triads = %+v, want no separation on %d pairs", s, minCutPairs-1)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"slices"
@@ -524,4 +525,120 @@ func voiceOptions(name string, stderr io.Writer) ([]proofread.Option, error) {
 	}
 
 	return []proofread.Option{proofread.WithVoice(v)}, nil
+}
+
+// pairedEval is what `voice eval --paired` was asked for.
+type pairedEval struct {
+	owner, other, field, kindField, idField, format string
+	kind                                            proofread.Kind
+	pool                                            int
+	seed                                            uint64
+}
+
+// runPairedEval joins the owner's texts with their rewrites by id, per kind,
+// and writes how far each feature moves across the pairs.
+func runPairedEval(e pairedEval, stdout, stderr io.Writer) int {
+	owners, err := e.read(e.owner)
+	if err != nil {
+		return failure(stderr, err)
+	}
+
+	others, err := e.read(e.other)
+	if err != nil {
+		return failure(stderr, err)
+	}
+
+	byKind := calibrate.JoinPairs(owners, others)
+	kinds := slices.Sorted(maps.Keys(byKind))
+	seps := make(map[proofread.Kind][]calibrate.PairedSeparation, len(kinds))
+	units := make(map[proofread.Kind]int, len(kinds))
+
+	for _, k := range kinds {
+		owners, others := e.measure(k, byKind[k].Pairs)
+		seps[k], units[k] = calibrate.SeparatePairs(owners, others), len(owners)
+	}
+
+	if e.format == "json" {
+		data, err := json.MarshalIndent(seps, "", "  ")
+		if err != nil {
+			return failure(stderr, fmt.Errorf("encode the separations: %w", err))
+		}
+
+		fmt.Fprintf(stdout, "%s\n", data)
+
+		return exitOK
+	}
+
+	for i, k := range kinds {
+		if i > 0 {
+			fmt.Fprintln(stdout)
+		}
+
+		fmt.Fprint(stdout, calibrate.PairedTable(k, units[k], byKind[k].Unpaired, e.pool, seps[k]))
+	}
+
+	return exitOK
+}
+
+// read returns path's texts by kind and id.
+func (e pairedEval) read(path string) (map[proofread.Kind]map[string]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", path, err)
+	}
+	defer f.Close()
+
+	records, err := jsonLineRecords(path, f, e.kind, e.field, e.kindField, e.idField)
+	if err != nil {
+		return nil, err
+	}
+
+	texts := make([]calibrate.KeyedText, 0, len(records))
+
+	for _, rec := range records {
+		if !slices.ContainsFunc(subcommands, func(s subcommand) bool { return s.kind == rec.kind }) {
+			return nil, fmt.Errorf("%s: unknown kind %q", path, rec.kind)
+		}
+
+		texts = append(texts, calibrate.KeyedText{Kind: rec.kind, ID: rec.id, Text: rec.text})
+	}
+
+	return calibrate.IndexTexts(path, texts)
+}
+
+// measure returns each pair's two shapes. A pool groups shuffled pairs until
+// the owner side holds pool words. Each chunk and its rewrite then cover the
+// same texts, which keeps the topic fixed.
+func (e pairedEval) measure(kind proofread.Kind, pairs []calibrate.TextPair) (owners, others []proofread.Shape) {
+	if e.pool == 0 {
+		for _, p := range pairs {
+			owners = append(owners, proofread.MeasureShape(p.Owner, kind))
+			others = append(others, proofread.MeasureShape(p.Other, kind))
+		}
+
+		return owners, others
+	}
+
+	shuffled := slices.Clone(pairs)
+	rand.New(rand.NewPCG(e.seed, e.seed)).Shuffle(len(shuffled), func(i, j int) {
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	})
+
+	var (
+		ownerChunk, otherChunk []string
+		words                  int
+	)
+
+	for _, p := range shuffled {
+		ownerChunk, otherChunk = append(ownerChunk, p.Owner), append(otherChunk, p.Other)
+		words += proofread.Measure(p.Owner, kind).Words
+
+		if words >= e.pool {
+			owners = append(owners, proofread.MeasureShape(strings.Join(ownerChunk, "\n\n"), kind))
+			others = append(others, proofread.MeasureShape(strings.Join(otherChunk, "\n\n"), kind))
+			ownerChunk, otherChunk, words = nil, nil, 0
+		}
+	}
+
+	return owners, others
 }
