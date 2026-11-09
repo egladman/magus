@@ -202,46 +202,17 @@ func (s snapshotSite) lookup() (policySnapshot, bool, error) {
 // compiled rules' settings if the hook has not. It writes nothing when
 // either fails or a source moved under the load.
 func (s snapshotSite) write(ctx context.Context, rules *WorkspaceRules) error {
-	approved, err := rules.approvedIfChanged(ctx)
+	body, err := snapshotOf(ctx, rules)
 	if err != nil {
 		return err
 	}
-	builtins, err := rules.effectiveBuiltins(ctx)
-	if err != nil {
-		return err
-	}
-	policy := rules.Policy()
-	body := snapshotBody{
-		Digest:   policy.Digest,
-		Builtins: builtins,
-		Worktree: registered(rules.registry),
-		Approved: registered(approved),
-	}
-	if approved != nil {
-		body.ApprovedPending = rules.approvedPending
-	}
-	paths := make([]string, len(policy.Sources))
-	for i, src := range policy.Sources {
-		body.Sources = append(body.Sources, snapshotSource{Path: src.Path, ContentID: src.ContentID})
+	paths := make([]string, len(body.Sources))
+	for i, src := range body.Sources {
 		paths[i] = src.Path
 	}
-	shell, dialect := rules.ShellRules()
-	body.ShellDialect = string(dialect)
-	for _, r := range shell {
-		body.ShellRules = append(body.ShellRules, snapshotShellRule(r))
-	}
-	key, ok := s.key(paths)
-	if !ok {
-		return errors.New("the checkout id cannot be read without the version control tool")
-	}
-	for _, src := range policy.Sources {
-		data, err := os.ReadFile(src.Path)
-		if err != nil || interp.ContentID(data) != src.ContentID {
-			return fmt.Errorf("%s changed after the load read it", src.Path)
-		}
-	}
-	if again, ok := s.key(paths); !ok || again != key {
-		return errors.New("the load's scope changed while the snapshot was keyed")
+	key, err := s.stableKey(paths, body.Sources)
+	if err != nil {
+		return err
 	}
 	snap := policySnapshot{key: key, body: body}
 	sealed, err := snap.sealed()
@@ -255,11 +226,84 @@ func (s snapshotSite) write(ctx context.Context, rules *WorkspaceRules) error {
 	return s.log().Update(ctx, func([]policySnapshot) []policySnapshot { return []policySnapshot{snap} })
 }
 
+// snapshotOf is what one load of rules decided, as the body a snapshot keeps.
+func snapshotOf(ctx context.Context, rules *WorkspaceRules) (snapshotBody, error) {
+	approved, err := rules.approvedIfChanged(ctx)
+	if err != nil {
+		return snapshotBody{}, err
+	}
+	builtins, err := rules.effectiveBuiltins(ctx)
+	if err != nil {
+		return snapshotBody{}, err
+	}
+	policy := rules.Policy()
+	body := snapshotBody{
+		Digest:   policy.Digest,
+		Builtins: builtins,
+		Worktree: registered(rules.registry),
+		Approved: registered(approved),
+	}
+	if approved != nil {
+		body.ApprovedPending = rules.approvedPending
+	}
+	for _, src := range policy.Sources {
+		body.Sources = append(body.Sources, snapshotSource{Path: src.Path, ContentID: src.ContentID})
+	}
+	shell, dialect := rules.ShellRules()
+	body.ShellDialect = string(dialect)
+	for _, r := range shell {
+		body.ShellRules = append(body.ShellRules, snapshotShellRule(r))
+	}
+	return body, nil
+}
+
+// stableKey is the key of paths once no source has moved under the load that
+// read sources and the key has held still across a second read of its scope.
+func (s snapshotSite) stableKey(paths []string, sources []snapshotSource) (string, error) {
+	key, ok := s.key(paths)
+	if !ok {
+		return "", errors.New("the checkout id cannot be read without the version control tool")
+	}
+	for _, src := range sources {
+		data, err := os.ReadFile(src.Path)
+		if err != nil || interp.ContentID(data) != src.ContentID {
+			return "", fmt.Errorf("%s changed after the load read it", src.Path)
+		}
+	}
+	if again, ok := s.key(paths); !ok || again != key {
+		return "", errors.New("the load's scope changed while the snapshot was keyed")
+	}
+	return key, nil
+}
+
 // dependencies fills deps from snap. Each function rule loads on its first
 // call, and the approved side reads snap's pending answer, so neither runs a
 // VCS status.
 func (s snapshotSite) dependencies(deps Dependencies, snap policySnapshot) Dependencies {
 	w, body := s.w, snap.body
+	for _, r := range body.ShellRules {
+		deps.ShellRules = append(deps.ShellRules, WorkspaceShellRule(r))
+	}
+	deps.ShellDialect = Dialect(body.ShellDialect)
+	deps.Builtins = body.Builtins
+	s.lazyWorktreeRules(&deps, body.Worktree)
+	s.lazyApprovedRules(&deps, body)
+	lineage := &WorkspaceRules{root: w.Root, opts: w.vcsOptions(), cacheDir: w.CacheDir}
+	policy := WorkspacePolicy{
+		Digest: body.Digest, ShellRules: len(body.ShellRules),
+		SpawnRule: body.Worktree.Spawn, CommandRule: body.Worktree.Command, WriteRule: body.Worktree.Write, StopRule: body.Worktree.Stop,
+	}
+	for _, src := range body.Sources {
+		policy.Sources = append(policy.Sources, interp.SourceFile{Path: src.Path, ContentID: src.ContentID})
+	}
+	deps.Policy = func() PolicyState { return lineage.policyStateOf(policy) }
+	return deps
+}
+
+// lazyWorktreeRules sets each function rule the snapshot says the working tree
+// registers, loading the tree's rules on the first call of any.
+func (s snapshotSite) lazyWorktreeRules(deps *Dependencies, has seamRules) {
+	w := s.w
 	var working onceAnswer[*WorkspaceRules]
 	worktree := func(ctx context.Context) (*WorkspaceRules, error) {
 		return working.get(ctx, func(ctx context.Context) (*WorkspaceRules, error) {
@@ -271,36 +315,37 @@ func (s snapshotSite) dependencies(deps Dependencies, snap policySnapshot) Depen
 			return rules, err
 		})
 	}
+	if has.Spawn {
+		deps.SpawnRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.SpawnRequest, hint.Gate) (types.GuardVerdict, error) {
+			return r.SpawnRule()
+		})
+	}
+	if has.Command {
+		deps.CommandRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.CommandRequest, hint.Gate) (types.GuardVerdict, error) {
+			return r.CommandRule()
+		})
+	}
+	if has.Write {
+		deps.WriteRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.WriteRequest, hint.Gate) (types.GuardVerdict, error) {
+			return r.WriteRule()
+		})
+	}
+	if has.Stop {
+		deps.StopRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.StopRequest, hint.Gate) (types.GuardVerdict, error) {
+			return r.StopRule()
+		})
+	}
+}
+
+// lazyApprovedRules sets the approved side's rules, resolved on the first call
+// of any from the snapshot's pending answer.
+func (s snapshotSite) lazyApprovedRules(deps *Dependencies, body snapshotBody) {
+	w := s.w
 	var approved onceAnswer[*workspace.WorkspaceRegistry]
 	registry := func(ctx context.Context) (*workspace.WorkspaceRegistry, error) {
 		return approved.get(ctx, func(ctx context.Context) (*workspace.WorkspaceRegistry, error) {
 			defer w.trace(ctx, "guard.approved_resolve")()
 			return approvedRegistry(ctx, w.Root, s.authority, body.ApprovedPending)
-		})
-	}
-	for _, r := range body.ShellRules {
-		deps.ShellRules = append(deps.ShellRules, WorkspaceShellRule(r))
-	}
-	deps.ShellDialect = Dialect(body.ShellDialect)
-	deps.Builtins = body.Builtins
-	if body.Worktree.Spawn {
-		deps.SpawnRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.SpawnRequest, hint.Gate) (types.GuardVerdict, error) {
-			return r.SpawnRule()
-		})
-	}
-	if body.Worktree.Command {
-		deps.CommandRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.CommandRequest, hint.Gate) (types.GuardVerdict, error) {
-			return r.CommandRule()
-		})
-	}
-	if body.Worktree.Write {
-		deps.WriteRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.WriteRequest, hint.Gate) (types.GuardVerdict, error) {
-			return r.WriteRule()
-		})
-	}
-	if body.Worktree.Stop {
-		deps.StopRule = lazyRule(worktree, func(r *WorkspaceRules) func(context.Context, types.StopRequest, hint.Gate) (types.GuardVerdict, error) {
-			return r.StopRule()
 		})
 	}
 	deps.ApprovedSpawnRule = func(ctx context.Context) (workspace.SpawnRule, error) {
@@ -315,16 +360,6 @@ func (s snapshotSite) dependencies(deps Dependencies, snap policySnapshot) Depen
 	deps.ApprovedStopRule = func(ctx context.Context) (workspace.StopRule, error) {
 		return approvedSeam(ctx, body.Approved.Stop, registry, (*workspace.WorkspaceRegistry).StopRule)
 	}
-	lineage := &WorkspaceRules{root: w.Root, opts: w.vcsOptions(), cacheDir: w.CacheDir}
-	policy := WorkspacePolicy{
-		Digest: body.Digest, ShellRules: len(body.ShellRules),
-		SpawnRule: body.Worktree.Spawn, CommandRule: body.Worktree.Command, WriteRule: body.Worktree.Write, StopRule: body.Worktree.Stop,
-	}
-	for _, src := range body.Sources {
-		policy.Sources = append(policy.Sources, interp.SourceFile{Path: src.Path, ContentID: src.ContentID})
-	}
-	deps.Policy = func() PolicyState { return lineage.policyStateOf(policy) }
-	return deps
 }
 
 // lazyRule is the working tree's rule that pick reads, loaded on its first
