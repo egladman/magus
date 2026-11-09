@@ -79,6 +79,23 @@ func recordMessageTopics(facts hint.Gate, message string) bool {
 	return marked
 }
 
+// removesOnly reports a write that only deletes text: every edit
+// replaces its old text with nothing, so no structure is added.
+func removesOnly(w writeFields) bool {
+	if w.Content != "" {
+		return false
+	}
+	if len(w.Edits) == 0 {
+		return w.OldText != "" && strings.TrimSpace(w.NewText) == ""
+	}
+	for _, e := range w.Edits {
+		if e.OldText == "" || strings.TrimSpace(e.NewText) != "" {
+			return false
+		}
+	}
+	return true
+}
+
 // denyArchitectureWithoutSkill is architecture-unbriefed: the verdict for a graded call by
 // an agent that has not loaded the architecture skill, made in a session whose person asked
 // a structure question, or for a write that creates a new directory. newDir is that
