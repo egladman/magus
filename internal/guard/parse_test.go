@@ -4,7 +4,52 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/types"
 )
+
+type ShellPayloadLoopSuite struct {
+	suite.Suite
+}
+
+func TestShellPayloadLoopSuite(t *testing.T) { suite.Run(t, new(ShellPayloadLoopSuite)) }
+
+func (s *ShellPayloadLoopSuite) TestShWhileLoopIsABusyWait() {
+	s.True(busyWaitFires(`sh -c 'while ! test -f done; do sleep 5; done'`, DialectBash))
+}
+
+func (s *ShellPayloadLoopSuite) TestNohupTickLoopIsABusyWait() {
+	s.True(busyWaitFires(`nohup sh -c 'while true; do sleep 540; echo tick; done' &`, DialectBash))
+}
+
+func (s *ShellPayloadLoopSuite) TestBashUntilLoopIsABusyWait() {
+	s.True(busyWaitFires(`bash -c 'until test -f done; do sleep 5; done'`, DialectBash))
+}
+
+func (s *ShellPayloadLoopSuite) TestQuotedLoopInAnEchoIsNot() {
+	s.False(busyWaitFires(`echo 'until grep -q x f; do sleep 1; done'`, DialectBash))
+}
+
+func (s *ShellPayloadLoopSuite) TestPayloadLoopProbingAPidIsAForeignWait() {
+	s.True(foreignWaitFires(`sh -c 'while kill -0 123; do sleep 5; done'`, DialectBash))
+}
+
+func (s *ShellPayloadLoopSuite) TestPayloadLoopMarksItsCommandsRepeating() {
+	got := commandInvocations(`bash -c 'until gh pr checks 1; do sleep 30; done'`, DialectBash, "/work")
+	s.Equal([]types.CommandInvocation{
+		{Program: "gh", Args: []string{"pr", "checks", "1"}, Repeats: true},
+		{Program: "sleep", Args: []string{"30"}, Repeats: true},
+	}, got)
+}
+
+func (s *ShellPayloadLoopSuite) TestPayloadInsideAnOuterLoopRepeats() {
+	got := commandInvocations(`while true; do sh -c 'gh run list'; done`, DialectBash, "/work")
+	s.Equal([]types.CommandInvocation{
+		{Program: "true", Args: []string{}, Repeats: true},
+		{Program: "gh", Args: []string{"run", "list"}, Repeats: true},
+	}, got)
+}
 
 // A version-control remove or move is a write of each path it names, and of nothing else
 // on its line: a global's value (`git -C sub`) and the subcommand are words a write path
