@@ -1,6 +1,6 @@
 ---
-title: "ADR 0038: judging is a pure computation, and recording it is a separate step"
-order: 38
+title: "ADR 0039: judging is a pure computation, and recording it is a separate step"
+order: 39
 description: A guard judgment reads state and writes nothing, so the same call against the same state gets the same verdict. Recording is a second step keyed on the call's id, and repeating it is a no-op, so a re-fired hook or a retry writes one trail row and spends fire-once advice once. An embedder that is not a coding assistant judges its own tools through one exported door, magus.JudgeTool, over tool rows it declares at Open. Rules read capabilities, one new capability marks an external, irreversible act, one exported enum carries the four decisions, ask needs an option saying the embedder can prompt, and the spawn rule becomes optional.
 tags: [adr, decision, guard, sdk, agents, harness, idempotence]
 status: proposed
@@ -8,7 +8,7 @@ date: 2026-11-09
 supersedes: "the dry-run flag on a guard request (internal/guard Request.DryRun)"
 ---
 
-# ADR 0038: judging is a pure computation, and recording it is a separate step
+# ADR 0039: judging is a pure computation, and recording it is a separate step
 
 ## Context
 
