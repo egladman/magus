@@ -31,13 +31,7 @@ import (
 // Nothing is read unless another lease claims a declaration of rel, so a write to a file
 // nobody claims below the whole pays for one scan of the rows and no process.
 func gradeClaimedDeclarations(ctx context.Context, workspace string, me types.Job, owners []types.Job, rel string, fields writeFields) writeGrade {
-	now := time.Now().Unix()
-	var others []types.Job
-	for _, u := range owners {
-		if u.ID != me.ID && !u.Overdue(now) && len(claimsOn(u.HardPaths(), rel)) > 0 {
-			others = append(others, u)
-		}
-	}
+	others := otherClaimants(me, owners, rel)
 	if len(others) == 0 {
 		return writeGrade{}
 	}
@@ -77,6 +71,18 @@ func gradeClaimedDeclarations(ctx context.Context, workspace string, me types.Jo
 	return writeGrade{}
 }
 
+// otherClaimants are the live leases besides me claiming a declaration of rel.
+func otherClaimants(me types.Job, owners []types.Job, rel string) []types.Job {
+	now := time.Now().Unix()
+	var others []types.Job
+	for _, u := range owners {
+		if u.ID != me.ID && !u.Overdue(now) && len(claimsOn(u.HardPaths(), rel)) > 0 {
+			others = append(others, u)
+		}
+	}
+	return others
+}
+
 // gradeNarrowedHold grows me's claims on rel by the declarations this write
 // changes, when the store narrowed me's hold on rel or a pattern alone holds it
 // (see job.NarrowHold). Each growth is advised. A change to a declaration
@@ -107,6 +113,12 @@ func gradeNarrowedHold(ctx context.Context, at location, checkout string, me typ
 		}
 		touched = append(touched, decl)
 	}
+	return growNarrowedHold(ctx, at, checkout, me, rel, mine, touched, narrowed)
+}
+
+// growNarrowedHold advises of me's claims on rel growing by touched, or of why
+// they did not. A dry run or an empty touched writes nothing.
+func growNarrowedHold(ctx context.Context, at location, checkout string, me types.Job, rel string, mine, touched []string, narrowed bool) writeGrade {
 	if len(touched) == 0 || isDryRun(ctx) {
 		return writeGrade{}
 	}
