@@ -18,6 +18,7 @@ func TestPluginsRegister(t *testing.T) {
 	for name, settings := range map[string]any{
 		"asciistrings": map[string]any{"module": "", "files": []any{"types/*.go"}},
 		"benchbeside":  map[string]any{"module": "example.com/m"},
+		"blankerror":   map[string]any{"base": "origin/main"},
 		"diagmsg": map[string]any{
 			"max-runes": 160, "prefixes": []any{"magus workspace:"},
 			"calls":  []any{map[string]any{"func": "a.Errorf", "arg": 1, "format": true}},

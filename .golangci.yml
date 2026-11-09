@@ -124,6 +124,7 @@ linters:
     - ruletext
     - asciistrings
     - benchbeside
+    - blankerror
     - stutter
     - filenames
     - nameoutput
@@ -459,6 +460,13 @@ linters:
             - std/archive.go
             - std/buzz_signature.go
             - internal/cache/output.go
+
+      blankerror:
+        type: module
+        description: reports a blank-assigned error that a change adds to a function it touches
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          base: origin/main
 
       benchbeside:
         type: module
