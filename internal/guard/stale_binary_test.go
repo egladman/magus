@@ -503,6 +503,32 @@ func (s *UnloadCauseSuite) TestTheDenialSaysAnyJudgePredatesTheConfig() {
 	s.Contains(d.Say, "the magus judging this predates this workspace's magus.yaml")
 }
 
+func (s *UnloadCauseSuite) TestTheDenialNamesAUserLevelKeyAndTheVersion() {
+	root := testkit.NewWorkspace(s.T()).Root()
+	keys := &config.UnknownKeysError{
+		File:  "/home/eli/.config/magus/magus.yaml",
+		Keys:  []config.UnknownKey{{Key: "knowledge.future_key", Lines: []int{3}}},
+		Build: ward.StaleBuild{Running: "v0.9.0"},
+	}
+	err := types.WrapDiagnostic(types.UnknownConfigKey, keys, "%s", keys.Error())
+	reason := unloadCause(err, root)
+	s.Equal(unloadReason{Cause: unloadStale, Config: true, Keys: keys}, reason)
+	d := staleBinaryDenial(judgedCall{what: "this command"}, reason, nil, true, root)
+	s.Equal("the magus judging this (v0.9.0) predates the user-level /home/eli/.config/magus/magus.yaml, "+
+		"which sets knowledge.future_key, a key it does not know, so it cannot load its guard policy; "+
+		"remove the key from /home/eli/.config/magus/magus.yaml, or judge with a magus that knows it; "+
+		"rebuilding this checkout does not change that file.", d.Say)
+}
+
+func (s *UnloadCauseSuite) TestTheDenialNamesAWorkspaceKey() {
+	binary := testkit.NewWorkspace(s.T())
+	binary.WriteExecutable("magus", "#!/bin/sh\n")
+	keys := &config.UnknownKeysError{File: "magus.yaml", Keys: []config.UnknownKey{{Key: "guard.newest"}}}
+	reason := unloadReason{Cause: unloadStale, Config: true, Keys: keys}
+	d := staleBinaryDenial(judgedCall{what: "this command"}, reason, nil, true, binary.Root())
+	s.Contains(d.Say, "./magus (an unknown version) predates this workspace's magus.yaml, which sets guard.newest, a key it does not know")
+}
+
 func TestDeclaresGuardRule(t *testing.T) {
 	root := t.TempDir()
 	assert.False(t, declaresGuardRule(root), "no magusfile")

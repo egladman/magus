@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -109,7 +110,7 @@ type rulesAnswer struct {
 // in the magusfile. No side loading at all is reported as unloaded, for denyUnloaded.
 func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies, resolveApproved func(context.Context) (ruleCall, error), worktree ruleCall) rulesAnswer {
 	log := judgmentPhases(ctx)
-	out := rulesAnswer{loadFailure: deps.LoadFailure, dryRun: isDryRun(ctx), log: log}
+	out := rulesAnswer{loadFailure: config.WithRunningVersion(deps.LoadFailure, deps.BinaryVersion), dryRun: isDryRun(ctx), log: log}
 	lapsed := func(l ruleLapse) {
 		out.failures = append(out.failures, trail.RuleFailure{Side: l.side, Error: l.failure()})
 		if out.lapse == nil {
@@ -384,7 +385,7 @@ func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	}
 	// One string, verdict first: verdictParts splits it again when the deny is worded.
 	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: d.full()}
-	if !broken {
+	if !broken && !reason.userTier() {
 		asked.next = binaryRemedy(own, at.workspace, call.lease, call.builds).next(asked.rule)
 	}
 	asked.by = decidedByBuiltin

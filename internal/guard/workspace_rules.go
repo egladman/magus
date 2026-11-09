@@ -1178,7 +1178,9 @@ type Wiring struct {
 	// Inspect, TargetPolicies and CacheDir become the Dependencies members of the same name.
 	Inspect        func(ctx context.Context, root string) (types.WorkspaceRepository, error)
 	TargetPolicies func(ctx context.Context, root string) (types.TargetPolicyIndex, bool)
-	CacheDir       func(root string) (string, error)
+	// RecordTargetPolicies becomes that Dependencies member too.
+	RecordTargetPolicies func(ctx context.Context, root string, ws types.WorkspaceRepository) error
+	CacheDir             func(root string) (string, error)
 	// Trace starts the named phase of the caller's trace and returns its end. Nil traces
 	// nothing.
 	Trace func(ctx context.Context, phase string) (end func())
@@ -1208,19 +1210,20 @@ func (w Wiring) vcsOptions() types.VCSOptions {
 // rules come back nil, and each function rule loads on its first call.
 func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRules) {
 	deps := Dependencies{
-		Inspect:        w.Inspect,
-		TargetPolicies: w.TargetPolicies,
-		CacheDir:       w.CacheDir,
-		NotesShared:    w.Config.Knowledge.Notes.Shared,
-		Spells:         project.DefaultSpellRegistry().All,
-		Revision:       revisionAt,
-		TrackedFiles:   trackedFilesAt,
-		CheckoutState:  checkoutStateAt,
-		VCS:            w.vcsOptions(),
-		DefaultCharms:  w.Config.DefaultCharms,
-		BinaryVersion:  w.BinaryVersion,
-		Binary:         w.Binary,
-		BinaryDirty:    buildinfo.Modified() || strings.HasSuffix(w.BinaryVersion, "-dirty"),
+		Inspect:              w.Inspect,
+		TargetPolicies:       w.TargetPolicies,
+		RecordTargetPolicies: w.RecordTargetPolicies,
+		CacheDir:             w.CacheDir,
+		NotesShared:          w.Config.Knowledge.Notes.Shared,
+		Spells:               project.DefaultSpellRegistry().All,
+		Revision:             revisionAt,
+		TrackedFiles:         trackedFilesAt,
+		CheckoutState:        checkoutStateAt,
+		VCS:                  w.vcsOptions(),
+		DefaultCharms:        w.Config.DefaultCharms,
+		BinaryVersion:        w.BinaryVersion,
+		Binary:               w.Binary,
+		BinaryDirty:          buildinfo.Modified() || strings.HasSuffix(w.BinaryVersion, "-dirty"),
 	}
 	if commit, _ := buildinfo.Commit(); commit != "unknown" {
 		deps.BinaryCommit = commit

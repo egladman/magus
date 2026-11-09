@@ -47,6 +47,35 @@ type unloadReason struct {
 	Spell string
 	// Config marks a stale failure on a magus.yaml key the binary predates.
 	Config bool
+	// Keys is that failure as data, nil when the error carries none.
+	Keys *config.UnknownKeysError
+}
+
+// userTier reports that the key is in the user-level magus.yaml. Rebuilding
+// ./magus does not fix that. The loader names a file inside the workspace
+// relative to its root, so only one outside it is absolute.
+func (r unloadReason) userTier() bool {
+	return r.Keys != nil && filepath.IsAbs(r.Keys.File)
+}
+
+// configProblem names the file and keys the judge predates, and its version.
+func (r unloadReason) configProblem(judge string) string {
+	if r.Keys == nil {
+		return judge + " predates this workspace's magus.yaml, which sets a key it does not know"
+	}
+	keys := make([]string, 0, len(r.Keys.Keys))
+	for _, k := range r.Keys.Keys {
+		keys = append(keys, k.Key)
+	}
+	version := r.Keys.Build.Running
+	if version == "" {
+		version = "an unknown version"
+	}
+	file := "this workspace's " + r.Keys.File
+	if r.userTier() {
+		file = "the user-level " + r.Keys.File
+	}
+	return fmt.Sprintf("%s (%s) predates %s, which sets %s, a key it does not know", judge, version, file, strings.Join(keys, ", "))
 }
 
 // The rules denyUnloaded refuses under, while no side of the workspace's guard policy loads.
@@ -75,7 +104,11 @@ func unloadCause(loadFailure error, root string) unloadReason {
 		return unloadReason{Cause: unloadNoBinary}
 	}
 	if ward.IsStaleBinary(loadFailure) {
-		return unloadReason{Cause: unloadStale, Config: errors.Is(loadFailure, types.UnknownConfigKey)}
+		reason := unloadReason{Cause: unloadStale, Config: errors.Is(loadFailure, types.UnknownConfigKey)}
+		if keys := (*config.UnknownKeysError)(nil); reason.Config && errors.As(loadFailure, &keys) {
+			reason.Keys = keys
+		}
+		return reason
 	}
 	spell := skewedSpell(loadFailure, root)
 	switch {
@@ -638,12 +671,15 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 	switch {
 	case reason.Cause == unloadSkewedSpell:
 		problem = fmt.Sprintf("./magus was built from another commit than this tree: it ships no spell %q, which the tree carries, so it cannot load its guard policy", reason.Spell)
+	case reason.userTier():
+		problem = reason.configProblem("the magus judging this") + ", so it cannot load its guard policy"
+		fix = binaryFix{say: fmt.Sprintf("remove the key from %s, or judge with a magus that knows it; rebuilding this checkout does not change that file", reason.Keys.File)}
 	case reason.Cause == unloadNoBinary, own && !hasBinary:
 		problem = "this checkout has no ./magus to load its guard policy"
 	case reason.Config && own && hasBinary:
-		problem = "./magus predates this workspace's magus.yaml, which sets a key it does not know, so it cannot load its guard policy"
+		problem = reason.configProblem("./magus") + ", so it cannot load its guard policy"
 	case reason.Config:
-		problem = "the magus judging this predates this workspace's magus.yaml, which sets a key it does not know, so it cannot load its guard policy"
+		problem = reason.configProblem("the magus judging this") + ", so it cannot load its guard policy"
 	case own && hasBinary:
 		problem = "./magus is older than this workspace and cannot load its guard policy"
 	}

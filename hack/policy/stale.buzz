@@ -281,6 +281,17 @@ fun movedList(bin: HookBinary) > str {
 export object StateWrite {
     verb: str,
     shared: bool,
+    root: str = "",
+}
+
+// elsewhere reports whether root, a call's absolute --root, names another
+// workspace. A relative root resolves where the call runs, so it is judged.
+fun elsewhere(root: str, workspace: str) > bool {
+    if (!root.startsWith("/") or workspace == "") {
+        return false;
+    }
+    final clean = if (root.endsWith("/")) root.sub(0, len: root.len() - 1) else root;
+    return clean != workspace and !clean.startsWith(workspace + "/");
 }
 
 // stateWrite is the first state-writing magus verb on the line, null when there is none.
@@ -293,8 +304,9 @@ export fun stateWrite(programs: [helpers\Program]) > StateWrite? {
             final global = helpers\hasFlag(p.args, long: "--global") or helpers\hasFlag(p.args, long: "-global");
             if (ops.len() > 0 and !dry) {
                 final sub = if (ops.len() > 1) ops[1] else "";
+                final root = helpers\flagValue(p.args, long: "--root", short: "-root") ?? "";
                 if (ops[0] == "init" and sub != "spell") {
-                    return StateWrite{ verb = "init", shared = true };
+                    return StateWrite{ verb = "init", shared = true, root = root };
                 }
                 if (ops[0] == "server" and sub == "start") {
                     return StateWrite{ verb = "server start", shared = true };
@@ -382,6 +394,9 @@ export fun decideStateWrite(programs: [helpers\Program], bin: fun () > HookBinar
     }
     final hook = bin();
     final verb = w!.verb;
+    if (elsewhere(w!.root, workspace: hook.workspace)) {
+        return magus\guard.allow();
+    }
     if (isStale(hook)) {
         var why = "it carries no go-build stamp, so nothing can say which sources it was built from";
         if (hook.stamped) {
@@ -642,6 +657,19 @@ test "read-only verbs, dry runs and another binary stay with the advisory" {
     }
     final other = fun () > HookBinary { return HookBinary{ ours = false, stamped = false, moved = [<str>] }; };
     std\assert(writeVerdict(["magus", "init"], bin: other, onBase: mainHolds([<str>])).decision == magus\GuardDecision.allow, message: "not this workspace's binary");
+}
+
+test "an init whose --root names another workspace is not judged by this one's binary" {
+    final staleBin = fun () > HookBinary {
+        return HookBinary{ ours = true, stamped = true, moved = ["internal/guard/shell.go"],
+            path = "/repo/magus", workspace = "/repo" };
+    };
+    foreach (argv in [["./magus", "init", "--root", "/other"], ["./magus", "--root=/repo-two/", "init"]]) {
+        std\assert(writeVerdict(argv, bin: staleBin, onBase: mainHolds([<str>])).decision == magus\GuardDecision.allow, message: argv.join(" "));
+    }
+    foreach (argv in [["./magus", "init", "--root", "/repo"], ["./magus", "init", "--root", "/repo/sub"], ["./magus", "init", "--root", "sub"]]) {
+        std\assert(writeVerdict(argv, bin: staleBin, onBase: mainHolds([<str>])).decision == magus\GuardDecision.deny, message: argv.join(" "));
+    }
 }
 
 test "a squash-merged build is judged by its stamped sources, not its ancestry" {
