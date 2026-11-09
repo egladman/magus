@@ -1071,7 +1071,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				refuse(denyBuzzUnbriefed, reason)
 			}
 		}
-		if verdict.Decision != decisionDeny && briefable {
+		if verdict.Decision != decisionDeny && briefable && !removesOnly(write) {
 			if reason := denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, newSourceDir(location.workspace, input)); reason != "" {
 				refuse(denyArchitectureUnbriefed, reason)
 			}
