@@ -95,7 +95,7 @@ const (
 
 // noBinaryOwnSay is the verdict a checkout of magus at root with no ./magus opens with.
 func noBinaryOwnSay(root string) string {
-	return fmt.Sprintf("this checkout has no ./magus to load its guard policy; bootstrap ./magus with `GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .`.", shellQuoted(root))
+	return fmt.Sprintf("this checkout has no ./magus to load its guard policy; bootstrap ./magus with `GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .`, then ready the checkout with `%s`, each alone on its line.", shellQuoted(root), readyCheckoutLine(root))
 }
 
 // shellQuoted is path as one POSIX shell word, the way a remedy line names a checkout.
@@ -144,7 +144,8 @@ func TestUnloadedTreeWithoutABinaryNamesTheMissingBinary(t *testing.T) {
 	declareGuardRule(t, root)
 
 	v := judgeUnloaded(ctx, unloadedDependencies(errors.New("magusfile.buzz:3:1: expected expression")), "touch notes.txt")
-	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, noBinaryOwnSay(root))
+	bootstrapOnly := strings.TrimSuffix(noBinaryOwnSay(root), fmt.Sprintf(", then ready the checkout with `%s`, each alone on its line.", readyCheckoutLine(root))) + "."
+	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, bootstrapOnly)
 	assert.NotContains(t, stored, "older than")
 }
 
