@@ -30,6 +30,7 @@ var testToolRows = []types.HarnessTool{
 	{Name: "Task", Capability: types.ToolSpawns},
 	{Name: "spawn_agent", Capability: types.ToolSpawns},
 	{Name: "mcp__browser__navigate", Capability: types.ToolNetwork},
+	{Name: "ScheduleWakeup", Capability: types.ToolSpawns},
 	{Name: "TodoWrite", Capability: types.ToolInert},
 	{Name: "TaskStop", Capability: types.ToolInert},
 	{Name: "WebFetch", Capability: types.ToolInert},
