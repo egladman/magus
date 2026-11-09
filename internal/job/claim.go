@@ -242,6 +242,8 @@ func driverPattern(p string) string {
 // no diff driver, for which depends_on is the only move. An integration row is
 // never refused here: the merge settles a shared file, and IntegrationOverlaps notes the holder.
 // An integration holder holds only the declarations its merge changed (see mergeLeftAlone).
+// A claim on declarations the holder left alone narrows the holder instead.
+// That writes the holder's row (see grantUntouched).
 func unorderedFileShareProblems(ctx context.Context, store *Store, rows []types.Job, row types.Job) types.JobProblems {
 	if store == nil || store.root == "" || len(row.WritePaths) == 0 || row.Integrating() {
 		return nil
@@ -260,6 +262,7 @@ func unorderedFileShareProblems(ctx context.Context, store *Store, rows []types.
 }
 
 // sharedFileProblem is unorderedFileShareProblems for the one write path mine.
+// A holder that left alone what row claims is narrowed and judged again.
 func sharedFileProblem(ctx context.Context, store *Store, rows, combined []types.Job, row types.Job, here, mine string) (types.JobProblem, bool) {
 	file, ok := literalClaimableFile(store.root, mine)
 	if !ok {
@@ -284,27 +287,114 @@ func sharedFileProblem(ctx context.Context, store *Store, rows, combined []types
 		if orderedPair(combined, row.ID, holder.ID) {
 			continue
 		}
-		for _, theirs := range holder.WritePaths {
-			if other, ok := literalClaimableFile(store.root, theirs); !ok || other != file {
-				continue
-			}
-			if !types.PathsIntersect(mine, theirs) || mergeLeftAlone(ctx, store, rows, holder, mine) {
-				continue
-			}
-			apart, unchecked := HeldApart(WorkingCheckout(here, row), holder, store.workspaceProjects, mine, theirs)
-			if apart {
-				continue
-			}
-			return sharedFileRefusal(ctx, store, rows, row, holder, sharedFile{file: file, mine: mine, theirs: theirs, unchecked: unchecked}), true
+		s, shared := heldFile(ctx, store, rows, row, holder, here, file, mine)
+		if !shared {
+			continue
 		}
+		narrowed, granted, why := grantUntouched(ctx, store, rows, row, holder, s)
+		if granted {
+			if s, shared = heldFile(ctx, store, rows, row, narrowed, here, file, mine); !shared {
+				continue
+			}
+			holder = narrowed
+		}
+		s.ungranted = why
+		return sharedFileRefusal(ctx, store, rows, row, holder, s), true
 	}
 	return types.JobProblem{}, false
+}
+
+// heldFile is the first entry of holder that holds file against row's mine.
+func heldFile(ctx context.Context, store *Store, rows []types.Job, row, holder types.Job, here, file, mine string) (sharedFile, bool) {
+	for _, theirs := range holder.WritePaths {
+		if other, ok := literalClaimableFile(store.root, theirs); !ok || other != file {
+			continue
+		}
+		if !types.PathsIntersect(mine, theirs) || releasedReach(holder, theirs, mine) || mergeLeftAlone(ctx, store, rows, holder, mine) {
+			continue
+		}
+		apart, unchecked := HeldApart(WorkingCheckout(here, row), holder, store.workspaceProjects, mine, theirs)
+		if apart {
+			continue
+		}
+		return sharedFile{file: file, mine: mine, theirs: theirs, unchecked: unchecked}, true
+	}
+	return sharedFile{}, false
+}
+
+// grantUntouched narrows holder's whole hold on s.file to what it touched,
+// taken by row, when row claims only declarations holder left alone.
+// It answers the narrowed holder, or why nothing was granted ("" when no
+// grant applies).
+func grantUntouched(ctx context.Context, store *Store, rows []types.Job, row, holder types.Job, s sharedFile) (types.Job, bool, string) {
+	if _, decl := types.SplitClaim(s.theirs); decl != "" || holder.Integrating() {
+		return types.Job{}, false, ""
+	}
+	if wholeFileHeld(row, s.file) {
+		return types.Job{}, false, fmt.Sprintf("%s wants %s whole; a fork claiming only declarations %s has not touched is granted them", row.ID, s.file, holder.ID)
+	}
+	touched, err := touchedDeclarations(ctx, store, rows, holder.ID, s.file)
+	if err != nil {
+		return types.Job{}, false, fmt.Sprintf("%s's footprint is unknown, so nothing of %s can be granted", holder.ID, s.file)
+	}
+	for _, c := range claimsOnFile(row, s.file) {
+		for _, d := range touched {
+			if c == d || types.NamesDeclaration(c, d) {
+				return types.Job{}, false, fmt.Sprintf("%s has touched %s#%s", holder.ID, s.file, c)
+			}
+		}
+	}
+	// A dry run writes nothing, so it judges holder as a grant leaves it.
+	if store.dryRun {
+		narrowed := holder.Clone()
+		narrowed.Releases = append(narrowed.Releases, types.JobRelease{Path: s.file, Narrowed: true, TakenBy: row.ID})
+		return narrowed, true, ""
+	}
+	narrowed, _, err := NarrowHold(ctx, store, holder.ID, s.file, touched, row.ID)
+	if err != nil {
+		return types.Job{}, false, err.Error()
+	}
+	return narrowed, true, ""
+}
+
+// grantNotes are a fork's lines for each hold the store narrowed for row.
+func grantNotes(rows []types.Job, row types.Job) []string {
+	var notes []string
+	for _, holder := range rows {
+		if holder.ID == row.ID || !Editing(holder) {
+			continue
+		}
+		for _, rel := range holder.Releases {
+			granted := claimsOnFile(row, rel.Path)
+			if !rel.Narrowed || rel.TakenBy != row.ID || len(granted) == 0 {
+				continue
+			}
+			held := "no declaration yet"
+			if words := claimsOnFile(holder, rel.Path); len(words) > 0 {
+				held = qualifiedClaims(rel.Path, words)
+			}
+			notes = append(notes, fmt.Sprintf("granted %s: %s had not touched it; %s now holds %s by %s (and grows on write)",
+				qualifiedClaims(rel.Path, granted), holder.ID, holder.ID, rel.Path, held))
+		}
+	}
+	return notes
+}
+
+// qualifiedClaims is words as `file#word` claims, comma-separated.
+func qualifiedClaims(file string, words []string) string {
+	claims := make([]string, len(words))
+	for i, w := range words {
+		claims[i] = fmt.Sprintf("%s#%s", file, w)
+	}
+	return strings.Join(claims, ", ")
 }
 
 // sharedFile is one file two rows both hold: row's entry mine and holder's entry theirs,
 // and why the generated-output scope check did not run, when it did not.
 type sharedFile struct {
 	file, mine, theirs, unchecked string
+	// ungranted is why grantUntouched granted row nothing, or "".
+	ungranted string
 }
 
 // sharedFileRefusal is the WritePathFileShared problem for s, after asking holder to
@@ -318,6 +408,9 @@ func sharedFileRefusal(ctx context.Context, store *Store, rows []types.Job, row,
 	})
 	store.requestRelease(ctx, holder.ID, s.file, wanted, unused)
 	fix := splitAdvice(ctx, store, row, holder, s.file, touched) + narrowAdvice(holder.ID, unused)
+	if s.ungranted != "" {
+		fix += ". Not granted: " + s.ungranted
+	}
 	if s.unchecked != "" {
 		fix += ". Also: " + s.unchecked
 	}
@@ -603,13 +696,16 @@ func wordByte(b byte) bool {
 // written, and is echoed so a typo shows. A row claiming declarations of a project's
 // configuration is given every claim its change there lacks (see unclaimedTouches). A
 // file row shares with a job in the same checkout, or not yet taken (write_proof
-// overlapping), gets the claim pair that would split it. Nothing is written to a row. A nil store, or one with no workspace root, has
-// no tree to read and returns nil.
+// overlapping), gets the claim pair that would split it.
+// A granted hold names what its holder now holds (see grantNotes).
+// Nothing is written to a row.
+// A nil store, or one with no workspace root, has no tree and returns nil.
 func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Job) []string {
 	if store == nil || store.root == "" {
 		return nil
 	}
-	var notes, configs []string
+	notes := grantNotes(rows, row)
+	var configs []string
 	if note := claimLimitAdvice(row); note != "" {
 		notes = append(notes, note)
 	}
