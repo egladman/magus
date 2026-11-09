@@ -470,23 +470,23 @@ equivalent a generator writes mechanically. buzzgen's mapping is therefore one t
 over every Go type kind, each row a Buzz form or a refusal naming why, preferring a
 construct upstream Buzz already has over a new gopherbuzz type:
 
-| Go                                        | Buzz                                    | State     |
-| ----------------------------------------- | --------------------------------------- | --------- |
-| `string`, `bool`, `int`, `float64`        | `str`, `bool`, `int`, `double`          | done      |
-| other sized ints, `uint*`, `float32`      | `int` or `double`, refusing overflow    | not built |
-| named string with constants               | `enum<str>`                             | done      |
-| struct                                    | `object`                                | done      |
-| pointer to T                              | `T?`                                    | in progress (some shapes) |
-| `[]T`, `[N]T`                             | `[T]`                                   | in progress (some shapes) |
-| `map[K]V`                                 | `{K: V}`                                | in progress (some shapes) |
-| `[]byte`                                  | `buffer\Buffer`, adopting the slice     | not built |
-| `iter.Seq[T]`, `<-chan T`                 | `fib<T, void>`                          | not built |
-| `func(...)` parameter                     | `fun (...)`                             | done      |
-| interface with methods                    | `protocol`                              | not built |
-| generic type                              | generic `object::<T>`                   | in progress (some shapes) |
-| `error`                                   | `result\Diagnostic`                     | not built |
-| `time.Time`, `time.Duration`              | `str` (RFC 3339), `int` (nanoseconds)   | in progress (some shapes) |
-| `complex*`, `unsafe.Pointer`, `uintptr`   | refused, naming the field               | not built |
+| Go                                      | Buzz                                  | State                     |
+| --------------------------------------- | ------------------------------------- | ------------------------- |
+| `string`, `bool`, `int`, `float64`      | `str`, `bool`, `int`, `double`        | done                      |
+| other sized ints, `uint*`, `float32`    | `int` or `double`, refusing overflow  | not built                 |
+| named string with constants             | `enum<str>`                           | done                      |
+| struct                                  | `object`                              | done                      |
+| pointer to T                            | `T?`                                  | in progress (some shapes) |
+| `[]T`, `[N]T`                           | `[T]`                                 | in progress (some shapes) |
+| `map[K]V`                               | `{K: V}`                              | in progress (some shapes) |
+| `[]byte`                                | `buffer\Buffer`, adopting the slice   | not built                 |
+| `iter.Seq[T]`, `<-chan T`               | `fib<T, void>`                        | not built                 |
+| `func(...)` parameter                   | `fun (...)`                           | done                      |
+| interface with methods                  | `protocol`                            | not built                 |
+| generic type                            | generic `object::<T>`                 | in progress (some shapes) |
+| `error`                                 | `result\Diagnostic`                   | not built                 |
+| `time.Time`, `time.Duration`            | `str` (RFC 3339), `int` (nanoseconds) | in progress (some shapes) |
+| `complex*`, `unsafe.Pointer`, `uintptr` | refused, naming the field             | not built                 |
 
 ### 2026-11-08: names come from packages, and objects get constructors
 
