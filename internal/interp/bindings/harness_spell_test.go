@@ -479,6 +479,7 @@ func TestHarnessSpellsShipModelRowsOnlyForClaudeCode(t *testing.T) {
 	assert.Equal(t, []types.ModelPricing{
 		{ID: "claude-fable-5-1", Window: 1_000_000, Input: 10, CacheWrite5m: 12.5, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
 		{ID: "claude-opus-5-5", Tier: "principal", Alias: "opus", Window: 1_000_000, Input: 4, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.2, Output: 20},
+		{ID: "claude-fable-5-2", Tier: "principal", Alias: "fable", Window: 1_000_000, Input: 10, CacheWrite5m: 12.5, CacheWrite1h: 20, CacheRead: 0.25, Output: 50},
 		{ID: "claude-sonnet-5-5", Tier: "standard", Alias: "sonnet", Window: 1_000_000, Input: 2, CacheWrite5m: 2.5, CacheWrite1h: 4, CacheRead: 0.1, Output: 10},
 		{ID: "claude-haiku-5-5", Tier: "economy", Alias: "haiku", Window: 1_000_000, Input: 0.1, CacheWrite5m: 0.125, CacheWrite1h: 0.2, CacheRead: 0.01, Output: 0.5,
 			LongContext: &types.PriceStep{Above: 100_000, Multiplier: 5}},
@@ -539,7 +540,10 @@ func TestClaudeCodeRowsNameAModelForEveryShippedTier(t *testing.T) {
 	require.NoError(t, err)
 	_, tierRows, err := validateModelRows(rows)
 	require.NoError(t, err)
-	tiers, err := pickTierModels(tierRows, func(string) (string, bool) { return "", false })
+	assert.Equal(t, []string{"claude-opus-5-5", "claude-fable-5-2"}, tierRows["principal"])
+	_, err = pickTierModels(tierRows, func(string) (string, bool) { return "", false })
+	require.Error(t, err, "principal has two rows and nothing maps one")
+	tiers, err := pickTierModels(tierRows, shippedTierModel("claude-code"))
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{
 		"economy": "claude-haiku-5-5", "standard": "claude-sonnet-5-5", "principal": "claude-opus-5-5",

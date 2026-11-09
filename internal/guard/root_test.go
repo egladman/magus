@@ -693,7 +693,7 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 		{"opus", "principal", "claude-opus-5-5", true},
 		{"sonnet", "standard", "claude-sonnet-5-5", true},
 		{"haiku", "economy", "claude-haiku-5-5", true},
-		{"fable", "principal", "claude-opus-5-5", false},
+		{"fable", "principal", "claude-opus-5-5", true},
 		{"Opus", "principal", "claude-opus-5-5", false},
 	} {
 		t.Run(tc.model, func(t *testing.T) {

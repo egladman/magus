@@ -259,8 +259,9 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[string][]
 		if err != nil {
 			return nil, fmt.Errorf("harness spell %q: mgs_listModels: %w", id, err)
 		}
-		// No declaration maps a tier yet, so a tier of several rows fails here.
-		tiers, err := pickTierModels(tierRows, func(string) (string, bool) { return "", false })
+		// No declaration maps a tier yet. A tier of several rows
+		// runs the shipped default, or fails here without one.
+		tiers, err := pickTierModels(tierRows, shippedTierModel(id))
 		if err != nil {
 			return nil, fmt.Errorf("harness spell %q: mgs_listModels: %w", id, err)
 		}
@@ -279,6 +280,20 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[string][]
 		hosts[id] = models
 	}
 	return hosts, nil
+}
+
+// shippedTierModels is the model a harness runs for a tier of
+// several rows. It applies only when the workspace maps no tiers.
+var shippedTierModels = map[string]map[string]string{
+	"claude-code": {"principal": "claude-opus-5-5"},
+}
+
+// shippedTierModel maps a tier to its shippedTierModels entry.
+func shippedTierModel(id string) func(tier string) (string, bool) {
+	return func(tier string) (string, bool) {
+		model, ok := shippedTierModels[id][tier]
+		return model, ok
+	}
 }
 
 // declaredTierModels is each tier's default model under harness id.
