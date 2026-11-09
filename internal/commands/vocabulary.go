@@ -169,6 +169,7 @@ var vocabulary = []concept{
 	{Flag: "result-digest"},
 	{Flag: "regenerate"},
 	{Flag: "regex"},
+	{Flag: "release-write-path"},
 	{Flag: "remote"},
 	{Flag: "remote-cache-read"},
 	{Flag: "remove"},

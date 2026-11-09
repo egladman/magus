@@ -130,6 +130,7 @@ config volatility.bootstrap_samples
 config volatility.enabled
 config volatility.min_samples
 config volatility.threshold
+config work.local_only
 flag affected/b
 flag affected/base
 flag affected/bisect

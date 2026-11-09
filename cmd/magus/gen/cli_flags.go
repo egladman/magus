@@ -299,6 +299,8 @@ const (
 	FlagJobApplyF = "f"
 	// job apply: --fix
 	FlagJobApplyFix = "fix"
+	// job apply: --release-write-path
+	FlagJobApplyReleaseWritePath = "release-write-path"
 	// job apply: --stdin
 	FlagJobApplyStdin = "stdin"
 	// job exec: --slots
@@ -1595,7 +1597,7 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 
 // JobApplyFlags are the flags declared for `magus job apply`.
 //
-// It does NOT carry --add-write-path: a custom-valued flag is bound by the command itself,
+// It does NOT carry --add-write-path, --release-write-path: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type JobApplyFlags struct {
 	F     string // -f
