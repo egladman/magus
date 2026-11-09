@@ -45,7 +45,8 @@ const (
 	WorkClear WorkState = "clear"
 )
 
-// WorkStates is every state.
+// WorkStates lists the states a ledger line may carry; a [WorkItem] whose
+// State is not among them fails validation. Each call returns a new slice.
 func WorkStates() []WorkState {
 	return []WorkState{WorkUnaccounted, WorkTracked, WorkLocalOnly,
 		WorkAbsorbed, WorkEnded, WorkClear}
