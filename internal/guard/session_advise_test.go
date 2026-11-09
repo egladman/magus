@@ -50,7 +50,7 @@ func (s *SessionAdviseSuite) TestARootStopIsHeldOnceToShowTheAdvisory() {
 	a := s.post("")
 	v := adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass())
 	s.Equal(decisionDeny, v.Decision)
-	s.Equal(RulePersonAdvisory, v.Rule)
+	s.Equal(string(denyRulePersonAdvisory), v.Rule)
 	s.Contains(v.Reason, a.ID)
 	s.Contains(v.Reason, "not a relay from another agent")
 	s.Equal(decisionPass, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Decision)
@@ -74,13 +74,13 @@ func (s *SessionAdviseSuite) TestAStopAlreadyHeldShowsItNextTime() {
 	s.post("")
 	held := types.GuardJudgment{Decision: decisionDeny, Reason: "background tasks still run"}
 	s.Equal(held, adviseStop(context.Background(), s.at, s.who, rootStopRaw, held))
-	s.Equal(RulePersonAdvisory, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Rule)
+	s.Equal(string(denyRulePersonAdvisory), adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Rule)
 }
 
 func (s *SessionAdviseSuite) TestAPromptWithoutContextLeavesItForTheStop() {
 	s.post("")
 	s.Equal(decisionPass, adviseMessage(context.Background(), s.at, s.who, false).Decision)
-	s.Equal(RulePersonAdvisory, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Rule)
+	s.Equal(string(denyRulePersonAdvisory), adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Rule)
 }
 
 func (s *SessionAdviseSuite) TestAPromptWithContextShowsItInsteadOfTheStop() {
@@ -129,11 +129,11 @@ func (s *SessionAdviseSuite) TestAnUnreadableStoreIsNamed() {
 
 func (s *SessionAdviseSuite) TestAnExpectedCommandCountsAfterTheShowing() {
 	s.post("git push")
-	recordAdvisoryAct(context.Background(), s.at, s.who, "git push origin HEAD")
+	recordDirectiveAct(context.Background(), s.at, s.who, "git push origin HEAD")
 	adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass())
 	child := s.who
 	child.Agent = "a1"
-	recordAdvisoryAct(context.Background(), s.at, child, "git push origin HEAD")
+	recordDirectiveAct(context.Background(), s.at, child, "git push origin HEAD")
 	all, err := s.store.Load()
 	s.Require().NoError(err)
 	s.Len(all[0].Acted, 1)

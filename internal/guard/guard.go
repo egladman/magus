@@ -908,7 +908,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		command := input
 		defer func() {
 			if judged.Decision != decisionDeny && judged.Decision != decisionAsk {
-				recordAdvisoryAct(ctx, location, who, command)
+				recordDirectiveAct(ctx, location, who, command)
 			}
 		}()
 	}

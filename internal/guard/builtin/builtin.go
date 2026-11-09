@@ -328,6 +328,7 @@ var defaults = map[string]decision{
 	"lease-vcs":             Deny,
 	"lease-write":           Deny,
 	"lease-claim":           Deny,
+	"person-advisory":       Deny,
 	"lease-row-unknown":     Deny,
 	"grant-is-a-persons":    Deny,
 	"conflict-commit":       Deny,
@@ -433,6 +434,7 @@ var fixed = map[string]string{
 	"workspace-spawn-failed":   "it is how a workspace learns that a spawn rule of its own judged nothing, so it can be neither silenced nor promoted",
 	"workspace-write-failed":   "it is how a workspace learns that a write rule of its own judged nothing, so it can be neither silenced nor promoted",
 	"grant-is-a-persons":       "a grant is a person's approval, so no workspace setting may let an agent issue one",
+	"person-advisory":          "it shows a person's advisory to every session, so a workspace setting would let a checkout silence the person",
 }
 
 // removal is why a rule the guard no longer has under its name is gone, and the name it

@@ -14,10 +14,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// RulePersonAdvisory names a stop the guard holds to show a person's
-// advisory. A host glue reads it to drop the guard's own label from the text,
-// because the words are the person's, not the guard's.
-const RulePersonAdvisory = "person-advisory"
+// denyRulePersonAdvisory names a stop the guard holds to show a person's
+// directive. A host glue reads it to drop the guard's own label from the
+// text, because the words are the person's, not the guard's.
+const denyRulePersonAdvisory denyRuleName = "person-advisory"
 
 // showDirectives returns the directive for the open advisories a root
 // session has not been shown, recording the showing. note names a store it
@@ -82,14 +82,14 @@ func adviseStop(ctx context.Context, at location, who hookAttribution, raw strin
 	if directive == "" {
 		return v
 	}
-	v.Decision, v.Reason, v.Rule = decisionDeny, directive, RulePersonAdvisory
+	v.Decision, v.Reason, v.Rule = decisionDeny, directive, string(denyRulePersonAdvisory)
 	return v
 }
 
-// recordAdvisoryAct counts command toward each advisory whose --expect it
+// recordDirectiveAct counts command toward each directive whose --expect it
 // matches. A subagent's command counts for its root's session. It is a
 // measure, never a verdict, so a failure is only logged.
-func recordAdvisoryAct(ctx context.Context, at location, who hookAttribution, command string) {
+func recordDirectiveAct(ctx context.Context, at location, who hookAttribution, command string) {
 	if who.Session == "" || at.workspace == "" {
 		return
 	}

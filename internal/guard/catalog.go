@@ -82,6 +82,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocPolicyUnloaded},
 	{doc: ruleDocRawTool},
 	{doc: ruleDocAgentSignOff},
+	{doc: ruleDocPersonAdvisory},
 	{doc: ruleDocSedInPlace},
 	{doc: ruleDocSharedStash},
 	{doc: ruleDocSiblingCheckout},
@@ -535,6 +536,15 @@ var ruleDocAgentSignOff = types.RuleDoc{
 	Why: "This is not a permission an agent is missing: there is no spelling of either an agent may use, because an agent stamping the changeset or closing its own block would make the measure mean nothing for everybody, including the human relying on it. " +
 		"Report what is unread instead: `magus diff --impact` names every changed file carrying no receipt, and `magus diff -o json` puts read_state on each file for a caller to branch on. " +
 		"Waiting on a request instead: say you are waiting on its id and hand it back; `magus session dispose <id>` is a person's to run.",
+}
+
+var ruleDocPersonAdvisory = types.RuleDoc{
+	Name:    string(denyRulePersonAdvisory),
+	Catches: "a root session ending its turn with an open `magus session advise` advisory it has not been shown",
+	Why: "An advisory is a person's directive to every session in the repository, and a stop is the one moment every host hands text back to the model. " +
+		"So a root session's stop that nothing else refuses is held once per advisory, with the advisory's text as the reason, and the session keeps working with it in front of it. " +
+		"Where the host renders a prompt's context (Claude Code, Codex) the next prompt shows it first and the stop does not repeat it. A subagent's stop shows nothing, so a child cannot spend its root's one showing. " +
+		"Nothing closes an advisory but `magus session retract <id>`, which is a person's to run. The rule is fixed: a workspace setting would let a checkout silence the person.",
 }
 
 var ruleDocSedInPlace = types.RuleDoc{
