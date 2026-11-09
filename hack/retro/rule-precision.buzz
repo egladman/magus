@@ -1,0 +1,1038 @@
+// Cost: reads the firings file, the guard trail of each --trail checkout and
+// the labels and findings files. It writes nothing.
+//
+// Joins what each rule raised with what happened next. magus counts and
+// refuses; a person labels, and every label names its labeler.
+namespace ruleprecision;
+
+import "crypto";
+import "encoding/json";
+import "env";
+import "assert";
+import "flags";
+import "fs";
+import "math";
+import "result";
+import "std";
+import "time";
+import "vcs";
+import "./denials" as denials;
+import "./trace" as trace;
+
+final USAGE = "usage: magus buzz hack/retro/rule-precision.buzz -- [--trail <checkout>]... [--firings <file>] [--labels <file>] [--findings <file>] [--author <name>] [--since <duration>] [-o jsonl]";
+final HELP = "cost: reads the firings file, the guard trail of each --trail checkout, the labels and findings files and one git show per recorded commit; writes nothing\n{USAGE}\n"
+    + "--firings and --labels default to firings.jsonl and labels.jsonl under $XDG_STATE_HOME/magus; hack/lint/run.buzz --record writes the first.\n"
+    + "--findings names a findings.jsonl of reviewed defects; without it no recall is computed.\n"
+    + "--author is a substring of the commit author whose own text is the house-style oracle; without it oracle-fp is not computed.\n"
+    + "-o jsonl prints one JSON object per rule, then one per class with escaped defects and one per gap.";
+
+final RFC3339 = "2006-01-02T15:04:05Z07:00";
+final Z = 1.96;
+export final TP = "tp";
+export final FP = "fp";
+
+// Firing is one finding a rule raised. decision ran marks a run of the rule
+// that found nothing; ts is unix ms and is shared by every line of one run.
+export object Firing {
+    rule: str,
+    source: str,
+    path: str,
+    line: int,
+    fingerprint: str,
+    decision: str,
+    ts: int,
+    session: str,
+    commit: str,
+}
+
+// Signal is one mechanical outcome of a fingerprint.
+export object Signal {
+    fingerprint: str,
+    outcome: str,
+}
+
+// Label is a person's verdict on one fingerprint, with who gave it.
+export object Label {
+    fingerprint: str,
+    label: str,
+    labeler: str,
+}
+
+// Review is one reviewed defect. Only status fix counts as confirmed.
+export object Review {
+    id: str,
+    severity: str,
+    path: str,
+    line: int,
+    class: str,
+    status: str,
+}
+
+// Authored is the commit facts the oracle join reads; at is unix ms.
+export object Authored {
+    sha: str,
+    author: str,
+    at: int,
+}
+
+// Window is the span of the trail one session covers; unix ms.
+export object Window {
+    session: str,
+    start: int,
+    end: int,
+}
+
+// Episode is a run of denials in one stream up to the call that passed.
+export object Episode {
+    denials: [trace\Record],
+    pass: trace\Record?,
+}
+
+// Cost is what the episodes that began with one rule's denial took.
+export object Cost {
+    rule: str,
+    denials: int,
+    episodes: int,
+    wallMs: int,
+    unresolved: int,
+}
+
+export object Row {
+    rule: str,
+    source: str,
+    firings: int,
+    fingerprints: int,
+    outcomes: {str: int},
+    tp: int,
+    fp: int,
+    unlabeled: int,
+    precision: double?,
+    wilson: double?,
+    confirmed: int,
+    escaped: int,
+    recall: double?,
+    denials: int,
+    meanRetries: double?,
+    wallSeconds: double,
+    unresolved: int,
+}
+
+export final OUTCOMES = ["retry-passed-unchanged", "suppressed", "reworded", "reverted", "oracle-fp", "review-confirmed"];
+
+export fun fingerprint(source: str, rule: str, path: str, text: str) > str {
+    return "{source}/v1:" + crypto\sha256Hex("{rule}\n{path}\n{text}").sub(0, len: 16);
+}
+
+// stateFile is the named file under $XDG_STATE_HOME/magus. Never commit it.
+export fun stateFile(name: str) > str !> any {
+    final base = env\getOr("XDG_STATE_HOME", def: "");
+    final root = if (base != "") base else fs\join(env\home(), name: ".local/state");
+    return fs\join(root, name: "magus/{name}");
+}
+
+export fun firingLine(f: Firing) > str !> any {
+    return json\stringify({
+        "rule": f.rule, "source": f.source, "path": f.path, "line": f.line, "fingerprint": f.fingerprint,
+        "decision": f.decision, "ts": f.ts, "session": f.session, "commit": f.commit,
+    });
+}
+
+// appendFirings adds lines to file and creates its directory. It rewrites
+// nothing, so a second writer cannot lose the first's lines.
+export fun appendFirings(file: str, lines: [str]) > void !> any {
+    if (lines.len() == 0) {
+        return;
+    }
+    fs\mkdirAll(fs\dirname(file));
+    fs\appendFile(file, content: lines.join("\n") + "\n");
+}
+
+fun text(doc: any, key: str) > str {
+    final v = doc[key];
+    if (v == null) {
+        return "";
+    }
+    return "{v}";
+}
+
+export fun parseFiring(line: str) > result\Result::<Firing> {
+    try {
+        final doc = json\parse(line);
+        final f = Firing{
+            rule = text(doc, key: "rule"), source = text(doc, key: "source"), path = text(doc, key: "path"),
+            line = std\toInt(doc["line"] ?? 0), fingerprint = text(doc, key: "fingerprint"), decision = text(doc, key: "decision"),
+            ts = std\toInt(doc["ts"] ?? 0), session = text(doc, key: "session"), commit = text(doc, key: "commit"),
+        };
+        if (f.rule == "" or f.source == "" or f.decision == "") {
+            return result\fail::<Firing>("a firing needs a rule, a source and a decision");
+        }
+        if (f.decision != "ran" and f.fingerprint == "") {
+            return result\fail::<Firing>("a firing needs a fingerprint");
+        }
+        return result\ok::<Firing>(f);
+    } catch (err: any) {
+        return result\caught::<Firing>(err, doing: "read a firing");
+    }
+}
+
+export fun parseLabel(line: str) > result\Result::<Label> {
+    try {
+        final doc = json\parse(line);
+        final l = Label{ fingerprint = text(doc, key: "fingerprint"), label = text(doc, key: "label"), labeler = text(doc, key: "labeler") };
+        if (l.fingerprint == "") {
+            return result\fail::<Label>("a label needs a fingerprint");
+        }
+        if (l.label != TP and l.label != FP) {
+            return result\fail::<Label>("a label is {TP} or {FP}, not \"{l.label}\"");
+        }
+        if (l.labeler == "") {
+            return result\fail::<Label>("a label names its labeler, a person or a signal");
+        }
+        return result\ok::<Label>(l);
+    } catch (err: any) {
+        return result\caught::<Label>(err, doing: "read a label");
+    }
+}
+
+export fun parseReview(line: str) > result\Result::<Review> {
+    try {
+        final doc = json\parse(line);
+        final r = Review{
+            id = text(doc, key: "id"), severity = text(doc, key: "severity"), path = text(doc, key: "path"),
+            line = std\toInt(doc["line"] ?? 0), class = text(doc, key: "class"), status = text(doc, key: "status"),
+        };
+        if (r.id == "" or r.path == "" or r.status == "") {
+            return result\fail::<Review>("a finding needs an id, a path and a status");
+        }
+        return result\ok::<Review>(r);
+    } catch (err: any) {
+        return result\caught::<Review>(err, doing: "read a finding");
+    }
+}
+
+// intent is what a call asked for; "" when its request was not recorded.
+export fun intent(r: trace\Record) > str {
+    if (r.command == "" and r.path == "" and r.target == "") {
+        return "";
+    }
+    return "{r.action}\n{r.command}\n{r.path}\n{r.target}";
+}
+
+fun streamKey(r: trace\Record) > str {
+    return "{r.session}\n{r.agent}\n{r.action}";
+}
+
+// ruleOf is the rule a stored verdict names, or unrecorded.
+export fun ruleOf(r: trace\Record, verdicts: {str: str}) > str {
+    if (verdicts[r.verdict] -> body) {
+        return denials\fromVerdict(body, site: "", at: r.at).rule;
+    }
+    return "unrecorded";
+}
+
+export fun guardFiring(r: trace\Record, rule: str) > Firing {
+    final path = if (r.path != "") r.path else r.target;
+    var what = intent(r);
+    if (what == "") {
+        what = "request:" + r.request;
+    }
+    return Firing{
+        rule = rule, source = "guard", path = path, line = 0, fingerprint = fingerprint("guard", rule: rule, path: path, text: what),
+        decision = "deny", ts = r.at, session = r.session, commit = "",
+    };
+}
+
+fun byTime(records: [trace\Record]) > [trace\Record] {
+    return records.cloneMutable().sort(fun (a: trace\Record, b: trace\Record) > bool => a.at < b.at);
+}
+
+// episodes groups the denials of one session, agent and action. An episode
+// ends at the first call of that stream the guard passed.
+export fun episodes(records: [trace\Record]) > [Episode] {
+    final open = mut {<str: [trace\Record]>};
+    final done = mut [<Episode>];
+    foreach (r in byTime(records)) {
+        final key = streamKey(r);
+        if (r.preview == "guard: deny") {
+            open[key] = (open[key] ?? [<trace\Record>]) + [r];
+        } else if (r.preview == "guard: pass") {
+            if (open[key] -> pending) {
+                done.append(Episode{ denials = pending, pass = r });
+                open.remove(key);
+            }
+        }
+    }
+    final keys = open.keys().cloneMutable().sort(fun (a: str, b: str) > bool => a < b);
+    foreach (key in keys) {
+        done.append(Episode{ denials = open[key]!, pass = null });
+    }
+    return done;
+}
+
+fun revertedBy(d: trace\Record, later: [trace\Record]) > bool {
+    if (d.path == "") {
+        return false;
+    }
+    foreach (x in later) {
+        if (x.at > d.at and x.session == d.session and x.command.indexOf(d.path) != null
+            and (x.command.indexOf("git checkout") != null or x.command.indexOf("git restore") != null)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// guardSignals reads what followed each denial: the retry that passed
+// unchanged, the reworded call, or the abandoned write.
+export fun guardSignals(records: [trace\Record], verdicts: {str: str}) > [Signal] {
+    final found = mut [<Signal>];
+    foreach (ep in episodes(records)) {
+        final last = ep.denials[ep.denials.len() - 1];
+        final fp = guardFiring(last, rule: ruleOf(last, verdicts: verdicts)).fingerprint;
+        if (ep.pass -> pass) {
+            final before = intent(last);
+            final after = intent(pass);
+            if (before != "" and after != "") {
+                found.append(Signal{ fingerprint = fp, outcome = if (before == after) "retry-passed-unchanged" else "reworded" });
+            }
+        }
+        foreach (d in ep.denials) {
+            if (revertedBy(d, later: records)) {
+                found.append(Signal{
+                    fingerprint = guardFiring(d, rule: ruleOf(d, verdicts: verdicts)).fingerprint, outcome = "reverted",
+                });
+            }
+        }
+    }
+    return found;
+}
+
+// guardCosts charges each episode to the rule of its first denial.
+export fun guardCosts(records: [trace\Record], verdicts: {str: str}) > [Cost] {
+    final byRule = mut {<str: Cost>};
+    final order = mut [<str>];
+    foreach (ep in episodes(records)) {
+        final rule = ruleOf(ep.denials[0], verdicts: verdicts);
+        final seen = byRule[rule] ?? Cost{ rule = rule, denials = 0, episodes = 0, wallMs = 0, unresolved = 0 };
+        if (byRule[rule] == null) {
+            order.append(rule);
+        }
+        var wall = seen.wallMs;
+        var open = seen.unresolved;
+        if (ep.pass -> pass) {
+            wall = wall + pass.at - ep.denials[0].at;
+        } else {
+            open = open + 1;
+        }
+        byRule[rule] = Cost{ rule = rule, denials = seen.denials + ep.denials.len(), episodes = seen.episodes + 1, wallMs = wall, unresolved = open };
+    }
+    final all = mut [<Cost>];
+    foreach (rule in order) {
+        all.append(byRule[rule]!);
+    }
+    return all;
+}
+
+// suppressedAt is true when the finding's line or the line above carries a
+// suppression naming its rule.
+export fun suppressedAt(f: Firing, lines: [str]) > bool {
+    if (f.line < 1) {
+        return false;
+    }
+    var i = if (f.line >= 2) f.line - 2 else 0;
+    while (i < f.line and i < lines.len()) {
+        final l = lines[i];
+        if (l.indexOf("off " + f.rule) != null or (l.indexOf(f.rule) != null and (l.indexOf("nolint") != null or l.indexOf("SANCTIONED") != null))) {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fun isFinding(f: Firing) > bool {
+    return f.decision != "ran" and f.source != "guard";
+}
+
+// lintSignals marks a finding suppressed where the file now says so. It is
+// reworded when the newest run of its rule no longer raises it.
+export fun lintSignals(firings: [Firing], lines: fun (path: str) > [str] !> any) > [Signal] !> any {
+    final found = mut [<Signal>];
+    final newest = mut {<str: int>};
+    foreach (f in firings) {
+        if (f.source != "guard" and f.ts > (newest[f.rule] ?? 0)) {
+            newest[f.rule] = f.ts;
+        }
+    }
+    final inNewest = mut {<str: bool>};
+    foreach (f in firings) {
+        if (isFinding(f) and f.ts == newest[f.rule]) {
+            inNewest[f.fingerprint] = true;
+        }
+    }
+    final cached = mut {<str: [str]>};
+    foreach (f in firings) {
+        if (!isFinding(f)) {
+            continue;
+        }
+        if (cached[f.path] == null) {
+            cached[f.path] = lines(f.path);
+        }
+        if (suppressedAt(f, lines: cached[f.path]!)) {
+            found.append(Signal{ fingerprint = f.fingerprint, outcome = "suppressed" });
+        }
+        if (f.ts < newest[f.rule]! and inNewest[f.fingerprint] == null) {
+            found.append(Signal{ fingerprint = f.fingerprint, outcome = "reworded" });
+        }
+    }
+    return found;
+}
+
+// sessionWindows is the span of the trail each session covers.
+export fun sessionWindows(records: [trace\Record]) > [Window] {
+    final spans = mut {<str: Window>};
+    foreach (r in records) {
+        if (r.session == "") {
+            continue;
+        }
+        if (spans[r.session] -> w) {
+            spans[r.session] = Window{ session = w.session, start = if (r.at < w.start) r.at else w.start, end = if (r.at > w.end) r.at else w.end };
+        } else {
+            spans[r.session] = Window{ session = r.session, start = r.at, end = r.at };
+        }
+    }
+    final all = mut [<Window>];
+    foreach (k, w in spans) {
+        all.append(w);
+    }
+    return all;
+}
+
+// oracleSignals marks findings recorded at a commit its author wrote while
+// no agent session in the trail was running.
+export fun oracleSignals(firings: [Firing], commits: {str: Authored}, windows: [Window], author: str) > [Signal] {
+    final found = mut [<Signal>];
+    foreach (f in firings) {
+        if (!isFinding(f) or f.commit == "") {
+            continue;
+        }
+        if (commits[f.commit] -> c) {
+            var covered = false;
+            foreach (w in windows) {
+                covered = covered or (c.at >= w.start and c.at <= w.end);
+            }
+            if (c.author.indexOf(author) != null and !covered) {
+                found.append(Signal{ fingerprint = f.fingerprint, outcome = "oracle-fp" });
+            }
+        }
+    }
+    return found;
+}
+
+// ReviewJoin is the reviewed defects set against the findings raised at
+// their line. classes maps a confirmed fingerprint to its defect class.
+export object ReviewJoin {
+    signals: [Signal],
+    classes: {str: str},
+    escaped: [Review],
+}
+
+export fun joinReviews(firings: [Firing], reviews: [Review]) > ReviewJoin {
+    final signals = mut [<Signal>];
+    final classes = mut {<str: str>};
+    final escaped = mut [<Review>];
+    foreach (r in reviews) {
+        if (r.status != "fix") {
+            continue;
+        }
+        var hit = false;
+        foreach (f in firings) {
+            if (isFinding(f) and f.path == r.path and f.line == r.line and r.line > 0) {
+                hit = true;
+                signals.append(Signal{ fingerprint = f.fingerprint, outcome = "review-confirmed" });
+                classes[f.fingerprint] = r.class;
+            }
+        }
+        if (!hit) {
+            escaped.append(r);
+        }
+    }
+    return ReviewJoin{ signals = signals, classes = classes, escaped = escaped };
+}
+
+fun sqrt(x: double) > double {
+    if (x <= 0.0) {
+        return 0.0;
+    }
+    var g = x;
+    var i = 0;
+    while (i < 40) {
+        g = (g + x / g) / 2.0;
+        i = i + 1;
+    }
+    return g;
+}
+
+// wilson is the lower bound of the 95% Wilson interval for tp of n.
+export fun wilson(tp: int, n: int) > double? {
+    if (n == 0) {
+        return null;
+    }
+    final nf = std\toDouble(n);
+    final p = std\toDouble(tp) / nf;
+    final z2 = Z * Z;
+    final centre = p + z2 / (2.0 * nf);
+    final spread = Z * sqrt(p * (1.0 - p) / nf + z2 / (4.0 * nf * nf));
+    return (centre - spread) / (1.0 + z2 / nf);
+}
+
+// Evidence is everything the per-rule counts join.
+export object Evidence {
+    firings: [Firing],
+    signals: [Signal],
+    labels: {str: Label},
+    review: ReviewJoin,
+    costs: [Cost],
+}
+
+fun hasOutcome(outs: [str], name: str) > bool {
+    return outs.indexOf(name) != null;
+}
+
+// rows counts per rule. A person's label beats a signal. A fingerprint with
+// neither is unlabeled and stays out of precision.
+export fun rows(ev: Evidence) > [Row] {
+    final sigs = mut {<str: [str]>};
+    foreach (s in ev.signals) {
+        sigs[s.fingerprint] = (sigs[s.fingerprint] ?? [<str>]) + [s.outcome];
+    }
+    final order = mut [<str>];
+    final source = mut {<str: str>};
+    final fired = mut {<str: int>};
+    final prints = mut {<str: [str]>};
+    foreach (f in ev.firings) {
+        if (f.decision == "ran") {
+            continue;
+        }
+        if (source[f.rule] == null) {
+            order.append(f.rule);
+            source[f.rule] = f.source;
+        }
+        fired[f.rule] = (fired[f.rule] ?? 0) + 1;
+        final seen = prints[f.rule] ?? [<str>];
+        if (!hasOutcome(seen, name: f.fingerprint)) {
+            prints[f.rule] = seen + [f.fingerprint];
+        }
+    }
+    final all = mut [<Row>];
+    foreach (rule in order) {
+        final counts = mut {<str: int>};
+        var tp = 0;
+        var fp = 0;
+        var unlabeled = 0;
+        var confirmed = 0;
+        final classes = mut {<str: bool>};
+        foreach (fpr in prints[rule]!) {
+            final outs = sigs[fpr] ?? [<str>];
+            foreach (o in OUTCOMES) {
+                if (hasOutcome(outs, name: o)) {
+                    counts[o] = (counts[o] ?? 0) + 1;
+                }
+            }
+            if (hasOutcome(outs, name: "review-confirmed")) {
+                confirmed = confirmed + 1;
+                classes[ev.review.classes[fpr] ?? ""] = true;
+            }
+            if (ev.labels[fpr] -> label) {
+                if (label.label == TP) {
+                    tp = tp + 1;
+                } else {
+                    fp = fp + 1;
+                }
+            } else if (hasOutcome(outs, name: "review-confirmed")) {
+                tp = tp + 1;
+            } else if (hasOutcome(outs, name: "oracle-fp") or hasOutcome(outs, name: "retry-passed-unchanged")) {
+                fp = fp + 1;
+            } else {
+                unlabeled = unlabeled + 1;
+            }
+        }
+        var missed = 0;
+        foreach (r in ev.review.escaped) {
+            if (classes[r.class] != null) {
+                missed = missed + 1;
+            }
+        }
+        final judged = tp + fp;
+        var cost = Cost{ rule = rule, denials = 0, episodes = 0, wallMs = 0, unresolved = 0 };
+        foreach (c in ev.costs) {
+            if (c.rule == rule) {
+                cost = c;
+            }
+        }
+        all.append(Row{
+            rule = rule, source = source[rule]!, firings = fired[rule]!, fingerprints = prints[rule]!.len(), outcomes = counts,
+            tp = tp, fp = fp, unlabeled = unlabeled,
+            precision = if (judged > 0) std\toDouble(tp) / std\toDouble(judged) else null, wilson = wilson(tp, n: judged),
+            confirmed = confirmed, escaped = missed,
+            recall = if (confirmed + missed > 0) std\toDouble(confirmed) / std\toDouble(confirmed + missed) else null,
+            denials = cost.denials, meanRetries = if (cost.episodes > 0) std\toDouble(cost.denials) / std\toDouble(cost.episodes) else null,
+            wallSeconds = std\toDouble(cost.wallMs) / 1000.0, unresolved = cost.unresolved,
+        });
+    }
+    return all;
+}
+
+fun round4(x: double?) > double? !> any {
+    if (x -> v) {
+        return math\round(v, places: 4);
+    }
+    return null;
+}
+
+export fun rowJson(r: Row) > str !> any {
+    final counts = mut {<str: int>};
+    foreach (o in OUTCOMES) {
+        counts[o] = r.outcomes[o] ?? 0;
+    }
+    return json\stringify({
+        "kind": "rule", "rule": r.rule, "source": r.source, "firings": r.firings, "fingerprints": r.fingerprints,
+        "outcomes": counts, "tp": r.tp, "fp": r.fp, "unlabeled": r.unlabeled, "precision": round4(r.precision),
+        "wilson_lb": round4(r.wilson), "review_confirmed": r.confirmed, "escaped_in_class": r.escaped, "recall": round4(r.recall),
+        "denials": r.denials, "mean_retries": round4(r.meanRetries), "wall_seconds": r.wallSeconds, "unresolved": r.unresolved,
+    });
+}
+
+// escapedClasses counts the confirmed defects no rule flagged, per class.
+export fun escapedClasses(escaped: [Review]) > {str: int} {
+    final by = mut {<str: int>};
+    foreach (r in escaped) {
+        by[r.class] = (by[r.class] ?? 0) + 1;
+    }
+    return by;
+}
+
+fun pct(x: double?) > str !> any {
+    if (x -> v) {
+        return "{math\round(v * 100.0, places: 1)}%";
+    }
+    return "-";
+}
+
+export fun table(all: [Row]) > [str] !> any {
+    final lines = mut ["rule  source  firings  tp  fp  unlabeled  precision  wilson-lb  recall  denials  retries"];
+    foreach (r in all) {
+        lines.append("{r.rule}  {r.source}  {r.firings}  {r.tp}  {r.fp}  {r.unlabeled}  {pct(r.precision)}  {pct(r.wilson)}  {pct(r.recall)}  {r.denials}  {round4(r.meanRetries) ?? 0.0}");
+    }
+    return lines;
+}
+
+object LoadedFirings {
+    items: [Firing],
+    refused: [str],
+}
+
+object LoadedLabels {
+    items: {str: Label},
+    refused: [str],
+}
+
+object LoadedReviews {
+    items: [Review],
+    refused: [str],
+}
+
+fun readFirings(file: str) > LoadedFirings !> any {
+    final items = mut [<Firing>];
+    final refused = mut [<str>];
+    foreach (n, row in fs\readLines(file)) {
+        if (row.trim() == "") {
+            continue;
+        }
+        final got = parseFiring(row);
+        if (got.error -> err) {
+            refused.append("{file}:{n + 1}: {err.message}");
+        } else {
+            items.append(got.value!);
+        }
+    }
+    return LoadedFirings{ items = items, refused = refused };
+}
+
+// readLabels keeps the last line per fingerprint.
+fun readLabels(file: str) > LoadedLabels !> any {
+    final items = mut {<str: Label>};
+    final refused = mut [<str>];
+    foreach (n, row in fs\readLines(file)) {
+        if (row.trim() == "") {
+            continue;
+        }
+        final got = parseLabel(row);
+        if (got.error -> err) {
+            refused.append("{file}:{n + 1}: {err.message}");
+        } else {
+            items[got.value!.fingerprint] = got.value!;
+        }
+    }
+    return LoadedLabels{ items = items, refused = refused };
+}
+
+fun readReviews(file: str) > LoadedReviews !> any {
+    final items = mut [<Review>];
+    final refused = mut [<str>];
+    foreach (n, row in fs\readLines(file)) {
+        if (row.trim() == "") {
+            continue;
+        }
+        final got = parseReview(row);
+        if (got.error -> err) {
+            refused.append("{file}:{n + 1}: {err.message}");
+        } else {
+            items.append(got.value!);
+        }
+    }
+    return LoadedReviews{ items = items, refused = refused };
+}
+
+fun verdictsOf(checkout: str, records: [trace\Record]) > {str: str} !> any {
+    final found = mut {<str: str>};
+    foreach (r in trace\denied(records)) {
+        final blob = fs\join(checkout, name: ".magus/activity/blobs/{r.verdict}");
+        if (r.verdict != "" and fs\exists(blob)) {
+            found[r.verdict] = fs\readFile(blob);
+        }
+    }
+    return found;
+}
+
+fun commitsOf(firings: [Firing], missing: mut [str]) > {str: Authored} {
+    final found = mut {<str: Authored>};
+    foreach (f in firings) {
+        if (f.commit == "" or found[f.commit] != null) {
+            continue;
+        }
+        try {
+            final c = vcs\commit(f.commit);
+            found[f.commit] = Authored{
+                sha = f.commit, author = "{c.author.name} <{c.author.email}>", at = std\toInt(time\parse(RFC3339, value: c.date)),
+            };
+        } catch (err: any) {
+            missing.append("the author of commit {f.commit}: {err}");
+        }
+    }
+    return found;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: ["--firings", "--labels", "--findings", "--author", "--since", "-o"], repeated: ["--trail"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "rule-precision: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final format = parsed.values["-o"] ?? "table";
+    if (format != "table" and format != "jsonl") {
+        throw "rule-precision: -o is table or jsonl, not {format}\n{USAGE}";
+    }
+    final root = vcs\root();
+    final trails = parsed.lists["--trail"] ?? [<str>];
+    final checkouts = if (trails.len() > 0) trails else [root];
+    var start = 0;
+    if (parsed.values["--since"] -> since) {
+        start = std\toInt(time\parse(RFC3339, value: time\nowIso())) - std\toInt(time\parseDuration(since));
+    }
+    final missing = mut [<str>];
+
+    final records = mut [<trace\Record>];
+    final verdicts = mut {<str: str>};
+    foreach (c in checkouts) {
+        if (!fs\exists(fs\join(c, name: ".magus/activity/events.jsonl"))) {
+            missing.append("every guard firing in {c}: no guard trail there; name the checkout that holds it with --trail");
+            continue;
+        }
+        final got = trace\trailFor(c, start: start, end: denials\FOREVER);
+        foreach (r in got) {
+            records.append(r);
+        }
+        foreach (k, v in verdictsOf(c, records: got)) {
+            verdicts[k] = v;
+        }
+    }
+
+    final firings = mut [<Firing>];
+    foreach (r in trace\denied(records)) {
+        firings.append(guardFiring(r, rule: ruleOf(r, verdicts: verdicts)));
+    }
+    final firingsFile = parsed.values["--firings"] ?? stateFile("firings.jsonl");
+    if (fs\exists(firingsFile)) {
+        final loaded = readFirings(firingsFile);
+        foreach (f in loaded.items) {
+            firings.append(f);
+        }
+        foreach (m in loaded.refused) {
+            missing.append("a firing line refused: {m}");
+        }
+    } else {
+        missing.append("every lint firing: no {firingsFile}; run hack/lint/run.buzz with --record");
+    }
+
+    final signals = mut [<Signal>];
+    foreach (s in guardSignals(records, verdicts: verdicts)) {
+        signals.append(s);
+    }
+    foreach (s in lintSignals(firings, lines: fun (path: str) > [str] !> any => fs\readLines(fs\join(root, name: path)) catch [<str>])) {
+        signals.append(s);
+    }
+    if (parsed.values["--author"] -> author) {
+        foreach (s in oracleSignals(firings, commits: commitsOf(firings, missing: missing), windows: sessionWindows(records), author: author)) {
+            signals.append(s);
+        }
+    } else {
+        missing.append("oracle-fp: no --author names the commits whose text is the oracle");
+    }
+
+    var review = ReviewJoin{ signals = [<Signal>], classes = {<str: str>}, escaped = [<Review>] };
+    if (parsed.values["--findings"] -> findingsFile) {
+        final loaded = readReviews(findingsFile);
+        review = joinReviews(firings, reviews: loaded.items);
+        foreach (m in loaded.refused) {
+            missing.append("a finding line refused: {m}");
+        }
+    } else {
+        missing.append("review-confirmed, escaped and recall: no --findings file of reviewed defects");
+    }
+    foreach (s in review.signals) {
+        signals.append(s);
+    }
+
+    final labelsFile = parsed.values["--labels"] ?? stateFile("labels.jsonl");
+    var labels = {<str: Label>};
+    if (fs\exists(labelsFile)) {
+        final loaded = readLabels(labelsFile);
+        labels = loaded.items;
+        foreach (m in loaded.refused) {
+            missing.append("a label line refused: {m}");
+        }
+    } else {
+        missing.append("person labels: no {labelsFile}");
+    }
+
+    final all = rows(Evidence{ firings = firings, signals = signals, labels = labels, review = review, costs = guardCosts(records, verdicts: verdicts) });
+    if (format == "jsonl") {
+        foreach (r in all) {
+            std\print(rowJson(r));
+        }
+        foreach (cls, n in escapedClasses(review.escaped)) {
+            std\print(json\stringify({"kind": "class", "class": cls, "escaped": n}));
+        }
+        foreach (m in missing) {
+            std\print(json\stringify({"kind": "missing", "what": m}));
+        }
+        return;
+    }
+    std\print("read-only: {all.len()} rule(s) from {firings.len()} firing(s) and {records.len()} trail record(s)");
+    foreach (line in table(all)) {
+        std\print(line);
+    }
+    foreach (m in missing) {
+        std\print("not recorded: {m}");
+    }
+}
+
+final EVENTS = "hack/retro/testdata/rule-precision/events.jsonl";
+final BLOBS = "hack/retro/testdata";
+
+final GREP = "grep is not the way to search here\nsee: https://eli.gladman.cc/magus/reference/rules/no-grep/";
+final PIPE = "this pipe hides the exit status\nsee: https://eli.gladman.cc/magus/reference/rules/output-pipe/";
+final STAGE = "stage your files by name\nsee: https://eli.gladman.cc/magus/reference/rules/stage-all/";
+
+fun verdicts() > {str: str} {
+    return {"grdgrep": GREP, "grdpipe": PIPE, "grdstage": STAGE};
+}
+
+fun trail() > [trace\Record] !> any {
+    return trace\loadTrail(EVENTS, blobs: BLOBS, start: 0, end: denials\FOREVER);
+}
+
+fun call(at: int, action: str, preview: str, command: str) > trace\Record {
+    return trace\Record{
+        line = 1, at = at, kind = "agent_command", action = action, agent = "a", lease = "", leaseFrom = "", preview = preview,
+        decidedBy = "", request = "r{at}", response = "", verdict = "", session = "s", command = command,
+    };
+}
+
+fun lintFiring(rule: str, path: str, line: int, ts: int, commit: str) > Firing {
+    return Firing{
+        rule = rule, source = "lint", path = path, line = line, fingerprint = fingerprint("lint", rule: rule, path: path, text: "m{line}"),
+        decision = "deny", ts = ts, session = "", commit = commit,
+    };
+}
+
+fun evidence(firings: [Firing], signals: [Signal]) > Evidence {
+    return Evidence{
+        firings = firings, signals = signals, labels = {<str: Label>}, costs = [<Cost>],
+        review = ReviewJoin{ signals = [<Signal>], classes = {<str: str>}, escaped = [<Review>] },
+    };
+}
+
+fun rowOf(all: [Row], rule: str) > Row {
+    foreach (r in all) {
+        if (r.rule == rule) {
+            return r;
+        }
+    }
+    return Row{
+        rule = "none", source = "", firings = 0, fingerprints = 0, outcomes = {<str: int>}, tp = 0, fp = 0, unlabeled = 0,
+        precision = null, wilson = null, confirmed = 0, escaped = 0, recall = null, denials = 0, meanRetries = null, wallSeconds = 0.0, unresolved = 0,
+    };
+}
+
+test "the trail's denials count, fold into episodes and cost wall time" {
+    final records = trail();
+    final costs = guardCosts(records, verdicts: verdicts());
+    assert\equal(costs.len(), want: 3, message: "three rules fired");
+    assert\equal(costs[0].rule, want: "no-grep", message: "first rule");
+    assert\equal(costs[0].denials, want: 3, message: "one denial and two");
+    assert\equal(costs[0].episodes, want: 2, message: "two episodes");
+    assert\equal(costs[0].wallMs, want: 4000, message: "1s then 3s");
+    assert\equal(costs[2].unresolved, want: 1, message: "the write was never retried in its stream");
+}
+
+test "an unchanged retry is a false-positive signal and a reworded call is not" {
+    final got = guardSignals(trail(), verdicts: verdicts());
+    final grep = guardFiring(trail()[0], rule: "no-grep").fingerprint;
+    final pipe = guardFiring(trail()[2], rule: "output-pipe").fingerprint;
+    assert\equal(got.len(), want: 3, message: "two episodes on grep, one on the pipe");
+    assert\equal(got[0].fingerprint, want: grep, message: "grep");
+    assert\equal(got[0].outcome, want: "retry-passed-unchanged", message: "same command passed");
+    assert\equal(got[1].fingerprint, want: pipe, message: "pipe");
+    assert\equal(got[1].outcome, want: "reworded", message: "a different command passed");
+}
+
+test "rows count a fingerprint once and judge it by its signals" {
+    final records = trail();
+    final firings = mut [<Firing>];
+    foreach (r in trace\denied(records)) {
+        firings.append(guardFiring(r, rule: ruleOf(r, verdicts: verdicts())));
+    }
+    final ev = Evidence{
+        firings = firings, signals = guardSignals(records, verdicts: verdicts()), labels = {<str: Label>}, costs = guardCosts(records, verdicts: verdicts()),
+        review = ReviewJoin{ signals = [<Signal>], classes = {<str: str>}, escaped = [<Review>] },
+    };
+    final grep = rowOf(rows(ev), rule: "no-grep");
+    assert\equal(grep.firings, want: 3, message: "three firings");
+    assert\equal(grep.fingerprints, want: 1, message: "one fingerprint");
+    assert\equal(grep.fp, want: 1, message: "the unchanged retry");
+    assert\equal(grep.precision!, want: 0.0, message: "no true positive");
+    assert\equal(grep.meanRetries!, want: 1.5, message: "three denials in two episodes");
+    assert\equal(grep.wallSeconds, want: 4.0, message: "wall seconds");
+    final pipe = rowOf(rows(ev), rule: "output-pipe");
+    assert\equal(pipe.unlabeled, want: 1, message: "a reworded call proves nothing");
+    assert\equal(pipe.precision, want: null, message: "no judged firing, no precision");
+}
+
+test "a write the next call checks out again is reverted" {
+    final write = trace\Record{
+        line = 1, at = 10, kind = "agent_command", action = "file.write", agent = "a", lease = "", leaseFrom = "", preview = "guard: deny",
+        decidedBy = "", request = "w", response = "", verdict = "", session = "s", path = "/w/b.go",
+    };
+    final undo = call(20, action: "shell.command", preview: "guard: pass", command: "git checkout /w/b.go");
+    final got = guardSignals([write, undo], verdicts: {<str: str>});
+    assert\equal(got.len(), want: 1, message: "one signal");
+    assert\equal(got[0].outcome, want: "reverted", message: "outcome");
+    assert\equal(guardSignals([write], verdicts: {<str: str>}).len(), want: 0, message: "nothing followed");
+}
+
+test "the Wilson lower bound matches the textbook interval" {
+    final lb = wilson(8, n: 10)!;
+    assert\isTrue(lb > 0.4901 and lb < 0.4903, message: "8 of 10 is 0.4902");
+    assert\equal(wilson(0, n: 0), want: null, message: "no sample");
+    assert\isTrue(wilson(30, n: 30)! > 0.88, message: "30 of 30 clears 0.88");
+}
+
+test "a person's label beats a signal and names its labeler" {
+    final f = lintFiring("r", path: "a.md", line: 3, ts: 1, commit: "");
+    final sig = [Signal{ fingerprint = f.fingerprint, outcome = "oracle-fp" }];
+    assert\equal(rowOf(rows(evidence([f], signals: sig)), rule: "r").fp, want: 1, message: "the signal alone");
+    final ev = Evidence{
+        firings = [f], signals = sig, labels = {f.fingerprint: Label{ fingerprint = f.fingerprint, label = "tp", labeler = "eli" }}, costs = [<Cost>],
+        review = ReviewJoin{ signals = [<Signal>], classes = {<str: str>}, escaped = [<Review>] },
+    };
+    final row = rowOf(rows(ev), rule: "r");
+    assert\equal(row.tp, want: 1, message: "the label wins");
+    assert\equal(row.fp, want: 0, message: "not also a false positive");
+    assert\isTrue(parseLabel("\{\"fingerprint\":\"x\",\"label\":\"tp\"}").error != null, message: "a label with no labeler is refused");
+    assert\isTrue(parseLabel("\{\"fingerprint\":\"x\",\"label\":\"maybe\",\"labeler\":\"eli\"}").error != null, message: "an unknown verdict is refused");
+    assert\equal(parseLabel("\{\"fingerprint\":\"x\",\"label\":\"fp\",\"labeler\":\"signal:oracle\"}").value!.labeler, want: "signal:oracle", message: "a signal may label");
+}
+
+test "a lint finding is suppressed when its line says so and reworded when it stops firing" {
+    final kept = lintFiring("banned-words", path: "a.md", line: 2, ts: 100, commit: "");
+    final gone = lintFiring("banned-words", path: "b.md", line: 1, ts: 100, commit: "");
+    final stays = lintFiring("banned-words", path: "a.md", line: 2, ts: 200, commit: "");
+    final ran = Firing{ rule = "banned-words", source = "lint", path = "", line = 0, fingerprint = "", decision = "ran", ts = 300, session = "", commit = "" };
+    final read = fun (path: str) > [str] !> any => if (path == "a.md") ["x", "<!-- proofread off banned-words: quoted -->"] else [<str>];
+    final got = lintSignals([kept, gone, stays, ran], lines: read);
+    final names = got.map(fun (index: int, s: Signal) > str => s.outcome);
+    assert\isTrue(names.indexOf("suppressed") != null, message: "suppressed");
+    assert\isTrue(names.indexOf("reworded") != null, message: "a later clean run reworded both");
+    assert\equal(got.filter(fun (index: int, s: Signal) > bool => s.outcome == "reworded").len(), want: 3, message: "all three stopped firing by the clean run");
+}
+
+test "the oracle marks a commit its author wrote outside every agent session" {
+    final f = lintFiring("r", path: "a.md", line: 1, ts: 1, commit: "c1");
+    final g = lintFiring("r", path: "b.md", line: 1, ts: 1, commit: "c2");
+    final commits = {
+        "c1": Authored{ sha = "c1", author = "Eli <eli@x>", at = 50 },
+        "c2": Authored{ sha = "c2", author = "Eli <eli@x>", at = 150 },
+    };
+    final windows = [Window{ session = "s", start = 100, end = 200 }];
+    final got = oracleSignals([f, g], commits: commits, windows: windows, author: "Eli");
+    assert\equal(got.len(), want: 1, message: "c2 sits inside a session");
+    assert\equal(got[0].fingerprint, want: f.fingerprint, message: "c1 is the oracle's");
+    assert\equal(oracleSignals([f], commits: commits, windows: windows, author: "Someone").len(), want: 0, message: "another author");
+}
+
+test "a confirmed defect a rule flagged is recall and one it missed escaped" {
+    final f = lintFiring("blank-error", path: "a.go", line: 7, ts: 1, commit: "");
+    final reviews = [
+        Review{ id = "1", severity = "high", path = "a.go", line = 7, class = "blank-error", status = "fix" },
+        Review{ id = "2", severity = "high", path = "b.go", line = 3, class = "blank-error", status = "fix" },
+        Review{ id = "3", severity = "low", path = "c.go", line = 1, class = "naming", status = "wontfix" },
+    ];
+    final join = joinReviews([f], reviews: reviews);
+    assert\equal(join.signals.len(), want: 1, message: "one confirmed");
+    assert\equal(join.escaped.len(), want: 1, message: "one escaped; a wontfix is neither");
+    final ev = Evidence{ firings = [f], signals = join.signals, labels = {<str: Label>}, costs = [<Cost>], review = join };
+    final row = rowOf(rows(ev), rule: "blank-error");
+    assert\equal(row.confirmed, want: 1, message: "confirmed");
+    assert\equal(row.escaped, want: 1, message: "escaped in its class");
+    assert\equal(row.recall!, want: 0.5, message: "recall");
+    assert\equal(row.tp, want: 1, message: "a confirmed defect is a true positive");
+    assert\equal(escapedClasses(join.escaped)["blank-error"]!, want: 1, message: "class count");
+}
+
+test "a firing round-trips through its line and a malformed line is refused" {
+    final f = lintFiring("r", path: "a.md", line: 4, ts: 9, commit: "abc");
+    final back = parseFiring(firingLine(f));
+    assert\equal(back.value!.fingerprint, want: f.fingerprint, message: "fingerprint");
+    assert\equal(back.value!.commit, want: "abc", message: "commit");
+    assert\isTrue(parseFiring("not json").error != null, message: "bad json");
+    assert\isTrue(parseFiring("\{\"rule\":\"r\",\"source\":\"lint\",\"decision\":\"deny\"}").error != null, message: "no fingerprint");
+}
+
+test "appending keeps earlier lines" {
+    final dir = fs\tempDir("rule-precision");
+    final file = fs\join(dir, name: "magus/firings.jsonl");
+    appendFirings(file, lines: ["a"]);
+    appendFirings(file, lines: ["b"]);
+    appendFirings(file, lines: [<str>]);
+    assert\equal(fs\readLines(file), want: ["a", "b"], message: "both lines, in order");
+    fs\removeAll(dir);
+}
+
+test "a lint fingerprint matches the one hack/lint/run.buzz records" {
+    assert\equal(fingerprint("lint", rule: "banned-words", path: "a.md", text: "m"), want: "lint/v1:ea581ab5bd37c1de", message: "pinned to run.buzz");
+}
