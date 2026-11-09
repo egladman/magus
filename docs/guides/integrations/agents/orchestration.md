@@ -112,9 +112,7 @@ workspace loading for everyone in that checkout.
 
 A worker reruns only its own check. When the machine's build budget refuses
 that check ([MGS3009](../../../reference/codes/sandbox/MGS3009.md)), the worker
-may wait for a seat with `magus server status --wait | magus run <its check>`, which
-keeps the seat the wait sized for the run it pipes into. Any other wait, or a
-bare rerun within the minute, is refused.
+files the check owed and stops. Any wait, or a bare rerun within the minute, is refused.
 
 Retrying a whole job is not the worker's. `magus job fork <same id>` on an ended
 job starts its next attempt and folds the one that ended into the row's `prior`,

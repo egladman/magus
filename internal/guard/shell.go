@@ -2078,8 +2078,8 @@ var (
 	// host announces when it ends, which a subagent's stop leaves standing (refuseLeftStop).
 	boundedRunWait = hint.JobExec.With("--timeout", "<d>", "--", "<command>")
 
-	denyBusyWait = fmt.Sprintf("this loop polls for work the host announces when it ends; background that work as `%s` and wait for its notice, or `%s` for a job.",
-		boundedRunWait, hint.JobWait.With("<job>"))
+	denyBusyWait = fmt.Sprintf("this loop polls for work the host announces when it ends; background that work as `%s` and wait for its notice.",
+		boundedRunWait)
 	denyBusyWaitWhy = "Past the tool timeout this loop is BACKGROUNDED rather than killed, and keeps polling a condition a failed run never prints.\n" +
 		"A watcher running the same loop is the same poll, and it wakes you again each time it fires or expires."
 
@@ -2087,8 +2087,8 @@ var (
 	// here announces that process's end to the caller, so it is sent to the record magus
 	// keeps of that work instead. Sending it to "your host's monitor" built piles of
 	// watchers, each running this loop.
-	denyBusyWaitForeign = fmt.Sprintf("this loop waits on work you did not start; wait on its record: `%s` for a job, or background your own call as `%s`.",
-		hint.JobWait.With("<job>"), boundedRunWait)
+	denyBusyWaitForeign = fmt.Sprintf("this loop waits on work you did not start, which announces nothing to you; read its record once with `%s`, or background your own call as `%s`.",
+		hint.DescribeJob.With("<job>"), boundedRunWait)
 	denyBusyWaitForeignWhy = "Past the tool timeout it is backgrounded rather than killed, and polls on. " +
 		"A watcher running the same loop is the same poll; if nothing else records the work, one watcher, armed once, is the most it earns."
 
