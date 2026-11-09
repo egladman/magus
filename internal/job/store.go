@@ -641,6 +641,14 @@ func keepDerived(row *types.Job, prev types.Job) {
 // may fail, which is what lets that refusal be decided under the lock; nothing is written
 // when it does.
 func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(cur *types.Job, exists bool, now int64) error) (types.Job, error) {
+	return s.mutateSeeing(ctx, id, kind, func(cur *types.Job, exists bool, now int64, _ []types.Job) error {
+		return apply(cur, exists, now)
+	})
+}
+
+// mutateSeeing is mutate whose apply also sees every stored row.
+// The rows are read under the same lock; apply must not change them.
+func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply func(cur *types.Job, exists bool, now int64, rows []types.Job) error) (types.Job, error) {
 	if strings.TrimSpace(id) == "" {
 		return types.Job{}, ErrNoID
 	}
@@ -670,7 +678,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		row := prev.Clone()
 		row.ID = id
 		now := time.Now().Unix()
-		if aerr := apply(&row, i >= 0, now); aerr != nil {
+		if aerr := apply(&row, i >= 0, now, f.Jobs); aerr != nil {
 			return aerr
 		}
 		row = row.Clone()
@@ -801,7 +809,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		if kind != asObservation {
 			row.ReworkRounds = prev.ReworkRounds
 		}
-		if i >= 0 && (prev.State == types.StateRunning || prev.State == types.StateExited) &&
+		if kind != asNarrowing && i >= 0 && (prev.State == types.StateRunning || prev.State == types.StateExited) &&
 			slices.ContainsFunc(row.WritePaths, func(p string) bool { return !slices.Contains(prev.WritePaths, p) }) {
 			row.Widenings++
 		}
@@ -1022,7 +1030,15 @@ func (s *Store) archive(f jobsFile) error {
 // inherits is the one left behind last. revoked marks what this write gave up as taken from
 // its holder rather than given up by it.
 func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64, revoked bool) []types.JobRelease {
+	refork := prev.State.Terminal() && next.State.Live()
 	out := slices.DeleteFunc(slices.Clone(prev.Releases), func(r types.JobRelease) bool {
+		switch {
+		// A narrowed release outlives its entry; a re-fork ends it.
+		case r.Narrowed && refork:
+			return true
+		case r.Narrowed && slices.Contains(prev.WritePaths, r.Path):
+			return false
+		}
 		return slices.Contains(next.WritePaths, r.Path)
 	})
 	for _, p := range prev.WritePaths {
