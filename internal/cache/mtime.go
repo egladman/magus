@@ -88,7 +88,7 @@ func shardKey(path string) byte {
 	return byte(h)
 }
 
-// load reads all shard files from disk (at most once). Migrates the legacy single-file format.
+// load reads all shard files from disk (at most once).
 func (s *mtimeStore) load(ctx context.Context) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -142,24 +142,6 @@ func (s *mtimeStore) load(ctx context.Context) {
 		}
 		gz.Close()
 		f.Close()
-	}
-
-	oldPath := filepath.Join(filepath.Dir(s.dir), "mtimes.json.gz")
-	if f, err := os.Open(oldPath); err == nil {
-		gz, err := gzip.NewReader(f)
-		if err == nil {
-			var old map[string]mtimeEntry
-			if json.NewDecoder(gz).Decode(&old) == nil {
-				for path, entry := range old {
-					key := shardKey(path)
-					s.shards[key][path] = entry
-					s.dirty[key] = true
-				}
-			}
-			gz.Close()
-		}
-		f.Close()
-		_ = os.Remove(oldPath)
 	}
 }
 
@@ -241,6 +223,8 @@ func (s *mtimeStore) flush(ctx context.Context) {
 	}
 }
 
+// writeShardFile rewrites a whole gzipped shard on purpose. The store is a
+// rebuildable memo, not local state: a torn shard costs a re-hash.
 func (s *mtimeStore) writeShardFile(key byte, data map[string]mtimeEntry) error {
 	path := filepath.Join(s.dir, fmt.Sprintf("%02x.json.gz", key))
 	var buf bytes.Buffer

@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sys/pid"
 )
@@ -29,13 +28,16 @@ import (
 // is a later invocation rather than the dying one, which is the only design that works
 // when the dying one gets no cycles at all.
 //
+// The file is JSON Lines: a start line per target, a stop line when it ends.
+// The last line per key wins, so a key with no stop line is still running.
+//
 // ONE FILE PER PID, not one shared file. Several magus processes share a cache dir
 // routinely (a recursive magus\run, the server serving two dispatches, an agent beside a
 // human), and a shared file means each rewrite erases the others, which would delete
 // exactly the record a peer is about to need. Per-pid also makes every write single-writer,
 // so a reader never sees a torn set.
 type inflight struct {
-	dir  string // directory holding inflight-<pid>.json for every live run
+	dir  string // directory holding inflight-<pid>.jsonl for every live run
 	path string // this process's own file
 
 	mu      sync.Mutex
@@ -53,7 +55,19 @@ type inflightTarget struct {
 	Started time.Time `json:"started"`
 }
 
-const inflightPrefix = "inflight-"
+// inflightEvent is one line of the log. A stop line has no Target.
+type inflightEvent struct {
+	Op     string          `json:"op"` // inflightStart or inflightStop
+	Key    uint64          `json:"key"`
+	Target *inflightTarget `json:"target,omitempty"`
+}
+
+const (
+	inflightPrefix = "inflight-"
+	inflightExt    = ".jsonl"
+	inflightStart  = "start"
+	inflightStop   = "stop"
+)
 
 // RunningTarget is one target executing in this process.
 type RunningTarget struct {
@@ -119,7 +133,7 @@ func newInflight(dir string) *inflight {
 	pid := os.Getpid()
 	return &inflight{
 		dir:     dir,
-		path:    filepath.Join(dir, fmt.Sprintf("%s%s.json", inflightPrefix, strconv.Itoa(pid))),
+		path:    filepath.Join(dir, fmt.Sprintf("%s%s%s", inflightPrefix, strconv.Itoa(pid), inflightExt)),
 		running: map[uint64]inflightTarget{},
 	}
 }
@@ -137,11 +151,12 @@ func (i *inflight) start(project, target string) func() {
 	i.mu.Lock()
 	i.next++
 	key := i.next
-	i.running[key] = inflightTarget{
+	t := inflightTarget{
 		Project: project, Target: target,
 		Pid: os.Getpid(), Host: host, Started: started,
 	}
-	i.flushLocked()
+	i.running[key] = t
+	i.appendLocked(inflightEvent{Op: inflightStart, Key: key, Target: &t})
 	i.mu.Unlock()
 	clearProcess := executing.add(RunningTarget{Project: project, Target: target, Started: started})
 
@@ -149,37 +164,56 @@ func (i *inflight) start(project, target string) func() {
 		clearProcess()
 		i.mu.Lock()
 		delete(i.running, key)
-		i.flushLocked()
+		if len(i.running) == 0 {
+			// Remove rather than leave a log of finished work, so a clean exit
+			// leaves no corpse for the next run to reason about.
+			_ = os.Remove(i.path)
+		} else {
+			i.appendLocked(inflightEvent{Op: inflightStop, Key: key})
+		}
 		i.mu.Unlock()
 	}
 }
 
-// flushLocked writes this process's set. The caller holds mu for the WHOLE operation:
-// releasing it around the write let a stale snapshot land after a fresh one, so a clean
-// exit could leave a file claiming a target was still running.
-//
-// Errors are dropped on purpose (a run must not fail because its post-mortem breadcrumb
-// could not be written), but the drop is why the caller logs at debug when it matters.
-func (i *inflight) flushLocked() {
-	targets := make([]inflightTarget, 0, len(i.running))
-	for _, u := range i.running {
-		targets = append(targets, u)
-	}
-	sortTargets(targets)
-
-	if len(targets) == 0 {
-		// Nothing running: remove rather than write an empty file, so a clean exit
-		// leaves no corpse for the next run to have to reason about.
-		_ = os.Remove(i.path)
-		return
-	}
-	b, err := json.Marshal(targets)
+// appendLocked adds a line to this process's log. The caller holds mu, so
+// lines land in edge order. Errors are dropped: a run must not fail because
+// its breadcrumb could not be written.
+func (i *inflight) appendLocked(e inflightEvent) {
+	b, err := json.Marshal(e)
 	if err != nil {
 		return
 	}
-	// Not synced: the death this reports is a killed process, and the kernel keeps a
-	// killed process's writes; only a power loss drops one.
-	_ = file.ReplaceFile(i.path, b, 0o600)
+	f, err := os.OpenFile(i.path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+	if err != nil {
+		return
+	}
+	// One unsynced write: the kernel keeps a killed process's writes.
+	_, _ = f.Write(append(b, '\n'))
+	_ = f.Close()
+}
+
+// replayInflight returns the targets with a start line and no stop line.
+// A line that does not parse, such as a torn last one, is skipped.
+func replayInflight(b []byte) []inflightTarget {
+	live := map[uint64]inflightTarget{}
+	for line := range strings.SplitSeq(string(b), "\n") {
+		var e inflightEvent
+		if line == "" || json.Unmarshal([]byte(line), &e) != nil {
+			continue
+		}
+		switch {
+		case e.Op == inflightStart && e.Target != nil:
+			live[e.Key] = *e.Target
+		case e.Op == inflightStop:
+			delete(live, e.Key)
+		}
+	}
+	out := make([]inflightTarget, 0, len(live))
+	for _, t := range live {
+		out = append(out, t)
+	}
+	sortTargets(out)
+	return out
 }
 
 // Running reports what this tracker currently has in flight. [InFlight] is the
@@ -232,7 +266,7 @@ func (i *inflight) takeAbandoned() []inflightTarget {
 			_ = os.RemoveAll(filepath.Join(i.dir, name))
 			continue
 		}
-		if !strings.HasPrefix(name, inflightPrefix) || !strings.HasSuffix(name, ".json") {
+		if !strings.HasPrefix(name, inflightPrefix) || !strings.HasSuffix(name, inflightExt) {
 			continue
 		}
 		path := filepath.Join(i.dir, name)
@@ -243,10 +277,10 @@ func (i *inflight) takeAbandoned() []inflightTarget {
 		if err != nil {
 			continue
 		}
-		var prev []inflightTarget
-		if json.Unmarshal(b, &prev) != nil || len(prev) == 0 {
-			// Unreadable or empty: nothing to report, but it is still litter from a
-			// run that is over, so do not leave it to be re-read every time.
+		prev := replayInflight(b)
+		if len(prev) == 0 {
+			// Nothing running in it: litter from a run that is over, so do not
+			// leave it to be re-read every time.
 			_ = os.Remove(path)
 			continue
 		}
