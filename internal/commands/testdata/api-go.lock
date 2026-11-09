@@ -295,6 +295,7 @@ github.com/egladman/magus.WithSpellFilter func(name string) RunOption
 github.com/egladman/magus.WithStderr func(w io.Writer) Option
 github.com/egladman/magus.WithStep func() RunOption
 github.com/egladman/magus.WithTarget func(name string, opts ...TargetOption) ProjectOption
+github.com/egladman/magus.WithTargetResults func(fn func(github.com/egladman/magus/types.TargetResult)) RunOption
 github.com/egladman/magus.WithUpstream func() ComposeOption
 github.com/egladman/magus.WithVCSDriver func(d github.com/egladman/magus/types.VCSDriver) Option
 github.com/egladman/magus.WithVersion func(v string) Option
@@ -481,6 +482,8 @@ github.com/egladman/magus/std.FsWriteFileAtomic func(ctx context.Context, path s
 github.com/egladman/magus/std.FsWriteLines func(ctx context.Context, path string, lines []string) error
 github.com/egladman/magus/std.Get func(name string) (Module, bool)
 github.com/egladman/magus/std.GetSource func(name string) (SourceModule, bool)
+github.com/egladman/magus/std.HTML var Module
+github.com/egladman/magus/std.HTMLEscape func(_ context.Context, s string) (string, error)
 github.com/egladman/magus/std.HTTP var Module
 github.com/egladman/magus/std.HTTPDownload func(ctx context.Context, url string, dest string, headers map[string]string, opts github.com/egladman/magus/types.HTTPOptions, retryPolicy github.com/egladman/magus/types.HTTPRetry) (int, error)
 github.com/egladman/magus/std.HTTPGet func(ctx context.Context, url string, headers map[string]string, opts github.com/egladman/magus/types.HTTPOptions, retryPolicy github.com/egladman/magus/types.HTTPRetry) (github.com/egladman/magus/types.HTTPResponse, error)
@@ -721,12 +724,16 @@ github.com/egladman/magus/std.OsSleep func(ctx context.Context, ms float64) erro
 github.com/egladman/magus/std.OsWithEnv func(ctx context.Context, env map[string]string, cb func(ctx context.Context) error) error
 github.com/egladman/magus/std.Path var Module
 github.com/egladman/magus/std.PathAbs func(ctx context.Context, path string) (string, error)
+github.com/egladman/magus/std.PathBase func(_ context.Context, path string) (string, error)
 github.com/egladman/magus/std.PathClean func(_ context.Context, path string) (string, error)
+github.com/egladman/magus/std.PathDir func(_ context.Context, path string) (string, error)
 github.com/egladman/magus/std.PathExpandUser func(_ context.Context, path string) (string, error)
 github.com/egladman/magus/std.PathIsAbs func(_ context.Context, path string) (bool, error)
+github.com/egladman/magus/std.PathJoin func(_ context.Context, parts []string) (string, error)
 github.com/egladman/magus/std.PathMatchAny func(ctx context.Context, patterns []string, path string) (bool, error)
 github.com/egladman/magus/std.PathMatches func(_ context.Context, pattern string, path string) (bool, error)
 github.com/egladman/magus/std.PathRel func(_ context.Context, base string, target string) (string, error)
+github.com/egladman/magus/std.PathWithin func(_ context.Context, dir string, path string) (bool, error)
 github.com/egladman/magus/std.Pipe var Module
 github.com/egladman/magus/std.PipeAll func(ctx context.Context) ([]github.com/egladman/magus/types.PipeRecord, error)
 github.com/egladman/magus/std.PipeDiff func(ctx context.Context, artifact map[string]any) error
@@ -803,6 +810,8 @@ github.com/egladman/magus/std.StringsLines func(_ context.Context, s string) ([]
 github.com/egladman/magus/std.StringsPadLeft func(_ context.Context, s string, length int, pad string) (string, error)
 github.com/egladman/magus/std.StringsPadRight func(_ context.Context, s string, length int, pad string) (string, error)
 github.com/egladman/magus/std.StringsPascalCase func(_ context.Context, s string) (string, error)
+github.com/egladman/magus/std.StringsPlural func(_ context.Context, n int, one string, many string) (string, error)
+github.com/egladman/magus/std.StringsPluralCount func(_ context.Context, n int, one string, many string) (string, error)
 github.com/egladman/magus/std.StringsSnakeCase func(_ context.Context, s string) (string, error)
 github.com/egladman/magus/std.StringsSplitN func(_ context.Context, s string, sep string, n int) ([]string, error)
 github.com/egladman/magus/std.StringsTrimPrefix func(_ context.Context, s string, prefix string) (string, error)
@@ -4902,6 +4911,7 @@ github.com/egladman/magus/types.TargetEntry.Spells field []string "json:\"spells
 github.com/egladman/magus/types.TargetExpander type interface
 github.com/egladman/magus/types.TargetExpander.ExpandAffected imethod func(ctx context.Context, target string, baseRef string) (targets []Target, source string, fellBack bool, err error)
 github.com/egladman/magus/types.TargetExpander.ExpandPath imethod func(t Target) ([]Target, error)
+github.com/egladman/magus/types.TargetFailed const TargetStatus = "failed"
 github.com/egladman/magus/types.TargetGraphDefinition const untyped string = "The target dependency graph is the ctx.needs DAG of a project's magusfile: each node is a target (an exported function), each edge a dependency it composes. It is extracted statically from the magusfile source, so it shows every edge - including both arms of a runtime branch - and flags any dependency cycle (which the run path rejects during dispatch)."
 github.com/egladman/magus/types.TargetGraphNode type struct
 github.com/egladman/magus/types.TargetGraphNode.Chain field []ChainStep "json:\"chain,omitempty\" yaml:\"chain,omitempty\""
@@ -4941,6 +4951,8 @@ github.com/egladman/magus/types.TargetGraphProject.Path field string "json:\"pat
 github.com/egladman/magus/types.TargetGraphProject.RelPath field string "json:\"-\" yaml:\"-\" buzz:\"-\""
 github.com/egladman/magus/types.TargetMissingContext const DiagnosticCode = "MGS1008"
 github.com/egladman/magus/types.TargetNeverReplays const DiagnosticCode = "MGS1009"
+github.com/egladman/magus/types.TargetOK const TargetStatus = "ok"
+github.com/egladman/magus/types.TargetPermitted const TargetStatus = "permitted"
 github.com/egladman/magus/types.TargetPolicy type struct
 github.com/egladman/magus/types.TargetPolicy.Compare method func(o TargetRef) int
 github.com/egladman/magus/types.TargetPolicy.HumanOnly field bool "json:\"human_only,omitempty\""
@@ -4968,9 +4980,20 @@ github.com/egladman/magus/types.TargetReport type struct
 github.com/egladman/magus/types.TargetReport.Count field int "json:\"count\"      yaml:\"count\""
 github.com/egladman/magus/types.TargetReport.Definition field string "json:\"definition\" yaml:\"definition\""
 github.com/egladman/magus/types.TargetReport.Targets field []TargetEntry "json:\"targets\"    yaml:\"targets\""
+github.com/egladman/magus/types.TargetResult type struct
+github.com/egladman/magus/types.TargetResult.CacheHit field bool
+github.com/egladman/magus/types.TargetResult.Duration field time.Duration
+github.com/egladman/magus/types.TargetResult.Err field error
+github.com/egladman/magus/types.TargetResult.Hash field string
+github.com/egladman/magus/types.TargetResult.Next field []NextStep
+github.com/egladman/magus/types.TargetResult.Project field string
+github.com/egladman/magus/types.TargetResult.Ref field string
+github.com/egladman/magus/types.TargetResult.Status field TargetStatus
+github.com/egladman/magus/types.TargetResult.Target field string
 github.com/egladman/magus/types.TargetSpellUse type struct
 github.com/egladman/magus/types.TargetSpellUse.Ops field []string "json:\"ops,omitempty\" yaml:\"ops,omitempty\""
 github.com/egladman/magus/types.TargetSpellUse.Spell field string "json:\"spell\"         yaml:\"spell\""
+github.com/egladman/magus/types.TargetStatus type string
 github.com/egladman/magus/types.TermBold const TermStyle = "1"
 github.com/egladman/magus/types.TermBrightGreen const TermStyle = "1;32"
 github.com/egladman/magus/types.TermDim const TermStyle = "2"
