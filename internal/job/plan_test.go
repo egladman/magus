@@ -585,13 +585,14 @@ func TestResolveSymbolGoalsDerivesClaims(t *testing.T) {
 		"Field":     {DefinedIn: []string{"types/job.go"}, Signature: "struct field Signature string"},
 		"Split":     {DefinedIn: []string{"a.go", "b.go"}, Signature: "func Split()"},
 		"Covered":   {DefinedIn: []string{"internal/job/plan.go"}, Signature: "func Covered()"},
+		"Whole":     {DefinedIn: []string{"whole.go"}, Signature: "func Whole()"},
 		"Unindexed": {DefinedIn: []string{"x.go"}},
 	})
 	symbol := func(id string, expect types.GoalExpect, names ...string) types.Goal {
 		return types.Goal{ID: id, Kind: types.GoalKindSymbol, Expect: expect, Symbols: names}
 	}
-	row := types.Job{ID: "j", WritePaths: []string{"internal/job", "api.go#func Other"}, Goals: []types.Goal{
-		symbol("moved", types.ExpectChanged, "Api", "Resolve", "Split", "Covered", "Unindexed", "Field"),
+	row := types.Job{ID: "j", WritePaths: []string{"internal/job", "api.go#func Other", "whole.go"}, Goals: []types.Goal{
+		symbol("moved", types.ExpectChanged, "Api", "Resolve", "Split", "Covered", "Whole", "Unindexed", "Field"),
 		symbol("gone", types.ExpectAbsent, "Update"),
 		{ID: "shape", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{"Goal"}, Signature: "type Goal struct"},
 		symbol("kept", types.ExpectPresent, "Api"),
@@ -601,10 +602,10 @@ func TestResolveSymbolGoalsDerivesClaims(t *testing.T) {
 
 	resolved, claims, err := ResolveSymbolGoals(t.Context(), row, read)
 	require.NoError(t, err)
-	want := []string{"api.go#func Api", "store.go#Store) Update", "types/job.go#Goal) Resolve", "types/job.go#type Goal"}
-	assert.Equal(t, want, claims)
-	assert.Equal(t, append([]string{"internal/job", "api.go#func Other"}, want...), resolved.WritePaths)
-	assert.Equal(t, []string{"internal/job", "api.go#func Other"}, row.WritePaths, "the row handed in is not changed")
+	want := []string{"api.go#func Api", "store.go#Store) Update", "types/job.go#Goal) Resolve", "types/job.go#type Goal", "whole.go#func Whole"}
+	assert.Equal(t, want, claims, "a literal whole-file entry is narrowed to the claim, a directory is not")
+	assert.Equal(t, append([]string{"internal/job", "api.go#func Other", "whole.go"}, want...), resolved.WritePaths)
+	assert.Equal(t, []string{"internal/job", "api.go#func Other", "whole.go"}, row.WritePaths, "the row handed in is not changed")
 
 	readOnly := row
 	readOnly.ReadOnly = true
@@ -660,7 +661,7 @@ func TestApplyKeepsAFrozenSignature(t *testing.T) {
 	t.Parallel()
 
 	s := tempStore(t, t.TempDir())
-	record := types.Declaration{ID: "wave/job", WritePaths: []string{"api.go"}, Check: forkCheck(), Goals: []types.Goal{
+	record := types.Declaration{ID: "wave/job", WritePaths: []string{"*.go"}, Check: forkCheck(), Goals: []types.Goal{
 		{ID: "shape", Kind: types.GoalKindSymbol, Expect: types.ExpectSignature, Symbols: []string{"Api"}},
 	}}
 	before := symbolReader(map[string]SymbolFact{"Api": {DefinedIn: []string{"api.go"}, Signature: "func Api()"}})

@@ -408,6 +408,9 @@ func prefixed(id string, ps types.JobProblems) types.JobProblems {
 // unreferenced claims nothing, a read-only row claims nothing, and so does a symbol whose
 // declaration line has no form a claim can name (a field, a value). Every door then holds
 // the claims to [PlaceDerivedClaims].
+//
+// A literal whole-file entry does not cover its file here. The fork
+// narrows that hold to the claims.
 func ResolveSymbolGoals(ctx context.Context, row types.Job, read SymbolReader) (types.Job, []string, error) {
 	row = row.Clone()
 	var refused, claims []string
@@ -487,7 +490,7 @@ func derivedClaim(row types.Job, expect types.GoalExpect, read bool, fact Symbol
 	for _, entry := range row.WritePaths {
 		p, decl := types.SplitClaim(entry)
 		switch {
-		case decl == "" && coversPath(p, file):
+		case decl == "" && coversPath(p, file) && (path.Clean(p) != file || strings.ContainsAny(p, globMeta)):
 			return ""
 		case decl != "" && path.Clean(p) == file && decl == word:
 			return ""
