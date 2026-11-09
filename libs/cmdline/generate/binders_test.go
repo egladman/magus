@@ -169,6 +169,7 @@ func TestGoTypeAndBindMethodCoverEveryBoundKind(t *testing.T) {
 		equal(t, c.goType, goType(c.kind))
 		equal(t, c.bindMethod, bindMethod(c.kind))
 	}
+	equal(t, "[]string", goType(cmdline.StringList))
 
 	// FlagCustom is declared but never bound, so reaching either of these with it
 	// means writeBinder's filter stopped working.
@@ -193,6 +194,7 @@ func TestFlagDefaultLiteral(t *testing.T) {
 		{"duration nil default", cmdline.Flag{Kind: cmdline.Duration}, "0"},
 		{"string", cmdline.Flag{Kind: cmdline.String, Default: "test"}, `"test"`},
 		{"string nil default", cmdline.Flag{Kind: cmdline.String}, `""`},
+		{"string list", cmdline.Flag{Kind: cmdline.StringList}, "nil"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -256,6 +258,18 @@ func TestWriteBinderEmitsTheStructAndOneBindPerSpelling(t *testing.T) {
 	contains(t, got, `fs.BoolVar(&f.Watch, FlagDemoW, false, "Short for --watch")`)
 	contains(t, got, "\treturn &f\n}\n")
 	notContains(t, got, "DemoDefaults", "no flag declared DefaultAtBind")
+}
+
+func TestWriteBinderBindsAStringListWithItsVar(t *testing.T) {
+	var b bytes.Buffer
+	writeBinder(&b, "demo", "demo", []cmdline.Flag{
+		{Name: "add-path", Kind: cmdline.StringList, Doc: "A path to add; repeatable"},
+	})
+	got := b.String()
+
+	contains(t, got, "\tAddPath []string // --add-path")
+	contains(t, got, `cmdline.StringListVar(fs, &f.AddPath, FlagDemoAddPath, "A path to add; repeatable")`)
+	notContains(t, got, "does NOT carry", "a StringList is bound by the binder")
 }
 
 // TestWriteBinderEmitsDefaultsForARuntimeDefault covers the shape that stopped
