@@ -397,13 +397,14 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 	// An unresolvable path leaves the trail row without one; the version still records.
 	binary, _ := runningBinaryPath()
 	deps, rules := guard.NewDependencies(ctx, guard.Wiring{
-		Root:           root,
-		Config:         globalCfg,
-		BinaryVersion:  version,
-		Binary:         binary,
-		Inspect:        inspect,
-		TargetPolicies: guardTargetPolicies(rootOverride, inspect),
-		CacheDir:       guardCacheDir(rootOverride),
+		Root:                 root,
+		Config:               globalCfg,
+		BinaryVersion:        version,
+		Binary:               binary,
+		Inspect:              inspect,
+		TargetPolicies:       guardTargetPolicies(rootOverride, inspect),
+		RecordTargetPolicies: guardRecordTargetPolicies(rootOverride),
+		CacheDir:             guardCacheDir(rootOverride),
 		Trace: func(ctx context.Context, phase string) func() {
 			return traceFromContext(ctx).phase(phase)
 		},
@@ -481,6 +482,24 @@ func guardTargetPolicies(rootOverride string, inspect func(context.Context, stri
 			return asMagus(ws)
 		})
 		return workspacegraph.RecordedTargetPolicies(ctx, lw, globalCfg)
+	}
+}
+
+// guardRecordTargetPolicies records what ws, opened for root, declares as
+// target policy, so the next judgment answers from guardTargetPolicies.
+func guardRecordTargetPolicies(rootOverride string) func(context.Context, string, types.WorkspaceRepository) error {
+	return func(ctx context.Context, root string, ws types.WorkspaceRepository) error {
+		if root == "" {
+			found, err := workspace.FindRoot(rootOverride)
+			if err != nil {
+				return err
+			}
+			root = found
+		}
+		lw := magus.NewLazyWorkspace(root, func(context.Context) (*magus.Magus, error) {
+			return asMagus(ws)
+		})
+		return workspacegraph.RecordTargetPolicies(ctx, lw, globalCfg)
 	}
 }
 

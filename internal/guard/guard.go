@@ -108,6 +108,10 @@ type Dependencies struct {
 	// caller's own. false means it cannot prove the record current, and the rule opens
 	// the workspace through Inspect instead. Nil means no record: every judgment opens it.
 	TargetPolicies func(ctx context.Context, root string) (types.TargetPolicyIndex, bool)
+	// RecordTargetPolicies records what ws, the workspace at root, declares, so
+	// TargetPolicies answers the next judgment without an open. Nil records
+	// nothing.
+	RecordTargetPolicies func(ctx context.Context, root string, ws types.WorkspaceRepository) error
 	// CheckoutState reads the checkout holding dir for a command rule judging a push or a
 	// commit, nil when its version control cannot report it.
 	CheckoutState func(ctx context.Context, dir string) *types.CheckoutState
