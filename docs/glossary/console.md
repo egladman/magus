@@ -41,6 +41,7 @@ In the code (`magus refs <name>` lists every site):
 
 - `config.Console` (Go)
 - `playground.Console` (Go)
+- `daemon.Console` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

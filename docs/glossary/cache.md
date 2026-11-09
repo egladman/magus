@@ -42,6 +42,7 @@ In the code (`magus refs <name>` lists every site):
 - `reclaimdisk\Cache` (Buzz host type)
 - `cache.Cache` (Go)
 - `config.Cache` (Go)
+- `daemon.Cache` (Go)
 
 <!-- END GLOSSARY USAGE -->
 

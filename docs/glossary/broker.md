@@ -35,6 +35,10 @@ In the docs:
 - [Supervising the broker](../guides/integrations/server.md#supervising-the-broker)
 - [Broker](../reference/api/status/v1alpha1/status.md#broker)
 
+In the code (`magus refs <name>` lists every site):
+
+- `daemon.Broker` (Go)
+
 <!-- END GLOSSARY USAGE -->
 
 ## See also
