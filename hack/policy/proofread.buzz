@@ -63,15 +63,13 @@ final RULES: {str: str} = {
     "comment-budget": "deny",
     "block-budget": "deny",
     "banned-word": "deny",
-    // Graded where their words can mean another thing, but the Markdown lint, the
-    // pr-description step and the commit guard denied them on pages, changelog fragments,
-    // descriptions and commits: a stock label, "in order to", "let's dive in", a template's
-    // unfilled placeholder, a fragment's unknown group.
-    "reply-voice": "deny",
-    "wordy": "deny",
-    "signpost": "deny",
-    "leak": "deny",
-    "changelog-group": "deny",
+    // Their measured precision is under the 0.70 a deny needs, so they advise.
+    "reply-voice": "advise",
+    "wordy": "advise",
+    "signpost": "advise",
+    "leak": "advise",
+    // Unmeasured; the fragment grammar rejects an unknown group.
+    "changelog-group": "advise",
     // The review rules ship off until a labeling round measures them; here they run graded,
     // at weight 0 until one does, each backed by the study or convention its page cites.
     "no-reason": "advise",
