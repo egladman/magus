@@ -163,3 +163,30 @@ func TestFlagHelpFoldsTheNegationAndPrintsTheDefault(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckRefusesAnUndeclaredCommandEffect(t *testing.T) {
+	root := Command{Name: "tool", Children: []Command{{Name: "run", Effect: "writes"}}}
+	err := Check(root)
+	if err == nil || !strings.Contains(err.Error(), `run declares Effect "writes"`) {
+		t.Errorf("want a refusal naming run's Effect, got %v", err)
+	}
+}
+
+func TestCheckRefusesAnUndeclaredFlagEffect(t *testing.T) {
+	flags := []Flag{{Name: "dry-run", Kind: Bool, Default: false, Effect: "none"}}
+	root := Command{Name: "tool", Children: []Command{{Name: "run", Effect: EffectRun, Flags: flags}}}
+	err := Check(root)
+	if err == nil || !strings.Contains(err.Error(), `run --dry-run declares Effect "none"`) {
+		t.Errorf("want a refusal naming --dry-run's Effect, got %v", err)
+	}
+}
+
+func TestCheckAcceptsEveryDeclaredEffect(t *testing.T) {
+	root := Command{Name: "tool"}
+	for _, e := range Effects {
+		root.Children = append(root.Children, Command{Name: string(e), Effect: e})
+	}
+	if err := Check(root); err != nil {
+		t.Error(err)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,10 @@ type Command struct {
 	// UnstructuredOutput means stdout belongs to a script, protocol, or terminal
 	// rather than the -o renderer. Each child declares its own value.
 	UnstructuredOutput bool
+
+	// Effect is what running the command does outside its process. Each
+	// child declares its own value; a Flag may override it.
+	Effect Effect
 
 	// Description is the docs page's meta description; empty falls back to Short.
 	Description string
@@ -68,6 +73,31 @@ const (
 	Custom Kind = "custom"
 )
 
+// Effect classifies what a command does outside its own process, so a
+// reader can judge an argv without running it. The zero value is undeclared.
+type Effect string
+
+const (
+	// EffectRead reads state and changes none.
+	EffectRead Effect = "read"
+	// EffectLocalWrite writes state only this checkout or user reads, such
+	// as a job store entry, a config file or an installed skill.
+	EffectLocalWrite Effect = "local-write"
+	// EffectSharedWrite writes state others read, such as a remote branch,
+	// a pull request, a queue or a running server.
+	EffectSharedWrite Effect = "shared-write"
+	// EffectRun executes workspace code, such as a target or a script,
+	// whose own effects the tree cannot see.
+	EffectRun Effect = "run"
+	// EffectStream follows a source and prints until interrupted.
+	EffectStream Effect = "stream"
+	// EffectWait blocks until something outside the command finishes.
+	EffectWait Effect = "wait"
+)
+
+// Effects lists every declared Effect, in the order above.
+var Effects = []Effect{EffectRead, EffectLocalWrite, EffectSharedWrite, EffectRun, EffectStream, EffectWait}
+
 // Flag is one command-specific flag.
 type Flag struct {
 	Name string // without leading dashes, e.g. "no-cache"
@@ -100,6 +130,11 @@ type Flag struct {
 	// Unit is what a bare number means on a Duration flag (ms, s, m, h). Required
 	// there so help can name it; empty on every other Kind.
 	Unit string
+
+	// Effect replaces the command's Effect when the flag holds a value
+	// other than its Default. Empty keeps the command's Effect. An alias
+	// takes the Effect of the flag it spells.
+	Effect Effect
 }
 
 // Operand is a word a command dispatches on, such as a target name.
@@ -187,14 +222,26 @@ func (c Command) BindFlags(fs *flag.FlagSet) {
 // Check reports every flag declaration in root's tree the generators refuse: a bool
 // whose name starts with no- (declare the positive name; the generator adds the
 // negation), a bool with no Default, and a bool whose --no-<name> form another flag
-// of the same command already takes.
+// of the same command already takes. It also reports an Effect, on a command
+// or a flag, that is none of Effects.
 func Check(root Command) error {
-	errs := checkFlags(root.Name, root.Flags)
+	errs := errors.Join(checkFlags(root.Name, root.Flags), checkEffects(root.Name, root))
 	Walk(root, func(path string, c Command) {
-		if err := checkFlags(path, c.Flags); err != nil {
-			errs = errors.Join(errs, err)
-		}
+		errs = errors.Join(errs, checkFlags(path, c.Flags), checkEffects(path, c))
 	})
+	return errs
+}
+
+func checkEffects(command string, c Command) error {
+	var errs error
+	if c.Effect != "" && !slices.Contains(Effects, c.Effect) {
+		errs = errors.Join(errs, fmt.Errorf("cmdline: %s declares Effect %q, which is none of %v", command, c.Effect, Effects))
+	}
+	for _, f := range c.Flags {
+		if f.Effect != "" && !slices.Contains(Effects, f.Effect) {
+			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s declares Effect %q, which is none of %v", command, f.Name, f.Effect, Effects))
+		}
+	}
 	return errs
 }
 
