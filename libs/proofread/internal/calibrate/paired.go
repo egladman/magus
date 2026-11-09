@@ -91,7 +91,7 @@ func PairedTable(kind proofread.Kind, units, unpaired, pool int, seps []PairedSe
 	}
 
 	fmt.Fprintf(&b, "%s: %d %s, %d texts unpaired; cut at %d%% owner false alarms\n",
-		kind, units, unit, unpaired, PairedFalseAlarmPercent)
+		kind, units, unit, unpaired, pairedFalseAlarmPercent)
 
 	if len(seps) == 0 {
 		fmt.Fprintf(&b, "  no feature measured on %d pairs\n", MinSeparationTexts)
@@ -117,13 +117,13 @@ func PairedTable(kind proofread.Kind, units, unpaired, pool int, seps []PairedSe
 	return b.String()
 }
 
-// PairedFalseAlarmPercent is the share of owner texts a [PairedSeparation]'s
+// pairedFalseAlarmPercent is the share of owner texts a [PairedSeparation]'s
 // cut lets past, the rate voice-drift holds to.
-const PairedFalseAlarmPercent = 5
+const pairedFalseAlarmPercent = 5
 
-// minCutPairs is the fewest pairs a cut at [PairedFalseAlarmPercent] can sit
+// minCutPairs is the fewest pairs a cut at [pairedFalseAlarmPercent] can sit
 // below the owners' maximum on. Under it no feature separates.
-const minCutPairs = 100 / PairedFalseAlarmPercent
+const minCutPairs = 100 / pairedFalseAlarmPercent
 
 // PairedSeparation is how one [proofread.Shape] feature moves from an owner's
 // texts to rewrites of the same texts.
@@ -134,14 +134,14 @@ type PairedSeparation struct {
 	// Higher is the share of pairs whose rewrite measures higher than its
 	// original, ties counted half: 0.5 is no movement.
 	Higher float64 `json:"higher"`
-	// Cut is the owner value no more than [PairedFalseAlarmPercent] of the
+	// Cut is the owner value no more than [pairedFalseAlarmPercent] of the
 	// owner texts pass in the direction the rewrites moved.
 	Cut float64 `json:"cut"`
 	// FalseAlarms and Detected are the shares of owner texts and of rewrites
 	// past the cut.
 	FalseAlarms float64 `json:"false_alarms"`
 	Detected    float64 `json:"detected"`
-	// Separates reports whether Pairs reach 100 / [PairedFalseAlarmPercent] and
+	// Separates reports whether Pairs reach 100 / [pairedFalseAlarmPercent] and
 	// the 95% Wilson lower bound on Detected is above FalseAlarms and the 5% rate.
 	Separates bool `json:"separates"`
 }
@@ -210,7 +210,7 @@ func pairedSeparation(feature proofread.Feature, ov, xv []float64) PairedSeparat
 	s := PairedSeparation{Feature: feature, Pairs: len(ov), Higher: round3(higher / float64(len(ov)))}
 
 	sorted := slices.Sorted(slices.Values(ov))
-	allowed := len(sorted) * PairedFalseAlarmPercent / 100
+	allowed := len(sorted) * pairedFalseAlarmPercent / 100
 
 	past := func(v float64) bool { return v < s.Cut }
 	if s.Higher >= 0.5 {
@@ -223,7 +223,7 @@ func pairedSeparation(feature proofread.Feature, ov, xv []float64) PairedSeparat
 	s.FalseAlarms = round3(float64(alarms) / float64(len(ov)))
 	s.Detected = round3(float64(detected) / float64(len(xv)))
 	s.Separates = len(ov) >= minCutPairs &&
-		WilsonLower(detected, len(xv), z95) > max(s.FalseAlarms, PairedFalseAlarmPercent/100.0)
+		WilsonLower(detected, len(xv), z95) > max(s.FalseAlarms, pairedFalseAlarmPercent/100.0)
 
 	return s
 }
