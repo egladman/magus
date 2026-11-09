@@ -25,6 +25,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/ci/forecast"
@@ -2191,10 +2192,10 @@ func impactReachLines(r *impactReach) []string {
 		return []string{"REACH: no project contains a changed file, so nothing rebuilds"}
 	}
 	out := []string{fmt.Sprintf("REACH: %d project%s edited, %d project%s rebuild",
-		r.Seeds, plural(r.Seeds, "", "s"), r.Rebuilds, plural(r.Rebuilds, "", "s"))}
+		r.Seeds, plural.Word(r.Seeds, "", "s"), r.Rebuilds, plural.Word(r.Rebuilds, "", "s"))}
 	for _, p := range impactCap(r.Projects) {
 		if p.Seed {
-			out = append(out, fmt.Sprintf("      %s - edited, %d file%s", p.Path, p.Files, plural(p.Files, "", "s")))
+			out = append(out, fmt.Sprintf("      %s - edited, %d file%s", p.Path, p.Files, plural.Word(p.Files, "", "s")))
 			continue
 		}
 		out = append(out, fmt.Sprintf("      %s - rebuilds because it depends on one that was", p.Path))
@@ -2209,7 +2210,7 @@ func impactOwnershipLines(owners []impactOwner) []string {
 	out := []string{"OWNERSHIP: who has been changing the projects in reach"}
 	for _, o := range impactCap(owners) {
 		line := fmt.Sprintf("      %s mostly %s (%d%%), %d author%s",
-			o.Project, o.Primary, o.PrimaryShare, o.Authors, plural(o.Authors, "", "s"))
+			o.Project, o.Primary, o.PrimaryShare, o.Authors, plural.Word(o.Authors, "", "s"))
 		if o.BusFactor1 {
 			// The bus factor is the whole point of the lens, so it is stated rather than left
 			// to be inferred from "1 author".
@@ -2232,7 +2233,7 @@ func impactCostLines(c *impactCost) []string {
 		impactDuration(c.TotalMs))}
 	for _, p := range impactCap(c.Projects) {
 		line := fmt.Sprintf("      %s %s ~%s (%d run%s)",
-			p.Project, p.Target, impactDuration(p.Ms), p.Samples, plural(p.Samples, "", "s"))
+			p.Project, p.Target, impactDuration(p.Ms), p.Samples, plural.Word(p.Samples, "", "s"))
 		if p.HitRate > 0 {
 			line += fmt.Sprintf(", %d%% cache hits", int(p.HitRate*100+0.5))
 		}
@@ -2296,12 +2297,12 @@ func impactAge(d time.Duration) string {
 	case d < time.Minute:
 		return "seconds"
 	case d < time.Hour:
-		return fmt.Sprintf("%d minute%s", int(d.Minutes()), plural(int(d.Minutes()), "", "s"))
+		return fmt.Sprintf("%d minute%s", int(d.Minutes()), plural.Word(int(d.Minutes()), "", "s"))
 	case d < 24*time.Hour:
-		return fmt.Sprintf("%d hour%s", int(d.Hours()), plural(int(d.Hours()), "", "s"))
+		return fmt.Sprintf("%d hour%s", int(d.Hours()), plural.Word(int(d.Hours()), "", "s"))
 	default:
 		days := int(d.Hours() / 24)
-		return fmt.Sprintf("%d day%s", days, plural(days, "", "s"))
+		return fmt.Sprintf("%d day%s", days, plural.Word(days, "", "s"))
 	}
 }
 
@@ -2329,7 +2330,7 @@ func impactAdvisorLines(sections []adviceSection, failed []string, base *impactA
 		}
 		found = append(found, s)
 	}
-	out = append(out, fmt.Sprintf("ADVISORS: %d finding%s", len(found), plural(len(found), "", "s")))
+	out = append(out, fmt.Sprintf("ADVISORS: %d finding%s", len(found), plural.Word(len(found), "", "s")))
 	for _, s := range found {
 		out = append(out, "      "+s.Title)
 		for _, line := range strings.Split(strings.TrimRight(s.Body, "\n"), "\n") {
@@ -2358,7 +2359,7 @@ func impactAnchorLines(hits []review.AnchorHit) []string {
 		return []string{"ANCHORS: no note anchors a changed file or symbol"}
 	}
 	out := []string{fmt.Sprintf("ANCHORS: %d note%s anchored to what you changed",
-		len(hits), plural(len(hits), "", "s"))}
+		len(hits), plural.Word(len(hits), "", "s"))}
 	for _, h := range impactCap(hits) {
 		out = append(out, "      "+h.Line())
 	}
@@ -2656,7 +2657,7 @@ func impactLeftBehindLines(l *impactLeftBehind) []string {
 		out = append(out, "LEFT BEHIND: no compat(until:) or Deprecated: marker added")
 	} else {
 		out = append(out, fmt.Sprintf("LEFT BEHIND: %d compat(until:) or Deprecated: marker%s added",
-			len(l.Markers), plural(len(l.Markers), "", "s")))
+			len(l.Markers), plural.Word(len(l.Markers), "", "s")))
 		for _, mk := range impactCap(l.Markers) {
 			out = append(out, fmt.Sprintf("      %s:%d %s %s", mk.Path, mk.Line, mk.Marker, mk.Text))
 		}
@@ -2669,7 +2670,7 @@ func impactLeftBehindLines(l *impactLeftBehind) []string {
 		out = append(out, "      no symbol it stopped using is still defined")
 	default:
 		out = append(out, fmt.Sprintf("      %d symbol%s lost the last use here and %s still defined",
-			len(l.Unreferenced), plural(len(l.Unreferenced), "", "s"), plural(len(l.Unreferenced), "is", "are")))
+			len(l.Unreferenced), plural.Word(len(l.Unreferenced), "", "s"), plural.Word(len(l.Unreferenced), "is", "are")))
 		for _, name := range impactCap(l.Unreferenced) {
 			out = append(out, "        "+name)
 		}
@@ -2689,7 +2690,7 @@ func impactEvidenceLines(hits []trail.Consultation, gap trail.ConsultGap) []stri
 		return impactEvidenceGapLines(gap)
 	}
 	out := []string{fmt.Sprintf("EVIDENCE: %d question%s the authors asked magus while writing this",
-		len(hits), plural(len(hits), "", "s"))}
+		len(hits), plural.Word(len(hits), "", "s"))}
 	for _, h := range impactCap(hits) {
 		// A trailing space on a subjectless verb reads as a truncated line.
 		line := "      " + h.Verb

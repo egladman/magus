@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types/diff"
 	"bytes"
 	"cmp"
@@ -528,7 +529,7 @@ func lsJobs(root string, args []string) error {
 		var ended int
 		list, ended = withoutEnded(list)
 		if ended > 0 {
-			slog.InfoContext(ctx, fmt.Sprintf("%d ended %s left out; `%s` lists them", ended, plural(ended, "job", "jobs"), hint.LsJobs.With("--all")),
+			slog.InfoContext(ctx, fmt.Sprintf("%d ended %s left out; `%s` lists them", ended, plural.Word(ended, "job", "jobs"), hint.LsJobs.With("--all")),
 				attr.Notice("jobs-ended"))
 		}
 	}

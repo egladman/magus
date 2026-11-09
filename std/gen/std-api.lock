@@ -194,6 +194,8 @@ strings.lines
 strings.padLeft
 strings.padRight
 strings.pascalCase
+strings.plural
+strings.pluralCount
 strings.snakeCase
 strings.splitN
 strings.trimPrefix

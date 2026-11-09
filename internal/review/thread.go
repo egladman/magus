@@ -1,6 +1,7 @@
 package review
 
 import (
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types/diff"
 	"context"
 	"fmt"
@@ -136,7 +137,7 @@ func AttachThreads(rev *diff.Diff, hunks []changeset.FileHunks, comments []diff.
 
 // ThreadRefLine is how a report names one thread beside the code it sits on.
 func ThreadRefLine(r diff.ThreadRef) string {
-	line := fmt.Sprintf("thread %s, %d %s", r.ID, r.Comments, plural(r.Comments, "comment", "comments"))
+	line := fmt.Sprintf("thread %s, %d %s", r.ID, r.Comments, plural.Word(r.Comments, "comment", "comments"))
 	if r.Outdated {
 		line += ", outdated"
 	}
@@ -457,9 +458,3 @@ func printableLines(lines []string) []string {
 	return out
 }
 
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
-}

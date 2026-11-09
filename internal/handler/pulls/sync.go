@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/log/attr"
 	pullsv1 "github.com/egladman/magus/proto/gen/go/magus/pulls/v1alpha1"
@@ -164,7 +165,7 @@ func (p *Poller) scheduleNext(now time.Time) {
 	if wait := failureBackoff(p.opts.Config.Floor, p.failures); wait > c.interval {
 		c = cadence{
 			interval: wait,
-			reason:   fmt.Sprintf("%s failed in a row: retrying in %s", plural(p.failures, "sync", "syncs"), formatDuration(wait)),
+			reason:   fmt.Sprintf("%s failed in a row: retrying in %s", plural.Count(p.failures, "sync", "syncs"), formatDuration(wait)),
 		}
 	}
 	p.isHeld = c.isHold

@@ -39,6 +39,7 @@
 namespace agentpolicy\pullRequests;
 
 import "std";
+import "strings";
 import "magus";
 import "vcs";
 import "proc";
@@ -1127,12 +1128,6 @@ export fun wordBudget(units: Units) > int {
     return baseWords + wordsPerChange * units.count;
 }
 
-fun plural(n: int, noun: str) > str {
-    if (n == 1) {
-        return "1 {noun}";
-    }
-    return "{n} {noun}s";
-}
 
 // overBudget names a description of words words after its lead past its budget, and what
 // U counted.
@@ -1143,11 +1138,11 @@ fun overBudget(words: int, units: Units) > str {
     if (units.breaking) {
         breaking = " plus 1 for the breaking title";
     }
-    var terms = "{plural(units.clauses, noun: "title clause")}";
+    var terms = "{strings\pluralCount(units.clauses, one: "title clause", many: "title clauses")}";
     if (f.known) {
-        terms = "{plural(f.fragments, noun: "changelog fragment")}{breaking}, " + terms
-            + ", {plural(f.shipped, noun: "shipped source file")} (counting {units.files}) and "
-            + "{plural(f.lines, noun: "changed line")} outside generated files (counting {units.lines})";
+        terms = "{strings\pluralCount(f.fragments, one: "changelog fragment", many: "changelog fragments")}{breaking}, " + terms
+            + ", {strings\pluralCount(f.shipped, one: "shipped source file", many: "shipped source files")} (counting {units.files}) and "
+            + "{strings\pluralCount(f.lines, one: "changed line", many: "changed lines")} outside generated files (counting {units.lines})";
     } else if (units.breaking) {
         terms = terms + ", 1 for the breaking title";
     }
@@ -1156,7 +1151,7 @@ fun overBudget(words: int, units: Units) > str {
         read = "; the branch's diff against its base could not be read, so it counts as 1 and this is advice, not a denial";
     }
     return "{words} words after the lead, past this pull request's budget of {wordBudget(units)} "
-        + "({baseWords} + {wordsPerChange} for each of {plural(u, noun: "change")}, "
+        + "({baseWords} + {wordsPerChange} for each of {strings\pluralCount(u, one: "change", many: "changes")}, "
         + "the most of {terms}){read}. Cut it to what a reviewer needs to review it, or split the "
         + "pull request if it carries more changes than that";
 }
@@ -1370,7 +1365,7 @@ export fun judgeShape(body: str) > Findings {
         }
     }
     if (walls > 0) {
-        advice.append("prose between the lead and the first heading outside the bullets ({plural(walls, noun: "paragraph")}): "
+        advice.append("prose between the lead and the first heading outside the bullets ({strings\pluralCount(walls, one: "paragraph", many: "paragraphs")}): "
             + "make each change a bullet, and put the rest under a Considerations heading");
     }
     return Findings{ denies = denies, advice = advice };

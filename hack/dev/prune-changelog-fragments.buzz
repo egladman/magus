@@ -7,6 +7,7 @@ import "result";
 import "serialize";
 import "sort";
 import "std";
+import "strings";
 import "vcs";
 
 import "assert";
@@ -90,10 +91,6 @@ fun short(id: str) > str {
     return id.sub(0, len: 12);
 }
 
-fun plural(n: int, word: str) > str {
-    if (n == 1) { return "1 {word}"; }
-    return "{n} {word}s";
-}
 
 fun owns(l: Line, id: str) > bool {
     return l.commit == id or (l.commit.len() >= 7 and id.startsWith(l.commit));
@@ -265,8 +262,8 @@ fun livesReason(c: Commit, t: Trace) > str {
     final paths = sort\strings(t.surviving.keys());
     foreach (p in paths) { n = n + t.surviving[p]!.len(); }
     var where = paths[0];
-    if (paths.len() > 1) { where = "{paths[0]} and {plural(paths.len() - 1, word: "more path")}"; }
-    var s = "{short(c.id)} still owns {plural(n, word: "line")} at HEAD in {where}";
+    if (paths.len() > 1) { where = "{paths[0]} and {strings\pluralCount(paths.len() - 1, one: "more path", many: "more paths")}"; }
+    var s = "{short(c.id)} still owns {strings\pluralCount(n, one: "line", many: "lines")} at HEAD in {where}";
     if (t.reason != "") { s = "{s} ({t.reason})"; }
     return s;
 }
@@ -506,9 +503,9 @@ export fun headline(verdicts: [Verdict], applied: bool) > str {
     final kinds = "{n["superseded"] ?? 0} superseded, {n["obsolete"] ?? 0} obsolete, {n["duplicate"] ?? 0} duplicate";
     final rewrite = n["rewrite"] ?? 0;
     if (applied) {
-        return "dropped {drop} of {plural(verdicts.len(), word: "fragment")} ({kinds}), rewrote {rewrite}";
+        return "dropped {drop} of {strings\pluralCount(verdicts.len(), one: "fragment", many: "fragments")} ({kinds}), rewrote {rewrite}";
     }
-    return "dry run: would drop {drop} of {plural(verdicts.len(), word: "fragment")} ({kinds}) and rewrite {rewrite}; nothing changed, pass --apply to write";
+    return "dry run: would drop {drop} of {strings\pluralCount(verdicts.len(), one: "fragment", many: "fragments")} ({kinds}) and rewrite {rewrite}; nothing changed, pass --apply to write";
 }
 
 fun indent(text: str, by: str) > str {

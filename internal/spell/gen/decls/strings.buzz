@@ -18,6 +18,8 @@ export extern fun lines(s: str) > [str];
 export extern fun padLeft(s: str, length: int, pad: str = " ") > str !> any;
 export extern fun padRight(s: str, length: int, pad: str = " ") > str !> any;
 export extern fun pascalCase(s: str) > str;
+export extern fun plural(n: int, one: str, many: str) > str;
+export extern fun pluralCount(n: int, one: str, many: str) > str;
 export extern fun snakeCase(s: str) > str;
 export extern fun splitN(s: str, sep: str, n: int) > [str];
 export extern fun trimPrefix(s: str, prefix: str) > str;

@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -163,7 +164,7 @@ func judgeStopTasks(deps Dependencies, said hint.Gate, env stopEnvelope, resumes
 		Decision:      decisionAdvise,
 		Rule:          string(denyRuleBackgroundLeft),
 		Context: fmt.Sprintf("magus workspace: %s this session ran in the background %s still running; stop any nothing waits on:\n%s",
-			plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "is", "are"), stoppableTasks(tasks, now)),
+			plural.Word(len(tasks), "a shell command", "shell commands"), plural.Word(len(tasks), "is", "are"), stoppableTasks(tasks, now)),
 	}, true, false
 }
 
@@ -188,7 +189,7 @@ func adviseResumedStop(tasks []backgroundTask, why string, now time.Time) types.
 		Decision:      decisionAdvise,
 		Rule:          string(denyRuleBackgroundLeft),
 		Context: fmt.Sprintf("magus workspace: this stop stands and the job stays yours: %s.\n%s you ran in the background %s still running:\n%s",
-			why, plural(len(tasks), "A shell command", "Shell commands"), plural(len(tasks), "is", "are"), stoppableTasks(tasks, now)),
+			why, plural.Word(len(tasks), "A shell command", "Shell commands"), plural.Word(len(tasks), "is", "are"), stoppableTasks(tasks, now)),
 	}
 }
 
@@ -363,12 +364,6 @@ func resumedStop(raw, resumesFrom string, now time.Time) bool {
 	return resumes
 }
 
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
-}
 
 // describeTasks lists tasks one per line: id, start, age and the command's first line.
 func describeTasks(tasks []backgroundTask, now time.Time) string {
@@ -431,7 +426,7 @@ func judgeBackgroundSilent(transcript string, limits backgroundLimits, said hint
 	if stuck := slices.DeleteFunc(slices.Clone(tasks), func(t backgroundTask) bool { return silentFor(t) < limits.deny }); len(stuck) > 0 {
 		return denial{
 			Say: fmt.Sprintf("magus workspace: %s this session ran in the background %s written nothing for over %s; stop %s before anything else:\n%s\n%s",
-				plural(len(stuck), "a shell command", "shell commands"), plural(len(stuck), "has", "have"), limits.deny, plural(len(stuck), "it", "each"), silentTasks(stuck, now), resumeAfterStop(limits.ceiling)),
+				plural.Word(len(stuck), "a shell command", "shell commands"), plural.Word(len(stuck), "has", "have"), limits.deny, plural.Word(len(stuck), "it", "each"), silentTasks(stuck, now), resumeAfterStop(limits.ceiling)),
 			Why: why,
 		}, advice{}
 	}
@@ -443,7 +438,7 @@ func judgeBackgroundSilent(transcript string, limits backgroundLimits, said hint
 	}
 	return denial{}, advice{
 		Say: fmt.Sprintf("magus workspace: %s this session ran in the background %s written nothing for over %s; stop any that is stuck:\n%s\n%s",
-			plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "has", "have"), limits.advise, silentTasks(tasks, now), resumeAfterStop(limits.ceiling)),
+			plural.Word(len(tasks), "a shell command", "shell commands"), plural.Word(len(tasks), "has", "have"), limits.advise, silentTasks(tasks, now), resumeAfterStop(limits.ceiling)),
 		Why: why,
 	}
 }

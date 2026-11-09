@@ -489,7 +489,6 @@ var modules = []Module{
 		Methods: []Method{
 			{Name: "parseWorktrees", Doc: "parseWorktrees reads `git worktree list --porcelain`: one stanza per worktree, the main", Sig: "reclaimdisk\\parseWorktrees(porcelain) -> [Worktree]"},
 			{Name: "displayPath", Doc: "displayPath is path relative to the main worktree when it sits under it.", Sig: "reclaimdisk\\displayPath(path, main) -> str"},
-			{Name: "plural", Doc: "", Sig: "reclaimdisk\\plural(n, word) -> str"},
 			{Name: "age", Doc: "", Sig: "reclaimdisk\\age(ms) -> str"},
 			{Name: "size", Doc: "", Sig: "reclaimdisk\\size(kib) -> str"},
 			{Name: "parseCwds", Doc: "", Sig: "reclaimdisk\\parseCwds(lsof) -> [Cwd]"},
@@ -599,6 +598,8 @@ var modules = []Module{
 			{Name: "fields", Doc: "Split s around runs of whitespace, discarding empties. Picking a column out of a tool's version banner is what this is for; str.split(\" \") cannot, because it yields an empty element per extra space.", Sig: "strings\\fields(s) -> []string"},
 			{Name: "split_n", Doc: "Split s on sep into at most n pieces, leaving any remaining separators in the final piece; n of -1 means no limit. Parsing a KEY=VALUE line whose value itself contains the separator needs this rather than str.split.", Sig: "strings\\splitN(s, sep, n) -> []string"},
 			{Name: "collapse_ws", Doc: "Fold every run of whitespace in s into a single space and trim the ends, so a multi-line value reads as one clean line.", Sig: "strings\\collapseWs(s) -> string"},
+			{Name: "plural", Doc: "Return one when n is 1, else many; zero is plural. The caller spells both forms, so no rule derives \"es\" or \"ies\".", Sig: "strings\\plural(n, one, many) -> string"},
+			{Name: "plural_count", Doc: "Return n and the matching form of one or many, as \"1 target\" or \"3 targets\".", Sig: "strings\\pluralCount(n, one, many) -> string"},
 		},
 	},
 	{
