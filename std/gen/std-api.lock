@@ -142,12 +142,16 @@ os.retry
 os.sleep
 os.withEnv
 path.abs
+path.base
 path.clean
+path.dir
 path.expandUser
 path.isAbs
+path.join
 path.matches
 path.matchesAny
 path.rel
+path.within
 pipe.all
 pipe.diff
 pipe.emit
