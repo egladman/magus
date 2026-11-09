@@ -230,3 +230,43 @@ func TestDeniedCheckProblemsDeferWhenTheRulesDidNotLoad(t *testing.T) {
 	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.WritePaths, u.Check = row.WritePaths, row.Check }, config.Jobs{}, nil)
 	require.NoError(t, err)
 }
+
+// GradeMemoSuite pins what a GradeMemo answers without judging: a verdict reached under
+// the same key, never a deferral and never an unkeyed grade.
+type GradeMemoSuite struct {
+	suite.Suite
+	memo *GradeMemo
+}
+
+func TestGradeMemoSuite(t *testing.T) {
+	suite.Run(t, new(GradeMemoSuite))
+}
+
+func (s *GradeMemoSuite) SetupTest() {
+	s.memo = NewGradeMemo()
+}
+
+func (s *GradeMemoSuite) TestAKeptVerdictIsReadBack() {
+	denied := CheckVerdict{Denied: true, Rule: "r", Reason: "no"}
+	s.Equal(denied, s.memo.Grade("k", func() CheckVerdict { return denied }))
+	s.Equal(denied, s.memo.Grade("k", func() CheckVerdict { return CheckVerdict{} }))
+	s.Equal(1, s.memo.Judged())
+}
+
+func (s *GradeMemoSuite) TestAnotherKeyJudgesAgain() {
+	s.memo.Grade("k", func() CheckVerdict { return CheckVerdict{} })
+	s.memo.Grade("other", func() CheckVerdict { return CheckVerdict{} })
+	s.Equal(2, s.memo.Judged())
+}
+
+func (s *GradeMemoSuite) TestADeferralIsJudgedAgain() {
+	s.memo.Grade("k", func() CheckVerdict { return CheckVerdict{Deferred: "ran out of time"} })
+	s.Equal(CheckVerdict{}, s.memo.Grade("k", func() CheckVerdict { return CheckVerdict{} }))
+	s.Equal(2, s.memo.Judged())
+}
+
+func (s *GradeMemoSuite) TestAnEmptyKeyKeepsNothing() {
+	s.memo.Grade("", func() CheckVerdict { return CheckVerdict{} })
+	s.memo.Grade("", func() CheckVerdict { return CheckVerdict{} })
+	s.Equal(2, s.memo.Judged())
+}

@@ -113,8 +113,6 @@ in his, claims the same page for the section he wants:
 
 ```console
 $ magus job fork fr/upgrading --criteria 'upgrading section in French' --write-paths docs/fr/install.md --check 'lint .'
-note: loading the symbol graph; a missing or stale symbol index is rebuilt first, which can take minutes
-note: loaded the symbol graph in 0ms
 note: judging fr/upgrading's goals; a goal naming a symbol loads the symbol graph
 note: judged fr/upgrading's goals in 0ms
 [error] 1 problem:

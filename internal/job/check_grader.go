@@ -63,6 +63,59 @@ func (s *Store) checkGrader() CheckGrader {
 	return installedCheckGrader()
 }
 
+// WithGrader returns a Store over s's file that grades a declared check with g in place of
+// s's own grader or the installed one: a fork wraps the grader it validates with in memos
+// that live as long as that fork. The view takes its own mutex, as [Store.As] does.
+func (s *Store) WithGrader(g CheckGrader) *Store {
+	v := s.view()
+	v.grader = g
+	return v
+}
+
+// GradeMemo keeps the verdicts a grader reached, under a key the caller derives from
+// everything the verdict reads, for a caller that grades the same checks again and again
+// against a tree it holds still. It keeps no deferred verdict: a deferral is the clock's or
+// the binary's, and the next grade may reach one. Safe for concurrent use.
+type GradeMemo struct {
+	mu       sync.Mutex
+	verdicts map[string]CheckVerdict
+	judged   int
+}
+
+// NewGradeMemo is an empty memo.
+func NewGradeMemo() *GradeMemo {
+	return &GradeMemo{verdicts: map[string]CheckVerdict{}}
+}
+
+// Grade answers the verdict kept under key, else the one judge reaches, kept unless it is
+// deferred. An empty key keeps nothing and always judges. Two grades of one key at once may
+// both judge.
+func (m *GradeMemo) Grade(key string, judge func() CheckVerdict) CheckVerdict {
+	if key != "" {
+		m.mu.Lock()
+		v, ok := m.verdicts[key]
+		m.mu.Unlock()
+		if ok {
+			return v
+		}
+	}
+	v := judge()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.judged++
+	if key != "" && v.Deferred == "" {
+		m.verdicts[key] = v
+	}
+	return v
+}
+
+// Judged is how many grades reached judge.
+func (m *GradeMemo) Judged() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.judged
+}
+
 // installedCheckGrader is the grader [SetCheckGrader] installed, nil when none is.
 func installedCheckGrader() CheckGrader {
 	installedGraderMu.RLock()
