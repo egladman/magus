@@ -206,16 +206,14 @@ func TestLoadFailurePassesOtherCommandsWithTheNote(t *testing.T) {
 			assert.Contains(t, v.Context, note)
 		})
 	}
-	t.Run("told in full once, then in one line", func(t *testing.T) {
+	t.Run("told in full every time", func(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
 		recordLoadedPolicy(t, cacheDir)
+		want := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: note, Rule: string(advisoryCommandRuleFailed)}
 		first := Judge(ctx, unloadedDeps(), Request{Input: "ls", Host: "claude-code", Session: "s1"})
-		assert.Equal(t, types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: note, Rule: string(advisoryCommandRuleFailed)}, first)
+		assert.Equal(t, want, first)
 		repeat := Judge(ctx, unloadedDeps(), Request{Input: "ls", Host: "claude-code", Session: "s1"})
-		assert.Equal(t, types.GuardJudgment{
-			SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Rule: string(advisoryCommandRuleFailed),
-			Context: "Only the built-in rules applied to this command. A workspace command rule is still failing, as told earlier in this session.",
-		}, repeat)
+		assert.Equal(t, want, repeat)
 	})
 }
 
@@ -279,7 +277,7 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 		assert.Contains(t, v.Context, fmt.Sprintf("Judged by %s (%s), this checkout's ./magus.", deps.Binary, version))
 		assert.NotContains(t, v.Context, "Fix:")
 	})
-	t.Run("the repeat stays one line", func(t *testing.T) {
+	t.Run("the repeat is told in full", func(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
 		recordLoadedPolicy(t, cacheDir)
 		root := ownCheckout(t, ctx, true)
@@ -289,8 +287,8 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 		Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
 		repeat := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
 
-		assert.NotContains(t, repeat.Context, "Judged by")
-		assert.Contains(t, repeat.Context, "is still failing, as told earlier in this session")
+		assert.Contains(t, repeat.Context, "Judged by")
+		assert.NotContains(t, repeat.Context, "is still failing")
 	})
 }
 
@@ -359,7 +357,7 @@ func TestSkewedBinaryIsAWorkspaceRuleErrorEveryCall(t *testing.T) {
 				assert.NotContains(t, first.Context, "Fix:")
 			}
 			repeat := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
-			assert.Contains(t, repeat.Context, "A workspace command rule is still failing, as told earlier in this session.")
+			assert.Equal(t, first.Context, repeat.Context)
 		})
 	}
 
@@ -385,12 +383,12 @@ func TestJudgingBinaryNoteForAWorkerAsksTheMainSession(t *testing.T) {
 	assert.Empty(t, judgingBinaryNote(Dependencies{}, at, stale, ""))
 }
 
-// A record that registered no command rule protects no command.
-func TestLoadFailureOfAnUnregisteredSeamPasses(t *testing.T) {
+// A record that registered no command rule still denies a push: nothing loaded.
+func TestLoadFailureOfAnUnregisteredSeamDenies(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	RecordPolicy(t.Context(), cacheDir, "/w", PolicyState{Digest: "d1", SpawnRule: true}, false)
 	v := Judge(ctx, unloadedDeps(), Request{Input: "git push", Host: "claude-code", Session: "s1"})
-	assert.Equal(t, decisionAdvise, v.Decision)
+	assert.Equal(t, decisionDeny, v.Decision)
 }
 
 // JudgedShortSuite pins what a call meets while a workspace rule judges nothing: a gated
@@ -450,15 +448,22 @@ func (s *JudgedShortSuite) TestARuleThatRaisesPassesAReadWithTheNote() {
 }
 
 func (s *JudgedShortSuite) TestALoadFailureWithNoRecordDeniesAGatedVerb() {
-	ctx, cacheDir := spawnFixture(s.T())
+	ctx, _ := spawnFixture(s.T())
 	v := Judge(ctx, unloadedDeps(), Request{Input: "gh pr merge 412 --admin", Host: "claude-code", Session: "s1"})
-	s.Contains(s.stored(cacheDir, v), "No policy of this workspace is on record as loading here, so nothing says it has no magus\\guard.command rule")
+	s.Equal(decisionDeny, v.Decision)
 }
 
-func (s *JudgedShortSuite) TestALoadFailureWithNoRecordPassesOtherCommandsWithTheNote() {
+func (s *JudgedShortSuite) TestALoadFailureWithNoRecordPassesAReadWithTheNote() {
 	ctx, _ := spawnFixture(s.T())
 	v := Judge(ctx, unloadedDeps(), Request{Input: "ls -la", Host: "claude-code", Session: "s1"})
 	s.Equal(verdictWithRule(decisionAdvise, string(advisoryCommandRuleFailed)), unworded(v))
+}
+
+func (s *JudgedShortSuite) TestALoadFailureWithNoRecordDeniesAStateChange() {
+	ctx, _ := spawnFixture(s.T())
+	v := Judge(ctx, unloadedDeps(), Request{Input: "touch NOTES.md", Host: "claude-code", Session: "s1"})
+	s.Equal(decisionDeny, v.Decision)
+	s.Equal(string(denyRuleStaleBinary), v.Rule)
 }
 
 // A spawn is gated; a continuation of a child already running is not.

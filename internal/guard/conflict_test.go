@@ -261,5 +261,5 @@ func TestConflictedPolicySaysSoOnEveryCall(t *testing.T) {
 	assert.True(t, strings.HasPrefix(first.Context, lead+"\n\nThe working tree's magus\\guard.command rule judged nothing: "), first.Context)
 
 	repeat := Judge(ctx, unloadedDependencies(errConflictedLoad), Request{Input: "ls", Host: "claude-code", Session: "s1"})
-	assert.Equal(t, lead+"\n\nOnly the built-in rules applied to this command. A workspace command rule is still failing, as told earlier in this session.", repeat.Context)
+	assert.Equal(t, first.Context, repeat.Context)
 }

@@ -148,13 +148,12 @@ func TestUnloadedTreeWithoutABinaryNamesTheMissingBinary(t *testing.T) {
 	assert.NotContains(t, stored, "older than")
 }
 
-// With no guard rule showing and none ever recorded there is no policy to have lost, so a
-// binary that cannot load the tree denies nothing.
-func TestUnloadedTreeWithoutAVisibleRuleDeniesNothing(t *testing.T) {
+// No rule showing or recorded still denies a change while nothing loads.
+func TestUnloadedTreeWithoutAVisibleRuleDeniesAChange(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	ownCheckout(t, ctx, false)
 	v := judgeUnloaded(ctx, unloadedDependencies(errMissingMember), "touch notes.txt")
-	assert.NotEqual(t, decisionDeny, v.Decision, v.Reason)
+	assert.Equal(t, decisionDeny, v.Decision, v.Reason)
 }
 
 // A ./magus older than the tree denies an edit, a spawn, a push and a state-writing magus

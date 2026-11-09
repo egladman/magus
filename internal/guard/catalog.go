@@ -38,8 +38,8 @@ type ruleDocEntry struct {
 	// they are catalogued anyway, because a reader asking what this workspace enforces is
 	// owed the whole set rather than the half that happens to apply to them today.
 	advisory bool
-	// enrolled advisories are held to one firing per session by a hint.MarkerKind gate;
-	// the rest speak on every match.
+	// enrolled advisories skip the repeat suppression. A gate holds them to
+	// one firing, or they speak in full every time.
 	enrolled bool
 }
 
@@ -160,9 +160,9 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocSharedCheckout, advisory: true, enrolled: true},
 	{doc: ruleDocStageClassify, advisory: true, enrolled: true},
 	{doc: ruleDocUnleasedWrite, advisory: true, enrolled: true},
-	{doc: ruleDocWorkspaceCommandFailed, advisory: true},
-	{doc: ruleDocWorkspaceWriteFailed, advisory: true},
-	{doc: ruleDocWorkspaceSpawnFailed, advisory: true},
+	{doc: ruleDocWorkspaceCommandFailed, advisory: true, enrolled: true},
+	{doc: ruleDocWorkspaceWriteFailed, advisory: true, enrolled: true},
+	{doc: ruleDocWorkspaceSpawnFailed, advisory: true, enrolled: true},
 	{doc: ruleDocGuardUnfinished, advisory: true},
 	{doc: ruleDocOrchestratorGroundwork},
 	{doc: ruleDocRootContextBudget, advisory: true},
@@ -1189,9 +1189,9 @@ var ruleDocWorkspaceCommandFailed = types.RuleDoc{
 	Name:    string(advisoryCommandRuleFailed),
 	Catches: "a command the workspace's rule could not judge, so only the built-in rules graded it",
 	Why: "A workspace command rule that fails to load or errors judges nothing, and a command reaching a verdict without it must say so rather than read as fully judged. " +
-		"The first notice in a session names each failing side and its error; a repeat is one line naming what applied. " +
+		"Every notice names each failing side and its error, in full, and says what applied. " +
 		"It stands alone only when the built-in rules passed the command; on any other verdict the note is appended to that verdict. " +
-		"Standing alone, the one line is said once per caller: like every advisory not held by its own marker, the same text is not repeated to the same caller in a session. " +
+		"Standing alone, it is said in full on every call; nothing holds it to one firing." +
 		"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing.",
 }
 
@@ -1199,7 +1199,7 @@ var ruleDocWorkspaceWriteFailed = types.RuleDoc{
 	Name:    string(advisoryWriteRuleFailed),
 	Catches: "a file write the workspace's rule could not judge, so only the built-in rules graded it",
 	Why: "A workspace write rule that fails to load or errors judges nothing, and a write reaching a verdict without it must say so rather than read as fully judged. " +
-		"The first notice in a session names each failing side and its error; a repeat is one line naming what applied. " +
+		"Every notice names each failing side and its error, in full, and says what applied. " +
 		"It stands alone only when the built-in rules passed the write; on any other verdict the note is appended to that verdict. " +
 		"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing.",
 }
@@ -1208,7 +1208,7 @@ var ruleDocWorkspaceSpawnFailed = types.RuleDoc{
 	Name:    string(advisorySpawnRuleFailed),
 	Catches: "a spawn the workspace's rule could not judge, so only the built-in rules graded it",
 	Why: "A workspace spawn rule that fails to load or errors judges nothing, and a spawn or continuation reaching a verdict without it must say so rather than read as fully judged. " +
-		"The first notice in a session names each failing side and its error; a repeat is one line naming what applied. " +
+		"Every notice names each failing side and its error, in full, and says what applied. " +
 		"It stands alone only when the built-in rules passed the call; on any other verdict the note is appended to that verdict. " +
 		"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing.",
 }

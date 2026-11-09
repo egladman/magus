@@ -1224,6 +1224,8 @@ func execBuzzSource(ctx context.Context, src *Source, parseMode bool) (*loadedBu
 		}
 		if store != nil {
 			buzzSess.SetBytecodeStore(store)
+		} else {
+			slog.With(attr.Component("interp")).WarnContext(ctx, "guard rules compile on every load: no sealed bytecode store (no root, build id, cache dir or seal key, or a reader that is neither the working tree nor the approved sources)", "dir", src.Dir)
 		}
 	}
 

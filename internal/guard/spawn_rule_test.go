@@ -241,9 +241,7 @@ func TestSpawnRuleFailureFailsOpen(t *testing.T) {
 	assert.Contains(t, first.Context, "Only the built-in rules applied to this spawn.")
 
 	repeat := Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	assert.Equal(t, "advise", repeat.Decision)
-	assert.NotContains(t, repeat.Context, "boom", "the repeat is one line")
-	assert.Contains(t, repeat.Context, "Only the built-in rules applied to this spawn.")
+	assert.Equal(t, first, repeat, "the note is told in full every time")
 }
 
 // The approved rule and the working-tree rule both run and the stricter answer stands,

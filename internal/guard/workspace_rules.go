@@ -666,37 +666,15 @@ func EffectiveProfile(ctx context.Context, rules *WorkspaceRules, root string) t
 // working tree's load, nil when it did not load, in which case root's approved sources
 // decide alone, as they do for the function rules.
 //
-// A side that does not resolve leaves the defaults at the light level in its place rather
-// than failing: a broken commit must not take down every hook any more than a broken
-// working tree does.
+// Nil is the bare defaults. A side that does not resolve adds nothing, and
+// Wiring reports its error as the load failure.
 func BuiltinSettings(ctx context.Context, rules *WorkspaceRules, root string) map[string]builtin.Setting {
-	var effective map[string]builtin.Setting
 	if rules != nil {
-		effective, _ = rules.effectiveBuiltins(ctx)
-	} else if approved, err := LoadApprovedBuiltins(ctx, root); err == nil {
-		effective = approved
-	}
-	if effective != nil {
+		effective, _ := rules.effectiveBuiltins(ctx)
 		return effective
 	}
-	return lightBuiltins()
-}
-
-// lightBuiltins is every compiled rule's setting at the light level. The guard reads nil as
-// the bare defaults, which would drop what the light level sets, so nil is the answer only
-// when the compiled-in light row does not resolve: a magus bug, which
-// TestBuiltinSettingsFallsBackToTheLightLevel pins away, and which leaves the defaults
-// rather than taking down every hook.
-func lightBuiltins() map[string]builtin.Setting {
-	light, err := builtin.ResolveProfile(types.GuardProfileLight, nil)
-	if err != nil || len(light) == 0 {
-		return nil
-	}
-	effective, err := builtin.Resolve(light)
-	if err != nil {
-		return nil
-	}
-	return effective
+	approved, _ := LoadApprovedBuiltins(ctx, root)
+	return approved
 }
 
 func loadApprovedRegistry(ctx context.Context, root string) (*workspace.WorkspaceRegistry, error) {
@@ -1343,7 +1321,9 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 			return loadApprovedRegistry(ctx, w.Root)
 		})
 	}
-	deps.Builtins = w.approvedBuiltins(ctx, registry)
+	var builtinsErr error
+	deps.Builtins, builtinsErr = w.approvedBuiltins(ctx, registry)
+	deps.LoadFailure = errors.Join(deps.LoadFailure, builtinsErr)
 	deps.ApprovedSpawnRule = func(ctx context.Context) (workspace.SpawnRule, error) {
 		reg, err := registry(ctx)
 		if err != nil || reg == nil {
@@ -1381,16 +1361,16 @@ func (w Wiring) builtins(ctx context.Context, rules *WorkspaceRules) map[string]
 	return BuiltinSettings(ctx, rules, "")
 }
 
-// approvedBuiltins is BuiltinSettings for a working tree that did not load, traced, read off
-// the registry the function rules share.
-func (w Wiring) approvedBuiltins(ctx context.Context, registry func(context.Context) (*workspace.WorkspaceRegistry, error)) map[string]builtin.Setting {
+// approvedBuiltins is BuiltinSettings for a working tree that did not load,
+// read off the registry the function rules share. The error says why the
+// approved side did not resolve.
+func (w Wiring) approvedBuiltins(ctx context.Context, registry func(context.Context) (*workspace.WorkspaceRegistry, error)) (map[string]builtin.Setting, error) {
 	defer w.trace(ctx, "guard.builtins_resolve")()
-	if reg, err := registry(ctx); err == nil {
-		if settings, err := approvedBuiltins(w.Root, reg); err == nil && settings != nil {
-			return settings
-		}
+	reg, err := registry(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return lightBuiltins()
+	return approvedBuiltins(w.Root, reg)
 }
 
 // revisionAt answers the revision rev names in the checkout holding dir, for the push gate,
