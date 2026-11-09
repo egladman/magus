@@ -67,6 +67,9 @@ const (
 	// RuleSecondPerson reports we, us, our or ours in a guide, which speaks to
 	// the reader as you.
 	RuleSecondPerson Rule = "second-person"
+	// RuleFirstPerson reports I, me or my in a reference page or a guide
+	// outside an author's note, the one place a page speaks as its author.
+	RuleFirstPerson Rule = "first-person"
 	// RuleStepVerb reports a step of a numbered procedure in a guide that does
 	// not open with its imperative verb.
 	RuleStepVerb Rule = "step-verb"
@@ -182,28 +185,16 @@ var kindAliases = map[string]Kind{
 	"message":                     KindDiagnostic,
 }
 
-// withoutPrinciple drops KindPrinciple from a rule's kinds, for a rule the
-// written kinds share and a principle page's argument is exempt from.
-func withoutPrinciple(kinds []Kind) []Kind {
-	return slices.DeleteFunc(kinds, func(k Kind) bool { return k == KindPrinciple })
-}
-
-// kinds is every kind proofread judges; ParseKind answers from it.
-var kinds = []Kind{
-	KindDocComment, KindReference, KindPrinciple, KindChangeDescription, KindAgentBrief, KindAgentCompact, KindSkillTemplate,
-	KindGuide, KindReviewSummary, KindReviewInline, KindReviewReply, KindDiagnostic, KindCommitMessage,
-	KindCLIHelp, KindIssue, KindReleaseNotes, KindChangelog, KindAgentReply, KindToolDescription, KindStylesheet,
-}
-
-// ParseKind returns the kind name names. A former name of a kind parses to
-// that kind. A name that is none of the kinds returns false and no kind.
+// ParseKind returns the built-in kind name names. A former name of a kind
+// parses to that kind. A name that is none of the built-in kinds returns false
+// and no kind.
 func ParseKind(name string) (Kind, bool) {
 	if k, ok := kindAliases[name]; ok {
 		return k, true
 	}
 
-	if k := Kind(name); slices.Contains(kinds, k) {
-		return k, true
+	if _, ok := builtins[Kind(name)]; ok {
+		return Kind(name), true
 	}
 
 	return "", false
@@ -273,125 +264,93 @@ func (d *Decision) UnmarshalText(text []byte) error {
 
 func (d Decision) valid() bool { return d >= DecisionOff && d <= DecisionDeny }
 
-var (
-	docOnly = []Kind{KindDocComment}
-	written = []Kind{KindReference, KindPrinciple, KindGuide, KindChangeDescription, KindAgentBrief}
-	all     = []Kind{KindDocComment, KindReference, KindPrinciple, KindGuide, KindChangeDescription, KindAgentBrief}
-	brief   = []Kind{KindAgentBrief}
-	compact = []Kind{KindAgentCompact}
-	guide   = []Kind{KindGuide}
-	// reviewed is text written to the people working on the change, where a
-	// sentence about past work or a reviewer is about someone the reader knows.
-	reviewed = slices.Concat([]Kind{KindChangeDescription}, reviewText)
-	// reviewText is every text a review posts: its body, a comment on a line of
-	// the diff and a reply in a thread.
-	reviewText = []Kind{KindReviewSummary, KindReviewInline, KindReviewReply}
-	diagnostic = []Kind{KindDiagnostic}
-	// changeText is what a repository writes about its own changes for the people
-	// who follow them: a commit, an issue, release notes and a changelog.
-	changeText = []Kind{KindCommitMessage, KindIssue, KindReleaseNotes, KindChangelog}
-	// proseKinds are the written kinds and changeText: the kinds the word and claim
-	// rules read as another person's words.
-	proseKinds = slices.Concat(written, changeText)
-	help       = []Kind{KindCLIHelp}
-	// toneKinds are the kinds the posture rules judge: text written to the people
-	// working on the change. Release notes and a changelog speak to users, who are
-	// owed what changed rather than a posture, so only a commit and an issue join.
-	toneKinds = slices.Concat(reviewed, []Kind{KindCommitMessage, KindIssue})
-)
-
-// check is one rule: the kinds it judges, its default decision, and the judge
-// itself.
+// check is one rule: the formats its judge can read, and the judge itself.
+// Which kinds it judges, and at what decision, is each [KindSpec]'s to say.
 type check struct {
-	rule Rule
-	on   []Kind
-	// graded marks a rule whose default is [DecisionAdvise] on every kind of
-	// on: its words have senses it cannot tell apart from the one it means, so
-	// its measured weight lowers a grade instead. Any other rule denies.
-	graded bool
-	// house marks a rule that encodes one repository's conventions rather than
-	// plain writing. It defaults to [DecisionOff] on every kind and
-	// runs only where a decisions table names it.
-	house bool
+	rule  Rule
+	reads []Format
 	judge func(in input) []Finding
 }
 
-// defaultDecision is what c decides on kind when no decisions table names it:
-// its declared decision, or off for an [unmeasured] rule.
-func (c check) defaultDecision(kind Kind) Decision {
-	if unmeasured[c.rule] {
+// defaultDecision is what c decides on s when no decisions table names it:
+// s's decision, or off for an [unmeasured] rule on a built-in kind.
+func (c check) defaultDecision(s *KindSpec) Decision {
+	if unmeasured[c.rule] && !s.declared {
 		return DecisionOff
 	}
 
-	return c.declaredDecision(kind)
+	return s.Rules[c.rule]
 }
 
-// declaredDecision is what c's check declares for kind, before [unmeasured].
-func (c check) declaredDecision(kind Kind) Decision {
-	switch {
-	case c.house || !slices.Contains(c.on, kind):
-		return DecisionOff
-	case c.graded:
-		return DecisionAdvise
-	default:
-		return DecisionDeny
+// isHouse reports whether r is house style: off on every built-in kind that
+// it judges, so it runs only where a decisions table names it.
+func isHouse(r Rule) bool {
+	judged := false
+
+	for i := range builtinKinds {
+		if d, ok := builtinKinds[i].Rules[r]; ok {
+			if d != DecisionOff {
+				return false
+			}
+
+			judged = true
+		}
 	}
+
+	return judged
 }
 
 // checks run in this order, which is the order [Judge] and [JudgeText] report
 // in. A doc keeps the rules it was always judged by: the rules written for
 // Markdown and pull requests would hold every doc comment in the tree to
 // them at once, with no sweep behind it.
-var checks = slices.Concat(coreChecks, cssChecks, toneChecks, slopChecks, messageChecks, commitChecks, helpChecks,
-	issueChecks, densityChecks, reviewChecks, reviewKindChecks, suppressChecks, agentReplyChecks, toolChecks, listChecks, voiceChecks,
+var checks = slices.Concat(coreChecks, cssChecks, toneChecks, slopChecks, markupChecks, messageChecks, commitChecks, helpChecks,
+	issueChecks, densityChecks, reviewChecks, reviewKindChecks, suppressChecks, agentReplyChecks, toolChecks, listChecks, voiceChecks, uniformChecks,
 	compactChecks, skillChecks, []check{templateCheck, gradeCheck}, triadChecks)
 
 var messageChecks = []check{
-	{rule: RuleMessageLength, on: diagnostic, judge: messageLength},
-	{rule: RuleMessageRationale, on: diagnostic, judge: messageRationale},
-	{rule: RuleMessageCommands, on: diagnostic, judge: messageCommands},
-	{rule: RuleMessageTag, on: diagnostic, judge: messageTag},
+	{rule: RuleMessageLength, reads: []Format{FormatMessage}, judge: messageLength},
+	{rule: RuleMessageRationale, reads: []Format{FormatMessage}, judge: messageRationale},
+	{rule: RuleMessageCommands, reads: []Format{FormatMessage}, judge: messageCommands},
+	{rule: RuleMessageTag, reads: []Format{FormatMessage}, judge: messageTag},
 }
 
 // templateCheck has no judge: a template that does not render is reported
 // before any rule runs, and the entry gives the rule its decisions and its
 // place in [Rules].
-var templateCheck = check{rule: RuleTemplate, on: []Kind{KindSkillTemplate}, house: true}
+var templateCheck = check{rule: RuleTemplate, reads: []Format{FormatTemplate}}
 
 // Another rule leaves a span to each of these where it reports the span
 // itself, so one span gives one finding; see [input.reports].
 var (
 	fillerCheck = check{
-		rule: RuleFiller, on: slices.Concat(everywhere, stylesheet), graded: true, judge: filler,
+		rule: RuleFiller, reads: []Format{FormatMarkdown, FormatLines, FormatPlain, FormatDocComment, FormatStylesheet}, judge: filler,
 	}
-	leadContextCheck = check{rule: RuleLeadContext, on: []Kind{KindChangeDescription}, judge: leadContext}
-	tenseCheck       = check{rule: RuleTense, on: withoutPrinciple(slices.Concat(proseKinds, compact, stylesheet)), house: true, judge: tense}
+	leadContextCheck = check{rule: RuleLeadContext, reads: proseFormats, judge: leadContext}
+	tenseCheck       = check{rule: RuleTense, reads: []Format{FormatMarkdown, FormatLines, FormatStylesheet}, judge: tense}
 )
 
-// comment is a doc comment and a stylesheet's comments, which the comment
-// rules judge alike.
-var comment = slices.Concat(docOnly, stylesheet)
-
 var coreChecks = []check{
-	{rule: RuleCommentBlock, on: comment, house: true, judge: commentBlock},
-	{rule: RuleCommentSentence, on: comment, house: true, judge: commentSentence},
+	{rule: RuleCommentBlock, reads: []Format{FormatDocComment, FormatStylesheet}, judge: commentBlock},
+	{rule: RuleCommentSentence, reads: []Format{FormatDocComment, FormatStylesheet}, judge: commentSentence},
 	fillerCheck,
-	{rule: RuleTerms, on: slices.Concat(everywhere, stylesheet), house: true, judge: terms},
-	{rule: RuleAside, on: slices.Concat(comment, help), house: true, judge: aside},
-	{rule: RuleHistory, on: comment, house: true, judge: history},
-	{rule: RuleDocStub, on: docOnly, house: true, judge: docStub},
+	{rule: RuleTerms, reads: []Format{FormatMarkdown, FormatLines, FormatPlain, FormatDocComment, FormatStylesheet}, judge: terms},
+	{rule: RuleAside, reads: []Format{FormatPlain, FormatDocComment, FormatStylesheet}, judge: aside},
+	{rule: RuleHistory, reads: []Format{FormatDocComment, FormatStylesheet}, judge: history},
+	{rule: RuleDocStub, reads: []Format{FormatDocComment}, judge: docStub},
 	leadContextCheck,
-	{rule: RuleReplyVoice, on: slices.Concat(withReply, compact, stylesheet), graded: true, judge: replyVoice},
+	{rule: RuleReplyVoice, reads: []Format{FormatMarkdown, FormatLines, FormatStylesheet}, judge: replyVoice},
 	tenseCheck,
-	{rule: RuleHedge, on: slices.Concat(proseKinds, compact, agentReply, stylesheet), graded: true, judge: hedge},
-	{rule: RuleAttribution, on: slices.Concat(withReply, compact, stylesheet), house: true, judge: attribution},
-	{rule: RuleTerseSentence, on: brief, house: true, judge: terseSentence},
-	{rule: RuleTerseParagraph, on: brief, house: true, judge: terseParagraph},
-	{rule: RuleWordy, on: slices.Concat(proseKinds, agentReply), graded: true, judge: wordy},
-	{rule: RuleBareRule, on: slices.Concat(brief, compact), house: true, judge: bareRule},
-	{rule: RuleSecondPerson, on: guide, judge: secondPerson},
-	{rule: RuleStepVerb, on: guide, judge: stepVerb},
-	{rule: RuleCondescension, on: slices.Concat(withReply, compact, help, agentReply), judge: condescension},
+	{rule: RuleHedge, reads: []Format{FormatMarkdown, FormatLines, FormatStylesheet}, judge: hedge},
+	{rule: RuleAttribution, reads: []Format{FormatMarkdown, FormatLines, FormatStylesheet}, judge: attribution},
+	{rule: RuleTerseSentence, reads: proseFormats, judge: terseSentence},
+	{rule: RuleTerseParagraph, reads: proseFormats, judge: terseParagraph},
+	{rule: RuleWordy, reads: proseFormats, judge: wordy},
+	{rule: RuleBareRule, reads: proseFormats, judge: bareRule},
+	{rule: RuleSecondPerson, reads: proseFormats, judge: secondPerson},
+	{rule: RuleStepVerb, reads: proseFormats, judge: stepVerb},
+	{rule: RuleFirstPerson, reads: proseFormats, judge: firstPersonSingular},
+	{rule: RuleCondescension, reads: []Format{FormatMarkdown, FormatLines, FormatPlain}, judge: condescension},
 }
 
 // Rules returns every rule in the order [Judge] and [JudgeText] report them.
@@ -427,12 +386,23 @@ func RuleDecisions(in map[string]string) (map[Rule]Decision, error) {
 	return out, nil
 }
 
-// KindRules returns the rules that judge kind, in [Rules] order.
+// KindRules returns the rules that judge the built-in kind, in [Rules] order,
+// and none for a name that is no built-in kind.
 func KindRules(kind Kind) []Rule {
+	s, ok := builtins[kind]
+	if !ok {
+		return nil
+	}
+
+	return s.RuleList()
+}
+
+// RuleList returns the rules that judge s, in [Rules] order.
+func (s *KindSpec) RuleList() []Rule {
 	var out []Rule
 
 	for _, c := range checks {
-		if slices.Contains(c.on, kind) {
+		if s.judges(c.rule) {
 			out = append(out, c.rule)
 		}
 	}
@@ -472,6 +442,9 @@ type Finding struct {
 	// Weight is what the finding costs its text's [Grade]: its rule's measured
 	// weight on an advise finding, 0 on a deny finding or an unmeasured rule.
 	Weight float64
+	// WeightSet marks a Weight the kind's spec set rather than one a
+	// labeling round measured.
+	WeightSet bool
 	// Code is the rule's PRF code, and URL the page that documents it.
 	Code diagnostics.Code
 	URL  string
@@ -483,6 +456,9 @@ type Finding struct {
 	// a rule that substitutes a word or a phrase offers one: a rewrite of a
 	// tone or claim finding would change what the writer meant.
 	Replacements []string
+	// Protected are the spans Match covers that a fix should keep. A deny
+	// that covers one is reported as advice.
+	Protected []Protected
 }
 
 // Option tunes one [Judge] or [JudgeText] call.
@@ -494,9 +470,16 @@ type options struct {
 	threadLength int
 	event        Event
 	voice        *Voice
+	// localBranches are the names [RuleLocalBranch] reports.
+	localBranches []string
+	// futureSections are the headings [RuleTense] lets speak of later work.
+	futureSections []string
 	// minimum is the grade under which a text gets a [RuleGrade] finding, nil
 	// for a call that grades nothing.
 	minimum *int
+	// kinds are the kinds [WithKinds] declared, which [JudgeText] resolves
+	// after the built-ins.
+	kinds []KindSpec
 }
 
 // WithOnly judges by the named rules alone. A named rule that does not apply
@@ -542,14 +525,10 @@ const (
 // posted with. Without it, a rule that needs the verdict judges nothing.
 func WithEvent(e Event) Option { return func(o *options) { o.event = e } }
 
-// isReview reports whether k is a text a review posts: its summary, an inline
-// comment or a reply.
-func isReview(k Kind) bool { return slices.Contains(reviewText, k) }
-
 // input is what a rule reads.
 type input struct {
 	symbol Symbol
-	kind   Kind
+	spec   *KindSpec
 	prose  []proseLine
 	// lines are the judged text's lines with what is not prose blanked, code
 	// still in place, for a rule that asks what a block is rather than what it
@@ -572,7 +551,7 @@ type input struct {
 func Judge(s Symbol, opts ...Option) []Finding {
 	lines := strings.Split(s.Doc, "\n")
 	out := run(input{
-		symbol: s, kind: KindDocComment, prose: readProse(lines, false), lines: lines, source: lines, opts: collect(opts),
+		symbol: s, spec: spec(KindDocComment), prose: readProse(lines, false), lines: lines, source: lines, opts: collect(opts),
 	})
 
 	for i := range out {
@@ -586,7 +565,7 @@ func run(in input) []Finding {
 	var out []Finding
 
 	for _, c := range checks {
-		d := in.opts.decide(c, in.kind)
+		d := in.opts.decide(c, in.spec)
 		if d == DecisionOff || c.judge == nil {
 			continue
 		}
@@ -598,11 +577,11 @@ func run(in input) []Finding {
 		slices.SortStableFunc(found, func(a, b Finding) int { return a.Line - b.Line })
 
 		for _, f := range found {
-			out = append(out, in.locate(in.opts.settle(c, f, d)))
+			out = append(out, in.locate(in.opts.settle(in.spec, c, f, d)))
 		}
 	}
 
-	out = in.suppress(out)
+	out = protect(in.suppress(out), protectedSpans(in.source))
 	if f, ok := in.grade(out); ok {
 		out = append(out, f)
 	}
@@ -627,20 +606,20 @@ func (in input) locate(f Finding) Finding {
 	return f
 }
 
-// decide returns the decision c's findings on kind carry, or [DecisionOff]
-// when c does not run there.
-func (o options) decide(c check, kind Kind) Decision {
-	if !slices.Contains(c.on, kind) || (len(o.only) > 0 && !slices.Contains(o.only, c.rule)) ||
-		(c.rule == RuleVoiceDrift && o.voice == nil) {
+// decide returns the decision c's findings on s carry, or [DecisionOff] when
+// c does not run there.
+func (o options) decide(c check, s *KindSpec) Decision {
+	if !s.judges(c.rule) || (len(o.only) > 0 && !slices.Contains(o.only, c.rule)) ||
+		((c.rule == RuleVoiceDrift || c.rule == RuleUniform) && o.voice == nil) {
 		return DecisionOff
 	}
 
 	d, ok := o.decisions[c.rule]
 	if !ok {
-		d = c.defaultDecision(kind)
+		d = c.defaultDecision(s)
 	}
 
-	if d == DecisionDeny && o.voice.relaxes(c.rule, kind) {
+	if d == DecisionDeny && o.voice.relaxes(c.rule, s) {
 		return DecisionAdvise
 	}
 
@@ -649,11 +628,11 @@ func (o options) decide(c check, kind Kind) Decision {
 
 // reports reports whether c runs on the text in holds. A rule that leaves a
 // span to c asks first, so the span is still reported where c is off.
-func (in input) reports(c check) bool { return in.opts.decide(c, in.kind) != DecisionOff }
+func (in input) reports(c check) bool { return in.opts.decide(c, in.spec) != DecisionOff }
 
-// settle gives f the rule, code and decision d of c. A decision the rule
-// marked on f itself stands only while no table names the rule.
-func (o options) settle(c check, f Finding, d Decision) Finding {
+// settle gives f the rule, code and decision d of c, judged on s. A decision
+// the rule marked on f itself stands only while no table names the rule.
+func (o options) settle(s *KindSpec, c check, f Finding, d Decision) Finding {
 	if _, named := o.decisions[c.rule]; named || f.Decision == 0 {
 		f.Decision = d
 	}
@@ -662,9 +641,12 @@ func (o options) settle(c check, f Finding, d Decision) Finding {
 	f.Code = ruleTexts[c.rule].code
 	f.URL = prf.URL(f.Code)
 
-	f.Weight = 0
+	f.Weight, f.WeightSet = 0, false
 	if f.Decision == DecisionAdvise {
 		f.Weight = weights[c.rule]
+		if w, set := s.Weights[c.rule]; set {
+			f.Weight, f.WeightSet = w, true
+		}
 	}
 
 	return f

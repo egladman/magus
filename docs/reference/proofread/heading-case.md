@@ -30,8 +30,8 @@ The code is `PRF4013`. The decision depends on the kind of text judged:
 | --------------- | ------- |
 | `reference`     | advise  |
 | `principle`     | advise  |
-| `guide`         | advise  |
 | `agent-brief`   | advise  |
+| `guide`         | advise  |
 | `issue`         | advise  |
 | `release-notes` | advise  |
 

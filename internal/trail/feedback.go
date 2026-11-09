@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	trailtypes "github.com/egladman/magus/types/trail"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
 )
 
 // FeedbackWindow selects one session's observations: the events inside [Since, Until]
@@ -59,9 +59,9 @@ func FeedbackBases(checkouts []string, cacheRel string, since time.Time) []strin
 // trail rotates blobs out with the events that cite them.
 //
 // Checkouts on the result names the bases that held at least one event of the session.
-func ReadFeedback(bases []string, w FeedbackWindow) (types.Trail, error) {
+func ReadFeedback(bases []string, w FeedbackWindow) (trailtypes.Trail, error) {
 	since, until := w.Since.UnixMilli(), w.Until.UnixMilli()
-	out := types.Trail{Start: since, End: until, Session: w.Session}
+	out := trailtypes.Trail{Start: since, End: until, Session: w.Session}
 	type sourced struct {
 		base string
 		e    Event
@@ -108,7 +108,7 @@ func ReadFeedback(bases []string, w FeedbackWindow) (types.Trail, error) {
 			if e.Action == ActionAgentContinue {
 				continue
 			}
-			sp := types.TrailSpawn{At: e.Ts, Agent: e.Agent, Child: e.Action, Lease: e.Lease}
+			sp := trailtypes.Spawn{At: e.Ts, Agent: e.Agent, Child: e.Action, Lease: e.Lease}
 			if raw, err := ReadBlob(s.base, e.RequestRef); err == nil {
 				var req agentSpawnRequest
 				if json.Unmarshal(raw, &req) == nil {
@@ -122,12 +122,12 @@ func ReadFeedback(bases []string, w FeedbackWindow) (types.Trail, error) {
 	return out, nil
 }
 
-func feedbackObservation(base string, e Event) (types.TrailObservation, bool) {
+func feedbackObservation(base string, e Event) (trailtypes.Observation, bool) {
 	var req agentCommandRequest
 	var resp agentCommandResponse
 	raw, err := ReadBlob(base, e.RequestRef)
 	if err != nil || json.Unmarshal(raw, &req) != nil {
-		return types.TrailObservation{}, false
+		return trailtypes.Observation{}, false
 	}
 	// A read carries no response blob: no rule judges it.
 	if e.ResponseRef != "" {
@@ -135,7 +135,7 @@ func feedbackObservation(base string, e Event) (types.TrailObservation, bool) {
 			_ = json.Unmarshal(raw, &resp)
 		}
 	}
-	obs := types.TrailObservation{
+	obs := trailtypes.Observation{
 		At: e.Ts, Agent: e.Agent, Lease: e.Lease, Tool: req.Tool,
 		Command: req.Command, Path: req.Path,
 		Decision: resp.Decision, Rule: resp.Rule, PreauthorizedBy: resp.PreauthorizedBy,

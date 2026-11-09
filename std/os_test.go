@@ -20,10 +20,8 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
-	"github.com/egladman/magus/std/gen/stdtest"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -134,10 +132,8 @@ func TestOsExecResolvesCwd(t *testing.T) {
 	})
 }
 
-// cbFunc adapts a plain func to the host.Callback interface for tests.
+// cbFunc is the callback with_env and with_slots take.
 type cbFunc func(context.Context) error
-
-func (f cbFunc) Call(ctx context.Context, _ ...any) ([]any, error) { return nil, f(ctx) }
 
 func TestOsWithSlots(t *testing.T) {
 	lim := cache.NewLimiter(4)
@@ -389,23 +385,9 @@ func TestFsStatMapKeys(t *testing.T) {
 	assert.False(t, info.IsDir)
 }
 
-// watchCallback adapts a Go func(changed) (stop bool) to the host.Callback the
-// fs.watch binding hands FsWatch.
-type watchCallback struct {
-	fn func(changed []string) bool
-}
-
-func (c watchCallback) Call(_ context.Context, args ...any) ([]any, error) {
-	var changed []string
-	if len(args) > 0 {
-		changed, _ = args[0].([]string)
-	}
-	return []any{c.fn(changed)}, nil
-}
-
 func TestFsWatchRequiresPaths(t *testing.T) {
 	t.Parallel()
-	err := FsWatch(context.Background(), nil, watchCallback{fn: func([]string) bool { return true }})
+	err := FsWatch(context.Background(), nil, func(context.Context, []string) (bool, error) { return true, nil })
 	assert.Error(t, err, "FsWatch with no paths should error")
 }
 
@@ -415,13 +397,13 @@ func TestFsWatchRequiresPaths(t *testing.T) {
 func TestFsWatchFiresCallbackAndStops(t *testing.T) {
 	dir := t.TempDir()
 	fired := make(chan []string, 1)
-	cb := watchCallback{fn: func(changed []string) bool {
+	cb := func(_ context.Context, changed []string) (bool, error) {
 		select {
 		case fired <- changed:
 		default:
 		}
-		return true // stop after the first batch
-	}}
+		return true, nil // stop after the first batch
+	}
 
 	done := make(chan error, 1)
 	go func() { done <- FsWatch(context.Background(), []string{dir}, cb) }()
@@ -456,15 +438,6 @@ func TestFsWatchFiresCallbackAndStops(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("FsWatch did not return after the callback asked to stop")
 	}
-}
-
-func TestCallbackTruthy(t *testing.T) {
-	t.Parallel()
-	assert.False(t, callbackTruthy(nil), "nil should be falsy")
-	assert.False(t, callbackTruthy([]any{nil}), "[nil] should be falsy")
-	assert.False(t, callbackTruthy([]any{false}), "[false] should be falsy")
-	assert.True(t, callbackTruthy([]any{true}), "[true] should be truthy")
-	assert.True(t, callbackTruthy([]any{"non-bool is truthy"}), "[non-bool] should be truthy")
 }
 
 func TestRelToCwd(t *testing.T) {
@@ -592,15 +565,31 @@ func TestOsExecDefaultsToNotQuiet(t *testing.T) {
 	assert.Equal(t, "shown", res.Stdout)
 }
 
-// failThenAnswer is a Callback that fails its first failures calls and then answers once
-// with ret. A call past those fails the test.
-func failThenAnswer(t *testing.T, failures int, ret ...any) *stdtest.MockCallback {
-	cb := stdtest.NewMockCallback(t)
-	if failures > 0 {
-		cb.EXPECT().Call(mock.Anything).Return(nil, errors.New("attempt failed")).Times(failures)
+// attempts is an os\retry fn that fails its first failures calls with err,
+// then answers ret. It counts every call.
+type attempts struct {
+	failures int
+	err      error
+	ret      any
+	calls    int
+}
+
+func (a *attempts) fn(context.Context) (any, error) {
+	a.calls++
+	if a.calls <= a.failures {
+		return nil, a.err
 	}
-	cb.EXPECT().Call(mock.Anything).Return(ret, nil).Once()
-	return cb
+	return a.ret, nil
+}
+
+// failThenAnswer fails failures calls, then answers ret.
+func failThenAnswer(failures int, ret any) *attempts {
+	return &attempts{failures: failures, err: errors.New("attempt failed"), ret: ret}
+}
+
+// alwaysFail fails every call with err.
+func alwaysFail(err error) *attempts {
+	return &attempts{failures: math.MaxInt, err: err}
 }
 
 // covFastRetry keeps the backoff below a millisecond so exercising the retry loop
@@ -608,35 +597,38 @@ func failThenAnswer(t *testing.T, failures int, ret ...any) *stdtest.MockCallbac
 var covFastRetry = types.RetryOptions{BackoffMs: new(0.1), MaxBackoffMs: new(1.0)}
 
 func TestOsRetryReturnsTheFirstSuccess(t *testing.T) {
-	// Once: a success must not be retried.
-	got, err := OsRetry(context.Background(), 3, failThenAnswer(t, 0, "answer"), types.RetryOptions{})
+	cb := failThenAnswer(0, "answer")
+	got, err := OsRetry(context.Background(), 3, cb.fn, types.RetryOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, "answer", got)
+	assert.Equal(t, 1, cb.calls, "a success is not retried")
 }
 
 func TestOsRetryRetriesUntilItSucceeds(t *testing.T) {
-	got, err := OsRetry(context.Background(), 5, failThenAnswer(t, 2, 42), covFastRetry)
+	cb := failThenAnswer(2, 42)
+	got, err := OsRetry(context.Background(), 5, cb.fn, covFastRetry)
 	require.NoError(t, err)
 	assert.Equal(t, 42, got)
+	assert.Equal(t, 3, cb.calls)
 }
 
 // TestOsRetryWithNoReturnValue: a callback that returns nothing succeeded, so the
 // result is the no-value result rather than an error.
 func TestOsRetryWithNoReturnValue(t *testing.T) {
-	got, err := OsRetry(context.Background(), 2, failThenAnswer(t, 0), types.RetryOptions{})
+	got, err := OsRetry(context.Background(), 2, failThenAnswer(0, nil).fn, types.RetryOptions{})
 	require.NoError(t, err)
 	assert.Nil(t, got)
 }
 
 func TestOsRetryExhaustsAndReportsTheLastError(t *testing.T) {
 	boom := errors.New("still broken")
-	cb := stdtest.NewMockCallback(t)
-	cb.EXPECT().Call(mock.Anything).Return(nil, boom).Times(3)
+	cb := alwaysFail(boom)
 
-	_, err := OsRetry(context.Background(), 3, cb, covFastRetry)
+	_, err := OsRetry(context.Background(), 3, cb.fn, covFastRetry)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, boom, "the caller needs the reason, not just the count")
 	assert.Contains(t, err.Error(), `os\retry: 3 attempt(s)`)
+	assert.Equal(t, 3, cb.calls)
 }
 
 func TestOsRetryRejectsANilCallback(t *testing.T) {
@@ -658,10 +650,11 @@ func TestOsRetryRefusesAMisconfiguredBackoff(t *testing.T) {
 		{"NaN backoff", types.RetryOptions{BackoffMs: new(math.NaN())}, "backoffMs"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			// A mock with no expectations fails the test if fn is called.
-			_, err := OsRetry(context.Background(), 2, stdtest.NewMockCallback(t), tc.opts)
+			cb := failThenAnswer(0, nil)
+			_, err := OsRetry(context.Background(), 2, cb.fn, tc.opts)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), `os\retry: `+tc.key)
+			assert.Zero(t, cb.calls, "fn does not run")
 		})
 	}
 }
@@ -671,12 +664,12 @@ func TestOsRetryRefusesAMisconfiguredBackoff(t *testing.T) {
 // exhaustion count.
 func TestOsRetryStopsOnANonRetryableError(t *testing.T) {
 	boom := types.NonRetryable(errors.New("hook is not a command"), types.RetryAfterConfig, "edit the hook")
-	cb := stdtest.NewMockCallback(t)
-	cb.EXPECT().Call(mock.Anything).Return(nil, boom).Once()
+	cb := alwaysFail(boom)
 
-	_, err := OsRetry(context.Background(), 5, cb, covFastRetry)
+	_, err := OsRetry(context.Background(), 5, cb.fn, covFastRetry)
 	require.Error(t, err)
 	assert.Same(t, boom, err)
+	assert.Equal(t, 1, cb.calls)
 }
 
 // TestOsRetryHonorsCancellationDuringBackoff: an interrupted run must wake out of
@@ -685,11 +678,10 @@ func TestOsRetryHonorsCancellationDuringBackoff(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	// Once: the cancellation must land in the first backoff.
-	cb := stdtest.NewMockCallback(t)
-	cb.EXPECT().Call(mock.Anything).Return(nil, errors.New("attempt failed")).Once()
-	_, err := OsRetry(ctx, 3, cb, types.RetryOptions{BackoffMs: new(60000.0)})
+	cb := alwaysFail(errors.New("attempt failed"))
+	_, err := OsRetry(ctx, 3, cb.fn, types.RetryOptions{BackoffMs: new(60000.0)})
 	assert.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, 1, cb.calls, "the cancellation lands in the first backoff")
 }
 
 // TestOsWithEnv: the overrides ride the context so subprocesses started inside the

@@ -1,0 +1,14 @@
+Cases written with the rule (2026-11-08); no labeling round has scored it.
+The author's own voice on a page that speaks for the project. A note opened
+with [!AUTHOR] is multi-line and is covered by the package tests.
+-- hit/reference --
+I keep the magus entry on a worktree that stays on main.
+It suits my setup.
+-- hit/guide --
+Run the build. I run it twice.
+-- pass/reference --
+It answers "how do I build this?"
+Set `my-flag` to bound I/O.
+Read [I think our tools are the problem](blog/tools.md).
+-- pass/guide --
+Add the entry, then run `magus ls`.

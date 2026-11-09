@@ -24,7 +24,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
@@ -196,52 +195,6 @@ func gateUnchanged(ctx context.Context, deps Dependencies, workspace string) (se
 		}
 	}
 	return last, true
-}
-
-// gateReplayScanLimit bounds how many distinct commits with a passing gate are asked for
-// their tree, newest first: one VCS read each, on a push the gate has not covered by commit.
-const gateReplayScanLimit = 64
-
-// gateReplayAt is the newest passing gate recorded at another commit whose tree equals
-// commit's, in the checkout dir. A replayed branch holds the files a gate already passed
-// under new commit ids, so the gate covers it. False when either tree cannot be read:
-// the push then stays graded by commit alone.
-func gateReplayAt(ctx context.Context, workspace, dir, commit string) (sessions.GateRecord, bool) {
-	if workspace == "" || dir == "" || !matchableRevision(commit) {
-		return sessions.GateRecord{}, false
-	}
-	res, err := vcs.Resolve(ctx, dir, "", types.VCSOptions{})
-	if err != nil || res.VCS == nil {
-		return sessions.GateRecord{}, false
-	}
-	tree, err := res.VCS.TreeID(ctx, dir, commit)
-	if err != nil || tree == "" {
-		return sessions.GateRecord{}, false
-	}
-	store, err := sessions.Dir(workspace)
-	if err != nil {
-		return sessions.GateRecord{}, false
-	}
-	fold, err := sessions.ReadGateResults(store)
-	if err != nil {
-		return sessions.GateRecord{}, false
-	}
-	seen := map[string]bool{}
-	for i := len(fold.Records) - 1; i >= 0 && len(seen) < gateReplayScanLimit; i-- {
-		rec := fold.Records[i]
-		var g sessions.GateResult
-		if rec.Kind != sessions.KindGateResult || json.Unmarshal(rec.Payload, &g) != nil {
-			continue
-		}
-		if g.Target != string(types.TargetCI) || g.Outcome != sessions.OutcomePass || !g.Scope.CoversBranch() || g.Commit == "" || seen[g.Commit] {
-			continue
-		}
-		seen[g.Commit] = true
-		if id, err := res.VCS.TreeID(ctx, dir, g.Commit); err == nil && id == tree {
-			return sessions.GateRecord{GateResult: g, At: time.UnixMilli(rec.Ts)}, true
-		}
-	}
-	return sessions.GateRecord{}, false
 }
 
 // workspaceRunsDir is where this workspace logs its invocations, or "" when there is none
@@ -928,7 +881,7 @@ func uncheckedDenial(v runVerdict, me types.Job, checks []types.LeaseCheck, defa
 func uncheckedCause(err error) string {
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
-		return fmt.Sprintf("opening the workspace took longer than the guard's %s budget for it", inspectBudget)
+		return fmt.Sprintf("opening the workspace took longer than the guard's %s budget", hookBudget)
 	case errors.Is(err, errNoDependency):
 		return "the guard was handed no way to open the workspace"
 	}
@@ -2079,6 +2032,12 @@ func isDescendant(held leaseStanding, id string) bool {
 		slices.ContainsFunc(types.JobDescendants(held.rows, held.row.ID), func(r types.Job) bool { return r.ID == id })
 }
 
+// rootHeld reports an integrate row with no parent lease: the root took it with
+// `job exec` because no one else may merge for it. It still forks sibling rows.
+func rootHeld(s leaseStanding) bool {
+	return s.row.Parent == "" && s.row.Integrating()
+}
+
 // childFork is the row a fork declares, as far as childForkRebind reads it.
 type childFork struct {
 	id, parent string
@@ -2113,6 +2072,8 @@ func childForkRebind(f childFork, h holder, verb, ask string) rebind {
 		return rebind{problem: fmt.Sprintf("would %s the guard cannot read", verb), fix: fmt.Sprintf("give the child an id and --parent %s, or its record in a quoted heredoc.", h.id)}
 	case f.id == h.id:
 		return rebind{problem: "would rewrite the job it holds", ask: "change it"}
+	case f.parent == "" && rootHeld(held) && !slices.ContainsFunc(held.rows, func(r types.Job) bool { return r.ID == f.id }):
+		return rebind{}
 	case f.parent != h.id:
 		return rebind{problem: fmt.Sprintf("is outside lease %s's tree", h.id), ask: ask,
 			why: fmt.Sprintf("It would %s outside its own tree: a row a worker creates must name %s as its parent, and this one names %q.", verb, h.id, f.parent)}
@@ -3400,7 +3361,7 @@ func mergeRefusal(operand, base string, row types.Job) string {
 		accepts = append(accepts, "a depends_on branch: "+strings.Join(deps, ", "))
 	}
 	if row.Integrating() {
-		accepts = append(accepts, "a branch it integrates, merged by name: "+strings.Join(row.Integrates, ", "))
+		accepts = append(accepts, "a branch it integrates, merged as <b>, origin/<b>, refs/heads/<b> or refs/remotes/origin/<b>: "+strings.Join(row.Integrates, ", "))
 	}
 	const moves = " To move this checkout to any other commit, run `git merge --ff-only <commit id>`."
 	switch len(accepts) {

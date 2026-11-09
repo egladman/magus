@@ -16,18 +16,14 @@ import "strings";
 import "magus/lint";
 import "hack/lint/support" as support;
 
-// HOSTS are the host hook configs this repository owns: the one it dogfoods, and the
-// one it ships for a reader to copy.
+// HOSTS are the host hook configs this repository ships for a reader to copy.
+// The Claude Code config is installed per checkout, not tracked, since #625.
 export final HOSTS = {
-    "claude-code": ".claude/settings.json",
     "codex": "docs/guides/integrations/agents/codex-hooks.json",
 };
 
-// FORMS are the glue commands each host's spell renders. Claude Code
-// picks the session checkout's ./magus before PATH's, and the glue then
-// judges with the event cwd's.
+// FORMS are the glue commands each host's spell renders.
 final FORMS = {
-    "claude-code": "m=\"$CLAUDE_PROJECT_DIR\"/magus; [ -x \"$m\" ] || m=magus; \"$m\" buzz -C \"$CLAUDE_PROJECT_DIR\" -s <file> [-- flags]",
     "codex": "magus buzz -C . -s <file> [-- flags]",
 };
 
@@ -92,12 +88,12 @@ export fun check(files: [Path]) > [Finding] !> any {
     return found;
 }
 
-// configs is both shipped configs, the dogfooded one wiring command on PreToolUse.
+// configs is the shipped config wiring command on PreToolUse.
 fun configs(command: str) > [Path] !> any {
     final body = "\{\n  \"hooks\": \{\n    \"PreToolUse\": [\n"
         + "      \{\"matcher\": \"Bash\", \"hooks\": [\{\"type\": \"command\", \"command\": \"" + command + "\"}]}\n"
         + "    ]\n  }\n}\n";
-    return support\fixture({HOSTS["claude-code"]!: body, HOSTS["codex"]!: "\{\"hooks\": \{}}"});
+    return support\fixture({HOSTS["codex"]!: body});
 }
 
 test "plain argv and a prefix on a command that runs no Buzz glue pass" {
@@ -122,19 +118,19 @@ test "the shipped checkout-first form passes, and a knob on its glue segment doe
     assert\equal(check(configs(head + glue)).len(), want: 0, message: "the binary choice runs before the glue segment");
     final got = check(configs(head + "MAGUS_GUARD_ADVISE=1 " + glue));
     assert\equal(got.len(), want: 1, message: "a knob after the binary choice");
-    assert\isTrue(got[0].fix.indexOf("[ -x \"$m\" ] || m=magus") != null, message: got[0].fix);
+    assert\isTrue(got[0].fix.indexOf("magus buzz -C . -s <file>") != null, message: got[0].fix);
 }
 
 test "a prefix on the Buzz glue is reported at its line" {
     final got = check(configs("MAGUS_GUARD_ADVISE=1 magus buzz -s docs/guides/integrations/agents/magus-command.buzz"));
     assert\equal(got.len(), want: 1, message: "one finding");
-    assert\equal(got[0].path, want: ".claude/settings.json", message: "path");
+    assert\equal(got[0].path, want: "docs/guides/integrations/agents/codex-hooks.json", message: "path");
     assert\equal(got[0].line, want: 4, message: "line");
     assert\equal(got[0].message, want: "wires the Buzz glue on PreToolUse \"Bash\" behind a MAGUS_GUARD_ADVISE= prefix", message: "message");
 }
 
 test "a missing config is reported" {
-    assert\equal(support\messages(check([<Path>])), want: ["cannot read .claude/settings.json", "cannot read docs/guides/integrations/agents/codex-hooks.json"], message: "both missing");
+    assert\equal(support\messages(check([<Path>])), want: ["cannot read docs/guides/integrations/agents/codex-hooks.json"], message: "missing");
 }
 
 test "envName is an environment variable's shape" {

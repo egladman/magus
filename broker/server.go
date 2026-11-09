@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"io"
 	"log/slog"
 	"net"
@@ -37,7 +38,7 @@ type ServiceHost interface {
 	Release(key string)
 	// StopAll stops every hosted service, returning how many, and leaves the host usable.
 	StopAll() int
-	Snapshot() []types.StatusService
+	Snapshot() []daemon.Service
 }
 
 // Option configures Serve.
@@ -709,13 +710,13 @@ func (s *server) attribute(sess *session, c types.MachineClaim) types.MachineCla
 	return c
 }
 
-func (s *server) status() types.StatusBroker {
+func (s *server) status() daemon.Broker {
 	snap := s.budget.Snapshot()
 	s.mu.Lock()
 	capacity := s.ledger.capacity(s.conns, snap)
 	capacity.Waiting = s.waitingLocked(time.Now())
 	s.mu.Unlock()
-	st := types.StatusBroker{
+	st := daemon.Broker{
 		PID:             os.Getpid(),
 		Version:         s.opts.version,
 		Protocol:        ProtocolVersion,

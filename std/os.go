@@ -24,8 +24,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module os -lang buzz -out ../internal/interp/bindings/gen/os.go -pkg bindgen
-
 // magusWarned holds each typed member warnIfMagusBinary has already named, so a script
 // looping over one invocation hears about it once.
 var magusWarned sync.Map
@@ -183,8 +181,8 @@ var Os = Module{
 			Name: "with_env",
 			Doc:  "Add env vars to subprocesses `proc\\exec` / `proc\\shell` start inside callback. Never touches the process's own environment - a lookup like os\\env inside callback does not see them.",
 			Args: []Arg{
-				{Name: "env", Type: TypeStringMap},
-				{Name: "callback", Type: TypeFunc, Func: "fun () > void !> any"},
+				{Name: "env"},
+				{Name: "callback"},
 			},
 			Returns: nil,
 			Raises:  true,
@@ -194,13 +192,13 @@ var Os = Module{
 			Name:    "platform",
 			Doc:     "Return the Docker/OCI platform triple: (os, arch, variant).",
 			Args:    nil,
-			Returns: []Ret{{Type: TypeString}, {Type: TypeString}, {Type: TypeString}},
+			Returns: []Ret{{}, {}, {}},
 			Impl:    OsPlatform,
 		},
 		{
 			Name:    "exit",
 			Doc:     "Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared server); it raises, ending the target, and the code becomes magus's process exit status.",
-			Args:    []Arg{{Name: "code", Type: TypeInt}},
+			Args:    []Arg{{Name: "code"}},
 			Returns: nil,
 			// NOT Raises, though the binding fails to end the run: upstream declares
 			// exit with no error set, so a script calling it from a function with no
@@ -210,7 +208,7 @@ var Os = Module{
 		{
 			Name:    "sleep",
 			Doc:     "Pause for the given number of milliseconds (fractional allowed), matching Buzz's os\\sleep. Cancellable: if the run is interrupted it returns early with the cancellation error rather than blocking.",
-			Args:    []Arg{{Name: "ms", Type: TypeFloat}},
+			Args:    []Arg{{Name: "ms"}},
 			Returns: nil,
 			Raises:  true,
 			Impl:    OsSleep,
@@ -219,14 +217,14 @@ var Os = Module{
 			Name:    "num_cpu",
 			Doc:     "Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os\\with_slots).",
 			Args:    nil,
-			Returns: []Ret{{Type: TypeInt}},
+			Returns: []Ret{{}},
 			Impl:    OsNumCPU,
 		},
 		{
 			Name:    "hostname",
 			Doc:     "Return the host machine's name.",
 			Args:    nil,
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    OsHostname,
 		},
@@ -234,7 +232,7 @@ var Os = Module{
 			Name:    "executable",
 			Doc:     "Return the absolute path of the running magus binary. Pair it with fs\\stat inside a long-lived watch loop to detect that the binary was rebuilt or upgraded underneath the process, which means any output it goes on to generate would be stale.",
 			Args:    nil,
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    OsExecutable,
 		},
@@ -242,11 +240,11 @@ var Os = Module{
 			Name: "retry",
 			Doc:  "Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. An error a host call inside fn raised keeps its type, and one typed non-retryable stops at once; a value fn throws itself, a string included, is retried. opts is a RetryOptions: backoffMs is the first pause (default 500) and maxBackoffMs caps it (default 30000); a negative option raises.",
 			Args: []Arg{
-				{Name: "max", Type: TypeInt},
-				{Name: "fn", Type: TypeFunc, Func: "fun () > any !> any"},
-				{Name: "opts", Type: TypeAnyMap, Optional: true, Object: "RetryOptions"},
+				{Name: "max"},
+				{Name: "fn"},
+				{Name: "opts", Optional: true, Object: "RetryOptions"},
 			},
-			Returns: []Ret{{Type: TypeAny}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    OsRetry,
 		},
@@ -530,7 +528,7 @@ type withEnvKey struct{}
 // OsWithEnv injects extra env vars for subprocesses spawned during the
 // callback without mutating the server's process-global environment.
 // Overrides are propagated via ctx and merged at exec time in applySandboxPolicy.
-func OsWithEnv(ctx context.Context, env map[string]string, cb Callback) error {
+func OsWithEnv(ctx context.Context, env map[string]string, cb func(ctx context.Context) error) error {
 	// Merge with any outer with_env overrides already on ctx.
 	outer, _ := ctx.Value(withEnvKey{}).([]string)
 	merged := make([]string, len(outer), len(outer)+len(env))
@@ -538,13 +536,11 @@ func OsWithEnv(ctx context.Context, env map[string]string, cb Callback) error {
 	for k, v := range env {
 		merged = append(merged, fmt.Sprintf("%s=%s", k, v))
 	}
-	ctx = context.WithValue(ctx, withEnvKey{}, merged)
-	_, callErr := cb.Call(ctx)
-	return callErr
+	return cb(context.WithValue(ctx, withEnvKey{}, merged))
 }
 
 // OsRetry calls fn up to max times, retrying on error with exponential backoff.
-// On success it returns fn's first return value; on exhaustion it errors.
+// On success it returns fn's value; on exhaustion it errors.
 // opts.BackoffMs is the initial delay (default 500) and opts.MaxBackoffMs its cap (default
 // 30000); a negative value is an error naming the option.
 //
@@ -555,7 +551,7 @@ func OsWithEnv(ctx context.Context, env map[string]string, cb Callback) error {
 // This is not [retry.Do] on purpose: fn runs once even on a cancelled context, its value
 // comes back, the knobs are float milliseconds, and the exhaustion text below is a
 // contract Buzz authors match on. The backoff arithmetic is shared: [retry.Backoff].
-func OsRetry(ctx context.Context, max int, fn Callback, opts types.RetryOptions) (any, error) {
+func OsRetry(ctx context.Context, max int, fn func(ctx context.Context) (any, error), opts types.RetryOptions) (any, error) {
 	if fn == nil {
 		return nil, fmt.Errorf(`os\retry: fn must not be nil`)
 	}
@@ -569,12 +565,9 @@ func OsRetry(ctx context.Context, max int, fn Callback, opts types.RetryOptions)
 	}
 	var lastErr error
 	for i := 0; i < max; i++ {
-		ret, err := fn.Call(ctx)
+		v, err := fn(ctx)
 		if err == nil {
-			if len(ret) > 0 {
-				return ret[0], nil
-			}
-			return nil, nil //nolint:nilnil // fn succeeded with no return value; nil is the no-value result
+			return v, nil
 		}
 		if !types.ClassifyRetry(err).Retryable {
 			return nil, err
@@ -617,7 +610,7 @@ func retryMillis(name string, ms *float64, def float64) (time.Duration, error) {
 // held is handed back while the n are reserved, so peak in-flight stays within the
 // cap rather than cap+n. Processes cb starts share a jobserver of n slots
 // (spawn.SeatJobserver), so a `make` or cargo given no -j of its own runs n wide.
-func ProcWithSlots(ctx context.Context, n int, cb Callback) error {
+func ProcWithSlots(ctx context.Context, n int, cb func(ctx context.Context) error) error {
 	if lim := cache.LimiterFromContext(ctx); lim != nil && n > 0 {
 		// Hand back every slot we hold (a weighted step holds more than one) so
 		// reserving n cannot deadlock on slots we pin ourselves.
@@ -637,6 +630,5 @@ func ProcWithSlots(ctx context.Context, n int, cb Callback) error {
 		defer closeJobserver()
 		ctx = seated
 	}
-	_, callErr := cb.Call(ctx)
-	return callErr
+	return cb(ctx)
 }

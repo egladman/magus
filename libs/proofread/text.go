@@ -31,36 +31,86 @@ func JudgeText(text string, kind Kind, opts ...Option) []Finding {
 }
 
 func judgeText(text string, kind Kind, o options) []Finding {
-	if k, ok := ParseKind(string(kind)); ok {
-		kind = k // compat: see kindAliases
+	s, ok := o.kind(kind)
+	if !ok {
+		return nil
 	}
 
+	return judgeSpec(text, s, o)
+}
+
+// judgeSpec reads text by s's reader and runs s's rules over it.
+func judgeSpec(text string, s *KindSpec, o options) []Finding {
 	raw := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 
-	switch kind {
-	case KindDocComment:
+	switch s.Reader.Format {
+	case FormatDocComment:
 		return run(input{
-			symbol: Symbol{Doc: text}, kind: kind, prose: readProse(raw, false), lines: raw, source: raw, opts: o,
+			symbol: Symbol{Doc: text}, spec: s, prose: readProse(raw, false), lines: raw, source: raw, opts: o,
 		})
-	case KindSkillTemplate:
-		return judgeSkillSource(strings.Join(raw, "\n"), o)
-	case KindStylesheet:
-		return judgeStylesheet(strings.Join(raw, "\n"), o)
-	case KindDiagnostic:
-		return judgeMessage(text, 0, o)
+	case FormatTemplate:
+		return judgeSkillSource(strings.Join(raw, "\n"), s, o)
+	case FormatStylesheet:
+		return judgeStylesheet(strings.Join(raw, "\n"), s, o)
+	case FormatMessage:
+		return judgeMessage(text, 0, s, o)
+	case FormatPlain:
+		return judgePlain(raw, s, o)
+	case FormatLines:
+		lines, prose := readLines(raw)
+
+		return run(input{spec: s, prose: prose, lines: lines, source: raw, opts: o})
+	case FormatMarkdown:
+		raw = blankBoilerplate(raw)
+		lines, prose := readMarkdown(raw, s.Reader)
+
+		return run(input{spec: s, prose: prose, lines: lines, source: raw, opts: o})
 	}
 
-	switch kind {
-	case KindCLIHelp:
-		return judgeHelp(raw, o)
-	case KindToolDescription:
-		return judgeTool(raw, o)
+	panic("proofread: kind " + string(s.Name) + " has no reader for format " + string(s.Reader.Format))
+}
+
+// readLines reads raw as [FormatLines]: Markdown's inline markup is not prose,
+// and each non-blank line or list item is a paragraph of its own.
+func readLines(raw []string) ([]string, []proseLine) {
+	lines := markdownProse(raw, false)
+	prose := readProse(lines, false)
+
+	for i := range prose {
+		prose[i].opens, prose[i].paragraph = true, true
 	}
 
-	raw = blankBoilerplate(raw)
-	lines, prose := readMarkdown(raw, kind)
+	return lines, prose
+}
 
-	return run(input{kind: kind, prose: prose, lines: lines, source: raw, opts: o})
+// judgePlain judges plain text: no Markdown is read, so a backtick still marks
+// a literal and an indented line still reads as an example. A URL is not
+// prose.
+func judgePlain(raw []string, s *KindSpec, o options) []Finding {
+	lines := make([]string, len(raw))
+	for i, ln := range raw {
+		lines[i] = bareURL.ReplaceAllString(ln, "")
+	}
+
+	return run(input{
+		spec: s, prose: readProse(lines, false), lines: lines, source: raw, text: strings.Join(raw, "\n"), opts: o,
+	})
+}
+
+// kind returns the spec kind names: a built-in kind, a former name included,
+// then a kind [WithKinds] declared.
+func (o options) kind(kind Kind) (*KindSpec, bool) {
+	if k, ok := ParseKind(string(kind)); ok {
+		return builtins[k], true // compat: see kindAliases
+	}
+
+	for i := range o.kinds {
+		if o.kinds[i].Name == kind {
+			return &o.kinds[i], true
+		}
+	}
+
+	return nil, false
 }
 
 var (
@@ -544,19 +594,17 @@ func blankQuoted(s string) string {
 // never read as the author's own words.
 func mentionsMasked(s string) string { return blankQuoted(blankBackticks(s)) }
 
-// mentions returns the mask filler and terms read kind through. Written
-// text reads a quoted word as a mention; a doc comment keeps reading it as used,
-// as it always has.
-func mentions(kind Kind) func(string) string {
-	if kind == KindDocComment {
+// mentions returns the mask filler and terms read text of format f through.
+// Written text reads a quoted word as a mention; a doc comment keeps reading
+// it as used, as it always has.
+func mentions(f Format) func(string) string {
+	if f == FormatDocComment {
 		return blankBackticks
 	}
 
 	return mentionsMasked
 }
 
-// titled reports whether kind opens with a title line, a paragraph of its own
-// however close the body starts below it.
-func titled(kind Kind) bool {
-	return kind == KindChangeDescription || kind == KindCommitMessage || kind == KindIssue
-}
+// titleLine reports whether head opens the title line of a titled text, a
+// paragraph of its own however close the body starts below it.
+func (in input) titleLine(head proseLine) bool { return in.spec.Reader.Titled && head.line == 1 }

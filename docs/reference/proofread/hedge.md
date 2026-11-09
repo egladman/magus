@@ -30,14 +30,14 @@ The code is `PRF3002`. The decision depends on the kind of text judged:
 | -------------------- | ------- |
 | `reference`          | advise  |
 | `principle`          | advise  |
-| `guide`              | advise  |
 | `change-description` | advise  |
 | `agent-brief`        | advise  |
+| `agent-compact`      | advise  |
+| `guide`              | advise  |
 | `commit-message`     | advise  |
 | `issue`              | advise  |
 | `release-notes`      | advise  |
 | `changelog`          | advise  |
-| `agent-compact`      | advise  |
 | `agent-reply`        | advise  |
 | `stylesheet`         | advise  |
 

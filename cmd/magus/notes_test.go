@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/egladman/magus/types/diff"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +13,6 @@ import (
 	store "github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
-	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -54,14 +54,14 @@ func TestNotePathReportsTheFileNotTheId(t *testing.T) {
 // not a transcript of the review: what was decided is nearly always in what somebody said
 // back, and that half lives on the forge rather than in the session.
 func TestCaptureKeepsWhatColleaguesSaid(t *testing.T) {
-	sess := &types.DiffReview{
+	sess := &diff.Review{
 		ID:   "rev-1",
 		AsOf: "patch-1",
-		Comments: []types.DiffComment{
-			{Path: "a.go", Hunk: 1, Author: types.DiffAuthorUnattributed, Body: "mine"},
+		Comments: []diff.Comment{
+			{Path: "a.go", Hunk: 1, Author: diff.AuthorUnattributed, Body: "mine"},
 		},
 	}
-	threads := []types.ReviewComment{
+	threads := []diff.ReviewComment{
 		{ID: "t1", Path: "a.go", Line: 12, Author: "priya", Body: "theirs"},
 		{ID: "t2", Path: "z.go", Line: 3, Author: "marcus", Body: "elsewhere"},
 	}
@@ -84,10 +84,10 @@ func TestCaptureKeepsWhatColleaguesSaid(t *testing.T) {
 // A review with no forge behind it is the ordinary case, and the local conversation is worth
 // keeping on its own.
 func TestCaptureWithNoThreadsIsStillATranscript(t *testing.T) {
-	sess := &types.DiffReview{
+	sess := &diff.Review{
 		ID: "rev-1",
-		Comments: []types.DiffComment{
-			{Path: "a.go", Author: types.DiffAuthorUnattributed, Body: "mine"},
+		Comments: []diff.Comment{
+			{Path: "a.go", Author: diff.AuthorUnattributed, Body: "mine"},
 		},
 	}
 	n, err := captureFromSession(sess, nil, "review", nil).Note("cap")
@@ -102,8 +102,8 @@ func TestCaptureReadsTheStoreWhenNoServerIsRunning(t *testing.T) {
 	cache := t.TempDir()
 	root := filepath.Join(cache, "ws")
 	written := changeset.NewStore(cache)
-	written.Attach(root, "main", types.Diff{Base: "main"}, "asof")
-	written.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "mine"}, types.DiffAuthorUnattributed)
+	written.Attach(root, "main", diff.Diff{Base: "main"}, "asof")
+	written.AddComment(root, diff.Comment{Path: "a.go", Line: 4, Body: "mine"}, diff.AuthorUnattributed)
 
 	sess, err := storedDiffReview(cache, "diff --git a/a.go b/a.go\n")
 	require.NoError(t, err)
@@ -128,10 +128,10 @@ func TestAStoredSessionWithNoPatchHasNoSnapshotId(t *testing.T) {
 // up. Without a server the forge is asked directly rather than the reader being shown a review
 // with nobody else in it.
 func TestReviewCommentsReachTheForgeWithNoServer(t *testing.T) {
-	withCannedThreads(t, []types.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "theirs"}})
+	withCannedThreads(t, []diff.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "theirs"}})
 	cache := t.TempDir()
 
-	threads, reason := localReviewComments(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, cache)
+	threads, reason := localReviewComments(t.Context(), diff.ReviewOrigin{Branch: "feat/x"}, cache)
 	require.Len(t, threads, 1)
 	assert.Equal(t, "theirs", threads[0].Body)
 	assert.Empty(t, reason)
@@ -143,14 +143,14 @@ func TestReviewCommentsReachTheForgeWithNoServer(t *testing.T) {
 // The watermark outlives the server that normally reads it, so a thread already seen does not
 // come back marked new the moment the server is stopped.
 func TestASeenThreadIsNotNewWithoutAServer(t *testing.T) {
-	withCannedThreads(t, []types.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "theirs"}})
+	withCannedThreads(t, []diff.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Author: "priya", Body: "theirs"}})
 	cache := t.TempDir()
 	root := filepath.Join(cache, "ws")
 	sessions := changeset.NewStore(cache)
-	sessions.Attach(root, "main", types.Diff{Base: "main"}, "asof")
+	sessions.Attach(root, "main", diff.Diff{Base: "main"}, "asof")
 	sessions.MarkCommentsSeen(root, []string{"t1"})
 
-	threads, _ := localReviewComments(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, cache)
+	threads, _ := localReviewComments(t.Context(), diff.ReviewOrigin{Branch: "feat/x"}, cache)
 	require.Len(t, threads, 1)
 	assert.False(t, threads[0].New)
 }
@@ -160,14 +160,14 @@ func TestASeenThreadIsNotNewWithoutAServer(t *testing.T) {
 // into the note: New belongs to this reader's history with the review, and in a transcript a
 // colleague reads next year it would describe somebody else's morning.
 func TestCaptureSaysWhatWasNewToThisReader(t *testing.T) {
-	threads := []types.ReviewComment{
+	threads := []diff.ReviewComment{
 		{ID: "t1", Author: "priya", Body: "you weighed this already"},
 		{ID: "t2", Author: "marcus", Body: "arrived since you looked", New: true},
 	}
 
 	assert.Contains(t, newRemarkLine(threads), "1 remark on the review had not been in front of you before")
 	assert.Empty(t, newRemarkLine(threads[:1]), "a conversation the reader has already had says nothing")
-	assert.Contains(t, newRemarkLine(append(threads, types.ReviewComment{ID: "t3", New: true})), "2 remarks")
+	assert.Contains(t, newRemarkLine(append(threads, diff.ReviewComment{ID: "t3", New: true})), "2 remarks")
 }
 
 // A malformed remark fails the read loudly: the threads decode strictly, so the caller says
@@ -184,16 +184,16 @@ export fun review_threads(target: Target, req: ReviewRef) > any {
 	bindings.SetReviewProvider(name)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
 
-	threads, reason := localReviewComments(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, t.TempDir())
+	threads, reason := localReviewComments(t.Context(), diff.ReviewOrigin{Branch: "feat/x"}, t.TempDir())
 	assert.Empty(t, threads)
 	assert.NotEmpty(t, reason, "a transcript silently missing a remark is worse than no transcript")
 }
 
 // withCannedThreads wires a review provider for this test, so the server-free read path
 // can be exercised against threads instead of only against an unwired workspace.
-func withCannedThreads(t *testing.T, threads []types.ReviewComment) {
+func withCannedThreads(t *testing.T, threads []diff.ReviewComment) {
 	t.Helper()
-	name := register.ReviewSpell(t, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, threads)
+	name := register.ReviewSpell(t, diff.ReviewTarget{ID: "482", Repo: "acme/acme"}, threads)
 	prev := bindings.ReviewProvider()
 	bindings.SetReviewProvider(name)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })

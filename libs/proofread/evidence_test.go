@@ -31,8 +31,8 @@ func declared() map[Rule]Decision {
 	out := map[Rule]Decision{}
 
 	for _, c := range checks {
-		for _, k := range c.on {
-			if d := c.declaredDecision(k); out[c.rule] != DecisionDeny && d != DecisionOff {
+		for i := range builtinKinds {
+			if d, ok := builtinKinds[i].Rules[c.rule]; ok && out[c.rule] != DecisionDeny && d != DecisionOff {
 				out[c.rule] = d
 			}
 		}

@@ -128,3 +128,32 @@ func (s *ReleaseAdviceSuite) TestALeasedCallOpensNoSessionFile() {
 		s.Fail("the judgment opened a session file and blocked on it")
 	}
 }
+
+func (s *ReleaseAdviceSuite) TestAGrantedHoldNamesTheForkAndWhatIsLeft() {
+	row := fixture.FleetLeases()[0]
+	row.WritePaths = []string{"internal/ledger/store.go", "internal/ledger/store.go#Open"}
+	row.Releases = []types.JobRelease{{Path: "internal/ledger/store.go", Narrowed: true, TakenBy: "lease-b"}}
+	s.Equal("magus workspace: lease lease-a now holds part of a file by declaration.\n"+
+		"internal/ledger/store.go: fork lease-b was granted declarations you had not touched; you hold it by internal/ledger/store.go#Open\n"+
+		"A write to an unclaimed declaration claims it.", adviseLeaseNarrowed(row).Say)
+}
+
+func (s *ReleaseAdviceSuite) TestAGrantedHoldWithNoClaimSaysSo() {
+	row := fixture.FleetLeases()[0]
+	row.WritePaths = []string{"internal/ledger/store.go"}
+	row.Releases = []types.JobRelease{{Path: "internal/ledger/store.go", Narrowed: true, TakenBy: "lease-b"}}
+	s.Contains(adviseLeaseNarrowed(row).Say, "you hold it by no declaration yet")
+}
+
+func (s *ReleaseAdviceSuite) TestAnEndedRowIsSilent() {
+	row := fixture.FleetLeases()[0]
+	row.State = types.StateExited
+	row.Releases = []types.JobRelease{{Path: "internal/ledger/store.go", Narrowed: true, TakenBy: "lease-b"}}
+	s.Empty(adviseLeaseNarrowed(row).Say)
+}
+
+func (s *ReleaseAdviceSuite) TestAHoldNarrowedByItsOwnWriteIsSilent() {
+	row := fixture.FleetLeases()[0]
+	row.Releases = []types.JobRelease{{Path: "magusfile.buzz", Narrowed: true}}
+	s.Empty(adviseLeaseNarrowed(row).Say)
+}

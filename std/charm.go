@@ -8,12 +8,6 @@ import (
 	"strconv"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module charm -lang buzz -out ../internal/interp/bindings/gen/charm.go -pkg bindgen
-
-// charmPredicate is the type of every *_func anchor: called with one argv element,
-// truthy on the one to anchor at.
-const charmPredicate = "fun (s: str) > bool !> any"
-
 // Charm is magus.extra.charm: the constructor set for the values a spell target
 // lists under `charms`. Each constructor returns an RFC 6902 JSON Patch (the
 // { ops = [...] } record Decode reads) over the target's base argv, treated as a
@@ -28,35 +22,35 @@ var Charm = Module{
 		{
 			Name:    "append",
 			Doc:     "Append vals to the end of the argv.",
-			Args:    []Arg{{Name: "vals", Type: TypeStringSlice}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmAppend,
+			Args:    []Arg{{Name: "vals"}},
+			Returns: []Ret{{Object: "Charm"}}, Impl: CharmAppend,
 		},
 		{
 			Name:    "prepend",
 			Doc:     "Insert vals at the front of the argv, in order.",
-			Args:    []Arg{{Name: "vals", Type: TypeStringSlice}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmPrepend,
+			Args:    []Arg{{Name: "vals"}},
+			Returns: []Ret{{Object: "Charm"}}, Impl: CharmPrepend,
 		},
 		{
 			Name:    "after",
 			Doc:     "Insert vals immediately after the first argv element equal to anchor.",
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}, {Name: "vals", Type: TypeStringSlice}},
+			Args:    []Arg{{Name: "argv"}, {Name: "anchor"}, {Name: "vals"}},
 			Raises:  true,
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmAfter,
+			Returns: []Ret{{Object: "Charm"}}, Impl: CharmAfter,
 		},
 		{
 			Name:    "before",
 			Doc:     "Insert vals immediately before the first argv element equal to anchor.",
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}, {Name: "vals", Type: TypeStringSlice}},
+			Args:    []Arg{{Name: "argv"}, {Name: "anchor"}, {Name: "vals"}},
 			Raises:  true,
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmBefore,
+			Returns: []Ret{{Object: "Charm"}}, Impl: CharmBefore,
 		},
 		{
 			Name:    "set",
 			Doc:     "Replace the first argv element equal to anchor with val.",
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}, {Name: "val", Type: TypeString}},
+			Args:    []Arg{{Name: "argv"}, {Name: "anchor"}, {Name: "val"}},
 			Raises:  true,
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmSet,
+			Returns: []Ret{{Object: "Charm"}}, Impl: CharmSet,
 		},
 		{
 			// "drop", not "remove": Buzz exposes this as a map member
@@ -64,93 +58,93 @@ var Charm = Module{
 			// .remove() method, so a charm.remove call could never reach this.
 			Name:    "drop",
 			Doc:     "Drop (remove) the first argv element equal to anchor.",
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}},
+			Args:    []Arg{{Name: "argv"}, {Name: "anchor"}},
 			Raises:  true,
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmDrop,
+			Returns: []Ret{{Object: "Charm"}}, Impl: CharmDrop,
 		},
 		{
 			Name:    "after_func",
-			Doc:     "Insert vals after the first argv element for which fn(s) is truthy.",
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc, Func: charmPredicate}, {Name: "vals", Type: TypeStringSlice}},
+			Doc:     "Insert vals after the first argv element for which fn(s) returns true.",
+			Args:    []Arg{{Name: "argv"}, {Name: "fn"}, {Name: "vals"}},
 			Raises:  true,
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmAfterFunc,
+			Returns: []Ret{{Object: "Charm"}}, Impl: CharmAfterFunc,
 		},
 		{
 			Name:    "before_func",
-			Doc:     "Insert vals before the first argv element for which fn(s) is truthy.",
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc, Func: charmPredicate}, {Name: "vals", Type: TypeStringSlice}},
+			Doc:     "Insert vals before the first argv element for which fn(s) returns true.",
+			Args:    []Arg{{Name: "argv"}, {Name: "fn"}, {Name: "vals"}},
 			Raises:  true,
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmBeforeFunc,
+			Returns: []Ret{{Object: "Charm"}}, Impl: CharmBeforeFunc,
 		},
 		{
 			Name:    "set_func",
-			Doc:     "Replace the first argv element for which fn(s) is truthy with val.",
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc, Func: charmPredicate}, {Name: "val", Type: TypeString}},
+			Doc:     "Replace the first argv element for which fn(s) returns true with val.",
+			Args:    []Arg{{Name: "argv"}, {Name: "fn"}, {Name: "val"}},
 			Raises:  true,
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmSetFunc,
+			Returns: []Ret{{Object: "Charm"}}, Impl: CharmSetFunc,
 		},
 		{
 			Name:    "drop_func",
-			Doc:     "Drop (remove) the first argv element for which fn(s) is truthy.",
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc, Func: charmPredicate}},
+			Doc:     "Drop (remove) the first argv element for which fn(s) returns true.",
+			Args:    []Arg{{Name: "argv"}, {Name: "fn"}},
 			Raises:  true,
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmDropFunc,
+			Returns: []Ret{{Object: "Charm"}}, Impl: CharmDropFunc,
 		},
 		{
 			Name:    "path",
 			Doc:     `Return the JSON Pointer ("/N") of the first argv element equal to anchor - the index, auto-calculated, for hand-built move/copy/test ops.`,
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}},
+			Args:    []Arg{{Name: "argv"}, {Name: "anchor"}},
 			Raises:  true,
-			Returns: []Ret{{Type: TypeString}}, Impl: CharmPath,
+			Returns: []Ret{{}}, Impl: CharmPath,
 		},
 		{
 			Name:    "path_func",
-			Doc:     `Return the JSON Pointer ("/N") of the first argv element for which fn(s) is truthy.`,
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc, Func: charmPredicate}},
+			Doc:     `Return the JSON Pointer ("/N") of the first argv element for which fn(s) returns true.`,
+			Args:    []Arg{{Name: "argv"}, {Name: "fn"}},
 			Raises:  true,
-			Returns: []Ret{{Type: TypeString}}, Impl: CharmPathFunc,
+			Returns: []Ret{{}}, Impl: CharmPathFunc,
 		},
 		{
 			Name:    "move",
 			Doc:     `Move the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/0" front, or charm\path(...)).`,
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}, {Name: "to", Type: TypeString}},
+			Args:    []Arg{{Name: "argv"}, {Name: "anchor"}, {Name: "to"}},
 			Raises:  true,
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmMove,
+			Returns: []Ret{{Object: "Charm"}}, Impl: CharmMove,
 		},
 		{
 			Name:    "move_func",
-			Doc:     `Move the first argv element for which fn(s) is truthy to the JSON Pointer to.`,
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc, Func: charmPredicate}, {Name: "to", Type: TypeString}},
+			Doc:     `Move the first argv element for which fn(s) returns true to the JSON Pointer to.`,
+			Args:    []Arg{{Name: "argv"}, {Name: "fn"}, {Name: "to"}},
 			Raises:  true,
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmMoveFunc,
+			Returns: []Ret{{Object: "Charm"}}, Impl: CharmMoveFunc,
 		},
 		{
 			Name:    "copy",
 			Doc:     `Copy the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/0" front, or charm\path(...)).`,
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}, {Name: "to", Type: TypeString}},
+			Args:    []Arg{{Name: "argv"}, {Name: "anchor"}, {Name: "to"}},
 			Raises:  true,
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmCopy,
+			Returns: []Ret{{Object: "Charm"}}, Impl: CharmCopy,
 		},
 		{
 			Name:    "copy_func",
-			Doc:     `Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.`,
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc, Func: charmPredicate}, {Name: "to", Type: TypeString}},
+			Doc:     `Copy the first argv element for which fn(s) returns true to the JSON Pointer to.`,
+			Args:    []Arg{{Name: "argv"}, {Name: "fn"}, {Name: "to"}},
 			Raises:  true,
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmCopyFunc,
+			Returns: []Ret{{Object: "Charm"}}, Impl: CharmCopyFunc,
 		},
 		{
 			Name:    "test",
 			Doc:     `Guard: assert the first argv element equal to anchor is still at its position when the patch applies (else the run errors).`,
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}},
+			Args:    []Arg{{Name: "argv"}, {Name: "anchor"}},
 			Raises:  true,
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmTest,
+			Returns: []Ret{{Object: "Charm"}}, Impl: CharmTest,
 		},
 		{
 			Name:    "test_func",
-			Doc:     `Guard: assert the first argv element for which fn(s) is truthy is still at its position when the patch applies.`,
-			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "fn", Type: TypeFunc, Func: charmPredicate}},
+			Doc:     `Guard: assert the first argv element for which fn(s) returns true is still at its position when the patch applies.`,
+			Args:    []Arg{{Name: "argv"}, {Name: "fn"}},
 			Raises:  true,
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmTestFunc,
+			Returns: []Ret{{Object: "Charm"}}, Impl: CharmTestFunc,
 		},
 	},
 }
@@ -192,14 +186,14 @@ func anchorIndex(argv []string, anchor string) (int, error) {
 }
 
 // anchorIndexFunc returns the position of the first argv element for which fn is
-// truthy, or an error when none match (same fail-fast rationale as anchorIndex).
-func anchorIndexFunc(ctx context.Context, argv []string, fn Callback) (int, error) {
+// true, or an error when none match (same fail-fast rationale as anchorIndex).
+func anchorIndexFunc(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error)) (int, error) {
 	var cbErr error
 	i := slices.IndexFunc(argv, func(s string) bool {
 		if cbErr != nil {
 			return false
 		}
-		ok, err := callPredicate(ctx, fn, s)
+		ok, err := fn(ctx, s)
 		if err != nil {
 			cbErr = err
 		}
@@ -265,7 +259,7 @@ func CharmDrop(_ context.Context, argv []string, anchor string) (spells.Charm, e
 }
 
 // CharmAfterFunc implements charm.after_func.
-func CharmAfterFunc(ctx context.Context, argv []string, fn Callback, vals []string) (spells.Charm, error) {
+func CharmAfterFunc(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error), vals []string) (spells.Charm, error) {
 	i, err := anchorIndexFunc(ctx, argv, fn)
 	if err != nil {
 		return spells.Charm{}, err
@@ -274,7 +268,7 @@ func CharmAfterFunc(ctx context.Context, argv []string, fn Callback, vals []stri
 }
 
 // CharmBeforeFunc implements charm.before_func.
-func CharmBeforeFunc(ctx context.Context, argv []string, fn Callback, vals []string) (spells.Charm, error) {
+func CharmBeforeFunc(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error), vals []string) (spells.Charm, error) {
 	i, err := anchorIndexFunc(ctx, argv, fn)
 	if err != nil {
 		return spells.Charm{}, err
@@ -283,7 +277,7 @@ func CharmBeforeFunc(ctx context.Context, argv []string, fn Callback, vals []str
 }
 
 // CharmSetFunc implements charm.set_func.
-func CharmSetFunc(ctx context.Context, argv []string, fn Callback, val string) (spells.Charm, error) {
+func CharmSetFunc(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error), val string) (spells.Charm, error) {
 	i, err := anchorIndexFunc(ctx, argv, fn)
 	if err != nil {
 		return spells.Charm{}, err
@@ -292,7 +286,7 @@ func CharmSetFunc(ctx context.Context, argv []string, fn Callback, val string) (
 }
 
 // CharmDropFunc implements charm.drop_func.
-func CharmDropFunc(ctx context.Context, argv []string, fn Callback) (spells.Charm, error) {
+func CharmDropFunc(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error)) (spells.Charm, error) {
 	i, err := anchorIndexFunc(ctx, argv, fn)
 	if err != nil {
 		return spells.Charm{}, err
@@ -310,7 +304,7 @@ func CharmPath(_ context.Context, argv []string, anchor string) (string, error) 
 }
 
 // CharmPathFunc implements charm.path_func.
-func CharmPathFunc(ctx context.Context, argv []string, fn Callback) (string, error) {
+func CharmPathFunc(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error)) (string, error) {
 	i, err := anchorIndexFunc(ctx, argv, fn)
 	if err != nil {
 		return "", err
@@ -340,7 +334,7 @@ func CharmMove(_ context.Context, argv []string, anchor, to string) (spells.Char
 }
 
 // CharmMoveFunc implements charm.move_func.
-func CharmMoveFunc(ctx context.Context, argv []string, fn Callback, to string) (spells.Charm, error) {
+func CharmMoveFunc(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error), to string) (spells.Charm, error) {
 	i, err := anchorIndexFunc(ctx, argv, fn)
 	if err != nil {
 		return spells.Charm{}, err
@@ -364,7 +358,7 @@ func CharmCopy(_ context.Context, argv []string, anchor, to string) (spells.Char
 }
 
 // CharmCopyFunc implements charm.copy_func.
-func CharmCopyFunc(ctx context.Context, argv []string, fn Callback, to string) (spells.Charm, error) {
+func CharmCopyFunc(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error), to string) (spells.Charm, error) {
 	i, err := anchorIndexFunc(ctx, argv, fn)
 	if err != nil {
 		return spells.Charm{}, err
@@ -386,30 +380,10 @@ func CharmTest(_ context.Context, argv []string, anchor string) (spells.Charm, e
 }
 
 // CharmTestFunc implements charm.test_func.
-func CharmTestFunc(ctx context.Context, argv []string, fn Callback) (spells.Charm, error) {
+func CharmTestFunc(ctx context.Context, argv []string, fn func(ctx context.Context, s string) (bool, error)) (spells.Charm, error) {
 	i, err := anchorIndexFunc(ctx, argv, fn)
 	if err != nil {
 		return spells.Charm{}, err
 	}
 	return charmResult(spells.PatchOp{Op: spells.OpTest, Path: jsonPointer(i), Value: argv[i]}), nil
-}
-
-// callPredicate invokes a VM predicate on s and reports its truthiness.
-// Truthiness follows the source language: any value other than nil/false is true.
-func callPredicate(ctx context.Context, fn Callback, s string) (bool, error) {
-	res, err := fn.Call(ctx, s)
-	if err != nil {
-		return false, err
-	}
-	if len(res) == 0 {
-		return false, nil
-	}
-	switch v := res[0].(type) {
-	case nil:
-		return false, nil
-	case bool:
-		return v, nil
-	default:
-		return true, nil
-	}
 }

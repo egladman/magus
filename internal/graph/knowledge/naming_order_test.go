@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,7 +31,7 @@ func TestConformanceFindsParameterOrderDrift(t *testing.T) {
 
 	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(subj), Introduced: introduced(subj)})
 
-	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(types.CheckParamOrder,
+	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(diff.CheckParamOrder,
 		"`jobWatchFiles` takes `out` before `root`; 5 of 5 functions in its scope that take both take `root` first",
 		"`root` first: applyDoctorFixes, checkpointCmd, notifyCmd",
 	)}}, got)
@@ -49,7 +50,7 @@ func TestConformanceFindsParameterOrderDriftInTypeScript(t *testing.T) {
 
 	got := g.ConformanceChecks(ConformanceChange{Conformance: testConformance(), Subjects: subjectIDs(subj)})
 
-	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(types.CheckParamOrder,
+	assert.Equal(t, map[string][]types.Check{symID(subj): {advice(diff.CheckParamOrder,
 		"`drawBadge` takes `row` before `host`; 5 of 5 functions in its scope that take both take `host` first",
 		"`host` first: drawFold, drawGutter, drawHunk",
 	)}}, got)

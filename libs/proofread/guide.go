@@ -229,12 +229,12 @@ func condescension(in input) []Finding {
 
 		var spans [][]int
 
-		switch in.kind {
-		case KindGuide:
+		switch {
+		case in.spec.Procedure:
 			spans = findAllIndex(condescending, para.text, false)
 		default:
 			spans = findAllIndex(presuming, para.text, false)
-			if slices.Contains(reviewed, in.kind) {
+			if in.spec.ToReviewers {
 				spans = append(spans, findAllIndex(obviously, para.text, false)...)
 			}
 
@@ -259,7 +259,7 @@ func condescension(in input) []Finding {
 
 		for _, at := range spans {
 			if within(at[0], taken) || condescensionExempt(para.text, at) ||
-				(isReview(in.kind) && assent.MatchString(para.text[sentenceAt(para.text, at[0]):])) {
+				(in.spec.Review && assent.MatchString(para.text[sentenceAt(para.text, at[0]):])) {
 				continue
 			}
 

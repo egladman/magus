@@ -7,6 +7,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestStringsCase(t *testing.T) {
@@ -243,4 +244,32 @@ func TestStringsContains(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equalf(t, tc.want, got, "contains(%q, %q)", tc.s, tc.substr)
 	}
+}
+
+type StringsPluralSuite struct{ suite.Suite }
+
+func TestStringsPluralSuite(t *testing.T) { suite.Run(t, new(StringsPluralSuite)) }
+
+func (s *StringsPluralSuite) TestPluralOneIsSingular() {
+	got, err := StringsPlural(context.Background(), 1, "target", "targets")
+	s.Require().NoError(err)
+	s.Equal("target", got)
+}
+
+func (s *StringsPluralSuite) TestPluralZeroIsPlural() {
+	got, err := StringsPlural(context.Background(), 0, "target", "targets")
+	s.Require().NoError(err)
+	s.Equal("targets", got)
+}
+
+func (s *StringsPluralSuite) TestPluralCountOne() {
+	got, err := StringsPluralCount(context.Background(), 1, "branch", "branches")
+	s.Require().NoError(err)
+	s.Equal("1 branch", got)
+}
+
+func (s *StringsPluralSuite) TestPluralCountMany() {
+	got, err := StringsPluralCount(context.Background(), 3, "branch", "branches")
+	s.Require().NoError(err)
+	s.Equal("3 branches", got)
 }

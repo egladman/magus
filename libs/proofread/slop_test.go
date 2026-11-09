@@ -10,7 +10,8 @@ import (
 func TestSlopChecksRunInOrder(t *testing.T) {
 	want := []Rule{
 		RuleSignpost, RuleChatbot, RuleLeak, RuleBuzzword, RuleBuzzwordWeak, RuleContrast, RuleVague,
-		RuleCloser, RuleIngTail, RuleStaccato, RuleDash, RuleASCII, RuleLocalPath, RuleHeadingCase,
+		RuleCloser, RuleIngTail, RuleStaccato, RuleDash, RuleASCII, RuleLocalPath, RuleLocalBranch,
+		RuleHeadingCase,
 	}
 
 	if got := ruleNames(slopChecks); !reflect.DeepEqual(got, want) {

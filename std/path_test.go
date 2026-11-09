@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestPathClean(t *testing.T) {
@@ -60,4 +61,102 @@ func TestPathExpandUser(t *testing.T) {
 		got, _ := PathExpandUser(ctx, in)
 		assert.Equal(t, in, got, "expand_user(%q) should be unchanged", in)
 	}
+}
+
+type PathJoinWithinSuite struct{ suite.Suite }
+
+func TestPathJoinWithinSuite(t *testing.T) { suite.Run(t, new(PathJoinWithinSuite)) }
+
+func (s *PathJoinWithinSuite) TestJoinCleansTheResult() {
+	got, err := PathJoin(context.Background(), []string{"a", "b/../c", "d"})
+	s.Require().NoError(err)
+	s.Equal(filepath.FromSlash("a/c/d"), got)
+}
+
+func (s *PathJoinWithinSuite) TestJoinSkipsEmptyParts() {
+	got, err := PathJoin(context.Background(), []string{"", "a", "", "b"})
+	s.Require().NoError(err)
+	s.Equal(filepath.FromSlash("a/b"), got)
+}
+
+func (s *PathJoinWithinSuite) TestJoinNoPartsIsEmpty() {
+	got, err := PathJoin(context.Background(), []string{})
+	s.Require().NoError(err)
+	s.Equal("", got)
+}
+
+func (s *PathJoinWithinSuite) TestWithinChild() {
+	got, err := PathWithin(context.Background(), "a/b", "a/b/c")
+	s.Require().NoError(err)
+	s.True(got)
+}
+
+func (s *PathJoinWithinSuite) TestWithinSelf() {
+	got, err := PathWithin(context.Background(), "a/b", "a/b/")
+	s.Require().NoError(err)
+	s.True(got)
+}
+
+func (s *PathJoinWithinSuite) TestWithinSiblingSharingAPrefixIsOutside() {
+	got, err := PathWithin(context.Background(), "a/b", "a/bc")
+	s.Require().NoError(err)
+	s.False(got)
+}
+
+func (s *PathJoinWithinSuite) TestWithinParentIsOutside() {
+	got, err := PathWithin(context.Background(), "a/b", "a")
+	s.Require().NoError(err)
+	s.False(got)
+}
+
+func (s *PathJoinWithinSuite) TestWithinDotHoldsEveryRelativePath() {
+	got, err := PathWithin(context.Background(), ".", "x/y")
+	s.Require().NoError(err)
+	s.True(got)
+}
+
+func (s *PathJoinWithinSuite) TestWithinDotDotNamedDirectoryIsInside() {
+	got, err := PathWithin(context.Background(), "a", "a/..b")
+	s.Require().NoError(err)
+	s.True(got)
+}
+
+func (s *PathJoinWithinSuite) TestWithinAbsoluteAgainstRelativeIsOutside() {
+	got, err := PathWithin(context.Background(), "a", string(filepath.Separator)+"a")
+	s.Require().NoError(err)
+	s.False(got)
+}
+
+type PathDirBaseSuite struct{ suite.Suite }
+
+func TestPathDirBaseSuite(t *testing.T) { suite.Run(t, new(PathDirBaseSuite)) }
+
+func (s *PathDirBaseSuite) TestDirOfANestedPath() {
+	got, err := PathDir(context.Background(), "a/b/c.go")
+	s.Require().NoError(err)
+	s.Equal(filepath.FromSlash("a/b"), got)
+}
+
+func (s *PathDirBaseSuite) TestDirOfABareNameIsDot() {
+	got, err := PathDir(context.Background(), "c.go")
+	s.Require().NoError(err)
+	s.Equal(".", got)
+}
+
+func (s *PathDirBaseSuite) TestDirOfARootChildIsRoot() {
+	got, err := PathDir(context.Background(), "/x")
+	s.Require().NoError(err)
+	s.Equal(string(filepath.Separator), got)
+}
+
+func (s *PathDirBaseSuite) TestBaseOfANestedPath() {
+	got, err := PathBase(context.Background(), "a/b/c.go")
+	s.Require().NoError(err)
+	s.Equal("c.go", got)
+}
+
+func (s *PathDirBaseSuite) TestBaseDropsTrailingSeparators() {
+	got, err := PathBase(context.Background(), "a/b/")
+	s.Require().NoError(err)
+	s.Equal("b", got)
 }

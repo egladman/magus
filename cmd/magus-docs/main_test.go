@@ -35,11 +35,15 @@ func TestPruneRemovesOnlyStaleModulePages(t *testing.T) {
 }
 
 func TestSourceLinksNameTheFileNotTheLine(t *testing.T) {
-	assert.Equal(t, "[`Callback`]("+docs.RepoBlob+"/std/module.go)", typeMarkdown(std.TypeFunc))
-
 	file := std.MethodSource(std.Method{Impl: std.FsGlob}, repoRoot)
 	if file == "" {
 		t.Skip("built with -trimpath: no absolute path to relativize")
 	}
 	assert.Equal(t, fmt.Sprintf(" - [source](%s/%s)", docs.RepoBlob, file), methodSourceLink(std.Method{Impl: std.FsGlob}))
+}
+
+func TestRenderedTypesAreNeverInvalid(t *testing.T) {
+	for _, m := range loadModules() {
+		assert.NotContains(t, renderModule(m), "<invalid>", "module %s", m.Name)
+	}
 }

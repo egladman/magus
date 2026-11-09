@@ -2,16 +2,16 @@ package main
 
 import (
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"io"
 
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interactive/difftui"
 	"github.com/egladman/magus/internal/review"
-	"github.com/egladman/magus/types"
 )
 
 // printDiffOrder writes the reading order under the file summary.
-func printDiffOrder(w io.Writer, rev types.Diff, showGenerated bool) {
+func printDiffOrder(w io.Writer, rev diff.Diff, showGenerated bool) {
 	for _, line := range review.OrderLines(rev, showGenerated) {
 		fmt.Fprintln(w, line)
 	}
@@ -21,17 +21,17 @@ func printDiffOrder(w io.Writer, rev types.Diff, showGenerated bool) {
 // step order, each hunk's Why sentence as a fact. Every hunk lands in exactly one file, so the
 // receipts earnedSync mints per path still add up. A diff with no order, or one whose count
 // says it did not place every hunk, keeps today's file-by-file projection.
-func diffOrderTUIFiles(rev types.Diff, parsed []changeset.FileHunks) []difftui.File {
+func diffOrderTUIFiles(rev diff.Diff, parsed []changeset.FileHunks) []difftui.File {
 	if rev.Order == nil || !rev.Order.Count.Complete {
 		return diffTUIFiles(rev, parsed)
 	}
 	byKey := map[string]changeset.Hunk{}
 	for _, f := range parsed {
 		for _, h := range f.Hunks {
-			byKey[types.DiffHunkRef{Path: f.Path, Index: h.Index}.Key()] = h
+			byKey[diff.HunkRef{Path: f.Path, Index: h.Index}.Key()] = h
 		}
 	}
-	files := map[string]types.DiffFile{}
+	files := map[string]diff.File{}
 	for _, f := range rev.Files {
 		files[f.Path] = f
 	}
@@ -52,8 +52,8 @@ func diffOrderTUIFiles(rev types.Diff, parsed []changeset.FileHunks) []difftui.F
 					src := files[sh.Ref.Path]
 					piece := difftui.File{
 						Path:      sh.Ref.Path,
-						Settled:   src.ReadState == types.DiffReadRead,
-						Generated: g.Kind == types.DiffGroupGenerated || src.Generated(),
+						Settled:   src.ReadState == diff.ReadRead,
+						Generated: g.Kind == diff.GroupGenerated || src.Generated(),
 						Facts:     []string{fmt.Sprintf("step %d of %d, %s", s.Number, steps, review.GroupTitle(g))},
 					}
 					if !shown[sh.Ref.Path] {
@@ -83,7 +83,7 @@ func diffOrderTUIFiles(rev types.Diff, parsed []changeset.FileHunks) []difftui.F
 		if !shown[f.Path] {
 			out = append(out, difftui.File{
 				Path:      f.Path,
-				Settled:   f.ReadState == types.DiffReadRead,
+				Settled:   f.ReadState == diff.ReadRead,
 				Generated: f.Generated(),
 				Facts:     diffFileFacts(f),
 			})
@@ -94,7 +94,7 @@ func diffOrderTUIFiles(rev types.Diff, parsed []changeset.FileHunks) []difftui.F
 
 // orderSteps is the order's step count: its highest step number, since steps are numbered from
 // 1 across the whole order and the unread filter drops steps without renumbering the rest.
-func orderSteps(o *types.DiffOrder) int {
+func orderSteps(o *diff.Order) int {
 	n := 0
 	for _, g := range o.Groups {
 		for _, s := range g.Steps {

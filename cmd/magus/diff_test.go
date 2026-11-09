@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -178,9 +179,9 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 // SortForReading and put a lockfile back at the top.
 func TestDiffTUIFilesJoinKeepsTheAnnotationOrder(t *testing.T) {
 	reach := 12
-	rev := types.Diff{Files: []types.DiffFile{
-		{Path: "core.go", Role: types.DiffRoleSource, Visibility: types.DiffVisibilityInternal, Reach: &reach, Project: "root"},
-		{Path: "gen/out.json", Role: types.DiffRoleOutput, Visibility: types.DiffVisibilityUnknown},
+	rev := diff.Diff{Files: []diff.File{
+		{Path: "core.go", Role: diff.RoleSource, Visibility: diff.VisibilityInternal, Reach: &reach, Project: "root"},
+		{Path: "gen/out.json", Role: diff.RoleOutput, Visibility: diff.VisibilityUnknown},
 	}}
 	patch := "diff --git a/gen/out.json b/gen/out.json\n" +
 		"@@ -1 +1 @@\n" +
@@ -214,11 +215,11 @@ func TestDiffTUIFilesJoinKeepsTheAnnotationOrder(t *testing.T) {
 }
 
 func TestDiffCountsLineIsWhatTheReaderIsLeftWith(t *testing.T) {
-	rev := types.Diff{
-		Files: []types.DiffFile{
-			{Path: "a.go", Role: types.DiffRoleSource},
-			{Path: "b.go", Role: types.DiffRoleSource},
-			{Path: "gen/out.json", Role: types.DiffRoleOutput},
+	rev := diff.Diff{
+		Files: []diff.File{
+			{Path: "a.go", Role: diff.RoleSource},
+			{Path: "b.go", Role: diff.RoleSource},
+			{Path: "gen/out.json", Role: diff.RoleOutput},
 		},
 		SeedProjects:     []string{"root"},
 		AffectedProjects: []types.ImpactProject{{Path: "root"}, {Path: "docs"}},
@@ -229,8 +230,8 @@ func TestDiffCountsLineIsWhatTheReaderIsLeftWith(t *testing.T) {
 	// folded contradicts the page it introduces.
 	assert.Equal(t, "2 files to read, 1 generated shown; 1 projects edited, 2 projects rebuild",
 		diffCountsLine(rev, true))
-	assert.Equal(t, "0 files to read", diffCountsLine(types.Diff{}, false))
-	assert.Equal(t, "0 files to read", diffCountsLine(types.Diff{}, true),
+	assert.Equal(t, "0 files to read", diffCountsLine(diff.Diff{}, false))
+	assert.Equal(t, "0 files to read", diffCountsLine(diff.Diff{}, true),
 		"with nothing generated there is no clause either way")
 }
 
@@ -258,7 +259,7 @@ func impactFixture() diffImpact {
 			},
 		},
 		Advisors: []adviceSection{
-			{Name: "exported-api", Title: "A public symbol changed", Body: "types.Diff is exported.\nBump the minor."},
+			{Name: "exported-api", Title: "A public symbol changed", Body: "diff.Diff is exported.\nBump the minor."},
 			// A retraction sits in the fixture because every real run has several: it must not
 			// read as a finding, and it must not read as an advisor that failed either.
 			{Name: "retracted", Title: "Nothing to retract"},
@@ -320,7 +321,7 @@ func TestImpactRendersEverySection(t *testing.T) {
 		"BASE: origin/main, tip 2 days old - a local run stays off the network, so anything merged since is outside what the advisors saw; `git fetch origin main` brings it forward",
 		"ADVISORS: 1 finding",
 		"      A public symbol changed",
-		"        types.Diff is exported.",
+		"        diff.Diff is exported.",
 		"        Bump the minor.",
 		"      1 ran and found nothing: retracted",
 		"      could not run: doctor.buzz: main() returned 1",
@@ -468,10 +469,10 @@ func TestImpactListsReportWhatTheyLeftOff(t *testing.T) {
 // line, which a substring check for the section headers would not catch.
 func TestPrintDiffTextWithoutImpactIsUnchanged(t *testing.T) {
 	reach := 12
-	rev := types.Diff{
-		Files: []types.DiffFile{
-			{Path: "a.go", Role: types.DiffRoleSource, Reach: &reach, Project: "root"},
-			{Path: "gen/out.json", Role: types.DiffRoleOutput},
+	rev := diff.Diff{
+		Files: []diff.File{
+			{Path: "a.go", Role: diff.RoleSource, Reach: &reach, Project: "root"},
+			{Path: "gen/out.json", Role: diff.RoleOutput},
 		},
 		SeedProjects:     []string{"root"},
 		AffectedProjects: []types.ImpactProject{{Path: "root"}, {Path: "docs"}},
@@ -501,7 +502,7 @@ func TestPrintDiffTextWithoutImpactIsUnchanged(t *testing.T) {
 // TestPrintDiffTextAppendsImpactAboveTheConsoleLink pins where the report lands: after the
 // file list, so the ordering of everything a reader already knows how to scan is untouched.
 func TestPrintDiffTextAppendsImpactAboveTheConsoleLink(t *testing.T) {
-	rev := types.Diff{Files: []types.DiffFile{{Path: "a.go", Role: types.DiffRoleSource}}}
+	rev := diff.Diff{Files: []diff.File{{Path: "a.go", Role: diff.RoleSource}}}
 	pre := impactFixture()
 
 	out := captureStdout(t, func() {
@@ -581,9 +582,9 @@ func TestImpactOwnersJoinOnlyTheReach(t *testing.T) {
 // own idea of the blast radius: types.Diff has carried these two fields all along and this
 // section only prints them.
 func TestImpactReachRendersWhatTheDiffAlreadyKnew(t *testing.T) {
-	assert.Nil(t, computeImpactReach(types.Diff{}), "an empty closure is a state, not a lookup failure")
+	assert.Nil(t, computeImpactReach(diff.Diff{}), "an empty closure is a state, not a lookup failure")
 
-	r := computeImpactReach(types.Diff{
+	r := computeImpactReach(diff.Diff{
 		SeedProjects:     []string{"root"},
 		AffectedProjects: []types.ImpactProject{{Path: "root", Seed: true, Files: []string{"a.go", "b.go"}}, {Path: "docs"}},
 	})
@@ -686,12 +687,12 @@ func TestDiffBridgeQueueKeepsTheNewestCursor(t *testing.T) {
 
 	// The first op is taken by the sender and held in the handler, which is what makes the rest
 	// deterministic: nothing is receiving from the queue while they are pushed.
-	b.SetCursor(types.DiffCursor{Path: "a.go", Hunk: 0})
+	b.SetCursor(diff.Cursor{Path: "a.go", Hunk: 0})
 	<-held.started
 
 	const pushed = 20
 	for i := 1; i <= pushed; i++ {
-		b.SetCursor(types.DiffCursor{Path: "a.go", Hunk: i})
+		b.SetCursor(diff.Cursor{Path: "a.go", Hunk: i})
 	}
 	held.unblock()
 	b.close()
@@ -714,14 +715,14 @@ func TestDiffBridgeNeverDropsAReadMark(t *testing.T) {
 	held := newHeldDiffSession(t)
 	b := held.bridge()
 
-	b.SetCursor(types.DiffCursor{Path: "a.go", Hunk: 0})
+	b.SetCursor(diff.Cursor{Path: "a.go", Hunk: 0})
 	<-held.started
 
 	// Far more cursor moves than the cursor queue holds, with marks interleaved: the overflow
 	// that evicts one must not be able to reach the other.
 	var want []string
 	for i := 0; i < 40; i++ {
-		b.SetCursor(types.DiffCursor{Path: "a.go", Hunk: i + 1})
+		b.SetCursor(diff.Cursor{Path: "a.go", Hunk: i + 1})
 		if i%8 == 0 {
 			d := fmt.Sprintf("digest-%d", i)
 			want = append(want, d)
@@ -796,7 +797,7 @@ func TestDiffBridgeSendAfterCloseIsSafe(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		b.SetCursor(types.DiffCursor{Path: "a.go", Hunk: 1})
+		b.SetCursor(diff.Cursor{Path: "a.go", Hunk: 1})
 		b.SetViewed("d1", true)
 	}()
 	select {
@@ -869,7 +870,7 @@ type recordingSync struct {
 	closed bool
 }
 
-func (r *recordingSync) SetCursor(types.DiffCursor)       {}
+func (r *recordingSync) SetCursor(diff.Cursor)            {}
 func (r *recordingSync) SetViewed(digest string, on bool) { r.marks = append(r.marks, digest) }
 func (r *recordingSync) SetThreadsSeen(ids []string)      { r.seen = append(r.seen, ids...) }
 func (r *recordingSync) close()                           { r.closed = true }
@@ -994,7 +995,7 @@ func TestEarnedSyncMintsNothingForAFileItCannotRead(t *testing.T) {
 func TestTerminalSeenMarkingReachesTheStoreTheConsoleWrites(t *testing.T) {
 	root, cache := t.TempDir(), t.TempDir()
 	sessions := changeset.NewStore(cache)
-	sessions.Attach(root, "main", types.Diff{Base: "main"}, "asof")
+	sessions.Attach(root, "main", diff.Diff{Base: "main"}, "asof")
 
 	diffStoreSync{store: sessions, root: root}.SetThreadsSeen([]string{"t1", "t2"})
 
@@ -1452,7 +1453,7 @@ final %s = [
 // names types declares, both ways: a check with no table would report into nothing, and a
 // table with no check is a heading nobody can reach.
 func TestConformanceTablesCoverEveryCheck(t *testing.T) {
-	decls, err := os.ReadFile(filepath.Join("..", "..", "types", "diff.go"))
+	decls, err := os.ReadFile(filepath.Join("..", "..", "types", "diff", "diff.go"))
 	require.NoError(t, err)
 	script, err := os.ReadFile(filepath.Join("..", "..", adviceDirRel, "conformance.buzz"))
 	require.NoError(t, err)
@@ -1534,27 +1535,27 @@ func TestLocalAdvisorsMatchAdviseBuzz(t *testing.T) {
 
 // reviewFixture plants files in a working tree and returns the tree, a cache dir, and the
 // changeset naming them.
-func reviewFixture(t *testing.T, files map[string]string, roles map[string]string) (string, string, types.Diff) {
+func reviewFixture(t *testing.T, files map[string]string, roles map[string]string) (string, string, diff.Diff) {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
 	root, cache := w.Root(), t.TempDir()
 
-	var rev types.Diff
+	var rev diff.Diff
 	for path, body := range files {
 		w.Write(path, body)
 
-		role := types.DiffRoleSource
+		role := diff.RoleSource
 		if r, ok := roles[path]; ok {
 			role = r
 		}
-		rev.Files = append(rev.Files, types.DiffFile{Path: path, Role: role})
+		rev.Files = append(rev.Files, diff.File{Path: path, Role: role})
 	}
 	return root, cache, rev
 }
 
 // attach folds the receipt store onto the changeset the way annotateDiff does, so these
 // tests exercise the join the CLI and the console both go through rather than a second one.
-func attach(t *testing.T, root, cache string, rev types.Diff) types.Diff {
+func attach(t *testing.T, root, cache string, rev diff.Diff) diff.Diff {
 	t.Helper()
 	states, err := review.ReadStates(cache, review.ChangedPaths(rev), reviewedContent{root: root}.digest)
 	require.NoError(t, err)
@@ -1606,7 +1607,7 @@ func TestCollectReview(t *testing.T) {
 	t.Run("generated output is not something to have read", func(t *testing.T) {
 		root, cache, rev := reviewFixture(t,
 			map[string]string{"a.go": "package a\n", "gen/x.go": "package gen\n"},
-			map[string]string{"gen/x.go": types.DiffRoleOutput})
+			map[string]string{"gen/x.go": diff.RoleOutput})
 
 		got := collectReview(attach(t, root, cache, rev), nil, nil)
 		require.NotNil(t, got)
@@ -1621,7 +1622,7 @@ func TestCollectReview(t *testing.T) {
 	// not measured. Reporting it as unread would accuse somebody of skipping a deletion.
 	t.Run("a deleted file is unmeasured, not unread", func(t *testing.T) {
 		root, cache := t.TempDir(), t.TempDir()
-		rev := types.Diff{Files: []types.DiffFile{{Path: "gone.go", Role: types.DiffRoleSource}}}
+		rev := diff.Diff{Files: []diff.File{{Path: "gone.go", Role: diff.RoleSource}}}
 
 		n, err := ackChangeset(reviewedContent{root: root}, cache, rev, "spot-checked", time.Now())
 		require.NoError(t, err)
@@ -1785,10 +1786,10 @@ func (s *projectsWorkspace) All() []*types.Project { return s.projects }
 // TestScopeAck is the editor-freedom path: a reader who read three files in vim records
 // those three, without claiming the other thirty and without opening magus's viewer.
 func TestScopeAck(t *testing.T) {
-	rev := types.Diff{Files: []types.DiffFile{
-		{Path: "a.go", Role: types.DiffRoleSource},
-		{Path: "b.go", Role: types.DiffRoleSource},
-		{Path: "c.go", Role: types.DiffRoleSource},
+	rev := diff.Diff{Files: []diff.File{
+		{Path: "a.go", Role: diff.RoleSource},
+		{Path: "b.go", Role: diff.RoleSource},
+		{Path: "c.go", Role: diff.RoleSource},
 	}}
 
 	t.Run("no paths covers the whole changeset", func(t *testing.T) {
@@ -1830,39 +1831,39 @@ func diffReach(n int) *int { return &n }
 // is the opposite of "nobody looked".
 func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 	t.Run("nothing measured yields no facts", func(t *testing.T) {
-		assert.Empty(t, diffFileFacts(types.DiffFile{Path: "a.go", Visibility: types.DiffVisibilityUnknown}))
+		assert.Empty(t, diffFileFacts(diff.File{Path: "a.go", Visibility: diff.VisibilityUnknown}))
 	})
 
 	t.Run("zero reach is not a fact", func(t *testing.T) {
-		facts := diffFileFacts(types.DiffFile{Path: "a.go", Reach: diffReach(0)})
+		facts := diffFileFacts(diff.File{Path: "a.go", Reach: diffReach(0)})
 		assert.Empty(t, facts)
 	})
 
 	t.Run("singular nouns agree with their counts", func(t *testing.T) {
-		facts := diffFileFacts(types.DiffFile{
+		facts := diffFileFacts(diff.File{
 			Path:  "a.go",
 			Reach: diffReach(1),
-			Churn: &types.DiffChurn{Commits: 1},
+			Churn: &diff.Churn{Commits: 1},
 		})
 		assert.Contains(t, facts, "1 file reference its widest changed symbol")
 		assert.Contains(t, facts, "changed in 1 commit")
 	})
 
 	t.Run("exported API names the exports when it knows them", func(t *testing.T) {
-		facts := diffFileFacts(types.DiffFile{
+		facts := diffFileFacts(diff.File{
 			Path:       "a.go",
-			Visibility: types.DiffVisibilityPublic,
-			Symbols:    []types.DiffSymbol{{Label: "Open", PublicBeyondWorkspace: true}, {Label: "Close", PublicBeyondWorkspace: true}},
+			Visibility: diff.VisibilityPublic,
+			Symbols:    []diff.Symbol{{Label: "Open", PublicBeyondWorkspace: true}, {Label: "Close", PublicBeyondWorkspace: true}},
 		})
 		require.NotEmpty(t, facts)
 		assert.Equal(t, "EXPORTED API: exports Open, Close", facts[0])
 	})
 
 	t.Run("conformance shows each check's message", func(t *testing.T) {
-		facts := diffFileFacts(types.DiffFile{
+		facts := diffFileFacts(diff.File{
 			Path: "a.go",
-			Symbols: []types.DiffSymbol{{Label: "EntryPointFrom", Checks: []types.Check{{
-				Name: types.CheckNamingAffix, Status: types.CheckAdvice, Evidence: types.EvidenceInferred,
+			Symbols: []diff.Symbol{{Label: "EntryPointFrom", Checks: []types.Check{{
+				Name: diff.CheckNamingAffix, Status: types.CheckAdvice, Evidence: types.EvidenceInferred,
 				Message: "`EntryPointFrom`: 8 of 9 functions shaped `func(ctx) value` that say From or Context are named `<X>FromContext`",
 				Details: []string{"named <X>FromContext: BaseFromContext"},
 			}}}},
@@ -1873,10 +1874,10 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 	})
 
 	t.Run("exported API falls back to the consuming projects", func(t *testing.T) {
-		facts := diffFileFacts(types.DiffFile{
+		facts := diffFileFacts(diff.File{
 			Path:       "a.go",
-			Visibility: types.DiffVisibilityPublic,
-			Symbols: []types.DiffSymbol{
+			Visibility: diff.VisibilityPublic,
+			Symbols: []diff.Symbol{
 				{Label: "Open", PublicTo: []string{"web", "api"}},
 				{Label: "Close", PublicTo: []string{"web"}},
 			},
@@ -1886,23 +1887,23 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 	})
 
 	t.Run("exported API with no evidence still says public", func(t *testing.T) {
-		facts := diffFileFacts(types.DiffFile{Path: "a.go", Visibility: types.DiffVisibilityPublic})
+		facts := diffFileFacts(diff.File{Path: "a.go", Visibility: diff.VisibilityPublic})
 		require.NotEmpty(t, facts)
 		assert.Equal(t, "EXPORTED API", facts[0])
 	})
 
 	t.Run("a hot rising file says so, and an unranked one keeps its commit count", func(t *testing.T) {
-		hot := diffFileFacts(types.DiffFile{
+		hot := diffFileFacts(diff.File{
 			Path:    "a.go",
 			Project: "core",
-			Churn:   &types.DiffChurn{Commits: 40, Authors: 6, Rank: 3, ProjectTrend: 12},
+			Churn:   &diff.Churn{Commits: 40, Authors: 6, Rank: 3, ProjectTrend: 12},
 		})
 		assert.Contains(t, hot, "changed in 40 commits by 6 people, hotspot #3 AND RISING - worth asking why it keeps changing")
 		assert.Contains(t, hot, "in core")
 
-		cold := diffFileFacts(types.DiffFile{
+		cold := diffFileFacts(diff.File{
 			Path:  "a.go",
-			Churn: &types.DiffChurn{Commits: 40, Rank: types.NotableRankCutoff + 1, ProjectTrend: 12},
+			Churn: &diff.Churn{Commits: 40, Rank: diff.NotableRankCutoff + 1, ProjectTrend: 12},
 		})
 		assert.Contains(t, cold, "changed in 40 commits")
 		for _, f := range cold {
@@ -1912,7 +1913,7 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 	})
 
 	t.Run("coverage rounds and no history is stated plainly", func(t *testing.T) {
-		facts := diffFileFacts(types.DiffFile{
+		facts := diffFileFacts(diff.File{
 			Path:      "a.go",
 			Coverage:  &types.ImpactCoverage{Ratio: 0.675, Covered: 27, Total: 40},
 			NoHistory: true,
@@ -1922,7 +1923,7 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 	})
 
 	t.Run("zero total coverage is not zero percent", func(t *testing.T) {
-		facts := diffFileFacts(types.DiffFile{Path: "a.go", Coverage: &types.ImpactCoverage{}})
+		facts := diffFileFacts(diff.File{Path: "a.go", Coverage: &types.ImpactCoverage{}})
 		assert.Empty(t, facts)
 	})
 }
@@ -2083,24 +2084,24 @@ func TestWantsTUIKeepsTheViewerForUnreadAndThread(t *testing.T) {
 // the unranked caveat's placement BEFORE the list, the generated fold in both states, and
 // the agent trail.
 func TestPrintDiffTextOrdersTheEvidence(t *testing.T) {
-	rev := types.Diff{
+	rev := diff.Diff{
 		Base: "working",
-		Files: []types.DiffFile{
+		Files: []diff.File{
 			{
 				Path:       "core/engine.go",
 				Project:    "core",
-				Role:       types.DiffRoleSource,
-				Visibility: types.DiffVisibilityPublic,
-				Symbols:    []types.DiffSymbol{{Label: "Run", PublicBeyondWorkspace: true, FileCount: 12}},
+				Role:       diff.RoleSource,
+				Visibility: diff.VisibilityPublic,
+				Symbols:    []diff.Symbol{{Label: "Run", PublicBeyondWorkspace: true, FileCount: 12}},
 				Reach:      diffReach(12),
-				Touches: []types.DiffTouch{{
+				Touches: []diff.Touch{{
 					Host:       "claude-code",
 					Read:       []string{"core/engine.go", "core/plan.go"},
 					Transcript: "/tmp/session.jsonl",
 				}},
 			},
-			{Path: "web/app.ts", Role: types.DiffRoleSource, Touches: []types.DiffTouch{{}}},
-			{Path: "MAGUS.md", Role: types.DiffRoleOutput},
+			{Path: "web/app.ts", Role: diff.RoleSource, Touches: []diff.Touch{{}}},
+			{Path: "MAGUS.md", Role: diff.RoleOutput},
 		},
 		SeedProjects:     []string{"core"},
 		AffectedProjects: []types.ImpactProject{{}, {}},
@@ -2138,9 +2139,9 @@ func TestPrintDiffTextOrdersTheEvidence(t *testing.T) {
 	})
 
 	t.Run("unranked says so before the list", func(t *testing.T) {
-		unranked := types.Diff{Files: []types.DiffFile{
-			{Path: "b.go", Role: types.DiffRoleSource},
-			{Path: "a.go", Role: types.DiffRoleSource},
+		unranked := diff.Diff{Files: []diff.File{
+			{Path: "b.go", Role: diff.RoleSource},
+			{Path: "a.go", Role: diff.RoleSource},
 		}}
 		out := captureStdout(t, func() {
 			require.NoError(t, printDiffText(unranked, false, func(p string) string { return p }, nil))
@@ -2153,7 +2154,7 @@ func TestPrintDiffTextOrdersTheEvidence(t *testing.T) {
 
 	t.Run("a single unranked file gets no caveat", func(t *testing.T) {
 		out := captureStdout(t, func() {
-			one := types.Diff{Files: []types.DiffFile{{Path: "a.go", Role: types.DiffRoleSource}}}
+			one := diff.Diff{Files: []diff.File{{Path: "a.go", Role: diff.RoleSource}}}
 			require.NoError(t, printDiffText(one, false, func(p string) string { return p }, nil))
 		})
 		assert.NotContains(t, out, "UNRANKED")
@@ -2266,8 +2267,8 @@ func TestReviewedContentYieldsNothingForAFileAbsentAtTheRevision(t *testing.T) {
 // that re-derived it would be the second lookup this join exists to prevent.
 func TestHintSinceLastReview(t *testing.T) {
 	rangeSrc := diffInput{kind: inputRevRange, base: "main", head: "topic", label: "the range main...topic"}
-	reviewed := func(at types.VCSCheckpoint, files int) types.Diff {
-		rev := types.Diff{Files: []types.DiffFile{{Path: "a.go"}, {Path: "b.go"}}}
+	reviewed := func(at types.VCSCheckpoint, files int) diff.Diff {
+		rev := diff.Diff{Files: []diff.File{{Path: "a.go"}, {Path: "b.go"}}}
 		rev.AttachReviewed(at, files)
 		return rev
 	}
@@ -2313,8 +2314,8 @@ func TestDiffTUIFilesHandsTheViewerTheEscapedForm(t *testing.T) {
 	// Written as an escape, never as the character: bidichk gates this repo's own source, and a
 	// test file carrying a raw override is one where the deception is invisible to its reviewer.
 	const rlo = "\u202e"
-	rev := types.Diff{Files: []types.DiffFile{
-		{Path: "auth.go", Role: types.DiffRoleSource},
+	rev := diff.Diff{Files: []diff.File{
+		{Path: "auth.go", Role: diff.RoleSource},
 	}}
 	patch := "diff --git a/auth.go b/auth.go\n" +
 		"--- a/auth.go\n+++ b/auth.go\n" +
@@ -2337,7 +2338,7 @@ func TestDiffTUIFilesHandsTheViewerTheEscapedForm(t *testing.T) {
 // The control for the one above: an honest patch reaches the viewer byte for byte. Display is nil
 // for every ordinary hunk, so a join that read it unconditionally would hand the viewer nothing.
 func TestDiffTUIFilesLeavesAnHonestPatchAlone(t *testing.T) {
-	rev := types.Diff{Files: []types.DiffFile{{Path: "a.go", Role: types.DiffRoleSource}}}
+	rev := diff.Diff{Files: []diff.File{{Path: "a.go", Role: diff.RoleSource}}}
 	patch := "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1 +1 @@\n-old\n+new\n"
 
 	files := diffTUIFiles(rev, changeset.ParseHunks(patch))
@@ -2350,8 +2351,8 @@ func TestDiffTUIFilesLeavesAnHonestPatchAlone(t *testing.T) {
 func TestDiffAPILinesNameTheReleaseStage(t *testing.T) {
 	t.Parallel()
 
-	api := func(stage types.ReleaseStage) *types.DiffAPI {
-		return &types.DiffAPI{Base: "main", Floor: types.DiffBumpMajor, Likely: types.DiffBumpMajor, Removed: 1, Stage: stage}
+	api := func(stage types.ReleaseStage) *diff.API {
+		return &diff.API{Base: "main", Floor: diff.BumpMajor, Likely: diff.BumpMajor, Removed: 1, Stage: stage}
 	}
 	cases := map[string]struct {
 		stage types.ReleaseStage

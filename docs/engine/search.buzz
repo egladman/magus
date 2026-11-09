@@ -65,13 +65,13 @@ export fun renderSearchPage(site: Site) > void !> any {
   </div>
   <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="{{root}}documentation/">documentation</a>, or use GitHub's code search on the <a href="{{gh}}">source repo</a>.</p></noscript>
 </div>
-`, {"root": root, "gh": site.config.repoURL, "rows": rows});
+`, {"root": root, "gh": site.inputs.config.repoURL, "rows": rows});
     final title = "Search";
     final desc = "Search the magus documentation. Filter by tag with tag:name, exclude terms with -term, and match exact phrases with quotes.";
     final doc = renderPage(title, desc, body, "search/index.md", "", "search/", "", mut [], "", site);
-    fs\mkdirAll(site.outDir + "/search");
-    final of = io\File.open(site.outDir + "/search/index.html", io\FileMode.write);
+    fs\mkdirAll(site.inputs.outDir + "/search");
+    final of = io\File.open(site.inputs.outDir + "/search/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
-    std\print("  search page -> " + site.outDir + "/search/index.html");
+    std\print("  search page -> " + site.inputs.outDir + "/search/index.html");
 }

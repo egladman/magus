@@ -18,13 +18,9 @@ const (
 	RuleNominalizations Rule = "nominalizations"
 )
 
-// densityKinds are the kinds written as running prose long enough for a rate
-// over the whole text to mean something.
-var densityKinds = []Kind{KindChangeDescription, KindReference, KindPrinciple, KindGuide, KindIssue}
-
 var densityChecks = []check{
-	{rule: RuleParticiples, on: densityKinds, graded: true, judge: participles},
-	{rule: RuleNominalizations, on: densityKinds, graded: true, judge: nominalizations},
+	{rule: RuleParticiples, reads: proseFormats, judge: participles},
+	{rule: RuleNominalizations, reads: proseFormats, judge: nominalizations},
 }
 
 var densityTexts = map[Rule]ruleText{

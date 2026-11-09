@@ -23,18 +23,16 @@ const (
 	RuleBannedWord Rule = "banned-word"
 )
 
-var stylesheet = []Kind{KindStylesheet}
-
 // blockBudgetCheck has no judge: a block's budget is judged once the whole
 // file is read (see [judgeStylesheet]), and the entry gives the rule its
 // decisions and its place in [Rules].
-var blockBudgetCheck = check{rule: RuleBlockBudget, on: stylesheet, house: true}
+var blockBudgetCheck = check{rule: RuleBlockBudget, reads: []Format{FormatStylesheet}}
 
 var cssChecks = []check{
-	{rule: RuleRestates, on: stylesheet, house: true, judge: restates},
-	{rule: RuleCommentBudget, on: stylesheet, house: true, judge: commentBudget},
+	{rule: RuleRestates, reads: []Format{FormatStylesheet}, judge: restates},
+	{rule: RuleCommentBudget, reads: []Format{FormatStylesheet}, judge: commentBudget},
 	blockBudgetCheck,
-	{rule: RuleBannedWord, on: stylesheet, house: true, judge: bannedWord},
+	{rule: RuleBannedWord, reads: []Format{FormatStylesheet}, judge: bannedWord},
 }
 
 var cssTexts = map[Rule]ruleText{
@@ -242,7 +240,7 @@ const nounFix = "Say what the thing is: the CLI, the page, the API. A verb this 
 func bannedWord(in input) []Finding {
 	var out []Finding
 
-	for _, para := range paragraphs(in.prose, mentions(in.kind)) {
+	for _, para := range paragraphs(in.prose, mentions(in.spec.Reader.Format)) {
 		for _, at := range bannedPlain.FindAllStringSubmatchIndex(para.text, -1) {
 			group := 0
 

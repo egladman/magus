@@ -1,6 +1,6 @@
 ---
 name: magus-local-development
-description: "Triage a review finding against magus's own Go before fixing it. Check for a pinning test, a test that asserts the bug, or a stale doc comment. Use when acting on review findings or fixing a suspected bug in internal/, cmd/, std/ or libs/. Use when adding a package-level cache or memo to the run path. Repo-only; never shipped."
+description: "Triage a review finding against magus's own Go before fixing it: find a pinning test, a test asserting the bug, or a stale doc comment. Use when fixing a finding or suspected bug in internal/, cmd/, std/ or libs/, or when adding a package-level cache to the run path. Use before restarting the server after a guard lapse. Repo-only."
 metadata:
   source: workspace
 ---
@@ -138,3 +138,16 @@ magus buzz hack/retro/denials.buzz -- [--trail <checkout>]... [--since <duration
   clears the `say`.
 - `--trail` defaults to this checkout. Point it at the root worktree to read its trail.
 - List each `not recorded:` line in the review as a gap.
+
+<!-- rule: no-daemon-while-dogfooding; added: 2026-11-09; origin: person, Eli;
+     evidence: a session that started, stopped and asked the person to restart the server several times while the guard lapsed;
+     retire-when: magus leaves pre-1.0 development and the daemon is the supported way to run it here -->
+## 11. Leave the server stopped
+
+This repository runs magus from source while it is under development, so the daemon is not
+running and stays that way.
+
+- Never run `magus server start`, `stop` or `restart`, and never hand the person a command that does.
+- A guard lapse, a slow command or a client and server version mismatch is not a reason to start
+  it. Report the lapse after its second retry and go on without the server.
+- A remedy that names the server is not a step to take here. Skip it and say that you skipped it.

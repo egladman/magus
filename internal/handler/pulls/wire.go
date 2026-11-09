@@ -1,7 +1,6 @@
 package pulls
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -83,11 +82,4 @@ func shortSHA(sha string) string {
 		return sha[:7]
 	}
 	return sha
-}
-
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return fmt.Sprintf("1 %s", one)
-	}
-	return fmt.Sprintf("%d %s", n, many)
 }

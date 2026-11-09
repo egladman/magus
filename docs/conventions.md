@@ -162,7 +162,7 @@ printed, which suits standard-library examples. `<!-- magus-run-recorder -->` is
 magusfile and spell examples: those fork real tools, which a browser cannot do, so it
 runs the snippet in dry-run and reports the tool invocations it WOULD have triggered as
 a trace. Both are wired in
-[`docs/lib/html.buzz`](https://github.com/egladman/magus/blob/main/docs/lib/html.buzz) (the
+[`libs/ssg/rewrite.buzz`](https://github.com/egladman/magus/blob/main/libs/ssg/rewrite.buzz) (the
 marker becomes a `data-magus-run` attribute at build time) and driven by
 [`docs/src/site/run-example.ts`](https://github.com/egladman/magus/blob/main/docs/src/site/run-example.ts).
 
@@ -180,6 +180,38 @@ per type:
 > Something that can bite you if ignored.
 
 The types are `NOTE`, `TIP`, `IMPORTANT`, `WARNING`, and `CAUTION`.
+
+### Author's notes
+
+Every other sentence on this site speaks for magus: it says what magus does, and a reader
+can hold magus to it. An author's note is the one exception. In it Eli, who writes magus,
+describes a personal setup or habit in the first person, and it promises nothing about the
+product:
+
+> [!AUTHOR]
+> I keep a second checkout of magus that never leaves main, so the repositories I connect
+> to it lint against what has merged, not what I am in the middle of.
+
+Write one as an alert of type `AUTHOR`:
+
+```markdown
+> [!AUTHOR]
+> I keep a second checkout of magus that never leaves main.
+```
+
+- **What it renders as.** An aside with a dashed frame, titled "Author's note", with a
+  byline saying it is personal practice. Its body is set in italics. GitHub has no
+  `AUTHOR` alert, so there it shows as a plain blockquote with the marker visible.
+- **What proofread allows in it.** The `first-person` rule
+  ([PRF1005](reference/proofread/first-person.md)) reports `I`, `me` and `my` on a reference
+  page or a guide, and leaves the lines of an author's note alone. Quoted words and code
+  are mentions, so a reader's question in quotes passes anywhere. Every other rule still
+  judges the note.
+- **When to write one.** When a page is better for knowing what its author does: a setup
+  run every day, or the habit behind a choice. Not for a recommendation: a step the
+  reader should take belongs in the page's own voice, where magus stands behind it.
+- **Where it is not needed.** The design pages and blog posts argue in the author's voice
+  throughout, and neither is held to `first-person`.
 
 ## Footnotes
 

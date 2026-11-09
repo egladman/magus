@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	imagetypes "github.com/egladman/magus/types/image"
 	"os"
 	"path/filepath"
 	"slices"
@@ -21,8 +22,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module image -lang buzz -out ../internal/interp/bindings/gen/image.go -pkg bindgen
-
 // Image is the Buzz image module: it assembles OCI Image Layouts from files a target
 // already wrote, and pulls and pushes them. Nothing in it runs a program.
 var Image = Module{
@@ -32,24 +31,24 @@ var Image = Module{
 		{
 			Name:    "assemble",
 			Doc:     "Write the Image Manifest spec describes as a layout at layout: the base's layers, at most one new layer, the config and the manifest. Never touches the network.",
-			Args:    []Arg{{Name: "spec", Type: TypeAnyMap, Object: "Spec"}, {Name: "layout", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Layout"}},
+			Args:    []Arg{{Name: "spec", Object: "Spec"}, {Name: "layout"}},
+			Returns: []Ret{{Object: "Layout"}},
 			Raises:  true,
 			Impl:    ImageAssemble,
 		},
 		{
 			Name:    "layout",
 			Doc:     "List every entry the new layer of spec holds, in added.entries: path, kind, mode, owner, size, mtime and the Spec item that placed it. It is the list assemble writes, read from the spec's host files without writing; there are no digests yet, and the base is never opened. A dry run of assemble returns the same.",
-			Args:    []Arg{{Name: "spec", Type: TypeAnyMap, Object: "Spec"}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Layout"}},
+			Args:    []Arg{{Name: "spec", Object: "Spec"}},
+			Returns: []Ret{{Object: "Layout"}},
 			Raises:  true,
 			Impl:    ImageLayout,
 		},
 		{
 			Name:    "assemble_index",
 			Doc:     "Write one Image Index over single-platform layouts as a layout at layout. Never touches the network.",
-			Args:    []Arg{{Name: "layouts", Type: TypeStringSlice}, {Name: "layout", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Layout"}},
+			Args:    []Arg{{Name: "layouts"}, {Name: "layout"}},
+			Returns: []Ret{{Object: "Layout"}},
 			Raises:  true,
 			Impl:    ImageAssembleIndex,
 		},
@@ -57,12 +56,12 @@ var Image = Module{
 			Name: "pull",
 			Doc:  "Fetch reference for platform into a layout at layout. A name@sha256:<hex> reference is content-addressed and caches like any input; a tag-only reference is refused outside the update charm.",
 			Args: []Arg{
-				{Name: "reference", Type: TypeString},
-				{Name: "platform", Type: TypeAnyMap, Object: "Platform"},
-				{Name: "layout", Type: TypeString},
-				{Name: "auth", Type: TypeAnyMap, Object: "RegistryAuth", Optional: true},
+				{Name: "reference"},
+				{Name: "platform", Object: "Platform"},
+				{Name: "layout"},
+				{Name: "auth", Object: "RegistryAuth", Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Layout"}},
+			Returns: []Ret{{Object: "Layout"}},
 			Raises:  true,
 			Impl:    ImagePull,
 		},
@@ -70,76 +69,76 @@ var Image = Module{
 			Name: "push",
 			Doc:  "Push the layout's image, its blobs and its referrers to repository, then tag it with each of tags; empty tags pushes by digest only. On a registry without the Referrers API each referrer is also listed in the subject's sha256-<hex> tag index.",
 			Args: []Arg{
-				{Name: "layout", Type: TypeString},
-				{Name: "repository", Type: TypeString},
-				{Name: "tags", Type: TypeStringSlice},
-				{Name: "auth", Type: TypeAnyMap, Object: "RegistryAuth", Optional: true},
+				{Name: "layout"},
+				{Name: "repository"},
+				{Name: "tags"},
+				{Name: "auth", Object: "RegistryAuth", Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Pushed"}},
+			Returns: []Ret{{Object: "Pushed"}},
 			Raises:  true,
 			Impl:    ImagePush,
 		},
 		{
 			Name:    "writeSBOM",
 			Doc:     "Write an SPDX 2.3 document naming the layout's image by digest to path.",
-			Args:    []Arg{{Name: "layout", Type: TypeString}, {Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Document"}},
+			Args:    []Arg{{Name: "layout"}, {Name: "path"}},
+			Returns: []Ret{{Object: "Document"}},
 			Raises:  true,
 			Impl:    ImageWriteSBOM,
 		},
 		{
 			Name:    "write_provenance",
 			Doc:     "Write an in-toto Statement v1 with SLSA v1 provenance for the layout's image to path. The digest of each base it was assembled over joins the dependencies.",
-			Args:    []Arg{{Name: "layout", Type: TypeString}, {Name: "provenance", Type: TypeAnyMap, Object: "Provenance"}, {Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Document"}},
+			Args:    []Arg{{Name: "layout"}, {Name: "provenance", Object: "Provenance"}, {Name: "path"}},
+			Returns: []Ret{{Object: "Document"}},
 			Raises:  true,
 			Impl:    ImageWriteProvenance,
 		},
 		{
 			Name:    "attach_referrers",
 			Doc:     "Write a new layout at layout holding subject's image and one OCI 1.1 referrer per document. subject is never edited.",
-			Args:    []Arg{{Name: "subject", Type: TypeString}, {Name: "documents", Type: TypeAny, Object: "[Document]"}, {Name: "layout", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Layout"}},
+			Args:    []Arg{{Name: "subject"}, {Name: "documents", Object: "[Document]"}, {Name: "layout"}},
+			Returns: []Ret{{Object: "Layout"}},
 			Raises:  true,
 			Impl:    ImageAttachReferrers,
 		},
 		{
 			Name:    "open",
 			Doc:     "Read the layout at layout back: the image whose org.opencontainers.image.ref.name is name (the only image when name is empty), the referrers whose subject it is, and for a single-platform image whose index.json entry names its platform, that platform, config and layers.",
-			Args:    []Arg{{Name: "layout", Type: TypeString}, {Name: "name", Type: TypeString, Optional: true}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Layout"}},
+			Args:    []Arg{{Name: "layout"}, {Name: "name", Optional: true}},
+			Returns: []Ret{{Object: "Layout"}},
 			Raises:  true,
 			Impl:    ImageOpen,
 		},
 		{
 			Name:    "referrers",
 			Doc:     "Read the documents attached beside the image at layout (the SBOM and provenance referrers) without a registry: one Document per referrer layer, its Path the blob in the layout so fs\\read reads it, its Descriptor the layer's with the referrer's artifactType. name picks the image as open does.",
-			Args:    []Arg{{Name: "layout", Type: TypeString}, {Name: "name", Type: TypeString, Optional: true}},
-			Returns: []Ret{{Type: TypeAny, Object: "[Document]"}},
+			Args:    []Arg{{Name: "layout"}, {Name: "name", Optional: true}},
+			Returns: []Ret{{Object: "[Document]"}},
 			Raises:  true,
 			Impl:    ImageReferrers,
 		},
 		{
 			Name:    "parsePlatform",
 			Doc:     "Parse \"linux/amd64\", \"linux/amd64/v3\" or \"linux/arm64/v8\" into a Platform.",
-			Args:    []Arg{{Name: "spec", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Platform"}},
+			Args:    []Arg{{Name: "spec"}},
+			Returns: []Ret{{Object: "Platform"}},
 			Raises:  true,
 			Impl:    ImageParsePlatform,
 		},
 		{
 			Name:    "parsePlatforms",
 			Doc:     "Parse each of specs into a Platform, refusing two that name the same platform: the set a multi-arch build fans out over.",
-			Args:    []Arg{{Name: "specs", Type: TypeStringSlice}},
-			Returns: []Ret{{Type: TypeAny, Object: "[Platform]"}},
+			Args:    []Arg{{Name: "specs"}},
+			Returns: []Ret{{Object: "[Platform]"}},
 			Raises:  true,
 			Impl:    ImageParsePlatforms,
 		},
 		{
 			Name:    "go_env",
 			Doc:     "The GOOS, GOARCH and, for an amd64 variant, GOAMD64 that make go build target platform, for a build target's ctx.withEnv.",
-			Args:    []Arg{{Name: "platform", Type: TypeAnyMap, Object: "Platform"}},
-			Returns: []Ret{{Type: TypeStringMap}},
+			Args:    []Arg{{Name: "platform", Object: "Platform"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    ImageGoEnv,
 		},
@@ -149,34 +148,34 @@ var Image = Module{
 		Methods: []Method{{
 			Name:    "string",
 			Doc:     "The digest as OCI writes it, \"sha256:<hex>\", and \"\" when unset.",
-			Returns: []Ret{{Type: TypeString}},
+			Returns: []Ret{{}},
 			Impl:    ImageDigestString,
 		}},
 	}},
 }
 
 // ImageDigestString is Digest.string() in Buzz.
-func ImageDigestString(_ context.Context, d types.ImageDigest) (string, error) {
+func ImageDigestString(_ context.Context, d imagetypes.Digest) (string, error) {
 	return d.String(), nil
 }
 
 // ImageAssemble writes the image spec describes as a layout at dest. A dry run
 // writes nothing and returns what ImageLayout returns.
-func ImageAssemble(ctx context.Context, spec types.ImageSpec, dest string) (types.ImageLayout, error) {
+func ImageAssemble(ctx context.Context, spec imagetypes.Spec, dest string) (imagetypes.Layout, error) {
 	if types.Stubbed(ctx, "image.assemble") {
 		return ImageLayout(ctx, spec)
 	}
 	s, err := imageSpec(ctx, spec)
 	if err != nil {
-		return types.ImageLayout{}, fmt.Errorf("image.assemble: %w", err)
+		return imagetypes.Layout{}, fmt.Errorf("image.assemble: %w", err)
 	}
 	dest = resolvePath(ctx, dest)
 	if err := imageCheck(ctx, imageReads(s), []string{dest}); err != nil {
-		return types.ImageLayout{}, fmt.Errorf("image.assemble: %w", err)
+		return imagetypes.Layout{}, fmt.Errorf("image.assemble: %w", err)
 	}
 	l, err := image.Assemble(ctx, s, dest)
 	if err != nil {
-		return types.ImageLayout{}, err
+		return imagetypes.Layout{}, err
 	}
 	return manifestToTypes(l), nil
 }
@@ -184,26 +183,26 @@ func ImageAssemble(ctx context.Context, spec types.ImageSpec, dest string) (type
 // ImageLayout lists every entry the new layer of spec holds, from the list
 // assemble writes. It reads the spec's host files, never the base, and writes
 // nothing, so it runs the same under a dry run.
-func ImageLayout(ctx context.Context, spec types.ImageSpec) (types.ImageLayout, error) {
+func ImageLayout(ctx context.Context, spec imagetypes.Spec) (imagetypes.Layout, error) {
 	s, err := imageSpec(ctx, spec)
 	if err != nil {
-		return types.ImageLayout{}, fmt.Errorf("image.layout: %w", err)
+		return imagetypes.Layout{}, fmt.Errorf("image.layout: %w", err)
 	}
 	if err := imageCheck(ctx, imageReads(s), nil); err != nil {
-		return types.ImageLayout{}, fmt.Errorf("image.layout: %w", err)
+		return imagetypes.Layout{}, fmt.Errorf("image.layout: %w", err)
 	}
 	entries, err := image.Entries(ctx, s)
 	if err != nil {
-		return types.ImageLayout{}, err
+		return imagetypes.Layout{}, err
 	}
 	p := platformToTypes(s.Platform)
-	return types.ImageLayout{Platform: &p, Added: listedToTypes(entries)}, nil
+	return imagetypes.Layout{Platform: &p, Added: listedToTypes(entries)}, nil
 }
 
 // ImageAssembleIndex writes one Image Index over layouts at dest.
-func ImageAssembleIndex(ctx context.Context, layouts []string, dest string) (types.ImageLayout, error) {
+func ImageAssembleIndex(ctx context.Context, layouts []string, dest string) (imagetypes.Layout, error) {
 	if types.Stubbed(ctx, "image.assembleIndex") {
-		return types.ImageLayout{}, nil
+		return imagetypes.Layout{}, nil
 	}
 	resolved := make([]string, len(layouts))
 	for i, l := range layouts {
@@ -211,11 +210,11 @@ func ImageAssembleIndex(ctx context.Context, layouts []string, dest string) (typ
 	}
 	dest = resolvePath(ctx, dest)
 	if err := imageCheck(ctx, resolved, []string{dest}); err != nil {
-		return types.ImageLayout{}, fmt.Errorf("image.assembleIndex: %w", err)
+		return imagetypes.Layout{}, fmt.Errorf("image.assembleIndex: %w", err)
 	}
 	l, err := image.AssembleIndex(ctx, resolved, dest)
 	if err != nil {
-		return types.ImageLayout{}, err
+		return imagetypes.Layout{}, err
 	}
 	return layoutToTypes(l), nil
 }
@@ -223,54 +222,54 @@ func ImageAssembleIndex(ctx context.Context, layouts []string, dest string) (typ
 // ImagePull fetches reference into a layout at dest. A tag-only reference is accepted
 // only under the update charm: it names what a registry serves today, which the cache
 // key cannot see.
-func ImagePull(ctx context.Context, reference string, platform types.ImagePlatform, dest string, auth *types.ImageRegistryAuth) (types.ImageLayout, error) {
+func ImagePull(ctx context.Context, reference string, platform imagetypes.Platform, dest string, auth *imagetypes.RegistryAuth) (imagetypes.Layout, error) {
 	if types.Stubbed(ctx, "image.pull") {
-		return types.ImageLayout{}, nil
+		return imagetypes.Layout{}, nil
 	}
 	ref, err := oci.ParseReference(reference)
 	if err != nil {
-		return types.ImageLayout{}, fmt.Errorf("image.pull: %w", err)
+		return imagetypes.Layout{}, fmt.Errorf("image.pull: %w", err)
 	}
 	dest = resolvePath(ctx, dest)
 	if err := imageCheck(ctx, nil, []string{dest}); err != nil {
-		return types.ImageLayout{}, fmt.Errorf("image.pull: %w", err)
+		return imagetypes.Layout{}, fmt.Errorf("image.pull: %w", err)
 	}
 	client := imageClient(auth)
 	if ref.Digest == "" {
 		if !types.HasCharm(ctx, types.CharmUpdate) {
-			return types.ImageLayout{}, fmt.Errorf("image.pull: %s names a tag, which can move: pin it as name@sha256:<hex>, or run the target under the update charm (magus run <target>:update) to resolve it", reference)
+			return imagetypes.Layout{}, fmt.Errorf("image.pull: %s names a tag, which can move: pin it as name@sha256:<hex>, or run the target under the update charm (magus run <target>:update) to resolve it", reference)
 		}
 		resolved, err := client.Resolve(ctx, ref)
 		if err != nil {
-			return types.ImageLayout{}, fmt.Errorf("image.pull: %w", err)
+			return imagetypes.Layout{}, fmt.Errorf("image.pull: %w", err)
 		}
 		ref.Digest = resolved.Digest
 	}
 	l, err := image.Pull(ctx, client, ref, platformFromTypes(platform), dest)
 	if err != nil {
-		return types.ImageLayout{}, err
+		return imagetypes.Layout{}, err
 	}
 	return manifestToTypes(l), nil
 }
 
 // ImagePush pushes the layout at layout to repository under tags.
-func ImagePush(ctx context.Context, layout, repository string, tags []string, auth *types.ImageRegistryAuth) (types.ImagePushed, error) {
+func ImagePush(ctx context.Context, layout, repository string, tags []string, auth *imagetypes.RegistryAuth) (imagetypes.Pushed, error) {
 	if types.Stubbed(ctx, "image.push") {
-		return types.ImagePushed{}, nil
+		return imagetypes.Pushed{}, nil
 	}
 	repo, err := oci.ParseRepository(repository)
 	if err != nil {
-		return types.ImagePushed{}, fmt.Errorf("image.push: %w", err)
+		return imagetypes.Pushed{}, fmt.Errorf("image.push: %w", err)
 	}
 	layout = resolvePath(ctx, layout)
 	if err := imageCheck(ctx, []string{layout}, nil); err != nil {
-		return types.ImagePushed{}, fmt.Errorf("image.push: %w", err)
+		return imagetypes.Pushed{}, fmt.Errorf("image.push: %w", err)
 	}
 	pinned, err := image.Push(ctx, imageClient(auth), layout, repo, tags...)
 	if err != nil {
-		return types.ImagePushed{}, err
+		return imagetypes.Pushed{}, err
 	}
-	return types.ImagePushed{
+	return imagetypes.Pushed{
 		Repository: repo.String(),
 		Digest:     digestToTypes(pinned.Digest),
 		Tags:       slices.Clone(tags),
@@ -279,49 +278,49 @@ func ImagePush(ctx context.Context, layout, repository string, tags []string, au
 }
 
 // ImageWriteSBOM writes an SPDX document for the layout's image to path.
-func ImageWriteSBOM(ctx context.Context, layout, path string) (types.ImageDocument, error) {
+func ImageWriteSBOM(ctx context.Context, layout, path string) (imagetypes.Document, error) {
 	if types.Stubbed(ctx, "image.writeSBOM") {
-		return types.ImageDocument{}, nil
+		return imagetypes.Document{}, nil
 	}
 	layout, path = resolvePath(ctx, layout), resolvePath(ctx, path)
 	if err := imageCheck(ctx, []string{layout}, []string{path}); err != nil {
-		return types.ImageDocument{}, fmt.Errorf("image.sbom: %w", err)
+		return imagetypes.Document{}, fmt.Errorf("image.sbom: %w", err)
 	}
 	doc, err := image.WriteSBOM(ctx, layout, path)
 	if err != nil {
-		return types.ImageDocument{}, err
+		return imagetypes.Document{}, err
 	}
 	return documentToTypes(doc), nil
 }
 
 // ImageWriteProvenance writes an in-toto statement for the layout's image to path.
-func ImageWriteProvenance(ctx context.Context, layout string, p types.ImageProvenance, path string) (types.ImageDocument, error) {
+func ImageWriteProvenance(ctx context.Context, layout string, p imagetypes.Provenance, path string) (imagetypes.Document, error) {
 	if types.Stubbed(ctx, "image.writeProvenance") {
-		return types.ImageDocument{}, nil
+		return imagetypes.Document{}, nil
 	}
 	prov := image.Provenance{BuilderID: p.BuilderID, SourceRevision: p.SourceRevision}
 	for i, m := range p.Dependencies {
 		d, err := digestFromTypes(m.Digest)
 		if err != nil {
-			return types.ImageDocument{}, fmt.Errorf("image.provenance: dependencies[%d]: %w", i, err)
+			return imagetypes.Document{}, fmt.Errorf("image.provenance: dependencies[%d]: %w", i, err)
 		}
 		prov.Dependencies = append(prov.Dependencies, image.Dependency{URI: m.URI, Digest: d})
 	}
 	layout, path = resolvePath(ctx, layout), resolvePath(ctx, path)
 	if err := imageCheck(ctx, []string{layout}, []string{path}); err != nil {
-		return types.ImageDocument{}, fmt.Errorf("image.provenance: %w", err)
+		return imagetypes.Document{}, fmt.Errorf("image.provenance: %w", err)
 	}
 	doc, err := image.WriteProvenance(ctx, layout, prov, path)
 	if err != nil {
-		return types.ImageDocument{}, err
+		return imagetypes.Document{}, err
 	}
 	return documentToTypes(doc), nil
 }
 
 // ImageAttachReferrers writes a new layout at dest with subject's image and documents.
-func ImageAttachReferrers(ctx context.Context, subject string, documents []types.ImageDocument, dest string) (types.ImageLayout, error) {
+func ImageAttachReferrers(ctx context.Context, subject string, documents []imagetypes.Document, dest string) (imagetypes.Layout, error) {
 	if types.Stubbed(ctx, "image.attachReferrers") {
-		return types.ImageLayout{}, nil
+		return imagetypes.Layout{}, nil
 	}
 	subject, dest = resolvePath(ctx, subject), resolvePath(ctx, dest)
 	docs := make([]image.Document, len(documents))
@@ -329,33 +328,33 @@ func ImageAttachReferrers(ctx context.Context, subject string, documents []types
 	for i, d := range documents {
 		desc, err := descriptorFromTypes(d.Descriptor)
 		if err != nil {
-			return types.ImageLayout{}, fmt.Errorf("image.attachReferrers: documents[%d]: %w", i, err)
+			return imagetypes.Layout{}, fmt.Errorf("image.attachReferrers: documents[%d]: %w", i, err)
 		}
 		docs[i] = image.Document{Path: resolvePath(ctx, d.Path), Descriptor: desc}
 		reads = append(reads, docs[i].Path)
 	}
 	if err := imageCheck(ctx, reads, []string{dest}); err != nil {
-		return types.ImageLayout{}, fmt.Errorf("image.attachReferrers: %w", err)
+		return imagetypes.Layout{}, fmt.Errorf("image.attachReferrers: %w", err)
 	}
 	l, err := image.AttachReferrers(ctx, subject, docs, dest)
 	if err != nil {
-		return types.ImageLayout{}, err
+		return imagetypes.Layout{}, err
 	}
 	return layoutToTypes(l), nil
 }
 
 // ImageOpen reads the layout at path back, opened at the image name names.
-func ImageOpen(ctx context.Context, path, name string) (types.ImageLayout, error) {
+func ImageOpen(ctx context.Context, path, name string) (imagetypes.Layout, error) {
 	if types.Stubbed(ctx, "image.open") {
-		return types.ImageLayout{}, nil
+		return imagetypes.Layout{}, nil
 	}
 	path = resolvePath(ctx, path)
 	if err := imageCheck(ctx, []string{path}, nil); err != nil {
-		return types.ImageLayout{}, fmt.Errorf("image.open: %w", err)
+		return imagetypes.Layout{}, fmt.Errorf("image.open: %w", err)
 	}
 	l, err := image.OpenLayout(ctx, path, name)
 	if err != nil {
-		return types.ImageLayout{}, err
+		return imagetypes.Layout{}, err
 	}
 	// A manifest's platform is in its config; the index.json entry names it for every
 	// layout magus writes, and without it there is no platform to ask Manifest for.
@@ -365,14 +364,14 @@ func ImageOpen(ctx context.Context, path, name string) (types.ImageLayout, error
 	p := l.Descriptor.Platform
 	m, err := l.Manifest(ctx, image.Platform{OS: p.OS, Architecture: p.Architecture, Variant: p.Variant})
 	if err != nil {
-		return types.ImageLayout{}, fmt.Errorf("image.open: %w", err)
+		return imagetypes.Layout{}, fmt.Errorf("image.open: %w", err)
 	}
 	return manifestToTypes(m), nil
 }
 
 // ImageReferrers reads the documents attached beside the image at path.
 // It needs no registry, which oci.Client.Referrers does.
-func ImageReferrers(ctx context.Context, path, name string) ([]types.ImageDocument, error) {
+func ImageReferrers(ctx context.Context, path, name string) ([]imagetypes.Document, error) {
 	if types.Stubbed(ctx, "image.referrers") {
 		return nil, nil
 	}
@@ -384,7 +383,7 @@ func ImageReferrers(ctx context.Context, path, name string) ([]types.ImageDocume
 	if err != nil {
 		return nil, err
 	}
-	docs := []types.ImageDocument{}
+	docs := []imagetypes.Document{}
 	for _, r := range l.Referrers {
 		data, err := os.ReadFile(layoutBlobPath(l.Path, r.Digest))
 		if err != nil {
@@ -402,7 +401,7 @@ func ImageReferrers(ctx context.Context, path, name string) ([]types.ImageDocume
 		}
 		for _, layer := range m.Layers {
 			layer.ArtifactType = m.ArtifactType
-			docs = append(docs, types.ImageDocument{Path: layoutBlobPath(l.Path, layer.Digest), Descriptor: descriptorToTypes(layer)})
+			docs = append(docs, imagetypes.Document{Path: layoutBlobPath(l.Path, layer.Digest), Descriptor: descriptorToTypes(layer)})
 		}
 	}
 	return docs, nil
@@ -413,21 +412,21 @@ func layoutBlobPath(layout string, d digest.Digest) string {
 }
 
 // ImageParsePlatform parses "os/architecture[/variant]".
-func ImageParsePlatform(_ context.Context, spec string) (types.ImagePlatform, error) {
+func ImageParsePlatform(_ context.Context, spec string) (imagetypes.Platform, error) {
 	p, err := image.ParsePlatform(spec)
 	if err != nil {
-		return types.ImagePlatform{}, err
+		return imagetypes.Platform{}, err
 	}
 	return platformToTypes(p), nil
 }
 
 // ImageParsePlatforms parses each spec, refusing duplicates.
-func ImageParsePlatforms(_ context.Context, specs []string) ([]types.ImagePlatform, error) {
+func ImageParsePlatforms(_ context.Context, specs []string) ([]imagetypes.Platform, error) {
 	ps, err := image.ParsePlatforms(specs...)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]types.ImagePlatform, len(ps))
+	out := make([]imagetypes.Platform, len(ps))
 	for i, p := range ps {
 		out[i] = platformToTypes(p)
 	}
@@ -435,7 +434,7 @@ func ImageParsePlatforms(_ context.Context, specs []string) ([]types.ImagePlatfo
 }
 
 // ImageGoEnv is the GOOS, GOARCH and GOAMD64 environment for platform.
-func ImageGoEnv(_ context.Context, platform types.ImagePlatform) (map[string]string, error) {
+func ImageGoEnv(_ context.Context, platform imagetypes.Platform) (map[string]string, error) {
 	return platformFromTypes(platform).GoEnv()
 }
 
@@ -473,14 +472,14 @@ func imageReads(s image.Spec) []string {
 }
 
 // imageClient is the single place a Buzz credential becomes a registry login.
-func imageClient(auth *types.ImageRegistryAuth) *oci.Client {
+func imageClient(auth *imagetypes.RegistryAuth) *oci.Client {
 	if auth == nil {
 		return &oci.Client{}
 	}
 	return &oci.Client{Credentials: oci.Credentials{Username: auth.Username, Password: types.NewSecret(auth.Password.Value)}}
 }
 
-func imageSpec(ctx context.Context, in types.ImageSpec) (image.Spec, error) {
+func imageSpec(ctx context.Context, in imagetypes.Spec) (image.Spec, error) {
 	s := image.Spec{
 		Scratch:     in.Scratch,
 		Platform:    platformFromTypes(in.Platform),
@@ -533,39 +532,39 @@ func imageMode(bits int) (image.Mode, error) {
 	return m, nil
 }
 
-func platformFromTypes(p types.ImagePlatform) image.Platform {
+func platformFromTypes(p imagetypes.Platform) image.Platform {
 	return image.Platform{OS: string(p.OS), Architecture: string(p.Architecture), Variant: string(p.Variant), OSVersion: p.OSVersion, OSFeatures: p.OSFeatures}
 }
 
-func platformToTypes(p image.Platform) types.ImagePlatform {
-	return types.ImagePlatform{
-		OS: types.ImageOS(p.OS), Architecture: types.ImageArchitecture(p.Architecture), Variant: types.ImageVariant(p.Variant),
+func platformToTypes(p image.Platform) imagetypes.Platform {
+	return imagetypes.Platform{
+		OS: imagetypes.OS(p.OS), Architecture: imagetypes.Architecture(p.Architecture), Variant: imagetypes.Variant(p.Variant),
 		OSVersion: p.OSVersion, OSFeatures: p.OSFeatures,
 	}
 }
 
 // ociPlatformToTypes converts a descriptor's platform, which may name one magus does not
 // build for, so it does not pass through image.Platform's validation.
-func ociPlatformToTypes(p ocispec.Platform) types.ImagePlatform {
-	return types.ImagePlatform{
-		OS: types.ImageOS(p.OS), Architecture: types.ImageArchitecture(p.Architecture), Variant: types.ImageVariant(p.Variant),
+func ociPlatformToTypes(p ocispec.Platform) imagetypes.Platform {
+	return imagetypes.Platform{
+		OS: imagetypes.OS(p.OS), Architecture: imagetypes.Architecture(p.Architecture), Variant: imagetypes.Variant(p.Variant),
 		OSVersion: p.OSVersion, OSFeatures: p.OSFeatures,
 	}
 }
 
-func digestToTypes(d digest.Digest) types.ImageDigest {
+func digestToTypes(d digest.Digest) imagetypes.Digest {
 	if d == "" {
-		return types.ImageDigest{}
+		return imagetypes.Digest{}
 	}
-	return types.ImageDigest{Algorithm: d.Algorithm().String(), Encoded: d.Encoded()}
+	return imagetypes.Digest{Algorithm: d.Algorithm().String(), Encoded: d.Encoded()}
 }
 
-func digestFromTypes(d types.ImageDigest) (digest.Digest, error) {
+func digestFromTypes(d imagetypes.Digest) (digest.Digest, error) {
 	return oci.ParseDigest(d.String())
 }
 
-func descriptorToTypes(d ocispec.Descriptor) types.ImageDescriptor {
-	out := types.ImageDescriptor{
+func descriptorToTypes(d ocispec.Descriptor) imagetypes.Descriptor {
+	out := imagetypes.Descriptor{
 		MediaType:    d.MediaType,
 		ArtifactType: d.ArtifactType,
 		Digest:       digestToTypes(d.Digest),
@@ -579,7 +578,7 @@ func descriptorToTypes(d ocispec.Descriptor) types.ImageDescriptor {
 	return out
 }
 
-func descriptorFromTypes(d types.ImageDescriptor) (ocispec.Descriptor, error) {
+func descriptorFromTypes(d imagetypes.Descriptor) (ocispec.Descriptor, error) {
 	dg, err := digestFromTypes(d.Digest)
 	if err != nil {
 		return ocispec.Descriptor{}, err
@@ -587,25 +586,25 @@ func descriptorFromTypes(d types.ImageDescriptor) (ocispec.Descriptor, error) {
 	return ocispec.Descriptor{MediaType: d.MediaType, ArtifactType: d.ArtifactType, Digest: dg, Size: int64(d.Size), Annotations: d.Annotations}, nil
 }
 
-func descriptorsToTypes(ds []ocispec.Descriptor) []types.ImageDescriptor {
-	out := make([]types.ImageDescriptor, len(ds))
+func descriptorsToTypes(ds []ocispec.Descriptor) []imagetypes.Descriptor {
+	out := make([]imagetypes.Descriptor, len(ds))
 	for i, d := range ds {
 		out[i] = descriptorToTypes(d)
 	}
 	return out
 }
 
-func layoutToTypes(l image.Layout) types.ImageLayout {
-	return types.ImageLayout{Path: l.Path, Descriptor: descriptorToTypes(l.Descriptor), Referrers: descriptorsToTypes(l.Referrers)}
+func layoutToTypes(l image.Layout) imagetypes.Layout {
+	return imagetypes.Layout{Path: l.Path, Descriptor: descriptorToTypes(l.Descriptor), Referrers: descriptorsToTypes(l.Referrers)}
 }
 
-func manifestToTypes(m image.Manifest) types.ImageLayout {
+func manifestToTypes(m image.Manifest) imagetypes.Layout {
 	out := layoutToTypes(m.Layout)
 	p := platformToTypes(m.Platform)
 	cfg := descriptorToTypes(m.Config)
 	out.Platform, out.Config, out.Layers, out.Created = &p, &cfg, descriptorsToTypes(m.Layers), m.Created
 	if m.Added != nil {
-		out.Added = &types.ImageAddedLayer{
+		out.Added = &imagetypes.AddedLayer{
 			Descriptor:  descriptorToTypes(m.Added.Descriptor),
 			DiffID:      digestToTypes(m.Added.DiffID),
 			Entries:     entriesToTypes(m.Added.Entries),
@@ -619,11 +618,11 @@ func manifestToTypes(m image.Manifest) types.ImageLayout {
 
 // listedToTypes is the layer entries would make, before it has a digest; nil
 // when there are none, as Assemble adds no layer then.
-func listedToTypes(entries []image.Entry) *types.ImageAddedLayer {
+func listedToTypes(entries []image.Entry) *imagetypes.AddedLayer {
 	if len(entries) == 0 {
 		return nil
 	}
-	out := &types.ImageAddedLayer{Entries: entriesToTypes(entries)}
+	out := &imagetypes.AddedLayer{Entries: entriesToTypes(entries)}
 	for _, e := range entries {
 		switch e.Kind {
 		case image.EntryFile:
@@ -637,17 +636,17 @@ func listedToTypes(entries []image.Entry) *types.ImageAddedLayer {
 	return out
 }
 
-func entriesToTypes(entries []image.Entry) []types.ImageEntry {
-	out := make([]types.ImageEntry, len(entries))
+func entriesToTypes(entries []image.Entry) []imagetypes.Entry {
+	out := make([]imagetypes.Entry, len(entries))
 	for i, e := range entries {
-		out[i] = types.ImageEntry{
-			Path: e.Path, Kind: types.ImageEntryKind(e.Kind), Mode: e.Mode.String(), UID: e.UID, GID: e.GID,
+		out[i] = imagetypes.Entry{
+			Path: e.Path, Kind: imagetypes.EntryKind(e.Kind), Mode: e.Mode.String(), UID: e.UID, GID: e.GID,
 			Size: int(e.Size), Target: e.Target, ModTime: e.ModTime.UTC().Format(time.RFC3339), Origin: e.Origin,
 		}
 	}
 	return out
 }
 
-func documentToTypes(d image.Document) types.ImageDocument {
-	return types.ImageDocument{Path: d.Path, Descriptor: descriptorToTypes(d.Descriptor)}
+func documentToTypes(d image.Document) imagetypes.Document {
+	return imagetypes.Document{Path: d.Path, Descriptor: descriptorToTypes(d.Descriptor)}
 }

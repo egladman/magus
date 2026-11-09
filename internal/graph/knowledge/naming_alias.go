@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"maps"
 	"slices"
 	"strings"
@@ -29,7 +30,7 @@ const (
 // no symbol index it is silent, and a language with no package clause reader yields nothing.
 type aliasCheck struct{}
 
-func (aliasCheck) name() string { return types.CheckImportAlias }
+func (aliasCheck) name() string { return diff.CheckImportAlias }
 
 func (aliasCheck) run(x *namingIndex) []finding {
 	if len(x.subjects) == 0 {

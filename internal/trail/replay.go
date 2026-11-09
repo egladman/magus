@@ -3,6 +3,7 @@ package trail
 import (
 	"bufio"
 	"cmp"
+	"github.com/egladman/magus/types/diff"
 	"os"
 	"slices"
 	"strings"
@@ -15,7 +16,7 @@ import (
 
 // A touch is one agent session's contact with one file: that it wrote the file, what it had
 // READ beforehand in the same session, and where the host's own transcript of that session
-// lives. It is the review's own types.DiffTouch, produced here rather than through a
+// lives. It is the review's own diff.Touch, produced here rather than through a
 // trail-side twin, because the read list is the part no other review tool has: a guard hook
 // sees every path an agent reaches, so magus can say what an agent was LOOKING AT
 // immediately before it wrote something, which is the closest thing to "why is this change
@@ -64,7 +65,7 @@ type observation struct {
 // a host that supplied no session id all just contribute less. A review must still open when
 // nothing was recorded, which is the normal case for a workspace whose agents have no guard
 // hook wired, and a file nobody touched keeps a nil Touches.
-func AttachTouches(rev *types.Diff, root, base string) {
+func AttachTouches(rev *diff.Diff, root, base string) {
 	paths := make([]string, len(rev.Files))
 	for i, f := range rev.Files {
 		paths[i] = f.Path
@@ -74,7 +75,7 @@ func AttachTouches(rev *types.Diff, root, base string) {
 		if fold, err := sessions.ReadAll(dir); err == nil {
 			for path, touches := range replayLoaded(fold, paths) {
 				for _, t := range touches {
-					if !slices.ContainsFunc(byPath[path], func(h types.DiffTouch) bool { return h.Host == t.Host && h.Session == t.Session }) {
+					if !slices.ContainsFunc(byPath[path], func(h diff.Touch) bool { return h.Host == t.Host && h.Session == t.Session }) {
 						byPath[path] = append(byPath[path], t)
 					}
 				}
@@ -90,10 +91,10 @@ func AttachTouches(rev *types.Diff, root, base string) {
 
 // replayTrail reconstructs, for each of paths, which agent sessions the trail at base saw
 // write it and what they had read first, reading at most limit recent events.
-func replayTrail(root, base string, paths []string, limit int) map[string][]types.DiffTouch {
+func replayTrail(root, base string, paths []string, limit int) map[string][]diff.Touch {
 	events, err := ReadRecent(base, limit)
 	if err != nil || len(events) == 0 {
-		return map[string][]types.DiffTouch{}
+		return map[string][]diff.Touch{}
 	}
 
 	// REVERSED rather than sorted by Ts. The events file is append-only, so its order IS the
@@ -142,7 +143,7 @@ func replayTrail(root, base string, paths []string, limit int) map[string][]type
 // sessions wrote each of paths and what they had read first. Loads store the
 // checkout-relative path and the reduced program, so nothing is relativized here; the events
 // are ordered by the host's own clock within each session.
-func replayLoaded(fold sessions.Fold, paths []string) map[string][]types.DiffTouch {
+func replayLoaded(fold sessions.Fold, paths []string) map[string][]diff.Touch {
 	var obs []observation
 	for session, ev := range sessions.EachAgentEvent(fold) {
 		var tool string
@@ -176,7 +177,7 @@ func replayLoaded(fold sessions.Fold, paths []string) map[string][]types.DiffTou
 // take a snapshot of what came before it. Walking newest-first would mean knowing the writes
 // before the reads that explain them, which is the wrong direction for the only question
 // being asked. The result is keyed by written path, one entry per session.
-func touchesRead(obs []observation, paths []string) map[string][]types.DiffTouch {
+func touchesRead(obs []observation, paths []string) map[string][]diff.Touch {
 	want := make(map[string]bool, len(paths))
 	for _, p := range paths {
 		want[p] = true
@@ -186,7 +187,7 @@ func touchesRead(obs []observation, paths []string) map[string][]types.DiffTouch
 		ran  []string
 	}
 	states := map[string]*sessionState{}
-	out := map[string][]types.DiffTouch{}
+	out := map[string][]diff.Touch{}
 
 	for _, o := range obs {
 		// Session is the grouping key. A host that supplies none still produces attributable
@@ -215,7 +216,7 @@ func touchesRead(obs []observation, paths []string) map[string][]types.DiffTouch
 			}
 			// The read list is snapshotted at the moment of the write, so a path the session
 			// reached AFTER this edit does not retroactively become its explanation.
-			t := types.DiffTouch{
+			t := diff.Touch{
 				Host:       o.Host,
 				Session:    o.Session,
 				Transcript: o.Transcript,
@@ -624,7 +625,7 @@ func withoutSelf(xs []string, self string) []string {
 // upsertLatest keeps ONE entry per session, the most recent write. A session that edits a file
 // eleven times is one story, not eleven, and listing each pass would bury the sessions that
 // touched it once.
-func upsertLatest(xs []types.DiffTouch, t types.DiffTouch) []types.DiffTouch {
+func upsertLatest(xs []diff.Touch, t diff.Touch) []diff.Touch {
 	for i := range xs {
 		if xs[i].Session == t.Session {
 			xs[i] = t

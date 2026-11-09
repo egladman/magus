@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -576,7 +577,7 @@ func generatedOutput(deps Dependencies, rel string) bool {
 		return false
 	}
 	files, err := ws.ClassifyFiles(ctx, []string{rel})
-	return err == nil && len(files) == 1 && files[0].Role == types.DiffRoleOutput
+	return err == nil && len(files) == 1 && files[0].Role == diff.RoleOutput
 }
 
 // readVerdict denies the first whole read on the line of a mapped file, advises the first

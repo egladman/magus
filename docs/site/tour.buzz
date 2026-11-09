@@ -54,15 +54,15 @@ export fun renderPlayground(site: Site) > void !> any {
     // Ships at /playground/ (a directory index), so the nav climbs one level to root.
     final outDir = "playground";
     final root = climbFromDir(outDir);
-    html = html.replace("<!-- site-nav -->", renderSiteNav(root, "playground", true, site.config));
+    html = html.replace("<!-- site-nav -->", renderSiteNav(root, "playground", true, site.inputs.config));
     // Default CSP meta - site.csp, not site.cspBadges: the playground never
     // loads an external image and holds the reader's own source, so it takes the
     // tighter img-src, not the badge hosts. playground.html's own <!-- csp -->
     // placeholder is also what CSP_INLINE_SCRIPT_SOURCES reads to compute site.csp, so
     // this file is both the hash's source and its sink.
-    html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
-    fs\mkdirAll(fs\join(site.outDir, outDir));
-    fs\writeFile(fs\join(site.outDir, outDir, "index.html"), html);
+    html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.inputs.csp + "\">");
+    fs\mkdirAll(fs\join(site.inputs.outDir, outDir));
+    fs\writeFile(fs\join(site.inputs.outDir, outDir, "index.html"), html);
 }
 
 
@@ -176,8 +176,8 @@ fun tourDocLabel(src: str) > str {
 export fun collectDemos(site: Site) > void !> any {
     var n = 1;
     foreach (step in tourSteps()) {
-        if (step.docSlug != "" and site.demoBySlug[step.docSlug] == null) {
-            site.demoBySlug[step.docSlug] = DemoLink{ title = step.title, anchor = "step-{n}" };
+        if (step.docSlug != "" and site.inputs.demoBySlug[step.docSlug] == null) {
+            site.inputs.demoBySlug[step.docSlug] = DemoLink{ title = step.title, anchor = "step-{n}" };
         }
         n = n + 1;
     }
@@ -202,8 +202,8 @@ export fun renderTourPage(site: Site) > void !> any {
     final title = "Tour";
     final desc = "A guided tour of magus: curated, runnable examples from a hello-world magusfile through a full multi-toolchain pipeline, custom targets, and the Buzz standard library.";
     final doc = renderPage(title, desc, body, "tour/index.md", "", "tour/", "", mut [], "", site);
-    fs\mkdirAll(site.outDir + "/tour");
-    final of = io\File.open(site.outDir + "/tour/index.html", io\FileMode.write);
+    fs\mkdirAll(site.inputs.outDir + "/tour");
+    final of = io\File.open(site.inputs.outDir + "/tour/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
     // addRecord uses the desc arg directly and parses this stub only for tags, so the
@@ -211,5 +211,5 @@ export fun renderTourPage(site: Site) > void !> any {
     // YAML). The body text seeds a few search terms.
     site.addRecord("tour/", title, desc,
         "---\ntags: [tour, getting started, examples, playground, hello world]\n---\nGuided tour of magus. Hello world, targets, spells, the Buzz language, and a full magusfile.\n");
-    std\print("  tour page -> " + site.outDir + "/tour/index.html");
+    std\print("  tour page -> " + site.inputs.outDir + "/tour/index.html");
 }

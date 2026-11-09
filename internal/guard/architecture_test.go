@@ -270,6 +270,19 @@ func TestSkillDemandsSkipWritesNoSkillCouldBrief(t *testing.T) {
 	requireArchitectureDeny(t, scout("notes.txt"), "a read-only agent can load the skill, so it is asked")
 }
 
+// A deleted declaration adds no structure. A replacement still does.
+func TestDeletingDeclarationsIsNotArchitecture(t *testing.T) {
+	t.Parallel()
+	assert.True(t, removesOnly(writeFields{OldText: "var unusedEmbed = 1\n"}), "a deleted declaration")
+	assert.True(t, removesOnly(writeFields{Edits: []textEdit{
+		{OldText: "var a = 1\n"}, {OldText: "var b = 2\n", NewText: "\n"},
+	}}), "every edit deletes")
+	assert.False(t, removesOnly(writeFields{OldText: "var a = 1\n", NewText: "var b = 2\n"}), "a replacement adds text")
+	assert.False(t, removesOnly(writeFields{Edits: []textEdit{{OldText: "var a = 1\n"}, {OldText: "x", NewText: "y"}}}), "one edit adds text")
+	assert.False(t, removesOnly(writeFields{Content: "package x\n"}), "a whole-file write adds content")
+	assert.False(t, removesOnly(writeFields{}), "an empty write removes nothing")
+}
+
 func decisionAndRule(v types.GuardJudgment) []string {
 	return []string{v.Decision, v.Rule}
 }
@@ -283,6 +296,19 @@ func TestSkillsKeyNestsTheAgentUnderItsSession(t *testing.T) {
 	assert.Equal(t, "claude-code/s1/agent/a%2F1", child.skillsKey())
 	assert.NotEqual(t, child.callerKey(), child.skillsKey())
 	assert.Empty(t, hookAttribution{Host: "claude-code", Agent: "a1"}.skillsKey(), "no session keys nothing")
+}
+
+// ArchitectureVocabularySuite pins words that alone ask no structure question.
+type ArchitectureVocabularySuite struct {
+	suite.Suite
+}
+
+func TestArchitectureVocabularySuite(t *testing.T) {
+	suite.Run(t, new(ArchitectureVocabularySuite))
+}
+
+func (s *ArchitectureVocabularySuite) TestBareDomainsAndLayersAskNothing() {
+	s.False(asksArchitecture("drop the unread vars from the image layers and the domain list"))
 }
 
 type ArchitectureJobReadSuite struct {

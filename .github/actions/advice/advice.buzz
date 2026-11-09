@@ -420,11 +420,72 @@ final footnotes_marker = "<!-- magus:advice:footnotes -->";
 final footer_marker = "<!-- magus:advice:footer -->";
 
 fun footer() > str {
-    return footer_marker + "\n<sub><i>Last updated " + time\nowIso() + ". "
+    return footer_marker + "\n<sub><i>" + updatedLine(time\nowIso(), stamp: currentStamp()) + " "
         + "Every one of these is an input you can set to <code>false</code>, and this "
         + "whole comment is one step you can drop. "
         + "<a href=\"https://eli.gladman.cc/magus/guides/integrations/pr-advice/\">"
         + "How to turn these off</a>.</i></sub>\n";
+}
+
+// Stamp names the commits a comment was written from: the head it
+// advises on and the magus binary's. Either is "" when it was unreadable.
+export object Stamp {
+    advised: str = "",
+    built: str = "",
+}
+
+// currentStamp reads the pull request's head and `magus version`'s commit.
+fun currentStamp() > Stamp {
+    final pr = pullRequest() catch PullRequest{};
+    var advised = pr.headSha;
+    if (advised == local_head) {
+        advised = "";
+    }
+    final built = magus\cmd("version", args: ["-o", "template=\{\{.commit\}\}"],
+        opts: magus\CommandOptions{ quiet = true }) catch null;
+    return Stamp{ advised = advised, built = if (built == null) "" else built!.stdout.trim() };
+}
+
+// updatedLine dates a comment and names its commits, once when they
+// agree. A binary built elsewhere is named, since its findings may differ.
+export fun updatedLine(at: str, stamp: Stamp) > str {
+    final advised = shortSha(stamp.advised);
+    final built = shortSha(stamp.built);
+    if (advised == "" and built == "") {
+        return "Last updated {at}; the commits it was written from could not be read.";
+    }
+    if (advised == "") {
+        return "Last updated {at} by magus at <code>{built}</code>.";
+    }
+    if (built == "") {
+        return "Last updated {at} for <code>{advised}</code>; the magus commit could not be read.";
+    }
+    if (advised == built) {
+        return "Last updated {at} for <code>{advised}</code>, by magus built from it.";
+    }
+    return "Last updated {at} for <code>{advised}</code>, by magus built from <code>{built}</code>.";
+}
+
+fun shortSha(sha: str) > str {
+    if (sha.len() > 9) {
+        return sha.sub(0, len: 9);
+    }
+    return sha;
+}
+
+test "the footer names one commit when the head and the binary agree, and both when not" {
+    final sha = "72861dbf62d0128f2b8b9bae2ed31828a9ae7c04";
+    final other = "d46a5ec86aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    assert\equal(updatedLine("T", stamp: Stamp{ advised = sha, built = sha }),
+        want: "Last updated T for <code>72861dbf6</code>, by magus built from it.", message: "same");
+    assert\equal(updatedLine("T", stamp: Stamp{ advised = sha, built = other }),
+        want: "Last updated T for <code>72861dbf6</code>, by magus built from <code>d46a5ec86</code>.", message: "differ");
+    assert\equal(updatedLine("T", stamp: Stamp{ advised = sha }),
+        want: "Last updated T for <code>72861dbf6</code>; the magus commit could not be read.", message: "no binary");
+    assert\equal(updatedLine("T", stamp: Stamp{ built = sha }),
+        want: "Last updated T by magus at <code>72861dbf6</code>.", message: "local");
+    assert\equal(updatedLine("T", stamp: Stamp{}),
+        want: "Last updated T; the commits it was written from could not be read.", message: "neither");
 }
 
 // compose returns the comment body with section `name` set to `body` under `title`,

@@ -41,3 +41,34 @@ A list item that opens with another word class, or another verb tense, than the 
 - The cache for each run.
 - Fast builds on every push.
 - Open the page.
+-- hit/changelog whole --
+- Wrote the parser.
+- Cut the cost.
+- Built a parser.
+- Adds a flag for the cache.
+-- pass/changelog whole --
+- Wrote the parser.
+- Wrote the docs.
+- Cut the cost.
+- Rewrote the tool.
+- Built a parser.
+- Ran the build.
+- Led the team.
+- Set the flag.
+-- pass/guide whole --
+- Run the build.
+- Cut the release.
+- Set the flag.
+- Open the page.
+-- pass/changelog whole --
+- Rewrote the config parser.
+- Cut the build time in half.
+- Moved the loader into its own package.
+- Dropped the legacy flag.
+- Fixed the race on the lock.
+-- pass/changelog whole --
+- Fixed the race on the lock.
+- Fixed the leak in the watcher.
+- Fixed the exit code on a bad flag.
+- Fixed the docs for the cache.
+- Fixed a typo in the guide.

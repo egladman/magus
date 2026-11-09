@@ -2,6 +2,7 @@ package screen
 
 import (
 	"fmt"
+	"html"
 	"strconv"
 	"strings"
 )
@@ -67,7 +68,7 @@ func (s *Terminal) svgBody(opts SVGOptions) string {
 			// A terminal gets this for free: the cell grid IS the advance. An SVG has
 			// to say so.
 			fmt.Fprintf(&b, ` textLength="%d" xml:space="preserve">%s</text>`,
-				opts.CellWidth*len([]rune(run.text)), escapeXML(run.text))
+				opts.CellWidth*len([]rune(run.text)), html.EscapeString(run.text))
 		}
 	}
 	return b.String()
@@ -145,8 +146,4 @@ func parseSGR(s string) sgrState {
 		}
 	}
 	return st
-}
-
-func escapeXML(s string) string {
-	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(s)
 }

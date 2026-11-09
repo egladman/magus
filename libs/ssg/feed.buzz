@@ -1,0 +1,55 @@
+// feed.buzz - pure XML builders and date normalization for the sitemap and Atom
+// feeds. Flat-imported by render.buzz (`import "lib/feed" as _`).
+namespace feed;
+
+import "assert";
+import "html";
+
+// Minimal XML leaves; every body and value funnels through html\escape.
+// Container tags with their own namespaces (<feed>, <urlset>, <entry>,
+// <url>) stay written inline.
+export fun xmlAttribute(name: str, value: str) > str {
+    return " " + name + "=\"" + html\escape(value) + "\"";
+}
+export fun xmlElementAttribute(tag: str, attrs: str, text: str) > str {
+    return "<" + tag + attrs + ">" + html\escape(text) + "</" + tag + ">";
+}
+export fun xmlElement(tag: str, text: str) > str {
+    return xmlElementAttribute(tag, attrs: "", text: text);
+}
+export fun xmlSelfClose(tag: str, attrs: str) > str {
+    return "<" + tag + attrs + "/>";
+}
+
+// atomDate normalizes a frontmatter date to RFC3339 UTC (bare date -> T00:00:00Z).
+export fun atomDate(d: str) > str {
+    if (d == "") { return ""; }
+    if (d.indexOf("T") == null) { return d + "T00:00:00Z"; }
+    return d;
+}
+
+test "xml builders wrap and escape" {
+    assert\equal(xmlAttribute("rel", value: "self"), want: " rel=\"self\"", message: "attribute with leading space");
+    assert\equal(xmlElement("title", text: "a & b"), want: "<title>a &amp; b</title>", message: "element escapes body");
+    assert\equal(xmlSelfClose("link", attrs: xmlAttribute("href", value: "u")), want: "<link href=\"u\"/>", message: "self-closing tag");
+}
+
+test "atomDate normalizes to RFC3339 UTC" {
+    assert\equal(atomDate("2026-07-01"), want: "2026-07-01T00:00:00Z", message: "bare date gets midnight UTC");
+    assert\equal(atomDate("2026-07-01T12:00:00Z"), want: "2026-07-01T12:00:00Z", message: "full RFC3339 passes through");
+    assert\equal(atomDate(""), want: "", message: "empty stays empty");
+}
+
+test "xml builders substitute all five XML entities" {
+    assert\equal(xmlElement("t", text: "a & b < c > d \" e ' f"),
+        want: "<t>a &amp; b &lt; c &gt; d &#34; e &#39; f</t>", message: "all five entities");
+    assert\equal(xmlElement("t", text: "plain"), want: "<t>plain</t>", message: "no-op on safe text");
+}
+
+// EVERY occurrence: str.replace once substituted only the FIRST match,
+// which left the later ampersands of a feed raw. Repetition catches it.
+test "xml builders substitute EVERY occurrence, not just the first" {
+    assert\equal(xmlElement("t", text: "&a&b&"), want: "<t>&amp;a&amp;b&amp;</t>", message: "ampersands at both edges and between");
+    assert\equal(xmlElement("t", text: "<a><b>"), want: "<t>&lt;a&gt;&lt;b&gt;</t>", message: "repeated angle brackets");
+    assert\equal(xmlElement("t", text: "<&>"), want: "<t>&lt;&amp;&gt;</t>", message: "no double-encoding of introduced entities");
+}

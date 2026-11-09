@@ -36,6 +36,7 @@ export object Record {
     request: str,
     response: str,
     verdict: str,
+    session: str = "",
     command: str = "",
     path: str = "",
     target: str = "",
@@ -106,6 +107,7 @@ export fun parseRecord(text: str, line: int, blobs: str) > Record !> any {
         agent = field(doc, key: "agent"), lease = field(doc, key: "lease"), leaseFrom = field(doc, key: "lease_from"),
         preview = field(doc, key: "preview"), decidedBy = field(doc, key: "decided_by"), request = field(doc, key: "request_ref"),
         response = field(doc, key: "response_ref"), verdict = field(doc, key: "verdict_ref"),
+        session = field(doc, key: "session"),
     };
     final file = fs\join(blobs, name: r.request);
     if (r.request == "" or !fs\exists(file)) {
@@ -145,6 +147,17 @@ export fun loadTrail(events: str, blobs: str, start: int, end: int) > [Record] !
         found.append(parseRecord(text, line: line, blobs: blobs));
     }
     return found;
+}
+
+// trailFor reads one checkout's trail records stamped in [start, end], unix ms.
+export fun trailFor(checkout: str, start: int, end: int) > [Record] !> any {
+    final dir = fs\join(checkout, name: ".magus/activity");
+    return loadTrail(fs\join(dir, name: "events.jsonl"), blobs: fs\join(dir, name: "blobs"), start: start, end: end);
+}
+
+// denied keeps the records the guard denied.
+export fun denied(records: [Record]) > [Record] {
+    return records.filter(fun (index: int, r: Record) > bool => r.preview == "guard: deny");
 }
 
 fun clock(ms: int) > str {
@@ -793,11 +806,10 @@ fun eventTime(a: Args, rows: [JobFacts], commit: CommitFacts?) > int !> any {
     return at;
 }
 
-fun readTrails(checkouts: [str], start: int, end: int) > [Record] !> any {
+export fun readTrails(checkouts: [str], start: int, end: int) > [Record] !> any {
     final records = mut [<Record>];
     foreach (c in checkouts) {
-        final dir = fs\join(c, name: ".magus/activity");
-        foreach (r in loadTrail(fs\join(dir, name: "events.jsonl"), blobs: fs\join(dir, name: "blobs"), start: start, end: end)) {
+        foreach (r in trailFor(c, start: start, end: end)) {
             records.append(r);
         }
     }

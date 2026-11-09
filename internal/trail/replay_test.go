@@ -2,6 +2,7 @@ package trail
 
 import (
 	"context"
+	"github.com/egladman/magus/types/diff"
 	"testing"
 	"time"
 
@@ -31,9 +32,9 @@ func TestReplayThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 	require.Len(t, touches, 1)
 
 	// Read is most recent first: this is the "what was it looking at" ordering. Ran is the
-	// PROGRAM, not the command line; see types.DiffTouch.Ran. The argument list is dropped at
+	// PROGRAM, not the command line; see diff.Touch.Ran. The argument list is dropped at
 	// ingest, so this asserts the reduction rather than the recorded text.
-	assert.Equal(t, types.DiffTouch{
+	assert.Equal(t, diff.Touch{
 		Host:       "claude-code",
 		Session:    "s1",
 		Transcript: "/tmp/s1.jsonl",
@@ -202,7 +203,7 @@ func TestReplayLoadedThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 	touches := replayLoaded(fold, []string{"magus.go"})["magus.go"]
 	require.Len(t, touches, 1)
 	// A read after the write does not explain it, so late.go is absent from Read.
-	assert.Equal(t, types.DiffTouch{
+	assert.Equal(t, diff.Touch{
 		Host:       "claude-code",
 		Session:    "s1",
 		Transcript: "/tmp/s1.jsonl",
@@ -228,20 +229,20 @@ func TestAttachTouchesMergesTheTrailAndTheLoadedStore(t *testing.T) {
 	}, sessions.InvocationStart{})
 	require.NoError(t, err)
 
-	rev := types.Diff{Files: []types.DiffFile{{Path: "magus.go"}, {Path: "untouched.go"}}}
+	rev := diff.Diff{Files: []diff.File{{Path: "magus.go"}, {Path: "untouched.go"}}}
 	AttachTouches(&rev, root, base)
 
 	got := rev.Files[0].Touches
 	require.Len(t, got, 2, "one entry per session, whichever store saw it")
 	// The trail's account wins for a session both stores hold.
-	assert.Equal(t, types.DiffTouch{Host: "claude-code", Session: "s1", Read: []string{"from-trail.go"}}, got[0])
-	assert.Equal(t, types.DiffTouch{Host: "codex", Session: "s2", Read: []string{}}, got[1])
+	assert.Equal(t, diff.Touch{Host: "claude-code", Session: "s1", Read: []string{"from-trail.go"}}, got[0])
+	assert.Equal(t, diff.Touch{Host: "codex", Session: "s2", Read: []string{}}, got[1])
 	assert.Nil(t, rev.Files[1].Touches, "a file nobody wrote keeps no touches")
 }
 
 func TestAttachTouchesLeavesTheReviewAloneWithNeitherStore(t *testing.T) {
 	testkit.Isolate(t)
-	rev := types.Diff{Files: []types.DiffFile{{Path: "magus.go"}}}
+	rev := diff.Diff{Files: []diff.File{{Path: "magus.go"}}}
 	AttachTouches(&rev, t.TempDir(), t.TempDir())
 	assert.Nil(t, rev.Files[0].Touches)
 }

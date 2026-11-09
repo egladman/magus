@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"maps"
 	"net/http"
@@ -293,9 +294,9 @@ const loadErrorViolation = "LOAD_ERROR"
 // WorkspaceFailed is what a call needing root answers while root is FAILED, and the Status
 // the workspace itself carries. The reason is the proximate cause (MGS3016); each
 // diagnostic the load stopped on is a PreconditionFailure violation, typed by its own code.
-func WorkspaceFailed(root string, f *types.WorkspaceFailure) Error {
+func WorkspaceFailed(root string, f *daemon.WorkspaceFailure) Error {
 	if f == nil {
-		f = &types.WorkspaceFailure{}
+		f = &daemon.WorkspaceFailure{}
 	}
 	e := Error{
 		Code:     connect.CodeFailedPrecondition,

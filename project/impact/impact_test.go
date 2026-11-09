@@ -2,6 +2,7 @@ package impact
 
 import (
 	"context"
+	"github.com/egladman/magus/types/diff"
 	"testing"
 
 	"github.com/egladman/magus/spells"
@@ -450,23 +451,23 @@ func TestPublicThrough(t *testing.T) {
 			"direct": {"leaf"},
 		},
 		boundary: map[string]string{
-			"direct": types.DiffBoundaryPackage,
-			"top":    types.DiffBoundaryProject,
-			"beyond": types.DiffBoundaryProject,
+			"direct": diff.BoundaryPackage,
+			"top":    diff.BoundaryProject,
+			"beyond": diff.BoundaryProject,
 		},
 	}
-	require.Equal(t, []types.DiffPublicPath{
-		{ID: "direct", Qualified: "Q.direct", Boundary: types.DiffBoundaryPackage},
-		{ID: "top", Qualified: "Q.top", Via: []string{"Q.mid"}, Boundary: types.DiffBoundaryProject},
+	require.Equal(t, []diff.PublicPath{
+		{ID: "direct", Qualified: "Q.direct", Boundary: diff.BoundaryPackage},
+		{ID: "top", Qualified: "Q.top", Via: []string{"Q.mid"}, Boundary: diff.BoundaryProject},
 	}, PublicThrough(g, "leaf"))
 }
 
 func TestPublicThroughStopsAtItsDepth(t *testing.T) {
 	g := mapCallGraph{
 		callers:  map[string][]string{"a": {"b"}, "b": {"c"}, "c": {"d"}, "d": {"e"}, "e": {"f"}},
-		boundary: map[string]string{"f": types.DiffBoundaryPackage},
+		boundary: map[string]string{"f": diff.BoundaryPackage},
 	}
 	require.Empty(t, PublicThrough(g, "a"))
-	require.Equal(t, []types.DiffPublicPath{{ID: "f", Qualified: "Q.f", Via: []string{"Q.d", "Q.e"}, Boundary: types.DiffBoundaryPackage}},
+	require.Equal(t, []diff.PublicPath{{ID: "f", Qualified: "Q.f", Via: []string{"Q.d", "Q.e"}, Boundary: diff.BoundaryPackage}},
 		PublicThrough(g, "c"))
 }

@@ -299,6 +299,8 @@ const (
 	FlagJobApplyF = "f"
 	// job apply: --fix
 	FlagJobApplyFix = "fix"
+	// job apply: --release-write-path
+	FlagJobApplyReleaseWritePath = "release-write-path"
 	// job apply: --stdin
 	FlagJobApplyStdin = "stdin"
 	// job exec: --slots
@@ -1594,13 +1596,12 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 }
 
 // JobApplyFlags are the flags declared for `magus job apply`.
-//
-// It does NOT carry --add-write-path: a custom-valued flag is bound by the command itself,
-// which must do so alongside this binder.
 type JobApplyFlags struct {
-	F     string // -f
-	Stdin bool   // --[no-]stdin
-	Fix   bool   // --[no-]fix
+	F                string   // -f
+	Stdin            bool     // --[no-]stdin
+	Fix              bool     // --[no-]fix
+	AddWritePath     []string // --add-write-path
+	ReleaseWritePath []string // --release-write-path
 }
 
 // BindJobApply registers `magus job apply`'s flags on fs and returns the destination.
@@ -1611,6 +1612,8 @@ func BindJobApply(fs *flag.FlagSet) *JobApplyFlags {
 	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagJobApplyStdin)
 	fs.BoolVar(&f.Fix, FlagJobApplyFix, false, "Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records")
 	cmdline.NegatedBoolVar(fs, &f.Fix, FlagJobApplyFix)
+	cmdline.StringListVar(fs, &f.AddWritePath, FlagJobApplyAddWritePath, "A path to add to the job's write paths, or `<file>#<declaration>` to claim one declaration of a file; repeatable or comma-separated")
+	cmdline.StringListVar(fs, &f.ReleaseWritePath, FlagJobApplyReleaseWritePath, "A write path to drop from the job, keeping its goals and check; repeatable or comma-separated, and a `<file>#<declaration>` claim is one path")
 	return &f
 }
 

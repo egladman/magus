@@ -725,7 +725,7 @@ Pieces the prototype put in the wrong layer:
 | Symbol store set and moniker joins                                                                                             | proposed                                                                             |
 | affected across workspaces                                                                                                     | proposed                                                                             |
 | Writes judged by the file's workspace; guard loads both policies                                                               | proposed                                                                             |
-| Portable conventions rules; buzzed takes magus's config unchanged, exceptions by `//nolint`                                    | in progress (job portable-conventions-lint)                                          |
+| Portable conventions rules; buzzed takes magus's config unchanged, exceptions by `//nolint`                                    | not built (each workspace keeps its own config; amendment of 2026-11-08)             |
 | Discovery through verbs; the guard steers a crossing search to `magus query`; watchers on real checkouts                       | proposed                                                                             |
 | One identity per file: the logical path through the link                                                                       | proposed                                                                             |
 | Generated joins per run under `.magus/gen/` for Go, Rust, pnpm, TypeScript and Python; npm, yarn and bun refuse until verified | proposed                                                                             |
@@ -907,3 +907,27 @@ Eli took both remaining recommendations: npm, yarn and bun refuse a joined build
 `workspace-join-unverified` until each is reproduced, bun first; a Python join sets
 `PYTHONPATH` over the project's own venv, with no venv under `.magus/gen/`. The Open
 questions section is removed, since none remain.
+
+### 2026-11-08: lint as main shipped it
+
+Main (#704, #707) shipped the links, reads and imports through them, and the Go spell's
+`spells/golang/golangci.buzz`, but not round 7's lint. Where this record and main differ,
+main holds:
+
+- Each conventions analyzer reads its module from the nearest `go.mod`, as round 7 says,
+  but an explicit `module:` setting still wins
+  (libs/conventions/plugin/plugin.go, `withTreeModule`).
+- magus's own `.golangci.yml` keeps `module: github.com/egladman/magus` on 13 analyzers
+  and its magus path settings. No `in-module` block exists, so nothing in it matches only
+  in magus.
+- So buzzed does not take magus's config unchanged. Each workspace keeps its own
+  `.golangci.yml` and builds magus's analyzers from their source through the link. A
+  rule magus adds reaches buzzed when buzzed's config enables it.
+- No `inert here:` line is printed (round 11): no analyzer is inert outside magus, since
+  none is configured only for magus's module.
+- The branch `portable-lint-finish` took the `in-module` route, conflicts with main, and
+  is superseded.
+- The adoption sample under decision 7 imports `hack/magusfile/run-golangci`; the module
+  main ships is `spells/golang/golangci` (`buildFrom`, `lintWith`).
+
+[Connect two workspaces](../guides/connecting-workspaces.md) documents what main does.

@@ -13,8 +13,6 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../../../cmd/magus-utils bindings -module ini -lang buzz -out ../../../internal/interp/bindings/gen/ini.go -pkg bindgen
-
 // iniGlobalSection is the key holding entries that appear before any [section]
 // header. The empty string cannot collide with a real section name, because a
 // literal `[]` header is not a name a config file writes.
@@ -55,16 +53,16 @@ var Module = std.Module{
 		{
 			Name:    "parse",
 			Doc:     "Parse INI text into {section: {key: value}}. Entries before the first [section] header are under the \"\" key, which is where a flat file like .npmrc puts everything. Values are always strings; a repeated key takes the last value.",
-			Args:    []std.Arg{{Name: "source", Type: std.TypeString}},
-			Returns: []std.Ret{{Type: std.TypeStringMapMap}},
+			Args:    []std.Arg{{Name: "source"}},
+			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    INIParse,
 		},
 		{
 			Name:    "stringify",
 			Doc:     "Render {section: {key: value}} back to INI text. The \"\" section is written first with no header, then the rest sorted by name with their keys sorted, so the output is byte-stable and diffs cleanly.",
-			Args:    []std.Arg{{Name: "sections", Type: std.TypeStringMapMap}},
-			Returns: []std.Ret{{Type: std.TypeString}},
+			Args:    []std.Arg{{Name: "sections"}},
+			Returns: []std.Ret{{}},
 			Impl:    INIStringify,
 		},
 	},

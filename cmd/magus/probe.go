@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"io"
 	"log/slog"
 	"net/http"
@@ -85,7 +86,7 @@ func probeName(kind probeKind) string {
 }
 
 // evaluateHealth reports whether the server is healthy. root, if non-empty, pins readiness to a specific workspace.
-func evaluateHealth(status *types.StatusOutput, err error, kind probeKind, root string) (ok bool, reason string) {
+func evaluateHealth(status *daemon.Output, err error, kind probeKind, root string) (ok bool, reason string) {
 	if err != nil || status == nil {
 		if err != nil {
 			return false, fmt.Sprintf("server unreachable: %v", err)
@@ -101,10 +102,10 @@ func evaluateHealth(status *types.StatusOutput, err error, kind probeKind, root 
 			if filepath.Clean(ws.Root) != clean {
 				continue
 			}
-			if ws.State == types.WorkspaceFailed {
+			if ws.State == daemon.WorkspaceFailed {
 				return false, fmt.Sprintf("workspace %s failed to load [%s]", root, types.WorkspaceLoadFailed)
 			}
-			if ws.State == types.WorkspaceLoading {
+			if ws.State == daemon.WorkspaceLoading {
 				return false, fmt.Sprintf("workspace %s is loading", root)
 			}
 			if ws.Loaded() {
@@ -119,7 +120,7 @@ func evaluateHealth(status *types.StatusOutput, err error, kind probeKind, root 
 	return false, "no workspaces loaded"
 }
 
-func loadedCount(ws []types.StatusWorkspace) int {
+func loadedCount(ws []daemon.Workspace) int {
 	n := 0
 	for _, w := range ws {
 		if w.Loaded() {
@@ -129,10 +130,10 @@ func loadedCount(ws []types.StatusWorkspace) int {
 	return n
 }
 
-func failedCount(ws []types.StatusWorkspace) int {
+func failedCount(ws []daemon.Workspace) int {
 	n := 0
 	for _, w := range ws {
-		if w.State == types.WorkspaceFailed {
+		if w.State == daemon.WorkspaceFailed {
 			n++
 		}
 	}
@@ -154,7 +155,7 @@ type probeResult struct {
 // non-mcp probe needs it: an mcp-only invocation makes no proc RPC at all. mcp holds the
 // endpoint config the mcp probe reads, passed in so this stays free of package globals.
 func evaluateProbes(ctx context.Context, statusOf statusFunc, mcp config.MCP, kinds []probeKind, root string) []probeResult {
-	var serverSnap *types.StatusOutput
+	var serverSnap *daemon.Output
 	var serverErr error
 	dialed := false
 
@@ -215,7 +216,7 @@ func renderProbeResults(ctx context.Context, stdout io.Writer, results []probeRe
 // reachable endpoint (serving or listening-but-not-ready) passes: for an ensure/liveness
 // check the server is up either way. Unreachable, disabled and http-off all fail, carrying
 // the status note (which points at `magus server start`, or names the disabling config).
-func evaluateMCPHealth(m *types.MCPEndpointStatus) (ok bool, reason string) {
+func evaluateMCPHealth(m *daemon.MCPEndpoint) (ok bool, reason string) {
 	if m == nil {
 		return false, "mcp endpoint status unavailable"
 	}
@@ -233,7 +234,7 @@ func evaluateMCPHealth(m *types.MCPEndpointStatus) (ok bool, reason string) {
 
 // statusFunc returns the server's current status snapshot for a health check.
 // It is a seam so tests can supply a snapshot without dialing a live socket.
-type statusFunc func(ctx context.Context) (*types.StatusOutput, error)
+type statusFunc func(ctx context.Context) (*daemon.Output, error)
 
 // errNotServer is a health probe that reached a per-process proc server. It answers a
 // socket and loads no workspace, so reporting its empty workspace list as "no
@@ -247,7 +248,7 @@ var errNotServer = fmt.Errorf("a per-process pool answered, not the server, the 
 // variable names that run's per-process pool, and a scan only finds more pools, none of
 // them the server; the server's address is the only place its answer can come from.
 func serverSnapshot(socket string) statusFunc {
-	return func(ctx context.Context) (*types.StatusOutput, error) {
+	return func(ctx context.Context) (*daemon.Output, error) {
 		reply, err := proc.QueryStatus(ctx, resolveServerAddr(socket))
 		if err != nil {
 			return nil, err
@@ -274,9 +275,9 @@ const mcpHTTPOff = "http-off"
 // the two can diverge. Never returns nil so the status render always has the endpoint's
 // address and state to show. The MCP config is passed in (not read from globalCfg) so
 // the function is self-contained and testable with an explicit config.
-func buildMCPEndpointStatus(ctx context.Context, mcp config.MCP) *types.MCPEndpointStatus {
+func buildMCPEndpointStatus(ctx context.Context, mcp config.MCP) *daemon.MCPEndpoint {
 	if mcp.Enabled != nil && !*mcp.Enabled {
-		return &types.MCPEndpointStatus{
+		return &daemon.MCPEndpoint{
 			State: "disabled",
 			Note:  "MCP is disabled (mcp.enabled=false); no agent tools are served.",
 		}
@@ -288,14 +289,14 @@ func buildMCPEndpointStatus(ctx context.Context, mcp config.MCP) *types.MCPEndpo
 		// The listener still carries the console, so its reachability is probed for
 		// buildConsoleStatus; /mcp itself is never on it, so there is no URL to name.
 		code := probeMCPReadiness(pctx, addr)
-		return &types.MCPEndpointStatus{
+		return &daemon.MCPEndpoint{
 			Address:   addr,
 			Reachable: code == http.StatusOK || code == http.StatusServiceUnavailable,
 			State:     mcpHTTPOff,
 			Note:      "MCP over HTTP is off (mcp.http=false); agents reach MCP over stdio (`magus mcp`) or at /mcp on the server socket.",
 		}
 	}
-	st := &types.MCPEndpointStatus{
+	st := &daemon.MCPEndpoint{
 		Enabled: true,
 		Address: addr,
 		URL:     fmt.Sprintf("http://%s/mcp", addr),
@@ -320,20 +321,20 @@ func buildMCPEndpointStatus(ctx context.Context, mcp config.MCP) *types.MCPEndpo
 // It takes the MCP endpoint's already-probed health rather than probing again, because the
 // server serves both from ONE listener: a second probe could only ever disagree with the
 // first, and a status block that contradicts the block above it is worse than no block.
-func buildConsoleStatus(cfg config.Console, mcp *types.MCPEndpointStatus) *types.ConsoleStatus {
+func buildConsoleStatus(cfg config.Console, mcp *daemon.MCPEndpoint) *daemon.Console {
 	if cfg.Enabled != nil && !*cfg.Enabled {
-		return &types.ConsoleStatus{
+		return &daemon.Console{
 			State: "disabled",
 			Note:  "the console is disabled (console.enabled=false); nothing is served at /console/.",
 		}
 	}
 	if mcp == nil || !mcp.Enabled && mcp.State != mcpHTTPOff {
-		return &types.ConsoleStatus{
+		return &daemon.Console{
 			State: "disabled",
 			Note:  "the console is served by the MCP listener, which is disabled (mcp.enabled=false).",
 		}
 	}
-	st := &types.ConsoleStatus{Enabled: true, Address: mcp.Address, URL: console.Root(mcp.Address)}
+	st := &daemon.Console{Enabled: true, Address: mcp.Address, URL: console.Root(mcp.Address)}
 	if !mcp.Reachable {
 		st.State = "unreachable"
 		st.Note = fmt.Sprintf("nothing is listening at %s; start the server: %s", mcp.Address, hint.ServerStart)
@@ -405,7 +406,7 @@ func healthHTTPHandler(kind probeKind, status statusFunc) http.HandlerFunc {
 // has some of the sources wired (or a test) can pass a partial value.
 type readinessExtras struct {
 	symbolIndexes  func(ctx context.Context) []types.SymbolIndexStatus
-	services       func() []types.StatusService
+	services       func() []daemon.Service
 	knowledgeGraph func() (watching, valid bool)
 }
 
@@ -437,8 +438,8 @@ func readinessHTTPHandler(status statusFunc, extra readinessExtras) http.Handler
 // as per-subsystem health. Each component degrades independently of the others: a nil
 // source in extra (e.g. no hosted-services registry on this server) reads as "disabled",
 // never an error, and a nil snapshot (server unreachable) is handled the same way.
-func buildReadinessReport(ctx context.Context, ready bool, snapshot *types.StatusOutput, extra readinessExtras) types.ReadinessReport {
-	report := types.ReadinessReport{Ready: ready}
+func buildReadinessReport(ctx context.Context, ready bool, snapshot *daemon.Output, extra readinessExtras) daemon.ReadinessReport {
+	report := daemon.ReadinessReport{Ready: ready}
 	report.Components = append(report.Components, workspacesComponent(snapshot))
 
 	var indexes []types.SymbolIndexStatus
@@ -447,7 +448,7 @@ func buildReadinessReport(ctx context.Context, ready bool, snapshot *types.Statu
 	}
 	report.Components = append(report.Components, symbolIndexComponent(indexes))
 
-	var services []types.StatusService
+	var services []daemon.Service
 	if extra.services != nil {
 		services = extra.services()
 	}
@@ -474,23 +475,23 @@ func buildReadinessReport(ctx context.Context, ready bool, snapshot *types.Statu
 // checks (evaluateHealth), restated as a component so the JSON body is self-describing
 // without a client having to re-derive it from Ready alone. Detail carries a count only,
 // never a workspace root (see the Detail policy above).
-func workspacesComponent(snapshot *types.StatusOutput) types.ReadinessComponent {
-	c := types.ReadinessComponent{Name: types.ReadinessWorkspaces}
+func workspacesComponent(snapshot *daemon.Output) daemon.ReadinessComponent {
+	c := daemon.ReadinessComponent{Name: daemon.ReadinessWorkspaces}
 	if snapshot == nil {
-		c.Status, c.Detail = types.ReadinessDown, "server unreachable"
+		c.Status, c.Detail = daemon.ReadinessDown, "server unreachable"
 		return c
 	}
 	loaded := loadedCount(snapshot.Workspaces)
 	failed := failedCount(snapshot.Workspaces)
 	switch {
 	case loaded == 0 && failed == 0:
-		c.Status, c.Detail = types.ReadinessDown, "no workspaces loaded"
+		c.Status, c.Detail = daemon.ReadinessDown, "no workspaces loaded"
 	case loaded == 0:
-		c.Status, c.Detail = types.ReadinessDown, fmt.Sprintf("%d failed to load", failed)
+		c.Status, c.Detail = daemon.ReadinessDown, fmt.Sprintf("%d failed to load", failed)
 	case failed > 0:
-		c.Status, c.Detail = types.ReadinessDegraded, fmt.Sprintf("%d loaded, %d failed to load", loaded, failed)
+		c.Status, c.Detail = daemon.ReadinessDegraded, fmt.Sprintf("%d loaded, %d failed to load", loaded, failed)
 	default:
-		c.Status, c.Detail = types.ReadinessOK, fmt.Sprintf("%d loaded", loaded)
+		c.Status, c.Detail = daemon.ReadinessOK, fmt.Sprintf("%d loaded", loaded)
 	}
 	return c
 }
@@ -498,10 +499,10 @@ func workspacesComponent(snapshot *types.StatusOutput) types.ReadinessComponent 
 // symbolIndexComponent summarizes SCIP index freshness across every symbol-capable
 // project: ok when all are up to date, degraded when any are out of date or not yet
 // built, disabled when there is no symbol-capable project to report on.
-func symbolIndexComponent(indexes []types.SymbolIndexStatus) types.ReadinessComponent {
-	c := types.ReadinessComponent{Name: types.ReadinessSymbolIndex}
+func symbolIndexComponent(indexes []types.SymbolIndexStatus) daemon.ReadinessComponent {
+	c := daemon.ReadinessComponent{Name: daemon.ReadinessSymbolIndex}
 	if len(indexes) == 0 {
-		c.Status, c.Detail = types.ReadinessDisabled, "no symbol-capable project"
+		c.Status, c.Detail = daemon.ReadinessDisabled, "no symbol-capable project"
 		return c
 	}
 	fresh := 0
@@ -511,9 +512,9 @@ func symbolIndexComponent(indexes []types.SymbolIndexStatus) types.ReadinessComp
 		}
 	}
 	if fresh == len(indexes) {
-		c.Status = types.ReadinessOK
+		c.Status = daemon.ReadinessOK
 	} else {
-		c.Status = types.ReadinessDegraded
+		c.Status = daemon.ReadinessDegraded
 	}
 	// Counts only, never project names (see the Detail policy above workspacesComponent).
 	c.Detail = fmt.Sprintf("%d of %d up to date", fresh, len(indexes))
@@ -523,10 +524,10 @@ func symbolIndexComponent(indexes []types.SymbolIndexStatus) types.ReadinessComp
 // servicesComponent summarizes hosted long-running services: ok when none have failed,
 // degraded when some have failed but others are still up, down when every service has
 // failed, disabled when the broker hosts no services at all.
-func servicesComponent(services []types.StatusService) types.ReadinessComponent {
-	c := types.ReadinessComponent{Name: types.ReadinessServices}
+func servicesComponent(services []daemon.Service) daemon.ReadinessComponent {
+	c := daemon.ReadinessComponent{Name: daemon.ReadinessServices}
 	if len(services) == 0 {
-		c.Status, c.Detail = types.ReadinessDisabled, "no hosted services"
+		c.Status, c.Detail = daemon.ReadinessDisabled, "no hosted services"
 		return c
 	}
 	var running, failed int
@@ -539,11 +540,11 @@ func servicesComponent(services []types.StatusService) types.ReadinessComponent 
 	}
 	switch {
 	case failed == 0:
-		c.Status = types.ReadinessOK
+		c.Status = daemon.ReadinessOK
 	case running > 0:
-		c.Status = types.ReadinessDegraded
+		c.Status = daemon.ReadinessDegraded
 	default:
-		c.Status = types.ReadinessDown
+		c.Status = daemon.ReadinessDown
 	}
 	// Counts only, never service names (see the Detail policy above workspacesComponent).
 	c.Detail = fmt.Sprintf("%d running, %d failed", running, failed)
@@ -554,15 +555,15 @@ func servicesComponent(services []types.StatusService) types.ReadinessComponent 
 // watcher is active and the cache is currently fresh, degraded when a watcher is active
 // but the cache is mid-rebuild (a query still answers, just not from memory), down when
 // no watcher is running at all (every query falls back to a cache-first rebuild).
-func knowledgeGraphComponent(watching, valid bool) types.ReadinessComponent {
-	c := types.ReadinessComponent{Name: types.ReadinessKnowledgeGraph}
+func knowledgeGraphComponent(watching, valid bool) daemon.ReadinessComponent {
+	c := daemon.ReadinessComponent{Name: daemon.ReadinessKnowledgeGraph}
 	switch {
 	case watching && valid:
-		c.Status, c.Detail = types.ReadinessOK, "watcher active, graph fresh"
+		c.Status, c.Detail = daemon.ReadinessOK, "watcher active, graph fresh"
 	case watching:
-		c.Status, c.Detail = types.ReadinessDegraded, "watcher active, graph rebuilding"
+		c.Status, c.Detail = daemon.ReadinessDegraded, "watcher active, graph rebuilding"
 	default:
-		c.Status, c.Detail = types.ReadinessDown, "no watcher; falling back to cache-first rebuild per query"
+		c.Status, c.Detail = daemon.ReadinessDown, "no watcher; falling back to cache-first rebuild per query"
 	}
 	return c
 }

@@ -3,7 +3,7 @@
 // unit-tests here; the Site-coupled loaders/writers stay in render.buzz.
 namespace release;
 
-import "lib/text" as _;
+import "../libs/ssg/text" as _;
 import "assert";
 
 // semverSortKey returns a zero-padded sort key: "v0.10.0.yaml" -> "0000.0010.0000",

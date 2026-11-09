@@ -14,6 +14,9 @@ type RuleDoc struct {
 	Code diagnostics.Code `json:"code"`
 	// Kinds are the kinds of text the rule judges.
 	Kinds []Kind `json:"kinds"`
+	// Reads are the formats the rule's judge can read, so the formats a
+	// declared kind must read to judge by it.
+	Reads []Format `json:"reads"`
 	// Decisions is the rule's default on each of Kinds: [DecisionOff] on every
 	// kind for a house rule.
 	Decisions map[Kind]Decision `json:"decisions"`
@@ -50,15 +53,22 @@ func Catalog() []RuleDoc {
 	out := make([]RuleDoc, len(checks))
 
 	for i, c := range checks {
-		decisions := make(map[Kind]Decision, len(c.on))
-		for _, k := range c.on {
-			decisions[k] = c.defaultDecision(k)
+		var judged []Kind
+
+		decisions := map[Kind]Decision{}
+
+		for j := range builtinKinds {
+			s := &builtinKinds[j]
+			if s.judges(c.rule) {
+				judged = append(judged, s.Name)
+				decisions[s.Name] = c.defaultDecision(s)
+			}
 		}
 
 		t := ruleTexts[c.rule]
 		out[i] = RuleDoc{
-			Name: c.rule, Code: t.code, Kinds: slices.Clone(c.on), Decisions: decisions, House: c.house, Weight: weights[c.rule],
-			Catches: t.catches, Why: t.why, Dimension: t.dimension,
+			Name: c.rule, Code: t.code, Kinds: judged, Reads: slices.Clone(c.reads), Decisions: decisions,
+			House: isHouse(c.rule), Weight: weights[c.rule], Catches: t.catches, Why: t.why, Dimension: t.dimension,
 		}
 	}
 
@@ -111,8 +121,8 @@ const (
 // review replies and PRF9xxx messages a program prints. A code is never
 // reused: a retired rule keeps its number out of circulation. Each family
 // file keeps its own rules' texts beside their checks.
-var ruleTexts = mergeTexts(coreTexts, cssTexts, commitTexts, helpTexts, issueTexts, densityTexts, reviewTexts, reviewKindTexts, suppressTexts,
-	agentReplyTexts, toolTexts, listTexts, voiceTexts, compactTexts, skillTexts, gradeTexts, triadTexts)
+var ruleTexts = mergeTexts(coreTexts, cssTexts, markupTexts, commitTexts, helpTexts, issueTexts, densityTexts, reviewTexts, reviewKindTexts, suppressTexts,
+	agentReplyTexts, toolTexts, listTexts, voiceTexts, uniformTexts, compactTexts, skillTexts, gradeTexts, triadTexts)
 
 func mergeTexts(tables ...map[Rule]ruleText) map[Rule]ruleText {
 	out := map[Rule]ruleText{}
@@ -165,6 +175,16 @@ var coreTexts = map[Rule]ruleText{
 		why: "A reader following a procedure scans for the action. A numbered list counts as a procedure " +
 			"only when one of its items opens with an imperative, so a recap, a precedence order or a list " +
 			"of reasons is left alone.",
+	},
+	RuleFirstPerson: {
+		code:      "PRF1005",
+		dimension: DimensionConventions,
+		catches:   "I, me or my on a reference page or in a guide, outside an author's note",
+		why: "A page states what the product does, so a reader takes every sentence as its contract. " +
+			"\"I use a worktree\" in that voice reads as advice the product gives, or as a promise it " +
+			"keeps. An author's note, a blockquote opened with [!AUTHOR], marks the one place a page " +
+			"speaks as its author, and the rule leaves it alone. Quoted words and code are mentions, so " +
+			"a reader's question (\"how do I build this?\") passes, as do \"I/O\" and a link's text.",
 	},
 	RuleBlame: {
 		code:      "PRF2001",
@@ -457,6 +477,14 @@ var coreTexts = map[Rule]ruleText{
 			"which resolves in every clone. A path like `~/Repos/<repo>/...` or `/Users/<name>/...` leaks the " +
 			"author's machine and resolves nowhere else. URLs, link targets and `/dev/null` are left alone, " +
 			"and a reply to the person at that machine is not judged.",
+	},
+	RuleLocalBranch: {
+		code:      "PRF5009",
+		dimension: DimensionConventions,
+		catches:   "a branch that exists only on the author's machine, from the names the caller passes",
+		why: "House style: a branch that was never pushed resolves on no reader's machine, the way a home " +
+			"directory path does not. Proofread cannot tell a local branch from text, so the caller lists the " +
+			"local-only names; with none, the rule judges nothing. A one-word name counts only in backticks.",
 	},
 	RuleTense: {
 		code:      "PRF5004",

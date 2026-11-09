@@ -185,39 +185,28 @@ const unreadMark = "%unread%"
 // False when every such word is plain. An argument that is not one is no business of this
 // check: `git commit -m "$msg"` names its command plainly.
 func unreadCommandWord(command string, d Dialect) (string, bool) {
-	return unreadCommandWordAt(command, 0, d)
-}
-
-func unreadCommandWordAt(command string, depth int, d Dialect) (string, bool) {
-	if depth > writeScanDepth {
-		return "", false
-	}
-	f, err := parseFile(command, d)
-	if err != nil {
-		return "", false
-	}
 	found := ""
-	syntax.Walk(f, func(n syntax.Node) bool {
-		call, ok := n.(*syntax.CallExpr)
-		if found != "" || !ok {
-			return found == ""
-		}
-		words := make([]string, len(call.Args))
-		for i, w := range call.Args {
-			words[i] = literalWord(w.Parts)
-			if !readsAsWritten(w.Parts) {
-				words[i] += fmt.Sprintf("%s%d%s", unreadMark, i, unreadMark)
+	eachScript(command, d, func(sf *scriptFile) bool {
+		syntax.Walk(sf.file, func(n syntax.Node) bool {
+			call, ok := n.(*syntax.CallExpr)
+			if found != "" || !ok {
+				return found == ""
 			}
-		}
-		for _, inv := range peelWrappers(words, d) {
-			if i, ok := markedWord(commandWords(inv)...); ok && i < len(call.Args) {
-				found = command[call.Args[i].Pos().Offset():call.Args[i].End().Offset()]
-				return false
+			words := make([]string, len(call.Args))
+			for i, w := range call.Args {
+				words[i] = literalWord(w.Parts)
+				if !readsAsWritten(w.Parts) {
+					words[i] += fmt.Sprintf("%s%d%s", unreadMark, i, unreadMark)
+				}
 			}
-		}
-		if script, ok := shellPayload(literalWords(call.Args)); ok {
-			found, _ = unreadCommandWordAt(script, depth+1, d)
-		}
+			for _, inv := range peelWrappers(words, d) {
+				if i, ok := markedWord(commandWords(inv)...); ok && i < len(call.Args) {
+					found = sf.text[call.Args[i].Pos().Offset():call.Args[i].End().Offset()]
+					return false
+				}
+			}
+			return true
+		})
 		return found == ""
 	})
 	return found, found != ""
@@ -501,6 +490,81 @@ type nestedScript struct {
 	dir  string
 }
 
+// scriptFile is one parsed script: the line, or a payload another shell parses.
+// from is the statement in parent that handed the payload over.
+type scriptFile struct {
+	file   *syntax.File
+	text   string
+	from   *syntax.Stmt
+	parent *scriptFile
+}
+
+// eachScript calls fn with the line, then with every shellPayload in it, depth
+// first. fn returns false to stop. An unparsable payload is skipped.
+func eachScript(command string, d Dialect, fn func(*scriptFile) bool) {
+	f, err := parseFile(command, d)
+	if err != nil {
+		return
+	}
+	eachScriptFrom(&scriptFile{file: f, text: command}, d, 0, fn)
+}
+
+func eachScriptFrom(sf *scriptFile, d Dialect, depth int, fn func(*scriptFile) bool) bool {
+	if !fn(sf) {
+		return false
+	}
+	if depth >= writeScanDepth {
+		return true
+	}
+	var payloads []*scriptFile
+	syntax.Walk(sf.file, func(n syntax.Node) bool {
+		stmt, ok := n.(*syntax.Stmt)
+		if !ok {
+			return true
+		}
+		call, ok := stmt.Cmd.(*syntax.CallExpr)
+		if !ok {
+			return true
+		}
+		if script, ok := shellPayload(literalWords(call.Args)); ok {
+			if f, err := parseFile(script, d); err == nil {
+				payloads = append(payloads, &scriptFile{file: f, text: script, from: stmt, parent: sf})
+			}
+		}
+		return true
+	})
+	for _, p := range payloads {
+		if !eachScriptFrom(p, d, depth+1, fn) {
+			return false
+		}
+	}
+	return true
+}
+
+// scriptDirs gives the directory each statement runs in. A payload starts in
+// the directory of the statement that handed it over.
+type scriptDirs struct {
+	start, home string
+	byScript    map[*scriptFile]map[*syntax.Stmt]string
+}
+
+func newScriptDirs(start, home string) *scriptDirs {
+	return &scriptDirs{start: start, home: home, byScript: map[*scriptFile]map[*syntax.Stmt]string{}}
+}
+
+func (t *scriptDirs) of(sf *scriptFile) map[*syntax.Stmt]string {
+	if dirs, ok := t.byScript[sf]; ok {
+		return dirs
+	}
+	start := t.start
+	if sf.parent != nil {
+		start = t.of(sf.parent)[sf.from]
+	}
+	dirs := stmtDirs(sf.file, sf.text, start, t.home)
+	t.byScript[sf] = dirs
+	return dirs
+}
+
 // shellCommands is the commands s runs, wrappers peeled, with each word rendered by render.
 func shellCommands(command string, s *syntax.Stmt, d Dialect, render func(string, *syntax.Word) string) []hint.Invocation {
 	call, ok := s.Cmd.(*syntax.CallExpr)
@@ -518,50 +582,38 @@ func shellCommands(command string, s *syntax.Stmt, d Dialect, render func(string
 // mv, and git, hg and sl remove and move), nested scripts included, each with the directory
 // it runs in, starting at start. Each takes a directory whole, so a boundary has to ask what
 // one holds, not only what it is named.
-func removedOrMovedOperands(command string, depth int, d Dialect, start, home string) []placedWord {
-	if depth > writeScanDepth {
-		return nil
-	}
-	f, err := parseFile(command, d)
-	if err != nil {
-		return nil
-	}
-	dirs := stmtDirs(f, command, start, home)
+func removedOrMovedOperands(command string, _ int, d Dialect, start, home string) []placedWord {
 	var out []placedWord
-	var nested []nestedScript
-	syntax.Walk(f, func(n syntax.Node) bool {
-		stmt, ok := n.(*syntax.Stmt)
-		if !ok {
+	dirTable := newScriptDirs(start, home)
+	eachScript(command, d, func(sf *scriptFile) bool {
+		dirs := dirTable.of(sf)
+		syntax.Walk(sf.file, func(n syntax.Node) bool {
+			stmt, ok := n.(*syntax.Stmt)
+			if !ok {
+				return true
+			}
+			keep := func(ops []string) {
+				for _, op := range ops {
+					out = append(out, placedWord{op, dirs[stmt]})
+				}
+			}
+			for _, c := range shellCommands(sf.text, stmt, d, placeableWord) {
+				name := path.Base(c.Name)
+				if paths, ok := vcsPathOperands(name, c.Args); ok {
+					keep(paths)
+					continue
+				}
+				switch name {
+				case "rm", "rmdir":
+					keep(operands(c.Args, ""))
+				case "mv":
+					keep(mvOperands(c.Args))
+				}
+			}
 			return true
-		}
-		if call, ok := stmt.Cmd.(*syntax.CallExpr); ok {
-			if script, ok := shellPayload(literalWords(call.Args)); ok {
-				nested = append(nested, nestedScript{script, dirs[stmt]})
-			}
-		}
-		keep := func(ops []string) {
-			for _, op := range ops {
-				out = append(out, placedWord{op, dirs[stmt]})
-			}
-		}
-		for _, c := range shellCommands(command, stmt, d, placeableWord) {
-			name := path.Base(c.Name)
-			if paths, ok := vcsPathOperands(name, c.Args); ok {
-				keep(paths)
-				continue
-			}
-			switch name {
-			case "rm", "rmdir":
-				keep(operands(c.Args, ""))
-			case "mv":
-				keep(mvOperands(c.Args))
-			}
-		}
+		})
 		return true
 	})
-	for _, s := range nested {
-		out = append(out, removedOrMovedOperands(s.text, depth+1, d, s.dir, home)...)
-	}
 	return out
 }
 
@@ -594,7 +646,7 @@ func mvOperands(args []string) []string {
 // the commands inside one, but a redirect there belongs to the inner parse tree and is
 // invisible to a walk of the outer one.
 func writeTargetCandidates(command string, d Dialect) []string {
-	placed := collectWriteCandidates(command, 0, d, "", "", func(_ string, w *syntax.Word) string { return literalWord(w.Parts) })
+	placed := collectWriteCandidates(command, d, "", "", func(_ string, w *syntax.Word) string { return literalWord(w.Parts) })
 	out := slices.Grow([]string(nil), len(placed)) // stays nil for a line that writes nothing
 	for _, p := range placed {
 		out = append(out, p.word)
@@ -605,45 +657,33 @@ func writeTargetCandidates(command string, d Dialect) []string {
 // placedWriteCandidates is writeTargetCandidates with each word as placeableWord renders it
 // and the directory its statement runs in, starting at start.
 func placedWriteCandidates(command string, d Dialect, start, home string) []placedWord {
-	return collectWriteCandidates(command, 0, d, start, home, placeableWord)
+	return collectWriteCandidates(command, d, start, home, placeableWord)
 }
 
-func collectWriteCandidates(command string, depth int, d Dialect, start, home string, render func(string, *syntax.Word) string) []placedWord {
-	if depth > writeScanDepth {
-		return nil
-	}
-	f, err := parseFile(command, d)
-	if err != nil {
-		return nil
-	}
-	dirs := stmtDirs(f, command, start, home)
+func collectWriteCandidates(command string, d Dialect, start, home string, render func(string, *syntax.Word) string) []placedWord {
 	var out []placedWord
-	var nested []nestedScript
-	syntax.Walk(f, func(n syntax.Node) bool {
-		stmt, ok := n.(*syntax.Stmt)
-		if !ok {
+	dirTable := newScriptDirs(start, home)
+	eachScript(command, d, func(sf *scriptFile) bool {
+		dirs := dirTable.of(sf)
+		syntax.Walk(sf.file, func(n syntax.Node) bool {
+			stmt, ok := n.(*syntax.Stmt)
+			if !ok {
+				return true
+			}
+			for _, r := range stmt.Redirs {
+				if writesToFile(r.Op) && !duplicatesDescriptor(r) {
+					out = append(out, placedWord{render(sf.text, r.Word), dirs[stmt]})
+				}
+			}
+			for _, c := range shellCommands(sf.text, stmt, d, render) {
+				for _, w := range commandWriteCandidates(c, heredocText(stmt)) {
+					out = append(out, placedWord{w, dirs[stmt]})
+				}
+			}
 			return true
-		}
-		for _, r := range stmt.Redirs {
-			if writesToFile(r.Op) && !duplicatesDescriptor(r) {
-				out = append(out, placedWord{render(command, r.Word), dirs[stmt]})
-			}
-		}
-		if call, ok := stmt.Cmd.(*syntax.CallExpr); ok {
-			if script, ok := shellPayload(literalWords(call.Args)); ok {
-				nested = append(nested, nestedScript{script, dirs[stmt]})
-			}
-		}
-		for _, c := range shellCommands(command, stmt, d, render) {
-			for _, w := range commandWriteCandidates(c, heredocText(stmt)) {
-				out = append(out, placedWord{w, dirs[stmt]})
-			}
-		}
+		})
 		return true
 	})
-	for _, s := range nested {
-		out = append(out, collectWriteCandidates(s.text, depth+1, d, s.dir, home, render)...)
-	}
 	return out
 }
 
@@ -885,20 +925,19 @@ func stmtCommands(s *syntax.Stmt, d Dialect) []hint.Invocation {
 // denied a heredoc that merely quoted the rule's own test cases. An AST knows a
 // WhileClause from a word that looks like one.
 func busyWaitFires(command string, d Dialect) bool {
-	f, err := parseFile(command, d)
-	if err != nil {
-		return false
-	}
 	found := false
-	syntax.Walk(f, func(n syntax.Node) bool {
-		if found {
-			return false
-		}
-		if body, ok := pollingLoop(n, d); ok && waitsIn(n, body, d) {
-			found = true
-			return false
-		}
-		return true
+	eachScript(command, d, func(sf *scriptFile) bool {
+		syntax.Walk(sf.file, func(n syntax.Node) bool {
+			if found {
+				return false
+			}
+			if body, ok := pollingLoop(n, d); ok && waitsIn(n, body, d) {
+				found = true
+				return false
+			}
+			return true
+		})
+		return !found
 	})
 	return found
 }
@@ -1233,34 +1272,20 @@ func sourceReadFires(cmds []hint.Invocation) bool {
 // An `sh -c` or `eval` payload is scanned on its own afterwards, bounded the same way: a
 // redirect inside one belongs to the inner parse tree and is invisible to a walk of the
 // outer one, which is the whole shape of a wrapper that reaches a rule keyed on redirects.
-func redirectTargets(command string, depth int, d Dialect) []string {
-	if depth > writeScanDepth {
-		return nil
-	}
-	f, err := parseFile(command, d)
-	if err != nil {
-		return nil
-	}
-	var out, nested []string
-	syntax.Walk(f, func(n syntax.Node) bool {
-		stmt, ok := n.(*syntax.Stmt)
-		if !ok {
+func redirectTargets(command string, _ int, d Dialect) []string {
+	var out []string
+	eachScript(command, d, func(sf *scriptFile) bool {
+		syntax.Walk(sf.file, func(n syntax.Node) bool {
+			if stmt, ok := n.(*syntax.Stmt); ok {
+				for _, r := range stmt.Redirs {
+					if writesToFile(r.Op) && !duplicatesDescriptor(r) {
+						out = append(out, literalWord(r.Word.Parts))
+					}
+				}
+			}
 			return true
-		}
-		for _, r := range stmt.Redirs {
-			if writesToFile(r.Op) && !duplicatesDescriptor(r) {
-				out = append(out, literalWord(r.Word.Parts))
-			}
-		}
-		if call, ok := stmt.Cmd.(*syntax.CallExpr); ok {
-			if script, ok := shellPayload(literalWords(call.Args)); ok {
-				nested = append(nested, script)
-			}
-		}
+		})
 		return true
 	})
-	for _, script := range nested {
-		out = append(out, redirectTargets(script, depth+1, d)...)
-	}
 	return out
 }

@@ -22,10 +22,10 @@ percent is the covered-line percentage across an lcov report, as a string
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
-| `lcov`    | `any` |          |             |
-| `keep`    | `any` |          |             |
+| `lcov`    | `str` |          |             |
+| `keep`    | `str` |          |             |
 
-**Returns:** any
+**Returns:** str
 
 ### mergePercent
 
@@ -33,10 +33,10 @@ mergePercent is percent over SEVERAL lcov reports of the same sources,
 
 **Signature:** `lcov\mergePercent(reports, keep) -> str`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `reports` | `any` |          |             |
-| `keep`    | `any` |          |             |
+| Parameter | Type    | Optional | Description |
+| --------- | ------- | -------- | ----------- |
+| `reports` | `[str]` |          |             |
+| `keep`    | `str`   |          |             |
 
-**Returns:** any
+**Returns:** str
 

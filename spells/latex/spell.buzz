@@ -6,6 +6,7 @@ import "magus/spell";
 // charm constructors derive argv patches from an anchor arg.
 import "magus/charm";
 import "encoding/toml";
+import "path";
 
 export fun mgs_getName() > str { return "latex"; }
 
@@ -86,18 +87,6 @@ export fun mgs_getSandbox() > Sandbox {
     };
 }
 
-fun dirOf(path: str) > str {
-    final parts = path.split("/");
-    if (parts.len() == 1) {
-        return ".";
-    }
-    return parts.sub(0, len: parts.len() - 1).join("/");
-}
-
-fun isUnder(path: str, dir: str) > bool {
-    return dir == "." or path == dir or path.startsWith("{dir}/");
-}
-
 fun isSource(path: str) > bool {
     return path.endsWith(".tex") or path.endsWith(".sty") or path.endsWith(".cls");
 }
@@ -120,7 +109,7 @@ fun hasPath(files: [DiscoveryFile], path: str) > bool {
 // inputs, and each input is a file under src/.
 fun outputGaps(file: DiscoveryFile, files: [DiscoveryFile]) > [DiscoveryGap] {
     final gaps = mut [<DiscoveryGap>];
-    final dir = dirOf(file.path);
+    final dir = path\dir(file.path);
     final prefix = if (dir == ".") "src" else "{dir}/src";
     var doc: {str: any}? = null;
     if (file.content -> text) {
@@ -163,9 +152,9 @@ export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredP
     final answer = mut [<DiscoveredProject>];
     foreach (file in req.files) {
         if (isMarker(file.path)) {
-            roots.append(dirOf(file.path));
+            roots.append(path\dir(file.path));
             answer.append(DiscoveredProject{
-                path = dirOf(file.path),
+                path = path\dir(file.path),
                 role = DiscoveryRole.project,
                 targets = {"build": ["tectonic"], "lint": ["chktex"], "format": ["latexindent"]},
                 notInferred = outputGaps(file, files: req.files),
@@ -176,10 +165,10 @@ export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredP
     final strayDirs = mut [<str>];
     final strayFirst = mut {<str: str>};
     foreach (file in req.files) {
-        if (!isSource(file.path) or roots.filter(fun (index: int, root: str) > bool => isUnder(file.path, dir: root)).len() > 0) {
+        if (!isSource(file.path) or roots.filter(fun (index: int, root: str) > bool => path\within(root, path: file.path)).len() > 0) {
             continue;
         }
-        final dir = dirOf(file.path);
+        final dir = path\dir(file.path);
         if (strayFirst[dir] == null) {
             strayDirs.append(dir);
             strayFirst[dir] = file.path;

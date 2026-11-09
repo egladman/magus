@@ -8,10 +8,11 @@ import "markdown";
 import "fs";
 import "io";
 import "template";
-import "lib/text" as _;
-import "lib/html" as _;
+import "html" as htmlcodec;
+import "../libs/ssg/text" as _;
+import "../libs/ssg/rewrite" as _;
 import "engine/meta" as _;
-import "engine/path" as _;
+import "../libs/ssg/paths" as _;
 import "engine/types" as _;
 import "engine/page" as _;
 
@@ -64,14 +65,14 @@ fun registerDevPage(title: str, desc: str, url: str, srcRel: str, site: Site) > 
 // not the workspace reported any projects, because renderRoot writes that page regardless.
 export fun collectDevelopmentPages(site: Site) > void !> any {
     registerDevPage("Development", DEVELOPMENT_DESC, "development/", "README.md", site);
-    if (fs\isFile(site.root + "/CONTRIBUTING.md")) {
+    if (fs\isFile(site.inputs.root + "/CONTRIBUTING.md")) {
         registerDevPage("Contributing", CONTRIBUTING_DESC,
             "development/contributing/", "development/contributing/_index.md", site);
     }
-    if (site.targets.projects.len() == 0) { return; }
+    if (site.inputs.targets.projects.len() == 0) { return; }
     registerDevPage("Projects", PROJECTS_DESC,
         "development/projects/", "development/projects/_index.md", site);
-    foreach (proj in site.targets.projects) {
+    foreach (proj in site.inputs.targets.projects) {
         final name = projectLabel(proj.path);
         final slug = slugifyProject(name);
         registerDevPage(name + " targets", projectPageDesc(name),
@@ -86,7 +87,7 @@ export fun collectDevelopmentPages(site: Site) > void !> any {
 fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str, site: Site) > void !> any {
     final html = renderContentHTML(markdown\toHtml(md), "", "");
     final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], generatedFrom(md), site);
-    final dir = fs\join(site.outDir, url.sub(0, url.len() - 1));
+    final dir = fs\join(site.inputs.outDir, url.sub(0, url.len() - 1));
     fs\mkdirAll(dir);
     fs\writeFile(dir + "/index.html", doc);
     site.addRecord(url, title, desc, md);
@@ -101,7 +102,7 @@ fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str,
 // text to index, since the HTML carries no useful prose.
 fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, url: str, srcRel: str, site: Site) > void !> any {
     final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], "", site);
-    final dir = fs\join(site.outDir, url.sub(0, url.len() - 1));
+    final dir = fs\join(site.inputs.outDir, url.sub(0, url.len() - 1));
     fs\mkdirAll(dir);
     fs\writeFile(dir + "/index.html", doc);
     site.addRecord(url, title, desc, searchText);
@@ -255,15 +256,15 @@ export fun renderDevelopment(site: Site) > void !> any {
     // CONTRIBUTING.md (repo root) as its own page under /development/. Written whether or
     // not the workspace reported projects - it is prose about the repository, not about
     // the graph, and collectDevelopmentPages registers it on the same condition.
-    if (fs\isFile(site.root + "/CONTRIBUTING.md")) {
-        final cf = io\File.open(site.root + "/CONTRIBUTING.md", io\FileMode.read);
+    if (fs\isFile(site.inputs.root + "/CONTRIBUTING.md")) {
+        final cf = io\File.open(site.inputs.root + "/CONTRIBUTING.md", io\FileMode.read);
         final contributingMd = cf.readAll();
         cf.close();
         renderDevelopmentPage("Contributing", CONTRIBUTING_DESC,
             contributingMd, "development/contributing/", "development/contributing/_index.md", site);
     }
 
-    final projects = site.targets.projects;
+    final projects = site.inputs.targets.projects;
     if (projects.len() == 0) { return; }
 
     foreach (proj in projects) {
@@ -292,15 +293,15 @@ export fun renderDevelopment(site: Site) > void !> any {
             desc = "{n.len()} targets";
         }
         projectCards.append("        <a class=\"related-card\" href=\"" + UP + slugifyProject(name) + "/\">"
-            + "<span class=\"related-card-title\">" + escapeAttr(name) + "</span>"
-            + "<span class=\"related-card-desc\">" + escapeAttr(desc) + "</span></a>\n");
+            + "<span class=\"related-card-title\">" + htmlcodec\escape(name) + "</span>"
+            + "<span class=\"related-card-desc\">" + htmlcodec\escape(desc) + "</span></a>\n");
     }
 
     // The project-level view, rendered through the markdown pipeline for its table and
     // then spliced into the raw page. renderContentHTML is
     // skipped for the same reason the page is raw at all: its link rewrite would strip the
     // trailing slash off every project href here.
-    final depsMd = workspaceDependencies(site.graph);
+    final depsMd = workspaceDependencies(site.inputs.graph);
     var depsSection = "";
     if (depsMd != "") {
         depsSection = wrapTables(markdown\toHtml(depsMd));

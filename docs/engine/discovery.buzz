@@ -7,15 +7,15 @@ namespace discovery;
 import "fs";
 import "assert";
 import "engine/types" as _;
-import "lib/text" as _;
-import "lib/feed" as _;
+import "../libs/ssg/text" as _;
+import "../libs/ssg/feed" as _;
 
 // writeSEOFiles writes sitemap.xml + robots.txt from the real page URLs (sorted, so
 // byte-stable), each an absolute baseURL loc - "index.html" maps to the bare site root.
 // Aliases are omitted (only canonical pages belong in a sitemap). Gated on baseURL so the
 // site can ship dark until the host is confirmed. robots points crawlers at the sitemap.
 export fun writeSEOFiles(site: Site) > void !> any {
-    if (site.config.baseURL == "") { return; }
+    if (site.inputs.config.baseURL == "") { return; }
     var urls: mut [str] = mut [<str>];
     foreach (u in site.pageUrls.keys()) { urls.append(u); }
     final sorted = urls.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
@@ -25,11 +25,11 @@ export fun writeSEOFiles(site: Site) > void !> any {
     foreach (u in sorted) {
         var loc = u;
         if (loc == "index.html") { loc = ""; }
-        body.append("  <url>" + xmlElement("loc", site.config.baseURL + loc) + "</url>\n");
+        body.append("  <url>" + xmlElement("loc", site.inputs.config.baseURL + loc) + "</url>\n");
     }
     body.append("</urlset>\n");
-    fs\writeFile(site.outDir + "/sitemap.xml", body.join(""));
-    fs\writeFile(site.outDir + "/robots.txt", "User-agent: *\nAllow: /\nSitemap: " + site.config.baseURL + "sitemap.xml\n");
+    fs\writeFile(site.inputs.outDir + "/sitemap.xml", body.join(""));
+    fs\writeFile(site.inputs.outDir + "/robots.txt", "User-agent: *\nAllow: /\nSitemap: " + site.inputs.config.baseURL + "sitemap.xml\n");
 }
 
 
@@ -63,11 +63,11 @@ fun llmsIndexBody(pages: mut [DocPage], base: str, title: str) > str {
 // under baseURL when set (so an external agent can follow them), else root-relative.
 export fun writeLLMsIndex(site: Site) > void !> any {
     var base = "/";
-    if (site.config.baseURL != "") {
-        base = site.config.baseURL;
+    if (site.inputs.config.baseURL != "") {
+        base = site.inputs.config.baseURL;
         if (base.endsWith("/") == false) { base = base + "/"; }
     }
-    fs\writeFile(site.outDir + "/llms.txt", llmsIndexBody(site.docPages, base, site.config.title));
+    fs\writeFile(site.inputs.outDir + "/llms.txt", llmsIndexBody(site.docPages, base, site.inputs.config.title));
 }
 
 

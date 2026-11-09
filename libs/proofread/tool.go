@@ -27,13 +27,11 @@ const (
 	toolRunes        = 1024
 )
 
-var toolKind = []Kind{KindToolDescription}
-
 var toolChecks = []check{
-	{rule: RuleToolLead, on: toolKind, graded: true, judge: toolLead},
-	{rule: RuleToolBoundary, on: toolKind, graded: true, judge: toolBoundary},
-	{rule: RuleToolLength, on: toolKind, graded: true, judge: toolLength},
-	{rule: RuleToolSelling, on: toolKind, judge: tellJudge("Drop '%s': say what the tool does, not how good it is.", toolSelling...)},
+	{rule: RuleToolLead, reads: []Format{FormatPlain}, judge: toolLead},
+	{rule: RuleToolBoundary, reads: []Format{FormatPlain}, judge: toolBoundary},
+	{rule: RuleToolLength, reads: []Format{FormatPlain}, judge: toolLength},
+	{rule: RuleToolSelling, reads: []Format{FormatPlain}, judge: tellJudge("Drop '%s': say what the tool does, not how good it is.", toolSelling...)},
 }
 
 var toolTexts = map[Rule]ruleText{
@@ -102,22 +100,8 @@ var toolBoundaryPhrase = regexp.MustCompile(
 		`only (?:when|if|for)|use (?:the |a |an )?\S+ (?:tool|skill|cli|command)|use \S+ (?:for|when)|` +
 		`refus(?:e|es|ed)|read-only)\b`)
 
-// judgeTool judges one tool's or skill's description as plain text: no
-// Markdown is read, so a backtick still marks a literal. A URL is not prose.
-func judgeTool(raw []string, o options) []Finding {
-	lines := make([]string, len(raw))
-	for i, ln := range raw {
-		lines[i] = bareURL.ReplaceAllString(ln, "")
-	}
-
-	return run(input{
-		kind: KindToolDescription, prose: readProse(lines, false), lines: lines, source: raw,
-		text: strings.Join(raw, "\n"), opts: o,
-	})
-}
-
 func toolLead(in input) []Finding {
-	paras := paragraphs(in.prose, mentions(in.kind))
+	paras := paragraphs(in.prose, mentions(in.spec.Reader.Format))
 	if len(paras) == 0 {
 		return nil
 	}

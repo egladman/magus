@@ -29,13 +29,13 @@ The code is `PRF5008`. The decision depends on the kind of text judged:
 | Kind                 | Default |
 | -------------------- | ------- |
 | `change-description` | off     |
+| `review-summary`     | off     |
+| `review-inline`      | off     |
+| `review-reply`       | off     |
 | `commit-message`     | off     |
 | `issue`              | off     |
 | `release-notes`      | off     |
 | `changelog`          | off     |
-| `review-summary`     | off     |
-| `review-inline`      | off     |
-| `review-reply`       | off     |
 
 House style ships `off`: the rule encodes one repository's conventions, not
 a rule of plain writing. A repository turns it on in its decisions table.

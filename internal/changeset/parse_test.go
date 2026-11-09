@@ -2,13 +2,12 @@ package changeset
 
 import (
 	"fmt"
+	difftypes "github.com/egladman/magus/types/diff"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/egladman/magus/types"
 )
 
 // These cases came from the console's parse.test.ts when the two readers were consolidated
@@ -447,7 +446,7 @@ func TestPlaceThreadsResolvesALineOntoItsHunk(t *testing.T) {
 	require.Len(t, files, 1)
 	require.Len(t, files[0].Hunks, 2)
 
-	got := PlaceThreads(files, []types.ReviewComment{
+	got := PlaceThreads(files, []difftypes.ReviewComment{
 		{ID: "t1", Path: "a.go", Line: 11},
 		{ID: "t2", Path: "a.go", Line: 40},
 		// The line moved out from under this remark. It still belongs to the file, and the
@@ -470,7 +469,7 @@ func TestPlaceThreadsGivesAReplyItsHeadsPathAndHunk(t *testing.T) {
 	files := ParseHunks("diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n" +
 		"@@ -10,3 +10,3 @@\n ten\n-old\n+new\n")
 
-	got := PlaceThreads(files, []types.ReviewComment{
+	got := PlaceThreads(files, []difftypes.ReviewComment{
 		{ID: "r1", Path: "a.go", Line: 11},
 		{ID: "r2", Path: "b.go", Line: 3, Root: "r1"},
 		{ID: "r3", Root: "r1"},
@@ -486,7 +485,7 @@ func TestPlaceThreadsIgnoresARootThatIsNotATopLevelComment(t *testing.T) {
 	files := ParseHunks("diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n" +
 		"@@ -10,3 +10,3 @@\n ten\n-old\n+new\n")
 
-	got := PlaceThreads(files, []types.ReviewComment{
+	got := PlaceThreads(files, []difftypes.ReviewComment{
 		{ID: "self", Path: "a.go", Line: 11, Root: "self"},
 		{ID: "a", Path: "a.go", Line: 11, Root: "b"},
 		{ID: "b", Path: "a.go", Line: 900, Root: "a"},
@@ -509,7 +508,7 @@ func TestPlaceThreadsKeepsAThreadUnderItsHead(t *testing.T) {
 		"@@ -10,3 +10,3 @@\n ten\n-old\n+new\n" +
 		"@@ -40,2 +40,2 @@\n-x\n+y\n")
 
-	got := PlaceThreads(files, []types.ReviewComment{
+	got := PlaceThreads(files, []difftypes.ReviewComment{
 		// The reply precedes its root in the list: the host's order is not ours to assume.
 		{ID: "r2", Path: "a.go", Line: 900, Root: "r1"},
 		{ID: "r1", Path: "a.go", Line: 11},
@@ -541,7 +540,7 @@ func TestPlaceThreadsKeepsAThreadUnderItsHead(t *testing.T) {
 func TestPlaceThreadsMatchesTheNewSideNotTheOld(t *testing.T) {
 	files := ParseHunks("diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n" +
 		"@@ -100,2 +5,2 @@\n-old\n+new\n")
-	got := PlaceThreads(files, []types.ReviewComment{
+	got := PlaceThreads(files, []difftypes.ReviewComment{
 		{ID: "new", Path: "a.go", Line: 5},
 		{ID: "old", Path: "a.go", Line: 100},
 	})

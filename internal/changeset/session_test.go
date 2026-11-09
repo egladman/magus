@@ -1,6 +1,7 @@
 package changeset
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,8 +16,8 @@ import (
 
 func TestAttachReturnsTheSameSessionForOneRoot(t *testing.T) {
 	s := NewStore("")
-	a := s.Attach("/w", "working", types.Diff{Base: "working"}, "")
-	b := s.Attach("/w", "working", types.Diff{Base: "working"}, "")
+	a := s.Attach("/w", "working", diff.Diff{Base: "working"}, "")
+	b := s.Attach("/w", "working", diff.Diff{Base: "working"}, "")
 	assert.Equal(t, a.ID, b.ID,
 		"two attaches to one workspace must share a session, or a console tab and an agent "+
 			"mark progress on different objects while both believe they are paired")
@@ -26,11 +27,11 @@ func TestAttachReturnsTheSameSessionForOneRoot(t *testing.T) {
 // conversation happening over it.
 func TestAttachUpdatesTheReviewWithoutClearingTheConversation(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Diff{Files: []types.DiffFile{{Path: "a.go"}}}, "")
-	s.AddComment("/w", types.DiffComment{Path: "a.go", Body: "look here"}, types.DiffAuthorAgent)
+	s.Attach("/w", "working", diff.Diff{Files: []diff.File{{Path: "a.go"}}}, "")
+	s.AddComment("/w", diff.Comment{Path: "a.go", Body: "look here"}, diff.AuthorAgent)
 	s.MarkViewed("/w", "digest1", true)
 
-	got := s.Attach("/w", "working", types.Diff{Files: []types.DiffFile{{Path: "b.go"}}}, "")
+	got := s.Attach("/w", "working", diff.Diff{Files: []diff.File{{Path: "b.go"}}}, "")
 	require.Len(t, got.Diff.Files, 1)
 	assert.Equal(t, "b.go", got.Diff.Files[0].Path, "the changeset must refresh")
 	assert.Len(t, got.Comments, 1, "comments must survive a recompute")
@@ -70,7 +71,7 @@ func TestHunkDigestChangesWhenTheBodyDoes(t *testing.T) {
 
 func TestMarkViewedTogglesAndDeduplicates(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Diff{}, "")
+	s.Attach("/w", "working", diff.Diff{}, "")
 	s.MarkViewed("/w", "d1", true)
 	got, _ := s.MarkViewed("/w", "d1", true)
 	assert.Equal(t, []string{"d1"}, got.Viewed, "marking twice must not duplicate")
@@ -82,12 +83,12 @@ func TestMarkViewedTogglesAndDeduplicates(t *testing.T) {
 func TestViewedStatePersistsAcrossStores(t *testing.T) {
 	dir := t.TempDir()
 	s1 := NewStore(dir)
-	s1.Attach("/w", "working", types.Diff{}, "")
+	s1.Attach("/w", "working", diff.Diff{}, "")
 	s1.MarkViewed("/w", "d1", true)
 	s1.MarkViewed("/w", "d2", true)
 
 	s2 := NewStore(dir)
-	got := s2.Attach("/w", "working", types.Diff{}, "")
+	got := s2.Attach("/w", "working", diff.Diff{}, "")
 	assert.ElementsMatch(t, []string{"d1", "d2"}, got.Viewed,
 		"a reader who is interrupted must not lose what they had already read")
 }
@@ -103,11 +104,11 @@ func TestProgressSavesDoNotDependOnAFixedTempName(t *testing.T) {
 	}
 
 	s := NewStore(dir)
-	s.Attach("/w", "working", types.Diff{}, "")
+	s.Attach("/w", "working", diff.Diff{}, "")
 	s.MarkViewed("/w", "d1", true)
 	s.MarkCommentsSeen("/w", []string{"t1"})
 
-	assert.ElementsMatch(t, []string{"d1"}, NewStore(dir).Attach("/w", "working", types.Diff{}, "").Viewed,
+	assert.ElementsMatch(t, []string{"d1"}, NewStore(dir).Attach("/w", "working", diff.Diff{}, "").Viewed,
 		"progress was lost because the save wanted one fixed temp path")
 	seen, err := NewStore(dir).LoadSeenComments()
 	require.NoError(t, err)
@@ -120,8 +121,8 @@ func TestProgressSavesDoNotDependOnAFixedTempName(t *testing.T) {
 func TestSessionSeenWatermarkNeverRegresses(t *testing.T) {
 	dir := t.TempDir()
 	a, b := NewStore(dir), NewStore(dir)
-	a.Attach("/w", "working", types.Diff{}, "")
-	b.Attach("/w", "working", types.Diff{}, "")
+	a.Attach("/w", "working", diff.Diff{}, "")
+	b.Attach("/w", "working", diff.Diff{}, "")
 
 	a.MarkCommentsSeen("/w", []string{"t1"})
 	b.MarkCommentsSeen("/w", []string{"t2"})
@@ -135,7 +136,7 @@ func TestUnreadableViewedFileIsIgnoredRatherThanFatal(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "review", "viewed.jsonl"), 0o755), "a directory where the file belongs")
 	s := NewStore(dir)
-	got := s.Attach("/w", "working", types.Diff{}, "")
+	got := s.Attach("/w", "working", diff.Diff{}, "")
 	assert.Empty(t, got.Viewed, "an unreadable progress file must not stop a review from opening")
 }
 
@@ -144,7 +145,7 @@ func TestUnreadableViewedFileIsIgnoredRatherThanFatal(t *testing.T) {
 func TestViewedAndSeenAreAppendedAsJSONLines(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)
-	s.Attach("/w", "working", types.Diff{}, "")
+	s.Attach("/w", "working", diff.Diff{}, "")
 	s.MarkViewed("/w", "d1", true)
 	s.MarkViewed("/w", "d2", true)
 	s.MarkViewed("/w", "d1", false)
@@ -157,8 +158,8 @@ func TestViewedAndSeenAreAppendedAsJSONLines(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, `{"id":"t1"}`+"\n"+`{"id":"t2"}`+"\n", string(seen))
 
-	restored := NewStore(dir).Attach("/w", "working", types.Diff{}, "")
-	want := &types.DiffReview{ID: "rev1", Base: "working", Cursor: types.DiffCursor{Hunk: -1}, Viewed: []string{"d2"}, SeenComments: []string{"t1", "t2"}, Comments: []types.DiffComment{}}
+	restored := NewStore(dir).Attach("/w", "working", diff.Diff{}, "")
+	want := &diff.Review{ID: "rev1", Base: "working", Cursor: diff.Cursor{Hunk: -1}, Viewed: []string{"d2"}, SeenComments: []string{"t1", "t2"}, Comments: []diff.Comment{}}
 	assert.Equal(t, want, restored)
 }
 
@@ -167,7 +168,7 @@ func TestViewedAndSeenAreAppendedAsJSONLines(t *testing.T) {
 func TestAnAppendOnlyFileCompactsPastItsBound(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)
-	s.Attach("/w", "working", types.Diff{}, "")
+	s.Attach("/w", "working", diff.Diff{}, "")
 	for range 40 {
 		s.MarkViewed("/w", "d1", true)
 		s.MarkViewed("/w", "d1", false)
@@ -177,7 +178,7 @@ func TestAnAppendOnlyFileCompactsPastItsBound(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join(dir, "review", "viewed.jsonl"))
 	require.NoError(t, err)
 	assert.False(t, file.CompactDue(strings.Count(string(b), "\n"), 1), "the toggles were folded away")
-	assert.Equal(t, []string{"d2"}, NewStore(dir).Attach("/w", "working", types.Diff{}, "").Viewed)
+	assert.Equal(t, []string{"d2"}, NewStore(dir).Attach("/w", "working", diff.Diff{}, "").Viewed)
 }
 
 // An old JSON file is not read as a second format and not skipped without a word: the error
@@ -198,7 +199,7 @@ func TestOldJSONStateIsNamedNotRead(t *testing.T) {
 			err := load(NewStore(dir))
 			require.ErrorIs(t, err, file.ErrLegacyStore)
 			require.ErrorContains(t, err, "preserve it")
-			got := NewStore(dir).Attach("/w", "working", types.Diff{}, "")
+			got := NewStore(dir).Attach("/w", "working", diff.Diff{}, "")
 			assert.Empty(t, got.Viewed)
 			assert.Empty(t, got.SeenComments)
 			assert.Empty(t, got.Comments)
@@ -211,9 +212,9 @@ func TestOldJSONStateIsNamedNotRead(t *testing.T) {
 func TestDraftsAreAppendedAsJSONLines(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)
-	s.Attach("/w", "working", types.Diff{}, "")
-	s.AddComment("/w", types.DiffComment{Path: "a.go", Body: "first\nsecond\twith a tab"}, types.DiffAuthorUnattributed)
-	s.AddComment("/w", types.DiffComment{Path: "b.go", Body: "other"}, types.DiffAuthorUnattributed)
+	s.Attach("/w", "working", diff.Diff{}, "")
+	s.AddComment("/w", diff.Comment{Path: "a.go", Body: "first\nsecond\twith a tab"}, diff.AuthorUnattributed)
+	s.AddComment("/w", diff.Comment{Path: "b.go", Body: "other"}, diff.AuthorUnattributed)
 
 	path := filepath.Join(dir, "review", "drafts.jsonl")
 	b, err := os.ReadFile(path)
@@ -221,7 +222,7 @@ func TestDraftsAreAppendedAsJSONLines(t *testing.T) {
 	assert.Equal(t, 2, strings.Count(string(b), "\n"), "the second save did not rewrite the first draft")
 	assert.Contains(t, string(b), `"body":"first\nsecond\twith a tab"`)
 
-	restored := NewStore(dir).Attach("/w", "working", types.Diff{}, "")
+	restored := NewStore(dir).Attach("/w", "working", diff.Diff{}, "")
 	require.Len(t, restored.Comments, 2)
 	assert.Equal(t, "first\nsecond\twith a tab", restored.Comments[0].Body)
 
@@ -229,7 +230,7 @@ func TestDraftsAreAppendedAsJSONLines(t *testing.T) {
 	b, err = os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Contains(t, string(b), `{"id":"c1","removed":true}`)
-	left := NewStore(dir).Attach("/w", "working", types.Diff{}, "")
+	left := NewStore(dir).Attach("/w", "working", diff.Diff{}, "")
 	require.Len(t, left.Comments, 1)
 	assert.Equal(t, "c2", left.Comments[0].ID)
 }
@@ -239,75 +240,75 @@ func TestDraftsAreAppendedAsJSONLines(t *testing.T) {
 func TestADraftRoundTripsThroughItsFile(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)
-	want := types.DiffComment{
-		ID: "c7", Path: "internal/a.go", Hunk: 2, Author: types.DiffAuthorUnattributed, AgentName: "claude",
+	want := diff.Comment{
+		ID: "c7", Path: "internal/a.go", Hunk: 2, Author: diff.AuthorUnattributed, AgentName: "claude",
 		Body: "why not `x`?\n\nand\ttabs", Resolved: true, Line: 41,
 		Origin: types.Origin{User: "eli", UID: "501", EntryPoint: "console", Host: "h", Session: "s", Agent: "a",
 			Credential: types.CredentialStdio},
-		Anchor: types.CommentAnchor{Digest: "d", Quote: "return nil", Declaration: "func f()",
+		Anchor: diff.CommentAnchor{Digest: "d", Quote: "return nil", Declaration: "func f()",
 			Before: []string{"", "x := 1"}, After: []string{"}", ""}},
 	}
-	s.saveDrafts([]types.DiffComment{want})
+	s.saveDrafts([]diff.Comment{want})
 
 	got, err := NewStore(dir).LoadDrafts()
 	require.NoError(t, err)
-	assert.Equal(t, []types.DiffComment{want}, got)
+	assert.Equal(t, []diff.Comment{want}, got)
 }
 
 // The server stamps the author from the transport. A body that claims otherwise is ignored,
 // which is what stops an agent posting as the person.
 func TestCommentAuthorIsStampedNotClaimed(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Diff{}, "")
+	s.Attach("/w", "working", diff.Diff{}, "")
 	got := s.AddComment("/w",
-		types.DiffComment{Path: "a.go", Body: "hi", Author: types.DiffAuthorUnattributed},
-		types.DiffAuthorAgent)
+		diff.Comment{Path: "a.go", Body: "hi", Author: diff.AuthorUnattributed},
+		diff.AuthorAgent)
 	require.Len(t, got.Comments, 1)
-	assert.Equal(t, types.DiffAuthorAgent, got.Comments[0].Author,
+	assert.Equal(t, diff.AuthorAgent, got.Comments[0].Author,
 		"a claimed author in the payload must never win over the transport's")
 }
 
 // The load-bearing rule of the whole paired design.
 func TestSuggestDoesNotMoveTheCursor(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Diff{}, "")
-	s.SetCursor("/w", types.DiffCursor{Path: "where/i/was.go", Hunk: 2})
-	got := s.Suggest("/w", types.DiffSuggestion{Path: "elsewhere.go", Hunk: 0, Reason: "3 callers"})
+	s.Attach("/w", "working", diff.Diff{}, "")
+	s.SetCursor("/w", diff.Cursor{Path: "where/i/was.go", Hunk: 2})
+	got := s.Suggest("/w", diff.Suggestion{Path: "elsewhere.go", Hunk: 0, Reason: "3 callers"})
 
-	assert.Equal(t, types.DiffCursor{Path: "where/i/was.go", Hunk: 2}, got.Cursor,
+	assert.Equal(t, diff.Cursor{Path: "where/i/was.go", Hunk: 2}, got.Cursor,
 		"an agent suggesting must never move the reader's viewport")
 	require.Len(t, got.Suggestions, 1)
-	assert.Equal(t, types.SuggestionPending, got.Suggestions[0].Status)
+	assert.Equal(t, diff.SuggestionPending, got.Suggestions[0].Status)
 }
 
 func TestAcceptingASuggestionIsWhatMovesTheCursor(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Diff{}, "")
-	s.SetCursor("/w", types.DiffCursor{Path: "a.go", Hunk: 0})
-	s.Suggest("/w", types.DiffSuggestion{Path: "b.go", Hunk: 3, Reason: "look"})
+	s.Attach("/w", "working", diff.Diff{}, "")
+	s.SetCursor("/w", diff.Cursor{Path: "a.go", Hunk: 0})
+	s.Suggest("/w", diff.Suggestion{Path: "b.go", Hunk: 3, Reason: "look"})
 
-	got := s.AnswerSuggestion("/w", "s1", types.SuggestionAccepted)
-	assert.Equal(t, types.DiffCursor{Path: "b.go", Hunk: 3}, got.Cursor,
+	got := s.AnswerSuggestion("/w", "s1", diff.SuggestionAccepted)
+	assert.Equal(t, diff.Cursor{Path: "b.go", Hunk: 3}, got.Cursor,
 		"the human accepting is the only path to the viewport")
-	assert.Equal(t, types.SuggestionAccepted, got.Suggestions[0].Status)
+	assert.Equal(t, diff.SuggestionAccepted, got.Suggestions[0].Status)
 }
 
 // Declining is recorded, not discarded, so an agent can stop repeating itself.
 func TestDecliningIsRecordedAndLeavesTheCursorAlone(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Diff{}, "")
-	s.SetCursor("/w", types.DiffCursor{Path: "a.go", Hunk: 0})
-	s.Suggest("/w", types.DiffSuggestion{Path: "b.go", Hunk: 3, Reason: "look"})
+	s.Attach("/w", "working", diff.Diff{}, "")
+	s.SetCursor("/w", diff.Cursor{Path: "a.go", Hunk: 0})
+	s.Suggest("/w", diff.Suggestion{Path: "b.go", Hunk: 3, Reason: "look"})
 
-	got := s.AnswerSuggestion("/w", "s1", types.SuggestionDeclined)
+	got := s.AnswerSuggestion("/w", "s1", diff.SuggestionDeclined)
 	assert.Equal(t, "a.go", got.Cursor.Path)
-	assert.Equal(t, types.SuggestionDeclined, got.Suggestions[0].Status)
+	assert.Equal(t, diff.SuggestionDeclined, got.Suggestions[0].Status)
 }
 
 func TestResolveComment(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Diff{}, "")
-	s.AddComment("/w", types.DiffComment{Path: "a.go", Body: "x"}, types.DiffAuthorAgent)
+	s.Attach("/w", "working", diff.Diff{}, "")
+	s.AddComment("/w", diff.Comment{Path: "a.go", Body: "x"}, diff.AuthorAgent)
 	got := s.ResolveComment("/w", "c1", true)
 	assert.True(t, got.Comments[0].Resolved)
 }
@@ -316,16 +317,16 @@ func TestResolveComment(t *testing.T) {
 func TestMutatingAnUnattachedRootYieldsNil(t *testing.T) {
 	s := NewStore("")
 	assert.Nil(t, s.Get("/nope"))
-	assert.Nil(t, s.SetCursor("/nope", types.DiffCursor{}))
+	assert.Nil(t, s.SetCursor("/nope", diff.Cursor{}))
 	unattached, _ := s.MarkViewed("/nope", "d", true)
 	assert.Nil(t, unattached)
-	assert.Nil(t, s.Suggest("/nope", types.DiffSuggestion{}))
+	assert.Nil(t, s.Suggest("/nope", diff.Suggestion{}))
 }
 
 // A handed-out session must not be a window into live state.
 func TestReturnedSessionsAreCopies(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Diff{}, "")
+	s.Attach("/w", "working", diff.Diff{}, "")
 	got, _ := s.MarkViewed("/w", "d1", true)
 	got.Viewed[0] = "tampered"
 	fresh := s.Get("/w")
@@ -344,7 +345,7 @@ func mkdirAllWrite(path, body string) error {
 // file it belongs to and whether that file is now complete.
 func TestMarkViewedReportsTheFileItFinished(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Diff{}, "")
+	s.Attach("/w", "working", diff.Diff{}, "")
 	s.TrackHunks("/w", []FileHunks{
 		{Path: "a.go", Hunks: []Hunk{{Digest: "a1"}, {Digest: "a2"}}},
 		{Path: "b.go", Hunks: []Hunk{{Digest: "b1"}}},
@@ -370,7 +371,7 @@ func TestMarkViewedReportsTheFileItFinished(t *testing.T) {
 // session, and guessing there would mint a receipt for a file the reader never finished.
 func TestMarkViewedFinishesNothingForAnUntrackedDigest(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Diff{}, "")
+	s.Attach("/w", "working", diff.Diff{}, "")
 
 	_, finished := s.MarkViewed("/w", "stranger", true)
 	assert.Empty(t, finished, "no hunk mapping was tracked, so nothing can be complete")
@@ -380,7 +381,7 @@ func TestMarkViewedFinishesNothingForAnUntrackedDigest(t *testing.T) {
 // recomputed, so a digest from the previous one names nothing a reader can still mark.
 func TestTrackHunksReplacesThePreviousMapping(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Diff{}, "")
+	s.Attach("/w", "working", diff.Diff{}, "")
 	digest := func(p string) string { return "content-of-" + p }
 	s.TrackHunks("/w", []FileHunks{{Path: "old.go", Hunks: []Hunk{{Digest: "x1"}}}}, digest)
 	s.TrackHunks("/w", []FileHunks{{Path: "new.go", Hunks: []Hunk{{Digest: "y1"}}}}, digest)
@@ -396,7 +397,7 @@ func TestTrackHunksReplacesThePreviousMapping(t *testing.T) {
 // a total the marked set can never reach and that file could never be finished.
 func TestTrackHunksCountsDistinctDigests(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Diff{}, "")
+	s.Attach("/w", "working", diff.Diff{}, "")
 	s.TrackHunks("/w", []FileHunks{
 		{Path: "a.go", Hunks: []Hunk{{Digest: "same"}, {Digest: "same"}}},
 	}, func(p string) string { return "content" })
@@ -410,7 +411,7 @@ func TestTrackHunksCountsDistinctDigests(t *testing.T) {
 // stamped as read; the next report calls it stale instead.
 func TestContentAtIsTakenWhenTracked(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Diff{}, "")
+	s.Attach("/w", "working", diff.Diff{}, "")
 	s.TrackHunks("/w", []FileHunks{{Path: "a.go", Hunks: []Hunk{{Digest: "h1"}}}},
 		func(p string) string { return "as-the-reader-saw-it" })
 
@@ -426,24 +427,24 @@ func TestHumanDraftsSurviveARestart(t *testing.T) {
 	const root = "/ws"
 
 	first := NewStore(dir)
-	first.Attach(root, "main", types.Diff{}, "asof1")
-	first.AddComment(root, types.DiffComment{
+	first.Attach(root, "main", diff.Diff{}, "asof1")
+	first.AddComment(root, diff.Comment{
 		Path: "a.go", Hunk: 0, Body: "this is the bit reviewers always ask about",
-		Anchor: types.CommentAnchor{Digest: "d1", Quote: "\treturn nil"},
-	}, types.DiffAuthorUnattributed)
-	first.AddComment(root, types.DiffComment{
+		Anchor: diff.CommentAnchor{Digest: "d1", Quote: "\treturn nil"},
+	}, diff.AuthorUnattributed)
+	first.AddComment(root, diff.Comment{
 		Path: "b.go", Hunk: 2, Body: "agent noise from the pairing session",
-	}, types.DiffAuthorAgent)
+	}, diff.AuthorAgent)
 
 	// A new Store over the same state directory IS the restart.
 	second := NewStore(dir)
-	sess := second.Attach(root, "main", types.Diff{}, "asof2")
+	sess := second.Attach(root, "main", diff.Diff{}, "asof2")
 	require.Len(t, sess.Comments, 1, "exactly the human draft should come back")
-	want := types.DiffComment{
+	want := diff.Comment{
 		Path: "a.go",
 		Body: "this is the bit reviewers always ask about",
 		// The anchor rides along, so the client can still say the code under it moved.
-		Anchor: types.CommentAnchor{Digest: "d1", Quote: "\treturn nil"},
+		Anchor: diff.CommentAnchor{Digest: "d1", Quote: "\treturn nil"},
 	}
 	// The store stamps the id, author and origin; a restart is not judged on them.
 	want.ID, want.Author, want.Origin = sess.Comments[0].ID, sess.Comments[0].Author, sess.Comments[0].Origin
@@ -457,13 +458,13 @@ func TestAPublishedCommentIsNotRestoredAsADraft(t *testing.T) {
 	const root = "/ws"
 
 	first := NewStore(dir)
-	first.Attach(root, "main", types.Diff{}, "asof1")
-	first.AddComment(root, types.DiffComment{Path: "a.go", Body: "sent"}, types.DiffAuthorUnattributed)
-	first.AddComment(root, types.DiffComment{Path: "b.go", Body: "still mine"}, types.DiffAuthorUnattributed)
+	first.Attach(root, "main", diff.Diff{}, "asof1")
+	first.AddComment(root, diff.Comment{Path: "a.go", Body: "sent"}, diff.AuthorUnattributed)
+	first.AddComment(root, diff.Comment{Path: "b.go", Body: "still mine"}, diff.AuthorUnattributed)
 	first.MarkPublished(root, "c1")
 
 	second := NewStore(dir)
-	sess := second.Attach(root, "main", types.Diff{}, "asof2")
+	sess := second.Attach(root, "main", diff.Diff{}, "asof2")
 	bodies := make([]string, 0, len(sess.Comments))
 	for _, c := range sess.Comments {
 		bodies = append(bodies, c.Body)
@@ -475,9 +476,9 @@ func TestAPublishedCommentIsNotRestoredAsADraft(t *testing.T) {
 // get. It must degrade to memory rather than to a panic or a write into the working directory.
 func TestDraftsAreMemoryOnlyWithoutAStateDir(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/ws", "main", types.Diff{}, "a")
-	s.AddComment("/ws", types.DiffComment{Path: "a.go", Body: "x"}, types.DiffAuthorUnattributed)
-	assert.Len(t, NewStore("").Attach("/ws", "main", types.Diff{}, "a").Comments, 0)
+	s.Attach("/ws", "main", diff.Diff{}, "a")
+	s.AddComment("/ws", diff.Comment{Path: "a.go", Body: "x"}, diff.AuthorUnattributed)
+	assert.Len(t, NewStore("").Attach("/ws", "main", diff.Diff{}, "a").Comments, 0)
 }
 
 // Ids come from the highest existing number, not the count, because a restored set has GAPS:
@@ -488,16 +489,16 @@ func TestACommentIDIsNeverReusedAfterAGap(t *testing.T) {
 	const root = "/ws"
 
 	first := NewStore(dir)
-	first.Attach(root, "main", types.Diff{}, "a")
+	first.Attach(root, "main", diff.Diff{}, "a")
 	for _, body := range []string{"one", "two", "three"} {
-		first.AddComment(root, types.DiffComment{Path: "a.go", Body: body}, types.DiffAuthorUnattributed)
+		first.AddComment(root, diff.Comment{Path: "a.go", Body: body}, diff.AuthorUnattributed)
 	}
 	// The middle one leaves the file, which is what makes the set sparse.
 	first.MarkPublished(root, "c2")
 
 	second := NewStore(dir)
-	second.Attach(root, "main", types.Diff{}, "b")
-	sess := second.AddComment(root, types.DiffComment{Path: "b.go", Body: "four"}, types.DiffAuthorUnattributed)
+	second.Attach(root, "main", diff.Diff{}, "b")
+	sess := second.AddComment(root, diff.Comment{Path: "b.go", Body: "four"}, diff.AuthorUnattributed)
 
 	seen := map[string]string{}
 	for _, c := range sess.Comments {
@@ -513,9 +514,9 @@ func TestACommentIDIsNeverReusedAfterAGap(t *testing.T) {
 func TestMarkCommentsSeenIsAdditiveAndDecidesWhatIsUnseen(t *testing.T) {
 	store := NewStore(t.TempDir())
 	root := t.TempDir()
-	require.NotNil(t, store.Attach(root, "", types.Diff{}, ""))
+	require.NotNil(t, store.Attach(root, "", diff.Diff{}, ""))
 
-	comments := []types.ReviewComment{{ID: "t1"}, {ID: "t2"}}
+	comments := []diff.ReviewComment{{ID: "t1"}, {ID: "t2"}}
 	require.Equal(t, []string{"t1", "t2"}, store.Get(root).UnseenComments(comments))
 
 	store.MarkCommentsSeen(root, []string{"t1"})
@@ -528,14 +529,14 @@ func TestMarkCommentsSeenIsAdditiveAndDecidesWhatIsUnseen(t *testing.T) {
 	// A comment deleted on the host and another added nets zero on a count and must not hide the
 	// new one.
 	store.MarkCommentsSeen(root, []string{"t2"})
-	assert.Equal(t, []string{"t3"}, store.Get(root).UnseenComments([]types.ReviewComment{{ID: "t1"}, {ID: "t3"}}))
+	assert.Equal(t, []string{"t3"}, store.Get(root).UnseenComments([]diff.ReviewComment{{ID: "t1"}, {ID: "t3"}}))
 }
 
 // A comment with no id cannot be tracked, and calling it new forever would mark the conversation
 // unread on every render.
 func TestUnseenCommentsIgnoresAnUnidentifiedComment(t *testing.T) {
-	var sess types.DiffReview
-	assert.Empty(t, sess.UnseenComments([]types.ReviewComment{{ID: ""}}))
+	var sess diff.Review
+	assert.Empty(t, sess.UnseenComments([]diff.ReviewComment{{ID: ""}}))
 }
 
 // TestTrackHunksRelocatesADraftWhoseCodeMoved is the end-to-end shape of the anchor: a remark
@@ -546,17 +547,17 @@ func TestUnseenCommentsIgnoresAnUnidentifiedComment(t *testing.T) {
 func TestTrackHunksRelocatesADraftWhoseCodeMoved(t *testing.T) {
 	root := t.TempDir()
 	s := NewStore("")
-	s.Attach(root, "main", types.Diff{}, "asof1")
+	s.Attach(root, "main", diff.Diff{}, "asof1")
 
 	before := []FileHunks{{Path: "a.go", Hunks: []Hunk{
 		{Lines: []string{" func F() {", " \tx := 1", " \treturn x", " }"}, Digest: "d1", NewStart: 10, NewCount: 4},
 	}}}
 	s.TrackHunks(root, before, nil)
 
-	sess := s.AddComment(root, types.DiffComment{
+	sess := s.AddComment(root, diff.Comment{
 		Path: "a.go", Hunk: 0, Line: 12, Body: "why is this not a pointer",
 		Anchor: s.Anchor(root, "a.go", 12),
-	}, types.DiffAuthorUnattributed)
+	}, diff.AuthorUnattributed)
 	require.Len(t, sess.Comments, 1)
 	require.Equal(t, "\treturn x", sess.Comments[0].Anchor.Quote, "the server captured what the reader saw")
 
@@ -569,9 +570,9 @@ func TestTrackHunksRelocatesADraftWhoseCodeMoved(t *testing.T) {
 	got := s.Get(root)
 	require.Len(t, got.Comments, 1)
 	// The remark follows its code, and says it moved rather than claiming it never did.
-	want := types.DiffComment{
-		ID: "c1", Path: "a.go", Hunk: 0, Line: 32, Author: types.DiffAuthorUnattributed,
-		Body: "why is this not a pointer", Rung: types.AnchorMoved,
+	want := diff.Comment{
+		ID: "c1", Path: "a.go", Hunk: 0, Line: 32, Author: diff.AuthorUnattributed,
+		Body: "why is this not a pointer", Rung: diff.AnchorMoved,
 		// Relocation rewrites the anchor's digest and context; the anchor's own tests pin those.
 		Anchor: got.Comments[0].Anchor,
 	}
@@ -583,15 +584,15 @@ func TestTrackHunksRelocatesADraftWhoseCodeMoved(t *testing.T) {
 func TestTrackHunksLeavesAPublishedRemarkWhereItWasSent(t *testing.T) {
 	root := t.TempDir()
 	s := NewStore("")
-	s.Attach(root, "main", types.Diff{}, "asof1")
+	s.Attach(root, "main", diff.Diff{}, "asof1")
 	tracked := []FileHunks{{Path: "a.go", Hunks: []Hunk{
 		{Lines: []string{" a", " b"}, Digest: "d1", NewStart: 1, NewCount: 2},
 	}}}
 	s.TrackHunks(root, tracked, nil)
-	s.AddComment(root, types.DiffComment{
+	s.AddComment(root, diff.Comment{
 		Path: "a.go", Line: 1, Body: "sent already", Published: true,
-		Anchor: types.CommentAnchor{Quote: "a"},
-	}, types.DiffAuthorUnattributed)
+		Anchor: diff.CommentAnchor{Quote: "a"},
+	}, diff.AuthorUnattributed)
 
 	s.TrackHunks(root, []FileHunks{{Path: "a.go", Hunks: []Hunk{
 		{Lines: []string{" z", " a", " b"}, Digest: "d2", NewStart: 1, NewCount: 3},
@@ -600,10 +601,10 @@ func TestTrackHunksLeavesAPublishedRemarkWhereItWasSent(t *testing.T) {
 	got := s.Get(root)
 	require.Len(t, got.Comments, 1)
 	// A published remark stays where the colleague saw it.
-	want := types.DiffComment{
-		ID: "c1", Path: "a.go", Line: 1, Author: types.DiffAuthorUnattributed,
-		Body: "sent already", Published: true, Rung: types.AnchorUnknown,
-		Anchor: types.CommentAnchor{Quote: "a"},
+	want := diff.Comment{
+		ID: "c1", Path: "a.go", Line: 1, Author: diff.AuthorUnattributed,
+		Body: "sent already", Published: true, Rung: diff.AnchorUnknown,
+		Anchor: diff.CommentAnchor{Quote: "a"},
 	}
 	assert.Equal(t, want, got.Comments[0])
 }

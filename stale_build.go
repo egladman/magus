@@ -59,6 +59,9 @@ func ownBuildEscape(exe string, info *debug.BuildInfo, root string) string {
 	pkg := strings.TrimPrefix(info.Path, info.Main.Path+"/")
 	link := config.SourceCommand(root, pkg, filepath.Base(exe), false)
 	escape := fmt.Sprintf("This binary was built from this checkout's own sources and predates them, so it cannot rebuild itself: every command it runs loads the same tree. Link a new one from source, one command at a time: `%s`, then rebuild it the way this workspace builds it. If that link fails with `undefined:` in generated code, the checkout's committed generated files are behind its sources (a merge kept one side), and restoring either side's copy brings back the mismatch: regenerate them with the commands its generate targets run, then link again.", link)
+	if ready := config.ReadyCheckoutCommand(config.CheckoutHookAt(root)); ready != "" {
+		escape += fmt.Sprintf(" Then ready the checkout, alone on its line: `%s`.", ready)
+	}
 	scripts := config.StaleBinaryScripts(root, workspaceConfigBytes(root))
 	if len(scripts) == 0 {
 		return escape + " No script in this workspace declares SERVES \"code:MGS1021\", so magus names none of its own."

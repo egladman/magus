@@ -30,18 +30,18 @@ The code is `PRF4009`. The decision depends on the kind of text judged:
 | -------------------- | ------- |
 | `reference`          | deny    |
 | `principle`          | deny    |
-| `guide`              | deny    |
 | `change-description` | deny    |
 | `agent-brief`        | deny    |
+| `agent-compact`      | deny    |
+| `guide`              | deny    |
+| `review-summary`     | deny    |
+| `review-inline`      | deny    |
+| `review-reply`       | deny    |
 | `commit-message`     | deny    |
 | `issue`              | deny    |
 | `release-notes`      | deny    |
 | `changelog`          | deny    |
-| `review-summary`     | deny    |
-| `review-inline`      | deny    |
-| `review-reply`       | deny    |
 | `agent-reply`        | deny    |
-| `agent-compact`      | deny    |
 
 ## Changing it
 

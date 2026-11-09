@@ -2,6 +2,7 @@ package difftui
 
 import (
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"io"
 	"regexp"
 	"strings"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/libs/termkit"
-	"github.com/egladman/magus/types"
 )
 
 // testFiles is the shape that exercises every boundary at once: a multi-hunk file, a
@@ -50,7 +50,7 @@ func move(t *testing.T, m *Model, key rune) bool {
 	return false
 }
 
-func at(path string, hunk int) types.DiffCursor { return types.DiffCursor{Path: path, Hunk: hunk} }
+func at(path string, hunk int) diff.Cursor { return diff.Cursor{Path: path, Hunk: hunk} }
 
 // TestCursorPublishesThePatchIndexNotTheRowPosition pins the coordinate the shared session is
 // keyed by. Hunk.Index and the position in Hunks agree while the viewer holds every hunk of
@@ -75,14 +75,14 @@ func TestCursorPublishesThePatchIndexNotTheRowPosition(t *testing.T) {
 func TestStartOpensTheViewerOnAThreadHunk(t *testing.T) {
 	t.Parallel()
 	tests := map[string]struct {
-		start      types.DiffCursor
-		want       types.DiffCursor
+		start      diff.Cursor
+		want       diff.Cursor
 		unfoldsGen bool
 	}{
 		"a hunk":                 {start: at("a.go", 1), want: at("a.go", 1)},
 		"a heading":              {start: at("b.go", -1), want: at("b.go", -1)},
 		"a folded file's hunk":   {start: at("gen/out.json", 0), want: at("gen/out.json", 0), unfoldsGen: true},
-		"no start":               {start: types.DiffCursor{Hunk: -1}, want: at("a.go", -1)},
+		"no start":               {start: diff.Cursor{Hunk: -1}, want: at("a.go", -1)},
 		"a path nothing carries": {start: at("gone.go", 0), want: at("a.go", -1)},
 		"a hunk the file lacks":  {start: at("b.go", 5), want: at("b.go", -1)},
 	}
@@ -107,7 +107,7 @@ func TestCursorMotionCrossesFileAndHunkBoundaries(t *testing.T) {
 		// keys is applied in order; wantMoved is the verdict of the LAST one, which is how a
 		// refusal at either end is asserted rather than inferred from the cursor not changing.
 		keys      string
-		want      types.DiffCursor
+		want      diff.Cursor
 		wantMoved bool
 	}{
 		{"opens on the first file's heading", "", at("a.go", -1), false},
@@ -267,12 +267,12 @@ func TestCommentsAndPendingSuggestionsSitUnderTheirHunk(t *testing.T) {
 	t.Parallel()
 	m := New(Input{
 		Files: testFiles(),
-		Comments: []types.DiffComment{
-			{ID: "c1", Path: "a.go", Hunk: 1, Author: types.DiffAuthorAgent, Body: "two\nlines"},
+		Comments: []diff.Comment{
+			{ID: "c1", Path: "a.go", Hunk: 1, Author: diff.AuthorAgent, Body: "two\nlines"},
 		},
-		Suggestions: []types.DiffSuggestion{
+		Suggestions: []diff.Suggestion{
 			{ID: "s1", Path: "a.go", Hunk: 1, Reason: "look here"},
-			{ID: "s2", Path: "b.go", Hunk: 0, Reason: "already answered", Status: types.SuggestionDeclined},
+			{ID: "s2", Path: "b.go", Hunk: 0, Reason: "already answered", Status: diff.SuggestionDeclined},
 		},
 	})
 
@@ -341,7 +341,7 @@ func TestEmptyChangesetDrawsNothingAndRefusesEveryMove(t *testing.T) {
 	m := New(Input{})
 	assert.Empty(t, m.Rows())
 	assert.Equal(t, -1, m.CursorRow())
-	assert.Equal(t, types.DiffCursor{Hunk: -1}, m.cursor())
+	assert.Equal(t, diff.Cursor{Hunk: -1}, m.cursor())
 	assert.False(t, m.nextHunk())
 	assert.False(t, m.previousHunk())
 	assert.False(t, m.nextFile())
@@ -564,8 +564,8 @@ func TestTheHostsThreadsRenderBesideTheCodeTheyAreAbout(t *testing.T) {
 		Files: []File{{Path: "a.go", Hunks: []Hunk{
 			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-old", "+new"}, Digest: "d0"},
 		}}},
-		Comments:       []types.DiffComment{{Path: "a.go", Hunk: 0, Author: types.DiffAuthorUnattributed, Body: "mine"}},
-		ReviewComments: []types.ReviewComment{{ID: "t1", Path: "a.go", Hunk: 0, Author: "priya", Body: "theirs"}},
+		Comments:       []diff.Comment{{Path: "a.go", Hunk: 0, Author: diff.AuthorUnattributed, Body: "mine"}},
+		ReviewComments: []diff.ReviewComment{{ID: "t1", Path: "a.go", Hunk: 0, Author: "priya", Body: "theirs"}},
 	})
 
 	text := everyRowText(m)
@@ -582,7 +582,7 @@ func TestAnUnplacedThreadRendersUnderItsFileRatherThanVanishing(t *testing.T) {
 	t.Parallel()
 	m := New(Input{
 		Files:          []File{{Path: "a.go", Hunks: []Hunk{{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"}}}},
-		ReviewComments: []types.ReviewComment{{ID: "t1", Path: "a.go", Hunk: -1, Author: "marcus", Body: "moved away"}},
+		ReviewComments: []diff.ReviewComment{{ID: "t1", Path: "a.go", Hunk: -1, Author: "marcus", Body: "moved away"}},
 	})
 	assert.NotEqual(t, -1, indexOfSubstring(everyRowText(m), "moved away"))
 }
@@ -595,7 +595,7 @@ func TestAThreadOutsideTheChangesetIsListedRatherThanDropped(t *testing.T) {
 	t.Parallel()
 	m := New(Input{
 		Files: []File{{Path: "a.go", Hunks: []Hunk{{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"}}}},
-		ReviewComments: []types.ReviewComment{
+		ReviewComments: []diff.ReviewComment{
 			{ID: "t1", Path: "elsewhere.go", Line: 12, Hunk: -1, Author: "priya", Body: "on another file"},
 		},
 	})
@@ -617,7 +617,7 @@ func TestAThreadOnAFoldedFileIsListedRatherThanDropped(t *testing.T) {
 			Generated: true,
 			Hunks:     []Hunk{{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"}},
 		}},
-		ReviewComments: []types.ReviewComment{
+		ReviewComments: []diff.ReviewComment{
 			{ID: "t1", Path: "gen/api.go", Line: 3, Hunk: 0, Author: "marcus", Body: "regenerate this"},
 		},
 	})
@@ -634,7 +634,7 @@ func twoThreadFile() Input {
 			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-old", "+fresh"}, Digest: "d0"},
 			{Index: 1, Header: "@@ -9 +9 @@", NewStart: 9, Lines: []string{"-x", "+y"}, Digest: "d1"},
 		}}},
-		ReviewComments: []types.ReviewComment{
+		ReviewComments: []diff.ReviewComment{
 			{ID: "t1", Path: "a.go", Hunk: 0, Author: "priya", Body: "near the top"},
 			{ID: "t2", Path: "a.go", Hunk: 1, Author: "marcus", Body: "further down"},
 		},
@@ -676,7 +676,7 @@ func TestARemarkNewToThisReaderSaysSo(t *testing.T) {
 		Files: []File{{Path: "a.go", Hunks: []Hunk{
 			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-old", "+two"}, Digest: "d0"},
 		}}},
-		ReviewComments: []types.ReviewComment{
+		ReviewComments: []diff.ReviewComment{
 			{ID: "t1", Path: "a.go", Hunk: 0, Author: "priya", Body: "arrived since you looked", New: true},
 			{ID: "t2", Path: "a.go", Hunk: 0, Author: "marcus", Body: "you weighed this one already"},
 		},
@@ -696,7 +696,7 @@ func TestRepliesDrawUnderTheirThreadHeadOldestFirst(t *testing.T) {
 		Files: []File{{Path: "a.go", Hunks: []Hunk{
 			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-old", "+new"}, Digest: "d0"},
 		}}},
-		ReviewComments: []types.ReviewComment{
+		ReviewComments: []diff.ReviewComment{
 			{ID: "r1", Path: "a.go", Hunk: 0, Author: "priya", Body: "why"},
 			{ID: "s1", Path: "a.go", Hunk: 0, Author: "dana", Body: "other topic"},
 			{ID: "r2", Path: "a.go", Hunk: 0, Root: "r1", Author: "marcus", Body: "first answer"},
@@ -731,7 +731,7 @@ func TestAnOutdatedThreadShowsItsDiffHunkAndKeepsItsReplies(t *testing.T) {
 		Files: []File{{Path: "a.go", Hunks: []Hunk{
 			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"},
 		}}},
-		ReviewComments: []types.ReviewComment{
+		ReviewComments: []diff.ReviewComment{
 			{ID: "r1", Path: "a.go", Line: 40, Hunk: -1, Outdated: true, Author: "priya",
 				Body: "drop this", DiffHunk: "@@ -38,2 +38,2 @@\n-gone()\n+kept()\n"},
 			{ID: "r2", Path: "a.go", Line: 40, Hunk: -1, Root: "r1", Author: "marcus", Body: "done"},
@@ -769,7 +769,7 @@ func TestMalformedRootsDrawEveryCommentAndNeverPanic(t *testing.T) {
 	files := []File{{Path: "a.go", Hunks: []Hunk{
 		{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"},
 	}}}
-	cases := map[string][]types.ReviewComment{
+	cases := map[string][]diff.ReviewComment{
 		"rooted at itself": {{ID: "x", Root: "x", Path: "a.go", Hunk: 0, Author: "ana", Body: "self"}},
 		"rooted at each other": {
 			{ID: "a", Root: "b", Path: "a.go", Hunk: 0, Author: "ana", Body: "first"},
@@ -813,7 +813,7 @@ func TestAReplyToAReplyDrawsAsItsOwnThread(t *testing.T) {
 		Files: []File{{Path: "a.go", Hunks: []Hunk{
 			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"},
 		}}},
-		ReviewComments: []types.ReviewComment{
+		ReviewComments: []diff.ReviewComment{
 			{ID: "h", Path: "a.go", Hunk: 0, Author: "ana", Body: "head"},
 			{ID: "r", Root: "h", Path: "a.go", Hunk: 0, Author: "ben", Body: "reply"},
 			{ID: "rr", Root: "r", Path: "a.go", Hunk: 0, Author: "cy", Body: "nested"},
@@ -842,9 +842,9 @@ func TestHostTextNeverReachesTheTerminalAsAControlSequence(t *testing.T) {
 		Files: []File{{Path: "a.go", Hunks: []Hunk{
 			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"},
 		}}},
-		Comments:    []types.DiffComment{{Path: "a.go", Hunk: 0, Author: types.DiffAuthorAgent, AgentName: "bot" + esc, Body: "agent" + esc}},
-		Suggestions: []types.DiffSuggestion{{Path: "a.go", Hunk: 0, Reason: "look" + esc}},
-		ReviewComments: []types.ReviewComment{
+		Comments:    []diff.Comment{{Path: "a.go", Hunk: 0, Author: diff.AuthorAgent, AgentName: "bot" + esc, Body: "agent" + esc}},
+		Suggestions: []diff.Suggestion{{Path: "a.go", Hunk: 0, Reason: "look" + esc}},
+		ReviewComments: []diff.ReviewComment{
 			{ID: "h", Path: "a.go", Hunk: 0, Author: "ana" + esc, Body: "body" + esc + "\rovertyped\nsecond" + esc},
 			{ID: "o", Path: "a.go", Hunk: -1, Outdated: true, Author: "ben", Body: "stale", DiffHunk: "@@ -1 +1 @@\n+hunk" + esc},
 		},

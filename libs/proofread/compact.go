@@ -33,12 +33,12 @@ const (
 )
 
 var compactChecks = []check{
-	{rule: RuleCompactFiller, on: compact, graded: true, judge: compactFiller},
-	{rule: RuleCompactMarkup, on: compact, graded: true, judge: compactMarkup},
-	{rule: RuleCompactCostlyAbbrev, on: compact, graded: true, judge: compactCostlyAbbrev},
-	{rule: RuleCompactSymbolNegation, on: compact, graded: true, judge: compactSymbolNegation},
-	{rule: RuleCompactLine, on: compact, graded: true, judge: compactLine},
-	{rule: RuleCompactDuplicate, on: compact, graded: true, judge: compactDuplicate},
+	{rule: RuleCompactFiller, reads: proseFormats, judge: compactFiller},
+	{rule: RuleCompactMarkup, reads: proseFormats, judge: compactMarkup},
+	{rule: RuleCompactCostlyAbbrev, reads: proseFormats, judge: compactCostlyAbbrev},
+	{rule: RuleCompactSymbolNegation, reads: proseFormats, judge: compactSymbolNegation},
+	{rule: RuleCompactLine, reads: proseFormats, judge: compactLine},
+	{rule: RuleCompactDuplicate, reads: proseFormats, judge: compactDuplicate},
 }
 
 const compactEvidence = " The measurements are in the machine-text research (research-machine-text.md in " +

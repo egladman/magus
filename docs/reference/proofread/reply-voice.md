@@ -30,17 +30,17 @@ The code is `PRF1002`. The decision depends on the kind of text judged:
 | -------------------- | ------- |
 | `reference`          | advise  |
 | `principle`          | advise  |
-| `guide`              | advise  |
 | `change-description` | advise  |
 | `agent-brief`        | advise  |
+| `agent-compact`      | advise  |
+| `guide`              | advise  |
+| `review-summary`     | advise  |
+| `review-inline`      | advise  |
+| `review-reply`       | advise  |
 | `commit-message`     | advise  |
 | `issue`              | advise  |
 | `release-notes`      | advise  |
 | `changelog`          | advise  |
-| `review-summary`     | advise  |
-| `review-inline`      | advise  |
-| `review-reply`       | advise  |
-| `agent-compact`      | advise  |
 | `stylesheet`         | advise  |
 
 ## Changing it

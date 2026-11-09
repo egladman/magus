@@ -2,10 +2,10 @@ package metrics
 
 import (
 	"context"
+	"github.com/egladman/magus/types/daemon"
 	"time"
 
 	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1"
-	"github.com/egladman/magus/types"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -20,7 +20,7 @@ type collector interface {
 // statusSource is the narrow live-pool read the sampler needs, satisfied by
 // *console.Service (the same StatusSnapshot the StatusService uses).
 type statusSource interface {
-	StatusSnapshot(context.Context) types.StatusSnapshot
+	StatusSnapshot(context.Context) daemon.Snapshot
 }
 
 // startSampler runs the utilization sampler until ctx is cancelled: it appends one Sample

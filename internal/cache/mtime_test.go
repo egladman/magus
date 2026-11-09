@@ -213,41 +213,6 @@ func TestMtimeStoreLoadSkipsJunkFiles(t *testing.T) {
 	assert.Equal(t, "abc123", got)
 }
 
-// TestMtimeStoreLoadMigratesLegacyFile verifies the legacy single-file
-// migration path: a pre-existing mtimes.json.gz is folded into the sharded
-// store and then removed. This covers the migration block of load.
-func TestMtimeStoreLoadMigratesLegacyFile(t *testing.T) {
-	dir := t.TempDir()
-	shardDir := filepath.Join(dir, "mtimes")
-
-	// Write the legacy single-file format at <cacheDir>/mtimes.json.gz, i.e.
-	// a sibling of the shard directory.
-	legacy := map[string]mtimeEntry{"/ws/legacy.go": {Mtime: 7, Size: 8, Hash: "legacyhash"}}
-	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
-	require.NoError(t, json.NewEncoder(gz).Encode(legacy))
-	require.NoError(t, gz.Close())
-	oldPath := filepath.Join(filepath.Dir(shardDir), "mtimes.json.gz")
-	require.NoError(t, os.WriteFile(oldPath, buf.Bytes(), 0o644))
-
-	s := newMtimeStore(dir, nil)
-	s.load(context.Background())
-	got, ok := s.get("/ws/legacy.go", 7, 8)
-	require.True(t, ok, "legacy entry must migrate into sharded store")
-	assert.Equal(t, "legacyhash", got)
-
-	// The legacy file must be removed after migration.
-	_, err := os.Stat(oldPath)
-	assert.True(t, os.IsNotExist(err), "legacy mtimes.json.gz must be removed after migration")
-
-	// Migrated entries are dirty, so a flush persists them into shards.
-	s.flush(context.Background())
-	s2 := newMtimeStore(dir, nil)
-	s2.load(context.Background())
-	_, ok = s2.get("/ws/legacy.go", 7, 8)
-	assert.True(t, ok, "migrated entry must persist to shards after flush")
-}
-
 // TestWriteShardFileError verifies that writeShardFile surfaces an error when
 // the shard directory cannot be created (parent path is a regular file). This
 // covers the error return of the atomic write.

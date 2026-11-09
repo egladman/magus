@@ -1,6 +1,7 @@
 package bindgen
 
 import (
+	"github.com/egladman/magus/types/daemon"
 	"fmt"
 	"reflect"
 	"testing"
@@ -167,7 +168,7 @@ func TestObjectEnumFieldsCrossAsTheResolversCase(t *testing.T) {
 		want  string
 	}{
 		{"Check.status", objectMap(t, ObjectCheck(types.Check{Status: types.CheckFail}, enums)), "status", "CheckStatus.fail"},
-		{"TargetRun.state", objectMap(t, ObjectStatusTargetRun(types.StatusTargetRun{State: types.TargetRunPassed}, enums)), "state", "TargetRunState.passed"},
+		{"TargetRun.state", objectMap(t, ObjectStatusTargetRun(daemon.TargetRun{State: daemon.TargetRunPassed}, enums)), "state", "TargetRunState.passed"},
 		{"ModelTierRequest.kind", objectMap(t, ObjectModelTierRequest(types.ModelTierRequest{Kind: types.JobKindSymbol}, enums)), "kind", "JobKind.symbol"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

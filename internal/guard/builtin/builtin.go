@@ -298,6 +298,7 @@ var defaults = map[string]decision{
 	"throwaway-copy":         Deny,
 	"unjudged-tool":          Deny,
 	"unknown-env":            Deny,
+	"unknown-magus-argv":     Deny,
 	"unread-command":         Deny,
 
 	// Irreversible, or a boundary someone else drew.

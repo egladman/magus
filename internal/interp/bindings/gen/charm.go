@@ -75,7 +75,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("afterFunc", vm.DirectValue("charm.afterFunc", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := ffi.StringSlice(bzArgs, 0)
-		fn := ffi.CallbackArg(sess, bzArgs, 1)
+		fn := callbackStringReturnsBool(sess, bzArgs, 1)
 		vals := ffi.StringSlice(bzArgs, 2)
 		ret0, err := std.CharmAfterFunc(ctx, argv, fn, vals)
 		if err != nil {
@@ -85,7 +85,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("beforeFunc", vm.DirectValue("charm.beforeFunc", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := ffi.StringSlice(bzArgs, 0)
-		fn := ffi.CallbackArg(sess, bzArgs, 1)
+		fn := callbackStringReturnsBool(sess, bzArgs, 1)
 		vals := ffi.StringSlice(bzArgs, 2)
 		ret0, err := std.CharmBeforeFunc(ctx, argv, fn, vals)
 		if err != nil {
@@ -95,7 +95,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("setFunc", vm.DirectValue("charm.setFunc", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := ffi.StringSlice(bzArgs, 0)
-		fn := ffi.CallbackArg(sess, bzArgs, 1)
+		fn := callbackStringReturnsBool(sess, bzArgs, 1)
 		val := ffi.String(bzArgs, 2)
 		ret0, err := std.CharmSetFunc(ctx, argv, fn, val)
 		if err != nil {
@@ -105,7 +105,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("dropFunc", vm.DirectValue("charm.dropFunc", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := ffi.StringSlice(bzArgs, 0)
-		fn := ffi.CallbackArg(sess, bzArgs, 1)
+		fn := callbackStringReturnsBool(sess, bzArgs, 1)
 		ret0, err := std.CharmDropFunc(ctx, argv, fn)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -123,7 +123,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("pathFunc", vm.DirectValue("charm.pathFunc", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := ffi.StringSlice(bzArgs, 0)
-		fn := ffi.CallbackArg(sess, bzArgs, 1)
+		fn := callbackStringReturnsBool(sess, bzArgs, 1)
 		ret0, err := std.CharmPathFunc(ctx, argv, fn)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
@@ -142,7 +142,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("moveFunc", vm.DirectValue("charm.moveFunc", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := ffi.StringSlice(bzArgs, 0)
-		fn := ffi.CallbackArg(sess, bzArgs, 1)
+		fn := callbackStringReturnsBool(sess, bzArgs, 1)
 		to := ffi.String(bzArgs, 2)
 		ret0, err := std.CharmMoveFunc(ctx, argv, fn, to)
 		if err != nil {
@@ -162,7 +162,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("copyFunc", vm.DirectValue("charm.copyFunc", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := ffi.StringSlice(bzArgs, 0)
-		fn := ffi.CallbackArg(sess, bzArgs, 1)
+		fn := callbackStringReturnsBool(sess, bzArgs, 1)
 		to := ffi.String(bzArgs, 2)
 		ret0, err := std.CharmCopyFunc(ctx, argv, fn, to)
 		if err != nil {
@@ -181,7 +181,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("testFunc", vm.DirectValue("charm.testFunc", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := ffi.StringSlice(bzArgs, 0)
-		fn := ffi.CallbackArg(sess, bzArgs, 1)
+		fn := callbackStringReturnsBool(sess, bzArgs, 1)
 		ret0, err := std.CharmTestFunc(ctx, argv, fn)
 		if err != nil {
 			return vm.Null, ffi.Error(err)

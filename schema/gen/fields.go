@@ -140,6 +140,15 @@ var Fields = []fieldtype.Field{
 		Doc:      "One runner's CPU cores",
 	},
 	{
+		GoPath:   "CI.RemoteGate",
+		YamlPath: "ci.remote_gate",
+		EnvVar:   "MAGUS_CI_REMOTE_GATE",
+		Flag:     fieldtype.FlagNames{Long: "ci-remote-gate"},
+		Kind:     fieldtype.KindString,
+		Usage:    "MAGUS_CI_REMOTE_GATE: RemoteGate names the CI that runs 'ci' on every pushed commit, such as github-actions.",
+		Doc:      "Names the CI that runs `ci` on every pushed commit, such as github-actions. Set, the push gate admits a push with no local run",
+	},
+	{
 		GoPath:   "Volatility.Enabled",
 		YamlPath: "volatility.enabled",
 		EnvVar:   "MAGUS_VOLATILITY_ENABLED",

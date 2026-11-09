@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -387,6 +388,17 @@ func TestReindexRefusedByAnAncestorLockGetsNoInstallHint(t *testing.T) {
 	assert.Contains(t, err.Error(), "magus: ", "names the project")
 	assert.NotContains(t, err.Error(), "scip-go", "the indexer was never run, so its install hint is wrong")
 	assert.NotContains(t, err.Error(), "rerun once", "rerunning inside the same outer run is refused again")
+}
+
+// An indexer that hit a missing file was found, so it is not uninstalled.
+func TestSymbolRunErrorNamesAMissingFileNotAMissingIndexer(t *testing.T) {
+	enoent := errors.New("Error: ENOENT: no such file or directory, open 'cmd/magus/notes.go'")
+
+	err := symbolRunError(types.NewProjectRef("docs", "/ws/docs"), "typescript", enoent)
+
+	require.ErrorIs(t, err, enoent)
+	assert.Contains(t, err.Error(), "a path it was given does not exist")
+	assert.NotContains(t, err.Error(), "may not be installed")
 }
 
 // indexerOnPath puts the fixture indexer on PATH, which installedIndexes requires before
@@ -1488,15 +1500,15 @@ func TestInstalledIndexesKeepsInProcessIndexers(t *testing.T) {
 // A touched project with no indexer is named, so "found nothing" is only ever said about
 // projects that were checked. A regenerated file is not a change of its own.
 func TestUncoveredProjectsAreTheOnesTheChecksCannotSee(t *testing.T) {
-	files := []types.DiffFile{
+	files := []diff.File{
 		{Path: "a.go", Project: "."},
 		{Path: "docs/x.md", Project: "docs"},
 		{Path: "docs/y.md", Project: "docs"},
-		{Path: "web/gen/z.ts", Project: "web", Role: types.DiffRoleOutput},
+		{Path: "web/gen/z.ts", Project: "web", Role: diff.RoleOutput},
 		{Path: "README", Project: ""},
 	}
 
-	assert.Equal(t, []types.DiffUncovered{{Project: "docs", Reason: types.DiffUncoveredNoIndexer}},
+	assert.Equal(t, []diff.Uncovered{{Project: "docs", Reason: diff.UncoveredNoIndexer}},
 		uncoveredProjects(files, []string{"."}))
 }
 

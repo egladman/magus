@@ -71,11 +71,11 @@ var voiceFeatures = []voiceFeature{
 	{name: "function_words.and", label: `"and"`, unit: per1000Words, digits: 1, higher: true, read: mapEntry},
 	{
 		name: "template_rate", label: "repeated part-of-speech 4-grams", unit: " of all", digits: 2, higher: true,
-		off: reviewText, read: unlessWithheld(func(s Shape) float64 { return s.TemplateRate }),
+		off: []Kind{KindReviewReply}, read: unlessWithheld(func(s Shape) float64 { return s.TemplateRate }),
 	},
 	{
 		name: "tag_compression", label: "part-of-speech compression", unit: " of raw size", digits: 2,
-		off: reviewText, read: unlessWithheld(func(s Shape) float64 { return s.TagCompression }),
+		off: []Kind{KindReviewReply}, read: unlessWithheld(func(s Shape) float64 { return s.TagCompression }),
 	},
 	{
 		name: "grammar_per_1000.participial_clause", label: "participial clauses", unit: per1000Words, digits: 1,
@@ -312,7 +312,7 @@ func rankP(sorted []float64, value float64, higher bool) float64 {
 }
 
 var voiceChecks = []check{
-	{rule: RuleVoiceDrift, on: voiceJudged, graded: true, judge: voiceDrift},
+	{rule: RuleVoiceDrift, reads: proseFormats, judge: voiceDrift},
 }
 
 var voiceTexts = map[Rule]ruleText{
@@ -345,16 +345,16 @@ func voiceDrift(in input) []Finding {
 		return nil
 	}
 
-	kind := heldKind(in.kind)
+	kind := in.spec.Voice
 
 	k, ok := in.opts.voice.Kinds[kind]
-	if !ok {
+	if kind == "" || !ok {
 		return nil
 	}
 
 	text := strings.Join(in.source, "\n")
 
-	if kind == KindCommitMessage {
+	if in.spec.Reader.Subject {
 		return subjectDrift(text, k.SubjectP95)
 	}
 
@@ -378,7 +378,7 @@ func voiceDrift(in input) []Finding {
 		return nil
 	}
 
-	return []Finding{{Message: driftMessage(in.kind, s.Words, parts, sortedValues(k.Windows))}}
+	return []Finding{{Message: driftMessage(in.spec, s.Words, parts, sortedValues(k.Windows))}}
 }
 
 // subjectDrift reports a commit subject longer than p95 characters, the
@@ -429,7 +429,7 @@ var (
 
 // driftMessage names the three parts with the smallest p, each with its
 // value, the author's 10th to 90th percentile and the direction it drifts.
-func driftMessage(kind Kind, words int, parts []voicePart, reference map[Feature][]float64) string {
+func driftMessage(s *KindSpec, words int, parts []voicePart, reference map[Feature][]float64) string {
 	parts = slices.Clone(parts)
 	slices.SortStableFunc(parts, func(a, b voicePart) int { return cmp.Compare(a.p, b.p) })
 
@@ -449,18 +449,20 @@ func driftMessage(kind Kind, words int, parts []voicePart, reference map[Feature
 	}
 
 	return fmt.Sprintf("This %s reads further from your own %s than %d%% of your writing does (%d words): %s. "+
-		"Read it against how you write.", nameOr(voiceDraftNames, kind), nameOr(voicePlurals, heldKind(kind)),
+		"Read it against how you write.", nameOr(voiceDraftNames, s.Name, s.Extends), nameOr(voicePlurals, s.Voice),
 		voiceKeepPercent, words, strings.Join(named, "; "))
 }
 
-// nameOr is kind's entry in names, or the kind's own name for a kind added to
-// voiceJudged without one.
-func nameOr(names map[Kind]string, kind Kind) string {
-	if name, ok := names[kind]; ok {
-		return name
+// nameOr is the entry in names of the first of kinds that has one. A kind
+// declared without one is named by the first kind itself.
+func nameOr(names map[Kind]string, kinds ...Kind) string {
+	for _, k := range kinds {
+		if name, ok := names[k]; ok {
+			return name
+		}
 	}
 
-	return string(kind)
+	return string(kinds[0])
 }
 
 // ownerRange is the 10th to 90th percentile of sorted, "none" when both are

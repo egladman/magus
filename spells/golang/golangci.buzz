@@ -20,7 +20,7 @@ export fun buildFrom(custom: str, into: str) > void !> any {
     final doc: {str: any} = yaml\parse(fs\readFile(custom));
     final build = into + "/custom-gcl-build";
     fs\mkdirAll(build);
-    fs\writeFile(build + "/.custom-gcl.yml", content: customConfig(doc, plugins: dirOf(custom), into: into));
+    fs\writeFile(build + "/.custom-gcl.yml", content: customConfig(doc, plugins: fs\dirname(custom), into: into));
     fs\remove(into + "/custom-gcl");
     fs\removeAll(into + "/golangci-lint");
     _ = proc\exec("golangci-lint", args: ["custom"], dir: build);
@@ -42,15 +42,6 @@ fun customConfig(doc: {str: any}, plugins: str, into: str) > str {
     return lines.join("\n") + "\n";
 }
 
-// dirOf is the directory holding path, "." for a bare name.
-fun dirOf(path: str) > str {
-    final parts = path.split("/");
-    if (parts.len() == 1) {
-        return ".";
-    }
-    return parts.sub(0, len: parts.len() - 1).join("/");
-}
-
 // lintWith runs into/custom-gcl, built by buildFrom, with config over the
 // module at dir. Its cache sits in into: findings key by absolute path.
 export fun lintWith(into: str, config: str, dir: str, args: [str]) > void !> any {
@@ -64,9 +55,4 @@ test "a build names absolute plugin paths and the caller's destination" {
     final got = customConfig(doc, plugins: "/a/libs/testpairing", into: "/b/.magus");
     assert\equal(got.indexOf("version: v2.12.2\ndestination: /b/.magus\n") != null, want: true, message: "the version is kept and the build lands in the caller");
     assert\equal(got.indexOf("    path: /a/libs/testpairing/../c\n") != null, want: true, message: "a plugin path resolves under the config's directory");
-}
-
-test "a config's directory is the path before its name" {
-    assert\equal(dirOf("/a/libs/testpairing/.custom-gcl.yml"), want: "/a/libs/testpairing", message: "an absolute path");
-    assert\equal(dirOf(".custom-gcl.yml"), want: ".", message: "a bare name");
 }

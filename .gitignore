@@ -136,5 +136,6 @@ coverage.cmd.out
 !.agents/skills/magus-local-development
 !.agents/skills/idiomatic-adrs
 !.agents/skills/idiomatic-pr-descriptions
+!.agents/skills/self-review-comments
 !.agents/skills/babysit-pull-requests
 !.agents/skills/chestertons-fence

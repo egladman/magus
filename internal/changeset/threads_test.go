@@ -1,15 +1,14 @@
 package changeset
 
 import (
+	"github.com/egladman/magus/types/diff"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/egladman/magus/types"
 )
 
-func ids(cs []types.ReviewComment) []string {
+func ids(cs []diff.ReviewComment) []string {
 	out := make([]string, 0, len(cs))
 	for _, c := range cs {
 		out = append(out, c.ID)
@@ -31,42 +30,42 @@ func shape(threads []Thread) [][]string {
 // something that is not a thread head.
 func TestGroupThreadsOnlyCountsARootThatIsATopLevelComment(t *testing.T) {
 	cases := map[string]struct {
-		in   []types.ReviewComment
+		in   []diff.ReviewComment
 		want [][]string
 	}{
 		"empty": {in: nil, want: nil},
 		"replies follow their head in list order": {
-			in: []types.ReviewComment{
+			in: []diff.ReviewComment{
 				{ID: "a"}, {ID: "b"}, {ID: "a2", Root: "a"}, {ID: "b2", Root: "b"}, {ID: "a3", Root: "a"},
 			},
 			want: [][]string{{"a", "a2", "a3"}, {"b", "b2"}},
 		},
 		"a reply that precedes its head still follows it": {
-			in:   []types.ReviewComment{{ID: "r", Root: "h"}, {ID: "h"}},
+			in:   []diff.ReviewComment{{ID: "r", Root: "h"}, {ID: "h"}},
 			want: [][]string{{"h", "r"}},
 		},
 		"a reply whose head the host trimmed heads its own thread": {
-			in:   []types.ReviewComment{{ID: "r1", Root: "gone"}, {ID: "r2", Root: "gone"}},
+			in:   []diff.ReviewComment{{ID: "r1", Root: "gone"}, {ID: "r2", Root: "gone"}},
 			want: [][]string{{"r1"}, {"r2"}},
 		},
 		"a comment rooted at itself heads its own thread": {
-			in:   []types.ReviewComment{{ID: "x", Root: "x"}},
+			in:   []diff.ReviewComment{{ID: "x", Root: "x"}},
 			want: [][]string{{"x"}},
 		},
 		"comments rooted at each other each head their own": {
-			in:   []types.ReviewComment{{ID: "a", Root: "b"}, {ID: "b", Root: "a"}},
+			in:   []diff.ReviewComment{{ID: "a", Root: "b"}, {ID: "b", Root: "a"}},
 			want: [][]string{{"a"}, {"b"}},
 		},
 		"a reply to a reply heads its own thread": {
-			in:   []types.ReviewComment{{ID: "h"}, {ID: "r", Root: "h"}, {ID: "rr", Root: "r"}},
+			in:   []diff.ReviewComment{{ID: "h"}, {ID: "r", Root: "h"}, {ID: "rr", Root: "r"}},
 			want: [][]string{{"h", "r"}, {"rr"}},
 		},
 		"a self-rooted comment does not capture a reply to it": {
-			in:   []types.ReviewComment{{ID: "x", Root: "x"}, {ID: "y", Root: "x"}},
+			in:   []diff.ReviewComment{{ID: "x", Root: "x"}, {ID: "y", Root: "x"}},
 			want: [][]string{{"x"}, {"y"}},
 		},
 		"a top-level duplicate id leaves its replies with the first": {
-			in:   []types.ReviewComment{{ID: "h"}, {ID: "h"}, {ID: "r", Root: "h"}},
+			in:   []diff.ReviewComment{{ID: "h"}, {ID: "h"}, {ID: "r", Root: "h"}},
 			want: [][]string{{"h", "r"}, {"h"}},
 		},
 	}
@@ -78,7 +77,7 @@ func TestGroupThreadsOnlyCountsARootThatIsATopLevelComment(t *testing.T) {
 }
 
 func TestFindThreadAnswersAnyCommentWithItsThread(t *testing.T) {
-	in := []types.ReviewComment{
+	in := []diff.ReviewComment{
 		{ID: "t1", Author: "ana"}, {ID: "t2"}, {ID: "t1b", Root: "t1"}, {ID: "orphan", Root: "gone"},
 	}
 
@@ -96,7 +95,7 @@ func TestFindThreadAnswersAnyCommentWithItsThread(t *testing.T) {
 }
 
 func TestFindThreadRefusesWhatNamesNoThread(t *testing.T) {
-	in := []types.ReviewComment{{ID: "t1"}, {ID: "r", Root: "gone"}}
+	in := []diff.ReviewComment{{ID: "t1"}, {ID: "r", Root: "gone"}}
 	for name, id := range map[string]string{"empty": " ", "unknown": "zzz", "a head the host trimmed": "gone"} {
 		t.Run(name, func(t *testing.T) {
 			_, err := FindThread(in, id)

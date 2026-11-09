@@ -187,7 +187,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("watch", vm.DirectValue("fs.watch", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		paths := ffi.StringSlice(bzArgs, 0)
-		callback := ffi.CallbackArg(sess, bzArgs, 1)
+		callback := callbackStringSliceReturnsBool(sess, bzArgs, 1)
 		if err := std.FsWatch(ctx, paths, callback); err != nil {
 			return vm.Null, ffi.Error(err)
 		}
@@ -195,7 +195,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("walk", vm.DirectValue("fs.walk", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		root := ffi.String(bzArgs, 0)
-		callback := ffi.CallbackArg(sess, bzArgs, 1)
+		callback := callbackStringBoolReturnsWalkStep(sess, bzArgs, 1)
 		if err := std.FsWalk(ctx, root, callback); err != nil {
 			return vm.Null, ffi.Error(err)
 		}

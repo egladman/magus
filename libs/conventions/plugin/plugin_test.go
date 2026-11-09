@@ -18,6 +18,7 @@ func TestPluginsRegister(t *testing.T) {
 	for name, settings := range map[string]any{
 		"asciistrings": map[string]any{"module": "", "files": []any{"types/*.go"}},
 		"benchbeside":  map[string]any{"module": "example.com/m"},
+		"blankerror":   map[string]any{"base": "origin/main"},
 		"diagmsg": map[string]any{
 			"max-runes": 160, "prefixes": []any{"magus workspace:"},
 			"calls":  []any{map[string]any{"func": "a.Errorf", "arg": 1, "format": true}},
@@ -33,6 +34,7 @@ func TestPluginsRegister(t *testing.T) {
 		"globalrestore": map[string]any{"module": "", "package": "a", "vars": []any{"global"}, "hint": "see docs"},
 		"hostagnostic":  map[string]any{"module": "example.com/m", "skip-dirs": []any{"gen"}, "hosts": []any{"acme"}, "hint": "see docs"},
 		"hostvocab":     map[string]any{"module": "", "files": []any{"internal/guard/*.go"}, "words": []any{"Read"}, "hint": "see docs"},
+		"jsonlstate":    map[string]any{"base": "origin/main", "state-segments": []any{".magus"}},
 		"nameoutput":    map[string]any{"module": "", "package": "a", "case-ident": "outputName", "emitters": []any{"emitNames"}, "hint": "see docs"},
 		"namewords":     map[string]any{"suffixes": []any{"Of"}, "short-forms": []any{"Cfg"}},
 		"providerio":    map[string]any{"module": "example.com/m", "dirs": []any{"cmd/app"}, "hint": "see docs"},

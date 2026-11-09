@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"io/fs"
 	"maps"
 	"slices"
@@ -318,7 +319,7 @@ func judgedGraph(ctx context.Context, member string, languages []string) (indexe
 	}
 	generated := map[string]bool{}
 	for _, e := range entries {
-		if e.Role == types.DiffRoleOutput {
+		if e.Role == diff.RoleOutput {
 			generated[e.Path] = true
 		}
 	}

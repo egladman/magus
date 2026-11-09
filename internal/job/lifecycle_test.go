@@ -224,6 +224,15 @@ func (s *exitEvidenceSuite) TestOwedGoalCitingARefIsRefused() {
 	s.ErrorContains(err, `goal "lint" is filed as owed and cites output ref "out9"`)
 }
 
+func (s *exitEvidenceSuite) TestRefuseOwedReasonAcceptsRemoteCI() {
+	result := passingResult()
+	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Owed: types.OwedRemoteCI}}
+	s.NoError(refuseOwedReason(result))
+
+	result.VerificationEvidence = []types.VerificationEvidence{{GateID: "lint", Owed: "too slow"}}
+	s.ErrorContains(refuseOwedReason(result), types.OwedRemoteCI)
+}
+
 func (s *exitEvidenceSuite) TestOwedCheckCitingARefIsRefused() {
 	row := s.row()
 	result := passingResult()

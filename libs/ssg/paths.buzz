@@ -1,0 +1,135 @@
+// paths.buzz - walk predicates: is a path a directory, and which docs-root children
+// are the SSG's own files rather than content. Pure (os only, no Site) so it stays a leaf
+// that both engine/types.buzz and render.buzz flat-import without a cycle. The
+// generated-name lists come from Config (generatorDirs/generatorFiles), not hardcoded.
+namespace paths;
+
+import "assert";
+import "fs";
+import "result";
+
+// True if path is a directory.
+//
+// fs\isDir, not os\execute(["test", "-d", ...]): the shell-out forked and exec'd a
+// process PER CHECK, and this is called for every entry of every tree walk - the page
+// walk, the doc-page collection, the glossary pass, the code-entity pass. A stat syscall
+// is roughly a thousand times cheaper than a fork+exec, and the render was spending more
+// time in the kernel than in the interpreter because of it.
+export fun isDirectory(path: str) > bool !> any {
+    return fs\isDir(path);
+}
+
+// makeOutputDir creates a written page's output directory, naming the conflict when a
+// FILE already occupies that path.
+//
+// gen/ is not a pure render target: committed static files live in it alongside generated
+// pages. gen/install is the install script the README's curl one-liner fetches, and
+// pruneStaleOutputs lists it under alwaysKeep for exactly that reason. A page whose clean
+// URL is /install/ therefore needs gen/install to be a directory, which it can never be.
+//
+// Without this guard the render dies inside the mkdir as
+//
+//	fs.makeDirectory: mkdir /.../docs/gen/install: not a directory
+//
+// which names neither the page that wanted the directory nor the file standing in its way,
+// and reads as a filesystem fault rather than an authoring mistake. Every writer that
+// creates a page directory goes through here so the message is the same wherever the
+// collision happens.
+//
+// what identifies the thing being written (a source path, or an alias) and url is its
+// gen-root-relative clean URL, so the error can be acted on without grepping for which
+// page renders where.
+export fun makeOutputDir(dir: str, what: str, url: str) > void !> any {
+    if (fs\isFile(dir)) {
+        throw "output path collision: " + what + " renders to /" + url
+            + ", but " + dir + " is an existing file. A page cannot share a URL with a "
+            + "static asset shipped in gen/ - give the page a different URL, or move the asset.";
+    }
+    fs\mkdirAll(dir);
+}
+
+// isGeneratorDir reports whether a docs-ROOT child directory is the SSG's own rather than
+// content. The SSG sits co-located with its markdown, so the content walk shares a tree
+// with node_modules/, gen/, src/, and tour/, whose stray .md (package READMEs, generated
+// index.md) must not be ingested as pages. CRUCIAL: call sites guard on rel == "", so only
+// EXACT docs-root children are skipped - a content subdir sharing one of these names at any
+// depth is still walked.
+export fun isGeneratorDir(name: str, dirs: [str]) > bool {
+    foreach (d in dirs) {
+        if (name == d) { return true; }
+    }
+    return false;
+}
+
+// isGeneratorFile reports whether a .md file is a generated artifact rather than content,
+// at ANY depth. MAGUS.md is every project's generated routing index: docs/ has one, and so
+// does each sub-project under it (docs/guides/integrations/agents). None renders as a doc
+// page; each project surfaces instead via renderDevelopment. Root-only would publish a
+// nested one, whose "Up" link climbs out of docs/ to a page the site never renders.
+export fun isGeneratorFile(name: str, files: [str]) > bool {
+    foreach (f in files) {
+        if (name == f) { return true; }
+    }
+    return false;
+}
+
+// docSources lists the markdown pages under dir, relative to dir, in
+// lexical order. The collect pass and the render both read it, so they
+// cannot disagree on what a page is. Pruning follows isNeverContentDir,
+// isGeneratorDir (dir's direct children only) and isGeneratorFile.
+export fun docSources(dir: str, generatorDirs: [str], generatorFiles: [str]) > result\Result::<[str]> {
+    final found: mut [str] = mut [];
+    final misses: mut [str] = mut [];
+    final prefixes: mut [str] = mut [];
+    try {
+        fs\walk(dir, callback: fun (path: str, isDir: bool) > fs\WalkStep {
+            // Paths are relative to the working directory, not dir. The first
+            // entry is dir itself and fixes the prefix.
+            if (prefixes.len() == 0) {
+                prefixes.append(if (path == ".") "" else path + "/");
+                return fs\WalkStep.next;
+            }
+            final prefix = prefixes[0];
+            if (!path.startsWith(prefix)) {
+                misses.append(path);
+                return fs\WalkStep.skipAll;
+            }
+            final rel = path.sub(prefix.len());
+            final name = fs\basename(path);
+            if (isDir) {
+                final atRoot = rel.indexOf("/") == null;
+                if (isNeverContentDir(name) or (atRoot and isGeneratorDir(name, generatorDirs))) {
+                    return fs\WalkStep.skipDir;
+                }
+            } else if (name.endsWith(".md") and isGeneratorFile(name, generatorFiles) == false) {
+                found.append(rel);
+            }
+            return fs\WalkStep.next;
+        });
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "docSources: walk {dir}");
+    }
+    if (misses.len() > 0) {
+        return result\fail::<[str]>("docSources: fs\\walk gave {misses[0]}, which is not under {prefixes[0]}");
+    }
+    return result\ok::<[str]>(found);
+}
+
+// isNeverContentDir reports whether a directory can never hold site content, at ANY
+// depth - as opposed to isGeneratorDir above, which is deliberately root-only.
+//
+// node_modules is the whole list. A package tree holds thousands of README.md files
+// and none of them are this site's pages. The root-only rule covered docs/node_modules
+// but not a nested one, so the moment a sub-project under docs/ had its dependencies
+// installed - which `magus run ci docs/guides/integrations/agents` does - the walk
+// started rendering every dependency's README into gen/. That is not a slow render:
+// it is an unbounded one, and it trips MGS3001 by writing into a descendant project.
+export fun isNeverContentDir(name: str) > bool {
+    return name == "node_modules";
+}
+
+test "isNeverContentDir catches node_modules at any depth, and nothing else" {
+    assert\equal(isNeverContentDir("node_modules"), want: true, message: "node_modules is never content");
+    assert\equal(isNeverContentDir("gen"), want: false, message: "gen is root-only, handled by isGeneratorDir");
+    assert\equal(isNeverContentDir("guides"), want: false, message: "a content dir is walked");
+}

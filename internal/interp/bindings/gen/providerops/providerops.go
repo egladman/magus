@@ -12,6 +12,7 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	difftypes "github.com/egladman/magus/types/diff"
 )
 
 // ResolveSecret is the secret provider's required resolve_secret op.
@@ -54,7 +55,7 @@ var Prune = bindgen.ProviderOp[types.PruneRequest, types.PruneResult]{Family: "c
 var ListLifecycles = bindgen.ProviderOp[types.LifecycleQuery, []spells.Lifecycle]{Family: "lifecycle", Name: "list_lifecycles", Encode: bindgen.ObjectLifecycleQuery, Decode: decoded[[]spells.Lifecycle](decode.ProviderFuncs, 12)}
 
 // FindReview is the review provider's required find_review op.
-var FindReview = bindgen.ProviderOp[types.FindReviewRequest, types.ReviewTarget]{Family: "review", Name: "find_review", Encode: bindgen.ObjectFindReviewRequest, Decode: decoded[types.ReviewTarget](decode.ProviderFuncs, 13)}
+var FindReview = bindgen.ProviderOp[types.FindReviewRequest, difftypes.ReviewTarget]{Family: "review", Name: "find_review", Encode: bindgen.ObjectFindReviewRequest, Decode: decoded[difftypes.ReviewTarget](decode.ProviderFuncs, 13)}
 
 // PublishReview is the review provider's required publish_review op.
 var PublishReview = bindgen.ProviderOp[types.PublishReviewRequest, types.Ack]{Family: "review", Name: "publish_review", Encode: bindgen.ObjectPublishReviewRequest, Decode: decoded[types.Ack](decode.ProviderFuncs, 14)}
@@ -63,7 +64,7 @@ var PublishReview = bindgen.ProviderOp[types.PublishReviewRequest, types.Ack]{Fa
 var ReplyReview = bindgen.ProviderOp[types.ReplyReviewRequest, types.Ack]{Family: "review", Name: "reply_review", Encode: bindgen.ObjectReplyReviewRequest, Decode: decoded[types.Ack](decode.ProviderFuncs, 15)}
 
 // ReviewThreads is the review provider's optional review_threads op.
-var ReviewThreads = bindgen.ProviderOp[types.ReviewRef, []types.ReviewComment]{Family: "review", Name: "review_threads", Encode: bindgen.ObjectReviewRef, Decode: decoded[[]types.ReviewComment](decode.ProviderFuncs, 16)}
+var ReviewThreads = bindgen.ProviderOp[types.ReviewRef, []difftypes.ReviewComment]{Family: "review", Name: "review_threads", Encode: bindgen.ObjectReviewRef, Decode: decoded[[]difftypes.ReviewComment](decode.ProviderFuncs, 16)}
 
 // ListPulls is the review provider's optional list_pulls op.
 var ListPulls = bindgen.ProviderOp[types.ListPullsRequest, types.PullList]{Family: "review", Name: "list_pulls", Encode: bindgen.ObjectListPullsRequest, Decode: decoded[types.PullList](decode.ProviderFuncs, 17)}

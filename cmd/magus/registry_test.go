@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -78,9 +79,9 @@ func TestAcquireKeepsAFailedWorkspaceWithoutReopening(t *testing.T) {
 	assert.Equal(t, int32(1), opens.Load())
 	got := r.status()
 	require.Len(t, got, 1)
-	assert.Equal(t, types.WorkspaceFailed, got[0].State)
+	assert.Equal(t, daemon.WorkspaceFailed, got[0].State)
 	require.NotNil(t, got[0].Error)
-	assert.Equal(t, []types.SourceDiagnostic{{Line: 3, Column: 3, Message: "expected expression"}}, got[0].Error.Diagnostics)
+	assert.Equal(t, []daemon.SourceDiagnostic{{Line: 3, Column: 3, Message: "expected expression"}}, got[0].Error.Diagnostics)
 	assert.Equal(t, rpcerr.WorkspaceFailed(root, got[0].Error).Code, r.unavailable(root).Code)
 }
 
@@ -101,7 +102,7 @@ func TestAcquireReportsWhereAMagusfileFailed(t *testing.T) {
 	got := r.status()
 	require.Len(t, got, 1)
 	require.NotNil(t, got[0].Error)
-	assert.Equal(t, []types.SourceDiagnostic{{
+	assert.Equal(t, []daemon.SourceDiagnostic{{
 		Code: "BZZ1005", URL: "https://github.com/egladman/magus/blob/main/libs/gopherbuzz/docs/codes/BZZ1005.md",
 		File: "magusfile.buzz", Line: 4, Column: 3, Message: `cannot assign str to int variable "x"`,
 	}}, got[0].Error.Diagnostics)
@@ -124,7 +125,7 @@ func TestSourceChangeRetriesAFailedBridge(t *testing.T) {
 	}
 	root := t.TempDir()
 	r.failBridge(root, errors.New("[BZZ1005] cannot assign"))
-	assert.Equal(t, types.WorkspaceFailed, r.status()[0].State)
+	assert.Equal(t, daemon.WorkspaceFailed, r.status()[0].State)
 
 	close(ok)
 	close(changed)
@@ -137,7 +138,7 @@ func TestSourceChangeRetriesAFailedBridge(t *testing.T) {
 	r.mu.Lock()
 	assert.Equal(t, 1, r.entries[root].inflight, "the bridge stays pinned across the retry")
 	r.mu.Unlock()
-	assert.Equal(t, types.WorkspaceActive, r.status()[0].State)
+	assert.Equal(t, daemon.WorkspaceActive, r.status()[0].State)
 }
 
 // `magus server reload` is the escape hatch when a watcher cannot start: it retries a failed
@@ -168,7 +169,7 @@ func TestUnavailableIsLoadingWhileALoadRuns(t *testing.T) {
 	r.entries[root] = newEntry(root, time.Now())
 
 	assert.Equal(t, rpcerr.WorkspaceLoading(root).Code, r.unavailable(root).Code)
-	assert.Equal(t, types.WorkspaceLoading, r.status()[0].State)
+	assert.Equal(t, daemon.WorkspaceLoading, r.status()[0].State)
 }
 
 // TestAdoptBridgeReportsWorkspace pins the fix for /readyz reporting "no workspaces loaded"

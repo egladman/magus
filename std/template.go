@@ -7,8 +7,6 @@ import (
 	"github.com/cbroglie/mustache"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module template -lang buzz -out ../internal/interp/bindings/gen/template.go -pkg bindgen
-
 // Template is the "template" host module: logic-less Mustache rendering via
 // github.com/cbroglie/mustache, which tracks the mustache/spec. Chosen over Go's
 // text/template: Mustache is a cross-language spec with a conformance suite, and
@@ -21,16 +19,16 @@ var Template = Module{
 		{
 			Name:    "render",
 			Doc:     "Render a Mustache template against a context value (usually a name->value map; lists drive sections, absent/false keys hide them). Returns the filled string; errors on a malformed template.",
-			Args:    []Arg{{Name: "template", Type: TypeString}, {Name: "data", Type: TypeAny}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "template"}, {Name: "data"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    TemplateRender,
 		},
 		{
 			Name:    "render_partials",
 			Doc:     "Render a Mustache template that includes partials via {{>name}}, resolving each name against the partials map (name->template string). Partials may reference other partials. Same context and escaping rules as render; errors on a malformed template.",
-			Args:    []Arg{{Name: "template", Type: TypeString}, {Name: "data", Type: TypeAny}, {Name: "partials", Type: TypeStringMap}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "template"}, {Name: "data"}, {Name: "partials"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    TemplateRenderPartials,
 		},

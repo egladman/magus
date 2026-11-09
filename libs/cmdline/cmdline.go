@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,10 @@ type Command struct {
 	// UnstructuredOutput means stdout belongs to a script, protocol, or terminal
 	// rather than the -o renderer. Each child declares its own value.
 	UnstructuredOutput bool
+
+	// Effect is what running the command does outside its process. Each
+	// child declares its own value; a Flag may override it.
+	Effect Effect
 
 	// Description is the docs page's meta description; empty falls back to Short.
 	Description string
@@ -62,11 +67,41 @@ const (
 	Int      Kind = "int"
 	Duration Kind = "duration"
 
+	// StringList is a repeatable flag: each occurrence appends its value whole,
+	// commas included, so a caller that splits a value decides how. It starts
+	// empty and declares no Default.
+	StringList Kind = "string-list"
+
 	// Custom is a flag declared here and bound by hand: a repeatable flag.Value, or
 	// a mode selector read from argv before any FlagSet exists. The generator emits
 	// only its name constant, since a second binding would panic as redefined.
 	Custom Kind = "custom"
 )
+
+// Effect classifies what a command does outside its own process, so a
+// reader can judge an argv without running it. The zero value is undeclared.
+type Effect string
+
+const (
+	// EffectRead reads state and changes none.
+	EffectRead Effect = "read"
+	// EffectLocalWrite writes state only this checkout or user reads, such
+	// as a job store entry, a config file or an installed skill.
+	EffectLocalWrite Effect = "local-write"
+	// EffectSharedWrite writes state others read, such as a remote branch,
+	// a pull request, a queue or a running server.
+	EffectSharedWrite Effect = "shared-write"
+	// EffectRun executes workspace code, such as a target or a script,
+	// whose own effects the tree cannot see.
+	EffectRun Effect = "run"
+	// EffectStream follows a source and prints until interrupted.
+	EffectStream Effect = "stream"
+	// EffectWait blocks until something outside the command finishes.
+	EffectWait Effect = "wait"
+)
+
+// Effects lists every declared Effect, in the order above.
+var Effects = []Effect{EffectRead, EffectLocalWrite, EffectSharedWrite, EffectRun, EffectStream, EffectWait}
 
 // Flag is one command-specific flag.
 type Flag struct {
@@ -100,6 +135,11 @@ type Flag struct {
 	// Unit is what a bare number means on a Duration flag (ms, s, m, h). Required
 	// there so help can name it; empty on every other Kind.
 	Unit string
+
+	// Effect replaces the command's Effect when the flag holds a value
+	// other than its Default. Empty keeps the command's Effect. An alias
+	// takes the Effect of the flag it spells.
+	Effect Effect
 }
 
 // Operand is a word a command dispatches on, such as a target name.
@@ -178,6 +218,8 @@ func (c Command) BindFlags(fs *flag.FlagSet) {
 				}
 			}
 			DurationVar(fs, new(time.Duration), f.Name, TypedDefault[time.Duration](f), unit, usage)
+		case StringList:
+			StringListVar(fs, new([]string), f.Name, f.Doc)
 		default:
 			panic(fmt.Sprintf("cmdline: flag --%s has unknown kind %s", f.Name, string(f.Kind)))
 		}
@@ -187,14 +229,26 @@ func (c Command) BindFlags(fs *flag.FlagSet) {
 // Check reports every flag declaration in root's tree the generators refuse: a bool
 // whose name starts with no- (declare the positive name; the generator adds the
 // negation), a bool with no Default, and a bool whose --no-<name> form another flag
-// of the same command already takes.
+// of the same command already takes. It also reports an Effect, on a command
+// or a flag, that is none of Effects.
 func Check(root Command) error {
-	errs := checkFlags(root.Name, root.Flags)
+	errs := errors.Join(checkFlags(root.Name, root.Flags), checkEffects(root.Name, root))
 	Walk(root, func(path string, c Command) {
-		if err := checkFlags(path, c.Flags); err != nil {
-			errs = errors.Join(errs, err)
-		}
+		errs = errors.Join(errs, checkFlags(path, c.Flags), checkEffects(path, c))
 	})
+	return errs
+}
+
+func checkEffects(command string, c Command) error {
+	var errs error
+	if c.Effect != "" && !slices.Contains(Effects, c.Effect) {
+		errs = errors.Join(errs, fmt.Errorf("cmdline: %s declares Effect %q, which is none of %v", command, c.Effect, Effects))
+	}
+	for _, f := range c.Flags {
+		if f.Effect != "" && !slices.Contains(Effects, f.Effect) {
+			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s declares Effect %q, which is none of %v", command, f.Name, f.Effect, Effects))
+		}
+	}
 	return errs
 }
 
@@ -213,6 +267,9 @@ func checkFlags(command string, flags []Flag) error {
 		}
 		if f.Kind == Duration && f.Unit != "" && unitPhrase[f.Unit] == "" {
 			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s Unit %q is not one of ns, us, µs, ms, s, m, h", command, f.Name, f.Unit))
+		}
+		if f.Kind == StringList && f.Default != nil {
+			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s is a StringList with a Default: a repeatable flag starts empty", command, f.Name))
 		}
 		if f.Kind != Bool {
 			continue
@@ -269,6 +326,29 @@ func (n *negation) Set(s string) error {
 		return fmt.Errorf("--%s%s takes no value: write --%s to turn it on", NegationPrefix, n.name, n.name)
 	}
 	*n.dst = false
+	return nil
+}
+
+// StringListVar registers name on fs as a [StringList] flag that appends each
+// occurrence's value to *p. An empty or blank value is refused.
+func StringListVar(fs *flag.FlagSet, p *[]string, name, usage string) {
+	fs.Var(stringListValue{p: p}, name, usage)
+}
+
+type stringListValue struct{ p *[]string }
+
+func (v stringListValue) String() string {
+	if v.p == nil {
+		return ""
+	}
+	return strings.Join(*v.p, ",")
+}
+
+func (v stringListValue) Set(s string) error {
+	if strings.TrimSpace(s) == "" {
+		return errors.New("empty entry")
+	}
+	*v.p = append(*v.p, s)
 	return nil
 }
 

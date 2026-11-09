@@ -3,11 +3,11 @@ package changeset
 import (
 	"context"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"path/filepath"
 	"time"
 
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/types"
 )
 
 // ReadingTTL is how long a [ReadingMark] counts. Twelve hours is a long working day: a mark
@@ -21,10 +21,10 @@ const ReadingTTL = 12 * time.Hour
 // does not look at it. It exists so that a merge landing under the reader can be reported, and the
 // time lost to it measured, by whichever process notices the merge.
 type ReadingMark struct {
-	// Review is the [types.ReviewTarget] ID the mark was set against. A mark for one review says
+	// Review is the [diff.ReviewTarget] ID the mark was set against. A mark for one review says
 	// nothing about another, so a branch that moves to a new pull request starts unmarked.
 	Review string `json:"review"`
-	// Repo is [types.ReviewTarget].Repo, kept so two forges that number their reviews alike do not
+	// Repo is [diff.ReviewTarget].Repo, kept so two forges that number their reviews alike do not
 	// share a mark.
 	Repo string `json:"repo,omitempty"`
 	// Since is when the reading began, in unix milliseconds.
@@ -35,7 +35,7 @@ type ReadingMark struct {
 func (m ReadingMark) Active() bool { return m.Review != "" }
 
 // Matches reports whether m was set against at.
-func (m ReadingMark) Matches(at types.ReviewTarget) bool {
+func (m ReadingMark) Matches(at diff.ReviewTarget) bool {
 	return m.Active() && m.Review == at.ID && m.Repo == at.Repo
 }
 
@@ -83,7 +83,7 @@ func errorNoReadingDir() error {
 // second tab sending it, must not shorten the interval a later merge is measured against. A mark
 // for a different review is replaced, and so is one that has outlived [ReadingTTL]; a person
 // reads one review at a time.
-func (s *Store) SetReading(ctx context.Context, at types.ReviewTarget, now time.Time) (ReadingMark, error) {
+func (s *Store) SetReading(ctx context.Context, at diff.ReviewTarget, now time.Time) (ReadingMark, error) {
 	path := s.readingPath()
 	if path == "" {
 		return ReadingMark{}, errorNoReadingDir()

@@ -74,6 +74,7 @@ type run struct {
 	narrowing       *project.OpNarrowing
 	session         string // the host session the guard judges the run for; see WithSession
 	observer        types.Observer
+	results         func(types.TargetResult) // see WithTargetResults
 }
 
 // lockRole is what the run's project locks admit it to.
@@ -151,6 +152,27 @@ func WithSession(session string) RunOption { return func(o *run) { o.session = s
 // affected-set computation of RunAffected included. The observer rides the run alone: two
 // runs on one workspace each report to their own.
 func WithObserver(o types.Observer) RunOption { return func(r *run) { r.observer = o } }
+
+// WithTargetResults calls fn once per target the run finishes, a cache
+// replay included, before Run returns. Calls never overlap, so fn needs no
+// lock of its own. A target the guard denied never starts and reports none.
+func WithTargetResults(fn func(types.TargetResult)) RunOption {
+	return func(r *run) { r.results = fn }
+}
+
+// serialized wraps fn so its calls never overlap: steps finish concurrently.
+// A nil fn stays nil.
+func serialized(fn func(types.TargetResult)) func(types.TargetResult) {
+	if fn == nil {
+		return nil
+	}
+	var mu sync.Mutex
+	return func(out types.TargetResult) {
+		mu.Lock()
+		defer mu.Unlock()
+		fn(out)
+	}
+}
 
 // observed returns ctx carrying the run's observer, when it has one.
 func (o run) observed(ctx context.Context) context.Context {
@@ -880,6 +902,8 @@ func (r *composedRunner) runKeyedStep(ctx context.Context, p *types.Project, ste
 			handler := r.m.targetHandler(step.Target)
 			_, err := r.m.cache.RunAside(cache.WithoutSlotHeld(ctx), step, func(ctx context.Context) error {
 				ctx = buzz.WithTargetRuns(ctx, buzz.NewTargetRuns(r.runs.Passed(p.Path)...))
+				// The caller's args are not this step's.
+				ctx = project.WithExtraArgs(ctx, step.ExtraArgs)
 				return handler(r.withBodyInterceptor(ctx, p, step), p)
 			}, r.cacheOpts...)
 			return err
@@ -2381,8 +2405,8 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		return names
 	}
 	cacheOpts = append(cacheOpts, observability.TargetRunOptions(ctx, m.tel, spellsOf)...)
-	if opts.report != nil {
-		cacheOpts = append(cacheOpts, report.RunOptions(opts.report, report.ServedIn(m.jobPlace()))...)
+	if opts.report != nil || opts.results != nil {
+		cacheOpts = append(cacheOpts, report.RunOptions(opts.report, report.ServedIn(m.jobPlace()), serialized(opts.results))...)
 	}
 	cacheOpts = append(cacheOpts, diagnosticCaptureOption(ctx))
 	// runTarget opens the descendant audit around a step's body, which a hit never runs.

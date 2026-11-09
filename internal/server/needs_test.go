@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -309,7 +310,7 @@ func bootUnloadedServer(t *testing.T) (base string, patterns []string, needs map
 	testkit.Isolate(t)
 	root := t.TempDir()
 	builtConsole(t)
-	failure := &types.WorkspaceFailure{Message: "magusfile: exec magusfile.buzz: [BZZ1005] ..."}
+	failure := &daemon.WorkspaceFailure{Message: "magusfile: exec magusfile.buzz: [BZZ1005] ..."}
 	d, addr := testServer(t, func(opts mcp.Options) *Server {
 		return NewUnloaded(opts, Unloaded{Root: root, Err: func() rpcerr.Error { return rpcerr.WorkspaceFailed(root, failure) }})
 	})

@@ -1,0 +1,54 @@
+Cases written with the voice budget (2026-11-09), not drawn from a labeling round.
+An invented author whose change descriptions run to a series of three in most
+of them. The author sections build the voice; a text may hold as many series as
+that author's own 95th percentile allows at its length.
+-- author/change-description --
+This moves the cache, the index and the log under one directory. It also drops the old flag we kept around for the migration last spring, since nobody passes it now.
+I split the loader into reading, parsing and checking so each part has its own tests. The checks were hard to follow when they lived inside one long function.
+The release script now builds, signs and uploads in that order. Before this it uploaded first, which meant a failed signature left a broken file on the mirror for a while.
+Renamed the fields for size, age and owner to match what the API returns. Callers that read the old names get a clear error that says which name to use instead.
+This fixes the retry loop, the timeout and the log line that printed the wrong host. I hit all three while chasing one flaky test on the Linux runner yesterday.
+The parser now accepts tabs, spaces and mixed indentation in the config file. People kept pasting snippets from the docs and getting a confusing error about line two.
+I added tests for the empty file, the huge file and the file with no trailing newline. The huge one takes a few seconds, so it only runs in the nightly job.
+We now read the token from the flag, the environment or the config file, in that order. The old code only read the config file and ignored the other two quietly.
+Moved the theme, the fonts and the icons into the assets folder. The build was copying them from three places and one of them was out of date.
+This drops the cache warmup, the second retry and the debug banner from startup. Together they added almost two seconds to every run on a cold machine.
+The importer handles CSV, TSV and JSON lines now. I left Excel out on purpose because the library we would need pulls in far too much for one format.
+Fixed the date parsing for leap years, time zones and the odd two-digit year. A user in Sydney reported the time zone one with a really clear example.
+I cleaned up the error messages for missing files, bad permissions and full disks. Each one now names the path and what you can do about it.
+The server logs the request, the user and the duration for every call. That is enough to find slow endpoints without turning on the full trace.
+This removes the legacy importer, its tests and its docs page. Nothing has called it since the new one shipped, and the docs page was confusing people.
+We now pin the compiler, the linter and the formatter in one file. Before this each machine could drift, and CI disagreed with laptops about once a week.
+Added a dry run that prints the plan, the files and the commands without running them. I wanted it while testing the migration and figured others would too.
+The dashboard shows build time, test time and queue time side by side now. It was hard to tell which one grew when only the total was on the page.
+I rewrote the setup guide for macOS, Linux and Windows after trying each one fresh. The Windows steps were missing a whole section about long paths.
+This makes the queue, the worker and the scheduler share one clock. They each read the time separately before, and the drift showed up in the retry math.
+Fixed the menu, the footer and the search box on small screens. They overlapped below about four hundred pixels, which is most phones held upright.
+The backup job now checks free space, file count and checksum before it starts. It used to fail halfway through and leave a partial archive behind.
+I moved the feature flags, the limits and the timeouts into one config section. Finding where a limit was set used to mean grepping the whole repo.
+This adds labels for size, priority and area to the issue template. Triage was slow because every issue needed someone to read it in full first.
+The client retries on timeouts, resets and the one server error that means try again. Every other error fails right away so we do not hide real bugs.
+I updated the charts for memory, disk and network so the axes start at zero. The old ones made a small bump look like an outage, which scared a few people.
+This teaches the CLI to read flags, a config file and environment variables the same way. Each source used to have its own parser with its own small bugs.
+Fixed the upload for big files, slow links and links that drop halfway. The code to pick up where it left off was there all along but never kicked in because of a typo.
+We now run the unit tests, the lint and the type check in parallel on CI. A full run went from about nine minutes to a little over four.
+I trimmed the welcome email, the reset email and the invite email down to a few lines each. People told us they skimmed past the long versions anyway.
+This adds a health check that reports the database, the queue and the cache separately. Ops wanted to know which one was down without reading logs.
+The search page remembers your filters, your sort order and the last query. Coming back to it after lunch used to mean setting everything up again.
+I replaced the date picker, the color picker and the file picker with the native ones. They work better with screen readers and cost us nothing to maintain.
+This stops the sync from touching hidden files, lock files and temp files. One user lost an editor swap file that way, and that should never happen.
+Fixed the totals on the invoice for discounts, taxes and refunds. The refund case double counted when someone was refunded on the same day.
+The deploy script now tags the build, posts to chat and opens the changelog. I kept forgetting the last two steps, so now they just happen.
+We cache the font files, the logo and the main script for a week now. Pages load a lot faster on the second visit, especially on mobile data.
+I added a short section on setup, testing and releasing to the README. New contributors kept asking the same three questions in the chat.
+This moves logging, metrics and tracing behind one small interface. Swapping the vendor later should only touch one file instead of forty.
+-- pass/change-description whole --
+fix(cache): read the key once
+
+The loader reads the cache, the graph and the log in one pass now. It also checks size, age and owner before it writes anything back to disk.
+
+Two workers used to race on the key when they started at the same moment, and the loser wrote a stale entry that stuck around until the next cold start. I found it while chasing a flaky test that only failed on the busiest runner. The new test starts both workers on one key and checks that the second one reads what the first one wrote.
+-- hit/change-description whole --
+fix(cache): read the key once
+
+The loader reads the cache, the graph and the log. It checks size, age and owner. It writes the key, the value and the stamp. It locks the file, the index and the journal.

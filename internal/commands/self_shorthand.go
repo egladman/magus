@@ -6,8 +6,9 @@ import "github.com/egladman/magus/libs/cmdline"
 // outside the build-tagged self pages because the shorthand does not depend on
 // the updater, so both the default and the -tags noselfupdate build ship it.
 var selfInstallShorthandCommand = cmdline.Command{
-	Name:  "install-shorthand",
-	Short: "Symlink mgs, the magus shorthand, to the running binary",
+	Name:   "install-shorthand",
+	Effect: cmdline.EffectLocalWrite,
+	Short:  "Symlink mgs, the magus shorthand, to the running binary",
 	Long: `Create mgs, the shorthand for magus, as a symlink to the running binary.
 
 Without --dir the link is created in the binary's own directory, which is

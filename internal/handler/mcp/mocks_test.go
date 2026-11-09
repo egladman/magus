@@ -7,7 +7,7 @@ package mcp
 import (
 	"context"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/diff"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -39,22 +39,22 @@ func (_m *mockWorkspaceSource) EXPECT() *mockWorkspaceSource_Expecter {
 }
 
 // Diff provides a mock function for the type mockWorkspaceSource
-func (_mock *mockWorkspaceSource) Diff(ctx context.Context, paths []string) (types.Diff, error) {
+func (_mock *mockWorkspaceSource) Diff(ctx context.Context, paths []string) (diff.Diff, error) {
 	ret := _mock.Called(ctx, paths)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Diff")
 	}
 
-	var r0 types.Diff
+	var r0 diff.Diff
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, []string) (types.Diff, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []string) (diff.Diff, error)); ok {
 		return returnFunc(ctx, paths)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, []string) types.Diff); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []string) diff.Diff); ok {
 		r0 = returnFunc(ctx, paths)
 	} else {
-		r0 = ret.Get(0).(types.Diff)
+		r0 = ret.Get(0).(diff.Diff)
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, []string) error); ok {
 		r1 = returnFunc(ctx, paths)
@@ -94,35 +94,35 @@ func (_c *mockWorkspaceSource_Diff_Call) Run(run func(ctx context.Context, paths
 	return _c
 }
 
-func (_c *mockWorkspaceSource_Diff_Call) Return(diff types.Diff, err error) *mockWorkspaceSource_Diff_Call {
-	_c.Call.Return(diff, err)
+func (_c *mockWorkspaceSource_Diff_Call) Return(diff1 diff.Diff, err error) *mockWorkspaceSource_Diff_Call {
+	_c.Call.Return(diff1, err)
 	return _c
 }
 
-func (_c *mockWorkspaceSource_Diff_Call) RunAndReturn(run func(ctx context.Context, paths []string) (types.Diff, error)) *mockWorkspaceSource_Diff_Call {
+func (_c *mockWorkspaceSource_Diff_Call) RunAndReturn(run func(ctx context.Context, paths []string) (diff.Diff, error)) *mockWorkspaceSource_Diff_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // DiffWith provides a mock function for the type mockWorkspaceSource
-func (_mock *mockWorkspaceSource) DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
+func (_mock *mockWorkspaceSource) DiffWith(ctx context.Context, paths []string, opts diff.Options) (diff.Diff, error) {
 	ret := _mock.Called(ctx, paths, opts)
 
 	if len(ret) == 0 {
 		panic("no return value specified for DiffWith")
 	}
 
-	var r0 types.Diff
+	var r0 diff.Diff
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, []string, types.DiffOptions) (types.Diff, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []string, diff.Options) (diff.Diff, error)); ok {
 		return returnFunc(ctx, paths, opts)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, []string, types.DiffOptions) types.Diff); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []string, diff.Options) diff.Diff); ok {
 		r0 = returnFunc(ctx, paths, opts)
 	} else {
-		r0 = ret.Get(0).(types.Diff)
+		r0 = ret.Get(0).(diff.Diff)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, []string, types.DiffOptions) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, []string, diff.Options) error); ok {
 		r1 = returnFunc(ctx, paths, opts)
 	} else {
 		r1 = ret.Error(1)
@@ -138,12 +138,12 @@ type mockWorkspaceSource_DiffWith_Call struct {
 // DiffWith is a helper method to define mock.On call
 //   - ctx context.Context
 //   - paths []string
-//   - opts types.DiffOptions
+//   - opts diff.Options
 func (_e *mockWorkspaceSource_Expecter) DiffWith(ctx interface{}, paths interface{}, opts interface{}) *mockWorkspaceSource_DiffWith_Call {
 	return &mockWorkspaceSource_DiffWith_Call{Call: _e.mock.On("DiffWith", ctx, paths, opts)}
 }
 
-func (_c *mockWorkspaceSource_DiffWith_Call) Run(run func(ctx context.Context, paths []string, opts types.DiffOptions)) *mockWorkspaceSource_DiffWith_Call {
+func (_c *mockWorkspaceSource_DiffWith_Call) Run(run func(ctx context.Context, paths []string, opts diff.Options)) *mockWorkspaceSource_DiffWith_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -153,9 +153,9 @@ func (_c *mockWorkspaceSource_DiffWith_Call) Run(run func(ctx context.Context, p
 		if args[1] != nil {
 			arg1 = args[1].([]string)
 		}
-		var arg2 types.DiffOptions
+		var arg2 diff.Options
 		if args[2] != nil {
-			arg2 = args[2].(types.DiffOptions)
+			arg2 = args[2].(diff.Options)
 		}
 		run(
 			arg0,
@@ -166,29 +166,29 @@ func (_c *mockWorkspaceSource_DiffWith_Call) Run(run func(ctx context.Context, p
 	return _c
 }
 
-func (_c *mockWorkspaceSource_DiffWith_Call) Return(diff types.Diff, err error) *mockWorkspaceSource_DiffWith_Call {
-	_c.Call.Return(diff, err)
+func (_c *mockWorkspaceSource_DiffWith_Call) Return(diff1 diff.Diff, err error) *mockWorkspaceSource_DiffWith_Call {
+	_c.Call.Return(diff1, err)
 	return _c
 }
 
-func (_c *mockWorkspaceSource_DiffWith_Call) RunAndReturn(run func(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error)) *mockWorkspaceSource_DiffWith_Call {
+func (_c *mockWorkspaceSource_DiffWith_Call) RunAndReturn(run func(ctx context.Context, paths []string, opts diff.Options) (diff.Diff, error)) *mockWorkspaceSource_DiffWith_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // ReviewOrigin provides a mock function for the type mockWorkspaceSource
-func (_mock *mockWorkspaceSource) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
+func (_mock *mockWorkspaceSource) ReviewOrigin(ctx context.Context) diff.ReviewOrigin {
 	ret := _mock.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ReviewOrigin")
 	}
 
-	var r0 types.ReviewOrigin
-	if returnFunc, ok := ret.Get(0).(func(context.Context) types.ReviewOrigin); ok {
+	var r0 diff.ReviewOrigin
+	if returnFunc, ok := ret.Get(0).(func(context.Context) diff.ReviewOrigin); ok {
 		r0 = returnFunc(ctx)
 	} else {
-		r0 = ret.Get(0).(types.ReviewOrigin)
+		r0 = ret.Get(0).(diff.ReviewOrigin)
 	}
 	return r0
 }
@@ -217,12 +217,12 @@ func (_c *mockWorkspaceSource_ReviewOrigin_Call) Run(run func(ctx context.Contex
 	return _c
 }
 
-func (_c *mockWorkspaceSource_ReviewOrigin_Call) Return(reviewOrigin types.ReviewOrigin) *mockWorkspaceSource_ReviewOrigin_Call {
+func (_c *mockWorkspaceSource_ReviewOrigin_Call) Return(reviewOrigin diff.ReviewOrigin) *mockWorkspaceSource_ReviewOrigin_Call {
 	_c.Call.Return(reviewOrigin)
 	return _c
 }
 
-func (_c *mockWorkspaceSource_ReviewOrigin_Call) RunAndReturn(run func(ctx context.Context) types.ReviewOrigin) *mockWorkspaceSource_ReviewOrigin_Call {
+func (_c *mockWorkspaceSource_ReviewOrigin_Call) RunAndReturn(run func(ctx context.Context) diff.ReviewOrigin) *mockWorkspaceSource_ReviewOrigin_Call {
 	_c.Call.Return(run)
 	return _c
 }

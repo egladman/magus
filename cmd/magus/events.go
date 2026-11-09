@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	eventstypes "github.com/egladman/magus/types/events"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +16,6 @@ import (
 	"github.com/egladman/magus/internal/eventstream"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
-	"github.com/egladman/magus/types"
 )
 
 // eventsCommand implements `magus events`: the subscribe command third-party
@@ -42,7 +42,7 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "stream, so a run started in another terminal shows up here.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Event types:")
-			for _, t := range types.StreamEventTypes() {
+			for _, t := range eventstypes.EventTypes() {
 				fmt.Fprintf(os.Stderr, "  %s\n", t)
 			}
 			fmt.Fprintln(os.Stderr, "")
@@ -135,9 +135,9 @@ func eventsCommand(ctx context.Context, root string, args []string) error {
 
 // eventRecordEmitter renders each event alone as it arrives. The stream never
 // closes, so no document could wrap it. A -o name line is the event's type.
-func eventRecordEmitter(opts output.Options, filter types.StreamFilter) func(types.StreamEvent) error {
+func eventRecordEmitter(opts output.Options, filter eventstypes.Filter) func(eventstypes.Event) error {
 	var mu sync.Mutex
-	return func(e types.StreamEvent) error {
+	return func(e eventstypes.Event) error {
 		if e.Body == nil || !filter.Allows(e.Body.StreamType()) {
 			return nil
 		}
@@ -153,20 +153,20 @@ func eventRecordEmitter(opts output.Options, filter types.StreamFilter) func(typ
 // A typo has to be an error rather than an empty match: `--type target.reslut`
 // would otherwise present as a workspace where nothing ever happens, which is
 // indistinguishable from a broken integration and costs an hour to diagnose.
-func parseStreamFilter(csv string) (types.StreamFilter, error) {
+func parseStreamFilter(csv string) (eventstypes.Filter, error) {
 	csv = strings.TrimSpace(csv)
 	if csv == "" {
-		return types.StreamFilter{}, nil
+		return eventstypes.Filter{}, nil
 	}
-	var out types.StreamFilter
+	var out eventstypes.Filter
 	for _, name := range strings.Split(csv, ",") {
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
 		}
-		t, err := types.ParseStreamEventType(name)
+		t, err := eventstypes.ParseStreamEventType(name)
 		if err != nil {
-			return types.StreamFilter{}, fmt.Errorf("magus events (known types: %s): %w", strings.Join(streamTypeNames(), ", "), err)
+			return eventstypes.Filter{}, fmt.Errorf("magus events (known types: %s): %w", strings.Join(streamTypeNames(), ", "), err)
 		}
 		out.Types = append(out.Types, t)
 	}
@@ -175,7 +175,7 @@ func parseStreamFilter(csv string) (types.StreamFilter, error) {
 
 // streamTypeNames renders the taxonomy for an error message.
 func streamTypeNames() []string {
-	all := types.StreamEventTypes()
+	all := eventstypes.EventTypes()
 	names := make([]string, len(all))
 	for i, t := range all {
 		names[i] = string(t)

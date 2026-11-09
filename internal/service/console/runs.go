@@ -3,13 +3,13 @@ package console
 import (
 	"context"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/types"
 )
 
 // defaultRunRetention is how long a finished run lingers in the registry after its last
@@ -46,9 +46,9 @@ type runState struct {
 	startedAt   time.Time
 	finished    bool
 	finishedAt  time.Time
-	lastEventAt time.Time                         // wall-clock time of the most recent folded event
-	order       []string                          // target keys, first-seen order (stable render)
-	targets     map[string]*types.StatusTargetRun // keyed by targetKey(project, target)
+	lastEventAt time.Time                    // wall-clock time of the most recent folded event
+	order       []string                     // target keys, first-seen order (stable render)
+	targets     map[string]*daemon.TargetRun // keyed by targetKey(project, target)
 }
 
 // NewRunRegistry returns an empty registry using the default retention and wall clock.
@@ -81,7 +81,7 @@ func (r *RunRegistry) fold(e journal.Event) {
 
 	rs := r.runs[e.Inv]
 	if rs == nil {
-		rs = &runState{inv: e.Inv, targets: make(map[string]*types.StatusTargetRun)}
+		rs = &runState{inv: e.Inv, targets: make(map[string]*daemon.TargetRun)}
 		r.runs[e.Inv] = rs
 	}
 
@@ -95,7 +95,7 @@ func (r *RunRegistry) fold(e journal.Event) {
 		// A scope header that names a target seeds it as QUEUED before it runs. Scope
 		// headers without a target carry no per-target state, so they are ignored.
 		if e.Target != "" {
-			r.targetLocked(rs, e).State = types.TargetRunQueued
+			r.targetLocked(rs, e).State = daemon.TargetRunQueued
 		}
 	case journal.KindExec:
 		// First subprocess for a target flips it to RUNNING; later exec events (a target
@@ -104,8 +104,8 @@ func (r *RunRegistry) fold(e journal.Event) {
 			return
 		}
 		t := r.targetLocked(rs, e)
-		if t.State == "" || t.State == types.TargetRunQueued {
-			t.State = types.TargetRunRunning
+		if t.State == "" || t.State == daemon.TargetRunQueued {
+			t.State = daemon.TargetRunRunning
 			t.StartedAt = time.UnixMilli(e.Ts)
 		}
 	case journal.KindResult:
@@ -133,11 +133,11 @@ func (r *RunRegistry) fold(e journal.Event) {
 
 // targetLocked returns the mutable target state for an event's project/target, creating it
 // (and recording first-seen order) on first reference. Caller holds r.mu.
-func (r *RunRegistry) targetLocked(rs *runState, e journal.Event) *types.StatusTargetRun {
+func (r *RunRegistry) targetLocked(rs *runState, e journal.Event) *daemon.TargetRun {
 	key := targetKey(e.Project, e.Target)
 	t := rs.targets[key]
 	if t == nil {
-		t = &types.StatusTargetRun{Project: e.Project, Target: e.Target}
+		t = &daemon.TargetRun{Project: e.Project, Target: e.Target}
 		rs.targets[key] = t
 		rs.order = append(rs.order, key)
 	}
@@ -146,14 +146,14 @@ func (r *RunRegistry) targetLocked(rs *runState, e journal.Event) *types.StatusT
 
 // Snapshot returns the current live runs, newest-started first, each with its targets in
 // first-seen order. It prunes runs that finished longer than the retention window ago.
-func (r *RunRegistry) Snapshot() []types.StatusRun {
+func (r *RunRegistry) Snapshot() []daemon.Run {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.pruneLocked(r.nowFn())
 
-	out := make([]types.StatusRun, 0, len(r.runs))
+	out := make([]daemon.Run, 0, len(r.runs))
 	for _, rs := range r.runs {
-		run := types.StatusRun{Inv: rs.inv, Trigger: rs.trigger, StartedAt: rs.startedAt}
+		run := daemon.Run{Inv: rs.inv, Trigger: rs.trigger, StartedAt: rs.startedAt}
 		for _, key := range rs.order {
 			run.Targets = append(run.Targets, *rs.targets[key])
 		}
@@ -188,16 +188,16 @@ func targetKey(project, target string) string { return fmt.Sprintf("%s\x00%s", p
 // resultState maps a journal result status onto a target run state. An unrecognized status
 // (e.g. a future journal status this build does not know) maps to the zero/unspecified state
 // rather than being silently shown as PASSED.
-func resultState(status string) types.TargetRunState {
+func resultState(status string) daemon.TargetRunState {
 	switch status {
 	case journal.StatusPass:
-		return types.TargetRunPassed
+		return daemon.TargetRunPassed
 	case journal.StatusCached:
-		return types.TargetRunCached
+		return daemon.TargetRunCached
 	case journal.StatusPermitted:
-		return types.TargetRunPermitted
+		return daemon.TargetRunPermitted
 	case journal.StatusFail:
-		return types.TargetRunFailed
+		return daemon.TargetRunFailed
 	default:
 		return ""
 	}

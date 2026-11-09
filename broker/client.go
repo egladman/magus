@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"maps"
 	"net"
@@ -180,10 +181,10 @@ func (e *HandshakeError) Unwrap() error { return e.Err }
 
 // QueryStatus dials the broker at addr, reads its status and hangs up. The error wraps
 // ErrUnavailable when none answers.
-func QueryStatus(ctx context.Context, addr string) (types.StatusBroker, error) {
+func QueryStatus(ctx context.Context, addr string) (daemon.Broker, error) {
 	c, err := Dial(ctx, addr)
 	if err != nil {
-		return types.StatusBroker{}, err
+		return daemon.Broker{}, err
 	}
 	defer func() { _ = c.Close() }()
 	return c.Status(ctx)
@@ -366,12 +367,12 @@ func (c *Client) StopServices(ctx context.Context) (int, error) {
 
 // Status is the broker's own report: its capacity, every claim holding it, and the
 // services it hosts.
-func (c *Client) Status(ctx context.Context) (types.StatusBroker, error) {
+func (c *Client) Status(ctx context.Context) (daemon.Broker, error) {
 	cn, err := c.connect(ctx)
 	if err != nil {
-		return types.StatusBroker{}, err
+		return daemon.Broker{}, err
 	}
-	var st types.StatusBroker
+	var st daemon.Broker
 	err = cn.roundTrip(ctx, c.next(), typeStatus, nil, typeStatusReply, &st, nil)
 	return st, err
 }

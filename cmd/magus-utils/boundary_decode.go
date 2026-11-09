@@ -352,7 +352,7 @@ func (e *decodeEmitter) emitStruct(entry boundaryType) error {
 	fmt.Fprintln(&body, "\t}")
 	required := requiredMembers[entry.key()]
 	declared := map[string]bool{}
-	for _, bf := range boundaryFields(t) {
+	for _, bf := range emit.ObjectFields(t) {
 		declared[buzzVMFieldName(bf.StructField)] = true
 	}
 	for _, key := range required {
@@ -364,14 +364,14 @@ func (e *decodeEmitter) emitStruct(entry boundaryType) error {
 	fmt.Fprintln(&body, "\tfor _, key := range fields.MapKeys() {")
 	fmt.Fprintln(&body, "\t\titem, _ := fields.MapGet(key)")
 	fmt.Fprintln(&body, "\t\tswitch key {")
-	for _, bf := range boundaryFields(t) {
+	for _, bf := range emit.ObjectFields(t) {
 		f := bf.StructField
 		key := buzzVMFieldName(f)
 		fmt.Fprintf(&body, "\t\tcase %q:\n", key)
 		if slices.Contains(required, key) {
 			fmt.Fprintf(&body, "\t\t\thas%s = true\n", goCase(key))
 		}
-		if err := e.assign(&body, "item", fmt.Sprintf("path+%q", "."+key), "out."+bf.selector, f.Name, f.Type, "\t\t\t"); err != nil {
+		if err := e.assign(&body, "item", fmt.Sprintf("path+%q", "."+key), "out."+bf.Selector, f.Name, f.Type, "\t\t\t"); err != nil {
 			return fmt.Errorf("%s.%s: %w", t.Name(), f.Name, err)
 		}
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // worktreeRepo is a clone of a one-commit origin, so origin/main is a real remote-tracking
@@ -535,4 +536,101 @@ func TestJudgeWorktreeRemove(t *testing.T) {
 	assert.NotEqual(t, "deny", Judge(ctx, Dependencies{}, Request{Input: "git worktree remove " + clean}).Decision)
 	v := Judge(ctx, Dependencies{}, Request{Input: "git worktree remove " + dirty})
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleWorktreeRemove)), unworded(v))
+}
+
+// WorktreePruneSuite judges `git worktree prune`. A gone record is the only
+// pointer to its branch, so prune must not clear one with unreached commits.
+type WorktreePruneSuite struct {
+	suite.Suite
+	repo worktreeRepo
+}
+
+func TestWorktreePruneSuite(t *testing.T) {
+	suite.Run(t, new(WorktreePruneSuite))
+}
+
+func (s *WorktreePruneSuite) SetupTest() {
+	s.repo = newWorktreeRepository(s.T())
+}
+
+func (s *WorktreePruneSuite) TestPassesWhenNoCheckoutIsGone() {
+	s.repo.add("kept")
+	s.Equal(ShellVerdict{}, s.repo.judge("git worktree prune"))
+}
+
+func (s *WorktreePruneSuite) TestDeniesAGoneCheckoutWhoseCommitNoRemoteReaches() {
+	wt := s.repo.add("lost")
+	s.repo.commit(wt)
+	s.Require().NoError(os.RemoveAll(wt))
+
+	v := s.repo.judge("git worktree prune")
+	s.Equal(denyRule{Name: denyRuleWorktreeRemove}, v.Rule)
+	s.Contains(v.Deny, "pruning the worktree records may lose work")
+	full := denial{Say: v.Deny, Why: v.Why}.full()
+	s.Contains(full, "is lost: its directory is deleted")
+	s.Contains(full, "restore with `git worktree add "+wt+" lost`")
+}
+
+func (s *WorktreePruneSuite) TestPassesWhenTheGoneCommitIsOnARemoteRef() {
+	wt := s.repo.add("published")
+	head := s.repo.commit(wt)
+	s.repo.git(s.repo.main, "update-ref", "refs/remotes/origin/published", head)
+	s.Require().NoError(os.RemoveAll(wt))
+
+	s.Equal(ShellVerdict{}, s.repo.judge("git worktree prune"))
+}
+
+type RmOfAWorktreeSuite struct {
+	suite.Suite
+	r worktreeRepo
+}
+
+func TestRmOfAWorktreeSuite(t *testing.T) { suite.Run(t, new(RmOfAWorktreeSuite)) }
+
+func (s *RmOfAWorktreeSuite) SetupTest() {
+	s.r = newWorktreeRepository(s.T())
+}
+
+func (s *RmOfAWorktreeSuite) TestIsJudgedLikeRemove() {
+	r := s.r
+	dirty := r.add("dirty")
+	require.NoError(s.T(), os.WriteFile(filepath.Join(dirty, "a.txt"), []byte("changed\n"), 0o644))
+	assertRemovalDenied(s.T(), r.judge("rm -rf "+dirty), "first a.txt")
+
+	ahead := r.add("ahead")
+	r.commit(ahead)
+	assertRemovalDenied(s.T(), r.judge("rm -r "+ahead), "1 commit(s) on it")
+	assertRemovalDenied(s.T(), r.judge("cd "+r.parent+" && rm -fR ahead"), "1 commit(s) on it")
+	assertRemovalDenied(s.T(), r.judge("rm --recursive -- "+ahead), "1 commit(s) on it")
+	assertRemovalDenied(s.T(), r.judge(`magus buzz -e 'fs\removeAll("`+ahead+`");'`), "1 commit(s) on it")
+}
+
+func (s *RmOfAWorktreeSuite) TestDirectoryHoldingAWorktreeIsJudged() {
+	r := s.r
+	ahead := r.add("ahead")
+	r.commit(ahead)
+
+	assertRemovalDenied(s.T(), r.judge("rm -rf "+r.parent), "it is the main worktree")
+	assertRemovalDenied(s.T(), r.judge("rm -rf "+r.parent+"/a*"), "1 commit(s) on it")
+}
+
+func (s *RmOfAWorktreeSuite) TestCleanLandedWorktreePasses() {
+	wt := s.r.add("done")
+	s.Equal(ShellVerdict{}, s.r.judge("rm -rf "+wt))
+}
+
+func (s *RmOfAWorktreeSuite) TestElsewhereIsNotJudged() {
+	r := s.r
+	ahead := r.add("ahead")
+	r.commit(ahead)
+	require.NoError(s.T(), os.MkdirAll(filepath.Join(ahead, "build"), 0o755))
+
+	for _, command := range []string{
+		"rm -rf " + filepath.Join(ahead, "build"),
+		"rm " + filepath.Join(ahead, "ahead.txt"),
+		`rm -rf "$tmp"`,
+		"rm -rf " + s.T().TempDir(),
+	} {
+		s.Equal(ShellVerdict{}, r.judge(command), "%q", command)
+	}
 }

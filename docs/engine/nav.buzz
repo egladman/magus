@@ -10,9 +10,10 @@ import "markdown";
 import "template";
 import "engine/types" as _;
 import "engine/route" as _;
-import "lib/html" as _;
-import "lib/text" as _;
-import "lib/date" as _;
+import "../libs/ssg/rewrite" as _;
+import "../libs/ssg/text" as _;
+import "../libs/ssg/dom" as _;
+import "../libs/ssg/date" as _;
 
 // Footer crediting the last commit that touched a page's source, falling back to HEAD for
 // a not-yet-committed file. Keying off the file's own history means a page changes when its
@@ -39,9 +40,9 @@ import "lib/date" as _;
 // honest answer there is to say nothing: attributing it to HEAD claims the page
 // changed in a commit that never touched it, which is both false and the drift bug.
 export fun renderCommitFooter(path: str, site: Site) > str !> any {
-    var rec = site.metaCommits[site.metaPrefix + path];
+    var rec = site.inputs.metaCommits[site.inputs.metaPrefix + path];
     if (rec == null) {
-        rec = site.metaCommits[site.metaPrefix + site.outDir + "/" + path];
+        rec = site.inputs.metaCommits[site.inputs.metaPrefix + site.inputs.outDir + "/" + path];
     }
     if (rec == null) { return ""; }
     final parts = rec.split("|");
@@ -51,13 +52,13 @@ export fun renderCommitFooter(path: str, site: Site) > str !> any {
     // "Last updated" line: always-visible provenance. A <small> paragraph so Pico's
     // typography sets the muted look, no custom classes. One inline line (no newlines).
     var line = template\render(`<small>Last updated <time datetime="{{stampAttr}}">{{stampDisplay}}</time> (<a href="{{gh}}/commit/{{full}}" data-tooltip="{{full}}" title="{{full}}">{{short}}</a>)</small>`,
-        {"stampAttr": cStamp, "stampDisplay": formatISO(cStamp), "gh": site.config.repoURL, "full": cFull, "short": cShort});
+        {"stampAttr": cStamp, "stampDisplay": formatISO(cStamp), "gh": site.inputs.config.repoURL, "full": cFull, "short": cShort});
 
     // <details> disclosure of the EARLIER commits (the latest is named above, so it is
     // skipped to avoid a double reference). Semantic markup only. Gated on a real history
     // entry; synthesized or single-commit pages show nothing extra.
-    final histKey = site.metaPrefix + path;
-    final hist = site.metaHistory[histKey];
+    final histKey = site.inputs.metaPrefix + path;
+    final hist = site.inputs.metaHistory[histKey];
     if (hist != null and hist.len() > 0) {
         var earlier: mut [{str: any}] = mut [<{str: any}>];
         foreach (row in hist) {
@@ -76,7 +77,7 @@ export fun renderCommitFooter(path: str, site: Site) > str !> any {
         }
         if (earlier.len() > 0) {
             line = line + template\render(`<details class="recent-changes"><summary>Earlier changes on this page ({{count}})</summary><ul>{{#earlier}}<li><a href="{{gh}}/commit/{{full}}"><code>{{short}}</code></a> <small><time datetime="{{stampAttr}}">{{stampDisplay}}</time></small> - {{subj}}</li>{{/earlier}}</ul><p><small><a href="{{gh}}/commits/{{branch}}/{{histKey}}" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="{{gh}}/blame/{{branch}}/{{histKey}}" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>`,
-                {"count": earlier.len(), "earlier": earlier, "gh": site.config.repoURL, "branch": site.metaBranch, "histKey": histKey});
+                {"count": earlier.len(), "earlier": earlier, "gh": site.inputs.config.repoURL, "branch": site.inputs.metaBranch, "histKey": histKey});
         }
     }
     return line;
@@ -94,10 +95,7 @@ export fun renderTocList(content: str) > str !> any {
     }
     if (nHead < 3) { return ""; }
 
-    final ul = mut [<str>];
-    ul.append("<ul>");
-    var haveLi = false;   // an h2 <li> is open, awaiting its </li>
-    var inSub = false;    // an h3 sublist <ul> is open
+    final items = mut [<TocItem>];
     foreach (line in lines) {
         var lvl = 0;
         if (line.startsWith("<h2 id=\"")) { lvl = 2; }
@@ -116,30 +114,39 @@ export fun renderTocList(content: str) > str !> any {
                     // TOC entries are plain text: drop inline <code>/<strong>/<em> so
                     // nothing in the sidebar looks bold, italic, or code-styled.
                     final plain = stripTags(label);
-                    final link = "<a href=\"#" + id + "\" title=\"" + plain + "\">" + plain + "</a>";
-                    if (lvl == 2) {
-                        if (inSub) { ul.append("</ul>"); inSub = false; }
-                        if (haveLi) { ul.append("</li>"); }
-                        ul.append("<li>" + link);
-                        haveLi = true;
+                    // plain is escaped already: the link shows
+                    // it as markup, the title decoded.
+                    final link = element("a", attrs: [attr("href", value: "#" + id),
+                        attr("title", value: decodeEntities(plain))], children: [markup(plain)]);
+                    final last = items.len() - 1;
+                    if (lvl == 3 and last >= 0 and items[last].section) {
+                        items[last].subs.append(element("li", attrs: [<Attr>], children: [link]));
                     } else {
-                        if (haveLi == false) {
-                            ul.append("<li>" + link + "</li>");
-                        } else {
-                            if (inSub == false) { ul.append("<ul>"); inSub = true; }
-                            ul.append("<li>" + link + "</li>");
-                        }
+                        items.append(mut TocItem{ link = link, section = lvl == 2, subs = mut [<Node>] });
                     }
                 }
             }
         }
     }
-    if (inSub) { ul.append("</ul>"); }
-    if (haveLi) { ul.append("</li>"); }
-    ul.append("</ul>");
+    final top = mut [<Node>];
+    foreach (item in items) {
+        final children = mut [item.link];
+        if (item.subs.len() > 0) {
+            children.append(element("ul", attrs: [<Attr>], children: item.subs));
+        }
+        top.append(element("li", attrs: [<Attr>], children: children));
+    }
     return template\render(`        <p class="toc-title">On this page</p>
         {{{ul}}}
-`, {"ul": ul.join("")});
+`, {"ul": render(element("ul", attrs: [<Attr>], children: top))});
+}
+
+// TocItem is one top-level table-of-contents entry: an h2 with the h3s
+// under it, or an h3 that came before any h2.
+object TocItem {
+    link: Node,
+    section: bool,
+    subs: mut [Node],
 }
 
 // renderSettingsPanel renders the gear button and its dropdown, the rightmost control in
@@ -262,7 +269,7 @@ var _refLoaded = false;
 
 // refDocHtml renders one docs/*.md to content HTML and templatizes its root-relative links.
 export fun refDocHtml(rel: str, site: Site) > str {
-    final f = io\File.open(site.root + "/" + site.docs + "/" + rel, io\FileMode.read);
+    final f = io\File.open(site.inputs.root + "/" + site.inputs.docs + "/" + rel, io\FileMode.read);
     final md = f.readAll();
     f.close();
     final cleanDir = newCleanDirectory(rel, site);
@@ -383,7 +390,7 @@ export fun conventionAnchorsIn(html: str) > {str: bool} {
 export fun renderReferenceDrawer(root: str, canonUrl: str, content: str, site: Site) > str !> any {
     loadReferenceContent(site);
     var glossary = _refGlossary;
-    final joined = site.pageTerms[canonUrl];
+    final joined = site.inputs.pageTerms[canonUrl];
     if (joined != null and joined! != "") {
         var keep: mut {str: bool} = mut {};
         foreach (a in joined!.split("||")) { keep[a] = true; }
@@ -448,7 +455,7 @@ export fun renderSiteFooter(root: str, site: Site) > str !> any {
     <small class="footer-group"><a href="{{gh}}">Source Code</a> &middot; <a href="{{gh}}/blob/{{branch}}/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
 `;
-    return template\render(tmpl, {"root": root, "gh": site.config.repoURL, "branch": site.metaBranch});
+    return template\render(tmpl, {"root": root, "gh": site.inputs.config.repoURL, "branch": site.inputs.metaBranch});
 }
 
 
@@ -479,10 +486,10 @@ export fun renderAnnouncementBar(root: str, site: Site) > str !> any {
     return template\render(tmpl, {
         "ver": ver,
         "released": released,
-        "gh": site.config.repoURL,
+        "gh": site.inputs.config.repoURL,
         "root": root,
-        "post": site.releaseBlogURL,
-        "hasPost": site.releaseBlogURL != "",
+        "post": site.inputs.releaseBlogURL,
+        "hasPost": site.inputs.releaseBlogURL != "",
     });
 }
 

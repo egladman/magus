@@ -163,3 +163,54 @@ func TestFlagHelpFoldsTheNegationAndPrintsTheDefault(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckRefusesAnUndeclaredCommandEffect(t *testing.T) {
+	root := Command{Name: "tool", Children: []Command{{Name: "run", Effect: "writes"}}}
+	err := Check(root)
+	if err == nil || !strings.Contains(err.Error(), `run declares Effect "writes"`) {
+		t.Errorf("want a refusal naming run's Effect, got %v", err)
+	}
+}
+
+func TestCheckRefusesAnUndeclaredFlagEffect(t *testing.T) {
+	flags := []Flag{{Name: "dry-run", Kind: Bool, Default: false, Effect: "none"}}
+	root := Command{Name: "tool", Children: []Command{{Name: "run", Effect: EffectRun, Flags: flags}}}
+	err := Check(root)
+	if err == nil || !strings.Contains(err.Error(), `run --dry-run declares Effect "none"`) {
+		t.Errorf("want a refusal naming --dry-run's Effect, got %v", err)
+	}
+}
+
+func TestCheckAcceptsEveryDeclaredEffect(t *testing.T) {
+	root := Command{Name: "tool"}
+	for _, e := range Effects {
+		root.Children = append(root.Children, Command{Name: string(e), Effect: e})
+	}
+	if err := Check(root); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestStringListKeepsEachValueWhole(t *testing.T) {
+	fs := flag.NewFlagSet("t", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	var got []string
+	StringListVar(fs, &got, "path", "")
+	if err := fs.Parse([]string{"--path", "a.go#Run,Stop", "--path", "b.go"}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"a.go#Run,Stop", "b.go"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if err := fs.Parse([]string{"--path", " "}); err == nil {
+		t.Error("a blank value parsed")
+	}
+}
+
+func TestCheckRefusesAStringListDefault(t *testing.T) {
+	flags := []Flag{{Name: "path", Kind: StringList, Default: []string{"a"}}}
+	err := Check(Command{Name: "tool", Flags: flags})
+	if err == nil || !strings.Contains(err.Error(), "--path is a StringList with a Default") {
+		t.Errorf("want a refusal naming --path's Default, got %v", err)
+	}
+}

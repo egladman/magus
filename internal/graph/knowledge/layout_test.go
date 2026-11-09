@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"maps"
 	"os"
 	"path"
@@ -81,15 +82,15 @@ func TestLayoutFlagsANewOneFileUntestedDigitNamedPackage(t *testing.T) {
 	evidence := "1 Go file, 0 test files and 1 importing directory"
 	assert.Equal(t, map[string][]types.Check{"internal/pkgb3": {
 		{
-			Name: types.CheckPackageFiles, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
+			Name: diff.CheckPackageFiles, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
 			Message: fmt.Sprintf("`internal/pkgb3`: %s; 6 of 6 Go directories beside it hold more than one, as `internal/pkgb` and `internal/pkgc` do", evidence),
 		},
 		{
-			Name: types.CheckPackageTests, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
+			Name: diff.CheckPackageTests, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
 			Message: fmt.Sprintf("`internal/pkgb3`: %s; 6 of 6 Go directories beside it hold a test file, as `internal/pkgb` and `internal/pkgc` do", evidence),
 		},
 		{
-			Name: types.CheckPackageName, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
+			Name: diff.CheckPackageName, Status: types.CheckAdvice, Evidence: types.EvidenceMeasured,
 			Message: fmt.Sprintf("`internal/pkgb3`: %s; 6 of 6 Go directories beside it carry no digit in their names, as `internal/pkgb` and `internal/pkgc` do", evidence),
 		},
 	}}, got)
@@ -126,7 +127,7 @@ func TestLayoutSilentBelowTheGates(t *testing.T) {
 		got := g.Layout(LayoutChange{Gates: testGates(), Added: addedSet(merge)})
 		// 4 of 6 hold two files and a test, which is a split; 6 of 6 carry no digit.
 		require.Len(t, got["internal/merge3"], 1)
-		assert.Equal(t, types.CheckPackageName, got["internal/merge3"][0].Name)
+		assert.Equal(t, diff.CheckPackageName, got["internal/merge3"][0].Name)
 		raised := testGates()
 		raised.MinCohort = 7
 		assert.Nil(t, g.Layout(LayoutChange{Gates: raised, Added: addedSet(merge)}), "a raised cohort gate holds it back")
@@ -142,7 +143,7 @@ func TestLayoutNamesTheOutliers(t *testing.T) {
 	require.Len(t, got["internal/zed"], 1)
 	// The message is pinned by substring below.
 	want := types.Check{
-		Name:     types.CheckPackageFiles,
+		Name:     diff.CheckPackageFiles,
 		Status:   types.CheckAdvice,
 		Evidence: types.EvidenceMeasured,
 		Message:  got["internal/zed"][0].Message,
@@ -181,7 +182,7 @@ func TestLayoutReadsTestFilesByTheirLanguagesConvention(t *testing.T) {
 
 	got := g.Layout(LayoutChange{Gates: testGates(), Added: addedSet(added...)})
 	require.Len(t, got["web/new"], 1)
-	assert.Equal(t, types.CheckPackageTests, got["web/new"][0].Name)
+	assert.Equal(t, diff.CheckPackageTests, got["web/new"][0].Name)
 	assert.Contains(t, got["web/new"][0].Message, "3 TypeScript files, 0 test files")
 }
 

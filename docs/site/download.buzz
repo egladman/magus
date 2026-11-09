@@ -15,7 +15,7 @@ namespace download;
 import "fs";
 import "io";
 import "template";
-import "lib/url" as _;
+import "../libs/ssg/urls" as _;
 import "engine/types" as _;
 import "engine/route" as _;
 import "engine/page" as _;
@@ -72,8 +72,8 @@ tar -xzf "magus_windows_amd64_static.tar.gz" magus.exe</code></pre>
     final title = "Download";
     final desc = "Install magus on macOS, Linux or Windows. One binary, no runtime, and the exact command for the machine you are on.";
     final doc = renderPage(title, desc, html, DOWNLOAD_SRC, "", "download/", "", mut [], "", site);
-    fs\mkdirAll(site.outDir + "/download");
-    final of = io\File.open(site.outDir + "/download/index.html", io\FileMode.write);
+    fs\mkdirAll(site.inputs.outDir + "/download");
+    final of = io\File.open(site.inputs.outDir + "/download/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
     site.addRecord("download/", title, desc,

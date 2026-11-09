@@ -9,8 +9,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module flags -lang buzz -out ../internal/interp/bindings/gen/flags.go -pkg bindgen
-
 // Flags is the "flags" host module: argv parsing for a script that receives one.
 //
 // A Buzz script run by `magus buzz <file> -- <args>` gets its argv as a list and, before
@@ -45,13 +43,13 @@ var Flags = Module{
 				"absent or given an empty value: a workflow passing an unset variable " +
 				"(`--issue \"$ISSUE\"`) is refused rather than read as a choice.",
 			Args: []Arg{
-				{Name: "argv", Type: TypeStringSlice},
-				{Name: "switches", Type: TypeStringSlice},
-				{Name: "valued", Type: TypeStringSlice},
-				{Name: "required", Type: TypeStringSlice, Optional: true},
-				{Name: "repeated", Type: TypeStringSlice, Optional: true},
+				{Name: "argv"},
+				{Name: "switches"},
+				{Name: "valued"},
+				{Name: "required", Optional: true},
+				{Name: "repeated", Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "FlagParse"}},
+			Returns: []Ret{{Object: "FlagParse"}},
 			Raises:  true,
 			Impl:    FlagsParse,
 		},

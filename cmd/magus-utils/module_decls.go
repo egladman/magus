@@ -72,6 +72,7 @@ func runModuleDecls(args []string) error {
 // returns reference (leaf-first, since a field referencing an object needs that
 // object declared already), then an extern per method.
 func renderModuleDecls(mod std.Module) (string, error) {
+	mod = mod.WithTags()
 	records, err := renderRecordDecls(mod)
 	if err != nil {
 		return "", err
@@ -134,6 +135,7 @@ func renderModuleDecls(mod std.Module) (string, error) {
 // renderRecordDecls renders the enums and object mirrors of one module's declarations,
 // the part a session executes so a script can construct them.
 func renderRecordDecls(mod std.Module) (string, error) {
+	mod = mod.WithTags()
 	var b strings.Builder
 	mirrors, err := collectMirrors(mod)
 	if err != nil {
@@ -258,7 +260,7 @@ func protocolMethodSig(m std.Method) (string, error) {
 
 // externDecl renders one method as `export extern fun name(params) > ret;`.
 //
-// A variadic method gets a COMMENT instead of a declaration. Buzz has no variadic
+// A variadic method is declared as an `any` value. Buzz has no variadic
 // parameter, and the call it has to accept (fs\join("a", "b", "c")) cannot be
 // spelled with a fixed parameter list. Declaring it as a list parameter would reject
 // every existing call site, so the method keeps today's untyped behavior and says so
@@ -270,18 +272,21 @@ func externDecl(m std.Method) (string, error) {
 	}
 	for _, a := range m.Args {
 		if a.Variadic {
-			// Declared as a VALUE, not a fun. Buzz has no variadic parameter, so no
-			// `extern fun` can accept fs\join("a", "b", "c"); a list parameter would
-			// reject every existing call site. Declaring it `any` keeps the call
-			// untyped, which is what this always did, while still putting the NAME in
-			// the namespace: emitting only a comment left the member undeclared, and an
-			// undeclared member is indistinguishable from one that does not exist.
 			return fmt.Sprintf("// %s is variadic; Buzz has no variadic parameter, so it stays untyped.\nexport final %s: any = null;\n", name, name), nil
 		}
 	}
 
 	params := make([]string, 0, len(m.Args))
+	sig := m.Signature()
 	for i, a := range m.Args {
+		if sig != nil && sig.In(i+1).Kind() == reflect.Func {
+			typ, err := callbackBuzzType(sig.In(i + 1))
+			if err != nil {
+				return "", fmt.Errorf("arg %s: %w", a.Name, err)
+			}
+			params = append(params, fmt.Sprintf("%s: %s", a.Name, typ))
+			continue
+		}
 		typ, err := buzzArgType(a.Type)
 		if err != nil {
 			return "", fmt.Errorf("arg %s: %w", a.Name, err)
@@ -295,12 +300,6 @@ func externDecl(m std.Method) (string, error) {
 		// enforce, and `str` enforces nothing.
 		if a.Enum != "" {
 			typ = a.Enum
-		}
-		if a.Func != "" {
-			if a.Type != std.TypeFunc {
-				return "", fmt.Errorf("arg %s: Func is set on a %v argument, it types only a TypeFunc", a.Name, a.Type)
-			}
-			typ = a.Func
 		}
 		// A byte-slice ARGUMENT accepts a str as well as a list: gen.ByteSlice decodes
 		// either, which is what lets a SigV4 chain feed a str secret into the same call
@@ -388,10 +387,6 @@ func buzzArgType(t std.TypeTag) (string, error) {
 		return "{str: str}", nil
 	case std.TypeAnyMap:
 		return "{str: any}", nil
-	case std.TypeFunc:
-		// A Buzz function type fixes its arity and parameter types, and a TypeFunc
-		// Arg carries neither; the host checks the callable when it is called.
-		return "any", nil
 	case std.TypeAny:
 		return "any", nil
 	default:
@@ -472,27 +467,18 @@ func buzzZero(t std.TypeTag) (string, error) {
 		return "0.0", nil
 	case std.TypeBool:
 		return "false", nil
-	case std.TypeStringSlice:
-		return "[<str>]", nil
-	case std.TypeFloatSlice:
-		return "[<double>]", nil
-	case std.TypeByteSlice:
-		return "[<int>]", nil
-	case std.TypeStringSliceSlice:
-		return "[<[str]>]", nil
-	case std.TypeStringMapMap:
-		return "{<str: {str: str}>}", nil
-	case std.TypeStringMap:
-		return "{<str: str>}", nil
-	case std.TypeAnyMap:
-		return "{<str: any>}", nil
 	case std.TypeAny:
 		// The one tag whose zero really is null: `any` is nullable, so `x: any = null`
 		// annotates cleanly.
 		return "null", nil
-	default:
+	}
+	// A list or map zero is its annotation as an empty literal.
+	typ, err := buzzArgType(t)
+	if err != nil || (typ[0] != '[' && typ[0] != '{') {
 		return "", fmt.Errorf("optional arg of type tag %d has no expressible Buzz default", t)
 	}
+	last := len(typ) - 1
+	return typ[:1] + "<" + typ[1:last] + ">" + typ[last:], nil
 }
 
 // buzzReturnType renders a method's Buzz return annotation.
@@ -675,7 +661,7 @@ func collectEnums(mod std.Module, mirrors []string) ([]boundaryEnum, error) {
 			}
 		}
 	}
-	for _, e := range boundaryEnums {
+	for _, e := range boundaryEnumList() {
 		if e.Module == mod.Name {
 			if err := add(e.Name, mod.Name); err != nil {
 				return nil, err
@@ -769,7 +755,7 @@ func sortedMethods(mod std.Module) []std.Method {
 // stated rather than relied upon.
 func referencedObjects(rt reflect.Type) []string {
 	var out []string
-	for _, f := range boundaryFields(rt) {
+	for _, f := range emit.ObjectFields(rt) {
 		t := f.Type
 		for t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Pointer || t.Kind() == reflect.Map {
 			t = t.Elem()

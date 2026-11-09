@@ -4,3 +4,13 @@ A series of exactly three twice in a text, or once in the lead's first sentence.
 Reviewers can now see the cache, the graph, and the log in one view. The old panel hid all of it.
 -- pass/review-summary --
 The loader now retries the fetch. It reads the cache, the graph, the log, and the index, then stops.
+-- hit/review-summary --
+Reviewed the release plan, rewrote the config parser, and shipped the fix. The notes follow.
+Ran the full build, fixed the lint warnings and tagged the release. The notes follow.
+-- pass/review-summary --
+The loader now retries. It reviewed the release plan, rewrote the config parser, and shipped the fix.
+We reviewed the release plan, rewrote the config parser, ran the full build, and shipped the fix.
+-- hit/change-description whole --
+fix(cache): read the key once
+
+The loader reads the cache, the graph and the log. We moved the docs, rewrote the parser for Sydney and shipped the fix.

@@ -2,25 +2,24 @@ package changeset
 
 import (
 	"fmt"
-
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/diff"
 )
 
 // UnreadHunks lists the hunks of files that no read mark covers, in patch order. A mark
 // covers a hunk by digest, so an edit that changes a hunk's lines or its context makes it
 // unread again, and the same hunk body in two files is two digests.
-func UnreadHunks(files []FileHunks, viewed []string) []types.DiffHunkRef {
+func UnreadHunks(files []FileHunks, viewed []string) []diff.HunkRef {
 	read := make(map[string]struct{}, len(viewed))
 	for _, d := range viewed {
 		read[d] = struct{}{}
 	}
-	var out []types.DiffHunkRef
+	var out []diff.HunkRef
 	for _, f := range files {
 		for _, h := range f.Hunks {
 			if _, ok := read[h.Digest]; ok {
 				continue
 			}
-			out = append(out, types.DiffHunkRef{Path: f.Path, Index: h.Index, Digest: h.Digest})
+			out = append(out, diff.HunkRef{Path: f.Path, Index: h.Index, Digest: h.Digest})
 		}
 	}
 	return out

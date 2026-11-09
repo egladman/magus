@@ -150,6 +150,9 @@ them and magus describe job prints one job's terms.
 **--[no-]fix** (default: off)
 : Make every edit a problem's fix names without judgment, as job fork --fix does, before applying the records
 
+**--release-write-path** *\<file\>#\<declaration\>*
+: A write path to drop from the job, keeping its goals and check; repeatable or comma-separated, and a \<file\>#\<declaration\> claim is one path
+
 **--[no-]stdin** (default: off)
 : Read the records from stdin instead of a file, as job fork --stdin does
 

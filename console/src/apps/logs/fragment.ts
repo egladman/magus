@@ -26,7 +26,10 @@ function gunzipFragment(b64url: string): ReadableStream<Uint8Array> {
 // here round-trips through the same decode path. Local only: the Share button never leaves
 // the page. base64url = RawURLEncoding (base64, then +/- and //_ swaps, no "=" padding).
 export async function encodeFragmentBytes(bytes: Uint8Array): Promise<string> {
-  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"));
+  // A Blob takes only ArrayBuffer-backed bytes; protobuf's may be shared.
+  const stream = new Blob([new Uint8Array(bytes)])
+    .stream()
+    .pipeThrough(new CompressionStream("gzip"));
   const gz = new Uint8Array(await new Response(stream).arrayBuffer());
   let bin = "";
   for (const byte of gz) bin += String.fromCharCode(byte);

@@ -86,7 +86,8 @@ func TestMonitorDuplicateAndPile(t *testing.T) {
 	assert.NotEqual(t, "deny", watch("w1", "tail -f more.log").Decision)
 	fifth := watch("w1", "tail -f last.log")
 	assert.Equal(t, types.GuardJudgment{Decision: "deny", Rule: string(denyRuleMonitorPile)}, judgedAs(fifth))
-	assert.Contains(t, fifth.Reason, hint.JobWait.With("<job>"))
+	assert.Contains(t, fifth.Reason, hint.DescribeJob.With("<job>"))
+	assert.NotContains(t, fifth.Reason, "job wait", "another agent's job is read once, not waited on")
 }
 
 func TestMonitorOnABackgroundedCommandsProcessIsADuplicate(t *testing.T) {

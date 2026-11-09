@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"strings"
 
 	"github.com/egladman/magus/types"
@@ -27,7 +28,7 @@ const (
 // symbol index it is silent; a language whose reader renders no parameters yields no knob.
 type couplingCheck struct{}
 
-func (couplingCheck) name() string { return types.CheckSharedLoop }
+func (couplingCheck) name() string { return diff.CheckSharedLoop }
 
 func (couplingCheck) run(x *namingIndex) []finding {
 	only := map[string]bool{}

@@ -1,20 +1,31 @@
 package guard
 
 import (
+	"context"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
+	"path"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/cmdline"
+	"github.com/egladman/magus/libs/testkit/register"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestEveryRuleIsCatalogued is what makes the catalog worth reading: a rule that fires
@@ -481,4 +492,416 @@ func classifySite(fset *token.FileSet, value ast.Expr) ruleSite {
 		s.constant = v.Name
 	}
 	return s
+}
+
+// A remedy the same guard refuses is the retry loop its rule exists to end.
+// Each rule serving one has a method here, named for the rule.
+
+type remedyContractSuite struct{ suite.Suite }
+
+func TestRemedyContract(t *testing.T) { suite.Run(t, new(remedyContractSuite)) }
+
+// servedFleet is every role a next is served to and what judges them.
+func servedFleet(t *testing.T) (context.Context, []servedRole, Dependencies) {
+	t.Helper()
+	ctx, roles := servedRoles(t)
+	deps := withRepositoryPolicy(t, strict(loadingWorkspace(t)))
+	deps.Spells = testDependencies().Spells
+	deps.GraphIDs = diagnosticGraph
+	// Lowered so a bound worker is served the raw-tool remedy.
+	deps.Builtins[string(denyRuleWorkerCheckOnly)] = builtin.Setting{
+		Decision: builtin.Advise,
+	}
+	return ctx, roles, deps
+}
+
+// withRepositoryPolicy layers the root magusfile's rules over deps, as the
+// hook loads them.
+func withRepositoryPolicy(t *testing.T, deps Dependencies) Dependencies {
+	t.Helper()
+	rules := workspacePolicy(t)
+	deps.ShellRules, deps.ShellDialect = rules.ShellRules()
+	deps.SpawnRule = rules.SpawnRule()
+	deps.CommandRule = rules.CommandRule()
+	deps.WriteRule = rules.WriteRule()
+	deps.StopRule = rules.StopRule()
+	for name, setting := range rules.Builtins() {
+		deps.Builtins[name] = setting
+	}
+	return deps
+}
+
+// remedyCase returns a refused call and the remedy an unbound caller gets.
+// want is "" when the remedy depends on what the fixture recorded.
+type remedyCase func(t *testing.T, at location) (call Request, want string)
+
+func refused(command, want string) remedyCase {
+	return func(*testing.T, location) (Request, string) {
+		return Request{Input: command}, want
+	}
+}
+
+// contract judges each case as every role and grades what each is served.
+func (s *remedyContractSuite) contract(rule denyRuleName, cases ...remedyCase) {
+	s.Require().NotEmpty(cases)
+	ctx, roles, deps := servedFleet(s.T())
+	for i, c := range cases {
+		for _, role := range roles {
+			s.Run(fmt.Sprintf("%d/%s", i, role.name), func() {
+				t := s.T()
+				call, want := c(t, hookLocation(ctx, Dependencies{}))
+				call = servedAs(call, role)
+				call.DryRun = true
+				v := Judge(ctx, deps, call)
+				if role.call.Host == "" {
+					require.Equal(t, string(rule), v.Rule, "%q:\n%s", call.Input, v.Reason)
+					require.NotEmpty(t, v.Next, "unbound, %q serves its remedy", call.Input)
+					if want != "" {
+						assert.Equal(t, want, v.Next[0].Run)
+					}
+				}
+				for _, n := range v.Next {
+					assert.Equal(t, hint.DenyRemedyPrefix+string(rule), n.ID)
+					assertRunsOnTheTree(t, n.Run)
+					gradeServed(t, ctx, deps, call, role.name, n.ID, n.Run)
+				}
+			})
+		}
+	}
+}
+
+// assertRunsOnTheTree fails t unless run parses as shell and each magus
+// invocation in it names a command the tree declares.
+func assertRunsOnTheTree(t *testing.T, run string) {
+	t.Helper()
+	assert.Empty(t, placeholderRe.FindString(run), "a remedy carries no placeholder: %q", run)
+	cmds, ok := ParseCommands(run)
+	require.True(t, ok && len(cmds) > 0, "the remedy does not parse: %q", run)
+	for _, c := range cmds {
+		if path.Base(filepath.ToSlash(c.Name)) != "magus" {
+			continue
+		}
+		assert.Empty(t, treeMiss(c.Args), "in %q", run)
+	}
+}
+
+// treeMiss names the magus argv word the tree has no command for. It is ""
+// past a leaf or a command taking operands. Only the root's flags take a
+// value before the subcommand.
+func treeMiss(args []string) string {
+	node := commands.Root
+	for i := 0; i < len(args); i++ {
+		word := args[i]
+		if word == "--" {
+			break
+		}
+		if strings.HasPrefix(word, "-") {
+			flag := strings.TrimLeft(word, "-")
+			if node.Name == commands.Root.Name && !strings.Contains(word, "=") && takesValue(node, flag) {
+				i++
+			}
+			continue
+		}
+		if len(node.Children) == 0 || len(node.Operands) > 0 {
+			return ""
+		}
+		child, ok := childNamed(node, word)
+		if !ok {
+			return fmt.Sprintf("magus has no command %q under %q", word, node.Name)
+		}
+		node = child
+	}
+	if len(node.Children) > 0 && len(node.Operands) == 0 {
+		return fmt.Sprintf("%q stops at %q, which needs a subcommand", strings.Join(args, " "), node.Name)
+	}
+	return ""
+}
+
+func childNamed(node cmdline.Command, name string) (cmdline.Command, bool) {
+	for _, c := range node.Children {
+		if c.Name == name {
+			return c, true
+		}
+	}
+	return cmdline.Command{}, false
+}
+
+func takesValue(node cmdline.Command, name string) bool {
+	for _, f := range node.Flags {
+		if f.Name == name {
+			return f.Kind != cmdline.Bool
+		}
+	}
+	return false
+}
+
+func (s *remedyContractSuite) TestBusyWait() {
+	s.contract(denyRuleBusyWait, func(t *testing.T, at location) (Request, string) {
+		recordRun(t, at.workspace, ".", "test", 5*time.Minute)
+		return Request{Input: "until ./magus run test .; do sleep 30; done"}, ""
+	})
+}
+
+func (s *remedyContractSuite) TestChainedRun() {
+	s.contract(denyRuleChainedRun,
+		refused("magus run lint . && magus run lint docs", "magus run lint . | magus run lint docs"),
+		refused("magus run generate:rw . && magus run test .", "magus run generate:rw . | magus run test ."),
+	)
+}
+
+func (s *remedyContractSuite) TestGrepReader() {
+	s.contract(denyRuleGrepReader, func(t *testing.T, at location) (Request, string) {
+		src := "package api\n\n// HandleRequest serves one request.\nfunc HandleRequest() {}\n"
+		require.NoError(t, os.WriteFile(filepath.Join(at.workspace, "handler.go"), []byte(src), 0o644))
+		t.Chdir(at.workspace)
+		return Request{Input: "grep -n 'func HandleRequest' -A20 handler.go"}, "sed -n 3,4p handler.go"
+	})
+}
+
+// TestLeaseClaim grades the claim line for the one caller it is served to: the
+// worker whose write it refused.
+func (s *remedyContractSuite) TestLeaseClaim() {
+	t := s.T()
+	ctx, root, row := leaseClaimFixture(t)
+	deps := withRepositoryPolicy(t, strict(Dependencies{}))
+	worker := Request{Host: "claude-code", Session: "5d1c", Lease: row.ID, Dir: root, DryRun: true}
+	write := worker
+	write.Input = hookJSON(t, map[string]any{
+		"session_id": "5d1c", "hook_event_name": "PreToolUse", "tool_name": "Write", "cwd": root,
+		"tool_input": map[string]any{"file_path": filepath.Join(root, "internal/commands/registry.go"), "content": "package x\n"},
+	})
+	v := Judge(ctx, deps, write)
+	require.Equal(t, string(denyRuleLeaseClaim), v.Rule, v.Reason)
+	require.Len(t, v.Next, 1)
+	assertRunsOnTheTree(t, v.Next[0].Run)
+	gradeServed(t, ctx, deps, worker, "lease holder", v.Next[0].ID, v.Next[0].Run)
+}
+
+func (s *remedyContractSuite) TestMagusTimeout() {
+	s.contract(denyRuleMagusTimeout,
+		refused("timeout 600 magus run lint .", "magus run --timeout 10m lint ."),
+		refused("timeout 60 magus ls jobs", "magus ls jobs"),
+	)
+}
+
+func (s *remedyContractSuite) TestOutputPipe() {
+	s.contract(denyRuleOutputPipe,
+		refused("magus run lint . | tail -20", "magus run lint . -s"),
+		refused("magus ls jobs | wc -l", `magus ls jobs -o "template={{len .jobs}}"`),
+	)
+}
+
+func (s *remedyContractSuite) TestOutputRedirect() {
+	s.contract(denyRuleOutputRedirect,
+		refused("magus ls jobs -o json > jobs.json", "magus ls jobs -o json --tee jobs.json"),
+		refused("magus ls jobs > jobs.txt", "magus ls jobs -o json --tee jobs.txt"),
+		refused("magus run lint . > /dev/null 2>&1", "magus run lint . --silent"),
+	)
+}
+
+func (s *remedyContractSuite) TestProcessPoll() {
+	s.contract(denyRuleProcessPoll, refused("pgrep -fl magus", "magus server status"))
+}
+
+func (s *remedyContractSuite) TestProcessSignal() {
+	s.contract(denyRuleProcessSignal, refused("pkill -f 'magus job fork'", "magus server status"))
+}
+
+func (s *remedyContractSuite) TestRawTool() {
+	s.contract(denyRuleRawTool, func(t *testing.T, _ location) (Request, string) {
+		spellName := register.Spell(t, "guard-remedy-test",
+			spells.WithTargets("check"),
+			spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
+				return "remedy-tool", []string{"check"}, target == "check", nil
+			}),
+		)
+		return Request{Input: "remedy-tool check"}, fmt.Sprintf("magus run %s::check", spellName)
+	})
+}
+
+func (s *remedyContractSuite) TestSiblingCheckout() {
+	sibling := func(verb string) remedyCase {
+		return func(t *testing.T, _ location) (Request, string) {
+			main, wt := twoCheckouts(t)
+			require.NoError(t, os.WriteFile(filepath.Join(wt, "magus"), []byte("#!/bin/sh\n"), 0o755))
+			t.Chdir(main)
+			// Relative: the fixture's temp dir is no throwaway copy.
+			return Request{Input: fmt.Sprintf("cd ../%s && ./magus %s harness/worker", filepath.Base(wt), verb)},
+				fmt.Sprintf("%s --root %s %s harness/worker", filepath.Join(wt, "magus"), wt, verb)
+		}
+	}
+	s.contract(denyRuleSiblingCheckout, sibling("describe job"), sibling("job exec"))
+}
+
+func (s *remedyContractSuite) TestSleepPoll() {
+	s.contract(denyRuleSleepPoll, func(t *testing.T, at location) (Request, string) {
+		recordRun(t, at.workspace, ".", "test", 80*time.Second)
+		return Request{Input: "sleep 30; ./magus server status; ./magus run test ."}, ""
+	})
+}
+
+func (s *remedyContractSuite) TestStageAll() {
+	s.contract(denyRuleStageAll,
+		refused("git add -A", "magus vcs ls-files --include-untracked --include-generated -o name | git add --pathspec-from-file=-"),
+		refused("git add -A -- cmd/magus/main.go", "magus vcs ls-files --include-untracked --include-generated cmd/magus/main.go -o name | git add --pathspec-from-file=-"),
+	)
+}
+
+func (s *remedyContractSuite) TestSymbolSearch() {
+	s.contract(denyRuleSymbolSearch, refused("grep -rn MGS2011 docs/", "magus explain diagnostic:MGS2011"))
+}
+
+func (s *remedyContractSuite) TestWorktreeRemove() {
+	s.contract(denyRuleWorktreeRemove,
+		func(t *testing.T, at location) (Request, string) {
+			r := newWorktreeRepository(t)
+			wt, row := r.workerWorktree(types.StatePass)
+			row.ID = "remedy-lock"
+			seedRemedyJob(t, at, row)
+			writeSpawnedAgent(hint.NewGate(at.cacheDir, FactsKey("claude", "remedy")), "agent-remedy", spawnedAgent{Description: "root/worker remedy-lock"})
+			return Request{Input: "git worktree remove " + wt, Dir: r.main, Host: "claude", Session: "remedy"}, "git worktree remove -f -f " + wt
+		},
+		func(t *testing.T, at location) (Request, string) {
+			r := newWorktreeRepository(t)
+			wt, row := r.workerWorktree(types.StateExited)
+			row.ID, row.Result = "remedy-wait", &types.JobResult{}
+			seedRemedyJob(t, at, row)
+			return Request{Input: "git worktree remove " + wt, Dir: r.main}, hint.JobWait.With("remedy-wait")
+		},
+	)
+}
+
+// TestEveryRemedyRuleHasAContract reads the rules that serve a remedy out of
+// the source, so a rule that starts serving one fails until a method drives it.
+func TestEveryRemedyRuleHasAContract(t *testing.T) {
+	t.Parallel()
+	serving := remedyRules(t)
+	require.NotEmpty(t, serving, "the sweep found no rule serving a remedy")
+
+	methods := map[string]bool{}
+	typ := reflect.TypeFor[*remedyContractSuite]()
+	for i := range typ.NumMethod() {
+		if name := typ.Method(i).Name; strings.HasPrefix(name, "Test") {
+			methods[name] = true
+		}
+	}
+	contracted := map[string]bool{}
+	for _, e := range ruleDocRegistry {
+		method := "Test" + pascalCase(e.doc.Name)
+		contracted[method] = true
+		if serving[e.doc.Name] {
+			assert.Truef(t, methods[method], "%q serves a remedy and remedyContractSuite has no %s", e.doc.Name, method)
+		}
+	}
+	for method := range methods {
+		assert.Truef(t, contracted[method], "remedyContractSuite.%s names no catalogued rule", method)
+	}
+}
+
+// remedyRules names every rule a remedy is built under in the package source.
+// That is a rule handed to a NextStep constructor taking a denyRuleName, or
+// one appended to hint.DenyRemedyPrefix.
+func remedyRules(t *testing.T) map[string]bool {
+	t.Helper()
+	src := parseRuleSource(t)
+	parsed := parsePackageSource(t)
+	constructors := remedyConstructors(parsed)
+	rule := func(expr ast.Expr) (string, bool) {
+		if conv, ok := expr.(*ast.CallExpr); ok && len(conv.Args) == 1 {
+			if fun, ok := conv.Fun.(*ast.Ident); ok && fun.Name == "string" {
+				expr = conv.Args[0]
+			}
+		}
+		id, ok := expr.(*ast.Ident)
+		if !ok {
+			return "", false
+		}
+		name, ok := src.values[id.Name]
+		return name, ok
+	}
+	out := map[string]bool{}
+	for _, f := range parsed {
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.CallExpr:
+				var name string
+				switch fun := n.Fun.(type) {
+				case *ast.Ident:
+					name = fun.Name
+				case *ast.SelectorExpr:
+					name = fun.Sel.Name
+				}
+				for _, i := range constructors[name] {
+					if i < len(n.Args) {
+						if r, ok := rule(n.Args[i]); ok {
+							out[r] = true
+						}
+					}
+				}
+			case *ast.BinaryExpr:
+				sel, ok := n.X.(*ast.SelectorExpr)
+				if !ok || sel.Sel.Name != "DenyRemedyPrefix" {
+					return true
+				}
+				if r, ok := rule(n.Y); ok {
+					out[r] = true
+				}
+			}
+			return true
+		})
+	}
+	return out
+}
+
+func parsePackageSource(t *testing.T) []*ast.File {
+	t.Helper()
+	files, err := filepath.Glob("*.go")
+	require.NoError(t, err)
+	fset := token.NewFileSet()
+	var parsed []*ast.File
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, name, nil, 0)
+		require.NoError(t, err, "parse %s", name)
+		parsed = append(parsed, f)
+	}
+	return parsed
+}
+
+// remedyConstructors maps each function building a NextStep under a rule to
+// the index of every denyRuleName parameter it takes.
+func remedyConstructors(parsed []*ast.File) map[string][]int {
+	constructors := map[string][]int{"NextForDenyRemedy": {0}, "NextForDenyRemedyPipeline": {0}}
+	for _, f := range parsed {
+		for _, decl := range f.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Type.Results == nil || !mentionsNextStep(fn.Type.Results) {
+				continue
+			}
+			i := 0
+			for _, field := range fn.Type.Params.List {
+				for range max(1, len(field.Names)) {
+					if isDenyRuleName(field.Type) {
+						constructors[fn.Name.Name] = append(constructors[fn.Name.Name], i)
+					}
+					i++
+				}
+			}
+		}
+	}
+	return constructors
+}
+
+// mentionsNextStep reports whether a result list carries a types.NextStep.
+func mentionsNextStep(results *ast.FieldList) bool {
+	found := false
+	ast.Inspect(results, func(n ast.Node) bool {
+		if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == "NextStep" {
+			found = true
+		}
+		return !found
+	})
+	return found
 }

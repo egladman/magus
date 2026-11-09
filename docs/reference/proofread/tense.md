@@ -29,14 +29,14 @@ The code is `PRF5004`. The decision depends on the kind of text judged:
 | Kind                 | Default |
 | -------------------- | ------- |
 | `reference`          | off     |
-| `guide`              | off     |
 | `change-description` | off     |
 | `agent-brief`        | off     |
+| `agent-compact`      | off     |
+| `guide`              | off     |
 | `commit-message`     | off     |
 | `issue`              | off     |
 | `release-notes`      | off     |
 | `changelog`          | off     |
-| `agent-compact`      | off     |
 | `stylesheet`         | off     |
 
 House style ships `off`: the rule encodes one repository's conventions, not

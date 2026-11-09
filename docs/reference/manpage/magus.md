@@ -186,6 +186,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_CI_MACHINE_CORES**
 : One runner's CPU cores. Config file key: **ci.machine.cores**.
 
+**MAGUS_CI_REMOTE_GATE**
+: Names the CI that runs \`ci\` on every pushed commit, such as github-actions. Set, the push gate admits a push with no local run. Config file key: **ci.remote_gate**.
+
 **MAGUS_VOLATILITY_ENABLED**
 : The master switch for volatility detection and auto-retry; false disables all retry logic (default: true). Config file key: **volatility.enabled**.
 

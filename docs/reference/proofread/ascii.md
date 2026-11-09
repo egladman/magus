@@ -30,18 +30,18 @@ The code is `PRF5003`. The decision depends on the kind of text judged:
 | -------------------- | ------- |
 | `reference`          | off     |
 | `principle`          | off     |
-| `guide`              | off     |
 | `change-description` | off     |
 | `agent-brief`        | off     |
+| `agent-compact`      | off     |
+| `guide`              | off     |
+| `review-summary`     | off     |
+| `review-inline`      | off     |
+| `review-reply`       | off     |
 | `commit-message`     | off     |
 | `issue`              | off     |
 | `release-notes`      | off     |
 | `changelog`          | off     |
-| `review-summary`     | off     |
-| `review-inline`      | off     |
-| `review-reply`       | off     |
 | `agent-reply`        | off     |
-| `agent-compact`      | off     |
 
 House style ships `off`: the rule encodes one repository's conventions, not
 a rule of plain writing. A repository turns it on in its decisions table.

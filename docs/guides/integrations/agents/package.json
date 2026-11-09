@@ -9,7 +9,7 @@
     "@cursor/sdk": "1.0.31",
     "@opencode-ai/plugin": "1.18.30",
     "bun-types": "1.2.23",
-    "typescript": "5.8.3",
+    "typescript": "7.0.2",
     "zod": "3.25.76",
     "zod-to-json-schema": "3.25.2"
   }

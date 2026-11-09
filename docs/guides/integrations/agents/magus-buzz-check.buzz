@@ -28,6 +28,7 @@
 import "io";
 import "flags";
 import "fs";
+import "path";
 import "encoding/json";
 import "proc";
 import "std";
@@ -83,12 +84,6 @@ fun unjudged(event: any?) > str {
     return "{source} names no written file, so nothing was checked. Wire this hook after the tools that write a file.";
 }
 
-// relativeTo is path under root, or path itself when it is already relative or elsewhere.
-fun relativeTo(path: str, root: str) > str {
-    if (root != "" and path.startsWith(root + "/")) { return path.sub(root.len() + 1, len: path.len() - root.len() - 1); }
-    return path;
-}
-
 // fileWorkspace is the workspace an absolute path lies in, else session.
 // A subagent's cwd is the session's checkout while it writes in its own.
 fun fileWorkspace(path: str, session: str) > str {
@@ -135,16 +130,16 @@ fun checkAll(bin: str, written: [str], root: str) > [str] {
             + "so {buzz.join(", ")} went unchecked. {hook\magusFix(root)}"];
     }
     final failures = mut [<str>];
-    foreach (path in buzz) {
-        final fileRoot = fileWorkspace(path, session: root);
-        final rel = relativeTo(path, root: fileRoot);
+    foreach (file in buzz) {
+        final fileRoot = fileWorkspace(file, session: root);
         final check = mut ["buzz", "--check"];
-        if (embedded(rel)) { check.append("--embedded"); }
-        check.append(rel);
         final dir = if (fileRoot != "") fileRoot else ".";
         var result: proc\ExecResult? = null;
         var raised = "";
         try {
+            final rel = if (path\within(fileRoot, path: file)) path\rel(fileRoot, target: file) else file;
+            if (embedded(rel)) { check.append("--embedded"); }
+            check.append(rel);
             result = proc\exec(bin, args: check, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
         } catch (err: any) {
             raised = "{err}";
@@ -183,12 +178,12 @@ test "an event that names no written file is answered with a note naming its too
 test "the engine's own Buzz is checked embedded and everything else strict" {
     std\assert(embedded("spells/harness/codex/spell.buzz") and embedded("hack/dev/a.buzz") and embedded("magusfiles/a.buzz"), message: "spells and scripts");
     std\assert(!embedded("docs/guides/integrations/agents/magus-command.buzz"), message: "a standalone script is strict");
-    std\assert(relativeTo("/r/spells/a.buzz", root: "/r") == "spells/a.buzz", message: "under the root");
+    std\assert((path\rel("/r", target: "/r/spells/a.buzz") catch "") == "spells/a.buzz", message: "under the root");
 }
 
 test "a written file is read against its own workspace, not the session's" {
     final spell = "{hook\workspaceRoot()}/spells/golang/spell.buzz";
-    final rel = relativeTo(spell, root: fileWorkspace(spell, session: "/elsewhere"));
+    final rel = path\rel(fileWorkspace(spell, session: "/elsewhere"), target: spell) catch spell;
     std\assert(embedded(rel), message: rel);
     std\assert(fileWorkspace("spells/a.buzz", session: "/elsewhere") == "/elsewhere", message: "a relative path stays the session's");
     std\assert(fileWorkspace("/nowhere/a.buzz", session: "/elsewhere") == "/elsewhere", message: "no workspace above the path");

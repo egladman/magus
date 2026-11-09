@@ -10,8 +10,6 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module path -lang buzz -out ../internal/interp/bindings/gen/path.go -pkg bindgen
-
 // Path is the "path" host module: pure path-string math (no filesystem access).
 // fs.* already covers dirname/basename/join/glob; these are the remaining
 // computations a spell otherwise has to shell out to `realpath`/`readlink -f`
@@ -26,41 +24,55 @@ var Path = Module{
 		{
 			Name:    "abs",
 			Doc:     "Return the absolute form of path, resolved against the current directory and lexically cleaned.",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    PathAbs,
 		},
 		{
 			Name:    "rel",
 			Doc:     "Return a relative path from base to target; errors if no relative path exists.",
-			Args:    []Arg{{Name: "base", Type: TypeString}, {Name: "target", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "base"}, {Name: "target"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    PathRel,
 		},
 		{
 			Name:    "clean",
 			Doc:     "Return the shortest lexically-equivalent path (resolves . and .., collapses separators).",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
 			Impl:    PathClean,
+		},
+		{
+			Name:    "dir",
+			Doc:     "Return every element of path but the last, cleaned: \".\" for a bare name, \"/\" for a child of the root.",
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
+			Impl:    PathDir,
+		},
+		{
+			Name:    "base",
+			Doc:     "Return the last element of path, trailing separators removed: \".\" for an empty path.",
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
+			Impl:    PathBase,
 		},
 		{
 			Name:    "is_abs",
 			Doc:     "Report whether path is absolute.",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeBool}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
 			Impl:    PathIsAbs,
 		},
 		{
 			Name: "matches",
 			Doc:  "Report whether path matches a doublestar glob (** crosses directory separators, * does not). Purely lexical: unlike fs.glob it touches no filesystem, so it is what filters a list already in hand - the changed files from vcs.changed_files, the entries from archive.list - against the same pattern syntax a target's sources use. Raises on a malformed pattern rather than reporting no match, so a typo is not read as \"nothing changed\".",
 			Args: []Arg{
-				{Name: "pattern", Type: TypeString},
-				{Name: "path", Type: TypeString},
+				{Name: "pattern"},
+				{Name: "path"},
 			},
-			Returns: []Ret{{Type: TypeBool}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    PathMatches,
 		},
@@ -68,20 +80,34 @@ var Path = Module{
 			Name: "matches_any",
 			Doc:  "Report whether path matches ANY of the patterns; an empty pattern list is false. The common shape of a declared source or ignore set, which is a list rather than one glob.",
 			Args: []Arg{
-				{Name: "patterns", Type: TypeStringSlice},
-				{Name: "path", Type: TypeString},
+				{Name: "patterns"},
+				{Name: "path"},
 			},
-			Returns: []Ret{{Type: TypeBool}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    PathMatchAny,
 		},
 		{
 			Name:    "expand_user",
 			Doc:     "Expand a leading ~ (or ~/...) to the current user's home directory; other paths are returned unchanged.",
-			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeString}},
+			Args:    []Arg{{Name: "path"}},
+			Returns: []Ret{{}},
 			Raises:  true,
 			Impl:    PathExpandUser,
+		},
+		{
+			Name:    "join",
+			Doc:     "Join parts with the OS separator and clean the result. Unlike fs.join, which takes its parts as variadic arguments, this takes a list, so a caller holding one needs no spread.",
+			Args:    []Arg{{Name: "parts"}},
+			Returns: []Ret{{}},
+			Impl:    PathJoin,
+		},
+		{
+			Name:    "within",
+			Doc:     "Report whether path equals dir or lies under it, comparing the cleaned forms lexically. A sibling that shares dir as a string prefix (\"/a/bc\" against \"/a/b\") is not within.",
+			Args:    []Arg{{Name: "dir"}, {Name: "path"}},
+			Returns: []Ret{{}},
+			Impl:    PathWithin,
 		},
 	},
 }
@@ -105,6 +131,17 @@ func PathRel(_ context.Context, base, target string) (string, error) {
 		return "", fmt.Errorf("path.rel: %w", err)
 	}
 	return rel, nil
+}
+
+// PathDir returns all but the last element of path, as filepath.Dir does. It is
+// pure string math, so a spell, which cannot import fs, can call it.
+func PathDir(_ context.Context, path string) (string, error) {
+	return filepath.Dir(path), nil
+}
+
+// PathBase returns the last element of path, as filepath.Base does.
+func PathBase(_ context.Context, path string) (string, error) {
+	return filepath.Base(path), nil
 }
 
 // PathClean returns the shortest lexically-equivalent path.
@@ -159,4 +196,18 @@ func PathExpandUser(_ context.Context, path string) (string, error) {
 		return home, nil
 	}
 	return filepath.Join(home, path[2:]), nil
+}
+
+// PathJoin joins parts with the OS separator and cleans the result.
+func PathJoin(_ context.Context, parts []string) (string, error) {
+	return filepath.Join(parts...), nil
+}
+
+// PathWithin reports whether path equals dir or lies under it. A path with
+// no relative form to dir, such as an absolute one against a relative one, is
+// not within.
+func PathWithin(_ context.Context, dir, path string) (bool, error) {
+	rel, err := filepath.Rel(filepath.Clean(dir), filepath.Clean(path))
+	inside := rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+	return err == nil && inside, nil
 }

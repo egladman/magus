@@ -1,0 +1,138 @@
+// csp.buzz - Content-Security-Policy construction and the content hashing it rests
+// on. Self-contained (stdlib crypto/fs/io/encoding only); flat-imported by render.buzz
+// (`import "lib/csp" as _`). Site-wide and redirect-stub policies both live here so they
+// never drift. Inline-<script> hashing makes "add a script, forget to regenerate" fail
+// loudly as a browser CSP violation rather than silently shipping a hole.
+namespace csp;
+
+import "crypto";
+import "fs";
+import "io";
+import "encoding/base64";
+import "encoding/hex";
+import "assert";
+
+// fileSha256 reads path and returns its lowercase-hex SHA-256 digest. Single place
+// file bytes get hashed (writeServiceWorker's cache-version stamp and
+// writeSiteManifest's per-asset integrity list), so the two never compute "the same
+// hash" two different ways.
+export fun fileSha256(path: str) > str !> any {
+    return crypto\hash(crypto\HashAlgorithm.Sha256, data: fs\readFile(path)).hex();
+}
+
+// scriptHash returns a CSP `sha256-<base64>` source for js's exact text (the same bytes
+// a browser hashes against a hash-source script-src). crypto.hash returns raw digest
+// bytes, so .hex() renders the lowercase hex this decodes;
+// CSP hash-sources are base64, so hexDecode back to raw digest bytes before
+// base64-encoding.
+export fun scriptHash(js: str) > str !> any {
+    return "sha256-" + base64\encode(hex\decode(crypto\hash(crypto\HashAlgorithm.Sha256, data: js).hex()));
+}
+
+// extractInlineScripts pulls the text of every attribute-less `<script>...</script>`
+// block out of html, in order. Matches only the literal "<script>" open tag: a
+// `<script src=...>` is an external load already covered by script-src 'self', not a
+// hash-source candidate.
+export fun extractInlineScripts(html: str) > [str] {
+    var scripts: mut [str] = mut [<str>];
+    var rest = html;
+    while (true) {
+        final start = rest.indexOf("<script>");
+        if (start == null) { return scripts; }
+        rest = rest.sub(start + 8);   // len("<script>") == 8
+        final end = rest.indexOf("</script>");
+        if (end == null) { return scripts; }
+        scripts.append(rest.sub(0, len: end));
+        rest = rest.sub(end + 9);   // len("</script>") == 9
+    }
+    // No trailing return: the loop is `while (true)` with no break, so every exit
+    // is one of the returns above and anything here is unreachable.
+}
+
+// CSP_IMG_SRC_DEFAULT is the img-src a page gets unless its site passes a wider one:
+// same-origin plus data: URIs, nothing else. img-src is a GET-only exfiltration channel
+// connect-src cannot restrict (an `<img src="https://host/?leaked=...">` still fires).
+export final CSP_IMG_SRC_DEFAULT = "'self' data:";
+
+// computeCSP builds one page's Content-Security-Policy meta content. default-src is
+// 'self', not 'none': manifest-src, a same-origin <link rel=prefetch> and the service
+// worker registration all fall back to default-src (via worker-src -> child-src), and
+// 'none' would break the service worker outright. Every directive is then named:
+//   - script-src: 'self' for bundles, then scriptSrc verbatim (a site whose runtime
+//     needs 'wasm-unsafe-eval' passes it), plus one sha256- hash per inline <script> in
+//     inlineScriptFiles. Hashing the files' actual bytes, not a hand-copied constant,
+//     makes "add a script, forget to regenerate" fail loudly in the browser.
+//   - style-src: 'unsafe-inline' because a page may carry a <style> block or a style=""
+//     attribute; CSP has no hash-source for style attributes (only style-src-attr's
+//     not-yet-universal 'unsafe-hashes'), so a per-block hash would leave that uncovered.
+//   - img-src: imgSrc verbatim, CSP_IMG_SRC_DEFAULT unless a page needs more.
+//   - connect-src: 'self' plus loopback wildcards, so a page may reach a local server
+//     and nothing beyond it.
+//   - form-action/object-src/frame-src 'none': no <form>, <object>/<embed>, <iframe>.
+//   - base-uri 'self': nothing sets <base>; pins it against injection anyway.
+export fun computeCSP(imgSrc: str, scriptSrc: str, inlineScriptFiles: [str]) > str !> any {
+    var hashes: mut [str] = mut [<str>];
+    foreach (path in inlineScriptFiles) {
+        final f = io\File.open(path, mode: io\FileMode.read);
+        final html = f.readAll();
+        f.close();
+        foreach (js in extractInlineScripts(html)) {
+            hashes.append(" '" + scriptHash(js) + "'");
+        }
+    }
+    final extra = if (scriptSrc != "") " " + scriptSrc else "";
+    return "default-src 'self'; script-src 'self'" + extra + hashes.join("")
+        + "; style-src 'self' 'unsafe-inline'"
+        + "; img-src " + imgSrc
+        + "; connect-src 'self' http://127.0.0.1:* http://[::1]:*"
+        + "; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'";
+}
+
+// cspForRedirectStub builds the CSP a plain alias redirect page needs - distinct from
+// the site-wide policy because a stub (aliasStub) loads no stylesheet, image, or
+// external script; its only content is one inline <script> that differs per stub, so it
+// cannot share the site-wide hash list. script is the exact text redirectScript(rel)
+// (lib/html.buzz) produces, so the hash always matches what ships.
+export fun cspForRedirectStub(script: str) > str !> any {
+    return "default-src 'none'; script-src '" + scriptHash(script) + "'"
+        + "; base-uri 'self'; form-action 'none'; object-src 'none'; frame-src 'none'";
+}
+
+test "extractInlineScripts finds only attribute-less <script> blocks, in order" {
+    final html = "<script src=\"a.js\"></script><p>x</p><script>one();</script>"
+        + "<script type=\"module\" src=\"b.js\"></script><script>two();</script>";
+    final got = extractInlineScripts(html);
+    assert\equal(got, want: ["one();", "two();"], message: "external scripts skipped; inline ones returned in order");
+    assert\equal(extractInlineScripts("no scripts here"), want: [], message: "no match -> empty list");
+}
+
+test "scriptHash matches a known sha256-then-base64 digest" {
+    // echo -n "" | openssl dgst -sha256 -binary | openssl base64
+    assert\equal(scriptHash(""), want: "sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=", message: "empty string's well-known SHA-256, base64-encoded");
+}
+
+test "computeCSP names every directive exactly once and includes the loopback hosts" {
+    final got = computeCSP(CSP_IMG_SRC_DEFAULT, scriptSrc: "", inlineScriptFiles: []);
+    assert\equal(got.indexOf("default-src 'self'") != null, want: true, message: "default-src present");
+    assert\equal(got.indexOf("script-src 'self';") != null, want: true, message: "script-src is 'self' alone with no extra source or file");
+    assert\equal(got.indexOf("connect-src 'self' http://127.0.0.1:* http://[::1]:*") != null, want: true, message: "connect-src carries exactly the loopback wildcards");
+    assert\equal(got.indexOf("object-src 'none'") != null, want: true, message: "object-src 'none'");
+    assert\equal(got.indexOf("frame-src 'none'") != null, want: true, message: "frame-src 'none'");
+}
+
+test "computeCSP's script-src and img-src are the caller's" {
+    final got = computeCSP(CSP_IMG_SRC_DEFAULT + " https://example.com", scriptSrc: "'wasm-unsafe-eval'", inlineScriptFiles: []);
+    assert\equal(got.indexOf("script-src 'self' 'wasm-unsafe-eval';") != null, want: true, message: "scriptSrc follows 'self'");
+    assert\equal(got.indexOf("img-src 'self' data: https://example.com;") != null, want: true, message: "imgSrc verbatim");
+    final plain = computeCSP(CSP_IMG_SRC_DEFAULT, scriptSrc: "", inlineScriptFiles: []);
+    assert\equal(plain.indexOf("example.com") != null, want: false, message: "the default img-src carries no external host");
+}
+
+test "cspForRedirectStub is scoped tighter than computeCSP and hashes exactly the given script" {
+    final got = cspForRedirectStub("location.replace(\"../x/\");");
+    assert\equal(got, want: "default-src 'none'; script-src '" + scriptHash("location.replace(\"../x/\");") + "'"
+        + "; base-uri 'self'; form-action 'none'; object-src 'none'; frame-src 'none'", message: "exact policy string");
+    assert\equal(got.indexOf("style-src") != null, want: false, message: "no style-src - a redirect stub has no stylesheet or style attribute");
+    assert\equal(got.indexOf("img-src") != null, want: false, message: "no img-src - a redirect stub has no image");
+    assert\equal(got.indexOf("connect-src") != null, want: false, message: "no connect-src - a redirect stub makes no fetch");
+}

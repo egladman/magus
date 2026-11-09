@@ -8,6 +8,10 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/daemon"
+	difftypes "github.com/egladman/magus/types/diff"
+	imagetypes "github.com/egladman/magus/types/image"
+	"github.com/egladman/magus/types/trail"
 	"time"
 )
 
@@ -198,11 +202,11 @@ func ObjectHTTPResponse(v types.HTTPResponse) vm.Value {
 	return out
 }
 
-func ObjectImageDigest(v types.ImageDigest, enums ffi.EnumCases) vm.Value {
+func ObjectImageDigest(v imagetypes.Digest, enums ffi.EnumCases) vm.Value {
 	return enums.Instance("Digest", []string{"algorithm", "encoded"}, []vm.Value{vm.StringValue(v.Algorithm), vm.StringValue(v.Encoded)})
 }
 
-func ObjectImagePlatform(v types.ImagePlatform, enums ffi.EnumCases) vm.Value {
+func ObjectImagePlatform(v imagetypes.Platform, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("os", enums.Case("OS", string(v.OS)))
 	out.MapSet("architecture", enums.Case("Architecture", string(v.Architecture)))
@@ -216,7 +220,7 @@ func ObjectImagePlatform(v types.ImagePlatform, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectImageDescriptor(v types.ImageDescriptor, enums ffi.EnumCases) vm.Value {
+func ObjectImageDescriptor(v imagetypes.Descriptor, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("mediaType", vm.StringValue(v.MediaType))
 	out.MapSet("artifactType", vm.StringValue(v.ArtifactType))
@@ -235,7 +239,7 @@ func ObjectImageDescriptor(v types.ImageDescriptor, enums ffi.EnumCases) vm.Valu
 	return out
 }
 
-func ObjectImageEntry(v types.ImageEntry, enums ffi.EnumCases) vm.Value {
+func ObjectImageEntry(v imagetypes.Entry, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("kind", enums.Case("EntryKind", string(v.Kind)))
@@ -249,7 +253,7 @@ func ObjectImageEntry(v types.ImageEntry, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectImageAddedLayer(v types.ImageAddedLayer, enums ffi.EnumCases) vm.Value {
+func ObjectImageAddedLayer(v imagetypes.AddedLayer, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("descriptor", ObjectImageDescriptor(v.Descriptor, enums))
 	out.MapSet("diffID", ObjectImageDigest(v.DiffID, enums))
@@ -264,7 +268,7 @@ func ObjectImageAddedLayer(v types.ImageAddedLayer, enums ffi.EnumCases) vm.Valu
 	return out
 }
 
-func ObjectImageLayout(v types.ImageLayout, enums ffi.EnumCases) vm.Value {
+func ObjectImageLayout(v imagetypes.Layout, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("descriptor", ObjectImageDescriptor(v.Descriptor, enums))
@@ -297,7 +301,7 @@ func ObjectImageLayout(v types.ImageLayout, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectImagePushed(v types.ImagePushed, enums ffi.EnumCases) vm.Value {
+func ObjectImagePushed(v imagetypes.Pushed, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("repository", vm.StringValue(v.Repository))
 	out.MapSet("digest", ObjectImageDigest(v.Digest, enums))
@@ -310,7 +314,7 @@ func ObjectImagePushed(v types.ImagePushed, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectImageDocument(v types.ImageDocument, enums ffi.EnumCases) vm.Value {
+func ObjectImageDocument(v imagetypes.Document, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("descriptor", ObjectImageDescriptor(v.Descriptor, enums))
@@ -671,6 +675,7 @@ func ObjectJobRelease(v types.JobRelease) vm.Value {
 	out.MapSet("revoked", vm.BoolValue(v.Revoked))
 	out.MapSet("takenBy", vm.StringValue(v.TakenBy))
 	out.MapSet("deadBecause", vm.StringValue(v.DeadBecause))
+	out.MapSet("narrowed", vm.BoolValue(v.Narrowed))
 	return out
 }
 
@@ -2220,7 +2225,7 @@ func ObjectImpactCoverage(v types.ImpactCoverage) vm.Value {
 	return out
 }
 
-func ObjectDiffPublicPath(v types.DiffPublicPath) vm.Value {
+func ObjectDiffPublicPath(v difftypes.PublicPath) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
 	out.MapSet("qualified", vm.StringValue(v.Qualified))
@@ -2233,7 +2238,7 @@ func ObjectDiffPublicPath(v types.DiffPublicPath) vm.Value {
 	return out
 }
 
-func ObjectDiffSymbol(v types.DiffSymbol, enums ffi.EnumCases) vm.Value {
+func ObjectDiffSymbol(v difftypes.Symbol, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
 	out.MapSet("label", vm.StringValue(v.Label))
@@ -2263,7 +2268,7 @@ func ObjectDiffSymbol(v types.DiffSymbol, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectDiffHunk(v types.DiffHunk) vm.Value {
+func ObjectDiffHunk(v difftypes.Hunk) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("index", vm.IntValue(int64(v.Index)))
 	out.MapSet("digest", vm.StringValue(v.Digest))
@@ -2280,7 +2285,7 @@ func ObjectDiffHunk(v types.DiffHunk) vm.Value {
 	return out
 }
 
-func ObjectDiffTouch(v types.DiffTouch) vm.Value {
+func ObjectDiffTouch(v difftypes.Touch) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("host", vm.StringValue(v.Host))
 	out.MapSet("session", vm.StringValue(v.Session))
@@ -2298,7 +2303,7 @@ func ObjectDiffTouch(v types.DiffTouch) vm.Value {
 	return out
 }
 
-func ObjectDiffChurn(v types.DiffChurn) vm.Value {
+func ObjectDiffChurn(v difftypes.Churn) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("commits", vm.IntValue(int64(v.Commits)))
 	out.MapSet("authors", vm.IntValue(int64(v.Authors)))
@@ -2308,7 +2313,7 @@ func ObjectDiffChurn(v types.DiffChurn) vm.Value {
 	return out
 }
 
-func ObjectDiffThreadRef(v types.DiffThreadRef) vm.Value {
+func ObjectDiffThreadRef(v difftypes.ThreadRef) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
 	out.MapSet("hunk", vm.IntValue(int64(v.Hunk)))
@@ -2318,7 +2323,7 @@ func ObjectDiffThreadRef(v types.DiffThreadRef) vm.Value {
 	return out
 }
 
-func ObjectDiffFile(v types.DiffFile, enums ffi.EnumCases) vm.Value {
+func ObjectDiffFile(v difftypes.File, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("project", vm.StringValue(v.Project))
@@ -2409,7 +2414,7 @@ func ObjectReleaseStage(v types.ReleaseStage) vm.Value {
 	return out
 }
 
-func ObjectDiffAPI(v types.DiffAPI) vm.Value {
+func ObjectDiffAPI(v difftypes.API) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StringValue(v.Base))
 	out.MapSet("floor", vm.StringValue(v.Floor))
@@ -2422,7 +2427,7 @@ func ObjectDiffAPI(v types.DiffAPI) vm.Value {
 	return out
 }
 
-func ObjectDiffHunkRef(v types.DiffHunkRef) vm.Value {
+func ObjectDiffHunkRef(v difftypes.HunkRef) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("index", vm.IntValue(int64(v.Index)))
@@ -2430,7 +2435,7 @@ func ObjectDiffHunkRef(v types.DiffHunkRef) vm.Value {
 	return out
 }
 
-func ObjectDiffWhy(v types.DiffWhy, enums ffi.EnumCases) vm.Value {
+func ObjectDiffWhy(v difftypes.Why, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("relation", enums.Case("DiffWhyRelation", string(v.Relation)))
 	out.MapSet("step", vm.IntValue(int64(v.Step)))
@@ -2444,7 +2449,7 @@ func ObjectDiffWhy(v types.DiffWhy, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectDiffStepHunk(v types.DiffStepHunk, enums ffi.EnumCases) vm.Value {
+func ObjectDiffStepHunk(v difftypes.StepHunk, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("ref", ObjectDiffHunkRef(v.Ref))
 	out.MapSet("label", vm.StringValue(v.Label))
@@ -2452,7 +2457,7 @@ func ObjectDiffStepHunk(v types.DiffStepHunk, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectDiffStep(v types.DiffStep, enums ffi.EnumCases) vm.Value {
+func ObjectDiffStep(v difftypes.Step, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("number", vm.IntValue(int64(v.Number)))
 	itemsHunks := make([]vm.Value, len(v.Hunks))
@@ -2463,7 +2468,7 @@ func ObjectDiffStep(v types.DiffStep, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectDiffGroup(v types.DiffGroup, enums ffi.EnumCases) vm.Value {
+func ObjectDiffGroup(v difftypes.Group, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("kind", enums.Case("DiffGroupKind", string(v.Kind)))
 	out.MapSet("label", vm.StringValue(v.Label))
@@ -2477,7 +2482,7 @@ func ObjectDiffGroup(v types.DiffGroup, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectDiffOrderCount(v types.DiffOrderCount) vm.Value {
+func ObjectDiffOrderCount(v difftypes.OrderCount) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("hunkCount", vm.IntValue(int64(v.HunkCount)))
 	out.MapSet("placed", vm.IntValue(int64(v.Placed)))
@@ -2500,7 +2505,7 @@ func ObjectDiffOrderCount(v types.DiffOrderCount) vm.Value {
 	return out
 }
 
-func ObjectDiffOrder(v types.DiffOrder, enums ffi.EnumCases) vm.Value {
+func ObjectDiffOrder(v difftypes.Order, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	itemsGroups := make([]vm.Value, len(v.Groups))
 	for indexGroups := range v.Groups {
@@ -2511,7 +2516,7 @@ func ObjectDiffOrder(v types.DiffOrder, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectDiffReviewed(v types.DiffReviewed) vm.Value {
+func ObjectDiffReviewed(v difftypes.Reviewed) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("at", ObjectVCSCheckpoint(v.At))
 	out.MapSet("files", vm.IntValue(int64(v.Files)))
@@ -2527,14 +2532,14 @@ func ObjectDiagnostic(v types.Diagnostic) vm.Value {
 	return out
 }
 
-func ObjectDiffUncovered(v types.DiffUncovered, enums ffi.EnumCases) vm.Value {
+func ObjectDiffUncovered(v difftypes.Uncovered, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StringValue(v.Project))
 	out.MapSet("reason", enums.Case("DiffUncoveredReason", string(v.Reason)))
 	return out
 }
 
-func ObjectDiffUnread(v types.DiffUnread, enums ffi.EnumCases) vm.Value {
+func ObjectDiffUnread(v difftypes.Unread, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("readState", enums.Case("DiffReadState", string(v.ReadState)))
 	out.MapSet("reason", vm.StringValue(v.Reason))
@@ -2543,7 +2548,7 @@ func ObjectDiffUnread(v types.DiffUnread, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectDiff(v types.Diff, enums ffi.EnumCases) vm.Value {
+func ObjectDiff(v difftypes.Diff, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StringValue(v.Base))
 	itemsFiles := make([]vm.Value, len(v.Files))
@@ -3011,7 +3016,7 @@ func ObjectJobRegistration(v types.JobRegistration, enums ffi.EnumCases) vm.Valu
 	return out
 }
 
-func ObjectTrailObservation(v types.TrailObservation) vm.Value {
+func ObjectTrailObservation(v trail.Observation) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("at", vm.IntValue(int64(v.At)))
 	out.MapSet("agent", vm.StringValue(v.Agent))
@@ -3036,7 +3041,7 @@ func ObjectTrailObservation(v types.TrailObservation) vm.Value {
 	return out
 }
 
-func ObjectTrailSpawn(v types.TrailSpawn) vm.Value {
+func ObjectTrailSpawn(v trail.Spawn) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("at", vm.IntValue(int64(v.At)))
 	out.MapSet("agent", vm.StringValue(v.Agent))
@@ -3046,7 +3051,7 @@ func ObjectTrailSpawn(v types.TrailSpawn) vm.Value {
 	return out
 }
 
-func ObjectTrail(v types.Trail) vm.Value {
+func ObjectTrail(v trail.Trail) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("session", vm.StringValue(v.Session))
 	out.MapSet("host", vm.StringValue(v.Host))
@@ -3070,7 +3075,7 @@ func ObjectTrail(v types.Trail) vm.Value {
 	return out
 }
 
-func ObjectTrailMark(v types.TrailMark, enums ffi.EnumCases) vm.Value {
+func ObjectTrailMark(v trail.Mark, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
 	out.MapSet("section", enums.Case("TrailSection", string(v.Section)))
@@ -4899,7 +4904,7 @@ func ObjectConformance(v types.Conformance, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectStatusTargetRun(v types.StatusTargetRun, enums ffi.EnumCases) vm.Value {
+func ObjectStatusTargetRun(v daemon.TargetRun, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StringValue(v.Project))
 	out.MapSet("target", vm.StringValue(v.Target))
@@ -4919,7 +4924,7 @@ func ObjectStatusTargetRun(v types.StatusTargetRun, enums ffi.EnumCases) vm.Valu
 	return out
 }
 
-func ObjectStatusRun(v types.StatusRun, enums ffi.EnumCases) vm.Value {
+func ObjectStatusRun(v daemon.Run, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("inv", vm.StringValue(v.Inv))
 	out.MapSet("trigger", vm.StringValue(v.Trigger))
@@ -5403,7 +5408,7 @@ func ObjectLifecycle(v spells.Lifecycle) vm.Value {
 	return out
 }
 
-func ObjectReviewTarget(v types.ReviewTarget) vm.Value {
+func ObjectDiffReviewTarget(v difftypes.ReviewTarget) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
 	out.MapSet("repo", vm.StringValue(v.Repo))
@@ -5414,7 +5419,7 @@ func ObjectReviewTarget(v types.ReviewTarget) vm.Value {
 	return out
 }
 
-func ObjectReviewComment(v types.ReviewComment) vm.Value {
+func ObjectDiffReviewComment(v difftypes.ReviewComment) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
 	out.MapSet("path", vm.StringValue(v.Path))
@@ -6093,7 +6098,7 @@ func ObjectLimits(v types.Limits) vm.Value {
 	return out
 }
 
-func ObjectImageFile(v types.ImageFile) vm.Value {
+func ObjectImageFile(v imagetypes.File) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("source", vm.StringValue(v.Source))
 	out.MapSet("path", vm.StringValue(v.Path))
@@ -6103,7 +6108,7 @@ func ObjectImageFile(v types.ImageFile) vm.Value {
 	return out
 }
 
-func ObjectImageTree(v types.ImageTree, enums ffi.EnumCases) vm.Value {
+func ObjectImageTree(v imagetypes.Tree, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("source", vm.StringValue(v.Source))
 	out.MapSet("path", vm.StringValue(v.Path))
@@ -6124,7 +6129,7 @@ func ObjectImageTree(v types.ImageTree, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectImageSymlink(v types.ImageSymlink) vm.Value {
+func ObjectImageSymlink(v imagetypes.Symlink) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("target", vm.StringValue(v.Target))
@@ -6133,7 +6138,7 @@ func ObjectImageSymlink(v types.ImageSymlink) vm.Value {
 	return out
 }
 
-func ObjectImageDirectory(v types.ImageDirectory) vm.Value {
+func ObjectImageDirectory(v imagetypes.Directory) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StringValue(v.Path))
 	out.MapSet("mode", vm.IntValue(int64(v.Mode)))
@@ -6142,7 +6147,7 @@ func ObjectImageDirectory(v types.ImageDirectory) vm.Value {
 	return out
 }
 
-func ObjectImageConfig(v types.ImageConfig) vm.Value {
+func ObjectImageConfig(v imagetypes.Config) vm.Value {
 	out := vm.NewMap()
 	optUser := vm.Null
 	if v.User != nil {
@@ -6213,7 +6218,7 @@ func ObjectImageConfig(v types.ImageConfig) vm.Value {
 	return out
 }
 
-func ObjectImageSpec(v types.ImageSpec, enums ffi.EnumCases) vm.Value {
+func ObjectImageSpec(v imagetypes.Spec, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StringValue(v.Base))
 	out.MapSet("scratch", vm.BoolValue(v.Scratch))
@@ -6248,21 +6253,21 @@ func ObjectImageSpec(v types.ImageSpec, enums ffi.EnumCases) vm.Value {
 	return out
 }
 
-func ObjectImageRegistryAuth(v types.ImageRegistryAuth) vm.Value {
+func ObjectImageRegistryAuth(v imagetypes.RegistryAuth) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("username", vm.StringValue(v.Username))
 	out.MapSet("password", ObjectSecret(v.Password))
 	return out
 }
 
-func ObjectImageDependency(v types.ImageDependency, enums ffi.EnumCases) vm.Value {
+func ObjectImageDependency(v imagetypes.Dependency, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("uri", vm.StringValue(v.URI))
 	out.MapSet("digest", ObjectImageDigest(v.Digest, enums))
 	return out
 }
 
-func ObjectImageProvenance(v types.ImageProvenance, enums ffi.EnumCases) vm.Value {
+func ObjectImageProvenance(v imagetypes.Provenance, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("builderID", vm.StringValue(v.BuilderID))
 	out.MapSet("sourceRevision", vm.StringValue(v.SourceRevision))
@@ -6449,7 +6454,7 @@ func ObjectChangeOptions(v types.ChangeOptions) vm.Value {
 	return out
 }
 
-func ObjectTrailReadOptions(v types.TrailReadOptions) vm.Value {
+func ObjectTrailReadOptions(v trail.ReadOptions) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("session", vm.StringValue(v.Session))
 	out.MapSet("since", vm.StringValue(v.Since))

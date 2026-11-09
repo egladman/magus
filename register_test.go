@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/gen/typestest"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/register"
@@ -21,6 +22,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // makeWorkspaceRoot lays down project manifest stubs and returns the
@@ -582,6 +584,56 @@ func modelTiers(t *testing.T) (low, high types.ModelTier) {
 	high, err = set.Parse("high")
 	require.NoError(t, err)
 	return low, high
+}
+
+// SpawnRuleSuite holds TierCeiling's refusals to their codes, through the rule
+// itself and through the job store that a fork door opens with it.
+type SpawnRuleSuite struct {
+	suite.Suite
+}
+
+func TestSpawnRuleSuite(t *testing.T) { suite.Run(t, new(SpawnRuleSuite)) }
+
+func (s *SpawnRuleSuite) TestARankAboveTheParentIsModelTierAboveParent() {
+	low, high := modelTiers(s.T())
+	err := TierCeiling(low, high)
+	s.Require().ErrorIs(err, types.ModelTierAboveParent)
+	var d *types.DiagnosticError
+	s.Require().ErrorAs(err, &d)
+	s.Equal(types.ModelTierAboveParent, d.Code)
+}
+
+func (s *SpawnRuleSuite) TestTiersFromTwoDeclarationsAreModelTiersIncomparable() {
+	low, _ := modelTiers(s.T())
+	otherLow, _ := modelTiers(s.T())
+	s.Require().ErrorIs(TierCeiling(otherLow, low), types.ModelTiersIncomparable)
+}
+
+func (s *SpawnRuleSuite) TestAForkAboveItsParentIsRefusedWithTheRulesCode() {
+	t := s.T()
+	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+		Enum: "Tier", Site: "magusfile.buzz:1", Cases: []string{"low", "high"}, Default: 0,
+		Bounds: make([]types.ModelTierBounds, 2),
+		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+	})
+	s.Require().NoError(err)
+	store := job.NewStore(job.Location{
+		StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: t.TempDir(), Actor: &job.Actor{},
+		ModelTiers: set, SpawnRule: TierCeiling,
+	})
+	put := func(id, parent, model string) error {
+		row := types.Job{
+			ID: id, Parent: parent, Model: model, Criteria: "goal for " + id, Checkpoint: "abc123",
+			WritePaths: []string{"internal/" + id}, Validation: "magus run test", State: types.StateDeclared,
+		}
+		_, err := store.Update(t.Context(), id, func(cur *types.Job) { *cur = row })
+		return err
+	}
+	s.Require().NoError(put("p", "", "low"))
+
+	err = put("c", "p", "high")
+	s.Require().ErrorIs(err, types.ModelTierAboveParent)
+	s.False(types.ClassifyRetry(err).Retryable, "a person forks the higher-tier row")
 }
 
 // TestTierCeilingHoldsAChildAtMostItsParentsTier: a child may run at its parent's tier or

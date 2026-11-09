@@ -95,7 +95,7 @@ const (
 
 // noBinaryOwnSay is the verdict a checkout of magus at root with no ./magus opens with.
 func noBinaryOwnSay(root string) string {
-	return fmt.Sprintf("this checkout has no ./magus to load its guard policy; bootstrap ./magus with `GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .`.", shellQuoted(root))
+	return fmt.Sprintf("this checkout has no ./magus to load its guard policy; bootstrap ./magus with `GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .`, then ready the checkout with `%s`, each alone on its line.", shellQuoted(root), readyCheckoutLine(root))
 }
 
 // shellQuoted is path as one POSIX shell word, the way a remedy line names a checkout.
@@ -144,17 +144,37 @@ func TestUnloadedTreeWithoutABinaryNamesTheMissingBinary(t *testing.T) {
 	declareGuardRule(t, root)
 
 	v := judgeUnloaded(ctx, unloadedDependencies(errors.New("magusfile.buzz:3:1: expected expression")), "touch notes.txt")
-	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, noBinaryOwnSay(root))
+	bootstrapOnly := strings.TrimSuffix(noBinaryOwnSay(root), fmt.Sprintf(", then ready the checkout with `%s`, each alone on its line.", readyCheckoutLine(root))) + "."
+	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, bootstrapOnly)
 	assert.NotContains(t, stored, "older than")
 }
 
-// With no guard rule showing and none ever recorded there is no policy to have lost, so a
-// binary that cannot load the tree denies nothing.
-func TestUnloadedTreeWithoutAVisibleRuleDeniesNothing(t *testing.T) {
+// PATH magus in a checkout that builds magus from source answers only the
+// bootstrap, even when its own policy would load.
+func TestPathMagusInAFromSourceCheckoutJudgesNothing(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	root := ownCheckout(t, ctx, true)
+	declareGuardRule(t, root)
+
+	own := filepath.Join(root, "magus")
+	same := ForeignJudgeDeps(Dependencies{}, root, own)
+	assert.NoError(t, same.LoadFailure, "the checkout's own ./magus judges")
+
+	deps := ForeignJudgeDeps(unloadedDependencies(errStaleLoad), root, "/usr/local/bin/magus")
+	require.ErrorIs(t, deps.LoadFailure, errNotCheckoutBinary)
+	assert.Equal(t, unloadReason{Cause: unloadNoBinary}, unloadCause(deps.LoadFailure, root))
+
+	v := judgeUnloaded(ctx, deps, "touch notes.txt")
+	assert.Equal(t, decisionDeny, v.Decision, v.Reason)
+	assert.Contains(t, v.Reason, ownBootstrapLine(root))
+}
+
+// No rule showing or recorded still denies a change while nothing loads.
+func TestUnloadedTreeWithoutAVisibleRuleDeniesAChange(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	ownCheckout(t, ctx, false)
 	v := judgeUnloaded(ctx, unloadedDependencies(errMissingMember), "touch notes.txt")
-	assert.NotEqual(t, decisionDeny, v.Decision, v.Reason)
+	assert.Equal(t, decisionDeny, v.Decision, v.Reason)
 }
 
 // A ./magus older than the tree denies an edit, a spawn, a push and a state-writing magus
@@ -1064,3 +1084,29 @@ func (s *LoadRecoverySuite) TestAWriteOutsideByAProgramThatWritesIsDenied() {
 }
 
 func (s *LoadRecoverySuite) testContext() context.Context { return s.layers.of(s.T()) }
+
+// NoBinaryRemedySuite judges the fix a magus checkout with no ./magus is named.
+type NoBinaryRemedySuite struct {
+	suite.Suite
+	root string
+}
+
+func TestNoBinaryRemedySuite(t *testing.T) {
+	suite.Run(t, new(NoBinaryRemedySuite))
+}
+
+func (s *NoBinaryRemedySuite) SetupTest() {
+	s.root = s.T().TempDir()
+	mod := []byte("module " + ownModule + "\n\ngo 1.25\n")
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "go.mod"), mod, 0o644))
+	declareCheckoutHook(s.T(), s.root)
+}
+
+func (s *NoBinaryRemedySuite) TestItNamesTheBootstrapThenTheCheckoutHook() {
+	ready := "./magus buzz " + testCheckoutHook + " -- --here --verify-ready"
+	bootstrap := config.SourceCommand(s.root, "", "", true)
+	fix := binaryRemedy(true, s.root, "", true)
+	s.Equal(fmt.Sprintf("bootstrap ./magus with `%s`, then ready the checkout with `%s`, each alone on its line", bootstrap, ready), fix.say)
+	at := location{workspace: s.root, policies: magusRepoAt.policies}
+	s.True(recoveryLine(ready, DialectBash, "", true, at), ready)
+}

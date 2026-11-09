@@ -8,13 +8,17 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/daemon"
+	difftypes "github.com/egladman/magus/types/diff"
+	imagetypes "github.com/egladman/magus/types/image"
+	"github.com/egladman/magus/types/trail"
 )
 
 // RuntimeBoundaryTypes is every value magus encodes for Buzz, zero-valued and paired
 // with its encoder. A test populates each and asserts the round trip loses nothing.
 var RuntimeBoundaryTypes = []ffi.BoundaryType{
-	{Name: "AddedLayer", Zero: types.ImageAddedLayer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectImageAddedLayer(v.(types.ImageAddedLayer), enums)
+	{Name: "AddedLayer", Zero: imagetypes.AddedLayer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectImageAddedLayer(v.(imagetypes.AddedLayer), enums)
 	}},
 	{Name: "Affected", Zero: types.AffectedResult{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAffectedResult(v.(types.AffectedResult)) }},
 	{Name: "Affinity", Zero: types.Affinity{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectAffinity(v.(types.Affinity)) }},
@@ -80,34 +84,34 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Credential", Zero: types.Credential{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCredential(v.(types.Credential), enums) }},
 	{Name: "CrossTargetRef", Zero: types.CrossTargetRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectCrossTargetRef(v.(types.CrossTargetRef)) }},
 	{Name: "DecisionSyntax", Zero: spells.DecisionSyntax{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDecisionSyntax(v.(spells.DecisionSyntax)) }},
-	{Name: "Descriptor", Zero: types.ImageDescriptor{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectImageDescriptor(v.(types.ImageDescriptor), enums)
+	{Name: "Descriptor", Zero: imagetypes.Descriptor{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectImageDescriptor(v.(imagetypes.Descriptor), enums)
 	}},
 	{Name: "Deviation", Zero: types.Deviation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDeviation(v.(types.Deviation)) }},
 	{Name: "Diagnostic", Zero: types.Diagnostic{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiagnostic(v.(types.Diagnostic)) }},
 	{Name: "DiagnosticCode", Zero: types.DiagnosticCodeRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectDiagnosticCodeRef(v.(types.DiagnosticCodeRef), enums)
 	}},
-	{Name: "Diff", Zero: types.Diff{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiff(v.(types.Diff), enums) }},
-	{Name: "DiffAPI", Zero: types.DiffAPI{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffAPI(v.(types.DiffAPI)) }},
-	{Name: "DiffChurn", Zero: types.DiffChurn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffChurn(v.(types.DiffChurn)) }},
-	{Name: "DiffFile", Zero: types.DiffFile{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffFile(v.(types.DiffFile), enums) }},
-	{Name: "DiffGroup", Zero: types.DiffGroup{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffGroup(v.(types.DiffGroup), enums) }},
-	{Name: "DiffHunk", Zero: types.DiffHunk{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffHunk(v.(types.DiffHunk)) }},
-	{Name: "DiffHunkRef", Zero: types.DiffHunkRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffHunkRef(v.(types.DiffHunkRef)) }},
-	{Name: "DiffOrder", Zero: types.DiffOrder{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffOrder(v.(types.DiffOrder), enums) }},
-	{Name: "DiffOrderCount", Zero: types.DiffOrderCount{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffOrderCount(v.(types.DiffOrderCount)) }},
-	{Name: "DiffPublicPath", Zero: types.DiffPublicPath{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffPublicPath(v.(types.DiffPublicPath)) }},
-	{Name: "DiffReviewed", Zero: types.DiffReviewed{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffReviewed(v.(types.DiffReviewed)) }},
-	{Name: "DiffStep", Zero: types.DiffStep{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffStep(v.(types.DiffStep), enums) }},
-	{Name: "DiffStepHunk", Zero: types.DiffStepHunk{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffStepHunk(v.(types.DiffStepHunk), enums) }},
-	{Name: "DiffSymbol", Zero: types.DiffSymbol{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffSymbol(v.(types.DiffSymbol), enums) }},
-	{Name: "DiffThreadRef", Zero: types.DiffThreadRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffThreadRef(v.(types.DiffThreadRef)) }},
-	{Name: "DiffTouch", Zero: types.DiffTouch{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffTouch(v.(types.DiffTouch)) }},
-	{Name: "DiffUncovered", Zero: types.DiffUncovered{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffUncovered(v.(types.DiffUncovered), enums) }},
-	{Name: "DiffUnread", Zero: types.DiffUnread{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffUnread(v.(types.DiffUnread), enums) }},
-	{Name: "DiffWhy", Zero: types.DiffWhy{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffWhy(v.(types.DiffWhy), enums) }},
-	{Name: "Digest", Zero: types.ImageDigest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageDigest(v.(types.ImageDigest), enums) }},
+	{Name: "Diff", Zero: difftypes.Diff{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiff(v.(difftypes.Diff), enums) }},
+	{Name: "DiffAPI", Zero: difftypes.API{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffAPI(v.(difftypes.API)) }},
+	{Name: "DiffChurn", Zero: difftypes.Churn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffChurn(v.(difftypes.Churn)) }},
+	{Name: "DiffFile", Zero: difftypes.File{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffFile(v.(difftypes.File), enums) }},
+	{Name: "DiffGroup", Zero: difftypes.Group{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffGroup(v.(difftypes.Group), enums) }},
+	{Name: "DiffHunk", Zero: difftypes.Hunk{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffHunk(v.(difftypes.Hunk)) }},
+	{Name: "DiffHunkRef", Zero: difftypes.HunkRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffHunkRef(v.(difftypes.HunkRef)) }},
+	{Name: "DiffOrder", Zero: difftypes.Order{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffOrder(v.(difftypes.Order), enums) }},
+	{Name: "DiffOrderCount", Zero: difftypes.OrderCount{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffOrderCount(v.(difftypes.OrderCount)) }},
+	{Name: "DiffPublicPath", Zero: difftypes.PublicPath{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffPublicPath(v.(difftypes.PublicPath)) }},
+	{Name: "DiffReviewed", Zero: difftypes.Reviewed{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffReviewed(v.(difftypes.Reviewed)) }},
+	{Name: "DiffStep", Zero: difftypes.Step{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffStep(v.(difftypes.Step), enums) }},
+	{Name: "DiffStepHunk", Zero: difftypes.StepHunk{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffStepHunk(v.(difftypes.StepHunk), enums) }},
+	{Name: "DiffSymbol", Zero: difftypes.Symbol{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffSymbol(v.(difftypes.Symbol), enums) }},
+	{Name: "DiffThreadRef", Zero: difftypes.ThreadRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffThreadRef(v.(difftypes.ThreadRef)) }},
+	{Name: "DiffTouch", Zero: difftypes.Touch{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffTouch(v.(difftypes.Touch)) }},
+	{Name: "DiffUncovered", Zero: difftypes.Uncovered{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffUncovered(v.(difftypes.Uncovered), enums) }},
+	{Name: "DiffUnread", Zero: difftypes.Unread{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffUnread(v.(difftypes.Unread), enums) }},
+	{Name: "DiffWhy", Zero: difftypes.Why{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiffWhy(v.(difftypes.Why), enums) }},
+	{Name: "Digest", Zero: imagetypes.Digest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageDigest(v.(imagetypes.Digest), enums) }},
 	{Name: "Dir", Zero: types.Dir{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDir(v.(types.Dir)) }},
 	{Name: "DirCall", Zero: types.DirCall{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDirCall(v.(types.DirCall)) }},
 	{Name: "DiscoveryFile", Zero: spells.DiscoveryFile{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiscoveryFile(v.(spells.DiscoveryFile)) }},
@@ -116,7 +120,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "DiskUsage", Zero: types.DiskUsage{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDiskUsage(v.(types.DiskUsage)) }},
 	{Name: "DoctorReport", Zero: types.DoctorReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDoctorReport(v.(types.DoctorReport), enums) }},
 	{Name: "DoctorSummary", Zero: types.DoctorSummary{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDoctorSummary(v.(types.DoctorSummary)) }},
-	{Name: "Document", Zero: types.ImageDocument{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageDocument(v.(types.ImageDocument), enums) }},
+	{Name: "Document", Zero: imagetypes.Document{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageDocument(v.(imagetypes.Document), enums) }},
 	{Name: "DriftResult", Zero: types.DriftResultRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDriftResultRecord(v.(types.DriftResultRecord)) }},
 	{Name: "Duplication", Zero: types.Duplication{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectDuplication(v.(types.Duplication), enums) }},
 	{Name: "DuplicationGroup", Zero: types.DuplicationGroup{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
@@ -130,7 +134,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectKnowledgeEdgeRef(v.(types.KnowledgeEdgeRef), enums)
 	}},
 	{Name: "Empty", Zero: types.Empty{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEmpty(v.(types.Empty)) }},
-	{Name: "Entry", Zero: types.ImageEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageEntry(v.(types.ImageEntry), enums) }},
+	{Name: "Entry", Zero: imagetypes.Entry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageEntry(v.(imagetypes.Entry), enums) }},
 	{Name: "EvaluatedProject", Zero: types.EvaluatedProject{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectEvaluatedProject(v.(types.EvaluatedProject), enums)
 	}},
@@ -249,7 +253,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectKnowledgeTextPresence(v.(types.KnowledgeTextPresence))
 	}},
 	{Name: "Layer", Zero: types.Layer{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLayer(v.(types.Layer)) }},
-	{Name: "Layout", Zero: types.ImageLayout{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageLayout(v.(types.ImageLayout), enums) }},
+	{Name: "Layout", Zero: imagetypes.Layout{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageLayout(v.(imagetypes.Layout), enums) }},
 	{Name: "LeaseCheck", Zero: types.LeaseCheck{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLeaseCheck(v.(types.LeaseCheck)) }},
 	{Name: "LifecycleQuery", Zero: types.LifecycleQuery{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLifecycleQuery(v.(types.LifecycleQuery)) }},
 	{Name: "LifecycleStatus", Zero: types.LifecycleStatus{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectLifecycleStatus(v.(types.LifecycleStatus)) }},
@@ -286,7 +290,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectKnowledgePathStep(v.(types.KnowledgePathStep), enums)
 	}},
 	{Name: "PipeRecord", Zero: types.PipeRecord{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPipeRecord(v.(types.PipeRecord)) }},
-	{Name: "Platform", Zero: types.ImagePlatform{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImagePlatform(v.(types.ImagePlatform), enums) }},
+	{Name: "Platform", Zero: imagetypes.Platform{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImagePlatform(v.(imagetypes.Platform), enums) }},
 	{Name: "Precedent", Zero: types.Precedent{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPrecedent(v.(types.Precedent), enums) }},
 	{Name: "PrecedentKey", Zero: types.PrecedentKey{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPrecedentKey(v.(types.PrecedentKey)) }},
 	{Name: "PrecedentScope", Zero: types.PrecedentScope{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectPrecedentScope(v.(types.PrecedentScope)) }},
@@ -301,7 +305,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "PublishReviewRequest", Zero: types.PublishReviewRequest{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectPublishReviewRequest(v.(types.PublishReviewRequest))
 	}},
-	{Name: "Pushed", Zero: types.ImagePushed{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImagePushed(v.(types.ImagePushed), enums) }},
+	{Name: "Pushed", Zero: imagetypes.Pushed{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImagePushed(v.(imagetypes.Pushed), enums) }},
 	{Name: "QueryResult", Zero: types.KnowledgeQueryOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeQueryOutput(v.(types.KnowledgeQueryOutput), enums)
 	}},
@@ -357,7 +361,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ReviewDraft", Zero: types.ReviewDraft{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReviewDraft(v.(types.ReviewDraft)) }},
 	{Name: "ReviewRef", Zero: types.ReviewRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectReviewRef(v.(types.ReviewRef)) }},
 	{Name: "Rule", Zero: types.RuleDoc{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectRuleDoc(v.(types.RuleDoc), enums) }},
-	{Name: "Run", Zero: types.StatusRun{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusRun(v.(types.StatusRun), enums) }},
+	{Name: "Run", Zero: daemon.Run{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusRun(v.(daemon.Run), enums) }},
 	{Name: "Sandbox", Zero: spells.Sandbox{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSandbox(v.(spells.Sandbox), enums) }},
 	{Name: "SandboxAllow", Zero: spells.SandboxAllow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSandboxAllow(v.(spells.SandboxAllow), enums) }},
 	{Name: "SandboxCache", Zero: spells.SandboxCache{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectSandboxCache(v.(spells.SandboxCache)) }},
@@ -396,9 +400,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 		return ObjectTargetGraphProject(v.(types.TargetGraphProject))
 	}},
 	{Name: "TargetRef", Zero: types.TargetRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTargetRef(v.(types.TargetRef)) }},
-	{Name: "TargetRun", Zero: types.StatusTargetRun{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
-		return ObjectStatusTargetRun(v.(types.StatusTargetRun), enums)
-	}},
+	{Name: "TargetRun", Zero: daemon.TargetRun{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusTargetRun(v.(daemon.TargetRun), enums) }},
 	{Name: "TargetSpellUse", Zero: types.TargetSpellUse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTargetSpellUse(v.(types.TargetSpellUse)) }},
 	{Name: "TermSize", Zero: types.TermSize{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTermSize(v.(types.TermSize)) }},
 	{Name: "TierEvidence", Zero: types.TierEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTierEvidence(v.(types.TierEvidence), enums) }},
@@ -406,10 +408,10 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "TierReport", Zero: types.TierReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTierReport(v.(types.TierReport), enums) }},
 	{Name: "ToolReport", Zero: types.ToolReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectToolReport(v.(types.ToolReport)) }},
 	{Name: "ToolRow", Zero: types.ToolRow{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectToolRow(v.(types.ToolRow)) }},
-	{Name: "Trail", Zero: types.Trail{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrail(v.(types.Trail)) }},
-	{Name: "TrailMark", Zero: types.TrailMark{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailMark(v.(types.TrailMark), enums) }},
-	{Name: "TrailObservation", Zero: types.TrailObservation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailObservation(v.(types.TrailObservation)) }},
-	{Name: "TrailSpawn", Zero: types.TrailSpawn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailSpawn(v.(types.TrailSpawn)) }},
+	{Name: "Trail", Zero: trail.Trail{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrail(v.(trail.Trail)) }},
+	{Name: "TrailMark", Zero: trail.Mark{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailMark(v.(trail.Mark), enums) }},
+	{Name: "TrailObservation", Zero: trail.Observation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailObservation(v.(trail.Observation)) }},
+	{Name: "TrailSpawn", Zero: trail.Spawn{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrailSpawn(v.(trail.Spawn)) }},
 	{Name: "Trend", Zero: types.Trend{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrend(v.(types.Trend)) }},
 	{Name: "TrendEntry", Zero: types.TrendEntry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrendEntry(v.(types.TrendEntry)) }},
 	{Name: "TrimReport", Zero: types.TrimReport{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTrimReport(v.(types.TrimReport)) }},

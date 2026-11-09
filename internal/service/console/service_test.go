@@ -2,6 +2,8 @@ package console
 
 import (
 	"context"
+	"github.com/egladman/magus/types/daemon"
+	"github.com/egladman/magus/types/diff"
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
@@ -38,7 +40,7 @@ func testService(opts ...Option) *Service {
 		WithKnowledgeGraphFunction(func(context.Context, bool) (*knowledge.Graph, error) { return g, nil }),
 		WithDescribeGraphFunction(func() types.TargetGraphOutput { return tg }),
 	}, opts...)
-	return NewService(nil, config.Config{}, types.StatusBase{}, "1.2.3", base...)
+	return NewService(nil, config.Config{}, daemon.Base{}, "1.2.3", base...)
 }
 
 func TestServiceGraphFull(t *testing.T) {
@@ -88,16 +90,16 @@ func TestServiceTargetGraph(t *testing.T) {
 
 // TestServiceStatusSnapshotSeam checks the injected report is returned verbatim.
 func TestServiceStatusSnapshotSeam(t *testing.T) {
-	want := types.StatusSnapshot{Pool: &types.StatusOutput{Capacity: 4, Running: 1}}
-	svc := NewService(nil, config.Config{}, types.StatusBase{}, "1.2.3",
-		WithStatusSnapshotFunction(func(context.Context) types.StatusSnapshot { return want }))
+	want := daemon.Snapshot{Pool: &daemon.Output{Capacity: 4, Running: 1}}
+	svc := NewService(nil, config.Config{}, daemon.Base{}, "1.2.3",
+		WithStatusSnapshotFunction(func(context.Context) daemon.Snapshot { return want }))
 	assert.Equal(t, want, svc.StatusSnapshot(context.Background()))
 }
 
 // TestServiceStatusSnapshotPoolError checks a failed server query surfaces as PoolError while
 // the static base fields still ride through.
 func TestServiceStatusSnapshotPoolError(t *testing.T) {
-	base := types.StatusBase{Cache: types.CacheStatus{SizeMB: 42}}
+	base := daemon.Base{Cache: daemon.Cache{SizeMB: 42}}
 	svc := NewService(nil, config.Config{}, base, "1.2.3", WithServerSocket("127.0.0.1:1"))
 	got := svc.StatusSnapshot(context.Background())
 	assert.Nil(t, got.Pool)
@@ -107,7 +109,7 @@ func TestServiceStatusSnapshotPoolError(t *testing.T) {
 
 // TestServiceVersion checks the running version stamped at construction is returned verbatim.
 func TestServiceVersion(t *testing.T) {
-	svc := NewService(nil, config.Config{}, types.StatusBase{}, "9.9.9")
+	svc := NewService(nil, config.Config{}, daemon.Base{}, "9.9.9")
 	assert.Equal(t, "9.9.9", svc.Version())
 }
 
@@ -116,31 +118,31 @@ func TestServiceVersion(t *testing.T) {
 func TestResolveStatusAddr(t *testing.T) {
 	// Config address wins outright.
 	svc := NewService(nil, config.Config{Server: config.Server{Address: "unix:///cfg.sock"}},
-		types.StatusBase{}, "1.0.0", WithServerSocket("unix:///seam.sock"))
+		daemon.Base{}, "1.0.0", WithServerSocket("unix:///seam.sock"))
 	addr, err := svc.resolveStatusAddr(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, "unix:///cfg.sock", addr)
 
 	// No config address: fall back to the injected server socket.
-	svc = NewService(nil, config.Config{}, types.StatusBase{}, "1.0.0", WithServerSocket("unix:///seam.sock"))
+	svc = NewService(nil, config.Config{}, daemon.Base{}, "1.0.0", WithServerSocket("unix:///seam.sock"))
 	addr, err = svc.resolveStatusAddr(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, "unix:///seam.sock", addr)
 }
 
 func TestDiffWithPassesTheOptionsToTheAnnotation(t *testing.T) {
-	var got []types.DiffOptions
-	svc := &Service{diffFn: func(_ context.Context, _ []string, opts types.DiffOptions) (types.Diff, error) {
+	var got []diff.Options
+	svc := &Service{diffFn: func(_ context.Context, _ []string, opts diff.Options) (diff.Diff, error) {
 		got = append(got, opts)
-		return types.Diff{}, nil
+		return diff.Diff{}, nil
 	}}
 
 	_, err := svc.Diff(context.Background(), []string{"a.go"})
 	require.NoError(t, err)
-	_, err = svc.DiffWith(context.Background(), []string{"a.go"}, types.DiffOptions{SkipOrder: true})
+	_, err = svc.DiffWith(context.Background(), []string{"a.go"}, diff.Options{SkipOrder: true})
 	require.NoError(t, err)
 
-	assert.Equal(t, []types.DiffOptions{{}, {SkipOrder: true}}, got, "Diff asks for the order; a brief opts out")
+	assert.Equal(t, []diff.Options{{}, {SkipOrder: true}}, got, "Diff asks for the order; a brief opts out")
 }
 
 func TestIsGraphRelevant(t *testing.T) {

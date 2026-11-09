@@ -1,6 +1,7 @@
 # `magus job fork` refuses a file another checkout already holds (MGS3032) and prints the
 # claim pair that would split it, computed from what the holder has touched and the symbols
-# the new job's goals name, without writing either claim. A claim word that several
+# the new job's goals name, without writing either claim. A fork claiming only
+# declarations the holder has not touched is granted them. A claim word that several
 # declarations of its file share is refused (MGS3031), with words that name one each. A
 # project's magusfile held whole is refused (MGS3036) in favour of its key claims.
 env HOME=$WORK/home
@@ -39,6 +40,15 @@ stdin $WORK/a.json
 ! exec magus job fork --stdin
 stderr 'MGS3032'
 stderr 'wave/b.s symbol goals and wave/a.s touched work both reach A in it, so a claim cannot split them'
+
+# A claim on C alone is granted: wave/a had not touched it, so wave/a now holds run.go
+# by the declaration it changed, and a claim on that one is still refused.
+exec magus job fork wave/c --criteria 'change C' --write-paths 'run.go#C' --check 'lint .'
+stdout 'granted run.go#C: wave/a had not touched it; wave/a now holds run.go by run.go#A \(and grows on write\)'
+exec magus ls jobs -o name
+stdout '^wave/c$'
+! exec magus job fork wave/a2 --criteria 'change A too' --write-paths 'run.go#A' --check 'lint .'
+stderr 'MGS3032'
 
 # A word every function shares guards all of them.
 ! exec magus job fork wave/ctx --criteria 'change ctx' --write-paths 'util.go#ctx' --check 'lint .'

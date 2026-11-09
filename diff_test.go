@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -93,16 +94,16 @@ diff --git a/vm_test.go b/vm_test.go
 `
 	hunks, pf := impact.ChangedLinesByHunk(patch), readPatchFacts(patch)
 	const vm = "symbol:gomod example.com/m/libs/x `example.com/m/libs/x/vm`/"
-	script := types.DiffSymbol{ID: vm + "script.", Label: "script", Change: types.DiffChangeBody, Qualified: "script"}
-	emit := types.DiffSymbol{ID: vm + "Asm#Emit().", Label: "Emit", Change: types.DiffChangeBody, Qualified: "Asm.Emit", PublicBeyondWorkspace: true}
-	compile := types.DiffSymbol{ID: vm + "compile().", Label: "compile", Change: types.DiffChangeAdded, Qualified: "compile"}
+	script := diff.Symbol{ID: vm + "script.", Label: "script", Change: diff.ChangeBody, Qualified: "script"}
+	emit := diff.Symbol{ID: vm + "Asm#Emit().", Label: "Emit", Change: diff.ChangeBody, Qualified: "Asm.Emit", PublicBeyondWorkspace: true}
+	compile := diff.Symbol{ID: vm + "compile().", Label: "compile", Change: diff.ChangeAdded, Qualified: "compile"}
 	all, perHunk := parsedGoSymbols(root, "libs/x/vm/jit_amd64.go", hunks["libs/x/vm/jit_amd64.go"], pf)
-	assert.Equal(t, []types.DiffSymbol{script, emit, compile}, all)
-	assert.Equal(t, [][]types.DiffSymbol{{script}, {emit}, {compile}}, perHunk, "each hunk lists the symbols it touched")
+	assert.Equal(t, []diff.Symbol{script, emit, compile}, all)
+	assert.Equal(t, [][]diff.Symbol{{script}, {emit}, {compile}}, perHunk, "each hunk lists the symbols it touched")
 
 	all, _ = parsedGoSymbols(root, "vm_test.go", hunks["vm_test.go"], pf)
-	assert.Equal(t, []types.DiffSymbol{
-		{ID: "symbol:gomod example.com/m `example.com/m_test`/TestVM().", Label: "TestVM", Change: types.DiffChangeBody, Qualified: "TestVM"},
+	assert.Equal(t, []diff.Symbol{
+		{ID: "symbol:gomod example.com/m `example.com/m_test`/TestVM().", Label: "TestVM", Change: diff.ChangeBody, Qualified: "TestVM"},
 	}, all, "an external test package is the import path plus _test")
 
 	all, perHunk = parsedGoSymbols(root, "gone.go", []impact.HunkLines{{Index: 0, Lines: []int{1}}}, pf)
@@ -126,11 +127,11 @@ func TestDiffWithSkipOrderDoesNotComputeTheOrder(t *testing.T) {
 	t.Cleanup(func() { _ = m.Close() })
 	paths := []string{"iface.go", "impl.go"}
 
-	full, err := m.DiffWith(t.Context(), paths, types.DiffOptions{Patch: orderPatch})
+	full, err := m.DiffWith(t.Context(), paths, diff.Options{Patch: orderPatch})
 	require.NoError(t, err)
 	require.NotNil(t, full.Order, "without SkipOrder the same diff carries an order")
 
-	brief, err := m.DiffWith(t.Context(), paths, types.DiffOptions{Patch: orderPatch, SkipOrder: true})
+	brief, err := m.DiffWith(t.Context(), paths, diff.Options{Patch: orderPatch, SkipOrder: true})
 	require.NoError(t, err)
 	assert.Nil(t, brief.Order)
 	assert.Len(t, brief.Files, len(full.Files), "the files are annotated either way")
@@ -160,14 +161,14 @@ func TestAttachAPIDeltaClassifiesAndBumps(t *testing.T) {
 		symbolNode(goSymbol("api", "hidden()."), "hidden", private, "func hidden() error", "d4x"),
 		symbolNode(goSymbol("api", "Fresh()."), "Fresh", "api.go:50", "func Fresh() error", "d5"),
 	)
-	out := types.Diff{Files: []types.DiffFile{{Path: "api.go", Project: "."}}}
-	byPath := map[string]*types.DiffFile{"api.go": &out.Files[0]}
+	out := diff.Diff{Files: []diff.File{{Path: "api.go", Project: "."}}}
+	byPath := map[string]*diff.File{"api.go": &out.Files[0]}
 
 	attachAPIDelta(&out, byPath, head, diffConfig{baseline: &base, baselineLabel: "main"}, noExternals)
 
 	require.NotNil(t, out.API)
-	assert.Equal(t, types.DiffAPI{
-		Base: "main", Floor: types.DiffBumpMajor, Likely: types.DiffBumpMajor,
+	assert.Equal(t, diff.API{
+		Base: "main", Floor: diff.BumpMajor, Likely: diff.BumpMajor,
 		Added: 1, Removed: 1, Signature: 1, Body: 0,
 	}, *out.API, "a removed export is a proven major; the private body change moves no count")
 
@@ -176,11 +177,11 @@ func TestAttachAPIDeltaClassifiesAndBumps(t *testing.T) {
 		changes[s.Qualified] = s.Change
 	}
 	assert.Equal(t, map[string]string{
-		"Open":  types.DiffChangeSignature,
-		"Close": types.DiffChangeRemoved,
-		"Fresh": types.DiffChangeAdded,
+		"Open":  diff.ChangeSignature,
+		"Close": diff.ChangeRemoved,
+		"Fresh": diff.ChangeAdded,
 	}, changes, "Steady is untouched in a changed file; hidden changed but no consumer can see it")
-	assert.Equal(t, types.DiffVisibilityPublic, out.Files[0].Visibility)
+	assert.Equal(t, diff.VisibilityPublic, out.Files[0].Visibility)
 }
 
 // TestAttachAPIDeltaLikelyOnlyFromSignatures pins the split between what magus proves and
@@ -193,14 +194,14 @@ func TestAttachAPIDeltaLikelyOnlyFromSignatures(t *testing.T) {
 		},
 	}
 	head := newGraph(symbolNode(goSymbol("api", "Open()."), "Open", "api.go:10", "func Open(quiet bool) error", "d2"))
-	out := types.Diff{Files: []types.DiffFile{{Path: "api.go", Project: "."}}}
+	out := diff.Diff{Files: []diff.File{{Path: "api.go", Project: "."}}}
 
-	attachAPIDelta(&out, map[string]*types.DiffFile{"api.go": &out.Files[0]}, head,
+	attachAPIDelta(&out, map[string]*diff.File{"api.go": &out.Files[0]}, head,
 		diffConfig{baseline: &base, baselineLabel: "main"}, noExternals)
 
 	require.NotNil(t, out.API)
 	// Nothing was added or removed, so the floor is a patch.
-	assert.Equal(t, types.DiffAPI{Base: "main", Floor: types.DiffBumpPatch, Likely: types.DiffBumpMajor, Signature: 1}, *out.API)
+	assert.Equal(t, diff.API{Base: "main", Floor: diff.BumpPatch, Likely: diff.BumpMajor, Signature: 1}, *out.API)
 }
 
 // TestAttachAPIDeltaMembersClassifyThemselves guards the container rule: scip-go renders a
@@ -220,24 +221,24 @@ func TestAttachAPIDeltaMembersClassifyThemselves(t *testing.T) {
 		symbolNode(typeID+"Root.", "Root", "api.go:11", "struct field Root string", "d2"),
 		symbolNode(typeID+"Quiet.", "Quiet", "api.go:12", "struct field Quiet bool", "d3"),
 	)
-	out := types.Diff{Files: []types.DiffFile{{Path: "api.go", Project: "."}}}
+	out := diff.Diff{Files: []diff.File{{Path: "api.go", Project: "."}}}
 
-	attachAPIDelta(&out, map[string]*types.DiffFile{"api.go": &out.Files[0]}, head,
+	attachAPIDelta(&out, map[string]*diff.File{"api.go": &out.Files[0]}, head,
 		diffConfig{baseline: &base, baselineLabel: "main"}, noExternals)
 
 	require.NotNil(t, out.API)
 	// The type defers to its members, so no signature moved, and the new field is the change.
-	assert.Equal(t, types.DiffAPI{
-		Base: "main", Floor: types.DiffBumpMinor, Likely: types.DiffBumpMinor,
+	assert.Equal(t, diff.API{
+		Base: "main", Floor: diff.BumpMinor, Likely: diff.BumpMinor,
 		Added: 1, Body: out.API.Body,
 	}, *out.API)
 }
 
 func TestAttachAPIDeltaRefusesABaselineWithoutSymbols(t *testing.T) {
-	out := types.Diff{Files: []types.DiffFile{{Path: "api.go", Project: "."}}}
+	out := diff.Diff{Files: []diff.File{{Path: "api.go", Project: "."}}}
 	base := types.KnowledgeGraphOutput{SchemaVersion: types.KnowledgeSchemaVersion}
 
-	attachAPIDelta(&out, map[string]*types.DiffFile{"api.go": &out.Files[0]}, newGraph(),
+	attachAPIDelta(&out, map[string]*diff.File{"api.go": &out.Files[0]}, newGraph(),
 		diffConfig{baseline: &base, baselineLabel: "main"}, noExternals)
 
 	assert.Nil(t, out.API, "no symbols on the base side means unknown, never an empty delta")
@@ -246,12 +247,12 @@ func TestAttachAPIDeltaRefusesABaselineWithoutSymbols(t *testing.T) {
 }
 
 func TestAttachAPIDeltaRefusesAnOlderSchema(t *testing.T) {
-	out := types.Diff{}
+	out := diff.Diff{}
 	base := types.KnowledgeGraphOutput{SchemaVersion: 13, Nodes: []types.KnowledgeNode{
 		symbolNode(goSymbol("api", "Open()."), "Open", "api.go:10", "", ""),
 	}}
 
-	attachAPIDelta(&out, map[string]*types.DiffFile{}, newGraph(), diffConfig{baseline: &base, baselineLabel: "main"}, noExternals)
+	attachAPIDelta(&out, map[string]*diff.File{}, newGraph(), diffConfig{baseline: &base, baselineLabel: "main"}, noExternals)
 
 	assert.Nil(t, out.API)
 	require.Len(t, out.Notes, 1)
@@ -308,8 +309,8 @@ const trailPatch = `diff --git a/internal/trail/trail.go b/internal/trail/trail.
 // review never listed it; the finding is what puts it on the file.
 func TestAttachConformanceFindsANewNameWithoutABaseline(t *testing.T) {
 	head := conformanceHead(map[string]int{"EntryPointFrom": 6, "Trail": 3})
-	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
-	byPath := map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}
+	out := diff.Diff{Files: []diff.File{{Path: "internal/trail/trail.go", Project: "."}}}
+	byPath := map[string]*diff.File{"internal/trail/trail.go": &out.Files[0]}
 
 	attachConformance(byPath, head, conformanceInput{conformance: shippedConformance(), patch: trailPatch})
 
@@ -319,7 +320,7 @@ func TestAttachConformanceFindsANewNameWithoutABaseline(t *testing.T) {
 	check := got.Checks[0]
 	// The patch added its definition. The exposure counts and signature are the index's, and
 	// the check's wording and counts are pinned where the check is tested.
-	assert.Equal(t, types.DiffSymbol{
+	assert.Equal(t, diff.Symbol{
 		ID:                    trailID("EntryPointFrom"),
 		Label:                 got.Label,
 		RefCount:              got.RefCount,
@@ -327,12 +328,12 @@ func TestAttachConformanceFindsANewNameWithoutABaseline(t *testing.T) {
 		PublicTo:              got.PublicTo,
 		PublicFileCount:       got.PublicFileCount,
 		PublicBeyondWorkspace: got.PublicBeyondWorkspace,
-		Change:                types.DiffChangeAdded,
+		Change:                diff.ChangeAdded,
 		Qualified:             "EntryPointFrom",
 		Signature:             got.Signature,
 		BaseSignature:         got.BaseSignature,
 		Checks: []types.Check{{
-			Name: types.CheckNamingAffix, Status: types.CheckAdvice,
+			Name: diff.CheckNamingAffix, Status: types.CheckAdvice,
 			Message: check.Message, Details: check.Details, Evidence: check.Evidence, Fix: check.Fix,
 		}},
 		PublicThrough: got.PublicThrough,
@@ -343,7 +344,7 @@ func TestAttachConformanceFindsANewNameWithoutABaseline(t *testing.T) {
 // same patch: it is not new, and nothing is said about its name.
 func TestAttachConformanceSkipsAMovedSymbol(t *testing.T) {
 	head := conformanceHead(map[string]int{"EntryPointFrom": 6})
-	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
+	out := diff.Diff{Files: []diff.File{{Path: "internal/trail/trail.go", Project: "."}}}
 	moved := trailPatch + `diff --git a/internal/obs/old.go b/internal/obs/old.go
 --- a/internal/obs/old.go
 +++ b/internal/obs/old.go
@@ -351,30 +352,30 @@ func TestAttachConformanceSkipsAMovedSymbol(t *testing.T) {
 -func EntryPointFrom(ctx context.Context) *T { return nil }
 `
 
-	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{conformance: shippedConformance(), patch: moved})
+	attachConformance(map[string]*diff.File{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{conformance: shippedConformance(), patch: moved})
 
 	assert.Empty(t, out.Files[0].Symbols)
 }
 
 func TestAttachConformanceFollowsTheBaselineClassification(t *testing.T) {
 	head := conformanceHead(map[string]int{"EntryPointFrom": 6})
-	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
-	byPath := map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}
+	out := diff.Diff{Files: []diff.File{{Path: "internal/trail/trail.go", Project: "."}}}
+	byPath := map[string]*diff.File{"internal/trail/trail.go": &out.Files[0]}
 
-	attachConformance(byPath, head, conformanceInput{conformance: shippedConformance(), changes: map[string]string{trailID("EntryPointFrom"): types.DiffChangeBody}})
+	attachConformance(byPath, head, conformanceInput{conformance: shippedConformance(), changes: map[string]string{trailID("EntryPointFrom"): diff.ChangeBody}})
 	assert.Empty(t, out.Files[0].Symbols, "a body edit is not a naming decision")
 
-	attachConformance(byPath, head, conformanceInput{conformance: shippedConformance(), changes: map[string]string{trailID("EntryPointFrom"): types.DiffChangeAdded}})
+	attachConformance(byPath, head, conformanceInput{conformance: shippedConformance(), changes: map[string]string{trailID("EntryPointFrom"): diff.ChangeAdded}})
 	require.Len(t, out.Files[0].Symbols, 1)
-	assert.Equal(t, types.DiffChangeAdded, out.Files[0].Symbols[0].Change)
+	assert.Equal(t, diff.ChangeAdded, out.Files[0].Symbols[0].Change)
 	assert.NotEmpty(t, out.Files[0].Symbols[0].Checks)
 }
 
 func TestAttachConformanceSkipsGeneratedFiles(t *testing.T) {
 	head := conformanceHead(map[string]int{"EntryPointFrom": 6})
-	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: ".", Role: types.DiffRoleOutput}}}
+	out := diff.Diff{Files: []diff.File{{Path: "internal/trail/trail.go", Project: ".", Role: diff.RoleOutput}}}
 
-	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{conformance: shippedConformance(), patch: trailPatch})
+	attachConformance(map[string]*diff.File{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{conformance: shippedConformance(), patch: trailPatch})
 
 	assert.Empty(t, out.Files[0].Symbols, "a regenerated file's names are the generator's decision")
 }
@@ -390,11 +391,11 @@ func TestAttachConformanceAppliesTheBarAndCapItIsGiven(t *testing.T) {
 		"a zero cap":        func(g *types.ConformanceGates) { g.MaxFindings = 0 },
 		"a bar none clears": func(g *types.ConformanceGates) { g.Bar = 1.01 },
 	} {
-		out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
+		out := diff.Diff{Files: []diff.File{{Path: "internal/trail/trail.go", Project: "."}}}
 		in := conformanceInput{conformance: shippedConformance(), patch: trailPatch}
 		gates(&in.conformance.Gates)
 
-		attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, in)
+		attachConformance(map[string]*diff.File{"internal/trail/trail.go": &out.Files[0]}, head, in)
 
 		assert.Empty(t, out.Files[0].Symbols, name)
 	}
@@ -420,9 +421,9 @@ func TestAttachConformanceRunsTheThresholdCheck(t *testing.T) {
 	conformance.Limits = map[types.ConformanceKey]types.ConformanceLimit{
 		{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}: {Percentile: 99, Anchor: 8},
 	}
-	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
+	out := diff.Diff{Files: []diff.File{{Path: "internal/trail/trail.go", Project: "."}}}
 
-	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head,
+	attachConformance(map[string]*diff.File{"internal/trail/trail.go": &out.Files[0]}, head,
 		conformanceInput{conformance: conformance, patch: trailPatch})
 
 	require.Len(t, out.Files[0].Symbols, 1)
@@ -461,11 +462,11 @@ func TestAttachConformanceReportsATouchedSymbolWhoseBodyGrew(t *testing.T) {
 	conformance.Limits = map[types.ConformanceKey]types.ConformanceLimit{
 		{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}: {Percentile: 99, Anchor: 52},
 	}
-	out := types.Diff{Files: []types.DiffFile{{Path: file, Project: "."}}}
+	out := diff.Diff{Files: []diff.File{{Path: file, Project: "."}}}
 
-	attachConformance(map[string]*types.DiffFile{file: &out.Files[0]}, head, conformanceInput{
+	attachConformance(map[string]*diff.File{file: &out.Files[0]}, head, conformanceInput{
 		conformance: conformance, base: base,
-		changes: map[string]string{ids["Long"]: types.DiffChangeBody, ids["Short"]: types.DiffChangeAdded},
+		changes: map[string]string{ids["Long"]: diff.ChangeBody, ids["Short"]: diff.ChangeAdded},
 	})
 
 	var got []string
@@ -501,14 +502,14 @@ func TestPairRenames(t *testing.T) {
 		ID: trailID("EntryPointFrom"), Kind: types.KindSymbol, Label: "EntryPointFrom",
 		Attrs: map[string]string{knowledge.AttrSignature: "func EntryPointFrom(ctx context.Context) *T"},
 	}
-	changes := map[string]string{trailID("EntryPointFromContext"): types.DiffChangeAdded, trailID("Unrelated"): types.DiffChangeBody}
+	changes := map[string]string{trailID("EntryPointFromContext"): diff.ChangeAdded, trailID("Unrelated"): diff.ChangeBody}
 	renamed := map[string]string{}
 
 	pairRenames(definedSymbols(head.Nodes()), changes, []types.KnowledgeNode{base}, renamed)
 	assert.Equal(t, map[string]string{trailID("EntryPointFromContext"): "EntryPointFrom"}, renamed)
 
 	// Two added symbols fit equally well, so neither is claimed.
-	changes[trailID("Unrelated")] = types.DiffChangeAdded
+	changes[trailID("Unrelated")] = diff.ChangeAdded
 	clear(renamed)
 	pairRenames(definedSymbols(head.Nodes()), changes, []types.KnowledgeNode{base}, renamed)
 	assert.Empty(t, renamed)
@@ -574,36 +575,4 @@ func TestReleaseStageFromIsUnknownWithoutTags(t *testing.T) {
 	assert.False(t, releaseStage(t.Context(), tagsDriver{}, ".").Known(), "no tag visible is unknown")
 	assert.False(t, releaseStage(t.Context(), tagsDriver{err: errors.New("no tags")}, ".").Known(),
 		"a driver that cannot list tags is unknown, never pre-1.0 by guess")
-}
-
-// Example_whatADiffAffects asks which projects a change to one file reaches. web
-// depends on api, so a change inside api affects both.
-func Example_whatADiffAffects() {
-	root, cleanup := newGuideWorkspace(map[string]string{
-		"magusfile.buzz":     "",
-		"api/magusfile.buzz": "",
-		"api/greeting.txt":   "hello\n",
-		"web/magusfile.buzz": "",
-	})
-	defer cleanup()
-
-	reg := NewWorkspaceRegistry()
-	reg.RegisterProject("web", WithDependsOn("api"))
-
-	ctx := context.Background()
-	ws, err := Inspect(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
-	if err != nil {
-		fmt.Println("inspect:", err)
-		return
-	}
-	res, err := ws.AffectedFromPaths(ctx, []string{"api/greeting.txt"})
-	if err != nil {
-		fmt.Println("affected:", err)
-		return
-	}
-	fmt.Println("changed in:", res.Seed)
-	fmt.Println("affected:", res.Affected)
-	// Output:
-	// changed in: [api]
-	// affected: [api web]
 }

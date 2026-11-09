@@ -72,6 +72,13 @@ func TestOwnBuildEscapeNamesTheScriptTheWorkspaceServes(t *testing.T) {
 	assert.Contains(t, escape, "hack/relink.buzz -- --checkout "+shellQuoted(root))
 }
 
+func TestOwnBuildEscapeNamesTheCheckoutHookAfterTheLink(t *testing.T) {
+	root, exe := sourceCheckout(t, "example.com/tool")
+	require.NoError(t, os.WriteFile(filepath.Join(root, config.Filename), []byte("checkout:\n  bootstrap: hack/boot.buzz\n"), 0o644))
+	escape := ownBuildEscape(exe, moduleBuildInfo("example.com/tool", "cmd/tool"), root)
+	assert.Contains(t, escape, "Then ready the checkout, alone on its line: `./magus buzz hack/boot.buzz -- --here --verify-ready`.")
+}
+
 // shellQuoted is path as one POSIX shell word, the way a remedy line names a checkout.
 func shellQuoted(path string) string {
 	q, _ := syntax.Quote(path, syntax.LangPOSIX) // only a NUL byte fails, and no temp dir holds one

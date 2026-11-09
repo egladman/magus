@@ -13,8 +13,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../../../cmd/magus-utils bindings -module url -lang buzz -out ../../../internal/interp/bindings/gen/url.go -pkg bindgen
-
 // Module is the "encoding/url" host module: percent-encoding, plus parsing a URL
 // into its components and building one back out.
 //
@@ -32,31 +30,31 @@ var Module = std.Module{
 		{
 			Name:    "encode",
 			Doc:     "Percent-encode s for use in a URL query component.",
-			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
-			Returns: []std.Ret{{Type: std.TypeString}},
+			Args:    []std.Arg{{Name: "s"}},
+			Returns: []std.Ret{{}},
 			Impl:    URLEncode,
 		},
 		{
 			Name:    "decode",
 			Doc:     "Decode a percent-encoded URL query component; errors on malformed input.",
-			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
-			Returns: []std.Ret{{Type: std.TypeString}},
+			Args:    []std.Arg{{Name: "s"}},
+			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    URLDecode,
 		},
 		{
 			Name:    "parse",
 			Doc:     "Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.",
-			Args:    []std.Arg{{Name: "rawUrl", Type: std.TypeString}},
-			Returns: []std.Ret{{Type: std.TypeAnyMap, Object: "URL"}},
+			Args:    []std.Arg{{Name: "rawUrl"}},
+			Returns: []std.Ret{{Object: "URL"}},
 			Raises:  true,
 			Impl:    URLParse,
 		},
 		{
 			Name:    "build",
 			Doc:     "Build a URL string from a URL object - the same shape parse returns, so the two round-trip. Missing fields are treated as empty.",
-			Args:    []std.Arg{{Name: "parts", Type: std.TypeAnyMap, Object: "URL"}},
-			Returns: []std.Ret{{Type: std.TypeString}},
+			Args:    []std.Arg{{Name: "parts", Object: "URL"}},
+			Returns: []std.Ret{{}},
 			Impl:    URLBuild,
 		},
 	},

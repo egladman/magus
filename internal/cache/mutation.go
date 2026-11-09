@@ -86,17 +86,9 @@ func movedInputs(before, after sourceFingerprint) []string {
 // checkSourceMutation reports MGS4007 when a target rewrote its own declared sources
 // without declaring them via ctx.writesFiles with editsExistingSource. Callers invoke it only after
 // fn succeeded, so it never stacks on top of a target's own failure.
-func (c *Cache) checkSourceMutation(ctx context.Context, s *Step, before sourceFingerprint) error {
-	if before == nil {
-		return nil
-	}
-	after, err := c.fingerprintSources(ctx, s)
-	if err != nil {
-		// An assertion about the run, not part of it: a tree that moved underfoot
-		// between the two passes must not turn a passing target red. Logged rather
-		// than dropped, so a check that stops running is still observable.
-		c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
-			fmt.Sprintf("source mutation check skipped for %s: %v", s.ProjectPath, err)))
+func checkSourceMutation(s *Step, before, after sourceFingerprint) error {
+	// A missing fingerprint skips the check; runMiss reports it.
+	if before == nil || after == nil {
 		return nil
 	}
 	changed := mutatedSources(before, after, s.Updates, s.OwnedOutputs)
@@ -430,18 +422,8 @@ func (c *Cache) checkUndeclaredWrites(ctx context.Context, s *Step, win *writeWi
 // would replay bytes built from different sources. Failing instead would punish the target
 // that was read rather than the one that wrote.
 //
-// True when the fingerprint cannot be taken: a tree magus cannot stat twice is evidence of
-// nothing, and the alternative stops caching whenever a stat races.
-func (c *Cache) keyStillDescribesInputs(ctx context.Context, s *Step, before sourceFingerprint) ([]string, bool) {
-	if before == nil {
-		return nil, true
-	}
-	after, err := c.fingerprintSources(ctx, s)
-	if err != nil {
-		c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
-			fmt.Sprintf("key staleness check skipped for %s: %v", s.ProjectPath, err)))
-		return nil, true
-	}
+// Neither side may be nil: runMiss makes the entry unstorable instead.
+func keyStillDescribesInputs(before, after sourceFingerprint) ([]string, bool) {
 	moved := movedInputs(before, after)
 	return moved, len(moved) == 0
 }

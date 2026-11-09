@@ -40,6 +40,30 @@ directive, so `go install` also builds it from a `libs/proofread/v*` tag. The
 [verify guide](https://eli.gladman.cc/magus/guides/setup/verify/) covers the
 download and both checks.
 
+## As a git hook
+
+This repository runs proofread through the magus guard, but the binary works alone. To
+judge every commit message, save this as `.git/hooks/commit-msg` and make it executable:
+
+```sh
+#!/bin/sh
+exec proofread commit-message -o text --minimum 20 "$1"
+```
+
+Proofread exits 1 when a finding is decided `deny` or the grade falls under the minimum,
+which stops the commit, and 0 otherwise, printing advice without stopping. It refuses to
+run with no minimum for the kind, so pass `--minimum` or set `minimums` in a decisions
+table. Add `--decisions FILE` to turn on the house
+rules your team keeps (`emphasis`, `bare-symbol`, `local-path` and the rest are off until a
+table names them). Judge a pull request description before posting it the same way:
+
+```sh
+printf '%s\n%s\n' "$TITLE" "$BODY" | proofread change-description --stdin -o text --minimum 80
+```
+
+A pass means proofread found nothing it can count. It does not mean the text is right.
+Read what you post, since your name is on it.
+
 ## Decisions
 
 Proofread speaks the decisions of a magus guard rule. Each rule ships a default
@@ -82,6 +106,14 @@ number of directories. An unknown rule, a decision other than the three, a glob
 matching no file argument, and an unknown key are errors that exit 2 and name
 it. `--only` takes comma-separated rule names and judges by those alone; an
 unknown name, or one the table leaves off for every file, exits 2.
+
+A person declares kinds of their own in `$XDG_CONFIG_HOME/proofread/kinds.json`,
+which every run reads beside the table. The file holds `{"kinds": {...}}` and
+nothing else: it sets no rules, paths or minimums, so it cannot loosen what a
+repository's table enforces. A kind name declared in both the table and the file
+is an error naming both, never an override. An absent file declares nothing; an
+unreadable or invalid one exits 2.
+
 `--thread-length N` tells `long-thread` how many replies the author already
 posted in the thread, and `--anchored` that the reply sits on a line of the
 diff, an inline comment or a reply in its thread: that line is what it refers
@@ -197,21 +229,49 @@ FILE...|--stdin` measures the author's own texts, one per file, NUL-separated on
 stdin, or as JSON lines with `--field` (and `--kind-field` for a kind per line),
 and writes the file to `--out`, by default `$XDG_CONFIG_HOME/proofread/voice.json`
 (under the OS config directory when unset, as magus resolves its own). It refuses that default inside a
-git work tree. The file holds aggregates alone, per kind: the texts and words
-counted, the first-person and future-tense rates, and the p10, p50 and p90 of
-each feature: words, words per sentence, the longest paragraph's words, colons,
-parentheses and dashes per 100 words, code spans, contractions, headings and
-bold, the marker words its, every, one, with, all, and, the, and a commit
-subject's characters. It holds no text, no content word and no path. It never
-leaves the machine and is never committed. Spelling, casing and semicolons are
-not measured.
+git work tree. The file, schema `proofread-voice/4`, holds aggregates alone, per
+kind: the texts and words counted, the first-person and future-tense rates, the
+features `voice-drift` ranks on for each 200-word window of the author's pooled
+texts, a commit subject's 95th percentile in characters, and the 5th and 95th
+percentile of each feature a budget or `uniform` reads: the triad and
+participial-clause rates, the spread of list items' words, the share of items
+on the most common opener, and the entropy of the parts of speech sentences
+open on. It holds no text, no content
+word and no path. It never leaves the machine and is never committed. A file
+in an older schema is refused with the command that rebuilds it.
 
 `--voice FILE` on any kind runs `voice-drift` (PRF1040), an advise-only rule
-that reports a text once when two or more features measure outside the author's
-p10 to p90 range, naming each feature and its direction. A kind under 30 texts
-sets no range. A voice whose change descriptions use "I" at 10 or more per 1000
+that reports a draft that reads further from the author's own texts of its kind
+than 95% of those texts do. A kind under 1,000 words keeps no windows and no
+ranges. A voice whose change descriptions use "I" at 10 or more per 1000
 words and "will" at 2 or more holds `tense` to advice on change descriptions,
 where a decisions table would deny it. The [proofread guide](https://eli.gladman.cc/magus/guides/proofread/) walks through building one.
+
+`proofread voice eval --owner FILE --other FILE` scores how far each shape
+feature separates two sets of texts. With `--paired`, `--other` holds a rewrite
+of each owner text, joined on `--id-field` (`id` by default), and the table
+gives per feature the share of pairs whose rewrite measures higher, the cut at
+5% of the owner texts, and the share of rewrites past it. A feature separates
+when the Wilson lower bound on that share clears the false-alarm rate on 20
+pairs or more. `--pool WORDS` groups shuffled pairs into chunks of that many
+owner words, so each chunk and its rewrite cover the same texts.
+
+`--set --stdin` judges NUL-separated texts as one set, pooled the way a voice
+window is: a branch's commits, or the bullets of one document. Only `uniform`
+and `triad` run, since one short text is too small to show a rate or a spread.
+A set under 200 words is not judged, and stderr says so. Its findings name the
+node `set` and no line.
+
+## Protected spans
+
+Some specifics show a person wrote a text: a number with its unit (`410ms`,
+`70%`), a name between lowercase words, and a moment the author saw (a clause
+led by "until", "when" or "after" with a subject). A rule that asks for words
+to be cut, one of the economy dimension, reports a match that holds one whole
+as advice at most. Its message names the span, and `-o json` lists it under the
+finding's `protected`, with its line, columns and reason. Rules that ask for
+evidence, markup or structure keep their decisions, since following them keeps
+the words.
 
 ## Rules
 
@@ -239,6 +299,7 @@ where a decisions table would deny it. The [proofread guide](https://eli.gladman
 | `bare-rule`          | PRF7003 | agent instructions               | off (house)                          | "rule" with no mechanism named, in either form of a template                     |
 | `second-person`      | PRF1003 | guide                            | deny                                 | we, us, our or ours where a guide addresses you                                  |
 | `step-verb`          | PRF1004 | guide                            | deny                                 | a numbered step that opens with no verb ("1. The target...")                     |
+| `first-person`       | PRF1005 | reference, guide                 | off (house)                          | I, me or my outside an author's note (`> [!AUTHOR]`)                             |
 | `condescension`      | PRF2006 | pages, change description, reply | deny                                 | in a guide, a step called easy; elsewhere a word that presumes ("of course")     |
 | `suppression-unused` | PRF1090 | every kind                       | deny                                 | a suppression with no reason, or one that matched no finding                     |
 | `blame`              | PRF2001 | change description, reply        | deny                                 | a person or a pull request as the subject of a fault; contempt ("sloppy")        |

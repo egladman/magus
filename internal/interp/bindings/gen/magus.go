@@ -13,6 +13,7 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/trail"
 )
 
 // RegisterMagus builds the "magus" module map and returns it.
@@ -198,7 +199,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ObjectJob(ret0, enums), nil
 	}))
 	m.MapSet("session", vm.DirectValue("magus.session", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		var opts types.TrailReadOptions
+		var opts trail.ReadOptions
 		if ffi.Present(bzArgs, 0) {
 			x, err := ffi.Object("magus\\session", "opts", bzArgs, 0, decode.DecodeTrailReadOptions)
 			if err != nil {
@@ -839,7 +840,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
-		return ffi.ObjectSlice(ret0, func(v types.TrailMark) vm.Value { return ObjectTrailMark(v, enums) }), nil
+		return ffi.ObjectSlice(ret0, func(v trail.Mark) vm.Value { return ObjectTrailMark(v, enums) }), nil
 	}))
 	m.MapSet("magus__Session__mark", vm.DirectValue("magus.magus__Session__mark", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		recv, err := ffi.Object("magus\\magus__Session__mark", "recv", bzArgs, 0, decode.DecodeSession)

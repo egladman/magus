@@ -4,24 +4,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"io"
 	"os"
 
 	"github.com/egladman/magus/libs/termkit"
-	"github.com/egladman/magus/types"
 )
 
 // Sync is the human's half of the session: where they are looking, and what they have read.
 //
 // There is deliberately no read side. A cursor coming BACK from the session would be some
 // other client moving this reader's viewport, and a viewport that moves on its own is the
-// one thing the whole suggestion design exists to prevent; see types.DiffSuggestion. An
+// one thing the whole suggestion design exists to prevent; see diff.Suggestion. An
 // agent suggests; only the person at the keyboard navigates.
 //
 // No method reports an error, and that is the contract rather than an omission: a
 // coordination write that failed must not interrupt somebody reading a diff.
 type Sync interface {
-	SetCursor(c types.DiffCursor)
+	SetCursor(c diff.Cursor)
 	SetViewed(digest string, on bool)
 	// SetThreadsSeen records that these of the host's review threads have been in front of the
 	// reader, which is the watermark deciding what still counts as NEW. A workspace whose

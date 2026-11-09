@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"io"
 	"log/slog"
 	"net"
@@ -1060,9 +1061,9 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 
 	port := freePort(t)
 	addr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), port)
-	failure := &types.WorkspaceFailure{
+	failure := &daemon.WorkspaceFailure{
 		Message: "magusfile: exec magusfile.buzz: [BZZ1005] ...",
-		Diagnostics: []types.SourceDiagnostic{{
+		Diagnostics: []daemon.SourceDiagnostic{{
 			Code: "BZZ1005", File: "magusfile.buzz", Line: 3, Column: 3, Message: "cannot assign str to int",
 		}},
 	}
@@ -1190,7 +1191,7 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 	}
 	require.NotEmpty(t, services, "the loaded server must mount at least one workspace Connect service")
 
-	failure := &types.WorkspaceFailure{Message: "magusfile: exec magusfile.buzz: [BZZ1005] ..."}
+	failure := &daemon.WorkspaceFailure{Message: "magusfile: exec magusfile.buzz: [BZZ1005] ..."}
 	unloadedPort := freePort(t)
 	unloadedAddr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), unloadedPort)
 	unloaded := NewUnloaded(mcp.Options{Version: "test", HTTPAddr: unloadedAddr, HealthRoutes: map[string]http.Handler{"/readyz": ok}},
@@ -1352,7 +1353,7 @@ func TestServerSocketCarriesTheUnloadedFailure(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	builtConsole(t)
 	root := t.TempDir()
-	failure := &types.WorkspaceFailure{Message: "magusfile: exec magusfile.buzz: [BZZ1005] ..."}
+	failure := &daemon.WorkspaceFailure{Message: "magusfile: exec magusfile.buzz: [BZZ1005] ..."}
 	d, tcp := testServer(t, func(opts mcp.Options) *Server {
 		return NewUnloaded(opts, Unloaded{Root: root, Err: func() rpcerr.Error { return rpcerr.WorkspaceFailed(root, failure) }}, WithSocket(srv))
 	})

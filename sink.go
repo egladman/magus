@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
 )
 
@@ -524,14 +525,14 @@ func (t textEncoder) summary(ctx context.Context, e report.RunSummary) {
 	}
 	elapsed := cache.FormatDuration(time.Duration(e.DurationMs) * time.Millisecond)
 	if e.Dry {
-		_ = t.term.EndRun(ctx, fmt.Sprintf("%sdry run, %s would run (%s)\n", lead, plural(e.Planned, "target"), elapsed))
+		_ = t.term.EndRun(ctx, fmt.Sprintf("%sdry run, %s would run (%s)\n", lead, plural.Count(e.Planned, "target", "targets"), elapsed))
 		return
 	}
 	if e.Files > 0 {
-		elapsed += " on " + plural(e.Files, "file")
+		elapsed += " on " + plural.Count(e.Files, "file", "files")
 	}
 	if e.Slots > 0 {
-		elapsed += " using " + plural(e.Slots, "slot")
+		elapsed += " using " + plural.Count(e.Slots, "slot", "slots")
 	}
 	footer := fmt.Sprintf("%s%d cached, %d ran, %d failed (%s)\n", lead, e.Hits, e.Misses, e.Errors, elapsed)
 	if e.Permitted > 0 {
@@ -561,13 +562,4 @@ func (t textEncoder) notice(ctx context.Context, e report.Notice) {
 
 func (t textEncoder) diagnostic(ctx context.Context, code types.DiagnosticCode, body string) {
 	t.say(ctx, "%s\n", types.FormatDiagnostic(code, body))
-}
-
-// plural writes the noun out rather than "target(s)", which reads as a writer refusing
-// to pick in output a reader is already scanning under pressure.
-func plural(n int, noun string) string {
-	if n == 1 {
-		return fmt.Sprintf("%d %s", n, noun)
-	}
-	return fmt.Sprintf("%d %ss", n, noun)
 }

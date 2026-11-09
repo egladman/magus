@@ -8,17 +8,20 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 	"go/format"
 	"path"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/internal/hostmodules"
+	"github.com/egladman/magus/libs/gopherbuzz/buzzgen"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
@@ -28,9 +31,17 @@ func runBindings(args []string) error {
 	moduleName := fs.String("module", "", "module name to generate (e.g. fs)")
 	lang := fs.String("lang", "buzz", "codegen target: buzz")
 	outPath := fs.String("out", "", "output file path")
+	outDir := fs.String("outdir", "", "with -all, the directory each <module>.go is written to")
+	all := fs.Bool("all", false, "generate every module with an Impl, concurrently")
 	pkg := fs.String("pkg", "", "package clause of the generated file")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *all {
+		if *outDir == "" || *pkg == "" {
+			return fmt.Errorf("usage: magus-utils bindings -all -outdir <dir> -pkg <package>")
+		}
+		return runAllBindings(*outDir, *pkg)
 	}
 
 	if *moduleName == "" || *outPath == "" || *pkg == "" {
@@ -60,6 +71,67 @@ func runBindings(args []string) error {
 		return fmt.Errorf("write %s: %w", *outPath, err)
 	}
 	return nil
+}
+
+// runAllBindings writes every module's trampolines in one process, one
+// goroutine per module. A `go run` per module relinked magus-utils each
+// time and ran the modules one after another.
+func runAllBindings(outDir, pkg string) error {
+	mods := hostmodules.All()
+	if err := checkObjectDecls(mods); err != nil {
+		return err
+	}
+	var g errgroup.Group
+	g.Go(func() error {
+		cbs, err := implCallbacks(mods)
+		if err != nil {
+			return err
+		}
+		out, err := emitCallbacks(cbs, pkg)
+		if err != nil {
+			return fmt.Errorf("render callback adapters: %w", err)
+		}
+		path := filepath.Join(outDir, "callbacks.go")
+		if err := emit.File(path, out); err != nil {
+			return fmt.Errorf("write %s: %w", path, err)
+		}
+		return nil
+	})
+	for _, m := range mods {
+		if !hasImpl(m) {
+			continue
+		}
+		g.Go(func() error {
+			out, err := emitBuzz(m, pkg)
+			if err != nil {
+				return fmt.Errorf("%s: render buzz declarations: %w", m.Name, err)
+			}
+			path := filepath.Join(outDir, m.Name+".go")
+			if err := emit.File(path, out); err != nil {
+				return fmt.Errorf("write %s: %w", path, err)
+			}
+			return nil
+		})
+	}
+	return g.Wait()
+}
+
+// hasImpl reports whether a module binds any Go function, so it has
+// trampolines to generate.
+func hasImpl(m std.Module) bool {
+	for _, meth := range m.Methods {
+		if meth.Impl != nil {
+			return true
+		}
+	}
+	for _, o := range m.Objects {
+		for _, meth := range o.Methods {
+			if meth.Impl != nil {
+				return true
+			}
+		}
+	}
+	return len(m.Fields) > 0
 }
 
 func titleCase(s string) string {
@@ -108,6 +180,7 @@ func goLiteral(v any) string {
 // object returns get a concrete, generated encoder in this package: no reflection
 // and no map[string]any intermediary are linked into the magus runtime path.
 func emitBuzz(m std.Module, pkg string) ([]byte, error) {
+	m = m.WithTags()
 	// Every Method's Impl (and Field's Resolver) has to live in the SAME Go
 	// package: one generated file makes one Register<Module> call, importing
 	// one Impl package under one qualifier. That was always true when every
@@ -155,7 +228,7 @@ func emitBuzz(m std.Module, pkg string) ([]byte, error) {
 	for _, meth := range slices.Concat(m.Methods, m.ObjectExterns()) {
 		// An Extern member has no Impl to wrap; internal/interp/bindings MapSets it
 		// onto the namespace at run time. It is declared, not trampolined.
-		if meth.Extern {
+		if meth.Extern != nil {
 			continue
 		}
 		if err := emitBuzzMethod(&members, m, meth, objects, pkgs, implPkg); err != nil {
@@ -212,7 +285,12 @@ func emitBuzz(m std.Module, pkg string) ([]byte, error) {
 		fmt.Fprintf(&b, "\t%q\n", implPath)
 	}
 	for _, p := range pkgs.packages() {
-		if p != implPath {
+		if p == implPath {
+			continue
+		}
+		if alias := packageAlias(p); alias != path.Base(p) {
+			fmt.Fprintf(&b, "\t%s %q\n", alias, p)
+		} else {
 			fmt.Fprintf(&b, "\t%q\n", p)
 		}
 	}
@@ -255,7 +333,7 @@ func resolveImplementationPackage(m std.Module) (importPath, pkgIdent string, er
 		}
 	}
 	for _, meth := range slices.Concat(m.Methods, m.ObjectExterns()) {
-		if meth.Extern {
+		if meth.Extern != nil {
 			continue // no Impl, so no package to import
 		}
 		path, pkg := std.MethodImplementationPackage(meth)
@@ -358,6 +436,10 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 // emitArgDecode emits the decode of one argument: an inbound Object through its
 // generated decoder, anything else through the ffi primitive for its type tag.
 func emitArgDecode(w *bytes.Buffer, pkgs *argPackages, member string, a std.Arg, idx int, param reflect.Type) error {
+	if param.Kind() == reflect.Func {
+		fmt.Fprintf(w, "\t\t%s := %s(sess, bzArgs, %d)\n", a.Name, callbackAdapterName(param), idx)
+		return nil
+	}
 	handled, err := emitObjectArgDecode(w, pkgs, member, a, idx, param)
 	if err != nil || handled {
 		return err
@@ -463,8 +545,6 @@ func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 		fmt.Fprintf(w, "\t\t%s := ffi.StringMap(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeAnyMap:
 		fmt.Fprintf(w, "\t\t%s := ffi.AnyMap(bzArgs, %d)\n", a.Name, idx)
-	case std.TypeFunc:
-		fmt.Fprintf(w, "\t\t%s := ffi.CallbackArg(sess, bzArgs, %d)\n", a.Name, idx)
 	case std.TypeAny:
 		fmt.Fprintf(w, "\t\t%s := ffi.Any(bzArgs, %d)\n", a.Name, idx)
 	default:
@@ -707,9 +787,9 @@ func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
 	}
 	if hasMethods(t) {
 		var names, values []string
-		for _, bf := range boundaryFields(t) {
+		for _, bf := range emit.ObjectFields(t) {
 			f := bf.StructField
-			value, err := e.value(&body, "v."+bf.selector, f.Name, f.Type, "\t")
+			value, err := e.value(&body, "v."+bf.Selector, f.Name, f.Type, "\t")
 			if err != nil {
 				return fmt.Errorf("%s.%s: %w", t.Name(), f.Name, err)
 			}
@@ -720,9 +800,9 @@ func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
 			buzzName(t), strings.Join(names, ", "), strings.Join(values, ", "))
 	} else {
 		fmt.Fprintln(&body, "\tout := vm.NewMap()")
-		for _, bf := range boundaryFields(t) {
+		for _, bf := range emit.ObjectFields(t) {
 			f := bf.StructField
-			value, err := e.value(&body, "v."+bf.selector, f.Name, f.Type, "\t")
+			value, err := e.value(&body, "v."+bf.Selector, f.Name, f.Type, "\t")
 			if err != nil {
 				return fmt.Errorf("%s.%s: %w", t.Name(), f.Name, err)
 			}
@@ -754,6 +834,11 @@ type boundaryPackage struct {
 var boundaryPackages = []boundaryPackage{
 	{path: "github.com/egladman/magus/spells", alias: "spells"},
 	{path: "github.com/egladman/magus/types", alias: "types"},
+	{path: "github.com/egladman/magus/types/image", alias: "imagetypes", prefix: "Image"},
+	{path: "github.com/egladman/magus/types/daemon", alias: "daemon", prefix: "Status"},
+	{path: "github.com/egladman/magus/types/trail", alias: "trail", prefix: "Trail"},
+	{path: "github.com/egladman/magus/types/events", alias: "events", prefix: "Stream"},
+	{path: "github.com/egladman/magus/types/diff", alias: "difftypes", prefix: "Diff"},
 	{path: "github.com/egladman/magus/internal/queue/types", alias: "queuetypes", prefix: "Queue"},
 	{path: "github.com/egladman/magus/libs/diagnostics", alias: "diagnostics"},
 }
@@ -777,7 +862,22 @@ func qualifyType(t reflect.Type) string {
 
 // typeIdent names t in a generated identifier (ObjectFileInfo, DecodeQueueChange).
 func typeIdent(t reflect.Type) string {
-	return typePackage(t).prefix + t.Name()
+	prefix := typePackage(t).prefix
+	if strings.HasPrefix(t.Name(), prefix) {
+		return t.Name()
+	}
+	return prefix + t.Name()
+}
+
+// packageAlias is the name generated code uses for the package at
+// importPath: its boundaryPackages alias, else its base name.
+func packageAlias(importPath string) string {
+	for _, p := range boundaryPackages {
+		if p.path == importPath {
+			return p.alias
+		}
+	}
+	return path.Base(importPath)
 }
 
 // importLines renders the import of each package in used, which is keyed by alias, in
@@ -956,7 +1056,7 @@ func (e *buzzValueEmitter) walkEnums(t reflect.Type, visiting map[reflect.Type]b
 		// A mirror with methods is an instance the session's definition makes, as an
 		// enum case is, so its encoder needs the same resolver.
 		reach = hasMethods(t)
-		for _, bf := range boundaryFields(t) {
+		for _, bf := range emit.ObjectFields(t) {
 			if reach {
 				break
 			}
@@ -981,34 +1081,6 @@ func (e *buzzValueEmitter) walkEnums(t reflect.Type, visiting map[reflect.Type]b
 // within the function.
 func (e *buzzValueEmitter) name(prefix, path string) string {
 	return prefix + path
-}
-
-// boundaryField is one field a boundary type carries across, with the selector that
-// reaches it from the value ("Schema.Version" for a field of an embedded struct).
-type boundaryField struct {
-	reflect.StructField
-	selector string
-}
-
-// boundaryFields lists t's exported fields the way buzzgen's mirror declares them: an
-// untagged embedded struct contributes its own fields inline rather than one nested field.
-func boundaryFields(t reflect.Type) []boundaryField {
-	var out []boundaryField
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		if !f.IsExported() || f.Tag.Get("buzz") == "-" {
-			continue
-		}
-		if f.Anonymous && f.Type.Kind() == reflect.Struct && f.Tag.Get("buzz") == "" {
-			for _, inner := range boundaryFields(f.Type) {
-				inner.selector = fmt.Sprintf("%s.%s", f.Name, inner.selector)
-				out = append(out, inner)
-			}
-			continue
-		}
-		out = append(out, boundaryField{StructField: f, selector: f.Name})
-	}
-	return out
 }
 
 // buzzVMFieldName must agree with the mirror's field name exactly: this emits the RUNTIME

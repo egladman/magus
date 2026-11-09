@@ -22,7 +22,7 @@ import (
 // v3 unified the per-target cache.hit/cache.miss/cache.error events into a single
 // target-result event (see TargetResult).
 // v4 prefixed that event and the diagnostic one with "run.": both collided by name
-// with types.StreamEvent, which stamps its own schema number on a line of nearly the
+// with events.Event, which stamps its own schema number on a line of nearly the
 // same shape.
 // v5 dropped run.base's vcs field and the lock.wait and lock.released events, and a
 // -o jsonl run's stderr moved from slog's {time,level,msg} lines to run.notice records.
@@ -32,29 +32,29 @@ const Schema = 5
 const (
 	TypeTargetResult          = "run.target.result"
 	TypeTargetValue           = "run.target.value"
-	TypeGraphBuild            = "graph.build"
-	TypeGraphQuery            = "graph.query"
-	TypeGraphError            = "graph.error"
+	typeGraphBuild            = "graph.build"
+	typeGraphQuery            = "graph.query"
+	typeGraphError            = "graph.error"
 	TypeVolatility            = "volatile"
 	TypeShardTotal            = "shard.total"
-	TypeRaceDetected          = "race.detected"
+	typeRaceDetected          = "race.detected"
 	TypeOutputOverlapDetected = "race.output_overlap"
-	TypeDeterminismMismatch   = "race.determinism_mismatch"
-	TypeDeterminismUnchecked  = "race.determinism_unchecked"
+	typeDeterminismMismatch   = "race.determinism_mismatch"
+	typeDeterminismUnchecked  = "race.determinism_unchecked"
 	TypeMissingDependency     = "race.missing_dependency"
 	TypeDiagnosticEmitted     = "run.diagnostic"
 	TypeRunScope              = "run.scope"
-	TypeRunCharms             = "run.charms"
-	TypeRunCache              = "run.cache"
-	TypeRunBase               = "run.base"
-	TypeRunStep               = "run.step"
-	TypeRunSummary            = "run.summary"
-	TypeRunRemote             = "run.remote"
-	TypeRunDry                = "run.dry"
-	TypeRunDetach             = "run.detach"
+	typeRunCharms             = "run.charms"
+	typeRunCache              = "run.cache"
+	typeRunBase               = "run.base"
+	typeRunStep               = "run.step"
+	typeRunSummary            = "run.summary"
+	typeRunRemote             = "run.remote"
+	typeRunDry                = "run.dry"
+	typeRunDetach             = "run.detach"
 	TypeLockSuperseded        = "lock.superseded"
-	TypeLockSupersedeRefused  = "lock.supersede_refused"
-	TypeLockPipeWait          = "lock.pipe_wait"
+	typeLockSupersedeRefused  = "lock.supersede_refused"
+	typeLockPipeWait          = "lock.pipe_wait"
 	TypeNotice                = "run.notice"
 )
 
@@ -299,7 +299,7 @@ type LockPipeWait struct {
 // an MGS####) when the notice carries one, and Message does not repeat it. Attrs
 // carries the fields of a log record no typed event converts (see [NewNoticeHandler]).
 //
-// Level is written as "debug", "info", "warn" or "error" (see [LevelName]).
+// Level is written as "debug", "info", "warn" or "error" (see [levelName]).
 type Notice struct {
 	Level   slog.Level
 	Code    string
@@ -317,7 +317,7 @@ type noticeWire struct {
 
 // MarshalJSON writes Level by name.
 func (n Notice) MarshalJSON() ([]byte, error) {
-	return json.Marshal(noticeWire{Level: LevelName(n.Level), Code: n.Code, Message: n.Message, Attrs: n.Attrs})
+	return json.Marshal(noticeWire{Level: levelName(n.Level), Code: n.Code, Message: n.Message, Attrs: n.Attrs})
 }
 
 // UnmarshalJSON reads a line [Notice.MarshalJSON] wrote.
@@ -334,9 +334,9 @@ func (n *Notice) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// LevelName is the name a record carries for l: one of debug, info, warn and error, with
+// levelName is the name a record carries for l: one of debug, info, warn and error, with
 // anything below debug (magus's trace) reading as debug and anything past error as error.
-func LevelName(l slog.Level) string {
+func levelName(l slog.Level) string {
 	switch {
 	case l < slog.LevelInfo:
 		return "debug"
@@ -352,28 +352,28 @@ var registry = map[reflect.Type]string{ // populated at init; read-only in the h
 	reflect.TypeOf(DiagnosticEmitted{}):     TypeDiagnosticEmitted,
 	reflect.TypeOf(TargetResult{}):          TypeTargetResult,
 	reflect.TypeOf(TargetValue{}):           TypeTargetValue,
-	reflect.TypeOf(GraphBuild{}):            TypeGraphBuild,
-	reflect.TypeOf(GraphQuery{}):            TypeGraphQuery,
-	reflect.TypeOf(GraphError{}):            TypeGraphError,
+	reflect.TypeOf(GraphBuild{}):            typeGraphBuild,
+	reflect.TypeOf(GraphQuery{}):            typeGraphQuery,
+	reflect.TypeOf(GraphError{}):            typeGraphError,
 	reflect.TypeOf(VolatilityCall{}):        TypeVolatility,
 	reflect.TypeOf(ShardTotal{}):            TypeShardTotal,
-	reflect.TypeOf(RaceDetected{}):          TypeRaceDetected,
+	reflect.TypeOf(RaceDetected{}):          typeRaceDetected,
 	reflect.TypeOf(OutputOverlapDetected{}): TypeOutputOverlapDetected,
-	reflect.TypeOf(DeterminismMismatch{}):   TypeDeterminismMismatch,
-	reflect.TypeOf(DeterminismUnchecked{}):  TypeDeterminismUnchecked,
+	reflect.TypeOf(DeterminismMismatch{}):   typeDeterminismMismatch,
+	reflect.TypeOf(DeterminismUnchecked{}):  typeDeterminismUnchecked,
 	reflect.TypeOf(MissingDependency{}):     TypeMissingDependency,
 	reflect.TypeOf(RunScope{}):              TypeRunScope,
-	reflect.TypeOf(RunCharms{}):             TypeRunCharms,
-	reflect.TypeOf(RunCache{}):              TypeRunCache,
-	reflect.TypeOf(RunBase{}):               TypeRunBase,
-	reflect.TypeOf(RunStep{}):               TypeRunStep,
-	reflect.TypeOf(RunSummary{}):            TypeRunSummary,
-	reflect.TypeOf(RunDry{}):                TypeRunDry,
-	reflect.TypeOf(RunDetach{}):             TypeRunDetach,
+	reflect.TypeOf(RunCharms{}):             typeRunCharms,
+	reflect.TypeOf(RunCache{}):              typeRunCache,
+	reflect.TypeOf(RunBase{}):               typeRunBase,
+	reflect.TypeOf(RunStep{}):               typeRunStep,
+	reflect.TypeOf(RunSummary{}):            typeRunSummary,
+	reflect.TypeOf(RunDry{}):                typeRunDry,
+	reflect.TypeOf(RunDetach{}):             typeRunDetach,
 	reflect.TypeOf(LockSuperseded{}):        TypeLockSuperseded,
-	reflect.TypeOf(LockSupersedeRefused{}):  TypeLockSupersedeRefused,
-	reflect.TypeOf(LockPipeWait{}):          TypeLockPipeWait,
-	reflect.TypeOf(RunRemote{}):             TypeRunRemote,
+	reflect.TypeOf(LockSupersedeRefused{}):  typeLockSupersedeRefused,
+	reflect.TypeOf(LockPipeWait{}):          typeLockPipeWait,
+	reflect.TypeOf(RunRemote{}):             typeRunRemote,
 	reflect.TypeOf(Notice{}):                TypeNotice,
 }
 
@@ -452,30 +452,55 @@ func successStatus(r *cache.Result) string {
 }
 
 // RunOptions returns a cache.RunOption that records hit/miss/error events into w per spec.
-func RunOptions(w *Writer, served NextServer) []cache.RunOption {
+// A non-nil results receives the same outcome, so served runs once per step:
+// it journals each hint it serves.
+func RunOptions(w *Writer, served NextServer, results func(types.TargetResult)) []cache.RunOption {
 	return []cache.RunOption{
 		cache.OnResult(func(s *cache.Step, r *cache.Result, err error) {
+			out := outcome(s, r, err, served)
+			if results != nil {
+				results(out)
+			}
 			tr := TargetResult{
-				Project:    s.ProjectPath,
-				Target:     s.Target,
-				Status:     successStatus(r),
-				CacheHit:   r.Hit,
-				Hash:       r.Hash,
-				DurationMs: r.Duration.Milliseconds(),
-				Ref:        r.Ref,
+				Project:    out.Project,
+				Target:     out.Target,
+				Status:     string(out.Status),
+				CacheHit:   out.CacheHit,
+				Hash:       out.Hash,
+				DurationMs: out.Duration.Milliseconds(),
+				Ref:        out.Ref,
 				HintID:     r.HintID,
+				Next:       out.Next,
 			}
 			if err != nil {
-				tr.Status = "failed"
 				tr.Error = err.Error()
-				tr.Next = hint.NextForFailure(s.ProjectPath, s.Target, r.Ref)
-				if served != nil {
-					tr.Next = served(tr.Next)
-				}
 			}
 			_ = Record(w, tr)
 		}),
 	}
+}
+
+// outcome is one finished step as the typed value a Go caller reads, the
+// facts the run.target.result record writes as text.
+func outcome(s *cache.Step, r *cache.Result, err error, served NextServer) types.TargetResult {
+	out := types.TargetResult{
+		Project:  s.ProjectPath,
+		Target:   s.Target,
+		Status:   types.TargetStatus(successStatus(r)),
+		CacheHit: r.Hit,
+		Hash:     r.Hash,
+		Duration: r.Duration,
+		Ref:      r.Ref,
+	}
+	if err != nil {
+		out.Status = types.TargetFailed
+		out.Err = err
+		out.Next = hint.NextForFailure(s.ProjectPath, s.Target, r.Ref)
+		if served != nil {
+			out.Next = served(out.Next)
+		}
+	}
+	return out
 }
 
 // GraphObserver returns a types.Observer that appends graph events to w; nil-safe.

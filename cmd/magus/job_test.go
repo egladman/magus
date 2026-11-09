@@ -19,7 +19,6 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/broker"
-	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
@@ -2610,12 +2609,6 @@ func (s *jobHelpSuite) TestApplyHelpPrintsItsExamplesOnce() {
 	for _, ex := range spec.Examples {
 		s.Equal(1, strings.Count(out.String(), ex.Command), ex.Command)
 	}
-}
-
-func (s *jobHelpSuite) TestAHandBoundFlagReadsItsDocFromTheTree() {
-	doc := registeredFlagDoc("job apply", flaggen.FlagJobApplyAddWritePath)
-
-	s.Contains(doc, "A path to add to the job's write paths")
 }
 
 type lsJobsUnmergedSuite struct {

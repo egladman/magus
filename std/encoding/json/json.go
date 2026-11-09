@@ -12,8 +12,6 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-//go:generate go run ../../../cmd/magus-utils bindings -module json -lang buzz -out ../../../internal/interp/bindings/gen/json.go -pkg bindgen
-
 // Module is the "json" host module: JSON encode/decode for spells.
 var Module = std.Module{
 	Name: "json",
@@ -24,8 +22,8 @@ var Module = std.Module{
 		{
 			Name:    "parse",
 			Doc:     "Decode a JSON string into a value (map, list, string, number, or boolean).",
-			Args:    []std.Arg{{Name: "s", Type: std.TypeString}},
-			Returns: []std.Ret{{Type: std.TypeAny}},
+			Args:    []std.Arg{{Name: "s"}},
+			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    JSONParse,
 		},
@@ -33,10 +31,10 @@ var Module = std.Module{
 			Name: "stringify",
 			Doc:  "Encode a value as a JSON string. With no indent (or \"\") the output is compact; pass an indent string (e.g. \"  \" or \"\\t\") for pretty, multi-line output.",
 			Args: []std.Arg{
-				{Name: "value", Type: std.TypeAny},
-				{Name: "indent", Type: std.TypeString, Optional: true},
+				{Name: "value"},
+				{Name: "indent", Optional: true},
 			},
-			Returns: []std.Ret{{Type: std.TypeString}},
+			Returns: []std.Ret{{}},
 			Raises:  true,
 			Impl:    JSONStringify,
 		},

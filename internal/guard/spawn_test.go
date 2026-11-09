@@ -2,11 +2,13 @@ package guard
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
@@ -358,7 +360,51 @@ func TestAScheduledPromptIsNoSpawn(t *testing.T) {
 		require.True(t, ok)
 		assert.False(t, req.IsSpawn, "%v", input)
 		assert.True(t, req.NothingToJudge, "%v", input)
+		assert.True(t, req.Schedules, "%v", input)
 	}
+}
+
+type scheduledPromptSuite struct {
+	suite.Suite
+	facts, stops hint.Gate
+	now          time.Time
+}
+
+func TestScheduledPromptSuite(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(scheduledPromptSuite))
+}
+
+func (s *scheduledPromptSuite) SetupTest() {
+	dir := s.T().TempDir()
+	s.facts, s.stops, s.now = hint.NewGate(dir, "facts"), hint.NewGate(dir, "stops"), time.Now()
+}
+
+func (s *scheduledPromptSuite) spawnChild(id string) {
+	body, err := json.Marshal(spawnedAgent{ID: id})
+	s.Require().NoError(err)
+	writeAgentMarker(s.facts, spawnedAgentKind(id), body)
+}
+
+func (s *scheduledPromptSuite) TestPassesWithNothingPending() {
+	s.Empty(gradeScheduledPrompt(s.facts, s.stops, "", s.now).Deny)
+}
+
+func (s *scheduledPromptSuite) TestIsATimerWhileAChildRuns() {
+	s.spawnChild("child-1")
+	v := gradeScheduledPrompt(s.facts, s.stops, "", s.now)
+	s.Equal(denySleepTimer, v.Deny)
+	s.Equal(string(denyRuleSleepPoll), v.RuleName())
+}
+
+func (s *scheduledPromptSuite) TestPassesOnceTheChildStopped() {
+	s.spawnChild("child-1")
+	s.stops.Touch(stoppedAgentKind("child-1"))
+	s.Empty(gradeScheduledPrompt(s.facts, s.stops, "", s.now).Deny)
+}
+
+func (s *scheduledPromptSuite) TestPassesWhenTheTranscriptCannotBeRead() {
+	s.Empty(gradeScheduledPrompt(s.facts, s.stops, "relative/transcript.jsonl", s.now).Deny)
 }
 
 // A host whose spawn answers with a name and whose child's calls carry an id: the child's

@@ -28,10 +28,6 @@ import (
 // process start and exit.
 const hookBudget = 7 * time.Second
 
-// inspectBudget bounds the wait for one workspace open, half the hook's budget so the rest
-// of the judgment still answers in time.
-const inspectBudget = hookBudget / 2
-
 // judgeReserve is held back from every phase for wording the verdict and writing the trail
 // row once the phases are done.
 const judgeReserve = 500 * time.Millisecond
@@ -168,37 +164,23 @@ func isDryRun(ctx context.Context) bool {
 	return dry
 }
 
-// phaseShares is how a judgment divides its deadline: each phase still to run holds its
-// shares, and a phase that starts spends its shares' part of what remains, so one that
-// answers early leaves its time to the ones after it.
-type phaseShares map[string]int
-
-// take removes phase from the table and returns what it may spend of ctx's remaining time,
-// less judgeReserve: zero when nothing is left, never less. bounded is false when ctx
-// carries no deadline, and the phase then runs to completion.
-func (p phaseShares) take(ctx context.Context, phase string) (budget time.Duration, bounded bool) {
-	shares := p[phase]
-	delete(p, phase)
+// untilReserve is what remains of ctx's deadline less judgeReserve, never
+// negative. bounded is false when ctx has no deadline.
+func untilReserve(ctx context.Context) (budget time.Duration, bounded bool) {
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		return 0, false
 	}
-	total := shares
-	for _, s := range p {
-		total += s
-	}
-	remaining := time.Until(deadline) - judgeReserve
-	return max(remaining*time.Duration(shares)/time.Duration(max(total, 1)), 0), true
+	return max(time.Until(deadline)-judgeReserve, 0), true
 }
 
 // TimeRuleLoad runs load, which reads the workspace's guard rules, and times it against
 // what remains of ctx's deadline. The phase is lapsed only when load failed after the
 // deadline passed.
 //
-// load runs under ctx itself rather than a share of it: the loaded session keeps the
-// context it was loaded with, and a share that ended would end every rule call after it.
-// Its budget is therefore all that remains, and the phases after it divide what it leaves.
-// With no deadline on ctx it has no budget and never lapses.
+// load runs under ctx itself: the loaded session keeps that context, so a
+// narrower one would end every rule call after it. With no deadline on ctx
+// the load has no budget and never lapses.
 //
 // A load that does not stop at the deadline is waited for, so a late answer still spares
 // what only a loaded policy can tell apart; a hook bounds the whole judgment, the load
@@ -206,7 +188,7 @@ func (p phaseShares) take(ctx context.Context, phase string) (budget time.Durati
 func TimeRuleLoad[T any](ctx context.Context, load func() (T, error)) (T, trail.Phase, error) {
 	log := judgmentPhases(ctx)
 	log.begin(phaseLoadRules)
-	budget, _ := phaseShares{phaseLoadRules: 1}.take(ctx, phaseLoadRules)
+	budget, _ := untilReserve(ctx)
 	start := time.Now()
 	got, err := load()
 	log.idle()
@@ -244,12 +226,10 @@ func awaitDeadline[T any](ctx context.Context, work func() (T, error)) (T, error
 	}
 }
 
-// boundedPhase runs call as phase of the judgment on ctx. The wait ends judgeReserve before
-// ctx does and never outlasts inspectBudget; a wait that ends first answers its error, and
-// once phase has lapsed in a judgment every later call answers context.DeadlineExceeded at
-// once, since each waiting its own budget on the same stall would add up past the deadline.
-// call runs without ctx's cancel, so a memoized answer is never cached as cancelled. The
-// phase is recorded lapsed when it answered an error after its wait ran out.
+// boundedPhase runs call as phase of the judgment on ctx, waiting until
+// judgeReserve before ctx's deadline. A lapsed phase answers
+// context.DeadlineExceeded at once to every later call.
+// call runs without ctx's cancel, so a memoized answer is never cancelled.
 func boundedPhase[T any](ctx context.Context, phase string, call func(context.Context) (T, error)) (T, error) {
 	log := judgmentPhases(ctx)
 	if log.lapsed(phase) {
@@ -257,15 +237,9 @@ func boundedPhase[T any](ctx context.Context, phase string, call func(context.Co
 		return zero, context.DeadlineExceeded
 	}
 	log.begin(phase)
-	budget := inspectBudget
-	if deadline, ok := ctx.Deadline(); ok {
-		remaining := max(time.Until(deadline)-judgeReserve, 0)
-		// A dry run nested in a hook still has a host waiting.
-		if isDryRun(ctx) && remaining > hookBudget {
-			budget = remaining
-		} else {
-			budget = min(budget, remaining)
-		}
+	budget, bounded := untilReserve(ctx)
+	if !bounded {
+		budget = hookBudget
 	}
 	wait, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()

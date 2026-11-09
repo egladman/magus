@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"slices"
 	"strings"
 
@@ -19,7 +20,7 @@ import (
 // describeTargets, a live CLI function, as a leftover of DescribeTargets. By words it does not.
 type renameCheck struct{}
 
-func (renameCheck) name() string { return types.CheckRenameLeftover }
+func (renameCheck) name() string { return diff.CheckRenameLeftover }
 
 func (renameCheck) run(x *namingIndex) []finding {
 	if x.change.Read == nil || len(x.change.Renamed) == 0 {

@@ -11,8 +11,8 @@
 // The pr-description CI step runs judgeText too, so the guard and CI reach one decision.
 // This rule keeps what proofread does not read: the spaced hyphen, the word budget, the
 // shape past the lead, the areas the diff touches, an unfinished-work checklist and the
-// title. Unfinished work a Considerations section names is a GitHub task-list item, so a
-// draft's next steps are legible and cannot look finished. When the text cannot be read,
+// title. Unfinished work is a task under Next, which holds
+// nothing else, so it cannot look finished. When the text cannot be read,
 // the whole line is judged for credit and typography instead.
 //
 // A description gets a word budget that grows with the change, counted after its lead so a
@@ -39,6 +39,7 @@
 namespace agentpolicy\pullRequests;
 
 import "std";
+import "strings";
 import "magus";
 import "vcs";
 import "proc";
@@ -76,6 +77,11 @@ final events = ["APPROVE", "REQUEST_CHANGES", "COMMENT"];
 // inlineField is the field of a review POST carrying one inline comment's text.
 final inlineField = "comments[][body]";
 
+// A Considerations list longer than this rambles.
+final maxConsiderations = 3;
+// LATER heads the follow-up pull requests a change lays groundwork for.
+final LATER = "Later";
+
 // example is the shape a denial teaches, since an agent sees only the denial text.
 final example = "    fix(cache): sort the key's inputs before hashing\n"
     + "    Make warm builds hit the cache again. A CI run showed the key hashing its inputs in\n"
@@ -86,17 +92,24 @@ final example = "    fix(cache): sort the key's inputs before hashing\n"
     + "\n"
     + "    ## Considerations\n"
     + "\n"
-    + "    - [ ] Not verified: a cold cache on Windows.";
+    + "    - Sorting costs a copy of the inputs per key.\n"
+    + "\n"
+    + "    ## Next\n"
+    + "\n"
+    + "    - [ ] Check a cold cache on Windows.";
 final fixLine = "Rewrite it in this shape: a conventional title; a lead of one to three sentences saying "
-    + "what you set out to do and why; one present-tense bullet per change; then a Considerations "
-    + "section for the implementation considerations: the trade-off taken, a constraint the code works "
-    + "under, the alternative set aside, a risk, and the one file that matters most with the reason it "
-    + "does. Never a reading order. Each unfinished item is a task opening Not verified: or Not done:. Keep it short and in your own words, within the budget the change earns, in plain "
+    + "what you set out to do and why; one present-tense bullet per change; then, if a reviewer must "
+    + "weigh something, a Considerations section of at most {maxConsiderations} bullets: the trade-off "
+    + "taken, a constraint, the alternative set aside, a risk. Never a reading order. A Later section "
+    + "may name the follow-up pull requests this one lays groundwork for. Last, a Next "
+    + "section of `- [ ]` tasks for what is not done or not verified, and nothing else. Keep it short "
+    + "and in your own words, within the budget the change earns, in plain "
     + "ASCII. Skip \"This PR\", lists of exactly three and credit to a tool or an agent. For example:\n"
     + example;
 final shapeLine = "The shape: what you set out to do and why in one to three sentences, one bullet per "
-    + "change, then a Considerations section with trade-offs, constraints, alternatives set aside and "
-    + "risks (a file may be named only with why it matters), and each unfinished item as a task. Short, in your own words. This is said once per pull request. For example:\n" + example;
+    + "change, then at most {maxConsiderations} Considerations bullets of trade-offs and risks (a file "
+    + "may be named only with why it matters), then a Next section of `- [ ]` tasks for unfinished "
+    + "work. Short, in your own words. This is said once per pull request. For example:\n" + example;
 final replyLine = "Rewrite the reply: say whether you made the change, and if not, why, in a sentence or "
     + "two. For example: \"Done, the retry is in the client now.\" or \"Kept it here, since the client "
     + "never sees the backoff state. Happy to move it if you see a cleaner seam.\"";
@@ -147,7 +160,9 @@ final considerationsHeading = $"^#{1,6}\s+considerations\s*$";
 final unfinishedOpener = $"^(\[ \]\s+)?(not verified|not tested|not done|not measured|untested)\b";
 // readingOpener is a Considerations item that says where to begin reading.
 final readingOpener = $"^(\[ \]\s+)?(start (with|at)|begin (with|at)|(read|look at|review)\b.*\bfirst\b)";
-final uncheckedTask = $"^\[ \]\s+\S";
+final nextHeading = $"^#{1,6}\s+next\s*$";
+// anyTask is a GitHub task-list item, open or ticked.
+final anyTask = $"^\[[ xX]\]\s+\S";
 final sourceLine = $":([0-9]+)$";
 final outputRef = $"\bout[0-9a-f]{6,}\b";
 final maxCitedRefs = 10;
@@ -675,6 +690,35 @@ export fun unnamedAreas(areas: [str], text: str) > [str] {
     return unnamed;
 }
 
+// elidedScopeProblems holds a title whose scope ends in `...` to name, in
+// the description, each area the change touches that the scope left out.
+export fun elidedScopeProblems(title: str, areas: [str], body: str) > [str] {
+    final names = conventional\scopes(title);
+    if (names.len() == 0 or names[names.len() - 1] != conventional\ELIDED) {
+        return [<str>];
+    }
+    final left = mut [<str>];
+    foreach (area in unnamedAreas(areas, text: body)) {
+        final parts = area.split("/");
+        if (names.indexOf(parts[parts.len() - 1]) == null) {
+            left.append(area);
+        }
+    }
+    if (left.len() == 0) {
+        return [<str>];
+    }
+    return ["this also touches {left.join(", ")}, which the title's `...` stands for; say what changed there"];
+}
+
+test "a scope's ellipsis asks the description to name what it left out" {
+    final title = "fix(proofread,...): keep the key";
+    final areas = ["libs/proofread", "docs", "internal/guard"];
+    final missing = elidedScopeProblems(title, areas: areas, body: "The docs page moves.");
+    std\assert(missing.len() == 1 and missing[0].startsWith("this also touches internal/guard,"), message: "{missing}");
+    std\assert(elidedScopeProblems(title, areas: areas, body: "The docs page and the guard move.").len() == 0, message: "named");
+    std\assert(elidedScopeProblems("fix(proofread): x", areas: areas, body: "").len() == 0, message: "no ellipsis");
+}
+
 // areaQuestions asks of each unnamed area what a reviewer asks first.
 export fun areaQuestions(unnamed: [str]) > [str] {
     final asked = mut [<str>];
@@ -848,23 +892,23 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
         // judge must run from the path stale checked.
         final bin = "{dir}/{proofread\binary}";
         final found = mut [<Judged>];
+        final branches = localBranchesFile(workspace);
+        var branchArgs = [<str>];
+        if (branches.error != null) {
+            found.append(Judged{ rule = "judge", line = 0, decision = "advise",
+                message = "local-branch judged nothing: {branches.error!.message}" });
+        } else {
+            branchArgs = ["--local-branches", branches.value!];
+        }
         final words = kind.split(" ");
-        final run = proc\exec(bin, args: words + voiceArgs(words[0]) + ["--stdin", "--decisions", table],
+        final run = proc\exec(bin, args: words + voiceArgs(words[0]) + ["--stdin", "--decisions", table] + branchArgs + futureArgs(words[0]),
             opts: proc\ExecOptions{stdin = text, quiet = true, allowFailure = true}) catch null;
         fs\remove(table) catch void;
-        // proofread exits 1 when it writes a deny finding, a grade under its kind's minimum among them.
-        if (run == null or (run!.code != 0 and run!.code != 1)) {
-            var why = "{bin} did not start";
-            if (run != null) {
-                why = judgeFailure(code: run!.code, stdout: run!.stdout, stderr: run!.stderr, bin: bin);
-            }
-            found.append(Judged{ rule = "judge", line = 0,
-                message = "proofread did not run ({why}); run {proofread\home}/{proofread\binary} {kind} "
-                    + "--stdin with the text on stdin, and read why" });
-        } else {
-            foreach (f in parseJudged(run!.stdout) + notices(run!.stderr)) {
-                found.append(f);
-            }
+        if (branches.value != null) {
+            fs\remove(branches.value!) catch void;
+        }
+        foreach (f in ranFindings(run, bin: bin, kind: kind)) {
+            found.append(f);
         }
         foreach (outside in OUTSIDE_JUDGES) {
             if (outside.kinds.indexOf(words[0]) != null) {
@@ -875,6 +919,54 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
         }
         return found;
     };
+}
+
+// ranFindings are what a proofread run reported, or why it did not run.
+// It exits 1 on a deny finding, a grade under the minimum among them.
+fun ranFindings(run: proc\ExecResult?, bin: str, kind: str) > [Judged] {
+    if (run == null or (run!.code != 0 and run!.code != 1)) {
+        var why = "{bin} did not start";
+        if (run != null) {
+            why = judgeFailure(code: run!.code, stdout: run!.stdout, stderr: run!.stderr, bin: bin);
+        }
+        return [Judged{ rule = "judge", line = 0,
+            message = "proofread did not run ({why}); run {proofread\home}/{proofread\binary} {kind} "
+                + "--stdin with the text on stdin, and read why" }];
+    }
+    return parseJudged(run!.stdout) + notices(run!.stderr);
+}
+
+// localBranchesFile writes the branches this clone holds and no remote does
+// to a temp file, for `proofread --local-branches`. The caller removes it.
+fun localBranchesFile(workspace: str) > result\Result::<str> {
+    if (vcs\name() != "git") {
+        return result\fail::<str>("listing unpushed branches is written for git, not {vcs\name()}");
+    }
+    try {
+        final opts = vcs\CommandOptions{ dir = workspace, quiet = true };
+        final heads = vcs\cmd(["for-each-ref", "--format=%(refname:short)", "refs/heads"], opts: opts).stdout.split("\n");
+        final pushed = vcs\cmd(["for-each-ref", "--format=%(refname:lstrip=3)", "refs/remotes"], opts: opts).stdout.split("\n");
+        final local = mut [<str>];
+        foreach (head in heads) {
+            // The scope word stays usable whatever a local branch is named.
+            if (head != "" and head != conventional\KITCHEN_SINK and pushed.indexOf(head) == null) {
+                local.append(head);
+            }
+        }
+        final file = fs\tempFile("proofread-local-branches");
+        fs\writeFile(file, content: local.join("\n"));
+        return result\ok::<str>(file);
+    } catch (err: any) {
+        return result\caught::<str>(err, doing: "list the unpushed branches");
+    }
+}
+
+// futureArgs lets a description's Later section name follow-up work.
+fun futureArgs(kind: str) > [str] {
+    if (kind == descriptionKind) {
+        return ["--future-sections", LATER];
+    }
+    return [<str>];
 }
 
 // voiceArgs judges pull request text and reviews with the author's voice.
@@ -1036,12 +1128,6 @@ export fun wordBudget(units: Units) > int {
     return baseWords + wordsPerChange * units.count;
 }
 
-fun plural(n: int, noun: str) > str {
-    if (n == 1) {
-        return "1 {noun}";
-    }
-    return "{n} {noun}s";
-}
 
 // overBudget names a description of words words after its lead past its budget, and what
 // U counted.
@@ -1052,11 +1138,11 @@ fun overBudget(words: int, units: Units) > str {
     if (units.breaking) {
         breaking = " plus 1 for the breaking title";
     }
-    var terms = "{plural(units.clauses, noun: "title clause")}";
+    var terms = "{strings\pluralCount(units.clauses, one: "title clause", many: "title clauses")}";
     if (f.known) {
-        terms = "{plural(f.fragments, noun: "changelog fragment")}{breaking}, " + terms
-            + ", {plural(f.shipped, noun: "shipped source file")} (counting {units.files}) and "
-            + "{plural(f.lines, noun: "changed line")} outside generated files (counting {units.lines})";
+        terms = "{strings\pluralCount(f.fragments, one: "changelog fragment", many: "changelog fragments")}{breaking}, " + terms
+            + ", {strings\pluralCount(f.shipped, one: "shipped source file", many: "shipped source files")} (counting {units.files}) and "
+            + "{strings\pluralCount(f.lines, one: "changed line", many: "changed lines")} outside generated files (counting {units.lines})";
     } else if (units.breaking) {
         terms = terms + ", 1 for the breaking title";
     }
@@ -1065,7 +1151,7 @@ fun overBudget(words: int, units: Units) > str {
         read = "; the branch's diff against its base could not be read, so it counts as 1 and this is advice, not a denial";
     }
     return "{words} words after the lead, past this pull request's budget of {wordBudget(units)} "
-        + "({baseWords} + {wordsPerChange} for each of {plural(u, noun: "change")}, "
+        + "({baseWords} + {wordsPerChange} for each of {strings\pluralCount(u, one: "change", many: "changes")}, "
         + "the most of {terms}){read}. Cut it to what a reviewer needs to review it, or split the "
         + "pull request if it carries more changes than that";
 }
@@ -1143,25 +1229,53 @@ fun listItems(list: Block) > [str] {
     return items;
 }
 
-// unfinishedChecklistProblems makes the unfinished work a Considerations section names an
-// explicit list. GitHub renders an unchecked Markdown task as both a visible status and a task
-// a reviewer can follow; an ordinary bullet looks too much like finished work.
-fun unfinishedChecklistProblems(body: str) > [str] {
+// taskProblems keeps tasks under Next, which holds nothing else, so a
+// person or an agent ticks one without editing the prose. Unfinished work
+// elsewhere moves there, and Considerations stays short.
+fun taskProblems(body: str) > [str] {
     final problems = mut [<str>];
-    var considerations = false;
+    var section = "";
+    var considerationItems = 0;
+    var nextTasks = 0;
+    var sawNext = false;
     foreach (b in splitBlocks(body)) {
         if (b.kind == "heading") {
-            considerations = considerationsHeading.match(b.lines[0].trim().lower()) != null;
+            final title = b.lines[0].trim().lower();
+            section = "";
+            if (considerationsHeading.match(title) != null) {
+                section = "considerations";
+            } else if (nextHeading.match(title) != null) {
+                section = "next";
+                sawNext = true;
+            }
             continue;
         }
-        if (!considerations or b.kind != "list") {
+        if (b.kind != "list") {
             continue;
         }
         foreach (item in listItems(b)) {
-            if (unfinishedOpener.match(item.lower()) != null and uncheckedTask.match(item) == null) {
-                problems.append("an unfinished item under Considerations is not an unchecked GitHub task: write `- [ ] {item}`");
+            final task = anyTask.match(item) != null;
+            if (section == "next") {
+                if (task) {
+                    nextTasks = nextTasks + 1;
+                } else {
+                    problems.append("`## Next` holds only tasks: write `- [ ] {item}`");
+                }
+                continue;
+            }
+            if (section == "considerations") {
+                considerationItems = considerationItems + 1;
+            }
+            if (task or unfinishedOpener.match(item.lower()) != null) {
+                problems.append("a task belongs under `## Next`, the last section: move `{item}` there as `- [ ] ...`");
             }
         }
+    }
+    if (considerationItems > maxConsiderations) {
+        problems.append("Considerations holds {considerationItems} bullets, past {maxConsiderations}: keep the trade-offs and risks a reviewer must weigh, and cut the rest");
+    }
+    if (sawNext and nextTasks == 0) {
+        problems.append("`## Next` holds no task: add `- [ ] ...` items or drop the heading");
     }
     return problems;
 }
@@ -1251,7 +1365,7 @@ export fun judgeShape(body: str) > Findings {
         }
     }
     if (walls > 0) {
-        advice.append("prose between the lead and the first heading outside the bullets ({plural(walls, noun: "paragraph")}): "
+        advice.append("prose between the lead and the first heading outside the bullets ({strings\pluralCount(walls, one: "paragraph", many: "paragraphs")}): "
             + "make each change a bullet, and put the rest under a Considerations heading");
     }
     return Findings{ denies = denies, advice = advice };
@@ -1346,7 +1460,10 @@ export fun judgeText(t: Text, facts: fun () > Facts, judge: fun (text: str, kind
         foreach (question in areaQuestions(unnamedAreas(read.areas, text: text))) {
             advice.append(question);
         }
-        foreach (problem in unfinishedChecklistProblems(t.body!)) {
+        foreach (problem in elidedScopeProblems(t.title ?? "", areas: read.areas, body: t.body!)) {
+            problems.append(problem);
+        }
+        foreach (problem in taskProblems(t.body!)) {
             problems.append(problem);
         }
         foreach (problem in readingOrderProblems(t.body!)) {
@@ -2281,7 +2398,24 @@ fun proofreadSources() > str {
     fs\writeFile("{dir}/go.sum", content: "") catch void;
     fs\writeFile("{dir}/proofread.go", content: "package proofread\n") catch void;
     fs\writeFile("{dir}/cmd/proofread/main.go", content: "package main\n") catch void;
+    final repo = seedGit(ws, args: ["init", "-q"]);
+    std\assert(repo.error == null, message: repo.error?.message ?? "");
     return ws;
+}
+
+test "the judge hears of each branch this clone holds and no remote does" {
+    final ws = proofreadSources();
+    foreach (args in [["commit", "-q", "--allow-empty", "-m", "seed"], ["branch", "feat/unpushed"],
+        ["update-ref", "refs/remotes/origin/pushed", "HEAD"], ["branch", "pushed"]]) {
+        final step = seedGit(ws, args: args);
+        std\assert(step.error == null, message: step.error?.message ?? "");
+    }
+    final file = localBranchesFile(ws);
+    std\assert(file.error == null, message: file.error?.message ?? "");
+    final names = fs\readLines(file.value!) catch [<str>];
+    fs\remove(file.value!) catch void;
+    std\assert(names.indexOf("feat/unpushed") != null and names.indexOf("pushed") == null, message: names.join(","));
+    fs\removeAll(ws) catch void;
 }
 
 // fakeProofread builds ws's proofread as a shell script, fresh against its sources.
@@ -2328,6 +2462,9 @@ test "pull request text is judged with the author's voice, and a notice proofrea
     std\assert(argv[0].startsWith("change-description --voice default --stdin"), message: argv[0]);
     std\assert(argv[1].startsWith("review-reply --voice default --stdin"), message: argv[1]);
     std\assert(argv[2].indexOf("--voice") == null, message: argv[2]);
+    std\assert(argv[0].indexOf("--local-branches ") != null, message: argv[0]);
+    std\assert(argv[0].endsWith("--future-sections Later"), message: argv[0]);
+    std\assert(argv[1].indexOf("--future-sections") == null, message: argv[1]);
     fs\removeAll(ws) catch void;
 }
 
@@ -2619,7 +2756,7 @@ test "the shape is a lead, bullets, at most one closing sentence, then headed se
         lead + "\n\nInside the key:\n- The digest.\n- The platform.\n\nA test pins both.",
         lead + "\n\n- Pins it.\n\n```\nmagus run build\n```",
         lead + "\n\n- Pins it.\n\n## Considerations\n\n- A per-process cache suited one worker. It stops holding at eight.\n"
-            + "- [ ] Not verified: Linux, which CI runs.",
+            + "\n## Next\n\n- [ ] Check Linux, which CI runs.",
     ]) {
         final v = verdictWith(goodTitle, body: body, f: readable());
         std\assert(v.decision == magus\GuardDecision.allow, message: "{body}: {v.reason}");
@@ -2711,15 +2848,38 @@ test "no message sends the reader to a skill" {
     std\assert(reason != "" and reason.indexOf("Skill(") == null, message: reason);
 }
 
-test "unfinished work under Considerations is an unchecked GitHub task" {
-    final plain = judgeText(Text{ kind = descriptionKind, title = goodTitle,
-        body = "The fix is ready for review.\n\n## Considerations\n- The key trades a longer digest for fewer misses.\n- Not verified: the full CI gate." },
-        facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited);
-    std\assert(plain.denies.len() == 1 and plain.denies[0].indexOf("unchecked GitHub task") != null, message: "{plain.denies}");
-    final tasks = judgeText(Text{ kind = descriptionKind, title = goodTitle,
-        body = "The fix is ready for review.\n\n## Considerations\n- The key trades a longer digest for fewer misses.\n- [ ] Not verified: the full CI gate." },
-        facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited);
-    std\assert(tasks.denies.len() == 0, message: "{tasks.denies}");
+// taskDenies are what judgeText denies in a description with body.
+fun taskDenies(body: str) > [str] {
+    return judgeText(Text{ kind = descriptionKind, title = goodTitle, body = "The fix is ready for review.\n\n" + body },
+        facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited).denies;
+}
+
+test "unfinished work is a task under Next, and Next holds only tasks" {
+    final note = "## Considerations\n- The key trades a longer digest for fewer misses.\n";
+    std\assert(taskDenies(note + "\n## Next\n- [ ] Run the full CI gate.").len() == 0, message: "tasks under Next");
+    std\assert(taskDenies(note + "\n## Next\n- [x] Run the full CI gate.").len() == 0, message: "a ticked task");
+    final unchecked = taskDenies(note + "- Not verified: the full CI gate.");
+    std\assert(unchecked.len() == 1 and unchecked[0].indexOf("belongs under `## Next`") != null, message: "{unchecked}");
+    final misplaced = taskDenies(note + "- [ ] Not verified: the full CI gate.");
+    std\assert(misplaced.len() == 1 and misplaced[0].indexOf("belongs under `## Next`") != null, message: "{misplaced}");
+    final inBullets = taskDenies("- [ ] Pin the key.");
+    std\assert(inBullets.len() == 1 and inBullets[0].indexOf("belongs under `## Next`") != null, message: "{inBullets}");
+    final prose = taskDenies("## Next\n- Run the full CI gate.");
+    std\assert(prose.len() == 2 and prose[0].indexOf("holds only tasks") != null and prose[1].indexOf("holds no task") != null,
+        message: "{prose}");
+}
+
+test "a Later section names follow-up work and holds no task" {
+    std\assert(taskDenies("## Later\n- `magus diff` reads the new index.").len() == 0, message: "a follow-up");
+    final task = taskDenies("## Later\n- [ ] `magus diff` reads the new index.");
+    std\assert(task.len() == 1 and task[0].indexOf("belongs under `## Next`") != null, message: "{task}");
+}
+
+test "Considerations holds at most three bullets" {
+    final three = "## Considerations\n- A trades B.\n- C bounds D.\n- E risks F.\n";
+    std\assert(taskDenies(three).len() == 0, message: "three");
+    final four = taskDenies(three + "- G sets H aside.\n");
+    std\assert(four.len() == 1 and four[0].startsWith("Considerations holds 4 bullets, past 3"), message: "{four}");
 }
 
 test "a Considerations item that tells the reader where to start is flagged" {

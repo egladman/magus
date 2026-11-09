@@ -109,9 +109,9 @@ const (
 	// row it lands on is by definition not the writer's, and the one write that sets
 	// Unattributed.
 	asObservation
-	// asNarrowing is [NarrowConfigHold] trading a pattern's hold on one config file for
-	// claims on the declarations its holder touched: ungraded, since the claims sit inside
-	// what the pattern already covered, and the one write that stamps its own release.
+	// asNarrowing is [NarrowHold] trading a whole-file hold for claims.
+	// Ungraded: the claims sit inside what the entry covered.
+	// It stamps its own release.
 	asNarrowing
 	// asClaim is [Store.Claim] adding proved write paths: graded by
 	// [authorizeClaim], and the one write that appends to Claims.

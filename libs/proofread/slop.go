@@ -55,67 +55,64 @@ const (
 	RuleHeadingCase Rule = "heading-case"
 )
 
-var (
-	// withReply is the written kinds and review text: the tells that apply to
-	// any text a person reads as another person's own words.
-	withReply = slices.Concat(proseKinds, reviewText)
-	// everywhere is every kind that holds prose, doc comments included.
-	everywhere = slices.Concat(all, compact, changeText, help, reviewText, agentReply)
-	// prosePages are the kinds written as running prose. A guide's steps and a
-	// skill's runbook are short imperatives by rule (step-verb, terse-sentence),
-	// so a run of short sentences there is the form, not a drumbeat.
-	prosePages = []Kind{KindReference, KindPrinciple, KindChangeDescription, KindIssue, KindReleaseNotes}
-	// published are the kinds a repository posts for readers on other machines.
-	published = slices.Concat([]Kind{KindChangeDescription}, changeText, reviewText)
-	// pageKinds are the kinds that hold headings.
-	pageKinds = []Kind{KindReference, KindPrinciple, KindGuide, KindAgentBrief, KindIssue, KindReleaseNotes}
-)
-
 // slopChecks run after [toneChecks].
 var slopChecks = []check{
-	{rule: RuleSignpost, on: agentWords, graded: true, judge: tellJudge("Drop '%s': state the point itself.", signposts...)},
+	{rule: RuleSignpost, reads: proseFormats, judge: tellJudge("Drop '%s': state the point itself.", signposts...)},
 	{
-		rule: RuleChatbot, on: slices.Concat(withReply, compact),
+		rule: RuleChatbot, reads: proseFormats,
 		judge: ownWords(tellJudge("Drop '%s': it answers a chat the reader never saw.", chatbots...)),
 	},
 	{
-		rule: RuleLeak, on: everywhere, graded: true,
+		rule: RuleLeak, reads: []Format{FormatMarkdown, FormatLines, FormatPlain, FormatDocComment},
 		judge: tellJudge("Remove '%s': it is left over from a tool or a template.", leaks...),
 	},
-	{rule: RuleBuzzword, on: agentWords, judge: tellJudge("Replace '%s' with what is actually so.", buzzwords...)},
+	{rule: RuleBuzzword, reads: proseFormats, judge: tellJudge("Replace '%s' with what is actually so.", buzzwords...)},
 	{
-		rule: RuleBuzzwordWeak, on: agentWords, graded: true,
+		rule: RuleBuzzwordWeak, reads: proseFormats,
 		judge: tellJudge("Replace '%s' with what is actually so.", weakBuzzwords...),
 	},
 	{
-		rule: RuleContrast, on: slices.Concat(withReply, compact, agentReply), graded: true,
+		rule: RuleContrast, reads: proseFormats,
 		judge: ownWords(tellJudgeExcept("State the positive claim directly: drop the negation in '%s'.",
 			contrastExempt, contrasts...)),
 	},
-	{rule: RuleVague, on: agentWords, judge: tellJudge("Name the specific thing '%s' stands for, or cut it.", vagues...)},
-	{rule: RuleCloser, on: agentWords, judge: tellJudge("Cut '%s': the paragraph above already says it.", closers...)},
+	{rule: RuleVague, reads: proseFormats, judge: tellJudge("Name the specific thing '%s' stands for, or cut it.", vagues...)},
+	{rule: RuleCloser, reads: proseFormats, judge: tellJudge("Cut '%s': the paragraph above already says it.", closers...)},
 	{
-		rule: RuleIngTail, on: slices.Concat(proseKinds, agentReply), graded: true,
+		rule: RuleIngTail, reads: proseFormats,
 		judge: ownWords(tellJudgeExcept("Make '%s' a sentence with a subject, or cut it.", ingTailExempt, ingTails...)),
 	},
-	{rule: RuleStaccato, on: prosePages, graded: true, judge: ownWords(staccato)},
-	{rule: RuleDash, on: agentWords, house: true, judge: dash},
-	{rule: RuleASCII, on: agentWords, house: true, judge: ascii},
-	{rule: RuleLocalPath, on: published, house: true, judge: localPath},
-	{rule: RuleHeadingCase, on: pageKinds, graded: true, judge: headingCase},
+	{rule: RuleStaccato, reads: proseFormats, judge: ownWords(staccato)},
+	{rule: RuleDash, reads: proseFormats, judge: dash},
+	{rule: RuleASCII, reads: proseFormats, judge: ascii},
+	{rule: RuleLocalPath, reads: proseFormats, judge: localPath},
+	{rule: RuleLocalBranch, reads: proseFormats, judge: localBranch},
+	{rule: RuleHeadingCase, reads: proseFormats, judge: headingCase},
 }
 
 // tell is one pattern of a rule. An opening tell is anchored to the start of
-// a sentence; kinds, when set, narrows the kinds the rule's own list judges.
+// a sentence; on, when set, narrows the kinds the rule judges to those it
+// holds for.
 type tell struct {
 	re      *regexp.Regexp
 	opening bool
-	kinds   []Kind
+	on      func(*KindSpec) bool
 }
 
-func anywhere(pattern string, kinds ...Kind) tell {
-	return tell{re: regexp.MustCompile(pattern), kinds: kinds}
+func anywhere(pattern string) tell { return tell{re: regexp.MustCompile(pattern)} }
+
+// only narrows t to the kinds on holds for.
+func (t tell) only(on func(*KindSpec) bool) tell {
+	t.on = on
+
+	return t
 }
+
+// outsideAChat holds for a text no chat surrounds. A review answers a thread
+// the reader shares, and only an agent reads compact text.
+func outsideAChat(s *KindSpec) bool { return !s.Review && !s.Compact }
+
+func prompted(s *KindSpec) bool { return s.Prompted }
 
 func opening(pattern string) tell {
 	return tell{re: regexp.MustCompile(pattern), opening: true}
@@ -160,11 +157,11 @@ func tellJudgeExcept(message string, exempt func(text string, at []int) bool, te
 	return func(in input) []Finding {
 		var out []Finding
 
-		for _, para := range paragraphs(in.prose, mentions(in.kind)) {
+		for _, para := range paragraphs(in.prose, mentions(in.spec.Reader.Format)) {
 			var spans [][]int
 
 			for _, t := range tells {
-				if len(t.kinds) == 0 || slices.Contains(t.kinds, in.kind) {
+				if t.on == nil || t.on(in.spec) {
 					spans = append(spans, t.find(para.text)...)
 				}
 			}
@@ -228,15 +225,11 @@ var signposts = []tell{
 // tells no person writes stay: in the labeled replies, "You're absolutely
 // right", "Great question" and "I'm sorry I" were wrong in all 21 firings.
 var chatbots = []tell{
-	anywhere(`(?i)\blet me know if\b|\bfeel free to\b|\bhappy to help\b|\b(?:would you like|want) me to\b|`+
-		`\bshould I (?:continue|go on|proceed)\b|\byou(?:'re| are) (?:(?:absolutely|completely|totally) )?right\b|`+
-		`\b(?:great|excellent|fantastic) (?:point|catch|observation)\b|`+
-		`\b(?:great|excellent|fantastic) question\b|\bI(?:'m| am) sorry,? (?:but )?I\b`, proseKinds...),
-	{
-		re:      regexp.MustCompile(`(?i)^(?:Certainly|Of course|Absolutely|Sure thing)[!,.]`),
-		opening: true,
-		kinds:   proseKinds,
-	},
+	anywhere(`(?i)\blet me know if\b|\bfeel free to\b|\bhappy to help\b|\b(?:would you like|want) me to\b|` +
+		`\bshould I (?:continue|go on|proceed)\b|\byou(?:'re| are) (?:(?:absolutely|completely|totally) )?right\b|` +
+		`\b(?:great|excellent|fantastic) (?:point|catch|observation)\b|` +
+		`\b(?:great|excellent|fantastic) question\b|\bI(?:'m| am) sorry,? (?:but )?I\b`).only(outsideAChat),
+	opening(`(?i)^(?:Certainly|Of course|Absolutely|Sure thing)[!,.]`).only(outsideAChat),
 	anywhere(`(?i)\bI hope (?:this|that) helps\b|\bis there anything else\b|` +
 		`\bas an? (?:ai|large) language model\b|` +
 		`\bI (?:cannot|can't) (?:help|assist) with\b|\bas of my (?:last )?(?:training|knowledge)|` +
@@ -247,9 +240,9 @@ var chatbots = []tell{
 		`\bnot (?:extensively |widely |publicly )?(?:documented|disclosed) in (?:readily )?available sources\b`),
 	opening(`(?i)^Here (?:is|are) (?:a|an|the|some|your) (?:\w+ ){0,2}(?:overview|summary|draft|breakdown|rewrite)\b`),
 	// A salutation is no tell on a page (a letter is a legitimate subject), so
-	// the letter patterns judge only a pull request.
-	anywhere(`\bDear [A-Z][\w ]{2,40}[:,]|\bI am writing to\b|\bhope this (?:message|email|note) finds you\b|`+
-		`\bI understand (?:the |your )?concerns?\b`, KindChangeDescription),
+	// the letter patterns judge only a prompted text.
+	anywhere(`\bDear [A-Z][\w ]{2,40}[:,]|\bI am writing to\b|\bhope this (?:message|email|note) finds you\b|` +
+		`\bI understand (?:the |your )?concerns?\b`).only(prompted),
 }
 
 // leaks read a pair of lenticular brackets (U+3010, U+3011) as a citation only
@@ -456,7 +449,7 @@ func staccato(in input) []Finding {
 	var out []Finding
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
-		if para.head.item || para.head.heading || (titled(in.kind) && para.head.line == 1) ||
+		if para.head.item || para.head.heading || in.titleLine(para.head) ||
 			htmlLaidOut(in.source, para) {
 			continue
 		}

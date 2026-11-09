@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"io/fs"
 	"maps"
 	"os"
@@ -679,14 +680,14 @@ func (m *Magus) handWritten(ctx context.Context, paths []string) ([]string, erro
 	}), nil
 }
 
-func (m *Magus) classified(ctx context.Context, paths []string) (map[string]*types.DiffFile, error) {
+func (m *Magus) classified(ctx context.Context, paths []string) (map[string]*diff.File, error) {
 	entries, err := m.ClassifyFiles(ctx, paths)
 	if err != nil {
 		return nil, fmt.Errorf("change risk: %w", err)
 	}
-	byPath := make(map[string]*types.DiffFile, len(entries))
+	byPath := make(map[string]*diff.File, len(entries))
 	for _, e := range entries {
-		byPath[e.Path] = &types.DiffFile{Path: e.Path, Project: e.Project, Role: e.Role}
+		byPath[e.Path] = &diff.File{Path: e.Path, Project: e.Project, Role: e.Role}
 	}
 	return byPath, nil
 }
@@ -694,7 +695,7 @@ func (m *Magus) classified(ctx context.Context, paths []string) (map[string]*typ
 func everySymbol(defs map[string]symbolDef) map[string]string {
 	out := make(map[string]string, len(defs))
 	for id := range defs {
-		out[id] = types.DiffChangeBody
+		out[id] = diff.ChangeBody
 	}
 	return out
 }
@@ -738,7 +739,7 @@ func (s sinceBase) basePath(path string) string {
 
 // baseSpan is fn's lines as the base held them, false when it is new since.
 func (s sinceBase) baseSpan(fn touchedFunction) (int, int, bool) {
-	if fn.Change == types.DiffChangeAdded || fn.EndLine == 0 {
+	if fn.Change == diff.ChangeAdded || fn.EndLine == 0 {
 		return 0, 0, false
 	}
 	lo, hi, ok := oldSpan(fn.Line, fn.EndLine, s.working[fn.Path])
@@ -942,7 +943,7 @@ func spansTouched(defs map[string]symbolDef, since sinceBase, read func(string) 
 			end = max(start, n)
 		}
 		if slices.ContainsFunc(since.lines[def.path], inSpan(start, end)) && !since.moved(def.path, start, end, read) {
-			out[id] = types.DiffChangeBody
+			out[id] = diff.ChangeBody
 		}
 	}
 	return out, nil
@@ -1072,7 +1073,7 @@ func (m *Magus) parseReport(project string, cov spells.Coverage, data []byte) ([
 // attachChangeRisk adds advice to each symbol the review says changed: the
 // threshold that refuses is repo policy. changes is what the review
 // classified, or nil to read it off the files' symbols.
-func (m *Magus) attachChangeRisk(out *types.Diff, byPath map[string]*types.DiffFile, graph *knowledge.Graph, changes map[string]string) {
+func (m *Magus) attachChangeRisk(out *diff.Diff, byPath map[string]*diff.File, graph *knowledge.Graph, changes map[string]string) {
 	if changes == nil {
 		changes = symbolChanges(out.Files)
 	}
@@ -1084,7 +1085,7 @@ func (m *Magus) attachChangeRisk(out *types.Diff, byPath map[string]*types.DiffF
 	attachChangeRiskChecks(out.Files, m.riskScorer(defs).scoreAll(fns))
 }
 
-func symbolChanges(files []types.DiffFile) map[string]string {
+func symbolChanges(files []diff.File) map[string]string {
 	out := map[string]string{}
 	for _, f := range files {
 		for _, s := range f.Symbols {
@@ -1096,7 +1097,7 @@ func symbolChanges(files []types.DiffFile) map[string]string {
 	return out
 }
 
-func attachChangeRiskChecks(files []types.DiffFile, risk types.ChangeRisk) {
+func attachChangeRiskChecks(files []diff.File, risk types.ChangeRisk) {
 	checks := riskChecks(risk)
 	for _, f := range files {
 		for j := range f.Symbols {
@@ -1105,7 +1106,7 @@ func attachChangeRiskChecks(files []types.DiffFile, risk types.ChangeRisk) {
 	}
 }
 
-func addCheck(sym *types.DiffSymbol, checks map[string]types.Check) {
+func addCheck(sym *diff.Symbol, checks map[string]types.Check) {
 	if c, ok := checks[sym.ID]; ok {
 		sym.Checks = append(sym.Checks, c)
 	}
