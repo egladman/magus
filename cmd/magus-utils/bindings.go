@@ -787,9 +787,9 @@ func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
 	}
 	if hasMethods(t) {
 		var names, values []string
-		for _, bf := range boundaryFields(t) {
+		for _, bf := range emit.ObjectFields(t) {
 			f := bf.StructField
-			value, err := e.value(&body, "v."+bf.selector, f.Name, f.Type, "\t")
+			value, err := e.value(&body, "v."+bf.Selector, f.Name, f.Type, "\t")
 			if err != nil {
 				return fmt.Errorf("%s.%s: %w", t.Name(), f.Name, err)
 			}
@@ -800,9 +800,9 @@ func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
 			buzzName(t), strings.Join(names, ", "), strings.Join(values, ", "))
 	} else {
 		fmt.Fprintln(&body, "\tout := vm.NewMap()")
-		for _, bf := range boundaryFields(t) {
+		for _, bf := range emit.ObjectFields(t) {
 			f := bf.StructField
-			value, err := e.value(&body, "v."+bf.selector, f.Name, f.Type, "\t")
+			value, err := e.value(&body, "v."+bf.Selector, f.Name, f.Type, "\t")
 			if err != nil {
 				return fmt.Errorf("%s.%s: %w", t.Name(), f.Name, err)
 			}
@@ -1056,7 +1056,7 @@ func (e *buzzValueEmitter) walkEnums(t reflect.Type, visiting map[reflect.Type]b
 		// A mirror with methods is an instance the session's definition makes, as an
 		// enum case is, so its encoder needs the same resolver.
 		reach = hasMethods(t)
-		for _, bf := range boundaryFields(t) {
+		for _, bf := range emit.ObjectFields(t) {
 			if reach {
 				break
 			}
@@ -1081,34 +1081,6 @@ func (e *buzzValueEmitter) walkEnums(t reflect.Type, visiting map[reflect.Type]b
 // within the function.
 func (e *buzzValueEmitter) name(prefix, path string) string {
 	return prefix + path
-}
-
-// boundaryField is one field a boundary type carries across, with the selector that
-// reaches it from the value ("Schema.Version" for a field of an embedded struct).
-type boundaryField struct {
-	reflect.StructField
-	selector string
-}
-
-// boundaryFields lists t's exported fields the way buzzgen's mirror declares them: an
-// untagged embedded struct contributes its own fields inline rather than one nested field.
-func boundaryFields(t reflect.Type) []boundaryField {
-	var out []boundaryField
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
-		if !f.IsExported() || f.Tag.Get("buzz") == "-" {
-			continue
-		}
-		if f.Anonymous && f.Type.Kind() == reflect.Struct && f.Tag.Get("buzz") == "" {
-			for _, inner := range boundaryFields(f.Type) {
-				inner.selector = fmt.Sprintf("%s.%s", f.Name, inner.selector)
-				out = append(out, inner)
-			}
-			continue
-		}
-		out = append(out, boundaryField{StructField: f, selector: f.Name})
-	}
-	return out
 }
 
 // buzzVMFieldName must agree with the mirror's field name exactly: this emits the RUNTIME

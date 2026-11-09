@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/internal/hostmodules"
 	queuetypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/libs/diagnostics"
@@ -666,7 +667,7 @@ var openStringTypes = map[reflect.Type]string{
 // in neither boundaryEnums nor openStringTypes.
 func checkNamedStrings(rt reflect.Type) error {
 	var unregistered []string
-	for _, f := range boundaryFields(rt) {
+	for _, f := range emit.ObjectFields(rt) {
 		if t, found := unregisteredString(f.Type); found {
 			unregistered = append(unregistered, fmt.Sprintf("%s (%s)", f.Name, t))
 		}

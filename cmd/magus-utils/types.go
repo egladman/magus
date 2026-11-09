@@ -109,19 +109,12 @@ func renderListedMirrors(goFile string) error {
 // typesDirective reads the -type and -out of one
 // `//go:generate go run .../magus-utils types` line.
 func typesDirective(line string) (typeName, out string, ok bool) {
-	line = strings.TrimSpace(line)
-	if !strings.HasPrefix(line, "//go:generate ") || !strings.Contains(line, "magus-utils types ") {
+	flags, ok := emit.Directive(line, "magus-utils types")
+	if !ok {
 		return "", "", false
 	}
-	fields := strings.Fields(line)
-	for i := 0; i+1 < len(fields); i++ {
-		switch fields[i] {
-		case "-type":
-			typeName = strings.ReplaceAll(strings.Trim(fields[i+1], `"`), `\\`, `\`)
-		case "-out":
-			out = fields[i+1]
-		}
-	}
+	typeName = strings.ReplaceAll(flags["type"], `\\`, `\`)
+	out = flags["out"]
 	return typeName, out, typeName != "" && out != ""
 }
 
@@ -198,7 +191,7 @@ func renderBuzzMirrorDecl(name string, rt reflect.Type) ([]byte, error) {
 func enumsUsedBy(rt reflect.Type) []boundaryEnum {
 	seen := map[string]bool{}
 	var out []boundaryEnum
-	for _, f := range boundaryFields(rt) {
+	for _, f := range emit.ObjectFields(rt) {
 		t := f.Type
 		for t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Pointer || t.Kind() == reflect.Map {
 			t = t.Elem()
