@@ -58,7 +58,7 @@ func RegisterProc(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("withSlots", vm.DirectValue("proc.withSlots", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		n := ffi.Int(bzArgs, 0, 0)
-		callback := ffi.CallbackArg(sess, bzArgs, 1)
+		callback := callbackVoid(sess, bzArgs, 1)
 		if err := std.ProcWithSlots(ctx, n, callback); err != nil {
 			return vm.Null, ffi.Error(err)
 		}

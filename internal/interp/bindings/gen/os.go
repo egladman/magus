@@ -23,7 +23,7 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 	m := vm.NewMap()
 	m.MapSet("withEnv", vm.DirectValue("os.withEnv", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		env := ffi.StringMap(bzArgs, 0)
-		callback := ffi.CallbackArg(sess, bzArgs, 1)
+		callback := callbackVoid(sess, bzArgs, 1)
 		if err := std.OsWithEnv(ctx, env, callback); err != nil {
 			return vm.Null, ffi.Error(err)
 		}
@@ -73,7 +73,7 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("retry", vm.DirectValue("os.retry", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		max := ffi.Int(bzArgs, 0, 0)
-		fn := ffi.CallbackArg(sess, bzArgs, 1)
+		fn := callbackReturnsAny(sess, bzArgs, 1)
 		var opts types.RetryOptions
 		if ffi.Present(bzArgs, 2) {
 			x, err := ffi.Object("os\\retry", "opts", bzArgs, 2, decode.DecodeRetryOptions)

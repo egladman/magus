@@ -214,7 +214,7 @@ var Fs = Module{
 			Doc:  "Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.",
 			Args: []Arg{
 				{Name: "paths"},
-				{Name: "callback", Func: "fun (paths: [str]) > bool !> any"},
+				{Name: "callback"},
 			},
 			Returns: nil,
 			Raises:  true,
@@ -225,7 +225,7 @@ var Fs = Module{
 			Doc:  "Recursively walk the directory tree rooted at root in lexical order, calling callback(path, isDir) for each entry. The callback returns a WalkStep, as a Go fs.WalkDirFunc returns nil, fs.SkipDir or fs.SkipAll: next continues, skipDir skips a directory's contents (or, for a file, the rest of its directory) and skipAll ends the walk. Sandbox-denied entries are silently skipped.",
 			Args: []Arg{
 				{Name: "root"},
-				{Name: "callback", Func: "fun (path: str, isDir: bool) > WalkStep !> any"},
+				{Name: "callback"},
 			},
 			Returns: nil,
 			Raises:  true,
@@ -881,7 +881,7 @@ func vcsIgnores(ctx context.Context, path string) bool {
 // callback propagates. Because it holds its session for its whole life, the
 // idiomatic use is a reactive loop (rebuild on change) run as its own target,
 // with parallelism coming from magus running other targets concurrently.
-func FsWatch(ctx context.Context, paths []string, cb Callback) error {
+func FsWatch(ctx context.Context, paths []string, cb func(ctx context.Context, paths []string) (bool, error)) error {
 	if len(paths) == 0 {
 		return fmt.Errorf("fs.watch: at least one path is required")
 	}
@@ -931,11 +931,11 @@ func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 			if !ok {
 				return nil
 			}
-			ret, err := cb.Call(ctx, relToCurrentWorkingDirectory(cwd, batch.Paths))
+			done, err := cb(ctx, relToCurrentWorkingDirectory(cwd, batch.Paths))
 			if err != nil {
 				return err
 			}
-			if callbackTruthy(ret) {
+			if done {
 				return nil
 			}
 		}
@@ -944,10 +944,10 @@ func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 
 // FsWalk walks the directory tree rooted at root, calling cb(path, isDir) for
 // each entry in lexical order. The callback's [types.WalkStep] maps to what
-// a fs.WalkDirFunc returns; any other value is an error naming the steps.
+// a fs.WalkDirFunc returns.
 // Sandbox-denied entries are silently skipped (dirs skip their whole subtree;
 // files are just omitted), matching the filtering policy of FsGlob.
-func FsWalk(ctx context.Context, root string, cb Callback) error {
+func FsWalk(ctx context.Context, root string, cb func(ctx context.Context, path string, isDir bool) (types.WalkStep, error)) error {
 	base := currentWorkingDirectoryFromContext(ctx)
 	root = resolvePath(ctx, root)
 	if err := checkRead(ctx, root); err != nil {
@@ -971,22 +971,19 @@ func FsWalk(ctx context.Context, root string, cb Callback) error {
 				cbPath = rel
 			}
 		}
-		ret, callErr := cb.Call(ctx, cbPath, d.IsDir())
+		step, callErr := cb(ctx, cbPath, d.IsDir())
 		if callErr != nil {
 			return callErr
 		}
-		return walkStepResult(ret, cbPath)
+		return walkStepResult(step, cbPath)
 	})
 }
 
 // walkStepResult turns a callback's WalkStep into the error fs.WalkDirFunc
-// returns for it.
-func walkStepResult(ret []any, path string) error {
-	var step string
-	if len(ret) > 0 {
-		step, _ = ret[0].(string)
-	}
-	switch types.WalkStep(step) {
+// returns for it. The adapter refuses a value outside the cases, so only a
+// zero step reaches the error here.
+func walkStepResult(step types.WalkStep, path string) error {
+	switch step {
 	case types.WalkNext:
 		return nil
 	case types.WalkSkipDir:
@@ -994,7 +991,7 @@ func walkStepResult(ret []any, path string) error {
 	case types.WalkSkipAll:
 		return filepath.SkipAll
 	}
-	return fmt.Errorf("fs.walk: the callback returned %v for %s, want WalkStep.next, WalkStep.skipDir or WalkStep.skipAll", ret, path)
+	return fmt.Errorf("fs.walk: the callback returned %q for %s, want WalkStep.next, WalkStep.skipDir or WalkStep.skipAll", step, path)
 }
 
 // FsAppendFile appends content to path (creating the file if absent, mode 0644),
@@ -1172,23 +1169,6 @@ func relToCurrentWorkingDirectory(base string, abs []string) []string {
 		}
 	}
 	return out
-}
-
-// callbackTruthy reports whether a callback's first return value is truthy,
-// matching the host predicate convention (nil/false is false; a bool is its
-// value; any other value is true).
-func callbackTruthy(ret []any) bool {
-	if len(ret) == 0 {
-		return false
-	}
-	switch v := ret[0].(type) {
-	case nil:
-		return false
-	case bool:
-		return v
-	default:
-		return true
-	}
 }
 
 // FsDiskUsage reads the filesystem holding path, subject to the sandbox read policy. The

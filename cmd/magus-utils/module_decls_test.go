@@ -109,24 +109,36 @@ func TestBuzzReturnTypeDeclaresANullableString(t *testing.T) {
 	assert.ErrorContains(t, err, "a nullable return is a str?")
 }
 
-// A callback declares its function type when the descriptor names one, and `any` when
-// it does not; Func on anything but a callback is a descriptor bug.
+// A callback declares the function type its Go func type renders as, labeled
+// with the Go parameter names.
 func TestExternDeclTypesACallback(t *testing.T) {
-	walk := std.Method{Name: "walk", Args: []std.Arg{
-		{Name: "root", Type: std.TypeString},
-		{Name: "callback", Type: std.TypeFunc, Func: "fun (path: str, isDir: bool) > bool !> any"},
-	}}
+	walk := std.Method{Name: "walk", Args: []std.Arg{{Name: "root"}, {Name: "callback"}}, Impl: std.FsWalk}.WithTags()
 	got, err := externDecl(walk)
 	require.NoError(t, err)
-	assert.Equal(t, "export extern fun walk(root: str, callback: fun (path: str, isDir: bool) > bool !> any) > void;\n", got)
+	assert.Equal(t, "export extern fun walk(root: str, callback: fun (path: str, isDir: bool) > WalkStep !> any) > void;\n", got)
 
-	walk.Args[1].Func = ""
-	got, err = externDecl(walk)
+	retry := std.Method{Name: "retry", Args: []std.Arg{{Name: "fn"}}, Returns: []std.Ret{{}},
+		Extern: (func(ctx context.Context, fn func(ctx context.Context) (any, error)) (any, error))(nil)}.WithTags()
+	got, err = externDecl(retry)
 	require.NoError(t, err)
-	assert.Contains(t, got, "callback: any)")
+	assert.Equal(t, "export extern fun retry(fn: fun () > any !> any) > any;\n", got)
+}
 
-	_, err = externDecl(std.Method{Name: "bad", Args: []std.Arg{{Name: "s", Type: std.TypeString, Func: "fun () > void"}}})
-	assert.ErrorContains(t, err, "it types only a TypeFunc")
+// One adapter per callback type, named for its parameter and result types.
+func TestImplCallbacksNamesOneAdapterPerType(t *testing.T) {
+	cbs, err := implCallbacks(hostmodules.All())
+	require.NoError(t, err)
+	names := make([]string, len(cbs))
+	for i, cb := range cbs {
+		names[i] = callbackAdapterName(cb)
+	}
+	assert.Equal(t, []string{
+		"callbackReturnsAny",
+		"callbackStringBoolReturnsWalkStep",
+		"callbackStringReturnsBool",
+		"callbackStringSliceReturnsBool",
+		"callbackVoid",
+	}, names)
 }
 
 type ModuleDeclsSuite struct {
