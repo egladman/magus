@@ -928,7 +928,7 @@ func uncheckedDenial(v runVerdict, me types.Job, checks []types.LeaseCheck, defa
 func uncheckedCause(err error) string {
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
-		return fmt.Sprintf("opening the workspace took longer than the guard's %s budget for it", inspectBudget)
+		return fmt.Sprintf("opening the workspace took longer than the guard's %s budget", hookBudget)
 	case errors.Is(err, errNoDependency):
 		return "the guard was handed no way to open the workspace"
 	}
