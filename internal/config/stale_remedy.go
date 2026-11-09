@@ -76,13 +76,11 @@ func checkoutHook(data []byte) string {
 	return path.Clean(filepath.ToSlash(hook))
 }
 
-// ReadyCheckoutCommand is the line that runs hook, a workspace's
-// checkout.bootstrap, on the checkout the shell is in. The bootstrap builds
-// ./magus alone; this installs the dependencies and harness tool rows.
-// "" when hook is "".
+// ReadyCheckoutCommand readies the checkout after the bootstrap builds ./magus.
+// A declared hook runs it; with none, only the harness rows are installed.
 func ReadyCheckoutCommand(hook string) string {
 	if hook == "" {
-		return ""
+		return "magus agent harness install"
 	}
 	return shellLine([]string{"./magus", "buzz", hook, "--", "--here", "--verify-ready"})
 }
