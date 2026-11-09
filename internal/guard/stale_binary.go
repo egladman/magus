@@ -642,6 +642,10 @@ func bareHarnessInstall(command string, d Dialect) bool {
 func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, own bool, root string) denial {
 	hasBinary := hasMagusBinary(root)
 	fix := binaryRemedy(own, root, call.lease, call.builds)
+	if reason.Cause == unloadNoBinary && own && (call.lease == "" || call.builds) {
+		// A foreign judge is not ./magus, so a ./magus rebuild cannot help.
+		fix = binaryFix{say: fmt.Sprintf("bootstrap ./magus with `%s`", BootstrapLine(root))}
+	}
 	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
 	switch {
 	case reason.Cause == unloadSkewedSpell:

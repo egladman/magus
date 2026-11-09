@@ -540,7 +540,7 @@ func TestIntegrationMergeInALoop(t *testing.T) {
 
 func TestMergeRefusalNamesTheBranchesARowIntegrates(t *testing.T) {
 	row := types.Job{ID: "integrate", Integrates: []string{"done-a", "done-b"}}
-	assert.Contains(t, mergeRefusal("734253d9a", "main", row), "or a branch it integrates, merged by name: done-a, done-b.")
+	assert.Contains(t, mergeRefusal("734253d9a", "main", row), "or a branch it integrates, merged as <b>, origin/<b>, refs/heads/<b> or refs/remotes/origin/<b>: done-a, done-b.")
 }
 
 func TestMergeRefusalOfARowIntegratingNothingNamesNoBranch(t *testing.T) {
