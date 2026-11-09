@@ -665,6 +665,8 @@ func commandDestinations(name string, args []string) []string {
 	switch name {
 	case "tee":
 		return operands(args, "")
+	case "touch":
+		return operands(args, "dtr")
 	case "truncate":
 		return operands(args, "sr")
 	case "cp", "install", "ln":

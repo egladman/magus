@@ -9,3 +9,5 @@
   `truncate` or `dd of=` creates inside the checkout and outside the lease is refused
   whether or not it exists yet. A target built from an expansion the guard cannot place
   still passes.
+- **A leased `touch` of a new file outside the write paths is refused**, like a `tee` or `cp`
+  to one.

@@ -141,6 +141,14 @@ func (s *LeaseBoundarySuite) TestInstallToANewUndeclaredFileIsRefused() {
 	s.Contains(s.deny("install -m 644 x docs/new.md"), "docs/new.md")
 }
 
+func (s *LeaseBoundarySuite) TestTouchOfANewUndeclaredFileIsRefused() {
+	s.Contains(s.deny("touch docs/new.md"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestTouchOfANewFileInsideTheLeasePasses() {
+	s.Empty(s.deny("touch -d 2020-01-01 cmd/magus/new.go"))
+}
+
 func (s *LeaseBoundarySuite) TestMoveToANewUndeclaredFileIsRefused() {
 	s.Contains(s.deny("mv /tmp/x docs/new.md"), "docs/new.md")
 }
