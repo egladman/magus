@@ -1,9 +1,9 @@
 package diagram
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
+	"github.com/egladman/magus/types/diff"
 	"net/http"
 	"net/http/httptest"
 	"strconv"

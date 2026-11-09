@@ -1,11 +1,11 @@
 package guard
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"cmp"
 	"context"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"os"
 	"path/filepath"
 	"regexp"

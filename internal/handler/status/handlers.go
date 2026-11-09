@@ -1,10 +1,10 @@
 package status
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"net/http"
 	"sync/atomic"

@@ -1,10 +1,10 @@
 package mcp
 
 import (
-	"github.com/egladman/magus/types/diff"
-	"github.com/egladman/magus/types/daemon"
 	"context"
 	"errors"
+	"github.com/egladman/magus/types/daemon"
+	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"net/http"
 	"net/netip"

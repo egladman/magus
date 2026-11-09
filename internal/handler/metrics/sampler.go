@@ -1,8 +1,8 @@
 package metrics
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"context"
+	"github.com/egladman/magus/types/daemon"
 	"time"
 
 	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1"

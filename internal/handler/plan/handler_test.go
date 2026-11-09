@@ -1,10 +1,10 @@
 package plan
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"net/http"
 	"net/http/httptest"
 	"strings"

@@ -1,10 +1,10 @@
 package diff
 
 import (
-	difftypes "github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
+	difftypes "github.com/egladman/magus/types/diff"
 	"log/slog"
 	"net/http"
 	"strings"

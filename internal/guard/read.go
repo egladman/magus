@@ -1,11 +1,11 @@
 package guard
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"bufio"
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"go/ast"
 	"go/parser"
 	"go/token"

@@ -1,9 +1,9 @@
 package mcp
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"context"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"net/url"
 	"os"
 	"path/filepath"

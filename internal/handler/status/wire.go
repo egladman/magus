@@ -3,9 +3,9 @@
 package status
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"encoding/base64"
 	"errors"
+	"github.com/egladman/magus/types/daemon"
 	"slices"
 
 	"google.golang.org/protobuf/proto"

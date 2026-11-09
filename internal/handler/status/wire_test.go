@@ -1,8 +1,8 @@
 package status
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"encoding/base64"
+	"github.com/egladman/magus/types/daemon"
 	"testing"
 	"time"
 

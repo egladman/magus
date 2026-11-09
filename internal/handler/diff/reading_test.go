@@ -1,8 +1,8 @@
 package diff
 
 import (
-	difftypes "github.com/egladman/magus/types/diff"
 	"context"
+	difftypes "github.com/egladman/magus/types/diff"
 	"net/http"
 	"testing"
 

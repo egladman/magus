@@ -6,10 +6,10 @@
 package diff
 
 import (
-	difftypes "github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
+	difftypes "github.com/egladman/magus/types/diff"
 	"log/slog"
 	"net/http"
 	"os"
@@ -765,8 +765,8 @@ type diffReviewResponse struct {
 	// the choices magus allows and has no rule of its own to get wrong. Always populated, so an
 	// absent field is a magus too old to have an opinion rather than a review nobody may remark
 	// on.
-	Verdicts     []types.ReviewVerdict `json:"verdicts"`
-	VerdictLimit string                `json:"verdict_limit,omitempty"`
+	Verdicts     []types.ReviewVerdict     `json:"verdicts"`
+	VerdictLimit string                    `json:"verdict_limit,omitempty"`
 	Comments     []difftypes.ReviewComment `json:"threads"`
 }
 

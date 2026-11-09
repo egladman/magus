@@ -1,10 +1,10 @@
 package status
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"bytes"
 	"context"
 	"encoding/base64"
+	"github.com/egladman/magus/types/daemon"
 	"io"
 	"net/http"
 	"net/http/httptest"

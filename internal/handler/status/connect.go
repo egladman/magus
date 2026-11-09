@@ -1,8 +1,8 @@
 package status
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"context"
+	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"time"
 
