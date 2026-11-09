@@ -53,6 +53,7 @@ import "hack/lint/magusfiles-hold-no-tests" as magusfiletests;
 import "hack/lint/markdown-carries-no-mermaid" as nomermaid;
 import "hack/lint/markdown-proofread" as markdownproofread;
 import "hack/lint/measured-claims-cite-their-run" as measuredclaims;
+import "hack/lint/no-hand-bound-flags" as handboundflags;
 import "hack/lint/no-throw" as nothrow;
 import "hack/lint/package-install-targets-never-replay" as installs;
 import "hack/lint/package-manifests-carry-no-scripts" as manifestscripts;
@@ -101,6 +102,7 @@ export fun rules() > [Rule] {
         Rule{ name = "markdown-carries-no-mermaid", reads = nomermaid\reads(), check = nomermaid\check },
         Rule{ name = "markdown-proofread", reads = markdownproofread\reads(), check = markdownproofread\check },
         Rule{ name = "banned-words", reads = bannedwords\reads(), check = bannedwords\check },
+        Rule{ name = "no-hand-bound-flags", reads = handboundflags\reads(), check = handboundflags\check },
         Rule{ name = "no-throw", reads = nothrow\reads(), check = nothrow\check },
         Rule{ name = "provider-io-is-buzz", reads = providerio\reads(), check = providerio\check },
         Rule{ name = "hack-scripts-start-with-a-verb", reads = hackverbs\reads(), check = hackverbs\check },
