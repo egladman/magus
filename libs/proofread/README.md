@@ -106,6 +106,14 @@ number of directories. An unknown rule, a decision other than the three, a glob
 matching no file argument, and an unknown key are errors that exit 2 and name
 it. `--only` takes comma-separated rule names and judges by those alone; an
 unknown name, or one the table leaves off for every file, exits 2.
+
+A person declares kinds of their own in `$XDG_CONFIG_HOME/proofread/kinds.json`,
+which every run reads beside the table. The file holds `{"kinds": {...}}` and
+nothing else: it sets no rules, paths or minimums, so it cannot loosen what a
+repository's table enforces. A kind name declared in both the table and the file
+is an error naming both, never an override. An absent file declares nothing; an
+unreadable or invalid one exits 2.
+
 `--thread-length N` tells `long-thread` how many replies the author already
 posted in the thread, and `--anchored` that the reply sits on a line of the
 diff, an inline comment or a reply in its thread: that line is what it refers

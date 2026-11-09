@@ -689,10 +689,11 @@ func (t table) turnsOn(r proofread.Rule, house bool) bool {
 func argumentPath(p string) string { return strings.TrimPrefix(filepath.ToSlash(p), "./") }
 
 // readTable reads the decisions file at p, or stdin for "-", and checks it
-// against the rules and against args. An empty p is an empty table.
+// against the rules and against args, then adds the user's kinds. An empty p
+// is an empty table.
 func readTable(p string, kind proofread.Kind, stdin io.Reader, args []string) (table, error) {
 	if p == "" {
-		return table{}, nil
+		return withUserKinds(table{}, "")
 	}
 
 	var data []byte
@@ -724,7 +725,7 @@ func readTable(p string, kind proofread.Kind, stdin io.Reader, args []string) (t
 		}
 	}
 
-	return t, nil
+	return withUserKinds(t, p)
 }
 
 // parseTable reads {"rules": {rule: decision}, "paths": {glob: {rule:
