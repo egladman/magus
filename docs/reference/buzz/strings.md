@@ -337,3 +337,31 @@ Fold every run of whitespace in s into a single space and trim the ends, so a mu
 
 **Returns:** string
 
+### plural
+
+Return one when n is 1, else many; zero is plural. The caller spells both forms, so no rule derives "es" or "ies".
+
+**Signature:** `strings\plural(n, one, many) -> string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `n`       | `int`    |          |             |
+| `one`     | `string` |          |             |
+| `many`    | `string` |          |             |
+
+**Returns:** string
+
+### pluralCount
+
+Return n and the matching form of one or many, as "1 target" or "3 targets".
+
+**Signature:** `strings\pluralCount(n, one, many) -> string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go)
+
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `n`       | `int`    |          |             |
+| `one`     | `string` |          |             |
+| `many`    | `string` |          |             |
+
+**Returns:** string
+

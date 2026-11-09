@@ -28,7 +28,7 @@ const topicArchitecture hint.MarkerKind = "topic-architecture"
 // alternative is a whole word or phrase, so "imports" matches and "important" does not.
 var architectureVocabulary = regexp.MustCompile(`(?i)\b(?:` +
 	`architect(?:ure|ures|ural|urally)` +
-	`|seams?|boundary|boundaries|layers?|layering|coupling|cohesion|domains?|bounded\s+contexts?` +
+	`|seams?|boundary|boundaries|layering|coupling|cohesion|bounded\s+contexts?` +
 	`|imports?|importing|(?:circular|cyclic)\s+dependenc(?:y|ies)|dependency\s+direction` +
 	`|package\s+layout|new\s+(?:packages?|modules?)|co-?locat\w*|sprawl\w*|god\s+(?:packages?|objects?)` +
 	`|fan-?(?:in|out)|blast\s+radius|restructur\w*|reorgani[sz]\w*` +

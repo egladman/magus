@@ -6,19 +6,28 @@
 //
 //	node hack/lint/no-throw.mjs <root> < paths
 //
-// The compiler API resolves as typescript-api, typescript 5.x, from
-// libs/textsearch/node_modules, which `magus run install libs/textsearch`
-// fills. TypeScript 7's package exports no compiler API at its root.
+// typescript resolves from libs/textsearch/node_modules, which
+// `magus run install libs/textsearch` fills. TypeScript 7 parses in tsgo,
+// reached through its typescript/unstable/sync API.
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const workspace = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-const loadCompiler = () => {
+// Files are served to tsgo under this root, which holds no tsconfig, so
+// each parses alone in the inferred project rather than in its own program.
+const VIRTUAL_ROOT = "/no-throw";
+
+const loadCompiler = async () => {
   try {
-    return { ts: createRequire(join(workspace, "libs", "textsearch", "package.json"))("typescript-api") };
+    const resolve = createRequire(join(workspace, "libs", "textsearch", "package.json")).resolve;
+    const load = (name) => import(pathToFileURL(resolve(name)).href);
+    const [api, ast, is] = await Promise.all([
+      load("typescript/unstable/sync"), load("typescript/unstable/ast"), load("typescript/unstable/ast/is"),
+    ]);
+    return { ts: { ...is, SyntaxKind: ast.SyntaxKind, API: api.API } };
   } catch (err) {
     return { error: `cannot load typescript from libs/textsearch/node_modules (${err.message}): run \`magus run install libs/textsearch\`` };
   }
@@ -32,11 +41,31 @@ const readText = (path) => {
   }
 };
 
-const scriptKind = (ts, path) => {
-  if (path.endsWith(".tsx")) return ts.ScriptKind.TSX;
-  if (path.endsWith(".jsx")) return ts.ScriptKind.JSX;
-  if (/\.[mc]?js$/.test(path)) return ts.ScriptKind.JS;
-  return ts.ScriptKind.TS;
+// eachSourceFile parses texts, keyed by workspace-relative path, in one tsgo
+// session and hands each tree to visit before the session closes. A file
+// outside the map falls back to the real filesystem.
+const eachSourceFile = (ts, texts, visit) => {
+  const files = new Map([...texts].map(([path, text]) => [`${VIRTUAL_ROOT}/${path}`, text]));
+  const fs = {
+    readFile: (name) => files.get(name),
+    fileExists: (name) => (files.has(name) ? true : undefined),
+  };
+  let api;
+  try {
+    api = new ts.API({ cwd: VIRTUAL_ROOT, fs });
+    const snapshot = api.updateSnapshot({ openFiles: [...files.keys()] });
+    for (const [path] of texts) {
+      const name = `${VIRTUAL_ROOT}/${path}`;
+      const sf = snapshot.getDefaultProjectForFile(name)?.program.getSourceFile(name);
+      if (sf === undefined) return { error: `tsgo returned no source file for ${path}` };
+      visit(path, sf);
+    }
+    return {};
+  } catch (err) {
+    return { error: `tsgo could not parse: ${err.message}` };
+  } finally {
+    api?.close();
+  }
 };
 
 const isFunction = (ts, node) =>
@@ -72,8 +101,7 @@ const neverOnly = (ts, fn) =>
   fn.parameters[0].type !== undefined &&
   fn.parameters[0].type.kind === ts.SyntaxKind.NeverKeyword;
 
-const sitesIn = (ts, path, text) => {
-  const sf = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, scriptKind(ts, path));
+const sitesIn = (ts, path, sf) => {
   const sites = [];
   const visit = (node) => {
     if (ts.isThrowStatement(node)) {
@@ -98,14 +126,14 @@ const sitesIn = (ts, path, text) => {
         unreachable: innermost !== undefined && nameOf(ts, sf, innermost) === "unreachable" && neverOnly(ts, innermost),
       });
     }
-    ts.forEachChild(node, visit);
+    node.forEachChild(visit);
   };
   visit(sf);
   return sites;
 };
 
 const root = process.argv[2];
-const compiler = loadCompiler();
+const compiler = await loadCompiler();
 if (root === undefined) {
   process.stderr.write("usage: node hack/lint/no-throw.mjs <root> < paths\n");
   process.exitCode = 2;
@@ -114,7 +142,7 @@ if (root === undefined) {
   process.exitCode = 2;
 } else {
   const paths = readFileSync(0, "utf8").split("\n").filter((p) => p !== "");
-  const out = [];
+  const texts = new Map();
   for (const path of paths) {
     const read = readText(join(root, path));
     if (read.error !== undefined) {
@@ -122,7 +150,15 @@ if (root === undefined) {
       process.exitCode = 2;
       continue;
     }
-    for (const site of sitesIn(compiler.ts, path, read.text)) out.push(JSON.stringify(site));
+    texts.set(path, read.text);
+  }
+  const out = [];
+  const parsed = texts.size === 0 ? {} : eachSourceFile(compiler.ts, texts, (path, sf) => {
+    for (const site of sitesIn(compiler.ts, path, sf)) out.push(JSON.stringify(site));
+  });
+  if (parsed.error !== undefined) {
+    process.stderr.write(`${parsed.error}\n`);
+    process.exitCode = 2;
   }
   process.stdout.write(out.length === 0 ? "" : `${out.join("\n")}\n`);
 }

@@ -2,6 +2,7 @@ import "magus/spell";
 // charm constructors derive argv patches from an anchor arg, not a counted index.
 import "magus/charm";
 import "encoding/toml";
+import "path";
 import "result";
 
 export fun mgs_getName() > str { return "python"; }
@@ -157,51 +158,6 @@ export fun mgs_getSymbolIndexer() > SymbolIndexer {
     };
 }
 
-fun dirOf(path: str) > str {
-    final parts = path.split("/");
-    if (parts.len() == 1) {
-        return ".";
-    }
-    return parts.sub(0, len: parts.len() - 1).join("/");
-}
-
-fun baseOf(path: str) > str {
-    final parts = path.split("/");
-    return parts[parts.len() - 1];
-}
-
-fun isUnder(path: str, dir: str) > bool {
-    return dir == "." or path == dir or path.startsWith(dir + "/");
-}
-
-// joinRelative resolves a pyproject's relative path against its directory, or null
-// when it leaves the workspace root.
-fun joinRelative(dir: str, rel: str) > str? {
-    final parts = mut [<str>];
-    if (dir != ".") {
-        foreach (part in dir.split("/")) {
-            parts.append(part);
-        }
-    }
-    foreach (part in rel.split("/")) {
-        if (part == "" or part == ".") {
-            continue;
-        }
-        if (part == "..") {
-            if (parts.len() == 0) {
-                return null;
-            }
-            parts.pop();
-            continue;
-        }
-        parts.append(part);
-    }
-    if (parts.len() == 0) {
-        return ".";
-    }
-    return parts.join("/");
-}
-
 // requirementName is the PEP 503 normalized name a PEP 508 requirement opens with:
 // "Pytest_Cov[toml]>=4; python_version>'3'" is "pytest-cov".
 fun requirementName(spec: str) > str {
@@ -310,7 +266,7 @@ object LocalProject {
 fun pathSourceGaps(gaps: mut [DiscoveryGap], deps: mut [str], file: str, dir: str, name: str, source: {str: any},
                    projects: [LocalProject]) > void {
     if ((source["path"] as? str) -> rel) {
-        final resolved = joinRelative(dir, rel: rel);
+        final resolved = path\join([dir, rel]);
         foreach (p in projects) {
             if (resolved == p.dir and p.dir != dir) {
                 deps.append(p.dir);
@@ -375,7 +331,7 @@ fun pyprojectClaim(dir: str, file: str, doc: {str: any}, locks: [str], projects:
     final targets = pyTargets(doc, names: declaredNames(doc), file: file, gaps: gaps);
     if (locks.indexOf("uv.lock") == null) {
         foreach (lock in locks) {
-            gaps.append(DiscoveryGap{file = joinRelative(dir, rel: lock)!, why = "the ops run through uv, which does not read {lock}"});
+            gaps.append(DiscoveryGap{file = path\join([dir, lock]), why = "the ops run through uv, which does not read {lock}"});
         }
     }
     taskGaps(gaps, file: file, table: tableAt(doc, keys: ["tool", "poe", "tasks"]), label: "[tool.poe.tasks]", runner: "poe");
@@ -433,13 +389,13 @@ fun legacyClaim(dir: str, files: [str], spans: [str]) > DiscoveredProject {
 fun spansOf(dir: str, pyFiles: [str]) > [str] {
     final seen = mut {<str: bool>};
     foreach (file in pyFiles) {
-        if (!isUnder(file, dir: dir)) {
+        if (!path\within(dir, path: file)) {
             continue;
         }
-        var at = dirOf(file);
+        var at = path\dir(file);
         while (at != dir and at != "." and !(seen[at] ?? false)) {
             seen[at] = true;
-            at = dirOf(at);
+            at = path\dir(at);
         }
     }
     return sortedKeys(seen);
@@ -464,8 +420,8 @@ object PyScan {
 fun pyScan(req: DiscoveryQuery) > result\Result::<PyScan> {
     final scan = PyScan{markersByDir = mut {}, locksByDir = mut {}, pyprojects = mut {}, parseErrors = mut {}, pyFiles = mut [], loose = mut []};
     foreach (file in req.files) {
-        final base = baseOf(file.path);
-        final dir = dirOf(file.path);
+        final base = path\base(file.path);
+        final dir = path\dir(file.path);
         if (markers.indexOf(base) != null) {
             scan.markersByDir[dir] = (scan.markersByDir[dir] ?? []) + [file.path];
         }
@@ -498,14 +454,14 @@ fun pyOrphans(scan: PyScan, dirs: [str]) > [DiscoveredProject] {
     foreach (file in scan.pyFiles + scan.loose) {
         var owned = false;
         foreach (dir in dirs) {
-            if (isUnder(file, dir: dir)) {
+            if (path\within(dir, path: file)) {
                 owned = true;
             }
         }
         if (owned) {
             continue;
         }
-        final dir = dirOf(file);
+        final dir = path\dir(file);
         final gaps = orphans[dir] ?? [];
         if (gaps.len() == 0 or scan.loose.indexOf(file) != null) {
             orphans[dir] = gaps + [DiscoveryGap{file = file, why = "no pyproject.toml, setup.py or setup.cfg owns it, so no python target is inferred"}];
@@ -537,7 +493,7 @@ export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredP
     }
     final claims = mut [<DiscoveredProject>];
     foreach (dir in dirs) {
-        final file = joinRelative(dir, rel: "pyproject.toml")!;
+        final file = path\join([dir, "pyproject.toml"]);
         final spans = spansOf(dir, pyFiles: scan.pyFiles);
         if (scan.parseErrors[dir] -> err) {
             claims.append(DiscoveredProject{path = dir, role = DiscoveryRole.project, spans = spans,

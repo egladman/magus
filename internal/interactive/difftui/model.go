@@ -14,6 +14,7 @@ package difftui
 import (
 	"cmp"
 	"fmt"
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types/diff"
 	"slices"
 	"strings"
@@ -507,7 +508,7 @@ func (m *Model) overviewRows() []OverviewRow {
 	for i := range m.files {
 		f := &m.files[i]
 		n, read := len(f.Hunks), m.readCount(i)
-		line := fmt.Sprintf("%s  %d %s, %d read", m.link(f.Path), n, plural(n, "hunk", "hunks"), read)
+		line := fmt.Sprintf("%s  %d %s, %d read", m.link(f.Path), n, plural.Word(n, "hunk", "hunks"), read)
 		if f.Generated {
 			line += ", generated"
 		}
@@ -590,7 +591,7 @@ func (m *Model) rebuild() {
 		if !m.expanded(i) {
 			n := len(f.Hunks)
 			m.rows = append(m.rows, Row{Kind: RowFold, File: i, Hunk: -1,
-				Text: fmt.Sprintf("  %d %s folded - %s", n, plural(n, "hunk", "hunks"), foldReason(f))})
+				Text: fmt.Sprintf("  %d %s folded - %s", n, plural.Word(n, "hunk", "hunks"), foldReason(f))})
 			continue
 		}
 		shown[f.Path] = true
@@ -810,7 +811,7 @@ func isAdd(line string) bool { return strings.HasPrefix(line, "+") }
 func (m *Model) fileLine(i int) string {
 	f := &m.files[i]
 	n := len(f.Hunks)
-	line := fmt.Sprintf("%s  %d %s, %d read", m.link(f.Path), n, plural(n, "hunk", "hunks"), m.readCount(i))
+	line := fmt.Sprintf("%s  %d %s, %d read", m.link(f.Path), n, plural.Word(n, "hunk", "hunks"), m.readCount(i))
 	if f.Generated {
 		line += ", generated"
 	}
@@ -868,11 +869,4 @@ func clamp(v, lo, hi int) int {
 		return hi
 	}
 	return v
-}
-
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // checkpointRepository makes a throwaway git repo on a named branch with one committed file,
@@ -229,4 +230,70 @@ func TestCheckpointKeepsTheHandleWhenPreservingFails(t *testing.T) {
 	require.Error(t, err, "a failed preserve is still a failure")
 	assert.Equal(t, "e5e5e5e5", cp.Preserved, "the handle to the minted object was discarded")
 	assert.NotEmpty(t, cp.Revision, "the identity the checkpoint had already resolved was discarded too")
+}
+
+type PreserveChangedSuite struct {
+	suite.Suite
+	dir string
+	res types.VCSResolution
+}
+
+func TestPreserveChangedSuite(t *testing.T) { suite.Run(t, new(PreserveChangedSuite)) }
+
+func (s *PreserveChangedSuite) SetupTest() {
+	s.T().Setenv("XDG_STATE_HOME", s.T().TempDir())
+	s.dir, s.res = checkpointRepository(s.T())
+	s.res.Base = "main"
+}
+
+func (s *PreserveChangedSuite) TestASecondTickCapturesNothing() {
+	writeFile(s.T(), s.dir, "a.txt", "alpha changed\n")
+
+	first, captured, err := PreserveChanged(s.T().Context(), s.dir, s.res)
+	s.Require().NoError(err)
+	s.True(captured)
+	s.NotEmpty(first.Preserved)
+
+	second, captured, err := PreserveChanged(s.T().Context(), s.dir, s.res)
+	s.Require().NoError(err)
+	s.False(captured, "an unchanged tree was captured again")
+	s.Equal(first.Preserved, second.Preserved)
+	s.Len(gitListPreserved(s.T(), s.dir), 1)
+
+	writeFile(s.T(), s.dir, "a.txt", "alpha changed again\n")
+	third, captured, err := PreserveChanged(s.T().Context(), s.dir, s.res)
+	s.Require().NoError(err)
+	s.True(captured, "new work was not captured")
+	s.NotEqual(first.Preserved, third.Preserved)
+}
+
+func (s *PreserveChangedSuite) TestACleanTreeCapturesNothing() {
+	cp, captured, err := PreserveChanged(s.T().Context(), s.dir, s.res)
+	s.Require().NoError(err)
+	s.False(captured)
+	s.Empty(cp.Preserved)
+}
+
+func (s *PreserveChangedSuite) TestAnUnabsorbedCaptureIsKept() {
+	writeFile(s.T(), s.dir, "a.txt", "alpha changed\n")
+	cp, _, err := PreserveChanged(s.T().Context(), s.dir, s.res)
+	s.Require().NoError(err)
+
+	dropped, err := PrunePreserved(s.T().Context(), s.dir, s.res)
+	s.Require().NoError(err)
+	s.Empty(dropped)
+	s.Contains(gitListPreserved(s.T(), s.dir), cp.Preserved)
+}
+
+func (s *PreserveChangedSuite) TestAnAbsorbedCaptureIsDropped() {
+	writeFile(s.T(), s.dir, "a.txt", "alpha changed\n")
+	cp, _, err := PreserveChanged(s.T().Context(), s.dir, s.res)
+	s.Require().NoError(err)
+	gitRun(s.T(), s.dir, "commit", "-qam", "land it")
+
+	s.res.Base = "work"
+	dropped, err := PrunePreserved(s.T().Context(), s.dir, s.res)
+	s.Require().NoError(err)
+	s.Equal([]string{cp.Preserved}, dropped)
+	s.Empty(gitListPreserved(s.T(), s.dir))
 }

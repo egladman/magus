@@ -38,8 +38,8 @@ type ruleDocEntry struct {
 	// they are catalogued anyway, because a reader asking what this workspace enforces is
 	// owed the whole set rather than the half that happens to apply to them today.
 	advisory bool
-	// enrolled advisories are held to one firing per session by a hint.MarkerKind gate;
-	// the rest speak on every match.
+	// enrolled advisories skip the repeat suppression. A gate holds them to
+	// one firing, or they speak in full every time.
 	enrolled bool
 }
 
@@ -69,6 +69,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocGrantIsAPersons},
 	{doc: ruleDocInlineAlias},
 	{doc: ruleDocMagusTimeout},
+	{doc: ruleDocUnknownMagusArgv},
 	{doc: ruleDocMergeSideCheckout},
 	{doc: ruleDocNotesAuthor},
 	{doc: ruleDocDeviationAuthor},
@@ -160,9 +161,9 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocSharedCheckout, advisory: true, enrolled: true},
 	{doc: ruleDocStageClassify, advisory: true, enrolled: true},
 	{doc: ruleDocUnleasedWrite, advisory: true, enrolled: true},
-	{doc: ruleDocWorkspaceCommandFailed, advisory: true},
-	{doc: ruleDocWorkspaceWriteFailed, advisory: true},
-	{doc: ruleDocWorkspaceSpawnFailed, advisory: true},
+	{doc: ruleDocWorkspaceCommandFailed, advisory: true, enrolled: true},
+	{doc: ruleDocWorkspaceWriteFailed, advisory: true, enrolled: true},
+	{doc: ruleDocWorkspaceSpawnFailed, advisory: true, enrolled: true},
 	{doc: ruleDocGuardUnfinished, advisory: true},
 	{doc: ruleDocOrchestratorGroundwork},
 	{doc: ruleDocRootContextBudget, advisory: true},
@@ -222,9 +223,9 @@ var ruleDocBusyWait = types.RuleDoc{
 	Catches: "a while or until loop that sleeps, or a for loop that sleeps until it breaks out",
 	Why: "A backgrounded command is tracked and announces its own completion, so starting it and doing something else is strictly better than watching it. " +
 		"Whatever the loop tests (a process, a file test on a task's output file, a grep of it) and whatever else each pass runs, a loop that sleeps is waiting. " +
-		"The one wait for work the caller started is that work's completion notice: a run backgrounded as `magus job exec --timeout <d> -- <command>` is announced when it ends, and a subagent may stop while it runs, since the notice resumes it with its job still bound (background-left). A job is waited on with `magus job wait <job>`. " +
+		"The one wait for work the caller started is that work's completion notice: a run backgrounded as `magus job exec --timeout <d> -- <command>` is announced when it ends, and a subagent may stop while it runs, since the notice resumes it with its job still bound (background-left). " +
 		"A loop waiting on one target run is served that run under `magus job exec --timeout`, bounded by the target's last run here plus half, or by background-unbounded's ceiling when nothing measures it. " +
-		"A loop probing a process the caller did not start (`kill -0`, the process table, `magus server status` or a job row) gets no such announcement, so its deny names the record magus keeps of that work instead: `magus job wait <job>` for a job, one `magus server status` for the project lock. " +
+		"A loop probing a process the caller did not start (`kill -0`, the process table, `magus server status` or a job row) gets no such announcement, so its deny names the record magus keeps of that work instead: `magus describe job <job>` for a job, one `magus server status` for the project lock. " +
 		"The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. " +
 		"Several have had to be killed by hand. A host's watcher running the same loop is judged the same way, since it is the same poll that also wakes the agent on every line and at expiry. " +
 		"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the output-pipe, output-redirect and unknown-env rules. " +
@@ -625,6 +626,14 @@ var ruleDocVcsOffSwitch = types.RuleDoc{
 	Catches: "an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads",
 	Why: "With vcs off, vcs.Resolve returns no VCS, so the guard has no approved copy to compare a policy edit against and every workspace rule is read from the working tree alone. " +
 		"Decided by parsing the proposed magus.yaml content, never by matching text. A person editing their own checkout, with no lease and no spawn ancestry, is untouched.",
+}
+
+var ruleDocUnknownMagusArgv = types.RuleDoc{
+	Name:    string(denyRuleUnknownMagusArgv),
+	Catches: "a magus command or flag the judging binary's command tree does not have",
+	Why: "magus exits 2 on an unknown subcommand or a flag the command does not bind, so the call would not run. " +
+		"The guard reads the same tree as the binary that judges, names the nearest command or flag, and says which build judged. " +
+		"Words past `--` belong to the tool a target runs and are not read.",
 }
 
 var ruleDocUnknownEnv = types.RuleDoc{
@@ -1189,9 +1198,9 @@ var ruleDocWorkspaceCommandFailed = types.RuleDoc{
 	Name:    string(advisoryCommandRuleFailed),
 	Catches: "a command the workspace's rule could not judge, so only the built-in rules graded it",
 	Why: "A workspace command rule that fails to load or errors judges nothing, and a command reaching a verdict without it must say so rather than read as fully judged. " +
-		"The first notice in a session names each failing side and its error; a repeat is one line naming what applied. " +
+		"Every notice names each failing side and its error, in full, and says what applied. " +
 		"It stands alone only when the built-in rules passed the command; on any other verdict the note is appended to that verdict. " +
-		"Standing alone, the one line is said once per caller: like every advisory not held by its own marker, the same text is not repeated to the same caller in a session. " +
+		"Standing alone, it is said in full on every call; nothing holds it to one firing." +
 		"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing.",
 }
 
@@ -1199,7 +1208,7 @@ var ruleDocWorkspaceWriteFailed = types.RuleDoc{
 	Name:    string(advisoryWriteRuleFailed),
 	Catches: "a file write the workspace's rule could not judge, so only the built-in rules graded it",
 	Why: "A workspace write rule that fails to load or errors judges nothing, and a write reaching a verdict without it must say so rather than read as fully judged. " +
-		"The first notice in a session names each failing side and its error; a repeat is one line naming what applied. " +
+		"Every notice names each failing side and its error, in full, and says what applied. " +
 		"It stands alone only when the built-in rules passed the write; on any other verdict the note is appended to that verdict. " +
 		"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing.",
 }
@@ -1208,7 +1217,7 @@ var ruleDocWorkspaceSpawnFailed = types.RuleDoc{
 	Name:    string(advisorySpawnRuleFailed),
 	Catches: "a spawn the workspace's rule could not judge, so only the built-in rules graded it",
 	Why: "A workspace spawn rule that fails to load or errors judges nothing, and a spawn or continuation reaching a verdict without it must say so rather than read as fully judged. " +
-		"The first notice in a session names each failing side and its error; a repeat is one line naming what applied. " +
+		"Every notice names each failing side and its error, in full, and says what applied. " +
 		"It stands alone only when the built-in rules passed the call; on any other verdict the note is appended to that verdict. " +
 		"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing.",
 }
@@ -1219,6 +1228,7 @@ var ruleDocGuardUnfinished = types.RuleDoc{
 	Why: "A host stops waiting on a hook that has not answered within its hook timeout, with no trail row and no word to the agent. " +
 		"So a check that has not answered within the guard's own budget, 7s against the host's 10s, stops waiting on its rules and answers unjudged: " +
 		"a call that changes state is denied, to be retried, and one that only reads runs with a note saying no rule judged it. The trail records the check as lapsed. " +
+		"A lapse deny is told in full every time; it is retried, never a standing refusal. " +
 		"Past two such checks in a row in a session, a call that changes state runs too, with a notice, until a check finishes in time; a guard always late would otherwise refuse every edit and spawn. " +
 		"A lapse never degrades a push, a run of a person-only target or of a target whose policy did not read in time, a bound worker's command, or a subagent's call reaching a live job's checkout. " +
 		"The built-in rules that read only the call still judge it through a lapse, the ledger's among them. " +

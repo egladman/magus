@@ -7,6 +7,7 @@
 namespace reclaimdisk;
 
 import "std";
+import "strings";
 import "fs";
 import "os";
 import "proc";
@@ -130,11 +131,6 @@ export fun displayPath(path: str, main: str) > str {
     return path;
 }
 
-export fun plural(n: int, word: str) > str {
-    if (n == 1) { return "1 {word}"; }
-    if (word.endsWith("ch")) { return "{n} {word}es"; }
-    return "{n} {word}s";
-}
 
 export fun age(ms: double) > str {
     final minutes = std\toInt(ms / 60000.0);
@@ -211,8 +207,8 @@ export fun classify(o: Observed, main: str, own: str, leases: {str: [str]}, pids
     if (o.locked -> lock) {
         if (lock == "") { keep("locked", why: "locked"); } else { keep("locked", why: "locked: {lock}"); }
     }
-    if (o.dirty > 0) { keep("dirty", why: plural(o.dirty, word: "uncommitted file")); }
-    if (o.unique > 0) { keep("unique", why: "{plural(o.unique, word: "commit")} on no remote and not in the base"); }
+    if (o.dirty > 0) { keep("dirty", why: strings\pluralCount(o.dirty, one: "uncommitted file", many: "uncommitted files")); }
+    if (o.unique > 0) { keep("unique", why: "{strings\pluralCount(o.unique, one: "commit", many: "commits")} on no remote and not in the base"); }
     foreach (l in leases[o.path] ?? [<str>]) { keep("lease", why: "live job {l}"); }
     final working = pids[o.path] ?? [<str>];
     if (working.len() > 0) { keep("process", why: "working directory of pid {working.join(", ")}"); }
@@ -343,7 +339,7 @@ export fun render(items: [Item]) > [str] {
         if (t.keptBy[k] -> n) { by.append("{k} {n}"); }
     }
     lines.append("");
-    lines.append("removable: {plural(t.removableWorktrees, word: "worktree")} ({size(t.removableKiB)}), {plural(t.branches, word: "agent branch")}");
+    lines.append("removable: {strings\pluralCount(t.removableWorktrees, one: "worktree", many: "worktrees")} ({size(t.removableKiB)}), {strings\pluralCount(t.branches, one: "agent branch", many: "agent branches")}");
     lines.append("kept: {t.kept} of {t.worktrees} worktrees, by reason (one worktree can have several): {by.join(", ")}");
     return lines;
 }
@@ -371,13 +367,13 @@ export fun headline(items: [Item], applied: bool, trimmed: str) > str {
     final t = totals(items);
     final tail = if (trimmed == "") "" else "; {trimmed}";
     if (!applied) {
-        return "dry run: nothing removed; --apply removes {plural(t.removableWorktrees, word: "worktree")} ({size(t.removableKiB)}) and {plural(t.branches, word: "agent branch")}{tail}";
+        return "dry run: nothing removed; --apply removes {strings\pluralCount(t.removableWorktrees, one: "worktree", many: "worktrees")} ({size(t.removableKiB)}) and {strings\pluralCount(t.branches, one: "agent branch", many: "agent branches")}{tail}";
     }
     var kib = 0;
     foreach (it in items) {
         if (it.kind == "worktree" and it.result == "removed" and it.kib > 0) { kib = kib + it.kib; }
     }
-    return "removed {count(items, kind: "worktree", result: "removed")} of {plural(t.removableWorktrees, word: "removable worktree")} ({size(kib)}) and deleted {count(items, kind: "branch", result: "deleted")} of {plural(t.branches, word: "agent branch")}{tail}";
+    return "removed {count(items, kind: "worktree", result: "removed")} of {strings\pluralCount(t.removableWorktrees, one: "removable worktree", many: "removable worktrees")} ({size(kib)}) and deleted {count(items, kind: "branch", result: "deleted")} of {strings\pluralCount(t.branches, one: "agent branch", many: "agent branches")}{tail}";
 }
 
 /// timeLeft is the timeoutMs a call made now may take: 0, no bound, when deadline is 0, and
@@ -671,8 +667,8 @@ export fun keptLine(items: [Item]) > str {
     if (t.keptBy["dirty"] -> n) { parts.append("{n} uncommitted"); }
     if (t.keptBy["unique"] -> n) { parts.append("{n} unpushed"); }
     if (t.keptBy["locked"] -> n) { parts.append("{n} locked"); }
-    if (parts.len() == 0) { return plural(t.kept, word: "worktree"); }
-    return "{plural(t.kept, word: "worktree")} ({parts.join(", ")})";
+    if (parts.len() == 0) { return strings\pluralCount(t.kept, one: "worktree", many: "worktrees"); }
+    return "{strings\pluralCount(t.kept, one: "worktree", many: "worktrees")} ({parts.join(", ")})";
 }
 
 /// TickReport is what one tick did. ran is false when it was not due or nothing
@@ -747,7 +743,7 @@ fun runTick(cwd: str, deadline: double, force: bool) > TickReport !> any { //nol
         final removed = items.filter(fun (i: int, it: Item) > bool => it.kind == "worktree" and it.result == "removed").len();
         if (removed > 0) {
             freed = true;
-            did.append("removed {plural(removed, word: "worktree")}");
+            did.append("removed {strings\pluralCount(removed, one: "worktree", many: "worktrees")}");
         }
     } catch (e) {
         did.append("stopped before the worktrees: {e}");

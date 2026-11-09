@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/cmdline/exit"
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -86,7 +87,7 @@ func staleIndexNotice(ans types.KnowledgeAnswer) string {
 		return ""
 	}
 	notice := fmt.Sprintf("\nstale index: %s changed since %s last indexed, so this answer may be missing sites in %s.\n",
-		plural(projects, "a project", "projects"), plural(projects, "it was", "they were"), ans.DescribeStale())
+		plural.Word(projects, "a project", "projects"), plural.Word(projects, "it was", "they were"), ans.DescribeStale())
 	if files := describeChangedFiles(ans.StaleIndexDetails); files != "" {
 		notice += fmt.Sprintf("  changed since: %s; deletions are not listed\n", files)
 	}
@@ -122,15 +123,6 @@ func describeChangedFiles(stale []types.KnowledgeStaleIndex) string {
 		out += fmt.Sprintf(" and %d more", more)
 	}
 	return out
-}
-
-// plural picks a word by count. Two call sites in one sentence, so the alternative is an
-// interpolation that reads worse than the branch.
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }
 
 // staleIndexProjects lists, workspace-relative and sorted, the projects whose built symbol
@@ -232,7 +224,7 @@ func renderStaleGraphAdvice(reason string, stale []types.KnowledgeStaleIndex) st
 	}
 	if projects := len(types.StaleIndexProjects(stale)); projects > 0 {
 		fmt.Fprintf(&b, "%s changed since %s last indexed: %s. A symbol added or moved since then is missing from the answer, and a lookup that misses it reports \"unknown, not absent\" rather than nothing being there.\n",
-			plural(projects, "One project", "Several projects"), plural(projects, "it was", "they were"), types.DescribeStaleIndexes(stale))
+			plural.Word(projects, "One project", "Several projects"), plural.Word(projects, "it was", "they were"), types.DescribeStaleIndexes(stale))
 	}
 	if files := describeChangedFiles(stale); files != "" {
 		fmt.Fprintf(&b, "Changed since: %s; deletions are not listed.\n", files)

@@ -283,7 +283,16 @@ func externDecl(m std.Method) (string, error) {
 	}
 
 	params := make([]string, 0, len(m.Args))
+	sig := m.Signature()
 	for i, a := range m.Args {
+		if sig != nil && sig.In(i+1).Kind() == reflect.Func {
+			typ, err := callbackBuzzType(sig.In(i + 1))
+			if err != nil {
+				return "", fmt.Errorf("arg %s: %w", a.Name, err)
+			}
+			params = append(params, fmt.Sprintf("%s: %s", a.Name, typ))
+			continue
+		}
 		typ, err := buzzArgType(a.Type)
 		if err != nil {
 			return "", fmt.Errorf("arg %s: %w", a.Name, err)
@@ -297,12 +306,6 @@ func externDecl(m std.Method) (string, error) {
 		// enforce, and `str` enforces nothing.
 		if a.Enum != "" {
 			typ = a.Enum
-		}
-		if a.Func != "" {
-			if a.Type != std.TypeFunc {
-				return "", fmt.Errorf("arg %s: Func is set on a %v argument, it types only a TypeFunc", a.Name, a.Type)
-			}
-			typ = a.Func
 		}
 		// A byte-slice ARGUMENT accepts a str as well as a list: gen.ByteSlice decodes
 		// either, which is what lets a SigV4 chain feed a str secret into the same call
@@ -390,10 +393,6 @@ func buzzArgType(t std.TypeTag) (string, error) {
 		return "{str: str}", nil
 	case std.TypeAnyMap:
 		return "{str: any}", nil
-	case std.TypeFunc:
-		// A Buzz function type fixes its arity and parameter types, and a TypeFunc
-		// Arg carries neither; the host checks the callable when it is called.
-		return "any", nil
 	case std.TypeAny:
 		return "any", nil
 	default:

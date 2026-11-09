@@ -3,23 +3,16 @@
 namespace feed;
 
 import "assert";
+import "html";
 
-// escapeXml is escapeAttr's XML form: five entities, ampersand FIRST so the & each of
-// the other four introduces is never rescanned. (This note used to say "& last", which
-// is the opposite of both the code and the correct order - replacing it last would turn
-// "&lt;" into "&amp;lt;".)
-export fun escapeXml(s: str) > str {
-    return s.replace("&", with: "&amp;").replace("<", with: "&lt;").replace(">", with: "&gt;")
-        .replace("\"", with: "&quot;").replace("'", with: "&apos;");
-}
-
-// Minimal XML leaves; every body and value funnels through escapeXml. Container tags
-// with their own namespaces (<feed>, <urlset>, <entry>, <url>) stay written inline.
+// Minimal XML leaves; every body and value funnels through html\escape.
+// Container tags with their own namespaces (<feed>, <urlset>, <entry>,
+// <url>) stay written inline.
 export fun xmlAttribute(name: str, value: str) > str {
-    return " " + name + "=\"" + escapeXml(value) + "\"";
+    return " " + name + "=\"" + html\escape(value) + "\"";
 }
 export fun xmlElementAttribute(tag: str, attrs: str, text: str) > str {
-    return "<" + tag + attrs + ">" + escapeXml(text) + "</" + tag + ">";
+    return "<" + tag + attrs + ">" + html\escape(text) + "</" + tag + ">";
 }
 export fun xmlElement(tag: str, text: str) > str {
     return xmlElementAttribute(tag, attrs: "", text: text);
@@ -35,30 +28,6 @@ export fun atomDate(d: str) > str {
     return d;
 }
 
-test "escapeXml substitutes all five XML entities, ampersand-safe" {
-    assert\equal(escapeXml("a & b < c > d \" e ' f"),
-        want: "a &amp; b &lt; c &gt; d &quot; e &apos; f", message: "all five entities");
-    assert\equal(escapeXml("plain"), want: "plain", message: "no-op on safe text");
-}
-
-// EVERY occurrence, not one of each. The test above covers all five entities and still
-// missed a real defect for months: str.replace substituted only the FIRST match until
-// 2026-08-09, so this escaper encoded the first ampersand of a document and left the
-// rest raw in the feed. One-of-each fixtures measure thoroughness across CHARACTERS,
-// which is the wrong axis - the axis that catches this is repetition.
-//
-// The shape to copy for any escaper: the character at both edges, adjacent to itself,
-// and interleaved with the others.
-test "escapeXml substitutes EVERY occurrence, not just the first" {
-    assert\equal(escapeXml("&a&b&"), want: "&amp;a&amp;b&amp;", message: "ampersands at both edges and between");
-    assert\equal(escapeXml("&&"), want: "&amp;&amp;", message: "adjacent ampersands");
-    assert\equal(escapeXml("<a><b>"), want: "&lt;a&gt;&lt;b&gt;", message: "repeated angle brackets");
-    assert\equal(escapeXml("\"a\"'b'"), want: "&quot;a&quot;&apos;b&apos;", message: "repeated quotes");
-    // Ampersand is replaced FIRST so the & it introduces is never rescanned by the
-    // later arms. Replacing it last would turn "&lt;" into "&amp;lt;".
-    assert\equal(escapeXml("<&>"), want: "&lt;&amp;&gt;", message: "no double-encoding of introduced entities");
-}
-
 test "xml builders wrap and escape" {
     assert\equal(xmlAttribute("rel", value: "self"), want: " rel=\"self\"", message: "attribute with leading space");
     assert\equal(xmlElement("title", text: "a & b"), want: "<title>a &amp; b</title>", message: "element escapes body");
@@ -69,4 +38,18 @@ test "atomDate normalizes to RFC3339 UTC" {
     assert\equal(atomDate("2026-07-01"), want: "2026-07-01T00:00:00Z", message: "bare date gets midnight UTC");
     assert\equal(atomDate("2026-07-01T12:00:00Z"), want: "2026-07-01T12:00:00Z", message: "full RFC3339 passes through");
     assert\equal(atomDate(""), want: "", message: "empty stays empty");
+}
+
+test "xml builders substitute all five XML entities" {
+    assert\equal(xmlElement("t", text: "a & b < c > d \" e ' f"),
+        want: "<t>a &amp; b &lt; c &gt; d &#34; e &#39; f</t>", message: "all five entities");
+    assert\equal(xmlElement("t", text: "plain"), want: "<t>plain</t>", message: "no-op on safe text");
+}
+
+// EVERY occurrence: str.replace once substituted only the FIRST match,
+// which left the later ampersands of a feed raw. Repetition catches it.
+test "xml builders substitute EVERY occurrence, not just the first" {
+    assert\equal(xmlElement("t", text: "&a&b&"), want: "<t>&amp;a&amp;b&amp;</t>", message: "ampersands at both edges and between");
+    assert\equal(xmlElement("t", text: "<a><b>"), want: "<t>&lt;a&gt;&lt;b&gt;</t>", message: "repeated angle brackets");
+    assert\equal(xmlElement("t", text: "<&>"), want: "<t>&lt;&amp;&gt;</t>", message: "no double-encoding of introduced entities");
 }

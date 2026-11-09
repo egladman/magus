@@ -279,7 +279,7 @@ is green without switching a gate off.
 | `libs/gopherbuzz/host` holds the module descriptor types; `std` declares `host.Module`            | not built |
 | `.buzzgen.yaml` at the root carries the 413 types and 10 open strings                             | not built |
 | Enum cases derived from constants; 532 `enumCase` values deleted                                  | not built |
-| Typed callbacks and `gen/callbacks.go`; `std.Callback`, `callbackTruthy`, `callPredicate` deleted | not built |
+| Typed callbacks and `gen/callbacks.go`; `std.Callback`, `callbackTruthy`, `callPredicate` deleted | done      |
 | Spell contract and provider ops generated as typed exports                                        | not built |
 | `!> result\Diagnostic` on every raising declaration; `result\caught` typed                        | not built |
 | `TypeTag` deleted; untyped Impl arguments and returns become structs or `modules.dynamic`         | not built |
@@ -470,23 +470,23 @@ equivalent a generator writes mechanically. buzzgen's mapping is therefore one t
 over every Go type kind, each row a Buzz form or a refusal naming why, preferring a
 construct upstream Buzz already has over a new gopherbuzz type:
 
-| Go                                        | Buzz                                    | State     |
-| ----------------------------------------- | --------------------------------------- | --------- |
-| `string`, `bool`, `int`, `float64`        | `str`, `bool`, `int`, `double`          | done      |
-| other sized ints, `uint*`, `float32`      | `int` or `double`, refusing overflow    | not built |
-| named string with constants               | `enum<str>`                             | done      |
-| struct                                    | `object`                                | done      |
-| pointer to T                              | `T?`                                    | in progress (some shapes) |
-| `[]T`, `[N]T`                             | `[T]`                                   | in progress (some shapes) |
-| `map[K]V`                                 | `{K: V}`                                | in progress (some shapes) |
-| `[]byte`                                  | `buffer\Buffer`, adopting the slice     | not built |
-| `iter.Seq[T]`, `<-chan T`                 | `fib<T, void>`                          | not built |
-| `func(...)` parameter                     | `fun (...)`                             | not built |
-| interface with methods                    | `protocol`                              | not built |
-| generic type                              | generic `object::<T>`                   | in progress (some shapes) |
-| `error`                                   | `result\Diagnostic`                     | not built |
-| `time.Time`, `time.Duration`              | `str` (RFC 3339), `int` (nanoseconds)   | in progress (some shapes) |
-| `complex*`, `unsafe.Pointer`, `uintptr`   | refused, naming the field               | not built |
+| Go                                      | Buzz                                  | State                     |
+| --------------------------------------- | ------------------------------------- | ------------------------- |
+| `string`, `bool`, `int`, `float64`      | `str`, `bool`, `int`, `double`        | done                      |
+| other sized ints, `uint*`, `float32`    | `int` or `double`, refusing overflow  | not built                 |
+| named string with constants             | `enum<str>`                           | done                      |
+| struct                                  | `object`                              | done                      |
+| pointer to T                            | `T?`                                  | in progress (some shapes) |
+| `[]T`, `[N]T`                           | `[T]`                                 | in progress (some shapes) |
+| `map[K]V`                               | `{K: V}`                              | in progress (some shapes) |
+| `[]byte`                                | `buffer\Buffer`, adopting the slice   | not built                 |
+| `iter.Seq[T]`, `<-chan T`               | `fib<T, void>`                        | not built                 |
+| `func(...)` parameter                   | `fun (...)`                           | done                      |
+| interface with methods                  | `protocol`                            | not built                 |
+| generic type                            | generic `object::<T>`                 | in progress (some shapes) |
+| `error`                                 | `result\Diagnostic`                   | not built                 |
+| `time.Time`, `time.Duration`            | `str` (RFC 3339), `int` (nanoseconds) | in progress (some shapes) |
+| `complex*`, `unsafe.Pointer`, `uintptr` | refused, naming the field             | not built                 |
 
 ### 2026-11-08: names come from packages, and objects get constructors
 

@@ -2,6 +2,7 @@ package review
 
 import (
 	"fmt"
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types/diff"
 
 	"github.com/egladman/magus/internal/changeset"
@@ -113,7 +114,7 @@ func UnreadLine(u diff.Unread, source string) string {
 	case u.ReadState == diff.ReadStateUnknown:
 		return fmt.Sprintf("read state unknown for %s; no hunk is called unread", source)
 	case u.Unread == 0:
-		return fmt.Sprintf("every hunk of %s is marked read (%d %s)", source, u.Hunks, plural(u.Hunks, "hunk", "hunks"))
+		return fmt.Sprintf("every hunk of %s is marked read (%d %s)", source, u.Hunks, plural.Word(u.Hunks, "hunk", "hunks"))
 	}
 	return fmt.Sprintf("%d of %d hunks in %s are not marked read", u.Unread, u.Hunks, source)
 }

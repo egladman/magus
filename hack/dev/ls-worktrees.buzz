@@ -4,23 +4,26 @@
 // uncommitted there, how many commits no remote has, and the job whose checkout it is.
 // Clean worktrees are listed too, since "safe to remove" is a row with zeros in it; --dirty
 // keeps only the ones holding uncommitted files.
+// --unaccounted lists instead what the work ledger says nothing accounts for.
 //
-//	magus buzz hack/dev/ls-worktrees.buzz -- [--dirty]
+//	magus buzz hack/dev/ls-worktrees.buzz -- [--dirty | --unaccounted]
 //
 // Every git call is a read: status runs with --no-optional-locks, so listing a worktree
 // another session is working in never takes its index lock.
 namespace lsworktrees;
 
 import "flags";
+import "fs";
 import "magus";
 import "result";
 import "std";
 import "vcs";
+import "encoding/json";
 import "magus/reclaimdisk" as reclaim;
 
 import "assert";
 
-final USAGE = "usage: magus buzz hack/dev/ls-worktrees.buzz -- [--dirty]";
+final USAGE = "usage: magus buzz hack/dev/ls-worktrees.buzz -- [--dirty | --unaccounted]";
 final HELP = "cost: grows with the number of worktrees\n{USAGE}";
 
 export object Row {
@@ -96,8 +99,104 @@ export fun worktrees(dirtyOnly: bool) > result\Result::<[Row]> {
     return result\ok::<[Row]>(found);
 }
 
+export object Unaccounted {
+    key: str,
+    why: str,
+}
+
+// unaccounted folds work ledger lines, the last per key winning, and keeps
+// repo's live items in the unaccounted state.
+export fun unaccounted(lines: [str], repo: str) > result\Result::<[Unaccounted]> {
+    final last = mut {<str: any>};
+    final order = mut [<str>];
+    try {
+        foreach (line in lines) {
+            if (line.trim() == "") {
+                continue;
+            }
+            final doc = json\parse(line);
+            final key = "{doc["kind"]}:{doc["name"]}";
+            if (!last.hasKey(key)) {
+                order.append(key);
+            }
+            last[key] = doc;
+        }
+    } catch (err: any) {
+        return result\caught::<[Unaccounted]>(err, doing: "ls-worktrees: read the work ledger");
+    }
+    final found = mut [<Unaccounted>];
+    foreach (key in order) {
+        final doc = last[key];
+        final dropped = "{doc["dropped"] ?? false}" == "true";
+        if (!dropped and "{doc["repo"]}" == repo and "{doc["state"]}" == "unaccounted") {
+            found.append(Unaccounted{ key = key, why = "{doc["why"] ?? ""}" });
+        }
+    }
+    return result\ok::<[Unaccounted]>(found);
+}
+
+// ledgerLines is every line of every work ledger whose lines name repo.
+// No ledger naming it is an error: an unsurveyed repository is not a clean one.
+fun ledgerLines(repo: str) > result\Result::<[str]> {
+    final lines = mut [<str>];
+    var named = false;
+    try {
+        final dir = fs\stateDir("work");
+        foreach (entry in fs\listDir(dir)) {
+            final path = fs\join(dir, entry: entry, file: "work.jsonl");
+            if (fs\isFile(path)) {
+                final read = fs\readLines(path);
+                foreach (line in read) {
+                    if (line.indexOf("\"repo\":{json\stringify(repo)}") != null) {
+                        named = true;
+                    }
+                    lines.append(line);
+                }
+            }
+        }
+    } catch (err: any) {
+        return result\caught::<[str]>(err, doing: "ls-worktrees: read the work ledgers");
+    }
+    if (!named) {
+        return result\fail::<[str]>("ls-worktrees: no work ledger names {repo}: nothing has surveyed it yet");
+    }
+    return result\ok::<[str]>(lines);
+}
+
+fun printUnaccounted() > void !> any {
+    final root = vcs\root();
+    final trees = reclaim\parseWorktrees(vcs\cmd(["worktree", "list", "--porcelain"], opts: vcs\CommandOptions{ dir = root, quiet = true }).stdout);
+    final repo = if (trees.len() > 0) trees[0].path else root;
+    final lines = ledgerLines(repo);
+    if (lines.error != null) {
+        throw lines.error!.message;
+    }
+    final items = unaccounted(lines.value!, repo: repo);
+    if (items.error != null) {
+        throw items.error!.message;
+    }
+    std\print("read-only");
+    foreach (line in renderUnaccounted(items.value!)) {
+        std\print(line);
+    }
+}
+
+export fun renderUnaccounted(items: [Unaccounted]) > [str] {
+    var width = 4;
+    foreach (u in items) {
+        if (u.key.len() > width) {
+            width = u.key.len();
+        }
+    }
+    final lines = mut ["{pad("ITEM", width: width)}  WHY"];
+    foreach (u in items) {
+        lines.append("{pad(u.key, width: width)}  {u.why}");
+    }
+    return lines;
+}
+
 export fun main(args: [str]) > void !> any {
-    final parsed = flags\parse(args, switches: ["--dirty", "--help"], valued: [<str>]);
+    final parsed = flags\parse(args, switches: ["--dirty", "--unaccounted", "--help"], valued: [<str>]);
     if (parsed.values["--help"] != null) {
         std\print(HELP);
         return;
@@ -107,6 +206,13 @@ export fun main(args: [str]) > void !> any {
     }
     if (vcs\name() != "git") {
         throw "ls-worktrees: reads git worktrees, and this checkout is {vcs\name()}";
+    }
+    if (parsed.values["--unaccounted"] != null) {
+        if (parsed.values["--dirty"] != null) {
+            throw "ls-worktrees: --dirty and --unaccounted list different things; pass one\n{USAGE}";
+        }
+        printUnaccounted();
+        return;
     }
     final rows = worktrees(parsed.values["--dirty"] != null);
     if (rows.error != null) {
@@ -129,4 +235,21 @@ test "rows render as aligned columns, a missing directory as gone" {
         ".claude/worktrees/topic  3      12        topic/fix (declared)",
         "/elsewhere/copy          gone   0         ",
     ], message: "table");
+}
+
+test "the ledger's last line per key wins, and a dropped line ends its key" {
+    final lines = [
+        `{"kind":"branch","name":"topic","repo":"/r","state":"tracked","at":1}`,
+        `{"kind":"branch","name":"topic","repo":"/r","state":"unaccounted","why":"1 unpublished revision(s)","at":2}`,
+        `{"kind":"checkout","name":"/r/w","repo":"/r","state":"unaccounted","at":1}`,
+        `{"kind":"checkout","name":"/r/w","repo":"/r","state":"unaccounted","dropped":true,"at":2}`,
+        `{"kind":"branch","name":"other","repo":"/elsewhere","state":"unaccounted","at":1}`,
+        `{"kind":"branch","name":"done","repo":"/r","state":"ended","reason":"dropped","at":1}`,
+    ];
+    final got = unaccounted(lines, repo: "/r");
+    assert\isTrue(got.error == null, message: "decodes");
+    assert\equal(renderUnaccounted(got.value!), want: [
+        "ITEM          WHY",
+        "branch:topic  1 unpublished revision(s)",
+    ], message: "only repo's live unaccounted items");
 }

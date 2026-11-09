@@ -233,22 +233,14 @@ func TestHasModeFlagAcceptsEverySpelling(t *testing.T) {
 	assert.False(t, hasModeFlag(nil, "plan"))
 }
 
-func TestCountLabelAndImpactPct(t *testing.T) {
-	assert.Equal(t, "0 files", countLabel(0, "file", "files"))
-	assert.Equal(t, "1 file", countLabel(1, "file", "files"))
-	assert.Equal(t, "3 files", countLabel(3, "file", "files"))
-
+func TestImpactPct(t *testing.T) {
 	assert.Equal(t, "0%", impactPct(0))
 	assert.Equal(t, "25%", impactPct(0.25))
 	assert.Equal(t, "76%", impactPct(0.756))
 	assert.Equal(t, "100%", impactPct(1))
 }
 
-func TestPluralSuffixAndLinesSuffix(t *testing.T) {
-	assert.Equal(t, "", plural(1, "", "s"))
-	assert.Equal(t, "s", plural(0, "", "s"))
-	assert.Equal(t, "s", plural(2, "", "s"))
-
+func TestLinesSuffix(t *testing.T) {
 	assert.Equal(t, "", linesSuffix(nil))
 	assert.Equal(t, "  lines 7", linesSuffix([]int{7}))
 	assert.Equal(t, "  lines 7,19,42", linesSuffix([]int{7, 19, 42}))

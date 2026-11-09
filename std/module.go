@@ -6,7 +6,6 @@
 package std
 
 import (
-	"context"
 	"fmt"
 	"maps"
 	"reflect"
@@ -18,13 +17,6 @@ import (
 // The module REGISTRY that binds these declarations to their generated trampolines is
 // itself generated, from the WASM field below plus each module's Name and Path. It
 // lives beside the trampolines rather than here because it names them.
-
-// Callback is the host-side handle for a VM-side function value passed as
-// an argument. The generated bindings layer wraps a buzz.Session + function value.
-// Impls invoke the callback via Call; args are marshaled per VM convention.
-type Callback interface {
-	Call(ctx context.Context, args ...any) ([]any, error)
-}
 
 // TypeTag classifies the shape of a value crossing the VM boundary. Each tag
 // has a canonical Go type that Impls accept (for args) or return; codegen
@@ -57,7 +49,6 @@ const (
 	// key-value pairs.
 	TypeStringMapMap
 	TypeAnyMap
-	TypeFunc
 	TypeAny
 	// TypeIndex is an int that names a position in a list. Buzz lists are
 	// 0-based, matching the Go Impl, so the index needs no offset on the way in
@@ -91,8 +82,6 @@ func (t TypeTag) GoType() string {
 		return "map[string]string"
 	case TypeAnyMap:
 		return "map[string]any"
-	case TypeFunc:
-		return "Callback"
 	case TypeAny:
 		return "any"
 	default:
@@ -129,10 +118,6 @@ type Arg struct {
 	// closed-set parameter reads as `str`, and naming an algorithm magus does not
 	// implement is a runtime throw rather than something the checker catches.
 	Enum string
-	// Func is the Buzz function type a TypeFunc argument must match, such as
-	// `fun (path: str, isDir: bool) > bool !> any`. Empty declares `any`, which lets
-	// a callback of the wrong shape through the checker to fail at the call.
-	Func string
 }
 
 // Ret is one return value of a Method.
@@ -310,14 +295,10 @@ func (m Method) RetTag(i int) TypeTag {
 	return TagOf(sig.Out(i))
 }
 
-var callbackType = reflect.TypeFor[Callback]()
-
 // TagOf is the tag a Go type crosses as. A struct crosses as a map the
-// generated decoder reads; a pointer as what it points to.
+// generated decoder reads; a pointer as what it points to. A func has no
+// tag: the generator renders it from its Go signature.
 func TagOf(t reflect.Type) TypeTag {
-	if t == callbackType {
-		return TypeFunc
-	}
 	switch t.Kind() {
 	case reflect.String:
 		return TypeString
@@ -512,7 +493,7 @@ func (m Module) ObjectExterns() []Method {
 // vocabulary, so std naming them would cycle. std/encoding/register.go collects
 // them and internal/hostmodules unions both sets, the only place that imports both.
 var portable = []Module{
-	Charm, Crypto, Diff, Env, Flags, Fmt, Log, Markdown, Math, Merge,
+	Charm, Crypto, Diff, Env, Flags, Fmt, HTML, Log, Markdown, Math, Merge,
 	Path, Platform, Semver, Sort, Strings, Template, Time, UUID,
 }
 

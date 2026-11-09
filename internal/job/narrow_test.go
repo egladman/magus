@@ -107,53 +107,172 @@ func TestRefuseWholeFileConfigClaims(t *testing.T) {
 	})
 }
 
-func TestNarrowConfigHold(t *testing.T) {
-	t.Parallel()
+// narrowHoldSuite pins NarrowHold over a workspace where cfg holds every Buzz file by a
+// pattern and lit holds notes.buzz by name.
+type narrowHoldSuite struct {
+	suite.Suite
+	root string
+	loc  Location
+	s    *Store
+}
 
-	root := testkit.NewRepository(t, configFiles).Root()
-	loc := tempLocation(t, root)
-	s := NewStore(loc)
-	seed(t, s, types.Job{ID: "cfg", State: types.StateRunning, WritePaths: []string{"**/*.buzz"}, Check: forkCheck()})
-	seed(t, s, types.Job{ID: "whole", State: types.StateRunning, WritePaths: []string{"libs/lib/magusfile.buzz"}, Check: forkCheck()})
+func TestNarrowHold(t *testing.T) { suite.Run(t, new(narrowHoldSuite)) }
+
+func (s *narrowHoldSuite) SetupTest() {
+	s.root = testkit.NewRepository(s.T(), configFiles).Root()
+	s.loc = tempLocation(s.T(), s.root)
+	s.s = NewStore(s.loc)
+	seed(s.T(), s.s, types.Job{ID: "cfg", State: types.StateRunning, WritePaths: []string{"**/*.buzz"}, Check: forkCheck()})
+	seed(s.T(), s.s, types.Job{ID: "lit", State: types.StateRunning, WritePaths: []string{"notes.buzz"}, Check: forkCheck()})
+}
+
+func (s *narrowHoldSuite) narrow(id, file string, touched ...string) (types.Job, []string, error) {
+	return NarrowHold(s.T().Context(), s.s, id, file, touched, "")
+}
+
+func (s *narrowHoldSuite) stored(id string) types.Job {
+	row, err := s.s.stored(id)
+	s.Require().NoError(err)
+	return row
+}
+
+func (s *narrowHoldSuite) TestAPatternHoldNarrowsToTheTouchedDeclarations() {
 	peer := types.Job{ID: "peer", State: types.StateDeclared, WritePaths: []string{"magusfile.buzz#project.name"}}
-	rows, err := s.List()
-	require.NoError(t, err)
-	assert.Equal(t, types.WriteProofOverlapping, s.WriteProof(rows, peer), "the pattern covers the magusfile whole")
+	rows, err := s.s.List()
+	s.Require().NoError(err)
+	s.Equal(types.WriteProofOverlapping, s.s.WriteProof(rows, peer), "the pattern covers the magusfile whole")
 
 	// The holder narrows its own row: the claims sit inside what its pattern covered.
-	got, err := NarrowConfigHold(t.Context(), boundStore(loc, "cfg"), "cfg", "magusfile.buzz", []string{"project.targets.test", types.Preamble})
-	require.NoError(t, err)
-	body, err := os.ReadFile(filepath.Join(root, "magusfile.buzz"))
-	require.NoError(t, err)
+	got, added, err := NarrowHold(s.T().Context(), boundStore(s.loc, "cfg"), "cfg", "magusfile.buzz", []string{"project.targets.test", types.Preamble}, "")
+	s.Require().NoError(err)
+	body, err := os.ReadFile(filepath.Join(s.root, "magusfile.buzz"))
+	s.Require().NoError(err)
 	sum := sha256.Sum256(body)
-	assert.Equal(t, []string{"**/*.buzz", "magusfile.buzz#project.targets.test"}, got.WritePaths)
-	require.Len(t, got.Releases, 1)
-	assert.NotZero(t, got.Releases[0].ReleasedAt)
-	assert.Equal(t, types.JobRelease{Path: "magusfile.buzz", Digest: "sha256:" + hex.EncodeToString(sum[:]), ReleasedAt: got.Releases[0].ReleasedAt}, got.Releases[0])
-	assert.Equal(t, []string{"project.targets.test"}, ClaimedDeclarations(got, "magusfile.buzz"))
-	assert.Nil(t, ClaimedDeclarations(got, "notes.buzz"), "the pattern still covers every other file whole")
+	s.Equal([]string{"magusfile.buzz#project.targets.test"}, added)
+	s.Equal([]string{"**/*.buzz", "magusfile.buzz#project.targets.test"}, got.WritePaths)
+	s.Require().Len(got.Releases, 1)
+	s.NotZero(got.Releases[0].ReleasedAt)
+	s.Equal(types.JobRelease{Path: "magusfile.buzz", Digest: "sha256:" + hex.EncodeToString(sum[:]), ReleasedAt: got.Releases[0].ReleasedAt, Narrowed: true},
+		got.Releases[0])
+	s.Equal([]string{"project.targets.test"}, ClaimedDeclarations(got, "magusfile.buzz"))
+	s.Nil(ClaimedDeclarations(got, "libs/lib/magusfile.buzz"), "the pattern still covers every other file whole")
+	s.Zero(got.Widenings, "a narrowing widens nothing")
 
-	rows, err = s.List()
-	require.NoError(t, err)
-	assert.Equal(t, types.WriteProofDisjoint, s.WriteProof(rows, peer), "a released file is out of the pattern's reach")
+	rows, err = s.s.List()
+	s.Require().NoError(err)
+	s.Equal(types.WriteProofDisjoint, s.s.WriteProof(rows, peer), "a narrowed file is out of the pattern's reach")
+}
 
-	again, err := NarrowConfigHold(t.Context(), s, "cfg", "magusfile.buzz",
-		[]string{"project.targets.test", "export fun build(ctx: magus\\Context, args: [str]) > void {"})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"**/*.buzz", "magusfile.buzz#project.targets.test", "magusfile.buzz#build"}, again.WritePaths)
-	assert.Len(t, again.Releases, 1)
+func (s *narrowHoldSuite) TestALaterCallGrowsTheClaims() {
+	_, _, err := s.narrow("cfg", "magusfile.buzz", "project.targets.test")
+	s.Require().NoError(err)
 
-	for _, tc := range []struct {
-		name, id, file, want string
-	}{
-		{"a file no project loads", "cfg", "notes.buzz", "notes.buzz is not a project's configuration"},
-		{"a row holding the file by its name", "whole", "libs/lib/magusfile.buzz", "no pattern of whole covers libs/lib/magusfile.buzz"},
-		{"an unknown row", "gone", "magusfile.buzz", "unknown lease"},
-	} {
-		_, err := NarrowConfigHold(t.Context(), s, tc.id, tc.file, []string{"project.name"})
-		require.Error(t, err, tc.name)
-		assert.Contains(t, err.Error(), tc.want, tc.name)
-	}
+	again, added, err := s.narrow("cfg", "magusfile.buzz", "project.targets.test", "export fun build(ctx: magus\\Context, args: [str]) > void {")
+	s.Require().NoError(err)
+	s.Equal([]string{"magusfile.buzz#build"}, added)
+	s.Equal([]string{"**/*.buzz", "magusfile.buzz#project.targets.test", "magusfile.buzz#build"}, again.WritePaths)
+	s.Len(again.Releases, 1)
+}
+
+func (s *narrowHoldSuite) TestARepeatWritesNothing() {
+	first, _, err := s.narrow("cfg", "magusfile.buzz", "project.targets.test")
+	s.Require().NoError(err)
+
+	again, added, err := s.narrow("cfg", "magusfile.buzz", "project.targets.test")
+	s.Require().NoError(err)
+	s.Empty(added)
+	s.Equal(first, again)
+	s.Equal(first, s.stored("cfg"))
+}
+
+func (s *narrowHoldSuite) TestALiteralEntryNarrowsAndStays() {
+	got, added, err := s.narrow("lit", "notes.buzz", "fun note() > void {")
+	s.Require().NoError(err)
+
+	s.Equal([]string{"notes.buzz#note"}, added)
+	s.Equal([]string{"notes.buzz", "notes.buzz#note"}, got.WritePaths, "the root's entry stays")
+	s.True(Narrowed(got, "notes.buzz"))
+	s.Equal([]string{"note"}, ClaimedDeclarations(got, "notes.buzz"))
+	s.True(releasedReach(got, "notes.buzz", "notes.buzz"))
+}
+
+func (s *narrowHoldSuite) TestANarrowedHoldWithNoClaimHoldsNothingWhole() {
+	got, added, err := s.narrow("lit", "notes.buzz", types.Preamble)
+	s.Require().NoError(err)
+
+	s.Empty(added)
+	s.NotNil(ClaimedDeclarations(got, "notes.buzz"), "an empty claim set, not a whole-file hold")
+	s.Empty(ClaimedDeclarations(got, "notes.buzz"))
+}
+
+func (s *narrowHoldSuite) TestAGrantRecordsItsFork() {
+	got, _, err := NarrowHold(s.T().Context(), s.s, "lit", "notes.buzz", []string{"fun note() > void {"}, "fork")
+	s.Require().NoError(err)
+	s.Equal("fork", got.Releases[0].TakenBy)
+
+	grown, _, err := s.narrow("lit", "notes.buzz", "fun note() > void {")
+	s.Require().NoError(err)
+	s.Equal("fork", grown.Releases[0].TakenBy, "the holder's own growth keeps the grant on record")
+}
+
+func (s *narrowHoldSuite) TestADeclarationAnotherRowClaimsIsRefused() {
+	seed(s.T(), s.s, types.Job{ID: "keys", State: types.StateRunning, WritePaths: []string{"magusfile.buzz#project.name"}, Check: forkCheck()})
+
+	_, _, err := s.narrow("cfg", "magusfile.buzz", "project.targets.test", "project.name")
+	s.Require().Error(err)
+	s.Contains(err.Error(), "magusfile.buzz#project.name is lease keys's claim")
+	s.Equal([]string{"**/*.buzz"}, s.stored("cfg").WritePaths, "a refused narrowing adds nothing")
+	s.Empty(s.stored("cfg").Releases)
+}
+
+func (s *narrowHoldSuite) TestAFileNoDriverPlacesIsRefused() {
+	seed(s.T(), s.s, types.Job{ID: "txt", State: types.StateRunning, WritePaths: []string{"notes.txt"}, Check: forkCheck()})
+
+	_, _, err := s.narrow("txt", "notes.txt", "anything")
+	s.Require().Error(err)
+	s.Contains(err.Error(), "no diff driver places the declarations of notes.txt, so its hold stays whole")
+	s.Empty(s.stored("txt").Releases)
+}
+
+func (s *narrowHoldSuite) TestARowHoldingNoWholeEntryIsRefused() {
+	seed(s.T(), s.s, types.Job{ID: "keys", State: types.StateRunning, WritePaths: []string{"magusfile.buzz#project.name"}, Check: forkCheck()})
+
+	_, _, err := s.narrow("keys", "magusfile.buzz", "project.targets.test")
+	s.Require().Error(err)
+	s.Contains(err.Error(), "no whole-file write path of keys covers magusfile.buzz")
+}
+
+func (s *narrowHoldSuite) TestAnUnknownRowIsRefused() {
+	_, _, err := s.narrow("gone", "magusfile.buzz", "project.name")
+	s.Require().Error(err)
+	s.Contains(err.Error(), "unknown lease")
+}
+
+func (s *narrowHoldSuite) TestARedeclarationKeepsTheNarrowing() {
+	_, _, err := s.narrow("lit", "notes.buzz", "fun note() > void {")
+	s.Require().NoError(err)
+
+	applied, err := Apply(s.T().Context(), s.s, []types.Declaration{{ID: "lit", WritePaths: []string{"notes.buzz", "notes.buzz#note"}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
+	s.Require().NoError(err)
+	s.True(Narrowed(applied[0].Next, "notes.buzz"))
+}
+
+func (s *narrowHoldSuite) TestAReforkEndsTheNarrowing() {
+	narrowed := types.Job{ID: "lit", State: types.StatePass, WritePaths: []string{"notes.buzz", "notes.buzz#note"},
+		Releases: []types.JobRelease{{Path: "notes.buzz", Narrowed: true, ReleasedAt: 1}}}
+	next := narrowed.Clone()
+	next.State = types.StateDeclared
+
+	s.Empty(s.s.releases(s.T().Context(), narrowed, next, 2, false))
+}
+
+func (s *narrowHoldSuite) TestNamingAPatternedFileAgainEndsTheNarrowing() {
+	narrowed := types.Job{ID: "cfg", State: types.StateRunning, WritePaths: []string{"**/*.buzz", "magusfile.buzz#build"},
+		Releases: []types.JobRelease{{Path: "magusfile.buzz", Narrowed: true, ReleasedAt: 1}}}
+	next := narrowed.Clone()
+	next.WritePaths = append(next.WritePaths, "magusfile.buzz")
+
+	s.Empty(s.s.releases(s.T().Context(), narrowed, next, 2, false))
 }
 
 // releaseUnderPatternSuite pins a record naming again the glob a narrowing took
@@ -168,7 +287,7 @@ func (s *releaseUnderPatternSuite) applied(write ...string) types.Job {
 	loc := tempLocation(s.T(), testkit.NewRepository(s.T(), configFiles).Root())
 	store := NewStore(loc)
 	seed(s.T(), store, types.Job{ID: "cfg", Criteria: "goal", State: types.StateRunning, WritePaths: []string{"**/*.buzz"}, Check: forkCheck()})
-	_, err := NarrowConfigHold(s.T().Context(), boundStore(loc, "cfg"), "cfg", "magusfile.buzz", []string{"project.targets.test"})
+	_, _, err := NarrowHold(s.T().Context(), boundStore(loc, "cfg"), "cfg", "magusfile.buzz", []string{"project.targets.test"}, "")
 	s.Require().NoError(err)
 	applied, err := Apply(s.T().Context(), store, []types.Declaration{{ID: "cfg", Criteria: "goal", WritePaths: write, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
 	s.Require().NoError(err)
@@ -340,7 +459,7 @@ func (s *exitEvidenceSuite) TestOwedForAnyReasonButNoSeatIsRefused() {
 
 	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
 
-	s.ErrorContains(err, `goal "lint" is filed as owed because "generated drift", and the one reason a run is owed is "no seat"`)
+	s.ErrorContains(err, `goal "lint" is filed as owed because "generated drift", and the reasons a run is owed are "no seat" and "remote CI runs it"`)
 	s.ErrorContains(err, "the integrator regenerates")
 }
 

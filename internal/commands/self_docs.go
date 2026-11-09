@@ -6,6 +6,7 @@ import "github.com/egladman/magus/libs/cmdline"
 // pages because neither depends on the updater.
 var selfCompletionCommand = cmdline.Command{
 	Name:               "completion",
+	Effect:             cmdline.EffectRead,
 	UnstructuredOutput: true, // stdout is the shell script
 	Short:              "Print a shell completion script",
 	Long: `Print a shell completion script to stdout. Every script registers both
@@ -40,14 +41,15 @@ Install differs per shell, and zsh is the one that bites:
 }
 
 var selfManCommand = cmdline.Command{
-	Name:  "man",
-	Short: "Install the section 1 man pages embedded in this binary",
+	Name:   "man",
+	Effect: cmdline.EffectLocalWrite,
+	Short:  "Install the section 1 man pages embedded in this binary",
 	Long: `Write the complete magus manpage set carried by this binary. The installer
 uses this command to place the pages under the selected installation prefix.`,
 	Usage: "magus self man [--dir <path>] [--dry-run]",
 	Flags: []cmdline.Flag{
 		{Name: "dir", Kind: cmdline.String, Doc: "Directory for section 1 man pages (default: the user manpath)"},
-		{Name: "dry-run", Kind: cmdline.Bool, Default: false, Doc: "Print what would be written without touching the filesystem"},
+		{Name: "dry-run", Kind: cmdline.Bool, Effect: cmdline.EffectRead, Default: false, Doc: "Print what would be written without touching the filesystem"},
 	},
 	Examples: []cmdline.Example{
 		{Comment: "Install to the default user manpath", Command: "magus self man"},

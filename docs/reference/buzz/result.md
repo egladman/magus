@@ -20,11 +20,11 @@ ok is a Result holding value.
 
 **Signature:** `result\ok(value) -> Result::<T>`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `value`   | `any` |          |             |
+| Parameter | Type | Optional | Description |
+| --------- | ---- | -------- | ----------- |
+| `value`   | `T`  |          |             |
 
-**Returns:** any
+**Returns:** Result::<T>
 
 ### fail
 
@@ -34,9 +34,9 @@ fail is a Result carrying message and no code. A failure with a code
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
-| `message` | `any` |          |             |
+| `message` | `str` |          |             |
 
-**Returns:** any
+**Returns:** Result::<T>
 
 ### caught
 
@@ -47,7 +47,7 @@ caught is a Result carrying what a catch handed back: a str, a Diagnostic,
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `err`     | `any` |          |             |
-| `doing`   | `any` | yes      |             |
+| `doing`   | `str` | yes      |             |
 
-**Returns:** any
+**Returns:** Result::<T>
 

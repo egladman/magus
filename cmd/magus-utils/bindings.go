@@ -82,6 +82,21 @@ func runAllBindings(outDir, pkg string) error {
 		return err
 	}
 	var g errgroup.Group
+	g.Go(func() error {
+		cbs, err := implCallbacks(mods)
+		if err != nil {
+			return err
+		}
+		out, err := emitCallbacks(cbs, pkg)
+		if err != nil {
+			return fmt.Errorf("render callback adapters: %w", err)
+		}
+		path := filepath.Join(outDir, "callbacks.go")
+		if err := emit.File(path, out); err != nil {
+			return fmt.Errorf("write %s: %w", path, err)
+		}
+		return nil
+	})
 	for _, m := range mods {
 		if !hasImpl(m) {
 			continue
@@ -421,6 +436,10 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 // emitArgDecode emits the decode of one argument: an inbound Object through its
 // generated decoder, anything else through the ffi primitive for its type tag.
 func emitArgDecode(w *bytes.Buffer, pkgs *argPackages, member string, a std.Arg, idx int, param reflect.Type) error {
+	if param.Kind() == reflect.Func {
+		fmt.Fprintf(w, "\t\t%s := %s(sess, bzArgs, %d)\n", a.Name, callbackAdapterName(param), idx)
+		return nil
+	}
 	handled, err := emitObjectArgDecode(w, pkgs, member, a, idx, param)
 	if err != nil || handled {
 		return err
@@ -526,8 +545,6 @@ func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 		fmt.Fprintf(w, "\t\t%s := ffi.StringMap(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeAnyMap:
 		fmt.Fprintf(w, "\t\t%s := ffi.AnyMap(bzArgs, %d)\n", a.Name, idx)
-	case std.TypeFunc:
-		fmt.Fprintf(w, "\t\t%s := ffi.CallbackArg(sess, bzArgs, %d)\n", a.Name, idx)
 	case std.TypeAny:
 		fmt.Fprintf(w, "\t\t%s := ffi.Any(bzArgs, %d)\n", a.Name, idx)
 	default:

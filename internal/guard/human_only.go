@@ -37,10 +37,11 @@ func (p humanOnlyPair) ref() string { return fmt.Sprintf("%s:%s", p.project, p.t
 // gradeHumanOnly is the verdict on command's magus runs: "deny" when any reaches a
 // human_only target through a chain, or when a leased worker names one; "ask" when a
 // session no lease binds names one; "" when none does or the workspace cannot be read.
-func gradeHumanOnly(ctx context.Context, deps Dependencies, actingLease, command string) (decision, reason string) {
+// lapsed marks a deny that judged nothing: the policy read ran out of time.
+func gradeHumanOnly(ctx context.Context, deps Dependencies, actingLease, command string) (decision, reason string, lapsed bool) {
 	cmds, ok := ParseCommands(command)
 	if !ok {
-		return "", ""
+		return "", "", false
 	}
 	var runs []targetRun
 	for _, c := range cmds {
@@ -49,7 +50,7 @@ func gradeHumanOnly(ctx context.Context, deps Dependencies, actingLease, command
 		}
 	}
 	if len(runs) == 0 {
-		return "", ""
+		return "", "", false
 	}
 	at := hookLocation(ctx, deps)
 	pairs, note := humanOnlyReach(ctx, deps, at.workspace, lazyWorkspace(ctx, deps, at.workspace), runs)
@@ -57,17 +58,17 @@ func gradeHumanOnly(ctx context.Context, deps Dependencies, actingLease, command
 		// Reaching nothing is not an answer when the read ran out of time.
 		if log := judgmentPhases(ctx); note == policyUnreadNote && (log.lapsed(phaseTargetPolicies) || log.lapsed(phaseInspect)) {
 			call := judgedCall{what: fmt.Sprintf("`%s`", elideCommand(command))}
-			lapse := ruleLapse{budget: inspectBudget, said: lapseWording{"reading this workspace's target policies", "finish"}}
+			lapse := ruleLapse{budget: hookBudget, said: lapseWording{"reading this workspace's target policies", "finish"}}
 			log.markLapseDenied()
-			return decisionDeny, lapseReason(call, lapse, isDryRun(ctx))
+			return decisionDeny, lapseReason(call, lapse, isDryRun(ctx)), true
 		}
-		return "", ""
+		return "", "", false
 	}
 	decision, reason = gradeHumanOnlyPairs(ctx, deps, actingLease, command, at.workspace, runs, pairs)
 	if note != "" {
 		reason += "\n" + note
 	}
-	return decision, reason
+	return decision, reason, false
 }
 
 // gradeHumanOnlyPairs is gradeHumanOnly's verdict once it knows the human_only targets

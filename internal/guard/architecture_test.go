@@ -285,6 +285,19 @@ func TestSkillsKeyNestsTheAgentUnderItsSession(t *testing.T) {
 	assert.Empty(t, hookAttribution{Host: "claude-code", Agent: "a1"}.skillsKey(), "no session keys nothing")
 }
 
+// ArchitectureVocabularySuite pins words that alone ask no structure question.
+type ArchitectureVocabularySuite struct {
+	suite.Suite
+}
+
+func TestArchitectureVocabularySuite(t *testing.T) {
+	suite.Run(t, new(ArchitectureVocabularySuite))
+}
+
+func (s *ArchitectureVocabularySuite) TestBareDomainsAndLayersAskNothing() {
+	s.False(asksArchitecture("drop the unread vars from the image layers and the domain list"))
+}
+
 type ArchitectureJobReadSuite struct {
 	suite.Suite
 	session archSession

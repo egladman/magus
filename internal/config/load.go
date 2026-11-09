@@ -185,6 +185,7 @@ func loadDirInto(cfg Config, dir string) (Config, error) {
 
 // loadRepositoryDirInto is [loadDirInto] for a tier a repository can carry.
 // It refuses sources: committed, they rank every contributor's searches.
+// It refuses work.local_only: committed, it hides a contributor's work.
 // The user directory is exempt: a cwd inside it reads it as this tier.
 func loadRepositoryDirInto(cfg Config, dir string) (Config, error) {
 	path, err := configFileIn(dir)
@@ -197,6 +198,9 @@ func loadRepositoryDirInto(cfg Config, dir string) (Config, error) {
 	}
 	if overlay.Sources != nil && !isUserConfigDir(dir) {
 		return Config{}, fmt.Errorf("config: %s sets sources, a personal reading list: move it to the user-level %s under $XDG_CONFIG_HOME/magus", path, Filename)
+	}
+	if overlay.Work.LocalOnly != nil && !isUserConfigDir(dir) {
+		return Config{}, fmt.Errorf("config: %s sets work.local_only, a person's own never-publish list: move it to the user-level %s under $XDG_CONFIG_HOME/magus", path, Filename)
 	}
 	if !isUserConfigDir(dir) {
 		if err := workspacesCommittedError(overlay.Knowledge.Workspaces); err != nil {

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -45,6 +46,45 @@ func RequiredVersionAt(root string) string {
 		}
 	}
 	return ""
+}
+
+// CheckoutHookAt is the checkout.bootstrap root's magus.yaml declares,
+// read leniently like [RequiredVersionAt].
+// "" for none, or for a path that leaves root.
+func CheckoutHookAt(root string) string {
+	for _, name := range []string{Filename, DottedFilename} {
+		if data, err := os.ReadFile(filepath.Join(root, name)); err == nil {
+			return checkoutHook(data)
+		}
+	}
+	return ""
+}
+
+func checkoutHook(data []byte) string {
+	var head struct {
+		Checkout struct {
+			Bootstrap string `yaml:"bootstrap"`
+		} `yaml:"checkout"`
+	}
+	if yaml.Unmarshal(data, &head) != nil {
+		return ""
+	}
+	hook := head.Checkout.Bootstrap
+	if hook == "" || !filepath.IsLocal(filepath.FromSlash(hook)) {
+		return ""
+	}
+	return path.Clean(filepath.ToSlash(hook))
+}
+
+// ReadyCheckoutCommand is the line that runs hook, a workspace's
+// checkout.bootstrap, on the checkout the shell is in. The bootstrap builds
+// ./magus alone; this installs the dependencies and harness tool rows.
+// "" when hook is "".
+func ReadyCheckoutCommand(hook string) string {
+	if hook == "" {
+		return ""
+	}
+	return shellLine([]string{"./magus", "buzz", hook, "--", "--here", "--verify-ready"})
 }
 
 func requiredVersion(data []byte) string {

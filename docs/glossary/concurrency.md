@@ -28,6 +28,10 @@ In the docs:
 - [ADR 0001: bounded concurrency with recursive invocation](../decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation)
 - [Concurrency](../guides/integrations/server.md#concurrency)
 
+In the code (`magus refs <name>` lists every site):
+
+- `daemon.Concurrency` (Go)
+
 <!-- END GLOSSARY USAGE -->
 
 ## See also

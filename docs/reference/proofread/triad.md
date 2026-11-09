@@ -1,17 +1,17 @@
 ---
 title: "triad"
-description: "A rule that is off by default: it reports a series of exactly three (\"X, Y, and Z\", three parallel short sentences, three parallel bullets) twice in a text, or once in the lead's first sentence once a decisions table turns it on."
+description: "A rule that is off by default: it reports a series of exactly three (\"X, Y, and Z\", three verb phrases such as \"reviewed the plan, rewrote the parser and shipped the fix\", three parallel short sentences, three parallel bullets) twice in a text, or once in the lead's first sentence once a decisions table turns it on."
 tags: [proofread, rules, triad, off]
 aliases: [reference/prose/triad]
 ---
 
 # triad
 
-A rule that is off by default: it reports a series of exactly three ("X, Y, and Z", three parallel short sentences, three parallel bullets) twice in a text, or once in the lead's first sentence once a decisions table turns it on.
+A rule that is off by default: it reports a series of exactly three ("X, Y, and Z", three verb phrases such as "reviewed the plan, rewrote the parser and shipped the fix", three parallel short sentences, three parallel bullets) twice in a text, or once in the lead's first sentence once a decisions table turns it on.
 
 ## What it catches
 
-A series of exactly three ("X, Y, and Z", three parallel short sentences, three parallel bullets) twice in a text, or once in the lead's first sentence.
+A series of exactly three ("X, Y, and Z", three verb phrases such as "reviewed the plan, rewrote the parser and shipped the fix", three parallel short sentences, three parallel bullets) twice in a text, or once in the lead's first sentence.
 
 ## Dimension
 
@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Wikipedia's "Signs of AI writing" lists the rule of three among the habits of generated prose, and MeasureShape already counts the series per 1000 words as a feature a voice profile can compare. One natural series is ordinary writing, so a single one mid-paragraph is left alone; a text with two, or a lead that opens on one, reads as a template. A declared kind of short entries may set triads to 1, which reports a single series. Code spans, paths, flags, ALL_CAPS names, numbers and a list the author numbered are not judged. No firing has been labeled, so it ships off.
+Wikipedia's "Signs of AI writing" lists the rule of three among the habits of generated prose, and MeasureShape already counts the series per 1000 words as a feature a voice profile can compare. One natural series is ordinary writing, so a single one mid-paragraph is left alone; a text with two, or a lead that opens on one, reads as a template. A declared kind of short entries may set triads to 1, which reports a single series. A noun item runs to three words; a verb phrase runs to six, each item opening on a verb the tagger reads after a subject, with or without the Oxford comma. Code spans, paths, flags, ALL_CAPS names, numbers and a list the author numbered are not judged. No firing has been labeled, so it ships off.
 
 ## Default decision
 

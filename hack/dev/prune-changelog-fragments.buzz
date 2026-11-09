@@ -7,6 +7,7 @@ import "result";
 import "serialize";
 import "sort";
 import "std";
+import "strings";
 import "vcs";
 
 import "assert";
@@ -90,10 +91,6 @@ fun short(id: str) > str {
     return id.sub(0, len: 12);
 }
 
-fun plural(n: int, word: str) > str {
-    if (n == 1) { return "1 {word}"; }
-    return "{n} {word}s";
-}
 
 fun owns(l: Line, id: str) > bool {
     return l.commit == id or (l.commit.len() >= 7 and id.startsWith(l.commit));
@@ -265,8 +262,8 @@ fun livesReason(c: Commit, t: Trace) > str {
     final paths = sort\strings(t.surviving.keys());
     foreach (p in paths) { n = n + t.surviving[p]!.len(); }
     var where = paths[0];
-    if (paths.len() > 1) { where = "{paths[0]} and {plural(paths.len() - 1, word: "more path")}"; }
-    var s = "{short(c.id)} still owns {plural(n, word: "line")} at HEAD in {where}";
+    if (paths.len() > 1) { where = "{paths[0]} and {paths.len() - 1} {strings\plural(paths.len() - 1, one: "more path", many: "more paths")}"; }
+    var s = "{short(c.id)} still owns {n} {strings\plural(n, one: "line", many: "lines")} at HEAD in {where}";
     if (t.reason != "") { s = "{s} ({t.reason})"; }
     return s;
 }
@@ -506,9 +503,9 @@ export fun headline(verdicts: [Verdict], applied: bool) > str {
     final kinds = "{n["superseded"] ?? 0} superseded, {n["obsolete"] ?? 0} obsolete, {n["duplicate"] ?? 0} duplicate";
     final rewrite = n["rewrite"] ?? 0;
     if (applied) {
-        return "dropped {drop} of {plural(verdicts.len(), word: "fragment")} ({kinds}), rewrote {rewrite}";
+        return "dropped {drop} of {verdicts.len()} {strings\plural(verdicts.len(), one: "fragment", many: "fragments")} ({kinds}), rewrote {rewrite}";
     }
-    return "dry run: would drop {drop} of {plural(verdicts.len(), word: "fragment")} ({kinds}) and rewrite {rewrite}; nothing changed, pass --apply to write";
+    return "dry run: would drop {drop} of {verdicts.len()} {strings\plural(verdicts.len(), one: "fragment", many: "fragments")} ({kinds}) and rewrite {rewrite}; nothing changed, pass --apply to write";
 }
 
 fun indent(text: str, by: str) > str {
@@ -769,7 +766,7 @@ object Fixture {
     asked: mut [str],
 }
 
-fun strings(b: serialize\Boxed) > [str] {
+fun stringList(b: serialize\Boxed) > [str] {
     final found = mut [<str>];
     foreach (x in b.listValue()) { found.append(x.stringValue()); }
     return found;
@@ -786,11 +783,11 @@ fun fixture() > result\Result::<Fixture> {
         }
         final commits = mut [<Commit>];
         foreach (c in doc.q("commits").listValue()) {
-            commits.append(Commit{ id = c.q("id").stringValue(), subject = c.q("subject").stringValue(), files = strings(c.q("files")) });
+            commits.append(Commit{ id = c.q("id").stringValue(), subject = c.q("subject").stringValue(), files = stringList(c.q("files")) });
         }
         final outputs = mut {<str: bool>};
-        foreach (p in strings(doc.q("outputs"))) { outputs[p] = true; }
-        final indexedSet = strings(doc.q("indexed"));
+        foreach (p in stringList(doc.q("outputs"))) { outputs[p] = true; }
+        final indexedSet = stringList(doc.q("indexed"));
         final blame = doc.q("blame").mapValue();
         final syms = doc.q("symbols").mapValue();
         final asked = mut [<str>];
@@ -800,7 +797,7 @@ fun fixture() > result\Result::<Fixture> {
                 if (copies and blame["{key} +C"] != null) { key = "{key} +C"; }
                 if (blame[key] == null) { return result\ok::<[Line]?>(null); }
                 final lines = mut [<Line>];
-                foreach (i, owner in strings(blame[key]!)) {
+                foreach (i, owner in stringList(blame[key]!)) {
                     lines.append(Line{ commit = owner, line = i + 1, text = "{path}:{i + 1}" });
                 }
                 return result\ok::<[Line]?>(lines);
@@ -808,7 +805,7 @@ fun fixture() > result\Result::<Fixture> {
             symbols = fun (commit: str, lines: {str: [Line]}) > result\Result::<[str]?> {
                 asked.append(commit);
                 if (syms[commit] == null) { return result\ok::<[str]?>(null); }
-                return result\ok::<[str]?>(strings(syms[commit]!));
+                return result\ok::<[str]?>(stringList(syms[commit]!));
             },
             indexed = fun (paths: [str]) > result\Result::<{str: bool}> {
                 final covered = mut {<str: bool>};

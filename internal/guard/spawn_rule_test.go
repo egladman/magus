@@ -241,9 +241,7 @@ func TestSpawnRuleFailureFailsOpen(t *testing.T) {
 	assert.Contains(t, first.Context, "Only the built-in rules applied to this spawn.")
 
 	repeat := Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	assert.Equal(t, "advise", repeat.Decision)
-	assert.NotContains(t, repeat.Context, "boom", "the repeat is one line")
-	assert.Contains(t, repeat.Context, "Only the built-in rules applied to this spawn.")
+	assert.Equal(t, first, repeat, "the note is told in full every time")
 }
 
 // The approved rule and the working-tree rule both run and the stricter answer stands,
@@ -1517,9 +1515,10 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
 	require.Len(t, spawns, 1)
 	assert.Equal(t, decidedByApproved, spawns[0].DecidedBy)
 	failures := readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures
-	require.Len(t, failures, 1)
+	require.Len(t, failures, 2, "under one deadline the working tree's rule has none left after the approved resolve")
 	assert.Equal(t, decidedByApproved, failures[0].Side)
 	assert.Regexp(t, `^resolving the rule did not finish within \d+ms$`, failures[0].Error)
+	assert.Equal(t, trail.RuleFailure{Side: decidedByWorktree, Error: "the rule had no time left before the guard's deadline"}, failures[1])
 	require.NotEmpty(t, spawns[0].Phases)
 	assert.Equal(t, phaseApprovedResolve, spawns[0].Phases[0].Name)
 	assert.True(t, spawns[0].Phases[0].Lapsed)

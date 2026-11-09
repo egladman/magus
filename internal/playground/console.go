@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/dry"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/text/plural"
 )
 
 // buzzLangVersion is the Buzz language version gopherbuzz implements. It mirrors
@@ -75,11 +76,11 @@ func (s *Console) SetSource(ctx context.Context, src string) (ok bool, status st
 	s.parsed = dry.LoadMagusfile(ctx, src)
 	if s.parsed.OK {
 		n := len(s.parsed.Targets)
-		unit := "target"
+		unit, units := "target", "targets"
 		if s.parsed.Spell {
-			unit = "op" // a spell buffer's runnable units are its ops, not targets
+			unit, units = "op", "ops" // a spell buffer's runnable units are its ops, not targets
 		}
-		return true, fmt.Sprintf("pass %d %s%s", n, unit, plural(n))
+		return true, fmt.Sprintf("pass %s", plural.Count(n, unit, units))
 	}
 	if d := s.parsed.Diag; d != nil && d.Line > 0 {
 		return false, fmt.Sprintf("fail line %d:%d", d.Line, d.Col)
@@ -367,11 +368,11 @@ func (s *Console) run(ctx context.Context, target string) []Line {
 		// A ward is a rejection at resolution, not a passing plan: magus refuses the
 		// op before running anything. Say so rather than a green pass, so the wards
 		// lesson reads correctly.
-		out = append(out, Line{HTML: fmt.Sprintf("[fail] %s rejected at resolution: %d ward%s raised, <b>nothing would run</b>", esc(target), wards, plural(wards)), Class: "err"})
+		out = append(out, Line{HTML: fmt.Sprintf("[fail] %s rejected at resolution: %s raised, <b>nothing would run</b>", esc(target), plural.Count(wards, "ward", "wards")), Class: "err"})
 		return out
 	}
 	n := len(r.Trace)
-	out = append(out, Line{HTML: fmt.Sprintf("[dry] %s: %d step%s planned, <b>nothing executed</b>", esc(target), n, plural(n)), Class: "ok"})
+	out = append(out, Line{HTML: fmt.Sprintf("[dry] %s: %s planned, <b>nothing executed</b>", esc(target), plural.Count(n, "step", "steps")), Class: "ok"})
 	return out
 }
 
@@ -409,13 +410,6 @@ func (s *Console) directDeps(key string) []string {
 }
 
 func esc(s string) string { return html.EscapeString(s) }
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
-}
 
 func orDot(s string) string {
 	if s == "" {

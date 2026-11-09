@@ -1,15 +1,10 @@
-# The 30-day retention `magus vcs checkpoint --preserve` promises has to run without a
-# second preserve, and for a long time it could not: the only pruning pass lived inside
-# Preserve, so a repository preserved ONCE kept that capture for good while the usage text
-# said it was dropped at 30 days.
+# A capture `magus vcs checkpoint --preserve` minted is kept until its work has landed in
+# the base, however old it is. prune-preserved is the pass that drops a landed one without a
+# second preserve. The server schedules it; this script drives the worker the schedule
+# submits, which is also the standalone spelling for a machine that runs no server.
 #
-# prune-preserved is the pass that has no such precondition. The server schedules it; this
-# script drives the worker the schedule submits, which is also the standalone spelling for
-# a machine that runs no server.
-#
-# The other half is the line pruning must not cross: a namespace is not a signature, so a
-# ref under refs/magus/preserved that magus did not write is not magus's to delete, and a
-# scheduled pass makes that more pressing rather than less.
+# A namespace is not a signature: a ref under refs/magus/preserved that magus did not write
+# is not magus's to delete, landed or not.
 
 exec git init
 exec git config user.email test@example.com
@@ -18,16 +13,22 @@ exec git config commit.gpgsign false
 exec git checkout -b main
 exec git add magus.yaml magusfile.buzz src/a.txt
 exec git commit -m initial
+exec git update-ref refs/remotes/origin/main HEAD
 
-# Two refs under magus's namespace, both dated well past the retention window: one magus
-# wrote, one it did not. Only the subject tells them apart.
+# Three refs under magus's namespace, all years old. Magus wrote the first two: one holds
+# nothing the base lacks, one holds an edit the base never took. Only the subject tells
+# the third, which magus did not write, apart.
 env GIT_COMMITTER_DATE=2020-01-01T00:00:00Z
 env GIT_AUTHOR_DATE=2020-01-01T00:00:00Z
 exec git commit --allow-empty -m 'magus preserved working copy'
 exec git update-ref refs/magus/preserved/0000000000000000000000000000000000000001 HEAD
 exec git reset --hard HEAD~1
-exec git commit --allow-empty -m 'a snapshot someone else took'
+cp unlanded.txt src/a.txt
+exec git commit -am 'magus preserved working copy'
 exec git update-ref refs/magus/preserved/0000000000000000000000000000000000000002 HEAD
+exec git reset --hard HEAD~1
+exec git commit --allow-empty -m 'a snapshot someone else took'
+exec git update-ref refs/magus/preserved/0000000000000000000000000000000000000003 HEAD
 exec git reset --hard HEAD~1
 env GIT_COMMITTER_DATE=
 env GIT_AUTHOR_DATE=
@@ -37,12 +38,12 @@ env GIT_AUTHOR_DATE=
 exec magus job run
 stderr 'prune-preserved'
 
-# The worker drops the aged capture. Nothing preserved anything here: that is the whole
-# point, since the pass inside Preserve can only run when someone preserves again.
+# The worker drops only the landed capture. Age drops nothing.
 exec magus server prune-preserved
-exec git for-each-ref --format='%(refname) %(contents:subject)' refs/magus/preserved/
-! stdout 'magus preserved working copy'
-stdout -count=1 'a snapshot someone else took'
+exec git for-each-ref --format='%(refname)' refs/magus/preserved/
+! stdout '0000000000000000000000000000000000000001'
+stdout -count=1 '0000000000000000000000000000000000000002'
+stdout -count=1 '0000000000000000000000000000000000000003'
 
 -- magus.yaml --
 concurrency: 2
@@ -57,3 +58,5 @@ magus\project({
 });
 -- src/a.txt --
 source one
+-- unlanded.txt --
+an edit the base never took

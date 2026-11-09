@@ -17,6 +17,7 @@ import "template";
 // Term linking: the landing gets the same glossary popovers and code cross-references
 // every docs page gets. Both maskers skip fenced <pre>, so the transcript and the
 // magusfile listing are left alone.
+import "html" as htmlcodec;
 import "../libs/ssg/text" as _;
 import "../libs/ssg/urls" as _;
 import "lib/glossary" as _;
@@ -93,8 +94,8 @@ fun recentPosts(site: Site) > str !> any {
         final desc = fm.q("description").stringValue();
         final url = site.inputs.blog + "/" + blogURLPath(name) + "/";
         cards.append("        <a class=\"landing-card\" href=\"" + url + "\">"
-            + "<span class=\"landing-card-title\">" + escapeAttr(title) + "</span>"
-            + "<span class=\"landing-card-body\">" + escapeAttr(desc) + "</span></a>\n");
+            + "<span class=\"landing-card-title\">" + htmlcodec\escape(title) + "</span>"
+            + "<span class=\"landing-card-body\">" + htmlcodec\escape(desc) + "</span></a>\n");
         shown = shown + 1;
     }
     if (cards.len() == 0) { return ""; }

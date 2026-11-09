@@ -98,6 +98,7 @@ magus graph export -o json  # the whole graph
 | libs/ssg                                                                    |       1 | `magus query project=libs/ssg`                        | `test`                                                        |
 | [libs/termkit](libs/termkit/MAGUS.md)                                       |       8 | `magus query project=libs/termkit`                    | `format`, `ci`, `test`                                        |
 | [libs/testpairing](libs/testpairing/MAGUS.md)                               |       8 | `magus query project=libs/testpairing`                | `format`, `ci`, `test`                                        |
+| [libs/text](libs/text/MAGUS.md)                                             |       8 | `magus query project=libs/text`                       | `format`, `ci`, `test`                                        |
 | [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `install`, `lint`, `test`                                     |
 | [libs/xdg](libs/xdg/MAGUS.md)                                               |       8 | `magus query project=libs/xdg`                        | `format`, `build`, `test`                                     |
 | [proto](proto/MAGUS.md)                                                     |       6 | `magus query project=proto`                           | `generate`, `breaking`, `ci`                                  |

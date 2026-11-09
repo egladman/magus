@@ -95,56 +95,56 @@ Drop (remove) the first argv element equal to anchor.
 
 ### afterFunc
 
-Insert vals after the first argv element for which fn(s) is truthy.
+Insert vals after the first argv element for which fn(s) returns true.
 
 **Signature:** `charm\afterFunc(argv, fn, vals) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go)
 
-| Parameter | Type                                                                    | Optional | Description |
-| --------- | ----------------------------------------------------------------------- | -------- | ----------- |
-| `argv`    | `[]string`                                                              |          |             |
-| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go) |          |             |
-| `vals`    | `[]string`                                                              |          |             |
+| Parameter | Type                                          | Optional | Description |
+| --------- | --------------------------------------------- | -------- | ----------- |
+| `argv`    | `[]string`                                    |          |             |
+| `fn`      | `func(context.Context, string) (bool, error)` |          |             |
+| `vals`    | `[]string`                                    |          |             |
 
 **Returns:** map[string]any
 
 ### beforeFunc
 
-Insert vals before the first argv element for which fn(s) is truthy.
+Insert vals before the first argv element for which fn(s) returns true.
 
 **Signature:** `charm\beforeFunc(argv, fn, vals) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go)
 
-| Parameter | Type                                                                    | Optional | Description |
-| --------- | ----------------------------------------------------------------------- | -------- | ----------- |
-| `argv`    | `[]string`                                                              |          |             |
-| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go) |          |             |
-| `vals`    | `[]string`                                                              |          |             |
+| Parameter | Type                                          | Optional | Description |
+| --------- | --------------------------------------------- | -------- | ----------- |
+| `argv`    | `[]string`                                    |          |             |
+| `fn`      | `func(context.Context, string) (bool, error)` |          |             |
+| `vals`    | `[]string`                                    |          |             |
 
 **Returns:** map[string]any
 
 ### setFunc
 
-Replace the first argv element for which fn(s) is truthy with val.
+Replace the first argv element for which fn(s) returns true with val.
 
 **Signature:** `charm\setFunc(argv, fn, val) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go)
 
-| Parameter | Type                                                                    | Optional | Description |
-| --------- | ----------------------------------------------------------------------- | -------- | ----------- |
-| `argv`    | `[]string`                                                              |          |             |
-| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go) |          |             |
-| `val`     | `string`                                                                |          |             |
+| Parameter | Type                                          | Optional | Description |
+| --------- | --------------------------------------------- | -------- | ----------- |
+| `argv`    | `[]string`                                    |          |             |
+| `fn`      | `func(context.Context, string) (bool, error)` |          |             |
+| `val`     | `string`                                      |          |             |
 
 **Returns:** map[string]any
 
 ### dropFunc
 
-Drop (remove) the first argv element for which fn(s) is truthy.
+Drop (remove) the first argv element for which fn(s) returns true.
 
 **Signature:** `charm\dropFunc(argv, fn) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go)
 
-| Parameter | Type                                                                    | Optional | Description |
-| --------- | ----------------------------------------------------------------------- | -------- | ----------- |
-| `argv`    | `[]string`                                                              |          |             |
-| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go) |          |             |
+| Parameter | Type                                          | Optional | Description |
+| --------- | --------------------------------------------- | -------- | ----------- |
+| `argv`    | `[]string`                                    |          |             |
+| `fn`      | `func(context.Context, string) (bool, error)` |          |             |
 
 **Returns:** map[string]any
 
@@ -163,14 +163,14 @@ Return the JSON Pointer ("/N") of the first argv element equal to anchor - the i
 
 ### pathFunc
 
-Return the JSON Pointer ("/N") of the first argv element for which fn(s) is truthy.
+Return the JSON Pointer ("/N") of the first argv element for which fn(s) returns true.
 
 **Signature:** `charm\pathFunc(argv, fn) -> string` - [source](https://github.com/egladman/magus/blob/main/std/charm.go)
 
-| Parameter | Type                                                                    | Optional | Description |
-| --------- | ----------------------------------------------------------------------- | -------- | ----------- |
-| `argv`    | `[]string`                                                              |          |             |
-| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go) |          |             |
+| Parameter | Type                                          | Optional | Description |
+| --------- | --------------------------------------------- | -------- | ----------- |
+| `argv`    | `[]string`                                    |          |             |
+| `fn`      | `func(context.Context, string) (bool, error)` |          |             |
 
 **Returns:** string
 
@@ -190,15 +190,15 @@ Move the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/
 
 ### moveFunc
 
-Move the first argv element for which fn(s) is truthy to the JSON Pointer to.
+Move the first argv element for which fn(s) returns true to the JSON Pointer to.
 
 **Signature:** `charm\moveFunc(argv, fn, to) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go)
 
-| Parameter | Type                                                                    | Optional | Description |
-| --------- | ----------------------------------------------------------------------- | -------- | ----------- |
-| `argv`    | `[]string`                                                              |          |             |
-| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go) |          |             |
-| `to`      | `string`                                                                |          |             |
+| Parameter | Type                                          | Optional | Description |
+| --------- | --------------------------------------------- | -------- | ----------- |
+| `argv`    | `[]string`                                    |          |             |
+| `fn`      | `func(context.Context, string) (bool, error)` |          |             |
+| `to`      | `string`                                      |          |             |
 
 **Returns:** map[string]any
 
@@ -218,15 +218,15 @@ Copy the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/
 
 ### copyFunc
 
-Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.
+Copy the first argv element for which fn(s) returns true to the JSON Pointer to.
 
 **Signature:** `charm\copyFunc(argv, fn, to) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go)
 
-| Parameter | Type                                                                    | Optional | Description |
-| --------- | ----------------------------------------------------------------------- | -------- | ----------- |
-| `argv`    | `[]string`                                                              |          |             |
-| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go) |          |             |
-| `to`      | `string`                                                                |          |             |
+| Parameter | Type                                          | Optional | Description |
+| --------- | --------------------------------------------- | -------- | ----------- |
+| `argv`    | `[]string`                                    |          |             |
+| `fn`      | `func(context.Context, string) (bool, error)` |          |             |
+| `to`      | `string`                                      |          |             |
 
 **Returns:** map[string]any
 
@@ -245,14 +245,14 @@ Guard: assert the first argv element equal to anchor is still at its position wh
 
 ### testFunc
 
-Guard: assert the first argv element for which fn(s) is truthy is still at its position when the patch applies.
+Guard: assert the first argv element for which fn(s) returns true is still at its position when the patch applies.
 
 **Signature:** `charm\testFunc(argv, fn) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go)
 
-| Parameter | Type                                                                    | Optional | Description |
-| --------- | ----------------------------------------------------------------------- | -------- | ----------- |
-| `argv`    | `[]string`                                                              |          |             |
-| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go) |          |             |
+| Parameter | Type                                          | Optional | Description |
+| --------- | --------------------------------------------- | -------- | ----------- |
+| `argv`    | `[]string`                                    |          |             |
+| `fn`      | `func(context.Context, string) (bool, error)` |          |             |
 
 **Returns:** map[string]any
 

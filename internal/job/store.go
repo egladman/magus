@@ -123,6 +123,7 @@ type storeConfig struct {
 	modelTiers      *types.ModelTierSet
 	modelRows       func() []types.ModelPricing
 	modelTierMatrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error)
+	spawnRule       func(parent, child types.ModelTier) error
 	owners          func(context.Context, []string) ([]string, error)
 	// priceContext is Location.PriceContext.
 	priceContext func(calls []types.AgentFacts) (tokens int64, usd float64, ok bool)
@@ -200,6 +201,10 @@ type Location struct {
 	// It runs inside the write, while the Store's locks are held, so it must not touch
 	// the Store.
 	ModelTierMatrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error)
+	// SpawnRule is the workspace's magus.WithSpawnRule. It judges a row
+	// whose tier and its parent's are both proven. Such a row with no rule
+	// is refused.
+	SpawnRule func(parent, child types.ModelTier) error
 	// Owners names the projects that own a list of files, the ownership `describe job`
 	// reports as a job's projects. It is asked only to fill a matrix's request, so a Store
 	// with no matrix never calls it; nil leaves the request's WriteProjects empty.
@@ -223,7 +228,7 @@ type Location struct {
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
 	s := &Store{storeConfig: storeConfig{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, stateBase: loc.StateBase, outputs: loc.Outputs, trailBase: loc.TrailBase, grader: loc.Grader, dryRun: loc.DryRun, build: cmp.Or(loc.Build, buildinfo.Build()),
-		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, owners: loc.Owners, priceContext: loc.PriceContext,
+		modelTiers: loc.ModelTiers, modelRows: loc.ModelRows, modelTierMatrix: loc.ModelTierMatrix, spawnRule: loc.SpawnRule, owners: loc.Owners, priceContext: loc.PriceContext,
 		migrations: jobMigrations}}
 	s.path, s.err = jobsPath(loc)
 	return s
@@ -636,6 +641,14 @@ func keepDerived(row *types.Job, prev types.Job) {
 // may fail, which is what lets that refusal be decided under the lock; nothing is written
 // when it does.
 func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(cur *types.Job, exists bool, now int64) error) (types.Job, error) {
+	return s.mutateSeeing(ctx, id, kind, func(cur *types.Job, exists bool, now int64, _ []types.Job) error {
+		return apply(cur, exists, now)
+	})
+}
+
+// mutateSeeing is mutate whose apply also sees every stored row.
+// The rows are read under the same lock; apply must not change them.
+func (s *Store) mutateSeeing(ctx context.Context, id string, kind grading, apply func(cur *types.Job, exists bool, now int64, rows []types.Job) error) (types.Job, error) {
 	if strings.TrimSpace(id) == "" {
 		return types.Job{}, ErrNoID
 	}
@@ -665,7 +678,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		row := prev.Clone()
 		row.ID = id
 		now := time.Now().Unix()
-		if aerr := apply(&row, i >= 0, now); aerr != nil {
+		if aerr := apply(&row, i >= 0, now, f.Jobs); aerr != nil {
 			return aerr
 		}
 		row = row.Clone()
@@ -783,7 +796,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			row.ModelTier = &assigned
 		}
 		if i < 0 || prev.Model != row.Model || prev.Parent != row.Parent {
-			if aerr := refuseAboveParent(s.modelTiers, row, f.Jobs); aerr != nil {
+			if aerr := refuseAboveParent(s.modelTiers, s.spawnRule, row, f.Jobs); aerr != nil {
 				return aerr
 			}
 		}
@@ -796,7 +809,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		if kind != asObservation {
 			row.ReworkRounds = prev.ReworkRounds
 		}
-		if i >= 0 && (prev.State == types.StateRunning || prev.State == types.StateExited) &&
+		if kind != asNarrowing && i >= 0 && (prev.State == types.StateRunning || prev.State == types.StateExited) &&
 			slices.ContainsFunc(row.WritePaths, func(p string) bool { return !slices.Contains(prev.WritePaths, p) }) {
 			row.Widenings++
 		}
@@ -1017,7 +1030,15 @@ func (s *Store) archive(f jobsFile) error {
 // inherits is the one left behind last. revoked marks what this write gave up as taken from
 // its holder rather than given up by it.
 func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64, revoked bool) []types.JobRelease {
+	refork := prev.State.Terminal() && next.State.Live()
 	out := slices.DeleteFunc(slices.Clone(prev.Releases), func(r types.JobRelease) bool {
+		switch {
+		// A narrowed release outlives its entry; a re-fork ends it.
+		case r.Narrowed && refork:
+			return true
+		case r.Narrowed && slices.Contains(prev.WritePaths, r.Path):
+			return false
+		}
 		return slices.Contains(next.WritePaths, r.Path)
 	})
 	for _, p := range prev.WritePaths {

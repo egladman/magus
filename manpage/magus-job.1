@@ -141,6 +141,9 @@ The records to apply from a file: one JSON job, a JSON array, or one job per lin
 \fB\-\-[no\-]fix\fR (default: off)
 Make every edit a problem's fix names without judgment, as job fork \-\-fix does, before applying the records
 .TP
+\fB\-\-release\-write\-path\fR \fI<file>#<declaration>\fR
+A write path to drop from the job, keeping its goals and check; repeatable or comma\-separated, and a <file>#<declaration> claim is one path
+.TP
 \fB\-\-[no\-]stdin\fR (default: off)
 Read the records from stdin instead of a file, as job fork \-\-stdin does
 .RE

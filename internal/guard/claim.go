@@ -77,21 +77,13 @@ func gradeClaimedDeclarations(ctx context.Context, workspace string, me types.Jo
 	return writeGrade{}
 }
 
-// gradeConfigNarrowing narrows me's hold on rel, a project's magusfile or magus.yaml its
-// write paths cover whole only through a pattern (`**/*.buzz`), to the declarations this write changes: they
-// become claims on me's row and the rest of the file is released with its digest (see
-// job.NarrowConfigHold), so other jobs may claim what me never touched. It runs on every
-// such write and narrows only for a declaration me does not claim yet. A change to a
-// declaration another lease claims is denied as gradeClaimedDeclarations denies one.
-// A write magus cannot place, and a dry run, narrow nothing and keep the path verdict.
-func gradeConfigNarrowing(ctx context.Context, at location, checkout string, me types.Job, owners []types.Job, rel string, fields writeFields) writeGrade {
-	// A name check first: job.NarrowConfigHold asks the tree, which no other write should pay for.
-	switch {
-	case path.Base(rel) == "magusfile.buzz", path.Base(rel) == "magus.yaml", path.Base(path.Dir(rel)) == "magusfiles":
-	default:
-		return writeGrade{}
-	}
-	if !coveredOnlyByPattern(me, rel) {
+// gradeNarrowedHold grows me's claims on rel by the declarations this write
+// changes, when the store narrowed me's hold on rel or a pattern alone holds it
+// (see job.NarrowHold). Each growth is advised. A change to a declaration
+// another lease claims is denied; a write magus cannot place narrows nothing.
+func gradeNarrowedHold(ctx context.Context, at location, checkout string, me types.Job, owners []types.Job, rel string, fields writeFields) writeGrade {
+	narrowed := job.Narrowed(me, rel)
+	if !narrowed && !coveredOnlyByPattern(me, rel) {
 		return writeGrade{}
 	}
 	changed, placed := changedDeclarations(ctx, checkout, rel, fields)
@@ -120,14 +112,36 @@ func gradeConfigNarrowing(ctx context.Context, at location, checkout string, me 
 	}
 	loc := at.jobs()
 	loc.Root = checkout
-	row, err := job.NarrowConfigHold(ctx, job.NewStore(loc), me.ID, rel, touched)
-	if err != nil {
-		return writeGrade{}
+	row, added, err := job.NarrowHold(ctx, job.NewStore(loc), me.ID, rel, touched, "")
+	switch {
+	case err != nil && narrowed:
+		return writeGrade{Decision: decisionAdvise,
+			Context: fmt.Sprintf("magus workspace: lease %s holds %s by %s, and this write lands outside them; the claims did not grow: %v.",
+				me.ID, rel, quotedClaims(rel, mine), err),
+			Why: "`magus job wait` grades your changes to the file against your claims, so it will report this one."}
+	case err != nil:
+		return writeGrade{Decision: decisionAdvise,
+			Context: fmt.Sprintf("magus workspace: lease %s still holds %s whole through a pattern: %v.", me.ID, rel, err),
+			Why:     "magus narrows a pattern's hold on a file to the declarations its holder writes, so other jobs may claim the rest; this one stays whole."}
+	case narrowed:
+		return writeGrade{Decision: decisionAdvise,
+			Context: fmt.Sprintf("magus workspace: lease %s's hold on %s grew by %s; it now holds the file by %s.",
+				me.ID, rel, quotedPaths(added), quotedClaims(rel, claimsOn(row.WritePaths, rel))),
+			Why: fmt.Sprintf("magus narrowed your hold on %s to the declarations you change. A write to one nobody claims adds it to your claims, and `magus job wait` grades your changes against them.", rel)}
 	}
 	return writeGrade{Decision: decisionAdvise,
 		Context: fmt.Sprintf("magus workspace: lease %s now holds %s by %s; the rest of the file is released for other jobs to claim.",
 			me.ID, rel, quotedClaims(rel, claimsOn(row.WritePaths, rel))),
-		Why: fmt.Sprintf("Your write paths cover %s, a project's configuration, only through a pattern. Every job that changes the workspace's configuration writes that file, so magus narrows the hold to the declarations you change, on the first write to each. `magus job wait` grades your changes to it against these claims.", rel)}
+		Why: fmt.Sprintf("Your write paths cover %s only through a pattern, so magus narrows the hold to the declarations you change, on the first write to each. `magus job wait` grades your changes to it against these claims.", rel)}
+}
+
+// quotedPaths renders write paths as quoted entries.
+func quotedPaths(paths []string) string {
+	quoted := make([]string, len(paths))
+	for i, p := range paths {
+		quoted[i] = fmt.Sprintf("%q", p)
+	}
+	return strings.Join(quoted, ", ")
 }
 
 // coveredOnlyByPattern reports whether a pattern among me's whole-file write paths covers

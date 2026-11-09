@@ -155,6 +155,17 @@ type Config struct {
 	// Sources is a person's reading list, read by the Cursor web hint.
 	// User-level only: committed, it would rank every contributor's searches.
 	Sources []Source `json:"sources" yaml:"sources" cli:"-"`
+
+	// Work configures the work ledger. User-level only, like Sources.
+	Work Work `json:"work" yaml:"work" cli:"-"`
+}
+
+// Work is a person's account of the work they keep on this machine.
+type Work struct {
+	// LocalOnly globs name checkouts and branches never meant to be
+	// published. The ledger reads a match as local-only, not unaccounted.
+	// User-level only: committed, it would hide a contributor's work.
+	LocalOnly []string `json:"local_only" yaml:"local_only" cli:"-"`
 }
 
 // Source is one reading-list entry. URL matches as a prefix of a cited URL.
@@ -604,6 +615,9 @@ type CI struct {
 	// Machine is the machine every shard runs on. The plan packs shards
 	// against its memory, never the planning host's. Unset, the plan says so.
 	Machine CIMachine `json:"machine" yaml:"machine"`
+	// RemoteGate names the CI that runs `ci` on every pushed commit, such as
+	// github-actions. Set, the push gate admits a push with no local run.
+	RemoteGate string `json:"remote_gate" yaml:"remote_gate"`
 }
 
 // CIMachine is the size of one CI machine. It sets both sizes or none.

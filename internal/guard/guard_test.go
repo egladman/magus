@@ -2003,16 +2003,9 @@ func TestEffectiveBuiltinsReadsTheUserTier(t *testing.T) {
 	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, BuiltinSettings(t.Context(), rules, "")["whole-tree"])
 }
 
-// A workspace whose level sets nothing still hands the hook the light level's settings, not
-// the bare defaults nil stands for.
-func TestBuiltinSettingsFallsBackToTheLightLevel(t *testing.T) {
+func TestBuiltinSettingsAtTheOffLevelAreTheBareDefaults(t *testing.T) {
 	rules, _ := profileRules(t, types.GuardProfileOff)
-	got := BuiltinSettings(t.Context(), rules, "")
-	require.NotNil(t, got, "the compiled-in light row resolves")
-	assert.Equal(t, lightBuiltins(), got)
-	assert.True(t, slices.ContainsFunc(slices.Collect(maps.Values(got)), func(s builtin.Setting) bool {
-		return s.Profile == types.GuardProfileLight
-	}), "the light row's settings are in it")
+	assert.Nil(t, BuiltinSettings(t.Context(), rules, ""))
 }
 
 // The approved side alone resolves the declaration over the defaults when no working tree

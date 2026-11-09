@@ -182,7 +182,7 @@ var Os = Module{
 			Doc:  "Add env vars to subprocesses `proc\\exec` / `proc\\shell` start inside callback. Never touches the process's own environment - a lookup like os\\env inside callback does not see them.",
 			Args: []Arg{
 				{Name: "env"},
-				{Name: "callback", Func: "fun () > void !> any"},
+				{Name: "callback"},
 			},
 			Returns: nil,
 			Raises:  true,
@@ -241,7 +241,7 @@ var Os = Module{
 			Doc:  "Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. An error a host call inside fn raised keeps its type, and one typed non-retryable stops at once; a value fn throws itself, a string included, is retried. opts is a RetryOptions: backoffMs is the first pause (default 500) and maxBackoffMs caps it (default 30000); a negative option raises.",
 			Args: []Arg{
 				{Name: "max"},
-				{Name: "fn", Func: "fun () > any !> any"},
+				{Name: "fn"},
 				{Name: "opts", Optional: true, Object: "RetryOptions"},
 			},
 			Returns: []Ret{{}},
@@ -528,7 +528,7 @@ type withEnvKey struct{}
 // OsWithEnv injects extra env vars for subprocesses spawned during the
 // callback without mutating the server's process-global environment.
 // Overrides are propagated via ctx and merged at exec time in applySandboxPolicy.
-func OsWithEnv(ctx context.Context, env map[string]string, cb Callback) error {
+func OsWithEnv(ctx context.Context, env map[string]string, cb func(ctx context.Context) error) error {
 	// Merge with any outer with_env overrides already on ctx.
 	outer, _ := ctx.Value(withEnvKey{}).([]string)
 	merged := make([]string, len(outer), len(outer)+len(env))
@@ -536,13 +536,11 @@ func OsWithEnv(ctx context.Context, env map[string]string, cb Callback) error {
 	for k, v := range env {
 		merged = append(merged, fmt.Sprintf("%s=%s", k, v))
 	}
-	ctx = context.WithValue(ctx, withEnvKey{}, merged)
-	_, callErr := cb.Call(ctx)
-	return callErr
+	return cb(context.WithValue(ctx, withEnvKey{}, merged))
 }
 
 // OsRetry calls fn up to max times, retrying on error with exponential backoff.
-// On success it returns fn's first return value; on exhaustion it errors.
+// On success it returns fn's value; on exhaustion it errors.
 // opts.BackoffMs is the initial delay (default 500) and opts.MaxBackoffMs its cap (default
 // 30000); a negative value is an error naming the option.
 //
@@ -553,7 +551,7 @@ func OsWithEnv(ctx context.Context, env map[string]string, cb Callback) error {
 // This is not [retry.Do] on purpose: fn runs once even on a cancelled context, its value
 // comes back, the knobs are float milliseconds, and the exhaustion text below is a
 // contract Buzz authors match on. The backoff arithmetic is shared: [retry.Backoff].
-func OsRetry(ctx context.Context, max int, fn Callback, opts types.RetryOptions) (any, error) {
+func OsRetry(ctx context.Context, max int, fn func(ctx context.Context) (any, error), opts types.RetryOptions) (any, error) {
 	if fn == nil {
 		return nil, fmt.Errorf(`os\retry: fn must not be nil`)
 	}
@@ -567,12 +565,9 @@ func OsRetry(ctx context.Context, max int, fn Callback, opts types.RetryOptions)
 	}
 	var lastErr error
 	for i := 0; i < max; i++ {
-		ret, err := fn.Call(ctx)
+		v, err := fn(ctx)
 		if err == nil {
-			if len(ret) > 0 {
-				return ret[0], nil
-			}
-			return nil, nil //nolint:nilnil // fn succeeded with no return value; nil is the no-value result
+			return v, nil
 		}
 		if !types.ClassifyRetry(err).Retryable {
 			return nil, err
@@ -615,7 +610,7 @@ func retryMillis(name string, ms *float64, def float64) (time.Duration, error) {
 // held is handed back while the n are reserved, so peak in-flight stays within the
 // cap rather than cap+n. Processes cb starts share a jobserver of n slots
 // (spawn.SeatJobserver), so a `make` or cargo given no -j of its own runs n wide.
-func ProcWithSlots(ctx context.Context, n int, cb Callback) error {
+func ProcWithSlots(ctx context.Context, n int, cb func(ctx context.Context) error) error {
 	if lim := cache.LimiterFromContext(ctx); lim != nil && n > 0 {
 		// Hand back every slot we hold (a weighted step holds more than one) so
 		// reserving n cannot deadlock on slots we pin ourselves.
@@ -635,6 +630,5 @@ func ProcWithSlots(ctx context.Context, n int, cb Callback) error {
 		defer closeJobserver()
 		ctx = seated
 	}
-	_, callErr := cb.Call(ctx)
-	return callErr
+	return cb(ctx)
 }

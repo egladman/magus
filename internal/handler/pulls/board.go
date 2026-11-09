@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/queue"
+	"github.com/egladman/magus/libs/text/plural"
 	pullsv1 "github.com/egladman/magus/proto/gen/go/magus/pulls/v1alpha1"
 	"github.com/egladman/magus/types"
 )
@@ -233,7 +234,7 @@ func blockedReasons(p types.ForgePull, r rollup, base string, runnerWait time.Du
 		out = append(out, "draft")
 	}
 	if p.BehindBy > 0 && mergeable != pullsv1.Mergeable_MERGEABLE_MERGEABLE && mergeable != pullsv1.Mergeable_MERGEABLE_CONFLICTING {
-		out = append(out, fmt.Sprintf("%s behind %s", plural(p.BehindBy, "commit", "commits"), base))
+		out = append(out, fmt.Sprintf("%s behind %s", plural.Count(p.BehindBy, "commit", "commits"), base))
 	}
 	return out
 }
@@ -349,7 +350,7 @@ func commitBefore(commits []types.BaseCommit, t time.Time) (types.BaseCommit, bo
 }
 
 func regressionMessage(p *pullsv1.Pattern) string {
-	msg := fmt.Sprintf("%s fail on %s", plural(len(p.Pulls), "PR", "PRs"), p.Check)
+	msg := fmt.Sprintf("%s fail on %s", plural.Count(len(p.Pulls), "PR", "PRs"), p.Check)
 	if p.OnMain {
 		msg += ", and main fails it too"
 	}

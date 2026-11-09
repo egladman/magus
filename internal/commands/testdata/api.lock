@@ -19,6 +19,7 @@ config ci.machine.memory_mb
 config ci.machine.name
 config ci.max_shards
 config ci.record_runs
+config ci.remote_gate
 config ci.runner_pool_budget
 config concurrency
 config concurrency_profile
@@ -129,6 +130,7 @@ config volatility.bootstrap_samples
 config volatility.enabled
 config volatility.min_samples
 config volatility.threshold
+config work.local_only
 flag affected/b
 flag affected/base
 flag affected/bisect

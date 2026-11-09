@@ -324,18 +324,13 @@ func scopePaths(r *http.Request) []string {
 	return paths
 }
 
-// ReviewHandler serves the live paired review (a [types.DiffReview]) on the review route.
+// ReviewHandler serves a paired [difftypes.Review] on the review route.
 //
-// Every write here is stamped DiffAuthorUnattributed with the request's origin: the OS
-// account and the credential the bearer guard verified. The agent's half lives on the MCP
-// tools and is stamped DiffAuthorAgent there. The stamp is decided by WHICH ROUTE the
-// write arrived on and never by the payload, but the route does not prove a person: any
-// process of the account can mint a console token, so the origin records which
-// credential wrote the remark rather than claiming who held it.
-//
-// It is one route with an `op` rather than five, because these are all small mutations of one
-// object and a client applies them from one place: a keypress handler. Five routes would be
-// five fetch wrappers for no gain in clarity.
+// Writes are stamped difftypes.AuthorUnattributed with the request's origin;
+// MCP tools stamp difftypes.AuthorAgent. The route decides the stamp, never the
+// payload. Any account process can mint a console token, so the origin names
+// the credential, not the person. One route takes an `op`: one keypress handler
+// applies every mutation.
 type ReviewHandler struct {
 	handler.Base
 	ReviewOptions

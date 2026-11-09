@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types/diff"
 	"io"
 	"net/http"
@@ -555,7 +556,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 	}
 	if changed != 0 {
 		fmt.Printf("Recorded the anchored code's current fingerprint for %d anchor%s: this note now reads as reviewed against the code as it is today.\n",
-			changed, plural(changed, "", "s"))
+			changed, plural.Word(changed, "", "s"))
 	}
 	return nil
 }
@@ -734,7 +735,7 @@ func notesWriteFromStdin(ctx context.Context, root, dir string, target notesStor
 		return fmt.Errorf("magus notes edit: wrote %s, but recording its anchors failed: %w", path, err)
 	}
 	if changed != 0 {
-		fmt.Printf("Recorded the anchored code's current fingerprint for %d anchor%s.\n", changed, plural(changed, "", "s"))
+		fmt.Printf("Recorded the anchored code's current fingerprint for %d anchor%s.\n", changed, plural.Word(changed, "", "s"))
 	}
 	return nil
 }
@@ -820,10 +821,10 @@ func notesIssuesError(issues []store.Issue, strict bool) error {
 	}
 	if failures == 0 && dangling != 0 {
 		return fmt.Errorf("magus notes verify: %d dangling anchor%s, re-anchor the note or remove the anchor",
-			dangling, plural(dangling, "", "s"))
+			dangling, plural.Word(dangling, "", "s"))
 	}
 	if failures != 0 {
-		return fmt.Errorf("magus notes verify: %d invalid note%s", failures, plural(failures, "", "s"))
+		return fmt.Errorf("magus notes verify: %d invalid note%s", failures, plural.Word(failures, "", "s"))
 	}
 	return nil
 }
@@ -920,7 +921,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	// whose most useful line came from somebody else.
 	said := len(sess.Comments) + len(comments)
 	fmt.Printf("Captured %d comment%s into %s [%s] (%s).\n",
-		said, plural(said, "", "s"),
+		said, plural.Word(said, "", "s"),
 		notePath(root, target, saved), target.scope, notesAnchorSummary(saved))
 	if line := newRemarkLine(comments); line != "" {
 		fmt.Println(line)
@@ -952,7 +953,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("magus notes capture: captured the thread, but recording its anchors failed: %w", err)
 	}
 	if changed != 0 {
-		fmt.Printf("Recorded the reviewed code's current fingerprint for %d anchor%s.\n", changed, plural(changed, "", "s"))
+		fmt.Printf("Recorded the reviewed code's current fingerprint for %d anchor%s.\n", changed, plural.Word(changed, "", "s"))
 	}
 	return nil
 }
@@ -1284,10 +1285,10 @@ func localReviewComments(ctx context.Context, from diff.ReviewOrigin, cacheDir s
 // of them, or "" when none of it is new to them.
 //
 // Printed rather than written into the note, which is the whole reason it is a line and not a
-// field. New belongs to the READER's history with the review and not to the conversation (see
-// types.ReviewComment.New), so in a transcript a colleague reads next year it would describe
-// somebody else's morning. Said to the person taking the capture, it is the one moment it is
-// worth knowing.
+// field. New belongs to the READER's history with the review, not the
+// conversation (see diff.ReviewComment.New). A colleague reading the transcript
+// next year would see it describe somebody else's morning. Said to the person
+// taking the capture, it is the one moment it is worth knowing.
 func newRemarkLine(comments []diff.ReviewComment) string {
 	fresh := 0
 	for _, t := range comments {
@@ -1299,7 +1300,7 @@ func newRemarkLine(comments []diff.ReviewComment) string {
 		return ""
 	}
 	return fmt.Sprintf("%d remark%s on the review had not been in front of you before; `%s` marks them new.",
-		fresh, plural(fresh, "", "s"), hint.Diff.String())
+		fresh, plural.Word(fresh, "", "s"), hint.Diff.String())
 }
 
 // tagList collects a repeatable --tag flag.

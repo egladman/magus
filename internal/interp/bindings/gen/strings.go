@@ -172,5 +172,25 @@ func RegisterStrings(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.StringVal(ret0), nil
 	}))
+	m.MapSet("plural", vm.DirectValue("strings.plural", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		n := ffi.Int(bzArgs, 0, 0)
+		one := ffi.String(bzArgs, 1)
+		many := ffi.String(bzArgs, 2)
+		ret0, err := std.StringsPlural(ctx, n, one, many)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
+	m.MapSet("pluralCount", vm.DirectValue("strings.pluralCount", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		n := ffi.Int(bzArgs, 0, 0)
+		one := ffi.String(bzArgs, 1)
+		many := ffi.String(bzArgs, 2)
+		ret0, err := std.StringsPluralCount(ctx, n, one, many)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.StringVal(ret0), nil
+	}))
 	return m
 }

@@ -24,12 +24,12 @@ Cursor `cursor.com/docs/agent/hooks`, OpenCode `opencode.ai/docs/build/plugins/s
 
 At spawn time:
 
-| host        | spawn event magus wires                        | brief the hook reads                               | can a hook rewrite it                                                                                      | can a hook refuse it                     |
-| ----------- | ---------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| Claude Code | `PreToolUse` on `Agent`, `Task`                | `tool_input.prompt`, `description`, `model`        | yes: `updatedInput` replaces the whole input; with `allow` it also skips the permission prompt             | yes: `permissionDecision: deny`          |
-| Codex       | `PreToolUse` on `spawn_agent`, `collaborationspawn_agent`, `Agent` | v1 `message` or `items`; v2 `message` is encrypted | v1 only: `updatedInput` is honored only beside `permissionDecision: allow`; a v2 brief cannot be read | yes                                      |
-| Cursor      | `preToolUse` on `Task`                         | `prompt`, `description`, `subagent_type`           | documented: `updated_input`; not probed on `Task`                                                          | yes: `permission: deny`                  |
-| OpenCode    | `tool.execute.before` on `task`                | `prompt`, `description`, `subagent_type`           | yes: the plugin is handed `output.args` by reference                                                       | yes: the plugin throws                   |
+| host        | spawn event magus wires                                            | brief the hook reads                               | can a hook rewrite it                                                                                 | can a hook refuse it            |
+| ----------- | ------------------------------------------------------------------ | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------- |
+| Claude Code | `PreToolUse` on `Agent`, `Task`                                    | `tool_input.prompt`, `description`, `model`        | yes: `updatedInput` replaces the whole input; with `allow` it also skips the permission prompt        | yes: `permissionDecision: deny` |
+| Codex       | `PreToolUse` on `spawn_agent`, `collaborationspawn_agent`, `Agent` | v1 `message` or `items`; v2 `message` is encrypted | v1 only: `updatedInput` is honored only beside `permissionDecision: allow`; a v2 brief cannot be read | yes                             |
+| Cursor      | `preToolUse` on `Task`                                             | `prompt`, `description`, `subagent_type`           | documented: `updated_input`; not probed on `Task`                                                     | yes: `permission: deny`         |
+| OpenCode    | `tool.execute.before` on `task`                                    | `prompt`, `description`, `subagent_type`           | yes: the plugin is handed `output.args` by reference                                                  | yes: the plugin throws          |
 
 Codex `SubagentStart` adds `additionalContext` to the child, and magus already sends the
 checkout brief there. Claude Code's `SubagentStart` adds context too, but carries no
@@ -38,12 +38,12 @@ prompt. Cursor's `subagentStart` can deny, but it never fires in cursor-agent
 
 At return time:
 
-| host        | event that sees the reply                                        | reply the hook reads                    | can a hook rewrite what the parent reads                                         | can a hook send the child back                                                    |
-| ----------- | ---------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Claude Code | `SubagentStop`; `PostToolUse` on `Agent`, `Task`                 | `last_assistant_message`                | yes: `PostToolUse` `updatedToolOutput`, for any tool whose output shape matches  | yes: `SubagentStop` `decision: block` with a `reason` keeps the child running     |
-| Codex       | `SubagentStop`; `PostToolUse` on the spawn                       | `last_assistant_message` (may be null)  | partly: a `PostToolUse` block replaces the tool result with the hook's feedback  | yes: `SubagentStop` `decision: block` continues the child                         |
-| Cursor      | none fires: no `postToolUse` for `Task`, `subagentStop` unseen   | none                                    | no                                                                               | not expressible: `subagentStop` `followup_message` exists and never fired in a probe |
-| OpenCode    | `tool.execute.after` on `task`                                   | the tool's `output`                     | yes: the plugin is handed the output object by reference                         | no hook; only a new prompt into the child session, which is acting, not judging  |
+| host        | event that sees the reply                                      | reply the hook reads                   | can a hook rewrite what the parent reads                                        | can a hook send the child back                                                       |
+| ----------- | -------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Claude Code | `SubagentStop`; `PostToolUse` on `Agent`, `Task`               | `last_assistant_message`               | yes: `PostToolUse` `updatedToolOutput`, for any tool whose output shape matches | yes: `SubagentStop` `decision: block` with a `reason` keeps the child running        |
+| Codex       | `SubagentStop`; `PostToolUse` on the spawn                     | `last_assistant_message` (may be null) | partly: a `PostToolUse` block replaces the tool result with the hook's feedback | yes: `SubagentStop` `decision: block` continues the child                            |
+| Cursor      | none fires: no `postToolUse` for `Task`, `subagentStop` unseen | none                                   | no                                                                              | not expressible: `subagentStop` `followup_message` exists and never fired in a probe |
+| OpenCode    | `tool.execute.after` on `task`                                 | the tool's `output`                    | yes: the plugin is handed the output object by reference                        | no hook; only a new prompt into the child session, which is acting, not judging      |
 
 ### What magus has today
 
@@ -118,15 +118,15 @@ for a child. This field lets a workspace rule judge an unleased subagent's reply
 any shape it declares: parse it with `json`, compare it with a buzzgen-generated object,
 and deny with the reason. magus does not parse the reply itself.
 
-| part                                                                | where                                                 | State    |
-| ------------------------------------------------------------------- | ----------------------------------------------------- | -------- |
-| job row as the structured input                                     | `magus job fork`, `spawn-unvalidated`                 | done     |
-| `JobResult` as the structured output                                | `magus job exit --stdin`, `--schema`                  | done     |
-| `Job.result` readable from a stop rule's `req.lease`                | `types.Job`, Buzz `Job.result`                        | done     |
-| `StopRequest.reply` from `last_assistant_message`                   | `types/guard.go`, the Claude Code and Codex stop glue | proposed |
-| a reference stop rule that requires a filed result                  | `hack/policy/guard.buzz` `judgeStop`                  | proposed |
-| a reference spawn rule that requires a job row for every spawn      | `hack/policy/spawn.buzz`                              | proposed |
-| rewriting a brief or a reply in a hook                              | none                                                  | not built |
+| part                                                           | where                                                 | State     |
+| -------------------------------------------------------------- | ----------------------------------------------------- | --------- |
+| job row as the structured input                                | `magus job fork`, `spawn-unvalidated`                 | done      |
+| `JobResult` as the structured output                           | `magus job exit --stdin`, `--schema`                  | done      |
+| `Job.result` readable from a stop rule's `req.lease`           | `types.Job`, Buzz `Job.result`                        | done      |
+| `StopRequest.reply` from `last_assistant_message`              | `types/guard.go`, the Claude Code and Codex stop glue | proposed  |
+| a reference stop rule that requires a filed result             | `hack/policy/guard.buzz` `judgeStop`                  | proposed  |
+| a reference spawn rule that requires a job row for every spawn | `hack/policy/spawn.buzz`                              | proposed  |
+| rewriting a brief or a reply in a hook                         | none                                                  | not built |
 
 ### Principles checked
 

@@ -242,3 +242,7 @@ agents:
       cache_read: 0.20
       cache_write_5m: 5.0
       cache_write_1h: 8.0
+
+# GitHub Actions runs `ci` on every pushed commit of a pull request.
+ci:
+  remote_gate: github-actions

@@ -436,10 +436,10 @@ Blocking. Watch paths (directories, recursively) and call callback with each deb
 
 **Signature:** `fs\watch(paths, callback)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go)
 
-| Parameter  | Type                                                                    | Optional | Description |
-| ---------- | ----------------------------------------------------------------------- | -------- | ----------- |
-| `paths`    | `[]string`                                                              |          |             |
-| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go) |          |             |
+| Parameter  | Type                                            | Optional | Description |
+| ---------- | ----------------------------------------------- | -------- | ----------- |
+| `paths`    | `[]string`                                      |          |             |
+| `callback` | `func(context.Context, []string) (bool, error)` |          |             |
 
 **Example:**
 
@@ -464,10 +464,10 @@ Recursively walk the directory tree rooted at root in lexical order, calling cal
 
 **Signature:** `fs\walk(root, callback)` - [source](https://github.com/egladman/magus/blob/main/std/fs.go)
 
-| Parameter  | Type                                                                    | Optional | Description |
-| ---------- | ----------------------------------------------------------------------- | -------- | ----------- |
-| `root`     | `string`                                                                |          |             |
-| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go) |          |             |
+| Parameter  | Type                                                          | Optional | Description |
+| ---------- | ------------------------------------------------------------- | -------- | ----------- |
+| `root`     | `string`                                                      |          |             |
+| `callback` | `func(context.Context, string, bool) (types.WalkStep, error)` |          |             |
 
 **Example:**
 

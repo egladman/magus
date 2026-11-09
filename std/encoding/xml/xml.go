@@ -9,6 +9,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"strings"
 
@@ -110,7 +111,7 @@ func renderNode(b *strings.Builder, node any) error {
 			b.WriteByte(' ')
 			b.WriteString(asString(attrs[i]))
 			b.WriteString(`="`)
-			b.WriteString(escapeAttr(asString(attrs[i+1])))
+			b.WriteString(html.EscapeString(asString(attrs[i+1])))
 			b.WriteByte('"')
 		}
 		children, err := asList(n["children"])
@@ -208,12 +209,8 @@ func asString(v any) string {
 	return fmt.Sprint(v)
 }
 
-// escapeText escapes character data (&, <, >). escapeAttr also escapes the quote that
-// delimits an attribute value. Both leave everything else byte-identical.
+// escapeText escapes character data (&, <, >) and leaves quotes alone,
+// unlike html.EscapeString.
 func escapeText(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(s)
-}
-
-func escapeAttr(s string) string {
-	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&#34;").Replace(s)
 }

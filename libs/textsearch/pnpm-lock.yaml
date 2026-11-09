@@ -14,9 +14,6 @@ importers:
       typescript:
         specifier: 7.0.2
         version: 7.0.2
-      typescript-api:
-        specifier: npm:typescript@5.8.3
-        version: typescript@5.8.3
 
 packages:
 
@@ -197,11 +194,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  typescript@5.8.3:
-    resolution: {integrity: sha512-p1diW6TqL9L07nNxvRMM7hMMw4c5XOo/1ibL4aAIGmSAt9slTE1Xgw5KWuof2uTOvCg9BY7ZRi+GaF+7sfgPeQ==}
-    engines: {node: '>=14.17'}
-    hasBin: true
-
   typescript@7.0.2:
     resolution: {integrity: sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==}
     engines: {node: '>=16.20.0'}
@@ -303,8 +295,6 @@ snapshots:
 
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
-
-  typescript@5.8.3: {}
 
   typescript@7.0.2:
     optionalDependencies:

@@ -675,6 +675,7 @@ func ObjectJobRelease(v types.JobRelease) vm.Value {
 	out.MapSet("revoked", vm.BoolValue(v.Revoked))
 	out.MapSet("takenBy", vm.StringValue(v.TakenBy))
 	out.MapSet("deadBecause", vm.StringValue(v.DeadBecause))
+	out.MapSet("narrowed", vm.BoolValue(v.Narrowed))
 	return out
 }
 

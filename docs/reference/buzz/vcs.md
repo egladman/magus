@@ -116,7 +116,7 @@ The working tree's uncommitted state as {clean, files}: clean is true when nothi
 | --------- | ---------- | -------- | ----------- |
 | `paths`   | `[]string` | yes      |             |
 
-**Returns:** any
+**Returns:** map[string]any
 
 ### isDirty
 
@@ -165,7 +165,7 @@ Resolve a revision (a VCS-native rev expression; omit for the current revision) 
 | --------- | -------- | -------- | ----------- |
 | `rev`     | `string` | yes      |             |
 
-**Returns:** any
+**Returns:** map[string]any
 
 ### history
 

@@ -772,6 +772,7 @@ export object JobRelease {
     revoked: bool = false,
     takenBy: str = "",
     deadBecause: str = "",
+    narrowed: bool = false,
 }
 
 export object JobUnattributedWrite {
