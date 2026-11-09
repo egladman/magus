@@ -32,29 +32,29 @@ const Schema = 5
 const (
 	TypeTargetResult          = "run.target.result"
 	TypeTargetValue           = "run.target.value"
-	TypeGraphBuild            = "graph.build"
-	TypeGraphQuery            = "graph.query"
-	TypeGraphError            = "graph.error"
+	typeGraphBuild            = "graph.build"
+	typeGraphQuery            = "graph.query"
+	typeGraphError            = "graph.error"
 	TypeVolatility            = "volatile"
 	TypeShardTotal            = "shard.total"
-	TypeRaceDetected          = "race.detected"
+	typeRaceDetected          = "race.detected"
 	TypeOutputOverlapDetected = "race.output_overlap"
-	TypeDeterminismMismatch   = "race.determinism_mismatch"
-	TypeDeterminismUnchecked  = "race.determinism_unchecked"
+	typeDeterminismMismatch   = "race.determinism_mismatch"
+	typeDeterminismUnchecked  = "race.determinism_unchecked"
 	TypeMissingDependency     = "race.missing_dependency"
 	TypeDiagnosticEmitted     = "run.diagnostic"
 	TypeRunScope              = "run.scope"
-	TypeRunCharms             = "run.charms"
-	TypeRunCache              = "run.cache"
-	TypeRunBase               = "run.base"
-	TypeRunStep               = "run.step"
-	TypeRunSummary            = "run.summary"
-	TypeRunRemote             = "run.remote"
-	TypeRunDry                = "run.dry"
-	TypeRunDetach             = "run.detach"
+	typeRunCharms             = "run.charms"
+	typeRunCache              = "run.cache"
+	typeRunBase               = "run.base"
+	typeRunStep               = "run.step"
+	typeRunSummary            = "run.summary"
+	typeRunRemote             = "run.remote"
+	typeRunDry                = "run.dry"
+	typeRunDetach             = "run.detach"
 	TypeLockSuperseded        = "lock.superseded"
-	TypeLockSupersedeRefused  = "lock.supersede_refused"
-	TypeLockPipeWait          = "lock.pipe_wait"
+	typeLockSupersedeRefused  = "lock.supersede_refused"
+	typeLockPipeWait          = "lock.pipe_wait"
 	TypeNotice                = "run.notice"
 )
 
@@ -299,7 +299,7 @@ type LockPipeWait struct {
 // an MGS####) when the notice carries one, and Message does not repeat it. Attrs
 // carries the fields of a log record no typed event converts (see [NewNoticeHandler]).
 //
-// Level is written as "debug", "info", "warn" or "error" (see [LevelName]).
+// Level is written as "debug", "info", "warn" or "error" (see [levelName]).
 type Notice struct {
 	Level   slog.Level
 	Code    string
@@ -317,7 +317,7 @@ type noticeWire struct {
 
 // MarshalJSON writes Level by name.
 func (n Notice) MarshalJSON() ([]byte, error) {
-	return json.Marshal(noticeWire{Level: LevelName(n.Level), Code: n.Code, Message: n.Message, Attrs: n.Attrs})
+	return json.Marshal(noticeWire{Level: levelName(n.Level), Code: n.Code, Message: n.Message, Attrs: n.Attrs})
 }
 
 // UnmarshalJSON reads a line [Notice.MarshalJSON] wrote.
@@ -334,9 +334,9 @@ func (n *Notice) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// LevelName is the name a record carries for l: one of debug, info, warn and error, with
+// levelName is the name a record carries for l: one of debug, info, warn and error, with
 // anything below debug (magus's trace) reading as debug and anything past error as error.
-func LevelName(l slog.Level) string {
+func levelName(l slog.Level) string {
 	switch {
 	case l < slog.LevelInfo:
 		return "debug"
@@ -352,28 +352,28 @@ var registry = map[reflect.Type]string{ // populated at init; read-only in the h
 	reflect.TypeOf(DiagnosticEmitted{}):     TypeDiagnosticEmitted,
 	reflect.TypeOf(TargetResult{}):          TypeTargetResult,
 	reflect.TypeOf(TargetValue{}):           TypeTargetValue,
-	reflect.TypeOf(GraphBuild{}):            TypeGraphBuild,
-	reflect.TypeOf(GraphQuery{}):            TypeGraphQuery,
-	reflect.TypeOf(GraphError{}):            TypeGraphError,
+	reflect.TypeOf(GraphBuild{}):            typeGraphBuild,
+	reflect.TypeOf(GraphQuery{}):            typeGraphQuery,
+	reflect.TypeOf(GraphError{}):            typeGraphError,
 	reflect.TypeOf(VolatilityCall{}):        TypeVolatility,
 	reflect.TypeOf(ShardTotal{}):            TypeShardTotal,
-	reflect.TypeOf(RaceDetected{}):          TypeRaceDetected,
+	reflect.TypeOf(RaceDetected{}):          typeRaceDetected,
 	reflect.TypeOf(OutputOverlapDetected{}): TypeOutputOverlapDetected,
-	reflect.TypeOf(DeterminismMismatch{}):   TypeDeterminismMismatch,
-	reflect.TypeOf(DeterminismUnchecked{}):  TypeDeterminismUnchecked,
+	reflect.TypeOf(DeterminismMismatch{}):   typeDeterminismMismatch,
+	reflect.TypeOf(DeterminismUnchecked{}):  typeDeterminismUnchecked,
 	reflect.TypeOf(MissingDependency{}):     TypeMissingDependency,
 	reflect.TypeOf(RunScope{}):              TypeRunScope,
-	reflect.TypeOf(RunCharms{}):             TypeRunCharms,
-	reflect.TypeOf(RunCache{}):              TypeRunCache,
-	reflect.TypeOf(RunBase{}):               TypeRunBase,
-	reflect.TypeOf(RunStep{}):               TypeRunStep,
-	reflect.TypeOf(RunSummary{}):            TypeRunSummary,
-	reflect.TypeOf(RunDry{}):                TypeRunDry,
-	reflect.TypeOf(RunDetach{}):             TypeRunDetach,
+	reflect.TypeOf(RunCharms{}):             typeRunCharms,
+	reflect.TypeOf(RunCache{}):              typeRunCache,
+	reflect.TypeOf(RunBase{}):               typeRunBase,
+	reflect.TypeOf(RunStep{}):               typeRunStep,
+	reflect.TypeOf(RunSummary{}):            typeRunSummary,
+	reflect.TypeOf(RunDry{}):                typeRunDry,
+	reflect.TypeOf(RunDetach{}):             typeRunDetach,
 	reflect.TypeOf(LockSuperseded{}):        TypeLockSuperseded,
-	reflect.TypeOf(LockSupersedeRefused{}):  TypeLockSupersedeRefused,
-	reflect.TypeOf(LockPipeWait{}):          TypeLockPipeWait,
-	reflect.TypeOf(RunRemote{}):             TypeRunRemote,
+	reflect.TypeOf(LockSupersedeRefused{}):  typeLockSupersedeRefused,
+	reflect.TypeOf(LockPipeWait{}):          typeLockPipeWait,
+	reflect.TypeOf(RunRemote{}):             typeRunRemote,
 	reflect.TypeOf(Notice{}):                TypeNotice,
 }
 
@@ -457,7 +457,7 @@ func successStatus(r *cache.Result) string {
 func RunOptions(w *Writer, served NextServer, results func(types.TargetResult)) []cache.RunOption {
 	return []cache.RunOption{
 		cache.OnResult(func(s *cache.Step, r *cache.Result, err error) {
-			out := Outcome(s, r, err, served)
+			out := outcome(s, r, err, served)
 			if results != nil {
 				results(out)
 			}
@@ -480,9 +480,9 @@ func RunOptions(w *Writer, served NextServer, results func(types.TargetResult)) 
 	}
 }
 
-// Outcome is one finished step as the typed value a Go caller reads, the
+// outcome is one finished step as the typed value a Go caller reads, the
 // facts the run.target.result record writes as text.
-func Outcome(s *cache.Step, r *cache.Result, err error, served NextServer) types.TargetResult {
+func outcome(s *cache.Step, r *cache.Result, err error, served NextServer) types.TargetResult {
 	out := types.TargetResult{
 		Project:  s.ProjectPath,
 		Target:   s.Target,
