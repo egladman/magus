@@ -11,3 +11,7 @@
   still passes.
 - **A leased `touch` of a new file outside the write paths is refused**, like a `tee` or `cp`
   to one.
+- **A leased worker cannot write a checkout's own `./magus`**, its own or any other, by a
+  tool write, a redirect, a copy, a move or `go build -o`, even with every path leased. The
+  workspace's bootstrap and build targets still produce it, and an unleased session is not
+  graded.

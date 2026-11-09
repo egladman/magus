@@ -4045,7 +4045,15 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	start, home := cmp.Or(deps.callDir, checkout), userHome()
 	removed := append(removedOrMovedOperands(command, 0, dialect, start, home), boundPathOperands(command, dialect, start)...)
 	destinations := destinationOperands(command, dialect, start, home)
-	for _, candidate := range placedWriteCandidates(command, dialect, start, home) {
+	candidates := placedWriteCandidates(command, dialect, start, home)
+	for _, w := range slices.Concat(candidates, destinations, removed) {
+		if target, placed := w.place(home); placed {
+			if g := denyOwnBinaryWrite(actingLease, target); g.Decision == decisionDeny {
+				return g.Reason
+			}
+		}
+	}
+	for _, candidate := range candidates {
 		// A flag (`-p`, `-c`) or stdin's `-` names no file; a file spelled that way is
 		// written `./-p`, which still resolves.
 		if strings.HasPrefix(candidate.word, "-") {

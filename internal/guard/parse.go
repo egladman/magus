@@ -688,6 +688,18 @@ func commandDestinations(name string, args []string) []string {
 			}
 		}
 		return out
+	case "go":
+		if len(args) == 0 || args[0] != "build" {
+			return nil
+		}
+		for i, a := range args {
+			if o, ok := strings.CutPrefix(a, "-o="); ok {
+				return []string{o}
+			}
+			if a == "-o" && i+1 < len(args) {
+				return args[i+1 : i+2]
+			}
+		}
 	}
 	return nil
 }

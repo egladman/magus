@@ -301,6 +301,9 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 			checkout = owned
 		}
 	}
+	if g := denyOwnBinaryWrite(actingLease, writePath); g.Decision != "" {
+		return g
+	}
 	rel, inside := workspaceRelative(checkout, writePath)
 	if !inside {
 		if g := denyMagusStateWrite(actingLease, writePath); g.Decision != "" {
@@ -1026,6 +1029,25 @@ func leaseRow(ctx context.Context, at location, lease string) (types.Job, bool) 
 		return types.Job{}, false
 	}
 	return rows[i], true
+}
+
+// denyOwnBinaryWrite refuses a lease's write to any checkout's own ./magus,
+// the file the hooks run by name to judge the lease's own calls.
+func denyOwnBinaryWrite(lease, writePath string) writeGrade {
+	if lease == "" || !filepath.IsAbs(writePath) {
+		return writeGrade{}
+	}
+	for _, p := range []string{filepath.Clean(writePath), writeDestination(writePath)} {
+		dir := filepath.Dir(p)
+		if filepath.Base(p) != "magus" || findMagusCheckout(dir) != dir {
+			continue
+		}
+		return writeGrade{Decision: decisionDeny, Reason: denial{
+			Say: fmt.Sprintf("magus workspace: %s is a checkout's own magus binary, which only the workspace's bootstrap and build targets write; lease %s runs the one placed for it.", writePath, lease),
+			Why: fmt.Sprintf("The hooks and the guard run that file by name, so a lease that writes it picks the guard its own calls are judged by. `%s` shows what the job holds.", hint.DescribeJob.With(lease)),
+		}.full()}
+	}
+	return writeGrade{}
 }
 
 // denyOtherCheckout refuses a lease's write into a magus checkout other than the one its

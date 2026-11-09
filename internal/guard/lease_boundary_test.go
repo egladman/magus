@@ -162,6 +162,54 @@ func (s *LeaseBoundarySuite) TestCopyFromAnUndeclaredFilePasses() {
 	s.Empty(s.deny("cp docs/notes.md cmd/magus/notes.md"))
 }
 
+// binary makes s.root a magus checkout and returns its ./magus.
+func (s *LeaseBoundarySuite) binary() string {
+	s.write("magusfile.buzz", "")
+	s.write("magus", "#!/bin/sh\n")
+	return filepath.Join(s.root, "magus")
+}
+
+func (s *LeaseBoundarySuite) TestToolWriteToTheCheckoutsOwnBinaryIsRefused() {
+	g := gradeLeasedWrite(s.ctx, Dependencies{}, "lease-b", s.binary())
+	s.Equal(decisionDeny, g.Decision)
+	s.Contains(g.Reason, "own magus binary")
+}
+
+func (s *LeaseBoundarySuite) TestGoBuildOfTheCheckoutsOwnBinaryIsRefused() {
+	s.binary()
+	s.Contains(s.deny("go build -o magus ./cmd/magus"), "own magus binary")
+}
+
+func (s *LeaseBoundarySuite) TestMovingTheCheckoutsOwnBinaryAsideIsRefused() {
+	s.binary()
+	s.Contains(s.deny("mv magus magus.old"), "own magus binary")
+}
+
+func (s *LeaseBoundarySuite) TestCopyOverALinkedCheckoutsBinaryIsRefused() {
+	other := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(other, "magusfile.buzz"), nil, 0o644))
+	s.Contains(s.deny("cp x "+filepath.Join(other, "magus")), "own magus binary")
+}
+
+func (s *LeaseBoundarySuite) TestALeaseHoldingEveryPathStillMayNotWriteItsBinary() {
+	dir := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
+	ctx, _ := fleetFixture(s.T(), types.Job{
+		ID: "all", WritePaths: []string{"**"}, CheckoutRoot: dir, State: types.StateRunning, Registered: 1,
+	})
+	s.Contains(denyWriteOutsideLease(ctx, Dependencies{callDir: dir}, "all", "echo x > magus"), "own magus binary")
+}
+
+func (s *LeaseBoundarySuite) TestRunningTheCheckoutsOwnBinaryPasses() {
+	s.binary()
+	s.Empty(s.deny("./magus run go-test . -- ./internal/guard"))
+}
+
+func (s *LeaseBoundarySuite) TestUnleasedWriteToTheBinaryIsNotGraded() {
+	s.NotEqual(decisionDeny, gradeLeasedWrite(s.ctx, Dependencies{}, "", s.binary()).Decision)
+	s.Empty(denyWriteOutsideLease(s.ctx, Dependencies{callDir: s.root}, "", "go build -o magus ./cmd/magus"))
+}
+
 func (s *LeaseBoundarySuite) TestShellWriteInsideTheNestedCheckoutPasses() {
 	ctx, _, nested := s.nestedLease()
 	s.Empty(denyWriteOutsideLease(ctx, Dependencies{callDir: nested}, "nested", "echo x > internal/guard/guard.go"))
