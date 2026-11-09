@@ -579,3 +579,58 @@ func (s *WorktreePruneSuite) TestPassesWhenTheGoneCommitIsOnARemoteRef() {
 
 	s.Equal(ShellVerdict{}, s.repo.judge("git worktree prune"))
 }
+
+type RmOfAWorktreeSuite struct {
+	suite.Suite
+	r worktreeRepo
+}
+
+func TestRmOfAWorktreeSuite(t *testing.T) { suite.Run(t, new(RmOfAWorktreeSuite)) }
+
+func (s *RmOfAWorktreeSuite) SetupTest() {
+	s.r = newWorktreeRepository(s.T())
+}
+
+func (s *RmOfAWorktreeSuite) TestIsJudgedLikeRemove() {
+	r := s.r
+	dirty := r.add("dirty")
+	require.NoError(s.T(), os.WriteFile(filepath.Join(dirty, "a.txt"), []byte("changed\n"), 0o644))
+	assertRemovalDenied(s.T(), r.judge("rm -rf "+dirty), "first a.txt")
+
+	ahead := r.add("ahead")
+	r.commit(ahead)
+	assertRemovalDenied(s.T(), r.judge("rm -r "+ahead), "1 commit(s) on it")
+	assertRemovalDenied(s.T(), r.judge("cd "+r.parent+" && rm -fR ahead"), "1 commit(s) on it")
+	assertRemovalDenied(s.T(), r.judge("rm --recursive -- "+ahead), "1 commit(s) on it")
+	assertRemovalDenied(s.T(), r.judge(`magus buzz -e 'fs\removeAll("`+ahead+`");'`), "1 commit(s) on it")
+}
+
+func (s *RmOfAWorktreeSuite) TestDirectoryHoldingAWorktreeIsJudged() {
+	r := s.r
+	ahead := r.add("ahead")
+	r.commit(ahead)
+
+	assertRemovalDenied(s.T(), r.judge("rm -rf "+r.parent), "it is the main worktree")
+	assertRemovalDenied(s.T(), r.judge("rm -rf "+r.parent+"/a*"), "1 commit(s) on it")
+}
+
+func (s *RmOfAWorktreeSuite) TestCleanLandedWorktreePasses() {
+	wt := s.r.add("done")
+	s.Equal(ShellVerdict{}, s.r.judge("rm -rf "+wt))
+}
+
+func (s *RmOfAWorktreeSuite) TestElsewhereIsNotJudged() {
+	r := s.r
+	ahead := r.add("ahead")
+	r.commit(ahead)
+	require.NoError(s.T(), os.MkdirAll(filepath.Join(ahead, "build"), 0o755))
+
+	for _, command := range []string{
+		"rm -rf " + filepath.Join(ahead, "build"),
+		"rm " + filepath.Join(ahead, "ahead.txt"),
+		`rm -rf "$tmp"`,
+		"rm -rf " + s.T().TempDir(),
+	} {
+		s.Equal(ShellVerdict{}, r.judge(command), "%q", command)
+	}
+}
