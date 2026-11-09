@@ -3,8 +3,6 @@ package guard
 import (
 	"cmp"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -356,12 +354,9 @@ type judgedCall struct {
 // registering a guard rule is enough. A call that puts back a file the load error names
 // (loadRestore) is advised instead, since the load cannot recover otherwise.
 //
-// Otherwise a gated verb is denied when the last policy that did load registered seam's
-// rule, and any other call that changes state is denied while the policy fails on its own
-// error, naming it (brokenPolicyDenial); an edit of a policy source passes, as that is the
-// fix. With no record of any policy loading here, nothing says the seam has no rule, so a
-// gated verb is denied too. Only a record that registered no rule for the seam passes it,
-// with the failure note.
+// Otherwise every call that changes state is denied, whether or not a rule is
+// on record. A gated verb gets unloadedDenial and the rest brokenPolicyDenial.
+// An edit of a policy source passes, as that is the fix.
 func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	if !asked.unloaded || asked.answer.Decision == types.GuardDeny {
 		return false
@@ -370,7 +365,7 @@ func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	recorded := recordedRule(at.cacheDir, call.seam)
 	unknown := !policyRecorded(at.cacheDir)
 	reason := unloadCause(asked.loadFailure, at.workspace)
-	guarded := call.changes && (recorded || declaresGuardRule(at.workspace))
+	guarded := call.changes
 	holds := guarded && reason.Cause != unloadNone
 	broken := guarded && reason.Cause == unloadNone && !call.guardSource
 	if holds || broken {
@@ -564,9 +559,7 @@ type ruleFailureReport struct {
 	seam     functionSeam
 	failures []trail.RuleFailure
 	answered []string
-	// toldInFull tells the failure set in full on every call rather than once a session: a
-	// set holding a phase that ran out of time, since which phase ran out, and of how much,
-	// is news each time.
+	// TODO: drop with its three callers; the note is always told in full.
 	toldInFull bool
 	// judging builds the line naming the magus that judged the call. It is read only when a
 	// rule failed, since it stats the checkout.
@@ -577,11 +570,8 @@ type ruleFailureReport struct {
 }
 
 // ruleFailureNote tells the reader which rules judged this call when any workspace rule
-// could not, "" when none failed. A set of failures is told in full the first time it fires
-// in a session (every time when a phase ran out of time) and as one line naming what
-// applied on every repeat, so the reader never takes a call for judged by a rule that was
-// skipped. The judging binary's line is part of the full telling only: the repeat stays one
-// line. A non-empty lead opens both forms, since it names a cause the reader must act on.
+// could not, "" when none failed. It is told in full on every call, so the
+// reader never takes a call for judged by a rule that was skipped.
 func ruleFailureNote(r ruleFailureReport) string {
 	if len(r.failures) == 0 {
 		return ""
@@ -597,10 +587,8 @@ func ruleFailureNote(r ruleFailureReport) string {
 	summary := fmt.Sprintf("Only %s applied to this %s.", strings.Join(applied, " and "), string(r.seam))
 	var full strings.Builder
 	full.WriteString(lead)
-	h := sha256.New()
 	for _, f := range r.failures {
 		fmt.Fprintf(&full, "The %s judged nothing: %s\n\n", sideName(r.seam, f.Side), f.Error)
-		_, _ = fmt.Fprintf(h, "%s\x00%s\x00", f.Side, f.Error)
 	}
 	full.WriteString(summary)
 	if r.judging != nil {
@@ -608,11 +596,7 @@ func ruleFailureNote(r ruleFailureReport) string {
 			full.WriteString("\n\n" + judged)
 		}
 	}
-	if r.toldInFull {
-		return full.String()
-	}
-	kind := hint.MarkerKind(fmt.Sprintf("%s-%s", string(ruleFailedKind(r.seam)), hex.EncodeToString(h.Sum(nil)[:8])))
-	return r.gate.OnceOrBrief(kind, full.String(), fmt.Sprintf("%s%s A workspace %s rule is still failing, as told earlier in this session.", lead, summary, string(r.seam)))
+	return full.String()
 }
 
 // judgingBinary is what is known about the magus that judged a call, told by String.
@@ -686,15 +670,4 @@ func (j judgingBinary) String() string {
 		return fmt.Sprintf("%s It is older than the tree: the hook uses ./magus when the call runs inside this checkout and ./magus is executable. Otherwise %s.", who, j.fix)
 	}
 	return fmt.Sprintf("%s Fix: %s.", who, j.fix)
-}
-
-// ruleFailedKind names the notice that a seam's workspace rule judged nothing.
-func ruleFailedKind(seam functionSeam) hint.MarkerKind {
-	switch seam {
-	case seamCommand:
-		return advisoryCommandRuleFailed
-	case seamWrite:
-		return advisoryWriteRuleFailed
-	}
-	return advisorySpawnRuleFailed
 }
