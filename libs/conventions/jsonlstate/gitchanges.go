@@ -13,7 +13,8 @@ import (
 	"sync"
 )
 
-// gitChanges copies blankerror's, which is private to that package.
+// gitChanges copies blankerror's on purpose: each package has its own span
+// type and File signature, and sharing would couple two checks.
 type gitChanges struct {
 	base string
 
