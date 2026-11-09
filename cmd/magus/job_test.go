@@ -2168,11 +2168,10 @@ func installCheckGrader(t *testing.T, g job.CheckGrader) {
 	t.Cleanup(func() { job.SetCheckGrader(previous) })
 }
 
-// One grader judges every fork: runCLI installs it.
-// The Store `magus job fork` opens names none of its own.
-// Nor do the Stores magus\workspace().putJob opens over MCP and in the daemon.
-// std's TestMagusPutJobGradesTheCheckLikeFork pins those.
-func TestJobForkGradesWithTheInstalledGrader(t *testing.T) {
+// `magus job fork` grades with a forkGrader of its own, not the installed grader, so its
+// memos live no longer than the fork. The installed one still serves the doors that open
+// a Store naming none: std's TestMagusPutJobGradesTheCheckLikeFork pins those.
+func TestJobForkGradesWithItsOwnGrader(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
@@ -2185,11 +2184,10 @@ func TestJobForkGradesWithTheInstalledGrader(t *testing.T) {
 		return job.CheckVerdict{}
 	})
 
-	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."}))
-	assert.NotEmpty(t, graded)
-	for _, at := range graded {
-		assert.Equal(t, root, at)
-	}
+	err := jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "a worker does not build magus", "the fork's own grader judged the check")
+	assert.Empty(t, graded)
 }
 
 func TestEvidenceFlagCollectsGoalRefPairs(t *testing.T) {

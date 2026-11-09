@@ -483,3 +483,45 @@ func TestDirectoryWritePathStandsDownForAnAllOutputDirectory(t *testing.T) {
 	assert.True(t, outputInside(row, types.Glob{Pattern: "docs/gen/*.md"}), "the directory claim holds an output glob under it (MGS3044)")
 	assert.False(t, outputInside(row, types.Glob{Pattern: "docs/mixed/*.md"}))
 }
+
+type FootprintMayExtendSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestFootprintMayExtendSuite(t *testing.T) {
+	suite.Run(t, new(FootprintMayExtendSuite))
+}
+
+func (s *FootprintMayExtendSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	for name, body := range map[string]string{"run/run.go": "package run\n", "run/run_test.go": "package run\n", "docs/guide.md": "# guide\n"} {
+		path := filepath.Join(s.root, filepath.FromSlash(name))
+		s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
+		s.Require().NoError(os.WriteFile(path, []byte(body), 0o644))
+	}
+}
+
+func (s *FootprintMayExtendSuite) TestSourceBesideATestMayExtend() {
+	s.True(FootprintMayExtend(s.root, types.Job{WritePaths: []string{"run/run.go"}}))
+}
+
+func (s *FootprintMayExtendSuite) TestADirectoryWritePathMayExtend() {
+	s.True(FootprintMayExtend(s.root, types.Job{WritePaths: []string{"run"}}))
+}
+
+func (s *FootprintMayExtendSuite) TestADirectoryWithNoTestCannotExtend() {
+	s.False(FootprintMayExtend(s.root, types.Job{WritePaths: []string{"docs/guide.md"}}))
+}
+
+func (s *FootprintMayExtendSuite) TestANewFileInANewDirectoryCannotExtend() {
+	s.False(FootprintMayExtend(s.root, types.Job{WritePaths: []string{"fresh/new.go"}}))
+}
+
+func (s *FootprintMayExtendSuite) TestWritingOnlyTestsCannotExtend() {
+	s.False(FootprintMayExtend(s.root, types.Job{WritePaths: []string{"run/run_test.go"}}))
+}
+
+func (s *FootprintMayExtendSuite) TestAReadOnlyRowCannotExtend() {
+	s.False(FootprintMayExtend(s.root, types.Job{ReadOnly: true, WritePaths: []string{"run/run.go"}}))
+}

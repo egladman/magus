@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/egladman/magus/libs/testkit"
 	"io"
 	"log/slog"
 	"os"
@@ -228,4 +229,54 @@ func (s *announcedLoadSuite) TestProgressGoesToStderrUnlessQuiet() {
 	s.Equal(os.Stderr, progressWriter(s.T().Context()))
 	slog.SetDefault(slog.New(slog.NewTextHandler(&s.said, &slog.HandlerOptions{Level: slog.LevelWarn})))
 	s.Equal(io.Discard, progressWriter(s.T().Context()))
+}
+
+// ForkGraphSuite pins that a fork merges the symbol shards only for a row whose footprint
+// its referrers could extend.
+type ForkGraphSuite struct {
+	suite.Suite
+	root   string
+	builds int
+}
+
+func TestForkGraphSuite(t *testing.T) {
+	suite.Run(t, new(ForkGraphSuite))
+}
+
+func (s *ForkGraphSuite) SetupTest() {
+	s.T().Cleanup(snapshotGlobals())
+	testkit.Isolate(s.T())
+	global = globalFlags{}
+	s.root = testkit.NewRepository(s.T(), map[string]string{
+		"magus.yaml": "{}\n", "magusfile.buzz": "", "go.mod": goModule,
+		"run.go": "package run\n", "run_test.go": "package run\n", "docs/guide.md": "# guide\n",
+	}).Root()
+	resetWorkspaceMemo(s.T())
+	s.T().Chdir(s.root)
+	s.builds = 0
+}
+
+func (s *ForkGraphSuite) footprint(paths ...string) {
+	graph := &jobGraph{rebuild: true, build: func(context.Context) (*knowledge.Graph, error) {
+		s.builds++
+		return knowledge.NewGraph(), nil
+	}}
+	store := job.NewStore(job.Location{StateBase: s.T().TempDir(), Root: s.root})
+	ws := job.Workspace{Projects: []*types.Project{{Name: ".", Path: "."}}}
+	extendedFootprint(s.T().Context(), store, graph, s.root, types.Declaration{ID: "w", WritePaths: paths}, ws)
+}
+
+func (s *ForkGraphSuite) TestARowWritingDocsLoadsNoGraph() {
+	s.footprint("docs/guide.md", "docs/new.md")
+	s.Zero(s.builds)
+}
+
+func (s *ForkGraphSuite) TestARowWritingOnlyTestsLoadsNoGraph() {
+	s.footprint("run_test.go")
+	s.Zero(s.builds)
+}
+
+func (s *ForkGraphSuite) TestARowWritingSourceBesideATestLoadsTheGraph() {
+	s.footprint("run.go")
+	s.Equal(1, s.builds)
 }
