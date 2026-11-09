@@ -161,6 +161,27 @@ func (s *configSuite) TestLoadRefusesSourcesInAWorkingDirConfig() {
 	s.Contains(err.Error(), "sets sources")
 }
 
+func (s *configSuite) TestLoadRefusesWorkLocalOnlyInTheWorkspaceConfig() {
+	s.T().Setenv("XDG_CONFIG_HOME", s.T().TempDir())
+	repo := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(repo, Filename),
+		[]byte("work:\n  local_only: [texteditor]\n"), 0o644))
+	_, err := LoadWithRoot("", repo)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "sets work.local_only")
+}
+
+func (s *configSuite) TestLoadReadsWorkLocalOnlyFromTheUserConfig() {
+	home := s.T().TempDir()
+	s.T().Setenv("XDG_CONFIG_HOME", home)
+	s.Require().NoError(os.Mkdir(filepath.Join(home, "magus"), 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(home, "magus", Filename),
+		[]byte("work:\n  local_only: [texteditor, buzzed-*]\n"), 0o644))
+	cfg, err := LoadWithRoot("", s.T().TempDir())
+	s.Require().NoError(err)
+	s.Equal([]string{"texteditor", "buzzed-*"}, cfg.Work.LocalOnly)
+}
+
 func (s *configSuite) TestLoadWorkspaceOnlyRefusesSources() {
 	s.T().Setenv("XDG_CONFIG_HOME", s.T().TempDir())
 	_, err := LoadWorkspaceOnly(s.repositoryWithSources())

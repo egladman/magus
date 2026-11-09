@@ -155,6 +155,17 @@ type Config struct {
 	// Sources is a person's reading list, read by the Cursor web hint.
 	// User-level only: committed, it would rank every contributor's searches.
 	Sources []Source `json:"sources" yaml:"sources" cli:"-"`
+
+	// Work configures the work ledger. User-level only, like Sources.
+	Work Work `json:"work" yaml:"work" cli:"-"`
+}
+
+// Work is a person's account of the work they keep on this machine.
+type Work struct {
+	// LocalOnly globs name checkouts and branches never meant to be
+	// published. The ledger reads a match as local-only, not unaccounted.
+	// User-level only: committed, it would hide a contributor's work.
+	LocalOnly []string `json:"local_only" yaml:"local_only" cli:"-"`
 }
 
 // Source is one reading-list entry. URL matches as a prefix of a cited URL.
