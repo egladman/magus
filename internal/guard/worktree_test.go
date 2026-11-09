@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // worktreeRepo is a clone of a one-commit origin, so origin/main is a real remote-tracking
@@ -535,4 +536,46 @@ func TestJudgeWorktreeRemove(t *testing.T) {
 	assert.NotEqual(t, "deny", Judge(ctx, Dependencies{}, Request{Input: "git worktree remove " + clean}).Decision)
 	v := Judge(ctx, Dependencies{}, Request{Input: "git worktree remove " + dirty})
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleWorktreeRemove)), unworded(v))
+}
+
+// WorktreePruneSuite judges `git worktree prune`. A gone record is the only
+// pointer to its branch, so prune must not clear one with unreached commits.
+type WorktreePruneSuite struct {
+	suite.Suite
+	repo worktreeRepo
+}
+
+func TestWorktreePruneSuite(t *testing.T) {
+	suite.Run(t, new(WorktreePruneSuite))
+}
+
+func (s *WorktreePruneSuite) SetupTest() {
+	s.repo = newWorktreeRepository(s.T())
+}
+
+func (s *WorktreePruneSuite) TestPassesWhenNoCheckoutIsGone() {
+	s.repo.add("kept")
+	s.Equal(ShellVerdict{}, s.repo.judge("git worktree prune"))
+}
+
+func (s *WorktreePruneSuite) TestDeniesAGoneCheckoutWhoseCommitNoRemoteReaches() {
+	wt := s.repo.add("lost")
+	s.repo.commit(wt)
+	s.Require().NoError(os.RemoveAll(wt))
+
+	v := s.repo.judge("git worktree prune")
+	s.Equal(denyRule{Name: denyRuleWorktreeRemove}, v.Rule)
+	s.Contains(v.Deny, "pruning the worktree records may lose work")
+	full := denial{Say: v.Deny, Why: v.Why}.full()
+	s.Contains(full, "is lost: its directory is deleted")
+	s.Contains(full, "restore with `git worktree add "+wt+" lost`")
+}
+
+func (s *WorktreePruneSuite) TestPassesWhenTheGoneCommitIsOnARemoteRef() {
+	wt := s.repo.add("published")
+	head := s.repo.commit(wt)
+	s.repo.git(s.repo.main, "update-ref", "refs/remotes/origin/published", head)
+	s.Require().NoError(os.RemoveAll(wt))
+
+	s.Equal(ShellVerdict{}, s.repo.judge("git worktree prune"))
 }

@@ -65,7 +65,104 @@ func denyWorktreeRemove(ctx context.Context, deps Dependencies, at location, cal
 			return worktreeRemoveDenial(r)
 		}
 	}
+	prunes, _ := locateCalls(command, d, callDir, isWorktreePrune, false)
+	for _, c := range prunes {
+		if r := judgeWorktreePrune(ctx, deps, callDir, c); len(r.failed) > 0 {
+			return worktreeRemoveDenial(r)
+		}
+	}
 	return ShellVerdict{}
+}
+
+// isWorktreePrune reports a `git worktree prune` past any global options.
+func isWorktreePrune(c hint.Invocation) bool {
+	if c.Name != "git" {
+		return false
+	}
+	g := parseGit(c.Args)
+	return g.sub == "worktree" && len(g.rest) > 0 && g.rest[0] == "prune"
+}
+
+// judgeWorktreePrune denies a gone checkout whose commits nothing reaches.
+// Its record is the only pointer to the branch, so prune must not clear it.
+func judgeWorktreePrune(ctx context.Context, deps Dependencies, callDir string, c locatedCall) removal {
+	r := removal{verb: "pruning", target: "the worktree records"}
+	fail := func(why string) removal {
+		r.failed = []string{why}
+		return r
+	}
+	switch {
+	case c.unfollowed:
+		return fail("it runs inside a conditional, a function, or a loop whose words are not all literal, which the guard does not follow")
+	case c.args == nil:
+		return fail("it is reached through a wrapper, whose arguments cannot be read as literal words")
+	}
+	at, _, ok := gitCallAt(c.args, c.at)
+	if !ok {
+		return fail("a word on it is not literal or the directory it runs in is not knowable without running it")
+	}
+	gitDir, err := filepath.Abs(at.dir)
+	if err != nil {
+		return fail("the directory it runs in cannot be resolved")
+	}
+	if callDir == "" {
+		return fail("which checkout this session runs in is unknown, so it cannot be told apart from the target")
+	}
+	_, hereCommon, ok := gitCheckout(callDir)
+	if !ok {
+		return fail("this session runs in no git checkout, so the repository and its job store cannot be read")
+	}
+	if _, common, ok := gitCheckout(gitDir); !ok || common != hereCommon {
+		return fail(fmt.Sprintf("git runs against another repository than this session's, whose job store magus does not read (`git -C %s rev-parse --git-common-dir`)", gitDir))
+	}
+
+	opts := deps.VCS
+	opts.Name = "git"
+	res, err := vcs.Resolve(ctx, gitDir, "", opts)
+	if err != nil || res.VCS == nil {
+		return fail("version control is disabled or unresolvable for this workspace, so nothing about the worktree can be read")
+	}
+	drv := res.VCS
+	all, err := drv.RegisteredCheckouts(ctx, gitDir)
+	if err != nil {
+		return fail("the registered worktrees cannot be read (`git worktree list --porcelain`): " + err.Error())
+	}
+	heads := map[string]string{}
+	if bh, ok := drv.(types.BranchHeadReporter); ok {
+		heads, err = bh.BranchHeads(ctx, gitDir)
+		if err != nil {
+			return fail("the local branches cannot be read (`git branch`): " + err.Error())
+		}
+	}
+	for _, co := range all {
+		if co.Primary || co.Head == "" {
+			continue
+		}
+		if _, err := os.Stat(co.Root); err == nil || !errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		lost := unlanded(ctx, drv, gitDir, callDir, co.Head, res.Base)
+		if len(lost) == 0 {
+			continue
+		}
+		r.failed = append(r.failed, lostCheckout(co.Root, co.Head, heads, lost[0]))
+	}
+	return r
+}
+
+// lostCheckout names a gone checkout and how to restore it.
+// With no local branch on its head, it names the commit instead.
+func lostCheckout(root, head string, heads map[string]string, reason string) string {
+	branch := ""
+	for name, h := range heads {
+		if h == head && (branch == "" || name < branch) {
+			branch = name
+		}
+	}
+	if branch == "" {
+		return fmt.Sprintf("%s is lost: its directory is deleted, and %s; no local branch names %.12s, so restore it from that commit", root, reason, head)
+	}
+	return fmt.Sprintf("%s is lost: its directory is deleted, and %s; restore with `git worktree add %s %s`", root, reason, root, branch)
 }
 
 // removal is one judged removal or unlock: what it does to which worktree, every
