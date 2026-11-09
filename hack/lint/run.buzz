@@ -21,7 +21,11 @@ import "flags";
 import "fs";
 import "os";
 import "path";
+import "crypto";
+import "encoding/json";
+import "env";
 import "std";
+import "time";
 import "vcs";
 import "magus/lint";
 import "hack/lint/support" as support;
@@ -355,22 +359,28 @@ export fun render(f: Finding) > str {
     return s;
 }
 
-final usage = "usage: magus buzz hack/lint/run.buzz [-- [--rule <name>] [<path>...]]\n"
+final usage = "usage: magus buzz hack/lint/run.buzz [-- [--record [--session <id>]] [--rule <name>] [<path>...]]\n"
     + "  bare            every rule over the whole tree\n"
     + "  <path>...       only the findings at these files, from the rules that read them\n"
-    + "  --rule <name>   only that rule";
+    + "  --rule <name>   only that rule\n"
+    + "  --record        append the run's findings to firings.jsonl under $XDG_STATE_HOME/magus; whole tree only\n"
+    + "  --session <id>  the agent session the run belongs to, recorded with --record";
 
-// Selection is what a run lints: the rule it names, or every rule when rule is null, and
-// the findings at paths, or every finding when paths is empty.
+// Selection is what a run lints: the rule it names, or every rule when
+// rule is null, and the findings at paths, or every finding when paths
+// is empty. record appends the run's firings, tagged with session.
 export object Selection {
     rule: str?,
     paths: [str],
+    record: bool = false,
+    session: str = "",
 }
 
-// parse reads --rule and the paths, refusing any other flag and a rule not in names. A
-// path after `--` may start with a dash.
+// parse reads --rule, --record, --session and the paths. It refuses any
+// other flag, a rule not in names and a recorded run narrowed to paths.
+// A path after `--` may start with a dash.
 export fun parse(args: [str], names: [str]) > Selection !> any {
-    final parsed = flags\parse(args, switches: [<str>], valued: ["--rule"]);
+    final parsed = flags\parse(args, switches: ["--record"], valued: ["--rule", "--session"]);
     final paths = mut [<str>];
     foreach (word in parsed.unknown) {
         if (word.startsWith("-")) {
@@ -410,7 +420,14 @@ export fun parse(args: [str], names: [str]) > Selection !> any {
             throw "lint: no rule is named \"{rule!}\"; the rules are:\n  " + names.join("\n  ");
         }
     }
-    return Selection{ rule = rule, paths = clean };
+    final record = parsed.values["--record"] != null;
+    if (record and clean.len() > 0) {
+        throw "lint: --record reads the whole tree; a path would record a rule as clean over files it skipped\n{usage}";
+    }
+    if (!record and parsed.values["--session"] != null) {
+        throw "lint: --session tags a recorded run; pass --record\n{usage}";
+    }
+    return Selection{ rule = rule, paths = clean, record = record, session = parsed.values["--session"] ?? "" };
 }
 
 // pick returns the rules sel runs: the one it names, or all, less those reading none of
@@ -478,6 +495,65 @@ export fun check(sel: Selection) > Report !> any {
     return Report{ rules = picked.len(), findings = at(found, paths: sel.paths) };
 }
 
+// Firing is one line of firings.jsonl. hack/retro/rule-precision.buzz reads
+// the same shape. It keeps its own copy because a module imported from here
+// cannot name its siblings with ./ paths.
+export object Firing {
+    rule: str,
+    source: str,
+    path: str,
+    line: int,
+    fingerprint: str,
+    decision: str,
+    ts: int,
+    session: str,
+    commit: str,
+}
+
+// fingerprint names a finding by its rule, path and message, so a moved line
+// keeps its identity.
+export fun fingerprint(rule: str, path: str, text: str) > str {
+    return "lint/v1:" + crypto\sha256Hex("{rule}\n{path}\n{text}").sub(0, len: 16);
+}
+
+// stateFile is firings.jsonl under $XDG_STATE_HOME/magus. Never commit it.
+export fun stateFile() > str !> any {
+    final base = env\getOr("XDG_STATE_HOME", def: "");
+    final root = if (base != "") base else fs\join(env\home(), name: ".local/state");
+    return fs\join(root, name: "magus/firings.jsonl");
+}
+
+export fun firingLine(f: Firing) > str !> any {
+    return json\stringify({
+        "rule": f.rule, "source": f.source, "path": f.path, "line": f.line, "fingerprint": f.fingerprint,
+        "decision": f.decision, "ts": f.ts, "session": f.session, "commit": f.commit,
+    });
+}
+
+// firingsOf is the lines a recorded run appends: one per finding, and one
+// marked ran for each rule in ran that found nothing.
+export fun firingsOf(found: [Finding], ran: [str], at: Firing) > [Firing] {
+    final lines = mut [<Firing>];
+    final fired = mut {<str: bool>};
+    foreach (f in found) {
+        fired[f.rule] = true;
+        lines.append(Firing{
+            rule = f.rule, source = "lint", path = f.path, line = f.line,
+            fingerprint = fingerprint(rule: f.rule, path: f.path, text: f.message),
+            decision = "deny", ts = at.ts, session = at.session, commit = at.commit,
+        });
+    }
+    foreach (name in ran) {
+        if (fired[name] == null) {
+            lines.append(Firing{
+                rule = name, source = "lint", path = "", line = 0, fingerprint = "", decision = "ran",
+                ts = at.ts, session = at.session, commit = at.commit,
+            });
+        }
+    }
+    return lines;
+}
+
 export fun main(args: [str]) > void !> any {
     final names = mut [<str>];
     foreach (r in rules()) {
@@ -487,6 +563,18 @@ export fun main(args: [str]) > void !> any {
     final report = check(sel);
     foreach (f in report.findings) {
         std\print(render(f));
+    }
+    if (sel.record) {
+        final ran = if (sel.rule != null) [sel.rule!] else names;
+        final stamp = Firing{
+            rule = "", source = "lint", path = "", line = 0, fingerprint = "", decision = "",
+            ts = std\toInt(time\parse("2006-01-02T15:04:05Z07:00", value: time\nowIso())), session = sel.session, commit = vcs\commit().id,
+        };
+        final lines = firingsOf(report.findings, ran: ran, at: stamp).map(fun (index: int, f: Firing) > str !> any => firingLine(f));
+        final file = stateFile();
+        fs\mkdirAll(fs\dirname(file));
+        fs\appendFile(file, content: lines.join("\n") + "\n");
+        std\print("lint: recorded {lines.len()} line(s) to {file}");
     }
     if (report.findings.len() > 0) {
         std\print("lint: {report.findings.len()} finding(s)");
@@ -638,4 +726,31 @@ test "the walk skips what the VCS ignores and keeps what it does not" {
     assert\contains(got, item: "kept.lock", message: "untracked, not ignored");
     assert\contains(got, item: ".claude/skills/a/SKILL.md", message: "a file deep in a kept ignored tree");
     assert\equal(got.len(), want: 4, message: "ignored dir and file skipped");
+}
+
+test "--record and --session reach the selection, and a path with --record is refused" {
+    final sel = parse(["--record", "--session", "s9"], names: ["a"]);
+    assert\isTrue(sel.record, message: "record");
+    assert\equal(sel.session, want: "s9", message: "session");
+    assert\equal(parse([<str>], names: ["a"]).record, want: false, message: "off by default");
+    assert\equal(
+        refusal(["--record", "x.lock"]),
+        want: "lint: --record reads the whole tree; a path would record a rule as clean over files it skipped\n" + usage,
+        message: "a path narrows the run",
+    );
+    assert\equal(refusal(["--session", "s"]), want: "lint: --session tags a recorded run; pass --record\n" + usage, message: "session alone");
+}
+
+test "a recorded run keeps one line per finding and marks a quiet rule ran" {
+    final found = [Finding{ path = "a.md", line = 3, rule = "banned-words", message = "m", fix = "f" }];
+    final stamp = Firing{
+        rule = "", source = "lint", path = "", line = 0, fingerprint = "", decision = "", ts = 7, session = "s", commit = "c",
+    };
+    final got = firingsOf(found, ran: ["banned-words", "lockfiles-are-sorted"], at: stamp);
+    assert\equal(got.len(), want: 2, message: "a finding and a quiet rule");
+    assert\equal(got[0].decision, want: "deny", message: "the finding");
+    assert\equal(got[0].fingerprint, want: "lint/v1:ea581ab5bd37c1de", message: "fingerprint, pinned to rule-precision.buzz");
+    assert\equal(got[1].decision, want: "ran", message: "the quiet rule");
+    assert\equal(got[1].rule, want: "lockfiles-are-sorted", message: "its name");
+    assert\equal(got[1].commit, want: "c", message: "stamped");
 }

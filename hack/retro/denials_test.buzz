@@ -1,5 +1,6 @@
 import "assert";
 import "./denials" as retro;
+import "./trace" as trace;
 
 final EVENTS = "hack/retro/testdata/denials/events.jsonl";
 
@@ -34,6 +35,10 @@ final POLICY = [
     "}",
 ].join("\n");
 
+fun denied(start: int) > [trace\Record] !> any {
+    return trace\denied(trace\loadTrail(EVENTS, blobs: "hack/retro/testdata/denials/blobs", start: start, end: retro\FOREVER));
+}
+
 fun verdicts() > {str: str} {
     return {"grdstage1": STAGE, "grdstage2": STAGE, "grdpipe": PIPE};
 }
@@ -57,9 +62,9 @@ test "a stored verdict splits into say, why and each next command" {
 }
 
 test "the trail keeps denied lines and folds repeats of one rule and say" {
-    final hits = retro\trailHits(EVENTS, start: 0);
+    final hits = denied(0);
     assert\equal(hits.len(), want: 5, message: "five denied lines");
-    assert\equal(retro\trailHits(EVENTS, start: 1700000004500).len(), want: 2, message: "start bounds the read");
+    assert\equal(denied(1700000004500).len(), want: 2, message: "start bounds the read");
     final got = retro\fromTrail(hits, verdicts: verdicts(), file: "events.jsonl");
     assert\equal(got.denials.len(), want: 2, message: "stage-all folded, output-pipe");
     assert\equal(got.denials[0].count, want: 2, message: "two firings");
