@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+
+	"github.com/egladman/magus/libs/proofread/internal/wordclass"
 )
 
 const (
@@ -33,12 +35,15 @@ var triadTexts = map[Rule]ruleText{
 	RuleTriad: {
 		code:      "PRF4030",
 		dimension: DimensionEconomy,
-		catches: "a series of exactly three (\"X, Y, and Z\", three parallel short sentences, three parallel " +
-			"bullets) twice in a text, or once in the lead's first sentence",
+		catches: "a series of exactly three (\"X, Y, and Z\", three verb phrases such as \"reviewed the plan, " +
+			"rewrote the parser and shipped the fix\", three parallel short sentences, three parallel bullets) " +
+			"twice in a text, or once in the lead's first sentence",
 		why: "Wikipedia's \"Signs of AI writing\" lists the rule of three among the habits of generated prose, " +
 			"and MeasureShape already counts the series per 1000 words as a feature a voice profile can " +
 			"compare. One natural series is ordinary writing, so a single one mid-paragraph is left alone; a " +
-			"text with two, or a lead that opens on one, reads as a template. Code spans, paths, flags, " +
+			"text with two, or a lead that opens on one, reads as a template. A noun item runs to three " +
+			"words; a verb phrase runs to six, each item opening on a verb the tagger reads after a subject, " +
+			"with or without the Oxford comma. Code spans, paths, flags, " +
 			"ALL_CAPS names, numbers and a list the author numbered are not judged. No firing has been " +
 			"labeled, so it ships off.",
 	},
@@ -72,7 +77,14 @@ var (
 	numberedInline = regexp.MustCompile(`\(\d+\)|\b\d+\)\s`)
 	ordinalWord    = regexp.MustCompile(`(?i)\b(?:first|second|third|finally|lastly)\b`)
 	seriesSplit    = regexp.MustCompile(`,\s+and\s+|\s+and\s+|,\s+`)
+	// verbSeries matches three items of up to six words. The first may start
+	// before its verb, which [verbStart] finds.
+	verbSeries = regexp.MustCompile(`(?:^|[^\w'\x{2019}-]\s*)((` + verbItem + `),\s+(` + verbItem +
+		`),?\s+and\s+(` + verbItem + `))`)
+	wordSpan = regexp.MustCompile(`\S+`)
 )
+
+const verbItem = `[\w'\x{2019}-]+(?:\s+[\w'\x{2019}-]+){0,5}`
 
 // codeLike reports whether word names code rather than saying something: a
 // code span (masked to '#'), a path, a flag, an ALL_CAPS name, a dotted or
@@ -189,8 +201,8 @@ func triadLead(in input, paras []maskedParagraph) (at, end int) {
 }
 
 type seriesHit struct {
-	match string
-	at    int
+	match   string
+	at, end int
 }
 
 // paragraphSeries returns the series of exactly three in one paragraph, as
@@ -212,10 +224,84 @@ func paragraphSeries(p maskedParagraph) []seriesHit {
 			continue
 		}
 
-		out = append(out, seriesHit{match: p.text[from:to], at: from})
+		out = append(out, seriesHit{match: p.text[from:to], at: from, end: to})
 	}
 
+	for _, h := range verbPhraseSeries(p) {
+		if !slices.ContainsFunc(out, func(o seriesHit) bool { return o.at < h.end && h.at < o.end }) {
+			out = append(out, h)
+		}
+	}
+
+	slices.SortStableFunc(out, func(a, b seriesHit) int { return a.at - b.at })
+
 	return append(out, parallelSentences(p)...)
+}
+
+// verbPhraseSeries returns each series of exactly three verb phrases:
+// "reviewed the plan, rewrote the config parser, and shipped the fix". The
+// [series] pattern caps an item at three words, which a verb and its object
+// often pass.
+func verbPhraseSeries(p maskedParagraph) []seriesHit {
+	var out []seriesHit
+
+	for _, m := range verbSeries.FindAllStringSubmatchIndex(p.masked, -1) {
+		from, to := m[2], m[3]
+
+		first := verbStart(p.masked[from:m[5]])
+		if first < 0 {
+			continue
+		}
+
+		from += first
+
+		parts := []string{p.masked[from:m[5]], p.masked[m[6]:m[7]], p.masked[m[8]:m[9]]}
+		if partOfLonger(p.masked, from, to) || !plainParts(parts) || !opensWithVerb(parts[1]) ||
+			!opensWithVerb(parts[2]) {
+			continue
+		}
+
+		out = append(out, seriesHit{match: p.text[from:to], at: from, end: to})
+	}
+
+	return out
+}
+
+// verbStart returns the offset of item's first verb, past a subject or an
+// adverb ("then we reviewed the plan"), or -1 when it has none.
+func verbStart(item string) int {
+	if opensWithVerb(item) {
+		return 0
+	}
+
+	spans := wordSpan.FindAllStringIndex(item, -1)
+
+	words := make([]string, len(spans))
+	for i, s := range spans {
+		words[i] = item[s[0]:s[1]]
+	}
+
+	for i, t := range wordclass.Tag(words) {
+		if t.Class == wordclass.Verb {
+			return spans[i][0]
+		}
+	}
+
+	return -1
+}
+
+// opensWithVerb reports whether phrase opens with a verb once a subject leads
+// it. Alone, the tagger reads "Ran the build" as a name.
+func opensWithVerb(phrase string) bool {
+	words := wordclass.Split(phrase)
+	if len(words) == 0 {
+		return false
+	}
+
+	words[0] = strings.ToLower(words[0])
+	tags := wordclass.Tag(append([]string{"it"}, words...))
+
+	return tags[1].Class == wordclass.Verb
 }
 
 // partOfLonger reports whether the series at text[from:to] is a piece of a

@@ -1,0 +1,186 @@
+Invented lists from release notes, changelogs and project READMEs, labeled by hand; no labeling round has read them.
+A list where one opening word starts most items. Each case is a whole list. The hits run from 4 of 5 to 9 of 12;
+the passes hold short lists, numbered steps, article openers and lists where the top word starts 3 of 5 or 4 of 6.
+-- hit/changelog whole --
+- Wrote the release script.
+- Wrote tests for the parser.
+- Cut the build time in half.
+- Wrote the migration guide.
+- Wrote a benchmark for the cache.
+- Rewrote the config loader.
+- Wrote docs for every flag.
+- Wrote the upgrade notes.
+- Built a new parser.
+- Wrote the changelog generator.
+- Wrote examples for the plugin API.
+- Wrote the security policy.
+-- hit/changelog whole --
+- Added a flag for the cache directory.
+- Added support for YAML config.
+- Added a progress bar to downloads.
+- Added the `--quiet` option.
+- Fixed a crash on empty input.
+- Added shell completions.
+-- hit/reference whole --
+- Supports Linux, macOS and Windows.
+- Supports plugins written in Go.
+- Supports remote caching.
+- Ships as a single binary.
+- Supports offline mode.
+- Supports config in YAML or TOML.
+-- hit/changelog whole --
+- Improved startup time.
+- Improved error messages for bad config.
+- Improved the docs for the plugin API.
+- Removed the old cache format.
+- Improved Windows path handling.
+- Improved memory use on large repos.
+- Improved the progress output.
+- Improved test coverage.
+-- hit/changelog whole --
+- Updated the README.
+- Updated dependencies.
+- Updated the contributing guide.
+- Updated the license year.
+- Dropped Python 3.8.
+-- hit/changelog whole --
+- Fix a crash when the config file is empty.
+- Fix the progress bar on narrow terminals.
+- Fix a race in the download queue.
+- Fix the exit code on failure.
+- Fix Windows path handling.
+- Document the cache flags.
+- Fix a leak in the watcher.
+-- hit/change-description whole --
+- Reworked the cache layer.
+- Reworked the plugin loader.
+- Reworked error handling.
+- Added a retry to downloads.
+- Reworked the config parser.
+- Reworked logging.
+-- hit/reference whole --
+- **Fast:** Uses a parallel scheduler.
+- **Small:** Uses one binary with no runtime.
+- **Portable:** Uses only the standard library.
+- **Safe:** Uses a sandbox for every task.
+- **Simple:** Ships with sane defaults.
+-- hit/changelog whole --
+- Bumped the minimum Go version to 1.22.
+- Bumped the YAML library.
+- Bumped the CI runner image.
+- Bumped the lint config.
+- Bumped the docs theme.
+- Bumped the test fixtures.
+- Removed the deprecated flag.
+- Bumped the release action.
+-- hit/guide whole --
+- Make sure Go is installed.
+- Make sure the cache directory exists.
+- Make sure the config file is valid.
+- Make sure you are on the main branch.
+- Run the build.
+-- hit/changelog whole --
+- Now caches remote results.
+- Now prints a summary at the end.
+- Now reads config from the environment.
+- Now exits 2 on a usage error.
+- Accepts a list of paths.
+- Now warns on an unknown key.
+-- hit/change-description whole --
+- Moved the parser into its own package.
+- Moved the cache tests.
+- Moved the CLI flags into one file.
+- Moved docs under the guides folder.
+- Moved the fixtures.
+-- pass/changelog whole --
+- Run the build.
+- Run the tests.
+- Run the linter.
+-- pass/changelog whole --
+- Added a flag for the cache directory.
+- Added support for YAML config.
+- Added shell completions.
+- Fixed a crash on empty input.
+-- pass/changelog whole --
+- Added a flag for the cache directory.
+- Fixed a crash on empty input.
+- Added support for YAML config.
+- Removed the old cache format.
+- Added shell completions.
+-- pass/changelog whole --
+- Added a progress bar to downloads.
+- Fixed the exit code on failure.
+- Added the `--quiet` option.
+- Removed Python 3.8 support.
+- Added shell completions.
+- Improved startup time.
+-- pass/changelog whole --
+- Added a flag for the cache directory.
+- Added support for YAML config.
+- Fixed a crash on empty input.
+- Added shell completions.
+- Removed the old cache format.
+- Added a progress bar to downloads.
+-- pass/reference whole --
+- The cache lives in the user's cache directory.
+- The config file is read once at start.
+- The plugin API is stable across minor releases.
+- The binary has no runtime dependencies.
+- The test suite runs offline.
+-- pass/reference whole --
+- A scheduler that runs tasks in parallel.
+- A cache keyed on every input.
+- A plugin API for new languages.
+- A sandbox for every task.
+- A single binary for every platform.
+-- pass/guide whole --
+1. Install Go 1.22 or later.
+2. Install the CLI with `go install`.
+3. Run `tool init` in your project.
+4. Run `tool build`.
+5. Run `tool test`.
+6. Run `tool release`.
+-- pass/reference whole --
+- Parallel builds on every core.
+- Remote caching over HTTP.
+- Plugins written in Go.
+- Shell completions for bash, zsh and fish.
+- Offline mode for planes and trains.
+-- pass/changelog whole --
+- Faster startup on large repos.
+- Clearer errors for bad config.
+- Fewer network calls during a build.
+- Smaller release binaries.
+- Shell completions for fish.
+-- pass/changelog whole --
+- Fixed a crash on empty input.
+- Fixed the exit code on failure.
+- Fixed Windows path handling.
+- Added shell completions.
+- Removed the old cache format.
+- Improved startup time.
+-- pass/reference whole --
+- Linux
+- macOS
+- Windows
+- FreeBSD
+- OpenBSD
+-- pass/changelog whole --
+- `--quiet` silences progress.
+- `--jobs` sets the worker count.
+- `--cache` picks the cache directory.
+- `--offline` skips the network.
+- `--color` forces color output.
+-- pass/change-description whole --
+- Rewrote the config parser.
+- Built a new cache layer.
+- Cut the build time in half.
+- Wrote the migration guide.
+- Ran the full test suite on Windows.
+- Led the review of the plugin API.
+-- pass/guide whole --
+- Use `tool init` to start a project.
+- Run `tool build` to compile it.
+- Use `tool test` for the tests.
+- Read the logs under `.tool/logs`.
+- Ask in the forum when stuck.
