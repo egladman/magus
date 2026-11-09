@@ -27,6 +27,7 @@ type Builders struct {
 	SymbolIndexTimes       func(ctx context.Context, ws types.Inspector, root string, cfg config.Config) (map[string]time.Time, bool)
 	SymbolOccurrences      func(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger, key string) (SymbolOccurrenceRead, bool)
 	RecordedTargetPolicies func(ctx context.Context, ws types.Inspector, cfg config.Config) (types.TargetPolicyIndex, bool)
+	RecordTargetPolicies   func(ctx context.Context, ws types.Inspector, cfg config.Config) error
 	RecordedStaleIndexes   func(ctx context.Context, ws types.Inspector, cfg config.Config) ([]types.KnowledgeStaleIndex, bool)
 	UsePublishedShards     func(ws types.Inspector, r knowledge.RemoteShards)
 	ReaderContext          func(ctx context.Context, ws types.Inspector, root string) ([]string, error)
@@ -110,6 +111,13 @@ func SymbolOccurrences(ctx context.Context, ws types.Inspector, root string, cfg
 // ws that is no lazy workspace. It never opens ws and writes nothing.
 func RecordedTargetPolicies(ctx context.Context, ws types.Inspector, cfg config.Config) (types.TargetPolicyIndex, bool) {
 	return linked().RecordedTargetPolicies(ctx, ws, cfg)
+}
+
+// RecordTargetPolicies records what ws declares as target policy, so a later
+// RecordedTargetPolicies answers without an open while the tree holds still.
+// It opens ws if it is not open, and fails for a ws that is no lazy workspace.
+func RecordTargetPolicies(ctx context.Context, ws types.Inspector, cfg config.Config) error {
+	return linked().RecordTargetPolicies(ctx, ws, cfg)
 }
 
 // RecordedStaleIndexes answers, for a lazy workspace that has not been opened, which

@@ -37,7 +37,13 @@ func declaredPolicies(ctx context.Context, deps Dependencies, root string, works
 	if err != nil {
 		return types.TargetPolicyIndex{}, policyUnreadNote, false
 	}
-	return types.IndexTargetPolicies(ws), policyOpenedNote, true
+	note = policyOpenedNote
+	if deps.RecordTargetPolicies != nil {
+		if err := deps.RecordTargetPolicies(ctx, root, ws); err != nil {
+			note += " It could not be recorded for the next judgment: " + err.Error() + "."
+		}
+	}
+	return types.IndexTargetPolicies(ws), note, true
 }
 
 // declaredIndex is declaredPolicies' answer, kept on a location so a judgment reads it once.

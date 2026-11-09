@@ -95,6 +95,48 @@ func TestRecordedHumanOnlyAnswersOnlyWhileTheSourcesHold(t *testing.T) {
 	assert.Zero(t, opens, "RecordedTargetPolicies never opens; the caller decides")
 }
 
+// TestAnOpenRecordsWhatNoSyncDid drives the guard's record: a workspace no
+// sync reached answers after one open records it, until its sources move.
+func TestAnOpenRecordsWhatNoSyncDid(t *testing.T) {
+	t.Setenv("MAGUS_VCS_ENABLED", "false")
+	ctx := context.Background()
+	w := testkit.NewWorkspace(t)
+	w.Magusfile(humanOnlyMagusfile)
+	root := w.Root()
+	cfg := config.Config{}
+	opens := 0
+
+	_, ok := workspacegraph.RecordedTargetPolicies(ctx, unopenable(root, &opens), cfg)
+	require.False(t, ok, "no sync and no open has recorded anything")
+
+	opened := NewLazyWorkspace(root, func(ctx context.Context) (*Magus, error) {
+		ws, err := Inspect(ctx, root, WithSpawnRule(TierCeiling))
+		if err != nil {
+			return nil, err
+		}
+		m, ok := ws.(*Magus)
+		require.True(t, ok, "Inspect opens a *Magus")
+		return m, nil
+	})
+	require.NoError(t, workspacegraph.RecordTargetPolicies(ctx, opened, cfg))
+
+	got, ok := workspacegraph.RecordedTargetPolicies(ctx, unopenable(root, &opens), cfg)
+	require.True(t, ok, "the open's record answers while nothing has moved")
+	assert.Equal(t, []string{"."}, got.Projects)
+	assert.Equal(t, []types.TargetPolicy{{
+		TargetRef: types.TargetRef{Project: ".", Target: "bench"},
+		HumanOnly: true,
+		Reason:    "launches paid sessions",
+		SkipCache: true,
+		ReachedBy: []types.TargetRef{{Project: ".", Target: "suite"}},
+	}}, got.Targets)
+
+	w.Magusfile(humanOnlyMagusfile + "\nexport fun extra(ctx: magus\\Context, args: [str]) > void {}\n")
+	_, ok = workspacegraph.RecordedTargetPolicies(ctx, unopenable(root, &opens), cfg)
+	assert.False(t, ok, "an edited magusfile moves the stamp the record was written under")
+	assert.Zero(t, opens)
+}
+
 // TestRecordedHumanOnlyIgnoresAManifestThatNeverRecordedIt pins the upgrade case: a store a
 // binary from before the record wrote matches on its stamps but vouches for nothing.
 func TestRecordedHumanOnlyIgnoresAManifestThatNeverRecordedIt(t *testing.T) {
