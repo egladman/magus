@@ -14,9 +14,10 @@ import "serialize";
 import "encoding/url" as urlcodec;
 import "template";
 import "assert";
+import "html" as htmlcodec;
 import "../libs/ssg/text" as _;
 import "../libs/ssg/urls" as _;
-import "../libs/ssg/html" as _;
+import "../libs/ssg/rewrite" as _;
 import "lib/glossary" as _;
 import "lib/conventions" as _;
 import "engine/meta" as _;
@@ -287,12 +288,12 @@ fun renderGeneratedChips(generatedFrom: str, root: str, site: Site) > str {
         + "\">generated</span>";
     if (generatedFrom.endsWith("/")) {
         return status + "<a class=\"tag\" href=\"" + root + generatedFrom + "\">"
-            + escapeAttr(generatedFrom) + "</a>";
+            + htmlcodec\escape(generatedFrom) + "</a>";
     }
     final first = generatedFrom.split(", ")[0];
     return status + "<a class=\"tag\" href=\"" + repoBlobHref(site, first) + "\" data-tooltip=\""
-        + escapeAttr(generatedFrom) + "\" title=\"" + escapeAttr(generatedFrom) + "\">"
-        + escapeAttr(first) + "</a>";
+        + htmlcodec\escape(generatedFrom) + "\" title=\"" + htmlcodec\escape(generatedFrom) + "\">"
+        + htmlcodec\escape(first) + "</a>";
 }
 
 export fun renderPage(title: str, description: str, content: str, srcRel: str, pager: str, canonUrl: str, reading: str, tags: [str], generatedFrom: str, site: Site) > str !> any {
@@ -363,10 +364,10 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
             // to stay querystring-safe.
             final slug = tagSlug(t);
             if (site.tagPages[slug] != null) {
-                chips.append("<a class=\"tag\" href=\"" + root + "tags/" + slug + "/\">" + escapeAttr(t) + "</a>");
+                chips.append("<a class=\"tag\" href=\"" + root + "tags/" + slug + "/\">" + htmlcodec\escape(t) + "</a>");
             } else {
                 final tagQuery = urlcodec\encode("tag:\"" + t + "\"");
-                chips.append("<a class=\"tag\" href=\"" + root + "search/?q=" + tagQuery + "\">" + escapeAttr(t) + "</a>");
+                chips.append("<a class=\"tag\" href=\"" + root + "search/?q=" + tagQuery + "\">" + htmlcodec\escape(t) + "</a>");
             }
         }
         tagsHtml = "    <div class=\"post-tags\" aria-label=\"Tags\">" + chips.join("") + "</div>\n";

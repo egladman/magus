@@ -12,6 +12,7 @@ import "magus/spell";
 // charm constructors derive argv patches from an anchor arg, not a counted index.
 import "magus/charm";
 import "encoding/yaml";
+import "path";
 
 export fun mgs_getName() > str { return "buf"; }
 
@@ -108,50 +109,6 @@ object BufClaim {
     gaps: mut [DiscoveryGap],
 }
 
-fun dirOf(p: str) > str {
-    final parts = p.split("/");
-    if (parts.len() < 2) {
-        return ".";
-    }
-    return parts.sub(0, len: parts.len() - 1).join("/");
-}
-
-fun baseOf(p: str) > str {
-    final parts = p.split("/");
-    return parts[parts.len() - 1];
-}
-
-// Null when rel climbs out of the workspace root.
-fun joinClean(base: str, rel: str) > str? {
-    final parts = mut [<str>];
-    if (base != ".") {
-        foreach (part in base.split("/")) {
-            parts.append(part);
-        }
-    }
-    foreach (part in rel.split("/")) {
-        if (part == "" or part == ".") {
-            continue;
-        }
-        if (part == "..") {
-            if (parts.len() == 0) {
-                return null;
-            }
-            parts.pop();
-            continue;
-        }
-        parts.append(part);
-    }
-    if (parts.len() == 0) {
-        return ".";
-    }
-    return parts.join("/");
-}
-
-fun isUnder(p: str, dir: str) > bool {
-    return dir == "." or p == dir or p.startsWith(dir + "/");
-}
-
 fun parseMarker(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > {str: any}? {
     if (file.content -> text) {
         try {
@@ -168,9 +125,9 @@ fun parseMarker(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > {str: any}? {
 // The module directories a buf.work.yaml `directories` or a v2 buf.yaml `modules[].path`
 // lists, relative to the workspace root. An entry that leaves the root is a gap.
 fun listModules(file: DiscoveryFile, doc: {str: any}, gaps: mut [DiscoveryGap]) > [str] {
-    final dir = dirOf(file.path);
+    final dir = path\dir(file.path);
     final listed = mut [<str>];
-    if (baseOf(file.path) == "buf.work.yaml") {
+    if (path\base(file.path) == "buf.work.yaml") {
         foreach (entry in (doc["directories"] as? [any]) ?? []) {
             if (entry as? str -> rel) {
                 listed.append(rel);
@@ -188,7 +145,8 @@ fun listModules(file: DiscoveryFile, doc: {str: any}, gaps: mut [DiscoveryGap]) 
     }
     final modules = mut [<str>];
     foreach (rel in listed) {
-        if (joinClean(dir, rel: rel) -> module) {
+        final module = path\join([dir, rel]);
+        if (module != ".." and !module.startsWith("../")) {
             modules.append(module);
         } else {
             gaps.append(DiscoveryGap{file = file.path, why = "module {rel} leaves the workspace root, so buf-build and buf-lint never reach it"});
@@ -201,7 +159,7 @@ fun listModules(file: DiscoveryFile, doc: {str: any}, gaps: mut [DiscoveryGap]) 
 fun ownerOf(claims: {str: mut BufClaim}, p: str) > mut BufClaim? {
     var best: mut BufClaim? = null;
     foreach (dir, claim in claims) {
-        if (claim.role == DiscoveryRole.project and isUnder(p, dir: dir)) {
+        if (claim.role == DiscoveryRole.project and path\within(dir, path: p)) {
             if (best == null or dir.len() > best!.path.len()) {
                 best = claim;
             }
@@ -236,7 +194,7 @@ fun rootAt(claims: mut {str: mut BufClaim}, dir: str, marker: str) > mut BufClai
 fun claimWorkspaces(claims: mut {str: mut BufClaim}, files: [DiscoveryFile]) > [DiscoveryFile] {
     final looseModules = mut [<DiscoveryFile>];
     foreach (file in files) {
-        final base = baseOf(file.path);
+        final base = path\base(file.path);
         if (base != "buf.work.yaml" and base != "buf.yaml") {
             continue;
         }
@@ -247,7 +205,7 @@ fun claimWorkspaces(claims: mut {str: mut BufClaim}, files: [DiscoveryFile]) > [
             looseModules.append(file);
             continue;
         }
-        final claim = rootAt(claims, dir: dirOf(file.path), marker: file.path);
+        final claim = rootAt(claims, dir: path\dir(file.path), marker: file.path);
         foreach (gap in gaps) {
             claim.gaps.append(gap);
         }
@@ -266,7 +224,7 @@ fun claimWorkspaces(claims: mut {str: mut BufClaim}, files: [DiscoveryFile]) > [
 // claimLooseModules roots a project at each v1 buf.yaml no workspace lists.
 fun claimLooseModules(claims: mut {str: mut BufClaim}, files: [DiscoveryFile]) > void {
     foreach (file in files) {
-        final dir = dirOf(file.path);
+        final dir = path\dir(file.path);
         var listed = false;
         foreach (_, claim in claims) {
             if (claim.modules.indexOf(dir) != null) {
@@ -292,13 +250,13 @@ fun strayProtos(roots: {str: mut BufClaim}, files: [DiscoveryFile]) > StrayProto
     final stray = StrayProtos{count = mut {<str: int>}, first = mut {<str: str>}};
     foreach (file in files) {
         final p = file.path;
-        if (!baseOf(p).endsWith(".proto")) {
+        if (!path\base(p).endsWith(".proto")) {
             continue;
         }
         if (ownerOf(roots, p: p) -> owner) {
             var inModule = false;
             foreach (module in owner.modules) {
-                if (isUnder(p, dir: module)) {
+                if (path\within(module, path: p)) {
                     inModule = true;
                 }
             }
@@ -307,7 +265,7 @@ fun strayProtos(roots: {str: mut BufClaim}, files: [DiscoveryFile]) > StrayProto
             }
             continue;
         }
-        final dir = dirOf(p);
+        final dir = path\dir(p);
         stray.count[dir] = (stray.count[dir] ?? 0) + 1;
         if (stray.first[dir] == null) {
             stray.first[dir] = p;
@@ -326,7 +284,7 @@ fun claimStrays(claims: mut {str: mut BufClaim}, stray: StrayProtos) > void {
     foreach (dir in dirs) {
         var outer: str? = null;
         foreach (k in kept) {
-            if (isUnder(dir, dir: k)) {
+            if (path\within(k, path: dir)) {
                 outer = k;
             }
         }
@@ -349,7 +307,7 @@ fun claimStrays(claims: mut {str: mut BufClaim}, stray: StrayProtos) > void {
 // can declare the plugin outputs it writes.
 fun claimGenerate(claims: mut {str: mut BufClaim}, roots: {str: mut BufClaim}, files: [DiscoveryFile]) > void {
     foreach (file in files) {
-        if (baseOf(file.path) != "buf.gen.yaml") {
+        if (path\base(file.path) != "buf.gen.yaml") {
             continue;
         }
         final outs = mut [<str>];
@@ -366,7 +324,7 @@ fun claimGenerate(claims: mut {str: mut BufClaim}, roots: {str: mut BufClaim}, f
             file = file.path,
             why = "buf-generate is not wired into generate: it writes each plugin's out: ({where}), which only the target running it can declare with ctx.writesFiles",
         });
-        final claim = ownerOf(roots, p: file.path) ?? memberAt(claims, dir: dirOf(file.path));
+        final claim = ownerOf(roots, p: file.path) ?? memberAt(claims, dir: path\dir(file.path));
         foreach (gap in gaps) {
             claim.gaps.append(gap);
         }

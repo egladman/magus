@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
 )
 
@@ -70,10 +71,10 @@ func broadClaimProblems(ctx context.Context, root string, row types.Job, ws Work
 		}
 		var over []string
 		if len(projects) > maxProjects {
-			over = append(over, fmt.Sprintf("more than %s", plural(maxProjects, "project")))
+			over = append(over, fmt.Sprintf("more than %s", plural.Count(maxProjects, "project", "projects")))
 		}
 		if len(files) > maxFiles {
-			over = append(over, fmt.Sprintf("more than %s", plural(maxFiles, "file")))
+			over = append(over, fmt.Sprintf("more than %s", plural.Count(maxFiles, "file", "files")))
 		}
 		if strings.HasPrefix(path.Clean(file), "**") {
 			over = append(over, "a leading `**`, which reaches every directory of the workspace")
@@ -89,7 +90,7 @@ func broadClaimProblems(ctx context.Context, root string, row types.Job, ws Work
 			Field:   fmt.Sprintf("write_paths[%d]", i),
 			Subject: wp,
 			Message: fmt.Sprintf("write path %q matches %s in %s: %s",
-				wp, plural(len(files), "file"), plural(len(projects), "project"), strings.Join(over, ", ")),
+				wp, plural.Count(len(files), "file", "files"), plural.Count(len(projects), "project", "projects"), strings.Join(over, ", ")),
 			Fix: fix(wp),
 		})
 	}
@@ -215,11 +216,4 @@ func projectLocator(root string, ws Workspace) func(string) string {
 		byDir[dir] = p
 		return p
 	}
-}
-
-func plural(n int, noun string) string {
-	if n == 1 {
-		return fmt.Sprintf("1 %s", noun)
-	}
-	return fmt.Sprintf("%d %ss", n, noun)
 }

@@ -416,40 +416,6 @@ final UNWIRED_TEST_RUNNERS = ["jest", "mocha", "ava", "jasmine", "@playwright/te
 final BUNDLER_CONFIG_PREFIXES = ["vite.config.", "webpack.config.", "rollup.config.", "rspack.config.",
                                  "tsup.config.", "esbuild.config."];
 
-fun dirOf(file: str) > str {
-    final parts = file.split("/");
-    if (parts.len() == 1) {
-        return ".";
-    }
-    return parts.sub(0, len: parts.len() - 1).join("/");
-}
-
-fun baseOf(file: str) > str {
-    final parts = file.split("/");
-    return parts[parts.len() - 1];
-}
-
-fun isUnder(dir: str, file: str) > bool {
-    return dir == "." or file == dir or file.startsWith(dir + "/");
-}
-
-fun relativeTo(dir: str, file: str) > str {
-    if (dir == ".") {
-        return file;
-    }
-    if (file == dir) {
-        return ".";
-    }
-    return file.sub(dir.len() + 1);
-}
-
-fun joinPath(dir: str, rel: str) > str {
-    if (dir == ".") {
-        return path\clean(rel);
-    }
-    return path\clean("{dir}/{rel}");
-}
-
 fun asMap(value: any) > {str: any} {
     if (value is {str: any}) {
         final m: {str: any} = value;
@@ -493,7 +459,7 @@ fun parsePackage(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > result\Result:
         final manifest = asMap(parsed);
         final name = manifest["name"];
         return result\ok::<NodePackage>(NodePackage{
-            dir = dirOf(file.path),
+            dir = path\dir(file.path),
             file = file.path,
             manifest = manifest,
             name = if (name is str) "{name}" else "",
@@ -535,7 +501,7 @@ fun parsePnpmWorkspace(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > result\R
         final parsed: any = yaml\parse(content) catch null;
         if (parsed == null) {
             // An empty file, or one holding only settings: a workspace of the root alone.
-            return result\ok::<NodeWorkspace?>(NodeWorkspace{root = dirOf(file.path), file = file.path, patterns = [<str>], pnpm = true});
+            return result\ok::<NodeWorkspace?>(NodeWorkspace{root = path\dir(file.path), file = file.path, patterns = [<str>], pnpm = true});
         }
         if (!(parsed is {str: any})) {
             gaps.append(gap(file.path, why: "not a YAML mapping, so no member was read"));
@@ -543,10 +509,10 @@ fun parsePnpmWorkspace(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > result\R
         }
         final declared = asMap(parsed)["packages"];
         if (declared == null) {
-            return result\ok::<NodeWorkspace?>(NodeWorkspace{root = dirOf(file.path), file = file.path, patterns = [<str>], pnpm = true});
+            return result\ok::<NodeWorkspace?>(NodeWorkspace{root = path\dir(file.path), file = file.path, patterns = [<str>], pnpm = true});
         }
         if (asStrings(declared) -> patterns) {
-            return result\ok::<NodeWorkspace?>(NodeWorkspace{root = dirOf(file.path), file = file.path, patterns = patterns, pnpm = true});
+            return result\ok::<NodeWorkspace?>(NodeWorkspace{root = path\dir(file.path), file = file.path, patterns = patterns, pnpm = true});
         }
         gaps.append(gap(file.path, why: "packages: not a list of globs, so no member was read"));
         return result\ok::<NodeWorkspace?>(null);
@@ -555,12 +521,12 @@ fun parsePnpmWorkspace(file: DiscoveryFile, gaps: mut [DiscoveryGap]) > result\R
 }
 
 fun isMember(ws: NodeWorkspace, dir: str) > result\Result::<bool> {
-    if (dir == ws.root or !isUnder(ws.root, file: dir)) {
+    if (dir == ws.root or !path\within(ws.root, path: dir)) {
         return result\ok::<bool>(false);
     }
-    final rel = relativeTo(ws.root, file: dir);
     var included = false;
     try {
+        final rel = path\rel(ws.root, target: dir);
         foreach (raw in ws.patterns) {
             if (raw.startsWith("!")) {
                 if (path\matches(normalizePattern(raw.sub(1)), path: rel)) {
@@ -647,7 +613,7 @@ fun dependsOn(pkg: NodePackage, ws: NodeWorkspace?, packages: [NodePackage], gap
                 }
             } else if (range.startsWith("file:") or range.startsWith("link:")) {
                 final target = range.sub(range.indexOf(":")! + 1);
-                linked = packageAt(joinPath(pkg.dir, rel: target), packages: packages);
+                linked = packageAt(path\join([pkg.dir, target]), packages: packages);
                 if (linked == null) {
                     gaps.append(gap(pkg.file, why: "{field}.{name}: {range} is no discovered package, so no dependency was drawn"));
                 }
@@ -681,7 +647,7 @@ fun hasDependency(pkg: NodePackage, name: str) > bool {
 fun ownerOf(file: str, packages: [NodePackage]) > str? {
     var best: str? = null;
     foreach (pkg in packages) {
-        if (isUnder(pkg.dir, file: file) and (best == null or pkg.dir.len() > best!.len())) {
+        if (path\within(pkg.dir, path: file) and (best == null or pkg.dir.len() > best!.len())) {
             best = pkg.dir;
         }
     }
@@ -713,21 +679,21 @@ fun lintFormatTargets(pkg: NodePackage, targets: mut {str: [str]}) > void {
 // buildTarget wires tsc-build when pkg holds tsconfig.json, with a gap for each tsconfig
 // variant or bundler config no op runs.
 fun buildTarget(pkg: NodePackage, owned: [str], targets: mut {str: [str]}, gaps: mut [DiscoveryGap]) > void {
-    if (owned.indexOf(joinPath(pkg.dir, rel: "tsconfig.json")) != null) {
+    if (owned.indexOf(path\join([pkg.dir, "tsconfig.json"])) != null) {
         targets["build"] = ["tsc-build"];
     } else {
         foreach (file in owned) {
-            if (dirOf(file) == pkg.dir and baseOf(file).startsWith("tsconfig")) {
+            if (path\dir(file) == pkg.dir and path\base(file).startsWith("tsconfig")) {
                 gaps.append(gap(file, why: "tsc --build reads tsconfig.json, which this package lacks, so no build was wired"));
             }
         }
     }
     foreach (file in owned) {
-        if (dirOf(file) != pkg.dir) {
+        if (path\dir(file) != pkg.dir) {
             continue;
         }
         foreach (prefix in BUNDLER_CONFIG_PREFIXES) {
-            if (baseOf(file).startsWith(prefix)) {
+            if (path\base(file).startsWith(prefix)) {
                 gaps.append(gap(file, why: "bundler config: no op runs it, so build does not cover what it emits"));
             }
         }
@@ -754,7 +720,7 @@ fun testTarget(pkg: NodePackage, owned: [str], targets: mut {str: [str]}, gaps: 
     var tsTests: str? = null;
     try {
         foreach (file in owned) {
-            final rel = relativeTo(pkg.dir, file: file);
+            final rel = path\rel(pkg.dir, target: file);
             if (path\matchesAny(NODE_TEST_PATTERNS, path: rel)) {
                 nodeTests = true;
             } else if (tsTests == null and path\matchesAny(TS_TEST_PATTERNS, path: rel)) {
@@ -798,7 +764,7 @@ fun nodeScan(req: DiscoveryQuery) > result\Result::<NodeScan> {
     final scan = NodeScan{packages = mut [], gapsByFile = mut {}, workspaces = mut [], workspaceGaps = mut []};
     final pnpmRoots = mut {<str: bool>};
     foreach (file in req.files) {
-        if (baseOf(file.path) == "pnpm-workspace.yaml") {
+        if (path\base(file.path) == "pnpm-workspace.yaml") {
             final parsed = parsePnpmWorkspace(file, gaps: scan.workspaceGaps);
             if (parsed.error -> err) {
                 return result\Result::<NodeScan>{ error = err };
@@ -810,7 +776,7 @@ fun nodeScan(req: DiscoveryQuery) > result\Result::<NodeScan> {
         }
     }
     foreach (file in req.files) {
-        if (baseOf(file.path) != "package.json") {
+        if (path\base(file.path) != "package.json") {
             continue;
         }
         final gaps = mut [<DiscoveryGap>];
@@ -842,8 +808,8 @@ fun unmatchedGlobs(scan: NodeScan) > result\Result::<bool> {
                 }
                 var matched = false;
                 foreach (pkg in scan.packages) {
-                    if (pkg.dir != ws.root and isUnder(ws.root, file: pkg.dir)
-                        and path\matches(normalizePattern(raw), path: relativeTo(ws.root, file: pkg.dir))) {
+                    if (pkg.dir != ws.root and path\within(ws.root, path: pkg.dir)
+                        and path\matches(normalizePattern(raw), path: path\rel(ws.root, target: pkg.dir))) {
                         matched = true;
                     }
                 }
@@ -881,7 +847,7 @@ fun nodeClaim(pkg: NodePackage, scan: NodeScan, owned: [str]) > result\Result::<
         gaps.append(gap(pkg.file, why: "no tsconfig.json, test runner, linter or formatter found, so no target was wired"));
     }
     foreach (wsGap in scan.workspaceGaps) {
-        if (dirOf(wsGap.file) == pkg.dir) {
+        if (path\dir(wsGap.file) == pkg.dir) {
             gaps.append(wsGap);
         }
     }

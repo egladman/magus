@@ -8,6 +8,7 @@ import "os";
 import "crypto";
 import "serialize";
 import "engine/types" as _;
+import "html" as htmlcodec;
 import "../libs/ssg/text" as _;
 import "../libs/ssg/csp" as _;
 import "engine/route" as _;
@@ -39,7 +40,7 @@ export fun writeManifest(site: Site) > void !> any {
         + "  \"short_name\": \"" + site.inputs.config.title + "\",\n"
         + "  \"id\": \"" + basePath + "\",\n"
         + "  \"lang\": \"en\",\n"
-        + "  \"description\": \"" + escapeAttr(site.inputs.config.description) + "\",\n"
+        + "  \"description\": \"" + htmlcodec\escape(site.inputs.config.description) + "\",\n"
         + "  \"start_url\": \"" + basePath + "\",\n"
         + "  \"scope\": \"" + basePath + "\",\n"
         + "  \"display\": \"standalone\",\n"

@@ -7,9 +7,10 @@
 namespace conventions;
 
 import "assert";
-import "../libs/ssg/text" as _;       // escapeAttr, splitPath
+import "html" as htmlcodec;
+import "../libs/ssg/text" as _;
 import "lib/glossary" as _;   // glossarySlug, for the goldmark anchors
-import "../libs/ssg/html" as _;       // resolvePath, to resolve a relative link against its file's dir
+import "../libs/ssg/rewrite" as _;       // resolvePath, to resolve a relative link against its file's dir
 import "lib/adr" as _;        // adrProblems, the ADR template
 import "lib/design" as _;     // designProblems, the design page template
 import "lib/dictionary" as dictionary;   // termProblems, the glossary term page template
@@ -75,8 +76,8 @@ fun conventionHint(conventions: [Convention], anchor: str, relToConventions: str
     foreach (c in conventions) {
         if (c.anchor == anchor) {
             return "<a class=\"convention-hint\" href=\"" + relToConventions + "#" + anchor
-                + "\" data-kind=\"convention\" data-def=\"" + escapeAttr(c.def)
-                + "\" aria-label=\"What is this? " + escapeAttr(c.title) + "\">" + helpCircleSvg + "</a>";
+                + "\" data-kind=\"convention\" data-def=\"" + htmlcodec\escape(c.def)
+                + "\" aria-label=\"What is this? " + htmlcodec\escape(c.title) + "\">" + helpCircleSvg + "</a>";
         }
     }
     return "";

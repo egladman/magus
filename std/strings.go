@@ -7,6 +7,8 @@ import (
 	"unicode"
 
 	"github.com/samber/lo"
+
+	"github.com/egladman/magus/libs/text/plural"
 )
 
 // Strings is the "strings" host module: the string operations Buzz's builtins
@@ -166,6 +168,20 @@ var Strings = Module{
 			Returns: []Ret{{}},
 			Impl:    StringsCollapseWs,
 		},
+			{
+				Name:    "plural",
+				Doc:     "Return one when n is 1, else many; zero is plural. The caller spells both forms, so no rule derives \"es\" or \"ies\".",
+				Args:    []Arg{{Name: "n"}, {Name: "one"}, {Name: "many"}},
+				Returns: []Ret{{}},
+				Impl:    StringsPlural,
+			},
+			{
+				Name:    "plural_count",
+				Doc:     "Return n and the matching form of one or many, as \"1 target\" or \"3 targets\".",
+				Args:    []Arg{{Name: "n"}, {Name: "one"}, {Name: "many"}},
+				Returns: []Ret{{}},
+				Impl:    StringsPluralCount,
+			},
 	},
 }
 
@@ -302,4 +318,14 @@ func StringsSplitN(_ context.Context, s, sep string, n int) ([]string, error) {
 // StringsCollapseWs folds every run of whitespace into a single space and trims.
 func StringsCollapseWs(_ context.Context, s string) (string, error) {
 	return strings.Join(strings.Fields(s), " "), nil
+}
+
+// StringsPlural returns one when n is 1, else many.
+func StringsPlural(_ context.Context, n int, one, many string) (string, error) {
+	return plural.Word(n, one, many), nil
+}
+
+// StringsPluralCount returns n and the matching form of one or many.
+func StringsPluralCount(_ context.Context, n int, one, many string) (string, error) {
+	return plural.Count(n, one, many), nil
 }

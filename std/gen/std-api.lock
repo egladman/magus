@@ -89,6 +89,7 @@ fs.watch
 fs.writeFile
 fs.writeFileAtomic
 fs.writeLines
+html.escape
 http.byteSize
 http.download
 http.get
@@ -142,12 +143,16 @@ os.retry
 os.sleep
 os.withEnv
 path.abs
+path.base
 path.clean
+path.dir
 path.expandUser
 path.isAbs
+path.join
 path.matches
 path.matchesAny
 path.rel
+path.within
 pipe.all
 pipe.diff
 pipe.emit
@@ -190,6 +195,8 @@ strings.lines
 strings.padLeft
 strings.padRight
 strings.pascalCase
+strings.plural
+strings.pluralCount
 strings.snakeCase
 strings.splitN
 strings.trimPrefix

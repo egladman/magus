@@ -153,35 +153,6 @@ object CargoWorkspace {
     dependencies: {str: any},
 }
 
-fun dirOf(file: str) > str {
-    final parts = file.split("/");
-    if (parts.len() == 1) {
-        return ".";
-    }
-    return parts.sub(0, len: parts.len() - 1).join("/");
-}
-
-fun joinDir(dir: str, rel: str) > str {
-    if (dir == ".") {
-        return path\clean(rel);
-    }
-    return path\clean("{dir}/{rel}");
-}
-
-// relativeTo answers null when dir is not base or under it.
-fun relativeTo(base: str, dir: str) > str? {
-    if (base == ".") {
-        return dir;
-    }
-    if (dir == base) {
-        return ".";
-    }
-    if (dir.startsWith("{base}/")) {
-        return dir.sub(base.len() + 1, len: dir.len() - base.len() - 1);
-    }
-    return null;
-}
-
 fun tableOf(v: any?) > {str: any} {
     return (v as? {str: any}) ?? {<str: any>};
 }
@@ -199,12 +170,8 @@ fun pathList(v: any?) > [str] {
 }
 
 fun excluded(ws: CargoWorkspace, dir: str) > bool {
-    final rel = relativeTo(ws.dir, dir: dir);
-    if (rel == null) {
-        return false;
-    }
     foreach (ex in ws.exclude) {
-        if (rel! == ex or rel!.startsWith("{ex}/")) {
+        if (path\within(path\join([ws.dir, ex]), path: dir)) {
             return true;
         }
     }
@@ -212,15 +179,14 @@ fun excluded(ws: CargoWorkspace, dir: str) > bool {
 }
 
 fun inWorkspace(ws: CargoWorkspace, dir: str) > bool {
-    final rel = relativeTo(ws.dir, dir: dir);
-    if (rel == null or excluded(ws, dir: dir)) {
+    if (!path\within(ws.dir, path: dir) or excluded(ws, dir: dir)) {
         return false;
     }
-    if (rel! == ".") {
+    if (dir == ws.dir) {
         return true;
     }
     foreach (member in ws.members) {
-        if (path\matches(member, path: rel!) catch false) {
+        if (path\matches(member, path: path\rel(ws.dir, target: dir)) catch false) {
             return true;
         }
     }
@@ -269,7 +235,7 @@ fun pathDependency(crate: Crate, ws: CargoWorkspace?, table: str, name: str, spe
     if (path\isAbs(rel!)) {
         return .{ dir = null, gap = "{table}.{name}: path {rel!} is absolute, so it names no workspace project" };
     }
-    final dir = joinDir(base, rel: rel!);
+    final dir = path\join([base, rel!]);
     if (dir == ".." or dir.startsWith("../")) {
         return .{ dir = null, gap = "{table}.{name}: path {rel!} leaves the workspace root" };
     }
@@ -299,7 +265,7 @@ fun dependencyTables(doc: {str: any}) > [obj{ label: str, deps: {str: any} }] {
 fun crateGaps(crate: Crate, ws: CargoWorkspace?, ancestor: CargoWorkspace?, rsFiles: {str: bool}) > [DiscoveryGap] {
     final gaps = mut [<DiscoveryGap>];
     final pkg = tableOf(crate.doc["package"]);
-    final buildScript = joinDir(crate.dir, rel: (pkg["build"] as? str) ?? "build.rs");
+    final buildScript = path\join([crate.dir, (pkg["build"] as? str) ?? "build.rs"]);
     if (rsFiles[buildScript] ?? false) {
         gaps.append(DiscoveryGap{ file = buildScript, why = "build script: what it reads, runs or generates is not inferred" });
     }
@@ -320,8 +286,7 @@ fun workspaceGaps(ws: CargoWorkspace, crates: {str: bool}, doc: {str: any}) > [D
     foreach (member in ws.members) {
         var matched = false;
         foreach (dir, _ in crates) {
-            final rel = relativeTo(ws.dir, dir: dir);
-            if (rel != null and (path\matches(member, path: rel!) catch false)) {
+            if (path\within(ws.dir, path: dir) and (path\matches(member, path: path\rel(ws.dir, target: dir)) catch false)) {
                 matched = true;
             }
         }
@@ -376,7 +341,7 @@ fun cargoScan(req: DiscoveryQuery) > CargoScan {
             scan.rsFiles[file.path] = true;
             continue;
         }
-        final dir = dirOf(file.path);
+        final dir = path\dir(file.path);
         final manifest = parseManifest(file);
         if (manifest.doc -> doc) {
             scan.parsed.append(Crate{ dir = dir, file = file.path, doc = doc });
@@ -418,10 +383,10 @@ fun crateWorkspace(crate: Crate, pkg: {str: any}?, workspaces: [CargoWorkspace])
     final explicit = tableOf(pkg)["workspace"] as? str;
     foreach (ws in workspaces) {
         if (explicit -> rel) {
-            if (ws.dir == joinDir(crate.dir, rel: rel)) {
+            if (ws.dir == path\join([crate.dir, rel])) {
                 own = ws;
             }
-        } else if (relativeTo(ws.dir, dir: crate.dir) != null and (ancestor == null or ws.dir.len() > ancestor!.dir.len())) {
+        } else if (path\within(ws.dir, path: crate.dir) and (ancestor == null or ws.dir.len() > ancestor!.dir.len())) {
             ancestor = ws;
         }
     }
@@ -482,7 +447,7 @@ fun crateClaim(crate: Crate, scan: CargoScan, workspaces: [CargoWorkspace]) > Di
                 gaps.append(gap);
             }
             foreach (member in ws.defaultMembers) {
-                final dir = joinDir(ws.dir, rel: member);
+                final dir = path\join([ws.dir, member]);
                 if (dir != crate.dir and spans.indexOf(dir) == null) {
                     spans.append(dir);
                 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types/daemon"
 	"cmp"
 	"context"
@@ -995,7 +996,7 @@ func printStatusCompact(w io.Writer, r daemon.Snapshot, now time.Time) {
 	parts = append(parts, compactRunningParts(p.RunningTargets, now)...)
 
 	if n := len(p.Workspaces); n > 0 {
-		parts = append(parts, fmt.Sprintf("%d workspace%s", n, plural(n, "", "s")))
+		parts = append(parts, fmt.Sprintf("%d workspace%s", n, plural.Word(n, "", "s")))
 	}
 	if tok := compactMCPToken(r.MCPEndpoint); tok != "" {
 		parts = append(parts, tok)
@@ -1042,7 +1043,7 @@ func compactServiceToken(services []daemon.Service) string {
 		}
 		dependents += s.Dependents
 	}
-	return fmt.Sprintf("services %d/%d active, %s", running, len(services), fmt.Sprintf("%d dependent%s", dependents, plural(dependents, "", "s")))
+	return fmt.Sprintf("services %d/%d active, %s", running, len(services), fmt.Sprintf("%d dependent%s", dependents, plural.Word(dependents, "", "s")))
 }
 
 // compactMCPToken renders the MCP endpoint as one sidebar-friendly token, or "" when

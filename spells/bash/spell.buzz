@@ -1,4 +1,5 @@
 import "magus/spell";
+import "path";
 
 export fun mgs_getName() > str { return "bash"; }
 
@@ -47,14 +48,6 @@ fun isScript(path: str) > bool {
     return path.endsWith(".sh") or path.endsWith(".bash");
 }
 
-fun dirOf(path: str) > str {
-    final parts = path.split("/");
-    if (parts.len() == 1) {
-        return ".";
-    }
-    return parts.sub(0, len: parts.len() - 1).join("/");
-}
-
 fun holds(dir: str, child: str) > bool {
     return dir == "." or child == dir or child.startsWith("{dir}/");
 }
@@ -66,7 +59,7 @@ fun holds(dir: str, child: str) > bool {
 export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredProject] {
     final dirs = mut [<str>];
     foreach (file in req.files) {
-        final dir = dirOf(file.path);
+        final dir = path\dir(file.path);
         if (isScript(file.path) and dirs.indexOf(dir) == null) {
             dirs.append(dir);
         }
@@ -78,7 +71,7 @@ export fun discover_projects(target: Target, req: DiscoveryQuery) > [DiscoveredP
         claims.append(DiscoveredProject{path = dir, role = DiscoveryRole.member, targets = {"lint": ["shellcheck"]}});
     }
     foreach (file in req.files) {
-        final dir = dirOf(file.path);
+        final dir = path\dir(file.path);
         if (isScript(file.path) or dirs.filter(fun (index: int, scriptDir: str) > bool => holds(dir, child: scriptDir)).len() > 0) {
             continue;
         }

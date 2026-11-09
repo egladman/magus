@@ -1,6 +1,6 @@
-// html.buzz - link rewriting and goldmark-output post-processing for the
+// rewrite.buzz - link rewriting and goldmark-output post-processing for the
 // directory-index layout. Pure string transforms; golden-gated.
-namespace html;
+namespace rewrite;
 
 import "assert";
 import "text" as _;

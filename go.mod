@@ -94,6 +94,7 @@ require (
 	github.com/egladman/magus/libs/gopherbuzz v0.2.0
 	github.com/egladman/magus/libs/scipbuzz v0.1.0
 	github.com/egladman/magus/libs/termkit v0.1.0
+	github.com/egladman/magus/libs/text v0.1.0
 	github.com/egladman/magus/libs/xdg v0.1.0
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
@@ -151,5 +152,7 @@ replace github.com/egladman/magus/libs/gopherbuzz => ./libs/gopherbuzz
 replace github.com/egladman/magus/libs/scipbuzz => ./libs/scipbuzz
 
 replace github.com/egladman/magus/libs/termkit => ./libs/termkit
+
+replace github.com/egladman/magus/libs/text => ./libs/text
 
 replace github.com/egladman/magus/libs/xdg => ./libs/xdg

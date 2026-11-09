@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/libs/figure"
+	"github.com/egladman/magus/libs/text/plural"
 	"github.com/egladman/magus/types"
 )
 
@@ -148,7 +149,7 @@ func (p *Plan) subtree(id string) []string {
 // Figures is the plan split to fit the budgets, the overview first.
 // A group's figure follows the figure that draws it as a box.
 func (p *Plan) Figures() []*PlanFigure {
-	title := fmt.Sprintf("Job plan: %d %s", len(p.order), pluralWord(len(p.order), "job", "jobs"))
+	title := fmt.Sprintf("Job plan: %d %s", len(p.order), plural.Word(len(p.order), "job", "jobs"))
 	out := numberFigures(p.group(title, p.roots), "plan", map[string]int{})
 	for _, f := range out {
 		for i, n := range f.Nodes {
@@ -158,13 +159,6 @@ func (p *Plan) Figures() []*PlanFigure {
 		}
 	}
 	return out
-}
-
-func pluralWord(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }
 
 // numberFigures gives f and the group figures under it their ids, depth
