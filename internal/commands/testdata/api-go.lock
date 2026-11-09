@@ -3856,6 +3856,7 @@ github.com/egladman/magus/types.ModelTierSource.Values method func() []string
 github.com/egladman/magus/types.ModelTierSourceDefault const ModelTierSource = "default"
 github.com/egladman/magus/types.ModelTierSourceMatrix const ModelTierSource = "matrix"
 github.com/egladman/magus/types.ModelTierSourceRow const ModelTierSource = "row"
+github.com/egladman/magus/types.ModelTierSourceUserMatrix const ModelTierSource = "user-matrix"
 github.com/egladman/magus/types.ModelTiers type struct
 github.com/egladman/magus/types.ModelTiers.Definition field string "json:\"definition\" yaml:\"definition\""
 github.com/egladman/magus/types.ModelTiers.Rows field []ModelTierRecord "json:\"rows\"       yaml:\"rows\""

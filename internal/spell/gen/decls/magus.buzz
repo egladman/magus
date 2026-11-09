@@ -43,6 +43,7 @@ export enum<str> SkillVariant {
 export enum<str> ModelTierSource {
     row = "row",
     matrix = "matrix",
+    userMatrix = "user-matrix",
     default = "default",
 }
 

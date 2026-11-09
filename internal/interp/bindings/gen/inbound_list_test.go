@@ -198,7 +198,7 @@ var enumCases = map[reflect.Type][]string{
 	reflect.TypeFor[types.JobWriteProof]():        {"", "alone", "disjoint", "overlapping"},
 	reflect.TypeFor[types.McpTransport]():         {"", "stdio", "http"},
 	reflect.TypeFor[imagetypes.ModePolicy]():      {"", "fixed", "executable-bit"},
-	reflect.TypeFor[types.ModelTierSource]():      {"row", "matrix", "default"},
+	reflect.TypeFor[types.ModelTierSource]():      {"row", "matrix", "user-matrix", "default"},
 	reflect.TypeFor[imagetypes.OS]():              {"", "linux"},
 	reflect.TypeFor[spells.PatchOpKind]():         {"", "add", "remove", "replace", "move", "copy", "test"},
 	reflect.TypeFor[types.RelationID]():           {"", "depends_on", "contains", "uses", "references", "documents", "calls", "implements", "imports", "rationale_for", "emits", "owns", "defines", "produces", "consumes", "authored", "annotates", "depicts", "co_changes", "splits"},
