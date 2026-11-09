@@ -340,7 +340,7 @@ func (s *exitEvidenceSuite) TestOwedForAnyReasonButNoSeatIsRefused() {
 
 	_, err := s.exit(row, result, types.JobAttempt{Target: "go-test"})
 
-	s.ErrorContains(err, `goal "lint" is filed as owed because "generated drift", and the one reason a run is owed is "no seat"`)
+	s.ErrorContains(err, `goal "lint" is filed as owed because "generated drift", and the reasons a run is owed are "no seat" and "remote CI runs it"`)
 	s.ErrorContains(err, "the integrator regenerates")
 }
 
