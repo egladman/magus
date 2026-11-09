@@ -30,7 +30,7 @@ func TestPersonAdvisorySuite(t *testing.T) { suite.Run(t, new(PersonAdvisorySuit
 func (s *PersonAdvisorySuite) SetupTest() {
 	s.T().Setenv("XDG_STATE_HOME", s.T().TempDir())
 	s.at = location{workspace: s.T().TempDir()}
-	store, err := advisoryStore(s.at)
+	store, err := sessions.OpenAdvisoryStore(s.at.workspace)
 	s.Require().NoError(err)
 	s.store = store
 	s.who = hookAttribution{Host: "claude-code", Session: "s1"}

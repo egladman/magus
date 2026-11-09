@@ -121,6 +121,8 @@ const advisoryFile = "advisories.jsonl"
 
 // AdvisoryDir resolves <XDG state>/magus/advisories/<repo>-<hash12>. It
 // keys on repository identity like [Dir], so every worktree reads one store.
+// It repeats [Dir]'s two calls rather than live under it, because [Prune]
+// removes files there at retention and an advisory stands until retracted.
 func AdvisoryDir(root string) (string, error) {
 	base, err := xdg.StateDir()
 	if err != nil {
@@ -140,6 +142,19 @@ func NewAdvisoryStore(dir string) AdvisoryStore {
 		Key:  AdvisoryEntry.key,
 	}}
 }
+
+// OpenAdvisoryStore is the store of the repository at root, in [AdvisoryDir].
+// It touches nothing until used.
+func OpenAdvisoryStore(root string) (AdvisoryStore, error) {
+	dir, err := AdvisoryDir(root)
+	if err != nil {
+		return AdvisoryStore{}, err
+	}
+	return NewAdvisoryStore(dir), nil
+}
+
+// Dir is the directory holding the store's file.
+func (s AdvisoryStore) Dir() string { return filepath.Dir(s.lines.Path) }
 
 // Load folds the store into its advisories, oldest post first. An absent
 // store has none. A line that does not decode fails the read, so a caller
@@ -272,18 +287,22 @@ type Showing struct {
 // Deliver returns the open advisories not yet shown to at's session, oldest
 // first. It records each delivery under the store's lock, so two hooks
 // firing at once show it once. An empty session id receives nothing.
+//
+// It reads before it locks, because every root stop calls it. A lock with
+// nothing to deliver would leave a lock file in every repository.
 func (s AdvisoryStore) Deliver(ctx context.Context, at Showing, now time.Time) ([]Advisory, error) {
 	if at.Session == "" {
 		return nil, nil
 	}
+	all, err := s.Load()
+	if err != nil || len(undelivered(all, at.Session)) == 0 {
+		return nil, err
+	}
 	var shown []Advisory
-	err := s.lines.Update(ctx, func(entries []AdvisoryEntry) []AdvisoryEntry {
-		var add []AdvisoryEntry
-		for _, a := range foldAdvisories(entries) {
-			if _, seen := a.Delivered[at.Session]; seen || !a.Open() {
-				continue
-			}
-			shown = append(shown, a)
+	err = s.lines.Update(ctx, func(entries []AdvisoryEntry) []AdvisoryEntry {
+		shown = undelivered(foldAdvisories(entries), at.Session)
+		add := make([]AdvisoryEntry, 0, len(shown))
+		for _, a := range shown {
 			add = append(add, at.entry(AdvisoryDelivered, a.ID, now))
 		}
 		return add
@@ -292,6 +311,16 @@ func (s AdvisoryStore) Deliver(ctx context.Context, at Showing, now time.Time) (
 		return nil, fmt.Errorf("advisories: record delivery: %w", err)
 	}
 	return shown, nil
+}
+
+func undelivered(all []Advisory, session string) []Advisory {
+	var out []Advisory
+	for _, a := range all {
+		if _, seen := a.Delivered[session]; a.Open() && !seen {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 func (at Showing) entry(kind AdvisoryKind, id string, now time.Time) AdvisoryEntry {

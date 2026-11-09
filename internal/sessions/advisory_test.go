@@ -44,6 +44,12 @@ func (s *AdvisorySuite) TestAnAbsentStoreHoldsNothing() {
 	s.Empty(got)
 }
 
+func (s *AdvisorySuite) TestADeliveryWithNothingOpenCreatesNoStore() {
+	s.store = NewAdvisoryStore(filepath.Join(s.dir, "absent"))
+	s.Empty(s.deliver("s1"))
+	s.NoDirExists(s.store.Dir())
+}
+
 func (s *AdvisorySuite) TestEachSessionIsShownAPostOnce() {
 	a := s.post("push what you have; we squash into one PR", "")
 	s.Equal([]string{a.ID}, ids(s.deliver("s1")))

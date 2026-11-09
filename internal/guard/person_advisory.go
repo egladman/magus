@@ -19,16 +19,6 @@ import (
 // because the words are the person's, not the guard's.
 const RulePersonAdvisory = "person-advisory"
 
-// advisoryStore opens the advisories store of the workspace at at, or says
-// why it cannot.
-func advisoryStore(at location) (sessions.AdvisoryStore, error) {
-	dir, err := sessions.AdvisoryDir(at.workspace)
-	if err != nil {
-		return sessions.AdvisoryStore{}, err
-	}
-	return sessions.NewAdvisoryStore(dir), nil
-}
-
 // showAdvisories returns the directive for the open advisories a root
 // session has not been shown, recording the showing. note names a store it
 // could not use, so an unreadable store never reads as nothing open.
@@ -36,7 +26,7 @@ func showAdvisories(ctx context.Context, at location, who hookAttribution) (dire
 	if who.Agent != "" || who.Session == "" || at.workspace == "" {
 		return "", ""
 	}
-	store, err := advisoryStore(at)
+	store, err := sessions.OpenAdvisoryStore(at.workspace)
 	if err != nil {
 		return "", advisoryNote(err)
 	}
@@ -103,7 +93,7 @@ func recordAdvisoryAct(ctx context.Context, at location, who hookAttribution, co
 	if who.Session == "" || at.workspace == "" {
 		return
 	}
-	store, err := advisoryStore(at)
+	store, err := sessions.OpenAdvisoryStore(at.workspace)
 	if err == nil {
 		showing := sessions.Showing{Session: who.Session, Host: who.Host, Event: who.Event}
 		err = store.RecordActed(ctx, showing, command, time.Now())

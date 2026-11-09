@@ -17,16 +17,12 @@ import (
 )
 
 // advisoryStore opens the advisories store of the repository root names.
-func advisoryStore(root string) (sessions.AdvisoryStore, string, error) {
+func advisoryStore(root string) (sessions.AdvisoryStore, error) {
 	root, err := attentionRoot(root)
 	if err != nil {
-		return sessions.AdvisoryStore{}, "", err
+		return sessions.AdvisoryStore{}, err
 	}
-	dir, err := sessions.AdvisoryDir(root)
-	if err != nil {
-		return sessions.AdvisoryStore{}, "", err
-	}
-	return sessions.NewAdvisoryStore(dir), dir, nil
+	return sessions.OpenAdvisoryStore(root)
 }
 
 // requirePerson refuses verb without an interactive terminal. The guard denies
@@ -56,7 +52,7 @@ func adviseCommand(root string, args []string) error {
 	if err := requirePerson("advise"); err != nil {
 		return err
 	}
-	store, _, err := advisoryStore(root)
+	store, err := advisoryStore(root)
 	if err != nil {
 		return err
 	}
@@ -78,7 +74,7 @@ func retractCommand(root string, args []string) error {
 	if err := requirePerson("retract"); err != nil {
 		return err
 	}
-	store, _, err := advisoryStore(root)
+	store, err := advisoryStore(root)
 	if err != nil {
 		return err
 	}
@@ -119,10 +115,11 @@ func advisoriesCommand(root string, args []string) error {
 	if len(rest) > 0 {
 		return exit.Usagef("magus session advisories: takes no arguments (got %q)", rest[0])
 	}
-	store, dir, err := advisoryStore(root)
+	store, err := advisoryStore(root)
 	if err != nil {
 		return err
 	}
+	dir := store.Dir()
 	loaded, err := store.Load()
 	if err != nil {
 		return err
