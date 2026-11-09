@@ -10,14 +10,18 @@ import "hack/lint/support" as support;
 // HAND_BINDING matches a flag bound on a FlagSet, or on the flag package.
 final HAND_BINDING = `\b(flag|fs|flags|fset|flagSet)\.(String|Bool|Int|Int64|Uint|Uint64|Float64|Duration|Var|StringVar|BoolVar|IntVar|Int64Var|UintVar|Uint64Var|Float64Var|DurationVar|Func|BoolFunc|TextVar)\(`;
 
+// reads: the magus binary only. cmd/magus-utils and libs/proofread/cmd are
+// separate binaries that the one-source flag rule does not cover.
 export fun reads() > [str] {
-    return ["**/*.go", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
-        "libs/figure/**/*.go", "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go",
-        "libs/text/**/*.go", "libs/xdg/**/*.go", "libs/cmdline/**/*.go"];
+    return ["cmd/magus/**/*.go", "internal/**/*.go"];
 }
 
-// exempt: the command tree, its generated output, and tests.
+// exempt: anything outside the magus binary, the command tree, its generated
+// output, and tests.
 export fun exempt(p: str) > bool {
+    if (!p.startsWith("cmd/magus/") and !p.startsWith("internal/")) {
+        return true;
+    }
     return p.startsWith("internal/commands/") or p.startsWith("internal/config/")
         or p.indexOf("/gen/") != null or p.startsWith("gen/") or p.endsWith("_test.go");
 }
@@ -158,4 +162,10 @@ test "the command tree, its generated output and tests are exempt" {
     assert\equal(exempt("cmd/magus/gen/flags.go"), want: true, message: "gen dir");
     assert\equal(exempt("cmd/magus/query_test.go"), want: true, message: "test");
     assert\equal(exempt("cmd/magus/query.go"), want: false, message: "a CLI file is not exempt");
+    assert\equal(exempt("internal/job/store.go"), want: false, message: "an internal file is not exempt");
+}
+
+test "other binaries are out of scope" {
+    assert\equal(exempt("cmd/magus-utils/main.go"), want: true, message: "magus-utils");
+    assert\equal(exempt("libs/proofread/cmd/proofread/main.go"), want: true, message: "proofread");
 }
