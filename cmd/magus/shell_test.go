@@ -2251,7 +2251,6 @@ func TestCheckoutBinaryIsAnotherBinaryOnly(t *testing.T) {
 type DelegateToCheckoutSuite struct {
 	suite.Suite
 	repo    *testkit.Repo
-	running string
 }
 
 func TestDelegateToCheckoutSuite(t *testing.T) {
@@ -2260,7 +2259,6 @@ func TestDelegateToCheckoutSuite(t *testing.T) {
 
 func (s *DelegateToCheckoutSuite) SetupTest() {
 	s.repo = testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
-	s.running = ""
 }
 
 // line is a Bash call from a session in another directory that runs magus in the checkout.
@@ -2274,7 +2272,7 @@ func (s *DelegateToCheckoutSuite) delegate(input string) (handled bool, declined
 
 func (s *DelegateToCheckoutSuite) delegateWithin(ctx context.Context, input string) (handled bool, declined, out string, err error) {
 	var stdout, stderr bytes.Buffer
-	handled, decline, err := delegateToCheckout(ctx, s.running, input, output.Options{Format: outputText}, &stdout, &stderr)
+	handled, decline, err := delegateToCheckout(ctx, input, output.Options{Format: outputText}, &stdout, &stderr)
 	return handled, decline.note, stdout.String(), err
 }
 
@@ -2328,37 +2326,6 @@ func (s *DelegateToCheckoutSuite) TestADelegateIsHandedTheParentsDeadline() {
 	s.Equal(strconv.FormatInt(want.UnixMilli(), 10), out)
 }
 
-// The lockout: HEAD moved past ./magus, and an older judge cannot read the row.
-func (s *DelegateToCheckoutSuite) TestABuildBehindHeadButNewerThanTheJudgeJudges() {
-	s.running = s.repo.Head()
-	built := s.repo.Commit("the build", nil)
-	s.repo.Commit("moved on", nil)
-	placeStub(s.T(), s.repo.Root(), built, `{"decision":"deny"}`, 2)
-	handled, declined, out, err := s.delegate(s.line())
-	s.True(handled)
-	s.Empty(declined)
-	s.Equal(2, exit.Code(err))
-	s.Equal(`{"decision":"deny"}`, out)
-}
-
-func (s *DelegateToCheckoutSuite) TestABuildBehindHeadAtTheJudgesCommitLeavesTheCallHere() {
-	s.running = s.repo.Head()
-	placeStub(s.T(), s.repo.Root(), s.running, `{"decision":"deny"}`, 2)
-	s.repo.Commit("moved on", nil)
-	handled, declined, _, _ := s.delegate(s.line())
-	s.False(handled)
-	s.Contains(declined, "neither the checkout's HEAD")
-}
-
-func (s *DelegateToCheckoutSuite) TestABuildOlderThanTheJudgeLeavesTheCallHere() {
-	built := s.repo.Head()
-	s.running = s.repo.Commit("the judge", nil)
-	s.repo.Commit("moved on", nil)
-	placeStub(s.T(), s.repo.Root(), built, `{"decision":"deny"}`, 2)
-	handled, _, _, _ := s.delegate(s.line())
-	s.False(handled)
-}
-
 func (s *DelegateToCheckoutSuite) TestABuildAtHeadJudgesTheWrite() {
 	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
 	input := fmt.Sprintf(`{"cwd":"/elsewhere","tool_input":{"file_path":%q}}`, filepath.Join(s.repo.Root(), "x.go"))
@@ -2388,22 +2355,22 @@ func (s *DelegateToCheckoutSuite) TestABuildAfterHeadJudges() {
 	s.Empty(declined)
 }
 
-func (s *DelegateToCheckoutSuite) TestABuildBehindHeadLeavesTheCallHere() {
+func (s *DelegateToCheckoutSuite) TestABuildBehindHeadJudges() {
 	behind := s.repo.Head()
-	head := s.repo.Commit("moved on", nil)
+	s.repo.Commit("moved on", nil)
 	placeStub(s.T(), s.repo.Root(), behind, `{"decision":"deny"}`, 2)
 	handled, declined, out, err := s.delegate(s.line())
-	s.False(handled)
-	s.Require().NoError(err)
-	s.Empty(out)
-	s.Contains(declined, fmt.Sprintf("built at %s, which is neither the checkout's HEAD %s nor a commit after it", shortCommit(behind), shortCommit(head)))
+	s.True(handled)
+	s.Empty(declined)
+	s.Equal(2, exit.Code(err))
+	s.Equal(`{"decision":"deny"}`, out)
 }
 
-func (s *DelegateToCheckoutSuite) TestAnUnstampedBuildLeavesTheCallHere() {
+func (s *DelegateToCheckoutSuite) TestAnUnstampedBuildJudges() {
 	placeStub(s.T(), s.repo.Root(), unknownVersion, `{"decision":"deny"}`, 2)
 	handled, declined, _, _ := s.delegate(s.line())
-	s.False(handled)
-	s.Contains(declined, "it carries no commit stamp")
+	s.True(handled)
+	s.Empty(declined)
 }
 
 func (s *DelegateToCheckoutSuite) TestACallAlreadyHandedOnIsJudgedHere() {

@@ -148,6 +148,26 @@ func TestUnloadedTreeWithoutABinaryNamesTheMissingBinary(t *testing.T) {
 	assert.NotContains(t, stored, "older than")
 }
 
+// PATH magus in a checkout that builds magus from source answers only the
+// bootstrap, even when its own policy would load.
+func TestPathMagusInAFromSourceCheckoutJudgesNothing(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	root := ownCheckout(t, ctx, true)
+	declareGuardRule(t, root)
+
+	own := filepath.Join(root, "magus")
+	same := ForeignJudgeDeps(Dependencies{}, root, own)
+	assert.NoError(t, same.LoadFailure, "the checkout's own ./magus judges")
+
+	deps := ForeignJudgeDeps(unloadedDependencies(errStaleLoad), root, "/usr/local/bin/magus")
+	require.ErrorIs(t, deps.LoadFailure, errNotCheckoutBinary)
+	assert.Equal(t, unloadReason{Cause: unloadNoBinary}, unloadCause(deps.LoadFailure, root))
+
+	v := judgeUnloaded(ctx, deps, "touch notes.txt")
+	assert.Equal(t, decisionDeny, v.Decision, v.Reason)
+	assert.Contains(t, v.Reason, BootstrapLine(root))
+}
+
 // With no guard rule showing and none ever recorded there is no policy to have lost, so a
 // binary that cannot load the tree denies nothing.
 func TestUnloadedTreeWithoutAVisibleRuleDeniesNothing(t *testing.T) {
