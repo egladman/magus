@@ -23,6 +23,7 @@ var Modules = ffi.Set{
 	"flags":    {Register: RegisterFlags, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"fmt":      {Register: RegisterFmt, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"hex":      {Register: RegisterHex, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/hex"},
+	"html":     {Register: RegisterHtml, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"ini":      {Register: RegisterIni, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/ini"},
 	"json":     {Register: RegisterJson, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/json"},
 	"log":      {Register: RegisterLog, Capabilities: ffi.Capabilities(ffi.WASM)},

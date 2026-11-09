@@ -8,8 +8,9 @@ import "markdown";
 import "fs";
 import "io";
 import "template";
+import "html" as htmlcodec;
 import "../libs/ssg/text" as _;
-import "../libs/ssg/html" as _;
+import "../libs/ssg/rewrite" as _;
 import "engine/meta" as _;
 import "../libs/ssg/paths" as _;
 import "engine/types" as _;
@@ -292,8 +293,8 @@ export fun renderDevelopment(site: Site) > void !> any {
             desc = "{n.len()} targets";
         }
         projectCards.append("        <a class=\"related-card\" href=\"" + UP + slugifyProject(name) + "/\">"
-            + "<span class=\"related-card-title\">" + escapeAttr(name) + "</span>"
-            + "<span class=\"related-card-desc\">" + escapeAttr(desc) + "</span></a>\n");
+            + "<span class=\"related-card-title\">" + htmlcodec\escape(name) + "</span>"
+            + "<span class=\"related-card-desc\">" + htmlcodec\escape(desc) + "</span></a>\n");
     }
 
     // The project-level view, rendered through the markdown pipeline for its table and

@@ -21,7 +21,7 @@ import "template";
 import "assert";
 import "../libs/ssg/text" as _;
 import "../libs/ssg/urls" as _;
-import "../libs/ssg/html" as _;
+import "../libs/ssg/rewrite" as _;
 import "lib/glossary" as _;
 import "lib/conventions" as _;
 import "../libs/ssg/csp" as _;

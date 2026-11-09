@@ -10,7 +10,7 @@ import "markdown";
 import "template";
 import "engine/types" as _;
 import "engine/route" as _;
-import "../libs/ssg/html" as _;
+import "../libs/ssg/rewrite" as _;
 import "../libs/ssg/text" as _;
 import "../libs/ssg/dom" as _;
 import "../libs/ssg/date" as _;

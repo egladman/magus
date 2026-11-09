@@ -24,7 +24,7 @@ import "../libs/ssg/feed" as _;
 import "../libs/ssg/date" as _;
 // Directory-index link rewriting (resolve, old->new URL map, re-relativize):
 // rewriteHref/resolvePath/cleanTarget.
-import "../libs/ssg/html" as _;
+import "../libs/ssg/rewrite" as _;
 import "lib/glossary" as _;
 import "lib/conventions" as _;
 // Content-Security-Policy construction + the content hashing under it:

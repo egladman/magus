@@ -512,7 +512,7 @@ func (m Module) ObjectExterns() []Method {
 // vocabulary, so std naming them would cycle. std/encoding/register.go collects
 // them and internal/hostmodules unions both sets, the only place that imports both.
 var portable = []Module{
-	Charm, Crypto, Diff, Env, Flags, Fmt, Log, Markdown, Math, Merge,
+	Charm, Crypto, Diff, Env, Flags, Fmt, HTML, Log, Markdown, Math, Merge,
 	Path, Platform, Semver, Sort, Strings, Template, Time, UUID,
 }
 

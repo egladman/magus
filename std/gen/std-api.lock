@@ -89,6 +89,7 @@ fs.watch
 fs.writeFile
 fs.writeFileAtomic
 fs.writeLines
+html.escape
 http.byteSize
 http.download
 http.get

@@ -23,7 +23,7 @@ import "vcs";
 import "engine/types" as _;
 import "../libs/ssg/text" as _;
 import "../libs/ssg/csp" as _;
-import "../libs/ssg/html" as _;
+import "../libs/ssg/rewrite" as _;
 // The conventions lint's pure half: lintMarkdown/pathReferences decide WHAT is wrong,
 // conventionsCheck below is the part allowed to read the tree and say so.
 import "lib/conventions" as _;
