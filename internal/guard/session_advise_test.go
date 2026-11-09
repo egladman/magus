@@ -56,9 +56,14 @@ func (s *SessionAdviseSuite) TestARootStopIsHeldOnceToShowTheAdvisory() {
 	s.Equal(decisionPass, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Decision)
 }
 
-func (s *SessionAdviseSuite) TestASubagentStopShowsNothing() {
+func (s *SessionAdviseSuite) TestASubagentStopEventShowsNothing() {
 	s.post("")
 	s.Equal(decisionPass, adviseStop(context.Background(), s.at, s.who, subagentStopRaw, pass()).Decision)
+	s.Equal(decisionDeny, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Decision)
+}
+
+func (s *SessionAdviseSuite) TestAStopNamingAnAgentShowsNothing() {
+	s.post("")
 	child := s.who
 	child.Agent = "a1"
 	s.Equal(decisionPass, adviseStop(context.Background(), s.at, child, rootStopRaw, pass()).Decision)
@@ -72,13 +77,44 @@ func (s *SessionAdviseSuite) TestAStopAlreadyHeldShowsItNextTime() {
 	s.Equal(RulePersonAdvisory, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Rule)
 }
 
-func (s *SessionAdviseSuite) TestAPromptShowsItOnlyWhereContextRenders() {
-	a := s.post("")
+func (s *SessionAdviseSuite) TestAPromptWithoutContextLeavesItForTheStop() {
+	s.post("")
 	s.Equal(decisionPass, adviseMessage(context.Background(), s.at, s.who, false).Decision)
+	s.Equal(RulePersonAdvisory, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Rule)
+}
+
+func (s *SessionAdviseSuite) TestAPromptWithContextShowsItInsteadOfTheStop() {
+	a := s.post("")
 	v := adviseMessage(context.Background(), s.at, s.who, true)
 	s.Equal(decisionAdvise, v.Decision)
 	s.Contains(v.Context, a.ID)
 	s.Equal(decisionPass, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Decision)
+}
+
+// A directive reaches every session as the person's own words, so an agent
+// posting or retracting one would put words in the person's mouth.
+func (s *SessionAdviseSuite) deniedToAnAgent(command string) {
+	s.Contains(Evaluate(strict(testDependencies()), command).Deny, "post or retract an advisory")
+}
+
+func (s *SessionAdviseSuite) TestAnAgentMayNotAdvise() {
+	s.deniedToAnAgent(`magus session advise "push what you have"`)
+}
+
+func (s *SessionAdviseSuite) TestAnAgentMayNotAdviseBehindGlobalFlags() {
+	s.deniedToAnAgent(`./magus -o json session advise --expect "git push" "push"`)
+}
+
+func (s *SessionAdviseSuite) TestAnAgentMayNotAdviseOnALineThatDoesNotParse() {
+	s.deniedToAnAgent(`magus session advise "x" && (`)
+}
+
+func (s *SessionAdviseSuite) TestAnAgentMayNotRetract() {
+	s.deniedToAnAgent(`magus session retract adv-3f9a`)
+}
+
+func (s *SessionAdviseSuite) TestAnAgentMayListAdvisories() {
+	s.Empty(Evaluate(strict(testDependencies()), `magus session advisories`).Deny)
 }
 
 func (s *SessionAdviseSuite) TestAnUnreadableStoreIsNamed() {

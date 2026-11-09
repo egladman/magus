@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -79,6 +80,9 @@ func retractCommand(root string, args []string) error {
 		return err
 	}
 	a, err := store.Retract(context.Background(), rest[0], localOrigin(types.EntryPointCLI).User, time.Now())
+	if errors.Is(err, sessions.ErrNoDirective) {
+		return fmt.Errorf("magus session retract: %w, run `magus session advisories --all` to list every id", err)
+	}
 	if err != nil {
 		return fmt.Errorf("magus session retract: %w", err)
 	}

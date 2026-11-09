@@ -275,7 +275,7 @@ func pickDirective(all []Directive, ref string) (Directive, error) {
 		return Directive{}, fmt.Errorf("%q matches %d advisories (%s); name one", ref, len(ids), strings.Join(ids, ", "))
 	case !matches[0].Open():
 		at := time.UnixMilli(matches[0].RetractedMs).Format(time.RFC3339)
-		return matches[0], fmt.Errorf("%w: %s was retracted at %s", ErrRetracted, matches[0].ID, at)
+		return matches[0], fmt.Errorf("%s: %w at %s", matches[0].ID, ErrRetracted, at)
 	}
 	return matches[0], nil
 }
