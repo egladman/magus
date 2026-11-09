@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"path"
 	"regexp"
 	"strconv"
@@ -65,7 +66,7 @@ func unreadHandoffs(command string, d Dialect) []string {
 	eachScript(command, d, func(sf *scriptFile) bool {
 		for _, h := range scriptHandoffs(sf.file, d) {
 			if !h.read {
-				out = append(out, h.to+" through "+h.via)
+				out = append(out, fmt.Sprintf("%s through %s", h.to, h.via))
 			}
 		}
 		return true
@@ -294,11 +295,7 @@ func programScripts(inv hint.Invocation, stdin func() (scriptText, bool)) []hand
 		out := eachProgram(name, commands, exScripts)
 		if name == "ex" || hasFlag(args, 'e', "") {
 			out = append(out, fromStdin(func(to, text string) []handedScript {
-				var lines []handedScript
-				for _, line := range strings.Split(text, "\n") {
-					lines = append(lines, exScripts(to, line)...)
-				}
-				return lines
+				return eachProgram(to, strings.Split(text, "\n"), exScripts)
 			})...)
 		}
 		return out
@@ -312,7 +309,7 @@ func isDigits(s string) bool {
 }
 
 func eachProgram(name string, programs []string, lang func(string, string) []handedScript) []handedScript {
-	var out []handedScript
+	out := make([]handedScript, 0, len(programs))
 	for _, p := range programs {
 		out = append(out, lang(name, p)...)
 	}
@@ -323,13 +320,14 @@ func eachProgram(name string, programs []string, lang func(string, string) []han
 // value is attached or the next word, as getopt reads a cluster.
 func flagValues(args []string, shorts, long string) []string {
 	var out []string
+	valued := fmt.Sprintf("--%s=", long)
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		switch {
 		case a == "--":
 			return out
-		case long != "" && strings.HasPrefix(a, "--"+long+"="):
-			out = append(out, strings.TrimPrefix(a, "--"+long+"="))
+		case long != "" && strings.HasPrefix(a, valued):
+			out = append(out, strings.TrimPrefix(a, valued))
 		case long != "" && a == "--"+long:
 			if i+1 < len(args) {
 				out = append(out, args[i+1])
@@ -363,8 +361,8 @@ func computed(to, via string) handedScript { return handedScript{to: to, via: vi
 // countedScripts pairs every call totalRe finds with literalRe's literal
 // argument; a call the literal form does not cover is computed.
 func countedScripts(to, via, src string, totalRe, literalRe *regexp.Regexp, value func([]string) string) []handedScript {
-	var out []handedScript
 	literals := literalRe.FindAllStringSubmatch(src, -1)
+	out := make([]handedScript, 0, len(literals))
 	for _, m := range literals {
 		out = append(out, literal(to, via, value(m)))
 	}
@@ -404,7 +402,7 @@ func awkScripts(to, program string) []handedScript {
 	var strs []string
 	stripped := awkStringRe.ReplaceAllStringFunc(program, func(s string) string {
 		strs = append(strs, cStringUnescape(s[1:len(s)-1]))
-		return "\x01" + strconv.Itoa(len(strs)-1) + "\x01"
+		return fmt.Sprintf("\x01%d\x01", len(strs)-1)
 	})
 	stripped = strings.ReplaceAll(awkRegexRe.ReplaceAllString(stripped, "//"), "||", "")
 	value := func(m []string) string {

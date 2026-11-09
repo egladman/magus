@@ -158,7 +158,7 @@ func TestPathMagusInAFromSourceCheckoutJudgesNothing(t *testing.T) {
 
 	own := filepath.Join(root, "magus")
 	same := ForeignJudgeDeps(Dependencies{}, root, own)
-	assert.NoError(t, same.LoadFailure, "the checkout's own ./magus judges")
+	require.NoError(t, same.LoadFailure, "the checkout's own ./magus judges")
 
 	deps := ForeignJudgeDeps(unloadedDependencies(errStaleLoad), root, "/usr/local/bin/magus")
 	require.ErrorIs(t, deps.LoadFailure, errNotCheckoutBinary)
@@ -1097,7 +1097,7 @@ func TestNoBinaryRemedySuite(t *testing.T) {
 
 func (s *NoBinaryRemedySuite) SetupTest() {
 	s.root = s.T().TempDir()
-	mod := []byte("module " + ownModule + "\n\ngo 1.25\n")
+	mod := fmt.Appendf(nil, "module %s\n\ngo 1.25\n", ownModule)
 	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "go.mod"), mod, 0o644))
 	declareCheckoutHook(s.T(), s.root)
 }

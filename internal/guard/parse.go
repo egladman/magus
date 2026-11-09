@@ -505,17 +505,18 @@ type scriptFile struct {
 	parent *scriptFile
 }
 
-// eachScript calls fn with the line, then with every shellPayload in it, depth
-// first. fn returns false to stop. An unparsable payload is skipped.
+// eachScript calls fn with the line, then with every shellPayload and
+// readable handedScript in it, depth first. fn returns false to stop.
+// An unparsable payload is skipped.
 func eachScript(command string, d Dialect, fn func(*scriptFile) bool) {
 	f, err := parseFile(command, d)
 	if err != nil {
 		return
 	}
-	eachScriptFrom(&scriptFile{file: f, text: command}, d, 0, fn)
+	eachNestedScript(&scriptFile{file: f, text: command}, d, 0, fn)
 }
 
-func eachScriptFrom(sf *scriptFile, d Dialect, depth int, fn func(*scriptFile) bool) bool {
+func eachNestedScript(sf *scriptFile, d Dialect, depth int, fn func(*scriptFile) bool) bool {
 	if !fn(sf) {
 		return false
 	}
@@ -548,7 +549,7 @@ func eachScriptFrom(sf *scriptFile, d Dialect, depth int, fn func(*scriptFile) b
 		}
 	}
 	for _, p := range payloads {
-		if !eachScriptFrom(p, d, depth+1, fn) {
+		if !eachNestedScript(p, d, depth+1, fn) {
 			return false
 		}
 	}

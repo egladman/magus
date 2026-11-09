@@ -4105,9 +4105,9 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	}
 	if unread := unreadHandoffs(command, dialect); len(unread) > 0 {
 		return denial{
-			Say: fmt.Sprintf("magus workspace: the guard cannot read the script handed to %s: spell it as a literal, as `sh -c '<script>'` or a heredoc with a quoted delimiter (`sh <<'EOF'`), or run it as a call of its own.",
+			Say: fmt.Sprintf("magus workspace: the guard cannot read the script handed to %s; spell it as a literal, as in `sh <<'EOF'`.",
 				strings.Join(unread, ", ")),
-			Why: fmt.Sprintf("lease-write reads a script a shell or an interpreter runs the way it reads `sh -c`. A script decoded, expanded or computed as the line runs cannot be read before it runs, so it could write anything. `%s` shows what the job holds.", hint.DescribeJob.With(me.ID)),
+			Why: fmt.Sprintf("lease-write reads a script a shell or an interpreter runs the way it reads `sh -c '<script>'`, a quoted heredoc included. A script decoded, expanded or computed as the line runs cannot be read before it runs, so it could write anything. `%s` shows what the job holds.", hint.DescribeJob.With(me.ID)),
 		}.full()
 	}
 	if reason := denyPatchOutsideLease(ctx, deps, me, command, dialect, start, home); reason != "" {

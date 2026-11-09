@@ -1043,8 +1043,8 @@ func denyOwnBinaryWrite(lease, writePath string) writeGrade {
 			continue
 		}
 		return writeGrade{Decision: decisionDeny, Reason: denial{
-			Say: fmt.Sprintf("magus workspace: %s is a checkout's own magus binary, which only the workspace's bootstrap and build targets write; lease %s runs the one placed for it.", writePath, lease),
-			Why: fmt.Sprintf("The hooks and the guard run that file by name, so a lease that writes it picks the guard its own calls are judged by. `%s` shows what the job holds.", hint.DescribeJob.With(lease)),
+			Say: fmt.Sprintf("magus workspace: %s is a checkout's own magus binary; lease %s runs the one placed for it.", writePath, lease),
+			Why: fmt.Sprintf("Only the workspace's bootstrap and build targets write that file. The hooks and the guard run it by name, so a lease that writes it picks the guard its own calls are judged by. `%s` shows what the job holds.", hint.DescribeJob.With(lease)),
 		}.full()}
 	}
 	return writeGrade{}
@@ -1085,9 +1085,9 @@ func denyMagusStateWrite(lease, writePath string) writeGrade {
 			continue
 		}
 		return writeGrade{Decision: decisionDeny, Reason: denial{
-			Say: fmt.Sprintf("magus workspace: %s is in magus's own %s directory (%s), which only magus commands write; record a result with `%s`.",
+			Say: fmt.Sprintf("magus workspace: %s is in magus's own %s directory (%s); record a result with `%s`.",
 				writePath, d.kind, d.dir, hint.JobExit.With(lease, "--stdin")),
-			Why: fmt.Sprintf("That directory holds the job store and the other records every verdict is computed from, lease %s's write paths included, so a write there by hand rewrites the boundary it is graded against. `%s` shows what the job holds.",
+			Why: fmt.Sprintf("Only magus commands write that directory. It holds the job store and the other records every verdict is computed from, lease %s's write paths included, so a write there by hand rewrites the boundary it is graded against. `%s` shows what the job holds.",
 				lease, hint.DescribeJob.With(lease)),
 		}.full()}
 	}
