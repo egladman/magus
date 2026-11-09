@@ -648,9 +648,9 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 
 // binaryFix is the fix for a binary that cannot load the tree: say is the likeliest one,
 // carrying at most one command, and why the rationale and the fallbacks.
-// The one exception is a bootstrap and the checkout hook it needs.
-// placeFor is the
-// lease whose checkout the main session places ./magus in, "" when the fix is not that.
+// A bootstrap also names the checkout hook it needs.
+// placeFor is the lease whose checkout the main session places ./magus in,
+// "" when the fix is not that.
 type binaryFix struct{ say, why, placeFor string }
 
 // next is the fix's command, served as the deny's next under rule.
@@ -701,12 +701,12 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 			why: fmt.Sprintf("If the rebuild cannot load the tree either, bootstrap over it, alone on its line: `%s`. If the error names a magusfile line instead, fix that line.", bootstrap),
 		}
 	case own:
-		hook := checkoutHook(root)
-		if hook == "" {
+		ready := ReadyCheckoutLine(root)
+		if ready == "" {
 			return binaryFix{say: fmt.Sprintf("bootstrap ./magus with `%s`", bootstrap)}
 		}
 		return binaryFix{
-			say: fmt.Sprintf("bootstrap ./magus with `%s`, then ready the checkout with `%s`, each alone on its line", bootstrap, readyCheckout(hook)),
+			say: fmt.Sprintf("bootstrap ./magus with `%s`, then ready the checkout with `%s`, each alone on its line", bootstrap, ready),
 			why: "The bootstrap builds ./magus and nothing else. The checkout hook then installs every project's dependencies and every declared harness's tool rows, " +
 				"and builds the graph, the symbol digest and the proofread binary the commit guard runs.",
 		}
@@ -726,10 +726,10 @@ func BootstrapLine(root string) string {
 	return config.SourceCommand(root, "", "", true)
 }
 
-// readyCheckout runs hook, the workspace's checkout.bootstrap,
-// on the checkout it is called in. recoveryLine passes it.
-func readyCheckout(hook string) string {
-	return fmt.Sprintf("./magus buzz %s -- --here --verify-ready", hook)
+// ReadyCheckoutLine is the line that runs root's checkout hook after
+// [BootstrapLine], "" when root declares none.
+func ReadyCheckoutLine(root string) string {
+	return config.ReadyCheckoutCommand(config.CheckoutHookAt(root))
 }
 
 // placementScript copies the main checkout's ./magus into a worker's checkout.

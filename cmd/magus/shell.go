@@ -1039,8 +1039,12 @@ func delegateToCheckout(ctx context.Context, runningCommit, input string, opts o
 	env := append(os.Environ(), fmt.Sprintf("%s=%s", delegatedEnv, running), bootstrapExecSentinelVar+"=1")
 	built, behind := checkoutBinaryBehind(ctx, own, env)
 	if behind != "" && !newerThanRunning(ctx, filepath.Dir(own), built, runningCommit) {
-		if line := guard.BootstrapLine(filepath.Dir(own)); line != "" {
+		root := filepath.Dir(own)
+		if line := guard.BootstrapLine(root); line != "" {
 			behind += fmt.Sprintf(". A ./magus at HEAD judges here once the main session places one, or the bootstrap builds it, alone on its line: `%s`", line)
+			if ready := guard.ReadyCheckoutLine(root); ready != "" {
+				behind += fmt.Sprintf(". Then ready the checkout, alone on its line: `%s`", ready)
+			}
 		}
 		return false, decline(behind), nil
 	}
