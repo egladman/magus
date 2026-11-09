@@ -335,3 +335,13 @@ func (s *DenialRouteSuite) TestAContractPickNamesTheForkThatLandsIt() {
 	s.Contains(got, "job fork <integration> --checkout <dir>")
 	s.NotContains(got, "dry run")
 }
+
+func TestALapseDenyIsNeverWordedAsARepeat(t *testing.T) {
+	gate := hint.NewGate(t.TempDir(), "lapse")
+	const reason = "the guard did not finish reading this workspace's target policies."
+	for range 3 {
+		got, _, _ := shapeDeny(t.Context(), gate, string(advisoryUnfinished), reason, "", "", nil, false)
+		assert.Equal(t, reason, got)
+		assert.NotContains(t, got, "denied again")
+	}
+}

@@ -1219,6 +1219,7 @@ var ruleDocGuardUnfinished = types.RuleDoc{
 	Why: "A host stops waiting on a hook that has not answered within its hook timeout, with no trail row and no word to the agent. " +
 		"So a check that has not answered within the guard's own budget, 7s against the host's 10s, stops waiting on its rules and answers unjudged: " +
 		"a call that changes state is denied, to be retried, and one that only reads runs with a note saying no rule judged it. The trail records the check as lapsed. " +
+		"A lapse deny is told in full every time; it is retried, never a standing refusal. " +
 		"Past two such checks in a row in a session, a call that changes state runs too, with a notice, until a check finishes in time; a guard always late would otherwise refuse every edit and spawn. " +
 		"A lapse never degrades a push, a run of a person-only target or of a target whose policy did not read in time, a bound worker's command, or a subagent's call reaching a live job's checkout. " +
 		"The built-in rules that read only the call still judge it through a lapse, the ledger's among them. " +
