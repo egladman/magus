@@ -150,3 +150,63 @@ func (s *IntegratorVCSSuite) TestInstallsTheHarnessInItsCheckout() {
 }
 
 func (s *IntegratorVCSSuite) ledgerContext() context.Context { return contextWithLedger(s.T(), s.at) }
+
+// IntegrationMergeSpellingsSuite pins how an integrate row names a branch.
+type IntegrationMergeSpellingsSuite struct {
+	suite.Suite
+	row types.Job
+}
+
+func TestIntegrationMergeSpellingsSuite(t *testing.T) {
+	suite.Run(t, new(IntegrationMergeSpellingsSuite))
+}
+
+func (s *IntegrationMergeSpellingsSuite) SetupTest() {
+	s.row = types.Job{ID: "integrate", Integrates: []string{"done-a"}}
+}
+
+func (s *IntegrationMergeSpellingsSuite) merges(line string) bool {
+	cmds, ok := ParseCommands(line)
+	s.Require().True(ok, line)
+	s.Require().Len(cmds, 1, line)
+	return integrationMerge(cmds[0], s.row)
+}
+
+func (s *IntegrationMergeSpellingsSuite) TestABareBranchMerges() {
+	s.True(s.merges("git merge done-a"))
+}
+
+func (s *IntegrationMergeSpellingsSuite) TestAnOriginBranchMerges() {
+	s.True(s.merges("git merge --no-ff origin/done-a"))
+}
+
+func (s *IntegrationMergeSpellingsSuite) TestAHeadsRefMerges() {
+	s.True(s.merges("git merge --no-ff --no-edit refs/heads/done-a"))
+}
+
+func (s *IntegrationMergeSpellingsSuite) TestARemoteRefMerges() {
+	s.True(s.merges("git merge refs/remotes/origin/done-a"))
+}
+
+func (s *IntegrationMergeSpellingsSuite) TestAMessageMerges() {
+	s.True(s.merges(`git merge --no-ff -m "merge done-a" done-a`))
+	s.True(s.merges(`git merge --message="merge done-a" done-a`))
+}
+
+func (s *IntegrationMergeSpellingsSuite) TestAnUnlistedRefIsRefused() {
+	s.False(s.merges("git merge origin/other"))
+	s.False(s.merges("git merge refs/tags/done-a"))
+}
+
+func (s *IntegrationMergeSpellingsSuite) TestAnotherOptionIsRefused() {
+	s.False(s.merges("git merge --squash done-a"))
+	s.False(s.merges("git merge -X theirs done-a"))
+}
+
+func (s *IntegrationMergeSpellingsSuite) TestTwoOperandsAreRefused() {
+	s.False(s.merges("git merge done-a origin/done-a"))
+}
+
+func (s *IntegrationMergeSpellingsSuite) TestADanglingMessageFlagIsRefused() {
+	s.False(s.merges("git merge done-a -m"))
+}

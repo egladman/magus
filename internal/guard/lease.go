@@ -2079,6 +2079,12 @@ func isDescendant(held leaseStanding, id string) bool {
 		slices.ContainsFunc(types.JobDescendants(held.rows, held.row.ID), func(r types.Job) bool { return r.ID == id })
 }
 
+// rootHeld reports an integrate row with no parent lease: the root took it with
+// `job exec` because no one else may merge for it. It still forks sibling rows.
+func rootHeld(s leaseStanding) bool {
+	return s.row.Parent == "" && s.row.Integrating()
+}
+
 // childFork is the row a fork declares, as far as childForkRebind reads it.
 type childFork struct {
 	id, parent string
@@ -2113,6 +2119,8 @@ func childForkRebind(f childFork, h holder, verb, ask string) rebind {
 		return rebind{problem: fmt.Sprintf("would %s the guard cannot read", verb), fix: fmt.Sprintf("give the child an id and --parent %s, or its record in a quoted heredoc.", h.id)}
 	case f.id == h.id:
 		return rebind{problem: "would rewrite the job it holds", ask: "change it"}
+	case f.parent == "" && rootHeld(held) && !slices.ContainsFunc(held.rows, func(r types.Job) bool { return r.ID == f.id }):
+		return rebind{}
 	case f.parent != h.id:
 		return rebind{problem: fmt.Sprintf("is outside lease %s's tree", h.id), ask: ask,
 			why: fmt.Sprintf("It would %s outside its own tree: a row a worker creates must name %s as its parent, and this one names %q.", verb, h.id, f.parent)}
@@ -3400,7 +3408,7 @@ func mergeRefusal(operand, base string, row types.Job) string {
 		accepts = append(accepts, "a depends_on branch: "+strings.Join(deps, ", "))
 	}
 	if row.Integrating() {
-		accepts = append(accepts, "a branch it integrates, merged by name: "+strings.Join(row.Integrates, ", "))
+		accepts = append(accepts, "a branch it integrates, merged as <b>, origin/<b>, refs/heads/<b> or refs/remotes/origin/<b>: "+strings.Join(row.Integrates, ", "))
 	}
 	const moves = " To move this checkout to any other commit, run `git merge --ff-only <commit id>`."
 	switch len(accepts) {

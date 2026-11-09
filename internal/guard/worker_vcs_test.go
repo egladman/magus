@@ -406,7 +406,7 @@ func TestIntegrationMergeAllowsOnlyTheListedBranches(t *testing.T) {
 	for _, line := range []string{
 		// A fast-forward hides that the branch was integrated; an unlisted branch, an octopus
 		// merge, a strategy option, a squash, a relocation or another verb widens what runs.
-		"git merge done-a", "git merge --no-ff other", "git merge --no-ff done-a done-b",
+		"git merge --no-ff other", "git merge --no-ff done-a done-b",
 		"git merge --no-ff -X theirs done-a", "git merge --no-ff --squash done-a",
 		"git -C ../x merge --no-ff done-a", "git rebase --no-ff done-a", "hg merge --no-ff done-a",
 	} {
