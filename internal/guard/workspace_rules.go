@@ -16,7 +16,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/egladman/magus/internal/buildinfo"
 	"github.com/egladman/magus/internal/config"
@@ -744,12 +743,8 @@ func approvedReader(ctx context.Context, approved headPolicy, pending []string) 
 // deleted is still found. It must be the whole tree's answer when approved is not
 // batched. Nil with no error when there is no magusfile to evaluate, and a
 // *types.EngineNotLinkedError when there is one and this program links no Buzz engine.
-//
-// The load may run up to approvedLoadGrace past ctx's deadline; see approvedLoadContext.
 func approvedRegistry(ctx context.Context, root string, approved headPolicy, pending []string) (*workspace.WorkspaceRegistry, error) {
 	defer func() { _ = approved.Close() }()
-	ctx, cancel := approvedLoadContext(ctx)
-	defer cancel()
 	read := approvedReader(ctx, approved, pending)
 	files, err := approvedMagusfiles(root, pending, read, func() ([]string, error) {
 		// The single magusfile is absent from the approved state, so the load is
@@ -774,32 +769,6 @@ func approvedRegistry(ctx context.Context, root string, approved headPolicy, pen
 		}
 	}
 	return reg, nil
-}
-
-// approvedLoadGrace is how far past its caller's deadline the approved load may run.
-const approvedLoadGrace = 2 * time.Second
-
-// approvedLoadContext bounds the approved load to approvedLoadGrace past ctx's deadline, and
-// leaves a ctx with no deadline as it is. A compile does not stop at a deadline anyway, but
-// the reads and the run after it do, and a chunk is stored only once its run finishes: a
-// load cut off there would spend every hook's time on the same compile and keep none of it.
-// The caller still sees its own deadline pass and reads the answer as late. Cancelling ctx
-// for any other reason cancels the load.
-func approvedLoadContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		return ctx, func() {}
-	}
-	lctx, cancel := context.WithDeadline(context.WithoutCancel(ctx), deadline.Add(approvedLoadGrace))
-	stop := context.AfterFunc(ctx, func() {
-		if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			cancel()
-		}
-	})
-	return lctx, func() {
-		stop()
-		cancel()
-	}
 }
 
 // approvedMagusfiles is the root magusfile's files as approved holds them, in whichever

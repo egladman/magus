@@ -92,10 +92,6 @@ type rulesAnswer struct {
 	log *phaseLog
 }
 
-// resolveShares is the approved resolve's weight against a rule call's one. Resolving runs a
-// VCS status and loads the committed magusfile a second time; a rule call is one function.
-const resolveShares = 2
-
 // askWorkspaceRules runs the approved rule and the working-tree rule and keeps the
 // stricter answer. An uncommitted edit that tightens applies at once; one that loosens has
 // no effect until it is approved.
@@ -106,8 +102,8 @@ const resolveShares = 2
 // deleted its twin, or failed to load. It is asked first, so a working-tree rule that loops
 // cannot spend the time it needs.
 //
-// Each phase (resolving the approved rule, calling it, calling the working tree's) gets its
-// share of what remains of ctx's deadline, and runs to completion when ctx has none. One
+// Each phase waits until ctx's deadline less judgeReserve, or completes
+// when ctx has none. One
 // that runs out, a rule load deps reports lapsed, or a job store read that ran out
 // (withJobStoreRows) is the answer's lapse, for denyLapse
 // to judge. A rule that raises is in raised, for denyRaised. Any other failure contributes
@@ -139,17 +135,9 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 			said: lapseWording{"reading the job store", "finish"}, failed: lapseWording{"the job store", "answer"},
 		})
 	}
-	shares := phaseShares{}
-	if resolveApproved != nil {
-		shares[phaseApprovedResolve] = resolveShares
-		shares[phaseApprovedRule] = 1
-	}
-	if worktree != nil {
-		shares[phaseWorktreeRule] = 1
-	}
 	ask := func(by, phase string, rule ruleCall) {
 		log.begin(phase)
-		budget, bounded := shares.take(ctx, phase)
+		budget, bounded := untilReserve(ctx)
 		if out.answer.Decision == types.GuardDeny {
 			return
 		}
@@ -184,7 +172,7 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 	approvedLoaded := false
 	if resolveApproved != nil {
 		log.begin(phaseApprovedResolve)
-		budget, bounded := shares.take(ctx, phaseApprovedResolve)
+		budget, bounded := untilReserve(ctx)
 		var rule ruleCall
 		var err error
 		expired := bounded && budget == 0
@@ -201,7 +189,6 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 			approvedLoaded = true
 			ask(decidedByApproved, phaseApprovedRule, rule)
 		} else {
-			delete(shares, phaseApprovedRule)
 			switch {
 			case expired:
 				// "No rule" read under an expired deadline may be a read that failed, since

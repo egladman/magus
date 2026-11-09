@@ -25,30 +25,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// A phase spends its shares' part of what remains, leaves the rest to the phases after it,
-// runs unbounded with no deadline, and is never handed a negative budget.
-func TestPhaseSharesSplitWhatRemains(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), judgeReserve+2*time.Second)
-	defer cancel()
-	shares := phaseShares{phaseApprovedResolve: 2, phaseApprovedRule: 1, phaseWorktreeRule: 1}
-	got, bounded := shares.take(ctx, phaseApprovedResolve)
-	require.True(t, bounded)
-	assert.LessOrEqual(t, got, time.Second)
-	assert.Greater(t, got, 900*time.Millisecond)
-	assert.NotContains(t, shares, phaseApprovedResolve, "a phase that started holds no shares")
-	got, _ = shares.take(ctx, phaseApprovedRule)
-	assert.Greater(t, got, 900*time.Millisecond, "half of what remains, the approved resolve having spent none")
-
-	_, bounded = phaseShares{phaseWorktreeRule: 1}.take(t.Context(), phaseWorktreeRule)
-	assert.False(t, bounded, "with no deadline, a phase runs to completion")
-
-	gone, cancelGone := context.WithTimeout(t.Context(), judgeReserve/2)
-	defer cancelGone()
-	got, bounded = phaseShares{phaseWorktreeRule: 1}.take(gone, phaseWorktreeRule)
-	assert.True(t, bounded)
-	assert.Zero(t, got, "past the reserve, nothing is left, and never less")
-}
-
 func TestWithHookDeadlineKeepsAnEarlierOne(t *testing.T) {
 	early, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
@@ -321,7 +297,7 @@ func TestBoundedPhaseAnswersInTime(t *testing.T) {
 	require.Len(t, phases, 2)
 	assert.False(t, phases[0].Lapsed)
 	assert.False(t, phases[1].Lapsed, "an error answered in time is the call's own, not a lapse")
-	assert.Equal(t, inspectBudget.Milliseconds(), phases[0].BudgetMs, "no deadline leaves the inspect budget")
+	assert.Equal(t, hookBudget.Milliseconds(), phases[0].BudgetMs, "no deadline leaves the hook budget")
 }
 
 // A judgment stuck where no deadline reaches still answers in time: past the hook's bound a
@@ -741,24 +717,27 @@ func (s *JudgeBudgetSuite) inspectBudgetUnder(ctx context.Context) int64 {
 	return phases[0].BudgetMs
 }
 
-func (s *JudgeBudgetSuite) TestDryRunOpenIsNotCappedAtTheHooksShare() {
+func (s *JudgeBudgetSuite) TestDryRunOpenHasTheDryRunsBudget() {
 	ctx, cancel := withDryRunDeadline(s.T().Context())
 	defer cancel()
 	s.Greater(s.inspectBudgetUnder(ctx), hookBudget.Milliseconds())
 }
 
-func (s *JudgeBudgetSuite) TestHookOpenKeepsTheCap() {
+func (s *JudgeBudgetSuite) TestHookOpenHasTheHooksBudget() {
 	ctx, cancel := WithHookDeadline(s.T().Context())
 	defer cancel()
-	s.Equal(inspectBudget.Milliseconds(), s.inspectBudgetUnder(ctx))
+	got := s.inspectBudgetUnder(ctx)
+	s.LessOrEqual(got, (hookBudget - judgeReserve).Milliseconds())
+	s.Greater(got, (hookBudget - judgeReserve - time.Second).Milliseconds())
 }
 
-func (s *JudgeBudgetSuite) TestDryRunNestedInAHookKeepsTheCap() {
+func (s *JudgeBudgetSuite) TestDryRunNestedInAHookHasTheHooksBudget() {
 	hook, cancelHook := WithHookDeadline(s.T().Context())
 	defer cancelHook()
 	ctx, cancel := withDryRunDeadline(hook)
 	defer cancel()
-	s.Equal(inspectBudget.Milliseconds(), s.inspectBudgetUnder(ctx))
+	got := s.inspectBudgetUnder(ctx)
+	s.LessOrEqual(got, (hookBudget - judgeReserve).Milliseconds())
 }
 
 func (s *JudgeBudgetSuite) TestJudgeLapsedReportsARuleThatRanOut() {
