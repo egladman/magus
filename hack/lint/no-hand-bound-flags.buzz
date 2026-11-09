@@ -1,0 +1,161 @@
+// Tier 1, mechanical: the fix is a flag declared in the command tree.
+namespace handboundflags;
+
+import "assert";
+import "std";
+import "vcs";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+// HAND_BINDING matches a flag bound on a FlagSet, or on the flag package.
+final HAND_BINDING = `\b(flag|fs|flags|fset|flagSet)\.(String|Bool|Int|Int64|Uint|Uint64|Float64|Duration|Var|StringVar|BoolVar|IntVar|Int64Var|UintVar|Uint64Var|Float64Var|DurationVar|Func|BoolFunc|TextVar)\(`;
+
+export fun reads() > [str] {
+    return ["**/*.go", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
+        "libs/figure/**/*.go", "libs/scipbuzz/**/*.go", "libs/testpairing/**/*.go",
+        "libs/text/**/*.go", "libs/xdg/**/*.go", "libs/cmdline/**/*.go"];
+}
+
+// exempt: the command tree, its generated output, and tests.
+export fun exempt(p: str) > bool {
+    return p.startsWith("internal/commands/") or p.startsWith("internal/config/")
+        or p.indexOf("/gen/") != null or p.startsWith("gen/") or p.endsWith("_test.go");
+}
+
+// check fails each hand-bound flag a change adds; no base fails too.
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    final todo = mut [<Path>];
+    foreach (f in files) {
+        if (!exempt(f.value)) {
+            todo.append(f);
+        }
+    }
+    if (todo.len() == 0) {
+        return found;
+    }
+    final base = mergeBase();
+    if (base == "") {
+        return [Finding{ path = ".", message = "cannot tell which lines this change touched: no git merge base",
+            fix = "Run the lint in a git checkout that holds the base branch: fetch it, then rerun lint." }];
+    }
+    foreach (f in todo) {
+        final was = fileAt(base, p: f.value) ?? "";
+        foreach (hit in judge(f.value, now: support\read(f), was: was)) {
+            found.append(hit);
+        }
+    }
+    return found;
+}
+
+// mergeBase is the base commit this checkout forked from, or "".
+fun mergeBase() > str {
+    if (vcs\name() != "git") {
+        return "";
+    }
+    final base = vcs\base() catch "";
+    if (base == "") {
+        return "";
+    }
+    final found = vcs\cmd(["merge-base", "HEAD", base], opts: vcs\CommandOptions{ quiet = true, allowFailure = true }) catch null;
+    if (found == null or !found!.ok) {
+        return "";
+    }
+    return found!.stdout.trim();
+}
+
+// fileAt is the file at base, or null when it did not exist there.
+fun fileAt(base: str, p: str) > str? {
+    final shown = vcs\cmd(["show", "{base}:./{p}"], opts: vcs\CommandOptions{ quiet = true, allowFailure = true }) catch null;
+    if (shown == null or !shown!.ok) {
+        return null;
+    }
+    return shown!.stdout;
+}
+
+// judge lists bindings in now that was lacks; matching is by text.
+export fun judge(path: str, now: str, was: str) > [Finding] {
+    final spare = mut {<str: int>};
+    foreach (line in was.split("\n")) {
+        final key = line.trim();
+        if (binds(key)) {
+            spare[key] = (spare[key] ?? 0) + 1;
+        }
+    }
+    final found = mut [<Finding>];
+    foreach (i, line in now.split("\n")) {
+        final key = line.trim();
+        if (!binds(key)) {
+            continue;
+        }
+        if ((spare[key] ?? 0) > 0) {
+            spare[key] = spare[key]! - 1;
+            continue;
+        }
+        found.append(Finding{ path = path, line = i + 1,
+            message = "this change binds a CLI flag by hand: " + brief(key),
+            fix = "Declare the flag in internal/commands so the generated flag set carries it." });
+    }
+    return found;
+}
+
+// binds: a trimmed line that binds a flag, not a comment.
+fun binds(line: str) > bool {
+    if (line.startsWith("//")) {
+        return false;
+    }
+    return std\pattern(HAND_BINDING).match(line) != null;
+}
+
+fun brief(text: str) > str {
+    if (text.len() > 60) {
+        return text.sub(0, len: 60) + "...";
+    }
+    return text;
+}
+
+test "a binding the change adds is reported at its line" {
+    final was = "\tfs.Bool(\"quiet\", false, \"\")\n";
+    final now = was + "\tfs.String(\"name\", \"\", \"usage\")\n";
+    final got = judge("cmd/magus/x.go", now: now, was: was);
+    assert\equal(got.len(), want: 1, message: "one new binding");
+    assert\equal(got[0].line, want: 2, message: "its line");
+    assert\equal(got[0].path, want: "cmd/magus/x.go", message: "its path");
+}
+
+test "a binding the base already held passes when it moves" {
+    final src = "\tfs.Bool(\"quiet\", false, \"\")\n\tfs.String(\"a\", \"\", \"\")\n";
+    assert\equal(judge("cmd/magus/x.go", now: src, was: src).len(), want: 0, message: "unchanged");
+    final moved = "\tfs.String(\"a\", \"\", \"\")\n\tfs.Bool(\"quiet\", false, \"\")\n";
+    assert\equal(judge("cmd/magus/x.go", now: moved, was: src).len(), want: 0, message: "moved");
+}
+
+test "a second copy of a base binding is new" {
+    final line = "\tfs.Bool(\"quiet\", false, \"\")\n";
+    assert\equal(judge("cmd/magus/x.go", now: line + line, was: line).len(), want: 1, message: "one copy is new");
+}
+
+test "every binding form is caught" {
+    final forms = ["\tflag.String(\"a\", \"\", \"\")", "\tfs.Var(&v, \"b\", \"\")", "\tflags.StringVar(&s, \"c\", \"\", \"\")",
+        "\tfset.Int64(\"d\", 0, \"\")", "\tflagSet.DurationVar(&d, \"e\", 0, \"\")", "\tfs.BoolFunc(\"f\", \"\", nil)"];
+    foreach (form in forms) {
+        assert\equal(judge("cmd/magus/x.go", now: form + "\n", was: "").len(), want: 1, message: form);
+    }
+}
+
+test "a FlagSet's parse and a receiver outside the flag names are not bindings" {
+    final quiet = "\tfs := flag.NewFlagSet(\"x\", flag.ContinueOnError)\n\t_ = fs.Parse(args)\n\tc.String(\"y\")\n";
+    assert\equal(judge("cmd/magus/x.go", now: quiet, was: "").len(), want: 0, message: "not a binding");
+}
+
+test "a commented binding is not a binding" {
+    assert\equal(judge("cmd/magus/x.go", now: "\t// fs.String(\"a\", \"\", \"\")\n", was: "").len(), want: 0, message: "comment");
+}
+
+test "the command tree, its generated output and tests are exempt" {
+    assert\equal(exempt("internal/commands/root.go"), want: true, message: "command tree");
+    assert\equal(exempt("internal/config/config.go"), want: true, message: "config");
+    assert\equal(exempt("cmd/magus/gen/flags.go"), want: true, message: "gen dir");
+    assert\equal(exempt("cmd/magus/query_test.go"), want: true, message: "test");
+    assert\equal(exempt("cmd/magus/query.go"), want: false, message: "a CLI file is not exempt");
+}
