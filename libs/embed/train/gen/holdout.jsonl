@@ -1017,7 +1017,7 @@
 {"group":"dir:hack/dev","path":"hack/dev/prune-changelog-fragments.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/rebase-branches-onto-base.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/reclaim-disk-space.buzz"}
-{"group":"dir:hack/dev","path":"hack/dev/recover-work.buzz"}
+{"group":"dir:hack/dev","path":"hack/dev/reclaim-lost-work.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/rename-gate-to-verification.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/rename-symbol.buzz"}
 {"group":"dir:hack/dev","path":"hack/dev/render-brief.buzz"}
@@ -1258,7 +1258,6 @@
 {"group":"dir:internal/guard","path":"internal/guard/pipe.go"}
 {"group":"dir:internal/guard","path":"internal/guard/pipe_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/policy.go"}
-{"group":"dir:internal/guard","path":"internal/guard/policy_snapshot.go"}
 {"group":"dir:internal/guard","path":"internal/guard/policy_snapshot_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/policy_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/preauth.go"}
