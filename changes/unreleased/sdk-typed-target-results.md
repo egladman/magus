@@ -9,8 +9,3 @@
   they reach only the exported API, and a test fails when a block of
   `docs/guides/go-sdk.md` stops matching them. New sections read a failed target's
   coded error and a run the guard denies.
-
-### Fixed
-
-- **The comment-style write rule no longer counts a Go Example's `// Output:` block as
-  prose.** It refused any example whose expected output ran past the comment limits.
