@@ -16,13 +16,13 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// advisoryStore opens the advisories store of the repository root names.
-func advisoryStore(root string) (sessions.AdvisoryStore, error) {
+// directiveStore opens the advisories store of the repository root names.
+func directiveStore(root string) (sessions.DirectiveStore, error) {
 	root, err := attentionRoot(root)
 	if err != nil {
-		return sessions.AdvisoryStore{}, err
+		return sessions.DirectiveStore{}, err
 	}
-	return sessions.OpenAdvisoryStore(root)
+	return sessions.OpenDirectiveStore(root)
 }
 
 // requirePerson refuses verb without an interactive terminal. The guard denies
@@ -52,7 +52,7 @@ func adviseCommand(root string, args []string) error {
 	if err := requirePerson("advise"); err != nil {
 		return err
 	}
-	store, err := advisoryStore(root)
+	store, err := directiveStore(root)
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func adviseCommand(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	return emitAdvisory(a, "posted")
+	return emitDirective(a, "posted")
 }
 
 func retractCommand(root string, args []string) error {
@@ -74,7 +74,7 @@ func retractCommand(root string, args []string) error {
 	if err := requirePerson("retract"); err != nil {
 		return err
 	}
-	store, err := advisoryStore(root)
+	store, err := directiveStore(root)
 	if err != nil {
 		return err
 	}
@@ -82,10 +82,10 @@ func retractCommand(root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("magus session retract: %w", err)
 	}
-	return emitAdvisory(a, "retracted")
+	return emitDirective(a, "retracted")
 }
 
-func emitAdvisory(a sessions.Advisory, verb string) error {
+func emitDirective(a sessions.Directive, verb string) error {
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -99,8 +99,8 @@ func emitAdvisory(a sessions.Advisory, verb string) error {
 
 // advisoriesOutput is the JSON form of `session advisories`.
 type advisoriesOutput struct {
-	Advisories []sessions.Advisory `json:"advisories"`
-	Store      string              `json:"store"`
+	Advisories []sessions.Directive `json:"advisories"`
+	Store      string               `json:"store"`
 }
 
 func advisoriesCommand(root string, args []string) error {
@@ -115,7 +115,7 @@ func advisoriesCommand(root string, args []string) error {
 	if len(rest) > 0 {
 		return exit.Usagef("magus session advisories: takes no arguments (got %q)", rest[0])
 	}
-	store, err := advisoryStore(root)
+	store, err := directiveStore(root)
 	if err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ func advisoriesCommand(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	shown := make([]sessions.Advisory, 0, len(loaded))
+	shown := make([]sessions.Directive, 0, len(loaded))
 	for _, a := range loaded {
 		if all || a.Open() {
 			shown = append(shown, a)
@@ -148,7 +148,7 @@ func advisoriesCommand(root string, args []string) error {
 	return emitFormatted(opts, advisoriesOutput{Advisories: shown, Store: dir})
 }
 
-func renderAdvisoriesText(shown []sessions.Advisory, dir string) {
+func renderAdvisoriesText(shown []sessions.Directive, dir string) {
 	if len(shown) == 0 {
 		fmt.Fprintf(os.Stdout, "no open advisories in %s\n", dir)
 		return
@@ -164,7 +164,7 @@ func renderAdvisoriesText(shown []sessions.Advisory, dir string) {
 	}
 }
 
-func actedLine(a sessions.Advisory) string {
+func actedLine(a sessions.Directive) string {
 	if a.Expect == "" {
 		return "acted: not measured (no --expect)"
 	}

@@ -19,26 +19,26 @@ import (
 // because the words are the person's, not the guard's.
 const RulePersonAdvisory = "person-advisory"
 
-// showAdvisories returns the directive for the open advisories a root
+// showDirectives returns the directive for the open advisories a root
 // session has not been shown, recording the showing. note names a store it
 // could not use, so an unreadable store never reads as nothing open.
-func showAdvisories(ctx context.Context, at location, who hookAttribution) (directive, note string) {
+func showDirectives(ctx context.Context, at location, who hookAttribution) (directive, note string) {
 	if who.Agent != "" || who.Session == "" || at.workspace == "" {
 		return "", ""
 	}
-	store, err := sessions.OpenAdvisoryStore(at.workspace)
+	store, err := sessions.OpenDirectiveStore(at.workspace)
 	if err != nil {
-		return "", advisoryNote(err)
+		return "", directiveNote(err)
 	}
-	showing := sessions.Showing{Session: who.Session, Host: who.Host, Event: who.Event}
+	showing := sessions.Recipient{Session: who.Session, Host: who.Host, Event: who.Event}
 	got, err := store.Deliver(ctx, showing, time.Now())
 	if err != nil {
-		return "", advisoryNote(err)
+		return "", directiveNote(err)
 	}
-	return sessions.Directive(got), ""
+	return sessions.DirectiveText(got), ""
 }
 
-func advisoryNote(err error) string {
+func directiveNote(err error) string {
 	return fmt.Sprintf("magus workspace: the person's advisories could not be read, so none was shown: %s", err)
 }
 
@@ -49,7 +49,7 @@ func adviseMessage(ctx context.Context, at location, who hookAttribution, render
 	if !rendersContext {
 		return v
 	}
-	directive, note := showAdvisories(ctx, at, who)
+	directive, note := showDirectives(ctx, at, who)
 	if text := strings.TrimSpace(directive + "\n\n" + note); text != "" {
 		v.Decision, v.Context = decisionAdvise, text
 	}
@@ -75,7 +75,7 @@ func adviseStop(ctx context.Context, at location, who hookAttribution, raw strin
 	if v.Decision == decisionDeny || !endsRootTurn(raw, who) {
 		return v
 	}
-	directive, note := showAdvisories(ctx, at, who)
+	directive, note := showDirectives(ctx, at, who)
 	if note != "" {
 		v.Context = strings.TrimPrefix(v.Context+"\n"+note, "\n")
 	}
@@ -93,9 +93,9 @@ func recordAdvisoryAct(ctx context.Context, at location, who hookAttribution, co
 	if who.Session == "" || at.workspace == "" {
 		return
 	}
-	store, err := sessions.OpenAdvisoryStore(at.workspace)
+	store, err := sessions.OpenDirectiveStore(at.workspace)
 	if err == nil {
-		showing := sessions.Showing{Session: who.Session, Host: who.Host, Event: who.Event}
+		showing := sessions.Recipient{Session: who.Session, Host: who.Host, Event: who.Event}
 		err = store.RecordActed(ctx, showing, command, time.Now())
 	}
 	if err != nil {

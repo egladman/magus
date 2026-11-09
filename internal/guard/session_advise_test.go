@@ -18,25 +18,25 @@ const (
 	subagentStopRaw = `{"hook_event_name":"SubagentStop","session_id":"s1","stop_hook_active":false}`
 )
 
-type PersonAdvisorySuite struct {
+type SessionAdviseSuite struct {
 	suite.Suite
 	at    location
-	store sessions.AdvisoryStore
+	store sessions.DirectiveStore
 	who   hookAttribution
 }
 
-func TestPersonAdvisorySuite(t *testing.T) { suite.Run(t, new(PersonAdvisorySuite)) }
+func TestSessionAdviseSuite(t *testing.T) { suite.Run(t, new(SessionAdviseSuite)) }
 
-func (s *PersonAdvisorySuite) SetupTest() {
+func (s *SessionAdviseSuite) SetupTest() {
 	s.T().Setenv("XDG_STATE_HOME", s.T().TempDir())
 	s.at = location{workspace: s.T().TempDir()}
-	store, err := sessions.OpenAdvisoryStore(s.at.workspace)
+	store, err := sessions.OpenDirectiveStore(s.at.workspace)
 	s.Require().NoError(err)
 	s.store = store
 	s.who = hookAttribution{Host: "claude-code", Session: "s1"}
 }
 
-func (s *PersonAdvisorySuite) post(expect string) sessions.Advisory {
+func (s *SessionAdviseSuite) post(expect string) sessions.Directive {
 	a, err := s.store.Post(context.Background(), "push what you have; we squash into one PR", expect, "eli", time.Now())
 	s.Require().NoError(err)
 	return a
@@ -46,7 +46,7 @@ func pass() types.GuardJudgment {
 	return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 }
 
-func (s *PersonAdvisorySuite) TestARootStopIsHeldOnceToShowTheAdvisory() {
+func (s *SessionAdviseSuite) TestARootStopIsHeldOnceToShowTheAdvisory() {
 	a := s.post("")
 	v := adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass())
 	s.Equal(decisionDeny, v.Decision)
@@ -56,7 +56,7 @@ func (s *PersonAdvisorySuite) TestARootStopIsHeldOnceToShowTheAdvisory() {
 	s.Equal(decisionPass, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Decision)
 }
 
-func (s *PersonAdvisorySuite) TestASubagentStopShowsNothing() {
+func (s *SessionAdviseSuite) TestASubagentStopShowsNothing() {
 	s.post("")
 	s.Equal(decisionPass, adviseStop(context.Background(), s.at, s.who, subagentStopRaw, pass()).Decision)
 	child := s.who
@@ -65,14 +65,14 @@ func (s *PersonAdvisorySuite) TestASubagentStopShowsNothing() {
 	s.Equal(decisionDeny, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Decision)
 }
 
-func (s *PersonAdvisorySuite) TestAStopAlreadyHeldShowsItNextTime() {
+func (s *SessionAdviseSuite) TestAStopAlreadyHeldShowsItNextTime() {
 	s.post("")
 	held := types.GuardJudgment{Decision: decisionDeny, Reason: "background tasks still run"}
 	s.Equal(held, adviseStop(context.Background(), s.at, s.who, rootStopRaw, held))
 	s.Equal(RulePersonAdvisory, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Rule)
 }
 
-func (s *PersonAdvisorySuite) TestAPromptShowsItOnlyWhereContextRenders() {
+func (s *SessionAdviseSuite) TestAPromptShowsItOnlyWhereContextRenders() {
 	a := s.post("")
 	s.Equal(decisionPass, adviseMessage(context.Background(), s.at, s.who, false).Decision)
 	v := adviseMessage(context.Background(), s.at, s.who, true)
@@ -81,8 +81,8 @@ func (s *PersonAdvisorySuite) TestAPromptShowsItOnlyWhereContextRenders() {
 	s.Equal(decisionPass, adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass()).Decision)
 }
 
-func (s *PersonAdvisorySuite) TestAnUnreadableStoreIsNamed() {
-	dir, err := sessions.AdvisoryDir(s.at.workspace)
+func (s *SessionAdviseSuite) TestAnUnreadableStoreIsNamed() {
+	dir, err := sessions.DirectiveDir(s.at.workspace)
 	s.Require().NoError(err)
 	s.Require().NoError(os.MkdirAll(dir, 0o755))
 	s.Require().NoError(os.WriteFile(filepath.Join(dir, "advisories.jsonl"), []byte("{\"kind\":\"shout\"}\n"), 0o644))
@@ -91,7 +91,7 @@ func (s *PersonAdvisorySuite) TestAnUnreadableStoreIsNamed() {
 	s.Contains(v.Context, "advisories could not be read")
 }
 
-func (s *PersonAdvisorySuite) TestAnExpectedCommandCountsAfterTheShowing() {
+func (s *SessionAdviseSuite) TestAnExpectedCommandCountsAfterTheShowing() {
 	s.post("git push")
 	recordAdvisoryAct(context.Background(), s.at, s.who, "git push origin HEAD")
 	adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass())
