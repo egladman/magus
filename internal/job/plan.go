@@ -556,7 +556,7 @@ func resolveMerge(ctx context.Context, store *Store, rows []types.Job, id string
 	paths := append(slices.Clone(probe.WritePaths), placed...)
 	if ws, why := store.loadedWorkspace(); why == "" {
 		probe.Goals, probe.WritePaths = goals, paths
-		if added := lintGoals(store.root, probe, ws); len(added) > 0 {
+		if added := lintGoals(store.root, probe, ws, store.checkGrader()); len(added) > 0 {
 			goals = append(slices.Clone(goals), added...)
 			out := store.notices
 			if out == nil {

@@ -297,8 +297,9 @@ func composeModelTierMatrix(workspace types.ModelTierMatrix, userPath string, ti
 // that declares none pays nothing, and are reused until a file they were read from
 // changes: a grader lives as long as the Store, or the daemon, it was made for, and
 // grading against rules an edit has since replaced would admit or refuse the wrong check.
-// runCLI installs one with job.SetCheckGrader, and it is the only grader.
-// Every fork door opens a Store that names none.
+// runCLI installs one with job.SetCheckGrader for every door that opens a Store naming
+// none, such as magus\workspace().putJob. `magus job fork` grades with a [forkGrader]
+// instead, which judges alike and keeps what it opened for the rest of the fork.
 func newCheckGrader() job.CheckGrader {
 	return (&rulesByRoot{loaded: map[string]gradingRules{}}).grade
 }
@@ -307,22 +308,25 @@ func newCheckGrader() job.CheckGrader {
 type rulesByRoot struct {
 	mu     sync.Mutex
 	loaded map[string]gradingRules
+	// opens is handed to every judgment as guard.Dependencies.Opens: nil for the
+	// installed grader, which outlives any one tree, and one fork's memo for a fork's.
+	opens *guard.WorkspaceMemo
 }
 
 func (r *rulesByRoot) grade(ctx context.Context, root string, row types.Job) job.CheckVerdict {
-	return gradeCheck(ctx, r.current(ctx, root), root, row)
+	return gradeCheck(ctx, r.current(ctx, root).judging(r.opens), root, row)
 }
 
-func (r *rulesByRoot) current(ctx context.Context, root string) guard.Dependencies {
+func (r *rulesByRoot) current(ctx context.Context, root string) gradingRules {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if g, ok := r.loaded[root]; ok && g.unchanged() {
-		return g.deps
+		return g
 	}
 	// The rules outlive this grade, so its cancellation must not decide them.
 	g := loadGradingRules(context.WithoutCancel(ctx), root)
 	r.loaded[root] = g
-	return g.deps
+	return g
 }
 
 // gradingRules is a workspace's guard dependencies and the files its rules were read from.
@@ -333,12 +337,39 @@ type gradingRules struct {
 	sources []interp.SourceFile
 }
 
+// judging is g's dependencies for one judgment, which keeps the workspaces it opens in
+// opens when that is not nil.
+func (g gradingRules) judging(opens *guard.WorkspaceMemo) guard.Dependencies {
+	deps := g.deps
+	deps.Opens = opens
+	return deps
+}
+
 func loadGradingRules(ctx context.Context, root string) gradingRules {
 	deps, rules := loadGuardDependencies(ctx, root)
-	if rules == nil {
+	if rules != nil {
+		return gradingRules{deps: deps, sources: rules.Policy().Sources}
+	}
+	if deps.Policy == nil {
 		return gradingRules{deps: deps}
 	}
-	return gradingRules{deps: deps, sources: rules.Policy().Sources}
+	// A policy snapshot hit only when its key covered the bytes on disk.
+	// So those bytes are the ones the rules came from.
+	return gradingRules{deps: deps, sources: sourcesOnDisk(deps.Policy().Files)}
+}
+
+// sourcesOnDisk names each file by the id of the bytes it holds now.
+// It is nil when a file cannot be read, so the next grade loads again.
+func sourcesOnDisk(paths []string) []interp.SourceFile {
+	out := make([]interp.SourceFile, len(paths))
+	for i, p := range paths {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return nil
+		}
+		out[i] = interp.SourceFile{Path: p, ContentID: interp.ContentID(data)}
+	}
+	return out
 }
 
 // unchanged reports whether every file the rules were read from still holds the bytes the
@@ -1335,7 +1366,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	jobWS := jobWorkspace(ctx, root)
-	store = store.InWorkspace(jobWS)
+	store = store.InWorkspace(jobWS).WithGrader(newForkGrader(forkHeldWorkspace(ctx, root, jobWS)).grade)
 	if retry {
 		if row, err = retriedDeclaration(ctx, store, row); err != nil {
 			return err
@@ -1388,8 +1419,16 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if row, err = forkCheckout(ctx, store, root, row); err != nil {
 		return err
 	}
-	// The reader loads the graph only when a gate names a symbol, or when the deletion
-	// candidates ask for it, and the two share one load.
+	// Claimed after forkCheckout and released before the worktree is provisioned: a build
+	// there claims its own seat, and a step behind its own process's claim may never seat.
+	seated, err := admitForkValidation(ctx, processBrokerClient(), root)
+	if err != nil {
+		return err
+	}
+	releaseSeat := sync.OnceFunc(seated)
+	defer releaseSeat()
+	// The graph loads only when a goal names a symbol, the footprint could extend by its
+	// referrers, or the report lists deletion candidates, and they share one load.
 	graph := newJobGraph(root, true)
 	reader := graphSymbolReader(graph.load)
 	row, notes := extendedFootprint(ctx, store, graph, root, row, jobWS)
@@ -1419,6 +1458,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("judged %s's goals in %s", row.ID, cache.FormatDuration(time.Since(judging))), attr.Notice("note"))
+	// ForkMerge validates once more, from the grades and the workspace this pass kept.
+	releaseSeat()
 	judgedLive := noteForkJudgedAsUpdate(ctx, store, row.ID)
 	if row.Parent == "" && len(row.Integrates) == 0 && len(validation.Problems) == 0 {
 		reportForkFacts(ctx, store, root)
@@ -1531,7 +1572,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			warnWorkspaceUnloaded(ctx, errors.New(jobWS.Unavailable))
 		}
 	}
-	referenced, referencedGap := referencedOutside(ctx, graph.load, root, stored, jobWS.Projects)
+	referenced, referencedGap := referencedOutside(ctx, graph.loadScoped(stored.WritePaths), root, stored, jobWS.Projects)
 	switch opts.Format {
 	case outputText:
 		fmt.Printf("forked %s, %s, with %d write path(s). Its holder reads the terms with `%s` and takes it with `%s`\n",
@@ -1551,7 +1592,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if len(derived) > 0 {
 			fmt.Printf("its symbol goals claimed %d declaration(s) its write paths did not cover: -o json lists each\n", len(derived))
 		}
-		job.RenderDeletionCandidates(os.Stdout, deletionCandidates(ctx, graph.load, stored))
+		job.RenderDeletionCandidates(os.Stdout, deletionCandidates(ctx, graph.loadScoped(stored.WritePaths), stored))
 		job.RenderReferencedOutside(os.Stdout, referenced, referencedGap)
 		job.RenderForegroundOverrun(os.Stdout, overrun)
 		// The forker waits for the budget so the holder never does.
@@ -1569,7 +1610,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return emitFormatted(opts, forkReport{
 			forkOutput{
 				Job:                  stored,
-				DeletionCandidates:   deletionCandidates(ctx, graph.load, stored),
+				DeletionCandidates:   deletionCandidates(ctx, graph.loadScoped(stored.WritePaths), stored),
 				ReferencedOutside:    referenced,
 				ReferencedOutsideGap: referencedGap,
 				ForegroundOverrun:    overrun,

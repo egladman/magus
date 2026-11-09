@@ -2,7 +2,9 @@ package guard
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/stretchr/testify/suite"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -2089,4 +2091,75 @@ func TestJobRowsReadIsBoundedByTheDeadline(t *testing.T) {
 	asked := askWorkspaceRules(ctx, seamCommand, Dependencies{}, nil, nil)
 	require.NotNil(t, asked.lapse)
 	assert.Contains(t, asked.lapse.what(), "reading the job store did not finish within")
+}
+
+// WorkspaceMemoSuite pins what Dependencies.Opens carries from one judgment to the next:
+// an open that succeeded, never one that failed.
+type WorkspaceMemoSuite struct {
+	suite.Suite
+	opens int
+	fail  bool
+}
+
+func TestWorkspaceMemoSuite(t *testing.T) {
+	suite.Run(t, new(WorkspaceMemoSuite))
+}
+
+func (s *WorkspaceMemoSuite) SetupTest() {
+	s.opens, s.fail = 0, false
+}
+
+// stubWorkspace is an opened workspace no rule here reads.
+type stubWorkspace struct{ types.WorkspaceRepository }
+
+// judgment is one judgment's Dependencies over memo, as Judge fills them.
+func (s *WorkspaceMemoSuite) judgment(memo *WorkspaceMemo) Dependencies {
+	deps := Dependencies{Opens: memo, Inspect: func(context.Context, string) (types.WorkspaceRepository, error) {
+		s.opens++
+		if s.fail {
+			return nil, errors.New("did not open")
+		}
+		return stubWorkspace{}, nil
+	}}
+	deps.opens = newWorkspaceOpens(deps.Opens)
+	return deps
+}
+
+func (s *WorkspaceMemoSuite) TestWithoutAMemoEachJudgmentOpens() {
+	for range 2 {
+		deps := s.judgment(nil)
+		_, _ = deps.inspect(s.T().Context(), "/w")
+		_, _ = deps.inspect(s.T().Context(), "/w")
+	}
+	s.Equal(2, s.opens, "once per judgment, however often a rule asks")
+}
+
+func (s *WorkspaceMemoSuite) TestAKeptWorkspaceServesEveryJudgment() {
+	memo := NewWorkspaceMemo()
+	memo.Keep("/w", stubWorkspace{})
+	for range 2 {
+		_, err := s.judgment(memo).inspect(s.T().Context(), "/w")
+		s.Require().NoError(err)
+	}
+	s.Zero(s.opens)
+}
+
+func (s *WorkspaceMemoSuite) TestAnOpenServesTheJudgmentsAfterIt() {
+	memo := NewWorkspaceMemo()
+	for range 3 {
+		_, err := s.judgment(memo).inspect(s.T().Context(), "/w")
+		s.Require().NoError(err)
+	}
+	s.Equal(1, s.opens)
+}
+
+func (s *WorkspaceMemoSuite) TestAFailedOpenIsTriedAgainNextJudgment() {
+	memo := NewWorkspaceMemo()
+	s.fail = true
+	_, err := s.judgment(memo).inspect(s.T().Context(), "/w")
+	s.Require().Error(err)
+	s.fail = false
+	_, err = s.judgment(memo).inspect(s.T().Context(), "/w")
+	s.Require().NoError(err)
+	s.Equal(2, s.opens)
 }

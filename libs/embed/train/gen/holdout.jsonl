@@ -465,6 +465,8 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/job_claim_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_delta.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_delta_test.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/job_fork.go"}
+{"group":"dir:cmd/magus","path":"cmd/magus/job_fork_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_grant.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_grant_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/job_graph.go"}
