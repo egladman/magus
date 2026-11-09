@@ -7257,6 +7257,12 @@ func decodeJobRelease(v vm.Value, path string) (types.JobRelease, error) {
 				return out, err
 			}
 			out.DeadBecause = sDeadBecause
+		case "narrowed":
+			bNarrowed, err := decodeBool(item, path+".narrowed")
+			if err != nil {
+				return out, err
+			}
+			out.Narrowed = bNarrowed
 		default:
 			return out, unknownMember(path, "JobRelease", key)
 		}
