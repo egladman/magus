@@ -271,7 +271,7 @@ func adviseUnresolvedCache(deps Dependencies, writePath string) writeGrade {
 // declaration of that file (see gradeDeniedDeclarations), and a write inside its own paths
 // when another live lease claims one (see gradeClaimedDeclarations). A write to a project's
 // magusfile or magus.yaml the lease holds only through a pattern narrows that hold to the
-// declarations it changes (see gradeConfigNarrowing). A write the lease's boundary allowed
+// declarations it changes (see gradeNarrowedHold). A write the lease's boundary allowed
 // that adds a compat marker is advised (see gradeCompatMarker).
 func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writePath string, fields writeFields) writeGrade {
 	writePath = strings.TrimSpace(writePath)
@@ -414,7 +414,7 @@ func gradeEnrolledEdit(ctx context.Context, deps Dependencies, e ownedEdit) writ
 	if claimed := gradeClaimedDeclarations(ctx, checkout, me, owners, rel, fields); claimed.Decision != "" {
 		return claimed
 	}
-	if narrowed := gradeConfigNarrowing(ctx, location, checkout, me, owners, rel, fields); narrowed.Decision != "" {
+	if narrowed := gradeNarrowedHold(ctx, location, checkout, me, owners, rel, fields); narrowed.Decision != "" {
 		return narrowed
 	}
 	// Graded whatever g says, so the root's row is filed even when another advisory

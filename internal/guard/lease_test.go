@@ -1309,7 +1309,7 @@ func TestWorkerCheckOnlyNamesASlowOpen(t *testing.T) {
 
 	reason := denyWorkerCheckOnly(ctx, deps, row.ID, "./magus run diagrams-generate:rw docs")
 	require.True(t, reason.refused())
-	assert.Contains(t, reason.Say, "opening the workspace took longer than the guard's 3.5s budget for it; run `")
+	assert.Contains(t, reason.Say, "opening the workspace took longer than the guard's 7s budget; run `")
 	assert.NotContains(t, reason.Say, "did not load")
 }
 

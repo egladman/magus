@@ -210,9 +210,6 @@ func (s snapshotSite) write(ctx context.Context, rules *WorkspaceRules) error {
 	if err != nil {
 		return err
 	}
-	if builtins == nil {
-		builtins = lightBuiltins()
-	}
 	policy := rules.Policy()
 	body := snapshotBody{
 		Digest:   policy.Digest,

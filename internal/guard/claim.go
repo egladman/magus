@@ -77,11 +77,11 @@ func gradeClaimedDeclarations(ctx context.Context, workspace string, me types.Jo
 	return writeGrade{}
 }
 
-// gradeConfigNarrowing grows me's claims on rel by the declarations this write
+// gradeNarrowedHold grows me's claims on rel by the declarations this write
 // changes, when the store narrowed me's hold on rel or a pattern alone holds it
 // (see job.NarrowHold). Each growth is advised. A change to a declaration
 // another lease claims is denied; a write magus cannot place narrows nothing.
-func gradeConfigNarrowing(ctx context.Context, at location, checkout string, me types.Job, owners []types.Job, rel string, fields writeFields) writeGrade {
+func gradeNarrowedHold(ctx context.Context, at location, checkout string, me types.Job, owners []types.Job, rel string, fields writeFields) writeGrade {
 	narrowed := job.Narrowed(me, rel)
 	if !narrowed && !coveredOnlyByPattern(me, rel) {
 		return writeGrade{}
