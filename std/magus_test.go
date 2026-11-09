@@ -1001,6 +1001,7 @@ type ratedWorkspace struct {
 
 func (w *ratedWorkspace) ModelTiers(context.Context) *types.ModelTierSet { return w.tiers }
 func (w *ratedWorkspace) ModelTierMatrix() types.ModelTierMatrix         { return nil }
+func (w *ratedWorkspace) CheckSpawn(_, _ types.ModelTier) error          { return nil }
 func (w *ratedWorkspace) ModelRows(context.Context) func() []types.ModelPricing {
 	return func() []types.ModelPricing { return w.rows }
 }

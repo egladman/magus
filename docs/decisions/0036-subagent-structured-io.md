@@ -88,7 +88,7 @@ the parent's prose, and nothing rewrites it. The row is already typed, validated
 the spawn, and rendered for the child by `magus describe job` and the checkout brief.
 Nothing is built for this part.
 
-### 2. The output is the JobResult the child files
+### 2. The output is the `JobResult` the child files
 
 A subagent's structured output is the `JobResult` it files with `magus job exit --stdin`.
 The parent reads it with `magus job wait` or `magus describe job`, from any checkout, on
@@ -109,7 +109,7 @@ The shape is configured where away mode is: in the workspace's own Buzz policy.
 
 magus ships no such rule, the same stance as `magus\guard.spawn`.
 
-### 4. One generic host addition: the reply on StopRequest
+### 4. One generic host addition: the reply on `StopRequest`
 
 `StopRequest` gains `reply`: the stopping agent's last message as the host reported it,
 empty when it reported none. Claude Code and Codex carry it as `last_assistant_message`.

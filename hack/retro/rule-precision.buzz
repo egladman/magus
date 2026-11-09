@@ -526,61 +526,71 @@ export fun rows(ev: Evidence) > [Row] {
     }
     final all = mut [<Row>];
     foreach (rule in order) {
-        final counts = mut {<str: int>};
-        var tp = 0;
-        var fp = 0;
-        var unlabeled = 0;
-        var confirmed = 0;
-        final classes = mut {<str: bool>};
-        foreach (fpr in prints[rule]!) {
-            final outs = sigs[fpr] ?? [<str>];
-            foreach (o in OUTCOMES) {
-                if (hasOutcome(outs, name: o)) {
-                    counts[o] = (counts[o] ?? 0) + 1;
-                }
-            }
-            if (hasOutcome(outs, name: "review-confirmed")) {
-                confirmed = confirmed + 1;
-                classes[ev.review.classes[fpr] ?? ""] = true;
-            }
-            if (ev.labels[fpr] -> label) {
-                if (label.label == TP) {
-                    tp = tp + 1;
-                } else {
-                    fp = fp + 1;
-                }
-            } else if (hasOutcome(outs, name: "review-confirmed")) {
-                tp = tp + 1;
-            } else if (hasOutcome(outs, name: "oracle-fp") or hasOutcome(outs, name: "retry-passed-unchanged")) {
-                fp = fp + 1;
-            } else {
-                unlabeled = unlabeled + 1;
-            }
-        }
-        var missed = 0;
-        foreach (r in ev.review.escaped) {
-            if (classes[r.class] != null) {
-                missed = missed + 1;
-            }
-        }
-        final judged = tp + fp;
-        var cost = Cost{ rule = rule, denials = 0, episodes = 0, wallMs = 0, unresolved = 0 };
-        foreach (c in ev.costs) {
-            if (c.rule == rule) {
-                cost = c;
-            }
-        }
-        all.append(Row{
-            rule = rule, source = source[rule]!, firings = fired[rule]!, fingerprints = prints[rule]!.len(), outcomes = counts,
-            tp = tp, fp = fp, unlabeled = unlabeled,
-            precision = if (judged > 0) std\toDouble(tp) / std\toDouble(judged) else null, wilson = wilson(tp, n: judged),
-            confirmed = confirmed, escaped = missed,
-            recall = if (confirmed + missed > 0) std\toDouble(confirmed) / std\toDouble(confirmed + missed) else null,
-            denials = cost.denials, meanRetries = if (cost.episodes > 0) std\toDouble(cost.denials) / std\toDouble(cost.episodes) else null,
-            wallSeconds = std\toDouble(cost.wallMs) / 1000.0, unresolved = cost.unresolved,
-        });
+        all.append(ruleRow(ev, rule: rule, source: source[rule]!, firings: fired[rule]!, prints: prints[rule]!, sigs: sigs));
     }
     return all;
+}
+
+fun costOf(costs: [Cost], rule: str) > Cost {
+    var cost = Cost{ rule = rule, denials = 0, episodes = 0, wallMs = 0, unresolved = 0 };
+    foreach (c in costs) {
+        if (c.rule == rule) {
+            cost = c;
+        }
+    }
+    return cost;
+}
+
+// ruleRow counts one rule's distinct fingerprints against their signals.
+fun ruleRow(ev: Evidence, rule: str, source: str, firings: int, prints: [str], sigs: {str: [str]}) > Row {
+    final counts = mut {<str: int>};
+    var tp = 0;
+    var fp = 0;
+    var unlabeled = 0;
+    var confirmed = 0;
+    final classes = mut {<str: bool>};
+    foreach (fpr in prints) {
+        final outs = sigs[fpr] ?? [<str>];
+        foreach (o in OUTCOMES) {
+            if (hasOutcome(outs, name: o)) {
+                counts[o] = (counts[o] ?? 0) + 1;
+            }
+        }
+        if (hasOutcome(outs, name: "review-confirmed")) {
+            confirmed = confirmed + 1;
+            classes[ev.review.classes[fpr] ?? ""] = true;
+        }
+        if (ev.labels[fpr] -> label) {
+            if (label.label == TP) {
+                tp = tp + 1;
+            } else {
+                fp = fp + 1;
+            }
+        } else if (hasOutcome(outs, name: "review-confirmed")) {
+            tp = tp + 1;
+        } else if (hasOutcome(outs, name: "oracle-fp") or hasOutcome(outs, name: "retry-passed-unchanged")) {
+            fp = fp + 1;
+        } else {
+            unlabeled = unlabeled + 1;
+        }
+    }
+    var missed = 0;
+    foreach (r in ev.review.escaped) {
+        if (classes[r.class] != null) {
+            missed = missed + 1;
+        }
+    }
+    final judged = tp + fp;
+    final cost = costOf(ev.costs, rule: rule);
+    return Row{
+        rule = rule, source = source, firings = firings, fingerprints = prints.len(), outcomes = counts,
+        tp = tp, fp = fp, unlabeled = unlabeled,
+        precision = if (judged > 0) std\toDouble(tp) / std\toDouble(judged) else null, wilson = wilson(tp, n: judged),
+        confirmed = confirmed, escaped = missed,
+        recall = if (confirmed + missed > 0) std\toDouble(confirmed) / std\toDouble(confirmed + missed) else null,
+        denials = cost.denials, meanRetries = if (cost.episodes > 0) std\toDouble(cost.denials) / std\toDouble(cost.episodes) else null,
+        wallSeconds = std\toDouble(cost.wallMs) / 1000.0, unresolved = cost.unresolved,
+    };
 }
 
 fun round4(x: double?) > double? !> any {
@@ -723,6 +733,77 @@ fun commitsOf(firings: [Firing], missing: mut [str]) > {str: Authored} {
     return found;
 }
 
+fun readTrails(checkouts: [str], start: int, records: mut [trace\Record], verdicts: mut {str: str}, missing: mut [str]) > void !> any {
+    foreach (c in checkouts) {
+        if (!fs\exists(fs\join(c, name: ".magus/activity/events.jsonl"))) {
+            missing.append("every guard firing in {c}: no guard trail there; name the checkout that holds it with --trail");
+            continue;
+        }
+        final got = trace\trailFor(c, start: start, end: denials\FOREVER);
+        foreach (r in got) {
+            records.append(r);
+        }
+        foreach (k, v in verdictsOf(c, records: got)) {
+            verdicts[k] = v;
+        }
+    }
+}
+
+fun labelsFrom(file: str, missing: mut [str]) > {str: Label} !> any {
+    if (!fs\exists(file)) {
+        missing.append("person labels: no {file}");
+        return {<str: Label>};
+    }
+    final loaded = readLabels(file);
+    foreach (m in loaded.refused) {
+        missing.append("a label line refused: {m}");
+    }
+    return loaded.items;
+}
+
+fun printJsonl(all: [Row], escaped: [Review], missing: [str]) > void !> any {
+    foreach (r in all) {
+        std\print(rowJson(r));
+    }
+    foreach (cls, n in escapedClasses(escaped)) {
+        std\print(json\stringify({"kind": "class", "class": cls, "escaped": n}));
+    }
+    foreach (m in missing) {
+        std\print(json\stringify({"kind": "missing", "what": m}));
+    }
+}
+
+fun firingsFrom(records: [trace\Record], verdicts: {str: str}, file: str, missing: mut [str]) > [Firing] !> any {
+    final firings = mut [<Firing>];
+    foreach (r in trace\denied(records)) {
+        firings.append(guardFiring(r, rule: ruleOf(r, verdicts: verdicts)));
+    }
+    if (!fs\exists(file)) {
+        missing.append("every lint firing: no {file}; run hack/lint/run.buzz with --record");
+        return firings;
+    }
+    final loaded = readFirings(file);
+    foreach (f in loaded.items) {
+        firings.append(f);
+    }
+    foreach (m in loaded.refused) {
+        missing.append("a firing line refused: {m}");
+    }
+    return firings;
+}
+
+fun reviewFrom(firings: [Firing], file: str?, missing: mut [str]) > ReviewJoin !> any {
+    if (file == null) {
+        missing.append("review-confirmed, escaped and recall: no --findings file of reviewed defects");
+        return ReviewJoin{ signals = [<Signal>], classes = {<str: str>}, escaped = [<Review>] };
+    }
+    final loaded = readReviews(file!);
+    foreach (m in loaded.refused) {
+        missing.append("a finding line refused: {m}");
+    }
+    return joinReviews(firings, reviews: loaded.items);
+}
+
 export fun main(args: [str]) > void !> any {
     final parsed = flags\parse(args, switches: ["--help"], valued: ["--firings", "--labels", "--findings", "--author", "--since", "-o"], repeated: ["--trail"]);
     if (parsed.values["--help"] != null) {
@@ -747,36 +828,9 @@ export fun main(args: [str]) > void !> any {
 
     final records = mut [<trace\Record>];
     final verdicts = mut {<str: str>};
-    foreach (c in checkouts) {
-        if (!fs\exists(fs\join(c, name: ".magus/activity/events.jsonl"))) {
-            missing.append("every guard firing in {c}: no guard trail there; name the checkout that holds it with --trail");
-            continue;
-        }
-        final got = trace\trailFor(c, start: start, end: denials\FOREVER);
-        foreach (r in got) {
-            records.append(r);
-        }
-        foreach (k, v in verdictsOf(c, records: got)) {
-            verdicts[k] = v;
-        }
-    }
+    readTrails(checkouts, start: start, records: records, verdicts: verdicts, missing: missing);
 
-    final firings = mut [<Firing>];
-    foreach (r in trace\denied(records)) {
-        firings.append(guardFiring(r, rule: ruleOf(r, verdicts: verdicts)));
-    }
-    final firingsFile = parsed.values["--firings"] ?? stateFile("firings.jsonl");
-    if (fs\exists(firingsFile)) {
-        final loaded = readFirings(firingsFile);
-        foreach (f in loaded.items) {
-            firings.append(f);
-        }
-        foreach (m in loaded.refused) {
-            missing.append("a firing line refused: {m}");
-        }
-    } else {
-        missing.append("every lint firing: no {firingsFile}; run hack/lint/run.buzz with --record");
-    }
+    final firings = firingsFrom(records, verdicts: verdicts, file: parsed.values["--firings"] ?? stateFile("firings.jsonl"), missing: missing);
 
     final signals = mut [<Signal>];
     foreach (s in guardSignals(records, verdicts: verdicts)) {
@@ -793,43 +847,16 @@ export fun main(args: [str]) > void !> any {
         missing.append("oracle-fp: no --author names the commits whose text is the oracle");
     }
 
-    var review = ReviewJoin{ signals = [<Signal>], classes = {<str: str>}, escaped = [<Review>] };
-    if (parsed.values["--findings"] -> findingsFile) {
-        final loaded = readReviews(findingsFile);
-        review = joinReviews(firings, reviews: loaded.items);
-        foreach (m in loaded.refused) {
-            missing.append("a finding line refused: {m}");
-        }
-    } else {
-        missing.append("review-confirmed, escaped and recall: no --findings file of reviewed defects");
-    }
+    final review = reviewFrom(firings, file: parsed.values["--findings"], missing: missing);
     foreach (s in review.signals) {
         signals.append(s);
     }
 
-    final labelsFile = parsed.values["--labels"] ?? stateFile("labels.jsonl");
-    var labels = {<str: Label>};
-    if (fs\exists(labelsFile)) {
-        final loaded = readLabels(labelsFile);
-        labels = loaded.items;
-        foreach (m in loaded.refused) {
-            missing.append("a label line refused: {m}");
-        }
-    } else {
-        missing.append("person labels: no {labelsFile}");
-    }
+    final labels = labelsFrom(parsed.values["--labels"] ?? stateFile("labels.jsonl"), missing: missing);
 
     final all = rows(Evidence{ firings = firings, signals = signals, labels = labels, review = review, costs = guardCosts(records, verdicts: verdicts) });
     if (format == "jsonl") {
-        foreach (r in all) {
-            std\print(rowJson(r));
-        }
-        foreach (cls, n in escapedClasses(review.escaped)) {
-            std\print(json\stringify({"kind": "class", "class": cls, "escaped": n}));
-        }
-        foreach (m in missing) {
-            std\print(json\stringify({"kind": "missing", "what": m}));
-        }
+        printJsonl(all, escaped: review.escaped, missing: missing);
         return;
     }
     std\print("read-only: {all.len()} rule(s) from {firings.len()} firing(s) and {records.len()} trail record(s)");
