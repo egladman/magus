@@ -69,6 +69,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocGrantIsAPersons},
 	{doc: ruleDocInlineAlias},
 	{doc: ruleDocMagusTimeout},
+	{doc: ruleDocUnknownMagusArgv},
 	{doc: ruleDocMergeSideCheckout},
 	{doc: ruleDocNotesAuthor},
 	{doc: ruleDocDeviationAuthor},
@@ -625,6 +626,14 @@ var ruleDocVcsOffSwitch = types.RuleDoc{
 	Catches: "an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads",
 	Why: "With vcs off, vcs.Resolve returns no VCS, so the guard has no approved copy to compare a policy edit against and every workspace rule is read from the working tree alone. " +
 		"Decided by parsing the proposed magus.yaml content, never by matching text. A person editing their own checkout, with no lease and no spawn ancestry, is untouched.",
+}
+
+var ruleDocUnknownMagusArgv = types.RuleDoc{
+	Name:    string(denyRuleUnknownMagusArgv),
+	Catches: "a magus command or flag the judging binary's command tree does not have",
+	Why: "magus exits 2 on an unknown subcommand or a flag the command does not bind, so the call would not run. " +
+		"The guard reads the same tree as the binary that judges, names the nearest command or flag, and says which build judged. " +
+		"Words past `--` belong to the tool a target runs and are not read.",
 }
 
 var ruleDocUnknownEnv = types.RuleDoc{
