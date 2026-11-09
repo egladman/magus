@@ -3,6 +3,7 @@ package jsonlstate
 import (
 	"testing"
 
+	"github.com/egladman/magus/libs/conventions/internal/gitdiff"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
@@ -45,14 +46,9 @@ func (s *AnalyzerSuite) TestNewRequiresABase() {
 	s.Require().ErrorContains(err, "no base revision")
 }
 
-func (s *AnalyzerSuite) TestHunksSpanTheWorkingCopyLines() {
-	diff := "@@ -3,0 +4,2 @@\n+a\n+b\n@@ -9,2 +11 @@\n@@ -20,3 +21,0 @@\n"
-	s.Equal([]span{{4, 5}, {11, 11}, {21, 22}}, hunks(diff))
-}
+type lines []gitdiff.Span
 
-type lines []span
-
-func (l lines) File(string) ([]span, error) { return l, nil }
+func (l lines) Lines(string) ([]gitdiff.Span, error) { return l, nil }
 
 // discard drops analysistest's verdict: the want comments expect reports.
 type discard struct{}

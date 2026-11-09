@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/libs/conventions/internal/gitdiff"
 	"github.com/egladman/magus/libs/conventions/internal/source"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/types/typeutil"
@@ -77,7 +78,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 	if slices.Contains(opts.StateSegments, "") {
 		return nil, errors.New("jsonlstate: an empty state segment matches every path")
 	}
-	return newWith(opts, &gitChanges{base: opts.Base}), nil
+	return newWith(opts, gitdiff.New(opts.Base)), nil
 }
 
 func newWith(opts Options, changes changeSource) *analysis.Analyzer {
@@ -89,12 +90,9 @@ func newWith(opts Options, changes changeSource) *analysis.Analyzer {
 }
 
 type changeSource interface {
-	// File returns the changed lines of the working copy.
-	File(path string) ([]span, error)
+	// Lines returns the changed lines of the working copy.
+	Lines(path string) ([]gitdiff.Span, error)
 }
-
-// span is a closed range of line numbers.
-type span struct{ from, to int }
 
 func run(pass *analysis.Pass, opts Options, changes changeSource) error {
 	// Only type-checked files: an ignored file has no types to resolve a call.
@@ -102,7 +100,7 @@ func run(pass *analysis.Pass, opts Options, changes changeSource) error {
 		if source.IsTest(pass, f) {
 			continue
 		}
-		changed, err := changes.File(source.Name(pass, f))
+		changed, err := changes.Lines(source.Name(pass, f))
 		if err != nil {
 			return fmt.Errorf("jsonlstate: %w", err)
 		}
@@ -125,11 +123,8 @@ func run(pass *analysis.Pass, opts Options, changes changeSource) error {
 func (w *walker) report(call *ast.CallExpr) {
 	from := w.pass.Fset.Position(call.Pos()).Line
 	to := w.pass.Fset.Position(call.End()).Line
-	for _, s := range w.changed {
-		if s.from <= to && from <= s.to {
-			w.pass.Reportf(call.Pos(), "%s", source.Hint(message, w.opts.Hint))
-			return
-		}
+	if gitdiff.Overlaps(w.changed, from, to) {
+		w.pass.Reportf(call.Pos(), "%s", source.Hint(message, w.opts.Hint))
 	}
 }
 
@@ -137,7 +132,7 @@ type walker struct {
 	pass *analysis.Pass
 	opts Options
 	// changed holds this file's lines changed since the base.
-	changed []span
+	changed []gitdiff.Span
 	// doc holds variables assigned a marshal result; state, a state path.
 	doc   map[types.Object]bool
 	state map[types.Object]bool

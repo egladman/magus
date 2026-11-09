@@ -1,22 +1,15 @@
 package blankerror
 
 import (
-	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"go/types"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
-	"sync"
 
+	"github.com/egladman/magus/libs/conventions/internal/gitdiff"
 	"github.com/egladman/magus/libs/conventions/internal/source"
 	"golang.org/x/tools/go/analysis"
 )
@@ -42,7 +35,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 	if opts.Base == "" {
 		return nil, errors.New("blankerror: no base revision to measure a change against")
 	}
-	return newWith(opts, &gitChanges{base: opts.Base}), nil
+	return newWith(opts, gitdiff.New(opts.Base)), nil
 }
 
 func newWith(opts Options, changes changeSource) *analysis.Analyzer {
@@ -58,21 +51,9 @@ func newWith(opts Options, changes changeSource) *analysis.Analyzer {
 type changeSource interface {
 	// File returns the changed lines of the working copy and the file's text
 	// at the base, nil when the base lacks the file.
-	File(path string) (changed []span, base []byte, err error)
+	File(path string) (changed []gitdiff.Span, base []byte, err error)
 
 	Rev() string
-}
-
-// span is a closed range of line numbers.
-type span struct{ from, to int }
-
-func overlaps(spans []span, from, to int) bool {
-	for _, s := range spans {
-		if s.from <= to && from <= s.to {
-			return true
-		}
-	}
-	return false
 }
 
 func run(pass *analysis.Pass, opts Options, changes changeSource) error {
@@ -101,7 +82,7 @@ func run(pass *analysis.Pass, opts Options, changes changeSource) error {
 	return nil
 }
 
-func checkFile(pass *analysis.Pass, opts Options, f *ast.File, changed []span, before map[string]int, rev string) {
+func checkFile(pass *analysis.Pass, opts Options, f *ast.File, changed []gitdiff.Span, before map[string]int, rev string) {
 	touched := map[string]bool{}
 	sites := map[string][]*ast.AssignStmt{}
 	var order []string
@@ -115,7 +96,7 @@ func checkFile(pass *analysis.Pass, opts Options, f *ast.File, changed []span, b
 			order = append(order, key)
 		}
 		start, end := pass.Fset.Position(d.Pos()).Line, pass.Fset.Position(d.End()).Line
-		touched[key] = touched[key] || overlaps(changed, start, end)
+		touched[key] = touched[key] || gitdiff.Overlaps(changed, start, end)
 		sites[key] = append(sites[key], sitesIn(pass.Fset, f, d)...)
 	}
 	for _, key := range order {
@@ -124,7 +105,7 @@ func checkFile(pass *analysis.Pass, opts Options, f *ast.File, changed []span, b
 		}
 		for _, as := range sites[key] {
 			from, to := pass.Fset.Position(as.Pos()).Line, pass.Fset.Position(as.End()).Line
-			if overlaps(changed, from, to) && dropsError(pass, as) {
+			if gitdiff.Overlaps(changed, from, to) && dropsError(pass, as) {
 				pass.Reportf(as.Pos(), "%s", source.Hint(fmt.Sprintf(message, key, rev), opts.Hint))
 			}
 		}
@@ -257,84 +238,4 @@ func baseCounts(base []byte) (map[string]int, error) {
 		}
 	}
 	return counts, nil
-}
-
-// gitChanges measures the working copy against the merge base of the base
-// revision and HEAD.
-type gitChanges struct {
-	base string
-
-	once sync.Once
-	rev  string
-	err  error
-}
-
-func (g *gitChanges) Rev() string { return g.base }
-
-func (g *gitChanges) merge(dir string) (string, error) {
-	g.once.Do(func() {
-		out, err := git(dir, "merge-base", "HEAD", g.base)
-		if err != nil {
-			g.err = fmt.Errorf("base %q: %w", g.base, err)
-			return
-		}
-		g.rev = strings.TrimSpace(out)
-	})
-	return g.rev, g.err
-}
-
-func (g *gitChanges) File(path string) ([]span, []byte, error) {
-	dir, name := filepath.Split(path)
-	rev, err := g.merge(dir)
-	if err != nil {
-		return nil, nil, err
-	}
-	if _, err := git(dir, "cat-file", "-e", rev+":./"+name); err != nil {
-		src, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return nil, nil, readErr
-		}
-		return []span{{1, bytes.Count(src, []byte("\n")) + 1}}, nil, nil
-	}
-	base, err := git(dir, "show", rev+":./"+name)
-	if err != nil {
-		return nil, nil, err
-	}
-	diff, err := git(dir, "diff", "--unified=0", "--no-color", "--no-ext-diff", rev, "--", name)
-	if err != nil {
-		return nil, nil, err
-	}
-	return hunks(diff), []byte(base), nil
-}
-
-var hunkHeader = regexp.MustCompile(`(?m)^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@`)
-
-// hunks returns the working-copy line ranges of a zero-context diff. A pure
-// deletion at line n spans n and the line after it, where the removal shows.
-func hunks(diff string) []span {
-	var spans []span
-	for _, m := range hunkHeader.FindAllStringSubmatch(diff, -1) {
-		start, _ := strconv.Atoi(m[1])
-		count := 1
-		if m[2] != "" {
-			count, _ = strconv.Atoi(m[2])
-		}
-		if count == 0 {
-			spans = append(spans, span{start, start + 1})
-			continue
-		}
-		spans = append(spans, span{start, start + count - 1})
-	}
-	return spans
-}
-
-func git(dir string, args ...string) (string, error) {
-	cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
-	}
-	return string(out), nil
 }
