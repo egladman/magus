@@ -236,6 +236,7 @@
 {"name":"WithStderr","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithStep","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithTarget","reason":"functional option that configures a Run, a Target or a Project declaration"}
+{"name":"WithTargetResults","reason":"functional option that configures a Run; the SDK examples read each finished target through it"}
 {"name":"WithUpstream","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithVCSDriver","reason":"functional option that configures a Run, a Target or a Project declaration"}
 {"name":"WithVersion","reason":"functional option that configures a Run, a Target or a Project declaration"}
