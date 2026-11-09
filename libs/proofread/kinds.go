@@ -94,6 +94,9 @@ type KindSpec struct {
 	// Terms holds spellings this kind replaces, each with its replacement, on
 	// top of the built-in glossary. [RuleTerms] reports them.
 	Terms map[string]string
+	// Triads is how many series of exactly three [RuleTriad] waits for before
+	// it reports them, 0 for its default of 2.
+	Triads int
 
 	// Voice is the kind whose measures in a [Voice] hold this one, empty for
 	// none. Every review text shares the review-reply voice.

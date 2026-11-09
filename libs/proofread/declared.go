@@ -29,6 +29,9 @@ type KindDecl struct {
 	// Terms maps each spelling the kind replaces to its replacement. Setting
 	// any turns [RuleTerms] on at deny unless Rules names it.
 	Terms map[string]string `json:"terms"`
+	// Triads is how many series of three [RuleTriad] waits for, 1 or 2.
+	// Setting it turns the rule on at advise unless Rules names it.
+	Triads *int `json:"triads"`
 }
 
 // DeclareKinds resolves a decisions table's declared kinds into specs, sorted
@@ -95,6 +98,7 @@ func declareKind(name string, d KindDecl) (KindSpec, error) {
 		func() error { return checkReader(s.Reader) },
 		func() error { return s.setRules(d.Rules) },
 		func() error { return s.setTerms(d.Terms, d.Rules) },
+		func() error { return s.setTriads(d.Triads, d.Rules) },
 		s.checkFormat,
 		func() error { return s.setWeights(d.Weights) },
 		func() error { return s.setMinimum(d.Minimum) },
@@ -223,6 +227,29 @@ func (s *KindSpec) setTerms(in, declared map[string]string) error {
 		s.Rules[RuleTerms] = DecisionDeny
 	case d == DecisionOff.String():
 		return at("terms", "set, but rules.terms is off, so nothing would report them")
+	}
+
+	return nil
+}
+
+// setTriads sets how many series [RuleTriad] waits for and turns it on at
+// advise, unless the declaration's own rules name it.
+func (s *KindSpec) setTriads(n *int, declared map[string]string) error {
+	if n == nil {
+		return nil
+	}
+
+	if *n != 1 && *n != 2 {
+		return at("triads", "want 1 or 2 series, not %d", *n)
+	}
+
+	s.Triads = *n
+
+	switch d, named := declared[string(RuleTriad)]; {
+	case !named:
+		s.Rules[RuleTriad] = DecisionAdvise
+	case d == DecisionOff.String():
+		return at("triads", "set, but rules.triad is off, so nothing would report them")
 	}
 
 	return nil
