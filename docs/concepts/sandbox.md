@@ -44,7 +44,8 @@ This is the same consent `make`, `gradle tasks`, `./gradlew`, cargo's `build.rs`
 The other half of the rule is what magus never does passively, meaning without a command you typed or a tool call that names the workspace:
 
 - Only `magus init --vcs <name>` writes `.gitattributes`, `.git/config` and hooks. `magus doctor` names a stale registration and the command that repairs it.
-- The merge driver and a hook's binary are never a file the repository tracks. A hook spelled `./magus` runs only a build git does not track.
+- The merge driver never runs a `./magus` the repository tracks.
+- An agent hook starts the `./magus` of the session's own checkout. It hands a call on only to the `./magus` of a linked checkout of the same repository, such as a job checkout or a worktree. A call into any other tree, a clone or a planted directory holding `magus.yaml`, is judged by the binary already running, and the verdict says so. A checkout's `./magus` also re-executes into another checkout's build only inside its own repository. Neither path checks whether the VCS tracks that `./magus`.
 - magus installs no hook into a `core.hooksPath` that other repositories share.
 - The server opens a workspace only when a command or tool call names it.
 

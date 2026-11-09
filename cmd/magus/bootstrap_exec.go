@@ -29,6 +29,9 @@ const bootstrapExecSentinelVar = "MAGUS_BOOTSTRAP_EXEC_DONE"
 // internal/config/config.go's envOnly alongside the rest of the MAGUS_* variables.
 const bootstrapExecOptOutVar = "MAGUS_NO_BOOTSTRAP_EXEC"
 
+// pinnedBinaryVar is the hook glue's own pin of the binary it starts.
+const pinnedBinaryVar = "__MAGUS_BIN"
+
 // maybeBootstrapExec looks for a workspace-local ./magus and, when one is found and
 // is not the binary already running, replaces this process with it before ANYTHING
 // else happens: argv is not yet parsed, no config is loaded, and no workspace has
@@ -62,6 +65,10 @@ func maybeBootstrapExec(argv []string) {
 	if !ok {
 		return
 	}
+	if why := bootstrapExecRefusal(target, self); why != "" {
+		fmt.Fprintf(os.Stderr, "magus: not using %s: %s\n", target, why)
+		return
+	}
 	// Before log setup: the exec replaces this process ahead of any display.
 	fmt.Fprintf(os.Stderr, "magus: using this workspace's own binary at %s instead of %s\n", target, self)
 	env := append(os.Environ(), bootstrapExecSentinelVar+"=1")
@@ -84,6 +91,10 @@ func bootstrapExecDecision(argv []string, self string) (target string, ok bool) 
 		return "", false
 	}
 	if os.Getenv(bootstrapExecSentinelVar) != "" {
+		return "", false
+	}
+	// The hook glue starts a pinned binary as the one to judge with.
+	if os.Getenv(pinnedBinaryVar) != "" {
 		return "", false
 	}
 
@@ -145,6 +156,18 @@ func resolveBootstrapExecTarget(start, self string) (target string, ok bool) {
 		return "", false
 	}
 	return resolved, true
+}
+
+// bootstrapExecRefusal says why a checkout's own ./magus must not hand over
+// to target, or "" when it may. The glue runs it wherever a call lands, so
+// only a checkout of its repository takes over. An installed binary defers
+// anywhere.
+func bootstrapExecRefusal(target, self string) string {
+	session := binaryCheckout(self)
+	if session == "" {
+		return ""
+	}
+	return foreignCheckout(filepath.Dir(target), session)
 }
 
 // truthyEnv matches the 1/true/yes convention of the boolean MAGUS_* env vars.

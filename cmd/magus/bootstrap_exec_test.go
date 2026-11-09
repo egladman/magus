@@ -12,6 +12,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/libs/testkit"
 )
 
 // bootstrapFixtureBinaryName returns the fixture binary name resolveBootstrapExecTarget
@@ -117,6 +120,7 @@ func unsetBootstrapExecEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv(bootstrapExecSentinelVar, "")
 	t.Setenv(bootstrapExecOptOutVar, "")
+	t.Setenv(pinnedBinaryVar, "")
 }
 
 // Test 3: the sentinel prevents a second hop.
@@ -245,4 +249,52 @@ func TestBootstrapExecIntoReplacesProcess(t *testing.T) {
 	require.True(t, errors.As(runErr, &exitErr), "expected the helper process to exit non-zero via the fixture; output:\n%s", out)
 	assert.Equal(t, 7, exitErr.ExitCode())
 	assert.Contains(t, string(out), "fixture ran: hello world")
+}
+
+// BootstrapExecRefusalSuite pins which ./magus a checkout's own build may
+// hand over to.
+type BootstrapExecRefusalSuite struct {
+	suite.Suite
+	repo *testkit.Repo
+	self string
+}
+
+func TestBootstrapExecRefusalSuite(t *testing.T) {
+	suite.Run(t, new(BootstrapExecRefusalSuite))
+}
+
+func (s *BootstrapExecRefusalSuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
+	s.self = filepath.Join(s.repo.Root(), "magus")
+}
+
+func (s *BootstrapExecRefusalSuite) TestALinkedCheckoutTakesOver() {
+	linked := s.repo.AddWorktree("job").Root()
+	s.Empty(bootstrapExecRefusal(filepath.Join(linked, "magus"), s.self))
+}
+
+func (s *BootstrapExecRefusalSuite) TestAPlantedWorkspaceInTheCheckoutIsRefused() {
+	planted := filepath.Join(s.repo.Root(), "planted")
+	s.Require().NoError(os.MkdirAll(planted, 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(planted, "magus.yaml"), []byte("{}\n"), 0o644))
+	target := writeBootstrapFixtureWorkspace(s.T(), planted)
+	s.Contains(bootstrapExecRefusal(target, s.self), "is not a checkout of the session's repository")
+}
+
+func (s *BootstrapExecRefusalSuite) TestAnotherRepositoryIsRefused() {
+	clone := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
+	s.Contains(bootstrapExecRefusal(filepath.Join(clone.Root(), "magus"), s.self), "is not a checkout of the session's repository")
+}
+
+func (s *BootstrapExecRefusalSuite) TestAnInstalledBinaryDefersAnywhere() {
+	clone := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
+	s.Empty(bootstrapExecRefusal(filepath.Join(clone.Root(), "magus"), filepath.Join(s.T().TempDir(), "magus")))
+}
+
+func (s *BootstrapExecRefusalSuite) TestAPinnedBinaryIsNeverReplaced() {
+	unsetBootstrapExecEnv(s.T())
+	writeBootstrapFixtureWorkspace(s.T(), s.repo.Root())
+	s.T().Setenv(pinnedBinaryVar, s.self)
+	_, ok := bootstrapExecDecision([]string{"magus", "--root", s.repo.Root(), "shell"}, filepath.Join(s.T().TempDir(), "magus"))
+	s.False(ok)
 }
