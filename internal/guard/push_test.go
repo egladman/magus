@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -626,7 +628,8 @@ func coverageAtPush(ctx context.Context, repo *testkit.Repo, commit string) gate
 func TestPushGateAcceptsAPassingGateOnTheIdenticalTree(t *testing.T) {
 	ctx, repo, gated, replayed := replayedBranch(t)
 
-	rec, ok := gateReplayAt(ctx, repo.Root(), repo.Root(), replayed)
+	lineage := gateLineageAt(ctx, types.VCSOptions{}, repo.Root(), replayed, readGateHistory(repo.Root()))
+	rec, ok := lineage.replay, lineage.replayed
 	require.True(t, ok)
 	assert.Equal(t, sessions.GateRecord{
 		GateResult: sessions.GateResult{Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: gated, Outcome: sessions.OutcomePass, Inv: "inv-green"},
@@ -654,7 +657,7 @@ func TestPushGateStillNeedsItsOwnGateForADifferentTree(t *testing.T) {
 	repo.Commit("more", map[string]string{"b.go": "package a\n"})
 	changed := fixtureGit(t, repo.Root(), "rev-parse", "HEAD")
 
-	_, ok := gateReplayAt(ctx, repo.Root(), repo.Root(), changed)
+	ok := gateLineageAt(ctx, types.VCSOptions{}, repo.Root(), changed, readGateHistory(repo.Root())).replayed
 	assert.False(t, ok)
 	assert.Equal(t, gateAbsent, coverageAtPush(ctx, repo, changed))
 }
@@ -708,7 +711,7 @@ func (s *GateScopeSuite) TestAProjectPassIsNoReplayOfTheTree() {
 	fixtureGit(s.T(), repo.Root(), "commit", "-q", "--amend", "-m", "reworded")
 	replayed := fixtureGit(s.T(), repo.Root(), "rev-parse", "HEAD")
 
-	_, ok := gateReplayAt(ctx, repo.Root(), repo.Root(), replayed)
+	ok := gateLineageAt(ctx, types.VCSOptions{}, repo.Root(), replayed, readGateHistory(repo.Root())).replayed
 	s.False(ok)
 }
 
@@ -803,6 +806,70 @@ func (s *NarrowPushSuite) TestNarrowRunsCoveringEveryChangedFileAdmitThePush() {
 	s.Empty(decision)
 	s.Contains(ev.admitted(), "goes out on narrow runs")
 	s.Contains(ev.admitted(), "each of the 2 files this host builds that changed since "+s.gated[:12])
+}
+
+// gitCalls puts a git on PATH that logs each argv, one per line, before
+// running the real one.
+func (s *NarrowPushSuite) gitCalls() func() []string {
+	if runtime.GOOS == "windows" {
+		s.T().Skip("the logging git is a shell script")
+	}
+	real, err := exec.LookPath("git")
+	s.Require().NoError(err)
+	bin := s.T().TempDir()
+	calls := filepath.Join(bin, "calls")
+	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' \"$*\" >> %q\nexec %q \"$@\"\n", calls, real)
+	s.Require().NoError(os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755))
+	s.T().Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return func() []string {
+		b, err := os.ReadFile(calls)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		s.Require().NoError(err)
+		return strings.Split(strings.TrimSpace(string(b)), "\n")
+	}
+}
+
+// Every gate used to cost a store fold and two git processes, which lapsed
+// the guard's deadline on a busy store.
+func (s *NarrowPushSuite) TestAPushJudgmentReadsTheStoreOnceAndGitOnceForEveryGate() {
+	dir, err := sessions.Dir(s.repo.Root())
+	s.Require().NoError(err)
+	var gated []string
+	for i := range 4 {
+		c := s.repo.Commit(fmt.Sprintf("gated %d", i), map[string]string{"a.go": fmt.Sprintf("package a\n\nvar A = %d\n", i)})
+		s.Require().NoError(sessions.RecordGate(dir, sessions.GateResult{
+			Target: types.TargetCI, Scope: sessions.GateScopeAffected, Ref: "main", Commit: c, Outcome: sessions.OutcomePass, Inv: fmt.Sprintf("inv-%d", i),
+		}, sessions.InvocationStart{Workspace: s.repo.Root()}))
+		gated = append(gated, c)
+		time.Sleep(2 * time.Millisecond)
+	}
+	head := s.repo.Commit("change", map[string]string{"b.go": "package a\n"})
+	s.passed(strings.Repeat("d", 64), "go-test", head)
+
+	reads := 0
+	defer func(read func(string) (sessions.Fold, error)) { readGateFold = read }(readGateFold)
+	readGateFold = func(dir string) (sessions.Fold, error) {
+		reads++
+		return sessions.ReadGateResults(dir)
+	}
+	calls := s.gitCalls()
+
+	ev := s.push(head)
+	s.Equal(gateNarrow, ev.cover)
+	s.Contains(ev.admitted(), "changed since "+gated[3][:12], "the newest gate is the ancestor")
+	s.Equal(1, reads)
+	var walks []string
+	for _, call := range calls() {
+		if strings.Contains(call, "rev-list --ignore-missing --stdin") {
+			walks = append(walks, call)
+		}
+		for _, c := range gated[:3] {
+			s.NotContains(call, c[:12], "no git process names a gate the push does not descend from")
+		}
+	}
+	s.Len(walks, 1)
 }
 
 func (s *NarrowPushSuite) TestAnUncoveredFileIsRefusedByName() {
@@ -968,7 +1035,7 @@ func (s *UnrunGateSuite) record(outcome string, scope sessions.GateScope) {
 
 func (s *UnrunGateSuite) TestAPushTheGateCouldNotFullyRunPassesNamingWhatIsOwed() {
 	s.record(sessions.OutcomeUnrun, sessions.GateScopeAffected)
-	cover, rec := gateRecordAt(s.root, unrunCommit[:12])
+	cover, rec := readGateHistory(s.root).recordAt(unrunCommit[:12])
 	s.Require().Equal(gateUnrun, cover)
 
 	ev := pushEvidence{cover: cover, commit: unrunCommit[:12], unrun: rec}
