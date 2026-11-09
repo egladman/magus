@@ -24,27 +24,27 @@ const readBudget = 3 * time.Second
 // itemBudget stops one wide item spending a whole survey.
 const itemBudget = time.Second
 
-// HeldReporter is the optional capability to list the stashes and
+// heldReporter is the optional capability to list the stashes and
 // preserved captures a repository holds. A backend without it leaves both
-// kinds unsurveyed, and the survey says so in [Report.Unknown].
-type HeldReporter interface {
+// kinds unsurveyed, and the survey says so in [report.Unknown].
+type heldReporter interface {
 	HeldRevisions(ctx context.Context, dir string) ([]types.HeldRevision, error)
 }
 
-// Ledger is the work ledger of one repository: an append-only JSONL file
+// ledger is the work ledger of one repository: an append-only JSONL file
 // whose last line per key is the item. Nothing is ever deleted from it; an
 // item that no longer exists gets a Dropped line. It computes and records,
 // and never touches the work itself.
-type Ledger struct {
+type ledger struct {
 	repo  string
 	items file.JSONL[types.WorkItem]
 	facts file.JSONL[fact]
 	now   func() time.Time
 }
 
-// Open is the ledger of the repository whose primary checkout is repo,
+// open is the ledger of the repository whose primary checkout is repo,
 // under $XDG_STATE_HOME/magus/work. It reads nothing until asked.
-func Open(repo string) (*Ledger, error) {
+func open(repo string) (*ledger, error) {
 	base, err := xdg.StateDir()
 	if err != nil {
 		return nil, fmt.Errorf("work ledger: %w", err)
@@ -56,7 +56,7 @@ func Open(repo string) (*Ledger, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("work ledger: %w", err)
 	}
-	return &Ledger{
+	return &ledger{
 		repo: repo,
 		items: file.JSONL[types.WorkItem]{
 			Path: filepath.Join(dir, "work.jsonl"),
@@ -72,13 +72,13 @@ func Open(repo string) (*Ledger, error) {
 }
 
 // Items is what the ledger says now, without asking the version control.
-func (l *Ledger) Items() ([]types.WorkItem, error) {
+func (l *ledger) Items() ([]types.WorkItem, error) {
 	return l.items.Load()
 }
 
 // End records that a person ended the item at key, for reason. It holds
 // while the item's head and uncommitted count stay what they were.
-func (l *Ledger) End(ctx context.Context, key, reason string) error {
+func (l *ledger) End(ctx context.Context, key, reason string) error {
 	if reason == "" {
 		return fmt.Errorf("work ledger: ending %s needs a reason", key)
 	}
@@ -103,8 +103,8 @@ func (l *Ledger) End(ctx context.Context, key, reason string) error {
 	return nil
 }
 
-// Survey is what a survey judges items against.
-type Survey struct {
+// surveyTerms is what a survey judges items against.
+type surveyTerms struct {
 	// Base is the revision an item is absorbed into. Required.
 	Base string
 	// Jobs are the rows that can track an item; a terminal row tracks none.
@@ -113,8 +113,8 @@ type Survey struct {
 	LocalOnly []string
 }
 
-// Report is the ledger after a survey, and what the survey left unread.
-type Report struct {
+// report is the ledger after a survey, and what the survey left unread.
+type report struct {
 	Items []types.WorkItem
 	// Unknown names what the survey could not read and why.
 	Unknown []string
@@ -125,36 +125,36 @@ type Report struct {
 // reports them. It appends a line for each item whose state moved, and a
 // Dropped line for each that no longer exists. A second survey over an
 // unchanged repository appends nothing.
-func (l *Ledger) Survey(ctx context.Context, driver types.VCSDriver, in Survey) (Report, error) {
+func (l *ledger) Survey(ctx context.Context, driver types.VCSDriver, in surveyTerms) (report, error) {
 	if in.Base == "" {
-		return Report{}, errors.New("work survey: no base revision to judge absorbed against")
+		return report{}, errors.New("work survey: no base revision to judge absorbed against")
 	}
 	for _, glob := range in.LocalOnly {
 		if _, err := path.Match(glob, ""); err != nil {
-			return Report{}, fmt.Errorf("work survey: work.local_only %q: %w", glob, err)
+			return report{}, fmt.Errorf("work survey: work.local_only %q: %w", glob, err)
 		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, readBudget)
 	defer cancel()
 	base, err := driver.FindCommit(ctx, l.repo, in.Base)
 	if err != nil {
-		return Report{}, fmt.Errorf("work survey: base %s: %w", in.Base, err)
+		return report{}, fmt.Errorf("work survey: base %s: %w", in.Base, err)
 	}
 	baseTree, err := driver.TreeID(ctx, l.repo, base.ID)
 	if err != nil {
-		return Report{}, fmt.Errorf("work survey: base %s: %w", in.Base, err)
+		return report{}, fmt.Errorf("work survey: base %s: %w", in.Base, err)
 	}
 	checkouts, err := driver.RegisteredCheckouts(ctx, l.repo)
 	if err != nil {
-		return Report{}, fmt.Errorf("work survey: %w", err)
+		return report{}, fmt.Errorf("work survey: %w", err)
 	}
 	stored, err := l.items.Load()
 	if err != nil {
-		return Report{}, fmt.Errorf("work survey: %w", err)
+		return report{}, fmt.Errorf("work survey: %w", err)
 	}
 	known, err := l.facts.Load()
 	if err != nil {
-		return Report{}, fmt.Errorf("work survey: %w", err)
+		return report{}, fmt.Errorf("work survey: %w", err)
 	}
 	r := &survey{
 		ledger: l, driver: driver, in: in, base: base.ID, baseTree: baseTree,
@@ -168,13 +168,13 @@ func (l *Ledger) Survey(ctx context.Context, driver types.VCSDriver, in Survey) 
 	r.readBranches(ctx)
 	r.readHeld(ctx)
 	if err := r.write(ctx); err != nil {
-		return Report{}, err
+		return report{}, err
 	}
 	items, err := l.items.Load()
 	if err != nil {
-		return Report{}, fmt.Errorf("work survey: %w", err)
+		return report{}, fmt.Errorf("work survey: %w", err)
 	}
-	return Report{Items: items, Unknown: r.unknown()}, nil
+	return report{Items: items, Unknown: r.unknown()}, nil
 }
 
 // fact is what the version control said of one head against one base.
@@ -189,9 +189,9 @@ type fact struct {
 func (f fact) key() string { return f.Head + ".." + f.Base }
 
 type survey struct {
-	ledger         *Ledger
+	ledger         *ledger
 	driver         types.VCSDriver
-	in             Survey
+	in             surveyTerms
 	base, baseTree string
 	stored         map[string]types.WorkItem
 	facts          map[string]fact
@@ -322,7 +322,7 @@ func (r *survey) readBranches(ctx context.Context) {
 }
 
 func (r *survey) readHeld(ctx context.Context) {
-	held, ok := r.driver.(HeldReporter)
+	held, ok := r.driver.(heldReporter)
 	if !ok {
 		r.notes = append(r.notes, fmt.Sprintf("%s lists no stashes or preserved captures, so neither was surveyed", r.driver.Name()))
 		r.keepKind(types.WorkStash, types.WorkPreserved)

@@ -154,30 +154,16 @@ func NarrowHold(ctx context.Context, store *Store, id, file string, touched []st
 		case !wholeFileHeld(*cur, file):
 			return fmt.Errorf("job: no whole-file write path of %s covers %s, so there is no hold on it to narrow", id, file)
 		}
-		held := claimsOnFile(*cur, file)
-		for _, d := range touched {
-			d = strings.TrimSpace(d)
-			if d == "" || d == types.Preamble || slices.ContainsFunc(held, func(c string) bool { return types.NamesDeclaration(c, d) }) {
-				continue
-			}
-			if owner, claim, taken := claimedByOther(rows, id, file, d); taken {
-				return fmt.Errorf("job: %s#%s is lease %s's claim, so %s cannot add %s", file, claim, owner, id, d)
-			}
-			word := claimWord(d, all)
-			held = append(held, word)
-			added = append(added, fmt.Sprintf("%s#%s", file, word))
+		var err error
+		added, err = claimTouched(*cur, rows, id, file, touched, all)
+		if err != nil {
+			return err
 		}
 		if len(added) == 0 && Narrowed(*cur, file) {
 			return errNarrowedAlready
 		}
 		cur.WritePaths = append(cur.WritePaths, added...)
-		rel := types.JobRelease{Path: file, Digest: store.digest(ctx, file), ReleasedAt: now, Narrowed: true, TakenBy: takenBy}
-		if at := fileRelease(*cur, file); at >= 0 {
-			rel.TakenBy = cmp.Or(takenBy, cur.Releases[at].TakenBy)
-			cur.Releases[at] = rel
-			return nil
-		}
-		cur.Releases = append(cur.Releases, rel)
+		recordNarrowing(cur, file, takenBy, now, store.digest(ctx, file))
 		return nil
 	})
 	if errors.Is(err, errNarrowedAlready) {
@@ -336,4 +322,35 @@ func heldRequests(row types.Job) []types.JobReleaseRequest {
 			return covers(entry, r.File) && !releasedReach(row, entry, r.File)
 		})
 	})
+}
+
+// claimTouched answers the `file#<word>` claims cur lacks for the declarations
+// in touched, refusing one that another live row claims.
+func claimTouched(cur types.Job, rows []types.Job, id, file string, touched, all []string) ([]string, error) {
+	var added []string
+	held := claimsOnFile(cur, file)
+	for _, d := range touched {
+		d = strings.TrimSpace(d)
+		if d == "" || d == types.Preamble || slices.ContainsFunc(held, func(c string) bool { return types.NamesDeclaration(c, d) }) {
+			continue
+		}
+		if owner, claim, taken := claimedByOther(rows, id, file, d); taken {
+			return nil, fmt.Errorf("job: %s#%s is lease %s's claim, so %s cannot add %s", file, claim, owner, id, d)
+		}
+		word := claimWord(d, all)
+		held = append(held, word)
+		added = append(added, fmt.Sprintf("%s#%s", file, word))
+	}
+	return added, nil
+}
+
+// recordNarrowing stores the narrowing release of file on cur, keeping who took it.
+func recordNarrowing(cur *types.Job, file, takenBy string, now int64, digest string) {
+	rel := types.JobRelease{Path: file, Digest: digest, ReleasedAt: now, Narrowed: true, TakenBy: takenBy}
+	if at := fileRelease(*cur, file); at >= 0 {
+		rel.TakenBy = cmp.Or(takenBy, cur.Releases[at].TakenBy)
+		cur.Releases[at] = rel
+		return
+	}
+	cur.Releases = append(cur.Releases, rel)
 }

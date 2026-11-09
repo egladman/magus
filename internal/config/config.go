@@ -157,11 +157,11 @@ type Config struct {
 	Sources []Source `json:"sources" yaml:"sources" cli:"-"`
 
 	// Work configures the work ledger. User-level only, like Sources.
-	Work Work `json:"work" yaml:"work" cli:"-"`
+	Work work `json:"work" yaml:"work" cli:"-"`
 }
 
-// Work is a person's account of the work they keep on this machine.
-type Work struct {
+// work is a person's account of the work they keep on this machine.
+type work struct {
 	// LocalOnly globs name checkouts and branches never meant to be
 	// published. The ledger reads a match as local-only, not unaccounted.
 	// User-level only: committed, it would hide a contributor's work.

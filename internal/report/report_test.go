@@ -115,10 +115,10 @@ func TestRoundTripAllTypes(t *testing.T) {
 
 	wantTypes := []string{
 		TypeTargetResult, TypeTargetResult, TypeTargetResult,
-		TypeGraphBuild, TypeGraphQuery, TypeGraphError,
+		typeGraphBuild, typeGraphQuery, typeGraphError,
 		TypeVolatility, TypeShardTotal,
-		TypeRunScope, TypeRunCharms, TypeRunCache, TypeRunBase,
-		TypeRunStep, TypeRunSummary,
+		TypeRunScope, typeRunCharms, typeRunCache, typeRunBase,
+		typeRunStep, typeRunSummary,
 		TypeNotice,
 	}
 	sc := bufio.NewScanner(f)
@@ -532,20 +532,20 @@ func TestStructuredRunEventTypes(t *testing.T) {
 	}{
 		{"RunScope", RunScope{Label: "3 projects", Source: "git diff vs origin/main"}, TypeRunScope},
 		{"RunScope no source", RunScope{Label: "."}, TypeRunScope},
-		{"RunCharms", RunCharms{Charms: "rw"}, TypeRunCharms},
-		{"RunCache", RunCache{Tier: "local", Mode: "read+write"}, TypeRunCache},
-		{"RunBase", RunBase{Base: "git diff vs origin/main"}, TypeRunBase},
-		{"RunStep pass", RunStep{Label: "magus", Target: "types-generate", Status: "pass", DurationMs: 695}, TypeRunStep},
-		{"RunStep fail", RunStep{Label: "magus", Target: "lint", Status: "fail", DurationMs: 40, Error: "exit status 1"}, TypeRunStep},
-		{"RunStep dry", RunStep{Label: "magus", Project: ".", Target: "build", Status: "dry"}, TypeRunStep},
-		{"RunSummary", RunSummary{Hits: 3, Misses: 1, Errors: 0, DurationMs: 1600}, TypeRunSummary},
-		{"RunSummary dry", RunSummary{Dry: true, Planned: 4, DurationMs: 12}, TypeRunSummary},
-		{"RunRemote", RunRemote{Hits: 2, Misses: 1, Stored: 1, Failures: 1, DownBytes: 2048, UpBytes: 512}, TypeRunRemote},
-		{"RunDry", RunDry{}, TypeRunDry},
+		{"RunCharms", RunCharms{Charms: "rw"}, typeRunCharms},
+		{"RunCache", RunCache{Tier: "local", Mode: "read+write"}, typeRunCache},
+		{"RunBase", RunBase{Base: "git diff vs origin/main"}, typeRunBase},
+		{"RunStep pass", RunStep{Label: "magus", Target: "types-generate", Status: "pass", DurationMs: 695}, typeRunStep},
+		{"RunStep fail", RunStep{Label: "magus", Target: "lint", Status: "fail", DurationMs: 40, Error: "exit status 1"}, typeRunStep},
+		{"RunStep dry", RunStep{Label: "magus", Project: ".", Target: "build", Status: "dry"}, typeRunStep},
+		{"RunSummary", RunSummary{Hits: 3, Misses: 1, Errors: 0, DurationMs: 1600}, typeRunSummary},
+		{"RunSummary dry", RunSummary{Dry: true, Planned: 4, DurationMs: 12}, typeRunSummary},
+		{"RunRemote", RunRemote{Hits: 2, Misses: 1, Stored: 1, Failures: 1, DownBytes: 2048, UpBytes: 512}, typeRunRemote},
+		{"RunDry", RunDry{}, typeRunDry},
 		{"LockSuperseded", LockSuperseded{Project: ".", HolderPID: 4242, Command: "magus run ci"}, TypeLockSuperseded},
-		{"LockSupersedeRefused", LockSupersedeRefused{Project: ".", HolderPID: 4242, Command: "magus run ci", BoundMs: 30000}, TypeLockSupersedeRefused},
-		{"LockPipeWait", LockPipeWait{UpstreamPID: 4242, Command: "magus affected ci --plan"}, TypeLockPipeWait},
-		{"DeterminismUnchecked", DeterminismUnchecked{Project: "api", Target: "build", Error: "open dist: permission denied"}, TypeDeterminismUnchecked},
+		{"LockSupersedeRefused", LockSupersedeRefused{Project: ".", HolderPID: 4242, Command: "magus run ci", BoundMs: 30000}, typeLockSupersedeRefused},
+		{"LockPipeWait", LockPipeWait{UpstreamPID: 4242, Command: "magus affected ci --plan"}, typeLockPipeWait},
+		{"DeterminismUnchecked", DeterminismUnchecked{Project: "api", Target: "build", Error: "open dist: permission denied"}, typeDeterminismUnchecked},
 		{"Notice", Notice{Level: slog.LevelWarn, Code: "MGS1028", Message: "projects seeded by changed files nothing declares"}, TypeNotice},
 	}
 
@@ -730,8 +730,8 @@ func TestGraphObserverWritesEachKind(t *testing.T) {
 		got = append(got, l)
 	}
 	assert.Equal(t, []line{
-		{Type: TypeGraphBuild, Nodes: 3},
-		{Type: TypeGraphQuery, Op: "affected", Nodes: 3},
-		{Type: TypeGraphError, Op: types.GraphOpBuild, Error: "dependency cycle"},
+		{Type: typeGraphBuild, Nodes: 3},
+		{Type: typeGraphQuery, Op: "affected", Nodes: 3},
+		{Type: typeGraphError, Op: types.GraphOpBuild, Error: "dependency cycle"},
 	}, got)
 }
