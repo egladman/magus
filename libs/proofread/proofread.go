@@ -456,6 +456,9 @@ type Finding struct {
 	// a rule that substitutes a word or a phrase offers one: a rewrite of a
 	// tone or claim finding would change what the writer meant.
 	Replacements []string
+	// Protected are the spans Match covers that a fix should keep. A deny
+	// that covers one is reported as advice.
+	Protected []Protected
 }
 
 // Option tunes one [Judge] or [JudgeText] call.
@@ -578,7 +581,7 @@ func run(in input) []Finding {
 		}
 	}
 
-	out = in.suppress(out)
+	out = protect(in.suppress(out), protectedSpans(in.source))
 	if f, ok := in.grade(out); ok {
 		out = append(out, f)
 	}

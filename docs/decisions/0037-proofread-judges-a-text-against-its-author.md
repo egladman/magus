@@ -120,6 +120,16 @@ a number with a unit, and a clause led by "until", "when" or "after" with a conc
 subject. A finding whose span covers a protected one is advise at most. It is an
 annotation, not a rule.
 
+As built, a span is protected only from an economy rule, one that asks for words to be
+cut, and only when the finding's match holds the span whole. A first cut that protected
+on any overlap and from every rule softened pinned case findings that were right:
+`claim` asks for evidence for a number, and bold-label and structure rules keep the
+words. A name is one capitalized word between lowercase ones, so a Title Case label is
+none. `-o json` lists the spans under each finding's `protected` rather than beside the
+findings, so its top level stays a list of findings. On the paired set, 26 of the 29
+spans in the owner texts survived the rewrites verbatim. Their brief told the agent to
+keep every fact, so that baseline shows nothing about what protection adds.
+
 ### 6. Short texts
 
 voice-drift abstains under 200 words, which skips commit messages, bullets and short
@@ -132,7 +142,7 @@ together on stdin, as one set.
 | `voice eval --paired`, and the calibration re-run on paired text                           | done                       |
 | Voice budgets for the counting rules, `triad` first                                        | in progress (`triad` done) |
 | `uniform`; `list-parallel` checks grammatical shape and `repeated-opener` checks the words | done (`uniform` ships off) |
-| Protected spans in `-o json` and the text output; a fix that covers one is advise at most  | planned                    |
+| Protected spans in `-o json` and the text output; a fix that covers one is advise at most  | done (economy rules)       |
 | Short texts judged as a set: the items of one list, or the texts passed together on stdin  | planned                    |
 
 ### Principles checked

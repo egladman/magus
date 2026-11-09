@@ -55,6 +55,8 @@ type finding struct {
 	EndLine      int      `json:"end_line,omitempty"`
 	EndColumn    int      `json:"end_column,omitempty"`
 	Replacements []string `json:"replacements,omitempty"`
+	// Protected are the specifics Match holds that a fix should keep.
+	Protected []proofread.Protected `json:"protected,omitempty"`
 }
 
 func main() {
@@ -576,6 +578,7 @@ func toFinding(node, source string, kind proofread.Kind, f proofread.Finding) fi
 		Node: node, Source: source, Kind: string(kind), Rule: string(f.Rule), Code: string(f.Code),
 		Decision: f.Decision.String(), Message: f.Message, Match: f.Match, URL: f.URL, Weight: f.Weight, WeightSet: f.WeightSet,
 		Line: f.Line, Column: f.Column, EndLine: f.EndLine, EndColumn: f.EndColumn, Replacements: f.Replacements,
+		Protected: f.Protected,
 	}
 }
 

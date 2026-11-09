@@ -10,3 +10,7 @@ Ran the full build, fixed the lint warnings and tagged the release. The notes fo
 -- pass/review-summary --
 The loader now retries. It reviewed the release plan, rewrote the config parser, and shipped the fix.
 We reviewed the release plan, rewrote the config parser, ran the full build, and shipped the fix.
+-- hit/change-description whole --
+fix(cache): read the key once
+
+The loader reads the cache, the graph and the log. We moved the docs, rewrote the parser for Sydney and shipped the fix.

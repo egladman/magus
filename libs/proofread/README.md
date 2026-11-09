@@ -256,6 +256,17 @@ when the Wilson lower bound on that share clears the false-alarm rate on 20
 pairs or more. `--pool WORDS` groups shuffled pairs into chunks of that many
 owner words, so each chunk and its rewrite cover the same texts.
 
+## Protected spans
+
+Some specifics show a person wrote a text: a number with its unit (`410ms`,
+`70%`), a name between lowercase words, and a moment the author saw (a clause
+led by "until", "when" or "after" with a subject). A rule that asks for words
+to be cut, one of the economy dimension, reports a match that holds one whole
+as advice at most. Its message names the span, and `-o json` lists it under the
+finding's `protected`, with its line, columns and reason. Rules that ask for
+evidence, markup or structure keep their decisions, since following them keeps
+the words.
+
 ## Rules
 
 | Rule                 | Code    | Kinds                            | Default                              | Reports                                                                          |
