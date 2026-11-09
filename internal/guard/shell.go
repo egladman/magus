@@ -1956,6 +1956,8 @@ var (
 
 	// agentSignOffRe matches an invocation of either verb this package folds into one
 	// rule: minting a read receipt, or closing an attention request.
+	// Posting or retracting an advisory joins them: sessions read one as the
+	// person's own words.
 	//
 	// A receipt is a claim that a PERSON read something, and a disposed request is a
 	// claim that a PERSON answered it; both are the only fact in their measure that no
@@ -1967,7 +1969,7 @@ var (
 	// agent hosts, so every command reaching it came from an agent by construction. A
 	// person at a terminal never meets this rule.
 	// The unparsable-line fallback for magusInvokes, as above.
-	agentSignOffRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b|\bmagus\s+session\s+dispose\b`)
+	agentSignOffRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b|\bmagus\s+session\s+(dispose|advise|retract)\b`)
 
 	// An IN-PLACE stream edit. Reading with sed is untouched; only -i is refused.
 	//
@@ -2056,8 +2058,8 @@ var (
 	pushGuardContextWhy = "The gate runs over every project the diff reaches, including ones you never edited.\n" +
 		"Already ran it, or pushing deliberate work-in-progress? Push. Load the magus-run skill if not already loaded."
 
-	denyAgentSignOff    = fmt.Sprintf("only a person may stamp a read receipt or dispose an attention request; report what is unread: `%s`.", hint.Diff.With("--impact"))
-	denyAgentSignOffWhy = fmt.Sprintf("A read receipt records that a PERSON read a change, and disposing an attention request records that a PERSON answered it, so every spelling of both is refused.\n"+
+	denyAgentSignOff    = fmt.Sprintf("only a person may stamp a read receipt, dispose an attention request, or post or retract an advisory; report what is unread: `%s`.", hint.Diff.With("--impact"))
+	denyAgentSignOffWhy = fmt.Sprintf("A read receipt records that a PERSON read a change, disposing an attention request records that a PERSON answered it, and an advisory is shown to every session as a PERSON's own words, so every spelling of each is refused.\n"+
 		"`%s` names every changed file carrying no receipt (`%s` puts read_state on each one). Say you cannot ack and hand back the unread list.\n"+
 		"Waiting on a request instead: say you are waiting on its id and hand it back; `%s` is a person's to run.",
 		hint.Diff.With("--impact"), hint.Diff.With("-o", "json"), hint.SessionDispose.With("<id>"))
@@ -2596,7 +2598,8 @@ func agentSignOffFires(cmds []hint.Invocation, parsed bool, command string) bool
 	if !parsed {
 		return agentSignOffRe.MatchString(command)
 	}
-	return magusInvokes(cmds, "diff", "--ack") || magusInvokes(cmds, "session", "dispose")
+	return magusInvokes(cmds, "diff", "--ack") || magusInvokes(cmds, "session", "dispose") ||
+		magusInvokes(cmds, "session", "advise") || magusInvokes(cmds, "session", "retract")
 }
 
 // precedentIdentRe is the identifier shape the transcript mining classified as a

@@ -69,6 +69,12 @@ func sessionCommand(ctx context.Context, root string, args []string) error {
 		return attentionList(root, rest)
 	case "dispose":
 		return attentionDispose(root, rest)
+	case "advise":
+		return adviseCommand(root, rest)
+	case "advisories":
+		return advisoriesCommand(root, rest)
+	case "retract":
+		return retractCommand(root, rest)
 	case "checkpoint":
 		return checkpointCommand(ctx, root, os.Stdin, os.Stdout, rest)
 	case "notify":
@@ -81,7 +87,7 @@ func sessionCommand(ctx context.Context, root string, args []string) error {
 		// and "unknown subcommand" does not tell whoever reads that log what to re-run.
 		return exit.Usagef("magus session hook is now `%s`, which takes the same flags and stdin. Re-run `%s` to rewrite host wiring that still calls the old path", hint.Shell, hint.AgentHarnessInstall)
 	default:
-		return exit.Usagef("magus session: unknown subcommand %q (want ls, show, hints, load, checkpoint, attention, dispose, or notify); the bare command lists recent sessions, bounded by --limit and --since. Taking a job is `%s`", verb, hint.JobExec)
+		return exit.Usagef("magus session: unknown subcommand %q (want ls, show, hints, load, checkpoint, attention, dispose, advise, advisories, retract, or notify); the bare command lists recent sessions, bounded by --limit and --since. Taking a job is `%s`", verb, hint.JobExec)
 	}
 }
 
@@ -93,6 +99,9 @@ func sessionUsage() {
 	fmt.Fprintln(os.Stderr, "       magus session load [--file <path>]")
 	fmt.Fprintln(os.Stderr, "       magus session attention [flags]")
 	fmt.Fprintln(os.Stderr, "       magus session dispose <id> [-reason <text>]")
+	fmt.Fprintln(os.Stderr, "       magus session advise <text> [--expect <command prefix>]")
+	fmt.Fprintln(os.Stderr, "       magus session advisories [--all]")
+	fmt.Fprintln(os.Stderr, "       magus session retract <id>")
 	fmt.Fprintln(os.Stderr, "       magus session checkpoint [--note <text>]")
 	fmt.Fprintln(os.Stderr, "       magus session notify [flags]    # machine: event ingest, wired by agent hosts")
 	fmt.Fprintln(os.Stderr, "")

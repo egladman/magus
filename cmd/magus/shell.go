@@ -266,7 +266,8 @@ func shellCommandWithErrorWriter(ctx context.Context, in io.Reader, out, errOut 
 		Event:      sf.Event,
 		// Declared by the wiring, because only a glue that renders the host's approval
 		// prompt can say so, and one that predates ask renders it as an allow.
-		RendersAsk: sf.RendersAsk,
+		RendersAsk:     sf.RendersAsk,
+		RendersContext: sf.RendersContext,
 		// The call's own word on how the host runs it.
 		CallBackground: sf.CallBackground,
 		CallTimeout:    sf.CallTimeout,

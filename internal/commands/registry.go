@@ -1477,6 +1477,7 @@ not block every tool call.`,
 		{Name: "transcript", Kind: cmdline.String, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
 		{Name: "event", Kind: cmdline.String, Doc: "The host's hook event name (e.g. PreToolUse)"},
 		{Name: "renders-ask", Kind: cmdline.Bool, Default: false, Doc: "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny"},
+		{Name: "renders-context", Kind: cmdline.Bool, Default: false, Doc: "With --message, this wiring hands an advise verdict's context to the model; only then is a person's open advisory shown and marked delivered at the prompt"},
 		{Name: "call-background", Kind: cmdline.Bool, Default: false, Doc: "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused"},
 		{Name: "call-timeout", Kind: cmdline.Duration, Unit: "ms", Doc: "The timeout the call gave its shell command (e.g. 10m, 600000ms); 0 or absent means the host's foreground default"},
 		{Name: "duration", Kind: cmdline.Duration, Effect: cmdline.EffectLocalWrite, Unit: "ms", Doc: "Read the input as a tool's name and record how long the host says it ran (e.g. 420ms), without judging: the verdict is always pass"},
@@ -2171,6 +2172,62 @@ block.`,
 			},
 		},
 		{
+			Name:        "advise",
+			Effect:      cmdline.EffectLocalWrite,
+			Short:       "Tell every agent session in this repository one thing, in your own words",
+			Description: "Post one directive from a person to every agent session in this repository; each root session is shown it once, at its next prompt or stop.",
+			Long: `Post one directive to every agent session in this repository.
+
+The text goes to an append-only store keyed by repository identity, so every
+worktree's sessions read it. The guard shows each open advisory once to each
+root session: as context at its next user prompt where the host takes context
+(Claude Code, Codex), and at its next stop on every host, where it keeps the
+session working with the text in front of it. The text says who posted it and
+that these are that person's own words, not a relay from another agent.
+
+Nothing closes an advisory but ` + "`session retract`" + `. A session started after
+the post is shown it too. An idle session sees it on its next turn; waking one
+is the host's job.
+
+--expect names what acting on it looks like, as the start of a shell command
+(--expect "git push"). The guard records the first command a session runs with
+that prefix after it was shown the advisory, and ` + "`session advisories`" + `
+prints how many sessions acted. Without --expect only delivery is counted.
+
+Only a person may post: the guard denies this command to an agent, and it
+refuses to run without an interactive terminal.`,
+			Usage: "magus session advise <text> [--expect <command prefix>]",
+			Flags: []cmdline.Flag{
+				{Name: "expect", Kind: cmdline.String, Doc: "The start of the shell command that carries the advisory out; counts sessions that run it after being shown it"},
+			},
+		},
+		{
+			Name:   "advisories",
+			Effect: cmdline.EffectRead,
+			Short:  "List open advisories, oldest first, with how many sessions were shown each and acted",
+			Long: `List the advisories people posted with ` + "`session advise`" + `.
+
+Each row says how many host sessions were shown it and, when it was posted with
+--expect, how many of those ran the expected command afterwards. One posted
+without --expect says its action was not measured rather than printing zero.`,
+			Usage: "magus session advisories [--all]",
+			Flags: []cmdline.Flag{
+				{Name: "all", Kind: cmdline.Bool, Default: false, Doc: "Also list retracted advisories"},
+			},
+		},
+		{
+			Name:   "retract",
+			Effect: cmdline.EffectLocalWrite,
+			Short:  "Close one advisory by id or unambiguous id prefix, so no further session is shown it",
+			Long: `Close one advisory. It closes once and stays closed; sessions already shown
+it keep what they read.
+
+The id may be any unambiguous prefix of an advisory id. An ambiguous prefix is
+refused and names every match. Only a person may retract: the guard denies this
+command to an agent.`,
+			Usage: "magus session retract <id>",
+		},
+		{
 			Name:        "checkpoint",
 			Effect:      cmdline.EffectLocalWrite,
 			Short:       "Record where the work stands, so it can be picked up later",
@@ -2252,6 +2309,8 @@ could not be filed, because that one has no row.`,
 		{Comment: "List open attention requests", Command: "magus session attention"},
 		{Comment: "Ask whether anyone is waiting", Command: "magus session attention -q"},
 		{Comment: "Close one request, saying why", Command: `magus session dispose att-3f9c -reason "approved and pushed by hand"`},
+		{Comment: "Tell every agent session one thing, and count who pushes after reading it", Command: `magus session advise "push what you have; we squash into one PR" --expect "git push"`},
+		{Comment: "See how many sessions each advisory reached", Command: "magus session advisories"},
 		{Comment: "Raise a permission prompt on the desktop (host-wired)", Command: "printf '%s\\n' 'needs approval' | magus session notify --outcome permission --desktop"},
 	},
 	ExitStatus: []cmdline.ExitCode{

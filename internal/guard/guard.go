@@ -639,6 +639,9 @@ type Request struct {
 	// because a glue that predates the decision renders it as nothing and its host reads
 	// nothing as allow.
 	RendersAsk bool
+	// RendersContext is the wiring's word that a --message reply's context
+	// reaches the model. Without it an advisory waits for the session's stop.
+	RendersContext bool
 	// CallBackground is the wiring's word that the host runs this shell command in the
 	// background, as the call asked; a bound worker's magus run is then refused. An
 	// envelope's run_in_background sets it too.
@@ -696,7 +699,7 @@ func hostUnnamed() types.GuardJudgment {
 //
 // A judgment mark BeginJudgment left on ctx is ended here; without one, Judge marks the
 // judgment itself once it has resolved the session.
-func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgment {
+func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.GuardJudgment) {
 	started := begunJudgment(ctx)
 	defer func() { started.end() }()
 	if req.Form != "" && strings.TrimSpace(req.Host) == "" {
@@ -717,10 +720,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 	hasInput := input != ""
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
 	if req.Message {
-		if !req.DryRun {
-			recordMessageTopics(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), input)
+		if req.DryRun {
+			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 		}
-		return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+		at := hookLocation(ctx, deps)
+		recordMessageTopics(hint.NewGate(at.cacheDir, who.factsKey()), input)
+		return adviseMessage(ctx, at, who, req.RendersContext)
 	}
 	if req.ToolMs > 0 {
 		if !req.DryRun {
@@ -817,6 +822,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 				}
 			}
 			if !req.DryRun && !req.Observe {
+				v = adviseStop(ctx, at, who, input, v)
 				if _, err := endStoppedSession(ctx, job.NewStore(at.jobs()), who.caller(), input, req.HostResumesOnBackgroundFrom, v); err != nil {
 					v.Context = fmt.Sprintf("%smagus workspace: the job store did not end the job this session held: %s", strings.TrimPrefix(v.Context+"\n", "\n"), err)
 				}
@@ -898,6 +904,14 @@ func Judge(ctx context.Context, deps Dependencies, req Request) types.GuardJudgm
 		job.NewStore(location.jobs()).Release(who.caller(), bound.Job)
 	}
 	actingLease, leaseFrom := resolveLease(who, req.Lease, binding.Job)
+	if persists && hasInput && !isPath && mcpTool == "" && unjudged == "" {
+		command := input
+		defer func() {
+			if judged.Decision != decisionDeny && judged.Decision != decisionAsk {
+				recordAdvisoryAct(ctx, location, who, command)
+			}
+		}()
+	}
 	deps.lease = actingLease
 	// A subagent's first call registers its checkout. A command line runs where the call
 	// does; a host's hook may run from the session's checkout, so an envelope counts only

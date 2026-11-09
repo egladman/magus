@@ -1834,9 +1834,25 @@ func TestGuardDeniesSessionDispose(t *testing.T) {
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
-		assert.Contains(t, v.Deny, "only a person may stamp a read receipt or dispose an attention request")
+		assert.Contains(t, v.Deny, "only a person may stamp a read receipt, dispose an attention request")
 		assert.Contains(t, v.Why, "session dispose")
 	}
+}
+
+// An advisory is shown to every session as the person's own words, so an
+// agent posting or retracting one would put words in the person's mouth.
+func TestGuardDeniesSessionAdviseAndRetract(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		`magus session advise "push what you have"`,
+		`./magus -o json session advise --expect "git push" "push"`,
+		`magus session retract adv-3f9a`,
+		`magus session advise "x" && (`,
+	} {
+		v := Evaluate(strict(testDependencies()), cmd)
+		assert.Contains(t, v.Deny, "post or retract an advisory", "expected a deny for %q", cmd)
+	}
+	assert.Empty(t, Evaluate(strict(testDependencies()), `magus session advisories`).Deny)
 }
 
 // TestGuardAllowsSessionAttention is the negative half of TestGuardDeniesSessionDispose:
