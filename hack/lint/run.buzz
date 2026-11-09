@@ -32,6 +32,7 @@ import "hack/lint/cd-runs-agree-across-workflows" as cdruns;
 import "hack/lint/cli-help-follows-proofread-rules" as clihelp;
 import "hack/lint/code-follows-mined-precedents" as precedents;
 import "hack/lint/code-stays-within-the-conformance-ceiling" as conformanceceiling;
+import "hack/lint/decisions-meet-their-evidence" as decisionsevidence;
 import "hack/lint/diagnostic-codes-have-docs-pages" as codepages;
 import "hack/lint/figure-modules-type-check-strictly" as figurecheck;
 import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
@@ -113,6 +114,7 @@ export fun rules() > [Rule] {
         Rule{ name = "tool-descriptions-follow-proofread-rules", reads = tooldesc\reads(), check = tooldesc\check },
         Rule{ name = "skill-renders-follow-markdown-and-description-budgets", reads = skillrenders\reads(), check = skillrenders\check },
         Rule{ name = "proofread-case-moves-name-their-origin", reads = casemoves\reads(), check = casemoves\check },
+        Rule{ name = "decisions-meet-their-evidence", reads = decisionsevidence\reads(), check = decisionsevidence\check },
         Rule{ name = "rules-name-their-tier", reads = ruletiers\reads(), check = ruletiers\check },
         Rule{ name = "sdk-exports", reads = sdkexports\reads(), check = sdkexports\check },
         Rule{ name = "typescript-never-throws", reads = typescriptthrows\reads(), check = typescriptthrows\check },
