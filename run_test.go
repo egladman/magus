@@ -3007,3 +3007,73 @@ func TestRunOnceWaitEndedByContextNamesTheTarget(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	assert.Contains(t, err.Error(), "waiting on "+ref.Ref())
 }
+
+type targetResultsSuite struct {
+	suite.Suite
+	calls atomic.Int32
+	fail  error
+	m     *Magus
+}
+
+func TestTargetResultsSuite(t *testing.T) { suite.Run(t, new(targetResultsSuite)) }
+
+func (s *targetResultsSuite) SetupTest() {
+	s.calls.Store(0)
+	s.fail = nil
+	spellName := register.Spell(s.T(), "zzz-target-results-spell",
+		spells.WithTargets("build"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
+			s.calls.Add(1)
+			return nil, s.fail
+		}),
+	)
+	w := testkit.NewWorkspace(s.T())
+	w.Magusfile("")
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), w.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = m.Close() })
+	s.m = m
+}
+
+func (s *targetResultsSuite) run() ([]types.TargetResult, error) {
+	var got []types.TargetResult
+	err := s.m.Run(context.Background(), []types.Target{{Path: ".", Name: "build"}},
+		WithTargetResults(func(r types.TargetResult) { got = append(got, r) }))
+	return got, err
+}
+
+func (s *targetResultsSuite) TestAPassingTargetReportsOKWithItsRef() {
+	got, err := s.run()
+	s.Require().NoError(err)
+	s.Require().Len(got, 1)
+	s.Equal(".", got[0].Project)
+	s.Equal("build", got[0].Target)
+	s.Equal(types.TargetOK, got[0].Status)
+	s.False(got[0].CacheHit)
+	s.NotEmpty(got[0].Ref)
+	s.NoError(got[0].Err)
+}
+
+func (s *targetResultsSuite) TestAReplayReportsACacheHit() {
+	_, err := s.run()
+	s.Require().NoError(err)
+	got, err := s.run()
+	s.Require().NoError(err)
+	s.Require().Len(got, 1)
+	s.True(got[0].CacheHit)
+	s.Equal(types.TargetOK, got[0].Status)
+	s.Equal(int32(1), s.calls.Load())
+}
+
+func (s *targetResultsSuite) TestAFailureKeepsItsErrorAndRemedy() {
+	refused := errors.New("refused on purpose")
+	s.fail = fmt.Errorf("check: %w", refused)
+	got, err := s.run()
+	s.Require().Error(err)
+	s.Require().Len(got, 1)
+	s.Equal(types.TargetFailed, got[0].Status)
+	s.ErrorIs(got[0].Err, refused)
+	s.NotEmpty(got[0].Next)
+}

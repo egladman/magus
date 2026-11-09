@@ -142,6 +142,8 @@ final tsDirective = $"^(///[ \t]*<|//[ \t]*(eslint-|@ts-|prettier-ignore|biome-i
 // The markers internal/agent reads off a hook template.
 final buzzDirective = $"^// magus-guard-(template|coverage): ";
 final generatedHeader = $"^// Code generated .* DO NOT EDIT\.$";
+// A Go Example's expected output: go test compares it, so it is not prose.
+final goExampleOutput = $"^// (Unordered output|Output):";
 final goLicense = $"(?i)copyright|spdx-license-identifier";
 final goDecl = $"^(func|type|var|const) ";
 final goMethod = $"^func \(([^)]*)\) ([A-Za-z_][A-Za-z0-9_]*)";
@@ -325,6 +327,13 @@ fun blockKind(lang: str, after: str, started: bool) > str {
 fun scanBlock(lang: str, lines: [str], at: int, had: {str: bool}, started: bool) > Scan {
     final t = lines[at].trim();
     final opener = t.startsWith("/*");
+    if (lang == "go" and goExampleOutput.match(t) != null) {
+        var end = at + 1;
+        while (end < lines.len() and lines[end].trim().startsWith("//")) {
+            end = end + 1;
+        }
+        return Scan{ next = end, generated = false, block = null };
+    }
     final license = !started and goLicense.match(t) != null;
     final prose = mut [<str>];
     final fresh = mut [<bool>];
@@ -889,6 +898,14 @@ test "a body comment over 3 lines is refused at once, naming the count and the l
     std\assert(v.reason.indexOf("/w/internal/a.go:4: comment inside a body, 4 lines, over the limit of 3.") != null, message: v.reason);
     std\assert(v.reason.indexOf("repository owner's house style") != null, message: "names whose style");
     std\assert(v.reason.indexOf("Cut each to the why") != null, message: "remedy");
+}
+
+test "a Go Example's output block is no prose, however long" {
+    final output = "\t// Output:\n" + commentLines(6, indent: "\t") + "\t// " + words(40) + "\n";
+    final v = graded("a_test.go", after: inBody(output));
+    std\assert(v.decision == magus\GuardDecision.allow, message: v.reason);
+    final unordered = graded("a_test.go", after: inBody("\t// Unordered output:\n" + commentLines(6, indent: "\t")));
+    std\assert(unordered.decision == magus\GuardDecision.allow, message: unordered.reason);
 }
 
 test "an exported doc earns 8 lines and an unexported one 4" {

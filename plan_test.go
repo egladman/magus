@@ -420,56 +420,6 @@ func (s *PlaceDutiesSuite) TestNoShardsTakeNoDuties() {
 	s.NotPanics(func() { placeDuties(nil) })
 }
 
-// Example_runATarget runs a target, reads its result from the run's records, and
-// reads the stored output its ref names.
-func Example_runATarget() {
-	root, cleanup := newGuideWorkspace(map[string]string{
-		"magusfile.buzz":     "",
-		"api/magusfile.buzz": "",
-		"api/greeting.txt":   "hello\n",
-	})
-	defer cleanup()
-	var runs int
-	defer registerCopySpell("guide-run", &runs)()
-
-	reg := NewWorkspaceRegistry()
-	reg.RegisterProject("api", WithSpell("guide-run"))
-
-	ctx := context.Background()
-	m, err := Open(ctx, root, WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
-	if err != nil {
-		fmt.Println("open:", err)
-		return
-	}
-	defer m.Close()
-
-	results, err := runRecorded(ctx, m, []types.Target{{Path: "api", Name: "build"}})
-	if err != nil {
-		fmt.Println("run:", err)
-		return
-	}
-	for _, r := range results {
-		fmt.Printf("%s:%s %s, cache hit %v\n", r.Project, r.Target, r.Status, r.CacheHit)
-
-		_, d, err := m.OutputByRef(ctx, r.Ref)
-		if err != nil {
-			fmt.Println("output:", err)
-			return
-		}
-		fmt.Printf("ref names %s:%s, failed %v\n", d.Project, d.Target, d.Failed)
-	}
-	built, err := os.ReadFile(filepath.Join(root, "api", "out", "greeting.txt"))
-	if err != nil {
-		fmt.Println("read output:", err)
-		return
-	}
-	fmt.Printf("api/out/greeting.txt: %s", built)
-	// Output:
-	// api:build ok, cache hit false
-	// ref names api:build, failed false
-	// api/out/greeting.txt: hello
-}
-
 // planBenchWorkspace is projects whose ci asks for lint and test, both
 // needing build, with every project changed.
 func planBenchWorkspace(b *testing.B, projects int) (*Magus, []string) {

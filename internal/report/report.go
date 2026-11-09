@@ -452,30 +452,55 @@ func successStatus(r *cache.Result) string {
 }
 
 // RunOptions returns a cache.RunOption that records hit/miss/error events into w per spec.
-func RunOptions(w *Writer, served NextServer) []cache.RunOption {
+// A non-nil results receives the same outcome, so served runs once per step:
+// it journals each hint it serves.
+func RunOptions(w *Writer, served NextServer, results func(types.TargetResult)) []cache.RunOption {
 	return []cache.RunOption{
 		cache.OnResult(func(s *cache.Step, r *cache.Result, err error) {
+			out := Outcome(s, r, err, served)
+			if results != nil {
+				results(out)
+			}
 			tr := TargetResult{
-				Project:    s.ProjectPath,
-				Target:     s.Target,
-				Status:     successStatus(r),
-				CacheHit:   r.Hit,
-				Hash:       r.Hash,
-				DurationMs: r.Duration.Milliseconds(),
-				Ref:        r.Ref,
+				Project:    out.Project,
+				Target:     out.Target,
+				Status:     string(out.Status),
+				CacheHit:   out.CacheHit,
+				Hash:       out.Hash,
+				DurationMs: out.Duration.Milliseconds(),
+				Ref:        out.Ref,
 				HintID:     r.HintID,
+				Next:       out.Next,
 			}
 			if err != nil {
-				tr.Status = "failed"
 				tr.Error = err.Error()
-				tr.Next = hint.NextForFailure(s.ProjectPath, s.Target, r.Ref)
-				if served != nil {
-					tr.Next = served(tr.Next)
-				}
 			}
 			_ = Record(w, tr)
 		}),
 	}
+}
+
+// Outcome is one finished step as the typed value a Go caller reads, the
+// facts the run.target.result record writes as text.
+func Outcome(s *cache.Step, r *cache.Result, err error, served NextServer) types.TargetResult {
+	out := types.TargetResult{
+		Project:  s.ProjectPath,
+		Target:   s.Target,
+		Status:   types.TargetStatus(successStatus(r)),
+		CacheHit: r.Hit,
+		Hash:     r.Hash,
+		Duration: r.Duration,
+		Ref:      r.Ref,
+	}
+	if err != nil {
+		out.Status = types.TargetFailed
+		out.Err = err
+		out.Next = hint.NextForFailure(s.ProjectPath, s.Target, r.Ref)
+		if served != nil {
+			out.Next = served(out.Next)
+		}
+	}
+	return out
 }
 
 // GraphObserver returns a types.Observer that appends graph events to w; nil-safe.
