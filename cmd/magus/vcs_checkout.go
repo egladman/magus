@@ -66,6 +66,9 @@ func vcsCheckoutCommand(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if flags.Remove != "" {
+		if err := preserveBeforeRemoval(ctx, os.Stderr, flags.Remove, res); err != nil {
+			return err
+		}
 		if err := review.Remove(ctx, flags.Remove); err != nil {
 			return err
 		}
@@ -79,6 +82,29 @@ func vcsCheckoutCommand(ctx context.Context, root string, args []string) error {
 		}
 	}
 	return err
+}
+
+// preserveBeforeRemoval captures dir's uncommitted work and says so on w. A
+// capture that fails stops the removal, since the work would be lost.
+func preserveBeforeRemoval(ctx context.Context, w io.Writer, dir string, res types.VCSResolution) error {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return fmt.Errorf("vcs checkout --remove: %w", err)
+	}
+	if _, err := os.Stat(abs); err != nil {
+		return nil
+	}
+	cp, captured, err := vcs.PreserveChanged(ctx, abs, res)
+	if err != nil {
+		return fmt.Errorf("vcs checkout --remove: not removing %s, its work could not be preserved: %w", abs, err)
+	}
+	switch {
+	case captured:
+		fmt.Fprintf(w, "preserved the uncommitted work in %s as %s (%s)\n", abs, cp.Preserved, cp.VCS)
+	case cp.Preserved != "":
+		fmt.Fprintf(w, "the uncommitted work in %s is already preserved as %s (%s)\n", abs, cp.Preserved, cp.VCS)
+	}
+	return nil
 }
 
 // emitCheckout renders rec: the structured formats get the record, the

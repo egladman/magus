@@ -2,9 +2,16 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -56,4 +63,30 @@ func (s *PrintCheckoutSuite) TestTheTextOfASkippedBootstrapSaysSo() {
 	s.Equal("checked out abc at /c/x (git)\n"+
 		"bootstrap: --no-bootstrap: nothing ran in the checkout\n"+
 		"remove: magus vcs checkout --remove /c/x\n", out.String())
+}
+
+type PreserveBeforeRemovalSuite struct {
+	suite.Suite
+}
+
+func TestPreserveBeforeRemovalSuite(t *testing.T) { suite.Run(t, new(PreserveBeforeRemovalSuite)) }
+
+func (s *PreserveBeforeRemovalSuite) TestRemovingACheckoutPreservesItFirst() {
+	s.T().Setenv("XDG_STATE_HOME", s.T().TempDir())
+	dir := testkit.NewRepository(s.T(), map[string]string{"a.txt": "one\n"}).Root()
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "a.txt"), []byte("two\n"), 0o644))
+	res, err := vcs.Resolve(s.T().Context(), dir, "", types.VCSOptions{})
+	s.Require().NoError(err)
+
+	var out bytes.Buffer
+	s.Require().NoError(preserveBeforeRemoval(s.T().Context(), &out, dir, res))
+	s.Contains(out.String(), "preserved the uncommitted work in")
+
+	refs, err := exec.Command("git", "-C", dir, "for-each-ref", "refs/magus/preserved/").Output()
+	s.Require().NoError(err)
+	s.NotEmpty(strings.TrimSpace(string(refs)), "nothing was captured before the removal")
+
+	out.Reset()
+	s.Require().NoError(preserveBeforeRemoval(s.T().Context(), &out, dir, res))
+	s.Contains(out.String(), "already preserved")
 }

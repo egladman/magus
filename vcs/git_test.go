@@ -1163,36 +1163,19 @@ func TestGitPrunePreservedSparesARefMagusDidNotWrite(t *testing.T) {
 	assert.NotContains(t, refs, handle, "pruning reported a handle it did not delete")
 }
 
-// Cutoffs an hour either side of now leave preserveRetention itself untested: the constant
-// could be thirty SECONDS and every assertion stays green. So this runs through Preserve
-// rather than passing PrunePreserved a cutoff of its own, and asserts both sides of the
-// window, since only the survival half pins the length.
-//
-// The two ages are LITERAL days, not preserveRetention plus or minus a day: written against
-// the constant they move with it, and 29 either side of thirty seconds is still one on each
-// side. Measured by setting the constant to thirty seconds.
-func TestGitPreserveRetentionBoundaryIsThirtyDays(t *testing.T) {
+func TestGitPreserveKeepsACaptureOfAnyAge(t *testing.T) {
 	dir := testkit.NewRepository(t, map[string]string{"a.txt": "one\n"}).Root()
 	tree := gitCapture(t, dir, nil, "rev-parse", "HEAD^{tree}")
-
-	// Aged through the committer date, which is what PrunePreserved keys on.
-	aged := func(days int) string {
-		when := time.Now().Add(-time.Duration(days) * 24 * time.Hour).Format(time.RFC3339)
-		sha := gitCapture(t, dir, []string{"GIT_COMMITTER_DATE=" + when, "GIT_AUTHOR_DATE=" + when},
-			"commit-tree", tree, "-p", "HEAD", "-m", preserveMessage)
-		gitRun(t, dir, "update-ref", preservedRefPrefix+sha, sha)
-		return sha
-	}
-	inside := aged(29)
-	outside := aged(31)
+	when := time.Now().Add(-90 * 24 * time.Hour).Format(time.RFC3339)
+	old := gitCapture(t, dir, []string{"GIT_COMMITTER_DATE=" + when, "GIT_AUTHOR_DATE=" + when},
+		"commit-tree", tree, "-p", "HEAD", "-m", preserveMessage)
+	gitRun(t, dir, "update-ref", preservedRefPrefix+old, old)
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("two\n"), 0o644))
 	_, err := gitVCS{}.Preserve(t.Context(), dir)
 	require.NoError(t, err)
 
-	refs := gitListPreserved(t, dir)
-	assert.Contains(t, refs, inside, "dropped a capture still inside the retention window")
-	assert.NotContains(t, refs, outside, "kept a capture past the retention window")
+	assert.Contains(t, gitListPreserved(t, dir), old, "dropped a capture for its age alone")
 }
 
 // gitShimMovingARefOnce puts a `git` ahead of the real one on PATH that passes every

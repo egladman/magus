@@ -561,15 +561,11 @@ func trimStatusColumns(lines []string, width int) []string {
 // back as the proof that magus wrote the object.
 const preserveMessage = "magus preserved working copy"
 
-// preserveRetention is how long a preserved state stays resolvable. Both enforcement sides
-// are needed: every Preserve prunes, so the bound holds on a machine that runs no
-// maintenance job, and the prune-preserved job calls [PrunePreserved] on a schedule, so it
-// also holds in a repository that preserved once and never again.
+// preserveRetention is no age limit. A capture lives until it has landed.
 //
-// Thirty days: long enough that a handle recorded in a ledger still resolves when someone
-// reads that ledger, short enough that a busy repository does not accumulate a year of
-// snapshots.
-const preserveRetention = 30 * 24 * time.Hour
+// TODO: git and hg Preserve still call their age-based prune with this window.
+// Delete those calls and the driver cutoff.
+const preserveRetention = time.Duration(1<<63 - 1)
 
 // shelfPrefix marks a shelf as magus's. PrunePreserved deletes only these, so a shelf a
 // person made by hand is never in scope.
