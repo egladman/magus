@@ -4044,6 +4044,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	checkout := leaseCheckout(ctx, location, actingLease)
 	start, home := cmp.Or(deps.callDir, checkout), userHome()
 	removed := append(removedOrMovedOperands(command, 0, dialect, start, home), boundPathOperands(command, dialect, start)...)
+	destinations := destinationOperands(command, dialect, start, home)
 	for _, candidate := range placedWriteCandidates(command, dialect, start, home) {
 		// A flag (`-p`, `-c`) or stdin's `-` names no file; a file spelled that way is
 		// written `./-p`, which still resolves.
@@ -4056,16 +4057,17 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		}
 		rel, inside := workspaceRelative(checkout, target)
 		if !inside {
-			// A checkout nested under this one is another checkout, which the file-write
-			// rules refuse a lease outright.
-			if nestedCheckout(checkout, target) {
-				if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == decisionDeny {
-					return g.Reason
-				}
+			// Outside, the file-write rules refuse magus's own
+			// directories and any other checkout, parent or nested.
+			if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == decisionDeny {
+				return g.Reason
 			}
 			continue
 		}
-		redirected := slices.Contains(redirects, candidate.word)
+		redirected := slices.Contains(redirects, candidate.word) || slices.ContainsFunc(destinations, func(o placedWord) bool {
+			t, ok := o.place(home)
+			return ok && t == target
+		})
 		declared, byCatchAll := declaredPath(declaring, rel)
 		switch {
 		case !declared:
@@ -4078,7 +4080,8 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 			}) {
 				continue
 			}
-			if info, err := os.Lstat(target); !redirected && (err != nil || !info.Mode().IsRegular()) {
+			// A destination counts too, and Stat follows a symlink.
+			if info, err := os.Stat(target); !redirected && (err != nil || !info.Mode().IsRegular()) {
 				continue
 			}
 		case byCatchAll && !redirected && !pathShaped(checkout, rel):

@@ -634,6 +634,62 @@ func mvOperands(args []string) []string {
 	return out
 }
 
+// destinationOperands are the files the line's calls create or overwrite
+// by operand, as commandDestinations names them. Unlike a candidate, each
+// is a file whether or not it exists yet.
+func destinationOperands(command string, d Dialect, start, home string) []placedWord {
+	var out []placedWord
+	dirTable := newScriptDirs(start, home)
+	eachScript(command, d, func(sf *scriptFile) bool {
+		dirs := dirTable.of(sf)
+		syntax.Walk(sf.file, func(n syntax.Node) bool {
+			stmt, ok := n.(*syntax.Stmt)
+			if !ok {
+				return true
+			}
+			for _, c := range shellCommands(sf.text, stmt, d, placeableWord) {
+				for _, op := range commandDestinations(path.Base(c.Name), c.Args) {
+					out = append(out, placedWord{op, dirs[stmt]})
+				}
+			}
+			return true
+		})
+		return true
+	})
+	return out
+}
+
+// commandDestinations are the operands name writes as files. A cp, install
+// or ln aimed at a directory with -t names no one file.
+func commandDestinations(name string, args []string) []string {
+	switch name {
+	case "tee":
+		return operands(args, "")
+	case "truncate":
+		return operands(args, "sr")
+	case "cp", "install", "ln":
+		if slices.ContainsFunc(args, func(a string) bool {
+			return a == "-t" || strings.HasPrefix(a, "--target-directory")
+		}) {
+			return nil
+		}
+		ops := operands(args, "mogS")
+		if len(ops) < 2 {
+			return nil
+		}
+		return ops[len(ops)-1:]
+	case "dd":
+		var out []string
+		for _, a := range args {
+			if of, ok := strings.CutPrefix(a, "of="); ok {
+				out = append(out, of)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
 // writeTargetCandidates names every word the line's writes could be aimed at, in the order
 // the walk reaches them: each writing redirect's target, and the operands of every command
 // that is not a known reader.
