@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
