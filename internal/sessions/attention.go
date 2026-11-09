@@ -328,29 +328,43 @@ func ResolveRequestID(fold Fold, ref string) (string, error) {
 // resolveRequestID resolves against an already-folded queue, so a caller holding one
 // does not fold it twice.
 func resolveRequestID(all []AttentionRequest, ref string) (string, error) {
-	if ref == "" {
-		return "", ErrNoRequest
+	ids := make([]string, 0, len(all))
+	for _, req := range all {
+		ids = append(ids, req.ID)
 	}
-	// An exact id wins over the prefix scan. Without that, a request whose id is a
-	// prefix of another's could never be addressed at all.
-	if slices.ContainsFunc(all, func(r AttentionRequest) bool { return r.ID == ref }) {
+	id, candidates := resolveIDPrefix(ids, ref)
+	switch {
+	case id != "":
+		return id, nil
+	case len(candidates) == 0:
+		return "", ErrNoRequest
+	default:
+		return "", &AmbiguousRequestError{Prefix: ref, Candidates: candidates}
+	}
+}
+
+// resolveIDPrefix resolves ref, a full id or a prefix of one, against ids.
+// It returns the id ref names, or "" and every id ref prefixes, sorted. No
+// candidates means ref names nothing. Directive ids resolve through it too.
+func resolveIDPrefix(ids []string, ref string) (id string, candidates []string) {
+	if ref == "" {
+		return "", nil
+	}
+	// An exact id wins over the prefix scan. Without that, an id that
+	// prefixes another's could never be addressed at all.
+	if slices.Contains(ids, ref) {
 		return ref, nil
 	}
-	var matches []string
-	for _, req := range all {
-		if strings.HasPrefix(req.ID, ref) {
-			matches = append(matches, req.ID)
+	for _, id := range ids {
+		if strings.HasPrefix(id, ref) {
+			candidates = append(candidates, id)
 		}
 	}
-	switch len(matches) {
-	case 0:
-		return "", ErrNoRequest
-	case 1:
-		return matches[0], nil
-	default:
-		slices.Sort(matches)
-		return "", &AmbiguousRequestError{Prefix: ref, Candidates: matches}
+	if len(candidates) == 1 {
+		return candidates[0], nil
 	}
+	slices.Sort(candidates)
+	return "", candidates
 }
 
 // OpenRequest files a raised block under dir as a durable open request, so a

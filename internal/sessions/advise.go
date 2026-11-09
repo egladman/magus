@@ -254,30 +254,23 @@ func (s DirectiveStore) Retract(ctx context.Context, ref, by string, now time.Ti
 }
 
 func pickDirective(all []Directive, ref string) (Directive, error) {
-	var matches []Directive
+	ids := make([]string, 0, len(all))
 	for _, a := range all {
-		if a.ID == ref {
-			matches = []Directive{a}
-			break
-		}
-		if strings.HasPrefix(a.ID, ref) {
-			matches = append(matches, a)
-		}
+		ids = append(ids, a.ID)
 	}
+	id, candidates := resolveIDPrefix(ids, ref)
 	switch {
-	case ref == "" || len(matches) == 0:
+	case id == "" && len(candidates) == 0:
 		return Directive{}, fmt.Errorf("%w matches %q", ErrNoDirective, ref)
-	case len(matches) > 1:
-		ids := make([]string, 0, len(matches))
-		for _, a := range matches {
-			ids = append(ids, a.ID)
-		}
-		return Directive{}, fmt.Errorf("%q matches %d advisories (%s); name one", ref, len(ids), strings.Join(ids, ", "))
-	case !matches[0].Open():
-		at := time.UnixMilli(matches[0].RetractedMs).Format(time.RFC3339)
-		return matches[0], fmt.Errorf("%s: %w at %s", matches[0].ID, ErrRetracted, at)
+	case id == "":
+		return Directive{}, fmt.Errorf("%q matches %d advisories (%s); name one", ref, len(candidates), strings.Join(candidates, ", "))
 	}
-	return matches[0], nil
+	got := all[slices.Index(ids, id)]
+	if !got.Open() {
+		at := time.UnixMilli(got.RetractedMs).Format(time.RFC3339)
+		return got, fmt.Errorf("%s: %w at %s", got.ID, ErrRetracted, at)
+	}
+	return got, nil
 }
 
 // Recipient is where a hook stands when the guard asks what to show.

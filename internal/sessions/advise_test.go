@@ -87,6 +87,14 @@ func (s *DirectiveSuite) TestARetractionClosesOnce() {
 	s.ErrorIs(err, ErrRetracted)
 }
 
+func (s *DirectiveSuite) TestAnAmbiguousRetractionNamesEveryMatch() {
+	first := s.post("first", "")
+	second := s.post("second", "")
+	_, err := s.store.Retract(context.Background(), "adv-", "eli", s.now)
+	s.ErrorContains(err, first.ID)
+	s.ErrorContains(err, second.ID)
+}
+
 func (s *DirectiveSuite) TestARetractionOfAnUnknownIdIsRefused() {
 	_, err := s.store.Retract(context.Background(), "adv-nope", "eli", s.now)
 	s.ErrorIs(err, ErrNoDirective)
