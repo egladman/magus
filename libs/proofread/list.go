@@ -18,6 +18,9 @@ const (
 	// RuleListParallel reports a list item that opens with another part of
 	// speech, or another verb tense, than the list's other items.
 	RuleListParallel Rule = "list-parallel"
+	// RuleRepeatedOpener reports a list where one opening word starts most
+	// items.
+	RuleRepeatedOpener Rule = "repeated-opener"
 )
 
 // listKinds are the Markdown kinds, each of which writes lists and dates.
@@ -28,6 +31,7 @@ var listKinds = slices.Concat(withReply, agentReply)
 var listChecks = []check{
 	{rule: RuleListMarks, on: listKinds, graded: true, judge: listMarks},
 	{rule: RuleListParallel, on: listKinds, graded: true, judge: listParallel},
+	{rule: RuleRepeatedOpener, on: listKinds, graded: true, judge: repeatedOpener},
 	{rule: RuleDateFormat, on: listKinds, graded: true, judge: dateFormat},
 }
 
@@ -56,8 +60,23 @@ var listTexts = map[Rule]ruleText{
 			"tagger, which is accurate on sentences but guesses on fragments (\"Fixed\", \"Cache\", \"Set\"), " +
 			"so only a list of 3 or more tagged items is judged, a form must hold two thirds of them, and " +
 			"only the items outside it are named. An adjective opens a noun phrase (\"Fast builds\"), so it " +
-			"counts as one. Tense is judged per list, so a current role's list may stay in the present while " +
+			"counts as one. An irregular past (\"Cut\", \"Rewrote\", \"Ran\") reads alone as a base form or a " +
+			"name, so each item is also tagged after a subject (\"it cut the cost\"), and that past reading " +
+			"counts when more items read as past than as any other tense. Tense is judged per list, so a " +
+			"current role's list may stay in the present while " +
 			"the rest are past. Precision is unmeasured, with no labeled firing yet, so it ships off.",
+	},
+	RuleRepeatedOpener: {
+		code:      "PRF1062",
+		dimension: DimensionStructure,
+		catches:   "a bulleted list of 5 or more items where one opening word starts 70% of them",
+		why: "A list where most items open on one word (\"Wrote\" on 9 of 12 bullets) makes the reader skim " +
+			"past the word to find what each item says, and reads as a template. list-parallel asks the " +
+			"items to share a shape; this asks them not to share a word. The threshold is where the hand-" +
+			"labeled lists in its case file separate: every hit holds 4 of 5 or more, every pass at most 3 of " +
+			"5 or 4 of 6, and no list under 5 items is a hit. A numbered list, an article opener (a, an, the) " +
+			"and an item that is only code or a link are not judged. The cases are invented and no labeling " +
+			"round has read a firing, so it ships off.",
 	},
 	RuleDateFormat: {
 		code:      "PRF5007",
@@ -348,6 +367,44 @@ func closingStop(text string) string {
 // a verb.
 type opener struct {
 	word, class, tense string
+	// past is a word that reads as a past tense after a subject. The tagger
+	// reads an irregular past alone as a base form ("Cut") or a name ("Ran").
+	past bool
+}
+
+// readPast takes each item's past reading when more items read as past than
+// as any other tense, and one of them is past alone.
+func readPast(openers []opener) {
+	cover := map[string]int{}
+	firm := false
+
+	for _, o := range openers {
+		switch {
+		case o.class == classVerb && o.tense == tensePast:
+			cover[tensePast]++
+			firm = true
+		case o.past:
+			cover[tensePast]++
+		case o.class == classVerb:
+			cover[o.tense]++
+		}
+	}
+
+	for tense, n := range cover {
+		if tense != tensePast && n >= cover[tensePast] {
+			return
+		}
+	}
+
+	if !firm {
+		return
+	}
+
+	for i, o := range openers {
+		if o.past {
+			openers[i].class, openers[i].tense = classVerb, tensePast
+		}
+	}
 }
 
 // listParallel reports, per list of 3 or more tagged items, each item that
@@ -368,6 +425,8 @@ func listParallel(in input) []Finding {
 				openers = append(openers, o)
 			}
 		}
+
+		readPast(openers)
 
 		classes := make([]string, len(openers))
 		for i, o := range openers {
@@ -442,6 +501,12 @@ func itemOpener(text string) (opener, bool) {
 	}
 
 	s := tagSentence(sentences[0])
+	past := false
+
+	lowered := slices.Concat([]string{"it", strings.ToLower(sentences[0][0])}, sentences[0][1:])
+	if after := tagSentence(lowered); len(s.tags) > 0 && len(after.tags) > 1 {
+		past = after.tags[1].Penn == "VBD" && verbTense(s.tags[0].Penn) != tensePast
+	}
 
 	for i, t := range s.tags {
 		if t.Class == wordclass.Punctuation || t.Class == wordclass.Symbol {
@@ -455,10 +520,10 @@ func itemOpener(text string) (opener, bool) {
 
 		switch t.Class {
 		case wordclass.Verb, wordclass.Auxiliary:
-			return opener{word: word, class: classVerb, tense: verbTense(t.Penn)}, true
+			return opener{word: word, class: classVerb, tense: verbTense(t.Penn), past: past}, true
 		case wordclass.Noun, wordclass.ProperNoun, wordclass.Pronoun, wordclass.Determiner, wordclass.Numeral,
 			wordclass.Adjective:
-			return opener{word: word, class: classNoun}, true
+			return opener{word: word, class: classNoun, past: past}, true
 		}
 
 		return opener{}, false
