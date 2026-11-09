@@ -147,4 +147,3 @@ func parseSGR(s string) sgrState {
 	}
 	return st
 }
-
