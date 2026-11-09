@@ -1152,3 +1152,21 @@ func (s *RemoteGatePushSuite) TestPushGateWithoutARemoteGateRefusesAsToday() {
 	s.Equal(decisionDeny, decision)
 	s.Contains(reason, "no `ci` run is recorded at this commit")
 }
+
+// A killed jj or hg read errs as a missing path does.
+func TestADeadlineCutReadCoversNothing(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	driver := typestest.NewMockVCSDriver(t)
+	driver.On("FindCommit", mock.Anything, "/repo", mock.Anything).Return(types.Commit{}, nil)
+	driver.On("ReadFileAt", mock.Anything, "/repo", mock.Anything, "a.go").
+		Run(func(mock.Arguments) { cancel() }).
+		Return("", context.Canceled)
+	ev := runEvidence{
+		driver: driver, root: "/repo", commit: "c1",
+		files: map[string]fileAt{}, revisions: map[string]bool{},
+	}
+
+	run := cache.OutputDescriptor{Revision: "r1"}
+	assert.False(t, ev.heldAsCommit(ctx, "a.go", run, false))
+	assert.False(t, ev.at(ctx, "c1", "a.go").known)
+}
