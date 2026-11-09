@@ -190,3 +190,27 @@ func TestCheckAcceptsEveryDeclaredEffect(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestStringListKeepsEachValueWhole(t *testing.T) {
+	fs := flag.NewFlagSet("t", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	var got []string
+	StringListVar(fs, &got, "path", "")
+	if err := fs.Parse([]string{"--path", "a.go#Run,Stop", "--path", "b.go"}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"a.go#Run,Stop", "b.go"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if err := fs.Parse([]string{"--path", " "}); err == nil {
+		t.Error("a blank value parsed")
+	}
+}
+
+func TestCheckRefusesAStringListDefault(t *testing.T) {
+	flags := []Flag{{Name: "path", Kind: StringList, Default: []string{"a"}}}
+	err := Check(Command{Name: "tool", Flags: flags})
+	if err == nil || !strings.Contains(err.Error(), "--path is a StringList with a Default") {
+		t.Errorf("want a refusal naming --path's Default, got %v", err)
+	}
+}

@@ -67,6 +67,11 @@ const (
 	Int      Kind = "int"
 	Duration Kind = "duration"
 
+	// StringList is a repeatable flag: each occurrence appends its value whole,
+	// commas included, so a caller that splits a value decides how. It starts
+	// empty and declares no Default.
+	StringList Kind = "string-list"
+
 	// Custom is a flag declared here and bound by hand: a repeatable flag.Value, or
 	// a mode selector read from argv before any FlagSet exists. The generator emits
 	// only its name constant, since a second binding would panic as redefined.
@@ -213,6 +218,8 @@ func (c Command) BindFlags(fs *flag.FlagSet) {
 				}
 			}
 			DurationVar(fs, new(time.Duration), f.Name, TypedDefault[time.Duration](f), unit, usage)
+		case StringList:
+			StringListVar(fs, new([]string), f.Name, f.Doc)
 		default:
 			panic(fmt.Sprintf("cmdline: flag --%s has unknown kind %s", f.Name, string(f.Kind)))
 		}
@@ -260,6 +267,9 @@ func checkFlags(command string, flags []Flag) error {
 		}
 		if f.Kind == Duration && f.Unit != "" && unitPhrase[f.Unit] == "" {
 			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s Unit %q is not one of ns, us, µs, ms, s, m, h", command, f.Name, f.Unit))
+		}
+		if f.Kind == StringList && f.Default != nil {
+			errs = errors.Join(errs, fmt.Errorf("cmdline: %s --%s is a StringList with a Default: a repeatable flag starts empty", command, f.Name))
 		}
 		if f.Kind != Bool {
 			continue
@@ -316,6 +326,29 @@ func (n *negation) Set(s string) error {
 		return fmt.Errorf("--%s%s takes no value: write --%s to turn it on", NegationPrefix, n.name, n.name)
 	}
 	*n.dst = false
+	return nil
+}
+
+// StringListVar registers name on fs as a [StringList] flag that appends each
+// occurrence's value to *p. An empty or blank value is refused.
+func StringListVar(fs *flag.FlagSet, p *[]string, name, usage string) {
+	fs.Var(stringListValue{p: p}, name, usage)
+}
+
+type stringListValue struct{ p *[]string }
+
+func (v stringListValue) String() string {
+	if v.p == nil {
+		return ""
+	}
+	return strings.Join(*v.p, ",")
+}
+
+func (v stringListValue) Set(s string) error {
+	if strings.TrimSpace(s) == "" {
+		return errors.New("empty entry")
+	}
+	*v.p = append(*v.p, s)
 	return nil
 }
 

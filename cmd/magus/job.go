@@ -1101,6 +1101,18 @@ func (l *claimListFlag) Set(value string) error {
 	return nil
 }
 
+// claimPaths splits each value of the path flag name as [claimListFlag.Set]
+// does, so a declaration claim stays one path.
+func claimPaths(name string, values []string) (claimListFlag, error) {
+	var paths claimListFlag
+	for _, v := range values {
+		if err := paths.Set(v); err != nil {
+			return nil, exit.Usagef("magus job apply: --%s %q: %s", name, v, err)
+		}
+	}
+	return paths, nil
+}
+
 // evidenceFlagDoc is `job wait --evidence`, spelled once for the flag set and the registry.
 const evidenceFlagDoc = "Grade check goal `<goal>` against the run `<ref>` recorded in THIS checkout instead of the job's own; `" +
 	types.PrimaryGoalID + "` names the job's check. The paths the job changed must read the same here as in the job's checkout," +
@@ -3039,17 +3051,19 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 // upserted in order. Nothing magus records about the job moves.
 // A new id creates the job.
 func jobApply(ctx context.Context, root string, args []string) error {
-	var (
-		flags        *flaggen.JobApplyFlags
-		addPaths     claimListFlag
-		releasePaths claimListFlag
-	)
+	var flags *flaggen.JobApplyFlags
 	pos, err := commandParse("job apply", args, func(fs *flag.FlagSet) {
 		flags = flaggen.BindJobApply(fs)
-		fs.Var(&addPaths, flaggen.FlagJobApplyAddWritePath, registeredFlagDoc(fs.Name(), flaggen.FlagJobApplyAddWritePath))
-		fs.Var(&releasePaths, flaggen.FlagJobApplyReleaseWritePath, registeredFlagDoc(fs.Name(), flaggen.FlagJobApplyReleaseWritePath))
 		fs.Usage = func() { printRegisteredHelp(fs) }
 	})
+	if err != nil {
+		return err
+	}
+	addPaths, err := claimPaths(flaggen.FlagJobApplyAddWritePath, flags.AddWritePath)
+	if err != nil {
+		return err
+	}
+	releasePaths, err := claimPaths(flaggen.FlagJobApplyReleaseWritePath, flags.ReleaseWritePath)
 	if err != nil {
 		return err
 	}
@@ -3193,12 +3207,6 @@ func jobApply(ctx context.Context, root string, args []string) error {
 		report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, ClaimNotes: claims[a.Next.ID]})
 	}
 	return emitFormatted(opts, report)
-}
-
-// registeredFlagDoc is the doc the tree gives a hand-bound flag of command.
-func registeredFlagDoc(command, name string) string {
-	spec, _ := commandAt(command)
-	return spec.Flags[slices.IndexFunc(spec.Flags, func(f cmdline.Flag) bool { return f.Name == name })].Doc
 }
 
 // widenedDeclaration is the job's own spec plus the paths it lacks, so a
