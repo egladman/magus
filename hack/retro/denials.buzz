@@ -13,6 +13,7 @@ import "magus";
 import "std";
 import "time";
 import "vcs";
+import "./trace" as trace;
 
 final USAGE = "usage: magus buzz hack/retro/denials.buzz -- [--trail <checkout>]... [--since <duration>] [--per-rule <n>] [--limit <n>] [--jsonl]";
 final HELP = "cost: one `magus describe rules`, a read of internal/guard and hack/policy, and a read of each --trail checkout's guard trail and verdict blobs; writes nothing\n{USAGE}\n"
@@ -58,12 +59,8 @@ export object Collected {
     missing: [str],
 }
 
-// Hit is one denied trail line; line is 1-based, at is unix ms.
-export object Hit {
-    line: int,
-    at: int,
-    ref: str,
-}
+// FOREVER is a unix-ms time past any trail record.
+export final FOREVER = 4102444800000;
 
 fun lineAt(text: str, offset: int) > int {
     return text.sub(0, len: offset).split("\n").len();
@@ -298,41 +295,25 @@ export fun fromVerdict(text: str, site: str, at: int) > Denial {
     return Denial{ rule = rule, origin = "trail", site = site, say = lines[0], why = why.join("\n").trim(), fix = fix, at = at };
 }
 
-// trailHits reads the denied calls stamped at or after start, unix ms.
-export fun trailHits(events: str, start: int) > [Hit] !> any {
-    final found = mut [<Hit>];
-    foreach (n, text in fs\readFile(events).split("\n")) {
-        if (text.indexOf("\"preview\":\"guard: deny\"") == null) {
-            continue;
-        }
-        final doc = json\parse(text);
-        final at = std\toInt(doc["ts"] ?? 0);
-        if (at >= start) {
-            found.append(Hit{ line = n + 1, at = at, ref = "{doc["verdict_ref"] ?? ""}" });
-        }
-    }
-    return found;
-}
-
 // fromTrail keeps one denial per rule and say, carrying the newest firing.
 // verdicts maps a ref to its stored text; a ref it lacks is not recorded.
-export fun fromTrail(hits: [Hit], verdicts: {str: str}, file: str) > Collected {
+export fun fromTrail(hits: [trace\Record], verdicts: {str: str}, file: str) > Collected {
     final byKey = mut {<str: Denial>};
     final order = mut [<str>];
     final missing = mut [<str>];
     var unref = 0;
     var unread = 0;
     foreach (h in hits) {
-        if (h.ref == "") {
+        if (h.verdict == "") {
             unref = unref + 1;
             continue;
         }
-        final text = verdicts[h.ref];
+        final text = verdicts[h.verdict];
         if (text == null) {
             unread = unread + 1;
             continue;
         }
-        final d = fromVerdict(text!, site: "{file}:{h.line} {h.ref}", at: h.at);
+        final d = fromVerdict(text!, site: "{file}:{h.line} {h.verdict}", at: h.at);
         final key = "{d.rule}\n{d.say}";
         if (byKey[key] -> seen) {
             final newer = d.at >= seen.at;
@@ -570,12 +551,12 @@ fun fromCheckouts(checkouts: [str], start: int, sites: {str: str}) > TrailRead !
             missing.append("every firing in {c}: no guard trail at {events}; name the checkout that holds it with --trail");
             continue;
         }
-        final hits = trailHits(events, start: start);
+        final hits = trace\denied(trace\trailFor(c, start: start, end: FOREVER));
         final verdicts = mut {<str: str>};
         foreach (h in hits) {
-            final blob = fs\join(dir, name: "blobs/{h.ref}");
-            if (h.ref != "" and fs\exists(blob)) {
-                verdicts[h.ref] = fs\readFile(blob);
+            final blob = fs\join(dir, name: "blobs/{h.verdict}");
+            if (h.verdict != "" and fs\exists(blob)) {
+                verdicts[h.verdict] = fs\readFile(blob);
             }
         }
         final got = fromTrail(hits, verdicts: verdicts, file: events);
