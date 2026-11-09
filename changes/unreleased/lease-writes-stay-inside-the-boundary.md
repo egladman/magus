@@ -15,3 +15,9 @@
   tool write, a redirect, a copy, a move or `go build -o`, even with every path leased. The
   workspace's bootstrap and build targets still produce it, and an unleased session is not
   graded.
+- **The guard reads a script handed to a shell or an interpreter by any route it can see**,
+  not only `sh -c`, `eval`, `env -S`, `xargs` and `find -exec`: a pipe or a here-string or a
+  heredoc into a shell or `tclsh`, awk's `system()` and pipes, sed's `e`, `php -r`,
+  `osascript -e` and a vim `!`. A literal script gets every line rule. A leased worker's
+  script that is decoded or computed as the line runs is refused, and the refusal names a
+  form the guard can read; an unleased session is unchanged.

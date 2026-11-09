@@ -210,6 +210,92 @@ func (s *LeaseBoundarySuite) TestUnleasedWriteToTheBinaryIsNotGraded() {
 	s.Empty(denyWriteOutsideLease(s.ctx, Dependencies{callDir: s.root}, "", "go build -o magus ./cmd/magus"))
 }
 
+const outside = "echo x > docs/new.md"
+
+func (s *LeaseBoundarySuite) TestScriptPipedIntoAShellIsJudged() {
+	s.Contains(s.deny("echo '"+outside+"' | sh"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestScriptPrintedIntoAShellIsJudged() {
+	s.Contains(s.deny(`printf '`+outside+`\n' | bash -s`), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestHereStringIntoAShellIsJudged() {
+	s.Contains(s.deny("bash <<< '"+outside+"'"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestQuotedHeredocIntoAShellIsJudged() {
+	s.Contains(s.deny("sh <<'EOF'\n"+outside+"\nEOF"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestAwkSystemIsJudged() {
+	s.Contains(s.deny(`awk 'BEGIN { system("`+outside+`") }'`), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestAwkPipeIsJudged() {
+	s.Contains(s.deny(`awk 'BEGIN { print "x" | "cat > docs/new.md" }'`), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestSedECommandIsJudged() {
+	s.Contains(s.deny("sed -n '1e "+outside+"' cmd/magus/a.go"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestPhpInlineProgramIsJudged() {
+	s.Contains(s.deny(`php -r 'system("`+outside+`");'`), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestOsascriptDoShellScriptIsJudged() {
+	s.Contains(s.deny(`osascript -e 'do shell script "`+outside+`"'`), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestTclExecIsJudged() {
+	s.Contains(s.deny("echo 'exec touch docs/new.md' | tclsh"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestVimBangCommandIsJudged() {
+	s.Contains(s.deny("vim -es -c '!"+outside+"' -c q"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestPipedScriptInsideTheLeasePasses() {
+	s.Empty(s.deny("echo 'echo x > cmd/magus/a.go' | sh"))
+}
+
+func (s *LeaseBoundarySuite) TestDecodedScriptPipedIntoAShellIsRefused() {
+	s.Contains(s.deny("echo ZWNobyB4Cg== | base64 -d | sh"), "cannot read the script handed to sh through a pipe")
+}
+
+func (s *LeaseBoundarySuite) TestComputedHereStringIsRefused() {
+	s.Contains(s.deny(`bash <<< "$(cat payload)"`), "cannot read the script")
+}
+
+func (s *LeaseBoundarySuite) TestHeredocThatExpandsIsRefused() {
+	s.Contains(s.deny("sh <<EOF\necho $X\nEOF"), "cannot read the script")
+}
+
+func (s *LeaseBoundarySuite) TestAwkSystemOfAFieldIsRefused() {
+	s.Contains(s.deny(`awk '{ system($0) }' cmd/magus/a.go`), "awk through system()")
+}
+
+func (s *LeaseBoundarySuite) TestSedSubstitutionThatRunsIsRefused() {
+	s.Contains(s.deny(`sed 's/.*/rm &/e' cmd/magus/a.go`), "sed through s///e")
+}
+
+func (s *LeaseBoundarySuite) TestPhpShellCallOfAVariableIsRefused() {
+	s.Contains(s.deny(`php -r 'system($argv[1]);' x`), "php through a shell function")
+}
+
+func (s *LeaseBoundarySuite) TestOsascriptJoinedStringIsRefused() {
+	s.Contains(s.deny(`osascript -e 'do shell script "rm " & x'`), "osascript through do shell script")
+}
+
+func (s *LeaseBoundarySuite) TestVimBangThatNamesTheBufferIsRefused() {
+	s.Contains(s.deny("vim -es -c '!rm %' cmd/magus/a.go"), "vim through !")
+}
+
+func (s *LeaseBoundarySuite) TestUnleasedDecodedScriptIsNotGraded() {
+	s.Empty(denyWriteOutsideLease(s.ctx, Dependencies{callDir: s.root}, "", "echo ZWNobyB4Cg== | base64 -d | sh"))
+}
+
 func (s *LeaseBoundarySuite) TestShellWriteInsideTheNestedCheckoutPasses() {
 	ctx, _, nested := s.nestedLease()
 	s.Empty(denyWriteOutsideLease(ctx, Dependencies{callDir: nested}, "nested", "echo x > internal/guard/guard.go"))

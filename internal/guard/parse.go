@@ -65,6 +65,12 @@ func ParseCommandsDialect(command string, d Dialect) ([]hint.Invocation, bool) {
 		}
 		return true
 	})
+	for _, h := range scriptHandoffs(f, d) {
+		if h.read {
+			inner, _ := ParseCommandsDialect(h.text, handedDialect(h, d))
+			out = append(out, inner...)
+		}
+	}
 	return out, true
 }
 
@@ -533,6 +539,14 @@ func eachScriptFrom(sf *scriptFile, d Dialect, depth int, fn func(*scriptFile) b
 		}
 		return true
 	})
+	for _, h := range scriptHandoffs(sf.file, d) {
+		if !h.read {
+			continue
+		}
+		if f, err := parseFile(h.text, handedDialect(h, d)); err == nil {
+			payloads = append(payloads, &scriptFile{file: f, text: h.text, from: h.stmt, parent: sf})
+		}
+	}
 	for _, p := range payloads {
 		if !eachScriptFrom(p, d, depth+1, fn) {
 			return false
