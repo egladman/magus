@@ -68,7 +68,8 @@ type labeledCase struct {
 //go:embed cases/*.txtar
 var labeledCases embed.FS
 
-// LabeledCases returns the case files proofread carries, one per rule.
+// LabeledCases returns the case files proofread carries, one or more per
+// rule.
 func LabeledCases() fs.FS {
 	sub, err := fs.Sub(labeledCases, "cases")
 	if err != nil {
@@ -96,7 +97,8 @@ const caseLead = "fix(cache): keep the key stable\n" +
 	"sorts its inputs before hashing.\n\n"
 
 // LoadCases reads every .txtar file at the root of fsys. A file is named for
-// the rule its cases judge, <rule>.txtar, and its comment is free text. Each
+// the rule its cases judge, <rule>.txtar, and its comment is free text. A
+// rule's cases under a voice go in <rule>.<set>.txtar beside it. Each
 // section header reads
 //
 //	<label>/<kind> [whole] [name=NAME] [owner=OWNER] [thread=N] [event=EVENT]
@@ -145,7 +147,8 @@ func LoadCases(fsys fs.FS) ([]labeledCase, error) {
 }
 
 func parseCases(name string, data []byte) ([]labeledCase, error) {
-	rule := proofread.Rule(strings.TrimSuffix(path.Base(name), ".txtar"))
+	stem, _, _ := strings.Cut(strings.TrimSuffix(path.Base(name), ".txtar"), ".")
+	rule := proofread.Rule(stem)
 
 	doc, ok := catalog()[rule]
 	if !ok {

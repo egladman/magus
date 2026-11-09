@@ -119,14 +119,14 @@ voice-drift abstains under 200 words, which skips commit messages, bullets and s
 replies. `uniform` and the budgets judge the items of one list, or the texts passed
 together on stdin, as one set.
 
-| Item                                                                                       | State   |
-| ------------------------------------------------------------------------------------------ | ------- |
-| Spread measures in `Shape`; per-feature percentiles in `VoiceStats`; `proofread-voice/4`   | done    |
-| `voice eval --paired`, and the calibration re-run on paired text                           | done    |
-| Voice budgets for the counting rules, `triad` first                                        | planned |
-| `uniform`; `list-parallel` checks grammatical shape and `repeated-opener` checks the words | planned |
-| Protected spans in `-o json` and the text output; a fix that covers one is advise at most  | planned |
-| Short texts judged as a set: the items of one list, or the texts passed together on stdin  | planned |
+| Item                                                                                       | State                      |
+| ------------------------------------------------------------------------------------------ | -------------------------- |
+| Spread measures in `Shape`; per-feature percentiles in `VoiceStats`; `proofread-voice/4`   | done                       |
+| `voice eval --paired`, and the calibration re-run on paired text                           | done                       |
+| Voice budgets for the counting rules, `triad` first                                        | in progress (`triad` done) |
+| `uniform`; `list-parallel` checks grammatical shape and `repeated-opener` checks the words | planned                    |
+| Protected spans in `-o json` and the text output; a fix that covers one is advise at most  | planned                    |
+| Short texts judged as a set: the items of one list, or the texts passed together on stdin  | planned                    |
 
 ### Principles checked
 
@@ -141,8 +141,9 @@ together on stdin, as one set.
   what wrote it. The same text by the same author gets the same finding whatever drafted it.
 - [No silent defaults](../design/judgment/no-silent-defaults.md): a budget names its
   source, the author's percentile or the default, in the finding.
-- [Delete before you add](../design/principles/delete-before-you-add.md): the tense floors
-  become one case of the budget lookup, and no second voice mechanism is added.
+- [Delete before you add](../design/principles/delete-before-you-add.md): budgets and
+  `uniform` read the windows a voice already pools, at voice-drift's 5% cut, so no second
+  voice mechanism is added. The tense floors stay: they read pooled rates, not windows.
 
 ## Alternatives
 

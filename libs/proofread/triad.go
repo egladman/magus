@@ -45,8 +45,11 @@ var triadTexts = map[Rule]ruleText{
 			"entries may set triads to 1, which reports a single series. A noun item runs to three " +
 			"words; a verb phrase runs to six, each item opening on a verb the tagger reads after a subject, " +
 			"with or without the Oxford comma. Code spans, paths, flags, " +
-			"ALL_CAPS names, numbers and a list the author numbered are not judged. No firing has been " +
-			"labeled, so it ships off.",
+			"ALL_CAPS names, numbers and a list the author numbered are not judged. With a voice file, a " +
+			"text may hold as many series as the author's own 95th percentile per 1000 words allows at its " +
+			"length, the lead included, and the finding says so; a voice never allows fewer than the kind " +
+			"does. No " +
+			"firing has been labeled, so it ships off.",
 	},
 	RuleStackedColon: {
 		code:      "PRF4031",
@@ -171,7 +174,11 @@ func triad(in input) []Finding {
 		wait = in.spec.Triads
 	}
 
-	if len(hits) < wait && (len(hits) == 0 || !hits[0].lead) {
+	// An author who writes more series than the kind allows sets more.
+	b := voiceBudget(in, "triads_per_1000", wait-1)
+
+	leadOnly := !b.fromVoice && len(hits) > 0 && hits[0].lead
+	if len(hits) <= b.allowed && !leadOnly {
 		return nil
 	}
 
@@ -180,7 +187,7 @@ func triad(in input) []Finding {
 	for _, h := range hits {
 		out = append(out, Finding{
 			Message: fmt.Sprintf("Name what is so, however many that is: '%s' is a series of exactly three, "+
-				"a count that reads as a template.", h.match),
+				"a count that reads as a template.%s", h.match, b.note()),
 			Match: h.match, Line: h.line,
 		})
 	}
