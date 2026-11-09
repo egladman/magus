@@ -40,7 +40,7 @@ func declaredPolicies(ctx context.Context, deps Dependencies, root string, works
 	note = policyOpenedNote
 	if deps.RecordTargetPolicies != nil {
 		if err := deps.RecordTargetPolicies(ctx, root, ws); err != nil {
-			note += " It could not be recorded for the next judgment: " + err.Error() + "."
+			note = fmt.Sprintf("%s It could not be recorded for the next judgment: %v.", note, err)
 		}
 	}
 	return types.IndexTargetPolicies(ws), note, true

@@ -122,14 +122,16 @@ func TestAnOpenRecordsWhatNoSyncDid(t *testing.T) {
 
 	got, ok := workspacegraph.RecordedTargetPolicies(ctx, unopenable(root, &opens), cfg)
 	require.True(t, ok, "the open's record answers while nothing has moved")
-	assert.Equal(t, []string{"."}, got.Projects)
-	assert.Equal(t, []types.TargetPolicy{{
-		TargetRef: types.TargetRef{Project: ".", Target: "bench"},
-		HumanOnly: true,
-		Reason:    "launches paid sessions",
-		SkipCache: true,
-		ReachedBy: []types.TargetRef{{Project: ".", Target: "suite"}},
-	}}, got.Targets)
+	assert.Equal(t, types.TargetPolicyIndex{
+		Projects: []string{"."},
+		Targets: []types.TargetPolicy{{
+			TargetRef: types.TargetRef{Project: ".", Target: "bench"},
+			HumanOnly: true,
+			Reason:    "launches paid sessions",
+			SkipCache: true,
+			ReachedBy: []types.TargetRef{{Project: ".", Target: "suite"}},
+		}},
+	}, got)
 
 	w.Magusfile(humanOnlyMagusfile + "\nexport fun extra(ctx: magus\\Context, args: [str]) > void {}\n")
 	_, ok = workspacegraph.RecordedTargetPolicies(ctx, unopenable(root, &opens), cfg)
