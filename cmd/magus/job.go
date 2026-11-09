@@ -347,10 +347,29 @@ func (g gradingRules) judging(opens *guard.WorkspaceMemo) guard.Dependencies {
 
 func loadGradingRules(ctx context.Context, root string) gradingRules {
 	deps, rules := loadGuardDependencies(ctx, root)
-	if rules == nil {
+	if rules != nil {
+		return gradingRules{deps: deps, sources: rules.Policy().Sources}
+	}
+	if deps.Policy == nil {
 		return gradingRules{deps: deps}
 	}
-	return gradingRules{deps: deps, sources: rules.Policy().Sources}
+	// A policy snapshot hit only when its key covered the bytes on disk.
+	// So those bytes are the ones the rules came from.
+	return gradingRules{deps: deps, sources: sourcesOnDisk(deps.Policy().Files)}
+}
+
+// sourcesOnDisk names each file by the id of the bytes it holds now.
+// It is nil when a file cannot be read, so the next grade loads again.
+func sourcesOnDisk(paths []string) []interp.SourceFile {
+	out := make([]interp.SourceFile, len(paths))
+	for i, p := range paths {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return nil
+		}
+		out[i] = interp.SourceFile{Path: p, ContentID: interp.ContentID(data)}
+	}
+	return out
 }
 
 // unchanged reports whether every file the rules were read from still holds the bytes the
