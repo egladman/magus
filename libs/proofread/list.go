@@ -60,8 +60,8 @@ var listTexts = map[Rule]ruleText{
 			"counts as one. An irregular past (\"Cut\", \"Rewrote\", \"Ran\") reads alone as a base form or a " +
 			"name, so each item is also tagged after a subject (\"it cut the cost\"), and that past reading " +
 			"counts when more items read as past than as any other tense. Tense is judged per list, so a " +
-			"current role's list may stay in the present while " +
-			"the rest are past. Precision is unmeasured, with no labeled firing yet, so it ships off.",
+			"list of current work may stay in the present while " +
+			"another list is past. Precision is unmeasured, with no labeled firing yet, so it ships off.",
 	},
 	RuleRepeatedOpener: {
 		code:      "PRF1062",
