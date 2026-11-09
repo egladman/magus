@@ -1,11 +1,11 @@
 package main
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"os"
 	"path/filepath"
 	"testing"

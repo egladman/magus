@@ -1,13 +1,13 @@
 package main
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"net"
 	"os"
 	"os/exec"

@@ -1,10 +1,10 @@
 package magus
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"testing"
 
 	"github.com/stretchr/testify/assert"

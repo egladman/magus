@@ -1,11 +1,11 @@
 package mcp
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"context"
 	stdjson "encoding/json"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"os"
 	"path/filepath"

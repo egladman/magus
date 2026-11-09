@@ -1,10 +1,10 @@
 package guard
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"io/fs"
 	"os"
 	"path/filepath"

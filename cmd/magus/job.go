@@ -1,14 +1,14 @@
 package main
 
 import (
-	"github.com/egladman/magus/libs/text/plural"
-	"github.com/egladman/magus/types/diff"
 	"bytes"
 	"cmp"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/libs/text/plural"
+	"github.com/egladman/magus/types/diff"
 	"io"
 	"io/fs"
 	"log/slog"

@@ -1,13 +1,13 @@
 package main
 
 import (
-	"github.com/egladman/magus/libs/text/plural"
-	"github.com/egladman/magus/types/diff"
 	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/libs/text/plural"
+	"github.com/egladman/magus/types/diff"
 	"io"
 	"net/http"
 	"os"
@@ -1228,9 +1228,9 @@ func serverReviewComments(ctx context.Context) (comments []diff.ReviewComment, r
 		return nil, "", false
 	}
 	var body struct {
-		ID       string                `json:"id"`
+		ID       string               `json:"id"`
 		Comments []diff.ReviewComment `json:"threads"`
-		Reason   string                `json:"reason"`
+		Reason   string               `json:"reason"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return nil, "", false

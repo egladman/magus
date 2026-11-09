@@ -2250,7 +2250,7 @@ func TestCheckoutBinaryIsAnotherBinaryOnly(t *testing.T) {
 // own ./magus, a stub that denies with exit 2.
 type DelegateToCheckoutSuite struct {
 	suite.Suite
-	repo    *testkit.Repo
+	repo *testkit.Repo
 }
 
 func TestDelegateToCheckoutSuite(t *testing.T) {

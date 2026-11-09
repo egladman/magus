@@ -494,7 +494,6 @@ func classifySite(fset *token.FileSet, value ast.Expr) ruleSite {
 	return s
 }
 
-
 // A remedy the same guard refuses is the retry loop its rule exists to end.
 // Each rule serving one has a method here, named for the rule.
 

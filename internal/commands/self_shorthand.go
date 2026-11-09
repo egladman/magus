@@ -9,7 +9,7 @@ var selfInstallShorthandCommand = cmdline.Command{
 	Name:   "install-shorthand",
 	Effect: cmdline.EffectLocalWrite,
 	Short:  "Symlink mgs, the magus shorthand, to the running binary",
-	Long:   `Create mgs, the shorthand for magus, as a symlink to the running binary.
+	Long: `Create mgs, the shorthand for magus, as a symlink to the running binary.
 
 Without --dir the link is created in the binary's own directory, which is
 already on PATH if magus is. A symlink is preferred over a shell alias because
@@ -19,7 +19,7 @@ every shipped completion script already registers mgs alongside magus.
 The shorthand survives magus self update: the updater resolves symlinks before
 it swaps, so the real binary is replaced underneath a link that keeps pointing
 at it. An existing mgs is left alone unless --force is given.`,
-	Flags:  []cmdline.Flag{
+	Flags: []cmdline.Flag{
 		{Name: "dir", Kind: cmdline.String, Doc: "Directory for the shorthand (default: the running binary's directory)"},
 		{Name: "force", Kind: cmdline.Bool, Default: false, Doc: "Replace an existing file at the shorthand path"},
 	},
