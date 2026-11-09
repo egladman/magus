@@ -168,18 +168,13 @@ func Record(cacheDir string, add []Receipt) error {
 	})
 }
 
-// ReadStates reports each path as one of types.DiffReadUnread, DiffReadRead or
-// DiffReadStale, against the recorded receipts.
+// ReadStates reports each path as diff.ReadUnread, diff.ReadRead or
+// diff.ReadStale against recorded receipts. The CLI's --impact report and the
+// console's review app share it to agree on what "read" means.
 //
-// One definition, because the CLI's --impact report and the console's review app must
-// agree on what "read" means; two callers deciding for themselves is how one of them comes
-// to call a file reviewed while the other calls it stale.
-//
-// A path whose content cannot be resolved is left out entirely rather than called unread: a
-// deleted file is not something anyone failed to review.
-// digest resolves each path's content, and is what makes this answer the right question for a
-// changeset that is not the working tree: a range review compares against the file at that
-// revision, where reading the reader's own checkout would report every file unread.
+// An unresolvable path is left out: a deleted file was not left unreviewed.
+// digestOf resolves content at the reviewed revision, never the reader's
+// checkout.
 func ReadStates(cacheDir string, paths []string, digestOf func(path string) string) (map[string]string, error) {
 	store, err := Load(cacheDir)
 	if err != nil {

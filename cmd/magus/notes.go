@@ -1284,10 +1284,10 @@ func localReviewComments(ctx context.Context, from diff.ReviewOrigin, cacheDir s
 // of them, or "" when none of it is new to them.
 //
 // Printed rather than written into the note, which is the whole reason it is a line and not a
-// field. New belongs to the READER's history with the review and not to the conversation (see
-// types.ReviewComment.New), so in a transcript a colleague reads next year it would describe
-// somebody else's morning. Said to the person taking the capture, it is the one moment it is
-// worth knowing.
+// field. New belongs to the READER's history with the review, not the
+// conversation (see diff.ReviewComment.New). A colleague reading the transcript
+// next year would see it describe somebody else's morning. Said to the person
+// taking the capture, it is the one moment it is worth knowing.
 func newRemarkLine(comments []diff.ReviewComment) string {
 	fresh := 0
 	for _, t := range comments {
