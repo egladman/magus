@@ -2467,7 +2467,7 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
                     "libs/diagnostics/magusfile.buzz",
                     "libs/figure/magusfile.buzz", "libs/gopherbuzz/magusfile.buzz",
                     "libs/testpairing/magusfile.buzz", "libs/textsearch/magusfile.buzz",
-                    "libs/scipbuzz/magusfile.buzz", "libs/xdg/magusfile.buzz", "libs/text/magusfile.buzz", "libs/termkit/magusfile.buzz",
+                    "libs/scipbuzz/magusfile.buzz", "libs/ssg/magusfile.buzz", "libs/ssg/*.buzz", "libs/xdg/magusfile.buzz", "libs/text/magusfile.buzz", "libs/termkit/magusfile.buzz",
                     "testdata/latex/onepage/magusfile.buzz",
                     "libs/cmdline/magusfile.buzz", "libs/kustomize/*.buzz",
                     "libs/kustomize/testdata/*.yaml",
