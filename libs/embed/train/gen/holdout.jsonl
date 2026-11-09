@@ -1228,6 +1228,7 @@
 {"group":"dir:internal/guard","path":"internal/guard/lapse.go"}
 {"group":"dir:internal/guard","path":"internal/guard/lapse_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/lease.go"}
+{"group":"dir:internal/guard","path":"internal/guard/lease_boundary_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/lease_claim.go"}
 {"group":"dir:internal/guard","path":"internal/guard/lease_claim_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/lease_denial.go"}
