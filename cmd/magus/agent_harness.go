@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
@@ -94,10 +95,24 @@ func agentHarnessInstallCommand(ctx context.Context, rootOverride string, args [
 		}
 		rec.Harnesses = append(rec.Harnesses, result)
 	}
+	if !globalCfg.DryRun {
+		writeGuardSnapshot(ctx, root, rootOverride)
+	}
 	if !text {
 		return emitRecord(opts, rec, ids)
 	}
 	return nil
+}
+
+// writeGuardSnapshot loads the guard's policy with no hook deadline, so the
+// hooks that follow judge from its snapshot and warm bytecode. A policy
+// that does not load is the hooks' to report; install still succeeds.
+func writeGuardSnapshot(ctx context.Context, root, rootOverride string) {
+	w := guard.Wiring{Root: root, Config: globalCfg, CacheDir: guardCacheDir(rootOverride)}
+	if err := guard.WritePolicySnapshot(ctx, w); err != nil {
+		slog.With(attr.Component("agent harness install")).WarnContext(ctx,
+			"the guard policy snapshot was not written, so the first hook loads the policy", attr.Error(err))
+	}
 }
 
 // installHarness writes one harness's skills, tool rows and planned files.
