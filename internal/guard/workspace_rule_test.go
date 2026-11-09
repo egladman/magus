@@ -263,7 +263,7 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 		v := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
 
 		bootstrap := config.SourceCommand(root, "", "", true)
-		assert.Contains(t, v.Context, fmt.Sprintf("Judged by /usr/local/bin/magus (%s); this checkout has no ./magus. Fix: bootstrap ./magus with `%s`.", version, bootstrap))
+		assert.Contains(t, v.Context, fmt.Sprintf("Judged by /usr/local/bin/magus (%s); this checkout has no ./magus. Fix: bootstrap ./magus with `%s`, then ready the checkout with `%s`, each alone on its line.", version, bootstrap, readyCheckoutLine(root)))
 	})
 	t.Run("a failure that is not the binary being old names no fix", func(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)

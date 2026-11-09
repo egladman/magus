@@ -96,29 +96,9 @@ func judgeWorktreePrune(ctx context.Context, deps Dependencies, callDir string, 
 		r.failed = []string{why}
 		return r
 	}
-	switch {
-	case c.unfollowed:
-		return fail("it runs inside a conditional, a function, or a loop whose words are not all literal, which the guard does not follow")
-	case c.args == nil:
-		return fail("it is reached through a wrapper, whose arguments cannot be read as literal words")
-	}
-	at, _, ok := gitCallAt(c.args, c.at)
-	if !ok {
-		return fail("a word on it is not literal or the directory it runs in is not knowable without running it")
-	}
-	gitDir, err := filepath.Abs(at.dir)
-	if err != nil {
-		return fail("the directory it runs in cannot be resolved")
-	}
-	if callDir == "" {
-		return fail("which checkout this session runs in is unknown, so it cannot be told apart from the target")
-	}
-	_, hereCommon, ok := gitCheckout(callDir)
-	if !ok {
-		return fail("this session runs in no git checkout, so the repository and its job store cannot be read")
-	}
-	if _, common, ok := gitCheckout(gitDir); !ok || common != hereCommon {
-		return fail(fmt.Sprintf("git runs against another repository than this session's, whose job store magus does not read (`git -C %s rev-parse --git-common-dir`)", gitDir))
+	gitDir, why := pruneSite(c, callDir)
+	if why != "" {
+		return fail(why)
 	}
 
 	opts := deps.VCS
@@ -153,6 +133,26 @@ func judgeWorktreePrune(ctx context.Context, deps Dependencies, callDir string, 
 		r.failed = append(r.failed, lostCheckout(co.Root, co.Head, heads, lost[0]))
 	}
 	return r
+}
+
+// pruneSite is the directory a located prune runs git in, or why that cannot
+// be judged.
+func pruneSite(c locatedCall, callDir string) (gitDir, why string) {
+	switch {
+	case c.unfollowed:
+		return "", "it runs inside a conditional, a function, or a loop whose words are not all literal, which the guard does not follow"
+	case c.args == nil:
+		return "", "it is reached through a wrapper, whose arguments cannot be read as literal words"
+	}
+	at, _, ok := gitCallAt(c.args, c.at)
+	if !ok {
+		return "", "a word on it is not literal or the directory it runs in is not knowable without running it"
+	}
+	gitDir, err := filepath.Abs(at.dir)
+	if err != nil {
+		return "", "the directory it runs in cannot be resolved"
+	}
+	return gitDir, repoMismatch(callDir, gitDir)
 }
 
 // lostCheckout names a gone checkout and how to restore it.
@@ -222,21 +222,30 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 	return judgeRemovalSite(ctx, deps, at, callDir, s, r)
 }
 
+// repoMismatch is why a git call at gitDir cannot be judged from the session in
+// callDir, or "" when both are one repository.
+func repoMismatch(callDir, gitDir string) string {
+	if callDir == "" {
+		return "which checkout this session runs in is unknown, so it cannot be told apart from the target"
+	}
+	_, hereCommon, ok := gitCheckout(callDir)
+	if !ok {
+		return "this session runs in no git checkout, so the repository and its job store cannot be read"
+	}
+	if _, common, ok := gitCheckout(gitDir); !ok || common != hereCommon {
+		return fmt.Sprintf("git runs against another repository than this session's, whose job store magus does not read (`git -C %s rev-parse --git-common-dir`)", gitDir)
+	}
+	return ""
+}
+
 // judgeRemovalSite judges the removal or unlock of the one worktree s names.
 func judgeRemovalSite(ctx context.Context, deps Dependencies, at location, callDir string, s removalSite, r removal) removal {
 	fail := func(why string) removal {
 		r.failed = []string{why}
 		return r
 	}
-	if callDir == "" {
-		return fail("which checkout this session runs in is unknown, so it cannot be told apart from the target")
-	}
-	_, hereCommon, ok := gitCheckout(callDir)
-	if !ok {
-		return fail("this session runs in no git checkout, so the repository and its job store cannot be read")
-	}
-	if _, common, ok := gitCheckout(s.gitDir); !ok || common != hereCommon {
-		return fail(fmt.Sprintf("git runs against another repository than this session's, whose job store magus does not read (`git -C %s rev-parse --git-common-dir`)", s.gitDir))
+	if why := repoMismatch(callDir, s.gitDir); why != "" {
+		return fail(why)
 	}
 
 	opts := deps.VCS
@@ -262,14 +271,7 @@ func judgeRemovalSite(ctx context.Context, deps Dependencies, at location, callD
 		return fail("this session runs in it; remove it from another checkout")
 	}
 
-	if _, err := os.Stat(co.Root); errors.Is(err, fs.ErrNotExist) {
-		r.failed = append(r.failed, "its directory is gone, so there is nothing to remove; `git worktree prune` clears the record")
-	} else if dirty, err := drv.DirtyFiles(ctx, co.Root, nil); err != nil {
-		r.failed = append(r.failed, fmt.Sprintf("its status cannot be read (`git -C %s status`): %s", co.Root, err.Error()))
-	} else if len(dirty) > 0 {
-		r.failed = append(r.failed, fmt.Sprintf("it has %d modified, staged or untracked path(s), first %s (`git -C %s status`)", len(dirty), dirty[0], co.Root))
-	}
-
+	r.failed = append(r.failed, checkoutStateFailures(ctx, drv, co)...)
 	rows, err := jobRowsAt(ctx, at)
 	if err != nil {
 		if co.Locked && !s.unlock {
@@ -278,11 +280,46 @@ func judgeRemovalSite(ctx context.Context, deps Dependencies, at location, callD
 		r.failed = append(r.failed, fmt.Sprintf("the job store cannot be read, so who works in it is unknown (`%s`): %s", hint.LsJobs.String(), err.Error()))
 		return r
 	}
-	var finished []types.Job
-	exited, unfiled := "", ""
+	scan := scanCheckoutJobs(deps, rows, co)
+	r.failed = append(r.failed, scan.failed...)
+	lock := judgeCheckoutLock(deps, rows, scan.finished, co, s)
+	r.failed = append(r.failed, lock.failed...)
+	if co.Head != "" {
+		r.failed = append(r.failed, unlanded(ctx, drv, s.gitDir, callDir, co.Head, res.Base)...)
+	}
+	r.addRemedy(scan, lock)
+	return r
+}
+
+// checkoutStateFailures are the conditions co fails by its directory: gone,
+// unreadable or holding changes.
+func checkoutStateFailures(ctx context.Context, drv types.VCSDriver, co types.RegisteredCheckout) []string {
+	if _, err := os.Stat(co.Root); errors.Is(err, fs.ErrNotExist) {
+		return []string{"its directory is gone, so there is nothing to remove; `git worktree prune` clears the record"}
+	}
+	dirty, err := drv.DirtyFiles(ctx, co.Root, nil)
+	switch {
+	case err != nil:
+		return []string{fmt.Sprintf("its status cannot be read (`git -C %s status`): %s", co.Root, err.Error())}
+	case len(dirty) > 0:
+		return []string{fmt.Sprintf("it has %d modified, staged or untracked path(s), first %s (`git -C %s status`)", len(dirty), dirty[0], co.Root)}
+	}
+	return nil
+}
+
+// checkoutJobScan is what the job rows say of one checkout. exited is a job
+// that exited ungraded, and unfiled one that exited with no result.
+type checkoutJobScan struct {
+	failed          []string
+	finished        []types.Job
+	exited, unfiled string
+}
+
+func scanCheckoutJobs(deps Dependencies, rows []types.Job, co types.RegisteredCheckout) checkoutJobScan {
+	var scan checkoutJobScan
 	for _, row := range rows {
 		if row.Worktree.Standing() && samePath(row.Worktree.Root, co.Root) && !mayWorkIn(deps, rows, row) {
-			r.failed = append(r.failed, fmt.Sprintf("job %s's fork made it, and only that job's holder or the session that forked it removes it (`%s`)",
+			scan.failed = append(scan.failed, fmt.Sprintf("job %s's fork made it, and only that job's holder or the session that forked it removes it (`%s`)",
 				row.ID, hint.DescribeJob.With(row.ID)))
 		}
 		if !samePath(row.CheckoutRoot, co.Root) {
@@ -290,54 +327,68 @@ func judgeRemovalSite(ctx context.Context, deps Dependencies, at location, callD
 		}
 		switch {
 		case row.State == types.StateExited && row.Result == nil:
-			// No result was filed, so there is nothing to wait for; only the tree can lose work.
-			unfiled = row.ID
+			// No result was filed: only the tree can lose work.
+			scan.unfiled = row.ID
 		case row.State.Live():
-			r.failed = append(r.failed, fmt.Sprintf("job %s (%s) was taken in it (`%s`)", row.ID, row.State, hint.DescribeJob.With(row.ID)))
+			scan.failed = append(scan.failed, fmt.Sprintf("job %s (%s) was taken in it (`%s`)", row.ID, row.State, hint.DescribeJob.With(row.ID)))
 			if row.State == types.StateExited {
-				exited = row.ID
+				scan.exited = row.ID
 			}
 		case row.State == types.StatePass || row.State == types.StateFail:
-			finished = append(finished, row)
+			scan.finished = append(scan.finished, row)
 		}
 	}
-	ownedLock := false
-	var forked *types.Job
+	return scan
+}
+
+// checkoutLock is how a locked checkout fails its removal. forked is the job
+// whose fork made and locked it, and owned a lock over a finished worker.
+type checkoutLock struct {
+	failed []string
+	forked *types.Job
+	owned  bool
+}
+
+func judgeCheckoutLock(deps Dependencies, rows, finished []types.Job, co types.RegisteredCheckout, s removalSite) checkoutLock {
+	var lock checkoutLock
 	switch {
 	case !co.Locked || s.unlock:
 	case co.LockReason == vcs.CheckoutLockReason:
-		// git removes a locked worktree only with -f -f, which would also discard changes, so
-		// a fork's checkout goes through magus, which removes it only once it holds no work.
+		// git removes a locked worktree only with -f -f, which would also
+		// discard changes, so a fork's checkout goes through magus, which
+		// removes it only once it holds no work.
 		i := slices.IndexFunc(rows, func(row types.Job) bool {
 			return row.Worktree.Standing() && samePath(row.Worktree.Root, co.Root) && mayWorkIn(deps, rows, row)
 		})
 		if i < 0 {
-			r.failed = append(r.failed, lockHeld(co))
+			lock.failed = append(lock.failed, lockHeld(co))
 			break
 		}
-		forked = &rows[i]
-		r.failed = append(r.failed, fmt.Sprintf("it is the checkout job %s's fork made and locked, which git removes only with -f -f; magus unlocks and removes it once the job ends", forked.ID))
+		lock.forked = &rows[i]
+		lock.failed = append(lock.failed, fmt.Sprintf("it is the checkout job %s's fork made and locked, which git removes only with -f -f; magus unlocks and removes it once the job ends", lock.forked.ID))
 	default:
 		switch owner := lockOwner(deps, rows, finished); {
 		case owner == "":
-			r.failed = append(r.failed, lockHeld(co))
+			lock.failed = append(lock.failed, lockHeld(co))
 		case s.force < 2:
-			r.failed = append(r.failed, fmt.Sprintf("it is locked over the worker your session spawned for job %s, which finished, and git removes a locked worktree only with -f -f", owner))
-			ownedLock = true
+			lock.failed = append(lock.failed, fmt.Sprintf("it is locked over the worker your session spawned for job %s, which finished, and git removes a locked worktree only with -f -f", owner))
+			lock.owned = true
 		}
 	}
-	if co.Head != "" {
-		r.failed = append(r.failed, unlanded(ctx, drv, s.gitDir, callDir, co.Head, res.Base)...)
-	}
+	return lock
+}
 
+// addRemedy sets the lead and next step of the first cause that has one.
+func (r *removal) addRemedy(scan checkoutJobScan, lock checkoutLock) {
+	forked := lock.forked
 	switch {
-	case unfiled != "" && len(r.failed) > 0:
-		r.lead = fmt.Sprintf("job %s exited without filing a result, and %s still holds work.", unfiled, r.target)
-		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobExit.Argv(unfiled),
+	case scan.unfiled != "" && len(r.failed) > 0:
+		r.lead = fmt.Sprintf("job %s exited without filing a result, and %s still holds work.", scan.unfiled, r.target)
+		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobExit.Argv(scan.unfiled),
 			"exit files the result the job never filed")
-	case exited != "":
-		r.lead = fmt.Sprintf("job %s exited and is not graded yet; wait for its grade before %s %s.", exited, r.verb, r.target)
-		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobWait.Argv(exited),
+	case scan.exited != "":
+		r.lead = fmt.Sprintf("job %s exited and is not graded yet; wait for its grade before %s %s.", scan.exited, r.verb, r.target)
+		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobWait.Argv(scan.exited),
 			"a job's worktree is removable once its grade is filed")
 	case forked != nil && len(r.failed) == 1 && forked.State.Terminal():
 		r.lead = fmt.Sprintf("job %s ended, and magus removes the checkout its fork made, keeping it if it holds work.", forked.ID)
@@ -347,12 +398,11 @@ func judgeRemovalSite(ctx context.Context, deps Dependencies, at location, callD
 		r.lead = fmt.Sprintf("job %s owns %s; ending it removes the checkout its fork made, keeping it if it holds work.", forked.ID, r.target)
 		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), hint.JobExit.Argv(forked.ID),
 			"exit ends the job, then unlocks and removes its checkout once it holds no work")
-	case ownedLock && len(r.failed) == 1:
+	case lock.owned && len(r.failed) == 1:
 		r.lead = r.target + " is locked over your finished worker; git removes a locked worktree only with -f -f."
 		r.next = hint.NextForDenyRemedy(string(denyRuleWorktreeRemove), []string{"git", "worktree", "remove", "-f", "-f", r.target},
 			"every condition but the lock holds, and the lock is your own finished worker's")
 	}
-	return r
 }
 
 // mayRemoveWorktree is the cheap test that a line can hold a removal.
@@ -418,34 +468,13 @@ func judgeRmTargets(ctx context.Context, deps Dependencies, at location, callDir
 	if dir == "" {
 		return removal{}
 	}
-	var abs []string
-	for _, t := range targets {
-		if !filepath.IsAbs(t) {
-			t = filepath.Join(dir, t)
-		}
-		t = filepath.Clean(t)
-		if strings.ContainsAny(t, "*?[") {
-			matches, _ := filepath.Glob(t)
-			abs = append(abs, matches...)
-			continue
-		}
-		abs = append(abs, t)
-	}
+	abs := absoluteTargets(dir, targets)
 	if len(abs) == 0 {
 		return removal{}
 	}
-	regDir := ""
-	for _, cand := range append([]string{dir, callDir}, abs...) {
-		if _, _, ok := gitCheckout(cand); ok && cand != "" {
-			regDir = cand
-			break
-		}
-	}
+	regDir := registryDir(dir, callDir, abs)
 	if regDir == "" {
 		return removal{}
-	}
-	if a, err := filepath.Abs(regDir); err == nil {
-		regDir = a
 	}
 	r := removal{verb: "removing", target: "the worktree"}
 	opts := deps.VCS
@@ -471,6 +500,40 @@ func judgeRmTargets(ctx context.Context, deps Dependencies, at location, callDir
 		}
 	}
 	return removal{}
+}
+
+// absoluteTargets are targets cleaned and resolved from dir, a glob replaced
+// by the paths it matches.
+func absoluteTargets(dir string, targets []string) []string {
+	var abs []string
+	for _, t := range targets {
+		if !filepath.IsAbs(t) {
+			t = filepath.Join(dir, t)
+		}
+		t = filepath.Clean(t)
+		if strings.ContainsAny(t, "*?[") {
+			matches, _ := filepath.Glob(t)
+			abs = append(abs, matches...)
+			continue
+		}
+		abs = append(abs, t)
+	}
+	return abs
+}
+
+// registryDir is the first of dir, callDir and abs inside a git checkout, as
+// an absolute path, or "" when none is.
+func registryDir(dir, callDir string, abs []string) string {
+	for _, cand := range append([]string{dir, callDir}, abs...) {
+		if _, _, ok := gitCheckout(cand); !ok || cand == "" {
+			continue
+		}
+		if a, err := filepath.Abs(cand); err == nil {
+			return a
+		}
+		return cand
+	}
+	return ""
 }
 
 // ownsCheckout reports whether root is a standing checkout a fork made for a job the

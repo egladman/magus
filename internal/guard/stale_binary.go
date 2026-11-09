@@ -126,7 +126,7 @@ var errNotCheckoutBinary = errors.New("the judging magus is not this checkout's 
 // foreignJudge reports whether binary is not the ./magus of root, a checkout
 // that builds magus from source. Other workspaces keep PATH magus as install.
 func foreignJudge(root, binary string) bool {
-	if root == "" || binary == "" || BootstrapLine(root) == "" {
+	if root == "" || binary == "" || ownBootstrapLine(root) == "" {
 		return false
 	}
 	judge, errJudge := os.Stat(binary)
@@ -665,7 +665,7 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 	fix := binaryRemedy(own, root, call.lease, call.builds)
 	if reason.Cause == unloadNoBinary && own && (call.lease == "" || call.builds) {
 		// A foreign judge is not ./magus, so a ./magus rebuild cannot help.
-		fix = binaryFix{say: fmt.Sprintf("bootstrap ./magus with `%s`", BootstrapLine(root))}
+		fix = binaryFix{say: fmt.Sprintf("bootstrap ./magus with `%s`", ownBootstrapLine(root))}
 	}
 	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
 	switch {
@@ -761,7 +761,7 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 			why: fmt.Sprintf("If the rebuild cannot load the tree either, bootstrap over it, alone on its line: `%s`. If the error names a magusfile line instead, fix that line.", bootstrap),
 		}
 	case own:
-		ready := ReadyCheckoutLine(root)
+		ready := readyCheckoutLine(root)
 		return binaryFix{
 			say: fmt.Sprintf("bootstrap ./magus with `%s`, then ready the checkout with `%s`, each alone on its line", bootstrap, ready),
 			why: "The bootstrap builds ./magus and nothing else. The checkout hook then installs every project's dependencies and every declared harness's tool rows, " +
@@ -774,18 +774,18 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 	}
 }
 
-// BootstrapLine is the line that builds a ./magus at the HEAD of root, a checkout of magus
-// itself, "" for any other workspace.
-func BootstrapLine(root string) string {
+// ownBootstrapLine is the line that builds a ./magus at the HEAD of root, a
+// checkout of magus itself, "" for any other workspace.
+func ownBootstrapLine(root string) string {
 	if !ownSourceRoot(root) {
 		return ""
 	}
 	return config.SourceCommand(root, "", "", true)
 }
 
-// ReadyCheckoutLine is the line that runs root's checkout hook after
-// [BootstrapLine], "" when root declares none.
-func ReadyCheckoutLine(root string) string {
+// readyCheckoutLine is the line that runs root's checkout hook after
+// [ownBootstrapLine], "" when root declares none.
+func readyCheckoutLine(root string) string {
 	return config.ReadyCheckoutCommand(config.CheckoutHookAt(root))
 }
 
