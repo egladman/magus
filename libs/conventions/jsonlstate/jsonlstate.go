@@ -20,6 +20,11 @@ const message = "this rewrites a whole JSON document as local state: keep an " +
 // Options configures the analyzer returned by [New]. At least one of
 // StateRoots, StateSegments and StateFields must name where state lives.
 type Options struct {
+	// Base is the revision a change is measured against, such as origin/main.
+	// Only a write on a line changed since its merge base with HEAD is
+	// reported.
+	Base string `json:"base"`
+
 	// StateRoots are functions returning a state directory, as
 	// "<import path>.<name>".
 	StateRoots []string `json:"state-roots"`
@@ -48,8 +53,11 @@ type Options struct {
 // os.Rename into place, that publishes the bytes of a JSON marshal at a state
 // path. Rewriting the document erases a concurrent writer's update.
 //
-// New errors when no state path is named or a name is malformed.
+// New errors when no base or state path is named or a name is malformed.
 func New(opts Options) (*analysis.Analyzer, error) {
+	if opts.Base == "" {
+		return nil, errors.New("jsonlstate: no base revision to measure a change against")
+	}
 	if len(opts.StateRoots) == 0 && len(opts.StateSegments) == 0 &&
 		len(opts.StateFields) == 0 {
 		return nil, errors.New("jsonlstate: no state-roots, state-segments or " +
@@ -69,23 +77,42 @@ func New(opts Options) (*analysis.Analyzer, error) {
 	if slices.Contains(opts.StateSegments, "") {
 		return nil, errors.New("jsonlstate: an empty state segment matches every path")
 	}
+	return newWith(opts, &gitChanges{base: opts.Base}), nil
+}
+
+func newWith(opts Options, changes changeSource) *analysis.Analyzer {
 	return &analysis.Analyzer{
 		Name: "jsonlstate",
 		Doc:  "report a whole JSON document written as local state",
-		Run:  func(pass *analysis.Pass) (any, error) { return nil, run(pass, opts) },
-	}, nil
+		Run:  func(pass *analysis.Pass) (any, error) { return nil, run(pass, opts, changes) },
+	}
 }
 
-func run(pass *analysis.Pass, opts Options) error {
+type changeSource interface {
+	// File returns the changed lines of the working copy.
+	File(path string) ([]span, error)
+}
+
+// span is a closed range of line numbers.
+type span struct{ from, to int }
+
+func run(pass *analysis.Pass, opts Options, changes changeSource) error {
 	// Only type-checked files: an ignored file has no types to resolve a call.
 	for _, f := range pass.Files {
 		if source.IsTest(pass, f) {
 			continue
 		}
+		changed, err := changes.File(source.Name(pass, f))
+		if err != nil {
+			return fmt.Errorf("jsonlstate: %w", err)
+		}
+		if len(changed) == 0 {
+			continue
+		}
 		for _, decl := range f.Decls {
 			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil {
 				w := &walker{
-					pass: pass, opts: opts,
+					pass: pass, opts: opts, changed: changed,
 					doc: map[types.Object]bool{}, state: map[types.Object]bool{},
 				}
 				w.function(fn.Body)
@@ -95,9 +122,22 @@ func run(pass *analysis.Pass, opts Options) error {
 	return nil
 }
 
+func (w *walker) report(call *ast.CallExpr) {
+	from := w.pass.Fset.Position(call.Pos()).Line
+	to := w.pass.Fset.Position(call.End()).Line
+	for _, s := range w.changed {
+		if s.from <= to && from <= s.to {
+			w.pass.Reportf(call.Pos(), "%s", source.Hint(message, w.opts.Hint))
+			return
+		}
+	}
+}
+
 type walker struct {
 	pass *analysis.Pass
 	opts Options
+	// changed holds this file's lines changed since the base.
+	changed []span
 	// doc holds variables assigned a marshal result; state, a state path.
 	doc   map[types.Object]bool
 	state map[types.Object]bool
@@ -134,7 +174,7 @@ func (w *walker) function(body *ast.BlockStmt) {
 		case w.isWriter(name) && len(call.Args) >= 2 && w.isDocument(call.Args[1]):
 			published = true
 			if w.isState(call.Args[0]) {
-				w.pass.Reportf(call.Pos(), "%s", source.Hint(message, w.opts.Hint))
+				w.report(call)
 			}
 		case name == "(*os.File).Write" && len(call.Args) == 1 &&
 			w.isDocument(call.Args[0]):
@@ -149,7 +189,7 @@ func (w *walker) function(body *ast.BlockStmt) {
 	}
 	for _, call := range renames {
 		if w.isState(call.Args[1]) {
-			w.pass.Reportf(call.Pos(), "%s", source.Hint(message, w.opts.Hint))
+			w.report(call)
 		}
 	}
 }

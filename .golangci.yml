@@ -125,6 +125,7 @@ linters:
     - asciistrings
     - benchbeside
     - blankerror
+    - jsonlstate
     - stutter
     - filenames
     - nameoutput
@@ -467,6 +468,15 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           base: origin/main
+
+      jsonlstate:
+        type: module
+        description: reports a whole JSON document that a change writes as local state
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          base: origin/main
+          state-segments:
+            - .magus
 
       benchbeside:
         type: module
