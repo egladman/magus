@@ -1,10 +1,10 @@
 package main
 
 import (
-	eventstypes "github.com/egladman/magus/types/events"
 	"context"
 	"flag"
 	"fmt"
+	eventstypes "github.com/egladman/magus/types/events"
 	"os"
 	"path/filepath"
 	"strings"

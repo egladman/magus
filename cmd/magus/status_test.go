@@ -1,10 +1,10 @@
 package main
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"bytes"
 	"context"
 	"errors"
+	"github.com/egladman/magus/types/daemon"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -55,8 +55,8 @@ func TestPrintSilentLeases(t *testing.T) {
 
 func TestStatusReportInlinesTheSnapshot(t *testing.T) {
 	report := statusReport{
-		Snapshot: daemon.Snapshot{PoolError: "no pool"},
-		SilentLeases:   []guard.SilentLease{{Lease: "job-a", Session: "s1", SilentSeconds: 2700}},
+		Snapshot:     daemon.Snapshot{PoolError: "no pool"},
+		SilentLeases: []guard.SilentLease{{Lease: "job-a", Session: "s1", SilentSeconds: 2700}},
 	}
 	raw, err := json.Marshal(report)
 	require.NoError(t, err)

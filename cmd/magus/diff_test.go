@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"context"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -870,7 +870,7 @@ type recordingSync struct {
 	closed bool
 }
 
-func (r *recordingSync) SetCursor(diff.Cursor)       {}
+func (r *recordingSync) SetCursor(diff.Cursor)            {}
 func (r *recordingSync) SetViewed(digest string, on bool) { r.marks = append(r.marks, digest) }
 func (r *recordingSync) SetThreadsSeen(ids []string)      { r.seen = append(r.seen, ids...) }
 func (r *recordingSync) close()                           { r.closed = true }

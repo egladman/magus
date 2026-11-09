@@ -1,13 +1,13 @@
 package main
 
 import (
-	difftypes "github.com/egladman/magus/types/diff"
 	"bytes"
 	"cmp"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	difftypes "github.com/egladman/magus/types/diff"
 	"io"
 	"log/slog"
 	"net"
@@ -1903,7 +1903,7 @@ func capSlice(xs []string, n int) []string {
 // before, so nothing reading `magus diff -o json` today meets a key it has never seen.
 type diffReport struct {
 	difftypes.Diff `yaml:",inline"`
-	Impact     *diffImpact `json:"impact,omitempty" yaml:"impact,omitempty"`
+	Impact         *diffImpact `json:"impact,omitempty" yaml:"impact,omitempty"`
 }
 
 // diffImpact is what a disposer should know before landing: the consequences a file list

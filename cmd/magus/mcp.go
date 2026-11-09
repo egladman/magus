@@ -1,10 +1,10 @@
 package main
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"context"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"io"
 	"log/slog"
 	"net/http"

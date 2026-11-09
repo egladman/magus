@@ -1,10 +1,10 @@
 package main
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"bytes"
 	"context"
 	"errors"
+	"github.com/egladman/magus/types/daemon"
 	"log/slog"
 	"sync"
 	"sync/atomic"

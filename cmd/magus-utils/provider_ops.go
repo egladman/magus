@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"bytes"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"go/format"
 	"reflect"
 	"strconv"

@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"context"
+	"github.com/egladman/magus/types/diff"
 	"os"
 	"path/filepath"
 	"strings"

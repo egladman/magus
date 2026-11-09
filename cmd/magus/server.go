@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"flag"
@@ -9,6 +8,7 @@ import (
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/termkit"
+	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"os"
 	"os/exec"
