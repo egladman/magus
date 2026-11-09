@@ -205,7 +205,7 @@ func (v BriefRefKind) Values() []string { return briefRefKinds.Strings() }
 func (v BriefRefKind) Valid() bool      { return briefRefKinds.Valid(v) }
 func (v BriefRefKind) String() string   { return enum.String(v) }
 
-var modelTierSources = enum.Set[ModelTierSource]{ModelTierSourceRow, ModelTierSourceMatrix, ModelTierSourceDefault}
+var modelTierSources = enum.Set[ModelTierSource]{ModelTierSourceRow, ModelTierSourceMatrix, ModelTierSourceUserMatrix, ModelTierSourceDefault}
 
 func (v ModelTierSource) Values() []string { return modelTierSources.Strings() }
 func (v ModelTierSource) Valid() bool      { return modelTierSources.Valid(v) }

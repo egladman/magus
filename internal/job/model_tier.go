@@ -301,8 +301,8 @@ func declaredTier(set *types.ModelTierSet, record *types.JobModelTier) (types.Mo
 }
 
 // checkMatrixAnswer holds a matrix's answer to the declaration it chose from. The answer
-// is stored as given once it agrees with set, with the source made the matrix's whatever
-// the function wrote there.
+// is stored as given once it agrees with set. Its source is the matrix's,
+// or the user matrix's when the answer names that.
 func checkMatrixAnswer(set *types.ModelTierSet, id string, answer types.JobModelTier) (types.JobModelTier, error) {
 	tier, err := set.Parse(answer.Name)
 	if err != nil {
@@ -317,7 +317,9 @@ func checkMatrixAnswer(set *types.ModelTierSet, id string, answer types.JobModel
 	if answer.Reason == "" {
 		return types.JobModelTier{}, fmt.Errorf("job: the model tier matrix gave no reason for %s, and every assignment records why", id)
 	}
-	answer.Source = types.ModelTierSourceMatrix
+	if answer.Source != types.ModelTierSourceUserMatrix {
+		answer.Source = types.ModelTierSourceMatrix
+	}
 	return answer, nil
 }
 
