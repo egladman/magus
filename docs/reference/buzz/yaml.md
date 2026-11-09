@@ -20,11 +20,11 @@ Decode a YAML string into a value (maps, lists, strings, numbers, bools, null); 
 
 **Signature:** `yaml\parse(source) -> any` - [source](https://github.com/egladman/magus/blob/main/std/encoding/yaml/yaml.go)
 
-| Parameter | Type     | Optional | Description |
-| --------- | -------- | -------- | ----------- |
-| `source`  | `string` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `source`  | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### positions
 
@@ -32,11 +32,11 @@ Report where each value of a YAML document starts, as {lines, columns}: 1-based,
 
 **Signature:** `yaml\positions(source) -> YamlPositions` - [source](https://github.com/egladman/magus/blob/main/std/encoding/yaml/yaml.go)
 
-| Parameter | Type     | Optional | Description |
-| --------- | -------- | -------- | ----------- |
-| `source`  | `string` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `source`  | `<invalid>` |          |             |
 
-**Returns:** map[string]any
+**Returns:** <invalid>
 
 ### stringify
 
@@ -44,9 +44,9 @@ Encode a value to a YAML string; errors on unencodable input.
 
 **Signature:** `yaml\stringify(value) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/yaml/yaml.go)
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `value`   | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `value`   | `<invalid>` |          |             |
 
-**Returns:** string
+**Returns:** <invalid>
 

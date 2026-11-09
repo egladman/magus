@@ -20,14 +20,14 @@ Bar draws done of total in cols cells, filled in eighths so it moves a fraction 
 
 **Signature:** `progress\bar(done, total, cols, track) -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-| Parameter | Type     | Optional | Description |
-| --------- | -------- | -------- | ----------- |
-| `done`    | `int`    |          |             |
-| `total`   | `int`    |          |             |
-| `cols`    | `int`    |          |             |
-| `track`   | `string` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `done`    | `<invalid>` |          |             |
+| `total`   | `<invalid>` |          |             |
+| `cols`    | `<invalid>` |          |             |
+| `track`   | `<invalid>` |          |             |
 
-**Returns:** map[string]any
+**Returns:** <invalid>
 
 ### loaderWidth
 
@@ -35,12 +35,12 @@ Width returns l sized to cols columns.
 
 **Signature:** `progress\loaderWidth(loader, cols) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `loader`  | `int` |          |             |
-| `cols`    | `int` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `loader`  | `<invalid>` |          |             |
+| `cols`    | `<invalid>` |          |             |
 
-**Returns:** int
+**Returns:** <invalid>
 
 ### loaderHeight
 
@@ -48,12 +48,12 @@ Height returns l sized to rows rows.
 
 **Signature:** `progress\loaderHeight(loader, rows) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `loader`  | `int` |          |             |
-| `rows`    | `int` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `loader`  | `<invalid>` |          |             |
+| `rows`    | `<invalid>` |          |             |
 
-**Returns:** int
+**Returns:** <invalid>
 
 ### loaderLabel
 
@@ -61,12 +61,12 @@ Label returns l animating text.
 
 **Signature:** `progress\loaderLabel(loader, text) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-| Parameter | Type     | Optional | Description |
-| --------- | -------- | -------- | ----------- |
-| `loader`  | `int`    |          |             |
-| `text`    | `string` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `loader`  | `<invalid>` |          |             |
+| `text`    | `<invalid>` |          |             |
 
-**Returns:** int
+**Returns:** <invalid>
 
 ### loaderFrame
 
@@ -74,12 +74,12 @@ Frame draws the frame elapsed after the animation started, one Line per row.
 
 **Signature:** `progress\loaderFrame(loader, elapsed) -> any` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `loader`  | `int` |          |             |
-| `elapsed` | `int` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `loader`  | `<invalid>` |          |             |
+| `elapsed` | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### names
 
@@ -87,7 +87,7 @@ Names lists every loader in catalog order.
 
 **Signature:** `progress\names() -> []string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-**Returns:** []string
+**Returns:** <invalid>
 
 ### lookup
 
@@ -95,11 +95,11 @@ Lookup returns the loader called name, such as "glyph/dots".
 
 **Signature:** `progress\lookup(name) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-| Parameter | Type     | Optional | Description |
-| --------- | -------- | -------- | ----------- |
-| `name`    | `string` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `name`    | `<invalid>` |          |             |
 
-**Returns:** int
+**Returns:** <invalid>
 
 ### loaderName
 
@@ -107,11 +107,11 @@ The Name field of a Loader.
 
 **Signature:** `progress\loaderName(loader) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `loader`  | `int` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `loader`  | `<invalid>` |          |             |
 
-**Returns:** string
+**Returns:** <invalid>
 
 ### loaderKind
 
@@ -119,11 +119,11 @@ The Kind field of a Loader.
 
 **Signature:** `progress\loaderKind(loader) -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `loader`  | `int` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `loader`  | `<invalid>` |          |             |
 
-**Returns:** string
+**Returns:** <invalid>
 
 ### loaderInterval
 
@@ -131,11 +131,11 @@ The Interval field of a Loader.
 
 **Signature:** `progress\loaderInterval(loader) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `loader`  | `int` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `loader`  | `<invalid>` |          |             |
 
-**Returns:** int
+**Returns:** <invalid>
 
 ### loaderCols
 
@@ -143,11 +143,11 @@ The Cols field of a Loader.
 
 **Signature:** `progress\loaderCols(loader) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `loader`  | `int` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `loader`  | `<invalid>` |          |             |
 
-**Returns:** int
+**Returns:** <invalid>
 
 ### loaderRows
 
@@ -155,11 +155,11 @@ The Rows field of a Loader.
 
 **Signature:** `progress\loaderRows(loader) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `loader`  | `int` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `loader`  | `<invalid>` |          |             |
 
-**Returns:** int
+**Returns:** <invalid>
 
 ### glyph
 
@@ -167,7 +167,7 @@ The footprints.
 
 **Signature:** `progress\glyph() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-**Returns:** string
+**Returns:** <invalid>
 
 ### rotation
 
@@ -175,7 +175,7 @@ The footprints.
 
 **Signature:** `progress\rotation() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-**Returns:** string
+**Returns:** <invalid>
 
 ### strip
 
@@ -183,7 +183,7 @@ The footprints.
 
 **Signature:** `progress\strip() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-**Returns:** string
+**Returns:** <invalid>
 
 ### text
 
@@ -191,7 +191,7 @@ The footprints.
 
 **Signature:** `progress\text() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-**Returns:** string
+**Returns:** <invalid>
 
 ### span
 
@@ -199,7 +199,7 @@ The footprints.
 
 **Signature:** `progress\span() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-**Returns:** string
+**Returns:** <invalid>
 
 ### column
 
@@ -207,7 +207,7 @@ The footprints.
 
 **Signature:** `progress\column() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-**Returns:** string
+**Returns:** <invalid>
 
 ### fallback
 
@@ -215,5 +215,5 @@ Fallback is the loader to draw when the terminal cannot show Unicode.
 
 **Signature:** `progress\fallback() -> string` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/progress/module.go)
 
-**Returns:** string
+**Returns:** <invalid>
 

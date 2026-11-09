@@ -20,11 +20,11 @@ parseWorktrees reads `git worktree list --porcelain`: one stanza per worktree, t
 
 **Signature:** `reclaimdisk\parseWorktrees(porcelain) -> [Worktree]`
 
-| Parameter   | Type  | Optional | Description |
-| ----------- | ----- | -------- | ----------- |
-| `porcelain` | `any` |          |             |
+| Parameter   | Type        | Optional | Description |
+| ----------- | ----------- | -------- | ----------- |
+| `porcelain` | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### displayPath
 
@@ -32,53 +32,42 @@ displayPath is path relative to the main worktree when it sits under it.
 
 **Signature:** `reclaimdisk\displayPath(path, main) -> str`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `path`    | `any` |          |             |
-| `main`    | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `path`    | `<invalid>` |          |             |
+| `main`    | `<invalid>` |          |             |
 
-**Returns:** any
-
-### plural
-
-**Signature:** `reclaimdisk\plural(n, word) -> str`
-
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `n`       | `any` |          |             |
-| `word`    | `any` |          |             |
-
-**Returns:** any
+**Returns:** <invalid>
 
 ### age
 
 **Signature:** `reclaimdisk\age(ms) -> str`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `ms`      | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `ms`      | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### size
 
 **Signature:** `reclaimdisk\size(kib) -> str`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `kib`     | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `kib`     | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### parseCwds
 
 **Signature:** `reclaimdisk\parseCwds(lsof) -> [Cwd]`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `lsof`    | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `lsof`    | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### pidsByWorktree
 
@@ -86,12 +75,12 @@ pidsByWorktree gives each process to the deepest worktree holding its working di
 
 **Signature:** `reclaimdisk\pidsByWorktree(cwds, paths) -> {str:[str]}`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `cwds`    | `any` |          |             |
-| `paths`   | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `cwds`    | `<invalid>` |          |             |
+| `paths`   | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### liveLeases
 
@@ -99,11 +88,11 @@ liveLeases is each checkout's live jobs as "<id> (<state>)". Exited counts as li
 
 **Signature:** `reclaimdisk\liveLeases(leases) -> {str:[str]}`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `leases`  | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `leases`  | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### classify
 
@@ -111,18 +100,18 @@ classify decides one worktree, listing every reason to keep it rather than the f
 
 **Signature:** `reclaimdisk\classify(o, main, own, leases, pids, now, keepRecent, shown) -> Item`
 
-| Parameter    | Type  | Optional | Description |
-| ------------ | ----- | -------- | ----------- |
-| `o`          | `any` |          |             |
-| `main`       | `any` |          |             |
-| `own`        | `any` |          |             |
-| `leases`     | `any` |          |             |
-| `pids`       | `any` |          |             |
-| `now`        | `any` |          |             |
-| `keepRecent` | `any` |          |             |
-| `shown`      | `any` |          |             |
+| Parameter    | Type        | Optional | Description |
+| ------------ | ----------- | -------- | ----------- |
+| `o`          | `<invalid>` |          |             |
+| `main`       | `<invalid>` |          |             |
+| `own`        | `<invalid>` |          |             |
+| `leases`     | `<invalid>` |          |             |
+| `pids`       | `<invalid>` |          |             |
+| `now`        | `<invalid>` |          |             |
+| `keepRecent` | `<invalid>` |          |             |
+| `shown`      | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### branchItems
 
@@ -130,14 +119,14 @@ branchItems lists the agent branches whose loss loses nothing: no kept worktree 
 
 **Signature:** `reclaimdisk\branchItems(tips, held, removable, unique) -> [Item]`
 
-| Parameter   | Type  | Optional | Description |
-| ----------- | ----- | -------- | ----------- |
-| `tips`      | `any` |          |             |
-| `held`      | `any` |          |             |
-| `removable` | `any` |          |             |
-| `unique`    | `any` |          |             |
+| Parameter   | Type        | Optional | Description |
+| ----------- | ----------- | -------- | ----------- |
+| `tips`      | `<invalid>` |          |             |
+| `held`      | `<invalid>` |          |             |
+| `removable` | `<invalid>` |          |             |
+| `unique`    | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### parseUniqueBranches
 
@@ -145,11 +134,11 @@ parseUniqueBranches reads `git log --format=%D --decorate-refs=refs/heads/`: the
 
 **Signature:** `reclaimdisk\parseUniqueBranches(log) -> [str]`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `log`     | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `log`     | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### rank
 
@@ -157,11 +146,11 @@ rank orders the plan largest reclaim first; unmeasured rows follow, removable be
 
 **Signature:** `reclaimdisk\rank(items) -> [Item]`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `items`   | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `items`   | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### pickChunk
 
@@ -169,32 +158,32 @@ pickChunk is one chunk of the plan: the n removable worktrees untouched longest,
 
 **Signature:** `reclaimdisk\pickChunk(items, n) -> [Item]`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `items`   | `any` |          |             |
-| `n`       | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `items`   | `<invalid>` |          |             |
+| `n`       | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### totals
 
 **Signature:** `reclaimdisk\totals(items) -> Totals`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `items`   | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `items`   | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### render
 
 **Signature:** `reclaimdisk\render(items) -> [str]`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `items`   | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `items`   | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### guardLine
 
@@ -202,12 +191,12 @@ guardLine is the shell line the guard judges for one removal: the same argv vcs\
 
 **Signature:** `reclaimdisk\guardLine(root, path) -> str?`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `root`    | `any` |          |             |
-| `path`    | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `root`    | `<invalid>` |          |             |
+| `path`    | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### headline
 
@@ -215,13 +204,13 @@ headline is the plan's one-line summary; trimmed, when not empty, is what a cach
 
 **Signature:** `reclaimdisk\headline(items, applied, trimmed) -> str`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `items`   | `any` |          |             |
-| `applied` | `any` |          |             |
-| `trimmed` | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `items`   | `<invalid>` |          |             |
+| `applied` | `<invalid>` |          |             |
+| `trimmed` | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### timeLeft
 
@@ -229,12 +218,12 @@ timeLeft is the timeoutMs a call made now may take: 0, no bound, when deadline i
 
 **Signature:** `reclaimdisk\timeLeft(deadline, now) -> double`
 
-| Parameter  | Type  | Optional | Description |
-| ---------- | ----- | -------- | ----------- |
-| `deadline` | `any` |          |             |
-| `now`      | `any` |          |             |
+| Parameter  | Type        | Optional | Description |
+| ---------- | ----------- | -------- | ----------- |
+| `deadline` | `<invalid>` |          |             |
+| `now`      | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### status
 
@@ -242,12 +231,12 @@ status reads one worktree's dirt; a directory that is gone reads dirty -1.
 
 **Signature:** `reclaimdisk\status(path, deadline) -> Status`
 
-| Parameter  | Type  | Optional | Description |
-| ---------- | ----- | -------- | ----------- |
-| `path`     | `any` |          |             |
-| `deadline` | `any` |          |             |
+| Parameter  | Type        | Optional | Description |
+| ---------- | ----------- | -------- | ----------- |
+| `path`     | `<invalid>` |          |             |
+| `deadline` | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### survey
 
@@ -255,15 +244,15 @@ survey reads every worktree and agent branch of the repository at the working di
 
 **Signature:** `reclaimdisk\survey(base, now, keepRecent, measure, deadline) -> Survey`
 
-| Parameter    | Type  | Optional | Description |
-| ------------ | ----- | -------- | ----------- |
-| `base`       | `any` |          |             |
-| `now`        | `any` |          |             |
-| `keepRecent` | `any` |          |             |
-| `measure`    | `any` |          |             |
-| `deadline`   | `any` |          |             |
+| Parameter    | Type        | Optional | Description |
+| ------------ | ----------- | -------- | ----------- |
+| `base`       | `<invalid>` |          |             |
+| `now`        | `<invalid>` |          |             |
+| `keepRecent` | `<invalid>` |          |             |
+| `measure`    | `<invalid>` |          |             |
+| `deadline`   | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### apply
 
@@ -271,13 +260,13 @@ apply removes the removable rows and returns the plan with each row's result. A 
 
 **Signature:** `reclaimdisk\apply(items, root, deadline) -> [Item]`
 
-| Parameter  | Type  | Optional | Description |
-| ---------- | ----- | -------- | ----------- |
-| `items`    | `any` |          |             |
-| `root`     | `any` |          |             |
-| `deadline` | `any` |          |             |
+| Parameter  | Type        | Optional | Description |
+| ---------- | ----------- | -------- | ----------- |
+| `items`    | `<invalid>` |          |             |
+| `root`     | `<invalid>` |          |             |
+| `deadline` | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### trimCache
 
@@ -285,15 +274,15 @@ trimCache trims one cache to its budget, keeping files inside fence.
 
 **Signature:** `reclaimdisk\trimCache(name, dir, trimMb, fence, deadline) -> CacheTrim`
 
-| Parameter  | Type  | Optional | Description |
-| ---------- | ----- | -------- | ----------- |
-| `name`     | `any` |          |             |
-| `dir`      | `any` |          |             |
-| `trimMb`   | `any` |          |             |
-| `fence`    | `any` |          |             |
-| `deadline` | `any` |          |             |
+| Parameter  | Type        | Optional | Description |
+| ---------- | ----------- | -------- | ----------- |
+| `name`     | `<invalid>` |          |             |
+| `dir`      | `<invalid>` |          |             |
+| `trimMb`   | `<invalid>` |          |             |
+| `fence`    | `<invalid>` |          |             |
+| `deadline` | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### trimLine
 
@@ -301,12 +290,12 @@ trimLine says what one trim really did, null when it did nothing to say.
 
 **Signature:** `reclaimdisk\trimLine(t, fence) -> str?`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `t`       | `any` |          |             |
-| `fence`   | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `t`       | `<invalid>` |          |             |
+| `fence`   | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### trimDeclared
 
@@ -314,12 +303,12 @@ trimDeclared trims every cache a spell gives a budget and returns each
 
 **Signature:** `reclaimdisk\trimDeclared(fence, deadline) -> [CacheTrim]`
 
-| Parameter  | Type  | Optional | Description |
-| ---------- | ----- | -------- | ----------- |
-| `fence`    | `any` |          |             |
-| `deadline` | `any` |          |             |
+| Parameter  | Type        | Optional | Description |
+| ---------- | ----------- | -------- | ----------- |
+| `fence`    | `<invalid>` |          |             |
+| `deadline` | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### chunk
 
@@ -327,11 +316,11 @@ chunk is the worktree half of a reclaim: the CHUNK_WORKTREES removable
 
 **Signature:** `reclaimdisk\chunk(deadline) -> [Item]`
 
-| Parameter  | Type  | Optional | Description |
-| ---------- | ----- | -------- | ----------- |
-| `deadline` | `any` |          |             |
+| Parameter  | Type        | Optional | Description |
+| ---------- | ----------- | -------- | ----------- |
+| `deadline` | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### keptLine
 
@@ -339,11 +328,11 @@ keptLine counts what a reclaim leaves for a person, "" when it leaves none.
 
 **Signature:** `reclaimdisk\keptLine(items) -> str`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `items`   | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `items`   | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### tick
 
@@ -351,13 +340,13 @@ tick is the one decider every trigger calls. It samples, decides, trims and
 
 **Signature:** `reclaimdisk\tick(cwd, deadline, [force]) -> TickResult`
 
-| Parameter  | Type  | Optional | Description |
-| ---------- | ----- | -------- | ----------- |
-| `cwd`      | `any` |          |             |
-| `deadline` | `any` |          |             |
-| `force`    | `any` | yes      |             |
+| Parameter  | Type        | Optional | Description |
+| ---------- | ----------- | -------- | ----------- |
+| `cwd`      | `<invalid>` |          |             |
+| `deadline` | `<invalid>` |          |             |
+| `force`    | `<invalid>` | yes      |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### reclaimNow
 

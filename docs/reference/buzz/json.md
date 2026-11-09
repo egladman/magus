@@ -25,11 +25,11 @@ Decode a JSON string into a value (map, list, string, number, or boolean).
 
 **Signature:** `json\parse(s) -> any`[^buzz-stdlib-json-parse] - [source](https://github.com/egladman/magus/blob/main/std/encoding/json/json.go)
 
-| Parameter | Type     | Optional | Description |
-| --------- | -------- | -------- | ----------- |
-| `s`       | `string` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `s`       | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 **Example:**
 
@@ -56,12 +56,12 @@ Encode a value as a JSON string. With no indent (or "") the output is compact; p
 
 **Signature:** `json\stringify(value, [indent]) -> string`[^buzz-stdlib-json-stringify] - [source](https://github.com/egladman/magus/blob/main/std/encoding/json/json.go)
 
-| Parameter | Type     | Optional | Description |
-| --------- | -------- | -------- | ----------- |
-| `value`   | `any`    |          |             |
-| `indent`  | `string` | yes      |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `value`   | `<invalid>` |          |             |
+| `indent`  | `<invalid>` | yes      |             |
 
-**Returns:** string
+**Returns:** <invalid>
 
 **Example:**
 

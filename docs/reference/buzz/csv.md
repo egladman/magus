@@ -20,13 +20,13 @@ Parse delimiter-separated text into a list of rows, each a list of fields. Quote
 
 **Signature:** `csv\parse(s, [delimiter], [comment]) -> [][]string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/csv/csv.go)
 
-| Parameter   | Type     | Optional | Description |
-| ----------- | -------- | -------- | ----------- |
-| `s`         | `string` |          |             |
-| `delimiter` | `string` | yes      |             |
-| `comment`   | `string` | yes      |             |
+| Parameter   | Type        | Optional | Description |
+| ----------- | ----------- | -------- | ----------- |
+| `s`         | `<invalid>` |          |             |
+| `delimiter` | `<invalid>` | yes      |             |
+| `comment`   | `<invalid>` | yes      |             |
 
-**Returns:** [][]string
+**Returns:** <invalid>
 
 ### stringify
 
@@ -34,10 +34,10 @@ Render rows (a list of lists of fields) as delimiter-separated text, quoting any
 
 **Signature:** `csv\stringify(rows, [delimiter]) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/csv/csv.go)
 
-| Parameter   | Type         | Optional | Description |
-| ----------- | ------------ | -------- | ----------- |
-| `rows`      | `[][]string` |          |             |
-| `delimiter` | `string`     | yes      |             |
+| Parameter   | Type        | Optional | Description |
+| ----------- | ----------- | -------- | ----------- |
+| `rows`      | `<invalid>` |          |             |
+| `delimiter` | `<invalid>` | yes      |             |
 
-**Returns:** string
+**Returns:** <invalid>
 

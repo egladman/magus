@@ -20,10 +20,10 @@ Add env vars to subprocesses `proc\exec` / `proc\shell` start inside callback. N
 
 **Signature:** `os\withEnv(env, callback)` - [source](https://github.com/egladman/magus/blob/main/std/os.go)
 
-| Parameter  | Type                                                                    | Optional | Description |
-| ---------- | ----------------------------------------------------------------------- | -------- | ----------- |
-| `env`      | `map[string]string`                                                     |          |             |
-| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go) |          |             |
+| Parameter  | Type                          | Optional | Description |
+| ---------- | ----------------------------- | -------- | ----------- |
+| `env`      | `map[string]string`           |          |             |
+| `callback` | `func(context.Context) error` |          |             |
 
 ### platform
 
@@ -83,11 +83,11 @@ Call fn up to max times, retrying on error with exponential backoff; returns fn'
 
 **Signature:** `os\retry(max, fn, [opts]) -> any` - [source](https://github.com/egladman/magus/blob/main/std/os.go)
 
-| Parameter | Type                                                                    | Optional | Description |
-| --------- | ----------------------------------------------------------------------- | -------- | ----------- |
-| `max`     | `int`                                                                   |          |             |
-| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go) |          |             |
-| `opts`    | `map[string]any`                                                        | yes      |             |
+| Parameter | Type                                          | Optional | Description |
+| --------- | --------------------------------------------- | -------- | ----------- |
+| `max`     | `int`                                         |          |             |
+| `fn`      | `func(context.Context) (interface {}, error)` |          |             |
+| `opts`    | `map[string]any`                              | yes      |             |
 
 **Returns:** any
 

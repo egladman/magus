@@ -273,7 +273,7 @@ Register the one function a fork calls to choose a job's model tier: fun(req: Mo
 
 **Signature:** `magus\modelTier(matrix)`
 
-| Parameter | Type                                                                    | Optional | Description |
-| --------- | ----------------------------------------------------------------------- | -------- | ----------- |
-| `matrix`  | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go) |          |             |
+| Parameter | Type                                                                  | Optional | Description |
+| --------- | --------------------------------------------------------------------- | -------- | ----------- |
+| `matrix`  | `func(context.Context, types.ModelTierRequest) (interface {}, error)` |          |             |
 

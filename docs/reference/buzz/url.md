@@ -20,11 +20,11 @@ Percent-encode s for use in a URL query component.
 
 **Signature:** `url\encode(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go)
 
-| Parameter | Type     | Optional | Description |
-| --------- | -------- | -------- | ----------- |
-| `s`       | `string` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `s`       | `<invalid>` |          |             |
 
-**Returns:** string
+**Returns:** <invalid>
 
 ### decode
 
@@ -32,11 +32,11 @@ Decode a percent-encoded URL query component; errors on malformed input.
 
 **Signature:** `url\decode(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go)
 
-| Parameter | Type     | Optional | Description |
-| --------- | -------- | -------- | ----------- |
-| `s`       | `string` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `s`       | `<invalid>` |          |             |
 
-**Returns:** string
+**Returns:** <invalid>
 
 ### parse
 
@@ -44,11 +44,11 @@ Parse a URL string into {scheme, host, port, path, query, fragment}; errors on m
 
 **Signature:** `url\parse(rawUrl) -> URL` - [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go)
 
-| Parameter | Type     | Optional | Description |
-| --------- | -------- | -------- | ----------- |
-| `rawUrl`  | `string` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `rawUrl`  | `<invalid>` |          |             |
 
-**Returns:** map[string]any
+**Returns:** <invalid>
 
 ### build
 
@@ -56,9 +56,9 @@ Build a URL string from a URL object - the same shape parse returns, so the two 
 
 **Signature:** `url\build(parts) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go)
 
-| Parameter | Type             | Optional | Description |
-| --------- | ---------------- | -------- | ----------- |
-| `parts`   | `map[string]any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `parts`   | `<invalid>` |          |             |
 
-**Returns:** string
+**Returns:** <invalid>
 

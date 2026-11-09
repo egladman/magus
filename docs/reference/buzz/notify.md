@@ -20,12 +20,12 @@ New returns a notifier that will draw into the bottom of z, holding at most max 
 
 **Signature:** `notify\new(z, max) -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/notify/module.go)
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `z`       | `int` |          |             |
-| `max`     | `int` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `z`       | `<invalid>` |          |             |
+| `max`     | `<invalid>` |          |             |
 
-**Returns:** int
+**Returns:** <invalid>
 
 ### stderr
 
@@ -33,7 +33,7 @@ Stderr returns the process-wide notification band on standard error, creating it
 
 **Signature:** `notify\stderr() -> int` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/notify/module.go)
 
-**Returns:** int
+**Returns:** <invalid>
 
 ### releaseStderr
 
@@ -47,12 +47,12 @@ Notify pushes a notification onto the stack, to be shown for ttl.
 
 **Signature:** `notify\stackNotify(stack, text, style, ttl)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/notify/module.go)
 
-| Parameter | Type     | Optional | Description |
-| --------- | -------- | -------- | ----------- |
-| `stack`   | `int`    |          |             |
-| `text`    | `string` |          |             |
-| `style`   | `string` |          |             |
-| `ttl`     | `int`    |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `stack`   | `<invalid>` |          |             |
+| `text`    | `<invalid>` |          |             |
+| `style`   | `<invalid>` |          |             |
+| `ttl`     | `<invalid>` |          |             |
 
 ### stackPin
 
@@ -60,12 +60,12 @@ Pin raises a notification about a CONDITION that is currently true, and keeps it
 
 **Signature:** `notify\stackPin(stack, key, text, style)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/notify/module.go)
 
-| Parameter | Type     | Optional | Description |
-| --------- | -------- | -------- | ----------- |
-| `stack`   | `int`    |          |             |
-| `key`     | `string` |          |             |
-| `text`    | `string` |          |             |
-| `style`   | `string` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `stack`   | `<invalid>` |          |             |
+| `key`     | `<invalid>` |          |             |
+| `text`    | `<invalid>` |          |             |
+| `style`   | `<invalid>` |          |             |
 
 ### stackClear
 
@@ -73,10 +73,10 @@ Clear retracts the pinned notification named by key, if it is showing.
 
 **Signature:** `notify\stackClear(stack, key)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/notify/module.go)
 
-| Parameter | Type     | Optional | Description |
-| --------- | -------- | -------- | ----------- |
-| `stack`   | `int`    |          |             |
-| `key`     | `string` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `stack`   | `<invalid>` |          |             |
+| `key`     | `<invalid>` |          |             |
 
 ### stackClose
 
@@ -84,7 +84,7 @@ Close stops the sweeper and gives the band back.
 
 **Signature:** `notify\stackClose(stack)` - [source](https://github.com/egladman/magus/blob/main/std/termkit/gen/notify/module.go)
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `stack`   | `int` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `stack`   | `<invalid>` |          |             |
 

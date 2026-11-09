@@ -20,7 +20,7 @@ storePath is the store's path, creating its directory.
 
 **Signature:** `diskwatch\storePath() -> str`
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### thresholds
 
@@ -28,11 +28,11 @@ thresholds reads the disk section of `magus config view -o json`. A key the conf
 
 **Signature:** `diskwatch\thresholds(config) -> Thresholds`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `config`  | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `config`  | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### due
 
@@ -40,13 +40,13 @@ due is the rate limit: a store last written at lastMs is sampled again only once
 
 **Signature:** `diskwatch\due([lastMs], now, everyMs) -> bool`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `lastMs`  | `any` | yes      |             |
-| `now`     | `any` |          |             |
-| `everyMs` | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `lastMs`  | `<invalid>` | yes      |             |
+| `now`     | `<invalid>` |          |             |
+| `everyMs` | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### decide
 
@@ -54,13 +54,13 @@ decide grades cur against the thresholds and prev, the last earlier sample of th
 
 **Signature:** `diskwatch\decide([prev], cur, t) -> Decision`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `prev`    | `any` | yes      |             |
-| `cur`     | `any` |          |             |
-| `t`       | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `prev`    | `<invalid>` | yes      |             |
+| `cur`     | `<invalid>` |          |             |
+| `t`       | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### fenceMs
 
@@ -68,12 +68,12 @@ fenceMs is the fence a cache trim keeps for a sample, 0 when no cache may be
 
 **Signature:** `diskwatch\fenceMs(cur, t) -> double`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `cur`     | `any` |          |             |
-| `t`       | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `cur`     | `<invalid>` |          |             |
+| `t`       | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### chunkRunning
 
@@ -81,12 +81,12 @@ chunkRunning reports whether a chunk started within CHUNK_WINDOW_MS has not yet 
 
 **Signature:** `diskwatch\chunkRunning(samples, now) -> bool`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `samples` | `any` |          |             |
-| `now`     | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `samples` | `<invalid>` |          |             |
+| `now`     | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### lastOf
 
@@ -94,12 +94,12 @@ lastOf is the newest sample of path, null when the store holds none.
 
 **Signature:** `diskwatch\lastOf(samples, path) -> DiskSample?`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `samples` | `any` |          |             |
-| `path`    | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `samples` | `<invalid>` |          |             |
+| `path`    | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### personLine
 
@@ -107,11 +107,11 @@ personLine is what a person reads after a tick: what happened, what it did
 
 **Signature:** `diskwatch\personLine(r) -> str`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `r`       | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `r`       | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### criticalLine
 
@@ -119,11 +119,11 @@ criticalLine is the line for space below disk.critical_free_mb when
 
 **Signature:** `diskwatch\criticalLine(cur) -> str`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `cur`     | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `cur`     | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### pendingLine
 
@@ -131,32 +131,32 @@ pendingLine is what the store has that no person was told: a tick's result,
 
 **Signature:** `diskwatch\pendingLine(samples, now) -> str?`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `samples` | `any` |          |             |
-| `now`     | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `samples` | `<invalid>` |          |             |
+| `now`     | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### encode
 
 **Signature:** `diskwatch\encode(s) -> str`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `s`       | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `s`       | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### decode
 
 **Signature:** `diskwatch\decode(text) -> DiskSample`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `text`    | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `text`    | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### read
 
@@ -164,11 +164,11 @@ read decodes every line of the store at path; a missing store is empty.
 
 **Signature:** `diskwatch\read(path) -> [DiskSample]`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `path`    | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `path`    | `<invalid>` |          |             |
 
-**Returns:** any
+**Returns:** <invalid>
 
 ### append
 
@@ -176,8 +176,8 @@ append adds s to the store, then compacts it by rename once it holds twice keepL
 
 **Signature:** `diskwatch\append(path, s)`
 
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `path`    | `any` |          |             |
-| `s`       | `any` |          |             |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `path`    | `<invalid>` |          |             |
+| `s`       | `<invalid>` |          |             |
 

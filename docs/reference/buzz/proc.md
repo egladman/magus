@@ -60,10 +60,10 @@ Reserve n slots from magus's concurrency budget for the duration of callback. Us
 
 **Signature:** `proc\withSlots(n, callback)` - [source](https://github.com/egladman/magus/blob/main/std/os.go)
 
-| Parameter  | Type                                                                    | Optional | Description |
-| ---------- | ----------------------------------------------------------------------- | -------- | ----------- |
-| `n`        | `int`                                                                   |          |             |
-| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go) |          |             |
+| Parameter  | Type                          | Optional | Description |
+| ---------- | ----------------------------- | -------- | ----------- |
+| `n`        | `int`                         |          |             |
+| `callback` | `func(context.Context) error` |          |             |
 
 ### stdinIsTerminal
 
