@@ -1,6 +1,6 @@
 ---
 name: magus-local-development
-description: "Triage a review finding against magus's own Go before fixing it. Check for a pinning test, a test that asserts the bug, or a stale doc comment. Use when acting on review findings or fixing a suspected bug in internal/, cmd/, std/ or libs/. Use when adding a package-level cache or memo to the run path. Use before starting, stopping or restarting the magus server, or suggesting it, after a guard lapse. Repo-only; never shipped."
+description: "Triage a review finding against magus's own Go before fixing it: find a pinning test, a test asserting the bug, or a stale doc comment. Use when fixing a finding or suspected bug in internal/, cmd/, std/ or libs/, when adding a package-level cache to the run path, and before restarting the server after a guard lapse. Repo-only."
 metadata:
   source: workspace
 ---
