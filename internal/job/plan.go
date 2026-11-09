@@ -263,6 +263,9 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 			invalid("write_paths", fmt.Sprintf("the record drops every write path %s holds, which leaves it bounded by nothing", rec.ID),
 				fmt.Sprintf("keep a write path, or end the job with `%s`", hint.JobExit.With(rec.ID)))
 		}
+		if i >= 0 {
+			ps = append(ps, droppedGoalProblems(prev, next)...)
+		}
 		actor := store.Actor()
 		if err := authorizeRow(actor, rec.ID, asDeclaration, prev, next, i >= 0, rows); err != nil {
 			return nil, err
@@ -300,6 +303,28 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		plan[k].Next = stored
 	}
 	return plan, nil
+}
+
+// droppedGoalProblems is one problem per goal next lacks, when it also
+// gives up a write path. Each edit restores one, so --fix restores all.
+func droppedGoalProblems(prev, next types.Job) types.JobProblems {
+	if subset(prev.WritePaths, next.WritePaths) {
+		return nil
+	}
+	var ps types.JobProblems
+	for _, g := range prev.Goals {
+		if slices.ContainsFunc(next.Goals, func(n types.Goal) bool { return n.ID == g.ID }) {
+			continue
+		}
+		restore := g
+		ps = append(ps, types.JobProblem{
+			Code: types.JobRecordInvalid, Field: "goals", Subject: g.ID,
+			Message: fmt.Sprintf("the record releases a write path of %s and drops its goal %q", prev.ID, g.ID),
+			Fix:     fmt.Sprintf("keep the goal %q, or release the path alone with `%s`", g.ID, hint.JobApply.With(prev.ID, "--release-write-path", "<path>")),
+			Edit:    &types.JobEdit{AddGoal: &restore},
+		})
+	}
+	return ps
 }
 
 // boundCheckout is the checkout row is bound to or held in, "" when neither.
