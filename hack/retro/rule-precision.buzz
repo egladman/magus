@@ -804,6 +804,26 @@ fun reviewFrom(firings: [Firing], file: str?, missing: mut [str]) > ReviewJoin !
     return joinReviews(firings, reviews: loaded.items);
 }
 
+// signalsFrom gathers the guard, lint and oracle signals. With no author the
+// oracle is skipped, and missing says so.
+fun signalsFrom(records: [trace\Record], verdicts: {str: str}, firings: [Firing], root: str, author: str?, missing: mut [str]) > mut [Signal] !> any {
+    final signals = mut [<Signal>];
+    foreach (s in guardSignals(records, verdicts: verdicts)) {
+        signals.append(s);
+    }
+    foreach (s in lintSignals(firings, lines: fun (path: str) > [str] !> any => fs\readLines(fs\join(root, name: path)) catch [<str>])) {
+        signals.append(s);
+    }
+    if (author -> name) {
+        foreach (s in oracleSignals(firings, commits: commitsOf(firings, missing: missing), windows: sessionWindows(records), author: name)) {
+            signals.append(s);
+        }
+    } else {
+        missing.append("oracle-fp: no --author names the commits whose text is the oracle");
+    }
+    return signals;
+}
+
 export fun main(args: [str]) > void !> any {
     final parsed = flags\parse(args, switches: ["--help"], valued: ["--firings", "--labels", "--findings", "--author", "--since", "-o"], repeated: ["--trail"]);
     if (parsed.values["--help"] != null) {
@@ -832,20 +852,7 @@ export fun main(args: [str]) > void !> any {
 
     final firings = firingsFrom(records, verdicts: verdicts, file: parsed.values["--firings"] ?? stateFile("firings.jsonl"), missing: missing);
 
-    final signals = mut [<Signal>];
-    foreach (s in guardSignals(records, verdicts: verdicts)) {
-        signals.append(s);
-    }
-    foreach (s in lintSignals(firings, lines: fun (path: str) > [str] !> any => fs\readLines(fs\join(root, name: path)) catch [<str>])) {
-        signals.append(s);
-    }
-    if (parsed.values["--author"] -> author) {
-        foreach (s in oracleSignals(firings, commits: commitsOf(firings, missing: missing), windows: sessionWindows(records), author: author)) {
-            signals.append(s);
-        }
-    } else {
-        missing.append("oracle-fp: no --author names the commits whose text is the oracle");
-    }
+    final signals = signalsFrom(records, verdicts: verdicts, firings: firings, root: root, author: parsed.values["--author"], missing: missing);
 
     final review = reviewFrom(firings, file: parsed.values["--findings"], missing: missing);
     foreach (s in review.signals) {
