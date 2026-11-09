@@ -256,6 +256,12 @@ when the Wilson lower bound on that share clears the false-alarm rate on 20
 pairs or more. `--pool WORDS` groups shuffled pairs into chunks of that many
 owner words, so each chunk and its rewrite cover the same texts.
 
+`--set --stdin` judges NUL-separated texts as one set, pooled the way a voice
+window is: a branch's commits, or the bullets of one document. Only `uniform`
+and `triad` run, since one short text is too small to show a rate or a spread.
+A set under 200 words is not judged, and stderr says so. Its findings name the
+node `set` and no line.
+
 ## Protected spans
 
 Some specifics show a person wrote a text: a number with its unit (`410ms`,

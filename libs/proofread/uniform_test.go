@@ -28,27 +28,36 @@ func unevenVoice() *Voice {
 	}}
 }
 
-const evenDescription = `fix(parser): read the new header
-
-Updated the parser to read the new header.
-
-- Updated the parser to read the new header format.
+const evenItems = `- Updated the parser to read the new header format.
 - Updated the writer to emit the new header format.
 - Updated the loader to accept the new header format.
 - Updated the tests to cover the new header format.
 - Updated the docs to describe the new header format.
 `
 
-const unevenDescription = `fix(parser): read the new header
-
-The parser reads the new header now, which unblocks the 2.3 release.
-
-- Rewrote the parser.
+const unevenItems = `- Rewrote the parser.
 - The writer kept its old header until the 2.3 release, so readers built before then still open the files it writes.
 - Tests for the empty file and the file with no trailing newline.
 - Moved the loader into its own package after the cache split.
 - Docs.
 `
+
+// evenDescription and unevenDescription repeat their items past the 200
+// words uniform judges a single text at.
+var (
+	evenDescription = "fix(parser): read the new header\n\nUpdated the parser to read the new header.\n\n" +
+		strings.Repeat(evenItems, 5)
+	unevenDescription = "fix(parser): read the new header\n\n" +
+		"The parser reads the new header now, which unblocks the 2.3 release.\n\n" + strings.Repeat(unevenItems, 4)
+)
+
+func TestUniformLeavesATextUnder200Words(t *testing.T) {
+	short := "fix(parser): read the new header\n\nUpdated the parser.\n\n" + evenItems
+
+	if got := JudgeText(short, KindChangeDescription, WithOnly(RuleUniform), uniformOn, WithVoice(unevenVoice())); len(got) != 0 {
+		t.Errorf("uniform = %v, want none under 200 words", got)
+	}
+}
 
 func TestUniformReportsATextMoreEvenThanItsAuthor(t *testing.T) {
 	got := JudgeText(evenDescription, KindChangeDescription, WithOnly(RuleUniform), uniformOn, WithVoice(unevenVoice()))

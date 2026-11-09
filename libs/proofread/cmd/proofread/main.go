@@ -285,6 +285,7 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	baselinePath := fs.String("baseline", "", "report only findings past the counts this baseline `file` holds")
 	prune := fs.Bool("prune", false, "with --baseline, rewrite the file to the counts this run found")
 	metrics := fs.Bool("metrics", false, "write each text's readability metrics instead of its findings")
+	asSet := fs.Bool("set", false, "with --stdin, judge the NUL-separated texts as one set by the rules a short text is too small to show")
 
 	if err := fs.Parse(args); err != nil {
 		return exitError
@@ -363,7 +364,8 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 		set, fromTable = *s.Minimum, true
 	}
 
-	grades := slices.Contains(s.RuleList(), proofread.RuleGrade) && t.turnsOn(proofread.RuleGrade, false) &&
+	// A set runs no grade, so it needs no minimum.
+	grades := !*asSet && slices.Contains(s.RuleList(), proofread.RuleGrade) && t.turnsOn(proofread.RuleGrade, false) &&
 		(len(onlyRules) == 0 || slices.Contains(onlyRules, proofread.RuleGrade))
 
 	switch {
@@ -378,7 +380,12 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 			kind, kind))
 	}
 
-	out, err := judge(kind, fs.Args(), stdin, t, opts)
+	judgeInput := judge
+	if *asSet {
+		judgeInput = judgeSet(*fromStdin, stderr)
+	}
+
+	out, err := judgeInput(kind, fs.Args(), stdin, t, opts)
 	if err != nil {
 		return failure(stderr, err)
 	}

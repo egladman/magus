@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A text cleared of every finding comes out evenly shaped, and that evenness is itself a mark of machine-written text. Runs only with a voice file, whose windows hold the author's own range of each measure; a text is held to that range, never to a shared one, and nothing is added to make a text uneven. A paired calibration of one author's texts against rewrites that cleared every finding found the rewrites narrowed what sentences open on, but evened out neither sentence nor paragraph length, so those are not read; it had too few lists to measure the item spreads. No firing has been labeled, so it ships off.
+A text cleared of every finding comes out evenly shaped, and that evenness is itself a mark of machine-written text. Runs only with a voice file, whose windows hold the author's own range of each measure; a text is held to that range, never to a shared one, and nothing is added to make a text uneven. A paired calibration of one author's texts against rewrites that cleared every finding found the rewrites narrowed what sentences open on, but evened out neither sentence nor paragraph length, so those are not read; it had too few lists to measure the item spreads. The author's ranges come from 200-word windows, so a text under 200 words is not judged alone; `proofread --set` pools short texts, such as a branch's commits, into one. No firing has been labeled, so it ships off.
 
 ## Default decision
 

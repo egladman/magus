@@ -46,13 +46,16 @@ var uniformTexts = map[Rule]ruleText{
 			"a text uneven. A paired calibration of one author's texts against rewrites that cleared every " +
 			"finding found the rewrites narrowed what sentences open on, but evened out neither sentence nor " +
 			"paragraph length, so those are not read; it had too few lists to measure the item spreads. " +
+			"The author's ranges come from 200-word windows, so a text under 200 words is not judged alone; " +
+			"`proofread --set` pools short texts, such as a branch's commits, into one. " +
 			"No firing has been labeled, so it ships off.",
 	},
 }
 
 // uniform reports a text whose spreads sit past its author's range on
 // minUniformFeatures or more. It abstains without a voice, on a kind with no
-// ranges, and on a measure the text is too short for.
+// ranges, and on a measure the text is too short for. Under 200 words it
+// abstains too: [JudgeSet] pools short texts.
 func uniform(in input) []Finding {
 	if in.opts.voice == nil || in.spec.Voice == "" {
 		return nil
@@ -63,7 +66,12 @@ func uniform(in input) []Finding {
 		return nil
 	}
 
+	// The author's ranges come from 200-word windows; a shorter text reads
+	// more even than any window would, so it is judged in a set instead.
 	s := MeasureShape(strings.Join(in.source, "\n"), in.spec.Voice)
+	if s.Words < voiceWindowWords {
+		return nil
+	}
 
 	var past []string
 

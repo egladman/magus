@@ -9,3 +9,6 @@
 - **A finding names the specifics its match holds.** A number with its unit, a name or a
   moment the author saw is listed under the finding's `protected` in `-o json`, and an
   economy rule that would cut one reports advice instead of a deny.
+- **`proofread --set --stdin` judges short texts as one set.** NUL-separated texts, such as
+  a branch's commits, are pooled the way a voice window is, and `uniform` and `triad`
+  judge the pool. A set under 200 words is not judged, and stderr says so.

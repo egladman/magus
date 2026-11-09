@@ -110,8 +110,8 @@ verbs passes both.
 and item opener share, which it could not measure, and opener part-of-speech entropy,
 the one lead. It ships off, as a rule with no labelled firing does. The author's range
 comes from 200-word windows, and a short text measures a lower opener entropy than a
-window of the same author's text. That bias leans `uniform` toward short texts until
-part 6 judges them as a set.
+window of the same author's text, so `uniform` judges a single text only from 200 words,
+the window size, and leaves shorter ones to part 6.
 
 ### 5. Protected spans
 
@@ -136,6 +136,13 @@ voice-drift abstains under 200 words, which skips commit messages, bullets and s
 replies. `uniform` and the budgets judge the items of one list, or the texts passed
 together on stdin, as one set.
 
+As built, the shared unit is a batch: `--set --stdin` reads NUL-separated texts, and
+`JudgeSet` pools them as `BuildVoice` pools a window, trimmed and a blank line apart.
+So a set is measured at the scale the author's ranges come from. Only `uniform` and
+`triad` run on a set, a set under 200 words is not judged, and stderr says so. The
+document as the unit lost because one document's bullets already reach `uniform` as
+list items when the document is 200 words or more.
+
 | Item                                                                                       | State                      |
 | ------------------------------------------------------------------------------------------ | -------------------------- |
 | Spread measures in `Shape`; per-feature percentiles in `VoiceStats`; `proofread-voice/4`   | done                       |
@@ -143,7 +150,7 @@ together on stdin, as one set.
 | Voice budgets for the counting rules, `triad` first                                        | in progress (`triad` done) |
 | `uniform`; `list-parallel` checks grammatical shape and `repeated-opener` checks the words | done (`uniform` ships off) |
 | Protected spans in `-o json` and the text output; a fix that covers one is advise at most  | done (economy rules)       |
-| Short texts judged as a set: the items of one list, or the texts passed together on stdin  | planned                    |
+| Short texts judged as a set: the items of one list, or the texts passed together on stdin  | done (`--set`)             |
 
 ### Principles checked
 

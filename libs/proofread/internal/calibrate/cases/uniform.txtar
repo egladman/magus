@@ -210,6 +210,23 @@ Updated the parser to read the new header.
 - Updated the loader to accept the new header format.
 - Updated the tests to cover the new header format.
 - Updated the docs to describe the new header format.
+- Updated the cache to store the new header format.
+- Updated the index to track the new header format.
+- Updated the server to serve the new header format.
+- Updated the client to request the new header format.
+- Updated the config to name the new header format.
+- Updated the logger to print the new header format.
+- Updated the router to route the new header format.
+- Updated the importer to read the new header format.
+- Updated the exporter to write the new header format.
+- Updated the checker to verify the new header format.
+- Updated the viewer to show the new header format.
+- Updated the archive to keep the new header format.
+- Updated the backup to copy the new header format.
+- Updated the mirror to sync the new header format.
+- Updated the guide to explain the new header format.
+- Updated the schema to declare the new header format.
+- Updated the fixtures to use the new header format.
 -- pass/change-description whole --
 fix(parser): read the new header
 
@@ -220,3 +237,13 @@ The parser reads the new header now, which unblocks the 2.3 release.
 - Tests for the empty file and the file with no trailing newline.
 - Moved the loader into its own package after the cache split.
 - Docs.
+- I left the old reader in place for one release, since two teams still ship files from the old writer.
+- Cache keys include the header version now.
+- The importer was the hard part: it guessed the header from the first line, and a file that opened on a comment fooled it every time.
+- Benchmarks.
+- A user in Sydney sent the file that showed the bug, which made the fix a lot faster to find.
+- Moved the fixtures.
+- The schema names both versions, and the checker reports which one a file uses when it rejects it.
+- Smaller error messages.
+- The viewer shows the header version in the status bar now, after a request on the tracker last month.
+- Changelog entry.
