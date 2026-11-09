@@ -347,7 +347,7 @@ from the Impl it describes, and a typo would surface at generation instead of as
 compile error. Reopen if the composite-literal reader in part 1 proves too fragile to
 keep.
 
-### Directive comments on Impls
+### Directive comments on `Impl` types
 
 Mark `//buzz:raises` and `//buzz:default perm=0o755` on each function and drop the
 descriptor. It lost because `Namespace`, `Object`, `Protocol` and `Extern` have no

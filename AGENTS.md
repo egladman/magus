@@ -92,8 +92,8 @@ saying it, delete it here.
 - A fresh worktree has no `./magus`, and the guard names two lines. The bootstrap
   only builds `./magus`. Then
   `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready`
-  installs every project's dependencies and every declared harness's tool rows,
-  and builds the graph, the symbol digest and the proofread binary the commit
+  installs every project's dependencies and every declared harness's tool rows.
+  It also builds the graph, the symbol digest and the proofread binary the commit
   guard runs.
 - Never rename `./magus` or move it aside: the hooks and the guard find it by name.
 
