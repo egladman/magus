@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -477,8 +478,8 @@ func TestPermitRecords(t *testing.T) {
 }
 
 func (s *permitRecordsSuite) TestAPermitReachesTheRecordsAndTheSummary() {
-	root, cleanup := newGuideWorkspace(map[string]string{
-		"magusfile.buzz": `import "magus";
+	w := testkit.NewWorkspace(s.T())
+	w.Magusfile(`import "magus";
 
 export fun plain(ctx: magus\Context, args: [str]) > void {
 }
@@ -486,11 +487,9 @@ export fun plain(ctx: magus\Context, args: [str]) > void {
 export fun gate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.permitted(2);
 }
-`,
-	})
-	defer cleanup()
+`)
 	ctx := s.T().Context()
-	m, err := Open(ctx, root, WithSpawnRule(TierCeiling))
+	m, err := Open(ctx, w.Root(), WithSpawnRule(TierCeiling))
 	s.Require().NoError(err)
 	defer m.Close()
 
