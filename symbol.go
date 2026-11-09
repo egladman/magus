@@ -1269,6 +1269,9 @@ func symbolRunError(project types.ProjectRef, language string, err error) error 
 	if errors.As(err, &busy) && busy.ExitCode() == lockContendedExit {
 		return fmt.Errorf("%s: the indexer never ran, so rerun once that finishes: %w", project.Display(), err)
 	}
+	if symbols.MissingFile(err) {
+		return fmt.Errorf("%s: the indexer ran and a path it was given does not exist: %w", project.Display(), err)
+	}
 	if hint := symbols.InstallHint(language); hint != "" {
 		return fmt.Errorf("%s: %s: %w", project.Display(), hint, err)
 	}

@@ -117,6 +117,37 @@ func TestTargetHandler_NormalizesVariantSpellings(t *testing.T) {
 	assert.NotNil(t, h)
 }
 
+// A freshened step takes its own args, not the files lint forwarded.
+func TestRunKeyedStepDropsTheCallersArgs(t *testing.T) {
+	var seen []string
+	spellName := register.Spell(t, "zzz-keyed-step-spell",
+		spells.WithTargets("build"),
+		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
+			seen = project.ExtraArgs(ctx)
+			return nil, nil
+		}),
+	)
+
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), w.Root(), WithWorkspaceRegistry(reg), WithSpawnRule(TierCeiling))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	p := m.Get(".")
+	require.NotNil(t, p)
+	step, err := m.targetStep(t.Context(), p, "build", nil, nil)
+	require.NoError(t, err)
+
+	r := &composedRunner{m: m, runs: cache.NewTargetRuns()}
+	ctx := project.WithExtraArgs(t.Context(), []string{"console/cmd/magus/notes.go"})
+	require.NoError(t, r.runKeyedStep(ctx, p, step))
+
+	assert.Empty(t, seen, "the caller's files stop at the caller")
+}
+
 func TestForcesNoCache(t *testing.T) {
 	assert.False(t, forcesNoCache(run{}), "neither Race nor RaceReplay set")
 	assert.True(t, forcesNoCache(run{Race: true}), "Race alone")
