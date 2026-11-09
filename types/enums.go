@@ -67,7 +67,6 @@ func (v EventSeverity) Values() []string { return eventSeverities.Strings() }
 func (v EventSeverity) Valid() bool      { return eventSeverities.Valid(v) }
 func (v EventSeverity) String() string   { return enum.String(v) }
 
-
 var patternTypes = enum.Set[PatternType]{"glob", "regex", "literal"}
 
 func (v PatternType) Values() []string { return patternTypes.Strings() }
@@ -79,8 +78,6 @@ var symbolIndexFreshnesses = enum.Set[SymbolIndexFreshness]{"up-to-date", "out-o
 func (v SymbolIndexFreshness) Values() []string { return symbolIndexFreshnesses.Strings() }
 func (v SymbolIndexFreshness) Valid() bool      { return symbolIndexFreshnesses.Valid(v) }
 func (v SymbolIndexFreshness) String() string   { return enum.String(v) }
-
-
 
 var vcsSources = enum.Set[VCSSource]{"explicit", "auto", "default", "disabled"}
 

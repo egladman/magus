@@ -1,10 +1,10 @@
 package magus
 
 import (
-	"github.com/egladman/magus/types/daemon"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
 	"io"
 	"io/fs"
 	"log/slog"

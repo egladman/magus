@@ -1,10 +1,10 @@
 package std
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"os"
 	"path/filepath"

@@ -1,11 +1,11 @@
 package magus
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"log/slog"
 	"maps"
 	"os"

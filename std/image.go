@@ -3,10 +3,10 @@
 package std
 
 import (
-	imagetypes "github.com/egladman/magus/types/image"
 	"bytes"
 	"context"
 	"fmt"
+	imagetypes "github.com/egladman/magus/types/image"
 	"os"
 	"path/filepath"
 	"slices"

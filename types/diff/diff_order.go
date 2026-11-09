@@ -75,7 +75,7 @@ type Group struct {
 	HunkCount int `json:"hunk_count" yaml:"hunk_count"`
 	// Reach is the widest file reach among the group's symbols, the second ranking key after
 	// size.
-	Reach int        `json:"reach" yaml:"reach"`
+	Reach int    `json:"reach" yaml:"reach"`
 	Steps []Step `json:"steps" yaml:"steps"`
 }
 
@@ -83,7 +83,7 @@ type Group struct {
 // so a step spans more than one file only when its hunks form a cycle.
 type Step struct {
 	// Number counts steps across the whole order, from 1.
-	Number int            `json:"number" yaml:"number"`
+	Number int        `json:"number" yaml:"number"`
 	Hunks  []StepHunk `json:"hunks" yaml:"hunks"`
 }
 
@@ -91,8 +91,8 @@ type Step struct {
 type StepHunk struct {
 	Ref HunkRef `json:"ref" yaml:"ref"`
 	// Label is the hunk's innermost changed symbol, or its declaration when it has none.
-	Label string  `json:"label,omitempty" yaml:"label,omitempty"`
-	Why   Why `json:"why" yaml:"why"`
+	Label string `json:"label,omitempty" yaml:"label,omitempty"`
+	Why   Why    `json:"why" yaml:"why"`
 }
 
 // WhyRelation is the relationship that placed a hunk.
@@ -139,9 +139,9 @@ type Why struct {
 // OrderCount is the completeness line. Complete is true only when Placed equals HunkCount
 // and Repeated and Missing are empty, so a renderer trusts it instead of recounting.
 type OrderCount struct {
-	HunkCount int           `json:"hunk_count" yaml:"hunk_count"`
-	Placed    int           `json:"placed" yaml:"placed"`
-	Complete  bool          `json:"complete" yaml:"complete"`
+	HunkCount int       `json:"hunk_count" yaml:"hunk_count"`
+	Placed    int       `json:"placed" yaml:"placed"`
+	Complete  bool      `json:"complete" yaml:"complete"`
 	Repeated  []HunkRef `json:"repeated,omitempty" yaml:"repeated,omitempty"`
 	Missing   []HunkRef `json:"missing,omitempty" yaml:"missing,omitempty"`
 	// FilesWithoutHunks lists changed files with no hunk (binary, rename only, mode only), so

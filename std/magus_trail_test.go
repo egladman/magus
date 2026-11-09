@@ -1,8 +1,8 @@
 package std
 
 import (
-	trailtypes "github.com/egladman/magus/types/trail"
 	"context"
+	trailtypes "github.com/egladman/magus/types/trail"
 	"testing"
 	"time"
 

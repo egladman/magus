@@ -1,9 +1,9 @@
 package magus
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"context"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"path/filepath"
 	"slices"
 	"strings"

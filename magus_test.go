@@ -1,8 +1,6 @@
 package magus
 
 import (
-	"github.com/egladman/magus/types/diff"
-	"github.com/egladman/magus/types/daemon"
 	"bufio"
 	"bytes"
 	"context"
@@ -11,6 +9,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/daemon"
+	"github.com/egladman/magus/types/diff"
 	"io"
 	"os"
 	"path/filepath"

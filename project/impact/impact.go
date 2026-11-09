@@ -11,9 +11,9 @@
 package impact
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"cmp"
 	"context"
+	"github.com/egladman/magus/types/diff"
 	"slices"
 
 	"github.com/egladman/magus/internal/changeset"

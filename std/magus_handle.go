@@ -3,14 +3,14 @@
 package std
 
 import (
-	difftypes "github.com/egladman/magus/types/diff"
-	"github.com/egladman/magus/types/trail"
 	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	difftypes "github.com/egladman/magus/types/diff"
+	"github.com/egladman/magus/types/trail"
 	"maps"
 	"os"
 	"path/filepath"

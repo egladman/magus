@@ -1,10 +1,10 @@
 package magus
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"cmp"
 	"context"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"maps"
 	"os"
 	"path/filepath"

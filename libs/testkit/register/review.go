@@ -1,8 +1,8 @@
 package register
 
 import (
-	"github.com/egladman/magus/types/diff"
 	"fmt"
+	"github.com/egladman/magus/types/diff"
 	"strings"
 
 	"github.com/egladman/magus/libs/testkit"
