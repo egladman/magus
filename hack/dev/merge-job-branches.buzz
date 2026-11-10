@@ -1200,6 +1200,8 @@ fun fixtureRepo() > result\Result::<str> {
         }
         _ = put(root, path: ".gitignore", content: ".magus/\n");
         _ = put(root, path: "magusfile.buzz", content: FIXTURE_MAGUSFILE);
+        // Keeps the store inside the fixture, so removing it removes the store.
+        _ = put(root, path: "magus.yaml", content: "cache:\n  dir: \"{root}/.magus/cache\"\n");
         _ = put(root, path: "src/a.txt", content: "a\n");
         _ = put(root, path: "gen/list.txt", content: "a.txt\n");
         // Loading the workspace writes the merge driver's .gitattributes, which the base has to
@@ -1260,6 +1262,12 @@ fun planStack(root: str, names: [str]) > result\Result::<stack\BranchStack> {
     final contains = containsMap(root, branches: names, base: "main");
     if (contains.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
     return order(cands, contains: contains.value!, base: "main");
+}
+
+test "the fixture keeps its store inside itself, never in the user's cache" {
+    final root = fixtureRepo().value!;
+    assert\equal(fs\isDir("{root}/.magus/cache"), want: true, message: "store under the fixture");
+    fs\removeAll(root);
 }
 
 test "a merge orders by ancestry, lets the driver settle generated output, and stops whole at a source conflict" {
