@@ -476,6 +476,7 @@ func TestHTTPServeRefusesAHostThatIsNotLoopback(t *testing.T) {
 	refused := get(fmt.Sprintf("rebind.example:%d", port), "")
 	assert.Equal(t, http.StatusForbidden, refused.Status)
 	assert.NotContains(t, refused.Body, "home page")
+	assert.NotContains(t, refused.Body, "mcp.allowed_origins", "no MCP setting widens http.server")
 	assert.Equal(t, http.StatusForbidden, get(fmt.Sprintf("localhost:%d", port), "http://rebind.example").Status, "a foreign Origin is refused too")
 	assert.Equal(t, mountResp{Status: http.StatusOK, Body: "home page"}, get(fmt.Sprintf("localhost:%d", port), ""))
 	assert.Equal(t, mountResp{Status: http.StatusOK, Body: "home page"}, get(fmt.Sprintf("127.0.0.1:%d", port), ""))

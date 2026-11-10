@@ -279,8 +279,10 @@ func HTTPServe(ctx context.Context, opts types.HTTPServerOptions) (int, error) {
 	}
 	// A loopback bind is not enough. A page that rebinds its own name to
 	// 127.0.0.1 reaches this port under that name, so the Host is checked.
+	// No setting widens this server, so its refusal names none.
+	allowed := httpx.AllowedHosts(tcpAddr.AddrPort()).WidenedBy("")
 	srv := &http.Server{
-		Handler:           httpx.GuardRebind(rpcerr.FormatJSON, httpx.AllowedHosts(tcpAddr.AddrPort()), handler),
+		Handler:           httpx.GuardRebind(rpcerr.FormatJSON, allowed, handler),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() { _ = srv.Serve(ln) }() // serves until the process exits; no caller waits

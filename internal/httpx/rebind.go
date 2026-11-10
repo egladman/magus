@@ -21,10 +21,12 @@ import (
 // Non-IP hostnames like "localhost" live in names.
 // origins pass the Origin check and never the Host check:
 // a page is trusted, its name is not.
+// setting is the config key a refusal names as the way to widen the set.
 type AllowedSet struct {
 	extra   netip.Addr
 	names   map[string]struct{} // lowercase
 	origins map[string]struct{} // exact scheme://host[:port]
+	setting string              // "" when nothing widens it
 }
 
 // GuardRebind rejects requests that a browser could forge via DNS rebinding.
@@ -39,23 +41,38 @@ type AllowedSet struct {
 // (/livez, /readyz, /healthz) are mounted outside it: /mcp trusts its bearer
 // token alone, and the health routes are deliberately unguarded.
 func GuardRebind(format rpcerr.Format, allowed AllowedSet, next http.Handler) http.Handler {
+	refusal := hostNotAllowed(allowed.setting)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isAllowedHost(r.Host, allowed) {
-			format.Write(w, r, hostNotAllowed)
+			format.Write(w, r, refusal)
 			return
 		}
 		if orig := r.Header.Get("Origin"); orig != "" && !isAllowedOrigin(orig, allowed) {
-			format.Write(w, r, hostNotAllowed)
+			format.Write(w, r, refusal)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
 }
 
-var hostNotAllowed = rpcerr.Error{
-	Code:    connect.CodePermissionDenied,
-	Reason:  types.HostNotAllowed,
-	Message: "the server serves only loopback hosts and the origins in mcp.allowed_origins; this request named another host in its Host or Origin header",
+// hostNotAllowed is the MGS9007 refusal. It names setting when one is set.
+func hostNotAllowed(setting string) rpcerr.Error {
+	served := "loopback hosts"
+	if setting != "" {
+		served += " and the origins in " + setting
+	}
+	return rpcerr.Error{
+		Code:    connect.CodePermissionDenied,
+		Reason:  types.HostNotAllowed,
+		Message: "the server serves only " + served + "; this request named another host in its Host or Origin header",
+	}
+}
+
+// WidenedBy returns a copy of a whose refusal names setting as the config key
+// that widens it, or no key when setting is "".
+func (a AllowedSet) WidenedBy(setting string) AllowedSet {
+	a.setting = setting
+	return a
 }
 
 // AllowOrigin returns a copy of a that also accepts origin in the Origin
@@ -71,7 +88,7 @@ func (a AllowedSet) AllowOrigin(origin string) (AllowedSet, error) {
 		origins[k] = struct{}{}
 	}
 	origins[exact] = struct{}{}
-	return AllowedSet{extra: a.extra, names: a.names, origins: origins}, nil
+	return AllowedSet{extra: a.extra, names: a.names, origins: origins, setting: a.setting}, nil
 }
 
 // exactOrigin returns s when it is what a browser sends as an Origin: a
@@ -98,9 +115,12 @@ func isAllowedOrigin(origin string, allowed AllowedSet) bool {
 // isAllowedHost via IsLoopback(), so they need no explicit entry. When addr
 // contains a concrete non-loopback, non-unspecified host it is stored in extra
 // so operators who deliberately bind to a LAN IP can still reach the console routes.
+// Its refusal names mcp.allowed_origins, the server's setting; a caller the
+// setting does not widen passes its own to WidenedBy.
 func AllowedHosts(addr netip.AddrPort) AllowedSet {
 	set := AllowedSet{
-		names: map[string]struct{}{"localhost": {}},
+		names:   map[string]struct{}{"localhost": {}},
+		setting: "mcp.allowed_origins",
 	}
 	host := addr.Addr().Unmap()
 	if host.IsValid() && !host.IsUnspecified() && !host.IsLoopback() {
