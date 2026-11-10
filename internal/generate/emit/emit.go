@@ -729,9 +729,6 @@ func snake(s string) string {
 	return b.String()
 }
 
-// workspaceModule is the Go module the generated packages live in.
-const workspaceModule = "github.com/egladman/magus"
-
 // moduleEmitter writes one generated leaf package.
 type moduleEmitter struct {
 	lib     *libModule
