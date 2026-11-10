@@ -770,7 +770,7 @@ func TestMain(m *testing.M) {
 			return 0, "", errors.New("a unit test never starts a real broker")
 		}
 	}
-	testscript.Main(testkit.Isolated(m, bootstrapExecIntoHelperTargetVar), map[string]func(){
+	testscript.Main(testkit.Isolated(m, bootstrapExecIntoHelperTargetVar, briefRefusalRootVar), map[string]func(){
 		"magus": func() { os.Exit(runCLI()) },
 	})
 }

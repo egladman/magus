@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
@@ -213,24 +214,37 @@ func (s *AdmissionRefusalSuite) TestABareExitStaysSilent() {
 	s.Empty(s.logged.String())
 }
 
+// briefRefusalRootVar names the workspace TestBriefRefusalHelperProcess runs
+// the CLI in; set, it marks that process as the helper.
+const briefRefusalRootVar = "MAGUS_TEST_BRIEF_REFUSAL_ROOT"
+
+// TestBriefRefusalHelperProcess is the process TestTheCLIPrintsTheBriefRefusal
+// starts. A fresh process builds its own stderr display handler, which an
+// earlier in-process runCLI would otherwise have bound to another stderr.
+func TestBriefRefusalHelperProcess(t *testing.T) {
+	root := os.Getenv(briefRefusalRootVar)
+	if root == "" {
+		t.Skip("not invoked as the brief refusal helper process")
+	}
+	t.Setenv("MAGUS_BROKER", "required")
+	os.Args = []string{"magus", "--root", root, "session", "--brief"}
+	os.Exit(runCLI())
+}
+
 func (s *AdmissionRefusalSuite) TestTheCLIPrintsTheBriefRefusal() {
 	w := testkit.NewWorkspace(s.T())
 	w.Magusfile("import \"magus\";\n")
-	errPath := filepath.Join(s.T().TempDir(), "stderr")
-	f, err := os.Create(errPath)
+	exe, err := os.Executable()
 	s.Require().NoError(err)
-	defer f.Close()
 
-	s.T().Setenv("MAGUS_BROKER", "required")
-	oldErr, oldArgs := os.Stderr, os.Args
-	os.Stderr, os.Args = f, []string{"magus", "--root", w.Root(), "session", "--brief"}
-	code := runCLI()
-	os.Stderr, os.Args = oldErr, oldArgs
+	cmd := exec.Command(exe, "-test.run", "^TestBriefRefusalHelperProcess$")
+	cmd.Env = append(os.Environ(), briefRefusalRootVar+"="+w.Root())
+	out, runErr := cmd.CombinedOutput()
 
-	text, readErr := os.ReadFile(errPath)
-	s.Require().NoError(readErr)
-	s.Equal(cache.ExitCodeBrokerUnavailable, code, string(text))
-	s.Contains(string(text), "session-brief")
+	var exitErr *exec.ExitError
+	s.Require().ErrorAs(runErr, &exitErr, string(out))
+	s.Equal(cache.ExitCodeBrokerUnavailable, exitErr.ExitCode(), string(out))
+	s.Contains(string(out), "session-brief")
 }
 
 // lockRefusal has the shape of the root package's unexported lockContendedError:
