@@ -238,7 +238,7 @@ func (s *AdmissionRefusalSuite) TestTheCLIPrintsTheBriefRefusal() {
 	s.Require().NoError(err)
 
 	cmd := exec.Command(exe, "-test.run", "^TestBriefRefusalHelperProcess$")
-	cmd.Env = append(os.Environ(), briefRefusalRootVar+"="+w.Root())
+	cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", briefRefusalRootVar, w.Root()))
 	out, runErr := cmd.CombinedOutput()
 
 	var exitErr *exec.ExitError
