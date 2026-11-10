@@ -824,14 +824,15 @@ fun rename(p: Push, name: str, current: str) > str {
     final remote = shellWord(p.remote);
     var local = "";
     if (p.tool == "git" or p.tool == "gh") {
+        // First: `gh pr create --head` reads the local branch of that name.
         if (current != "" and current != name) {
-            local = "\n  git branch -m {shellWord(current)} {served}";
+            local = "  git branch -m {shellWord(current)} {served}\n";
         }
         var then = "";
         if (p.tool == "gh") {
             then = "\n  then open the pull request with --head {served}";
         }
-        return "  git push -u {remote} {shellWord("HEAD:" + name)}{local}{then}";
+        return "{local}  git push -u {remote} {shellWord("HEAD:" + name)}{then}";
     }
     if (p.tool == "jj") {
         if (p.generated) {
@@ -1109,6 +1110,16 @@ test "the commands to use a served name quote what the shell would expand" {
     std\assert(v.reason.indexOf("git branch -m 'feat/x;touch pwned' comparison-practical-gates") != null, message: "the branch is one quoted word: {v.reason}");
     std\assert(shellWord("it's") == "'it'\\''s'", message: "a quote inside a quoted word");
     std\assert(shellWord("HEAD:feat/x") == "HEAD:feat/x", message: "a plain word stays bare");
+}
+
+test "the served name's pull request opens from a local branch renamed first" {
+    final pr = helpers\request([["gh", "pr", "create", "--head", "feat/practical-gates-e9x4tl", "--fill"]]);
+    final v = decideNames(pr, current: "feat/practical-gates-e9x4tl", remote: remote([<str>]), topic: practical, once: helpers\counter());
+    final renamed = v.reason.indexOf("git branch -m feat/practical-gates-e9x4tl comparison-practical-gates");
+    final pushed = v.reason.indexOf("git push -u origin HEAD:comparison-practical-gates");
+    final opened = v.reason.indexOf("--head comparison-practical-gates");
+    std\assert(renamed != null and pushed != null and opened != null, message: "names all three: {v.reason}");
+    std\assert(renamed! < pushed! and pushed! < opened!, message: "gh reads the local branch --head names: {v.reason}");
 }
 
 test "a good name, the base branch and a version pass" {
