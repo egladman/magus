@@ -265,10 +265,10 @@ fun main() > void !> any {
     std\print("trusted-script-moved: {found.len()} finding(s) over {moves.len()} rename(s) and removal(s)");
 }
 
-fun queueApply(script: str) > Workflow {
+fun queueAdvice(script: str) > Workflow {
     return Workflow{
-        path = ".github/workflows/queue-apply.yaml",
-        events = ["workflow_run"],
+        path = ".github/workflows/queue-advice.yaml",
+        events = ["pull_request", "pull_request_review"],
         jobs = [Job{id = "dashboard", name = "queue dashboard", steps = [
             Step{uses = "actions/checkout@3d3c42e5", ref = `${{ github.event.repository.default_branch }}`},
             Step{run = `magus buzz ` + script + ` -- dashboard --all --base "$MAIN"`},
@@ -282,41 +282,41 @@ fun renamed(previous: str, to: str) > ChangedFile {
 
 test "PR #511: moving the queue dashboard's script passes once it merges" {
     final found = findings([renamed("hack/pull-requests.buzz", to: "hack/ci/pull-requests.buzz")],
-        base: [queueApply("hack/pull-requests.buzz")], head: [queueApply("hack/ci/pull-requests.buzz")], defaultBranch: "main");
+        base: [queueAdvice("hack/pull-requests.buzz")], head: [queueAdvice("hack/ci/pull-requests.buzz")], defaultBranch: "main");
     assert\equal(title(found), want: "A trusted job runs a script this moves", message: "title");
     assert\equal(body(found, defaultBranch: "main"),
         want: "This pull request moves `hack/pull-requests.buzz` to `hack/ci/pull-requests.buzz`, which the "
-            + "`queue dashboard` job (`.github/workflows/queue-apply.yaml`) runs. It checks out `main`, which has "
+            + "`queue dashboard` job (`.github/workflows/queue-advice.yaml`) runs. It checks out `main`, which has "
             + "no `hack/ci/pull-requests.buzz` yet, so it skips or fails on this pull request and passes once this merges.",
         message: "body");
 }
 
 test "a rename the workflow does not follow fails after the merge" {
     final found = findings([renamed("hack/pull-requests.buzz", to: "hack/ci/pull-requests.buzz")],
-        base: [queueApply("hack/pull-requests.buzz")], head: [queueApply("hack/pull-requests.buzz")], defaultBranch: "main");
+        base: [queueAdvice("hack/pull-requests.buzz")], head: [queueAdvice("hack/pull-requests.buzz")], defaultBranch: "main");
     assert\equal(title(found), want: "A trusted job fails after this merges", message: "title");
     assert\equal(body(found, defaultBranch: "main"),
         want: "**This pull request moves `hack/pull-requests.buzz` to `hack/ci/pull-requests.buzz`, but the "
-            + "`queue dashboard` job (`.github/workflows/queue-apply.yaml`) still runs `hack/pull-requests.buzz`.** "
+            + "`queue dashboard` job (`.github/workflows/queue-advice.yaml`) still runs `hack/pull-requests.buzz`.** "
             + "It checks out `main`, so it fails after this merges unless the workflow runs `hack/ci/pull-requests.buzz`.",
         message: "body");
 }
 
 test "removing a script a trusted job still runs fails after the merge" {
     final removed = ChangedFile{filename = "hack/pull-requests.buzz", status = "removed"};
-    final found = findings([removed], base: [queueApply("hack/pull-requests.buzz")],
-        head: [queueApply("hack/pull-requests.buzz")], defaultBranch: "main");
+    final found = findings([removed], base: [queueAdvice("hack/pull-requests.buzz")],
+        head: [queueAdvice("hack/pull-requests.buzz")], defaultBranch: "main");
     assert\equal(found.len(), want: 1, message: "one finding");
     assert\equal(body(found, defaultBranch: "main"),
         want: "**This pull request removes `hack/pull-requests.buzz`, which the `queue dashboard` job "
-            + "(`.github/workflows/queue-apply.yaml`) runs.** It checks out `main`, so it fails after this merges "
+            + "(`.github/workflows/queue-advice.yaml`) runs.** It checks out `main`, so it fails after this merges "
             + "unless the workflow stops running it.",
         message: "body");
 }
 
 test "an unrelated rename is silent" {
     final found = findings([renamed("hack/labels.buzz", to: "hack/ci/labels.buzz")],
-        base: [queueApply("hack/pull-requests.buzz")], head: [queueApply("hack/pull-requests.buzz")], defaultBranch: "main");
+        base: [queueAdvice("hack/pull-requests.buzz")], head: [queueAdvice("hack/pull-requests.buzz")], defaultBranch: "main");
     assert\equal(found.len(), want: 0, message: "silent");
 }
 
@@ -354,12 +354,11 @@ test "mentions matches whole paths only" {
 }
 
 test "parseWorkflow decodes the queue dashboard job from YAML" {
-    final w = parseWorkflow(".github/workflows/queue-apply.yaml", text: `name: Queue apply
+    final w = parseWorkflow(".github/workflows/queue-advice.yaml", text: `name: Queue advice
 on:
-  workflow_run:
-    workflows: [Queue]
-    types: [requested]
-  workflow_dispatch:
+  pull_request:
+    types: [opened]
+  pull_request_review:
 jobs:
   dashboard:
     name: queue dashboard
@@ -368,13 +367,13 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
       - run: magus buzz hack/pull-requests.buzz -- dashboard
-  planned:
-    name: queue planned
+  advice:
+    name: queue advice
     steps:
       - uses: actions/checkout@3d3c42e5
 `);
-    assert\equal(w.name, want: "Queue apply", message: "name");
-    std\assert(w.events.indexOf("workflow_dispatch") != null, message: "events");
+    assert\equal(w.name, want: "Queue advice", message: "name");
+    std\assert(w.events.indexOf("pull_request_review") != null, message: "events");
     final trusted = trustedJobs(w, defaultBranch: "main");
     assert\equal(trusted.len(), want: 1, message: "one trusted job");
     assert\equal(trusted[0].name, want: "queue dashboard", message: "the dashboard");

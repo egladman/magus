@@ -26,7 +26,6 @@ export final SANCTIONED = {
     "symbol:gomod github.com/egladman/magus `github.com/egladman/magus/cmd/magus`/magusErr.": "a lazy singleton's memoized open error beside its value, not a sentinel to compare against",
     "symbol:gomod github.com/egladman/magus `github.com/egladman/magus/cmd/magus`/inspectErr.": "a lazy singleton's memoized open error beside its value, not a sentinel to compare against",
     "file:example_test.go": "package magus_test on purpose (458ef9da7): the examples show the public API as a caller imports it",
-    "file:guide_test.go": "package magus_test on purpose (458ef9da7): the guide's code runs as a caller imports the public API",
 };
 
 // THIS is where a finding sends a reader to sanction a departure.
