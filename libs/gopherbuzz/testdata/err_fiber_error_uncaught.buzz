@@ -1,0 +1,13 @@
+// @error: buzz: uncaught error: MyErr{"code": 7}
+
+// A fiber error no parent catches still ends the run with its message.
+object MyErr { code: int }
+
+fun failing() > str *> int !> MyErr {
+    _ = yield 1;
+    throw MyErr{ code = 7 };
+}
+
+final f = &failing();
+_ = resume f;
+_ = resume f;

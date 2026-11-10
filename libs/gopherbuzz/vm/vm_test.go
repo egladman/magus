@@ -111,6 +111,20 @@ func TestCaughtValueRendersStructuredErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("a throw from another VM is caught as the value thrown", func(t *testing.T) {
+		v := caughtValue(errorUncaught(IntValue(7)))
+		if !v.IsInt() || v.AsInt() != 7 {
+			t.Fatalf("got %s, want the int 7", v.String())
+		}
+	})
+
+	t.Run("a wrapped throw keeps the host's message", func(t *testing.T) {
+		v := caughtValue(fmt.Errorf("generate: %w", errorUncaught(StringValue("boom"))))
+		if v.String() != "generate: buzz: uncaught error: boom" {
+			t.Fatalf("got %q", v.String())
+		}
+	})
+
 	t.Run("a missing message is filled from Error()", func(t *testing.T) {
 		v := caughtValue(noMessage{})
 		got, ok := v.MapGet("message")

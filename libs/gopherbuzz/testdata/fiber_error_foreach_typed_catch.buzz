@@ -1,0 +1,23 @@
+// @expect: 1;9
+// An error thrown in a fiber that a foreach drives is caught around
+// the loop, by type, as upstream does.
+object MyErr { code: int }
+
+fun failing() > void *> int? !> MyErr {
+    _ = yield 1;
+    throw MyErr{ code = 9 };
+}
+
+fun run() > str {
+    var seen = "";
+    try {
+        foreach (n in &failing()) {
+            seen = "{n}";
+        }
+    } catch (e: MyErr) {
+        return "{seen};{e.code}";
+    }
+    return "no raise";
+}
+
+final __r = run();

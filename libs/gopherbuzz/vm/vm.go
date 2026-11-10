@@ -1436,6 +1436,11 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			} else if state.fib != nil {
 				val, fdone, err := vm.fiberIterNext(state.fib)
 				if err != nil {
+					if vm.raiseHostError(err) {
+						f = &vm.frames[len(vm.frames)-1] // refresh f/code: frames unwound
+						code = f.chunk.Code
+						continue
+					}
 					return Null, err
 				}
 				if fdone {
@@ -2114,7 +2119,20 @@ func errorRangeOperands(lo, hi Value) error {
 }
 
 //go:noinline
-func errorUncaught(v Value) error { return fmt.Errorf("buzz: uncaught error: %s", v.String()) }
+func errorUncaught(v Value) error {
+	return &uncaughtError{value: v, msg: "buzz: uncaught error: " + v.String()}
+}
+
+// uncaughtError is a throw its own VM did not catch. A parent VM
+// resuming the fiber catches the value itself, with its type.
+// The message is rendered at the throw: the value may be released
+// before anyone reads Error.
+type uncaughtError struct {
+	value Value
+	msg   string
+}
+
+func (e *uncaughtError) Error() string { return e.msg }
 
 // caughtValue renders a host error as the value a `catch` binds.
 //
@@ -2131,7 +2149,13 @@ func errorUncaught(v Value) error { return fmt.Errorf("buzz: uncaught error: %s"
 //
 // "message" is filled from Error() when the embedder omits it, so a caught map is always
 // printable.
+//
+// A throw from another VM is caught as the value thrown. A host that
+// wrapped one keeps its wrapping message.
 func caughtValue(err error) Value {
+	if ue, ok := err.(*uncaughtError); ok {
+		return ue.value
+	}
 	var se StructuredError
 	if !errors.As(err, &se) {
 		return StringValue(err.Error())
