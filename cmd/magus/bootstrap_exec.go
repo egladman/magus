@@ -10,9 +10,6 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 )
 
-// bootstrapExecSentinelVar is the name shell.go sets on the delegate it starts.
-const bootstrapExecSentinelVar = workspace.BootstrapExecSentinelVar
-
 // maybeBootstrapExec looks for a workspace-local ./magus and, when one is found and
 // is not the binary already running, replaces this process with it before ANYTHING
 // else happens: argv is not yet parsed, no config is loaded, and no workspace has

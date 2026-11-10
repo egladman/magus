@@ -1133,7 +1133,7 @@ func delegateToCheckout(ctx context.Context, input string, opts output.Options, 
 	}
 	// The sentinel keeps the delegate from re-execing into the ./magus of this process's
 	// directory, which is the binary handing the call over.
-	env := append(os.Environ(), fmt.Sprintf("%s=%s", delegatedEnv, running), bootstrapExecSentinelVar+"=1")
+	env := append(os.Environ(), fmt.Sprintf("%s=%s", delegatedEnv, running), workspace.BootstrapExecSentinelVar+"=1")
 	end, err := guard.RunDelegate(ctx, own, os.Args[1:], env, strings.NewReader(input), out, errOut)
 	switch end {
 	case guard.DelegateExited:
