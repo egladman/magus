@@ -187,19 +187,19 @@ func (s *AdmissionRefusalSuite) SetupTest() {
 func (s *AdmissionRefusalSuite) TestAForkRefusalIsPrinted() {
 	_, err := admitForkValidation(s.T().Context(), &fullBudget{}, s.T().TempDir())
 	s.Equal(cache.ExitCodeMachineBusy, mapExitCode(err))
-	s.Contains(s.logged.String(), "not starting . job-fork")
+	s.Contains(s.logged.String(), "not starting (root) job-fork")
 }
 
 func (s *AdmissionRefusalSuite) TestAGraphBuildRefusalIsPrinted() {
 	_, err := admitGraphBuild(s.T().Context(), &fullBudget{}, s.T().TempDir())
 	s.Equal(cache.ExitCodeMachineBusy, mapExitCode(err))
-	s.Contains(s.logged.String(), "not starting . graph-build")
+	s.Contains(s.logged.String(), "not starting (root) graph-build")
 }
 
 func (s *AdmissionRefusalSuite) TestASessionBriefRefusalIsPrinted() {
 	_, err := admitSessionBrief(s.T().Context(), &fullBudget{}, s.T().TempDir())
 	s.Equal(cache.ExitCodeMachineBusy, mapExitCode(err))
-	s.Contains(s.logged.String(), "not starting . session-brief")
+	s.Contains(s.logged.String(), "not starting (root) session-brief")
 }
 
 func (s *AdmissionRefusalSuite) TestAPausedJobRefusalIsPrinted() {
