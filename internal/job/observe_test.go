@@ -602,7 +602,8 @@ func (s *landedSuite) contentLanded() int {
 	s.Require().NoError(err)
 	target, err := driver.FindCommit(s.T().Context(), s.repo.Root(), "")
 	s.Require().NoError(err)
-	return contentLanded(s.T().Context(), driver, s.row, head, s.repo.Root(), target)
+	paths, _ := contentLanded(s.T().Context(), driver, s.row, head, s.repo.Root(), target)
+	return paths
 }
 
 func (s *landedSuite) TestADeletionOnBothSidesHasLanded() {
