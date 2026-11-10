@@ -126,19 +126,20 @@ func WithActivityWorkspaces(fn func() []activityhandler.Workspace) Option {
 	return func(d *Server) { d.workspaces = fn }
 }
 
-// Socket is a unix socket that serves a mounted handler beside its own routes, admitting only
-// processes that run as the server's user and stamping them with the socket peer's credential.
-// *proc.Server is the one implementation.
+// Socket is a unix socket that serves a mounted handler beside its own routes.
+// It admits only processes of the server's user that present its proc token,
+// and stamps them with the socket peer's credential. *proc.Server is the one
+// implementation.
 type Socket interface {
 	// Mount serves h on the socket until unmount runs. It fails where the socket cannot
 	// name its caller.
 	Mount(h http.Handler) (unmount func(), err error)
 }
 
-// WithSocket also mounts /mcp and every Connect service on sock while the server serves,
-// each held to the Need it holds on the loopback listener, against the credential the socket
-// stamped rather than a bearer token. The console, the /api routes, health and share stay on
-// loopback: they are for browsers, which cannot dial a unix socket.
+// WithSocket also mounts /mcp and every Connect service on sock while the
+// server serves. Each holds its loopback Need against the socket's credential.
+// The console, the /api routes, health and share stay on loopback: they are
+// for browsers, which cannot dial a unix socket.
 func WithSocket(sock Socket) Option {
 	return func(d *Server) { d.socket = sock }
 }
