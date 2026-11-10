@@ -206,6 +206,11 @@ fun claude_tools_dir() > str { return ".claude/magus/tools"; }
 fun claude_tools() > [HarnessTool] {
     final rows = mut [<HarnessTool>];
     foreach (name in ["Bash", "Monitor"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.runs}); }
+    // EnterWorktree moves where every later call runs. The guard lets it
+    // reach only the caller's own job checkout.
+    rows.append(HarnessTool{name = "EnterWorktree", capability = ToolCapability.runs});
+    // It removes only a tree EnterWorktree made by name, which is refused.
+    rows.append(HarnessTool{name = "ExitWorktree", capability = ToolCapability.inert});
     foreach (name in ["Read", "NotebookRead", "Glob", "Grep", "LS"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.reads}); }
     foreach (name in ["Write", "Edit", "MultiEdit", "NotebookEdit"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.writes}); }
     foreach (name in ["Agent", "Task", "SendMessage", "ScheduleWakeup"]) { rows.append(HarnessTool{name = name, capability = ToolCapability.spawns}); }

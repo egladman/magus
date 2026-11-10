@@ -894,6 +894,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			unjudged = env.UnjudgedTool
 			input, hasInput = unjudged, true
 		}
+		if env.Enters {
+			input, hasInput = cmp.Or(env.Value, env.EntersNew), true
+		}
 		switch {
 		case env.Read != "" && !req.Observe:
 			// A read is judged as the line it stands for, whichever tool performs it.
@@ -958,7 +961,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		job.NewStore(location.jobs()).Release(who.caller(), bound.Job)
 	}
 	actingLease, leaseFrom := resolveLease(who, req.Lease, binding.Job)
-	if persists && hasInput && !isPath && mcpTool == "" && unjudged == "" {
+	if persists && hasInput && !isPath && mcpTool == "" && unjudged == "" && !env.Enters {
 		command := input
 		defer func() {
 			if judged.Decision != decisionDeny && judged.Decision != decisionAsk {
@@ -982,7 +985,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 	switch {
 	case req.Observe:
 		tool = hookToolRead
-	case unjudged != "":
+	case unjudged != "" || env.Enters:
 		tool = hookToolCall
 	case isPath:
 		tool = hookToolWrite
@@ -1039,7 +1042,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 	// once every rule has spoken.
 	var remedy ShellVerdict
 	preauth := ""
-	if hasInput && !req.Observe && !isPath && !gradingRemedy(ctx) {
+	if hasInput && !req.Observe && !isPath && !env.Enters && !gradingRemedy(ctx) {
 		preauth = servedNextPreauthorizes(markers, input)
 	}
 	switch {
@@ -1051,6 +1054,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		// advisory about editing a file the agent opened read-only.
 	case unjudged != "":
 		refuseWith(denyRuleUnjudgedTool, denyUnjudgedTool(unjudged, req.Tools))
+		pending.speak(markers, &verdict, whys)
+	case env.Enters:
+		if d := denyEnterCheckout(env.Tool, env.Value, env.EntersNew, ownedCheckouts(ctx, deps, location)); d.refused() {
+			refuseWith(denyRuleSiblingCheckout, d)
+		}
 		pending.speak(markers, &verdict, whys)
 	case isPath:
 		said := ""
@@ -2065,6 +2073,17 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 		if d, ok := envelopeWatch(env.ToolInput); ok {
 			req.IsWatch, req.WatchFor, req.CallBackground = true, d, true
 		}
+	case capability == types.ToolRuns && (envelopeString(env.ToolInput, "path") != "" || envelopeString(env.ToolInput, "name") != ""):
+		// No command, but a tree's path or a new tree's name:
+		// every later call of the session runs there.
+		req.Enters, req.Tool = true, env.ToolName
+		req.EntersNew = envelopeString(env.ToolInput, "name")
+		if dir := envelopeString(env.ToolInput, "path"); dir != "" {
+			req.Value = dir
+			if !filepath.IsAbs(dir) {
+				req.Value = filepath.Join(env.Cwd, dir)
+			}
+		}
 	case env.Command != "":
 		req.Value = env.Command
 	case nativeSearchLine(env.ToolInput) != "" && envelopeWritePath(env.ToolInput) == "":
@@ -2175,6 +2194,28 @@ func decodeHookEnvelope(raw string, tools agent.ToolRows) (hookRequest, bool) {
 	return req, true
 }
 
+// denyEnterCheckout refuses tool's move of the session anywhere but an owned
+// checkout (see [ownedCheckouts]). A new tree, named by name, is no job's.
+func denyEnterCheckout(tool, path, name string, owned []string) denial {
+	if path != "" && slices.ContainsFunc(owned, func(root string) bool { return samePath(root, path) }) {
+		return denial{}
+	}
+	say := fmt.Sprintf("magus workspace: %s into %s leaves the checkouts this caller may work in; ", tool, path)
+	if path == "" {
+		say = fmt.Sprintf("magus workspace: %s would make a new tree %q, which no job owns; ", tool, name)
+	}
+	if len(owned) == 0 {
+		say += "no job gives this caller a checkout, so work where the session is."
+	} else {
+		say += "enter one of " + strings.Join(owned, ", ") + " by its path."
+	}
+	return denial{
+		Say: say,
+		Why: "A job's checkout is where its write paths, check and binary hold, and the guard grades its calls against it. " +
+			"A tree no job owns has none of them, so a worker that moved there would be graded against nothing.",
+	}
+}
+
 // gradeScheduledPrompt refuses a queued prompt as a timer while the session has
 // work whose own notice would wake it. With nothing pending it passes.
 func gradeScheduledPrompt(facts, stops hint.Gate, transcript string, now time.Time) ShellVerdict {
@@ -2259,6 +2300,10 @@ type hookRequest struct {
 	// Inert is a nothing-to-judge call to a tool the table calls inert, which records
 	// nothing either: the read-only fast path answers it without loading any rule.
 	Inert bool
+	// Enters moves the session's later calls into the tree
+	// Value names, or a new one named EntersNew.
+	Enters    bool
+	EntersNew string
 	// Read is the shell line a read tool's call stands for, "" for any other call; Value
 	// is then the path it reads.
 	Read    string

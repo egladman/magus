@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,6 +19,7 @@ import (
 var testToolRows = []types.HarnessTool{
 	{Name: "Bash", Capability: types.ToolRuns},
 	{Name: "Monitor", Capability: types.ToolRuns},
+	{Name: "EnterWorktree", Capability: types.ToolRuns},
 	{Name: "Read", Capability: types.ToolReads},
 	{Name: "Glob", Capability: types.ToolReads},
 	{Name: "Grep", Capability: types.ToolReads},
@@ -291,4 +293,51 @@ func TestJudgeWithinAnswersAnInertCallWithoutLoadingRules(t *testing.T) {
 	norows.Tools = agent.ToolRows{}
 	JudgeWithin(ctx, Dependencies{}, norows, judge)
 	assert.Equal(t, 5, judged, "with no rows nothing is known to be inert")
+}
+
+// A tool that runs no command but names a tree moves the session there.
+// It is judged against the caller's checkouts, not named unjudged.
+func TestEnteringATreeIsAMoveOfTheSession(t *testing.T) {
+	t.Parallel()
+	byPath, ok := decodeTestEnvelope(t, toolEnvelope(t, "s1", "/r", "EnterWorktree", map[string]any{"path": "wt"}))
+	require.True(t, ok)
+	assert.Equal(t, hookRequest{Value: "/r/wt", Cwd: "/r", Enters: true, Tool: "EnterWorktree", Who: hookAttribution{Session: "s1", Event: "PreToolUse"}}, byPath,
+		"a relative path resolves against the call's directory")
+
+	byName, ok := decodeTestEnvelope(t, toolEnvelope(t, "s1", "/r", "EnterWorktree", map[string]any{"name": "scratch"}))
+	require.True(t, ok)
+	assert.True(t, byName.Enters)
+	assert.Equal(t, "scratch", byName.EntersNew)
+	assert.Empty(t, byName.Value, "a new tree has no path yet")
+
+	shell, ok := decodeTestEnvelope(t, toolEnvelope(t, "s1", "/r", "Bash", map[string]any{"command": "ls", "path": "wt"}))
+	require.True(t, ok)
+	assert.False(t, shell.Enters, "a command is judged as the command")
+}
+
+func TestDenyEnterCheckoutLetsTheCallerReachOnlyItsOwnCheckout(t *testing.T) {
+	t.Parallel()
+	own, other := t.TempDir(), t.TempDir()
+
+	assert.False(t, denyEnterCheckout("EnterWorktree", own, "", []string{own}).refused(), "the caller's own checkout")
+
+	elsewhere := denyEnterCheckout("EnterWorktree", other, "", []string{own})
+	assert.Equal(t, fmt.Sprintf("magus workspace: EnterWorktree into %s leaves the checkouts this caller may work in; enter one of %s by its path.", other, own), elsewhere.Say)
+	assert.NotEmpty(t, elsewhere.Why)
+
+	made := denyEnterCheckout("EnterWorktree", "", "scratch", []string{own})
+	assert.Equal(t, fmt.Sprintf(`magus workspace: EnterWorktree would make a new tree "scratch", which no job owns; enter one of %s by its path.`, own), made.Say)
+
+	assert.Contains(t, denyEnterCheckout("EnterWorktree", other, "", nil).Say, "no job gives this caller a checkout")
+}
+
+func TestEnteringATreeNoJobOwnsIsRefused(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	root := hookLocation(ctx, Dependencies{}).workspace
+	other := t.TempDir()
+	input := toolEnvelope(t, "enter-other", root, "EnterWorktree", map[string]any{"path": other})
+	v := Judge(ctx, Dependencies{}, Request{Input: input, Host: "claude-code", Dir: root, Tools: testTools(t)})
+	shape, text := spoken(v)
+	assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSiblingCheckout)}, shape)
+	assert.Contains(t, text, other)
 }
