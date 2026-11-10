@@ -16,7 +16,6 @@ import (
 // CallbacksSuite runs the generated adapters against real Buzz function values.
 type CallbacksSuite struct {
 	suite.Suite
-	ctx  context.Context
 	sess *buzz.Session
 }
 
@@ -25,15 +24,14 @@ func TestCallbacks(t *testing.T) {
 }
 
 func (s *CallbacksSuite) SetupTest() {
-	s.ctx = context.Background()
-	s.sess = buzz.NewSession(s.ctx, buzz.WithEmbedded())
+	s.sess = buzz.NewSession(s.T().Context(), buzz.WithEmbedded())
 	s.T().Cleanup(func() { _ = s.sess.Close() })
 }
 
 // fun runs src and returns the global it binds as the only argument a
 // trampoline would pass.
 func (s *CallbacksSuite) fun(src, name string) []vm.Value {
-	s.Require().NoError(s.sess.Exec(s.ctx, src))
+	s.Require().NoError(s.sess.Exec(s.T().Context(), src))
 	return []vm.Value{s.sess.GetGlobal(name)}
 }
 
@@ -44,7 +42,7 @@ func (s *CallbacksSuite) TestAnAbsentArgumentIsANilFunc() {
 
 func (s *CallbacksSuite) TestAnyResultCrossesAsAGoValue() {
 	cb := callbackReturnsAny(s.sess, s.fun(`final f = fun() > str { return "payload"; };`, "f"), 0)
-	got, err := cb(s.ctx)
+	got, err := cb(s.T().Context())
 	s.Require().NoError(err)
 	s.Equal("payload", got)
 }
@@ -55,26 +53,26 @@ final f = fun(path: str, isDir: bool) > str {
     if (isDir and path == "sub") { return "skipDir"; }
     return "next";
 };`, "f"), 0)
-	step, err := cb(s.ctx, "sub", true)
+	step, err := cb(s.T().Context(), "sub", true)
 	s.Require().NoError(err)
 	s.Equal(types.WalkSkipDir, step)
 }
 
 func (s *CallbacksSuite) TestAWalkStepOutsideItsCasesIsRefused() {
 	cb := callbackStringBoolReturnsWalkStep(s.sess, s.fun(`final f = fun(path: str, isDir: bool) > str { return "onward"; };`, "f"), 0)
-	_, err := cb(s.ctx, "a.txt", false)
+	_, err := cb(s.T().Context(), "a.txt", false)
 	s.ErrorContains(err, "want a WalkStep: next, skipDir, skipAll")
 }
 
 func (s *CallbacksSuite) TestABoolResultMustBeABool() {
 	cb := callbackStringReturnsBool(s.sess, s.fun(`final f = fun(s: str) > any { return "yes"; };`, "f"), 0)
-	_, err := cb(s.ctx, "a")
+	_, err := cb(s.T().Context(), "a")
 	s.ErrorContains(err, "want bool")
 }
 
 func (s *CallbacksSuite) TestABoolResultCrosses() {
 	cb := callbackStringSliceReturnsBool(s.sess, s.fun(`final f = fun(paths: [str]) > bool { return paths.len() == 2; };`, "f"), 0)
-	done, err := cb(s.ctx, []string{"a", "b"})
+	done, err := cb(s.T().Context(), []string{"a", "b"})
 	s.Require().NoError(err)
 	s.True(done)
 }
@@ -93,7 +91,7 @@ func (s *CallbacksSuite) TestRetryErrorsKeepTheirClass() {
 		calls++
 		return vm.Null, nil
 	}))
-	s.Require().NoError(s.sess.Exec(s.ctx, `
+	s.Require().NoError(s.sess.Exec(s.T().Context(), `
 final viaHost = fun() > void !> any { refuse(); };
 final thrown = fun() > void !> any { tick(); throw "flaky"; };
 `))
@@ -102,14 +100,14 @@ final thrown = fun() > void !> any { tick(); throw "flaky"; };
 	}
 	fast := types.RetryOptions{BackoffMs: new(0.0)}
 
-	_, err := std.OsRetry(s.ctx, 3, callback("viaHost"), fast)
+	_, err := std.OsRetry(s.T().Context(), 3, callback("viaHost"), fast)
 	var typed *types.NonRetryableError
 	s.Require().ErrorAs(err, &typed)
 	s.Equal(types.RetryAfterConfig, types.ClassifyRetry(err).Change)
 	s.Equal(1, calls)
 
 	calls = 0
-	_, err = std.OsRetry(s.ctx, 3, callback("thrown"), fast)
+	_, err = std.OsRetry(s.T().Context(), 3, callback("thrown"), fast)
 	s.Require().ErrorContains(err, "flaky")
 	s.True(types.ClassifyRetry(err).Retryable)
 	s.Equal(3, calls)

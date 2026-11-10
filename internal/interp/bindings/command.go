@@ -102,7 +102,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn.Exe
 		if len(dropped) > 0 {
 			_, stderr := spawn.OutputWriters(ctx)
 			_, _ = fmt.Fprintf(stderr, "%s: takes no operand for the forwarded file(s) %s, so it leaves them out\n",
-				opName(opts.op, tgt.Bin), strings.Join(dropped, " "))
+				opName(opts.op, tgt.Bin), strings.Join(dropped, " ")) // best effort: a lost notice changes no result
 		}
 		// Each forwarded arg named a file the tool takes no operand for.
 		// A bare run would widen the call to the whole project.
