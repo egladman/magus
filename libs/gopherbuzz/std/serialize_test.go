@@ -196,6 +196,29 @@ final f = serialize\jsonDecode("[10.0]").q([0]).floatValue();`))
 	assert.InDelta(t, 10.0, s.Globals()["f"].AsFloat(), 0)
 }
 
+// Upstream refuses an integer past 48 bits with "Could not parse JSON: `N` is
+// not a number". It neither wraps nor widens it to a double.
+func TestJSONDecodeRefusesIntegersPastFortyEightBits(t *testing.T) {
+	for _, lit := range []string{"281474976710656", "9007199254740993", "140737488355328", "-140737488355329", "9223372036854775808"} {
+		_, err := JSONDecodeValue([]byte(`[` + lit + `]`))
+		require.Error(t, err, lit)
+		assert.Contains(t, err.Error(), "Could not parse JSON: `"+lit+"` is not a number")
+	}
+
+	_, err := serializeJSONDecode(t.Context(), []vm.Value{vm.StringValue(`[140737488355328]`)})
+	require.Error(t, err)
+}
+
+func TestJSONDecodeKeepsIntegersAtTheFortyEightBitEdges(t *testing.T) {
+	v, err := JSONDecodeValue([]byte(`[140737488355327, -140737488355328, -5]`))
+	require.NoError(t, err)
+	items := v.ListItems()
+	require.Len(t, items, 3)
+	assert.Equal(t, int64(140737488355327), items[0].AsInt())
+	assert.Equal(t, int64(-140737488355328), items[1].AsInt())
+	assert.Equal(t, int64(-5), items[2].AsInt())
+}
+
 func TestSession_SerializeBoxedIsDeclared(t *testing.T) {
 	ctx := context.Background()
 	exec := func(src string) (*buzz.Session, error) {

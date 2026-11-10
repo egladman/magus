@@ -422,6 +422,12 @@ func buzzToGo(v vm.Value, path []vm.Value) (any, error) {
 	}
 }
 
+// The range of vm.IntValue; a wider integer is refused, not truncated.
+const (
+	minJSONInt = -(1 << 47)
+	maxJSONInt = 1<<47 - 1
+)
+
 // jsonDocument builds the Buzz value from the document's bytes. Decoding
 // into any forgets member order and how each number was written.
 type jsonDocument struct{ value vm.Value }
@@ -555,12 +561,16 @@ func (s *jsonScanner) number() (vm.Value, error) {
 		s.i++
 	}
 	lit := string(s.b[start:s.i])
-	x, err := strconv.ParseFloat(lit, 64)
-	if err != nil {
-		return vm.Null, err
-	}
 	if strings.ContainsAny(lit, ".eE") {
+		x, err := strconv.ParseFloat(lit, 64)
+		if err != nil {
+			return vm.Null, err
+		}
 		return vm.FloatValue(x), nil
 	}
-	return vm.IntValue(int64(x)), nil
+	n, err := strconv.ParseInt(lit, 10, 64)
+	if err != nil || n < minJSONInt || n > maxJSONInt {
+		return vm.Null, fmt.Errorf("Could not parse JSON: `%s` is not a number", lit)
+	}
+	return vm.IntValue(n), nil
 }
