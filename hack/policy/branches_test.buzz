@@ -109,44 +109,6 @@ fun gitIn(dir: str, argv: [str]) > helpers\Program {
         vcs = helpers\VcsCall{ tool = "git", subcommand = argv[0], args = argv.sub(1) } };
 }
 
-// scored: narrow topic for the pushed commits, wide for the checkout.
-fun scored(seen: mut [str]) > fun (source: str, dir: str) > branches\Topic {
-    return fun (source: str, dir: str) > branches\Topic {
-        seen.append("{dir}|{source}");
-        if (source == "bafc60786" or dir == "/other") {
-            return branches\withSubjects(branches\unknownTopic(), subjects: [
-                fragment("buzz-json-decode-is-stable", headline: "Buzz JSON decode is stable"),
-                fragment("buzz-fiber-errors-keep-their-value", headline: "Buzz fiber errors keep their value"),
-                fragment("buzz-checker-types-writes", headline: "The Buzz checker types writes"),
-            ]);
-        }
-        return branches\withSubjects(branches\unknownTopic(), subjects: squash());
-    };
-}
-
-test "a push names the source rev and checkout it publishes" {
-    final sha = branches\findPushes(helpers\vcsRequest([["git", "push", "origin", "bafc60786:refs/heads/buzz-checker-fiber-json"]]), current: "hook-lease");
-    std\assert(sha[0].name == "buzz-checker-fiber-json" and sha[0].source == "bafc60786", message: "sha: {sha[0].name} {sha[0].source}");
-    final bare = branches\findPushes(helpers\vcsRequest([["git", "push", "origin", "topic-a"]]), current: "hook-lease");
-    std\assert(bare[0].source == "topic-a", message: "branch source");
-    final head = branches\findPushes(helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD"]]), current: "hook-lease");
-    std\assert(head[0].source == "", message: "the checkout's own HEAD");
-    final other = branches\findPushes([gitIn("/other", ["push", "origin", "topic-a"])], current: "hook-lease");
-    std\assert(other[0].dir == "/other" and other[0].source == "topic-a", message: "git -C: {other[0].dir} {other[0].source}");
-}
-
-test "a sha:ref push and a git -C push are scored by the commits they publish" {
-    final remote = branches\Remote{ base = "origin/main", branches = [<str>] };
-    final seen = mut [<str>];
-    final sha = branches\decideNames(helpers\vcsRequest([["git", "push", "origin", "bafc60786:refs/heads/buzz-checker-fiber-json"]]), current: "hook-lease", remote: remote, topic: scored(seen), once: helpers\counter());
-    std\assert(sha.decision == magus\GuardDecision.allow, message: "sha: {sha.reason}");
-    final other = branches\decideNames([gitIn("/other", ["push", "origin", "buzz-checker-fiber-json"])], current: "hook-lease", remote: remote, topic: scored(seen), once: helpers\counter());
-    std\assert(other.decision == magus\GuardDecision.allow, message: "git -C: {other.reason}");
-    std\assert(seen.join(",") == "|bafc60786,/other|buzz-checker-fiber-json", message: seen.join(","));
-    final own = branches\decideNames(helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:buzz-checker-fiber-json"]]), current: "hook-lease", remote: remote, topic: scored(mut [<str>]), once: helpers\counter());
-    std\assert(own.decision == magus\GuardDecision.deny, message: "the checkout's own wide branch is still judged");
-}
-
 fun shell(name: str, args: [str]) > helpers\Program {
     return helpers\Program{ name = name, args = args, repeats = false };
 }
@@ -164,24 +126,12 @@ fun merged() > [branches\Subject] {
     return found;
 }
 
-test "a push after a cd runs in the checkout the cd names" {
-    final abs = branches\findPushes([shell("cd", args: ["/w/fix"])] + helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:main-spell-charms"]]), current: "fix");
-    std\assert(abs[0].dir == "/w/fix" and abs[0].located, message: "cd: {abs[0].dir}");
-    final rel = branches\findPushes([shell("cd", args: ["sub"])] + helpers\vcsRequest([["git", "push", "origin", "topic-a"]]), current: "fix");
-    std\assert(rel[0].dir == "sub" and rel[0].located, message: "relative cd: {rel[0].dir}");
-    final both = branches\findPushes([shell("cd", args: ["/w"]), gitIn("fix", ["push", "origin", "topic-a"])], current: "fix");
-    std\assert(both[0].dir == "/w/fix", message: "cd then git -C: {both[0].dir}");
-    final home = branches\findPushes([shell("cd", args: ["~/w"])] + helpers\vcsRequest([["git", "push", "origin", "topic-a"]]), current: "fix");
-    std\assert(!home[0].located, message: "a cd the shell resolves names no checkout");
-    final back = branches\findPushes([shell("cd", args: ["~/w"]), gitIn("/w/fix", ["push", "origin", "topic-a"])], current: "fix");
-    std\assert(back[0].located and back[0].dir == "/w/fix", message: "an absolute git -C names it again");
-}
-
-test "a cd push is scored by its own commits, not the host checkout's branch" {
-    final seen = mut [<str>];
-    final topic = fun (source: str, dir: str) > branches\Topic {
+// placedAt reads the topic where the guard placed the request, as guard.buzz's
+// branchTopic does: narrow at a pushed fork, wide at the host's hook-lease.
+fun placedAt(placed: str, seen: mut [str]) > fun (source: str, dir: str) > branches\Topic {
+    return fun (source: str, dir: str) > branches\Topic {
         seen.append("{dir}|{source}");
-        if (dir == "/w/fix") {
+        if (source == "bafc60786" or placed != "/w/root") {
             return branches\withSubjects(branches\unknownTopic(), subjects: [
                 branches\commitSubjectTopic("hand TestResolve_FunctionValueTargets a Charm object as upstream Buzz requires"),
                 branches\commitSubjectTopic("align the MCP transport table to dprint"),
@@ -189,21 +139,34 @@ test "a cd push is scored by its own commits, not the host checkout's branch" {
         }
         return branches\withSubjects(branches\unknownTopic(), subjects: merged());
     };
-    final remote = branches\Remote{ base = "origin/main", branches = [<str>] };
-    final line = [shell("cd", args: ["/w/fix"])] + helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:main-spell-charms"]]);
-    final v = branches\decideNames(line, current: "fix-main-spell-charms-and-mcp-table", remote: remote, topic: topic, once: helpers\counter());
-    std\assert(v.decision != magus\GuardDecision.deny, message: v.reason);
-    std\assert(seen.join(",") == "/w/fix|HEAD", message: seen.join(","));
-    final unmoved = branches\decideNames(helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:main-spell-charms"]]), current: "hook-lease", remote: remote, topic: topic, once: helpers\counter());
-    std\assert(unmoved.reason.indexOf("adds 11 topics") != null, message: "the host checkout's own branch is still judged: {unmoved.reason}");
 }
 
-test "a push after a cd the shell resolves is not scored" {
-    final topic = fun (source: str, dir: str) > branches\Topic {
-        return branches\withSubjects(branches\unknownTopic(), subjects: merged());
-    };
+test "a push names the source rev it publishes" {
+    final sha = branches\findPushes(helpers\vcsRequest([["git", "push", "origin", "bafc60786:refs/heads/buzz-checker-fiber-json"]]), current: "hook-lease");
+    std\assert(sha[0].name == "buzz-checker-fiber-json" and sha[0].source == "bafc60786", message: "sha: {sha[0].name} {sha[0].source}");
+    final bare = branches\findPushes(helpers\vcsRequest([["git", "push", "origin", "topic-a"]]), current: "hook-lease");
+    std\assert(bare[0].source == "topic-a", message: "branch source");
+    final head = branches\findPushes(helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD"]]), current: "hook-lease");
+    std\assert(head[0].source == "", message: "the checkout's own HEAD");
+}
+
+test "a sha:ref push is scored by the commits it publishes" {
     final remote = branches\Remote{ base = "origin/main", branches = [<str>] };
-    final line = [shell("cd", args: ["$CHECKOUT"])] + helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:main-spell-charms"]]);
-    final v = branches\decideNames(line, current: "fix", remote: remote, topic: topic, once: helpers\counter());
-    std\assert(v.decision != magus\GuardDecision.deny, message: v.reason);
+    final seen = mut [<str>];
+    final sha = branches\decideNames(helpers\vcsRequest([["git", "push", "origin", "bafc60786:refs/heads/buzz-checker-fiber-json"]]), current: "hook-lease", remote: remote, topic: placedAt("/w/root", seen: seen), once: helpers\counter());
+    std\assert(sha.decision == magus\GuardDecision.allow, message: "sha: {sha.reason}");
+    std\assert(seen.join(",") == "|bafc60786", message: seen.join(","));
+}
+
+test "a cd or git -C push is scored where the guard placed it, not on the host's branch" {
+    final remote = branches\Remote{ base = "origin/main", branches = [<str>] };
+    final seen = mut [<str>];
+    final cd = [shell("cd", args: ["/w/fix"])] + helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:main-spell-charms"]]);
+    final moved = branches\decideNames(cd, current: "fix-main-spell-charms-and-mcp-table", remote: remote, topic: placedAt("/w/fix", seen: seen), once: helpers\counter());
+    std\assert(moved.decision != magus\GuardDecision.deny, message: "cd: {moved.reason}");
+    final other = branches\decideNames([gitIn("../fix", ["push", "origin", "HEAD:main-spell-charms"])], current: "fix", remote: remote, topic: placedAt("/w/fix", seen: seen), once: helpers\counter());
+    std\assert(other.decision != magus\GuardDecision.deny, message: "git -C: {other.reason}");
+    std\assert(seen.join(",") == "|HEAD,|HEAD", message: "the request already stands there, so no dir moves it again: {seen.join(",")}");
+    final host = branches\decideNames(helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:main-spell-charms"]]), current: "hook-lease", remote: remote, topic: placedAt("/w/root", seen: mut [<str>]), once: helpers\counter());
+    std\assert(host.reason.indexOf("adds 11 topics") != null, message: "the host checkout's own wide branch is still judged: {host.reason}");
 }
