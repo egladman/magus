@@ -28,12 +28,12 @@ func (s *AnalyzerSuite) options() Options {
 }
 
 func (s *AnalyzerSuite) TestReportsWholeDocumentWrites() {
-	analyzer := newWith(s.options(), lines{{1, 1000}})
+	analyzer := newWith(s.options(), lines{{From: 1, To: 1000}})
 	analysistest.Run(s.T(), analysistest.TestData(), analyzer, "a")
 }
 
 func (s *AnalyzerSuite) TestUnchangedLinesAreNotReported() {
-	analyzer := newWith(s.options(), lines{{1, 1}})
+	analyzer := newWith(s.options(), lines{{From: 1, To: 1}})
 	for _, r := range analysistest.Run(discard{}, analysistest.TestData(), analyzer, "a") {
 		s.Empty(r.Diagnostics)
 	}
