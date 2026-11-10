@@ -9,6 +9,8 @@ import "std";
 import "fs";
 import "vcs";
 import "encoding/json";
+import "encoding/yaml";
+import "serialize";
 import "magus/lint";
 import "assert";
 
@@ -695,6 +697,22 @@ test "edits to what decides a gate are listed" {
         Changed{ path = "README.md" },
     ]);
     assert\equal(got.notices.len(), want: 4, message: "four watched files");
+}
+
+// The workflow runs only on its paths, so it never lists a file they omit.
+test "deliberate-break.yaml runs on every file listChanges watches" {
+    final doc = serialize\Boxed.init(yaml\parse(fs\readFile(".github/workflows/deliberate-break.yaml")));
+    final paths = mut [<str>];
+    foreach (p in doc.q(["on", "pull_request_target", "paths"]).listValue()) {
+        paths.append(p.stringValue());
+    }
+    final want = mut ["**/*deviations.jsonl*", ".github/workflows/**", "magus.yaml"];
+    foreach (path, _ in WATCHED) {
+        want.append(path);
+    }
+    foreach (w in want) {
+        assert\isTrue(paths.indexOf(w) != null, message: "deliberate-break.yaml's paths lack {w}");
+    }
 }
 
 test "magus.yaml is listed only when a vcs line changed" {

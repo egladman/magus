@@ -2,6 +2,9 @@ package testpairing
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -115,5 +118,44 @@ func TestUnreadableDirectory(t *testing.T) {
 	sources := sourceNames(filepath.Join(t.TempDir(), "absent"))
 	if got := pairing("widget_test.go", sources); !strings.HasPrefix(got, "widget_test.go has no source file") {
 		t.Errorf("pairing over an unreadable directory = %q", got)
+	}
+}
+
+func parseTestFile(t *testing.T, src string) *ast.File {
+	t.Helper()
+
+	f, err := parser.ParseFile(token.NewFileSet(), "example_test.go", src, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return f
+}
+
+func TestExternalExamplesDocumentThePackage(t *testing.T) {
+	f := parseTestFile(t, "package widget_test\n\nfunc helper() {}\n\nfunc Example_open() {}\n\nfunc ExampleWidget_Close() {}\n")
+	if !documentsThePackage(f) {
+		t.Error("an external file of examples and helpers should pair with its package")
+	}
+}
+
+func TestExternalExamplesBesideATestDoNotPair(t *testing.T) {
+	f := parseTestFile(t, "package widget_test\n\nimport \"testing\"\n\nfunc Example() {}\n\nfunc TestOpen(t *testing.T) {}\n")
+	if documentsThePackage(f) {
+		t.Error("a Test beside the examples tests some file, so the file should not pair")
+	}
+}
+
+func TestInPackageExamplesDoNotDocumentThePackage(t *testing.T) {
+	f := parseTestFile(t, "package widget\n\nfunc Example() {}\n")
+	if documentsThePackage(f) {
+		t.Error("an in-package example can join its file's _test.go, so it should not pair")
+	}
+}
+
+func TestALowercaseSuffixIsNotAnExample(t *testing.T) {
+	f := parseTestFile(t, "package widget_test\n\nfunc Exampled() {}\n")
+	if documentsThePackage(f) {
+		t.Error("go test does not run Exampled, so it should not pair")
 	}
 }

@@ -63,7 +63,9 @@ unit has any history, the plan opens at most 2 shards and says so under
 
 Units that share a prerequisite the change reaches go to one shard, so that
 prerequisite computes once. A prerequisite the change does not reach replays from
-the cache on every shard that needs it. A shard runs `cores` targets at once: it
+the cache on every shard that needs it
+([Compute once, reuse everywhere](../design/principles/compute-once.md)). A shard
+runs `cores` targets at once: it
 costs one runner's setup plus its distinct targets' durations spread across
 `cores`, never less than its longest target. Units go longest first to the shard
 they leave cheapest. A new shard opens only when it shortens the longest shard by

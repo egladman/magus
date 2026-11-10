@@ -19,7 +19,7 @@ import (
 )
 
 // These examples are the code blocks of docs/guides/go-sdk.md, tabs shown as
-// four spaces; guide_test.go holds the two equal. Package
+// four spaces; the docs crosscheck holds the two equal. Package
 // magus_test reaches only what a caller can import.
 
 // newGuideWorkspace writes files, keyed by slash-separated relative path,

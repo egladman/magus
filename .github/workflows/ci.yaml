@@ -1,7 +1,8 @@
 name: CI
 
 # Validates a change. Nothing here ships or pushes: its artifacts are the magus the plan
-# builds for the jobs after it, and a red shard's logs. The top-level default
+# builds for the jobs after it, a red shard's logs, and on main the coverage profiles
+# cd.yaml renders the badges from. The top-level default
 # is contents: read; the advisor holds pull-requests: write for its comment.
 #
 # Cache rule: a job holding a secret, a write token or id-token restores no UNVERIFIED
@@ -10,7 +11,8 @@ name: CI
 # signed by main's key and checked against the trust set before a byte of it is used.
 #
 # Four workflows, one trigger each, and the name says which: ci.yaml validates (pull
-# request), cd.yaml ships what a merge produces (main push), release.yaml cuts a release
+# request), cd.yaml ships what a merge produces (main push, and this workflow's main
+# run for the site), release.yaml cuts a release
 # (v* tag), audit.yaml runs the expensive out-of-band checks (cron).
 #
 # ci also runs on main pushes, and that is not a publish step: the push run is what
@@ -973,34 +975,89 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # The kernel sandbox's proof on a hosted runner. MAGUS_TEST_REQUIRE_LANDLOCK turns
-  # its tests' skip into a failure, so green here means the ABI probe found landlock
-  # and a confined child was denied. CGO_ENABLED=0 because a cgo binary cannot confine
-  # every thread in process, and the shards' race build links cgo and skips that test.
-  landlock:
-    name: landlock
+  # The profiles cd.yaml renders the README's coverage badges from, for every main commit.
+  # The shards run only what the push reaches, so this job asks for every suite, and each
+  # replays from the remote-tier entry a shard or an earlier main run stored: a suite runs
+  # once per tree (ADR 0027; docs/concepts/ci.md). A miss runs that suite here, since a
+  # cache is an accelerator, never a dependency.
+  coverage:
+    name: coverage
+    needs: [plan, generate, stage-1]
+    # !cancelled(): stage 1 skips when the plan inherits a verdict or reaches nothing, and
+    # the profiles are owed for that commit all the same.
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.plan.result == 'success' && needs.generate.result == 'success' && (needs.stage-1.result == 'success' || needs.stage-1.result == 'skipped') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     permissions:
       contents: read
+    env:
+      # No signing key reaches this job, so it stores nothing in the remote tier.
+      MAGUS_CACHE_REMOTE_WRITE_ENABLED: 'false'
+      # The shards' zone, so a suite that misses runs as it would there.
+      TZ: Australia/Lord_Howe
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
-      # Go alone: nothing else in mise.toml is on this job's path. No cache: this
-      # install's key exists in no scope main writes, so each pull request saved a copy
-      # of its own that only its reruns could read.
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
-          install_args: go
           env: false
           cache: false
 
-      - name: Test the kernel sandbox with landlock required
-        env:
-          CGO_ENABLED: '0'
-          MAGUS_TEST_REQUIRE_LANDLOCK: '1'
-        run: go test -count=1 ./internal/sandbox/...
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: artifact
+          artifact: ${{ needs.plan.outputs.magus_artifact }}
+          artifact-sha256: ${{ needs.plan.outputs.magus_sha256 }}
+          artifact-commit: ${{ github.sha }}
+
+      - uses: ./.github/actions/setup-scip
+
+      # As the shards export them, but fatal: without the remote tier every suite reruns.
+      - name: Export the Actions cache service credentials
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+              const value = process.env[name]
+              if (!value) {
+                core.setFailed(`${name} is not set; without the remote cache this job would rerun every suite`)
+                return
+              }
+              if (name.endsWith('_TOKEN')) core.setSecret(value)
+              core.exportVariable(name, value)
+            }
+
+      - uses: ./.github/actions/codec-deps
+
+      # gha and no default charm, as the shards run: a charm keys every step, so any other
+      # set would miss the entries they stored. Two runs, because the console imports the
+      # root and so cannot be one of coverage-measure's needs.
+      - name: Measure the console's coverage
+        run: magus run test:gha console --no-default-charms --concurrency-profile aggressive
+
+      - name: Measure every other suite's coverage
+        run: magus run coverage-measure:gha . --no-default-charms --concurrency-profile aggressive
+
+      # Each profile keeps its workspace path, so cd.yaml extracts the artifact into its
+      # checkout. .magus is hidden, which upload-artifact skips unless told otherwise. A
+      # rerun replaces the attempt before it.
+      - name: Upload the coverage profiles
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-${{ github.sha }}
+          path: |
+            .magus/coverage*.out
+            libs/*/coverage.out
+            coverage/buzz/coverage.txt
+            console/coverage.txt
+          include-hidden-files: true
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
 
   # The two symbol indexes advice reads, built where a cache may be restored: this job
   # holds no write token, so trusted-jobs-restore-no-actions-cache allows it. The merge

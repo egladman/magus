@@ -75,7 +75,7 @@ about to see that pull request merged.
 | queue a stack                   | label its top pull request `merge-queue: squash`        |
 | take it out                     | `gh pr merge <n> --disable-auto`, or remove the label   |
 | list what is queued             | `magus queue ls --provider github --base main`          |
-| see the queue                   | the pinned "Merge queue" issue (see below)              |
+| see the queue                   | the newest `Queue apply` run's summary (see below)      |
 | see yours offline, with jobs    | `magus ls jobs`, from what `queue ls` read              |
 | see why one is waiting          | its `merge-queue` status, which reads `waiting: <why>`  |
 | see why one was kicked back     | the queue's newest comment on it                        |
@@ -98,22 +98,14 @@ and reads `merge-queue:` followed by a merge method, exactly: `merge-queue: squa
 `merge-queue: rebase` or `merge-queue: merge`. The status labels are the queue's answer
 and read `queue:`, so none ever reads as intent.
 
-In this repository a `queue dashboard` job keeps one pinned issue, "Merge queue", whose
-body shows every open pull request: a status line with `main`'s state and a count per
-section, then one leaderboard ranked by how near each row is to merging (validating,
-queued in queue order, can join), with the kicked-back rows unranked below it. Each row
-gives its state and age, checks, review and next step; the reasons and a person's
-commands fold under the table, beside a link that draws the queue in the console. It is rewritten whole after every apply run and on every label, review or
-auto-merge event, and the same page goes to the run's summary. To render it locally:
+In this repository a `queue dashboard` job writes one page into the summary of every
+`Queue apply` run that follows a validation. It shows every open pull request: a status
+line with `main`'s state and a count per section, then one leaderboard ranked by how near
+each row is to merging (validating, queued in queue order, can join), with the
+kicked-back rows unranked below it. Each row gives its state and age, checks, review and
+next step; the reasons and a person's commands fold under the table, beside a link that
+draws the queue in the console. To render it locally:
 `magus buzz hack/ci/pull-requests.buzz -- dashboard --all --preview --out dashboard.md`.
-
-The page also draws a box per action that starts something back up: requeue a pull
-request that was kicked back, queue one that could join, rerun a pull request's failed
-jobs, start a validation run, or render the page again. Checking one edits the issue,
-and `.github/workflows/queue-dashboard.yaml` answers the edit: it acts only when whoever
-checked the box holds write, maintain or admin, takes the action as the queue app, and
-renders the page again with every box clear. The box names the pull request; whether the
-action is still offered is read from GitHub at that moment, never from the issue body.
 
 GitHub's auto-merge follows GitHub's own mergeability, which says nothing of what the
 queue can settle. A pull request GitHub reports as conflicting is queued by the label
@@ -886,8 +878,8 @@ verdicts pass between them one change at a time:
    validation run completes. A first job waits only to see whether validation's plan job
    runs at all; on a run cancelled before it started it is skipped, and so is apply.
 3. A pull request event (merge intent enabled, a queue label, a push, a review) runs the
-   pull request's own copy of `queue.yaml`, so apply never follows it. That run's one job
-   says whether the event carries merge intent, and `queue-apply.yaml`'s dispatch job,
+   pull request's own copy of `queue-intent.yaml`, which apply never follows. That run's
+   one job says whether the event carries merge intent, and `queue-apply.yaml`'s dispatch job,
    holding only an app token scoped to `actions: write`, answers it by dispatching
    `queue.yaml` on main, which validates the whole queue. A forged intent job starts one
    more run on main and nothing else.
@@ -935,7 +927,9 @@ request: when the run's head is still the head of a pull request carrying merge 
 it starts `queue.yaml` on main, so a change waiting on its checks is picked up the
 moment they report.
 
-The queue's status, `merge-queue`, is main's only required check. It reads `pending`
+The queue's status, `merge-queue`, is main's only required check, and only the queue
+posts it. A pull request the queue has never held shows it as GitHub's "Expected", since
+nothing has started. It reads `pending`
 while a change waits and `success` only on the commit apply is about to see merged: right
 before it goes green, apply reads main again and confirms it is still the tip the merge
 was predicted onto, and a change whose main moved waits for the next run instead. Then the
@@ -1015,8 +1009,8 @@ with `--app <slug>:<id>`: give it the App ID after the slug. An id that is not a
 integer without a leading zero, or that disagrees with the app GitHub shows, is an error,
 and so is a slug GitHub has no `<slug>[bot]` user for, which names no app at all.
 
-1. Commit `.github/workflows/queue.yaml` and `.github/workflows/queue-apply.yaml` (this
-   repository's are the reference).
+1. Commit `.github/workflows/queue.yaml`, `.github/workflows/queue-intent.yaml` and
+   `.github/workflows/queue-apply.yaml` (this repository's are the reference).
 2. Run `describe` without `--app`, open the registration link it prints, and click
    "Create GitHub App". It is pre-filled: private, no webhook, and contents, pull
    requests, commit statuses, actions and workflows write.

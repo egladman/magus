@@ -217,6 +217,8 @@ it if stage zero writes the remote tier, which a pull request does not.
 - Stage zero survives `--only`: the filtered shards may still share its work, and a
   stage-zero shard nobody needs costs one runner.
 - Inherited and trivial verdicts empty stage zero as they empty the matrix.
+- Stage zero is one enforcement point of
+  [Compute once, reuse everywhere](../design/principles/compute-once.md).
 
 - No history holds a shard peak for diagrams-generate, since it ran outside the
   matrix. The first run counts its peak as zero and packs it as if it fits. The plan

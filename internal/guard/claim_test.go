@@ -2,6 +2,7 @@ package guard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -215,7 +216,7 @@ func TestNarrowedHold(t *testing.T) { suite.Run(t, new(narrowedHoldSuite)) }
 func narrowedLease(id, file string, decls ...string) types.Job {
 	row := claimLease(id, file)
 	for _, d := range decls {
-		row.WritePaths = append(row.WritePaths, file+"#"+d)
+		row.WritePaths = append(row.WritePaths, fmt.Sprintf("%s#%s", file, d))
 	}
 	return row
 }

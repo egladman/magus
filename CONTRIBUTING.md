@@ -619,9 +619,16 @@ and drifts from the real `//go:generate` directive.
 ## Coverage badges are published, never committed
 
 The README shows three language badges: Go, Buzz, and TypeScript. None of them lives in
-the tree. The CD site job (`.github/workflows/cd.yaml`) measures all three on every push
-to main with `magus run coverage-render .`, renders the SVGs, and publishes them with
-the docs site under `assets/`. Nothing to refresh, nothing to commit.
+the tree. On every push to main, CI's `coverage` job (`.github/workflows/ci.yaml`)
+measures all three with `magus run test console` and `magus run coverage-measure .`,
+whose suites replay from the cache the shards just filled, and uploads the profiles.
+The CD site job (`.github/workflows/cd.yaml`) follows that run, downloads them, renders
+the SVGs with `magus run coverage-render .`, and publishes them with the docs site under
+`assets/`. CD runs no suite, and a run with no profiles fails naming the CI run. Nothing
+to refresh, nothing to commit.
+
+To render the badges locally, run `magus run coverage-measure .`, `magus run test
+console` and `magus run deploy-generate .` first.
 
 A committed badge cannot be gated consistently. Go coverage differs by platform, and
 Node's line coverage moves with its patch version, so a badge measured on one machine is

@@ -2,11 +2,8 @@ package buzzgen
 
 import (
 	"context"
-	"go/ast"
-	"go/importer"
-	"go/parser"
-	"go/token"
-	"go/types"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -35,15 +32,16 @@ func Second(cb func(ctx context.Context, b string) error) {}
 var Extern = (func(ctx context.Context, rule func(ctx context.Context, n int64) (any, error)) error)(nil)
 `
 
+// The fixture loads through LoadCallbacks, whose go/packages asks the go
+// command for the standard library; go/importer asks runtime.GOROOT,
+// which a -trimpath test binary leaves empty without GOROOT set.
 func (s *CallbackSuite) SetupSuite() {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "fixture.go", callbackFixture, 0)
+	dir := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/fixture\n\ngo 1.22\n"), 0o600))
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "fixture.go"), []byte(callbackFixture), 0o600))
+	cbs, err := LoadCallbacks(dir, "example.com/fixture")
 	s.Require().NoError(err)
-	info := &types.Info{Types: map[ast.Expr]types.TypeAndValue{}}
-	conf := types.Config{Importer: importer.Default()}
-	_, err = conf.Check("example.com/fixture", fset, []*ast.File{file}, info)
-	s.Require().NoError(err)
-	s.cbs = collectCallbacks("example.com/fixture", []*ast.File{file}, info)
+	s.cbs = cbs
 }
 
 func (s *CallbackSuite) TestParamsAreTheNamesAfterTheContext() {

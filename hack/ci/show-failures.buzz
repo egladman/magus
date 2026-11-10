@@ -208,7 +208,7 @@ test "a failed plain job beside a failed shard with an artifact is still read" {
 
 test "a fallback with no artifact goes to stderr, never stdout" {
     final lines = mut [<str>];
-    reportFallback("99", "doctor (job 11)\nerror one", sink: fun (line: str) > void {
+    reportFallback("99", fallback: "doctor (job 11)\nerror one", sink: fun (line: str) > void {
         lines.append(line);
     });
     assert\equal(lines.len(), want: 2, message: "note and log");

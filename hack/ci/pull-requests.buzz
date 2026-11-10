@@ -14,20 +14,10 @@
 //	    is not in a stack it prints the command (for_person) and runs nothing
 //	magus buzz hack/ci/pull-requests.buzz -- dashboard [--all] [--base <b>] --out <file> (--issue <n> | --preview) [--console-base <url>]
 //	    the queue as one markdown page: an alert with the queue's state, a table per
-//	    section with what needs a person first, a box per action that starts a pull
-//	    request back up, and a link that draws the queue in the console (--console-base,
-//	    the hosted one by default); --issue replaces that issue's body with it, and
+//	    section with what needs a person first, and a link that draws
+//	    the queue in the console (--console-base, the hosted one by
+//	    default). --issue replaces that issue's body with it, and
 //	    --preview writes only the file. `magus queue ls` needs GITHUB_TOKEN
-//	magus buzz hack/ci/pull-requests.buzz -- boxes --event <file> --issue <n> --plan <file> --out <file> [--base <b>]
-//	    answer an edit of the dashboard issue (the `issues` event in --event): the boxes
-//	    a person with write access checked, matched to the boxes the board offers now,
-//	    as a plan for act, a run summary, and the step's outputs
-//	magus buzz hack/ci/pull-requests.buzz -- act --plan <file>
-//	    run the plan's commands, as the queue app for the person who checked each box:
-//	    enable auto-merge, or rerun failed jobs
-//	magus buzz hack/ci/pull-requests.buzz -- waiting --pr <n>... [--base <b>]
-//	    post the merge-queue status saying why each pull request waits
-//	    outside the queue; it posts only pending
 //
 // red-inherited means every failing check, and every Go test its log reports failing, also
 // fails on main's latest completed CI run, and nothing else does: the change broke nothing
@@ -682,110 +672,6 @@ fun mainRegressions(base: str, open: [Pull]) > [regressions\Regression] !> any {
         throw err.message;
     }
     return read.value!;
-}
-
-// What the waiting step posts on QUEUE_STATUS. WAITING_PREFIXES tell its
-// statuses from the queue's, whose descriptions never open with them.
-// GitHub caps a description at STATUS_LIMIT bytes.
-final NOT_QUEUED = "not queued: ";
-final WAITING_PREFIXES = [NOT_QUEUED, "ready: ", "queued: "];
-final CI_UNPASSED = NOT_QUEUED + "CI has not passed";
-final UNAPPROVED = NOT_QUEUED + "waiting for an approving review";
-final READY_TO_QUEUE = "ready: add the merge-queue: squash label or enable auto-merge";
-final AWAITING_QUEUE = "queued: waiting for the merge queue to validate it";
-final STATUS_LIMIT = 140;
-
-// QueueStatus is the newest QUEUE_STATUS on a commit. Its state is the
-// statuses API's word, or "" when nothing posted one.
-object QueueStatus {
-    state: str = "",
-    description: str = "",
-}
-
-// Waiting says whether to post description, and why. It has no state:
-// the step posts only pending, since a success outside the queue would
-// let a merge skip it.
-object Waiting {
-    post: bool = false,
-    description: str = "",
-    reason: str,
-}
-
-// latestQueueStatus reads `gh api repos/<repo>/commits/<sha>/statuses`,
-// which lists newest first.
-export fun latestQueueStatus(listing: str) > result\Result::<QueueStatus> {
-    final list = serialize\jsonDecode(listing).list();
-    if (list == null) {
-        return result\fail::<QueueStatus>("pull-requests: waiting: the status listing is not a list: {listing}");
-    }
-    foreach (s in list!) {
-        if (s.q("context").stringValue() == QUEUE_STATUS) {
-            return result\ok(QueueStatus{ state = s.q("state").stringValue(), description = s.q("description").stringValue() });
-        }
-    }
-    return result\ok(QueueStatus{});
-}
-
-fun postedHere(s: QueueStatus) > bool {
-    foreach (prefix in WAITING_PREFIXES) {
-        if (s.description.startsWith(prefix)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// ciPassed reports whether every REQUIRED check succeeded and none failed.
-// A check still running, this workflow's own among them, does not count:
-// the ci gate already waits on every shard.
-export fun ciPassed(checks: [Check]) > bool {
-    if (failing(checks).len() > 0) {
-        return false;
-    }
-    foreach (name in REQUIRED) {
-        var passed = false;
-        foreach (c in checks) {
-            if (c.name == name and c.conclusion == "SUCCESS") {
-                passed = true;
-            }
-        }
-        if (!passed) {
-            return false;
-        }
-    }
-    return true;
-}
-
-// waiting decides the QUEUE_STATUS a pull request shows, given the one on
-// its head. The queue's own status stands while the pull request is queued.
-// Its failure, a kick-back, stands until a push. Anything else becomes
-// pending with the reason, a stale success included.
-export fun waiting(p: Pull, open: [Pull], base: str, current: QueueStatus) > Waiting {
-    if (p.state != "OPEN") {
-        return Waiting{ reason = "#{p.number} is {p.state.lower()}" };
-    }
-    if (p.base != base) {
-        return Waiting{ reason = "#{p.number} targets {p.base}, not {base}" };
-    }
-    final ours = current.state == "" or postedHere(current);
-    var description = AWAITING_QUEUE;
-    if (intent(p, open: open)) {
-        if (!ours) {
-            return Waiting{ reason = "#{p.number} is queued; the queue's status stands" };
-        }
-    } else if (!ours and (current.state == "failure" or current.state == "error")) {
-        return Waiting{ reason = "#{p.number}: the queue's {current.state} stands until a push" };
-    } else if (!ciPassed(p.checks)) {
-        description = CI_UNPASSED;
-    } else if (p.review != "APPROVED") {
-        description = UNAPPROVED;
-    } else {
-        description = READY_TO_QUEUE;
-    }
-    if (current.state == "pending" and current.description == description) {
-        return Waiting{ reason = "#{p.number} already says {description}" };
-    }
-    return Waiting{ post = true, description = description, reason = "#{p.number}: {description}" };
 }
 
 final failMarker = "--- FAIL: ";
@@ -1484,10 +1370,7 @@ export fun selected(open: [Pull], prs: [int], author: str) > [Pull] {
 final usage = "usage: magus buzz hack/ci/pull-requests.buzz -- <step> <flags>\n"
     + "  status [--all | --author <login>] [--pr <n>]...\n"
     + "  apply [--author <login>] [--pr <n>]... [--method squash|merge|rebase]\n"
-    + "  dashboard [--all | --author <login>] [--pr <n>]... [--base <branch>] --out <file> (--issue <n> | --preview) [--run-url <url>] [--console-base <url>]\n"
-    + "  boxes --event <file> --issue <n> --plan <file> --out <file> [--base <branch>]\n"
-    + "  act --plan <file>\n"
-    + "  waiting --pr <n>... [--base <branch>]";
+    + "  dashboard [--all | --author <login>] [--pr <n>]... [--base <branch>] --out <file> (--issue <n> | --preview) [--run-url <url>] [--console-base <url>]";
 
 // parseSelector parses a step's flags. --pr repeats, which flags\parse does not keep, so it
 // is taken out first.
@@ -1522,8 +1405,6 @@ export fun parseSelector(step: str, argv: [str]) > Selector !> any {
     final switches = mut [<str>];
     if (step == "apply") {
         valued.append("--method");
-    } else if (step == "waiting") {
-        valued.append("--base");
     } else {
         // apply acts on what it selects, so it never reaches past the caller's own.
         switches.append("--all");
@@ -1568,9 +1449,6 @@ export fun parseSelector(step: str, argv: [str]) > Selector !> any {
     }
     if (issue != "" and parsed.values["--preview"] != null) {
         throw "pull-requests: --preview edits no issue, so it takes no --issue\n{usage}";
-    }
-    if (step == "waiting" and prs.len() == 0) {
-        throw "pull-requests: waiting needs --pr\n{usage}";
     }
     final file = parsed.values["--out"] ?? "";
     return Selector{ prs = prs, author = author ?? "", all = all, method = method,
@@ -1845,67 +1723,9 @@ fun apply(sel: Selector) > void !> any {
     }
 }
 
-// postWaiting posts each selected pull request's waiting status, as waiting
-// decides it, and prints one JSON line per pull request.
-fun postWaiting(sel: Selector) > result\Result::<bool> {
-    var open = [<Pull>];
-    var repo = "";
-    try {
-        repo = os\env("GITHUB_REPOSITORY") ?? "";
-        open = openPulls();
-    } catch (err: any) {
-        return result\caught::<bool>(err, doing: "pull-requests: waiting: list the open pull requests");
-    }
-    if (repo == "") {
-        return result\fail::<bool>("pull-requests: waiting: GITHUB_REPOSITORY is not set; the runner provides it");
-    }
-    foreach (n in sel.prs) {
-        var w = Waiting{ reason = "#{n} is not open" };
-        foreach (p in open) {
-            if (p.number != n) {
-                continue;
-            }
-            var listing = "";
-            try {
-                listing = capture("gh", args: ["api", "repos/{repo}/commits/{p.oid}/statuses?per_page=100"]);
-            } catch (err: any) {
-                return result\caught::<bool>(err, doing: "pull-requests: waiting: read #{n}'s statuses");
-            }
-            final current = latestQueueStatus(listing);
-            if (current.error != null) {
-                return result\fail::<bool>(current.error!.message);
-            }
-            w = waiting(p, open: open, base: sel.base, current: current.value!);
-            if (w.post) {
-                try {
-                    _ = capture("gh", args: ["api", "--method", "POST", "repos/{repo}/statuses/{p.oid}",
-                        "-f", "state=pending", "-f", "context={QUEUE_STATUS}", "-f", "description={w.description}"]);
-                } catch (err: any) {
-                    return result\caught::<bool>(err, doing: "pull-requests: waiting: post #{n}'s {QUEUE_STATUS}");
-                }
-            }
-        }
-        std\print(encode({"pr": n, "posted": w.post, "reason": w.reason}));
-    }
-    return result\ok(true);
-}
-
-// The dashboard is one markdown page of every open pull request's place in the queue,
-// rebuilt whole on each render: nothing a person writes into the issue survives, and
-// every box it draws is unchecked.
+// The dashboard is one markdown page of every open pull request's place in the
+// queue. Each render rebuilds it whole.
 final DASHBOARD_MARKER = "<!-- magus-queue-dashboard -->";
-// A box's marker names the action a checked box asks for and the pull request it acts
-// on, and nothing more: the board read when the box is checked decides whether that box
-// is still offered, and the role of whoever checked it decides whether anything runs.
-final BOX_MARKER = "<!-- magus-queue: ";
-final BOX_END = " -->";
-// Actions on the whole queue take no pull request; the others take exactly one.
-final QUEUE_ACTIONS = ["start", "render"];
-final PULL_ACTIONS = ["requeue", "queue", "rerun"];
-// Roles whose check runs a box: the ones that may queue a pull request by hand.
-final ACTING_ROLES = ["admin", "maintain", "write"];
-// A login goes into an API path, so it must be a user's shape and nothing else.
-final LOGIN = std\pattern("^[A-Za-z0-9-]+$");
 // How many merged pull requests the merged line reads. Each one carries its whole
 // statusCheckRollup, and 100 of them times out GitHub's GraphQL (HTTP 504) every time.
 final MERGED_LIMIT = 40;
@@ -1997,19 +1817,6 @@ object Placed {
     section: str,
 }
 
-// Box is one action the page offers as a task-list box.
-object Box {
-    action: str,
-    // The pull request it acts on, 0 for the whole queue.
-    pr: int = 0,
-    // The section of the pull request it acts on, "" for the controls at the top.
-    section: str = "",
-    label: str = "",
-    // A requeue's or a queue's merge method, and a rerun's failed workflow runs.
-    method: str = "squash",
-    runs: [str] = [<str>],
-}
-
 // Ranked is one leaderboard row.
 object Ranked {
     placed: Placed,
@@ -2019,39 +1826,6 @@ object Ranked {
     // Its place among the queued changes not validating, in queue order; null for one
     // `magus queue ls` does not list.
     line: int? = null,
-}
-
-// Mark is a box as an issue body shows it.
-object Mark {
-    action: str,
-    pr: int = 0,
-    checked: bool,
-}
-
-// Edit is what an `issues` edited event says: the body before and after, and who
-// edited it. bodyEdited is false for an edit that changed only the title.
-object Edit {
-    issue: int,
-    sender: str,
-    bot: bool,
-    bodyEdited: bool,
-    before: str = "",
-    after: str = "",
-}
-
-// Choice is what a set of newly checked boxes comes to: the boxes to act on, and a line
-// per box that is not.
-object Choice {
-    take: [Box] = [<Box>],
-    skip: [str] = [<str>],
-}
-
-// Response is the answer to one edit: why it acts on nothing ("" when it may act), the
-// boxes it checked, and what they come to.
-object Response {
-    refusal: str,
-    marks: [Mark] = [<Mark>],
-    choice: Choice = Choice{},
 }
 
 // parseQueue reads `magus queue ls`'s mergequeue.changes/v1 document.
@@ -2279,26 +2053,6 @@ fun requeueCommand(p: Pull) > str {
     return "gh pr merge {p.number} --auto --squash";
 }
 
-// kickMethod is the merge method a kick-back's requeue command names, squash when it
-// names none.
-fun kickMethod(p: Pull) > str {
-    foreach (word in requeueCommand(p).split(" ")) {
-        foreach (m in METHODS) {
-            if (word == "--" + m) {
-                return m;
-            }
-        }
-    }
-    return "squash";
-}
-
-// standalone reports whether p is in no stack. A stack is queued by a label on its
-// top, and the queue honors that label only from a person with write access, so no box
-// can queue one.
-fun standalone(p: Pull, open: [Pull]) > bool {
-    return stackParent(p, open: open) == null and stackTops(p, open: open, depth: 0).len() == 0;
-}
-
 // failedRuns are the workflow runs of p's failed checks, each once. A commit status has
 // no run to rerun.
 fun failedRuns(p: Pull) > [str] {
@@ -2332,257 +2086,6 @@ fun joinCommand(p: Pull, r: Record) > str {
         return "gh pr edit {p.number} --add-label \"{QUEUE_LABEL}squash\"";
     }
     return "gh pr merge {p.number} --auto --squash";
-}
-
-// offeredBoxes is every box the page offers, the controls first: what "start it back up"
-// means for each pull request's section. A kicked-back pull request is queued again, one
-// that could join is queued, and one whose checks failed has them rerun.
-export fun offeredBoxes(b: Board, placed: [Placed]) > [Box] {
-    final acc = mut [
-        Box{ action = "start", label = "**Run the queue now** on {mono(b.base)}" },
-        Box{ action = "render", label = "**Re-render this page**" },
-    ];
-    foreach (x in placed) {
-        final p = x.pull;
-        final s = x.section;
-        if ((s == "author" or s == "manual") and standalone(p, open: b.open)) {
-            var why = "";
-            if (p.kick != null and p.kick!.code != "") {
-                why = ", kicked back with {mono(p.kick!.code)}";
-            }
-            acc.append(Box{ action = "requeue", pr = p.number, section = s, method = kickMethod(p),
-                label = "**Requeue #{p.number}** with auto-merge ({kickMethod(p)}){why}" });
-        }
-        if (s == "join" and x.record.action == "queue" and x.record.evidence.top == null) {
-            acc.append(Box{ action = "queue", pr = p.number, section = s,
-                label = "**Queue #{p.number}** with auto-merge (squash)" });
-        }
-        final runs = failedRuns(p);
-        if (s != "drafts" and s != "flight" and x.record.state == "red" and runs.len() > 0) {
-            var plural = "";
-            if (runs.len() > 1) {
-                plural = "s";
-            }
-            acc.append(Box{ action = "rerun", pr = p.number, section = s, runs = runs,
-                label = "**Rerun #{p.number}'s failed jobs** ({runs.len()} workflow run{plural})" });
-        }
-    }
-    return acc;
-}
-
-fun boxMarker(action: str, pr: int) > str {
-    if (pr == 0) {
-        return BOX_MARKER + action + BOX_END;
-    }
-    return BOX_MARKER + "{action} {pr}" + BOX_END;
-}
-
-// boxLine is a box as the page draws it: always unchecked.
-export fun boxLine(x: Box) > str {
-    return "- [ ] " + boxMarker(x.action, pr: x.pr) + " " + x.label;
-}
-
-// parseMarks reads every box in body that carries a well-formed marker; a line whose
-// marker names no action or no pull request this page draws is not a box.
-export fun parseMarks(body: str) > [Mark] {
-    final acc = mut [<Mark>];
-    foreach (line in body.split("\n")) {
-        final l = line.trim();
-        if (l.len() < 6 or (!l.startsWith("- [") and !l.startsWith("* ["))) {
-            continue;
-        }
-        final state = l.sub(3, len: 3);
-        if (state != " ] " and state != "x] " and state != "X] ") {
-            continue;
-        }
-        final rest = l.sub(6);
-        final end = rest.indexOf(BOX_END);
-        if (!rest.startsWith(BOX_MARKER) or end == null) {
-            continue;
-        }
-        final words = rest.sub(BOX_MARKER.len(), len: end! - BOX_MARKER.len()).trim().split(" ");
-        final checked = state != " ] ";
-        if (words.len() == 1 and QUEUE_ACTIONS.indexOf(words[0]) != null) {
-            acc.append(Mark{ action = words[0], checked = checked });
-        } else if (words.len() == 2 and PULL_ACTIONS.indexOf(words[0]) != null) {
-            final n = std\parseInt(words[1]) ?? 0;
-            if (n > 0 and "{n}" == words[1]) {
-                acc.append(Mark{ action = words[0], pr = n, checked = checked });
-            }
-        }
-    }
-    return acc;
-}
-
-// checkedNow is the boxes after shows checked that before did not, each once. A box
-// already checked before the edit was answered by an earlier run, or is waiting for one.
-export fun checkedNow(before: str, after: str) > [Mark] {
-    final was = mut [<str>];
-    foreach (m in parseMarks(before)) {
-        if (m.checked) {
-            was.append(boxMarker(m.action, pr: m.pr));
-        }
-    }
-    final acc = mut [<Mark>];
-    final seen = mut [<str>];
-    foreach (m in parseMarks(after)) {
-        final key = boxMarker(m.action, pr: m.pr);
-        if (m.checked and was.indexOf(key) == null and seen.indexOf(key) == null) {
-            seen.append(key);
-            acc.append(m);
-        }
-    }
-    return acc;
-}
-
-// readEdit reads an `issues` edited event from the file GITHUB_EVENT_PATH names.
-export fun readEdit(event: str) > Edit !> any {
-    final doc = serialize\jsonDecode(event);
-    final change = doc.q("changes").q("body");
-    final issue = doc.q("issue");
-    return Edit{
-        issue = issue.q("number").integerValue(),
-        sender = doc.q("sender").q("login").stringValue(),
-        bot = doc.q("sender").q("type").stringValue() == "Bot",
-        bodyEdited = change.map() != null,
-        before = change.q("from").stringValue(),
-        after = issue.q("body").stringValue(),
-    };
-}
-
-// editRefusal says why e acts on nothing, "" when it may act. role is the sender's role on
-// the repository, null before it is read: the checks that need no API call come first,
-// so a bot's or another issue's edit reads nothing.
-export fun editRefusal(e: Edit, issue: int, role: str?) > str {
-    if (e.issue != issue) {
-        return "issue #{e.issue} is not the dashboard, #{issue}";
-    }
-    if (!e.bodyEdited) {
-        return "the edit changed the title, not the body";
-    }
-    if (e.bot) {
-        return "{e.sender} is a bot, and a bot's checks are ignored";
-    }
-    if (LOGIN.match(e.sender) == null) {
-        return "\"{e.sender}\" is not a user's login";
-    }
-    if (role != null and ACTING_ROLES.indexOf(role!) == null) {
-        var held = role!;
-        if (held == "") {
-            held = "no";
-        }
-        return "{e.sender} has {held} access, and a box acts only for {ACTING_ROLES.join(", ")}";
-    }
-    return "";
-}
-
-// choose matches each checked box to a box the board offers now. The marker names
-// which; the board says whether that is still something to do.
-export fun choose(marks: [Mark], offered: [Box]) > Choice {
-    final take = mut [<Box>];
-    final skip = mut [<str>];
-    foreach (m in marks) {
-        var found: Box? = null;
-        foreach (x in offered) {
-            if (x.action == m.action and x.pr == m.pr) {
-                found = x;
-            }
-        }
-        if (found == null) {
-            skip.append("{m.action} #{m.pr}: the queue no longer offers that box; the page shows what it does now");
-        } else {
-            take.append(found!);
-        }
-    }
-    return Choice{ take = take, skip = skip };
-}
-
-// respond answers one edit given the sender's role and what the board offers.
-export fun respond(e: Edit, issue: int, role: str, offered: [Box]) > Response {
-    final refusal = editRefusal(e, issue: issue, role: role);
-    final marks = checkedNow(e.before, after: e.after);
-    if (refusal != "") {
-        return Response{ refusal = refusal, marks = marks };
-    }
-    return Response{ refusal = refusal, marks = marks, choice = choose(marks, offered: offered) };
-}
-
-// boxCommands is what act runs for a box, as the queue app. A box is checked by a person
-// with write access, so the auto-merge it enables is that person's act. A requeue and a
-// queue enable auto-merge, which is merge intent the queue reads with no labeler to check;
-// start is merge-queue.buzz's step, which the workflow runs itself.
-export fun boxCommands(x: Box) > [[str]] {
-    final cmds = mut [<[str]>];
-    if (x.action == "requeue" or x.action == "queue") {
-        cmds.append(["gh", "pr", "merge", "{x.pr}", "--auto", "--" + x.method]);
-    } else if (x.action == "rerun") {
-        foreach (run in x.runs) {
-            cmds.append(["gh", "run", "rerun", run, "--failed"]);
-        }
-    }
-    return cmds;
-}
-
-// planFromBoxes is the plan boxes writes and act reads.
-export fun planFromBoxes(take: [Box]) > str {
-    final docs = mut [<any>];
-    foreach (x in take) {
-        final d = mut {<str: any>};
-        d["action"] = x.action;
-        d["pr"] = x.pr;
-        d["method"] = x.method;
-        d["runs"] = x.runs;
-        docs.append(d);
-    }
-    return serialize\jsonEncode(serialize\Boxed.init(docs));
-}
-
-export fun boxesFromPlan(plan: str) > [Box] !> any {
-    final acc = mut [<Box>];
-    foreach (d in serialize\jsonDecode(plan).listValue()) {
-        final runs = mut [<str>];
-        foreach (r in d.q("runs").listValue()) {
-            runs.append(r.stringValue());
-        }
-        final method = d.q("method").stringValue();
-        if (METHODS.indexOf(method) == null) {
-            throw "pull-requests: the plan's merge method \"{method}\" is not one of {METHODS.join(", ")}";
-        }
-        acc.append(Box{ action = d.q("action").stringValue(), pr = d.q("pr").integerValue(), method = method, runs = runs });
-    }
-    return acc;
-}
-
-// replySummary is the run summary for one edit: who checked what, and what came of it.
-export fun replySummary(e: Edit, role: str, res: Response) > str {
-    final lines = mut ["## Merge queue boxes", ""];
-    if (res.refusal != "") {
-        lines.append("> [!WARNING]");
-        lines.append("> Ignored {res.marks.len()} checked box(es) on #{e.issue}: {res.refusal}.");
-        lines.append("");
-        return lines.join("\n") + "\n";
-    }
-    if (res.marks.len() == 0) {
-        lines.append("{e.sender} ({role}) edited #{e.issue} and checked no box.");
-        return lines.join("\n") + "\n";
-    }
-    lines.append("{e.sender} ({role}) checked {res.marks.len()} box(es) on #{e.issue}.");
-    lines.append("");
-    foreach (x in res.choice.take) {
-        var what = "re-render the page";
-        if (x.action == "start") {
-            what = "start a validation run unless one waits to read the queue";
-        } else if (x.action == "rerun") {
-            what = "rerun the failed jobs of #{x.pr} ({x.runs.join(", ")})";
-        } else if (x.action != "render") {
-            what = "{x.action} #{x.pr} with auto-merge ({x.method})";
-        }
-        lines.append("- done: {what}");
-    }
-    foreach (s in res.choice.skip) {
-        lines.append("- skipped: {s}");
-    }
-    return lines.join("\n") + "\n";
 }
 
 // rankRows ranks the rows the table shows by how near each is to merging: in
@@ -2664,25 +2167,16 @@ export fun stateCell(x: Ranked, b: Board) > str !> any {
     return label;
 }
 
-// nextCell is the one thing to do next for x. A box cannot be checked inside a table, so
-// "box below" points at the row's box in the list under it.
-fun nextCell(x: Ranked, b: Board, boxes: [Box]) > str !> any {
+// nextCell is the one thing to do next for x.
+fun nextCell(x: Ranked, b: Board) > str !> any {
     final p = x.placed.pull;
     final s = x.placed.section;
-    final has = fun (action: str) > bool {
-        foreach (bx in boxes) {
-            if (bx.action == action and bx.pr == p.number) {
-                return true;
-            }
-        }
-        return false;
-    };
     if (s == "flight") {
         return "merging: [run]({b.flights[p.number]!.url})";
     }
     if (s == "queued") {
-        if (has("rerun")) {
-            return "rerun (box below)";
+        if (x.placed.record.state == "red" and failedRuns(p).len() > 0) {
+            return "rerun its failed jobs";
         }
         var said = x.placed.record.reason;
         final w = b.waits[p.number];
@@ -2695,24 +2189,18 @@ fun nextCell(x: Ranked, b: Board, boxes: [Box]) > str !> any {
         return "wait: " + cell(clip(said, n: 60));
     }
     if (s == "join") {
-        if (has("queue")) {
-            return "queue (box below)";
-        }
         return "queue it (see how)";
     }
     var fix = "fix it";
     if (s == "manual") {
         fix = "regenerate";
     }
-    if (has("requeue")) {
-        return "{fix}, then requeue (box below)";
-    }
     return "{fix}, then requeue (see why)";
 }
 
 // tableRow is x's leaderboard row: rank, the pull request with its author and branch,
 // state, CI, review, and the one thing to do next.
-fun tableRow(x: Ranked, b: Board, boxes: [Box]) > str !> any {
+fun tableRow(x: Ranked, b: Board) > str !> any {
     final p = x.placed.pull;
     final r = x.placed.record;
     // A pipe in a code span still splits a table row; GitHub reads "\|" there as "|".
@@ -2737,11 +2225,11 @@ fun tableRow(x: Ranked, b: Board, boxes: [Box]) > str !> any {
     } else if (p.review == "REVIEW_REQUIRED") {
         review = "pending";
     }
-    return row([x.rank, pr, stateCell(x, b: b), ci, review, nextCell(x, b: b, boxes: boxes)]);
+    return row([x.rank, pr, stateCell(x, b: b), ci, review, nextCell(x, b: b)]);
 }
 
 // whyLine is x's line in the details under the leaderboard: the full reason, and the
-// command a person runs instead of a box.
+// command a person runs.
 fun whyLine(x: Placed, b: Board) > str {
     final p = x.pull;
     if (x.section == "author") {
@@ -2833,7 +2321,6 @@ fun mainLine(b: Board) > str {
 // renderDashboard renders the page from what the step read; it reads nothing itself.
 export fun renderDashboard(b: Board) > str !> any {
     final placed = placePulls(b);
-    final boxes = offeredBoxes(b, placed: placed);
     final sections = mut {<int: str>};
     final counts = mut {<str: int>};
     foreach (x in placed) {
@@ -2860,9 +2347,9 @@ export fun renderDashboard(b: Board) > str !> any {
     } else if (b.mainRun != null and b.mainRun!.state == "red") {
         hint = "{mono(b.base)} is red, so a candidate can fail the gate for that alone.";
     } else if ((counts["queued"] ?? 0) > 0 and (counts["flight"] ?? 0) == 0) {
-        hint = "Changes are queued and none is validating; if that lasts, check Run the queue now.";
+        hint = "Changes are queued and none is validating; if that lasts, start a validation run on {mono(b.base)}.";
     } else if ((counts["join"] ?? 0) > 0) {
-        hint = "An approved, green pull request can join: check its Queue box.";
+        hint = "An approved, green pull request can join: see how below.";
     }
 
     final meta = mut ["Updated {when(b.at)} UTC"];
@@ -2907,21 +2394,7 @@ export fun renderDashboard(b: Board) > str !> any {
     } else {
         lines.append(TABLE_HEAD);
         foreach (x in ranked) {
-            lines.append(tableRow(x, b: b, boxes: boxes));
-        }
-    }
-    lines.append("");
-    // A row's boxes in rank order, then the queue's own.
-    foreach (x in ranked) {
-        foreach (bx in boxes) {
-            if (bx.pr == x.placed.pull.number) {
-                lines.append(boxLine(bx));
-            }
-        }
-    }
-    foreach (x in boxes) {
-        if (x.section == "") {
-            lines.append(boxLine(x));
+            lines.append(tableRow(x, b: b));
         }
     }
     lines.append("");
@@ -2980,18 +2453,6 @@ export fun renderDashboard(b: Board) > str !> any {
         foreach (x in other) {
             lines.append("- #{x.pull.number} " + cell(clip(x.pull.title, n: 60)) + ": " + cell(x.record.reason));
         }
-        final reruns = mut [<str>];
-        foreach (bx in boxes) {
-            if (bx.section == "other") {
-                reruns.append(boxLine(bx));
-            }
-        }
-        if (reruns.len() > 0) {
-            lines.append("");
-            foreach (l in reruns) {
-                lines.append(l);
-            }
-        }
         lines.append("");
         lines.append("</details>");
         lines.append("");
@@ -2999,10 +2460,8 @@ export fun renderDashboard(b: Board) > str !> any {
 
     lines.append("<details><summary>How this page works</summary>");
     lines.append("");
-    lines.append("- Rendered from GitHub and `magus queue ls` after every queue run and on every label, review or auto-merge event; edits here do not survive.");
+    lines.append("- Rendered from GitHub and `magus queue ls` after every queue run.");
     lines.append("- Rows rank by how near each is to merging: validating, queued in queue order, can join. Kicked-back rows sit below, unranked.");
-    lines.append("- A box runs when someone with write access checks it; any other check is ignored and the page is rendered again.");
-    lines.append("- Queue and Requeue enable auto-merge as the queue app; Rerun reruns the failed jobs; Run the queue now starts a validation run on {mono(b.base)} unless one is waiting.");
     lines.append("- Past it counts merges whose {mono(QUEUE_STATUS)} status was not success.");
     lines.append("- Render it yourself: {mono("magus buzz hack/ci/pull-requests.buzz -- dashboard --all --base {b.base} --preview --out dashboard.md")}");
     lines.append("");
@@ -3087,98 +2546,6 @@ fun dashboard(sel: Selector) > void !> any {
     std\print("pull-requests: wrote the dashboard to {sel.file} and to issue #{sel.issue}");
 }
 
-// BoxFlags are the boxes and act steps' flags.
-object BoxFlags {
-    event: str = "",
-    issue: int = 0,
-    base: str = "main",
-    plan: str,
-    summary: str = "",
-}
-
-export fun parseBoxFlags(step: str, argv: [str]) > BoxFlags !> any {
-    var valued = ["--plan"];
-    var required = ["--plan"];
-    if (step == "boxes") {
-        valued = ["--event", "--issue", "--base", "--plan", "--out"];
-        required = ["--event", "--issue", "--plan", "--out"];
-    }
-    final parsed = flags\parse(argv, switches: [<str>], valued: valued, required: required);
-    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
-        throw "pull-requests: {step} does not take {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{usage}";
-    }
-    final issue = parsed.values["--issue"] ?? "";
-    final number = std\parseInt(issue) ?? 0;
-    if (step == "boxes" and (number <= 0 or "{number}" != issue)) {
-        throw "pull-requests: --issue \"{issue}\" is not an issue number\n{usage}";
-    }
-    final base = parsed.values["--base"] ?? "main";
-    if (base == "") {
-        throw "pull-requests: --base needs a branch\n{usage}";
-    }
-    return BoxFlags{ event = parsed.values["--event"] ?? "", issue = number, base = base,
-        plan = parsed.values["--plan"] ?? "", summary = parsed.values["--out"] ?? "" };
-}
-
-// boxes answers an edit of the dashboard issue: it reads the sender's role only for a
-// person's edit of the dashboard's body, and the board only for a writer who checked a
-// box. It writes the plan act runs, the run summary, and the step's outputs: act and
-// start when there is something for the queue app to do, rerender when a box was
-// checked, so the page goes back to every box clear.
-fun boxes(o: BoxFlags) > void !> any {
-    final outputs = os\env("GITHUB_OUTPUT") ?? "";
-    if (outputs == "") {
-        throw "pull-requests: GITHUB_OUTPUT is not set; the runner provides it";
-    }
-    final e = readEdit(fs\readFile(o.event));
-    var role = "";
-    if (editRefusal(e, issue: o.issue, role: null) == "") {
-        role = capture("gh", args: ["api", "repos/\{owner}/\{repo}/collaborators/{e.sender}/permission", "--jq", ".role_name"]).trim();
-    }
-    var offered = [<Box>];
-    if (editRefusal(e, issue: o.issue, role: role) == "" and checkedNow(e.before, after: e.after).len() > 0) {
-        final b = fetchBoard(Selector{ all = true, base = o.base });
-        offered = offeredBoxes(b, placed: placePulls(b));
-    }
-    final res = respond(e, issue: o.issue, role: role, offered: offered);
-    fs\writeFile(o.plan, content: planFromBoxes(res.choice.take));
-    fs\writeFile(o.summary, content: replySummary(e, role: role, res: res));
-    var act = false;
-    var start = false;
-    foreach (x in res.choice.take) {
-        if (boxCommands(x).len() > 0) {
-            act = true;
-        }
-        if (x.action == "start") {
-            start = true;
-        }
-    }
-    final rerender = e.issue == o.issue and e.bodyEdited and res.marks.len() > 0;
-    fs\appendFile(outputs, content: "act={act}\nstart={start}\nrerender={rerender}\n");
-    std\print("pull-requests: {res.marks.len()} box(es) checked, {res.choice.take.len()} taken; act={act} start={start} rerender={rerender}");
-    if (res.refusal != "") {
-        std\print("::notice title=queue-boxes-ignored::{res.refusal}");
-    }
-}
-
-// act runs the plan boxes wrote, every command even after one fails, then fails if any
-// did.
-fun act(o: BoxFlags) > void !> any {
-    final failed = mut [<str>];
-    foreach (x in boxesFromPlan(fs\readFile(o.plan))) {
-        foreach (cmd in boxCommands(x)) {
-            final res = proc\exec(cmd[0], args: cmd.sub(1), opts: proc\ExecOptions{ quiet = true, allowFailure = true });
-            std\print(encode({"pr": x.pr, "action": x.action, "command": cmd, "ok": res.ok}));
-            if (!res.ok) {
-                failed.append("{cmd.join(" ")}: exit {res.code}: {res.stderr.trim()}");
-            }
-        }
-    }
-    if (failed.len() > 0) {
-        throw "pull-requests: {failed.len()} command(s) failed:\n" + failed.join("\n");
-    }
-}
-
 export fun main(args: [str]) > void !> any {
     if (args.len() == 0) {
         throw "pull-requests: no step given\n{usage}";
@@ -3190,15 +2557,6 @@ export fun main(args: [str]) > void !> any {
         apply(parseSelector(step, argv: args.sub(1)));
     } else if (step == "dashboard") {
         dashboard(parseSelector(step, argv: args.sub(1)));
-    } else if (step == "boxes") {
-        boxes(parseBoxFlags(step, argv: args.sub(1)));
-    } else if (step == "act") {
-        act(parseBoxFlags(step, argv: args.sub(1)));
-    } else if (step == "waiting") {
-        final posted = postWaiting(parseSelector(step, argv: args.sub(1)));
-        if (posted.error != null) {
-            throw posted.error!.message;
-        }
     } else {
         throw "pull-requests: unknown step \"{step}\"\n{usage}";
     }
@@ -3962,13 +3320,13 @@ test "each kick code goes to the author, and a regeneration to a manual merge, a
     has(labeled, want: "1 to merge by hand");
 }
 
-test "a title cannot break a table, a box line or the graph" {
+test "a title cannot break a table, a comment or the graph" {
     final open = [Pull{ number = 30, head = "t", title = "caf\195\169 | \"quoted\" #1; <!-- magus-queue: start -->", autoMerge = true }];
     final page = renderDashboard(board(open, queue: [Queued{ id = 30 }]));
     has(page, want: "| 1 | #30 caf? \\| \"quoted\" #1; &lt;!-- magus-queue: start --><br><sub>`t`</sub> | queued 1st | running | - | wait: queued |\n");
     final odd = Pull{ number = 31, head = "a|b", author = "x|y", title = "t", review = "APPROVED", checks = [green("t")] };
     has(renderDashboard(board([odd], queue: [<Queued>])), want: "| 1 | #31 t<br><sub>x\\|y · `a\\|b`</sub> | can join |");
-    assert\equal(parseMarks(page).len(), want: 2, message: "the title's marker is no box: {parseMarks(page)}");
+    lacks(page, want: "<!-- magus-queue: start -->");
     assert\equal(figureIn(page).q("nodes").listValue()[1].q("label").stringValue(), want: "#30 caf? | \"quoted\" #1; <!-- magus-queue...", message: "the label");
 }
 
@@ -4017,295 +3375,12 @@ test "a kick-back comment gives its first report line and its requeue command" {
     assert\equal(kickProse("<!-- mergequeue: \{} -->"), want: ["", ""], message: "nothing but the marker");
 }
 
-fun markKeys(marks: [Mark]) > [str] {
-    final acc = mut [<str>];
-    foreach (m in marks) {
-        var state = " ";
-        if (m.checked) {
-            state = "x";
-        }
-        acc.append("{state} {m.action} {m.pr}");
-    }
-    return acc;
-}
-
-test "each box offered is drawn unchecked, and reads back as the box it is" {
-    final b = fullBoard();
-    final offered = offeredBoxes(b, placed: placePulls(b));
-    final want = mut [<str>];
-    foreach (x in offered) {
-        want.append("  {x.action} {x.pr}");
-    }
-    assert\equal(want, want: ["  start 0", "  render 0", "  rerun 3", "  requeue 6", "  rerun 6", "  requeue 7", "  queue 8", "  rerun 12"], message: "the boxes");
-    final drawn = mut [<str>];
-    foreach (k in markKeys(parseMarks(renderDashboard(b)))) {
-        drawn.append(k);
-    }
-    _ = drawn.sort(fun (a: str, c: str) > bool => a < c);
-    _ = want.sort(fun (a: str, c: str) > bool => a < c);
-    assert\equal(drawn, want: want, message: "drawn unchecked, once each");
-    foreach (x in offered) {
-        if (x.action == "requeue") {
-            assert\equal(x.method, want: "rebase", message: "the kick-back's method");
-        }
-        if (x.action == "rerun" and x.pr != 3) {
-            assert\equal(x.runs, want: ["11"], message: "each failed run once");
-        }
-    }
-}
-
-test "a stack, a conflicting pull request and one in flight offer no box of their own" {
-    final b = fullBoard();
-    foreach (x in offeredBoxes(b, placed: placePulls(b))) {
-        assert\equal([4, 5, 9, 1, 10, 11].indexOf(x.pr) == null, want: true, message: "a box for #{x.pr}");
-    }
+test "a kicked-back stack says to fix it and requeue, and draws no box" {
     final bottom = Pull{ number = 40, head = "b1", labels = [KICKED], kick = Kick{ code = "KICK_RED" } };
     final top = Pull{ number = 41, head = "b2", base = "b1" };
-    final kicked = board([bottom, top], queue: [<Queued>]);
-    final boxes = offeredBoxes(kicked, placed: placePulls(kicked));
-    assert\equal(boxes.len(), want: 2, message: "the controls alone for a kicked stack");
-    has(renderDashboard(kicked), want: "fix it, then requeue (see why)");
-}
-
-test "box markers parse only in the shape the page draws" {
-    final body = "- [ ] <!-- magus-queue: start --> run\n"
-        + "- [x] <!-- magus-queue: requeue 514 --> requeue\n"
-        + "  * [X] <!-- magus-queue: rerun 7 --> nested\n"
-        + "- [x] <!-- magus-queue: requeue --> no number\n"
-        + "- [x] <!-- magus-queue: start 3 --> a number it does not take\n"
-        + "- [x] <!-- magus-queue: merge 5 --> no such action\n"
-        + "- [x] <!-- magus-queue: queue 05 --> not a plain number\n"
-        + "- [x] <!-- magus-queue: queue -1 --> not a number\n"
-        + "[x] <!-- magus-queue: render --> not a list item\n"
-        + "- [x] see <!-- magus-queue: render --> marker not first\n"
-        + "<!-- magus-queue-dashboard -->";
-    assert\equal(markKeys(parseMarks(body)), want: ["  start 0", "x requeue 514", "x rerun 7"], message: "the boxes");
-}
-
-test "only a box unchecked before the edit and checked after it counts, once" {
-    final before = "- [ ] <!-- magus-queue: start -->\n- [x] <!-- magus-queue: requeue 6 -->\n- [ ] <!-- magus-queue: queue 8 -->";
-    final after = "- [x] <!-- magus-queue: start -->\n- [x] <!-- magus-queue: requeue 6 -->\n- [x] <!-- magus-queue: queue 8 -->\n- [x] <!-- magus-queue: queue 8 -->";
-    assert\equal(markKeys(checkedNow(before, after: after)), want: ["x start 0", "x queue 8"], message: "the new checks");
-    assert\equal(checkedNow(after, after: after).len(), want: 0, message: "already checked runs nothing again");
-    assert\equal(markKeys(checkedNow("", after: "- [x] <!-- magus-queue: render -->")), want: ["x render 0"], message: "absent before counts as unchecked");
-    final web = "- [ ] <!-- magus-queue: start -->\r\n- [x] <!-- magus-queue: rerun 3 -->\r\n";
-    assert\equal(markKeys(checkedNow(web, after: web.replace("[ ]", with: "[x]"))), want: ["x start 0"], message: "the web editor's CRLF");
-}
-
-fun edit(sender: str, bot: bool) > Edit {
-    return Edit{ issue = 515, sender = sender, bot = bot, bodyEdited = true,
-        before = "- [ ] <!-- magus-queue: requeue 6 -->\n- [ ] <!-- magus-queue: rerun 3 -->",
-        after = "- [x] <!-- magus-queue: requeue 6 -->\n- [x] <!-- magus-queue: rerun 3 -->" };
-}
-
-test "an edit acts only for a writer, on the dashboard's body" {
-    assert\equal(editRefusal(edit("eli", bot: false), issue: 515, role: null), want: "", message: "before the role is read");
-    foreach (role in ACTING_ROLES) {
-        assert\equal(editRefusal(edit("eli", bot: false), issue: 515, role: role), want: "", message: role);
-    }
-    assert\equal(editRefusal(edit("eli", bot: false), issue: 516, role: "admin"), want: "issue #515 is not the dashboard, #516", message: "another issue");
-    final title = Edit{ issue = 515, sender = "eli", bot = false, bodyEdited = false };
-    assert\equal(editRefusal(title, issue: 515, role: "admin"), want: "the edit changed the title, not the body", message: "a title edit");
-    assert\equal(editRefusal(edit("renovate[bot]", bot: true), issue: 515, role: null), want: "renovate[bot] is a bot, and a bot's checks are ignored", message: "a bot");
-    assert\equal(editRefusal(edit("a/../b", bot: false), issue: 515, role: null), want: "\"a/../b\" is not a user's login", message: "a login for a path");
-    assert\equal(editRefusal(edit("pat", bot: false), issue: 515, role: "triage"), want: "pat has triage access, and a box acts only for admin, maintain, write", message: "triage");
-    assert\equal(editRefusal(edit("pat", bot: false), issue: 515, role: ""), want: "pat has no access, and a box acts only for admin, maintain, write", message: "none");
-}
-
-test "an unauthorized sender's checks take nothing, even a box the board offers" {
-    final offered = [Box{ action = "requeue", pr = 6, method = "rebase" }, Box{ action = "rerun", pr = 3, runs = ["11"] }];
-    final reader = respond(edit("pat", bot: false), issue: 515, role: "read", offered: offered);
-    assert\equal(reader.refusal != "", want: true, message: "refused");
-    assert\equal(reader.marks.len(), want: 2, message: "it still says what was checked");
-    assert\equal(reader.choice.take.len(), want: 0, message: "and takes none");
-    assert\equal(planFromBoxes(reader.choice.take), want: "[]", message: "an empty plan");
-    has(replySummary(edit("pat", bot: false), role: "read", res: reader), want: "> [!WARNING]\n> Ignored 2 checked box(es) on #515: pat has read access");
-    final bot = respond(edit("renovate[bot]", bot: true), issue: 515, role: "", offered: offered);
-    assert\equal(bot.choice.take.len(), want: 0, message: "a bot takes none");
-
-    final writer = respond(edit("eli", bot: false), issue: 515, role: "maintain", offered: offered);
-    assert\equal(writer.refusal, want: "", message: "a maintainer");
-    assert\equal(writer.choice.take.len(), want: 2, message: "takes both");
-}
-
-test "a checked box the board no longer offers is skipped, and says so" {
-    final res = respond(edit("eli", bot: false), issue: 515, role: "write", offered: [Box{ action = "rerun", pr = 3, runs = ["11"] }]);
-    assert\equal(res.choice.take.len(), want: 1, message: "the rerun");
-    assert\equal(res.choice.skip, want: ["requeue #6: the queue no longer offers that box; the page shows what it does now"], message: "the requeue");
-    final summary = replySummary(edit("eli", bot: false), role: "write", res: res);
-    has(summary, want: "eli (write) checked 2 box(es) on #515.");
-    has(summary, want: "- done: rerun the failed jobs of #3 (11)");
-    has(summary, want: "- skipped: requeue #6:");
-}
-
-test "a box's commands are auto-merge and reruns; the plan carries them to act" {
-    final take = [Box{ action = "requeue", pr = 6, method = "rebase" }, Box{ action = "queue", pr = 8 },
-        Box{ action = "rerun", pr = 3, runs = ["11", "12"] }, Box{ action = "start" }, Box{ action = "render" }];
-    final cmds = mut [<[str]>];
-    foreach (x in boxesFromPlan(planFromBoxes(take))) {
-        foreach (c in boxCommands(x)) {
-            cmds.append(c);
-        }
-    }
-    assert\equal(cmds, want: [
-        ["gh", "pr", "merge", "6", "--auto", "--rebase"],
-        ["gh", "pr", "merge", "8", "--auto", "--squash"],
-        ["gh", "run", "rerun", "11", "--failed"],
-        ["gh", "run", "rerun", "12", "--failed"],
-    ], message: "the commands");
-    var refused = false;
-    try {
-        _ = boxesFromPlan(`[{"action": "queue", "pr": 8, "method": "squash --admin", "runs": []}]`);
-    } catch (e) {
-        refused = true;
-    }
-    assert\equal(refused, want: true, message: "a method the queue does not take");
-}
-
-test "an issues edited event reads into an edit" {
-    final e = readEdit(`{"action": "edited", "changes": {"body": {"from": "- [ ] <!-- magus-queue: start -->"}},
-        "issue": {"number": 515, "body": "- [x] <!-- magus-queue: start -->"}, "sender": {"login": "eli", "type": "User"}}`);
-    assert\equal([e.issue, e.sender, e.bot, e.bodyEdited], want: [515, "eli", false, true], message: "the edit");
-    assert\equal(markKeys(checkedNow(e.before, after: e.after)), want: ["x start 0"], message: "the box");
-    final title = readEdit(`{"action": "edited", "changes": {"title": {"from": "x"}}, "issue": {"number": 515, "body": "- [x] <!-- magus-queue: start -->"},
-        "sender": {"login": "github-actions[bot]", "type": "Bot"}}`);
-    assert\equal([title.bodyEdited, title.bot], want: [false, true], message: "a bot's title edit");
-}
-
-test "boxes and act take their flags, and refuse what is missing" {
-    final o = parseBoxFlags("boxes", argv: ["--event", "e.json", "--issue", "515", "--plan", "p.json", "--out", "s.md"]);
-    assert\equal([o.event, o.plan, o.summary, o.base], want: ["e.json", "p.json", "s.md", "main"], message: "boxes");
-    assert\equal(o.issue, want: 515, message: "the issue");
-    assert\equal(parseBoxFlags("act", argv: ["--plan", "p.json"]).plan, want: "p.json", message: "act");
-    foreach (c in [["boxes", "--event", "e", "--issue", "", "--plan", "p", "--out", "s"], ["boxes", "--event", "e", "--issue", "x", "--plan", "p", "--out", "s"],
-            ["boxes", "--issue", "5", "--plan", "p", "--out", "s"], ["act"], ["act", "--plan", "p", "--issue", "5"]]) {
-        var refused = false;
-        try {
-            _ = parseBoxFlags(c[0], argv: c.sub(1));
-        } catch (e) {
-            refused = true;
-        }
-        assert\equal(refused, want: true, message: c.join(" "));
-    }
-}
-
-final PASSED = [green("ci gate"), green(HYGIENE)];
-
-fun pending(name: str) > Check {
-    return Check{ name = name, conclusion = "PENDING" };
-}
-
-fun said(w: Waiting) > str {
-    if (!w.post) {
-        return "";
-    }
-    return w.description;
-}
-
-test "a pull request whose checks still run is not queued, since CI has not passed" {
-    final p = Pull{ number = 5, checks = [green(HYGIENE), pending("ci gate")] };
-    assert\equal(said(waiting(p, open: [p], base: "main", current: QueueStatus{})), want: CI_UNPASSED, message: "running");
-}
-
-test "a pull request with a failed check is not queued, since CI has not passed" {
-    final p = Pull{ number = 5, review = "APPROVED", checks = [green(HYGIENE), red("ci gate", conclusion: "FAILURE", job: "1")] };
-    assert\equal(said(waiting(p, open: [p], base: "main", current: QueueStatus{})), want: CI_UNPASSED, message: "failed");
-}
-
-test "a check still running beside passed required ones does not hold CI back" {
-    final p = Pull{ number = 5, review = "APPROVED", checks = PASSED + [pending("queue advice")] };
-    assert\equal(said(waiting(p, open: [p], base: "main", current: QueueStatus{})), want: READY_TO_QUEUE, message: "ready");
-}
-
-test "a green pull request without an approval waits for one" {
-    final p = Pull{ number = 5, review = "REVIEW_REQUIRED", checks = PASSED };
-    assert\equal(said(waiting(p, open: [p], base: "main", current: QueueStatus{})), want: UNAPPROVED, message: "unapproved");
-}
-
-test "a green, approved pull request names the label and auto-merge" {
-    final p = Pull{ number = 5, review = "APPROVED", checks = PASSED };
-    final current = QueueStatus{ state = "pending", description = CI_UNPASSED };
-    assert\equal(said(waiting(p, open: [p], base: "main", current: current)), want: READY_TO_QUEUE, message: "ready");
-}
-
-test "a queued pull request still showing this step's status says it is queued" {
-    final p = Pull{ number = 5, review = "APPROVED", checks = PASSED, labels = ["merge-queue: squash"] };
-    final current = QueueStatus{ state = "pending", description = READY_TO_QUEUE };
-    assert\equal(said(waiting(p, open: [p], base: "main", current: current)), want: AWAITING_QUEUE, message: "label");
-    final auto = Pull{ number = 6, autoMerge = true };
-    assert\equal(said(waiting(auto, open: [auto], base: "main", current: QueueStatus{})), want: AWAITING_QUEUE, message: "auto-merge, nothing posted yet");
-}
-
-test "a queued pull request keeps every status the queue set" {
-    final p = Pull{ number = 5, review = "APPROVED", checks = PASSED, autoMerge = true };
-    foreach (s in [
-        QueueStatus{ state = "pending", description = "waiting: an earlier run stopped before merging it" },
-        QueueStatus{ state = "success", description = "validated as abc123; merging" },
-        QueueStatus{ state = "failure", description = "kicked back; see the comment" },
-    ]) {
-        assert\equal(waiting(p, open: [p], base: "main", current: s).post, want: false, message: s.description);
-    }
-}
-
-test "a kick-back stands on its head after the queue lets go" {
-    final p = Pull{ number = 5, review = "APPROVED", checks = PASSED };
-    final current = QueueStatus{ state = "failure", description = "kicked back; see the comment" };
-    assert\equal(waiting(p, open: [p], base: "main", current: current).post, want: false, message: "kick-back kept");
-}
-
-test "a success outside the queue becomes pending" {
-    final p = Pull{ number = 5, review = "APPROVED", checks = PASSED };
-    final current = QueueStatus{ state = "success", description = "validated as abc123; merging" };
-    assert\equal(said(waiting(p, open: [p], base: "main", current: current)), want: READY_TO_QUEUE, message: "unqueued after success");
-    final waitingOnQueue = QueueStatus{ state = "pending", description = "waiting: an earlier run stopped before merging it" };
-    assert\equal(said(waiting(p, open: [p], base: "main", current: waitingOnQueue)), want: READY_TO_QUEUE, message: "unqueued while the queue waited");
-}
-
-test "a status that already says it is not posted again" {
-    final p = Pull{ number = 5, review = "APPROVED", checks = PASSED };
-    final current = QueueStatus{ state = "pending", description = READY_TO_QUEUE };
-    assert\equal(waiting(p, open: [p], base: "main", current: current).post, want: false, message: "unchanged");
-}
-
-test "a closed pull request or one on another base gets nothing" {
-    final closed = Pull{ number = 5, state = "MERGED", checks = PASSED };
-    assert\equal(waiting(closed, open: [<Pull>], base: "main", current: QueueStatus{}).post, want: false, message: "merged");
-    final other = Pull{ number = 6, base = "release", checks = PASSED };
-    assert\equal(waiting(other, open: [other], base: "main", current: QueueStatus{}).post, want: false, message: "another base");
-}
-
-test "every waiting description fits GitHub's cap and opens with a waiting prefix" {
-    foreach (d in [CI_UNPASSED, UNAPPROVED, READY_TO_QUEUE, AWAITING_QUEUE]) {
-        assert\equal(d.len() <= STATUS_LIMIT, want: true, message: d);
-        assert\equal(postedHere(QueueStatus{ state = "pending", description = d }), want: true, message: d);
-    }
-}
-
-test "the newest merge-queue status on a commit is the one read" {
-    final listing = `[
-        {"context": "other", "state": "success", "description": "x"},
-        {"context": "merge-queue", "state": "pending", "description": "waiting: behind main"},
-        {"context": "merge-queue", "state": "success", "description": "validated as abc123; merging"}
-    ]`;
-    final s = latestQueueStatus(listing);
-    assert\equal(s.value!.description, want: "waiting: behind main", message: "newest first");
-    assert\equal(latestQueueStatus(`[]`).value!.state, want: "", message: "none posted");
-    assert\equal(latestQueueStatus(`{"message": "Not Found"}`).error != null, want: true, message: "not a list");
-}
-
-test "waiting takes --pr and --base, and needs a --pr" {
-    final sel = parseSelector("waiting", argv: ["--pr", "7", "--pr", "8", "--base", "trunk"]);
-    assert\equal(sel.prs, want: [7, 8], message: "both numbers");
-    assert\equal(sel.base, want: "trunk", message: "base");
-    foreach (argv in [[<str>], ["--all"], ["--base", "main"]]) {
-        var refused = false;
-        try {
-            _ = parseSelector("waiting", argv: argv);
-        } catch (e) {
-            refused = true;
-        }
-        assert\equal(refused, want: true, message: argv.join(" "));
-    }
+    final page = renderDashboard(board([bottom, top], queue: [<Queued>]));
+    has(page, want: "fix it, then requeue (see why)");
+    lacks(page, want: "- [ ]");
 }
 
 test "an inherited red names who broke the check on main and who fixes it" {

@@ -64,4 +64,5 @@ wait longest for it.
 
 - [Clear is better than clever](clear-is-better-than-clever.md)
 - [A cache is an accelerator, never a dependency](a-cache-is-an-accelerator.md)
+- [Compute once, reuse everywhere](compute-once.md)
 - [Benchmarks](../../benchmarks.md)

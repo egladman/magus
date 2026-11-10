@@ -568,7 +568,7 @@ func (s *WorktreePruneSuite) TestDeniesAGoneCheckoutWhoseCommitNoRemoteReaches()
 	s.Contains(v.Deny, "pruning the worktree records may lose work")
 	full := denial{Say: v.Deny, Why: v.Why}.full()
 	s.Contains(full, "is lost: its directory is deleted")
-	s.Contains(full, "restore with `git worktree add "+wt+" lost`")
+	s.Contains(full, fmt.Sprintf("restore with `git worktree add %s lost`", wt))
 }
 
 func (s *WorktreePruneSuite) TestPassesWhenTheGoneCommitIsOnARemoteRef() {
@@ -600,9 +600,9 @@ func (s *RmOfAWorktreeSuite) TestIsJudgedLikeRemove() {
 	ahead := r.add("ahead")
 	r.commit(ahead)
 	assertRemovalDenied(s.T(), r.judge("rm -r "+ahead), "1 commit(s) on it")
-	assertRemovalDenied(s.T(), r.judge("cd "+r.parent+" && rm -fR ahead"), "1 commit(s) on it")
+	assertRemovalDenied(s.T(), r.judge(fmt.Sprintf("cd %s && rm -fR ahead", r.parent)), "1 commit(s) on it")
 	assertRemovalDenied(s.T(), r.judge("rm --recursive -- "+ahead), "1 commit(s) on it")
-	assertRemovalDenied(s.T(), r.judge(`magus buzz -e 'fs\removeAll("`+ahead+`");'`), "1 commit(s) on it")
+	assertRemovalDenied(s.T(), r.judge(fmt.Sprintf(`magus buzz -e 'fs\removeAll("%s");'`, ahead)), "1 commit(s) on it")
 }
 
 func (s *RmOfAWorktreeSuite) TestDirectoryHoldingAWorktreeIsJudged() {
@@ -611,7 +611,7 @@ func (s *RmOfAWorktreeSuite) TestDirectoryHoldingAWorktreeIsJudged() {
 	r.commit(ahead)
 
 	assertRemovalDenied(s.T(), r.judge("rm -rf "+r.parent), "it is the main worktree")
-	assertRemovalDenied(s.T(), r.judge("rm -rf "+r.parent+"/a*"), "1 commit(s) on it")
+	assertRemovalDenied(s.T(), r.judge("rm -rf "+filepath.Join(r.parent, "a*")), "1 commit(s) on it")
 }
 
 func (s *RmOfAWorktreeSuite) TestCleanLandedWorktreePasses() {

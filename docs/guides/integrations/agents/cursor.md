@@ -374,6 +374,7 @@ object Verdict {
     decision: str,
     reason: str,
     context: str,
+    rule: str = "",
 }
 
 // Scope is the attribution one event shares across every judgment it makes.
@@ -773,6 +774,7 @@ fun parseVerdict(stdout: str) > Verdict? {
         decision = decision,
         reason = hook\field(parsed, dotPath: "reason"),
         context = hook\field(parsed, dotPath: "context"),
+        rule = hook\field(parsed, dotPath: "rule"),
     };
 }
 
@@ -1196,6 +1198,8 @@ fun gateStop(scope: Scope, event: any?, eventName: str) > str {
     if (v.decision == UNJUDGED) { warn(v.reason); }
     if (v.decision == "advise") { warn(v.context); }
     if (v.decision != "deny") { return EMPTY; }
+    // An advisory is a person's words, so it carries no guard label.
+    if (v.rule == "person-advisory") { return json\stringify({"followup_message": v.reason}) catch EMPTY; }
     return json\stringify({"followup_message": "[magus guard] {v.reason}"}) catch EMPTY;
 }
 

@@ -55,7 +55,8 @@ const doc = `check where a test file lives and how it is named
 It reports a test file in an external test package (package foo_test). A test
 belongs in the package it tests; the external package is reserved for the case where
 an in-package test would close an import cycle, and that case is worth a //nolint
-naming the cycle rather than a silent convention.
+naming the cycle rather than a silent convention. A file of godoc examples alone
+is the exception: an example shows the package as a caller imports it.
 
 With report-unix-suffix it reports any Go file named with a _unix segment. With
 report-main-tests it reports any _test.go declaring package main or main_test: that
@@ -132,7 +133,7 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 			continue
 		}
 
-		if strings.HasSuffix(f.Name.Name, "_test") {
+		if strings.HasSuffix(f.Name.Name, "_test") && !documentsThePackage(f) {
 			pass.Report(analysis.Diagnostic{Pos: f.Package, Message: externalPackageMessage(f.Name.Name)})
 		}
 
