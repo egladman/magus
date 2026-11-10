@@ -93,7 +93,7 @@ func (e directiveEntry) valid() error {
 
 // key keeps a post apart from its retraction, so the fold keeps the text.
 func (e directiveEntry) key() string {
-	return string(e.Kind) + "\x00" + e.ID + "\x00" + e.Session
+	return fmt.Sprintf("%s\x00%s\x00%s", e.Kind, e.ID, e.Session)
 }
 
 // Directive is one post as a reader meets it. Delivered and Acted map each
@@ -252,14 +252,14 @@ func pickDirective(all []Directive, ref string) (Directive, error) {
 	id, candidates := resolveIDPrefix(ids, ref)
 	switch {
 	case id == "" && len(candidates) == 0:
-		return Directive{}, fmt.Errorf("%w matches %q", ErrNoDirective, ref)
+		return Directive{}, fmt.Errorf("%w: none matches %q", ErrNoDirective, ref)
 	case id == "":
-		return Directive{}, fmt.Errorf("%q matches %d advisories (%s); name one", ref, len(candidates), strings.Join(candidates, ", "))
+		return Directive{}, fmt.Errorf("%q matches %d advisories, so name one of %s", ref, len(candidates), strings.Join(candidates, ", "))
 	}
 	got := all[slices.Index(ids, id)]
 	if !got.Open() {
 		at := time.UnixMilli(got.RetractedMs).Format(time.RFC3339)
-		return got, fmt.Errorf("%s: %w at %s", got.ID, errRetracted, at)
+		return got, fmt.Errorf("%s at %s: %w", got.ID, at, errRetracted)
 	}
 	return got, nil
 }
@@ -327,8 +327,9 @@ func (s DirectiveStore) RecordActed(ctx context.Context, at Recipient, command s
 		return err
 	}
 	err = s.lines.Update(ctx, func(entries []directiveEntry) []directiveEntry {
-		var add []directiveEntry
-		for _, a := range pendingActs(foldDirectives(entries), at.Session, command) {
+		pending := pendingActs(foldDirectives(entries), at.Session, command)
+		add := make([]directiveEntry, 0, len(pending))
+		for _, a := range pending {
 			add = append(add, at.entry(directiveActed, a.ID, now))
 		}
 		return add

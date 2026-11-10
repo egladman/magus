@@ -64,7 +64,7 @@ func hostNotAllowed(setting string) rpcerr.Error {
 	return rpcerr.Error{
 		Code:    connect.CodePermissionDenied,
 		Reason:  types.HostNotAllowed,
-		Message: "the server serves only " + served + "; this request named another host in its Host or Origin header",
+		Message: fmt.Sprintf("the server serves only %s; this request named another host in its Host or Origin header", served),
 	}
 }
 
