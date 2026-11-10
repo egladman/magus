@@ -8,9 +8,21 @@ import "os";
 import "proc";
 import "std";
 import "magus";
+import "crypto";
 import "encoding/json";
 
 import "assert";
+
+// LINTER_SOURCES are the files `golangci-lint custom` compiles into
+// .magus/custom-gcl. libs/proofread enters through a go.mod replace.
+// install_linter's readsFiles repeats this list; keep the two in step.
+export final LINTER_SOURCES = ["libs/testpairing/.custom-gcl.yml", "libs/testpairing/go.mod",
+    "libs/testpairing/go.sum", "libs/testpairing/**/*.go",
+    "libs/conventions/go.mod", "libs/conventions/go.sum", "libs/conventions/**/*.go",
+    "libs/proofread/go.mod", "libs/proofread/go.sum", "libs/proofread/**/*.go"];
+
+// The digest of LINTER_SOURCES the build at .magus/custom-gcl was linked from.
+final LINKED_FROM = ".magus/custom-gcl.inputs";
 
 // binary is the workspace's custom build; it throws, naming the target that builds it, when absent.
 export fun binary() > str !> any {
@@ -21,15 +33,49 @@ export fun binary() > str !> any {
     return path;
 }
 
-// linkOnce links the custom build when the checkout has none, as install-linter does, but
-// without the format and generate that target runs first: a scoped lint must not fail on
-// drift elsewhere in the tree. A build already linked is kept, stale or not; bare lint
-// relinks it.
-export fun linkOnce() > void !> any {
-    final root = magus\describe.project().workspace;
-    if (!fs\exists(root + "/.magus/custom-gcl")) {
-        _ = proc\exec("golangci-lint", args: ["custom"], dir: root + "/libs/testpairing");
+// linkerInputs is the digest of every file LINTER_SOURCES matches under root.
+fun linkerInputs(root: str) > str !> any {
+    final lines = mut [<str>];
+    foreach (pattern in LINTER_SOURCES) {
+        foreach (path in fs\glob(root + "/" + pattern)) {
+            final rel = path.value.sub(root.len() + 1, len: path.value.len() - root.len() - 1);
+            lines.append("{rel} {crypto\sha256File(path.value)}");
+        }
     }
+    _ = lines.sort(fun (left: str, right: str) > bool => left < right);
+    return crypto\sha256Hex(lines.join("\n"));
+}
+
+// whyRelink says why the build must be linked again, or "" when it may run.
+fun whyRelink(linked: bool, linkedFrom: str, inputs: str) > str {
+    if (!linked) {
+        return ".magus/custom-gcl is not built";
+    }
+    if (linkedFrom.trim() != inputs) {
+        return ".magus/custom-gcl was linked from other linter sources than the tree holds";
+    }
+    return "";
+}
+
+// linkFresh links the custom build unless the one at hand was linked from
+// the linter sources the tree holds. A digest decides, not a cache key:
+// install-linter declares no outputs, so its replay restores no binary.
+export fun linkFresh() > void !> any {
+    final root = magus\describe.project().workspace;
+    final inputs = linkerInputs(root);
+    final why = whyRelink(fs\exists(root + "/.magus/custom-gcl"), linkedFrom: fs\readFile(root + "/" + LINKED_FROM) catch "", inputs: inputs);
+    if (why == "") {
+        return;
+    }
+    magus\log.info("linking the custom golangci-lint: {why}");
+    // A fresh inode: macOS keys the code signature on the inode, and an
+    // in-place rewrite gets the next exec SIGKILLed.
+    fs\remove(root + "/.magus/custom-gcl");
+    // custom-gcl's version salt hashes only plugin dirs with a path, so a
+    // rebuilt binary would replay stale findings from this cache.
+    fs\removeAll(root + "/.magus/golangci-lint");
+    _ = proc\exec("golangci-lint", args: ["custom"], dir: root + "/libs/testpairing");
+    fs\writeFile(root + "/" + LINKED_FROM, content: inputs + "\n");
 }
 
 // readLibFiles declares what a lib module's run reads. Restated in full because readsFiles
@@ -72,6 +118,8 @@ fun libArgs(dir: str) > [str] {
 // packagesOf groups the Go files among files by the module holding them, "." or one of
 // libs, each module's packages relative to it as golangci-lint takes them. golangci-lint
 // stops at a go.mod, so each module runs alone.
+// A file `./...` leaves out is in no package: the scoped run lints what
+// the bare run lints.
 export fun packagesOf(files: [str], libs: [str]) > {str: [str]} {
     final packages = mut {<str: [str]>};
     foreach (f in files) {
@@ -86,13 +134,22 @@ export fun packagesOf(files: [str], libs: [str]) > {str: [str]} {
         }
         final rel = if (module == ".") f else f.sub(module.len() + 1, len: f.len() - module.len() - 1);
         final slash = rel.split("/");
-        final pkg = if (slash.len() == 1) "." else "./" + slash.sub(0, len: slash.len() - 1).join("/");
+        final dirs = slash.sub(0, len: slash.len() - 1);
+        if (dirs.filter(fun (i: int, d: str) > bool => d == "testdata" or d == "vendor" or d.startsWith("_") or d.startsWith(".")).len() > 0) {
+            continue;
+        }
+        final pkg = if (dirs.len() == 0) "." else "./" + dirs.join("/");
         final held = packages[module] ?? [<str>];
         if (held.indexOf(pkg) == null) {
             packages[module] = held + [pkg];
         }
     }
     return packages;
+}
+
+// atOrUnder is the files among files that are one of paths or lie under one.
+export fun atOrUnder(files: [str], paths: [str]) > [str] {
+    return files.filter(fun (i: int, f: str) > bool => paths.filter(fun (j: int, p: str) > bool => f == p or f.startsWith(p + "/")).len() > 0);
 }
 
 // issuesIn reads a `--output.json.path stdout --path-mode abs` report and keeps each issue
@@ -168,6 +225,26 @@ test "Go files group by their nearest module, as packages relative to it" {
     assert\equal(got["libs/x"], want: ["./y", "."], message: "relative to the lib");
     assert\equal(got["libs/xy"], want: ["."], message: "a lib sharing a prefix is its own module");
     assert\equal(got.len(), want: 3, message: "no module for Markdown");
+}
+
+test "a file go's ./... leaves out names no package" {
+    final got = packagesOf(["internal/job/testdata/a.go", "libs/x/y/testdata/src/b.go", "vendor/v/c.go",
+        "_tools/d.go", ".github/e.go", "internal/job/f.go"], libs: ["libs/x"]);
+    assert\equal(got["."], want: ["./internal/job"], message: "testdata, vendor, _ and . dirs are left out");
+    assert\equal(got["libs/x"] == null, want: true, message: "a lib's testdata is left out too");
+}
+
+test "a build linked from other linter sources is linked again" {
+    assert\equal(whyRelink(false, linkedFrom: "", inputs: "abc") != "", want: true, message: "no build");
+    assert\equal(whyRelink(true, linkedFrom: "old\n", inputs: "abc") != "", want: true, message: "a lint rule moved since the link");
+    assert\equal(whyRelink(true, linkedFrom: "", inputs: "abc") != "", want: true, message: "a build with no record of its sources");
+    assert\equal(whyRelink(true, linkedFrom: "abc\n", inputs: "abc"), want: "", message: "linked from the tree's sources");
+}
+
+test "the files at or under paths are kept" {
+    final got = atOrUnder(["README.md", "libs/x/README.md", "changes/README.md", "changes/unreleased/a.md", "changesets.md"],
+        paths: ["README.md", "changes"]);
+    assert\equal(got, want: ["README.md", "changes/README.md", "changes/unreleased/a.md"], message: "a nested README and a shared prefix are left out");
 }
 
 test "only the issues at the files are kept" {
