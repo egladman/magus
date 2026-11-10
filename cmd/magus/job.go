@@ -2397,12 +2397,12 @@ func provisionCheckout(ctx context.Context, store *job.Store, ws job.Workspace, 
 // and so does one an earlier fork of the job made.
 func failedProvision(ctx context.Context, store *job.Store, wt types.JobWorktree, made bool, err error) error {
 	if !made {
-		return fmt.Errorf("%w\n%s stays as it was: this fork did not make it, so it does not remove it", err, wt.Root)
+		return fmt.Errorf("%w: %s stays as it was, since this fork did not make it", err, wt.Root)
 	}
 	if derr := store.DiscardWorktree(ctx, wt); derr != nil {
 		return errors.Join(err, fmt.Errorf("removing %s, which this fork made: %w", wt.Root, derr))
 	}
-	return fmt.Errorf("%w\nthis fork made %s, so it removed it", err, wt.Root)
+	return fmt.Errorf("%w: this fork made %s, so it removed it", err, wt.Root)
 }
 
 // bootstrapCheckout builds ./magus in dir, a checkout the fork made or

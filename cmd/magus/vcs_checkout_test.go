@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -122,7 +123,7 @@ func (s *FailedProvisionSuite) TestAnAdoptedCheckoutStaysAndTheErrorSaysSo() {
 
 	s.Require().ErrorContains(err, job.NoCheckoutHook)
 	s.NotContains(err.Error(), "removed")
-	s.ErrorContains(err, dir+" stays as it was: this fork did not make it")
+	s.ErrorContains(err, fmt.Sprintf("%s stays as it was, since this fork did not make it", dir))
 	s.DirExists(dir)
 }
 
@@ -134,6 +135,6 @@ func (s *FailedProvisionSuite) TestACheckoutThisForkMadeIsRemovedAndTheErrorSays
 	err = s.failed(wt, made)
 
 	s.Require().ErrorContains(err, job.NoCheckoutHook)
-	s.ErrorContains(err, "this fork made "+wt.Root+", so it removed it")
+	s.ErrorContains(err, fmt.Sprintf("this fork made %s, so it removed it", wt.Root))
 	s.NoDirExists(wt.Root)
 }
