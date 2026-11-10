@@ -541,32 +541,43 @@ export fun endMergedRows(h: Host, dir: str, onto: str, did: mut [str]) > result\
             kept.append("{row.id} (it has committed nothing yet)");
             continue;
         }
-        final inside = gitRan(h, dir: row.root, args: ["merge-base", "--is-ancestor", sha, onto]);
-        if (inside.error -> err) {
+        final how = mergedHow(h, row: row, head: sha, onto: onto);
+        if (how.error -> err) {
             return result\Result::<[str]>{ error = err };
         }
-        if (inside.value!.code != 0 and inside.value!.code != 1) {
-            return result\fail::<[str]>("bootstrap-checkout: git merge-base --is-ancestor {sha} {onto} in {row.root}: exit {inside.value!.code}: {inside.value!.stderr}");
-        }
-        var how = "its head {sha.sub(0, len: 12)} is already in {onto}";
-        if (inside.value!.code == 1) {
-            final squashed = holdsWork(h, row: row, head: sha, onto: onto);
-            if (squashed.error -> err) {
-                return result\Result::<[str]>{ error = err };
-            }
-            if (!squashed.value!) {
-                kept.append("{row.id} (its head is not in the target yet)");
-                continue;
-            }
-            how = "its work since {row.base.sub(0, len: 12)} is already in {onto}, merged as other commits";
+        if (how.value! == "") {
+            kept.append("{row.id} (its head is not in the target yet)");
+            continue;
         }
         final ended = endRow(h, dir: dir, id: row.id);
         if (ended.error -> err) {
             return result\Result::<[str]>{ error = err };
         }
-        note(h, did: did, line: "ended running row {row.id}: {how}");
+        note(h, did: did, line: "ended running row {row.id}: {how.value!}");
     }
     return result\ok::<[str]>(kept);
+}
+
+// mergedHow says how onto holds row's head, "" when it does not.
+fun mergedHow(h: Host, row: Row, head: str, onto: str) > result\Result::<str> {
+    final inside = gitRan(h, dir: row.root, args: ["merge-base", "--is-ancestor", head, onto]);
+    if (inside.error -> err) {
+        return result\Result::<str>{ error = err };
+    }
+    if (inside.value!.code == 0) {
+        return result\ok::<str>("its head {head.sub(0, len: 12)} is already in {onto}");
+    }
+    if (inside.value!.code != 1) {
+        return result\fail::<str>("bootstrap-checkout: git merge-base --is-ancestor {head} {onto} in {row.root}: exit {inside.value!.code}: {inside.value!.stderr}");
+    }
+    final squashed = holdsWork(h, row: row, head: head, onto: onto);
+    if (squashed.error -> err) {
+        return result\Result::<str>{ error = err };
+    }
+    if (!squashed.value!) {
+        return result\ok::<str>("");
+    }
+    return result\ok::<str>("its work since {row.base.sub(0, len: 12)} is already in {onto}, merged as other commits");
 }
 
 // holdsWork reports whether onto holds what row committed since its base.
