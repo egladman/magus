@@ -1253,13 +1253,12 @@ func (e *moduleEmitter) value(v *libValue) error {
 	}
 	impl := "Impl" + v.name
 	src := fmt.Sprintf("%s.%s", e.pkgAlias(v.file.pkg), v.name)
-	var t, goT, val string
+	var goT, val string
 	switch c.kind {
 	case convError:
-		t, goT, val = "std.TypeString", "string", src+".Error()"
+		goT, val = "string", src+".Error()"
 	default:
-		t = tag(c)
-		goT = implementationParam(t)
+		goT = implementationParam(tag(c))
 		val = e.encodeTop(c, src, goT)
 	}
 	// A method rather than a std.Field: the checker declares methods, so a
