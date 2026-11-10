@@ -2326,6 +2326,7 @@ export object CommandRequest {
     checkout: CheckoutState? = null,
     dir: str = "",
     workspace: str = "",
+    unplaced: bool = false,
     ownedCheckouts: [str] = [],
 }
 

@@ -234,6 +234,10 @@ type CommandRequest struct {
 	Dir string
 	// Workspace is the root of the workspace holding Dir, empty when none does.
 	Workspace string
+	// Unplaced marks a first push, pull request call or relink
+	// whose directory only running the line reveals, as after
+	// `cd "$X"`. Dir then names where the line starts.
+	Unplaced bool
 	// OwnedCheckouts are the roots, cleaned, of the standing checkouts `magus job fork
 	// --checkout` made for jobs the caller may work in: its lease's, one descending from
 	// it, the row a spawn record names before the caller binds, or any for a root. Empty

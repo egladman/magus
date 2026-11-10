@@ -445,6 +445,28 @@ func TestCommandRuleSeesThePushedCheckout(t *testing.T) {
 	assert.Equal(t, []string{filepath.Join(at.dir, "../other")}, read, "read once, in the checkout -C names")
 }
 
+// A push after a cd only running the line resolves is marked unplaced,
+// so the rule can tell its Dir is not where the push runs.
+func TestCommandRuleSeesAPushItCannotPlace(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	probe := &commandRuleProbe{}
+	deps := Dependencies{CommandRule: probe.rule()}
+	at := hookLocation(ctx, Dependencies{})
+
+	Judge(ctx, deps, Request{Input: `cd "$X" && git push origin HEAD:topic`, Host: "claude-code"})
+	Judge(ctx, deps, Request{Input: `cd "$(git rev-parse --show-toplevel)" && gh pr create --title t --body b`, Host: "claude-code"})
+	Judge(ctx, deps, Request{Input: "cd sub && git push origin HEAD:topic", Host: "claude-code"})
+	Judge(ctx, deps, Request{Input: `cd "$X" && git status`, Host: "claude-code"})
+	require.Len(t, probe.asked, 4)
+	for _, req := range probe.asked[:2] {
+		assert.True(t, req.Unplaced, req.Command)
+		assert.Nil(t, req.Checkout, req.Command)
+		assert.Equal(t, at.dir, req.Dir, "it stays where the line starts: %s", req.Command)
+	}
+	assert.False(t, probe.asked[2].Unplaced, "a literal cd places the push")
+	assert.False(t, probe.asked[3].Unplaced, "a line that pushes nothing has nothing to place")
+}
+
 // A command magus itself served stays served: the rule's advice stands down, as every
 // advisory does on one.
 func TestCommandRuleAdviceStandsDownOnAServedCommand(t *testing.T) {
