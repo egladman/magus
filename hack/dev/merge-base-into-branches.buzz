@@ -101,6 +101,14 @@ export fun fetchArgv(stack: [Step]) > [str] {
     return ["fetch", "--no-tags", "--quiet", "origin"] + refs;
 }
 
+fun fetchBases(sh: Shell, stack: [Step]) > result\Result::<str> {
+    final argv = fetchArgv(stack);
+    if (argv.len() == 0) {
+        return result\ok::<str>("");
+    }
+    return must(sh.git("", args: argv), what: "git {argv.join(" ")}");
+}
+
 export fun resolveArgv(against: str) > [str] {
     return ["vcs", "resolve", "--against", against];
 }
@@ -306,12 +314,9 @@ export fun execute(sh: Shell, stack: [Step], here: str) > result\Result::<bool> 
             }
         }
     }
-    final fetch = fetchArgv(stack);
-    if (fetch.len() > 0) {
-        final fetched = must(sh.git("", args: fetch), what: "git {fetch.join(" ")}");
-        if (fetched.error -> err) {
-            return result\Result::<bool>{ error = err };
-        }
+    final fetched = fetchBases(sh, stack: stack);
+    if (fetched.error -> err) {
+        return result\Result::<bool>{ error = err };
     }
     foreach (i, s in stack) {
         if (settled[i]) {
