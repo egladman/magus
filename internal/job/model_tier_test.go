@@ -693,6 +693,6 @@ func TestRefuseAboveParentJudgesOnlyAProvenPair(t *testing.T) {
 
 	proven := []types.Job{{ID: "p", ModelTier: &types.JobModelTier{Name: "economy", Rank: 0}}}
 	require.Error(t, refuseAboveParent(set, tierWithin, types.Job{ID: "c", Parent: "p", ModelTier: principal}, proven))
-	assert.NoError(t, refuseAboveParent(nil, tierWithin, types.Job{ID: "c", Parent: "p", ModelTier: principal}, proven), "a workspace without tiers bounds nothing")
+	require.NoError(t, refuseAboveParent(nil, tierWithin, types.Job{ID: "c", Parent: "p", ModelTier: principal}, proven), "a workspace without tiers bounds nothing")
 	assert.ErrorContains(t, refuseAboveParent(set, nil, types.Job{ID: "c", Parent: "p", ModelTier: principal}, proven), "no spawn rule", "a proven pair with no rule is refused, never allowed")
 }
