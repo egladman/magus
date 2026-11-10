@@ -861,7 +861,7 @@ final release = $"^v[0-9]";
 // decideNames judges every branch the line publishes but the base branch and a version. A
 // mechanical failure denies; a topic miss alone advises. A name the remote already has, and
 // every `gh pr create` (which opens from a pushed branch), is judged once per session.
-export fun decideNames(programs: [helpers\Program], current: str, remote: Remote, topic: fun (source: str, dir: str) > Topic, once: fun (key: str) > bool) > GuardVerdict {
+export fun decideNames(programs: [helpers\Program], current: str, remote: Remote, topic: fun (source: str) > Topic, once: fun (key: str) > bool) > GuardVerdict {
     final pushes = findPushes(programs, current: current);
     if (pushes.len() == 0) {
         return magus\guard.allow();
@@ -878,8 +878,7 @@ export fun decideNames(programs: [helpers\Program], current: str, remote: Remote
         if (p.name == "" or p.name == baseName or release.match(p.name) != null) {
             continue;
         }
-        // The request already stands where the push runs, so no dir moves it.
-        final read = topic(p.source, "");
+        final read = topic(p.source);
         var verdict = judgeName(p.name, topic: read);
         if (p.generated) {
             verdict = Verdict{
@@ -1076,7 +1075,7 @@ fun remote(branches: [str]) > Remote {
     return Remote{ base = "origin/main", branches = branches };
 }
 
-fun practical(source: str, dir: str) > Topic {
+fun practical(source: str) > Topic {
     return readTopic(practicalPaths);
 }
 

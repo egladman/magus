@@ -80,7 +80,7 @@ test "commit subjects stand in when the branch adds no fragment" {
 }
 
 test "a coverage miss is denied at the push, naming the topics" {
-    final topic = fun (source: str, dir: str) > branches\Topic {
+    final topic = fun (source: str) > branches\Topic {
         return branches\withSubjects(branches\unknownTopic(), subjects: squash());
     };
     final push = helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:portable-lint"]]);
@@ -91,7 +91,7 @@ test "a coverage miss is denied at the push, naming the topics" {
 }
 
 test "a coverage miss on a two-topic branch advises at the push" {
-    final topic = fun (source: str, dir: str) > branches\Topic {
+    final topic = fun (source: str) > branches\Topic {
         return branches\withSubjects(branches\unknownTopic(), subjects: [
             fragment("guard-rule-precision", headline: "The guard judges a rule only where it applies."),
             fragment("proofread-local-path", headline: "proofread flags a local path in a reply."),
@@ -128,9 +128,9 @@ fun merged() > [branches\Subject] {
 
 // placedAt reads the topic where the guard placed the request, as guard.buzz's
 // branchTopic does: narrow at a pushed fork, wide at the host's hook-lease.
-fun placedAt(placed: str, seen: mut [str]) > fun (source: str, dir: str) > branches\Topic {
-    return fun (source: str, dir: str) > branches\Topic {
-        seen.append("{dir}|{source}");
+fun placedAt(placed: str, seen: mut [str]) > fun (source: str) > branches\Topic {
+    return fun (source: str) > branches\Topic {
+        seen.append(source);
         if (source == "bafc60786" or placed != "/w/root") {
             return branches\withSubjects(branches\unknownTopic(), subjects: [
                 branches\commitSubjectTopic("hand TestResolve_FunctionValueTargets a Charm object as upstream Buzz requires"),
@@ -155,7 +155,7 @@ test "a sha:ref push is scored by the commits it publishes" {
     final seen = mut [<str>];
     final sha = branches\decideNames(helpers\vcsRequest([["git", "push", "origin", "bafc60786:refs/heads/buzz-checker-fiber-json"]]), current: "hook-lease", remote: remote, topic: placedAt("/w/root", seen: seen), once: helpers\counter());
     std\assert(sha.decision == magus\GuardDecision.allow, message: "sha: {sha.reason}");
-    std\assert(seen.join(",") == "|bafc60786", message: seen.join(","));
+    std\assert(seen.join(",") == "bafc60786", message: seen.join(","));
 }
 
 test "a cd or git -C push is scored where the guard placed it, not on the host's branch" {
@@ -166,7 +166,7 @@ test "a cd or git -C push is scored where the guard placed it, not on the host's
     std\assert(moved.decision != magus\GuardDecision.deny, message: "cd: {moved.reason}");
     final other = branches\decideNames([gitIn("../fix", ["push", "origin", "HEAD:main-spell-charms"])], current: "fix", remote: remote, topic: placedAt("/w/fix", seen: seen), once: helpers\counter());
     std\assert(other.decision != magus\GuardDecision.deny, message: "git -C: {other.reason}");
-    std\assert(seen.join(",") == "|HEAD,|HEAD", message: "the request already stands there, so no dir moves it again: {seen.join(",")}");
+    std\assert(seen.join(",") == "HEAD,HEAD", message: "the source each push publishes: {seen.join(",")}");
     final host = branches\decideNames(helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:main-spell-charms"]]), current: "hook-lease", remote: remote, topic: placedAt("/w/root", seen: mut [<str>]), once: helpers\counter());
     std\assert(host.reason.indexOf("adds 11 topics") != null, message: "the host checkout's own wide branch is still judged: {host.reason}");
 }
