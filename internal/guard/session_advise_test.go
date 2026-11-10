@@ -118,8 +118,9 @@ func (s *SessionAdviseSuite) TestAnAgentMayListAdvisories() {
 }
 
 func (s *SessionAdviseSuite) TestAnUnreadableStoreIsNamed() {
-	dir, err := sessions.DirectiveDir(s.at.workspace)
+	store, err := sessions.OpenDirectiveStore(s.at.workspace)
 	s.Require().NoError(err)
+	dir := store.Dir()
 	s.Require().NoError(os.MkdirAll(dir, 0o755))
 	s.Require().NoError(os.WriteFile(filepath.Join(dir, "advisories.jsonl"), []byte("{\"kind\":\"shout\"}\n"), 0o644))
 	v := adviseStop(context.Background(), s.at, s.who, rootStopRaw, pass())

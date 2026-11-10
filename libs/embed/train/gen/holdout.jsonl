@@ -538,7 +538,6 @@
 {"group":"dir:cmd/magus","path":"cmd/magus/server_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/service_host.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/session.go"}
-{"group":"dir:cmd/magus","path":"cmd/magus/session_advise.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/session_brief.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/session_brief_test.go"}
 {"group":"dir:cmd/magus","path":"cmd/magus/session_cost.go"}
@@ -932,6 +931,7 @@
 {"group":"file:docs/reference/rules/lease-gate.md","path":"docs/reference/rules/lease-gate.md"}
 {"group":"file:docs/reference/rules/lease-paused.md","path":"docs/reference/rules/lease-paused.md"}
 {"group":"file:docs/reference/rules/output-redirect.md","path":"docs/reference/rules/output-redirect.md"}
+{"group":"file:docs/reference/rules/person-advisory.md","path":"docs/reference/rules/person-advisory.md"}
 {"group":"file:docs/reference/rules/process-poll.md","path":"docs/reference/rules/process-poll.md"}
 {"group":"file:docs/reference/rules/process-signal.md","path":"docs/reference/rules/process-signal.md"}
 {"group":"file:docs/reference/rules/read-symbol.md","path":"docs/reference/rules/read-symbol.md"}

@@ -18,32 +18,32 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// DirectiveKind is what one line of the advisories store records. See
+// directiveKind is what one line of the advisories store records. See
 // docs/decisions/0038-a-person-advises-every-session-through-the-hooks.md.
-type DirectiveKind string
+type directiveKind string
 
 const (
-	// DirectivePost is a person's directive to every session.
-	DirectivePost DirectiveKind = "post"
-	// DirectiveRetract closes a post; nothing else does.
-	DirectiveRetract DirectiveKind = "retract"
-	// DirectiveDelivered records that one host session was shown a post.
-	DirectiveDelivered DirectiveKind = "delivered"
-	// DirectiveActed records that a session shown a post ran its Expect.
-	DirectiveActed DirectiveKind = "acted"
+	// directivePost is a person's directive to every session.
+	directivePost directiveKind = "post"
+	// directiveRetract closes a post; nothing else does.
+	directiveRetract directiveKind = "retract"
+	// directiveDelivered records that one host session was shown a post.
+	directiveDelivered directiveKind = "delivered"
+	// directiveActed records that a session shown a post ran its Expect.
+	directiveActed directiveKind = "acted"
 )
 
-var directiveKinds = []DirectiveKind{
-	DirectivePost, DirectiveRetract, DirectiveDelivered, DirectiveActed,
+var directiveKinds = []directiveKind{
+	directivePost, directiveRetract, directiveDelivered, directiveActed,
 }
 
-// DirectiveEntry is one line of the advisories store.
+// directiveEntry is one line of the advisories store.
 //
 // Text, By and Expect belong to a post. Session, Host and Event say where a
 // delivery or an action happened. A command line is never stored: acted
 // says only that the prefix matched.
-type DirectiveEntry struct {
-	Kind    DirectiveKind `json:"kind"`
+type directiveEntry struct {
+	Kind    directiveKind `json:"kind"`
 	ID      string        `json:"id"`
 	Ms      int64         `json:"ms"`
 	Text    string        `json:"text,omitempty"`
@@ -54,11 +54,11 @@ type DirectiveEntry struct {
 	Event   string        `json:"event,omitempty"`
 }
 
-type directiveEntryJSON DirectiveEntry
+type directiveEntryJSON directiveEntry
 
 // MarshalJSON refuses an entry no reader could fold. That is an unknown
 // kind, no id, or a delivery or action naming no session.
-func (e DirectiveEntry) MarshalJSON() ([]byte, error) {
+func (e directiveEntry) MarshalJSON() ([]byte, error) {
 	if err := e.valid(); err != nil {
 		return nil, err
 	}
@@ -66,33 +66,33 @@ func (e DirectiveEntry) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON applies MarshalJSON's checks to a line read back.
-func (e *DirectiveEntry) UnmarshalJSON(b []byte) error {
+func (e *directiveEntry) UnmarshalJSON(b []byte) error {
 	var raw directiveEntryJSON
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}
-	if err := DirectiveEntry(raw).valid(); err != nil {
+	if err := directiveEntry(raw).valid(); err != nil {
 		return err
 	}
-	*e = DirectiveEntry(raw)
+	*e = directiveEntry(raw)
 	return nil
 }
 
-func (e DirectiveEntry) valid() error {
+func (e directiveEntry) valid() error {
 	if !slices.Contains(directiveKinds, e.Kind) {
 		return fmt.Errorf("advisory entry kind %q is not one of post, retract, delivered or acted", e.Kind)
 	}
 	if e.ID == "" {
 		return fmt.Errorf("advisory %s entry has no id", e.Kind)
 	}
-	if (e.Kind == DirectiveDelivered || e.Kind == DirectiveActed) && e.Session == "" {
+	if (e.Kind == directiveDelivered || e.Kind == directiveActed) && e.Session == "" {
 		return fmt.Errorf("advisory %s entry for %s names no session", e.Kind, e.ID)
 	}
 	return nil
 }
 
 // key keeps a post apart from its retraction, so the fold keeps the text.
-func (e DirectiveEntry) key() string {
+func (e directiveEntry) key() string {
 	return string(e.Kind) + "\x00" + e.ID + "\x00" + e.Session
 }
 
@@ -117,43 +117,34 @@ func (a Directive) Open() bool { return a.RetractedMs == 0 }
 
 // DirectiveStore is the advisories store of one repository.
 type DirectiveStore struct {
-	lines file.JSONL[DirectiveEntry]
+	lines file.JSONL[directiveEntry]
 }
 
 const directiveFile = "advisories.jsonl"
 
-// DirectiveDir resolves <XDG state>/magus/advisories/<repo>-<hash12>. It
-// keys on repository identity like [Dir], so every worktree reads one store.
-// It repeats [Dir]'s two calls rather than live under it, because [Prune]
-// removes files there at retention and an advisory stands until retracted.
-func DirectiveDir(root string) (string, error) {
-	base, err := xdg.StateDir()
-	if err != nil {
-		return "", fmt.Errorf("advisories: resolve state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
-	}
-	dir, err := vcs.StateDir(base, "advisories", root)
-	if err != nil {
-		return "", fmt.Errorf("advisories: %w", err)
-	}
-	return dir, nil
-}
-
-// NewDirectiveStore is the store in dir. It touches nothing until used.
-func NewDirectiveStore(dir string) DirectiveStore {
-	return DirectiveStore{lines: file.JSONL[DirectiveEntry]{
+// newDirectiveStore is the store in dir. It touches nothing until used.
+func newDirectiveStore(dir string) DirectiveStore {
+	return DirectiveStore{lines: file.JSONL[directiveEntry]{
 		Path: filepath.Join(dir, directiveFile),
-		Key:  DirectiveEntry.key,
+		Key:  directiveEntry.key,
 	}}
 }
 
-// OpenDirectiveStore is the store of the repository at root, in [DirectiveDir].
-// It touches nothing until used.
+// OpenDirectiveStore is the store of the repository at root, in
+// <XDG state>/magus/advisories/<repo>-<hash12>. It keys on repository
+// identity like [Dir], so every worktree reads one store. It does not live
+// under [Dir], because [Prune] removes files there at retention and an
+// advisory stands until retracted. It touches nothing until used.
 func OpenDirectiveStore(root string) (DirectiveStore, error) {
-	dir, err := DirectiveDir(root)
+	base, err := xdg.StateDir()
 	if err != nil {
-		return DirectiveStore{}, err
+		return DirectiveStore{}, fmt.Errorf("advisories: resolve state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
 	}
-	return NewDirectiveStore(dir), nil
+	dir, err := vcs.StateDir(base, "advisories", root)
+	if err != nil {
+		return DirectiveStore{}, fmt.Errorf("advisories: %w", err)
+	}
+	return newDirectiveStore(dir), nil
 }
 
 // Dir is the directory holding the store's file.
@@ -170,11 +161,11 @@ func (s DirectiveStore) Load() ([]Directive, error) {
 	return foldDirectives(entries), nil
 }
 
-func foldDirectives(entries []DirectiveEntry) []Directive {
+func foldDirectives(entries []directiveEntry) []Directive {
 	byID := map[string]*Directive{}
 	var order []string
 	for _, e := range entries {
-		if e.Kind != DirectivePost {
+		if e.Kind != directivePost {
 			continue
 		}
 		byID[e.ID] = &Directive{ID: e.ID, Text: e.Text, By: e.By, Expect: e.Expect, PostedMs: e.Ms,
@@ -187,13 +178,13 @@ func foldDirectives(entries []DirectiveEntry) []Directive {
 			continue
 		}
 		switch e.Kind {
-		case DirectiveRetract:
+		case directiveRetract:
 			a.RetractedMs = e.Ms
-		case DirectiveDelivered:
+		case directiveDelivered:
 			a.Delivered[e.Session] = e.Ms
-		case DirectiveActed:
+		case directiveActed:
 			a.Acted[e.Session] = e.Ms
-		case DirectivePost:
+		case directivePost:
 		}
 	}
 	out := make([]Directive, 0, len(order))
@@ -204,9 +195,9 @@ func foldDirectives(entries []DirectiveEntry) []Directive {
 	return out
 }
 
-// DirectiveID names a post by its text and the moment it was posted. The
+// directiveID names a post by its text and the moment it was posted. The
 // same words posted twice are two advisories, each shown again.
-func DirectiveID(text string, ms int64) string {
+func directiveID(text string, ms int64) string {
 	sum := sha256.Sum256(fmt.Appendf(nil, "%s\x00%d", text, ms))
 	return "adv-" + hex.EncodeToString(sum[:])[:12]
 }
@@ -219,33 +210,33 @@ func (s DirectiveStore) Post(ctx context.Context, text, expect, by string, now t
 		return Directive{}, errors.New("advisories: an advisory needs text")
 	}
 	ms := now.UnixMilli()
-	e := DirectiveEntry{Kind: DirectivePost, ID: DirectiveID(text, ms), Ms: ms,
+	e := directiveEntry{Kind: directivePost, ID: directiveID(text, ms), Ms: ms,
 		Text: boundMessage(text), By: by, Expect: strings.TrimSpace(expect)}
-	err := s.lines.Update(ctx, func([]DirectiveEntry) []DirectiveEntry { return []DirectiveEntry{e} })
+	err := s.lines.Update(ctx, func([]directiveEntry) []directiveEntry { return []directiveEntry{e} })
 	if err != nil {
 		return Directive{}, fmt.Errorf("advisories: record post: %w", err)
 	}
-	return foldDirectives([]DirectiveEntry{e})[0], nil
+	return foldDirectives([]directiveEntry{e})[0], nil
 }
 
 // ErrNoDirective is a retraction whose id or prefix names no advisory.
 var ErrNoDirective = errors.New("no such advisory")
 
-// ErrRetracted is a retraction of a closed advisory: one closes once.
-var ErrRetracted = errors.New("advisory already retracted")
+// errRetracted is a retraction of a closed advisory: one closes once.
+var errRetracted = errors.New("advisory already retracted")
 
 // Retract closes the advisory ref names, by id or unambiguous id prefix. An
 // ambiguous prefix is refused and lists every match.
 func (s DirectiveStore) Retract(ctx context.Context, ref, by string, now time.Time) (Directive, error) {
 	var got Directive
 	var refused error
-	err := s.lines.Update(ctx, func(entries []DirectiveEntry) []DirectiveEntry {
+	err := s.lines.Update(ctx, func(entries []directiveEntry) []directiveEntry {
 		got, refused = pickDirective(foldDirectives(entries), ref)
 		if refused != nil {
 			return nil
 		}
 		got.RetractedMs = now.UnixMilli()
-		return []DirectiveEntry{{Kind: DirectiveRetract, ID: got.ID, Ms: got.RetractedMs, By: by}}
+		return []directiveEntry{{Kind: directiveRetract, ID: got.ID, Ms: got.RetractedMs, By: by}}
 	})
 	if err != nil {
 		return Directive{}, fmt.Errorf("advisories: record retraction: %w", err)
@@ -268,7 +259,7 @@ func pickDirective(all []Directive, ref string) (Directive, error) {
 	got := all[slices.Index(ids, id)]
 	if !got.Open() {
 		at := time.UnixMilli(got.RetractedMs).Format(time.RFC3339)
-		return got, fmt.Errorf("%s: %w at %s", got.ID, ErrRetracted, at)
+		return got, fmt.Errorf("%s: %w at %s", got.ID, errRetracted, at)
 	}
 	return got, nil
 }
@@ -295,11 +286,11 @@ func (s DirectiveStore) Deliver(ctx context.Context, at Recipient, now time.Time
 		return nil, err
 	}
 	var shown []Directive
-	err = s.lines.Update(ctx, func(entries []DirectiveEntry) []DirectiveEntry {
+	err = s.lines.Update(ctx, func(entries []directiveEntry) []directiveEntry {
 		shown = undelivered(foldDirectives(entries), at.Session)
-		add := make([]DirectiveEntry, 0, len(shown))
+		add := make([]directiveEntry, 0, len(shown))
 		for _, a := range shown {
-			add = append(add, at.entry(DirectiveDelivered, a.ID, now))
+			add = append(add, at.entry(directiveDelivered, a.ID, now))
 		}
 		return add
 	})
@@ -319,8 +310,8 @@ func undelivered(all []Directive, session string) []Directive {
 	return out
 }
 
-func (at Recipient) entry(kind DirectiveKind, id string, now time.Time) DirectiveEntry {
-	return DirectiveEntry{Kind: kind, ID: id, Ms: now.UnixMilli(), Session: at.Session, Host: at.Host, Event: at.Event}
+func (at Recipient) entry(kind directiveKind, id string, now time.Time) directiveEntry {
+	return directiveEntry{Kind: kind, ID: id, Ms: now.UnixMilli(), Session: at.Session, Host: at.Host, Event: at.Event}
 }
 
 // RecordActed records an action on each open advisory shown to at's session
@@ -335,10 +326,10 @@ func (s DirectiveStore) RecordActed(ctx context.Context, at Recipient, command s
 	if err != nil || len(pendingActs(all, at.Session, command)) == 0 {
 		return err
 	}
-	err = s.lines.Update(ctx, func(entries []DirectiveEntry) []DirectiveEntry {
-		var add []DirectiveEntry
+	err = s.lines.Update(ctx, func(entries []directiveEntry) []directiveEntry {
+		var add []directiveEntry
 		for _, a := range pendingActs(foldDirectives(entries), at.Session, command) {
-			add = append(add, at.entry(DirectiveActed, a.ID, now))
+			add = append(add, at.entry(directiveActed, a.ID, now))
 		}
 		return add
 	})

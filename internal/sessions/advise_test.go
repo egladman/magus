@@ -21,7 +21,7 @@ func TestDirectiveSuite(t *testing.T) { suite.Run(t, new(DirectiveSuite)) }
 
 func (s *DirectiveSuite) SetupTest() {
 	s.dir = s.T().TempDir()
-	s.store = NewDirectiveStore(s.dir)
+	s.store = newDirectiveStore(s.dir)
 	s.now = time.UnixMilli(1_800_000_000_000)
 }
 
@@ -45,7 +45,7 @@ func (s *DirectiveSuite) TestAnAbsentStoreHoldsNothing() {
 }
 
 func (s *DirectiveSuite) TestADeliveryWithNothingOpenCreatesNoStore() {
-	s.store = NewDirectiveStore(filepath.Join(s.dir, "absent"))
+	s.store = newDirectiveStore(filepath.Join(s.dir, "absent"))
 	s.Empty(s.deliver("s1"))
 	s.NoDirExists(s.store.Dir())
 }
@@ -84,7 +84,7 @@ func (s *DirectiveSuite) TestARetractionClosesOnce() {
 	_, err := s.store.Retract(context.Background(), a.ID, "eli", s.now)
 	s.Require().NoError(err)
 	_, err = s.store.Retract(context.Background(), a.ID, "eli", s.now)
-	s.ErrorIs(err, ErrRetracted)
+	s.ErrorIs(err, errRetracted)
 }
 
 func (s *DirectiveSuite) TestAnAmbiguousRetractionNamesEveryMatch() {

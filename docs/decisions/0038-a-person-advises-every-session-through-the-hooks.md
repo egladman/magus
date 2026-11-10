@@ -48,24 +48,24 @@ The constraints:
 
 ### 1. One store per repository
 
-| Item                                                                                                                                   | State    |
-| -------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `<XDG state>/magus/advisories/<repo>-<hash12>/advisories.jsonl`, keyed through `vcs.StateDir` as the session store is, so every worktree reads it | done     |
-| One entry type, `sessions.DirectiveEntry`, with its own `MarshalJSON` and `UnmarshalJSON`; `kind` is `post`, `retract`, `delivered` or `acted` | done     |
-| The last line per key wins: a post and its retraction key on the advisory id, a delivery or an action on the id and the host session    | done     |
-| The text is clamped to `sessions.MaxMessageBytes`, the bound attention messages already carry                                           | done     |
+| Item                                                                                                                                              | State |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| `<XDG state>/magus/advisories/<repo>-<hash12>/advisories.jsonl`, keyed through `vcs.StateDir` as the session store is, so every worktree reads it | done  |
+| One entry type, `sessions.directiveEntry`, with its own `MarshalJSON` and `UnmarshalJSON`; `kind` is `post`, `retract`, `delivered` or `acted`    | done  |
+| The last line per key wins: a post and its retraction key on the advisory id, a delivery or an action on the id and the host session              | done  |
+| The text is clamped to `sessions.MaxMessageBytes`, the bound attention messages already carry                                                     | done  |
 
 The id is `adv-` plus 12 hex digits of the sha256 of the text and the post time, so two
 posts of one text are two advisories.
 
 ### 2. Three verbs, all a person's
 
-| Item                                                                                                                         | State    |
-| ---------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `magus session advise "<text>" [--expect <command prefix>]` posts one advisory and prints its id                             | done     |
-| `magus session advisories [--all]` lists open advisories, oldest first, with how many sessions each reached and acted; `--all` adds retracted ones | done     |
-| `magus session retract <id>` closes one by id or unambiguous prefix, as `session dispose` does                                | done     |
-| The guard denies `session advise` and `session retract` to an agent, beside `session dispose` and `diff --ack`                 | done     |
+| Item                                                                                                                                               | State |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| `magus session advise "<text>" [--expect <command prefix>]` posts one advisory and prints its id                                                   | done  |
+| `magus session advisories [--all]` lists open advisories, oldest first, with how many sessions each reached and acted; `--all` adds retracted ones | done  |
+| `magus session retract <id>` closes one by id or unambiguous prefix, as `session dispose` does                                                     | done  |
+| The guard denies `session advise` and `session retract` to an agent, beside `session dispose` and `diff --ack`                                     | done  |
 
 Nothing closes an advisory but `retract`: no expiry and no count of deliveries. A
 session started after the post sees it too, because the person's word stands until the
@@ -73,25 +73,25 @@ person takes it back.
 
 ### 3. Delivery through the guard
 
-| Item                                                                                                                                                           | State    |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| At a root `Stop`, a judgment that does not already deny becomes a deny whose reason is the advisory, on every host: the session keeps working and reads it     | done     |
-| At a user prompt, `magus shell --message --renders-context` answers with the advisory as `context`, and `magus-command.buzz` renders it as `UserPromptSubmit` `additionalContext` (Claude Code, Codex); a wiring without `--renders-context` is shown nothing and marked nothing, so its stop still shows it | done     |
-| Each advisory reaches one host session once: the guard appends `delivered` before it answers, and a session with a delivery for an id is never shown it again | done     |
-| A subagent event (`SubagentStop`, or any call that names an agent id) delivers nothing, so a child cannot spend its root's one showing                          | done     |
-| The text opens with who posted it (the OS user `magus session advise` ran as), when, and the id, and says it is that person's own instruction to every session, not a relay | done     |
-| Cursor's stop reply drops its `[magus guard]` prefix for an advisory, which is a person's words, not the guard's                                              | done     |
-| Cursor and OpenCode prompt delivery                                                                                                                           | not built (no channel; see Context) |
+| Item                                                                                                                                                                                                                                                                                                         | State                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
+| At a root `Stop`, a judgment that does not already deny becomes a deny whose reason is the advisory, on every host: the session keeps working and reads it                                                                                                                                                   | done                                |
+| At a user prompt, `magus shell --message --renders-context` answers with the advisory as `context`, and `magus-command.buzz` renders it as `UserPromptSubmit` `additionalContext` (Claude Code, Codex); a wiring without `--renders-context` is shown nothing and marked nothing, so its stop still shows it | done                                |
+| Each advisory reaches one host session once: the guard appends `delivered` before it answers, and a session with a delivery for an id is never shown it again                                                                                                                                                | done                                |
+| A subagent event (`SubagentStop`, or any call that names an agent id) delivers nothing, so a child cannot spend its root's one showing                                                                                                                                                                       | done                                |
+| The text opens with who posted it (the OS user `magus session advise` ran as), when, and the id, and says it is that person's own instruction to every session, not a relay                                                                                                                                  | done                                |
+| Cursor's stop reply drops its `[magus guard]` prefix for an advisory, which is a person's words, not the guard's                                                                                                                                                                                             | done                                |
+| Cursor and OpenCode prompt delivery                                                                                                                                                                                                                                                                          | not built (no channel; see Context) |
 
 An idle session sees the advisory on its next prompt or stop. Waking one is the host's job.
 
 ### 4. Measuring whether sessions act
 
-| Item                                                                                                                                                       | State    |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `delivered` per session is the reach: `session advisories` prints how many host sessions were shown each advisory                                          | done     |
-| `--expect <prefix>` names what acting on it looks like (`--expect "git push"`); the guard appends `acted` the first time a session it delivered to runs a shell command starting with that prefix, counting a subagent's command for its root and never a denied one | done     |
-| `session advisories` prints `acted M of N`, or `acted: not measured (no --expect)`, never a bare count                                                    | done     |
+| Item                                                                                                                                                                                                                                                                 | State |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| `delivered` per session is the reach: `session advisories` prints how many host sessions were shown each advisory                                                                                                                                                    | done  |
+| `--expect <prefix>` names what acting on it looks like (`--expect "git push"`); the guard appends `acted` the first time a session it delivered to runs a shell command starting with that prefix, counting a subagent's command for its root and never a denied one | done  |
+| `session advisories` prints `acted M of N`, or `acted: not measured (no --expect)`, never a bare count                                                                                                                                                               | done  |
 
 An advisory without `--expect` is measured for reach only, and the listing says so. The
 guard checks the prefix only on shell commands of a session holding a delivery whose
