@@ -377,21 +377,27 @@ fun rejectedFlag(result: proc\ExecResult?) > bool {
         and result!.stderr.indexOf(UNKNOWN_FLAG) != null;
 }
 
-// recordMessage hands a message the person typed to `magus shell --message` and reads
-// nothing back. A failure costs the record, never the message.
-// It returns the reply: "", or the per-session notice that no magus ran.
+// A person's open advisory, as context for the prompt the person just sent.
+final PROMPT_REPLY = `{{if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":{{toJson .context}}}}{{end}}`;
+
+// recordMessage hands a message the person typed to `magus shell --message`.
+// A failure costs the record, never the message. It returns the reply: an
+// open advisory as context, the notice that no magus ran, or "".
 fun recordMessage(bin: str, message: str, dir: str, session: str, host: str, attribution: [str]) > str {
     if (bin == "" or !hook\isExecutable(bin)) {
         return hook\unrecordedNotice(bin, session: session, host: host,
             file: "magus-command.buzz", root: hook\workspaceRootAt(dir));
     }
-    final args = mut ["shell", "--message"];
+    final args = mut ["shell", "--message", "--renders-context", "-o", "template={PROMPT_REPLY}"];
     foreach (word in attribution) { args.append(word); }
-    _ = proc\exec(bin, args: args, dir: dir, opts: proc\ExecOptions{
-        quiet = true,
-        allowFailure = true,
-        stdin = message,
-    }) catch void;
+    final opts = proc\ExecOptions{quiet = true, allowFailure = true, stdin = message};
+    final result = proc\exec(bin, args: args, dir: dir, opts: opts) catch null;
+    if (result == null) { return ""; }
+    if (!rejectedFlag(result)) { return hook\trimTrailingNewlines(result!.stdout); }
+    // A magus older than advisories still records the message.
+    final plain = mut ["shell", "--message"];
+    foreach (word in attribution) { plain.append(word); }
+    _ = proc\exec(bin, args: plain, dir: dir, opts: opts) catch void;
     return "";
 }
 

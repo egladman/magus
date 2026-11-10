@@ -332,9 +332,11 @@ flag shell/no-message
 flag shell/no-observe
 flag shell/no-path
 flag shell/no-renders-ask
+flag shell/no-renders-context
 flag shell/observe
 flag shell/path
 flag shell/renders-ask
+flag shell/renders-context
 flag shell/result-digest
 flag shell/session
 flag shell/transcript

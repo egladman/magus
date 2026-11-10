@@ -109,6 +109,9 @@ Judge the input as a file path an edit is about to write, not as a shell command
 \fB\-\-[no\-]renders\-ask\fR (default: off)
 This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny
 .TP
+\fB\-\-[no\-]renders\-context\fR (default: off)
+With \-\-message, this wiring hands an advise verdict's context to the model; only then is a person's open advisory shown and marked delivered at the prompt
+.TP
 \fB\-\-result\-digest\fR \fIstring\fR
 With \-\-duration, a fingerprint of the call's result, so an equal answer can be told from a changed one; never the result's text. Absent means the host gave none, and the record says so
 .TP

@@ -129,15 +129,10 @@ func diffCommand(ctx context.Context, root string, args []string) error {
 	//
 	// The two controls that hold are the ones nobody can satisfy by typing faster: the agent
 	// guard, and the terminal check below.
-	if rf.Ack && !isInteractiveTTY() {
-		// The agent guard denies --ack outright, but it fails OPEN where it is not wired,
-		// and a receipt minted by a script is precisely the laundering this refuses. Not a
-		// usage error: the flags are fine and the caller is not a person.
-		// 2 rather than 1: the flags are fine and the caller is not who this is for, which
-		// the documented taxonomy separates from a 1 (the changeset could not be read).
-		slog.ErrorContext(ctx, "diff --ack records that a person read this, so it needs an interactive terminal",
-			attr.Notice(""), attr.Component("magus"))
-		return exit.Reported(exit.Usage)
+	if rf.Ack {
+		if err := requirePerson(ctx, "diff --ack records that a person read this"); err != nil {
+			return err
+		}
 	}
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -164,6 +159,18 @@ func diffCommand(ctx context.Context, root string, args []string) error {
 		return watchDiff(ctx, m, render)
 	}
 	return render()
+}
+
+// requirePerson refuses a command recording a person's act without an
+// interactive terminal. The guard denies it to an agent but fails open where
+// unwired. Exit 2: the flags are fine, the caller is not a person.
+func requirePerson(ctx context.Context, records string) error {
+	if isInteractiveTTY() {
+		return nil
+	}
+	slog.ErrorContext(ctx, records+", so it needs an interactive terminal",
+		attr.Notice(""), attr.Component("magus"))
+	return exit.Reported(exit.Usage)
 }
 
 // diffInputKind is where the patch comes from.

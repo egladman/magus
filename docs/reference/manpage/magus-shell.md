@@ -119,6 +119,9 @@ not block every tool call.
 **--[no-]renders-ask** (default: off)
 : This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny
 
+**--[no-]renders-context** (default: off)
+: With --message, this wiring hands an advise verdict's context to the model; only then is a person's open advisory shown and marked delivered at the prompt
+
 **--result-digest** *string*
 : With --duration, a fingerprint of the call's result, so an equal answer can be told from a changed one; never the result's text. Absent means the host gave none, and the record says so
 

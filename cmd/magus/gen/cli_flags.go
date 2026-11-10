@@ -649,6 +649,10 @@ const (
 	FlagServerStopPools = "pools"
 	// server stop: --socket
 	FlagServerStopSocket = "socket"
+	// session advise: --expect
+	FlagSessionAdviseExpect = "expect"
+	// session advisories: --all
+	FlagSessionAdvisoriesAll = "all"
 	// session checkpoint: --agent-name
 	FlagSessionCheckpointAgentName = "agent-name"
 	// session checkpoint: --note
@@ -697,6 +701,8 @@ const (
 	FlagShellPath = "path"
 	// shell: --renders-ask
 	FlagShellRendersAsk = "renders-ask"
+	// shell: --renders-context
+	FlagShellRendersContext = "renders-context"
 	// shell: --result-digest
 	FlagShellResultDigest = "result-digest"
 	// shell: --session
@@ -1044,6 +1050,7 @@ type ShellFlags struct {
 	Transcript     string        // --transcript
 	Event          string        // --event
 	RendersAsk     bool          // --[no-]renders-ask
+	RendersContext bool          // --[no-]renders-context
 	CallBackground bool          // --[no-]call-background
 	CallTimeout    time.Duration // --call-timeout
 	Duration       time.Duration // --duration
@@ -1069,6 +1076,8 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.StringVar(&f.Event, FlagShellEvent, "", "The host's hook event name (e.g. PreToolUse)")
 	fs.BoolVar(&f.RendersAsk, FlagShellRendersAsk, false, "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny")
 	cmdline.NegatedBoolVar(fs, &f.RendersAsk, FlagShellRendersAsk)
+	fs.BoolVar(&f.RendersContext, FlagShellRendersContext, false, "With --message, this wiring hands an advise verdict's context to the model; only then is a person's open advisory shown and marked delivered at the prompt")
+	cmdline.NegatedBoolVar(fs, &f.RendersContext, FlagShellRendersContext)
 	fs.BoolVar(&f.CallBackground, FlagShellCallBackground, false, "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused")
 	cmdline.NegatedBoolVar(fs, &f.CallBackground, FlagShellCallBackground)
 	cmdline.DurationVar(fs, &f.CallTimeout, FlagShellCallTimeout, 0, "ms", "The timeout the call gave its shell command (e.g. 10m, 600000ms); 0 or absent means the host's foreground default. Bare numbers are milliseconds.")
@@ -1516,6 +1525,31 @@ type SessionDisposeFlags struct {
 func BindSessionDispose(fs *flag.FlagSet) *SessionDisposeFlags {
 	var f SessionDisposeFlags
 	fs.StringVar(&f.Reason, FlagSessionDisposeReason, "", "Record why the request is being closed, alongside the disposition")
+	return &f
+}
+
+// SessionAdviseFlags are the flags declared for `magus session advise`.
+type SessionAdviseFlags struct {
+	Expect string // --expect
+}
+
+// BindSessionAdvise registers `magus session advise`'s flags on fs and returns the destination.
+func BindSessionAdvise(fs *flag.FlagSet) *SessionAdviseFlags {
+	var f SessionAdviseFlags
+	fs.StringVar(&f.Expect, FlagSessionAdviseExpect, "", "The start of the shell command that carries the advisory out; counts sessions that run it after being shown it")
+	return &f
+}
+
+// SessionAdvisoriesFlags are the flags declared for `magus session advisories`.
+type SessionAdvisoriesFlags struct {
+	All bool // --[no-]all
+}
+
+// BindSessionAdvisories registers `magus session advisories`'s flags on fs and returns the destination.
+func BindSessionAdvisories(fs *flag.FlagSet) *SessionAdvisoriesFlags {
+	var f SessionAdvisoriesFlags
+	fs.BoolVar(&f.All, FlagSessionAdvisoriesAll, false, "Also list retracted advisories")
+	cmdline.NegatedBoolVar(fs, &f.All, FlagSessionAdvisoriesAll)
 	return &f
 }
 

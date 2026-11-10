@@ -1834,7 +1834,7 @@ func TestGuardDeniesSessionDispose(t *testing.T) {
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
-		assert.Contains(t, v.Deny, "only a person may stamp a read receipt or dispose an attention request")
+		assert.Contains(t, v.Deny, "only a person may stamp a read receipt, dispose an attention request")
 		assert.Contains(t, v.Why, "session dispose")
 	}
 }
