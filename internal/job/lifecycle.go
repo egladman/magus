@@ -1052,7 +1052,8 @@ type landing struct {
 //     and no live child hangs under it, so a root outlives the children still working;
 //     a row queued on a declared or running dependency is waiting, and its clock starts
 //     when the last one ends or exits (see [types.JobIdleSince]);
-//  4. its holder exited, its work landed on the base branch (see [Store.landedOnBase]),
+//  4. its holder exited, or it runs with no filed result,
+//     its work landed on the base branch (see [Store.landedOnBase]),
 //     and no live child hangs under it;
 //  5. a holder took it and its deadline passed (see [types.Job.Overdue]): the declared
 //     bound is obeyed, not only reported.
