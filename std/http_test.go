@@ -449,6 +449,38 @@ func TestHTTPServeSingleDir(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, getMount(t, port, "/missing").Status)
 }
 
+// TestHTTPServeRefusesAHostThatIsNotLoopback stands in for a DNS rebinding
+// page: it reaches the loopback port under a name the attacker controls.
+func TestHTTPServeRefusesAHostThatIsNotLoopback(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.html"), []byte("home page"), 0o600))
+	port, err := HTTPServe(context.Background(), types.HTTPServerOptions{Dir: dir})
+	require.NoError(t, err)
+
+	get := func(host, origin string) mountResp {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/", port), nil)
+		require.NoError(t, err)
+		req.Host = host
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		raw, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		return mountResp{Status: resp.StatusCode, Body: string(raw)}
+	}
+
+	refused := get(fmt.Sprintf("rebind.example:%d", port), "")
+	assert.Equal(t, http.StatusForbidden, refused.Status)
+	assert.NotContains(t, refused.Body, "home page")
+	assert.Equal(t, http.StatusForbidden, get(fmt.Sprintf("localhost:%d", port), "http://rebind.example").Status, "a foreign Origin is refused too")
+	assert.Equal(t, mountResp{Status: http.StatusOK, Body: "home page"}, get(fmt.Sprintf("localhost:%d", port), ""))
+	assert.Equal(t, mountResp{Status: http.StatusOK, Body: "home page"}, get(fmt.Sprintf("127.0.0.1:%d", port), ""))
+}
+
 // TestHTTPServeMounts stands up two roots under a "mounts" prefix map and checks
 // that "/" serves the docs root, "/console/" serves the console root, longest-prefix
 // precedence lets "/console/" shadow "/" for a shared filename, and an unmounted
