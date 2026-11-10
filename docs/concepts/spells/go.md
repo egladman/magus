@@ -327,7 +327,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 
 ## go-vet
 
--trimpath: see go-test above; keeps vet's cache key worktree-independent too. ./... trails because go vet reads no flag after a package, so any forwarded arg drops it and the caller names the package.
+-trimpath: see go-test above; keeps vet's cache key worktree-independent too. ./... trails because go vet reads no flag after a package, so any forwarded arg drops it and the caller names the package. A forwarded file vets its package: go vet type-checks named files alone, so a multi-file package fails. A file ./... leaves out names no package.
 
 **Command:** `go vet -trimpath ./...`
 
