@@ -4,33 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
-	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 )
 
-// bootstrapExecSentinelVar marks a process that already replaced itself with a
-// workspace-local ./magus via maybeBootstrapExec, so a second hop can never chain.
-//
-// Distinct from spawn.AncestorsEnvVar / MAGUS_LEVEL (internal/proc/spawn/exec.go): those
-// describe a magus process spawning ANOTHER magus as a child invocation, i.e.
-// recursion depth. This is not that: the exec below replaces THIS process's image
-// with the same argv, stdio and exit code, so it is one invocation continuing under a
-// different binary, not a new, nested one. Reusing MAGUS_LEVEL would misreport a
-// straight-line bootstrap substitution as recursion to everything keyed on depth
-// (admission, telemetry, the "topLevel" checks in startup()), so this gets its own
-// var instead, kept in the same MAGUS_* namespace.
-const bootstrapExecSentinelVar = "MAGUS_BOOTSTRAP_EXEC_DONE"
-
-// bootstrapExecOptOutVar disables maybeBootstrapExec entirely. Documented in
-// internal/config/config.go's envOnly alongside the rest of the MAGUS_* variables.
-const bootstrapExecOptOutVar = "MAGUS_NO_BOOTSTRAP_EXEC"
-
-// pinnedBinaryVar is the hook glue's own pin of the binary it starts.
-const pinnedBinaryVar = "__MAGUS_BIN"
+// bootstrapExecSentinelVar is the name shell.go sets on the delegate it starts.
+const bootstrapExecSentinelVar = workspace.BootstrapExecSentinelVar
 
 // maybeBootstrapExec looks for a workspace-local ./magus and, when one is found and
 // is not the binary already running, replaces this process with it before ANYTHING
@@ -61,7 +41,7 @@ func maybeBootstrapExec(argv []string) {
 	if err != nil {
 		return
 	}
-	target, ok := bootstrapExecDecision(argv, self)
+	target, ok := workspace.BootstrapExecTarget(extractRootFlag(argv[1:]), self)
 	if !ok {
 		return
 	}
@@ -71,91 +51,8 @@ func maybeBootstrapExec(argv []string) {
 	}
 	// Before log setup: the exec replaces this process ahead of any display.
 	fmt.Fprintf(os.Stderr, "magus: using this workspace's own binary at %s instead of %s\n", target, self)
-	env := append(os.Environ(), bootstrapExecSentinelVar+"=1")
+	env := append(os.Environ(), workspace.BootstrapExecSentinelVar+"=1")
 	bootstrapExecInto(target, argv, env)
-}
-
-// bootstrapExecDecision is maybeBootstrapExec's decision logic without its test-binary
-// guard or side effects (the stderr line, the actual exec), so bootstrap_exec_test.go
-// can drive every branch (the opt-out, the sentinel, --root vs $PWD, no magusfile.buzz
-// anywhere above) directly, without needing a real, non-test process to do it in.
-//
-// A process running from a `go run` build never defers. The bootstrap builds ./magus
-// with `go run`, so that binary is the fresh build of the tree; the placed ./magus is
-// the stale one being replaced, and may be too old to load the workspace config.
-func bootstrapExecDecision(argv []string, self string) (target string, ok bool) {
-	if truthyEnv(os.Getenv(bootstrapExecOptOutVar)) {
-		return "", false
-	}
-	if ward.GoRunBinary(self) {
-		return "", false
-	}
-	if os.Getenv(bootstrapExecSentinelVar) != "" {
-		return "", false
-	}
-	// The hook glue starts a pinned binary as the one to judge with.
-	if os.Getenv(pinnedBinaryVar) != "" {
-		return "", false
-	}
-
-	start := extractRootFlag(argv[1:])
-	if start == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return "", false
-		}
-		start = wd
-	}
-	start, err := filepath.Abs(start)
-	if err != nil {
-		return "", false
-	}
-
-	return resolveBootstrapExecTarget(start, self)
-}
-
-// resolveBootstrapExecTarget finds the workspace root above start with workspace.FindRoot,
-// the definition every other entry point uses, and resolves the ./magus beside it.
-//
-// The marker is magus.yaml, not the nearest magusfile.buzz: console/, docs/, libs/* and
-// the agents guide directory each carry a magusfile.buzz and no binary, so stopping at
-// the first one handed every call made from a subdirectory to whatever magus is on PATH.
-// The nearest magus.yaml still never crosses out of the tree start is inside: a nested
-// worktree (this repository keeps them under .claude/worktrees/) holds its OWN
-// magus.yaml at its root, so the walk halts there and never reaches the parent
-// checkout's copy above it. A tree with no magus.yaml falls back to FindRoot's
-// contiguous project-marker rule.
-//
-// Returns ok=false when no root exists, it has no usable ./magus, or that binary
-// resolves to self.
-func resolveBootstrapExecTarget(start, self string) (target string, ok bool) {
-	dir, err := workspace.FindRoot(start)
-	if err != nil {
-		return "", false
-	}
-
-	name := "magus"
-	if runtime.GOOS == "windows" {
-		name = "magus.exe"
-	}
-	candidate := filepath.Join(dir, name)
-	info, err := os.Stat(candidate)
-	if err != nil || info.IsDir() {
-		return "", false
-	}
-	// Windows has no execute-permission bit; a stat that resolved is enough given the
-	// name already carries the platform's executable extension.
-	if runtime.GOOS != "windows" && info.Mode()&0o111 == 0 {
-		return "", false
-	}
-	resolved, err := filepath.EvalSymlinks(candidate)
-	if err != nil {
-		return "", false
-	}
-	if resolved == self {
-		return "", false
-	}
-	return resolved, true
 }
 
 // bootstrapExecRefusal says why a checkout's own ./magus must not hand over
@@ -168,14 +65,4 @@ func bootstrapExecRefusal(target, self string) string {
 		return ""
 	}
 	return foreignCheckout(filepath.Dir(target), session)
-}
-
-// truthyEnv matches the 1/true/yes convention of the boolean MAGUS_* env vars.
-func truthyEnv(v string) bool {
-	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "1", "true", "yes":
-		return true
-	default:
-		return false
-	}
 }
