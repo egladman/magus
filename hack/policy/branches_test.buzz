@@ -146,3 +146,64 @@ test "a sha:ref push and a git -C push are scored by the commits they publish" {
     final own = branches\decideNames(helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:buzz-checker-fiber-json"]]), current: "hook-lease", remote: remote, topic: scored(mut [<str>]), once: helpers\counter());
     std\assert(own.decision == magus\GuardDecision.deny, message: "the checkout's own wide branch is still judged");
 }
+
+fun shell(name: str, args: [str]) > helpers\Program {
+    return helpers\Program{ name = name, args = args, repeats = false };
+}
+
+// merged: the 11 fragments #719 added, which a branch squash-merged as
+// #719 still adds against origin/main.
+fun merged() > [branches\Subject] {
+    final found = mut [<branches\Subject>];
+    foreach (slug in ["admission-refusal-says-why", "console-serves-only-the-embedded-app",
+        "hack-scripts-pass-their-own-checks", "hook-delegates-only-to-its-own-repository",
+        "lease-writes-stay-inside-the-boundary", "mcp-unix-socket-mcp", "push-refuses-host-named-branches",
+        "sandbox-control-files-fold-case", "small-cache-and-vcs-fixes", "small-harness-gaps", "small-network-hardening"]) {
+        found.append(fragment(slug, headline: slug.replace("-", with: " ")));
+    }
+    return found;
+}
+
+test "a push after a cd runs in the checkout the cd names" {
+    final abs = branches\findPushes([shell("cd", args: ["/w/fix"])] + helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:main-spell-charms"]]), current: "fix");
+    std\assert(abs[0].dir == "/w/fix" and abs[0].located, message: "cd: {abs[0].dir}");
+    final rel = branches\findPushes([shell("cd", args: ["sub"])] + helpers\vcsRequest([["git", "push", "origin", "topic-a"]]), current: "fix");
+    std\assert(rel[0].dir == "sub" and rel[0].located, message: "relative cd: {rel[0].dir}");
+    final both = branches\findPushes([shell("cd", args: ["/w"]), gitIn("fix", ["push", "origin", "topic-a"])], current: "fix");
+    std\assert(both[0].dir == "/w/fix", message: "cd then git -C: {both[0].dir}");
+    final home = branches\findPushes([shell("cd", args: ["~/w"])] + helpers\vcsRequest([["git", "push", "origin", "topic-a"]]), current: "fix");
+    std\assert(!home[0].located, message: "a cd the shell resolves names no checkout");
+    final back = branches\findPushes([shell("cd", args: ["~/w"]), gitIn("/w/fix", ["push", "origin", "topic-a"])], current: "fix");
+    std\assert(back[0].located and back[0].dir == "/w/fix", message: "an absolute git -C names it again");
+}
+
+test "a cd push is scored by its own commits, not the host checkout's branch" {
+    final seen = mut [<str>];
+    final topic = fun (source: str, dir: str) > branches\Topic {
+        seen.append("{dir}|{source}");
+        if (dir == "/w/fix") {
+            return branches\withSubjects(branches\unknownTopic(), subjects: [
+                branches\commitSubjectTopic("hand TestResolve_FunctionValueTargets a Charm object as upstream Buzz requires"),
+                branches\commitSubjectTopic("align the MCP transport table to dprint"),
+            ]);
+        }
+        return branches\withSubjects(branches\unknownTopic(), subjects: merged());
+    };
+    final remote = branches\Remote{ base = "origin/main", branches = [<str>] };
+    final line = [shell("cd", args: ["/w/fix"])] + helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:main-spell-charms"]]);
+    final v = branches\decideNames(line, current: "fix-main-spell-charms-and-mcp-table", remote: remote, topic: topic, once: helpers\counter());
+    std\assert(v.decision != magus\GuardDecision.deny, message: v.reason);
+    std\assert(seen.join(",") == "/w/fix|HEAD", message: seen.join(","));
+    final unmoved = branches\decideNames(helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:main-spell-charms"]]), current: "hook-lease", remote: remote, topic: topic, once: helpers\counter());
+    std\assert(unmoved.reason.indexOf("adds 11 topics") != null, message: "the host checkout's own branch is still judged: {unmoved.reason}");
+}
+
+test "a push after a cd the shell resolves is not scored" {
+    final topic = fun (source: str, dir: str) > branches\Topic {
+        return branches\withSubjects(branches\unknownTopic(), subjects: merged());
+    };
+    final remote = branches\Remote{ base = "origin/main", branches = [<str>] };
+    final line = [shell("cd", args: ["$CHECKOUT"])] + helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:main-spell-charms"]]);
+    final v = branches\decideNames(line, current: "fix", remote: remote, topic: topic, once: helpers\counter());
+    std\assert(v.decision != magus\GuardDecision.deny, message: v.reason);
+}

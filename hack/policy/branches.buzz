@@ -126,6 +126,9 @@ export fun authorityDenial(caller: Pusher) > str {
 // Push is one branch a line publishes. name is the branch as the remote receives it, ""
 // when it is the checkout's own and the checkout reported none. generated is true for
 // `jj git push --change`, where jj makes the name up.
+// dir is the checkout the push runs in, relative to the host's
+// directory. located is false when the line moves somewhere only
+// the shell resolves (`cd ~`, `popd`), so dir names no checkout.
 export object Push {
     tool: str,
     remote: str,
@@ -133,6 +136,7 @@ export object Push {
     generated: bool = false,
     source: str = "",
     dir: str = "",
+    located: bool = true,
 }
 
 // gitDir is the checkout `git -C <dir>` runs in, "" when the line gives none.
@@ -154,9 +158,27 @@ final gitSkipFlags = ["--delete", "-d", "--tags", "--all", "--mirror", "--help",
 
 // findPushes are the branches the line's programs publish. current is the checkout's branch
 // or bookmark, "" when it is on none.
+//
+// A line often cds from the host's checkout into another to push.
+// Each push carries the checkout it runs in, whose commits it
+// publishes. A gh call carries none: magus moves its request.
 export fun findPushes(programs: [helpers\Program], current: str) > [Push] {
     final pushes = mut [<Push>];
+    var at: str? = "";
     foreach (p in programs) {
+        if (p.name == "cd" or p.name == "pushd") {
+            final ops = helpers\stripFlags(p.args, valueFlags: [<str>]);
+            if (ops.len() == 1) {
+                at = movedTo(at, to: ops[0]);
+            } else {
+                at = null;
+            }
+            continue;
+        }
+        if (p.name == "popd") {
+            at = null;
+            continue;
+        }
         if (p.name == "gh") {
             final head = prHead(p.args, current: current);
             if (head != null) {
@@ -168,23 +190,52 @@ export fun findPushes(programs: [helpers\Program], current: str) > [Push] {
             continue;
         }
         final call = p.vcs!;
+        final found = mut [<Push>];
         if (call.tool == "git" and call.subcommand == "push") {
-            foreach (push in gitPushes(call.args, current: current, dir: gitDir(p.args))) { pushes.append(push); }
+            foreach (push in gitPushes(call.args, current: current)) { found.append(push); }
         } else if ((call.tool == "hg" or call.tool == "sl") and call.subcommand == "push") {
             foreach (name in flagValues(call.args, longs: ["--bookmark", "--to"], shorts: ["-B"])) {
-                pushes.append(Push{ tool = call.tool, remote = "default", name = name });
+                found.append(Push{ tool = call.tool, remote = "default", name = name });
             }
         } else if (call.tool == "jj" and call.subcommand == "git") {
             final ops = helpers\stripFlags(call.args, valueFlags: [<str>]);
             if (ops.len() > 0 and ops[0] == "push") {
-                foreach (push in jjPushes(call.args, current: current)) { pushes.append(push); }
+                foreach (push in jjPushes(call.args, current: current)) { found.append(push); }
             }
+        }
+        var dir = at;
+        final named = gitDir(p.args);
+        if (named != "") {
+            dir = movedTo(at, to: named);
+        }
+        foreach (push in found) {
+            pushes.append(Push{ tool = push.tool, remote = push.remote, name = push.name, generated = push.generated,
+                source = push.source, dir = dir ?? "", located = dir != null });
         }
     }
     return pushes;
 }
 
-fun gitPushes(args: [str], current: str, dir: str) > [Push] {
+// movedTo is at moved to the directory to names, joined to at
+// unless to is absolute. "" for at is the host's directory. null
+// when at is unknown or only the shell resolves to.
+fun movedTo(at: str?, to: str) > str? {
+    if (to == "" or to == "-" or to.startsWith("~") or to.indexOf("$") != null) {
+        return null;
+    }
+    if (to.startsWith("/")) {
+        return to;
+    }
+    if (at == null) {
+        return null;
+    }
+    if (at! == "") {
+        return to;
+    }
+    return "{at!}/{to}";
+}
+
+fun gitPushes(args: [str], current: str) > [Push] {
     final pushes = mut [<Push>];
     foreach (flag in gitSkipFlags) {
         if (args.indexOf(flag) != null) {
@@ -197,7 +248,7 @@ fun gitPushes(args: [str], current: str, dir: str) > [Push] {
         remote = ops[0];
     }
     if (ops.len() < 2) {
-        pushes.append(Push{ tool = "git", remote = remote, name = current, dir = dir });
+        pushes.append(Push{ tool = "git", remote = remote, name = current });
         return pushes;
     }
     foreach (spec in ops.sub(1)) {
@@ -225,7 +276,7 @@ fun gitPushes(args: [str], current: str, dir: str) > [Push] {
         if (ref == "") {
             continue;
         }
-        pushes.append(Push{ tool = "git", remote = remote, name = ref, source = source, dir = dir });
+        pushes.append(Push{ tool = "git", remote = remote, name = ref, source = source });
     }
     return pushes;
 }
@@ -892,7 +943,10 @@ export fun decideNames(programs: [helpers\Program], current: str, remote: Remote
         if (p.name == "" or p.name == baseName or release.match(p.name) != null) {
             continue;
         }
-        final read = topic(p.source, p.dir);
+        var read = unknownTopic();
+        if (p.located) {
+            read = topic(p.source, p.dir);
+        }
         var verdict = judgeName(p.name, topic: read);
         if (p.generated) {
             verdict = Verdict{
