@@ -71,6 +71,7 @@ type run struct {
 	Cache           bool     // replay cache hits; false forces a fresh run that still refreshes the entry (magus run --no-cache); applyRunOptions defaults it true
 	Gate            bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
 	Background      bool     // index work; any run that wants its locks stops it
+	UnderAncestor   bool     // index work; runs under a lock its ancestor holds
 	narrowing       *project.OpNarrowing
 	session         string // the host session the guard judges the run for; see WithSession
 	observer        types.Observer
@@ -84,6 +85,8 @@ func (o run) lockRole() []lockerOption {
 		return []lockerOption{asGate()}
 	case o.Background:
 		return []lockerOption{asBackground()}
+	case o.UnderAncestor:
+		return []lockerOption{underAncestorLock()}
 	}
 	return nil
 }

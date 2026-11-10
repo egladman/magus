@@ -261,6 +261,9 @@ type projectLocker struct {
 	// background marks index work nobody waits on.
 	// Any run that wants its locks stops it.
 	background bool
+	// underAncestor marks work that writes no tree, such as an index op.
+	// A lock its ancestor holds covers it, so it takes none of its own.
+	underAncestor bool
 	// out is where the lock's decision lines go: the workspace's WithStderr writer in a
 	// run, a buffer under test so it can read the exact bytes a user sees. The lines are written
 	// straight to the stream, never through the console, which is why -s/--silent
@@ -302,6 +305,10 @@ func asGate() lockerOption { return func(l *projectLocker) { l.gate = true } }
 
 // asBackground marks background work. See projectLocker.background.
 func asBackground() lockerOption { return func(l *projectLocker) { l.background = true } }
+
+// underAncestorLock marks work that runs under its ancestor's lock. See
+// projectLocker.underAncestor.
+func underAncestorLock() lockerOption { return func(l *projectLocker) { l.underAncestor = true } }
 
 // withReportWriter records the supersede decisions on w instead of printing them. nil is
 // a no-op, so callers can pass the run's writer unconditionally.
@@ -351,15 +358,7 @@ func newProjectLocker(cacheDir, workspaceRoot string, opts ...lockerOption) *pro
 // yields nil and the contention is judged like any other. Over-detecting would refuse a
 // legitimate concurrent run.
 func (l *projectLocker) reentrantError(ctx context.Context, projectPath string) error {
-	rec := l.readOwner(projectPath)
-	if !types.HasInvocationAncestor(ctx, rec.PID, rec.Inv) {
-		return nil
-	}
-	// An owner record outlives a holder that was killed between locking and cleanup, and the
-	// flock behind it may since have been taken by someone else entirely. Believing a
-	// corpse here would diagnose re-entry against a holder that is not an ancestor, so
-	// confirm the lock is still held. Same question heldLocks asks, for the same reason.
-	if !lockIsHeld(l.lockPath(projectPath)) {
+	if !l.ancestorHolds(ctx, projectPath) {
 		return nil
 	}
 	p := projectPath
@@ -371,6 +370,18 @@ func (l *projectLocker) reentrantError(ctx context.Context, projectPath string) 
 			" Waiting would never end, so it is refused instead."+
 			" Either target a project the outer run does not hold, or express the dependency with ctx.needs(<target>)"+
 			" so one invocation runs both.", p, l.describeOwner(projectPath))
+}
+
+// ancestorHolds reports whether one of this invocation's ancestors holds
+// projectPath's lock. See reentrantError.
+func (l *projectLocker) ancestorHolds(ctx context.Context, projectPath string) bool {
+	rec := l.readOwner(projectPath)
+	if !types.HasInvocationAncestor(ctx, rec.PID, rec.Inv) {
+		return false
+	}
+	// An owner record outlives a killed holder, and another process may hold
+	// the flock since. Believing it would blame an ancestor that is gone.
+	return lockIsHeld(l.lockPath(projectPath))
 }
 
 // lockContendedError is returned when a magus process outside this invocation's own run
@@ -417,7 +428,8 @@ func heldBy(owner string) string {
 // Who holds the lock decides what happens:
 //
 //   - one of this invocation's own ancestors: refused with MGS3007, since the ancestor
-//     is blocked on this invocation and would never release;
+//     is blocked on this invocation and would never release. Under
+//     underAncestorLock nothing is taken, and the release is a no-op;
 //   - an earlier gate on this same tree, when this invocation is a gate: asked to stop
 //     (MGS3014), and the lock is taken when it does;
 //   - background work on this tree, unless this is too: asked to stop
@@ -428,6 +440,9 @@ func heldBy(owner string) string {
 //     so is an earlier gate in another process that does not stop within
 //     supersedeYieldBound. magus never waits on another magus invocation.
 func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func(), error) {
+	if l.underAncestor && l.ancestorHolds(ctx, projectPath) {
+		return func() {}, nil
+	}
 	path := l.lockPath(projectPath)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, fmt.Errorf("workspace lock: create lock dir for %s: %w", projectPath, err)
