@@ -157,6 +157,19 @@ func TestJSONDecodeValueKeepsIntegralNumbersInts(t *testing.T) {
 	assert.False(t, boxed, "the value is plain, not Boxed")
 }
 
+func TestJSONDecodeKeepsObjectMembersInDocumentOrder(t *testing.T) {
+	doc := `{"zulu":1,"alpha":2,"mike":3,"echo":4,"yankee":5,"bravo":6,"x":{"q":1,"b":2,"m":3},"k":7,"c":8}`
+	want := []string{"zulu", "alpha", "mike", "echo", "yankee", "bravo", "x", "k", "c"}
+	for range 50 {
+		v, err := JSONDecodeValue([]byte(doc))
+		require.NoError(t, err)
+		assert.Equal(t, want, v.MapKeys())
+		x, ok := v.MapGet("x")
+		require.True(t, ok)
+		assert.Equal(t, []string{"q", "b", "m"}, x.MapKeys())
+	}
+}
+
 func TestSession_SerializeBoxedIsDeclared(t *testing.T) {
 	ctx := context.Background()
 	exec := func(src string) (*buzz.Session, error) {

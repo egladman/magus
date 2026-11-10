@@ -6,6 +6,8 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	json "github.com/egladman/magus/libs/gopherbuzz/internal/codec"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -353,21 +355,17 @@ func serializeJSONDecode(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if len(args) < 1 || !args[0].IsString() {
 		return vm.Null, fmt.Errorf("serialize.jsonDecode: requires a str argument")
 	}
-	var raw any
-	if err := json.Unmarshal([]byte(args[0].AsString()), &raw); err != nil {
+	v, err := decodeJSON([]byte(args[0].AsString()))
+	if err != nil {
 		return vm.Null, fmt.Errorf("serialize.jsonDecode: %w", err)
 	}
-	return makeBoxed(goToBoxedBuzz(raw)), nil
+	return makeBoxed(v), nil
 }
 
 // JSONDecodeValue decodes data the way serialize.jsonDecode does, integral
 // numbers to int included, but returns the plain value rather than a Boxed one.
 func JSONDecodeValue(data []byte) (vm.Value, error) {
-	var raw any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return vm.Null, err
-	}
-	return goToBoxedBuzz(raw), nil
+	return decodeJSON(data)
 }
 
 // buzzToGo converts a Buzz value to a Go-native value suitable for JSON
@@ -424,35 +422,144 @@ func buzzToGo(v vm.Value, path []vm.Value) (any, error) {
 	}
 }
 
-// goToBoxedBuzz converts a Go value (as returned by json.Unmarshal) to a Buzz value.
-func goToBoxedBuzz(v any) vm.Value {
-	if v == nil {
-		return vm.Null
+// jsonDocument builds the Buzz value from the document's bytes. Decoding
+// into any forgets member order and how each number was written.
+type jsonDocument struct{ value vm.Value }
+
+func (d *jsonDocument) UnmarshalJSON(data []byte) error {
+	s := &jsonScanner{b: data}
+	v, err := s.next()
+	if err != nil {
+		return err
 	}
-	switch x := v.(type) {
-	case bool:
-		return vm.BoolValue(x)
-	case float64:
-		// json.Unmarshal always uses float64 for numbers.
-		if x == float64(int64(x)) {
-			return vm.IntValue(int64(x))
+	d.value = v
+	return nil
+}
+
+func decodeJSON(data []byte) (vm.Value, error) {
+	var doc jsonDocument
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return vm.Null, err
+	}
+	return doc.value, nil
+}
+
+// jsonScanner walks bytes the codec has already validated, so it checks no
+// syntax of its own.
+type jsonScanner struct {
+	b []byte
+	i int
+}
+
+func (s *jsonScanner) skipSpace() {
+	for s.i < len(s.b) && strings.IndexByte(" \t\r\n", s.b[s.i]) >= 0 {
+		s.i++
+	}
+}
+
+func (s *jsonScanner) next() (vm.Value, error) {
+	s.skipSpace()
+	switch s.b[s.i] {
+	case '{':
+		return s.object()
+	case '[':
+		return s.array()
+	case '"':
+		str, err := s.str()
+		if err != nil {
+			return vm.Null, err
 		}
-		return vm.FloatValue(x)
-	case string:
-		return vm.StringValue(x)
-	case []any:
-		items := make([]vm.Value, len(x))
-		for i, it := range x {
-			items[i] = goToBoxedBuzz(it)
-		}
-		return vm.ListValue(items)
-	case map[string]any:
-		m := vm.NewMap()
-		for k, val := range x {
-			m.MapSet(k, goToBoxedBuzz(val))
-		}
-		return m
+		return vm.StringValue(str), nil
+	case 't':
+		s.i += len("true")
+		return vm.BoolValue(true), nil
+	case 'f':
+		s.i += len("false")
+		return vm.BoolValue(false), nil
+	case 'n':
+		s.i += len("null")
+		return vm.Null, nil
 	default:
-		return vm.StringValue(fmt.Sprintf("%v", v))
+		return s.number()
 	}
+}
+
+func (s *jsonScanner) object() (vm.Value, error) {
+	m := vm.NewMap()
+	s.i++
+	for {
+		s.skipSpace()
+		if s.b[s.i] == '}' {
+			s.i++
+			return m, nil
+		}
+		if s.b[s.i] == ',' {
+			s.i++
+			s.skipSpace()
+		}
+		key, err := s.str()
+		if err != nil {
+			return vm.Null, err
+		}
+		s.skipSpace()
+		s.i++
+		val, err := s.next()
+		if err != nil {
+			return vm.Null, err
+		}
+		m.MapSet(key, val)
+	}
+}
+
+func (s *jsonScanner) array() (vm.Value, error) {
+	items := []vm.Value{}
+	s.i++
+	for {
+		s.skipSpace()
+		if s.b[s.i] == ']' {
+			s.i++
+			return vm.ListValue(items), nil
+		}
+		if s.b[s.i] == ',' {
+			s.i++
+		}
+		val, err := s.next()
+		if err != nil {
+			return vm.Null, err
+		}
+		items = append(items, val)
+	}
+}
+
+// str hands the string literal at the cursor to the codec to unescape.
+func (s *jsonScanner) str() (string, error) {
+	start := s.i
+	s.i++
+	for s.b[s.i] != '"' {
+		if s.b[s.i] == '\\' {
+			s.i++
+		}
+		s.i++
+	}
+	s.i++
+	var out string
+	if err := json.Unmarshal(s.b[start:s.i], &out); err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
+func (s *jsonScanner) number() (vm.Value, error) {
+	start := s.i
+	for s.i < len(s.b) && strings.IndexByte("+-.eE0123456789", s.b[s.i]) >= 0 {
+		s.i++
+	}
+	x, err := strconv.ParseFloat(string(s.b[start:s.i]), 64)
+	if err != nil {
+		return vm.Null, err
+	}
+	if x == float64(int64(x)) {
+		return vm.IntValue(int64(x)), nil
+	}
+	return vm.FloatValue(x), nil
 }
