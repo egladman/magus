@@ -4597,7 +4597,7 @@ func (s *LeaseBoundarySuite) ctx() context.Context {
 }
 
 func (s *LeaseBoundarySuite) deny(command string) string {
-	return denyWriteOutsideLease(s.ctx(),Dependencies{callDir: s.root}, "lease-b", command)
+	return denyWriteOutsideLease(s.ctx(), Dependencies{callDir: s.root}, "lease-b", command)
 }
 
 func (s *LeaseBoundarySuite) jobLedger() string {
@@ -4605,7 +4605,7 @@ func (s *LeaseBoundarySuite) jobLedger() string {
 }
 
 func (s *LeaseBoundarySuite) TestToolWriteIntoTheJobLedgerIsRefused() {
-	g := gradeLeasedWrite(s.ctx(),Dependencies{}, "lease-b", s.jobLedger())
+	g := gradeLeasedWrite(s.ctx(), Dependencies{}, "lease-b", s.jobLedger())
 	s.Equal(decisionDeny, g.Decision)
 	s.Contains(g.Reason, "magus's own state directory")
 }
@@ -4623,7 +4623,7 @@ func (s *LeaseBoundarySuite) TestTeeIntoTheSharedCacheIsRefused() {
 }
 
 func (s *LeaseBoundarySuite) TestUnleasedWriteIntoTheJobLedgerIsNotGraded() {
-	s.Empty(gradeLeasedWrite(s.ctx(),Dependencies{}, "", s.jobLedger()).Reason)
+	s.Empty(gradeLeasedWrite(s.ctx(), Dependencies{}, "", s.jobLedger()).Reason)
 }
 
 func (s *LeaseBoundarySuite) TestReadOfTheJobLedgerPasses() {
@@ -4686,7 +4686,7 @@ func (s *LeaseBoundarySuite) TestRedirectThroughADanglingLinkIsRefused() {
 
 func (s *LeaseBoundarySuite) TestToolWriteThroughADanglingLinkIsRefused() {
 	s.link("cmd/magus/new.go", "../../docs/new.go")
-	g := gradeLeasedWrite(s.ctx(),Dependencies{}, "lease-b", filepath.Join(s.root, "cmd", "magus", "new.go"))
+	g := gradeLeasedWrite(s.ctx(), Dependencies{}, "lease-b", filepath.Join(s.root, "cmd", "magus", "new.go"))
 	s.Equal(decisionDeny, g.Decision)
 	s.Contains(g.Reason, "docs/new.go")
 }
@@ -4739,7 +4739,7 @@ func (s *LeaseBoundarySuite) binary() string {
 }
 
 func (s *LeaseBoundarySuite) TestToolWriteToTheCheckoutsOwnBinaryIsRefused() {
-	g := gradeLeasedWrite(s.ctx(),Dependencies{}, "lease-b", s.binary())
+	g := gradeLeasedWrite(s.ctx(), Dependencies{}, "lease-b", s.binary())
 	s.Equal(decisionDeny, g.Decision)
 	s.Contains(g.Reason, "own magus binary")
 }
@@ -4775,8 +4775,8 @@ func (s *LeaseBoundarySuite) TestRunningTheCheckoutsOwnBinaryPasses() {
 }
 
 func (s *LeaseBoundarySuite) TestUnleasedWriteToTheBinaryIsNotGraded() {
-	s.NotEqual(decisionDeny, gradeLeasedWrite(s.ctx(),Dependencies{}, "", s.binary()).Decision)
-	s.Empty(denyWriteOutsideLease(s.ctx(),Dependencies{callDir: s.root}, "", "go build -o magus ./cmd/magus"))
+	s.NotEqual(decisionDeny, gradeLeasedWrite(s.ctx(), Dependencies{}, "", s.binary()).Decision)
+	s.Empty(denyWriteOutsideLease(s.ctx(), Dependencies{callDir: s.root}, "", "go build -o magus ./cmd/magus"))
 }
 
 func (s *LeaseBoundarySuite) TestScriptPipedIntoAShellIsJudged() {
@@ -4860,7 +4860,7 @@ func (s *LeaseBoundarySuite) TestVimBangThatNamesTheBufferIsRefused() {
 }
 
 func (s *LeaseBoundarySuite) TestUnleasedDecodedScriptIsNotGraded() {
-	s.Empty(denyWriteOutsideLease(s.ctx(),Dependencies{callDir: s.root}, "", "echo ZWNobyB4Cg== | base64 -d | sh"))
+	s.Empty(denyWriteOutsideLease(s.ctx(), Dependencies{callDir: s.root}, "", "echo ZWNobyB4Cg== | base64 -d | sh"))
 }
 
 func (s *LeaseBoundarySuite) TestShellWriteInsideTheNestedCheckoutPasses() {
