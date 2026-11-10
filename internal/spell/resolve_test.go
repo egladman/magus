@@ -179,7 +179,7 @@ import "magus/spell";
 export fun mgs_getName() > str { return "fnpkg"; }
 fun build(t: Target) > Command { return Command{bin = "go", args = ["build"]}; }
 fun fmt(t: Target) > Command {
-    return Command{bin = "gofmt", args = ["-l", "."], charms = {"write": {"ops": [{"op": "replace", "path": "/0", "value": "-w"}]}}};
+    return Command{bin = "gofmt", args = ["-l", "."], charms = {"write": Charm{ops = [PatchOp{op = PatchOpKind.replace, path = "/0", value = "-w"}]}}};
 }
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"build": build, "fmt": fmt};
