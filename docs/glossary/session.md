@@ -30,10 +30,10 @@ In the docs:
 
 - [Agent contact (@session)](../concepts/knowledge.md#agent-contact-session)
 - [Gate the person to one session](../decisions/0020-the-person-directs-sessions-report.md#gate-the-person-to-one-session)
+- [4. Measuring whether sessions act](../decisions/0038-a-person-advises-every-session-through-the-hooks.md#4-measuring-whether-sessions-act)
 - [When a session loses its history](../guides/integrations/agents.md#when-a-session-loses-its-history)
 - [Handing a session its state back](../guides/integrations/agents/any-host.md#handing-a-session-its-state-back)
 - [Handing a compacted session its state back](../guides/integrations/agents/claude-code.md#handing-a-compacted-session-its-state-back)
-- [Relationship to magus session hook](../guides/integrations/editor/design.md#relationship-to-magus-session-hook)
 
 In the code (`magus refs <name>` lists every site):
 
