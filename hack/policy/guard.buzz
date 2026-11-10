@@ -24,6 +24,8 @@
 //     to a branch the checkout does not know the remote has.
 //   push-authority (deny): a push or `gh pr create` by any caller but the main session, and
 //     by one the host reported no session for.
+//   unplaced-call (deny): a push, pull request call or relink after a cd magus
+//     cannot follow, which the other rules would judge in the wrong checkout.
 //   branch-name (deny, or advise on a topic miss alone): a pushed branch or bookmark, or a
 //     pull request's head, that is not a short topic of lowercase words.
 //   foreign-binary (deny): a magus binary built in one checkout of magus run against another.
@@ -188,6 +190,9 @@ test "the fork counts read every fact the host hands over" {
 // judge is the command rule the root magusfile registers. opens is the
 // pull request verb the delivery rule reads.
 export fun judge(req: CommandRequest, opens: fun (argv: [str]) > {str: str}?) > GuardVerdict {
+    if (req.unplaced) {
+        return magus\guard.deny(unplacedDenial);
+    }
     final programs = parsePrograms(req);
     if (refusedEarly(req, programs: programs, opens: opens) -> refused) {
         return refused;
@@ -224,7 +229,7 @@ export fun judge(req: CommandRequest, opens: fun (argv: [str]) > {str: str}?) > 
     }
     final pusher = requestPusher(req);
     final topic = fun (source: str, dir: str) > branches\Topic {
-        return branchTopic(pushDir(req.dir, named: dir), source: source);
+        return branchTopic(req.dir, source: source);
     };
     final texts = withHeredocs(programs, line: req.command);
     final decided = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent, holdsCheckout = cadence\gatesInHeldCheckout(req.lease, programs: programs, dir: req.dir, workspace: req.workspace) }, checkout: checkout,
@@ -248,6 +253,19 @@ fun lastWord(req: CommandRequest, programs: [helpers\Program], decided: GuardVer
         return decided;
     }
     return stale\decideStale(stale\hookBinary(req.workspace), once: once);
+}
+
+// unplacedDenial refuses a line magus would judge in the wrong checkout.
+final unplacedDenial = "this line's push, pull request or relink runs where only running it shows, so it cannot be judged; spell the directory as a literal path\n"
+    + "A `cd` to a variable or substitution leaves the rules reading the checkout the line starts in. "
+    + "Name the checkout outright (`cd /abs/checkout && ...` or `git -C /abs/checkout push ...`), then run the line again.";
+
+test "a push that only running the line can place is refused, naming the fix" {
+    final push = CommandInvocation{ program = "git", args = ["push", "origin", "HEAD:x"],
+        vcs = VCSInvocation{ tool = "git", subcommand = "push", args = ["origin", "HEAD:x"] } };
+    final unplaced = judge(CommandRequest{ session = "s1", role = magus\AgentRole.root, unplaced = true, commands = [push] }, opens: noForge);
+    std\assert(unplaced.decision == magus\GuardDecision.deny and unplaced.reason == unplacedDenial, message: unplaced.reason);
+    verdict\assertVerdict(unplaced.reason, label: "an unplaced push");
 }
 
 // binariesDenial is the binaries rule's answer for req's programs, "" when it allows them.
@@ -345,17 +363,6 @@ export object Publishing {
     current: str,
     remote: branches\Remote,
     topic: fun (source: str, dir: str) > branches\Topic,
-}
-
-// pushDir is the checkout `git -C` names, relative to the caller's.
-fun pushDir(dir: str, named: str) > str {
-    if (named == "") {
-        return dir;
-    }
-    if (named.startsWith("/") or dir == "") {
-        return named;
-    }
-    return fs\join(dir, name: named);
 }
 
 // currentBranch is the branch or bookmark the guard read for a push, else the one the
