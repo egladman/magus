@@ -186,7 +186,7 @@ type fact struct {
 	At       int64  `json:"at"`
 }
 
-func (f fact) key() string { return f.Head + ".." + f.Base }
+func (f fact) key() string { return fmt.Sprintf("%s..%s", f.Head, f.Base) }
 
 type survey struct {
 	ledger         *ledger
@@ -376,7 +376,7 @@ func (r *survey) decide(item types.WorkItem) types.WorkItem {
 	case !held && item.Dirty == 0 && item.Commits == 0:
 		item.State, item.Why = types.WorkClear, "no uncommitted file and no unpublished revision"
 	case item.Dirty == 0 && f.Absorbed:
-		item.State, item.Why = types.WorkAbsorbed, "merging it into "+r.in.Base+" leaves the tree as it is"
+		item.State, item.Why = types.WorkAbsorbed, fmt.Sprintf("merging it into %s leaves the tree as it is", r.in.Base)
 	case tracked != "":
 		item.State, item.Why = types.WorkTracked, tracked
 	case glob != "":
