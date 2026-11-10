@@ -4103,7 +4103,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	if !enrolled || len(me.WritePaths) == 0 {
 		return ""
 	}
-	if unread := unreadHandoffs(command, dialect); len(unread) > 0 {
+	if unread := unreadHandedScripts(command, dialect); len(unread) > 0 {
 		return denial{
 			Say: fmt.Sprintf("magus workspace: the guard cannot read the script handed to %s; spell it as a literal, as in `sh <<'EOF'`.",
 				strings.Join(unread, ", ")),

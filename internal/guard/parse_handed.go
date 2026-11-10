@@ -59,9 +59,9 @@ func handedScripts(f *syntax.File, d Dialect) []handedScript {
 	return out
 }
 
-// unreadHandoffs names each script the line hands over in a form the guard
+// unreadHandedScripts names each script the line hands over in a form the guard
 // cannot read, nested scripts included.
-func unreadHandoffs(command string, d Dialect) []string {
+func unreadHandedScripts(command string, d Dialect) []string {
 	var out []string
 	eachScript(command, d, func(sf *scriptFile) bool {
 		for _, h := range handedScripts(sf.file, d) {
