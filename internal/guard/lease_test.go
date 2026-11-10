@@ -1071,7 +1071,7 @@ func TestWorkerCheckOnlyHoldsARewriteToTheWritePaths(t *testing.T) {
 			continue
 		}
 		require.NotEmpty(t, reason, tt.name)
-		assert.Contains(t, reason.Say, "rewrites files outside lease docs/jobs's write paths; run `", tt.name)
+		assert.Contains(t, reason.Say, "outside lease docs/jobs's write paths; run `", tt.name)
 		_, next, _ := strings.Cut(reason.Say, "; run `")
 		assert.True(t, strings.HasSuffix(next, " .`."), "%s: the next run drops the charm: %s", tt.name, next)
 		assert.NotContains(t, next, ":rw", "%s: the next run drops the charm", tt.name)
@@ -1133,7 +1133,7 @@ func TestWorkerCheckOnlyRefusesAnOpRewrite(t *testing.T) {
 	narrow.WritePaths = []string{"docs/guides/jobs.md"}
 	ctx, _ := fleetFixture(t, narrow)
 	reason := denyWorkerCheckOnly(ctx, Dependencies{Inspect: inspect}, narrow.ID, "./magus run format:rw .")
-	assert.Contains(t, reason.Say, "rewrites files outside lease docs/jobs's write paths", "the target calling the op is judged by its declarations")
+	assert.Contains(t, reason.Say, "rewrites `docs/**/*.md` outside lease docs/jobs's write paths", "the target calling the op is judged by its declarations")
 
 	uncalled := row
 	uncalled.Check = &types.LeaseCheck{Target: "markdown-lint", Project: "."}
@@ -1339,7 +1339,7 @@ func TestWorkerCheckOnlyJudgesTheCwdProject(t *testing.T) {
 	assert.Empty(t, denyWorkerCheckOnly(ctx, deps, row.ID, "../magus run format"), "the check, run from its project")
 	reason := denyWorkerCheckOnly(ctx, deps, row.ID, "../magus run format:rw")
 	require.True(t, reason.refused())
-	assert.Contains(t, reason.Say, "rewrites files outside lease docs/jobs's write paths")
+	assert.Contains(t, reason.Say, "rewrites `docs/**/*.md` outside lease docs/jobs's write paths")
 	assert.Contains(t, reason.Why, "`docs/**/*.md`")
 
 	op := denyWorkerCheckOnly(ctx, deps, row.ID, "../magus run dprint:rw")
@@ -4063,7 +4063,7 @@ func TestWorkerRegeneratesItsOwnOutputs(t *testing.T) {
 	}{
 		{"the generator of its own output", "./magus run api-generate .", ""},
 		{"that generator under rw", "./magus run api-generate:rw .", ""},
-		{"a generator that also rewrites a file outside", "./magus run docs-generate:rw .", "rewrites files outside lease z/flag's write paths"},
+		{"a generator that also rewrites a file outside", "./magus run docs-generate:rw .", "rewrites `README.md` outside lease z/flag's write paths"},
 		{"a target writing nothing it regenerates", "./magus run lint .", "is not lease z/flag's check"},
 		{"its generator on another project", "./magus run api-generate docs", "is not lease z/flag's check"},
 	} {

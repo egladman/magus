@@ -14,15 +14,25 @@ import (
 )
 
 // rewriteDenial words the refusal of a run the rw charm would have write
-// past the row's write paths.
+// past the row's write paths. Say names the files, since a host shows the
+// agent Say and leaves Why behind the verdict's ref.
 func rewriteDenial(v runVerdict, me types.Job, defaults []string) denial {
 	r, next := v.run, v.run.readOnly(defaults)
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` rewrites files outside lease %s's write paths; run `%s`.", r.target, me.ID, next),
+		Say: fmt.Sprintf("magus workspace: `%s` rewrites %s outside lease %s's write paths; run `%s`.", r.target, outsideShown(v.outside), me.ID, next),
 		Why: fmt.Sprintf("Under the rw charm `%s` writes `%s`, which lease %s's write paths (%s) do not cover.\n"+
 			"`%s` reports the same drift without writing it. The checkout's integrator, "+integratorIs+", rewrites the rest after it integrates the units; name the files in your result's unresolved risks if the unit needs them.",
 			r.target, strings.Join(v.outside, "`, `"), me.ID, writePathsShown(me), next),
 	}
+}
+
+// outsideShown quotes the first writePathsShownMax of globs, then counts the
+// rest, which the refusal's Why lists.
+func outsideShown(globs []string) string {
+	if len(globs) <= writePathsShownMax {
+		return fmt.Sprintf("`%s`", strings.Join(globs, "`, `"))
+	}
+	return fmt.Sprintf("`%s` and %d more", strings.Join(globs[:writePathsShownMax], "`, `"), len(globs)-writePathsShownMax)
 }
 
 // writePathsShown lists row's write paths, the first writePathsShownMax of
