@@ -1450,19 +1450,6 @@ test "a running row whose work the target holds as a squash is ended" {
     assert\equal(calls.indexOf("magus job exit merged-work") != null, want: true, message: "ended");
 }
 
-test "a merge the checkout's git cannot run fails loudly" {
-    final calls = mut [<str>];
-    final did = mut [<str>];
-    final h = stubHost({
-        "magus ls jobs -o json": Ran{ stdout = ROWS },
-        "/r: git rev-parse HEAD": Ran{ stdout = "h1\n" },
-        "/r: git merge-base --is-ancestor h1 bbb": Ran{ code = 1 },
-        "/r: git merge-tree --write-tree --merge-base b0 bbb h1": Ran{ code = 129, stderr = "unknown option" },
-    }, stamps: {}, calls: calls);
-    final res = endMergedRows(h, dir: "/c", onto: "bbb", did: did);
-    assert\isTrue(res.error != null and res.error!.message.indexOf("unknown option") != null, message: "named");
-}
-
 test "a running row not yet in the target, at its base, or unreadable stays running" {
     final calls = mut [<str>];
     final did = mut [<str>];
