@@ -118,9 +118,9 @@ export fun loadReleases(site: Site) > void !> any {
     // isVersionTag before it can claim to be a release. Without that, one stray tag
     // newer than the last real one silently becomes the announced version AND the
     // expansion of __MAGUS_VERSION__ across the install docs.
-    var tags: mut [{str: str}] = mut [<{str: str}>];
+    var tags: mut [vcs\Tag] = mut [<vcs\Tag>];
     foreach (t in vcs\tags("v*")) {
-        if (isVersionTag(t["name"])) { tags.append(t); }
+        if (isVersionTag(t.name)) { tags.append(t); }
     }
     if (tags.len() == 0) {
         // No tags visible - a shallow clone, or a genuinely untagged repository. The
@@ -130,7 +130,7 @@ export fun loadReleases(site: Site) > void !> any {
         return;
     }
     foreach (t in tags) {
-        final ver = t["name"];
+        final ver = t.name;
         final known = manifests[ver];
         if (known != null) {
             site.inputs.releases.append(known);
@@ -138,7 +138,7 @@ export fun loadReleases(site: Site) > void !> any {
         }
         // Tagged with no manifest: real, and dated, but with no prose or artifacts.
         // The tag date is RFC3339; the manifests carry a bare date, so match them.
-        var when = t["date"];
+        var when = t.date;
         if (when.len() >= 10) { when = when.sub(0, 10); }
         site.inputs.releases.append(Release{ version = ver, date = when });
     }
