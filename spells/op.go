@@ -66,7 +66,7 @@ type Command struct {
 	// PathScopeFiles are the globs PathScope maps, "!" exclusions included.
 	PathScopeFiles []string `json:"path_scope_files,omitempty"`
 	Bin            string   `json:"bin,omitempty"`
-	Args      []string `json:"args,omitempty"`
+	Args           []string `json:"args,omitempty"`
 	// DefaultArgs are trailing argv tokens the RUNNER appends only when the
 	// invocation passes no explicit args of its own; explicit call-site args
 	// replace them. `magus run <t> -- <extra>` forwarding is not explicit args:
