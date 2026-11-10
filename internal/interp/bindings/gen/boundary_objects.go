@@ -5168,6 +5168,7 @@ func ObjectCommandRequest(v types.CommandRequest, enums ffi.EnumCases) vm.Value 
 	out.MapSet("checkout", optCheckout)
 	out.MapSet("dir", vm.StringValue(v.Dir))
 	out.MapSet("workspace", vm.StringValue(v.Workspace))
+	out.MapSet("unplaced", vm.BoolValue(v.Unplaced))
 	itemsOwnedCheckouts := make([]vm.Value, len(v.OwnedCheckouts))
 	for indexOwnedCheckouts := range v.OwnedCheckouts {
 		itemsOwnedCheckouts[indexOwnedCheckouts] = vm.StringValue(v.OwnedCheckouts[indexOwnedCheckouts])
