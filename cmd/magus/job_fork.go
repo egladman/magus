@@ -101,10 +101,5 @@ const forkValidationMemoryMB = 2048
 // memory refuses it with MGS3053 and a full budget past budget_wait with MGS3009, both exit
 // 75. Broker off claims nothing and reads no memory.
 func admitForkValidation(ctx context.Context, admit cache.MachineAdmitter, root string) (func(), error) {
-	policy := globalCfg.Broker.Resolved()
-	if policy == types.BrokerOff {
-		return func() {}, nil
-	}
-	claim := types.MachineClaim{Project: ".", Target: "job-fork", MemoryMB: forkValidationMemoryMB, Dir: resolveRootOrEmpty(root)}
-	return cache.AdmitMachine(ctx, admit, claim, policy == types.BrokerRequired, globalCfg.BudgetWait)
+	return admitUnderBrokerPolicy(ctx, admit, root, "job-fork", forkValidationMemoryMB)
 }

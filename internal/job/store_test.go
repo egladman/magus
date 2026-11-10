@@ -196,6 +196,23 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 }
 
+// TestStoreIsPrivateToItsOwner pins the modes the first write creates: rows
+// carry a repository's plan and its checkout paths.
+func TestStoreIsPrivateToItsOwner(t *testing.T) {
+	t.Parallel()
+
+	s := tempStore(t, t.TempDir())
+	_, err := s.Update(t.Context(), "row", func(cur *types.Job) { cur.Criteria = "private" })
+	require.NoError(t, err)
+
+	info, err := os.Stat(filepath.Dir(s.path))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o700), info.Mode().Perm())
+	info, err = os.Stat(s.path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+}
+
 func TestStorePutRequiresAnID(t *testing.T) {
 	t.Parallel()
 

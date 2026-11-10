@@ -186,7 +186,7 @@ type fact struct {
 	At       int64  `json:"at"`
 }
 
-func (f fact) key() string { return f.Head + ".." + f.Base }
+func (f fact) key() string { return fmt.Sprintf("%s..%s", f.Head, f.Base) }
 
 type survey struct {
 	ledger         *ledger
@@ -217,7 +217,7 @@ func indexItems(items []types.WorkItem) map[string]types.WorkItem {
 
 func (r *survey) readCheckouts(ctx context.Context, checkouts []types.RegisteredCheckout) {
 	for _, c := range checkouts {
-		if why := r.jobFor(c.Root); why != "" && c.Head != "" {
+		if why := r.holdingJob(c.Root); why != "" && c.Head != "" {
 			r.trackAt[c.Head] = why
 		}
 		item := types.WorkItem{Kind: types.WorkCheckout, Name: c.Root, Head: c.Head}
@@ -235,7 +235,8 @@ func (r *survey) readItem(ctx context.Context, item *types.WorkItem) bool {
 	if item.Kind == types.WorkCheckout {
 		dirty, gone, err := r.dirty(ctx, item.Name)
 		if err != nil {
-			return r.cutItem(*item, err)
+			r.cutItem(*item, err)
+			return false
 		}
 		item.Dirty, item.Gone = dirty, gone
 	}
@@ -244,7 +245,8 @@ func (r *survey) readItem(ctx context.Context, item *types.WorkItem) bool {
 	}
 	f, err := r.fact(ctx, item.Head)
 	if err != nil {
-		return r.cutItem(*item, err)
+		r.cutItem(*item, err)
+		return false
 	}
 	item.Base, item.Commits = r.base, f.Commits
 	return true
@@ -252,17 +254,16 @@ func (r *survey) readItem(ctx context.Context, item *types.WorkItem) bool {
 
 // cutItem keeps a stored line as it was. A checkout with none is still
 // listed, as unaccounted: an unread checkout is not a clear one.
-func (r *survey) cutItem(item types.WorkItem, err error) bool {
+func (r *survey) cutItem(item types.WorkItem, err error) {
 	r.cut++
 	if _, ok := r.stored[item.Key()]; ok {
 		r.kept[item.Key()] = true
-		return false
+		return
 	}
 	if item.Kind == types.WorkCheckout {
 		r.unread[item.Key()] = fmt.Sprintf("not read within %s: %v", itemBudget, err)
 		r.found = append(r.found, item)
 	}
-	return false
 }
 
 func (r *survey) dirty(ctx context.Context, root string) (int, bool, error) {
@@ -352,7 +353,7 @@ func (r *survey) keepKind(kinds ...types.WorkKind) {
 	}
 }
 
-func (r *survey) jobFor(root string) string {
+func (r *survey) holdingJob(root string) string {
 	for _, row := range r.in.Jobs {
 		if row.State.Terminal() {
 			continue
@@ -375,7 +376,7 @@ func (r *survey) decide(item types.WorkItem) types.WorkItem {
 	case !held && item.Dirty == 0 && item.Commits == 0:
 		item.State, item.Why = types.WorkClear, "no uncommitted file and no unpublished revision"
 	case item.Dirty == 0 && f.Absorbed:
-		item.State, item.Why = types.WorkAbsorbed, "merging it into "+r.in.Base+" leaves the tree as it is"
+		item.State, item.Why = types.WorkAbsorbed, fmt.Sprintf("merging it into %s leaves the tree as it is", r.in.Base)
 	case tracked != "":
 		item.State, item.Why = types.WorkTracked, tracked
 	case glob != "":
@@ -406,7 +407,7 @@ func unaccountedWhy(item types.WorkItem) string {
 func (r *survey) tracked(item types.WorkItem) string {
 	switch item.Kind {
 	case types.WorkCheckout:
-		return r.jobFor(item.Name)
+		return r.holdingJob(item.Name)
 	case types.WorkBranch:
 		return r.trackAt[item.Head]
 	case types.WorkStash, types.WorkPreserved:

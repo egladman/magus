@@ -158,7 +158,7 @@ func TestPathMagusInAFromSourceCheckoutJudgesNothing(t *testing.T) {
 
 	own := filepath.Join(root, "magus")
 	same := ForeignJudgeDeps(Dependencies{}, root, own)
-	assert.NoError(t, same.LoadFailure, "the checkout's own ./magus judges")
+	require.NoError(t, same.LoadFailure, "the checkout's own ./magus judges")
 
 	deps := ForeignJudgeDeps(unloadedDependencies(errStaleLoad), root, "/usr/local/bin/magus")
 	require.ErrorIs(t, deps.LoadFailure, errNotCheckoutBinary)
@@ -234,7 +234,7 @@ func TestStaleBinaryRemedyFollowsTheCaller(t *testing.T) {
 
 	shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, "touch notes.txt"), denyRuleStaleBinary, staleOwnSay)
 
-	worker := Judge(ctx, deps, Request{Input: "touch notes.txt", Host: "claude-code", Session: "s1", Lease: "lease-a"})
+	worker := Judge(ctx, deps, Request{Input: "touch internal/ledger/notes.txt", Host: "claude-code", Session: "s1", Lease: "lease-a"})
 	stored := servedDeny(t, cacheDir, worker, denyRuleStaleBinary, staleWorkerSay, placementNext(denyRuleStaleBinary, "lease-a"))
 	assert.Contains(t, stored, "\n"+onePerBase+"\n")
 	assert.NotContains(t, stored, "go-build")
@@ -283,7 +283,7 @@ func TestStaleBinaryLetsAWorkerFastForwardToItsBinary(t *testing.T) {
 		assert.Equal(t, decisionDeny, v.Decision, line)
 	}
 
-	stored := servedDeny(t, cacheDir, judge("touch", "touch notes.txt"), denyRuleStaleBinary, staleWorkerSay, placementNext(denyRuleStaleBinary, "lease-a"))
+	stored := servedDeny(t, cacheDir, judge("touch", "touch internal/ledger/notes.txt"), denyRuleStaleBinary, staleWorkerSay, placementNext(denyRuleStaleBinary, "lease-a"))
 	assert.Contains(t, stored, "\n"+workerFastForward+"\n")
 }
 
@@ -1097,7 +1097,7 @@ func TestNoBinaryRemedySuite(t *testing.T) {
 
 func (s *NoBinaryRemedySuite) SetupTest() {
 	s.root = s.T().TempDir()
-	mod := []byte("module " + ownModule + "\n\ngo 1.25\n")
+	mod := fmt.Appendf(nil, "module %s\n\ngo 1.25\n", ownModule)
 	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "go.mod"), mod, 0o644))
 	declareCheckoutHook(s.T(), s.root)
 }

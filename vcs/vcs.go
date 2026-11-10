@@ -542,14 +542,20 @@ func splitTagVersion(name string) (prefix string, version types.SemverVersion) {
 // A line SHORTER than width is passed through whole rather than sliced away. Slicing
 // would silently turn a short path into "", dropping a changed file from the result,
 // and a caller cannot tell an empty answer from a clean tree.
+//
+// A line exactly width long is a prefix with no path, so it is discarded.
+// The path keeps its edge spaces: they belong to the file's name.
 func trimStatusColumns(lines []string, width int) []string {
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
-		p := line
-		if len(p) > width {
+		p := strings.TrimSuffix(line, "\r")
+		switch {
+		case len(p) == width:
+			continue
+		case len(p) > width:
 			p = p[width:]
 		}
-		if p = strings.TrimSpace(p); p != "" {
+		if strings.TrimSpace(p) != "" {
 			out = append(out, p)
 		}
 	}

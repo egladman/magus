@@ -7,11 +7,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/libs/testkit"
 )
 
 // bootstrapFixtureBinaryName returns the fixture binary name resolveBootstrapExecTarget
@@ -34,172 +36,6 @@ func writeBootstrapFixtureWorkspace(t *testing.T, dir string) string {
 	resolved, err := filepath.EvalSymlinks(bin)
 	require.NoError(t, err)
 	return resolved
-}
-
-// Test 1: a workspace with an executable ./magus hands off.
-func TestResolveBootstrapExecTargetFindsWorkspaceBinary(t *testing.T) {
-	dir := t.TempDir()
-	want := writeBootstrapFixtureWorkspace(t, dir)
-
-	sub := filepath.Join(dir, "a", "b")
-	require.NoError(t, os.MkdirAll(sub, 0o755))
-
-	target, ok := resolveBootstrapExecTarget(sub, filepath.Join(dir, "not-the-workspace-binary"))
-	require.True(t, ok)
-	assert.Equal(t, want, target)
-}
-
-// A nested project carries its own magusfile.buzz and no binary. The call is made from
-// inside it and still resolves the workspace root's ./magus.
-func TestResolveBootstrapExecTargetFromNestedProjectUsesRootBinary(t *testing.T) {
-	root := t.TempDir()
-	want := writeBootstrapFixtureWorkspace(t, root)
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("# fixture\n"), 0o644))
-	nested := filepath.Join(root, "console")
-	require.NoError(t, os.MkdirAll(filepath.Join(nested, "src"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(nested, "magusfile.buzz"), []byte("// nested\n"), 0o644))
-
-	for _, start := range []string{nested, filepath.Join(nested, "src")} {
-		target, ok := resolveBootstrapExecTarget(start, "/nonexistent-self")
-		require.True(t, ok, start)
-		assert.Equal(t, want, target, start)
-	}
-}
-
-// A worktree under the main checkout's .claude/worktrees holds its own magus.yaml, so the
-// walk stops there. A worktree with no ./magus gets no substitution; it is never handed
-// the parent checkout's binary.
-func TestResolveBootstrapExecTargetNeverClimbsIntoParentCheckout(t *testing.T) {
-	checkout := t.TempDir()
-	writeBootstrapFixtureWorkspace(t, checkout)
-	require.NoError(t, os.WriteFile(filepath.Join(checkout, "magus.yaml"), []byte("# checkout\n"), 0o644))
-	worktree := filepath.Join(checkout, ".claude", "worktrees", "job")
-	require.NoError(t, os.MkdirAll(filepath.Join(worktree, "console"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(worktree, "magus.yaml"), []byte("# worktree\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(worktree, "magusfile.buzz"), []byte("// worktree\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(worktree, "console", "magusfile.buzz"), []byte("// nested\n"), 0o644))
-
-	for _, start := range []string{worktree, filepath.Join(worktree, "console")} {
-		target, ok := resolveBootstrapExecTarget(start, "/nonexistent-self")
-		assert.False(t, ok, "%s resolved %s", start, target)
-	}
-
-	own := writeBootstrapFixtureWorkspace(t, worktree)
-	target, ok := resolveBootstrapExecTarget(filepath.Join(worktree, "console"), "/nonexistent-self")
-	require.True(t, ok)
-	assert.Equal(t, own, target)
-}
-
-// Test 2: the same binary does NOT hand off to itself.
-func TestResolveBootstrapExecTargetSkipsSelf(t *testing.T) {
-	dir := t.TempDir()
-	self := writeBootstrapFixtureWorkspace(t, dir)
-
-	_, ok := resolveBootstrapExecTarget(dir, self)
-	assert.False(t, ok, "must not exec into the binary already running")
-}
-
-// Test 5: no magusfile.buzz anywhere above means no substitution.
-func TestResolveBootstrapExecTargetNoMagusfileAnywhereAbove(t *testing.T) {
-	dir := t.TempDir()
-	sub := filepath.Join(dir, "a", "b", "c")
-	require.NoError(t, os.MkdirAll(sub, 0o755))
-
-	_, ok := resolveBootstrapExecTarget(sub, "/nonexistent-self")
-	assert.False(t, ok)
-}
-
-// unsetBootstrapExecEnv clears both env vars bootstrapExecDecision reads. A magus
-// that already bootstrap-exec'd exports the sentinel to every process it spawns,
-// `go test` included, so without this the ambient value decides the tests below
-// rather than the branch each one names.
-func unsetBootstrapExecEnv(t *testing.T) {
-	t.Helper()
-	t.Setenv(bootstrapExecSentinelVar, "")
-	t.Setenv(bootstrapExecOptOutVar, "")
-}
-
-// Test 3: the sentinel prevents a second hop.
-func TestBootstrapExecDecisionSentinelPreventsSecondHop(t *testing.T) {
-	unsetBootstrapExecEnv(t)
-	dir := t.TempDir()
-	writeBootstrapFixtureWorkspace(t, dir)
-	t.Setenv(bootstrapExecSentinelVar, "1")
-
-	_, ok := bootstrapExecDecision([]string{"magus", "--root", dir, "run", "build"}, filepath.Join(dir, "not-it"))
-	assert.False(t, ok, "the sentinel must block a second hop")
-}
-
-// Test 6: the opt-out disables the whole mechanism.
-func TestBootstrapExecDecisionOptOut(t *testing.T) {
-	unsetBootstrapExecEnv(t)
-	dir := t.TempDir()
-	writeBootstrapFixtureWorkspace(t, dir)
-	t.Setenv(bootstrapExecOptOutVar, "1")
-	t.Chdir(dir)
-
-	_, ok := bootstrapExecDecision([]string{"magus", "run", "build"}, filepath.Join(dir, "not-it"))
-	assert.False(t, ok, "MAGUS_NO_BOOTSTRAP_EXEC must disable the whole mechanism")
-}
-
-func TestBootstrapExecDecisionGoRunBuildKeepsOwnBinary(t *testing.T) {
-	unsetBootstrapExecEnv(t)
-	dir := t.TempDir()
-	writeBootstrapFixtureWorkspace(t, dir)
-	t.Chdir(dir)
-	argv := []string{"magus", "run", "go-build"}
-
-	goRunSelf := filepath.Join(t.TempDir(), "go-build123", "b001", "exe", bootstrapFixtureBinaryName())
-	_, ok := bootstrapExecDecision(argv, goRunSelf)
-	assert.False(t, ok, "a go run build must not defer to the placed ./magus")
-
-	installedSelf := filepath.Join(t.TempDir(), "bin", bootstrapFixtureBinaryName())
-	_, ok = bootstrapExecDecision(argv, installedSelf)
-	assert.True(t, ok, "an installed binary still defers to the placed ./magus")
-}
-
-func TestBootstrapExecDecisionCachedGoRunBuildKeepsOwnBinary(t *testing.T) {
-	unsetBootstrapExecEnv(t)
-	dir := t.TempDir()
-	writeBootstrapFixtureWorkspace(t, dir)
-	t.Chdir(dir)
-
-	id := "ab" + strings.Repeat("0", 62)
-	cachedSelf := filepath.Join(t.TempDir(), "go-cache", "ab", id+"-d", bootstrapFixtureBinaryName())
-	_, ok := bootstrapExecDecision([]string{"magus", "run", "go-build", "--no-cache", "."}, cachedSelf)
-	assert.False(t, ok, "the escape's go run build runs from the build cache and must not defer to the placed ./magus")
-}
-
-// Test 4: --root picks the named tree rather than $PWD.
-func TestBootstrapExecDecisionHonorsRootOverCwd(t *testing.T) {
-	unsetBootstrapExecEnv(t)
-	namedRoot := t.TempDir()
-	want := writeBootstrapFixtureWorkspace(t, namedRoot)
-
-	decoy := t.TempDir() // no magusfile.buzz here; proves --root, not $PWD, wins
-	t.Chdir(decoy)
-
-	target, ok := bootstrapExecDecision([]string{"magus", "--root", namedRoot, "run", "build"}, filepath.Join(namedRoot, "not-it"))
-	require.True(t, ok)
-	assert.Equal(t, want, target)
-}
-
-// A hook runs PATH's magus as `magus buzz -C <root> ...` from whatever directory the
-// session is in, which may be another checkout with its own build. The -C after the
-// subcommand names the tree whose binary runs the glue.
-func TestBootstrapExecDecisionFollowsBuzzWorkDirOverCwd(t *testing.T) {
-	unsetBootstrapExecEnv(t)
-	root := t.TempDir()
-	want := writeBootstrapFixtureWorkspace(t, root)
-	decoy := t.TempDir()
-	writeBootstrapFixtureWorkspace(t, decoy)
-	t.Chdir(decoy)
-
-	argv := []string{"magus", "buzz", "-C", root, "-s", "docs/guides/integrations/agents/magus-command.buzz",
-		"--", "--agent-name", "claude-code"}
-	target, ok := bootstrapExecDecision(argv, filepath.Join(root, "not-it"))
-	require.True(t, ok)
-	assert.Equal(t, want, target)
 }
 
 // bootstrapExecIntoHelperTargetVar carries the fixture path into the subprocess
@@ -245,4 +81,44 @@ func TestBootstrapExecIntoReplacesProcess(t *testing.T) {
 	require.True(t, errors.As(runErr, &exitErr), "expected the helper process to exit non-zero via the fixture; output:\n%s", out)
 	assert.Equal(t, 7, exitErr.ExitCode())
 	assert.Contains(t, string(out), "fixture ran: hello world")
+}
+
+// BootstrapExecRefusalSuite pins which ./magus a checkout's own build may
+// hand over to.
+type BootstrapExecRefusalSuite struct {
+	suite.Suite
+	repo *testkit.Repo
+	self string
+}
+
+func TestBootstrapExecRefusalSuite(t *testing.T) {
+	suite.Run(t, new(BootstrapExecRefusalSuite))
+}
+
+func (s *BootstrapExecRefusalSuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
+	s.self = filepath.Join(s.repo.Root(), "magus")
+}
+
+func (s *BootstrapExecRefusalSuite) TestALinkedCheckoutTakesOver() {
+	linked := s.repo.AddWorktree("job").Root()
+	s.Empty(bootstrapExecRefusal(filepath.Join(linked, "magus"), s.self))
+}
+
+func (s *BootstrapExecRefusalSuite) TestAPlantedWorkspaceInTheCheckoutIsRefused() {
+	planted := filepath.Join(s.repo.Root(), "planted")
+	s.Require().NoError(os.MkdirAll(planted, 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(planted, "magus.yaml"), []byte("{}\n"), 0o644))
+	target := writeBootstrapFixtureWorkspace(s.T(), planted)
+	s.Contains(bootstrapExecRefusal(target, s.self), "is not a checkout of the session's repository")
+}
+
+func (s *BootstrapExecRefusalSuite) TestAnotherRepositoryIsRefused() {
+	clone := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
+	s.Contains(bootstrapExecRefusal(filepath.Join(clone.Root(), "magus"), s.self), "is not a checkout of the session's repository")
+}
+
+func (s *BootstrapExecRefusalSuite) TestAnInstalledBinaryDefersAnywhere() {
+	clone := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
+	s.Empty(bootstrapExecRefusal(filepath.Join(clone.Root(), "magus"), filepath.Join(s.T().TempDir(), "magus")))
 }

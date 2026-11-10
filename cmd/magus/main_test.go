@@ -342,9 +342,7 @@ func TestExitCodeOf(t *testing.T) {
 	// and lock_test.go's contention case.
 	assert.Equal(t, 1, mapExitCode(types.DiagnosticErrorf(types.MachineBudgetExhausted, "the machine is full")))
 
-	// An ExitError keeps its code whether or not it wraps a diagnostic. It logs
-	// NOTHING either way: a diagnostic-carrying one is logged where it is raised, so
-	// that a reader sees it when the run stops rather than only at the end.
+	// An ExitError keeps its code whether or not it wraps a cause.
 	assert.Equal(t, 3, mapExitCode(types.ExitError{Code: 3}))
 	assert.Equal(t, 70, mapExitCode(types.ExitError{Code: 70, Err: errors.New("the gate wedged")}))
 }
@@ -772,7 +770,7 @@ func TestMain(m *testing.M) {
 			return 0, "", errors.New("a unit test never starts a real broker")
 		}
 	}
-	testscript.Main(testkit.Isolated(m, bootstrapExecIntoHelperTargetVar), map[string]func(){
+	testscript.Main(testkit.Isolated(m, bootstrapExecIntoHelperTargetVar, briefRefusalRootVar), map[string]func(){
 		"magus": func() { os.Exit(runCLI()) },
 	})
 }

@@ -240,6 +240,19 @@ func TestArchitectureUnbriefedFiresOnlyOnAProbeOfSource(t *testing.T) {
 	assert.NotEqual(t, "deny", s.bash("", "ls internal").Decision, "a listing of it is advised once, never refused")
 }
 
+func TestArchitectureUnbriefedIgnoresAgentSkillDirectories(t *testing.T) {
+	s := newArchSession(t, strict(testDependencies()), true)
+	s.message("does this respect our current architecture patterns?")
+	for _, command := range []string{
+		"cat .agents/skills/magus-multi-agent/SKILL.md",
+		"ls .opencode/skills",
+		"grep -rn job .agents",
+	} {
+		assert.Equal(t, "pass", s.bash("", command).Decision, command)
+	}
+	requireArchitectureAdvice(t, s.bash("", "ls internal"), "source is still advised")
+}
+
 func TestArchitectureUnbriefedNeverDeniesARead(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 	s.message("does this respect our current architecture patterns?")

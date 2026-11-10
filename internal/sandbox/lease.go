@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path"
@@ -43,25 +44,24 @@ import (
 // this ruleset and landlock are both allowlists with no deny rule, so an enclosing grant
 // is replaced by grants on its children (see splitAroundDenied).
 //
-// An unreadable job store fails OPEN with a warning, matching the guard: a lease id that
-// stops resolving must not brick the checkout a person is working in.
+// An unreadable job store is an error and no policy.
+// A claimed lease whose boundary cannot be read never gets
+// the workspace write grant.
 //
 // from is the source that answered leaseID; the narrowed policy carries it so a denial
 // can say whether the boundary was bound or only claimed.
-func NarrowToLease(ctx context.Context, policy *Policy, loc job.Location, leaseID string, from types.LeaseSource) *Policy {
+func NarrowToLease(ctx context.Context, policy *Policy, loc job.Location, leaseID string, from types.LeaseSource) (*Policy, error) {
 	if policy == nil || loc.Root == "" || leaseID == "" {
-		return policy
+		return policy, nil
 	}
 	rows, err := job.NewStore(loc).List()
 	if err != nil {
-		slog.WarnContext(ctx, types.FormatDiagnostic(types.AllowlistUnresolved,
-			"job store unreadable; sandbox running with the workspace write grant"),
-			slog.String("lease", leaseID), attr.Error(err), attr.Unchecked())
-		return policy
+		return nil, fmt.Errorf("%s: %w", types.FormatDiagnostic(types.AllowlistUnresolved,
+			fmt.Sprintf("lease %s: job store unreadable, so its write boundary is unknown", leaseID)), err)
 	}
 	row, ok := workerLease(rows, leaseID)
 	if !ok {
-		return policy
+		return policy, nil
 	}
 
 	b := &leaseBoundary{id: row.ID, from: from, root: filesystem.ResolveRulePath(loc.Root), cacheDir: loc.CacheDir}
@@ -70,7 +70,7 @@ func NarrowToLease(ctx context.Context, policy *Policy, loc job.Location, leaseI
 	}
 	slog.With(attr.Component("magus")).InfoContext(ctx, "narrowed the sandbox write grant to a lease boundary",
 		"lease", row.ID, "parent", row.Parent, "write_paths", len(row.WritePaths), "write_rules", len(b.granted))
-	return b.apply(policy)
+	return b.apply(policy), nil
 }
 
 // leaseBoundary is a lease's write boundary as NarrowToLease derived it from the job

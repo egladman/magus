@@ -41,8 +41,9 @@ func TestOwnBuildEscapeNamesTheLinkForAnOwnSourceBuild(t *testing.T) {
 		"way this workspace builds it. If that link fails with `undefined:` in generated code, the "+
 		"checkout's committed generated files are behind its sources (a merge kept one side), and "+
 		"restoring either side's copy brings back the mismatch: regenerate them with the commands its "+
-		"generate targets run, then link again. No script in this workspace declares SERVES "+
-		"\"code:MGS1021\", so magus names none of its own.", root)
+		"generate targets run, then link again. Then ready the checkout, alone on its line: `%s`. "+
+		"No script in this workspace declares SERVES "+
+		"\"code:MGS1021\", so magus names none of its own.", root, config.ReadyCheckoutCommand(""))
 	assert.Equal(t, want,
 		ownBuildEscape(exe, moduleBuildInfo("example.com/tool", "cmd/tool"), root))
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/types"
@@ -73,4 +74,37 @@ func TestProcSelfRulesMoveToTheLauncher(t *testing.T) {
 	assert.Empty(t, empty)
 	_, err = decodeRules("rw:relative")
 	assert.Error(t, err)
+}
+
+// The launcher's rule encoding carries any path back unchanged.
+type RuleEncodingSuite struct{ suite.Suite }
+
+func TestRuleEncodingSuite(t *testing.T) { suite.Run(t, new(RuleEncodingSuite)) }
+
+func (s *RuleEncodingSuite) roundTrip(rules []filesystem.Rule) {
+	got, err := decodeRules(encodeRules(rules))
+	s.Require().NoError(err)
+	s.Equal(rules, got)
+}
+
+func (s *RuleEncodingSuite) TestAPathHoldingAnInjectedRuleStaysOneRule() {
+	s.roundTrip([]filesystem.Rule{{Path: "/ws/a,rwx:/", Read: true}})
+}
+
+func (s *RuleEncodingSuite) TestAPathHoldingABackslashRoundTrips() {
+	s.roundTrip([]filesystem.Rule{{Path: `/ws/a\,b\`, Read: true, Write: true}})
+}
+
+func (s *RuleEncodingSuite) TestAPathHoldingAColonRoundTrips() {
+	s.roundTrip([]filesystem.Rule{{Path: "/ws/a:b", Exec: true}, {Path: "/usr", Read: true}})
+}
+
+func (s *RuleEncodingSuite) TestADanglingEscapeIsMalformed() {
+	_, err := decodeRules(`r--:/ws/a\`)
+	s.Error(err)
+}
+
+func (s *RuleEncodingSuite) TestAnUnknownEscapeIsMalformed() {
+	_, err := decodeRules(`r--:/ws/\a`)
+	s.Error(err)
 }

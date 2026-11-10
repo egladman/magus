@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -14,11 +15,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/daemon"
 )
 
 // The share endpoint answers its own failures in the AIP-193 shape its guards already use,
@@ -118,4 +122,61 @@ func TestShareMintIsAudited(t *testing.T) {
 		Expires: rec.Expires, // stamped at mint time
 		Minter:  minter,
 	}, rec)
+}
+
+// A cloned repository's console/gen is not the console a person opens. It is
+// served only when MAGUS_CONSOLE_DIR names it, and passing it over is logged.
+func TestWorkspaceConsoleGenIsNotServedByDefault(t *testing.T) {
+	testkit.Isolate(t)
+	root := t.TempDir()
+	gen := filepath.Join(root, "console", "gen")
+	require.NoError(t, os.MkdirAll(gen, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(gen, "index.html"),
+		[]byte("<html><head></head><body>planted by the repository</body></html>"), 0o600))
+	t.Setenv("MAGUS_CONSOLE_DIR", "")
+	logs := &syncBuffer{}
+
+	failure := &daemon.WorkspaceFailure{Message: "magusfile: exec magusfile.buzz: [BZZ1005] ..."}
+	d, addr := testServer(t, func(opts mcp.Options) *Server {
+		opts.Logger = slog.New(slog.NewTextHandler(logs, nil))
+		return NewUnloaded(opts, Unloaded{Root: root, Err: func() rpcerr.Error { return rpcerr.WorkspaceFailed(root, failure) }})
+	})
+	base, patterns, _ := serveMounted(t, d, addr)
+
+	assert.NotContains(t, patterns, "/console/")
+	resp, err := http.Get(base + "/console/")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.NotEqual(t, http.StatusOK, resp.StatusCode)
+	assert.NotContains(t, string(body), "planted by the repository")
+	assert.Contains(t, logs.String(), "passed_over="+gen)
+}
+
+func TestConsoleDirIsOnlyTheOneMagusConsoleDirNames(t *testing.T) {
+	root := t.TempDir()
+	gen := filepath.Join(root, "console", "gen")
+	require.NoError(t, os.MkdirAll(gen, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(gen, "index.html"), []byte("<html></html>"), 0o600))
+
+	t.Setenv("MAGUS_CONSOLE_DIR", gen)
+	dir, ok := resolveConsoleDir(t.Context(), slog.New(slog.DiscardHandler), root)
+	assert.True(t, ok)
+	assert.Equal(t, gen, dir)
+}
+
+func TestConsoleDirWithNoIndexDoesNotFallBackToConsoleGen(t *testing.T) {
+	root := t.TempDir()
+	gen := filepath.Join(root, "console", "gen")
+	require.NoError(t, os.MkdirAll(gen, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(gen, "index.html"), []byte("<html></html>"), 0o600))
+
+	named := t.TempDir()
+	t.Setenv("MAGUS_CONSOLE_DIR", named)
+	logs := &syncBuffer{}
+	dir, ok := resolveConsoleDir(t.Context(), slog.New(slog.NewTextHandler(logs, nil)), root)
+	assert.False(t, ok)
+	assert.Empty(t, dir)
+	assert.Contains(t, logs.String(), "dir="+named)
 }

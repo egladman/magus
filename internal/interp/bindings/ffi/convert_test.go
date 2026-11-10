@@ -173,7 +173,7 @@ func TestAnyValNamedStringType(t *testing.T) {
 	assert.Equal(t, "ok", got.AsString())
 }
 
-// The same hole, one type over: TargetRun.state is types.TargetRunState.
+// The same hole, one type over: TargetRun.state is daemon.TargetRunState.
 func TestAnyValNamedStringOnTargetRun(t *testing.T) {
 	got, ok := AnyVal(map[string]any{"state": daemon.TargetRunPassed}).MapGet("state")
 	require.True(t, ok)

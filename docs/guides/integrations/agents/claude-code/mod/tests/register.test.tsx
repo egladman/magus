@@ -4,6 +4,7 @@ import type { On } from 'claude-code'
 
 const ROOT = '/w'
 const SOCK = '/c/magus/run/server.sock'
+const TOKEN = 'f00d'
 const MIN = 60_000
 const T0 = 1_000_000_000
 
@@ -100,6 +101,7 @@ function engine(on: On, opts: Opts = {}): Seen {
     const text = opts.files?.[e.path]
     if (text !== undefined) return { value: text }
     if (e.path === `${ROOT}/go.mod`) return { value: 'module github.com/egladman/magus\n' }
+    if (opts.serverUp && e.path === `${SOCK}.token`) return { value: `${TOKEN}\n` }
     return { deny: `no such file: ${e.path}` } as never
   })
   on('process.run', ($, e) => {
@@ -121,6 +123,9 @@ function engine(on: On, opts: Opts = {}): Seen {
     return ok(127, '')
   })
   on('http.fetch', ($, e) => {
+    if (e.init?.headers?.['Magus-Proc-Token'] !== TOKEN) {
+      return { value: { status: 401, ok: false, headers: {}, text: '{"message":"proc: token refused"}' } }
+    }
     const answers: Record<string, unknown> = {
       'http://magus/magus.job.v1alpha1.JobService/ListJobs': {
         jobs: [

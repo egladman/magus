@@ -104,11 +104,15 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 	if err != nil {
 		return fail(err)
 	}
-	models, tierModels, err := validateModelRows(rows)
+	models, tierRows, err := validateModelRows(rows)
 	if err != nil {
 		return fail(fmt.Errorf("mgs_listModels: %w", err))
 	}
 	d.Models = models
+	tierModels, err := declaredTierModels(ctx, id, tierRows)
+	if err != nil {
+		return fail(fmt.Errorf("mgs_listModels: %w", err))
+	}
 	model, err := cheapestTierModel(ctx, id, tierModels)
 	if err != nil {
 		return fail(err)
@@ -251,7 +255,13 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[string][]
 		if err != nil {
 			return nil, fmt.Errorf("harness spell %q: %w", id, err)
 		}
-		_, tiers, err := validateModelRows(rows)
+		_, tierRows, err := validateModelRows(rows)
+		if err != nil {
+			return nil, fmt.Errorf("harness spell %q: mgs_listModels: %w", id, err)
+		}
+		// No declaration maps a tier yet. A tier of several rows
+		// runs the shipped default, or fails here without one.
+		tiers, err := pickTierModels(tierRows, shippedTierModel(id))
 		if err != nil {
 			return nil, fmt.Errorf("harness spell %q: mgs_listModels: %w", id, err)
 		}
@@ -272,14 +282,84 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[string][]
 	return hosts, nil
 }
 
-// validateModelRows reads model rows into prices and each tier's exact model id (nil when
-// no row names a tier). A row without an id would hide a misspelled key, a half-set price
-// step names no price, and an alias without a tier, or an alias or tier on two rows, names
-// no one model, so each is an error.
-func validateModelRows(rows []types.ModelRow) ([]types.ModelPricing, map[string]string, error) {
+// shippedTierModels is the model a harness runs for a tier of
+// several rows. It applies only when the workspace maps no tiers.
+var shippedTierModels = map[string]map[string]string{
+	"claude-code": {"principal": "claude-opus-5-5"},
+}
+
+// shippedTierModel maps a tier to its shippedTierModels entry.
+func shippedTierModel(id string) func(tier string) (string, bool) {
+	return func(tier string) (string, bool) {
+		model, ok := shippedTierModels[id][tier]
+		return model, ok
+	}
+}
+
+// declaredTierModels is each tier's default model under harness id.
+// A tier of several rows takes the id the declaration maps for it.
+// With no declaration in force, such a tier is left out.
+func declaredTierModels(ctx context.Context, id string, tierRows map[string][]string) (map[string]string, error) {
+	var set *types.ModelTierSet
+	if ws, ok := types.WorkspaceFromContext(ctx).(interface {
+		ModelTiers(ctx context.Context) *types.ModelTierSet
+	}); ok {
+		set = ws.ModelTiers(ctx)
+	}
+	if set == nil {
+		var out map[string]string
+		for tier, ids := range tierRows {
+			if len(ids) != 1 {
+				continue
+			}
+			if out == nil {
+				out = map[string]string{}
+			}
+			out[tier] = ids[0]
+		}
+		return out, nil
+	}
+	return pickTierModels(tierRows, func(tier string) (string, bool) {
+		t, err := set.Parse(tier)
+		if err != nil {
+			return "", false
+		}
+		alias, err := set.Alias(id, t)
+		return alias, err == nil
+	})
+}
+
+// pickTierModels is each tier's default model from its rows' ids.
+// A tier of several rows runs the id mapped returns for it.
+// When mapped names none of them it is an error, never a pick by order.
+func pickTierModels(tierRows map[string][]string, mapped func(tier string) (string, bool)) (map[string]string, error) {
+	if len(tierRows) == 0 {
+		return nil, nil
+	}
+	out := map[string]string{}
+	for _, tier := range slices.Sorted(maps.Keys(tierRows)) {
+		ids := tierRows[tier]
+		if len(ids) == 1 {
+			out[tier] = ids[0]
+			continue
+		}
+		if id, ok := mapped(tier); ok && slices.Contains(ids, id) {
+			out[tier] = id
+			continue
+		}
+		return nil, fmt.Errorf("rows %s all declare tier %s and the declaration maps none of them for it, so map tier %s to one of those ids in the declaration's hosts",
+			strings.Join(ids, ", "), tier, tier)
+	}
+	return out, nil
+}
+
+// validateModelRows reads model rows into prices and each tier's row ids.
+// A half-set price step, or an alias without a tier or on two rows, names
+// no one model, so each is an error. Several rows may share a tier.
+func validateModelRows(rows []types.ModelRow) ([]types.ModelPricing, map[string][]string, error) {
 	out := make([]types.ModelPricing, len(rows))
 	aliases := map[string]string{}
-	var tiers map[string]string
+	var tiers map[string][]string
 	for i, r := range rows {
 		if strings.TrimSpace(r.ID) == "" {
 			return nil, nil, fmt.Errorf("row %d has no id", i+1)
@@ -294,13 +374,10 @@ func validateModelRows(rows []types.ModelRow) ([]types.ModelPricing, map[string]
 			aliases[r.Alias] = r.ID
 		}
 		if r.Tier != "" {
-			if prior, dup := tiers[r.Tier]; dup {
-				return nil, nil, fmt.Errorf("rows %s and %s both declare tier %s", prior, r.ID, r.Tier)
-			}
 			if tiers == nil {
-				tiers = map[string]string{}
+				tiers = map[string][]string{}
 			}
-			tiers[r.Tier] = r.ID
+			tiers[r.Tier] = append(tiers[r.Tier], r.ID)
 		}
 		if (r.Step.Above > 0) != (r.Step.Multiplier > 0) {
 			return nil, nil, fmt.Errorf("row %d (%s) sets one of the price step's above and multiplier without the other", i+1, r.ID)

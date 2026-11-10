@@ -109,7 +109,7 @@ proves who they are:
 | Transport                 | Where                                    | Credential                                  | Use it for                                                                                          |
 | ------------------------- | ---------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | stdio                     | `magus mcp`, launched by the host        | none; the host launched the process as you  | one host driving the workspace it opens, with no daemon running                                     |
-| Streamable HTTP, socket   | `/mcp` on the daemon's own `server.sock` | the kernel's word that the peer runs as you | a local client that speaks HTTP over a unix socket and should share the daemon's warm graph         |
+| Streamable HTTP, socket   | `/mcp` on the daemon's own `server.sock` | the proc token, from a peer running as you  | a local client that speaks HTTP over a unix socket and should share the daemon's warm graph         |
 | Streamable HTTP, loopback | `http://127.0.0.1:7391/mcp`              | a bearer token holding `mcp=write`          | a client that only takes a URL, runs as another user, or reaches the daemon through a tunnel or TLS |
 
 Whichever the transport, each tool call is held to `mcp=write` again, and a caller
@@ -125,11 +125,15 @@ operations the CLI uses (see [the daemon's socket](server.md#two-transports)):
 $XDG_RUNTIME_DIR/magus/server.sock      # else <user cache dir>/magus/run/, else /tmp/magus-<uid>/
 ```
 
-It is Streamable HTTP, like the loopback endpoint, carried over the socket instead of TCP,
-and it takes no token. What admits a caller is the user it runs as: for every connection
-the daemon asks the kernel for the peer's uid (`SO_PEERCRED` on Linux, `LOCAL_PEERCRED` on
-macOS) and admits only its own. Any other peer, root included, gets `403`
-[MGS9022](../../reference/codes/auth/MGS9022.md). An admitted call carries the
+It is Streamable HTTP, like the loopback endpoint, carried over the socket instead of TCP.
+Every request carries the proc token in a `Magus-Proc-Token` header. The daemon writes a
+fresh one at each start to `server.sock.token`, beside the socket, readable by you alone. A
+request without it gets `401`. A build step runs as you too and can reach the socket, so
+the token, which the sandbox does not grant, is what keeps it from calling a tool that runs
+magus outside that sandbox. The daemon also asks the kernel for each connection's peer uid
+(`SO_PEERCRED` on Linux, `LOCAL_PEERCRED` on macOS) and admits only its own. Any other
+peer, root included, gets `403` [MGS9022](../../reference/codes/auth/MGS9022.md). An
+admitted call carries the
 `socket-peer` credential, which holds `mcp=write` and `console=write` but never token
 management, and the activity trail records each call under it. On a platform where magus
 cannot read a peer's uid, the socket carries the control operations alone and MCP stays
@@ -138,7 +142,8 @@ on loopback.
 To check it by hand, send a handshake with curl:
 
 ```sh
-curl --unix-socket "$XDG_RUNTIME_DIR/magus/server.sock" http://magus/mcp \
+sock="$XDG_RUNTIME_DIR/magus/server.sock"
+curl --unix-socket "$sock" http://magus/mcp -H "Magus-Proc-Token: $(cat "$sock.token")" \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}'
 ```
@@ -454,9 +459,8 @@ logs and history). How you connect depends on the client:
   public `https://` URL and rejects `http://` and loopback addresses. Front the
   daemon with a TLS tunnel first if you need that path.
 
-The [daemon socket](#mcp-over-the-daemon-socket) reads no token; the kernel's report of
-the peer's uid stands in for it, so anything running as you reaches it, just as it
-could read your operator token.
+The [daemon socket](#mcp-over-the-daemon-socket) takes the proc token, not a bearer. Anything
+running as you outside a sandbox can read it, just as it could read your operator token.
 
 The token is the boundary on loopback `/mcp`, and the only one. The endpoint checks no
 `Host` or `Origin` header and answers any origin's CORS preflight with
@@ -471,9 +475,9 @@ A page without a valid token, a DNS-rebinding page included, learns nothing it c
   the page the same network error it gets when nothing listens on the port. The
   preflight does carry the header, and the Private Network Access allowance, but a page
   cannot read a preflight's answer.
-- **Failures are throttled.** Each caller, keyed by its `Origin` (which a page cannot
-  change) or else its peer address, may fail authentication 20 times a second in bursts of
-  40. Past that it gets `429` with `Retry-After`
+- **Failures are throttled.** Each caller, keyed by its peer address and never by its
+  `Origin` (which any client but a browser can set), may fail authentication 20 times a
+  second in bursts of 40. Past that it gets `429` with `Retry-After`
   ([MGS9030](../../reference/codes/auth/MGS9030.md)). A request whose token verifies is
   never throttled.
 - **Failures are cheap.** Tokens are checked against an in-memory copy of the operator

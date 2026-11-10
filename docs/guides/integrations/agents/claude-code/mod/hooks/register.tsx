@@ -370,11 +370,24 @@ async function rpc($: EngineInterface, procedure: string, body: unknown): Promis
       new MagusError({ code: '', message: 'No magus server is running. Start one with `magus server start`.' }),
     )
   }
+  // The server writes a fresh token beside its socket each start.
+  const token = await fromPromise($.fs.read(`${socket}.token`))
+  if (token.error) {
+    const at = socket
+    socket = null
+    return fail(
+      new MagusError({ code: '', message: `Cannot read the server's token at ${at}.token: ${token.error.message}` }),
+    )
+  }
   const answered = await fromPromise(
     $.http.fetch(`http://magus${procedure}`, {
       method: 'POST',
       socketPath: socket,
-      headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Connect-Protocol-Version': '1',
+        'Magus-Proc-Token': token.value.trim(),
+      },
       body: JSON.stringify(body),
     }),
   )

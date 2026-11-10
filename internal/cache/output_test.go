@@ -62,6 +62,25 @@ func TestOutputStorePersistLookupRoundTrip(t *testing.T) {
 	}, desc)
 }
 
+// TestOutputStorePersistIsPrivateToItsOwner pins the modes Persist creates:
+// an output is a build's whole log.
+func TestOutputStorePersistIsPrivateToItsOwner(t *testing.T) {
+	s := NewOutputStore(filepath.Join(t.TempDir(), "cache"))
+	stored, err := s.Persist(t.Context(), "deadbeefcafef00d", []byte("log\n"), OutputDescriptor{Project: "api", Target: "test"})
+	require.NoError(t, err)
+
+	perm := func(p string) os.FileMode {
+		info, err := os.Stat(p)
+		require.NoError(t, err)
+		return info.Mode().Perm()
+	}
+	dir := filepath.Join(s.outputsDir(), "deadbeefcafef00d")
+	assert.Equal(t, os.FileMode(0o700), perm(s.outputsDir()))
+	assert.Equal(t, os.FileMode(0o700), perm(dir))
+	assert.Equal(t, os.FileMode(0o600), perm(filepath.Join(dir, stored.Attempt+outExt)))
+	assert.Equal(t, os.FileMode(0o600), perm(filepath.Join(dir, stored.Attempt+descExt)))
+}
+
 // TestOutputStorePersistNeverExposesPartialBlob verifies a reader racing Persist never
 // observes a half-written .out blob. newestAttemptBlob falls back to modtime for a
 // descriptor-less (orphan) blob (exactly the state a fresh Persist is in while its

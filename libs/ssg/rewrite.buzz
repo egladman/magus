@@ -479,8 +479,8 @@ test "aliasStub is a redirect page to rel, carrying the caller's CSP" {
     final stub = aliasStub(rel: "/new/", csp: "default-src 'none'; script-src 'sha256-x'");
     assert\equal(got: stub.sub(0, len: 15), want: "<!DOCTYPE html>", message: "html stub");
     assert\equal(got: stub.indexOf("Content-Security-Policy") != null, want: true, message: "csp meta present");
-    assert\equal(got: stub.indexOf("script-src &#39;sha256-x&#39;") != null, want: false, message: "csp attribute is not double-escaped");
-    assert\equal(got: stub.indexOf("script-src 'sha256-x'") != null, want: true, message: "csp content passed through verbatim (single quotes unescaped)");
+    assert\equal(got: stub.indexOf("script-src &#39;sha256-x&#39;") != null, want: true, message: "csp attribute escapes its quotes once");
+    assert\equal(got: stub.indexOf("&amp;#39;") != null, want: false, message: "csp attribute is not double-escaped");
 }
 
 test "redirectScript matches the literal text aliasStub embeds" {
@@ -498,7 +498,7 @@ test "tagAdmonition builds a callout div" {
 
 test "tagAdmonition builds an author's note as an aside with its byline" {
     assert\equal(got: tagAdmonition(html: "<blockquote>\n<p>[!AUTHOR]\nI use this.</p>\n</blockquote>"),
-        want: "<aside class=\"admonition admonition-author\"><p class=\"admonition-title\">Author's note</p>"
+        want: "<aside class=\"admonition admonition-author\"><p class=\"admonition-title\">Author&#39;s note</p>"
             + "<p class=\"admonition-byline\">" + AUTHOR_BYLINE + "</p>\n<p>I use this.</p>\n</aside>",
         message: "author's note");
 }

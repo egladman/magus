@@ -126,19 +126,20 @@ func WithActivityWorkspaces(fn func() []activityhandler.Workspace) Option {
 	return func(d *Server) { d.workspaces = fn }
 }
 
-// Socket is a unix socket that serves a mounted handler beside its own routes, admitting only
-// processes that run as the server's user and stamping them with the socket peer's credential.
-// *proc.Server is the one implementation.
+// Socket is a unix socket that serves a mounted handler beside its own routes.
+// It admits only processes of the server's user that present its proc token,
+// and stamps them with the socket peer's credential. *proc.Server is the one
+// implementation.
 type Socket interface {
 	// Mount serves h on the socket until unmount runs. It fails where the socket cannot
 	// name its caller.
 	Mount(h http.Handler) (unmount func(), err error)
 }
 
-// WithSocket also mounts /mcp and every Connect service on sock while the server serves,
-// each held to the Need it holds on the loopback listener, against the credential the socket
-// stamped rather than a bearer token. The console, the /api routes, health and share stay on
-// loopback: they are for browsers, which cannot dial a unix socket.
+// WithSocket also mounts /mcp and every Connect service on sock while the
+// server serves. Each holds its loopback Need against the socket's credential.
+// The console, the /api routes, health and share stay on loopback: they are
+// for browsers, which cannot dial a unix socket.
 func WithSocket(sock Socket) Option {
 	return func(d *Server) { d.socket = sock }
 }
@@ -501,9 +502,9 @@ func (s *Server) Serve(ctx context.Context) error {
 			// connected. The trail is the same workspace cache base the ActivityService reads.
 			shareMgr := share.NewManager(ctx, log, share.WithTrailDir(opts.Magus.CacheDir()))
 			defer shareMgr.Close()
-			consoleDir, ok := resolveConsoleDir(opts.Magus.Root())
+			consoleDir, ok := resolveConsoleDir(ctx, shareLog, opts.Magus.Root())
 			if !ok {
-				shareLog.WarnContext(ctx, "built console not found; share to phone will report it needs a console build",
+				shareLog.WarnContext(ctx, "no console is served; share to phone refuses until MAGUS_CONSOLE_DIR names a built console",
 					slog.String("root", opts.Magus.Root()))
 			}
 			shareH := s.newShareHandler(shareMgr, consoleDir, shareGuarded, opts.Magus.CacheDir(), log)
@@ -529,8 +530,8 @@ func (s *Server) Serve(ctx context.Context) error {
 			// build also writes the hosted demo's graph JSON (this repo's knowledge graph, notes
 			// included) into the same dir. It is wrapped in the same GuardRebind the rest of the
 			// loopback routes use, so a forged cross-origin Host cannot reach it. Mounted only
-			// when a build was found; otherwise the server still runs (MCP + data routes) and
-			// /console/ just 404s until a console is built.
+			// when MAGUS_CONSOLE_DIR names a build.
+			// Otherwise /console/ 404s.
 			if ok {
 				f.server.Handle("/console/", httpx.GuardRebind(rpcerr.FormatJSON, f.allowed, console.StaticHandler(consoleDir)))
 				bridgeLog.InfoContext(ctx, "static console mounted", slog.String("path", "/console/"), slog.String("dir", consoleDir))
@@ -882,7 +883,7 @@ func (s *Server) serveUnloaded(ctx context.Context) error {
 	for path := range apiNeeds {
 		f.api(path, refuseJSON)
 	}
-	if consoleDir, ok := resolveConsoleDir(u.Root); ok {
+	if consoleDir, ok := resolveConsoleDir(ctx, log.With(attr.Component("bridge")), u.Root); ok {
 		f.server.Handle("/console/", httpx.GuardRebind(rpcerr.FormatJSON, f.allowed, console.StaticHandler(consoleDir)))
 	}
 	log.With(attr.Component("bridge")).WarnContext(ctx, "workspace not loaded; serving status and the console only",

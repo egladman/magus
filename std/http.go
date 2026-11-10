@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/retry"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
 
@@ -113,7 +114,8 @@ var HTTP = Module{
 				"the LONGEST matching prefix, so \"/console/\" wins over \"/\" for a /console/ path and the matched prefix " +
 				"is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds " +
 				"that port; 0 (the default) scans upward from 8080 and binds the first available one. Unknown keys are " +
-				"rejected. Serves localhost only and runs until the process exits, so pair it with a blocking call like fs.watch.",
+				"rejected. Serves localhost only, refusing a request whose Host or Origin names another host (DNS rebinding), " +
+				"and runs until the process exits, so pair it with a blocking call like fs.watch.",
 			Args: []Arg{
 				{Name: "opts", Object: "ServerOptions"},
 			},
@@ -270,15 +272,20 @@ func HTTPServe(ctx context.Context, opts types.HTTPServerOptions) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	srv := &http.Server{
-		Handler:           handler,
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-	go func() { _ = srv.Serve(ln) }()
 	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
+		_ = ln.Close() // the address error below is the one to report
 		return 0, fmt.Errorf("http.server: unexpected listener address type %T", ln.Addr())
 	}
+	// A loopback bind is not enough. A page that rebinds its own name to
+	// 127.0.0.1 reaches this port under that name, so the Host is checked.
+	// No setting widens this server, so its refusal names none.
+	allowed := httpx.AllowedHosts(tcpAddr.AddrPort()).WidenedBy("")
+	srv := &http.Server{
+		Handler:           httpx.GuardRebind(rpcerr.FormatJSON, allowed, handler),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	go func() { _ = srv.Serve(ln) }() // serves until the process exits; no caller waits
 	return tcpAddr.Port, nil
 }
 

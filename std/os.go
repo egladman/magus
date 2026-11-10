@@ -33,8 +33,12 @@ var magusWarned sync.Map
 // returns text to parse back, and runs the build that loaded the script rather than
 // whichever magus the path finds. An invocation no member answers (`job exec`, `queue ls`,
 // `server start`) is what proc.exec is for, so it stays silent. Execution is never blocked.
-func warnIfMagusBinary(ctx context.Context, cmd string, args []string) {
+// A magus named by a path that is not this build stays silent.
+func warnIfMagusBinary(ctx context.Context, cmd, wd string, args []string) {
 	if filepath.Base(cmd) != "magus" {
+		return
+	}
+	if strings.ContainsRune(cmd, filepath.Separator) && !isOwnBinary(cmd, wd) {
 		return
 	}
 	member := typedMagusMember(args)
@@ -47,6 +51,26 @@ func warnIfMagusBinary(ctx context.Context, cmd string, args []string) {
 	slog.WarnContext(ctx, "proc\\exec runs magus for an invocation a typed member answers",
 		"invocation", strings.Join(append([]string{"magus"}, args...), " "),
 		"hint", fmt.Sprintf("call magus\\%s instead", member))
+}
+
+// isOwnBinary reports whether path is the file this process started from.
+func isOwnBinary(path, wd string) bool {
+	if !filepath.IsAbs(path) && wd != "" {
+		path = filepath.Join(wd, path)
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	selfInfo, err := os.Stat(self)
+	if err != nil {
+		return false
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(selfInfo, info)
 }
 
 // typedMagusMembers maps a magus invocation, by its subcommand and, where the subcommand
@@ -464,8 +488,8 @@ func ProcExec(ctx context.Context, cmd string, args []string, dir string, opts t
 	if err := procVCSRefusal(cmd, args, dir); err != nil {
 		return types.ExecResult{}, err
 	}
-	warnIfMagusBinary(ctx, cmd, args)
 	wd := resolveDir(ctx, dir)
+	warnIfMagusBinary(ctx, cmd, wd, args)
 	if wd != "" {
 		if err := checkRead(ctx, wd); err != nil {
 			return types.ExecResult{}, err

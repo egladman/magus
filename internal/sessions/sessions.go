@@ -254,7 +254,7 @@ func Open(dir, invocation string, start InvocationStart) (*Writer, error) {
 	if !ValidFileID(invocation) {
 		return nil, fmt.Errorf("sessions: invocation id %q must be alphanumeric with hyphen and underscore (it names the invocation's file), mint one with journal.NewInvocationID", invocation)
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("sessions: create store %s: %w", dir, err)
 	}
 	stamp := filepath.Join(dir, pruneStamp)
@@ -337,7 +337,7 @@ func (w *Writer) write(kind string, payload any) error {
 	// Opened and closed per append rather than held: an invocation's facts are
 	// low-frequency, and a long-lived handle would need a close nobody on the CLI
 	// path is positioned to run. See internal/trail, which made the same trade.
-	if err := file.AppendLines(w.path, [][]byte{line}, 0o644, file.WithoutSync()); err != nil {
+	if err := file.AppendLines(w.path, [][]byte{line}, 0o600, file.WithoutSync()); err != nil {
 		return fmt.Errorf("sessions: append %s record: %w", kind, err)
 	}
 	w.seq++

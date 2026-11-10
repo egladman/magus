@@ -693,7 +693,7 @@ func TestSpawnModelTiersReadInstalledClaudeCodeRows(t *testing.T) {
 		{"opus", "principal", "claude-opus-5-5", true},
 		{"sonnet", "standard", "claude-sonnet-5-5", true},
 		{"haiku", "economy", "claude-haiku-5-5", true},
-		{"fable", "principal", "claude-opus-5-5", false},
+		{"fable", "principal", "claude-opus-5-5", true},
 		{"Opus", "principal", "claude-opus-5-5", false},
 	} {
 		t.Run(tc.model, func(t *testing.T) {
@@ -993,4 +993,27 @@ func (s *RecoversOwnCheckoutSuite) TestTheHookWithoutRecoverIsNotRecovery() {
 func (s *RecoversOwnCheckoutSuite) TestASecondCommandIsNotRecovery() {
 	declareCheckoutHook(s.T(), s.root)
 	s.False(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --here --recover && git push", s.root))
+}
+
+// tierlessFableRows lists claude-fable-5-1 with no tier.
+func tierlessFableRows() []types.ModelPricing {
+	return []types.ModelPricing{{ID: "claude-fable-5-1", Alias: "fable"}}
+}
+
+func TestARowNamingFableSpawnsOnFable(t *testing.T) {
+	set := testModelTiers(t, "claude-code")
+	economy, ok := set.At(0)
+	require.True(t, ok)
+	f := forkedTier{job: "j", record: types.JobModelTier{Name: "economy", Model: "claude-fable-5-1"}, tier: economy, set: set, rows: tierlessFableRows()}
+
+	assert.Empty(t, f.refusal("claude-code", "fable"), "the row names Fable by id, the spawn by alias")
+}
+
+func TestATieredRowStillRefusesFable(t *testing.T) {
+	set := testModelTiers(t, "claude-code")
+	economy, ok := set.At(0)
+	require.True(t, ok)
+	f := forkedTier{job: "j", record: types.JobModelTier{Name: "economy"}, tier: economy, set: set, rows: tierlessFableRows()}
+
+	assert.Contains(t, f.refusal("claude-code", "claude-fable-5-1"), "maps to no model tier")
 }

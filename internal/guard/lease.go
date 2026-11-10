@@ -4044,7 +4044,16 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	checkout := leaseCheckout(ctx, location, actingLease)
 	start, home := cmp.Or(deps.callDir, checkout), userHome()
 	removed := append(removedOrMovedOperands(command, 0, dialect, start, home), boundPathOperands(command, dialect, start)...)
-	for _, candidate := range placedWriteCandidates(command, dialect, start, home) {
+	destinations := destinationOperands(command, dialect, start, home)
+	candidates := placedWriteCandidates(command, dialect, start, home)
+	for _, w := range slices.Concat(candidates, destinations, removed) {
+		if target, placed := w.place(home); placed {
+			if g := denyOwnBinaryWrite(actingLease, target); g.Decision == decisionDeny {
+				return g.Reason
+			}
+		}
+	}
+	for _, candidate := range candidates {
 		// A flag (`-p`, `-c`) or stdin's `-` names no file; a file spelled that way is
 		// written `./-p`, which still resolves.
 		if strings.HasPrefix(candidate.word, "-") {
@@ -4056,16 +4065,17 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		}
 		rel, inside := workspaceRelative(checkout, target)
 		if !inside {
-			// A checkout nested under this one is another checkout, which the file-write
-			// rules refuse a lease outright.
-			if nestedCheckout(checkout, target) {
-				if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == decisionDeny {
-					return g.Reason
-				}
+			// Outside, the file-write rules refuse magus's own
+			// directories and any other checkout, parent or nested.
+			if g := gradeLeasedWrite(ctx, deps, actingLease, target); g.Decision == decisionDeny {
+				return g.Reason
 			}
 			continue
 		}
-		redirected := slices.Contains(redirects, candidate.word)
+		redirected := slices.Contains(redirects, candidate.word) || slices.ContainsFunc(destinations, func(o placedWord) bool {
+			t, ok := o.place(home)
+			return ok && t == target
+		})
 		declared, byCatchAll := declaredPath(declaring, rel)
 		switch {
 		case !declared:
@@ -4078,7 +4088,8 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 			}) {
 				continue
 			}
-			if info, err := os.Lstat(target); !redirected && (err != nil || !info.Mode().IsRegular()) {
+			// A destination counts too, and Stat follows a symlink.
+			if info, err := os.Stat(target); !redirected && (err != nil || !info.Mode().IsRegular()) {
 				continue
 			}
 		case byCatchAll && !redirected && !pathShaped(checkout, rel):
@@ -4091,6 +4102,13 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 	}
 	if !enrolled || len(me.WritePaths) == 0 {
 		return ""
+	}
+	if unread := unreadHandedScripts(command, dialect); len(unread) > 0 {
+		return denial{
+			Say: fmt.Sprintf("magus workspace: the guard cannot read the script handed to %s; spell it as a literal, as in `sh <<'EOF'`.",
+				strings.Join(unread, ", ")),
+			Why: fmt.Sprintf("lease-write reads a script a shell or an interpreter runs the way it reads `sh -c '<script>'`, a quoted heredoc included. A script decoded, expanded or computed as the line runs cannot be read before it runs, so it could write anything. `%s` shows what the job holds.", hint.DescribeJob.With(me.ID)),
+		}.full()
 	}
 	if reason := denyPatchOutsideLease(ctx, deps, me, command, dialect, start, home); reason != "" {
 		return reason

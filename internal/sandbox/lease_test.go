@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/job"
@@ -63,7 +64,40 @@ func stateDir(t *testing.T) string {
 func narrowed(t *testing.T, root, cacheDir, leaseID string) *Policy {
 	t.Helper()
 	base := fromConfig(t, root, cacheDir, config.SandboxConfig{})
-	return NarrowToLease(t.Context(), base, job.Location{StateBase: stateDir(t), CacheDir: cacheDir, Root: root}, leaseID, types.LeaseSourceMarker)
+	p, err := NarrowToLease(t.Context(), base, job.Location{StateBase: stateDir(t), CacheDir: cacheDir, Root: root}, leaseID, types.LeaseSourceMarker)
+	require.NoError(t, err)
+	return p
+}
+
+type UnreadableJobStoreSuite struct {
+	suite.Suite
+	base *Policy
+	loc  job.Location
+}
+
+func TestUnreadableJobStoreSuite(t *testing.T) { suite.Run(t, new(UnreadableJobStoreSuite)) }
+
+// SetupTest puts a directory where the store's file belongs.
+func (s *UnreadableJobStoreSuite) SetupTest() {
+	t := s.T()
+	root, cacheDir := leaseWorkspace(t, types.Job{})
+	s.loc = job.Location{StateBase: stateDir(t), CacheDir: cacheDir, Root: root}
+	path, err := job.NewStore(s.loc).Path()
+	s.Require().NoError(err)
+	s.Require().NoError(os.MkdirAll(path, 0o755))
+	s.base = fromConfig(t, root, cacheDir, config.SandboxConfig{})
+}
+
+func (s *UnreadableJobStoreSuite) TestAClaimedLeaseIsAnError() {
+	p, err := NarrowToLease(s.T().Context(), s.base, s.loc, "fleet/w1", types.LeaseSourceMarker)
+	s.Require().ErrorContains(err, "fleet/w1")
+	s.Nil(p, "no policy, so no caller can run with the workspace write grant")
+}
+
+func (s *UnreadableJobStoreSuite) TestNoLeaseNeverReadsTheStore() {
+	p, err := NarrowToLease(s.T().Context(), s.base, s.loc, "", types.LeaseSourceMarker)
+	s.Require().NoError(err)
+	s.Same(s.base, p)
 }
 
 // TestNarrowToLeaseGrantsOnlyTheWritePaths is the boundary the whole tier rests on: a
@@ -202,8 +236,9 @@ func TestNarrowToLeaseLeavesEveryUnnarrowableCaseAlone(t *testing.T) {
 			root, cacheDir := leaseWorkspace(t, tc.row)
 			base := fromConfig(t, root, cacheDir, config.SandboxConfig{})
 
-			p := NarrowToLease(t.Context(), base, job.Location{StateBase: stateDir(t), CacheDir: cacheDir, Root: root}, tc.acted, types.LeaseSourceMarker)
+			p, err := NarrowToLease(t.Context(), base, job.Location{StateBase: stateDir(t), CacheDir: cacheDir, Root: root}, tc.acted, types.LeaseSourceMarker)
 
+			require.NoError(t, err)
 			assert.Same(t, base, p)
 			require.NoError(t, p.CheckWrite(t.Context(), filepath.Join(root, "pkg", "b", "x.txt")))
 		})

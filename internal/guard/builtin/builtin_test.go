@@ -13,11 +13,12 @@ import (
 
 func TestDefaults(t *testing.T) {
 	got := Defaults()
-	assert.Len(t, got, 131)
+	assert.Len(t, got, 132)
 	assert.NotContains(t, got, "stdin-closed")
 	assert.NotContains(t, got, "spawn-principal-for-economy")
 	want := map[string]decision{
 		"conflict-commit":      Deny,
+		"unknown-magus-argv":   Deny,
 		"cache-clear":          Deny,
 		"deviation-author":     Deny,
 		"compat-marker":        Advise,

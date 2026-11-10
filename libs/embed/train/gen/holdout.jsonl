@@ -1253,6 +1253,8 @@
 {"group":"dir:internal/guard","path":"internal/guard/paging.go"}
 {"group":"dir:internal/guard","path":"internal/guard/paging_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/parse.go"}
+{"group":"dir:internal/guard","path":"internal/guard/parse_handoff.go"}
+{"group":"dir:internal/guard","path":"internal/guard/parse_handoff_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/parse_test.go"}
 {"group":"dir:internal/guard","path":"internal/guard/patch_writes.go"}
 {"group":"dir:internal/guard","path":"internal/guard/pause.go"}

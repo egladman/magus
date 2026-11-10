@@ -79,7 +79,9 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 		return ctx, err
 	}
 	lease, from := job.RunLease(ctx, loc)
-	p = sandbox.NarrowToLease(ctx, p, loc, lease, from)
+	if p, err = sandbox.NarrowToLease(ctx, p, loc, lease, from); err != nil {
+		return ctx, err
+	}
 	// Held back for magus\cmd's nested magus, which runs targets.
 	p = p.WithNestedTargets(m.TargetSandboxes())
 	confines, err := p.KernelConfines()

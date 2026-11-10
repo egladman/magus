@@ -82,8 +82,13 @@ func (s *scoutSuite) TestJobExitIsAllowed() {
 	s.Contains(scoutCommandNames(), "magus job exit")
 }
 
+func (s *scoutSuite) TestJobExecIsAllowed() {
+	s.Contains(scoutCommandNames(), "magus job exec <your row>")
+	s.Contains(s.scout.Instructions, "`magus job exec <your row>`")
+}
+
 func (s *scoutSuite) TestEveryWorkerVerbTheSkillMandatesIsAllowed() {
-	for _, verb := range []string{"magus describe", "magus job exit"} {
+	for _, verb := range []string{"magus describe", "magus job exec <your row>", "magus job exit"} {
 		s.Contains(scoutCommandNames(), verb)
 	}
 }

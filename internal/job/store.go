@@ -1016,7 +1016,7 @@ func (s *Store) archive(f jobsFile) error {
 		return err
 	}
 	name := fmt.Sprintf("jobs-%s.jsonl", time.Now().UTC().Format("20060102T150405Z"))
-	return file.RewriteLines(filepath.Join(filepath.Dir(s.path), name), lines, 0o644)
+	return file.RewriteLines(filepath.Join(filepath.Dir(s.path), name), lines, 0o600)
 }
 
 // update runs fn over the ledger as it stands under the file lock beside jobs.jsonl, so a
@@ -1030,6 +1030,11 @@ func (s *Store) archive(f jobsFile) error {
 func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 	if s.err != nil {
 		return s.err
+	}
+	// Made here, before the lock and file helpers create it world-readable.
+	// Rows carry a repository's plan and its checkout paths.
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
+		return fmt.Errorf("job: create store %s: %w", filepath.Dir(s.path), err)
 	}
 	return s.locked(ctx, func() error {
 		f, log, err := s.readFile(false)
@@ -1082,7 +1087,7 @@ func (s *Store) write(f jobsFile, log jobsLog) error {
 	}
 	sameHeader := bytes.Equal(header, log.header)
 	if !dropped && sameHeader && !log.partial && !file.CompactDue(log.lines+len(changed), len(f.Jobs)) {
-		return file.AppendLines(s.path, changed, 0o644)
+		return file.AppendLines(s.path, changed, 0o600)
 	}
 	if log.partial {
 		out := s.notices
@@ -1091,7 +1096,7 @@ func (s *Store) write(f jobsFile, log jobsLog) error {
 		}
 		fmt.Fprintf(out, "job: %s ended in a line no writer finished; the rewrite dropped it\n", s.path)
 	}
-	return file.RewriteLines(s.path, lines, 0o644)
+	return file.RewriteLines(s.path, lines, 0o600)
 }
 
 // pruneFootprints removes the footprint cache of every checkpoint revision no live row in
