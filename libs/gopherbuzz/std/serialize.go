@@ -554,12 +554,13 @@ func (s *jsonScanner) number() (vm.Value, error) {
 	for s.i < len(s.b) && strings.IndexByte("+-.eE0123456789", s.b[s.i]) >= 0 {
 		s.i++
 	}
-	x, err := strconv.ParseFloat(string(s.b[start:s.i]), 64)
+	lit := string(s.b[start:s.i])
+	x, err := strconv.ParseFloat(lit, 64)
 	if err != nil {
 		return vm.Null, err
 	}
-	if x == float64(int64(x)) {
-		return vm.IntValue(int64(x)), nil
+	if strings.ContainsAny(lit, ".eE") {
+		return vm.FloatValue(x), nil
 	}
-	return vm.FloatValue(x), nil
+	return vm.IntValue(int64(x)), nil
 }

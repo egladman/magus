@@ -170,6 +170,32 @@ func TestJSONDecodeKeepsObjectMembersInDocumentOrder(t *testing.T) {
 	}
 }
 
+func TestJSONDecodeReadsFractionAndExponentNumbersAsFloats(t *testing.T) {
+	boxed, err := serializeJSONDecode(t.Context(), []vm.Value{vm.StringValue(`[10.0, 1e2, 2.5E-1, 7]`)})
+	require.NoError(t, err)
+
+	v, err := JSONDecodeValue([]byte(`[10.0, 1e2, 2.5E-1, 7]`))
+	require.NoError(t, err)
+	items := v.ListItems()
+	require.Len(t, items, 4)
+	for i, want := range []float64{10, 100, 0.25} {
+		require.True(t, items[i].IsFloat(), "item %d decodes as %s", i, items[i].Kind())
+		assert.InDelta(t, want, items[i].AsFloat(), 0)
+	}
+	assert.True(t, items[3].IsInt(), "7 decodes as %s", items[3].Kind())
+
+	got, err := JSONEncode(boxed)
+	require.NoError(t, err)
+	assert.JSONEq(t, `[10, 100, 0.25, 7]`, got)
+
+	s := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	t.Cleanup(func() { _ = s.Close() })
+	Register(s)
+	require.NoError(t, s.Exec(t.Context(), `import "serialize";
+final f = serialize\jsonDecode("[10.0]").q([0]).floatValue();`))
+	assert.InDelta(t, 10.0, s.Globals()["f"].AsFloat(), 0)
+}
+
 func TestSession_SerializeBoxedIsDeclared(t *testing.T) {
 	ctx := context.Background()
 	exec := func(src string) (*buzz.Session, error) {
