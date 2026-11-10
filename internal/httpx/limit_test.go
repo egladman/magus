@@ -56,8 +56,8 @@ func TestFailureLimiterBoundsItsCallers(t *testing.T) {
 	assert.Less(t, len(l.buckets), maxBuckets)
 }
 
-// The guard answers an exhausted caller 429 with Retry-After, keeps admitting its valid
-// token, and charges a failure to the Origin, else the peer.
+// The guard answers an exhausted caller 429 with Retry-After, keeps
+// admitting its valid token, and charges a failure to the TCP peer.
 func TestGuardLimitsOnlyFailures(t *testing.T) {
 	l := NewFailureLimiter(20, 2)
 	verify := func(p string) (types.Credential, bool) {
@@ -88,7 +88,17 @@ func TestGuardLimitsOnlyFailures(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "more than 20 times a second (bursts of 2)")
 	assert.Contains(t, w.Body.String(), "only failed attempts count")
 	assert.Equal(t, http.StatusOK, send("https://a.example", "good").Code, "a valid token is never limited")
-	assert.Equal(t, http.StatusUnauthorized, send("https://b.example", "bad").Code, "another Origin has its own bucket")
-	assert.Equal(t, http.StatusUnauthorized, send("", "bad").Code, "and so does the peer")
-	assert.Equal(t, "peer 192.0.2.1", FailureKey(httptest.NewRequest(http.MethodPost, "/mcp", nil)))
+	assert.Equal(t, http.StatusTooManyRequests, send("https://b.example", "bad").Code, "another Origin from the same peer buys no fresh bucket")
+	assert.Equal(t, http.StatusTooManyRequests, send("", "bad").Code, "and neither does dropping it")
+
+	other := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	other.RemoteAddr = "192.0.2.2:1234"
+	other.Header.Set("Authorization", "Bearer bad")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, other)
+	assert.Equal(t, http.StatusUnauthorized, w.Code, "another peer has its own bucket")
+
+	withOrigin := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	withOrigin.Header.Set("Origin", "https://a.example")
+	assert.Equal(t, "peer 192.0.2.1", FailureKey(withOrigin))
 }
