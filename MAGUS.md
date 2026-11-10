@@ -69,7 +69,7 @@ magus graph export -o json  # the whole graph
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS1021`, `MGS3032`                                                                                                                                |
 | doc        |    2000+ | `magus query kind=doc`        | `docs/reference/rules/index.md`, `docs/reference/proofread/index.md`, `docs/guides/integrations/agents/guard.md`                                               |
 | dir        |     600+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/proofread`                                                                                       |
-| file       |     600+ | `magus query kind=file`       | `magusfile.buzz`, `libs/figure/figure.buzz`, `hack/ci/pull-requests.buzz`                                                                                      |
+| file       |     600+ | `magus query kind=file`       | `magusfile.buzz`, `libs/figure/figure.buzz`, `hack/policy/pull_requests.buzz`                                                                                  |
 | function   |    4000+ | `magus query kind=function`   | `apiBase`, `main`, `judgeText`                                                                                                                                 |
 | import     |     100+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                                                                           |
 | rationale  |      10+ | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                                                                         |
@@ -80,7 +80,7 @@ magus graph export -o json  # the whole graph
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                                   |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | ------------------------------------------------------------- |
-| [.](MAGUS.md)                                                               |      69 | `magus query project=.`                               | `conventions`, `buzz-test`, `test`                            |
+| [.](MAGUS.md)                                                               |      70 | `magus query project=.`                               | `conventions`, `buzz-test`, `test`                            |
 | [console](console/MAGUS.md)                                                 |      11 | `magus query project=console`                         | `build`, `lint`, `install`                                    |
 | [docs](docs/MAGUS.md)                                                       |      28 | `magus query project=docs`                            | `catalog-docs-generate`, `site-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |      10 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                               |
@@ -177,6 +177,7 @@ magus graph export -o json  # the whole graph
 | `harness-drift`                | Fails when a local host installation lacks what its wired harness spell renders, naming each file and the command that merges it.                                                                                                      |
 | `swegrade-build`               | Builds swegrade, the grader a SWE-bench trial's eval log is piped through, into benchmarks/agent/bin.                                                                                                                                  |
 | `compress-cgo-test`            | Runs internal/compress's tests under the cgo tags, which the ordinary test target cannot reach.                                                                                                                                        |
+| `landlock-test`                | Runs internal/sandbox's tests with landlock required.                                                                                                                                                                                  |
 
 ## Project: libs/embed
 

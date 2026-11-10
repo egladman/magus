@@ -4,17 +4,12 @@
 
 Nothing to merge right now.
 
-- [ ] <!-- magus-queue: start --> **Run the queue now** on `main`
-- [ ] <!-- magus-queue: render --> **Re-render this page**
-
 <sub>Updated 2026-09-26 20:00 UTC · `main` at `cba6465e8617` · merged in 7 days: 0 by the queue, 0 past it</sub>
 
 <details><summary>How this page works</summary>
 
-- Rendered from GitHub and `magus queue ls` after every queue run and on every label, review or auto-merge event; edits here do not survive.
+- Rendered from GitHub and `magus queue ls` after every queue run.
 - Rows rank by how near each is to merging: validating, queued in queue order, can join. Kicked-back rows sit below, unranked.
-- A box runs when someone with write access checks it; any other check is ignored and the page is rendered again.
-- Queue and Requeue enable auto-merge as the queue app; Rerun reruns the failed jobs; Run the queue now starts a validation run on `main` unless one is waiting.
 - Past it counts merges whose `merge-queue` status was not success.
 - Render it yourself: `magus buzz hack/ci/pull-requests.buzz -- dashboard --all --base main --preview --out dashboard.md`
 

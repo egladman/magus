@@ -150,7 +150,7 @@ without target artifacts. Missing artifacts do not mean a passing run.
 | --- | --- | --- |
 | `hack/ci/merge-queue.buzz` | the merge queue's workflow steps, one subcommand each | network |
 | `magus buzz hack/ci/run-with-harnesses.buzz -- <subcommand> [args...]` | installs the agent harnesses, then runs one magus subcommand; `gate` runs `ci:gha` for the queue and restores the `--` before forwarded flags | none |
-| `magus buzz hack/ci/pull-requests.buzz -- status \| apply \| dashboard \| boxes \| act` | named before the verb rule: each open pull request's state and the action it needs; `apply` queues and reruns; the queue workflows render `dashboard`, and queue-dashboard.yaml answers its boxes with `boxes` and `act` | network |
+| `magus buzz hack/ci/pull-requests.buzz -- status \| apply \| dashboard` | named before the verb rule: each open pull request's state and the action it needs; `apply` queues and reruns; `queue-apply.yaml` renders `dashboard` into its run summary | network |
 | `magus buzz hack/ci/show-failures.buzz -- [--commit <rev>] [--run <id>] \| magus query output --stdin` | read-only: writes the output records of a commit's failed CI targets, from the run's `magus-logs-*` artifacts, to stdout for `magus query output --stdin` to print; exits 3 when the commit has no CI run | network |
 | `magus buzz hack/ci/labels.buzz -- [--repo <owner/name>]` | named before the verb rule: prints the `gh label` commands for this repository's label taxonomy | none |
 
