@@ -995,6 +995,8 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	// cancellation instead so the entry is neither replayed nor exported.
 	if err := ctx.Err(); err != nil {
 		result.Duration = time.Since(start)
+		result.Ref = c.recordOutput(ctx, s, hash, rawOutput, result, err, false)
+		rc.fireResults(rc.step, &result, err)
 		return result, err
 	}
 

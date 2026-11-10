@@ -184,6 +184,33 @@ func TestRunSnapshotFailureReportsLikeRunErr(t *testing.T) {
 	assert.NotEmpty(t, r.Ref, "recordOutput must still run so the failure is queryable by ref")
 }
 
+// A cancelled step whose fn succeeded still ends for observers: OnResult
+// fires with the cancellation and the output is recorded under a ref.
+func TestRunCancelledAfterSuccessReportsEnd(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	step := makeStep(root)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fn := func(_ context.Context) error {
+		cancel()
+		return nil
+	}
+
+	var onResultErr error
+	var onResultCalled bool
+	r, err := c.Run(ctx, step, fn, OnResult(func(_ *Step, _ *Result, err error) {
+		onResultCalled = true
+		onResultErr = err
+	}))
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.True(t, onResultCalled, "OnResult must fire when the context was cancelled")
+	assert.ErrorIs(t, onResultErr, context.Canceled)
+	assert.NotEmpty(t, r.Ref, "the cancelled step's output must be recorded")
+}
+
 // TestNoCacheAlwaysRuns verifies that a Step with NoCache=true never replays:
 // fn runs on every Run with identical inputs (no snapshot, no hit), so a
 // long-running target re-executes instead of replaying a cached completion.
