@@ -228,6 +228,32 @@ func CheckoutHead(ctx context.Context, dir string) string {
 	return head.ID
 }
 
+// StartCheckpoint is the checkpoint job id starts from in wt: declared, or
+// wt's head when declared names no revision. A re-fork into the checkout
+// rows record for id starts at that head too, and note says so. Its commits
+// are the job's own, and exec would read them as a divergence. An unread
+// head leaves declared, else wt.Base.
+func StartCheckpoint(ctx context.Context, rows []types.Job, id, declared string, wt types.JobWorktree) (checkpoint, note string) {
+	head, at, err := CheckpointAtHead(ctx, wt.Root, declared)
+	revision, _ := types.ParseCheckpointToken(declared)
+	switch {
+	case head == "" && revision == "":
+		return wt.Base, ""
+	case head == "" || err != nil:
+		return declared, ""
+	case revision == "":
+		return head, ""
+	case at:
+		return declared, ""
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	if i < 0 || !rows[i].Worktree.Standing() || !samePath(rows[i].Worktree.Root, wt.Root) {
+		return declared, ""
+	}
+	return head, fmt.Sprintf("%s's checkout %s, which an earlier fork of it holds, stands at %.12s, not the checkpoint %.12s, so the job starts at %.12s",
+		id, wt.Root, head, revision, head)
+}
+
 // RowLive reports whether job id has a row that has not ended, which a fork
 // updates rather than declares.
 func (s *Store) RowLive(id string) (bool, error) {

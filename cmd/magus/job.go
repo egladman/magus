@@ -1491,20 +1491,23 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		if mirrored != "" && (followed || stale || made && worktree.Binary == "") && job.BuildsItsOwnMagus(worktree.Root) {
 			reused, err := provisionCheckout(ctx, store, jobWS, mirrored, root, row, worktree)
 			if err != nil {
-				if !made {
-					return err
-				}
-				return errors.Join(err, store.DiscardWorktree(ctx, worktree))
+				return failedProvision(ctx, store, worktree, made, err)
 			}
 			worktree.Binary, built = filepath.Join(worktree.Root, "magus"), !reused
+		}
+		rows, err := store.List()
+		if err != nil {
+			return err
+		}
+		// The job starts from what its checkout holds, not from the forker's tree.
+		start, note := job.StartCheckpoint(ctx, rows, row.ID, row.Checkpoint, worktree)
+		if note != "" {
+			slog.InfoContext(ctx, note, attr.Notice("note"))
 		}
 		declare := merge
 		merge = func(u *types.Job) {
 			declare(u)
-			// The job starts from what its checkout holds, not from the forker's tree.
-			if u.Checkpoint == "" {
-				u.Checkpoint = worktree.Base
-			}
+			u.Checkpoint = start
 			u.Worktree = &worktree
 		}
 	}
@@ -2389,16 +2392,30 @@ func provisionCheckout(ctx context.Context, store *job.Store, ws job.Workspace, 
 	return placed != "", bootstrapCheckout(ctx, exe, forker, wt.Root, "--install", job.InstallProjects(forker, declared, ws.Projects))
 }
 
-// bootstrapCheckout builds ./magus in dir, a checkout the fork just made, from
-// dir's own sources. exe runs the forker's copy of its checkout.bootstrap hook
-// from forker. Progress goes to stderr, since the fork's stdout is its record.
+// failedProvision is err, from readying wt, with what became of wt.
+// Only a checkout this fork made is removed. An adopted one stays,
+// and so does one an earlier fork of the job made.
+func failedProvision(ctx context.Context, store *job.Store, wt types.JobWorktree, made bool, err error) error {
+	if !made {
+		return fmt.Errorf("%w\n%s stays as it was: this fork did not make it, so it does not remove it", err, wt.Root)
+	}
+	if derr := store.DiscardWorktree(ctx, wt); derr != nil {
+		return errors.Join(err, fmt.Errorf("removing %s, which this fork made: %w", wt.Root, derr))
+	}
+	return fmt.Errorf("%w\nthis fork made %s, so it removed it", err, wt.Root)
+}
+
+// bootstrapCheckout builds ./magus in dir, a checkout the fork made or
+// adopted, from dir's own sources. exe runs the forker's copy of its
+// checkout.bootstrap hook from forker. Progress goes to stderr, since the
+// fork's stdout is its record.
 func bootstrapCheckout(ctx context.Context, exe, forker, dir string, flags ...string) error {
 	hook, err := job.CheckoutHook(forker)
 	if err != nil {
 		return fmt.Errorf("magus job fork: %w", err)
 	}
 	if hook == "" {
-		return fmt.Errorf("magus job fork: %s holds a hook to build its own ./magus, and %s has %s, so the checkout is removed", dir, forker, job.NoCheckoutHook)
+		return fmt.Errorf("magus job fork: %s holds a hook to build its own ./magus, and %s has %s", dir, forker, job.NoCheckoutHook)
 	}
 	args := append([]string{"buzz", hook, "--", "--checkout", dir}, flags...)
 	cmd := exec.CommandContext(ctx, exe, args...) //nolint:gosec // exe is the running magus binary or its own placed copy
@@ -2406,9 +2423,9 @@ func bootstrapCheckout(ctx context.Context, exe, forker, dir string, flags ...st
 	cmd.Dir, cmd.Stdout, cmd.Stderr = forker, progressWriter(ctx), io.MultiWriter(os.Stderr, &output)
 	if err := cmd.Run(); err != nil {
 		if full := cache.DiskFullCause(output.String(), forker, cache.DiskFullFloorBytes); full != "" {
-			return fmt.Errorf("magus job fork: building ./magus in %s failed, so the checkout is removed: %s: %w", dir, full, err)
+			return fmt.Errorf("magus job fork: building ./magus in %s failed: %s: %w", dir, full, err)
 		}
-		return fmt.Errorf("magus job fork: building ./magus in %s from its own sources failed, so the checkout is removed: `%s` from %s says why: %w",
+		return fmt.Errorf("magus job fork: building ./magus in %s from its own sources failed: `%s` from %s says why: %w",
 			dir, job.CheckoutBootstrap(hook, dir), forker, err)
 	}
 	return nil

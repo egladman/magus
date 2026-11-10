@@ -22,6 +22,7 @@ import (
 type FollowCheckpointSuite struct {
 	suite.Suite
 	store *Store
+	loc   Location
 	repo  *testkit.Repo
 	row   types.Job
 	start string
@@ -33,7 +34,7 @@ func TestFollowCheckpointSuite(t *testing.T) {
 }
 
 func (s *FollowCheckpointSuite) SetupTest() {
-	s.store, _, s.repo = worktreeStore(s.T())
+	s.store, s.loc, s.repo = worktreeStore(s.T())
 	s.row = forkInto(s.T(), s.store, "w1", "")
 	s.start = s.row.Worktree.Base
 }
@@ -87,6 +88,51 @@ func (s *FollowCheckpointSuite) TestForkingAtItsOwnBaseKeepsItsCommits() {
 	s.Require().NoError(err)
 	s.Equal(s.start, wt.Base)
 	s.Equal(mine, s.head())
+}
+
+// The re-fork's own commits read as a match at exec, not a divergence.
+func (s *FollowCheckpointSuite) TestAReforkOverTheJobsOwnCommitsStartsAtTheHead() {
+	s.repo.Git("-C", s.row.Worktree.Root, "commit", "-q", "--allow-empty", "-m", "the job's own")
+	mine := s.head()
+	wt, err := s.fork(s.start)
+	s.Require().NoError(err)
+	rows, err := s.store.List()
+	s.Require().NoError(err)
+
+	checkpoint, note := StartCheckpoint(s.T().Context(), rows, "w1", s.start, wt)
+
+	s.Equal(mine, checkpoint)
+	s.Contains(note, fmt.Sprintf("stands at %.12s, not the checkpoint %.12s", mine, s.start))
+	_, err = s.store.Update(s.T().Context(), "w1", func(u *types.Job) { u.Checkpoint = checkpoint })
+	s.Require().NoError(err)
+	taken, err := NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: wt.Root}).Exec(s.T().Context(), "w1")
+	s.Require().NoError(err)
+	s.Equal(types.BaseMatch, taken.BaseVerdict)
+}
+
+func (s *FollowCheckpointSuite) TestAForkNamingNoCheckpointStartsAtTheHead() {
+	s.repo.Git("-C", s.row.Worktree.Root, "commit", "-q", "--allow-empty", "-m", "the job's own")
+	mine := s.head()
+	wt, err := s.fork("")
+	s.Require().NoError(err)
+	rows, err := s.store.List()
+	s.Require().NoError(err)
+
+	checkpoint, note := StartCheckpoint(s.T().Context(), rows, "w1", "", wt)
+
+	s.Equal(mine, checkpoint)
+	s.Empty(note)
+}
+
+func (s *FollowCheckpointSuite) TestACheckoutAnotherJobHoldsKeepsTheDeclaredCheckpoint() {
+	s.repo.Git("-C", s.row.Worktree.Root, "commit", "-q", "--allow-empty", "-m", "the job's own")
+	rows, err := s.store.List()
+	s.Require().NoError(err)
+
+	checkpoint, note := StartCheckpoint(s.T().Context(), rows, "w2", s.start, *s.row.Worktree)
+
+	s.Equal(s.start, checkpoint)
+	s.Empty(note)
 }
 
 func (s *FollowCheckpointSuite) TestAnUnknownCheckpointIsRefused() {
