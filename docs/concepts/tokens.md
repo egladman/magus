@@ -125,14 +125,15 @@ mint nothing.
 A share link travels over plaintext HTTP on the LAN, so anyone on that network can
 read its token until it expires.
 
-One credential has no token and no prefix: `socket-peer`, the caller on the
-daemon's [unix socket](../guides/integrations/server.md#two-transports). The kernel
+One credential has no bearer token and no prefix: `socket-peer`, the caller on the
+daemon's [unix socket](../guides/integrations/server.md#two-transports). Each request
+presents the proc token, which the daemon writes beside its socket at each start and
+a build step's sandbox does not grant; a request without it gets `401`. The kernel
 names the uid of the process on the other end of each connection, and the daemon
 admits only its own, with `mcp=write` and `console=write`. It never holds
-`tokens=write`: a build step runs as the same user and can reach the socket, and a
-token it minted would outlive the run. Any other peer gets `403`
-[MGS9022](../reference/codes/auth/MGS9022.md). The trail records
-its calls with class `socket-peer`, a grant, and no id or name.
+`tokens=write`: a token minted over the socket would outlive the run that minted
+it. Any other peer gets `403` [MGS9022](../reference/codes/auth/MGS9022.md). The
+trail records its calls with class `socket-peer`, a grant, and no id or name.
 
 The store holds every record to the rules a mint follows, at load: a record that
 holds `tokens=write`, expires more than 366 days after its creation, was created
