@@ -39,17 +39,29 @@ fun globbed(planned: mut [Run], pattern: str, embedded: bool, skip: str = "") > 
     }
 }
 
-// docsLib is a run of lib, a module of the docs site, from docs/. Its SF paths
-// are relative to docs/, so they are rewritten before the join.
-fun docsLib(lib: str) > Run {
-    final fragment = fragmentOf("docs_", mod: lib);
-    return Run{ argv = ["-t", "--embedded", "--coverprofile", "../" + fragment, lib], dir = "docs",
-        fragment = fragment, oldPrefix = "SF:lib/", newPrefix = "SF:docs/lib/" };
+// libRun is a run of lib, a module under dir, from dir so its sibling
+// imports resolve. Its SF paths are rewritten to the workspace before the join.
+fun libRun(dir: str, lib: str, up: str, prefix: str) > Run {
+    final fragment = fragmentOf(prefix, mod: lib);
+    return Run{ argv = ["-t", "--embedded", "--coverprofile", up + fragment, lib], dir = dir,
+        fragment = fragment, oldPrefix = "SF:", newPrefix = "SF:{dir}/" };
 }
 
-final DOCS_LIBS = ["lib/text.buzz", "lib/dom.buzz", "lib/feed.buzz", "lib/html.buzz",
-                   "lib/csp.buzz", "lib/url.buzz", "lib/date.buzz", "lib/glossary.buzz",
-                   "lib/conventions.buzz"];
+// docsLib is a run of lib, a module of the docs site, from docs/.
+fun docsLib(lib: str) > Run {
+    return libRun("docs", lib: lib, up: "../", prefix: "docs_");
+}
+
+// ssgLib is a run of lib, a module of libs/ssg, from libs/ssg/.
+fun ssgLib(lib: str) > Run {
+    return libRun("libs/ssg", lib: lib, up: "../../", prefix: "libs_ssg_");
+}
+
+// Tests fail when a listed file is gone or a module in either dir is unlisted.
+final DOCS_LIBS = ["lib/adr.buzz", "lib/conventions.buzz", "lib/crosscheck.buzz", "lib/design.buzz",
+                   "lib/dictionary.buzz", "lib/glossary.buzz"];
+final SSG_LIBS = ["csp.buzz", "date.buzz", "dom.buzz", "feed.buzz", "paths.buzz", "rewrite.buzz",
+                  "text.buzz", "urls.buzz"];
 
 // runs is every run buzz-test makes. A script a person or workflow runs is run
 // bare, so it is gated strict. A magusfile import and a spell parse embedded,
@@ -67,6 +79,9 @@ export fun runs() > [Run] !> any {
     globbed(planned, pattern: "spells/**/*.buzz", embedded: true, skip: "spells/examples/");
     foreach (lib in DOCS_LIBS) {
         planned.append(docsLib(lib));
+    }
+    foreach (lib in SSG_LIBS) {
+        planned.append(ssgLib(lib));
     }
     return planned;
 }
@@ -111,10 +126,36 @@ test "an embedded module says so before its profile" {
 }
 
 test "a docs library runs from docs and is rebased onto the workspace" {
-    final run = docsLib("lib/text.buzz");
+    final run = docsLib("lib/adr.buzz");
     assert\equal(run.dir, want: "docs", message: "dir");
-    assert\equal(run.argv[3], want: "../coverage/buzz/docs_lib_text.buzz.lcov", message: "profile from docs");
-    assert\equal(rebased(run, text: "SF:lib/text.buzz\nDA:1,1\n"), want: "SF:docs/lib/text.buzz\nDA:1,1\n", message: "rebased");
+    assert\equal(run.argv[3], want: "../coverage/buzz/docs_lib_adr.buzz.lcov", message: "profile from docs");
+    assert\equal(rebased(run, text: "SF:lib/adr.buzz\nDA:1,1\n"), want: "SF:docs/lib/adr.buzz\nDA:1,1\n", message: "rebased");
+}
+
+test "an ssg library runs from libs/ssg and is rebased onto the workspace" {
+    final run = ssgLib("text.buzz");
+    assert\equal(run.dir, want: "libs/ssg", message: "dir");
+    assert\equal(run.argv[3], want: "../../coverage/buzz/libs_ssg_text.buzz.lcov", message: "profile from libs/ssg");
+    assert\equal(rebased(run, text: "SF:text.buzz\n"), want: "SF:libs/ssg/text.buzz\n", message: "rebased");
+}
+
+test "every listed docs and ssg module exists" {
+    foreach (lib in DOCS_LIBS) {
+        assert\equal(fs\isFile("docs/" + lib), want: true, message: "docs/{lib} is missing");
+    }
+    foreach (lib in SSG_LIBS) {
+        assert\equal(fs\isFile("libs/ssg/" + lib), want: true, message: "libs/ssg/{lib} is missing");
+    }
+}
+
+test "every module in docs/lib and libs/ssg is listed" {
+    foreach (path in fs\glob("docs/lib/*.buzz")) {
+        assert\equal(DOCS_LIBS.indexOf("lib/" + fs\basename(path.value)) != null, want: true, message: "{path.value} is not listed");
+    }
+    foreach (path in fs\glob("libs/ssg/*.buzz")) {
+        final name = fs\basename(path.value);
+        assert\equal(name == "magusfile.buzz" or SSG_LIBS.indexOf(name) != null, want: true, message: "{path.value} is not listed");
+    }
 }
 
 test "a root run's fragment is kept as written" {
