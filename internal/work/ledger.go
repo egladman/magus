@@ -235,7 +235,8 @@ func (r *survey) readItem(ctx context.Context, item *types.WorkItem) bool {
 	if item.Kind == types.WorkCheckout {
 		dirty, gone, err := r.dirty(ctx, item.Name)
 		if err != nil {
-			return r.cutItem(*item, err)
+			r.cutItem(*item, err)
+			return false
 		}
 		item.Dirty, item.Gone = dirty, gone
 	}
@@ -244,7 +245,8 @@ func (r *survey) readItem(ctx context.Context, item *types.WorkItem) bool {
 	}
 	f, err := r.fact(ctx, item.Head)
 	if err != nil {
-		return r.cutItem(*item, err)
+		r.cutItem(*item, err)
+		return false
 	}
 	item.Base, item.Commits = r.base, f.Commits
 	return true
@@ -252,17 +254,16 @@ func (r *survey) readItem(ctx context.Context, item *types.WorkItem) bool {
 
 // cutItem keeps a stored line as it was. A checkout with none is still
 // listed, as unaccounted: an unread checkout is not a clear one.
-func (r *survey) cutItem(item types.WorkItem, err error) bool {
+func (r *survey) cutItem(item types.WorkItem, err error) {
 	r.cut++
 	if _, ok := r.stored[item.Key()]; ok {
 		r.kept[item.Key()] = true
-		return false
+		return
 	}
 	if item.Kind == types.WorkCheckout {
 		r.unread[item.Key()] = fmt.Sprintf("not read within %s: %v", itemBudget, err)
 		r.found = append(r.found, item)
 	}
-	return false
 }
 
 func (r *survey) dirty(ctx context.Context, root string) (int, bool, error) {
