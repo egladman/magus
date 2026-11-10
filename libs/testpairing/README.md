@@ -23,7 +23,13 @@ A test file pairs with:
 - a source file of the same stem: `resolver_test.go` and `resolver.go`;
 - that stem less the build suffixes the toolchain reads, every GOOS and GOARCH plus
   `unix`: `rawconn_linux_test.go` and `rawconn.go`;
-- a platform family: `tree_test.go` and `tree_linux.go` with no `tree.go`.
+- a platform family: `tree_test.go` and `tree_linux.go` with no `tree.go`;
+- its package, when it is an external test package declaring `Example` functions
+  and no `Test`, `Benchmark` or `Fuzz`. godoc shows an example on the package or
+  the identifier it names, never beside a file, and a file declares one package,
+  so no in-package `_test.go` can take it. `testpairing` allows such a file its
+  external package too, since an example shows the package as a caller imports it.
+  An in-package example pairs by name like any test.
 
 Nothing else pairs, and nothing configures it. There is no conventional-name list,
 so `example_test.go`, `main_test.go`, `export_test.go`, `fuzz_test.go` and
@@ -47,7 +53,8 @@ some file.
 A test file a build constraint excludes on this platform, `store_linux_test.go` on
 darwin or one behind `//go:build integration`, is in no pass's syntax. testpair
 checks it anyway, from the pass's ignored files, parsing the package clause to
-report at it. Source names come off disk, so a tagged source file still pairs.
+report at it. Source names come off disk, so a tagged source file still pairs. The
+package clause holds no functions, so a tagged file of examples is reported.
 
 ### Why its own linter name
 
