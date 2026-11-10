@@ -475,9 +475,9 @@ A page without a valid token, a DNS-rebinding page included, learns nothing it c
   the page the same network error it gets when nothing listens on the port. The
   preflight does carry the header, and the Private Network Access allowance, but a page
   cannot read a preflight's answer.
-- **Failures are throttled.** Each caller, keyed by its `Origin` (which a page cannot
-  change) or else its peer address, may fail authentication 20 times a second in bursts of
-  40. Past that it gets `429` with `Retry-After`
+- **Failures are throttled.** Each caller, keyed by its peer address and never by its
+  `Origin` (which any client but a browser can set), may fail authentication 20 times a
+  second in bursts of 40. Past that it gets `429` with `Retry-After`
   ([MGS9030](../../reference/codes/auth/MGS9030.md)). A request whose token verifies is
   never throttled.
 - **Failures are cheap.** Tokens are checked against an in-memory copy of the operator
