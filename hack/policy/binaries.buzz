@@ -16,13 +16,14 @@ import "./hack/policy/stale" as stale;
 // holding it. Either is "" when unknown. lease is the job the caller works under, "" for the
 // main session or a person; integrator is true when that caller integrates this checkout.
 // owned are the checkouts forks made for jobs the caller may work in, and writePaths the
-// lease's write paths.
+// lease's write paths. leaseRoot is the checkout the lease's row stands in.
 export object Where {
     dir: str,
     workspace: str,
     lease: str = "",
     integrator: bool = false,
     owned: [str] = [<str>],
+    leaseRoot: str = "",
     writePaths: [str] = [<str>],
 }
 
@@ -150,13 +151,14 @@ fun foreignBinary(p: helpers\Program, where: Where, disk: Disk) > str {
 }
 
 // heldCheckout is the checkout a leased worker runs magus in:
-// the owned one holding where.dir, else the only one owned.
-// An integrator is not held to one checkout.
+// the owned one holding where.dir, else the lease's own,
+// else the only one owned. An integrator is not held to one checkout.
 fun heldCheckout(where: Where) > str {
     if (where.lease == "" or where.integrator) { return ""; }
     foreach (root in where.owned) {
         if (where.dir == root or where.dir.startsWith(root + "/")) { return root; }
     }
+    if (where.leaseRoot != "") { return where.leaseRoot; }
     if (where.owned.len() == 1) { return where.owned[0]; }
     return "";
 }
@@ -347,6 +349,9 @@ test "a leased worker is sent to the checkout it holds, which lease-checkout let
     final forked = Where{ dir = "/w/c/docs", workspace = "/w/c", lease = "scout", owned = ["/w/d", "/w/c"] };
     std\assert(binaryDenial([["/w/a/magus", "--root", "/w/b", "ls"]], where: forked, disk: three).indexOf("`/w/c/magus --root /w/c ...`") != null,
         message: "of several owned checkouts, the one the call runs in");
+    final adopted = Where{ dir = "/w/b", workspace = "/w/b", lease = "scout", owned = ["/w/d", "/w/e"], leaseRoot = "/w/c" };
+    std\assert(binaryDenial([["/w/a/magus", "ls"]], where: adopted, disk: three).indexOf("`/w/c/magus --root /w/c ...`") != null,
+        message: "the lease's own checkout, when the call runs in none it owns");
     final integrator = Where{ dir = "/w/b", workspace = "/w/b", lease = "scout", integrator = true, owned = ["/w/c"] };
     std\assert(binaryDenial([["/w/a/magus", "ls"]], where: integrator, disk: three).indexOf("`/w/b/magus --root /w/b ...`") != null,
         message: "an integrator is not held to one checkout");

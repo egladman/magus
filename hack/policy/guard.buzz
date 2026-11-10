@@ -10,7 +10,8 @@
 // Rules, each keyed on facts the guard hands over (parsed programs, titles, paths), never
 // on prose:
 //   ci-watch (deny): a gh invocation that blocks until CI or the merge queue finishes.
-//   ci-batch-poll (deny): CI status summaries instead of failure artifacts.
+//   ci-batch-poll (advise once per session): CI status summaries,
+//     not failure artifacts.
 //   ci-log-read (advise once per session): prefer artifacts, leaving raw job diagnostics available.
 //   queue-poll (advise once per session): the merge queue's state read through GitHub.
 //   admin-merge (deny): `gh pr merge --admin`, which lands a pull request past the queue.
@@ -228,7 +229,7 @@ export fun judge(req: CommandRequest, opens: fun (argv: [str]) > {str: str}?) > 
         return commented;
     }
     final pusher = requestPusher(req);
-    final topic = fun (source: str, dir: str) > branches\Topic {
+    final topic = fun (source: str) > branches\Topic {
         return branchTopic(req.dir, source: source);
     };
     final texts = withHeredocs(programs, line: req.command);
@@ -271,11 +272,14 @@ test "a push that only running the line can place is refused, naming the fix" {
 // binariesDenial is the binaries rule's answer for req's programs, "" when it allows them.
 fun binariesDenial(req: CommandRequest, programs: [helpers\Program]) > str {
     var lease = "";
+    var leaseRoot = "";
     if (req.lease != null) {
         lease = req.lease!.id;
+        final tree = req.lease!.worktree;
+        if (tree != null and tree!.removed == 0) { leaseRoot = tree!.root; }
     }
     final integrator = req.role == magus\AgentRole.integrator;
-    return binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease, integrator = integrator, owned = req.ownedCheckouts, writePaths = leaseWrites(req) }, disk: binaries\onDisk(),
+    return binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease, integrator = integrator, owned = req.ownedCheckouts, leaseRoot = leaseRoot, writePaths = leaseWrites(req) }, disk: binaries\onDisk(),
         worker: !integrator and (req.role == magus\AgentRole.worker or req.parent != "" or req.agent != ""));
 }
 
@@ -362,7 +366,7 @@ export object Publishing {
     pusher: branches\Pusher,
     current: str,
     remote: branches\Remote,
-    topic: fun (source: str, dir: str) > branches\Topic,
+    topic: fun (source: str) > branches\Topic,
 }
 
 // currentBranch is the branch or bookmark the guard read for a push, else the one the
