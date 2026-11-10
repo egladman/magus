@@ -1,0 +1,3 @@
+// @error: cannot pass str as argument 1 of append on mut [int], which takes int
+final l: mut [int] = mut [1];
+l.append("t");

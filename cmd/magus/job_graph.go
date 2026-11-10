@@ -639,9 +639,13 @@ func extendedFootprint(ctx context.Context, store *job.Store, graph *jobGraph, r
 	}
 	var declared types.Job
 	rec.Apply(&declared)
+	// Merging every symbol shard costs a GB of heap, so it waits for a row whose
+	// footprint referrers could extend.
 	var referrers func(file, declaration string) map[string]int
-	if g := graph.load(ctx); g != nil && g.HasSymbols() {
-		referrers = g.Referrers
+	if job.FootprintMayExtend(root, declared) {
+		if g := graph.loadScoped(declared.WritePaths)(ctx); g != nil && g.HasSymbols() {
+			referrers = g.Referrers
+		}
 	}
 	paths, _ := job.ExtendFootprint(root, declared, ws.Projects, referrers)
 	rec.WritePaths = append(rec.WritePaths, paths...)

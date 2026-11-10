@@ -2168,11 +2168,10 @@ func installCheckGrader(t *testing.T, g job.CheckGrader) {
 	t.Cleanup(func() { job.SetCheckGrader(previous) })
 }
 
-// One grader judges every fork: runCLI installs it.
-// The Store `magus job fork` opens names none of its own.
-// Nor do the Stores magus\workspace().putJob opens over MCP and in the daemon.
-// std's TestMagusPutJobGradesTheCheckLikeFork pins those.
-func TestJobForkGradesWithTheInstalledGrader(t *testing.T) {
+// `magus job fork` grades with a forkGrader of its own, not the installed grader, so its
+// memos live no longer than the fork. The installed one still serves the doors that open
+// a Store naming none: std's TestMagusPutJobGradesTheCheckLikeFork pins those.
+func TestJobForkGradesWithItsOwnGrader(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
@@ -2185,11 +2184,10 @@ func TestJobForkGradesWithTheInstalledGrader(t *testing.T) {
 		return job.CheckVerdict{}
 	})
 
-	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."}))
-	assert.NotEmpty(t, graded)
-	for _, at := range graded {
-		assert.Equal(t, root, at)
-	}
+	err := jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "a worker does not build magus", "the fork's own grader judged the check")
+	assert.Empty(t, graded)
 }
 
 func TestEvidenceFlagCollectsGoalRefPairs(t *testing.T) {
@@ -2694,7 +2692,8 @@ func (s *jobApplyContractSuite) assertStored(store *job.Store, want types.Job) {
 	s.T().Helper()
 	got := s.stored(store)
 	// Each accepted apply stamps validation and appends a new store generation.
-	want.Validated, want.Generation = got.Validated, got.Generation
+	// Updated is in seconds, so it moves only when the apply crosses one.
+	want.Validated, want.Generation, want.Updated = got.Validated, got.Generation, got.Updated
 	s.Equal(want, got)
 }
 
@@ -2891,4 +2890,70 @@ func (s *RecordCheckoutSuite) TestAcceptsARelativeRecordCheckoutThatMatchesTheFl
 func (s *RecordCheckoutSuite) TestRefusesTwoCheckouts() {
 	_, err := recordCheckout("/work/a", "/work/b")
 	s.ErrorContains(err, "name two checkouts")
+}
+
+type jobApplyReleaseWritePathSuite struct {
+	suite.Suite
+	root  string
+	store *job.Store
+}
+
+func TestJobApplyReleaseWritePath(t *testing.T) { suite.Run(t, new(jobApplyReleaseWritePathSuite)) }
+
+func (s *jobApplyReleaseWritePathSuite) SetupTest() {
+	row := leaseRow("w", "")
+	row.State, row.WritePaths = types.StateRunning, []string{"a.go", "b.go", "c.go#Run"}
+	row.Check = &types.LeaseCheck{Target: "test", Project: "."}
+	row.Validation = row.Check.String()
+	row.Goals = []types.Goal{{ID: "g", Kind: types.GoalKindPaths, Paths: []string{"a.go"}}}
+	root, cacheDir := execFixture(s.T(), row)
+	s.root = root
+	s.store = job.NewStore(job.Location{StateBase: fixture.StateBase(s.T()), CacheDir: cacheDir, Root: root})
+}
+
+func (s *jobApplyReleaseWritePathSuite) release(paths ...string) types.Declaration {
+	held, err := widenedDeclaration(s.store, "w", nil)
+	s.Require().NoError(err)
+	rec, err := narrowedDeclaration(held, "w", paths)
+	s.Require().NoError(err)
+	return rec
+}
+
+func (s *jobApplyReleaseWritePathSuite) TestAReleasedPathLeavesTheRestOfTheSpec() {
+	rec := s.release("b.go")
+
+	s.Equal([]string{"a.go", "c.go#Run"}, rec.WritePaths)
+	s.Len(rec.Goals, 1)
+	s.NotNil(rec.Check)
+}
+
+func (s *jobApplyReleaseWritePathSuite) TestADeclarationClaimIsReleasedByItsWholeValue() {
+	s.Equal([]string{"a.go", "b.go"}, s.release("c.go#Run").WritePaths)
+}
+
+func (s *jobApplyReleaseWritePathSuite) TestAPathTheJobLacksIsAUsageError() {
+	held, err := widenedDeclaration(s.store, "w", nil)
+	s.Require().NoError(err)
+
+	_, err = narrowedDeclaration(held, "w", []string{"nope.go"})
+
+	s.Require().Error(err)
+	s.Equal(exit.Usage, exit.Code(err))
+}
+
+func (s *jobApplyReleaseWritePathSuite) TestNamingRecordsAsWellIsAUsageError() {
+	s.Require().Error(jobApply(s.T().Context(), s.root, []string{"w", "--release-write-path", "b.go", "--stdin"}))
+}
+
+func (s *jobApplyReleaseWritePathSuite) TestWithoutAnIdIsAUsageError() {
+	s.Require().Error(jobApply(s.T().Context(), s.root, []string{"--release-write-path", "b.go"}))
+}
+
+func (s *jobApplyReleaseWritePathSuite) TestAClaimWithACommaIsOnePath() {
+	var paths claimListFlag
+
+	s.Require().NoError(paths.Set("a.go#Run,Stop"))
+	s.Require().NoError(paths.Set("b.go,c.go"))
+
+	s.Equal(claimListFlag{"a.go#Run,Stop", "b.go", "c.go"}, paths)
 }

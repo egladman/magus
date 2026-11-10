@@ -5,7 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -178,14 +181,15 @@ func permitBut(ps types.JobProblems, deviations []types.Deviation) (kept, permit
 // lintGoals is a lint goal per project whose lint reads a file the row writes
 // and nothing runs. It only reports, and over the written files alone: a
 // finding elsewhere is not the worker's. See [ranOver] for a soft path.
-func lintGoals(root string, row types.Job, ws Workspace) []types.Goal {
+func lintGoals(root string, row types.Job, ws Workspace, grader CheckGrader) []types.Goal {
 	if row.ReadOnly || len(row.WritePaths) == 0 || ws.Unavailable != "" {
 		return nil
 	}
 	written := slices.DeleteFunc(writtenFiles(root, row), func(f string) bool { return slices.Contains(row.SoftPaths, f) })
 	slices.Sort(written)
 	var goals []types.Goal
-	for _, g := range UnrunGates(root, row, ws.Projects, RegeneratedOutside(root, row, ws.Projects, ws.Ignored)) {
+	gates, _ := unrunGates(root, row, ws.Projects, RegeneratedOutside(root, row, ws.Projects, ws.Ignored), gradeWith(grader, root, row))
+	for _, g := range gates {
 		if g.Target == lintTarget && !g.IntegratorGates {
 			goal := g.Goal
 			goal.Check.NoDefaultCharms = true
@@ -242,6 +246,38 @@ func ExtendFootprint(root string, row types.Job, projects []*types.Project, refe
 		}
 	}
 	return paths, notes
+}
+
+// FootprintMayExtend reports whether [ExtendFootprint] could add a path to row, so a caller
+// loads the symbol graph its referrers come from only when it could: a written file is not
+// a test, and a directory holding a written file holds a test file. It reads the
+// directories and not the index, so the answer does not move with the index's temperature.
+// A directory it cannot read counts as holding a test.
+func FootprintMayExtend(root string, row types.Job) bool {
+	if row.ReadOnly || len(row.WritePaths) == 0 {
+		return false
+	}
+	written := writtenFiles(root, row)
+	if !slices.ContainsFunc(written, func(f string) bool { return !types.IsTestPath(f) }) {
+		return false
+	}
+	dirs := map[string]bool{}
+	for _, f := range written {
+		dirs[path.Dir(f)] = true
+	}
+	for dir := range dirs {
+		entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(dir)))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return true
+		}
+		if slices.ContainsFunc(entries, func(e fs.DirEntry) bool { return !e.IsDir() && types.IsTestPath(path.Join(dir, e.Name())) }) {
+			return true
+		}
+	}
+	return false
 }
 
 // integratorRegenerates is the reason a record gives for an output the integrator owns.

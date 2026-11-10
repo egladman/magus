@@ -25,9 +25,9 @@ type bucket struct {
 	at     time.Time
 }
 
-// maxBuckets bounds the callers tracked at once. Past it, buckets already refilled are
-// dropped, and if none are, every new caller shares one overflow bucket, so a client that
-// varies its Origin buys no memory and no fresh allowance.
+// maxBuckets bounds the callers tracked at once. Past it, buckets already
+// refilled are dropped. If none are, every new caller shares one overflow
+// bucket, so many peers buy no memory and no fresh allowance.
 const maxBuckets = 4096
 
 // NewFailureLimiter returns a limiter allowing perSecond failures a second per caller, with
@@ -46,12 +46,10 @@ func (l *FailureLimiter) Limits() (perSecond, burst int) {
 	return int(l.perSecond), int(l.burst)
 }
 
-// FailureKey names the caller a request's failures are charged to: its Origin when it sends
-// one, which a browser sets and a page cannot change, else the TCP peer's host.
+// FailureKey names the caller a request's failures are charged to: the
+// TCP peer's host. It never reads Origin. Any client but a browser sends
+// the Origin it likes, so each invented value would get a fresh allowance.
 func FailureKey(r *http.Request) string {
-	if o := r.Header.Get("Origin"); o != "" {
-		return "origin " + o
-	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr

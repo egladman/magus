@@ -1,0 +1,2 @@
+// @error: cannot assign {str:int} to mut {str:int} variable "m"
+final m: mut {str: int} = {"a": 1};

@@ -343,8 +343,10 @@ fun body() > void *> void !> any {
 	assert.Equal(t, want, err, "uncaught, the error comes back unwrapped")
 	assert.False(t, s.Globals()["after"].AsBool())
 
+	_, err = s.ResolveFiber(t.Context(), fiber)
+	assert.Equal(t, want, err, "resolving the ended fiber re-surfaces the same error")
 	_, err = s.ResumeFiber(t.Context(), fiber)
-	assert.Equal(t, want, err, "the ended fiber re-surfaces the same error")
+	assert.EqualError(t, err, "Fiber is over", "resuming the ended fiber raises as upstream does")
 }
 
 func TestThrowIntoFiberRefusesAFiberThatIsNotSuspended(t *testing.T) {

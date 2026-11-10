@@ -2246,11 +2246,12 @@ func TestCheckoutBinaryIsAnotherBinaryOnly(t *testing.T) {
 	assert.Empty(t, checkoutBinary(t.TempDir(), "/usr/local/bin/magus"), "no workspace")
 }
 
-// DelegateToCheckoutSuite hands hook calls from a session elsewhere to a job checkout's
-// own ./magus, a stub that denies with exit 2.
+// DelegateToCheckoutSuite hands hook calls from a session in a linked
+// worktree to a job checkout's own ./magus, a stub that denies with exit 2.
 type DelegateToCheckoutSuite struct {
 	suite.Suite
-	repo *testkit.Repo
+	repo    *testkit.Repo
+	session string
 }
 
 func TestDelegateToCheckoutSuite(t *testing.T) {
@@ -2259,11 +2260,30 @@ func TestDelegateToCheckoutSuite(t *testing.T) {
 
 func (s *DelegateToCheckoutSuite) SetupTest() {
 	s.repo = testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
+	s.session = s.repo.AddWorktree("session").Root()
+	s.runAs(filepath.Join(s.session, "magus"))
 }
 
-// line is a Bash call from a session in another directory that runs magus in the checkout.
+// runAs makes bin the running binary for the rest of the test.
+func (s *DelegateToCheckoutSuite) runAs(bin string) {
+	was := hookBinaryPath
+	hookBinaryPath = func() (string, error) { return bin, nil }
+	s.T().Cleanup(func() { hookBinaryPath = was })
+}
+
+// line is a Bash call from the session that runs magus in the checkout.
 func (s *DelegateToCheckoutSuite) line() string {
-	return fmt.Sprintf(`{"cwd":%q,"tool_name":"Bash","tool_input":{"command":"cd %s && ./magus run lint ."}}`, s.T().TempDir(), s.repo.Root())
+	return s.lineInto(s.repo.Root())
+}
+
+// lineInto is a Bash call from the session that runs magus in dir.
+func (s *DelegateToCheckoutSuite) lineInto(dir string) string {
+	return fmt.Sprintf(`{"cwd":%q,"tool_name":"Bash","tool_input":{"command":"cd %s && ./magus run lint ."}}`, s.session, dir)
+}
+
+// write is a write from the session into a file under dir.
+func (s *DelegateToCheckoutSuite) write(dir string) string {
+	return fmt.Sprintf(`{"cwd":%q,"tool_input":{"file_path":%q}}`, s.session, filepath.Join(dir, "x.go"))
 }
 
 func (s *DelegateToCheckoutSuite) delegate(input string) (handled bool, declined, out string, err error) {
@@ -2328,8 +2348,7 @@ func (s *DelegateToCheckoutSuite) TestADelegateIsHandedTheParentsDeadline() {
 
 func (s *DelegateToCheckoutSuite) TestABuildAtHeadJudgesTheWrite() {
 	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"deny"}`, 2)
-	input := fmt.Sprintf(`{"cwd":"/elsewhere","tool_input":{"file_path":%q}}`, filepath.Join(s.repo.Root(), "x.go"))
-	handled, declined, out, err := s.delegate(input)
+	handled, declined, out, err := s.delegate(s.write(s.repo.Root()))
 	s.True(handled)
 	s.Empty(declined)
 	s.Equal(2, exit.Code(err))
@@ -2428,6 +2447,49 @@ func (s *DelegateToCheckoutSuite) TestALineThatStaysInTheSessionIsJudgedHere() {
 	handled, declined, _, _ := s.delegate(input)
 	s.False(handled)
 	s.Empty(declined)
+}
+
+func (s *DelegateToCheckoutSuite) TestASessionDirectoryMovedIntoAnotherRepositoryIsJudgedHere() {
+	clone := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
+	placeStub(s.T(), clone.Root(), clone.Head(), `{"decision":"pass"}`, 0)
+	s.session = clone.Root()
+	handled, declined, out, err := s.delegate(s.write(clone.Root()))
+	s.Require().NoError(err)
+	s.False(handled)
+	s.Empty(out)
+	s.Contains(declined, "is not a checkout of the session's repository")
+}
+
+func (s *DelegateToCheckoutSuite) TestAReadIntoAnotherRepositoryIsJudgedHere() {
+	clone := testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
+	placeStub(s.T(), clone.Root(), clone.Head(), `{"decision":"pass"}`, 0)
+	handled, declined, out, err := s.delegate(s.write(clone.Root()))
+	s.Require().NoError(err)
+	s.False(handled)
+	s.Empty(out)
+	s.Contains(declined, "is not a checkout of the session's repository")
+}
+
+func (s *DelegateToCheckoutSuite) TestALineThatCdsIntoAPlantedWorkspaceIsJudgedHere() {
+	planted := filepath.Join(s.session, "planted")
+	s.Require().NoError(os.MkdirAll(planted, 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(planted, "magus.yaml"), []byte("{}\n"), 0o644))
+	placeStub(s.T(), planted, s.repo.Head(), `{"decision":"pass"}`, 0)
+	handled, declined, out, err := s.delegate(s.lineInto(planted))
+	s.Require().NoError(err)
+	s.False(handled)
+	s.Empty(out)
+	s.Contains(declined, "is not a checkout of the session's repository")
+}
+
+func (s *DelegateToCheckoutSuite) TestABinaryInNoCheckoutHandsNothingOn() {
+	placeStub(s.T(), s.repo.Root(), s.repo.Head(), `{"decision":"pass"}`, 0)
+	s.runAs(filepath.Join(s.T().TempDir(), "magus"))
+	handled, declined, out, err := s.delegate(s.line())
+	s.Require().NoError(err)
+	s.False(handled)
+	s.Empty(out)
+	s.Contains(declined, "is no checkout's own ./magus")
 }
 
 func (s *DelegateToCheckoutSuite) TestCallDirIsTheCheckoutALineCdsInto() {

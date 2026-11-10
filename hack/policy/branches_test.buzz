@@ -80,7 +80,7 @@ test "commit subjects stand in when the branch adds no fragment" {
 }
 
 test "a coverage miss is denied at the push, naming the topics" {
-    final topic = fun () > branches\Topic {
+    final topic = fun (source: str, dir: str) > branches\Topic {
         return branches\withSubjects(branches\unknownTopic(), subjects: squash());
     };
     final push = helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:portable-lint"]]);
@@ -91,7 +91,7 @@ test "a coverage miss is denied at the push, naming the topics" {
 }
 
 test "a coverage miss on a two-topic branch advises at the push" {
-    final topic = fun () > branches\Topic {
+    final topic = fun (source: str, dir: str) > branches\Topic {
         return branches\withSubjects(branches\unknownTopic(), subjects: [
             fragment("guard-rule-precision", headline: "The guard judges a rule only where it applies."),
             fragment("proofread-local-path", headline: "proofread flags a local path in a reply."),
@@ -102,4 +102,47 @@ test "a coverage miss on a two-topic branch advises at the push" {
     final v = branches\decideNames(push, current: "startup-latency", remote: remote, topic: topic, once: helpers\counter());
     std\assert(v.decision == magus\GuardDecision.advise, message: v.reason);
     std\assert(v.reason.indexOf("coverage:") != null, message: v.reason);
+}
+
+fun gitIn(dir: str, argv: [str]) > helpers\Program {
+    return helpers\Program{ name = "git", args = ["-C", dir] + argv, repeats = false,
+        vcs = helpers\VcsCall{ tool = "git", subcommand = argv[0], args = argv.sub(1) } };
+}
+
+// scored: narrow topic for the pushed commits, wide for the checkout.
+fun scored(seen: mut [str]) > fun (source: str, dir: str) > branches\Topic {
+    return fun (source: str, dir: str) > branches\Topic {
+        seen.append("{dir}|{source}");
+        if (source == "bafc60786" or dir == "/other") {
+            return branches\withSubjects(branches\unknownTopic(), subjects: [
+                fragment("buzz-json-decode-is-stable", headline: "Buzz JSON decode is stable"),
+                fragment("buzz-fiber-errors-keep-their-value", headline: "Buzz fiber errors keep their value"),
+                fragment("buzz-checker-types-writes", headline: "The Buzz checker types writes"),
+            ]);
+        }
+        return branches\withSubjects(branches\unknownTopic(), subjects: squash());
+    };
+}
+
+test "a push names the source rev and checkout it publishes" {
+    final sha = branches\findPushes(helpers\vcsRequest([["git", "push", "origin", "bafc60786:refs/heads/buzz-checker-fiber-json"]]), current: "hook-lease");
+    std\assert(sha[0].name == "buzz-checker-fiber-json" and sha[0].source == "bafc60786", message: "sha: {sha[0].name} {sha[0].source}");
+    final bare = branches\findPushes(helpers\vcsRequest([["git", "push", "origin", "topic-a"]]), current: "hook-lease");
+    std\assert(bare[0].source == "topic-a", message: "branch source");
+    final head = branches\findPushes(helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD"]]), current: "hook-lease");
+    std\assert(head[0].source == "", message: "the checkout's own HEAD");
+    final other = branches\findPushes([gitIn("/other", ["push", "origin", "topic-a"])], current: "hook-lease");
+    std\assert(other[0].dir == "/other" and other[0].source == "topic-a", message: "git -C: {other[0].dir} {other[0].source}");
+}
+
+test "a sha:ref push and a git -C push are scored by the commits they publish" {
+    final remote = branches\Remote{ base = "origin/main", branches = [<str>] };
+    final seen = mut [<str>];
+    final sha = branches\decideNames(helpers\vcsRequest([["git", "push", "origin", "bafc60786:refs/heads/buzz-checker-fiber-json"]]), current: "hook-lease", remote: remote, topic: scored(seen), once: helpers\counter());
+    std\assert(sha.decision == magus\GuardDecision.allow, message: "sha: {sha.reason}");
+    final other = branches\decideNames([gitIn("/other", ["push", "origin", "buzz-checker-fiber-json"])], current: "hook-lease", remote: remote, topic: scored(seen), once: helpers\counter());
+    std\assert(other.decision == magus\GuardDecision.allow, message: "git -C: {other.reason}");
+    std\assert(seen.join(",") == "|bafc60786,/other|buzz-checker-fiber-json", message: seen.join(","));
+    final own = branches\decideNames(helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:buzz-checker-fiber-json"]]), current: "hook-lease", remote: remote, topic: scored(mut [<str>]), once: helpers\counter());
+    std\assert(own.decision == magus\GuardDecision.deny, message: "the checkout's own wide branch is still judged");
 }

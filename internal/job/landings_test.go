@@ -30,16 +30,40 @@ func TestLandingProbesAppendAndRewriteOnADrop(t *testing.T) {
 	require.NoError(t, err)
 	probes := filepath.Join(filepath.Dir(path), landingProbesFile)
 
-	s.writeLandingProbes(s.readLandingProbes(), map[string]landingProbe{"a": {At: 1, Updated: 1}, "b": {At: 1, Updated: 1}})
-	s.writeLandingProbes(s.readLandingProbes(), map[string]landingProbe{"a": {At: 2, Updated: 1}, "b": {At: 1, Updated: 1}})
+	require.NoError(t, s.writeLandingProbes(s.readLandingProbes(), map[string]landingProbe{"a": {At: 1, Updated: 1}, "b": {At: 1, Updated: 1}}))
+	require.NoError(t, s.writeLandingProbes(s.readLandingProbes(), map[string]landingProbe{"a": {At: 2, Updated: 1}, "b": {At: 1, Updated: 1}}))
 	got := s.readLandingProbes()
 	assert.Equal(t, probeLog{probes: map[string]landingProbe{"a": {At: 2, Updated: 1}, "b": {At: 1, Updated: 1}}, lines: 3}, got,
 		"the changed entry was appended")
 
-	s.writeLandingProbes(got, map[string]landingProbe{"b": {At: 1, Updated: 1}})
+	require.NoError(t, s.writeLandingProbes(got, map[string]landingProbe{"b": {At: 1, Updated: 1}}))
 	raw, err := os.ReadFile(probes)
 	require.NoError(t, err)
 	assert.Equal(t, `{"id":"b","at":1,"updated":1}`+"\n", string(raw))
+}
+
+func TestWriteLandingProbesReturnsAFailedWrite(t *testing.T) {
+	t.Parallel()
+
+	s := tempStore(t, t.TempDir())
+	path, err := s.Path()
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(filepath.Dir(path), landingProbesFile), 0o755))
+
+	err = s.writeLandingProbes(probeLog{}, map[string]landingProbe{"a": {At: 1, Updated: 1}})
+	assert.Error(t, err)
+}
+
+func TestWriteUnmergedFactsReturnsAFailedWrite(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "facts.jsonl")
+	require.NoError(t, os.MkdirAll(path, 0o755))
+	stored := storedUnmergedFacts{facts: map[string]unmergedFact{}}
+	next := map[string]unmergedFact{"a": {ID: "a", Branch: "main"}}
+
+	err := writeUnmergedFacts(path, stored, next, func(unmergedFact) bool { return true })
+	assert.Error(t, err)
 }
 
 // An exited row the landing probe proves is on the base ends as no_return with the

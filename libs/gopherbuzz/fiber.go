@@ -24,8 +24,8 @@ import (
 // C API.
 
 // ResumeFiber advances fiber to its next yield, exactly as `resume fiber` does. It
-// reports the yielded value, or null when the fiber completed. A fiber that is
-// already done returns null and re-surfaces its terminal error, if it had one.
+// reports the yielded value, or null when the fiber completes. Resuming a
+// finished fiber returns "Fiber is over".
 //
 // WARNING: the result does NOT distinguish "yielded null" from "the fiber finished".
 // Both are (null, nil). That ambiguity is upstream's, carried deliberately for keyword

@@ -4,6 +4,7 @@ import type { On } from 'claude-code'
 
 const ROOT = '/w'
 const SOCK = '/c/magus/run/server.sock'
+const TOKEN = 'f00d'
 const PANE = {
   plugin: 'magus',
   surface: 'desktop',
@@ -34,7 +35,7 @@ const LIST_JOBS = {
   stale: ['css-reorg/tokens'],
 }
 
-type Call = { url: string; socketPath?: string; body: unknown }
+type Call = { url: string; socketPath?: string; token?: string; body: unknown }
 
 function engine(on: On, opts: { serverUp: boolean; calls: Call[] }) {
   on('session.start', ($, e) => ({ cwd: e.cwd }))
@@ -43,6 +44,9 @@ function engine(on: On, opts: { serverUp: boolean; calls: Call[] }) {
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.panes', () => ({ value: [{ id: 'magus', title: 'magus', isFocused: true }] as never }))
   on('fs.exists', () => ({ value: true }))
+  on('fs.read', ($, e) =>
+    e.path === `${SOCK}.token` ? { value: `${TOKEN}\n` } : ({ deny: `no such file: ${e.path}` } as never),
+  )
   on('process.run', () => ({
     value: {
       exitCode: opts.serverUp ? 0 : 1,
@@ -55,7 +59,12 @@ function engine(on: On, opts: { serverUp: boolean; calls: Call[] }) {
     },
   }))
   on('http.fetch', ($, e) => {
-    opts.calls.push({ url: e.url, socketPath: e.init?.socketPath, body: JSON.parse(e.init?.body ?? 'null') })
+    opts.calls.push({
+      url: e.url,
+      socketPath: e.init?.socketPath,
+      token: e.init?.headers?.['Magus-Proc-Token'],
+      body: JSON.parse(e.init?.body ?? 'null'),
+    })
     const answers: Record<string, unknown> = {
       'http://magus/magus.job.v1alpha1.JobService/ListJobs': LIST_JOBS,
       'http://magus/magus.activity.v1alpha1.ActivityService/ListActivityEvents': {
@@ -86,7 +95,9 @@ test('the pane reads ListJobs over the server socket, draws the live tree, and w
   await clock.advance(1)
   await clock.settle()
 
-  expect(calls).toEqual([{ url: 'http://magus/magus.job.v1alpha1.JobService/ListJobs', socketPath: SOCK, body: {} }])
+  expect(calls).toEqual([
+    { url: 'http://magus/magus.job.v1alpha1.JobService/ListJobs', socketPath: SOCK, token: TOKEN, body: {} },
+  ])
 
   const ui = await $.ui.mount(PANE)
   expect(await ui.find({ type: 'Button', key: 'sel-css-reorg' })).toBeDefined()
@@ -107,6 +118,7 @@ test('the pane reads ListJobs over the server socket, draws the live tree, and w
   expect(calls.at(-1)).toEqual({
     url: 'http://magus/magus.activity.v1alpha1.ActivityService/ListActivityEvents',
     socketPath: SOCK,
+    token: TOKEN,
     body: { pageSize: 40, filter: { units: ['css-reorg'] } },
   })
   expect(await ui.find({ type: 'Text', text: /file_change write console\/app\.css/ })).toBeDefined()

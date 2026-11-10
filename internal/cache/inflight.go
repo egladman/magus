@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sys/pid"
 )
@@ -183,13 +184,8 @@ func (i *inflight) appendLocked(e inflightEvent) {
 	if err != nil {
 		return
 	}
-	f, err := os.OpenFile(i.path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
-	if err != nil {
-		return
-	}
-	// One unsynced write: the kernel keeps a killed process's writes.
-	_, _ = f.Write(append(b, '\n'))
-	_ = f.Close()
+	// Unsynced: the kernel keeps a killed process's writes.
+	_ = file.AppendLines(i.path, [][]byte{b}, 0o600, file.WithoutSync())
 }
 
 // replayInflight returns the targets with a start line and no stop line.
@@ -305,15 +301,13 @@ func (i *inflight) takeAbandoned() []inflightTarget {
 // replay, so an hour is past any of them.
 const staleAfter = time.Hour
 
-// isStale reports whether e is litter a killed run left in the cache root: an inflight
-// temp file its rename never consumed, or a remote-tier staging directory it never
-// removed. The temp name is [file.ReplaceFile]'s: a dot, the target's name, ".tmp.".
+// isStale reports whether e is litter a killed run left in the cache root.
+// That is an old binary's inflight temp file or a remote staging directory.
 func isStale(dir string, e os.DirEntry, now time.Time) bool {
 	name := e.Name()
-	temp := (strings.HasPrefix(name, "."+inflightPrefix) && strings.Contains(name, ".json.tmp.")) ||
-		// compat(until: the oldest magus release still in use names its inflight temp
-		// file through file.ReplaceFile): older binaries leave inflight-*.tmp behind.
-		(strings.HasPrefix(name, inflightPrefix) && strings.HasSuffix(name, ".tmp"))
+	// compat(until: the oldest magus release still in use names its inflight temp
+	// file through file.ReplaceFile): older binaries leave inflight-*.tmp behind.
+	temp := strings.HasPrefix(name, inflightPrefix) && strings.HasSuffix(name, ".tmp")
 	staging := e.IsDir() && strings.HasPrefix(name, stagingPrefix)
 	if !temp && !staging {
 		return false

@@ -1244,9 +1244,9 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 	}
 }
 
-// serverSocket starts a real proc server on a socket in a fresh short directory (t.TempDir's
-// can exceed the unix socket length limit on macOS), skipping where a peer's uid cannot be
-// read, and returns it with a client that dials it.
+// serverSocket starts a real proc server in a fresh short directory, since
+// t.TempDir's can exceed the macOS socket path limit. It skips where no peer
+// uid is readable. Its client presents the server's token.
 func serverSocket(t *testing.T) (*proc.Server, string, *http.Client) {
 	t.Helper()
 	if !httpx.PeerCredentialsSupported() {
@@ -1264,18 +1264,38 @@ func serverSocket(t *testing.T) (*proc.Server, string, *http.Client) {
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(t.Context()))
 	t.Cleanup(srv.Close)
-	return srv, srv.Addr(), &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
+	return srv, srv.Addr(), socketClient(path, srv.Token())
+}
+
+// socketClient dials the socket at path and presents token on every request,
+// none when token is empty. The header name is spelled out: non-Go clients send
+// it by that name.
+func socketClient(path, token string) *http.Client {
+	var rt http.RoundTripper = &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return endpoint.Endpoint{Scheme: "unix", Addr: path}.Dial(ctx)
 		},
-	}}
+	}
+	if token != "" {
+		rt = presentToken{next: rt, token: token}
+	}
+	return &http.Client{Timeout: 10 * time.Second, Transport: rt}
 }
 
-// TestServerSocketCarriesMCPAndTheAPIs mounts a loaded server on a real server socket and
-// drives each kind of route there without a token: an MCP session whose tool call the trail
-// attributes to the socket peer, a Connect call, and a proc route beside them. The socket's
-// route table is the loopback one minus the browser-only /api routes, Need for Need. The
-// loopback /mcp still refuses the same tokenless request.
+type presentToken struct {
+	next  http.RoundTripper
+	token string
+}
+
+func (p presentToken) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set("Magus-Proc-Token", p.token)
+	return p.next.RoundTrip(req)
+}
+
+// TestServerSocketCarriesMCPAndTheAPIs drives each route kind on a real socket
+// with the proc token: MCP, Connect and /proc/. The trail credits the peer.
+// The table is loopback's minus /api, Need for Need. Tokenless, each is a 401.
 func TestServerSocketCarriesMCPAndTheAPIs(t *testing.T) {
 	srv, addr, client := serverSocket(t)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
@@ -1301,30 +1321,23 @@ func TestServerSocketCarriesMCPAndTheAPIs(t *testing.T) {
 	assert.Equal(t, want, onSocket, "the socket serves every loopback route but the browser's /api, held to the same Need")
 	assert.Contains(t, onSocket, "/mcp")
 
-	call := func(c *http.Client, url, session, body string) (*http.Response, string) {
-		t.Helper()
-		req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(body))
-		require.NoError(t, err)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json, text/event-stream")
-		if session != "" {
-			req.Header.Set("Mcp-Session-Id", session)
-		}
-		resp, err := c.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		out, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		return resp, string(out)
-	}
-
 	const initialize = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"socket-test","version":"1"}}}`
-	resp, out := call(client, "http://magus/mcp", "", initialize)
+	ep, err := endpoint.Parse(addr)
+	require.NoError(t, err)
+	tokenless := socketClient(ep.Addr, "")
+	resp, out := postMCP(t, tokenless, "http://magus/mcp", "", initialize)
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "a same-uid peer without the token opens no MCP session: %s", out)
+	assert.Empty(t, resp.Header.Get("Mcp-Session-Id"))
+	_, err = statusv1alpha1connect.NewStatusServiceClient(tokenless, "http://magus").
+		GetStatus(t.Context(), connect.NewRequest(&statusv1alpha1.GetStatusRequest{}))
+	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "a Connect service refuses a peer without the token: %v", err)
+
+	resp, out = postMCP(t, client, "http://magus/mcp", "", initialize)
 	require.Equal(t, http.StatusOK, resp.StatusCode, out)
 	session := resp.Header.Get("Mcp-Session-Id")
 	require.NotEmpty(t, session)
 
-	resp, out = call(client, "http://magus/mcp", session, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"config","arguments":{}}}`)
+	resp, out = postMCP(t, client, "http://magus/mcp", session, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"config","arguments":{}}}`)
 	require.Equal(t, http.StatusOK, resp.StatusCode, out)
 	assert.Contains(t, out, `"result"`)
 	assert.NotContains(t, out, `"isError":true`, "the socket peer's grant reaches every tool")
@@ -1342,8 +1355,25 @@ func TestServerSocketCarriesMCPAndTheAPIs(t *testing.T) {
 	require.NoError(t, err, "the proc routes share the socket")
 	assert.Equal(t, os.Getpid(), pool.ParentPID)
 
-	resp, out = call(http.DefaultClient, base+"/mcp", "", initialize)
+	resp, out = postMCP(t, http.DefaultClient, base+"/mcp", "", initialize)
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "loopback HTTP still needs a bearer: %s", out)
+}
+
+func postMCP(t *testing.T, c *http.Client, url, session, body string) (*http.Response, string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	if session != "" {
+		req.Header.Set("Mcp-Session-Id", session)
+	}
+	resp, err := c.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	out, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return resp, string(out)
 }
 
 // A server whose workspace failed mounts on the socket too, and its services answer there with

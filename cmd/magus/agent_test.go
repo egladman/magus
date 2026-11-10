@@ -2,10 +2,12 @@ package main
 
 import (
 	"archive/tar"
+	"bytes"
 	"cmp"
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -728,4 +730,18 @@ func TestHarnessSourceLinksRefuseBoundCommandBeforeReadingStdin(t *testing.T) {
 	assert.Contains(t, err.Error(), `bound job "fleet/bound"`)
 	_, err = writer.Write([]byte(`{"links":{}}`))
 	assert.NoError(t, err, "stdin remains unread while the checkout is bound")
+}
+
+func TestPointAtConsoleNamesTheServerStartOnlyWhenAsked(t *testing.T) {
+	testkit.Isolate(t)
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	pointAtConsole(t.Context(), "some-job", false)
+	assert.Empty(t, buf.String(), "nobody asked for the server")
+
+	pointAtConsole(t.Context(), "some-job", true)
+	assert.Contains(t, buf.String(), "the console is not running")
 }

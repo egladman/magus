@@ -563,6 +563,37 @@ func TestProcRoutesRequireTheToken(t *testing.T) {
 	assert.True(t, called.Load())
 }
 
+// TestMountedRoutesRequireTheToken: an MCP tool call runs magus too, so the
+// mounted paths refuse the confined child exactly as /proc/v1/run does.
+func TestMountedRoutesRequireTheToken(t *testing.T) {
+	srv, err := New(t.Context(), Options{Handler: func(context.Context, []string) error { return nil }})
+	require.NoError(t, err)
+	defer srv.Close()
+	if !srv.peerChecked {
+		t.Skip("no peer credentials on this platform, so nothing mounts")
+	}
+	require.NoError(t, srv.Start(t.Context()))
+	ep, err := endpoint.Parse(srv.Addr())
+	require.NoError(t, err)
+	var reached atomic.Bool
+	unmount, err := srv.Mount(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached.Store(true) }))
+	require.NoError(t, err)
+	defer unmount()
+
+	for _, token := range []string{"", strings.Repeat("0", len(srv.Token())), srv.Token() + "x"} {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, socketURL("/mcp"), strings.NewReader(`{}`))
+		require.NoError(t, err)
+		if token != "" {
+			req.Header.Set(tokenHeader, token)
+		}
+		resp, err := socketClient(ep).Do(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "token %q", token)
+	}
+	assert.False(t, reached.Load(), "a request without the token must not reach the mount")
+}
+
 // TestTokenFileIsPrivateAndGoesWithTheServer pins the discovery half: a client that found
 // the socket reads the token beside it, the file is this user's alone, and Close removes it.
 func TestTokenFileIsPrivateAndGoesWithTheServer(t *testing.T) {

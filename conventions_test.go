@@ -987,7 +987,7 @@ var appendAllowed = map[string]string{
 
 // TestStoresAreJSONLines holds every append to a file to internal/file.
 //
-// Tier 1, mechanical: the fix is a call to file.AppendLines or file.AppendLinesNoSync, which
+// Tier 1, mechanical: the fix is a call to file.AppendLines (with file.WithoutSync() to skip the sync), which
 // every hand-rolled append so far could make with its behavior unchanged. A store is JSON
 // Lines (docs/design/principles/everything-is-a-file.md), and an append is how one grows, so the
 // one copy of the append decides the line framing, the single write per batch that keeps a
@@ -1006,7 +1006,7 @@ func TestStoresAreJSONLines(t *testing.T) {
 
 	assert.Empty(t, violations,
 		"these functions open a file with O_APPEND themselves. Append through internal/file:\n"+
-			"file.AppendLines, or file.AppendLinesNoSync where a sync per append costs more than\n"+
+			"file.AppendLines, with file.WithoutSync() where a sync per append costs more than\n"+
 			"a lost tail. A site that is not a store (a log, a user API) goes in appendAllowed\n"+
 			"with its reason.\n\nviolations:\n%s", strings.Join(violations, "\n"))
 	assert.Empty(t, stale,

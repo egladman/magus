@@ -98,6 +98,56 @@ func TestCheckWriteRefusesControlFiles(t *testing.T) {
 	require.NoError(t, p.CheckWrite(ctx, filepath.Join(common, "objects", "ab", "cd")))
 }
 
+// A control file is refused whatever its letter case, on every platform.
+type ControlFileCaseSuite struct {
+	suite.Suite
+	ws, gitDir string
+	p          *Policy
+}
+
+func TestControlFileCaseSuite(t *testing.T) { suite.Run(t, new(ControlFileCaseSuite)) }
+
+func (s *ControlFileCaseSuite) SetupTest() {
+	s.ws = s.T().TempDir()
+	common := s.T().TempDir()
+	s.gitDir = filepath.Join(common, "worktrees", "wt")
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.ws, ".git", "hooks"), 0o755))
+	s.Require().NoError(os.MkdirAll(s.gitDir, 0o755))
+	s.p = BuildPolicy(PolicyOptions{Workspace: s.ws, GitDir: s.gitDir, GitCommonDir: common})
+}
+
+func (s *ControlFileCaseSuite) refused(path string) {
+	s.ErrorIs(s.p.CheckWrite(s.T().Context(), path), filesystem.ErrDenied, path)
+}
+
+func (s *ControlFileCaseSuite) TestUpperCaseGitHookIsRefused() {
+	s.refused(filepath.Join(s.ws, ".GIT", "hooks", "pre-commit"))
+}
+
+func (s *ControlFileCaseSuite) TestMixedCaseGitHooksDirIsRefused() {
+	s.refused(filepath.Join(s.ws, ".git", "Hooks", "pre-push"))
+}
+
+func (s *ControlFileCaseSuite) TestUpperCaseEnvrcIsRefused() {
+	s.refused(filepath.Join(s.ws, ".ENVRC"))
+}
+
+func (s *ControlFileCaseSuite) TestMixedCaseClaudeSettingsAreRefused() {
+	s.refused(filepath.Join(s.ws, ".Claude", "settings.json"))
+}
+
+func (s *ControlFileCaseSuite) TestMixedCaseVSCodeTasksAreRefused() {
+	s.refused(filepath.Join(s.ws, ".VSCode", "Tasks.json"))
+}
+
+func (s *ControlFileCaseSuite) TestUpperCaseWorktreeGitConfigIsRefused() {
+	s.refused(filepath.Join(s.gitDir, "CONFIG"))
+}
+
+func (s *ControlFileCaseSuite) TestAnOrdinaryUpperCaseFileStaysWritable() {
+	s.Require().NoError(s.p.CheckWrite(s.T().Context(), filepath.Join(s.ws, "README.MD")))
+}
+
 // The object store stays readable and loses its write grant, and the worktree's own git
 // directory keeps its own; the result is never rebuilt with the grant back.
 func TestWithReadOnlyObjectsTakesOnlyTheStoresWrite(t *testing.T) {

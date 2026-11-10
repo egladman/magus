@@ -443,11 +443,23 @@ that sends it out.
 
 A locally built console is not limited to the hosted site's copy: the server's
 LAN share listener (`POST /api/v1/share`) and its own `/console/` mount both
-resolve which built console to serve via `resolveConsoleDir`
-(`internal/server/share.go`), which honors `MAGUS_CONSOLE_DIR` as an override
-before falling back to `<workspace root>/console/gen`. Point it at a console
-you built and audited yourself to serve that copy instead of trusting any
-prebuilt one.
+serve the build `MAGUS_CONSOLE_DIR` names (`resolveConsoleDir` in
+`internal/server/share.go`), and nothing when it is unset. The server never
+falls back to `<workspace root>/console/gen`: a cloned repository writes that
+directory, and a page served from it would run on the server's origin and read
+the token from the link. The server logs a `console/gen` it passed over, and a
+`MAGUS_CONSOLE_DIR` with no `index.html`. Point it at a console you built and
+audited yourself to serve that copy instead of trusting any prebuilt one.
+
+To serve this repository's own console while developing it, build it, then
+name its output before the server starts:
+
+```sh
+./magus run build console
+MAGUS_CONSOLE_DIR="$PWD/console/gen" ./magus server start
+```
+
+The server reads the variable when it starts, so restart it after changing it.
 
 ### The one nuance: the service worker is not covered by this policy
 

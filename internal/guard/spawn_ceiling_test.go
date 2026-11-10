@@ -209,3 +209,33 @@ func spoken(v types.GuardJudgment) (shape types.GuardJudgment, text string) {
 func TestSpawnAboveParentTierNamesAnUnmappedHost(t *testing.T) {
 	assert.Contains(t, declaredAliases(testModelTiers(t, "codex"), "claude-code"), "maps no model for harness claude-code: its hosts are codex")
 }
+
+func TestSpawnAboveParentTierResolvesASecondRowAtOneTierByIDAndAlias(t *testing.T) {
+	rows := func() []types.ModelPricing {
+		return []types.ModelPricing{
+			{ID: "claude-sonnet-5-5", Tier: "standard"},
+			{ID: "claude-opus-5-5", Tier: "principal", Alias: "opus"},
+			{ID: "claude-next-1", Tier: "principal", Alias: "next"},
+		}
+	}
+	for _, spawn := range []string{"claude-next-1", "next"} {
+		ctx, deps, _ := ceilingFixture(t, "claude-sonnet-5-5", true)
+		deps.ModelRows = rows
+		shape, text := spoken(judgeSpawnBy(ctx, t, deps, "", spawn))
+		assert.Equal(t, types.GuardJudgment{Decision: decisionDeny, Rule: string(denyRuleSpawnAboveParentTier)}, shape, spawn)
+		assert.Contains(t, text, "model tier principal (rank 2)", spawn)
+	}
+}
+
+func TestSpawnAboveParentTierJudgesASessionOnASecondRowAtOneTier(t *testing.T) {
+	ctx, deps, _ := ceilingFixture(t, "claude-next-1", true)
+	deps.ModelRows = func() []types.ModelPricing {
+		return []types.ModelPricing{
+			{ID: "claude-opus-5-5", Tier: "principal", Alias: "opus"},
+			{ID: "claude-next-1", Tier: "principal", Alias: "next"},
+		}
+	}
+
+	v := judgeSpawnBy(ctx, t, deps, "", "opus")
+	assert.NotEqual(t, decisionDeny, v.Decision, "a principal child under a principal parent passes")
+}

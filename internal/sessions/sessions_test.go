@@ -37,6 +37,24 @@ func TestAppendReadRoundTrip(t *testing.T) {
 	assert.Equal(t, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 12}, got)
 }
 
+// TestStoreIsPrivateToItsOwner pins the modes Open and Append create: a
+// session records the commands its user ran.
+func TestStoreIsPrivateToItsOwner(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), "sessions")
+
+	w, err := Open(dir, "sess1", InvocationStart{Workspace: "/repo", Command: "run build"})
+	require.NoError(t, err)
+	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass}))
+
+	info, err := os.Stat(dir)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o700), info.Mode().Perm())
+	info, err = os.Stat(w.path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+}
+
 // A result carries what the target claimed and cost under the names a reader of
 // `magus session -o json` sees, and a replay's zero claim writes only its sizing.
 func TestTargetResultEncodesTheClaimAndCost(t *testing.T) {

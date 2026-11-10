@@ -574,7 +574,7 @@ type attempts struct {
 	calls    int
 }
 
-func (a *attempts) fn(context.Context) (any, error) {
+func (a *attempts) run(context.Context) (any, error) {
 	a.calls++
 	if a.calls <= a.failures {
 		return nil, a.err
@@ -598,7 +598,7 @@ var covFastRetry = types.RetryOptions{BackoffMs: new(0.1), MaxBackoffMs: new(1.0
 
 func TestOsRetryReturnsTheFirstSuccess(t *testing.T) {
 	cb := failThenAnswer(0, "answer")
-	got, err := OsRetry(context.Background(), 3, cb.fn, types.RetryOptions{})
+	got, err := OsRetry(context.Background(), 3, cb.run, types.RetryOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, "answer", got)
 	assert.Equal(t, 1, cb.calls, "a success is not retried")
@@ -606,7 +606,7 @@ func TestOsRetryReturnsTheFirstSuccess(t *testing.T) {
 
 func TestOsRetryRetriesUntilItSucceeds(t *testing.T) {
 	cb := failThenAnswer(2, 42)
-	got, err := OsRetry(context.Background(), 5, cb.fn, covFastRetry)
+	got, err := OsRetry(context.Background(), 5, cb.run, covFastRetry)
 	require.NoError(t, err)
 	assert.Equal(t, 42, got)
 	assert.Equal(t, 3, cb.calls)
@@ -615,7 +615,7 @@ func TestOsRetryRetriesUntilItSucceeds(t *testing.T) {
 // TestOsRetryWithNoReturnValue: a callback that returns nothing succeeded, so the
 // result is the no-value result rather than an error.
 func TestOsRetryWithNoReturnValue(t *testing.T) {
-	got, err := OsRetry(context.Background(), 2, failThenAnswer(0, nil).fn, types.RetryOptions{})
+	got, err := OsRetry(context.Background(), 2, failThenAnswer(0, nil).run, types.RetryOptions{})
 	require.NoError(t, err)
 	assert.Nil(t, got)
 }
@@ -624,7 +624,7 @@ func TestOsRetryExhaustsAndReportsTheLastError(t *testing.T) {
 	boom := errors.New("still broken")
 	cb := alwaysFail(boom)
 
-	_, err := OsRetry(context.Background(), 3, cb.fn, covFastRetry)
+	_, err := OsRetry(context.Background(), 3, cb.run, covFastRetry)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, boom, "the caller needs the reason, not just the count")
 	assert.Contains(t, err.Error(), `os\retry: 3 attempt(s)`)
@@ -651,7 +651,7 @@ func TestOsRetryRefusesAMisconfiguredBackoff(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cb := failThenAnswer(0, nil)
-			_, err := OsRetry(context.Background(), 2, cb.fn, tc.opts)
+			_, err := OsRetry(context.Background(), 2, cb.run, tc.opts)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), `os\retry: `+tc.key)
 			assert.Zero(t, cb.calls, "fn does not run")
@@ -666,7 +666,7 @@ func TestOsRetryStopsOnANonRetryableError(t *testing.T) {
 	boom := types.NonRetryable(errors.New("hook is not a command"), types.RetryAfterConfig, "edit the hook")
 	cb := alwaysFail(boom)
 
-	_, err := OsRetry(context.Background(), 5, cb.fn, covFastRetry)
+	_, err := OsRetry(context.Background(), 5, cb.run, covFastRetry)
 	require.Error(t, err)
 	assert.Same(t, boom, err)
 	assert.Equal(t, 1, cb.calls)
@@ -679,7 +679,7 @@ func TestOsRetryHonorsCancellationDuringBackoff(t *testing.T) {
 	cancel()
 
 	cb := alwaysFail(errors.New("attempt failed"))
-	_, err := OsRetry(ctx, 3, cb.fn, types.RetryOptions{BackoffMs: new(60000.0)})
+	_, err := OsRetry(ctx, 3, cb.run, types.RetryOptions{BackoffMs: new(60000.0)})
 	assert.ErrorIs(t, err, context.Canceled)
 	assert.Equal(t, 1, cb.calls, "the cancellation lands in the first backoff")
 }
@@ -874,17 +874,38 @@ func TestWarnIfMagusBinaryNamesTheTypedMember(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	magusWarned.Delete("run")
 
-	warnIfMagusBinary(t.Context(), "./magus", []string{"job", "exec", "x"})
-	warnIfMagusBinary(t.Context(), "go", []string{"run", "."})
+	own := filepath.Join(t.TempDir(), "magus")
+	self, err := os.Executable()
+	require.NoError(t, err)
+	if err := os.Symlink(self, own); err != nil {
+		t.Skipf("no symlinks: %v", err)
+	}
+
+	warnIfMagusBinary(t.Context(), own, "", []string{"job", "exec", "x"})
+	warnIfMagusBinary(t.Context(), "go", "", []string{"run", "."})
 	assert.Empty(t, buf.String(), "job exec has no member, and go is not magus")
 
-	warnIfMagusBinary(t.Context(), "/usr/local/bin/magus", []string{"run", "go-build", "."})
+	warnIfMagusBinary(t.Context(), own, "", []string{"run", "go-build", "."})
 	assert.Contains(t, buf.String(), `call magus\\run instead`)
 	assert.Contains(t, buf.String(), "magus run go-build .")
 
 	buf.Reset()
-	warnIfMagusBinary(t.Context(), "magus", []string{"run", "lint", "."})
+	warnIfMagusBinary(t.Context(), "magus", "", []string{"run", "lint", "."})
 	assert.Empty(t, buf.String(), "a member is named once per process")
+}
+
+func TestWarnIfMagusBinaryIgnoresAnotherCheckoutsBinary(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	magusWarned.Delete("run")
+
+	other := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(other, "magus"), []byte("#!/bin/sh\n"), 0o755))
+	warnIfMagusBinary(t.Context(), filepath.Join(other, "magus"), "", []string{"run", "go-build", "."})
+	warnIfMagusBinary(t.Context(), "./magus", other, []string{"run", "go-build", "."})
+	assert.Empty(t, buf.String())
 }
 
 func TestProcExecTimeoutKillsASlowCommandAndRaises(t *testing.T) {

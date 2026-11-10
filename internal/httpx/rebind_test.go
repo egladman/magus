@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/rpcerr"
@@ -177,4 +178,27 @@ func TestRebindRefusalOmitsTheBearerChallenge(t *testing.T) {
 	got := decodeStatus(t, rr.Body.Bytes())
 	assert.Equal(t, "PERMISSION_DENIED", got.Error.Status)
 	assert.Equal(t, "MGS9007", got.reason())
+}
+
+// The refusal names the setting that widens the caller's set, and only that.
+func TestRebindRefusalNamesTheCallersSetting(t *testing.T) {
+	t.Parallel()
+	refuse := func(allowed AllowedSet) string {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Host = "evil.example"
+		rr := httptest.NewRecorder()
+		GuardRebind(rpcerr.FormatJSON, allowed, okHandler).ServeHTTP(rr, req)
+		require.Equal(t, http.StatusForbidden, rr.Code)
+		return decodeStatus(t, rr.Body.Bytes()).Error.Message
+	}
+	server := AllowedHosts(netip.MustParseAddrPort("127.0.0.1:7391"))
+	widened, err := server.AllowOrigin("https://console.example")
+	require.NoError(t, err)
+
+	assert.Contains(t, refuse(server), "only loopback hosts and the origins in mcp.allowed_origins;", "the server's MCP setting")
+	assert.Contains(t, refuse(widened), "the origins in mcp.allowed_origins;", "AllowOrigin keeps the setting")
+	assert.Contains(t, refuse(server.WidenedBy("viewer.origin")), "only loopback hosts and the origins in viewer.origin;")
+	none := refuse(server.WidenedBy(""))
+	assert.Contains(t, none, "only loopback hosts;")
+	assert.NotContains(t, none, "origins in")
 }

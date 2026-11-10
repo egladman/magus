@@ -4572,3 +4572,329 @@ func (s *PatchWriteSuite) testContext() context.Context { return s.layers.of(s.T
 func (s *CherryPickWriteSuite) testContext() context.Context { return s.layers.of(s.T()) }
 
 func (s *ScratchWorkspaceSuite) testContext() context.Context { return s.layers.of(s.T()) }
+
+// LeaseBoundarySuite pins the routes by which a leased worker's write left
+// its boundary. Each one reached a file the worker's write paths do not
+// name.
+type LeaseBoundarySuite struct {
+	suite.Suite
+	loc  location
+	root string
+}
+
+func TestLeaseBoundarySuite(t *testing.T) {
+	suite.Run(t, new(LeaseBoundarySuite))
+}
+
+func (s *LeaseBoundarySuite) SetupTest() {
+	var ctx context.Context
+	ctx, s.root = fleetFixture(s.T(), writePathFleet()...)
+	s.loc = ctx.Value(locationKey{}).(location)
+}
+
+func (s *LeaseBoundarySuite) leaseContext() context.Context {
+	return context.WithValue(s.T().Context(), locationKey{}, s.loc)
+}
+
+func (s *LeaseBoundarySuite) deny(command string) string {
+	return denyWriteOutsideLease(s.leaseContext(), Dependencies{callDir: s.root}, "lease-b", command)
+}
+
+func (s *LeaseBoundarySuite) jobLedger() string {
+	return filepath.Join(os.Getenv("XDG_STATE_HOME"), "magus", "jobs", "repo-0123456789ab", "jobs.jsonl")
+}
+
+func (s *LeaseBoundarySuite) TestToolWriteIntoTheJobLedgerIsRefused() {
+	g := gradeLeasedWrite(s.leaseContext(), Dependencies{}, "lease-b", s.jobLedger())
+	s.Equal(decisionDeny, g.Decision)
+	s.Contains(g.Reason, "magus's own state directory")
+}
+
+func (s *LeaseBoundarySuite) TestShellAppendToTheJobLedgerIsRefused() {
+	s.Contains(s.deny(`echo '{"id":"lease-b","write_paths":["**"]}' >> `+s.jobLedger()), "magus's own state directory")
+}
+
+func (s *LeaseBoundarySuite) TestCopyIntoTheUserConfigIsRefused() {
+	s.Contains(s.deny("cp x "+filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "magus", "magus.yaml")), "magus's own config directory")
+}
+
+func (s *LeaseBoundarySuite) TestTeeIntoTheSharedCacheIsRefused() {
+	s.Contains(s.deny("echo x | tee "+filepath.Join(os.Getenv("XDG_CACHE_HOME"), "magus", "cache", "k")), "magus's own cache directory")
+}
+
+func (s *LeaseBoundarySuite) TestUnleasedWriteIntoTheJobLedgerIsNotGraded() {
+	s.Empty(gradeLeasedWrite(s.leaseContext(), Dependencies{}, "", s.jobLedger()).Reason)
+}
+
+func (s *LeaseBoundarySuite) TestReadOfTheJobLedgerPasses() {
+	s.Empty(s.deny("cat " + s.jobLedger()))
+}
+
+func (s *LeaseBoundarySuite) TestWriteInAScratchCheckoutIsNotMagusState() {
+	s.Empty(s.deny("echo x > " + filepath.Join(os.Getenv("XDG_CACHE_HOME"), "magus", "tmp", "scratch", "notes.txt")))
+}
+
+// nestedLease stands a worker's checkout in .claude/worktrees/x under a
+// parent checkout. It returns the context, the parent and the nested root.
+func (s *LeaseBoundarySuite) nestedLease() (context.Context, string, string) {
+	parent := s.T().TempDir()
+	nested := filepath.Join(parent, ".claude", "worktrees", "x")
+	for _, dir := range []string{parent, nested} {
+		s.Require().NoError(os.MkdirAll(filepath.Join(dir, "internal", "guard"), 0o755))
+		s.Require().NoError(os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
+	}
+	s.Require().NoError(os.WriteFile(filepath.Join(nested, ".git"), []byte("gitdir: x\n"), 0o644))
+	ctx, _ := fleetFixture(s.T(), types.Job{
+		ID: "nested", WritePaths: []string{"internal/guard/**"}, CheckoutRoot: nested,
+		State: types.StateRunning, Registered: 1,
+	})
+	return ctx, parent, nested
+}
+
+func (s *LeaseBoundarySuite) TestShellWriteFromANestedCheckoutIntoItsParentIsRefused() {
+	ctx, parent, nested := s.nestedLease()
+	target := filepath.Join(parent, "internal", "guard", "guard.go")
+	onPath := gradeLeasedWrite(ctx, Dependencies{}, "nested", target)
+	s.Require().Equal(decisionDeny, onPath.Decision)
+	from := Dependencies{callDir: nested}
+	s.Equal(onPath.Reason, denyWriteOutsideLease(ctx, from, "nested", "echo x > ../../../internal/guard/guard.go"))
+	s.Equal(onPath.Reason, denyWriteOutsideLease(ctx, from, "nested", "cp x "+target))
+}
+
+func (s *LeaseBoundarySuite) write(rel, body string) {
+	p := filepath.Join(s.root, rel)
+	s.Require().NoError(os.MkdirAll(filepath.Dir(p), 0o755))
+	s.Require().NoError(os.WriteFile(p, []byte(body), 0o644))
+}
+
+func (s *LeaseBoundarySuite) link(rel, target string) {
+	p := filepath.Join(s.root, rel)
+	s.Require().NoError(os.MkdirAll(filepath.Dir(p), 0o755))
+	s.Require().NoError(os.Symlink(target, p))
+}
+
+func (s *LeaseBoundarySuite) TestSedThroughALinkToAnUndeclaredFileIsRefused() {
+	s.write("docs/notes.md", "a\n")
+	s.link("cmd/magus/notes.md", "../../docs/notes.md")
+	s.Contains(s.deny("sed -i 's/a/b/' cmd/magus/notes.md"), "docs/notes.md")
+}
+
+func (s *LeaseBoundarySuite) TestRedirectThroughADanglingLinkIsRefused() {
+	s.link("cmd/magus/new.go", "../../docs/new.go")
+	s.Contains(s.deny("echo x > cmd/magus/new.go"), "docs/new.go")
+}
+
+func (s *LeaseBoundarySuite) TestToolWriteThroughADanglingLinkIsRefused() {
+	s.link("cmd/magus/new.go", "../../docs/new.go")
+	g := gradeLeasedWrite(s.leaseContext(), Dependencies{}, "lease-b", filepath.Join(s.root, "cmd", "magus", "new.go"))
+	s.Equal(decisionDeny, g.Decision)
+	s.Contains(g.Reason, "docs/new.go")
+}
+
+func (s *LeaseBoundarySuite) TestRedirectThroughALinkIntoAnotherCheckoutIsRefused() {
+	other := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(other, "magusfile.buzz"), nil, 0o644))
+	s.link("cmd/magus/out.go", filepath.Join(other, "out.go"))
+	s.Contains(s.deny("echo x > cmd/magus/out.go"), "in another checkout")
+}
+
+func (s *LeaseBoundarySuite) TestTeeToANewUndeclaredFileIsRefused() {
+	s.Contains(s.deny("echo x | tee docs/new.md"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestCopyToANewUndeclaredFileIsRefused() {
+	s.Contains(s.deny("cp x docs/new.md"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestInstallToANewUndeclaredFileIsRefused() {
+	s.Contains(s.deny("install -m 644 x docs/new.md"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestTouchOfANewUndeclaredFileIsRefused() {
+	s.Contains(s.deny("touch docs/new.md"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestTouchOfANewFileInsideTheLeasePasses() {
+	s.Empty(s.deny("touch -d 2020-01-01 cmd/magus/new.go"))
+}
+
+func (s *LeaseBoundarySuite) TestMoveToANewUndeclaredFileIsRefused() {
+	s.Contains(s.deny("mv /tmp/x docs/new.md"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestCopyToANewFileInsideTheLeasePasses() {
+	s.Empty(s.deny("cp x cmd/magus/new.go"))
+}
+
+func (s *LeaseBoundarySuite) TestCopyFromAnUndeclaredFilePasses() {
+	s.write("docs/notes.md", "a\n")
+	s.Empty(s.deny("cp docs/notes.md cmd/magus/notes.md"))
+}
+
+// binary makes s.root a magus checkout and returns its ./magus.
+func (s *LeaseBoundarySuite) binary() string {
+	s.write("magusfile.buzz", "")
+	s.write("magus", "#!/bin/sh\n")
+	return filepath.Join(s.root, "magus")
+}
+
+func (s *LeaseBoundarySuite) TestToolWriteToTheCheckoutsOwnBinaryIsRefused() {
+	g := gradeLeasedWrite(s.leaseContext(), Dependencies{}, "lease-b", s.binary())
+	s.Equal(decisionDeny, g.Decision)
+	s.Contains(g.Reason, "own magus binary")
+}
+
+func (s *LeaseBoundarySuite) TestGoBuildOfTheCheckoutsOwnBinaryIsRefused() {
+	s.binary()
+	s.Contains(s.deny("go build -o magus ./cmd/magus"), "own magus binary")
+}
+
+func (s *LeaseBoundarySuite) TestMovingTheCheckoutsOwnBinaryAsideIsRefused() {
+	s.binary()
+	s.Contains(s.deny("mv magus magus.old"), "own magus binary")
+}
+
+func (s *LeaseBoundarySuite) TestCopyOverALinkedCheckoutsBinaryIsRefused() {
+	other := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(other, "magusfile.buzz"), nil, 0o644))
+	s.Contains(s.deny("cp x "+filepath.Join(other, "magus")), "own magus binary")
+}
+
+func (s *LeaseBoundarySuite) TestALeaseHoldingEveryPathStillMayNotWriteItsBinary() {
+	dir := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
+	ctx, _ := fleetFixture(s.T(), types.Job{
+		ID: "all", WritePaths: []string{"**"}, CheckoutRoot: dir, State: types.StateRunning, Registered: 1,
+	})
+	s.Contains(denyWriteOutsideLease(ctx, Dependencies{callDir: dir}, "all", "echo x > magus"), "own magus binary")
+}
+
+func (s *LeaseBoundarySuite) TestRunningTheCheckoutsOwnBinaryPasses() {
+	s.binary()
+	s.Empty(s.deny("./magus run go-test . -- ./internal/guard"))
+}
+
+func (s *LeaseBoundarySuite) TestUnleasedWriteToTheBinaryIsNotGraded() {
+	s.NotEqual(decisionDeny, gradeLeasedWrite(s.leaseContext(), Dependencies{}, "", s.binary()).Decision)
+	s.Empty(denyWriteOutsideLease(s.leaseContext(), Dependencies{callDir: s.root}, "", "go build -o magus ./cmd/magus"))
+}
+
+func (s *LeaseBoundarySuite) TestScriptPipedIntoAShellIsJudged() {
+	s.Contains(s.deny("echo 'echo x > docs/new.md' | sh"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestScriptPrintedIntoAShellIsJudged() {
+	s.Contains(s.deny(`printf 'echo x > docs/new.md\n' | bash -s`), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestHereStringIntoAShellIsJudged() {
+	s.Contains(s.deny("bash <<< 'echo x > docs/new.md'"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestQuotedHeredocIntoAShellIsJudged() {
+	s.Contains(s.deny("sh <<'EOF'\necho x > docs/new.md\nEOF"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestAwkSystemIsJudged() {
+	s.Contains(s.deny(`awk 'BEGIN { system("echo x > docs/new.md") }'`), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestAwkPipeIsJudged() {
+	s.Contains(s.deny(`awk 'BEGIN { print "x" | "cat > docs/new.md" }'`), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestSedECommandIsJudged() {
+	s.Contains(s.deny("sed -n '1e echo x > docs/new.md' cmd/magus/a.go"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestPhpInlineProgramIsJudged() {
+	s.Contains(s.deny(`php -r 'system("echo x > docs/new.md");'`), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestOsascriptDoShellScriptIsJudged() {
+	s.Contains(s.deny(`osascript -e 'do shell script "echo x > docs/new.md"'`), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestTclExecIsJudged() {
+	s.Contains(s.deny("echo 'exec touch docs/new.md' | tclsh"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestVimBangCommandIsJudged() {
+	s.Contains(s.deny("vim -es -c '!echo x > docs/new.md' -c q"), "docs/new.md")
+}
+
+func (s *LeaseBoundarySuite) TestPipedScriptInsideTheLeasePasses() {
+	s.Empty(s.deny("echo 'echo x > cmd/magus/a.go' | sh"))
+}
+
+func (s *LeaseBoundarySuite) TestDecodedScriptPipedIntoAShellIsRefused() {
+	s.Contains(s.deny("echo ZWNobyB4Cg== | base64 -d | sh"), "cannot read the script handed to sh through a pipe")
+}
+
+func (s *LeaseBoundarySuite) TestComputedHereStringIsRefused() {
+	s.Contains(s.deny(`bash <<< "$(cat payload)"`), "cannot read the script")
+}
+
+func (s *LeaseBoundarySuite) TestHeredocThatExpandsIsRefused() {
+	s.Contains(s.deny("sh <<EOF\necho $X\nEOF"), "cannot read the script")
+}
+
+func (s *LeaseBoundarySuite) TestAwkSystemOfAFieldIsRefused() {
+	s.Contains(s.deny(`awk '{ system($0) }' cmd/magus/a.go`), "awk through system()")
+}
+
+func (s *LeaseBoundarySuite) TestSedSubstitutionThatRunsIsRefused() {
+	s.Contains(s.deny(`sed 's/.*/rm &/e' cmd/magus/a.go`), "sed through s///e")
+}
+
+func (s *LeaseBoundarySuite) TestPhpShellCallOfAVariableIsRefused() {
+	s.Contains(s.deny(`php -r 'system($argv[1]);' x`), "php through a shell function")
+}
+
+func (s *LeaseBoundarySuite) TestOsascriptJoinedStringIsRefused() {
+	s.Contains(s.deny(`osascript -e 'do shell script "rm " & x'`), "osascript through do shell script")
+}
+
+func (s *LeaseBoundarySuite) TestVimBangThatNamesTheBufferIsRefused() {
+	s.Contains(s.deny("vim -es -c '!rm %' cmd/magus/a.go"), "vim through !")
+}
+
+func (s *LeaseBoundarySuite) TestUnleasedDecodedScriptIsNotGraded() {
+	s.Empty(denyWriteOutsideLease(s.leaseContext(), Dependencies{callDir: s.root}, "", "echo ZWNobyB4Cg== | base64 -d | sh"))
+}
+
+func (s *LeaseBoundarySuite) TestShellWriteInsideTheNestedCheckoutPasses() {
+	ctx, _, nested := s.nestedLease()
+	s.Empty(denyWriteOutsideLease(ctx, Dependencies{callDir: nested}, "nested", "echo x > internal/guard/guard.go"))
+}
+
+// RootHeldRowSuite pins what a parentless integrate row's holder may do.
+type RootHeldRowSuite struct {
+	suite.Suite
+}
+
+func TestRootHeldRowSuite(t *testing.T) { suite.Run(t, new(RootHeldRowSuite)) }
+
+func (s *RootHeldRowSuite) holder(parent string, kids ...types.Job) holder {
+	row := types.Job{ID: "integrate", Parent: parent, Integrates: []string{"done-a"}, State: types.StateRunning}
+	st := leaseStanding{readable: true, declared: true, state: row.State, row: row, rows: append([]types.Job{row}, kids...)}
+	return holder{id: row.ID, standing: func() leaseStanding { return st }, storeLease: func() string { return row.ID }}
+}
+
+func (s *RootHeldRowSuite) TestARootHoldingARowForksASibling() {
+	got := childForkRebind(childFork{id: "next-row", readOnly: true}, s.holder(""), "declare a job", "fork it")
+	s.False(got.refuses(), got.problem)
+}
+
+func (s *RootHeldRowSuite) TestARootEndsItsRowWithLiveChildren() {
+	kid := types.Job{ID: "kid", Parent: "integrate", State: types.StateRunning}
+	cmds, ok := ParseCommands("magus job exit integrate --stdin")
+	s.Require().True(ok)
+	got := leaseRebind(cmds[0], "", s.holder("", kid))
+	s.False(got.refuses(), got.problem)
+}
+
+func (s *RootHeldRowSuite) TestAWorkerStillCannotForkOutsideItsTree() {
+	got := childForkRebind(childFork{id: "next-row", readOnly: true}, s.holder("orchestrator"), "declare a job", "fork it")
+	s.True(got.refuses())
+}

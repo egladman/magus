@@ -1,0 +1,19 @@
+// @expect: boom
+// A string thrown in a fiber arrives through resolve as that string,
+// with no prefix, as upstream does.
+fun failing() > str *> int !> str {
+    _ = yield 1;
+    throw "boom";
+}
+
+fun run() > str {
+    final f = &failing();
+    try {
+        _ = resolve f;
+    } catch (e: str) {
+        return e;
+    }
+    return "no raise";
+}
+
+final __r = run();

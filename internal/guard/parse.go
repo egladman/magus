@@ -65,6 +65,12 @@ func ParseCommandsDialect(command string, d Dialect) ([]hint.Invocation, bool) {
 		}
 		return true
 	})
+	for _, h := range handedScripts(f, d) {
+		if h.read {
+			inner, _ := ParseCommandsDialect(h.text, handedDialect(h, d))
+			out = append(out, inner...)
+		}
+	}
 	return out, true
 }
 
@@ -499,17 +505,18 @@ type scriptFile struct {
 	parent *scriptFile
 }
 
-// eachScript calls fn with the line, then with every shellPayload in it, depth
-// first. fn returns false to stop. An unparsable payload is skipped.
+// eachScript calls fn with the line, then with every shellPayload and
+// readable handedScript in it, depth first. fn returns false to stop.
+// An unparsable payload is skipped.
 func eachScript(command string, d Dialect, fn func(*scriptFile) bool) {
 	f, err := parseFile(command, d)
 	if err != nil {
 		return
 	}
-	eachScriptFrom(&scriptFile{file: f, text: command}, d, 0, fn)
+	eachNestedScript(&scriptFile{file: f, text: command}, d, 0, fn)
 }
 
-func eachScriptFrom(sf *scriptFile, d Dialect, depth int, fn func(*scriptFile) bool) bool {
+func eachNestedScript(sf *scriptFile, d Dialect, depth int, fn func(*scriptFile) bool) bool {
 	if !fn(sf) {
 		return false
 	}
@@ -533,8 +540,16 @@ func eachScriptFrom(sf *scriptFile, d Dialect, depth int, fn func(*scriptFile) b
 		}
 		return true
 	})
+	for _, h := range handedScripts(sf.file, d) {
+		if !h.read {
+			continue
+		}
+		if f, err := parseFile(h.text, handedDialect(h, d)); err == nil {
+			payloads = append(payloads, &scriptFile{file: f, text: h.text, from: h.stmt, parent: sf})
+		}
+	}
 	for _, p := range payloads {
-		if !eachScriptFrom(p, d, depth+1, fn) {
+		if !eachNestedScript(p, d, depth+1, fn) {
 			return false
 		}
 	}
@@ -632,6 +647,76 @@ func mvOperands(args []string) []string {
 		}
 	}
 	return out
+}
+
+// destinationOperands are the files the line's calls create or overwrite
+// by operand, as commandDestinations names them. Unlike a candidate, each
+// is a file whether or not it exists yet.
+func destinationOperands(command string, d Dialect, start, home string) []placedWord {
+	var out []placedWord
+	dirTable := newScriptDirs(start, home)
+	eachScript(command, d, func(sf *scriptFile) bool {
+		dirs := dirTable.of(sf)
+		syntax.Walk(sf.file, func(n syntax.Node) bool {
+			stmt, ok := n.(*syntax.Stmt)
+			if !ok {
+				return true
+			}
+			for _, c := range shellCommands(sf.text, stmt, d, placeableWord) {
+				for _, op := range commandDestinations(path.Base(c.Name), c.Args) {
+					out = append(out, placedWord{op, dirs[stmt]})
+				}
+			}
+			return true
+		})
+		return true
+	})
+	return out
+}
+
+// commandDestinations are the operands name writes as files. A cp, install
+// or ln aimed at a directory with -t names no one file.
+func commandDestinations(name string, args []string) []string {
+	switch name {
+	case "tee":
+		return operands(args, "")
+	case "touch":
+		return operands(args, "dtr")
+	case "truncate":
+		return operands(args, "sr")
+	case "cp", "install", "ln":
+		if slices.ContainsFunc(args, func(a string) bool {
+			return a == "-t" || strings.HasPrefix(a, "--target-directory")
+		}) {
+			return nil
+		}
+		ops := operands(args, "mogS")
+		if len(ops) < 2 {
+			return nil
+		}
+		return ops[len(ops)-1:]
+	case "dd":
+		var out []string
+		for _, a := range args {
+			if of, ok := strings.CutPrefix(a, "of="); ok {
+				out = append(out, of)
+			}
+		}
+		return out
+	case "go":
+		if len(args) == 0 || args[0] != "build" {
+			return nil
+		}
+		for i, a := range args {
+			if o, ok := strings.CutPrefix(a, "-o="); ok {
+				return []string{o}
+			}
+			if a == "-o" && i+1 < len(args) {
+				return args[i+1 : i+2]
+			}
+		}
+	}
+	return nil
 }
 
 // writeTargetCandidates names every word the line's writes could be aimed at, in the order

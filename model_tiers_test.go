@@ -48,7 +48,7 @@ func TestModelRowsLetAJobPutResolveAnAliasThroughARealMagus(t *testing.T) {
 	ws, err := Inspect(t.Context(), root, WithSpawnRule(TierCeiling))
 	require.NoError(t, err)
 
-	got, err := std.MagusPutJob(types.WithWorkspace(t.Context(), ws), "w1", types.JobPut{Criteria: new("ship it"), Model: new("opus"), ReadOnly: new(true)})
+	got, err := std.MagusPutJob(ws.(*Magus).Context(t.Context()), "w1", types.JobPut{Criteria: new("ship it"), Model: new("opus"), ReadOnly: new(true)})
 	require.NoError(t, err)
 	require.NotNil(t, got.ModelTier)
 	assert.Equal(t, "principal", got.ModelTier.Name)

@@ -729,9 +729,6 @@ func snake(s string) string {
 	return b.String()
 }
 
-// workspaceModule is the Go module the generated packages live in.
-const workspaceModule = "github.com/egladman/magus"
-
 // moduleEmitter writes one generated leaf package.
 type moduleEmitter struct {
 	lib     *libModule
@@ -1253,13 +1250,12 @@ func (e *moduleEmitter) value(v *libValue) error {
 	}
 	impl := "Impl" + v.name
 	src := fmt.Sprintf("%s.%s", e.pkgAlias(v.file.pkg), v.name)
-	var t, goT, val string
+	var goT, val string
 	switch c.kind {
 	case convError:
-		t, goT, val = "std.TypeString", "string", src+".Error()"
+		goT, val = "string", src+".Error()"
 	default:
-		t = tag(c)
-		goT = implementationParam(t)
+		goT = implementationParam(tag(c))
 		val = e.encodeTop(c, src, goT)
 	}
 	// A method rather than a std.Field: the checker declares methods, so a

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log/slog"
@@ -55,7 +56,7 @@ func (s *Server) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 			refuseShare(w, r, rpcerr.Error{
 				Code:    connect.CodeFailedPrecondition,
 				Reason:  types.ConsoleNotBuilt,
-				Message: "the built console was not found, so there is nothing to share; build it with `magus run build console` and try again",
+				Message: "no built console is served, so there is nothing to share; set MAGUS_CONSOLE_DIR to a directory holding a built console's index.html, then restart the server",
 			}, log)
 			return
 		}
@@ -111,23 +112,28 @@ func refuseShare(w http.ResponseWriter, r *http.Request, e rpcerr.Error, log *sl
 	rpcerr.FormatJSON.Write(w, r, e)
 }
 
-// resolveConsoleDir locates the built console the LAN share serves. It honors an
-// explicit MAGUS_CONSOLE_DIR override (for a non-dogfood install), else falls
-// back to <root>/console/gen (the repo's own build output). It returns ok=false
-// when no directory containing an index.html is found, so the share endpoint can
-// fail with a build hint rather than serving an empty app.
-func resolveConsoleDir(root string) (string, bool) {
-	var candidates []string
-	if env := os.Getenv("MAGUS_CONSOLE_DIR"); env != "" {
-		candidates = append(candidates, env)
-	}
-	if root != "" {
-		candidates = append(candidates, filepath.Join(root, "console", "gen"))
-	}
-	for _, dir := range candidates {
-		if fi, err := os.Stat(filepath.Join(dir, "index.html")); err == nil && !fi.IsDir() {
-			return dir, true
+// resolveConsoleDir returns the console MAGUS_CONSOLE_DIR names, or false.
+// A cloned repository writes <root>/console/gen, and its page would read the
+// token from the URL fragment. So that directory is never served unnamed, and
+// passing it over is logged.
+func resolveConsoleDir(ctx context.Context, log *slog.Logger, root string) (string, bool) {
+	dir := os.Getenv("MAGUS_CONSOLE_DIR")
+	if dir == "" {
+		if gen := filepath.Join(root, "console", "gen"); root != "" && hasIndex(gen) {
+			log.WarnContext(ctx, "serving no console: the workspace's console/gen is served only when MAGUS_CONSOLE_DIR names it",
+				slog.String("passed_over", gen))
 		}
+		return "", false
 	}
-	return "", false
+	if !hasIndex(dir) {
+		log.WarnContext(ctx, "serving no console: MAGUS_CONSOLE_DIR holds no index.html",
+			slog.String("dir", dir))
+		return "", false
+	}
+	return dir, true
+}
+
+func hasIndex(dir string) bool {
+	fi, err := os.Stat(filepath.Join(dir, "index.html"))
+	return err == nil && !fi.IsDir()
 }

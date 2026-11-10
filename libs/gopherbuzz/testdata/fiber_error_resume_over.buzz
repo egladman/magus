@@ -1,0 +1,23 @@
+// @expect: null;Fiber is over;done
+// Resuming a completed fiber raises "Fiber is over", and resolve
+// still answers its return value. Upstream does both.
+fun counting() > str *> int {
+    _ = yield 1;
+    return "done";
+}
+
+fun run() > str {
+    final f = &counting();
+    _ = resume f;
+    final finished = resume f;
+    var seen = "no raise";
+    try {
+        _ = resume f;
+    } catch (e: str) {
+        seen = e;
+    }
+    final returned = resolve f;
+    return "{finished};{seen};{returned}";
+}
+
+final __r = run();

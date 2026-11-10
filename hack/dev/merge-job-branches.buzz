@@ -906,9 +906,7 @@ fun requireNewBranch(root: str, into: str) > result\Result::<bool> {
 }
 
 // sh is the output of a git command a test expects to succeed.
-fun sh(dir: str, args: [str]) > str {
-    return rc\git(dir, args: args).value!;
-}
+fun sh(dir: str, args: [str]) > str => rc\git(dir, args: args).value!;
 
 test "requireBranch resolves a remote-tracking ref and refuses a name that is no commit" {
     final root = fs\tempDir("merge-job-branches-test-");
@@ -1198,13 +1196,12 @@ fun fixtureRepo() > result\Result::<str> {
         foreach (kv in [["user.email", "t@example.com"], ["user.name", "t"], ["commit.gpgsign", "false"], ["core.hooksPath", "/dev/null"]]) {
             _ = sh(root, args: ["config", kv[0], kv[1]]);
         }
-        _ = put(root, path: ".gitignore", content: ".magus/\n");
-        _ = put(root, path: "magusfile.buzz", content: FIXTURE_MAGUSFILE);
-        _ = put(root, path: "src/a.txt", content: "a\n");
-        _ = put(root, path: "gen/list.txt", content: "a.txt\n");
+        // magus.yaml puts the store in the fixture, which the test removes.
+        foreach (p, c in {".gitignore": ".magus/\n", "magusfile.buzz": FIXTURE_MAGUSFILE, "magus.yaml": "cache:\n  dir: \"{root}/.magus/cache\"\n", "src/a.txt": "a\n", "gen/list.txt": "a.txt\n"}) { _ = put(root, path: p, content: c); }
         // Loading the workspace writes the merge driver's .gitattributes, which the base has to
         // carry, or every merge would find the tree dirty.
-        _ = magus\cmd("ls", args: [<str>], opts: magus\CommandOptions{ dir = root, root = root, quiet = true });
+        // The flag outranks MAGUS_CACHE_DIR, which CI sets, and the yaml above.
+        _ = magus\cmd("ls", args: ["--cache-dir", "{root}/.magus/cache"], opts: magus\CommandOptions{ dir = root, root = root, quiet = true });
         _ = commitAll(root, subject: "base");
         _ = branchFrom(root, name: "gen-b", start: "main", files: {"src/b.txt": "b\n", "gen/list.txt": "a.txt\nb.txt\n"}, subject: "add b");
         _ = branchFrom(root, name: "gen-c", start: "main", files: {"src/c.txt": "c\n", "gen/list.txt": "a.txt\nc.txt\n"}, subject: "add c");
@@ -1224,8 +1221,7 @@ fun fixtureRepo() > result\Result::<str> {
 // with this and leave regenerateWithMagus to a standalone `magus buzz -t` run.
 fun fixtureRegenerate(dir: str) > result\Result::<bool> {
     try {
-        final names = mut [<str>];
-        foreach (n in fs\listDir("{dir}/src")) { names.append(n); }
+        final names = fs\listDir("{dir}/src").cloneMutable();
         _ = names.sort(fun (a: str, b: str) > bool => a < b);
         final wrote = put(dir, path: "gen/list.txt", content: names.join("\n") + "\n");
         if (wrote.error -> err) { return result\Result::<bool>{ error = err }; }
@@ -1260,6 +1256,13 @@ fun planStack(root: str, names: [str]) > result\Result::<stack\BranchStack> {
     final contains = containsMap(root, branches: names, base: "main");
     if (contains.error -> err) { return result\Result::<stack\BranchStack>{ error = err }; }
     return order(cands, contains: contains.value!, base: "main");
+}
+
+test "the fixture keeps its store inside itself, never in the user's cache" {
+    final root = fixtureRepo().value!;
+    final stores = if (fs\isDir("{root}/.magus/cache")) fs\listDir("{root}/.magus/cache") else [<str>];
+    assert\equal(stores.len() > 0, want: true, message: "the setup run wrote its store under the fixture");
+    fs\removeAll(root);
 }
 
 test "a merge orders by ancestry, lets the driver settle generated output, and stops whole at a source conflict" {

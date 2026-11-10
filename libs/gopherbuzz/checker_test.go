@@ -2027,3 +2027,67 @@ fun pair::<A, B>(a: A, b: B) > R::<B> { return R::<B>{ v = b }; }
 	checkError(t, decls+`final r: R::<str> = mk::<int>(1);`, "cannot assign")
 	checkError(t, decls+`final r = mk::<int, str>(1);`, "wrong type argument count: got 2, want 1")
 }
+
+// Upstream Buzz accepts each write in the TestCheck_Write tests.
+func TestCheck_WriteOptionalFieldAcceptsNull(t *testing.T) {
+	checkOK(t, `object P { x: int? } final p = mut P{ x = 1 }; p.x = null;`)
+}
+
+func TestCheck_WriteAnyFieldAcceptsAnyValue(t *testing.T) {
+	checkOK(t, `object P { x: any } final p = mut P{ x = 1 }; p.x = "s";`)
+}
+
+func TestCheck_WriteOptionalListAcceptsNull(t *testing.T) {
+	checkOK(t, `final l: mut [int?] = mut [1]; l[0] = null; l.append(null); l.insert(0, value: null);`)
+}
+
+func TestCheck_WriteAnyListAcceptsAnyValue(t *testing.T) {
+	checkOK(t, `final l: mut [any] = mut [1]; l[0] = "s"; l.append(2.5); l.insert(0, value: true);`)
+}
+
+func TestCheck_WriteUnannotatedEmptyListAcceptsAnyValue(t *testing.T) {
+	checkOK(t, `final l = mut []; l.append("s"); l.append(1);`)
+}
+
+func TestCheck_WriteAnyMapAcceptsAnyValue(t *testing.T) {
+	checkOK(t, `final m: mut {str: any} = mut {}; m["a"] = 1; m["b"] = "x"; final k: {str: any} = {"a": 1, "b": "s"};`)
+}
+
+func TestCheck_WriteAnyKeyMapAcceptsAnyKey(t *testing.T) {
+	checkOK(t, `final m: mut {any: int} = mut {}; m["a"] = 1; m[2] = 3;`)
+}
+
+func TestCheck_WriteOptionalMapValueAcceptsNull(t *testing.T) {
+	checkOK(t, `final m: mut {str: int?} = mut {}; m["a"] = null;`)
+}
+
+func TestCheck_WriteProtocolElementAcceptsConformingObject(t *testing.T) {
+	checkOK(t, `protocol Named { fun name() > str; }
+object<Named> A { fun name() > str { return "a"; } }
+final l: mut [Named] = mut []; l.append(A{});
+final m: mut {str: Named} = mut {}; m["a"] = A{};`)
+}
+
+func TestCheck_WriteGenericElementInsideGenericFunction(t *testing.T) {
+	checkOK(t, `fun put::<T>(l: mut [T], v: T) > void { l[0] = v; l.append(v); }
+final l: mut [int] = mut [0]; put::<int>(l, v: 1);`)
+}
+
+func TestCheck_WriteMutableValueIntoImmutableElement(t *testing.T) {
+	checkOK(t, `final m: mut {str: [int]} = mut {}; m["a"] = mut [1]; final k: {str: int} = mut {"a": 1};`)
+}
+
+func TestCheck_WriteEnumCaseResolvesAgainstElementType(t *testing.T) {
+	checkOK(t, `enum E { a, b } final l: mut [E] = mut []; l.append(.b); l.insert(0, value: .a); l[0] = .b;`)
+}
+
+func TestCheck_WriteObjectIntoOptionalField(t *testing.T) {
+	checkOK(t, `object Q { a: int } object P { q: Q? } final p = mut P{ q = null }; p.q = Q{ a = 1 };`)
+}
+
+func TestCheck_WriteMapLiteralFitsExpectedMapType(t *testing.T) {
+	checkOK(t, `fun f() > {str: int} { return {}; }
+fun g(m: {str: int}) > void {}
+g({"a": 1}); g({});
+final k: {str: [int]} = {"a": [1], "b": []};`)
+}

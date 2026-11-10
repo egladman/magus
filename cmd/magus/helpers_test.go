@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
@@ -25,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -160,6 +163,88 @@ func TestExitCodeOfPrintsWhatNoOneElseDid(t *testing.T) {
 		Err: types.DiagnosticErrorf(types.MachineBudgetExhausted, "not starting (root) test")}
 	assert.Equal(t, cache.ExitCodeMachineBusy, mapExitCode(fmt.Errorf("run: %w", refused)))
 	assert.Empty(t, logged.String())
+}
+
+// AdmissionRefusalSuite pins that a refusal from cache.AdmitMachine is printed
+// once: it runs outside any step, so no cache.error record says it.
+type AdmissionRefusalSuite struct {
+	suite.Suite
+	logged bytes.Buffer
+}
+
+func TestAdmissionRefusalSuite(t *testing.T) { suite.Run(t, new(AdmissionRefusalSuite)) }
+
+func (s *AdmissionRefusalSuite) SetupTest() {
+	s.T().Cleanup(snapshotGlobals())
+	testkit.Isolate(s.T())
+	globalCfg.Broker = types.BrokerBestEffort
+	globalCfg.BudgetWait = 10 * time.Millisecond
+	s.logged.Reset()
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&s.logged, nil)))
+	s.T().Cleanup(func() { slog.SetDefault(prev) })
+}
+
+func (s *AdmissionRefusalSuite) TestAForkRefusalIsPrinted() {
+	_, err := admitForkValidation(s.T().Context(), &fullBudget{}, s.T().TempDir())
+	s.Equal(cache.ExitCodeMachineBusy, mapExitCode(err))
+	s.Contains(s.logged.String(), "not starting (root) job-fork")
+}
+
+func (s *AdmissionRefusalSuite) TestAGraphBuildRefusalIsPrinted() {
+	_, err := admitGraphBuild(s.T().Context(), &fullBudget{}, s.T().TempDir())
+	s.Equal(cache.ExitCodeMachineBusy, mapExitCode(err))
+	s.Contains(s.logged.String(), "not starting (root) graph-build")
+}
+
+func (s *AdmissionRefusalSuite) TestASessionBriefRefusalIsPrinted() {
+	_, err := admitSessionBrief(s.T().Context(), &fullBudget{}, s.T().TempDir())
+	s.Equal(cache.ExitCodeMachineBusy, mapExitCode(err))
+	s.Contains(s.logged.String(), "not starting (root) session-brief")
+}
+
+func (s *AdmissionRefusalSuite) TestAPausedJobRefusalIsPrinted() {
+	err := types.ExitError{Code: cache.ExitCodeMachineBusy, Err: errors.New("magus job exec: job x is paused")}
+	s.Equal(cache.ExitCodeMachineBusy, mapExitCode(err))
+	s.Contains(s.logged.String(), "job x is paused")
+}
+
+func (s *AdmissionRefusalSuite) TestABareExitStaysSilent() {
+	s.Equal(3, mapExitCode(types.ExitError{Code: 3}))
+	s.Empty(s.logged.String())
+}
+
+// briefRefusalRootVar names the workspace TestBriefRefusalHelperProcess runs
+// the CLI in; set, it marks that process as the helper.
+const briefRefusalRootVar = "MAGUS_TEST_BRIEF_REFUSAL_ROOT"
+
+// TestBriefRefusalHelperProcess is the process TestTheCLIPrintsTheBriefRefusal
+// starts. A fresh process builds its own stderr display handler, which an
+// earlier in-process runCLI would otherwise have bound to another stderr.
+func TestBriefRefusalHelperProcess(t *testing.T) {
+	root := os.Getenv(briefRefusalRootVar)
+	if root == "" {
+		t.Skip("not invoked as the brief refusal helper process")
+	}
+	t.Setenv("MAGUS_BROKER", "required")
+	os.Args = []string{"magus", "--root", root, "session", "--brief"}
+	os.Exit(runCLI())
+}
+
+func (s *AdmissionRefusalSuite) TestTheCLIPrintsTheBriefRefusal() {
+	w := testkit.NewWorkspace(s.T())
+	w.Magusfile("import \"magus\";\n")
+	exe, err := os.Executable()
+	s.Require().NoError(err)
+
+	cmd := exec.Command(exe, "-test.run", "^TestBriefRefusalHelperProcess$")
+	cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", briefRefusalRootVar, w.Root()))
+	out, runErr := cmd.CombinedOutput()
+
+	var exitErr *exec.ExitError
+	s.Require().ErrorAs(runErr, &exitErr, string(out))
+	s.Equal(cache.ExitCodeBrokerUnavailable, exitErr.ExitCode(), string(out))
+	s.Contains(string(out), "session-brief")
 }
 
 // lockRefusal has the shape of the root package's unexported lockContendedError:

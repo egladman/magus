@@ -18,6 +18,7 @@ func TestDefaults(t *testing.T) {
 	assert.NotContains(t, got, "spawn-principal-for-economy")
 	want := map[string]decision{
 		"conflict-commit":      Deny,
+		"unknown-magus-argv":   Deny,
 		"cache-clear":          Deny,
 		"deviation-author":     Deny,
 		"compat-marker":        Advise,

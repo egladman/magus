@@ -82,6 +82,27 @@ func TestAppendAndReadRecent_NewestFirst(t *testing.T) {
 	assert.Equal(t, want, events[0], "event not round-tripped")
 }
 
+// TestTrailIsPrivateToItsOwner pins the modes Append and WriteBlob create:
+// the trail records what an agent ran and what a tool returned.
+func TestTrailIsPrivateToItsOwner(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	for i := range 3 {
+		Append(t.Context(), dir, Event{Ts: int64(i), Kind: KindMCPToolCall, Action: "query", Outcome: OutcomeOK})
+	}
+	ref, _ := WriteBlob(t.Context(), dir, "mcp", []byte("a payload"))
+	require.NotEmpty(t, ref)
+
+	perm := func(p string) os.FileMode {
+		info, err := os.Stat(p)
+		require.NoError(t, err)
+		return info.Mode().Perm()
+	}
+	assert.Equal(t, os.FileMode(0o700), perm(filepath.Dir(eventsPath(dir))))
+	assert.Equal(t, os.FileMode(0o700), perm(blobsPath(dir)))
+	assert.Equal(t, os.FileMode(0o600), perm(eventsPath(dir)))
+	assert.Equal(t, os.FileMode(0o600), perm(filepath.Join(blobsPath(dir), ref)))
+}
+
 func TestReadRecent_LimitKeepsTailNewestFirst(t *testing.T) {
 	dir := t.TempDir()
 	for i := 1; i <= 5; i++ {
@@ -750,8 +771,9 @@ func TestWriteBlob_IsOwnerOnly(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
 }
 
-// A rotate keeps the mode Append creates the trail with, rather than its temp file's 0600.
-func TestRotate_KeepsTheTrailMode(t *testing.T) {
+// A rotate writes the trail with the mode Append creates it with, so a trail
+// an older magus left world-readable becomes private.
+func TestRotate_WritesTheTrailPrivate(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("no POSIX modes")
 	}
@@ -765,7 +787,7 @@ func TestRotate_KeepsTheTrailMode(t *testing.T) {
 	require.Len(t, got, maxEvents, "the rotate ran")
 	fi, err := os.Stat(eventsPath(dir))
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o644), fi.Mode().Perm())
+	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
 }
 
 // TestRotate_SkipsTheReadWhenTheFileIsTooSmall pins the stat fast path, which is what makes an

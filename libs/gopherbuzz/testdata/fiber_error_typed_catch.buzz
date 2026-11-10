@@ -1,0 +1,24 @@
+// @expect: 7
+// A fiber's thrown value reaches the resuming code with its type.
+// Upstream runs the MyErr clause with code 7.
+object MyErr { code: int }
+
+fun failing() > str *> int !> MyErr {
+    _ = yield 1;
+    throw MyErr{ code = 7 };
+}
+
+fun run() > int {
+    final f = &failing();
+    try {
+        _ = resume f;
+        _ = resume f;
+    } catch (e: MyErr) {
+        return e.code;
+    } catch (e: any) {
+        return -1;
+    }
+    return 0;
+}
+
+final __r = run();

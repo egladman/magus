@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // magus shell is the guard with one door.
@@ -973,6 +974,10 @@ func delegatedBy(ctx context.Context) string {
 	return by
 }
 
+// hookBinaryPath is runningBinaryPath, a variable so tests can place the
+// running binary in a checkout.
+var hookBinaryPath = runningBinaryPath
+
 // delegatedEnv marks a guard call one magus handed to the checkout's own ./magus, so that
 // one judges instead of handing it on again.
 const delegatedEnv = "__MAGUS_DELEGATED_BY"
@@ -1022,6 +1027,46 @@ func callDir(input string) string {
 	return dir
 }
 
+// binaryCheckout is the workspace root bin sits at, or "" when bin is not
+// a checkout's own ./magus. The glue starts the session checkout's binary.
+// The event's cwd is no anchor: a persisted cd or a workdir moves it.
+func binaryCheckout(bin string) string {
+	dir := filepath.Dir(bin)
+	root, err := workspace.FindRoot(dir)
+	if err != nil || realPath(root) != realPath(dir) {
+		return ""
+	}
+	return dir
+}
+
+// foreignCheckout says why root is not a checkout of the session's
+// repository, or "" when it is. A magus.yaml dir inside a checkout is not
+// a checkout root. A VCS that lists no other checkouts trusts only its own.
+func foreignCheckout(root, session string) string {
+	here, others, err := vcs.Checkouts(session)
+	if err != nil {
+		return fmt.Sprintf("the checkouts of the session's repository at %s could not be listed: %v", session, err)
+	}
+	if here == "" {
+		return fmt.Sprintf("the session's directory %s is in no checkout, so no checkout's binary is trusted", session)
+	}
+	want := realPath(root)
+	for _, c := range append([]string{here}, others...) {
+		if realPath(c) == want {
+			return ""
+		}
+	}
+	return fmt.Sprintf("%s is not a checkout of the session's repository at %s, so its binary is not trusted to judge", root, here)
+}
+
+// realPath is p with symlinks resolved, or p cleaned when they cannot be.
+func realPath(p string) string {
+	if real, err := filepath.EvalSymlinks(p); err == nil {
+		return real
+	}
+	return filepath.Clean(p)
+}
+
 // checkoutBinary is the ./magus of the workspace dir lies in, when it is executable and is
 // not the binary at running; "" otherwise. A directory not created yet is judged by the
 // nearest one that exists.
@@ -1055,14 +1100,15 @@ func checkoutBinary(dir, running string) string {
 }
 
 // delegateToCheckout hands a hook call to the ./magus of the checkout
-// it lands in. A ./magus behind HEAD judges too, and its own stale-binary
+// it lands in, when that is a checkout of the session's own repository.
+// A ./magus behind HEAD judges too, and its own stale-binary
 // rules name the bootstrap. On handled false this binary judges, and declined
 // says why.
 func delegateToCheckout(ctx context.Context, input string, opts output.Options, out, errOut io.Writer) (handled bool, declined checkoutDecline, err error) {
 	if delegatedBy(ctx) != "" {
 		return false, checkoutDecline{}, nil
 	}
-	running, err := runningBinaryPath()
+	running, err := hookBinaryPath()
 	if err != nil {
 		slog.WarnContext(ctx, "this binary's own path is unknown, so it judges the call instead of handing it on",
 			attr.Error(err), attr.Component("magus shell"))
@@ -1072,14 +1118,23 @@ func delegateToCheckout(ctx context.Context, input string, opts output.Options, 
 	if own == "" {
 		return false, checkoutDecline{}, nil
 	}
-	decline := func(why string) checkoutDecline {
-		d := checkoutDecline{root: filepath.Dir(own), note: fmt.Sprintf("Judged by %s, not by %s: %s.", running, own, why)}
+	decline := func(root, why string) checkoutDecline {
+		d := checkoutDecline{root: root, note: fmt.Sprintf("Judged by %s, not by %s: %s.", running, own, why)}
 		slog.WarnContext(ctx, d.note, attr.Component("magus shell"))
 		return d
 	}
+	session := binaryCheckout(running)
+	if session == "" {
+		return false, decline("", "this binary is no checkout's own ./magus, so it trusts no checkout's binary"), nil
+	}
+	// A foreign root's rules are not loaded either: this binary judges the
+	// call as it would one into a tree with no ./magus.
+	if why := foreignCheckout(filepath.Dir(own), session); why != "" {
+		return false, decline("", why), nil
+	}
 	// The sentinel keeps the delegate from re-execing into the ./magus of this process's
 	// directory, which is the binary handing the call over.
-	env := append(os.Environ(), fmt.Sprintf("%s=%s", delegatedEnv, running), bootstrapExecSentinelVar+"=1")
+	env := append(os.Environ(), fmt.Sprintf("%s=%s", delegatedEnv, running), workspace.BootstrapExecSentinelVar+"=1")
 	end, err := guard.RunDelegate(ctx, own, os.Args[1:], env, strings.NewReader(input), out, errOut)
 	switch end {
 	case guard.DelegateExited:
@@ -1105,7 +1160,7 @@ func delegateToCheckout(ctx context.Context, input string, opts output.Options, 
 	case errors.As(err, &exited):
 		return true, checkoutDecline{}, exit.Reported(exited.ExitCode())
 	}
-	return false, decline(fmt.Sprintf("it did not start: %v", err)), nil
+	return false, decline(filepath.Dir(own), fmt.Sprintf("it did not start: %v", err)), nil
 }
 
 // checkoutDecline is a checkout whose own ./magus was passed over, and the note saying so.

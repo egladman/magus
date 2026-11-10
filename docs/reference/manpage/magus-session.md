@@ -82,6 +82,16 @@ session-start event and hand the model state instead of prose.
 **--reason** *string*
 : Record why the request is being closed, alongside the disposition
 
+### session advise options
+
+**--expect** *string*
+: The start of the shell command that carries the advisory out; counts sessions that run it after being shown it
+
+### session advisories options
+
+**--[no-]all** (default: off)
+: Also list retracted advisories
+
 ### session checkpoint options
 
 **--agent-name** *string*
@@ -123,6 +133,15 @@ session-start event and hand the model state instead of prose.
 
 **dispose**
 : Close one open request by id or unambiguous id prefix
+
+**advise**
+: Tell every agent session in this repository one thing, in your own words
+
+**advisories**
+: List open advisories, oldest first, with how many sessions were shown each and acted
+
+**retract**
+: Close one advisory by id or unambiguous id prefix, so no further session is shown it
 
 **checkpoint**
 : Record where the work stands, so it can be picked up later
@@ -195,6 +214,18 @@ magus session attention -q
 
 ```sh
 magus session dispose att-3f9c -reason "approved and pushed by hand"
+```
+
+*Tell every agent session one thing, and count who pushes after reading it*
+
+```sh
+magus session advise "push what you have; we squash into one PR" --expect "git push"
+```
+
+*See how many sessions each advisory reached*
+
+```sh
+magus session advisories
 ```
 
 *Raise a permission prompt on the desktop (host-wired)*

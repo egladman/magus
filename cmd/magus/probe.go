@@ -347,7 +347,7 @@ func buildConsoleStatus(cfg config.Console, mcp *daemon.MCPEndpoint) *daemon.Con
 // probeMCPReadiness GETs the endpoint's /readyz and returns the HTTP status, or 0 when
 // nothing answered (connection refused/timeout). 200 = ready, 503 = listening but no
 // workspace loaded; any other answered status is treated by the caller as reachable.
-// /readyz's body is now a JSON types.ReadinessReport (readinessHTTPHandler), but this
+// /readyz's body is now a JSON daemon.ReadinessReport (readinessHTTPHandler), but this
 // probe keys on the status code alone and never reads the body, so it needs no change:
 // the code is the same 200/503 gate it always was, just with a richer body alongside it.
 func probeMCPReadiness(ctx context.Context, addr string) int {
@@ -412,7 +412,7 @@ type readinessExtras struct {
 
 // readinessHTTPHandler is /readyz's handler. It keeps the EXACT pass/fail gate and status
 // codes healthHTTPHandler(probeReadiness, ...) used to serve (a kubelet reads only the
-// code, and that contract does not change here) but writes a JSON types.ReadinessReport
+// code, and that contract does not change here) but writes a JSON daemon.ReadinessReport
 // body instead of a plain reason line, so a browser client can read component-level detail
 // via CORS (which a plain 503 line does not give it any structure to parse). Accepts
 // ?workspace= exactly like healthHTTPHandler, pinning the gate to one root.

@@ -314,6 +314,8 @@ fun claude_models() > [ModelRow] {
             price: Price{input = 10.0, cacheWrite5m = 12.5, cacheWrite1h = 20.0, cacheRead = 0.25, output = 50.0}),
         claude_model("claude-opus-5-5", tier: "principal", alias: "opus", window: 1000000,
             price: Price{input = 4.0, cacheWrite5m = 5.0, cacheWrite1h = 8.0, cacheRead = 0.2, output = 20.0}),
+        claude_model("claude-fable-5-2", tier: "principal", alias: "fable", window: 1000000,
+            price: Price{input = 10.0, cacheWrite5m = 12.5, cacheWrite1h = 20.0, cacheRead = 0.25, output = 50.0}),
         claude_model("claude-sonnet-5-5", tier: "standard", alias: "sonnet", window: 1000000,
             price: Price{input = 2.0, cacheWrite5m = 2.5, cacheWrite1h = 4.0, cacheRead = 0.1, output = 10.0}),
         // The one current model priced by prompt length: every category is 5x above 100000
@@ -460,18 +462,18 @@ test "mgs_renderAgents renders one file per agent, in order, and none for none" 
     assert\equal(mgs_renderAgents([<ShippedAgent>]).len(), 0, "no agents, no files");
 }
 
-test "mgs_listModels ships the five Claude rows, and only haiku-5-5 steps its price" {
+test "mgs_listModels ships the six Claude rows, and only haiku-5-5 steps its price" {
     final ids = mut [<str>];
     final steps = mut [<str>];
     foreach (row in mgs_listModels()) {
         ids.append(row.id);
         if (row.step.above != 0) { steps.append(row.id); }
     }
-    assert\equal(ids.join(","), "claude-fable-5-1,claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5,claude-haiku-4-5", "ids in table order");
+    assert\equal(ids.join(","), "claude-fable-5-1,claude-opus-5-5,claude-fable-5-2,claude-sonnet-5-5,claude-haiku-5-5,claude-haiku-4-5", "ids in table order");
     assert\equal(steps.join(","), "claude-haiku-5-5", "the one model priced by prompt length");
 }
 
-test "each shipped tier runs on exactly one row, by its exact id, under the host's alias" {
+test "each shipped tier runs on its rows, by exact id, each under its own alias" {
     final tiers = mut {<str: str>};
     final aliases = mut {<str: str>};
     foreach (row in claude_models()) {
@@ -479,16 +481,17 @@ test "each shipped tier runs on exactly one row, by its exact id, under the host
             assert\equal(row.alias, "", "{row.id} has an alias but no tier");
             continue;
         }
-        assert\isTrue(tiers[row.tier] == null, "tier {row.tier} names one model");
-        tiers[row.tier] = row.id;
+        final prior = tiers[row.tier] ?? "";
+        tiers[row.tier] = if (prior == "") row.id else "{prior},{row.id}";
         assert\isTrue(aliases[row.alias] == null, "alias {row.alias} names one row");
         aliases[row.alias] = row.id;
     }
     assert\equal(tiers["economy"] ?? "", "claude-haiku-5-5", "the shipped agents' tier");
     assert\equal(tiers["standard"] ?? "", "claude-sonnet-5-5", "the default tier");
-    assert\equal(tiers["principal"] ?? "", "claude-opus-5-5", "the top tier");
-    assert\equal(aliases["opus"] ?? "", "claude-opus-5-5", "the top tier's alias");
-    assert\equal(aliases.len(), 3, "only the tiered rows carry an alias");
+    assert\equal(tiers["principal"] ?? "", "claude-opus-5-5,claude-fable-5-2", "the top tier's two rows");
+    assert\equal(aliases["opus"] ?? "", "claude-opus-5-5", "the top tier's default alias");
+    assert\equal(aliases["fable"] ?? "", "claude-fable-5-2", "the second top-tier row's alias");
+    assert\equal(aliases.len(), 4, "only the tiered rows carry an alias");
 }
 
 test "mgs_getName is the harness id describe and verify look up" {

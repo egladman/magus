@@ -257,7 +257,7 @@ func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byt
 	d.PersistedNs = nextPersistNs()
 	d.MagusVersion = types.MagusVersionFromContext(ctx)
 	dir := filepath.Join(s.outputsDir(), cacheKey)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, privateDirPerm); err != nil {
 		return OutputDescriptor{}, err
 	}
 	// Temp + rename, matching AdoptImported: until its descriptor lands, this blob is an
@@ -268,7 +268,7 @@ func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byt
 	// a warm run's step time. A record lost to a crash reads as a missing or orphaned
 	// attempt, which newestAttemptBlob already ranks below every intact one; no replay
 	// reads it.
-	if err := file.ReplaceFile(filepath.Join(dir, d.Attempt+outExt), output, 0o644); err != nil {
+	if err := file.ReplaceFile(filepath.Join(dir, d.Attempt+outExt), output, privateFilePerm); err != nil {
 		return OutputDescriptor{}, err
 	}
 	descriptor, err := json.Marshal(d)
@@ -279,7 +279,7 @@ func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byt
 	// the capture tap, so this is their only write boundary. Redacting the marshaled bytes
 	// rather than each field keeps a field added later covered by construction.
 	descriptor = secret.Redact(ctx, descriptor)
-	if err := file.ReplaceFile(filepath.Join(dir, d.Attempt+descExt), descriptor, 0o644); err != nil {
+	if err := file.ReplaceFile(filepath.Join(dir, d.Attempt+descExt), descriptor, privateFilePerm); err != nil {
 		return OutputDescriptor{}, err
 	}
 	s.pruneKey(dir, defaultOutputKeepLast)

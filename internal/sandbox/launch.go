@@ -61,6 +61,9 @@ func procSelfRules(rules []filesystem.Rule, pid int) (self, rest []filesystem.Ru
 
 // encodeRules renders rules for the launcher's argv as "rwx:/path" words joined by
 // commas, a dash for an access not granted.
+//
+// A path's backslashes and commas are backslash-escaped.
+// Otherwise a path holding ",rwx:/" would inject a rule.
 func encodeRules(rules []filesystem.Rule) string {
 	words := make([]string, 0, len(rules))
 	for _, r := range rules {
@@ -70,9 +73,33 @@ func encodeRules(rules []filesystem.Rule) string {
 			}
 			return "-"
 		}
-		words = append(words, fmt.Sprintf("%s%s%s:%s", flag(r.Read, "r"), flag(r.Write, "w"), flag(r.Exec, "x"), r.Path))
+		words = append(words, fmt.Sprintf("%s%s%s:%s", flag(r.Read, "r"), flag(r.Write, "w"), flag(r.Exec, "x"), ruleEscaper.Replace(r.Path)))
 	}
 	return strings.Join(words, ",")
+}
+
+var ruleEscaper = strings.NewReplacer(`\`, `\\`, `,`, `\,`)
+
+// splitRuleWords splits s at its unescaped commas and unescapes each word.
+func splitRuleWords(s string) ([]string, error) {
+	var words []string
+	var w strings.Builder
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; c {
+		case '\\':
+			if i+1 == len(s) || (s[i+1] != '\\' && s[i+1] != ',') {
+				return nil, fmt.Errorf("sandbox: launcher: malformed escape at byte %d of %q", i, s)
+			}
+			i++
+			w.WriteByte(s[i])
+		case ',':
+			words = append(words, w.String())
+			w.Reset()
+		default:
+			w.WriteByte(c)
+		}
+	}
+	return append(words, w.String()), nil
 }
 
 // decodeRules is encodeRules undone.
@@ -80,8 +107,12 @@ func decodeRules(s string) ([]filesystem.Rule, error) {
 	if s == "" {
 		return nil, nil
 	}
+	words, err := splitRuleWords(s)
+	if err != nil {
+		return nil, err
+	}
 	var rules []filesystem.Rule
-	for _, w := range strings.Split(s, ",") {
+	for _, w := range words {
 		flags, path, ok := strings.Cut(w, ":")
 		if !ok || len(flags) != 3 || !strings.HasPrefix(path, "/") {
 			return nil, fmt.Errorf("sandbox: launcher: malformed rule %q", w)

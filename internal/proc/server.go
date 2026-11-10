@@ -142,16 +142,16 @@ type Options struct {
 // Server serves HTTP on a Unix-domain socket: the proc routes under /proc/v1/ that child
 // processes forward work through, and whatever [Server.Mount] adds beside them.
 //
-// Where the platform reports a connection's peer uid, every request must come from a process
-// running as this one's user, and is admitted as [types.CredentialSocketPeer] and held to its
-// route's Need. Elsewhere the socket's private directory is the only boundary, as it always
-// was for these routes, and Mount refuses: nothing that needs a credential rides a socket that
+// Every request carries the server's token, the mounted paths included.
+// Where the platform reports a peer uid, the peer must also run as this user.
+// It is admitted as [types.CredentialSocketPeer] and held to its route's Need.
+// Elsewhere Mount refuses: nothing needing a credential rides a socket that
 // cannot name its caller.
 type Server struct {
 	ep   endpoint.Endpoint
 	svc  *service
 	http *http.Server
-	// token is the secret every /proc/ request must carry; see [TokenEnv].
+	// token is the secret every request must carry; see [TokenEnv].
 	token types.Secret
 	// peerChecked is whether requests pass the peer-uid guard; see Server.
 	peerChecked bool
@@ -172,8 +172,9 @@ type Server struct {
 // Addr returns the canonical unix:// URL that children dial. Valid after New.
 func (s *Server) Addr() string { return s.ep.String() }
 
-// Token returns the secret a client presents on every /proc/ request. A process hands it
-// to the nested magus it spawns through [TokenEnv], and to nothing else.
+// Token returns the secret a client presents on every socket request.
+// A process hands it to the nested magus it spawns through [TokenEnv], and to
+// nothing else.
 func (s *Server) Token() string { return s.token.Reveal() }
 
 // Done returns a channel closed when the server has been Closed, whether by an RPC
@@ -187,7 +188,8 @@ func (s *Server) Done() <-chan struct{} { return s.done }
 // socket peer's credential, until the returned unmount runs. A later Mount replaces an
 // earlier one; an unmount whose handler was already replaced does nothing. Where the
 // platform cannot name a connection's peer it installs nothing and returns
-// [httpx.ErrPeerCredentialsUnsupported].
+// [httpx.ErrPeerCredentialsUnsupported]. Only a request with the token
+// reaches h.
 func (s *Server) Mount(h http.Handler) (unmount func(), err error) {
 	if !s.peerChecked {
 		return nil, httpx.ErrPeerCredentialsUnsupported
@@ -330,24 +332,22 @@ func (s *Server) routes() (http.Handler, error) {
 		if err != nil {
 			return nil, fmt.Errorf("proc: %w", err)
 		}
-		mux.Handle("/proc/", s.requireToken(guarded))
+		mux.Handle("/proc/", guarded)
 	} else {
-		mux.Handle("/proc/", s.requireToken(proc))
+		mux.Handle("/proc/", proc)
 	}
 	mux.HandleFunc("/", s.serveExtra)
+	tokened := s.requireToken(mux)
 	if !s.peerChecked {
-		return mux, nil
+		return tokened, nil
 	}
-	return httpx.PeerGuard(rpcerr.FormatJSON, os.Getuid(), types.CredentialSocketPeer, mux), nil
+	return httpx.PeerGuard(rpcerr.FormatJSON, os.Getuid(), types.CredentialSocketPeer, tokened), nil
 }
 
-// requireToken refuses a /proc/ request that does not carry this server's token.
-//
-// The peer check admits every process of this user, and landlock does not govern
-// connect(2) on a pathname socket, so a confined child that finds the socket could post a
-// run its parent then executes outside the child's sandbox. The token is what that child
-// lacks: it rides only to a nested magus (see [TokenEnv]) and in a 0600 file in the
-// private socket directory, which the sandbox does not grant.
+// requireToken refuses any socket request without this server's token.
+// Landlock does not govern connect(2), so the peer check also admits a confined
+// child of this user. The token reaches only a nested magus ([TokenEnv]) and a
+// 0600 file the sandbox withholds.
 func (s *Server) requireToken(next http.Handler) http.Handler {
 	want := []byte(s.token.Reveal())
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

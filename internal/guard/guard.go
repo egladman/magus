@@ -230,6 +230,11 @@ type Dependencies struct {
 	revisions *revisionMemo
 	// opens keeps each root's open; Judge fills it, nil opens every time.
 	opens *workspaceOpens
+	// Opens keeps the workspaces a judgment opened for the judgments after it, for a
+	// caller that judges many requests against a tree it holds still: one fork grading
+	// every check it validates. Nil opens each root afresh in every judgment, which a hook
+	// and a daemon need, since the tree moves between their calls.
+	Opens *WorkspaceMemo
 }
 
 // workingDir is where a relative path on the judged line resolves. The hook process's cwd
@@ -282,6 +287,12 @@ type workspaceOpen struct {
 type workspaceOpens struct {
 	mu     sync.Mutex
 	byRoot map[string]workspaceOpen
+	// shared is the caller's memo across judgments, nil when it keeps none.
+	shared *WorkspaceMemo
+}
+
+func newWorkspaceOpens(shared *WorkspaceMemo) *workspaceOpens {
+	return &workspaceOpens{byRoot: map[string]workspaceOpen{}, shared: shared}
 }
 
 func (o *workspaceOpens) kept(root string) (workspaceOpen, bool) {
@@ -289,9 +300,15 @@ func (o *workspaceOpens) kept(root string) (workspaceOpen, bool) {
 		return workspaceOpen{}, false
 	}
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	got, ok := o.byRoot[root]
-	return got, ok
+	o.mu.Unlock()
+	if ok {
+		return got, true
+	}
+	if ws, ok := o.shared.kept(root); ok {
+		return workspaceOpen{ws: ws}, true
+	}
+	return workspaceOpen{}, false
 }
 
 func (o *workspaceOpens) keep(root string, got workspaceOpen) {
@@ -299,8 +316,45 @@ func (o *workspaceOpens) keep(root string, got workspaceOpen) {
 		return
 	}
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	o.byRoot[root] = got
+	o.mu.Unlock()
+	if got.err == nil && got.ws != nil {
+		o.shared.Keep(root, got.ws)
+	}
+}
+
+// WorkspaceMemo is [Dependencies.Opens]: the workspace each root opened to, kept across
+// judgments. It keeps only an open that succeeded. One that failed or ran out of time
+// belongs to its judgment: the next one may open it in time, and a verdict must not turn
+// on which judgment came first. Safe for concurrent use.
+type WorkspaceMemo struct {
+	mu     sync.Mutex
+	byRoot map[string]types.WorkspaceRepository
+}
+
+// NewWorkspaceMemo is an empty memo.
+func NewWorkspaceMemo() *WorkspaceMemo {
+	return &WorkspaceMemo{byRoot: map[string]types.WorkspaceRepository{}}
+}
+
+// Keep records ws as the workspace at root, for a caller that already holds it open.
+func (m *WorkspaceMemo) Keep(root string, ws types.WorkspaceRepository) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.byRoot[root] = ws
+}
+
+func (m *WorkspaceMemo) kept(root string) (types.WorkspaceRepository, bool) { //nolint:ireturn // the workspace backing is chosen at runtime
+	if m == nil {
+		return nil, false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ws, ok := m.byRoot[root]
+	return ws, ok
 }
 
 // targetPolicies is TargetPolicies as a boundedPhase of its own: a read that does not
@@ -715,7 +769,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 	ctx = withPhaseLog(ctx, deps.RuleLoad)
 	judgmentPhases(ctx).settle(deps)
 	deps.revisions = &revisionMemo{current: map[string]string{}}
-	deps.opens = &workspaceOpens{byRoot: map[string]workspaceOpen{}}
+	deps.opens = newWorkspaceOpens(deps.Opens)
 	input := req.Input
 	hasInput := input != ""
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}

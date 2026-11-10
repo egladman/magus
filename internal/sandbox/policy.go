@@ -320,16 +320,20 @@ var gitControlNames = map[string]bool{"hooks": true, "config": true, "config.wor
 // controlFile reports whether abs, a resolved path, is or lies inside a control file
 // of the workspace or of one of its git directories. A linked worktree's .git is a
 // file naming its git directory, so it is a control file too.
+//
+// Case is folded on every platform. On macOS .GIT/hooks is .git/hooks.
+// Refusing .GIT on a case-sensitive filesystem costs nothing.
 func (p *Policy) controlFile(abs string) bool {
+	abs = strings.ToLower(abs)
 	for _, dir := range p.GitDirs {
-		if rel, ok := relUnder(abs, dir); ok {
+		if rel, ok := relUnder(abs, strings.ToLower(dir)); ok {
 			first, _, _ := strings.Cut(rel, string(filepath.Separator))
 			if rel == "" || gitControlNames[first] {
 				return true
 			}
 		}
 	}
-	rel, ok := relUnder(abs, p.Workspace)
+	rel, ok := relUnder(abs, strings.ToLower(p.Workspace))
 	if !ok || rel == "" {
 		return false
 	}

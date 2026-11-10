@@ -281,7 +281,7 @@ func sessionBriefCommand(ctx context.Context, root string) error {
 	// Claim the host budget before Inspect: the load is what panics measured stacking
 	// across parallel hooks. A full budget refuses (exit 75) so a sessionStart hook
 	// keeps env-only rather than outspending the machine next to a go-build.
-	release, err := admitSessionBrief(ctx, root)
+	release, err := admitSessionBrief(ctx, processBrokerClient(), root)
 	if err != nil {
 		return err
 	}
@@ -319,12 +319,12 @@ func sessionBriefCommand(ctx context.Context, root string) error {
 // admitSessionBrief takes the host-capacity claim for the workspace Inspect that
 // follows. broker: off skips; best-effort admits unarbitrated when no broker answers;
 // required refuses (MGS3022).
-func admitSessionBrief(ctx context.Context, root string) (func(), error) {
+func admitSessionBrief(ctx context.Context, admit cache.MachineAdmitter, root string) (func(), error) {
 	if globalCfg.Broker.Resolved() == types.BrokerOff {
 		return func() {}, nil
 	}
 	required := globalCfg.Broker.Resolved() == types.BrokerRequired
-	return cache.AdmitMachine(ctx, processBrokerClient(), types.MachineClaim{
+	return cache.AdmitMachine(ctx, admit, types.MachineClaim{
 		Project:  ".",
 		Target:   "session-brief",
 		MemoryMB: briefMemoryMB,

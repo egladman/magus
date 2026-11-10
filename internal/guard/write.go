@@ -301,8 +301,14 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 			checkout = owned
 		}
 	}
+	if g := denyOwnBinaryWrite(actingLease, writePath); g.Decision != "" {
+		return g
+	}
 	rel, inside := workspaceRelative(checkout, writePath)
 	if !inside {
+		if g := denyMagusStateWrite(actingLease, writePath); g.Decision != "" {
+			return g
+		}
 		return denyOtherCheckout(checkout, actingLease, writePath)
 	}
 	leases, err := leaseRows(ctx, location)
@@ -1033,7 +1039,7 @@ func denyOtherCheckout(checkout, lease, writePath string) writeGrade {
 	if lease == "" || !filepath.IsAbs(writePath) {
 		return writeGrade{}
 	}
-	other := findMagusCheckout(filepath.Dir(writePath))
+	other := findMagusCheckout(filepath.Dir(writeDestination(writePath)))
 	if other == "" || samePath(other, checkout) || scratchWorkspace(other, checkout) {
 		return writeGrade{}
 	}
@@ -1135,8 +1141,9 @@ func workspaceRelative(root, p string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	rel, err := filepath.Rel(realPath(root), realPath(abs))
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || nestedCheckout(root, abs) {
+	dest := writeDestination(abs)
+	rel, err := filepath.Rel(realPath(root), dest)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || nestedCheckout(root, dest) {
 		return "", false
 	}
 	return filepath.ToSlash(rel), true

@@ -328,13 +328,18 @@ is a path on it:
 | `/mcp`                                | [MCP](mcp.md#mcp-over-the-daemon-socket), when `mcp.enabled` allows |
 | `/magus.<pkg>.v1alpha1.<Service>/...` | every Connect API the console uses                                  |
 
-It takes no token. The socket sits in a private (`0700`) directory, and on Linux and macOS
-the daemon also asks the kernel for each connection's peer uid and admits only its own;
-anyone else gets `403` [MGS9022](../../reference/codes/auth/MGS9022.md). An admitted
-caller holds the `socket-peer` credential, `mcp=write` and `console=write`, and each path is
-held to the same need as on loopback. Where the platform cannot name a peer, the directory
-is the only boundary and the socket carries the `/proc/` paths alone. A per-process pool's
-`magus-<pid>-<rand>.sock` speaks the same `/proc/` paths.
+Every path takes the proc token in a `Magus-Proc-Token` header; without it the socket
+answers `401`. The daemon writes a fresh token at each start to `server.sock.token`, beside
+the socket and readable by you alone, and hands it to a nested magus through
+`MAGUS_PROC_TOKEN`. A build step runs as you and can reach the socket, but its sandbox
+grants neither, so it cannot post a run or call an MCP tool that would execute outside it.
+The socket sits in a private (`0700`) directory, and on Linux and macOS the daemon also
+asks the kernel for each connection's peer uid and admits only its own; anyone else gets
+`403` [MGS9022](../../reference/codes/auth/MGS9022.md). An admitted caller holds the
+`socket-peer` credential, `mcp=write` and `console=write`, and each path is held to the same
+need as on loopback. Where the platform cannot name a peer, the token and the directory are
+the boundary and the socket carries the `/proc/` paths alone. A per-process pool's
+`magus-<pid>-<rand>.sock` speaks the same `/proc/` paths, with its own token beside it.
 
 An **HTTP server** on `mcp.address` serves the clients that cannot reach a Unix socket:
 the console and other browsers, agents that take only a URL over [MCP](mcp.md) at `/mcp`

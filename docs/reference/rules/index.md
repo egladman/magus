@@ -81,6 +81,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [orchestrator-groundwork](orchestrator-groundwork.md) | a session that hands out work doing its own groundwork: reads, searches, edits, runs                |
 | [output-pipe](output-pipe.md)                         | magus output piped into a filter, when magus projects the record itself                             |
 | [output-redirect](output-redirect.md)                 | magus output sent to a file or discarded, which the run log already holds                           |
+| [person-advisory](person-advisory.md)                 | a root session ending its turn with an open `magus session advise` advisory it has not been shown   |
 | [policy-unloaded](policy-unloaded.md)                 | a call that changes state while the guard policy that judges it does not load                       |
 | [process-poll](process-poll.md)                       | a process table inspected to wait on magus work the lock already reports                            |
 | [process-signal](process-signal.md)                   | kill, pkill or killall used to signal a process identified only by PID or name                      |

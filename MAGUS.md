@@ -81,7 +81,7 @@ magus graph export -o json  # the whole graph
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                                   |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | ------------------------------------------------------------- |
 | [.](MAGUS.md)                                                               |      68 | `magus query project=.`                               | `conventions`, `buzz-test`, `test`                            |
-| [console](console/MAGUS.md)                                                 |      11 | `magus query project=console`                         | `lint`, `build`, `install`                                    |
+| [console](console/MAGUS.md)                                                 |      11 | `magus query project=console`                         | `build`, `lint`, `install`                                    |
 | [docs](docs/MAGUS.md)                                                       |      28 | `magus query project=docs`                            | `catalog-docs-generate`, `site-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |      10 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                               |
 | [libs/cmdline](libs/cmdline/MAGUS.md)                                       |       8 | `magus query project=libs/cmdline`                    | `format`, `ci`, `test`                                        |

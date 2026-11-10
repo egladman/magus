@@ -108,7 +108,7 @@ verbs passes both.
 
 `uniform` (PRF1041) reads the three spreads the paired run kept: item length spread
 and item opener share, which it could not measure, and opener part-of-speech entropy,
-the one lead. It ships off, as a rule with no labelled firing does. The author's range
+the one lead. It ships off, as a rule with no labeled firing does. The author's range
 comes from 200-word windows, and a short text measures a lower opener entropy than a
 window of the same author's text, so `uniform` judges a single text only from 200 words,
 the window size, and leaves shorter ones to part 6.
@@ -197,7 +197,7 @@ list items when the document is 200 words or more.
 
 ## Open questions
 
-- Whether `uniform` ships at advise or off. Rules with no labelled firings ship off by
+- Whether `uniform` ships at advise or off. Rules with no labeled firings ship off by
   convention.
 - Which paired data counts: the light edits the 2026-10-13 study kept, rewrites of the
   author's older public text under the current rules, or older commit messages too.
