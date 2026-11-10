@@ -1206,7 +1206,8 @@ fun fixtureRepo() > result\Result::<str> {
         _ = put(root, path: "gen/list.txt", content: "a.txt\n");
         // Loading the workspace writes the merge driver's .gitattributes, which the base has to
         // carry, or every merge would find the tree dirty.
-        _ = magus\cmd("ls", args: [<str>], opts: magus\CommandOptions{ dir = root, root = root, quiet = true });
+        // The flag outranks MAGUS_CACHE_DIR, which CI sets, and the yaml above.
+        _ = magus\cmd("ls", args: ["--cache-dir", "{root}/.magus/cache"], opts: magus\CommandOptions{ dir = root, root = root, quiet = true });
         _ = commitAll(root, subject: "base");
         _ = branchFrom(root, name: "gen-b", start: "main", files: {"src/b.txt": "b\n", "gen/list.txt": "a.txt\nb.txt\n"}, subject: "add b");
         _ = branchFrom(root, name: "gen-c", start: "main", files: {"src/c.txt": "c\n", "gen/list.txt": "a.txt\nc.txt\n"}, subject: "add c");
@@ -1266,7 +1267,8 @@ fun planStack(root: str, names: [str]) > result\Result::<stack\BranchStack> {
 
 test "the fixture keeps its store inside itself, never in the user's cache" {
     final root = fixtureRepo().value!;
-    assert\equal(fs\isDir("{root}/.magus/cache"), want: true, message: "store under the fixture");
+    final stores = if (fs\isDir("{root}/.magus/cache")) fs\listDir("{root}/.magus/cache") else [<str>];
+    assert\equal(stores.len() > 0, want: true, message: "the setup run wrote its store under the fixture");
     fs\removeAll(root);
 }
 
