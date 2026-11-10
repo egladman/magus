@@ -180,7 +180,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	}
 
 	// Claimed only now: a step behind its own process's claim may never seat.
-	seated, err := admitGraphBuild(ctx, root)
+	seated, err := admitGraphBuild(ctx, processBrokerClient(), root)
 	if err != nil {
 		return err
 	}
@@ -287,13 +287,13 @@ func acquireGraphBuild(ctx context.Context, root string) (release func() error, 
 
 // admitGraphBuild claims the machine budget for assembling the graph, under
 // the workspace's broker policy.
-func admitGraphBuild(ctx context.Context, root string) (func(), error) {
+func admitGraphBuild(ctx context.Context, admit cache.MachineAdmitter, root string) (func(), error) {
 	policy := globalCfg.Broker.Resolved()
 	if policy == types.BrokerOff {
 		return func() {}, nil
 	}
 	claim := types.MachineClaim{Project: ".", Target: "graph-build", MemoryMB: graphBuildMemoryMB, Dir: resolveRootOrEmpty(root)}
-	return cache.AdmitMachine(ctx, processBrokerClient(), claim, policy == types.BrokerRequired, globalCfg.BudgetWait)
+	return cache.AdmitMachine(ctx, admit, claim, policy == types.BrokerRequired, globalCfg.BudgetWait)
 }
 
 // noticeLines logs each line written to it as a notice. It stands in for os.Stderr where a

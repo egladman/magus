@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
@@ -25,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/cmdline/output"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -160,6 +162,75 @@ func TestExitCodeOfPrintsWhatNoOneElseDid(t *testing.T) {
 		Err: types.DiagnosticErrorf(types.MachineBudgetExhausted, "not starting (root) test")}
 	assert.Equal(t, cache.ExitCodeMachineBusy, mapExitCode(fmt.Errorf("run: %w", refused)))
 	assert.Empty(t, logged.String())
+}
+
+// AdmissionRefusalSuite pins that a refusal from cache.AdmitMachine is printed
+// once: it runs outside any step, so no cache.error record says it.
+type AdmissionRefusalSuite struct {
+	suite.Suite
+	logged bytes.Buffer
+}
+
+func TestAdmissionRefusalSuite(t *testing.T) { suite.Run(t, new(AdmissionRefusalSuite)) }
+
+func (s *AdmissionRefusalSuite) SetupTest() {
+	s.T().Cleanup(snapshotGlobals())
+	testkit.Isolate(s.T())
+	globalCfg.Broker = types.BrokerBestEffort
+	globalCfg.BudgetWait = 10 * time.Millisecond
+	s.logged.Reset()
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&s.logged, nil)))
+	s.T().Cleanup(func() { slog.SetDefault(prev) })
+}
+
+func (s *AdmissionRefusalSuite) TestAForkRefusalIsPrinted() {
+	_, err := admitForkValidation(s.T().Context(), &fullBudget{}, s.T().TempDir())
+	s.Equal(cache.ExitCodeMachineBusy, mapExitCode(err))
+	s.Contains(s.logged.String(), "not starting . job-fork")
+}
+
+func (s *AdmissionRefusalSuite) TestAGraphBuildRefusalIsPrinted() {
+	_, err := admitGraphBuild(s.T().Context(), &fullBudget{}, s.T().TempDir())
+	s.Equal(cache.ExitCodeMachineBusy, mapExitCode(err))
+	s.Contains(s.logged.String(), "not starting . graph-build")
+}
+
+func (s *AdmissionRefusalSuite) TestASessionBriefRefusalIsPrinted() {
+	_, err := admitSessionBrief(s.T().Context(), &fullBudget{}, s.T().TempDir())
+	s.Equal(cache.ExitCodeMachineBusy, mapExitCode(err))
+	s.Contains(s.logged.String(), "not starting . session-brief")
+}
+
+func (s *AdmissionRefusalSuite) TestAPausedJobRefusalIsPrinted() {
+	err := types.ExitError{Code: cache.ExitCodeMachineBusy, Err: errors.New("magus job exec: job x is paused")}
+	s.Equal(cache.ExitCodeMachineBusy, mapExitCode(err))
+	s.Contains(s.logged.String(), "job x is paused")
+}
+
+func (s *AdmissionRefusalSuite) TestABareExitStaysSilent() {
+	s.Equal(3, mapExitCode(types.ExitError{Code: 3}))
+	s.Empty(s.logged.String())
+}
+
+func (s *AdmissionRefusalSuite) TestTheCLIPrintsTheBriefRefusal() {
+	w := testkit.NewWorkspace(s.T())
+	w.Magusfile("import \"magus\";\n")
+	errPath := filepath.Join(s.T().TempDir(), "stderr")
+	f, err := os.Create(errPath)
+	s.Require().NoError(err)
+	defer f.Close()
+
+	s.T().Setenv("MAGUS_BROKER", "required")
+	oldErr, oldArgs := os.Stderr, os.Args
+	os.Stderr, os.Args = f, []string{"magus", "--root", w.Root(), "session", "--brief"}
+	code := runCLI()
+	os.Stderr, os.Args = oldErr, oldArgs
+
+	text, readErr := os.ReadFile(errPath)
+	s.Require().NoError(readErr)
+	s.Equal(cache.ExitCodeBrokerUnavailable, code, string(text))
+	s.Contains(string(text), "session-brief")
 }
 
 // lockRefusal has the shape of the root package's unexported lockContendedError:

@@ -113,7 +113,28 @@ func AdmitMachine(ctx context.Context, admit MachineAdmitter, c types.MachineCla
 		c.Slots = 1
 	}
 	g := &machineGate{admit: admit, required: required, wait: wait, log: slog.With(attr.Component("magus"))}
-	return g.acquire(ctx, c)
+	release, err = g.acquire(ctx, c)
+	return release, unsaid(err)
+}
+
+// unsaid marks a refusal no step logs, so the CLI prints it.
+func unsaid(err error) error {
+	var refusal types.ExitError
+	if !errors.As(err, &refusal) {
+		return err
+	}
+	return unsaidRefusal{err}
+}
+
+type unsaidRefusal struct{ error }
+
+func (e unsaidRefusal) Unwrap() error { return e.error }
+
+// Unsaid reports whether err holds a refusal [AdmitMachine] raised, which no
+// log line has said yet.
+func Unsaid(err error) bool {
+	var refusal unsaidRefusal
+	return errors.As(err, &refusal)
 }
 
 // machineGate is the client half of admission: it asks the budget, and either proceeds,
