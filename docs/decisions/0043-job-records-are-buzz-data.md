@@ -1,0 +1,342 @@
+---
+title: "ADR 0043: job records are Buzz data, and Markdown is rendered from them"
+order: 43
+description: What a parent hands a child is the job row, and what a child hands back is the JobResult it files; both are Go types mirrored into Buzz by the one generator, and the only prose is rendered from them by one Buzz template, never written first and parsed later. The word brief goes; the row's rendering is its terms. The guard holds a spawn to a complete, validated row and a leased child's stop to a filed result. agents.brief_format, magus\Brief, the buzz prompt format and StopRequest.reply are deleted as a deliberate break, and the change is judged against the spawn baseline collected before it.
+tags: [adr, decision, agents, jobs, guard, buzz, subagents, harness]
+status: proposed
+date: 2026-11-10
+supersedes: ADR 0036 sections 3 and 4 (the workspace-only stop rule and StopRequest.reply), and agents.brief_format
+---
+
+# ADR 0043: job records are Buzz data, and Markdown is rendered from them
+
+## Context
+
+Eli, 2026-11-10, on the subagent input and output work: "I'm a fan of the brief format.
+I also just don't like the word brief. I feel like this feature could be more fleshed out
+and be more explicit. I don't like all these agentic changes; I would almost argue it makes
+it more of an agentic tool. We want to speak in favor of actual, through Buzz, always, and
+then you can output Markdown from that, from the raw data. Structured data first, and then
+it goes into whatever you want it to be. Structured data can be turned into Markdown, not
+the other way around. This feature needs to be rethought."
+
+Read on 2026-11-10 from origin/main at a0625c0fe:
+
+- [ADR 0036](0036-subagent-structured-io.md) (proposed) decides the input is the job row
+  and the output is the `JobResult` filed with `magus job exit --stdin`. Its stop rule that
+  requires a filed result is left to the workspace and not built; `StopRequest.reply` is
+  proposed and not built.
+- `agents.brief_format` takes `markdown` (the default) or `buzz` (`types/brief.go`,
+  `internal/config/agents.go:29`, `internal/job/brief_format.go`). A `buzz` prompt is one
+  `magus\Brief{job, goal, why, decisions, evidence}` literal, which `judgeBriefBuzz` in
+  `internal/guard/brief.go:97` type-checks against the generated declarations. Nothing
+  rewrites it and nothing reads it after the check: the literal is text in the prompt and
+  never reaches the store.
+- `hack/dev/render-brief.buzz` renders Markdown for a worker from `magus describe job -o
+  json` and `magus ls jobs -o json`, parsed as `any`, through a `Terms` object it declares
+  itself (`render-brief.buzz:50`). It refuses a row with no check, or no write paths on a
+  job that is not read-only (`:271`).
+- `magus describe job <id>` prints the row for its holder, and `magus job exec` ends with
+  "read the terms with `./magus describe job <id>`".
+- Structured results carry `next` steps (`types.NextStep`, `cmd/magus/next.go`), the
+  commands a reader runs next, as data beside the record.
+- This repository sets no `brief_format` (`magus.yaml:199` carries `agents.models` only),
+  so the `buzz` format has run nowhere, and nothing measures any of it. A separate scout is
+  collecting the baseline now: spawns, spawns whose title names a row, results filed, refs
+  filed, tokens and reply bytes per child.
+- The word brief carries three senses in the tree: the prompt a parent spawns with
+  (`brief-command`, `brief-plain-commands`, 222 files), a skill load (`spawn-unbriefed`,
+  `buzz-unbriefed`, `architecture-unbriefed`) and a summary (`magus session --brief`).
+
+The forces: [The outer harness stays outside](../design/judgment/the-outer-harness-stays-outside.md)
+forbids rewriting the prompt or the reply; [Enforcement, not pinky promises](../design/principles/enforcement-not-pinky-promises.md)
+says a record nobody is required to file is a record nobody files; and
+[The model proposes, the harness executes](../design/principles/the-model-proposes-the-harness-executes.md)
+keeps magus computing and refusing, never acting.
+
+## Decision
+
+### 1. Two records, both Go types mirrored into Buzz
+
+A parent's record is the job row, `types.Job`, mirrored as `magus\Job`. A child's record is
+`types.JobResult`, mirrored as `magus\JobResult`. There is no third record. Both mirrors come
+from the one generator of [ADR 0035](0035-buzz-bindings-come-from-one-config-driven-generator.md)
+and are read in Buzz through the typed repository of
+[ADR 0030](0030-buzz-reads-state-through-typed-repositories.md), never through
+`magus\cmd(... -o json)` parsed as `any`.
+
+The row gains the two fields `magus\Brief` carried that the row did not:
+
+| field                | type              | what it holds                                                                              |
+| -------------------- | ----------------- | ------------------------------------------------------------------------------------------ |
+| `Job.Decisions`      | `[]JobDecision`   | the choices already made, `what` and `why`, so the holder does not reopen them             |
+| `Job.Evidence`       | `[]JobEvidence`   | pointers the holder can open: `kind` (output, verdict, invocation, file, plan, commit), `id`, `says` |
+
+`Criteria` stays the one prose field a parent writes, and the Goals stay the half magus
+grades. The spawn prompt is the parent's own words and the reply is the child's own words;
+neither is a record, neither is parsed and neither is rewritten (ADR 0036 sections 1 and 2
+stand). A parent that wants the child to read something puts it on the row; the prompt
+names the row, as `<parent>/<role> <job>` already does.
+
+### 2. One render path, Buzz template over the record, Markdown out
+
+Markdown is rendered from the two records by one Buzz script, `job-terms.buzz` beside `hack/dev/render-brief.buzz`,
+which replaces `render-brief.buzz`. It reads `magus\Job` and `magus\JobResult` typed,
+renders through the `template` host module, and returns `result\Result::<str>`. It has two
+entry points: a row's terms, for a worker, a Codex `SubagentStart` context or a mod pane;
+and a result's report, for a person or a pull request. The script keeps the repository's
+own steps (the bootstrap script to run, the skill to load, "run nothing else that
+validates"), which is why it is repository Buzz and not Go: core never names a `hack/`
+script ([The host wiring is yours](../design/judgment/the-host-wiring-is-yours.md)).
+
+Rendered Markdown is never stored and never read back. `magus describe job` stays the
+terminal door onto the same row and parses nothing. Core ships the records, `-o json`,
+`-o template=` and the `template` module; it ships no Markdown.
+
+### 3. The names
+
+| was                                                    | is                                                         | why                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------ | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a brief (the text handed to a worker)                  | the job's terms                                            | `job exec` already says "read the terms"; `render-brief.buzz` already names its object `Terms`; a lease has terms, and terms are conditions that are graded, where a brief is a message that is read. Nothing agentic in the word                   |
+| `magus\Brief`, `BriefDecision`, `BriefRef`, `BriefRefKind` | fields on `Job`: `JobDecision`, `JobEvidence`, `JobEvidenceKind` | a second record beside the row said the same things twice, once in the store and once in a prompt the store never saw                                                                                                                      |
+| `agents.brief_format`, `Job.BriefFormat`, `types.BriefFormat` | nothing                                               | there is no format to choose: the record has one shape, and the prompt is prose by definition                                                                                                                                                      |
+| `brief-command`, `brief-plain-commands`                | `spawn-command`, `spawn-plain-commands`                    | they grade the spawn's prompt, and every other spawn-time rule is `spawn-*`                                                                                                                                                                         |
+| `spawn-unbriefed`, `buzz-unbriefed`, `architecture-unbriefed` | `spawn-before-skill`, `buzz-before-skill`, `architecture-before-skill` | each refuses an act before a skill loaded; the new name says what it catches                                                                                                                                                       |
+| `hack/dev/render-brief.buzz`, `hack/testdata/render-brief-*.json` | `job-terms.buzz` and `job-terms-*.json` in the same directories | named for what it renders                                                                                                                                                                                                                   |
+| the checkout brief Codex `SubagentStart` receives      | the checkout terms                                         | same text, same source, one word                                                                                                                                                                                                                    |
+| `magus session --brief`                                | unchanged                                                  | a summary flag with prior art (`diff --brief`, `file --brief`); not this feature's sense                                                                                                                                                 |
+
+Rejected names: spec and status (Kubernetes' halves of a resource; the row mixes declared
+and store-computed fields today, and splitting it is a different decision, see
+Alternatives); mandate (taken by [ADR 0019](0019-a-mandate-carries-out-decisions-already-made.md));
+assignment, work order and charter (none has prior art in a build or VCS tool);
+instructions (reads as prose to follow rather than conditions graded).
+
+### 4. Kept, renamed, deleted
+
+| piece                                                           | fate                                                                                   | State     |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------- | --------- |
+| job row as the parent's record (ADR 0036 s1)                    | kept; gains `Decisions`, `Evidence`                                                    | proposed  |
+| `JobResult` as the child's record (ADR 0036 s2)                 | kept unchanged                                                                         | done      |
+| `Job.result` readable from a stop rule's `req.lease`            | kept                                                                                   | done      |
+| `types/brief.go`, `magus\Brief` and its two helpers             | deleted; fields move to `types/job.go`                                                 | proposed  |
+| `agents.brief_format`, `Job.BriefFormat`, `ResolveBriefFormat`, `BriefFormatUnset` | deleted                                                             | proposed  |
+| `judgeBriefBuzz` and the Buzz type check of a prompt            | deleted                                                                                | proposed  |
+| `hack/dev/render-brief.buzz`                                    | replaced by `job-terms.buzz` in the same directory, typed, two entry points                         | proposed  |
+| `magus describe job`                                            | kept as the terminal door                                                              | done      |
+| `next` steps on structured results                              | kept; the terms render them as the worker's next commands                              | done      |
+| a stop rule requiring a filed result (ADR 0036 s3, workspace)   | replaced by the shipped `stop-unfiled` below                                           | proposed  |
+| `StopRequest.reply` (ADR 0036 s4)                               | not built: a reply judged for shape is prose parsed into data, the direction refused   | not built |
+| `brief-*` and `*-unbriefed` rule names                          | renamed as in section 3                                                                | proposed  |
+
+### 5. The guard makes it explicit, at spawn and at stop
+
+Every check is a deny with a reason and a command to run; none rewrites anything.
+
+At spawn, shipped, deny by default:
+
+- `spawn-unvalidated` (kept): the row the title names carries the `validated` stamp.
+  Validation at `job fork` and `job apply` gains the requirements `render-brief.buzz`
+  enforces at render time today: criteria, a check, write paths or `read_only`, and a
+  model. The two refusals in `render-brief.buzz:271` move into validation, and the renderer
+  stops judging.
+- `spawn-command` and `spawn-plain-commands` (renamed): the prompt teaches no command the
+  guard denies and, for an isolated worker, no compound command.
+- `spawn-without-job-row` stays this repository's rule in `hack/policy/spawn.buzz`:
+  whether a spawn with no row at all is refused is the workspace's call, as
+  [ADR 0039](0039-judging-is-a-pure-computation.md) makes the spawn rule optional.
+
+At stop, shipped, deny by default, named `stop-unfiled`:
+
+- A `SubagentStop` for a caller whose `Lease` is set and whose `Lease.result` is null is
+  refused once, naming `magus job exit <job> --stdin` and `magus job exit --schema`. A
+  read-only row files a result too, with `changed_paths: []`, so a scout is held to the same
+  rule. When `StopHookActive` is set the second stop passes, as the mandate's idle-stop rule
+  already does, and `magus job wait` then shows the row never passed: the gap moves later,
+  never out of sight.
+- On Claude Code and Codex the deny becomes `decision: block`, so the child files the record
+  itself. Cursor and OpenCode report no child stop, and the rule says nothing there.
+- A workspace sets it to `advise` or `off` by name through `magus\guard.builtins`, as every
+  shipped rule.
+
+This reverses ADR 0036's "ship no such rule". The reason it gave, that a read-only scout may
+not need to file, does not hold: `job exit` already ends a read-only row with nothing to
+grade, so filing costs the scout one command and gives the parent one record to wait on.
+
+### 6. What it refuses to become
+
+- A prompt template: prose with holes a parent fills. The row is the template, and it is
+  data.
+- A rewriting hook: `updatedInput`, `updatedToolOutput`, OpenCode's mutable `output.args`
+  (ADR 0036, Alternatives).
+- A reply parser: Markdown or JSON pulled out of `last_assistant_message` into a record.
+  That is `StopRequest.reply`'s purpose, and it is not built.
+- A second record beside the row, under any name.
+- A format setting: `brief_format`, or a per-host record shape.
+- A Markdown renderer in Go core that carries a repository's steps.
+- A model call that summarizes a result, grades its quality or writes the terms.
+- A message store or protocol between parent and child. The parent reads the result through
+  `job wait`; the child reads the row through `describe job`.
+- A re-prompt or retry of a child that filed nothing: `stop-unfiled` refuses once and
+  `job wait` reports; nothing sends the child back a second time or forks for it.
+- Stored Markdown: the render is read-time only, and a stale copy cannot exist.
+- A required reply shape, length or vocabulary.
+
+### 7. The migration is a deliberate break
+
+magus is pre-1.0 and this is one change, one pull request, no shim and no alias kept for an old caller
+([A deliberate break never merges red](../design/principles/a-deliberate-break-never-merges-red.md)).
+
+1. `types/job.go` gains `Decisions`, `Evidence`, `JobDecision`, `JobEvidence`,
+   `JobEvidenceKind`; `types/brief.go` is deleted; `Job.BriefFormat` and
+   `types.BriefFormat` go with it. `magus job exit --schema` and the job apply schema
+   regenerate from the types.
+2. The Buzz declarations regenerate through the ADR 0035 generator and are committed with
+   their source. `magus\Brief`, `BriefDecision`, `BriefRef` and `BriefRefKind` leave the
+   generated file because they left Go; nothing is hand-edited.
+3. `agents.brief_format` leaves `internal/config/agents.go`. A `magus.yaml` still carrying
+   it fails validation as an unknown key, naming the key and this record. No warning, no
+   silent skip.
+4. The job store reads a row carrying `brief_format` by dropping the key, pinned by a test
+   that reads one such line; the row's next put writes it without. No reader branches on
+   it, so this is not a compat shim and carries no marker.
+5. `internal/guard/brief.go` loses `judgeBriefBuzz`, `briefInput.format` and
+   `formatFrom`; `internal/job/brief_format.go` is deleted; the rules are renamed and the
+   rule pages regenerate from their descriptors. A workspace that set a renamed rule by its
+   old name in `magus\guard.builtins` fails loudly with the new name.
+6. `stop-unfiled` is added as a shipped stop rule with its descriptor and page.
+7. `hack/dev/render-brief.buzz` becomes `job-terms.buzz` in the same directory, reading typed records,
+   with its fixtures renamed; `--extra` goes, since the prompt is where a parent's extra
+   words live.
+8. Guides, glossary (a `terms` entry), ADR 0036 (amended: s3 and s4 superseded here) and
+   `changes/unreleased` name the break: the config key, the row field, the rule names and
+   the deleted Buzz objects.
+
+### 8. Comparing against the baseline
+
+The scout running now records, from the trail's `agent_spawn` events and their prompt
+blobs, the job store and the host transcripts: spawns; spawns whose title or first line
+names a live row; results filed per leased spawn; refs filed per result
+(`validation.output_ref` set or `owed` named, plus `verification_evidence` entries);
+tokens per child, from the host's context window report; and reply bytes per child, from
+the transcript's last assistant message. It writes the table with its window (sessions,
+days, hosts) and date under `plans/`.
+
+After this record is built, the same script runs over a window of the same size, and the
+two tables sit side by side in the same file. Each measure has a direction it must move and
+a reading that reopens the decision:
+
+| measure                        | expected                                   | if not                                                                                   |
+| ------------------------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| results filed per leased spawn | rises toward 1.0                           | `stop-unfiled` is not reaching the child: check which hosts the stops came from          |
+| `stop-unfiled` precision       | of denials, the share followed by a filed result, reported with its count | below 0.8, the deny costs turns and files nothing: set it to advise and say why |
+| refs filed per result          | rises                                      | the terms do not say which ref to file: fix the template, not the rule                   |
+| prompt bytes per spawn         | falls, since the row carries the terms     | parents still paste the row: the render is being copied, measure what they add           |
+| reply bytes per child          | falls, since the result carries the record | parents ask for prose: the result report is not reaching them                            |
+| tokens per child               | does not rise                              | the row's new fields cost more to read than the prose did: cut the template              |
+
+A rate is reported with its numerator and denominator and its dates, never bare, as
+[Measured, not asserted](../design/principles/measured-not-asserted.md) requires. The
+comparison is one table a person reads; nothing in magus acts on it.
+
+### Principles checked
+
+- [The outer harness stays outside](../design/judgment/the-outer-harness-stays-outside.md):
+  the prompt and the reply are the models' own text, unrewritten and unparsed; the records
+  travel through the store, not through the hook.
+- [Enforcement, not pinky promises](../design/principles/enforcement-not-pinky-promises.md):
+  the stop rule ships as a deny, because ADR 0036 left it to prose and nothing was built.
+- [One source, every door](../design/principles/one-source-every-door.md): `types.Job` and
+  `types.JobResult` generate the JSON schema, the Buzz objects and the template's input;
+  the CLI, a script and a hook read the same record.
+- [Behavior is code, facts are data](../design/principles/behavior-is-code-facts-are-data.md):
+  the record holds facts; the rendering is a Buzz function a person reads top to bottom.
+- [No silent defaults](../design/judgment/no-silent-defaults.md): a removed key fails
+  validation by name; a renamed rule fails by name; `stop-unfiled` says why it passed a
+  second stop.
+- [The host wiring is yours](../design/judgment/the-host-wiring-is-yours.md): the Markdown
+  renderer and the repository's steps are repository Buzz; core adds no host-specific path.
+- [Human in the loop](../design/principles/human-in-the-loop.md) and
+  [The model proposes, the harness executes](../design/principles/the-model-proposes-the-harness-executes.md):
+  magus refuses a stop and reports a comparison; a person reads both and decides.
+- [Delete before you add](../design/principles/delete-before-you-add.md): five things are
+  deleted (the Brief types, the format key, the row field, the Buzz type check,
+  `StopRequest.reply`) for two fields and one rule added.
+- [A deliberate break never merges red](../design/principles/a-deliberate-break-never-merges-red.md):
+  the break is listed in section 7 and in `changes/unreleased`, and any gate it trips gets
+  its deviation line in the same diff.
+- [Flags, config and help from one source](../design/principles/flags-config-help-one-source.md):
+  the config key leaves the one source, and its help, completion and schema leave with it.
+
+## Alternatives
+
+### Keep `brief_format: buzz`, a typed literal in the prompt
+
+A `magus\Brief{...}` literal the guard type-checks. It lost because the literal duplicates
+the row in a place the store never sees, so the two drift; the guard checks text no person
+reviews in version control; and Codex's v2 prompt is encrypted, so the check cannot run
+there (ADR 0036, spawn table). Evidence: it ran nowhere, this repository included, in the
+two days since it merged. Reopen if a host offers a typed spawn input field that reaches
+the child as data rather than as prompt text.
+
+### Split the row into spec and status
+
+Rename the parent's half `spec` and the store's and child's half `status`, as Kubernetes
+does. It lost because the rename touches every reader of `types.Job` and adds no
+capability this decision needs; the row already separates declared fields from
+store-computed ones in its comments, and `Generation` already marks a spec change. Prior
+art is input here, not a reason. Reopen when a reader needs the declared half alone, such
+as a diff of a row between generations.
+
+### Markdown as the source, with a parser
+
+Let the parent write prose and have magus pull a record out of it. It lost on direction:
+Eli's words, and the fact that no parser of prose is total, so every miss is a silent
+default. Reopen never on these grounds.
+
+### Leave the stop rule to the workspace (ADR 0036 s3)
+
+It lost because a rule nobody is required to write is a rule nobody writes: two days after
+ADR 0036 merged, no workspace rule existed, this repository's included, and the scout's
+baseline is the first count of unfiled results. Reopen if that baseline already shows 0.9 or
+more results filed per leased spawn, which would make the deny noise.
+
+### `magus describe job -o markdown` in Go
+
+One flag, every workspace. It lost because the terms a worker reads carry this repository's
+steps (the bootstrap script, the skill to load, which target it may run), which core never
+names ([The host wiring is yours](../design/judgment/the-host-wiring-is-yours.md)), and a
+generic Markdown of the row is `-o template=` already. Reopen if the terms shrink to
+nothing repository-specific.
+
+### Keep the word brief
+
+It lost on Eli's call, and on the three senses the word carries in the tree (a prompt, a
+skill load, a summary), which the renames separate. Reopen never.
+
+## Consequences
+
+- A parent spawns with a title that names the row and a prompt of its own words. Everything
+  the child must honor is on the row, readable with `describe job` and renderable as terms.
+- A leased child on Claude Code or Codex cannot stop without filing a `JobResult`; on Cursor
+  and OpenCode the gap shows in `job wait`.
+- The Buzz declarations lose four objects and gain two fields and one enum, all generated.
+- A `magus.yaml` carrying `agents.brief_format`, a row carrying `brief_format`, a workspace
+  naming a `brief-*` or `*-unbriefed` rule, and a script calling `render-brief.buzz` each
+  fail by name once this merges. There is no other migration.
+- The Markdown a person reads is rendered from the record at read time, so it cannot
+  disagree with the row.
+- The comparison in section 8 is the first measurement this feature has had.
+
+## Open questions
+
+- Whether `JobEvidenceKind` needs a `session` kind for a transcript, which a parent today
+  cites by path in prose.
+- Whether the Codex `SubagentStart` context should carry the rendered terms rather than
+  `describe job`'s terminal text, which would make the Buzz renderer the one render on that
+  host too.
+- The number: main ends at 0039 at this writing, and 0040 to 0042 are on open branches.
+  Recheck at merge.
+- What the scout's baseline window is, so the after-window can match it.
+
+## Amendments
