@@ -1327,7 +1327,7 @@ func (h *PrettyHandler) FailureTail() string {
 	if lines == "" {
 		return ""
 	}
-	return lines + "  outputs: " + hint.QueryOutput.With("<ref>") + "\n"
+	return fmt.Sprintf("%s  outputs: %s\n", lines, hint.QueryOutput.With("<ref>"))
 }
 
 // printRefLegend says once, at the end of a run, what the bare ids above are.

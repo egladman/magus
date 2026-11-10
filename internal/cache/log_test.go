@@ -1487,6 +1487,30 @@ func TestPrettyHandlerRefLegend(t *testing.T) {
 		assert.NotContains(t, buf.String(), "outputs:")
 	})
 
+	// The legend names a magus command and nothing downstream of it. A vendor in
+	// a build tool's output ages badly and is the docs' job, not the CLI's.
+	t.Run("names no agent vendor", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		h := newTestHandler(&buf)
+		require.NoError(t, h.Handle(context.Background(), buildRecord(
+			"cache.miss",
+			slog.String("project", "api"),
+			slog.Int64("duration", int64(80*time.Millisecond)),
+			slog.String("ref", "out1a2b3c4d5e6f"),
+		)), "miss")
+		require.NoError(t, h.EndRun(context.Background(), footer), "summary")
+		for _, vendor := range []string{"claude", "codex", "cursor", "copilot"} {
+			assert.NotContains(t, strings.ToLower(buf.String()), vendor)
+		}
+	})
+}
+
+func TestPrettyHandlerFooterNamesFailedRefs(t *testing.T) {
+	t.Parallel()
+
+	const footer = "summary: 0 cached, 2 ran, 2 failed (1.0s)\n"
+
 	t.Run("failed targets are named after the summary with their refs", func(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
@@ -1516,24 +1540,6 @@ func TestPrettyHandlerRefLegend(t *testing.T) {
 		h := newTestHandler(&buf)
 		require.NoError(t, h.EndRun(context.Background(), footer), "summary")
 		assert.Equal(t, footer, buf.String())
-	})
-
-	// The legend names a magus command and nothing downstream of it. A vendor in
-	// a build tool's output ages badly and is the docs' job, not the CLI's.
-	t.Run("names no agent vendor", func(t *testing.T) {
-		t.Parallel()
-		var buf bytes.Buffer
-		h := newTestHandler(&buf)
-		require.NoError(t, h.Handle(context.Background(), buildRecord(
-			"cache.miss",
-			slog.String("project", "api"),
-			slog.Int64("duration", int64(80*time.Millisecond)),
-			slog.String("ref", "out1a2b3c4d5e6f"),
-		)), "miss")
-		require.NoError(t, h.EndRun(context.Background(), footer), "summary")
-		for _, vendor := range []string{"claude", "codex", "cursor", "copilot"} {
-			assert.NotContains(t, strings.ToLower(buf.String()), vendor)
-		}
 	})
 }
 
