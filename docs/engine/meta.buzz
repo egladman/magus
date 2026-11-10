@@ -209,7 +209,7 @@ test "insertAdrMeta places status and date right after the h1" {
 
 test "insertAdrMeta shows what the page supersedes, with its code spans" {
     final got = insertAdrMeta("<h1>T</h1>", "accepted", "2026-09-22", "the `import \"x\" as <y>;` form, `unpaired");
-    assert\equal(got.indexOf("Supersedes: the <code>import &quot;x&quot; as &lt;y&gt;;</code> form, `unpaired") != null, true,
+    assert\equal(got.indexOf("Supersedes: the <code>import &#34;x&#34; as &lt;y&gt;;</code> form, `unpaired") != null, true,
         "escaped, code span, literal backtick");
 }
 
