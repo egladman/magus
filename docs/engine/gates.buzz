@@ -628,9 +628,9 @@ fun formatFindings(found: [ConventionFinding], into: mut [str]) > void {
     }
 }
 
-// crosscheckFindings runs lib/crosscheck over the tree: every page for what it must never
-// carry, and the agent guide, the verify guide and the unreleased changelog fragments
-// against the files they document.
+// crosscheckFindings runs lib/crosscheck over the tree. It checks every page
+// for what it must never carry. It holds the agent, verify and Go SDK guides
+// and the changelog fragments to the files they document.
 fun crosscheckFindings(root: str, docs: str, pages: [str]) > [str] !> any {
     final found: mut [str] = mut [<str>];
     foreach (rel in pages) {
@@ -696,6 +696,12 @@ foreach (block in magus\describe.harness("claude-code").wired) {
     final verify = docs + "/guides/setup/verify.md";
     foreach (f in releaseKeyFindings(fs\readFile(root + "/internal/selfupdate/release-keys.json"),
             guideFile: verify, guide: fs\readFile(root + "/" + verify))) {
+        found.append(f);
+    }
+
+    final sdk = docs + "/guides/go-sdk.md";
+    foreach (f in exampleFindings(sdk, guide: fs\readFile(root + "/" + sdk),
+            examplesFile: "example_test.go", examples: fs\readFile(root + "/example_test.go"))) {
         found.append(f);
     }
     return found;
