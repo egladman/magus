@@ -619,7 +619,10 @@ func TestRegisterMasksAHeldCredential(t *testing.T) {
 // revealCeiling is how many Reveal calls production code makes. Each is a place a
 // credential stops protecting itself. Lower it when a call goes away; raising it is a
 // review question: could the Secret travel further before it is revealed?
-const revealCeiling = 35
+//
+// 36: PolicyStore.Seal in internal/interp/runtime.go keys an HMAC,
+// and crypto/hmac takes its key only as bytes.
+const revealCeiling = 36
 
 // TestRevealCallsStayCapped counts Reveal calls in the root module's non-test files.
 func TestRevealCallsStayCapped(t *testing.T) {
