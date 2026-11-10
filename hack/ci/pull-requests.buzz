@@ -25,9 +25,6 @@
 //	magus buzz hack/ci/pull-requests.buzz -- act --plan <file>
 //	    run the plan's commands, as the queue app for the person who checked each box:
 //	    enable auto-merge, or rerun failed jobs
-//	magus buzz hack/ci/pull-requests.buzz -- waiting --pr <n>... [--base <b>]
-//	    post the merge-queue status saying why each pull request waits
-//	    outside the queue; it posts only pending
 //
 // red-inherited means every failing check, and every Go test its log reports failing, also
 // fails on main's latest completed CI run, and nothing else does: the change broke nothing
@@ -682,110 +679,6 @@ fun mainRegressions(base: str, open: [Pull]) > [regressions\Regression] !> any {
         throw err.message;
     }
     return read.value!;
-}
-
-// What the waiting step posts on QUEUE_STATUS. WAITING_PREFIXES tell its
-// statuses from the queue's, whose descriptions never open with them.
-// GitHub caps a description at STATUS_LIMIT bytes.
-final NOT_QUEUED = "not queued: ";
-final WAITING_PREFIXES = [NOT_QUEUED, "ready: ", "queued: "];
-final CI_UNPASSED = NOT_QUEUED + "CI has not passed";
-final UNAPPROVED = NOT_QUEUED + "waiting for an approving review";
-final READY_TO_QUEUE = "ready: add the merge-queue: squash label or enable auto-merge";
-final AWAITING_QUEUE = "queued: waiting for the merge queue to validate it";
-final STATUS_LIMIT = 140;
-
-// QueueStatus is the newest QUEUE_STATUS on a commit. Its state is the
-// statuses API's word, or "" when nothing posted one.
-object QueueStatus {
-    state: str = "",
-    description: str = "",
-}
-
-// Waiting says whether to post description, and why. It has no state:
-// the step posts only pending, since a success outside the queue would
-// let a merge skip it.
-object Waiting {
-    post: bool = false,
-    description: str = "",
-    reason: str,
-}
-
-// latestQueueStatus reads `gh api repos/<repo>/commits/<sha>/statuses`,
-// which lists newest first.
-export fun latestQueueStatus(listing: str) > result\Result::<QueueStatus> {
-    final list = serialize\jsonDecode(listing).list();
-    if (list == null) {
-        return result\fail::<QueueStatus>("pull-requests: waiting: the status listing is not a list: {listing}");
-    }
-    foreach (s in list!) {
-        if (s.q("context").stringValue() == QUEUE_STATUS) {
-            return result\ok(QueueStatus{ state = s.q("state").stringValue(), description = s.q("description").stringValue() });
-        }
-    }
-    return result\ok(QueueStatus{});
-}
-
-fun postedHere(s: QueueStatus) > bool {
-    foreach (prefix in WAITING_PREFIXES) {
-        if (s.description.startsWith(prefix)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// ciPassed reports whether every REQUIRED check succeeded and none failed.
-// A check still running, this workflow's own among them, does not count:
-// the ci gate already waits on every shard.
-export fun ciPassed(checks: [Check]) > bool {
-    if (failing(checks).len() > 0) {
-        return false;
-    }
-    foreach (name in REQUIRED) {
-        var passed = false;
-        foreach (c in checks) {
-            if (c.name == name and c.conclusion == "SUCCESS") {
-                passed = true;
-            }
-        }
-        if (!passed) {
-            return false;
-        }
-    }
-    return true;
-}
-
-// waiting decides the QUEUE_STATUS a pull request shows, given the one on
-// its head. The queue's own status stands while the pull request is queued.
-// Its failure, a kick-back, stands until a push. Anything else becomes
-// pending with the reason, a stale success included.
-export fun waiting(p: Pull, open: [Pull], base: str, current: QueueStatus) > Waiting {
-    if (p.state != "OPEN") {
-        return Waiting{ reason = "#{p.number} is {p.state.lower()}" };
-    }
-    if (p.base != base) {
-        return Waiting{ reason = "#{p.number} targets {p.base}, not {base}" };
-    }
-    final ours = current.state == "" or postedHere(current);
-    var description = AWAITING_QUEUE;
-    if (intent(p, open: open)) {
-        if (!ours) {
-            return Waiting{ reason = "#{p.number} is queued; the queue's status stands" };
-        }
-    } else if (!ours and (current.state == "failure" or current.state == "error")) {
-        return Waiting{ reason = "#{p.number}: the queue's {current.state} stands until a push" };
-    } else if (!ciPassed(p.checks)) {
-        description = CI_UNPASSED;
-    } else if (p.review != "APPROVED") {
-        description = UNAPPROVED;
-    } else {
-        description = READY_TO_QUEUE;
-    }
-    if (current.state == "pending" and current.description == description) {
-        return Waiting{ reason = "#{p.number} already says {description}" };
-    }
-    return Waiting{ post = true, description = description, reason = "#{p.number}: {description}" };
 }
 
 final failMarker = "--- FAIL: ";
@@ -1486,8 +1379,7 @@ final usage = "usage: magus buzz hack/ci/pull-requests.buzz -- <step> <flags>\n"
     + "  apply [--author <login>] [--pr <n>]... [--method squash|merge|rebase]\n"
     + "  dashboard [--all | --author <login>] [--pr <n>]... [--base <branch>] --out <file> (--issue <n> | --preview) [--run-url <url>] [--console-base <url>]\n"
     + "  boxes --event <file> --issue <n> --plan <file> --out <file> [--base <branch>]\n"
-    + "  act --plan <file>\n"
-    + "  waiting --pr <n>... [--base <branch>]";
+    + "  act --plan <file>";
 
 // parseSelector parses a step's flags. --pr repeats, which flags\parse does not keep, so it
 // is taken out first.
@@ -1522,8 +1414,6 @@ export fun parseSelector(step: str, argv: [str]) > Selector !> any {
     final switches = mut [<str>];
     if (step == "apply") {
         valued.append("--method");
-    } else if (step == "waiting") {
-        valued.append("--base");
     } else {
         // apply acts on what it selects, so it never reaches past the caller's own.
         switches.append("--all");
@@ -1568,9 +1458,6 @@ export fun parseSelector(step: str, argv: [str]) > Selector !> any {
     }
     if (issue != "" and parsed.values["--preview"] != null) {
         throw "pull-requests: --preview edits no issue, so it takes no --issue\n{usage}";
-    }
-    if (step == "waiting" and prs.len() == 0) {
-        throw "pull-requests: waiting needs --pr\n{usage}";
     }
     final file = parsed.values["--out"] ?? "";
     return Selector{ prs = prs, author = author ?? "", all = all, method = method,
@@ -1843,51 +1730,6 @@ fun apply(sel: Selector) > void !> any {
             std\print(encode({"pr": r.pr, "action": r.action, "for_person": cmd}));
         }
     }
-}
-
-// postWaiting posts each selected pull request's waiting status, as waiting
-// decides it, and prints one JSON line per pull request.
-fun postWaiting(sel: Selector) > result\Result::<bool> {
-    var open = [<Pull>];
-    var repo = "";
-    try {
-        repo = os\env("GITHUB_REPOSITORY") ?? "";
-        open = openPulls();
-    } catch (err: any) {
-        return result\caught::<bool>(err, doing: "pull-requests: waiting: list the open pull requests");
-    }
-    if (repo == "") {
-        return result\fail::<bool>("pull-requests: waiting: GITHUB_REPOSITORY is not set; the runner provides it");
-    }
-    foreach (n in sel.prs) {
-        var w = Waiting{ reason = "#{n} is not open" };
-        foreach (p in open) {
-            if (p.number != n) {
-                continue;
-            }
-            var listing = "";
-            try {
-                listing = capture("gh", args: ["api", "repos/{repo}/commits/{p.oid}/statuses?per_page=100"]);
-            } catch (err: any) {
-                return result\caught::<bool>(err, doing: "pull-requests: waiting: read #{n}'s statuses");
-            }
-            final current = latestQueueStatus(listing);
-            if (current.error != null) {
-                return result\fail::<bool>(current.error!.message);
-            }
-            w = waiting(p, open: open, base: sel.base, current: current.value!);
-            if (w.post) {
-                try {
-                    _ = capture("gh", args: ["api", "--method", "POST", "repos/{repo}/statuses/{p.oid}",
-                        "-f", "state=pending", "-f", "context={QUEUE_STATUS}", "-f", "description={w.description}"]);
-                } catch (err: any) {
-                    return result\caught::<bool>(err, doing: "pull-requests: waiting: post #{n}'s {QUEUE_STATUS}");
-                }
-            }
-        }
-        std\print(encode({"pr": n, "posted": w.post, "reason": w.reason}));
-    }
-    return result\ok(true);
 }
 
 // The dashboard is one markdown page of every open pull request's place in the queue,
@@ -3194,11 +3036,6 @@ export fun main(args: [str]) > void !> any {
         boxes(parseBoxFlags(step, argv: args.sub(1)));
     } else if (step == "act") {
         act(parseBoxFlags(step, argv: args.sub(1)));
-    } else if (step == "waiting") {
-        final posted = postWaiting(parseSelector(step, argv: args.sub(1)));
-        if (posted.error != null) {
-            throw posted.error!.message;
-        }
     } else {
         throw "pull-requests: unknown step \"{step}\"\n{usage}";
     }
@@ -4186,125 +4023,6 @@ test "boxes and act take their flags, and refuse what is missing" {
             refused = true;
         }
         assert\equal(refused, want: true, message: c.join(" "));
-    }
-}
-
-final PASSED = [green("ci gate"), green(HYGIENE)];
-
-fun pending(name: str) > Check {
-    return Check{ name = name, conclusion = "PENDING" };
-}
-
-fun said(w: Waiting) > str {
-    if (!w.post) {
-        return "";
-    }
-    return w.description;
-}
-
-test "a pull request whose checks still run is not queued, since CI has not passed" {
-    final p = Pull{ number = 5, checks = [green(HYGIENE), pending("ci gate")] };
-    assert\equal(said(waiting(p, open: [p], base: "main", current: QueueStatus{})), want: CI_UNPASSED, message: "running");
-}
-
-test "a pull request with a failed check is not queued, since CI has not passed" {
-    final p = Pull{ number = 5, review = "APPROVED", checks = [green(HYGIENE), red("ci gate", conclusion: "FAILURE", job: "1")] };
-    assert\equal(said(waiting(p, open: [p], base: "main", current: QueueStatus{})), want: CI_UNPASSED, message: "failed");
-}
-
-test "a check still running beside passed required ones does not hold CI back" {
-    final p = Pull{ number = 5, review = "APPROVED", checks = PASSED + [pending("queue advice")] };
-    assert\equal(said(waiting(p, open: [p], base: "main", current: QueueStatus{})), want: READY_TO_QUEUE, message: "ready");
-}
-
-test "a green pull request without an approval waits for one" {
-    final p = Pull{ number = 5, review = "REVIEW_REQUIRED", checks = PASSED };
-    assert\equal(said(waiting(p, open: [p], base: "main", current: QueueStatus{})), want: UNAPPROVED, message: "unapproved");
-}
-
-test "a green, approved pull request names the label and auto-merge" {
-    final p = Pull{ number = 5, review = "APPROVED", checks = PASSED };
-    final current = QueueStatus{ state = "pending", description = CI_UNPASSED };
-    assert\equal(said(waiting(p, open: [p], base: "main", current: current)), want: READY_TO_QUEUE, message: "ready");
-}
-
-test "a queued pull request still showing this step's status says it is queued" {
-    final p = Pull{ number = 5, review = "APPROVED", checks = PASSED, labels = ["merge-queue: squash"] };
-    final current = QueueStatus{ state = "pending", description = READY_TO_QUEUE };
-    assert\equal(said(waiting(p, open: [p], base: "main", current: current)), want: AWAITING_QUEUE, message: "label");
-    final auto = Pull{ number = 6, autoMerge = true };
-    assert\equal(said(waiting(auto, open: [auto], base: "main", current: QueueStatus{})), want: AWAITING_QUEUE, message: "auto-merge, nothing posted yet");
-}
-
-test "a queued pull request keeps every status the queue set" {
-    final p = Pull{ number = 5, review = "APPROVED", checks = PASSED, autoMerge = true };
-    foreach (s in [
-        QueueStatus{ state = "pending", description = "waiting: an earlier run stopped before merging it" },
-        QueueStatus{ state = "success", description = "validated as abc123; merging" },
-        QueueStatus{ state = "failure", description = "kicked back; see the comment" },
-    ]) {
-        assert\equal(waiting(p, open: [p], base: "main", current: s).post, want: false, message: s.description);
-    }
-}
-
-test "a kick-back stands on its head after the queue lets go" {
-    final p = Pull{ number = 5, review = "APPROVED", checks = PASSED };
-    final current = QueueStatus{ state = "failure", description = "kicked back; see the comment" };
-    assert\equal(waiting(p, open: [p], base: "main", current: current).post, want: false, message: "kick-back kept");
-}
-
-test "a success outside the queue becomes pending" {
-    final p = Pull{ number = 5, review = "APPROVED", checks = PASSED };
-    final current = QueueStatus{ state = "success", description = "validated as abc123; merging" };
-    assert\equal(said(waiting(p, open: [p], base: "main", current: current)), want: READY_TO_QUEUE, message: "unqueued after success");
-    final waitingOnQueue = QueueStatus{ state = "pending", description = "waiting: an earlier run stopped before merging it" };
-    assert\equal(said(waiting(p, open: [p], base: "main", current: waitingOnQueue)), want: READY_TO_QUEUE, message: "unqueued while the queue waited");
-}
-
-test "a status that already says it is not posted again" {
-    final p = Pull{ number = 5, review = "APPROVED", checks = PASSED };
-    final current = QueueStatus{ state = "pending", description = READY_TO_QUEUE };
-    assert\equal(waiting(p, open: [p], base: "main", current: current).post, want: false, message: "unchanged");
-}
-
-test "a closed pull request or one on another base gets nothing" {
-    final closed = Pull{ number = 5, state = "MERGED", checks = PASSED };
-    assert\equal(waiting(closed, open: [<Pull>], base: "main", current: QueueStatus{}).post, want: false, message: "merged");
-    final other = Pull{ number = 6, base = "release", checks = PASSED };
-    assert\equal(waiting(other, open: [other], base: "main", current: QueueStatus{}).post, want: false, message: "another base");
-}
-
-test "every waiting description fits GitHub's cap and opens with a waiting prefix" {
-    foreach (d in [CI_UNPASSED, UNAPPROVED, READY_TO_QUEUE, AWAITING_QUEUE]) {
-        assert\equal(d.len() <= STATUS_LIMIT, want: true, message: d);
-        assert\equal(postedHere(QueueStatus{ state = "pending", description = d }), want: true, message: d);
-    }
-}
-
-test "the newest merge-queue status on a commit is the one read" {
-    final listing = `[
-        {"context": "other", "state": "success", "description": "x"},
-        {"context": "merge-queue", "state": "pending", "description": "waiting: behind main"},
-        {"context": "merge-queue", "state": "success", "description": "validated as abc123; merging"}
-    ]`;
-    final s = latestQueueStatus(listing);
-    assert\equal(s.value!.description, want: "waiting: behind main", message: "newest first");
-    assert\equal(latestQueueStatus(`[]`).value!.state, want: "", message: "none posted");
-    assert\equal(latestQueueStatus(`{"message": "Not Found"}`).error != null, want: true, message: "not a list");
-}
-
-test "waiting takes --pr and --base, and needs a --pr" {
-    final sel = parseSelector("waiting", argv: ["--pr", "7", "--pr", "8", "--base", "trunk"]);
-    assert\equal(sel.prs, want: [7, 8], message: "both numbers");
-    assert\equal(sel.base, want: "trunk", message: "base");
-    foreach (argv in [[<str>], ["--all"], ["--base", "main"]]) {
-        var refused = false;
-        try {
-            _ = parseSelector("waiting", argv: argv);
-        } catch (e) {
-            refused = true;
-        }
-        assert\equal(refused, want: true, message: argv.join(" "));
     }
 }
 

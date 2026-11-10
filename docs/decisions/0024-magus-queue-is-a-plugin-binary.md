@@ -30,8 +30,8 @@ What it is, measured on this tree on 2026-11-05 at `aa1597183`:
   is GitHub. Setting it up takes a private GitHub App, a `magus-queue` environment holding
   the app's private key as a secret, and a ruleset that requires the queue's status from
   that app ([Setting it up on GitHub](../concepts/merge-queue.md#setting-it-up-on-github)).
-  This repository runs it through four workflows: `queue.yaml`, `queue-apply.yaml`,
-  `queue-advice.yaml` and `queue-dashboard.yaml`.
+  This repository runs it through three workflows: `queue.yaml`, `queue-intent.yaml`
+  and `queue-apply.yaml`.
 - `go list -deps ./internal/queue/...` reaches 736 packages and `go list -deps ./cmd/magus`
   reaches 819. Apart from the generated `queuetest` mocks and testify, every package the
   queue reaches is one `magus` already links. A plugin binary would therefore be close to
@@ -284,7 +284,7 @@ It loses because the queue would need a second command root for its global flags
 `--root`, `-o`, verbosity), its help and its man page, which breaks one source for flags.
 Every workflow and document that says `magus queue` would change for no gain. The dispatch
 this record adds is one lookup and one `exec`. Evidence: the `queue` entry in
-`internal/commands/registry.go` already reads magus's global flags, and the four workflows
+`internal/commands/registry.go` already reads magus's global flags, and the queue workflows
 call `magus queue`. It reopens if the queue moves to its own module and release with its
 own version, where a dispatch tied to magus's exact version would be wrong.
 
@@ -322,7 +322,7 @@ It loses because it removes nothing from `magus`. It changes only the name a per
 
 ### Delete the queue
 
-It loses because this repository merges through it, and the four queue workflows would
+It loses because this repository merges through it, and the queue workflows would
 need a replacement. It reopens if the repository stops merging through `magus queue`.
 
 ## Consequences

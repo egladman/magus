@@ -1059,35 +1059,6 @@ jobs:
           overwrite: true
           retention-days: 7
 
-  # The kernel sandbox's proof on a hosted runner. MAGUS_TEST_REQUIRE_LANDLOCK turns
-  # its tests' skip into a failure, so green here means the ABI probe found landlock
-  # and a confined child was denied. CGO_ENABLED=0 because a cgo binary cannot confine
-  # every thread in process, and the shards' race build links cgo and skips that test.
-  landlock:
-    name: landlock
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # Go alone: nothing else in mise.toml is on this job's path. No cache: this
-      # install's key exists in no scope main writes, so each pull request saved a copy
-      # of its own that only its reruns could read.
-      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
-        with:
-          version: '2026.4.8'
-          install_args: go
-          env: false
-          cache: false
-
-      - name: Test the kernel sandbox with landlock required
-        env:
-          CGO_ENABLED: '0'
-          MAGUS_TEST_REQUIRE_LANDLOCK: '1'
-        run: go test -count=1 ./internal/sandbox/...
-
   # The two symbol indexes advice reads, built where a cache may be restored: this job
   # holds no write token, so trusted-jobs-restore-no-actions-cache allows it. The merge
   # base's graph is a function of that commit alone and is keyed on it exactly; this

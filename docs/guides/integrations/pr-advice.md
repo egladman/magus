@@ -142,7 +142,15 @@ carries neither auto-merge nor a queue label. It reads the label's prefix and th
 merge methods from `magus queue describe --provider <merge-queue-provider>`, so it names
 what the provider accepts, and it retracts once the pull request is queued, merged or
 closed. Those states change on labels and reviews, so run it from a workflow triggered
-by them, as this repository's `queue-advice.yaml` does:
+by them:
+
+```yaml
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled, closed, auto_merge_enabled, auto_merge_disabled]
+  pull_request_review:
+    types: [submitted, dismissed]
+```
 
 ```yaml
 - uses: egladman/magus/.github/actions/advice@v0.4.0
@@ -151,6 +159,9 @@ by them, as this repository's `queue-advice.yaml` does:
   with:
     merge-queue: 'true'
 ```
+
+It waits for an approving review, so it never speaks where the rules require none. This
+repository requires none, and does not run it.
 
 `blast-radius` takes a `fanout-share` (default `0.5`): the share of the workspace a
 change must reach before it says anything. It is a share rather than a count because

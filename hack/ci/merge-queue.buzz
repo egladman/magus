@@ -48,6 +48,7 @@ import "result";
 import "serialize";
 import "std";
 import "time";
+import "encoding/yaml";
 
 import "assert";
 
@@ -582,9 +583,28 @@ fun dispatch(run: str, base: str, intentAt: str) > result\Result::<bool> {
     return result\ok::<bool>(true);
 }
 
-// INTENT_JOB is the job a pull request's run runs on merge intent.
+// INTENT_JOB is the job INTENT_WORKFLOW runs on merge intent.
 // Its if: decides intent; dispatch reads only whether it ran.
 final INTENT_JOB = "queue intent";
+final INTENT_WORKFLOW = ".github/workflows/queue-intent.yaml";
+
+// weighedActions is each `github.event.action == '<x>'` in an if:, once.
+fun weighedActions(cond: str) > [str] {
+    final marker = "github.event.action == '";
+    final acc = mut [<str>];
+    var rest = cond;
+    var at = rest.indexOf(marker);
+    while (at != null) {
+        rest = rest.sub(at! + marker.len());
+        final end = rest.indexOf("'") ?? rest.len();
+        final action = rest.sub(0, len: end);
+        if (acc.indexOf(action) == null) {
+            acc.append(action);
+        }
+        at = rest.indexOf(marker);
+    }
+    return acc;
+}
 
 // START_FLAGS are start's flags and DISPATCH_FLAGS dispatch's, all required: neither
 // step starts a run without the moment the change became ready to weigh it against.
@@ -834,6 +854,29 @@ test "dispatch reads only whether the intent job ran" {
     assert\equal(jobRan(encode({"status": "completed"}), jobs: jobs, job: INTENT_JOB), want: false, message: "its if: found no intent");
     final ran = listed("jobs", docs: [{"name": INTENT_JOB, "conclusion": "success"}]);
     assert\equal(jobRan(encode({"status": "in_progress"}), jobs: ran, job: INTENT_JOB), want: true, message: "intent");
+}
+
+// An action triggered but not weighed starts runs that queue nothing.
+// One weighed but not triggered is intent that never arrives.
+test "the intent job weighs exactly the actions its workflow triggers on" {
+    final wf = serialize\Boxed.init(yaml\parse(fs\readFile(INTENT_WORKFLOW)));
+    final triggered = mut [<str>];
+    foreach (event in ["pull_request", "pull_request_review"]) {
+        foreach (t in wf.q(["on", event, "types"]).listValue()) {
+            triggered.append(t.stringValue());
+        }
+    }
+    final weighed = weighedActions(wf.q(["jobs", "intent", "if"]).stringValue()).cloneMutable();
+    _ = triggered.sort(fun (a: str, b: str) > bool => a < b);
+    _ = weighed.sort(fun (a: str, b: str) > bool => a < b);
+    assert\equal(weighed, want: triggered, message: INTENT_WORKFLOW);
+    assert\equal(wf.q(["jobs", "intent", "name"]).stringValue(), want: INTENT_JOB, message: "dispatch reads the job by this name");
+}
+
+test "weighed actions are read from every comparison, each once" {
+    assert\equal(weighedActions("github.event.action == 'a' || (github.event.action == 'b' && github.event.action == 'a')"),
+        want: ["a", "b"], message: "two actions");
+    assert\equal(weighedActions("github.event_name == 'push'"), want: [<str>], message: "none");
 }
 
 test "apply mints its token once the run uploads a verdict or ends" {

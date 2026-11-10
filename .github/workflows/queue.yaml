@@ -15,19 +15,10 @@ name: Queue
 # why verdicts travel as artifacts: a job running pull-request code with statuses: write
 # could set the very status branch protection requires.
 #
-# Only a run on main started by a push or a dispatch plans and validates. A pull request
-# event runs the pull request's own copy of this file, which could upload any plan and any
-# verdict, so apply follows no such run: there the intent job alone runs, and
-# queue-apply.yaml answers it by dispatching this workflow on main.
+# It runs only on main, for a push or a dispatch. Pull request events go to
+# queue-intent.yaml, which queue-apply.yaml answers by dispatching this workflow on main.
 
 on:
-  # No branches filter: a stacked pull request targets the branch below it, not main.
-  pull_request:
-    # auto_merge_enabled is the entry, and a "merge-queue: <method>" label; synchronize
-    # and a review can make a queued pull request ready without either again.
-    types: [auto_merge_enabled, labeled, synchronize]
-  pull_request_review:
-    types: [submitted]
   # Every merge moves the base the rest of the queue waits on, and every merge pushes
   # main, the queue app's included.
   push:
@@ -36,12 +27,9 @@ on:
   workflow_dispatch:
 
 # One validation at a time; a newer event waits rather than cancelling a run whose
-# verdicts apply is already following. A pull request event validates nothing, so it
-# waits on no validation.
+# verdicts apply is already following.
 concurrency:
-  group: >-
-    ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && 'queue-validate' ||
-    format('queue-intent-{0}', github.run_id) }}
+  group: queue-validate
   cancel-in-progress: false
 
 permissions:
@@ -57,59 +45,8 @@ env:
   CI_PROVIDER: github-actions
 
 jobs:
-  # Runs where a pull request event carries merge intent. queue-apply.yaml reads whether
-  # it ran and dispatches a run on main; it is a hint, never a verdict. The provider lists
-  # forks too and the plan refuses them by name; skipping them here only saves a run
-  # nobody's change can use. Each action counts only for what it adds: a label only for
-  # a method's (the queue's own marks fire labeled too), a review only once it
-  # approves, auto-merge only where no method label already queued the pull request.
-  # A synchronize counts wherever intent stands.
-  intent:
-    name: queue intent
-    if: >-
-      github.event_name != 'push' && github.event_name != 'workflow_dispatch' &&
-      github.event.pull_request.head.repo.full_name == github.repository && (
-        (github.event.action == 'labeled' &&
-         contains(fromJSON('["merge-queue: squash", "merge-queue: rebase", "merge-queue: merge"]'), github.event.label.name)) ||
-        (github.event.action == 'auto_merge_enabled' && github.event.pull_request.base.ref == 'main' &&
-         !contains(github.event.pull_request.labels.*.name, 'merge-queue: squash') &&
-         !contains(github.event.pull_request.labels.*.name, 'merge-queue: rebase') &&
-         !contains(github.event.pull_request.labels.*.name, 'merge-queue: merge')) ||
-        ((github.event.action == 'synchronize' ||
-          (github.event.action == 'submitted' && github.event.review.state == 'approved')) &&
-         ((github.event.pull_request.auto_merge != null && github.event.pull_request.base.ref == 'main') ||
-          contains(github.event.pull_request.labels.*.name, 'merge-queue: squash') ||
-          contains(github.event.pull_request.labels.*.name, 'merge-queue: rebase') ||
-          contains(github.event.pull_request.labels.*.name, 'merge-queue: merge'))))
-    runs-on: ubuntu-latest
-    timeout-minutes: 1
-    permissions: {}
-    steps:
-      - name: Merge intent; queue-apply.yaml starts the run on main that validates it
-        run: 'true'
-
-  # intent's if: weighs exactly the actions on.types names. An action added there and
-  # not weighed in intent's if: fails here rather than queueing nothing.
-  intent-action:
-    name: queue intent action
-    if: >-
-      github.event_name != 'push' && github.event_name != 'workflow_dispatch' &&
-      !contains(fromJSON('["auto_merge_enabled", "labeled", "synchronize", "submitted"]'), github.event.action)
-    runs-on: ubuntu-latest
-    timeout-minutes: 1
-    permissions: {}
-    steps:
-      - name: Refuse an action intent does not weigh
-        env:
-          EVENT: ${{ github.event_name }}
-          ACTION: ${{ github.event.action }}
-        run: |
-          echo "::error::queue.yaml: intent's if: does not weigh $EVENT action \"$ACTION\"; name it there" >&2
-          exit 1
-
   plan:
     name: queue plan
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
