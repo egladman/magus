@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -101,7 +103,10 @@ func (s *Store) landings(rows []types.Job, now int64) map[string]landing {
 		next[row.ID] = landingProbe{At: now, Updated: row.Updated}
 	}
 	if read && !s.dryRun && !maps.Equal(history, next) {
-		s.writeLandingProbes(log, next)
+		if err := s.writeLandingProbes(log, next); err != nil {
+			// No file lock is held, and the loss costs only the interval.
+			slog.Warn("landing probes not recorded", attr.Component("magus"), attr.Error(err))
+		}
 	}
 	out := map[string]landing{}
 	for _, row := range due {
@@ -157,10 +162,10 @@ func (s *Store) readLandingProbes() probeLog {
 
 // writeLandingProbes records next against log, the history it was decided from: the
 // entries that changed are appended, and the file is rewritten to next alone when next
-// drops an entry or the log is [file.CompactDue].
-func (s *Store) writeLandingProbes(log probeLog, next map[string]landingProbe) {
+// drops an entry or the log is [file.CompactDue]. It returns the write's error.
+func (s *Store) writeLandingProbes(log probeLog, next map[string]landingProbe) error {
 	if s.err != nil || s.path == "" {
-		return
+		return nil
 	}
 	dropped := false
 	for id := range log.probes {
@@ -173,7 +178,7 @@ func (s *Store) writeLandingProbes(log probeLog, next map[string]landingProbe) {
 		p := next[id]
 		line, err := json.Marshal(landingProbeLine{ID: id, At: p.At, Updated: p.Updated})
 		if err != nil {
-			return
+			return err
 		}
 		all = append(all, line)
 		if prev, ok := log.probes[id]; !ok || prev != p {
@@ -182,10 +187,9 @@ func (s *Store) writeLandingProbes(log probeLog, next map[string]landingProbe) {
 	}
 	path := filepath.Join(filepath.Dir(s.path), landingProbesFile)
 	if !dropped && !log.partial && !file.CompactDue(log.lines+len(changed), len(next)) {
-		_ = file.AppendLines(path, changed, 0o644)
-		return
+		return file.AppendLines(path, changed, 0o644)
 	}
-	_ = file.RewriteLines(path, all, 0o644)
+	return file.RewriteLines(path, all, 0o644)
 }
 
 // landedOnBase reports why row's work is on the base branch, or "" when that is not
@@ -446,9 +450,13 @@ func (r *unmergedRead) run(ctx context.Context, rows, work []types.Job) {
 			r.stale++
 		}
 	}
-	writeUnmergedFacts(path, stored, next, func(f unmergedFact) bool {
+	err := writeUnmergedFacts(path, stored, next, func(f unmergedFact) bool {
 		return slices.ContainsFunc(rows, func(row types.Job) bool { return row.ID == f.ID }) && r.branchStands(f.Branch)
 	})
+	if err != nil {
+		// Unmerged runs outside the job store lock and cannot return an error.
+		slog.WarnContext(ctx, "unmerged answers not stored", attr.Component("magus"), attr.Error(err))
+	}
 }
 
 // branchStands reports branch as the one read or one still listed. A backend
@@ -706,11 +714,11 @@ func readUnmergedFacts(path string) storedUnmergedFacts {
 }
 
 // writeUnmergedFacts appends next, or rewrites to the latest per row once the
-// file is [file.CompactDue] or an answer keep refuses drops out. A failed write
-// only costs the stored answers.
-func writeUnmergedFacts(path string, stored storedUnmergedFacts, next map[string]unmergedFact, keep func(unmergedFact) bool) {
+// file is [file.CompactDue] or an answer keep refuses drops out. It returns the
+// write's error, which only costs the stored answers.
+func writeUnmergedFacts(path string, stored storedUnmergedFacts, next map[string]unmergedFact, keep func(unmergedFact) bool) error {
 	if path == "" {
-		return
+		return nil
 	}
 	dropped := false
 	for key, f := range stored.facts {
@@ -720,7 +728,7 @@ func writeUnmergedFacts(path string, stored storedUnmergedFacts, next map[string
 		}
 	}
 	if !dropped && len(next) == 0 {
-		return
+		return nil
 	}
 	var changed [][]byte
 	for _, id := range slices.Sorted(maps.Keys(next)) {
@@ -731,8 +739,7 @@ func writeUnmergedFacts(path string, stored storedUnmergedFacts, next map[string
 		}
 	}
 	if !dropped && !stored.partial && !file.CompactDue(stored.lines+len(changed), len(stored.facts)) {
-		_ = file.AppendLines(path, changed, 0o644)
-		return
+		return file.AppendLines(path, changed, 0o644)
 	}
 	var all [][]byte
 	for _, key := range slices.Sorted(maps.Keys(stored.facts)) {
@@ -740,7 +747,7 @@ func writeUnmergedFacts(path string, stored storedUnmergedFacts, next map[string
 			all = append(all, line)
 		}
 	}
-	_ = file.RewriteLines(path, all, 0o644)
+	return file.RewriteLines(path, all, 0o644)
 }
 
 func integratedByPass(rows []types.Job, id string) bool {
