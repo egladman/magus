@@ -2,10 +2,13 @@ package testpairing
 
 import (
 	"fmt"
+	"go/ast"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/tools/go/analysis"
 )
@@ -14,9 +17,12 @@ const pairingDoc = `check that every test file pairs with a source file of the s
 
 X_test.go accompanies X.go. It also pairs when X less its build suffixes names a
 source file (rawconn_linux_test.go and rawconn.go), or when X names a platform
-family (tree_test.go and tree_linux.go with no tree.go). Nothing else pairs: not a
-conventional name such as example_test.go or main_test.go, not a benchmark file,
-not a marker comment, and there is no allow list.
+family (tree_test.go and tree_linux.go with no tree.go). An external test package
+holding only godoc examples pairs with its package, whatever its name: godoc shows
+an example on the package or the identifier it names, never beside a file, and no
+in-package _test.go can take it. Nothing else pairs: not a conventional name such
+as example_test.go or main_test.go, not a benchmark file, not a marker comment, and
+there is no allow list.
 
 When some prefix of X names a source file - resolver_edge_cases_test.go against
 resolver.go - the message says which file's tests these are.`
@@ -44,6 +50,10 @@ func runPairing(pass *analysis.Pass) (any, error) {
 	for path, f := range goFiles(pass) {
 		name := filepath.Base(path)
 		if !strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+
+		if documentsThePackage(f) {
 			continue
 		}
 
@@ -99,6 +109,46 @@ func pairing(name string, sources map[string]bool) string {
 
 	return fmt.Sprintf("%s has no source file of the same name; move its tests into the _test.go "+
 		"of the file they exercise, or move the code it owns into %s.go", name, base)
+}
+
+// documentsThePackage reports whether f is an external test package declaring
+// Example functions and no Test, Benchmark or Fuzz. No file of the package
+// can hold it, since a file declares one package.
+func documentsThePackage(f *ast.File) bool {
+	if !strings.HasSuffix(f.Name.Name, "_test") {
+		return false
+	}
+
+	examples := false
+
+	for _, decl := range f.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv != nil {
+			continue
+		}
+
+		switch name := fn.Name.Name; {
+		case goTestName(name, "Example"):
+			examples = true
+		case goTestName(name, "Test"), goTestName(name, "Benchmark"), goTestName(name, "Fuzz"):
+			return false
+		}
+	}
+
+	return examples
+}
+
+// goTestName reports whether go test reads name as a function of kind prefix:
+// the prefix alone, or followed by anything but a lowercase letter.
+func goTestName(name, prefix string) bool {
+	rest, ok := strings.CutPrefix(name, prefix)
+	if !ok {
+		return false
+	}
+
+	r, _ := utf8.DecodeRuneInString(rest)
+
+	return rest == "" || !unicode.IsLower(r)
 }
 
 // pairsWithFamily reports whether some source file is base plus build suffixes only,
