@@ -142,14 +142,17 @@ func jobUsage() {
 // to see how a worker is doing that leaves it alone. With no server it names no link: a
 // page that never loads cannot say whether nothing is listening or the console is broken.
 // The notice names that state and a next command rather than handing out a dead link.
-func pointAtConsole(ctx context.Context, id string) {
+// It prints only when asked: a caller that did not ask to watch gets silence.
+func pointAtConsole(ctx context.Context, id string, asked bool) {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
 		return
 	}
 	serving, serverVersion := probeConsoleServer()
 	if !serving {
-		slog.InfoContext(ctx, "the console is not running; start it to watch this job",
-			attr.Notice("note"), attr.Next(hint.ServerStart.String()))
+		if asked {
+			slog.InfoContext(ctx, "the console is not running; start it to watch this job",
+				attr.Notice("note"), attr.Next(hint.ServerStart.String()))
+		}
 		return
 	}
 	host := mcpAddrString()
@@ -613,7 +616,7 @@ func lsJobs(root string, args []string) error {
 			fmt.Fprintf(os.Stdout, "  %s: %q\n", risk.Job, risk.Item)
 		}
 		printInflight(os.Stdout, list, all)
-		pointAtConsole(context.Background(), "")
+		pointAtConsole(context.Background(), "", false)
 		return nil
 	default:
 		list.Changes = inflightScope(list.Changes, all)
@@ -1042,7 +1045,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 			return err
 		}
 		printJobChange(os.Stdout, joined.Changes, row.ID)
-		pointAtConsole(ctx, row.ID)
+		pointAtConsole(ctx, row.ID, false)
 		return nil
 	default:
 		return emitFormatted(opts, describeJobOutput{Terms: brief, Goals: status})
@@ -1543,13 +1546,13 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	for _, file := range slices.Sorted(maps.Keys(wholeHeld)) {
 		narrowed, _, err := job.NarrowHold(ctx, store, stored.ID, file, wholeHeld[file], "")
 		if err != nil {
-			slog.InfoContext(ctx, fmt.Sprintf("%s stays whole: %s", file, err), attr.Notice("note"))
+			slog.InfoContext(ctx, fmt.Sprintf("%s stays whole", file), attr.Notice("note"), attr.Error(err))
 			continue
 		}
 		stored = narrowed
 		claims := make([]string, len(wholeHeld[file]))
 		for i, decl := range wholeHeld[file] {
-			claims[i] = file + "#" + decl
+			claims[i] = fmt.Sprintf("%s#%s", file, decl)
 		}
 		narrowedLines = append(narrowedLines, fmt.Sprintf("narrowed %s to %s; a write to another declaration of %s claims it", file, strings.Join(claims, ", "), file))
 	}
@@ -1604,7 +1607,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 				}
 			}
 		}
-		pointAtConsole(ctx, stored.ID)
+		pointAtConsole(ctx, stored.ID, false)
 		return nil
 	default:
 		return emitFormatted(opts, forkReport{
@@ -1814,7 +1817,7 @@ func jobEnter(ctx context.Context, store *job.Store, id, rel string) error {
 		return emitNames(os.Stdout, []string{stored.ID})
 	case outputText:
 		fmt.Println(job.EntryAdvice(stored, rel))
-		pointAtConsole(ctx, stored.ID)
+		pointAtConsole(ctx, stored.ID, false)
 		return nil
 	default:
 		return emitFormatted(opts, stored)
@@ -2615,7 +2618,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		err = emitNames(os.Stdout, []string{status.Job})
 	case outputText:
 		printJobStatus(os.Stdout, status)
-		pointAtConsole(ctx, status.Job)
+		pointAtConsole(ctx, status.Job, false)
 		told = os.Stdout
 	default:
 		err = emitFormatted(opts, status)
@@ -2733,7 +2736,7 @@ func jobWatch(ctx context.Context, root string, args []string) error {
 	}
 
 	out := os.Stdout
-	pointAtConsole(ctx, id)
+	pointAtConsole(ctx, id, true)
 	fmt.Fprintf(out, "watching %s in %s; interrupt to stop\n", id, root)
 
 	// The job plan is re-read per batch rather than captured: a holder releases paths as it
@@ -3239,7 +3242,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	if opts.Format == outputText {
 		printJobApply(os.Stdout, applied, claims, globalCfg.DryRun)
 		if len(applied) == 1 && !globalCfg.DryRun {
-			pointAtConsole(ctx, applied[0].Next.ID)
+			pointAtConsole(ctx, applied[0].Next.ID, false)
 		}
 		return nil
 	}

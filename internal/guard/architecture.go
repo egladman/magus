@@ -176,7 +176,7 @@ func inSource(workspace, p string) bool {
 		return false
 	}
 	switch strings.SplitN(filepath.ToSlash(rel), "/", 2)[0] {
-	case ".git", ".magus", ".claude":
+	case ".git", ".magus", ".claude", ".agents", ".opencode":
 		return false
 	}
 	return true

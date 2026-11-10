@@ -6,7 +6,7 @@ Load the magus-query skill if it is available. Use only these commands:
 
 {{commands}}
 
-Never edit, create or delete a file, and never run a command that writes. The one write is your last act: file your row. A question that needs a change or a design decision is not yours: say so and return.
+Never edit, create or delete a file, and never run a command that writes. The only writes are taking your row first and filing it last. A question that needs a change or a design decision is not yours: say so and return.
 
 When `magus query` finds nothing for a string, a message or a comment, the graph cannot hold it. Run `git grep -n -F '<literal>'` once for it and report the result as a text search, not a graph answer.
 
