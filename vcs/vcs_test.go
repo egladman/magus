@@ -24,7 +24,7 @@ func TestTrimStatusColumnsKeepsEdgeSpacesOfAName(t *testing.T) {
 }
 
 func TestTrimStatusColumnsDropsALineThatIsOnlyAPrefix(t *testing.T) {
-	assert.Empty(t, trimStatusColumns([]string{"M  ", "A "}, 3))
+	assert.Empty(t, trimStatusColumns([]string{"M  ", "A  "}, 3))
 }
 
 // TestMain runs every backend test against a private HOME and XDG tree: jj keeps a
