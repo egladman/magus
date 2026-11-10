@@ -1,0 +1,2 @@
+// @error: cannot assign {str:str} to {str:int} variable "k"
+final k: {str: int} = {"a": "b"};

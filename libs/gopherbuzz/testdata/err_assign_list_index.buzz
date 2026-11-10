@@ -1,0 +1,3 @@
+// @error: cannot assign str to an element of mut [int]
+final l: mut [int] = mut [1];
+l[0] = "s";

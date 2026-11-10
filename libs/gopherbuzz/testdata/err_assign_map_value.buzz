@@ -1,0 +1,3 @@
+// @error: cannot assign str to a value of mut {str:int}
+final m: mut {str: int} = mut {};
+m["a"] = "v";
