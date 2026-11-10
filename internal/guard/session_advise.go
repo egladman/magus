@@ -50,7 +50,7 @@ func adviseMessage(ctx context.Context, at location, who hookAttribution, render
 		return v
 	}
 	directive, note := showDirectives(ctx, at, who)
-	if text := strings.TrimSpace(directive + "\n\n" + note); text != "" {
+	if text := strings.TrimSpace(strings.Join([]string{directive, note}, "\n\n")); text != "" {
 		v.Decision, v.Context = decisionAdvise, text
 	}
 	return v
@@ -77,7 +77,7 @@ func adviseStop(ctx context.Context, at location, who hookAttribution, raw strin
 	}
 	directive, note := showDirectives(ctx, at, who)
 	if note != "" {
-		v.Context = strings.TrimPrefix(v.Context+"\n"+note, "\n")
+		v.Context = strings.TrimPrefix(strings.Join([]string{v.Context, note}, "\n"), "\n")
 	}
 	if directive == "" {
 		return v

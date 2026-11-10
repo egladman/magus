@@ -124,11 +124,11 @@ func emitCallbackAdapter(w *bytes.Buffer, pkgs *argPackages, t reflect.Type) err
 			return fmt.Errorf("callback %s parameter %s: %w", t, name, err)
 		}
 		values[i] = value
-		params[i] = name + " " + spellType(pkgs, pt)
+		params[i] = fmt.Sprintf("%s %s", name, spellType(pkgs, pt))
 	}
 	results := "error"
 	if t.NumOut() == 2 {
-		results = "(" + spellType(pkgs, t.Out(0)) + ", error)"
+		results = fmt.Sprintf("(%s, error)", spellType(pkgs, t.Out(0)))
 	}
 	goType := fmt.Sprintf("func(ctx context.Context%s) %s", prefixed(params), results)
 	name := callbackAdapterName(t)

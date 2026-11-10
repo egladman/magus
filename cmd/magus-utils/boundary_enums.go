@@ -38,12 +38,12 @@ func loadBoundaryEnums() ([]boundaryEnum, error) {
 	}
 	byKey := map[string]reflect.Type{}
 	for _, rt := range boundaryEnumTypes {
-		byKey[rt.PkgPath()+"."+rt.Name()] = rt
+		byKey[fmt.Sprintf("%s.%s", rt.PkgPath(), rt.Name())] = rt
 	}
 	var enums []boundaryEnum
 	var errs []error
 	for _, ref := range cfg.Types() {
-		key := ref.Package + "." + ref.Name
+		key := fmt.Sprintf("%s.%s", ref.Package, ref.Name)
 		rt, ok := byKey[key]
 		if !ok {
 			continue

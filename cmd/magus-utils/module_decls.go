@@ -478,7 +478,7 @@ func buzzZero(t std.TypeTag) (string, error) {
 		return "", fmt.Errorf("optional arg of type tag %d has no expressible Buzz default", t)
 	}
 	last := len(typ) - 1
-	return typ[:1] + "<" + typ[1:last] + ">" + typ[last:], nil
+	return fmt.Sprintf("%s<%s>%s", typ[:1], typ[1:last], typ[last:]), nil
 }
 
 // buzzReturnType renders a method's Buzz return annotation.
