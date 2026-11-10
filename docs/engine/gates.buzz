@@ -181,7 +181,7 @@ final HISTORY_MAX = 8;
 //   - metaHistory: path -> up to HISTORY_MAX "full|short|stamp|subject" entries, newest-
 //     first; drives the collapsed history panel.
 // metaCommits also keys the releases directory itself, for the pages the manifests feed.
-export fun buildCommits(site: Site) > {str: str} !> any {
+export fun buildCommits(site: Site) > mut {str: str} !> any {
     var m: mut {str: str} = mut {};
     site.inputs.metaHistory = mut {};
     var sources: mut [str] = mut [<str>];
