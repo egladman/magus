@@ -312,12 +312,12 @@ func levelSet(t *testing.T) *types.ModelTierSet {
 func userMatrixModule(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "matrix.buzz")
-	require.NoError(t, os.WriteFile(path, []byte(`import "magus";
+	require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf(`import "magus";
 enum Level { low, middle, high }
 export fun choose(req: ModelTierRequest) > any {
-`+body+`
+%s
 }
-`), 0o644))
+`, body)), 0o644))
 	return path
 }
 

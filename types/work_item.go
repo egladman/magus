@@ -84,7 +84,7 @@ type WorkItem struct {
 
 // Key is "<kind>:<name>".
 func (w WorkItem) Key() string {
-	return string(w.Kind) + ":" + w.Name
+	return fmt.Sprintf("%s:%s", w.Kind, w.Name)
 }
 
 type workItemWire struct {

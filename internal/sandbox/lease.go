@@ -57,7 +57,7 @@ func NarrowToLease(ctx context.Context, policy *Policy, loc job.Location, leaseI
 	rows, err := job.NewStore(loc).List()
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", types.FormatDiagnostic(types.AllowlistUnresolved,
-			"lease "+leaseID+": job store unreadable, so its write boundary is unknown"), err)
+			fmt.Sprintf("lease %s: job store unreadable, so its write boundary is unknown", leaseID)), err)
 	}
 	row, ok := workerLease(rows, leaseID)
 	if !ok {
