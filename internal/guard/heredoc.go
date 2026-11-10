@@ -2,7 +2,10 @@ package guard
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path"
 	"strings"
 
@@ -20,9 +23,16 @@ const denyRuleHeredocWrite denyRuleName = "heredoc-write"
 // heredocWrite is one file a line writes from a here-document: the target as written, and
 // where the shell opens it.
 type heredocWrite struct {
-	name string
-	path string
-	body string
+	name    string
+	path    string
+	body    string
+	appends bool
+}
+
+// heredocTarget is a word a here-document is written to.
+type heredocTarget struct {
+	word    *syntax.Word
+	appends bool
 }
 
 // heredocWrites lists the files the line writes from a here-document whose body is literal
@@ -47,13 +57,13 @@ func heredocWrites(command string, d Dialect, start, home string) []heredocWrite
 			return true
 		}
 		var body *syntax.Word
-		var targets []*syntax.Word
+		var targets []heredocTarget
 		for _, r := range s.Redirs {
 			switch {
 			case (r.Op == syntax.Hdoc || r.Op == syntax.DashHdoc) && r.Hdoc != nil:
 				body = r.Hdoc
 			case (r.Op == syntax.RdrOut || r.Op == syntax.AppOut || r.Op == syntax.RdrClob) && (r.N == nil || r.N.Value == "1"):
-				targets = append(targets, r.Word)
+				targets = append(targets, heredocTarget{word: r.Word, appends: r.Op == syntax.AppOut})
 			}
 		}
 		text, literal := plainWord(body)
@@ -66,23 +76,62 @@ func heredocWrites(command string, d Dialect, start, home string) []heredocWrite
 				return true
 			}
 		case "tee":
-			for _, w := range call.Args[1:] {
-				if !strings.HasPrefix(placeableWord(command, w), "-") {
-					targets = append(targets, w)
-				}
-			}
+			targets = append(targets, teeTargets(command, call.Args[1:])...)
 		default:
 			return true
 		}
 		for _, t := range targets {
-			name := placeableWord(command, t)
+			name := placeableWord(command, t.word)
 			if p, ok := placePath(name, dirs[s], home); ok && !strings.HasPrefix(p, "/dev/") {
-				out = append(out, heredocWrite{name: name, path: p, body: text})
+				out = append(out, heredocWrite{name: name, path: p, body: text, appends: t.appends})
 			}
 		}
 		return true
 	})
 	return out
+}
+
+// teeTargets are the files tee writes, given its arguments.
+func teeTargets(command string, args []*syntax.Word) []heredocTarget {
+	appends := false
+	var files []*syntax.Word
+	for _, w := range args {
+		word := placeableWord(command, w)
+		switch {
+		case word == "--append":
+			appends = true
+		case strings.HasPrefix(word, "--"):
+		case strings.HasPrefix(word, "-"):
+			appends = appends || strings.Contains(word, "a")
+		default:
+			files = append(files, w)
+		}
+	}
+	out := make([]heredocTarget, 0, len(files))
+	for _, w := range files {
+		out = append(out, heredocTarget{word: w, appends: appends})
+	}
+	return out
+}
+
+// heredocContent is what w leaves in its file, written holding what earlier
+// writes on the line left. A rule reads an append's fragment as the whole
+// file otherwise. False when an append's file exists and cannot be read.
+func heredocContent(w heredocWrite, written map[string]string) (string, bool) {
+	if !w.appends {
+		return w.body, true
+	}
+	before, ok := written[w.path]
+	if !ok {
+		data, err := os.ReadFile(w.path)
+		switch {
+		case err == nil:
+			before = string(data)
+		case !errors.Is(err, fs.ErrNotExist):
+			return "", false
+		}
+	}
+	return before + w.body, true
 }
 
 // judgeFileWrite is the verdict a host's write tool would get for writing content to
@@ -152,8 +201,13 @@ func judgeHeredocWrites(ctx context.Context, deps Dependencies, req Request, who
 		return ShellVerdict{}
 	}
 	var advised ShellVerdict
+	written := map[string]string{}
 	for _, w := range writes {
-		switch v := judgeFileWrite(ctx, deps, req, who, callDir, lease, w.path, w.body); v.Decision {
+		content, known := heredocContent(w, written)
+		if known {
+			written[w.path] = content
+		}
+		switch v := judgeFileWrite(ctx, deps, req, who, callDir, lease, w.path, content); v.Decision {
 		case decisionDeny:
 			first, _, _ := strings.Cut(v.Reason, "\n")
 			return ShellVerdict{

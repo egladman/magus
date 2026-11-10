@@ -44,6 +44,13 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 | `checkout`    | for a line that runs `git push` only: the checkout's state (below); null otherwise    |
 | `dir`         | the directory the line runs in, as the host reported it; empty when it reported none  |
 | `workspace`   | the root of the workspace holding `dir`, empty when none does                         |
+| `unplaced`    | true when the first push, pull request call or relink cannot be placed (below)        |
+
+A line that enters another workspace's checkout before its first push, pull request call
+or relink carries that checkout as `dir` and `workspace`, so a rule judges the tree the call
+runs in. When that directory is known only once the line runs, as after `cd "$X"` or
+`git -C "$(pwd)/x"`, `unplaced` is true, `checkout` is null, and `dir` and `workspace` name
+where the line starts, not where the call runs.
 
 `checkout` is read in the directory the push runs in (after any `-C`), through the
 version control that resolves there, and only for a push, since it costs processes:
@@ -210,6 +217,11 @@ strengthen only, fails open, and runs from both sides exactly as the command rul
 
 The texts are read from the host's payload by shape. An edit shape magus does not read
 leaves all three empty, which a rule should take as unknown rather than as an empty file.
+
+A here-document a shell line writes into a file (`cat > f <<EOF`, `tee f <<EOF`) is judged
+as a whole-file write. An append (`cat >> f`, `tee -a f`) arrives as what the file holds on
+disk with the body added, so a rule that reads the file first sees what the append adds.
+An append to a file that exists and cannot be read leaves `content` empty.
 
 ## Writing a repository policy
 
