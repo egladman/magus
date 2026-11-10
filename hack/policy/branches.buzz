@@ -131,6 +131,22 @@ export object Push {
     remote: str,
     name: str,
     generated: bool = false,
+    source: str = "",
+    dir: str = "",
+}
+
+// gitDir is the checkout `git -C <dir>` runs in, "" when the line gives none.
+fun gitDir(args: [str]) > str {
+    var dir = "";
+    foreach (i, arg in args) {
+        if (arg == "push") {
+            break;
+        }
+        if (arg == "-C" and i + 1 < args.len()) {
+            dir = args[i + 1];
+        }
+    }
+    return dir;
 }
 
 final gitValueFlags = ["-o", "--push-option", "--repo", "--receive-pack", "--exec"];
@@ -153,7 +169,7 @@ export fun findPushes(programs: [helpers\Program], current: str) > [Push] {
         }
         final call = p.vcs!;
         if (call.tool == "git" and call.subcommand == "push") {
-            foreach (push in gitPushes(call.args, current: current)) { pushes.append(push); }
+            foreach (push in gitPushes(call.args, current: current, dir: gitDir(p.args))) { pushes.append(push); }
         } else if ((call.tool == "hg" or call.tool == "sl") and call.subcommand == "push") {
             foreach (name in flagValues(call.args, longs: ["--bookmark", "--to"], shorts: ["-B"])) {
                 pushes.append(Push{ tool = call.tool, remote = "default", name = name });
@@ -168,7 +184,7 @@ export fun findPushes(programs: [helpers\Program], current: str) > [Push] {
     return pushes;
 }
 
-fun gitPushes(args: [str], current: str) > [Push] {
+fun gitPushes(args: [str], current: str, dir: str) > [Push] {
     final pushes = mut [<Push>];
     foreach (flag in gitSkipFlags) {
         if (args.indexOf(flag) != null) {
@@ -181,7 +197,7 @@ fun gitPushes(args: [str], current: str) > [Push] {
         remote = ops[0];
     }
     if (ops.len() < 2) {
-        pushes.append(Push{ tool = "git", remote = remote, name = current });
+        pushes.append(Push{ tool = "git", remote = remote, name = current, dir = dir });
         return pushes;
     }
     foreach (spec in ops.sub(1)) {
@@ -190,9 +206,13 @@ fun gitPushes(args: [str], current: str) > [Push] {
         if (ref.startsWith(":")) {
             continue;
         }
+        var source = "";
         final colon = ref.indexOf(":");
         if (colon != null) {
+            source = ref.sub(0, len: colon!);
             ref = ref.sub(colon! + 1);
+        } else if (ref != "HEAD" and ref != "@") {
+            source = ref;
         }
         if (ref == "HEAD" or ref == "@") {
             ref = current;
@@ -205,7 +225,7 @@ fun gitPushes(args: [str], current: str) > [Push] {
         if (ref == "") {
             continue;
         }
-        pushes.append(Push{ tool = "git", remote = remote, name = ref });
+        pushes.append(Push{ tool = "git", remote = remote, name = ref, source = source, dir = dir });
     }
     return pushes;
 }
@@ -855,7 +875,7 @@ final release = $"^v[0-9]";
 // decideNames judges every branch the line publishes but the base branch and a version. A
 // mechanical failure denies; a topic miss alone advises. A name the remote already has, and
 // every `gh pr create` (which opens from a pushed branch), is judged once per session.
-export fun decideNames(programs: [helpers\Program], current: str, remote: Remote, topic: fun () > Topic, once: fun (key: str) > bool) > GuardVerdict {
+export fun decideNames(programs: [helpers\Program], current: str, remote: Remote, topic: fun (source: str, dir: str) > Topic, once: fun (key: str) > bool) > GuardVerdict {
     final pushes = findPushes(programs, current: current);
     if (pushes.len() == 0) {
         return magus\guard.allow();
@@ -868,19 +888,16 @@ export fun decideNames(programs: [helpers\Program], current: str, remote: Remote
     final baseName = baseParts[baseParts.len() - 1];
     final denials = mut [<str>];
     final advice = mut [<str>];
-    var read: Topic? = null;
     foreach (p in pushes) {
         if (p.name == "" or p.name == baseName or release.match(p.name) != null) {
             continue;
         }
-        if (read == null) {
-            read = topic();
-        }
-        var verdict = judgeName(p.name, topic: read!);
+        final read = topic(p.source, p.dir);
+        var verdict = judgeName(p.name, topic: read);
         if (p.generated) {
             verdict = Verdict{
                 failures = [Failure{ rule = "generated-id", why = "`jj git push --change` names the bookmark after the change id" }],
-                served = serve([<str>], topic: read!),
+                served = serve([<str>], topic: read),
             };
         }
         if (verdict.failures.len() == 0) {
@@ -893,7 +910,7 @@ export fun decideNames(programs: [helpers\Program], current: str, remote: Remote
         }
         foreach (f in verdict.failures) {
             lines.append("- {f.rule}: {f.why}");
-            final small = f.rule == "coverage" and read!.subjects.len() <= maxAdvised;
+            final small = f.rule == "coverage" and read.subjects.len() <= maxAdvised;
             if (f.rule != "topic" and !small) { mechanical = true; }
         }
         final update = p.tool == "gh" or remote.branches.indexOf("{p.remote}/{p.name}") != null;
@@ -1072,7 +1089,7 @@ fun remote(branches: [str]) > Remote {
     return Remote{ base = "origin/main", branches = branches };
 }
 
-fun practical() > Topic {
+fun practical(source: str, dir: str) > Topic {
     return readTopic(practicalPaths);
 }
 

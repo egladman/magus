@@ -223,8 +223,8 @@ export fun judge(req: CommandRequest, opens: fun (argv: [str]) > {str: str}?) > 
         return commented;
     }
     final pusher = requestPusher(req);
-    final topic = fun () > branches\Topic {
-        return branchTopic(req.dir);
+    final topic = fun (source: str, dir: str) > branches\Topic {
+        return branchTopic(pushDir(req.dir, named: dir), source: source);
     };
     final texts = withHeredocs(programs, line: req.command);
     final decided = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent, holdsCheckout = cadence\gatesInHeldCheckout(req.lease, programs: programs, dir: req.dir, workspace: req.workspace) }, checkout: checkout,
@@ -344,7 +344,18 @@ export object Publishing {
     pusher: branches\Pusher,
     current: str,
     remote: branches\Remote,
-    topic: fun () > branches\Topic,
+    topic: fun (source: str, dir: str) > branches\Topic,
+}
+
+// pushDir is the checkout `git -C` names, relative to the caller's.
+fun pushDir(dir: str, named: str) > str {
+    if (named == "") {
+        return dir;
+    }
+    if (named.startsWith("/") or dir == "") {
+        return named;
+    }
+    return fs\join(dir, name: named);
 }
 
 // currentBranch is the branch or bookmark the guard read for a push, else the one the
@@ -367,26 +378,42 @@ fun requestRemote(req: CommandRequest) > branches\Remote {
     return branches\Remote{ base = base!, branches = [<str>] };
 }
 
-// branchTopic is the topic of the branch's changes against the base in the checkout holding
-// dir, the caller's rather than the hook process's. A diff it cannot read is no topic.
-fun branchTopic(dir: str) > branches\Topic {
+// branchTopic is the topic of what a push publishes: source against base.
+// An empty source is dir's HEAD. A diff it cannot read is no topic.
+fun branchTopic(dir: str, source: str) > branches\Topic {
     final paths = mut [<str>];
     try {
-        foreach (p in vcs\changedFiles(dir: dir)) {
-            paths.append(p.value);
+        if (source == "") {
+            foreach (p in vcs\changedFiles(dir: dir)) {
+                paths.append(p.value);
+            }
+        } else {
+            final diff = vcs\cmd(["diff", "--name-only", vcs\base(dir: dir) + "..." + source], opts: vcs\CommandOptions{ dir = dir, quiet = true });
+            foreach (line in diff.stdout.split("\n")) {
+                if (line.trim() != "") {
+                    paths.append(line.trim());
+                }
+            }
         }
     } catch (e) {
         return branches\unknownTopic();
     }
-    return branches\withSubjects(branches\readTopic(paths), subjects: branchSubjects(dir, paths: paths));
+    return branches\withSubjects(branches\readTopic(paths), subjects: branchSubjects(dir, paths: paths, source: source));
 }
 
 // branchSubjects are the topics the branch adds: its changelog fragments,
 // else its commit subjects. A fragment or a log it cannot read adds none.
-fun branchSubjects(dir: str, paths: [str]) > [branches\Subject] {
+fun branchSubjects(dir: str, paths: [str], source: str) > [branches\Subject] {
     final found = mut [<branches\Subject>];
     foreach (path in paths) {
         if (!path.startsWith("changes/unreleased/") or !path.endsWith(".md")) {
+            continue;
+        }
+        if (source != "") {
+            final shown = vcs\cmd(["show", "{source}:{path}"], opts: vcs\CommandOptions{ dir = dir, quiet = true }) catch null;
+            if (shown != null) {
+                found.append(branches\fragmentSubject(path, text: shown!.stdout));
+            }
             continue;
         }
         final file = fs\join(dir, name: path);
@@ -397,8 +424,12 @@ fun branchSubjects(dir: str, paths: [str]) > [branches\Subject] {
     if (found.len() > 0) {
         return found;
     }
+    var tip = "HEAD";
+    if (source != "") {
+        tip = source;
+    }
     try {
-        final log = vcs\cmd(["log", "--format=%s", vcs\base(dir: dir) + "..HEAD"], opts: vcs\CommandOptions{ dir = dir, quiet = true });
+        final log = vcs\cmd(["log", "--format=%s", vcs\base(dir: dir) + ".." + tip], opts: vcs\CommandOptions{ dir = dir, quiet = true });
         foreach (line in log.stdout.split("\n")) {
             if (line.trim() != "") {
                 found.append(branches\commitSubjectTopic(line.trim()));
