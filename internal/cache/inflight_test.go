@@ -174,23 +174,20 @@ func TestInflightSameTargetTwiceKeepsBothRecords(t *testing.T) {
 	assert.Empty(t, i.Running())
 }
 
-// A killed run's inflight temp file, under its current name or an older binary's, and a
-// remote-tier staging directory are collected once stale; a fresh one may belong to a
+// An older binary's inflight temp file and a remote-tier staging directory are
+// collected once stale; a fresh one may belong to a
 // live writer and stays.
 func TestInflightCollectsStaleLitter(t *testing.T) {
 	dir := t.TempDir()
 	old := time.Now().Add(-2 * staleAfter)
-	tmp := filepath.Join(dir, "."+inflightPrefix+"1.json.tmp.123")
 	olderTmp := filepath.Join(dir, inflightPrefix+"3.tmp")
-	for _, p := range []string{tmp, olderTmp} {
-		require.NoError(t, os.WriteFile(p, nil, 0o644))
-	}
+	require.NoError(t, os.WriteFile(olderTmp, nil, 0o644))
 	staging := filepath.Join(dir, stagingPrefix+"old")
 	require.NoError(t, os.MkdirAll(filepath.Join(staging, "cas"), 0o755))
-	for _, p := range []string{tmp, olderTmp, staging} {
+	for _, p := range []string{olderTmp, staging} {
 		require.NoError(t, os.Chtimes(p, old, old))
 	}
-	fresh := []string{"." + inflightPrefix + "2.json.tmp.456", inflightPrefix + "4.tmp"}
+	fresh := []string{inflightPrefix + "4.tmp"}
 	for _, name := range fresh {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), nil, 0o644))
 	}
@@ -203,6 +200,20 @@ func TestInflightCollectsStaleLitter(t *testing.T) {
 		names = append(names, e.Name())
 	}
 	assert.Equal(t, fresh, names)
+}
+
+// No writer makes a ".json.tmp." inflight file any more, so none is collected.
+func TestInflightStaleIgnoresRetiredJSONTempName(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "."+inflightPrefix+"1.json.tmp.123")
+	require.NoError(t, os.WriteFile(path, nil, 0o644))
+	old := time.Now().Add(-2 * staleAfter)
+	require.NoError(t, os.Chtimes(path, old, old))
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
+	assert.False(t, isStale(dir, entries[0], time.Now()))
 }
 
 // The record names projects and targets a run is building, so it stays private to its
