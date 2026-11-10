@@ -3199,10 +3199,24 @@ fun gitIn(dir: str, args: [str]) > CommitRead {
     return CommitRead{ files = [Committed{ path = "", before = "", after = run!.stdout }] };
 }
 
+// mergeSide is path's text at MERGE_HEAD, "" when the path is absent there.
+// Only a merge in progress has a MERGE_HEAD, so merging gates the read.
+fun mergeSide(dir: str, path: str, merging: bool) > str {
+    if (!merging) {
+        return "";
+    }
+    final run = vcs\cmd(["show", "MERGE_HEAD:{path}"], opts: vcs\CommandOptions{ dir = dir, quiet = true, allowFailure = true }) catch null;
+    if (run == null or run!.code != 0) {
+        return "";
+    }
+    return run!.stdout;
+}
+
 // committedFile reads the file one `git diff --name-status` row names. It has
 // no file when the row names none this rule grades. root is set for `-a`,
-// which commits the working tree's text.
-fun committedFile(dir: str, row: str, root: str) > CommitRead {
+// which commits the working tree's text. While merging, a line the other
+// parent holds is not added, so its text joins before.
+fun committedFile(dir: str, row: str, root: str, merging: bool) > CommitRead {
     final cols = row.split("\t");
     final path = cols[cols.len() - 1];
     if (cols.len() < 2 or !comments\gradesComments(path) or generated(path)) {
@@ -3216,6 +3230,7 @@ fun committedFile(dir: str, row: str, root: str) > CommitRead {
         }
         before = was.files[0].after;
     }
+    before = before + mergeSide(dir, path: path, merging: merging);
     if (root != "") {
         final read = fs\readFile(root + "/" + path) catch null;
         if (read == null) {
@@ -3257,9 +3272,11 @@ export fun committedReader(dir: str) > fun (all: bool) > CommitRead {
             }
             root = top.files[0].after.trim();
         }
+        final head = vcs\cmd(["rev-parse", "-q", "--verify", "MERGE_HEAD"], opts: vcs\CommandOptions{ dir = dir, quiet = true, allowFailure = true }) catch null;
+        final merging = head != null and head!.code == 0;
         final files = mut [<Committed>];
         foreach (row in listed.files[0].after.split("\n")) {
-            final one = committedFile(dir, row: row, root: root);
+            final one = committedFile(dir, row: row, root: root, merging: merging);
             if (one.unreadable != "") {
                 return one;
             }
@@ -3386,6 +3403,44 @@ test "committedReader reads the staged text and the text at HEAD" {
     fs\removeAll("{dir}/.git");
     final outside = committedReader(dir)(false);
     std\assert(outside.unreadable == "" and outside.files.len() == 0, message: "outside a work tree: {outside.unreadable}");
+    fs\removeAll(dir);
+}
+
+test "a merge grades only the comments neither parent holds" {
+    final dir = fs\tempDir("committed-merge") catch "";
+    std\assert(dir != "", message: "a temp dir");
+    final git = fun (args: [str]) > void {
+        final r = seedGit(dir, args: args);
+        std\assert(r.error == null, message: if (r.error != null) r.error!.message else "");
+    };
+    final long = "w ".repeat(40) + "w.";
+    git(["init", "-q", "-b", "main"]);
+    fs\writeFile("{dir}/a.go", content: "package a\n");
+    git(["add", "a.go"]);
+    git(["commit", "-q", "-m", "seed"]);
+    git(["checkout", "-q", "-b", "side"]);
+    fs\writeFile("{dir}/a.go", content: "package a\n\n// " + long + "\nfunc F() \{}\n");
+    fs\writeFile("{dir}/b.go", content: "package a\n\n// " + long + "\nfunc G() \{}\n");
+    git(["add", "a.go", "b.go"]);
+    git(["commit", "-q", "-m", "side"]);
+    git(["checkout", "-q", "main"]);
+    fs\writeFile("{dir}/c.go", content: "package a\n");
+    git(["add", "c.go"]);
+    git(["commit", "-q", "-m", "main"]);
+    git(["merge", "-q", "--no-commit", "--no-ff", "side"]);
+    final merged = committedReader(dir)(false);
+    std\assert(merged.unreadable == "", message: merged.unreadable);
+    std\assert(merged.files.len() == 2, message: "{merged.files.len()} files");
+    foreach (f in merged.files) {
+        std\assert(f.before.indexOf(long) != null, message: "{f.path} before lacks the other parent's comment");
+        final problems = comments\commentProblems(f.path, before: f.before, after: f.after);
+        std\assert(problems.len() == 0, message: "{f.path}: {problems}");
+    }
+    git(["merge", "--abort"]);
+    git(["checkout", "-q", "side", "--", "b.go"]);
+    final plain = committedReader(dir)(false);
+    std\assert(plain.unreadable == "" and plain.files.len() == 1 and plain.files[0].before == "", message: "a plain commit keeps before: {plain.unreadable}");
+    std\assert(comments\commentProblems("b.go", before: plain.files[0].before, after: plain.files[0].after).len() > 0, message: "a plain commit still grades the long comment");
     fs\removeAll(dir);
 }
 
