@@ -476,12 +476,16 @@ func (s *Session) registerTest(_ context.Context, args []vmpackage.Value) (vmpac
 // each Fn (e.g. via CallValue) and treats a returned error as a failure.
 func (s *Session) Tests() []TestEntry { return s.tests }
 
+// errFiberOver is uncoded: a catch binds its message, and upstream's is
+// exactly this string.
+var errFiberOver = errors.New("Fiber is over")
+
 // builtinResume is the session-aware implementation of `resume fiber`. It swaps
 // curVM to the fiber's VM via enter() so debug introspection (Frames,
 // CallDepth, step hooks) sees the fiber's stack for the duration of Exec().
 //
-// Returns the yielded value, or null if nothing was yielded or the fiber is
-// over (upstream parity: resume never errors on a completed fiber).
+// Returns the yielded value, or null when the fiber completes. Resuming a
+// fiber that is over raises "Fiber is over", as upstream does.
 func (s *Session) builtinResume(ctx context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
 	if len(args) < 1 {
 		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: resume requires a fiber argument")
@@ -492,10 +496,9 @@ func (s *Session) builtinResume(ctx context.Context, args []vmpackage.Value) (vm
 	}
 	switch fib.Status() {
 	case vmpackage.FiberDone:
-		// upstream: resume on a completed fiber returns null. If the fiber ended
-		// in an error, re-surface it rather than swallowing it (Err is nil for a
-		// clean completion, so this returns null, nil in that case).
-		return vmpackage.Null, fib.Error()
+		// Upstream panics resuming a fiber that ended in an error or was
+		// cancelled. Here that fiber is over too.
+		return vmpackage.Null, errFiberOver
 	case vmpackage.FiberRunning:
 		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: cannot resume a running fiber (recursive resume)")
 	}

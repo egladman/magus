@@ -1,0 +1,5 @@
+// @error: cannot assign int to field "x" of type double
+// Buzz has no numeric widening: upstream rejects an int written to a double field.
+object P { x: double }
+final p = mut P{ x = 1.0 };
+p.x = 2;

@@ -157,6 +157,68 @@ func TestJSONDecodeValueKeepsIntegralNumbersInts(t *testing.T) {
 	assert.False(t, boxed, "the value is plain, not Boxed")
 }
 
+func TestJSONDecodeKeepsObjectMembersInDocumentOrder(t *testing.T) {
+	doc := `{"zulu":1,"alpha":2,"mike":3,"echo":4,"yankee":5,"bravo":6,"x":{"q":1,"b":2,"m":3},"k":7,"c":8}`
+	want := []string{"zulu", "alpha", "mike", "echo", "yankee", "bravo", "x", "k", "c"}
+	for range 50 {
+		v, err := JSONDecodeValue([]byte(doc))
+		require.NoError(t, err)
+		assert.Equal(t, want, v.MapKeys())
+		x, ok := v.MapGet("x")
+		require.True(t, ok)
+		assert.Equal(t, []string{"q", "b", "m"}, x.MapKeys())
+	}
+}
+
+func TestJSONDecodeReadsFractionAndExponentNumbersAsFloats(t *testing.T) {
+	boxed, err := serializeJSONDecode(t.Context(), []vm.Value{vm.StringValue(`[10.0, 1e2, 2.5E-1, 7]`)})
+	require.NoError(t, err)
+
+	v, err := JSONDecodeValue([]byte(`[10.0, 1e2, 2.5E-1, 7]`))
+	require.NoError(t, err)
+	items := v.ListItems()
+	require.Len(t, items, 4)
+	for i, want := range []float64{10, 100, 0.25} {
+		require.True(t, items[i].IsFloat(), "item %d decodes as %s", i, items[i].Kind())
+		assert.InDelta(t, want, items[i].AsFloat(), 0)
+	}
+	assert.True(t, items[3].IsInt(), "7 decodes as %s", items[3].Kind())
+
+	got, err := JSONEncode(boxed)
+	require.NoError(t, err)
+	assert.JSONEq(t, `[10, 100, 0.25, 7]`, got)
+
+	s := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	t.Cleanup(func() { _ = s.Close() })
+	Register(s)
+	require.NoError(t, s.Exec(t.Context(), `import "serialize";
+final f = serialize\jsonDecode("[10.0]").q([0]).floatValue();`))
+	assert.InDelta(t, 10.0, s.Globals()["f"].AsFloat(), 0)
+}
+
+// Upstream refuses an integer past 48 bits with "Could not parse JSON: `N` is
+// not a number". It neither wraps nor widens it to a double.
+func TestJSONDecodeRefusesIntegersPastFortyEightBits(t *testing.T) {
+	for _, lit := range []string{"281474976710656", "9007199254740993", "140737488355328", "-140737488355329", "9223372036854775808"} {
+		_, err := JSONDecodeValue([]byte(`[` + lit + `]`))
+		require.Error(t, err, lit)
+		assert.Contains(t, err.Error(), "Could not parse JSON: `"+lit+"` is not a number")
+	}
+
+	_, err := serializeJSONDecode(t.Context(), []vm.Value{vm.StringValue(`[140737488355328]`)})
+	require.Error(t, err)
+}
+
+func TestJSONDecodeKeepsIntegersAtTheFortyEightBitEdges(t *testing.T) {
+	v, err := JSONDecodeValue([]byte(`[140737488355327, -140737488355328, -5]`))
+	require.NoError(t, err)
+	items := v.ListItems()
+	require.Len(t, items, 3)
+	assert.Equal(t, int64(140737488355327), items[0].AsInt())
+	assert.Equal(t, int64(-140737488355328), items[1].AsInt())
+	assert.Equal(t, int64(-5), items[2].AsInt())
+}
+
 func TestSession_SerializeBoxedIsDeclared(t *testing.T) {
 	ctx := context.Background()
 	exec := func(src string) (*buzz.Session, error) {

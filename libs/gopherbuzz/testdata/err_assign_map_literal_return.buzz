@@ -1,0 +1,2 @@
+// @error: return type mismatch: got {str:str}, want {str:int}
+fun f() > {str: int} { return {"a": "b"}; }

@@ -1,0 +1,4 @@
+// @error: cannot assign double to field "x" of type int
+object P { x: int }
+final p = mut P{ x = 1 };
+p.x += 1.5;

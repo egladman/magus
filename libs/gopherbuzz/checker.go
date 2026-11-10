@@ -1024,8 +1024,48 @@ func (c *checker) checkAssign(v *ast.AssignStmt) {
 	if root := rootIdentName(v.Target); root != "" {
 		c.markAssigned(root)
 	}
-	c.inferExpected(v.Value, c.infer(v.Target))
+	ix, isIndex := v.Target.(*ast.IndexExpr)
+	var container types.Type
+	var want types.Type
+	if isIndex {
+		var key types.Type
+		container, key, want = c.inferIndexParts(ix)
+		c.checkMapKeyWrite(ix, container, key)
+	} else {
+		want = c.infer(v.Target)
+	}
+	want = c.resolveType(want)
+	got := c.inferExpected(v.Value, want)
 	c.checkImmutableWrite(v.Target)
+	// Upstream's E4 (property) and E71 (value). An erased generic or a member
+	// this checker does not model stays silent, as in checkArgType.
+	if elemFits(got, want) {
+		return
+	}
+	switch t := v.Target.(type) {
+	case *ast.MemberExpr:
+		c.errorfc(v.Pos, TypeMismatch, "cannot assign %s to field %q of type %s", got.TypeName(), t.Name, want.TypeName())
+	case *ast.IndexExpr:
+		slot := "an element"
+		if _, isMap := container.(*types.MapType); isMap {
+			slot = "a value"
+		}
+		c.errorfc(v.Pos, TypeMismatch, "cannot assign %s to %s of %s", got.TypeName(), slot, container.TypeName())
+	}
+}
+
+// checkMapKeyWrite reports a key written into a map that does not fit the
+// map's key type, upstream's E70.
+func (c *checker) checkMapKeyWrite(ix *ast.IndexExpr, container, key types.Type) {
+	mt, isMap := container.(*types.MapType)
+	if !isMap {
+		return
+	}
+	keyWant := c.resolveType(mt.Key)
+	if elemFits(key, keyWant) {
+		return
+	}
+	c.errorfc(ast.NodePos(ix.Index), TypeMismatch, "cannot use %s as a key of %s", key.TypeName(), mt.TypeName())
 }
 
 // checkImmutableWrite reports a write to a key or field of a map or object bound
@@ -2141,20 +2181,28 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 			}
 			continue
 		}
-		got := c.infer(a)
 		m, isMember := v.Callee.(*ast.MemberExpr)
 		if !isMember {
+			c.infer(a)
 			continue
 		}
-		// A list's indexOf matches by ==, so an enum needle in a [str] (or the reverse)
-		// is never found, under the same rule BZZ1005 holds == to.
-		if lt, isList := c.builtinRecv[m].(*types.ListType); isList && m.Name == "indexOf" && i == 0 {
-			c.checkEnumEquality(v.Pos, "indexOf", c.resolveType(lt.Elem), got)
+		want := builtinArgType(c.builtinRecv[m], m.Name, i)
+		if want == nil {
+			got := c.infer(a)
+			// A list's indexOf matches by ==, so an enum needle in a [str] (or the reverse)
+			// is never found, under the same rule BZZ1005 holds == to.
+			if lt, isList := c.builtinRecv[m].(*types.ListType); isList && m.Name == "indexOf" && i == 0 {
+				c.checkEnumEquality(v.Pos, "indexOf", c.resolveType(lt.Elem), got)
+			}
 			continue
 		}
-		if want := builtinArgType(c.builtinRecv[m], m.Name, i); want != nil {
-			c.checkEnumForString(a, i, got, c.resolveType(want))
+		want = c.resolveType(want)
+		got := c.inferExpected(a, want)
+		if m.Name == "append" || m.Name == "insert" {
+			c.checkElementArg(m, i, a, got, want)
+			continue
 		}
+		c.checkEnumForString(a, i, got, want)
 	}
 	// An explicit generic type argument (`buf.readZAt::<double>(...)`) names the
 	// call's result type. gopherbuzz doesn't model generic signatures, so without
@@ -2248,6 +2296,16 @@ func (c *checker) checkArgType(ft *types.FuncType, i int, arg ast.Node, got, wan
 		slot = fmt.Sprintf("argument %q", ft.ParamNames[i])
 	}
 	c.errorfc(ast.NodePos(arg), TypeMismatch, "cannot pass %s as %s of type %s", got.TypeName(), slot, want.TypeName())
+}
+
+// checkElementArg reports a value appended or inserted into a list whose
+// element type it does not fit, upstream's E8.
+func (c *checker) checkElementArg(m *ast.MemberExpr, i int, arg ast.Node, got, want types.Type) {
+	if elemFits(got, want) {
+		return
+	}
+	c.errorfc(ast.NodePos(arg), TypeMismatch, "cannot pass %s as argument %d of %s on %s, which takes %s",
+		got.TypeName(), i+1, m.Name, c.builtinRecv[m].TypeName(), want.TypeName())
 }
 
 // instantiate substitutes args into t when t is a generic object type; any
@@ -2582,8 +2640,19 @@ func selfReturning(ret types.Type) types.Type {
 }
 
 func (c *checker) inferIndex(v *ast.IndexExpr) types.Type {
+	_, _, elem := c.inferIndexParts(v)
+	return elem
+}
+
+// inferIndexParts infers an index expression once and answers the indexed
+// container, the key and the element types.
+func (c *checker) inferIndexParts(v *ast.IndexExpr) (container, key, elem types.Type) {
 	ot := c.infer(v.Object)
-	c.infer(v.Index)
+	kt := c.infer(v.Index)
+	return ot, kt, c.indexedElem(v, ot)
+}
+
+func (c *checker) indexedElem(v *ast.IndexExpr, ot types.Type) types.Type {
 	switch t := ot.(type) {
 	case *types.ListType:
 		// A list index must be a non-null int, and `?[` is the form that tolerates
@@ -2706,11 +2775,7 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 	// An annotated map literal passes its declared element types down, so a
 	// nested `.{ ... }` value knows which object it is filling in.
 	if want, ok := c.wantType().(*types.MapType); ok {
-		for i := range v.Keys {
-			c.inferExpected(v.Keys[i], c.resolveType(want.Key))
-			c.inferExpected(v.Values[i], c.resolveType(want.Val))
-		}
-		return want
+		return c.inferMapAgainst(v, want)
 	}
 	if len(v.Keys) == 0 {
 		// `{any: any}`, matching upstream and the empty-list case below: an
@@ -2735,6 +2800,30 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 		c.anonMaps[mt] = true
 	}
 	return mt
+}
+
+// inferMapAgainst infers a map literal's entries against the map type its
+// position expects. A misfit answers the first key or value type that did not
+// fit, so the caller's Compat reports it where the literal is used.
+func (c *checker) inferMapAgainst(v *ast.MapExpr, want *types.MapType) types.Type {
+	keyWant, valWant := c.resolveType(want.Key), c.resolveType(want.Val)
+	keyGot, valGot := keyWant, valWant
+	for i := range v.Keys {
+		k := c.inferExpected(v.Keys[i], keyWant)
+		if keyGot == keyWant && !elemFits(k, keyWant) {
+			keyGot = k
+		}
+		val := c.inferExpected(v.Values[i], valWant)
+		if valGot == valWant && !elemFits(val, valWant) {
+			valGot = val
+		}
+	}
+	return &types.MapType{Key: keyGot, Val: valGot, Mut: v.Mut}
+}
+
+// elemFits is types.Compat that passes a type with an erased generic part.
+func elemFits(got, want types.Type) bool {
+	return hasErasedType(got) || hasErasedType(want) || types.Compat(got, want)
 }
 
 func (c *checker) inferListExpr(v *ast.ListExpr) types.Type {

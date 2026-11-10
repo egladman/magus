@@ -1,0 +1,4 @@
+// @error: cannot assign str to field "x" of type int
+object P { x: int }
+final p = mut P{ x = 1 };
+p.x = "s";

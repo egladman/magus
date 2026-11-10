@@ -854,19 +854,28 @@ final r = resume f;
 	assert.Error(t, sess.Exec(context.Background(), src), "recursive resume of a running fiber should error")
 }
 
-// TestFiberResumeDoneReturnsNull checks that resuming a completed fiber returns
-// null (upstream parity: resume on a done fiber is not an error).
-func TestFiberResumeDoneReturnsNull(t *testing.T) {
-	sess := newSession(context.Background())
-	src := `
+// TestFiberResumeDoneRaisesOver checks that resuming a completed fiber raises
+// "Fiber is over", as upstream does.
+func TestFiberResumeDoneRaisesOver(t *testing.T) {
+	ctx := context.Background()
+	sess := newSession(ctx)
+	require.NoError(t, sess.Exec(ctx, `
 fun gen() > int { return 1; }
 final f = &gen();
 final a = resume f;
-final b = resume f;
-`
-	require.NoError(t, sess.Exec(context.Background(), src))
-	assert.True(t, sess.GetGlobal("a").IsNull(), "first resume (completes gen) should return null")
-	assert.True(t, sess.GetGlobal("b").IsNull(), "resume of a done fiber should return null")
+`))
+	assert.True(t, sess.GetGlobal("a").IsNull(), "the resume that completes gen returns null")
+	assert.EqualError(t, sess.Exec(ctx, `final b = resume f;`), "Fiber is over")
+}
+
+// TestFiberResumeErroredRaisesOver checks that a fiber that ended in an error
+// is over too. Upstream panics here.
+func TestFiberResumeErroredRaisesOver(t *testing.T) {
+	ctx := context.Background()
+	sess := newSession(ctx)
+	require.NoError(t, sess.Exec(ctx, `fun boom() { throw "boom"; } final f = &boom();`))
+	require.Error(t, sess.Exec(ctx, `final a = resume f;`))
+	assert.EqualError(t, sess.Exec(ctx, `final b = resume f;`), "Fiber is over")
 }
 
 // TestFiberErrorResurfaced checks that a fiber whose VM errors caches the error

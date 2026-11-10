@@ -1,0 +1,3 @@
+// @error: cannot pass double as argument 2 of insert on mut [int], which takes int
+final l: mut [int] = mut [1];
+l.insert(0, value: 2.5);
