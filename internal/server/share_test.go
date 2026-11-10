@@ -135,12 +135,10 @@ func TestWorkspaceConsoleGenIsNotServedByDefault(t *testing.T) {
 		[]byte("<html><head></head><body>planted by the repository</body></html>"), 0o600))
 	t.Setenv("MAGUS_CONSOLE_DIR", "")
 	logs := &syncBuffer{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	failure := &daemon.WorkspaceFailure{Message: "magusfile: exec magusfile.buzz: [BZZ1005] ..."}
 	d, addr := testServer(t, func(opts mcp.Options) *Server {
+		opts.Logger = slog.New(slog.NewTextHandler(logs, nil))
 		return NewUnloaded(opts, Unloaded{Root: root, Err: func() rpcerr.Error { return rpcerr.WorkspaceFailed(root, failure) }})
 	})
 	base, patterns, _ := serveMounted(t, d, addr)
@@ -163,7 +161,7 @@ func TestConsoleDirIsOnlyTheOneMagusConsoleDirNames(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(gen, "index.html"), []byte("<html></html>"), 0o600))
 
 	t.Setenv("MAGUS_CONSOLE_DIR", gen)
-	dir, ok := resolveConsoleDir(root)
+	dir, ok := resolveConsoleDir(t.Context(), slog.New(slog.DiscardHandler), root)
 	assert.True(t, ok)
 	assert.Equal(t, gen, dir)
 }
@@ -174,8 +172,11 @@ func TestConsoleDirWithNoIndexDoesNotFallBackToConsoleGen(t *testing.T) {
 	require.NoError(t, os.MkdirAll(gen, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(gen, "index.html"), []byte("<html></html>"), 0o600))
 
-	t.Setenv("MAGUS_CONSOLE_DIR", t.TempDir())
-	dir, ok := resolveConsoleDir(root)
+	named := t.TempDir()
+	t.Setenv("MAGUS_CONSOLE_DIR", named)
+	logs := &syncBuffer{}
+	dir, ok := resolveConsoleDir(t.Context(), slog.New(slog.NewTextHandler(logs, nil)), root)
 	assert.False(t, ok)
 	assert.Empty(t, dir)
+	assert.Contains(t, logs.String(), "dir="+named)
 }

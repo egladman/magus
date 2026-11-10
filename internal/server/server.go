@@ -502,9 +502,9 @@ func (s *Server) Serve(ctx context.Context) error {
 			// connected. The trail is the same workspace cache base the ActivityService reads.
 			shareMgr := share.NewManager(ctx, log, share.WithTrailDir(opts.Magus.CacheDir()))
 			defer shareMgr.Close()
-			consoleDir, ok := resolveConsoleDir(opts.Magus.Root())
+			consoleDir, ok := resolveConsoleDir(ctx, shareLog, opts.Magus.Root())
 			if !ok {
-				shareLog.WarnContext(ctx, "built console not found; share to phone will report it needs a console build",
+				shareLog.WarnContext(ctx, "no console is served; share to phone refuses until MAGUS_CONSOLE_DIR names a built console",
 					slog.String("root", opts.Magus.Root()))
 			}
 			shareH := s.newShareHandler(shareMgr, consoleDir, shareGuarded, opts.Magus.CacheDir(), log)
@@ -530,8 +530,8 @@ func (s *Server) Serve(ctx context.Context) error {
 			// build also writes the hosted demo's graph JSON (this repo's knowledge graph, notes
 			// included) into the same dir. It is wrapped in the same GuardRebind the rest of the
 			// loopback routes use, so a forged cross-origin Host cannot reach it. Mounted only
-			// when a build was found; otherwise the server still runs (MCP + data routes) and
-			// /console/ just 404s until a console is built.
+			// when MAGUS_CONSOLE_DIR names a build.
+			// Otherwise /console/ 404s.
 			if ok {
 				f.server.Handle("/console/", httpx.GuardRebind(rpcerr.FormatJSON, f.allowed, console.StaticHandler(consoleDir)))
 				bridgeLog.InfoContext(ctx, "static console mounted", slog.String("path", "/console/"), slog.String("dir", consoleDir))
@@ -883,7 +883,7 @@ func (s *Server) serveUnloaded(ctx context.Context) error {
 	for path := range apiNeeds {
 		f.api(path, refuseJSON)
 	}
-	if consoleDir, ok := resolveConsoleDir(u.Root); ok {
+	if consoleDir, ok := resolveConsoleDir(ctx, log.With(attr.Component("bridge")), u.Root); ok {
 		f.server.Handle("/console/", httpx.GuardRebind(rpcerr.FormatJSON, f.allowed, console.StaticHandler(consoleDir)))
 	}
 	log.With(attr.Component("bridge")).WarnContext(ctx, "workspace not loaded; serving status and the console only",

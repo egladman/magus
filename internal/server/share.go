@@ -116,18 +116,18 @@ func refuseShare(w http.ResponseWriter, r *http.Request, e rpcerr.Error, log *sl
 // A cloned repository writes <root>/console/gen, and its page would read the
 // token from the URL fragment. So that directory is never served unnamed, and
 // passing it over is logged.
-func resolveConsoleDir(root string) (string, bool) {
+func resolveConsoleDir(ctx context.Context, log *slog.Logger, root string) (string, bool) {
 	dir := os.Getenv("MAGUS_CONSOLE_DIR")
 	if dir == "" {
 		if gen := filepath.Join(root, "console", "gen"); root != "" && hasIndex(gen) {
-			slog.Default().WarnContext(context.Background(), "serving no console: the workspace's console/gen is served only when MAGUS_CONSOLE_DIR names it",
-				attr.Component("console"), slog.String("passed_over", gen))
+			log.WarnContext(ctx, "serving no console: the workspace's console/gen is served only when MAGUS_CONSOLE_DIR names it",
+				slog.String("passed_over", gen))
 		}
 		return "", false
 	}
 	if !hasIndex(dir) {
-		slog.Default().WarnContext(context.Background(), "serving no console: MAGUS_CONSOLE_DIR holds no index.html",
-			attr.Component("console"), slog.String("dir", dir))
+		log.WarnContext(ctx, "serving no console: MAGUS_CONSOLE_DIR holds no index.html",
+			slog.String("dir", dir))
 		return "", false
 	}
 	return dir, true

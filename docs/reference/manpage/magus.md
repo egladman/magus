@@ -496,7 +496,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Env-only, no magus.yaml equivalent: base URL of the log viewer page a live run opens, for a self-hosted mirror (default: the hosted log viewer)
 
 **MAGUS_CONSOLE_DIR**
-: Env-only, no magus.yaml equivalent: directory of the built console the LAN share serves (default: \<root\>/console/gen)
+: Env-only, no magus.yaml equivalent: directory of the built console the server serves at /console/ and the LAN share serves; unset serves none, and the workspace's own console/gen is never served unless this names it
 
 **MAGUS_PPROF**
 : Env-only, no magus.yaml equivalent: write Go profiles for one invocation, as kind:path pairs (cpu, mem, trace), comma separated
