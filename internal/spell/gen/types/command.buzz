@@ -14,6 +14,8 @@ export enum<str> External {
 export object Command {
     testSelection: str = "",
     testScope: [str] = [],
+    pathScope: [str] = [],
+    pathScopeFiles: [str] = [],
     bin: str = "",
     args: [str] = [],
     defaultArgs: [str] = [],

@@ -124,6 +124,18 @@ func decodeCommand(v vm.Value, path string) (spells.Command, error) {
 				return out, err
 			}
 			out.TestScope = strsTestScope
+		case "pathScope":
+			strsPathScope, err := decodeStringList(item, path+".pathScope")
+			if err != nil {
+				return out, err
+			}
+			out.PathScope = strsPathScope
+		case "pathScopeFiles":
+			strsPathScopeFiles, err := decodeStringList(item, path+".pathScopeFiles")
+			if err != nil {
+				return out, err
+			}
+			out.PathScopeFiles = strsPathScopeFiles
 		case "bin":
 			sBin, err := decodeString(item, path+".bin")
 			if err != nil {

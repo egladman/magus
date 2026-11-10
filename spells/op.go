@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/bmatcuk/doublestar/v4"
 )
 
 // PatchOp is one RFC 6902 operation over a target's argv array. Path/From are
@@ -58,7 +60,12 @@ type Command struct {
 	// TestScope narrows a test op to the tests of one source file, through
 	// ExpandTestScope. Empty runs the whole project.
 	TestScope []string `json:"test_scope,omitempty"`
-	Bin       string   `json:"bin,omitempty"`
+	// PathScope maps a forwarded file to the tool's operands for it, with
+	// TestScope's placeholders. See [Command.ScopePath].
+	PathScope []string `json:"path_scope,omitempty"`
+	// PathScopeFiles are the globs PathScope maps, "!" exclusions included.
+	PathScopeFiles []string `json:"path_scope_files,omitempty"`
+	Bin            string   `json:"bin,omitempty"`
 	Args      []string `json:"args,omitempty"`
 	// DefaultArgs are trailing argv tokens the RUNNER appends only when the
 	// invocation passes no explicit args of its own; explicit call-site args
@@ -172,7 +179,7 @@ type Command struct {
 // Validate rejects a Command whose fields contradict each other. Quiet without
 // Capture is an error: the output would stream nowhere and return nowhere.
 func (c Command) Validate() error {
-	for _, check := range []func() error{c.validateSelection, c.validateQuiet, c.validateSourcesEach, c.validateTestScope} {
+	for _, check := range []func() error{c.validateSelection, c.validateQuiet, c.validateSourcesEach, c.validateTestScope, c.validatePathScope} {
 		if err := check(); err != nil {
 			return err
 		}
@@ -204,15 +211,46 @@ func (c Command) validateSourcesEach() error {
 var testScopePlaceholder = regexp.MustCompile(`\{[^{}]*\}`)
 
 func (c Command) validateTestScope() error {
-	for i, entry := range c.TestScope {
+	return validateScope("test_scope", c.TestScope)
+}
+
+func validateScope(field string, entries []string) error {
+	for i, entry := range entries {
 		if entry == "" {
-			return fmt.Errorf("test_scope[%d] is empty", i)
+			return fmt.Errorf("%s[%d] is empty", field, i)
 		}
 		for _, p := range testScopePlaceholder.FindAllString(entry, -1) {
 			if !slices.Contains([]string{"{dir}", "{file}", "{stem}"}, p) {
-				return fmt.Errorf("test_scope %q: placeholder %s, want {dir}, {file} or {stem}", entry, p)
+				return fmt.Errorf("%s %q: placeholder %s, want {dir}, {file} or {stem}", field, entry, p)
 			}
 		}
+	}
+	return nil
+}
+
+func (c Command) validatePathScope() error {
+	if err := validateScope("path_scope", c.PathScope); err != nil {
+		return err
+	}
+	if len(c.PathScope) > 0 && len(c.PathScopeFiles) == 0 {
+		return errors.New("path_scope without path_scope_files maps no file, set the globs of the files it maps")
+	}
+	if len(c.PathScope) == 0 && len(c.PathScopeFiles) > 0 {
+		return errors.New("path_scope_files without path_scope maps its files to nothing, set path_scope or drop path_scope_files")
+	}
+	positive := false
+	for i, raw := range c.PathScopeFiles {
+		pattern, excluded := strings.CutPrefix(raw, "!")
+		if pattern == "" {
+			return fmt.Errorf("path_scope_files[%d] %q names no pattern", i, raw)
+		}
+		if !doublestar.ValidatePattern(pattern) {
+			return fmt.Errorf("path_scope_files[%d] %q is not a valid glob", i, raw)
+		}
+		positive = positive || !excluded
+	}
+	if len(c.PathScopeFiles) > 0 && !positive {
+		return errors.New("path_scope_files holds only exclusions, so it maps no file")
 	}
 	return nil
 }
@@ -221,10 +259,35 @@ func (c Command) validateTestScope() error {
 // {dir} is its directory, {file} its path and {stem} its base name without
 // extension. It checks no path; a caller drops entries naming none.
 func (c Command) ExpandTestScope(file string) []string {
+	return expandScope(c.TestScope, file)
+}
+
+// ScopePath maps file, a slash-separated path relative to the command's
+// working directory, through PathScope as ExpandTestScope maps TestScope.
+// keep is false when PathScopeFiles leaves file out: it names no operand of
+// this tool. It checks no path; the runner calls it only for existing files.
+func (c Command) ScopePath(file string) (operands []string, keep bool) {
+	matched := false
+	for _, raw := range c.PathScopeFiles {
+		pattern, excluded := strings.CutPrefix(raw, "!")
+		if ok, _ := doublestar.Match(pattern, file); ok {
+			if excluded {
+				return nil, false
+			}
+			matched = true
+		}
+	}
+	if !matched {
+		return nil, false
+	}
+	return expandScope(c.PathScope, file), true
+}
+
+func expandScope(entries []string, file string) []string {
 	r := strings.NewReplacer("{dir}", path.Dir(file), "{file}", file,
 		"{stem}", strings.TrimSuffix(path.Base(file), path.Ext(file)))
-	out := make([]string, 0, len(c.TestScope))
-	for _, entry := range c.TestScope {
+	out := make([]string, 0, len(entries))
+	for _, entry := range entries {
 		out = append(out, r.Replace(entry))
 	}
 	return out

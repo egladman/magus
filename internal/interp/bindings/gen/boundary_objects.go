@@ -3333,6 +3333,16 @@ func ObjectCommand(v spells.Command, enums ffi.EnumCases) vm.Value {
 		itemsTestScope[indexTestScope] = vm.StringValue(v.TestScope[indexTestScope])
 	}
 	out.MapSet("testScope", vm.ListValue(itemsTestScope))
+	itemsPathScope := make([]vm.Value, len(v.PathScope))
+	for indexPathScope := range v.PathScope {
+		itemsPathScope[indexPathScope] = vm.StringValue(v.PathScope[indexPathScope])
+	}
+	out.MapSet("pathScope", vm.ListValue(itemsPathScope))
+	itemsPathScopeFiles := make([]vm.Value, len(v.PathScopeFiles))
+	for indexPathScopeFiles := range v.PathScopeFiles {
+		itemsPathScopeFiles[indexPathScopeFiles] = vm.StringValue(v.PathScopeFiles[indexPathScopeFiles])
+	}
+	out.MapSet("pathScopeFiles", vm.ListValue(itemsPathScopeFiles))
 	out.MapSet("bin", vm.StringValue(v.Bin))
 	itemsArgs := make([]vm.Value, len(v.Args))
 	for indexArgs := range v.Args {

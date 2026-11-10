@@ -203,6 +203,11 @@ test "go-vet takes its package from the caller and keys on the compile selectors
     final vet = command("go-vet");
     std\assert(vet.args.indexOf("./...") == null, message: "fixed ./... would follow the caller's package");
     std\assert(vet.trailingArgs.join(" ") == "./...", message: "dropped by any forwarded arg");
+    std\assert(vet.pathScope.join(" ") == "./\{dir\}", message: "a forwarded file vets its package");
+    foreach (left in ["!**/testdata/**", "!**/vendor/**", "!**/_*/**", "!**/.*/**"]) {
+        std\assert(vet.pathScopeFiles.indexOf(left) != null, message: "{left}: ./... leaves it out, so no forwarded file there is vetted");
+    }
+    std\assert(vet.pathScopeFiles.indexOf("**/*.go") != null, message: "a non-Go file names no package");
     foreach (op in ["go-build", "go-test", "go-vet", "go-fuzz"]) {
         foreach (name in ["GOFLAGS", "GOEXPERIMENT", "CGO_ENABLED"]) {
             std\assert(command(op).envKeys.indexOf(name) != null, message: "{name} keys {op}");
