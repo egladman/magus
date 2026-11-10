@@ -13,10 +13,12 @@ fix the pure function that produced it and its test, then run it again.
 
 ## The loop
 
-1. Read the pinned "Merge queue" issue first. It lists every open pull request's
-   place in the queue, with its reason and a person's command. `./magus buzz
-   hack/ci/pull-requests.buzz -- dashboard --all --preview --out dashboard.md`
-   renders it locally. Then read the board:
+1. Read the board. The queue's own page is the run summary of the latest
+   `queue-apply.yaml` run, written by its `queue dashboard` job. It lists every
+   open pull request's place in the queue, with its reason and a person's command.
+   `./magus buzz hack/ci/pull-requests.buzz -- dashboard --all --preview --out
+   dashboard.md` renders the same page locally. The `status` records are what
+   you act on:
 
    ```sh
    ./magus buzz hack/ci/pull-requests.buzz -- status [--pr <n>]... [--author <login>]
