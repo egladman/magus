@@ -1,7 +1,7 @@
 ---
 title: "ADR 0043: job records are Buzz data, and Markdown is rendered from them"
 order: 43
-description: What a parent hands a child is the job row, and what a child hands back is the JobResult it files; both are Go types mirrored into Buzz by the one generator, and the only prose is rendered from them by one Buzz template, never written first and parsed later. The word brief goes; the row's rendering is its terms. The guard holds a spawn to a complete, validated row and a leased child's stop to a filed result. agents.brief_format, magus\Brief, the buzz prompt format and StopRequest.reply are deleted as a deliberate break, and the change is judged against the spawn baseline collected before it.
+description: What a parent hands a child is the job row, and what a child hands back is the JobResult it files; both are Go types mirrored into Buzz by the one generator, and the only prose is rendered from them by one Buzz template, never written first and parsed later. The word brief goes; the parent's record is the job spec, and the rendered Markdown is a view of it. The guard holds a spawn to a complete, validated row and a leased child's stop to a filed result. agents.brief_format, magus\Brief, the buzz prompt format and StopRequest.reply are deleted as a deliberate break, and the change is judged against the spawn baseline collected before it.
 tags: [adr, decision, agents, jobs, guard, buzz, subagents, harness]
 status: proposed
 date: 2026-11-10
@@ -19,6 +19,10 @@ it more of an agentic tool. We want to speak in favor of actual, through Buzz, a
 then you can output Markdown from that, from the raw data. Structured data first, and then
 it goes into whatever you want it to be. Structured data can be turned into Markdown, not
 the other way around. This feature needs to be rethought."
+
+The same day, on the questions this record's draft left him: the parent's record is the
+"spec"; on shipping `stop-unfiled` as a built-in rule, "yes"; and on the render path, "view,
+as in job view / job-view.buzz: says it's a rendering of the data, never stored".
 
 Read on 2026-11-10 from origin/main at a0625c0fe:
 
@@ -58,8 +62,9 @@ keeps magus computing and refusing, never acting.
 
 ### 1. Two records, both Go types mirrored into Buzz
 
-A parent's record is the job row, `types.Job`, mirrored as `magus\Job`. A child's record is
-`types.JobResult`, mirrored as `magus\JobResult`. There is no third record. Both mirrors come
+A parent's record is the job spec: the declared fields of the job row, `types.Job`, mirrored
+as `magus\Job`. A child's record is `types.JobResult`, mirrored as `magus\JobResult`. There
+is no third record. Both mirrors come
 from the one generator of [ADR 0035](0035-buzz-bindings-come-from-one-config-driven-generator.md)
 and are read in Buzz through the typed repository of
 [ADR 0030](0030-buzz-reads-state-through-typed-repositories.md), never through
@@ -80,11 +85,13 @@ names the row, as `<parent>/<role> <job>` already does.
 
 ### 2. One render path, Buzz template over the record, Markdown out
 
-Markdown is rendered from the two records by one Buzz script, `job-terms.buzz` beside `hack/dev/render-brief.buzz`,
-which replaces `render-brief.buzz`. It reads `magus\Job` and `magus\JobResult` typed,
-renders through the `template` host module, and returns `result\Result::<str>`. It has two
-entry points: a row's terms, for a worker, a Codex `SubagentStart` context or a mod pane;
-and a result's report, for a person or a pull request. The script keeps the repository's
+The rendered Markdown is a view: a reading of the record for a person or a host that wants
+prose, never a record itself. It is rendered from the two records by one Buzz script,
+`job-view.buzz` beside `hack/dev/render-brief.buzz`, which replaces `render-brief.buzz`. It
+reads `magus\Job` and `magus\JobResult` typed, renders through the `template` host module,
+and returns `result\Result::<str>`. It has two entry points: a spec's view, for a worker, a
+Codex `SubagentStart` context or a mod pane; and a result's view, for a person or a pull
+request. The script keeps the repository's
 own steps (the bootstrap script to run, the skill to load, "run nothing else that
 validates"), which is why it is repository Buzz and not Go: core never names a `hack/`
 script ([The host wiring is yours](../design/judgment/the-host-wiring-is-yours.md)).
@@ -93,22 +100,39 @@ Rendered Markdown is never stored and never read back. `magus describe job` stay
 terminal door onto the same row and parses nothing. Core ships the records, `-o json`,
 `-o template=` and the `template` module; it ships no Markdown.
 
+No `magus job view <id>` verb ships. The verb would have to run `job-view.buzz` under `hack/dev`,
+and core never names a repository's Buzz script path
+([The host wiring is yours](../design/judgment/the-host-wiring-is-yours.md); the stop and
+spawn rules reach the guard only because the magusfile registers them). In this repository
+the view is `magus buzz hack/dev/job-view.buzz -- --job <id>`, one command a person, a
+worker or a host can run. A workspace that wants one door for it declares the renderer in
+its magusfile, as it declares its guard rules, and a verb that runs the declared renderer
+and refuses by name when none is declared is the only shape such a verb could take. That
+declaration is not built here: no caller has asked for the door, and a verb with nothing
+declared behind it is a silent default waiting to happen.
+
 ### 3. The names
 
 | was                                                    | is                                                         | why                                                                                                                                                                                                                                                 |
 | ------------------------------------------------------ | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| a brief (the text handed to a worker)                  | the job's terms                                            | `job exec` already says "read the terms"; `render-brief.buzz` already names its object `Terms`; a lease has terms, and terms are conditions that are graded, where a brief is a message that is read. Nothing agentic in the word                   |
+| a brief (the text handed to a worker)                  | the job spec                                               | data first: a spec is the declared half of a record, which is what a parent writes and the store validates, where a brief is a message that is read. The prior art is Kubernetes' `Job.spec`, which the row already leans on (`Generation` as `metadata.generation`, `MaxAttempts` as `backoffLimit`) and which Eli already uses for version names. Eli picked it, 2026-11-10 |
+| the Markdown rendered from a record                    | a view                                                     | a view is read off data and never written back, which is the one direction this record allows. Eli, 2026-11-10: "view, as in job view / job-view.buzz: says it's a rendering of the data, never stored"                                               |
 | `magus\Brief`, `BriefDecision`, `BriefRef`, `BriefRefKind` | fields on `Job`: `JobDecision`, `JobEvidence`, `JobEvidenceKind` | a second record beside the row said the same things twice, once in the store and once in a prompt the store never saw                                                                                                                      |
 | `agents.brief_format`, `Job.BriefFormat`, `types.BriefFormat` | nothing                                               | there is no format to choose: the record has one shape, and the prompt is prose by definition                                                                                                                                                      |
 | `brief-command`, `brief-plain-commands`                | `spawn-command`, `spawn-plain-commands`                    | they grade the spawn's prompt, and every other spawn-time rule is `spawn-*`                                                                                                                                                                         |
 | `spawn-unbriefed`, `buzz-unbriefed`, `architecture-unbriefed` | `spawn-before-skill`, `buzz-before-skill`, `architecture-before-skill` | each refuses an act before a skill loaded; the new name says what it catches                                                                                                                                                       |
-| `hack/dev/render-brief.buzz`, `hack/testdata/render-brief-*.json` | `job-terms.buzz` and `job-terms-*.json` in the same directories | named for what it renders                                                                                                                                                                                                                   |
-| the checkout brief Codex `SubagentStart` receives      | the checkout terms                                         | same text, same source, one word                                                                                                                                                                                                                    |
+| `hack/dev/render-brief.buzz`, `hack/testdata/render-brief-*.json` | `job-view.buzz` and `job-view-*.json` in the same directories | named for what it renders                                                                                                                                                                                                                     |
+| the checkout brief Codex `SubagentStart` receives      | the checkout spec                                          | same text, same source, one word                                                                                                                                                                                                                    |
+| "read the terms" in `job exec`'s last line             | "read the spec"                                            | one word for the record everywhere it is named                                                                                                                                                                                                      |
 | `magus session --brief`                                | unchanged                                                  | a summary flag with prior art (`diff --brief`, `file --brief`); not this feature's sense                                                                                                                                                 |
 
-Rejected names: spec and status (Kubernetes' halves of a resource; the row mixes declared
-and store-computed fields today, and splitting it is a different decision, see
-Alternatives); mandate (taken by [ADR 0019](0019-a-mandate-carries-out-decisions-already-made.md));
+`JobResult` keeps its name: Eli did not pick status, and a result is filed once where a
+status is overwritten. The row is not split into `spec` and `status` fields either; spec
+names the parent's half of the row as it stands (see Alternatives).
+
+Rejected names: terms (in-tree precedent in `job exec` and `render-brief.buzz`'s `Terms`,
+but it names the agreement rather than the data, and its prior art is a lease, not a tool);
+mandate (taken by [ADR 0019](0019-a-mandate-carries-out-decisions-already-made.md));
 assignment, work order and charter (none has prior art in a build or VCS tool);
 instructions (reads as prose to follow rather than conditions graded).
 
@@ -122,11 +146,12 @@ instructions (reads as prose to follow rather than conditions graded).
 | `types/brief.go`, `magus\Brief` and its two helpers             | deleted; fields move to `types/job.go`                                                 | proposed  |
 | `agents.brief_format`, `Job.BriefFormat`, `ResolveBriefFormat`, `BriefFormatUnset` | deleted                                                             | proposed  |
 | `judgeBriefBuzz` and the Buzz type check of a prompt            | deleted                                                                                | proposed  |
-| `hack/dev/render-brief.buzz`                                    | replaced by `job-terms.buzz` in the same directory, typed, two entry points                         | proposed  |
+| `hack/dev/render-brief.buzz`                                    | replaced by `job-view.buzz` in the same directory, typed, two entry points             | proposed  |
 | `magus describe job`                                            | kept as the terminal door                                                              | done      |
-| `next` steps on structured results                              | kept; the terms render them as the worker's next commands                              | done      |
+| `next` steps on structured results                              | kept; the view renders them as the worker's next commands                              | done      |
 | a stop rule requiring a filed result (ADR 0036 s3, workspace)   | replaced by the shipped `stop-unfiled` below                                           | proposed  |
 | `StopRequest.reply` (ADR 0036 s4)                               | not built: a reply judged for shape is prose parsed into data, the direction refused   | not built |
+| `magus job view <id>` running a workspace-declared renderer     | not built: core names no repository script; the view is `magus buzz hack/dev/job-view.buzz` | not built |
 | `brief-*` and `*-unbriefed` rule names                          | renamed as in section 3                                                                | proposed  |
 
 ### 5. The guard makes it explicit, at spawn and at stop
@@ -162,6 +187,7 @@ At stop, shipped, deny by default, named `stop-unfiled`:
 This reverses ADR 0036's "ship no such rule". The reason it gave, that a read-only scout may
 not need to file, does not hold: `job exit` already ends a read-only row with nothing to
 grade, so filing costs the scout one command and gives the parent one record to wait on.
+Eli, 2026-11-10, asked whether it ships as written: "yes".
 
 ### 6. What it refuses to become
 
@@ -174,7 +200,7 @@ grade, so filing costs the scout one command and gives the parent one record to 
 - A second record beside the row, under any name.
 - A format setting: `brief_format`, or a per-host record shape.
 - A Markdown renderer in Go core that carries a repository's steps.
-- A model call that summarizes a result, grades its quality or writes the terms.
+- A model call that summarizes a result, grades its quality or writes the spec.
 - A message store or protocol between parent and child. The parent reads the result through
   `job wait`; the child reads the row through `describe job`.
 - A re-prompt or retry of a child that filed nothing: `stop-unfiled` refuses once and
@@ -205,10 +231,10 @@ magus is pre-1.0 and this is one change, one pull request, no shim and no alias 
    rule pages regenerate from their descriptors. A workspace that set a renamed rule by its
    old name in `magus\guard.builtins` fails loudly with the new name.
 6. `stop-unfiled` is added as a shipped stop rule with its descriptor and page.
-7. `hack/dev/render-brief.buzz` becomes `job-terms.buzz` in the same directory, reading typed records,
-   with its fixtures renamed; `--extra` goes, since the prompt is where a parent's extra
-   words live.
-8. Guides, glossary (a `terms` entry), ADR 0036 (amended: s3 and s4 superseded here) and
+7. `hack/dev/render-brief.buzz` becomes `job-view.buzz` in the same directory, reading typed
+   records, with its fixtures renamed; `--extra` goes, since the prompt is where a parent's
+   extra words live. `job exec`'s last line says "read the spec".
+8. Guides, glossary (a `spec` entry), ADR 0036 (amended: s3 and s4 superseded here) and
    `changes/unreleased` name the break: the config key, the row field, the rule names and
    the deleted Buzz objects.
 
@@ -230,10 +256,10 @@ a reading that reopens the decision:
 | ------------------------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | results filed per leased spawn | rises toward 1.0                           | `stop-unfiled` is not reaching the child: check which hosts the stops came from          |
 | `stop-unfiled` precision       | of denials, the share followed by a filed result, reported with its count | below 0.8, the deny costs turns and files nothing: set it to advise and say why |
-| refs filed per result          | rises                                      | the terms do not say which ref to file: fix the template, not the rule                   |
-| prompt bytes per spawn         | falls, since the row carries the terms     | parents still paste the row: the render is being copied, measure what they add           |
-| reply bytes per child          | falls, since the result carries the record | parents ask for prose: the result report is not reaching them                            |
-| tokens per child               | does not rise                              | the row's new fields cost more to read than the prose did: cut the template              |
+| refs filed per result          | rises                                      | the view does not say which ref to file: fix the template, not the rule                  |
+| prompt bytes per spawn         | falls, since the spec carries the record   | parents still paste the row: the view is being copied, measure what they add             |
+| reply bytes per child          | falls, since the result carries the record | parents ask for prose: the result view is not reaching them                              |
+| tokens per child               | does not rise                              | the spec's new fields cost more to read than the prose did: cut the template             |
 
 A rate is reported with its numerator and denominator and its dates, never bare, as
 [Measured, not asserted](../design/principles/measured-not-asserted.md) requires. The
@@ -245,7 +271,8 @@ comparison is one table a person reads; nothing in magus acts on it.
   the prompt and the reply are the models' own text, unrewritten and unparsed; the records
   travel through the store, not through the hook.
 - [Enforcement, not pinky promises](../design/principles/enforcement-not-pinky-promises.md):
-  the stop rule ships as a deny, because ADR 0036 left it to prose and nothing was built.
+  the stop rule ships as a deny, because ADR 0036 left it to prose and nothing was built;
+  Eli confirmed the shipped rule on 2026-11-10.
 - [One source, every door](../design/principles/one-source-every-door.md): `types.Job` and
   `types.JobResult` generate the JSON schema, the Buzz objects and the template's input;
   the CLI, a script and a hook read the same record.
@@ -279,14 +306,21 @@ there (ADR 0036, spawn table). Evidence: it ran nowhere, this repository include
 two days since it merged. Reopen if a host offers a typed spawn input field that reaches
 the child as data rather than as prompt text.
 
-### Split the row into spec and status
+### Split the row into `spec` and `status` fields
 
-Rename the parent's half `spec` and the store's and child's half `status`, as Kubernetes
-does. It lost because the rename touches every reader of `types.Job` and adds no
-capability this decision needs; the row already separates declared fields from
-store-computed ones in its comments, and `Generation` already marks a spec change. Prior
-art is input here, not a reason. Reopen when a reader needs the declared half alone, such
-as a diff of a row between generations.
+Nest the parent's half under `Job.spec` and the store's and child's half under `Job.status`,
+as a Kubernetes resource does. The word spec wins (section 3); the nesting lost, because it
+touches every reader of `types.Job` and adds no capability this decision needs: the row
+already separates declared fields from store-computed ones in its comments, and
+`Generation` already marks a spec change. Reopen when a reader needs the declared half
+alone, such as a diff of a row between generations.
+
+### Call it the terms
+
+The in-tree word: `job exec` says "read the terms" and `render-brief.buzz` declares `Terms`.
+It lost to spec on Eli's call, 2026-11-10, and on what the word names: terms are the
+conditions of a lease, an agreement, where spec names data a store validates and a view is
+rendered from. Reopen never; the word stays available for the lease it describes.
 
 ### Markdown as the source, with a parser
 
@@ -303,11 +337,20 @@ more results filed per leased spawn, which would make the deny noise.
 
 ### `magus describe job -o markdown` in Go
 
-One flag, every workspace. It lost because the terms a worker reads carry this repository's
+One flag, every workspace. It lost because the view a worker reads carries this repository's
 steps (the bootstrap script, the skill to load, which target it may run), which core never
 names ([The host wiring is yours](../design/judgment/the-host-wiring-is-yours.md)), and a
-generic Markdown of the row is `-o template=` already. Reopen if the terms shrink to
+generic Markdown of the row is `-o template=` already. Reopen if the view shrinks to
 nothing repository-specific.
+
+### A `magus job view <id>` verb in core
+
+One verb on every host, running the repository's `job-view.buzz`. It lost because core
+never names a repository's Buzz script path, and a verb that ran a hard-coded `hack/` path
+would be the first. The declared route (a renderer registered in the magusfile, a verb that
+refuses by name when none is) stays open and is not built: `magus buzz hack/dev/job-view.buzz`
+is already one command. Reopen when a second workspace renders a view and wants the same
+door, or a host needs the view without a shell.
 
 ### Keep the word brief
 
@@ -317,7 +360,7 @@ skill load, a summary), which the renames separate. Reopen never.
 ## Consequences
 
 - A parent spawns with a title that names the row and a prompt of its own words. Everything
-  the child must honor is on the row, readable with `describe job` and renderable as terms.
+  the child must honor is on the spec, readable with `describe job` and renderable as a view.
 - A leased child on Claude Code or Codex cannot stop without filing a `JobResult`; on Cursor
   and OpenCode the gap shows in `job wait`.
 - The Buzz declarations lose four objects and gain two fields and one enum, all generated.
@@ -332,7 +375,7 @@ skill load, a summary), which the renames separate. Reopen never.
 
 - Whether `JobEvidenceKind` needs a `session` kind for a transcript, which a parent today
   cites by path in prose.
-- Whether the Codex `SubagentStart` context should carry the rendered terms rather than
+- Whether the Codex `SubagentStart` context should carry the rendered view rather than
   `describe job`'s terminal text, which would make the Buzz renderer the one render on that
   host too.
 - The number: main ends at 0039 at this writing, and 0040 to 0042 are on open branches.
