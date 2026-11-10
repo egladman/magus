@@ -375,7 +375,9 @@ async function rpc($: EngineInterface, procedure: string, body: unknown): Promis
   if (token.error) {
     const at = socket
     socket = null
-    return fail(new MagusError({ code: '', message: `Cannot read the server's token at ${at}.token: ${token.error.message}` }))
+    return fail(
+      new MagusError({ code: '', message: `Cannot read the server's token at ${at}.token: ${token.error.message}` }),
+    )
   }
   const answered = await fromPromise(
     $.http.fetch(`http://magus${procedure}`, {
