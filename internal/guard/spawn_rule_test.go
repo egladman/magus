@@ -1074,6 +1074,33 @@ func TestRegisterAgentBaseFollowsADivergedCheckout(t *testing.T) {
 	}
 }
 
+// A diverged worker that exits after a commit keeps its exit. Exec would reopen
+// the row, and the worker's next call after `job exit` would read it running.
+func TestRegisterAgentBaseLeavesAnExitedRowExited(t *testing.T) {
+	row := types.Job{ID: "lease-life", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
+	ctx, root := fleetFixture(t, row)
+	at := hookLocation(ctx, Dependencies{})
+	checkpoint, created, committed := commitCheckout(t, root), commitCheckout(t, root), commitCheckout(t, root)
+	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: at.cacheDir, Root: at.workspace})
+	_, err := store.Update(ctx, row.ID, func(u *types.Job) { u.Checkpoint = checkpoint })
+	require.NoError(t, err)
+	fixtureGit(t, root, "checkout", "-q", created)
+	_, err = store.Exec(ctx, row.ID)
+	require.NoError(t, err)
+	_, err = store.Update(ctx, row.ID, func(u *types.Job) { u.State = types.StateExited })
+	require.NoError(t, err)
+	fixtureGit(t, root, "checkout", "-q", committed)
+	deps := Dependencies{Revision: func(context.Context, string, string) string { return committed }}
+
+	wrote := registerAgentBase(ctx, deps, at, row.ID)
+
+	rows, err := store.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, []any{false, types.StateExited, created},
+		[]any{wrote, rows[0].State, rows[0].ReportedBase})
+}
+
 // A registration the job store refuses (another checkout holds the job) is not tried again
 // until the row changes: each try reads the checkout's base, a VCS process, for nothing.
 func TestRegisterAgentBaseStopsAfterARefusal(t *testing.T) {
