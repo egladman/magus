@@ -1337,7 +1337,7 @@ func TestServerSocketCarriesMCPAndTheAPIs(t *testing.T) {
 	session := resp.Header.Get("Mcp-Session-Id")
 	require.NotEmpty(t, session)
 
-	resp, out = postMCP(t, client, "http://magus/mcp", session,`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"config","arguments":{}}}`)
+	resp, out = postMCP(t, client, "http://magus/mcp", session, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"config","arguments":{}}}`)
 	require.Equal(t, http.StatusOK, resp.StatusCode, out)
 	assert.Contains(t, out, `"result"`)
 	assert.NotContains(t, out, `"isError":true`, "the socket peer's grant reaches every tool")
