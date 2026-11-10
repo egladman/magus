@@ -204,7 +204,10 @@ async function hooks() {
       input: { tool: string; callID: string; sessionID?: string },
       output: { args: Record<string, unknown> },
     ) => Promise<void>;
-    "tool.execute.after": (input: { callID: string }, output: { output: string }) => Promise<void>;
+    "tool.execute.after": (
+      input: { callID: string; sessionID?: string },
+      output: { output: string },
+    ) => Promise<void>;
   }>;
   return await plugin(pluginInput);
 }
@@ -218,19 +221,30 @@ test("live: bash arm denies git stash with the whole-tree reason", { skip }, asy
   );
 });
 
-test("live: bash arm directs CI status reads to failure artifacts", { skip }, async () => {
+test("live: bash arm advises once on a CI status read and denies a watched one", { skip }, async () => {
   stubBunWithRealChild(magusBin as string);
   const h = await hooks();
+  // once() keys on the session, so a fresh id keeps a rerun from finding the advice spent.
+  const sessionID = `live-ci-${process.pid}-${Date.now()}`;
   const warnings = await withWarnings(async () => {
-    await assert.rejects(
-      h["tool.execute.before"](
-        { tool: "bash", callID: "c1", sessionID: "s1" },
-        { args: { command: "gh pr checks 5" } },
-      ),
-      /hack\/ci\/show-failures\.buzz/,
+    await h["tool.execute.before"](
+      { tool: "bash", callID: "c1", sessionID },
+      { args: { command: "gh pr checks 5" } },
     );
   });
-  assert.deepEqual(warnings, [], "the denial reaches the call without a second warning");
+  assert.deepEqual(warnings, [], "the advice rides in the call's own result, not a warning");
+
+  const result = { output: "checks listed" };
+  await h["tool.execute.after"]({ callID: "c1", sessionID }, result);
+  assert.match(result.output, /hack\/ci\/show-failures\.buzz/);
+
+  await assert.rejects(
+    h["tool.execute.before"](
+      { tool: "bash", callID: "c2", sessionID },
+      { args: { command: "gh pr checks 5 --watch" } },
+    ),
+    /hack\/ci\/show-failures\.buzz/,
+  );
 });
 
 test("live: edit arm passes on a path that is not a declared output", { skip }, async () => {
