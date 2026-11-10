@@ -18,6 +18,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestTrimStatusColumnsKeepsEdgeSpacesOfAName(t *testing.T) {
+	got := trimStatusColumns([]string{"M  lead.txt ", "M   spaced.txt"}, 3)
+	assert.Equal(t, []string{"lead.txt ", " spaced.txt"}, got)
+}
+
+func TestTrimStatusColumnsDropsALineThatIsOnlyAPrefix(t *testing.T) {
+	assert.Empty(t, trimStatusColumns([]string{"M  ", "A "}, 3))
+}
+
 // TestMain runs every backend test against a private HOME and XDG tree: jj keeps a
 // repository's config under the user's config directory, and git, hg and sl read the
 // user's config, so without it these tests read and wrote the developer's own.
