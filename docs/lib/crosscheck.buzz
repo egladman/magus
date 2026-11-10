@@ -122,6 +122,39 @@ export fun embedFindings(template: str, body: str, page: str, doc: str) > [str] 
     return ["{page}: does not carry {template} verbatim; a reader must see exactly what they would download"];
 }
 
+// spacedTabs writes each leading tab of source as four spaces, the way the
+// guides show Go.
+fun spacedTabs(source: str) > str {
+    final lines = mut [<str>];
+    foreach (line in source.split("\n")) {
+        var tabs = 0;
+        while (tabs < line.len() and line.byte(tabs) == 9) { tabs = tabs + 1; }
+        lines.append("    ".repeat(tabs) + line.sub(tabs, len: line.len() - tabs));
+    }
+    return lines.join("\n");
+}
+
+// exampleFindings reports each go block of guide that examples, a Go file of
+// godoc examples, does not hold verbatim. go test compiles and runs the
+// examples, so a block that stops compiling fails there.
+export fun exampleFindings(guideFile: str, guide: str, examplesFile: str, examples: str) > [str] {
+    final blocks = guide.split("```go\n");
+    if (blocks.len() < 2) {
+        return ["{guideFile}: has no go block; it shows the examples in {examplesFile}"];
+    }
+    final source = spacedTabs(examples);
+    final found = mut [<str>];
+    foreach (i, block in blocks) {
+        if (i == 0) { continue; }
+        final body = block.sub(0, len: block.indexOf("```") ?? block.len());
+        if (source.indexOf(body) == null) {
+            final first = body.split("\n")[0];
+            found.append("{guideFile}: the go block opening `{first}` is not in {examplesFile}; copy it from there, tabs as four spaces");
+        }
+    }
+    return found;
+}
+
 // coverageDecls returns the key=value fields of every line carrying marker.
 export fun coverageDecls(body: str, marker: str) > [{str: str}] {
     final decls: mut [{str: str}] = mut [<{str: str}>];
@@ -142,7 +175,7 @@ export fun coverageDecls(body: str, marker: str) > [{str: str}] {
 // normalizeHost folds the declarations' label (claude-code) and the guide's product
 // name (Claude Code) to one key.
 export fun normalizeHost(s: str) > str {
-    return s.trim().lower().replace(" ", "").replace("-", "").replace("`", "");
+    return s.trim().lower().replace(" ", with: "").replace("-", with: "").replace("`", with: "");
 }
 
 fun splitTableRow(line: str) > [str] {
@@ -168,7 +201,7 @@ fun guardColumn(cell: str) > str {
 // sessionColumn folds a header to the contract's dimension name ("hook output" is
 // hook-output).
 fun sessionColumn(cell: str) > str {
-    return cell.lower().replace(" ", "-").replace("`", "");
+    return cell.lower().replace(" ", with: "-").replace("`", with: "");
 }
 
 // tableRows reads the first table after heading as normalized host -> column -> cell.
@@ -381,51 +414,58 @@ export fun releaseKeyFindings(keyring: str, guideFile: str, guide: str) > [str] 
 }
 
 test "bearerFindings flags a real token and leaves the placeholder alone" {
-    final f = bearerFindings("p.md", "ok `#token=<bearer>`\nhttp://x/#token=abcdefghijklmnopqrstuvwxyz0123\n");
-    assert\equal(f.len(), 1, "one finding");
-    assert\equal(f[0].line, 2, "the token's line");
+    final f = bearerFindings("p.md", md: "ok `#token=<bearer>`\nhttp://x/#token=abcdefghijklmnopqrstuvwxyz0123\n");
+    assert\equal(f.len(), want: 1, message: "one finding");
+    assert\equal(f[0].line, want: 2, message: "the token's line");
 }
 
 test "environmentFindings flags a read of a detection variable, not a mention" {
-    final f = environmentFindings("p.md", "set `CI=true` in the workflow\nif os.Getenv(\"CI\") != \"\" \{\nprocess.env." + "GITHUB_ACTIONS\n");
-    assert\equal(f.len(), 2, "the call and the process.env read");
-    assert\equal(f[0].line, 2, "the Getenv line");
-    assert\equal(f[1].line, 3, "the process.env line");
+    final f = environmentFindings("p.md", md: "set `CI=true` in the workflow\nif os.Getenv(\"CI\") != \"\" \{\nprocess.env." + "GITHUB_ACTIONS\n");
+    assert\equal(f.len(), want: 2, message: "the call and the process.env read");
+    assert\equal(f[0].line, want: 2, message: "the Getenv line");
+    assert\equal(f[1].line, want: 3, message: "the process.env line");
 }
 
 test "magusLookupFindings flags ./magus and passes the walk-up" {
-    assert\equal(magusLookupFindings("p.md", "[ -x ./magus ] && ./magus hook\n").len(), 1, "root-only lookup");
-    assert\equal(magusLookupFindings("p.md", "[ -x \"$d/magus\" ] && \"$d/magus\" hook\n").len(), 0, "walk-up lookup");
+    assert\equal(magusLookupFindings("p.md", md: "[ -x ./magus ] && ./magus hook\n").len(), want: 1, message: "root-only lookup");
+    assert\equal(magusLookupFindings("p.md", md: "[ -x \"$d/magus\" ] && \"$d/magus\" hook\n").len(), want: 0, message: "walk-up lookup");
 }
 
 test "embedFindings wants the body verbatim, trailing newline aside" {
-    assert\equal(embedFindings("t.sh", body: "echo hi\n", page: "p.md", doc: "```sh\necho hi\n```").len(), 0, "embedded");
-    assert\equal(embedFindings("t.sh", body: "echo bye\n", page: "p.md", doc: "```sh\necho hi\n```").len(), 1, "drifted");
+    assert\equal(embedFindings("t.sh", body: "echo hi\n", page: "p.md", doc: "```sh\necho hi\n```").len(), want: 0, message: "embedded");
+    assert\equal(embedFindings("t.sh", body: "echo bye\n", page: "p.md", doc: "```sh\necho hi\n```").len(), want: 1, message: "drifted");
+}
+
+test "exampleFindings wants each go block in the examples, tabs as four spaces" {
+    final examples = "func f() error \{\n\treturn nil\n\}\n";
+    assert\equal(exampleFindings("g.md", guide: "```go\nfunc f() error \{\n    return nil\n\}\n```", examplesFile: "e.go", examples: examples).len(), want: 0, message: "copied");
+    assert\equal(exampleFindings("g.md", guide: "```go\nfunc f() error \{\n    return err\n\}\n```", examplesFile: "e.go", examples: examples).len(), want: 1, message: "an edited block is caught");
+    assert\equal(exampleFindings("g.md", guide: "no code", examplesFile: "e.go", examples: examples).len(), want: 1, message: "no block is a finding");
 }
 
 test "guardParityFindings compares cells to declarations both ways" {
     final templates = {"t.sh": "# magus-guard-coverage: schema=2 host=claude-code,codex input=command deny=model advise=none\n"};
     final guide = "## Parity across hosts\n\n| | command rules | declared-output rule | deny | advise |\n| --- | --- | --- | --- | --- |\n| Claude Code | yes | no | yes | no |\n| Codex | yes | no | yes | yes |\n| Cursor | no | no | no | no |\n";
     final f = guardParityFindings(templates, guide: guide, guideFile: "g.md");
-    assert\equal(f.len(), 2, "codex advise disagrees, cursor is undeclared");
+    assert\equal(f.len(), want: 2, message: "codex advise disagrees, cursor is undeclared");
 }
 
 test "sessionParityFindings compares cells to declarations" {
     final adapters = {"a.sh": "# magus-session-coverage: schema=1 host=codex commands=yes hook-output=none\n"};
     final ok = "## Session load across hosts\n\n| host | commands | hook output |\n| --- | --- | --- |\n| Codex | yes | none |\n";
-    assert\equal(sessionParityFindings(adapters, guide: ok, guideFile: "s.md").len(), 0, "agrees");
+    assert\equal(sessionParityFindings(adapters, guide: ok, guideFile: "s.md").len(), want: 0, message: "agrees");
     final bad = "## Session load across hosts\n\n| host | commands | hook output |\n| --- | --- | --- |\n| Codex | yes | yes |\n";
-    assert\equal(sessionParityFindings(adapters, guide: bad, guideFile: "s.md").len(), 1, "hook output disagrees");
+    assert\equal(sessionParityFindings(adapters, guide: bad, guideFile: "s.md").len(), want: 1, message: "hook output disagrees");
 }
 
 test "hostWiringFindings wants each wired event and template named" {
     final config = `{"hooks": {"Stop": [{"hooks": [{"command": "magus buzz -s magus-checkpoint.buzz"}]}], "PreToolUse": [{"matcher": "Bash", "hooks": [{"command": "magus buzz -s magus-command.buzz"}]}]}}`;
-    assert\equal(hostWiringFindings(config, configFile: "c.json", page: "p.md", doc: "PreToolUse runs magus-command; Stop runs magus-checkpoint").len(), 0, "all named");
-    assert\equal(hostWiringFindings(config, configFile: "c.json", page: "p.md", doc: "PreToolUse runs magus-command").len(), 2, "Stop and its template unnamed");
+    assert\equal(hostWiringFindings(config, configFile: "c.json", page: "p.md", doc: "PreToolUse runs magus-command; Stop runs magus-checkpoint").len(), want: 0, message: "all named");
+    assert\equal(hostWiringFindings(config, configFile: "c.json", page: "p.md", doc: "PreToolUse runs magus-command").len(), want: 2, message: "Stop and its template unnamed");
 }
 
 test "releaseKeyFindings wants the active key in base64" {
     final ring = `{"keys": [{"state": "active", "key": "ffbb"}]}`;
-    assert\equal(releaseKeyFindings(ring, guideFile: "v.md", guide: "key: /7s=").len(), 0, "published");
-    assert\equal(releaseKeyFindings(ring, guideFile: "v.md", guide: "no key").len(), 1, "missing");
+    assert\equal(releaseKeyFindings(ring, guideFile: "v.md", guide: "key: /7s=").len(), want: 0, message: "published");
+    assert\equal(releaseKeyFindings(ring, guideFile: "v.md", guide: "no key").len(), want: 1, message: "missing");
 }
