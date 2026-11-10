@@ -47,9 +47,7 @@ fun docsLib(lib: str) > Run {
         fragment = fragment, oldPrefix = "SF:lib/", newPrefix = "SF:docs/lib/" };
 }
 
-final DOCS_LIBS = ["lib/text.buzz", "lib/dom.buzz", "lib/feed.buzz", "lib/html.buzz",
-                   "lib/csp.buzz", "lib/url.buzz", "lib/date.buzz", "lib/glossary.buzz",
-                   "lib/conventions.buzz"];
+final DOCS_LIBS = ["lib/glossary.buzz", "lib/conventions.buzz"];
 
 // runs is every run buzz-test makes. A script a person or workflow runs is run
 // bare, so it is gated strict. A magusfile import and a spell parse embedded,
