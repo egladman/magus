@@ -7,7 +7,7 @@
   </picture>
 </p>
 
-<!-- The coverage badges are measured and rendered by `magus run coverage-render .` in the CD site job on every push to main, and published with the docs site. Nothing commits them. -->
+<!-- The coverage badges are measured by CI's coverage job on every push to main, rendered from that run's profiles by `magus run coverage-render .` in the CD site job, and published with the docs site. Nothing commits them. -->
 
 <a href="https://github.com/egladman/magus/actions/workflows/ci.yaml?query=branch%3Amain"><img alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg?branch=main"></a> <a href="https://github.com/egladman/magus/actions/workflows/cd.yaml?query=branch%3Amain"><img alt="CD" src="https://github.com/egladman/magus/actions/workflows/cd.yaml/badge.svg?branch=main"></a> <img alt="Go coverage" src="https://eli.gladman.cc/magus/assets/go-coverage.svg"> <img alt="Buzz coverage" src="https://eli.gladman.cc/magus/assets/buzz-coverage.svg"> <img alt="TypeScript coverage" src="https://eli.gladman.cc/magus/assets/typescript-coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a>
 
