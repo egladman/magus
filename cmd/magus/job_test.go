@@ -2692,7 +2692,8 @@ func (s *jobApplyContractSuite) assertStored(store *job.Store, want types.Job) {
 	s.T().Helper()
 	got := s.stored(store)
 	// Each accepted apply stamps validation and appends a new store generation.
-	want.Validated, want.Generation = got.Validated, got.Generation
+	// Updated is in seconds, so it moves only when the apply crosses one.
+	want.Validated, want.Generation, want.Updated = got.Validated, got.Generation, got.Updated
 	s.Equal(want, got)
 }
 
