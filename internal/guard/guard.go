@@ -2200,17 +2200,16 @@ func denyEnterCheckout(tool, path, name string, owned []string) denial {
 	if path != "" && slices.ContainsFunc(owned, func(root string) bool { return samePath(root, path) }) {
 		return denial{}
 	}
-	say := fmt.Sprintf("magus workspace: %s into %s leaves the checkouts this caller may work in; ", tool, path)
+	target := path
 	if path == "" {
-		say = fmt.Sprintf("magus workspace: %s would make a new tree %q, which no job owns; ", tool, name)
+		target = fmt.Sprintf("a new tree %q", name)
 	}
-	if len(owned) == 0 {
-		say += "no job gives this caller a checkout, so work where the session is."
-	} else {
-		say += "enter one of " + strings.Join(owned, ", ") + " by its path."
+	allowed := "no checkout, since no job gives this caller one"
+	if len(owned) > 0 {
+		allowed = strings.Join(owned, " or ")
 	}
 	return denial{
-		Say: say,
+		Say: fmt.Sprintf("magus workspace: %s may enter %s, not %s.", tool, allowed, target),
 		Why: "A job's checkout is where its write paths, check and binary hold, and the guard grades its calls against it. " +
 			"A tree no job owns has none of them, so a worker that moved there would be graded against nothing.",
 	}

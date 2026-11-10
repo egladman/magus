@@ -322,13 +322,14 @@ func TestDenyEnterCheckoutLetsTheCallerReachOnlyItsOwnCheckout(t *testing.T) {
 	assert.False(t, denyEnterCheckout("EnterWorktree", own, "", []string{own}).refused(), "the caller's own checkout")
 
 	elsewhere := denyEnterCheckout("EnterWorktree", other, "", []string{own})
-	assert.Equal(t, fmt.Sprintf("magus workspace: EnterWorktree into %s leaves the checkouts this caller may work in; enter one of %s by its path.", other, own), elsewhere.Say)
+	assert.Equal(t, fmt.Sprintf("magus workspace: EnterWorktree may enter %s, not %s.", own, other), elsewhere.Say)
 	assert.NotEmpty(t, elsewhere.Why)
 
 	made := denyEnterCheckout("EnterWorktree", "", "scratch", []string{own})
-	assert.Equal(t, fmt.Sprintf(`magus workspace: EnterWorktree would make a new tree "scratch", which no job owns; enter one of %s by its path.`, own), made.Say)
+	assert.Equal(t, fmt.Sprintf(`magus workspace: EnterWorktree may enter %s, not a new tree "scratch".`, own), made.Say)
 
-	assert.Contains(t, denyEnterCheckout("EnterWorktree", other, "", nil).Say, "no job gives this caller a checkout")
+	assert.Equal(t, fmt.Sprintf("magus workspace: EnterWorktree may enter no checkout, since no job gives this caller one, not %s.", other),
+		denyEnterCheckout("EnterWorktree", other, "", nil).Say)
 }
 
 func TestEnteringATreeNoJobOwnsIsRefused(t *testing.T) {
