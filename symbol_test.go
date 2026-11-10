@@ -439,6 +439,36 @@ func TestFreshenInsideATargetReindexesThroughTheOuterRun(t *testing.T) {
 	assert.Equal(t, types.SymbolIndexFresh, seen, "the reader inside the target sees the root index up to date")
 }
 
+// A magus a target body starts, as buzz-test starts `magus buzz`, has no run
+// scheduler on its ctx. Its ancestor holds the project's lock, so a run of the
+// index op of its own was refused MGS3007.
+func TestFreshenNestedUnderARunReindexesUnderTheAncestorsLock(t *testing.T) {
+	indexerOnPath(t)
+	var m *Magus
+	var freshenErr error
+	var seen types.SymbolIndexFreshness
+	readerSpell := register.Spell(t, "zzz-nested-index-reader-spell",
+		spells.WithTargets("lint"),
+		spells.WithInvoker(func(ctx context.Context, req spells.InvokeRequest) (any, error) {
+			if req.Target != "lint" {
+				return nil, nil
+			}
+			child := types.WithInvocationAncestors(context.Background(), types.InvocationAncestorsFromContext(ctx))
+			freshenErr = m.freshenSymbolIndexes(child, []string{"."}, nil)
+			seen = freshness(t, m)
+			return nil, nil
+		}),
+	)
+
+	m, src, _ := newIndexedWorkspaceWith(t, readerSpell)
+	require.NoError(t, os.WriteFile(src, []byte("package main\n\nfunc Added() {}\n"), 0o644))
+	require.Equal(t, types.SymbolIndexStale, freshness(t, m), "the Go edit leaves the index behind")
+
+	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "lint"}}))
+	require.NoError(t, freshenErr, "the nested reader rebuilds under the lock its ancestor holds")
+	assert.Equal(t, types.SymbolIndexFresh, seen, "the nested reader sees the index up to date")
+}
+
 // Outside any run a reader still rebuilds the index as its own invocation.
 func TestFreshenOutsideARunReindexesThroughItsOwnRun(t *testing.T) {
 	indexerOnPath(t)

@@ -345,10 +345,11 @@ func servedFixtures() []servedFixture {
 			call := servedAs(Request{Input: "gh pr checks 183"}, role)
 			call.DryRun = true
 			v := Judge(ctx, deps, call)
-			require.Equal(t, decisionDeny, v.Decision, "gh pr checks is refused to every role")
-			// The refusal names more than one read; the caller needs one it can run.
+			require.Equal(t, decisionAdvise, v.Decision, "a one-shot gh pr checks is advised to every role")
+			_, said := spoken(v)
+			// It names more than one read; the caller needs one it can run.
 			var runnable []string
-			for _, m := range backtickRe.FindAllStringSubmatch(v.Reason, -1) {
+			for _, m := range backtickRe.FindAllStringSubmatch(said, -1) {
 				read := placeholderRe.ReplaceAllString(m[1], "0123abcd")
 				if !strings.Contains(read, "show-failures") && !strings.Contains(read, "--log-failed") {
 					continue
@@ -358,7 +359,7 @@ func servedFixtures() []servedFixture {
 					runnable = append(runnable, read)
 				}
 			}
-			require.NotEmpty(t, runnable, "the refusal names a failure read a %s can run:\n%s", role.name, v.Reason)
+			require.NotEmpty(t, runnable, "the advice names a failure read a %s can run:\n%s", role.name, said)
 			return Request{}, nil
 		}},
 		{"a subagent's stop names the call that stops each task", func(t *testing.T, _ context.Context, _ Dependencies, role servedRole) (Request, []string) {

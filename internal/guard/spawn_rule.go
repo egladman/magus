@@ -621,6 +621,9 @@ func spawnedAsJob(facts hint.Gate, rows []types.Job, agentID, job string) bool {
 // A registration the job store refuses (another checkout holds the job) is not tried again
 // until the row changes: every call would otherwise read the checkout's base again only to
 // be refused the same way.
+//
+// An exited row is left alone. Exec reopens it, so a call after
+// `job exit` would undo the exit.
 func registerAgentBase(ctx context.Context, deps Dependencies, at location, agentJob string) bool {
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
@@ -630,7 +633,7 @@ func registerAgentBase(ctx context.Context, deps Dependencies, at location, agen
 		if row.ID != agentJob {
 			continue
 		}
-		if !row.State.Live() || (row.Registered != 0 && !baseSuperseded(ctx, deps, at, row)) {
+		if !row.State.Editing() || (row.Registered != 0 && !baseSuperseded(ctx, deps, at, row)) {
 			return false
 		}
 		refusals := hint.NewGate(at.cacheDir, agentBaseRefusals)

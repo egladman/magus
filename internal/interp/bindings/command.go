@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -96,6 +97,20 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (spawn.Exe
 	// Warn on the real execution path only (not the describe/render path, which
 	// resolveCharmArgs also serves and which surfaces conflicts in its own output).
 	warnCharmConflicts(ctx, tgt.Args, tgt.Charms)
+	if !opts.hasArgs && len(tgt.PathScope) > 0 && len(opts.args) > 0 {
+		scoped, dropped := scopeForwardedPaths(tgt.Command, dir, opts.args)
+		if len(dropped) > 0 {
+			_, stderr := spawn.OutputWriters(ctx)
+			_, _ = fmt.Fprintf(stderr, "%s: takes no operand for the forwarded file(s) %s, so it leaves them out\n",
+				opName(opts.op, tgt.Bin), strings.Join(dropped, " ")) // best effort: a lost notice changes no result
+		}
+		// Each forwarded arg named a file the tool takes no operand for.
+		// A bare run would widen the call to the whole project.
+		if len(scoped) == 0 {
+			return spawn.ExecResult{}, nil
+		}
+		opts.args = scoped
+	}
 	// Explicit call-site args replace the declared defaults; anything else
 	// (including `magus run <t> -- <extra>` forwarding, which arrives with
 	// hasArgs unset) keeps them. A forwarded test scope operand also replaces
@@ -663,6 +678,62 @@ func sourceBatches(files []string, each bool) [][]string {
 // joinNonEmpty concatenates a and b with a newline separator, skipping either
 // side that is empty rather than leaving a stray blank line.
 var scopePlaceholder = regexp.MustCompile(`\{[^{}]*\}`)
+
+// scopeForwardedPaths maps each of args naming an existing file under dir
+// through c's PathScope, each operand once, in first-seen order. Any other
+// arg, a flag or a package, passes unchanged. dropped are the files
+// PathScopeFiles leaves out.
+func scopeForwardedPaths(c spells.Command, dir string, args []string) (scoped, dropped []string) {
+	seen := map[string]bool{}
+	for _, a := range args {
+		rel, ok := forwardedFile(dir, a)
+		if !ok {
+			scoped = append(scoped, a)
+			continue
+		}
+		operands, keep := c.ScopePath(rel)
+		if !keep {
+			dropped = append(dropped, a)
+			continue
+		}
+		for _, o := range operands {
+			if !seen[o] {
+				seen[o] = true
+				scoped = append(scoped, o)
+			}
+		}
+	}
+	return scoped, dropped
+}
+
+// forwardedFile is arg as a slash-separated path relative to dir when it names
+// an existing regular file inside dir.
+func forwardedFile(dir, arg string) (string, bool) {
+	if arg == "" || strings.HasPrefix(arg, "-") {
+		return "", false
+	}
+	p := arg
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(dir, p)
+	}
+	info, err := os.Stat(p)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", false
+	}
+	rel, err := filepath.Rel(dir, p)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return filepath.ToSlash(rel), true
+}
+
+// opName is op, or bin for a call with no op name to give.
+func opName(op, bin string) string {
+	if op != "" {
+		return op
+	}
+	return bin
+}
 
 // namesTestScope tells a forwarded scope operand from a forwarded flag: the
 // spell declares the operand's shape in TestScope, so no second declaration is

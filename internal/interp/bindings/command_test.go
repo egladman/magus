@@ -431,6 +431,83 @@ func TestRunCommandGoCleanTrailingArgs(t *testing.T) {
 	})
 }
 
+// runCommandPathScopeSuite pins Command.PathScope on go-vet's shape: a
+// forwarded file becomes its package, and a file the tool takes no operand for
+// is left out.
+type runCommandPathScopeSuite struct {
+	suite.Suite
+	dir     string
+	logFile string
+	stderr  bytes.Buffer
+}
+
+func TestRunCommandPathScope(t *testing.T) { suite.Run(t, new(runCommandPathScopeSuite)) }
+
+func (s *runCommandPathScopeSuite) SetupTest() {
+	s.dir = s.T().TempDir()
+	s.logFile = filepath.Join(s.T().TempDir(), "calls.log")
+	s.stderr.Reset()
+	for _, f := range []string{"main.go", "pkg/a.go", "pkg/b.go", "pkg/testdata/x.go", "README.md"} {
+		path := filepath.Join(s.dir, filepath.FromSlash(f))
+		s.Require().NoError(os.MkdirAll(filepath.Dir(path), 0o755))
+		s.Require().NoError(os.WriteFile(path, nil, 0o644))
+	}
+}
+
+// run runs the op with opts and returns the argv it ran with, or nil when it
+// did not run.
+func (s *runCommandPathScopeSuite) run(opts commandOpts) []string {
+	op := spells.Op{Command: spells.Command{
+		Bin:            "sh",
+		Args:           []string{"-c", `echo "$@" >> "$LOGFILE"`, "sh", "vet"},
+		TrailingArgs:   []string{"./..."},
+		PathScope:      []string{"./{dir}"},
+		PathScopeFiles: []string{"**/*.go", "!**/testdata/**"},
+	}}
+	opts.op = "go-vet"
+	opts.env = map[string]string{"LOGFILE": s.logFile}
+	ctx := std.WithCurrentWorkingDirectory(context.Background(), s.dir)
+	ctx = spawn.WithOutputWriters(ctx, io.Discard, &s.stderr)
+	_, err := runCommand(ctx, op, opts)
+	s.Require().NoError(err)
+	if _, err := os.Stat(s.logFile); os.IsNotExist(err) {
+		return nil
+	}
+	lines := logLines(s.T(), s.logFile)
+	s.Require().Len(lines, 1)
+	return strings.Fields(lines[0])
+}
+
+func (s *runCommandPathScopeSuite) TestForwardedFilesBecomeTheirPackagesOnce() {
+	s.Equal([]string{"vet", "./pkg", "./."}, s.run(commandOpts{args: []string{"pkg/a.go", "pkg/b.go", "main.go"}}))
+}
+
+func (s *runCommandPathScopeSuite) TestFilesTheToolTakesNoOperandForAreLeftOutAndNamed() {
+	s.Equal([]string{"vet", "./pkg"}, s.run(commandOpts{args: []string{"README.md", "pkg/testdata/x.go", "pkg/a.go"}}))
+	s.Contains(s.stderr.String(), "go-vet: takes no operand for the forwarded file(s) README.md pkg/testdata/x.go")
+}
+
+func (s *runCommandPathScopeSuite) TestOnlyLeftOutFilesRunsNothing() {
+	s.Nil(s.run(commandOpts{args: []string{"README.md"}}), "a bare go vet would widen the call to ./...")
+	s.Contains(s.stderr.String(), "README.md")
+}
+
+func (s *runCommandPathScopeSuite) TestAForwardedPackageAndFlagPassUnchanged() {
+	s.Equal([]string{"vet", "-v", "./pkg"}, s.run(commandOpts{args: []string{"-v", "./pkg"}}))
+}
+
+func (s *runCommandPathScopeSuite) TestAForwardedPathNamingNoFilePassesUnchanged() {
+	s.Equal([]string{"vet", "missing.go"}, s.run(commandOpts{args: []string{"missing.go"}}))
+}
+
+func (s *runCommandPathScopeSuite) TestExplicitArgsAreNotScoped() {
+	s.Equal([]string{"vet", "pkg/a.go"}, s.run(commandOpts{args: []string{"pkg/a.go"}, hasArgs: true}))
+}
+
+func (s *runCommandPathScopeSuite) TestNoArgsKeepsTheTrailingPattern() {
+	s.Equal([]string{"vet", "./..."}, s.run(commandOpts{}))
+}
+
 // TestRunCommandNeedsArgs pins the refusal: no caller args, absent or empty, stops the
 // command before it spawns, and the op's own Args and DefaultArgs do not satisfy it.
 func TestRunCommandNeedsArgs(t *testing.T) {

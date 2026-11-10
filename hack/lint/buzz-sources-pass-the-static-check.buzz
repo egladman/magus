@@ -14,6 +14,7 @@
 namespace buzzcheck;
 
 import "assert";
+import "fs";
 import "magus";
 import "std";
 import "magus/lint";
@@ -31,7 +32,10 @@ final DOCS_MAGUSFILE = "docs/magusfile.buzz";
 
 final SKIPPED = ["docs/site/diagrams/", "internal/spell/gen/", "libs/gopherbuzz/examples/"];
 
-final EMBEDDED = ["spells/", "hack/", "docs/", "std/examples/", "cmd/", "console/", "internal/queue/"];
+// EDIT_HOOK checks each file an agent writes; it holds the same EMBEDDED line.
+final EDIT_HOOK = "docs/guides/integrations/agents/magus-buzz-check.buzz";
+
+final EMBEDDED = ["magusfiles/", "spells/", "hack/", "docs/", "std/examples/", "cmd/", "console/", "internal/queue/"];
 
 // HOST_BOUND are the import prefixes the host binds at load.
 final HOST_BOUND = ["magus/spell/", "project/", "mergequeue", "opencode\""];
@@ -180,6 +184,12 @@ test "mode follows the path" {
     assert\isTrue(skipped("docs/site/diagrams/a.buzz"), message: "figures");
     assert\isTrue(skipped("libs/gopherbuzz/examples/ffi/a.buzz"), message: "ffi demo");
     assert\isTrue(!skipped("docs/lib/text.buzz"), message: "docs library");
+}
+
+test "the edit hook checks every file in the mode this rule does" {
+    final line = "final EMBEDDED = [" + EMBEDDED.map(fun (index: int, p: str) > str => "\"{p}\"").join(", ") + "];";
+    final hook = fs\readFile(EDIT_HOOK);
+    assert\isTrue(hook.indexOf(line) != null, message: "{EDIT_HOOK} holds `{line}`");
 }
 
 test "a file with a warning is reported and a clean one is not" {

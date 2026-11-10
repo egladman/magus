@@ -200,7 +200,8 @@ func (s *Store) writeLandingProbes(log probeLog, next map[string]landingProbe) e
 // same at the row's checkout HEAD as at the base, and differs at HEAD from the row's
 // checkpoint: a path equal at HEAD and checkpoint is uncommitted, so HEAD says nothing
 // about it. A path deleted at both HEAD and the base reads the same (see
-// [vcs.DifferingPaths]).
+// [vcs.DifferingPaths]). A path the base edited since also passes when
+// merging the work onto the base changes nothing.
 //
 // The diff is read, never the result's changed_paths: a result naming the part of the work
 // that landed would otherwise end the job while the rest has not.
@@ -224,12 +225,12 @@ func (s *Store) landedOnBase(ctx context.Context, row types.Job) string {
 	if err != nil {
 		return ""
 	}
-	paths := contentLanded(ctx, driver, row, head, s.root, base)
+	paths, held := contentLanded(ctx, driver, row, head, s.root, base)
 	if paths == 0 {
 		return ""
 	}
-	return fmt.Sprintf("its work landed on %s at %s: the %d changed path(s) at %s in %s read the same there",
-		res.Base, shortRevision(base), paths, shortRevision(head), row.CheckoutRoot)
+	return fmt.Sprintf("its work landed on %s at %s: the %d changed path(s) at %s in %s %s",
+		res.Base, shortRevision(base), paths, shortRevision(head), row.CheckoutRoot, held)
 }
 
 // landedInIntegration reports why row's work is in the checkout of a live integration job
@@ -257,9 +258,9 @@ func (s *Store) landedInIntegration(ctx context.Context, row types.Job, rows []t
 		if err != nil {
 			continue
 		}
-		if paths := contentLanded(ctx, driver, row, head, into.CheckoutRoot, tip); paths > 0 {
-			return fmt.Sprintf("its work landed in integration job %s at %s: the %d changed path(s) at %s in %s read the same there",
-				into.ID, shortRevision(tip), paths, shortRevision(head), row.CheckoutRoot)
+		if paths, held := contentLanded(ctx, driver, row, head, into.CheckoutRoot, tip); paths > 0 {
+			return fmt.Sprintf("its work landed in integration job %s at %s: the %d changed path(s) at %s in %s %s",
+				into.ID, shortRevision(tip), paths, shortRevision(head), row.CheckoutRoot, held)
 		}
 	}
 	return ""
@@ -268,26 +269,48 @@ func (s *Store) landedInIntegration(ctx context.Context, row types.Job, rows []t
 // contentLanded is how many paths the row's checkout changed since its checkpoint, or 0
 // when any of them does not read at target's commit as it reads at head (the row's
 // checkout HEAD), or still reads at head as it did at the checkpoint.
-func contentLanded(ctx context.Context, driver types.VCSDriver, row types.Job, head types.Commit, targetRoot string, target types.Commit) int {
+// A path that reads otherwise still counts as landed when merging
+// the work onto target changes nothing: the base edited it later.
+// held says which of the two held, for the end reason.
+func contentLanded(ctx context.Context, driver types.VCSDriver, row types.Job, head types.Commit, targetRoot string, target types.Commit) (paths int, held string) {
 	checkpoint := checkpointRevision(row.Checkpoint)
 	if dirty, err := driver.Dirty(ctx, row.CheckoutRoot, nil); err != nil || dirty {
-		return 0
+		return 0, ""
 	}
 	// The paths alone: changedSince also places every changed line in its declaration,
 	// a VCS read per path this verdict never looks at.
-	paths, err := driver.ChangedFiles(ctx, row.CheckoutRoot, checkpoint)
-	if err != nil || len(paths) == 0 {
-		return 0
+	changed, err := driver.ChangedFiles(ctx, row.CheckoutRoot, checkpoint)
+	if err != nil || len(changed) == 0 {
+		return 0, ""
 	}
-	off, err := vcs.DifferingPaths(ctx, driver, targetRoot, head.ID, target.ID, paths)
-	if err != nil || len(off) > 0 {
-		return 0
+	off, err := vcs.DifferingPaths(ctx, driver, targetRoot, head.ID, target.ID, changed)
+	switch {
+	case err != nil:
+		return 0, ""
+	case len(off) == 0:
+		held = "read the same there"
+	case mergeChangesNothing(ctx, driver, targetRoot, checkpoint, head, target):
+		held = fmt.Sprintf("merge there changing nothing, though %d read otherwise since the base edited them", len(off))
+	default:
+		return 0, ""
 	}
-	committed, err := vcs.DifferingPaths(ctx, driver, row.CheckoutRoot, checkpoint, head.ID, paths)
-	if err != nil || len(committed) < len(paths) {
-		return 0
+	committed, err := vcs.DifferingPaths(ctx, driver, row.CheckoutRoot, checkpoint, head.ID, changed)
+	if err != nil || len(committed) < len(changed) {
+		return 0, ""
 	}
-	return len(paths)
+	return len(changed), held
+}
+
+// mergeChangesNothing reports whether merging what head changed since
+// checkpoint onto target leaves target's tree as it is, with no conflict.
+// A backend that cannot merge trees reports false.
+func mergeChangesNothing(ctx context.Context, driver types.VCSDriver, root, checkpoint string, head, target types.Commit) bool {
+	merged, err := driver.MergeTrees(ctx, root, types.TreeMerge{Base: checkpoint, Ours: target.ID, Theirs: head.ID})
+	if err != nil || len(merged.Conflicts) > 0 {
+		return false
+	}
+	tree, err := driver.TreeID(ctx, root, target.ID)
+	return err == nil && tree != "" && tree == merged.Tree
 }
 
 // Unmerged reports what the branch checked out at root does not hold, for job

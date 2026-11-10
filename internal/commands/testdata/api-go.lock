@@ -1420,6 +1420,7 @@ github.com/egladman/magus/types.CommandRequest.Role field AgentRole
 github.com/egladman/magus/types.CommandRequest.Session field string
 github.com/egladman/magus/types.CommandRequest.Thread field AgentThread
 github.com/egladman/magus/types.CommandRequest.ThreadFrom field ThreadSource
+github.com/egladman/magus/types.CommandRequest.Unplaced field bool
 github.com/egladman/magus/types.CommandRequest.Window field *ContextWindow
 github.com/egladman/magus/types.CommandRequest.Workspace field string
 github.com/egladman/magus/types.Commit type struct

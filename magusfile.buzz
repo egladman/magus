@@ -231,6 +231,7 @@ magus\project({
             "skip_cache": "drives the installed agent hosts, whose versions and logins no input glob can key",
             "human_only": "drives Claude Code, Codex, Cursor and OpenCode on the person's own logins and spends model tokens on each",
         },
+        "install-linter": {"skip_cache": "declares no outputs, so a replay would skip the link and restore no binary; the body relinks only when the linter sources moved"},
         "go-build": {
             "skip_cache": "declares no outputs, so a replay would skip the link and restore no binary",
             "relinks": "./magus",
@@ -2413,24 +2414,18 @@ export fun build(ctx: magus\Context, args: [str])  > void {
     }
 }
 // Builds .magus/custom-gcl, the golangci-lint carrying this repo's own linters.
-// Runs in libs/testpairing because `golangci-lint custom` reads .custom-gcl.yml from its
-// cwd. No declared outputs, for go-build's reason, so a read-only run leaves no binary.
+// It declares no outputs, so a read-only run leaves no binary.
 export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
     // The custom linters read Go sources that format may rewrite. Keep the reader after
     // that writer whenever lint runs on its own as well as under the CI composition.
     ctx.needs(format);
+    // golangci\LINTER_SOURCES, copied: readsFiles takes only a literal.
     ctx.readsFiles(["libs/testpairing/.custom-gcl.yml", "libs/testpairing/go.mod",
                     "libs/testpairing/go.sum", "libs/testpairing/**/*.go",
                     "libs/conventions/go.mod", "libs/conventions/go.sum",
                     "libs/conventions/**/*.go",
                     "libs/proofread/go.mod", "libs/proofread/go.sum", "libs/proofread/**/*.go"]);
-    // Removed first so the link gets a fresh inode: macOS keys the code signature on the
-    // inode, and an in-place rewrite gets the next exec SIGKILLed.
-    fs\remove(".magus/custom-gcl");
-    // custom-gcl's version salt hashes only plugin dirs with a path, and libs/proofread
-    // enters through a go.mod replace, so a rebuilt binary would replay stale findings.
-    fs\removeAll(".magus/golangci-lint");
-    _ = proc\exec("golangci-lint", ["custom"], "libs/testpairing");
+    golangci\linkFresh();
 }
 
 // Measures the change's base for the conformance ceiling rule, which only reads the measure.
@@ -2624,7 +2619,7 @@ fun lintFiles(ctx: magus\Context, args: [str]) > void !> any {
     if (files.len() == 0) {
         return;
     }
-    golangci\linkOnce();
+    golangci\linkFresh();
     final failures = mut [<str>];
     // The rules judge from the symbol indexes.
     // magus\graph().precedents() freshens them, as in conventions.
@@ -2657,7 +2652,8 @@ fun lintFiles(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // scopedTools is the argv of each tool lintFiles runs beyond golangci-lint; goPackages are
-// the root module's packages holding files.
+// the root module's packages holding files. Each tool gets only the files
+// bare lint hands it.
 fun scopedTools(ctx: magus\Context, files: [str], goPackages: [str]) > [[str]] {
     final tools = mut [<[str]>];
     if (goPackages.len() > 0) {
@@ -2666,8 +2662,12 @@ fun scopedTools(ctx: magus\Context, files: [str], goPackages: [str]) > [[str]] {
     final md = files.filter(fun (i: int, f: str) > bool => f.endsWith(".md"));
     if (md.len() > 0) {
         tools.append(["markdownlint"] + md);
+    }
+    // lint's typos list: a nested project's prose is its own lint's.
+    final prose = golangci\atOrUnder(files, paths: ["README.md", "CONTRIBUTING.md", "AGENTS.md", "changes"]);
+    if (prose.len() > 0) {
         ctx.readsFiles(["_typos.toml"]);
-        tools.append(["typos", "--format", "brief"] + md);
+        tools.append(["typos", "--format", "brief"] + prose);
     }
     final shells = files.filter(fun (i: int, f: str) > bool => f.endsWith(".sh") or f.endsWith(".bash"));
     if (shells.len() > 0) {

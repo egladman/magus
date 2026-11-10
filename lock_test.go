@@ -541,6 +541,48 @@ func TestReentrantLockRefusedNotAwaited(t *testing.T) {
 	}
 }
 
+// An index op a nested magus runs writes no tree. Its ancestor's lock covers
+// it, and releasing the nested hold leaves that lock with the ancestor.
+func TestUnderAncestorLockTakesNoLockItsAncestorHolds(t *testing.T) {
+	cacheDir := t.TempDir()
+	l := newProjectLocker(cacheDir, testWorkspaceRoot)
+	release, err := l.acquire(ancestryContext(t, "inv-outer"), "app")
+	if err != nil {
+		t.Fatalf("outer acquire: %v", err)
+	}
+	defer release()
+
+	nested := newProjectLocker(cacheDir, testWorkspaceRoot, underAncestorLock())
+	ctx, cancel := context.WithTimeout(ancestryContext(t, "inv-outer", "inv-nested"), 10*time.Second)
+	defer cancel()
+	nestedRelease, err := nested.acquire(ctx, "app")
+	if err != nil {
+		t.Fatalf("nested acquire under the ancestor's lock: %v", err)
+	}
+	nestedRelease()
+	if !lockIsHeld(l.lockPath("app")) {
+		t.Fatal("the nested release freed the lock its ancestor still holds")
+	}
+}
+
+// The option reaches only an ancestor's lock. An unrelated holder refuses.
+func TestUnderAncestorLockStillContendsWithAnUnrelatedHolder(t *testing.T) {
+	cacheDir := t.TempDir()
+	cmd := helperHold(t, cacheDir, "app", 5_000)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start holder: %v", err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill() })
+	waitForFile(t, filepath.Join(workspace.LocksDir(cacheDir, testWorkspaceRoot), "app", "ready"), 3*time.Second)
+
+	l := newProjectLocker(cacheDir, testWorkspaceRoot, underAncestorLock())
+	_, err := l.acquire(ancestryContext(t, "inv-unrelated"), "app")
+	var c *lockContendedError
+	if !errors.As(err, &c) {
+		t.Fatalf("want *lockContendedError for an unrelated holder, got %v", err)
+	}
+}
+
 // TestUnrelatedContentionFailsFast is the other half, and the one that keeps the
 // reentrant fix honest: contention with a run this one is NOT nested inside is
 // ordinary contention, refused exactly like any other holder (*lockContendedError,

@@ -254,6 +254,29 @@ func TestARunningRowWithNoResultAndUncommittedEditsKeepsItsLease(t *testing.T) {
 	assert.False(t, got.Landed)
 }
 
+// The base squashed the work, then edited the same file elsewhere. The path
+// reads otherwise than HEAD, yet merging the work there changes nothing.
+func TestARowEndsWhenTheBaseEditedItsLandedFileSince(t *testing.T) {
+	repo := testkit.NewRepository(t, map[string]string{"a.go": "package a\n\nfunc A() {}\n"})
+	seedRev := repo.Head()
+	wt := repo.AddWorktree("job")
+	wt.Write("a.go", "package a // landed\n\nfunc A() {}\n")
+	wt.Git("commit", "-q", "-am", "job")
+	repo.Commit("squash", map[string]string{"a.go": "package a // landed\n\nfunc A() {}\n"})
+	repo.Commit("later", map[string]string{"a.go": "package a // landed\n\nfunc A() { _ = 1 }\n"})
+	repo.Git("update-ref", "refs/remotes/origin/main", repo.Head())
+
+	s := tempStore(t, repo.Root())
+	s.notices = io.Discard
+	plant(t, s, types.Job{ID: "job", State: types.StateRunning, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
+		WritePaths: []string{"a.go"}, Updated: 1})
+	got := states(t, s)["job"]
+
+	assert.Equal(t, types.StateNoReturn, got.State)
+	assert.True(t, got.Landed)
+	assert.Contains(t, got.EndReason, "merge there changing nothing, though 1 read otherwise since the base edited them")
+}
+
 func TestARunningRowWithNoResultAndAPathDifferingAtTheBaseKeepsItsLease(t *testing.T) {
 	got := landedWithNoResult(t, false, true)
 

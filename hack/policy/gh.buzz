@@ -23,7 +23,7 @@ final ciWatchDenial = "read failed targets instead of watching: `{failureReader}
     + "The merge queue is the same: `magus queue ls` lists every change with merge intent and its "
     + "state in one call, so ask it rather than watching a queue.yaml or queue-apply.yaml run.";
 
-final ciStatusDenial = "read the failed targets: `{failureReader}`.\n"
+final ciStatusAdvice = "A status read names checks, not why they failed; read the failed targets: `{failureReader}`. "
     + "CI status summaries and raw job logs do not isolate the failed target output. "
     + queueStatusNote + " "
     + "For a known run: `{failureRunReader}`. Select the pull request's current head, not the checkout's HEAD. "
@@ -63,9 +63,6 @@ export fun decideGitHub(programs: [helpers\Program], once: fun (key: str) > bool
         if (blocksOnCI(call)) {
             return magus\guard.deny(ciWatchDenial);
         }
-        if (readsOneCI(call)) {
-            return magus\guard.deny(ciStatusDenial);
-        }
         if (runs(call, first: "pr", second: "merge") and helpers\hasFlag(call.args, long: "--admin")) {
             return magus\guard.deny(adminMergeDenial);
         }
@@ -83,6 +80,10 @@ export fun decideGitHub(programs: [helpers\Program], once: fun (key: str) > bool
         }
         if (pollsQueue(call)) {
             if (once("queue-poll")) { return magus\guard.advise(queuePollAdvice); }
+            return magus\guard.allow();
+        }
+        if (readsOneCI(call)) {
+            if (once("ci-batch-poll")) { return magus\guard.advise(ciStatusAdvice); }
             return magus\guard.allow();
         }
     }
@@ -302,22 +303,30 @@ test "watching the merge queue's runs is denied, naming the queue" {
     }
 }
 
-test "CI status summaries name the failure artifact reader" {
+test "a one-shot CI status read is allowed, advising the failure artifact reader once" {
     foreach (argv in [
         ["gh", "pr", "checks", "183"],
-        ["gh", "pr", "checks", "183", "--watch"],
         ["gh", "pr", "view", "183", "--json", "state,statusCheckRollup"],
         ["gh", "pr", "list", "--state", "open", "--json", "number,mergeable,statusCheckRollup"],
         ["gh", "pr", "list", "--json=statusCheckRollup"],
         ["gh", "api", "repos/egladman/magus/commits/abc123/check-runs"],
         ["gh", "api", "repos/egladman/magus/commits/abc123/check-runs?per_page=100"],
+        ["gh", "api", "repos/egladman/magus/commits/abc123/status"],
     ]) {
-        final v = ask(argv);
-        std\assert(v.decision == magus\GuardDecision.deny, message: argv.join(" "));
+        final once = helpers\counter();
+        final request = helpers\request([argv]);
+        final v = judged(request, once: once);
+        std\assert(v.decision == magus\GuardDecision.advise, message: argv.join(" "));
         std\assert(v.reason.indexOf(failureReader) != null, message: v.reason);
         std\assert(v.reason.indexOf(rootFailureReader) != null, message: "names a read a root handing out work may run");
         std\assert(v.reason.indexOf("gh pr list") == null, message: "does not route back to status summaries");
+        std\assert(judged(request, once: once).decision == magus\GuardDecision.allow, message: "only once");
+        std\assert(judged(helpers\request([ ["loop:"] + argv ]), once: once).decision == magus\GuardDecision.deny,
+            message: "a repeated status read still watches");
     }
+    final watched = ask(["gh", "pr", "checks", "183", "--watch"]);
+    std\assert(watched.decision == magus\GuardDecision.deny, message: "--watch waits on CI");
+    std\assert(watched.reason.indexOf(failureReader) != null, message: watched.reason);
 }
 
 test "one-shot log reads remain available when failure artifacts are missing" {

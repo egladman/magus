@@ -20,19 +20,21 @@ func TestHeredocWritesReadsOnlyALiteralBodyIntoAFile(t *testing.T) {
 		line string
 		want []heredocWrite
 	}{
-		{"cat > notes.md <<'EOF'\nhello\nEOF", []heredocWrite{{"notes.md", "/w/notes.md", "hello\n"}}},
-		{"cat >> notes.md <<EOF\nplain text\nEOF", []heredocWrite{{"notes.md", "/w/notes.md", "plain text\n"}}},
-		{"tee -a a.go b.go >/dev/null <<'EOF'\npackage a\nEOF", []heredocWrite{{"a.go", "/w/a.go", "package a\n"}, {"b.go", "/w/b.go", "package a\n"}}},
+		{"cat > notes.md <<'EOF'\nhello\nEOF", []heredocWrite{{"notes.md", "/w/notes.md", "hello\n", false}}},
+		{"cat >> notes.md <<EOF\nplain text\nEOF", []heredocWrite{{"notes.md", "/w/notes.md", "plain text\n", true}}},
+		{"tee -a a.go b.go >/dev/null <<'EOF'\npackage a\nEOF", []heredocWrite{{"a.go", "/w/a.go", "package a\n", true}, {"b.go", "/w/b.go", "package a\n", true}}},
+		{"tee a.go >> b.go <<'EOF'\npackage a\nEOF", []heredocWrite{{"b.go", "/w/b.go", "package a\n", true}, {"a.go", "/w/a.go", "package a\n", false}}},
+		{"tee -ia --append a.go <<'EOF'\npackage a\nEOF", []heredocWrite{{"a.go", "/w/a.go", "package a\n", true}}},
 		// A home-relative target is the home's, never a directory named ~ here.
-		{"cat >> ~/.claude/p/RESUME.md <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", resume, "x\n"}}},
-		{"cat >> $HOME/.claude/p/RESUME.md <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", resume, "x\n"}}},
-		{"cat >> \"${HOME}/.claude/p/RESUME.md\" <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", resume, "x\n"}}},
-		{"tee -a \"$HOME/.claude/p/RESUME.md\" <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", resume, "x\n"}}},
+		{"cat >> ~/.claude/p/RESUME.md <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", resume, "x\n", true}}},
+		{"cat >> $HOME/.claude/p/RESUME.md <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", resume, "x\n", true}}},
+		{"cat >> \"${HOME}/.claude/p/RESUME.md\" <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", resume, "x\n", true}}},
+		{"tee -a \"$HOME/.claude/p/RESUME.md\" <<'EOF'\nx\nEOF", []heredocWrite{{"~/.claude/p/RESUME.md", resume, "x\n", true}}},
 		// A cd earlier on the line moves where a relative target lands.
-		{"cd ~/.claude/p && cat >> RESUME.md <<'EOF'\nx\nEOF", []heredocWrite{{"RESUME.md", resume, "x\n"}}},
-		{"cd sub && cat > a.md <<'EOF'\nx\nEOF", []heredocWrite{{"a.md", "/w/sub/a.md", "x\n"}}},
+		{"cd ~/.claude/p && cat >> RESUME.md <<'EOF'\nx\nEOF", []heredocWrite{{"RESUME.md", resume, "x\n", true}}},
+		{"cd sub && cat > a.md <<'EOF'\nx\nEOF", []heredocWrite{{"a.md", "/w/sub/a.md", "x\n", false}}},
 		// The shell leaves a quoted ~ a name, so the file is a directory called ~ here.
-		{"cat > \"~/x\" <<'EOF'\nx\nEOF", []heredocWrite{{"./~/x", "/w/~/x", "x\n"}}},
+		{"cat > \"~/x\" <<'EOF'\nx\nEOF", []heredocWrite{{"./~/x", "/w/~/x", "x\n", false}}},
 		// Any other expansion places the target nowhere, rather than dropping the parameter.
 		{"cat >> $DIR/RESUME.md <<'EOF'\nx\nEOF", nil},
 		{"tee \"${D}R.md\" <<'EOF'\nx\nEOF", nil},
@@ -90,6 +92,30 @@ func TestHeredocWriteMeetsTheWriteRules(t *testing.T) {
 			assert.Equal(t, filepath.Join(home, ".claude", "plans", "p", "RESUME.md"), req.Path, line)
 		}
 	}
+}
+
+// An append reaches the write rules as the file it leaves, so a
+// rule reading the file first can tell what the append adds.
+func TestHeredocAppendMeetsTheWriteRulesAsTheWholeFile(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	root := hookLocation(ctx, Dependencies{}).workspace
+	require.NoError(t, os.WriteFile(filepath.Join(root, "notes.md"), []byte("# Notes\n"), 0o600))
+	var seen []string
+	deps := Dependencies{WriteRule: func(_ context.Context, req types.WriteRequest, _ hint.Gate) (types.GuardVerdict, error) {
+		seen = append(seen, req.Content)
+		return types.GuardVerdict{Decision: types.GuardAllow}, nil
+	}}
+	judge := func(line string) {
+		seen = nil
+		Judge(ctx, deps, Request{Input: line, Session: "heredoc-append", Host: "claude-code", Dir: root})
+	}
+
+	judge("cat >> notes.md <<'EOF'\nmore\nEOF")
+	assert.Equal(t, []string{"# Notes\nmore\n"}, seen)
+	judge("tee -a notes.md new.md <<'EOF'\nmore\nEOF")
+	assert.Equal(t, []string{"# Notes\nmore\n", "more\n"}, seen, "a file not there yet holds only the body")
+	judge("cat > notes.md <<'EOF'\nfresh\nEOF\ncat >> notes.md <<'EOF'\nmore\nEOF")
+	assert.Equal(t, []string{"fresh\n", "fresh\nmore\n"}, seen, "a later append follows the line's own write")
 }
 
 // Every file a patch writes is judged, not only its first.

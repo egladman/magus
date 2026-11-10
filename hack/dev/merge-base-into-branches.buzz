@@ -86,6 +86,29 @@ export fun branchesProblem(branches: [str]) > str {
     return "";
 }
 
+// fetchArgv brings each origin ref the stack merges up to date, [] for
+// none. A merge of a stale ref changes nothing.
+export fun fetchArgv(stack: [Step]) > [str] {
+    final refs = mut [<str>];
+    foreach (s in stack) {
+        if (s.against.startsWith("origin/") and refs.indexOf(s.against.sub(7)) == null) {
+            refs.append(s.against.sub(7));
+        }
+    }
+    if (refs.len() == 0) {
+        return [<str>];
+    }
+    return ["fetch", "--no-tags", "--quiet", "origin"] + refs;
+}
+
+fun fetchBases(sh: Shell, stack: [Step]) > result\Result::<str> {
+    final argv = fetchArgv(stack);
+    if (argv.len() == 0) {
+        return result\ok::<str>("");
+    }
+    return must(sh.git("", args: argv), what: "git {argv.join(" ")}");
+}
+
 export fun resolveArgv(against: str) > [str] {
     return ["vcs", "resolve", "--against", against];
 }
@@ -291,6 +314,10 @@ export fun execute(sh: Shell, stack: [Step], here: str) > result\Result::<bool> 
             }
         }
     }
+    final fetched = fetchBases(sh, stack: stack);
+    if (fetched.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
     foreach (i, s in stack) {
         if (settled[i]) {
             std\print("{s.branch} holds a settled merge of {s.against}; committing it");
@@ -367,6 +394,10 @@ export fun main(args: [str]) > void !> any {
     final here = vcs\root();
     if (parsed.values["--dry-run"] != null) {
         std\print("dry run: nothing changes");
+        final fetch = fetchArgv(stack);
+        if (fetch.len() > 0) {
+            std\print("git {fetch.join(" ")}");
+        }
         foreach (s in stack) {
             final located = locate(sh, branch: s.branch, here: here);
             if (located.error -> err) {
@@ -476,6 +507,7 @@ test "a local branch is switched to here, merged and pushed" {
         "git rev-parse -q --verify MERGE_HEAD",
         "git rev-parse --abbrev-ref HEAD",
         "git status --porcelain",
+        "git fetch --no-tags --quiet origin main",
         "git switch local-only",
         "ready ",
         "magus vcs resolve --against origin/main",
@@ -485,6 +517,24 @@ test "a local branch is switched to here, merged and pushed" {
         "ready ",
         "git push origin local-only",
     ], message: "calls");
+}
+
+test "each origin ref the stack merges is fetched once, before any merge" {
+    assert\equal(fetchArgv(steps(["a", "b"], base: "origin/main", stacked: false)), want: ["fetch", "--no-tags", "--quiet", "origin", "main"], message: "one fetch for a shared base");
+    assert\equal(fetchArgv(steps(["a", "b"], base: "origin/main", stacked: true)), want: ["fetch", "--no-tags", "--quiet", "origin", "main"], message: "a stack's later steps merge local branches");
+    assert\equal(fetchArgv(steps(["a"], base: "main", stacked: false)), want: [<str>], message: "a local base fetches nothing");
+
+    final calls = mut [<str>];
+    final sh = fake({ "git worktree list --porcelain": Ran{ stdout = WORKTREES } }, calls: calls);
+    assert\isTrue(execute(sh, stack: steps(["a", "b"], base: "origin/main", stacked: false), here: "/repo").error == null, message: "executes");
+    final fetched = calls.indexOf("git fetch --no-tags --quiet origin main");
+    final merged = calls.indexOf("magus vcs resolve --against origin/main");
+    assert\isTrue(fetched != null and merged != null and fetched! < merged!, message: "fetched before the merge: {calls.join("; ")}");
+    assert\equal(calls.filter(fun (index: int, c: str) > bool => c.startsWith("git fetch")).len(), want: 1, message: "once");
+
+    final failing = fake({ "git fetch --no-tags --quiet origin main": Ran{ code = 128, stderr = "no network" } }, calls: mut [<str>]);
+    final why = execute(failing, stack: steps(["a"], base: "origin/main", stacked: false), here: "/repo").error!.message;
+    assert\isTrue(why.indexOf("no network") != null, message: "a failed fetch stops the run: {why}");
 }
 
 test "a branch checked out in another worktree is merged there, never switched to" {

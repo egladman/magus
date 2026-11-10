@@ -159,6 +159,76 @@ func (s *commandTestScopeSuite) TestExpandsNothingWhenUndeclared() {
 	s.Empty(Command{}.ExpandTestScope("main.go"))
 }
 
+type commandPathScopeSuite struct{ suite.Suite }
+
+func TestCommandPathScope(t *testing.T) { suite.Run(t, new(commandPathScopeSuite)) }
+
+func goPackageScope() Command {
+	return Command{PathScope: []string{"./{dir}"}, PathScopeFiles: []string{"**/*.go", "!**/testdata/**"}}
+}
+
+func (s *commandPathScopeSuite) TestMapsAFileToItsPackage() {
+	operands, keep := goPackageScope().ScopePath("buzzgen/load.go")
+	s.True(keep)
+	s.Equal([]string{"./buzzgen"}, operands)
+}
+
+func (s *commandPathScopeSuite) TestMapsAFileAtTheRoot() {
+	operands, keep := goPackageScope().ScopePath("main.go")
+	s.True(keep)
+	s.Equal([]string{"./."}, operands)
+}
+
+func (s *commandPathScopeSuite) TestDropsAFileNoGlobMatches() {
+	operands, keep := goPackageScope().ScopePath("README.md")
+	s.False(keep)
+	s.Empty(operands)
+}
+
+func (s *commandPathScopeSuite) TestDropsAnExcludedFile() {
+	_, keep := goPackageScope().ScopePath("buzzgen/testdata/src/a.go")
+	s.False(keep)
+}
+
+func (s *commandPathScopeSuite) TestValidates() {
+	s.NoError(goPackageScope().Validate())
+}
+
+func (s *commandPathScopeSuite) TestRefusesAScopeWithoutFiles() {
+	s.EqualError(Command{PathScope: []string{"./{dir}"}}.Validate(),
+		"path_scope without path_scope_files maps no file, set the globs of the files it maps")
+}
+
+func (s *commandPathScopeSuite) TestRefusesFilesWithoutAScope() {
+	s.EqualError(Command{PathScopeFiles: []string{"**/*.go"}}.Validate(),
+		"path_scope_files without path_scope maps its files to nothing, set path_scope or drop path_scope_files")
+}
+
+func (s *commandPathScopeSuite) TestRefusesOnlyExclusions() {
+	s.EqualError(Command{PathScope: []string{"./{dir}"}, PathScopeFiles: []string{"!**/testdata/**"}}.Validate(),
+		"path_scope_files holds only exclusions, so it maps no file")
+}
+
+func (s *commandPathScopeSuite) TestRefusesAnUnknownPlaceholder() {
+	s.EqualError(Command{PathScope: []string{"./{package}"}, PathScopeFiles: []string{"**/*.go"}}.Validate(),
+		`path_scope "./{package}": placeholder {package}, want {dir}, {file} or {stem}`)
+}
+
+func (s *commandPathScopeSuite) TestRefusesAnInvalidGlob() {
+	s.EqualError(Command{PathScope: []string{"./{dir}"}, PathScopeFiles: []string{"[*.go"}}.Validate(),
+		`path_scope_files[0] "[*.go" is not a valid glob`)
+}
+
+func (s *commandPathScopeSuite) TestSurvivesJSON() {
+	original := goPackageScope()
+	data, err := json.Marshal(original)
+	s.Require().NoError(err)
+	s.Contains(string(data), `"path_scope":["./{dir}"],"path_scope_files":["**/*.go","!**/testdata/**"]`)
+	var decoded Command
+	s.Require().NoError(json.Unmarshal(data, &decoded))
+	s.Equal(original, decoded)
+}
+
 func (s *commandTestScopeSuite) TestSurvivesJSON() {
 	original := Command{Bin: "go", TestScope: []string{"./{dir}"}}
 	data, err := json.Marshal(original)

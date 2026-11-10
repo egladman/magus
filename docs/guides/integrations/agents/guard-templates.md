@@ -2743,9 +2743,9 @@ not a call.
 // apply_patch input. A path that is not a .buzz file is skipped, and so
 // is a magusfile.buzz: the check cannot bind its magus/spell/* imports.
 // An event that names no written file is named on stderr, since the hook
-// is wired after a tool that writes none. Anything under magusfiles/,
-// spells/ or hack/ is checked with --embedded, the mode the engine loads it
-// in; any other .buzz file is checked strict. A
+// is wired after a tool that writes none. A file under EMBEDDED is checked
+// with --embedded, the mode the host loads it in, and one under docs/ from
+// docs/; any other .buzz file is checked strict. A
 // failure prints {"decision":"block","reason":...} on stdout, which the host hands the agent
 // as the reason to fix the file; a pass prints nothing. It always exits 0.
 // A check that could not run blocks too, naming the binary and why.
@@ -2824,13 +2824,38 @@ fun fileWorkspace(path: str, session: str) > str {
     return if (found != "") found else session;
 }
 
-// embedded reports whether the engine loads rel in embedded mode: the spells,
-// magusfiles and hack scripts.
+// EMBEDDED are the dirs the host loads in embedded mode. The static-check
+// lint rule holds the same line, and its test keeps the two equal.
+final EMBEDDED = ["magusfiles/", "spells/", "hack/", "docs/", "std/examples/", "cmd/", "console/", "internal/queue/"];
+
+// DOCS checks from docs/, where its lib/ and engine/ imports resolve.
+final DOCS = "docs/";
+
+// embedded reports whether the host loads rel in embedded mode.
 fun embedded(rel: str) > bool {
-    foreach (prefix in ["magusfiles/", "spells/", "hack/"]) {
+    foreach (prefix in EMBEDDED) {
         if (rel.startsWith(prefix)) { return true; }
     }
     return false;
+}
+
+// CheckCall is one --check run: the directory it runs in and its args.
+object CheckCall {
+    dir: str,
+    args: [str],
+}
+
+// checkCall checks rel, a path under root, in the mode and from the
+// directory the static-check lint rule uses.
+fun checkCall(root: str, rel: str) > CheckCall {
+    final args = mut ["buzz", "--check"];
+    if (embedded(rel)) { args.append("--embedded"); }
+    if (rel.startsWith(DOCS)) {
+        args.append(rel.sub(DOCS.len()));
+        return CheckCall{dir = fs\join(root, name: "docs"), args = args};
+    }
+    args.append(rel);
+    return CheckCall{dir = root, args = args};
 }
 
 fun main(args: [str]) > void {
@@ -2864,22 +2889,20 @@ fun checkAll(bin: str, written: [str], root: str) > [str] {
     final failures = mut [<str>];
     foreach (file in buzz) {
         final fileRoot = fileWorkspace(file, session: root);
-        final check = mut ["buzz", "--check"];
-        final dir = if (fileRoot != "") fileRoot else ".";
+        var check = CheckCall{dir = if (fileRoot != "") fileRoot else ".", args = ["buzz", "--check", file]};
         var result: proc\ExecResult? = null;
         var raised = "";
         try {
             final rel = if (path\within(fileRoot, path: file)) path\rel(fileRoot, target: file) else file;
-            if (embedded(rel)) { check.append("--embedded"); }
-            check.append(rel);
-            result = proc\exec(bin, args: check, dir: dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
+            check = checkCall(check.dir, rel: rel);
+            result = proc\exec(bin, args: check.args, dir: check.dir, opts: proc\ExecOptions{quiet = true, allowFailure = true});
         } catch (err: any) {
             raised = "{err}";
         }
         if (result == null) {
-            failures.append("magus-buzz-check could not run `{bin} {check.join(" ")}`: {raised}");
+            failures.append("magus-buzz-check could not run `{bin} {check.args.join(" ")}`: {raised}");
         } else if (!result!.ok) {
-            failures.append("`magus {check.join(" ")}` failed:\n" + (result!.stdout + result!.stderr).trim()
+            failures.append("`magus {check.args.join(" ")}` failed:\n" + (result!.stdout + result!.stderr).trim()
                 + "\nFix the file before you go on.");
         }
     }
@@ -2909,8 +2932,18 @@ test "an event that names no written file is answered with a note naming its too
 
 test "the engine's own Buzz is checked embedded and everything else strict" {
     std\assert(embedded("spells/harness/codex/spell.buzz") and embedded("hack/dev/a.buzz") and embedded("magusfiles/a.buzz"), message: "spells and scripts");
-    std\assert(!embedded("docs/guides/integrations/agents/magus-command.buzz"), message: "a standalone script is strict");
+    std\assert(embedded("cmd/magus/a.buzz") and embedded("console/a.buzz") and embedded("internal/queue/a.buzz") and embedded("std/examples/a.buzz"), message: "Buzz the binary loads");
+    std\assert(!embedded("libs/gopherbuzz/x.buzz") and !embedded("evals/x.buzz"), message: "a library and an eval are strict");
     std\assert((path\rel("/r", target: "/r/spells/a.buzz") catch "") == "spells/a.buzz", message: "under the root");
+}
+
+test "docs/ is checked embedded from docs/, where its imports resolve" {
+    final gates = checkCall("/r", rel: "docs/engine/gates.buzz");
+    std\assert(gates.dir == "/r/docs" and gates.args.join(" ") == "buzz --check --embedded engine/gates.buzz", message: "{gates.dir}: {gates.args.join(" ")}");
+    final spell = checkCall("/r", rel: "spells/a.buzz");
+    std\assert(spell.dir == "/r" and spell.args.join(" ") == "buzz --check --embedded spells/a.buzz", message: "{spell.dir}: {spell.args.join(" ")}");
+    final lib = checkCall("/r", rel: "libs/x/a.buzz");
+    std\assert(lib.args.join(" ") == "buzz --check libs/x/a.buzz", message: lib.args.join(" "));
 }
 
 test "a written file is read against its own workspace, not the session's" {

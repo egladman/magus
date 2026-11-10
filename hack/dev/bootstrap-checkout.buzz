@@ -497,7 +497,8 @@ export fun runningRows(jobsJSON: str) > result\Result::<[Row]> {
             final id: str = job["id"] ?? "";
             final root: str = job["checkout_root"] ?? "";
             final worktree: {str: any} = job["worktree"] ?? {};
-            final base: str = worktree["base"] ?? "";
+            final checkpoint: str = job["checkpoint"] ?? "";
+            final base: str = worktree["base"] ?? checkpoint.split("+")[0];
             found.append(Row{ id = id, root = root, base = base });
         }
         return result\ok::<[Row]>(found);
@@ -506,7 +507,7 @@ export fun runningRows(jobsJSON: str) > result\Result::<[Row]> {
     }
 }
 
-// endMergedRows ends each running row whose HEAD is already in onto.
+// endMergedRows ends each running row whose HEAD or work is already in onto.
 // It returns the rows it left running, each with the reason.
 // A row at its base, an unreadable checkout and dir itself stay running.
 export fun endMergedRows(h: Host, dir: str, onto: str, did: mut [str]) > result\Result::<[str]> {
@@ -540,24 +541,72 @@ export fun endMergedRows(h: Host, dir: str, onto: str, did: mut [str]) > result\
             kept.append("{row.id} (it has committed nothing yet)");
             continue;
         }
-        final inside = gitRan(h, dir: row.root, args: ["merge-base", "--is-ancestor", sha, onto]);
-        if (inside.error -> err) {
+        final how = mergedHow(h, row: row, head: sha, onto: onto);
+        if (how.error -> err) {
             return result\Result::<[str]>{ error = err };
         }
-        if (inside.value!.code == 1) {
+        if (how.value! == "") {
             kept.append("{row.id} (its head is not in the target yet)");
             continue;
-        }
-        if (inside.value!.code != 0) {
-            return result\fail::<[str]>("bootstrap-checkout: git merge-base --is-ancestor {sha} {onto} in {row.root}: exit {inside.value!.code}: {inside.value!.stderr}");
         }
         final ended = endRow(h, dir: dir, id: row.id);
         if (ended.error -> err) {
             return result\Result::<[str]>{ error = err };
         }
-        note(h, did: did, line: "ended running row {row.id}: its head {sha.sub(0, len: 12)} is already in {onto}");
+        note(h, did: did, line: "ended running row {row.id}: {how.value!}");
     }
     return result\ok::<[str]>(kept);
+}
+
+// mergedHow says how onto holds row's head, "" when it does not.
+fun mergedHow(h: Host, row: Row, head: str, onto: str) > result\Result::<str> {
+    final inside = gitRan(h, dir: row.root, args: ["merge-base", "--is-ancestor", head, onto]);
+    if (inside.error -> err) {
+        return result\Result::<str>{ error = err };
+    }
+    if (inside.value!.code == 0) {
+        return result\ok::<str>("its head {head.sub(0, len: 12)} is already in {onto}");
+    }
+    if (inside.value!.code != 1) {
+        return result\fail::<str>("bootstrap-checkout: git merge-base --is-ancestor {head} {onto} in {row.root}: exit {inside.value!.code}: {inside.value!.stderr}");
+    }
+    final squashed = holdsWork(h, row: row, head: head, onto: onto);
+    if (squashed.error -> err) {
+        return result\Result::<str>{ error = err };
+    }
+    if (!squashed.value!) {
+        return result\ok::<str>("");
+    }
+    return result\ok::<str>("its work since {row.base.sub(0, len: 12)} is already in {onto}, merged as other commits");
+}
+
+// holdsWork reports whether onto holds what row committed since its base.
+// A squash merge leaves the head out of onto's history, so the trees decide:
+// merging the work onto onto must change nothing.
+fun holdsWork(h: Host, row: Row, head: str, onto: str) > result\Result::<bool> {
+    if (row.base == "") {
+        return result\ok::<bool>(false);
+    }
+    final merged = gitRan(h, dir: row.root, args: ["merge-tree", "--write-tree", "--merge-base", row.base, onto, head]);
+    if (merged.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    if (merged.value!.code == 1) {
+        return result\ok::<bool>(false);
+    }
+    if (merged.value!.code != 0) {
+        return result\fail::<bool>("bootstrap-checkout: git merge-tree --write-tree --merge-base {row.base} {onto} {head} in {row.root}: exit {merged.value!.code}: {merged.value!.stderr}");
+    }
+    final target = gitRan(h, dir: row.root, args: ["rev-parse", "{onto}^\{tree}"]);
+    if (target.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    if (target.value!.code != 0) {
+        return result\fail::<bool>("bootstrap-checkout: git rev-parse {onto}^\{tree} in {row.root}: exit {target.value!.code}: {target.value!.stderr}");
+    }
+    final tree = lines(merged.value!.stdout);
+    final want = target.value!.stdout.trim();
+    return result\ok::<bool>(want != "" and tree.len() > 0 and tree[0] == want);
 }
 
 fun endRow(h: Host, dir: str, id: str) > result\Result::<bool> {
@@ -1383,6 +1432,24 @@ test "a running row whose head is already in the target is ended" {
     assert\equal(calls.indexOf("magus job exit done"), want: null, message: "exited rows are the prune's");
 }
 
+test "a running row whose work the target holds as a squash is ended" {
+    final calls = mut [<str>];
+    final did = mut [<str>];
+    final noWorktree = `{"jobs":[{"id":"merged-work","state":"running","checkout_root":"/r","checkpoint":"b0+d1","worktree":null}]}`;
+    final h = stubHost({
+        "magus ls jobs -o json": Ran{ stdout = noWorktree },
+        "/r: git rev-parse HEAD": Ran{ stdout = "h1\n" },
+        "/r: git merge-base --is-ancestor h1 bbb": Ran{ code = 1 },
+        "/r: git merge-tree --write-tree --merge-base b0 bbb h1": Ran{ stdout = "t1\n" },
+        "/r: git rev-parse bbb^\{tree}": Ran{ stdout = "t1\n" },
+    }, stamps: {}, calls: calls);
+    final kept = endMergedRows(h, dir: "/c", onto: "bbb", did: did);
+    assert\isTrue(kept.error == null, message: "settled");
+    assert\equal(kept.value!.len(), want: 0, message: "none left");
+    assert\equal(did, want: ["ended running row merged-work: its work since b0 is already in bbb, merged as other commits"], message: "said");
+    assert\equal(calls.indexOf("magus job exit merged-work") != null, want: true, message: "ended");
+}
+
 test "a running row not yet in the target, at its base, or unreadable stays running" {
     final calls = mut [<str>];
     final did = mut [<str>];
@@ -1390,8 +1457,17 @@ test "a running row not yet in the target, at its base, or unreadable stays runn
         "magus ls jobs -o json": Ran{ stdout = ROWS },
         "/r: git rev-parse HEAD": Ran{ stdout = "h1\n" },
         "/r: git merge-base --is-ancestor h1 bbb": Ran{ code = 1 },
+        "/r: git merge-tree --write-tree --merge-base b0 bbb h1": Ran{ code = 1, stdout = "t9\n" },
     }, stamps: {}, calls: calls);
     assert\equal(endMergedRows(notYet, dir: "/c", onto: "bbb", did: did).value!, want: ["merged-work (its head is not in the target yet)"], message: "not yet");
+    final moreWork = stubHost({
+        "magus ls jobs -o json": Ran{ stdout = ROWS },
+        "/r: git rev-parse HEAD": Ran{ stdout = "h1\n" },
+        "/r: git merge-base --is-ancestor h1 bbb": Ran{ code = 1 },
+        "/r: git merge-tree --write-tree --merge-base b0 bbb h1": Ran{ stdout = "t9\n" },
+        "/r: git rev-parse bbb^\{tree}": Ran{ stdout = "t1\n" },
+    }, stamps: {}, calls: calls);
+    assert\equal(endMergedRows(moreWork, dir: "/c", onto: "bbb", did: did).value!, want: ["merged-work (its head is not in the target yet)"], message: "work the target lacks");
     final atBase = stubHost({
         "magus ls jobs -o json": Ran{ stdout = ROWS },
         "/r: git rev-parse HEAD": Ran{ stdout = "b0\n" },

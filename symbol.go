@@ -1095,11 +1095,14 @@ func (m *Magus) buildSkew(ctx context.Context) string {
 // owns ctx holds the project's lock for its whole invocation) rebuilds through that run's
 // scheduler, as step: a nested m.Run would be refused MGS3007 for the very project the
 // body runs in. Anywhere else it runs the index op as its own invocation.
+//
+// A magus that body started has no scheduler to ask.
+// Its run takes no lock its ancestor holds.
 func (m *Magus) buildSymbolIndex(ctx context.Context, idx projectIndex, step cache.Step) error {
 	if ran, err := interp.CrossDispatchFromContext(ctx).DispatchStep(ctx, idx.project, step); ran {
 		return err
 	}
-	return m.runTargets(ctx, []types.Target{{Path: idx.project.Path, Name: idx.op}}, run{})
+	return m.runTargets(ctx, []types.Target{{Path: idx.project.Path, Name: idx.op}}, run{UnderAncestor: true})
 }
 
 // installedIndexes drops each index whose indexer is not installed, as long as its project
