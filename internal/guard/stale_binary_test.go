@@ -144,8 +144,7 @@ func TestUnloadedTreeWithoutABinaryNamesTheMissingBinary(t *testing.T) {
 	declareGuardRule(t, root)
 
 	v := judgeUnloaded(ctx, unloadedDependencies(errors.New("magusfile.buzz:3:1: expected expression")), "touch notes.txt")
-	bootstrapOnly := strings.TrimSuffix(noBinaryOwnSay(root), fmt.Sprintf(", then ready the checkout with `%s`, each alone on its line.", readyCheckoutLine(root))) + "."
-	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, bootstrapOnly)
+	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, noBinaryOwnSay(root))
 	assert.NotContains(t, stored, "older than")
 }
 

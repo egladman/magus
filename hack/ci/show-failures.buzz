@@ -113,6 +113,12 @@ fun capture(cmd: str, args: [str]) > str !> any {
     return res.stdout;
 }
 
+// No stdout parameter: stdout carries output records only.
+fun reportFallback(run: str, fallback: str, sink: fun (line: str) > void) > void {
+    sink("run {run}: failed jobs no {ARTIFACT_PREFIX}* artifact accounts for; fell back to their gh logs");
+    sink(fallback);
+}
+
 // main copies the records in the run's artifacts to stdout untouched, for
 // `magus query output --stdin`; a commit with no CI run exits 3.
 export fun main(args: [str]) > void !> any {
@@ -135,12 +141,7 @@ export fun main(args: [str]) > void !> any {
     final names = logArtifacts(capture("gh", args: ["api", "repos/\{owner}/\{repo}/actions/runs/{run}/artifacts?per_page=100"]));
     final fallback = fallbackLogs(run, artifacts: names, gh: fun (ghArgs: [str]) > str !> any => capture("gh", args: ghArgs));
     if (fallback != "") {
-        note("run {run}: failed jobs no {ARTIFACT_PREFIX}* artifact accounts for; fell back to their gh logs");
-        if (names.len() == 0) {
-            io\stdout.write(fallback + "\n") catch void;
-        } else {
-            note(fallback);
-        }
+        reportFallback(run, fallback, note);
     }
     if (names.len() == 0) {
         if (fallback == "") {
@@ -203,6 +204,15 @@ test "a failed plain job beside a failed shard with an artifact is still read" {
     assert\equal(seen.len(), want: 2, message: "one log call for the one uncovered job");
     assert\equal(covered("1d go", artifacts: ["magus-logs-1d"]), want: true, message: "shard matches");
     assert\equal(covered("1da go", artifacts: ["magus-logs-1d"]), want: false, message: "no prefix collision");
+}
+
+test "a fallback with no artifact goes to stderr, never stdout" {
+    final lines = mut [<str>];
+    reportFallback("99", "doctor (job 11)\nerror one", sink: fun (line: str) > void {
+        lines.append(line);
+    });
+    assert\equal(lines.len(), want: 2, message: "note and log");
+    assert\equal(lines[1].indexOf("error one") != null, want: true, message: "log reaches the stderr sink");
 }
 
 test "tail keeps the last lines" {

@@ -214,6 +214,53 @@ func TestALandedSubsetOfTheWorkLeavesTheJobExited(t *testing.T) {
 	assert.Equal(t, types.StateExited, states(t, s)["job"].State)
 }
 
+func landedWithNoResult(t *testing.T, dirty, differs bool) types.Job {
+	t.Helper()
+	repo := testkit.NewRepository(t, map[string]string{"a.go": "package a\n"})
+	seedRev := repo.Head()
+	wt := repo.AddWorktree("job")
+	wt.Write("a.go", "package a // landed\n")
+	wt.Git("commit", "-q", "-am", "job")
+	body := "package a // landed\n"
+	if differs {
+		body = "package a // changed again on the base\n"
+	}
+	repo.Commit("squash", map[string]string{"a.go": body})
+	repo.Git("update-ref", "refs/remotes/origin/main", repo.Head())
+	if dirty {
+		wt.Write("a.go", "package a // still editing\n")
+	}
+
+	s := tempStore(t, repo.Root())
+	s.notices = io.Discard
+	plant(t, s, types.Job{ID: "job", State: types.StateRunning, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
+		WritePaths: []string{"a.go"}, Updated: 1})
+	return states(t, s)["job"]
+}
+
+// A running row with no filed result ends once its committed diff is on base.
+func TestARunningRowWithNoResultEndsWhenItsCommittedWorkLanded(t *testing.T) {
+	got := landedWithNoResult(t, false, false)
+
+	assert.Equal(t, types.StateNoReturn, got.State)
+	assert.True(t, got.Landed)
+	assert.Contains(t, got.EndReason, "its work landed on origin/main")
+}
+
+func TestARunningRowWithNoResultAndUncommittedEditsKeepsItsLease(t *testing.T) {
+	got := landedWithNoResult(t, true, false)
+
+	assert.Equal(t, types.StateRunning, got.State)
+	assert.False(t, got.Landed)
+}
+
+func TestARunningRowWithNoResultAndAPathDifferingAtTheBaseKeepsItsLease(t *testing.T) {
+	got := landedWithNoResult(t, false, true)
+
+	assert.Equal(t, types.StateRunning, got.State)
+	assert.False(t, got.Landed)
+}
+
 // A worker whose branch a live integration job merged ends as landed before the base has
 // the work: the integration row's checkout reads the worker's paths as the worker does. A
 // worker no live integration row names stays exited.

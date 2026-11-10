@@ -665,7 +665,7 @@ func staleBinaryDenial(call judgedCall, reason unloadReason, failures []string, 
 	fix := binaryRemedy(own, root, call.lease, call.builds)
 	if reason.Cause == unloadNoBinary && own && (call.lease == "" || call.builds) {
 		// A foreign judge is not ./magus, so a ./magus rebuild cannot help.
-		fix = binaryFix{say: fmt.Sprintf("bootstrap ./magus with `%s`", ownBootstrapLine(root))}
+		fix = binaryFix{say: bootstrapSay(ownBootstrapLine(root), readyCheckoutLine(root))}
 	}
 	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
 	switch {
@@ -761,9 +761,8 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 			why: fmt.Sprintf("If the rebuild cannot load the tree either, bootstrap over it, alone on its line: `%s`. If the error names a magusfile line instead, fix that line.", bootstrap),
 		}
 	case own:
-		ready := readyCheckoutLine(root)
 		return binaryFix{
-			say: fmt.Sprintf("bootstrap ./magus with `%s`, then ready the checkout with `%s`, each alone on its line", bootstrap, ready),
+			say: bootstrapSay(bootstrap, readyCheckoutLine(root)),
 			why: "The bootstrap builds ./magus and nothing else. The checkout hook then installs every project's dependencies and every declared harness's tool rows, " +
 				"and builds the graph, the symbol digest and the proofread binary the commit guard runs.",
 		}
@@ -772,6 +771,12 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 		say: fmt.Sprintf("install a magus that loads this workspace with `%s`", config.ReleaseCommand(config.RequiredVersionAt(root))),
 		why: "If the error names a magusfile line instead, fix that line; `magus doctor` names the failure.",
 	}
+}
+
+// bootstrapSay is the fix for a checkout with no ./magus. The build alone
+// leaves the harness tool rows uninstalled, so the checkout hook follows it.
+func bootstrapSay(bootstrap, ready string) string {
+	return fmt.Sprintf("bootstrap ./magus with `%s`, then ready the checkout with `%s`, each alone on its line", bootstrap, ready)
 }
 
 // ownBootstrapLine is the line that builds a ./magus at the HEAD of root, a

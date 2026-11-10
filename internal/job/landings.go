@@ -52,11 +52,12 @@ type probeLog struct {
 	partial bool
 }
 
-// landingCandidate reports a running or exited row with a filed result in a checkout,
-// the only rows a landing can be judged for.
+// landingCandidate reports a running or exited row in a checkout, the only
+// rows a landing can be judged for. The checkout's diff decides, so a row
+// whose holder filed no result still qualifies.
 func landingCandidate(row types.Job) bool {
 	return (row.State == types.StateExited || row.State == types.StateRunning) && row.Holder.OrSession() != types.HolderServer && !row.ReadOnly &&
-		row.Result != nil && len(row.Result.ChangedPaths) > 0 && row.CheckoutRoot != "" &&
+		row.CheckoutRoot != "" &&
 		checkpointRevision(row.Checkpoint) != ""
 }
 
@@ -102,10 +103,10 @@ func (s *Store) landings(rows []types.Job, now int64) map[string]landing {
 	for _, row := range due {
 		next[row.ID] = landingProbe{At: now, Updated: row.Updated}
 	}
-	if read && !s.dryRun && !maps.Equal(history, next) {
+	if read && s.err == nil && s.path != "" && !s.dryRun && !maps.Equal(history, next) {
 		if err := s.writeLandingProbes(log, next); err != nil {
 			// No file lock is held, and the loss costs only the interval.
-			slog.Warn("landing probes not recorded", attr.Component("magus"), attr.Error(err))
+			slog.WarnContext(context.Background(), "landing probes not recorded", attr.Component("magus"), attr.Error(err))
 		}
 	}
 	out := map[string]landing{}
@@ -163,10 +164,8 @@ func (s *Store) readLandingProbes() probeLog {
 // writeLandingProbes records next against log, the history it was decided from: the
 // entries that changed are appended, and the file is rewritten to next alone when next
 // drops an entry or the log is [file.CompactDue]. It returns the write's error.
+// The caller checks that the store has a path and no error.
 func (s *Store) writeLandingProbes(log probeLog, next map[string]landingProbe) error {
-	if s.err != nil || s.path == "" {
-		return nil
-	}
 	dropped := false
 	for id := range log.probes {
 		if _, ok := next[id]; !ok {
