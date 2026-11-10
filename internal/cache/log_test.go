@@ -972,8 +972,9 @@ func TestBlockedCascadeReportsTheRootOnce(t *testing.T) {
 		"only the root is worth rerunning; a dependent reruns into the same failure")
 	// The run this replaces printed 39 lines: five per failure, seven failures,
 	// plus the summary. The cause is worth reading once.
-	assert.Equal(t, 7, strings.Count(out, "\n"),
-		"one failure block, one blocked-by line, one summary")
+	assert.Equal(t, 9, strings.Count(out, "\n"),
+		"one failure block, one blocked-by line, one summary, the root's ref line and the legend")
+	assert.Contains(t, out, "[fail] docs diagrams-generate  out177c63a16c3e\n", "only the root gets a ref line")
 }
 
 // One cause shared by many independent steps (every formatter step tripping MGS4007)
@@ -1130,7 +1131,8 @@ func TestBlockedCascadeFoldsCompositeRestatements(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(out, "modified its declared sources"), "the cause prints once")
 	assert.Equal(t, 1, strings.Count(out, "see: https://eli.gladman.cc/magus/reference/codes/race/MGS4007/"),
 		"a see: line belongs to the message above it, so it folds with it")
-	assert.Equal(t, 1, strings.Count(out, "[fail]"), "only the root prints a block")
+	blocks, _, _ := strings.Cut(out, "summary:")
+	assert.Equal(t, 1, strings.Count(blocks, "[fail]"), "only the root prints a block")
 	assert.Contains(t, out, "blocked by workspace types-generate:rw: job-generate:rw, termcast-generate:rw, "+
 		"langservice-generate:rw, bindings-generate:rw, generate:rw\n")
 	assert.Contains(t, out, "6 failed", "a blocked step did fail")
@@ -1165,7 +1167,8 @@ func TestBlockedKeepsAPrefixThatNamesNoFailedStep(t *testing.T) {
 	summaryEvent(t, h, 2)
 
 	out := buf.String()
-	assert.Equal(t, 2, strings.Count(out, "[fail]"))
+	blocks, _, _ := strings.Cut(out, "summary:")
+	assert.Equal(t, 2, strings.Count(blocks, "[fail]"))
 	assert.NotContains(t, out, "blocked by")
 }
 
@@ -1181,7 +1184,8 @@ func TestBlockedKeepsACompositeWithItsOwnFailureBesideTheRoot(t *testing.T) {
 	summaryEvent(t, h, 2)
 
 	out := buf.String()
-	assert.Equal(t, 2, strings.Count(out, "[fail]"))
+	blocks, _, _ := strings.Cut(out, "summary:")
+	assert.Equal(t, 2, strings.Count(blocks, "[fail]"))
 	assert.Contains(t, out, "mockery exited 1")
 	assert.NotContains(t, out, "blocked by")
 }
