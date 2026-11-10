@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 )
 
@@ -38,7 +39,9 @@ func maybeBootstrapExec(argv []string) {
 		return
 	}
 	self, err := runningBinaryPath()
-	if err != nil {
+	// The bootstrap builds ./magus with `go run`, so that build is the fresh
+	// one and the placed ./magus the stale one.
+	if err != nil || ward.GoRunBinary(self) {
 		return
 	}
 	target, ok := workspace.BootstrapExecTarget(extractRootFlag(argv[1:]), self)

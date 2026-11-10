@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -109,8 +108,8 @@ func TestResolveBootstrapExecTargetNoMagusfileAnywhereAbove(t *testing.T) {
 func unsetBootstrapExecEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv(BootstrapExecSentinelVar, "")
-	t.Setenv(BootstrapExecOptOutVar, "")
-	t.Setenv(PinnedBinaryVar, "")
+	t.Setenv(bootstrapExecOptOutVar, "")
+	t.Setenv(pinnedBinaryVar, "")
 }
 
 func TestBootstrapExecTargetSentinelPreventsSecondHop(t *testing.T) {
@@ -127,38 +126,22 @@ func TestBootstrapExecTargetOptOut(t *testing.T) {
 	unsetBootstrapExecEnv(t)
 	dir := t.TempDir()
 	writeBootstrapFixtureWorkspace(t, dir)
-	t.Setenv(BootstrapExecOptOutVar, "1")
+	t.Setenv(bootstrapExecOptOutVar, "1")
 	t.Chdir(dir)
 
 	_, ok := BootstrapExecTarget("", filepath.Join(dir, "not-it"))
 	assert.False(t, ok, "MAGUS_NO_BOOTSTRAP_EXEC must disable the whole mechanism")
 }
 
-func TestBootstrapExecTargetGoRunBuildKeepsOwnBinary(t *testing.T) {
+func TestBootstrapExecTargetStartsFromTheWorkingDirectory(t *testing.T) {
 	unsetBootstrapExecEnv(t)
 	dir := t.TempDir()
-	writeBootstrapFixtureWorkspace(t, dir)
+	want := writeBootstrapFixtureWorkspace(t, dir)
 	t.Chdir(dir)
 
-	goRunSelf := filepath.Join(t.TempDir(), "go-build123", "b001", "exe", bootstrapFixtureBinaryName())
-	_, ok := BootstrapExecTarget("", goRunSelf)
-	assert.False(t, ok, "a go run build must not defer to the placed ./magus")
-
-	installedSelf := filepath.Join(t.TempDir(), "bin", bootstrapFixtureBinaryName())
-	_, ok = BootstrapExecTarget("", installedSelf)
-	assert.True(t, ok, "an installed binary still defers to the placed ./magus")
-}
-
-func TestBootstrapExecTargetCachedGoRunBuildKeepsOwnBinary(t *testing.T) {
-	unsetBootstrapExecEnv(t)
-	dir := t.TempDir()
-	writeBootstrapFixtureWorkspace(t, dir)
-	t.Chdir(dir)
-
-	id := "ab" + strings.Repeat("0", 62)
-	cachedSelf := filepath.Join(t.TempDir(), "go-cache", "ab", id+"-d", bootstrapFixtureBinaryName())
-	_, ok := BootstrapExecTarget("", cachedSelf)
-	assert.False(t, ok, "the escape's go run build runs from the build cache and must not defer to the placed ./magus")
+	target, ok := BootstrapExecTarget("", filepath.Join(t.TempDir(), "bin", bootstrapFixtureBinaryName()))
+	require.True(t, ok, "an installed binary defers to the placed ./magus")
+	assert.Equal(t, want, target)
 }
 
 func TestBootstrapExecTargetHonorsStartOverCwd(t *testing.T) {
@@ -176,7 +159,7 @@ func TestBootstrapExecTargetNeverReplacesAPinnedBinary(t *testing.T) {
 	unsetBootstrapExecEnv(t)
 	dir := t.TempDir()
 	writeBootstrapFixtureWorkspace(t, dir)
-	t.Setenv(PinnedBinaryVar, filepath.Join(dir, "magus"))
+	t.Setenv(pinnedBinaryVar, filepath.Join(dir, "magus"))
 
 	_, ok := BootstrapExecTarget(dir, filepath.Join(t.TempDir(), "magus"))
 	assert.False(t, ok)

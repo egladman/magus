@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	"github.com/egladman/magus/internal/ward"
 )
 
 // BootstrapExecSentinelVar marks a process that already replaced itself with
@@ -17,24 +15,22 @@ import (
 // and exit code, so reusing it would read one invocation as recursion.
 const BootstrapExecSentinelVar = "MAGUS_BOOTSTRAP_EXEC_DONE"
 
-// BootstrapExecOptOutVar disables the bootstrap exec entirely. Documented in
+// bootstrapExecOptOutVar disables the bootstrap exec entirely. Documented in
 // internal/config/config.go's envOnly with the rest of the MAGUS_* variables.
-const BootstrapExecOptOutVar = "MAGUS_NO_BOOTSTRAP_EXEC"
+const bootstrapExecOptOutVar = "MAGUS_NO_BOOTSTRAP_EXEC"
 
-// PinnedBinaryVar is the hook glue's own pin of the binary it starts.
-const PinnedBinaryVar = "__MAGUS_BIN"
+// pinnedBinaryVar is the hook glue's own pin of the binary it starts.
+const pinnedBinaryVar = "__MAGUS_BIN"
 
 // BootstrapExecTarget is the workspace-local ./magus that should replace
 // self, found from start, or from the working directory when start is "".
 // It reads only the tree and the environment, so no config need load.
-//
-// The opt-out, the sentinel and the pin each turn it off. So does a `go run`
-// build of self, which is fresher than the placed ./magus.
+// The opt-out, the sentinel and the hook glue's pin each turn it off.
 func BootstrapExecTarget(start, self string) (target string, ok bool) {
-	if truthyEnv(os.Getenv(BootstrapExecOptOutVar)) || ward.GoRunBinary(self) {
+	if truthyEnv(os.Getenv(bootstrapExecOptOutVar)) {
 		return "", false
 	}
-	if os.Getenv(BootstrapExecSentinelVar) != "" || os.Getenv(PinnedBinaryVar) != "" {
+	if os.Getenv(BootstrapExecSentinelVar) != "" || os.Getenv(pinnedBinaryVar) != "" {
 		return "", false
 	}
 	if start == "" {
