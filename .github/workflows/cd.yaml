@@ -6,7 +6,7 @@ name: CD
 #
 # The image follows the push. The site follows CI's push run on main: CI already ran
 # every suite over this tree, so the site renders the coverage profiles that run uploaded
-# rather than testing the tree again (ADR 0027; docs/concepts/ci.md). The queue's
+# rather than testing the tree again (docs/design/principles/compute-once.md). The queue's
 # validation is not that run: its candidate need not be the commit that lands, and it
 # runs pull-request code.
 #

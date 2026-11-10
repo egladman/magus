@@ -60,5 +60,7 @@ undeclared input with no source in the tree that could reproduce it.
 ## See also
 
 - [Remote cache](../../concepts/cache/remote.md)
+- [Compute once, reuse everywhere](compute-once.md): a declared result a later
+  stage reads is an input, not a cache
 - [Everything is a file](everything-is-a-file.md)
 - [No silent defaults](../judgment/no-silent-defaults.md)
