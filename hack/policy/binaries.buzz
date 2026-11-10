@@ -136,12 +136,38 @@ fun foreignBinary(p: helpers\Program, where: Where, disk: Disk) > str {
     if (sameFile("{target}/magus", b: p.path)) { return ""; }
     final hasBinary = disk.hasBinary;
     if (places(p.args, built: built, dir: where.dir) and !hasBinary(target)) { return ""; }
-    return ("a binary from another checkout runs here; use `{target}/magus`\n"
-        + "`{p.path}` was built in {built} and runs against {target}, another checkout of magus; "
-        + "run {target}'s own binary: `{target}/magus --root {target} ...`. "
+    final aim = remedyRoot(target, where: where);
+    var run = "another checkout of magus; run {target}'s own binary";
+    if (aim != target) {
+        final lease = where.lease;
+        run = "a checkout lease {lease} does not hold; run the binary of the one it holds";
+    }
+    return ("a binary from another checkout runs here; use `{aim}/magus`\n"
+        + "`{p.path}` was built in {built} and runs against {target}, {run}: `{aim}/magus --root {aim} ...`. "
         + "A binary carries the guard rules, host declarations and spell bytecode of the tree "
         + "it was built from, so its verdicts describe {built}, and what it regenerates lands in {target} "
-        + "unmarked. " + ownBinaryHint(target, disk: disk, lease: where.lease)).trim();
+        + "unmarked. " + ownBinaryHint(aim, disk: disk, lease: where.lease)).trim();
+}
+
+// heldCheckout is the checkout a leased worker runs magus in:
+// the owned one holding where.dir, else the only one owned.
+// An integrator is not held to one checkout.
+fun heldCheckout(where: Where) > str {
+    if (where.lease == "" or where.integrator) { return ""; }
+    foreach (root in where.owned) {
+        if (where.dir == root or where.dir.startsWith(root + "/")) { return root; }
+    }
+    if (where.owned.len() == 1) { return where.owned[0]; }
+    return "";
+}
+
+// remedyRoot is the checkout a remedy aimed at target names.
+// lease-checkout refuses a leased worker's call outside its
+// checkout, so naming target there would be refused in turn.
+fun remedyRoot(target: str, where: Where) > str {
+    final held = heldCheckout(where);
+    if (held == "" or where.owned.indexOf(target) != null) { return target; }
+    return held;
 }
 
 // goIntoCheckout: `go -C <dir>` out of this workspace and into a checkout of magus, for a
@@ -161,9 +187,15 @@ fun goIntoCheckout(p: helpers\Program, where: Where, disk: Disk) > str {
     final isCheckout = disk.isCheckout;
     if (root == "" or !isCheckout(root) or root == where.workspace) { return ""; }
     if (bootstrap(call.args)) { return ""; }
+    final aim = remedyRoot(root, where: where);
+    var there = "that checkout";
+    if (aim != root) {
+        final lease = where.lease;
+        there = "the checkout lease {lease} holds";
+    }
     return ("go -C into another checkout of magus runs outside its cache and its drift tracking\n"
-        + "`go -C {root} {verb}` runs a toolchain command in another checkout of magus; run the target from that checkout: "
-        + "`{root}/magus --root {root} run <target> .`. " + ownBinaryHint(root, disk: disk, lease: where.lease)).trim();
+        + "`go -C {root} {verb}` runs a toolchain command in another checkout of magus; run the target from {there}: "
+        + "`{aim}/magus --root {aim} run <target> .`. " + ownBinaryHint(aim, disk: disk, lease: where.lease)).trim();
 }
 
 // placementScript copies an eligible ./magus into a fresh worktree and refuses any other.
@@ -301,6 +333,23 @@ test "the binary in a checkout the caller's job owns runs from any cwd" {
     std\assert(binaryDenial([["/w/a/magus", "job", "exec", "scout"]], where: holder, disk: twoCheckouts) == "", message: "the owned checkout's binary");
     std\assert(binaryDenial([["/w/a/magus", "ls"]], where: Where{ dir = "/w/b", workspace = "/w/b", lease = "scout", owned = ["/w/c"] }, disk: twoCheckouts) != "",
         message: "a checkout another job owns");
+}
+
+test "a leased worker is sent to the checkout it holds, which lease-checkout lets it run in" {
+    final three = fakeDisk(["/w/a", "/w/b", "/w/c"], binaries: ["/w/a", "/w/b", "/w/c"]);
+    final worker = Where{ dir = "/w/b", workspace = "/w/b", lease = "scout", owned = ["/w/c"] };
+    final foreign = binaryDenial([["/w/a/magus", "ls"]], where: worker, disk: three);
+    std\assert(foreign.indexOf("`/w/c/magus --root /w/c ...`") != null, message: "names the held checkout: " + foreign);
+    std\assert(foreign.indexOf("/w/b/magus") == null, message: "never a checkout the lease does not hold: " + foreign);
+    final goC = binaryDenial([["go", "-C", "/w/a", "test", "./..."]], where: worker, disk: three);
+    std\assert(goC.indexOf("`/w/c/magus --root /w/c run <target> .`") != null, message: "names the held checkout: " + goC);
+    std\assert(goC.indexOf("/w/a/magus") == null, message: "never a checkout the lease does not hold: " + goC);
+    final forked = Where{ dir = "/w/c/docs", workspace = "/w/c", lease = "scout", owned = ["/w/d", "/w/c"] };
+    std\assert(binaryDenial([["/w/a/magus", "--root", "/w/b", "ls"]], where: forked, disk: three).indexOf("`/w/c/magus --root /w/c ...`") != null,
+        message: "of several owned checkouts, the one the call runs in");
+    final integrator = Where{ dir = "/w/b", workspace = "/w/b", lease = "scout", integrator = true, owned = ["/w/c"] };
+    std\assert(binaryDenial([["/w/a/magus", "ls"]], where: integrator, disk: three).indexOf("`/w/b/magus --root /w/b ...`") != null,
+        message: "an integrator is not held to one checkout");
 }
 
 test "go -C into another checkout of magus is denied for a verb its targets cover" {
