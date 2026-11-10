@@ -41,6 +41,8 @@ func buzzRepl(ctx context.Context, noAutoload bool) error {
 		Candidates: workspaceReplCandidates(ctx, cwd),
 		Targets:    workspaceTargetNames(ctx, cwd),
 		Flags:      cliFlagCandidates,
+
+		ShellIntegration: globalCfg.ShellIntegration == "osc133",
 	})
 }
 

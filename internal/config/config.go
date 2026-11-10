@@ -60,6 +60,11 @@ type Config struct {
 	// ShutdownGrace bounds how long the broker and the server take to stop after a first SIGTERM. The broker seats nothing new and waits this long for the runs holding claims or services to finish; the server cancels the runs it adopted and waits this long for them to unwind. A second SIGTERM, or a SIGINT to the broker, stops either at once. Zero stops at once on the first signal; negative is an error.
 	ShutdownGrace time.Duration `json:"shutdown_grace" yaml:"shutdown_grace" validate:"gte=0"`
 
+	// ShellIntegration names the marks the `magus buzz` REPL writes for its
+	// terminal. osc133 adds OSC 133 prompt and entry marks and an OSC 7 cwd.
+	// Empty writes none.
+	ShellIntegration string `json:"shell_integration" yaml:"shell_integration" validate:"omitempty,oneof=osc133"`
+
 	// MaxFailures bounds how many projects may fail before a run stops starting
 	// more. Zero, the default, is unlimited: a batch runs everything it can and
 	// reports every failure at once.

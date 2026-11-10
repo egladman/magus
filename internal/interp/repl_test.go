@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -1040,4 +1041,54 @@ func TestRepl_HistoryPersistsAcrossSessions(t *testing.T) {
 		Stdin: strings.NewReader(".history\n"), Stdout: &out2, Stderr: &err2,
 	}))
 	assert.Contains(t, out2.String(), "first line")
+}
+
+func shellIntegrationSession() (*scriptedSession, *scriptDriver) {
+	drv := &scriptDriver{
+		lang: "buzz",
+		responses: map[string]driverResponse{
+			"ok":  {vals: []engine.Value{engine.NumberValue(2)}},
+			"bad": {err: &scriptError{"boom"}},
+		},
+	}
+	return newScriptedSession(drv), drv
+}
+
+func TestRepl_ShellIntegrationMarksPromptsAndEntries(t *testing.T) {
+	sess, _ := shellIntegrationSession()
+	host, _ := os.Hostname()
+	out, _, err := runRepl(t, sess, ReplOptions{WorkDir: "/work dir", ShellIntegration: true}, "ok\nbad\n")
+	require.NoError(t, err)
+
+	expand := strings.NewReplacer(
+		"{DIR}", fmt.Sprintf("\x1b]7;file://%s/work%%20dir\x1b\\", host),
+		"{A}", "\x1b]133;A\x1b\\",
+		"{B}", "\x1b]133;B\x1b\\",
+		"{C}", "\x1b]133;C\x1b\\",
+		"{D0}", "\x1b]133;D;0\x1b\\",
+		"{D1}", "\x1b]133;D;1\x1b\\",
+	)
+	want := expand.Replace(`Type .exit to quit, .help for commands.
+{DIR}{A}> {B}{C}2
+{D0}{DIR}{A}> {B}{C}{D1}{DIR}{A}> {B}
+`)
+	assert.Equal(t, want, out)
+}
+
+func TestRepl_ShellIntegrationOffEmitsNoEscapes(t *testing.T) {
+	sess, _ := shellIntegrationSession()
+	out, _, err := runRepl(t, sess, ReplOptions{WorkDir: "/work"}, "ok\nbad\n")
+	require.NoError(t, err)
+	assert.Equal(t, "Type .exit to quit, .help for commands.\n> 2\n> > \n", out)
+}
+
+func TestRepl_ShellIntegrationOnlyAddsMarks(t *testing.T) {
+	onSess, _ := shellIntegrationSession()
+	offSess, _ := shellIntegrationSession()
+	on, _, err := runRepl(t, onSess, ReplOptions{WorkDir: "/w", ShellIntegration: true}, "ok\nbad\n.help\n")
+	require.NoError(t, err)
+	off, _, err := runRepl(t, offSess, ReplOptions{WorkDir: "/w"}, "ok\nbad\n.help\n")
+	require.NoError(t, err)
+	stripped := regexp.MustCompile("\x1b\\][^\x1b]*\x1b\\\\").ReplaceAllString(on, "")
+	assert.Equal(t, off, stripped)
 }
