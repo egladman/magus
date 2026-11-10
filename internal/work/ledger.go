@@ -217,7 +217,7 @@ func indexItems(items []types.WorkItem) map[string]types.WorkItem {
 
 func (r *survey) readCheckouts(ctx context.Context, checkouts []types.RegisteredCheckout) {
 	for _, c := range checkouts {
-		if why := r.jobFor(c.Root); why != "" && c.Head != "" {
+		if why := r.holdingJob(c.Root); why != "" && c.Head != "" {
 			r.trackAt[c.Head] = why
 		}
 		item := types.WorkItem{Kind: types.WorkCheckout, Name: c.Root, Head: c.Head}
@@ -353,7 +353,7 @@ func (r *survey) keepKind(kinds ...types.WorkKind) {
 	}
 }
 
-func (r *survey) jobFor(root string) string {
+func (r *survey) holdingJob(root string) string {
 	for _, row := range r.in.Jobs {
 		if row.State.Terminal() {
 			continue
@@ -407,7 +407,7 @@ func unaccountedWhy(item types.WorkItem) string {
 func (r *survey) tracked(item types.WorkItem) string {
 	switch item.Kind {
 	case types.WorkCheckout:
-		return r.jobFor(item.Name)
+		return r.holdingJob(item.Name)
 	case types.WorkBranch:
 		return r.trackAt[item.Head]
 	case types.WorkStash, types.WorkPreserved:
