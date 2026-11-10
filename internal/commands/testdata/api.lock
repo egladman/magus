@@ -110,6 +110,7 @@ config server.maintenance.rotate_activities
 config server.maintenance.rotate_logs
 config server.maintenance.sync_graph
 config server.workspaces
+config shell_integration
 config shutdown_grace
 config spells.allow_shadow.<name>.name
 config spells.allow_shadow.<name>.reason

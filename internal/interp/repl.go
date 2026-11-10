@@ -599,6 +599,7 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 	}
 
 	marks := osc133{w: stdout, on: opts.ShellIntegration}
+	running := false // C sent for the pending entry, D not yet
 
 	footer := newReplFooter(opts.Stdout)
 	// Released on every exit path, including the ctx-cancelled one below: leaving
@@ -632,6 +633,10 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 				// Ctrl-C: abandon whatever was pending and start clean, the way a
 				// shell's line-kill does, rather than ending the session.
 				fmt.Fprintln(stdout, "^C")
+				if running {
+					marks.done(err)
+					running = false
+				}
 				pending.Reset()
 				depth = 0
 				continue
@@ -682,9 +687,10 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 			continue
 		}
 
-		if !started {
+		if !started && !running {
 			marks.mark("C")
 		}
+		running = false
 		if currentDriver == nil {
 			fmt.Fprintln(stderr, "error: no REPL driver available")
 			marks.mark("D;1")
@@ -704,6 +710,9 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 		})
 		if evalError != nil {
 			if currentDriver.IsIncomplete(evalError) {
+				// The driver cannot say a form is unfinished before compiling
+				// it, so C is already out; the retry must not send a second.
+				running = true
 				continue
 			}
 			fmt.Fprintf(stderr, "error: %v\n", evalError)

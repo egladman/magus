@@ -426,6 +426,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_SHUTDOWN_GRACE**
 : Bounds how long the broker and the server take to stop after a first SIGTERM. The broker seats nothing new and waits this long for the runs holding claims or services to finish; the server cancels the runs it adopted and waits this long for them to unwind. A second SIGTERM, or a SIGINT to the broker, stops either at once. Zero stops at once on the first signal; negative is an error (default: 5m). Config file key: **shutdown_grace**.
 
+**MAGUS_SHELL_INTEGRATION**
+: Names the marks the \`magus buzz\` REPL writes for its terminal. osc133 adds OSC 133 prompt and entry marks and an OSC 7 cwd. Empty writes none. Config file key: **shell_integration**.
+
 **MAGUS_MAX_FAILURES**
 : Bounds how many projects may fail before a run stops starting more. Zero, the default, is unlimited: a batch runs everything it can and reports every failure at once. Config file key: **max_failures**.
 

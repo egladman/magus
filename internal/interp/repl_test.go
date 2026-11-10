@@ -1092,3 +1092,18 @@ func TestRepl_ShellIntegrationOnlyAddsMarks(t *testing.T) {
 	stripped := regexp.MustCompile("\x1b\\][^\x1b]*\x1b\\\\").ReplaceAllString(on, "")
 	assert.Equal(t, off, stripped)
 }
+
+func TestRepl_ShellIntegrationSendsOneCAndOneDPerEntry(t *testing.T) {
+	drv := &scriptDriver{
+		lang: "buzz",
+		responses: map[string]driverResponse{
+			"partial":       {err: &scriptError{"got EOF"}, incomplete: true},
+			"partial\nrest": {vals: []engine.Value{engine.StringValue("joined")}},
+		},
+	}
+	out, _, err := runRepl(t, newScriptedSession(drv), ReplOptions{ShellIntegration: true}, "partial\nrest\n")
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(out, "\x1b]133;C\x1b\\"))
+	assert.Equal(t, 1, strings.Count(out, "\x1b]133;D;"))
+	assert.Equal(t, 3, strings.Count(out, "\x1b]133;A\x1b\\"))
+}

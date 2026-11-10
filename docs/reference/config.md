@@ -74,6 +74,7 @@ magus resolves configuration from these layers, highest precedence first: a CLI 
 | `dry_run`             | `MAGUS_DRY_RUN`             | `-u`, `--dry-run`       | bool                               |
 | `history_path`        | `MAGUS_HISTORY_PATH`        | `--history-path`        | string                             |
 | `max_failures`        | `MAGUS_MAX_FAILURES`        | `--max-failures`        | int                                |
+| `shell_integration`   | `MAGUS_SHELL_INTEGRATION`   | `--shell-integration`   | string                             |
 | `shutdown_grace`      | `MAGUS_SHUTDOWN_GRACE`      | `--shutdown-grace`      | duration                           |
 | `stall_timeout`       | `MAGUS_STALL_TIMEOUT`       | `--stall-timeout`       | duration                           |
 | `target_timeout`      | `MAGUS_TARGET_TIMEOUT`      | `--target-timeout`      | duration                           |

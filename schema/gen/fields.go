@@ -860,6 +860,15 @@ var Fields = []fieldtype.Field{
 		Doc:      "Bounds how long the broker and the server take to stop after a first SIGTERM. The broker seats nothing new and waits this long for the runs holding claims or services to finish; the server cancels the runs it adopted and waits this long for them to unwind. A second SIGTERM, or a SIGINT to the broker, stops either at once. Zero stops at once on the first signal; negative is an error",
 	},
 	{
+		GoPath:   "ShellIntegration",
+		YamlPath: "shell_integration",
+		EnvVar:   "MAGUS_SHELL_INTEGRATION",
+		Flag:     fieldtype.FlagNames{Long: "shell-integration"},
+		Kind:     fieldtype.KindString,
+		Usage:    "MAGUS_SHELL_INTEGRATION: ShellIntegration names the marks the 'magus buzz' REPL writes for its terminal.",
+		Doc:      "Names the marks the `magus buzz` REPL writes for its terminal. osc133 adds OSC 133 prompt and entry marks and an OSC 7 cwd. Empty writes none",
+	},
+	{
 		GoPath:   "MaxFailures",
 		YamlPath: "max_failures",
 		EnvVar:   "MAGUS_MAX_FAILURES",
