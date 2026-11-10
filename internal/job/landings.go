@@ -103,19 +103,17 @@ func (s *Store) landings(rows []types.Job, now int64) map[string]landing {
 	for _, row := range due {
 		next[row.ID] = landingProbe{At: now, Updated: row.Updated}
 	}
-	ctx := context.Background()
-	stored := s.err == nil && s.path != ""
-	if read && stored && !s.dryRun && !maps.Equal(history, next) {
+	if read && s.err == nil && s.path != "" && !s.dryRun && !maps.Equal(history, next) {
 		if err := s.writeLandingProbes(log, next); err != nil {
 			// No file lock is held, and the loss costs only the interval.
-			slog.WarnContext(ctx, "landing probes not recorded", attr.Component("magus"), attr.Error(err))
+			slog.WarnContext(context.Background(), "landing probes not recorded", attr.Component("magus"), attr.Error(err))
 		}
 	}
 	out := map[string]landing{}
 	for _, row := range due {
-		reason := probe(ctx, row)
+		reason := probe(context.Background(), row)
 		if reason == "" {
-			reason = s.landedInIntegration(ctx, row, rows)
+			reason = s.landedInIntegration(context.Background(), row, rows)
 		}
 		if reason != "" {
 			out[row.ID] = landing{updated: row.Updated, reason: reason}
