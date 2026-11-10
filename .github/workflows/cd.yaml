@@ -1,8 +1,14 @@
 name: CD
 
 # Ships what a merge to main produces: the docs site to GitHub Pages, and a container
-# image of that commit to GHCR. One trigger, one file, one job per artifact. A v* tag is a
-# deliberate release rather than continuous delivery, so it lives in release.yaml.
+# image of that commit to GHCR. One file, one job per artifact. A v* tag is a deliberate
+# release rather than continuous delivery, so it lives in release.yaml.
+#
+# The image follows the push. The site follows CI's push run on main: CI already ran
+# every suite over this tree, so the site renders the coverage profiles that run uploaded
+# rather than testing the tree again (ADR 0027; docs/concepts/ci.md). The queue's
+# validation is not that run: its candidate need not be the commit that lands, and it
+# runs pull-request code.
 #
 # No paths filter, deliberately, for either job. The inputs span the docs and console
 # trees, root Markdown, assets, blog, releases/*.yaml, the embedded skills, and every Go
@@ -21,7 +27,12 @@ name: CD
 on:
   push:
     branches: [main]
+  # Builds the image only: a dispatch names no CI run to read profiles from. Rerun the
+  # site's CD run to redeploy it.
   workflow_dispatch:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
 
 permissions:
   contents: read
@@ -37,13 +48,24 @@ env:
 jobs:
   site:
     name: docs site
+    # workflow_run matches workflows by name and fires for every run of one, a fork's
+    # pull request among them. So the site follows only a run of this repository's
+    # ci.yaml that a push or a dispatch started on main, as queue-apply.yaml does. The
+    # conclusion is checked in a step, so a red CI run fails this job instead of
+    # skipping the deploy unseen.
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.path == '.github/workflows/ci.yaml' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')
     runs-on: ubuntu-latest
-    # 60 rather than 30: coverage-render runs the race-enabled Go suite, every lib suite
-    # and buzz-test on top of the docs and console builds.
-    timeout-minutes: 60
-    # Least privilege: read the repo, mint the Pages OIDC token, write the deployment.
+    timeout-minutes: 30
+    # Least privilege: read the repo and the CI run's artifacts, mint the Pages OIDC
+    # token, write the deployment.
     permissions:
       contents: read
+      actions: read
       pages: write
       id-token: write
     # Serialize deploys; never cancel an in-flight publish mid-upload. Job-level so a slow
@@ -55,6 +77,19 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Require the CI run to have passed
+        env:
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          if [ "$CONCLUSION" != success ]; then
+            echo "::error title=CI::CI run $RUN_URL concluded $CONCLUSION; the site deploys only a tree CI passed"
+            exit 1
+          fi
+
+      # The CI run's commit, never github.sha: under workflow_run that is main's tip when
+      # this run started, which a later merge may have moved.
+      #
       # fetch-depth: 0 is load-bearing here rather than incidental. Each page's "Last
       # updated" footer and its History disclosure come from `git log` over that page's
       # source, so a shallow checkout would publish a site with no provenance at all.
@@ -62,8 +97,30 @@ jobs:
       # never read a historical blob. See docs/guides/integrations/ci.md.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
           filter: blob:none
+
+      # First, so a run with no profiles fails before the site builds. The artifact holds
+      # each profile at its workspace path, so it extracts into the checkout.
+      - id: coverage
+        name: Download the coverage profiles CI measured
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: coverage-${{ github.event.workflow_run.head_sha }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ github.workspace }}
+
+      # No fallback: CD never runs a suite itself.
+      - name: Name the CI run that uploaded no profiles
+        if: failure() && steps.coverage.outcome == 'failure'
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          echo "::error title=coverage::CI run $RUN_URL uploaded no coverage-$SHA artifact; rerun its coverage job, then this run"
+          exit 1
 
       # install stays ON (the default). With install: false the action adds the shims
       # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
@@ -109,20 +166,15 @@ jobs:
       - name: Build the console app
         run: magus run build console --concurrency-profile aggressive
 
-      # Leaves console/coverage.txt, the TypeScript figure coverage-render publishes. The
-      # root cannot need this target itself, because the console imports the root.
-      - name: Test the console
-        run: magus run test console --concurrency-profile aggressive
-
       # Assembles gen/site: docs at the root of it, console under /console/. Reproduce the
       # exact published tree locally with the same commands.
       - name: Assemble the deploy tree
         run: magus run deploy-generate . --concurrency-profile aggressive
 
-      # The ONLY producer of the README's coverage badges. Runs every Go module's suite and
-      # buzz-test, then writes go-, buzz- and typescript-coverage.svg into gen/site/assets/.
+      # The ONLY producer of the README's coverage badges. Runs no suite: it merges the
+      # downloaded profiles into go-, buzz- and typescript-coverage.svg in gen/site/assets/.
       # Nothing is committed back, which is why this job keeps read-only contents.
-      - name: Measure coverage and render the badges
+      - name: Render the coverage badges
         run: magus run coverage-render . --concurrency-profile aggressive
 
       # enablement: true turns Pages on (with the Actions source) the first time this
@@ -142,6 +194,7 @@ jobs:
 
   image:
     name: container image
+    if: github.event_name != 'workflow_run'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
