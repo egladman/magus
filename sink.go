@@ -362,7 +362,15 @@ func (t *plainTerminal) Print(ctx context.Context, text string) error {
 
 func (t *plainTerminal) BeginRun() {}
 
-func (t *plainTerminal) EndRun(ctx context.Context, footer string) error { return t.Print(ctx, footer) }
+func (t *plainTerminal) EndRun(ctx context.Context, footer string) error {
+	t.mu.Lock()
+	records := t.records
+	t.mu.Unlock()
+	if records != nil {
+		footer += records.FailureTail()
+	}
+	return t.Print(ctx, footer)
+}
 
 // textEncoder renders each event as the prose a person reads, from the event alone.
 type textEncoder struct {

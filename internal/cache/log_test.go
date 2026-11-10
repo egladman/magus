@@ -1487,6 +1487,37 @@ func TestPrettyHandlerRefLegend(t *testing.T) {
 		assert.NotContains(t, buf.String(), "outputs:")
 	})
 
+	t.Run("failed targets are named after the summary with their refs", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		h := newTestHandler(&buf)
+		ctx := context.Background()
+		for _, c := range []struct{ project, ref string }{{"api", "outfail00000001"}, {"web", "outfail00000002"}} {
+			require.NoError(t, h.Handle(ctx, buildRecord(
+				"cache.error",
+				slog.String("project", c.project),
+				slog.String("target", "test"),
+				slog.Int64("duration", int64(80*time.Millisecond)),
+				slog.String("ref", c.ref),
+			)), "error")
+		}
+		require.NoError(t, h.EndRun(ctx, footer), "summary")
+
+		out := buf.String()
+		tail := out[strings.Index(out, footer):]
+		assert.Contains(t, tail, "api test  outfail00000001\n")
+		assert.Contains(t, tail, "web test  outfail00000002\n")
+		assert.Contains(t, tail, "outputs: magus query output <ref>")
+	})
+
+	t.Run("a run with no failure lists none", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		h := newTestHandler(&buf)
+		require.NoError(t, h.EndRun(context.Background(), footer), "summary")
+		assert.Equal(t, footer, buf.String())
+	})
+
 	// The legend names a magus command and nothing downstream of it. A vendor in
 	// a build tool's output ages badly and is the docs' job, not the CLI's.
 	t.Run("names no agent vendor", func(t *testing.T) {

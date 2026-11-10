@@ -125,6 +125,8 @@ type PrettyHandler struct {
 	// Per RUN rather than a constant line, because a run that minted none would
 	// otherwise explain a notation nothing on screen uses.
 	mintedRef bool
+	// failedRefs outlives the pinned ring so the footer names every failure.
+	failedRefs []Failure
 	// blocked groups a root failure with the dependent targets whose failure
 	// only restated it, so one cause is printed once and the targets it took
 	// down are named in a single line at the summary. blockedAt indexes into it
@@ -631,6 +633,7 @@ func (h *PrettyHandler) EndRun(ctx context.Context, footer string) error {
 	h.printBlocked(ctx, colorize)
 	h.printRepeated(ctx, colorize)
 	h.printf(ctx, "%s", footer)
+	h.printFailedRefs(ctx, colorize)
 	h.printRefLegend(ctx, colorize)
 	if !h.hasPinnedFailures() || !h.lease.Enabled() {
 		h.fail(h.lease.Release())
@@ -864,6 +867,9 @@ func (h *PrettyHandler) printFailure(ctx context.Context, colorize bool, f failu
 	}
 	if h.suppressBlocked(heading, project, target, cause) || h.foldRepeatedCode(heading, project, target, cause) {
 		return
+	}
+	if ref != "" {
+		h.failedRefs = append(h.failedRefs, Failure{Project: project, Target: target, OutputRef: ref})
 	}
 	h.ensureLease()
 	pinned := false
@@ -1288,6 +1294,40 @@ func (h *PrettyHandler) printRef(ctx context.Context, ref string) {
 	}
 	h.mintedRef = true
 	h.printf(ctx, "ref  %s\n\n", ref)
+}
+
+// printFailedRefs names each failed target and its ref under the summary line,
+// so they survive output cut in the middle. It also arms the legend.
+func (h *PrettyHandler) printFailedRefs(ctx context.Context, colorize bool) {
+	if lines := h.failedRefLines(colorize); lines != "" {
+		h.printf(ctx, "%s", lines)
+		h.mintedRef = true
+	}
+}
+
+func (h *PrettyHandler) failedRefLines(colorize bool) string {
+	var b strings.Builder
+	for _, f := range h.failedRefs {
+		name := f.Project
+		if f.Target != "" {
+			name += " " + f.Target
+		}
+		fmt.Fprintf(&b, "%s %s  %s\n", Glyph(colorize, "fail", colRed), name, f.OutputRef)
+	}
+	return b.String()
+}
+
+// FailureTail returns the failed-target lines and the legend for a footer the
+// caller prints itself, and clears them. It is empty when nothing failed.
+func (h *PrettyHandler) FailureTail() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	lines := h.failedRefLines(false)
+	h.failedRefs = nil
+	if lines == "" {
+		return ""
+	}
+	return lines + "  outputs: " + hint.QueryOutput.With("<ref>") + "\n"
 }
 
 // printRefLegend says once, at the end of a run, what the bare ids above are.
@@ -1751,6 +1791,7 @@ func (h *PrettyHandler) resetRun() {
 	h.failureAt = 0
 	h.selected = -1
 	h.mintedRef = false
+	h.failedRefs = nil
 	h.blockedAt = nil
 	h.blocked = nil
 	h.failedSteps = nil

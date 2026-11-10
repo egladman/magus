@@ -261,6 +261,26 @@ func (s *TextSinkSummarySuite) TestLeavesOutFilesNobodyRecorded() {
 	s.Equal("summary: 0 cached, 2 ran, 0 failed (300ms using 4 slots)\n", got)
 }
 
+func (s *TextSinkSummarySuite) TestPlainFooterNamesFailedRefs() {
+	var out bytes.Buffer
+	term := &plainTerminal{w: &out}
+	rec := slog.NewRecord(time.Now(), slog.LevelError, "cache.error", 0)
+	rec.AddAttrs(slog.String("project", "api"), slog.String("target", "test"), slog.String("ref", "outfail00000001"))
+	s.Require().NoError(term.Handle(s.T().Context(), rec))
+	out.Reset()
+
+	s.Require().NoError(term.EndRun(s.T().Context(), "summary: 0 cached, 1 ran, 1 failed (1s)\n"))
+	s.Contains(out.String(), "summary: 0 cached, 1 ran, 1 failed (1s)\n[fail] api test  outfail00000001\n")
+	s.Contains(out.String(), "outputs: ")
+}
+
+func (s *TextSinkSummarySuite) TestPlainFooterWithoutFailureIsUnchanged() {
+	var out bytes.Buffer
+	term := &plainTerminal{w: &out}
+	s.Require().NoError(term.EndRun(s.T().Context(), "summary: 1 cached, 0 ran, 0 failed (1s)\n"))
+	s.Equal("summary: 1 cached, 0 ran, 0 failed (1s)\n", out.String())
+}
+
 func (s *TextSinkSummarySuite) TestDryRunIgnoresCounts() {
 	got := s.render(report.RunSummary{Dry: true, Planned: 2, Files: 9, Slots: 3, DurationMs: 2})
 	s.Equal("summary: dry run, 2 targets would run (2ms)\n", got)
