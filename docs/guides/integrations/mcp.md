@@ -106,11 +106,11 @@ current; turning off MCP turns off the endpoint and nothing else.
 The same tools answer on each transport. What differs is who can reach them and what
 proves who they are:
 
-| Transport                 | Where                                    | Credential                                  | Use it for                                                                                          |
-| ------------------------- | ---------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| stdio                     | `magus mcp`, launched by the host        | none; the host launched the process as you  | one host driving the workspace it opens, with no daemon running                                     |
-| Streamable HTTP, socket   | `/mcp` on the daemon's own `server.sock` | the proc token, from a peer running as you  | a local client that speaks HTTP over a unix socket and should share the daemon's warm graph         |
-| Streamable HTTP, loopback | `http://127.0.0.1:7391/mcp`              | a bearer token holding `mcp=write`          | a client that only takes a URL, runs as another user, or reaches the daemon through a tunnel or TLS |
+| Transport                 | Where                                    | Credential                                 | Use it for                                                                                          |
+| ------------------------- | ---------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| stdio                     | `magus mcp`, launched by the host        | none; the host launched the process as you | one host driving the workspace it opens, with no daemon running                                     |
+| Streamable HTTP, socket   | `/mcp` on the daemon's own `server.sock` | the proc token, from a peer running as you | a local client that speaks HTTP over a unix socket and should share the daemon's warm graph         |
+| Streamable HTTP, loopback | `http://127.0.0.1:7391/mcp`              | a bearer token holding `mcp=write`         | a client that only takes a URL, runs as another user, or reaches the daemon through a tunnel or TLS |
 
 Whichever the transport, each tool call is held to `mcp=write` again, and a caller
 below it gets [MGS9015](../../reference/codes/auth/MGS9015.md) as a tool error.

@@ -696,3 +696,58 @@ func TestCommandRuleSeesThePullRequestCallsCheckout(t *testing.T) {
 	at := hookLocation(ctx, Dependencies{})
 	assert.Equal(t, at.workspace, probe.asked[0].Workspace, "a call with no cd stays at the session's checkout")
 }
+
+// pushPlaced is the request the command rule is handed for line, run from main.
+func pushPlaced(main, line string) types.CommandRequest {
+	req := types.CommandRequest{Dir: main, Workspace: main}
+	at := magusRepoAt
+	at.workspace, at.dir = main, main
+	placeMovedCall(&req, commandRuleInput{command: line, dialect: DialectBash}, at)
+	return req
+}
+
+// A root session started in one checkout cds into a fork to push it. The rule
+// reads the fork's commits, not the branch the host's checkout is on.
+func TestTheRuleJudgesAPushInTheCheckoutTheLineEnters(t *testing.T) {
+	main, own := t.TempDir(), t.TempDir()
+	placeFile(t, own, "magus.yaml", "")
+	req := pushPlaced(main, fmt.Sprintf("cd %s; git push -u origin HEAD:main-spell-charms", own))
+	assert.Equal(t, types.CommandRequest{Dir: own, Workspace: own}, req)
+}
+
+func TestTheRuleJudgesAGitDashCPushInTheCheckoutItNames(t *testing.T) {
+	main, own := t.TempDir(), t.TempDir()
+	placeFile(t, own, "magus.yaml", "")
+	assert.Equal(t, own, pushPlaced(main, fmt.Sprintf("git -C %s push origin HEAD:topic", own)).Dir)
+}
+
+func TestTheRuleJudgesAnHgPushInTheRepositoryItNames(t *testing.T) {
+	main, own := t.TempDir(), t.TempDir()
+	placeFile(t, own, "magus.yaml", "")
+	assert.Equal(t, own, pushPlaced(main, fmt.Sprintf("hg -R %s push -B topic", own)).Dir)
+}
+
+func TestTheRuleJudgesAJjPushInTheRepositoryItNames(t *testing.T) {
+	main, own := t.TempDir(), t.TempDir()
+	placeFile(t, own, "magus.yaml", "")
+	assert.Equal(t, own, pushPlaced(main, fmt.Sprintf("jj -R %s git push -b topic", own)).Dir)
+}
+
+// The push and the pull request after it share one site, entered once. gh
+// does not apply the relative cd a second time.
+func TestTheRuleJudgesARelativeCdPushBesideAPullRequestOnce(t *testing.T) {
+	main := t.TempDir()
+	placeFile(t, main, "fix/magus.yaml", "")
+	req := pushPlaced(main, `cd fix && git push -u origin HEAD:topic && gh pr create --title "add a topic" --body x`)
+	assert.Equal(t, types.CommandRequest{Dir: filepath.Join(main, "fix"), Workspace: main}, req, "fix is inside the hook's own workspace")
+}
+
+func TestTheRuleStaysPutForAPushWithNoCd(t *testing.T) {
+	main := t.TempDir()
+	assert.Equal(t, main, pushPlaced(main, "git push -u origin HEAD:topic").Dir)
+}
+
+func TestTheRuleStaysPutForAPushAfterACdTheShellResolves(t *testing.T) {
+	main := t.TempDir()
+	assert.Equal(t, main, pushPlaced(main, `cd "$CHECKOUT" && git push -u origin HEAD:topic`).Dir)
+}

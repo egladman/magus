@@ -132,21 +132,6 @@ export object Push {
     name: str,
     generated: bool = false,
     source: str = "",
-    dir: str = "",
-}
-
-// gitDir is the checkout `git -C <dir>` runs in, "" when the line gives none.
-fun gitDir(args: [str]) > str {
-    var dir = "";
-    foreach (i, arg in args) {
-        if (arg == "push") {
-            break;
-        }
-        if (arg == "-C" and i + 1 < args.len()) {
-            dir = args[i + 1];
-        }
-    }
-    return dir;
 }
 
 final gitValueFlags = ["-o", "--push-option", "--repo", "--receive-pack", "--exec"];
@@ -169,7 +154,7 @@ export fun findPushes(programs: [helpers\Program], current: str) > [Push] {
         }
         final call = p.vcs!;
         if (call.tool == "git" and call.subcommand == "push") {
-            foreach (push in gitPushes(call.args, current: current, dir: gitDir(p.args))) { pushes.append(push); }
+            foreach (push in gitPushes(call.args, current: current)) { pushes.append(push); }
         } else if ((call.tool == "hg" or call.tool == "sl") and call.subcommand == "push") {
             foreach (name in flagValues(call.args, longs: ["--bookmark", "--to"], shorts: ["-B"])) {
                 pushes.append(Push{ tool = call.tool, remote = "default", name = name });
@@ -184,7 +169,7 @@ export fun findPushes(programs: [helpers\Program], current: str) > [Push] {
     return pushes;
 }
 
-fun gitPushes(args: [str], current: str, dir: str) > [Push] {
+fun gitPushes(args: [str], current: str) > [Push] {
     final pushes = mut [<Push>];
     foreach (flag in gitSkipFlags) {
         if (args.indexOf(flag) != null) {
@@ -197,7 +182,7 @@ fun gitPushes(args: [str], current: str, dir: str) > [Push] {
         remote = ops[0];
     }
     if (ops.len() < 2) {
-        pushes.append(Push{ tool = "git", remote = remote, name = current, dir = dir });
+        pushes.append(Push{ tool = "git", remote = remote, name = current });
         return pushes;
     }
     foreach (spec in ops.sub(1)) {
@@ -225,7 +210,7 @@ fun gitPushes(args: [str], current: str, dir: str) > [Push] {
         if (ref == "") {
             continue;
         }
-        pushes.append(Push{ tool = "git", remote = remote, name = ref, source = source, dir = dir });
+        pushes.append(Push{ tool = "git", remote = remote, name = ref, source = source });
     }
     return pushes;
 }
@@ -892,7 +877,8 @@ export fun decideNames(programs: [helpers\Program], current: str, remote: Remote
         if (p.name == "" or p.name == baseName or release.match(p.name) != null) {
             continue;
         }
-        final read = topic(p.source, p.dir);
+        // The request already stands where the push runs, so no dir moves it.
+        final read = topic(p.source, "");
         var verdict = judgeName(p.name, topic: read);
         if (p.generated) {
             verdict = Verdict{
