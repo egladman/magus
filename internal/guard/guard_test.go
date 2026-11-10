@@ -353,6 +353,8 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			checkout: &types.CheckoutState{RemoteBranches: []string{"origin/main"}}, decision: decisionDeny, reason: "HEAD:refs/heads/guard-pr-polling"},
 		{rule: "push-authority", name: "a subagent opens a pull request", input: bash(`gh pr create --title "fix: pin the key" --body "Pins it."`),
 			worker: "root/feat footprint", decision: decisionDeny, reason: "only the main session pushes or opens a pull request"},
+		{rule: "unplaced-call", name: "a push after a cd to a variable", input: bash(`cd "$X" && git push origin HEAD:pin-key`),
+			decision: decisionDeny, reason: "spell the directory as a literal path"},
 		{rule: "branch-name", name: "the main session pushes an uppercase, underscored name", input: bash("git push origin HEAD:Pin_Key"),
 			checkout: &types.CheckoutState{Branch: "pin-key", Base: "origin/main", RemoteBranches: []string{"origin/main"}}, decision: decisionDeny, reason: "`Pin_Key` is not a branch name to publish"},
 		{rule: "spawn-without-job-row", name: "a spawn titled for no job", input: agentSpawn(map[string]any{
