@@ -3,8 +3,9 @@
 // Lands commits as a pull request on a new branch from a fresh origin/main.
 // It cherry-picks the commits and makes the checkout verify-ready.
 // Then it runs CI's three hygiene checks, pushes and runs `gh pr create`.
-// It refuses a branch name that exists locally or on origin, and stops at the
-// first failed step, leaving the branch where it stood. --dry-run prints the steps and runs none.
+// It refuses a branch name on origin, or local with other commits. It stops
+// at the first failed step, leaving the branch where it stood. A rerun switches
+// to that branch and checks again. --dry-run prints the steps and runs none.
 //
 //	magus buzz hack/dev/land-commits.buzz -- --branch <name> --from <sha,...|ref> --title <text> --body-file <file> [--dry-run]
 //
@@ -35,6 +36,13 @@ export object Landing {
     title: str,
     body: str,
     bodyFile: str,
+    continuing: bool = false,
+}
+
+// ownBranch reports whether have, the subjects past origin/main on a branch,
+// are exactly want, those of the commits to pick: an earlier run made it.
+export fun ownBranch(have: [str], want: [str]) > bool {
+    return have.len() > 0 and have.join("\n") == want.join("\n");
 }
 
 // nameProblem is why branch cannot be created, "" when it is free everywhere.
@@ -64,9 +72,9 @@ export fun isCommitList(source: str) > bool {
 // checkArgvs are the three hygiene checks CI runs on a pull request, as `magus` arguments.
 export fun checkArgvs(title: str, body: str) > [[str]] {
     return [
-        ["run", "pr-title", ".", "--", "--title={title}"],
+        ["run", "pr-title", ".", "--", title],
         ["run", "pr-description", ".", "--", "--title={title}", "--body={body}"],
-        ["run", "pr-changelog", ".", "--", "--title={title}"],
+        ["run", "pr-changelog", ".", "--", title],
     ];
 }
 
@@ -80,8 +88,14 @@ export fun createArgv(branch: str, title: str, bodyFile: str) > [str] {
 
 // plan is the steps of a landing, in order, as the lines --dry-run prints.
 export fun plan(l: Landing) > [str] {
-    final steps = mut ["git fetch origin main", "git switch -c {l.branch} origin/main"];
-    steps.append("git cherry-pick {l.commits.join(" ")}");
+    final steps = mut [<str>];
+    if (l.continuing) {
+        steps.append("git switch {l.branch}");
+    } else {
+        steps.append("git fetch origin main");
+        steps.append("git switch -c {l.branch} origin/main");
+        steps.append("git cherry-pick {l.commits.join(" ")}");
+    }
     steps.append("magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready");
     foreach (argv in checkArgvs(l.title, body: "<{l.bodyFile}>")) {
         steps.append("magus {argv.join(" ")}");
@@ -119,17 +133,42 @@ fun commitsOf(source: str) > result\Result::<[str]> {
     return result\ok::<[str]>(commits);
 }
 
+fun madeByEarlierRun(branch: str, commits: [str]) > result\Result::<bool> {
+    final have = git(["log", "--reverse", "--format=%s", "origin/main..{branch}"]);
+    if (have.error -> err) {
+        return result\Result::<bool>{ error = err };
+    }
+    final want = mut [<str>];
+    foreach (id in commits) {
+        final subject = git(["log", "-1", "--format=%s", id]);
+        if (subject.error -> err) {
+            return result\Result::<bool>{ error = err };
+        }
+        want.append(subject.value!.trim());
+    }
+    final lines = mut [<str>];
+    foreach (line in have.value!.split("\n")) {
+        if (line.trim() != "") {
+            lines.append(line.trim());
+        }
+    }
+    return result\ok::<bool>(ownBranch(lines, want: want));
+}
+
 fun land(l: Landing) > result\Result::<bool> {
-    foreach (args in [["fetch", "origin", "main"], ["switch", "-c", l.branch, "origin/main"]]) {
+    final setup = if (l.continuing) [["switch", l.branch]] else [["fetch", "origin", "main"], ["switch", "-c", l.branch, "origin/main"]];
+    foreach (args in setup) {
         final ran = git(args);
         if (ran.error -> err) {
             return result\Result::<bool>{ error = err };
         }
     }
     try {
-        final picked = vcs\cmd(["cherry-pick"] + l.commits, opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
-        if (!picked.ok) {
-            return result\fail::<bool>("land-commits: the cherry-pick of {l.commits.join(" ")} conflicted on {l.branch}: settle it with `magus buzz hack/dev/resolve-conflicts.buzz -- --file <path>`, then `git cherry-pick --continue`");
+        if (!l.continuing) {
+            final picked = vcs\cmd(["cherry-pick"] + l.commits, opts: vcs\CommandOptions{ quiet = true, allowFailure = true });
+            if (!picked.ok) {
+                return result\fail::<bool>("land-commits: the cherry-pick of {l.commits.join(" ")} conflicted on {l.branch}: settle it with `magus buzz hack/dev/resolve-conflicts.buzz -- --file <path>`, then `git cherry-pick --continue`");
+            }
         }
         foreach (line in bootstrap\verifyReady(bootstrap\liveHost(), dir: vcs\root())) {
             std\print("verify-ready: {line}");
@@ -178,15 +217,26 @@ export fun main(args: [str]) > void !> any {
     if (remote.error -> err) {
         throw err.message;
     }
-    final refused = nameProblem(branch, local: local.value!.trim() != "", remote: remote.value!.trim() != "");
-    if (refused != "") {
-        throw refused;
-    }
     final commits = commitsOf(source);
     if (commits.error -> err) {
         throw err.message;
     }
-    final landing = Landing{ branch = branch, commits = commits.value!, title = title, body = fs\readFile(bodyFile), bodyFile = bodyFile };
+    final onRemote = remote.value!.trim() != "";
+    var onLocal = local.value!.trim() != "";
+    var continuing = false;
+    if (onLocal and !onRemote) {
+        final own = madeByEarlierRun(branch, commits: commits.value!);
+        if (own.error -> err) {
+            throw err.message;
+        }
+        continuing = own.value!;
+        onLocal = !continuing;
+    }
+    final refused = nameProblem(branch, local: onLocal, remote: onRemote);
+    if (refused != "") {
+        throw refused;
+    }
+    final landing = Landing{ branch = branch, commits = commits.value!, title = title, body = fs\readFile(bodyFile), bodyFile = bodyFile, continuing = continuing };
     if (parsed.values["--dry-run"] != null) {
         std\print("dry run: nothing changes");
         foreach (step in plan(landing)) {
@@ -217,11 +267,25 @@ test "--from reads a list of commit ids, and anything else is a ref" {
 
 test "the checks, push and pull request are built as argv with the title and body in one word each" {
     final checks = checkArgvs("add the thing", body: "why it is");
-    assert\equal(checks[0], want: ["run", "pr-title", ".", "--", "--title=add the thing"], message: "title");
+    assert\equal(checks[0], want: ["run", "pr-title", ".", "--", "add the thing"], message: "title");
     assert\equal(checks[1], want: ["run", "pr-description", ".", "--", "--title=add the thing", "--body=why it is"], message: "description");
-    assert\equal(checks[2], want: ["run", "pr-changelog", ".", "--", "--title=add the thing"], message: "changelog");
+    assert\equal(checks[2], want: ["run", "pr-changelog", ".", "--", "add the thing"], message: "changelog");
     assert\equal(pushArgv("topic"), want: ["push", "-u", "origin", "topic"], message: "push");
     assert\equal(createArgv("topic", title: "t", bodyFile: "b.md"), want: ["pr", "create", "--base", "main", "--head", "topic", "--title", "t", "--body-file", "b.md"], message: "create");
+}
+
+test "a branch holding exactly the commits to pick is a rerun's own" {
+    assert\equal(ownBranch(["a", "b"], want: ["a", "b"]), want: true, message: "same");
+    assert\equal(ownBranch([<str>], want: [<str>]), want: false, message: "empty is a fresh name clash");
+    assert\equal(ownBranch(["a"], want: ["a", "b"]), want: false, message: "short");
+    assert\equal(ownBranch(["a", "x"], want: ["a", "b"]), want: false, message: "other work");
+}
+
+test "a rerun switches to its branch and picks nothing" {
+    final steps = plan(Landing{ branch = "topic", commits = ["abc1234"], title = "t", body = "b", bodyFile = "b.md", continuing = true });
+    assert\equal(steps.len(), want: 7, message: "steps");
+    assert\equal(steps[0], want: "git switch topic", message: "switch");
+    assert\equal(steps[1].startsWith("magus buzz"), want: true, message: "verify-ready next");
 }
 
 test "the dry run lists every step in order and never enables auto-merge" {
