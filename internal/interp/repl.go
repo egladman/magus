@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"slices"
 	"sort"
@@ -42,6 +43,40 @@ type ReplOptions struct {
 	// spelled with its leading dashes, for completion inside magus\run([...])
 	// once the target name is typed. Optional.
 	Flags func(verb string) []string
+	// ShellIntegration emits OSC 133 prompt marks and an OSC 7 directory report.
+	// Off, the output is unchanged.
+	ShellIntegration bool
+}
+
+// osc133 writes shell-integration escapes; the zero value writes nothing.
+type osc133 struct {
+	w  io.Writer
+	on bool
+}
+
+// mark writes ESC ] 133 ; body ST. Bodies: A, B, C and D;status.
+func (o osc133) mark(body string) {
+	if o.on {
+		fmt.Fprintf(o.w, "\x1b]133;%s\x1b\\", body)
+	}
+}
+
+func (o osc133) directory(dir string) {
+	if !o.on || dir == "" {
+		return
+	}
+	host, _ := os.Hostname()
+	u := url.URL{Scheme: "file", Host: host, Path: dir}
+	fmt.Fprintf(o.w, "\x1b]7;%s\x1b\\", u.String())
+}
+
+// done writes D with status 1 for an error, else 0.
+func (o osc133) done(err error) {
+	if err != nil {
+		o.mark("D;1")
+		return
+	}
+	o.mark("D;0")
 }
 
 // replInput is the REPL's line source. It is one type with two behaviors because
@@ -61,6 +96,7 @@ type replInput struct {
 	fd      uintptr
 	sig     *ctrlTracker
 	out     io.Writer
+	marks   osc133 // prompt marks A and B; off unless ReplOptions.ShellIntegration
 }
 
 // ctrlC and ctrlD are the raw bytes a terminal sends for those keys (ETX, EOT).
@@ -79,9 +115,16 @@ var errInterrupted = errors.New("interrupted")
 type ctrlTracker struct {
 	io.Reader
 	last byte
+	// beforeRead runs once ahead of the next Read: the editor has drawn its
+	// prompt by then and nothing is echoed yet.
+	beforeRead func()
 }
 
 func (r *ctrlTracker) Read(p []byte) (int, error) {
+	if f := r.beforeRead; f != nil {
+		r.beforeRead = nil
+		f()
+	}
 	n, err := r.Reader.Read(p)
 	for _, b := range p[:n] {
 		if b == ctrlC || b == ctrlD {
@@ -107,7 +150,7 @@ func (r *ctrlTracker) take() byte {
 // REPL that refuses to start over a missing line editor is strictly worse than one
 // with no history.
 func newReplInput(opts ReplOptions, complete func(line string, pos int, key rune) (string, int, bool)) *replInput {
-	in := &replInput{out: opts.Stdout}
+	in := &replInput{out: opts.Stdout, marks: osc133{w: opts.Stdout, on: opts.ShellIntegration}}
 	stdin, isFile := opts.Stdin.(*os.File)
 	if !isFile || !termkit.StdinIsTerminal() || !termkit.IsTerminalWriter(opts.Stdout, termkit.SystemProbe) {
 		in.scanner = bufio.NewScanner(opts.Stdin)
@@ -143,15 +186,28 @@ func newReplInput(opts ReplOptions, complete func(line string, pos int, key rune
 // readLine returns the next line. The editor draws prompt itself; the scanner path
 // prints it, which is what keeps a piped transcript identical to the old behavior.
 func (in *replInput) readLine(prompt string) (string, error) {
+	in.marks.mark("A")
 	if in.editor != nil {
 		in.editor.SetPrompt(prompt)
+		// Not in the prompt string: x/term ends an escape at the next letter,
+		// so it would miscount the prompt width.
+		sent := false
+		in.sig.beforeRead = func() {
+			sent = true
+			in.marks.mark("B")
+		}
 		line, err := in.editor.ReadLine()
+		in.sig.beforeRead = nil
+		if !sent {
+			in.marks.mark("B")
+		}
 		if errors.Is(err, io.EOF) && in.sig.take() == ctrlC {
 			return "", errInterrupted
 		}
 		return line, err
 	}
 	fmt.Fprint(in.out, prompt)
+	in.marks.mark("B")
 	if !in.scanner.Scan() {
 		if err := in.scanner.Err(); err != nil {
 			return "", err
@@ -542,6 +598,9 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 		stderr = input.out
 	}
 
+	marks := osc133{w: stdout, on: opts.ShellIntegration}
+	running := false // C sent for the pending entry, D not yet
+
 	footer := newReplFooter(opts.Stdout)
 	// Released on every exit path, including the ctx-cancelled one below: leaving
 	// the scroll margins set would hand the shell back a terminal that only
@@ -567,12 +626,17 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 		}
 		footer.paint(replState(lang, opts.WorkDir, depth, pending.Len() > 0))
 
+		marks.directory(opts.WorkDir)
 		line, err := input.readLine(prompt)
 		if err != nil {
 			if errors.Is(err, errInterrupted) {
 				// Ctrl-C: abandon whatever was pending and start clean, the way a
 				// shell's line-kill does, rather than ending the session.
 				fmt.Fprintln(stdout, "^C")
+				if running {
+					marks.done(err)
+					running = false
+				}
 				pending.Reset()
 				depth = 0
 				continue
@@ -590,12 +654,17 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 		}
 
 		// Meta-commands only on fresh input.
+		started := false
 		if pending.Len() == 0 && depth == 0 {
+			if started = strings.HasPrefix(line, "."); started {
+				marks.mark("C")
+			}
 			handled, exit := handleReplMeta(ctx, stdout, stderr, line, &currentDriver, drivers, sess, hist)
 			if exit {
 				return nil
 			}
 			if handled {
+				marks.done(nil)
 				continue
 			}
 			if line == "" || strings.HasPrefix(line, "--") {
@@ -618,8 +687,13 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 			continue
 		}
 
+		if !started && !running {
+			marks.mark("C")
+		}
+		running = false
 		if currentDriver == nil {
 			fmt.Fprintln(stderr, "error: no REPL driver available")
+			marks.mark("D;1")
 			pending.Reset()
 			continue
 		}
@@ -636,9 +710,13 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 		})
 		if evalError != nil {
 			if currentDriver.IsIncomplete(evalError) {
+				// The driver cannot say a form is unfinished before compiling
+				// it, so C is already out; the retry must not send a second.
+				running = true
 				continue
 			}
 			fmt.Fprintf(stderr, "error: %v\n", evalError)
+			marks.done(evalError)
 			pending.Reset()
 		} else {
 			for _, v := range vals {
@@ -646,6 +724,7 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 					PrettyPrint(stdout, v, PrettyOpts{MaxDepth: 3})
 				}
 			}
+			marks.done(nil)
 			pending.Reset()
 		}
 	}

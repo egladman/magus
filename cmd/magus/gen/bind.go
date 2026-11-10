@@ -95,6 +95,7 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.TextVar(&cfg.Broker, "broker", cfg.Broker, "MAGUS_BROKER: Broker decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and sha...")
 	fs.DurationVar(&cfg.BudgetWait, "budget-wait", cfg.BudgetWait, "MAGUS_BUDGET_WAIT: BudgetWait bounds a step's wait for budget other runs hold, 30m by default.")
 	fs.DurationVar(&cfg.ShutdownGrace, "shutdown-grace", cfg.ShutdownGrace, "MAGUS_SHUTDOWN_GRACE: ShutdownGrace bounds how long the broker and the server take to stop after a first SIGTERM.")
+	fs.StringVar(&cfg.ShellIntegration, "shell-integration", cfg.ShellIntegration, "MAGUS_SHELL_INTEGRATION: ShellIntegration names the marks the 'magus buzz' REPL writes for its terminal.")
 	fs.IntVar(&cfg.MaxFailures, "max-failures", cfg.MaxFailures, "MAGUS_MAX_FAILURES: MaxFailures bounds how many projects may fail before a run stops starting more.")
 	fs.DurationVar(&cfg.TargetTimeout, "target-timeout", cfg.TargetTimeout, "MAGUS_TARGET_TIMEOUT: TargetTimeout bounds how long any single target may run before magus cancels it.")
 	fs.DurationVar(&cfg.StallTimeout, "stall-timeout", cfg.StallTimeout, "MAGUS_STALL_TIMEOUT: StallTimeout aborts an invocation that is making no progress at all: no target has started, finished, or written a li...")

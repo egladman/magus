@@ -624,6 +624,9 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			cfg.ShutdownGrace = d
 		}
 	}
+	if v := getenv("MAGUS_SHELL_INTEGRATION"); v != "" {
+		cfg.ShellIntegration = v
+	}
 	if v := getenv("MAGUS_MAX_FAILURES"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_MAX_FAILURES: %w", err))
