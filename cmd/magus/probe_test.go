@@ -333,7 +333,7 @@ func TestKnowledgeGraphComponent(t *testing.T) {
 	}
 }
 
-// TestReadinessHTTPHandler verifies /readyz's JSON body: the whole types.ReadinessReport
+// TestReadinessHTTPHandler verifies /readyz's JSON body: the whole daemon.ReadinessReport
 // (Ready plus every component) for a healthy snapshot with all extras wired, for an
 // unhealthy one, and for the nil-extras case (no source wired degrades every extra
 // component to disabled/down rather than erroring).
