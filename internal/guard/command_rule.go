@@ -195,12 +195,12 @@ func commandRequest(ctx context.Context, in commandRuleInput, who hookAttributio
 	}
 }
 
-// placeMovedCall moves req to the checkout a line cds to before a pull request
-// call or a relink, so the rule judges that tree. A directory only running the
-// line can reveal leaves the call where the host started.
+// placeMovedCall moves req to the checkout a line enters before a push, a pull
+// request call or a relink. The rule judges that tree. A directory only
+// running the line can reveal leaves the call where the host started.
 func placeMovedCall(req *types.CommandRequest, in commandRuleInput, at location) {
 	moved := func(c hint.Invocation) bool {
-		if isPullRequestText(c) {
+		if isPush(c) || isPullRequestText(c) {
 			return true
 		}
 		r, ok := parseTargetRun(c)
