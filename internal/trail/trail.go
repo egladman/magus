@@ -664,7 +664,12 @@ func Append(ctx context.Context, base string, e Event) {
 	if err != nil {
 		return
 	}
-	_ = file.AppendLines(eventsPath(base), [][]byte{line}, 0o644, file.WithoutSync())
+	path := eventsPath(base)
+	// Made first: the file helpers create a missing dir world-readable.
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return
+	}
+	_ = file.AppendLines(path, [][]byte{line}, 0o600, file.WithoutSync())
 }
 
 // WriteBlob stores a payload under a provenance prefix (e.g. "mcp") and returns its ref and byte
@@ -692,6 +697,9 @@ func WriteBlob(ctx context.Context, base, prefix string, data []byte) (ref strin
 	}
 	// 0600 because a blob is a whole tool payload, which redaction scrubs of what it
 	// recognizes and no more.
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return "", size
+	}
 	if err := file.ReplaceFile(path, data, 0o600); err != nil {
 		return "", size
 	}
@@ -937,7 +945,7 @@ func rotate(base string, max int) {
 	}
 	// Synced, unlike a blob: a crash that emptied this file would lose the whole trail,
 	// where an unsynced blob loses one payload.
-	if err := file.WriteFileAtomic(path, []byte(b.String()), 0o644); err != nil {
+	if err := file.WriteFileAtomic(path, []byte(b.String()), 0o600); err != nil {
 		return
 	}
 	gcBlobs(base, kept)

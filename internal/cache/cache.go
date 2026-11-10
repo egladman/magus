@@ -424,12 +424,19 @@ func deferMtimeFlush() RunOption {
 	return func(rc *runCtx) { rc.deferMtimeFlush = true }
 }
 
+// privateDirPerm and privateFilePerm keep the cache to its owner. Its logs and
+// outputs hold whatever a build printed, which redaction scrubs only in part.
+const (
+	privateDirPerm  os.FileMode = 0o700
+	privateFilePerm os.FileMode = 0o600
+)
+
 // Open returns a Cache rooted at dir (created on demand). It reads no environment:
 // every setting arrives as an Option, which the caller resolves from its config. It
 // errors on a write configuration that cannot take effect (see buildTiers).
 func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	dir = filepath.Clean(dir)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, privateDirPerm); err != nil {
 		return nil, fmt.Errorf("magus/cache: mkdir %q: %w", dir, err)
 	}
 	c := &Cache{
@@ -448,7 +455,7 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	}
 	if c.store == "" {
 		c.store = dir
-	} else if err := os.MkdirAll(c.store, 0o755); err != nil {
+	} else if err := os.MkdirAll(c.store, privateDirPerm); err != nil {
 		return nil, fmt.Errorf("magus/cache: mkdir %q: %w", c.store, err)
 	}
 	// After the options, so its warnings reach the logger the caller chose.
@@ -2030,11 +2037,11 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(clean, 0o755); err != nil {
+			if err := os.MkdirAll(clean, privateDirPerm); err != nil {
 				return fmt.Errorf("magus/cache: import mkdir %q: %w", clean, err)
 			}
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(clean), 0o755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(clean), privateDirPerm); err != nil {
 				return fmt.Errorf("magus/cache: import mkdir parent: %w", err)
 			}
 			if !hdr.ModTime.IsZero() {
@@ -2167,10 +2174,10 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	// running fn without capture writers, journal step tagging, or failure-dump
 	// machinery would leave observers and the journal never seeing the step
 	// finish, and no log file for a later hit to replay.
-	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(logPath), privateDirPerm); err != nil {
 		return nil, fmt.Errorf("magus/cache: create log dir for %s: %w", logPath, err)
 	}
-	logF, err := os.Create(logPath)
+	logF, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, privateFilePerm)
 	if err != nil {
 		return nil, fmt.Errorf("magus/cache: create log file %s: %w", logPath, err)
 	}

@@ -104,6 +104,28 @@ func TestMissThenHit(t *testing.T) {
 	assert.Equal(t, r1.Hash, r2.Hash, "hit hash must equal miss hash")
 }
 
+// TestCacheStateIsPrivateToItsOwner pins the modes a run creates: a log
+// carries whatever the build printed.
+func TestCacheStateIsPrivateToItsOwner(t *testing.T) {
+	root, cdir, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	touchOut(t, root)
+	step := makeStep(root)
+
+	r, err := c.Run(t.Context(), step, func(context.Context) error { return nil })
+	require.NoError(t, err)
+
+	perm := func(p string) os.FileMode {
+		info, err := os.Stat(p)
+		require.NoError(t, err)
+		return info.Mode().Perm()
+	}
+	log := c.logPath(step.ProjectPath, r.Hash)
+	assert.Equal(t, os.FileMode(0o700), perm(cdir), "the cache dir")
+	assert.Equal(t, os.FileMode(0o700), perm(filepath.Dir(log)), "the log dir")
+	assert.Equal(t, os.FileMode(0o600), perm(log), "the log")
+}
+
 // TestCacheHitReplaysLogToStderrNotStdout verifies a cache hit's log replay
 // goes to stderr, matching the miss path (captureRun streams a live run to
 // stderr specifically so stdout stays reserved for structured output like
