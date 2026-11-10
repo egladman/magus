@@ -39,7 +39,7 @@ func integrationMerge(c hint.Invocation, row types.Job) bool {
 
 // integrationSpellings lists each name git resolves to a listed branch.
 func integrationSpellings(branches []string) []string {
-	var out []string
+	out := make([]string, 0, 4*len(branches))
 	for _, b := range branches {
 		out = append(out, b, "origin/"+b, "refs/heads/"+b, "refs/remotes/origin/"+b)
 	}

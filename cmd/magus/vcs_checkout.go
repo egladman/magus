@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/egladman/magus"
 	flaggen "github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
@@ -66,7 +68,7 @@ func vcsCheckoutCommand(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if flags.Remove != "" {
-		if err := preserveBeforeRemoval(ctx, os.Stderr, flags.Remove, res); err != nil {
+		if err := preserveBeforeRemoval(ctx, flags.Remove, res); err != nil {
 			return err
 		}
 		if err := review.Remove(ctx, flags.Remove); err != nil {
@@ -84,15 +86,18 @@ func vcsCheckoutCommand(ctx context.Context, root string, args []string) error {
 	return err
 }
 
-// preserveBeforeRemoval captures dir's uncommitted work and says so on w. A
+// preserveBeforeRemoval captures dir's uncommitted work and says so. A
 // capture that fails stops the removal, since the work would be lost.
-func preserveBeforeRemoval(ctx context.Context, w io.Writer, dir string, res types.VCSResolution) error {
+// A missing dir holds no work to capture.
+func preserveBeforeRemoval(ctx context.Context, dir string, res types.VCSResolution) error {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return fmt.Errorf("vcs checkout --remove: %w", err)
 	}
-	if _, err := os.Stat(abs); err != nil {
+	if _, err := os.Stat(abs); errors.Is(err, os.ErrNotExist) {
 		return nil
+	} else if err != nil {
+		return fmt.Errorf("vcs checkout --remove: not removing %s, it cannot be read: %w", abs, err)
 	}
 	cp, captured, err := vcs.PreserveChanged(ctx, abs, res)
 	if err != nil {
@@ -100,9 +105,9 @@ func preserveBeforeRemoval(ctx context.Context, w io.Writer, dir string, res typ
 	}
 	switch {
 	case captured:
-		fmt.Fprintf(w, "preserved the uncommitted work in %s as %s (%s)\n", abs, cp.Preserved, cp.VCS)
+		slog.InfoContext(ctx, fmt.Sprintf("preserved the uncommitted work in %s as %s (%s)", abs, cp.Preserved, cp.VCS), attr.Notice(""))
 	case cp.Preserved != "":
-		fmt.Fprintf(w, "the uncommitted work in %s is already preserved as %s (%s)\n", abs, cp.Preserved, cp.VCS)
+		slog.InfoContext(ctx, fmt.Sprintf("the uncommitted work in %s is already preserved as %s (%s)", abs, cp.Preserved, cp.VCS), attr.Notice(""))
 	}
 	return nil
 }

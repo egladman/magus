@@ -964,10 +964,10 @@ func (r *WorkspaceRules) Policy() WorkspacePolicy {
 // policyState is Policy as the trail's lineage records it. The approved ids are left to a
 // callback, since reading them runs a process per file and the lineage asks only when the
 // policy moved.
-func (r *WorkspaceRules) policyState() PolicyState { return r.policyStateOf(r.Policy()) }
+func (r *WorkspaceRules) policyState() PolicyState { return r.keptPolicyState(r.Policy()) }
 
-// policyStateOf is policyState for a policy a snapshot may have kept.
-func (r *WorkspaceRules) policyStateOf(policy WorkspacePolicy) PolicyState {
+// keptPolicyState is policyState for a policy a snapshot may have kept.
+func (r *WorkspaceRules) keptPolicyState(policy WorkspacePolicy) PolicyState {
 	files := make([]string, len(policy.Sources))
 	for i, s := range policy.Sources {
 		files[i] = s.Path

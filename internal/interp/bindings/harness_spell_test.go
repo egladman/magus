@@ -923,6 +923,13 @@ func TestPickTierModelsRefusesADeclaredIdThatIsNoRowOfTheTier(t *testing.T) {
 	assert.Contains(t, err.Error(), "rows m-1, m-2 all declare tier principal")
 }
 
+func TestPickTierModelsPicksNothingForAHarnessWithNoTiers(t *testing.T) {
+	got, err := pickTierModels(nil, func(string) (string, bool) { return "", false })
+
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
 func TestPickTierModelsRunsTheOneRowOfATierWithNoDeclaration(t *testing.T) {
 	got, err := pickTierModels(map[string][]string{"principal": {"m-1"}}, func(string) (string, bool) { return "", false })
 
