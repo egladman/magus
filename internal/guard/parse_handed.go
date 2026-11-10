@@ -23,8 +23,8 @@ type handedScript struct {
 	read bool
 }
 
-// scriptHandoffs are the handedScripts of f's statements, in walk order.
-func scriptHandoffs(f *syntax.File, d Dialect) []handedScript {
+// handedScripts are the scripts f's statements hand over, in walk order.
+func handedScripts(f *syntax.File, d Dialect) []handedScript {
 	piped := map[*syntax.Stmt]*syntax.Stmt{}
 	var out []handedScript
 	syntax.Walk(f, func(n syntax.Node) bool {
@@ -64,7 +64,7 @@ func scriptHandoffs(f *syntax.File, d Dialect) []handedScript {
 func unreadHandoffs(command string, d Dialect) []string {
 	var out []string
 	eachScript(command, d, func(sf *scriptFile) bool {
-		for _, h := range scriptHandoffs(sf.file, d) {
+		for _, h := range handedScripts(sf.file, d) {
 			if !h.read {
 				out = append(out, fmt.Sprintf("%s through %s", h.to, h.via))
 			}
@@ -220,87 +220,116 @@ func printfLiteral(format string) (string, bool) {
 // programScripts are the shell scripts inv runs other than by -c. A shell
 // reads one on stdin. Each language below has its own way to start one.
 func programScripts(inv hint.Invocation, stdin func() (scriptText, bool)) []handedScript {
-	name, args := path.Base(inv.Name), inv.Args
-	fromStdin := func(lang func(string, string) []handedScript) []handedScript {
-		t, ok := stdin()
-		if !ok {
-			return nil
-		}
-		if !t.read {
-			return []handedScript{{to: name, via: t.via}}
-		}
-		return lang(name, t.text)
-	}
+	call := programCall{name: path.Base(inv.Name), args: inv.Args, stdin: stdin}
+	name := call.name
 	switch {
 	case shells[name]:
-		if _, ok := shellDashC(args); ok {
-			return nil
-		}
-		if ops := operands(args, "oO"); len(ops) > 0 && ops[0] != "-" && !hasFlag(args, 's', "") {
-			return nil
-		}
-		return fromStdin(func(to, text string) []handedScript {
-			return []handedScript{{to: to, via: "stdin", text: text, read: true}}
-		})
+		return call.shellScripts()
 	case name == "tclsh" || name == "wish":
-		if ops := operands(args, ""); len(ops) > 0 && ops[0] != "-" {
+		if ops := operands(call.args, ""); len(ops) > 0 && ops[0] != "-" {
 			return nil
 		}
-		return fromStdin(tclScripts)
+		return call.fromStdin(tclScripts)
 	case name == "awk" || name == "gawk" || name == "mawk" || name == "nawk":
-		if hasFlag(args, 'f', "file") {
-			return nil
-		}
-		programs := flagValues(args, "e", "source")
-		if len(programs) == 0 {
-			if ops := operands(args, "Fvf"); len(ops) > 0 {
-				programs = ops[:1]
-			}
-		}
-		return eachProgram(name, programs, awkScripts)
+		return call.inlinePrograms("source", "Fvf", awkScripts)
 	case name == "sed" || name == "gsed":
-		if hasFlag(args, 'f', "file") {
-			return nil
-		}
-		programs := flagValues(args, "e", "expression")
-		if len(programs) == 0 {
-			if ops := operands(args, "efl"); len(ops) > 0 {
-				programs = ops[:1]
-			}
-		}
-		return eachProgram(name, programs, sedScripts)
+		return call.inlinePrograms("expression", "efl", sedScripts)
 	case name == "php" || strings.HasPrefix(name, "php") && isDigits(strings.TrimPrefix(name, "php")):
-		if code := flagValues(args, "rBRE", ""); len(code) > 0 {
-			return eachProgram(name, code, phpScripts)
-		}
-		if ops := operands(args, "cdzf"); len(ops) > 0 && ops[0] != "-" {
-			return nil
-		}
-		return fromStdin(phpScripts)
+		return call.phpProgramScripts()
 	case name == "osascript":
-		if lines := flagValues(args, "e", ""); len(lines) > 0 {
-			return appleScripts(name, strings.Join(lines, "\n"))
-		}
-		if ops := operands(args, "elis"); len(ops) > 0 && ops[0] != "-" {
-			return nil
-		}
-		return fromStdin(appleScripts)
+		return call.appleProgramScripts()
 	case name == "vim" || name == "vi" || name == "nvim" || name == "ex" || name == "view":
-		commands := flagValues(args, "c", "cmd")
-		for _, a := range args {
-			if len(a) > 1 && a[0] == '+' {
-				commands = append(commands, a[1:])
-			}
-		}
-		out := eachProgram(name, commands, exScripts)
-		if name == "ex" || hasFlag(args, 'e', "") {
-			out = append(out, fromStdin(func(to, text string) []handedScript {
-				return eachProgram(to, strings.Split(text, "\n"), exScripts)
-			})...)
-		}
-		return out
+		return call.exCommandScripts()
 	}
 	return nil
+}
+
+// programCall is one interpreter's argv and the stdin its statement hands it.
+type programCall struct {
+	name  string
+	args  []string
+	stdin func() (scriptText, bool)
+}
+
+// fromStdin runs lang over the program on the call's stdin, or names it
+// unread.
+func (c programCall) fromStdin(lang func(string, string) []handedScript) []handedScript {
+	t, ok := c.stdin()
+	if !ok {
+		return nil
+	}
+	if !t.read {
+		return []handedScript{{to: c.name, via: t.via}}
+	}
+	return lang(c.name, t.text)
+}
+
+// shellScripts is the script a shell reads on stdin: none when -c or a
+// script file gives it one.
+func (c programCall) shellScripts() []handedScript {
+	if _, ok := shellDashC(c.args); ok {
+		return nil
+	}
+	if ops := operands(c.args, "oO"); len(ops) > 0 && ops[0] != "-" && !hasFlag(c.args, 's', "") {
+		return nil
+	}
+	return c.fromStdin(func(to, text string) []handedScript {
+		return []handedScript{{to: to, via: "stdin", text: text, read: true}}
+	})
+}
+
+// inlinePrograms runs lang over each -e or --long program, else the first
+// operand, as awk and sed take theirs. valued names the short flags that
+// take a value. A program read with -f is not inline.
+func (c programCall) inlinePrograms(long, valued string, lang func(string, string) []handedScript) []handedScript {
+	if hasFlag(c.args, 'f', "file") {
+		return nil
+	}
+	programs := flagValues(c.args, "e", long)
+	if len(programs) == 0 {
+		if ops := operands(c.args, valued); len(ops) > 0 {
+			programs = ops[:1]
+		}
+	}
+	return eachProgram(c.name, programs, lang)
+}
+
+func (c programCall) phpProgramScripts() []handedScript {
+	if code := flagValues(c.args, "rBRE", ""); len(code) > 0 {
+		return eachProgram(c.name, code, phpScripts)
+	}
+	if ops := operands(c.args, "cdzf"); len(ops) > 0 && ops[0] != "-" {
+		return nil
+	}
+	return c.fromStdin(phpScripts)
+}
+
+func (c programCall) appleProgramScripts() []handedScript {
+	if lines := flagValues(c.args, "e", ""); len(lines) > 0 {
+		return appleScripts(c.name, strings.Join(lines, "\n"))
+	}
+	if ops := operands(c.args, "elis"); len(ops) > 0 && ops[0] != "-" {
+		return nil
+	}
+	return c.fromStdin(appleScripts)
+}
+
+// exCommandScripts are the scripts Vim's -c and + commands run, and an Ex
+// script on stdin.
+func (c programCall) exCommandScripts() []handedScript {
+	commands := flagValues(c.args, "c", "cmd")
+	for _, a := range c.args {
+		if len(a) > 1 && a[0] == '+' {
+			commands = append(commands, a[1:])
+		}
+	}
+	out := eachProgram(c.name, commands, exScripts)
+	if c.name == "ex" || hasFlag(c.args, 'e', "") {
+		out = append(out, c.fromStdin(func(to, text string) []handedScript {
+			return eachProgram(to, strings.Split(text, "\n"), exScripts)
+		})...)
+	}
+	return out
 }
 
 func isDigits(s string) bool {
@@ -417,12 +446,6 @@ func awkScripts(to, program string) []handedScript {
 // bare e or an s///e runs the pattern space, which is computed.
 func sedScripts(to, script string) []handedScript {
 	var out []handedScript
-	toLineEnd := func(i int) int {
-		if j := strings.IndexByte(script[i:], '\n'); j >= 0 {
-			return i + j
-		}
-		return len(script)
-	}
 	for i := 0; i < len(script); {
 		c := script[i]
 		switch {
@@ -431,12 +454,9 @@ func sedScripts(to, script string) []handedScript {
 		case c == '\\' && i+1 < len(script):
 			i = skipDelimited(script, i+2, script[i+1])
 		case c == '#' || c == ':' || c == 'r' || c == 'R' || c == 'w' || c == 'W':
-			i = toLineEnd(i)
+			i = sedLineEnd(script, i)
 		case c == 'a' || c == 'i' || c == 'c':
-			// A text ending in a backslash goes on to the next line.
-			for i = toLineEnd(i); i > 0 && i < len(script) && script[i-1] == '\\'; {
-				i = toLineEnd(i + 1)
-			}
+			i = sedTextEnd(script, i)
 		case c == 'b' || c == 't' || c == 'T':
 			j := strings.IndexAny(script[i:], ";\n")
 			if j < 0 {
@@ -444,26 +464,13 @@ func sedScripts(to, script string) []handedScript {
 			}
 			i += j
 		case c == 'e':
-			end := toLineEnd(i)
-			command := strings.TrimSpace(script[i+1 : end])
-			if command == "" || command[0] == ';' || command[0] == '}' {
-				out = append(out, computed(to, "e"))
-			} else {
-				out = append(out, literal(to, "e", command))
-			}
-			i = end
+			var h handedScript
+			h, i = sedExec(to, script, i)
+			out = append(out, h)
 		case c == 's' && i+1 < len(script):
-			delim := script[i+1]
-			i = skipDelimited(script, skipDelimited(script, i+2, delim), delim)
-			for ; i < len(script) && !strings.ContainsRune(";\n}", rune(script[i])); i++ {
-				if script[i] == 'e' {
-					out = append(out, computed(to, "s///e"))
-				}
-				if script[i] == 'w' {
-					i = toLineEnd(i)
-					break
-				}
-			}
+			var hs []handedScript
+			hs, i = sedSubstitute(to, script, i)
+			out = append(out, hs...)
 		case c == 'y' && i+1 < len(script):
 			delim := script[i+1]
 			i = skipDelimited(script, skipDelimited(script, i+2, delim), delim)
@@ -472,6 +479,50 @@ func sedScripts(to, script string) []handedScript {
 		}
 	}
 	return out
+}
+
+// sedLineEnd is the index of the newline that ends the line holding i.
+func sedLineEnd(script string, i int) int {
+	if j := strings.IndexByte(script[i:], '\n'); j >= 0 {
+		return i + j
+	}
+	return len(script)
+}
+
+// sedTextEnd is the end of the text an a, i or c at i adds. A line ending in
+// a backslash goes on to the next.
+func sedTextEnd(script string, i int) int {
+	for i = sedLineEnd(script, i); i > 0 && i < len(script) && script[i-1] == '\\'; {
+		i = sedLineEnd(script, i+1)
+	}
+	return i
+}
+
+// sedExec reads the e command at i and returns the index past it.
+func sedExec(to, script string, i int) (handedScript, int) {
+	end := sedLineEnd(script, i)
+	command := strings.TrimSpace(script[i+1 : end])
+	if command == "" || command[0] == ';' || command[0] == '}' {
+		return computed(to, "e"), end
+	}
+	return literal(to, "e", command), end
+}
+
+// sedSubstitute reads the s command at i, an e flag among its flags, and
+// returns the index past it. A w flag takes the rest of the line.
+func sedSubstitute(to, script string, i int) ([]handedScript, int) {
+	var out []handedScript
+	delim := script[i+1]
+	i = skipDelimited(script, skipDelimited(script, i+2, delim), delim)
+	for ; i < len(script) && !strings.ContainsRune(";\n}", rune(script[i])); i++ {
+		if script[i] == 'e' {
+			out = append(out, computed(to, "s///e"))
+		}
+		if script[i] == 'w' {
+			return out, sedLineEnd(script, i)
+		}
+	}
+	return out, i
 }
 
 // skipDelimited is the index past the delim that closes the field from i.

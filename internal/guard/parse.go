@@ -65,7 +65,7 @@ func ParseCommandsDialect(command string, d Dialect) ([]hint.Invocation, bool) {
 		}
 		return true
 	})
-	for _, h := range scriptHandoffs(f, d) {
+	for _, h := range handedScripts(f, d) {
 		if h.read {
 			inner, _ := ParseCommandsDialect(h.text, handedDialect(h, d))
 			out = append(out, inner...)
@@ -540,7 +540,7 @@ func eachNestedScript(sf *scriptFile, d Dialect, depth int, fn func(*scriptFile)
 		}
 		return true
 	})
-	for _, h := range scriptHandoffs(sf.file, d) {
+	for _, h := range handedScripts(sf.file, d) {
 		if !h.read {
 			continue
 		}
