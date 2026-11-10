@@ -340,26 +340,26 @@ Internally, `guard.Judge(ctx, deps, req)` keeps its shape and becomes pure. A ne
 `guard.Record(ctx context.Context, deps Dependencies, req Request, j agent.Judgment) error`
 makes the writes.
 
-| part                                                               | where                                                    | State                    |
-| ------------------------------------------------------------------ | -------------------------------------------------------- | ------------------------ |
-| a verdict with no writes, by flag                                  | `guard.Request.DryRun`, `sessionCopy`                    | done (deleted by part 2) |
-| `ask` turned into a deny without `RendersAsk`                      | `internal/guard/guard.go:1409`, `askUnrenderedDeny`      | done                     |
-| an undeclared tool refused                                         | `unjudged-tool`, `denyUnjudgedTool`                      | done                     |
-| host tool rows from an installed directory                         | `internal/agent/tools.go` `readToolRows`, `FindToolRows` | done                     |
-| a spawn rule required by `Open` and `Inspect`                      | `register.go:99`                                         | done (relaxed by part 7) |
-| `JudgeCommand`, `JudgeWrite`                                       | `judge.go:24`, `:30`                                     | done (deleted by part 3) |
-| a pure `guard.Judge`, the clock from `ToolCall.At`, an overlay     | `internal/guard/guard.go`                                | proposed                 |
-| `guard.Record` and `Magus.RecordJudgment`, keyed on the call id    | `internal/guard`, `judge.go`, the session's `calls.jsonl` | proposed                |
-| the call id read from the hook envelope                            | `hookEnvelope`                                           | proposed                 |
-| `Magus.JudgeTool`, `WithToolRows`, `WithToolRule`                  | `judge.go`, `register.go`                                | proposed                 |
-| `magus\guard.tool`                                                 | `std/magus.go`, `internal/guard`                         | proposed                 |
-| the `types/agent` package and the moves into it                    | `types/agent`; the old names deleted from `types`        | proposed                 |
-| `CapabilityExternal` and the `external-act` rule                   | `types/agent`, `internal/guard`                          | proposed                 |
-| `WithRendersAsk` and its own deny text                             | `register.go`, `internal/guard/push.go`                  | proposed                 |
-| `spawn-rule-unset` when no `WithSpawnRule` is given                | `register.go`, `internal/guard`                          | proposed                 |
-| `WithCallID` on `Run`                                              | `run.go`                                                 | proposed                 |
-| an agent loop, a model router, `Serve` or `Stream` in the SDK      | none                                                     | not built                |
-| a dry-run option on `JudgeTool`                                    | none                                                     | not built                |
+| part                                                            | where                                                     | State                    |
+| --------------------------------------------------------------- | --------------------------------------------------------- | ------------------------ |
+| a verdict with no writes, by flag                               | `guard.Request.DryRun`, `sessionCopy`                     | done (deleted by part 2) |
+| `ask` turned into a deny without `RendersAsk`                   | `internal/guard/guard.go:1409`, `askUnrenderedDeny`       | done                     |
+| an undeclared tool refused                                      | `unjudged-tool`, `denyUnjudgedTool`                       | done                     |
+| host tool rows from an installed directory                      | `internal/agent/tools.go` `readToolRows`, `FindToolRows`  | done                     |
+| a spawn rule required by `Open` and `Inspect`                   | `register.go:99`                                          | done (relaxed by part 7) |
+| `JudgeCommand`, `JudgeWrite`                                    | `judge.go:24`, `:30`                                      | done (deleted by part 3) |
+| a pure `guard.Judge`, the clock from `ToolCall.At`, an overlay  | `internal/guard/guard.go`                                 | proposed                 |
+| `guard.Record` and `Magus.RecordJudgment`, keyed on the call id | `internal/guard`, `judge.go`, the session's `calls.jsonl` | proposed                 |
+| the call id read from the hook envelope                         | `hookEnvelope`                                            | proposed                 |
+| `Magus.JudgeTool`, `WithToolRows`, `WithToolRule`               | `judge.go`, `register.go`                                 | proposed                 |
+| `magus\guard.tool`                                              | `std/magus.go`, `internal/guard`                          | proposed                 |
+| the `types/agent` package and the moves into it                 | `types/agent`; the old names deleted from `types`         | proposed                 |
+| `CapabilityExternal` and the `external-act` rule                | `types/agent`, `internal/guard`                           | proposed                 |
+| `WithRendersAsk` and its own deny text                          | `register.go`, `internal/guard/push.go`                   | proposed                 |
+| `spawn-rule-unset` when no `WithSpawnRule` is given             | `register.go`, `internal/guard`                           | proposed                 |
+| `WithCallID` on `Run`                                           | `run.go`                                                  | proposed                 |
+| an agent loop, a model router, `Serve` or `Stream` in the SDK   | none                                                      | not built                |
+| a dry-run option on `JudgeTool`                                 | none                                                      | not built                |
 
 ### Principles checked
 
