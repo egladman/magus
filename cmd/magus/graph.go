@@ -288,12 +288,7 @@ func acquireGraphBuild(ctx context.Context, root string) (release func() error, 
 // admitGraphBuild claims the machine budget for assembling the graph, under
 // the workspace's broker policy.
 func admitGraphBuild(ctx context.Context, admit cache.MachineAdmitter, root string) (func(), error) {
-	policy := globalCfg.Broker.Resolved()
-	if policy == types.BrokerOff {
-		return func() {}, nil
-	}
-	claim := types.MachineClaim{Project: ".", Target: "graph-build", MemoryMB: graphBuildMemoryMB, Dir: resolveRootOrEmpty(root)}
-	return cache.AdmitMachine(ctx, admit, claim, policy == types.BrokerRequired, globalCfg.BudgetWait)
+	return admitUnderBrokerPolicy(ctx, admit, root, "graph-build", graphBuildMemoryMB)
 }
 
 // noticeLines logs each line written to it as a notice. It stands in for os.Stderr where a
