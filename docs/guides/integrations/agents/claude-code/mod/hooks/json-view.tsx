@@ -3,7 +3,7 @@ import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 import type { JsonView } from '../types'
 import { childPath, headerOf, leafOf, structuredOf, summaryOf, textsOf } from './json'
 import type { Leaf, Structured } from './json'
-import { fromPromise } from './result'
+import { fromPromise, isRecord } from './result'
 import type { On } from './ui'
 
 const MAX_ROWS = 1500
@@ -16,7 +16,6 @@ const LEAF_COLOR: Record<Leaf['type'], string> = {
   null: 'gray',
 }
 
-type Input = RenderInput<'ToolResult'>
 type Els = ReturnType<EngineInterface['ui']['resolve']>
 
 async function edit($: EngineInterface, id: string, change: (v: JsonView) => JsonView): Promise<void> {
@@ -100,12 +99,15 @@ function rawOf(s: Structured, text: string): string {
   return s.kind === 'jsonl' ? text.trim() : JSON.stringify(s.value, null, 2)
 }
 
+// Found is one drawn result's text read as data. id keys which nodes are open.
+export type Found = { id: string; s: Structured; text: string; stderr: string; isErrored: boolean }
+
 // explorer draws structured output as a tree, every node closed until
 // pressed, with the record's envelope named on its closed row.
-export async function explorer($: EngineInterface, e: Input, s: Structured, text: string, stderr: string) {
+export async function explorer($: EngineInterface, e: RenderInput, f: Found) {
   const els = $.ui.resolve(e)
   const { Box, Button, Code, Text } = els
-  const id = e.props.tool_use_id
+  const { id, s, text, stderr } = f
   const { value: view = { open: [], isRaw: false } } = await $.state.get({ plugin: 'magus', key: 'json', id })
   const rows = new Rows(els, new Set(view.open), path => {
     void edit($, id, v => ({ ...v, open: flip(v.open, path) }))
@@ -115,7 +117,7 @@ export async function explorer($: EngineInterface, e: Input, s: Structured, text
   const count = s.kind === 'jsonl' ? `${s.records.length} records` : ''
   return (
     <Box flexDirection="column">
-      {s.kind === 'json' && s.lead !== '' ? <Text color={e.props.isErrored ? 'red' : undefined}>{s.lead}</Text> : null}
+      {s.kind === 'json' && s.lead !== '' ? <Text color={f.isErrored ? 'red' : undefined}>{s.lead}</Text> : null}
       <Box gap={1}>
         <Text dimColor>{count !== '' ? `JSON Lines · ${count}` : 'JSON'}</Text>
         <Button
@@ -134,13 +136,44 @@ export async function explorer($: EngineInterface, e: Input, s: Structured, text
   )
 }
 
+function found(id: string, output: unknown, isErrored: boolean): Found | null {
+  const texts = textsOf(output)
+  const s = texts === null ? null : structuredOf(texts.text)
+  return texts === null || s === null ? null : { id, s, isErrored, ...texts }
+}
+
+// blanked is a call's output with its text emptied, so the engine's row keeps
+// its header and draws no raw copy under the tree.
+function blanked(output: unknown, f: Found): unknown {
+  if (typeof output === 'string') return f.s.kind === 'json' ? f.s.lead : ''
+  if (Array.isArray(output)) return []
+  if (isRecord(output) && Array.isArray(output.content)) return { ...output, content: [] }
+  if (isRecord(output) && typeof output.stdout === 'string') return { ...output, stdout: '', stderr: '' }
+  return output
+}
+
 // registerJsonExplorer draws every tool result whose text is JSON or JSON
-// Lines as a collapsible tree in place of the raw text.
+// Lines as a collapsible tree in place of the raw text. The terminal draws a
+// call's output in its own result block; desktop, VS Code and mobile draw it
+// inside the call's row, so there the row carries the tree.
 export function registerJsonExplorer(on: On): void {
   on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
-    const texts = textsOf(e.props.output)
-    const s = texts === null ? null : structuredOf(texts.text)
-    if (texts === null || s === null) return next(e)
-    return explorer($, e, s, texts.text, texts.stderr)
+    if (e.surface !== 'terminal') return next(e)
+    const f = found(e.props.tool_use_id, e.props.output, e.props.isErrored)
+    return f === null ? next(e) : explorer($, e, f)
+  })
+
+  on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
+    if (e.surface === 'terminal' || e.props.isRunning) return next(e)
+    const f = found(e.props.tool_use_id, e.props.output, e.props.isErrored)
+    if (f === null) return next(e)
+    const { Box } = $.ui.resolve(e)
+    const own = await next({ ...e, props: { ...e.props, output: blanked(e.props.output, f) } })
+    return (
+      <Box flexDirection="column">
+        {own}
+        {await explorer($, e, f)}
+      </Box>
+    )
   })
 }

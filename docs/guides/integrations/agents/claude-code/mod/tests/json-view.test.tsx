@@ -1,4 +1,5 @@
 import { expect, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { headerOf, structuredOf } from '../hooks/json'
@@ -23,7 +24,8 @@ const FORK = JSON.stringify(
   2,
 )
 
-// `magus refs 'symbol:buzz `std/lib/reclaimdisk.buzz`/magusBin().' -o json`, whole.
+// `magus refs 'symbol:buzz `std/lib/reclaimdisk.buzz`/magusBin().' -o json`,
+// less its definition field.
 const REFS = JSON.stringify(
   {
     api_version: 'magus.knowledge/v1alpha1',
@@ -40,11 +42,49 @@ const REFS = JSON.stringify(
   2,
 )
 
+const BASH = (stdout: string) => ({ stdout, stderr: '', interrupted: false })
+
+// engine draws a dim "engine" for every site and records the output each
+// ToolUse row was handed.
 function engine(on: On) {
+  const outputs: unknown[] = []
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('ui.render', ($, e) => {
+    if (e.component === 'ToolUse') outputs.push(e.props.output)
     const { Text } = $.ui.resolve(e)
     return <Text>engine</Text>
+  })
+  return { outputs }
+}
+
+type Surface = 'terminal' | 'desktop'
+
+// The terminal draws a call's output in its ToolResult block; desktop draws it
+// in the ToolUse row, which then carries the tree.
+function mount($: Engine, surface: Surface, id: string, output: unknown, isErrored = false) {
+  if (surface === 'terminal') {
+    return $.ui.mount({
+      plugin: 'magus',
+      surface,
+      component: 'ToolResult',
+      requestId: id,
+      props: { tool_use_id: id, tool: 'Bash', output, isErrored },
+    })
+  }
+  return $.ui.mount({
+    plugin: 'magus',
+    surface,
+    component: 'ToolUse',
+    requestId: id,
+    props: {
+      tool_use_id: id,
+      tool: 'Bash',
+      input: { command: 'magus' },
+      output,
+      isRunning: false,
+      isErrored,
+      isInterrupted: false,
+    },
   })
 }
 
@@ -70,16 +110,11 @@ test('headerOf names the envelope, skipping an empty api_version', () => {
 
 for (const surface of ['terminal', 'desktop'] as const) {
   test(`${surface}: a job fork record draws closed, opens on press, and shows raw`, async ($, on) => {
-    engine(on)
+    const seen = engine(on)
     await $.session.start({ cwd: '/w', surface, isInteractive: true })
-    const ui = await $.ui.mount({
-      plugin: 'magus',
-      surface,
-      component: 'ToolResult',
-      requestId: 't1',
-      props: { tool_use_id: 't1', tool: 'Bash', output: `Exit code 1\n${FORK}`, isErrored: true },
-    })
-    expect(await ui.find({ type: 'Text', text: 'engine' })).toBeUndefined()
+    const ui = await mount($, surface, 't1', `Exit code 1\n${FORK}`, true)
+    if (surface === 'terminal') expect(await ui.find({ type: 'Text', text: 'engine' })).toBeUndefined()
+    else expect(seen.outputs).toEqual(['Exit code 1'])
     expect(await ui.find({ type: 'Text', text: 'Exit code 1' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /\{…\} 3 keys/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /"job"/ })).toBeUndefined()
@@ -96,20 +131,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 
   test(`${surface}: a refs record names its api_version while closed`, async ($, on) => {
-    engine(on)
+    const seen = engine(on)
     await $.session.start({ cwd: '/w', surface, isInteractive: true })
-    const ui = await $.ui.mount({
-      plugin: 'magus',
-      surface,
-      component: 'ToolResult',
-      requestId: 't2',
-      props: {
-        tool_use_id: 't2',
-        tool: 'Bash',
-        output: { stdout: REFS, stderr: '', interrupted: false },
-        isErrored: false,
-      },
-    })
+    const ui = await mount($, surface, 't2', BASH(REFS))
+    if (surface === 'desktop') expect(seen.outputs).toEqual([BASH('')])
     expect(await ui.find({ type: 'Text', text: /magus\.knowledge\/v1alpha1/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /\{…\} 9 keys/ })).toBeDefined()
   })
@@ -118,18 +143,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     engine(on)
     await $.session.start({ cwd: '/w', surface, isInteractive: true })
     const rows = ['{"api_version":"magus.job/v1alpha1","id":"a"}', '{"api_version":"magus.job/v1alpha1","id":"b"}']
-    const ui = await $.ui.mount({
-      plugin: 'magus',
-      surface,
-      component: 'ToolResult',
-      requestId: 't3',
-      props: {
-        tool_use_id: 't3',
-        tool: 'Bash',
-        output: { stdout: rows.join('\n'), stderr: '', interrupted: false },
-        isErrored: false,
-      },
-    })
+    const ui = await mount($, surface, 't3', BASH(rows.join('\n')))
     expect(await ui.find({ type: 'Text', text: 'JSON Lines · 2 records' })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'json#0' })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'json#1' })).toBeDefined()
@@ -138,20 +152,25 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 
   test(`${surface}: prose output is the engine's own`, async ($, on) => {
-    engine(on)
+    const seen = engine(on)
     await $.session.start({ cwd: '/w', surface, isInteractive: true })
-    const ui = await $.ui.mount({
-      plugin: 'magus',
-      surface,
-      component: 'ToolResult',
-      requestId: 't4',
-      props: {
-        tool_use_id: 't4',
-        tool: 'Bash',
-        output: { stdout: 'ok', stderr: '', interrupted: false },
-        isErrored: false,
-      },
-    })
+    const ui = await mount($, surface, 't4', BASH('ok'))
     expect(await ui.find({ type: 'Text', text: 'engine' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'json-raw' })).toBeUndefined()
+    if (surface === 'desktop') expect(seen.outputs).toEqual([BASH('ok')])
   })
 }
+
+test('desktop: the result block is left to the engine, so the tree draws once', async ($, on) => {
+  engine(on)
+  await $.session.start({ cwd: '/w', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({
+    plugin: 'magus',
+    surface: 'desktop',
+    component: 'ToolResult',
+    requestId: 't5',
+    props: { tool_use_id: 't5', tool: 'Bash', output: BASH(REFS), isErrored: false },
+  })
+  expect(await ui.find({ type: 'Text', text: 'engine' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'json-raw' })).toBeUndefined()
+})

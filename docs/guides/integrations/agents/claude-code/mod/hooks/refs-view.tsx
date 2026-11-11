@@ -3,6 +3,8 @@ import type { EngineInterface, RenderElement } from 'claude-code'
 import type { RefView } from '../types'
 import { magusBin } from './bin'
 import { runsMagus } from './budget'
+import { structuredOf } from './json'
+import { explorer } from './json-view'
 import { refArgs, refCommand, refLinks, refOf, refsIn, refStrings, stripAnsi } from './refs'
 import { fromPromise, isRecord } from './result'
 import { copyFix } from './ui'
@@ -100,6 +102,7 @@ export function registerRefLinks(on: On): void {
     const { Box, Button, Code, Text } = $.ui.resolve(e)
     const { value: view = null } = await $.state.get(REF)
     if (view === null) return <Text dimColor>Press a ref in the transcript to show it here.</Text>
+    const s = structuredOf(view.text)
     return (
       <Box flexDirection="column" gap={1}>
         <Box gap={1}>
@@ -111,7 +114,11 @@ export function registerRefLinks(on: On): void {
         {view.note !== null ? <Text dimColor>{view.note}</Text> : null}
         {view.isLoading ? <Text dimColor>reading {view.ref}…</Text> : null}
         {view.error !== null ? <Text color="red">✖ {view.error}</Text> : null}
-        {view.text !== '' ? <Code source={view.text} language="text" /> : null}
+        {view.text === '' ? null : s === null ? (
+          <Code source={view.text} language="text" />
+        ) : (
+          await explorer($, e, { id: `ref:${view.ref}`, s, text: view.text, stderr: '', isErrored: false })
+        )}
         {view.omitted > 0 ? <Text dimColor>{view.omitted} more characters not shown.</Text> : null}
       </Box>
     )
