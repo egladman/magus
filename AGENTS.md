@@ -163,3 +163,7 @@ saying it, delete it here.
 - `actionlint` and `trivy fs` are cantrips. Do not author them as spells, and
   do not author a mise spell or a `code/edit` spell.
   [Cantrip](docs/glossary/cantrip.md).
+- A guard policy edit that loosens a rule (a limit in hack/policy/*.buzz)
+  applies only once committed: the guard runs the committed and the
+  working-tree rule and the stricter answer stands
+  ([guard command](docs/reference/guard-command.md)).
