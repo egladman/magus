@@ -669,8 +669,7 @@ It adds these to a session:
   priced from a rates table you can replace through the mod's `ratesFile` setting.
   There is no countdown: the moment that matters is the submit.
 - Cost gates, each priced from the same table. The cache and price step gates are
-  `off`, `warn` (a toast) or `confirm`; the cache gate is `confirm` by default and
-  the price step gate `warn`. Each gate speaks once per response, so a second
+  `off`, `warn` (a toast) or `confirm`, `confirm` by default. Each gate speaks once per response, so a second
   submit before the next response, queued mid-turn or sent after a hold, goes
   through without a word. The price step gate acts
   when the context the next prompt re-sends is at or within `priceStepMarginTokens`
@@ -680,8 +679,8 @@ It adds these to a session:
   `spawnMaxInputUsdPerMTok` (2 by default, Sonnet's input rate; 0 turns it off) and
   refuses the spawn before it starts, pointing to the read-only `magus-scout` agent
   or `model: haiku`. The budget gate acts once the session's spend passes
-  `sessionBudgetUsd` (0 by default, which is off), and `confirm` holds the prompt
-  once. A subagent's token count is shown, never flagged: context size is not billed
+  `sessionBudgetUsd` (0 by default, which is off), and holds the prompt once by
+  default (`budgetGate`: `off`, `warn` or `confirm`). A subagent's token count is shown, never flagged: context size is not billed
   cost.
 - The session's spend, main conversation and subagents together, at the top of the
   pane.

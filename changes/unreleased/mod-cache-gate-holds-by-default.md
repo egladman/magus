@@ -1,8 +1,9 @@
 ### Changed
 
-- **The Claude Code mod's cache expiry gate holds the prompt by default.** `cacheGate`
-  defaults to `confirm`: a submit after the prompt cache expired is held once, its
-  text put back, and the next submit sends it. Set it to `warn` for the toast alone.
+- **The Claude Code mod's cost gates hold the prompt by default.** `cacheGate`,
+  `priceStepGate` and `budgetGate` default to `confirm`: a submit after the prompt
+  cache expired, near a price step or past the budget is held once, its text put
+  back, and the next submit sends it. Set a gate to `warn` for the toast alone.
 
 ### Fixed
 

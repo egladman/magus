@@ -364,20 +364,34 @@ test('a server that is down shows in the status line and not in the band', async
 
 const HAIKU = 'claude-haiku-5-5'
 
-test('the price step gate warns past the step by default and still sends', async ($, on) => {
+test('the price step gate holds past the step by default', async ($, on) => {
   const clock = mock.clock(on)
   await clock.set(T0)
-  const seen = engine(on)
+  engine(on)
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
   await $.turn.complete(main(usage({ write: 182_000 }, HAIKU)))
 
-  expect(await $.prompt.submit({ text: 'go on' } as never)).toMatchObject({ text: 'go on' })
-  expect(seen.toasts).toEqual([
-    'Context is 182K tokens, past the 100K step: every request on claude-haiku-5-5 now pays $0.50 per MTok input and $2.50 output, up from $0.10 and $0.50. Consider /compact.',
-  ])
+  expect(await $.prompt.submit({ text: 'go on' } as never)).toMatchObject({ drop: expect.stringMatching(/^Held: /) })
 })
 
-test('the price step gate speaks inside its margin', async ($, on) => {
+test(
+  'the warn price step gate toasts past the step and still sends',
+  { options: { priceStepGate: 'warn' } },
+  async ($, on) => {
+    const clock = mock.clock(on)
+    await clock.set(T0)
+    const seen = engine(on)
+    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+    await $.turn.complete(main(usage({ write: 182_000 }, HAIKU)))
+
+    expect(await $.prompt.submit({ text: 'go on' } as never)).toMatchObject({ text: 'go on' })
+    expect(seen.toasts).toEqual([
+      'Context is 182K tokens, past the 100K step: every request on claude-haiku-5-5 now pays $0.50 per MTok input and $2.50 output, up from $0.10 and $0.50. Consider /compact.',
+    ])
+  },
+)
+
+test('the price step gate speaks inside its margin', { options: { priceStepGate: 'warn' } }, async ($, on) => {
   const clock = mock.clock(on)
   await clock.set(T0)
   const seen = engine(on, { context: 95_000 })

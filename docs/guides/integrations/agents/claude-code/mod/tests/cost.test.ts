@@ -259,12 +259,12 @@ test('readSettings fills the documented defaults and ignores values outside the 
     cacheGate: 'confirm',
     gateMinTokens: 50_000,
     cacheTtl: 'auto',
-    priceStepGate: 'warn',
+    priceStepGate: 'confirm',
     priceStepMarginTokens: 10_000,
     spawnGate: 'off',
     spawnMaxInputUsdPerMTok: 2,
     sessionBudgetUsd: 0,
-    budgetGate: 'warn',
+    budgetGate: 'confirm',
     ratesFile: '',
   })
   expect(readSettings({ cacheGate: 'loud', cacheTtl: '1h' })).toMatchObject({ cacheGate: 'confirm', cacheTtl: '1h' })
@@ -281,7 +281,7 @@ test('the new gates take their own words, and 0 is a value, not a missing one', 
   })
   expect(readSettings({ spawnGate: 'confirm', priceStepGate: 'deny', sessionBudgetUsd: -3 })).toMatchObject({
     spawnGate: 'off',
-    priceStepGate: 'warn',
+    priceStepGate: 'confirm',
     sessionBudgetUsd: 0,
   })
 })
