@@ -17,7 +17,11 @@ func (s *Store) decodeLine(text []byte, line int, into any, schema *types.Schema
 	if err := json.Unmarshal(text, into); err != nil {
 		return types.WrapDiagnostic(types.StoreLineUndecodable, err, "%s:%d: %v", s.path, line, err)
 	}
-	adoptIntegerStamp(schema)
+	var result *types.JobResult
+	if row, ok := into.(*types.Job); ok {
+		result = row.Result
+	}
+	adoptIntegerStamp(schema, result)
 	if _, old := schema.Unknown["schema_version"]; old || (schema.Version != "" && schema.Version.Compare(types.JobAPIVersion) < 0) {
 		return types.JobAPIVersion.Refuse(fmt.Sprintf("job: %s:%d", s.path, line), schema.Version, staleStoreFix)
 	}
@@ -25,20 +29,33 @@ func (s *Store) decodeLine(text []byte, line int, into any, schema *types.Schema
 }
 
 // adoptIntegerStamp reads a line stamped with an integer schema_version
-// as JobAPIVersion; its next rewrite writes the new stamp.
+// as JobAPIVersion; its next rewrite writes the new stamp. An older
+// binary rewriting the store keeps api_version and adds its integer, so
+// a line carrying both reads as its api_version. The row's result reads
+// its integer as JobResultAPIVersion the same way.
 // compat(until: the next release): every worktree shares one store, and
 // older binaries keep writing integers during development.
-func adoptIntegerStamp(schema *types.Schema) {
+func adoptIntegerStamp(schema *types.Schema, result *types.JobResult) {
+	adoptStamp(schema, types.JobAPIVersion)
+	if result != nil {
+		adoptStamp(&result.Schema, types.JobResultAPIVersion)
+	}
+}
+
+// compat: see adoptIntegerStamp.
+func adoptStamp(schema *types.Schema, v types.APIVersion) {
 	raw, ok := schema.Unknown["schema_version"]
 	var n int
-	if !ok || schema.Version != "" || json.Unmarshal(raw, &n) != nil {
+	if !ok || json.Unmarshal(raw, &n) != nil {
 		return
 	}
 	delete(schema.Unknown, "schema_version")
 	if len(schema.Unknown) == 0 {
 		schema.Unknown = nil
 	}
-	schema.Version = types.JobAPIVersion
+	if schema.Version == "" {
+		schema.Version = v
+	}
 }
 
 // newestVersion is the stamp a rewrite carries: this build's, or the

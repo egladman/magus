@@ -1568,6 +1568,43 @@ func (s *IntegerStampSuite) TestRewriteWritesTheName() {
 	s.NotContains(row, "schema_version")
 }
 
+// An older binary's rewrite keeps api_version and adds its integer beside
+// it, and the row's result keeps its integer alone.
+const rewrittenByOlder = `{"api_version":"magus.job/v1alpha1","schema_version":13}` + "\n" +
+	`{"api_version":"magus.job/v1alpha1","schema_version":0,"id":"a","state":"running","created":1,"updated":1,` +
+	`"result":{"api_version":"","schema_version":2,"job":"a","changed_paths":[],"unresolved_risks":[]}}`
+
+func (s *IntegerStampSuite) TestReadsALineCarryingBothStampsAsItsAPIVersion() {
+	plantRaw(s.T(), s.store, rewrittenByOlder)
+	rows, err := s.store.List()
+	s.Require().NoError(err)
+	s.Require().Len(rows, 1)
+	s.Equal(types.JobAPIVersion, rows[0].Version)
+	s.Empty(rows[0].Unknown)
+}
+
+func (s *IntegerStampSuite) TestReadsAnIntegerResultAsV1alpha1() {
+	plantRaw(s.T(), s.store, rewrittenByOlder)
+	rows, err := s.store.List()
+	s.Require().NoError(err)
+	s.Require().Len(rows, 1)
+	s.Require().NotNil(rows[0].Result)
+	s.Equal(types.JobResultAPIVersion, rows[0].Result.Version)
+	s.Empty(rows[0].Result.Unknown)
+}
+
+func (s *IntegerStampSuite) TestRewriteDropsTheLeftoverIntegers() {
+	path := plantRaw(s.T(), s.store, rewrittenByOlder)
+	_, err := s.store.Update(s.T().Context(), "a", func(u *types.Job) { u.Criteria = "moved" })
+	s.Require().NoError(err)
+	row := storedRow(s.T(), path, "a")
+	s.NotContains(row, "schema_version")
+	result, ok := row["result"].(map[string]any)
+	s.Require().True(ok, "the result is kept: %v", row)
+	s.Equal(string(types.JobResultAPIVersion), result["api_version"])
+	s.NotContains(result, "schema_version")
+}
+
 func (s *IntegerStampSuite) TestRefusesANonIntegerSchemaVersion() {
 	plantRaw(s.T(), s.store, `{"id":"a","schema_version":"13","state":"running","created":1,"updated":1}`)
 	_, err := s.store.List()
