@@ -138,6 +138,7 @@ func TestLoadAgentsLayersTiers(t *testing.T) {
 	_, err = LoadAgents(root)
 	require.ErrorIs(t, err, types.UnknownConfigKey, "ADR 0043 removed the key with no shim")
 	assert.Contains(t, err.Error(), "agents.brief_format")
+	assert.Contains(t, err.Error(), "removed with no replacement by docs/decisions/0043-job-records-are-buzz-data.md")
 
 	writeYAML(t, root, "agents:\n  billing: oauth\n")
 	_, err = LoadAgents(root)
