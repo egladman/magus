@@ -6,37 +6,44 @@ import "fs";
 import "encoding/json";
 import "magus";
 import "magus/figure";
-import "site/diagrams/server-http" as _;
-import "site/diagrams/server-socket" as _;
-import "site/diagrams/server-jobs" as _;
-import "site/diagrams/server-share" as _;
-import "site/diagrams/ci-pipeline" as _;
-import "site/diagrams/ci-providers" as _;
-import "site/diagrams/image-build" as _;
-import "site/diagrams/oci-assembly" as _;
-import "site/diagrams/dogfood" as _;
-import "site/diagrams/project-reference" as _;
-import "site/diagrams/volatility" as _;
-import "site/diagrams/commit-generated" as _;
-import "site/diagrams/lease-loop" as _;
-import "site/diagrams/cache-trust" as _;
-import "site/diagrams/diagram-pipeline" as _;
-import "site/diagrams/knowledge-graph" as _;
-import "site/diagrams/guard-path" as _;
-import "site/diagrams/agent-integration" as _;
-import "site/diagrams/buzz-engine" as _;
-import "site/diagrams/buzz-compile" as _;
-import "site/diagrams/buzz-run" as _;
-import "site/diagrams/merge-queue-risk" as _;
-import "site/diagrams/workspace-load" as _;
-import "site/diagrams/inputs-outputs" as _;
-import "site/diagrams/bootstrap" as _;
-import "site/diagrams/target-order" as _;
-import "site/diagrams/agent-orchestration" as _;
-import "site/diagrams/harness-layer" as _;
-import "site/diagrams/kustomize-architecture" as _;
-import "site/diagrams/mandate" as _;
-import "site/diagrams/harness-pyramid" as _;
+import "site/diagrams/server-http";
+import "site/diagrams/server-socket";
+import "site/diagrams/server-jobs";
+import "site/diagrams/server-share";
+import "site/diagrams/ci-pipeline";
+import "site/diagrams/ci-providers";
+import "site/diagrams/image-build";
+import "site/diagrams/oci-assembly";
+import "site/diagrams/dogfood";
+import "site/diagrams/project-reference";
+import "site/diagrams/volatility";
+import "site/diagrams/commit-generated";
+import "site/diagrams/lease-loop";
+import "site/diagrams/cache-trust";
+import "site/diagrams/diagram-pipeline";
+import "site/diagrams/knowledge-graph";
+import "site/diagrams/guard-path";
+import "site/diagrams/agent-integration";
+import "site/diagrams/buzz-engine";
+import "site/diagrams/buzz-compile";
+import "site/diagrams/buzz-run";
+import "site/diagrams/merge-queue-risk";
+import "site/diagrams/workspace-load";
+import "site/diagrams/inputs-outputs";
+import "site/diagrams/bootstrap";
+import "site/diagrams/target-order";
+import "site/diagrams/agent-orchestration";
+import "site/diagrams/kustomize-architecture";
+import "site/diagrams/mandate";
+import "site/diagrams/harness-pyramid";
+import "site/diagrams/guard-internals";
+import "site/diagrams/job-records";
+import "site/diagrams/sandbox";
+import "site/diagrams/symbol-index";
+import "site/diagrams/harness-integrations";
+import "site/diagrams/merge-queue-workflows";
+import "site/diagrams/ci-cd-split";
+import "site/diagrams/cache-internals";
 
 // The committed files, relative to the docs project. The site render inlines their page
 // copies, so rendering a page never needs the symbol index.
@@ -46,39 +53,46 @@ final PAIR_DIR = "assets/gen";
 // here, naming it.
 export fun allFigures() > [figure\Figure] !> any {
     return [
-        serverHttpFigure(),
-        serverSocketFigure(),
-        serverJobsFigure(),
-        serverShareFigure(),
-        ciPipelineFigure(),
-        ciProvidersFigure(),
-        imageBuildFigure(),
-        ociAssemblyFigure(),
-        dogfoodFigure(),
-        projectReferenceFigure(),
-        volatilityFigure(),
-        commitGeneratedFigure(),
-        leaseLoopFigure(),
-        cacheTrustFigure(),
-        diagramPipelineFigure(),
-        knowledgeGraphFigure(),
-        guardPathFigure(),
-        agentIntegrationFigure(),
-        buzzEngineFigure(),
-        buzzCompileFigure(),
-        buzzRunFigure(),
-        mergeQueueRiskFigure(),
-        workspaceLoadFigure(),
-        inputsOutputsFigure(),
-        bootstrapFigure(),
-        targetOrderFigure(),
-        agentOrchestrationFigure(),
-        harnessLayerFigure(),
-        kustomizeArchitectureFigure(),
-        mandateRolesFigure(),
-        mandateBarFigure(),
-        harnessPyramidFigure(),
-        harnessStackFigure(),
+        serverHttp\serverHttpFigure(),
+        serverSocket\serverSocketFigure(),
+        serverJobs\serverJobsFigure(),
+        serverShare\serverShareFigure(),
+        ciPipeline\ciPipelineFigure(),
+        ciProviders\ciProvidersFigure(),
+        imageBuild\imageBuildFigure(),
+        ociAssembly\ociAssemblyFigure(),
+        dogfood\dogfoodFigure(),
+        projectReference\projectReferenceFigure(),
+        volatility\volatilityFigure(),
+        commitGenerated\commitGeneratedFigure(),
+        leaseLoop\leaseLoopFigure(),
+        cacheTrust\cacheTrustFigure(),
+        diagramPipeline\diagramPipelineFigure(),
+        knowledgeGraph\knowledgeGraphFigure(),
+        guardPath\guardPathFigure(),
+        agentIntegration\agentIntegrationFigure(),
+        buzzEngine\buzzEngineFigure(),
+        buzzCompile\buzzCompileFigure(),
+        buzzRun\buzzRunFigure(),
+        mergeQueueRisk\mergeQueueRiskFigure(),
+        workspaceLoad\workspaceLoadFigure(),
+        inputsOutputs\inputsOutputsFigure(),
+        bootstrap\bootstrapFigure(),
+        targetOrder\targetOrderFigure(),
+        agentOrchestration\agentOrchestrationFigure(),
+        kustomizeArchitecture\kustomizeArchitectureFigure(),
+        mandatefigures\mandateRolesFigure(),
+        mandatefigures\mandateBarFigure(),
+        harnessPyramid\harnessPyramidFigure(),
+        harnessPyramid\harnessStackFigure(),
+        guardInternals\guardInternalsFigure(),
+        jobRecords\jobRecordsFigure(),
+        sandbox\sandboxFigure(),
+        symbolIndex\symbolIndexFigure(),
+        harnessIntegrations\harnessIntegrationsFigure(),
+        mergeQueueWorkflows\mergeQueueWorkflowsFigure(),
+        ciCdSplit\ciCdSplitFigure(),
+        cacheInternals\cacheInternalsFigure(),
     ];
 }
 

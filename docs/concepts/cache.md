@@ -940,6 +940,8 @@ its bytes are never the same twice and a drift gate over it would fail every run
 by construction. Rendering that committed capture IS pure, so
 `termcast-generate` sits inside the umbrella and is gated.
 
+<!--diagram:cache-internals-->
+
 ## On disk: just files
 
 The cache's entries live in one store per repository, shared by every worktree and

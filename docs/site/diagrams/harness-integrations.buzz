@@ -1,0 +1,45 @@
+namespace harnessIntegrations;
+
+import "magus";
+import "magus/figure";
+
+export fun harnessIntegrationsFigure() > figure\Figure !> any {
+    final spells = figure\external("Harness spells", sub: "spells/harness: claude-code, codex, cursor, opencode", look: figure\Look.focal);
+    final hook = figure\external("Hook entry", sub: "printed by describe harness", look: figure\Look.plain);
+    final skills = figure\external("Skills", sub: "embedded, stamped", look: figure\Look.plain);
+    final scout = figure\external("Scout agent", sub: "read-only lookups", look: figure\Look.plain);
+    final host = figure\external("Agent host", sub: "Claude Code, Codex, Cursor, OpenCode", tag: "client");
+    final agent = magus\graph().dir("internal/agent");
+    final driver = magus\graph().dir("internal/agent/harness");
+    final guard = magus\graph().dir("internal/guard");
+    return figure\of("harness-integrations",
+            title: "One spell per host writes the hook that reaches the guard",
+            eyebrow: "agents",
+            desc: "Each supported host has a harness spell under spells/harness: Claude Code, "
+                + "Codex, Cursor and OpenCode, plus the Claude Code mod. A spell knows where its "
+                + "host keeps hook entries and prints the entry a person merges. magus agent "
+                + "install writes the shared half, the embedded skills and the read-only scout "
+                + "agent, through internal/agent. The hook each spell prints runs the guard before "
+                + "every call. The driver in internal/agent/harness runs a host's loop in tests, "
+                + "so a spell's output is proven against a real hook payload.")
+        .actor(spells)
+        .actor(hook)
+        .actor(host)
+        .actor(skills)
+        .actor(scout)
+        .box(agent, label: "Agent install", sub: "magus agent install")
+        .box(driver, label: "Host driver", sub: "runs a host's loop in tests", look: figure\Look.optional)
+        .box(guard, label: "Guard", sub: "every call, first")
+        .flowAcross(spells, dst: hook, label: "prints")
+        .flowAcross(hook, dst: host, label: "merged by hand")
+        .flowOut(agent, dst: skills, label: "writes")
+        .flowOut(agent, dst: scout, label: "writes")
+        .flowAcross(skills, dst: host, label: "read by")
+        .flowIn(host, dst: guard, label: "every call", stroke: figure\Stroke.focal)
+        .edgesFromGraph()
+        .zone("what a spell prints", actors: [spells, hook])
+        .legend(figure\Look.focal, label: "one per host")
+        .legend(figure\Look.optional, label: "tests only")
+        .legend(figure\Look.external, label: "outside magus")
+        .scope([agent, driver, guard]);
+}

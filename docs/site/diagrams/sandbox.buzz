@@ -1,0 +1,43 @@
+namespace sandbox;
+
+import "magus";
+import "magus/figure";
+
+export fun sandboxFigure() > figure\Figure !> any {
+    final sandbox = magus\graph().dir("internal/sandbox");
+    final env = magus\graph().dir("internal/sandbox/env");
+    final fs = magus\graph().dir("internal/sandbox/filesystem");
+    final jobs = magus\graph().dir("internal/job");
+    final journal = magus\graph().dir("internal/journal");
+    final trail = magus\graph().dir("internal/trail");
+    final interp = magus\graph().dir("internal/interp");
+    final spawn = magus\graph().dir("internal/proc/spawn");
+    final spell = magus\graph().dir("internal/spell");
+    return figure\of("sandbox",
+            title: "What a spell may touch while it runs",
+            eyebrow: "sandbox",
+            desc: "A spell reaches the sandbox from two sides: the interpreter runs its Buzz in "
+                + "process, and the spawner starts its tool. The sandbox builds one grant. The "
+                + "filesystem half names the readable and writable paths and applies them with "
+                + "landlock where the kernel has it. The environment half rebuilds the child's "
+                + "variables from an allowlist. A job's write paths narrow the writes, a refusal "
+                + "lands in the trail, and the journal keeps the denial.")
+        .box(sandbox, label: "Sandbox", sub: "one grant per run", focal: true)
+        .box(fs, label: "Filesystem grant", sub: "landlock where the kernel has it")
+        .box(env, label: "Environment", sub: "allowlist, no secrets")
+        .box(jobs, label: "Job store", sub: "write paths narrow the grant", look: figure\Look.store)
+        .box(journal, label: "Journal", sub: "the denial kept", look: figure\Look.store)
+        .box(trail, label: "Trail", sub: "the refusal", look: figure\Look.store)
+        .box(interp, label: "Interpreter", sub: "Buzz, in process")
+        .box(spawn, label: "Spawner", sub: "the tool's process")
+        .box(spell, label: "Spells", sub: "ops that run")
+        .edgesFromGraph()
+        .hideEdges([interp, spell], dst: [sandbox, spawn, fs],
+            why: "both reach the sandbox through the interpreter's host bindings; one arrow per entry is enough")
+        .markEdge(sandbox, dst: fs, label: "paths")
+        .markEdge(sandbox, dst: env, label: "variables")
+        .markEdge(sandbox, dst: jobs, label: "row")
+        .legend(figure\Look.focal, label: "the grant")
+        .legend(figure\Look.store, label: "records")
+        .scope([sandbox, env, fs]);
+}

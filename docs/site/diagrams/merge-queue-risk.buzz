@@ -10,7 +10,7 @@ export fun mergeQueueRiskFigure() > figure\Figure !> any {
     final risk = magus\graph().dir("internal/risk");
     final nested: [magus\Dir] = magus\graph().dirs("internal/queue/*");
     final queue = figure\without(nested + [queueDir], drop: [provider]);
-    final github = figure\external("GitHub", sub: "auto-merge or a label");
+    final flows = figure\external("Queue workflows", sub: "queue-intent, queue, queue-apply");
     final low = figure\external("low risk?", look: figure\Look.decision);
     final gate = figure\external("Gate the projects", sub: "every one when unbounded", look: figure\Look.plain);
     final verdict = figure\external("Verdict", sub: "green, red or kicked back", look: figure\Look.plain);
@@ -23,7 +23,7 @@ export fun mergeQueueRiskFigure() > figure\Figure !> any {
                 + "and settles only a low-risk one, kicking code back, then gates the projects "
                 + "the magus SDK says the change reaches, or every project when that set is no proof.",
             direction: figure\Direction.down)
-        .actor(github)
+        .actor(flows)
         .box(provider, label: "Forge provider", sub: "github.buzz on a Buzz VM")
         .group(queue, label: "Queue engine", sub: "plan, validate, apply")
         .box(sdk, label: "magus SDK", sub: "asked via queue/client")
@@ -34,14 +34,14 @@ export fun mergeQueueRiskFigure() > figure\Figure !> any {
         .edgesFromGraph()
         .markEdge(provider, dst: queueDir, label: "changes")
         .markEdge(queueDir, dst: sdk, label: "a conflict")
-        .flowIn(github, dst: provider, label: "merge intent")
+        .flowIn(flows, dst: provider, label: "merge intent")
         .flowOut(risk, dst: low, label: "the class", stroke: figure\Stroke.focal)
         .flowOut(queueDir, dst: gate, label: "no conflict")
         .flowOut(sdk, dst: gate, label: "its projects")
         .flowAcross(low, dst: gate, label: "yes: settled")
         .flowAcross(low, dst: verdict, label: "no: kick back")
         .flowAcross(gate, dst: verdict, label: "exit status")
-        .flowAcross(verdict, dst: github, label: "apply")
+        .flowAcross(verdict, dst: flows, label: "apply")
         .zone("the workspace", dirs: [sdk, risk])
         .legend(figure\Look.focal, label: "reads what an edit is")
         .legend(figure\Look.external, label: "outside magus")

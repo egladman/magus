@@ -112,6 +112,8 @@ Deeper: [Logging](../reference/logging.md), [CLI reference](../reference/cli.md)
 
 ## Set up your coding agent
 
+<!--diagram:harness-integrations-->
+
 magus ships skills for coding agents, and a guard hook that stops an agent
 bypassing the workspace. Install the skills into whichever directories your host
 reads:
@@ -165,6 +167,8 @@ Deeper: [Agent skills](../reference/skills/index.md) shows every skill in both
 forms with its size, and [Agents](integrations/agents.md) covers host wiring.
 
 ### The guard hook
+
+<!--diagram:guard-internals-->
 
 The guard reads one command an agent is about to run and returns deny, advise, or
 pass. It parses the shell rather than pattern-matching it, so a command cannot

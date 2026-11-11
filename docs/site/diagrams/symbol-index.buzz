@@ -1,0 +1,41 @@
+namespace symbolIndex;
+
+import "magus";
+import "magus/figure";
+
+export fun symbolIndexFigure() > figure\Figure !> any {
+    final contract = magus\graph().dir("internal/symbols");
+    final golang = magus\graph().dir("internal/symbols/goindex");
+    final buzz = magus\graph().dir("internal/symbols/buzzindex");
+    final shell = magus\graph().dir("internal/symbols/shindex");
+    final scip = magus\graph().dir("libs/scipbuzz");
+    final bindings = magus\graph().dir("internal/interp/bindings");
+    final spell = magus\graph().dir("internal/spell");
+    final knowledge = magus\graph().dir("internal/graph/knowledge");
+    final index = figure\external("index.scip", sub: "one per project", look: figure\Look.store);
+    return figure\of("symbol-index",
+            title: "A SCIP indexer per language writes the file the graph reads lazily",
+            eyebrow: "symbols",
+            desc: "Each language has an indexer behind one contract. The Go indexer wraps a Go "
+                + "analyzer, the Buzz indexer parses with scipbuzz, and the shell indexer reads "
+                + "scripts. The contract fixes the result as one SCIP file per project. The "
+                + "bindings and the spell host call the indexers when a project's sources change, "
+                + "and the knowledge graph opens that file one project at a time instead of "
+                + "loading every symbol.")
+        .box(contract, label: "Index contract", sub: "what an indexer returns", focal: true)
+        .box(golang, label: "Go indexer", sub: "packages, symbols")
+        .box(buzz, label: "Buzz indexer", sub: "parsed by scipbuzz")
+        .box(shell, label: "Shell indexer", sub: "functions, sources")
+        .box(scip, label: "scipbuzz", sub: "Buzz to SCIP", look: figure\Look.input)
+        .box(bindings, label: "Host bindings", sub: "calls an indexer")
+        .box(spell, label: "Spell host", sub: "ops ask for symbols")
+        .box(knowledge, label: "Knowledge graph", sub: "opens a shard lazily")
+        .actor(index)
+        .edgesFromGraph()
+        .flowOut(contract, dst: index, label: "writes")
+        .flowIn(index, dst: knowledge, label: "read lazily")
+        .legend(figure\Look.focal, label: "the contract")
+        .legend(figure\Look.store, label: "the committed shape")
+        .legend(figure\Look.input, label: "a parser")
+        .scope([contract, golang, buzz, shell, scip]);
+}

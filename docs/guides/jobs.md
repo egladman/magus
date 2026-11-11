@@ -59,6 +59,8 @@ Every transcript below is what the command printed, compared byte for byte by th
 scripts in `cmd/magus/testdata/script/job_people_*.txtar`. Paths read `~/src` and
 output refs read `out<hex>`, the two parts that change from run to run.
 
+<!--diagram:job-records-->
+
 ## One person, two worktrees
 
 Ana's shop prices things in whole units, and she wants cents. Two halves can move
