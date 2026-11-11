@@ -1,16 +1,17 @@
 ---
 title: Spec
 order: 12
-description: "The declared half of a job row: what the parent wrote and the store validated (criteria, checkpoint, write and read paths, the check, the goals and the model). The child reads it with magus describe job, and a view renders it as Markdown at read time, never stored."
+description: "The declared half of a job row: what the parent wrote and the store validated (criteria, checkpoint, write and read paths, the check, the goals, the model, the decisions already made and the evidence behind them). The child reads it with magus describe job, and a view renders it as Markdown at read time, never stored."
 tags: [glossary, sessions-and-leases]
 ---
 
 # Spec
 
 The declared half of a job row: what the parent wrote and the store validated
-(criteria, checkpoint, write and read paths, the check, the goals and the
-model). The child reads it with `magus describe job`, and a view renders it as
-Markdown at read time, never stored.
+(criteria, checkpoint, write and read paths, the check, the goals, the model,
+the decisions already made and the evidence behind them). The child reads it
+with `magus describe job`, and a view renders it as Markdown at read time,
+never stored. A fork without criteria or a model is refused.
 
 The spec is the parent's record; the `JobResult` the child files with
 `magus job exit --stdin` is the child's. The spawn prompt is neither: it is the

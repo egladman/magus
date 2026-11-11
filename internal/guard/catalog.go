@@ -348,7 +348,7 @@ var ruleDocConflictRewrite = types.RuleDoc{
 }
 
 var ruleDocSpawnBeforeSkill = types.RuleDoc{
-	Name:    string(denySpawnUnbriefed),
+	Name:    string(denySpawnBeforeSkill),
 	Catches: "a subagent spawned before the multi-agent skill loaded",
 	Why: "Four decisions a spawn cannot be corrected for later are made before the child starts: which worktree it is cut from, which lease grades its writes, which model it runs, and that git stays with the orchestrator. The magus-multi-agent skill carries all four. " +
 		"A skill nobody is required to read is a skill nobody reads, so the spawn waits on the load instead of trusting it. " +
@@ -356,7 +356,7 @@ var ruleDocSpawnBeforeSkill = types.RuleDoc{
 }
 
 var ruleDocBuzzBeforeSkill = types.RuleDoc{
-	Name:    string(denyBuzzUnbriefed),
+	Name:    string(denyBuzzBeforeSkill),
 	Catches: "the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill",
 	Why: "Buzz is in no model's training data, so what gets written is Go or TypeScript with the serial numbers filed off, and enough of it parses to reach review. " +
 		"Typical errors of an agent with this repository open throughout: fs\\glob indexed as strings when it returns [Path]; .append on a list declared without mut; the ternary form, which upstream-strict parsing rejects outside --embedded; archive\\extract, which does not exist; a missing `import \"fs\"`; and .sub sliced by character on BYTE-indexed strings. Reading first supplies every one of them. " +
@@ -364,7 +364,7 @@ var ruleDocBuzzBeforeSkill = types.RuleDoc{
 }
 
 var ruleDocArchitectureBeforeSkill = types.RuleDoc{
-	Name:    string(denyArchitectureUnbriefed),
+	Name:    string(denyArchitectureBeforeSkill),
 	Catches: "a write after a structure question, or into a new directory, before the architecture skill",
 	Why: "A structure question is answered from the workspace's own edges: what imports what, where a cycle closes, which layer a package sits in, how far a change reaches. An agent reading files one at a time answers it from the files it happened to open, and proposes a boundary nobody needed. The magus-architecture-review skill is how the graph gets asked. " +
 		"Two acts arm it. A message the person submits with structure vocabulary (architecture, boundaries, layering, coupling, imports, a new package, where something belongs, blast radius) marks the session, and the agent's next write waits on the load. A write that creates a new directory waits on it too, since that write draws a boundary whatever was asked. " +
@@ -672,7 +672,7 @@ var ruleDocUnreadCommand = types.RuleDoc{
 }
 
 var ruleDocSpawnCommand = types.RuleDoc{
-	Name:    string(denyRuleBriefCommand),
+	Name:    string(denyRuleSpawnCommand),
 	Catches: "a spawn prompt or stopping reply that hands over a command the guard denies",
 	Why: "A worker runs the commands in its spawn prompt as written, so a denied one is refused in every worker the prompt reaches, or teaches each of them a way around the refusal. " +
 		"Only what the prompt presents as a command is graded, a fenced shell block or an inline code span, with the same rules a shell line gets. A line naming a command to forbid it (never, do not, denied, instead of) is passed over, and a `<placeholder>` reads as a word rather than a redirect. " +
@@ -915,7 +915,7 @@ var ruleDocHooksOff = types.RuleDoc{
 }
 
 var ruleDocSpawnPlainCommands = types.RuleDoc{
-	Name:    string(denyRuleBriefPlainCommands),
+	Name:    string(denyRuleSpawnPlainCommands),
 	Catches: "a spawn prompt for an isolated worker that teaches a substitution, a loop or an exec",
 	Why: "A host that runs a worker in a worktree of its own refuses each command it cannot prove stays inside that worktree, and a substitution, a loop or an exec is one it cannot. " +
 		"A worker writes its commands the way its spawn prompt shows them, so a spawn into its own worktree must not show a command of those shapes. " +

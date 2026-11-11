@@ -16,7 +16,7 @@ exec git init -q -b main
 exec git add -A
 exec git commit -q -m 'registry and its generated pages'
 
-! exec magus job fork flags/locked --write-paths 'cli/*.go,docs/rules/*.md' --deny-paths cli/testdata/api.lock --check 'test .'
+! exec magus job fork flags/locked --write-paths 'cli/*.go,docs/rules/*.md' --deny-paths cli/testdata/api.lock --check 'test .' --criteria 'the scripted job' --model economy
 ! stdout .
 stderr '^\[error\] 1 problem:$'
 stderr '^  1\. \[MGS3044\] write_paths: \.:man-generate regenerates cli/testdata/api\.lock from cli/\*\*/\*\.go'
@@ -26,7 +26,7 @@ stderr '^note: 1 regenerated output\(s\) outside the write paths are permitted'
 exec magus ls jobs -o name
 ! stdout .
 
-exec magus job fork flags/shell --write-paths 'cli/*.go,docs/rules/*.md' --check 'test .'
+exec magus job fork flags/shell --write-paths 'cli/*.go,docs/rules/*.md' --check 'test .' --criteria 'the scripted job' --model economy
 stdout '^forked flags/shell, declared, with 2 write path\(s\)\.'
 stderr '^note: 2 regenerated output\(s\) outside the write paths are permitted: the integrator owns them$'
 
@@ -47,7 +47,7 @@ stdout '"output": "cli/testdata/api\.lock"'
 stdout '"target": "\.:man-generate"'
 stdout '"source": "cli/registry\.go"'
 
-exec magus job fork flags/survey --read-only --criteria 'read the registry'
+exec magus job fork flags/survey --read-only --criteria 'read the registry' --model economy
 ! stdout 'regenerated outside'
 
 stdin $WORK/widen.json
@@ -56,16 +56,16 @@ stdout '^  write_paths \+docs/manpage/\*\.md$'
 ! stdout 'docs:content-generate'
 
 -- fork.json --
-{"api_version": "magus.job/v1alpha1", "id": "flags/glob", "write_paths": ["cli/*.go", "docs/rules/*.md"],
+{"api_version": "magus.job/v1alpha1", "id": "flags/glob", "criteria": "the scripted job", "model": "economy", "write_paths": ["cli/*.go", "docs/rules/*.md"],
  "check": {"target": "test", "project": "."},
  "deviations": [{"code": "MGS3044", "subject": "**", "reason": "the integrator regenerates every one"}]}
 -- fork.out --
-forked flags/glob, declared, with 2 write path(s). Its holder reads the terms with `magus describe job flags/glob` and takes it with `magus job exec flags/glob`
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+forked flags/glob, declared, with 2 write path(s). Its holder reads the spec with `magus describe job flags/glob` and takes it with `magus job exec flags/glob`
+model tier: economy (rank 0), row: "the job names the tier economy"
 referenced outside the write paths: files that use what the write paths define
   unknown, no symbol index answered; `magus graph build` builds one
 -- widen.json --
-{"api_version": "magus.job/v1alpha1", "id": "flags/shell", "write_paths": ["cli/*.go", "docs/rules/*.md", "docs/manpage/*.md"],
+{"api_version": "magus.job/v1alpha1", "id": "flags/shell", "criteria": "the scripted job", "model": "economy", "write_paths": ["cli/*.go", "docs/rules/*.md", "docs/manpage/*.md"],
  "check": {"target": "test", "project": "."}}
 -- .gitignore --
 .magus/

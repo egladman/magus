@@ -40,7 +40,6 @@ var vocabulary = []concept{
 	{Flag: "bisect"},
 	{Flag: "bootstrap"},
 	{Flag: "brief"},
-	{Flag: "brief-format"},
 	{Flag: "budget"},
 	{Flag: "cache-key"},
 	{Flag: "call-background"},

@@ -372,7 +372,7 @@ test "a spawn whose job builds its own binary may brief the build" {
 
 // A starting guess, not a measurement: change it here when it stops fitting.
 // magus only reports this count. Refusing on it is this repository's call.
-export final finishedBranchLimit = 10;
+export final finishedBranchLimit = 50;
 
 // ForkCounts is what the rules read of magus\workspace().forkFacts().
 // It is copied out like Spawn.
@@ -622,9 +622,9 @@ fun noFile(path: str) > str {
 }
 
 test "a top-level fork at the limit is refused, printing both counts, the last test and the file" {
-    final v = verdict\checked(decideFork(mandate\Fork{ id = "next" }, counts: waiting(10), limit: finishedBranchLimit), label: "at the limit");
+    final v = verdict\checked(decideFork(mandate\Fork{ id = "next" }, counts: waiting(finishedBranchLimit), limit: finishedBranchLimit), label: "at the limit");
     std\assert(v.decision == magus\GuardDecision.deny, message: "at the branch limit");
-    foreach (want in ["10 finished branch(es)", "done-9 (job done-9", "3 commit(s)", "out1a2b3c at abc123", "hack/policy/spawn.buzz", "integrate-branches"]) {
+    foreach (want in ["{finishedBranchLimit} finished branch(es)", "done-{finishedBranchLimit - 1} (job done-{finishedBranchLimit - 1}", "3 commit(s)", "out1a2b3c at abc123", "hack/policy/spawn.buzz", "integrate-branches"]) {
         std\assert(v.reason.indexOf(want) != null, message: "{want} in {v.reason}");
     }
 }
@@ -633,14 +633,14 @@ test "a branch a remote ref holds stops counting, and the denial says how many w
     final onRemote = fun (branch: str) > result\Result::<bool> {
         return result\ok::<bool>(branch != "done-0" and branch != "done-1");
     };
-    final trimmed = withoutPublished(waiting(12), published: onRemote);
-    std\assert(trimmed.finishedBranches.len() == 2 and trimmed.publishedSkipped == 10, message: "{trimmed.finishedBranches}");
+    final trimmed = withoutPublished(waiting(finishedBranchLimit + 2), published: onRemote);
+    std\assert(trimmed.finishedBranches.len() == 2 and trimmed.publishedSkipped == finishedBranchLimit, message: "{trimmed.finishedBranches}");
     std\assert(decideFork(mandate\Fork{ id = "next" }, counts: trimmed, limit: finishedBranchLimit).decision == magus\GuardDecision.allow, message: "published work waits on nothing");
-    final stillOver = withoutPublished(waiting(12), published: fun (branch: str) > result\Result::<bool> {
+    final stillOver = withoutPublished(waiting(finishedBranchLimit + 2), published: fun (branch: str) > result\Result::<bool> {
         return result\ok::<bool>(branch == "done-0");
     });
     final v = decideFork(mandate\Fork{ id = "next" }, counts: stillOver, limit: finishedBranchLimit);
-    std\assert(v.decision == magus\GuardDecision.deny, message: "eleven unpublished");
+    std\assert(v.decision == magus\GuardDecision.deny, message: "over the limit unpublished");
     std\assert(v.reason.indexOf("1 branch(es) skipped as published") != null, message: v.reason);
 }
 
@@ -648,41 +648,41 @@ test "a branch the base already holds stops counting, and the denial says how ma
     final squashed = fun (branch: str) > result\Result::<bool> {
         return result\ok::<bool>(branch != "done-0");
     };
-    final trimmed = withoutLanded(waiting(12), landed: squashed);
-    std\assert(trimmed.finishedBranches.len() == 1 and trimmed.landedSkipped == 11, message: "{trimmed.finishedBranches}");
+    final trimmed = withoutLanded(waiting(finishedBranchLimit + 2), landed: squashed);
+    std\assert(trimmed.finishedBranches.len() == 1 and trimmed.landedSkipped == finishedBranchLimit + 1, message: "{trimmed.finishedBranches}");
     std\assert(decideFork(mandate\Fork{ id = "next" }, counts: trimmed, limit: finishedBranchLimit).decision == magus\GuardDecision.allow, message: "landed work waits on nothing");
-    final stillOver = withoutLanded(waiting(12), landed: fun (branch: str) > result\Result::<bool> {
+    final stillOver = withoutLanded(waiting(finishedBranchLimit + 2), landed: fun (branch: str) > result\Result::<bool> {
         return result\ok::<bool>(branch == "done-0");
     });
     final v = decideFork(mandate\Fork{ id = "next" }, counts: stillOver, limit: finishedBranchLimit);
-    std\assert(v.decision == magus\GuardDecision.deny, message: "eleven not landed");
+    std\assert(v.decision == magus\GuardDecision.deny, message: "over the limit not landed");
     std\assert(v.reason.indexOf("1 skipped as landed") != null, message: v.reason);
 }
 
 test "a branch the base cannot be checked against stays counted, and says why" {
-    final broken = withoutLanded(waiting(10), landed: fun (branch: str) > result\Result::<bool> {
+    final broken = withoutLanded(waiting(finishedBranchLimit), landed: fun (branch: str) > result\Result::<bool> {
         return result\fail::<bool>("git merge-tree HEAD {branch}: bad object");
     });
-    std\assert(broken.finishedBranches.len() == 10 and broken.landedSkipped == 0, message: "counted");
+    std\assert(broken.finishedBranches.len() == finishedBranchLimit and broken.landedSkipped == 0, message: "counted");
     final v = decideFork(mandate\Fork{ id = "next" }, counts: broken, limit: finishedBranchLimit);
     std\assert(v.reason.indexOf("bad object") != null, message: v.reason);
 }
 
 test "a branch that is on no remote ref stays counted, and an unreadable one says why" {
-    final none = withoutPublished(waiting(10), published: fun (branch: str) > result\Result::<bool> {
+    final none = withoutPublished(waiting(finishedBranchLimit), published: fun (branch: str) > result\Result::<bool> {
         return result\ok::<bool>(false);
     });
-    std\assert(none.finishedBranches.len() == 10 and none.publishedSkipped == 0, message: "unpublished");
+    std\assert(none.finishedBranches.len() == finishedBranchLimit and none.publishedSkipped == 0, message: "unpublished");
     final v = decideFork(mandate\Fork{ id = "next" }, counts: none, limit: finishedBranchLimit);
     std\assert(v.decision == magus\GuardDecision.deny and v.reason.indexOf("0 branch(es) skipped as published") != null, message: v.reason);
-    final broken = withoutPublished(waiting(10), published: fun (branch: str) > result\Result::<bool> {
+    final broken = withoutPublished(waiting(finishedBranchLimit), published: fun (branch: str) > result\Result::<bool> {
         return result\fail::<bool>("no remotes");
     });
-    std\assert(broken.finishedBranches.len() == 10 and broken.publishedUnread == "no remotes", message: broken.publishedUnread);
+    std\assert(broken.finishedBranches.len() == finishedBranchLimit and broken.publishedUnread == "no remotes", message: broken.publishedUnread);
 }
 
 test "raising the limit lets the same fork through" {
-    final v = decideFork(mandate\Fork{ id = "next" }, counts: waiting(10), limit: finishedBranchLimit + 1);
+    final v = decideFork(mandate\Fork{ id = "next" }, counts: waiting(finishedBranchLimit), limit: finishedBranchLimit + 1);
     std\assert(v.decision == magus\GuardDecision.allow, message: v.reason);
 }
 

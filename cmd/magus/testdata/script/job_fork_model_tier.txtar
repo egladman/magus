@@ -1,34 +1,27 @@
-# A fork records the model tier its job runs at, and the step that chose it: the row when
-# it names a tier or a model, else the workspace's matrix, else the declared default. Fork
-# prints the line, describe job prints it again with the skill variant, and ls jobs shows
-# the tier when the row names no model. A dry-run apply assigns nothing and runs no matrix.
+# A fork records the model tier its job runs at, and the step that chose it. A fork
+# names its model (ADR 0043), so the row decides: a tier by name, or a model the
+# harness maps, or one no tier maps to, which takes the default's rank. A declared
+# matrix is never asked. Fork prints the line, describe job prints it again with the
+# skill variant, and ls jobs shows the model the row names. A dry-run apply assigns
+# nothing.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 exec magus init -local -vcs git
 cp $WORK/matrix.buzz magusfile.buzz
 cp $WORK/code.go a.go
-cp $WORK/code.go b.go
-cp $WORK/code.go c.go
 cp $WORK/code.go d.go
 cp $WORK/code.go e.go
 cp $WORK/code.go f.go
 
-# The matrix answers for a one-file job.
+# A row naming a tier takes it, and the matrix that would answer for a one-file job is not asked.
 stdin $WORK/small.json
 exec magus job fork --stdin
-stdout '^model tier: economy \(rank 0\), matrix: "1 file in 1 project" at magusfile\.buzz$'
+stdout '^model tier: economy \(rank 0\), row: "the job names the tier economy"$'
+! stdout 'matrix'
 exec magus describe job wave/small
-stdout '^model tier: economy \(rank 0\), matrix: "1 file in 1 project" at magusfile\.buzz$'
-stdout '^skills: full$'
+stdout '^model tier: economy \(rank 0\), row: "the job names the tier economy"$'
+stdout '^skills: '
 
-# It declines for a wider one, and the shipped default decides.
-stdin $WORK/wide.json
-exec magus job fork --stdin
-stdout '^model tier: standard \(rank 1\), default: "the declared default" at magus/modeltiers$'
-exec magus describe job wave/wide
-stdout '^skills: short$'
-
-# A row naming a tier wins and the matrix is not asked.
 stdin $WORK/named.json
 exec magus job fork --stdin
 stdout '^model tier: principal \(rank 2\), row: "the job names the tier principal"$'
@@ -38,10 +31,9 @@ stdin $WORK/model.json
 exec magus job fork --stdin
 stdout '^model tier: standard \(rank 1\), row: "the job names the model haiku, which no model tier maps to"$'
 
-# ls jobs shows the tier where the row names no model, and the model where it does.
+# ls jobs shows the tier a row names, and the model where it names one.
 exec magus ls jobs
 stdout 'wave/small +- +declared +economy '
-stdout 'wave/wide +- +declared +standard '
 stdout 'wave/named +- +declared +principal '
 stdout 'wave/model +- +declared +haiku '
 
@@ -55,7 +47,7 @@ exec magus ls jobs -o name
 stdin $WORK/applied.json
 exec magus job apply --stdin
 stdout '^created wave/applied, declared, with 1 write path\(s\)$'
-stdout '^model tier: economy \(rank 0\), matrix: "1 file in 1 project" at magusfile\.buzz$'
+stdout '^model tier: economy \(rank 0\), row: "the job names the tier economy"$'
 
 -- matrix.buzz --
 import "magus";
@@ -76,17 +68,14 @@ magus\modelTier(choose);
 -- code.go --
 package pkg
 -- small.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/small", "write_paths": ["a.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/small", "criteria": "the scripted job", "model": "economy", "write_paths": ["a.go"],
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}
--- wide.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/wide", "write_paths": ["b.go", "c.go"],
- "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["b.go", "c.go"]}]}
 -- named.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/named", "write_paths": ["d.go"], "model": "principal",
+{"api_version": "magus.job/v1alpha1", "id": "wave/named", "criteria": "the scripted job", "write_paths": ["d.go"], "model": "principal",
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["d.go"]}]}
 -- model.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/model", "write_paths": ["e.go"], "model": "haiku",
+{"api_version": "magus.job/v1alpha1", "id": "wave/model", "criteria": "the scripted job", "write_paths": ["e.go"], "model": "haiku",
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["e.go"]}]}
 -- applied.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/applied", "write_paths": ["f.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/applied", "criteria": "the scripted job", "model": "economy", "write_paths": ["f.go"],
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["f.go"]}]}

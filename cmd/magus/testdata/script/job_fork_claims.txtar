@@ -21,7 +21,7 @@ exec git worktree add -q ../ben
 exec git worktree add -q ../cara
 
 cd ../ana
-exec magus job fork wave/a --criteria 'change A' --write-paths run.go --check 'lint .'
+exec magus job fork wave/a --criteria 'change A' --write-paths run.go --check 'lint .' --model economy
 exec magus job exec wave/a
 cp $WORK/run_a.go run.go
 
@@ -43,15 +43,15 @@ stderr 'wave/b.s symbol goals and wave/a.s touched work both reach A in it, so a
 
 # A claim on C alone is granted: wave/a had not touched it, so wave/a now holds run.go
 # by the declaration it changed, and a claim on that one is still refused.
-exec magus job fork wave/c --criteria 'change C' --write-paths 'run.go#C' --check 'lint .'
+exec magus job fork wave/c --criteria 'change C' --write-paths 'run.go#C' --check 'lint .' --model economy
 stdout 'granted run.go#C: wave/a had not touched it; wave/a now holds run.go by run.go#A \(and grows on write\)'
 exec magus ls jobs -o name
 stdout '^wave/c$'
-! exec magus job fork wave/a2 --criteria 'change A too' --write-paths 'run.go#A' --check 'lint .'
+! exec magus job fork wave/a2 --criteria 'change A too' --write-paths 'run.go#A' --check 'lint .' --model economy
 stderr 'MGS3032'
 
 # A word every function shares guards all of them.
-! exec magus job fork wave/ctx --criteria 'change ctx' --write-paths 'util.go#ctx' --check 'lint .'
+! exec magus job fork wave/ctx --criteria 'change ctx' --write-paths 'util.go#ctx' --check 'lint .' --model economy
 stderr 'MGS3031'
 stderr '"util.go#ctx" names 2 declarations of util.go'
 stderr 'such as `Open`, `Close`'
@@ -59,8 +59,8 @@ exec magus ls jobs -o name
 ! stdout 'wave/ctx'
 
 # A word one function has, and one nothing has yet, both fork.
-exec magus job fork wave/open --criteria 'change Open' --write-paths 'util.go#Open' --check 'lint .'
-exec magus job fork wave/new --criteria 'add helper' --write-paths 'util.go#helper' --check 'lint .'
+exec magus job fork wave/open --criteria 'change Open' --write-paths 'util.go#Open' --check 'lint .' --model economy
+exec magus job fork wave/new --criteria 'add helper' --write-paths 'util.go#helper' --check 'lint .' --model economy
 exec magus ls jobs -o name
 stdout '^wave/open$'
 stdout '^wave/new$'
@@ -68,7 +68,7 @@ stdout '^wave/new$'
 # A job holding every Buzz file by a pattern, in a third checkout. A leading ** is refused
 # as too broad (MGS3043) unless the record permits it.
 cd ../cara
-! exec magus job fork wave/cfg --criteria 'tune buzz' --write-paths '**/*.buzz' --check 'lint .'
+! exec magus job fork wave/cfg --criteria 'tune buzz' --write-paths '**/*.buzz' --check 'lint .' --model economy
 stderr 'MGS3043'
 stderr 'deviation'
 stdin $WORK/cfg.json
@@ -78,23 +78,23 @@ exec magus job exec wave/cfg
 # The magusfile whole is refused with the claims it has (MGS3036), and the holder is asked
 # to release it in one attention request however often the fork is refused.
 cd ../ben
-! exec magus job fork wave/slots --criteria 'lint timeout' --write-paths magusfile.buzz --check 'lint .'
+! exec magus job fork wave/slots --criteria 'lint timeout' --write-paths magusfile.buzz --check 'lint .' --model economy
 stderr 'MGS3036'
 stderr '`magusfile.buzz#project.name`, `magusfile.buzz#project.targets.lint`'
-! exec magus job fork wave/slots --criteria 'lint timeout' --write-paths magusfile.buzz --check 'lint .'
+! exec magus job fork wave/slots --criteria 'lint timeout' --write-paths magusfile.buzz --check 'lint .' --model economy
 exec magus session attention
 stdout -count=1 'job wave/cfg holds magusfile.buzz'
 
 # A key claim names that key and not a sibling that shares its prefix, and a map key claims
 # every entry under it.
-exec magus job fork wave/slots --criteria 'lint timeout' --write-paths 'magusfile.buzz#project.targets.lint' --check 'lint .'
-exec magus job fork wave/targets --criteria 'targets' --write-paths 'magusfile.buzz#project.targets' --check 'lint .'
+exec magus job fork wave/slots --criteria 'lint timeout' --write-paths 'magusfile.buzz#project.targets.lint' --check 'lint .' --model economy
+exec magus job fork wave/targets --criteria 'targets' --write-paths 'magusfile.buzz#project.targets' --check 'lint .' --model economy
 exec magus ls jobs -o name
 stdout '^wave/slots$'
 stdout '^wave/targets$'
 
 -- cfg.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/cfg", "criteria": "tune buzz", "write_paths": ["**/*.buzz"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/cfg", "model": "economy", "criteria": "tune buzz", "write_paths": ["**/*.buzz"],
  "check": {"target": "lint", "project": "."},
  "deviations": [{"code": "MGS3043", "subject": "**/*.buzz", "reason": "the job tunes every magusfile"}]}
 -- site/.gitignore --
@@ -164,8 +164,8 @@ func C() {
 	c()
 }
 -- c.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/b", "criteria": "change C", "write_paths": ["run.go"], "check": {"target": "lint", "project": "."},
+{"api_version": "magus.job/v1alpha1", "id": "wave/b", "model": "economy", "criteria": "change C", "write_paths": ["run.go"], "check": {"target": "lint", "project": "."},
  "goals": [{"id": "c", "kind": "symbol", "expect": "changed", "symbols": ["C"]}]}
 -- a.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/b", "criteria": "change A again", "write_paths": ["run.go"], "check": {"target": "lint", "project": "."},
+{"api_version": "magus.job/v1alpha1", "id": "wave/b", "model": "economy", "criteria": "change A again", "write_paths": ["run.go"], "check": {"target": "lint", "project": "."},
  "goals": [{"id": "a", "kind": "symbol", "expect": "changed", "symbols": ["A"]}]}

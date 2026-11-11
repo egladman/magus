@@ -1081,35 +1081,6 @@ github.com/egladman/magus/types.BranchChangeReporter.BranchChanges imethod func(
 github.com/egladman/magus/types.BranchHeadReporter type interface
 github.com/egladman/magus/types.BranchHeadReporter.BranchHeads imethod func(ctx context.Context, root string) (map[string]string, error)
 github.com/egladman/magus/types.BranchIdents func(lines [][]byte, start int, end int, language string) []string
-github.com/egladman/magus/types.Brief type struct
-github.com/egladman/magus/types.Brief.Decisions field []BriefDecision "json:\"decisions,omitempty\""
-github.com/egladman/magus/types.Brief.Evidence field []BriefRef "json:\"evidence,omitempty\""
-github.com/egladman/magus/types.Brief.Goal field string "json:\"goal\""
-github.com/egladman/magus/types.Brief.Job field string "json:\"job\""
-github.com/egladman/magus/types.Brief.Why field string "json:\"why,omitempty\""
-github.com/egladman/magus/types.BriefDecision type struct
-github.com/egladman/magus/types.BriefDecision.What field string "json:\"what\""
-github.com/egladman/magus/types.BriefDecision.Why field string "json:\"why,omitempty\""
-github.com/egladman/magus/types.BriefFormat type string
-github.com/egladman/magus/types.BriefFormat.String method func() string
-github.com/egladman/magus/types.BriefFormat.Valid method func() bool
-github.com/egladman/magus/types.BriefFormat.Values method func() []string
-github.com/egladman/magus/types.BriefFormatBuzz const BriefFormat = "buzz"
-github.com/egladman/magus/types.BriefFormatMarkdown const BriefFormat = "markdown"
-github.com/egladman/magus/types.BriefRef type struct
-github.com/egladman/magus/types.BriefRef.ID field string "json:\"id\""
-github.com/egladman/magus/types.BriefRef.Kind field BriefRefKind "json:\"kind\""
-github.com/egladman/magus/types.BriefRef.Says field string "json:\"says,omitempty\""
-github.com/egladman/magus/types.BriefRefCommit const BriefRefKind = "commit"
-github.com/egladman/magus/types.BriefRefFile const BriefRefKind = "file"
-github.com/egladman/magus/types.BriefRefInvocation const BriefRefKind = "invocation"
-github.com/egladman/magus/types.BriefRefKind type string
-github.com/egladman/magus/types.BriefRefKind.String method func() string
-github.com/egladman/magus/types.BriefRefKind.Valid method func() bool
-github.com/egladman/magus/types.BriefRefKind.Values method func() []string
-github.com/egladman/magus/types.BriefRefOutput const BriefRefKind = "output"
-github.com/egladman/magus/types.BriefRefPlan const BriefRefKind = "plan"
-github.com/egladman/magus/types.BriefRefVerdict const BriefRefKind = "verdict"
 github.com/egladman/magus/types.BrokerBestEffort const BrokerPolicy = "best-effort"
 github.com/egladman/magus/types.BrokerOff const BrokerPolicy = "off"
 github.com/egladman/magus/types.BrokerPolicy type string
@@ -1634,18 +1605,19 @@ github.com/egladman/magus/types.Declaration type struct
 github.com/egladman/magus/types.Declaration.Apply method func(u *Job)
 github.com/egladman/magus/types.Declaration.ApplySpec method func(u *Job)
 github.com/egladman/magus/types.Declaration.Breaks field []string "json:\"breaks,omitempty\""
-github.com/egladman/magus/types.Declaration.BriefFormat field BriefFormat "json:\"brief_format,omitempty\""
 github.com/egladman/magus/types.Declaration.Check field *LeaseCheck "json:\"check,omitempty\""
 github.com/egladman/magus/types.Declaration.Checkout field string "json:\"checkout,omitempty\" schema:\"abspath\""
 github.com/egladman/magus/types.Declaration.Checkpoint field string "json:\"checkpoint,omitempty\""
 github.com/egladman/magus/types.Declaration.Claim field []JobClaimRequest "json:\"claim,omitempty\""
 github.com/egladman/magus/types.Declaration.Criteria field string "json:\"criteria,omitempty\""
+github.com/egladman/magus/types.Declaration.Decisions field []JobDecision "json:\"decisions,omitempty\""
 github.com/egladman/magus/types.Declaration.Deferred field []JobDeferred "json:\"deferred,omitempty\""
 github.com/egladman/magus/types.Declaration.Delivery field string "json:\"delivery,omitempty\""
 github.com/egladman/magus/types.Declaration.DenyPaths field []string "json:\"deny_paths,omitempty\" schema:\"writepath\""
 github.com/egladman/magus/types.Declaration.DependsOn field []string "json:\"depends_on,omitempty\" schema:\"leaseid\""
 github.com/egladman/magus/types.Declaration.Deviations field []Deviation "json:\"deviations,omitempty\""
 github.com/egladman/magus/types.Declaration.Enter field string "json:\"enter,omitempty\""
+github.com/egladman/magus/types.Declaration.Evidence field []JobEvidence "json:\"evidence,omitempty\""
 github.com/egladman/magus/types.Declaration.FoldLegacyNames method(ptr) func() error
 github.com/egladman/magus/types.Declaration.Follows field string "json:\"follows,omitempty\" schema:\"leaseid\""
 github.com/egladman/magus/types.Declaration.FreshReason field string "json:\"fresh_reason,omitempty\""
@@ -2616,7 +2588,6 @@ github.com/egladman/magus/types.Job.Attempt field *JobAttempt "json:\"attempt,om
 github.com/egladman/magus/types.Job.Attempts field int "json:\"attempts,omitempty\"  yaml:\"attempts,omitempty\""
 github.com/egladman/magus/types.Job.BaseVerdict field JobBaseVerdict "json:\"base_verdict,omitempty\" yaml:\"base_verdict,omitempty\""
 github.com/egladman/magus/types.Job.Breaks field []string "json:\"breaks,omitempty\" yaml:\"breaks,omitempty\""
-github.com/egladman/magus/types.Job.BriefFormat field BriefFormat "json:\"brief_format,omitempty\" yaml:\"brief_format,omitempty\""
 github.com/egladman/magus/types.Job.Check field *LeaseCheck "json:\"check,omitempty\" yaml:\"check,omitempty\""
 github.com/egladman/magus/types.Job.CheckoutRoot field string "json:\"checkout_root,omitempty\" yaml:\"checkout_root,omitempty\""
 github.com/egladman/magus/types.Job.Checkpoint field string "json:\"checkpoint,omitempty\" yaml:\"checkpoint,omitempty\""
@@ -2625,6 +2596,7 @@ github.com/egladman/magus/types.Job.Clone method func() Job
 github.com/egladman/magus/types.Job.Created field int64 "json:\"created\" yaml:\"created\""
 github.com/egladman/magus/types.Job.Criteria field string "json:\"criteria,omitempty\" yaml:\"criteria,omitempty\""
 github.com/egladman/magus/types.Job.Deadline field int64 "json:\"deadline,omitempty\" yaml:\"deadline,omitempty\""
+github.com/egladman/magus/types.Job.Decisions field []JobDecision "json:\"decisions,omitempty\" yaml:\"decisions,omitempty\""
 github.com/egladman/magus/types.Job.Deferred field []JobDeferred "json:\"deferred,omitempty\" yaml:\"deferred,omitempty\""
 github.com/egladman/magus/types.Job.Delivery field string "json:\"delivery,omitempty\" yaml:\"delivery,omitempty\""
 github.com/egladman/magus/types.Job.DenyPaths field []string "json:\"deny_paths,omitempty\" yaml:\"deny_paths,omitempty\""
@@ -2634,6 +2606,7 @@ github.com/egladman/magus/types.Job.EffectiveGoals method func() []Goal
 github.com/egladman/magus/types.Job.EndReason field string "json:\"end_reason,omitempty\" yaml:\"end_reason,omitempty\""
 github.com/egladman/magus/types.Job.EndedWithSession method func() bool
 github.com/egladman/magus/types.Job.Entries field []JobEntry "json:\"entries,omitempty\" yaml:\"entries,omitempty\""
+github.com/egladman/magus/types.Job.Evidence field []JobEvidence "json:\"evidence,omitempty\" yaml:\"evidence,omitempty\""
 github.com/egladman/magus/types.Job.Follows field string "json:\"follows,omitempty\"      yaml:\"follows,omitempty\""
 github.com/egladman/magus/types.Job.FreshReason field string "json:\"fresh_reason,omitempty\" yaml:\"fresh_reason,omitempty\""
 github.com/egladman/magus/types.Job.GateAttempts field []JobGateAttempt "json:\"gate_attempts,omitempty\" yaml:\"gate_attempts,omitempty\""
@@ -2725,6 +2698,9 @@ github.com/egladman/magus/types.JobClaimRequest type struct
 github.com/egladman/magus/types.JobClaimRequest.Because field string "json:\"because,omitempty\" schema:\"nonblank\""
 github.com/egladman/magus/types.JobClaimRequest.Callers field string "json:\"callers,omitempty\" schema:\"nonblank\""
 github.com/egladman/magus/types.JobClaimRequest.Path field string "json:\"path,omitempty\" schema:\"writepath\""
+github.com/egladman/magus/types.JobDecision type struct
+github.com/egladman/magus/types.JobDecision.What field string "json:\"what\" yaml:\"what\""
+github.com/egladman/magus/types.JobDecision.Why field string "json:\"why,omitempty\" yaml:\"why,omitempty\""
 github.com/egladman/magus/types.JobDeferred type struct
 github.com/egladman/magus/types.JobDeferred.Item field string "json:\"item\"             yaml:\"item\""
 github.com/egladman/magus/types.JobDeferred.Reason field string "json:\"reason,omitempty\" yaml:\"reason,omitempty\""
@@ -2748,6 +2724,20 @@ github.com/egladman/magus/types.JobEntry.At field int64 "json:\"at\" yaml:\"at\"
 github.com/egladman/magus/types.JobEntry.By field Origin "json:\"by\" yaml:\"by\""
 github.com/egladman/magus/types.JobEntry.Consumed field int64 "json:\"consumed,omitempty\" yaml:\"consumed,omitempty\""
 github.com/egladman/magus/types.JobEntry.Path field string "json:\"path\" yaml:\"path\""
+github.com/egladman/magus/types.JobEvidence type struct
+github.com/egladman/magus/types.JobEvidence.ID field string "json:\"id\" yaml:\"id\""
+github.com/egladman/magus/types.JobEvidence.Kind field JobEvidenceKind "json:\"kind\" yaml:\"kind\""
+github.com/egladman/magus/types.JobEvidence.Says field string "json:\"says,omitempty\" yaml:\"says,omitempty\""
+github.com/egladman/magus/types.JobEvidenceCommit const JobEvidenceKind = "commit"
+github.com/egladman/magus/types.JobEvidenceFile const JobEvidenceKind = "file"
+github.com/egladman/magus/types.JobEvidenceInvocation const JobEvidenceKind = "invocation"
+github.com/egladman/magus/types.JobEvidenceKind type string
+github.com/egladman/magus/types.JobEvidenceKind.String method func() string
+github.com/egladman/magus/types.JobEvidenceKind.Valid method func() bool
+github.com/egladman/magus/types.JobEvidenceKind.Values method func() []string
+github.com/egladman/magus/types.JobEvidenceOutput const JobEvidenceKind = "output"
+github.com/egladman/magus/types.JobEvidencePlan const JobEvidenceKind = "plan"
+github.com/egladman/magus/types.JobEvidenceVerdict const JobEvidenceKind = "verdict"
 github.com/egladman/magus/types.JobForkFacts type struct
 github.com/egladman/magus/types.JobForkFacts.BranchesUnknown field string "json:\"branches_unknown,omitempty\"  yaml:\"branches_unknown,omitempty\""
 github.com/egladman/magus/types.JobForkFacts.CommitsSinceTest field int "json:\"commits_since_test\"           yaml:\"commits_since_test\""
@@ -2867,15 +2857,16 @@ github.com/egladman/magus/types.JobProblems.Fixable method func() int
 github.com/egladman/magus/types.JobProblems.Permit method func(ds []Deviation) (kept JobProblems, permitted JobProblems)
 github.com/egladman/magus/types.JobPut type struct
 github.com/egladman/magus/types.JobPut.Breaks field *[]string "json:\"breaks,omitempty\""
-github.com/egladman/magus/types.JobPut.BriefFormat field *BriefFormat "json:\"brief_format,omitempty\""
 github.com/egladman/magus/types.JobPut.Check field *LeaseCheck "json:\"check,omitempty\""
 github.com/egladman/magus/types.JobPut.Checkpoint field *string "json:\"checkpoint,omitempty\""
 github.com/egladman/magus/types.JobPut.Criteria field *string "json:\"criteria,omitempty\""
+github.com/egladman/magus/types.JobPut.Decisions field *[]JobDecision "json:\"decisions,omitempty\""
 github.com/egladman/magus/types.JobPut.Delivery field *string "json:\"delivery,omitempty\""
 github.com/egladman/magus/types.JobPut.DenyPaths field *[]string "json:\"deny_paths,omitempty\""
 github.com/egladman/magus/types.JobPut.DependsOn field *[]string "json:\"depends_on,omitempty\""
 github.com/egladman/magus/types.JobPut.Deviations field *[]Deviation "json:\"deviations,omitempty\""
 github.com/egladman/magus/types.JobPut.Enter field *string "json:\"enter,omitempty\""
+github.com/egladman/magus/types.JobPut.Evidence field *[]JobEvidence "json:\"evidence,omitempty\""
 github.com/egladman/magus/types.JobPut.Follows field *string "json:\"follows,omitempty\""
 github.com/egladman/magus/types.JobPut.FreshReason field *string "json:\"fresh_reason,omitempty\""
 github.com/egladman/magus/types.JobPut.Goals field *[]Goal "json:\"goals,omitempty\""

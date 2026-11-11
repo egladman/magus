@@ -15,16 +15,16 @@ exec git switch -q -c side
 exec git commit -q --allow-empty -m 'side'
 exec git switch -q main
 
-exec magus job fork land --read-only --criteria 'land the work' --checkout $WORK/land
+exec magus job fork land --read-only --criteria 'land the work' --checkout $WORK/land --model economy
 stdout '^checkout .*land: made for job land at '
 
 cd $WORK/land
-! exec magus job fork probe --read-only --criteria 'check the side work' --checkpoint side
+! exec magus job fork probe --read-only --criteria 'check the side work' --checkpoint side --model economy
 stderr 'probe names the checkpoint side'
 stderr 'pass --checkout <dir>'
 ! exec magus describe job probe
 
-exec magus job fork here --read-only --criteria 'read the landing tree'
+exec magus job fork here --read-only --criteria 'read the landing tree' --model economy
 stderr 'so here is taken there too'
 
 -- shop/.gitignore --

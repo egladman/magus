@@ -1146,12 +1146,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		briefable := inSource(location.workspace, input)
 		if verdict.Decision != decisionDeny && briefable {
 			if reason := denyBuzzWriteWithoutSkill(skills, req.ObservesSkillLoads, location.workspace, input); reason != "" {
-				refuse(denyBuzzUnbriefed, reason)
+				refuse(denyBuzzBeforeSkill, reason)
 			}
 		}
 		if verdict.Decision != decisionDeny && briefable && !removesOnly(write) {
 			if reason := denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, newSourceDir(location.workspace, input)); reason != "" {
-				refuse(denyArchitectureUnbriefed, reason)
+				refuse(denyArchitectureBeforeSkill, reason)
 			}
 		}
 		if verdict.Decision != decisionDeny {
@@ -1286,7 +1286,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 		}
 		// Outside judgeShellLine: it reads session state (which skills have loaded) rather
 		// than the line alone, and a remedy graded by that function never writes Buzz.
-		v = deps.rankGraded(v, denyBuzzUnbriefed, denyBuzzAuthorWithoutSkill(skills, req.ObservesSkillLoads, location.workspace, input, shellD), rankBuzzAuthor)
+		v = deps.rankGraded(v, denyBuzzBeforeSkill, denyBuzzAuthorWithoutSkill(skills, req.ObservesSkillLoads, location.workspace, input, shellD), rankBuzzAuthor)
 		// The rules below read and spend the caller's own session record, which is why they
 		// sit here rather than in the pure rule set a remedy is graded by.
 		now := time.Now()
@@ -1310,11 +1310,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 					Why: "The bare word \"ci\" names both the magus target and the host's CI/CD; picking either before the person clarifies is the assumption this rule stops."}
 			}
 		}
-		var unbriefed string
+		var beforeSkill string
 		if structureProbe(input, location.workspace) {
-			unbriefed = denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, "")
+			beforeSkill = denyArchitectureWithoutSkill(facts, skills, req.ObservesSkillLoads, location.workspace, "")
 		}
-		switch v = deps.rankGraded(v, denyArchitectureUnbriefed, unbriefed, rankArchitectureUnbriefed); {
+		switch v = deps.rankGraded(v, denyArchitectureBeforeSkill, beforeSkill, rankArchitectureBeforeSkill); {
 		case v.Deny != "":
 			// A bound worker's raw tool is refused naming its check, the remedy it can run,
 			// rather than raw-tool's generic target.

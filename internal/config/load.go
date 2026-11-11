@@ -316,17 +316,26 @@ type UnknownKeysError struct {
 }
 
 // UnknownKey is one unknown key and every line it appears on. At most one of
-// Suggestion and RenamedTo is set; with neither, the key reads as one this build predates.
+// Suggestion, RenamedTo and RemovedBy is set; with none, the key reads as one
+// this build predates.
 type UnknownKey struct {
 	Key        string `json:"key"`
 	Lines      []int  `json:"lines"`
 	Suggestion string `json:"suggestion,omitempty"`
 	RenamedTo  string `json:"renamed_to,omitempty"`
+	// RemovedBy names the decision record that removed the key.
+	RemovedBy string `json:"removed_by,omitempty"`
 }
 
-// Error renders the keys as a list, one line per key with all of its lines, and states
-// the version gap once when any key has neither a suggestion nor a rename. Nothing is
-// truncated: the list is as long as Keys.
+// removedKeys maps a dotted key magus once read to the decision record that
+// removed it with no replacement.
+var removedKeys = map[string]string{
+	"agents.brief_format": "docs/decisions/0043-job-records-are-buzz-data.md",
+}
+
+// Error renders the keys as a list, one line per key with all of its lines.
+// It states the version gap once when a key has no suggestion, rename or
+// removal. Nothing is truncated: the list is as long as Keys.
 func (e *UnknownKeysError) Error() string {
 	var b strings.Builder
 	if len(e.Keys) == 1 {
@@ -351,6 +360,8 @@ func (e *UnknownKeysError) Error() string {
 		switch {
 		case k.RenamedTo != "":
 			where += fmt.Sprintf("; renamed to %q", k.RenamedTo)
+		case k.RemovedBy != "":
+			where += fmt.Sprintf("; removed with no replacement by %s, so delete it", k.RemovedBy)
 		case k.Suggestion != "":
 			where += fmt.Sprintf("; did you mean %q?", k.Suggestion)
 		default:
@@ -430,6 +441,8 @@ func unknownKeyError(path string, data []byte, err error) error {
 		k := UnknownKey{Key: dotted, Lines: []int{line}}
 		if renamed, ok := retiredKeys[key]; ok && goType == configTypeName {
 			k.RenamedTo = renamed
+		} else if record, ok := removedKeys[dotted]; ok {
+			k.RemovedBy = record
 		} else {
 			k.Suggestion = hint.Nearest(key, knownKeysIn(goType))
 		}

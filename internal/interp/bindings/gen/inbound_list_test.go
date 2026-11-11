@@ -174,13 +174,14 @@ var inboundTypes = []inboundType{
 	{Name: "Session", Zero: types.Session{}, Encode: func(v any) vm.Value { return ObjectSession(v.(types.Session), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeSession(v) }},
 	{Name: "Workspace", Zero: types.MagusWorkspace{}, Encode: func(v any) vm.Value { return ObjectMagusWorkspace(v.(types.MagusWorkspace), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeMagusWorkspace(v) }},
 	{Name: "TierOptions", Zero: types.TierOptions{}, Encode: func(v any) vm.Value { return ObjectTierOptions(v.(types.TierOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeTierOptions(v) }},
+	{Name: "JobDecision", Zero: types.JobDecision{}, Encode: func(v any) vm.Value { return ObjectJobDecision(v.(types.JobDecision)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobDecision(v) }},
+	{Name: "JobEvidence", Zero: types.JobEvidence{}, Encode: func(v any) vm.Value { return ObjectJobEvidence(v.(types.JobEvidence), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobEvidence(v) }},
 	{Name: "Job", Zero: types.Job{}, Encode: func(v any) vm.Value { return ObjectJob(v.(types.Job), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJob(v) }},
 }
 
 var enumCases = map[reflect.Type][]string{
 	reflect.TypeFor[imagetypes.Architecture]():    {"", "amd64", "arm64"},
 	reflect.TypeFor[types.BindingStatus]():        {"", "bound", "unsupported"},
-	reflect.TypeFor[types.BriefFormat]():          {"", "markdown", "buzz"},
 	reflect.TypeFor[types.ClaimKind]():            {"", "refs", "test", "output", "released", "dead"},
 	reflect.TypeFor[spells.CoverageFormat]():      {"", "lcov", "go-coverprofile"},
 	reflect.TypeFor[types.CredentialKind]():       {"", "operator", "stored", "share", "exchange", "stdio", "socket-peer"},
@@ -193,6 +194,7 @@ var enumCases = map[reflect.Type][]string{
 	reflect.TypeFor[types.GoalKind]():             {"", "check", "paths", "symbol"},
 	reflect.TypeFor[types.HookPoint]():            {"", "shell", "edit", "stop", "subagent-stop", "spawn", "session-start", "compact", "mcp", "attach"},
 	reflect.TypeFor[types.JobBaseVerdict]():       {"", "match", "revision-match", "diverged", "unknown"},
+	reflect.TypeFor[types.JobEvidenceKind]():      {"output", "verdict", "invocation", "file", "plan", "commit"},
 	reflect.TypeFor[types.JobHolder]():            {"", "server", "session"},
 	reflect.TypeFor[types.JobState]():             {"", "declared", "running", "exited", "pass", "fail", "no_return"},
 	reflect.TypeFor[types.JobWriteProof]():        {"", "alone", "disjoint", "overlapping"},

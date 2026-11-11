@@ -198,8 +198,8 @@ func TestBuzzAuthoringOnACommandLineRequiresTheSkill(t *testing.T) {
 	t.Run("set to advise it advises", func(t *testing.T) {
 		g := hint.NewGate(t.TempDir(), "buzz-default")
 		reason := denyBuzzAuthorWithoutSkill(g, true, "", `magus buzz -e 'fun main() > void {}'`, DialectBash)
-		assert.Equal(t, denyBuzzUnbriefed, Dependencies{}.rankGraded(ShellVerdict{}, denyBuzzUnbriefed, reason, rankBuzzAuthor).Rule.Name, "refused by default")
-		v := advising(Dependencies{}, string(denyBuzzUnbriefed)).rankGraded(ShellVerdict{}, denyBuzzUnbriefed, reason, rankBuzzAuthor)
-		requireAdvisedOnce(t, v, denyBuzzUnbriefed)
+		assert.Equal(t, denyBuzzBeforeSkill, Dependencies{}.rankGraded(ShellVerdict{}, denyBuzzBeforeSkill, reason, rankBuzzAuthor).Rule.Name, "refused by default")
+		v := advising(Dependencies{}, string(denyBuzzBeforeSkill)).rankGraded(ShellVerdict{}, denyBuzzBeforeSkill, reason, rankBuzzAuthor)
+		requireAdvisedOnce(t, v, denyBuzzBeforeSkill)
 	})
 }

@@ -1198,6 +1198,10 @@ func (s *Store) migrate(found int, held bool) error {
 	return s.locked(context.Background(), apply)
 }
 
+// removedRowMember is a member ADR 0043 removed from the row. parse
+// drops it, so the row's next put writes it without.
+const removedRowMember = "brief_format"
+
 // parse reads the file as it stands; see [Store.readFile].
 func (s *Store) parse(wait bool) (jobsFile, jobsLog, error) {
 	if s.err != nil {
@@ -1228,6 +1232,10 @@ func (s *Store) parse(wait bool) (jobsFile, jobsLog, error) {
 		var row types.Job
 		if err := s.decodeLine(line.Text, line.N, &row, &row.Schema); err != nil {
 			return jobsFile{}, jobsLog{}, err
+		}
+		delete(row.Unknown, removedRowMember)
+		if len(row.Unknown) == 0 {
+			row.Unknown = nil
 		}
 		if row.ID == "" {
 			var header jobsFile

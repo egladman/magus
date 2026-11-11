@@ -357,7 +357,8 @@ export fun rebase(sh: Shell, checkout: str, s: Step, onto: str, base: str) > res
 
 export fun forkArgs(id: str, checkout: str, paths: [str], base: str) > [str] {
     return ["fork", id, "--checkout", checkout, "--write-paths", paths.join(","), "--check", "ci .", "--fix",
-        "--criteria", "rebase-branches-onto-base.buzz rebases branches onto {base} after their base pull request squash-merged"];
+        "--criteria", "rebase-branches-onto-base.buzz rebases branches onto {base} after their base pull request squash-merged",
+        "--model", "economy"];
 }
 
 // execute forks the job, takes it in its checkout, rebases each step, and ends the job, which
@@ -644,7 +645,7 @@ test "execute forks a checkout job, rebases each branch onto the one below, and 
     assert\isTrue(execute(sh, stack: stack, base: "origin/main", checkout: "/c").error == null, message: "executes");
     final kept = calls.filter(fun (index: int, c: str) > bool => c.startsWith("magus job") or c.startsWith("git rebase"));
     assert\equal(kept, want: [
-        "magus job fork rebase-branches-onto-base-a --checkout /c --write-paths x.go,y.go --check ci . --fix --criteria rebase-branches-onto-base.buzz rebases branches onto origin/main after their base pull request squash-merged",
+        "magus job fork rebase-branches-onto-base-a --checkout /c --write-paths x.go,y.go --check ci . --fix --criteria rebase-branches-onto-base.buzz rebases branches onto origin/main after their base pull request squash-merged --model economy",
         "magus job exec rebase-branches-onto-base-a",
         "git rebase --onto origin/main s h1",
         "git rebase --onto new h1 h2",

@@ -54,7 +54,7 @@ import (
 
 // jobCommand implements `magus job`, the POSIX child lifecycle over delegated work: fork
 // declares a job, exec takes the lease on it in this checkout, exit returns it with its
-// result, and wait verifies that result. Listing is `magus ls jobs` and the terms are
+// result, and wait verifies that result. Listing is `magus ls jobs` and the spec is
 // `magus describe job`, because enumerating and defining are those verbs' work everywhere
 // else in this CLI.
 //
@@ -131,7 +131,7 @@ func jobUsage() {
 		fmt.Fprintf(os.Stderr, "  %-6s %s\n", c.Name, c.Short)
 	}
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintf(os.Stderr, "`%s` lists every job in flight, and `%s` prints one job's terms.\n", hint.LsJobs, hint.DescribeJob.With("<job>"))
+	fmt.Fprintf(os.Stderr, "`%s` lists every job in flight, and `%s` prints one job's spec.\n", hint.LsJobs, hint.DescribeJob.With("<job>"))
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "One author per job, enforced by the store: a session holding a lease may release")
 	fmt.Fprintf(os.Stderr, "paths and end its own job, and nothing else. %s (magus\\job) is the\n", hint.ToolClient)
@@ -949,7 +949,7 @@ func overlapFootprintLine(f *types.JobOverlapFootprint) string {
 	return "footprints: " + f.Verdict
 }
 
-// describeJob is `magus describe job`: one job's terms, which is what a holder reads on
+// describeJob is `magus describe job`: one job's spec, which is what a holder reads on
 // arrival. It prints the criteria, the write paths, the check, the model, the checkpoint, the
 // dependencies, what the workspace itself puts out of reach, the graph's blast radius for
 // each write path, and where each declared goal stands graded against the evidence magus
@@ -960,7 +960,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe job <job> [flags]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Print one job's terms: its criteria, write paths, check and dependencies, the paths this")
+			fmt.Fprintln(os.Stderr, "Print one job's spec: its criteria, write paths, check and dependencies, the paths this")
 			fmt.Fprintln(os.Stderr, "workspace puts out of reach, the graph's blast radius for each write path, and where each")
 			fmt.Fprintln(os.Stderr, "declared goal stands graded against the evidence magus holds now.")
 			fmt.Fprintln(os.Stderr, "")
@@ -1004,7 +1004,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 
 	// leaseBoundary took 12 s warm and most of 22 s cold, printing nothing.
 	waiting := time.AfterFunc(3*time.Second, func() {
-		slog.InfoContext(ctx, fmt.Sprintf("loading the workspace and the knowledge graph for %s's terms, usually 10 to 25 s", row.ID), attr.Notice("note"))
+		slog.InfoContext(ctx, fmt.Sprintf("loading the workspace and the knowledge graph for %s's spec, usually 10 to 25 s", row.ID), attr.Notice("note"))
 	})
 	defer waiting.Stop()
 
@@ -1181,7 +1181,7 @@ func (e evidenceFlag) Set(value string) error {
 // so a typed job and a piped one are one declaration. It names no state:
 // the store stores a declaration that names none as declared.
 func bindForkSpec(fs *flag.FlagSet, d *types.Declaration, check *string) {
-	fs.StringVar(&d.Criteria, "criteria", "", "What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares")
+	fs.StringVar(&d.Criteria, "criteria", "", "What this job is for and what done means, as prose, required; the machine-checkable half is --check, and the goals a --stdin record declares")
 	fs.StringVar(&d.Timeout, "timeout", "", "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout")
 	fs.StringVar(&d.Parent, "parent", "", "The job this one is forked from")
 	fs.StringVar(&d.Checkpoint, "checkpoint", "", "The working state this job is handed, as `magus vcs checkpoint -o name` prints it")
@@ -1190,8 +1190,7 @@ func bindForkSpec(fs *flag.FlagSet, d *types.Declaration, check *string) {
 	fs.Var((*listFlag)(&d.ReadPaths), "read-paths", "A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)")
 	fs.Var((*listFlag)(&d.DependsOn), "depends-on", "A job this one waits on; repeatable or comma-separated")
 	fs.StringVar(check, "check", "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
-	fs.StringVar(&d.Model, "model", "", "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier")
-	fs.StringVar((*string)(&d.BriefFormat), "brief-format", "", "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides")
+	fs.StringVar(&d.Model, "model", "", "The model tier, or the model, the work was matched to; required, and the workspace's matrix maps a model to its tier")
 	fs.StringVar(&d.Delivery, "delivery", "", deliveryDoc)
 	fs.BoolVar(&d.ReadOnly, "read-only", false, "A job that gathers evidence and writes nothing")
 	cmdline.NegatedBoolVar(fs, &d.ReadOnly, "read-only")
@@ -1581,7 +1580,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	referenced, referencedGap := referencedOutside(ctx, graph.loadScoped(stored.WritePaths), root, stored, jobWS.Projects)
 	switch opts.Format {
 	case outputText:
-		fmt.Printf("forked %s, %s, with %d write path(s). Its holder reads the terms with `%s` and takes it with `%s`\n",
+		fmt.Printf("forked %s, %s, with %d write path(s). Its holder reads the spec with `%s` and takes it with `%s`\n",
 			stored.ID, orDash(string(stored.State)), len(stored.WritePaths),
 			hint.DescribeJob.With(stored.ID), hint.JobExec.With(stored.ID))
 		if stored.ModelTier != nil {
@@ -1629,7 +1628,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 
 // forkSpecFlags are the job fork flags that declare the spec, which a --stdin record carries
 // instead and a fork by id alone takes from the stored job.
-var forkSpecFlags = []string{"criteria", "timeout", "parent", "checkpoint", "write-paths", "deny-paths", "read-paths", "depends-on", "check", "model", "brief-format", "delivery", "read-only"}
+var forkSpecFlags = []string{"criteria", "timeout", "parent", "checkpoint", "write-paths", "deny-paths", "read-paths", "depends-on", "check", "model", "delivery", "read-only"}
 
 // deliveryDoc is --delivery's help, equal to the command registry's.
 const deliveryDoc = "How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)"
@@ -2497,7 +2496,7 @@ func printLandingBootstrap(ctx context.Context, out io.Writer, store *job.Store,
 	}
 }
 
-// jobWait collects a returned job's result and verifies it against the job's own terms.
+// jobWait collects a returned job's result and verifies it against the job's own spec.
 //
 // THE ENFORCEMENT POINT. Everything else about a job is a declaration: the store records,
 // the guard grades writes as they happen, and verification used to be the forking agent

@@ -63,10 +63,10 @@ func noProducers() func(target, project string) bool {
 	return func(string, string) bool { return false }
 }
 
-// judgeBriefCommand refuses a brief that teaches a denied command, naming the command and
-// the rule. Otherwise it passes, and the verdict may carry Context saying why a magus run
-// in the brief was not held to a check.
-func judgeBriefCommand(deps Dependencies, brief briefInput) ShellVerdict {
+// judgeSpawnCommand refuses a brief that teaches a denied command,
+// naming the command and the rule. Otherwise it passes. The verdict may
+// carry Context saying why a magus run in the brief was not held to a check.
+func judgeSpawnCommand(deps Dependencies, brief briefInput) ShellVerdict {
 	for _, cmd := range briefCommands(brief.text) {
 		cmd = withoutBootstrap(cmd)
 		if strings.TrimSpace(cmd) == "" {
@@ -81,10 +81,10 @@ func judgeBriefCommand(deps Dependencies, brief briefInput) ShellVerdict {
 			Deny: fmt.Sprintf("this brief teaches `%s`, a command the guard denies [%s]; fix the brief.", elideCommand(cmd), v.RuleName()),
 			Why: fmt.Sprintf(`The guard's verdict on it: %s
 A worker runs a brief's commands as written, so every worker it reaches is refused, or learns a way around the refusal. A line that names it to forbid it ("never ...") is not graded.`, first),
-			Rule: denyRule{Name: denyRuleBriefCommand, Arg: v.RuleName()},
+			Rule: denyRule{Name: denyRuleSpawnCommand, Arg: v.RuleName()},
 		}
 	}
-	if v := judgeBriefPlainCommands(brief); v.Deny != "" {
+	if v := judgeSpawnPlainCommands(brief); v.Deny != "" {
 		return v
 	}
 	if brief.bound {
@@ -93,15 +93,15 @@ A worker runs a brief's commands as written, so every worker it reaches is refus
 	return judgeBriefOffCheck(deps, brief)
 }
 
-// denyRuleBriefPlainCommands is a brief for an isolated worker that teaches a compound command.
-const denyRuleBriefPlainCommands denyRuleName = "spawn-plain-commands"
+// denyRuleSpawnPlainCommands is a spawn prompt for an isolated worker
+// that teaches a compound command.
+const denyRuleSpawnPlainCommands denyRuleName = "spawn-plain-commands"
 
-// judgeBriefPlainCommands refuses a brief for a worker in its own worktree that teaches a
-// compound command. A host that isolates a worker refuses the commands it cannot prove stay
-// inside the worktree, and a worker copies the style of the commands its brief shows. A
-// brief need not say how to write commands: the host's refusal already teaches that. Briefs
-// for a shared checkout pass.
-func judgeBriefPlainCommands(brief briefInput) ShellVerdict {
+// judgeSpawnPlainCommands refuses a brief for an isolated worker that
+// teaches a compound command. Its host refuses what it cannot prove
+// stays in the worktree, and a worker copies the brief's style.
+// Briefs for a shared checkout pass.
+func judgeSpawnPlainCommands(brief briefInput) ShellVerdict {
 	if !brief.isolated {
 		return ShellVerdict{}
 	}
@@ -112,7 +112,7 @@ func judgeBriefPlainCommands(brief briefInput) ShellVerdict {
 			return ShellVerdict{
 				Deny: fmt.Sprintf("this brief teaches `%s`, which a worker in its own worktree is refused as too complex: split it into plain commands.", elideCommand(cmd)),
 				Why:  why,
-				Rule: denyRule{Name: denyRuleBriefPlainCommands},
+				Rule: denyRule{Name: denyRuleSpawnPlainCommands},
 			}
 		}
 	}
@@ -225,7 +225,7 @@ func gradeBriefRuns(ctx context.Context, deps Dependencies, at location, workspa
 				return ShellVerdict{
 					Deny: briefOffCheckDeny(row, off, v),
 					Why:  briefOffCheckWhy(row, v, deps.DefaultCharms),
-					Rule: denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleWorkerCheckOnly)},
+					Rule: denyRule{Name: denyRuleSpawnCommand, Arg: string(denyRuleWorkerCheckOnly)},
 				}
 			}
 			notes = append(notes, briefPassNotes(one, judge)...)
@@ -254,7 +254,7 @@ A leased worker is refused it whoever asks.`, pairs[0].reason)
 			Deny: fmt.Sprintf("this brief tells job %s's worker to run `%s`, which a person runs [%s]: fix the brief.\nThe line: %q",
 				row.ID, pairs[0].ref(), denyRuleHumanOnly, elideCommand(strings.TrimSpace(r.line))),
 			Why:  why,
-			Rule: denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleHumanOnly)},
+			Rule: denyRule{Name: denyRuleSpawnCommand, Arg: string(denyRuleHumanOnly)},
 		}
 	}
 	return ShellVerdict{}
@@ -342,7 +342,7 @@ func briefPassVerdict(notes []string) ShellVerdict {
 	}
 	return ShellVerdict{
 		Context: fmt.Sprintf("worker-check-only passed this brief: %s.", strings.Join(notes, "; ")),
-		Rule:    denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleWorkerCheckOnly)},
+		Rule:    denyRule{Name: denyRuleSpawnCommand, Arg: string(denyRuleWorkerCheckOnly)},
 	}
 }
 

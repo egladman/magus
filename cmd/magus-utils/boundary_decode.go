@@ -187,6 +187,8 @@ var inboundTypes = []string{
 	"Session",
 	"Workspace",
 	"TierOptions",
+	"JobDecision",
+	"JobEvidence",
 	"Job",
 }
 

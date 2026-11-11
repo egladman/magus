@@ -23,12 +23,12 @@ exec git commit -q -am 'add a lint target'
 exec git switch -q main
 
 # A live job on main holds the file done-a changed.
-exec magus job fork editor --write-paths pricing.txt --check 'test .' --criteria 'edit pricing'
+exec magus job fork editor --write-paths pricing.txt --check 'test .' --criteria 'edit pricing' --model economy
 
 # One finished branch off the base: the next fork reports it and the commits since a full test.
 stdin $WORK/done-a.json
 exec magus job fork --stdin
-exec magus job fork reader --read-only --criteria 'read the tax code'
+exec magus job fork reader --read-only --criteria 'read the tax code' --model economy
 stderr 'note: 1 finished branch\(es\) off the base: done-a \(job done-a, 1 commit\(s\)\); commits since the last full test: unknown, '
 stderr '"integrates":\["done-a"\]'
 stderr 'magus job fork --stdin --checkout <dir>'
@@ -40,7 +40,7 @@ stdout '^finished branches off the base: 1: done-a$'
 # However many wait, magus only reports them: no policy here, so the fork goes through.
 stdin $WORK/done-b.json
 exec magus job fork --stdin
-exec magus job fork writer --read-only --criteria 'read the tests'
+exec magus job fork writer --read-only --criteria 'read the tests' --model economy
 stderr '2 finished branch\(es\) off the base: done-a \(job done-a, 1 commit\(s\)\), done-b \(job done-b, 1 commit\(s\)\)'
 
 # An integration job naming write paths is refused: they are computed, never declared.
@@ -66,7 +66,7 @@ stdout '^  magusfile.buzz$'
 stdout '^  pricing.txt$'
 
 # Named by a live integration job, the branches no longer count, and forks go through.
-exec magus job fork writer --read-only --criteria 'read the tests'
+exec magus job fork writer --read-only --criteria 'read the tests' --model economy
 stderr '0 finished branches off the base'
 
 # A regeneration a merge left owed in the checkout refuses the integration's pass until
@@ -106,15 +106,15 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 }
 -- done-a.json --
-{"api_version": "magus.job/v1alpha1", "id": "done-a", "state": "pass", "criteria": "raise prices", "write_paths": ["pricing.txt"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "done-a", "model": "economy", "state": "pass", "criteria": "raise prices", "write_paths": ["pricing.txt"], "check": {"target": "test", "project": "."}}
 -- done-b.json --
-{"api_version": "magus.job/v1alpha1", "id": "done-b", "state": "pass", "criteria": "add a lint target", "write_paths": ["magusfile.buzz#lint"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "done-b", "model": "economy", "state": "pass", "criteria": "add a lint target", "write_paths": ["magusfile.buzz#lint"], "check": {"target": "test", "project": "."}}
 -- declares-paths.json --
-{"api_version": "magus.job/v1alpha1", "id": "integrate", "integrates": ["done-a"], "write_paths": ["pricing.txt"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "integrate", "criteria": "the scripted job", "model": "economy", "integrates": ["done-a"], "write_paths": ["pricing.txt"], "check": {"target": "test", "project": "."}}
 -- missing.json --
-{"api_version": "magus.job/v1alpha1", "id": "integrate", "integrates": ["no-such-branch"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "integrate", "criteria": "the scripted job", "model": "economy", "integrates": ["no-such-branch"], "check": {"target": "test", "project": "."}}
 -- integrate.json --
-{"api_version": "magus.job/v1alpha1", "id": "integrate", "criteria": "merge the finished branches", "integrates": ["done-a", "done-b"], "check": {"target": "test", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "integrate", "model": "economy", "criteria": "merge the finished branches", "integrates": ["done-a", "done-b"], "check": {"target": "test", "project": "."}}
 -- shop/.gitignore --
 .magus/
 -- shop/magus.yaml --

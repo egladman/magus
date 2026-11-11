@@ -13,7 +13,7 @@ cp $WORK/broken.buzz magusfile.buzz
 ! exec magus ls
 stderr 'no member "noSuchCall"'
 
-exec magus job fork wave/fix --write-paths a.go --check 'test .'
+exec magus job fork wave/fix --write-paths a.go --check 'test .' --criteria 'the scripted job' --model economy
 stderr 'unchecked: check `magus run test \.` was not graded, so nothing says its worker may run it'
 stderr 'the workspace.s rules did not load: .*no member "noSuchCall"'
 exec magus job exit wave/fix
@@ -55,8 +55,8 @@ magus\noSuchCall();
 -- code.go --
 package pkg
 -- fix.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/fix", "write_paths": ["a.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/fix", "criteria": "the scripted job", "model": "economy", "write_paths": ["a.go"],
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}
 -- applied.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/applied", "write_paths": ["b.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/applied", "criteria": "the scripted job", "model": "economy", "write_paths": ["b.go"],
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["b.go"]}]}

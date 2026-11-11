@@ -75,6 +75,7 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 	if updates {
 		ps = append(ps, newProblems(rowDeclaration(prev).Problems(), rowDeclaration(merged).Problems())...)
 		ps = append(ps, ungradedProblems(merged)...)
+		ps = append(ps, newProblems(unspecifiedProblems(prev), unspecifiedProblems(merged))...)
 		var goals []types.Goal
 		for _, gate := range merged.Goals {
 			if !slices.ContainsFunc(prev.Goals, func(g types.Goal) bool { return g.ID == gate.ID }) {
@@ -113,6 +114,7 @@ func validateMerge(ctx context.Context, store *Store, rows []types.Job, id strin
 		ps = append(ps, rowDeclaration(merged).Problems()...)
 		ps = append(ps, unscopedProblems(merged)...)
 		ps = append(ps, ungradedProblems(merged)...)
+		ps = append(ps, unspecifiedProblems(merged)...)
 		ps = append(ps, forkLimitProblems(rows, id, merged.Parent, limits)...)
 		ps = append(ps, claimCeilingProblems(merged, limits)...)
 		ps = append(ps, ambiguousSymbolProblems(ctx, merged.Goals, read)...)
@@ -146,7 +148,7 @@ func contendedFork(ctx context.Context, store *Store, rows []types.Job, id strin
 	if kept, _ := permitBut(contended, merged.Deviations); len(kept) == 0 {
 		return types.JobValidation{}, false
 	}
-	ps := slices.Concat(rowDeclaration(merged).Problems(), unscopedProblems(merged), ungradedProblems(merged),
+	ps := slices.Concat(rowDeclaration(merged).Problems(), unscopedProblems(merged), ungradedProblems(merged), unspecifiedProblems(merged),
 		claimCeilingProblems(merged, limits), directoryWritePathProblems(store, merged), contended)
 	v := types.JobValidation{Job: merged, Unchecked: []string{cheapRefusalSkip}}
 	v.Problems, v.Permitted = permitBut(ps, merged.Deviations)
@@ -551,7 +553,7 @@ func rowDeclaration(row types.Job) types.Declaration {
 		WritePaths: row.WritePaths, DenyPaths: row.DenyPaths, ReadPaths: row.ReadPaths, DependsOn: row.DependsOn,
 		Breaks: row.Breaks, Model: row.Model, Goals: row.Goals, State: row.State, ReadOnly: row.ReadOnly,
 		MaxAttempts: row.MaxAttempts, MaxClaims: row.MaxClaims, Deviations: row.Deviations,
-		Delivery: row.Delivery, ParentHead: row.ParentHead,
+		Decisions: row.Decisions, Evidence: row.Evidence, Delivery: row.Delivery, ParentHead: row.ParentHead,
 	}
 	// A stored row renders its check into Validation too, and a record carries one spelling.
 	if row.Check != nil {
@@ -569,7 +571,7 @@ func RetryDeclaration(row types.Job) types.Declaration {
 	rec.Schema = types.Schema{Version: types.JobAPIVersion}
 	rec.State = ""
 	rec.SoftPaths, rec.Integrates = row.SoftPaths, row.Integrates
-	rec.BriefFormat, rec.Follows, rec.FreshReason = row.BriefFormat, row.Follows, row.FreshReason
+	rec.Follows, rec.FreshReason = row.Follows, row.FreshReason
 	if row.Weight != 0 {
 		rec.Weight = &row.Weight
 	}
@@ -734,6 +736,28 @@ func unscopedProblems(row types.Job) types.JobProblems {
 			` script check, {"check": {"script": "<probe>.buzz"}}, whose result cites the ref `+"`%s`"+` prints, or its holder ends it with `+"`%s`",
 			hint.Buzz.With("--record", "<probe>.buzz"), hint.JobExit.With(row.ID)),
 	}}
+}
+
+// unspecifiedProblems finds a job with no criteria or no model. The
+// row is the spec its holder reads (ADR 0043), and a spec without
+// either says nothing to read or no tier to run at.
+func unspecifiedProblems(row types.Job) types.JobProblems {
+	var ps types.JobProblems
+	if strings.TrimSpace(row.Criteria) == "" {
+		ps = append(ps, types.JobProblem{
+			Code: types.JobRecordInvalid, Field: "criteria",
+			Message: fmt.Sprintf("%s names no criteria, so its spec says neither what the job is for nor what done means", row.ID),
+			Fix:     "say what the job is for and what done means in criteria (--criteria)",
+		})
+	}
+	if strings.TrimSpace(row.Model) == "" {
+		ps = append(ps, types.JobProblem{
+			Code: types.JobRecordInvalid, Field: "model",
+			Message: fmt.Sprintf("%s names no model, so nothing records which model the work was matched to", row.ID),
+			Fix:     "name the model or tier the work was matched to in model (--model), such as economy, standard or principal",
+		})
+	}
+	return ps
 }
 
 // forkLimitProblems finds a fork that would put the job deeper below its root, or leave its

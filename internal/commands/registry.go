@@ -91,9 +91,9 @@ step at a time.`,
 		{
 			Name:        "job",
 			Effect:      cmdline.EffectRead,
-			Short:       "Print one job's terms: its criteria, paths, check and dependencies",
+			Short:       "Print one job's spec: its criteria, paths, check and dependencies",
 			Description: "Print what one job grants its holder: the criteria, the write and read paths, the check, its goals, its dependencies, and the paths out of reach. It adds each write path's blast radius and each goal's grade against current evidence.",
-			Long: `Print one job's terms, which is what a holder reads on arrival.
+			Long: `Print one job's spec, which is what a holder reads on arrival.
 
 It carries no procedure. Taking a job is ` + "`magus job exec`" + `'s work to DO, and a
 block of "run this, then this" is a procedure a reader can skip, mistype or
@@ -105,7 +105,7 @@ land inside them, the paths another live job is holding, the build inputs and
 workspace config that have one owner, and the projects that change alongside the
 held ones without declaring a dependency. It is context and never a status,
 with one refusal: a job whose check is the ci
-gate, or a target that chains to it, has no terms printed at all. The gate runs
+gate, or a target that chains to it, has no spec printed at all. The gate runs
 once, in the forking session's tree, after every job lands.
 
 It also grades where each declared goal stands against the evidence magus holds
@@ -2394,7 +2394,7 @@ on its record, leans its runs' retries ahead of other waiters; it is a lean, nev
 a place in a queue.
 
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
-them and magus describe job prints one job's terms.`,
+them and magus describe job prints one job's spec.`,
 	Usage: "magus job <fork|apply|exec|exit|wait|watch|run|graph|rm|prune|pause|resume> [flags]",
 	Children: []cmdline.Command{
 		{
@@ -2414,7 +2414,7 @@ them and magus describe job prints one job's terms.`,
 			Flags: []cmdline.Flag{
 				{Name: "schema", Kind: cmdline.Bool, Default: false, Doc: "Print the JSON schema a job must satisfy, and exit"},
 				{Name: "stdin", Kind: cmdline.Bool, Default: false, Doc: "Read one job as JSON on stdin instead of taking it from flags"},
-				{Name: "criteria", Kind: cmdline.String, Doc: "What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares"},
+				{Name: "criteria", Kind: cmdline.String, Doc: "What this job is for and what done means, as prose, required; the machine-checkable half is --check, and the goals a --stdin record declares"},
 				{Name: "timeout", Kind: cmdline.Duration, Unit: "m", Doc: "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout"},
 				{Name: "parent", Kind: cmdline.String, Doc: "The job this one is forked from"},
 				{Name: "checkpoint", Kind: cmdline.String, Doc: "The working state this job is handed, as `magus vcs checkpoint -o name` prints it"},
@@ -2423,8 +2423,7 @@ them and magus describe job prints one job's terms.`,
 				{Name: "read-paths", Kind: cmdline.Custom, Doc: "A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)"},
 				{Name: "depends-on", Kind: cmdline.Custom, Doc: "A job this one waits on; repeatable or comma-separated"},
 				{Name: "check", Kind: cmdline.String, Doc: "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)"},
-				{Name: "model", Kind: cmdline.String, Doc: "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier"},
-				{Name: "brief-format", Kind: cmdline.String, Doc: "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides"},
+				{Name: "model", Kind: cmdline.String, Doc: "The model tier, or the model, the work was matched to; required, and the workspace's matrix maps a model to its tier"},
 				{Name: "delivery", Kind: cmdline.String, Doc: "How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)"},
 				{Name: "read-only", Kind: cmdline.Bool, Default: false, Doc: "A job that gathers evidence and writes nothing"},
 				{Name: "checkout", Kind: cmdline.String, Doc: "Make a new checkout of this repository for the job at this directory, outside the workspace; the job owns it, and magus removes it once the job ends unless it holds work"},

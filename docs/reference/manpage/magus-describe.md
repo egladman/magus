@@ -77,7 +77,7 @@ step at a time.
 : List every target the workspace defines
 
 **job**
-: Print one job's terms: its criteria, paths, check and dependencies
+: Print one job's spec: its criteria, paths, check and dependencies
 
 **target**
 : Detail one target ref: its dispatch plan, globs, spells and policy

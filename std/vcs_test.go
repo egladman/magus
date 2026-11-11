@@ -487,7 +487,7 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 	dir := testkit.NewRepository(t, nil).Root()
 
 	ws := types.WithWorkspace(WithCurrentWorkingDirectory(t.Context(), dir), &ledgerWorkspace{cacheDir: t.TempDir(), root: dir})
-	_, err := MagusPutJob(ws, "worker", types.JobPut{Criteria: new("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
+	_, err := MagusPutJob(ws, "worker", types.JobPut{Model: new("economy"), Criteria: new("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
 	require.NoError(t, err)
 	var asked []string
 	refusal := errors.New("lease-vcs: refused")

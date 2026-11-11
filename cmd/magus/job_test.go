@@ -447,7 +447,6 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 		"--depends-on", "adj/guard",
 		"--check", "test internal/ledger",
 		"--model", "principal",
-		"--brief-format", "buzz",
 	}))
 	// The version is READ from the constant, not typed as a digit: this case is about the
 	// two doors agreeing on the FIELDS, and a fixture whose version fell behind would fail
@@ -463,8 +462,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	  "read_paths": ["internal/trail"],
 	  "depends_on": ["adj/guard"],
 	  "validation": "magus run test internal/ledger",
-	  "model": "principal",
-	  "brief_format": "buzz"
+	  "model": "principal"
 	}`))
 	require.NoError(t, err)
 
@@ -475,15 +473,15 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	fromFlags.Apply(&a)
 	piped.Apply(&b)
 	assert.Equal(t, a, b)
-	assert.Equal(t, types.BriefFormatBuzz, a.BriefFormat)
 }
 
-// A brief format is one of the two, refused at fork rather than read as markdown later.
-func TestForkRefusesAnUnknownBriefFormat(t *testing.T) {
+// ADR 0043 removed brief_format: a declaration still carrying it is refused
+// as an unknown member, naming it.
+func TestForkRefusesTheRemovedBriefFormat(t *testing.T) {
 	t.Parallel()
-	err := flagDeclaration(types.Declaration{Criteria: "c", BriefFormat: "json"}, "adj/store", "").Validate()
+	_, _, err := job.DecodeStdinDeclaration(strings.NewReader(`{"id":"adj/store","criteria":"c","brief_format":"buzz"}`))
 	require.Error(t, err)
-	assert.ErrorContains(t, err, `brief_format "json"`)
+	assert.ErrorContains(t, err, "brief_format")
 }
 
 // A path flag takes both spellings, and refuses the empty segment a trailing comma
@@ -547,7 +545,7 @@ func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
 	root := repo.Root()
 	repo.WriteTree(map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n\nfunc A() {}\n", "notes.txt": "Intro\n"})
 	fork := func(id, deny string) error {
-		return jobFork(t.Context(), root, []string{id, "--check", "test .", "--write-paths", "run.go,notes.txt", "--deny-paths", deny})
+		return jobFork(t.Context(), root, []string{id, "--criteria", "c", "--model", "economy", "--check", "test .", "--write-paths", "run.go,notes.txt", "--deny-paths", deny})
 	}
 
 	err := fork("refused", "notes.txt#Intro")
@@ -570,7 +568,7 @@ func TestJobForkByIdAloneKeepsTheStoredSpec(t *testing.T) {
 	root := repo.Root()
 	repo.WriteTree(map[string]string{"run.go": "package run\n"})
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
-	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--check", "test .", "--write-paths", "run.go", "--criteria", "run"}))
+	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--model", "economy", "--check", "test .", "--write-paths", "run.go", "--criteria", "run"}))
 	_, err := job.Exit(t.Context(), store, "w", nil, nil)
 	require.NoError(t, err)
 
@@ -590,11 +588,11 @@ func TestJobForkByIdAloneKeepsTheStoredSpec(t *testing.T) {
 	assert.Equal(t, spec(first[0]), spec(rows[0]), "the retry keeps the declared spec")
 	assert.Equal(t, types.StateDeclared, rows[0].State, "the retry is a new attempt")
 
-	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--read-only", "--criteria", "anew"}))
+	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--model", "economy", "--read-only", "--criteria", "anew"}))
 	rows, err = store.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, types.Declaration{ID: "w", Criteria: "anew", ReadOnly: true}, spec(rows[0]), "a spec flag declares the job anew")
+	assert.Equal(t, types.Declaration{ID: "w", Criteria: "anew", Model: "economy", ReadOnly: true}, spec(rows[0]), "a spec flag declares the job anew")
 }
 
 // A row naming no write paths bounds its holder by nothing unless it is read-only, so fork
@@ -602,7 +600,7 @@ func TestJobForkByIdAloneKeepsTheStoredSpec(t *testing.T) {
 func TestJobForkRefusesARowScopedByNothing(t *testing.T) {
 	resetWorkspaceMemo(t)
 	root, cacheDir := execFixture(t)
-	fork := func(args ...string) error { return jobFork(t.Context(), root, args) }
+	fork := func(args ...string) error { return jobFork(t.Context(), root, append(args, "--model", "economy")) }
 
 	err := fork("scout", "--criteria", "find the callers", "--check", "test .")
 	require.Error(t, err)
@@ -612,7 +610,7 @@ func TestJobForkRefusesARowScopedByNothing(t *testing.T) {
 	assert.Contains(t, err.Error(), fmt.Sprintf("`%s`", hint.Buzz.With("--record", "<probe>.buzz")))
 
 	require.NoError(t, fork("reader", "--read-only", "--criteria", "find the callers"))
-	require.NoError(t, fork("writer", "--write-paths", "run.go", "--check", "test ."))
+	require.NoError(t, fork("writer", "--criteria", "c", "--write-paths", "run.go", "--check", "test ."))
 	rows, err := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root}).List()
 	require.NoError(t, err)
 	got := make(map[string]bool, len(rows))
@@ -652,7 +650,7 @@ func TestJobForkResolvesItsCheckpoint(t *testing.T) {
 	root := repo.Root()
 	head := repo.Head()
 	fork := func(id, checkpoint string) error {
-		return jobFork(t.Context(), root, []string{id, "--check", "test .", "--write-paths", "magus.yaml", "--checkpoint", checkpoint})
+		return jobFork(t.Context(), root, []string{id, "--criteria", "c", "--model", "economy", "--check", "test .", "--write-paths", "magus.yaml", "--checkpoint", checkpoint})
 	}
 
 	const madeUp = "34b41fd546ba8fa9c71a6a64e4ea0f3e93d5a7bc"
@@ -683,7 +681,7 @@ func TestJobForkFromStdinMakesTheCheckoutTheFlagNames(t *testing.T) {
 	_, err := store.Exec(t.Context(), "live")
 	require.NoError(t, err)
 	record := func(id, checkout string) string {
-		return fmt.Sprintf(`{"api_version": %q, "id": %q, "checkout": %q, "write_paths": ["magus.yaml"],`+
+		return fmt.Sprintf(`{"api_version": %q, "id": %q, "criteria": "c", "model": "economy", "checkout": %q, "write_paths": ["magus.yaml"],`+
 			` "check": {"target": "test", "project": "."}}`, types.JobAPIVersion, id, checkout)
 	}
 	fork := func(stdin string, args ...string) error {
@@ -724,7 +722,7 @@ func TestJobForkBindsTheCheckoutItRunsIn(t *testing.T) {
 		return jobFork(t.Context(), at, append([]string{"--stdin"}, args...))
 	}
 	record := func(id, path string) string {
-		return fmt.Sprintf(`{"api_version": %q, "id": %q, "write_paths": [%q], "check": {"target": "test", "project": "."}}`,
+		return fmt.Sprintf(`{"api_version": %q, "id": %q, "criteria": "c", "model": "economy", "write_paths": [%q], "check": {"target": "test", "project": "."}}`,
 			types.JobAPIVersion, id, path)
 	}
 
@@ -745,7 +743,7 @@ func TestJobForkBindsTheCheckoutItRunsIn(t *testing.T) {
 	repo.Git("branch", "done")
 	repo.Git("reset", "-q", "--hard", "HEAD~1")
 	session := repo.AddWorktree("session").Root()
-	integration := fmt.Sprintf(`{"api_version": %q, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobAPIVersion)
+	integration := fmt.Sprintf(`{"api_version": %q, "id": "merge", "criteria": "c", "model": "economy", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobAPIVersion)
 	err = fork(session, integration)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "the forker's own linked checkout")
@@ -769,7 +767,7 @@ func TestJobForkIntegrationIntoAStandingCheckoutRecordsTheCheckoutsRevision(t *t
 	repo.Commit("forker moves on", map[string]string{"forker.txt": "ahead\n"})
 	require.NotEqual(t, checkoutHead, repo.Head())
 
-	writeStdin(t, fmt.Sprintf(`{"api_version": %q, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobAPIVersion))
+	writeStdin(t, fmt.Sprintf(`{"api_version": %q, "id": "merge", "criteria": "c", "model": "economy", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobAPIVersion))
 	captureStdout(t, func() {
 		require.NoError(t, jobFork(t.Context(), root, []string{"--stdin", "--checkout", standing}))
 	})
@@ -806,7 +804,7 @@ func (s *IntegrationStandingCheckoutSuite) SetupTest() {
 	repo.Commit("raise prices", map[string]string{"pricing.txt": "apples 2\n"})
 	repo.Git("branch", "done")
 	repo.Git("reset", "-q", "--hard", "HEAD~1")
-	writeStdin(t, fmt.Sprintf(`{"api_version": %q, "id": "merge", "integrates": ["done"], "checkpoint": %q, "check": {"target": "test", "project": "."}}`, types.JobAPIVersion, old))
+	writeStdin(t, fmt.Sprintf(`{"api_version": %q, "id": "merge", "criteria": "c", "model": "economy", "integrates": ["done"], "checkpoint": %q, "check": {"target": "test", "project": "."}}`, types.JobAPIVersion, old))
 	captureStdout(t, func() {
 		s.Require().NoError(jobFork(t.Context(), s.root, []string{"--stdin", "--checkout", s.standing}))
 	})
@@ -838,7 +836,7 @@ func TestJobForkTakesAnUnfinishedIntegrationAgain(t *testing.T) {
 	repo.Commit("raise prices", map[string]string{"pricing.txt": "apples 2\n"})
 	repo.Git("branch", "done")
 	repo.Git("reset", "-q", "--hard", "HEAD~1")
-	integration := fmt.Sprintf(`{"api_version": %q, "id": "merge", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobAPIVersion)
+	integration := fmt.Sprintf(`{"api_version": %q, "id": "merge", "criteria": "c", "model": "economy", "integrates": ["done"], "check": {"target": "test", "project": "."}}`, types.JobAPIVersion)
 	fork := func() error {
 		resetStartupSingletons()
 		writeStdin(t, integration)
@@ -922,7 +920,7 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 			}))
 
 			out := captureStdout(t, func() {
-				require.NoError(t, jobFork(t.Context(), root, []string{"long", "--check", "test .", "--write-paths", "magus.yaml"}))
+				require.NoError(t, jobFork(t.Context(), root, []string{"long", "--criteria", "c", "--model", "economy", "--check", "test .", "--write-paths", "magus.yaml"}))
 			})
 			if tt.want == "" {
 				assert.NotContains(t, out, "foreground call may wait")
@@ -949,7 +947,7 @@ func TestJobForkTakesTheTierOfAWiredHarnessModelRow(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "limit-host"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
-	writeStdin(t, `{"api_version": "magus.job/v1alpha1", "id": "wave/opus", "write_paths": ["a.go"], "model": "opus",`+
+	writeStdin(t, `{"api_version": "magus.job/v1alpha1", "id": "wave/opus", "criteria": "c", "write_paths": ["a.go"], "model": "opus",`+
 		` "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["a.go"]}]}`)
 
 	out := captureStdout(t, func() {
@@ -1203,13 +1201,14 @@ func (s *jobApplyStateSuite) TestAReleaseAPatternStillNamesIsNoted() {
 // either way.
 func TestJobApplyPrintsTheSpecDiffAndKeepsTheState(t *testing.T) {
 	row := leaseRow("w", "")
+	row.Criteria = "c"
 	row.State, row.WritePaths, row.Check = types.StateRunning, []string{"a.go", "b.go"}, &types.LeaseCheck{Target: "test", Project: "."}
 	row.Validation = row.Check.String()
 	root, cacheDir := execFixture(t, row)
 	store := job.NewStore(job.Location{StateBase: fixture.StateBase(t), CacheDir: cacheDir, Root: root})
 	record := filepath.Join(t.TempDir(), "w.json")
 	require.NoError(t, os.WriteFile(record, fmt.Appendf(nil,
-		`{"api_version":%q,"id":"w","model":"standard","write_paths":["b.go","c.go"],"check":{"target":"test","project":"."}}`,
+		`{"api_version":%q,"id":"w","criteria":"c","model":"standard","write_paths":["b.go","c.go"],"check":{"target":"test","project":"."}}`,
 		types.JobAPIVersion), 0o644))
 	args := []string{"-f", record}
 
@@ -1380,7 +1379,7 @@ func TestJobForkSaysReferencedOutsideIsUnknownWithoutASymbolIndex(t *testing.T) 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("package a\n\nfunc A() {}\n"), 0o644))
 
 	out := captureStdout(t, func() {
-		require.NoError(t, jobFork(t.Context(), root, []string{"unindexed", "--check", "test .", "--write-paths", "a.go"}))
+		require.NoError(t, jobFork(t.Context(), root, []string{"unindexed", "--criteria", "c", "--model", "economy", "--check", "test .", "--write-paths", "a.go"}))
 	})
 	assert.Contains(t, out, fmt.Sprintf("\n  unknown, no symbol index answered; `%s` builds one\n", hint.GraphBuild.String()))
 
@@ -1388,7 +1387,7 @@ func TestJobForkSaysReferencedOutsideIsUnknownWithoutASymbolIndex(t *testing.T) 
 	t.Cleanup(func() { global.output = prev })
 	global.output = "json"
 	raw := captureStdout(t, func() {
-		require.NoError(t, jobFork(t.Context(), root, []string{"unindexed-json", "--check", "test .", "--write-paths", "a.go"}))
+		require.NoError(t, jobFork(t.Context(), root, []string{"unindexed-json", "--criteria", "c", "--model", "economy", "--check", "test .", "--write-paths", "a.go"}))
 	})
 	var got map[string]any
 	require.NoError(t, json.Unmarshal([]byte(raw), &got))
@@ -1501,11 +1500,11 @@ func TestJobForkReadOnlyRowPrintsNoBudgetAdvice(t *testing.T) {
 	require.NoError(t, err)
 
 	reader := captureStdout(t, func() {
-		require.NoError(t, jobFork(t.Context(), root, []string{"reader", "--read-only", "--criteria", "find the callers"}))
+		require.NoError(t, jobFork(t.Context(), root, []string{"reader", "--model", "economy", "--read-only", "--criteria", "find the callers"}))
 	})
 	assert.NotContains(t, reader, "the build budget is full")
 	writer := captureStdout(t, func() {
-		require.NoError(t, jobFork(t.Context(), root, []string{"writer", "--check", "test .", "--write-paths", "magus.yaml"}))
+		require.NoError(t, jobFork(t.Context(), root, []string{"writer", "--criteria", "c", "--model", "economy", "--check", "test .", "--write-paths", "magus.yaml"}))
 	})
 	assert.Contains(t, writer, "the build budget is full")
 }
@@ -1561,7 +1560,7 @@ func TestAForkUnderJobExecSharesItsClaim(t *testing.T) {
 
 	checkout := filepath.Join(t.TempDir(), "under-exec")
 	out, err = run("job", "exec", "--timeout", "2m", "--", bin,
-		"job", "fork", "under-exec", "--check", "test .", "--write-paths", "a.go", "--checkout", checkout)
+		"job", "fork", "under-exec", "--criteria", "c", "--model", "economy", "--check", "test .", "--write-paths", "a.go", "--checkout", checkout)
 	require.NoError(t, err, out)
 	assert.NotContains(t, out, "MGS3009")
 	assert.DirExists(t, checkout)
@@ -1904,7 +1903,7 @@ func TestJobForkRefusesACheckThatSkipsATestOfItsPackage(t *testing.T) {
 	t.Chdir(root)
 	root, cacheDir := seedJobStore(t, root)
 	fork := func(check string) error {
-		return jobFork(t.Context(), root, []string{"w", "--write-paths", "pkg/a.go", "--check", check})
+		return jobFork(t.Context(), root, []string{"w", "--criteria", "c", "--model", "economy", "--write-paths", "pkg/a.go", "--check", check})
 	}
 
 	err := fork("go-test . -- -run Alpha")
@@ -1950,7 +1949,7 @@ func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
 	t.Chdir(root)
 	installCheckGrader(t, newCheckGrader())
 	fork := func(check string) error {
-		return jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", check})
+		return jobFork(t.Context(), root, []string{"w", "--criteria", "c", "--model", "economy", "--write-paths", "run.go", "--check", check})
 	}
 
 	err := fork("go-build .")
@@ -2149,7 +2148,7 @@ func TestJobForkRefusesAsUngradedADenyThatHoldsForEveryCommand(t *testing.T) {
 	assert.NotContains(t, verdict.NotGraded, "rebuild it")
 
 	installCheckGrader(t, newCheckGrader())
-	err := jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."})
+	err := jobFork(t.Context(), root, []string{"w", "--criteria", "c", "--model", "economy", "--write-paths", "run.go", "--check", "go-build ."})
 	require.ErrorIs(t, err, types.JobUngraded)
 	assert.NotErrorIs(t, err, types.JobCheckUnrunnable)
 	assert.Equal(t, 1, strings.Count(err.Error(), string(types.JobUngraded)), "reported once: %s", err)
@@ -2184,7 +2183,7 @@ func TestJobForkGradesWithItsOwnGrader(t *testing.T) {
 		return job.CheckVerdict{}
 	})
 
-	err := jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."})
+	err := jobFork(t.Context(), root, []string{"w", "--criteria", "c", "--model", "economy", "--write-paths", "run.go", "--check", "go-build ."})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "a worker does not build magus", "the fork's own grader judged the check")
 	assert.Empty(t, graded)
@@ -2273,7 +2272,7 @@ func dryRunFork(t *testing.T, format string, args ...string) (stdout string, sto
 }
 
 func TestJobForkDryRunListsEveryProblemAndWritesNothing(t *testing.T) {
-	out, store, err := dryRunFork(t, "", "w", "--write-paths", "run.go", "--check", "nosuch .")
+	out, store, err := dryRunFork(t, "", "w", "--criteria", "c", "--model", "economy", "--write-paths", "run.go", "--check", "nosuch .")
 
 	require.Error(t, err)
 	assert.Equal(t, exit.Failure, exit.Code(err))
@@ -2289,7 +2288,7 @@ func TestJobForkDryRunListsEveryProblemAndWritesNothing(t *testing.T) {
 }
 
 func TestJobForkDryRunOfACleanRecordPrintsItAndExitsZero(t *testing.T) {
-	out, store, err := dryRunFork(t, "", "w", "--write-paths", "run.go", "--check", "go::go-vet .")
+	out, store, err := dryRunFork(t, "", "w", "--criteria", "c", "--model", "economy", "--write-paths", "run.go", "--check", "go::go-vet .")
 
 	require.NoError(t, err)
 	assert.Contains(t, out, "no problems\nwould store:\n")
@@ -2300,7 +2299,7 @@ func TestJobForkDryRunOfACleanRecordPrintsItAndExitsZero(t *testing.T) {
 }
 
 func TestJobForkDryRunEmitsTheValidationForAStructuredFormat(t *testing.T) {
-	out, _, err := dryRunFork(t, "json", "w", "--write-paths", "run.go", "--check", "nosuch .")
+	out, _, err := dryRunFork(t, "json", "w", "--criteria", "c", "--model", "economy", "--write-paths", "run.go", "--check", "nosuch .")
 
 	require.Error(t, err)
 	var v types.JobValidation
@@ -2830,7 +2829,7 @@ func (s *forkErrorsSuite) TestForkPreservesTheStackedHeadCancellation() {
 	ctx, cancel := context.WithCancel(s.T().Context())
 	cancel()
 
-	err := jobFork(ctx, repo.Root(), []string{"child", "--read-only", "--criteria", "inspect", "--delivery", "stacked"})
+	err := jobFork(ctx, repo.Root(), []string{"child", "--model", "economy", "--read-only", "--criteria", "inspect", "--delivery", "stacked"})
 
 	s.ErrorIs(err, context.Canceled)
 	s.ErrorContains(err, "magus job fork: child is stacked with no pull request base")
@@ -2848,7 +2847,7 @@ func (s *forkErrorsSuite) TestForkPreservesThePlanWriteFailure() {
 	// Readers can inspect the absent plan; its writer cannot open the dangling lock link.
 	s.Require().NoError(os.Symlink(filepath.Join(s.T().TempDir(), "missing", "lock"), path+".lock"))
 
-	err = jobFork(s.T().Context(), repo.Root(), []string{"child", "--read-only", "--criteria", "inspect"})
+	err = jobFork(s.T().Context(), repo.Root(), []string{"child", "--model", "economy", "--read-only", "--criteria", "inspect"})
 
 	var cause *os.PathError
 	s.Require().ErrorAs(err, &cause)

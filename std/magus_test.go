@@ -388,7 +388,7 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
-	_, err := MagusPutJob(ctx, "u1", types.JobPut{Criteria: new("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
+	_, err := MagusPutJob(ctx, "u1", types.JobPut{Model: new("economy"), Criteria: new("ship it"), State: new(types.StateRunning), ReadOnly: new(true)})
 	require.NoError(t, err)
 
 	report, err := MagusListJob(ctx)
@@ -403,7 +403,7 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 	testkit.Isolate(t)
 	ws := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-	_, err := MagusPutJob(ws, "on-disk", types.JobPut{Criteria: new("not what the guard read"), ReadOnly: new(true)})
+	_, err := MagusPutJob(ws, "on-disk", types.JobPut{Model: new("economy"), Criteria: new("not what the guard read"), ReadOnly: new(true)})
 	require.NoError(t, err)
 
 	pinned := types.Job{ID: "orchestrator/guard-facts", Criteria: "the seam", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
@@ -469,7 +469,7 @@ func TestJobListMeasuresOverlapFootprints(t *testing.T) {
 	check, err := types.ParseLeaseCheck("test .")
 	require.NoError(t, err)
 	for id, paths := range map[string][]string{"a": {"api/*.go"}, "b": {"api/x.go"}} {
-		_, err := MagusPutJob(ctx, id, types.JobPut{Checkpoint: new(rev), WritePaths: new(paths), Check: new(check), State: new(types.StateRunning)})
+		_, err := MagusPutJob(ctx, id, types.JobPut{Criteria: new("hold the checkpoint"), Model: new("economy"), Checkpoint: new(rev), WritePaths: new(paths), Check: new(check), State: new(types.StateRunning)})
 		require.NoError(t, err)
 		_, _, err = MagusRegisterJob(ctx, id)
 		require.NoError(t, err)
@@ -550,7 +550,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
-	_, err := MagusPutJob(ctx, "u1", decodedPut(t, map[string]any{"criteria": "the declared goal", "write_paths": "internal/job", "check": "test ."}))
+	_, err := MagusPutJob(ctx, "u1", decodedPut(t, map[string]any{"criteria": "the declared goal", "model": "economy", "write_paths": "internal/job", "check": "test ."}))
 	require.NoError(t, err)
 
 	got, err := MagusPutJob(ctx, "u1", decodedPut(t, map[string]any{"state": "pass"}))
@@ -577,7 +577,7 @@ func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 	testkit.Isolate(t)
 
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
-	readOnly := types.JobPut{ReadOnly: new(true)}
+	readOnly := types.JobPut{Criteria: new("read"), Model: new("economy"), ReadOnly: new(true)}
 	_, err := MagusPutJob(ctx, "u1", readOnly)
 	require.NoError(t, err)
 	_, err = MagusPutJob(ctx, "u2", readOnly)
@@ -628,7 +628,7 @@ func TestLedgerBindingAndStoreAgree(t *testing.T) {
 	cacheDir, root := t.TempDir(), t.TempDir()
 	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: cacheDir, root: root})
 
-	_, err := MagusPutJob(ctx, "u1", types.JobPut{Criteria: new("shared row"), ReadOnly: new(true)})
+	_, err := MagusPutJob(ctx, "u1", types.JobPut{Model: new("economy"), Criteria: new("shared row"), ReadOnly: new(true)})
 	require.NoError(t, err)
 
 	store := job.NewStore(job.Location{StateBase: stateBase, CacheDir: cacheDir, Root: root})
@@ -946,7 +946,7 @@ func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	put := func(check string) error {
 		c, err := types.ParseLeaseCheck(check)
 		require.NoError(t, err)
-		_, err = MagusPutJob(ctx, "w", types.JobPut{WritePaths: new([]string{"run.go"}), Check: &c})
+		_, err = MagusPutJob(ctx, "w", types.JobPut{Criteria: new("build"), Model: new("economy"), WritePaths: new([]string{"run.go"}), Check: &c})
 		return err
 	}
 

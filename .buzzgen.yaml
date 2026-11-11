@@ -48,8 +48,6 @@ packages:
       AgentRole: {}
       AgentThread: {}
       BindingStatus: {}
-      BriefFormat: {}
-      BriefRefKind: {config: {zeroCase: ""}}
       BrokerPolicy: {}
       ChangeStatus: {}
       CheckStatus: {}
@@ -80,6 +78,7 @@ packages:
       HookPoint: {}
       InflightAttention: {config: {zeroCase: unset}}
       JobBaseVerdict: {config: {cases: {"match": matches}}}
+      JobEvidenceKind: {config: {zeroCase: ""}}
       JobHolder: {}
       JobKind: {config: {zeroCase: ""}}
       JobState: {}

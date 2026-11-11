@@ -13,7 +13,7 @@ exec git commit -q -m 'shop'
 
 exec sh -c 'ref=$(magus buzz --record probes/pricing.buzz 2>&1 >/dev/null | sed -n "s/^ref  \(out[0-9a-f]*\)$/\1/p") && sed "s/out<hex>/$ref/" "$WORK/risky.in.json" > "$WORK/risky.json" && sed "s/out<hex>/$ref/" "$WORK/clean.in.json" > "$WORK/clean.json"'
 
-exec magus job fork scout/risky --read-only --criteria 'run the gate'
+exec magus job fork scout/risky --read-only --criteria 'run the gate' --model economy
 exec magus job exec scout/risky
 stdin $WORK/risky.json
 exec magus job exit scout/risky --stdin
@@ -22,7 +22,7 @@ stdout '^exited scout/risky, recorded exited'
 exec magus ls jobs
 stdout 'scout/risky .*exited'
 
-exec magus job fork scout/clean --read-only --criteria 'list the tax rules'
+exec magus job fork scout/clean --read-only --criteria 'list the tax rules' --model economy
 exec magus job exec scout/clean
 stdin $WORK/clean.json
 exec magus job exit scout/clean --stdin

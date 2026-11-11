@@ -1,10 +1,10 @@
 ---
-title: "buzz-unbriefed: the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill"
+title: "buzz-before-skill: the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill"
 description: "A deny rule by default: it refuses the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill, and names what to run instead."
-tags: [guard, rules, buzz-unbriefed, deny]
+tags: [guard, rules, buzz-before-skill, deny]
 ---
 
-# buzz-unbriefed
+# buzz-before-skill
 
 A deny rule by default: it refuses the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill, and names what to run instead.
 
@@ -22,7 +22,7 @@ By default this rule takes the decision `deny`. A workspace sets it by name, in 
 magusfile, to `deny`, `advise` or `off`:
 
 ```buzz
-magus\guard.builtins({"buzz-unbriefed": "advise"})
+magus\guard.builtins({"buzz-before-skill": "advise"})
 ```
 
 A loosening takes effect once it is committed; a tightening applies at once.
@@ -32,12 +32,12 @@ A loosening takes effect once it is committed; a tightening applies at once.
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-deny [buzz-unbriefed]: ...
+deny [buzz-before-skill]: ...
 ```
 
-A workspace that sets this rule to `advise` sees `advise [buzz-unbriefed]: ...` instead.
+A workspace that sets this rule to `advise` sees `advise [buzz-before-skill]: ...` instead.
 
-`magus describe rule buzz-unbriefed` prints the same entry at a terminal, and
+`magus describe rule buzz-before-skill` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 
 ## See also

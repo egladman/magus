@@ -573,14 +573,14 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 	}{
 		{name: "job fork --stdin", fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
 			row, err := decodeDeclaration(strings.NewReader(fmt.Sprintf(
-				`{"api_version":%q,"id":"a","criteria":"goal","checkpoint":%q,"write_paths":["a.go"],"check":{"target":"go-test","project":"."}}`,
+				`{"api_version":%q,"id":"a","criteria":"goal","model":"economy","checkpoint":%q,"write_paths":["a.go"],"check":{"target":"go-test","project":"."}}`,
 				types.JobAPIVersion, checkpoint)))
 			require.NoError(t, err)
 			return s.Update(t.Context(), row.ID, Declare(row, 0))
 		}},
 		{name: "magus\\workspace().putJob", proof: types.WriteProofAlone, validated: true, fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
 			put, err := DecodePut(map[string]any{
-				"criteria": "goal", "checkpoint": checkpoint, "write_paths": []any{"a.go"}, "check": "go-test .",
+				"criteria": "goal", "model": testModel, "checkpoint": checkpoint, "write_paths": []any{"a.go"}, "check": "go-test .",
 			})
 			require.NoError(t, err)
 			merge, err := PutMerge(put)
@@ -600,6 +600,7 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 				Schema:       types.Schema{Version: types.JobAPIVersion},
 				ID:           "a",
 				Criteria:     "goal",
+				Model:        testModel,
 				Checkpoint:   head,
 				WritePaths:   []string{"a.go"},
 				Check:        &check,
@@ -995,6 +996,26 @@ func TestStoreUpdatePreservesAnUnknownMember(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, types.StatePass, rows[0].State, "the field the update named was still applied")
+}
+
+// ADR 0043 removed brief_format from the row: a stored line carrying it
+// reads without it, and the next put writes it without.
+func TestStoreDropsTheRemovedBriefFormatOnRead(t *testing.T) {
+	t.Parallel()
+
+	s := tempStore(t, t.TempDir())
+	path := plantRaw(t, s, fmt.Sprintf(
+		`{"id":"adj/store","api_version":%q,"state":"running","created":1,"updated":1,"brief_format":"buzz"}`,
+		types.JobAPIVersion))
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.NotContains(t, rows[0].Unknown, "brief_format")
+
+	_, err = s.Update(t.Context(), "adj/store", func(u *types.Job) { u.State = types.StatePass })
+	require.NoError(t, err)
+	assert.NotContains(t, storedRow(t, path, "adj/store"), "brief_format")
 }
 
 func TestStoreListReturnsCopies(t *testing.T) {

@@ -12,9 +12,9 @@ exec git init -q -b main
 exec git add -A
 exec git commit -q -m 'shop'
 
-exec magus job fork lead --read-only --criteria 'plan the pricing work'
-exec magus job fork lead-scout --read-only --parent lead --criteria 'read the pricing code'
-exec magus job fork tax --read-only --depends-on lead-scout --criteria 'read the tax code'
+exec magus job fork lead --read-only --criteria 'plan the pricing work' --model economy
+exec magus job fork lead-scout --read-only --parent lead --criteria 'read the pricing code' --model economy
+exec magus job fork tax --read-only --depends-on lead-scout --criteria 'read the tax code' --model economy
 
 exec magus job graph
 stdout '^plan: Job plan: 3 jobs$'

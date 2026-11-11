@@ -12,22 +12,22 @@ exec git init -q -b main
 exec git add -A
 exec git commit -q -m 'a generator and its output'
 
-exec magus job fork pages/gen --write-paths 'src/in.txt,gen' --check 'test .'
+exec magus job fork pages/gen --write-paths 'src/in.txt,gen' --check 'test .' --criteria 'the scripted job' --model economy
 stdout '^forked pages/gen, declared, with 2 write path\(s\)\.'
 ! stderr 'MGS3018'
 ! stderr 'MGS3044'
 
-! exec magus job fork pages/mixed --write-paths 'src/in.txt,hand' --check 'test .'
+! exec magus job fork pages/mixed --write-paths 'src/in.txt,hand' --check 'test .' --criteria 'the scripted job' --model economy
 ! stdout .
 stderr 'MGS3018'
 stderr 'hand/notes\.txt is not a declared output'
 
-! exec magus job fork pages/src --write-paths 'src' --check 'test .'
+! exec magus job fork pages/src --write-paths 'src' --check 'test .' --criteria 'the scripted job' --model economy
 ! stdout .
 stderr 'MGS3018'
 stderr 'src/in\.txt is not a declared output'
 
-! exec magus job fork pages/root --write-paths '**' --check 'test .'
+! exec magus job fork pages/root --write-paths '**' --check 'test .' --criteria 'the scripted job' --model economy
 ! stdout .
 stderr 'MGS3018'
 

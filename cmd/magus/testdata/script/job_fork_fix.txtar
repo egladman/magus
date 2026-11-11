@@ -13,13 +13,13 @@ exec git init -q -b main
 exec git add -A
 exec git commit -q -m 'pricing and its guide'
 
-! exec magus job fork pricing --write-paths 'docs/guide.md,pricing' --check 'test .'
+! exec magus job fork pricing --write-paths 'docs/guide.md,pricing' --check 'test .' --criteria 'the scripted job' --model economy
 stderr '^\[error\] 2 problems:$'
 stderr '\[MGS3018\] write_paths\[1\]'
 stderr '\[MGS3045\] goals: ci runs `check-docs \.`'
 stderr '^--fix would apply 1 of them$'
 
-! exec magus job fork pricing --write-paths 'docs/guide.md,pricing' --check 'test .' --fix
+! exec magus job fork pricing --write-paths 'docs/guide.md,pricing' --check 'test .' --fix --criteria 'the scripted job' --model economy
 stderr '^fixed: added the goal "check-docs" \(magus run check-docs \.\)$'
 stderr '^\[error\] 1 problem:$'
 stderr '\[MGS3018\] write_paths\[1\]'
@@ -28,7 +28,7 @@ stderr '\[MGS3018\] write_paths\[1\]'
 exec magus ls jobs -o name
 ! stdout .
 
-exec magus job fork pricing --write-paths 'docs/guide.md,pricing/total.sh' --check 'test .' --fix
+exec magus job fork pricing --write-paths 'docs/guide.md,pricing/total.sh' --check 'test .' --fix --criteria 'the scripted job' --model economy
 stderr '^fixed: added the goal "check-docs"'
 stdout '^forked pricing, declared, with 2 write path\(s\)\.'
 exec magus describe job pricing -o json
@@ -41,7 +41,7 @@ stderr '^fixed: added the goal "check-docs"'
 stdout '^forked guide, declared, with 1 write path\(s\)\.'
 
 -- guide.json --
-{"id": "guide", "write_paths": ["docs/faq.md"], "check": {"target": "test", "project": "."}}
+{"id": "guide", "criteria": "the scripted job", "model": "economy", "write_paths": ["docs/faq.md"], "check": {"target": "test", "project": "."}}
 -- .gitignore --
 .magus/
 -- magus.yaml --

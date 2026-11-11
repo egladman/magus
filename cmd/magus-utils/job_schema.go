@@ -79,10 +79,10 @@ const (
 // name a field is declared with. The values come from the package that owns the set, so
 // a state added there reaches the schema with nothing here to change.
 var closedSets = map[string][]string{
-	"JobState":    leaseStateNames(),
-	"GoalKind":    goalKindNames(),
-	"GoalExpect":  goalExpectNames(),
-	"BriefFormat": types.BriefFormat("").Values(),
+	"JobState":        leaseStateNames(),
+	"GoalKind":        goalKindNames(),
+	"GoalExpect":      goalExpectNames(),
+	"JobEvidenceKind": types.JobEvidenceKind("").Values(),
 	// The only DiagnosticCode a record declares is Deviation.Code, so the set is the codes a
 	// deviation may name: a deviation on any other code fails the schema as it fails the decoder.
 	"DiagnosticCode": permissibleCodeNames(),

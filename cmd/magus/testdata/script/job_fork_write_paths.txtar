@@ -11,12 +11,12 @@ cp $WORK/code.go src/pkg/code.go
 mkdir console
 cp $WORK/console.buzz console/magusfile.buzz
 
-! exec magus job fork wave/dir --check 'test .' --write-paths src/pkg
+! exec magus job fork wave/dir --check 'test .' --write-paths src/pkg --criteria 'the scripted job' --model economy
 stderr 'MGS3018'
 stderr '"src/pkg", inside project "."'
 stderr 'a write path names files'
 stderr 'fix: list the files the job will edit in its place'
-! exec magus job fork wave/glob --check 'test .' --write-paths 'src/**'
+! exec magus job fork wave/glob --check 'test .' --write-paths 'src/**' --criteria 'the scripted job' --model economy
 stderr '"src/\*\*" \(matching the directory "src"\)'
 
 stdin $WORK/root.json
@@ -46,14 +46,14 @@ import "magus";
 
 export fun build(ctx: magus\Context, args: [str]) > void {}
 -- root.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/root", "write_paths": ["."],
+{"api_version": "magus.job/v1alpha1", "id": "wave/root", "criteria": "the scripted job", "model": "economy", "write_paths": ["."],
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["src/pkg/code.go"]}]}
 -- console.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/console", "write_paths": ["console"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/console", "criteria": "the scripted job", "model": "economy", "write_paths": ["console"],
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["console/magusfile.buzz"]}]}
 -- file.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/file", "write_paths": ["src/pkg/code.go"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/file", "criteria": "the scripted job", "model": "economy", "write_paths": ["src/pkg/code.go"],
  "goals": [{"id": "edited", "kind": "paths", "expect": "changed", "paths": ["src/pkg/code.go"]}]}
 -- new.json --
-{"api_version": "magus.job/v1alpha1", "id": "wave/new", "write_paths": ["src/fresh"],
+{"api_version": "magus.job/v1alpha1", "id": "wave/new", "criteria": "the scripted job", "model": "economy", "write_paths": ["src/fresh"],
  "goals": [{"id": "created", "kind": "paths", "expect": "present", "paths": ["src/fresh"]}]}

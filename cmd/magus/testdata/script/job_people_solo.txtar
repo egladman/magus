@@ -20,10 +20,10 @@ exec git init -q -b main
 exec git add -A
 exec git commit -q -m 'shop before the refactor'
 
-exec magus job fork refactor/pricing --criteria 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .'
+exec magus job fork refactor/pricing --criteria 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .' --model standard
 cmp stdout $WORK/fork.out
 ! stderr 'the console is not running'
-exec magus job fork refactor/tax --criteria 'tax rounds half up' --write-paths checkout/tax.sh --check 'test .'
+exec magus job fork refactor/tax --criteria 'tax rounds half up' --write-paths checkout/tax.sh --check 'test .' --model standard
 exec git worktree add -q ../shop-pricing
 exec git worktree add -q ../shop-tax
 exec magus ls jobs
@@ -101,8 +101,8 @@ total() { echo $(( $1 + $2 )); }
  "validation": {"command": "magus run test .", "output_ref": "out<hex>"},
  "unresolved_risks": []}
 -- fork.out --
-forked refactor/pricing, declared, with 1 write path(s). Its holder reads the terms with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+forked refactor/pricing, declared, with 1 write path(s). Its holder reads the spec with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`
+model tier: standard (rank 1), row: "the job names the tier standard"
 referenced outside the write paths: files that use what the write paths define
   unknown, no symbol index answered; `magus graph build` builds one
 -- ls-declared.out --
@@ -116,7 +116,7 @@ recorded job refactor/pricing's base as 58d5e2c343b3312b97a2ac07d85607b3044e9b7d
 took refactor/pricing in ~/src/shop-pricing; read the spec with `magus describe job refactor/pricing`
 -- describe.out --
 job: refactor/pricing
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: standard (rank 1), row: "the job names the tier standard"
 skills: short
 
 criteria

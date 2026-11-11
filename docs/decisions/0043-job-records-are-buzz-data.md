@@ -140,11 +140,11 @@ instructions (reads as prose to follow rather than conditions graded).
 
 | piece                                                           | fate                                                                                   | State     |
 | --------------------------------------------------------------- | -------------------------------------------------------------------------------------- | --------- |
-| job row as the parent's record (ADR 0036 s1)                    | kept; gains `Decisions`, `Evidence`                                                    | planned (needs the boundary registry, `cmd/magus-utils/boundary_types.go`) |
+| job row as the parent's record (ADR 0036 s1)                    | kept; gains `Decisions`, `Evidence`                                                    | done      |
 | `JobResult` as the child's record (ADR 0036 s2)                 | kept unchanged                                                                         | done      |
 | `Job.result` readable from a stop rule's `req.lease`            | kept                                                                                   | done      |
-| `types/brief.go`, `magus\Brief` and its two helpers             | deleted; fields move to `types/job.go`                                                 | planned (needs the boundary registry) |
-| `agents.brief_format`, `Job.BriefFormat`, `ResolveBriefFormat`, `BriefFormatUnset` | deleted                                                             | in progress (`Job.BriefFormat` waits on the regenerated bindings) |
+| `types/brief.go`, `magus\Brief` and its two helpers             | deleted; fields move to `types/job.go`                                                 | done      |
+| `agents.brief_format`, `Job.BriefFormat`, `ResolveBriefFormat`, `BriefFormatUnset` | deleted                                                             | done      |
 | `judgeBriefBuzz` and the Buzz type check of a prompt            | deleted                                                                                | done      |
 | `hack/dev/render-brief.buzz`                                    | replaced by `job-view.buzz` in the same directory, typed, two entry points             | done      |
 | `magus describe job`                                            | kept as the terminal door                                                              | done      |
@@ -381,6 +381,9 @@ skill load, a summary), which the renames separate. Reopen never.
 - The number: main ends at 0039 at this writing, and 0040 to 0042 are on open branches.
   Recheck at merge.
 - What the scout's baseline window is, so the after-window can match it.
+- Whether the model tier matrix (`magus\modelTier`) and the default tier stay, now that a
+  fork must name its model and so never reaches either (amendment of 2026-11-10, steps
+  1, 2 and 4).
 
 ## Amendments
 
@@ -394,3 +397,22 @@ the boundary registry and the regenerated bindings, which another branch holds. 
 pieces of section 7 stay open with them: a `magus.yaml` still naming the removed key
 fails as an unknown key without naming this record, and validation at `job fork` does not
 yet require criteria and a model, since most of the scripted tests fork without either.
+
+### 2026-11-10: steps 1, 2 and 4 built; fork and apply require criteria and a model
+
+`types/brief.go`, `Job.BriefFormat`, `types.BriefFormat` and `job fork --brief-format`
+are gone. The row and the declaration carry `decisions` (`JobDecision`) and `evidence`
+(`JobEvidence`, whose `kind` is a `JobEvidenceKind`), a put replaces either, and the Buzz
+mirrors regenerate from the boundary registry with `magus\Brief`, `BriefDecision`,
+`BriefRef` and `BriefRefKind` gone. The job store drops a stored `brief_format` on read
+(`TestStoreDropsTheRemovedBriefFormatOnRead`), and the job ledgers reserve the name. A
+`magus.yaml` naming `agents.brief_format` fails as an unknown key that names this record.
+`job-view.buzz` renders a spec's decisions and evidence after its criteria.
+
+A new row with no criteria or no model is refused at `job fork` and `job apply` (MGS3037,
+fields `criteria` and `model`); an update to an older row that names neither is not
+refused for the gap. Every scripted fork names both. One consequence was not in section
+5: a fork always names its model now, so the row decides its tier, and neither a
+workspace's `magus\modelTier` matrix nor the declared default tier is asked for a new row
+(`job_fork_model_tier.txtar` pins that). Whether the matrix keeps a caller, or goes, is
+open.

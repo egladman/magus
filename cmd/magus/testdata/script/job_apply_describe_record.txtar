@@ -28,4 +28,4 @@ stdout '^\["src/pkg/code\.go","src/pkg/other\.go"\]$'
 -- code.go --
 package pkg
 -- row.json --
-{"api_version":"magus.job/v1alpha1","id":"wave/a","write_paths":["src/pkg/code.go"],"check":{"target":"test","project":"."}}
+{"api_version":"magus.job/v1alpha1","id":"wave/a","criteria":"the scripted job","model":"economy","write_paths":["src/pkg/code.go"],"check":{"target":"test","project":"."}}
