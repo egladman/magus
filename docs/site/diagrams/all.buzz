@@ -44,6 +44,15 @@ import "site/diagrams/harness-integrations" as harnessIntegrations;
 import "site/diagrams/merge-queue-workflows" as mergeQueueWorkflows;
 import "site/diagrams/ci-cd-split" as ciCdSplit;
 import "site/diagrams/cache-internals" as cacheInternals;
+import "site/diagrams/vcs" as vcsBoxes;
+import "site/diagrams/types" as typeRecords;
+import "site/diagrams/language-service" as languageService;
+import "site/diagrams/dry-run" as dryRun;
+import "site/diagrams/sessions" as sessions;
+import "site/diagrams/config-load" as configLoad;
+import "site/diagrams/service" as service;
+import "site/diagrams/bindings-generate" as bindingsGenerate;
+import "site/diagrams/doctor" as doctor;
 
 // The committed files, relative to the docs project. The site render inlines their page
 // copies, so rendering a page never needs the symbol index.
@@ -93,6 +102,15 @@ export fun allFigures() > [figure\Figure] !> any {
         mergeQueueWorkflows\mergeQueueWorkflowsFigure(),
         ciCdSplit\ciCdSplitFigure(),
         cacheInternals\cacheInternalsFigure(),
+        vcsBoxes\vcsFigure(),
+        typeRecords\typesFigure(),
+        languageService\languageServiceFigure(),
+        dryRun\dryRunFigure(),
+        sessions\sessionsFigure(),
+        configLoad\configLoadFigure(),
+        service\serviceFigure(),
+        bindingsGenerate\bindingsGenerateFigure(),
+        doctor\doctorFigure(),
     ];
 }
 

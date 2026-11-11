@@ -5,6 +5,10 @@
   workflows, the CI and CD split and the cache's internals each get a figure, placed on the
   page that explains the subsystem. Every box is a directory the graph holds.
 
+- **Nine more figures from the graph.** Doctor, the bindings generator, services, config loading,
+  sessions, the dry run, the language service, the shared types and the VCS interface each get
+  a figure on the page that explains them.
+
 ### Changed
 
 - **The guard, lease, knowledge graph, agent and server figures show the subsystems as they

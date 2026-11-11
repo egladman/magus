@@ -124,6 +124,8 @@ preserved. The docs warn against substituting "Operation" for a work-unit Target
 ([targets.md](targets.md)); that warning is about `types.Target` and never
 protected `spell.Target`, which was the actual offender.
 
+<!--diagram:types-->
+
 ## Relationship to the value types
 
 The serializable Buzz value types model the _nouns_ around this hierarchy:

@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 0,
+    "imports": 0
+  },
+  "figure": "bindings-generate",
+  "findings": [],
+  "stamp": "sha256:ca35187ef1224406aa0ae1f0536e2fa56d9fc9e0f297b4bf45129e74d8d1a052"
+}

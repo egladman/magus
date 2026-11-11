@@ -72,6 +72,8 @@ Two consequences worth knowing before you pick a build:
   report. See the [gopherbuzz JIT notes](https://github.com/egladman/magus/blob/main/libs/gopherbuzz/README.md#which-platforms-this-has-run-on)
   for the full matrix.
 
+<!--diagram:vcs-->
+
 ## Version control
 
 magus drives the repository's own version control binary, and refuses one older than the

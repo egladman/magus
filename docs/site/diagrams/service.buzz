@@ -1,0 +1,35 @@
+namespace service;
+
+import "magus";
+import "magus/figure";
+
+export fun serviceFigure() > figure\Figure !> any {
+    final service = magus\graph().dir("internal/service");
+    final identity = magus\graph().dir("internal/service/identity");
+    final audit = magus\graph().dir("internal/serviceaudit");
+    final ward = magus\graph().dir("internal/ward");
+    final spawn = magus\graph().dir("internal/proc/spawn");
+    final bindings = magus\graph().dir("internal/interp/bindings");
+    final doctor = magus\graph().dir("internal/doctor");
+    return figure\of("service",
+            title: "A service op is one long-running process with one identity",
+            eyebrow: "services",
+            desc: "A service op names a long-running process. internal/service starts it through "
+                + "the spawner and keeps the record of the run, keyed by an identity that "
+                + "survives a restart. The ward checks the op's argv against its declared kind "
+                + "before it runs, the audit finds a recorded service whose op is gone, and "
+                + "the host bindings and doctor read the same identity. The identity package "
+                + "holds the key and nothing else, so every reader agrees on what one service is.")
+        .box(service, label: "Service", sub: "start, record, stop", focal: true)
+        .box(identity, label: "Identity", sub: "one key per service")
+        .box(spawn, label: "Spawner", sub: "the process")
+        .box(ward, label: "Ward", sub: "argv against kind")
+        .box(audit, label: "Audit", sub: "recorded, op gone")
+        .box(bindings, label: "Host bindings", sub: "ops call it")
+        .box(doctor, label: "Doctor", sub: "reports drift")
+        .edgesFromGraph()
+        .hideEdges([ward, audit, bindings, doctor], dst: [identity],
+            why: "every reader keys by identity; one arrow from the service shows where it is defined")
+        .legend(figure\Look.focal, label: "the record")
+        .scope([service, identity, audit, ward]);
+}

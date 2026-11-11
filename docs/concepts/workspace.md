@@ -42,6 +42,8 @@ A project owns:
 - Its bound spells are the tool libraries whose ops the targets compose (see [spells.md](spells.md) and [operations.md](operations.md)).
 - Its policy is dependencies, outputs, watch-ignore patterns, and per-target execution flags, all layered on by an optional `magus\project({...})` call.
 
+<!--diagram:config-load-->
+
 ## Project discovery
 
 `project.Discover` walks the workspace root once with `filepath.WalkDir` and registers every directory that `hasDeclaration` reports true. The rules:
@@ -325,6 +327,8 @@ diagnostics:
 - `docs` is the page for a code, with `{code}` standing for it: a URL or a workspace path. Without it a raised code prints no `see:` line.
 - `magus\diagnosticCode("WS1003")` mints a code under the prefix and refuses any other, and `magus\raise` takes what it returns. A spell a workspace imports raises under that workspace's prefix.
 - A workspace code never replaces a built-in one: the CLI marks its origin, and its page comes only from `docs`.
+
+<!--diagram:doctor-->
 
 ## Scripts the guard and doctor serve
 

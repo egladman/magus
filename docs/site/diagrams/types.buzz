@@ -1,0 +1,40 @@
+namespace typeRecords;
+
+import "magus";
+import "magus/figure";
+
+export fun typesFigure() > figure\Figure !> any {
+    final types = magus\graph().dir("types");
+    final enums = magus\graph().dir("types/enum");
+    final daemon = magus\graph().dir("types/daemon");
+    final diff = magus\graph().dir("types/diff");
+    final events = magus\graph().dir("types/events");
+    final trail = magus\graph().dir("types/trail");
+    final image = magus\graph().dir("types/image");
+    final json = magus\graph().dir("internal/json");
+    final diagnostics = magus\graph().dir("libs/diagnostics");
+    return figure\of("types",
+            title: "The shared records sit at the bottom, and the groups lean on them",
+            eyebrow: "types",
+            desc: "types holds the records every other package passes around: targets, runs, "
+                + "findings, jobs. Its enums sit in types/enum, and the diagnostic codes come "
+                + "from libs/diagnostics. The daemon, diff, event, trail and image groups split "
+                + "off the records that only some callers need, and each imports the base and "
+                + "the enums, never the other way. Encoding lives on the type through the shared "
+                + "JSON package, so no reader splits lines itself.")
+        .box(types, label: "Records", sub: "targets, runs, findings, jobs", focal: true)
+        .box(enums, label: "Enums", sub: "method sets by hand")
+        .box(diagnostics, label: "Diagnostic codes", sub: "MGSxxxx")
+        .box(json, label: "JSON encoding", sub: "on the type")
+        .box(daemon, label: "Daemon records", sub: "server wire types")
+        .box(diff, label: "Diff records", sub: "changes between revisions")
+        .box(events, label: "Events", sub: "the stream")
+        .box(trail, label: "Trail records", sub: "audit entries")
+        .box(image, label: "Image records", sub: "OCI specs")
+        .edgesFromGraph()
+        .hideEdges([daemon, diff], dst: [enums],
+            why: "each group imports the enums as well as the base; the figure draws that once, from the base")
+        .hideEdges([events], dst: [json], why: "the base already draws the shared encoding edge")
+        .legend(figure\Look.focal, label: "the base every package imports")
+        .scope([types, enums, daemon, diff, events, trail, image, diagnostics, json]);
+}

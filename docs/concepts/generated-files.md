@@ -16,6 +16,8 @@ tags:
 
 # Formatting, linting, and generated files
 
+<!--diagram:bindings-generate-->
+
 ## Formatting is not linting
 
 These are different operations. Much tooling blurs them, and the blur is the source

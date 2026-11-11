@@ -23,6 +23,8 @@ Magus has two entry points into an interactive debugging REPL:
 
 Both share the same evaluator. Pry adds stack-introspection commands (`.where`, `.locals`, `.up`/`.down`, `.step`, ...) on top of the base REPL. The [meta-commands](#meta-commands) and [multiline input](#multiline-input) sections apply to both unless noted.
 
+<!--diagram:dry-run-->
+
 ## Interactive REPL
 
 `magus buzz` with no arguments opens an interactive Buzz REPL with the same runtime environment available to a magusfile: the `magus` object (including the host modules and spell bindings) is preloaded. If a `magusfile.buzz` is present at or above the current directory, it is executed automatically on startup so registered targets and locals are available. There is no flag for this and none is needed: magus reads the workspace from the directory you are in, the same way `magus run` and `magus ls` do. Outside a workspace there is nothing to load.
