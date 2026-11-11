@@ -1,0 +1,526 @@
+// file-name-words-tell-siblings-apart refuses a file name whose extra words
+// tell it apart from no sibling: model_tier.go beside enums.go is model.go.
+// A rename is reported only when the extra word is a suffix used in three
+// directories and the file declares a type named by the first word.
+//
+// Tier 1, mechanical: the fix is a rename, and ALLOW keeps a file with why.
+namespace filesiblings;
+
+import "assert";
+import "path";
+import "std";
+import "magus";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+final THIS = "hack/lint/file-name-words-tell-siblings-apart.buzz";
+
+// ALLOW holds each kept file by workspace path, with why. An entry that is
+// no longer a finding is itself a finding.
+export final ALLOW = {<str: str>};
+
+// The suffixes Go reads as build constraints; `unix` is one too.
+final GOARCH = ["386", "amd64", "arm", "arm64", "loong64", "mips", "mipsle", "mips64", "mips64le",
+    "ppc64", "ppc64le", "riscv64", "s390x", "sparc64", "wasm"];
+final GOOS = ["aix", "android", "darwin", "dragonfly", "freebsd", "hurd", "illumos", "ios", "js",
+    "linux", "nacl", "netbsd", "openbsd", "plan9", "solaris", "unix", "wasip1", "windows", "zos"];
+
+// SKIPPED paths are neither judged nor counted as siblings. .gitattributes
+// adds the generated files.
+final SKIPPED = ["**/gen/**", "gen/**", "**/testdata/**", "testdata/**", ".claude/**", "MAGUS.md", "**/MAGUS.md"];
+
+final WORD_CHARS = std\pattern(`^[A-Za-z0-9_-]+$`);
+final ORDINAL = std\pattern(`^[0-9]+$`);
+
+// SUFFIX_DIRS is how many directories must end names in a word before it
+// reads as a qualifier that can go.
+final SUFFIX_DIRS = 3;
+
+final LANGUAGES = ["go", "typescript", "buzz"];
+
+// TYPE_KINDS are the symbol kinds of a declared type.
+final TYPE_KINDS = ["struct", "type", "interface"];
+
+export fun reads() > [str] {
+    return ["**/*.go", "**/*.ts", "**/*.tsx", "**/*.buzz", ".gitattributes"];
+}
+
+export object Name {
+    path: str,
+    dir: str,
+    lang: str,
+    base: str,
+    words: [str],
+    suffix: str,
+}
+
+export object Hit {
+    path: str,
+    first: str,
+    suggest: str,
+    lang: str,
+}
+
+fun camelWords(s: str) > [str] {
+    final pieces = mut [<str>];
+    var cur = mut [<str>];
+    var lower = false;
+    var i = 0;
+    while (i < s.len()) {
+        final c = s.sub(i, len: 1);
+        if (c >= "A" and c <= "Z" and lower and cur.len() > 0) {
+            pieces.append(cur.join(""));
+            cur = mut [<str>];
+        }
+        cur.append(c);
+        lower = (c >= "a" and c <= "z") or (c >= "0" and c <= "9");
+        i = i + 1;
+    }
+    if (cur.len() > 0) {
+        pieces.append(cur.join(""));
+    }
+    return pieces;
+}
+
+// splitWords splits a TypeScript name on hyphens and camelCase together, so
+// bigPicture and bigPicture-dom start with the same word.
+fun splitWords(stem: str, lang: str) > [str] {
+    if (lang == "go") {
+        return stem.split("_");
+    }
+    if (lang == "buzz") {
+        return stem.split("-");
+    }
+    final words = mut [<str>];
+    foreach (segment in stem.split("-")) {
+        foreach (w in camelWords(segment)) {
+            words.append(w);
+        }
+    }
+    return words;
+}
+
+// squash lowercases s and drops separators, so read_log matches readlog.
+fun squash(s: str) > str {
+    return s.lower().replace("_", with: "").replace("-", with: "");
+}
+
+fun isOrdinal(word: str) > bool {
+    return ORDINAL.match(word) != null;
+}
+
+// parse splits the file at p into words, or returns null for another
+// language or a name that is not plain words.
+export fun parse(p: str) > Name? {
+    final parts = p.split("/");
+    final file = parts[parts.len() - 1];
+    final dir = parts.sub(0, len: parts.len() - 1).join("/");
+    var lang = "";
+    var ext = "";
+    if (file.endsWith(".go")) {
+        lang = "go";
+        ext = ".go";
+    } else if (file.endsWith(".tsx")) {
+        lang = "ts";
+        ext = ".tsx";
+    } else if (file.endsWith(".ts")) {
+        lang = "ts";
+        ext = ".ts";
+    } else if (file.endsWith(".buzz")) {
+        lang = "buzz";
+        ext = ".buzz";
+    } else {
+        return null;
+    }
+    var stem = file.sub(0, len: file.len() - ext.len());
+    final stripped = mut [<str>];
+    var groups = [["_test"]];
+    if (lang == "ts") {
+        groups = [[".live.test", ".test", ".d"]];
+    } else if (lang == "go") {
+        groups = [["_test"], GOARCH, GOOS];
+    }
+    foreach (group in groups) {
+        foreach (word in group) {
+            final tail = if (lang == "go" and word != "_test") "_" + word else word;
+            if (stem.endsWith(tail) and stem.len() > tail.len()) {
+                stripped.append(tail);
+                stem = stem.sub(0, len: stem.len() - tail.len());
+                break;
+            }
+        }
+    }
+    if (WORD_CHARS.match(stem) == null) {
+        return null;
+    }
+    final words = splitWords(stem, lang: lang);
+    foreach (w in words) {
+        if (w == "") {
+            return null;
+        }
+    }
+    return Name{ path = p, dir = dir, lang = lang, base = stem, words = words,
+        suffix = stripped.reverse().join("") + ext };
+}
+
+// judge returns the files of two or more words whose first word no other
+// base name shares in the same directory and language.
+//
+// A directory where most names are multi-word has that convention. A name
+// echoing its directory, or a numbered series, is not judged.
+//
+// The extra word must be a suffix that multi-word names end in across three
+// directories. types holds, per file group, the squashed type names its files
+// declare; one must start with the first word.
+export fun judge(files: [str], skipped: [str], types: {str: str}) > [Hit] !> any {
+    final every = mut {<str: bool>};
+    foreach (f in files) {
+        every[f] = true;
+    }
+    final names = mut [<Name>];
+    final counted = mut {<str: bool>};
+    final bases = mut {<str: int>};
+    final total = mut {<str: int>};
+    final multi = mut {<str: int>};
+    final suffixDirs = mut {<str: int>};
+    foreach (f in files) {
+        if (path\matchesAny(skipped, path: f)) {
+            continue;
+        }
+        final n = parse(f);
+        if (n == null) {
+            continue;
+        }
+        names.append(n!);
+        final group = n!.dir + "\n" + n!.lang;
+        final key = group + "\n" + n!.words[0].lower();
+        if (counted[group + "\n" + n!.base] == null) {
+            counted[group + "\n" + n!.base] = true;
+            total[group] = (total[group] ?? 0) + 1;
+            if (n!.words.len() > 1) {
+                multi[group] = (multi[group] ?? 0) + 1;
+                final suffixKey = n!.lang + "\n" + n!.words[n!.words.len() - 1].lower();
+                if (counted[suffixKey + "\n" + n!.dir] == null) {
+                    counted[suffixKey + "\n" + n!.dir] = true;
+                    suffixDirs[suffixKey] = (suffixDirs[suffixKey] ?? 0) + 1;
+                }
+            }
+        }
+        if (counted[key + "\n" + n!.base] == null) {
+            counted[key + "\n" + n!.base] = true;
+            bases[key] = (bases[key] ?? 0) + 1;
+        }
+    }
+    final hits = mut [<Hit>];
+    foreach (n in names) {
+        final first = n.words[0];
+        final group = n.dir + "\n" + n.lang;
+        if (n.words.len() < 2 or bases[group + "\n" + first.lower()] != 1 or isOrdinal(first)) {
+            continue;
+        }
+        if ((multi[group] ?? 0) * 2 > (total[group] ?? 0)) {
+            continue;
+        }
+        final dirParts = n.dir.split("/");
+        final dirName = squash(dirParts[dirParts.len() - 1]);
+        if (squash(first) == dirName or squash(n.base) == dirName) {
+            continue;
+        }
+        final suffixKey = n.lang + "\n" + n.words[n.words.len() - 1].lower();
+        if ((suffixDirs[suffixKey] ?? 0) < SUFFIX_DIRS) {
+            continue;
+        }
+        final declared = types[group + "\n" + n.base] ?? "";
+        if (declared.indexOf(" " + squash(first)) == null) {
+            continue;
+        }
+        final suggest = (if (n.dir == "") "" else n.dir + "/") + first + n.suffix;
+        if (every[suggest] != null) {
+            continue;
+        }
+        hits.append(Hit{ path = n.path, first = first, suggest = suggest, lang = n.lang });
+    }
+    return hits;
+}
+
+// findings reports each hit outside allow, and each allow entry naming no hit.
+export fun findings(hits: [Hit], allow: {str: str}) > [Finding] {
+    final found = mut [<Finding>];
+    final hit = mut {<str: bool>};
+    foreach (h in hits) {
+        hit[h.path] = true;
+        if (allow[h.path] != null) {
+            continue;
+        }
+        found.append(Finding{ path = h.path,
+            message = "no sibling {h.lang} file starts with \"{h.first}\", so the words after it tell this file apart from nothing",
+            fix = "Rename it to {h.suggest}, or add it to ALLOW in {THIS} with a reason." });
+    }
+    foreach (p in support\sorted(allow.keys())) {
+        if (hit[p] == null) {
+            found.append(Finding{ path = THIS,
+                message = "ALLOW names {p}, which is not a finding",
+                fix = "Delete the entry from {THIS}." });
+        }
+    }
+    return found;
+}
+
+// banned-words keeps the same test private.
+fun isGeneratedGo(src: str) > bool {
+    foreach (line in src.split("\n")) {
+        if (line.startsWith("package ")) {
+            return false;
+        }
+        if (line.startsWith("// Code generated ") and line.trim().endsWith("DO NOT EDIT.")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// groupKey names the files that share a directory, language and base name,
+// such as foo.go and foo_test.go.
+export fun groupKey(p: str) > str {
+    final n = parse(p);
+    if (n == null) {
+        return "";
+    }
+    return n!.dir + "\n" + n!.lang + "\n" + n!.base;
+}
+
+// typeIndex maps each group to the squashed type names its files declare.
+// A pair is a file path and a type name.
+export fun typeIndex(pairs: [[str]]) > {str: str} {
+    final index = mut {<str: str>};
+    foreach (pair in pairs) {
+        final key = groupKey(pair[0]);
+        if (key != "") {
+            index[key] = (index[key] ?? "") + " " + squash(pair[1]);
+        }
+    }
+    return index;
+}
+
+// Declared is the type index and the findings that keep it from being
+// trusted: a stale or missing symbol index, or a language that gave no type.
+export object Declared {
+    types: {str: str},
+    findings: [Finding],
+}
+
+fun indexRow(idx: magus\SymbolIndexStatus) > any {
+    return {"freshness": idx.freshness.value, "project": {"path": idx.project.path},
+        "language": idx.language, "detail": idx.detail, "changed": idx.changed,
+        "changed_count": idx.changedCount};
+}
+
+fun declaredTypes() > Declared !> any {
+    final data = magus\graph(languages: LANGUAGES).symbols();
+    final found = mut [<Finding>];
+    final indexed = mut {<str: bool>};
+    foreach (idx in data.indexes) {
+        if (LANGUAGES.indexOf(idx.language) == null) {
+            continue;
+        }
+        indexed[idx.language] = true;
+        foreach (f in support\staleness(indexRow(idx), judging: "file names").findings) {
+            found.append(f);
+        }
+    }
+    final pairs = mut [<[str]>];
+    final seen = mut {<str: bool>};
+    foreach (s in data.symbols) {
+        if (LANGUAGES.indexOf(s.language) == null or s.owner != "" or TYPE_KINDS.indexOf(s.kind) == null) {
+            continue;
+        }
+        final colon = s.source.indexOf(":");
+        pairs.append([if (colon == null) s.source else s.source.sub(0, len: colon!), s.name]);
+        seen[s.language] = true;
+    }
+    foreach (lang in LANGUAGES) {
+        if (indexed[lang] == null or seen[lang] == null) {
+            found.append(Finding{ path = ".",
+                message = "no {lang} type was indexed, so its file names cannot be judged: silence, not a pass",
+                fix = "Declare a {lang} symbol index and rebuild it with `magus graph build`." });
+        }
+    }
+    return Declared{ types = typeIndex(pairs), findings = found };
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final declared = declaredTypes();
+    if (declared.findings.len() > 0) {
+        return declared.findings;
+    }
+    return judged(files, allow: ALLOW, types: declared.types);
+}
+
+// judged is check over the types a test names.
+export fun judged(files: [Path], allow: {str: str}, types: {str: str}) > [Finding] !> any {
+    final skipped = mut [<str>];
+    foreach (g in SKIPPED) {
+        skipped.append(g);
+    }
+    final attrs = support\named(files, p: ".gitattributes");
+    if (attrs != null) {
+        foreach (g in support\attributeGlobs(support\read(attrs!))) {
+            skipped.append(g);
+        }
+    }
+    final paths = mut [<str>];
+    final byPath = mut {<str: Path>};
+    foreach (f in files) {
+        paths.append(f.value);
+        byPath[f.value] = f;
+    }
+    final kept = mut [<Hit>];
+    foreach (h in judge(paths, skipped: skipped, types: types)) {
+        if (h.lang == "go" and isGeneratedGo(support\read(byPath[h.path]!))) {
+            continue;
+        }
+        kept.append(h);
+    }
+    return findings(kept, allow: allow);
+}
+
+// hits pads files so each suffix ends names in three directories.
+fun hits(files: [str], suffixes: [str], declared: [[str]]) > [Hit] !> any {
+    final all = mut [<str>];
+    foreach (f in files) {
+        all.append(f);
+    }
+    foreach (w in suffixes) {
+        foreach (d in ["pad1", "pad2", "pad3"]) {
+            all.append("{d}/x_{w}.go");
+            all.append("{d}/x-{w}.ts");
+            all.append("{d}/x-{w}.buzz");
+        }
+    }
+    return judge(all, skipped: [<str>], types: typeIndex(declared));
+}
+
+test "a lone two-word file is reported with its first word as the suggestion" {
+    final got = hits(["types/agent/model_tier.go", "types/agent/enums.go"], suffixes: ["tier"], declared: [["types/agent/model_tier.go", "Model"]]);
+    assert\equal(got.len(), want: 1, message: "one hit");
+    assert\equal(got[0].path, want: "types/agent/model_tier.go", message: "the file");
+    assert\equal(got[0].suggest, want: "types/agent/model.go", message: "its first word");
+}
+
+test "a two-word file whose first word a sibling shares is not reported" {
+    final key = [["a/key_inputs.go", "Key"], ["b/key_value.go", "Key"], ["a/key_value.go", "Key"], ["a/key-value.buzz", "Key"]];
+    assert\equal(hits(["a/key_inputs.go", "a/key_value.go"], suffixes: ["inputs", "value"], declared: key).len(), want: 0, message: "two words alike");
+    assert\equal(hits(["a/key_inputs.go", "a/key.go"], suffixes: ["inputs"], declared: key).len(), want: 0, message: "one word alike");
+    assert\equal(hits(["a/key_inputs.go", "b/key_value.go", "a/x.go", "b/y.go"], suffixes: ["inputs", "value"], declared: key).len(), want: 2, message: "another directory");
+    assert\equal(hits(["a/key_inputs.go", "a/key-value.buzz", "a/x.go", "a/y.buzz"], suffixes: ["inputs", "value"], declared: key).len(), want: 2, message: "another language");
+    assert\equal(hits(["a/key_inputs.go", "a/key_inputs_test.go", "a/x.go"], suffixes: ["inputs"], declared: key).len(), want: 2, message: "a test is the same base, not a sibling");
+}
+
+test "a directory where most names are multi-word has that convention" {
+    final key = [["a/key_inputs.go", "Key"], ["a/last_entry.go", "Last"]];
+    assert\equal(hits(["a/key_inputs.go", "a/last_entry.go", "a/x.go"], suffixes: ["inputs", "entry"], declared: key).len(), want: 0, message: "two of three");
+    assert\equal(hits(["a/key_inputs.go", "a/x.go", "a/y.go"], suffixes: ["inputs"], declared: key).len(), want: 1, message: "one of three");
+    assert\equal(hits(["a/key_inputs.go", "a/last_entry.go", "a/x.ts", "a/y.ts"], suffixes: ["inputs", "entry"], declared: key).len(), want: 0, message: "a language is counted alone");
+}
+
+test "a name that echoes its directory is not reported" {
+    assert\equal(hits(["ci-outcome/ci-outcome.buzz", "ci-outcome/x.buzz"], suffixes: ["outcome"], declared: [["ci-outcome/ci-outcome.buzz", "Ci"]]).len(), want: 0, message: "the whole name");
+    assert\equal(hits(["readlog/read_log.go", "readlog/x.go"], suffixes: ["log"], declared: [["readlog/read_log.go", "Read"]]).len(), want: 0, message: "separators aside");
+    assert\equal(hits(["json/json_v2.go", "json/x.go"], suffixes: ["v2"], declared: [["json/json_v2.go", "Json"]]).len(), want: 0, message: "the first word");
+    assert\equal(hits(["json/other_v2.go", "json/x.go"], suffixes: ["v2"], declared: [["json/other_v2.go", "Other"]]).len(), want: 1, message: "another word");
+}
+
+test "a leading ordinal numbers a series and its title is not judged" {
+    final tour = ["tour/01-hello.buzz", "tour/13-custom-targets.buzz", "tour/x.buzz", "tour/y.buzz", "tour/z.buzz"];
+    assert\equal(hits(tour, suffixes: ["targets", "hello"], declared: [["tour/13-custom-targets.buzz", "Custom"], ["tour/01-hello.buzz", "Hello"]]).len(), want: 0, message: "ordinal first word");
+    assert\equal(hits(["tour/custom-targets.buzz", "tour/x.buzz", "tour/y.buzz"], suffixes: ["targets"], declared: [["tour/custom-targets.buzz", "Custom"]]).len(), want: 1, message: "no ordinal");
+}
+
+test "a first word that is a sibling's whole name is a variant of it" {
+    final reading = [["web/reading-dom.test.ts", "Reading"]];
+    assert\equal(hits(["web/reading-dom.test.ts", "web/reading.ts", "web/app.ts"], suffixes: ["dom"], declared: reading).len(), want: 0, message: "dom test beside its source");
+    assert\equal(hits(["web/reading-dom.test.ts", "web/app.ts", "web/main.ts"], suffixes: ["dom"], declared: reading).len(), want: 1, message: "no source");
+}
+
+test "hyphens and camelCase split alike, so a file and its test start with one word" {
+    final big = [["web/bigPicture.ts", "Big"], ["web/bigPicture-dom.test.ts", "Big"]];
+    assert\equal(hits(["web/bigPicture.ts", "web/bigPicture-dom.test.ts", "web/app.ts", "web/main.ts"], suffixes: ["picture", "dom"], declared: big).len(), want: 0, message: "same first word");
+    assert\equal(hits(["web/bigPicture.ts", "web/app.ts", "web/main.ts"], suffixes: ["picture"], declared: big)[0].suggest, want: "web/big.ts", message: "camelCase alone");
+}
+
+test "a suffix used in fewer than three directories is a meaning, not a qualifier" {
+    final key = [["a/key_inputs.go", "Key"]];
+    assert\equal(hits(["a/key_inputs.go", "a/x.go"], suffixes: ["inputs"], declared: key).len(), want: 1, message: "three directories");
+    assert\equal(judge(["a/key_inputs.go", "a/x.go", "pad1/x_inputs.go", "pad2/x_inputs.go"], skipped: [<str>], types: typeIndex(key)).len(), want: 1, message: "a and two more");
+    assert\equal(judge(["a/key_inputs.go", "a/x.go", "pad1/x_inputs.go"], skipped: [<str>], types: typeIndex(key)).len(), want: 0, message: "two directories");
+    assert\equal(judge(["a/key_inputs.go", "a/x.go"], skipped: [<str>], types: typeIndex(key)).len(), want: 0, message: "one directory");
+}
+
+test "the file must declare a type named by the first word" {
+    final files = ["a/key_inputs.go", "a/x.go"];
+    assert\equal(hits(files, suffixes: ["inputs"], declared: [["a/key_inputs.go", "KeyInputs"]]).len(), want: 1, message: "a type starting with key");
+    assert\equal(hits(files, suffixes: ["inputs"], declared: [["a/key_inputs_test.go", "Key"]]).len(), want: 1, message: "a type in the test file counts");
+    assert\equal(hits(files, suffixes: ["inputs"], declared: [["a/key_inputs.go", "Other"]]).len(), want: 0, message: "a type named otherwise");
+    assert\equal(hits(files, suffixes: ["inputs"], declared: [<[str]>]).len(), want: 0, message: "no type at all");
+    assert\equal(hits(files, suffixes: ["inputs"], declared: [["a/x.go", "Key"]]).len(), want: 0, message: "a type in another file");
+}
+
+test "a Go _test and build suffixes are stripped and kept in the suggestion" {
+    final key = [["a/key_inputs.go", "Key"]];
+    assert\equal(hits(["a/key_inputs_test.go", "a/other.go"], suffixes: ["inputs"], declared: key)[0].suggest, want: "a/key_test.go", message: "_test");
+    assert\equal(hits(["a/key_inputs_linux.go", "a/other.go"], suffixes: ["inputs"], declared: key)[0].suggest, want: "a/key_linux.go", message: "_linux");
+    assert\equal(hits(["a/key_inputs_linux_amd64_test.go", "a/other.go"], suffixes: ["inputs"], declared: key)[0].suggest,
+        want: "a/key_linux_amd64_test.go", message: "os, arch and test");
+    assert\equal(hits(["a/enums_linux.go", "a/enums_darwin.go", "a/other.go"], suffixes: ["linux"], declared: [["a/enums.go", "Enums"]]).len(), want: 0, message: "one word once stripped");
+    assert\equal(hits(["a/key_linux.go", "a/key.go"], suffixes: ["linux"], declared: key).len(), want: 0, message: "a suffix is not a word");
+}
+
+test "a TypeScript .test.ts is stripped, and camelCase splits when there is no hyphen" {
+    assert\equal(hits(["web/event-log.test.ts", "web/app.ts"], suffixes: ["log"], declared: [["web/event-log.ts", "Event"]])[0].suggest, want: "web/event.test.ts", message: ".test");
+    assert\equal(hits(["web/app.test.ts", "web/app.ts"], suffixes: ["test"], declared: [["web/app.ts", "App"]]).len(), want: 0, message: "one word once stripped");
+    assert\equal(hits(["web/api-types.d.ts", "web/app.ts"], suffixes: ["types"], declared: [["web/api-types.d.ts", "Api"]])[0].suggest, want: "web/api.d.ts", message: ".d");
+    assert\equal(hits(["web/stream-view.live.test.ts", "web/app.ts"], suffixes: ["view"], declared: [["web/stream-view.ts", "Stream"]])[0].suggest, want: "web/stream.live.test.ts", message: ".live.test");
+    assert\equal(hits(["web/eventLog.ts", "web/app.ts"], suffixes: ["log"], declared: [["web/eventLog.ts", "Event"]])[0].suggest, want: "web/event.ts", message: "camelCase");
+    assert\equal(hits(["web/eventLog.ts", "web/event.test.ts"], suffixes: ["log"], declared: [["web/eventLog.ts", "Event"]]).len(), want: 0, message: "a test sibling shares the word");
+}
+
+test "a Buzz file splits on hyphens and drops _test" {
+    final no = [["lint/no-throw.buzz", "NoThrowRule"]];
+    assert\equal(hits(["lint/no-throw.buzz", "lint/run.buzz"], suffixes: ["throw"], declared: no)[0].suggest, want: "lint/no.buzz", message: "hyphen");
+    assert\equal(hits(["lint/no-throw_test.buzz", "lint/run.buzz"], suffixes: ["throw"], declared: no)[0].suggest, want: "lint/no_test.buzz", message: "_test");
+    assert\equal(hits(["lint/no-throw.buzz", "lint/no-hand.buzz"], suffixes: ["throw", "hand"], declared: no).len(), want: 0, message: "shared first word");
+}
+
+test "a would-be collision is not reported" {
+    final all = ["a/key_inputs.go", "a/key.go", "pad1/x_inputs.go", "pad2/x_inputs.go", "pad3/x_inputs.go"];
+    assert\equal(judge(all, skipped: ["a/key.go"], types: typeIndex([["a/key_inputs.go", "Key"]])).len(), want: 0, message: "key.go exists, skipped or not");
+}
+
+test "a generated file and testdata are skipped" {
+    final pads = ["pad1/x_inputs.go", "pad2/x_inputs.go", "pad3/x_inputs.go"];
+    final key = typeIndex([["a/gen/key_inputs.go", "Key"], ["a/testdata/key_inputs.go", "Key"]]);
+    assert\equal(judge(["a/gen/key_inputs.go", "a/other.go"] + pads, skipped: SKIPPED, types: key).len(), want: 0, message: "gen dir");
+    assert\equal(judge(["a/testdata/key_inputs.go", "a/other.go"] + pads, skipped: SKIPPED, types: key).len(), want: 0, message: "testdata");
+    final tree = support\fixture({".gitattributes": "a/key_inputs.go linguist-generated\n", "a/key_inputs.go": "package a\n",
+        "a/other.go": "package a\n", "b/value_inputs.go": "// Code generated by x. DO NOT EDIT.\npackage b\n", "b/other.go": "package b\n",
+        "c/last_inputs.go": "package c\n", "c/other.go": "package c\n", "pad1/x_inputs.go": "package p\n", "pad2/x_inputs.go": "package p\n",
+        "pad3/x_inputs.go": "package p\n"});
+    final types = typeIndex([["a/key_inputs.go", "Key"], ["b/value_inputs.go", "Value"], ["c/last_inputs.go", "Last"]]);
+    final got = judged(tree, allow: {<str: str>}, types: types);
+    assert\equal(got.len(), want: 1, message: ".gitattributes and the header skip two, the third is reported");
+    assert\equal(got[0].path, want: "c/last_inputs.go", message: "the file kept");
+}
+
+test "an allowed file is kept, and an allow entry that names no hit is a finding" {
+    final got = hits(["a/key_inputs.go", "a/other.go"], suffixes: ["inputs"], declared: [["a/key_inputs.go", "Key"]]);
+    assert\equal(findings(got, allow: {<str: str>}).len(), want: 1, message: "unallowed");
+    assert\equal(findings(got, allow: {"a/key_inputs.go": "the name is the protocol's"}).len(), want: 0, message: "allowed");
+    final stale = findings(got, allow: {"a/key_inputs.go": "kept", "a/gone.go": "old"});
+    assert\equal(support\messages(stale), want: ["ALLOW names a/gone.go, which is not a finding"], message: "stale entry");
+}
+
+test "typeIndex groups a file with its test and skips what is not a source" {
+    final index = typeIndex([["a/key.go", "Key"], ["a/key_test.go", "KeySuite"], ["a/readme.md", "Doc"]]);
+    assert\equal(index.len(), want: 1, message: "one group");
+    assert\equal(index["a\ngo\nkey"], want: " key keysuite", message: "squashed names joined");
+}
