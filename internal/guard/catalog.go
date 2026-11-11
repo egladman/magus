@@ -60,10 +60,10 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocInterpreterScript},
 	{doc: ruleDocConflictRewrite},
 	{doc: ruleDocConflictCommit},
-	{doc: ruleDocSpawnUnbriefed},
-	{doc: ruleDocBuzzUnbriefed},
+	{doc: ruleDocSpawnBeforeSkill},
+	{doc: ruleDocBuzzBeforeSkill},
 	{doc: ruleDocAmbiguousCiWord},
-	{doc: ruleDocArchitectureUnbriefed},
+	{doc: ruleDocArchitectureBeforeSkill},
 	{doc: ruleDocPushUnverified},
 	{doc: ruleDocHumanOnly},
 	{doc: ruleDocGrantIsAPersons},
@@ -94,7 +94,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocVcsOffSwitch},
 	{doc: ruleDocUnknownEnv},
 	{doc: ruleDocUnreadCommand},
-	{doc: ruleDocBriefCommand},
+	{doc: ruleDocSpawnCommand},
 	{doc: ruleDocFocusRead},
 	{doc: ruleDocHookWiringWrite},
 	{doc: ruleDocLeaseCheckout},
@@ -117,7 +117,7 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocReadPaging},
 	{doc: ruleDocHeredocWrite},
 	{doc: ruleDocHooksOff},
-	{doc: ruleDocBriefPlainCommands},
+	{doc: ruleDocSpawnPlainCommands},
 	{doc: ruleDocUnjudgedTool},
 	{doc: ruleDocMonitorDuplicate},
 	{doc: ruleDocMonitorPile},
@@ -337,7 +337,7 @@ var ruleDocConflictRewrite = types.RuleDoc{
 		"A destination under a scratch path, a new file, and a program that only reads are untouched. Your editor tool reads the file first and reports what it changed; where the workspace carries a script that resolves hunks, the verdict names it.",
 }
 
-var ruleDocSpawnUnbriefed = types.RuleDoc{
+var ruleDocSpawnBeforeSkill = types.RuleDoc{
 	Name:    string(denySpawnUnbriefed),
 	Catches: "a subagent spawned before the multi-agent skill loaded",
 	Why: "Four decisions a spawn cannot be corrected for later are made before the child starts: which worktree it is cut from, which lease grades its writes, which model it runs, and that git stays with the orchestrator. The magus-multi-agent skill carries all four. " +
@@ -345,7 +345,7 @@ var ruleDocSpawnUnbriefed = types.RuleDoc{
 		"It grades the session, never the prompt: it asks whether a marker file exists, so a handed-over prompt that merely mentions a denied command is untouched. Load Skill(magus-multi-agent) once and every later spawn in the session passes.",
 }
 
-var ruleDocBuzzUnbriefed = types.RuleDoc{
+var ruleDocBuzzBeforeSkill = types.RuleDoc{
 	Name:    string(denyBuzzUnbriefed),
 	Catches: "the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill",
 	Why: "Buzz is in no model's training data, so what gets written is Go or TypeScript with the serial numbers filed off, and enough of it parses to reach review. " +
@@ -353,7 +353,7 @@ var ruleDocBuzzUnbriefed = types.RuleDoc{
 		"It grades the session, not the file: one Skill(magus-buzz-lang) and every later Buzz write passes. Reads are never gated, since reading is how the language gets learned, so `magus buzz <file>` and `magus buzz -t <file>` run something that already exists and go untouched.",
 }
 
-var ruleDocArchitectureUnbriefed = types.RuleDoc{
+var ruleDocArchitectureBeforeSkill = types.RuleDoc{
 	Name:    string(denyArchitectureUnbriefed),
 	Catches: "a write after a structure question, or into a new directory, before the architecture skill",
 	Why: "A structure question is answered from the workspace's own edges: what imports what, where a cycle closes, which layer a package sits in, how far a change reaches. An agent reading files one at a time answers it from the files it happened to open, and proposes a boundary nobody needed. The magus-architecture-review skill is how the graph gets asked. " +
@@ -661,11 +661,11 @@ var ruleDocUnreadCommand = types.RuleDoc{
 		"A wrapper's program (`env \\git`), a `sh -c` script and an `eval` are read the same way.",
 }
 
-var ruleDocBriefCommand = types.RuleDoc{
+var ruleDocSpawnCommand = types.RuleDoc{
 	Name:    string(denyRuleBriefCommand),
-	Catches: "a brief or stopping reply that hands over a command the guard denies",
-	Why: "A worker runs the commands in its brief as written, so a denied one is refused in every worker the brief reaches, or teaches each of them a way around the refusal. " +
-		"Only what the brief presents as a command is graded, a fenced shell block or an inline code span, with the same rules a shell line gets. A line naming a command to forbid it (never, do not, denied, instead of) is passed over, and a `<placeholder>` reads as a word rather than a redirect. " +
+	Catches: "a spawn prompt or stopping reply that hands over a command the guard denies",
+	Why: "A worker runs the commands in its spawn prompt as written, so a denied one is refused in every worker the prompt reaches, or teaches each of them a way around the refusal. " +
+		"Only what the prompt presents as a command is graded, a fenced shell block or an inline code span, with the same rules a shell line gets. A line naming a command to forbid it (never, do not, denied, instead of) is passed over, and a `<placeholder>` reads as a word rather than a redirect. " +
 		"A command the person runs reaches no hook, so a reply's fenced shell blocks are judged at stop as if the agent ran them, and the first denied one refuses the stop once. Its inline spans are not: a reply names commands in prose.",
 }
 
@@ -816,7 +816,7 @@ var ruleDocWorkerCheckOnly = types.RuleDoc{
 		"A spell op run on its own under the rw charm (`markdown::dprint:rw`, or a target no magusfile it selects exports) is refused even when the check composes it: an op declares no writes, so it would always pass and what it rewrites shows only after the write, as MGS3001. The refusal names the magusfile target that calls the op, whose declarations are judged, or the run without the charm when none does. An op whose spell declares no rw charm runs unpatched under default_charms [rw] and passes. " +
 		"A run regenerating an output another declared or running lease holds is refused, so the two never overwrite each other's copy; a lease that filed its result holds no output. The refusal names `magus job wait` for a holder below the caller, and otherwise the root of the holder's job tree, for which it files one attention row. " +
 		"`magus affected` is never the check, since it takes its projects from the diff. Rebuilding magus's own binary (`go-build .`, the target whose relinks policy names it) is refused too: there is one binary per base, the integrator builds it and a copy is placed in the worker's checkout. The one exception is that run, with no charm and over the root alone, in a checkout the caller's job owns while a workspace command rule is loaded: this rule stands down and that rule answers. A rule that raises answers nothing, so such a build passes with the failure noted. An unbound caller, the checkout's integrator and a row declaring no check are untouched. " +
-		"The same rule grades a spawn brief naming a live row (by `magus.lease=`, `job exec` or its JOB ID line): a brief telling that worker to run another target is refused under brief-command, quoting the line, before any worker exists. " +
+		"The same rule grades a spawn prompt naming a live row (by `magus.lease=`, `job exec` or its JOB ID line): a prompt telling that worker to run another target is refused under spawn-command, quoting the line, before any worker exists. " +
 		"A run it lets through is still refused unless it carries `--budget-wait 0`, since a claim otherwise queues for the budget's 30m default and a worker never waits: the refusal names the check with the flag. " +
 		"A continuation to a worker already bound to a live row is not graded against the row: that worker's own runs are.",
 }
@@ -904,12 +904,12 @@ var ruleDocHooksOff = types.RuleDoc{
 		"It cannot tell a repository with no hooks installed, where the flag skips nothing, from one where it skips them all.",
 }
 
-var ruleDocBriefPlainCommands = types.RuleDoc{
+var ruleDocSpawnPlainCommands = types.RuleDoc{
 	Name:    string(denyRuleBriefPlainCommands),
-	Catches: "a brief for an isolated worker that teaches a substitution, a loop or an exec",
+	Catches: "a spawn prompt for an isolated worker that teaches a substitution, a loop or an exec",
 	Why: "A host that runs a worker in a worktree of its own refuses each command it cannot prove stays inside that worktree, and a substitution, a loop or an exec is one it cannot. " +
-		"A worker writes its commands the way its brief shows them, so a spawn into its own worktree must not show a command of those shapes. " +
-		"A brief need not say how to write commands: the host's refusal teaches that. A spawn into a shared checkout passes.",
+		"A worker writes its commands the way its spawn prompt shows them, so a spawn into its own worktree must not show a command of those shapes. " +
+		"A prompt need not say how to write commands: the host's refusal teaches that. A spawn into a shared checkout passes.",
 }
 
 var ruleDocUnjudgedTool = types.RuleDoc{

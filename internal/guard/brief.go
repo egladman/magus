@@ -94,7 +94,7 @@ A worker runs a brief's commands as written, so every worker it reaches is refus
 }
 
 // denyRuleBriefPlainCommands is a brief for an isolated worker that teaches a compound command.
-const denyRuleBriefPlainCommands denyRuleName = "brief-plain-commands"
+const denyRuleBriefPlainCommands denyRuleName = "spawn-plain-commands"
 
 // judgeBriefPlainCommands refuses a brief for a worker in its own worktree that teaches a
 // compound command. A host that isolates a worker refuses the commands it cannot prove stay

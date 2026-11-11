@@ -257,7 +257,7 @@ cd $WORK
 
 # Inside a fixture workspace, because the rule stands down without a cache dir to key its
 # per-session marker on: that is the same fail-open a host that sees no load gets, and a case
-# run at $WORK would pass both ways and pin nothing. The workspace sets spawn-unbriefed to
+# run at $WORK would pass both ways and pin nothing. The workspace sets spawn-before-skill to
 # deny, since it only advises by default.
 cd push-ws
 
@@ -307,7 +307,7 @@ cd $WORK
 # An event that names no tool and carries text at `prompt` (Claude Code's envelope key) is
 # the person's message, not a call. The glue hands it to `magus shell --message` and says
 # NOTHING: a message hook's stdout reaches the model, and a recorded topic is not news to it. What the record does
-# shows on the next call, which architecture-unbriefed advises until the agent loads the
+# shows on the next call, which architecture-before-skill advises until the agent loads the
 # architecture skill. A read is never refused, even where the workspace sets the rule to
 # deny; a write waits on the load.
 
@@ -1473,7 +1473,7 @@ magus\project({
         },
     },
 });
-magus\guard.builtins({"spawn-unbriefed": "deny"});
+magus\guard.builtins({"spawn-before-skill": "deny"});
 
 export fun bench(ctx: magus\Context, args: [str]) > void {}
 -- arch-ws/magusfile.buzz --
@@ -1483,7 +1483,7 @@ magus\project({
     "sources": ["*.buzz"],
     "no_language": "fixture workspace: only the guard's view of a message and the call after it matters here",
 });
-magus\guard.builtins({"architecture-unbriefed": "deny"});
+magus\guard.builtins({"architecture-before-skill": "deny"});
 -- prompt-architecture.json --
 {"session_id": "arch-1", "hook_event_name": "UserPromptSubmit", "prompt": "does this respect our current architecture patterns?"}
 -- prompt-ordinary.json --

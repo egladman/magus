@@ -38,7 +38,8 @@ func adviseNewSourceDir(root, path string) advice {
 }
 
 // newSourceDir is the workspace-relative directory a write to path would create, or ""
-// when it creates none. architecture-unbriefed gates the same act this advises on.
+// when it creates none. architecture-before-skill gates the same act
+// this advises on.
 func newSourceDir(root, path string) string {
 	dir, ok := workspaceRelativeDir(root, path)
 	if !ok {

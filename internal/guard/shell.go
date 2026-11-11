@@ -162,11 +162,11 @@ const (
 	// shell parser. They live in this block because denyRuleName is the one namespace every
 	// verdict's Rule field is drawn from, and the catalog test reads this block to find what
 	// must be documented. See internal/guard/spawn.go and internal/guard/buzz.go.
-	denySpawnUnbriefed   denyRuleName = "spawn-unbriefed"
-	denyBuzzUnbriefed    denyRuleName = "buzz-unbriefed"
-	denyRuleBriefCommand denyRuleName = "brief-command"
+	denySpawnUnbriefed   denyRuleName = "spawn-before-skill"
+	denyBuzzUnbriefed    denyRuleName = "buzz-before-skill"
+	denyRuleBriefCommand denyRuleName = "spawn-command"
 	// Any graded call, shell line or write; see internal/guard/architecture.go.
-	denyArchitectureUnbriefed denyRuleName = "architecture-unbriefed"
+	denyArchitectureUnbriefed denyRuleName = "architecture-before-skill"
 	// A graded call that picks magus `ci` or the host's CI/CD while the person's
 	// bare word "ci" is still unresolved; see internal/guard/ambiguous_ci_word.go.
 	denyRuleAmbiguousCIWord denyRuleName = "ambiguous-ci-word"

@@ -293,39 +293,39 @@ sets any of them to `advise`, which serves the same command once a session and
 lets the call run, or to `off`, with
 [`magus\guard.builtins`](#setting-a-built-in-rule).
 
-| rule                                                                           | denies                                                                 |
-| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| [`architecture-unbriefed`](../../../reference/rules/architecture-unbriefed.md) | an agent acting on structure before it read the architecture skill     |
-| [`brief-command`](../../../reference/rules/brief-command.md)                   | a brief or stopping reply that hands over a command the guard refuses  |
-| [`brief-plain-commands`](../../../reference/rules/brief-plain-commands.md)     | a brief for an isolated worker that shows a substitution, loop or exec |
-| [`busy-wait`](../../../reference/rules/busy-wait.md)                           | a while or until loop that sleeps; a for loop that sleeps until break  |
-| [`buzz-unbriefed`](../../../reference/rules/buzz-unbriefed.md)                 | the first Buzz a session authors, before it read the Buzz skill        |
-| [`chained-run`](../../../reference/rules/chained-run.md)                       | magus runs sequenced with `&&` or `;`                                  |
-| [`exit-status-echo`](../../../reference/rules/exit-status-echo.md)             | a line ending by printing an exit status                               |
-| [`filter-without-input`](../../../reference/rules/filter-without-input.md)     | a filter with no file, pipe or redirect                                |
-| [`grep-reader`](../../../reference/rules/grep-reader.md)                       | a definition lookup with a context flag                                |
-| [`interpreter-rewrite`](../../../reference/rules/interpreter-rewrite.md)       | an inline interpreter rewriting a tracked file                         |
-| [`magus-timeout`](../../../reference/rules/magus-timeout.md)                   | magus wrapped in `timeout`                                             |
-| [`monitor-duplicate`](../../../reference/rules/monitor-duplicate.md)           | a second live watcher on one subject, or one on your own work          |
-| [`monitor-pile`](../../../reference/rules/monitor-pile.md)                     | a third live waiter of one agent (refused at the fifth when raised)    |
-| [`output-pipe`](../../../reference/rules/output-pipe.md)                       | magus output piped into a filter                                       |
-| [`output-redirect`](../../../reference/rules/output-redirect.md)               | magus output sent to a file or discarded                               |
-| [`process-poll`](../../../reference/rules/process-poll.md)                     | a process table inspected to wait on magus work                        |
-| [`raw-tool`](../../../reference/rules/raw-tool.md)                             | a toolchain command a spell already wraps                              |
-| [`read-navigation`](../../../reference/rules/read-navigation.md)               | a whole read of a long Go, Buzz or Markdown file                       |
-| [`read-paging`](../../../reference/rules/read-paging.md)                       | the third window of a mapped file, paged through by one caller         |
-| [`interpreter-rewrite`](../../../reference/rules/interpreter-rewrite.md)       | a scripted substitute-and-write                                        |
-| [`search-translation`](../../../reference/rules/search-translation.md)         | a text search a graph query provably answers                           |
-| [`sed-in-place`](../../../reference/rules/sed-in-place.md)                     | `sed -i`                                                               |
-| [`sibling-checkout`](../../../reference/rules/sibling-checkout.md)             | a magus command relocated into another checkout                        |
-| [`sleep-poll`](../../../reference/rules/sleep-poll.md)                         | a sleep before a status read, or a backgrounded call that only sleeps  |
-| [`spawn-unbriefed`](../../../reference/rules/spawn-unbriefed.md)               | a subagent spawned before the multi-agent skill loaded                 |
-| [`spawn-waiter`](../../../reference/rules/spawn-waiter.md)                     | a spawn whose child exists to wait on other work                       |
-| [`stage-all`](../../../reference/rules/stage-all.md)                           | a whole-tree `git add`                                                 |
-| [`symbol-search`](../../../reference/rules/symbol-search.md)                   | a text search for a symbol the graph answers                           |
-| [`throwaway-copy`](../../../reference/rules/throwaway-copy.md)                 | a run inside a temp or scratchpad copy                                 |
-| [`unjudged-tool`](../../../reference/rules/unjudged-tool.md)                   | a tool call whose input no rule reads, from a tool the guard lacks     |
-| [`unknown-env`](../../../reference/rules/unknown-env.md)                       | a retired or misspelled `MAGUS_*` variable                             |
+| rule                                                                                 | denies                                                                    |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| [`architecture-before-skill`](../../../reference/rules/architecture-before-skill.md) | an agent acting on structure before it read the architecture skill        |
+| [`busy-wait`](../../../reference/rules/busy-wait.md)                                 | a while or until loop that sleeps; a for loop that sleeps until break     |
+| [`buzz-before-skill`](../../../reference/rules/buzz-before-skill.md)                 | the first Buzz a session authors, before it read the Buzz skill           |
+| [`chained-run`](../../../reference/rules/chained-run.md)                             | magus runs sequenced with `&&` or `;`                                     |
+| [`exit-status-echo`](../../../reference/rules/exit-status-echo.md)                   | a line ending by printing an exit status                                  |
+| [`filter-without-input`](../../../reference/rules/filter-without-input.md)           | a filter with no file, pipe or redirect                                   |
+| [`grep-reader`](../../../reference/rules/grep-reader.md)                             | a definition lookup with a context flag                                   |
+| [`interpreter-rewrite`](../../../reference/rules/interpreter-rewrite.md)             | an inline interpreter rewriting a tracked file                            |
+| [`interpreter-rewrite`](../../../reference/rules/interpreter-rewrite.md)             | a scripted substitute-and-write                                           |
+| [`magus-timeout`](../../../reference/rules/magus-timeout.md)                         | magus wrapped in `timeout`                                                |
+| [`monitor-duplicate`](../../../reference/rules/monitor-duplicate.md)                 | a second live watcher on one subject, or one on your own work             |
+| [`monitor-pile`](../../../reference/rules/monitor-pile.md)                           | a third live waiter of one agent (refused at the fifth when raised)       |
+| [`output-pipe`](../../../reference/rules/output-pipe.md)                             | magus output piped into a filter                                          |
+| [`output-redirect`](../../../reference/rules/output-redirect.md)                     | magus output sent to a file or discarded                                  |
+| [`process-poll`](../../../reference/rules/process-poll.md)                           | a process table inspected to wait on magus work                           |
+| [`raw-tool`](../../../reference/rules/raw-tool.md)                                   | a toolchain command a spell already wraps                                 |
+| [`read-navigation`](../../../reference/rules/read-navigation.md)                     | a whole read of a long Go, Buzz or Markdown file                          |
+| [`read-paging`](../../../reference/rules/read-paging.md)                             | the third window of a mapped file, paged through by one caller            |
+| [`search-translation`](../../../reference/rules/search-translation.md)               | a text search a graph query provably answers                              |
+| [`sed-in-place`](../../../reference/rules/sed-in-place.md)                           | `sed -i`                                                                  |
+| [`sibling-checkout`](../../../reference/rules/sibling-checkout.md)                   | a magus command relocated into another checkout                           |
+| [`sleep-poll`](../../../reference/rules/sleep-poll.md)                               | a sleep before a status read, or a backgrounded call that only sleeps     |
+| [`spawn-before-skill`](../../../reference/rules/spawn-before-skill.md)               | a subagent spawned before the multi-agent skill loaded                    |
+| [`spawn-command`](../../../reference/rules/spawn-command.md)                         | a spawn prompt or stopping reply handing over a command the guard refuses |
+| [`spawn-plain-commands`](../../../reference/rules/spawn-plain-commands.md)           | a prompt for an isolated worker that shows a substitution, loop or exec   |
+| [`spawn-waiter`](../../../reference/rules/spawn-waiter.md)                           | a spawn whose child exists to wait on other work                          |
+| [`stage-all`](../../../reference/rules/stage-all.md)                                 | a whole-tree `git add`                                                    |
+| [`symbol-search`](../../../reference/rules/symbol-search.md)                         | a text search for a symbol the graph answers                              |
+| [`throwaway-copy`](../../../reference/rules/throwaway-copy.md)                       | a run inside a temp or scratchpad copy                                    |
+| [`unjudged-tool`](../../../reference/rules/unjudged-tool.md)                         | a tool call whose input no rule reads, from a tool the guard lacks        |
+| [`unknown-env`](../../../reference/rules/unknown-env.md)                             | a retired or misspelled `MAGUS_*` variable                                |
 
 The notices, such as `split-run` and `leased-path`, are in
 [What magus explains](#what-magus-explains), beside `capture-filter` and
@@ -425,10 +425,10 @@ matches; a workspace that set `advise` gets the same served command as advice.
   distinct `sed -n` window of one Go, Buzz or Markdown file by one caller,
   counting a host read tool's offset and limit, with the file's map. A window
   inside one declaration or heading is a targeted read and never counts.
-- **A brief for a worker in its own worktree is refused** when it shows a
-  command with a `$()`, a loop or an exec (`brief-plain-commands`). A host that
+- **A spawn prompt for a worker in its own worktree is refused** when it shows a
+  command with a `$()`, a loop or an exec (`spawn-plain-commands`). A host that
   isolates the worker refuses each command it cannot prove stays in the
-  worktree, and a worker copies the commands its brief shows.
+  worktree, and a worker copies the commands its prompt shows.
 
 ## Setting a built-in rule
 
