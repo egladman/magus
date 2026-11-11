@@ -4,43 +4,51 @@ import "magus";
 import "magus/figure";
 
 export fun agentIntegrationFigure() > figure\Figure !> any {
-    final skills = magus\graph().dir("internal/agent");
+    final install = magus\graph().dir("internal/agent");
     final guard = magus\graph().dir("internal/guard");
+    final jobs = magus\graph().dir("internal/job");
     final hint = magus\graph().dir("internal/hint");
     final tools = magus\graph().dir("internal/handler/mcp");
     final nested: [magus\Dir] = magus\graph().dirs("internal/handler/mcp/**");
     final mcp = nested + [tools];
-    final harness = figure\external("Harness spells", sub: "hook entries per host", look: figure\Look.plain);
-    final host = figure\external("Agent host", sub: "Claude Code, Codex, Cursor", tag: "client");
+    final spells = figure\external("Harness spells", sub: "spells/harness: a hook entry per host", look: figure\Look.plain);
+    final skills = figure\external("Skills", sub: "embedded, stamped, AGENTS.md", look: figure\Look.plain);
+    final host = figure\external("Agent host", sub: "Claude Code, Codex, Cursor, OpenCode", tag: "client");
     return figure\of("agent-integration",
             title: "What an agent host gets, and the gate every call crosses",
             eyebrow: "agents",
-            desc: "magus agent install writes the skills and the AGENTS.md block, and magus "
-                + "describe harness prints the hook entries a person merges into the host's "
+            desc: "magus agent install writes the skills and the AGENTS.md block, and the harness "
+                + "spell for the host prints the hook entry a person merges into the host's "
                 + "config. From then on the host runs the guard's PreToolUse hook before every "
                 + "shell command, file edit and magus MCP call, and only an allowed call runs. "
-                + "Skills, guard verdicts and MCP replies all name commands through internal/hint, "
-                + "so a renamed command cannot leave one of them pointing at nothing.")
-        .box(skills, label: "Skills catalog", sub: "embedded skills, AGENTS.md")
-        .actor(harness)
+                + "The guard reads the job store for the lease the call acts as. The harness sits "
+                + "in the same Go module as the task runner: the guard, the job store and the MCP "
+                + "tools import the graph the targets declare, not a layer above it. Skills, guard "
+                + "verdicts and MCP replies all name commands through internal/hint, so a renamed "
+                + "command cannot leave one of them pointing at nothing.")
+        .box(install, label: "Agent install", sub: "writes skills, AGENTS.md")
+        .actor(skills)
+        .actor(spells)
         .actor(host)
         .box(guard, label: "Guard", sub: "deny, advise, ask", tag: "gate", focal: true)
+        .box(jobs, label: "Job store", sub: "the lease a call acts as", look: figure\Look.store)
         .group(mcp, label: "MCP tools", sub: "./magus mcp or /mcp")
         // Last: skills, guard denials and MCP replies all render through it.
         .box(hint, label: "Hints", sub: "commands, next fields")
         .edgesFromGraph()
-        .hideEdges([guard], dst: [skills],
-            why: "the guard names skills in its denials; the skills reach the host by install, drawn from the catalog")
-        .markEdge(skills, dst: hint, label: "command names")
+        .hideEdges([install], dst: [hint], why: "install writes the skills, which name commands; drawn from the skills")
         .markEdge(guard, dst: hint, label: "denial hints")
         .markEdge(tools, dst: hint, label: "next fields")
-        .flowOut(skills, dst: host, label: "agent install")
-        .flowAcross(harness, dst: host, label: "hooks to merge")
+        .markEdge(guard, dst: jobs, label: "lease")
+        .flowOut(install, dst: skills, label: "agent install")
+        .flowAcross(spells, dst: host, label: "hooks to merge")
+        .flowAcross(skills, dst: host, label: "read by")
         .flowIn(host, dst: guard, label: "every call", stroke: figure\Stroke.focal)
         .flowIn(host, dst: tools, label: "if allowed")
-        .zone("installed before a session", dirs: [skills], actors: [harness])
-        .zone("on every call", dirs: mcp + [guard, hint])
+        .zone("installed before a session", dirs: [install], actors: [spells, skills])
+        .zone("on every call", dirs: mcp + [guard, jobs, hint])
         .legend(figure\Look.focal, label: "the gate")
+        .legend(figure\Look.store, label: "the declared leases")
         .legend(figure\Look.external, label: "outside magus")
-        .scope(mcp + [skills, hint]);
+        .scope(mcp + [install, guard, jobs, hint]);
 }

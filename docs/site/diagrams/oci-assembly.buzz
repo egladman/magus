@@ -1,27 +1,37 @@
 namespace ociAssembly;
 
+import "magus";
 import "magus/figure";
 
 export fun ociAssemblyFigure() > figure\Figure !> any {
+    final host = magus\graph().dir("std");
+    final image = magus\graph().dir("libs/image");
+    final oci = magus\graph().dir("libs/oci");
     final files = figure\external("Built files", look: figure\Look.input);
     final base = figure\external("Pinned base", sub: "optional, by digest", look: figure\Look.optional);
-    final write = figure\external("image.write", look: figure\Look.focal);
-    final layouts = figure\external("Platform layouts", sub: "one per platform", look: figure\Look.plain);
-    final index = figure\external("image.index", look: figure\Look.plain);
-    final publish = figure\external("image.publish", look: figure\Look.plain);
     final registry = figure\external("Registry", look: figure\Look.store);
 
     return figure\of("oci-assembly",
-            title: "Proposed OCI assembly flow",
-            eyebrow: "proposed",
-            desc: "Built files and an optional digest-pinned base feed image.write, which stages "
-                + "one layout per platform. image.index combines the layouts, then image.publish "
-                + "sends the result to a registry. These API calls remain proposed.")
-        .flowAcross(files, dst: write)
-        .flowAcross(base, dst: write)
-        .flowAcross(write, dst: layouts)
-        .flowAcross(layouts, dst: index)
-        .flowAcross(index, dst: publish)
-        .flowAcross(publish, dst: registry)
-        .unscoped(why: "a proposed API process, not a package dependency graph");
+            title: "OCI assembly: files in, a layout out, a registry after",
+            eyebrow: "images",
+            desc: "Built files and an optional digest-pinned base reach libs/image through the "
+                + "image host module. libs/image assembles each layer, stages one layout per "
+                + "platform, combines the layouts into an index and attaches referrers, cloning "
+                + "files copy-on-write where the filesystem has it. libs/oci is the registry "
+                + "client: it resolves the base by digest and publishes the result.")
+        .actor(files)
+        .actor(base)
+        .box(host, label: "image module", sub: "write, index, publish")
+        .box(image, label: "Layout assembly", sub: "layers, platforms, index", focal: true)
+        .box(oci, label: "Registry client", sub: "resolve, push, referrers")
+        .actor(registry)
+        .edgesFromGraph()
+        .flowIn(files, dst: host)
+        .flowIn(base, dst: oci, label: "by digest")
+        .flowOut(oci, dst: registry, label: "publish")
+        .legend(figure\Look.focal, label: "where layers are built")
+        .legend(figure\Look.input, label: "what magus built")
+        .legend(figure\Look.optional, label: "optional")
+        .legend(figure\Look.store, label: "outside magus")
+        .scope([image, oci]);
 }

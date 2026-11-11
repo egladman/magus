@@ -2,17 +2,17 @@ namespace volatility;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/buzz-stages" as _;
-import "site/diagrams/packages" as _;
+import "site/diagrams/buzz-stages" as buzzStages;
+import "site/diagrams/packages" as packages;
 
 export fun volatilityFigure() > figure\Figure !> any {
     final decide = magus\graph().dir("internal/ci/volatility");
     final fail = figure\external("Target fails", look: figure\Look.plain);
     final report = figure\external("Report failure", look: figure\Look.plain);
     final shouldRetry = "symbol:gomod github.com/egladman/magus `github.com/egladman/magus/internal/ci/volatility`/shouldRetry().";
-    final thin = codeStage(decide, symbol: shouldRetry, name: "enough history?", look: figure\Look.decision);
-    final touched = codeStage(decide, symbol: shouldRetry, name: "diff touched it?", look: figure\Look.decision);
-    final rate = codeStage(decide, symbol: "symbol:gomod github.com/egladman/magus `github.com/egladman/magus/internal/ci/volatility`/score().", name: "over threshold?", look: figure\Look.decision);
+    final thin = buzzStages\codeStage(decide, symbol: shouldRetry, name: "enough history?", look: figure\Look.decision);
+    final touched = buzzStages\codeStage(decide, symbol: shouldRetry, name: "diff touched it?", look: figure\Look.decision);
+    final rate = buzzStages\codeStage(decide, symbol: "symbol:gomod github.com/egladman/magus `github.com/egladman/magus/internal/ci/volatility`/score().", name: "over threshold?", look: figure\Look.decision);
     // invokeSpell in the root package reruns the target; codeStage cannot anchor a symbol there.
     final retry = figure\external("Retry once", sub: "the same target", look: figure\Look.plain);
     final volatile = figure\external("Record volatile", sub: "the run continues", look: figure\Look.plain);
@@ -47,7 +47,7 @@ export fun volatilityFigure() > figure\Figure !> any {
         .flowAcross(retry, dst: volatile, label: "passes")
         .flowAcross(retry, dst: regress, label: "fails again")
         .legend(figure\Look.focal, label: "wants a human")
-        .scope(goPackages("internal/ci/**"))
+        .scope(packages\goPackages("internal/ci/**"))
         .except([magus\graph().dir("internal/ci")],
             why: "plans the CI fan-out and the gate; a retry is decided per target, inside a run")
         .except([magus\graph().dir("internal/ci/annotate")],

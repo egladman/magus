@@ -1,0 +1,39 @@
+namespace guardInternals;
+
+import "magus";
+import "magus/figure";
+
+export fun guardInternalsFigure() > figure\Figure !> any {
+    final guard = magus\graph().dir("internal/guard");
+    final catalog = magus\graph().dir("internal/guard/builtin");
+    final workspace = magus\graph().dir("internal/workspace");
+    final config = magus\graph().dir("internal/config");
+    final interp = magus\graph().dir("internal/interp");
+    final jobs = magus\graph().dir("internal/job");
+    final sessions = magus\graph().dir("internal/sessions");
+    final trail = magus\graph().dir("internal/trail");
+    final hint = magus\graph().dir("internal/hint");
+    return figure\of("guard-internals",
+            title: "What the guard reads to reach one verdict",
+            eyebrow: "guard",
+            desc: "The guard holds the rules and little else of its own. The catalog names every "
+                + "built-in rule and its grade, the workspace supplies the loaded policy, and the "
+                + "config says which rules are denied, advised or off. The interpreter runs the "
+                + "workspace's Buzz rule. To judge a call the guard reads the job store for the "
+                + "lease the call acts as and the session record for what the session already did. "
+                + "It writes each judgement to the trail and names the command to run instead "
+                + "through the hint package.")
+        .box(guard, label: "Guard", sub: "one verdict per call", focal: true)
+        .box(catalog, label: "Rule catalog", sub: "ids, grades")
+        .group([workspace, config], label: "Policy", sub: "loaded rules, grades")
+        .box(interp, label: "Interpreter", sub: "runs the Buzz rule")
+        .group([jobs, sessions, trail], label: "Stores", sub: "lease, session, judgement", look: figure\Look.store)
+        .box(hint, label: "Hints", sub: "next: breadcrumbs")
+        .edgesFromGraph()
+        .hideEdges([workspace, config, jobs, sessions, trail, interp],
+            dst: [catalog, workspace, config, jobs, sessions, trail, hint],
+            why: "the guard drives each of these; the edges between them serve other verbs")
+        .legend(figure\Look.focal, label: "the verdict")
+        .legend(figure\Look.store, label: "read or appended")
+        .scope([guard, catalog, workspace, config, interp, jobs, sessions, trail, hint]);
+}

@@ -1,0 +1,40 @@
+namespace dryRun;
+
+import "magus";
+import "magus/figure";
+
+export fun dryRunFigure() > figure\Figure !> any {
+    final dry = magus\graph().dir("internal/dry");
+    final spell = magus\graph().dir("internal/spell");
+    final ward = magus\graph().dir("internal/ward");
+    final gen = magus\graph().dir("internal/interp/bindings/gen");
+    final ffi = magus\graph().dir("internal/interp/bindings/ffi");
+    final figures = magus\graph().dir("libs/figure");
+    final playground = magus\graph().dir("internal/playground");
+    final doctor = magus\graph().dir("internal/doctor");
+    final docs = magus\graph().dir("cmd/magus-docs");
+    return figure\of("dry-run",
+            title: "A dry run evaluates a magusfile with the host's effects stubbed",
+            eyebrow: "dry run",
+            desc: "internal/dry loads a magusfile or a spell with every host call replaced by a "
+                + "recording stub, so the Buzz runs and nothing outside the process changes. It "
+                + "reads the spell registry and the wards to answer the same way a real run "
+                + "would, uses the generated host mirrors to type the stubs, and hands the "
+                + "recorded graph to the callers: doctor checks a workspace with it, the docs "
+                + "generator runs examples with it and the playground runs a script in a browser.")
+        .box(dry, label: "Dry run", sub: "stubbed host effects", focal: true)
+        .box(spell, label: "Spell registry", sub: "ops as declared")
+        .box(ward, label: "Ward", sub: "kind checks still apply")
+        .box(gen, label: "Host mirrors", sub: "types the stubs", look: figure\Look.store)
+        .box(ffi, label: "Host calls", sub: "what a stub replaces")
+        .box(figures, label: "Figures", sub: "the recorded graph drawn")
+        .box(playground, label: "Playground", sub: "a script in a browser")
+        .box(doctor, label: "Doctor", sub: "checks a workspace")
+        .box(docs, label: "Docs generator", sub: "runs the examples")
+        .edgesFromGraph()
+        .hideEdges([spell], dst: [ward], why: "the registry's own ward checks are drawn in service")
+        .hideEdges([gen], dst: [ffi], why: "the mirrors wrap the host calls; the stubs replace the calls")
+        .legend(figure\Look.focal, label: "the dry run")
+        .legend(figure\Look.store, label: "generated output")
+        .scope([dry, playground, docs]);
+}

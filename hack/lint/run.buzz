@@ -38,6 +38,7 @@ import "hack/lint/code-follows-mined-precedents" as precedents;
 import "hack/lint/code-stays-within-the-conformance-ceiling" as conformanceceiling;
 import "hack/lint/decisions-meet-their-evidence" as decisionsevidence;
 import "hack/lint/diagnostic-codes-have-docs-pages" as codepages;
+import "hack/lint/figure-imports-are-named" as figureimports;
 import "hack/lint/figure-modules-type-check-strictly" as figurecheck;
 import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
 import "hack/lint/gate-pages-say-what-they-do-not-measure" as gatemeasures;
@@ -108,6 +109,7 @@ export fun rules() > [Rule] {
         Rule{ name = "hack-scripts-start-with-a-verb", reads = hackverbs\reads(), check = hackverbs\check },
         Rule{ name = "hack-scripts-parse-argv-with-flags", reads = scriptflags\reads(), check = scriptflags\check },
         Rule{ name = "magusfile-modules-have-no-main", reads = magusfilemodules\reads(), check = magusfilemodules\check },
+        Rule{ name = "figure-imports-are-named", reads = figureimports\reads(), check = figureimports\check },
         Rule{ name = "figure-modules-type-check-strictly", reads = figurecheck\reads(), check = figurecheck\check },
         Rule{ name = "buzz-sources-pass-the-static-check", reads = buzzcheck\reads(), check = buzzcheck\check },
         Rule{ name = "diagnostic-codes-have-docs-pages", reads = codepages\reads(), check = codepages\check },

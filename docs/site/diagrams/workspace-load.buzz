@@ -2,7 +2,7 @@ namespace workspaceLoad;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/packages" as _;
+import "site/diagrams/packages" as packages;
 
 export fun workspaceLoadFigure() > figure\Figure !> any {
     final discover = magus\graph().dir("project");
@@ -45,14 +45,14 @@ export fun workspaceLoadFigure() > figure\Figure !> any {
         .zone("written by hand", actors: [rootMf, nestedMf])
         .legend(figure\Look.focal, label: "what every reader reads")
         .legend(figure\Look.input, label: "the only declarations")
-        .scope(goPackages("project/**"))
-        .scope(goPackages("internal/interp/**"))
-        .scope(goPackages("internal/describe/**"))
-        .scope(goPackages("types/**"))
-        .scope(goPackages("internal/cache/**"))
+        .scope(packages\goPackages("project/**"))
+        .scope(packages\goPackages("internal/interp/**"))
+        .scope(packages\goPackages("internal/describe/**"))
+        .scope(packages\goPackages("types/**"))
+        .scope(packages\goPackages("internal/cache/**"))
         .except([magus\graph().dir("project/impact")],
             why: "the blast radius of a changeset, which affected reads after the load")
-        .except(figure\without(goPackages("internal/interp/**"), drop: [interp]),
+        .except(figure\without(packages\goPackages("internal/interp/**"), drop: [interp]),
             why: "the engine seam, host bindings, MCP client and transforms an evaluation calls through; the Evaluate box is where an export becomes a target")
         .except([magus\graph().dir("types/enum"), magus\graph().dir("types/daemon"), magus\graph().dir("types/diff"),
                  magus\graph().dir("types/events"), magus\graph().dir("types/image"), magus\graph().dir("types/trail")],

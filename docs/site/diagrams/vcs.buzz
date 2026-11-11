@@ -1,0 +1,47 @@
+namespace vcsBoxes;
+
+import "magus";
+import "magus/figure";
+
+export fun vcsFigure() > figure\Figure !> any {
+    final vcs = magus\graph().dir("vcs");
+    final file = magus\graph().dir("internal/file");
+    final stamp = magus\graph().dir("internal/stamp");
+    final xdg = magus\graph().dir("libs/xdg");
+    final records = [
+        magus\graph().dir("internal/sessions"),
+        magus\graph().dir("internal/trail"),
+    ];
+    final runs = [
+        magus\graph().dir("internal/job"),
+        magus\graph().dir("internal/cache"),
+        magus\graph().dir("internal/queue"),
+    ];
+    final landing = [
+        magus\graph().dir("internal/settle"),
+        magus\graph().dir("internal/race"),
+        magus\graph().dir("internal/work"),
+    ];
+    return figure\of("vcs",
+            title: "One VCS interface answers git, Mercurial, Sapling and Jujutsu",
+            eyebrow: "vcs",
+            desc: "The vcs package names the revision, the branch, the dirty digest and the "
+                + "changed files for whichever backend the checkout uses, so no other package "
+                + "runs a VCS command. Job leases and the cache key read the revision, the "
+                + "session and trail records stamp it, and the landing code reads the branch and "
+                + "the merge base. The package reads files through internal/file, identifies "
+                + "itself with the build stamp and keeps its state in the XDG directories.")
+        .box(vcs, label: "VCS", sub: "revision, branch, dirty digest", focal: true)
+        .box(file, label: "File helpers", sub: "reads and writes")
+        .box(stamp, label: "Build stamp", sub: "who ran it")
+        .box(xdg, label: "XDG paths", sub: "state")
+        .group(runs, label: "Runs", sub: "leases, cache key, queue")
+        .group(records, label: "Records", sub: "sessions, trail", look: figure\Look.store)
+        .group(landing, label: "Landing", sub: "settle, race, work")
+        .edgesFromGraph()
+        .hideEdges(runs + records + landing, dst: [file, xdg, stamp],
+            why: "every caller leans on these for its own work; the figure shows what vcs leans on")
+        .legend(figure\Look.focal, label: "the one interface")
+        .legend(figure\Look.store, label: "append-only")
+        .scope([vcs]);
+}

@@ -1,0 +1,33 @@
+namespace languageService;
+
+import "magus";
+import "magus/figure";
+
+export fun languageServiceFigure() > figure\Figure !> any {
+    final service = magus\graph().dir("internal/langservice");
+    final token = magus\graph().dir("libs/gopherbuzz/token");
+    final cli = magus\graph().dir("cmd/magus");
+    final playground = magus\graph().dir("cmd/buzz-playground");
+    final engine = magus\graph().dir("internal/playground");
+    final editor = figure\external("Editor", sub: "completion, hover, signatures", tag: "client");
+    return figure\of("language-service",
+            title: "One language service answers the editor and the playground",
+            eyebrow: "editor",
+            desc: "The language service answers completion, hover and signature help for Buzz "
+                + "from the lexer's tokens and a manifest of every host module's members. magus "
+                + "serves it to an editor over the language server protocol, and the browser "
+                + "playground runs the same code in WebAssembly beside the dry-run engine, so "
+                + "the two answer the same way.")
+        .actor(editor)
+        .box(service, label: "Language service", sub: "complete, hover, signature", focal: true)
+        .box(token, label: "Buzz tokens", sub: "the lexer's output")
+        .box(cli, label: "magus CLI", sub: "serves the protocol")
+        .box(playground, label: "Playground", sub: "WebAssembly build")
+        .box(engine, label: "Playground engine", sub: "runs a script")
+        .edgesFromGraph()
+        .hideEdges([cli, playground], dst: [token], why: "they read tokens through the service")
+        .flowIn(editor, dst: cli, label: "protocol")
+        .legend(figure\Look.focal, label: "the one service")
+        .legend(figure\Look.external, label: "outside magus")
+        .scope([service, cli, playground, engine]);
+}

@@ -43,6 +43,8 @@ guard's policy files, which a hook loads in a fresh process on every command.
 
 <!--diagram:buzz-run-->
 
+<!--diagram:language-service-->
+
 gopherbuzz has two tiers, an interpreter and a baseline JIT, and the unit both run is the
 chunk. There are no traces and no hotness counter: `VM.Run` offers the chunk it was handed
 to the JIT on every run, and the JIT judges each chunk once.

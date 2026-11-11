@@ -271,6 +271,8 @@ A target runs a spell with `cwd = project.Dir` and may only walk **down** from t
 
 One boundary sits adjacent to but outside the sandbox policy: **descendant project scope.** A spell dispatched on a parent project must stop at the boundary of any registered descendant project nested inside it. When a write-mode dispatch crosses into a descendant's tree (typically a recursive glob like `prettier --write '**/*.md'` reaching into `api/docs`), the auditor raises [MGS3001](../reference/codes/sandbox/MGS3001.md) and fails the target. The audit happens after the tool writes, so it cannot roll the change back; it prevents the run from succeeding. Landlock cannot enforce this boundary beforehand because both trees are inside the workspace allowlist. That is why MGS3001 lives on the MGS3xxx (audit) rail rather than the MGS2xxx (sandbox) rail.
 
+<!--diagram:sandbox-->
+
 ## Platform reality: two enforcement layers
 
 The sandbox is enforced by **two layers that run together**, and exactly one of them is platform-dependent.

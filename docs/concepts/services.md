@@ -32,6 +32,8 @@ fun pg(t: Target) > Service {
 }
 ```
 
+<!--diagram:service-->
+
 ## Directly run vs. as a dependency
 
 A service behaves differently depending on how it is reached:

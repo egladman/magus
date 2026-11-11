@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 0,
+    "imports": 0
+  },
+  "figure": "dry-run",
+  "findings": [],
+  "stamp": "sha256:e91937cc0cd489a3e79ee64ab56eafc1be86efb973604ca84b7a5bfb265837d2"
+}

@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 0,
+    "imports": 0
+  },
+  "figure": "job-records",
+  "findings": [],
+  "stamp": "sha256:c73485340920bfddd38f4557fc45ad9e3b0912fddda97ff7890850ec39d9ac4b"
+}

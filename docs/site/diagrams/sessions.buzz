@@ -1,0 +1,37 @@
+namespace sessions;
+
+import "magus";
+import "magus/figure";
+
+export fun sessionsFigure() > figure\Figure !> any {
+    final sessions = magus\graph().dir("internal/sessions");
+    final journal = magus\graph().dir("internal/journal");
+    final trail = magus\graph().dir("internal/trail");
+    final agent = magus\graph().dir("internal/agent");
+    final attention = magus\graph().dir("internal/handler/attention");
+    final viewer = magus\graph().dir("internal/handler/viewer");
+    final guard = magus\graph().dir("internal/guard");
+    return figure\of("sessions",
+            title: "A session record is written by the hook and read by four others",
+            eyebrow: "sessions",
+            desc: "Each agent host session gets one record: who started it, its checkout and what "
+                + "it did. The guard appends to it on every call, and the journal underneath keeps "
+                + "the append-only lines. The trail reads the record to say which session made a "
+                + "change, the agent install reads it to rehydrate a session that lost its "
+                + "history, and the console's attention and viewer handlers show it to the person "
+                + "watching.")
+        .box(sessions, label: "Session record", sub: "one per host session", focal: true)
+        .box(journal, label: "Journal", sub: "append-only lines", look: figure\Look.store)
+        .box(trail, label: "Trail", sub: "which session changed what")
+        .box(agent, label: "Agent install", sub: "rehydrate a lost session")
+        .box(guard, label: "Guard", sub: "appends on every call")
+        .box(attention, label: "Attention view", sub: "what needs a person")
+        .box(viewer, label: "Viewer", sub: "the shared read")
+        .edgesFromGraph()
+        .hideEdges([guard], dst: [agent, journal, trail],
+            why: "the guard's other reads are drawn in guard-internals; here it only writes the record")
+        .hideEdges([viewer], dst: [journal], why: "the viewer reads the record, which holds the journal")
+        .legend(figure\Look.focal, label: "the record")
+        .legend(figure\Look.store, label: "append-only")
+        .scope([sessions, journal, trail, agent, attention, viewer]);
+}

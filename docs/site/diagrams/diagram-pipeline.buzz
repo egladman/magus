@@ -2,12 +2,13 @@ namespace diagramPipeline;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/packages" as _;
+import "site/diagrams/packages" as packages;
 
 export fun diagramPipelineFigure() > figure\Figure !> any {
     final module = magus\graph().dir("libs/figure");
     final host = magus\graph().dir("std");
     final server = magus\graph().dir("internal/handler/diagram");
+    final jobs = magus\graph().dir("internal/job");
     final source = figure\external("Figure source", sub: "records, sets, actors", tag: "buzz", look: figure\Look.plain);
     final files = figure\external("SVGs + receipts", sub: "diagrams-generate", look: figure\Look.store);
     final site = figure\external("Site render", sub: "inlines the page copy", look: figure\Look.plain);
@@ -21,13 +22,14 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
                 + "diagrams-generate writes the committed light, dark and page copies with a "
                 + "receipt beside each, and the site render inlines the page copy. The server "
                 + "embeds the same module to draw live figures at /api/v1/diagrams, which the "
-                + "console fetches.")
+                + "console fetches. The job store draws its plan figure through the same module, and each figure's receipt carries a stamp of its boxes and edges, so a stale committed copy is a diff.")
         .actor(source)
         .box(host, label: "magus module", sub: "dir, dirs, layer from the graph", look: figure\Look.input)
         .box(module, label: "magus/figure", sub: "sets, layout, paint", focal: true)
         .actor(files)
         .actor(site)
         .box(server, label: "/api/v1/diagrams", sub: "the module in-process")
+        .box(jobs, label: "Job plan figure", sub: "draws rows with the same module")
         .actor(console)
         .edgesFromGraph()
         .markEdge(host, dst: module, label: "embeds")
@@ -39,9 +41,9 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
         .legend(figure\Look.focal, label: "the one layout")
         .legend(figure\Look.input, label: "reads the knowledge graph")
         .legend(figure\Look.store, label: "committed output")
-        .scope(goPackages("libs/*"))
-        .scope(goPackages("libs/figure/**"))
-        .scope(goPackages("std/**"))
+        .scope(packages\goPackages("libs/*"))
+        .scope(packages\goPackages("libs/figure/**"))
+        .scope(packages\goPackages("std/**"))
         .scope(magus\graph().layer("handler").dirs)
         .except([magus\graph().dir("libs/gopherbuzz")],
             why: "the Buzz runtime every module runs on, figures included; drawn in buzz-engine")
@@ -70,9 +72,9 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
             why: "the Buzz Result type embedded by go-build; no figure passes through it")
         .except([magus\graph().dir("libs/termkit")],
             why: "the terminal UI library; no figure passes through it")
-        .except(goPackages("std/termkit/**"),
+        .except(packages\goPackages("std/termkit/**"),
             why: "the termkit host modules; a figure source reads the graph through the magus module alone")
-        .except(goPackages("std/encoding/**"),
+        .except(packages\goPackages("std/encoding/**"),
             why: "the encoding host modules; a figure source reads the graph through the magus module alone")
         .except(figure\without(magus\graph().layer("handler").dirs, drop: [server]),
             why: "the console's other services; none embeds magus/figure");

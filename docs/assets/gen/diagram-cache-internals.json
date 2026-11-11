@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 0,
+    "imports": 0
+  },
+  "figure": "cache-internals",
+  "findings": [],
+  "stamp": "sha256:4306ac29e1049af82392cc4a054b7a13dd13e10da722d073cf8d054cdbca8754"
+}

@@ -26,6 +26,8 @@ one from the spell it binds, which declares its indexer with `mgs_getSymbolIndex
 `magus graph build` runs those indexers and stores what they write in magus's own
 format.
 
+<!--diagram:symbol-index-->
+
 ## In-process indexers
 
 magus indexes Go itself, in process, re-checking only the packages an edit moved. A

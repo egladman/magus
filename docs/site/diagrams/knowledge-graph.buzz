@@ -2,16 +2,15 @@ namespace knowledgeGraph;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/packages" as _;
+import "site/diagrams/packages" as packages;
 
 export fun knowledgeGraphFigure() > figure\Figure !> any {
     final graph = magus\graph().dir("internal/graph/knowledge");
     final verbs = magus\graph().dir(".");
     final cli = magus\graph().dir("cmd/magus");
     final mcp = magus\graph().dir("internal/handler/mcp");
-    final core = figure\external("Magusfiles + registry", sub: "@registry, one per project", look: figure\Look.plain);
-    final files = figure\external("File adapters", sub: "buzz, docs, dirs, links, owners", look: figure\Look.plain);
-    final symbols = figure\external("Symbols", sub: "SCIP index, lazy shards", look: figure\Look.input);
+    final core = figure\external("Magusfiles + adapters", sub: "registry, Buzz, docs, dirs, links, owners", look: figure\Look.plain);
+    final symbols = magus\graph().dirs("internal/symbols/**") + [magus\graph().dir("internal/symbols")];
     final vcs = figure\external("History", sub: "@vcs, from git", look: figure\Look.plain);
     final notes = figure\external("Notes", sub: "@notes shared + private", look: figure\Look.plain);
     return figure\of("knowledge-graph",
@@ -24,10 +23,9 @@ export fun knowledgeGraphFigure() > figure\Figure !> any {
                 + "the ones whose content changed, then merges them into one graph. The CLI and "
                 + "the MCP tools read that graph through the same query, explain, refs and path.")
         .actor(core)
-        .actor(files)
-        .actor(symbols)
         .actor(vcs)
         .actor(notes)
+        .group(symbols, label: "Symbol index", sub: "SCIP per language, lazy shards", look: figure\Look.input)
         .box(graph, label: "One graph", sub: "fingerprint, sync, merge", focal: true)
         .box(verbs, label: "The four verbs", sub: "query, explain, refs, path")
         .box(cli, label: "magus CLI", sub: "text or -o json", tag: "reader")
@@ -35,15 +33,15 @@ export fun knowledgeGraphFigure() > figure\Figure !> any {
         .edgesFromGraph()
         .hideEdges([cli], dst: [graph, mcp],
             why: "graph build drives the store and the CLI serves the MCP tools; the reads go through the verbs")
+        .hideEdges([verbs], dst: symbols,
+            why: "refs reads the symbol shards; drawn in symbol-index, where the shard is opened")
         .flowIn(core, dst: graph)
-        .flowIn(files, dst: graph)
-        .flowIn(symbols, dst: graph)
         .flowIn(vcs, dst: graph)
         .flowIn(notes, dst: graph)
-        .zone("a shard per source", actors: [core, files, symbols, vcs, notes])
+        .zone("a shard per source", dirs: symbols, actors: [core, vcs, notes])
         .legend(figure\Look.focal, label: "what every reader asks")
         .legend(figure\Look.input, label: "built by a SCIP indexer")
-        .scope(goPackages("internal/graph/**"))
+        .scope(packages\goPackages("internal/graph/**") + symbols)
         .except([magus\graph().dir("internal/graph/dependency")],
             why: "the project dependency DAG targets run in, a different graph")
         .except([magus\graph().dir("internal/graph/workspacegraph")],

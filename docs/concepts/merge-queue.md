@@ -971,6 +971,8 @@ main carries the predicted tree in the shape the merge method gives (one new com
 squash, a merge commit whose second parent is what it handed over, a line of commits for
 a rebase), and stops otherwise.
 
+<!--diagram:merge-queue-workflows-->
+
 ## Setting it up on GitHub
 
 The queue writes only as its own GitHub App, for the reason

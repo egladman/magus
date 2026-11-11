@@ -1,0 +1,38 @@
+namespace cacheInternals;
+
+import "magus";
+import "magus/figure";
+
+export fun cacheInternalsFigure() > figure\Figure !> any {
+    final cache = magus\graph().dir("internal/cache");
+    final reflink = magus\graph().dir("internal/cache/reflink");
+    final remotetest = magus\graph().dir("internal/cache/remotetest");
+    final changeset = magus\graph().dir("internal/changeset");
+    final httpx = magus\graph().dir("internal/httpx");
+    final secret = magus\graph().dir("internal/secret");
+    final jobs = magus\graph().dir("internal/job");
+    final journal = magus\graph().dir("internal/journal");
+    final spawn = magus\graph().dir("internal/proc/spawn");
+    return figure\of("cache-internals",
+            title: "What a cache lookup reads, and what it writes back",
+            eyebrow: "cache",
+            desc: "A lookup hashes a target's declared inputs, found by the change set, and asks "
+                + "the local store, then the remote tier over HTTP. A hit restores the outputs by "
+                + "copy-on-write clone where the filesystem has it. A miss runs the target through "
+                + "the spawner, records the run in the journal and, on a trusted branch, signs the "
+                + "entry with the secret and puts it. The job row decides which writes count as "
+                + "the run's own.")
+        .box(cache, label: "Cache", sub: "key, restore, store", focal: true)
+        .box(changeset, label: "Change set", sub: "declared inputs, diffed")
+        .box(reflink, label: "Reflink restore", sub: "copy-on-write clones")
+        .box(httpx, label: "Remote tier", sub: "HTTP client")
+        .box(spawn, label: "Spawner", sub: "runs a miss")
+        .group([jobs, journal], label: "Run records", sub: "whose writes, what ran", look: figure\Look.store)
+        .box(secret, label: "Signing key", sub: "sign and verify", look: figure\Look.input)
+        .edgesFromGraph()
+        .legend(figure\Look.focal, label: "the lookup")
+        .legend(figure\Look.input, label: "trusted runs only")
+        .legend(figure\Look.store, label: "append-only")
+        .scope([cache, reflink, remotetest])
+        .except([remotetest], why: "a test server for the remote protocols, linked only by tests");
+}

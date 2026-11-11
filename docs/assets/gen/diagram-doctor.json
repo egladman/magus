@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 0,
+    "imports": 0
+  },
+  "figure": "doctor",
+  "findings": [],
+  "stamp": "sha256:f3a2aedc382ccf698ab2f58aef0b76fcd9c214ad1dbd09312211a73bc2787bc4"
+}

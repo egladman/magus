@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 0,
+    "imports": 0
+  },
+  "figure": "vcs",
+  "findings": [],
+  "stamp": "sha256:ca06d3bfb232cd4dca686fb4ea64b6e9a8f0978fc1e2144fce1d1ad651246bf3"
+}

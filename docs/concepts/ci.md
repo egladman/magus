@@ -22,6 +22,8 @@ locally is a pipeline you debug through the web UI.
 
 Six things do change, and each has a page or a section here.
 
+<!--diagram:ci-cd-split-->
+
 ## The pipeline verb
 
 `ci` is an ordinary target you compose in your magusfile, not a mode magus enters.

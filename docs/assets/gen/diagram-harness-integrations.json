@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 0,
+    "imports": 0
+  },
+  "figure": "harness-integrations",
+  "findings": [],
+  "stamp": "sha256:de73bbede234de34fe92c4778fcfc9e63201aaac47e553885b1ac7e208e2bdd9"
+}

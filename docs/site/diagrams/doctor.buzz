@@ -1,0 +1,39 @@
+namespace doctor;
+
+import "magus";
+import "magus/figure";
+
+export fun doctorFigure() > figure\Figure !> any {
+    final doctor = magus\graph().dir("internal/doctor");
+    final config = magus\graph().dir("internal/config");
+    final cache = magus\graph().dir("internal/cache");
+    final spell = magus\graph().dir("internal/spell");
+    final audit = magus\graph().dir("internal/serviceaudit");
+    final agent = magus\graph().dir("internal/agent");
+    final records = [
+        magus\graph().dir("internal/job"),
+        magus\graph().dir("internal/sessions"),
+        magus\graph().dir("internal/trail"),
+    ];
+    return figure\of("doctor",
+            title: "One check per question, each reading the subsystem it asks about",
+            eyebrow: "doctor",
+            desc: "magus doctor runs a list of checks and prints one verdict per check. Each check "
+                + "reads the subsystem it is about: the loaded config, the cache and its remote "
+                + "tier, the spell registry and its overrides, the service audit, the installed "
+                + "agent skills and hooks, and the job, session and trail records. A check "
+                + "reports what is wrong and the command that fixes it; it changes nothing.")
+        .box(doctor, label: "Checks", sub: "one verdict each", focal: true)
+        .box(config, label: "Config", sub: "keys, drift")
+        .box(cache, label: "Cache", sub: "local and remote tier")
+        .box(spell, label: "Spells", sub: "registry, overrides")
+        .box(audit, label: "Service audit", sub: "kind coherence")
+        .box(agent, label: "Agent install", sub: "skills, hooks")
+        .group(records, label: "Records", sub: "leases, sessions, trail", look: figure\Look.store)
+        .edgesFromGraph()
+        .hideEdges([cache, spell, config, audit, agent] + records, dst: [cache, spell, config, audit, agent] + records,
+            why: "the checks read each subsystem directly; how the subsystems read each other is not what doctor asks")
+        .legend(figure\Look.focal, label: "the verdicts")
+        .legend(figure\Look.store, label: "append-only")
+        .scope([doctor, config, cache, spell, audit, agent] + records);
+}

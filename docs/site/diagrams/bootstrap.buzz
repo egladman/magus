@@ -2,7 +2,7 @@ namespace bootstrap;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/packages" as _;
+import "site/diagrams/packages" as packages;
 
 export fun bootstrapFigure() > figure\Figure !> any {
     final cli = magus\graph().dir("cmd/magus");
@@ -59,17 +59,17 @@ export fun bootstrapFigure() > figure\Figure !> any {
         .legend(figure\Look.external, label: "outside magus")
         .legend(figure\Look.store, label: "embedded in the binary")
         .legend(figure\Look.input, label: "this repo's rules")
-        .scope(goPackages("cmd/**"))
-        .scope(goPackages("internal/guard/**"))
-        .scope(goPackages("internal/interp/**"))
+        .scope(packages\goPackages("cmd/**"))
+        .scope(packages\goPackages("internal/guard/**"))
+        .scope(packages\goPackages("internal/interp/**"))
         .except([magus\graph().dir("cmd/magus/gen")],
             why: "the CLI's generated config flags, linked into the same binary")
-        .except(figure\without(cmdTools(), drop: [magus\graph().dir("cmd/magus-utils")]),
+        .except(figure\without(packages\cmdTools(), drop: [magus\graph().dir("cmd/magus-utils")]),
             why: "docs generators and the browser playground, each built by its own target once ./magus exists; go-build links ./cmd/magus alone")
         .except([magus\graph().dir("internal/guard/builtin")],
             why: "each built-in rule's grade; the raw-tool advisory this figure draws is graded there like every other rule")
         .except([magus\graph().dir("cmd/magus-utils")],
             why: "the type generator spells-generate runs through go generate; the Spell bytecode actor stands for that step")
-        .except(figure\without(goPackages("internal/interp/**"), drop: [stamp]),
+        .except(figure\without(packages\goPackages("internal/interp/**"), drop: [stamp]),
             why: "the rest of the magusfile interpreter; go-build's -X flag names bindings.buildStamp alone");
 }

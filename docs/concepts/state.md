@@ -12,6 +12,8 @@ line; compaction rewrites the file to one line per key through a rename. The
 [everything is a file](../design/principles/everything-is-a-file.md) principle
 holds the full set of conventions.
 
+<!--diagram:sessions-->
+
 ## Store migrations
 
 A store whose entries change shape, such as a member renamed, migrates the way a

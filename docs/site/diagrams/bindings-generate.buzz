@@ -1,0 +1,37 @@
+namespace bindingsGenerate;
+
+import "magus";
+import "magus/figure";
+
+export fun bindingsGenerateFigure() > figure\Figure !> any {
+    final utils = magus\graph().dir("cmd/magus-utils");
+    final emit = magus\graph().dir("internal/generate/emit");
+    final godecl = magus\graph().dir("internal/generate/godecl");
+    final cfgen = magus\graph().dir("internal/config/generate");
+    final buzzgen = magus\graph().dir("libs/gopherbuzz/buzzgen");
+    final gen = magus\graph().dir("internal/interp/bindings/gen");
+    final bindings = magus\graph().dir("internal/interp/bindings");
+    final config = magus\graph().dir("internal/config");
+    return figure\of("bindings-generate",
+            title: "Go types become Buzz mirrors at build time, never at run time",
+            eyebrow: "generate",
+            desc: "magus-utils reads Go declarations with godecl and the config keys with the "
+                + "config generator. Both hand the emitter a description, and the emitter writes "
+                + "Buzz declarations through buzzgen. The bindings package imports the generated "
+                + "mirrors from its gen directory, so a host module and a Buzz script see the "
+                + "same type. A mirror is generated and committed, never reflected at run time.")
+        .box(utils, label: "magus-utils", sub: "the generate targets")
+        .box(godecl, label: "Go declarations", sub: "types, enums, callbacks")
+        .box(config, label: "Config", sub: "keys, defaults")
+        .box(cfgen, label: "Config generator", sub: "keys to Buzz")
+        .box(emit, label: "Emitter", sub: "description to Buzz", focal: true)
+        .box(buzzgen, label: "buzzgen", sub: "writes the declarations")
+        .box(gen, label: "Generated mirrors", sub: "committed, never edited", look: figure\Look.store)
+        .box(bindings, label: "Host bindings", sub: "import the mirrors")
+        .edgesFromGraph()
+        .hideEdges([utils], dst: [config, buzzgen],
+            why: "the command drives the generators; their own edges are drawn")
+        .legend(figure\Look.focal, label: "the one emitter")
+        .legend(figure\Look.store, label: "generated output")
+        .scope([utils, emit, godecl, cfgen, gen]);
+}

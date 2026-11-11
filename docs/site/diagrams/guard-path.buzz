@@ -2,43 +2,46 @@ namespace guardPath;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/packages" as _;
 
 export fun guardPathFigure() > figure\Figure !> any {
     final shell = magus\graph().dir("cmd/magus");
     final guard = magus\graph().dir("internal/guard");
-    final grades = magus\graph().dir("internal/guard/builtin");
+    final catalog = magus\graph().dir("internal/guard/builtin");
     final jobs = magus\graph().dir("internal/job");
-    final hint = magus\graph().dir("internal/hint");
+    final sessions = magus\graph().dir("internal/sessions");
+    final trail = magus\graph().dir("internal/trail");
     final hook = figure\external("Host hook", sub: "PreToolUse, stdin JSON", tag: "settings");
     final policy = figure\external("Workspace rules", sub: "magus\\guard.command, can only add", look: figure\Look.input);
-    final verdict = figure\external("Verdict", sub: "deny, advise or pass", look: figure\Look.focal);
+    final verdict = figure\external("Verdict", sub: "deny, advise or pass, with next:", look: figure\Look.focal);
     return figure\of("guard-path",
             title: "One command judges every call, and says what to run instead",
             eyebrow: "guard",
             desc: "The host's PreToolUse hook, wired by magus agent harness install, pipes the "
                 + "event to magus shell. The built-in rules judge it first, reading the job store "
-                + "for the lease the call acts as; the workspace's magus\\guard.command rule sees "
-                + "only what they let through and can only add to the verdict. A deny carries its "
-                + "reason and a next: breadcrumb naming the command to run instead, and the hook "
-                + "renders it into the host's reply.")
+                + "for the lease the call acts as and the session record for what the session "
+                + "already did; the workspace's magus\\guard.command rule sees only what they let "
+                + "through and can only add to the verdict. Each judgement lands in the trail. A "
+                + "deny carries its reason and a next: breadcrumb naming the command to run "
+                + "instead, and the hook renders it into the host's reply.")
         .actor(hook)
         .box(shell, label: "magus shell", sub: "the guard with one door")
-        .box(guard, label: "Built-in rules", sub: "catalogued, run first")
-        .box(grades, label: "Rule grades", sub: "deny, advise or off per rule")
+        .box(guard, label: "Built-in rules", sub: "judged first, in order", focal: true)
+        .box(catalog, label: "Rule catalog", sub: "ids and grades")
         .box(jobs, label: "Job store", sub: "leases, write paths", look: figure\Look.store)
+        .box(sessions, label: "Session record", sub: "what this session did", look: figure\Look.store)
+        .box(trail, label: "Trail", sub: "every judgement kept", look: figure\Look.store)
         .actor(policy)
         .actor(verdict)
-        .box(hint, label: "next: breadcrumb", sub: "a command to run")
         .edgesFromGraph()
-        .hideEdges([shell], dst: [jobs, hint],
-            why: "the shell's own job and hint uses are other verbs; a call reaches them through the guard")
-        .hideEdges([jobs], dst: [hint],
-            why: "job results carry their own next: steps; the guard's comes from the verdict")
+        .hideEdges([shell], dst: [jobs, sessions, trail],
+            why: "the shell's own uses are other verbs; a call reaches them through the guard")
+        .hideEdges([jobs, trail], dst: [sessions, trail],
+            why: "the stores read each other for their own verbs; the guard's path reads each one directly")
         .markEdge(shell, dst: guard, label: "judges")
-        .markEdge(guard, dst: grades, label: "grade")
+        .markEdge(guard, dst: catalog, label: "rules")
         .markEdge(guard, dst: jobs, label: "lease")
-        .markEdge(guard, dst: hint, label: "next")
+        .markEdge(guard, dst: sessions, label: "history")
+        .markEdge(guard, dst: trail, label: "records")
         .flowIn(hook, dst: shell, label: "argv + stdin")
         .flowOut(guard, dst: policy, label: "let through")
         .flowOut(guard, dst: verdict)
@@ -47,12 +50,6 @@ export fun guardPathFigure() > figure\Figure !> any {
         .legend(figure\Look.focal, label: "what the agent reads")
         .legend(figure\Look.external, label: "the host's side")
         .legend(figure\Look.input, label: "this repo's rules")
-        .legend(figure\Look.store, label: "the declared leases")
-        .scope(goPackages("cmd/**"))
-        .scope(goPackages("internal/guard/**"))
-        .scope(goPackages("internal/job/**"))
-        .scope(goPackages("internal/hint/**"))
-        .except([magus\graph().dir("cmd/magus/gen")],
-            why: "the CLI's generated config flags; the hook event arrives on stdin")
-        .except(cmdTools(), why: "docs generators, codegen and the browser playground; none reads a hook event");
+        .legend(figure\Look.store, label: "append-only records")
+        .scope([shell, guard, catalog, jobs, sessions, trail]);
 }

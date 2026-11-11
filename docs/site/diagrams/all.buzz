@@ -6,37 +6,53 @@ import "fs";
 import "encoding/json";
 import "magus";
 import "magus/figure";
-import "site/diagrams/server-http" as _;
-import "site/diagrams/server-socket" as _;
-import "site/diagrams/server-jobs" as _;
-import "site/diagrams/server-share" as _;
-import "site/diagrams/ci-pipeline" as _;
-import "site/diagrams/ci-providers" as _;
-import "site/diagrams/image-build" as _;
-import "site/diagrams/oci-assembly" as _;
-import "site/diagrams/dogfood" as _;
-import "site/diagrams/project-reference" as _;
-import "site/diagrams/volatility" as _;
-import "site/diagrams/commit-generated" as _;
-import "site/diagrams/lease-loop" as _;
-import "site/diagrams/cache-trust" as _;
-import "site/diagrams/diagram-pipeline" as _;
-import "site/diagrams/knowledge-graph" as _;
-import "site/diagrams/guard-path" as _;
-import "site/diagrams/agent-integration" as _;
-import "site/diagrams/buzz-engine" as _;
-import "site/diagrams/buzz-compile" as _;
-import "site/diagrams/buzz-run" as _;
-import "site/diagrams/merge-queue-risk" as _;
-import "site/diagrams/workspace-load" as _;
-import "site/diagrams/inputs-outputs" as _;
-import "site/diagrams/bootstrap" as _;
-import "site/diagrams/target-order" as _;
-import "site/diagrams/agent-orchestration" as _;
-import "site/diagrams/harness-layer" as _;
-import "site/diagrams/kustomize-architecture" as _;
-import "site/diagrams/mandate" as _;
-import "site/diagrams/harness-pyramid" as _;
+import "site/diagrams/server-http" as serverHttp;
+import "site/diagrams/server-socket" as serverSocket;
+import "site/diagrams/server-jobs" as serverJobs;
+import "site/diagrams/server-share" as serverShare;
+import "site/diagrams/ci-pipeline" as ciPipeline;
+import "site/diagrams/ci-providers" as ciProviders;
+import "site/diagrams/image-build" as imageBuild;
+import "site/diagrams/oci-assembly" as ociAssembly;
+import "site/diagrams/dogfood" as dogfood;
+import "site/diagrams/project-reference" as projectReference;
+import "site/diagrams/volatility" as volatility;
+import "site/diagrams/commit-generated" as commitGenerated;
+import "site/diagrams/lease-loop" as leaseLoop;
+import "site/diagrams/cache-trust" as cacheTrust;
+import "site/diagrams/diagram-pipeline" as diagramPipeline;
+import "site/diagrams/knowledge-graph" as knowledgeGraph;
+import "site/diagrams/guard-path" as guardPath;
+import "site/diagrams/agent-integration" as agentIntegration;
+import "site/diagrams/buzz-engine" as buzzEngine;
+import "site/diagrams/buzz-compile" as buzzCompile;
+import "site/diagrams/buzz-run" as buzzRun;
+import "site/diagrams/merge-queue-risk" as mergeQueueRisk;
+import "site/diagrams/workspace-load" as workspaceLoad;
+import "site/diagrams/inputs-outputs" as inputsOutputs;
+import "site/diagrams/bootstrap" as bootstrap;
+import "site/diagrams/target-order" as targetOrder;
+import "site/diagrams/agent-orchestration" as agentOrchestration;
+import "site/diagrams/kustomize-architecture" as kustomizeArchitecture;
+import "site/diagrams/mandate" as mandatefigures;
+import "site/diagrams/harness-pyramid" as harnessPyramid;
+import "site/diagrams/guard-internals" as guardInternals;
+import "site/diagrams/job-records" as jobRecords;
+import "site/diagrams/sandbox" as sandbox;
+import "site/diagrams/symbol-index" as symbolIndex;
+import "site/diagrams/harness-integrations" as harnessIntegrations;
+import "site/diagrams/merge-queue-workflows" as mergeQueueWorkflows;
+import "site/diagrams/ci-cd-split" as ciCdSplit;
+import "site/diagrams/cache-internals" as cacheInternals;
+import "site/diagrams/vcs" as vcsBoxes;
+import "site/diagrams/types" as typeRecords;
+import "site/diagrams/language-service" as languageService;
+import "site/diagrams/dry-run" as dryRun;
+import "site/diagrams/sessions" as sessions;
+import "site/diagrams/config-load" as configLoad;
+import "site/diagrams/service" as service;
+import "site/diagrams/bindings-generate" as bindingsGenerate;
+import "site/diagrams/doctor" as doctor;
 
 // The committed files, relative to the docs project. The site render inlines their page
 // copies, so rendering a page never needs the symbol index.
@@ -46,39 +62,55 @@ final PAIR_DIR = "assets/gen";
 // here, naming it.
 export fun allFigures() > [figure\Figure] !> any {
     return [
-        serverHttpFigure(),
-        serverSocketFigure(),
-        serverJobsFigure(),
-        serverShareFigure(),
-        ciPipelineFigure(),
-        ciProvidersFigure(),
-        imageBuildFigure(),
-        ociAssemblyFigure(),
-        dogfoodFigure(),
-        projectReferenceFigure(),
-        volatilityFigure(),
-        commitGeneratedFigure(),
-        leaseLoopFigure(),
-        cacheTrustFigure(),
-        diagramPipelineFigure(),
-        knowledgeGraphFigure(),
-        guardPathFigure(),
-        agentIntegrationFigure(),
-        buzzEngineFigure(),
-        buzzCompileFigure(),
-        buzzRunFigure(),
-        mergeQueueRiskFigure(),
-        workspaceLoadFigure(),
-        inputsOutputsFigure(),
-        bootstrapFigure(),
-        targetOrderFigure(),
-        agentOrchestrationFigure(),
-        harnessLayerFigure(),
-        kustomizeArchitectureFigure(),
-        mandateRolesFigure(),
-        mandateBarFigure(),
-        harnessPyramidFigure(),
-        harnessStackFigure(),
+        serverHttp\serverHttpFigure(),
+        serverSocket\serverSocketFigure(),
+        serverJobs\serverJobsFigure(),
+        serverShare\serverShareFigure(),
+        ciPipeline\ciPipelineFigure(),
+        ciProviders\ciProvidersFigure(),
+        imageBuild\imageBuildFigure(),
+        ociAssembly\ociAssemblyFigure(),
+        dogfood\dogfoodFigure(),
+        projectReference\projectReferenceFigure(),
+        volatility\volatilityFigure(),
+        commitGenerated\commitGeneratedFigure(),
+        leaseLoop\leaseLoopFigure(),
+        cacheTrust\cacheTrustFigure(),
+        diagramPipeline\diagramPipelineFigure(),
+        knowledgeGraph\knowledgeGraphFigure(),
+        guardPath\guardPathFigure(),
+        agentIntegration\agentIntegrationFigure(),
+        buzzEngine\buzzEngineFigure(),
+        buzzCompile\buzzCompileFigure(),
+        buzzRun\buzzRunFigure(),
+        mergeQueueRisk\mergeQueueRiskFigure(),
+        workspaceLoad\workspaceLoadFigure(),
+        inputsOutputs\inputsOutputsFigure(),
+        bootstrap\bootstrapFigure(),
+        targetOrder\targetOrderFigure(),
+        agentOrchestration\agentOrchestrationFigure(),
+        kustomizeArchitecture\kustomizeArchitectureFigure(),
+        mandatefigures\mandateRolesFigure(),
+        mandatefigures\mandateBarFigure(),
+        harnessPyramid\harnessPyramidFigure(),
+        harnessPyramid\harnessStackFigure(),
+        guardInternals\guardInternalsFigure(),
+        jobRecords\jobRecordsFigure(),
+        sandbox\sandboxFigure(),
+        symbolIndex\symbolIndexFigure(),
+        harnessIntegrations\harnessIntegrationsFigure(),
+        mergeQueueWorkflows\mergeQueueWorkflowsFigure(),
+        ciCdSplit\ciCdSplitFigure(),
+        cacheInternals\cacheInternalsFigure(),
+        vcsBoxes\vcsFigure(),
+        typeRecords\typesFigure(),
+        languageService\languageServiceFigure(),
+        dryRun\dryRunFigure(),
+        sessions\sessionsFigure(),
+        configLoad\configLoadFigure(),
+        service\serviceFigure(),
+        bindingsGenerate\bindingsGenerateFigure(),
+        doctor\doctorFigure(),
     ];
 }
 

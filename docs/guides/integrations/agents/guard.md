@@ -38,6 +38,8 @@ Wiring is per host: [Claude Code](claude-code.md), [Codex](codex.md),
 [any host that can run a command](any-host.md). The rules below are the same
 everywhere, because they come from one binary.
 
+<!--diagram:guard-internals-->
+
 ## Deny with a remedy
 
 A rule worth having denies, and its refusal names a command the caller can run

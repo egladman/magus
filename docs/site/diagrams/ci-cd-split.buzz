@@ -1,0 +1,49 @@
+namespace ciCdSplit;
+
+import "magus";
+import "magus/figure";
+
+export fun ciCdSplitFigure() > figure\Figure !> any {
+    final ci = magus\graph().dir("internal/ci");
+    final annotate = magus\graph().dir("internal/ci/annotate");
+    final forecast = magus\graph().dir("internal/ci/forecast");
+    final volatility = magus\graph().dir("internal/ci/volatility");
+    final cache = magus\graph().dir("internal/cache");
+    final change = figure\external("A pull request", sub: "untrusted code", look: figure\Look.input);
+    final validate = figure\external("ci.yaml", sub: "validates, ships nothing", tag: "workflow", look: figure\Look.plain);
+    final ship = figure\external("cd.yaml", sub: "site and image of main", tag: "workflow", look: figure\Look.focal);
+    final release = figure\external("release.yaml", sub: "binaries on a v* tag", tag: "workflow", look: figure\Look.plain);
+    return figure\of("ci-cd-split",
+            title: "CI validates a change; CD ships what a merge produces",
+            eyebrow: "ci",
+            desc: "ci.yaml runs on a pull request: the gate sizer in internal/ci picks the shards "
+                + "from the forecast and the volatility score, runs them, and annotates the "
+                + "result. It restores the signed remote cache and writes only a tier scoped to "
+                + "the pull request. cd.yaml runs after a merge to main, renders the site from "
+                + "the profiles CI uploaded and builds the image, and it alone holds the key "
+                + "that writes the shared tier. release.yaml cuts binaries on a tag. Nothing "
+                + "that runs pull-request code holds a secret or a write token.",
+            direction: figure\Direction.down)
+        .actor(change)
+        .actor(validate)
+        .actor(ship)
+        .actor(release)
+        .box(ci, label: "Gate sizing", sub: "which shards run")
+        .box(annotate, label: "Annotations", sub: "the result on the PR")
+        .group([forecast, volatility], label: "Forecast", sub: "cost and volatility", look: figure\Look.input)
+        .box(cache, label: "Remote cache", sub: "signed by main only", look: figure\Look.store)
+        .edgesFromGraph()
+        .markEdge(ci, dst: forecast, label: "sizes by")
+        .flowIn(change, dst: ci, label: "pull_request")
+        .flowOut(ci, dst: validate, label: "shards")
+        .flowAcross(validate, dst: ship, label: "profiles")
+        .flowOut(cache, dst: validate, label: "read only")
+        .flowIn(ship, dst: cache, label: "sign + put", stroke: figure\Stroke.focal)
+        .flowAcross(ship, dst: release, label: "v* tag")
+        .zone("validates, no secret", dirs: [ci, annotate, forecast, volatility], actors: [change, validate])
+        .zone("ships, holds the key", dirs: [cache], actors: [ship, release])
+        .legend(figure\Look.focal, label: "the one that ships")
+        .legend(figure\Look.input, label: "reads history")
+        .legend(figure\Look.store, label: "the shared store")
+        .scope([ci, annotate, forecast, volatility]);
+}

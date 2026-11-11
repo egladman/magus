@@ -2,55 +2,51 @@ namespace leaseLoop;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/packages" as _;
 
 export fun leaseLoopFigure() > figure\Figure !> any {
-    final decl = magus\graph().dir("internal/job");
+    final vcs = magus\graph().dir("vcs");
+    final jobs = magus\graph().dir("internal/job");
+    final describe = magus\graph().dir("internal/describe");
     final verify = magus\graph().dir("internal/changeset");
-    final cp = figure\external("magus vcs checkpoint", sub: "revision + dirty digest", look: figure\Look.plain);
-    final part = figure\external("Partition by write set", sub: "refs, explain, affected", look: figure\Look.plain);
-    final work = figure\external("Workers edit", sub: "one write set each");
-    final integrate = figure\external("Integrate", sub: "magus affected ci", look: figure\Look.plain);
-    final plan = figure\external("Plan app", sub: "/console/plan/, overlaps, stale", look: figure\Look.plain);
+    final guard = magus\graph().dir("internal/guard");
+    final view = magus\graph().dir("internal/handler/job");
+    final root = figure\external("Orchestrator", sub: "partitions by write set", look: figure\Look.plain);
+    final work = figure\external("Workers", sub: "one write set each");
     final human = figure\external("The human", sub: "watches and decides");
-    // Not a step: no connector reaches it because it constrains every box.
-    final doctrine = figure\external("magus records and answers", sub: "it enforces none of it", look: figure\Look.focal);
     return figure\of("lease-loop",
             title: "A declared plan, released early, verified by diff",
             eyebrow: "lease",
-            desc: "An orchestrator checkpoints the working state, partitions the work by write "
-                + "set using graph evidence, and forks one job per unit: goal, "
-                + "checkpoint, write paths. Holders release paths as soon as they are done with "
-                + "them, so the plan shrinks while it runs, and the Jobs view renders the "
-                + "rows, their overlaps and their staleness for whoever is watching. The "
-                + "orchestrator verifies each job by diffing since that job's checkpoint "
-                + "against what it claimed, then integrates and runs magus affected ci. magus "
-                + "records and answers; it enforces none of it.",
+            desc: "An orchestrator checkpoints the revision through vcs, partitions the work by "
+                + "write set and forks one job row per unit into the job store: goal, "
+                + "checkpoint, write paths. describe prints the row a worker reads. The guard "
+                + "reads the row on every call. Holders release paths as soon as they are done, "
+                + "so the plan shrinks while it runs, and the Jobs view renders the rows for "
+                + "whoever is watching. The change set verifies each job by diffing since that "
+                + "job's checkpoint against what it claimed. magus records and answers; it "
+                + "enforces none of it beyond the guard.",
             direction: figure\Direction.down)
-        .actor(cp)
-        .actor(part)
-        .box(decl, label: "Declare the plan", sub: "goal, checkpoint, paths")
+        .actor(root)
+        .box(vcs, label: "Checkpoint", sub: "revision + dirty digest")
+        .box(jobs, label: "Job store", sub: "goal, checkpoint, paths", focal: true)
+        .box(describe, label: "describe job", sub: "the spec a worker reads")
         .actor(work)
+        .box(guard, label: "Guard", sub: "reads the row per call")
         .box(verify, label: "Verify each lease", sub: "diff since its checkpoint")
-        .actor(integrate)
-        .actor(plan)
+        .box(view, label: "Jobs view", sub: "rows, overlaps, stale")
         .actor(human)
-        .actor(doctrine)
         .edgesFromGraph()
-        .flowAcross(cp, dst: part)
-        .flowIn(part, dst: decl)
-        .flowOut(decl, dst: work)
+        .hideEdges([guard], dst: [vcs], why: "the guard reads the row, not the revision")
+        .markEdge(jobs, dst: vcs, label: "checkpoint")
+        .markEdge(jobs, dst: describe, label: "spec")
+        .markEdge(guard, dst: jobs, label: "lease")
+        .markEdge(view, dst: jobs, label: "job rows")
+        .flowIn(root, dst: jobs, label: "fork")
+        .flowIn(work, dst: jobs, label: "release", stroke: figure\Stroke.focal)
         .flowIn(work, dst: verify, label: "reports done")
-        .flowOut(verify, dst: integrate)
-        .flowAcross(integrate, dst: cp)
-        // The accent: releasing a path while the lease is still held is the half people skip.
-        .flowIn(work, dst: decl, label: "release", stroke: figure\Stroke.focal)
-        .flowOut(decl, dst: plan, label: "job rows")
-        .flowAcross(human, dst: plan, label: "watches")
-        .zone("the loop the orchestrator runs", dirs: [decl, verify], actors: [cp, part, work, integrate])
-        .zone("what a person watches", actors: [plan, human])
+        .flowIn(human, dst: view, label: "watches")
+        .zone("the loop the orchestrator runs", dirs: [vcs, jobs, describe, verify, guard], actors: [root, work])
+        .zone("what a person watches", dirs: [view], actors: [human])
         .legend(figure\Look.focal, label: "the whole guarantee")
         .legend(figure\Look.external, label: "agents and people")
-        .scope(goPackages("internal/job/**"))
-        .scope(goPackages("internal/changeset/**"));
+        .scope([vcs, jobs, describe, verify, guard, view]);
 }

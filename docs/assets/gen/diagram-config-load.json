@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 0,
+    "imports": 0
+  },
+  "figure": "config-load",
+  "findings": [],
+  "stamp": "sha256:de39eddc11ff0e000b70320d8c5e15488f686e2d11683dab0eb7ed612ecaf72f"
+}

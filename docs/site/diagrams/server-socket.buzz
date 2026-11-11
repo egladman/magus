@@ -2,7 +2,7 @@ namespace serverSocket;
 
 import "magus";
 import "magus/figure";
-import "site/diagrams/packages" as _;
+import "site/diagrams/packages" as packages;
 
 export fun serverSocketFigure() > figure\Figure !> any {
     final sock = magus\graph().dir("internal/proc");
@@ -32,8 +32,8 @@ export fun serverSocketFigure() > figure\Figure !> any {
         .flowIn(cli, dst: share, label: "spawns", stroke: figure\Stroke.optional)
         .legend(figure\Look.store, label: "shared server state")
         .legend(figure\Look.optional, label: "spawned on demand")
-        .scope(goPackages("internal/proc/**"))
-        .scope(goPackages("internal/share/**"))
+        .scope(packages\goPackages("internal/proc/**"))
+        .scope(packages\goPackages("internal/share/**"))
         .except([magus\graph().dir("internal/proc/endpoint")],
             why: "parses the transport address a client dials, a value type the CLI and config share")
         .except([magus\graph().dir("internal/proc/environ")],
