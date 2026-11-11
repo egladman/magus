@@ -242,18 +242,50 @@ export function spawnRefusal(c: SpawnCost, capUsd: number, isFork: boolean): str
   return `${spawnWarning(c, capUsd)} ${route}`
 }
 
-export const sessionUsd = (s: Spend): number => s.mainUsd + s.agentUsd
+// sessionUsd is Claude Code's own total where it keeps one, else the mod's
+// sum priced from its rates table.
+export const sessionUsd = (s: Spend): number => s.claudeUsd ?? s.mainUsd + s.agentUsd
 
-// The status line's part: the total, against the budget when there is one. undefined
-// before anything is spent.
+// The mod's sum stands in, and a response ran on a model it does not price.
+const isFloor = (s: Spend): boolean => (s.claudeUsd ?? null) === null && s.isPartial
+
+// The session total, against the budget when there is one. undefined before
+// anything is spent.
 export function spendStatus(s: Spend, budgetUsd: number): string | undefined {
-  if (sessionUsd(s) === 0 && !s.isPartial) return undefined
-  const total = `${formatUsd(sessionUsd(s))}${s.isPartial ? '+' : ''}`
+  if (sessionUsd(s) === 0 && !isFloor(s)) return undefined
+  const total = `${formatUsd(sessionUsd(s))}${isFloor(s) ? '+' : ''}`
   return budgetUsd > 0 ? `${total}/${formatUsd(budgetUsd)}` : total
 }
 
+// costStatus is the status line's cost part, `≈$1.75 session · ≈$12.40 today`,
+// marked `(mod rates)` where Claude Code reported no total. Every figure is
+// an estimate at list price, never the bill.
+export function costStatus(s: Spend, budgetUsd: number): string | undefined {
+  const session = spendStatus(s, budgetUsd)
+  if (session === undefined) return undefined
+  const hasDay = s.dayUsd !== undefined && s.dayUsd !== null
+  const day = hasDay ? ` · ≈${formatUsd(s.dayUsd ?? 0)} today` : ''
+  const source = (s.claudeUsd ?? null) === null ? ' (mod rates)' : ''
+  return `≈${session} session${day}${source}`
+}
+
+// The mod's own split; Claude Code reports no split by main and subagent.
 export function spendBreakdown(s: Spend): string {
-  return `main ${formatUsd(s.mainUsd)}, subagents ${formatUsd(s.agentUsd)}`
+  return `main ${formatUsd(s.mainUsd)}, subagents ${formatUsd(s.agentUsd)} at the mod's rates`
+}
+
+// dayKey names the store key holding one local calendar day's total.
+export function dayKey(ms: number): string {
+  const d = new Date(ms)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `spend-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+// costDelta is what a new reading of the session total adds since the last.
+// A total that went down was started over by /clear, so all of it is new.
+export function costDelta(previous: number | null, usd: number): number {
+  if (previous === null || usd < previous) return usd
+  return usd - previous
 }
 
 // The budget gate's warning; null while the budget is off or not yet passed.

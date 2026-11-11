@@ -102,7 +102,16 @@ export type CacheState = {
 
 // What the session has spent, in USD, priced from the rates table. isPartial: a response
 // ran on a model the table does not price, so the totals are a floor.
-export type Spend = { mainUsd: number; agentUsd: number; isPartial: boolean }
+// claudeUsd is Claude Code's own session total, as /cost has it; null where
+// it keeps none, and the mod's sum stands in. dayUsd is today's total across
+// sessions.
+export type Spend = {
+  mainUsd: number
+  agentUsd: number
+  isPartial: boolean
+  claudeUsd?: number | null
+  dayUsd?: number | null
+}
 
 // One claim on the machine build budget: an entry of broker.capacity.holders in
 // `magus server status -o json`.

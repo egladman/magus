@@ -19,6 +19,9 @@ import { capacityText, holderText, parseBudget, refusalText, runsMagus, waiterTe
 import {
   budgetNotice,
   cacheNotice,
+  costDelta,
+  costStatus,
+  dayKey,
   formatTokens,
   formatUsd,
   frontmatterModel,
@@ -233,10 +236,14 @@ async function readBudgetOnce($: EngineInterface): Promise<void> {
 
 // ---------- status line ----------
 
-// One entry, labeled with the mod's name: the health issues, or nothing while healthy.
+// One entry, labeled with the mod's name: the health issues, then what the
+// session and the day have cost.
 async function refreshStatus($: EngineInterface): Promise<void> {
   const { value: report = null } = await $.state.get(REPORT)
-  $.ui.status((report ? statusText(report.issues) : undefined) || undefined)
+  const { value: spend = NO_SPEND } = await $.state.get(SPEND)
+  const health = report ? statusText(report.issues) : ''
+  const cost = costStatus(spend, settings.sessionBudgetUsd) ?? ''
+  $.ui.status([health, cost].filter(p => p !== '').join(' · ') || undefined)
 }
 
 // ---------- cost ----------
@@ -290,6 +297,30 @@ async function recordMainResponse($: EngineInterface, usage: TurnUsage | undefin
 async function addSpend($: EngineInterface, who: 'mainUsd' | 'agentUsd', usd: number | null): Promise<void> {
   const { value: spend = NO_SPEND } = await $.state.get(SPEND)
   await $.state.set(SPEND, usd === null ? { ...spend, isPartial: true } : { ...spend, [who]: spend[who] + usd })
+  await recordClaudeCost($)
+}
+
+// Reads Claude Code's own session total and adds what it grew by to today's
+// total in the store, so a session past midnight splits across both days.
+// Two sessions writing one day at once can lose one delta; the next adds on.
+async function recordClaudeCost($: EngineInterface): Promise<void> {
+  const usage = await fromPromise($.session.usage())
+  const usd = usage.error ? undefined : usage.value.cost?.usd
+  const { value: spend = NO_SPEND } = await $.state.get(SPEND)
+  if (usd === undefined) {
+    if ((spend.claudeUsd ?? null) !== null) await $.state.set(SPEND, { ...spend, claudeUsd: null })
+    return
+  }
+  const delta = costDelta(spend.claudeUsd ?? null, usd)
+  const key = dayKey(await $.clock.now())
+  const stored = await fromPromise($.store.get(key))
+  const before = typeof stored.value === 'number' ? stored.value : 0
+  const day = before + delta
+  if (delta > 0) {
+    const written = await fromPromise($.store.set(key, day))
+    if (written.error) $.ui.toast(`Today's spend was not saved: ${written.error.message}`)
+  }
+  await $.state.set(SPEND, { ...spend, claudeUsd: usd, dayUsd: day })
 }
 
 async function recordAgentUsage($: EngineInterface, agentId: string, usage: TurnUsage): Promise<void> {

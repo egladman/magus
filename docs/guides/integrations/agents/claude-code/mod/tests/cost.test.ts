@@ -3,6 +3,9 @@ import { describe, expect, test } from 'claude-code/testing'
 import {
   budgetNotice,
   cacheNotice,
+  costDelta,
+  costStatus,
+  dayKey,
   formatDuration,
   formatTokens,
   formatUsd,
@@ -220,11 +223,28 @@ describe('session spend', () => {
     expect(spendStatus(spend(0, 0, true), 0)).toBe('$0.00+')
   })
 
+  test("Claude Code's total stands in place of the mod's sum, and is never a floor", async () => {
+    const claude = { ...spend(1.5, 0.25, true), claudeUsd: 3 }
+    expect(sessionUsd(claude)).toBe(3)
+    expect(spendStatus(claude, 0)).toBe('$3.00')
+    expect(costStatus({ ...claude, dayUsd: 9.5 }, 0)).toBe('≈$3.00 session · ≈$9.50 today')
+    expect(costStatus(spend(1.5, 0.25), 5)).toBe('≈$1.75/$5.00 session (mod rates)')
+    expect(costStatus(spend(0, 0), 0)).toBeUndefined()
+  })
+
+  test('a day adds what the session total grew by; a total that went down started over', async () => {
+    expect(costDelta(null, 1.25)).toBe(1.25)
+    expect(costDelta(1.25, 2)).toBe(0.75)
+    expect(costDelta(2, 0.5)).toBe(0.5)
+    expect(dayKey(new Date(2026, 10, 11, 23, 59).getTime())).toBe('spend-2026-11-11')
+    expect(dayKey(new Date(2026, 10, 12, 0, 1).getTime())).toBe('spend-2026-11-12')
+  })
+
   test('the budget notice appears only once the total passes it', async () => {
     expect(budgetNotice(spend(4, 1), 5)).toBeNull()
     expect(budgetNotice(spend(4, 1), 0)).toBeNull()
     expect(budgetNotice(spend(4, 1.5), 5)).toBe(
-      'Session spend $5.50 has passed your $5.00 budget (main $4.00, subagents $1.50).',
+      "Session spend $5.50 has passed your $5.00 budget (main $4.00, subagents $1.50 at the mod's rates).",
     )
   })
 })

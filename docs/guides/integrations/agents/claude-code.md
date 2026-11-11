@@ -682,8 +682,14 @@ It adds these to a session:
   `sessionBudgetUsd` (0 by default, which is off), and holds the prompt once by
   default (`budgetGate`: `off`, `warn` or `confirm`). A subagent's token count is shown, never flagged: context size is not billed
   cost.
-- The session's spend, main conversation and subagents together, at the top of the
-  pane.
+- What the session and the day have cost, on the status line:
+  `≈$1.75 session · ≈$12.40 today`. The session figure is Claude Code's own
+  total, the one `/cost` shows; the day adds each session's growth to a total in
+  the mod's store, so a session past midnight splits across both days. Where
+  Claude Code reports no total, the mod's sum from its rates table stands in,
+  marked `(mod rates)`. Every figure is an estimate at list price, never the bill.
+  The pane shows the same total with the mod's split by main conversation and
+  subagents.
 - The machine build budget, read from `magus server status -o json` every 15 seconds and
   around each Bash call that runs magus: each holder's pid, target, slots, memory,
   age and checkout, the callers waiting for a seat, and the
