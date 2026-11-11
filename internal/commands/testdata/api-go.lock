@@ -4758,6 +4758,8 @@ github.com/egladman/magus/types.StopRequest.Parent field string
 github.com/egladman/magus/types.StopRequest.Role field AgentRole
 github.com/egladman/magus/types.StopRequest.Session field string
 github.com/egladman/magus/types.StopRequest.StopHookActive field bool
+github.com/egladman/magus/types.StopRequest.Tasks field []string
+github.com/egladman/magus/types.StopRequest.TasksUnknown field string
 github.com/egladman/magus/types.StopRequest.Thread field AgentThread
 github.com/egladman/magus/types.StopRequest.ThreadFrom field ThreadSource
 github.com/egladman/magus/types.StopRequest.Transcript field string

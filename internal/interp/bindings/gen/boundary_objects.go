@@ -5272,6 +5272,12 @@ func ObjectStopRequest(v types.StopRequest, enums ffi.EnumCases) vm.Value {
 	out.MapSet("event", vm.StringValue(v.Event))
 	out.MapSet("stopHookActive", vm.BoolValue(v.StopHookActive))
 	out.MapSet("transcript", vm.StringValue(v.Transcript))
+	itemsTasks := make([]vm.Value, len(v.Tasks))
+	for indexTasks := range v.Tasks {
+		itemsTasks[indexTasks] = vm.StringValue(v.Tasks[indexTasks])
+	}
+	out.MapSet("tasks", vm.ListValue(itemsTasks))
+	out.MapSet("tasksUnknown", vm.StringValue(v.TasksUnknown))
 	optCheckout := vm.Null
 	if v.Checkout != nil {
 		optCheckout = ObjectCheckoutState((*v.Checkout))

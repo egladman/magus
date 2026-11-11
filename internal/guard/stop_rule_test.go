@@ -70,7 +70,16 @@ func (s *StopRuleSuite) TestARootStopAsksTheRule() {
 	v := s.judge(Dependencies{StopRule: probe.rule()}, s.stop("Stop", map[string]any{"stop_hook_active": true}))
 	s.Equal(types.GuardJudgment{Decision: decisionPass}, v)
 	s.Equal(types.StopRequest{Host: "claude-code", Session: "8f2c6a1e", Role: types.AgentRoleRoot, Event: "Stop", StopHookActive: true,
-		Transcript: "/nonexistent/root.jsonl", Workspace: s.root}, s.asked(probe))
+		Transcript: "/nonexistent/root.jsonl", TasksUnknown: "the host's transcript /nonexistent/root.jsonl could not be read: open /nonexistent/root.jsonl: no such file or directory",
+		Workspace: s.root}, s.asked(probe))
+}
+
+func (s *StopRuleSuite) TestARootStopNamesTheSubagentsStillRunning() {
+	probe := &stopRuleProbe{}
+	s.judge(Dependencies{StopRule: probe.rule()}, s.stop("Stop", map[string]any{"transcript_path": writeTranscript(s.T(), spawnCall, spawnLaunched)}))
+	req := s.asked(probe)
+	s.Equal([]string{"root/worker naming-lint"}, req.Tasks)
+	s.Empty(req.TasksUnknown)
 }
 
 func (s *StopRuleSuite) TestTheRulesDenyRefusesTheStop() {

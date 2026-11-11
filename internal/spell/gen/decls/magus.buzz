@@ -2376,6 +2376,8 @@ export object StopRequest {
     event: str = "",
     stopHookActive: bool = false,
     transcript: str = "",
+    tasks: [str] = [],
+    tasksUnknown: str = "",
     checkout: CheckoutState? = null,
     dir: str = "",
     workspace: str = "",
