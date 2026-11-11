@@ -125,12 +125,8 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// A continuation carries a brief as much as a spawn does, so both are graded.
 	if verdict.Decision != decisionDeny {
 		deps.scope = scopeAt(at)
-		row, bound := continuedRow(ctx, at, facts, env)
-		if env.IsSpawn {
-			row, _ = titled()
-		}
+		_, bound := continuedRow(ctx, at, facts, env)
 		brief := briefInput{text: env.Value, title: env.Spawn.Description, isolated: env.IsSpawn && spawnIsolated(env, titled), bound: bound}
-		brief.format, brief.formatFrom = job.ResolveBriefFormat(row, deps.BriefFormat)
 		if v, refused := held.hold(deps, judgeBriefCommand(deps, brief)); refused {
 			verdict = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
 			why, decided = v.Why, decidedByBuiltin
