@@ -23,10 +23,6 @@ type Agents struct {
 	// magus\guard.profile declares, never lower it, and of the tiers that set it the
 	// highest applies.
 	Profile types.GuardProfile `json:"profile" yaml:"profile" validate:"omitempty,oneof=off light standard strict"`
-	// BriefFormat is the format a spawn brief takes when its job row names none: markdown,
-	// or buzz, which the guard type-checks as one `magus\Brief{...}` literal. Only the
-	// workspace's magus.yaml sets it, so two people in one repository get the same verdict.
-	BriefFormat types.BriefFormat `json:"brief_format" yaml:"brief_format" validate:"omitempty,oneof=markdown buzz"`
 	// PromptCacheTTL is how long the account's prompt cache keeps a prefix, as a Go duration:
 	// "1h" for a host on the one-hour cache. Zero leaves the provider's shortest published
 	// window, 5m. The guard's spawn-warm-worker measures a finished worker's warmth by it.
@@ -132,7 +128,6 @@ func LoadAgents(root string) (Agents, error) {
 		return Agents{}, err
 	}
 	agents := merged.Agents
-	agents.BriefFormat = workspace.Agents.BriefFormat
 	agents.Profile = workspace.Agents.Profile
 	if p := user.Agents.Profile; p != "" {
 		agents.Profile = p.Stricter(agents.Profile)
