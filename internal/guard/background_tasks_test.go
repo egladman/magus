@@ -431,7 +431,9 @@ func TestJudgeStampsTheJobASubagentStopReleasesAndItsNextCallClears(t *testing.T
 	worker := job.Caller{Host: "claude-code", Session: "8f2c6a1e", Agent: "a05d44b006f8f68af"}
 	require.NoError(t, store.Bind(worker, "w"))
 
-	v := Judge(ctx, Dependencies{}, Request{Input: subagentStop(t, worker.Agent, writeTranscript(t)), Host: "claude-code"})
+	// A stop that stands: stop-unfiled would refuse this unfiled row's first.
+	standing := Dependencies{Builtins: map[string]builtin.Setting{string(denyRuleStopUnfiled): {Decision: builtin.Off}}}
+	v := Judge(ctx, standing, Request{Input: subagentStop(t, worker.Agent, writeTranscript(t)), Host: "claude-code"})
 	assert.Equal(t, decisionPass, v.Decision, v.Reason+v.Context)
 	rows, err := store.List()
 	require.NoError(t, err)
