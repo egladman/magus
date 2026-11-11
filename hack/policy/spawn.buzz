@@ -372,7 +372,7 @@ test "a spawn whose job builds its own binary may brief the build" {
 
 // A starting guess, not a measurement: change it here when it stops fitting.
 // magus only reports this count. Refusing on it is this repository's call.
-export final finishedBranchLimit = 10;
+export final finishedBranchLimit = 50;
 
 // ForkCounts is what the rules read of magus\workspace().forkFacts().
 // It is copied out like Spawn.
@@ -622,7 +622,7 @@ fun noFile(path: str) > str {
 }
 
 test "a top-level fork at the limit is refused, printing both counts, the last test and the file" {
-    final v = verdict\checked(decideFork(mandate\Fork{ id = "next" }, counts: waiting(10), limit: finishedBranchLimit), label: "at the limit");
+    final v = verdict\checked(decideFork(mandate\Fork{ id = "next" }, counts: waiting(finishedBranchLimit), limit: finishedBranchLimit), label: "at the limit");
     std\assert(v.decision == magus\GuardDecision.deny, message: "at the branch limit");
     foreach (want in ["10 finished branch(es)", "done-9 (job done-9", "3 commit(s)", "out1a2b3c at abc123", "hack/policy/spawn.buzz", "integrate-branches"]) {
         std\assert(v.reason.indexOf(want) != null, message: "{want} in {v.reason}");
@@ -682,7 +682,7 @@ test "a branch that is on no remote ref stays counted, and an unreadable one say
 }
 
 test "raising the limit lets the same fork through" {
-    final v = decideFork(mandate\Fork{ id = "next" }, counts: waiting(10), limit: finishedBranchLimit + 1);
+    final v = decideFork(mandate\Fork{ id = "next" }, counts: waiting(finishedBranchLimit), limit: finishedBranchLimit + 1);
     std\assert(v.decision == magus\GuardDecision.allow, message: v.reason);
 }
 
