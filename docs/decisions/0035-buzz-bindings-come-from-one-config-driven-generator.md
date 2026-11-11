@@ -183,7 +183,7 @@ A callback is declared by the Impl's Go parameter type, and nothing else. `Arg.F
 
 ```go
 func FsWalk(ctx context.Context, root string,
-	callback func(ctx context.Context, path string, isDir bool) (types.WalkStep, error)) error
+    callback func(ctx context.Context, path string, isDir bool) (types.WalkStep, error)) error
 ```
 
 - The parameter is a Go func type whose first parameter is `context.Context` and whose
@@ -510,3 +510,17 @@ field, is mirrored with no config line. A package sets `all: true`, with
 `include-type-regex` and `exclude-type-regex`, for types scripts build that no
 signature reaches. A type is listed only for a setting. Keys are kebab-case
 (`zero-case`), as mockery v3's are.
+
+### 2026-11-11: cases may be declared elsewhere, and a generic instance is a field
+
+The versioned envelope in `libs/apiversion` names its kinds with a type that declares
+none: each spec type's package declares `const KindJob apiversion.Kind = "Job"`. A type
+sets `casesFrom`, a list of packages, to say where its cases are declared. Unset, only
+the type's own package is read; set, only the listed ones are, in order, and a type with
+no case in any of them is still refused. Listed packages are loaded with the rest.
+
+A field or slice element that is a concrete generic instance, such as
+`apiversion.Object[types.JobSpec]`, mirrors as `Object::<JobSpec>`, defaulting to
+`Object::<JobSpec>{}`. The arguments are read from reflect's name for the instance, so
+each keeps its Go name: a `Namer` rename of an argument does not apply, and a map
+argument is refused.

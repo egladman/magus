@@ -73,3 +73,19 @@ outputs: {x: {kind: rust, path: ""}}
 		s.ErrorContains(err, want)
 	}
 }
+
+func (s *ConfigSuite) TestCasesFromLayersAndIsLoadedWithThePackages() {
+	cfg, err := s.parse(`version: v1alpha1
+packages:
+  example.com/a:
+    config: {casesFrom: [example.com/b]}
+    types:
+      Kind: {config: {casesFrom: [example.com/c, example.com/a]}}
+      Other: {}
+`)
+	s.Require().NoError(err)
+	refs := cfg.Types()
+	s.Equal([]string{"example.com/c", "example.com/a"}, refs[0].Settings.CasesFrom)
+	s.Equal([]string{"example.com/b"}, refs[1].Settings.CasesFrom)
+	s.Equal([]string{"example.com/a", "example.com/b", "example.com/c"}, cfg.PackagePaths())
+}

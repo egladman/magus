@@ -217,10 +217,14 @@ func FieldType(t reflect.Type, opts Options) (typeName, zero string, err error) 
 		if opts.TimeAsString && t == reflect.TypeOf(time.Time{}) {
 			return "str", `""`, nil
 		}
-		// A field holding a generic instance would need `Result::<int>` spelled from
-		// the type arguments, which reflect does not expose by name.
+		// reflect names an instance only as Object[pkg/path.Arg], so the Buzz
+		// spelling is rebuilt from that string.
 		if strings.Contains(t.Name(), "[") {
-			return "", "", fmt.Errorf("generic instance %s cannot be a field type", t)
+			name, err := genericInstanceName(t.Name())
+			if err != nil {
+				return "", "", fmt.Errorf("generic instance %s: %w", t, err)
+			}
+			return name, name + "{}", nil
 		}
 		// A struct field maps to the Buzz object the host declares for it, which is NOT
 		// always the Go type's own name. Resolving through the Namer is what keeps a
@@ -303,4 +307,73 @@ func LowerFirstWord(name string) string {
 		// the one capital that stays.
 		return strings.ToLower(string(r[:n-1])) + string(r[n-1:])
 	}
+}
+
+var builtinTypeNames = map[string]string{
+	"string": "str", "bool": "bool", "float32": "double", "float64": "double",
+	"int": "int", "int8": "int", "int16": "int", "int32": "int", "int64": "int",
+	"uint": "int", "uint8": "int", "uint16": "int", "uint32": "int", "uint64": "int",
+	"any": "any?",
+}
+
+// genericInstanceName spells reflect's Object[example.com/types.JobSpec] as
+// Object::<JobSpec>. Arguments keep their Go names, because a Namer needs
+// types and reflect gives only this string. A map argument is refused.
+func genericInstanceName(reflected string) (string, error) {
+	open := strings.Index(reflected, "[")
+	if open <= 0 || !strings.HasSuffix(reflected, "]") {
+		return "", fmt.Errorf("cannot read type arguments from %q", reflected)
+	}
+	var args []string
+	for _, arg := range splitTypeArguments(reflected[open+1 : len(reflected)-1]) {
+		buzzArg, err := typeArgumentName(arg)
+		if err != nil {
+			return "", err
+		}
+		args = append(args, buzzArg)
+	}
+	return reflected[:open] + "::<" + strings.Join(args, ", ") + ">", nil
+}
+
+func splitTypeArguments(list string) []string {
+	var parts []string
+	depth, start := 0, 0
+	for i, r := range list {
+		switch r {
+		case '[':
+			depth++
+		case ']':
+			depth--
+		case ',':
+			if depth == 0 {
+				parts = append(parts, list[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(parts, list[start:])
+}
+
+func typeArgumentName(arg string) (string, error) {
+	arg = strings.TrimSpace(arg)
+	switch {
+	case strings.HasPrefix(arg, "[]"):
+		elem, err := typeArgumentName(arg[2:])
+		return "[" + elem + "]", err
+	case strings.HasPrefix(arg, "*"):
+		elem, err := typeArgumentName(arg[1:])
+		if err != nil || strings.HasSuffix(elem, "?") {
+			return elem, err
+		}
+		return elem + "?", nil
+	case strings.HasPrefix(arg, "map["):
+		return "", fmt.Errorf("type argument %q is a map", arg)
+	}
+	if open := strings.Index(arg, "["); open > 0 {
+		return genericInstanceName(arg[strings.LastIndex(arg[:open], ".")+1:])
+	}
+	if name, ok := builtinTypeNames[arg]; ok {
+		return name, nil
+	}
+	return arg[strings.LastIndex(arg, ".")+1:], nil
 }

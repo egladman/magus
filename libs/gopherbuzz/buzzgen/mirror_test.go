@@ -177,10 +177,47 @@ func TestObjectDecl_Generic(t *testing.T) {
 	assert.Empty(t, TypeParams(reflect.TypeFor[genericDiag]()))
 }
 
-// Its Buzz spelling needs type arguments reflect cannot name.
-func TestFieldType_GenericInstanceRefused(t *testing.T) {
+func TestFieldType_GenericInstanceOfANamedType(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := FieldType(reflect.TypeFor[genericResult[int]](), DefaultOptions())
-	require.ErrorContains(t, err, "generic instance")
+	typeName, zero, err := FieldType(reflect.TypeFor[genericResult[genericDiag]](), DefaultOptions())
+	require.NoError(t, err)
+	assert.Equal(t, "genericResult::<genericDiag>", typeName)
+	assert.Equal(t, "genericResult::<genericDiag>{}", zero)
+}
+
+func TestFieldType_GenericInstanceOfBuiltinsAndContainers(t *testing.T) {
+	t.Parallel()
+
+	typeName, _, err := FieldType(reflect.TypeFor[genericResult[[]*genericDiag]](), DefaultOptions())
+	require.NoError(t, err)
+	assert.Equal(t, "genericResult::<[genericDiag?]>", typeName)
+
+	typeName, _, err = FieldType(reflect.TypeFor[genericResult[int]](), DefaultOptions())
+	require.NoError(t, err)
+	assert.Equal(t, "genericResult::<int>", typeName)
+}
+
+func TestFieldType_GenericInstanceNested(t *testing.T) {
+	t.Parallel()
+
+	typeName, _, err := FieldType(reflect.TypeFor[genericResult[genericPair[string]]](), DefaultOptions())
+	require.NoError(t, err)
+	assert.Equal(t, "genericResult::<genericPair::<str>>", typeName)
+}
+
+func TestFieldType_GenericInstanceAsSliceElement(t *testing.T) {
+	t.Parallel()
+
+	typeName, zero, err := FieldType(reflect.TypeFor[[]genericResult[genericDiag]](), DefaultOptions())
+	require.NoError(t, err)
+	assert.Equal(t, "[genericResult::<genericDiag>]", typeName)
+	assert.Equal(t, "[]", zero)
+}
+
+func TestFieldType_GenericInstanceWithMapArgumentRefused(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := FieldType(reflect.TypeFor[genericResult[map[string]int]](), DefaultOptions())
+	require.ErrorContains(t, err, "is a map")
 }

@@ -100,5 +100,16 @@ func (p *Program) Enum(ref TypeRef) (Enum, error) {
 	if ref.OpenReason() != "" {
 		return Enum{}, fmt.Errorf("buzzgen: %s.%s is open, so it crosses as str", ref.Package, ref.Name)
 	}
-	return EnumOf(named, ref)
+	from := []*types.Package{named.Obj().Pkg()}
+	if ref.Settings.CasesFrom != nil {
+		from = nil
+		for _, path := range ref.Settings.CasesFrom {
+			pkg, err := p.Package(path)
+			if err != nil {
+				return Enum{}, fmt.Errorf("buzzgen: %s.%s casesFrom: %w", ref.Package, ref.Name, err)
+			}
+			from = append(from, pkg.Types)
+		}
+	}
+	return DeriveEnum(named, ref, from)
 }

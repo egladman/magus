@@ -51,6 +51,9 @@ type Settings struct {
 	// Cases maps a value to the case name it takes, overriding the
 	// derived name. Levels merge by key.
 	Cases map[string]string `yaml:"cases,omitempty"`
+	// CasesFrom lists the packages that declare the type's cases. Unset,
+	// the type's own package is read.
+	CasesFrom []string `yaml:"casesFrom,omitempty"`
 	// PkgName is the Go package name a go or go-decode output declares.
 	PkgName *string `yaml:"pkgname,omitempty"`
 }
@@ -78,6 +81,9 @@ func (s Settings) over(child Settings) Settings {
 	}
 	if child.PkgName != nil {
 		out.PkgName = child.PkgName
+	}
+	if child.CasesFrom != nil {
+		out.CasesFrom = child.CasesFrom
 	}
 	if child.Required != nil {
 		out.Required = child.Required
@@ -272,10 +278,16 @@ func (c Config) PkgName(output string) string {
 // PackagePaths lists every package the config names, sorted.
 func (c Config) PackagePaths() []string {
 	paths := sortedKeys(c.Packages)
-	if c.Modules.Package != "" && !slices.Contains(paths, c.Modules.Package) {
-		paths = append(paths, c.Modules.Package)
-		slices.Sort(paths)
+	extra := []string{c.Modules.Package}
+	for _, ref := range c.Types() {
+		extra = append(extra, ref.Settings.CasesFrom...)
 	}
+	for _, path := range extra {
+		if path != "" && !slices.Contains(paths, path) {
+			paths = append(paths, path)
+		}
+	}
+	slices.Sort(paths)
 	return paths
 }
 
