@@ -432,8 +432,6 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 			value = 0.75
 		case "timeout":
 			value = "30m"
-		case "brief_format":
-			value = "buzz"
 		case "delivery":
 			value = types.DeliveryStacked
 		case "check":
@@ -449,6 +447,10 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 			value = []any{map[string]any{
 				"code": string(types.WritePathTooBroad), "subject": "internal/**", "reason": "the root regenerates it",
 			}}
+		case "decisions":
+			value = []any{map[string]any{"what": "keep the store format", "why": "no reader branches on it"}}
+		case "evidence":
+			value = []any{map[string]any{"kind": string(types.JobEvidenceOutput), "id": "out1a2b3c", "says": "the test fails"}}
 		}
 		_, err = DecodePut(map[string]any{field: value})
 		require.NoError(t, err, "magus\\workspace().putJob rejects %q, which `magus job fork` accepts", field)

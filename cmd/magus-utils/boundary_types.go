@@ -460,6 +460,8 @@ var boundaryTypes = []boundaryType{
 	{Name: "ClaimEvidence", Type: reflect.TypeFor[types.ClaimEvidence](), RuntimeObject: true},
 	{Name: "JobClaim", Type: reflect.TypeFor[types.JobClaim](), RuntimeObject: true},
 	{Name: "JobClaimRequest", Type: reflect.TypeFor[types.JobClaimRequest]()},
+	{Name: "JobDecision", Type: reflect.TypeFor[types.JobDecision](), RuntimeObject: true},
+	{Name: "JobEvidence", Type: reflect.TypeFor[types.JobEvidence](), RuntimeObject: true},
 	{Name: "Job", Type: reflect.TypeFor[types.Job](), RuntimeObject: true},
 	// Declaration is Job's INPUT twin: a magusfile can construct one, but nothing hands one
 	// back out, so it carries no RuntimeObject encoder.
@@ -509,11 +511,6 @@ var boundaryTypes = []boundaryType{
 	{Name: "TrailSpawn", Type: reflect.TypeFor[trail.Spawn](), RuntimeObject: true},
 	{Name: "Trail", Type: reflect.TypeFor[trail.Trail](), RuntimeObject: true},
 	{Name: "TrailMark", Type: reflect.TypeFor[trail.Mark](), RuntimeObject: true},
-	// A buzz-format brief is one magus\Brief literal the guard type-checks; nothing hands
-	// one back, so none is a runtime object. Leaf first: Brief holds lists of the two.
-	{Name: "BriefDecision", Type: reflect.TypeFor[types.BriefDecision]()},
-	{Name: "BriefRef", Type: reflect.TypeFor[types.BriefRef]()},
-	{Name: "Brief", Type: reflect.TypeFor[types.Brief]()},
 	// The magus root constructors' records and their methods' reports.
 	{Name: "Workspace", Type: reflect.TypeFor[types.MagusWorkspace](), RuntimeObject: true},
 	{Name: "ChangeOptions", Type: reflect.TypeFor[types.ChangeOptions]()},
@@ -576,8 +573,7 @@ var boundaryEnumTypes = []reflect.Type{
 	reflect.TypeFor[types.McpTransport](),
 	reflect.TypeFor[types.ModelTierSource](),
 	reflect.TypeFor[types.GroupingShape](),
-	reflect.TypeFor[types.BriefFormat](),
-	reflect.TypeFor[types.BriefRefKind](),
+	reflect.TypeFor[types.JobEvidenceKind](),
 	reflect.TypeFor[types.ClaimKind](),
 	reflect.TypeFor[image.OS](),
 	reflect.TypeFor[image.Architecture](),

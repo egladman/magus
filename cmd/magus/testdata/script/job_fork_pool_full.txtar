@@ -16,13 +16,13 @@ exec magus job fork -h
 stderr 'When this machine''s build budget is full it says how full and which run has held'
 stderr 'which never waits for a seat'
 
-exec magus job fork wave/off --write-paths code.go --check 'test .'
+exec magus job fork wave/off --write-paths code.go --check 'test .' --criteria 'the scripted job' --model economy
 stdout '^forked wave/off'
 ! stdout 'build budget'
 
 env MAGUS_BROKER=best-effort
 env XDG_RUNTIME_DIR=$WORK/run
-exec magus job fork wave/unanswered --write-paths code.go --check 'test .'
+exec magus job fork wave/unanswered --write-paths code.go --check 'test .' --criteria 'the scripted job' --model economy
 stdout '^forked wave/unanswered'
 ! stdout 'build budget'
 

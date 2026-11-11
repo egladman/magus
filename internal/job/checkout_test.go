@@ -112,6 +112,7 @@ func TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout(t *testing.T) {
 	limits := config.Jobs{}
 
 	held, err := ForkMerge(ctx, s, "wave/worker-one", func(u *types.Job) {
+		specify(u)
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
 	}, limits, nil)
 	require.NoError(t, err)
@@ -119,6 +120,7 @@ func TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = ForkMerge(ctx, s, "wave/worker-two", func(u *types.Job) {
+		specify(u)
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"magusfile.buzz", "docs"}
 	}, limits, nil)
 
@@ -129,6 +131,7 @@ func TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout(t *testing.T) {
 
 	t.Run("a write path that touches no workspace-load file still forks", func(t *testing.T) {
 		_, err := ForkMerge(ctx, s, "wave/worker-three", func(u *types.Job) {
+			specify(u)
 			u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"internal/guard"}
 		}, limits, nil)
 		require.NoError(t, err)
@@ -137,6 +140,7 @@ func TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout(t *testing.T) {
 	t.Run("an empty checkout refuses nothing", func(t *testing.T) {
 		alone := NewStore(tempLocation(t, root))
 		_, err := ForkMerge(ctx, alone, "solo", func(u *types.Job) {
+			specify(u)
 			u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"magusfile.buzz"}
 		}, limits, nil)
 		require.NoError(t, err)
@@ -154,6 +158,7 @@ func TestForkIntoItsOwnCheckoutJudgesThatCheckout(t *testing.T) {
 	limits := config.Jobs{}
 
 	held, err := ForkMerge(ctx, s, "wave/worker-one", func(u *types.Job) {
+		specify(u)
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
 	}, limits, nil)
 	require.NoError(t, err)
@@ -162,11 +167,13 @@ func TestForkIntoItsOwnCheckoutJudgesThatCheckout(t *testing.T) {
 
 	own := filepath.Join(t.TempDir(), "worker-two")
 	loadClaim := func(u *types.Job) {
+		specify(u)
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"magusfile.buzz"}
 	}
 
 	t.Run("a fork naming a checkout passes", func(t *testing.T) {
 		stored, err := ForkMerge(ctx, s, "wave/worker-two", func(u *types.Job) {
+			specify(u)
 			loadClaim(u)
 			u.Worktree = &types.JobWorktree{Root: own}
 		}, limits, nil)
@@ -193,6 +200,7 @@ func TestForkRecordsWhetherTheWritePathsWereProvenDisjoint(t *testing.T) {
 	s := NewStore(loc)
 
 	alone, err := ForkMerge(ctx, s, "wave/first", func(u *types.Job) {
+		specify(u)
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
@@ -201,12 +209,14 @@ func TestForkRecordsWhetherTheWritePathsWereProvenDisjoint(t *testing.T) {
 	require.NoError(t, err)
 
 	disjoint, err := ForkMerge(ctx, s, "wave/second", func(u *types.Job) {
+		specify(u)
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"internal/guard"}
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, types.WriteProofDisjoint, disjoint.WriteProof)
 
 	overlapping, err := ForkMerge(ctx, s, "wave/third", func(u *types.Job) {
+		specify(u)
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"internal/job/store.go"}
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
@@ -226,6 +236,7 @@ func TestForkProvesAgainstDeclaredJobsNoOneHasExecuted(t *testing.T) {
 	fork := func(name string, paths ...string) types.Job {
 		t.Helper()
 		row, err := ForkMerge(ctx, s, name, func(u *types.Job) {
+			specify(u)
 			u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, paths
 		}, config.Jobs{}, nil)
 		require.NoError(t, err)
@@ -276,6 +287,7 @@ func TestForkRefusesADirectoryWritePath(t *testing.T) {
 			t.Parallel()
 			s := NewStore(tempLocation(t, root))
 			_, err := ForkMerge(context.Background(), s, "wave/job", func(u *types.Job) {
+				specify(u)
 				u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, tc.paths
 			}, config.Jobs{}, nil)
 			if tc.want == "" {
@@ -297,10 +309,11 @@ func TestForkRefusesADirectoryWritePath(t *testing.T) {
 		s := NewStore(tempLocation(t, root))
 		ctx := context.Background()
 		_, err := ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
+			specify(u)
 			u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"internal/job/store.go"}
 		}, config.Jobs{}, nil)
 		require.NoError(t, err)
-		_, err = ForkMerge(ctx, s, "wave/job", func(u *types.Job) { u.Model = "opus" }, config.Jobs{}, nil)
+		_, err = ForkMerge(ctx, s, "wave/job", func(u *types.Job) { specify(u); u.Model = "opus" }, config.Jobs{}, nil)
 		require.NoError(t, err)
 	})
 }
@@ -321,6 +334,7 @@ func TestSharedCheckoutRefusalIgnoresAJobThatIsOver(t *testing.T) {
 			s := NewStore(tempLocation(t, root))
 
 			done, err := ForkMerge(ctx, s, "wave/done", func(u *types.Job) {
+				specify(u)
 				u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"magus.yaml"}
 			}, config.Jobs{}, nil)
 			require.NoError(t, err)
@@ -330,6 +344,7 @@ func TestSharedCheckoutRefusalIgnoresAJobThatIsOver(t *testing.T) {
 			require.NoError(t, err)
 
 			next, err := ForkMerge(ctx, s, "wave/next", func(u *types.Job) {
+				specify(u)
 				u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"magus.yaml"}
 			}, config.Jobs{}, nil)
 			require.NoError(t, err)
@@ -347,6 +362,7 @@ func TestSharedCheckoutRefusalNamesTheHoldersUnusedPaths(t *testing.T) {
 	root := loadableRepository(t)
 	s := NewStore(tempLocation(t, root))
 	held, err := ForkMerge(ctx, s, "wave/worker-one", func(u *types.Job) {
+		specify(u)
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
@@ -379,6 +395,7 @@ func TestSharedCheckoutRefusalNamesTheHoldersUnusedPaths(t *testing.T) {
 		root := loadableRepository(t)
 		s := NewStore(tempLocation(t, root))
 		held, err := ForkMerge(ctx, s, "wave/worker-one", func(u *types.Job) {
+			specify(u)
 			u.Check, u.State, u.WritePaths = forkCheck(), types.StateRunning, []string{"internal/job/store.go"}
 		}, config.Jobs{}, nil)
 		require.NoError(t, err)

@@ -805,9 +805,11 @@ type Job struct {
 	// output-only like Releases: a caller's value is replaced by the stored one, and nil
 	// means the workspace declared no model tiers when the row was written.
 	ModelTier *JobModelTier `json:"model_tier,omitempty" yaml:"model_tier,omitempty"`
-	// BriefFormat is the format a brief to this row's worker takes, over the workspace's
-	// agents.brief_format. Empty defers to magus.yaml.
-	BriefFormat BriefFormat `json:"brief_format,omitempty" yaml:"brief_format,omitempty"`
+	// Decisions are choices already made, so the holder does not
+	// reopen them. Evidence points at what backs them. Nothing grades
+	// either.
+	Decisions []JobDecision `json:"decisions,omitempty" yaml:"decisions,omitempty"`
+	Evidence  []JobEvidence `json:"evidence,omitempty" yaml:"evidence,omitempty"`
 	// Delivery is how the person chose to deliver this job's work, one of
 	// JobDeliveries; empty means nobody chose. Workspace policy judges it.
 	Delivery string `json:"delivery,omitempty" yaml:"delivery,omitempty"`
@@ -1098,6 +1100,34 @@ type PriorAttempt struct {
 	Retry        RetryVerdict `json:"retry"                  yaml:"retry"`
 }
 
+// JobDecision is one choice a parent already made, handed to the
+// holder on the row. What is required.
+type JobDecision struct {
+	What string `json:"what" yaml:"what"`
+	Why  string `json:"why,omitempty" yaml:"why,omitempty"`
+}
+
+// JobEvidenceKind is what a [JobEvidence] points at.
+type JobEvidenceKind string
+
+const (
+	JobEvidenceOutput     JobEvidenceKind = "output"
+	JobEvidenceVerdict    JobEvidenceKind = "verdict"
+	JobEvidenceInvocation JobEvidenceKind = "invocation"
+	JobEvidenceFile       JobEvidenceKind = "file"
+	JobEvidencePlan       JobEvidenceKind = "plan"
+	JobEvidenceCommit     JobEvidenceKind = "commit"
+)
+
+// JobEvidence is one pointer the holder can open, never a summary of
+// what it points at. Says is what the parent read there. Kind and ID
+// are required.
+type JobEvidence struct {
+	Kind JobEvidenceKind `json:"kind" yaml:"kind"`
+	ID   string          `json:"id" yaml:"id"`
+	Says string          `json:"says,omitempty" yaml:"says,omitempty"`
+}
+
 // Declaration is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing
 // the store computes. A caller cannot say when its row was created or what it released, and
 // the way to make that true is for the input type not to carry those fields rather than for
@@ -1151,9 +1181,9 @@ type Declaration struct {
 	// Weight is the job's lean on the machine budget, in (0,1]: omitted means 0.5, and an
 	// explicit 0 is out of range. See [Job.Weight].
 	Weight *float64 `json:"weight,omitempty"`
-	// BriefFormat is the format a brief to this job's worker takes; empty defers to
-	// magus.yaml's agents.brief_format. See [Job.BriefFormat].
-	BriefFormat BriefFormat `json:"brief_format,omitempty"`
+	// Decisions and Evidence: see [Job.Decisions].
+	Decisions []JobDecision `json:"decisions,omitempty"`
+	Evidence  []JobEvidence `json:"evidence,omitempty"`
 	// Delivery and ParentHead: see [Job.Delivery].
 	Delivery   string `json:"delivery,omitempty"`
 	ParentHead string `json:"parent_head,omitempty"`
@@ -1448,6 +1478,7 @@ func (r Declaration) Problems() JobProblems {
 	if r.Settles() {
 		return append(ps, r.settlementProblems()...)
 	}
+	ps = append(ps, specRecordProblems(r.Decisions, r.Evidence)...)
 	if p := strings.TrimSpace(r.Parent); p != "" && !ValidJobID(p) {
 		invalid("parent", fmt.Sprintf("parent %q is not a lease id", r.Parent), "name the id of the job this one was forked under")
 	}
@@ -1475,10 +1506,6 @@ func (r Declaration) Problems() JobProblems {
 	}
 	if _, err := ParseJobTimeout(r.Timeout); err != nil {
 		invalid("timeout", fmt.Sprintf("timeout %q is not a positive duration", r.Timeout), "name one such as 30m or 2h, or leave it out")
-	}
-	if r.BriefFormat != "" && !r.BriefFormat.Valid() {
-		invalid("brief_format", fmt.Sprintf("brief_format %q is not a brief format", r.BriefFormat),
-			fmt.Sprintf("use one of %s, or leave it out for magus.yaml's agents.brief_format", strings.Join(r.BriefFormat.Values(), ", ")))
 	}
 	if r.Delivery != "" && !slices.Contains(JobDeliveries(), r.Delivery) {
 		invalid("delivery", fmt.Sprintf("delivery %q is not a delivery", r.Delivery),
@@ -1543,6 +1570,32 @@ func (r Declaration) Problems() JobProblems {
 		}
 	}
 	return append(ps, goalsProblems(r.Goals, declared)...)
+}
+
+// specRecordProblems is each decision with no what and each piece of
+// evidence with no id or an unknown kind.
+func specRecordProblems(decisions []JobDecision, evidence []JobEvidence) JobProblems {
+	var ps JobProblems
+	invalid := func(field, message, fix string) {
+		ps = append(ps, JobProblem{Code: JobRecordInvalid, Field: field, Message: message, Fix: fix})
+	}
+	for i, d := range decisions {
+		if strings.TrimSpace(d.What) == "" {
+			at := fmt.Sprintf("decisions[%d].what", i)
+			invalid(at, at+" is blank", "say what was decided, or drop the entry")
+		}
+	}
+	for i, e := range evidence {
+		at := fmt.Sprintf("evidence[%d]", i)
+		if !e.Kind.Valid() {
+			invalid(at+".kind", fmt.Sprintf("%s.kind %q is not an evidence kind", at, e.Kind),
+				"use one of "+strings.Join(e.Kind.Values(), ", "))
+		}
+		if strings.TrimSpace(e.ID) == "" {
+			invalid(at+".id", at+".id is blank", "name the ref, verdict, invocation, file:line, plan path or commit it points at")
+		}
+	}
+	return ps
 }
 
 // claimProblems is every problem of a claim record: it carries only schema_version, id
@@ -1959,7 +2012,8 @@ func (r Declaration) Apply(u *Job) {
 	if r.Weight != nil {
 		u.Weight = *r.Weight
 	}
-	u.BriefFormat = r.BriefFormat
+	u.Decisions = slices.Clone(r.Decisions)
+	u.Evidence = slices.Clone(r.Evidence)
 	u.Delivery = r.Delivery
 	u.ParentHead = strings.TrimSpace(r.ParentHead)
 	u.Follows = strings.TrimSpace(r.Follows)
@@ -2763,6 +2817,8 @@ func (u Job) Clone() Job {
 	c.DependsOn = slices.Clone(u.DependsOn)
 	c.Integrates = slices.Clone(u.Integrates)
 	c.Breaks = slices.Clone(u.Breaks)
+	c.Decisions = slices.Clone(u.Decisions)
+	c.Evidence = slices.Clone(u.Evidence)
 	c.Goals = cloneGoals(u.Goals)
 	c.Releases = slices.Clone(u.Releases)
 	c.Claims = slices.Clone(u.Claims)

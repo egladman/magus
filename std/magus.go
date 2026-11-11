@@ -555,9 +555,7 @@ var Magus = Module{
 					Extern:  (func(context.Context, string) ([]string, error))(nil),
 				},
 			},
-			// Brief is no method's: a buzz-format spawn brief is one magus\Brief literal the
-			// guard type-checks against this declaration.
-			Objects: []string{"SpawnRequest", "CommandRequest", "WriteRequest", "StopRequest", "GuardBinary", "Brief"},
+			Objects: []string{"SpawnRequest", "CommandRequest", "WriteRequest", "StopRequest", "GuardBinary"},
 		},
 		{
 			Name: "harness",

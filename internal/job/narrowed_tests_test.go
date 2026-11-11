@@ -332,28 +332,29 @@ func TestForkAndApplyRefuseACheckThatLeavesOutATest(t *testing.T) {
 	paths := []string{"pkg/a.go"}
 
 	s := tempStore(t, testRoot(t).Root()).InWorkspace(goCheckWorkspace("."))
-	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths, u.Check = paths, narrow }, config.Jobs{}, nil)
+	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { specify(u); u.WritePaths, u.Check = paths, narrow }, config.Jobs{}, nil)
 	require.ErrorContains(t, err, "TestBeta", "a fork by merge, the tool's put")
 
-	_, err = Apply(ctx, s, []types.Declaration{{ID: "w", WritePaths: paths, Check: narrow}}, config.Jobs{}, nil, nil, true)
+	_, err = Apply(ctx, s, []types.Declaration{{Criteria: testCriteria, Model: testModel, ID: "w", WritePaths: paths, Check: narrow}}, config.Jobs{}, nil, nil, true)
 	require.ErrorContains(t, err, "TestBeta", "job apply, a dry run included")
 
 	rows, err := s.List()
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a refused fork wrote nothing")
 
-	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths, u.Check = paths, goTestCheck() }, config.Jobs{}, nil)
+	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { specify(u); u.WritePaths, u.Check = paths, goTestCheck() }, config.Jobs{}, nil)
 	require.NoError(t, err)
 
-	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { u.Check = narrow }, config.Jobs{}, nil)
+	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { specify(u); u.Check = narrow }, config.Jobs{}, nil)
 	require.ErrorContains(t, err, "TestBeta", "narrowing the check of a row that exists")
 
 	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) {
+		specify(u)
 		u.Goals = append(u.Goals, types.Goal{ID: "unit", Kind: types.GoalKindCheck, Check: *narrow}.Resolve())
 	}, config.Jobs{}, nil)
 	require.ErrorContains(t, err, `goal "unit"`, "adding a narrowed goal to a row that exists")
 
-	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths = []string{"pkg/a.go", "pkg/b.go"} }, config.Jobs{}, nil)
+	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { specify(u); u.WritePaths = []string{"pkg/a.go", "pkg/b.go"} }, config.Jobs{}, nil)
 	require.NoError(t, err, "an update that leaves the check alone is held to nothing new")
 }
 
@@ -364,7 +365,7 @@ func TestForkLetsARowThatAlreadyNarrowsTakeAnUnrelatedUpdate(t *testing.T) {
 	s := tempStore(t, testRoot(t).Root()).InWorkspace(goCheckWorkspace("."))
 	seed(t, s, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha"), State: types.StateDeclared})
 
-	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.Model = "opus" }, config.Jobs{}, nil)
+	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { specify(u); u.Model = "opus" }, config.Jobs{}, nil)
 	require.NoError(t, err)
 }
 
@@ -379,11 +380,11 @@ func TestForkGradesOnlyTheAddedWritePathsOfAnUpdate(t *testing.T) {
 	s := tempStore(t, w.Root()).InWorkspace(goCheckWorkspace("."))
 	seed(t, s, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha"), State: types.StateDeclared})
 
-	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths = append(u.WritePaths, "other/o.go") }, config.Jobs{}, nil)
+	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { specify(u); u.WritePaths = append(u.WritePaths, "other/o.go") }, config.Jobs{}, nil)
 	require.ErrorContains(t, err, "other (TestOther)", "the added package is graded")
 	assert.NotContains(t, err.Error(), "pkg (", "and the package the row already held is not")
 
-	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths = append(u.WritePaths, "docs/page.md") }, config.Jobs{}, nil)
+	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { specify(u); u.WritePaths = append(u.WritePaths, "docs/page.md") }, config.Jobs{}, nil)
 	require.NoError(t, err, "a path that names no Go package adds nothing to grade")
 }
 

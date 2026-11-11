@@ -47,6 +47,15 @@ export enum<str> ModelTierSource {
     default = "default",
 }
 
+export enum<str> JobEvidenceKind {
+    output = "output",
+    verdict = "verdict",
+    invocation = "invocation",
+    file = "file",
+    plan = "plan",
+    commit = "commit",
+}
+
 export enum<str> ClaimKind {
     none = "",
     refs = "refs",
@@ -108,12 +117,6 @@ export enum<str> GoalExpect {
     absent = "absent",
     unreferenced = "unreferenced",
     signature = "signature",
-}
-
-export enum<str> BriefFormat {
-    none = "",
-    markdown = "markdown",
-    buzz = "buzz",
 }
 
 export enum<str> JobHolder {
@@ -405,15 +408,6 @@ export enum<str> Orchestration {
     proven = "proven",
 }
 
-export enum<str> BriefRefKind {
-    output = "output",
-    verdict = "verdict",
-    invocation = "invocation",
-    file = "file",
-    plan = "plan",
-    commit = "commit",
-}
-
 export enum<str> DriftPolicy {
     none = "",
     fail = "fail",
@@ -650,6 +644,17 @@ export object JobModelTier {
     reason: str = "",
     site: str = "",
     model: str = "",
+}
+
+export object JobDecision {
+    what: str = "",
+    why: str = "",
+}
+
+export object JobEvidence {
+    kind: JobEvidenceKind = JobEvidenceKind.output,
+    id: str = "",
+    says: str = "",
 }
 
 export object ClaimEvidence {
@@ -889,7 +894,8 @@ export object Job {
     breaks: [str] = [],
     model: str = "",
     modelTier: JobModelTier? = null,
-    briefFormat: BriefFormat = BriefFormat.none,
+    decisions: [JobDecision] = [],
+    evidence: [JobEvidence] = [],
     delivery: str = "",
     parentHead: str = "",
     follows: str = "",
@@ -2365,25 +2371,6 @@ export object StopRequest {
     checkout: CheckoutState? = null,
     dir: str = "",
     workspace: str = "",
-}
-
-export object BriefDecision {
-    what: str = "",
-    why: str = "",
-}
-
-export object BriefRef {
-    kind: BriefRefKind = BriefRefKind.output,
-    id: str = "",
-    says: str = "",
-}
-
-export object Brief {
-    job: str = "",
-    goal: str = "",
-    why: str = "",
-    decisions: [BriefDecision] = [],
-    evidence: [BriefRef] = [],
 }
 
 export object CharmDeclaration {

@@ -12,8 +12,6 @@ type JobPut struct {
 	Criteria   *string `json:"criteria,omitempty"`
 	Checkpoint *string `json:"checkpoint,omitempty"`
 	Model      *string `json:"model,omitempty"`
-	// BriefFormat sets the row's brief format; empty clears it back to magus.yaml's.
-	BriefFormat *BriefFormat `json:"brief_format,omitempty"`
 	// Delivery and ParentHead: see [Job.Delivery].
 	Delivery   *string `json:"delivery,omitempty"`
 	ParentHead *string `json:"parent_head,omitempty"`
@@ -37,7 +35,10 @@ type JobPut struct {
 	Goals      *[]Goal     `json:"goals,omitempty"`
 	// Deviations replaces the row's deviations; each is validated as a declaration's would be.
 	Deviations *[]Deviation `json:"deviations,omitempty"`
-	ReadOnly   *bool        `json:"read_only,omitempty"`
+	// Decisions and Evidence replace the row's; see [Job.Decisions].
+	Decisions *[]JobDecision `json:"decisions,omitempty"`
+	Evidence  *[]JobEvidence `json:"evidence,omitempty"`
+	ReadOnly  *bool          `json:"read_only,omitempty"`
 	// MaxAttempts is how many times the job may be forked, its first fork included; 0
 	// clears the cap.
 	MaxAttempts *int `json:"max_attempts,omitempty"`

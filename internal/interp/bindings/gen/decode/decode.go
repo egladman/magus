@@ -8564,6 +8564,78 @@ func decodeTierOptions(v vm.Value, path string) (types.TierOptions, error) {
 	return out, nil
 }
 
+// DecodeJobDecision decodes a Buzz JobDecision, an object instance or a map, into a types.JobDecision.
+func DecodeJobDecision(v vm.Value) (types.JobDecision, error) {
+	return decodeJobDecision(v, "jobDecision")
+}
+
+func decodeJobDecision(v vm.Value, path string) (types.JobDecision, error) {
+	var out types.JobDecision
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "JobDecision", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "what":
+			sWhat, err := decodeString(item, path+".what")
+			if err != nil {
+				return out, err
+			}
+			out.What = sWhat
+		case "why":
+			sWhy, err := decodeString(item, path+".why")
+			if err != nil {
+				return out, err
+			}
+			out.Why = sWhy
+		default:
+			return out, unknownMember(path, "JobDecision", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeJobEvidence decodes a Buzz JobEvidence, an object instance or a map, into a types.JobEvidence.
+func DecodeJobEvidence(v vm.Value) (types.JobEvidence, error) {
+	return decodeJobEvidence(v, "jobEvidence")
+}
+
+func decodeJobEvidence(v vm.Value, path string) (types.JobEvidence, error) {
+	var out types.JobEvidence
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "JobEvidence", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "kind":
+			sKind, err := decodeEnum(item, path+".kind", "JobEvidenceKind", enumJobEvidenceKindValues)
+			if err != nil {
+				return out, err
+			}
+			out.Kind = types.JobEvidenceKind(sKind)
+		case "id":
+			sID, err := decodeString(item, path+".id")
+			if err != nil {
+				return out, err
+			}
+			out.ID = sID
+		case "says":
+			sSays, err := decodeString(item, path+".says")
+			if err != nil {
+				return out, err
+			}
+			out.Says = sSays
+		default:
+			return out, unknownMember(path, "JobEvidence", key)
+		}
+	}
+	return out, nil
+}
+
 // DecodeJob decodes a Buzz Job, an object instance or a map, into a types.Job.
 func DecodeJob(v vm.Value) (types.Job, error) {
 	return decodeJob(v, "job")
@@ -8672,12 +8744,38 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 				optModelTier = xModelTier
 				out.ModelTier = &optModelTier
 			}
-		case "briefFormat":
-			sBriefFormat, err := decodeEnum(item, path+".briefFormat", "BriefFormat", enumBriefFormatValues)
+		case "decisions":
+			listDecisions, err := decodeList(item, path+".decisions", "[JobDecision]")
 			if err != nil {
 				return out, err
 			}
-			out.BriefFormat = types.BriefFormat(sBriefFormat)
+			if len(listDecisions) > 0 {
+				itemsDecisions := make([]types.JobDecision, len(listDecisions))
+				for indexDecisions, itemDecisions := range listDecisions {
+					xDecisionsItem, err := decodeJobDecision(itemDecisions, fmt.Sprintf("%s[%d]", path+".decisions", indexDecisions))
+					if err != nil {
+						return out, err
+					}
+					itemsDecisions[indexDecisions] = xDecisionsItem
+				}
+				out.Decisions = itemsDecisions
+			}
+		case "evidence":
+			listEvidence, err := decodeList(item, path+".evidence", "[JobEvidence]")
+			if err != nil {
+				return out, err
+			}
+			if len(listEvidence) > 0 {
+				itemsEvidence := make([]types.JobEvidence, len(listEvidence))
+				for indexEvidence, itemEvidence := range listEvidence {
+					xEvidenceItem, err := decodeJobEvidence(itemEvidence, fmt.Sprintf("%s[%d]", path+".evidence", indexEvidence))
+					if err != nil {
+						return out, err
+					}
+					itemsEvidence[indexEvidence] = xEvidenceItem
+				}
+				out.Evidence = itemsEvidence
+			}
 		case "delivery":
 			sDelivery, err := decodeString(item, path+".delivery")
 			if err != nil {
@@ -9543,7 +9641,6 @@ func decodeProviderQueueDismissReview(v vm.Value) (types.Ack, error) {
 
 var enumArchitectureValues = []string{"", "amd64", "arm64"}
 var enumBindingStatusValues = []string{"", "bound", "unsupported"}
-var enumBriefFormatValues = []string{"", "markdown", "buzz"}
 var enumClaimKindValues = []string{"", "refs", "test", "output", "released", "dead"}
 var enumCoverageFormatValues = []string{"", "lcov", "go-coverprofile"}
 var enumCredentialKindValues = []string{"", "operator", "stored", "share", "exchange", "stdio", "socket-peer"}
@@ -9556,6 +9653,7 @@ var enumGoalExpectValues = []string{"", "passed", "changed", "present", "absent"
 var enumGoalKindValues = []string{"", "check", "paths", "symbol"}
 var enumHookPointValues = []string{"", "shell", "edit", "stop", "subagent-stop", "spawn", "session-start", "compact", "mcp", "attach"}
 var enumJobBaseVerdictValues = []string{"", "match", "revision-match", "diverged", "unknown"}
+var enumJobEvidenceKindValues = []string{"output", "verdict", "invocation", "file", "plan", "commit"}
 var enumJobHolderValues = []string{"", "server", "session"}
 var enumJobStateValues = []string{"", "declared", "running", "exited", "pass", "fail", "no_return"}
 var enumJobWriteProofValues = []string{"", "alone", "disjoint", "overlapping"}

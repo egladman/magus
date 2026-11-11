@@ -34,13 +34,13 @@ project, declared together in one stream:
 
 ```console
 $ magus job apply --stdin <<'EOF'
-{"api_version": "magus.job/v1alpha1", "id": "upgrade/api", "criteria": "api runs left-pad 1.3", "write_paths": ["api/deps.txt"], "check": {"target": "test", "project": "api"}}
-{"api_version": "magus.job/v1alpha1", "id": "upgrade/web", "criteria": "web runs left-pad 1.3", "write_paths": ["web/deps.txt"], "check": {"target": "test", "project": "web"}}
+{"api_version": "magus.job/v1alpha1", "id": "upgrade/api", "model": "standard", "criteria": "api runs left-pad 1.3", "write_paths": ["api/deps.txt"], "check": {"target": "test", "project": "api"}}
+{"api_version": "magus.job/v1alpha1", "id": "upgrade/web", "model": "standard", "criteria": "web runs left-pad 1.3", "write_paths": ["web/deps.txt"], "check": {"target": "test", "project": "web"}}
 EOF
 created upgrade/api, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: standard (rank 1), row: "the job names the tier standard"
 created upgrade/web, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: standard (rank 1), row: "the job names the tier standard"
 ```
 
 Each job's check is that project's own test, so `api` passing says nothing about
@@ -112,7 +112,7 @@ in his, claims the same page for the section he wants:
 <!-- golden: job_people_pages.txtar refused.out -->
 
 ```console
-$ magus job fork fr/upgrading --criteria 'upgrading section in French' --write-paths docs/fr/install.md --check 'lint .'
+$ magus job fork fr/upgrading --criteria 'upgrading section in French' --write-paths docs/fr/install.md --check 'lint .' --model standard
 note: judging fr/upgrading's goals; a goal naming a symbol loads the symbol graph
 note: judged fr/upgrading's goals in 0ms
 [error] 1 problem:
@@ -130,13 +130,13 @@ page by heading, which narrows Ana's job and declares Ben's in one stream:
 
 ```console
 $ magus job apply --stdin <<'EOF'
-{"api_version": "magus.job/v1alpha1", "id": "fr/install", "criteria": "install page in French", "write_paths": ["docs/fr/install.md#Installer"], "check": {"target": "lint", "project": "."}}
-{"api_version": "magus.job/v1alpha1", "id": "fr/upgrading", "criteria": "upgrading section in French", "write_paths": ["docs/fr/install.md#Mettre à jour"], "check": {"target": "lint", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "fr/install", "model": "standard", "criteria": "install page in French", "write_paths": ["docs/fr/install.md#Installer"], "check": {"target": "lint", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "fr/upgrading", "model": "standard", "criteria": "upgrading section in French", "write_paths": ["docs/fr/install.md#Mettre à jour"], "check": {"target": "lint", "project": "."}}
 EOF
 updated fr/install, still running:
   write_paths +docs/fr/install.md#Installer -docs/fr/install.md
 created fr/upgrading, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: standard (rank 1), row: "the job names the tier standard"
 ```
 
 The part after `#` names a heading the diff driver matches. Once Ben takes his job,
@@ -172,13 +172,13 @@ needs no target: `paths` goals read the diff and the tree.
 
 ```console
 $ magus job apply --stdin <<'EOF'
-{"api_version": "magus.job/v1alpha1", "id": "release-1.3/changelog", "criteria": "CHANGELOG.md has a 1.3 section", "write_paths": ["CHANGELOG.md"], "goals": [{"id": "changelog", "kind": "paths", "expect": "changed", "paths": ["CHANGELOG.md"]}]}
-{"api_version": "magus.job/v1alpha1", "id": "release-1.3/notes", "criteria": "release notes exist for 1.3", "write_paths": ["notes/1.3.md"], "goals": [{"id": "notes", "kind": "paths", "expect": "present", "paths": ["notes/1.3.md"]}]}
+{"api_version": "magus.job/v1alpha1", "id": "release-1.3/changelog", "model": "standard", "criteria": "CHANGELOG.md has a 1.3 section", "write_paths": ["CHANGELOG.md"], "goals": [{"id": "changelog", "kind": "paths", "expect": "changed", "paths": ["CHANGELOG.md"]}]}
+{"api_version": "magus.job/v1alpha1", "id": "release-1.3/notes", "model": "standard", "criteria": "release notes exist for 1.3", "write_paths": ["notes/1.3.md"], "goals": [{"id": "notes", "kind": "paths", "expect": "present", "paths": ["notes/1.3.md"]}]}
 EOF
 created release-1.3/changelog, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: standard (rank 1), row: "the job names the tier standard"
 created release-1.3/notes, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: standard (rank 1), row: "the job names the tier standard"
 ```
 
 Two people take an item each in their own worktree. The changelog gets written and committed

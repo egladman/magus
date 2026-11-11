@@ -64,10 +64,11 @@ func TestRefuseWholeFileConfigClaims(t *testing.T) {
 			t.Parallel()
 			fork := NewStore(tempLocation(t, root))
 			_, forkErr := ForkMerge(t.Context(), fork, "wave/job", func(u *types.Job) {
+				specify(u)
 				u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, tc.paths
 			}, config.Jobs{}, nil)
 			apply := NewStore(tempLocation(t, root))
-			_, applyErr := Apply(t.Context(), apply, []types.Declaration{{ID: "wave/job", WritePaths: tc.paths, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
+			_, applyErr := Apply(t.Context(), apply, []types.Declaration{{Criteria: testCriteria, Model: testModel, ID: "wave/job", WritePaths: tc.paths, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
 			for door, err := range map[string]error{"fork": forkErr, "apply": applyErr} {
 				if tc.want == "" {
 					require.NoError(t, err, door)
@@ -90,7 +91,7 @@ func TestRefuseWholeFileConfigClaims(t *testing.T) {
 		t.Parallel()
 		s := NewStore(tempLocation(t, root))
 		seed(t, s, types.Job{ID: "wave/job", State: types.StateRunning, WritePaths: []string{"notes.buzz"}, Check: forkCheck()})
-		_, err := Apply(t.Context(), s, []types.Declaration{{ID: "wave/job", WritePaths: []string{"notes.buzz", "magusfile.buzz"}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
+		_, err := Apply(t.Context(), s, []types.Declaration{{Criteria: testCriteria, Model: testModel, ID: "wave/job", WritePaths: []string{"notes.buzz", "magusfile.buzz"}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
 		require.ErrorIs(t, err, types.WritePathConfigWholeFile)
 	})
 
@@ -252,7 +253,7 @@ func (s *narrowHoldSuite) TestARedeclarationKeepsTheNarrowing() {
 	_, _, err := s.narrow("lit", "notes.buzz", "fun note() > void {")
 	s.Require().NoError(err)
 
-	applied, err := Apply(s.T().Context(), s.s, []types.Declaration{{ID: "lit", WritePaths: []string{"notes.buzz", "notes.buzz#note"}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
+	applied, err := Apply(s.T().Context(), s.s, []types.Declaration{{Criteria: testCriteria, Model: testModel, ID: "lit", WritePaths: []string{"notes.buzz", "notes.buzz#note"}, Check: forkCheck()}}, config.Jobs{}, nil, nil, false)
 	s.Require().NoError(err)
 	s.True(Narrowed(applied[0].Next, "notes.buzz"))
 }
@@ -325,12 +326,13 @@ func TestConfigRefusalRequestsOneRelease(t *testing.T) {
 	seed(t, s, types.Job{ID: "cfg", State: types.StateRunning, WritePaths: []string{"**/*.buzz"}, Checkpoint: elsewhere.Head(), CheckoutRoot: elsewhere.Root()})
 	fork := func(id string, paths ...string) error {
 		_, err := ForkMerge(t.Context(), s, id, func(u *types.Job) {
+			specify(u)
 			u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, paths
 		}, config.Jobs{}, nil)
 		return err
 	}
 
-	_, err := Apply(t.Context(), s, []types.Declaration{{ID: "slots", WritePaths: []string{"magusfile.buzz"}, Check: forkCheck()}}, config.Jobs{}, nil, nil, true)
+	_, err := Apply(t.Context(), s, []types.Declaration{{Criteria: testCriteria, Model: testModel, ID: "slots", WritePaths: []string{"magusfile.buzz"}, Check: forkCheck()}}, config.Jobs{}, nil, nil, true)
 	require.ErrorIs(t, err, types.WritePathConfigWholeFile)
 	assert.Empty(t, releaseRequests(t, root), "a dry run is refused the same way and files nothing")
 

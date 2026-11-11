@@ -103,10 +103,42 @@
       "type": "number",
       "description": "Weight is the job's lean on the machine budget, in (0,1]: omitted means 0.5, and an explicit 0 is out of range. See [Job.Weight]."
     },
-    "brief_format": {
-      "type": "string",
-      "enum": ["", "markdown", "buzz"],
-      "description": "BriefFormat is the format a brief to this job's worker takes; empty defers to magus.yaml's agents.brief_format. See [Job.BriefFormat]."
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["what"],
+        "properties": {
+          "what": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Decisions and Evidence: see [Job.Decisions]."
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["output", "verdict", "invocation", "file", "plan", "commit"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "says": {
+            "type": "string"
+          }
+        }
+      }
     },
     "delivery": {
       "type": "string",

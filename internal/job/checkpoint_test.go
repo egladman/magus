@@ -29,12 +29,13 @@ func committedRepository(t *testing.T) (root, head string) {
 
 func checkpointMerge(token string) func(*types.Job) {
 	return func(u *types.Job) {
+		specify(u)
 		u.Check, u.State, u.WritePaths, u.Checkpoint = forkCheck(), types.StateDeclared, []string{"internal/job/store.go"}, token
 	}
 }
 
 func checkpointRecord(id, token string) types.Declaration {
-	return types.Declaration{ID: id, WritePaths: []string{"internal/job/store.go"}, Check: forkCheck(), Checkpoint: token}
+	return types.Declaration{Criteria: testCriteria, Model: testModel, ID: id, WritePaths: []string{"internal/job/store.go"}, Check: forkCheck(), Checkpoint: token}
 }
 
 // The defect: a fork named a full-length revision the repository never held, and nothing
@@ -120,6 +121,7 @@ func TestACheckpointOnASiblingBranchIsPlaceableForItsOwnCheckout(t *testing.T) {
 	s := NewStore(tempLocation(t, repo.Root()))
 	own := func(token string) func(*types.Job) {
 		return func(u *types.Job) {
+			specify(u)
 			checkpointMerge(token)(u)
 			u.Worktree = &types.JobWorktree{Root: filepath.Join(t.TempDir(), "own")}
 		}
@@ -169,6 +171,7 @@ func TestAForkByMergeNamingNoCheckpointRecordsTheCheckouts(t *testing.T) {
 	assert.Equal(t, dirtyToken(t, root), forked.Checkpoint)
 
 	reader, err := ForkMerge(t.Context(), s, "reader", func(u *types.Job) {
+		specify(u)
 		u.State, u.ReadOnly = types.StateDeclared, true
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)

@@ -19,11 +19,11 @@ exec git worktree add -q ../ana
 exec git worktree add -q ../ben
 
 cd ../ana
-exec magus job fork cents --criteria 'prices are integers of cents' --write-paths pricing/total.sh,pricing/format.sh --check 'test .'
+exec magus job fork cents --criteria 'prices are integers of cents' --write-paths pricing/total.sh,pricing/format.sh --check 'test .' --model standard
 exec magus job exec cents
 
 cd ../ben
-exec magus job fork currency --criteria 'prices carry a currency code' --write-paths pricing/format.sh,checkout/tax.sh --check 'test .'
+exec magus job fork currency --criteria 'prices carry a currency code' --write-paths pricing/format.sh,checkout/tax.sh --check 'test .' --model standard
 cmp stdout $WORK/fork.out
 
 # An advisory exits 0: a person who names no job is told, never stopped.
@@ -79,13 +79,13 @@ tax() { echo $(( $1 / 10 )); }
 . checkout/tax.sh
 [ "$(total 2 3)" = 5 ] && [ "$(format 5)" = 5.00 ] && [ "$(tax 50)" = 5 ]
 -- release.json --
-{"api_version": "magus.job/v1alpha1", "id": "cents",
+{"api_version": "magus.job/v1alpha1", "id": "cents", "model": "standard",
  "criteria": "prices are integers of cents",
  "write_paths": ["pricing/total.sh"],
  "check": {"target": "test", "project": "."}}
 -- fork.out --
-forked currency, declared, with 2 write path(s). Its holder reads the terms with `magus describe job currency` and takes it with `magus job exec currency`
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+forked currency, declared, with 2 write path(s). Its holder reads the spec with `magus describe job currency` and takes it with `magus job exec currency`
+model tier: standard (rank 1), row: "the job names the tier standard"
 referenced outside the write paths: files that use what the write paths define
   unknown, no symbol index answered; `magus graph build` builds one
 -- shell.out --
@@ -113,7 +113,7 @@ currency  ben     running  standard  2      alone  magus run test .
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 -- describe.out --
 job: currency
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: standard (rank 1), row: "the job names the tier standard"
 skills: short
 
 criteria

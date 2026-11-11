@@ -311,8 +311,6 @@ const (
 	FlagJobExitSchema = "schema"
 	// job exit: --stdin
 	FlagJobExitStdin = "stdin"
-	// job fork: --brief-format
-	FlagJobForkBriefFormat = "brief-format"
 	// job fork: --check
 	FlagJobForkCheck = "check"
 	// job fork: --checkout
@@ -1591,19 +1589,18 @@ func BindSessionNotify(fs *flag.FlagSet) *SessionNotifyFlags {
 // It does NOT carry --write-paths, --deny-paths, --read-paths, --depends-on: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type JobForkFlags struct {
-	Schema      bool          // --[no-]schema
-	Stdin       bool          // --[no-]stdin
-	Criteria    string        // --criteria
-	Timeout     time.Duration // --timeout
-	Parent      string        // --parent
-	Checkpoint  string        // --checkpoint
-	Check       string        // --check
-	Model       string        // --model
-	BriefFormat string        // --brief-format
-	Delivery    string        // --delivery
-	ReadOnly    bool          // --[no-]read-only
-	Checkout    string        // --checkout
-	Fix         bool          // --[no-]fix
+	Schema     bool          // --[no-]schema
+	Stdin      bool          // --[no-]stdin
+	Criteria   string        // --criteria
+	Timeout    time.Duration // --timeout
+	Parent     string        // --parent
+	Checkpoint string        // --checkpoint
+	Check      string        // --check
+	Model      string        // --model
+	Delivery   string        // --delivery
+	ReadOnly   bool          // --[no-]read-only
+	Checkout   string        // --checkout
+	Fix        bool          // --[no-]fix
 }
 
 // BindJobFork registers `magus job fork`'s flags on fs and returns the destination.
@@ -1613,13 +1610,12 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 	cmdline.NegatedBoolVar(fs, &f.Schema, FlagJobForkSchema)
 	fs.BoolVar(&f.Stdin, FlagJobForkStdin, false, "Read one job as JSON on stdin instead of taking it from flags")
 	cmdline.NegatedBoolVar(fs, &f.Stdin, FlagJobForkStdin)
-	fs.StringVar(&f.Criteria, FlagJobForkCriteria, "", "What this job is for and what done means, as prose; the machine-checkable half is --check, and the goals a --stdin record declares")
+	fs.StringVar(&f.Criteria, FlagJobForkCriteria, "", "What this job is for and what done means, as prose, required; the machine-checkable half is --check, and the goals a --stdin record declares")
 	cmdline.DurationVar(fs, &f.Timeout, FlagJobForkTimeout, 0, "m", "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout. Bare numbers are minutes.")
 	fs.StringVar(&f.Parent, FlagJobForkParent, "", "The job this one is forked from")
 	fs.StringVar(&f.Checkpoint, FlagJobForkCheckpoint, "", "The working state this job is handed, as `magus vcs checkpoint -o name` prints it")
 	fs.StringVar(&f.Check, FlagJobForkCheck, "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
-	fs.StringVar(&f.Model, FlagJobForkModel, "", "The model tier, or the model, the work was matched to; unset, the workspace's matrix or default chooses the tier")
-	fs.StringVar(&f.BriefFormat, FlagJobForkBriefFormat, "", "The format a brief to this job's worker takes, markdown or buzz; unset, magus.yaml's agents.brief_format decides")
+	fs.StringVar(&f.Model, FlagJobForkModel, "", "The model tier, or the model, the work was matched to; required, and the workspace's matrix maps a model to its tier")
 	fs.StringVar(&f.Delivery, FlagJobForkDelivery, "", "How the job's work is delivered: fold (into the parent's pull request), separate (its own pull request) or stacked (one based on the parent's head)")
 	fs.BoolVar(&f.ReadOnly, FlagJobForkReadOnly, false, "A job that gathers evidence and writes nothing")
 	cmdline.NegatedBoolVar(fs, &f.ReadOnly, FlagJobForkReadOnly)

@@ -37,6 +37,7 @@ func TestRefuseUngradableClaims(t *testing.T) {
 			t.Parallel()
 			s := NewStore(tempLocation(t, root))
 			_, err := ForkMerge(context.Background(), s, "wave/job", func(u *types.Job) {
+				specify(u)
 				u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, tc.paths
 			}, config.Jobs{}, nil)
 			if tc.want == "" {
@@ -67,6 +68,7 @@ func TestRefuseUngradableClaims(t *testing.T) {
 			t.Parallel()
 			s := NewStore(tempLocation(t, root))
 			_, err := ForkMerge(context.Background(), s, "wave/job", func(u *types.Job) {
+				specify(u)
 				u.Check, u.State, u.WritePaths, u.DenyPaths = forkCheck(), types.StateDeclared, []string{"run.go", "notes.txt"}, []string{tc.deny}
 			}, config.Jobs{}, nil)
 			if tc.want == "" {
@@ -174,7 +176,7 @@ func TestValidateMergeRefusesAContendedForkBeforeTheWorkspaceChecks(t *testing.T
 	require.NoError(t, err)
 
 	declare := func(paths ...string) func(*types.Job) {
-		return func(u *types.Job) { u.WritePaths, u.Check = paths, forkCheck() }
+		return func(u *types.Job) { specify(u); u.WritePaths, u.Check = paths, forkCheck() }
 	}
 	v := validateMerge(t.Context(), s, rows, "contender", declare("magusfile.buzz"), config.Jobs{}, nil)
 	assert.Equal(t, []types.DiagnosticCode{types.WritePathFileShared}, codes(v.Problems))
@@ -271,6 +273,7 @@ func TestSoftPathsHardenAtTheFirstWrite(t *testing.T) {
 		rows, err := s.List()
 		require.NoError(t, err)
 		return validateMerge(t.Context(), s, rows, "B", func(u *types.Job) {
+			specify(u)
 			u.WritePaths, u.SoftPaths, u.Check = []string{"run_test.go"}, soft, forkCheck()
 		}, config.Jobs{}, nil)
 	}

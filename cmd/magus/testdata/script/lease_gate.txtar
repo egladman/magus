@@ -11,7 +11,7 @@ env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 exec magus init -local -vcs git
 cp $WORK/magusfile.buzz magusfile.buzz
-exec magus job fork wave/guard --check 'test .' --write-paths src/pkg/code.go
+exec magus job fork wave/guard --check 'test .' --write-paths src/pkg/code.go --criteria 'the scripted job' --model economy
 env BAGGAGE=magus.lease=wave/guard
 
 # --- passes: the check, a slice of it, an install ------------------------------------

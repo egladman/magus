@@ -87,9 +87,11 @@ var JobSchema = SchemaLedger{
 	Name:    "job",
 	Type:    reflect.TypeFor[Job](),
 	Version: JobAPIVersion,
+	Added:   map[string]APIVersion{"decisions": JobAPIVersion, "evidence": JobAPIVersion},
 	// The four boundary renames and completion_gates, names only the JSON document an
 	// older magus kept the plan in carried, and waivers, the name deviations had first.
-	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates", "waivers", "schema_version"},
+	// brief_format is the field ADR 0043 removed.
+	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates", "waivers", "schema_version", "brief_format"},
 	Requires: map[string]APIVersion{
 		"dead-job-end":       JobAPIVersion,
 		"claim-declarations": JobAPIVersion,
@@ -104,9 +106,10 @@ var DeclarationSchema = SchemaLedger{
 	Name:    "declaration",
 	Type:    reflect.TypeFor[Declaration](),
 	Version: JobAPIVersion,
+	Added:   map[string]APIVersion{"decisions": JobAPIVersion, "evidence": JobAPIVersion},
 	// goals' spelling frozen in v11, and deviations' first name. A record sending either is
-	// refused as an unknown member.
-	Reserved: []string{"completion_gates", "waivers", "schema_version"},
+	// refused as an unknown member, as is brief_format, which ADR 0043 removed.
+	Reserved: []string{"completion_gates", "waivers", "schema_version", "brief_format"},
 	Requires: JobSchema.Requires,
 }
 

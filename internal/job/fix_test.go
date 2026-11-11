@@ -19,7 +19,7 @@ func TestFixForkAppliesEveryMechanicalEditAndLeavesJudgment(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	row := types.Declaration{ID: "w", WritePaths: []string{"cli", "cli/registry.go"}, Check: forkCheck()}
+	row := types.Declaration{Criteria: testCriteria, Model: testModel, ID: "w", WritePaths: []string{"cli", "cli/registry.go"}, Check: forkCheck()}
 	before, err := ValidateFork(t.Context(), s, row.ID, fixMerge(row), config.Jobs{}, nil)
 	require.NoError(t, err)
 	require.NotZero(t, before.Problems.Fixable(), "the record starts with mechanical problems: %v", codes(before.Problems))
@@ -87,7 +87,7 @@ func TestFixApplyFixesEachRecord(t *testing.T) {
 	t.Parallel()
 
 	s, _ := validateWorkspace(t)
-	records := []types.Declaration{{ID: "a", WritePaths: []string{"cli/registry.go"}, Check: forkCheck()}}
+	records := []types.Declaration{{Criteria: testCriteria, Model: testModel, ID: "a", WritePaths: []string{"cli/registry.go"}, Check: forkCheck()}}
 
 	fixed, edits := FixApply(t.Context(), s, records, config.Jobs{}, nil, nil)
 
@@ -133,7 +133,7 @@ func TestFixForkLeavesNoGateNeedingADeviationForAGoJob(t *testing.T) {
 		}
 		return CheckVerdict{}
 	}
-	row := types.Declaration{ID: "w", WritePaths: []string{"cli/registry.go"}, Check: &types.LeaseCheck{Target: "vet", Project: "."}}
+	row := types.Declaration{Criteria: testCriteria, Model: testModel, ID: "w", WritePaths: []string{"cli/registry.go"}, Check: &types.LeaseCheck{Target: "vet", Project: "."}}
 
 	before, err := ValidateFork(t.Context(), s, row.ID, fixMerge(row), config.Jobs{}, nil)
 	require.NoError(t, err)

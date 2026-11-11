@@ -19,13 +19,13 @@ exec git worktree add -q ../ana
 exec git worktree add -q ../ben
 
 cd ../ana
-exec magus job fork fr/install --criteria 'install page in French' --write-paths docs/fr/install.md --check 'lint .'
+exec magus job fork fr/install --criteria 'install page in French' --write-paths docs/fr/install.md --check 'lint .' --model standard
 exec magus job exec fr/install
 
 # The refusal names how long ago the holder last moved, which a slow machine can push
 # past 0s. Each note names how long its step took, which is never the same twice.
 cd ../ben
-! exec magus job fork fr/upgrading --criteria 'upgrading section in French' --write-paths docs/fr/install.md --check 'lint .'
+! exec magus job fork fr/upgrading --criteria 'upgrading section in French' --write-paths docs/fr/install.md --check 'lint .' --model standard
 cp stderr $WORK/raw
 exec sh -c 'sed -E -e "s/updated [0-9]+[smh] ago/updated 0s ago/" -e "s/ in [0-9.]+(ms|s)$/ in 0ms/" "$WORK/raw"'
 cmp stdout $WORK/refused.out
@@ -71,8 +71,8 @@ Téléchargez l'archive.
 
 À traduire.
 -- split.jsonl --
-{"api_version": "magus.job/v1alpha1", "id": "fr/install", "criteria": "install page in French", "write_paths": ["docs/fr/install.md#Installer"], "check": {"target": "lint", "project": "."}}
-{"api_version": "magus.job/v1alpha1", "id": "fr/upgrading", "criteria": "upgrading section in French", "write_paths": ["docs/fr/install.md#Mettre à jour"], "check": {"target": "lint", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "fr/install", "model": "standard", "criteria": "install page in French", "write_paths": ["docs/fr/install.md#Installer"], "check": {"target": "lint", "project": "."}}
+{"api_version": "magus.job/v1alpha1", "id": "fr/upgrading", "model": "standard", "criteria": "upgrading section in French", "write_paths": ["docs/fr/install.md#Mettre à jour"], "check": {"target": "lint", "project": "."}}
 -- refused.out --
 note: judging fr/upgrading's goals; a goal naming a symbol loads the symbol graph
 note: judged fr/upgrading's goals in 0ms
@@ -85,7 +85,7 @@ not checked:
 updated fr/install, still running:
   write_paths +docs/fr/install.md#Installer -docs/fr/install.md
 created fr/upgrading, declared, with 1 write path(s)
-model tier: standard (rank 1), default: "the declared default" at magus/modeltiers
+model tier: standard (rank 1), row: "the job names the tier standard"
 -- ls.out --
 JOB           HOLDER  STATE    MODEL     PATHS  PROOF     CHECK
 fr/install    ana     running  standard  1      alone     magus run lint .

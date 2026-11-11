@@ -49,12 +49,6 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 	str("fresh_reason", &put.FreshReason)
 	str("delivery", &put.Delivery)
 	str("parent_head", &put.ParentHead)
-	if v, ok, e := mergeString(params, "brief_format"); e != nil {
-		err = errors.Join(err, e)
-	} else if ok {
-		f := types.BriefFormat(strings.TrimSpace(v))
-		put.BriefFormat = &f
-	}
 	str("timeout", &put.Timeout)
 	str("enter", &put.Enter)
 	list("write_paths", &put.WritePaths)
@@ -71,6 +65,16 @@ func DecodePut(params map[string]any) (types.JobPut, error) {
 		err = errors.Join(err, e)
 	} else if ok {
 		put.Deviations = &deviations
+	}
+	if decisions, ok, e := decodeObjects[types.JobDecision](params, "decisions", "decisions"); e != nil {
+		err = errors.Join(err, e)
+	} else if ok {
+		put.Decisions = &decisions
+	}
+	if evidence, ok, e := decodeObjects[types.JobEvidence](params, "evidence", "evidence"); e != nil {
+		err = errors.Join(err, e)
+	} else if ok {
+		put.Evidence = &evidence
 	}
 
 	// check and validation are two spellings of one field, so a put naming each of them is
@@ -187,14 +191,6 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 		v := strings.TrimSpace(*p.FreshReason)
 		set = append(set, func(u *types.Job) { u.FreshReason = v })
 	}
-	if p.BriefFormat != nil {
-		if f := *p.BriefFormat; f != "" && !f.Valid() {
-			err = errors.Join(err, fmt.Errorf("job: brief_format %q is not one of %s, or empty for magus.yaml's agents.brief_format",
-				f, strings.Join(f.Values(), ", ")))
-		} else {
-			set = append(set, func(u *types.Job) { u.BriefFormat = f })
-		}
-	}
 	delivery, derr := deliverySetters(p)
 	err = errors.Join(err, derr)
 	set = append(set, delivery...)
@@ -227,6 +223,26 @@ func PutMerge(p types.JobPut) (func(*types.Job), error) {
 			err = errors.Join(err, e)
 		} else {
 			set = append(set, func(u *types.Job) { u.Deviations = deviations })
+		}
+	}
+	if p.Decisions != nil || p.Evidence != nil {
+		var decisions []types.JobDecision
+		var evidence []types.JobEvidence
+		if p.Decisions != nil {
+			decisions = slices.Clone(*p.Decisions)
+		}
+		if p.Evidence != nil {
+			evidence = slices.Clone(*p.Evidence)
+		}
+		if e := (types.Declaration{ID: "merge", Decisions: decisions, Evidence: evidence}).Validate(); e != nil {
+			err = errors.Join(err, e)
+		} else {
+			if p.Decisions != nil {
+				set = append(set, func(u *types.Job) { u.Decisions = decisions })
+			}
+			if p.Evidence != nil {
+				set = append(set, func(u *types.Job) { u.Evidence = evidence })
+			}
 		}
 	}
 	if p.Check != nil {
@@ -333,10 +349,11 @@ func declaredKeys(p types.JobPut) []string {
 		set bool
 	}{
 		{"parent", p.Parent != nil}, {"criteria", p.Criteria != nil}, {"checkpoint", p.Checkpoint != nil},
-		{"model", p.Model != nil}, {"brief_format", p.BriefFormat != nil}, {"timeout", p.Timeout != nil}, {"state", p.State != nil},
+		{"model", p.Model != nil}, {"timeout", p.Timeout != nil}, {"state", p.State != nil},
 		{"check", p.Check != nil}, {"write_paths", p.WritePaths != nil}, {"deny_paths", p.DenyPaths != nil},
 		{"read_paths", p.ReadPaths != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil},
-		{"goals", p.Goals != nil}, {"deviations", p.Deviations != nil}, {"read_only", p.ReadOnly != nil},
+		{"goals", p.Goals != nil}, {"deviations", p.Deviations != nil}, {"decisions", p.Decisions != nil}, {"evidence", p.Evidence != nil},
+		{"read_only", p.ReadOnly != nil},
 		{"max_attempts", p.MaxAttempts != nil}, {"max_claims", p.MaxClaims != nil}, {"follows", p.Follows != nil}, {"fresh_reason", p.FreshReason != nil},
 		{"weight", p.Weight != nil}, {"delivery", p.Delivery != nil}, {"parent_head", p.ParentHead != nil},
 	} {
@@ -351,7 +368,7 @@ func declaredKeys(p types.JobPut) []string {
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
 	"parent", "criteria", "checkpoint", "write_paths", "deny_paths", "read_paths",
-	"depends_on", "breaks", "model", "brief_format", "check", "validation", "goals", "deviations", "state", "read_only",
+	"depends_on", "breaks", "model", "check", "validation", "goals", "deviations", "decisions", "evidence", "state", "read_only",
 	"timeout", "max_attempts", "max_claims", "weight", "enter", "follows", "fresh_reason",
 	"delivery", "parent_head",
 }

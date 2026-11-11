@@ -25,11 +25,11 @@ exec magus describe job flags/glob -o 'template={{toJson .job.deviations}}'
 stdout '^\[\{"code":"MGS3044","reason":"the integrator regenerates every one","subject":"\*\*"\}\]$'
 
 -- fork.json --
-{"api_version": "magus.job/v1alpha1", "id": "flags/glob", "write_paths": ["cli/*.go"],
+{"api_version": "magus.job/v1alpha1", "id": "flags/glob", "criteria": "the scripted job", "model": "economy", "write_paths": ["cli/*.go"],
  "check": {"target": "test", "project": "."},
  "deviations": [{"code": "MGS3044", "subject": "**", "reason": "the integrator regenerates every one"}]}
 -- widen.json --
-{"api_version": "magus.job/v1alpha1", "id": "flags/glob", "write_paths": ["cli/*.go", "docs/rules/*.md", "docs/manpage/*.md"],
+{"api_version": "magus.job/v1alpha1", "id": "flags/glob", "criteria": "the scripted job", "model": "economy", "write_paths": ["cli/*.go", "docs/rules/*.md", "docs/manpage/*.md"],
  "check": {"target": "test", "project": "."},
  "deviations": [{"code": "MGS3044", "subject": "**", "reason": "the integrator regenerates every one"}]}
 -- .gitignore --

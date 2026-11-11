@@ -19,10 +19,10 @@ exec magus init --vcs git
 exec git add -A
 exec git commit -q -m base
 
-exec magus job fork a --criteria 'A returns 10' --write-paths 'a.go#A' --check 'test .'
-exec magus job fork b --criteria 'B returns 20' --write-paths 'a.go#B' --check 'test .'
-exec magus job fork c --criteria 'B returns 21' --write-paths 'a.go#A,a.go#B' --check 'test .'
-exec magus job fork d --criteria 'B returns 22' --write-paths 'a.go#B' --check 'test .'
+exec magus job fork a --criteria 'A returns 10' --write-paths 'a.go#A' --check 'test .' --model economy
+exec magus job fork b --criteria 'B returns 20' --write-paths 'a.go#B' --check 'test .' --model economy
+exec magus job fork c --criteria 'B returns 21' --write-paths 'a.go#A,a.go#B' --check 'test .' --model economy
+exec magus job fork d --criteria 'B returns 22' --write-paths 'a.go#B' --check 'test .' --model economy
 exec git worktree add -q -b a ../a
 exec git worktree add -q -b b ../b
 exec git worktree add -q -b c ../c

@@ -10,7 +10,7 @@ mkdir src/pkg
 cp $WORK/code.go src/pkg/code.go
 cp $WORK/code.go src/pkg/other.go
 
-env 'ROW={"api_version":"magus.job/v1alpha1","id":"wave/a","write_paths":["src/pkg/code.go"],"check":{"target":"test","project":"."}}'
+env 'ROW={"api_version":"magus.job/v1alpha1","id":"wave/a","criteria":"the scripted job","model":"economy","write_paths":["src/pkg/code.go"],"check":{"target":"test","project":"."}}'
 exec sh -c 'printf ''%s'' "$ROW" | magus job apply --stdin'
 stdout '^created wave/a, declared, with 1 write path\(s\)$'
 
@@ -74,16 +74,16 @@ stdout '^unchanged wave/a'
 -- code.go --
 package pkg
 -- widen.jsonl --
-{"api_version":"magus.job/v1alpha1","id":"wave/a","write_paths":["src/pkg/code.go","src/pkg/other.go"],"check":{"target":"test","project":"."}}
-{"api_version":"magus.job/v1alpha1","id":"wave/b","write_paths":["src/fresh"],"goals":[{"id":"created","kind":"paths","expect":"present","paths":["src/fresh"]}]}
+{"api_version":"magus.job/v1alpha1","id":"wave/a","criteria":"the scripted job","model":"economy","write_paths":["src/pkg/code.go","src/pkg/other.go"],"check":{"target":"test","project":"."}}
+{"api_version":"magus.job/v1alpha1","id":"wave/b","criteria":"the scripted job","model":"economy","write_paths":["src/fresh"],"goals":[{"id":"created","kind":"paths","expect":"present","paths":["src/fresh"]}]}
 -- narrow.json --
-{"api_version":"magus.job/v1alpha1","id":"wave/a","write_paths":["src/pkg/code.go"],"check":{"target":"test","project":"."}}
+{"api_version":"magus.job/v1alpha1","id":"wave/a","criteria":"the scripted job","model":"economy","write_paths":["src/pkg/code.go"],"check":{"target":"test","project":"."}}
 -- fresh.json --
-{"api_version":"magus.job/v1alpha1","id":"wave/a","write_paths":["src/pkg/code.go","src/pkg/other.go"],"fresh_reason":"wave/b read the old limiter","check":{"target":"test","project":"."}}
+{"api_version":"magus.job/v1alpha1","id":"wave/a","criteria":"the scripted job","model":"economy","write_paths":["src/pkg/code.go","src/pkg/other.go"],"fresh_reason":"wave/b read the old limiter","check":{"target":"test","project":"."}}
 -- typo.json --
-{"api_version":"magus.job/v1alpha1","id":"wave/a","write_pathz":["src/pkg/code.go"],"check":{"target":"test","project":"."}}
+{"api_version":"magus.job/v1alpha1","id":"wave/a","criteria":"the scripted job","model":"economy","write_pathz":["src/pkg/code.go"],"check":{"target":"test","project":"."}}
 -- two.jsonl --
-{"api_version":"magus.job/v1alpha1","id":"wave/a","write_paths":["src/pkg/code.go","src/pkg/other.go","src/pkg"],"check":{"target":"test","project":"."}}
-{"api_version":"magus.job/v1alpha1","id":"wave/b","write_paths":["src/fresh"],"check":{"target":"nosuch","project":"."}}
+{"api_version":"magus.job/v1alpha1","id":"wave/a","criteria":"the scripted job","model":"economy","write_paths":["src/pkg/code.go","src/pkg/other.go","src/pkg"],"check":{"target":"test","project":"."}}
+{"api_version":"magus.job/v1alpha1","id":"wave/b","criteria":"the scripted job","model":"economy","write_paths":["src/fresh"],"check":{"target":"nosuch","project":"."}}
 -- dir.json --
-{"api_version":"magus.job/v1alpha1","id":"wave/a","write_paths":["src/pkg/code.go","src/pkg/other.go","src/pkg"],"check":{"target":"test","project":"."}}
+{"api_version":"magus.job/v1alpha1","id":"wave/a","criteria":"the scripted job","model":"economy","write_paths":["src/pkg/code.go","src/pkg/other.go","src/pkg"],"check":{"target":"test","project":"."}}

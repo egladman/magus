@@ -13,7 +13,7 @@ cp $WORK/bench.buzz magusfile.buzz
 exec git add -A
 exec git commit -q -m 'start'
 
-! exec magus job fork wave/bench --criteria 'run it' --write-paths code.go --check 'bench .'
+! exec magus job fork wave/bench --criteria 'run it' --write-paths code.go --check 'bench .' --model economy
 stderr 'wave/bench''s check `magus run bench \.` is a target a person runs \(human-only\)'
 stderr 'launches paid sessions'
 stderr 'declare a check its worker may run in its place'
@@ -23,7 +23,7 @@ stdin goal.json
 ! exec magus job fork --stdin
 stderr 'wave/goal''s goal paid''s check `magus run bench \.` is a target a person runs \(human-only\)'
 
-exec magus job fork wave/lint --criteria 'lint it' --write-paths code.go --check 'lint .'
+exec magus job fork wave/lint --criteria 'lint it' --write-paths code.go --check 'lint .' --model economy
 exec magus ls jobs -o name
 stdout 'wave/lint'
 ! stdout 'wave/bench'

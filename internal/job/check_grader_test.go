@@ -81,7 +81,7 @@ func TestDeniedCheckProblemsQuoteTheVerdictAndNameATargetThatCompiles(t *testing
 	s, rec := graderStore(t, CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus;\nask the main session"})
 	build := &types.LeaseCheck{Target: "go-build", Project: "."}
 
-	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.WritePaths, u.Check = []string{"pkg/b.go"}, build }, config.Jobs{}, nil)
+	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { specify(u); u.WritePaths, u.Check = []string{"pkg/b.go"}, build }, config.Jobs{}, nil)
 	require.ErrorIs(t, err, types.JobCheckUnrunnable)
 	ps := deniedCheckProblems(t.Context(), s, types.Job{ID: "w", WritePaths: []string{"pkg/b.go"}, Check: build})
 	require.Len(t, ps, 1)
@@ -99,7 +99,7 @@ func TestDeniedCheckProblemsQuoteTheVerdictAndNameATargetThatCompiles(t *testing
 	require.NoError(t, err)
 	assert.Empty(t, rows, "a refused fork wrote nothing")
 
-	_, err = Apply(t.Context(), s, []types.Declaration{{ID: "w", WritePaths: []string{"pkg/b.go"}, Check: build}}, config.Jobs{}, nil, nil, true)
+	_, err = Apply(t.Context(), s, []types.Declaration{{Criteria: testCriteria, Model: testModel, ID: "w", WritePaths: []string{"pkg/b.go"}, Check: build}}, config.Jobs{}, nil, nil, true)
 	require.ErrorContains(t, err, "would be denied to its worker", "job apply grades too")
 }
 
@@ -107,20 +107,20 @@ func TestDeniedCheckProblemsAcceptWhatTheGuardLets(t *testing.T) {
 	t.Parallel()
 
 	s, rec := graderStore(t, CheckVerdict{})
-	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.WritePaths, u.Check = []string{"pkg/b.go"}, forkCheck() }, config.Jobs{}, nil)
+	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { specify(u); u.WritePaths, u.Check = []string{"pkg/b.go"}, forkCheck() }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	require.Len(t, rec.graded, 1)
 
-	_, err = ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.Model = "opus" }, config.Jobs{}, nil)
+	_, err = ForkMerge(t.Context(), s, "w", func(u *types.Job) { specify(u); u.Model = "opus" }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, 1, "an update that leaves the check alone is not graded again")
 
-	_, err = ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.Check = &types.LeaseCheck{Target: "lint", Project: "."} }, config.Jobs{}, nil)
+	_, err = ForkMerge(t.Context(), s, "w", func(u *types.Job) { specify(u); u.Check = &types.LeaseCheck{Target: "lint", Project: "."} }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, 2, "a changed check is")
 
 	assert.Empty(t, deniedCheckProblems(t.Context(), tempStore(t, t.TempDir()), types.Job{ID: "w", Check: forkCheck()}), "a store with no grader finds nothing")
-	_, err = ForkMerge(t.Context(), s, "scout", func(u *types.Job) { u.ReadOnly = true }, config.Jobs{}, nil)
+	_, err = ForkMerge(t.Context(), s, "scout", func(u *types.Job) { specify(u); u.ReadOnly = true }, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Len(t, rec.graded, 2, "a job with no check has nothing to grade")
 }
@@ -146,7 +146,7 @@ func TestDeniedCheckProblemsReportACheckNobodyGradedOnce(t *testing.T) {
 	assert.NotEmpty(t, ps[0].Fix)
 	assert.Len(t, rec.graded, 1, "grading stops at the first check nobody could grade")
 
-	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.WritePaths, u.Check = row.WritePaths, row.Check }, config.Jobs{}, nil)
+	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { specify(u); u.WritePaths, u.Check = row.WritePaths, row.Check }, config.Jobs{}, nil)
 	require.ErrorIs(t, err, types.JobUngraded)
 }
 
@@ -227,7 +227,7 @@ func TestDeniedCheckProblemsDeferWhenTheRulesDidNotLoad(t *testing.T) {
 	assert.Empty(t, deniedCheckProblems(t.Context(), s, row))
 	assert.Len(t, rec.graded, 1, "grading stops at the first deferred check")
 
-	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.WritePaths, u.Check = row.WritePaths, row.Check }, config.Jobs{}, nil)
+	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { specify(u); u.WritePaths, u.Check = row.WritePaths, row.Check }, config.Jobs{}, nil)
 	require.NoError(t, err)
 }
 

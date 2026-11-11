@@ -527,7 +527,7 @@ func TestApplyDryRunAssignsNothingAndRunsNoMatrix(t *testing.T) {
 
 	matrix := countingMatrix{answer: economyAnswer()}
 	s := tieredStore(t, tierSet(t), matrix.choose)
-	record := types.Declaration{ID: "wave/job", WritePaths: []string{"a.go"}, Check: forkCheck()}
+	record := types.Declaration{Criteria: testCriteria, Model: testModel, ID: "wave/job", WritePaths: []string{"a.go"}, Check: forkCheck()}
 
 	plan, err := Apply(t.Context(), s, []types.Declaration{record}, config.Jobs{}, nil, nil, true)
 	require.NoError(t, err)
@@ -538,11 +538,14 @@ func TestApplyDryRunAssignsNothingAndRunsNoMatrix(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 
+	// A fork names its model (ADR 0043), so the written row takes the tier
+	// it names and the matrix is never asked.
 	plan, err = Apply(t.Context(), s, []types.Declaration{record}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
 	require.NotNil(t, plan[0].Next.ModelTier)
 	assert.Equal(t, "economy", plan[0].Next.ModelTier.Name)
-	assert.Equal(t, 1, matrix.calls)
+	assert.Equal(t, types.ModelTierSourceRow, plan[0].Next.ModelTier.Source)
+	assert.Zero(t, matrix.calls)
 }
 
 func TestStoreFillsTheMatrixRequestWithTheProjectsThatOwnTheWritePaths(t *testing.T) {

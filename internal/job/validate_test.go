@@ -17,6 +17,24 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// testCriteria and testModel are the spec a fixture forks with: a fork
+// refuses a new row without either (ADR 0043).
+const (
+	testCriteria = "the test job"
+	testModel    = "economy"
+)
+
+// specify gives a forked fixture row the criteria and model a fork
+// requires. A merge that sets either after it wins.
+func specify(u *types.Job) {
+	if u.Criteria == "" {
+		u.Criteria = testCriteria
+	}
+	if u.Model == "" {
+		u.Model = testModel
+	}
+}
+
 // integratedDirectorySuite pins MGS3018 against a branch replacing a directory.
 type integratedDirectorySuite struct {
 	suite.Suite
@@ -106,6 +124,7 @@ func TestValidateMergeCollectsEveryProblem(t *testing.T) {
 
 	s, _ := validateWorkspace(t)
 	v := validateMerge(t.Context(), s, nil, "w", func(u *types.Job) {
+		specify(u)
 		u.WritePaths = []string{"cli", "cli/registry.go"}
 		u.Check = &types.LeaseCheck{Target: "nosuch", Project: "."}
 		u.Goals = []types.Goal{{ID: "elsewhere", Kind: types.GoalKindCheck, Check: types.LeaseCheck{Target: "test", Project: "nowhere"}}}
@@ -147,6 +166,7 @@ func TestValidateMergePermitsOnlyWhatTheRecordNames(t *testing.T) {
 	s, _ := validateWorkspace(t)
 	declare := func(deviations ...types.Deviation) func(*types.Job) {
 		return func(u *types.Job) {
+			specify(u)
 			u.WritePaths, u.Check, u.Deviations = []string{"cli/registry.go"}, forkCheck(), deviations
 		}
 	}
@@ -168,6 +188,7 @@ func TestValidateMergePermitsOnlyWhatTheRecordNames(t *testing.T) {
 	assert.Equal(t, deviations, stored.Deviations)
 
 	wrong := validateMerge(t.Context(), s, nil, "w2", func(u *types.Job) {
+		specify(u)
 		u.WritePaths, u.Check = []string{"cli"}, forkCheck()
 		u.Deviations = []types.Deviation{{Code: types.WritePathIsDirectory, Subject: "cli", Reason: "it is mine"}, {Code: types.GateNotRun, Subject: "lint ."}}
 	}, config.Jobs{}, nil)
@@ -184,7 +205,7 @@ func TestValidateMergeNamesWhatItCouldNotCheck(t *testing.T) {
 	t.Parallel()
 
 	root, _ := regeneratedWorkspace(t)
-	merge := func(u *types.Job) { u.WritePaths, u.Check = []string{"cli/registry.go"}, forkCheck() }
+	merge := func(u *types.Job) { specify(u); u.WritePaths, u.Check = []string{"cli/registry.go"}, forkCheck() }
 
 	v := validateMerge(t.Context(), NewStore(tempLocation(t, root)), nil, "w", merge, config.Jobs{}, nil)
 	assert.Empty(t, v.Problems)
@@ -198,8 +219,31 @@ func TestValidateMergeNamesWhatItCouldNotCheck(t *testing.T) {
 	require.Len(t, v.Unchecked, 4)
 	assert.Contains(t, v.Unchecked[0], "the workspace did not load: magusfile.buzz: line 3")
 
-	v = validateMerge(t.Context(), unavailable, nil, "scout", func(u *types.Job) { u.ReadOnly = true }, config.Jobs{}, nil)
+	v = validateMerge(t.Context(), unavailable, nil, "scout", func(u *types.Job) { specify(u); u.ReadOnly = true }, config.Jobs{}, nil)
 	assert.Empty(t, v.Unchecked, "a read-only row with no check skips nothing it would have needed")
+}
+
+// ADR 0043: a new row names its criteria and its model, and an update
+// to an older row that names neither is not refused for the gap.
+func TestValidateMergeRefusesANewRowWithNoCriteriaOrModel(t *testing.T) {
+	t.Parallel()
+
+	s, _ := validateWorkspace(t)
+	scope := func(u *types.Job) { u.WritePaths, u.Check = []string{"cli/registry.go"}, forkCheck() }
+	v := validateMerge(t.Context(), s, nil, "w", scope, config.Jobs{}, nil)
+	var fields []string
+	for _, p := range v.Problems {
+		if p.Code == types.JobRecordInvalid {
+			fields = append(fields, p.Field)
+		}
+	}
+	assert.Equal(t, []string{"criteria", "model"}, fields)
+
+	older := types.Job{ID: "w", WritePaths: []string{"cli/registry.go"}, Check: forkCheck(), State: types.StateDeclared}
+	v = validateMerge(t.Context(), s, []types.Job{older}, "w", func(u *types.Job) { u.Breaks = []string{"--brief-format"} }, config.Jobs{}, nil)
+	for _, p := range v.Problems {
+		assert.NotEqual(t, types.JobRecordInvalid, p.Code, "%v", p)
+	}
 }
 
 func TestValidateForkWritesNothing(t *testing.T) {
@@ -207,6 +251,7 @@ func TestValidateForkWritesNothing(t *testing.T) {
 
 	s, _ := validateWorkspace(t)
 	v, err := ValidateFork(t.Context(), s, "w", func(u *types.Job) {
+		specify(u)
 		u.WritePaths, u.Check, u.Checkpoint = []string{"cli"}, forkCheck(), "abc+zz"
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
@@ -220,6 +265,7 @@ func TestValidateForkWritesNothing(t *testing.T) {
 	assert.Empty(t, rows, "a dry run writes nothing")
 
 	_, err = ForkMerge(t.Context(), s, "w", func(u *types.Job) {
+		specify(u)
 		u.WritePaths, u.Check, u.Checkpoint = []string{"cli"}, forkCheck(), "abc+zz"
 	}, config.Jobs{}, nil)
 	require.ErrorIs(t, err, types.JobCheckpointUnplaceable)
@@ -234,10 +280,10 @@ func TestValidateMergeJudgesAnUpdateByWhatItAdds(t *testing.T) {
 	rows, err := s.List()
 	require.NoError(t, err)
 
-	narrowed := validateMerge(t.Context(), s, rows, "w", func(u *types.Job) { u.WritePaths = []string{"cli/registry.go"} }, config.Jobs{}, nil)
+	narrowed := validateMerge(t.Context(), s, rows, "w", func(u *types.Job) { specify(u); u.WritePaths = []string{"cli/registry.go"} }, config.Jobs{}, nil)
 	assert.Empty(t, narrowed.Problems, "narrowing a glob to a file it covers adds nothing")
 
-	widened := validateMerge(t.Context(), s, rows, "w", func(u *types.Job) { u.WritePaths = []string{"cli/**", "docs/**", "cmd"} }, config.Jobs{}, nil)
+	widened := validateMerge(t.Context(), s, rows, "w", func(u *types.Job) { specify(u); u.WritePaths = []string{"cli/**", "docs/**", "cmd"} }, config.Jobs{}, nil)
 	assert.Equal(t, "write_paths[2]", problemAt(t, widened.Problems, types.WritePathIsDirectory).Field,
 		"a problem found on what the update adds names the field in the whole row")
 	assert.NotContains(t, codes(widened.Problems), types.JobRecordInvalid, "a shape the row already had is not the update's")
@@ -267,6 +313,7 @@ func TestValidateMergePermitsEveryRegeneratedOutputByGlob(t *testing.T) {
 	s, _ := validateWorkspace(t)
 	declare := func(deviations ...types.Deviation) func(*types.Job) {
 		return func(u *types.Job) {
+			specify(u)
 			u.WritePaths, u.Check, u.Deviations = []string{"cli/registry.go"}, forkCheck(), deviations
 		}
 	}
@@ -337,6 +384,7 @@ func TestValidateMergePermitsLintOnlyByItsExactSubject(t *testing.T) {
 	s, _ := validateWorkspace(t)
 	declare := func(deviations ...types.Deviation) func(*types.Job) {
 		return func(u *types.Job) {
+			specify(u)
 			u.WritePaths, u.Check, u.Deviations = []string{"cli/registry.go"}, forkCheck(), deviations
 		}
 	}
@@ -356,7 +404,7 @@ func TestResolveMergeAddsALintGoalAndSaysSo(t *testing.T) {
 
 	s, _ := validateWorkspace(t)
 	declare := func(paths ...string) func(*types.Job) {
-		return func(u *types.Job) { u.WritePaths, u.Check = paths, forkCheck() }
+		return func(u *types.Job) { specify(u); u.WritePaths, u.Check = paths, forkCheck() }
 	}
 	resolve := func(merge func(*types.Job)) (types.Job, string) {
 		var notes bytes.Buffer
