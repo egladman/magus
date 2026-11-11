@@ -175,18 +175,41 @@ test('the status line and the band stay empty while a cache counts down', async 
   expect(await ui.find({ type: 'Text', text: 'engine' })).toBeDefined()
 })
 
-test('the warn gate toasts at submit after expiry and still sends', async ($, on) => {
+test(
+  'the warn gate toasts once at submit after expiry and still sends; a second submit before the next response says nothing',
+  { options: { cacheGate: 'warn' } },
+  async ($, on) => {
+    const clock = mock.clock(on)
+    await clock.set(T0)
+    const seen = engine(on)
+    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+    await $.turn.complete(main(usage({ write: 182_000 })))
+    await clock.advance(6 * MIN)
+    await clock.settle()
+
+    const sent = await $.prompt.submit({ text: 'next step' } as never)
+    expect(sent).toMatchObject({ text: 'next step' })
+    expect(seen.toasts.at(-1)).toMatch(/Cache expired 1m ago/)
+    const toasts = seen.toasts.length
+
+    const queued = await $.prompt.submit({ text: 'one more thing' } as never)
+    expect(queued).toMatchObject({ text: 'one more thing' })
+    expect(seen.toasts).toHaveLength(toasts)
+  },
+)
+
+test('the cache gate holds by default', async ($, on) => {
   const clock = mock.clock(on)
   await clock.set(T0)
-  const seen = engine(on)
+  engine(on)
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
   await $.turn.complete(main(usage({ write: 182_000 })))
   await clock.advance(6 * MIN)
   await clock.settle()
 
-  const sent = await $.prompt.submit({ text: 'next step' } as never)
-  expect(sent).toMatchObject({ text: 'next step' })
-  expect(seen.toasts.at(-1)).toMatch(/Cache expired 1m ago/)
+  expect(await $.prompt.submit({ text: 'next step' } as never)).toMatchObject({
+    drop: expect.stringMatching(/^Held: /),
+  })
 })
 
 test(
@@ -229,21 +252,25 @@ test(
   },
 )
 
-test('a cache hit after a 20-minute gap teaches the mod the TTL is an hour', async ($, on) => {
-  const clock = mock.clock(on)
-  await clock.set(T0)
-  const seen = engine(on)
-  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
-  await $.turn.complete(main(usage({ write: 182_000 })))
-  await clock.advance(20 * MIN)
-  await clock.settle()
+test(
+  'a cache hit after a 20-minute gap teaches the mod the TTL is an hour',
+  { options: { cacheGate: 'warn' } },
+  async ($, on) => {
+    const clock = mock.clock(on)
+    await clock.set(T0)
+    const seen = engine(on)
+    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+    await $.turn.complete(main(usage({ write: 182_000 })))
+    await clock.advance(20 * MIN)
+    await clock.settle()
 
-  await $.turn.complete(main(usage({ read: 182_000, write: 300 })))
-  await clock.advance(61 * MIN)
-  await clock.settle()
-  await $.prompt.submit({ text: 'late' } as never)
-  expect(seen.toasts.at(-1)).toMatch(/Cache expired 1m ago.*TTL 1h, observed/)
-})
+    await $.turn.complete(main(usage({ read: 182_000, write: 300 })))
+    await clock.advance(61 * MIN)
+    await clock.settle()
+    await $.prompt.submit({ text: 'late' } as never)
+    expect(seen.toasts.at(-1)).toMatch(/Cache expired 1m ago.*TTL 1h, observed/)
+  },
+)
 
 test('a subagent shows its cost in the pane and raises no toast', async ($, on) => {
   const clock = mock.clock(on)

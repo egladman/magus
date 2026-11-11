@@ -589,14 +589,17 @@ export const register: Register = (on, options) => {
       const text = budgetNotice(spend, settings.sessionBudgetUsd)
       if (text) found.push({ mode: settings.budgetGate, text })
     }
+    if (found.length === 0) return next(e)
+    // The gates speak once per response: each reads what that response left, and a
+    // second submit before the next response, queued mid-turn or sent after a hold,
+    // re-caches nothing more.
+    const { value: heldFor = 0 } = await $.state.get(HELD_FOR)
+    if (heldFor === cache.lastResponseAt) return next(e)
+    await $.state.set(HELD_FOR, cache.lastResponseAt)
     for (const g of found) if (g.mode === 'warn') $.ui.toast(g.text)
 
     const holds = found.filter(g => g.mode === 'confirm')
     if (holds.length === 0) return next(e)
-    // One hold per response covers every gate: each reads what that response left.
-    const { value: heldFor = 0 } = await $.state.get(HELD_FOR)
-    if (heldFor === cache.lastResponseAt) return next(e)
-    await $.state.set(HELD_FOR, cache.lastResponseAt)
     const text = e.text
     $.clock.after(0, () => void $.prompt.fill({ text }))
     return { drop: `Held: ${holds.map(g => g.text).join(' ')} Submit again to send it.` }

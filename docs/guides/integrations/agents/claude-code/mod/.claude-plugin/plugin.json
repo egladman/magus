@@ -7,7 +7,7 @@
       "type": "string",
       "title": "Cache expiry gate",
       "description": "What happens when you submit after the prompt cache expired: off, warn (a toast), or confirm (holds the prompt once; submit again to send).",
-      "default": "warn"
+      "default": "confirm"
     },
     "gateMinTokens": {
       "type": "number",

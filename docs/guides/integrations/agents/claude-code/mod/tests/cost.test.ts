@@ -256,7 +256,7 @@ test('formatting', async () => {
 
 test('readSettings fills the documented defaults and ignores values outside the options', async () => {
   expect(readSettings({})).toEqual({
-    cacheGate: 'warn',
+    cacheGate: 'confirm',
     gateMinTokens: 50_000,
     cacheTtl: 'auto',
     priceStepGate: 'warn',
@@ -267,7 +267,7 @@ test('readSettings fills the documented defaults and ignores values outside the 
     budgetGate: 'warn',
     ratesFile: '',
   })
-  expect(readSettings({ cacheGate: 'loud', cacheTtl: '1h' })).toMatchObject({ cacheGate: 'warn', cacheTtl: '1h' })
+  expect(readSettings({ cacheGate: 'loud', cacheTtl: '1h' })).toMatchObject({ cacheGate: 'confirm', cacheTtl: '1h' })
 })
 
 test('the new gates take their own words, and 0 is a value, not a missing one', async () => {

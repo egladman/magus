@@ -669,7 +669,10 @@ It adds these to a session:
   priced from a rates table you can replace through the mod's `ratesFile` setting.
   There is no countdown: the moment that matters is the submit.
 - Cost gates, each priced from the same table. The cache and price step gates are
-  `off`, `warn` (a toast) or `confirm`, `warn` by default. The price step gate acts
+  `off`, `warn` (a toast) or `confirm`; the cache gate is `confirm` by default and
+  the price step gate `warn`. Each gate speaks once per response, so a second
+  submit before the next response, queued mid-turn or sent after a hold, goes
+  through without a word. The price step gate acts
   when the context the next prompt re-sends is at or within `priceStepMarginTokens`
   of a model's prompt-size price step, past which every request costs more, and
   `confirm` holds the prompt once and suggests `/compact`. The subagent gate is `off`

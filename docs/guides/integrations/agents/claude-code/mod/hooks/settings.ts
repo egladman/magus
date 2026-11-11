@@ -31,7 +31,7 @@ const pick = <T extends string>(v: unknown, allowed: readonly T[], fallback: T):
 export function readSettings(o: PluginOptions): Settings {
   const ttl = o.cacheTtl
   return {
-    cacheGate: pick(o.cacheGate, ['off', 'warn', 'confirm'], 'warn'),
+    cacheGate: pick(o.cacheGate, ['off', 'warn', 'confirm'], 'confirm'),
     gateMinTokens: num(o.gateMinTokens, 50_000),
     cacheTtl: ttl === '5m' || ttl === '1h' ? ttl : 'auto',
     priceStepGate: pick(o.priceStepGate, ['off', 'warn', 'confirm'], 'warn'),
