@@ -725,3 +725,121 @@ func (s *MainLogicReachSuite) TestACallOutsideTheWorkspaceIsNoPackageCall() {
 	dep.Source, dep.Defs = "", nil
 	s.Equal([]string{"cmd/tool/main.go#compute"}, s.flagged(dep))
 }
+
+// ConformanceIdentitySuite pins that a violation keeps its declaration's
+// identity, so a base and a head measure of one move agree on it.
+type ConformanceIdentitySuite struct {
+	suite.Suite
+}
+
+func TestConformanceIdentitySuite(t *testing.T) {
+	suite.Run(t, new(ConformanceIdentitySuite))
+}
+
+func withDigest(sym types.KnowledgeSymbol, digest string) types.KnowledgeSymbol {
+	sym.BodyDigest = digest
+	return sym
+}
+
+// packageSplitSymbols is a module where internal/w imports lib and types and
+// references Set and its method M. When moved, Set lives in types/agent.
+func packageSplitSymbols(moved bool, mDigest string) []types.KnowledgeSymbol {
+	const w, wGo, lib, libGo, typesGo = "/internal/w", "internal/w/w.go", "/lib", "lib/l.go", "types/t.go"
+	home, homeGo := "/types", typesGo
+	if moved {
+		home, homeGo = "/types/agent", "types/agent/t.go"
+	}
+	syms := []types.KnowledgeSymbol{
+		conformancePkg(w, []string{wGo}),
+		conformancePkg(lib, []string{libGo}, wGo),
+		conformancePkg("/types", []string{typesGo}, wGo),
+		conformanceSym(w, "W().", wGo, 3, 4, 10, "", 0),
+		withDigest(conformanceSym(lib, "L().", libGo, 3, 4, 10, "", 0, wGo), "dL"),
+		withDigest(conformanceSym("/types", "Keep().", typesGo, 40, 41, 50, "", 0, wGo), "dKeep"),
+		withDigest(conformanceSym(home, "Set#", homeGo, 3, 5, 40, "", 0, wGo), "dSet"),
+		withDigest(conformanceSym(home, "Set#M().", homeGo, 7, 30, 40, "", 0, wGo), mDigest),
+	}
+	if moved {
+		syms = append(syms, conformancePkg(home, []string{homeGo}, wGo))
+	}
+	return syms
+}
+
+func splitOptions() types.ConformanceOptions {
+	return types.ConformanceOptions{MinSample: 1, Limits: map[types.ConformanceKey]types.ConformanceLimit{
+		{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource}: {Anchor: 2},
+		{Metric: types.ConformanceFuncLines, Population: types.ConformancePopSource}:        {Anchor: 8},
+	}}
+}
+
+// ceilings is what the split's head, with M's digest mDigest, is charged.
+func (s *ConformanceIdentitySuite) ceilings(mDigest string) []types.ConformanceCeiling {
+	o := splitOptions()
+	baseGraph := assembleLens(packageSplitSymbols(false, "dM"))
+	base := baseGraph.Conformance(o)
+	base.Packages = baseGraph.ConformancePackages(o)
+	head := assembleLens(packageSplitSymbols(true, mDigest)).Conformance(o)
+	touched := []string{"internal/w/w.go", "types/agent/t.go", "types/t.go"}
+	return types.ConformanceCeilings(base, head, touched,
+		[]types.ConformanceMetric{types.ConformanceImportedPackages, types.ConformanceFuncLines})
+}
+
+func (s *ConformanceIdentitySuite) TestAViolationCarriesItsBodyDigest() {
+	out := assembleLens(packageSplitSymbols(true, "dM")).Conformance(splitOptions())
+	s.Equal([]types.ConformanceItem{
+		{ID: "types/agent/t.go#Set.M", Source: "types/agent/t.go:7", Measure: 24, Digest: "dM"},
+	}, findConformanceRow(s.T(), out, types.ConformanceFuncLines, types.ConformancePopSource, "").Violations)
+}
+
+func (s *ConformanceIdentitySuite) TestAnImportCarriesTheDigestsItReaches() {
+	out := assembleLens(packageSplitSymbols(true, "dM")).Conformance(splitOptions())
+	s.Equal([]types.ConformanceItem{{ID: "internal/w", Source: "internal/w", Measure: 3, Imports: []types.ConformanceImport{
+		{Dir: "lib", Digests: []string{"dL"}},
+		{Dir: "types", Digests: []string{"dKeep"}},
+		{Dir: "types/agent", Digests: []string{"dSet"}},
+	}}}, findConformanceRow(s.T(), out, types.ConformanceImportedPackages, types.ConformancePopSource, "internal").Violations,
+		"a reference to M reaches Set, the declaration that owns it")
+}
+
+func (s *ConformanceIdentitySuite) TestAnImportReachingNoDigestIsUnknown() {
+	syms := packageSplitSymbols(true, "dM")
+	syms[len(syms)-3].BodyDigest = ""
+	out := assembleLens(syms).Conformance(splitOptions())
+	row := findConformanceRow(s.T(), out, types.ConformanceImportedPackages, types.ConformancePopSource, "internal")
+	s.Equal(types.ConformanceImport{Dir: "types/agent"}, row.Violations[0].Imports[2])
+}
+
+func (s *ConformanceIdentitySuite) TestPackagesKeepImportsAndTopLevelDigests() {
+	s.Equal([]types.ConformancePackage{
+		{Dir: "internal/w", Imports: []string{"lib", "types"}},
+		{Dir: "lib", Digests: []string{"dL"}},
+		{Dir: "types", Digests: []string{"dKeep", "dSet"}},
+	}, assembleLens(packageSplitSymbols(false, "dM")).ConformancePackages(splitOptions()),
+		"M is a member of Set, not a top-level declaration")
+}
+
+func (s *ConformanceIdentitySuite) TestASplitIntoANewPackageIsNotCharged() {
+	s.Empty(s.ceilings("dM"))
+}
+
+func (s *ConformanceIdentitySuite) TestAMoveWithAnEditedBodyIsCharged() {
+	got := s.ceilings("dM2")
+	s.Require().Len(got, 1)
+	s.Equal(types.ConformanceFuncLines, got[0].Key.Metric)
+	s.Equal("types/agent/t.go", got[0].File)
+}
+
+func (s *ConformanceIdentitySuite) TestACloneGroupCarriesItsMembersDigests() {
+	syms := lensSymbols()
+	for i := range syms {
+		switch syms[i].Key {
+		case conformanceNS("/internal/a") + "F().":
+			syms[i].BodyDigest = "dF"
+		case conformanceNS("/internal/b") + "G().":
+			syms[i].BodyDigest = "dG"
+		}
+	}
+	out := assembleLens(syms).Conformance(lensFixtureOptions())
+	clones := findConformanceRow(s.T(), out, types.ConformanceCloneTokens, types.ConformancePopSource, "")
+	s.Equal("dF,dG", clones.Violations[0].Digest)
+}

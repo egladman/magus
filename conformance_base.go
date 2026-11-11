@@ -34,7 +34,7 @@ const projectNewAtHead = "its project is new at head, so the base holds no measu
 // baseMeasureVersion keys the kept measures; bump it when measureTree measures differently.
 // It replaces the magus build in the key: a gate measures under one
 // binary and lint reads under the checkout's own.
-const baseMeasureVersion = "5"
+const baseMeasureVersion = "6"
 
 // ConformanceCeilings is head, the lens over the working tree, with c.Base's ceilings: each file
 // changed since c.Base whose count of violations of a metric in c.Checks rose past its count
@@ -386,6 +386,7 @@ func (m *Magus) measureTree(ctx context.Context, tree string, plan baseIndexPlan
 	}
 	out := g.Conformance(opts)
 	out.Definition = types.ConformanceDefinition
+	out.Packages = g.ConformancePackages(opts)
 	if out.Answer.Verdict == types.VerdictUnknown {
 		return types.Conformance{}, errors.New("the in-process indexers read no symbols, so no ceiling can be judged against it")
 	}

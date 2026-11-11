@@ -194,6 +194,78 @@ func (s *ConformanceSuite) TestCeilingsCountAPackageInEveryFileDirectlyInside() 
 	s.Equal("internal/a/a.go", got[0].File)
 }
 
+func (s *ConformanceSuite) TestCeilingsPassAPureMove() {
+	base := identityOutput(funcLinesSource, ConformanceItem{ID: "a.go#F", Digest: "d1"})
+	head := identityOutput(funcLinesSource, ConformanceItem{ID: "b.go#F", Digest: "d1"})
+	s.Empty(ConformanceCeilings(base, head, []string{"a.go", "b.go"}, []ConformanceMetric{ConformanceFuncLines}))
+}
+
+func (s *ConformanceSuite) TestCeilingsPassAMovePlusRename() {
+	base := identityOutput(funcLinesSource, ConformanceItem{ID: "a.go#F", Digest: "d1"})
+	head := identityOutput(funcLinesSource, ConformanceItem{ID: "sub/b.go#G", Digest: "d1"})
+	s.Empty(ConformanceCeilings(base, head, []string{"a.go", "sub/b.go"}, []ConformanceMetric{ConformanceFuncLines}))
+}
+
+func (s *ConformanceSuite) TestCeilingsChargeAMoveWithAnEditedBody() {
+	base := identityOutput(funcLinesSource, ConformanceItem{ID: "a.go#F", Digest: "d1"})
+	head := identityOutput(funcLinesSource, ConformanceItem{ID: "b.go#F", Digest: "d2"})
+	s.Equal([]ConformanceCeiling{{
+		Key: funcLinesSource, File: "b.go", Base: 0, Head: 1,
+		Violations: []ConformanceItem{{ID: "b.go#F", Digest: "d2"}},
+	}}, ConformanceCeilings(base, head, []string{"a.go", "b.go"}, []ConformanceMetric{ConformanceFuncLines}))
+}
+
+func (s *ConformanceSuite) TestCeilingsChargeACopyBesideItsOriginal() {
+	base := identityOutput(funcLinesSource, ConformanceItem{ID: "a.go#F", Digest: "d1"})
+	head := identityOutput(funcLinesSource,
+		ConformanceItem{ID: "a.go#F", Digest: "d1"}, ConformanceItem{ID: "b.go#F", Digest: "d1"})
+	got := ConformanceCeilings(base, head, []string{"a.go", "b.go"}, []ConformanceMetric{ConformanceFuncLines})
+	s.Len(got, 1)
+	s.Equal("b.go", got[0].File)
+}
+
+func (s *ConformanceSuite) TestCeilingsChargeAMoveWithNoDigest() {
+	base := identityOutput(funcLinesSource, ConformanceItem{ID: "a.go#F"})
+	head := identityOutput(funcLinesSource, ConformanceItem{ID: "b.go#F"})
+	got := ConformanceCeilings(base, head, []string{"a.go", "b.go"}, []ConformanceMetric{ConformanceFuncLines})
+	s.Len(got, 1)
+	s.Equal("b.go", got[0].File)
+}
+
+func (s *ConformanceSuite) TestCeilingsPairOnlyWithinAMetric() {
+	base := identityOutput(cloneSource, ConformanceItem{ID: "a.go#F", Digest: "d1"})
+	head := identityOutput(funcLinesSource, ConformanceItem{ID: "b.go#F", Digest: "d1"})
+	s.Len(ConformanceCeilings(base, head, []string{"b.go"},
+		[]ConformanceMetric{ConformanceFuncLines, ConformanceCloneTokens}), 1)
+}
+
+func (s *ConformanceSuite) TestCeilingsPassASplitIntoANewPackage() {
+	base := splitBase(true, "d1", "d2")
+	s.Empty(ConformanceCeilings(base, splitHead("d1"), []string{"internal/w/w.go"},
+		[]ConformanceMetric{ConformanceImportedPackages}))
+}
+
+func (s *ConformanceSuite) TestCeilingsChargeASplitWhoseDeclarationChanged() {
+	base := splitBase(true, "d1", "d2")
+	got := ConformanceCeilings(base, splitHead("d1", "d3"), []string{"internal/w/w.go"},
+		[]ConformanceMetric{ConformanceImportedPackages})
+	s.Len(got, 1)
+	s.Equal(1, got[0].Head)
+}
+
+func (s *ConformanceSuite) TestCeilingsChargeAnImportOfAnotherImportersDeclarations() {
+	base := splitBase(false, "d1")
+	got := ConformanceCeilings(base, splitHead("d1"), []string{"internal/w/w.go"},
+		[]ConformanceMetric{ConformanceImportedPackages})
+	s.Len(got, 1)
+}
+
+func (s *ConformanceSuite) TestCeilingsChargeAnImportThatReachesNoDigest() {
+	base := splitBase(true, "d1")
+	s.Len(ConformanceCeilings(base, splitHead(), []string{"internal/w/w.go"},
+		[]ConformanceMetric{ConformanceImportedPackages}), 1)
+}
+
 // ceilingOutput is a lens answer with one row for k holding a violation per id.
 func ceilingOutput(k ConformanceKey, ids ...string) Conformance {
 	row := ConformanceRow{Key: k}
@@ -201,4 +273,36 @@ func ceilingOutput(k ConformanceKey, ids ...string) Conformance {
 		row.Violations = append(row.Violations, ConformanceItem{ID: id})
 	}
 	return Conformance{Rows: []ConformanceRow{row}}
+}
+
+// identityOutput is a lens answer with one row for k holding items.
+func identityOutput(k ConformanceKey, items ...ConformanceItem) Conformance {
+	return Conformance{Rows: []ConformanceRow{{Key: k, Violations: items}}}
+}
+
+// splitBase is a base where internal/w imports lib, and types too when
+// importsTypes is set. That package holds digests, else one it never
+// imported does.
+func splitBase(importsTypes bool, digests ...string) Conformance {
+	home := "other"
+	imports := []string{"lib"}
+	if importsTypes {
+		home = "types"
+		imports = append(imports, home)
+	}
+	return Conformance{Packages: []ConformancePackage{
+		{Dir: "internal/w", Imports: imports},
+		{Dir: home, Digests: digests},
+	}}
+}
+
+// splitHead is a head where internal/w also imports types/agent, past its
+// anchor of 2, reaching declarations with digests.
+func splitHead(digests ...string) Conformance {
+	item := ConformanceItem{ID: "internal/w", Measure: 3, Imports: []ConformanceImport{
+		{Dir: "lib", Digests: []string{"d9"}},
+		{Dir: "types", Digests: []string{"d2"}},
+		{Dir: "types/agent", Digests: digests},
+	}}
+	return Conformance{Rows: []ConformanceRow{{Key: importedPackagesSource, Value: 2, Violations: []ConformanceItem{item}}}}
 }
