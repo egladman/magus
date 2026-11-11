@@ -614,6 +614,43 @@ func TestLoadStoreRefusesTokensWrittenBeforeGrants(t *testing.T) {
 	assert.ErrorIs(t, skipped[0], types.TokenStoreTooOld)
 }
 
+type PreFoldTokenSuite struct {
+	suite.Suite
+	store  *Store
+	secret string
+}
+
+func TestPreFoldTokenSuite(t *testing.T) {
+	suite.Run(t, new(PreFoldTokenSuite))
+}
+
+func (s *PreFoldTokenSuite) SetupTest() {
+	s.store = isolatedStore(s.T())
+	s.secret = plant(s.T(), s.store.dir, "older", func(*tokenRecord) {})
+	path := filepath.Join(s.store.dir, "older.json")
+	b, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	b = []byte(strings.Replace(string(b), `"version":"`+string(storeVersion)+`"`, `"version":2`, 1))
+	s.Require().Contains(string(b), `"version":2`)
+	s.Require().NoError(os.WriteFile(path, b, 0o600))
+}
+
+func (s *PreFoldTokenSuite) TestAVersionTwoTokenVerifies() {
+	fresh := reopen(s.T())
+	skipped, err := fresh.Skipped()
+	s.Require().NoError(err)
+	s.Empty(skipped)
+	cred, ok := fresh.Lookup(s.secret)
+	s.Require().True(ok)
+	s.Equal("older", cred.Name)
+}
+
+func (s *PreFoldTokenSuite) TestAVersionTwoTokenRevokes() {
+	_, err := reopen(s.T()).Revoke(types.GrantOperator, "older")
+	s.Require().NoError(err)
+	s.NoFileExists(filepath.Join(s.store.dir, "older.json"))
+}
+
 // With a retired store present, the operator token still verifies: it never opens the store.
 func TestOperatorVerifiesBesideARetiredStore(t *testing.T) {
 	testkit.Isolate(t)

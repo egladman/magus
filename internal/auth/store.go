@@ -41,8 +41,26 @@ const (
 )
 
 // storeVersion is the token record this build writes and reads. Older
-// records, integer versions included, are refused rather than translated.
+// records are refused rather than translated, but for preFoldVersion.
 const storeVersion types.APIVersion = "magus.token/v1alpha1"
+
+// preFoldVersion is the integer an older magus stamped storeVersion's
+// records with. compat(until: the next release): a token minted under it
+// lives up to MaxTokenTTL, and refusing it locks its holder out.
+const preFoldVersion = "2"
+
+// recordVersion reads a record's version member, preFoldVersion as
+// storeVersion. Any other integer, or no member, is "".
+func recordVersion(raw json.RawMessage) types.APIVersion {
+	if string(raw) == preFoldVersion {
+		return storeVersion
+	}
+	var v types.APIVersion
+	if json.Unmarshal(raw, &v) != nil {
+		return ""
+	}
+	return v
+}
 
 // The sentinels a caller tests with errors.Is. Every refusal auth returns is a coded
 // DiagnosticError that unwraps to one of them, so each edge reports the same MGS code.
@@ -85,6 +103,20 @@ func (t Token) Expired(now time.Time) bool { return now.After(t.Expires) }
 type tokenRecord struct {
 	Version types.APIVersion `json:"version"`
 	Token
+}
+
+func (r *tokenRecord) UnmarshalJSON(b []byte) error {
+	var probe struct {
+		Version json.RawMessage `json:"version"`
+	}
+	if err := json.Unmarshal(b, &probe); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, &r.Token); err != nil {
+		return err
+	}
+	r.Version = recordVersion(probe.Version)
+	return nil
 }
 
 // MintRequest is what a minter asks for. An empty Name takes the first free "connector-N"
@@ -260,9 +292,8 @@ func parseTokenRecord(name, path string, info fs.FileInfo, now time.Time) (Token
 	if err := json.Unmarshal(data, &version); err != nil {
 		return Token{}, invalidRecord(path, "it is not JSON: %v", err)
 	}
-	var got types.APIVersion
-	switch {
-	case json.Unmarshal(version.Version, &got) != nil, got.Compare(storeVersion) < 0:
+	switch got := recordVersion(version.Version); {
+	case got == "", got.Compare(storeVersion) < 0:
 		return Token{}, tooOld([]string{path})
 	case got != storeVersion:
 		return Token{}, types.DiagnosticErrorf(types.TokenStoreTooNew, "auth: token %s is %s, and this magus reads only %s; upgrade magus", path, got, storeVersion)
