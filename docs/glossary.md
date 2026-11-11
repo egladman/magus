@@ -291,6 +291,10 @@ What a spawning tool said about itself in the environment: TRACEPARENT (the W3C 
 
 One read-only check from the advice suite: it reads the changeset through magus and writes one titled section of findings. The same advisors run as a pull request comment in CI and inside magus diff --impact locally. [Advisor in full](glossary/advisor.md).
 
+### Spec
+
+The declared half of a job row: what the parent wrote and the store validated (criteria, checkpoint, write and read paths, the check, the goals, the model, the decisions already made and the evidence behind them). The child reads it with magus describe job, and a view renders it as Markdown at read time, never stored. [Spec in full](glossary/spec.md).
+
 ## Console
 
 ### Console
