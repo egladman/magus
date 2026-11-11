@@ -1,7 +1,7 @@
 ---
 title: "ADR 0044: a job may carry an agent, and an attempt is one try of it"
 order: 44
-description: Two kinds in group batch.magus/v1alpha1. A Job is the unit of work, and its graded part names no model. Agentic work adds one optional spec.agent section (requested model, instructions, decisions, evidence, fresh reason). In Go that section is agent.Spec in types/agent, beside the model tier types that move there, and types.Job.Agent holds it. An Attempt is one try, and the job result becomes its status. The records are Kubernetes CRD-shaped; each has an unexported persistence type in internal/job beside jobs.jsonl, as ADR 0030 lays a store out. There is no Task kind.
+description: Two kinds in group batch.magus/v1alpha1. A Job is the unit of work, and its graded part names no model. Agentic work adds one optional spec.agent section (requested model, instructions, decisions, evidence, and whether a new worker or the warm one takes it). In Go that section is agent.Spec in types/agent, beside the model tier types that move there, and types.Job.Agent holds it. An Attempt is one try, and the job result becomes its status. The records are Kubernetes CRD-shaped; each has an unexported persistence type in internal/job beside jobs.jsonl, as ADR 0030 lays a store out. There is no Task kind.
 tags: [adr, decision, jobs, agents, records, stores]
 status: proposed
 date: 2026-11-11
@@ -43,8 +43,10 @@ Measured on main at 5f0df014d, 2026-11-11, with `magus refs` and reads of
   the success rules, `needs`) names no model, tier or prose.
 - An **agent** is one optional section of a Job, `spec.agent`: the requested model
   `{id, tier}`, the instructions, the decisions with their reasons, the evidence, and
-  the fresh reason. A Job without it is ordinary work, such as a server maintenance
-  run.
+  `worker {type, reason}`. `type` is `Resume` or `New` and is always written. `reason`
+  says why a new worker starts instead of the warm one of the job this one
+  `follows`. It replaces `fresh_reason` (Eli, 2026-11-11). A Job without the section
+  is ordinary work, such as a server maintenance run.
 - An **Attempt** is one try of a Job. The job result becomes its `status`. What the
   workspace resolved the model to (`status.agent.model.resolved`) and what the
   harness's own record observed (`status.agent.model.observed`) are per try, so both
@@ -117,8 +119,8 @@ maps them. The envelope is an unexported generic in `internal/job` until
 
 Pre-1.0, with no compatibility reader
 ([Break now, hold still later](../design/principles/break-now-hold-still-later.md)). A
-`jobs.jsonl` row's `model`, `model_tier`, `fresh_reason` and `criteria` move under
-`agent` when the store migrates it. The JSON output of `magus job` and `describe job`
+`jobs.jsonl` row's `model`, `model_tier` and `criteria` move under `agent` when the
+store migrates it, and `fresh_reason` becomes `agent.worker` with `type: New`. The JSON output of `magus job` and `describe job`
 shows them under `agent`. The job proto's `model_tier` and `criteria` fields move into
 an agent message.
 
