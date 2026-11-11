@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -80,17 +81,27 @@ func (s *PreserveBeforeRemovalSuite) TestRemovingACheckoutPreservesItFirst() {
 	res, err := vcs.Resolve(s.T().Context(), dir, "", types.VCSOptions{})
 	s.Require().NoError(err)
 
-	var out bytes.Buffer
-	s.Require().NoError(preserveBeforeRemoval(s.T().Context(), &out, dir, res))
-	s.Contains(out.String(), "preserved the uncommitted work in")
+	var logged bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	s.T().Cleanup(func() { slog.SetDefault(prev) })
+
+	s.Require().NoError(preserveBeforeRemoval(s.T().Context(), dir, res))
+	s.Contains(logged.String(), "preserved the uncommitted work in")
 
 	refs, err := exec.Command("git", "-C", dir, "for-each-ref", "refs/magus/preserved/").Output()
 	s.Require().NoError(err)
 	s.NotEmpty(strings.TrimSpace(string(refs)), "nothing was captured before the removal")
 
-	out.Reset()
-	s.Require().NoError(preserveBeforeRemoval(s.T().Context(), &out, dir, res))
-	s.Contains(out.String(), "already preserved")
+	logged.Reset()
+	s.Require().NoError(preserveBeforeRemoval(s.T().Context(), dir, res))
+	s.Contains(logged.String(), "already preserved")
+}
+
+func (s *PreserveBeforeRemovalSuite) TestAMissingCheckoutHasNothingToPreserve() {
+	missing := filepath.Join(s.T().TempDir(), "gone")
+
+	s.NoError(preserveBeforeRemoval(s.T().Context(), missing, types.VCSResolution{}))
 }
 
 type FailedProvisionSuite struct {

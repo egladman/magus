@@ -40,9 +40,11 @@ func TestRunMultipleTargetsRunsAllProjectTargetPairs(t *testing.T) {
 import "magus";
 import "fs";
 export fun alpha(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["ran-alpha"]);
     fs\writeFile("ran-alpha", "1");
 }
 export fun beta(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles(["ran-beta"]);
     fs\writeFile("ran-beta", "1");
 }
 `

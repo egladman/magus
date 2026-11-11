@@ -174,7 +174,7 @@ func emitCallbackResult(w *bytes.Buffer, pkgs *argPackages, rt reflect.Type) err
 		fmt.Fprintf(w, "\t\treturn %s(s), err\n", spellType(pkgs, rt))
 		return nil
 	}
-	switch tag := std.TagOf(rt); {
+	switch tag := std.GoTypeTag(rt); {
 	case tag == std.TypeBool && rt.PkgPath() == "":
 		fmt.Fprintln(w, "\t\treturn ffi.ResultBool(res)")
 	case tag == std.TypeAny && rt.NumMethod() == 0:
@@ -194,7 +194,7 @@ func callbackArgValue(t reflect.Type, src string) (string, error) {
 	if t.PkgPath() != "" || t.Kind() == reflect.Struct {
 		return "", fmt.Errorf("no adapter encodes a %s", t)
 	}
-	tag := std.TagOf(t)
+	tag := std.GoTypeTag(t)
 	if tag == std.TypeInvalid {
 		return "", fmt.Errorf("no adapter encodes a %s", t)
 	}

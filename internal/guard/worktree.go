@@ -152,7 +152,7 @@ func pruneSite(c locatedCall, callDir string) (gitDir, why string) {
 	if err != nil {
 		return "", "the directory it runs in cannot be resolved"
 	}
-	return gitDir, repoMismatch(callDir, gitDir)
+	return gitDir, repositoryMismatch(callDir, gitDir)
 }
 
 // lostCheckout names a gone checkout and how to restore it.
@@ -222,9 +222,9 @@ func judgeWorktreeRemove(ctx context.Context, deps Dependencies, at location, ca
 	return judgeRemovalSite(ctx, deps, at, callDir, s, r)
 }
 
-// repoMismatch is why a git call at gitDir cannot be judged from the session in
-// callDir, or "" when both are one repository.
-func repoMismatch(callDir, gitDir string) string {
+// repositoryMismatch is why a git call at gitDir cannot be judged from
+// the session in callDir, or "" when both are one repository.
+func repositoryMismatch(callDir, gitDir string) string {
 	if callDir == "" {
 		return "which checkout this session runs in is unknown, so it cannot be told apart from the target"
 	}
@@ -244,7 +244,7 @@ func judgeRemovalSite(ctx context.Context, deps Dependencies, at location, callD
 		r.failed = []string{why}
 		return r
 	}
-	if why := repoMismatch(callDir, s.gitDir); why != "" {
+	if why := repositoryMismatch(callDir, s.gitDir); why != "" {
 		return fail(why)
 	}
 
@@ -437,8 +437,9 @@ func isWorktreeRemoval(c hint.Invocation) bool {
 var buzzRemoveAllRe = regexp.MustCompile(`\bfs\\removeAll\s*\(\s*"([^"\\$]+)"\s*\)`)
 
 func removeAllPaths(command string) []string {
-	var paths []string
-	for _, m := range buzzRemoveAllRe.FindAllStringSubmatch(command, -1) {
+	matches := buzzRemoveAllRe.FindAllStringSubmatch(command, -1)
+	paths := make([]string, 0, len(matches))
+	for _, m := range matches {
 		paths = append(paths, m[1])
 	}
 	return paths

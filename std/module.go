@@ -283,7 +283,7 @@ func (m Method) ArgTag(i int) TypeTag {
 	if m.Args[i].Variadic {
 		param = param.Elem()
 	}
-	return TagOf(param)
+	return GoTypeTag(param)
 }
 
 // RetTag is the tag return i crosses as, read from the signature.
@@ -292,13 +292,13 @@ func (m Method) RetTag(i int) TypeTag {
 	if sig == nil || i >= sig.NumOut() {
 		return TypeInvalid
 	}
-	return TagOf(sig.Out(i))
+	return GoTypeTag(sig.Out(i))
 }
 
-// TagOf is the tag a Go type crosses as. A struct crosses as a map the
+// GoTypeTag is the tag a Go type crosses as. A struct crosses as a map the
 // generated decoder reads; a pointer as what it points to. A func has no
 // tag: the generator renders it from its Go signature.
-func TagOf(t reflect.Type) TypeTag {
+func GoTypeTag(t reflect.Type) TypeTag {
 	switch t.Kind() {
 	case reflect.String:
 		return TypeString
@@ -311,7 +311,7 @@ func TagOf(t reflect.Type) TypeTag {
 	case reflect.Interface:
 		return TypeAny
 	case reflect.Pointer:
-		return TagOf(t.Elem())
+		return GoTypeTag(t.Elem())
 	case reflect.Struct:
 		return TypeAnyMap
 	case reflect.Slice:

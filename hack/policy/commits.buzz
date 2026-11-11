@@ -16,6 +16,7 @@ namespace agentpolicy\commits;
 
 import "std";
 import "magus";
+import "vcs";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
 import "./hack/magusfile/commits" as conventional;
@@ -165,6 +166,70 @@ export fun messageSlots(p: helpers\Program) > [int] {
     return slots;
 }
 
+final alphanumeric = $"[A-Za-z0-9]";
+
+// namesWord reports whether text holds word as a whole word, case aside.
+// "Eli's" holds "eli"; "Elias" does not.
+fun namesWord(text: str, word: str) > bool {
+    final haystack = text.lower();
+    final needle = word.lower();
+    var scanned = 0;
+    while (needle != "" and scanned < haystack.len()) {
+        final found = haystack.sub(scanned).indexOf(needle);
+        if (found == null) {
+            return false;
+        }
+        final start = scanned + found!;
+        final end = start + needle.len();
+        final openOk = start == 0 or alphanumeric.match(haystack.sub(start - 1, len: 1)) == null;
+        final closeOk = end >= haystack.len() or alphanumeric.match(haystack.sub(end, len: 1)) == null;
+        if (openOk and closeOk) {
+            return true;
+        }
+        scanned = start + 1;
+    }
+    return false;
+}
+
+// committerNames are the full user.name and its first word. Empty when the
+// tool names no one, so nothing is judged.
+fun committerNames() > [str] {
+    final names = mut [<str>];
+    var args = ["config", "user.name"];
+    if (vcs\name() == "jj") {
+        args = ["config", "get", "user.name"];
+    } else if (vcs\name() == "hg" or vcs\name() == "sl") {
+        args = ["config", "ui.username"];
+    }
+    final result = vcs\cmd(args, opts: vcs\CommandOptions{ quiet = true, allowFailure = true }) catch null;
+    if (result == null or !result!.ok) {
+        return names;
+    }
+    final full = result!.stdout.trim();
+    if (full == "") {
+        return names;
+    }
+    names.append(full);
+    final first = full.split(" ")[0];
+    if (first != full) {
+        names.append(first);
+    }
+    return names;
+}
+
+// authorVoiceProblems refuses text that names its own author. A message
+// reads as if the author wrote it: "I" or "my", never the name.
+export fun authorVoiceProblems(text: str, names: [str]) > [str] {
+    final problems = mut [<str>];
+    foreach (name in names) {
+        if (namesWord(text, name)) {
+            problems.append("\"{name}\": the message names its own author in the third person; say it as yourself, or drop the name");
+            return problems;
+        }
+    }
+    return problems;
+}
+
 // wordingProblems judges a pull request title: it opens in the imperative. A conventional
 // title is judged after its `<type>(<scope>)!: ` prefix, which is not part of the
 // description. The selling words are proofread's filler rule, which reads the title as the
@@ -182,6 +247,9 @@ export fun wordingProblems(subject: str, conventional: bool) > [str] {
     if (verb != null) {
         problems.append("\"{verb![0]}\": write the subject in the imperative: 'add', not 'added' or 'adds'");
     }
+    foreach (problem in authorVoiceProblems(text, names: committerNames())) {
+        problems.append(problem);
+    }
     return problems;
 }
 
@@ -189,7 +257,7 @@ export fun wordingProblems(subject: str, conventional: bool) > [str] {
 // after the subcommand. baseBranch is the branch the commit lands on as written, "" when it
 // is made anywhere else. A message that still renders empty is a value only known at run
 // time, so its subject goes unjudged.
-fun subjectProblems(call: helpers\VcsCall, syntax: Syntax, baseBranch: str) > [str] {
+fun subjectProblems(call: helpers\VcsCall, syntax: Syntax, baseBranch: str, names: [str]) > [str] {
     final problems = mut [<str>];
     if (attributes(call.args.join("\n"))) {
         problems.append("an attribution (Co-Authored-By, Generated with): credit nobody in a commit");
@@ -222,6 +290,9 @@ fun subjectProblems(call: helpers\VcsCall, syntax: Syntax, baseBranch: str) > [s
     }
     if (nonASCII.match(subject) != null) {
         problems.append("a character outside plain ASCII (an em dash, a curly quote, an emoji)");
+    }
+    foreach (problem in authorVoiceProblems(subject, names: names)) {
+        problems.append(problem);
     }
     if (baseBranch != "") {
         final problem = conventional\baseProblem(subject);
@@ -278,10 +349,11 @@ fun baseFix(baseBranch: str) > str {
 // takes the conventional form; "" for any other branch or an unknown checkout.
 export fun decideCommit(programs: [helpers\Program], baseBranch: str) > GuardVerdict {
     final problems = mut [<str>];
+    final names = committerNames();
     foreach (p in programs) {
         final syntax = commitSyntax(p);
         if (syntax != null) {
-            foreach (problem in subjectProblems(p.vcs!, syntax: syntax!, baseBranch: baseBranch)) {
+            foreach (problem in subjectProblems(p.vcs!, syntax: syntax!, baseBranch: baseBranch, names: names)) {
                 if (problems.indexOf(problem) == null) {
                     problems.append(problem);
                 }
@@ -376,6 +448,18 @@ test "a pull request title opens in the imperative" {
     std\assert(wordingProblems("fix(cache): keep the key stable", conventional: true).len() == 0, message: "imperative");
     std\assert(wordingProblems("added a vale spell", conventional: true).len() == 1, message: "no prefix to strip");
     std\assert(wordingProblems("keep the key; moved the rule", conventional: false).len() == 0, message: "only the first word counts");
+}
+
+test "a subject naming its own author is refused" {
+    final names = ["Eli Gladman", "Eli"];
+    std\assert(authorVoiceProblems("record Eli's picks in ADR 0043; name the parent's record the spec", names: names).len() == 1, message: "possessive of the first word");
+    std\assert(authorVoiceProblems("tell eli about the lease", names: names).len() == 1, message: "the first word, any case");
+    std\assert(authorVoiceProblems("credit Eli Gladman's picks", names: names).len() == 1, message: "the full name");
+    std\assert(authorVoiceProblems("record my picks in ADR 0043", names: names).len() == 0, message: "first person passes");
+    std\assert(authorVoiceProblems("thank Alex for the picks; Elias agrees", names: names).len() == 0, message: "another person's name passes");
+    std\assert(authorVoiceProblems("record Eli's picks", names: []).len() == 0, message: "no known author, nothing judged");
+    final reason = authorVoiceProblems("record Eli's picks", names: names)[0];
+    std\assert(reason.indexOf("say it as yourself, or drop the name") != null, message: "names the fix");
 }
 
 test "a title sells nothing this rule judges" {

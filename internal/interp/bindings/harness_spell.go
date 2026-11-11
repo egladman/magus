@@ -333,9 +333,6 @@ func declaredTierModels(ctx context.Context, id string, tierRows map[string][]st
 // A tier of several rows runs the id mapped returns for it.
 // When mapped names none of them it is an error, never a pick by order.
 func pickTierModels(tierRows map[string][]string, mapped func(tier string) (string, bool)) (map[string]string, error) {
-	if len(tierRows) == 0 {
-		return nil, nil
-	}
 	out := map[string]string{}
 	for _, tier := range slices.Sorted(maps.Keys(tierRows)) {
 		ids := tierRows[tier]

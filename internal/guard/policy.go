@@ -454,7 +454,7 @@ func (s snapshotSite) lookup() (policySnapshot, bool, error) {
 // compiled rules' settings if the hook has not. It writes nothing when
 // either fails or a source moved under the load.
 func (s snapshotSite) write(ctx context.Context, rules *WorkspaceRules) error {
-	body, err := snapshotOf(ctx, rules)
+	body, err := newSnapshotBody(ctx, rules)
 	if err != nil {
 		return err
 	}
@@ -478,8 +478,8 @@ func (s snapshotSite) write(ctx context.Context, rules *WorkspaceRules) error {
 	return s.log().Update(ctx, func([]policySnapshot) []policySnapshot { return []policySnapshot{snap} })
 }
 
-// snapshotOf is what one load of rules decided, as the body a snapshot keeps.
-func snapshotOf(ctx context.Context, rules *WorkspaceRules) (snapshotBody, error) {
+// newSnapshotBody is what one load of rules decided, as a snapshot keeps it.
+func newSnapshotBody(ctx context.Context, rules *WorkspaceRules) (snapshotBody, error) {
 	approved, err := rules.approvedIfChanged(ctx)
 	if err != nil {
 		return snapshotBody{}, err
@@ -548,7 +548,7 @@ func (s snapshotSite) dependencies(deps Dependencies, snap policySnapshot) Depen
 	for _, src := range body.Sources {
 		policy.Sources = append(policy.Sources, interp.SourceFile{Path: src.Path, ContentID: src.ContentID})
 	}
-	deps.Policy = func() PolicyState { return lineage.policyStateOf(policy) }
+	deps.Policy = func() PolicyState { return lineage.keptPolicyState(policy) }
 	return deps
 }
 

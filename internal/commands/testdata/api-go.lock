@@ -482,6 +482,7 @@ github.com/egladman/magus/std.FsWriteFileAtomic func(ctx context.Context, path s
 github.com/egladman/magus/std.FsWriteLines func(ctx context.Context, path string, lines []string) error
 github.com/egladman/magus/std.Get func(name string) (Module, bool)
 github.com/egladman/magus/std.GetSource func(name string) (SourceModule, bool)
+github.com/egladman/magus/std.GoTypeTag func(t reflect.Type) TypeTag
 github.com/egladman/magus/std.HTML var Module
 github.com/egladman/magus/std.HTMLEscape func(_ context.Context, s string) (string, error)
 github.com/egladman/magus/std.HTTP var Module
@@ -818,7 +819,6 @@ github.com/egladman/magus/std.StringsTrimPrefix func(_ context.Context, s string
 github.com/egladman/magus/std.StringsTrimSuffix func(_ context.Context, s string, suffix string) (string, error)
 github.com/egladman/magus/std.StringsUpperFirst func(_ context.Context, s string) (string, error)
 github.com/egladman/magus/std.StringsWords func(_ context.Context, s string) ([]string, error)
-github.com/egladman/magus/std.TagOf func(t reflect.Type) TypeTag
 github.com/egladman/magus/std.Template var Module
 github.com/egladman/magus/std.TemplateRender func(_ context.Context, tmpl string, data any) (string, error)
 github.com/egladman/magus/std.TemplateRenderPartials func(_ context.Context, tmpl string, data any, partials map[string]string) (string, error)
