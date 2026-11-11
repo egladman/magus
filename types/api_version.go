@@ -103,10 +103,10 @@ func (v APIVersion) parts() apiVersionParts {
 		return apiVersionParts{}
 	}
 	p := apiVersionParts{group: m[1], stability: StabilityStable}
-	p.major, _ = strconv.Atoi(m[2])
+	p.major, _ = strconv.Atoi(m[2]) // apiVersionRe matched digits
 	if m[3] != "" {
 		p.stability = Stability(m[3])
-		p.minor, _ = strconv.Atoi(m[4])
+		p.minor, _ = strconv.Atoi(m[4]) // apiVersionRe matched digits
 	}
 	return p
 }
