@@ -881,6 +881,14 @@ github.com/egladman/magus/std.ValidateModule func(m Module) error
 github.com/egladman/magus/std.Vcs var Module
 github.com/egladman/magus/std.WithCurrentWorkingDirectory func(ctx context.Context, dir string) context.Context
 github.com/egladman/magus/std.WithEditJudge func(ctx context.Context, j EditJudge) context.Context
+github.com/egladman/magus/types.APIVersion type string
+github.com/egladman/magus/types.APIVersion.Compare method func(w APIVersion) int
+github.com/egladman/magus/types.APIVersion.Group method func() string
+github.com/egladman/magus/types.APIVersion.Refuse method func(what string, got APIVersion, fix string) error
+github.com/egladman/magus/types.APIVersion.Stability method func() Stability
+github.com/egladman/magus/types.APIVersion.String method func() string
+github.com/egladman/magus/types.APIVersion.Valid method func() bool
+github.com/egladman/magus/types.APIVersion.Version method func() string
 github.com/egladman/magus/types.Ack type struct
 github.com/egladman/magus/types.Ack.OK field bool
 github.com/egladman/magus/types.ActiveDispatch type struct
@@ -1979,12 +1987,13 @@ github.com/egladman/magus/types.EvaluatedTargetReport.Count field int "json:\"co
 github.com/egladman/magus/types.EvaluatedTargetReport.Definition field string "json:\"definition\" yaml:\"definition\""
 github.com/egladman/magus/types.EvaluatedTargetReport.Targets field []EvaluatedTarget "json:\"targets\"    yaml:\"targets\""
 github.com/egladman/magus/types.Event type struct
+github.com/egladman/magus/types.Event.APIVersion field APIVersion "json:\"api_version\""
 github.com/egladman/magus/types.Event.Message field string "json:\"message\""
 github.com/egladman/magus/types.Event.Outcome field EventOutcome "json:\"outcome\""
-github.com/egladman/magus/types.Event.SchemaVersion field int "json:\"schema_version\""
 github.com/egladman/magus/types.Event.Severity field EventSeverity "json:\"severity\""
 github.com/egladman/magus/types.Event.Source field EventSource "json:\"source\""
 github.com/egladman/magus/types.Event.Where field *EventLocation "json:\"where,omitempty\""
+github.com/egladman/magus/types.EventAPIVersion const APIVersion = "magus.event/v1alpha1"
 github.com/egladman/magus/types.EventLocation type struct
 github.com/egladman/magus/types.EventLocation.Files field []FileRef "json:\"files,omitempty\""
 github.com/egladman/magus/types.EventLocation.Project field *ProjectRef "json:\"project,omitempty\""
@@ -1993,7 +2002,6 @@ github.com/egladman/magus/types.EventOutcome type string
 github.com/egladman/magus/types.EventOutcome.String method func() string
 github.com/egladman/magus/types.EventOutcome.Valid method func() bool
 github.com/egladman/magus/types.EventOutcome.Values method func() []string
-github.com/egladman/magus/types.EventSchemaVersion const untyped int = 1
 github.com/egladman/magus/types.EventSeverity type string
 github.com/egladman/magus/types.EventSeverity.String method func() string
 github.com/egladman/magus/types.EventSeverity.Valid method func() bool
@@ -2300,6 +2308,7 @@ github.com/egladman/magus/types.GuardDeniedError.Error method(ptr) func() string
 github.com/egladman/magus/types.GuardDeniedError.Judgment field GuardJudgment
 github.com/egladman/magus/types.GuardDeny const GuardDecision = "deny"
 github.com/egladman/magus/types.GuardJudgment type struct
+github.com/egladman/magus/types.GuardJudgment.APIVersion field APIVersion "json:\"api_version\""
 github.com/egladman/magus/types.GuardJudgment.Context field string "json:\"context,omitempty\""
 github.com/egladman/magus/types.GuardJudgment.Decision field string "json:\"decision\""
 github.com/egladman/magus/types.GuardJudgment.Lease field string "json:\"lease,omitempty\""
@@ -2307,7 +2316,6 @@ github.com/egladman/magus/types.GuardJudgment.LeaseFrom field LeaseSource "json:
 github.com/egladman/magus/types.GuardJudgment.Next field []NextStep "json:\"next,omitempty\""
 github.com/egladman/magus/types.GuardJudgment.Reason field string "json:\"reason,omitempty\""
 github.com/egladman/magus/types.GuardJudgment.Rule field string "json:\"rule,omitempty\""
-github.com/egladman/magus/types.GuardJudgment.SchemaVersion field int "json:\"schema_version\""
 github.com/egladman/magus/types.GuardProfile type string
 github.com/egladman/magus/types.GuardProfile.Effective method func() GuardProfile
 github.com/egladman/magus/types.GuardProfile.MarshalText method func() ([]byte, error)
@@ -2680,6 +2688,7 @@ github.com/egladman/magus/types.Job.Widenings field int "json:\"widenings,omitem
 github.com/egladman/magus/types.Job.Worktree field *JobWorktree "json:\"worktree,omitempty\" yaml:\"worktree,omitempty\""
 github.com/egladman/magus/types.Job.WritePaths field []string "json:\"write_paths,omitempty\" yaml:\"write_paths,omitempty\""
 github.com/egladman/magus/types.Job.WriteProof field JobWriteProof "json:\"write_proof,omitempty\" yaml:\"write_proof,omitempty\""
+github.com/egladman/magus/types.JobAPIVersion const APIVersion = "magus.job/v1alpha1"
 github.com/egladman/magus/types.JobAncestors func(rows []Job, id string) []Job
 github.com/egladman/magus/types.JobAttempt type struct
 github.com/egladman/magus/types.JobAttempt.AttemptID field string "json:\"attempt_id,omitempty\" yaml:\"attempt_id,omitempty\""
@@ -2919,8 +2928,8 @@ github.com/egladman/magus/types.JobResult.Unmet method func(known []string) []st
 github.com/egladman/magus/types.JobResult.UnresolvedRisks field []string "json:\"unresolved_risks\" yaml:\"unresolved_risks\""
 github.com/egladman/magus/types.JobResult.Validation field JobResultValidation "json:\"validation,omitempty\" yaml:\"validation,omitempty\""
 github.com/egladman/magus/types.JobResult.VerificationEvidence field []VerificationEvidence "json:\"verification_evidence,omitempty\" yaml:\"verification_evidence,omitempty\""
+github.com/egladman/magus/types.JobResultAPIVersion const APIVersion = "magus.job-result/v1alpha1"
 github.com/egladman/magus/types.JobResultSchema var SchemaLedger
-github.com/egladman/magus/types.JobResultSchemaVersion const untyped int = 2
 github.com/egladman/magus/types.JobResultValidation type struct
 github.com/egladman/magus/types.JobResultValidation.Command field string "json:\"command\" yaml:\"command\""
 github.com/egladman/magus/types.JobResultValidation.OutputRef field string "json:\"output_ref\" yaml:\"output_ref\""
@@ -2935,7 +2944,6 @@ github.com/egladman/magus/types.JobRun.Invocation field string "json:\"invocatio
 github.com/egladman/magus/types.JobRun.ItemsRemoved field int64 "json:\"items_removed,omitempty\"   yaml:\"items_removed,omitempty\""
 github.com/egladman/magus/types.JobRun.OK field bool "json:\"ok\"              yaml:\"ok\""
 github.com/egladman/magus/types.JobSchema var SchemaLedger
-github.com/egladman/magus/types.JobSchemaVersion const untyped int = 13
 github.com/egladman/magus/types.JobStaleAt func(rows []Job, row Job, now int64, after time.Duration) bool
 github.com/egladman/magus/types.JobState type string
 github.com/egladman/magus/types.JobState.Editing method func() bool
@@ -3041,6 +3049,7 @@ github.com/egladman/magus/types.KindStored const CredentialKind = "stored"
 github.com/egladman/magus/types.KindSymbol const untyped string = "symbol"
 github.com/egladman/magus/types.KindTarget const untyped string = "target"
 github.com/egladman/magus/types.KindTool const untyped string = "tool"
+github.com/egladman/magus/types.KnowledgeAPIVersion const APIVersion = "magus.knowledge/v1alpha1"
 github.com/egladman/magus/types.KnowledgeAnswer type struct
 github.com/egladman/magus/types.KnowledgeAnswer.DescribeStale method func() string
 github.com/egladman/magus/types.KnowledgeAnswer.Gaps field []KnowledgeSymbolGap "json:\"gaps,omitempty\"          yaml:\"gaps,omitempty\""
@@ -3068,11 +3077,11 @@ github.com/egladman/magus/types.KnowledgeDefinitionSite.Status field KnowledgeDe
 github.com/egladman/magus/types.KnowledgeDefinitionStatus type string
 github.com/egladman/magus/types.KnowledgeDefinitionsDefinition const untyped string = "refs --definition prints where an ingested code symbol is defined as path:start-end, the exact lines its body occupies, from the SCIP index's enclosing range. Each range is checked against the file on disk: verified when the file predates its index, changed when the symbol's name has left the start line, unverified when the name is there but the file was edited since. With --source it prints those lines."
 github.com/egladman/magus/types.KnowledgeDefinitionsOutput type struct
+github.com/egladman/magus/types.KnowledgeDefinitionsOutput.APIVersion field APIVersion "json:\"api_version\" yaml:\"api_version\""
 github.com/egladman/magus/types.KnowledgeDefinitionsOutput.Answer field KnowledgeAnswer "json:\"answer\"         yaml:\"answer\""
 github.com/egladman/magus/types.KnowledgeDefinitionsOutput.Definition field string "json:\"definition\"     yaml:\"definition\""
 github.com/egladman/magus/types.KnowledgeDefinitionsOutput.Definitions field []KnowledgeDefinitionSite "json:\"definitions\"    yaml:\"definitions\""
 github.com/egladman/magus/types.KnowledgeDefinitionsOutput.Label field string "json:\"label\"          yaml:\"label\""
-github.com/egladman/magus/types.KnowledgeDefinitionsOutput.SchemaVersion field int "json:\"schema_version\" yaml:\"schema_version\""
 github.com/egladman/magus/types.KnowledgeDefinitionsOutput.Symbol field string "json:\"symbol\"         yaml:\"symbol\""
 github.com/egladman/magus/types.KnowledgeDocCoverage type struct
 github.com/egladman/magus/types.KnowledgeDocCoverage.Documented field int "json:\"documented\"             yaml:\"documented\""
@@ -3101,6 +3110,7 @@ github.com/egladman/magus/types.KnowledgeEndpointShape.SourceKind field string "
 github.com/egladman/magus/types.KnowledgeEndpointShape.TargetKind field string "json:\"target_kind\" yaml:\"target_kind\""
 github.com/egladman/magus/types.KnowledgeExplainDefinition const untyped string = "explain shows one node's context: its data, its incoming and outgoing edges with provenance, and how many nodes reach it."
 github.com/egladman/magus/types.KnowledgeExplainOutput type struct
+github.com/egladman/magus/types.KnowledgeExplainOutput.APIVersion field APIVersion "json:\"api_version\" yaml:\"api_version\""
 github.com/egladman/magus/types.KnowledgeExplainOutput.BlastRadius field int "json:\"blast_radius\"   yaml:\"blast_radius\""
 github.com/egladman/magus/types.KnowledgeExplainOutput.Definition field string "json:\"definition\"     yaml:\"definition\""
 github.com/egladman/magus/types.KnowledgeExplainOutput.DocsURL field string "json:\"docs_url,omitempty\" yaml:\"docs_url,omitempty\""
@@ -3110,7 +3120,6 @@ github.com/egladman/magus/types.KnowledgeExplainOutput.Out field []KnowledgeEdge
 github.com/egladman/magus/types.KnowledgeExplainOutput.PublicAPI field []PublicSymbol "json:\"public_api,omitempty\" yaml:\"public_api,omitempty\""
 github.com/egladman/magus/types.KnowledgeExplainOutput.PublicAPIGap field string "json:\"public_api_gap,omitempty\" yaml:\"public_api_gap,omitempty\""
 github.com/egladman/magus/types.KnowledgeExplainOutput.Resolution field KnowledgeResolution "json:\"resolution,omitempty\" yaml:\"resolution,omitempty\""
-github.com/egladman/magus/types.KnowledgeExplainOutput.SchemaVersion field int "json:\"schema_version\" yaml:\"schema_version\""
 github.com/egladman/magus/types.KnowledgeFold type struct
 github.com/egladman/magus/types.KnowledgeFold.Folded field int "json:\"folded\" yaml:\"folded\""
 github.com/egladman/magus/types.KnowledgeFold.Node field string "json:\"node\" yaml:\"node\""
@@ -3124,6 +3133,7 @@ github.com/egladman/magus/types.KnowledgeGodNode.Label field string "json:\"labe
 github.com/egladman/magus/types.KnowledgeGodNode.Out field int "json:\"out\"    yaml:\"out\""
 github.com/egladman/magus/types.KnowledgeGraphDefinition const untyped string = "The knowledge graph is a deterministic, cache-backed graph of the magus domain: projects, targets, spells, ops, charms, modules, methods, and diagnostics, connected by verified relations (depends_on, contains, uses, references, documents). Every node and edge is extracted or rubric-inferred from workspace sources - no LLM pass - so it is safe to rebuild implicitly and query instead of grepping."
 github.com/egladman/magus/types.KnowledgeGraphDiff type struct
+github.com/egladman/magus/types.KnowledgeGraphDiff.APIVersion field APIVersion "json:\"api_version\" yaml:\"api_version\""
 github.com/egladman/magus/types.KnowledgeGraphDiff.Base field string "json:\"base\"           yaml:\"base\""
 github.com/egladman/magus/types.KnowledgeGraphDiff.Definition field string "json:\"definition\"     yaml:\"definition\""
 github.com/egladman/magus/types.KnowledgeGraphDiff.EdgesAdded field []KnowledgeEdge "json:\"edges_added,omitempty\"    yaml:\"edges_added,omitempty\""
@@ -3131,9 +3141,9 @@ github.com/egladman/magus/types.KnowledgeGraphDiff.EdgesRemoved field []Knowledg
 github.com/egladman/magus/types.KnowledgeGraphDiff.NodesAdded field []KnowledgeNode "json:\"nodes_added,omitempty\"    yaml:\"nodes_added,omitempty\""
 github.com/egladman/magus/types.KnowledgeGraphDiff.NodesChanged field []KnowledgeNodeChange "json:\"nodes_changed,omitempty\"  yaml:\"nodes_changed,omitempty\""
 github.com/egladman/magus/types.KnowledgeGraphDiff.NodesRemoved field []KnowledgeNode "json:\"nodes_removed,omitempty\"  yaml:\"nodes_removed,omitempty\""
-github.com/egladman/magus/types.KnowledgeGraphDiff.SchemaVersion field int "json:\"schema_version\" yaml:\"schema_version\""
 github.com/egladman/magus/types.KnowledgeGraphDiffDefinition const untyped string = "graph diff reports how the knowledge graph changed between a base revision and the working tree: the nodes and edges added, removed, or (for nodes) changed. It is the PR-review blast-radius artifact - what a change did to the domain's shape - emitted as json or markdown, never rendered. Edge diffs are structural: an edge is identified by (source, target, relation), so a re-scored or re-provenanced edge that keeps those three is not reported as changed."
 github.com/egladman/magus/types.KnowledgeGraphOutput type struct
+github.com/egladman/magus/types.KnowledgeGraphOutput.APIVersion field APIVersion "json:\"api_version\" yaml:\"api_version\""
 github.com/egladman/magus/types.KnowledgeGraphOutput.CatalogFingerprint field string "json:\"catalog_fingerprint,omitempty\" yaml:\"catalog_fingerprint,omitempty\""
 github.com/egladman/magus/types.KnowledgeGraphOutput.Definition field string "json:\"definition\"    yaml:\"definition\""
 github.com/egladman/magus/types.KnowledgeGraphOutput.Directed field bool "json:\"directed\"      yaml:\"directed\""
@@ -3144,7 +3154,6 @@ github.com/egladman/magus/types.KnowledgeGraphOutput.NodeCount field int "json:\
 github.com/egladman/magus/types.KnowledgeGraphOutput.Nodes field []KnowledgeNode "json:\"nodes\"         yaml:\"nodes\" jsonl:\"primary\""
 github.com/egladman/magus/types.KnowledgeGraphOutput.RelationFingerprint field string "json:\"relation_fingerprint\" yaml:\"relation_fingerprint\""
 github.com/egladman/magus/types.KnowledgeGraphOutput.Relations field []KnowledgeRelationDefinition "json:\"relations\"           yaml:\"relations\""
-github.com/egladman/magus/types.KnowledgeGraphOutput.SchemaVersion field int "json:\"schema_version\" yaml:\"schema_version\""
 github.com/egladman/magus/types.KnowledgeGraphOutput.SourceBaseURL field string "json:\"source_base,omitempty\" yaml:\"source_base,omitempty\""
 github.com/egladman/magus/types.KnowledgeIndexCause type struct
 github.com/egladman/magus/types.KnowledgeIndexCause.Fix field string "json:\"fix\" yaml:\"fix\""
@@ -3174,6 +3183,7 @@ github.com/egladman/magus/types.KnowledgeNeighborhoodOptions.Depth field int "js
 github.com/egladman/magus/types.KnowledgeNeighborhoodOptions.Direction field EdgeDirection "json:\"direction,omitempty\" yaml:\"direction,omitempty\""
 github.com/egladman/magus/types.KnowledgeNeighborhoodOptions.Relations field []RelationID "json:\"relations,omitempty\" yaml:\"relations,omitempty\""
 github.com/egladman/magus/types.KnowledgeNeighborhoodOutput type struct
+github.com/egladman/magus/types.KnowledgeNeighborhoodOutput.APIVersion field APIVersion "json:\"api_version\" yaml:\"api_version\""
 github.com/egladman/magus/types.KnowledgeNeighborhoodOutput.Answer field KnowledgeAnswer "json:\"answer\" yaml:\"answer\""
 github.com/egladman/magus/types.KnowledgeNeighborhoodOutput.Definition field string "json:\"definition\"     yaml:\"definition\""
 github.com/egladman/magus/types.KnowledgeNeighborhoodOutput.Focus field string "json:\"focus\"      yaml:\"focus\""
@@ -3182,7 +3192,6 @@ github.com/egladman/magus/types.KnowledgeNeighborhoodOutput.Links field []Knowle
 github.com/egladman/magus/types.KnowledgeNeighborhoodOutput.Nodes field []KnowledgeNode "json:\"nodes\"      yaml:\"nodes\""
 github.com/egladman/magus/types.KnowledgeNeighborhoodOutput.Options field KnowledgeNeighborhoodOptions "json:\"options\"    yaml:\"options\""
 github.com/egladman/magus/types.KnowledgeNeighborhoodOutput.Resolution field KnowledgeResolution "json:\"resolution\" yaml:\"resolution\""
-github.com/egladman/magus/types.KnowledgeNeighborhoodOutput.SchemaVersion field int "json:\"schema_version\" yaml:\"schema_version\""
 github.com/egladman/magus/types.KnowledgeNode type struct
 github.com/egladman/magus/types.KnowledgeNode.Attrs field map[string]string "json:\"attrs,omitempty\"  yaml:\"attrs,omitempty\""
 github.com/egladman/magus/types.KnowledgeNode.Doc field string "json:\"doc,omitempty\"    yaml:\"doc,omitempty\""
@@ -3203,6 +3212,7 @@ github.com/egladman/magus/types.KnowledgeNote.Tags field []string
 github.com/egladman/magus/types.KnowledgeNote.Title field string
 github.com/egladman/magus/types.KnowledgeOccurrencesDefinition const untyped string = "refs --occurrences lists every exact source range where a symbol appears, complete and column-precise, with each range verified against the file on disk. It is the view a mechanical rewrite needs; the default file:line view caps its line list and cannot say which occurrence on a line to replace."
 github.com/egladman/magus/types.KnowledgeOccurrencesOutput type struct
+github.com/egladman/magus/types.KnowledgeOccurrencesOutput.APIVersion field APIVersion "json:\"api_version\" yaml:\"api_version\""
 github.com/egladman/magus/types.KnowledgeOccurrencesOutput.Answer field KnowledgeAnswer "json:\"answer\"                yaml:\"answer\""
 github.com/egladman/magus/types.KnowledgeOccurrencesOutput.Definition field string "json:\"definition\"     yaml:\"definition\""
 github.com/egladman/magus/types.KnowledgeOccurrencesOutput.FileCount field int "json:\"file_count\"       yaml:\"file_count\""
@@ -3211,7 +3221,6 @@ github.com/egladman/magus/types.KnowledgeOccurrencesOutput.Label field string "j
 github.com/egladman/magus/types.KnowledgeOccurrencesOutput.Name field string "json:\"name\" yaml:\"name\""
 github.com/egladman/magus/types.KnowledgeOccurrencesOutput.Names field []string "json:\"names,omitempty\"  yaml:\"names,omitempty\""
 github.com/egladman/magus/types.KnowledgeOccurrencesOutput.OccurrenceCount field int "json:\"occurrence_count\" yaml:\"occurrence_count\""
-github.com/egladman/magus/types.KnowledgeOccurrencesOutput.SchemaVersion field int "json:\"schema_version\" yaml:\"schema_version\""
 github.com/egladman/magus/types.KnowledgeOccurrencesOutput.StaleFiles field int "json:\"stale_files,omitempty\" yaml:\"stale_files,omitempty\""
 github.com/egladman/magus/types.KnowledgeOccurrencesOutput.Symbol field string "json:\"symbol\"         yaml:\"symbol\""
 github.com/egladman/magus/types.KnowledgeOccurrencesOutput.VerifiedCount field int "json:\"verified_count\"   yaml:\"verified_count\""
@@ -3235,10 +3244,10 @@ github.com/egladman/magus/types.KnowledgePathDefinition const untyped string = "
 github.com/egladman/magus/types.KnowledgePathOptions type struct
 github.com/egladman/magus/types.KnowledgePathOptions.Relations field []RelationID "json:\"relations,omitempty\" yaml:\"relations,omitempty\""
 github.com/egladman/magus/types.KnowledgePathOutput type struct
+github.com/egladman/magus/types.KnowledgePathOutput.APIVersion field APIVersion "json:\"api_version\" yaml:\"api_version\""
 github.com/egladman/magus/types.KnowledgePathOutput.Definition field string "json:\"definition\"     yaml:\"definition\""
 github.com/egladman/magus/types.KnowledgePathOutput.Found field bool "json:\"found\"          yaml:\"found\""
 github.com/egladman/magus/types.KnowledgePathOutput.From field string "json:\"from\"           yaml:\"from\""
-github.com/egladman/magus/types.KnowledgePathOutput.SchemaVersion field int "json:\"schema_version\" yaml:\"schema_version\""
 github.com/egladman/magus/types.KnowledgePathOutput.Steps field []KnowledgePathStep "json:\"steps,omitempty\" yaml:\"steps,omitempty\""
 github.com/egladman/magus/types.KnowledgePathOutput.To field string "json:\"to\"             yaml:\"to\""
 github.com/egladman/magus/types.KnowledgePathStep type struct
@@ -3252,6 +3261,7 @@ github.com/egladman/magus/types.KnowledgeQueryOptions.Budget field int "json:\"b
 github.com/egladman/magus/types.KnowledgeQueryOptions.Limit field int "json:\"limit,omitempty\""
 github.com/egladman/magus/types.KnowledgeQueryOptions.Offset field int "json:\"offset,omitempty\""
 github.com/egladman/magus/types.KnowledgeQueryOutput type struct
+github.com/egladman/magus/types.KnowledgeQueryOutput.APIVersion field APIVersion "json:\"api_version\" yaml:\"api_version\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.Answer field KnowledgeAnswer "json:\"answer\" yaml:\"answer\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.Budget field int "json:\"budget\"         yaml:\"budget\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.Definition field string "json:\"definition\"     yaml:\"definition\""
@@ -3262,7 +3272,6 @@ github.com/egladman/magus/types.KnowledgeQueryOutput.Nodes field []KnowledgeNode
 github.com/egladman/magus/types.KnowledgeQueryOutput.Offset field int "json:\"offset,omitempty\" yaml:\"offset,omitempty\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.Query field string "json:\"query\"          yaml:\"query\""
 github.com/egladman/magus/types.KnowledgeQueryOutput.Ranking field *KnowledgeRanking "json:\"ranking,omitempty\" yaml:\"ranking,omitempty\""
-github.com/egladman/magus/types.KnowledgeQueryOutput.SchemaVersion field int "json:\"schema_version\" yaml:\"schema_version\""
 github.com/egladman/magus/types.KnowledgeRanking type struct
 github.com/egladman/magus/types.KnowledgeRanking.Note field string "json:\"note,omitempty\"    yaml:\"note,omitempty\""
 github.com/egladman/magus/types.KnowledgeRanking.Reader field []string "json:\"reader,omitempty\"  yaml:\"reader,omitempty\""
@@ -3277,6 +3286,7 @@ github.com/egladman/magus/types.KnowledgeRefsOptions type struct
 github.com/egladman/magus/types.KnowledgeRefsOptions.Limit field int "json:\"limit,omitempty\""
 github.com/egladman/magus/types.KnowledgeRefsOptions.Offset field int "json:\"offset,omitempty\""
 github.com/egladman/magus/types.KnowledgeRefsOutput type struct
+github.com/egladman/magus/types.KnowledgeRefsOutput.APIVersion field APIVersion "json:\"api_version\" yaml:\"api_version\""
 github.com/egladman/magus/types.KnowledgeRefsOutput.Answer field KnowledgeAnswer "json:\"answer\" yaml:\"answer\""
 github.com/egladman/magus/types.KnowledgeRefsOutput.Definition field string "json:\"definition\"     yaml:\"definition\""
 github.com/egladman/magus/types.KnowledgeRefsOutput.Defs field []KnowledgeRefSite "json:\"defs,omitempty\" yaml:\"defs,omitempty\""
@@ -3284,7 +3294,6 @@ github.com/egladman/magus/types.KnowledgeRefsOutput.FileCount field int "json:\"
 github.com/egladman/magus/types.KnowledgeRefsOutput.Label field string "json:\"label\"          yaml:\"label\""
 github.com/egladman/magus/types.KnowledgeRefsOutput.RefCount field int "json:\"ref_count\"      yaml:\"ref_count\""
 github.com/egladman/magus/types.KnowledgeRefsOutput.Refs field []KnowledgeRefSite "json:\"refs,omitempty\" yaml:\"refs,omitempty\""
-github.com/egladman/magus/types.KnowledgeRefsOutput.SchemaVersion field int "json:\"schema_version\" yaml:\"schema_version\""
 github.com/egladman/magus/types.KnowledgeRefsOutput.Signature field *string "json:\"signature,omitempty\" yaml:\"signature,omitempty\""
 github.com/egladman/magus/types.KnowledgeRefsOutput.Symbol field string "json:\"symbol\"         yaml:\"symbol\""
 github.com/egladman/magus/types.KnowledgeRelation func(id RelationID) (KnowledgeRelationDefinition, bool)
@@ -3303,6 +3312,7 @@ github.com/egladman/magus/types.KnowledgeRelationDefinitions func() []KnowledgeR
 github.com/egladman/magus/types.KnowledgeRelationFingerprint func() string
 github.com/egladman/magus/types.KnowledgeRenameDefinition const untyped string = "refs --rename replaces a symbol's name at every site its verified occurrences name, after grading every file under the acting lease: every file is written or none is. Its inverse is the same verb with the two names swapped."
 github.com/egladman/magus/types.KnowledgeRenameOutput type struct
+github.com/egladman/magus/types.KnowledgeRenameOutput.APIVersion field APIVersion "json:\"api_version\" yaml:\"api_version\""
 github.com/egladman/magus/types.KnowledgeRenameOutput.Applied field bool "json:\"applied\"             yaml:\"applied\""
 github.com/egladman/magus/types.KnowledgeRenameOutput.Definition field string "json:\"definition\"     yaml:\"definition\""
 github.com/egladman/magus/types.KnowledgeRenameOutput.FileCount field int "json:\"file_count\"          yaml:\"file_count\""
@@ -3310,7 +3320,6 @@ github.com/egladman/magus/types.KnowledgeRenameOutput.Files field []EditedFile "
 github.com/egladman/magus/types.KnowledgeRenameOutput.From field string "json:\"from\"                yaml:\"from\""
 github.com/egladman/magus/types.KnowledgeRenameOutput.Label field string "json:\"label\"          yaml:\"label\""
 github.com/egladman/magus/types.KnowledgeRenameOutput.Refused field []EditRefusal "json:\"refused,omitempty\"   yaml:\"refused,omitempty\""
-github.com/egladman/magus/types.KnowledgeRenameOutput.SchemaVersion field int "json:\"schema_version\" yaml:\"schema_version\""
 github.com/egladman/magus/types.KnowledgeRenameOutput.SiteCount field int "json:\"site_count\"          yaml:\"site_count\""
 github.com/egladman/magus/types.KnowledgeRenameOutput.Sites field []EditSpan "json:\"sites,omitempty\"     yaml:\"sites,omitempty\""
 github.com/egladman/magus/types.KnowledgeRenameOutput.Symbol field string "json:\"symbol\"         yaml:\"symbol\""
@@ -3320,12 +3329,12 @@ github.com/egladman/magus/types.KnowledgeResolution.String method func() string
 github.com/egladman/magus/types.KnowledgeResolution.Valid method func() bool
 github.com/egladman/magus/types.KnowledgeResolution.Values method func() []string
 github.com/egladman/magus/types.KnowledgeRouting type struct
+github.com/egladman/magus/types.KnowledgeRouting.APIVersion field APIVersion "json:\"api_version\" yaml:\"api_version\""
 github.com/egladman/magus/types.KnowledgeRouting.CatalogFingerprint field string "json:\"catalog_fingerprint,omitempty\" yaml:\"catalog_fingerprint,omitempty\""
 github.com/egladman/magus/types.KnowledgeRouting.EdgeCount field int "json:\"edge_count\"     yaml:\"edge_count\""
 github.com/egladman/magus/types.KnowledgeRouting.Kinds field []KnowledgeRoutingKind "json:\"kinds\"          yaml:\"kinds\""
 github.com/egladman/magus/types.KnowledgeRouting.NodeCount field int "json:\"node_count\"     yaml:\"node_count\""
 github.com/egladman/magus/types.KnowledgeRouting.Projects field []KnowledgeRoutingProject "json:\"projects\"       yaml:\"projects\""
-github.com/egladman/magus/types.KnowledgeRouting.SchemaVersion field int "json:\"schema_version\" yaml:\"schema_version\""
 github.com/egladman/magus/types.KnowledgeRoutingKind type struct
 github.com/egladman/magus/types.KnowledgeRoutingKind.Anchors field []string "json:\"anchors,omitempty\" yaml:\"anchors,omitempty\""
 github.com/egladman/magus/types.KnowledgeRoutingKind.Count field int "json:\"count\"             yaml:\"count\""
@@ -3335,7 +3344,6 @@ github.com/egladman/magus/types.KnowledgeRoutingProject type struct
 github.com/egladman/magus/types.KnowledgeRoutingProject.KeyTargets field []string "json:\"key_targets,omitempty\" yaml:\"key_targets,omitempty\""
 github.com/egladman/magus/types.KnowledgeRoutingProject.Path field string "json:\"path\"                  yaml:\"path\""
 github.com/egladman/magus/types.KnowledgeRoutingProject.TargetCount field int "json:\"target_count\"          yaml:\"target_count\""
-github.com/egladman/magus/types.KnowledgeSchemaVersion const untyped int = 25
 github.com/egladman/magus/types.KnowledgeStaleIndex type struct
 github.com/egladman/magus/types.KnowledgeStaleIndex.Changed field []string "json:\"changed,omitempty\"       yaml:\"changed,omitempty\""
 github.com/egladman/magus/types.KnowledgeStaleIndex.ChangedCount field int "json:\"changed_count,omitzero\"  yaml:\"changed_count,omitempty\""
@@ -4053,6 +4061,7 @@ github.com/egladman/magus/types.OwnershipEntry.Path field string "json:\"path\" 
 github.com/egladman/magus/types.OwnershipEntry.Primary field string "json:\"primary\"                yaml:\"primary\""
 github.com/egladman/magus/types.OwnershipEntry.PrimaryShare field int "json:\"primary_share\"          yaml:\"primary_share\""
 github.com/egladman/magus/types.OwnershipEntry.Stale field bool "json:\"stale,omitempty\"        yaml:\"stale,omitempty\""
+github.com/egladman/magus/types.ParseAPIVersion func(s string) (APIVersion, error)
 github.com/egladman/magus/types.ParseCheckpointToken func(token string) (revision string, digest string)
 github.com/egladman/magus/types.ParseClaimEvidence func(because string) (ClaimEvidence, error)
 github.com/egladman/magus/types.ParseGlobs func(declared []string) ([]Glob, error)
@@ -4513,15 +4522,15 @@ github.com/egladman/magus/types.Schema type struct
 github.com/egladman/magus/types.Schema.Requires field []string "json:\"requires,omitempty\" yaml:\"requires,omitempty\""
 github.com/egladman/magus/types.Schema.Unknown field map[string]github.com/egladman/magus/internal/json.RawMessage "json:\",unknown\" yaml:\"-\" buzz:\"-\""
 github.com/egladman/magus/types.Schema.Unmet method func(known []string) []string
-github.com/egladman/magus/types.Schema.Version field int "json:\"schema_version\" yaml:\"schema_version\" buzz:\"schemaVersion\""
+github.com/egladman/magus/types.Schema.Version field APIVersion "json:\"api_version\" yaml:\"api_version\" buzz:\"apiVersion\""
 github.com/egladman/magus/types.SchemaLedger type struct
-github.com/egladman/magus/types.SchemaLedger.Added field map[string]int
+github.com/egladman/magus/types.SchemaLedger.Added field map[string]APIVersion
 github.com/egladman/magus/types.SchemaLedger.Features method func() []string
 github.com/egladman/magus/types.SchemaLedger.Name field string
-github.com/egladman/magus/types.SchemaLedger.Requires field map[int]string
+github.com/egladman/magus/types.SchemaLedger.Requires field map[string]APIVersion
 github.com/egladman/magus/types.SchemaLedger.Reserved field []string
 github.com/egladman/magus/types.SchemaLedger.Type field reflect.Type
-github.com/egladman/magus/types.SchemaLedger.Version field int
+github.com/egladman/magus/types.SchemaLedger.Version field APIVersion
 github.com/egladman/magus/types.SchemaLedgers var []SchemaLedger
 github.com/egladman/magus/types.Scope type string
 github.com/egladman/magus/types.ScopeConsole const Scope = "console"
@@ -4754,12 +4763,16 @@ github.com/egladman/magus/types.SplitClaim func(entry string) (path string, decl
 github.com/egladman/magus/types.SplitExplainedOutputs func(files []FileEntry, alsoChangedIn map[string]bool) (explained []string, unexplained []string)
 github.com/egladman/magus/types.SplitLines func(b []byte) []string
 github.com/egladman/magus/types.SplitSourceLines func(b []byte) [][]byte
+github.com/egladman/magus/types.Stability type string
+github.com/egladman/magus/types.StabilityAlpha const Stability = "alpha"
+github.com/egladman/magus/types.StabilityBeta const Stability = "beta"
+github.com/egladman/magus/types.StabilityStable const Stability = "stable"
 github.com/egladman/magus/types.StagedFileReporter type interface
 github.com/egladman/magus/types.StagedFileReporter.StagedFiles imethod func(ctx context.Context, dir string) ([]string, error)
 github.com/egladman/magus/types.StaleGeneratedOutput const DiagnosticCode = "MGS4006"
 github.com/egladman/magus/types.StaleIndexProjects func(stale []KnowledgeStaleIndex) []string
 github.com/egladman/magus/types.StaleSourceProjects func(files []FileEntry) []string
-github.com/egladman/magus/types.StampedSchemaVersion func(b []byte) (int, bool)
+github.com/egladman/magus/types.StampedKnowledgeVersion func(b []byte) (APIVersion, bool)
 github.com/egladman/magus/types.StateConflict const DiagnosticCode = "MGS9025"
 github.com/egladman/magus/types.StateDeclared const JobState = "declared"
 github.com/egladman/magus/types.StateExited const JobState = "exited"
@@ -4806,8 +4819,8 @@ github.com/egladman/magus/types.StoredOutput.OutputBase64 field []byte "json:\"o
 github.com/egladman/magus/types.StoredOutput.OutputDescriptor embedded OutputDescriptor
 github.com/egladman/magus/types.StoredOutput.Schema embedded Schema
 github.com/egladman/magus/types.StoredOutput.Unmet method func(known []string) []string
+github.com/egladman/magus/types.StoredOutputAPIVersion const APIVersion = "magus.output-record/v1alpha1"
 github.com/egladman/magus/types.StoredOutputSchema var SchemaLedger
-github.com/egladman/magus/types.StoredOutputSchemaVersion const untyped int = 1
 github.com/egladman/magus/types.StreamingUnsupported const DiagnosticCode = "MGS9028"
 github.com/egladman/magus/types.StricterGuardVerdict func(a GuardVerdict, b GuardVerdict) GuardVerdict
 github.com/egladman/magus/types.Strings type struct
