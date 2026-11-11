@@ -92,7 +92,7 @@ func (v ConflictKind) Valid() bool      { return conflictKinds.Valid(v) }
 func (v ConflictKind) String() string   { return enum.String(v) }
 
 var precedentFamilies = enum.Set[PrecedentFamily]{
-	PrecedentDepDirection, PrecedentDepFanout, PrecedentErrSentinelName, PrecedentTestPackageName,
+	PrecedentDepDirection, PrecedentImportedPackages, PrecedentErrSentinelName, PrecedentTestPackageName,
 	PrecedentParamNameByType, PrecedentParamOrder, PrecedentCtxFirst, PrecedentErrorLast,
 }
 
@@ -200,7 +200,7 @@ func (v ClaimKind) Valid() bool      { return claimKinds.Valid(v) }
 func (v ClaimKind) String() string   { return enum.String(v) }
 
 var conformanceMetrics = enum.Set[ConformanceMetric]{
-	ConformanceFileLines, ConformanceFuncLines, ConformanceTypeMethods, ConformanceFileSymbols, ConformanceDepFanout,
+	ConformanceFileLines, ConformanceFuncLines, ConformanceTypeMethods, ConformanceFileSymbols, ConformanceImportedPackages,
 	ConformanceCloneTokens, ConformanceExportScope, ConformanceCallSequence, ConformanceSharedBody, ConformanceSharedReach,
 	ConformanceCallerSpread, ConformanceModeKnobs, ConformanceAliasShare, ConformanceNameClash,
 	ConformanceMainLogic, ConformanceStorePathExport, ConformanceFileSplit,

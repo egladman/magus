@@ -108,8 +108,8 @@ func lensFixtureOptions() types.ConformanceOptions {
 		{types.ConformanceFuncLines, types.ConformancePopSource, "", 95, 8},
 		{types.ConformanceTypeMethods, types.ConformancePopSource, "", 95, 49},
 		{types.ConformanceFileSymbols, types.ConformancePopSource, "", 95, 82},
-		{types.ConformanceDepFanout, types.ConformancePopSource, "", 95, 62},
-		{types.ConformanceDepFanout, types.ConformancePopMain, "cmd/tool", 0, 89},
+		{types.ConformanceImportedPackages, types.ConformancePopSource, "", 95, 62},
+		{types.ConformanceImportedPackages, types.ConformancePopMain, "cmd/tool", 0, 89},
 		{types.ConformanceCloneTokens, types.ConformancePopSource, "", 50, 80},
 		{types.ConformanceExportScope, types.ConformancePopSource, "", 0, 0},
 		{types.ConformanceExportScope, types.ConformancePopMain, "", 0, 0},
@@ -140,11 +140,12 @@ func TestConformanceMeasuresEveryMetricAndPopulation(t *testing.T) {
 	}
 	assert.Equal(t, []string{
 		"clone-tokens source ", "clone-tokens test ",
-		"dep-fanout main cmd/tool", "dep-fanout source .", "dep-fanout source internal",
 		"export-scope main ", "export-scope source ",
 		"file-lines main ", "file-lines source ", "file-lines test ",
 		"file-symbols main ", "file-symbols source ", "file-symbols test ",
-		"func-lines main ", "func-lines source ", "func-lines test ", "main-logic main ",
+		"func-lines main ", "func-lines source ", "func-lines test ",
+		"imported-packages main cmd/tool", "imported-packages source .", "imported-packages source internal",
+		"main-logic main ",
 		"mode-knobs source ", "shared-reach source ",
 		"type-methods source ",
 	}, keys, "generated, excluded and fixture files form no row and add no sample")
@@ -180,9 +181,9 @@ func TestConformanceMeasuresEveryMetricAndPopulation(t *testing.T) {
 	assert.Equal(t, 2, findConformanceRow(t, out, types.ConformanceFileSymbols, types.ConformancePopMain, "").P50, "main and Run")
 
 	// A package is keyed by its own directory when that directory has a value, else its layer.
-	tool := findConformanceRow(t, out, types.ConformanceDepFanout, types.ConformancePopMain, "cmd/tool")
+	tool := findConformanceRow(t, out, types.ConformanceImportedPackages, types.ConformancePopMain, "cmd/tool")
 	assert.Equal(t, []int{1, 2, 89}, []int{tool.N, tool.P50, tool.Value})
-	internal := findConformanceRow(t, out, types.ConformanceDepFanout, types.ConformancePopSource, "internal")
+	internal := findConformanceRow(t, out, types.ConformanceImportedPackages, types.ConformancePopSource, "internal")
 	assert.Equal(t, []int{2, 1, 62}, []int{internal.N, internal.P99, internal.Value},
 		"b importing the generated package counts; what gen imports would not")
 
@@ -464,7 +465,7 @@ func TestConformanceWithoutSymbolsIsUnknown(t *testing.T) {
 	assert.Empty(t, out.Rows)
 }
 
-// nearestRank's float form agrees with the integer form precedent.go's depFanout inlines.
+// nearestRank's float form agrees with the integer form precedent.go's importedPackages inlines.
 func TestNearestRankMatchesTheIntegerForm(t *testing.T) {
 	for n := 1; n <= 500; n++ {
 		sorted := make([]int, n)

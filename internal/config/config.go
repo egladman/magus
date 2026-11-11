@@ -962,7 +962,7 @@ type ConformanceLimitConfig struct {
 	// judges it; 0 judges every package with one. Other metrics ignore it.
 	MinSubject int `json:"min_subject" yaml:"min_subject" validate:"gte=0"`
 	// Scopes bounds a package directory or layer apart from the rest of the population,
-	// as directory to anchor, measured at this Percentile. Only dep-fanout has scopes. A
+	// as directory to anchor, measured at this Percentile. Only imported-packages has scopes. A
 	// package that legitimately sits past the population's anchor takes its own here, so
 	// the anchor itself stays tight.
 	Scopes map[string]int `json:"scopes,omitempty" yaml:"scopes,omitempty"`
@@ -1026,19 +1026,19 @@ func conformanceDefaults() ConformanceConfig {
 		Step:      0.05,
 		Gates:     conformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
 		Checks: map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig{
-			types.ConformanceFileLines:    {src: limit(95, 2200), main: limit(95, 3000), test: limit(99, 1900)},
-			types.ConformanceFuncLines:    {src: limit(99, 92), main: limit(99, 140), test: limit(99, 73)},
-			types.ConformanceTypeMethods:  {src: limit(95, 49), main: limit(95, 22), test: limit(95, 32)},
-			types.ConformanceFileSymbols:  {src: limit(95, 82)},
-			types.ConformanceCloneTokens:  {src: limit(50, 80), main: limit(50, 80)},
-			types.ConformanceDepFanout:    {src: limit(95, 62)},
-			types.ConformanceCallSequence: {src: limit(99, 7), main: limit(99, 7)},
-			types.ConformanceSharedBody:   {src: limit(90, 94)},
-			types.ConformanceSharedReach:  {src: limit(95, 7)},
-			types.ConformanceCallerSpread: {src: limit(95, 3)},
-			types.ConformanceModeKnobs:    {src: limit(0, 0)},
-			types.ConformanceAliasShare:   {src: {Percentile: 95, Anchor: 100, MinSubject: 5}},
-			types.ConformanceNameClash:    {src: {Percentile: 99, Anchor: 62, MinSubject: 5}},
+			types.ConformanceFileLines:        {src: limit(95, 2200), main: limit(95, 3000), test: limit(99, 1900)},
+			types.ConformanceFuncLines:        {src: limit(99, 92), main: limit(99, 140), test: limit(99, 73)},
+			types.ConformanceTypeMethods:      {src: limit(95, 49), main: limit(95, 22), test: limit(95, 32)},
+			types.ConformanceFileSymbols:      {src: limit(95, 82)},
+			types.ConformanceCloneTokens:      {src: limit(50, 80), main: limit(50, 80)},
+			types.ConformanceImportedPackages: {src: limit(95, 62)},
+			types.ConformanceCallSequence:     {src: limit(99, 7), main: limit(99, 7)},
+			types.ConformanceSharedBody:       {src: limit(90, 94)},
+			types.ConformanceSharedReach:      {src: limit(95, 7)},
+			types.ConformanceCallerSpread:     {src: limit(95, 3)},
+			types.ConformanceModeKnobs:        {src: limit(0, 0)},
+			types.ConformanceAliasShare:       {src: {Percentile: 95, Anchor: 100, MinSubject: 5}},
+			types.ConformanceNameClash:        {src: {Percentile: 99, Anchor: 62, MinSubject: 5}},
 		},
 	}
 }

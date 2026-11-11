@@ -167,7 +167,7 @@ func TestConformanceDefaults(t *testing.T) {
 	assert.Equal(t, 32, c.Checks[types.ConformanceTypeMethods][types.ConformancePopTest].Anchor)
 	assert.Equal(t, 82, c.Checks[types.ConformanceFileSymbols][types.ConformancePopSource].Anchor)
 	assert.Equal(t, ConformanceLimitConfig{Percentile: 50, Anchor: 80}, c.Checks[types.ConformanceCloneTokens][types.ConformancePopSource])
-	assert.Equal(t, ConformanceLimitConfig{Percentile: 95, Anchor: 62}, c.Checks[types.ConformanceDepFanout][types.ConformancePopSource],
+	assert.Equal(t, ConformanceLimitConfig{Percentile: 95, Anchor: 62}, c.Checks[types.ConformanceImportedPackages][types.ConformancePopSource],
 		"a scope names one workspace's directory, so it ships in none")
 	assert.Equal(t, map[types.ConformancePopulation]ConformanceLimitConfig{
 		types.ConformancePopSource: {Percentile: 99, Anchor: 7},
@@ -207,14 +207,14 @@ func TestConformanceOptions(t *testing.T) {
 		Exclude:   []string{"vendor/**"},
 		Gates:     conformanceGatesConfig{MinCohort: 3, MinShare: 0.7, Bar: 0.4, MaxFindings: 9},
 		Checks: map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig{
-			types.ConformanceFileLines:  {types.ConformancePopTest: {Percentile: 99, Anchor: 1900}},
-			types.ConformanceDepFanout:  {types.ConformancePopSource: {Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 89}}},
-			types.ConformanceAliasShare: {types.ConformancePopSource: {Percentile: 95, Anchor: 100, MinSubject: 5}},
+			types.ConformanceFileLines:        {types.ConformancePopTest: {Percentile: 99, Anchor: 1900}},
+			types.ConformanceImportedPackages: {types.ConformancePopSource: {Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 89}}},
+			types.ConformanceAliasShare:       {types.ConformancePopSource: {Percentile: 95, Anchor: 100, MinSubject: 5}},
 		},
 	}
 	fileLines := types.ConformanceKey{Metric: types.ConformanceFileLines, Population: types.ConformancePopTest}
-	fanout := types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource}
-	scoped := types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: "cmd/magus"}
+	fanout := types.ConformanceKey{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource}
+	scoped := types.ConformanceKey{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource, Scope: "cmd/magus"}
 	alias := types.ConformanceKey{Metric: types.ConformanceAliasShare, Population: types.ConformancePopSource}
 	want := types.ConformanceOptions{
 		Limits: map[types.ConformanceKey]types.ConformanceLimit{
@@ -239,11 +239,11 @@ func TestConformanceOptions(t *testing.T) {
 // every other package answers to stays tight.
 func TestConformanceScopedLimitKeepsTheAnchorTight(t *testing.T) {
 	t.Parallel()
-	scoped := types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: "cmd/magus"}
-	other := types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: "internal/server"}
+	scoped := types.ConformanceKey{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource, Scope: "cmd/magus"}
+	other := types.ConformanceKey{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource, Scope: "internal/server"}
 
 	c := Defaults().Knowledge.Conformance
-	c.Checks[types.ConformanceDepFanout][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 89}}
+	c.Checks[types.ConformanceImportedPackages][types.ConformancePopSource] = ConformanceLimitConfig{Percentile: 95, Anchor: 62, Scopes: map[string]int{"cmd/magus": 89}}
 	o := c.Options()
 	require.NoError(t, o.Validate())
 
@@ -263,7 +263,7 @@ func TestConformanceLoadsFromYAML(t *testing.T) {
   conformance:
     min_sample: 10
     checks:
-      dep-fanout:
+      imported-packages:
         source:
           percentile: 90
           anchor: 20
@@ -278,11 +278,11 @@ func TestConformanceLoadsFromYAML(t *testing.T) {
 		Step:      0.05,
 		Gates:     conformanceGatesConfig{MinCohort: 5, MinShare: 0.8, Bar: 0.5, MaxFindings: 5},
 		Checks: map[types.ConformanceMetric]map[types.ConformancePopulation]ConformanceLimitConfig{
-			types.ConformanceDepFanout: {types.ConformancePopSource: {Percentile: 90, Anchor: 20, Scopes: map[string]int{"cmd/tool": 31}}},
+			types.ConformanceImportedPackages: {types.ConformancePopSource: {Percentile: 90, Anchor: 20, Scopes: map[string]int{"cmd/tool": 31}}},
 		},
 	}, c, "keys left out keep their defaults and written checks replace the defaults")
 
-	scoped := types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: "cmd/tool"}
+	scoped := types.ConformanceKey{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource, Scope: "cmd/tool"}
 	assert.Equal(t, types.ConformanceLimit{Percentile: 90, Anchor: 31}, c.Options().Limits[scoped])
 }
 

@@ -1936,9 +1936,9 @@ const (
 	// PrecedentDepDirection is which way package imports run between two top-level
 	// directories.
 	PrecedentDepDirection PrecedentFamily = "dep-direction"
-	// PrecedentDepFanout is how many distinct packages under one top-level directory a
-	// package imports.
-	PrecedentDepFanout PrecedentFamily = "dep-fanout"
+	// PrecedentImportedPackages counts the distinct packages under one
+	// top-level directory that a package imports.
+	PrecedentImportedPackages PrecedentFamily = "imported-packages"
 	// PrecedentErrSentinelName is whether a package-level error value's name leads with err.
 	PrecedentErrSentinelName PrecedentFamily = "err-sentinel-name"
 	// PrecedentTestPackageName is whether a test file declares the package its directory's
@@ -1956,7 +1956,7 @@ const (
 )
 
 // Precedent is what a body of cases in the graph establishes: Follow of Cohort cases share one
-// shape. It is established only when Cohort and Share clear the conformance gate (a dep-fanout
+// shape. It is established only when Cohort and Share clear the conformance gate (a imported-packages
 // row, whose share is at least 0.95 by construction, is gated on Cohort alone); the zero value,
 // and any row below the gate, is no precedent, a count and never a rule. Departures are the
 // cases that do not follow it, so a reader can check each one against the count.
@@ -1978,7 +1978,7 @@ type Precedent struct {
 // the family: Layers for the dep families, Language for the rest.
 type PrecedentScope struct {
 	// Layers are top-level directories, "." for the workspace root: the sorted pair a
-	// dep-direction row compares, or the one layer a dep-fanout row counts imports into.
+	// dep-direction row compares, or the one layer a imported-packages row counts imports into.
 	Layers   []string `json:"layers,omitempty"`
 	Language string   `json:"language,omitempty"`
 }
@@ -1990,8 +1990,8 @@ type PrecedentKey struct {
 	// From and To are the layers a dep-direction precedent says imports run from and to.
 	From string `json:"from,omitempty"`
 	To   string `json:"to,omitempty"`
-	// MaxImports is the most packages under the layer a dep-fanout precedent lets one package
-	// import: the dep-fanout value knowledge.conformance enforces for the layer, the committed
+	// MaxImports is the most packages under the layer a imported-packages precedent lets one package
+	// import: the imported-packages value knowledge.conformance enforces for the layer, the committed
 	// one else the anchor, and never the cohort's own percentile.
 	MaxImports int `json:"max_imports,omitempty"`
 	// Prefix is the word an err-sentinel-name precedent says a name starts with, folded to

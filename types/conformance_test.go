@@ -7,13 +7,13 @@ import (
 )
 
 var (
-	fileLinesSource = ConformanceKey{Metric: ConformanceFileLines, Population: ConformancePopSource}
-	funcLinesSource = ConformanceKey{Metric: ConformanceFuncLines, Population: ConformancePopSource}
-	depFanoutSource = ConformanceKey{Metric: ConformanceDepFanout, Population: ConformancePopSource}
-	cloneSource     = ConformanceKey{Metric: ConformanceCloneTokens, Population: ConformancePopSource}
+	fileLinesSource        = ConformanceKey{Metric: ConformanceFileLines, Population: ConformancePopSource}
+	funcLinesSource        = ConformanceKey{Metric: ConformanceFuncLines, Population: ConformancePopSource}
+	importedPackagesSource = ConformanceKey{Metric: ConformanceImportedPackages, Population: ConformancePopSource}
+	cloneSource            = ConformanceKey{Metric: ConformanceCloneTokens, Population: ConformancePopSource}
 )
 
-const conformanceMetricList = "[file-lines func-lines type-methods file-symbols dep-fanout clone-tokens export-scope " +
+const conformanceMetricList = "[file-lines func-lines type-methods file-symbols imported-packages clone-tokens export-scope " +
 	"call-sequence shared-body shared-reach caller-spread mode-knobs alias-share name-clash main-logic store-path-export file-split]"
 
 type ConformanceSuite struct {
@@ -29,8 +29,8 @@ func TestConformanceSuite(t *testing.T) {
 func (s *ConformanceSuite) SetupTest() {
 	s.o = ConformanceOptions{
 		Limits: map[ConformanceKey]ConformanceLimit{
-			fileLinesSource: {Percentile: 95, Anchor: 2200},
-			depFanoutSource: {Percentile: 95, Anchor: 62},
+			fileLinesSource:        {Percentile: 95, Anchor: 2200},
+			importedPackagesSource: {Percentile: 95, Anchor: 62},
 		},
 		MinSample: 30,
 		Step:      0.05,
@@ -45,13 +45,13 @@ func (s *ConformanceSuite) TestEffectiveIsTheConfiguredAnchor() {
 }
 
 func (s *ConformanceSuite) TestEffectiveFallsBackFromAScopeToTheUnscopedKey() {
-	v, ok := s.o.Effective(ConformanceKey{Metric: ConformanceDepFanout, Population: ConformancePopSource, Scope: "internal"})
+	v, ok := s.o.Effective(ConformanceKey{Metric: ConformanceImportedPackages, Population: ConformancePopSource, Scope: "internal"})
 	s.True(ok)
 	s.Equal(62, v)
 }
 
 func (s *ConformanceSuite) TestEffectivePrefersTheScopesOwnAnchor() {
-	scoped := ConformanceKey{Metric: ConformanceDepFanout, Population: ConformancePopSource, Scope: "cmd/magus"}
+	scoped := ConformanceKey{Metric: ConformanceImportedPackages, Population: ConformancePopSource, Scope: "cmd/magus"}
 	s.o.Limits[scoped] = ConformanceLimit{Anchor: 89}
 	v, ok := s.o.Effective(scoped)
 	s.True(ok)
@@ -94,8 +94,8 @@ func (s *ConformanceSuite) TestValidateRefusesAPercentilePast100() {
 }
 
 func (s *ConformanceSuite) TestValidateRefusesANegativeAnchor() {
-	s.o.Limits[depFanoutSource] = ConformanceLimit{Percentile: 95, Anchor: -1}
-	s.EqualError(s.o.Validate(), "limit dep-fanout source: anchor -1: want at least 0")
+	s.o.Limits[importedPackagesSource] = ConformanceLimit{Percentile: 95, Anchor: -1}
+	s.EqualError(s.o.Validate(), "limit imported-packages source: anchor -1: want at least 0")
 }
 
 func (s *ConformanceSuite) TestValidateRefusesAMinSampleBelow1() {
@@ -187,9 +187,9 @@ func (s *ConformanceSuite) TestCeilingsCountACloneGroupInEachMembersFile() {
 }
 
 func (s *ConformanceSuite) TestCeilingsCountAPackageInEveryFileDirectlyInside() {
-	head := ceilingOutput(depFanoutSource, "internal/a")
+	head := ceilingOutput(importedPackagesSource, "internal/a")
 	got := ConformanceCeilings(Conformance{}, head, []string{"internal/a/a.go", "internal/a/b/b.go"},
-		[]ConformanceMetric{ConformanceDepFanout})
+		[]ConformanceMetric{ConformanceImportedPackages})
 	s.Len(got, 1)
 	s.Equal("internal/a/a.go", got[0].File)
 }

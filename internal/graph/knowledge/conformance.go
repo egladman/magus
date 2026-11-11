@@ -116,7 +116,7 @@ func compareConformanceKeys(a, b types.ConformanceKey) int {
 
 // conformanceSamples measures every item of every metric, keyed by metric, population and
 // scope, each list in ID order. Generated and excluded files belong to no population. A
-// dep-fanout package is keyed by its own directory when a value is configured for that
+// imported-packages package is keyed by its own directory when a value is configured for that
 // directory, else by its layer. clone-tokens samples every callable with a shape, test
 // code in its own row; its violations are cloneGroups, not these samples. call-sequence
 // samples are callSeqSamples'.
@@ -132,7 +132,7 @@ func conformanceSamples(g *Graph, o types.ConformanceOptions) map[types.Conforma
 	x.mainLogicSamples(add)
 	x.storePathSamples(add)
 	x.fileSplitSamples(add)
-	x.depSamples(add)
+	x.importedPackageSamples(add)
 	for _, e := range x.exports() {
 		add(types.ConformanceExportScope, e.pop, "", e.item)
 	}
@@ -458,7 +458,7 @@ func (x *conformanceIndex) symbolSamples(add conformanceAdd) {
 // depSamples measures how many other workspace package directories each package imports,
 // read from the imports the index recorded. What a generated file imports is its
 // generator's choice and is not counted, but importing a generated package is.
-func (x *conformanceIndex) depSamples(add conformanceAdd) {
+func (x *conformanceIndex) importedPackageSamples(add conformanceAdd) {
 	deps := x.g.packageDepsExcept(func(file string) bool {
 		_, ok := x.population(file)
 		return !ok
@@ -482,10 +482,10 @@ func (x *conformanceIndex) depSamples(add conformanceAdd) {
 	for dir, tos := range imports {
 		pop := pops[dir]
 		scope := dir
-		if !x.pinned(types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: pop, Scope: dir}) {
+		if !x.pinned(types.ConformanceKey{Metric: types.ConformanceImportedPackages, Population: pop, Scope: dir}) {
 			scope = x.layer(dir)
 		}
-		add(types.ConformanceDepFanout, pop, scope, types.ConformanceItem{ID: dir, Source: dir, Measure: len(tos)})
+		add(types.ConformanceImportedPackages, pop, scope, types.ConformanceItem{ID: dir, Source: dir, Measure: len(tos)})
 	}
 }
 

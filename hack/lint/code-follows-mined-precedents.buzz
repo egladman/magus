@@ -8,7 +8,7 @@ import "magus";
 import "magus/lint";
 import "hack/lint/support" as support;
 
-// FAMILIES are the precedents this repository holds itself to. dep-direction and dep-fanout
+// FAMILIES are the precedents this repository holds itself to. dep-direction and imported-packages
 // stay advice: depguard and importceiling enforce the layering by declaration. ctx-first and
 // error-last repeat revive's rules, but revive does not lint every nested module (gopherbuzz
 // runs go vet alone), and these read every Go index. param-name-by-type and param-order stay advice: measured at 3e29af6ff they

@@ -85,11 +85,11 @@ func depCase(dir string, imports ...string) types.Case {
 	return types.Case{Node: precedentNamespace(dir, "go"), Source: dir, Imports: imports}
 }
 
-// fanoutConformance configures the dep-fanout ceiling as an anchor beside the shipped gates.
+// fanoutConformance configures the imported-packages ceiling as an anchor beside the shipped gates.
 func fanoutConformance(anchor int) types.ConformanceOptions {
 	o := testConformance()
 	o.Limits = map[types.ConformanceKey]types.ConformanceLimit{
-		{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource}: {Percentile: 95, Anchor: anchor},
+		{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource}: {Percentile: 95, Anchor: anchor},
 	}
 	return o
 }
@@ -354,7 +354,7 @@ func TestPrecedentsNeverCountAGeneratedFileInAMixedPackage(t *testing.T) {
 			Follow: 1, Cohort: 1, Share: 1, Cited: []types.Case{depCase("cmd/app", "internal/a")},
 		},
 		{
-			Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
+			Family: types.PrecedentImportedPackages, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
 			Follow: 1, Cohort: 1, Share: 1, Cited: []types.Case{depCase("cmd/app", "internal/a")},
 		},
 	}, f.g.Precedents(PrecedentOptions{Generated: map[string]bool{"internal/a/zz_generated.go": true}, Conformance: fanoutConformance(1)}),
@@ -441,13 +441,13 @@ func TestPrecedentsFanoutDepartsPastTheConfiguredCeiling(t *testing.T) {
 	f, all := fanoutCohort()
 	internal := types.PrecedentScope{Layers: []string{"internal"}}
 	assert.Equal(t, types.Precedent{
-		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
+		Family: types.PrecedentImportedPackages, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
 		Follow: 19, Cohort: 20, Share: 19.0 / 20, Established: true,
 		Cited: []types.Case{
 			depCase("cmd/c00", "internal/p0"), depCase("cmd/c01", "internal/p0"), depCase("cmd/c02", "internal/p0"),
 		},
 		Departures: []types.Case{depCase("cmd/big", all...)},
-	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(1)}), types.PrecedentDepFanout, internal))
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(1)}), types.PrecedentImportedPackages, internal))
 }
 
 // TestPrecedentsFanoutNeverFollowsTheLiveDistribution: the cohort's own p95 is 1, and a ceiling
@@ -458,12 +458,12 @@ func TestPrecedentsFanoutNeverFollowsTheLiveDistribution(t *testing.T) {
 	f, all := fanoutCohort()
 	internal := types.PrecedentScope{Layers: []string{"internal"}}
 	assert.Equal(t, types.Precedent{
-		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 12},
+		Family: types.PrecedentImportedPackages, Scope: internal, Key: types.PrecedentKey{MaxImports: 12},
 		Follow: 20, Cohort: 20, Share: 1, Established: true,
 		Cited: []types.Case{
 			depCase("cmd/big", all...), depCase("cmd/c00", "internal/p0"), depCase("cmd/c01", "internal/p0"),
 		},
-	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(12)}), types.PrecedentDepFanout, internal))
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(12)}), types.PrecedentImportedPackages, internal))
 }
 
 func TestPrecedentsFanoutEnforcesTheLayersAnchorOverTheUnscopedOne(t *testing.T) {
@@ -471,16 +471,16 @@ func TestPrecedentsFanoutEnforcesTheLayersAnchorOverTheUnscopedOne(t *testing.T)
 
 	f, all := fanoutCohort()
 	o := fanoutConformance(12)
-	o.Limits[types.ConformanceKey{Metric: types.ConformanceDepFanout, Population: types.ConformancePopSource, Scope: "internal"}] = types.ConformanceLimit{Anchor: 2}
+	o.Limits[types.ConformanceKey{Metric: types.ConformanceImportedPackages, Population: types.ConformancePopSource, Scope: "internal"}] = types.ConformanceLimit{Anchor: 2}
 	internal := types.PrecedentScope{Layers: []string{"internal"}}
 	assert.Equal(t, types.Precedent{
-		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 2},
+		Family: types.PrecedentImportedPackages, Scope: internal, Key: types.PrecedentKey{MaxImports: 2},
 		Follow: 19, Cohort: 20, Share: 19.0 / 20, Established: true,
 		Cited: []types.Case{
 			depCase("cmd/c00", "internal/p0"), depCase("cmd/c01", "internal/p0"), depCase("cmd/c02", "internal/p0"),
 		},
 		Departures: []types.Case{depCase("cmd/big", all...)},
-	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: o}), types.PrecedentDepFanout, internal))
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: o}), types.PrecedentImportedPackages, internal))
 }
 
 func TestPrecedentsFanoutHasNoRowWithoutAConfiguredCeiling(t *testing.T) {
@@ -488,7 +488,7 @@ func TestPrecedentsFanoutHasNoRowWithoutAConfiguredCeiling(t *testing.T) {
 
 	f, _ := fanoutCohort()
 	for _, r := range f.g.Precedents(PrecedentOptions{Conformance: testConformance()}) {
-		assert.NotEqual(t, types.PrecedentDepFanout, r.Family, "no ceiling is configured, so none is claimed")
+		assert.NotEqual(t, types.PrecedentImportedPackages, r.Family, "no ceiling is configured, so none is claimed")
 	}
 }
 
@@ -506,14 +506,14 @@ func TestPrecedentsFanoutIsGatedOnItsCohortAlone(t *testing.T) {
 	}
 	internal := types.PrecedentScope{Layers: []string{"internal"}}
 	want := types.Precedent{
-		Family: types.PrecedentDepFanout, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
+		Family: types.PrecedentImportedPackages, Scope: internal, Key: types.PrecedentKey{MaxImports: 1},
 		Follow: 4, Cohort: 4, Share: 1, Cited: cited[:3],
 	}
-	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(1)}), types.PrecedentDepFanout, internal),
+	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(1)}), types.PrecedentImportedPackages, internal),
 		"four importers are under the minimum cohort of five")
 
 	f.pkg("cmd/c4", 1)
 	f.imports("cmd/c4", "internal/a")
 	want.Follow, want.Cohort, want.Established = 5, 5, true
-	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(1)}), types.PrecedentDepFanout, internal))
+	assert.Equal(t, want, precedentRow(t, f.g.Precedents(PrecedentOptions{Conformance: fanoutConformance(1)}), types.PrecedentImportedPackages, internal))
 }

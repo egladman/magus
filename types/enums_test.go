@@ -11,13 +11,13 @@ func TestEnumPrecedentFamilyClosesItsSet(t *testing.T) {
 
 	assert.Equal(t,
 		[]string{
-			"dep-direction", "dep-fanout", "err-sentinel-name", "test-package-name", "param-name-by-type",
+			"dep-direction", "imported-packages", "err-sentinel-name", "test-package-name", "param-name-by-type",
 			"param-order", "ctx-first", "error-last",
 		},
 		PrecedentFamily("").Values())
 	assert.Equal(t,
-		map[PrecedentFamily]bool{"": true, PrecedentDepFanout: true, "dep-fan-out": false},
-		map[PrecedentFamily]bool{"": PrecedentFamily("").Valid(), PrecedentDepFanout: PrecedentDepFanout.Valid(), "dep-fan-out": PrecedentFamily("dep-fan-out").Valid()})
+		map[PrecedentFamily]bool{"": true, PrecedentImportedPackages: true, "dep-fan-out": false},
+		map[PrecedentFamily]bool{"": PrecedentFamily("").Valid(), PrecedentImportedPackages: PrecedentImportedPackages.Valid(), "dep-fan-out": PrecedentFamily("dep-fan-out").Valid()})
 	assert.Equal(t, "unset", PrecedentFamily("").String())
 }
 
@@ -26,7 +26,7 @@ func TestEnumConformanceSetsClose(t *testing.T) {
 
 	assert.Equal(t,
 		[]string{
-			"file-lines", "func-lines", "type-methods", "file-symbols", "dep-fanout", "clone-tokens", "export-scope",
+			"file-lines", "func-lines", "type-methods", "file-symbols", "imported-packages", "clone-tokens", "export-scope",
 			"call-sequence", "shared-body", "shared-reach", "caller-spread", "mode-knobs", "alias-share", "name-clash", "main-logic", "store-path-export", "file-split",
 		},
 		ConformanceMetric("").Values())

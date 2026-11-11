@@ -23,8 +23,8 @@ const (
 	ConformanceTypeMethods ConformanceMetric = "type-methods"
 	// ConformanceFileSymbols is how many top-level declarations a file holds.
 	ConformanceFileSymbols ConformanceMetric = "file-symbols"
-	// ConformanceDepFanout is how many workspace packages a package imports.
-	ConformanceDepFanout ConformanceMetric = "dep-fanout"
+	// ConformanceImportedPackages counts a package's workspace imports.
+	ConformanceImportedPackages ConformanceMetric = "imported-packages"
 	// ConformanceCloneTokens is the token count of a body another body shares its shape with.
 	ConformanceCloneTokens ConformanceMetric = "clone-tokens"
 	// ConformanceExportScope counts exported symbols nothing outside their package uses.
@@ -87,7 +87,7 @@ const (
 	ConformancePopTest ConformancePopulation = "test"
 )
 
-// ConformanceKey names one threshold. Scope is a layer or package directory for dep-fanout,
+// ConformanceKey names one threshold. Scope is a layer or package directory for imported-packages,
 // and empty otherwise.
 type ConformanceKey struct {
 	Metric     ConformanceMetric     `json:"metric"          yaml:"metric"`
@@ -302,7 +302,7 @@ type ConformanceCeiling struct {
 // ConformanceCeilings is each file among touched whose count of violations of a key whose
 // metric is in checks is higher in head than in base, sorted by key, then file. A drop or a
 // file that holds as many as before passes. An item counts in every file it names: a clone
-// group in each member's file, and a dep-fanout package in every file directly inside it.
+// group in each member's file, and a imported-packages package in every file directly inside it.
 func ConformanceCeilings(base, head Conformance, touched []string, checks []ConformanceMetric) []ConformanceCeiling {
 	before := conformanceRowsByKey(base)
 	var out []ConformanceCeiling
@@ -337,7 +337,7 @@ func conformanceItemsIn(items []ConformanceItem, m ConformanceMetric, file strin
 	var out []ConformanceItem
 	for _, it := range items {
 		if slices.ContainsFunc(strings.Split(it.ID, ", "), func(member string) bool {
-			if m == ConformanceDepFanout {
+			if m == ConformanceImportedPackages {
 				return member == path.Dir(file)
 			}
 			name, _, _ := strings.Cut(member, "#")

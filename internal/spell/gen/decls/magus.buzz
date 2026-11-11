@@ -236,7 +236,7 @@ export enum<str> KnowledgeResolution {
 export enum<str> PrecedentFamily {
     none = "",
     depDirection = "dep-direction",
-    depFanout = "dep-fanout",
+    importedPackages = "imported-packages",
     errSentinelName = "err-sentinel-name",
     testPackageName = "test-package-name",
     paramNameByType = "param-name-by-type",
@@ -309,7 +309,7 @@ export enum<str> ConformanceMetric {
     funcLines = "func-lines",
     typeMethods = "type-methods",
     fileSymbols = "file-symbols",
-    depFanout = "dep-fanout",
+    importedPackages = "imported-packages",
     cloneTokens = "clone-tokens",
     exportScope = "export-scope",
     callSequence = "call-sequence",
