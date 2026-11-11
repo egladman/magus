@@ -655,11 +655,11 @@ github.com/egladman/magus/std.MarkdownStripFrontmatter func(_ context.Context, s
 github.com/egladman/magus/std.MarkdownToHTML func(_ context.Context, source string) (string, error)
 github.com/egladman/magus/std.Math var Module
 github.com/egladman/magus/std.MathClamp func(_ context.Context, x float64, lo float64, hi float64) (float64, error)
-github.com/egladman/magus/std.MathMax func(_ context.Context, nums []float64) (float64, error)
+github.com/egladman/magus/std.MathLargest func(_ context.Context, nums []float64) (float64, error)
 github.com/egladman/magus/std.MathMean func(ctx context.Context, nums []float64) (float64, error)
 github.com/egladman/magus/std.MathMedian func(_ context.Context, nums []float64) (float64, error)
-github.com/egladman/magus/std.MathMin func(_ context.Context, nums []float64) (float64, error)
 github.com/egladman/magus/std.MathRound func(_ context.Context, x float64, places int) (float64, error)
+github.com/egladman/magus/std.MathSmallest func(_ context.Context, nums []float64) (float64, error)
 github.com/egladman/magus/std.MathSum func(_ context.Context, nums []float64) (float64, error)
 github.com/egladman/magus/std.MathTrunc func(_ context.Context, x float64) (float64, error)
 github.com/egladman/magus/std.Merge var Module
