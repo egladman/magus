@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 type registryKey struct{}
@@ -68,11 +69,11 @@ type WorkspaceRegistry struct {
 	// modelTiers is the declaration a magusfile made via magus\job.modelTiers, nil when it
 	// turned tiers off. modelTiersDeclared tells that apart from no call at all, which
 	// leaves the shipped default to defaultModelTiers.
-	modelTiers         *types.ModelTierSet
+	modelTiers         *agent.ModelTierSet
 	modelTiersDeclared bool
 	// defaultModelTiers builds the shipped declaration, run at most once and only when
 	// something asks for the tiers of a workspace whose magusfile declared none.
-	defaultModelTiers func() (*types.ModelTierSet, error)
+	defaultModelTiers func() (*agent.ModelTierSet, error)
 	// modelTierMatrix is the function a magusfile registered via magus\job.modelTier, or nil.
 	modelTierMatrix types.ModelTierMatrix
 }
@@ -544,7 +545,7 @@ func unprobedReadiness(p *types.Project) []error {
 // evaluation of the same magusfile recorded; nil records that the magusfile turned model
 // tiers off, so the shipped default does not apply. Refusing a second call is the binding's
 // job, on the terms of SetSpawnRule. Safe to call concurrently.
-func (r *WorkspaceRegistry) SetModelTiers(set *types.ModelTierSet) {
+func (r *WorkspaceRegistry) SetModelTiers(set *agent.ModelTierSet) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.modelTiers = set
@@ -553,7 +554,7 @@ func (r *WorkspaceRegistry) SetModelTiers(set *types.ModelTierSet) {
 
 // SetDefaultModelTiers records how to build the declaration a workspace gets when its
 // magusfile makes none, so a workspace nothing asks about never builds it.
-func (r *WorkspaceRegistry) SetDefaultModelTiers(build func() (*types.ModelTierSet, error)) {
+func (r *WorkspaceRegistry) SetDefaultModelTiers(build func() (*agent.ModelTierSet, error)) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.defaultModelTiers = build
@@ -562,7 +563,7 @@ func (r *WorkspaceRegistry) SetDefaultModelTiers(build func() (*types.ModelTierS
 // ModelTiers returns the workspace's model tiers: the magusfile's declaration, nil when it
 // turned them off, else the shipped default. It is nil too when the default cannot be
 // built, which is logged at error level.
-func (r *WorkspaceRegistry) ModelTiers(ctx context.Context) *types.ModelTierSet {
+func (r *WorkspaceRegistry) ModelTiers(ctx context.Context) *agent.ModelTierSet {
 	r.mu.Lock()
 	if r.modelTiersDeclared || r.defaultModelTiers == nil {
 		defer r.mu.Unlock()

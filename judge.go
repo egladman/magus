@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -64,7 +65,7 @@ func (m *Magus) guardDependencies(ctx context.Context) (guard.Dependencies, erro
 		return guard.Dependencies{}, deps.LoadFailure
 	}
 	deps.Workspace = m.Root()
-	deps.ModelTiers = func() *types.ModelTierSet { return m.ModelTiers(ctx) }
+	deps.ModelTiers = func() *agent.ModelTierSet { return m.ModelTiers(ctx) }
 	deps.TierRule = m.spawnRule
 	return deps, nil
 }

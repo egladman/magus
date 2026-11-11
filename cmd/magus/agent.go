@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // agentSkills is the catalog of skills magus ships. Sources, rendering, provenance, installation
@@ -413,7 +414,7 @@ func reportContextCost(ctx context.Context, dir string, written []string) {
 	// What the always-loaded set would cost if the long form were the one carried. Kept
 	// even though it is no longer a flag to choose between, because it is the number that
 	// justifies the split: without it the reader cannot see what the shorter form buys.
-	if alt, err := agentSkills.VariantSize(types.SkillVariantFull); err == nil && alt > installed {
+	if alt, err := agentSkills.VariantSize(typesagent.SkillVariantFull); err == nil && alt > installed {
 		msg += fmt.Sprintf("; the full form would be %s", byteSize(alt))
 	}
 	if twins > 0 {

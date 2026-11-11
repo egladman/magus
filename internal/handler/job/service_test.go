@@ -20,6 +20,7 @@ import (
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 func TestMain(m *testing.M) { testkit.Main(m) }
@@ -378,8 +379,8 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	row.Version = "magus.job/v1alpha11"
 	row.Requires = []string{"claims"}
 	row.Breaks = []string{"--old-flag", "api.Open"}
-	row.ModelTier = &types.JobModelTier{
-		Name: "economy", Rank: 0, Skills: types.SkillVariantFull, Source: types.ModelTierSourceMatrix,
+	row.ModelTier = &agent.JobModelTier{
+		Name: "economy", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix,
 		Reason: "small checked job", Site: "magusfile.buzz:20", Model: "haiku",
 	}
 	row.ReworkRounds, row.Widenings = 2, 1

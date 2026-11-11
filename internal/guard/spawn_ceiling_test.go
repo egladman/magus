@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // ceilingFixture is a workspace whose tiers map claude-code to haiku, sonnet and opus, a
@@ -20,7 +21,7 @@ func ceilingFixture(t *testing.T, model string, reported bool) (context.Context,
 	set := testModelTiers(t, "claude-code")
 	ctx := tierFixture(t, set)
 	deps := levelDeps(t, types.GuardProfileStandard)
-	deps.ModelTiers = func() *types.ModelTierSet { return set }
+	deps.ModelTiers = func() *agent.ModelTierSet { return set }
 	at := hookLocation(ctx, deps)
 	if reported {
 		hostGate(at.cacheDir, "claude-code").MarkFired(hostAgentsKind)
@@ -120,7 +121,7 @@ func TestSpawnAboveParentTierNeedsASessionModelAndADeclaration(t *testing.T) {
 	assert.NotEqual(t, string(denyRuleSpawnAboveParentTier), judgeSpawnBy(ctx, t, deps, "", "opus").Rule, "no session model")
 
 	ctx, deps, _ = ceilingFixture(t, "sonnet", true)
-	deps.ModelTiers = func() *types.ModelTierSet { return nil }
+	deps.ModelTiers = func() *agent.ModelTierSet { return nil }
 	assert.NotEqual(t, string(denyRuleSpawnAboveParentTier), judgeSpawnBy(ctx, t, deps, "", "opus").Rule, "tiers turned off")
 }
 

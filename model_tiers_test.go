@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 const opusHostSpell = `import "magus/spell";
@@ -61,24 +62,24 @@ func TestModelTiersWithoutARegistry(t *testing.T) {
 }
 
 func TestModelTiersReadTheRegistry(t *testing.T) {
-	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+	set, err := typesagent.NewModelTierSet(typesagent.ModelTierDeclaration{
 		Enum:   "Tier",
 		Site:   "magusfile.buzz:1",
 		Cases:  []string{"low", "high"},
-		Bounds: make([]types.ModelTierBounds, 2),
-		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+		Bounds: make([]typesagent.ModelTierBounds, 2),
+		Skills: []typesagent.SkillVariant{typesagent.SkillVariantFull, typesagent.SkillVariantShort},
 	})
 	require.NoError(t, err)
 
 	reg := workspace.NewWorkspaceRegistry()
 	reg.SetModelTiers(set)
-	reg.SetModelTierMatrix(func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error) {
-		return &types.JobModelTier{Name: "high", Rank: 1}, nil
+	reg.SetModelTierMatrix(func(context.Context, types.ModelTierRequest) (*typesagent.JobModelTier, error) {
+		return &typesagent.JobModelTier{Name: "high", Rank: 1}, nil
 	})
 	m := &Magus{wsReg: reg}
 
 	assert.Same(t, set, m.ModelTiers(t.Context()))
 	got, err := m.ModelTierMatrix()(context.Background(), types.ModelTierRequest{})
 	require.NoError(t, err)
-	assert.Equal(t, &types.JobModelTier{Name: "high", Rank: 1}, got)
+	assert.Equal(t, &typesagent.JobModelTier{Name: "high", Rank: 1}, got)
 }

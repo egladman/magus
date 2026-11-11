@@ -2,6 +2,8 @@ package types
 
 import (
 	"fmt"
+
+	"github.com/egladman/magus/types/agent"
 )
 
 // SpawnKind is which agent event a magus\guard.spawn rule is judging.
@@ -97,7 +99,7 @@ type SpawnRequest struct {
 	// ModelTier is the model tier recorded on the live row a spawn's `<parent>/<role> <job>`
 	// title names. Nil on a continue, when the title names no live row, or when the row was
 	// written with no model tiers declared.
-	ModelTier *JobModelTier
+	ModelTier *agent.JobModelTier
 	// Thread, ThreadFrom, Orchestration and Window are the CALLER's, as on CommandRequest.
 	Thread        AgentThread
 	ThreadFrom    ThreadSource

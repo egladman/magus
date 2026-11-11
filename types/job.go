@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/egladman/magus/types/agent"
 )
 
 // errInvalidJob opens every error a job record's validation returns.
@@ -804,7 +805,7 @@ type Job struct {
 	// changed, with the source, reason and site that chose it. Store-computed and
 	// output-only like Releases: a caller's value is replaced by the stored one, and nil
 	// means the workspace declared no model tiers when the row was written.
-	ModelTier *JobModelTier `json:"model_tier,omitempty" yaml:"model_tier,omitempty"`
+	ModelTier *agent.JobModelTier `json:"model_tier,omitempty" yaml:"model_tier,omitempty"`
 	// BriefFormat is the format a brief to this row's worker takes, over the workspace's
 	// agents.brief_format. Empty defers to magus.yaml.
 	BriefFormat BriefFormat `json:"brief_format,omitempty" yaml:"brief_format,omitempty"`

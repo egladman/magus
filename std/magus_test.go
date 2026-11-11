@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -995,23 +996,23 @@ func TestMagusJobSchemaIsTheDeclarationSchema(t *testing.T) {
 
 type ratedWorkspace struct {
 	ledgerWorkspace
-	tiers *types.ModelTierSet
+	tiers *agent.ModelTierSet
 	rows  []types.ModelPricing
 }
 
-func (w *ratedWorkspace) ModelTiers(context.Context) *types.ModelTierSet { return w.tiers }
+func (w *ratedWorkspace) ModelTiers(context.Context) *agent.ModelTierSet { return w.tiers }
 func (w *ratedWorkspace) ModelTierMatrix() types.ModelTierMatrix         { return nil }
-func (w *ratedWorkspace) CheckSpawn(_, _ types.ModelTier) error          { return nil }
+func (w *ratedWorkspace) CheckSpawn(_, _ agent.ModelTier) error          { return nil }
 func (w *ratedWorkspace) ModelRows(context.Context) func() []types.ModelPricing {
 	return func() []types.ModelPricing { return w.rows }
 }
 
 func TestJobPutResolvesAModelNamedByAHarnessModelRow(t *testing.T) {
 	testkit.Isolate(t)
-	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+	set, err := agent.NewModelTierSet(agent.ModelTierDeclaration{
 		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"economy", "standard", "principal"}, Default: 1,
-		Bounds: []types.ModelTierBounds{{}, {}, {}},
-		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort, types.SkillVariantShort},
+		Bounds: []agent.ModelTierBounds{{}, {}, {}},
+		Skills: []agent.SkillVariant{agent.SkillVariantFull, agent.SkillVariantShort, agent.SkillVariantShort},
 	})
 	require.NoError(t, err)
 	ws := &ratedWorkspace{
@@ -1025,7 +1026,7 @@ func TestJobPutResolvesAModelNamedByAHarnessModelRow(t *testing.T) {
 	require.NotNil(t, got.ModelTier)
 	tier := *got.ModelTier
 	tier.Reason = ""
-	assert.Equal(t, types.JobModelTier{Name: "principal", Rank: 2, Model: "opus", Skills: tier.Skills, Source: tier.Source, Site: tier.Site}, tier)
+	assert.Equal(t, agent.JobModelTier{Name: "principal", Rank: 2, Model: "opus", Skills: tier.Skills, Source: tier.Source, Site: tier.Site}, tier)
 }
 
 // magus\cmd's nested magus gets the target layer; its caller's exec does not.

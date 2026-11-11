@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -276,24 +277,24 @@ func joinedScripts(hooks []types.HookCommand) string {
 // tieredWorkspace is a workspace that also answers the model tiers the render step asks for.
 type tieredWorkspace struct {
 	types.WorkspaceRepository
-	set *types.ModelTierSet
+	set *typesagent.ModelTierSet
 }
 
-func (w tieredWorkspace) ModelTiers(context.Context) *types.ModelTierSet { return w.set }
+func (w tieredWorkspace) ModelTiers(context.Context) *typesagent.ModelTierSet { return w.set }
 
-func tiersMapping(t *testing.T, hosts map[string][]string) *types.ModelTierSet {
+func tiersMapping(t *testing.T, hosts map[string][]string) *typesagent.ModelTierSet {
 	t.Helper()
-	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+	set, err := typesagent.NewModelTierSet(typesagent.ModelTierDeclaration{
 		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"small", "large"}, Default: 1,
-		Bounds: []types.ModelTierBounds{{}, {}},
-		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+		Bounds: []typesagent.ModelTierBounds{{}, {}},
+		Skills: []typesagent.SkillVariant{typesagent.SkillVariantFull, typesagent.SkillVariantShort},
 		Hosts:  hosts,
 	})
 	require.NoError(t, err)
 	return set
 }
 
-func tieredContext(t *testing.T, set *types.ModelTierSet) context.Context {
+func tieredContext(t *testing.T, set *typesagent.ModelTierSet) context.Context {
 	t.Helper()
 	ws := typestest.NewMockWorkspaceRepository(t)
 	ws.EXPECT().All().Return(nil).Maybe()

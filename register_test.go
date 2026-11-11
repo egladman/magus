@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -569,14 +570,14 @@ func TestRefuseHumanOnlyInGate(t *testing.T) {
 }
 
 // modelTiers declares low and high, cheapest first, as a magusfile's enum would.
-func modelTiers(t *testing.T) (low, high types.ModelTier) {
+func modelTiers(t *testing.T) (low, high agent.ModelTier) {
 	t.Helper()
-	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+	set, err := agent.NewModelTierSet(agent.ModelTierDeclaration{
 		Enum:   "Tier",
 		Site:   "magusfile.buzz:1",
 		Cases:  []string{"low", "high"},
-		Bounds: make([]types.ModelTierBounds, 2),
-		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+		Bounds: make([]agent.ModelTierBounds, 2),
+		Skills: []agent.SkillVariant{agent.SkillVariantFull, agent.SkillVariantShort},
 	})
 	require.NoError(t, err)
 	low, err = set.Parse("low")
@@ -611,10 +612,10 @@ func (s *SpawnRuleSuite) TestTiersFromTwoDeclarationsAreModelTiersIncomparable()
 
 func (s *SpawnRuleSuite) TestAForkAboveItsParentIsRefusedWithTheRulesCode() {
 	t := s.T()
-	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+	set, err := agent.NewModelTierSet(agent.ModelTierDeclaration{
 		Enum: "Tier", Site: "magusfile.buzz:1", Cases: []string{"low", "high"}, Default: 0,
-		Bounds: make([]types.ModelTierBounds, 2),
-		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+		Bounds: make([]agent.ModelTierBounds, 2),
+		Skills: []agent.SkillVariant{agent.SkillVariantFull, agent.SkillVariantShort},
 	})
 	s.Require().NoError(err)
 	store := job.NewStore(job.Location{
@@ -646,8 +647,8 @@ func TestTierCeilingHoldsAChildAtMostItsParentsTier(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `"low"`)
 	assert.Contains(t, err.Error(), `"high"`)
-	assert.NoError(t, TierCeiling(types.ModelTier{}, high), "an unassigned parent bounds nothing")
-	assert.NoError(t, TierCeiling(low, types.ModelTier{}), "an unassigned child is bounded by nothing")
+	assert.NoError(t, TierCeiling(agent.ModelTier{}, high), "an unassigned parent bounds nothing")
+	assert.NoError(t, TierCeiling(low, agent.ModelTier{}), "an unassigned child is bounded by nothing")
 
 	otherLow, _ := modelTiers(t)
 	assert.Error(t, TierCeiling(otherLow, low), "two declarations cannot be ordered against each other")

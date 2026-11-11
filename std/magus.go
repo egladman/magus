@@ -29,6 +29,7 @@ import (
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // Magus declares the host-declarable subset of the magus module. The remaining
@@ -1508,9 +1509,9 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	// Recovered by assertion like workspaceCacheDir; declared here, inside the one
 	// declaration this door owns.
 	type modelTiered interface {
-		ModelTiers(ctx context.Context) *types.ModelTierSet
+		ModelTiers(ctx context.Context) *agent.ModelTierSet
 		ModelTierMatrix() types.ModelTierMatrix
-		CheckSpawn(parent, child types.ModelTier) error
+		CheckSpawn(parent, child agent.ModelTier) error
 	}
 	if tiers, ok := ws.(modelTiered); ok {
 		loc.ModelTiers, loc.ModelTierMatrix = tiers.ModelTiers(ctx), tiers.ModelTierMatrix()

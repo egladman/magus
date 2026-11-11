@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -522,7 +523,7 @@ func TestSpawnRuleSeesTheRowsModelTier(t *testing.T) {
 	judgeSpawn(ctx, t, deps, "haiku")
 	Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 	require.Len(t, probe.asked, 2)
-	assert.Equal(t, &types.JobModelTier{Name: "economy", Rank: 0, Skills: types.SkillVariantFull, Source: types.ModelTierSourceMatrix,
+	assert.Equal(t, &agent.JobModelTier{Name: "economy", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix,
 		Reason: "two files", Site: "hack/tiers.buzz:12"}, probe.asked[0].ModelTier)
 	assert.Nil(t, probe.asked[1].ModelTier)
 }

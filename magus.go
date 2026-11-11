@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/types/daemon"
 	difftypes "github.com/egladman/magus/types/diff"
 	"io"
@@ -286,7 +287,7 @@ func (w internals) SpellImports() *remotespell.Imports { return w.spellImports }
 
 // CheckSpawn holds a job at tier parent spawning one at tier child to the workspace's
 // spawn rule.
-func (w internals) CheckSpawn(parent, child types.ModelTier) error {
+func (w internals) CheckSpawn(parent, child agent.ModelTier) error {
 	return w.spawnRule(parent, child)
 }
 

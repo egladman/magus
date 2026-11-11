@@ -7,11 +7,12 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // ModelTiers returns what the root magusfile declared with magus\modelTiers.
 // Else it returns the shipped declaration, and nil when it turned them off.
-func (m *Magus) ModelTiers(ctx context.Context) *types.ModelTierSet {
+func (m *Magus) ModelTiers(ctx context.Context) *typesagent.ModelTierSet {
 	if m.wsReg == nil {
 		return nil
 	}

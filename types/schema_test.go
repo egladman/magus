@@ -58,6 +58,14 @@ func loadGoldens(t *testing.T, l SchemaLedger) map[APIVersion]schemaGolden {
 	return out
 }
 
+var packageQualifier = regexp.MustCompile(`\b[a-z][a-z0-9_]*\.`)
+
+// wireType drops the pointer and every package qualifier, so a type that moves
+// between packages is the same wire type and []types.Goal stays []Goal.
+func wireType(t string) string {
+	return packageQualifier.ReplaceAllString(strings.TrimPrefix(t, "*"), "")
+}
+
 // ledgerViolations is every way l's type breaks the contract against goldens.
 func ledgerViolations(l SchemaLedger, goldens map[APIVersion]schemaGolden) []string {
 	var out []string
@@ -84,7 +92,7 @@ func ledgerViolations(l SchemaLedger, goldens map[APIVersion]schemaGolden) []str
 			switch {
 			case !ok && !slices.Contains(l.Reserved, name):
 				add("%q (in %s) is gone; a removed name goes into Reserved so it is never reused", name, v)
-			case ok && strings.TrimPrefix(typ, "*") != strings.TrimPrefix(g.Fields[name], "*"):
+			case ok && wireType(typ) != wireType(g.Fields[name]):
 				add("%q was %s in %s and is %s now; a new type is a new name", name, g.Fields[name], v, typ)
 			}
 		}

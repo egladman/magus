@@ -8,6 +8,7 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/types/daemon"
 	difftypes "github.com/egladman/magus/types/diff"
 	imagetypes "github.com/egladman/magus/types/image"
@@ -467,7 +468,7 @@ func ObjectHistory(v types.History, enums ffi.EnumCases) vm.Value {
 	return enums.Instance("History", []string{"dir", "commits", "since", "files"}, []vm.Value{vm.StringValue(v.Dir), vm.IntValue(int64(v.Commits)), vm.StringValue(v.Since), vm.BoolValue(v.Files)})
 }
 
-func ObjectJobModelTier(v types.JobModelTier, enums ffi.EnumCases) vm.Value {
+func ObjectJobModelTier(v typesagent.JobModelTier, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StringValue(v.Name))
 	out.MapSet("rank", vm.IntValue(int64(v.Rank)))

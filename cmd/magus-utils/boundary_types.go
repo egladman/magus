@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/types/daemon"
 	"github.com/egladman/magus/types/diff"
 	"github.com/egladman/magus/types/events"
@@ -408,7 +409,7 @@ var boundaryTypes = []boundaryType{
 	// so they carry no encoder; a matrix function is handed the request, whose history is
 	// a list of records. There is deliberately no ModelTier object: that name is the
 	// workspace's own Buzz enum.
-	{Name: "ModelTierBounds", Type: reflect.TypeFor[types.ModelTierBounds]()},
+	{Name: "ModelTierBounds", Type: reflect.TypeFor[agent.ModelTierBounds]()},
 	// The harness contract's records (types/harness_contract.go), leaf first: a harness
 	// spell's mgs_ functions return all but ShippedAgent, which magus hands
 	// mgs_renderAgents.
@@ -449,7 +450,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Provenance", Type: reflect.TypeFor[image.Provenance]()},
 	{Name: "Document", Type: reflect.TypeFor[image.Document](), RuntimeObject: true},
 	{Name: "ShippedAgent", Type: reflect.TypeFor[types.ShippedAgent](), RuntimeObject: true},
-	{Name: "JobModelTier", Type: reflect.TypeFor[types.JobModelTier](), RuntimeObject: true},
+	{Name: "JobModelTier", Type: reflect.TypeFor[agent.JobModelTier](), RuntimeObject: true},
 	{Name: "ModelTierRequest", Type: reflect.TypeFor[types.ModelTierRequest](), RuntimeObject: true},
 	// Leaf first: Job.prior is [PriorAttempt], whose denials and retry are these two.
 	{Name: "JobDenial", Type: reflect.TypeFor[types.JobDenial](), RuntimeObject: true},
@@ -566,7 +567,7 @@ var boundaryEnumTypes = []reflect.Type{
 	reflect.TypeFor[spells.CoverageFormat](),
 	reflect.TypeFor[spells.External](),
 	reflect.TypeFor[spells.SandboxAccess](),
-	reflect.TypeFor[types.SkillVariant](),
+	reflect.TypeFor[agent.SkillVariant](),
 	reflect.TypeFor[types.JobKind](),
 	reflect.TypeFor[types.SkillForm](),
 	reflect.TypeFor[spells.DiscoveryRole](),
@@ -574,7 +575,7 @@ var boundaryEnumTypes = []reflect.Type{
 	reflect.TypeFor[types.HookPoint](),
 	reflect.TypeFor[types.BindingStatus](),
 	reflect.TypeFor[types.McpTransport](),
-	reflect.TypeFor[types.ModelTierSource](),
+	reflect.TypeFor[agent.ModelTierSource](),
 	reflect.TypeFor[types.GroupingShape](),
 	reflect.TypeFor[types.BriefFormat](),
 	reflect.TypeFor[types.BriefRefKind](),

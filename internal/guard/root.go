@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // The cost rules judge the main thread of a session: the context every one of its calls
@@ -478,9 +479,9 @@ func gradeSpawnModel(deps Dependencies, verdict types.GuardJudgment, env hookReq
 // declaration as it stands.
 type forkedTier struct {
 	job    string
-	record types.JobModelTier
-	tier   types.ModelTier
-	set    *types.ModelTierSet
+	record agent.JobModelTier
+	tier   agent.ModelTier
+	set    *agent.ModelTierSet
 	// rows are the mgs_listModels rows: their aliases name the short model a host's spawn
 	// tool takes where the declaration maps only full ids.
 	rows []types.ModelPricing
@@ -499,7 +500,7 @@ func boundModelTier(deps Dependencies, row types.Job) (forkedTier, bool) {
 // tierIn is the tier row was forked at in set. It is false when the row records none, set
 // is nil, or set no longer has a case of that name at that rank: a row forked before its
 // enum changed is graded by nothing rather than by a guess.
-func tierIn(set *types.ModelTierSet, row types.Job) (forkedTier, bool) {
+func tierIn(set *agent.ModelTierSet, row types.Job) (forkedTier, bool) {
 	if set == nil || row.ModelTier == nil {
 		return forkedTier{}, false
 	}

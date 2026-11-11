@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 func main() {
@@ -67,11 +68,11 @@ func run(outDir string) error {
 	full := make([]agent.AgentSkill, 0, len(defs))
 	short := make([]agent.AgentSkill, 0, len(defs))
 	for _, def := range defs {
-		f, err := cat.Render(def, types.SkillVariantFull)
+		f, err := cat.Render(def, typesagent.SkillVariantFull)
 		if err != nil {
 			return err
 		}
-		s, err := cat.Render(def, types.SkillVariantShort)
+		s, err := cat.Render(def, typesagent.SkillVariantShort)
 		if err != nil {
 			return err
 		}
@@ -317,7 +318,7 @@ func firstSentence(s string) string {
 // alone; both of its forms report the same one, which is why they go
 // stale together and why an edit to a different skill leaves this page alone.
 func writeStampTable(b *strings.Builder, cat *agent.Catalog, skill agent.AgentSkill) {
-	body := string(cat.StampSkill(skill.Name, cat.RenderSkill(skill), types.SkillVariantFull))
+	body := string(cat.StampSkill(skill.Name, cat.RenderSkill(skill), typesagent.SkillVariantFull))
 
 	b.WriteString("## What an installed copy carries\n\n")
 	b.WriteString("`magus agent install` writes this frontmatter above the body. " +

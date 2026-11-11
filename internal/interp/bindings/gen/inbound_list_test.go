@@ -11,6 +11,7 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 	difftypes "github.com/egladman/magus/types/diff"
 	imagetypes "github.com/egladman/magus/types/image"
 	"github.com/egladman/magus/types/trail"
@@ -136,7 +137,7 @@ var inboundTypes = []inboundType{
 	{Name: "archive\\Options", Zero: types.ArchiveOptions{}, Encode: func(v any) vm.Value { return ObjectArchiveOptions(v.(types.ArchiveOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeArchiveOptions(v) }},
 	{Name: "RetryOptions", Zero: types.RetryOptions{}, Encode: func(v any) vm.Value { return ObjectRetryOptions(v.(types.RetryOptions)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeRetryOptions(v) }},
 	{Name: "ProjectRef", Zero: types.ProjectRef{}, Encode: func(v any) vm.Value { return ObjectProjectRef(v.(types.ProjectRef)) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeProjectRef(v) }},
-	{Name: "JobModelTier", Zero: types.JobModelTier{}, Encode: func(v any) vm.Value { return ObjectJobModelTier(v.(types.JobModelTier), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobModelTier(v) }},
+	{Name: "JobModelTier", Zero: typesagent.JobModelTier{}, Encode: func(v any) vm.Value { return ObjectJobModelTier(v.(typesagent.JobModelTier), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobModelTier(v) }},
 	{Name: "JobClaim", Zero: types.JobClaim{}, Encode: func(v any) vm.Value { return ObjectJobClaim(v.(types.JobClaim), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeJobClaim(v) }},
 	{Name: "ClaimEvidence", Zero: types.ClaimEvidence{}, Encode: func(v any) vm.Value { return ObjectClaimEvidence(v.(types.ClaimEvidence), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeClaimEvidence(v) }},
 	{Name: "Origin", Zero: types.Origin{}, Encode: func(v any) vm.Value { return ObjectOrigin(v.(types.Origin), ffi.EnumBacking) }, Decode: func(v vm.Value) (any, error) { return decode.DecodeOrigin(v) }},
@@ -198,14 +199,14 @@ var enumCases = map[reflect.Type][]string{
 	reflect.TypeFor[types.JobWriteProof]():        {"", "alone", "disjoint", "overlapping"},
 	reflect.TypeFor[types.McpTransport]():         {"", "stdio", "http"},
 	reflect.TypeFor[imagetypes.ModePolicy]():      {"", "fixed", "executable-bit"},
-	reflect.TypeFor[types.ModelTierSource]():      {"row", "matrix", "user-matrix", "default"},
+	reflect.TypeFor[typesagent.ModelTierSource](): {"row", "matrix", "user-matrix", "default"},
 	reflect.TypeFor[imagetypes.OS]():              {"", "linux"},
 	reflect.TypeFor[spells.PatchOpKind]():         {"", "add", "remove", "replace", "move", "copy", "test"},
 	reflect.TypeFor[types.RelationID]():           {"", "depends_on", "contains", "uses", "references", "documents", "calls", "implements", "imports", "rationale_for", "emits", "owns", "defines", "produces", "consumes", "authored", "annotates", "depicts", "co_changes", "splits"},
 	reflect.TypeFor[types.RetryChange]():          {"", "config", "widening", "person", "upgrade"},
 	reflect.TypeFor[spells.SandboxAccess]():       {"", "ro", "rx", "rw", "rwx"},
 	reflect.TypeFor[types.SkillForm]():            {"", "both", "short", "full"},
-	reflect.TypeFor[types.SkillVariant]():         {"short", "full"},
+	reflect.TypeFor[typesagent.SkillVariant]():    {"short", "full"},
 	reflect.TypeFor[spells.SymbolFormat]():        {"", "scip", "go-packages", "buzz-module", "shell-script"},
 	reflect.TypeFor[types.SymbolIndexFreshness](): {"", "up-to-date", "out-of-date", "not-indexed", "unvouched"},
 	reflect.TypeFor[imagetypes.SymlinkPolicy]():   {"", "refuse", "keep", "follow"},

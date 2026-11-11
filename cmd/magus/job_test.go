@@ -36,6 +36,7 @@ import (
 	"github.com/egladman/magus/libs/cmdline/exit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -2231,7 +2232,7 @@ func TestEvidenceFlagCollectsGoalRefPairs(t *testing.T) {
 func TestJobModelCellFallsBackToTheAssignedTier(t *testing.T) {
 	t.Parallel()
 
-	tier := &types.JobModelTier{Name: "economy"}
+	tier := &typesagent.JobModelTier{Name: "economy"}
 	tests := []struct {
 		name string
 		row  types.Job

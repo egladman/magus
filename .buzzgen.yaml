@@ -42,6 +42,10 @@ packages:
       OS: {}
       SymlinkPolicy: {}
       Variant: {}
+  github.com/egladman/magus/types/agent:
+    types:
+      ModelTierSource: {config: {zeroCase: ""}}
+      SkillVariant: {config: {zeroCase: ""}}
   github.com/egladman/magus/types:
     types:
       AgentBilling: {}
@@ -93,7 +97,6 @@ packages:
       MarkerFamily: {}
       MarkerVerb: {}
       McpTransport: {}
-      ModelTierSource: {config: {zeroCase: ""}}
       Orchestration: {}
       PatternType: {}
       PlatformStyle: {}
@@ -105,7 +108,6 @@ packages:
       Scope: {}
       SignAlgorithm: {config: {zeroCase: "", cases: {"ed25519": Ed25519}}}
       SkillForm: {}
-      SkillVariant: {config: {zeroCase: ""}}
       SlotSource: {}
       SpawnKind: {config: {cases: {"continue": continuation}}}
       SymbolIndexFreshness: {}

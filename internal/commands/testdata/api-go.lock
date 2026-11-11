@@ -143,7 +143,7 @@ github.com/egladman/magus.Magus.MetricsSnapshot method(ptr) func(ctx context.Con
 github.com/egladman/magus.Magus.ModelRows method(ptr) func(ctx context.Context) func() []github.com/egladman/magus/types.ModelPricing
 github.com/egladman/magus.Magus.ModelTierLens method(ptr) func(ctx context.Context) (github.com/egladman/magus/types.ModelTiers, error)
 github.com/egladman/magus.Magus.ModelTierMatrix method(ptr) func() github.com/egladman/magus/types.ModelTierMatrix
-github.com/egladman/magus.Magus.ModelTiers method(ptr) func(ctx context.Context) *github.com/egladman/magus/types.ModelTierSet
+github.com/egladman/magus.Magus.ModelTiers method(ptr) func(ctx context.Context) *github.com/egladman/magus/types/agent.ModelTierSet
 github.com/egladman/magus.Magus.OutputAttempts method(ptr) func(ctx context.Context, ref string) ([]OutputDescriptor, error)
 github.com/egladman/magus.Magus.OutputByRef method(ptr) func(ctx context.Context, ref string) ([]byte, OutputDescriptor, error)
 github.com/egladman/magus.Magus.OutputByRefRemote method(ptr) func(ctx context.Context, ref string) ([]byte, OutputDescriptor, error)
@@ -234,7 +234,7 @@ github.com/egladman/magus.Sink.EmitShardTotal method(ptr) func(ctx context.Conte
 github.com/egladman/magus.Sink.GraphObserver method(ptr) func() github.com/egladman/magus/types.Observer
 github.com/egladman/magus.Sink.RecordValues method(ptr) func(target string, returns github.com/egladman/magus/types.Returns)
 github.com/egladman/magus.SinkOption type func(*sinkOptions)
-github.com/egladman/magus.SpawnRule type func(parent github.com/egladman/magus/types.ModelTier, child github.com/egladman/magus/types.ModelTier) error
+github.com/egladman/magus.SpawnRule type func(parent github.com/egladman/magus/types/agent.ModelTier, child github.com/egladman/magus/types/agent.ModelTier) error
 github.com/egladman/magus.SpellCache type struct
 github.com/egladman/magus.SpellCache.Bytes field int64
 github.com/egladman/magus.SpellCache.Dirs field []string
@@ -261,7 +261,7 @@ github.com/egladman/magus.SymbolRefreshBudget const time.Duration = 180000000000
 github.com/egladman/magus.TargetHandler type func(context.Context, *github.com/egladman/magus/types.Project) error
 github.com/egladman/magus.TargetLabel func(targets []github.com/egladman/magus/types.Target, source string) string
 github.com/egladman/magus.TargetOption type = github.com/egladman/magus/internal/workspace.TargetOption
-github.com/egladman/magus.TierCeiling func(parent github.com/egladman/magus/types.ModelTier, child github.com/egladman/magus/types.ModelTier) error
+github.com/egladman/magus.TierCeiling func(parent github.com/egladman/magus/types/agent.ModelTier, child github.com/egladman/magus/types/agent.ModelTier) error
 github.com/egladman/magus.WithBaseRef func(ref string) RunOption
 github.com/egladman/magus.WithBroker func(b *github.com/egladman/magus/broker.Client) Option
 github.com/egladman/magus.WithBrokerPolicy func(p github.com/egladman/magus/types.BrokerPolicy) Option
@@ -2653,7 +2653,7 @@ github.com/egladman/magus/types.Job.LeftUnmerged field string "json:\"left_unmer
 github.com/egladman/magus/types.Job.MaxAttempts field int "json:\"max_attempts,omitempty\" yaml:\"max_attempts,omitempty\""
 github.com/egladman/magus/types.Job.MaxClaims field int "json:\"max_claims,omitempty\" yaml:\"max_claims,omitempty\""
 github.com/egladman/magus/types.Job.Model field string "json:\"model,omitempty\" yaml:\"model,omitempty\""
-github.com/egladman/magus/types.Job.ModelTier field *JobModelTier "json:\"model_tier,omitempty\" yaml:\"model_tier,omitempty\""
+github.com/egladman/magus/types.Job.ModelTier field *github.com/egladman/magus/types/agent.JobModelTier "json:\"model_tier,omitempty\" yaml:\"model_tier,omitempty\""
 github.com/egladman/magus/types.Job.Overdue method func(now int64) bool
 github.com/egladman/magus/types.Job.Parent field string "json:\"parent,omitempty\" yaml:\"parent,omitempty\""
 github.com/egladman/magus/types.Job.ParentHead field string "json:\"parent_head,omitempty\" yaml:\"parent_head,omitempty\""
@@ -2804,15 +2804,6 @@ github.com/egladman/magus/types.JobList.ReadOnly field []JobReadOnly "json:\"rea
 github.com/egladman/magus/types.JobList.Stale field []string "json:\"stale,omitempty\"   yaml:\"stale,omitempty\""
 github.com/egladman/magus/types.JobList.Unmerged field *JobUnmergedReport "json:\"unmerged,omitempty\" yaml:\"unmerged,omitempty\""
 github.com/egladman/magus/types.JobList.Unproposed field []string "json:\"unproposed,omitempty\" yaml:\"unproposed,omitempty\""
-github.com/egladman/magus/types.JobModelTier type struct
-github.com/egladman/magus/types.JobModelTier.Model field string "json:\"model,omitempty\"  yaml:\"model,omitempty\""
-github.com/egladman/magus/types.JobModelTier.Name field string "json:\"name\"             yaml:\"name\""
-github.com/egladman/magus/types.JobModelTier.Rank field int "json:\"rank\"             yaml:\"rank\""
-github.com/egladman/magus/types.JobModelTier.Reason field string "json:\"reason,omitempty\" yaml:\"reason,omitempty\""
-github.com/egladman/magus/types.JobModelTier.Site field string "json:\"site,omitempty\"   yaml:\"site,omitempty\""
-github.com/egladman/magus/types.JobModelTier.Skills field SkillVariant "json:\"skills\"           yaml:\"skills\""
-github.com/egladman/magus/types.JobModelTier.Source field ModelTierSource "json:\"source\"           yaml:\"source\""
-github.com/egladman/magus/types.JobModelTier.String method func() string
 github.com/egladman/magus/types.JobOutcome type struct
 github.com/egladman/magus/types.JobOutcome.Attempt field int "json:\"attempt,omitzero\"        yaml:\"attempt,omitempty\""
 github.com/egladman/magus/types.JobOutcome.ChecksRun field int "json:\"checks_run\"              yaml:\"checks_run\""
@@ -2830,8 +2821,8 @@ github.com/egladman/magus/types.JobOutcome.Reason field string "json:\"reason,om
 github.com/egladman/magus/types.JobOutcome.Retry field RetryChange "json:\"retry,omitempty\"         yaml:\"retry,omitempty\""
 github.com/egladman/magus/types.JobOutcome.ReworkRounds field int "json:\"rework_rounds,omitempty\" yaml:\"rework_rounds,omitempty\""
 github.com/egladman/magus/types.JobOutcome.Site field string "json:\"site,omitempty\"          yaml:\"site,omitempty\""
-github.com/egladman/magus/types.JobOutcome.Skills field SkillVariant "json:\"skills,omitempty\"        yaml:\"skills,omitempty\""
-github.com/egladman/magus/types.JobOutcome.Source field ModelTierSource "json:\"source,omitempty\"        yaml:\"source,omitempty\""
+github.com/egladman/magus/types.JobOutcome.Skills field github.com/egladman/magus/types/agent.SkillVariant "json:\"skills,omitempty\"        yaml:\"skills,omitempty\""
+github.com/egladman/magus/types.JobOutcome.Source field github.com/egladman/magus/types/agent.ModelTierSource "json:\"source,omitempty\"        yaml:\"source,omitempty\""
 github.com/egladman/magus/types.JobOutcome.State field JobState "json:\"state\"                   yaml:\"state\""
 github.com/egladman/magus/types.JobOutcome.Tokens field *int64 "json:\"usage_tokens,omitzero\"   yaml:\"usage_tokens,omitempty\""
 github.com/egladman/magus/types.JobOutcome.Unattributed field int "json:\"unattributed,omitzero\"   yaml:\"unattributed,omitempty\""
@@ -3789,27 +3780,9 @@ github.com/egladman/magus/types.ModelRow.Price field Price "json:\"price\""
 github.com/egladman/magus/types.ModelRow.Step field PriceStep "json:\"step,omitzero\""
 github.com/egladman/magus/types.ModelRow.Tier field string "json:\"tier,omitzero\""
 github.com/egladman/magus/types.ModelRow.Window field int64 "json:\"window,omitzero\""
-github.com/egladman/magus/types.ModelTier type struct
-github.com/egladman/magus/types.ModelTier.Above method func(u ModelTier) (bool, error)
-github.com/egladman/magus/types.ModelTier.IsZero method func() bool
-github.com/egladman/magus/types.ModelTier.MarshalText method func() ([]byte, error)
-github.com/egladman/magus/types.ModelTier.Name method func() string
-github.com/egladman/magus/types.ModelTier.Rank method func() int
-github.com/egladman/magus/types.ModelTier.Within method func(ceiling ModelTier) error
 github.com/egladman/magus/types.ModelTierAboveParent const DiagnosticCode = "MGS3055"
-github.com/egladman/magus/types.ModelTierBounds type struct
-github.com/egladman/magus/types.ModelTierBounds.MaxContext field int64
-github.com/egladman/magus/types.ModelTierBounds.MaxLive field int
-github.com/egladman/magus/types.ModelTierDeclaration type struct
-github.com/egladman/magus/types.ModelTierDeclaration.Bounds field []ModelTierBounds
-github.com/egladman/magus/types.ModelTierDeclaration.Cases field []string
-github.com/egladman/magus/types.ModelTierDeclaration.Default field int
-github.com/egladman/magus/types.ModelTierDeclaration.Enum field string
-github.com/egladman/magus/types.ModelTierDeclaration.Hosts field map[string][]string
-github.com/egladman/magus/types.ModelTierDeclaration.Site field string
-github.com/egladman/magus/types.ModelTierDeclaration.Skills field []SkillVariant
 github.com/egladman/magus/types.ModelTierDeclarationUnusable const DiagnosticCode = "MGS1052"
-github.com/egladman/magus/types.ModelTierMatrix type func(ctx context.Context, req ModelTierRequest) (*JobModelTier, error)
+github.com/egladman/magus/types.ModelTierMatrix type func(ctx context.Context, req ModelTierRequest) (*github.com/egladman/magus/types/agent.JobModelTier, error)
 github.com/egladman/magus/types.ModelTierRecord type struct
 github.com/egladman/magus/types.ModelTierRecord.ChecksPerJob field float64 "json:\"checks_per_job\"    yaml:\"checks_per_job\""
 github.com/egladman/magus/types.ModelTierRecord.Fail field int "json:\"fail\"              yaml:\"fail\""
@@ -3846,26 +3819,6 @@ github.com/egladman/magus/types.ModelTierRequest.ReadPaths field []string
 github.com/egladman/magus/types.ModelTierRequest.WriteFiles field int
 github.com/egladman/magus/types.ModelTierRequest.WritePaths field []string
 github.com/egladman/magus/types.ModelTierRequest.WriteProjects field []string
-github.com/egladman/magus/types.ModelTierSet type struct
-github.com/egladman/magus/types.ModelTierSet.Alias method(ptr) func(host string, t ModelTier) (string, error)
-github.com/egladman/magus/types.ModelTierSet.All method(ptr) func() []ModelTier
-github.com/egladman/magus/types.ModelTierSet.At method(ptr) func(rank int) (ModelTier, bool)
-github.com/egladman/magus/types.ModelTierSet.Bounds method(ptr) func(t ModelTier) ModelTierBounds
-github.com/egladman/magus/types.ModelTierSet.Default method(ptr) func() ModelTier
-github.com/egladman/magus/types.ModelTierSet.Enum method(ptr) func() string
-github.com/egladman/magus/types.ModelTierSet.Hosts method(ptr) func() []string
-github.com/egladman/magus/types.ModelTierSet.Parse method(ptr) func(name string) (ModelTier, error)
-github.com/egladman/magus/types.ModelTierSet.Resolve method(ptr) func(host string, alias string) (ModelTier, bool)
-github.com/egladman/magus/types.ModelTierSet.Site method(ptr) func() string
-github.com/egladman/magus/types.ModelTierSet.Skills method(ptr) func(t ModelTier) SkillVariant
-github.com/egladman/magus/types.ModelTierSource type string
-github.com/egladman/magus/types.ModelTierSource.String method func() string
-github.com/egladman/magus/types.ModelTierSource.Valid method func() bool
-github.com/egladman/magus/types.ModelTierSource.Values method func() []string
-github.com/egladman/magus/types.ModelTierSourceDefault const ModelTierSource = "default"
-github.com/egladman/magus/types.ModelTierSourceMatrix const ModelTierSource = "matrix"
-github.com/egladman/magus/types.ModelTierSourceRow const ModelTierSource = "row"
-github.com/egladman/magus/types.ModelTierSourceUserMatrix const ModelTierSource = "user-matrix"
 github.com/egladman/magus/types.ModelTiers type struct
 github.com/egladman/magus/types.ModelTiers.Definition field string "json:\"definition\" yaml:\"definition\""
 github.com/egladman/magus/types.ModelTiers.Rows field []ModelTierRecord "json:\"rows\"       yaml:\"rows\""
@@ -3915,7 +3868,6 @@ github.com/egladman/magus/types.NewFileReport func(files []FileEntry) FileReport
 github.com/egladman/magus/types.NewGraph func(repo DepGraphRepository, projects map[string]*Project) *Graph
 github.com/egladman/magus/types.NewGraphConfig func(initial Observer) *GraphConfig
 github.com/egladman/magus/types.NewJobList func(jobs []Job) JobList
-github.com/egladman/magus/types.NewModelTierSet func(decl ModelTierDeclaration) (*ModelTierSet, error)
 github.com/egladman/magus/types.NewProjectRef func(path string, dir string) ProjectRef
 github.com/egladman/magus/types.NewSecret func(s string) Secret
 github.com/egladman/magus/types.NewStepLog func() *StepLog
@@ -4640,18 +4592,10 @@ github.com/egladman/magus/types.SkillForm type string
 github.com/egladman/magus/types.SkillForm.String method func() string
 github.com/egladman/magus/types.SkillForm.Valid method func() bool
 github.com/egladman/magus/types.SkillForm.Values method func() []string
-github.com/egladman/magus/types.SkillForm.Variant method func() SkillVariant
+github.com/egladman/magus/types.SkillForm.Variant method func() github.com/egladman/magus/types/agent.SkillVariant
 github.com/egladman/magus/types.SkillFormBoth const SkillForm = "both"
 github.com/egladman/magus/types.SkillFormFull const SkillForm = "full"
 github.com/egladman/magus/types.SkillFormShort const SkillForm = "short"
-github.com/egladman/magus/types.SkillVariant type string
-github.com/egladman/magus/types.SkillVariant.Full method func() bool
-github.com/egladman/magus/types.SkillVariant.Short method func() bool
-github.com/egladman/magus/types.SkillVariant.String method func() string
-github.com/egladman/magus/types.SkillVariant.Valid method func() bool
-github.com/egladman/magus/types.SkillVariant.Values method func() []string
-github.com/egladman/magus/types.SkillVariantFull const SkillVariant = "full"
-github.com/egladman/magus/types.SkillVariantShort const SkillVariant = "short"
 github.com/egladman/magus/types.SkillsOptions type struct
 github.com/egladman/magus/types.SkillsOptions.Form field SkillForm
 github.com/egladman/magus/types.SkillsOptions.Name field string
@@ -4690,7 +4634,7 @@ github.com/egladman/magus/types.SpawnRequest.Isolated field bool
 github.com/egladman/magus/types.SpawnRequest.Kind field SpawnKind
 github.com/egladman/magus/types.SpawnRequest.Lease field *Job
 github.com/egladman/magus/types.SpawnRequest.Model field string
-github.com/egladman/magus/types.SpawnRequest.ModelTier field *JobModelTier
+github.com/egladman/magus/types.SpawnRequest.ModelTier field *github.com/egladman/magus/types/agent.JobModelTier
 github.com/egladman/magus/types.SpawnRequest.Name field string
 github.com/egladman/magus/types.SpawnRequest.Orchestration field Orchestration
 github.com/egladman/magus/types.SpawnRequest.Parent field string

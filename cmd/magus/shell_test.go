@@ -37,6 +37,7 @@ import (
 	"github.com/egladman/magus/libs/cmdline/output"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // shellStdin runs `magus shell` with its input on stdin, which is the shape a host's
@@ -1818,24 +1819,24 @@ func judgeSpawnAt(t *testing.T, root string) types.GuardJudgment {
 // tieredWorkspace is a loaded workspace that declares set as its model tiers.
 type tieredWorkspace struct {
 	types.WorkspaceRepository
-	set *types.ModelTierSet
+	set *typesagent.ModelTierSet
 }
 
-func (w tieredWorkspace) ModelTiers(context.Context) *types.ModelTierSet { return w.set }
+func (w tieredWorkspace) ModelTiers(context.Context) *typesagent.ModelTierSet { return w.set }
 
 // The guard's model tiers open the workspace on the first ask and never again, so a spawn
 // that never asks, one bound to no tiered row, pays nothing for the load.
 func TestWorkspaceModelTiersOpenTheWorkspaceOnceAndOnlyWhenAsked(t *testing.T) {
-	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+	set, err := typesagent.NewModelTierSet(typesagent.ModelTierDeclaration{
 		Enum: "ModelTier", Site: "magusfile.buzz:3", Cases: []string{"economy", "principal"},
-		Bounds: []types.ModelTierBounds{{}, {}}, Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+		Bounds: []typesagent.ModelTierBounds{{}, {}}, Skills: []typesagent.SkillVariant{typesagent.SkillVariantFull, typesagent.SkillVariantShort},
 	})
 	require.NoError(t, err)
 	cases := []struct {
 		name string
 		ws   types.WorkspaceRepository
 		err  error
-		want *types.ModelTierSet
+		want *typesagent.ModelTierSet
 	}{
 		{"a tiered workspace", tieredWorkspace{set: set}, nil, set},
 		{"a workspace with no tier reader", struct{ types.WorkspaceRepository }{}, nil, nil},

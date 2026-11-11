@@ -3,6 +3,8 @@ package types
 import (
 	"path"
 	"slices"
+
+	"github.com/egladman/magus/types/agent"
 )
 
 // The harness contract's records: what a harness spell's mgs_ functions return
@@ -29,11 +31,11 @@ const (
 
 // Variant returns the body this form's primary entries carry. SkillFormBoth's twins are
 // full regardless.
-func (f SkillForm) Variant() SkillVariant {
+func (f SkillForm) Variant() agent.SkillVariant {
 	if f == SkillFormFull {
-		return SkillVariantFull
+		return agent.SkillVariantFull
 	}
-	return SkillVariantShort
+	return agent.SkillVariantShort
 }
 
 // ToolCapability is what a host tool can do to a workspace, in magus's own words. The shape

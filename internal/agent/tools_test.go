@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 func writeToolFiles(t *testing.T, root string, files []types.AgentFile) {
@@ -102,10 +103,10 @@ func (s *PreFoldToolRowsSuite) TestReadsVersionOneRows() {
 
 func testModelFacts(t testing.TB) *ModelFacts {
 	t.Helper()
-	tiers, err := types.NewModelTierSet(types.ModelTierDeclaration{
+	tiers, err := typesagent.NewModelTierSet(typesagent.ModelTierDeclaration{
 		Enum: "Tier", Site: "magusfile.buzz:7", Cases: []string{"economy", "standard"}, Default: 1,
-		Bounds: []types.ModelTierBounds{{MaxLive: 4}, {MaxContext: 150_000}},
-		Skills: []types.SkillVariant{types.SkillVariantShort, types.SkillVariantFull},
+		Bounds: []typesagent.ModelTierBounds{{MaxLive: 4}, {MaxContext: 150_000}},
+		Skills: []typesagent.SkillVariant{typesagent.SkillVariantShort, typesagent.SkillVariantFull},
 		Hosts:  map[string][]string{"host": {"small", "large"}},
 	})
 	require.NoError(t, err)

@@ -34,6 +34,7 @@ import (
 	"github.com/egladman/magus/internal/store/migrate"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -118,10 +119,10 @@ type storeConfig struct {
 	// build is Location.Build.
 	build string
 	// modelTiers and modelTierMatrix are Location's.
-	modelTiers      *types.ModelTierSet
+	modelTiers      *agent.ModelTierSet
 	modelRows       func() []types.ModelPricing
-	modelTierMatrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error)
-	spawnRule       func(parent, child types.ModelTier) error
+	modelTierMatrix func(context.Context, types.ModelTierRequest) (*agent.JobModelTier, error)
+	spawnRule       func(parent, child agent.ModelTier) error
 	owners          func(context.Context, []string) ([]string, error)
 	// priceContext is Location.PriceContext.
 	priceContext func(calls []types.AgentFacts) (tokens int64, usd float64, ok bool)
@@ -190,7 +191,7 @@ type Location struct {
 	// ModelTiers is the workspace's model tier declaration. With it, a write that creates a
 	// row or changes its Model assigns the row's tier (see [resolveModelTier]); nil assigns
 	// nothing, as does a Store a dry run reads.
-	ModelTiers *types.ModelTierSet
+	ModelTiers *agent.ModelTierSet
 	// ModelRows is the harness model rows (mgs_listModels), which name a model by id or
 	// alias for a tier the declaration's hosts do not map. Nil leaves only the hosts to
 	// resolve a model.
@@ -198,11 +199,11 @@ type Location struct {
 	// ModelTierMatrix is the function the workspace registered to choose a tier, or nil.
 	// It runs inside the write, while the Store's locks are held, so it must not touch
 	// the Store.
-	ModelTierMatrix func(context.Context, types.ModelTierRequest) (*types.JobModelTier, error)
+	ModelTierMatrix func(context.Context, types.ModelTierRequest) (*agent.JobModelTier, error)
 	// SpawnRule is the workspace's magus.WithSpawnRule. It judges a row
 	// whose tier and its parent's are both proven. Such a row with no rule
 	// is refused.
-	SpawnRule func(parent, child types.ModelTier) error
+	SpawnRule func(parent, child agent.ModelTier) error
 	// Owners names the projects that own a list of files, the ownership `describe job`
 	// reports as a job's projects. It is asked only to fill a matrix's request, so a Store
 	// with no matrix never calls it; nil leaves the request's WriteProjects empty.

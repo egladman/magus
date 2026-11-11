@@ -8,6 +8,7 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/types/daemon"
 	difftypes "github.com/egladman/magus/types/diff"
 	imagetypes "github.com/egladman/magus/types/image"
@@ -202,7 +203,9 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "JobGateAttempt", Zero: types.JobGateAttempt{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobGateAttempt(v.(types.JobGateAttempt)) }},
 	{Name: "JobIntegration", Zero: types.JobIntegration{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobIntegration(v.(types.JobIntegration)) }},
 	{Name: "JobList", Zero: types.JobList{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobList(v.(types.JobList), enums) }},
-	{Name: "JobModelTier", Zero: types.JobModelTier{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobModelTier(v.(types.JobModelTier), enums) }},
+	{Name: "JobModelTier", Zero: typesagent.JobModelTier{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
+		return ObjectJobModelTier(v.(typesagent.JobModelTier), enums)
+	}},
 	{Name: "JobOverlap", Zero: types.JobOverlap{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobOverlap(v.(types.JobOverlap)) }},
 	{Name: "JobOverlapFootprint", Zero: types.JobOverlapFootprint{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectJobOverlapFootprint(v.(types.JobOverlapFootprint))

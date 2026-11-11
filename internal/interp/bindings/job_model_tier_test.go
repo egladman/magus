@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -86,10 +87,10 @@ magus\modelTiers(Level, default: Level.high,
 	require.NoError(t, err)
 	high, err := set.Parse("high")
 	require.NoError(t, err)
-	assert.Equal(t, types.ModelTierBounds{MaxLive: 3, MaxContext: 5000}, set.Bounds(low))
-	assert.Equal(t, types.ModelTierBounds{MaxLive: 1}, set.Bounds(high), "a field the function leaves out is no cap")
-	assert.Equal(t, types.SkillVariantFull, set.Skills(low))
-	assert.Equal(t, types.SkillVariantShort, set.Skills(high))
+	assert.Equal(t, agent.ModelTierBounds{MaxLive: 3, MaxContext: 5000}, set.Bounds(low))
+	assert.Equal(t, agent.ModelTierBounds{MaxLive: 1}, set.Bounds(high), "a field the function leaves out is no cap")
+	assert.Equal(t, agent.SkillVariantFull, set.Skills(low))
+	assert.Equal(t, agent.SkillVariantShort, set.Skills(high))
 
 	alias, err := set.Alias("claude-code", high)
 	require.NoError(t, err)
@@ -140,11 +141,11 @@ func TestModelTiersDefaultToTheShippedDeclaration(t *testing.T) {
 	assert.Equal(t, "standard", set.Default().Name())
 	economy, err := set.Parse("economy")
 	require.NoError(t, err)
-	assert.Equal(t, types.ModelTierBounds{MaxContext: 100000}, set.Bounds(economy))
+	assert.Equal(t, agent.ModelTierBounds{MaxContext: 100000}, set.Bounds(economy))
 	standard, err := set.Parse("standard")
 	require.NoError(t, err)
 	assert.Zero(t, set.Bounds(standard).MaxLive, "the default caps no tier's live jobs")
-	assert.Equal(t, types.SkillVariantFull, set.Skills(economy), "economy workers load the full skill bodies")
+	assert.Equal(t, agent.SkillVariantFull, set.Skills(economy), "economy workers load the full skill bodies")
 	assert.Same(t, set, reg.ModelTiers(t.Context()), "the default is built once")
 }
 
@@ -264,9 +265,9 @@ magus\modelTier(fun (req: ModelTierRequest) > Choice? {
 
 	got, err := matrix(t.Context(), types.ModelTierRequest{ID: "wide", Kind: types.JobKindCheck})
 	require.NoError(t, err)
-	assert.Equal(t, &types.JobModelTier{
-		Name: "high", Rank: 1, Skills: types.SkillVariantFull,
-		Source: types.ModelTierSourceMatrix, Reason: "wide: check", Site: "magusfile",
+	assert.Equal(t, &agent.JobModelTier{
+		Name: "high", Rank: 1, Skills: agent.SkillVariantFull,
+		Source: agent.ModelTierSourceMatrix, Reason: "wide: check", Site: "magusfile",
 	}, got)
 
 	got, err = matrix(t.Context(), types.ModelTierRequest{ID: "default-me"})
@@ -298,12 +299,12 @@ magus\modelTier(fun (req: ModelTierRequest) > any !> any {
 	}
 }
 
-func levelSet(t *testing.T) *types.ModelTierSet {
+func levelSet(t *testing.T) *agent.ModelTierSet {
 	t.Helper()
-	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+	set, err := agent.NewModelTierSet(agent.ModelTierDeclaration{
 		Enum: "Level", Site: "magusfile", Cases: []string{"low", "high"},
-		Bounds: make([]types.ModelTierBounds, 2),
-		Skills: []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+		Bounds: make([]agent.ModelTierBounds, 2),
+		Skills: []agent.SkillVariant{agent.SkillVariantFull, agent.SkillVariantShort},
 	})
 	require.NoError(t, err)
 	return set
@@ -323,9 +324,9 @@ export fun choose(req: ModelTierRequest) > any {
 
 func TestUserModelTierMatrix(t *testing.T) {
 	set := levelSet(t)
-	tiers := func(context.Context) *types.ModelTierSet { return set }
+	tiers := func(context.Context) *agent.ModelTierSet { return set }
 
-	ask := func(t *testing.T, path string, tiers func(context.Context) *types.ModelTierSet) (*types.JobModelTier, error) {
+	ask := func(t *testing.T, path string, tiers func(context.Context) *agent.ModelTierSet) (*agent.JobModelTier, error) {
 		t.Helper()
 		return userModelTierMatrix(path, tiers)(t.Context(), types.ModelTierRequest{ID: "j"})
 	}
@@ -334,9 +335,9 @@ func TestUserModelTierMatrix(t *testing.T) {
 		path := userMatrixModule(t, `return .{ tier = Level.high, skills = magus\SkillVariant.short, reason = "mine" };`)
 		got, err := ask(t, path, tiers)
 		require.NoError(t, err)
-		assert.Equal(t, &types.JobModelTier{
-			Name: "high", Rank: 1, Skills: types.SkillVariantShort,
-			Source: types.ModelTierSourceUserMatrix, Reason: "mine", Site: path,
+		assert.Equal(t, &agent.JobModelTier{
+			Name: "high", Rank: 1, Skills: agent.SkillVariantShort,
+			Source: agent.ModelTierSourceUserMatrix, Reason: "mine", Site: path,
 		}, got)
 	})
 	t.Run("null declines", func(t *testing.T) {
@@ -350,7 +351,7 @@ func TestUserModelTierMatrix(t *testing.T) {
 		require.ErrorContains(t, err, "middle")
 	})
 	t.Run("tiers off fails", func(t *testing.T) {
-		_, err := ask(t, userMatrixModule(t, `return null;`), func(context.Context) *types.ModelTierSet { return nil })
+		_, err := ask(t, userMatrixModule(t, `return null;`), func(context.Context) *agent.ModelTierSet { return nil })
 		require.ErrorContains(t, err, "turned them off")
 	})
 	t.Run("a module that does not load fails", func(t *testing.T) {

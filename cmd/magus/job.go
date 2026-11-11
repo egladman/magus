@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/egladman/magus/libs/text/plural"
+	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/types/diff"
 	"io"
 	"io/fs"
@@ -279,12 +280,12 @@ func openJobs(ctx context.Context, root string, o jobOpen) (*job.Store, error) {
 
 // composeModelTierMatrix asks the workspace matrix, then the person's on a nil.
 // An error from either stands.
-func composeModelTierMatrix(workspace types.ModelTierMatrix, userPath string, tiers func(context.Context) *types.ModelTierSet) types.ModelTierMatrix {
+func composeModelTierMatrix(workspace types.ModelTierMatrix, userPath string, tiers func(context.Context) *typesagent.ModelTierSet) types.ModelTierMatrix {
 	if userPath == "" {
 		return workspace
 	}
 	user := bindings.UserModelTierMatrix(userPath, tiers)
-	return func(ctx context.Context, req types.ModelTierRequest) (*types.JobModelTier, error) {
+	return func(ctx context.Context, req types.ModelTierRequest) (*typesagent.JobModelTier, error) {
 		if workspace != nil {
 			choice, err := workspace(ctx, req)
 			if err != nil || choice != nil {

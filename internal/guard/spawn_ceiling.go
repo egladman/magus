@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // denyRuleSpawnAboveParentTier refuses a spawn whose model's tier ranks above the tier of
@@ -104,7 +105,7 @@ func gradeSpawnCeiling(deps Dependencies, verdict types.GuardJudgment, env hookR
 // modelTierByExactID is model's tier: the case the declaration maps model to for host, else the
 // tier the mgs_listModels row whose id or alias is exactly model names. False for any other
 // model.
-func modelTierByExactID(set *types.ModelTierSet, host, model string, rows []types.ModelPricing) (types.ModelTier, bool) {
+func modelTierByExactID(set *agent.ModelTierSet, host, model string, rows []types.ModelPricing) (agent.ModelTier, bool) {
 	if t, ok := set.Resolve(host, model); ok {
 		return t, true
 	}
@@ -112,14 +113,14 @@ func modelTierByExactID(set *types.ModelTierSet, host, model string, rows []type
 		return r.Tier != "" && (r.ID == model || r.Alias != "" && r.Alias == model)
 	})
 	if i < 0 {
-		return types.ModelTier{}, false
+		return agent.ModelTier{}, false
 	}
 	t, err := set.Parse(rows[i].Tier)
 	return t, err == nil
 }
 
 // declaredAliases says which aliases set maps for host, cheapest first, or why it maps none.
-func declaredAliases(set *types.ModelTierSet, host string) string {
+func declaredAliases(set *agent.ModelTierSet, host string) string {
 	var aliases []string
 	for _, t := range set.All() {
 		alias, err := set.Alias(host, t)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -92,7 +93,7 @@ func TestFoldAttemptKeepsWhatTheNextHolderNeeds(t *testing.T) {
 
 	prev := types.Job{ID: "a", State: types.StateFail, Generation: 2, Attempts: 1, Checkpoint: "abc", ReportedBase: "abd"}
 	prev.Updated, prev.ReworkRounds, prev.Widenings = 40, 2, 1
-	prev.ModelTier = &types.JobModelTier{Name: "economy"}
+	prev.ModelTier = &agent.JobModelTier{Name: "economy"}
 	prev.Result = &types.JobResult{UnresolvedRisks: []string{"one", "two"}}
 	prev.Attempt = &types.JobAttempt{Ref: "out1", Failed: true}
 	prev.GateAttempts = []types.JobGateAttempt{

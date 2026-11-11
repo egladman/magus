@@ -31,6 +31,7 @@ import (
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // workspace is the narrow slice of *magus.Magus the handler needs: where the trail lives, how
@@ -380,7 +381,7 @@ func wireOrigin(o types.Origin) *jobv1.JobOrigin {
 
 // wireModelTier maps the tier the store assigned, nil for a row written where the workspace
 // declared none.
-func wireModelTier(t *types.JobModelTier) *jobv1.JobModelTier {
+func wireModelTier(t *agent.JobModelTier) *jobv1.JobModelTier {
 	if t == nil {
 		return nil
 	}

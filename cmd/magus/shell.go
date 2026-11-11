@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -476,7 +477,7 @@ func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Depe
 		facts, err := tools.Models()
 		if err == nil {
 			deps.ModelRows = func() []types.ModelPricing { return facts.Rows }
-			deps.ModelTiers = func() *types.ModelTierSet { return facts.Tiers }
+			deps.ModelTiers = func() *typesagent.ModelTierSet { return facts.Tiers }
 			return deps, rules
 		}
 		slog.WarnContext(ctx, "the guard loads the whole workspace for its model rows and tiers, which can miss the hook's deadline",
@@ -578,7 +579,7 @@ func guardModelRows(ctx context.Context, rootOverride string) func() []types.Mod
 // It opens the workspace whole, as guardModelRows does.
 // The guard's rule load keeps only magus\guard registrations.
 // So it holds no magus\modelTiers call and no harness aliases.
-func guardModelTiers(ctx context.Context, rootOverride string) func() *types.ModelTierSet {
+func guardModelTiers(ctx context.Context, rootOverride string) func() *typesagent.ModelTierSet {
 	if _, err := workspace.FindRoot(rootOverride); err != nil {
 		return nil
 	}
@@ -589,10 +590,10 @@ func guardModelTiers(ctx context.Context, rootOverride string) func() *types.Mod
 
 // workspaceModelTiers is the lazy reader of the model tiers the workspace inspect opens
 // declares. A workspace that does not load or declares no tiers yields nil.
-func workspaceModelTiers(ctx context.Context, inspect func(context.Context) (types.WorkspaceRepository, error)) func() *types.ModelTierSet {
-	return onceInspected(ctx, inspect, func(ctx context.Context, ws types.WorkspaceRepository) *types.ModelTierSet {
+func workspaceModelTiers(ctx context.Context, inspect func(context.Context) (types.WorkspaceRepository, error)) func() *typesagent.ModelTierSet {
+	return onceInspected(ctx, inspect, func(ctx context.Context, ws types.WorkspaceRepository) *typesagent.ModelTierSet {
 		tiered, ok := ws.(interface {
-			ModelTiers(ctx context.Context) *types.ModelTierSet
+			ModelTiers(ctx context.Context) *typesagent.ModelTierSet
 		})
 		if !ok {
 			return nil

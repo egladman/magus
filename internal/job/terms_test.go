@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -225,17 +226,17 @@ func TestTermsNamesTheModelTierAndItsSource(t *testing.T) {
 
 	tests := []struct {
 		name string
-		tier types.JobModelTier
+		tier agent.JobModelTier
 		want string
 	}{
 		{
 			name: "a matrix answer names its reason and site",
-			tier: types.JobModelTier{Name: "economy", Rank: 0, Skills: types.SkillVariantFull, Source: types.ModelTierSourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20"},
+			tier: agent.JobModelTier{Name: "economy", Rank: 0, Skills: agent.SkillVariantFull, Source: agent.ModelTierSourceMatrix, Reason: "small checked job", Site: "magusfile.buzz:20"},
 			want: "job: harness/ledger-per-repo\nmodel tier: economy (rank 0), matrix: \"small checked job\" at magusfile.buzz:20\nskills: full\n",
 		},
 		{
 			name: "a default has no site",
-			tier: types.JobModelTier{Name: "standard", Rank: 1, Skills: types.SkillVariantShort, Source: types.ModelTierSourceDefault, Reason: "the declared default"},
+			tier: agent.JobModelTier{Name: "standard", Rank: 1, Skills: agent.SkillVariantShort, Source: agent.ModelTierSourceDefault, Reason: "the declared default"},
 			want: "job: harness/ledger-per-repo\nmodel tier: standard (rank 1), default: \"the declared default\"\nskills: short\n",
 		},
 	}

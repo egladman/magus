@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/libs/xdg"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 // Dependencies are the workspace facts the rules cannot resolve for themselves: they depend on the
@@ -102,10 +103,10 @@ type Dependencies struct {
 	// off or did not load. It opens the workspace whole, so the guard asks only once a job
 	// row the call is bound to records a tier. Nil means no declaration: the tier rules then
 	// have nothing to compare and stay silent.
-	ModelTiers func() *types.ModelTierSet
+	ModelTiers func() *typesagent.ModelTierSet
 	// TierRule is the workspace's magus.WithSpawnRule, which the spawn
 	// ceiling asks. Nil leaves a ceiling it would judge reported unjudged.
-	TierRule func(parent, child types.ModelTier) error
+	TierRule func(parent, child typesagent.ModelTier) error
 	// TargetPolicies answers what the workspace at root declares as target policy from the
 	// record the knowledge store keeps of it, without opening the workspace; "" is the
 	// caller's own. false means it cannot prove the record current, and the rule opens

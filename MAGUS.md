@@ -59,7 +59,7 @@ magus graph export -o json  # the whole graph
 | Kind       |     Size | List them                     | Anchors (most connected)                                                                                                                                          |
 | ---------- | -------: | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | project    |      20+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                                                                                |
-| target     |     200+ | `magus query kind=target`     | `conventions`, `buzz-test`, `catalog-docs-generate`                                                                                                               |
+| target     |     200+ | `magus query kind=target`     | `conventions`, `catalog-docs-generate`, `buzz-test`                                                                                                               |
 | spell      | built in | `magus query kind=spell`      | `go`, `typescript`, `buzz`                                                                                                                                        |
 | op         | built in | `magus query kind=op`         | `go-test`, `go-build`, `go-fmt`                                                                                                                                   |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                                                                   |
@@ -84,6 +84,7 @@ magus graph export -o json  # the whole graph
 | [console](console/MAGUS.md)                                                 |      11 | `magus query project=console`                         | `build`, `lint`, `install`                        |
 | [docs](docs/MAGUS.md)                                                       |      28 | `magus query project=docs`                            | `catalog-docs-generate`, `site-generate`, `lint`  |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |      10 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                   |
+| [libs/apiversion](libs/apiversion/MAGUS.md)                                 |       8 | `magus query project=libs/apiversion`                 | `format`, `ci`, `build`                           |
 | [libs/cmdline](libs/cmdline/MAGUS.md)                                       |       8 | `magus query project=libs/cmdline`                    | `format`, `ci`, `test`                            |
 | [libs/conventions](libs/conventions/MAGUS.md)                               |       8 | `magus query project=libs/conventions`                | `format`, `ci`, `test`                            |
 | [libs/diagnostics](libs/diagnostics/MAGUS.md)                               |       8 | `magus query project=libs/diagnostics`                | `format`, `ci`, `test`                            |

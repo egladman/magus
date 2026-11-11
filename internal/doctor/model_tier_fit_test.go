@@ -11,32 +11,33 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // tieredWorkspace is a workspace that declares model tiers.
 type tieredWorkspace struct {
 	types.WorkspaceReader
-	set *types.ModelTierSet
+	set *agent.ModelTierSet
 }
 
-func (w tieredWorkspace) ModelTiers(context.Context) *types.ModelTierSet { return w.set }
+func (w tieredWorkspace) ModelTiers(context.Context) *agent.ModelTierSet { return w.set }
 
-func declaredTiers(t *testing.T) *types.ModelTierSet {
+func declaredTiers(t *testing.T) *agent.ModelTierSet {
 	t.Helper()
-	set, err := types.NewModelTierSet(types.ModelTierDeclaration{
+	set, err := agent.NewModelTierSet(agent.ModelTierDeclaration{
 		Enum:    "ModelTier",
 		Site:    "magusfile.buzz:3",
 		Cases:   []string{"economy", "standard"},
 		Default: 1,
-		Bounds:  []types.ModelTierBounds{{}, {}},
-		Skills:  []types.SkillVariant{types.SkillVariantFull, types.SkillVariantShort},
+		Bounds:  []agent.ModelTierBounds{{}, {}},
+		Skills:  []agent.SkillVariant{agent.SkillVariantFull, agent.SkillVariantShort},
 		Hosts:   map[string][]string{"claude-code": {"haiku", "sonnet"}},
 	})
 	require.NoError(t, err)
 	return set
 }
 
-func tierOutcomes(tier string, kind types.JobKind, source types.ModelTierSource, reason string, passed, failed int) []types.JobOutcome {
+func tierOutcomes(tier string, kind types.JobKind, source agent.ModelTierSource, reason string, passed, failed int) []types.JobOutcome {
 	var out []types.JobOutcome
 	for i := range passed + failed {
 		state := types.StatePass
@@ -44,7 +45,7 @@ func tierOutcomes(tier string, kind types.JobKind, source types.ModelTierSource,
 			state = types.StateFail
 		}
 		o := types.JobOutcome{Job: fmt.Sprintf("%s-%s-%s-job-%d", tier, kind, source, i), ModelTier: tier, Kind: kind, Source: source, Reason: reason, State: state}
-		if source == types.ModelTierSourceMatrix {
+		if source == agent.ModelTierSourceMatrix {
 			o.Site = "magusfile.buzz:40"
 		}
 		out = append(out, o)
@@ -52,7 +53,7 @@ func tierOutcomes(tier string, kind types.JobKind, source types.ModelTierSource,
 	return out
 }
 
-func tierFitRunner(t *testing.T, set *types.ModelTierSet, outcomes ...[]types.JobOutcome) *runner {
+func tierFitRunner(t *testing.T, set *agent.ModelTierSet, outcomes ...[]types.JobOutcome) *runner {
 	t.Helper()
 	h := forecast.History{Version: forecast.HistoryVersion}
 	for _, o := range outcomes {
@@ -66,9 +67,9 @@ func tierFitRunner(t *testing.T, set *types.ModelTierSet, outcomes ...[]types.Jo
 
 func TestModelTierFitNamesTheLineThatRoutedAFailingTier(t *testing.T) {
 	r := tierFitRunner(t, declaredTiers(t),
-		tierOutcomes("economy", types.JobKindSymbol, types.ModelTierSourceMatrix, "small and checked", 2, 6),
-		tierOutcomes("economy", types.JobKindSymbol, types.ModelTierSourceDefault, "the declared default", 1, 1),
-		tierOutcomes("standard", types.JobKindCheck, types.ModelTierSourceDefault, "the declared default", 12, 0),
+		tierOutcomes("economy", types.JobKindSymbol, agent.ModelTierSourceMatrix, "small and checked", 2, 6),
+		tierOutcomes("economy", types.JobKindSymbol, agent.ModelTierSourceDefault, "the declared default", 1, 1),
+		tierOutcomes("standard", types.JobKindCheck, agent.ModelTierSourceDefault, "the declared default", 12, 0),
 	)
 
 	got := r.checkModelTierFit(t.Context(), nil)
@@ -84,7 +85,7 @@ func TestModelTierFitNamesTheLineThatRoutedAFailingTier(t *testing.T) {
 
 func TestModelTierFitIsQuietUntilAPairHasEnoughJobs(t *testing.T) {
 	r := tierFitRunner(t, declaredTiers(t),
-		tierOutcomes("economy", types.JobKindSymbol, types.ModelTierSourceDefault, "", 0, modelTierFitJobs-1),
+		tierOutcomes("economy", types.JobKindSymbol, agent.ModelTierSourceDefault, "", 0, modelTierFitJobs-1),
 	)
 
 	got := r.checkModelTierFit(t.Context(), nil)
@@ -95,7 +96,7 @@ func TestModelTierFitIsQuietUntilAPairHasEnoughJobs(t *testing.T) {
 
 func TestModelTierFitKeepsATierThatPasses(t *testing.T) {
 	r := tierFitRunner(t, declaredTiers(t),
-		tierOutcomes("economy", types.JobKindCheck, types.ModelTierSourceMatrix, "small", 11, 1),
+		tierOutcomes("economy", types.JobKindCheck, agent.ModelTierSourceMatrix, "small", 11, 1),
 	)
 
 	got := r.checkModelTierFit(t.Context(), nil)
@@ -106,7 +107,7 @@ func TestModelTierFitKeepsATierThatPasses(t *testing.T) {
 
 func TestModelTierFitSkipsATierTheDeclarationDropped(t *testing.T) {
 	r := tierFitRunner(t, declaredTiers(t),
-		tierOutcomes("retired", types.JobKindCheck, types.ModelTierSourceDefault, "", 0, 20),
+		tierOutcomes("retired", types.JobKindCheck, agent.ModelTierSourceDefault, "", 0, 20),
 	)
 
 	got := r.checkModelTierFit(t.Context(), nil)
@@ -116,7 +117,7 @@ func TestModelTierFitSkipsATierTheDeclarationDropped(t *testing.T) {
 }
 
 func TestModelTierFitHasNothingToSayWithoutADeclaration(t *testing.T) {
-	r := tierFitRunner(t, nil, tierOutcomes("economy", types.JobKindCheck, types.ModelTierSourceDefault, "", 0, 20))
+	r := tierFitRunner(t, nil, tierOutcomes("economy", types.JobKindCheck, agent.ModelTierSourceDefault, "", 0, 20))
 
 	got := r.checkModelTierFit(t.Context(), nil)
 

@@ -21,6 +21,7 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 	difftypes "github.com/egladman/magus/types/diff"
 	imagetypes "github.com/egladman/magus/types/image"
 	"github.com/egladman/magus/types/trail"
@@ -6403,13 +6404,13 @@ func decodeProjectRef(v vm.Value, path string) (types.ProjectRef, error) {
 	return out, nil
 }
 
-// DecodeJobModelTier decodes a Buzz JobModelTier, an object instance or a map, into a types.JobModelTier.
-func DecodeJobModelTier(v vm.Value) (types.JobModelTier, error) {
+// DecodeJobModelTier decodes a Buzz JobModelTier, an object instance or a map, into a typesagent.JobModelTier.
+func DecodeJobModelTier(v vm.Value) (typesagent.JobModelTier, error) {
 	return decodeJobModelTier(v, "jobModelTier")
 }
 
-func decodeJobModelTier(v vm.Value, path string) (types.JobModelTier, error) {
-	var out types.JobModelTier
+func decodeJobModelTier(v vm.Value, path string) (typesagent.JobModelTier, error) {
+	var out typesagent.JobModelTier
 	fields, ok := v.MapView()
 	if !ok {
 		return out, mismatch(path, "JobModelTier", v)
@@ -6434,13 +6435,13 @@ func decodeJobModelTier(v vm.Value, path string) (types.JobModelTier, error) {
 			if err != nil {
 				return out, err
 			}
-			out.Skills = types.SkillVariant(sSkills)
+			out.Skills = typesagent.SkillVariant(sSkills)
 		case "source":
 			sSource, err := decodeEnum(item, path+".source", "ModelTierSource", enumModelTierSourceValues)
 			if err != nil {
 				return out, err
 			}
-			out.Source = types.ModelTierSource(sSource)
+			out.Source = typesagent.ModelTierSource(sSource)
 		case "reason":
 			sReason, err := decodeString(item, path+".reason")
 			if err != nil {
@@ -8664,7 +8665,7 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 			out.Model = sModel
 		case "modelTier":
 			if !item.IsNull() {
-				var optModelTier types.JobModelTier
+				var optModelTier typesagent.JobModelTier
 				xModelTier, err := decodeJobModelTier(item, path+".modelTier")
 				if err != nil {
 					return out, err

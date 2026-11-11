@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	typesagent "github.com/egladman/magus/types/agent"
 )
 
 func init() { //nolint:gochecknoinits // internal/agent cannot link the Buzz VM; the loader registers from the layer that can
@@ -209,7 +210,7 @@ func shippedAgents(model string) (vm.Value, error) {
 // declares tiers and has no row for the cheapest one is an error naming the row to add.
 func cheapestTierModel(ctx context.Context, id string, tierModels map[string]string) (string, error) {
 	ws, ok := types.WorkspaceFromContext(ctx).(interface {
-		ModelTiers(ctx context.Context) *types.ModelTierSet
+		ModelTiers(ctx context.Context) *typesagent.ModelTierSet
 	})
 	if !ok {
 		return "", nil
@@ -296,9 +297,9 @@ func shippedTierModel(id string) func(tier string) (string, bool) {
 // A tier of several rows takes the id the declaration maps for it.
 // With no declaration in force, such a tier is left out.
 func declaredTierModels(ctx context.Context, id string, tierRows map[string][]string) (map[string]string, error) {
-	var set *types.ModelTierSet
+	var set *typesagent.ModelTierSet
 	if ws, ok := types.WorkspaceFromContext(ctx).(interface {
-		ModelTiers(ctx context.Context) *types.ModelTierSet
+		ModelTiers(ctx context.Context) *typesagent.ModelTierSet
 	}); ok {
 		set = ws.ModelTiers(ctx)
 	}

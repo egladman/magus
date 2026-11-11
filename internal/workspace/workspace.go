@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // Load is the accumulated state of an Open or Inspect call.
@@ -64,7 +65,7 @@ type Load struct {
 	VCSDriverGiven bool
 	// SpawnRule decides whether a job may spawn one at a given model tier. Required: a
 	// workspace has no default rule.
-	SpawnRule func(parent, child types.ModelTier) error
+	SpawnRule func(parent, child agent.ModelTier) error
 	// CacheBackend, when CacheBackendGiven, is the store behind the remote cache tier in
 	// place of one a magusfile wires.
 	CacheBackend      types.CacheBackend

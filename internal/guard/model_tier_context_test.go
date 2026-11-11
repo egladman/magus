@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/agent"
 )
 
 // A leased subagent is advised once its reported context passes its row's tier cap, and
@@ -22,7 +23,7 @@ func TestModelTierContextCapAdvisesPastTheTiersCap(t *testing.T) {
 	who := hookAttribution{Host: "claude-code", Session: "s", Agent: "a1"}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	asked := 0
-	deps := Dependencies{ModelTiers: func() *types.ModelTierSet {
+	deps := Dependencies{ModelTiers: func() *agent.ModelTierSet {
 		asked++
 		return set
 	}}
@@ -56,7 +57,7 @@ func TestModelTierContextCapNeedsATierWithACap(t *testing.T) {
 	over := int64(500_000)
 	writeSpawnedAgent(facts, "a1", spawnedAgent{ContextTokens: &over})
 
-	got := adviseModelTierContext(ctx, Dependencies{ModelTiers: func() *types.ModelTierSet { return set }}, at, who, facts, "lease-a")
+	got := adviseModelTierContext(ctx, Dependencies{ModelTiers: func() *agent.ModelTierSet { return set }}, at, who, facts, "lease-a")
 
 	assert.Equal(t, advice{}, got, "standard caps no context")
 	assert.Equal(t, advice{}, adviseModelTierContext(ctx, Dependencies{}, at, who, facts, "lease-a"), "no declaration")
@@ -70,7 +71,7 @@ func TestModelTierContextCapRaisedToDenyRefusesWrites(t *testing.T) {
 	who := hookAttribution{Host: "test-host", Session: "s"}
 	writeCostState(hint.NewGate(hookLocation(ctx, Dependencies{}).cacheDir, who.factsKey()), costState{Tokens: 150_000})
 	deps := withSetting(string(advisoryModelTierContextCap), builtin.Deny)
-	deps.ModelTiers = func() *types.ModelTierSet { return set }
+	deps.ModelTiers = func() *agent.ModelTierSet { return set }
 
 	v := Judge(ctx, deps, Request{Input: filepath.Join(root, "internal/ledger/store.go"), IsPath: true, Session: "s", Host: "test-host", Lease: "lease-a"})
 
