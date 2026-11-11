@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func writeMagusfile(t *testing.T, dir, body string) {
@@ -1886,4 +1887,53 @@ final v = vcs\CommandOptions{ tty = true };
 	v, err := decode.DecodeVCSCommandOptions(sess.GetGlobal("v"))
 	require.NoError(t, err)
 	assert.Equal(t, types.VCSCommandOptions{TTY: true}, v)
+}
+
+type MathModuleSuite struct {
+	suite.Suite
+}
+
+func TestMathModuleSuite(t *testing.T) {
+	suite.Run(t, new(MathModuleSuite))
+}
+
+func (s *MathModuleSuite) run(body string) error {
+	sess := scriptSession(s.T())
+	return sess.Exec(context.Background(), `
+import "std";
+import "math";
+
+fun main() > void {
+`+body+`
+}
+main();
+`)
+}
+
+func (s *MathModuleSuite) TestSinResolves() {
+	s.Require().NoError(s.run(`std\assert(math\sin(0.0) == 0.0, message: "sin");`))
+}
+
+func (s *MathModuleSuite) TestCosResolves() {
+	s.Require().NoError(s.run(`std\assert(math\cos(0.0) == 1.0, message: "cos");`))
+}
+
+func (s *MathModuleSuite) TestPowResolves() {
+	s.Require().NoError(s.run(`std\assert((math\pow(2.0, y: 10.0) catch 0.0) == 1024.0, message: "pow");`))
+}
+
+func (s *MathModuleSuite) TestMagusMembersStillResolve() {
+	s.Require().NoError(s.run(`std\assert((math\round(1.26, places: 1) catch 0.0) == 1.3, message: "round");`))
+}
+
+func (s *MathModuleSuite) TestSmallestTakesAList() {
+	s.Require().NoError(s.run(`std\assert((math\smallest([3.0, 1.0, 2.0]) catch 0.0) == 1.0, message: "smallest");`))
+}
+
+func (s *MathModuleSuite) TestLargestTakesAList() {
+	s.Require().NoError(s.run(`std\assert((math\largest([3.0, 1.0, 2.0]) catch 0.0) == 3.0, message: "largest");`))
+}
+
+func (s *MathModuleSuite) TestMinIntKeepsUpstreamTwoValueForm() {
+	s.Require().NoError(s.run(`std\assert(math\minInt(3, b: 2) == 2, message: "minInt");`))
 }

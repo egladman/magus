@@ -6,11 +6,30 @@
 // runtime keeps the host binding - an extern emits no code, so it cannot shadow
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
+export extern fun abs(x: double) > double;
+export extern fun acos(x: double) > double;
+export extern fun asin(x: double) > double;
+export extern fun atan(x: double) > double;
+export extern fun ceil(x: double) > int;
 export extern fun clamp(x: double, lo: double, hi: double) > double !> any;
-export extern fun max(nums: [double]) > double !> any;
+export extern fun cos(x: double) > double;
+export extern fun deg(x: double) > double;
+export extern fun exp(x: double) > double;
+export extern fun floor(x: double) > int;
+export extern fun largest(nums: [double]) > double !> any;
+export extern fun log(base: double, n: double) > double;
+export extern fun maxDouble(a: double, b: double) > double;
+export extern fun maxInt(a: int, b: int) > int;
 export extern fun mean(nums: [double]) > double !> any;
 export extern fun median(nums: [double]) > double !> any;
-export extern fun min(nums: [double]) > double !> any;
+export extern fun minDouble(a: double, b: double) > double;
+export extern fun minInt(a: int, b: int) > int;
+export extern fun pow(x: double, y: double) > double !> any;
+export extern fun rad(x: double) > double;
 export extern fun round(x: double, places: int = 0) > double !> any;
+export extern fun sin(x: double) > double;
+export extern fun smallest(nums: [double]) > double !> any;
+export extern fun sqrt(x: double) > double;
 export extern fun sum(nums: [double]) > double;
+export extern fun tan(x: double) > double;
 export extern fun trunc(x: double) > double;

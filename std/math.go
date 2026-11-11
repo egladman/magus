@@ -7,26 +7,20 @@ import (
 	"sort"
 )
 
-// Math is the "math" host module: the arithmetic Buzz's own math module lacks,
-// layered onto it rather than replacing it.
+// Math is the "math" host module: Buzz's own math plus rounding to a place and
+// aggregation over a list.
 //
-// Buzz already provides abs/ceil/floor/sqrt/pow/exp/log, the trig functions, and
-// two-argument minInt/maxInt/minDouble/maxDouble. What it has none of is
-// ROUNDING TO A PLACE and AGGREGATION OVER A LIST, which between them are most of
-// what a build actually computes: a coverage percentage rendered to one decimal,
-// the mean of a set of timings, the median that says what a typical run costs
-// when one outlier would drag a mean.
+// Buzz's members are declared Extern so the checker sees the union. Its pi is a
+// constant, which a declaration cannot express, so it is bound but not declared.
 //
-// The aggregations SKIP non-numeric items rather than treating them as zero. A
-// silent zero shifts a mean and moves a median without anything reporting it,
-// which is the worst failure mode for a number a gate then compares against a
-// floor.
+// The aggregations skip non-numeric items rather than counting them as zero. A
+// silent zero shifts a mean without anything reporting it.
 //
 // Pure computation: WASM-safe, no filesystem, no environment.
 var Math = Module{
 	Name: "math",
 	WASM: true,
-	Doc:  "Rounding to a decimal place, clamping, and aggregation over a list of numbers.",
+	Doc:  "Buzz's math plus rounding to a decimal place, clamping, and aggregation over a list of numbers.",
 	Methods: []Method{
 		{
 			Name: "round",
@@ -82,21 +76,43 @@ var Math = Module{
 			Impl:    MathMedian,
 		},
 		{
-			Name:    "min",
-			Doc:     "The smallest number in the list. Distinct from Buzz's own minInt/minDouble, which compare exactly two values. Raises on an empty list.",
+			Name:    "smallest",
+			Doc:     "The smallest number in the list. Buzz's own minInt/minDouble keep the two-value form; this one takes a list. Raises on an empty list.",
 			Args:    []Arg{{Name: "nums"}},
 			Returns: []Ret{{}},
 			Raises:  true,
-			Impl:    MathMin,
+			Impl:    MathSmallest,
 		},
 		{
-			Name:    "max",
-			Doc:     "The largest number in the list. Distinct from Buzz's own maxInt/maxDouble, which compare exactly two values. Raises on an empty list.",
+			Name:    "largest",
+			Doc:     "The largest number in the list. Buzz's own maxInt/maxDouble keep the two-value form; this one takes a list. Raises on an empty list.",
 			Args:    []Arg{{Name: "nums"}},
 			Returns: []Ret{{}},
 			Raises:  true,
-			Impl:    MathMax,
+			Impl:    MathLargest,
 		},
+		// Buzz's own math members, declared so the checker sees the union with the
+		// members above. They are Extern: gopherbuzz's math module binds them and the
+		// merge in internal/interp/bindings keeps them, so there is no trampoline.
+		{Name: "abs", Doc: "Absolute value of x. Buzz's own.", Args: []Arg{{Name: "x"}}, Returns: []Ret{{}}, Extern: (func(context.Context, float64) (float64, error))(nil)},
+		{Name: "acos", Doc: "Arc cosine of x, in radians. Buzz's own.", Args: []Arg{{Name: "x"}}, Returns: []Ret{{}}, Extern: (func(context.Context, float64) (float64, error))(nil)},
+		{Name: "asin", Doc: "Arc sine of x, in radians. Buzz's own.", Args: []Arg{{Name: "x"}}, Returns: []Ret{{}}, Extern: (func(context.Context, float64) (float64, error))(nil)},
+		{Name: "atan", Doc: "Arc tangent of x, in radians. Buzz's own.", Args: []Arg{{Name: "x"}}, Returns: []Ret{{}}, Extern: (func(context.Context, float64) (float64, error))(nil)},
+		{Name: "ceil", Doc: "Smallest whole number not below x. Buzz's own.", Args: []Arg{{Name: "x"}}, Returns: []Ret{{}}, Extern: (func(context.Context, float64) (int, error))(nil)},
+		{Name: "cos", Doc: "Cosine of x, in radians. Buzz's own.", Args: []Arg{{Name: "x"}}, Returns: []Ret{{}}, Extern: (func(context.Context, float64) (float64, error))(nil)},
+		{Name: "deg", Doc: "Convert x from radians to degrees. Buzz's own.", Args: []Arg{{Name: "x"}}, Returns: []Ret{{}}, Extern: (func(context.Context, float64) (float64, error))(nil)},
+		{Name: "exp", Doc: "e raised to x. Buzz's own.", Args: []Arg{{Name: "x"}}, Returns: []Ret{{}}, Extern: (func(context.Context, float64) (float64, error))(nil)},
+		{Name: "floor", Doc: "Largest whole number not above x. Buzz's own.", Args: []Arg{{Name: "x"}}, Returns: []Ret{{}}, Extern: (func(context.Context, float64) (int, error))(nil)},
+		{Name: "log", Doc: "Logarithm of n in the given base. Buzz's own.", Args: []Arg{{Name: "base"}, {Name: "n"}}, Returns: []Ret{{}}, Extern: (func(context.Context, float64, float64) (float64, error))(nil)},
+		{Name: "max_double", Doc: "The larger of two doubles. Buzz's own.", Args: []Arg{{Name: "a"}, {Name: "b"}}, Returns: []Ret{{}}, Extern: (func(context.Context, float64, float64) (float64, error))(nil)},
+		{Name: "max_int", Doc: "The larger of two ints. Buzz's own.", Args: []Arg{{Name: "a"}, {Name: "b"}}, Returns: []Ret{{}}, Extern: (func(context.Context, int, int) (int, error))(nil)},
+		{Name: "min_double", Doc: "The smaller of two doubles. Buzz's own.", Args: []Arg{{Name: "a"}, {Name: "b"}}, Returns: []Ret{{}}, Extern: (func(context.Context, float64, float64) (float64, error))(nil)},
+		{Name: "min_int", Doc: "The smaller of two ints. Buzz's own.", Args: []Arg{{Name: "a"}, {Name: "b"}}, Returns: []Ret{{}}, Extern: (func(context.Context, int, int) (int, error))(nil)},
+		{Name: "pow", Doc: "x raised to the power y; raises on overflow and underflow. Buzz's own.", Args: []Arg{{Name: "x"}, {Name: "y"}}, Returns: []Ret{{}}, Raises: true, Extern: (func(context.Context, float64, float64) (float64, error))(nil)},
+		{Name: "rad", Doc: "Convert x from degrees to radians. Buzz's own.", Args: []Arg{{Name: "x"}}, Returns: []Ret{{}}, Extern: (func(context.Context, float64) (float64, error))(nil)},
+		{Name: "sin", Doc: "Sine of x, in radians. Buzz's own.", Args: []Arg{{Name: "x"}}, Returns: []Ret{{}}, Extern: (func(context.Context, float64) (float64, error))(nil)},
+		{Name: "sqrt", Doc: "Square root of x. Buzz's own.", Args: []Arg{{Name: "x"}}, Returns: []Ret{{}}, Extern: (func(context.Context, float64) (float64, error))(nil)},
+		{Name: "tan", Doc: "Tangent of x, in radians. Buzz's own.", Args: []Arg{{Name: "x"}}, Returns: []Ret{{}}, Extern: (func(context.Context, float64) (float64, error))(nil)},
 	},
 }
 
@@ -171,9 +187,9 @@ func MathMedian(_ context.Context, nums []float64) (float64, error) {
 	return (s[mid-1] + s[mid]) / 2, nil
 }
 
-// MathMin returns the smallest value in nums.
-func MathMin(_ context.Context, nums []float64) (float64, error) {
-	if err := mathRequireNonEmpty("min", nums); err != nil {
+// MathSmallest returns the smallest value in nums.
+func MathSmallest(_ context.Context, nums []float64) (float64, error) {
+	if err := mathRequireNonEmpty("smallest", nums); err != nil {
 		return 0, err
 	}
 	out := nums[0]
@@ -183,9 +199,9 @@ func MathMin(_ context.Context, nums []float64) (float64, error) {
 	return out, nil
 }
 
-// MathMax returns the largest value in nums.
-func MathMax(_ context.Context, nums []float64) (float64, error) {
-	if err := mathRequireNonEmpty("max", nums); err != nil {
+// MathLargest returns the largest value in nums.
+func MathLargest(_ context.Context, nums []float64) (float64, error) {
+	if err := mathRequireNonEmpty("largest", nums); err != nil {
 		return 0, err
 	}
 	out := nums[0]

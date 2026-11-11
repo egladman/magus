@@ -82,11 +82,11 @@ func TestMathAggregations(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2.5, mean)
 
-	min, err := MathMin(ctx, nums)
+	min, err := MathSmallest(ctx, nums)
 	require.NoError(t, err)
 	assert.Equal(t, 1.0, min)
 
-	max, err := MathMax(ctx, nums)
+	max, err := MathLargest(ctx, nums)
 	require.NoError(t, err)
 	assert.Equal(t, 4.0, max)
 }
@@ -133,7 +133,7 @@ func TestMathEmptyListBehaviour(t *testing.T) {
 	// The rest RAISE. 0 is a real average, so returning it for "there was
 	// nothing to average" would let an empty set silently pass a floor check.
 	for name, fn := range map[string]func(context.Context, []float64) (float64, error){
-		"mean": MathMean, "median": MathMedian, "min": MathMin, "max": MathMax,
+		"mean": MathMean, "median": MathMedian, "smallest": MathSmallest, "largest": MathLargest,
 	} {
 		_, err := fn(ctx, nil)
 		assert.Errorf(t, err, "%s of an empty list must raise", name)

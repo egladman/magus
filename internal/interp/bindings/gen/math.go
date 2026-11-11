@@ -12,7 +12,7 @@ import (
 )
 
 // RegisterMath builds the "math" module map and returns it.
-// Rounding to a decimal place, clamping, and aggregation over a list of numbers.
+// Buzz's math plus rounding to a decimal place, clamping, and aggregation over a list of numbers.
 func RegisterMath(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
@@ -68,17 +68,17 @@ func RegisterMath(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.FloatVal(ret0), nil
 	}))
-	m.MapSet("min", vm.DirectValue("math.min", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("smallest", vm.DirectValue("math.smallest", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		nums := ffi.FloatSlice(bzArgs, 0)
-		ret0, err := std.MathMin(ctx, nums)
+		ret0, err := std.MathSmallest(ctx, nums)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return ffi.FloatVal(ret0), nil
 	}))
-	m.MapSet("max", vm.DirectValue("math.max", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("largest", vm.DirectValue("math.largest", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		nums := ffi.FloatSlice(bzArgs, 0)
-		ret0, err := std.MathMax(ctx, nums)
+		ret0, err := std.MathLargest(ctx, nums)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
