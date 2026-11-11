@@ -2,7 +2,8 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { dayKey } from '../hooks/cost'
+import { dayKey, MODELS_FILE } from '../hooks/cost'
+import { MODELS } from './models'
 
 const ROOT = '/w'
 const SOCK = '/c/magus/run/server.sock'
@@ -58,6 +59,8 @@ type Opts = {
   spawnedModel?: string
   // Claude Code's session total, as /cost has it; none unless a test sets it.
   costUsd?: () => number | undefined
+  // No models file: magus agent harness install has not run.
+  noModels?: boolean
   run?: (argv: readonly string[]) => { exitCode: number; stdout: string } | undefined
 }
 
@@ -67,6 +70,10 @@ const ok = (exitCode: number, stdout: string) => ({
 
 function engine(on: On, opts: Opts = {}): Seen {
   const seen: Seen = { statuses: [], toasts: [], fills: [] }
+  const files: Record<string, string> = {
+    ...(opts.noModels ? {} : { [`${ROOT}/${MODELS_FILE}`]: MODELS }),
+    ...opts.files,
+  }
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.root', () => ({ value: ROOT }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
@@ -98,15 +105,18 @@ function engine(on: On, opts: Opts = {}): Seen {
   on('agent.spawn', () => ({ model: opts.spawnedModel ?? 'claude-haiku-5-5', agentId: 'ag1' }))
   on('fs.exists', ($, e) => ({
     value:
-      opts.workspace === true &&
-      [`${ROOT}/magusfile.buzz`, `${ROOT}/go.mod`, ...(opts.noLocalBinary ? [] : [`${ROOT}/magus`])].includes(e.path),
+      e.path in files ||
+      (opts.workspace === true &&
+        [`${ROOT}/magusfile.buzz`, `${ROOT}/go.mod`, ...(opts.noLocalBinary ? [] : [`${ROOT}/magus`])].includes(
+          e.path,
+        )),
   }))
   on(
     'ui.copy',
     () => ({ value: opts.noClipboard ? { isCopied: false, reason: 'no-clipboard' } : { isCopied: true } }) as never,
   )
   on('fs.read', ($, e) => {
-    const text = opts.files?.[e.path]
+    const text = files[e.path]
     if (text !== undefined) return { value: text }
     if (e.path === `${ROOT}/go.mod`) return { value: 'module github.com/egladman/magus\n' }
     if (opts.serverUp && e.path === `${SOCK}.token`) return { value: `${TOKEN}\n` }
@@ -178,7 +188,7 @@ test('the status line shows only cost and the band stays empty while a cache cou
   await $.turn.complete(main(usage({ write: 182_000 })))
   await clock.advance(4 * MIN)
   await clock.settle()
-  expect(seen.statuses.at(-1)).toMatch(/^≈\$\d+\.\d\d session \(mod rates\)$/)
+  expect(seen.statuses.at(-1)).toMatch(/^≈\$\d+\.\d\d session \(magus prices\)$/)
   const ui = await $.ui.mount(BAND)
   expect(await ui.find({ type: 'Text', text: 'engine' })).toBeDefined()
 })
@@ -350,20 +360,30 @@ test('a subagent shows its cost in the pane and raises no toast', async ($, on) 
   expect(await ui.find({ type: 'Text', text: /over .* budget/ })).toBeUndefined()
 })
 
-test(
-  'a rates file that does not parse falls back to the built-in rates and says so',
-  { options: { ratesFile: '/r.json' } },
-  async ($, on) => {
-    const clock = mock.clock(on)
-    await clock.set(T0)
-    engine(on, { files: { '/r.json': '{"models": "nope"}' } })
-    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
-    const ui = await $.ui.mount(BAND)
-    expect(
-      await ui.find({ type: 'Text', text: /\/r\.json: rates: cacheWriteMultiplier.*using the built-in rates/ }),
-    ).toBeDefined()
-  },
-)
+test('a models file that does not parse prices nothing and names its line in the band', async ($, on) => {
+  const clock = mock.clock(on)
+  await clock.set(T0)
+  engine(on, { files: { [`${ROOT}/${MODELS_FILE}`]: '{"id":"claude-x","input":"four","output":20}' } })
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount(BAND)
+  expect(
+    await ui.find({ type: 'Text', text: /no model prices: .*models: line 1 \(claude-x\): needs numeric input/ }),
+  ).toBeDefined()
+})
+
+test('no models file prices nothing and the band names the install that writes it', async ($, on) => {
+  const clock = mock.clock(on)
+  await clock.set(T0)
+  const seen = engine(on, { noModels: true })
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount(BAND)
+  expect(
+    await ui.find({ type: 'Text', text: /models is missing; run `\.\/magus agent harness install`/ }),
+  ).toBeDefined()
+
+  await $.turn.complete(main(usage({ write: 182_000 })))
+  expect(seen.statuses.at(-1)).toBe('≈$0.00+ session (magus prices)')
+})
 
 test('/magus reads ListJobs over the server socket and opens a job on press', async ($, on) => {
   const clock = mock.clock(on)
@@ -397,7 +417,7 @@ test('a server that is down shows in the status line and not in the band', async
   expect(seen.statuses.at(-1)).toBe('⚠ server down')
 
   await $.turn.complete(main(usage({ write: 182_000 })))
-  expect(seen.statuses.at(-1)).toMatch(/^⚠ server down · ≈\$\d+\.\d\d session \(mod rates\)$/)
+  expect(seen.statuses.at(-1)).toMatch(/^⚠ server down · ≈\$\d+\.\d\d session \(magus prices\)$/)
   const ui = await $.ui.mount(BAND)
   expect(await ui.find({ type: 'Text', text: /No magus server/ })).toBeUndefined()
   expect(await ui.find({ type: 'Button', text: /Hide|Recheck/ })).toBeUndefined()
@@ -531,7 +551,7 @@ test(
 
     const held = await $.prompt.submit({ text: 'over budget' } as never)
     expect(held).toMatchObject({
-      drop: "Held: Session spend $1.52 has passed your $1.00 budget (main $0.92, subagents $0.60 at the mod's rates). Submit again to send it.",
+      drop: "Held: Session spend $1.52 has passed your $1.00 budget (main $0.92, subagents $0.60 at magus's prices). Submit again to send it.",
     })
     expect(await $.prompt.submit({ text: 'over budget' } as never)).toMatchObject({ text: 'over budget' })
 
@@ -540,7 +560,7 @@ test(
     expect(
       await ui.find({
         type: 'Text',
-        text: /Session spend \$1\.52\/\$1\.00 \(main \$0\.92, subagents \$0\.60 at the mod's rates\)/,
+        text: /Session spend \$1\.52\/\$1\.00 \(main \$0\.92, subagents \$0\.60 at magus's prices\)/,
       }),
     ).toBeDefined()
   },

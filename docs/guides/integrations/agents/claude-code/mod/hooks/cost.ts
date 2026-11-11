@@ -3,9 +3,23 @@ import { MagusError, fail, isRecord, ok, parseJSON, type Result } from './result
 
 export type { CacheState, Spend, Ttl }
 
-// USD per million tokens. cacheRead absent means the table's default multiplier of input.
-export type Tier = { abovePromptTokens: number; input: number; output: number; cacheRead?: number }
-export type ModelRates = { match: string; input: number; output: number; cacheRead?: number; tiers?: Tier[] }
+// USD per million tokens. cacheRead or cacheWrite absent means the table's
+// default multiplier of input.
+export type Tier = {
+  abovePromptTokens: number
+  input: number
+  output: number
+  cacheRead?: number
+  cacheWrite?: Record<Ttl, number>
+}
+export type ModelRates = {
+  match: string
+  input: number
+  output: number
+  cacheRead?: number
+  cacheWrite?: Record<Ttl, number>
+  tiers?: Tier[]
+}
 export type RateTable = {
   checked: string
   source: string
@@ -23,71 +37,68 @@ export const TTL_MS: Record<Ttl, number> = { '5m': 5 * 60_000, '1h': 60 * 60_000
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
 
-// Reads a rates file, failing with a message that names the first field it could not use, so
-// an edit that breaks the table says where rather than silently pricing at zero.
-export function parseRates(text: string): Result<RateTable> {
-  const doc = parseJSON(text)
-  if (doc.error) return fail(new MagusError({ code: '', message: `rates: not JSON: ${doc.error.message}` }))
-  const t = doc.value
-  if (!isRecord(t)) return fail(new MagusError({ code: '', message: 'rates: the file must hold a JSON object' }))
-  const cw = t.cacheWriteMultiplier
-  if (!isRecord(cw) || !isNum(cw['5m']) || !isNum(cw['1h'])) {
-    return fail(new MagusError({ code: '', message: 'rates: cacheWriteMultiplier needs numeric "5m" and "1h"' }))
-  }
-  if (!isNum(t.defaultCacheReadMultiplier))
-    return fail(new MagusError({ code: '', message: 'rates: defaultCacheReadMultiplier must be a number' }))
-  if (!Array.isArray(t.models)) return fail(new MagusError({ code: '', message: 'rates: models must be a list' }))
+// MODELS_FILE is where `magus agent harness install` writes the Claude Code
+// harness's model rows: the claude-code spell's tools dir joined with
+// types.ToolModelRowsFile. One JSON object per line.
+export const MODELS_FILE = '.claude/magus/tools/models'
+
+// The API's multipliers of input, for a row that leaves a cache price out.
+const CACHE_WRITE_MULTIPLIER: Record<Ttl, number> = { '5m': 1.25, '1h': 2 }
+const CACHE_READ_MULTIPLIER = 0.1
+
+const modelsError = (message: string) => fail(new MagusError({ code: '', message: `${MODELS_FILE}: ${message}` }))
+
+// parseModelRows reads magus's models file into a rate table. It fails on the
+// first line it cannot use, naming it, so a broken file never prices at zero.
+// A row's price_step and step_factor become one tier: past that many prompt
+// tokens every rate is multiplied by the factor.
+export function parseModelRows(text: string): Result<RateTable> {
   const models: ModelRates[] = []
-  for (const [i, m] of t.models.entries()) {
-    const model = readModel(m, i)
-    if (model.error) return model
-    models.push(model.value)
+  for (const [i, raw] of text.split('\n').entries()) {
+    if (raw.trim() === '') continue
+    const row = readRow(raw, i + 1)
+    if (row.error) return row
+    models.push(row.value)
   }
   return ok({
-    checked: String(t.checked ?? ''),
-    source: String(t.source ?? ''),
-    cacheWriteMultiplier: { '5m': cw['5m'], '1h': cw['1h'] },
-    defaultCacheReadMultiplier: t.defaultCacheReadMultiplier,
+    checked: '',
+    source: MODELS_FILE,
+    cacheWriteMultiplier: CACHE_WRITE_MULTIPLIER,
+    defaultCacheReadMultiplier: CACHE_READ_MULTIPLIER,
     models,
   })
 }
 
-function readModel(m: unknown, i: number): Result<ModelRates> {
-  if (!isRecord(m) || typeof m.match !== 'string' || !m.match) {
-    return fail(new MagusError({ code: '', message: `rates: models[${i}].match must name a model id prefix` }))
+function readRow(raw: string, line: number): Result<ModelRates> {
+  const doc = parseJSON(raw)
+  if (doc.error) return modelsError(`line ${line}: not JSON: ${doc.error.message}`)
+  const r = doc.value
+  if (!isRecord(r) || typeof r.id !== 'string' || r.id === '') return modelsError(`line ${line}: needs an id`)
+  if (!isNum(r.input) || !isNum(r.output)) return modelsError(`line ${line} (${r.id}): needs numeric input and output`)
+  for (const k of ['cache_read', 'cache_write_5m', 'cache_write_1h', 'price_step', 'step_factor']) {
+    if (r[k] !== undefined && !isNum(r[k])) return modelsError(`line ${line} (${r.id}): ${k} must be a number`)
   }
-  if (!isNum(m.input) || !isNum(m.output))
-    return fail(
-      new MagusError({ code: '', message: `rates: models[${i}] (${m.match}) needs numeric input and output` }),
-    )
-  const model: ModelRates = { match: m.match, input: m.input, output: m.output }
-  if (m.cacheRead !== undefined) {
-    if (!isNum(m.cacheRead))
-      return fail(new MagusError({ code: '', message: `rates: models[${i}].cacheRead must be a number` }))
-    model.cacheRead = m.cacheRead
+  const num = (k: string): number | undefined => (isNum(r[k]) ? r[k] : undefined)
+  const input = r.input
+  const cacheRead = num('cache_read') ?? input * CACHE_READ_MULTIPLIER
+  const cacheWrite = {
+    '5m': num('cache_write_5m') ?? input * CACHE_WRITE_MULTIPLIER['5m'],
+    '1h': num('cache_write_1h') ?? input * CACHE_WRITE_MULTIPLIER['1h'],
   }
-  if (m.tiers === undefined) return ok(model)
-  if (!Array.isArray(m.tiers))
-    return fail(new MagusError({ code: '', message: `rates: models[${i}].tiers must be a list` }))
-  const tiers: Tier[] = []
-  for (const [j, tier] of m.tiers.entries()) {
-    if (!isRecord(tier) || !isNum(tier.abovePromptTokens) || !isNum(tier.input) || !isNum(tier.output)) {
-      return fail(
-        new MagusError({
-          code: '',
-          message: `rates: models[${i}].tiers[${j}] needs numeric abovePromptTokens, input and output`,
-        }),
-      )
-    }
-    const read: Tier = { abovePromptTokens: tier.abovePromptTokens, input: tier.input, output: tier.output }
-    if (tier.cacheRead !== undefined) {
-      if (!isNum(tier.cacheRead))
-        return fail(new MagusError({ code: '', message: `rates: models[${i}].tiers[${j}].cacheRead must be a number` }))
-      read.cacheRead = tier.cacheRead
-    }
-    tiers.push(read)
+  const model: ModelRates = { match: r.id, input, output: r.output, cacheRead, cacheWrite }
+  const step = num('price_step') ?? 0
+  const factor = num('step_factor') ?? 0
+  if (step > 0 && factor > 0) {
+    model.tiers = [
+      {
+        abovePromptTokens: step,
+        input: input * factor,
+        output: r.output * factor,
+        cacheRead: cacheRead * factor,
+        cacheWrite: { '5m': cacheWrite['5m'] * factor, '1h': cacheWrite['1h'] * factor },
+      },
+    ]
   }
-  model.tiers = tiers
   return ok(model)
 }
 
@@ -108,12 +119,12 @@ export function ratesFor(table: RateTable, model: string, promptTokens: number):
   const input = tier?.input ?? entry.input
   const output = tier?.output ?? entry.output
   const cacheRead = tier?.cacheRead ?? (tier ? undefined : entry.cacheRead) ?? input * table.defaultCacheReadMultiplier
-  return {
-    input,
-    output,
-    cacheRead,
-    cacheWrite: { '5m': input * table.cacheWriteMultiplier['5m'], '1h': input * table.cacheWriteMultiplier['1h'] },
-  }
+  const cacheWrite = tier?.cacheWrite ??
+    (tier ? undefined : entry.cacheWrite) ?? {
+      '5m': input * table.cacheWriteMultiplier['5m'],
+      '1h': input * table.cacheWriteMultiplier['1h'],
+    }
+  return { input, output, cacheRead, cacheWrite }
 }
 
 // What re-caching tokens of context costs on model, or null when the model is not priced.
@@ -258,20 +269,20 @@ export function spendStatus(s: Spend, budgetUsd: number): string | undefined {
 }
 
 // costStatus is the status line's cost part, `≈$1.75 session · ≈$12.40 today`,
-// marked `(mod rates)` where Claude Code reported no total. Every figure is
+// marked `(magus prices)` where Claude Code reported no total. Every figure is
 // an estimate at list price, never the bill.
 export function costStatus(s: Spend, budgetUsd: number): string | undefined {
   const session = spendStatus(s, budgetUsd)
   if (session === undefined) return undefined
   const hasDay = s.dayUsd !== undefined && s.dayUsd !== null
   const day = hasDay ? ` · ≈${formatUsd(s.dayUsd ?? 0)} today` : ''
-  const source = (s.claudeUsd ?? null) === null ? ' (mod rates)' : ''
+  const source = (s.claudeUsd ?? null) === null ? ' (magus prices)' : ''
   return `≈${session} session${day}${source}`
 }
 
 // The mod's own split; Claude Code reports no split by main and subagent.
 export function spendBreakdown(s: Spend): string {
-  return `main ${formatUsd(s.mainUsd)}, subagents ${formatUsd(s.agentUsd)} at the mod's rates`
+  return `main ${formatUsd(s.mainUsd)}, subagents ${formatUsd(s.agentUsd)} at magus's prices`
 }
 
 // dayKey names the store key holding one local calendar day's total.

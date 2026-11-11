@@ -27,7 +27,8 @@ import {
   frontmatterModel,
   inferTtl,
   overSpawnCap,
-  parseRates,
+  MODELS_FILE,
+  parseModelRows,
   priceStepNotice,
   pricedModel,
   requestUsd,
@@ -43,7 +44,6 @@ import { assess, inBand, statusText } from './health'
 import type { BinaryInfo, Probe, ServerInfo } from './health'
 import { registerJsonExplorer } from './json-view'
 import { registerJsonlTables } from './jsonl-view'
-import { DEFAULT_RATES } from './rates'
 import { registerRefLinks } from './refs-view'
 import { MagusError, fail, fromPromise, ok, type Result } from './result'
 import { readSettings } from './settings'
@@ -81,7 +81,14 @@ const THEME = { plugin: 'magus', key: 'theme' } as const
 
 // Module state, rebuilt by register on every load.
 let settings: Settings = readSettings({})
-let rates: RateTable = DEFAULT_RATES
+const NO_RATES: RateTable = {
+  checked: '',
+  source: '',
+  cacheWriteMultiplier: { '5m': 1.25, '1h': 2 },
+  defaultCacheReadMultiplier: 0.1,
+  models: [],
+}
+let rates: RateTable = NO_RATES
 // The TTL Claude Code last reported (on a model switch), which outranks an observation.
 let engineTtl: Ttl | null = null
 let healthInFlight: Promise<void> | null = null
@@ -248,21 +255,23 @@ async function refreshStatus($: EngineInterface): Promise<void> {
 
 // ---------- cost ----------
 
+// The prices come from magus's models file, the one table the guard prices
+// with too. Without it nothing is priced, and the band says so.
 async function loadRates($: EngineInterface): Promise<void> {
-  if (settings.ratesFile === '') {
-    rates = DEFAULT_RATES
-    await $.state.set(RATES_ERROR, null)
-    return
+  rates = NO_RATES
+  const root = await fromPromise($.session.root())
+  if (root.error) return void (await $.state.set(RATES_ERROR, `no model prices: ${root.error.message}`))
+  const path = `${root.value}/${MODELS_FILE}`
+  const exists = await fromPromise($.fs.exists(path))
+  if (!exists.error && !exists.value) {
+    const fix = 'run `./magus agent harness install` to write it'
+    return void (await $.state.set(RATES_ERROR, `no model prices: ${MODELS_FILE} is missing; ${fix}`))
   }
-  const read = await fromPromise($.fs.read(settings.ratesFile))
-  const parsed = read.error ? read : parseRates(read.value)
-  if (!parsed.error) {
-    rates = parsed.value
-    await $.state.set(RATES_ERROR, null)
-    return
-  }
-  rates = DEFAULT_RATES
-  await $.state.set(RATES_ERROR, `${settings.ratesFile}: ${parsed.error.message}; using the built-in rates`)
+  const read = await fromPromise($.fs.read(path))
+  const parsed = read.error ? read : parseModelRows(read.value)
+  if (parsed.error) return void (await $.state.set(RATES_ERROR, `no model prices: ${parsed.error.message}`))
+  rates = parsed.value
+  await $.state.set(RATES_ERROR, null)
 }
 
 function resolveTtl(observed: Ttl | null, previous: CacheState | null): Pick<CacheState, 'ttl' | 'ttlSource'> {

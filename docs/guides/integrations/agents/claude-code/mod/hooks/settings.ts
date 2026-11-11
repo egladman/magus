@@ -15,7 +15,6 @@ export type Settings = {
   spawnMaxInputUsdPerMTok: number
   sessionBudgetUsd: number
   budgetGate: Gate
-  ratesFile: string
 }
 
 const num = (v: unknown, fallback: number): number =>
@@ -40,6 +39,5 @@ export function readSettings(o: PluginOptions): Settings {
     spawnMaxInputUsdPerMTok: num(o.spawnMaxInputUsdPerMTok, 2),
     sessionBudgetUsd: num(o.sessionBudgetUsd, 0),
     budgetGate: pick(o.budgetGate, ['off', 'warn', 'confirm'], 'confirm'),
-    ratesFile: typeof o.ratesFile === 'string' ? o.ratesFile.trim() : '',
   }
 }

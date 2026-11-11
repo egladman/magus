@@ -56,12 +56,6 @@
       "title": "Session budget gate",
       "description": "What happens when you submit after the session's spend passed the budget: off, warn (a toast), or confirm (holds the prompt once; submit again to send).",
       "default": "confirm"
-    },
-    "ratesFile": {
-      "type": "string",
-      "title": "Rates file",
-      "description": "Absolute path to your own rates JSON (same shape as the mod's rates.json). Empty uses the mod's.",
-      "default": ""
     }
   },
   "author": {
