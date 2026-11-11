@@ -214,3 +214,13 @@ continues the child itself.
   branches). Recheck at merge.
 
 ## Amendments
+
+### 2026-11-10: sections 3 and 4 superseded by ADR 0043
+
+[ADR 0043](0043-job-records-are-buzz-data.md) replaces section 3's workspace stop rule
+with the shipped `stop-unfiled`: a leased subagent's first stop is refused until its row
+carries a filed `JobResult`, read-only rows included. The reason section 3 gave for
+leaving it to the workspace, that a scout may not need to file, does not hold, since
+`job exit` already ends a read-only row with nothing to grade. Section 4's
+`StopRequest.reply` is not built: a reply judged for shape is prose parsed into data.
+Sections 1 and 2 stand.
