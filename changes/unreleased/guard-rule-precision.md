@@ -7,5 +7,5 @@
   with a recorded run of the same arguments is priced by that run; one with none is
   priced by the whole target, and the advice says which.
 - **A skill-gate deny names the installed SKILL.md.** An agent with no Skill tool can
-  clear architecture-unbriefed, spawn-unbriefed and buzz-unbriefed by reading that file,
+  clear architecture-before-skill, spawn-before-skill and buzz-before-skill by reading that file,
   which the guard already counted as a load.
