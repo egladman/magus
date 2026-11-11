@@ -22,9 +22,9 @@ import (
 //
 // The cost is real and bounds how many of these there should be: each one spends an
 // agent's first action on reading, and a deny common enough to be routine is one people
-// learn to route around. Three exist. The third, architecture-unbriefed, came with that
-// evidence: the new-directory advisory named its skill in every session that met it, and
-// the skill still went unloaded. A fourth needs evidence of the same kind.
+// learn to route around. Three exist. The third is architecture-before-skill.
+// The new-directory advisory named its skill in every session that met it.
+// The skill still went unloaded. A fourth needs evidence of the same kind.
 //
 // A load counts for the AGENT that made it, not its session. A skill read into a parent's
 // context is not in its child's, so a session-wide mark let every subagent pass on a brief

@@ -115,7 +115,7 @@ refactor/tax      -       declared  standard  1      disjoint  magus run test .
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 -- exec.out --
 recorded job refactor/pricing's base as 58d5e2c343b3312b97a2ac07d85607b3044e9b7d, which is the checkpoint it was handed. Nothing to reconcile; carry on.
-took refactor/pricing in ~/src/shop-pricing; read the terms with `magus describe job refactor/pricing`
+took refactor/pricing in ~/src/shop-pricing; read the spec with `magus describe job refactor/pricing`
 -- describe.out --
 job: refactor/pricing
 model tier: standard (rank 1), default: "the declared default" at magus/modeltiers

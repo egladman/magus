@@ -1228,11 +1228,6 @@ func NewDependencies(ctx context.Context, w Wiring) (Dependencies, *WorkspaceRul
 	if commit, _ := buildinfo.Commit(); commit != "unknown" {
 		deps.BinaryCommit = commit
 	}
-	// LoadAgents, not w.Config: only the workspace tier sets the brief format. A load that
-	// fails is reported by the builtins, which read the same section.
-	if agents, err := config.LoadAgents(w.Root); err == nil {
-		deps.BriefFormat = agents.BriefFormat
-	}
 	var site snapshotSite
 	if w.Root != "" {
 		hit, at, ok := snapshotDependencies(ctx, w, deps)

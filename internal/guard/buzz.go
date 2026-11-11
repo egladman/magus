@@ -88,7 +88,8 @@ func buzzAuthoredBy(command string, d Dialect) string {
 	return ""
 }
 
-// denyBuzzAuthorWithoutSkill is buzz-unbriefed for a command line rather than a file write.
+// denyBuzzAuthorWithoutSkill is buzz-before-skill for a command line
+// rather than a file write.
 func denyBuzzAuthorWithoutSkill(markers hint.Gate, observesSkillLoads bool, workspace, command string, d Dialect) string {
 	if buzzAuthoredBy(command, d) == "" {
 		return ""

@@ -446,7 +446,7 @@ export fun render(row: Row, root: str) > [str] {
         "took job {row.id} in {root}: checkout verified",
         base,
         "the guard sees this script, not the exec inside it: unless your spawn was titled for {row.id}, run `./magus job exec {row.id}` once so it binds your session",
-        "read the terms: ./magus describe job {row.id}",
+        "read the spec: ./magus describe job {row.id}",
     ];
 }
 

@@ -677,10 +677,9 @@ func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
 // spawn is recorded rather than blocked for describing a denied command; and that stays true
 // whether or not the caller named a model, which is a claim this guard grades nothing on.
 //
-// The session loads the multi-agent brief first, which is the one question a spawn IS graded
-// on (spawn-unbriefed). Without it the pass below would be a deny for an unrelated reason and
-// this test would stop covering what it is named for; TestHookCmd_DeniesSpawnBeforeTheBrief
-// carries that rule.
+// The session loads the multi-agent skill first: spawn-before-skill
+// grades that. Without it the pass below would be a deny for an unrelated
+// reason; TestHookCmd_DeniesSpawnBeforeTheBrief carries that rule.
 func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	t.Setenv(trail.EnvBaggage, "")
@@ -1589,8 +1588,9 @@ func loadSkillForTest(t *testing.T, ctx context.Context, dir, session string) {
 	require.Equal(t, "pass\n", out.String(), "a skill load carries nothing to judge")
 }
 
-// TestHookCmd_RefusesSpawnBeforeTheBrief is the spawn-unbriefed rule end to end: with no
-// workspace setting, a spawn is refused until the multi-agent skill loads, and passes after.
+// TestHookCmd_RefusesSpawnBeforeTheBrief is spawn-before-skill end to end.
+// With no workspace setting, a spawn is refused until the multi-agent skill
+// loads, and passes after.
 //
 // The prompt is deliberately innocuous. The rule reads a marker file and never the prose,
 // so nothing about the handed context should change the verdict either way.

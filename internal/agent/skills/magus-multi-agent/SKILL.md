@@ -393,20 +393,20 @@ inputs and workspace configuration that have one owner, and the projects that
 change alongside the leased ones without declaring a dependency{{end}}.{{if .Full}} Two renders of one
 row are byte-identical; hand-typed prompts are not.{{end}}
 
-The guard grades every command a brief presents in a shell fence or a code span. One
-it would deny refuses the spawn{{if .Full}}, since the worker runs a brief's
+The guard grades every command a spawn prompt presents in a shell fence or a code span. One
+it would deny refuses the spawn{{if .Full}}, since the worker runs its prompt's
 commands as written{{end}}. A line that names a command to forbid it ("never ...") is not graded.
 
-### What a brief leaves out
+### What a spawn prompt leaves out
 
-{{if .Full}}A brief carries the JOB ID, the goal and why, the decisions made, and evidence refs.
+{{if .Full}}A spawn prompt is the parent's own words: the JOB ID, the goal and why, the decisions made, and evidence refs.
 It leaves out skill loads, command style, the `BAGGAGE` export, write paths, the check,
 how to commit and push, and attribution: the guard, the harness and `{{cmd "describe job"}}`
 supply or enforce each. A restated guard rule costs every worker tokens and goes stale;
-when a worker keeps missing something, fix the guard rule or its message, not the brief.
-A follow-up message to a bound worker carries only what changed.{{else}}Brief carries only: JOB ID, goal and why, decisions made, evidence refs.
+when a worker keeps missing something, fix the guard rule or its message, not the prompt.
+A follow-up message to a bound worker carries only what changed.{{else}}Spawn prompt carries only: JOB ID, goal and why, decisions made, evidence refs.
 Leave out: skill loads, command style, `BAGGAGE` export, write paths, check, how to commit and push, attribution; guard, harness, `{{cmd "describe job"}}` supply or enforce each.
-Restated guard rule costs every worker tokens, goes stale. Worker keeps missing something -> fix guard rule or its message, never brief.
+Restated guard rule costs every worker tokens, goes stale. Worker keeps missing something -> fix guard rule or its message, never prompt.
 Follow-up message to bound worker: only what changed.{{end}}
 
 Every worker prompt includes its row, its JOB ID, relevant graph evidence, and
@@ -421,12 +421,13 @@ any cap the user set for the tree. Require the worker to:
 - never wait for the build budget. Its check runs with `--budget-wait 0`, so a refused check (MGS3009) returns at once; it commits and files the check as owed, `"owed": "no seat"` in `validation` or that goal's `verification_evidence`, with no output ref. `{{cmd "job wait"}}` passes that result and the integration runs the check;
 - never exit its row while it waits on a reply from you: ending its turn with the question as its final text leaves the row open and the worker resumable.
 
-End every brief with the step that files the result, as the worker's LAST act before
-it reports back. A brief that leaves it out gets a prose report and a row that never
+End every spawn prompt with the step that files the result, as the worker's LAST act
+before it reports back. `stop-unfiled` refuses a leased child's first stop until it files
+one, and a prompt that leaves it out gets a prose report and a row that never
 moves{{if .Full}}: the store keeps the write paths held, `{{cmd "job wait"}}`
 has nothing to verify, and nobody notices until a sibling is refused over a path
 the finished worker no longer needs{{end}}. The step: `{{cmd "job exit"}} <job> --stdin`, filing the shape `{{cmd "job exec"}} <row>` printed.
-Never inline the result fields in a brief; the row prints them filled in{{if .Full}}, and
+Never inline the result fields in a prompt; the row prints them filled in{{if .Full}}, and
 [reference.md](reference.md) shows a record{{end}}.
 {{if .Full}}A typed result makes verification mechanical. {{end}}Keep unresolved risks mandatory{{if .Full}}, so a
 mis-scoped worker can say so instead of widening silently{{end}}.

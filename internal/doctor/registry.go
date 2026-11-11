@@ -160,14 +160,6 @@ var allChecks = []checkDef{
 		},
 	},
 	{
-		Name:     "brief-format",
-		Doc:      "the format a spawn brief takes when its job row names none, and whether magus.yaml chose it",
-		Evidence: types.EvidenceDeclared,
-		run: func(_ context.Context, r *runner, projects []*types.Project) types.Check {
-			return r.checkBriefFormat(projects)
-		},
-	},
-	{
 		Name:           "conformance-ceiling",
 		Doc:            "configured conformance anchors the code now measures tighter than",
 		Evidence:       types.EvidenceMeasured,

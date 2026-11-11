@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -53,10 +52,6 @@ type briefInput struct {
 	// bound is a continuation to a worker already bound to a live row. worker-check-only
 	// grades that worker's own runs, so its message is not graded against the row.
 	bound bool
-	// format is the brief's format and formatFrom where it came from (job.ResolveBriefFormat).
-	// Zero is markdown with nothing to name.
-	format     types.BriefFormat
-	formatFrom string
 }
 
 // lazyProducers finds, once and on demand, whether a target regenerates a row's write
@@ -92,27 +87,14 @@ A worker runs a brief's commands as written, so every worker it reaches is refus
 	if v := judgeBriefPlainCommands(brief); v.Deny != "" {
 		return v
 	}
-	named := fmt.Sprintf("%s, %s", string(brief.format), brief.formatFrom)
-	if brief.format == types.BriefFormatBuzz {
-		if v := judgeBriefBuzz(context.Background(), brief.text, magusDecls(), named); v.Deny != "" {
-			return v
-		}
+	if brief.bound {
+		return ShellVerdict{}
 	}
-	v := ShellVerdict{}
-	if !brief.bound {
-		v = judgeBriefOffCheck(deps, brief)
-	}
-	if brief.formatFrom != "" && brief.formatFrom != job.BriefFormatUnset && v.Deny == "" {
-		v.Context = strings.TrimSpace(fmt.Sprintf("brief format: %s. %s", named, v.Context))
-		if v.Rule.Name == "" {
-			v.Rule = denyRule{Name: denyRuleBriefCommand, Arg: "brief-format"}
-		}
-	}
-	return v
+	return judgeBriefOffCheck(deps, brief)
 }
 
 // denyRuleBriefPlainCommands is a brief for an isolated worker that teaches a compound command.
-const denyRuleBriefPlainCommands denyRuleName = "brief-plain-commands"
+const denyRuleBriefPlainCommands denyRuleName = "spawn-plain-commands"
 
 // judgeBriefPlainCommands refuses a brief for a worker in its own worktree that teaches a
 // compound command. A host that isolates a worker refuses the commands it cannot prove stay

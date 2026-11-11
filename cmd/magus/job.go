@@ -1942,7 +1942,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 		return emitNames(os.Stdout, []string{stored.ID})
 	case outputText:
 		fmt.Println(job.BaseAdvice(stored))
-		fmt.Printf("took %s in %s; read the terms with `%s`\n", stored.ID, root, hint.DescribeJob.With(stored.ID))
+		fmt.Printf("took %s in %s; read the spec with `%s`\n", stored.ID, root, hint.DescribeJob.With(stored.ID))
 		return nil
 	default:
 		return emitFormatted(opts, stored)

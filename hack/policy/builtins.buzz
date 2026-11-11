@@ -30,13 +30,13 @@ export final BUILTINS: {str: any} = {
 
 // Evidence for the rules this repository set to deny before ADR 0013 made deny the
 // default:
-//   architecture-unbriefed: 2026-10-10, 11 sessions met the new-directory advisory that
-//     names magus-architecture-review, and organic loads of it stayed near zero.
-//   brief-command: 2026-09-24, 33 briefs seeded 462 prefixes of a retired variable.
-//   brief-plain-commands: 2026-10-13, Claude Code refused 1,068 compound commands from
-//     worktree-isolated workers, who copy the command shapes their briefs show.
-//   buzz-unbriefed: six errors in one session, by an agent with this repository open
-//     throughout.
+//   architecture-before-skill: 2026-10-10, 11 sessions met the advisory
+//     naming magus-architecture-review, and its organic loads stayed near 0.
+//   spawn-command: 2026-09-24, 33 prompts seeded 462 uses of a retired name.
+//   spawn-plain-commands: 2026-10-13, Claude Code refused 1,068 compound
+//     commands from isolated workers, who copy the shapes their prompts show.
+//   buzz-before-skill: six errors in one session, by an agent with this
+//     repository open throughout.
 //   chained-run: 2026-09-27, every such chain was `generate:rw docs` then `generate:rw .`.
 //   ambiguous-ci-word: the bare word "ci" names both the magus target and the
 //     host's CI/CD; an agent that assumes either burns a turn on the wrong gate.
@@ -67,9 +67,9 @@ export final BUILTINS: {str: any} = {
 //     under changes/ and docs/.
 //   sleep-poll: 2026-10-13, 65 calls slept 10 seconds or more and then read a status
 //     once, 61 minutes of waiting spread over calls.
-//   spawn-unbriefed: across 2,147 session transcripts, zero loads of the multi-agent
-//     skill, under every name and variant, while the two skills a hook demands loaded 415
-//     times.
+//   spawn-before-skill: 2,147 session transcripts held no load of the
+//     multi-agent skill under any name. The two skills a hook demands loaded
+//     415 times.
 //   spawn-waiter: 2026-10-13, waiters scout: no spawn in 9 days was a waiter, so the deny
 //     costs nothing here; the host's completion notice already does the job.
 //   stage-all: one call put 69 files, a whole regenerated docs site plus five untouched

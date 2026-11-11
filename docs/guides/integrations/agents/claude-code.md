@@ -772,7 +772,7 @@ the message the person typed to `magus shell --message`, which records a topic m
 the message asks a structure question (architecture, boundaries, layering, imports,
 a new package, where something belongs, blast radius) and prints nothing, so the
 model's context gets no advisory and the message is never blocked. The marker
-changes a later verdict: `architecture-unbriefed` holds the agent's next call
+changes a later verdict: `architecture-before-skill` holds the agent's next call
 until it loads `magus-architecture-review`. The message text is not kept.
 
 `SubagentStart` is the one worth naming, because it looks like it should replace

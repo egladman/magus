@@ -21,7 +21,7 @@ var architectureSkill = agent.MustSkill("magus-architecture-review")
 
 // topicArchitecture marks a session whose person asked a structure question. It is a
 // FACT about the session, keyed like a skill load's, and recording it says nothing to
-// the model: architecture-unbriefed reads it on the next graded call.
+// the model. architecture-before-skill reads it on the next graded call.
 const topicArchitecture hint.MarkerKind = "topic-architecture"
 
 // architectureVocabulary is the phrasing a structure question arrives in. Every
@@ -96,14 +96,10 @@ func removesOnly(w writeFields) bool {
 	return true
 }
 
-// denyArchitectureWithoutSkill is architecture-unbriefed: the verdict for a graded call by
-// an agent that has not loaded the architecture skill, made in a session whose person asked
-// a structure question, or for a write that creates a new directory. newDir is that
-// directory, "" when the write creates none or the call is not a write.
-//
-// facts holds the session's topic mark and skills the calling agent's own loads, so a
-// subagent working in an architecture conversation is briefed by its own load and never
-// by its parent's.
+// denyArchitectureWithoutSkill is architecture-before-skill. It refuses an
+// agent without the skill after a structure question, or a write creating
+// newDir ("" for none). facts holds the topic mark and skills the caller's
+// own loads, so a parent's load never counts.
 func denyArchitectureWithoutSkill(facts, skills hint.Gate, observesSkillLoads bool, workspace, newDir string) string {
 	const carries = "The knowledge graph answers imports, cycles, layering and coupling from the workspace's own edges; reading files does not."
 	if newDir != "" {
