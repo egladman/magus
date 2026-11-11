@@ -866,6 +866,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 				v = types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 			}
 			lease, _ := resolveLease(who, req.Lease, boundJob(who, at).Job)
+			if v.Decision != decisionDeny {
+				if unfiled, judged := judgeStopUnfiled(withJobStoreRows(ctx, at), deps, input, who, at, lease); judged && (unfiled.Decision == decisionDeny || v.Decision == decisionPass) {
+					v = unfiled
+				}
+			}
 			v = gradeWorkspaceStop(withJobStoreRows(ctx, at), deps, v, input, who, at, lease)
 			if v.Decision != decisionDeny {
 				if handed, refused := judgeHandedCommands(ctx, deps, req, at.dir, input); refused {

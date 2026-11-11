@@ -45,6 +45,7 @@ type ruleDocEntry struct {
 
 var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocBackgroundLeft},
+	{doc: ruleDocStopUnfiled},
 	{doc: ruleDocBackgroundSilent},
 	{doc: ruleDocBackgroundUnbounded},
 	{doc: ruleDocBacktickSubstitution},
@@ -177,6 +178,15 @@ var ruleDocRegistry = []ruleDocEntry{
 	{doc: ruleDocModelTierContextCap, advisory: true, enrolled: true},
 	{doc: ruleDocCompatMarker, advisory: true},
 	{doc: ruleDocStall, advisory: true},
+}
+
+var ruleDocStopUnfiled = types.RuleDoc{
+	Name:    string(denyRuleStopUnfiled),
+	Catches: "a leased subagent stopping before it filed its job's result",
+	Why: "A parent reads what its child did through `magus job wait`, which waits on the row's filed JobResult; a child that stops without one leaves nothing to wait on, and a rule nobody is required to follow is one nobody follows (ADR 0043). " +
+		"At a subagent's stop, when the caller holds a lease whose live row has no result, the stop is refused once, naming `magus job exit <job> --stdin` and `magus job exit --schema`. A read-only row files one too, with an empty changed_paths, so a scout is held to the same rule. " +
+		"The second stop passes with a note, since the host marks it as one a stop rule already held: nothing re-prompts the child, and `magus job wait` shows the row never passed. " +
+		"On Claude Code and Codex the refusal blocks the stop, so the child files the record itself. A host that reports no child stop never reaches it. Set to advise, the stop stands and the note says what was not filed.",
 }
 
 var ruleDocBackgroundLeft = types.RuleDoc{

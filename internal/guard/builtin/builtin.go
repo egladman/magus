@@ -294,6 +294,7 @@ var defaults = map[string]decision{
 	"spawn-plain-commands":      Deny,
 	"spawn-waiter":              Deny,
 	"stage-all":                 Deny,
+	"stop-unfiled":              Deny,
 	"symbol-search":             Deny,
 	"throwaway-copy":            Deny,
 	"unjudged-tool":             Deny,
