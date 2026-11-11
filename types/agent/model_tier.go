@@ -107,70 +107,17 @@ type ModelTierBounds struct {
 // or host list whose length differs from the cases, a negative bound, an invalid skill
 // variant, an empty host id or alias, or one host giving two cases the same alias.
 func NewModelTierSet(decl ModelTierDeclaration) (*ModelTierSet, error) {
-	var errs []error
-	fail := func(format string, args ...any) {
-		errs = append(errs, fmt.Errorf("%w: enum %s at %s: %s", errModelTierDeclaration, decl.Enum, decl.Site, fmt.Sprintf(format, args...)))
-	}
-	n := len(decl.Cases)
-	if decl.Enum == "" {
-		fail("the enum has no name")
-	}
-	if n == 0 {
-		fail("the enum declares no cases")
-	}
-	byName := make(map[string]int, n)
-	for i, c := range decl.Cases {
-		if c == "" {
-			fail("case %d has no name", i)
-			continue
+	problems := slices.Concat(decl.caseProblems(), decl.listProblems(), decl.hostProblems())
+	if len(problems) > 0 {
+		errs := make([]error, len(problems))
+		for i, p := range problems {
+			errs[i] = fmt.Errorf("%w: enum %s at %s: %s", errModelTierDeclaration, decl.Enum, decl.Site, p)
 		}
-		if _, dup := byName[c]; dup {
-			fail("case %q is declared twice", c)
-			continue
-		}
-		byName[c] = i
-	}
-	if n > 0 && (decl.Default < 0 || decl.Default >= n) {
-		fail("default rank %d is outside 0..%d", decl.Default, n-1)
-	}
-	if len(decl.Bounds) != n {
-		fail("bounds covers %d cases and the enum declares %d", len(decl.Bounds), n)
-	}
-	for i, b := range decl.Bounds {
-		if b.MaxLive < 0 || b.MaxContext < 0 {
-			fail("bounds for rank %d are negative", i)
-		}
-	}
-	if len(decl.Skills) != n {
-		fail("skills covers %d cases and the enum declares %d", len(decl.Skills), n)
-	}
-	for i, s := range decl.Skills {
-		if s == "" || !s.Valid() {
-			fail("skills for rank %d is %s, and the variants are %s", i, s, strings.Join(s.Values(), ", "))
-		}
-	}
-	for _, host := range slices.Sorted(maps.Keys(decl.Hosts)) {
-		aliases := decl.Hosts[host]
-		if host == "" {
-			fail("a host mapping has no harness id")
-			continue
-		}
-		if len(aliases) != n {
-			fail("host %s maps %d cases and the enum declares %d", host, len(aliases), n)
-			continue
-		}
-		seen := map[string]bool{}
-		for i, a := range aliases {
-			if a == "" {
-				fail("host %s maps rank %d to an empty alias", host, i)
-			} else if seen[a] {
-				fail("host %s maps two cases to %q, so a spawn of it names no one tier", host, a)
-			}
-			seen[a] = true
-		}
-	}
-	if len(errs) > 0 {
 		return nil, errors.Join(errs...)
+	}
+	byName := make(map[string]int, len(decl.Cases))
+	for i, c := range decl.Cases {
+		byName[c] = i
 	}
 	hosts := make(map[string][]string, len(decl.Hosts))
 	for k, v := range decl.Hosts {
@@ -186,6 +133,82 @@ func NewModelTierSet(decl ModelTierDeclaration) (*ModelTierSet, error) {
 		skills: slices.Clone(decl.Skills),
 		hosts:  hosts,
 	}, nil
+}
+
+// caseProblems checks the enum's name, its cases and the default rank.
+func (decl ModelTierDeclaration) caseProblems() []string {
+	var out []string
+	n := len(decl.Cases)
+	if decl.Enum == "" {
+		out = append(out, "the enum has no name")
+	}
+	if n == 0 {
+		out = append(out, "the enum declares no cases")
+	}
+	seen := make(map[string]bool, n)
+	for i, c := range decl.Cases {
+		switch {
+		case c == "":
+			out = append(out, fmt.Sprintf("case %d has no name", i))
+		case seen[c]:
+			out = append(out, fmt.Sprintf("case %q is declared twice", c))
+		}
+		seen[c] = true
+	}
+	if n > 0 && (decl.Default < 0 || decl.Default >= n) {
+		out = append(out, fmt.Sprintf("default rank %d is outside 0..%d", decl.Default, n-1))
+	}
+	return out
+}
+
+// listProblems checks bounds and skills against the cases.
+func (decl ModelTierDeclaration) listProblems() []string {
+	var out []string
+	n := len(decl.Cases)
+	if len(decl.Bounds) != n {
+		out = append(out, fmt.Sprintf("bounds covers %d cases and the enum declares %d", len(decl.Bounds), n))
+	}
+	for i, b := range decl.Bounds {
+		if b.MaxLive < 0 || b.MaxContext < 0 {
+			out = append(out, fmt.Sprintf("bounds for rank %d are negative", i))
+		}
+	}
+	if len(decl.Skills) != n {
+		out = append(out, fmt.Sprintf("skills covers %d cases and the enum declares %d", len(decl.Skills), n))
+	}
+	for i, s := range decl.Skills {
+		if s == "" || !s.Valid() {
+			out = append(out, fmt.Sprintf("skills for rank %d is %s, and the variants are %s", i, s, strings.Join(s.Values(), ", ")))
+		}
+	}
+	return out
+}
+
+// hostProblems checks each host's aliases, sorted so the report is stable.
+func (decl ModelTierDeclaration) hostProblems() []string {
+	var out []string
+	n := len(decl.Cases)
+	for _, host := range slices.Sorted(maps.Keys(decl.Hosts)) {
+		aliases := decl.Hosts[host]
+		if host == "" {
+			out = append(out, "a host mapping has no harness id")
+			continue
+		}
+		if len(aliases) != n {
+			out = append(out, fmt.Sprintf("host %s maps %d cases and the enum declares %d", host, len(aliases), n))
+			continue
+		}
+		seen := map[string]bool{}
+		for i, a := range aliases {
+			if a == "" {
+				out = append(out, fmt.Sprintf("host %s maps rank %d to an empty alias", host, i))
+			} else if seen[a] {
+				out = append(out, fmt.Sprintf("host %s maps two cases to %q, so a spawn of it names no one tier", host, a))
+			}
+			seen[a] = true
+		}
+	}
+	return out
 }
 
 // All lists every tier, cheapest first.
