@@ -38,6 +38,7 @@ import {
 import type { RateTable, Usage } from './cost'
 import { assess, inBand, statusText } from './health'
 import type { BinaryInfo, Probe, ServerInfo } from './health'
+import { registerJsonExplorer } from './json-view'
 import { registerJsonlTables } from './jsonl-view'
 import { DEFAULT_RATES } from './rates'
 import { registerRefLinks } from './refs-view'
@@ -495,6 +496,7 @@ async function openJob($: EngineInterface, candidates: string[]): Promise<void> 
 
 export const register: Register = (on, options) => {
   settings = readSettings(options)
+  registerJsonExplorer(on)
   registerJsonlTables(on)
   registerRefLinks(on)
 

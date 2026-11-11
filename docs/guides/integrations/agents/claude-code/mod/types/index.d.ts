@@ -186,6 +186,10 @@ export type RefView = {
   isLoading: boolean
 }
 
+// How one drawn JSON result is opened: the node paths expanded, and whether
+// the raw text shows in place of the tree.
+export type JsonView = { open: string[]; isRaw: boolean }
+
 declare module 'claude-code' {
   interface PluginState {
     magus: {
@@ -209,6 +213,8 @@ declare module 'claude-code' {
       // The `theme` row of /config, read at session start and on each change.
       theme: string | null
       ref: RefView | null
+      // One per tool result the JSON explorer draws, by its tool_use_id.
+      json: StateFamily<JsonView>
     }
   }
 }
