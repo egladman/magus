@@ -123,83 +123,6 @@ fun rejectedFlag(result: proc\ExecResult?) > bool {
         and result!.stderr.indexOf(UNKNOWN_FLAG) != null;
 }
 
-// From here to Judged is magus-command.buzz's copy, which says why each part
-// holds. lib/hook is their shared home and does not carry them yet.
-final UNLOADED_MARK = "__MAGUS_UNLOADED__";
-final UNLOADED_HEAD = `{{with index . "rule"}}{{if and (eq . "stale-binary") (eq (index $ "decision") "deny")}}__MAGUS_UNLOADED__{{toJson (index $ "reason")}}` + "\n" + `{{end}}{{end}}`;
-final LOAD_FAILURES = ["MGS1040", "MGS1021", "this magus does not know", "invalid config"];
-
-fun errorLines(stderr: str) > str {
-    final lines = mut [<str>];
-    foreach (line in stderr.split("\n")) {
-        if (line != "" and line.indexOf("WARN") == null and lines.len() < 12) { lines.append(line); }
-    }
-    return lines.join("\n");
-}
-
-fun unloadedWhy(attempt: proc\ExecResult?) > str {
-    if (attempt == null) { return "it could not be run"; }
-    final printed = attempt!.stdout;
-    if (printed.startsWith(UNLOADED_MARK)) {
-        final head = hook\firstLine(printed.sub(UNLOADED_MARK.len(), len: printed.len() - UNLOADED_MARK.len()));
-        final why = hook\firstLine(((json\parse(head) catch null) as? str) ?? "");
-        if (why != "") { return why; }
-        return "it judged under the stale-binary rule";
-    }
-    if (attempt!.code == 0 or hook\trimTrailingNewlines(printed) != "") { return ""; }
-    final lines = errorLines(attempt!.stderr);
-    foreach (marker in LOAD_FAILURES) {
-        if (lines.indexOf(marker) != null) { return lines; }
-    }
-    return "";
-}
-
-fun checkoutsUp(root: str) > [str] {
-    final found = mut [<str>];
-    var at = root;
-    while (at != "") {
-        found.append(at);
-        at = hook\workspaceRootAt(hook\parentDir(at));
-    }
-    return found;
-}
-
-fun binCandidates(first: str, cwd: str) > [str] {
-    final found = mut [first];
-    final bins = mut [<str>];
-    foreach (root in checkoutsUp(hook\workspaceRootAt(cwd)) + checkoutsUp(hook\binRoot(""))) {
-        bins.append("{root}/magus");
-    }
-    bins.append(env\get("__MAGUS_BIN") catch "");
-    bins.append(proc\which("magus") catch "");
-    foreach (bin in bins) {
-        if (bin != "" and found.indexOf(bin) == null and hook\isExecutable(bin)) { found.append(bin); }
-    }
-    return found;
-}
-
-object Judged {
-    result: proc\ExecResult?,
-    by: str,
-    trail: [str],
-}
-
-// judgeFirstLoaded asks each candidate in turn, asking again without the
-// flags only when one refuses them, and keeps the first answer that stands.
-fun judgeFirstLoaded(guard: Guard, candidates: [str], attributed: [str]) > Judged {
-    final trail = mut [<str>];
-    foreach (candidate in candidates) {
-        final asked = Guard{ bin = candidate, payload = guard.payload, response = guard.response, dir = guard.dir };
-        var attempt = judge(asked, extra: attributed) catch null;
-        if (rejectedFlag(attempt)) { attempt = judge(asked, extra: [<str>]) catch null; }
-        final why = unloadedWhy(attempt);
-        if (why == "") { return Judged{ result = attempt, by = candidate, trail = trail }; }
-        final verb = if (trail.len() == 0) "tried" else "fell to";
-        trail.append("{verb} {candidate}, which could not load this tree: {why}");
-    }
-    return Judged{ result = null, by = "", trail = trail };
-}
-
 fun adviseBranch() > str {
     final suppressed = env\get("__MAGUS_NO_ADVISE") catch "";
     if (suppressed != "") { return ""; }
@@ -244,7 +167,9 @@ fun main(args: [str]) > void {
     final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
     final bin = hook\resolveBin(cwd: cwd);
     final note = hook\fallbackNote(cwd);
-    var fix = hook\magusFix(hook\workspaceRootAt(cwd));
+    var root = hook\workspaceRootAt(cwd);
+    if (root == "") { root = hook\binRoot(""); }
+    var fix = hook\recoveryFix(root);
     if (note != "") { fix = note + ". " + fix; }
     if (bin == "" or !hook\isExecutable(bin)) {
         io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE", fallback: hook\refusal(
@@ -286,7 +211,7 @@ fun main(args: [str]) > void {
     if (!hook\wholeEvent(event, dotPath: eventPath, toolPath: toolPath)) {
         payload = hook\rawField(event, dotPath: eventPath) + "\n";
     }
-    final guard = Guard{ bin = bin, payload = payload, response = UNLOADED_HEAD + response, dir = cwd };
+    final marked = hook\unloadedTemplate(response);
 
     // Attribution is BEST EFFORT; the verdict is not. --agent-name, --session and --agent postdate
     // the current magus release, and an older binary rejects the unknown flag outright,
@@ -300,16 +225,20 @@ fun main(args: [str]) > void {
         attributed.append(word);
     }
     foreach (flag in rendersAsk) { attributed.append(flag); }
-    final judged = judgeFirstLoaded(guard, candidates: binCandidates(bin, cwd: cwd), attributed: attributed);
+    final judged = hook\judgeFirstLoaded(hook\binCandidates(bin, cwd: cwd), ask: fun (candidate: str) > proc\ExecResult? {
+        final asked = Guard{ bin = candidate, payload = payload, response = marked, dir = cwd };
+        final attempt = judge(asked, extra: attributed) catch null;
+        if (rejectedFlag(attempt)) { return judge(asked, extra: [<str>]) catch null; }
+        return attempt;
+    });
     final result = judged.result;
-    var trail = "";
-    if (judged.trail.len() > 0) { trail = judged.trail.join("\n") + "\n"; }
     if (judged.by == "") {
         io\stdout.write(hook\envOr("__MAGUS_FAILED_RESPONSE", fallback: hook\refusal(
-            "magus guard could not judge this write: no magus it tried can load this tree\n"
-                + trail + "no other magus is left to fall to", fix: fix))) catch void;
+            hook\unloadedVerdict(judged, what: "write"), fix: fix))) catch void;
         return;
     }
+    var trail = "";
+    if (judged.trail.len() > 0) { trail = judged.trail.join("\n") + "\n"; }
 
     // A pass and a broken guard both render nothing; see magus-command.buzz for why
     // telling them apart matters. Every call here is a write, so it is refused.
@@ -326,8 +255,9 @@ fun main(args: [str]) > void {
     if (note != "" and hook\noticeOnce(session, family: "bin-fallback", file: "magus-path.buzz")) {
         reply = hook\withNotice(reply, text: "magus-path.buzz: " + note);
     }
-    if (trail != "" and hook\noticeOnce(session, family: "bin-unloaded", file: "magus-path.buzz")) {
-        reply = hook\withNotice(reply, text: "magus-path.buzz: {trail}fell to {judged.by}, which judged this write.");
+    final fell = hook\fellToNotice(judged, what: "write", root: root);
+    if (fell != "" and hook\noticeOnce(session, family: "bin-unloaded", file: "magus-path.buzz")) {
+        reply = hook\withNotice(reply, text: "magus-path.buzz: " + fell);
     }
     io\stdout.write(reply) catch void;
 }

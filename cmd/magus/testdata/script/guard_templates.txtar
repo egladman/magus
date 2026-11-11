@@ -1098,6 +1098,15 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
 stdout 'tried \S*unloadable-magus, which could not load this tree'
 stdout 'which judged this write'
 
+# Cursor shows the person a message only with a refusal, so it says the fallback on stderr.
+env TMPDIR=$WORK/n-unloadable-cursor
+stdin cursor-shell-deny.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '"permission":"deny"'
+stdout 'whole-tree git stash'
+stderr 'tried \S*unloadable-magus, which could not load this tree'
+stderr 'which judged this call'
+
 # A binary that loads the config but not the policy denies under stale-binary. That deny
 # is a guess too. When no binary left can load the tree, none judges: the refusal names
 # each one tried, and only the rebuild it names runs.

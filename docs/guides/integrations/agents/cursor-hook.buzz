@@ -110,6 +110,11 @@ object Guard {
     payload: str,
     // fix says how to get a magus that judges here.
     fix: str = "",
+    // candidates are the binaries asked in turn while one cannot load the tree.
+    candidates: [str] = [<str>],
+    // root is the checkout whose rebuild runs while none can.
+    root: str = "",
+    session: str = "",
 }
 
 // Verdict is the part of `magus shell -o json` this file renders.
@@ -118,6 +123,8 @@ object Verdict {
     reason: str,
     context: str,
     rule: str = "",
+    // root is the checkout an unjudged call's recovery line rebuilds.
+    root: str = "",
 }
 
 // Scope is the attribution one event shares across every judgment it makes.
@@ -127,6 +134,8 @@ object Scope {
     session: str,
     transcript: str,
     fix: str = "",
+    candidates: [str] = [<str>],
+    root: str = "",
 }
 
 fun firstField(node: any?, keys: [str]) > str {
@@ -446,13 +455,8 @@ fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
     final probe = proc\exec(guard.bin, args: ["version"], dir: binDir(guard.bin), opts: proc\ExecOptions{quiet = true, allowFailure = true}) catch null;
     if (probe != null) { version = hook\firstLine(probe!.stdout); }
     if (version == "") { version = "version unreadable"; }
-    final lines = mut [<str>];
-    if (failed != null) {
-        foreach (line in failed!.stderr.split("\n")) {
-            if (line != "" and line.indexOf("WARN") == null and lines.len() < 12) { lines.append(line); }
-        }
-    }
-    var why = lines.join("\n");
+    var why = "";
+    if (failed != null) { why = hook\errorLines(failed!.stderr); }
     if (why == "" and failed != null) { why = "it printed no error (exit code {failed!.code})"; }
     if (why == "") { why = "it could not be run"; }
     return "magus guard could not judge this call: {guard.bin} ({version}) said: {why}";
@@ -475,8 +479,8 @@ fun binDir(bin: str) > str {
 // refuses it, reads included.
 final UNJUDGED = "unjudged";
 
-fun unjudged(why: str, fix: str) > Verdict {
-    return Verdict{ decision = UNJUDGED, reason = "{why}\n{fix}", context = "" };
+fun unjudged(why: str, fix: str, root: str = "") > Verdict {
+    return Verdict{ decision = UNJUDGED, reason = "{why}\n{fix}", context = "", root = root };
 }
 
 final UNKNOWN_FLAG = "flag provided but not defined";
@@ -491,20 +495,38 @@ fun rejectedFlag(result: proc\ExecResult?) > bool {
 
 // judged returns magus's verdict, or an unjudged one naming why it gave none.
 // Each attempt drops flags an older binary may reject, newest first, and runs
-// only after the one before it was refused for such a flag.
+// only after the one before it was refused for such a flag. A candidate that
+// cannot load the tree is passed over for the next.
 fun judged(guard: Guard, attempts: [[str]]) > Verdict {
-    var result: proc\ExecResult? = null;
-    foreach (extra in attempts) {
-        result = judge(guard, extra: extra);
-        if (!rejectedFlag(result)) { break; }
+    final found = hook\judgeFirstLoaded(guard.candidates, ask: fun (candidate: str) > proc\ExecResult? {
+        final asked = Guard{ bin = candidate, payload = guard.payload };
+        var attempt: proc\ExecResult? = null;
+        foreach (extra in attempts) {
+            attempt = judge(asked, extra: extra);
+            if (!rejectedFlag(attempt)) { break; }
+        }
+        return attempt;
+    });
+    if (found.by == "") {
+        return unjudged(hook\unloadedVerdict(found, what: "call"), fix: guard.fix, root: guard.root);
     }
-    final fix = "Rebuild or update {guard.bin}. {guard.fix}";
+    final result = found.result;
+    final by = Guard{ bin = found.by, payload = guard.payload };
+    var trail = "";
+    if (found.trail.len() > 0) { trail = found.trail.join("\n") + "\n"; }
+    final fix = "Rebuild or update {found.by}. {guard.fix}";
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
-        return unjudged(failureNotice(guard, failed: result), fix: fix);
+        return unjudged(trail + failureNotice(by, failed: result), fix: fix, root: guard.root);
     }
     final got = parseVerdict(hook\trimTrailingNewlines(result!.stdout));
     if (got == null) {
-        return unjudged("magus guard could not judge this call: {guard.bin} answered something that is not a verdict", fix: fix);
+        return unjudged("{trail}magus guard could not judge this call: {found.by} answered something that is not a verdict", fix: fix, root: guard.root);
+    }
+    // Cursor shows the person a message only with a refusal, so a judged
+    // call's fallback is said once on stderr.
+    final fell = hook\fellToNotice(found, what: "call", root: guard.root);
+    if (fell != "" and hook\noticeOnce(guard.session, family: "bin-unloaded", file: "cursor-hook.buzz")) {
+        io\stderr.write("cursor-hook.buzz: " + fell + "\n") catch void;
     }
     return got!;
 }
@@ -534,7 +556,8 @@ fun shellArgs(scope: Scope, asPath: bool, ask: bool) > [str] {
 // verdict asks magus about one call. ask is whether the reply can put an ask
 // in front of the person, which only a gating event can.
 fun verdict(scope: Scope, payload: str, asPath: bool, ask: bool) > Verdict {
-    final guard = Guard{ bin = scope.bin, payload = payload, fix = scope.fix };
+    final guard = Guard{ bin = scope.bin, payload = payload, fix = scope.fix,
+        candidates = scope.candidates, root = scope.root, session = scope.session };
     final attributed = shellArgs(scope, asPath: asPath, ask: ask);
     final bare = mut ["-o", "json"];
     if (asPath) { bare.append("--path"); }
@@ -584,7 +607,7 @@ fun gateReply(v: Verdict, eventName: str, command: str) > str {
         return blockedAsk(v.reason, command: command);
     }
     if (v.decision == "pass" or v.decision == "advise") { return ALLOW; }
-    if (v.decision == UNJUDGED and hook\isBootstrap(command)) {
+    if (v.decision == UNJUDGED and hook\recovers(command, root: v.root)) {
         return json\stringify({
             "permission": "allow",
             "user_message": hook\firstLine(v.reason),
@@ -1002,12 +1025,15 @@ fun main(args: [str]) > void {
     final cwd = hook\field(event, dotPath: "cwd");
     final bin = hook\resolveBin(cwd: cwd);
     final note = hook\fallbackNote(cwd);
-    var fix = hook\magusFix(hook\binRoot(cwd));
+    final root = hook\binRoot(cwd);
+    var fix = hook\recoveryFix(root);
     if (note != "") { fix = note + ". " + fix; }
     if (bin == "" or !hook\isExecutable(bin)) {
         final text = UNAVAILABLE_TEXT + "\n" + fix;
         if (gates(eventName)) {
-            io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE", fallback: denyBoth(text))) catch void;
+            final command = firstField(event, keys: ["command", "tool_input.command"]);
+            final refused = gateReply(unjudged(UNAVAILABLE_TEXT, fix: fix, root: root), eventName: eventName, command: command);
+            io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE", fallback: refused)) catch void;
             return;
         }
         if (hook\noticeOnce(readSession(event), family: "unavailable", file: "cursor-hook.buzz")) {
@@ -1022,6 +1048,8 @@ fun main(args: [str]) > void {
         session = readSession(event),
         transcript = hook\field(event, dotPath: "transcript_path"),
         fix = fix,
+        candidates = hook\binCandidates(bin, cwd: cwd),
+        root = root,
     };
     // Cursor shows the person a message only with a refusal, so a judged call's
     // fallback is said once on stderr.
@@ -1032,10 +1060,22 @@ fun main(args: [str]) > void {
 }
 
 test "a call no magus could judge is refused, and the person reads why" {
-    final v = judged(Guard{ bin = "/nonexistent/magus", payload = "ls" }, attempts: [["-o", "json"]]);
+    final v = judged(Guard{ bin = "/nonexistent/magus", payload = "ls", candidates = ["/nonexistent/magus"] }, attempts: [["-o", "json"]]);
     std\assert(v.decision == UNJUDGED, message: v.decision);
     std\assert(v.reason.indexOf("/nonexistent/magus") != null, message: v.reason);
     final reply: {str: any} = json\parse(gateReply(v, eventName: "preToolUse", command: "")) catch {<str: any>};
     std\assert(reply["permission"] == "deny", message: "{reply}");
     std\assert(reply["user_message"] == v.reason, message: "the person reads the whole fix");
+}
+
+test "while no magus judges, Cursor lets the recovery line alone run" {
+    final root = fs\tempDir("cursor-recovery-");
+    fs\writeFile("{root}/go.mod", content: "module github.com/egladman/magus\n");
+    final v = unjudged("v", fix: "f", root: root);
+    final line = hook\recoveryLine(root);
+    final allowed: {str: any} = json\parse(gateReply(v, eventName: "beforeShellExecution", command: line)) catch {<str: any>};
+    std\assert(allowed["permission"] == "allow", message: "{allowed}");
+    final refused: {str: any} = json\parse(gateReply(v, eventName: "beforeShellExecution", command: line + " && ls")) catch {<str: any>};
+    std\assert(refused["permission"] == "deny", message: "{refused}");
+    fs\removeAll(root);
 }
