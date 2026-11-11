@@ -63,8 +63,11 @@ func StoreDir(cacheDir string) string { return filepath.Join(cacheDir, "knowledg
 // manifest is the per-shard index persisted at manifest.json. It doubles as the
 // (future) shard routing index; Phase 1 carries only fingerprints and counts.
 type manifest struct {
-	APIVersion types.APIVersion     `json:"api_version"`
-	Shards     map[string]shardMeta `json:"shards"`
+	APIVersion types.APIVersion `json:"api_version"`
+	// PreFold is the stamp an older magus wrote.
+	// compat: see manifest.readForward.
+	PreFold int                  `json:"schema_version,omitzero"`
+	Shards  map[string]shardMeta `json:"shards"`
 	// Inputs is the stamp each class's shards were last assembled under (see Stamps). A
 	// class with no entry matches no stamp, so a store written before stamps existed, or
 	// by a Sync that had none, is reassembled on its next build.
@@ -969,6 +972,20 @@ func ProjectPaths(cacheDir string) []string {
 	return out
 }
 
+// preFoldKnowledge is the schema_version an older magus stamped
+// KnowledgeAPIVersion's shapes with.
+const preFoldKnowledge = 25
+
+// readForward names a preFoldKnowledge manifest KnowledgeAPIVersion.
+// compat(until: the next release): every worktree shares one cache dir,
+// and a binary built before the rename keeps writing the integer.
+func (m *manifest) readForward() {
+	if m.APIVersion == "" && m.PreFold == preFoldKnowledge {
+		m.APIVersion = types.KnowledgeAPIVersion
+	}
+	m.PreFold = 0
+}
+
 func (s *Store) readManifestOrNil() *manifest {
 	b, err := os.ReadFile(s.manifestPath())
 	if err != nil {
@@ -978,6 +995,7 @@ func (s *Store) readManifestOrNil() *manifest {
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil // a corrupt manifest is treated as absent; a full rebuild follows
 	}
+	m.readForward()
 	if m.APIVersion != types.KnowledgeAPIVersion {
 		return nil // schema bump invalidates the whole store
 	}
@@ -1147,6 +1165,7 @@ func ShardKeys(manifestJSON []byte) (map[string]string, error) {
 	if err := json.Unmarshal(manifestJSON, &m); err != nil {
 		return nil, fmt.Errorf("knowledge: decode store manifest: %w", err)
 	}
+	m.readForward() // compat: see manifest.readForward.
 	if m.APIVersion != types.KnowledgeAPIVersion {
 		return nil, fmt.Errorf("knowledge: store manifest is %q, this binary reads %s", m.APIVersion, types.KnowledgeAPIVersion)
 	}

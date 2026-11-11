@@ -22,6 +22,11 @@ import (
 // another layout is reported rather than misread.
 const ToolRowsVersion types.APIVersion = "magus.tool-rows/v1alpha1"
 
+// preFoldToolRows is the version file an older magus wrote for
+// ToolRowsVersion's layout. compat(until: the next release): a harness
+// installed before the rename keeps its rows until it is reinstalled.
+const preFoldToolRows types.APIVersion = "1"
+
 // ModelFacts is what the guard prices and tiers a call by: the model rows the harness
 // publishes through mgs_listModels, and the workspace's model-tier declaration, nil when it
 // declares none or turned tiers off.
@@ -172,7 +177,11 @@ func readToolRows(root, dir string) ToolRows {
 		rows.Err = fmt.Errorf("no tool rows at %s, %s: %w", dir, reinstall, err)
 		return rows
 	}
-	if err := ToolRowsVersion.Refuse("the tool rows at "+dir, types.APIVersion(strings.TrimSpace(string(version))), reinstall); err != nil {
+	got := types.APIVersion(strings.TrimSpace(string(version)))
+	if got == preFoldToolRows {
+		got = ToolRowsVersion
+	}
+	if err := ToolRowsVersion.Refuse("the tool rows at "+dir, got, reinstall); err != nil {
 		rows.Err = err
 		return rows
 	}

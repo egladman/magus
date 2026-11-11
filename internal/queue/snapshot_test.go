@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/queue/types"
@@ -54,6 +55,47 @@ func TestSnapshotRefusesAnotherSchema(t *testing.T) {
 
 	_, _, err = NewestSnapshot(root)
 	require.ErrorContains(t, err, `document is "mergequeue.snapshot/v2", want "mergequeue.snapshot/v1alpha1"`)
+}
+
+type PreFoldSnapshotSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestPreFoldSnapshotSuite(t *testing.T) {
+	suite.Run(t, new(PreFoldSnapshotSuite))
+}
+
+func (s *PreFoldSnapshotSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	dir, err := snapshotDir(s.root)
+	s.Require().NoError(err)
+	s.Require().NoError(os.MkdirAll(dir, 0o755))
+	older := `{"schema":"mergequeue.snapshot/v1","fetched":{"provider":"github","base":"main","at":200},` +
+		`"changes":{"schema":"mergequeue.changes/v1","base":"main","changes":[]},` +
+		`"plan":{"schema":"mergequeue.plan/v1","base":"main","verdicts":[{"schema":"mergequeue.verdict/v1"}]}}`
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, snapshotName("main")), []byte(older), 0o644))
+}
+
+func (s *PreFoldSnapshotSuite) TestReadsAsV1alpha1() {
+	got, ok, err := NewestSnapshot(s.root)
+	s.Require().NoError(err)
+	s.Require().True(ok)
+	s.Equal(SchemaSnapshot, got.Schema)
+	s.Equal(types.SchemaChanges, got.Changes.Schema)
+	s.Require().NotNil(got.Plan)
+	s.Equal(types.SchemaPlan, got.Plan.Schema)
+	s.Require().Len(got.Plan.Verdicts, 1)
+	s.Equal(types.SchemaVerdict, got.Plan.Verdicts[0].Schema)
+}
+
+func (s *PreFoldSnapshotSuite) TestRewriteWritesTheNewNames() {
+	s.Require().NoError(RecordPlan(s.root, types.Plan{Schema: types.SchemaPlan, Base: "main"}))
+	dir, err := snapshotDir(s.root)
+	s.Require().NoError(err)
+	b, err := os.ReadFile(filepath.Join(dir, snapshotName("main")))
+	s.Require().NoError(err)
+	s.NotContains(string(b), `/v1"`)
 }
 
 // A plan lands on its base's snapshot and nowhere else: without the changes there is

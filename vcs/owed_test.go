@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/libs/testkit"
 )
@@ -62,6 +63,39 @@ func TestOwedRegenerationRejectsUnknownSchema(t *testing.T) {
 
 	_, err = OwedRegenerations(t.Context(), dir)
 	require.ErrorContains(t, err, "is magus.owed/v1alpha99, newer than the magus.owed/v1alpha1 this magus reads")
+}
+
+type PreFoldOwedSuite struct {
+	suite.Suite
+	dir, path string
+}
+
+func TestPreFoldOwedSuite(t *testing.T) {
+	suite.Run(t, new(PreFoldOwedSuite))
+}
+
+func (s *PreFoldOwedSuite) SetupTest() {
+	s.dir = testkit.NewRepository(s.T(), map[string]string{"a.txt": "a\n"}).Root()
+	path, err := OwedRegenerationPath(s.T().Context(), s.dir)
+	s.Require().NoError(err)
+	s.path = path
+	older := `{"schema_version": 1, "owed": [{"project": ".", "target": "generate", "paths": ["gen/a.md"]}]}`
+	s.Require().NoError(os.WriteFile(path, []byte(older), 0o644))
+}
+
+func (s *PreFoldOwedSuite) TestReadsSchemaVersionOneAsV1alpha1() {
+	got, err := OwedRegenerations(s.T().Context(), s.dir)
+	s.Require().NoError(err)
+	s.Equal([]OwedRegeneration{{Project: ".", Target: "generate", Paths: []string{"gen/a.md"}}}, got)
+}
+
+func (s *PreFoldOwedSuite) TestRewriteWritesOnlyTheAPIVersion() {
+	_, err := RecordOwedRegeneration(s.T().Context(), s.dir, OwedRegeneration{Project: "docs", Target: "generate", Paths: []string{"x"}})
+	s.Require().NoError(err)
+	b, err := os.ReadFile(s.path)
+	s.Require().NoError(err)
+	s.Contains(string(b), `"api_version": "magus.owed/v1alpha1"`)
+	s.NotContains(string(b), "schema_version")
 }
 
 // TestOwedRegenerationOutsideARepository is the backend without hooks: nothing is

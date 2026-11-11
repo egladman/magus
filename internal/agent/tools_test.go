@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/types"
 )
@@ -76,6 +77,27 @@ func TestReadToolRowsReadsBackWhatFilesWrote(t *testing.T) {
 	assert.Equal(t, types.ToolRuns, rows.Capability("Shell"))
 	assert.Equal(t, types.ToolNetwork, rows.Capability("Browse"))
 	assert.Empty(t, rows.Capability("Stranger"))
+}
+
+type PreFoldToolRowsSuite struct{ suite.Suite }
+
+func TestPreFoldToolRowsSuite(t *testing.T) {
+	suite.Run(t, new(PreFoldToolRowsSuite))
+}
+
+func (s *PreFoldToolRowsSuite) TestReadsVersionOneRows() {
+	root := s.T().TempDir()
+	files := ToolFiles(types.HarnessTools{Dir: "tools", Rows: shellRow()}, nil)
+	for i, f := range files {
+		if path.Base(f.Path) == types.ToolRowsVersionFile {
+			files[i].Content = "1\n"
+		}
+	}
+	writeToolFiles(s.T(), root, files)
+
+	rows := readToolRows(root, "tools")
+	s.Require().NoError(rows.Err)
+	s.Equal(types.ToolRuns, rows.Capability("Shell"))
 }
 
 func testModelFacts(t testing.TB) *ModelFacts {

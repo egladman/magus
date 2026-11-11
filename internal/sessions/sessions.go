@@ -73,16 +73,36 @@ import (
 const APIVersion types.APIVersion = "magus.sessions/v1alpha1"
 
 // olderVersion reports whether line is a record stamped older than
-// APIVersion, an integer from an older magus included.
+// APIVersion, an integer from an older magus included, but for
+// preFoldVersion.
 func olderVersion(line []byte) bool {
 	var stamp struct {
 		V json.RawMessage `json:"v"`
 	}
-	if json.Unmarshal(line, &stamp) != nil || stamp.V == nil {
+	if json.Unmarshal(line, &stamp) != nil || stamp.V == nil || string(stamp.V) == preFoldVersion {
 		return false
 	}
 	var v types.APIVersion
 	return json.Unmarshal(stamp.V, &v) != nil || v.Compare(APIVersion) < 0
+}
+
+// preFoldVersion is the integer an older magus stamped APIVersion's
+// records with. compat(until: the next release): every worktree appends
+// to one store, and a binary built before the rename keeps writing it.
+const preFoldVersion = "2"
+
+// compat: see preFoldVersion. An older magus marshaled Record with v
+// first, so the prefix is the whole test.
+var preFoldPrefix = []byte(`{"v":` + preFoldVersion + `,`)
+
+// readForward is line with a preFoldVersion stamp named APIVersion.
+// compat: see preFoldVersion.
+func readForward(line []byte) []byte {
+	rest, ok := bytes.CutPrefix(line, preFoldPrefix)
+	if !ok {
+		return line
+	}
+	return slices.Concat([]byte(`{"v":"`+string(APIVersion)+`",`), rest)
 }
 
 // Kinds of fact an invocation records. A reader must tolerate a kind it does not know:
@@ -461,7 +481,7 @@ func readFile(path string) (records []Record, skipped, legacy int, vanished bool
 			// for: with the tail invisible, no dispose is ever found and every request in
 			// the file re-opens forever.
 			skipped++
-		} else if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 {
+		} else if trimmed := readForward(bytes.TrimSpace(line)); len(trimmed) > 0 {
 			var rec Record
 			switch {
 			case olderVersion(trimmed):

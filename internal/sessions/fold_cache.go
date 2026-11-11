@@ -22,7 +22,7 @@ func foldCachePath(dir, kind string) string {
 
 // foldCacheFormat changes whenever the cached shape or what decides an entry's validity
 // does, so an older cache is refolded rather than read under a new meaning.
-const foldCacheFormat = 1
+const foldCacheFormat = 2
 
 type foldCache struct {
 	Format int                  `json:"format"`

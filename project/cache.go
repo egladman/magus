@@ -15,9 +15,27 @@ const cacheAPIVersion types.APIVersion = "magus.workspace-cache/v1alpha1"
 const wsCacheFile = ".magus/workspace.cache.json"
 
 type wsCache struct {
-	APIVersion types.APIVersion         `json:"v"`
+	APIVersion cacheStamp               `json:"v"`
 	Projects   map[string]cachedProject `json:"projects"`
 	DirMtimes  map[string]int64         `json:"dir_mtimes"`
+}
+
+// cacheStamp is wsCache's version, reading the 1 an older magus wrote as
+// cacheAPIVersion. compat(until: the next release): every worktree's
+// binary rewrites the cache, and refusing the other's means a full walk.
+type cacheStamp types.APIVersion
+
+func (s *cacheStamp) UnmarshalJSON(b []byte) error {
+	if string(b) == "1" {
+		*s = cacheStamp(cacheAPIVersion)
+		return nil
+	}
+	var v types.APIVersion
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	*s = cacheStamp(v)
+	return nil
 }
 
 type cachedProject struct {
@@ -35,7 +53,7 @@ func loadWSCache(root string) (*wsCache, bool) {
 	if err := json.Unmarshal(data, &c); err != nil {
 		return nil, false
 	}
-	if c.APIVersion != cacheAPIVersion {
+	if c.APIVersion != cacheStamp(cacheAPIVersion) {
 		return nil, false
 	}
 	return &c, true
@@ -65,7 +83,7 @@ func saveWSCache(root string, ws *types.Workspace, dirMtimes map[string]int64) {
 		}
 	}
 	c := wsCache{
-		APIVersion: cacheAPIVersion,
+		APIVersion: cacheStamp(cacheAPIVersion),
 		Projects:   projects,
 		DirMtimes:  dirMtimes,
 	}

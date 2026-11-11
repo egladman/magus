@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestAppendReadRoundTrip(t *testing.T) {
@@ -330,6 +331,38 @@ func TestReadAllCountsEveryUnusableLine(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, fold.Records, 1)
 	assert.Equal(t, 3, fold.Skipped)
+}
+
+type PreFoldRecordSuite struct {
+	suite.Suite
+	fold Fold
+}
+
+func TestPreFoldRecordSuite(t *testing.T) {
+	suite.Run(t, new(PreFoldRecordSuite))
+}
+
+func (s *PreFoldRecordSuite) SetupTest() {
+	dir := s.T().TempDir()
+	body := strings.Join([]string{
+		`{"v":2,"invocation":"sess1","seq":1,"kind":"invocation_start","ts":10,"payload":{"workspace":"/repo"}}`,
+		`{"v":1,"session":"old","seq":1,"kind":"invocation_start","ts":5}`,
+	}, "\n")
+	s.Require().NoError(os.WriteFile(filepath.Join(dir, "sess1.jsonl"), []byte(body+"\n"), 0o644))
+	fold, err := ReadAll(dir)
+	s.Require().NoError(err)
+	s.fold = fold
+}
+
+func (s *PreFoldRecordSuite) TestReadsAVersionTwoRecordAsV1alpha1() {
+	s.Require().Len(s.fold.Records, 1)
+	s.Equal(APIVersion, s.fold.Records[0].V)
+	s.Equal("sess1", s.fold.Records[0].Invocation)
+	s.Zero(s.fold.Skipped)
+}
+
+func (s *PreFoldRecordSuite) TestStillCountsAVersionOneRecordAsLegacy() {
+	s.Equal(1, s.fold.Legacy)
 }
 
 // An unknown kind and an unknown payload field are what a NEWER magus writes. An
