@@ -299,6 +299,24 @@ export fun recovers(command: str, root: str) > bool {
     return isBootstrap(command) or (line != "" and command.trim() == line);
 }
 
+// exitsJob is a `magus job exit`, the call a worker files its result through.
+// It writes no tracked file, and refusing it leaves the row with no word on
+// why its holder stopped.
+export fun exitsJob(command: str) > bool {
+    final words = command.trim().split(" ");
+    if (words.len() < 3 or words[1] != "job" or words[2] != "exit") { return false; }
+    return words[0] == "magus" or words[0].endsWith("/magus");
+}
+
+test "a worker's job exit runs while no magus judges, and nothing else does" {
+    std\assert(exitsJob("./magus job exit rename-x --stdin"), message: "the checkout's binary");
+    std\assert(exitsJob("magus job exit rename-x"), message: "the binary on PATH");
+    std\assert(exitsJob("/abs/path/magus job exit rename-x --stdin"), message: "an absolute binary");
+    std\assert(!exitsJob("./magus job fork rename-x"), message: "a fork changes the store's plan");
+    std\assert(!exitsJob("./magus run test ."), message: "a run");
+    std\assert(!exitsJob("notmagus job exit x"), message: "another binary");
+}
+
 // recoveryFix names that line, or the install page outside a magus checkout.
 export fun recoveryFix(root: str) > str {
     final line = recoveryLine(root);

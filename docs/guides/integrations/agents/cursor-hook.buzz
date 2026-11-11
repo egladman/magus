@@ -607,7 +607,7 @@ fun gateReply(v: Verdict, eventName: str, command: str) > str {
         return blockedAsk(v.reason, command: command);
     }
     if (v.decision == "pass" or v.decision == "advise") { return ALLOW; }
-    if (v.decision == UNJUDGED and hook\recovers(command, root: v.root)) {
+    if (v.decision == UNJUDGED and (hook\recovers(command, root: v.root) or hook\exitsJob(command))) {
         return json\stringify({
             "permission": "allow",
             "user_message": hook\firstLine(v.reason),

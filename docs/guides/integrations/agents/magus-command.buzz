@@ -190,6 +190,10 @@ final PERMISSION_UNKNOWN = `{{else}}{"hookSpecificOutput":{"hookEventName":"Perm
 // call has no magus to ask, and a read may pass it.
 final READ_TOOLS = ["Read", "NotebookRead", "Glob", "Grep", "LS"];
 
+// A subagent files its report through this tool. Refusing it while no magus
+// judges leaves the parent with no word on why the child stopped.
+final HANDBACK_TOOLS = ["SubagentHandback"];
+
 // Nothing arrived, so no rule was ever offered the call. `magus shell`
 // denies an unreadable payload too and leaves this case to its caller.
 final UNREADABLE_DEFAULT = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not read this call from the host, so nothing was judged. A payload that arrives truncated reads exactly like an empty one, which is why this is blocked rather than cleared. Retry the call."}}`;
@@ -451,7 +455,8 @@ fun unjudgedReply(eventName: str, toolName: str, command: str, verdict: str, fix
         return json\stringify({"systemMessage": text,
             "hookSpecificOutput": {"hookEventName": eventName}}) catch PERMISSION_NO_DECISION;
     }
-    if (eventName == "PostToolUse" or READ_TOOLS.indexOf(toolName) != null or hook\recovers(command, root: root)) {
+    if (eventName == "PostToolUse" or READ_TOOLS.indexOf(toolName) != null or HANDBACK_TOOLS.indexOf(toolName) != null
+        or hook\recovers(command, root: root) or hook\exitsJob(command)) {
         final named = if (eventName == "PostToolUse") eventName else "PreToolUse";
         return json\stringify({"systemMessage": text,
             "hookSpecificOutput": {"hookEventName": named, "additionalContext": text}}) catch "";
