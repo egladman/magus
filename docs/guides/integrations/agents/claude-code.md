@@ -666,10 +666,15 @@ It adds these to a session:
   name gives no shade, such as `auto`, the rows stay untinted and the tab says so.
   Claude Code's own task list cannot be styled by a mod, so only this pane is tinted.
 - A warning or a held prompt when you submit after the prompt cache has expired,
-  priced from a rates table you can replace through the mod's `ratesFile` setting.
-  There is no countdown: the moment that matters is the submit.
+  priced from magus's model prices: the `models` file `magus agent harness install`
+  writes to `.claude/magus/tools/`, from the harness spell's `mgs_listModels`, the
+  table the guard prices with too. Without that file nothing is priced, and the
+  band above the prompt names the install that writes it. There is no countdown:
+  the moment that matters is the submit.
 - Cost gates, each priced from the same table. The cache and price step gates are
-  `off`, `warn` (a toast) or `confirm`, `warn` by default. The price step gate acts
+  `off`, `warn` (a toast) or `confirm`, `confirm` by default. Each gate speaks once per response, so a second
+  submit before the next response, queued mid-turn or sent after a hold, goes
+  through without a word. The price step gate acts
   when the context the next prompt re-sends is at or within `priceStepMarginTokens`
   of a model's prompt-size price step, past which every request costs more, and
   `confirm` holds the prompt once and suggests `/compact`. The subagent gate is `off`
@@ -677,11 +682,18 @@ It adds these to a session:
   `spawnMaxInputUsdPerMTok` (2 by default, Sonnet's input rate; 0 turns it off) and
   refuses the spawn before it starts, pointing to the read-only `magus-scout` agent
   or `model: haiku`. The budget gate acts once the session's spend passes
-  `sessionBudgetUsd` (0 by default, which is off), and `confirm` holds the prompt
-  once. A subagent's token count is shown, never flagged: context size is not billed
+  `sessionBudgetUsd` (0 by default, which is off), and holds the prompt once by
+  default (`budgetGate`: `off`, `warn` or `confirm`). A subagent's token count is shown, never flagged: context size is not billed
   cost.
-- The session's spend, main conversation and subagents together, at the top of the
-  pane.
+- What the session and the day have cost, on the status line:
+  `≈$1.75 session · ≈$12.40 today`. The session figure is Claude Code's own
+  total, the one `/cost` shows; the day adds each session's growth to a total in
+  the mod's store, so a session past midnight splits across both days. Where
+  Claude Code reports no total, the mod's sum at magus's prices stands in,
+  marked `(magus prices)`. Every figure is an estimate at list price, never the
+  bill.
+  The pane shows the same total with the mod's split by main conversation and
+  subagents.
 - The machine build budget, read from `magus server status -o json` every 15 seconds and
   around each Bash call that runs magus: each holder's pid, target, slots, memory,
   age and checkout, the callers waiting for a seat, and the
@@ -699,11 +711,19 @@ It adds these to a session:
   command that prints it. Pressing one opens a pane with that command's output and a
   Copy command button. Where the host opens links itself and no press reaches the
   mod, the link opens the page on [output refs](../../../concepts/cache/output-refs.md).
+  When that output is JSON, the pane draws it as the tree below.
+- A tree in place of every tool result whose text is JSON or JSON Lines: each
+  object and array starts closed and opens on a press, keys, brackets and value
+  types keep JSON's colors, and Raw shows the text. A record's `api_version`,
+  `kind` and name head its row while it is closed. JSON Lines draws one row per
+  record. The text around one JSON value, such as `Exit code 1` before it or a
+  command's summary after it, still draws. The terminal draws it in the result
+  block; desktop, VS Code and mobile draw it inside the call's row.
 
 Every threshold is a setting in `/config`: `cacheGate`, `gateMinTokens`, `cacheTtl`,
 `priceStepGate`, `priceStepMarginTokens`, `spawnGate`, `spawnMaxInputUsdPerMTok`,
-`sessionBudgetUsd`, `budgetGate` and `ratesFile`. A `spawnGate` of `warn`, and the
-settings `cacheWarnMinutes`, `subagentTokenBudget` and `ratesStaleDays`, are gone.
+`sessionBudgetUsd` and `budgetGate`. A `spawnGate` of `warn`, and the settings
+`ratesFile`, `cacheWarnMinutes`, `subagentTokenBudget` and `ratesStaleDays`, are gone.
 The mod reads a spawn's model from the call, then
 the agent's definition file under `.claude/agents`, then
 `CLAUDE_CODE_SUBAGENT_MODEL`, then the session; a built-in or plugin agent it cannot

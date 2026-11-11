@@ -2,6 +2,9 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { dayKey, MODELS_FILE } from '../hooks/cost'
+import { MODELS } from './models'
+
 const ROOT = '/w'
 const SOCK = '/c/magus/run/server.sock'
 const TOKEN = 'f00d'
@@ -54,6 +57,10 @@ type Opts = {
   context?: number
   // The model the engine resolves a spawn to; haiku unless a test needs another.
   spawnedModel?: string
+  // Claude Code's session total, as /cost has it; none unless a test sets it.
+  costUsd?: () => number | undefined
+  // No models file: magus agent harness install has not run.
+  noModels?: boolean
   run?: (argv: readonly string[]) => { exitCode: number; stdout: string } | undefined
 }
 
@@ -63,12 +70,20 @@ const ok = (exitCode: number, stdout: string) => ({
 
 function engine(on: On, opts: Opts = {}): Seen {
   const seen: Seen = { statuses: [], toasts: [], fills: [] }
+  const files: Record<string, string> = {
+    ...(opts.noModels ? {} : { [`${ROOT}/${MODELS_FILE}`]: MODELS }),
+    ...opts.files,
+  }
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.root', () => ({ value: ROOT }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
-  on('session.usage', () => ({
-    value: { startedAt: 0, context: { tokens: opts.context ?? 182_000, window: 1_000_000 }, rateLimits: [] } as never,
-  }))
+  on('session.usage', () => {
+    const usd = opts.costUsd?.()
+    const context = { tokens: opts.context ?? 182_000, window: 1_000_000 }
+    return {
+      value: { startedAt: 0, context, rateLimits: [], ...(usd === undefined ? {} : { cost: { usd } }) } as never,
+    }
+  })
   on('env.get', ($, e) => ({ value: opts.env?.[e.name] }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
@@ -90,15 +105,18 @@ function engine(on: On, opts: Opts = {}): Seen {
   on('agent.spawn', () => ({ model: opts.spawnedModel ?? 'claude-haiku-5-5', agentId: 'ag1' }))
   on('fs.exists', ($, e) => ({
     value:
-      opts.workspace === true &&
-      [`${ROOT}/magusfile.buzz`, `${ROOT}/go.mod`, ...(opts.noLocalBinary ? [] : [`${ROOT}/magus`])].includes(e.path),
+      e.path in files ||
+      (opts.workspace === true &&
+        [`${ROOT}/magusfile.buzz`, `${ROOT}/go.mod`, ...(opts.noLocalBinary ? [] : [`${ROOT}/magus`])].includes(
+          e.path,
+        )),
   }))
   on(
     'ui.copy',
     () => ({ value: opts.noClipboard ? { isCopied: false, reason: 'no-clipboard' } : { isCopied: true } }) as never,
   )
   on('fs.read', ($, e) => {
-    const text = opts.files?.[e.path]
+    const text = files[e.path]
     if (text !== undefined) return { value: text }
     if (e.path === `${ROOT}/go.mod`) return { value: 'module github.com/egladman/magus\n' }
     if (opts.serverUp && e.path === `${SOCK}.token`) return { value: `${TOKEN}\n` }
@@ -162,7 +180,7 @@ const usage = (
 const main = (u: ReturnType<typeof usage>) =>
   ({ answer: 'ok', durationMs: 1000, isAborted: false, turnId: 't', reason: 'answer', usage: u }) as never
 
-test('the status line and the band stay empty while a cache counts down', async ($, on) => {
+test('the status line shows only cost and the band stays empty while a cache counts down', async ($, on) => {
   const clock = mock.clock(on)
   await clock.set(T0)
   const seen = engine(on)
@@ -170,23 +188,79 @@ test('the status line and the band stay empty while a cache counts down', async 
   await $.turn.complete(main(usage({ write: 182_000 })))
   await clock.advance(4 * MIN)
   await clock.settle()
-  expect(seen.statuses.at(-1)).toBeUndefined()
+  expect(seen.statuses.at(-1)).toMatch(/^≈\$\d+\.\d\d session \(magus prices\)$/)
   const ui = await $.ui.mount(BAND)
   expect(await ui.find({ type: 'Text', text: 'engine' })).toBeDefined()
 })
 
-test('the warn gate toasts at submit after expiry and still sends', async ($, on) => {
+test("the status line shows Claude Code's session total and today's, and the day adds each delta", async ($, on) => {
   const clock = mock.clock(on)
   await clock.set(T0)
-  const seen = engine(on)
+  let usd = 1.25
+  // Another session already spent $10 today.
+  mock.store(on, { [dayKey(T0)]: 10 })
+  const seen = engine(on, { costUsd: () => usd })
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+
+  await $.turn.complete(main(usage({ write: 182_000 })))
+  expect(seen.statuses.at(-1)).toBe('≈$1.25 session · ≈$11.25 today')
+
+  // The day is read back from the store, so $12 proves $11.25 was written.
+  usd = 2
+  await $.turn.complete(main(usage({ read: 182_000 })))
+  expect(seen.statuses.at(-1)).toBe('≈$2.00 session · ≈$12.00 today')
+})
+
+test(
+  "the budget gate counts Claude Code's total where it reports one",
+  { options: { sessionBudgetUsd: 1 } },
+  async ($, on) => {
+    const clock = mock.clock(on)
+    await clock.set(T0)
+    engine(on, { costUsd: () => 1.5 })
+    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+    await $.turn.complete(main(usage({ read: 1_000 })))
+
+    const held = await $.prompt.submit({ text: 'go on' } as never)
+    expect(held).toMatchObject({ drop: expect.stringMatching(/Session spend \$1\.50 has passed your \$1\.00 budget/) })
+  },
+)
+
+test(
+  'the warn gate toasts once at submit after expiry and still sends; a second submit before the next response says nothing',
+  { options: { cacheGate: 'warn' } },
+  async ($, on) => {
+    const clock = mock.clock(on)
+    await clock.set(T0)
+    const seen = engine(on)
+    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+    await $.turn.complete(main(usage({ write: 182_000 })))
+    await clock.advance(6 * MIN)
+    await clock.settle()
+
+    const sent = await $.prompt.submit({ text: 'next step' } as never)
+    expect(sent).toMatchObject({ text: 'next step' })
+    expect(seen.toasts.at(-1)).toMatch(/Cache expired 1m ago/)
+    const toasts = seen.toasts.length
+
+    const queued = await $.prompt.submit({ text: 'one more thing' } as never)
+    expect(queued).toMatchObject({ text: 'one more thing' })
+    expect(seen.toasts).toHaveLength(toasts)
+  },
+)
+
+test('the cache gate holds by default', async ($, on) => {
+  const clock = mock.clock(on)
+  await clock.set(T0)
+  engine(on)
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
   await $.turn.complete(main(usage({ write: 182_000 })))
   await clock.advance(6 * MIN)
   await clock.settle()
 
-  const sent = await $.prompt.submit({ text: 'next step' } as never)
-  expect(sent).toMatchObject({ text: 'next step' })
-  expect(seen.toasts.at(-1)).toMatch(/Cache expired 1m ago/)
+  expect(await $.prompt.submit({ text: 'next step' } as never)).toMatchObject({
+    drop: expect.stringMatching(/^Held: /),
+  })
 })
 
 test(
@@ -229,21 +303,25 @@ test(
   },
 )
 
-test('a cache hit after a 20-minute gap teaches the mod the TTL is an hour', async ($, on) => {
-  const clock = mock.clock(on)
-  await clock.set(T0)
-  const seen = engine(on)
-  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
-  await $.turn.complete(main(usage({ write: 182_000 })))
-  await clock.advance(20 * MIN)
-  await clock.settle()
+test(
+  'a cache hit after a 20-minute gap teaches the mod the TTL is an hour',
+  { options: { cacheGate: 'warn' } },
+  async ($, on) => {
+    const clock = mock.clock(on)
+    await clock.set(T0)
+    const seen = engine(on)
+    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+    await $.turn.complete(main(usage({ write: 182_000 })))
+    await clock.advance(20 * MIN)
+    await clock.settle()
 
-  await $.turn.complete(main(usage({ read: 182_000, write: 300 })))
-  await clock.advance(61 * MIN)
-  await clock.settle()
-  await $.prompt.submit({ text: 'late' } as never)
-  expect(seen.toasts.at(-1)).toMatch(/Cache expired 1m ago.*TTL 1h, observed/)
-})
+    await $.turn.complete(main(usage({ read: 182_000, write: 300 })))
+    await clock.advance(61 * MIN)
+    await clock.settle()
+    await $.prompt.submit({ text: 'late' } as never)
+    expect(seen.toasts.at(-1)).toMatch(/Cache expired 1m ago.*TTL 1h, observed/)
+  },
+)
 
 test('a subagent shows its cost in the pane and raises no toast', async ($, on) => {
   const clock = mock.clock(on)
@@ -282,20 +360,30 @@ test('a subagent shows its cost in the pane and raises no toast', async ($, on) 
   expect(await ui.find({ type: 'Text', text: /over .* budget/ })).toBeUndefined()
 })
 
-test(
-  'a rates file that does not parse falls back to the built-in rates and says so',
-  { options: { ratesFile: '/r.json' } },
-  async ($, on) => {
-    const clock = mock.clock(on)
-    await clock.set(T0)
-    engine(on, { files: { '/r.json': '{"models": "nope"}' } })
-    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
-    const ui = await $.ui.mount(BAND)
-    expect(
-      await ui.find({ type: 'Text', text: /\/r\.json: rates: cacheWriteMultiplier.*using the built-in rates/ }),
-    ).toBeDefined()
-  },
-)
+test('a models file that does not parse prices nothing and names its line in the band', async ($, on) => {
+  const clock = mock.clock(on)
+  await clock.set(T0)
+  engine(on, { files: { [`${ROOT}/${MODELS_FILE}`]: '{"id":"claude-x","input":"four","output":20}' } })
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount(BAND)
+  expect(
+    await ui.find({ type: 'Text', text: /no model prices: .*models: line 1 \(claude-x\): needs numeric input/ }),
+  ).toBeDefined()
+})
+
+test('no models file prices nothing and the band names the install that writes it', async ($, on) => {
+  const clock = mock.clock(on)
+  await clock.set(T0)
+  const seen = engine(on, { noModels: true })
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount(BAND)
+  expect(
+    await ui.find({ type: 'Text', text: /models is missing; run `\.\/magus agent harness install`/ }),
+  ).toBeDefined()
+
+  await $.turn.complete(main(usage({ write: 182_000 })))
+  expect(seen.statuses.at(-1)).toBe('≈$0.00+ session (magus prices)')
+})
 
 test('/magus reads ListJobs over the server socket and opens a job on press', async ($, on) => {
   const clock = mock.clock(on)
@@ -329,7 +417,7 @@ test('a server that is down shows in the status line and not in the band', async
   expect(seen.statuses.at(-1)).toBe('⚠ server down')
 
   await $.turn.complete(main(usage({ write: 182_000 })))
-  expect(seen.statuses.at(-1)).toBe('⚠ server down')
+  expect(seen.statuses.at(-1)).toMatch(/^⚠ server down · ≈\$\d+\.\d\d session \(magus prices\)$/)
   const ui = await $.ui.mount(BAND)
   expect(await ui.find({ type: 'Text', text: /No magus server/ })).toBeUndefined()
   expect(await ui.find({ type: 'Button', text: /Hide|Recheck/ })).toBeUndefined()
@@ -337,20 +425,34 @@ test('a server that is down shows in the status line and not in the band', async
 
 const HAIKU = 'claude-haiku-5-5'
 
-test('the price step gate warns past the step by default and still sends', async ($, on) => {
+test('the price step gate holds past the step by default', async ($, on) => {
   const clock = mock.clock(on)
   await clock.set(T0)
-  const seen = engine(on)
+  engine(on)
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
   await $.turn.complete(main(usage({ write: 182_000 }, HAIKU)))
 
-  expect(await $.prompt.submit({ text: 'go on' } as never)).toMatchObject({ text: 'go on' })
-  expect(seen.toasts).toEqual([
-    'Context is 182K tokens, past the 100K step: every request on claude-haiku-5-5 now pays $0.50 per MTok input and $2.50 output, up from $0.10 and $0.50. Consider /compact.',
-  ])
+  expect(await $.prompt.submit({ text: 'go on' } as never)).toMatchObject({ drop: expect.stringMatching(/^Held: /) })
 })
 
-test('the price step gate speaks inside its margin', async ($, on) => {
+test(
+  'the warn price step gate toasts past the step and still sends',
+  { options: { priceStepGate: 'warn' } },
+  async ($, on) => {
+    const clock = mock.clock(on)
+    await clock.set(T0)
+    const seen = engine(on)
+    await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+    await $.turn.complete(main(usage({ write: 182_000 }, HAIKU)))
+
+    expect(await $.prompt.submit({ text: 'go on' } as never)).toMatchObject({ text: 'go on' })
+    expect(seen.toasts).toEqual([
+      'Context is 182K tokens, past the 100K step: every request on claude-haiku-5-5 now pays $0.50 per MTok input and $2.50 output, up from $0.10 and $0.50. Consider /compact.',
+    ])
+  },
+)
+
+test('the price step gate speaks inside its margin', { options: { priceStepGate: 'warn' } }, async ($, on) => {
   const clock = mock.clock(on)
   await clock.set(T0)
   const seen = engine(on, { context: 95_000 })
@@ -449,14 +551,17 @@ test(
 
     const held = await $.prompt.submit({ text: 'over budget' } as never)
     expect(held).toMatchObject({
-      drop: 'Held: Session spend $1.52 has passed your $1.00 budget (main $0.92, subagents $0.60). Submit again to send it.',
+      drop: "Held: Session spend $1.52 has passed your $1.00 budget (main $0.92, subagents $0.60 at magus's prices). Submit again to send it.",
     })
     expect(await $.prompt.submit({ text: 'over budget' } as never)).toMatchObject({ text: 'over budget' })
 
     await $.command.run(RUN_MAGUS)
     const ui = await $.ui.mount(PANE)
     expect(
-      await ui.find({ type: 'Text', text: /Session spend \$1\.52\/\$1\.00 \(main \$0\.92, subagents \$0\.60\)/ }),
+      await ui.find({
+        type: 'Text',
+        text: /Session spend \$1\.52\/\$1\.00 \(main \$0\.92, subagents \$0\.60 at magus's prices\)/,
+      }),
     ).toBeDefined()
   },
 )

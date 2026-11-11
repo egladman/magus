@@ -19,12 +19,16 @@ import { capacityText, holderText, parseBudget, refusalText, runsMagus, waiterTe
 import {
   budgetNotice,
   cacheNotice,
+  costDelta,
+  costStatus,
+  dayKey,
   formatTokens,
   formatUsd,
   frontmatterModel,
   inferTtl,
   overSpawnCap,
-  parseRates,
+  MODELS_FILE,
+  parseModelRows,
   priceStepNotice,
   pricedModel,
   requestUsd,
@@ -38,8 +42,8 @@ import {
 import type { RateTable, Usage } from './cost'
 import { assess, inBand, statusText } from './health'
 import type { BinaryInfo, Probe, ServerInfo } from './health'
+import { registerJsonExplorer } from './json-view'
 import { registerJsonlTables } from './jsonl-view'
-import { DEFAULT_RATES } from './rates'
 import { registerRefLinks } from './refs-view'
 import { MagusError, fail, fromPromise, ok, type Result } from './result'
 import { readSettings } from './settings'
@@ -77,7 +81,14 @@ const THEME = { plugin: 'magus', key: 'theme' } as const
 
 // Module state, rebuilt by register on every load.
 let settings: Settings = readSettings({})
-let rates: RateTable = DEFAULT_RATES
+const NO_RATES: RateTable = {
+  checked: '',
+  source: '',
+  cacheWriteMultiplier: { '5m': 1.25, '1h': 2 },
+  defaultCacheReadMultiplier: 0.1,
+  models: [],
+}
+let rates: RateTable = NO_RATES
 // The TTL Claude Code last reported (on a model switch), which outranks an observation.
 let engineTtl: Ttl | null = null
 let healthInFlight: Promise<void> | null = null
@@ -232,29 +243,35 @@ async function readBudgetOnce($: EngineInterface): Promise<void> {
 
 // ---------- status line ----------
 
-// One entry, labeled with the mod's name: the health issues, or nothing while healthy.
+// One entry, labeled with the mod's name: the health issues, then what the
+// session and the day have cost.
 async function refreshStatus($: EngineInterface): Promise<void> {
   const { value: report = null } = await $.state.get(REPORT)
-  $.ui.status((report ? statusText(report.issues) : undefined) || undefined)
+  const { value: spend = NO_SPEND } = await $.state.get(SPEND)
+  const health = report ? statusText(report.issues) : ''
+  const cost = costStatus(spend, settings.sessionBudgetUsd) ?? ''
+  $.ui.status([health, cost].filter(p => p !== '').join(' · ') || undefined)
 }
 
 // ---------- cost ----------
 
+// The prices come from magus's models file, the one table the guard prices
+// with too. Without it nothing is priced, and the band says so.
 async function loadRates($: EngineInterface): Promise<void> {
-  if (settings.ratesFile === '') {
-    rates = DEFAULT_RATES
-    await $.state.set(RATES_ERROR, null)
-    return
+  rates = NO_RATES
+  const root = await fromPromise($.session.root())
+  if (root.error) return void (await $.state.set(RATES_ERROR, `no model prices: ${root.error.message}`))
+  const path = `${root.value}/${MODELS_FILE}`
+  const exists = await fromPromise($.fs.exists(path))
+  if (!exists.error && !exists.value) {
+    const fix = 'run `./magus agent harness install` to write it'
+    return void (await $.state.set(RATES_ERROR, `no model prices: ${MODELS_FILE} is missing; ${fix}`))
   }
-  const read = await fromPromise($.fs.read(settings.ratesFile))
-  const parsed = read.error ? read : parseRates(read.value)
-  if (!parsed.error) {
-    rates = parsed.value
-    await $.state.set(RATES_ERROR, null)
-    return
-  }
-  rates = DEFAULT_RATES
-  await $.state.set(RATES_ERROR, `${settings.ratesFile}: ${parsed.error.message}; using the built-in rates`)
+  const read = await fromPromise($.fs.read(path))
+  const parsed = read.error ? read : parseModelRows(read.value)
+  if (parsed.error) return void (await $.state.set(RATES_ERROR, `no model prices: ${parsed.error.message}`))
+  rates = parsed.value
+  await $.state.set(RATES_ERROR, null)
 }
 
 function resolveTtl(observed: Ttl | null, previous: CacheState | null): Pick<CacheState, 'ttl' | 'ttlSource'> {
@@ -289,6 +306,30 @@ async function recordMainResponse($: EngineInterface, usage: TurnUsage | undefin
 async function addSpend($: EngineInterface, who: 'mainUsd' | 'agentUsd', usd: number | null): Promise<void> {
   const { value: spend = NO_SPEND } = await $.state.get(SPEND)
   await $.state.set(SPEND, usd === null ? { ...spend, isPartial: true } : { ...spend, [who]: spend[who] + usd })
+  await recordClaudeCost($)
+}
+
+// Reads Claude Code's own session total and adds what it grew by to today's
+// total in the store, so a session past midnight splits across both days.
+// Two sessions writing one day at once can lose one delta; the next adds on.
+async function recordClaudeCost($: EngineInterface): Promise<void> {
+  const usage = await fromPromise($.session.usage())
+  const usd = usage.error ? undefined : usage.value.cost?.usd
+  const { value: spend = NO_SPEND } = await $.state.get(SPEND)
+  if (usd === undefined) {
+    if ((spend.claudeUsd ?? null) !== null) await $.state.set(SPEND, { ...spend, claudeUsd: null })
+    return
+  }
+  const delta = costDelta(spend.claudeUsd ?? null, usd)
+  const key = dayKey(await $.clock.now())
+  const stored = await fromPromise($.store.get(key))
+  const before = typeof stored.value === 'number' ? stored.value : 0
+  const day = before + delta
+  if (delta > 0) {
+    const written = await fromPromise($.store.set(key, day))
+    if (written.error) $.ui.toast(`Today's spend was not saved: ${written.error.message}`)
+  }
+  await $.state.set(SPEND, { ...spend, claudeUsd: usd, dayUsd: day })
 }
 
 async function recordAgentUsage($: EngineInterface, agentId: string, usage: TurnUsage): Promise<void> {
@@ -495,6 +536,7 @@ async function openJob($: EngineInterface, candidates: string[]): Promise<void> 
 
 export const register: Register = (on, options) => {
   settings = readSettings(options)
+  registerJsonExplorer(on)
   registerJsonlTables(on)
   registerRefLinks(on)
 
@@ -587,14 +629,17 @@ export const register: Register = (on, options) => {
       const text = budgetNotice(spend, settings.sessionBudgetUsd)
       if (text) found.push({ mode: settings.budgetGate, text })
     }
+    if (found.length === 0) return next(e)
+    // The gates speak once per response: each reads what that response left, and a
+    // second submit before the next response, queued mid-turn or sent after a hold,
+    // re-caches nothing more.
+    const { value: heldFor = 0 } = await $.state.get(HELD_FOR)
+    if (heldFor === cache.lastResponseAt) return next(e)
+    await $.state.set(HELD_FOR, cache.lastResponseAt)
     for (const g of found) if (g.mode === 'warn') $.ui.toast(g.text)
 
     const holds = found.filter(g => g.mode === 'confirm')
     if (holds.length === 0) return next(e)
-    // One hold per response covers every gate: each reads what that response left.
-    const { value: heldFor = 0 } = await $.state.get(HELD_FOR)
-    if (heldFor === cache.lastResponseAt) return next(e)
-    await $.state.set(HELD_FOR, cache.lastResponseAt)
     const text = e.text
     $.clock.after(0, () => void $.prompt.fill({ text }))
     return { drop: `Held: ${holds.map(g => g.text).join(' ')} Submit again to send it.` }
