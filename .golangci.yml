@@ -177,12 +177,14 @@ linters:
           list-mode: lax
           files:
             - "${base-path}/types/*.go"
+            - "${base-path}/types/agent/*.go"
             - "!$test"
           allow:
             - github.com/egladman/magus/spells$
             - github.com/egladman/magus/libs/diagnostics$
             - github.com/egladman/magus/internal/json$
             - github.com/egladman/magus/types/enum$
+            - github.com/egladman/magus/types/agent$
           deny:
             - pkg: os$
               desc: types is the near-leaf domain package and may not reach the world

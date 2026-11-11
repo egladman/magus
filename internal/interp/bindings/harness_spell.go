@@ -282,7 +282,7 @@ func harnessTierHosts(ctx context.Context, cases, wired []string) (map[string][]
 // shippedTierModels is the model a harness runs for a tier of
 // several rows. It applies only when the workspace maps no tiers.
 var shippedTierModels = map[string]map[string]string{
-	"claude-code": {"principal": "claude-opus-5-5"},
+	"claude-code": {"principal": "claude-opus-5-5"}, //nolint:hostagnostic // keyed by the harness spell's name, the one host with a shipped tier model
 }
 
 // shippedTierModel maps a tier to its shippedTierModels entry.
