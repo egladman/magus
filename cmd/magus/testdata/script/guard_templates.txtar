@@ -1070,6 +1070,57 @@ stdout 'host-chose-this'
 ! stdout 'stale-magus'
 env __MAGUS_FAILED_RESPONSE=
 
+# --- a binary that cannot load the tree never judges: the next one does ------
+#
+# A build older than the workspace's magus.yaml exits on the key it does not know. The
+# glue passes it over for the next candidate, here the magus on PATH, and tells the person
+# once per session which binary it tried, why that one could not load, and which judged.
+
+env __MAGUS_BIN=$WORK/unloadable-magus
+chmod 0755 $WORK/unloadable-magus
+env TMPDIR=$WORK/n-unloadable
+stdin deny-command.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'whole-tree git stash'
+stdout 'tried \S*unloadable-magus, which could not load this tree: \[MGS1040\]'
+stdout 'ci.remote_gate'
+stdout 'fell to \S*magus, which judged this call'
+stdin deny-command.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout 'whole-tree git stash'
+! stdout 'could not load this tree'
+
+env TMPDIR=$WORK/n-unloadable-path
+stdin pass-path.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
+! stdout 'permissionDecision'
+stdout 'tried \S*unloadable-magus, which could not load this tree'
+stdout 'which judged this write'
+
+# A binary that loads the config but not the policy denies under stale-binary. That deny
+# is a guess too. When no binary left can load the tree, none judges: the refusal names
+# each one tried, and only the rebuild it names runs.
+env __MAGUS_BIN=
+env TMPDIR=$WORK/n-none-loads
+stdin unloaded-write.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'no magus it tried can load this tree'
+stdout 'tried \S*magus, which could not load this tree: \S'
+stdout 'no other magus is left to fall to'
+stdout 'go -C \S*/unloaded-ws run -trimpath ./cmd/magus run go-build --no-cache \.'
+# The line names the checkout by absolute path, which only the script knows.
+exec sh -c 'printf "{\"session_id\": \"u1\", \"hook_event_name\": \"PreToolUse\", \"tool_name\": \"Bash\", \"tool_input\": {\"command\": \"GOEXPERIMENT=jsonv2 go -C %s/unloaded-ws run -trimpath ./cmd/magus run go-build --no-cache .\"}, \"cwd\": \"unloaded-ws\"}" "$WORK" > unloaded-recovery.json'
+stdin unloaded-recovery.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
+! stdout 'permissionDecision'
+stdin unloaded-path.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
+stdout '"permissionDecision":"deny"'
+stdout 'no magus it tried can load this tree'
+env __MAGUS_BIN=$WORK/stale-magus
+
 # --- every unjudged call is refused and said, never once per session ---------
 #
 # A refusal is the one reply the caller cannot see past, so the second call in a session
@@ -1599,6 +1650,29 @@ exit 1
 echo 'magus: WARN config: unknown or unexpected keys in config file' >&2
 echo 'magus: unknown subcommand "session"' >&2
 exit 2
+-- unloadable-magus --
+#!/bin/sh
+# Stands in for a build older than the workspace's magus.yaml: it exits on the key it
+# does not know before it judges anything.
+cat > /dev/null
+[ "$1" = version ] && { echo 'magus v0.0.1-unloadable'; exit 0; }
+echo '[MGS1040] magus.yaml has a key this magus does not know:' >&2
+echo '  - ci.remote_gate  (line 3)' >&2
+exit 1
+-- unloaded-ws/go.mod --
+module github.com/egladman/magus
+
+go 1.25
+-- unloaded-ws/magus.yaml --
+a_section_from_a_newer_magus:
+  enabled: true
+-- unloaded-ws/magusfile.buzz --
+import "magus";
+magus\guard.command(judge);
+-- unloaded-write.json --
+{"session_id": "u1", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "touch notes.txt"}, "cwd": "unloaded-ws"}
+-- unloaded-path.json --
+{"session_id": "u1", "hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "unloaded-ws/notes.txt", "content": "x\n"}, "cwd": "unloaded-ws"}
 -- deny-command.json --
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git stash"}}
 -- deny-command-s2.json --
