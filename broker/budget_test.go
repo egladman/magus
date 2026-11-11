@@ -466,7 +466,7 @@ func (s *StrangerQueueSuite) TestAProtocol4ClientIsRefusedAtHello() {
 	r, w := newFrameReader(conn), &frameWriter{w: conn}
 	_, err = r.read()
 	s.Require().NoError(err)
-	s.Require().NoError(w.write(typeHello, 1, hello{Magic: helloMagic, Protocol: 4}))
+	s.Require().NoError(w.write(typeHello, 1, map[string]any{"magic": helloMagic, "protocol": 4}))
 	f, err := r.read()
 	s.Require().NoError(err)
 	var er errorReply

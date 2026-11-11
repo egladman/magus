@@ -772,7 +772,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
 	if req.Message {
 		if req.DryRun {
-			return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+			return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 		}
 		at := hookLocation(ctx, deps)
 		recordMessageTopics(hint.NewGate(at.cacheDir, who.factsKey()), input)
@@ -858,7 +858,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) (judged types.Gu
 			if env.Schedules {
 				timer := gradeScheduledPrompt(hint.NewGate(at.cacheDir, who.factsKey()), hint.NewGate(at.cacheDir, who.callerKey()), who.Transcript, time.Now())
 				if v := deps.grade(timer); v.Deny != "" {
-					return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
+					return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
 				}
 			}
 			v, ok := judgeStop(deps, hint.NewGate(at.cacheDir, who.callerKey()), input, req.HostResumesOnBackgroundFrom, time.Now())

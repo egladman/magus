@@ -277,10 +277,8 @@ type Job struct {
 	Unattributed []*JobUnattributedWrite `protobuf:"bytes,34,rep,name=unattributed,proto3" json:"unattributed,omitempty"`
 	Entries      []*JobEntry             `protobuf:"bytes,35,rep,name=entries,proto3" json:"entries,omitempty"`
 	Integration  *JobIntegration         `protobuf:"bytes,36,opt,name=integration,proto3" json:"integration,omitempty"` // unset until the integrator verified the job
-	// The row's schema envelope: the newest store schema any writer of it used, and the
-	// features a reader must implement to act on it (see ListJobsResponse.read_only).
-	SchemaVersion int32    `protobuf:"varint,38,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
-	Requires      []string `protobuf:"bytes,37,rep,name=requires,proto3" json:"requires,omitempty"`
+	ApiVersion   string                  `protobuf:"bytes,45,opt,name=api_version,json=apiVersion,proto3" json:"api_version,omitempty"`
+	Requires     []string                `protobuf:"bytes,37,rep,name=requires,proto3" json:"requires,omitempty"`
 	// waiter_evidence is the goals whose passing run came from the waiter's checkout rather than
 	// the holder's, unset unless `magus job wait --evidence` took some. gate_attempts keep the
 	// holder's own attempts untouched; this is the second fact beside them.
@@ -583,11 +581,11 @@ func (x *Job) GetIntegration() *JobIntegration {
 	return nil
 }
 
-func (x *Job) GetSchemaVersion() int32 {
+func (x *Job) GetApiVersion() string {
 	if x != nil {
-		return x.SchemaVersion
+		return x.ApiVersion
 	}
-	return 0
+	return ""
 }
 
 func (x *Job) GetRequires() []string {
@@ -2263,7 +2261,7 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\rinvocation_id\x18\x02 \x01(\tR\finvocationId\x12\x1f\n" +
 	"\vconsole_url\x18\x03 \x01(\tR\n" +
 	"consoleUrl\x12)\n" +
-	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xea\r\n" +
+	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xfa\r\n" +
 	"\x03Job\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
@@ -2311,8 +2309,9 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\rgate_attempts\x18! \x03(\v2\".magus.job.v1alpha1.JobGateAttemptR\fgateAttempts\x12L\n" +
 	"\funattributed\x18\" \x03(\v2(.magus.job.v1alpha1.JobUnattributedWriteR\funattributed\x126\n" +
 	"\aentries\x18# \x03(\v2\x1c.magus.job.v1alpha1.JobEntryR\aentries\x12D\n" +
-	"\vintegration\x18$ \x01(\v2\".magus.job.v1alpha1.JobIntegrationR\vintegration\x12%\n" +
-	"\x0eschema_version\x18& \x01(\x05R\rschemaVersion\x12\x1a\n" +
+	"\vintegration\x18$ \x01(\v2\".magus.job.v1alpha1.JobIntegrationR\vintegration\x12\x1f\n" +
+	"\vapi_version\x18- \x01(\tR\n" +
+	"apiVersion\x12\x1a\n" +
 	"\brequires\x18% \x03(\tR\brequires\x12K\n" +
 	"\x0fwaiter_evidence\x18' \x01(\v2\".magus.job.v1alpha1.JobIntegrationR\x0ewaiterEvidence\x12\x16\n" +
 	"\x06breaks\x18( \x03(\tR\x06breaks\x12?\n" +
@@ -2320,7 +2319,7 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"model_tier\x18) \x01(\v2 .magus.job.v1alpha1.JobModelTierR\tmodelTier\x12#\n" +
 	"\rrework_rounds\x18* \x01(\x05R\freworkRounds\x12\x1c\n" +
 	"\twidenings\x18+ \x01(\x05R\twidenings\x12!\n" +
-	"\fbrief_format\x18, \x01(\tR\vbriefFormat\"\xa8\x01\n" +
+	"\fbrief_format\x18, \x01(\tR\vbriefFormatJ\x04\b&\x10'R\x0eschema_version\"\xa8\x01\n" +
 	"\fJobModelTier\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04rank\x18\x02 \x01(\x05R\x04rank\x12\x16\n" +

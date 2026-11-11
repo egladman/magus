@@ -22,7 +22,7 @@ final HELP = "cost: two job-store reads\n{USAGE}\n\n"
 
 // RESULT_SCHEMA is the job result schema the spec's skeleton is written to.
 // `./magus job exit --schema` prints the shape a binary accepts.
-final RESULT_SCHEMA = 2;
+final RESULT_SCHEMA = "magus.job-result/v1alpha1";
 final WORD = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/:=,+@%-";
 
 // The templates switch Mustache's delimiters to <% %>, so a Buzz string
@@ -114,7 +114,7 @@ final SPEC = [
     "",
     "```json",
     "\{",
-    "  \"schema_version\": <%& resultSchema %>,",
+    "  \"api_version\": \"<%& resultSchema %>\",",
     "  \"job\": \"<%& id %>\",",
     "  \"changed_paths\": <%& changed %>,",
     "  \"validation\": \{\"command\": \"<%& checkJSON %>\", \"output_ref\": \"<the ref the check printed>\"\},",

@@ -209,7 +209,7 @@ func TestLoadFailurePassesOtherCommandsWithTheNote(t *testing.T) {
 	t.Run("told in full every time", func(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
 		recordLoadedPolicy(t, cacheDir)
-		want := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: note, Rule: string(advisoryCommandRuleFailed)}
+		want := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionAdvise, Context: note, Rule: string(advisoryCommandRuleFailed)}
 		first := Judge(ctx, unloadedDeps(), Request{Input: "ls", Host: "claude-code", Session: "s1"})
 		assert.Equal(t, want, first)
 		repeat := Judge(ctx, unloadedDeps(), Request{Input: "ls", Host: "claude-code", Session: "s1"})

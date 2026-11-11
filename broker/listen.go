@@ -19,9 +19,9 @@ import (
 )
 
 // SocketName is the broker socket's file name in the per-user runtime
-// directory. It names [ProtocolVersion], so a build speaking another
+// directory. It names [APIVersion], so a build speaking another
 // protocol runs its own broker rather than meeting this one's refusal.
-var SocketName = fmt.Sprintf("broker-%d.sock", ProtocolVersion)
+var SocketName = fmt.Sprintf("broker-%s.sock", APIVersion.Version())
 
 // OtherBrokers lists the sockets in dir that a broker of another protocol
 // accepts connections on. Each arbitrates only builds speaking its protocol,

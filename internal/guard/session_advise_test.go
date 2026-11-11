@@ -43,7 +43,7 @@ func (s *SessionAdviseSuite) post(expect string) sessions.Directive {
 }
 
 func pass() types.GuardJudgment {
-	return types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+	return types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 }
 
 func (s *SessionAdviseSuite) TestARootStopIsHeldOnceToShowTheAdvisory() {

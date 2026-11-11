@@ -45,7 +45,7 @@ func directiveNote(err error) string {
 // adviseMessage answers a person's prompt. The prompt carries an open
 // advisory only where the wiring renders context; elsewhere the stop does.
 func adviseMessage(ctx context.Context, at location, who hookAttribution, rendersContext bool) types.GuardJudgment {
-	v := types.GuardJudgment{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+	v := types.GuardJudgment{APIVersion: agent.GuardAPIVersion, Decision: decisionPass}
 	if !rendersContext {
 		return v
 	}

@@ -737,7 +737,7 @@ func ObjectVerificationEvidence(v types.VerificationEvidence) vm.Value {
 
 func ObjectJobResult(v types.JobResult) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("schemaVersion", vm.IntValue(int64(v.Schema.Version)))
+	out.MapSet("apiVersion", vm.StringValue(string(v.Schema.Version)))
 	itemsRequires := make([]vm.Value, len(v.Schema.Requires))
 	for indexRequires := range v.Schema.Requires {
 		itemsRequires[indexRequires] = vm.StringValue(v.Schema.Requires[indexRequires])
@@ -935,7 +935,7 @@ func ObjectJob(v types.Job, enums ffi.EnumCases) vm.Value {
 	if v.WaiterEvidence != nil {
 		optWaiterEvidence = ObjectJobIntegration((*v.WaiterEvidence))
 	}
-	return enums.Instance("Job", []string{"schemaVersion", "requires", "id", "parent", "criteria", "checkpoint", "writePaths", "denyPaths", "softPaths", "readPaths", "dependsOn", "integrates", "breaks", "model", "modelTier", "briefFormat", "delivery", "parentHead", "follows", "freshReason", "reworkRounds", "widenings", "claims", "generation", "maxAttempts", "maxClaims", "deferred", "leftUnmerged", "landed", "weight", "paused", "pausedBy", "pauseReason", "pausedUntil", "attempts", "prior", "rejection", "check", "validation", "goals", "state", "holder", "readOnly", "releases", "unattributed", "entries", "writeProof", "deviations", "validated", "reportedBase", "baseVerdict", "registeredBy", "registered", "holderStopped", "checkoutRoot", "worktree", "endReason", "created", "updated", "deadline", "result", "attempt", "gateAttempts", "lastRun", "integration", "waiterEvidence"}, []vm.Value{vm.IntValue(int64(v.Schema.Version)), vm.ListValue(itemsRequires), vm.StringValue(v.ID), vm.StringValue(v.Parent), vm.StringValue(v.Criteria), vm.StringValue(v.Checkpoint), vm.ListValue(itemsWritePaths), vm.ListValue(itemsDenyPaths), vm.ListValue(itemsSoftPaths), vm.ListValue(itemsReadPaths), vm.ListValue(itemsDependsOn), vm.ListValue(itemsIntegrates), vm.ListValue(itemsBreaks), vm.StringValue(v.Model), optModelTier, enums.Case("BriefFormat", string(v.BriefFormat)), vm.StringValue(v.Delivery), vm.StringValue(v.ParentHead), vm.StringValue(v.Follows), vm.StringValue(v.FreshReason), vm.IntValue(int64(v.ReworkRounds)), vm.IntValue(int64(v.Widenings)), vm.ListValue(itemsClaims), vm.IntValue(int64(v.Generation)), vm.IntValue(int64(v.MaxAttempts)), vm.IntValue(int64(v.MaxClaims)), vm.ListValue(itemsDeferred), vm.StringValue(v.LeftUnmerged), vm.BoolValue(v.Landed), vm.FloatValue(float64(v.Weight)), vm.IntValue(int64(v.Paused)), ObjectOrigin(v.PausedBy, enums), vm.StringValue(v.PauseReason), vm.IntValue(int64(v.PausedUntil)), vm.IntValue(int64(v.Attempts)), vm.ListValue(itemsPrior), optRejection, optCheck, vm.StringValue(v.Validation), vm.ListValue(itemsGoals), enums.Case("JobState", string(v.State)), enums.Case("JobHolder", string(v.Holder)), vm.BoolValue(v.ReadOnly), vm.ListValue(itemsReleases), vm.ListValue(itemsUnattributed), vm.ListValue(itemsEntries), enums.Case("JobWriteProof", string(v.WriteProof)), vm.ListValue(itemsDeviations), vm.IntValue(int64(v.Validated)), vm.StringValue(v.ReportedBase), enums.Case("JobBaseVerdict", string(v.BaseVerdict)), ObjectOrigin(v.RegisteredBy, enums), vm.IntValue(int64(v.Registered)), vm.IntValue(int64(v.HolderStopped)), vm.StringValue(v.CheckoutRoot), optWorktree, vm.StringValue(v.EndReason), vm.IntValue(int64(v.Created)), vm.IntValue(int64(v.Updated)), vm.IntValue(int64(v.Deadline)), optResult, optAttempt, vm.ListValue(itemsGateAttempts), optLastRun, optIntegration, optWaiterEvidence})
+	return enums.Instance("Job", []string{"apiVersion", "requires", "id", "parent", "criteria", "checkpoint", "writePaths", "denyPaths", "softPaths", "readPaths", "dependsOn", "integrates", "breaks", "model", "modelTier", "briefFormat", "delivery", "parentHead", "follows", "freshReason", "reworkRounds", "widenings", "claims", "generation", "maxAttempts", "maxClaims", "deferred", "leftUnmerged", "landed", "weight", "paused", "pausedBy", "pauseReason", "pausedUntil", "attempts", "prior", "rejection", "check", "validation", "goals", "state", "holder", "readOnly", "releases", "unattributed", "entries", "writeProof", "deviations", "validated", "reportedBase", "baseVerdict", "registeredBy", "registered", "holderStopped", "checkoutRoot", "worktree", "endReason", "created", "updated", "deadline", "result", "attempt", "gateAttempts", "lastRun", "integration", "waiterEvidence"}, []vm.Value{vm.StringValue(string(v.Schema.Version)), vm.ListValue(itemsRequires), vm.StringValue(v.ID), vm.StringValue(v.Parent), vm.StringValue(v.Criteria), vm.StringValue(v.Checkpoint), vm.ListValue(itemsWritePaths), vm.ListValue(itemsDenyPaths), vm.ListValue(itemsSoftPaths), vm.ListValue(itemsReadPaths), vm.ListValue(itemsDependsOn), vm.ListValue(itemsIntegrates), vm.ListValue(itemsBreaks), vm.StringValue(v.Model), optModelTier, enums.Case("BriefFormat", string(v.BriefFormat)), vm.StringValue(v.Delivery), vm.StringValue(v.ParentHead), vm.StringValue(v.Follows), vm.StringValue(v.FreshReason), vm.IntValue(int64(v.ReworkRounds)), vm.IntValue(int64(v.Widenings)), vm.ListValue(itemsClaims), vm.IntValue(int64(v.Generation)), vm.IntValue(int64(v.MaxAttempts)), vm.IntValue(int64(v.MaxClaims)), vm.ListValue(itemsDeferred), vm.StringValue(v.LeftUnmerged), vm.BoolValue(v.Landed), vm.FloatValue(float64(v.Weight)), vm.IntValue(int64(v.Paused)), ObjectOrigin(v.PausedBy, enums), vm.StringValue(v.PauseReason), vm.IntValue(int64(v.PausedUntil)), vm.IntValue(int64(v.Attempts)), vm.ListValue(itemsPrior), optRejection, optCheck, vm.StringValue(v.Validation), vm.ListValue(itemsGoals), enums.Case("JobState", string(v.State)), enums.Case("JobHolder", string(v.Holder)), vm.BoolValue(v.ReadOnly), vm.ListValue(itemsReleases), vm.ListValue(itemsUnattributed), vm.ListValue(itemsEntries), enums.Case("JobWriteProof", string(v.WriteProof)), vm.ListValue(itemsDeviations), vm.IntValue(int64(v.Validated)), vm.StringValue(v.ReportedBase), enums.Case("JobBaseVerdict", string(v.BaseVerdict)), ObjectOrigin(v.RegisteredBy, enums), vm.IntValue(int64(v.Registered)), vm.IntValue(int64(v.HolderStopped)), vm.StringValue(v.CheckoutRoot), optWorktree, vm.StringValue(v.EndReason), vm.IntValue(int64(v.Created)), vm.IntValue(int64(v.Updated)), vm.IntValue(int64(v.Deadline)), optResult, optAttempt, vm.ListValue(itemsGateAttempts), optLastRun, optIntegration, optWaiterEvidence})
 }
 
 func ObjectSession(v types.Session, enums ffi.EnumCases) vm.Value {
@@ -1586,7 +1586,7 @@ func ObjectKnowledgeRanking(v types.KnowledgeRanking) vm.Value {
 func ObjectKnowledgeQueryOutput(v types.KnowledgeQueryOutput, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
-	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
+	out.MapSet("apiVersion", vm.StringValue(string(v.APIVersion)))
 	out.MapSet("query", vm.StringValue(v.Query))
 	out.MapSet("budget", vm.IntValue(int64(v.Budget)))
 	out.MapSet("matchCount", vm.IntValue(int64(v.MatchCount)))
@@ -1644,7 +1644,7 @@ func ObjectPublicSymbol(v types.PublicSymbol) vm.Value {
 func ObjectKnowledgeExplainOutput(v types.KnowledgeExplainOutput, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
-	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
+	out.MapSet("apiVersion", vm.StringValue(string(v.APIVersion)))
 	out.MapSet("node", ObjectKnowledgeNode(v.Node))
 	out.MapSet("blastRadius", vm.IntValue(int64(v.BlastRadius)))
 	itemsOut := make([]vm.Value, len(v.Out))
@@ -1680,7 +1680,7 @@ func ObjectKnowledgePathStep(v types.KnowledgePathStep, enums ffi.EnumCases) vm.
 func ObjectKnowledgePathOutput(v types.KnowledgePathOutput, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
-	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
+	out.MapSet("apiVersion", vm.StringValue(string(v.APIVersion)))
 	out.MapSet("from", vm.StringValue(v.From))
 	out.MapSet("to", vm.StringValue(v.To))
 	out.MapSet("found", vm.BoolValue(v.Found))
@@ -1707,7 +1707,7 @@ func ObjectKnowledgeRefSite(v types.KnowledgeRefSite) vm.Value {
 func ObjectKnowledgeRefsOutput(v types.KnowledgeRefsOutput, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
-	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
+	out.MapSet("apiVersion", vm.StringValue(string(v.APIVersion)))
 	out.MapSet("symbol", vm.StringValue(v.Symbol))
 	out.MapSet("label", vm.StringValue(v.Label))
 	out.MapSet("fileCount", vm.IntValue(int64(v.FileCount)))
@@ -1819,7 +1819,7 @@ func ObjectKnowledgeFold(v types.KnowledgeFold) vm.Value {
 func ObjectKnowledgeNeighborhoodOutput(v types.KnowledgeNeighborhoodOutput, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Definition))
-	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
+	out.MapSet("apiVersion", vm.StringValue(string(v.APIVersion)))
 	out.MapSet("focus", vm.StringValue(v.Focus))
 	out.MapSet("resolution", enums.Case("KnowledgeResolution", string(v.Resolution)))
 	out.MapSet("options", ObjectKnowledgeNeighborhoodOptions(v.Options, enums))

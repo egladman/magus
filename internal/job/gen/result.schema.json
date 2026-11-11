@@ -6,13 +6,12 @@
   "description": "JobResult is the result a holder files for a job.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "changed_paths", "unresolved_risks"],
+  "required": ["api_version", "changed_paths", "unresolved_risks"],
   "properties": {
-    "schema_version": {
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 2,
-      "description": "Version is the newest schema any writer of this record used. A rewrite stamps the larger of the stored version and its own, so an older magus never relabels content a newer one wrote."
+    "api_version": {
+      "type": "string",
+      "const": "magus.job-result/v1alpha1",
+      "description": "Version is the format this record is written in. A reader refuses any other, so no magus acts on a record it cannot read."
     },
     "requires": {
       "type": "array",
