@@ -359,10 +359,14 @@ var boundaryTypes = []boundaryType{
 	// The conformance lens, leaf first: ConformanceRow carries a ConformanceKey and [ConformanceItem], and
 	// Conformance carries [ConformanceRow], [ConformanceCeiling] and [ConformanceUnmeasured].
 	// It rides the history-metrics board and magus\change().conformance.
+	// ConformanceItem carries [ConformanceImport]; Conformance carries
+	// [ConformancePackage] too.
 	{Name: "ConformanceKey", Type: reflect.TypeFor[types.ConformanceKey](), RuntimeObject: true},
+	{Name: "ConformanceImport", Type: reflect.TypeFor[types.ConformanceImport](), RuntimeObject: true},
 	{Name: "ConformanceItem", Type: reflect.TypeFor[types.ConformanceItem](), RuntimeObject: true},
 	{Name: "ConformanceCeiling", Type: reflect.TypeFor[types.ConformanceCeiling](), RuntimeObject: true},
 	{Name: "ConformanceUnmeasured", Type: reflect.TypeFor[types.ConformanceUnmeasured](), RuntimeObject: true},
+	{Name: "ConformancePackage", Type: reflect.TypeFor[types.ConformancePackage](), RuntimeObject: true},
 	{Name: "ConformanceRow", Type: reflect.TypeFor[types.ConformanceRow](), RuntimeObject: true},
 	{Name: "Conformance", Type: reflect.TypeFor[types.Conformance](), RuntimeObject: true},
 	{Name: "FunctionGap", Type: reflect.TypeFor[types.FunctionGap](), RuntimeObject: true},

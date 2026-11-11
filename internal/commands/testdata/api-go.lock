@@ -1504,6 +1504,7 @@ github.com/egladman/magus/types.Conformance.Base field string "json:\"base,omite
 github.com/egladman/magus/types.Conformance.Ceilings field []ConformanceCeiling "json:\"ceilings,omitempty\"   yaml:\"ceilings,omitempty\""
 github.com/egladman/magus/types.Conformance.Definition field string "json:\"definition\"           yaml:\"definition\""
 github.com/egladman/magus/types.Conformance.Excluded field int "json:\"excluded\"             yaml:\"excluded\""
+github.com/egladman/magus/types.Conformance.Packages field []ConformancePackage "json:\"packages,omitempty\"   yaml:\"packages,omitempty\""
 github.com/egladman/magus/types.Conformance.Rows field []ConformanceRow "json:\"rows\"                 yaml:\"rows\""
 github.com/egladman/magus/types.Conformance.Unmeasured field []ConformanceUnmeasured "json:\"unmeasured,omitempty\" yaml:\"unmeasured,omitempty\""
 github.com/egladman/magus/types.ConformanceAliasShare const ConformanceMetric = "alias-share"
@@ -1529,10 +1530,15 @@ github.com/egladman/magus/types.ConformanceGates.MaxFindings field int
 github.com/egladman/magus/types.ConformanceGates.MinCohort field int
 github.com/egladman/magus/types.ConformanceGates.MinShare field float64
 github.com/egladman/magus/types.ConformanceGates.Override method func(minCohort int, minShare float64) ConformanceGates
+github.com/egladman/magus/types.ConformanceImport type struct
+github.com/egladman/magus/types.ConformanceImport.Digests field []string "json:\"digests,omitempty\" yaml:\"digests,omitempty\""
+github.com/egladman/magus/types.ConformanceImport.Dir field string "json:\"dir\"               yaml:\"dir\""
 github.com/egladman/magus/types.ConformanceImportedPackages const ConformanceMetric = "imported-packages"
 github.com/egladman/magus/types.ConformanceItem type struct
+github.com/egladman/magus/types.ConformanceItem.Digest field string "json:\"digest,omitempty\"   yaml:\"digest,omitempty\""
 github.com/egladman/magus/types.ConformanceItem.Home field string "json:\"home,omitempty\"     yaml:\"home,omitempty\""
 github.com/egladman/magus/types.ConformanceItem.ID field string "json:\"id\"                 yaml:\"id\""
+github.com/egladman/magus/types.ConformanceItem.Imports field []ConformanceImport "json:\"imports,omitempty\"  yaml:\"imports,omitempty\""
 github.com/egladman/magus/types.ConformanceItem.Measure field int "json:\"measure\"            yaml:\"measure\""
 github.com/egladman/magus/types.ConformanceItem.Rename field string "json:\"rename,omitempty\"   yaml:\"rename,omitempty\""
 github.com/egladman/magus/types.ConformanceItem.Source field string "json:\"source\"             yaml:\"source\""
@@ -1562,6 +1568,10 @@ github.com/egladman/magus/types.ConformanceOptions.Limits field map[ConformanceK
 github.com/egladman/magus/types.ConformanceOptions.MinSample field int
 github.com/egladman/magus/types.ConformanceOptions.Step field float64
 github.com/egladman/magus/types.ConformanceOptions.Validate method func() error
+github.com/egladman/magus/types.ConformancePackage type struct
+github.com/egladman/magus/types.ConformancePackage.Digests field []string "json:\"digests,omitempty\" yaml:\"digests,omitempty\""
+github.com/egladman/magus/types.ConformancePackage.Dir field string "json:\"dir\"               yaml:\"dir\""
+github.com/egladman/magus/types.ConformancePackage.Imports field []string "json:\"imports,omitempty\" yaml:\"imports,omitempty\""
 github.com/egladman/magus/types.ConformancePopMain const ConformancePopulation = "main"
 github.com/egladman/magus/types.ConformancePopSource const ConformancePopulation = "source"
 github.com/egladman/magus/types.ConformancePopTest const ConformancePopulation = "test"

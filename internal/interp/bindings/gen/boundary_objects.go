@@ -2703,6 +2703,17 @@ func ObjectConformanceKey(v types.ConformanceKey, enums ffi.EnumCases) vm.Value 
 	return out
 }
 
+func ObjectConformanceImport(v types.ConformanceImport) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("dir", vm.StringValue(v.Dir))
+	itemsDigests := make([]vm.Value, len(v.Digests))
+	for indexDigests := range v.Digests {
+		itemsDigests[indexDigests] = vm.StringValue(v.Digests[indexDigests])
+	}
+	out.MapSet("digests", vm.ListValue(itemsDigests))
+	return out
+}
+
 func ObjectConformanceItem(v types.ConformanceItem) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StringValue(v.ID))
@@ -2711,6 +2722,12 @@ func ObjectConformanceItem(v types.ConformanceItem) vm.Value {
 	out.MapSet("home", vm.StringValue(v.Home))
 	out.MapSet("unshared", vm.BoolValue(v.Unshared))
 	out.MapSet("rename", vm.StringValue(v.Rename))
+	out.MapSet("digest", vm.StringValue(v.Digest))
+	itemsImports := make([]vm.Value, len(v.Imports))
+	for indexImports := range v.Imports {
+		itemsImports[indexImports] = ObjectConformanceImport(v.Imports[indexImports])
+	}
+	out.MapSet("imports", vm.ListValue(itemsImports))
 	return out
 }
 
@@ -2755,6 +2772,22 @@ func ObjectConformanceUnmeasured(v types.ConformanceUnmeasured) vm.Value {
 	return out
 }
 
+func ObjectConformancePackage(v types.ConformancePackage) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("dir", vm.StringValue(v.Dir))
+	itemsImports := make([]vm.Value, len(v.Imports))
+	for indexImports := range v.Imports {
+		itemsImports[indexImports] = vm.StringValue(v.Imports[indexImports])
+	}
+	out.MapSet("imports", vm.ListValue(itemsImports))
+	itemsDigests := make([]vm.Value, len(v.Digests))
+	for indexDigests := range v.Digests {
+		itemsDigests[indexDigests] = vm.StringValue(v.Digests[indexDigests])
+	}
+	out.MapSet("digests", vm.ListValue(itemsDigests))
+	return out
+}
+
 func ObjectConformanceReport(v types.ConformanceReport, enums ffi.EnumCases) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("definition", vm.StringValue(v.Conformance.Definition))
@@ -2776,6 +2809,11 @@ func ObjectConformanceReport(v types.ConformanceReport, enums ffi.EnumCases) vm.
 		itemsUnmeasured[indexUnmeasured] = ObjectConformanceUnmeasured(v.Conformance.Unmeasured[indexUnmeasured])
 	}
 	out.MapSet("unmeasured", vm.ListValue(itemsUnmeasured))
+	itemsPackages := make([]vm.Value, len(v.Conformance.Packages))
+	for indexPackages := range v.Conformance.Packages {
+		itemsPackages[indexPackages] = ObjectConformancePackage(v.Conformance.Packages[indexPackages])
+	}
+	out.MapSet("packages", vm.ListValue(itemsPackages))
 	itemsIndexes := make([]vm.Value, len(v.Indexes))
 	for indexIndexes := range v.Indexes {
 		itemsIndexes[indexIndexes] = ObjectSymbolIndexStatus(v.Indexes[indexIndexes], enums)
@@ -4912,6 +4950,11 @@ func ObjectConformance(v types.Conformance, enums ffi.EnumCases) vm.Value {
 		itemsUnmeasured[indexUnmeasured] = ObjectConformanceUnmeasured(v.Unmeasured[indexUnmeasured])
 	}
 	out.MapSet("unmeasured", vm.ListValue(itemsUnmeasured))
+	itemsPackages := make([]vm.Value, len(v.Packages))
+	for indexPackages := range v.Packages {
+		itemsPackages[indexPackages] = ObjectConformancePackage(v.Packages[indexPackages])
+	}
+	out.MapSet("packages", vm.ListValue(itemsPackages))
 	return out
 }
 

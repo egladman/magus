@@ -2023,6 +2023,11 @@ export object ConformanceKey {
     scope: str = "",
 }
 
+export object ConformanceImport {
+    dir: str = "",
+    digests: [str] = [],
+}
+
 export object ConformanceItem {
     id: str = "",
     source: str = "",
@@ -2030,6 +2035,8 @@ export object ConformanceItem {
     home: str = "",
     unshared: bool = false,
     rename: str = "",
+    digest: str = "",
+    imports: [ConformanceImport] = [],
 }
 
 export object ConformanceRow {
@@ -2059,6 +2066,12 @@ export object ConformanceUnmeasured {
     reason: str = "",
 }
 
+export object ConformancePackage {
+    dir: str = "",
+    imports: [str] = [],
+    digests: [str] = [],
+}
+
 export object ConformanceReport {
     definition: str = "",
     rows: [ConformanceRow] = [],
@@ -2067,6 +2080,7 @@ export object ConformanceReport {
     base: str = "",
     ceilings: [ConformanceCeiling] = [],
     unmeasured: [ConformanceUnmeasured] = [],
+    packages: [ConformancePackage] = [],
     indexes: [SymbolIndexStatus] = [],
 }
 
